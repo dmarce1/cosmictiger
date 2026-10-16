@@ -23,7 +23,7 @@
 #include <cooperative_groups.h>
 #include <cuda/barrier>
 
-#include <cosmictiger/cuda_mem.hpp>
+#include <cosmictiger/cuda_memory.hpp>
 #include <cosmictiger/device_vector.hpp>
 
 using BarrierType = cuda::barrier<cuda::thread_scope::thread_scope_block>;

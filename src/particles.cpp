@@ -38,9 +38,9 @@ constexpr bool kVerbose = true;
 
 struct LineIdType;
 
-static Vector<GroupInt> particlesGroupRefreshCacheLine(PartInt index);
+static Vector<GroupInteger> particlesGroupRefreshCacheLine(ParticleInteger index);
 
-static Vector<GroupParticle> particlesGroupFetchCacheLine(PartInt index);
+static Vector<GroupParticle> particlesGroupFetchCacheLine(ParticleInteger index);
 static GroupParticle const* particlesGroupCacheReadLine(LineIdType lineId);
 void particlesGroupCacheFree();
 
@@ -58,15 +58,15 @@ struct ParticlesCacheEntry {
     }
 };
 
-static Vector<ParticlesCacheEntry> particlesFetchCacheLine(PartInt index);
+static Vector<ParticlesCacheEntry> particlesFetchCacheLine(ParticleInteger index);
 static ParticlesCacheEntry const* particlesCacheReadLine(LineIdType lineId);
 void particlesCacheFree();
 
-static Vector<Array<float, NDIM>> particlesFetchCacheLineVels(PartInt index);
+static Vector<Array<float, NDIM>> particlesFetchCacheLineVels(ParticleInteger index);
 static Array<float, NDIM> const* particlesCacheReadLineVels(LineIdType lineId);
 
-static Vector<float> particlesFetchCacheLineSoftlens(PartInt index);
-static Vector<char> particlesFetchCacheLineRungs(PartInt index);
+static Vector<float> particlesFetchCacheLineSoftlens(ParticleInteger index);
+static Vector<char> particlesFetchCacheLineRungs(ParticleInteger index);
 static float const* particlesCacheReadLineSoftlens(LineIdType lineId);
 static char const* particlesCacheReadLineRungs(LineIdType lineId);
 void particlesCacheFreeSoftlens();
@@ -75,11 +75,11 @@ static void particlesSetGlobalOffset(Vector<size_t>);
 
 static SharedMutexType sharedMutex;
 
-static PartInt size = 0;
-static PartInt capacity = 0;
+static ParticleInteger size = 0;
+static ParticleInteger capacity = 0;
 static Vector<size_t> globalOffsets;
-static PartInt rungBegin;
-static std::vector<PartInt> rungBegins;
+static ParticleInteger rungBegin;
+static std::vector<ParticleInteger> rungBegins;
 
 HPX_PLAIN_ACTION(particlesCacheFree, ParticlesCacheFreeAction);
 HPX_PLAIN_ACTION(particlesIncGroupCacheEpoch, ParticlesIncGroupCacheEpochAction);
@@ -193,7 +193,7 @@ double particlesActivePct() {
         numActive += f.get();
     }
     if (hpxRank() == 0) {
-        numActive /= getOptions().nparts;
+        numActive /= getOptions().numberParticles;
     }
     return numActive;
 }
@@ -205,12 +205,12 @@ void particlesDisplace(double dx, double dy, double dz) {
     for (auto& c : hpxChildren()) {
         futs.push_back(hpx::async<ParticlesDisplaceAction>(c, dx, dy, dz));
     }
-    int const nthreads = hpxHardwareConcurrency();
-    for (int proc = 0; proc < nthreads; proc++) {
-        futs.push_back(hpx::async([nthreads, proc, dx, dy, dz]() {
-            PartInt const begin = (size_t) proc * particlesSize() / nthreads;
-            PartInt const end = (size_t) (proc + 1) * particlesSize() / nthreads;
-            for (PartInt i = begin; i < end; i++) {
+    int const numberThreads = hpxHardwareConcurrency();
+    for (int proc = 0; proc < numberThreads; proc++) {
+        futs.push_back(hpx::async([numberThreads, proc, dx, dy, dz]() {
+            ParticleInteger const begin = (size_t) proc * particlesSize() / numberThreads;
+            ParticleInteger const end = (size_t) (proc + 1) * particlesSize() / numberThreads;
+            for (ParticleInteger i = begin; i < end; i++) {
                 double x = particlesPos(XDIM, i).toDouble();
                 double y = particlesPos(YDIM, i).toDouble();
                 double z = particlesPos(ZDIM, i).toDouble();
@@ -250,7 +250,7 @@ void particlesPushRungs() {
 
 struct LineIdType {
     int proc;
-    PartInt index;
+    ParticleInteger index;
     inline bool operator==(LineIdType other) const {
         return proc == other.proc && index == other.index;
     }
@@ -258,8 +258,8 @@ struct LineIdType {
 
 struct LineIdHash {
     inline size_t operator()(LineIdType id) const {
-        PartInt const lineSize = getOptions().partCacheLineSize;
-        PartInt const i = id.index / lineSize;
+        ParticleInteger const lineSize = getOptions().partCacheLineSize;
+        ParticleInteger const i = id.index / lineSize;
         return i * (hpxSize() - 1) + ((id.proc < hpxRank()) ? id.proc : id.proc - 1);
     }
 };
@@ -371,7 +371,7 @@ Vector<OutputParticle> particlesGetSample(Range<double> const& box) {
     for (auto const& c : hpxChildren()) {
         futs.push_back(hpx::async<ParticlesGetSampleAction>(c, box));
     }
-    for (PartInt i = 0; i < particlesSize(); i++) {
+    for (ParticleInteger i = 0; i < particlesSize(); i++) {
         Array<double, NDIM> x;
         for (int dim = 0; dim < NDIM; dim++) {
             x[dim] = particlesPos(dim, i).toDouble();
@@ -401,13 +401,13 @@ int particlesApplyUpdates(int minrung, float t0, float a) {
     for (auto& c : hpxChildren()) {
         futs.push_back(hpx::async<ParticlesApplyUpdatesAction>(c, minrung, t0, a));
     }
-    int const nthreads = hpxHardwareConcurrency();
-    for (int proc = 0; proc < nthreads; proc++) {
-        futs.push_back(hpx::async([t0, nthreads, proc, minrung, a]() {
+    int const numberThreads = hpxHardwareConcurrency();
+    for (int proc = 0; proc < numberThreads; proc++) {
+        futs.push_back(hpx::async([t0, numberThreads, proc, minrung, a]() {
             int maxRung = 0;
             float const cfl = getOptions().cfl;
-            PartInt const b = (size_t) proc * particlesSize() / nthreads;
-            PartInt const e = (size_t) (proc + 1) * particlesSize() / nthreads;
+            ParticleInteger const b = (size_t) proc * particlesSize() / numberThreads;
+            ParticleInteger const e = (size_t) (proc + 1) * particlesSize() / numberThreads;
             for (int i = b; i < e; i++) {
                 auto& rung = particlesRung(i);
                 if (particlesRung(i) >= minrung && particlesType(i) == DARK_MATTER_TYPE) {
@@ -449,7 +449,7 @@ Vector<OutputParticle> particlesGetTracers() {
     for (auto const& c : hpxChildren()) {
         futs.push_back(hpx::async<ParticlesGetTracersAction>(c));
     }
-    for (PartInt i = 0; i < particlesSize(); i++) {
+    for (ParticleInteger i = 0; i < particlesSize(); i++) {
         if (particlesTracer(i)) {
             OutputParticle data;
             for (int dim = 0; dim < NDIM; dim++) {
@@ -474,7 +474,7 @@ void particlesSetTracers(size_t count) {
             hpxLocalities()[hpxRank() + 1], count + particlesSize());
     }
 
-    double particlesPerTracer = getOptions().nparts / getOptions().tracerCount;
+    double particlesPerTracer = getOptions().numberParticles / getOptions().tracerCount;
     size_t cycles = count / particlesPerTracer;
     double start = cycles * particlesPerTracer;
     start -= count;
@@ -483,7 +483,7 @@ void particlesSetTracers(size_t count) {
     }
     memset(&particlesTracer(0), 0, particlesSize());
     for (double r = start; r < particlesSize(); r += particlesPerTracer) {
-        particlesTracer((PartInt) r) = 1;
+        particlesTracer((ParticleInteger) r) = 1;
     }
 
     if (hpxRank() < hpxSize() - 1) {
@@ -491,18 +491,18 @@ void particlesSetTracers(size_t count) {
     }
 }
 
-std::unordered_map<int, PartInt> particlesGroupsInit() {
-    Vector<hpx::future<std::unordered_map<int, PartInt>>> futs;
+std::unordered_map<int, ParticleInteger> particlesGroupsInit() {
+    Vector<hpx::future<std::unordered_map<int, ParticleInteger>>> futs;
     for (auto const& c : hpxChildren()) {
         futs.push_back(hpx::async<ParticlesGroupsInitAction>(c));
     }
 
     ALWAYS_ASSERT(!particlesGrp);
-    particlesGrp = new std::atomic<GroupInt>[size];
+    particlesGrp = new std::atomic<GroupInteger>[size];
     hpx_fill(PAR_EXECUTION_POLICY, particlesGrp, particlesGrp + particlesSize(), NO_GROUP).get();
     groupCacheEpoch = 0;
 
-    std::unordered_map<int, PartInt> map;
+    std::unordered_map<int, ParticleInteger> map;
     map[hpxRank()] = particlesSize();
     for (auto& f : futs) {
         auto thisMap = f.get();
@@ -523,7 +523,7 @@ std::unordered_map<int, PartInt> particlesGroupsInit() {
     return map;
 }
 
-int particlesGroupHome(GroupInt grp) {
+int particlesGroupHome(GroupInteger grp) {
     int begin = 0;
     int end = hpxSize();
     while (end - begin > 1) {
@@ -553,13 +553,13 @@ void particlesGroupsDestroy() {
     for (auto const& c : hpxChildren()) {
         futs.push_back(hpx::async<ParticlesGroupsDestroyAction>(c));
     }
-    int const nthreads = hpxHardwareConcurrency();
+    int const numberThreads = hpxHardwareConcurrency();
     Vector<hpx::future<void>> futs2;
-    for (int proc = 0; proc < nthreads; proc++) {
-        futs2.push_back(hpx::async([nthreads, proc]() {
-            PartInt const begin = (size_t) proc * particlesSize() / nthreads;
-            PartInt const end = (size_t) (proc + 1) * particlesSize() / nthreads;
-            for (PartInt i = begin; i < end; i++) {
+    for (int proc = 0; proc < numberThreads; proc++) {
+        futs2.push_back(hpx::async([numberThreads, proc]() {
+            ParticleInteger const begin = (size_t) proc * particlesSize() / numberThreads;
+            ParticleInteger const end = (size_t) (proc + 1) * particlesSize() / numberThreads;
+            for (ParticleInteger i = begin; i < end; i++) {
                 particlesLastgroup(i) = particlesGroup(i);
             }
         }));
@@ -643,13 +643,13 @@ void particlesMemadviseCpu() {
 #endif
 }
 
-void particlesGlobalReadPosAndGroup(
-    ParticleGlobalRange range, Fixed32* x, Fixed32* y, Fixed32* z, GroupInt* g, PartInt offset) {
-    PartInt const lineSize = getOptions().partCacheLineSize;
+void particlesGlobalReadPosAndGroup(ParticleGlobalRange range, Fixed32* x, Fixed32* y, Fixed32* z,
+    GroupInteger* g, ParticleInteger offset) {
+    ParticleInteger const lineSize = getOptions().partCacheLineSize;
     if (range.range.first != range.range.second) {
         if (range.proc == hpxRank()) {
-            PartInt const dif = offset - range.range.first;
-            PartInt const sz = range.range.second - range.range.first;
+            ParticleInteger const dif = offset - range.range.first;
+            ParticleInteger const sz = range.range.second - range.range.first;
             std::memcpy(x + offset, &particlesPos(XDIM, range.range.first), sizeof(float) * sz);
             std::memcpy(y + offset, &particlesPos(YDIM, range.range.first), sizeof(float) * sz);
             std::memcpy(z + offset, &particlesPos(ZDIM, range.range.first), sizeof(float) * sz);
@@ -659,16 +659,16 @@ void particlesGlobalReadPosAndGroup(
         } else {
             LineIdType lineId;
             lineId.proc = range.proc;
-            PartInt const startLine = (range.range.first / lineSize) * lineSize;
-            PartInt const stopLine = ((range.range.second - 1) / lineSize) * lineSize;
-            PartInt destIndex = offset;
-            for (PartInt line = startLine; line <= stopLine; line += lineSize) {
+            ParticleInteger const startLine = (range.range.first / lineSize) * lineSize;
+            ParticleInteger const stopLine = ((range.range.second - 1) / lineSize) * lineSize;
+            ParticleInteger destIndex = offset;
+            for (ParticleInteger line = startLine; line <= stopLine; line += lineSize) {
                 lineId.index = line;
                 auto const* ptr = particlesGroupCacheReadLine(lineId);
                 auto const begin = std::max(lineId.index, range.range.first);
                 auto const end = std::min(lineId.index + lineSize, range.range.second);
-                for (PartInt i = begin; i < end; i++) {
-                    PartInt const srcIndex = i - lineId.index;
+                for (ParticleInteger i = begin; i < end; i++) {
+                    ParticleInteger const srcIndex = i - lineId.index;
                     x[destIndex] = ptr[srcIndex].x[XDIM];
                     y[destIndex] = ptr[srcIndex].x[YDIM];
                     z[destIndex] = ptr[srcIndex].x[ZDIM];
@@ -746,13 +746,13 @@ Vector<size_t> particlesRungCounts() {
     for (auto& c : hpxChildren()) {
         futs.push_back(hpx::async<ParticlesRungCountsAction>(c));
     }
-    int const nthreads = hpxHardwareConcurrency();
-    for (int proc = 0; proc < nthreads; proc++) {
-        futs.push_back(hpx::async([proc, nthreads]() {
+    int const numberThreads = hpxHardwareConcurrency();
+    for (int proc = 0; proc < numberThreads; proc++) {
+        futs.push_back(hpx::async([proc, numberThreads]() {
             Vector<size_t> counts;
-            PartInt const b = (size_t) proc * particlesSize() / nthreads;
-            PartInt const e = (size_t) (proc + 1) * particlesSize() / nthreads;
-            for (PartInt i = b; i < e; i++) {
+            ParticleInteger const b = (size_t) proc * particlesSize() / numberThreads;
+            ParticleInteger const e = (size_t) (proc + 1) * particlesSize() / numberThreads;
+            for (ParticleInteger i = b; i < e; i++) {
                 auto const rung = particlesRung(i);
                 if (counts.size() <= rung) {
                     counts.resize(rung + 1, 0);
@@ -777,7 +777,7 @@ Vector<size_t> particlesRungCounts() {
         for (int i = 0; i < counts.size(); i++) {
             tot += counts[i];
         }
-        //	ALWAYS_ASSERT(tot == nparts);
+        //	ALWAYS_ASSERT(tot == numberParticles);
     }
     profilerExit();
     return counts;
@@ -791,12 +791,12 @@ void particlesSetMinrung(int minrung) {
     for (auto& c : hpxChildren()) {
         futs.push_back(hpx::async<ParticlesSetMinrungAction>(c, minrung));
     }
-    int const nthreads = hpxHardwareConcurrency();
-    for (int proc = 0; proc < nthreads; proc++) {
-        futs.push_back(hpx::async([proc, nthreads, minrung]() {
-            PartInt const b = (size_t) proc * particlesSize() / nthreads;
-            PartInt const e = (size_t) (proc + 1) * particlesSize() / nthreads;
-            for (PartInt i = b; i < e; i++) {
+    int const numberThreads = hpxHardwareConcurrency();
+    for (int proc = 0; proc < numberThreads; proc++) {
+        futs.push_back(hpx::async([proc, numberThreads, minrung]() {
+            ParticleInteger const b = (size_t) proc * particlesSize() / numberThreads;
+            ParticleInteger const e = (size_t) (proc + 1) * particlesSize() / numberThreads;
+            for (ParticleInteger i = b; i < e; i++) {
                 auto& rung = particlesRung(i);
                 rung = std::max((int) rung, minrung);
             }
@@ -808,27 +808,27 @@ void particlesSetMinrung(int minrung) {
     profilerExit();
 }
 
-void particlesGlobalReadSoftlens(ParticleGlobalRange range, float* h, PartInt offset) {
+void particlesGlobalReadSoftlens(ParticleGlobalRange range, float* h, ParticleInteger offset) {
     static bool const sph = getOptions().sph;
-    PartInt const lineSize = getOptions().partCacheLineSize;
+    ParticleInteger const lineSize = getOptions().partCacheLineSize;
     if (range.range.first != range.range.second) {
         if (range.proc == hpxRank()) {
-            PartInt const dif = offset - range.range.first;
-            PartInt const sz = range.range.second - range.range.first;
+            ParticleInteger const dif = offset - range.range.first;
+            ParticleInteger const sz = range.range.second - range.range.first;
             std::memcpy(h + offset, &particlesSoftlen(range.range.first), sizeof(float) * sz);
         } else {
             LineIdType lineId;
             lineId.proc = range.proc;
-            PartInt const startLine = (range.range.first / lineSize) * lineSize;
-            PartInt const stopLine = ((range.range.second - 1) / lineSize) * lineSize;
-            PartInt destIndex = offset;
-            for (PartInt line = startLine; line <= stopLine; line += lineSize) {
+            ParticleInteger const startLine = (range.range.first / lineSize) * lineSize;
+            ParticleInteger const stopLine = ((range.range.second - 1) / lineSize) * lineSize;
+            ParticleInteger destIndex = offset;
+            for (ParticleInteger line = startLine; line <= stopLine; line += lineSize) {
                 lineId.index = line;
                 auto const* ptr = particlesCacheReadLineSoftlens(lineId);
                 auto const begin = std::max(lineId.index, range.range.first);
                 auto const end = std::min(lineId.index + lineSize, range.range.second);
-                for (PartInt i = begin; i < end; i++) {
-                    PartInt const srcIndex = i - lineId.index;
+                for (ParticleInteger i = begin; i < end; i++) {
+                    ParticleInteger const srcIndex = i - lineId.index;
                     h[destIndex] = ptr[srcIndex];
                     destIndex++;
                 }
@@ -843,13 +843,13 @@ static float const* particlesCacheReadLineSoftlens(LineIdType lineId) {
 }
 
 void particlesGlobalReadPos(ParticleGlobalRange range, Fixed32* x, Fixed32* y, Fixed32* z,
-    char* types, float* zeta, PartInt offset) {
+    char* types, float* zeta, ParticleInteger offset) {
     static bool const sph = getOptions().sph;
-    PartInt const lineSize = getOptions().partCacheLineSize;
+    ParticleInteger const lineSize = getOptions().partCacheLineSize;
     if (range.range.first != range.range.second) {
         if (range.proc == hpxRank()) {
-            PartInt const dif = offset - range.range.first;
-            PartInt const sz = range.range.second - range.range.first;
+            ParticleInteger const dif = offset - range.range.first;
+            ParticleInteger const sz = range.range.second - range.range.first;
             std::memcpy(x + offset, &particlesPos(XDIM, range.range.first), sizeof(Fixed32) * sz);
             std::memcpy(y + offset, &particlesPos(YDIM, range.range.first), sizeof(Fixed32) * sz);
             std::memcpy(z + offset, &particlesPos(ZDIM, range.range.first), sizeof(Fixed32) * sz);
@@ -860,7 +860,7 @@ void particlesGlobalReadPos(ParticleGlobalRange range, Fixed32* x, Fixed32* y, F
                 for (int i = range.range.first; i < range.range.second; i++) {
                     int const j = offset + i - range.range.first;
                     if (getOptions().sph) {
-                        PartInt const k = particlesCatIndex(i);
+                        ParticleInteger const k = particlesCatIndex(i);
                         int type = particlesType(i);
                         types[j] = type;
                     } else {
@@ -871,16 +871,16 @@ void particlesGlobalReadPos(ParticleGlobalRange range, Fixed32* x, Fixed32* y, F
         } else {
             LineIdType lineId;
             lineId.proc = range.proc;
-            PartInt const startLine = (range.range.first / lineSize) * lineSize;
-            PartInt const stopLine = ((range.range.second - 1) / lineSize) * lineSize;
-            PartInt destIndex = offset;
-            for (PartInt line = startLine; line <= stopLine; line += lineSize) {
+            ParticleInteger const startLine = (range.range.first / lineSize) * lineSize;
+            ParticleInteger const stopLine = ((range.range.second - 1) / lineSize) * lineSize;
+            ParticleInteger destIndex = offset;
+            for (ParticleInteger line = startLine; line <= stopLine; line += lineSize) {
                 lineId.index = line;
                 auto const* ptr = particlesCacheReadLine(lineId);
                 auto const begin = std::max(lineId.index, range.range.first);
                 auto const end = std::min(lineId.index + lineSize, range.range.second);
-                for (PartInt i = begin; i < end; i++) {
-                    PartInt const srcIndex = i - lineId.index;
+                for (ParticleInteger i = begin; i < end; i++) {
+                    ParticleInteger const srcIndex = i - lineId.index;
                     x[destIndex] = ptr[srcIndex].x[XDIM];
                     y[destIndex] = ptr[srcIndex].x[YDIM];
                     z[destIndex] = ptr[srcIndex].x[ZDIM];
@@ -905,14 +905,14 @@ static ParticlesCacheEntry const* particlesCacheReadLine(LineIdType lineId) {
     return readParticleCacheLine<ParticlesFetchCacheLineAction>(lineId, partCache, mutexes);
 }
 
-static Vector<ParticlesCacheEntry> particlesFetchCacheLine(PartInt index) {
+static Vector<ParticlesCacheEntry> particlesFetchCacheLine(ParticleInteger index) {
     bool const sph = getOptions().sph;
     bool const vsoft = getOptions().vsoft;
-    PartInt const lineSize = getOptions().partCacheLineSize;
+    ParticleInteger const lineSize = getOptions().partCacheLineSize;
     Vector<ParticlesCacheEntry> line(lineSize);
-    PartInt const begin = (index / lineSize) * lineSize;
-    PartInt const end = std::min(particlesSize(), begin + lineSize);
-    for (PartInt i = begin; i < end; i++) {
+    ParticleInteger const begin = (index / lineSize) * lineSize;
+    ParticleInteger const end = std::min(particlesSize(), begin + lineSize);
+    for (ParticleInteger i = begin; i < end; i++) {
         auto& ln = line[i - begin];
         ln.zeta1 = ln.zeta2 = 0.0f;
         for (int dim = 0; dim < NDIM; dim++) {
@@ -932,25 +932,25 @@ static Vector<ParticlesCacheEntry> particlesFetchCacheLine(PartInt index) {
     return line;
 }
 
-static Vector<float> particlesFetchCacheLineSoftlens(PartInt index) {
+static Vector<float> particlesFetchCacheLineSoftlens(ParticleInteger index) {
     static bool const sph = getOptions().sph;
-    PartInt const lineSize = getOptions().partCacheLineSize;
+    ParticleInteger const lineSize = getOptions().partCacheLineSize;
     Vector<float> line(lineSize);
-    PartInt const begin = (index / lineSize) * lineSize;
-    PartInt const end = std::min(particlesSize(), begin + lineSize);
-    for (PartInt i = begin; i < end; i++) {
+    ParticleInteger const begin = (index / lineSize) * lineSize;
+    ParticleInteger const end = std::min(particlesSize(), begin + lineSize);
+    for (ParticleInteger i = begin; i < end; i++) {
         auto& ln = line[i - begin];
         ln = particlesSoftlen(i);
     }
     return line;
 }
 
-static Vector<GroupParticle> particlesGroupFetchCacheLine(PartInt index) {
-    PartInt const lineSize = getOptions().partCacheLineSize;
+static Vector<GroupParticle> particlesGroupFetchCacheLine(ParticleInteger index) {
+    ParticleInteger const lineSize = getOptions().partCacheLineSize;
     Vector<GroupParticle> line(lineSize);
-    PartInt const begin = (index / lineSize) * lineSize;
-    PartInt const end = std::min(particlesSize(), begin + lineSize);
-    for (PartInt i = begin; i < end; i++) {
+    ParticleInteger const begin = (index / lineSize) * lineSize;
+    ParticleInteger const end = std::min(particlesSize(), begin + lineSize);
+    for (ParticleInteger i = begin; i < end; i++) {
         for (int dim = 0; dim < NDIM; dim++) {
             line[i - begin].x[dim] = particlesPos(dim, i);
         }
@@ -960,7 +960,7 @@ static Vector<GroupParticle> particlesGroupFetchCacheLine(PartInt index) {
 }
 
 void particlesIncGroupCacheEpoch() {
-    PartInt const lineSize = getOptions().partCacheLineSize;
+    ParticleInteger const lineSize = getOptions().partCacheLineSize;
     Vector<hpx::future<void>> futs;
     auto const children = hpxChildren();
     for (auto const& c : children) {
@@ -970,13 +970,13 @@ void particlesIncGroupCacheEpoch() {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
-static Vector<GroupInt> particlesGroupRefreshCacheLine(PartInt index) {
-    PartInt const lineSize = getOptions().partCacheLineSize;
-    Vector<GroupInt> line(lineSize);
-    PartInt const begin = (index / lineSize) * lineSize;
-    PartInt const end = std::min(particlesSize(), begin + lineSize);
-    for (PartInt i = begin; i < end; i++) {
-        line[i - begin] = (GroupInt) particlesGroup(i);
+static Vector<GroupInteger> particlesGroupRefreshCacheLine(ParticleInteger index) {
+    ParticleInteger const lineSize = getOptions().partCacheLineSize;
+    Vector<GroupInteger> line(lineSize);
+    ParticleInteger const begin = (index / lineSize) * lineSize;
+    ParticleInteger const end = std::min(particlesSize(), begin + lineSize);
+    for (ParticleInteger i = begin; i < end; i++) {
+        line[i - begin] = (GroupInteger) particlesGroup(i);
     }
     return line;
 }
@@ -995,12 +995,12 @@ void particlesDestroy() {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
-PartInt particlesSize() {
+ParticleInteger particlesSize() {
     return size;
 }
 
 template <class T>
-void particlesArrayResize(T*& ptr, PartInt newCapacity, bool reg) {
+void particlesArrayResize(T*& ptr, ParticleInteger newCapacity, bool reg) {
     T* newPtr;
 #ifdef USE_CUDA
     if (reg) {
@@ -1030,16 +1030,16 @@ void particlesArrayResize(T*& ptr, PartInt newCapacity, bool reg) {
 HPX_PLAIN_ACTION(particlesResetConverged, ParticlesResetConvergedAction);
 
 void particlesResetConverged() {
-    int const nthread = hpxHardwareConcurrency();
+    int const numberThreads = hpxHardwareConcurrency();
     std::vector<hpx::future<void>> futs;
     for (auto& c : hpxChildren()) {
         futs.push_back(hpx::async<ParticlesResetConvergedAction>(c));
     }
-    for (int proc = 0; proc < nthread; proc++) {
-        futs.push_back(hpx::async([proc, nthread] {
-            PartInt const b = (size_t) proc * particlesSize() / nthread;
-            PartInt const e = (size_t) (proc + 1) * particlesSize() / nthread;
-            for (PartInt i = b; i < e; i++) {
+    for (int proc = 0; proc < numberThreads; proc++) {
+        futs.push_back(hpx::async([proc, numberThreads] {
+            ParticleInteger const b = (size_t) proc * particlesSize() / numberThreads;
+            ParticleInteger const e = (size_t) (proc + 1) * particlesSize() / numberThreads;
+            for (ParticleInteger i = b; i < e; i++) {
                 particlesConverged(i) = false;
             }
         }));
@@ -1047,13 +1047,13 @@ void particlesResetConverged() {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
-void particlesResize(PartInt sz, bool lock) {
+void particlesResize(ParticleInteger sz, bool lock) {
     //	PRINT( "Resizing particles to %i\n", sz);
     if (sz > capacity) {
         if (lock) {
             sharedMutex.lock();
         }
-        PartInt newCapacity = std::max(capacity, (PartInt) 100);
+        ParticleInteger newCapacity = std::max(capacity, (ParticleInteger) 100);
         while (newCapacity < sz) {
             newCapacity = size_t(105) * newCapacity / size_t(100);
         }
@@ -1073,7 +1073,7 @@ void particlesResize(PartInt sz, bool lock) {
         }
         if (getOptions().doGroups) {
             particlesArrayResize(particlesLgrp, newCapacity, false);
-            for (PartInt i = capacity; i < newCapacity; i++) {
+            for (ParticleInteger i = capacity; i < newCapacity; i++) {
                 particlesLgrp[i] = NO_GROUP;
             }
         }
@@ -1184,20 +1184,20 @@ void particlesRandomInit() {
     for (auto const& c : children) {
         futs.push_back(hpx::async<ParticlesRandomInitAction>(c));
     }
-    size_t const totalNumParts = getOptions().nparts;
-    size_t const begin = (size_t) (hpxRank()) * totalNumParts / hpxSize();
-    size_t const end = (size_t) (hpxRank() + 1) * totalNumParts / hpxSize();
+    size_t const totalNumberParticles = getOptions().numberParticles;
+    size_t const begin = (size_t) (hpxRank()) * totalNumberParticles / hpxSize();
+    size_t const end = (size_t) (hpxRank() + 1) * totalNumberParticles / hpxSize();
     size_t const myNumParts = end - begin;
     particlesResize(myNumParts);
-    int const nthreads = hpxHardwareConcurrency();
-    for (int proc = 0; proc < nthreads; proc++) {
-        futs.push_back(hpx::async([proc, nthreads]() {
-            PartInt const begin = (size_t) proc * particlesSize() / nthreads;
-            PartInt const end = (size_t) (proc + 1) * particlesSize() / nthreads;
-            int const seed = 4321 * (hpxRank() * nthreads + proc) + 42;
+    int const numberThreads = hpxHardwareConcurrency();
+    for (int proc = 0; proc < numberThreads; proc++) {
+        futs.push_back(hpx::async([proc, numberThreads]() {
+            ParticleInteger const begin = (size_t) proc * particlesSize() / numberThreads;
+            ParticleInteger const end = (size_t) (proc + 1) * particlesSize() / numberThreads;
+            int const seed = 4321 * (hpxRank() * numberThreads + proc) + 42;
             gsl_rng* rndgen = gsl_rng_alloc(gsl_rng_taus);
             gsl_rng_set(rndgen, seed);
-            for (PartInt i = begin; i < end; i++) {
+            for (ParticleInteger i = begin; i < end; i++) {
                 for (int dim = 0; dim < NDIM; dim++) {
                     particlesPos(dim, i) = gsl_rng_uniform(rndgen);
                     particlesVel(dim, i) = 0.0f;
@@ -1210,20 +1210,21 @@ void particlesRandomInit() {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
-Pair<Array<double, NDIM>, double> particlesEnclosingSphere(Pair<PartInt> rng) {
+Pair<Array<double, NDIM>, double> particlesEnclosingSphere(Pair<ParticleInteger> rng) {
     auto totRng = particlesCurrentRange();
-    auto npartsTot = totRng.second - totRng.first;
-    int const nthreads = (rng.second - rng.first) * hpxHardwareConcurrency() / npartsTot;
+    auto totalNumberParticles = totRng.second - totRng.first;
+    int const numberThreads =
+        (rng.second - rng.first) * hpxHardwareConcurrency() / totalNumberParticles;
 
-    auto const func1 = [nthreads, rng](int proc) {
+    auto const func1 = [numberThreads, rng](int proc) {
         Range<double> box;
         for (int dim = 0; dim < NDIM; dim++) {
             box.begin[dim] = 1.0;
             box.end[dim] = 0.0;
         }
-        auto const begin = (size_t) (proc) * (rng.second - rng.first) * nthreads + rng.first;
-        auto const end = (size_t) (proc + 1) * (rng.second - rng.first) * nthreads + rng.first;
-        for (PartInt i = begin; i < end; i++) {
+        auto const begin = (size_t) (proc) * (rng.second - rng.first) * numberThreads + rng.first;
+        auto const end = (size_t) (proc + 1) * (rng.second - rng.first) * numberThreads + rng.first;
+        for (ParticleInteger i = begin; i < end; i++) {
             for (int dim = 0; dim < NDIM; dim++) {
                 auto const x = particlesPos(dim, i).toDouble();
                 box.begin[dim] = std::min(box.begin[dim], x);
@@ -1233,7 +1234,7 @@ Pair<Array<double, NDIM>, double> particlesEnclosingSphere(Pair<PartInt> rng) {
         return box;
     };
     Vector<hpx::future<Range<double>>> futs1;
-    for (int proc = 1; proc < nthreads; proc++) {
+    for (int proc = 1; proc < numberThreads; proc++) {
         futs1.push_back(hpx::async(func1, proc));
     }
     auto box = func1(0);
@@ -1248,11 +1249,11 @@ Pair<Array<double, NDIM>, double> particlesEnclosingSphere(Pair<PartInt> rng) {
     for (int dim = 0; dim < NDIM; dim++) {
         xc[dim] = 0.5 * (box.begin[dim] + box.end[dim]);
     }
-    auto const func2 = [nthreads, rng, xc](int proc) {
+    auto const func2 = [numberThreads, rng, xc](int proc) {
         double rmax = 0.0;
-        auto const begin = (size_t) (proc) * (rng.second - rng.first) * nthreads + rng.first;
-        auto const end = (size_t) (proc + 1) * (rng.second - rng.first) * nthreads + rng.first;
-        for (PartInt i = begin; i < end; i++) {
+        auto const begin = (size_t) (proc) * (rng.second - rng.first) * numberThreads + rng.first;
+        auto const end = (size_t) (proc + 1) * (rng.second - rng.first) * numberThreads + rng.first;
+        for (ParticleInteger i = begin; i < end; i++) {
             double r2 = 0.0;
             for (int dim = 0; dim < NDIM; dim++) {
                 double const x = particlesPos(dim, i).toDouble();
@@ -1263,7 +1264,7 @@ Pair<Array<double, NDIM>, double> particlesEnclosingSphere(Pair<PartInt> rng) {
         return rmax;
     };
     Vector<hpx::future<double>> futs2;
-    for (int proc = 1; proc < nthreads; proc++) {
+    for (int proc = 1; proc < numberThreads; proc++) {
         futs2.push_back(hpx::async(func2, proc));
     }
     auto rmax = func2(0);
@@ -1276,11 +1277,11 @@ Pair<Array<double, NDIM>, double> particlesEnclosingSphere(Pair<PartInt> rng) {
     return rc;
 }
 
-PartInt particlesSort(Pair<PartInt> rng, double xm, int xdim) {
-    PartInt begin = rng.first;
-    PartInt end = rng.second;
-    PartInt lo = begin;
-    PartInt hi = end;
+ParticleInteger particlesSort(Pair<ParticleInteger> rng, double xm, int xdim) {
+    ParticleInteger begin = rng.first;
+    ParticleInteger end = rng.second;
+    ParticleInteger lo = begin;
+    ParticleInteger hi = end;
     Fixed32 xmid(xm);
     bool const doGroups = getOptions().doGroups;
     bool const doTracers = getOptions().doTracers;
@@ -1325,8 +1326,8 @@ PartInt particlesSort(Pair<PartInt> rng, double xm, int xdim) {
     addCpuFlops(flops);
 }
 
-Pair<PartInt, PartInt> particlesCurrentRange() {
-    Pair<PartInt, PartInt> rc;
+Pair<ParticleInteger, ParticleInteger> particlesCurrentRange() {
+    Pair<ParticleInteger, ParticleInteger> rc;
     rc.first = rungBegin;
     rc.second = particlesSize();
     return rc;
@@ -1343,12 +1344,12 @@ void particlesSortByRung(int minrung) {
     if (minrung == 0) {
         rungBegin = 0;
     } else {
-        PartInt begin;
-        PartInt end;
+        ParticleInteger begin;
+        ParticleInteger end;
         begin = rungBegin;
         end = particlesSize();
-        PartInt lo = begin;
-        PartInt hi = end;
+        ParticleInteger lo = begin;
+        ParticleInteger hi = end;
         bool const doGroups = getOptions().doGroups;
         bool const doTracers = getOptions().doTracers;
         auto& x = particlesX[XDIM];
@@ -1391,26 +1392,26 @@ void particlesSortByRung(int minrung) {
     profilerExit();
 }
 
-void particlesGlobalReadRungs(ParticleGlobalRange range, char* r, PartInt offset) {
-    PartInt const lineSize = getOptions().partCacheLineSize;
+void particlesGlobalReadRungs(ParticleGlobalRange range, char* r, ParticleInteger offset) {
+    ParticleInteger const lineSize = getOptions().partCacheLineSize;
     if (range.range.first != range.range.second) {
         if (range.proc == hpxRank()) {
-            PartInt const dif = offset - range.range.first;
-            PartInt const sz = range.range.second - range.range.first;
+            ParticleInteger const dif = offset - range.range.first;
+            ParticleInteger const sz = range.range.second - range.range.first;
             std::memcpy(r + offset, &particlesRung(range.range.first), sizeof(char) * sz);
         } else {
             LineIdType lineId;
             lineId.proc = range.proc;
-            PartInt const startLine = (range.range.first / lineSize) * lineSize;
-            PartInt const stopLine = ((range.range.second - 1) / lineSize) * lineSize;
-            PartInt destIndex = offset;
-            for (PartInt line = startLine; line <= stopLine; line += lineSize) {
+            ParticleInteger const startLine = (range.range.first / lineSize) * lineSize;
+            ParticleInteger const stopLine = ((range.range.second - 1) / lineSize) * lineSize;
+            ParticleInteger destIndex = offset;
+            for (ParticleInteger line = startLine; line <= stopLine; line += lineSize) {
                 lineId.index = line;
                 auto const* ptr = particlesCacheReadLineRungs(lineId);
                 auto const begin = std::max(lineId.index, range.range.first);
                 auto const end = std::min(lineId.index + lineSize, range.range.second);
-                for (PartInt i = begin; i < end; i++) {
-                    PartInt const srcIndex = i - lineId.index;
+                for (ParticleInteger i = begin; i < end; i++) {
+                    ParticleInteger const srcIndex = i - lineId.index;
                     r[destIndex] = ptr[srcIndex];
                     destIndex++;
                 }
@@ -1424,12 +1425,12 @@ static char const* particlesCacheReadLineRungs(LineIdType lineId) {
         lineId, partCacheRungs, mutexesRungs);
 }
 
-static Vector<char> particlesFetchCacheLineRungs(PartInt index) {
-    PartInt const lineSize = getOptions().partCacheLineSize;
+static Vector<char> particlesFetchCacheLineRungs(ParticleInteger index) {
+    ParticleInteger const lineSize = getOptions().partCacheLineSize;
     Vector<char> line(lineSize);
-    PartInt const begin = (index / lineSize) * lineSize;
-    PartInt const end = std::min(particlesSize(), begin + lineSize);
-    for (PartInt i = begin; i < end; i++) {
+    ParticleInteger const begin = (index / lineSize) * lineSize;
+    ParticleInteger const end = std::min(particlesSize(), begin + lineSize);
+    for (ParticleInteger i = begin; i < end; i++) {
         auto& ln = line[i - begin];
         ln = particlesRung(i);
     }
@@ -1443,22 +1444,22 @@ Vector<ParticleSample> particlesSample(int cnt) {
     if (hpxRank() == 0) {
         auto const& localities = hpxLocalities();
         for (int i = 1; i < localities.size(); i++) {
-            PartInt const b = (size_t) i * cnt / localities.size();
-            PartInt const e = (size_t) (i + 1) * cnt / localities.size();
-            PartInt const thisCnt = e - b;
+            ParticleInteger const b = (size_t) i * cnt / localities.size();
+            ParticleInteger const e = (size_t) (i + 1) * cnt / localities.size();
+            ParticleInteger const thisCnt = e - b;
             futs.push_back(hpx::async<ParticlesSampleAction>(localities[i], thisCnt));
         }
-        PartInt const b = 0;
-        PartInt const e = (size_t) (1) * cnt / localities.size();
+        ParticleInteger const b = 0;
+        ParticleInteger const e = (size_t) (1) * cnt / localities.size();
         cnt = e - b;
     }
     int const seed = 4321 * hpxRank() + 42;
     gsl_rng* rndgen = gsl_rng_alloc(gsl_rng_taus);
     gsl_rng_set(rndgen, seed);
     PRINT("Selecting %i particles\n", cnt);
-    for (PartInt i = 0; i < cnt; i++) {
+    for (ParticleInteger i = 0; i < cnt; i++) {
         ParticleSample sample;
-        PartInt const index =
+        ParticleInteger const index =
             ((size_t) gsl_rng_get(rndgen) * (size_t) gsl_rng_get(rndgen)) % particlesSize();
         for (int dim = 0; dim < NDIM; dim++) {
             sample.x[dim] = particlesPos(dim, index);
@@ -1481,14 +1482,14 @@ Vector<ParticleSample> particlesSample(int cnt) {
 }
 
 void particlesLoad(FILE* fp) {
-    PartInt sphSize = 0;
-    PartInt starsSize0 = 0;
+    ParticleInteger sphSize = 0;
+    ParticleInteger starsSize0 = 0;
     bool const vsoft = getOptions().vsoft;
-    PartInt size;
-    FREAD(&size, sizeof(PartInt), 1, fp);
+    ParticleInteger size;
+    FREAD(&size, sizeof(ParticleInteger), 1, fp);
     if (getOptions().sph) {
-        FREAD(&sphSize, sizeof(PartInt), 1, fp);
-        FREAD(&starsSize0, sizeof(PartInt), 1, fp);
+        FREAD(&sphSize, sizeof(ParticleInteger), 1, fp);
+        FREAD(&starsSize0, sizeof(ParticleInteger), 1, fp);
         PRINT("Reading %i total particles %i stars %i sph\n", size, starsSize0, sphSize);
         if (starsSize0 != 0 || sphSize < 0 || sphSize > size) {
             THROW_ERROR("Unsupported star payload or invalid gas count in checkpoint\n");
@@ -1506,7 +1507,7 @@ void particlesLoad(FILE* fp) {
     FREAD(particlesVelData(), sizeof(Array<float, NDIM>), particlesSize(), fp);
     FREAD(&particlesRung(0), sizeof(char), particlesSize(), fp);
     if (getOptions().doGroups) {
-        FREAD(&particlesLastgroup(0), sizeof(GroupInt), particlesSize(), fp);
+        FREAD(&particlesLastgroup(0), sizeof(GroupInteger), particlesSize(), fp);
     }
     if (getOptions().doTracers) {
         FREAD(&particlesTracer(0), sizeof(char), particlesSize(), fp);
@@ -1517,7 +1518,7 @@ void particlesLoad(FILE* fp) {
     }
     if (getOptions().sph) {
         FREAD(&particlesType(0), sizeof(char), particlesSize(), fp);
-        FREAD(&particlesCatIndex(0), sizeof(PartInt), particlesSize(), fp);
+        FREAD(&particlesCatIndex(0), sizeof(ParticleInteger), particlesSize(), fp);
         sphParticlesLoad(fp);
     }
     FREAD(&size, sizeof(int), 1, fp);
@@ -1527,14 +1528,14 @@ void particlesLoad(FILE* fp) {
 }
 
 void particlesSave(FILE* fp) {
-    PartInt sphSize = getOptions().sph ? sphParticlesSize() : 0;
-    PartInt starsSize0 = 0;
+    ParticleInteger sphSize = getOptions().sph ? sphParticlesSize() : 0;
+    ParticleInteger starsSize0 = 0;
     bool const vsoft = getOptions().vsoft;
-    PartInt size = particlesSize();
-    fwrite(&size, sizeof(PartInt), 1, fp);
+    ParticleInteger size = particlesSize();
+    fwrite(&size, sizeof(ParticleInteger), 1, fp);
     if (getOptions().sph) {
-        fwrite(&sphSize, sizeof(PartInt), 1, fp);
-        fwrite(&starsSize0, sizeof(PartInt), 1, fp);
+        fwrite(&sphSize, sizeof(ParticleInteger), 1, fp);
+        fwrite(&starsSize0, sizeof(ParticleInteger), 1, fp);
     }
     fwrite(&particlesPos(XDIM, 0), sizeof(Fixed32), particlesSize(), fp);
     fwrite(&particlesPos(YDIM, 0), sizeof(Fixed32), particlesSize(), fp);
@@ -1542,7 +1543,7 @@ void particlesSave(FILE* fp) {
     fwrite(particlesVelData(), sizeof(Array<float, NDIM>), particlesSize(), fp);
     fwrite(&particlesRung(0), sizeof(char), particlesSize(), fp);
     if (getOptions().doGroups) {
-        fwrite(&particlesLastgroup(0), sizeof(GroupInt), particlesSize(), fp);
+        fwrite(&particlesLastgroup(0), sizeof(GroupInteger), particlesSize(), fp);
     }
     if (getOptions().doTracers) {
         fwrite(&particlesTracer(0), sizeof(char), particlesSize(), fp);
@@ -1553,7 +1554,7 @@ void particlesSave(FILE* fp) {
     }
     if (getOptions().sph) {
         fwrite(&particlesType(0), sizeof(char), particlesSize(), fp);
-        fwrite(&particlesCatIndex(0), sizeof(PartInt), particlesSize(), fp);
+        fwrite(&particlesCatIndex(0), sizeof(ParticleInteger), particlesSize(), fp);
         sphParticlesSave(fp);
     }
     size = rungBegins.size();
@@ -1564,34 +1565,34 @@ void particlesSave(FILE* fp) {
 
 void particlesSaveGlass(char const* filename) {
     FILE* fp = fopen(filename, "wb");
-    PartInt size = getOptions().partsDim;
-    fwrite(&size, sizeof(PartInt), 1, fp);
-    for (PartInt i = 0; i < particlesSize(); i++) {
+    ParticleInteger size = getOptions().partsDim;
+    fwrite(&size, sizeof(ParticleInteger), 1, fp);
+    for (ParticleInteger i = 0; i < particlesSize(); i++) {
         if (particlesType(i) == DARK_MATTER_TYPE) {
             fwrite(&particlesPos(XDIM, i), sizeof(Fixed32), 1, fp);
         }
     }
-    for (PartInt i = 0; i < particlesSize(); i++) {
+    for (ParticleInteger i = 0; i < particlesSize(); i++) {
         if (particlesType(i) == DARK_MATTER_TYPE) {
             fwrite(&particlesPos(YDIM, i), sizeof(Fixed32), 1, fp);
         }
     }
-    for (PartInt i = 0; i < particlesSize(); i++) {
+    for (ParticleInteger i = 0; i < particlesSize(); i++) {
         if (particlesType(i) == DARK_MATTER_TYPE) {
             fwrite(&particlesPos(ZDIM, i), sizeof(Fixed32), 1, fp);
         }
     }
-    for (PartInt i = 0; i < particlesSize(); i++) {
+    for (ParticleInteger i = 0; i < particlesSize(); i++) {
         if (particlesType(i) == SPH_TYPE) {
             fwrite(&particlesPos(XDIM, i), sizeof(Fixed32), 1, fp);
         }
     }
-    for (PartInt i = 0; i < particlesSize(); i++) {
+    for (ParticleInteger i = 0; i < particlesSize(); i++) {
         if (particlesType(i) == SPH_TYPE) {
             fwrite(&particlesPos(YDIM, i), sizeof(Fixed32), 1, fp);
         }
     }
-    for (PartInt i = 0; i < particlesSize(); i++) {
+    for (ParticleInteger i = 0; i < particlesSize(); i++) {
         if (particlesType(i) == SPH_TYPE) {
             fwrite(&particlesPos(ZDIM, i), sizeof(Fixed32), 1, fp);
         }
@@ -1600,19 +1601,19 @@ void particlesSaveGlass(char const* filename) {
 }
 
 void particlesResolveWithSphParticles() {
-    int const nthread = hpxHardwareConcurrency();
+    int const numberThreads = hpxHardwareConcurrency();
     std::vector<hpx::future<void>> futs;
-    for (int proc = 0; proc < nthread; proc++) {
-        futs.push_back(hpx::async([proc, nthread] {
-            PartInt const b = (size_t) proc * particlesSize() / nthread;
-            PartInt const e = (size_t) (proc + 1) * particlesSize() / nthread;
-            for (PartInt i = b; i < e; i++) {
+    for (int proc = 0; proc < numberThreads; proc++) {
+        futs.push_back(hpx::async([proc, numberThreads] {
+            ParticleInteger const b = (size_t) proc * particlesSize() / numberThreads;
+            ParticleInteger const e = (size_t) (proc + 1) * particlesSize() / numberThreads;
+            for (ParticleInteger i = b; i < e; i++) {
                 int const type = particlesType(i);
                 if (type == SPH_TYPE) {
-                    PartInt const index = particlesCatIndex(i);
+                    ParticleInteger const index = particlesCatIndex(i);
                     sphParticlesDmIndex(index) = i;
                 } else if (type == STAR_TYPE) {
-                    PartInt const index = particlesCatIndex(i);
+                    ParticleInteger const index = particlesCatIndex(i);
                     starsGet(index).dmIndex = i;
                 }
             }
@@ -1622,14 +1623,14 @@ void particlesResolveWithSphParticles() {
 }
 
 void particlesGlobalReadVels(
-    ParticleGlobalRange range, float* vx, float* vy, float* vz, PartInt offset) {
+    ParticleGlobalRange range, float* vx, float* vy, float* vz, ParticleInteger offset) {
     static bool const sph = getOptions().sph;
-    PartInt const lineSize = getOptions().partCacheLineSize;
+    ParticleInteger const lineSize = getOptions().partCacheLineSize;
     if (range.range.first != range.range.second) {
         if (range.proc == hpxRank()) {
-            PartInt const dif = offset - range.range.first;
-            PartInt const sz = range.range.second - range.range.first;
-            for (PartInt i = 0; i < sz; i++) {
+            ParticleInteger const dif = offset - range.range.first;
+            ParticleInteger const sz = range.range.second - range.range.first;
+            for (ParticleInteger i = 0; i < sz; i++) {
                 vx[offset + i] = particlesVel(XDIM, range.range.first + i);
                 vy[offset + i] = particlesVel(YDIM, range.range.first + i);
                 vz[offset + i] = particlesVel(ZDIM, range.range.first + i);
@@ -1637,16 +1638,16 @@ void particlesGlobalReadVels(
         } else {
             LineIdType lineId;
             lineId.proc = range.proc;
-            PartInt const startLine = (range.range.first / lineSize) * lineSize;
-            PartInt const stopLine = ((range.range.second - 1) / lineSize) * lineSize;
-            PartInt destIndex = offset;
-            for (PartInt line = startLine; line <= stopLine; line += lineSize) {
+            ParticleInteger const startLine = (range.range.first / lineSize) * lineSize;
+            ParticleInteger const stopLine = ((range.range.second - 1) / lineSize) * lineSize;
+            ParticleInteger destIndex = offset;
+            for (ParticleInteger line = startLine; line <= stopLine; line += lineSize) {
                 lineId.index = line;
                 auto const* ptr = particlesCacheReadLineVels(lineId);
                 auto const begin = std::max(lineId.index, range.range.first);
                 auto const end = std::min(lineId.index + lineSize, range.range.second);
-                for (PartInt i = begin; i < end; i++) {
-                    PartInt const srcIndex = i - lineId.index;
+                for (ParticleInteger i = begin; i < end; i++) {
+                    ParticleInteger const srcIndex = i - lineId.index;
                     vx[destIndex] = ptr[srcIndex][XDIM];
                     vy[destIndex] = ptr[srcIndex][YDIM];
                     vz[destIndex] = ptr[srcIndex][ZDIM];
@@ -1662,14 +1663,14 @@ static Array<float, NDIM> const* particlesCacheReadLineVels(LineIdType lineId) {
         lineId, velsPartCache, velsMutexes);
 }
 
-static Vector<Array<float, NDIM>> particlesFetchCacheLineVels(PartInt index) {
+static Vector<Array<float, NDIM>> particlesFetchCacheLineVels(ParticleInteger index) {
     static bool const sph = getOptions().sph;
     static bool const vsoft = getOptions().vsoft;
-    PartInt const lineSize = getOptions().partCacheLineSize;
+    ParticleInteger const lineSize = getOptions().partCacheLineSize;
     Vector<Array<float, NDIM>> line(lineSize);
-    PartInt const begin = (index / lineSize) * lineSize;
-    PartInt const end = std::min(particlesSize(), begin + lineSize);
-    for (PartInt i = begin; i < end; i++) {
+    ParticleInteger const begin = (index / lineSize) * lineSize;
+    ParticleInteger const end = std::min(particlesSize(), begin + lineSize);
+    for (ParticleInteger i = begin; i < end; i++) {
         auto& ln = line[i - begin];
         for (int dim = 0; dim < NDIM; dim++) {
             ln[dim] = particlesVel(dim, i);
@@ -1687,13 +1688,13 @@ EnergiesT particlesSumEnergies() {
         futs.push_back(hpx::async<ParticlesSumEnergiesAction>(c));
     }
     EnergiesT energies;
-    int const nthreads = hpxHardwareConcurrency();
-    for (int proc = 0; proc < nthreads; proc++) {
-        futs.push_back(hpx::async([nthreads, proc]() {
+    int const numberThreads = hpxHardwareConcurrency();
+    for (int proc = 0; proc < numberThreads; proc++) {
+        futs.push_back(hpx::async([numberThreads, proc]() {
             EnergiesT energies;
-            PartInt const b = (size_t) proc * particlesSize() / nthreads;
-            PartInt const e = (size_t) (proc + 1) * particlesSize() / nthreads;
-            for (PartInt i = b; i != e; i++) {
+            ParticleInteger const b = (size_t) proc * particlesSize() / numberThreads;
+            ParticleInteger const e = (size_t) (proc + 1) * particlesSize() / numberThreads;
+            for (ParticleInteger i = b; i != e; i++) {
                 float const vx = particlesVel(XDIM, i);
                 float const vy = particlesVel(YDIM, i);
                 float const vz = particlesVel(ZDIM, i);
@@ -1730,7 +1731,7 @@ SharedMutexType& particlesSharedMutex() {
     return sharedMutex;
 }
 
-Vector<int> particlesGetLocal(Vector<Pair<PartInt>> const& ranges) {
+Vector<int> particlesGetLocal(Vector<Pair<ParticleInteger>> const& ranges) {
     Vector<int> rc;
     size_t sz = 0;
     for (auto const& r : ranges) {
@@ -1741,7 +1742,7 @@ Vector<int> particlesGetLocal(Vector<Pair<PartInt>> const& ranges) {
 
     auto const func1 = [&ranges, &rc, sz]() {
         std::shared_lock<SharedMutexType> lock(sharedMutex);
-        PartInt i = 0;
+        ParticleInteger i = 0;
         for (int j = 0; j < ranges.size() / 2; j++) {
             auto const& r = ranges[j];
             auto const count = r.second - r.first;
@@ -1753,7 +1754,7 @@ Vector<int> particlesGetLocal(Vector<Pair<PartInt>> const& ranges) {
     };
     auto const func2 = [&ranges, &rc, sz]() {
         std::shared_lock<SharedMutexType> lock(sharedMutex);
-        PartInt i = sz;
+        ParticleInteger i = sz;
         for (int j = ranges.size() - 1; j >= (int) ranges.size() / 2; j--) {
             auto const& r = ranges[j];
             auto const count = r.second - r.first;
@@ -1771,7 +1772,7 @@ Vector<int> particlesGetLocal(Vector<Pair<PartInt>> const& ranges) {
 
 HPX_PLAIN_ACTION(particlesGetLocal, ParticlesGetLocalAction);
 
-hpx::future<Vector<int>> particlesGet(int rank, Vector<Pair<PartInt>> const& ranges) {
+hpx::future<Vector<int>> particlesGet(int rank, Vector<Pair<ParticleInteger>> const& ranges) {
     return hpx::async<ParticlesGetLocalAction>(hpxLocalities()[rank], ranges);
 }
 
@@ -1801,12 +1802,12 @@ GadgetIoHeader particlesReadGadget4(std::string fnameBase) {
     PRINT("%i\n", size);
 
     PRINT("Print nparts = %lli\n", header.npart[1]);
-    auto const nparts = header.npart[1];
-    particlesResize(nparts);
+    auto const numberParticles = header.npart[1];
+    particlesResize(numberParticles);
 
     FREAD(&size, sizeof(int), 1, fp);
     PRINT("%i\n", size);
-    for (PartInt i = 0; i < nparts; i++) {
+    for (ParticleInteger i = 0; i < numberParticles; i++) {
         for (int dim = 0; dim < NDIM; dim++) {
             float pos;
             FREAD(&pos, sizeof(float), 1, fp);
@@ -1819,7 +1820,7 @@ GadgetIoHeader particlesReadGadget4(std::string fnameBase) {
 
     FREAD(&size, sizeof(int), 1, fp);
     PRINT("%i\n", size);
-    for (PartInt i = 0; i < nparts; i++) {
+    for (ParticleInteger i = 0; i < numberParticles; i++) {
         for (int dim = 0; dim < NDIM; dim++) {
             float vel;
             FREAD(&vel, sizeof(float), 1, fp);
@@ -1827,7 +1828,7 @@ GadgetIoHeader particlesReadGadget4(std::string fnameBase) {
         }
     }
     auto const a = 1.0 / (header.redshift + 1.0);
-    for (int i = 0; i < nparts; i++) {
+    for (int i = 0; i < numberParticles; i++) {
         //	PRINT( "%e %e %e\n", particles_pos(XDIM,i).to_double(),
         // particles_pos(YDIM,i).to_double(), particles_pos(ZDIM,i).to_double());
         for (int dim = 0; dim < NDIM; dim++) {

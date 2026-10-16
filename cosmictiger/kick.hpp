@@ -36,7 +36,7 @@ struct CudaKickData {
     float* sphGx;
     float* sphGy;
     float* sphGz;
-    PartInt* catIndex;
+    ParticleInteger* catIndex;
     char* type;
     bool sph;
     float dmMass;
@@ -62,7 +62,7 @@ struct ExpansionType {
     Expansion<float> expansion;
 };
 
-struct SearchParams {
+struct SearchParameters {
     int self;
     int phase;
 };
@@ -74,7 +74,7 @@ struct ForceType {
     float phi;
 };
 
-struct CudaKickShmem {
+struct CudaKickSharedMemory {
     union {
         struct {
             Array<Fixed32, KICK_PP_MAX> x;
@@ -94,7 +94,7 @@ struct CudaKickShmem {
     DeviceVector<int> pclist;
     DeviceVector<int> nextlist;
     DeviceVector<ExpansionType> l;
-    DeviceVector<SearchParams> params;
+    DeviceVector<SearchParameters> params;
     BarrierType barrier;
 };
 #endif
@@ -165,7 +165,7 @@ struct KickReturn {
     }
 };
 
-struct KickParams {
+struct KickParameters {
     bool htime;
     float sign;
     int minLevel;
@@ -186,7 +186,7 @@ struct KickParams {
     bool descending;
     bool top;
     bool doPhi;
-    KickParams() {
+    KickParameters() {
         htime = true;
         maxDt = 1e30;
         doPhi = true;
@@ -229,16 +229,16 @@ struct KickWorkitem {
 struct KickWorkspace;
 
 #ifndef __CUDACC__
-KickReturn kick(KickParams, Expansion<float> l, Array<Fixed32, NDIM> pos, TreeId self,
+KickReturn kick(KickParameters, Expansion<float> l, Array<Fixed32, NDIM> pos, TreeId self,
     Vector<TreeId> dchecklist, Vector<TreeId> echecklist, std::shared_ptr<KickWorkspace>);
 #endif
 void kickShowTimings();
 void kickSetRc(KickReturn kr);
 #ifdef USE_CUDA
 KickReturn cudaExecuteKicks(
-    KickParams params, Fixed32*, Fixed32*, Fixed32*, TreeNode*, Vector<KickWorkitem> workitems);
+    KickParameters params, Fixed32*, Fixed32*, Fixed32*, TreeNode*, Vector<KickWorkitem> workitems);
 #endif
 int kickBlockCount();
-size_t kickEstimateCudaMemUsage(double theta, int nparts, int checkCount);
+size_t kickEstimateCudaMemoryUsage(double theta, int numberParticles, int checkCount);
 
 #endif /* KICK_HPP_ */

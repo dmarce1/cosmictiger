@@ -48,7 +48,7 @@
 #define CHEM_HEPP 6
 #define CHEM_Z 7
 
-class FracReal {
+class FractionReal {
     unsigned short i_;
     constexpr static float kC0_ = 10000.0f;
     constexpr static float kC0inv_ = 1.0f / kC0_;
@@ -59,7 +59,7 @@ public:
         return expf(-sqr(i_ * kC0inv_));
     }
     CUDA_EXPORT
-    FracReal& operator=(float y) {
+    FractionReal& operator=(float y) {
         ALWAYS_ASSERT(y <= 1.0f);
         if (y > 0.0) {
             i_ = kC0_ * sqrtf(-logf(y));
@@ -161,7 +161,7 @@ SPH_PARTICLES_EXTERN SphRecord2* sphParticlesR2;
 SPH_PARTICLES_EXTERN SphRecord5* sphParticlesR5;
 SPH_PARTICLES_EXTERN SphRecord6* sphParticlesR6;
 
-SPH_PARTICLES_EXTERN PartInt* sphParticlesDm;                // dark matter index
+SPH_PARTICLES_EXTERN ParticleInteger* sphParticlesDm;        // dark matter index
 SPH_PARTICLES_EXTERN Array<float*, NDIM> sphParticlesDv2;    // dvel_pred
 SPH_PARTICLES_EXTERN Array<float*, NDIM> sphParticlesG;      // dvel_pred
 SPH_PARTICLES_EXTERN float* sphParticlesDv;
@@ -180,7 +180,7 @@ SPH_PARTICLES_EXTERN char* sphParticlesOr;
 SPH_PARTICLES_EXTERN char* sphParticlesSa;
 SPH_PARTICLES_EXTERN char* sphParticlesSt;
 
-struct AuxQuantities {
+struct AuxiliaryQuantities {
     float omega;
     float shearv;
     float alpha;
@@ -200,8 +200,8 @@ struct AuxQuantities {
     }
 };
 
-PartInt sphParticlesSize();
-void sphParticlesResize(PartInt sz, bool parts2 = true);
+ParticleInteger sphParticlesSize();
+void sphParticlesResize(ParticleInteger sz, bool parts2 = true);
 void sphParticlesFree();
 void sphParticlesCacheFree1();
 void sphParticlesCacheFree2();
@@ -211,29 +211,30 @@ void sphParticlesCacheFreeEntr();
 void sphParticlesCacheFreeEint();
 #endif
 void sphParticlesResolveWithParticles();
-void sphParticlesSortByParticles(Pair<PartInt> rng);
-void sphParticlesSwap(PartInt i, PartInt j);
-void sphParticlesSwap2(PartInt i, PartInt j);
-PartInt sphParticlesSort(Pair<PartInt> rng, Fixed32 xm, int xdim);
+void sphParticlesSortByParticles(Pair<ParticleInteger> rng);
+void sphParticlesSwap(ParticleInteger i, ParticleInteger j);
+void sphParticlesSwap2(ParticleInteger i, ParticleInteger j);
+ParticleInteger sphParticlesSort(Pair<ParticleInteger> rng, Fixed32 xm, int xdim);
 void sphParticlesGlobalReadPos(
-    ParticleGlobalRange range, Fixed32* x, Fixed32* y, Fixed32* z, PartInt offset);
-void sphParticlesGlobalReadFcold(ParticleGlobalRange range, float*, char*, PartInt offset);
+    ParticleGlobalRange range, Fixed32* x, Fixed32* y, Fixed32* z, ParticleInteger offset);
+void sphParticlesGlobalReadFcold(ParticleGlobalRange range, float*, char*, ParticleInteger offset);
 void sphParticlesGlobalReadEnergyAndSmoothlen(
-    ParticleGlobalRange range, float*, float*, PartInt offset);
-void sphParticlesGlobalReadRungs(ParticleGlobalRange range, char*, PartInt offset);
-void sphParticlesGlobalReadVels(ParticleGlobalRange range, float*, float*, float*, PartInt offset);
-void sphParticlesGlobalReadKappas(ParticleGlobalRange range, float*, PartInt offset);
-void sphParticlesGlobalReadRho(ParticleGlobalRange range, float*, PartInt offset);
+    ParticleGlobalRange range, float*, float*, ParticleInteger offset);
+void sphParticlesGlobalReadRungs(ParticleGlobalRange range, char*, ParticleInteger offset);
+void sphParticlesGlobalReadVels(
+    ParticleGlobalRange range, float*, float*, float*, ParticleInteger offset);
+void sphParticlesGlobalReadKappas(ParticleGlobalRange range, float*, ParticleInteger offset);
+void sphParticlesGlobalReadRho(ParticleGlobalRange range, float*, ParticleInteger offset);
 void sphParticlesGlobalReadAux(ParticleGlobalRange range, float* alpha, float* omega, float* omegaP,
-    float* pre, float* shearv, Array<float, NCHEMFRACS>* fracs, PartInt offset);
+    float* pre, float* shearv, Array<float, NCHEMFRACS>* fracs, ParticleInteger offset);
 void sphParticlesResetConverged();
 void sphParticlesResetSemiactive();
 void sphParticlesLoad(FILE* fp);
 void sphParticlesSave(FILE* fp);
 void sphCheckpointTest();
 float sphParticlesMaxSmoothLen();
-float sphParticlesTemperature(PartInt, float);
-float sphParticlesMmw(PartInt);
+float sphParticlesTemperature(ParticleInteger, float);
+float sphParticlesMmw(ParticleInteger);
 void sphParticlesSoftlens2smoothlens(int minrung);
 
 std::pair<double, double> sphParticlesApplyUpdates(int, int, float, float, float = 1.0);
@@ -245,64 +246,64 @@ std::pair<double, double> sphParticlesApplyUpdates(int, int, float, float, float
  */
 
 #ifdef ENTROPY
-inline float& sphParticlesEntr0(PartInt index) {
+inline float& sphParticlesEntr0(ParticleInteger index) {
     return sphParticlesE0[index];
 }
 #else
-inline float& sphParticlesEint0(PartInt index) {
+inline float& sphParticlesEint0(ParticleInteger index) {
     return sphParticlesE0[index];
 }
 #endif
 
-inline char& sphParticlesIsstar(PartInt index) {
+inline char& sphParticlesIsstar(ParticleInteger index) {
     return sphParticlesSt[index];
 }
 
-inline float& sphParticlesTcool(PartInt index) {
+inline float& sphParticlesTcool(ParticleInteger index) {
     return sphParticlesTc[index];
 }
 
-inline char& sphParticlesConverged(PartInt index) {
+inline char& sphParticlesConverged(ParticleInteger index) {
     return sphParticlesOr[index];
 }
 
-inline char& sphParticlesSemiactive(PartInt index) {
+inline char& sphParticlesSemiactive(ParticleInteger index) {
     return sphParticlesSa[index];
 }
 
-inline float& sphParticlesKappa(PartInt index) {
+inline float& sphParticlesKappa(ParticleInteger index) {
     return sphParticlesKap[index];
 }
 
-inline float& sphParticlesColdMass(PartInt index) {
+inline float& sphParticlesColdMass(ParticleInteger index) {
     return sphParticlesFc[index];
 }
 
-inline float& sphParticlesDcoldMass(PartInt index) {
+inline float& sphParticlesDcoldMass(ParticleInteger index) {
     return sphParticlesR5[index].dfcold;
 }
 
-inline float& sphParticlesAlpha(PartInt index) {
+inline float& sphParticlesAlpha(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     return sphParticlesR1[index].alpha;
 }
 
-inline float& sphParticlesFrac(int j, PartInt index) {
+inline float& sphParticlesFrac(int j, ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     return sphParticlesR1[index].frac[j];
 }
 
-inline float& sphParticlesShear(PartInt index) {
+inline float& sphParticlesShear(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     return sphParticlesS2[index];
 }
 
-inline float& sphParticlesZ(PartInt index) {
+inline float& sphParticlesZ(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     return sphParticlesR1[index].frac[CHEM_Z];
 }
 
-inline void sphParticlesNormalizeFracs(PartInt index) {
+inline void sphParticlesNormalizeFracs(ParticleInteger index) {
     double sum = 0.0;
     for (double fi = 0; fi < NCHEMFRACS; fi++) {
         sum += sphParticlesFrac(fi, index);
@@ -312,47 +313,47 @@ inline void sphParticlesNormalizeFracs(PartInt index) {
     }
 }
 
-inline float& sphParticlesH(PartInt index) {
+inline float& sphParticlesH(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     return sphParticlesR1[index].frac[CHEM_H];
 }
 
-inline float& sphParticlesHe0(PartInt index) {
+inline float& sphParticlesHe0(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     return sphParticlesR1[index].frac[CHEM_HE];
 }
 
-inline float& sphParticlesHp(PartInt index) {
+inline float& sphParticlesHp(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     return sphParticlesR1[index].frac[CHEM_HP];
 }
 
-inline float& sphParticlesHn(PartInt index) {
+inline float& sphParticlesHn(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     return sphParticlesR1[index].frac[CHEM_HN];
 }
 
-inline float& sphParticlesH2(PartInt index) {
+inline float& sphParticlesH2(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     return sphParticlesR1[index].frac[CHEM_H2];
 }
 
-inline float& sphParticlesHep(PartInt index) {
+inline float& sphParticlesHep(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     return sphParticlesR1[index].frac[CHEM_HEP];
 }
 
-inline float& sphParticlesHepp(PartInt index) {
+inline float& sphParticlesHepp(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     return sphParticlesR1[index].frac[CHEM_HEPP];
 }
 
-inline float sphParticlesY(PartInt index) {
+inline float sphParticlesY(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     return sphParticlesHe0(index) + sphParticlesHep(index) + sphParticlesHepp(index);
 }
 
-inline float sphParticlesGamma(PartInt index) {
+inline float sphParticlesGamma(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     float const hValue = sphParticlesH(index);
     float const hp = sphParticlesHp(index);
@@ -369,38 +370,38 @@ inline float sphParticlesGamma(PartInt index) {
     return 1.f + 1.f / cv;
 }
 
-inline SphRecord1& sphParticlesRec1(PartInt index) {
+inline SphRecord1& sphParticlesRec1(ParticleInteger index) {
     return sphParticlesR1[index];
 }
 
-inline SphRecord2& sphParticlesRec2(PartInt index) {
+inline SphRecord2& sphParticlesRec2(ParticleInteger index) {
     return sphParticlesR2[index];
 }
 
-inline SphRecord5& sphParticlesRec5(PartInt index) {
+inline SphRecord5& sphParticlesRec5(ParticleInteger index) {
     return sphParticlesR5[index];
 }
 
-inline SphRecord6& sphParticlesRec6(PartInt index) {
+inline SphRecord6& sphParticlesRec6(ParticleInteger index) {
     return sphParticlesR6[index];
 }
 
-inline float& sphParticlesOmega(PartInt index) {
+inline float& sphParticlesOmega(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     return sphParticlesFp1[index];
 }
 
-inline float& sphParticlesOmegaP(PartInt index) {
+inline float& sphParticlesOmegaP(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     return sphParticlesFp2[index];
 }
 
-inline float& sphParticlesPressure(PartInt index) {
+inline float& sphParticlesPressure(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     return sphParticlesPre[index];
 }
 
-inline PartInt& sphParticlesDmIndex(PartInt index) {
+inline ParticleInteger& sphParticlesDmIndex(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     return sphParticlesDm[index];
 }
@@ -418,69 +419,69 @@ inline char& sphParticlesRung(int index) {
 }
 
 #ifdef ENTROPY
-inline float& sphParticlesEntr(PartInt index) {
+inline float& sphParticlesEntr(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     return sphParticlesR2[index].A;
 }
 
-inline float& sphParticlesDentr2(PartInt index) {
+inline float& sphParticlesDentr2(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     return sphParticlesDe3[index];
 }
 
-inline float& sphParticlesDentr1(PartInt index) {
+inline float& sphParticlesDentr1(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     return sphParticlesDe2[index];
 }
 
 #else
-inline float& sphParticlesEint(PartInt index) {
+inline float& sphParticlesEint(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     return sphParticlesR2[index].eint;
 }
 
-inline float& sphParticlesDeint2(PartInt index) {
+inline float& sphParticlesDeint2(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     return sphParticlesDe3[index];
 }
 
-inline float& sphParticlesDeint1(PartInt index) {
+inline float& sphParticlesDeint1(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     return sphParticlesDe2[index];
 }
 #endif
 
-inline float& sphParticlesDvel0(int dim, PartInt index) {
+inline float& sphParticlesDvel0(int dim, ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     return sphParticlesDv2[dim][index];
 }
 
-inline float& sphParticlesDvel(int dim, PartInt index) {
+inline float& sphParticlesDvel(int dim, ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     return sphParticlesR6[index].dvel[dim];
 }
 
-inline Array<float, NCHEMFRACS>& sphParticlesChem(PartInt index) {
+inline Array<float, NCHEMFRACS>& sphParticlesChem(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     return sphParticlesR1[index].frac;
 }
 
-inline Array<float, NCHEMFRACS>& sphParticlesDchem(PartInt index) {
+inline Array<float, NCHEMFRACS>& sphParticlesDchem(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     return sphParticlesR5[index].dfrac;
 }
 
-inline float& sphParticlesDivv(PartInt index) {
+inline float& sphParticlesDivv(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     return sphParticlesDv[index];
 }
 
-inline float& sphParticlesGforce(int dim, PartInt index) {
+inline float& sphParticlesGforce(int dim, ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     return sphParticlesG[dim][index];
 }
 
-inline float sphParticlesEkin(PartInt index) {
+inline float sphParticlesEkin(ParticleInteger index) {
     float ekin = 0.f;
     for (int dim = 0; dim < NDIM; dim++) {
         ekin += 0.5f * sqr(sphParticlesVel(dim, index));
@@ -488,18 +489,18 @@ inline float sphParticlesEkin(PartInt index) {
     return ekin;
 }
 
-inline float& sphParticlesSmoothLen(PartInt index) {
+inline float& sphParticlesSmoothLen(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     return sphParticlesR2[index].h;
 }
 
 #ifdef HOPKINS
 
-inline float& sphParticlesRhoRho(PartInt index) {
+inline float& sphParticlesRhoRho(ParticleInteger index) {
     return sphParticlesRh[index];
 }
 
-inline float sphParticlesRhoPre(PartInt index) {
+inline float sphParticlesRhoPre(ParticleInteger index) {
 #ifdef ENTROPY
     float const gamma = getOptions().gamma;
     return powf(sphParticlesPressure(index) / sphParticlesEntr(index), 1.0f / gamma);
@@ -509,7 +510,7 @@ inline float sphParticlesRhoPre(PartInt index) {
 #endif
 }
 
-inline float sphParticlesEintPre(PartInt index) {
+inline float sphParticlesEintPre(ParticleInteger index) {
 #ifdef ENTROPY
     ALWAYS_ASSERT(sphParticlesEntr(index) > 0.0f);
     float const gamma = getOptions().gamma;
@@ -519,7 +520,7 @@ inline float sphParticlesEintPre(PartInt index) {
 #endif
 }
 
-inline float sphParticlesEintRho(PartInt index) {
+inline float sphParticlesEintRho(ParticleInteger index) {
 #ifdef ENTROPY
     static float const gamma0 = getOptions().gamma;
     float const rho = sphParticlesRhoRho(index);
@@ -532,12 +533,12 @@ inline float sphParticlesEintRho(PartInt index) {
 
 #else
 
-inline float& sphParticlesRho(PartInt index) {
+inline float& sphParticlesRho(ParticleInteger index) {
     return sphParticlesRh[index];
 }
 
 #ifdef ENTROPY
-inline float sphParticlesEint(PartInt index) {
+inline float sphParticlesEint(ParticleInteger index) {
     static float const gamma0 = getOptions().gamma;
     static float const stars = getOptions().stars;
     float hfrac = 1.0f;
@@ -551,8 +552,8 @@ inline float sphParticlesEint(PartInt index) {
 #endif
 #endif
 
-inline AuxQuantities sphParticlesAuxQuantities(PartInt index) {
-    AuxQuantities aux{};
+inline AuxiliaryQuantities sphParticlesAuxQuantities(ParticleInteger index) {
+    AuxiliaryQuantities aux{};
     aux.alpha = sphParticlesAlpha(index);
     aux.omega = sphParticlesOmega(index);
     aux.omegaP = sphParticlesOmegaP(index);
@@ -567,7 +568,7 @@ inline AuxQuantities sphParticlesAuxQuantities(PartInt index) {
     return aux;
 }
 
-inline SphParticle getSphParticle(PartInt i) {
+inline SphParticle getSphParticle(ParticleInteger i) {
     SphParticle part;
     for (int fi = 0; fi < NCHEMFRACS; fi++) {
         part.frac[fi] = sphParticlesFrac(fi, i);

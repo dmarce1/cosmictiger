@@ -3,14 +3,14 @@
 #include <cosmictiger/compress.hpp>
 
 double CompressedParticles::compressionRatio() {
-    size_t nparts = 0;
-    size_t nbytes = 36;
+    size_t numberParticles = 0;
+    size_t numberBytes = 36;
     for (int i = 0; i < blocks.size(); i++) {
         int const n = blocks[i].x[XDIM].size();
-        nbytes += 33 + 2 * NDIM * n;
-        nparts += n;
+        numberBytes += 33 + 2 * NDIM * n;
+        numberParticles += n;
     }
-    return (double) (24 * nparts) / nbytes;
+    return (double) (24 * numberParticles) / numberBytes;
 }
 
 int CompressedParticles::size() {
@@ -24,7 +24,7 @@ int CompressedParticles::size() {
 void CompressedBlock::write(FILE* fp) {
     unsigned char size = x[XDIM].size();
     fwrite(&size, sizeof(unsigned char), 1, fp);
-    fwrite(&xc[0], NDIM * sizeof(LcReal), 1, fp);
+    fwrite(&xc[0], NDIM * sizeof(LightconeReal), 1, fp);
     fwrite(&vc[0], NDIM * sizeof(float), 1, fp);
     fwrite(&xmax, sizeof(float), 1, fp);
     fwrite(&vmax, sizeof(float), 1, fp);
@@ -43,7 +43,7 @@ void CompressedBlock::read(FILE* fp) {
         x[dim].resize(size);
         v[dim].resize(size);
     }
-    FREAD(&xc[0], NDIM * sizeof(LcReal), 1, fp);
+    FREAD(&xc[0], NDIM * sizeof(LightconeReal), 1, fp);
     FREAD(&vc[0], NDIM * sizeof(float), 1, fp);
     FREAD(&xmax, sizeof(float), 1, fp);
     FREAD(&vmax, sizeof(float), 1, fp);
@@ -57,9 +57,9 @@ void CompressedBlock::read(FILE* fp) {
 
 void CompressedParticles::write(FILE* fp) {
     int size = blocks.size();
-    fwrite(&groupId, sizeof(LcGroup), 1, fp);
+    fwrite(&groupId, sizeof(LightconeGroup), 1, fp);
     fwrite(&size, sizeof(int), 1, fp);
-    fwrite(&xc[0], NDIM * sizeof(LcReal), 1, fp);
+    fwrite(&xc[0], NDIM * sizeof(LightconeReal), 1, fp);
     fwrite(&vc[0], NDIM * sizeof(float), 1, fp);
     fwrite(&xmax, sizeof(float), 1, fp);
     fwrite(&vmax, sizeof(float), 1, fp);
@@ -70,10 +70,10 @@ void CompressedParticles::write(FILE* fp) {
 
 void CompressedParticles::read(FILE* fp) {
     int size;
-    FREAD(&groupId, sizeof(LcGroup), 1, fp);
+    FREAD(&groupId, sizeof(LightconeGroup), 1, fp);
     FREAD(&size, sizeof(int), 1, fp);
     blocks.resize(size);
-    FREAD(&xc[0], NDIM * sizeof(LcReal), 1, fp);
+    FREAD(&xc[0], NDIM * sizeof(LightconeReal), 1, fp);
     FREAD(&vc[0], NDIM * sizeof(float), 1, fp);
     FREAD(&xmax, sizeof(float), 1, fp);
     FREAD(&vmax, sizeof(float), 1, fp);
@@ -147,8 +147,8 @@ Vector<CompressedBlock> compressedLeavesToBlocks(
 
 void compressedTreeCreate(Vector<Pair<int>>& leaves, Vector<Array<double, 2 * NDIM>>& parts,
     Range<double, 2 * NDIM> const& box, Pair<int> const& partRange) {
-    int const nparts = partRange.second - partRange.first;
-    if (nparts <= 64) {
+    int const numberParticles = partRange.second - partRange.first;
+    if (numberParticles <= 64) {
         leaves.push_back(partRange);
     } else {
         int xdim = box.longestDim();
@@ -181,7 +181,7 @@ void compressedTreeCreate(Vector<Pair<int>>& leaves, Vector<Array<double, 2 * ND
 
 #ifndef LC2GADGET2
 
-CompressedParticles compressParticles(Vector<LcEntry> const& inparts, LcGroup id) {
+CompressedParticles compressParticles(Vector<LightconeEntry> const& inparts, LightconeGroup id) {
     Vector<Array<double, 2 * NDIM>> particles;
     particles.reserve(inparts.size());
     Array<double, NDIM> xc;

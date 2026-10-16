@@ -155,10 +155,10 @@ public:
 };
 
 void cudaSetDevice();
-size_t cudaFreeMem();
+size_t cudaFreeMemory();
 int cudaSmpCount();
-size_t cudaFreeMem();
-size_t cudaTotalMem();
+size_t cudaFreeMemory();
+size_t cudaTotalMemory();
 int cudaSmpCount();
 void cudaInit();
 cudaStream_t cudaGetStream();

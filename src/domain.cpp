@@ -48,7 +48,7 @@ HPX_PLAIN_ACTION(domainsInitRebounds, DomainsInitReboundsAction);
 HPX_PLAIN_ACTION(domainsTransmitParticles, DomainsTransmitParticlesAction);
 HPX_PLAIN_ACTION(domainsTransmitBoxes, DomainsTransmitBoxesAction);
 
-static Vector<PartInt> freeIndices;
+static Vector<ParticleInteger> freeIndices;
 static Vector<Vector<Particle>> transParticles;
 static std::unordered_map<size_t, DomainT> boxesByKey;
 
@@ -146,18 +146,18 @@ Vector<size_t> domainsCountBelow(Vector<double> bounds, int depth) {
                 //							PRINT("???? %i %i %i %i \n", hpx_rank(), i,
                 // local_domains[i].part_range.first, local_domains[i].part_range.second);
                 auto const rng = localDomains[i].partRange;
-                int const nthreads = std::max(2 * (size_t) (rng.second - rng.first) *
+                int const numberThreads = std::max(2 * (size_t) (rng.second - rng.first) *
                         hpxHardwareConcurrency() / (size_t) particlesSize(),
                     (size_t) 1);
                 Vector<hpx::future<void>> futs;
                 int const xdim = depth % NDIM;
                 Fixed32 const xmid = bounds[i];
                 std::atomic<size_t> count(0);
-                auto const func = [nthreads, rng, xdim, xmid, &count, &counts](int proc) {
+                auto const func = [numberThreads, rng, xdim, xmid, &count, &counts](int proc) {
                     size_t const begin =
-                        rng.first + (size_t) proc * (rng.second - rng.first) / nthreads;
+                        rng.first + (size_t) proc * (rng.second - rng.first) / numberThreads;
                     size_t const end =
-                        rng.first + (size_t) (proc + 1) * (rng.second - rng.first) / nthreads;
+                        rng.first + (size_t) (proc + 1) * (rng.second - rng.first) / numberThreads;
                     size_t thisCount = 0;
                     for (size_t i = begin; i < end; i++) {
                         if (particlesPos(xdim, i) < xmid) {
@@ -167,7 +167,7 @@ Vector<size_t> domainsCountBelow(Vector<double> bounds, int depth) {
                     count += thisCount;
                 };
 
-                for (int proc = 1; proc < nthreads; proc++) {
+                for (int proc = 1; proc < numberThreads; proc++) {
                     futs.push_back(hpx::async(func, proc));
                 }
                 func(0);
@@ -224,7 +224,7 @@ void domainsRebound() {
     domains[0].box = unitBox<double>();
     domains[0].procRange.first = 0;
     domains[0].procRange.second = hpxSize();
-    domains[0].totalCount = getOptions().nparts;
+    domains[0].totalCount = getOptions().numberParticles;
     domains[0].midhi = 1.0;
     domains[0].midlo = 0.0;
     domains[0].key = 1;
@@ -410,7 +410,7 @@ void receiveSphParticles(Vector<SphMigrationParticle> parts) {
     receivedSphParticles.push_back(std::move(parts));
 }
 HPX_PLAIN_ACTION(receiveSphParticles, ReceiveSphParticlesAction);
-static SphMigrationParticle packSphParticle(PartInt index) {
+static SphMigrationParticle packSphParticle(ParticleInteger index) {
     SphMigrationParticle result;
     result.part = particlesGetParticle(index);
     ALWAYS_ASSERT(result.part.type != STAR_TYPE);
@@ -456,7 +456,8 @@ static SphMigrationParticle packSphParticle(PartInt index) {
     }
     return result;
 }
-static void unpackSphParticle(SphMigrationParticle record, PartInt index, PartInt gasIndex) {
+static void unpackSphParticle(
+    SphMigrationParticle record, ParticleInteger index, ParticleInteger gasIndex) {
     if (record.part.type == SPH_TYPE) {
         record.part.catIndex = gasIndex;
     }
@@ -513,7 +514,7 @@ static void beginSphMigration(int rung) {
     std::unordered_map<int, Vector<SphMigrationParticle>> sends;
     // The ordinary integrator retains every rung in the same particle range.
     // Moving every out-of-domain particle also handles domain rebalancing.
-    for (PartInt i = 0; i < particlesSize(); i++) {
+    for (ParticleInteger i = 0; i < particlesSize(); i++) {
         Array<double, NDIM> x;
         for (int dim = 0; dim < NDIM; dim++) {
             x[dim] = particlesPos(dim, i).toDouble();
@@ -553,14 +554,14 @@ static void endSphMigration() {
         }
     }
     receivedSphParticles.clear();
-    PartInt gasCount = 0;
+    ParticleInteger gasCount = 0;
     for (auto const& record : retainedSphParticles) {
         gasCount += record.part.type == SPH_TYPE;
     }
     particlesResize(retainedSphParticles.size());
     sphParticlesResize(gasCount, false);
-    PartInt gasIndex = 0;
-    for (PartInt i = 0; i < retainedSphParticles.size(); i++) {
+    ParticleInteger gasIndex = 0;
+    for (ParticleInteger i = 0; i < retainedSphParticles.size(); i++) {
         unpackSphParticle(retainedSphParticles[i], i, gasIndex);
         gasIndex += retainedSphParticles[i].part.type == SPH_TYPE;
     }
@@ -584,27 +585,27 @@ void domainsBegin(int rung) {
     auto const myDomain = domainsFindMyBox();
     freeIndices.resize(0);
     MutexType mutex;
-    int const nthreads = hpxHardwareConcurrency();
+    int const numberThreads = hpxHardwareConcurrency();
     auto const currentRange = particlesCurrentRange();
-    std::atomic<PartInt> nextBegin(0);
+    std::atomic<ParticleInteger> nextBegin(0);
     constexpr int kChunkSize = 1024;
-    for (int proc = 0; proc < nthreads; proc++) {
-        futs.push_back(hpx::async([proc, nthreads, &mutex, &nextBegin, myDomain, currentRange,
+    for (int proc = 0; proc < numberThreads; proc++) {
+        futs.push_back(hpx::async([proc, numberThreads, &mutex, &nextBegin, myDomain, currentRange,
                                       rung]() {
             std::unordered_map<int, Vector<Particle>> sends;
             Vector<hpx::future<void>> futs;
-            Vector<PartInt> myFreeIndices;
-            PartInt begin = nextBegin++ * kChunkSize + currentRange.first;
+            Vector<ParticleInteger> myFreeIndices;
+            ParticleInteger begin = nextBegin++ * kChunkSize + currentRange.first;
             while (begin < currentRange.second) {
-                PartInt const end = std::min(begin + kChunkSize, currentRange.second);
-                for (PartInt i = begin; i < end; i++) {
+                ParticleInteger const end = std::min(begin + kChunkSize, currentRange.second);
+                for (ParticleInteger i = begin; i < end; i++) {
                     if (particlesRung(i) == rung) {
                         Array<double, NDIM> x;
-                        for (PartInt dim = 0; dim < NDIM; dim++) {
+                        for (ParticleInteger dim = 0; dim < NDIM; dim++) {
                             x[dim] = particlesPos(dim, i).toDouble();
                         }
                         if (!myDomain.contains(x)) {
-                            PartInt const rank = findParticleDomain(x);
+                            ParticleInteger const rank = findParticleDomain(x);
                             auto& send = sends[rank];
                             send.push_back(particlesGetParticle(i));
                             if (send.size() >= MAX_PARTICLES_PER_PARCEL) {
@@ -651,7 +652,7 @@ void domainsEnd() {
         futs.push_back(hpx::async<DomainsEndAction>(c));
     }
     auto const particleCompare = [](Particle a, Particle b) {
-        for (PartInt dim = 0; dim < NDIM; dim++) {
+        for (ParticleInteger dim = 0; dim < NDIM; dim++) {
             if (a.x[dim] < b.x[dim]) {
                 return true;
             } else if (a.x[dim] > b.x[dim]) {
@@ -668,21 +669,21 @@ void domainsEnd() {
         fut1 = hpx::make_ready_future();
     }
     Vector<Particle> allTransParticles;
-    Vector<PartInt> offsets(transParticles.size());
-    PartInt sz = 0;
+    Vector<ParticleInteger> offsets(transParticles.size());
+    ParticleInteger sz = 0;
     for (int i = 0; i < transParticles.size(); i++) {
         offsets[i] = sz;
         sz += transParticles[i].size();
     }
     allTransParticles.resize(sz);
     Vector<hpx::future<void>> futs1;
-    int const nthreads = hpxHardwareConcurrency();
+    int const numberThreads = hpxHardwareConcurrency();
     std::atomic<int> index(0);
-    for (int proc = 0; proc < nthreads; proc++) {
+    for (int proc = 0; proc < numberThreads; proc++) {
         futs1.push_back(hpx::async([&index, &allTransParticles, &offsets]() {
             int i;
             while ((i = index++) < transParticles.size()) {
-                for (PartInt j = 0; j < transParticles[i].size(); j++) {
+                for (ParticleInteger j = 0; j < transParticles[i].size(); j++) {
                     allTransParticles[offsets[i] + j] = transParticles[i][j];
                 }
             }
@@ -699,8 +700,8 @@ void domainsEnd() {
     fut1.get();
     fut2.get();
     if (freeIndices.size() < allTransParticles.size()) {
-        PartInt const diff = allTransParticles.size() - freeIndices.size();
-        for (PartInt i = 0; i < diff; i++) {
+        ParticleInteger const diff = allTransParticles.size() - freeIndices.size();
+        for (ParticleInteger i = 0; i < diff; i++) {
             freeIndices.push_back(particlesSize() + i);
         }
         particlesResize(particlesSize() + diff);
@@ -713,11 +714,11 @@ void domainsEnd() {
         }
     }
     // PRINT("unloading particles on %i\n", hpx_rank());
-    for (int proc = 0; proc < nthreads; proc++) {
-        futs.push_back(hpx::async([nthreads, proc, &allTransParticles]() {
-            PartInt const begin = (size_t) proc * freeIndices.size() / nthreads;
-            PartInt const end = (size_t) (proc + 1) * freeIndices.size() / nthreads;
-            for (PartInt i = begin; i < end; i++) {
+    for (int proc = 0; proc < numberThreads; proc++) {
+        futs.push_back(hpx::async([numberThreads, proc, &allTransParticles]() {
+            ParticleInteger const begin = (size_t) proc * freeIndices.size() / numberThreads;
+            ParticleInteger const end = (size_t) (proc + 1) * freeIndices.size() / numberThreads;
+            for (ParticleInteger i = begin; i < end; i++) {
                 particlesSetParticle(allTransParticles[i], freeIndices[i]);
             }
         }));
@@ -738,14 +739,16 @@ Range<double> domainsFindMyBox() {
 static void domainsCheck() {
     std::atomic<int> fail(0);
     auto const myDomain = domainsFindMyBox();
-    int const nthreads = hpxHardwareConcurrency();
+    int const numberThreads = hpxHardwareConcurrency();
     Vector<hpx::future<void>> futs;
-    for (int proc = 0; proc < nthreads; proc++) {
-        futs.push_back(hpx::async([proc, nthreads, &fail, myDomain]() {
+    for (int proc = 0; proc < numberThreads; proc++) {
+        futs.push_back(hpx::async([proc, numberThreads, &fail, myDomain]() {
             auto const rng = particlesCurrentRange();
-            PartInt const begin = size_t(proc) * (rng.second - rng.first) / nthreads + rng.first;
-            PartInt const end = size_t(proc + 1) * (rng.second - rng.first) / nthreads + rng.first;
-            for (PartInt i = begin; i < end; i++) {
+            ParticleInteger const begin =
+                size_t(proc) * (rng.second - rng.first) / numberThreads + rng.first;
+            ParticleInteger const end =
+                size_t(proc + 1) * (rng.second - rng.first) / numberThreads + rng.first;
+            for (ParticleInteger i = begin; i < end; i++) {
                 Array<double, NDIM> x;
                 for (int dim = 0; dim < NDIM; dim++) {
                     x[dim] = particlesPos(dim, i).toDouble();

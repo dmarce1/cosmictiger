@@ -29,7 +29,7 @@ using GroupRange = Range<double>;
 struct GroupTreeNode {
     GroupRange box;
     Array<TreeId, NCHILD> children;
-    Pair<PartInt> partRange;
+    Pair<ParticleInteger> partRange;
     Pair<int> procRange;
     bool localRoot;
     bool active;
@@ -63,7 +63,7 @@ struct GroupTreeReturn {
 };
 
 GroupTreeReturn groupTreeCreate(size_t key = 1, Pair<int, int> procRange = {0, hpxSize()},
-    Pair<PartInt> partRange = {-1, -1}, GroupRange box = unitBox<double>(), int depth = 0,
+    Pair<ParticleInteger> partRange = {-1, -1}, GroupRange box = unitBox<double>(), int depth = 0,
     bool localRoot = hpxSize() == 1);
 void groupTreeDestroy();
 GroupTreeNode const* groupTreeGetNode(TreeId id);

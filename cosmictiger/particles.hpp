@@ -38,19 +38,19 @@ static __constant__ float rungDt[MAX_RUNG] = {1.0 / (1 << 0), 1.0 / (1 << 1), 1.
     1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13),
     1.0 / (1 << 14), 1.0 / (1 << 15)};
 
-#define NO_INDEX ((PartInt) 0xFFFFFFFFU)
+#define NO_INDEX ((ParticleInteger) 0xFFFFFFFFU)
 
 #define DARK_MATTER_TYPE 0
 #define SPH_TYPE 1
 #define STAR_TYPE 2
 
 #ifdef LONG_LONG_PART_INT
-using PartInt = long long;
+using ParticleInteger = long long;
 #else
-using PartInt = int;
+using ParticleInteger = int;
 #endif
 
-#define NO_GROUP GroupInt(0x7FFFFFFFFFFFFFFFLL)
+#define NO_GROUP GroupInteger(0x7FFFFFFFFFFFFFFFLL)
 
 #ifdef PARTICLES_CPP
 #define PARTICLES_EXTERN
@@ -60,7 +60,7 @@ using PartInt = int;
 
 struct GroupParticle {
     Array<Fixed32, NDIM> x;
-    GroupInt g;
+    GroupInteger g;
     template <class A>
     void serialize(A&& arc, unsigned) {
         arc & x;
@@ -115,8 +115,8 @@ struct GadgetIoHeader {
 struct Particle {
     Array<Fixed32, NDIM> x;
     Array<float, NDIM> v;
-    GroupInt lg;
-    PartInt catIndex;
+    GroupInteger lg;
+    ParticleInteger catIndex;
     char r;
     char t;
     char type;
@@ -178,26 +178,26 @@ PARTICLES_EXTERN char* particlesC;
 PARTICLES_EXTERN char* particlesSa;
 PARTICLES_EXTERN float* particlesP;
 PARTICLES_EXTERN float* particlesDv;
-PARTICLES_EXTERN std::atomic<GroupInt>* particlesGrp
+PARTICLES_EXTERN std::atomic<GroupInteger>* particlesGrp
 #ifdef PARTICLES_CPP
     = nullptr
 #endif
     ;
-PARTICLES_EXTERN PartInt* particlesSph;
-PARTICLES_EXTERN GroupInt* particlesLgrp;
+PARTICLES_EXTERN ParticleInteger* particlesSph;
+PARTICLES_EXTERN GroupInteger* particlesLgrp;
 PARTICLES_EXTERN char* particlesTr;
 PARTICLES_EXTERN char* particlesTy;
 PARTICLES_EXTERN size_t particlesGlobalOffset;
 
 struct ParticleGlobalRange {
     int proc;
-    Pair<PartInt> range;
+    Pair<ParticleInteger> range;
 };
 
-PartInt particlesSize();
-std::unordered_map<int, PartInt> particlesGroupsInit();
+ParticleInteger particlesSize();
+std::unordered_map<int, ParticleInteger> particlesGroupsInit();
 void particlesGroupsDestroy();
-void particlesResize(PartInt, bool lock = true);
+void particlesResize(ParticleInteger, bool lock = true);
 void particlesResetConverged();
 void particlesRandomInit();
 void particlesResolveWithSphParticles();
@@ -206,31 +206,31 @@ void particlesPopRungs();
 void particlesPushRungs();
 void particlesDisplace(double dx, double dy, double dz);
 void particlesDestroy();
-void particlesSortBySph(Pair<PartInt> rng);
+void particlesSortBySph(Pair<ParticleInteger> rng);
 void particlesGlobalReadPos(ParticleGlobalRange, Fixed32* x, Fixed32* y, Fixed32* z, char* type,
-    float* zeta, PartInt offset);
+    float* zeta, ParticleInteger offset);
 inline void particlesGlobalReadPos(
-    ParticleGlobalRange range, Fixed32* x, Fixed32* y, Fixed32* z, PartInt offset) {
+    ParticleGlobalRange range, Fixed32* x, Fixed32* y, Fixed32* z, ParticleInteger offset) {
     particlesGlobalReadPos(range, x, y, z, nullptr, nullptr, offset);
 }
-void particlesGlobalReadSoftlens(ParticleGlobalRange range, float* h, PartInt offset);
-void particlesGlobalReadPosAndGroup(
-    ParticleGlobalRange range, Fixed32* x, Fixed32* y, Fixed32* z, GroupInt* g, PartInt offset);
-PartInt particlesSort(Pair<PartInt> rng, double xm, int xdim);
+void particlesGlobalReadSoftlens(ParticleGlobalRange range, float* h, ParticleInteger offset);
+void particlesGlobalReadPosAndGroup(ParticleGlobalRange range, Fixed32* x, Fixed32* y, Fixed32* z,
+    GroupInteger* g, ParticleInteger offset);
+ParticleInteger particlesSort(Pair<ParticleInteger> rng, double xm, int xdim);
 GadgetIoHeader particlesReadGadget4(std::string);
 #ifndef __CUDACC__
-hpx::future<Vector<int>> particlesGet(int rank, Vector<Pair<PartInt>> const& ranges);
+hpx::future<Vector<int>> particlesGet(int rank, Vector<Pair<ParticleInteger>> const& ranges);
 #endif
 void particlesCacheFree();
 void particlesGroupCacheFree();
-Pair<Array<double, NDIM>, double> particlesEnclosingSphere(Pair<PartInt> rng);
+Pair<Array<double, NDIM>, double> particlesEnclosingSphere(Pair<ParticleInteger> rng);
 Vector<OutputParticle> particlesGetSample(Range<double> const& box);
 Vector<ParticleSample> particlesSample(int cnt);
 void particlesLoad(FILE* fp);
 void particlesSave(FILE* fp);
 void particlesIncGroupCacheEpoch();
-void particlesGlobalReadRungs(ParticleGlobalRange range, char* r, PartInt offset);
-int particlesGroupHome(GroupInt);
+void particlesGlobalReadRungs(ParticleGlobalRange range, char* r, ParticleInteger offset);
+int particlesGroupHome(GroupInteger);
 #ifndef __CUDACC__
 SharedMutexType& particlesSharedMutex();
 #endif
@@ -238,7 +238,7 @@ void particlesSetTracers(size_t count = 0);
 Vector<OutputParticle> particlesGetTracers();
 void particlesMemadviseCpu();
 void particlesGlobalReadVels(
-    ParticleGlobalRange range, float* vx, float* vy, float* z, PartInt offset);
+    ParticleGlobalRange range, float* vx, float* vy, float* z, ParticleInteger offset);
 void particlesMemadviseGpu();
 Vector<size_t> particlesRungCounts();
 void particlesSetMinrung(int minrung);
@@ -246,9 +246,9 @@ void particlesFree();
 void particlesSaveGlass(char const* filename);
 void particlesSortByRung(int minrung);
 double particlesActivePct();
-Pair<PartInt, PartInt> particlesCurrentRange();
+Pair<ParticleInteger, ParticleInteger> particlesCurrentRange();
 
-inline char& particlesType(PartInt index) {
+inline char& particlesType(ParticleInteger index) {
     static bool const sph = getOptions().sph;
     if (getOptions().sph) {
         CHECK_PART_BOUNDS(index);
@@ -259,7 +259,7 @@ inline char& particlesType(PartInt index) {
     }
 }
 
-inline float particlesMass(PartInt index) {
+inline float particlesMass(ParticleInteger index) {
     if (!getOptions().sph) {
         return 1.0f;
     }
@@ -272,37 +272,37 @@ inline float particlesMass(PartInt index) {
     }
 }
 
-inline float& particlesDivv(PartInt index) {
+inline float& particlesDivv(ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     return particlesDv[index];
 }
 
-inline float& particlesPot(PartInt index) {
+inline float& particlesPot(ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     return particlesP[index];
 }
 
-inline float& particlesRho(PartInt index) {
+inline float& particlesRho(ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     return particlesRh[index];
 }
 
-inline char& particlesConverged(PartInt index) {
+inline char& particlesConverged(ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     return particlesC[index];
 }
 
-inline char& particlesSemiactive(PartInt index) {
+inline char& particlesSemiactive(ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     return particlesSa[index];
 }
 
-inline Fixed32& particlesPos(int dim, PartInt index) {
+inline Fixed32& particlesPos(int dim, ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     return particlesX[dim][index];
 }
 
-inline float& particlesVel(int dim, PartInt index) {
+inline float& particlesVel(int dim, ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     return particlesV[index][dim];
 }
@@ -311,54 +311,54 @@ inline Array<float, NDIM>* particlesVelData() {
     return particlesV;
 }
 
-inline char& particlesRung(PartInt index) {
+inline char& particlesRung(ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     return particlesR[index];
 }
 
-inline float& particlesSoftlen(PartInt index) {
+inline float& particlesSoftlen(ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     return particlesS[index];
 }
 
-inline float& particlesZeta(PartInt index) {
+inline float& particlesZeta(ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     return particlesZ[index];
 }
 
-inline float& particlesGforce(int dim, PartInt index) {
+inline float& particlesGforce(int dim, ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     return particlesG[dim][index];
 }
 
-inline GroupInt particlesGroupInit(PartInt index) {
+inline GroupInteger particlesGroupInit(ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     return particlesGlobalOffset + index;
 }
 
-inline std::atomic<GroupInt>& particlesGroup(PartInt index) {
+inline std::atomic<GroupInteger>& particlesGroup(ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     ASSERT(particlesGrp);
     return particlesGrp[index];
 }
 
-inline GroupInt& particlesLastgroup(PartInt index) {
+inline GroupInteger& particlesLastgroup(ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     ASSERT(particlesLgrp);
     return particlesLgrp[index];
 }
 
-inline char& particlesTracer(PartInt index) {
+inline char& particlesTracer(ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     return particlesTr[index];
 }
 
-inline PartInt& particlesCatIndex(PartInt index) {
+inline ParticleInteger& particlesCatIndex(ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     return particlesSph[index];
 }
 
-inline Particle particlesGetParticle(PartInt index) {
+inline Particle particlesGetParticle(ParticleInteger index) {
     static bool doGroups = getOptions().doGroups;
     static bool doTracers = getOptions().doTracers;
     CHECK_PART_BOUNDS(index);
@@ -381,7 +381,7 @@ inline Particle particlesGetParticle(PartInt index) {
     return p;
 }
 
-inline void particlesSetParticle(Particle p, PartInt index) {
+inline void particlesSetParticle(Particle p, ParticleInteger index) {
     static bool doGroups = getOptions().doGroups;
     static bool doTracers = getOptions().doTracers;
     CHECK_PART_BOUNDS(index);

@@ -24,7 +24,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/device_vector.hpp>
 #include <cosmictiger/fixed.hpp>
-#include <cosmictiger/fixedcapvec.hpp>
+#include <cosmictiger/fixed_capacity_vector.hpp>
 #include <cosmictiger/range.hpp>
 
 struct BhTreeNode {

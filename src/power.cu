@@ -17,7 +17,7 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include <cosmictiger/cuda_mem.hpp>
+#include <cosmictiger/cuda_memory.hpp>
 #include <cosmictiger/domain.hpp>
 #include <cosmictiger/fft.hpp>
 #include <cosmictiger/hpx.hpp>
@@ -29,14 +29,15 @@
 #define BLOCK_SIZE 256
 
 __global__ void accumulateDensityKernel(Fixed32* xValue, Fixed32* yValue, Fixed32* zValue,
-    float* rho, float const* masses, int mfold, size_t nparts, int ndim, Range<int64_t> intbox) {
+    float* rho, float const* masses, int mfold, size_t numberParticles, int ndim,
+    Range<int64_t> intbox) {
     int const tid = threadIdx.x;
     int const bid = blockIdx.x;
     int const gsz = gridDim.x;
-    PartInt const ibegin = (size_t) bid * nparts / (size_t) gsz;
-    PartInt const iend = (size_t) (bid + 1) * nparts / (size_t) gsz;
-    for (PartInt i = ibegin + tid; i < iend; i += BLOCK_SIZE) {
-        ALWAYS_ASSERT(i < nparts);
+    ParticleInteger const ibegin = (size_t) bid * numberParticles / (size_t) gsz;
+    ParticleInteger const iend = (size_t) (bid + 1) * numberParticles / (size_t) gsz;
+    for (ParticleInteger i = ibegin + tid; i < iend; i += BLOCK_SIZE) {
+        ALWAYS_ASSERT(i < numberParticles);
         float x = fmodf(mfold * xValue[i].toFloat(), 1.0f);
         float y = fmodf(mfold * yValue[i].toFloat(), 1.0f);
         float z = fmodf(mfold * zValue[i].toFloat(), 1.0f);
@@ -68,7 +69,7 @@ __global__ void accumulateDensityKernel(Fixed32* xValue, Fixed32* yValue, Fixed3
 }
 
 Vector<float> accumulateDensityCuda(int m, int ndim, Range<int64_t> intbox) {
-    int nblocks;
+    int numberBlocks;
     auto const n3 = intbox.volume();
     Vector<float> rho(n3, 0.0f);
     if (particlesSize() == 0) {
@@ -78,7 +79,7 @@ Vector<float> accumulateDensityCuda(int m, int ndim, Range<int64_t> intbox) {
     float* masses = nullptr;
     if (getOptions().sph) {
         masses = static_cast<float*>(cudaAllocate(particlesSize() * sizeof(float)));
-        for (PartInt i = 0; i < particlesSize(); i++) {
+        for (ParticleInteger i = 0; i < particlesSize(); i++) {
             masses[i] = particlesMass(i);
         }
     }
@@ -87,10 +88,11 @@ Vector<float> accumulateDensityCuda(int m, int ndim, Range<int64_t> intbox) {
         devRho[i] = 0.f;
     }
     CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &nblocks, (void const*) accumulateDensityKernel, BLOCK_SIZE, 0));
-    nblocks *= cudaSmpCount();
-    accumulateDensityKernel<<<nblocks, BLOCK_SIZE>>>(&particlesPos(XDIM, 0), &particlesPos(YDIM, 0),
-        &particlesPos(ZDIM, 0), devRho, masses, m, particlesSize(), ndim, intbox);
+        &numberBlocks, (void const*) accumulateDensityKernel, BLOCK_SIZE, 0));
+    numberBlocks *= cudaSmpCount();
+    accumulateDensityKernel<<<numberBlocks, BLOCK_SIZE>>>(&particlesPos(XDIM, 0),
+        &particlesPos(YDIM, 0), &particlesPos(ZDIM, 0), devRho, masses, m, particlesSize(), ndim,
+        intbox);
     CUDA_CHECK(cudaDeviceSynchronize());
     memcpy(rho.data(), devRho, sizeof(float) * n3);
     CUDA_CHECK(cudaFree(devRho));

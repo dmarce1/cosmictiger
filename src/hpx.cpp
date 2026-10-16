@@ -25,7 +25,7 @@
 #include <cosmictiger/hpx.hpp>
 
 static int rank;
-static int nranks;
+static int numberRanks;
 static Vector<hpx::id_type> localities;
 static Vector<hpx::id_type> children;
 static int ppnode;
@@ -62,14 +62,14 @@ void hpxInit() {
     rank = hpx::get_locality_id();
     auto tmp = hpx::find_all_localities();
     localities.insert(localities.end(), tmp.begin(), tmp.end());
-    nranks = localities.size();
+    numberRanks = localities.size();
     int base = (rank + 1) << 1;
     int const index1 = base - 1;
     int const index2 = base;
-    if (index1 < nranks) {
+    if (index1 < numberRanks) {
         children.push_back(localities[index1]);
     }
-    if (index2 < nranks) {
+    if (index2 < numberRanks) {
         children.push_back(localities[index2]);
     }
 #ifdef USE_CUDA
@@ -90,7 +90,7 @@ int hpxRank() {
 }
 
 int hpxSize() {
-    return nranks;
+    return numberRanks;
 }
 
 Vector<hpx::id_type> const& hpxLocalities() {

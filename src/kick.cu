@@ -20,10 +20,10 @@
 #include <atomic>
 
 #include <cosmictiger/cuda.hpp>
-#include <cosmictiger/cuda_mem.hpp>
+#include <cosmictiger/cuda_memory.hpp>
 #include <cosmictiger/cuda_reduce.hpp>
 #include <cosmictiger/defs.hpp>
-#include <cosmictiger/fixedcapvec.hpp>
+#include <cosmictiger/fixed_capacity_vector.hpp>
 #include <cosmictiger/flops.hpp>
 #include <cosmictiger/fmm_kernels.hpp>
 #include <cosmictiger/gravity.hpp>
@@ -40,7 +40,7 @@
  __managed__ double gravity_time;
  static __managed__ double kick_time;*/
 
-struct CudaKickParams {
+struct CudaKickParameters {
     Array<Fixed32, NDIM> lpos;
     Expansion<float> lValue;
     int self;
@@ -50,12 +50,12 @@ struct CudaKickParams {
     int ecount;
 };
 
-__device__ void doKick(KickReturn& result, KickParams params, CudaKickData const& data,
+__device__ void doKick(KickReturn& result, KickParameters params, CudaKickData const& data,
     Expansion<float> const& lValue2, TreeNode const& self) {
     //	auto tm = clock64();
     int const& tid = threadIdx.x;
     extern __shared__ int shmemPtr[];
-    CudaKickShmem& shmem = *(CudaKickShmem*) shmemPtr;
+    CudaKickSharedMemory& shmem = *(CudaKickSharedMemory*) shmemPtr;
     auto& allPhi = data.pot;
     auto& allGx = data.gx;
     auto& allGy = data.gy;
@@ -66,7 +66,7 @@ __device__ void doKick(KickReturn& result, KickParams params, CudaKickData const
     auto const* sinkX = data.x + self.partRange.first;
     auto const* sinkY = data.y + self.partRange.first;
     auto const* sinkZ = data.z + self.partRange.first;
-    int const nsink = self.partRange.second - self.partRange.first;
+    int const numberSinks = self.partRange.second - self.partRange.first;
     int maxRung = 0;
     float phiTot = 0.0f;
     float kinTot = 0.f;
@@ -83,10 +83,10 @@ __device__ void doKick(KickReturn& result, KickParams params, CudaKickData const
 
     float const& hsoft = params.h;
     FlopCounter<int> flops = 0;
-    for (int i = tid; i < nsink; i += WARP_SIZE) {
+    for (int i = tid; i < numberSinks; i += WARP_SIZE) {
         Expansion2<float> l2;
         Array<float, NDIM> dx;
-        PartInt snki;
+        ParticleInteger snki;
         float vx;
         float vy;
         float vz;
@@ -162,7 +162,7 @@ __device__ void doKick(KickReturn& result, KickParams params, CudaKickData const
         } else {
             bool const gas = data.sph && data.type[snki] == SPH_TYPE;
             if (gas) {
-                PartInt const k = data.catIndex[snki];
+                ParticleInteger const k = data.catIndex[snki];
                 data.sphGx[k] = fValue.gx;
                 data.sphGy[k] = fValue.gy;
                 data.sphGz[k] = fValue.gz;
@@ -251,13 +251,13 @@ __device__ void doKick(KickReturn& result, KickParams params, CudaKickData const
     addGpuFlops(flops);
 }
 
-__global__ void cudaKickKernel(KickReturn* rc, KickParams globalParams, CudaKickData data,
-    CudaKickParams* params, int itemCount, int* nextItem) {
+__global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, CudaKickData data,
+    CudaKickParameters* params, int itemCount, int* nextItem) {
     //	auto tm1 = clock64();
     int const& tid = threadIdx.x;
     extern __shared__ int shmemPtr[];
-    CudaKickShmem& shmem = *(CudaKickShmem*) shmemPtr;
-    new (shmemPtr) CudaKickShmem;
+    CudaKickSharedMemory& shmem = *(CudaKickSharedMemory*) shmemPtr;
+    new (shmemPtr) CudaKickSharedMemory;
     auto& sparams = shmem.params;
     auto& lValue3 = shmem.l;
     auto& dchecks = shmem.dchecks;
@@ -305,7 +305,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParams globalParams, CudaKick
             echecks[i] = params[index].echecks[i];
         }
         {
-            SearchParams sparam;
+            SearchParameters sparam;
             sparam.phase = 0;
             sparam.self = params[index].self;
             sparams.pushBack(sparam);
@@ -331,10 +331,10 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParams globalParams, CudaKick
                     }
                     flops += 2650 + globalParams.doPhi * 332;
                 }
-                PartInt const nsinks = self.partRange.second - self.partRange.first;
+                ParticleInteger const numberSinks = self.partRange.second - self.partRange.first;
                 if (self.leaf) {
-                    force.resize(nsinks);
-                    for (int l = tid; l < nsinks; l += WARP_SIZE) {
+                    force.resize(numberSinks);
+                    for (int l = tid; l < numberSinks; l += WARP_SIZE) {
                         auto& f = force[l];
                         f.gx = f.gy = f.gz = 0.f;
                         float const mass = data.sph ?
@@ -346,7 +346,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParams globalParams, CudaKick
                     }
                 }
                 __syncwarp();
-                if (nsinks) {
+                if (numberSinks) {
                     nextlist.resize(0);
                     cclist.resize(0);
                     constexpr int kCc = 0;
@@ -364,7 +364,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParams globalParams, CudaKick
                         }
                         if (i < checks.size()) {
                             TreeNode const& other = treeNodes[checks[i]];
-                            if (other.nparts()) {
+                            if (other.numberParticles()) {
                                 for (int dim = 0; dim < NDIM; dim++) {
                                     dx[dim] = distance(self.pos[dim], other.pos[dim]);    // 3
                                 }
@@ -409,7 +409,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParams globalParams, CudaKick
                     cudaGravityCcEwald(
                         data, lValue3.back().expansion, self, cclist, globalParams.doPhi);
                 }
-                if (nsinks) {
+                if (numberSinks) {
                     nextlist.resize(0);
                     leaflist.resize(0);
                     cclist.resize(0);
@@ -434,7 +434,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParams globalParams, CudaKick
                             }
                             if (i < checks.size()) {
                                 TreeNode const& other = treeNodes[checks[i]];
-                                if (other.nparts()) {
+                                if (other.numberParticles()) {
                                     for (int dim = 0; dim < NDIM; dim++) {
                                         dx[dim] = distance(self.pos[dim], other.pos[dim]);    // 3
                                     }
@@ -442,8 +442,8 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParams globalParams, CudaKick
                                     float const mind = self.radius + other.radius + h;
                                     float const dcc =
                                         fmaxf((self.radius + other.radius) * thetainv, mind);
-                                    auto const selfParts = self.nparts();
-                                    auto const otherParts = other.nparts();
+                                    auto const selfParts = self.numberParticles();
+                                    auto const otherParts = other.numberParticles();
                                     sw[kCc] =
                                         (r2 > sqr(dcc));    // && min(self_parts, (part_int)
                                                             // (2*MIN_PARTS2_CC)) * min(other_parts,
@@ -529,7 +529,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParams globalParams, CudaKick
                 }
                 if (self.leaf) {
                     __syncwarp();
-                    if (nsinks) {
+                    if (numberSinks) {
                         doKick(kr, globalParams, data, lValue3.back().expansion, self);
                     }
                     sparams.popBack();
@@ -549,7 +549,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParams globalParams, CudaKick
                     echecks.pushTop();
                     sparams.back().phase += 1;
                     {
-                        SearchParams sparam;
+                        SearchParameters sparam;
                         sparam.phase = 0;
                         sparam.self = child.index;
                         sparams.pushBack(sparam);
@@ -565,7 +565,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParams globalParams, CudaKick
                 echecks.popTop();
                 sparams.back().phase += 1;
                 {
-                    SearchParams sparam;
+                    SearchParameters sparam;
                     sparam.phase = 0;
                     sparam.self = self.children[RIGHT].index;
                     sparams.pushBack(sparam);
@@ -602,18 +602,18 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParams globalParams, CudaKick
 
         atomicMax(&rc->maxRung, kr.maxRung);
     }
-    ((CudaKickShmem*) shmemPtr)->~CudaKickShmem();
+    ((CudaKickSharedMemory*) shmemPtr)->~CudaKickSharedMemory();
 
     //	atomicAdd(&total_time, ((double) (clock64() - tm1)));
 }
 
-KickReturn cudaExecuteKicks(KickParams kparams, Fixed32* devX, Fixed32* devY, Fixed32* devZ,
+KickReturn cudaExecuteKicks(KickParameters kparams, Fixed32* devX, Fixed32* devY, Fixed32* devZ,
     TreeNode* devTreeNodes, Vector<KickWorkitem> workitems) {
     Timer tm;
     tm.start();
-    int nblocks = kickBlockCount();
+    int numberBlocks = kickBlockCount();
     ALWAYS_ASSERT(workitems.size());
-    nblocks = std::min(nblocks, (int) workitems.size());
+    numberBlocks = std::min(numberBlocks, (int) workitems.size());
     static char* dataPtr = nullptr;
     static char* devDataPtr = nullptr;
     static int dataSize = 0;
@@ -623,7 +623,7 @@ KickReturn cudaExecuteKicks(KickParams kparams, Fixed32* devX, Fixed32* devY, Fi
         dcount += workitems[i].dchecklist.size();
         ecount += workitems[i].echecklist.size();
     }
-    int const allocSize = sizeof(int) + sizeof(CudaKickParams) * workitems.size() +
+    int const allocSize = sizeof(int) + sizeof(CudaKickParameters) * workitems.size() +
         sizeof(KickReturn) + sizeof(int) * dcount + sizeof(int) * ecount;
     if (dataSize < allocSize) {
         if (dataPtr) {
@@ -637,8 +637,8 @@ KickReturn cudaExecuteKicks(KickParams kparams, Fixed32* devX, Fixed32* devY, Fi
     int offset = 0;
     KickReturn* result = (KickReturn*) (dataPtr + offset);
     offset += sizeof(KickReturn);
-    CudaKickParams* ikickParams = (CudaKickParams*) (dataPtr + offset);
-    offset += sizeof(CudaKickParams) * workitems.size();
+    CudaKickParameters* ikickParams = (CudaKickParameters*) (dataPtr + offset);
+    offset += sizeof(CudaKickParameters) * workitems.size();
     int* dchecks = (int*) (dataPtr + offset);
     offset += sizeof(int) * dcount;
     int* echecks = (int*) (dataPtr + offset);
@@ -648,8 +648,8 @@ KickReturn cudaExecuteKicks(KickParams kparams, Fixed32* devX, Fixed32* devY, Fi
     offset = 0;
     KickReturn* devReturnArg = (KickReturn*) (devDataPtr + offset);
     offset += sizeof(KickReturn);
-    CudaKickParams* devIkickParams = (CudaKickParams*) (devDataPtr + offset);
-    offset += sizeof(CudaKickParams) * workitems.size();
+    CudaKickParameters* devIkickParams = (CudaKickParameters*) (devDataPtr + offset);
+    offset += sizeof(CudaKickParameters) * workitems.size();
     int* devDchecks = (int*) (devDataPtr + offset);
     offset += sizeof(int) * dcount;
     int* devEchecks = (int*) (devDataPtr + offset);
@@ -703,7 +703,7 @@ KickReturn cudaExecuteKicks(KickParams kparams, Fixed32* devX, Fixed32* devY, Fi
     }
 
     for (int i = 0; i < workitems.size(); i++) {
-        CudaKickParams params;
+        CudaKickParameters params;
         params.lpos = workitems[i].pos;
         params.lValue = workitems[i].l;
         params.self = workitems[i].self.index;
@@ -716,7 +716,7 @@ KickReturn cudaExecuteKicks(KickParams kparams, Fixed32* devX, Fixed32* devY, Fi
     cudaSetDevice();
     CUDA_CHECK(
         cudaMemcpyAsync(devDataPtr, dataPtr, sizeof(char) * allocSize, cudaMemcpyHostToDevice, 0));
-    cudaKickKernel<<<nblocks, WARP_SIZE, sizeof(CudaKickShmem)>>>(
+    cudaKickKernel<<<numberBlocks, WARP_SIZE, sizeof(CudaKickSharedMemory)>>>(
         devReturnArg, kparams, data, devIkickParams, workitems.size(), devCurrentIndex);
     CUDA_CHECK(
         cudaMemcpyAsync(result, devReturnArg, sizeof(KickReturn), cudaMemcpyDeviceToHost, 0));
@@ -725,17 +725,17 @@ KickReturn cudaExecuteKicks(KickParams kparams, Fixed32* devX, Fixed32* devY, Fi
 }
 
 int kickBlockCount() {
-    static int nblocks;
+    static int numberBlocks;
     static bool shown = false;
     if (!shown) {
         cudaFuncAttributes attr;
         CUDA_CHECK(cudaFuncGetAttributes(&attr, (void const*) cudaKickKernel));
         CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-            &nblocks, (void const*) cudaKickKernel, WARP_SIZE, sizeof(CudaKickShmem)));
-        PRINT("Occupancy is %i shmem size = %li numregs = %i\n", nblocks, sizeof(CudaKickShmem),
-            attr.numRegs);
-        nblocks *= cudaSmpCount();
+            &numberBlocks, (void const*) cudaKickKernel, WARP_SIZE, sizeof(CudaKickSharedMemory)));
+        PRINT("Occupancy is %i shmem size = %li numregs = %i\n", numberBlocks,
+            sizeof(CudaKickSharedMemory), attr.numRegs);
+        numberBlocks *= cudaSmpCount();
         shown = true;
     }
-    return nblocks;
+    return numberBlocks;
 }

@@ -18,7 +18,7 @@
  */
 
 #include <cosmictiger/cuda.hpp>
-#include <cosmictiger/cuda_mem.hpp>
+#include <cosmictiger/cuda_memory.hpp>
 #include <cosmictiger/cuda_reduce.hpp>
 #include <cosmictiger/device_vector.hpp>
 #include <cosmictiger/hpx.hpp>

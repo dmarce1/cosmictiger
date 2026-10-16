@@ -218,7 +218,7 @@ static void treeTest() {
     tm.reset();
 
     tm.start();
-    TreeCreateParams tparams(0, 0.7, getOptions().hsoft);
+    TreeCreateParameters tparams(0, 0.7, getOptions().hsoft);
     treeCreate(tparams);
     tm.stop();
     PRINT("tree_create: %e s\n", tm.read());
@@ -267,7 +267,7 @@ static void kickTest() {
     tm.reset();
     tm.reset();
     tm.start();
-    TreeCreateParams tparams(0, getOptions().theta, getOptions().hsoft);
+    TreeCreateParameters tparams(0, getOptions().theta, getOptions().hsoft);
     auto sr = treeCreate(tparams);
     tm.stop();
     PRINT("tree_create: %e s\n", tm.read());
@@ -284,7 +284,7 @@ static void kickTest() {
     PRINT("tree_create: %e s\n", tm.read());
     tm.reset();
     tm.start();
-    KickParams kparams;
+    KickParameters kparams;
     kparams.gpu = true;
     kparams.nodeLoad = 10;
     kparams.minLevel = tparams.minLevel;
@@ -333,7 +333,7 @@ static void kickTest() {
     KickWorkspace::clearBuffers();
 }
 
-DriverParams readCheckpoint();
+DriverParameters readCheckpoint();
 
 static void forceTest() {
     Timer tm;
@@ -355,9 +355,9 @@ static void forceTest() {
         domainsBegin(0);
         domainsEnd();
         particlesSortByRung(0);
-        TreeCreateParams tparams(0, thetas[iter], getOptions().hsoft);
+        TreeCreateParameters tparams(0, thetas[iter], getOptions().hsoft);
         treeCreate(tparams);
-        KickParams kparams;
+        KickParameters kparams;
         kparams.nodeLoad = 10;
         kparams.gpu = true;
         kparams.minLevel = tparams.minLevel;
@@ -428,10 +428,10 @@ static void bucketTest() {
             domainsBegin(0);
             domainsEnd();
             particlesSortByRung(0);
-            TreeCreateParams tparams(0, getOptions().theta, getOptions().hsoft);
+            TreeCreateParameters tparams(0, getOptions().theta, getOptions().hsoft);
             treeCreate(tparams);
             PRINT("Tree created\n");
-            KickParams kparams;
+            KickParameters kparams;
             kparams.nodeLoad = 10;
             kparams.gpu = true;
             kparams.maxDt = 1.0;
@@ -519,9 +519,9 @@ static void speedTest() {
             domainsBegin(0);
             domainsEnd();
             particlesSortByRung(0);
-            TreeCreateParams tparams(0, thetas[ci], getOptions().hsoft);
+            TreeCreateParameters tparams(0, thetas[ci], getOptions().hsoft);
             treeCreate(tparams);
-            KickParams kparams;
+            KickParameters kparams;
             kparams.nodeLoad = 10;
             kparams.gpu = true;
             kparams.minLevel = tparams.minLevel;

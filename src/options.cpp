@@ -137,7 +137,7 @@ bool processOptions(int argc, char* argv[]) {
         ("slice_res", po::value<int>(&(opts.sliceRes))->default_value(4096),
             "slice resolution")                                                                //
         ("parts_dim", po::value<int>(&(opts.partsDim))->default_value(128), "nparts^(1/3)")    //
-        ("nsteps", po::value<int>(&(opts.nsteps))->default_value(64),
+        ("nsteps", po::value<int>(&(opts.numberSteps))->default_value(64),
             "Number of super-timesteps")                                                   //
         ("z0", po::value<double>(&(opts.z0))->default_value(49.0), "starting redshift")    //
         ("z1", po::value<double>(&(opts.z1))->default_value(0.0), "ending redshift")       //
@@ -266,10 +266,10 @@ bool processOptions(int argc, char* argv[]) {
     }
     opts.hsoft *= selfPhi();
     opts.eta /= sqrt(selfPhi());
-    opts.nparts = sqr(opts.partsDim) * opts.partsDim;
+    opts.numberParticles = sqr(opts.partsDim) * opts.partsDim;
     opts.nfour = opts.partsDim;
     if (opts.closePack) {
-        opts.nparts *= 2;
+        opts.numberParticles *= 2;
         //		opts.Nfour *= 2;
     }
     opts.treeCacheLineSize = 65536 / sizeof(TreeNode);
@@ -279,21 +279,21 @@ bool processOptions(int argc, char* argv[]) {
     opts.omegaM = opts.omegaB + opts.omegaC;
     opts.dmMass = opts.sph ? opts.omegaC / opts.omegaM : 1.0;
     opts.sphMass = opts.sph ? opts.omegaB / opts.omegaM : 0.0;
-    opts.rho0B = opts.nparts * opts.omegaB / opts.omegaM;
-    opts.rho0C = opts.nparts * opts.omegaC / opts.omegaM;
+    opts.rho0B = opts.numberParticles * opts.omegaB / opts.omegaM;
+    opts.rho0C = opts.numberParticles * opts.omegaC / opts.omegaM;
 
     opts.codeToG *= constants::kM0;
-    opts.codeToCm = pow(opts.codeToG * (8.0 * M_PI) * opts.nparts * constants::kG /
+    opts.codeToCm = pow(opts.codeToG * (8.0 * M_PI) * opts.numberParticles * constants::kG /
             (3.0 * opts.omegaM * sqr(constants::kH0 * opts.hubble)),
         1.0 / 3.0);
     opts.codeToS = opts.codeToCm / constants::kC;
     double h = constants::kH0 * opts.codeToS;
-    opts.gm = opts.omegaM * 3.0 * sqr(h * opts.hubble) / (8.0 * M_PI) / opts.nparts;
+    opts.gm = opts.omegaM * 3.0 * sqr(h * opts.hubble) / (8.0 * M_PI) / opts.numberParticles;
     PRINT("box_size = %e Mpc\n", opts.codeToCm / constants::kMpcToCm);
     opts.sliceSize = std::min((20.0 / opts.hubble) / (opts.codeToCm / constants::kMpcToCm), 1.0);
     double const neff = 3.086;
     double const thetaValue = 1.0;
-    auto const nside1 = pow(M_PI * opts.nparts / 10000.0 / 12.0, 0.5);
+    auto const nside1 = pow(M_PI * opts.numberParticles / 10000.0 / 12.0, 0.5);
     int nside = 1;
     while (nside < nside1 / 2.0) {
         nside *= 2;
@@ -313,21 +313,21 @@ bool processOptions(int argc, char* argv[]) {
     } else {
         opts.omegaK = 1.0 - opts.omegaM - opts.omegaR - opts.omegaLam;
     }
-    opts.linkLen = pow(opts.nparts, -1.0 / NDIM) * 0.28;
+    opts.linkLen = pow(opts.numberParticles, -1.0 / NDIM) * 0.28;
     opts.minGroup = 20;
     opts.lcMinGroup = 20;
     if (opts.createGlass) {
-        opts.gm = 1.0 / opts.nparts;
+        opts.gm = 1.0 / opts.numberParticles;
         opts.codeToCm = constants::kMpcToCm;
         opts.hubble = 1.0;
     }
     if (opts.partsDim % 2 == 1) {
         THROW_ERROR("parts_dim must be an even number\n");
     }
-    opts.hsoft *= pow(opts.nparts, -1.0 / NDIM);
+    opts.hsoft *= pow(opts.numberParticles, -1.0 / NDIM);
     if (opts.plummer) {
-        opts.hsoft =
-            selfPhi() * pow((4.0 / 3.0 * M_PI * pow(opts.plummerR, 3.0)) / opts.nparts, 1.0 / 3.0);
+        opts.hsoft = selfPhi() *
+            pow((4.0 / 3.0 * M_PI * pow(opts.plummerR, 3.0)) / opts.numberParticles, 1.0 / 3.0);
     }
     SHOW("sph", sph);
     SHOW("htime", htime);
@@ -337,7 +337,7 @@ bool processOptions(int argc, char* argv[]) {
     PRINT("code_to_M_solar = %e\n", opts.codeToG / 1.98e33);
     PRINT("Box size = %e cm/h\n", opts.codeToCm / constants::kMpcToCm * opts.hubble);
     if (opts.plummer) {
-        opts.gm = 1.0 / opts.nparts;
+        opts.gm = 1.0 / opts.numberParticles;
         opts.theta = 0.4;
     }
 #ifdef CHECK_MUTUAL_SORT

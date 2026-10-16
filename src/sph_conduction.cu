@@ -45,7 +45,8 @@ struct ConductionWorkspace {
     DeviceVector<ConductionRecord2> rec2;
 };
 
-__global__ void sphCudaConduction(SphRunParams params, SphRunCudaData data, SphReduction* reduce) {
+__global__ void sphCudaConduction(
+    SphRunParameters params, SphRunCudaData data, SphReduction* reduce) {
     int const tid = threadIdx.x;
     int const blockSize = blockDim.x;
     __shared__ int index;
@@ -60,7 +61,7 @@ __global__ void sphCudaConduction(SphRunParams params, SphRunCudaData data, SphR
     Array<Fixed32, NDIM> x;
     float const cons = -2.f * sqr(params.a) * m;
     int flops = 4;
-    while (index < data.nselfs) {
+    while (index < data.numberTargetNodes) {
         __syncthreads();
         ws.rec1.resize(0);
         ws.rec2.resize(0);

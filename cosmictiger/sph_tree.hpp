@@ -31,12 +31,12 @@
 struct SphTreeNode {
     Array<TreeId, NCHILD> children;
     Pair<int, int> procRange;
-    Pair<PartInt> partRange;
-    Pair<PartInt> sinkPartRange;
+    Pair<ParticleInteger> partRange;
+    Pair<ParticleInteger> sinkPartRange;
     Fixed32Range innerBox;
     Fixed32Range outerBox;
     Fixed32Range box;
-    size_t nactive;
+    size_t numberActive;
     bool localRoot;
     bool leaf;
     bool converged;
@@ -48,7 +48,7 @@ struct SphTreeNode {
       : procRange(0, 0)
       , partRange(0, 0)
       , sinkPartRange(0, 0)
-      , nactive(0)
+      , numberActive(0)
       , localRoot(false)
       , leaf(true)
       , converged(false)
@@ -66,7 +66,7 @@ struct SphTreeNode {
             box.begin[dim] = box.end[dim] = 0.0;
         }
     }
-    inline PartInt nparts() const {
+    inline ParticleInteger numberParticles() const {
         return partRange.second - partRange.first;
     }
     inline ParticleGlobalRange globalPartRange() const {
@@ -92,7 +92,7 @@ struct SphTreeNode {
         arc & children;
         arc & procRange;
         arc & partRange;
-        arc & nactive;
+        arc & numberActive;
         arc & localRoot;
         arc & leaf;
         arc & activeNodes;
@@ -105,7 +105,7 @@ struct SphTreeCreateReturn {
     Fixed32Range innerBox;
     Fixed32Range outerBox;
     TreeId id;
-    size_t nactive;
+    size_t numberActive;
     size_t activeNodes;
     size_t nodeCount;
     size_t activeLeafNodes;
@@ -121,7 +121,7 @@ struct SphTreeCreateReturn {
         a & innerBox;
         a & outerBox;
         a & id;
-        a & nactive;
+        a & numberActive;
         a & nodeCount;
         a & flops;
         a & maxDepth;
@@ -129,11 +129,11 @@ struct SphTreeCreateReturn {
     }
 };
 
-struct SphTreeCreateParams {
+struct SphTreeCreateParameters {
     int minRung;
     float hWt;
-    SphTreeCreateParams() = default;
-    SphTreeCreateParams(int minRung, float hWt);
+    SphTreeCreateParameters() = default;
+    SphTreeCreateParameters(int minRung, float hWt);
     template <typename A>
     void serialize(A&& arc, unsigned) {
         arc & minRung;
@@ -141,16 +141,16 @@ struct SphTreeCreateParams {
     }
 };
 
-SphTreeCreateReturn sphTreeCreate(SphTreeCreateParams params, size_t key = 1,
+SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key = 1,
     Pair<int, int> procRange = Pair<int>(0, hpxSize()),
-    Pair<PartInt> partRange = Pair<PartInt>(-1, -1), Range<double> box = unitBox<double>(),
-    int depth = 0, bool localRoot = (hpxSize() == 1));
+    Pair<ParticleInteger> partRange = Pair<ParticleInteger>(-1, -1),
+    Range<double> box = unitBox<double>(), int depth = 0, bool localRoot = (hpxSize() == 1));
 void sphTreeCacheClear();
 void sphTreeDestroy(bool freeSphTree = false);
 SphTreeNode const* sphTreeGetNode(TreeId);
 void sphTreeSortSphParticlesByParticles();
 void sphTreeSetConverged(TreeId id, bool = true);
-void sphTreeSetNactive(TreeId id, PartInt i);
+void sphTreeSetNumberActive(TreeId id, ParticleInteger i);
 void sphTreeSetBoxes(TreeId, Fixed32Range const&, Fixed32Range const&);
 void sphTreeFreeNeighborList();
 int sphTreeAllocateNeighborList(Vector<TreeId> const&);

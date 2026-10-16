@@ -2,7 +2,7 @@
 #include <cosmictiger/domain.hpp>
 #include <cosmictiger/gravity.hpp>
 #include <cosmictiger/particle_server.hpp>
-#include <cosmictiger/rand.hpp>
+#include <cosmictiger/random_number_generator.hpp>
 
 struct TestParticle {
     std::array<Fixed32, NDIM> x;

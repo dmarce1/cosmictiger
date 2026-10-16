@@ -34,13 +34,13 @@ struct EwaldConst {
     static void initGpu();
     CUDA_EXPORT static Array<float, NDIM> const& realIndex(int i);
     CUDA_EXPORT static Array<float, NDIM> const& fourIndex(int i);
-    CUDA_EXPORT static TensorTrlessSym<float, LORDER> const& fourExpansion(int i);
-    CUDA_EXPORT static TensorSym<float, LORDER> const d0();
+    CUDA_EXPORT static SymmetricTracelessTensor<float, LORDER> const& fourExpansion(int i);
+    CUDA_EXPORT static SymmetricTensor<float, LORDER> const d0();
 };
 
 struct EwaldConstants {
     Array<Array<float, NDIM>, NREAL> realIndices;
     Array<Array<float, NDIM>, NFOUR> fourIndices;
-    Array<TensorTrlessSym<float, LORDER>, NFOUR> fourExpanse;
-    TensorSym<float, LORDER> d0;
+    Array<SymmetricTracelessTensor<float, LORDER>, NFOUR> fourExpanse;
+    SymmetricTensor<float, LORDER> d0;
 };

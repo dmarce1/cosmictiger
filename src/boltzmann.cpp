@@ -257,9 +257,9 @@ void einsteinBoltzmann(
     }
 }
 
-void einsteinBoltzmannInterpolationFunction(InterpFunctor<double>* dmKFunc,
-    InterpFunctor<double>* baryKFunc, CosState* u, ZeroOrderUniverse* uni, double kmin, double kmax,
-    double norm, int n, double astart, double astop, bool cont, double ns) {
+void einsteinBoltzmannInterpolationFunction(InterpolationFunctor<double>* dmKFunc,
+    InterpolationFunctor<double>* baryKFunc, CosState* u, ZeroOrderUniverse* uni, double kmin,
+    double kmax, double norm, int n, double astart, double astop, bool cont, double ns) {
     double dlogk = 1.0e-2;
     double logkmin = log(kmin) - dlogk;
     double logkmax = log(kmax) + dlogk;

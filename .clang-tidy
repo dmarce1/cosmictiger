@@ -1,0 +1,33 @@
+Checks: '-*,readability-identifier-naming'
+HeaderFilterRegex: '(^|/)(cosmictiger|src|tests)/[^/]+\.(hpp|cpp|cu)$'
+FormatStyle: none
+CheckOptions:
+  readability-identifier-naming.GetConfigPerFile: false
+  readability-identifier-naming.AggressiveDependentMemberLookup: false
+  readability-identifier-naming.NamespaceCase: lower_case
+  readability-identifier-naming.ClassCase: CamelCase
+  readability-identifier-naming.StructCase: CamelCase
+  readability-identifier-naming.UnionCase: CamelCase
+  readability-identifier-naming.EnumCase: CamelCase
+  readability-identifier-naming.TypeAliasCase: CamelCase
+  readability-identifier-naming.TypedefCase: CamelCase
+  readability-identifier-naming.TypeTemplateParameterCase: CamelCase
+  readability-identifier-naming.ValueTemplateParameterCase: camelBack
+  readability-identifier-naming.VariableCase: camelBack
+  readability-identifier-naming.ParameterCase: camelBack
+  readability-identifier-naming.FunctionCase: camelBack
+  readability-identifier-naming.MethodCase: camelBack
+  readability-identifier-naming.MemberCase: camelBack
+  readability-identifier-naming.MemberIgnoredRegexp: '^[a-z][A-Za-z0-9]*_$'
+  readability-identifier-naming.PrivateMemberSuffix: '_'
+  readability-identifier-naming.PrivateMemberCase: camelBack
+  readability-identifier-naming.ProtectedMemberSuffix: '_'
+  readability-identifier-naming.ProtectedMemberCase: camelBack
+  readability-identifier-naming.EnumConstantCase: camelBack
+  readability-identifier-naming.ConstexprVariableCase: CamelCase
+  readability-identifier-naming.ConstexprVariablePrefix: k
+  readability-identifier-naming.ConstexprVariableIgnoredRegexp: '^k[A-Z][A-Za-z0-9]*_$'
+  readability-identifier-naming.StructIgnoredRegexp: '^numeric_limits$'
+  readability-identifier-naming.FunctionIgnoredRegexp: '^hpx_main$'
+  readability-identifier-naming.TypeAliasIgnoredRegexp: '^(value_type|size_type|difference_type|pointer|const_pointer|reference|const_reference|iterator|const_iterator|reverse_iterator|const_reverse_iterator|is_always_equal|propagate_on_container_.*|type|other)$'
+  readability-identifier-naming.TypedefIgnoredRegexp: '^(value_type|size_type|difference_type|pointer|const_pointer|reference|const_reference|iterator|const_iterator|reverse_iterator|const_reverse_iterator|is_always_equal|propagate_on_container_.*|type|other)$'

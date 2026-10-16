@@ -24,9 +24,9 @@
 
 #define BLOCK_SIZE 32
 
-__global__ void cudaLightconeKernel(LcPartMapType* partMapPtr, LcTreeMapType* treeMapPtr,
-    int* rcPtr, LcTreeId const* leaves, int n, int* indexPtr, LcGroup* nextIdPtr, double linkLen,
-    int hpxSize, int hpxRank) {
+__global__ void cudaLightconeKernel(LightconeParticleMapType* partMapPtr,
+    LightconeTreeMapType* treeMapPtr, int* rcPtr, LightconeTreeId const* leaves, int n,
+    int* indexPtr, LightconeGroup* nextIdPtr, double linkLen, int hpxSize, int hpxRank) {
     int const& tid = threadIdx.x;
     __shared__ int index;
     float const linkLen2 = sqr(linkLen);
@@ -36,7 +36,7 @@ __global__ void cudaLightconeKernel(LcPartMapType* partMapPtr, LcTreeMapType* tr
         index = atomicAdd(indexPtr, 1);
     }
     auto const generateId = [&nextIdPtr, hpxRank, hpxSize]() {
-        LcGroup id = atomicAdd(nextIdPtr, 1);
+        LightconeGroup id = atomicAdd(nextIdPtr, 1);
         id *= hpxSize;
         id += hpxRank + 1;
         return id;
@@ -100,13 +100,13 @@ __global__ void cudaLightconeKernel(LcPartMapType* partMapPtr, LcTreeMapType* tr
                 foundLink = false;
                 for (int pj = self.partRange.first; pj < self.partRange.second; pj++) {
                     auto& a = selfParts.group[pj];
-                    LcGroup minGroup = LC_NO_GROUP;
+                    LightconeGroup minGroup = LC_NO_GROUP;
                     int thisFoundLink = 0;
                     auto const maxpi =
                         roundUp(self.partRange.second - self.partRange.first, BLOCK_SIZE) +
                         self.partRange.first;
                     for (int pi = self.partRange.first + tid; pi < maxpi; pi += BLOCK_SIZE) {
-                        LcGroup thisMinGroup = LC_NO_GROUP;
+                        LightconeGroup thisMinGroup = LC_NO_GROUP;
                         if (pi != pj && pi < self.partRange.second) {
                             auto const bValue = selfParts.group[pi];
                             float const dx =
@@ -159,28 +159,29 @@ __global__ void cudaLightconeKernel(LcPartMapType* partMapPtr, LcTreeMapType* tr
     //	PRINT( "! %lli\n", *rc_ptr);
 }
 
-size_t cudaLightcone(DeviceVector<LcTreeId> const& leaves, LcPartMapType* partMapPtr,
-    LcTreeMapType* treeMapPtr, LcGroup* nextIdValue) {
-    int nblocks;
+size_t cudaLightcone(DeviceVector<LightconeTreeId> const& leaves,
+    LightconeParticleMapType* partMapPtr, LightconeTreeMapType* treeMapPtr,
+    LightconeGroup* nextIdValue) {
+    int numberBlocks;
     CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &nblocks, (void const*) cudaLightconeKernel, BLOCK_SIZE, 0));
-    nblocks *= cudaSmpCount();
+        &numberBlocks, (void const*) cudaLightconeKernel, BLOCK_SIZE, 0));
+    numberBlocks *= cudaSmpCount();
     int* indexPtr;
-    LcGroup* nextIdPtr;
+    LightconeGroup* nextIdPtr;
     int* rcPtr;
-    nextIdPtr = (LcGroup*) cudaAllocate(sizeof(LcGroup));
+    nextIdPtr = (LightconeGroup*) cudaAllocate(sizeof(LightconeGroup));
     indexPtr = (int*) cudaAllocate(sizeof(int));
     rcPtr = (int*) cudaAllocate(sizeof(int));
     *rcPtr = 0;
     *indexPtr = 0;
     *nextIdPtr = *nextIdValue;
     auto const b = getOptions().lcB;
-    auto const nparts = getOptions().nparts;
-    double const linkLen = b * pow(nparts, -1.0 / NDIM);
-    cudaLightconeKernel<<<nblocks, BLOCK_SIZE>>>(partMapPtr, treeMapPtr, rcPtr, leaves.data(),
+    auto const numberParticles = getOptions().numberParticles;
+    double const linkLen = b * pow(numberParticles, -1.0 / NDIM);
+    cudaLightconeKernel<<<numberBlocks, BLOCK_SIZE>>>(partMapPtr, treeMapPtr, rcPtr, leaves.data(),
         leaves.size(), indexPtr, nextIdPtr, linkLen, hpxSize(), hpxRank());
     CUDA_CHECK(cudaDeviceSynchronize());
-    PRINT("lc blocks = %i next id = %lli\n", nblocks, *nextIdPtr);
+    PRINT("lc blocks = %i next id = %lli\n", numberBlocks, *nextIdPtr);
     size_t rc = *rcPtr;
     *nextIdValue = *nextIdPtr;
     cudaRelease(rcPtr);

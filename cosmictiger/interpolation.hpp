@@ -17,8 +17,8 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-#ifndef GPUTIGER_INTERP_HPP_
-#define GPUTIGER_INTERP_HPP_
+#ifndef COSMICTIGER_INTERPOLATION_HPP_
+#define COSMICTIGER_INTERPOLATION_HPP_
 #include <cmath>
 #include <stdio.h>
 #include <vector>
@@ -26,7 +26,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <cuda.h>
 
 template <class T>
-struct InterpFunctor {
+struct InterpolationFunctor {
     std::vector<T> values;
     T amin;
     T amax;
@@ -61,12 +61,12 @@ struct InterpFunctor {
 
 template <class T>
 inline void buildInterpolationFunction(
-    InterpFunctor<T>* f, std::vector<T> const& values, T amin, T amax) {
+    InterpolationFunctor<T>* f, std::vector<T> const& values, T amin, T amax) {
     T minloga = log(amin);
     T maxloga = log(amax);
     int n = values.size();
     T dloga = (maxloga - minloga) / (n - 1);
-    InterpFunctor<T> functor;
+    InterpolationFunctor<T> functor;
     functor.values = std::move(values);
     functor.maxloga = maxloga;
     functor.minloga = minloga;
@@ -77,4 +77,4 @@ inline void buildInterpolationFunction(
     *f = functor;
 }
 
-#endif /* GPUTIGER_INTERP_HPP_ */
+#endif /* COSMICTIGER_INTERPOLATION_HPP_ */

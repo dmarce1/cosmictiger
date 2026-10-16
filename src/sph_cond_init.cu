@@ -42,7 +42,8 @@ struct CondInitWorkspace {
     DeviceVector<int> neighbors;
 };
 
-__global__ void sphCudaCondInit(SphRunParams params, SphRunCudaData data, SphReduction* reduce) {
+__global__ void sphCudaCondInit(
+    SphRunParameters params, SphRunCudaData data, SphReduction* reduce) {
     int const tid = threadIdx.x;
     int const blockSize = blockDim.x;
     __shared__ int index;
@@ -67,7 +68,7 @@ __global__ void sphCudaCondInit(SphRunParams params, SphRunCudaData data, SphRed
     float const cv0 = constants::kB / (gamma0 - 1.0f);                           // 5
     float const invgm1 = 1.f / (gamma0 - 1.0);
     flops += 128;
-    while (index < data.nselfs) {
+    while (index < data.numberTargetNodes) {
         __syncthreads();
         int flops = 0;
         ws.rec1.resize(0);

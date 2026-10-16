@@ -48,20 +48,20 @@ Pair<double> chemistryDoStep(float a, int minrung, float t0, float adot, int dir
         futs.push_back(hpx::async<ChemistryDoStepAction>(c, a, minrung, t0, adot, dir));
     }
     double echange = 0.0;
-    int nthreads = hpxHardwareConcurrency();
-    for (int proc = 0; proc < nthreads; proc++) {
-        futs.push_back(hpx::async([proc, nthreads, a, minrung, t0, dir, adot]() {
-            PartInt const b = (size_t) proc * sphParticlesSize() / nthreads;
-            PartInt const e = (size_t) (proc + 1) * sphParticlesSize() / nthreads;
-            Vector<ChemAttribs> chems;
+    int numberThreads = hpxHardwareConcurrency();
+    for (int proc = 0; proc < numberThreads; proc++) {
+        futs.push_back(hpx::async([proc, numberThreads, a, minrung, t0, dir, adot]() {
+            ParticleInteger const b = (size_t) proc * sphParticlesSize() / numberThreads;
+            ParticleInteger const e = (size_t) (proc + 1) * sphParticlesSize() / numberThreads;
+            Vector<ChemistryAttributes> chems;
             float const mass = getOptions().sphMass;
             float const stars = getOptions().stars;
             int const n = getOptions().sneighborNumber;
-            for (PartInt i = b; i < e; i++) {
+            for (ParticleInteger i = b; i < e; i++) {
                 int rung1 = sphParticlesRung(i);
                 //	int rung2 = sph_particles_oldrung(i);
                 if (rung1 >= minrung && !sphParticlesIsstar(i)) {
-                    ChemAttribs chem;
+                    ChemistryAttributes chem;
                     float t = sphParticlesTemperature(i, a);
                     sphParticlesNormalizeFracs(i);
                     float const factor = 1.0f / (1.0f - sphParticlesZ(i));
@@ -133,10 +133,10 @@ Pair<double> chemistryDoStep(float a, int minrung, float t0, float adot, int dir
             int j = 0;
             double echange = 0.0;
             double const sphMass = getOptions().sphMass;
-            for (PartInt i = b; i < e; i++) {
+            for (ParticleInteger i = b; i < e; i++) {
                 int rung1 = sphParticlesRung(i);
                 if (rung1 >= minrung && !sphParticlesIsstar(i)) {
-                    ChemAttribs chem = chems[j++];
+                    ChemistryAttributes chem = chems[j++];
                     //					double cv = 1.5 + 0.5* chem.H2 / (1. - .75 *
                     //(chem.He+chem.Hep+chem.Hepp) - 0.5 * chem.H2); 					double gamma
                     //= 1. + 1. / cv;

@@ -50,8 +50,8 @@ static void computeDensityFolded(int m) {
         futs1.push_back(hpx::async<ComputeDensityFoldedAction>(c, m));
     }
     size_t const ndim = getOptions().nfour;
-    size_t const nparts = getOptions().nparts;
-    size_t const partsPerRank = nparts / hpxSize();
+    size_t const numberParticles = getOptions().numberParticles;
+    size_t const partsPerRank = numberParticles / hpxSize();
     size_t nper = ndim;
     while (sqr(nper) * nper > partsPerRank) {
         nper /= 2;

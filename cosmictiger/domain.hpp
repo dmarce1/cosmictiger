@@ -60,7 +60,7 @@ struct DomainGlobal {
 struct DomainLocal {
     Range<double> box;
     Pair<int> procRange;
-    Pair<PartInt> partRange;
+    Pair<ParticleInteger> partRange;
     int depth;
 };
 

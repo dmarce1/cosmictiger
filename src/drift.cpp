@@ -45,7 +45,7 @@ void drift(
         double const adot = getOptions().test.empty() ? scale * cosmosDadt(scale) : 0.0;
         float const hmin = getOptions().hmin;
         float const hmax = getOptions().hmax;
-        for (PartInt i = 0; i < sphParticlesSize(); i++) {
+        for (ParticleInteger i = 0; i < sphParticlesSize(); i++) {
             if (rung >= 0 && sphParticlesRung(i) != rung) {
                 continue;
             }

@@ -55,13 +55,13 @@ inline int n1pow(int n) {
 }
 
 template <class T, int pValue>
-class TensorTrlessSym : public Array<T, pValue * pValue + 1> {
+class SymmetricTracelessTensor : public Array<T, pValue * pValue + 1> {
 private:
 public:
     static constexpr int kN_ = pValue * pValue + 1;
 
     CUDA_EXPORT
-    inline TensorTrlessSym& operator=(T const& other) {
+    inline SymmetricTracelessTensor& operator=(T const& other) {
         for (int i = 0; i < kN_; i++) {
             (*this)[i] = other;
         }
@@ -69,16 +69,16 @@ public:
     }
 
     CUDA_EXPORT
-    inline TensorTrlessSym operator+(TensorTrlessSym const& other) const {
-        TensorTrlessSym<T, pValue> result;
+    inline SymmetricTracelessTensor operator+(SymmetricTracelessTensor const& other) const {
+        SymmetricTracelessTensor<T, pValue> result;
         for (int i = 0; i < kN_; i++) {
             result[i] = other[i] + (*this)[i];
         }
         return result;
     }
 
-    inline TensorTrlessSym operator-(TensorTrlessSym const& other) const {
-        TensorTrlessSym<T, pValue> result;
+    inline SymmetricTracelessTensor operator-(SymmetricTracelessTensor const& other) const {
+        SymmetricTracelessTensor<T, pValue> result;
         for (int i = 0; i < kN_; i++) {
             result[i] = other[i] - (*this)[i];
         }
@@ -184,21 +184,21 @@ inline Vector<int> symToIndices(Array<int, NDIM> const& i) {
 }
 
 template <class T, int pValue>
-class TensorSym : public Array<T, (pValue * (pValue + 1) * (pValue + 2)) / 6> {
+class SymmetricTensor : public Array<T, (pValue * (pValue + 1) * (pValue + 2)) / 6> {
 private:
 public:
     static constexpr int kN_ = (pValue * (pValue + 1) * (pValue + 2)) / 6;
 
     CUDA_EXPORT
-    inline TensorSym& operator=(T const& other) {
+    inline SymmetricTensor& operator=(T const& other) {
         for (int i = 0; i < kN_; i++) {
             (*this)[i] = other;
         }
         return *this;
     }
 
-    inline TensorSym operator+(TensorSym const& other) const {
-        TensorSym<T, pValue> result;
+    inline SymmetricTensor operator+(SymmetricTensor const& other) const {
+        SymmetricTensor<T, pValue> result;
         for (int i = 0; i < kN_; i++) {
             result[i] = other[i] + (*this)[i];
         }
@@ -237,9 +237,9 @@ public:
         return (*this)(n[0], n[1], n[2]);
     }
 
-    inline TensorTrlessSym<T, pValue> detraceD() const {
-        TensorTrlessSym<T, pValue> aValue;
-        TensorSym<T, pValue> const& bValue = *this;
+    inline SymmetricTracelessTensor<T, pValue> detraceD() const {
+        SymmetricTracelessTensor<T, pValue> aValue;
+        SymmetricTensor<T, pValue> const& bValue = *this;
         Array<int, NDIM> m;
         Array<int, NDIM> k;
         Array<int, NDIM> n;
@@ -284,8 +284,8 @@ public:
 
 template <class T, int pValue>
 
-TensorSym<T, pValue> vectorToSymTensor(Array<T, NDIM> const& vec) {
-    TensorSym<T, pValue> xValue;
+SymmetricTensor<T, pValue> vectorToSymTensor(Array<T, NDIM> const& vec) {
+    SymmetricTensor<T, pValue> xValue;
     Array<int, NDIM> n;
     T x = T(1);
     for (n[0] = 0; n[0] < pValue; n[0]++) {

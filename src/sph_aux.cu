@@ -37,4 +37,4 @@ struct AuxWorkspace {
     DeviceVector<int> neighbors;
 };
 
-__global__ void sphCudaAux(SphRunParams params, SphRunCudaData data, SphReduction* reduce) {}
+__global__ void sphCudaAux(SphRunParameters params, SphRunCudaData data, SphReduction* reduce) {}

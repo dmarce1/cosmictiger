@@ -17,8 +17,8 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-#ifndef FIXEDCAPVEC_HPP_
-#define FIXEDCAPVEC_HPP_
+#ifndef FIXED_CAPACITY_VECTOR_HPP_
+#define FIXED_CAPACITY_VECTOR_HPP_
 
 #include <cosmictiger/containers.hpp>
 #include <cosmictiger/cuda.hpp>
@@ -27,15 +27,15 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #ifdef __CUDACC__
 template <class T, int n>
-class Fixedcapvec {
+class FixedCapacityVector {
     Array<T, n> data_;
-    int sz_;
+    int size_;
 
 public:
-    __device__ constexpr Fixedcapvec() {
+    __device__ constexpr FixedCapacityVector() {
         int const tid = threadIdx.x;
         if (tid == 0) {
-            sz_ = 0;
+            size_ = 0;
         }
 #ifdef __CUDA_ARCH__
         __syncthreads();
@@ -44,25 +44,25 @@ public:
     __device__ void initialize() {
         int const tid = threadIdx.x;
         if (tid == 0) {
-            sz_ = 0;
+            size_ = 0;
         }
 #ifdef __CUDA_ARCH__
         __syncthreads();
 #endif
     }
-    Fixedcapvec(Fixedcapvec const&) = default;
-    Fixedcapvec& operator=(Fixedcapvec const&) = default;
+    FixedCapacityVector(FixedCapacityVector const&) = default;
+    FixedCapacityVector& operator=(FixedCapacityVector const&) = default;
     __device__ inline int size() const {
-        return sz_;
+        return size_;
     }
-    __device__ inline void resize(int newSz) {
+    __device__ inline void resize(int newSize) {
         int const tid = threadIdx.x;
 #ifdef __CUDA_ARCH__
         __syncthreads();
 #endif
         if (tid == 0) {
-            sz_ = newSz;
-            if (sz_ >= n) {
+            size_ = newSize;
+            if (size_ >= n) {
                 PRINT("fixedcapvec exceeded size of %i in %s on line %i\n", n, __FILE__, __LINE__);
 #ifdef __CUDA_ARCH__
                 __trap();
@@ -78,9 +78,9 @@ public:
     __device__ inline void pushBack(T const& item) {
         int const tid = threadIdx.x;
         if (tid == 0) {
-            data_[sz_] = item;
-            sz_++;
-            if (sz_ >= n) {
+            data_[size_] = item;
+            size_++;
+            if (size_ >= n) {
                 PRINT("fixedcapvec exceeded size of %i in %s on line %i\n", n, __FILE__, __LINE__);
 #ifdef __CUDA_ARCH__
                 __trap();
@@ -96,29 +96,29 @@ public:
     __device__ inline void popBack() {
         int const tid = threadIdx.x;
         if (tid == 0) {
-            sz_--;
+            size_--;
         }
 #ifdef __CUDA_ARCH__
         __syncthreads();
 #endif
     }
     __device__ inline T& back() {
-        ASSERT(sz_ >= 1);
-        return data_[sz_ - 1];
+        ASSERT(size_ >= 1);
+        return data_[size_ - 1];
     }
     __device__ inline T back() const {
-        return data_[sz_ - 1];
+        return data_[size_ - 1];
     }
     __device__ T* begin() {
         return data_;
     }
     __device__ T* end() {
-        return data_ + sz_;
+        return data_ + size_;
     }
     __device__ T& operator[](int i) {
 #ifdef CHECK_BOUNDS
-        if (i < 0 || i >= sz_) {
-            PRINT("index out of bounds for fixedcapvec %i should be between 0 and %i.\n", i, sz_);
+        if (i < 0 || i >= size_) {
+            PRINT("index out of bounds for fixedcapvec %i should be between 0 and %i.\n", i, size_);
 #ifdef __CUDA_ARCH__
             assert(false);
             __trap();
@@ -131,8 +131,8 @@ public:
     }
     __device__ T operator[](int i) const {
 #ifdef CHECK_BOUNDS
-        if (i < 0 || i >= sz_) {
-            PRINT("index out of bounds for fixedcapvec %i should be between 0 and %i.\n", i, sz_);
+        if (i < 0 || i >= size_) {
+            PRINT("index out of bounds for fixedcapvec %i should be between 0 and %i.\n", i, size_);
 #ifdef __CUDA_ARCH__
             __trap();
 #else
@@ -147,4 +147,4 @@ public:
     }
 };
 #endif
-#endif /* FIXEDCAPVEC_HPP_ */
+#endif /* FIXED_CAPACITY_VECTOR_HPP_ */

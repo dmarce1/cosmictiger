@@ -105,8 +105,8 @@ static void resetLastCacheEntries() {
 }
 
 FastFuture<GroupTreeReturn> groupTreeCreateFork(size_t key, Pair<int, int> procRange,
-    Pair<PartInt> partRange, GroupRange box, int depth, bool localRoot, bool threadme) {
-    static std::atomic<int> nthreads(0);
+    Pair<ParticleInteger> partRange, GroupRange box, int depth, bool localRoot, bool threadme) {
+    static std::atomic<int> numberThreads(0);
     FastFuture<GroupTreeReturn> rc;
     bool remote = false;
     if (procRange.first != hpxRank()) {
@@ -115,12 +115,12 @@ FastFuture<GroupTreeReturn> groupTreeCreateFork(size_t key, Pair<int, int> procR
     } else if (threadme) {
         threadme = partRange.second - partRange.first > MIN_SORT_THREAD_PARTS;
         if (threadme) {
-            if (nthreads++ < SORT_OVERSUBSCRIPTION * hpxHardwareConcurrency() ||
+            if (numberThreads++ < SORT_OVERSUBSCRIPTION * hpxHardwareConcurrency() ||
                 procRange.second - procRange.first > 1) {
                 threadme = true;
             } else {
                 threadme = false;
-                nthreads--;
+                numberThreads--;
             }
         }
     }
@@ -132,15 +132,15 @@ FastFuture<GroupTreeReturn> groupTreeCreateFork(size_t key, Pair<int, int> procR
     } else {
         rc = hpx::async([procRange, partRange, depth, localRoot, box, key]() {
             auto rc = groupTreeCreate(key, procRange, partRange, box, depth, localRoot);
-            nthreads--;
+            numberThreads--;
             return rc;
         });
     }
     return rc;
 }
 
-GroupTreeReturn groupTreeCreate(size_t key, Pair<int, int> procRange, Pair<PartInt> partRange,
-    GroupRange box, int depth, bool localRoot) {
+GroupTreeReturn groupTreeCreate(size_t key, Pair<int, int> procRange,
+    Pair<ParticleInteger> partRange, GroupRange box, int depth, bool localRoot) {
     int const treeCacheLineSize = getOptions().treeCacheLineSize;
     if (depth >= MAX_DEPTH) {
         THROW_ERROR("%s\n", "Maximum depth exceeded\n");
@@ -192,7 +192,7 @@ GroupTreeReturn groupTreeCreate(size_t key, Pair<int, int> procRange, Pair<PartI
         } else {
             int const xdim = box.longestDim();
             double const xmid = (box.begin[xdim] + box.end[xdim]) * 0.5;
-            PartInt const mid = particlesSort(partRange, xmid, xdim);
+            ParticleInteger const mid = particlesSort(partRange, xmid, xdim);
             leftParts.second = rightParts.first = mid;
             leftBox.end[xdim] = rightBox.begin[xdim] = xmid;
         }
@@ -213,7 +213,7 @@ GroupTreeReturn groupTreeCreate(size_t key, Pair<int, int> procRange, Pair<PartI
             partBox.begin[dim] = 1.0;
             partBox.end[dim] = 0.0;
         }
-        for (PartInt i = partRange.first; i < partRange.second; i++) {
+        for (ParticleInteger i = partRange.first; i < partRange.second; i++) {
             for (int dim = 0; dim < NDIM; dim++) {
                 double const x = particlesPos(dim, i).toDouble();
                 partBox.begin[dim] = std::min(partBox.begin[dim], x);
@@ -389,7 +389,7 @@ static Vector<unsigned> groupTreeRefreshCacheLine(int index) {
 }
 
 void groupTreeIncCacheEpoch() {
-    PartInt const lineSize = getOptions().partCacheLineSize;
+    ParticleInteger const lineSize = getOptions().partCacheLineSize;
     Vector<hpx::future<void>> futs;
     auto const children = hpxChildren();
     for (auto const& c : children) {

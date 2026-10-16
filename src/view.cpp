@@ -38,7 +38,7 @@ HPX_PLAIN_ACTION(outputView, OutputViewAction);
 
 static Vector<Range<double>> viewBoxes;
 
-struct DmPartInfo {
+struct DarkMatterParticleInfo {
     Fixed32 x;
     Fixed32 y;
     Fixed32 z;
@@ -58,7 +58,7 @@ struct DmPartInfo {
     }
 };
 
-struct SphPartInfo : public DmPartInfo {
+struct SphParticleInfo : public DarkMatterParticleInfo {
     float eint;
     float rho;
     float h;
@@ -74,7 +74,7 @@ struct SphPartInfo : public DmPartInfo {
     float coldFrac;
     template <typename A>
     void serialize(A&& arc, unsigned ver) {
-        DmPartInfo::serialize(arc, ver);
+        DarkMatterParticleInfo::serialize(arc, ver);
         arc & eint;
         arc & rho;
         arc & h;
@@ -91,14 +91,14 @@ struct SphPartInfo : public DmPartInfo {
     }
 };
 
-struct StarPartInfo : public DmPartInfo {
+struct StarParticleInfo : public DarkMatterParticleInfo {
     float yValue2;
     float zValue2;
     float m;
     float zform;
     template <typename A>
     void serialize(A&& arc, unsigned ver) {
-        DmPartInfo::serialize(arc, ver);
+        DarkMatterParticleInfo::serialize(arc, ver);
         arc & yValue2;
         arc & zValue2;
         arc & m;
@@ -107,9 +107,9 @@ struct StarPartInfo : public DmPartInfo {
 };
 
 struct ViewReturn {
-    Vector<Vector<SphPartInfo>> hydro;
-    Vector<Vector<DmPartInfo>> dm;
-    Vector<Vector<StarPartInfo>> star;
+    Vector<Vector<SphParticleInfo>> hydro;
+    Vector<Vector<DarkMatterParticleInfo>> dm;
+    Vector<Vector<StarParticleInfo>> star;
     template <typename A>
     void serialize(A&& arc, unsigned) {
         arc & hydro;
@@ -136,27 +136,27 @@ ViewReturn viewGetParticles(Vector<Range<double>> boxes = Vector<Range<double>>(
     }
     bool const chem = getOptions().chem;
     bool const stars = getOptions().stars;
-    int const nthreads = hpxHardwareConcurrency();
-    for (int proc = 0; proc < nthreads; proc++) {
+    int const numberThreads = hpxHardwareConcurrency();
+    for (int proc = 0; proc < numberThreads; proc++) {
         futs.push_back(hpx::async(hpx::annotated_function(
-            [proc, nthreads, boxes, chem, stars]() {
+            [proc, numberThreads, boxes, chem, stars]() {
                 ViewReturn rc;
                 rc.hydro.resize(boxes.size());
                 rc.dm.resize(boxes.size());
                 rc.star.resize(boxes.size());
-                PartInt const b = (size_t) proc * particlesSize() / nthreads;
-                PartInt const e = (size_t) (proc + 1) * particlesSize() / nthreads;
-                for (PartInt i = b; i < e; i++) {
+                ParticleInteger const b = (size_t) proc * particlesSize() / numberThreads;
+                ParticleInteger const e = (size_t) (proc + 1) * particlesSize() / numberThreads;
+                for (ParticleInteger i = b; i < e; i++) {
                     Array<double, NDIM> x;
                     x[XDIM] = particlesPos(XDIM, i).toDouble();
                     x[YDIM] = particlesPos(YDIM, i).toDouble();
                     x[ZDIM] = particlesPos(ZDIM, i).toDouble();
                     for (int j = 0; j < boxes.size(); j++) {
                         if (boxes[j].contains(x)) {
-                            PartInt const k = particlesType(i);
+                            ParticleInteger const k = particlesType(i);
                             switch (k) {
                             case DARK_MATTER_TYPE: {
-                                DmPartInfo info{};
+                                DarkMatterParticleInfo info{};
                                 info.x = particlesPos(XDIM, i);
                                 info.y = particlesPos(YDIM, i);
                                 info.z = particlesPos(ZDIM, i);
@@ -168,7 +168,7 @@ ViewReturn viewGetParticles(Vector<Range<double>> boxes = Vector<Range<double>>(
                                 break;
                             }
                             case SPH_TYPE: {
-                                SphPartInfo info{};
+                                SphParticleInfo info{};
                                 int const l = particlesCatIndex(i);
                                 if (!sphParticlesIsstar(l)) {
                                     info.x = particlesPos(XDIM, i);
@@ -205,7 +205,7 @@ ViewReturn viewGetParticles(Vector<Range<double>> boxes = Vector<Range<double>>(
                                     rc.hydro[j].push_back(info);
                                 } else {
                                     int const k = particlesCatIndex(i);
-                                    StarPartInfo info{};
+                                    StarParticleInfo info{};
                                     info.x = particlesPos(XDIM, i);
                                     info.y = particlesPos(YDIM, i);
                                     info.z = particlesPos(ZDIM, i);
@@ -483,18 +483,18 @@ Vector<float> outputView(int number, double time) {
     for (auto const& c : hpxChildren()) {
         valFuts.push_back(hpx::async<OutputViewAction>(c, number, time));
     }
-    int const nthreads = hpxHardwareConcurrency();
+    int const numberThreads = hpxHardwareConcurrency();
     int const nside = getOptions().viewSize;
     int const npix = 12 * sqr(nside);
     Vector<std::atomic<float>> values(npix);
     for (auto& v : values) {
         v = 0.0f;
     }
-    for (int proc = 0; proc < nthreads; proc++) {
+    for (int proc = 0; proc < numberThreads; proc++) {
         futs.push_back(hpx::async(hpx::annotated_function(
-            [nthreads, proc, nside, &values]() {
-                PartInt const begin = (size_t) proc * particlesSize() / nthreads;
-                PartInt const end = (size_t) (proc + 1) * particlesSize() / nthreads;
+            [numberThreads, proc, nside, &values]() {
+                ParticleInteger const begin = (size_t) proc * particlesSize() / numberThreads;
+                ParticleInteger const end = (size_t) (proc + 1) * particlesSize() / numberThreads;
                 for (int i = begin; i < end; i++) {
                     for (int xi = -1; xi <= 0; xi++) {
                         for (int yi = -1; yi <= 0; yi++) {

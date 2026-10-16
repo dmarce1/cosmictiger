@@ -1,5 +1,5 @@
 #include <cosmictiger/cuda_reduce.hpp>
-#include <cosmictiger/fixedcapvec.hpp>
+#include <cosmictiger/fixed_capacity_vector.hpp>
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/rockstar.hpp>
 #include <cosmictiger/stack_vector.hpp>
@@ -7,7 +7,7 @@
 #define BLOCK_SIZE 32
 
 __global__ void rockstarFindSubgroupsKernel(RockstarTree* nodes, int const* leaves,
-    RockstarParticle* parts, float linkLen, int* nextIndex, int* activeCnt);
+    RockstarParticle* parts, float linkLen, int* nextIndex, int* numberActive);
 __global__ void rockstarAssignLinklenKernel(RockstarTree const* nodes, int const* leaves,
     RockstarParticle* parts, float linkLen, bool phase);
 
@@ -31,14 +31,14 @@ void rockstarAssignLinklenCuda(DeviceVector<RockstarTree> const& nodes,
 void rockstarFindSubgroupsCuda(DeviceVector<RockstarTree>& nodes, DeviceVector<int> const& inleaves,
     DeviceVector<RockstarParticle>& parts, float linkLen, int& nextId) {
     int* nextIndex;
-    int* activeCnt;
+    int* numberActive;
     nextIndex = (int*) cudaAllocate(sizeof(int));
-    activeCnt = (int*) cudaAllocate(sizeof(int));
+    numberActive = (int*) cudaAllocate(sizeof(int));
     *nextIndex = nextId;
     int cnt = 0;
     do {
         DeviceVector<int> leaves;
-        *activeCnt = 0;
+        *numberActive = 0;
         for (int i = 0; i < inleaves.size(); i++) {
             int const li = inleaves[i];
             nodes[li].lastActive = nodes[li].active;
@@ -49,16 +49,16 @@ void rockstarFindSubgroupsCuda(DeviceVector<RockstarTree>& nodes, DeviceVector<i
         auto stream = cudaGetStream();
         blocksUsed += leaves.size();
         rockstarFindSubgroupsKernel<<<leaves.size(), BLOCK_SIZE, 0, stream>>>(
-            nodes.data(), leaves.data(), parts.data(), linkLen, nextIndex, activeCnt);
+            nodes.data(), leaves.data(), parts.data(), linkLen, nextIndex, numberActive);
         cudaEndStream(stream);
         blocksUsed -= leaves.size();
         cnt++;
-    } while (*activeCnt);
+    } while (*numberActive);
     nextId = *nextIndex;
 }
 
 __global__ void rockstarFindSubgroupsKernel(RockstarTree* nodes, int const* leaves,
-    RockstarParticle* parts, float linkLen, int* nextIndex, int* activeCnt) {
+    RockstarParticle* parts, float linkLen, int* nextIndex, int* numberActive) {
     int const& tid = threadIdx.x;
     int const& index = blockIdx.x;
     __syncthreads();
@@ -151,7 +151,7 @@ __global__ void rockstarFindSubgroupsKernel(RockstarTree* nodes, int const* leav
                 auto& other = nodes[neighbors[i]];
                 other.active = true;
             }
-            atomicAdd(activeCnt, 1);
+            atomicAdd(numberActive, 1);
         }
     }
 }

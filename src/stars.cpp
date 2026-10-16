@@ -41,11 +41,11 @@ void starsSave(FILE* fp) {
     fwrite(stars.data(), sizeof(StarParticle), stars.size(), fp);
 }
 
-StarParticle& starsGet(PartInt index) {
+StarParticle& starsGet(ParticleInteger index) {
     return stars[index];
 }
 
-PartInt starsSize() {
+ParticleInteger starsSize() {
     return stars.size();
 }
 
@@ -67,12 +67,12 @@ double starsFind(float a, float dt, int minrung, int step, float t0) {
     }
     MutexType mutex;
     std::atomic<int> found(0);
-    Vector<PartInt> indices;
-    int const nthreads = hpxHardwareConcurrency();
-    Vector<gsl_rng*> rndGens(nthreads);
-    for (int i = 0; i < nthreads; i++) {
+    Vector<ParticleInteger> indices;
+    int const numberThreads = hpxHardwareConcurrency();
+    Vector<gsl_rng*> rndGens(numberThreads);
+    for (int i = 0; i < numberThreads; i++) {
         rndGens[i] = gsl_rng_alloc(gsl_rng_taus);
-        gsl_rng_set(rndGens[i], step * nthreads + i);
+        gsl_rng_set(rndGens[i], step * numberThreads + i);
     }
     double eloss = 0.0;
 
@@ -81,9 +81,9 @@ double starsFind(float a, float dt, int minrung, int step, float t0) {
     static double const codeToCm = getOptions().codeToCm;
     static double const codeToS = getOptions().codeToS;
     static double const g = getOptions().gm;
-    for (int proc = 0; proc < nthreads; proc++) {
-        futs.push_back(
-            hpx::async([proc, t0, nthreads, a, minrung, &found, &mutex, &indices, dt, &rndGens]() {
+    for (int proc = 0; proc < numberThreads; proc++) {
+        futs.push_back(hpx::async(
+            [proc, t0, numberThreads, a, minrung, &found, &mutex, &indices, dt, &rndGens]() {
                 double eloss = 0.0;
                 double const dmSoft = getOptions().hsoft;
                 double const codeToS = getOptions().codeToS;
@@ -95,12 +95,12 @@ double starsFind(float a, float dt, int minrung, int step, float t0) {
                 double const rho0C = rho0 * getOptions().omegaC;
                 double const codeToDensity = codeToG / pow(codeToCm, 3);
                 double const codeToEnergy = pow(codeToCm / codeToS, 2);
-                PartInt const b = (size_t) proc * sphParticlesSize() / nthreads;
-                PartInt const e = (size_t) (proc + 1) * sphParticlesSize() / nthreads;
-                for (PartInt i = b; i < e; i++) {
+                ParticleInteger const b = (size_t) proc * sphParticlesSize() / numberThreads;
+                ParticleInteger const e = (size_t) (proc + 1) * sphParticlesSize() / numberThreads;
+                for (ParticleInteger i = b; i < e; i++) {
                     if (!sphParticlesIsstar(i)) {
                         char rung = sphParticlesRung(i);
-                        PartInt const kk = sphParticlesDmIndex(i);
+                        ParticleInteger const kk = sphParticlesDmIndex(i);
                         double const rhoTot = particlesRho(kk) * codeToDensity;
 #ifdef HOPKINS
                         double const rhoB = sphParticlesRhoRho(i) * codeToDensity;
@@ -165,7 +165,7 @@ double starsFind(float a, float dt, int minrung, int step, float t0) {
     for (auto& f : futs) {
         eloss += f.get();
     }
-    for (int i = 0; i < nthreads; i++) {
+    for (int i = 0; i < numberThreads; i++) {
         gsl_rng_free(rndGens[i]);
     }
     profilerExit();
@@ -183,13 +183,13 @@ StarsStats starsStatistics(float a) {
         futs.push_back(hpx::async<StarsStatisticsAction>(c, a));
     }
     StarsStats stats;
-    int const nthreads = hpxHardwareConcurrency();
-    for (int proc = 0; proc < nthreads; proc++) {
-        futs.push_back(hpx::async([proc, nthreads]() {
-            PartInt const b = (size_t) proc * sphParticlesSize() / nthreads;
-            PartInt const e = (size_t) (proc + 1) * sphParticlesSize() / nthreads;
+    int const numberThreads = hpxHardwareConcurrency();
+    for (int proc = 0; proc < numberThreads; proc++) {
+        futs.push_back(hpx::async([proc, numberThreads]() {
+            ParticleInteger const b = (size_t) proc * sphParticlesSize() / numberThreads;
+            ParticleInteger const e = (size_t) (proc + 1) * sphParticlesSize() / numberThreads;
             StarsStats stats;
-            for (PartInt i = b; i < e; i++) {
+            for (ParticleInteger i = b; i < e; i++) {
                 if (sphParticlesIsstar(i)) {
                     stats.stars++;
                 }
@@ -221,11 +221,11 @@ void starsRemove(float a, float dt, int minrung, int step) {
      for (auto& c : hpx_children()) {
      futs.push_back(hpx::async<stars_find_action>(c, a, dt, minrung, step));
      }
-     const int nthreads = hpx_hardware_concurrency();
-     vector<gsl_rng *> rnd_gens(nthreads);
-     for (int i = 0; i < nthreads; i++) {
+     const int numberThreads = hpx_hardware_concurrency();
+     vector<gsl_rng *> rnd_gens(numberThreads);
+     for (int i = 0; i < numberThreads; i++) {
      rnd_gens[i] = gsl_rng_alloc(gsl_rng_taus);
-     gsl_rng_set(rnd_gens[i], step * nthreads + i);
+     gsl_rng_set(rnd_gens[i], step * numberThreads + i);
      }
      static const double sph_mass = get_options().sph_mass;
      static const double code_to_g = get_options().code_to_g;
@@ -236,15 +236,15 @@ void starsRemove(float a, float dt, int minrung, int step) {
      std::atomic<int> remnants(0);
      std::atomic<int> clouds(0);
      std::atomic<int> nstars(0);
-     for (int proc = 0; proc < nthreads; proc++) {
-     futs2.push_back(hpx::async([&rnd_gens,proc, nthreads, a, dt, &to_gas_mutex, &to_gas_indices,
-     minrung, &remnants, &clouds,&nstars]() { const part_int b = (size_t) proc * stars.size() /
-     nthreads; const part_int e = (size_t) (proc+1) * stars.size() / nthreads; for( part_int i = b;
-     i < e; i++) { if( stars[i].type == STAR_TYPE ) { float real_dt = a * dt * code_to_s *
-     constants::seconds_to_years; stars[i].time_remaining -= real_dt; float remnant_mass_ratio =
-     stars_remnant_mass(stars[i].stellar_mass, stars[i].Z); float wind_rate = WIND_RATIO * (1.0 -
-     remnant_mass_ratio); float dt_star = stars[i].total_life; dt_star /=
-     constants::seconds_to_years; dt_star /= code_to_s; dt_star /= a; float pwind = 1.0 -
+     for (int proc = 0; proc < numberThreads; proc++) {
+     futs2.push_back(hpx::async([&rnd_gens,proc, numberThreads, a, dt, &to_gas_mutex,
+     &to_gas_indices, minrung, &remnants, &clouds,&nstars]() { const part_int b = (size_t) proc *
+     stars.size() / numberThreads; const part_int e = (size_t) (proc+1) * stars.size() /
+     numberThreads; for( part_int i = b; i < e; i++) { if( stars[i].type == STAR_TYPE ) { float
+     real_dt = a * dt * code_to_s * constants::seconds_to_years; stars[i].time_remaining -= real_dt;
+     float remnant_mass_ratio = stars_remnant_mass(stars[i].stellar_mass, stars[i].Z); float
+     wind_rate = WIND_RATIO * (1.0 - remnant_mass_ratio); float dt_star = stars[i].total_life;
+     dt_star /= constants::seconds_to_years; dt_star /= code_to_s; dt_star /= a; float pwind = 1.0 -
      exp(-wind_rate*dt/dt_star); if( gsl_rng_uniform_pos(rnd_gens[proc]) < pwind) {
      std::lock_guard<mutex_type> lock(to_gas_mutex);
      //		PRINT( "Stellar wind!\n");
@@ -354,7 +354,7 @@ void starsRemove(float a, float dt, int minrung, int step) {
      }
      hpx::wait_all(futs.begin(), futs.end());
      PRINT("%i stars, %i remnants, %i clouds\n", (int ) nstars, (int ) remnants, (int ) clouds);
-     for (int i = 0; i < nthreads; i++) {
+     for (int i = 0; i < numberThreads; i++) {
      gsl_rng_free(rnd_gens[i]);
      }
      //	profiler_exit();*/

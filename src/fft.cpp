@@ -36,9 +36,9 @@ static Array<Range<int64_t>, NDIM> cmplxMybox;
 static Vector<std::shared_ptr<SpinlockType>> mutexes;
 
 static Vector<float> rValue;
-static Vector<Cmplx> yValue;
-static Vector<Cmplx> ym;
-static Vector<Cmplx> y1Value;
+static Vector<ComplexFloat> yValue;
+static Vector<ComplexFloat> ym;
+static Vector<ComplexFloat> y1Value;
 
 static void findBoxes(Range<int64_t> box, Vector<Range<int64_t>>& boxes, int begin, int end);
 static void splitBox(Range<int64_t> box, Vector<Range<int64_t>>& realBoxes);
@@ -49,16 +49,16 @@ static void fft3dPhase1();
 static void fft3dPhase2(int, bool);
 static void fft3dPhase3();
 static void finishForceReal();
-static Vector<Cmplx> transposeRead(Range<int64_t> const&, int dim1, int dim2);
-static Vector<Cmplx> shiftRead(Range<int64_t> const&, bool);
-struct PspecRet {
+static Vector<ComplexFloat> transposeRead(Range<int64_t> const&, int dim1, int dim2);
+static Vector<ComplexFloat> shiftRead(Range<int64_t> const&, bool);
+struct PowerSpectrumReturn {
     Vector<float> k;
     Vector<float> p;
     Vector<double> c;
     Vector<float> pdev;
 };
-static PspecRet powerSpectrumCompute(Vector<float> const& kbins);
-static PspecRet powerSpectrumCompute2(PspecRet, Vector<float> const& kbins);
+static PowerSpectrumReturn powerSpectrumCompute(Vector<float> const& kbins);
+static PowerSpectrumReturn powerSpectrumCompute2(PowerSpectrumReturn, Vector<float> const& kbins);
 
 HPX_PLAIN_ACTION(fft3dAccumulateReal, Fft3dAccumulateRealAction);
 HPX_PLAIN_ACTION(fft3dAccumulateComplex, Fft3dAccumulateComplexAction);
@@ -238,8 +238,8 @@ int searchKbins(Vector<float> kbins, double k, int binmin, int binmax) {
     return -1;
 };
 
-static PspecRet powerSpectrumCompute(Vector<float> const& kbins) {
-    Vector<hpx::future<PspecRet>> futs;
+static PowerSpectrumReturn powerSpectrumCompute(Vector<float> const& kbins) {
+    Vector<hpx::future<PowerSpectrumReturn>> futs;
     for (auto c : hpxChildren()) {
         futs.push_back(hpx::async<PowerSpectrumComputeAction>(c, kbins));
     }
@@ -248,19 +248,19 @@ static PspecRet powerSpectrumCompute(Vector<float> const& kbins) {
     auto const& box = cmplxMybox[ZDIM];
     Array<int64_t, NDIM> iValue;
 
-    int const nbins = kbins.size() - 1;
-    Vector<float> power(nbins, 0.0);
-    Vector<double> count(nbins, 0);
-    Vector<float> ktot(nbins, 0.0);
+    int const numberBins = kbins.size() - 1;
+    Vector<float> power(numberBins, 0.0);
+    Vector<double> count(numberBins, 0);
+    Vector<float> ktot(numberBins, 0.0);
     for (iValue[0] = box.begin[0]; iValue[0] != box.end[0]; iValue[0]++) {
         futs.push_back(hpx::async(
-            [n, nbins, &kbins, box](Array<int64_t, NDIM> iValue2) {
+            [n, numberBins, &kbins, box](Array<int64_t, NDIM> iValue2) {
                 int64_t const i = iValue2[0] < n / 2 ? iValue2[0] : iValue2[0] - n;
                 double const sx = cloudFilter(2.0 * M_PI * i / n);
-                PspecRet ret;
-                Vector<float> power(nbins, 0.0);
-                Vector<double> count(nbins, 0);
-                Vector<float> ktot(nbins, 0.0);
+                PowerSpectrumReturn ret;
+                Vector<float> power(numberBins, 0.0);
+                Vector<double> count(numberBins, 0);
+                Vector<float> ktot(numberBins, 0.0);
                 for (iValue2[1] = box.begin[1]; iValue2[1] != box.end[1]; iValue2[1]++) {
                     int64_t const j = iValue2[1] < n / 2 ? iValue2[1] : iValue2[1] - n;
                     double const sy = cloudFilter(2.0 * M_PI * j / n);
@@ -271,7 +271,7 @@ static PspecRet powerSpectrumCompute(Vector<float> const& kbins) {
                         yValue[box.index(iValue2)] *= c0;
                         double const iii = std::sqrt(i * i + j * j + k * k);
                         if (iii > 0) {
-                            int const bin = searchKbins(kbins, iii, 0, nbins);
+                            int const bin = searchKbins(kbins, iii, 0, numberBins);
                             if (bin >= 0) {
                                 float const pwr = yValue[box.index(iValue2)].norm();
                                 count[bin] += 1;
@@ -299,15 +299,16 @@ static PspecRet powerSpectrumCompute(Vector<float> const& kbins) {
             ktot[i] += thisKtot[i];
         }
     }
-    PspecRet rc;
+    PowerSpectrumReturn rc;
     rc.p = std::move(power);
     rc.c = std::move(count);
     rc.k = std::move(ktot);
     return rc;
 }
 
-static PspecRet powerSpectrumCompute2(PspecRet rc, Vector<float> const& kbins) {
-    Vector<hpx::future<PspecRet>> futs;
+static PowerSpectrumReturn powerSpectrumCompute2(
+    PowerSpectrumReturn rc, Vector<float> const& kbins) {
+    Vector<hpx::future<PowerSpectrumReturn>> futs;
     for (auto c : hpxChildren()) {
         futs.push_back(hpx::async<PowerSpectrumCompute2Action>(c, rc, kbins));
     }
@@ -316,15 +317,15 @@ static PspecRet powerSpectrumCompute2(PspecRet rc, Vector<float> const& kbins) {
     auto const& box = cmplxMybox[ZDIM];
     Array<int64_t, NDIM> iValue;
 
-    int const nbins = kbins.size() - 1;
-    Vector<float> devs(nbins, 0.0);
+    int const numberBins = kbins.size() - 1;
+    Vector<float> devs(numberBins, 0.0);
     for (iValue[0] = box.begin[0]; iValue[0] != box.end[0]; iValue[0]++) {
         futs.push_back(hpx::async(
-            [n, nbins, &kbins, box, rc](Array<int64_t, NDIM> iValue2) {
+            [n, numberBins, &kbins, box, rc](Array<int64_t, NDIM> iValue2) {
                 int64_t const i = iValue2[0] < n / 2 ? iValue2[0] : iValue2[0] - n;
                 double const sx = sinc(M_PI * i / n);
-                PspecRet ret;
-                Vector<float> pdev(nbins, 0.0);
+                PowerSpectrumReturn ret;
+                Vector<float> pdev(numberBins, 0.0);
                 for (iValue2[1] = box.begin[1]; iValue2[1] != box.end[1]; iValue2[1]++) {
                     int64_t const j = iValue2[1] < n / 2 ? iValue2[1] : iValue2[1] - n;
                     double const sy = sinc(M_PI * j / n);
@@ -335,7 +336,7 @@ static PspecRet powerSpectrumCompute2(PspecRet rc, Vector<float> const& kbins) {
                         yValue[box.index(iValue2)] *= c0;
                         double const iii = std::sqrt(i * i + j * j + k * k);
                         if (iii > 0) {
-                            int const bin = searchKbins(kbins, iii, 0, nbins);
+                            int const bin = searchKbins(kbins, iii, 0, numberBins);
                             if (bin >= 0) {
                                 float const pwr = yValue[box.index(iValue2)].norm();
                                 pdev[bin] += sqr(pwr - rc.p[bin]);
@@ -351,7 +352,7 @@ static PspecRet powerSpectrumCompute2(PspecRet rc, Vector<float> const& kbins) {
     for (auto& f : futs) {
         auto const pr = f.get();
         auto const& thisPdev = pr.pdev;
-        for (int i = 0; i < nbins; i++) {
+        for (int i = 0; i < numberBins; i++) {
             devs[i] += thisPdev[i];
         }
     }
@@ -405,7 +406,7 @@ Range<int64_t> fft3dRealRange() {
     return realMybox;
 }
 
-Vector<Cmplx>& fft3dComplexVector() {
+Vector<ComplexFloat>& fft3dComplexVector() {
     return yValue;
 }
 
@@ -486,9 +487,9 @@ Vector<float> fft3dReadReal(Range<int64_t> const& thisBox) {
     return std::move(data);
 }
 
-Vector<Cmplx> fft3dReadComplex(Range<int64_t> const& thisBox) {
+Vector<ComplexFloat> fft3dReadComplex(Range<int64_t> const& thisBox) {
     Vector<hpx::future<void>> futs;
-    Vector<Cmplx> data(thisBox.volume());
+    Vector<ComplexFloat> data(thisBox.volume());
     auto const mybox = cmplxMybox[ZDIM];
     if (mybox.contains(thisBox)) {
         Array<int64_t, NDIM> i;
@@ -514,7 +515,7 @@ Vector<Cmplx> fft3dReadComplex(Range<int64_t> const& thisBox) {
                                 auto fut = hpx::async<Fft3dReadComplexAction>(
                                     hpxLocalities()[ri], thisInter);
                                 futs.push_back(fut.then([si, thisBox, thisInter, &data](
-                                                            hpx::future<Vector<Cmplx>> fut) {
+                                                            hpx::future<Vector<ComplexFloat>> fut) {
                                     auto thisData = fut.get();
                                     Array<int64_t, NDIM> i;
                                     for (i[0] = thisInter.begin[0]; i[0] != thisInter.end[0];
@@ -605,7 +606,7 @@ void fft3dAccumulateReal(Range<int64_t> const& thisBox, Vector<float> const& dat
     hpx::wait_all(futs.begin(), futs.end());
 }
 
-void fft3dAccumulateComplex(Range<int64_t> const& thisBox, Vector<Cmplx> const& data) {
+void fft3dAccumulateComplex(Range<int64_t> const& thisBox, Vector<ComplexFloat> const& data) {
     Vector<hpx::future<void>> futs;
     auto const& box = cmplxMybox[ZDIM];
     if (box.contains(thisBox)) {
@@ -632,7 +633,7 @@ void fft3dAccumulateComplex(Range<int64_t> const& thisBox, Vector<Cmplx> const& 
                             Vector<Range<int64_t>> inters;
                             splitBox(inter, inters);
                             for (auto thisInter : inters) {
-                                Vector<Cmplx> thisData;
+                                Vector<ComplexFloat> thisData;
                                 thisData.resize(thisInter.volume());
                                 Array<int64_t, NDIM> i;
                                 for (i[0] = thisInter.begin[0]; i[0] != thisInter.end[0]; i[0]++) {
@@ -688,7 +689,7 @@ void fft3dInit(int64_t gridSize, float initConst) {
         findBoxes(box, cmplxBoxes[dim], 0, hpxSize());
         cmplxMybox[dim] = cmplxBoxes[dim][hpxRank()];
     }
-    yValue.resize(cmplxMybox[ZDIM].volume(), Cmplx(0.0, 0.0));
+    yValue.resize(cmplxMybox[ZDIM].volume(), ComplexFloat(0.0, 0.0));
     mutexes.resize(n * n);
     for (int64_t i = 0; i < n * n; i++) {
         mutexes[i] = std::make_shared<SpinlockType>();
@@ -884,7 +885,7 @@ static void transpose(int dim1, int dim2) {
                 auto inter = thisTinter.transpose(dim1, dim2);
                 auto fut =
                     hpx::async<TransposeReadAction>(hpxLocalities()[bi], thisTinter, dim1, dim2);
-                futs.push_back(fut.then([inter, dim1](hpx::future<Vector<Cmplx>> fut) {
+                futs.push_back(fut.then([inter, dim1](hpx::future<Vector<ComplexFloat>> fut) {
                     auto data = fut.get();
                     Array<int64_t, NDIM> i;
                     for (i[0] = inter.begin[0]; i[0] != inter.end[0]; i[0]++) {
@@ -906,8 +907,8 @@ static void transpose(int dim1, int dim2) {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
-static Vector<Cmplx> transposeRead(Range<int64_t> const& thisBox, int dim1, int dim2) {
-    Vector<Cmplx> data(thisBox.volume());
+static Vector<ComplexFloat> transposeRead(Range<int64_t> const& thisBox, int dim1, int dim2) {
+    Vector<ComplexFloat> data(thisBox.volume());
     ASSERT(cmplxMybox[dim2].contains(thisBox));
     auto tbox = thisBox.transpose(dim1, dim2);
     Array<int64_t, NDIM> i;
@@ -941,7 +942,7 @@ static void shift(bool inv) {
             for (auto thisTinter : tinters) {
                 auto inter = inv ? thisTinter.shiftDown() : thisTinter.shiftUp();
                 auto fut = hpx::async<ShiftReadAction>(hpxLocalities()[bi], thisTinter, inv);
-                futs.push_back(fut.then([inter, dim2](hpx::future<Vector<Cmplx>> fut) {
+                futs.push_back(fut.then([inter, dim2](hpx::future<Vector<ComplexFloat>> fut) {
                     auto data = fut.get();
                     Array<int64_t, NDIM> i;
                     for (i[0] = inter.begin[0]; i[0] != inter.end[0]; i[0]++) {
@@ -963,8 +964,8 @@ static void shift(bool inv) {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
-static Vector<Cmplx> shiftRead(Range<int64_t> const& thisBox, bool inv) {
-    Vector<Cmplx> data(thisBox.volume());
+static Vector<ComplexFloat> shiftRead(Range<int64_t> const& thisBox, bool inv) {
+    Vector<ComplexFloat> data(thisBox.volume());
     auto tbox = inv ? thisBox.shiftDown() : thisBox.shiftUp();
     Array<int64_t, NDIM> i;
     int const dim = inv ? XDIM : YDIM;

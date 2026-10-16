@@ -94,7 +94,7 @@ void EwaldConst::initGpu() {
         ec.fourExpanse[count] = d0.detraceD();
         count++;
     }
-    TensorSym<float, LORDER> dValue;
+    SymmetricTensor<float, LORDER> dValue;
     for (int n = 0; n < (LORDER + 2) * (LORDER + 1) * LORDER / 6; n++) {
         dValue[n] = 0.0;
     }
@@ -122,7 +122,7 @@ CUDA_EXPORT int EwaldConst::nreal() {
     return NREAL;
 }
 
-CUDA_EXPORT TensorSym<float, LORDER> const EwaldConst::d0() {
+CUDA_EXPORT SymmetricTensor<float, LORDER> const EwaldConst::d0() {
 #ifdef __CUDA_ARCH__
     return ecDev.d0;
 #else
@@ -146,7 +146,7 @@ CUDA_EXPORT Array<float, NDIM> const& EwaldConst::fourIndex(int i) {
 #endif
 }
 
-CUDA_EXPORT TensorTrlessSym<float, LORDER> const& EwaldConst::fourExpansion(int i) {
+CUDA_EXPORT SymmetricTracelessTensor<float, LORDER> const& EwaldConst::fourExpansion(int i) {
 #ifdef __CUDA_ARCH__
     return ecDev.fourExpanse[i];
 #else

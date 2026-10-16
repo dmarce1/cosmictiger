@@ -88,7 +88,7 @@ bool GroupEntry::read(FILE* fp) {
     int parentCount;
     freadSingle(fp, parentCount);
     for (int i = 0; i < parentCount; i++) {
-        std::pair<GroupInt, int> entry;
+        std::pair<GroupInteger, int> entry;
         freadSingle(fp, entry);
         parents[entry.first] = entry.second;
     }

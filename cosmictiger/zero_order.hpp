@@ -22,9 +22,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <functional>
 
 #include <cosmictiger/constants.hpp>
-#include <cosmictiger/interp.hpp>
+#include <cosmictiger/interpolation.hpp>
 
-struct CosmicParams {
+struct CosmicParameters {
     double omegaB, omegaC, omegaGam, omegaNu;
     double neff, y, theta, hubble;
 };
@@ -37,10 +37,10 @@ inline double hubbleFunction(double a, double littleh, double omegaM, double ome
 struct ZeroOrderUniverse {
     double amin;
     double amax;
-    CosmicParams params;
-    InterpFunctor<double> sigmaT;
-    InterpFunctor<double> cs2;
-    InterpFunctor<double> k;
+    CosmicParameters params;
+    InterpolationFunctor<double> sigmaT;
+    InterpolationFunctor<double> cs2;
+    InterpolationFunctor<double> k;
     std::function<double(double)> xe;
 
     void computeMatterFractions(double& oc, double& ob, double a) const;
@@ -57,7 +57,7 @@ struct ZeroOrderUniverse {
 };
 
 void createZeroOrderUniverse(
-    ZeroOrderUniverse* uniPtr, std::function<double(double)> fxe, double amax, CosmicParams);
+    ZeroOrderUniverse* uniPtr, std::function<double(double)> fxe, double amax, CosmicParameters);
 
 class Cosmos {
     double a_;

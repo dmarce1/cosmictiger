@@ -18,7 +18,7 @@
  */
 
 #include <cosmictiger/cuda.hpp>
-#include <cosmictiger/cuda_mem.hpp>
+#include <cosmictiger/cuda_memory.hpp>
 #include <cosmictiger/ewald_indices.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/particles.hpp>
@@ -28,8 +28,8 @@
 void cudaAllocate(void** ptr, size_t size, char const* file, int line) {
     static MutexType mutex;
     std::lock_guard<MutexType> lock(mutex);
-    double freeMem = cudaFreeMem();
-    double totalMem = cudaTotalMem();
+    double freeMem = cudaFreeMemory();
+    double totalMem = cudaTotalMemory();
     if ((freeMem - (double) size) / totalMem < 0.15) {
         PRINT("Attempt to allocate %li bytes on rank %i in %s on line %i leaves less than 15%% "
               "memory\n",
@@ -53,7 +53,7 @@ int cudaGetDevice() {
     return deviceNum;
 }
 
-size_t cudaTotalMem() {
+size_t cudaTotalMemory() {
     size_t total;
     size_t free;
     cudaSetDevice();
@@ -61,7 +61,7 @@ size_t cudaTotalMem() {
     return total;
 }
 
-size_t cudaFreeMem() {
+size_t cudaFreeMemory() {
     size_t total;
     size_t free;
     cudaSetDevice();
@@ -107,7 +107,7 @@ void cudaInit() {
         if (value != oval) {
             THROW_ERROR("Unable to set stack size to %li\n", oval);
         }*/
-    cudaMemInit(HEAP_SIZE);
+    cudaMemoryInitialize(HEAP_SIZE);
 }
 
 #endif

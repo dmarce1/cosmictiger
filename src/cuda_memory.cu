@@ -20,7 +20,7 @@
 #include <cooperative_groups.h>
 #include <cuda/barrier>
 
-#include <cosmictiger/cuda_mem.hpp>
+#include <cosmictiger/cuda_memory.hpp>
 
 using BarrierType = cuda::barrier<cuda::thread_scope::thread_scope_block>;
 
@@ -86,7 +86,7 @@ CUDA_EXPORT T systemAtomicExchange(T* self, T value) {
 }
 
 CUDA_EXPORT
-void CudaMem::push(int bin, char* ptr) {
+void CudaMemory::push(int bin, char* ptr) {
     using Itype = unsigned long long int;
     auto& thisQ = q_[bin];
     auto in = qin_[bin];
@@ -108,7 +108,7 @@ void CudaMem::push(int bin, char* ptr) {
 }
 
 CUDA_EXPORT
-char* CudaMem::pop(int bin) {
+char* CudaMemory::pop(int bin) {
     using Itype = unsigned long long int;
     auto& thisQ = q_[bin];
     auto const& in = qin_[bin];
@@ -130,7 +130,7 @@ char* CudaMem::pop(int bin) {
 }
 
 CUDA_EXPORT
-bool CudaMem::createNewAllocation(int bin) {
+bool CudaMemory::createNewAllocation(int bin) {
     size_t size = (1 << bin) + sizeof(size_t);
     auto* ptr = (char*) systemAtomicAdd((unsigned long long*) &next_, (unsigned long long) size);
     if (next_ >= heapEnd_) {
@@ -144,7 +144,7 @@ bool CudaMem::createNewAllocation(int bin) {
 }
 
 CUDA_EXPORT
-void* CudaMem::allocate(size_t sz) {
+void* CudaMemory::allocate(size_t sz) {
     int allocSize = 8;
     int bin = 3;
     while (allocSize < sz) {
@@ -164,7 +164,7 @@ void* CudaMem::allocate(size_t sz) {
     return ptr;
 }
 
-CUDA_EXPORT void CudaMem::free(void* ptr) {
+CUDA_EXPORT void CudaMemory::free(void* ptr) {
     size_t* binptr = (size_t*) ((char*) ptr - sizeof(size_t));
     if (*binptr >= CUDA_MEM_NBIN) {
         printf("Corrupt free! %li\n", *binptr);
@@ -173,13 +173,13 @@ CUDA_EXPORT void CudaMem::free(void* ptr) {
     push(*binptr, (char*) ptr);
 }
 
-CudaMem::CudaMem(size_t heapSize) {
+CudaMemory::CudaMemory(size_t heapSize) {
     CUDA_CHECK(cudaMallocManaged(&heapBegin_, heapSize));
     heapEnd_ = heapBegin_ + heapSize;
     reset();
 }
 
-void CudaMem::reset() {
+void CudaMemory::reset() {
     next_ = heapBegin_;
     for (int i = 0; i < CUDA_MEM_NBIN; i++) {
         for (int j = 0; j < CUDA_MEM_STACK_SIZE; j++) {
@@ -190,11 +190,11 @@ void CudaMem::reset() {
     }
 }
 
-CudaMem::~CudaMem() {
+CudaMemory::~CudaMemory() {
     CUDA_CHECK(cudaFree(heapBegin_));
 }
 
-__managed__ CudaMem* memory;
+__managed__ CudaMemory* memory;
 
 CUDA_EXPORT void* cudaAllocate(size_t sz) {
     return memory->allocate(sz);
@@ -204,9 +204,9 @@ CUDA_EXPORT void cudaRelease(void* ptr) {
     memory->free(ptr);
 }
 
-void cudaMemInit(size_t heapSize) {
-    CUDA_CHECK(cudaMallocManaged(&memory, sizeof(CudaMem)));
-    new (memory) CudaMem(heapSize);
+void cudaMemoryInitialize(size_t heapSize) {
+    CUDA_CHECK(cudaMallocManaged(&memory, sizeof(CudaMemory)));
+    new (memory) CudaMemory(heapSize);
 }
 
 void copyCudaMemory(void* dest, void* src, int size) {

@@ -19,7 +19,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #ifndef GPUTIGER_BOLTZMANN_HPP_
 #define GPUTIGER_BOLTZMANN_HPP_
-#include <cosmictiger/interp.hpp>
+#include <cosmictiger/interpolation.hpp>
 #include <cosmictiger/zero_order.hpp>
 
 #define LMAX 1024
@@ -63,8 +63,8 @@ void einsteinBoltzmann(
 void einsteinBoltzmannInitSet(CosState* u, ZeroOrderUniverse* uni, double kmin, double kmax, int n,
     double amin, double normalization);
 
-void einsteinBoltzmannInterpolationFunction(InterpFunctor<double>* cdmKFunc,
-    InterpFunctor<double>* velKFunc, CosState* u, ZeroOrderUniverse* uni, double kmin, double kmax,
-    double norm, int n, double astart, double astop, bool cont, double ns);
+void einsteinBoltzmannInterpolationFunction(InterpolationFunctor<double>* cdmKFunc,
+    InterpolationFunctor<double>* velKFunc, CosState* u, ZeroOrderUniverse* uni, double kmin,
+    double kmax, double norm, int n, double astart, double astop, bool cont, double ns);
 
 #endif /* GPUTIGER_BOLTZMANN_HPP_ */

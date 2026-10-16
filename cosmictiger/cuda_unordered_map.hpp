@@ -27,10 +27,10 @@
 template <class T>
 class CudaUnorderedMap {
     DeviceVector<DeviceVector<Pair<int, T>>> buckets_;
-    int sz_;
+    int size_;
     CUDA_EXPORT
     void initialize() {
-        sz_ = 0;
+        size_ = 0;
     }
     CUDA_EXPORT
     void rehash() {
@@ -145,7 +145,7 @@ public:
         int bucketIndex = entry.first % buckets_.size();
         auto& bucket = buckets_[bucketIndex];
         bucket.pushBack(std::move(entry));
-        sz_++;
+        size_++;
         Iterator iter;
         iter.map_ = this;
         iter.bucket_ = bucketIndex;
@@ -163,11 +163,11 @@ public:
                 bucket.popBack();
             }
         }
-        sz_--;
+        size_--;
     }
     CUDA_EXPORT
     int size() const {
-        return sz_;
+        return size_;
     }
     CUDA_EXPORT
     T& operator[](int key) {

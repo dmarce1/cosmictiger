@@ -55,8 +55,8 @@ struct StarsStats {
     }
 };
 
-StarParticle& starsGet(PartInt index);
-PartInt starsSize();
+StarParticle& starsGet(ParticleInteger index);
+ParticleInteger starsSize();
 double starsFind(float a, float dt, int minrung, int step, float tau);
 void starsRemove(float a, float dt, int minrung, int step);
 StarsStats starsStatistics(float);

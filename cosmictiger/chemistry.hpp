@@ -50,7 +50,7 @@ struct SpeciesT {
     SpeciesT numberDensityToFractions() const;
 };
 
-struct ChemAttribs {
+struct ChemistryAttributes {
     float h;
     float hp;
     float h2;
@@ -66,6 +66,6 @@ struct ChemAttribs {
 };
 
 void chemistryTest();
-double cudaChemistryStep(Vector<ChemAttribs>& chems, float scale);
+double cudaChemistryStep(Vector<ChemistryAttributes>& chems, float scale);
 void testCudaChemistryKernel();
 Pair<double> chemistryDoStep(float, int, float, float, int);

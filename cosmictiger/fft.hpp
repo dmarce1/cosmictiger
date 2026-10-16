@@ -28,14 +28,14 @@ void fft3dInit(int64_t n, float initConst = 0.0);
 void fft3dExecute();
 void fft3dInvExecute();
 Vector<float> fft3dReadReal(Range<int64_t> const&);
-Vector<Cmplx> fft3dReadComplex(Range<int64_t> const&);
+Vector<ComplexFloat> fft3dReadComplex(Range<int64_t> const&);
 void fft3dAccumulateReal(Range<int64_t> const&, Vector<float> const&);
-void fft3dAccumulateComplex(Range<int64_t> const&, Vector<Cmplx> const&);
+void fft3dAccumulateComplex(Range<int64_t> const&, Vector<ComplexFloat> const&);
 void fft3dDestroy();
 void fft3dForceReal();
 Range<int64_t> fft3dComplexRange();
 Range<int64_t> fft3dRealRange();
-Vector<Cmplx>& fft3dComplexVector();
+Vector<ComplexFloat>& fft3dComplexVector();
 
 struct PowerSpectrumT {
     Vector<float> p;

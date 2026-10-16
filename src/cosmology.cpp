@@ -192,16 +192,16 @@ void cosmosNfwFit(Vector<double> radii, double& rs, double& rhoNfw) {
     double err;
     double rmax = radii.back();
     double npart = radii.size();
-    int nbin = std::max(1, std::min(50, (int) npart / 15));
-    Vector<double> rbnd(nbin + 1);
+    int numberBins = std::max(1, std::min(50, (int) npart / 15));
+    Vector<double> rbnd(numberBins + 1);
     rbnd[0] = 0.0;
-    for (int n = 1; n < nbin; n++) {
-        double j = (double) n / nbin * npart;
+    for (int n = 1; n < numberBins; n++) {
+        double j = (double) n / numberBins * npart;
         double k = j - (int) j;
         double r0 = radii[j] * (1.0 - k) + radii[j + 1] * k;
         rbnd[n] = r0;
     }
-    rbnd[nbin] = rmax;
+    rbnd[numberBins] = rmax;
     double rho0 = npart / (4.0 / 3.0 * M_PI * sqr(rmax) * rmax);
 
     double cinvMin = 0.0;
@@ -214,12 +214,12 @@ void cosmosNfwFit(Vector<double> radii, double& rs, double& rhoNfw) {
         double cmax = 1.0 / cinvMax;
         double fmin = 0.0;
         double fmax = 0.0;
-        for (int i = 0; i < nbin; i++) {
+        for (int i = 0; i < numberBins; i++) {
             double dr = (rbnd[i + 1] - rbnd[i]);
             if (dr > 0.0) {
                 double vol =
                     4.0 / 3.0 * M_PI * (sqr(rbnd[i + 1]) * rbnd[i + 1] - sqr(rbnd[i]) * rbnd[i]);
-                double rho = npart / nbin / vol;
+                double rho = npart / numberBins / vol;
                 double x = 0.5 * (rbnd[i] + rbnd[i + 1]) / rmax;
                 c = cmin;
                 fmin += (-2 * c * rho0 *

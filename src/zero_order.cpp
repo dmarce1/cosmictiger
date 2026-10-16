@@ -134,8 +134,8 @@ double ZeroOrderUniverse::redshiftToTime(double z) const {
     return t;
 }
 
-void createZeroOrderUniverse(
-    ZeroOrderUniverse* uniPtr, std::function<double(double)> fxe, double amax, CosmicParams cpars) {
+void createZeroOrderUniverse(ZeroOrderUniverse* uniPtr, std::function<double(double)> fxe,
+    double amax, CosmicParameters cpars) {
     ZeroOrderUniverse& uni = *uniPtr;
     uni.xe = fxe;
     using namespace constants;

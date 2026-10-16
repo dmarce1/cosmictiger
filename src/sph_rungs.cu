@@ -26,7 +26,7 @@ struct RungsWorkspace {
     DeviceVector<char> rungs;
 };
 
-__global__ void sphCudaRungs(SphRunParams params, SphRunCudaData data, SphReduction* reduce) {
+__global__ void sphCudaRungs(SphRunParameters params, SphRunCudaData data, SphReduction* reduce) {
     int const tid = threadIdx.x;
     int const blockSize = blockDim.x;
     __shared__ int index;
@@ -39,7 +39,7 @@ __global__ void sphCudaRungs(SphRunParams params, SphRunCudaData data, SphReduct
     int flops = 0;
     Array<Fixed32, NDIM> x;
     int changes = 0;
-    while (index < data.nselfs) {
+    while (index < data.numberTargetNodes) {
         __syncthreads();
         ws.x.resize(0);
         ws.y.resize(0);

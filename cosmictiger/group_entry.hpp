@@ -26,7 +26,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <cosmictiger/containers.hpp>
 #include <cosmictiger/defs.hpp>
 
-using GroupInt = long long;
+using GroupInteger = long long;
 
 struct GroupHeader {
     int number;
@@ -36,7 +36,7 @@ struct GroupHeader {
 };
 
 struct GroupEntry {
-    GroupInt id;
+    GroupInteger id;
     Array<double, NDIM> com;
     Array<float, NDIM> vel;
     Array<float, NDIM> lang;
@@ -59,7 +59,7 @@ struct GroupEntry {
     float iyz;
     float izz;
     bool incomplete;
-    std::unordered_map<GroupInt, int> parents;
+    std::unordered_map<GroupInteger, int> parents;
     GroupEntry() = default;
     GroupEntry(GroupEntry&&) = default;
     GroupEntry(GroupEntry const&) = delete;

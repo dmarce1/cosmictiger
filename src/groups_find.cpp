@@ -25,15 +25,15 @@
 
 HPX_PLAIN_ACTION(groupsFind, GroupsFindAction);
 
-void atomicMin(std::atomic<GroupInt>& minValue, GroupInt value) {
-    GroupInt prevValue = minValue;
+void atomicMin(std::atomic<GroupInteger>& minValue, GroupInteger value) {
+    GroupInteger prevValue = minValue;
     while (prevValue > value && !minValue.compare_exchange_strong(prevValue, value)) {
     }
 }
 
 hpx::future<size_t> groupsFindFork(
     TreeId self, Vector<TreeId> checklist, double linkLen, bool threadme) {
-    static std::atomic<int> nthreads(0);
+    static std::atomic<int> numberThreads(0);
     hpx::future<size_t> rc;
     GroupTreeNode const* selfPtr = groupTreeGetNode(self);
     bool remote = false;
@@ -43,12 +43,12 @@ hpx::future<size_t> groupsFindFork(
     } else if (threadme) {
         threadme = selfPtr->partRange.second - selfPtr->partRange.first > MIN_KICK_THREAD_PARTS;
         if (threadme) {
-            if (nthreads++ < KICK_OVERSUBSCRIPTION * hpxHardwareConcurrency() ||
+            if (numberThreads++ < KICK_OVERSUBSCRIPTION * hpxHardwareConcurrency() ||
                 (selfPtr->procRange.second - selfPtr->procRange.first > 1)) {
                 threadme = true;
             } else {
                 threadme = false;
-                nthreads--;
+                numberThreads--;
             }
         }
     }
@@ -63,7 +63,7 @@ hpx::future<size_t> groupsFindFork(
         rc = hpx::async(
             [self, linkLen](Vector<TreeId> checklist) {
                 auto rc = groupsFind(self, std::move(checklist), linkLen);
-                nthreads--;
+                numberThreads--;
                 return rc;
             },
             std::move(checklist));
@@ -75,7 +75,7 @@ struct LeafWorkspace {
     Vector<Fixed32> xValue;
     Vector<Fixed32> yValue;
     Vector<Fixed32> zValue;
-    Vector<GroupInt> g;
+    Vector<GroupInteger> g;
 };
 
 static thread_local std::stack<LeafWorkspace> leafWorkspaces;
@@ -138,7 +138,7 @@ hpx::future<size_t> groupsFind(TreeId self, Vector<TreeId> checklist, double lin
         Vector<Fixed32>& xValue2 = ws.xValue;
         Vector<Fixed32>& yValue2 = ws.yValue;
         Vector<Fixed32>& zValue2 = ws.zValue;
-        Vector<GroupInt>& g = ws.g;
+        Vector<GroupInteger>& g = ws.g;
         if (leaflist.size()) {
             auto const myRng = selfPtr->partRange;
             float const linkLen2 = sqr(linkLen);
@@ -182,7 +182,7 @@ hpx::future<size_t> groupsFind(TreeId self, Vector<TreeId> checklist, double lin
                     totalSize += otherSize;
                 }
             }
-            for (PartInt k = myRng.first; k < myRng.second; k++) {
+            for (ParticleInteger k = myRng.first; k < myRng.second; k++) {
                 SimdInt sinkX = particlesPos(XDIM, k).raw();
                 SimdInt sinkY = particlesPos(YDIM, k).raw();
                 SimdInt sinkZ = particlesPos(ZDIM, k).raw();
@@ -207,8 +207,8 @@ hpx::future<size_t> groupsFind(TreeId self, Vector<TreeId> checklist, double lin
                         int const l0 = l - j;
                         if (lt[l0]) {
                             auto& grp = particlesGroup(k);
-                            GroupInt const startGroup = particlesGroup(k);
-                            if ((GroupInt) grp == NO_GROUP) {
+                            GroupInteger const startGroup = particlesGroup(k);
+                            if ((GroupInteger) grp == NO_GROUP) {
                                 grp = particlesGroupInit(k);
                                 foundAnyLink = true;
                             }
@@ -223,11 +223,11 @@ hpx::future<size_t> groupsFind(TreeId self, Vector<TreeId> checklist, double lin
             bool foundLink;
             do {
                 foundLink = false;
-                for (PartInt j = myRng.first; j < myRng.second; j++) {
+                for (ParticleInteger j = myRng.first; j < myRng.second; j++) {
                     SimdInt sinkX = particlesPos(XDIM, j).raw();
                     SimdInt sinkY = particlesPos(YDIM, j).raw();
                     SimdInt sinkZ = particlesPos(ZDIM, j).raw();
-                    for (PartInt k = j + 1; k < myRng.second; k += SIMD_FLOAT_SIZE) {
+                    for (ParticleInteger k = j + 1; k < myRng.second; k += SIMD_FLOAT_SIZE) {
                         static SimdFloat const toFloatFactor(kFixed2float);
                         int const lmax = std::min(myRng.second, k + SIMD_FLOAT_SIZE);
                         SimdInt srcX;
@@ -248,21 +248,21 @@ hpx::future<size_t> groupsFind(TreeId self, Vector<TreeId> checklist, double lin
                             if (lt[l - k] == 1.0) {
                                 auto& grpa = particlesGroup(l);
                                 auto& grpb = particlesGroup(j);
-                                if ((GroupInt) grpa == NO_GROUP) {
+                                if ((GroupInteger) grpa == NO_GROUP) {
                                     grpa = particlesGroupInit(l);
                                     foundLink = true;
                                     foundAnyLink = true;
                                 }
-                                if ((GroupInt) grpb == NO_GROUP) {
+                                if ((GroupInteger) grpb == NO_GROUP) {
                                     grpb = particlesGroupInit(j);
                                     foundLink = true;
                                     foundAnyLink = true;
                                 }
                                 if (grpa != grpb) {
                                     if (grpa < grpb) {
-                                        grpb = (GroupInt) grpa;
+                                        grpb = (GroupInteger) grpa;
                                     } else {
-                                        grpa = (GroupInt) grpb;
+                                        grpa = (GroupInteger) grpb;
                                     }
                                     foundLink = true;
                                     foundAnyLink = true;

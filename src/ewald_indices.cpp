@@ -48,11 +48,11 @@ Array<float, NDIM> const& EwaldConst::fourIndex(int i) {
     return ec.fourIndices[i];
 }
 
-TensorTrlessSym<float, LORDER> const& EwaldConst::fourExpansion(int i) {
+SymmetricTracelessTensor<float, LORDER> const& EwaldConst::fourExpansion(int i) {
     return ec.fourExpanse[i];
 }
 
-TensorSym<float, LORDER> const EwaldConst::d0() {
+SymmetricTensor<float, LORDER> const EwaldConst::d0() {
     return ec.d0;
 }
 
@@ -129,7 +129,7 @@ void EwaldConst::init() {
         }
         ec.fourExpanse[count++] = d0Value.detraceD();
     }
-    TensorSym<float, LORDER> d;
+    SymmetricTensor<float, LORDER> d;
     for (int n = 0; n < EXPANSION_SIZE; n++) {
         d[n] = 0.0;
     }

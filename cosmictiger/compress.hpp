@@ -15,7 +15,7 @@ struct CompressedBlock {
 };
 
 struct CompressedParticles {
-    LcGroup groupId;
+    LightconeGroup groupId;
     Array<Fixed<int, 31>, NDIM> xc;
     Array<float, NDIM> vc;
     float xmax;
@@ -27,4 +27,4 @@ struct CompressedParticles {
     int size();
 };
 
-CompressedParticles compressParticles(Vector<LcEntry> const& inparts, LcGroup);
+CompressedParticles compressParticles(Vector<LightconeEntry> const& inparts, LightconeGroup);

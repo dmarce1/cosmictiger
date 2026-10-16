@@ -26,11 +26,11 @@
 #include <cosmictiger/tensor.hpp>
 
 template <class T>
-using Expansion = TensorTrlessSym<T, 7>;
+using Expansion = SymmetricTracelessTensor<T, 7>;
 template <class T>
-using Expansion2 = TensorTrlessSym<T, 2>;
+using Expansion2 = SymmetricTracelessTensor<T, 2>;
 template <class T>
-using Multipole = TensorTrlessSym<T, 6>;
+using Multipole = SymmetricTracelessTensor<T, 6>;
 #define EXPANSION_SIZE 50
 #define MULTIPOLE_SIZE 37
 #define SCALE_FACTOR 1.000000e+03f
@@ -53,7 +53,7 @@ using Multipole = TensorTrlessSym<T, 6>;
 
 template <class T>
 CUDA_EXPORT inline int greensFunction(
-    TensorTrlessSym<T, 7>& d, Array<T, NDIM> position, bool scale = true) {
+    SymmetricTracelessTensor<T, 7>& d, Array<T, NDIM> position, bool scale = true) {
     if (scale) {
         position[0] *= T(SCALE_FACTOR);
         position[1] *= T(SCALE_FACTOR);
@@ -308,7 +308,7 @@ CUDA_EXPORT inline int greensFunction(
     return 259 + scale * NDIM;
 }
 template <class T>
-CUDA_EXPORT int ewaldGreensFunction(TensorTrlessSym<T, 7>& d, Array<T, NDIM> position) {
+CUDA_EXPORT int ewaldGreensFunction(SymmetricTracelessTensor<T, 7>& d, Array<T, NDIM> position) {
     position[0] *= T(SCALE_FACTOR);
     position[1] *= T(SCALE_FACTOR);
     position[2] *= T(SCALE_FACTOR);
@@ -316,8 +316,8 @@ CUDA_EXPORT int ewaldGreensFunction(TensorTrlessSym<T, 7>& d, Array<T, NDIM> pos
     FlopCounter<int> flops = 7;
     T r = sqrt(fmaf(position[0], position[0], fmaf(position[1], position[1], sqr(position[2]))));
     T const fouroversqrtpi = T(2.256758334e+00);
-    TensorSym<T, 7> dreal;
-    TensorTrlessSym<T, 7> dfour;
+    SymmetricTensor<T, 7> dreal;
+    SymmetricTracelessTensor<T, 7> dfour;
     dreal = 0.0f;
     dfour = 0.0f;
     d = 0.0f;
@@ -1491,8 +1491,8 @@ CUDA_EXPORT int ewaldGreensFunction(TensorTrlessSym<T, 7>& d, Array<T, NDIM> pos
 }
 
 template <class T>
-CUDA_EXPORT inline int m2L(TensorTrlessSym<T, 2>& l, TensorTrlessSym<T, 6> const& m,
-    TensorTrlessSym<T, 7> const& d, bool doPhi) {
+CUDA_EXPORT inline int m2L(SymmetricTracelessTensor<T, 2>& l,
+    SymmetricTracelessTensor<T, 6> const& m, SymmetricTracelessTensor<T, 7> const& d, bool doPhi) {
     T const m000 = (m[0]);
     T const m001 = (m[21]);
     T const m002 = (m[36]);
@@ -1891,8 +1891,8 @@ CUDA_EXPORT inline int m2L(TensorTrlessSym<T, 2>& l, TensorTrlessSym<T, 6> const
 }
 
 template <class T>
-CUDA_EXPORT inline int m2L(TensorTrlessSym<T, 7>& l, TensorTrlessSym<T, 6> const& m,
-    TensorTrlessSym<T, 7> const& d, bool doPhi) {
+CUDA_EXPORT inline int m2L(SymmetricTracelessTensor<T, 7>& l,
+    SymmetricTracelessTensor<T, 6> const& m, SymmetricTracelessTensor<T, 7> const& d, bool doPhi) {
     T const m000 = (m[0]);
     T const m001 = (m[21]);
     T const m002 = (m[36]);
@@ -2857,8 +2857,8 @@ CUDA_EXPORT inline int m2L(TensorTrlessSym<T, 7>& l, TensorTrlessSym<T, 6> const
 }
 
 template <class T>
-CUDA_EXPORT TensorTrlessSym<T, 6> p2M(Array<T, NDIM>& position) {
-    TensorTrlessSym<T, 6> m;
+CUDA_EXPORT SymmetricTracelessTensor<T, 6> p2M(Array<T, NDIM>& position) {
+    SymmetricTracelessTensor<T, 6> m;
     position[0] *= -T(SCALE_FACTOR);
     position[1] *= -T(SCALE_FACTOR);
     position[2] *= -T(SCALE_FACTOR);
@@ -3087,9 +3087,10 @@ CUDA_EXPORT TensorTrlessSym<T, 6> p2M(Array<T, NDIM>& position) {
 }
 
 template <class T>
-CUDA_EXPORT TensorTrlessSym<T, 6> m2M(TensorTrlessSym<T, 6> const& ma, Array<T, NDIM>& position) {
-    TensorSym<T, 6> mb;
-    TensorTrlessSym<T, 6> mc;
+CUDA_EXPORT SymmetricTracelessTensor<T, 6> m2M(
+    SymmetricTracelessTensor<T, 6> const& ma, Array<T, NDIM>& position) {
+    SymmetricTensor<T, 6> mb;
+    SymmetricTracelessTensor<T, 6> mc;
     position[0] *= -T(SCALE_FACTOR);
     position[1] *= -T(SCALE_FACTOR);
     position[2] *= -T(SCALE_FACTOR);
@@ -3965,12 +3966,12 @@ CUDA_EXPORT
 #ifdef __CUDACC__
     __noinline__
 #endif
-        TensorTrlessSym<T, 7> l2L(
-            TensorTrlessSym<T, 7> const& la, Array<T, NDIM> position, bool doPhi) {
+        SymmetricTracelessTensor<T, 7> l2L(
+            SymmetricTracelessTensor<T, 7> const& la, Array<T, NDIM> position, bool doPhi) {
     position[0] *= T(SCALE_FACTOR);
     position[1] *= T(SCALE_FACTOR);
     position[2] *= T(SCALE_FACTOR);
-    TensorTrlessSym<T, 7> lb;
+    SymmetricTracelessTensor<T, 7> lb;
     T x[84];
     x[0] = T(1);
     x[1] = position[0];
@@ -4951,12 +4952,12 @@ CUDA_EXPORT
 #ifdef __CUDACC__
     __noinline__
 #endif
-        TensorTrlessSym<T, 2> l2P(
-            TensorTrlessSym<T, 7> const& la, Array<T, NDIM> position, bool doPhi) {
+        SymmetricTracelessTensor<T, 2> l2P(
+            SymmetricTracelessTensor<T, 7> const& la, Array<T, NDIM> position, bool doPhi) {
     position[0] *= T(SCALE_FACTOR);
     position[1] *= T(SCALE_FACTOR);
     position[2] *= T(SCALE_FACTOR);
-    TensorTrlessSym<T, 2> lb;
+    SymmetricTracelessTensor<T, 2> lb;
     T x[84];
     x[0] = T(1);
     x[1] = position[0];
@@ -5671,21 +5672,21 @@ inline __constant__ char phiLsrc[83] = {3, 9, 19, 34, 55, 83, 2, 8, 18, 33, 54, 
     40, 65, 21, 39, 64, 38, 63, 62, 20, 37, 61, 36, 60, 59, 35, 58, 57, 56};
 #ifdef __CUDACC__
 template <class T>
-__device__ TensorTrlessSym<T, 7> l2LCuda(
-    TensorTrlessSym<T, 7> const& la, Array<T, NDIM> position, bool doPhi) {
+__device__ SymmetricTracelessTensor<T, 7> l2LCuda(
+    SymmetricTracelessTensor<T, 7> const& la, Array<T, NDIM> position, bool doPhi) {
     int const tid = threadIdx.x;
     position[0] *= T(SCALE_FACTOR);
     position[1] *= T(SCALE_FACTOR);
     position[2] *= T(SCALE_FACTOR);
-    TensorTrlessSym<T, 7> lb;
-    TensorSym<T, 7> lc;
+    SymmetricTracelessTensor<T, 7> lb;
+    SymmetricTensor<T, 7> lc;
     for (int i = 0; i < EXPANSION_SIZE; i++) {
         lb[i] = 0.0f;
     }
     for (int i = tid; i < EXPANSION_SIZE; i += WARP_SIZE) {
         lb[i] = la[i];
     }
-    TensorSym<T, 7> dx;
+    SymmetricTensor<T, 7> dx;
     dx[0] = T(1);
     dx[1] = position[0];
     dx[2] = position[1];
@@ -5872,7 +5873,7 @@ __device__ TensorTrlessSym<T, 7> l2LCuda(
 }
 #endif
 template <class T>
-CUDA_EXPORT int applyScaleFactorInv(TensorTrlessSym<T, 7>& l) {
+CUDA_EXPORT int applyScaleFactorInv(SymmetricTracelessTensor<T, 7>& l) {
     l[0] *= SCALE_FACTOR_INV1;
     l[28] *= SCALE_FACTOR_INV2;
     l[2] *= SCALE_FACTOR_INV2;
@@ -5926,7 +5927,7 @@ CUDA_EXPORT int applyScaleFactorInv(TensorTrlessSym<T, 7>& l) {
     return 50;
 }
 template <class T>
-CUDA_EXPORT int applyScaleFactor(TensorTrlessSym<T, 6>& m) {
+CUDA_EXPORT int applyScaleFactor(SymmetricTracelessTensor<T, 6>& m) {
     m[0] *= SCALE_FACTOR_INV0;
     m[21] *= SCALE_FACTOR_INV1;
     m[2] *= SCALE_FACTOR_INV1;

@@ -67,7 +67,7 @@ set(cosmictiger_source_files
     src/compress.cpp
     src/cosmology.cpp
     src/cuda.cpp
-    src/cuda_mem.cu
+    src/cuda_memory.cu
     src/drift.cpp
     src/drift.cu
     src/driver.cpp
@@ -146,10 +146,10 @@ set(cosmictiger_header_files
     cosmictiger/ewald_indices.hpp
     cosmictiger/fixed.hpp
     cosmictiger/fft.hpp
-    cosmictiger/fixedcapvec.hpp
+    cosmictiger/fixed_capacity_vector.hpp
     cosmictiger/gravity.hpp
     cosmictiger/initialize.hpp
-    cosmictiger/interp.hpp
+    cosmictiger/interpolation.hpp
     cosmictiger/flops.hpp
     cosmictiger/fp16.hpp
     cosmictiger/group_tree.hpp
@@ -167,7 +167,7 @@ set(cosmictiger_header_files
     cosmictiger/particles.hpp
     cosmictiger/power.hpp
     cosmictiger/profiler.hpp
-    cosmictiger/rand.hpp
+    cosmictiger/random_number_generator.hpp
     cosmictiger/range.hpp
     cosmictiger/rockstar.hpp
     cosmictiger/safe_io.hpp

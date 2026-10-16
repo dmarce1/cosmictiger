@@ -42,7 +42,7 @@ void requireClose(char const* label, double actual, double expected, double tole
 void initializePair(double separation) {
     particlesResize(2);
     sphParticlesResize(1, false);
-    for (PartInt i = 0; i < 2; i++) {
+    for (ParticleInteger i = 0; i < 2; i++) {
         for (int dim = 0; dim < NDIM; dim++) {
             particlesPos(dim, i) = dim == XDIM ? 0.375 - i * separation : 0.375;
             particlesVel(dim, i) = i == 1 ? 0.125 * (dim + 1) : 0.0;
@@ -62,7 +62,7 @@ void initializePair(double separation) {
     sphParticlesR5[0].dfrac[0] = 0.125;
     sphParticlesGforce(XDIM, 0) = 0.0;
 }
-TreeId findLeaf(TreeId node, PartInt particle) {
+TreeId findLeaf(TreeId node, ParticleInteger particle) {
     auto const* ptr = treeGetNode(node);
     if (ptr->leaf) {
         return node;
@@ -77,15 +77,15 @@ TreeId findLeaf(TreeId node, PartInt particle) {
     throw std::runtime_error("Particle missing from gravity tree");
 }
 void verifyMappings() {
-    for (PartInt k = 0; k < sphParticlesSize(); k++) {
+    for (ParticleInteger k = 0; k < sphParticlesSize(); k++) {
         auto const i = sphParticlesDmIndex(k);
         if (i < 0 || i >= particlesSize() || !particlesIsSph(i) || particlesCatIndex(i) != k) {
             throw std::runtime_error("Gas category mapping was not preserved");
         }
     }
 }
-KickParams makeKickParams() {
-    KickParams p;
+KickParameters makeKickParams() {
+    KickParameters p;
     p.htime = false;
     p.sign = 1.0;
     p.minLevel = 0;
@@ -108,7 +108,7 @@ KickParams makeKickParams() {
     return p;
 }
 void resetKickState() {
-    for (PartInt i = 0; i < particlesSize(); i++) {
+    for (ParticleInteger i = 0; i < particlesSize(); i++) {
         particlesRung(i) = 1;
         for (int dim = 0; dim < NDIM; dim++) {
             particlesVel(dim, i) = particlesIsSph(i) ? 0.125 * (dim + 1) : 0.0;
@@ -118,7 +118,7 @@ void resetKickState() {
     }
 }
 void verifyKick(double inverseCube, double inverseRadius, double separation) {
-    for (PartInt i = 0; i < particlesSize(); i++) {
+    for (ParticleInteger i = 0; i < particlesSize(); i++) {
         bool const gas = particlesIsSph(i);
         double const sourceMass = gas ? getOptions().dmMass : getOptions().sphMass;
         double const acceleration =
@@ -141,7 +141,7 @@ void verifyKick(double inverseCube, double inverseRadius, double separation) {
 }
 void verifySynchronizedDiagnostics(KickReturn const& result) {
     double kinetic = 0.0, xMomentum = 0.0, yMomentum = 0.0, zMomentum = 0.0, momentumNorm = 0.0;
-    for (PartInt i = 0; i < particlesSize(); i++) {
+    for (ParticleInteger i = 0; i < particlesSize(); i++) {
         double const mass = particlesMass(i);
         double const vx = particlesVel(XDIM, i), vy = particlesVel(YDIM, i),
                      vz = particlesVel(ZDIM, i);
@@ -168,11 +168,11 @@ void verifySynchronizedDiagnostics(KickReturn const& result) {
 void runPairCase(bool useCuda, bool softened) {
     double const nominalSeparation = softened ? 0.0025 : 0.25;
     initializePair(nominalSeparation);
-    auto const built = treeCreate(TreeCreateParams(0, 0.5, getOptions().hsoft));
+    auto const built = treeCreate(TreeCreateParameters(0, 0.5, getOptions().hsoft));
     verifyMappings();
     requireClose("root mixed mass", treeGetNode(built.id)->mpos->multi[0], 1.0);
-    PartInt const gas = sphParticlesDmIndex(0);
-    PartInt const dm = 1 - gas;
+    ParticleInteger const gas = sphParticlesDmIndex(0);
+    ParticleInteger const dm = 1 - gas;
     double const separation =
         particlesPos(XDIM, dm).toDouble() - particlesPos(XDIM, gas).toDouble();
     double inverseCube = 1.0 / (separation * separation * separation);
@@ -196,7 +196,7 @@ void runPairCase(bool useCuda, bool softened) {
                                     (-495.0 / 128.0 + q2 * (385.0 / 256.0 - q2 * 63.0 / 256.0))))) /
             h;
     }
-    for (PartInt sink = 0; sink < 2; sink++) {
+    for (ParticleInteger sink = 0; sink < 2; sink++) {
         auto const self = findLeaf(built.id, sink);
         auto const source = findLeaf(built.id, 1 - sink);
         Vector<TreeId> sources{source};
@@ -270,7 +270,7 @@ void checkpointPair() {
     if (file == nullptr) {
         throw std::runtime_error("Cannot create temporary checkpoint");
     }
-    PartInt const gas = sphParticlesDmIndex(0);
+    ParticleInteger const gas = sphParticlesDmIndex(0);
     auto const position = particlesPos(XDIM, gas);
     particlesSave(file);
     particlesPos(XDIM, gas) = 0.9;
@@ -293,7 +293,7 @@ void initializeSphDomainRegression() {
     using namespace detail;
     initializePair(0.25);
     int const target = (hpxRank() + 1) % hpxSize();
-    for (PartInt i = 0; i < 2; i++) {
+    for (ParticleInteger i = 0; i < 2; i++) {
         particlesPos(XDIM, i) = (target + (i == 0 ? 0.25 : 0.75)) / hpxSize();
     }
     sphParticlesR1[0].alpha = 10.0 + target;
@@ -315,7 +315,7 @@ void validateSphDomainRegression() {
     requireClose("migration predicted velocity", sphParticlesDv2[YDIM][0], 40.0 + target);
     requireClose("migration gravity", sphParticlesG[ZDIM][0], 50.0 + target);
     Array<double, NDIM> position;
-    for (PartInt i = 0; i < particlesSize(); i++) {
+    for (ParticleInteger i = 0; i < particlesSize(); i++) {
         for (int dim = 0; dim < NDIM; dim++) {
             position[dim] = particlesPos(dim, i).toDouble();
         }
@@ -356,7 +356,7 @@ void sphGravityTest() {
     opts.dmMass = 0.75;
     opts.sphMass = 0.25;
     opts.bucketSize = 1;
-    opts.nparts = 2 * hpxSize();
+    opts.numberParticles = 2 * hpxSize();
     opts.hsoft = 0.01;
     setOptions(opts);
     if (hpxSize() == 1) {
@@ -390,7 +390,7 @@ void sphGravityTest() {
         future.get();
     }
     if (hpxSize() > 1) {
-        treeCreate(TreeCreateParams(0, 0.5, getOptions().hsoft));
+        treeCreate(TreeCreateParameters(0, 0.5, getOptions().hsoft));
         pending.clear();
         for (auto const& locality : hpxLocalities()) {
             pending.push_back(hpx::async<ValidateSphRemoteTreeCacheAction>(locality));

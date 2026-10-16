@@ -32,7 +32,7 @@ struct DriftReturn {
     double momz;
     double coldMass;
     double flops;
-    PartInt nmapped;
+    ParticleInteger nmapped;
     template <class Arc>
     void serialize(Arc&& a, unsigned) {
         a & vol;

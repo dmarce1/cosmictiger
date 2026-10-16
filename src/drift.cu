@@ -29,13 +29,13 @@
 
 #define BLOCK_SIZE 512
 
-using ListType = DeviceVector<DeviceVector<LcEntry>>;
+using ListType = DeviceVector<DeviceVector<LightconeEntry>>;
 
 __managed__ ListType* listPtr;
 
 __global__ void cudaDriftKernel(Fixed32* __restrict__ const x, Fixed32* __restrict__ const y,
     Fixed32* __restrict__ const z, Array<float, NDIM>* const vels, char const* const rungs,
-    PartInt count, int rung, double a, double dt, double tau0, double tau1, double tauMax,
+    ParticleInteger count, int rung, double a, double dt, double tau0, double tau1, double tauMax,
     bool doLc, int nside, double drag) {
     doLc = doLc && (tauMax - tau1 < 1.0f);
     auto const& tid = threadIdx.x;
@@ -44,15 +44,15 @@ __global__ void cudaDriftKernel(Fixed32* __restrict__ const x, Fixed32* __restri
     double const c0 = doLc ? 1.0 / tauMax : 0.0;
     double const t0(tau0);
     double const ainv = 1.0 / a;
-    auto const& nblocks = gridDim.x;
-    PartInt const begin = (size_t) bid * count / nblocks;
-    PartInt const end = (size_t) (bid + 1) * count / nblocks;
-    PartInt const end0 = roundUp(end - begin, BLOCK_SIZE) + begin;
+    auto const& numberBlocks = gridDim.x;
+    ParticleInteger const begin = (size_t) bid * count / numberBlocks;
+    ParticleInteger const end = (size_t) (bid + 1) * count / numberBlocks;
+    ParticleInteger const end0 = roundUp(end - begin, BLOCK_SIZE) + begin;
     double const c1 = dt / a;
     if (doLc) {
         list->resize(0);
     }
-    for (PartInt i = begin + tid; i < end0; i += BLOCK_SIZE) {
+    for (ParticleInteger i = begin + tid; i < end0; i += BLOCK_SIZE) {
         int thisRung = -1;
         double x0 = 0.0, y0 = 0.0, z0 = 0.0, x1 = 0.0, y1 = 0.0, z1 = 0.0;
         Array<double, NDIM> x0Value;
@@ -86,7 +86,7 @@ __global__ void cudaDriftKernel(Fixed32* __restrict__ const x, Fixed32* __restri
                     x1Value[YDIM] = y1 + (double) yi;
                     for (int zi = -1; zi <= 0; zi++) {
                         bool test = false;
-                        LcEntry entry;
+                        LightconeEntry entry;
                         if (i < end && (rung < 0 || thisRung == rung)) {
                             x0Value[ZDIM] = z0 + (double) zi;
                             x1Value[ZDIM] = z1 + (double) zi;
@@ -161,20 +161,20 @@ __global__ void cudaDriftKernel(Fixed32* __restrict__ const x, Fixed32* __restri
 
 void cudaDrift(int rung, float a, float dt, float tau0, float tau1, float tauMax, double drag) {
     static bool init = false;
-    int nblocks;
+    int numberBlocks;
     Timer tm1;
     tm1.start();
     CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &nblocks, (void const*) cudaDriftKernel, BLOCK_SIZE, 0));
+        &numberBlocks, (void const*) cudaDriftKernel, BLOCK_SIZE, 0));
     cudaFuncAttributes attr;
     CUDA_CHECK(cudaFuncGetAttributes(&attr, (void const*) cudaDriftKernel));
-    nblocks *= cudaSmpCount();
-    auto const rng = rung < 0 ? Pair<PartInt>(0, particlesSize()) : particlesCurrentRange();
+    numberBlocks *= cudaSmpCount();
+    auto const rng = rung < 0 ? Pair<ParticleInteger>(0, particlesSize()) : particlesCurrentRange();
     if (rng.first == rng.second) {
         return;
     }
     bool const doLc = getOptions().doLc && tauMax - tau1 < 1.0f;
-    nblocks = std::min(nblocks, std::max((rng.second - rng.first) / BLOCK_SIZE, 1));
+    numberBlocks = std::min(numberBlocks, std::max((rng.second - rng.first) / BLOCK_SIZE, 1));
     auto cnt = rng.second - rng.first;
     if (doLc) {
         if (!init) {
@@ -182,7 +182,7 @@ void cudaDrift(int rung, float a, float dt, float tau0, float tau1, float tauMax
             new (listPtr) ListType;
             init = true;
         }
-        listPtr->resize(nblocks);
+        listPtr->resize(numberBlocks);
     }
     Fixed32* x = &particlesPos(XDIM, rng.first);
     Fixed32* y = &particlesPos(YDIM, rng.first);
@@ -190,8 +190,8 @@ void cudaDrift(int rung, float a, float dt, float tau0, float tau1, float tauMax
     auto* vels = particlesVelData() + rng.first;
     auto const* rungs = &particlesRung(rng.first);
     drag = getOptions().createGlass ? M_PI : 0.0;
-    cudaDriftKernel<<<nblocks, BLOCK_SIZE>>>(x, y, z, vels, rungs, cnt, rung, a, dt, tau0, tau1,
-        tauMax, doLc, getOptions().lcMapSize, drag);
+    cudaDriftKernel<<<numberBlocks, BLOCK_SIZE>>>(x, y, z, vels, rungs, cnt, rung, a, dt, tau0,
+        tau1, tauMax, doLc, getOptions().lcMapSize, drag);
     CUDA_CHECK(cudaDeviceSynchronize());
     cnt = 0;
     static size_t totalCnt = 0;

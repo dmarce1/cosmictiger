@@ -38,7 +38,7 @@ struct RockstarParticle {
         };
     };
     int subgroup;
-    PartInt index;
+    ParticleInteger index;
     float minDist2;
 };
 
@@ -141,7 +141,7 @@ struct Subgroup {
 };
 
 Vector<Subgroup> rockstarFindSubgroups(Vector<ParticleData> const& parts, float scale);
-Vector<RockstarRecord> rockstarFindSubgroups(Vector<LcEntry> const& parts, double);
+Vector<RockstarRecord> rockstarFindSubgroups(Vector<LightconeEntry> const& parts, double);
 void rockstarFindSubgroupsCuda(DeviceVector<RockstarTree>& nodes, DeviceVector<int> const& leaves,
     DeviceVector<RockstarParticle>& parts, float linkLen, int& nextId);
 void rockstarAssignLinklenCuda(DeviceVector<RockstarTree> const& nodes,

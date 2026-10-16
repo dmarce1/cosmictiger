@@ -27,7 +27,7 @@
 #include <cosmictiger/sph_tree.hpp>
 #include <cosmictiger/time.hpp>
 
-struct DriverParams {
+struct DriverParameters {
     double a;
     double adot;
     double dummy;
@@ -66,8 +66,8 @@ struct DriverParams {
     }
 };
 
-void writeCheckpoint(DriverParams params);
-DriverParams readCheckpoint();
+void writeCheckpoint(DriverParameters params);
+DriverParameters readCheckpoint();
 SphTreeCreateReturn sphStep1(int minrung, double scale, double tau, double t0, int phase,
     double adot, int maxRung, int iter, double dt, double* eheat, bool verbose = true);
 SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phase, double adot,

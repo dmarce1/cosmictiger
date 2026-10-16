@@ -53,7 +53,7 @@ inline bool rangeIntersect(Fixed32Range const& a, Fixed32Range const& b) {
 }
 
 struct SphRunWorkspace {
-    SphRunParams params;
+    SphRunParameters params;
     Vector<Array<float, NCHEMFRACS>, PinnedAllocator<Array<float, NCHEMFRACS>>> hostChem;
     Vector<float, PinnedAllocator<float>> hostColdFrac;
     Vector<float, PinnedAllocator<float>> hostDivv;
@@ -86,7 +86,7 @@ struct SphRunWorkspace {
     MutexType mutex;
     void addWork(TreeId selfid);
     SphRunReturn toGpu();
-    SphRunWorkspace(SphRunParams p) {
+    SphRunWorkspace(SphRunParameters p) {
         params = p;
     }
 };
@@ -103,9 +103,9 @@ inline bool rangeContains(Fixed32Range const& a, Array<Fixed32, NDIM> const x) {
     return contains;
 }
 
-hpx::future<SphTreeNeighborReturn> sphTreeNeighborFork(
-    SphTreeNeighborParams params, TreeId self, Vector<TreeId> checklist, int level, bool threadme) {
-    static std::atomic<int> nthreads(0);
+hpx::future<SphTreeNeighborReturn> sphTreeNeighborFork(SphTreeNeighborParameters params,
+    TreeId self, Vector<TreeId> checklist, int level, bool threadme) {
+    static std::atomic<int> numberThreads(0);
     hpx::future<SphTreeNeighborReturn> rc;
     SphTreeNode const* selfPtr = sphTreeGetNode(self);
     bool remote = false;
@@ -122,12 +122,12 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighborFork(
     } else if (threadme) {
         threadme = selfPtr->partRange.second - selfPtr->partRange.first > MIN_KICK_THREAD_PARTS;
         if (threadme) {
-            if (nthreads++ < KICK_OVERSUBSCRIPTION * hpx::thread::hardware_concurrency() ||
+            if (numberThreads++ < KICK_OVERSUBSCRIPTION * hpx::thread::hardware_concurrency() ||
                 !selfPtr->isLocal()) {
                 threadme = true;
             } else {
                 threadme = false;
-                nthreads--;
+                numberThreads--;
             }
         }
     }
@@ -143,7 +143,7 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighborFork(
         rc = hpx::async(
             [self, level, params](Vector<TreeId> checklist) {
                 auto rc = sphTreeNeighbor(params, self, std::move(checklist), level + 1);
-                nthreads--;
+                numberThreads--;
                 return rc;
             },
             std::move(checklist));
@@ -167,7 +167,7 @@ static bool hasActiveNeighbors(SphTreeNode const* self) {
     bool rc = false;
     for (int i = self->neighborRange.first; i < self->neighborRange.second; i++) {
         auto const id = sphTreeGetNeighbor(i);
-        if (sphTreeGetNode(id)->nactive > 0) {
+        if (sphTreeGetNode(id)->numberActive > 0) {
             rc = true;
             break;
         }
@@ -203,7 +203,7 @@ struct SphDataVecs {
 };
 
 hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
-    SphTreeNeighborParams params, TreeId self, Vector<TreeId> checklist, int level) {
+    SphTreeNeighborParameters params, TreeId self, Vector<TreeId> checklist, int level) {
     if (level == 0 && hpxRank() == 0 && hpxSize() > 1) {
         sphTreeCacheClear();
     }
@@ -245,7 +245,7 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
     Vector<TreeId> nextlist;
     Vector<TreeId> leaflist;
     Fixed32Range box;
-    if ((params.seti | SPH_INTERACTIONS_I) && selfPtr->nactive) {
+    if ((params.seti | SPH_INTERACTIONS_I) && selfPtr->numberActive) {
         if (!rangeIntersect(selfPtr->outerBox, selfPtr->innerBox)) {
             for (int dim = 0; dim < NDIM; dim++) {
                 PRINT("%e %e\n", selfPtr->outerBox.begin[dim].toDouble(),
@@ -256,7 +256,7 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
         }
     }
 
-    if ((params.seti | SPH_INTERACTIONS_J) && selfPtr->nactive) {
+    if ((params.seti | SPH_INTERACTIONS_J) && selfPtr->numberActive) {
         ALWAYS_ASSERT(rangeIntersect(selfPtr->innerBox, selfPtr->outerBox));
     }
 
@@ -303,7 +303,7 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
             }
             bool show = false;
             bool factive = false;
-            for (PartInt i = selfPtr->partRange.first; i < selfPtr->partRange.second; i++) {
+            for (ParticleInteger i = selfPtr->partRange.first; i < selfPtr->partRange.second; i++) {
                 bool const active = sphParticlesRung(i) >= params.minRung;
                 float const h = params.hWt * sphParticlesSmoothLen(i);
                 //				PRINT( "%e\n", params.h_wt);
@@ -345,7 +345,7 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
                     }
                 }
             }
-            if (selfPtr->nactive) {
+            if (selfPtr->numberActive) {
                 ALWAYS_ASSERT(factive);
             }
             if (show) {
@@ -395,7 +395,7 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
     }
 }
 
-SphRunReturn sphRun(SphRunParams params, bool cuda) {
+SphRunReturn sphRun(SphRunParameters params, bool cuda) {
     // Each phase consumes gas fields updated by the preceding phase on every locality.
     if (hpxRank() == 0 && hpxSize() > 1) {
         sphParticlesCacheFree2();
@@ -419,17 +419,17 @@ SphRunReturn sphRun(SphRunParams params, bool cuda) {
     for (auto& c : hpxChildren()) {
         futs.push_back(hpx::async<SphRunAction>(c, params, cuda));
     }
-    int nthreads = hpxHardwareConcurrency();
+    int numberThreads = hpxHardwareConcurrency();
     if (hpxSize() > 1) {
-        nthreads *= 4;
+        numberThreads *= 4;
     }
     static std::atomic<int> next;
     next = 0;
     static std::atomic<int> gpuWork;
     gpuWork = 0;
     //	PRINT( "sph_tree_list_size = %i\n", sph_tree_size());
-    for (int proc = 0; proc < nthreads; proc++) {
-        futs2.push_back(hpx::async([proc, nthreads, params, cuda, workspacePtr]() {
+    for (int proc = 0; proc < numberThreads; proc++) {
+        futs2.push_back(hpx::async([proc, numberThreads, params, cuda, workspacePtr]() {
             SphRunReturn rc;
             int index = next++;
             SphDataVecs data;
@@ -440,15 +440,15 @@ SphRunReturn sphRun(SphRunParams params, bool cuda) {
                 bool test;
                 switch (params.runType) {
                 case SPH_RUN_AUX:
-                    test = self->nactive > 0;
+                    test = self->numberActive > 0;
                     break;
 
                 case SPH_RUN_RUNGS:
-                    test = self->nactive > 0;
+                    test = self->numberActive > 0;
                     break;
 
                 case SPH_RUN_PREHYDRO1:
-                    test = self->nactive > 0 && !isConverged(self, params.minRung);
+                    test = self->numberActive > 0 && !isConverged(self, params.minRung);
                     break;
 
                 case SPH_RUN_PREHYDRO2:
@@ -465,7 +465,7 @@ SphRunReturn sphRun(SphRunParams params, bool cuda) {
                     break;
 
                 case SPH_RUN_HYDRO:
-                    test = self->nactive > 0;
+                    test = self->numberActive > 0;
                     break;
                 }
                 if (test) {
@@ -626,20 +626,20 @@ SphRunReturn SphRunWorkspace::toGpu() {
         }
     }
     Vector<hpx::future<void>> futs;
-    int const nthreads = 8 * hpxHardwareConcurrency();
+    int const numberThreads = 8 * hpxHardwareConcurrency();
     std::atomic<int> index(0);
-    std::atomic<PartInt> partIndex(0);
+    std::atomic<ParticleInteger> partIndex(0);
     for (int i = 0; i < hostSelflist.size(); i++) {
         hostTrees[hostSelflist[i]].neighborRange = neighborRanges[i];
     }
-    for (int proc = 0; proc < nthreads; proc++) {
-        futs.push_back(hpx::async([&index, proc, nthreads, this, &partIndex, chem, stars,
+    for (int proc = 0; proc < numberThreads; proc++) {
+        futs.push_back(hpx::async([&index, proc, numberThreads, this, &partIndex, chem, stars,
                                       conduction, explicitConduction, diffusion]() {
             int thisIndex = index++;
             while (thisIndex < hostTrees.size()) {
                 auto& node = hostTrees[thisIndex];
-                PartInt const size = node.partRange.second - node.partRange.first;
-                PartInt const offset = (partIndex += size) - size;
+                ParticleInteger const size = node.partRange.second - node.partRange.first;
+                ParticleInteger const offset = (partIndex += size) - size;
                 sphParticlesGlobalReadPos(
                     node.globalPartRange(), hostX.data(), hostY.data(), hostZ.data(), offset);
                 if (params.runType == SPH_RUN_PREHYDRO2) {
@@ -957,7 +957,7 @@ SphRunReturn SphRunWorkspace::toGpu() {
     cudaData.gzSnk = &sphParticlesGforce(ZDIM, 0);
     cudaData.defGamma = getOptions().gamma;
     cudaData.gsoft = getOptions().hsoft;
-    cudaData.nselfs = hostSelflist.size();
+    cudaData.numberTargetNodes = hostSelflist.size();
     cudaData.chemistry = getOptions().chem;
     cudaData.convergedSnk = &sphParticlesConverged(0);
     cudaData.gravity = getOptions().gravity;
@@ -1005,8 +1005,8 @@ SphRunReturn SphRunWorkspace::toGpu() {
     if (params.runType == SPH_RUN_RUNGS) {
         for (int i = 0; i < hostSelflist.size(); i++) {
             auto const& node = hostTrees[hostSelflist[i]];
-            PartInt const offset = node.sinkPartRange.first - node.partRange.first;
-            for (PartInt j = node.partRange.first; j < node.partRange.second; j++) {
+            ParticleInteger const offset = node.sinkPartRange.first - node.partRange.first;
+            for (ParticleInteger j = node.partRange.first; j < node.partRange.second; j++) {
                 sphParticlesRung(j + offset) = hostRungs[j];
             }
         }
@@ -1097,20 +1097,20 @@ SphRunReturn SphRunWorkspace::toGpu() {
 HPX_PLAIN_ACTION(sphApplyConductionUpdate, SphApplyConductionUpdateAction);
 
 CondUpdateReturn sphApplyConductionUpdate(int minrung) {
-    int const nthread = hpxHardwareConcurrency();
+    int const numberThreads = hpxHardwareConcurrency();
     float errMax = 0.0;
     std::vector<hpx::future<CondUpdateReturn>> futs;
     for (auto& c : hpxChildren()) {
         futs.push_back(hpx::async<SphApplyConductionUpdateAction>(c, minrung));
     }
-    for (int proc = 0; proc < nthread; proc++) {
-        futs.push_back(hpx::async([proc, nthread, minrung] {
+    for (int proc = 0; proc < numberThreads; proc++) {
+        futs.push_back(hpx::async([proc, numberThreads, minrung] {
             float errMax = 0.0;
             float errRms = 0.0;
             size_t n = 0;
-            PartInt const b = (size_t) proc * sphParticlesSize() / nthread;
-            PartInt const e = (size_t) (proc + 1) * sphParticlesSize() / nthread;
-            for (PartInt i = b; i < e; i++) {
+            ParticleInteger const b = (size_t) proc * sphParticlesSize() / numberThreads;
+            ParticleInteger const e = (size_t) (proc + 1) * sphParticlesSize() / numberThreads;
+            for (ParticleInteger i = b; i < e; i++) {
                 if (!sphParticlesConverged(i) &&
                     (sphParticlesRung(i) >= minrung || sphParticlesSemiactive(i)) &&
                     !sphParticlesIsstar(i)) {

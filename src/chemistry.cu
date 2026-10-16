@@ -26,7 +26,7 @@
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/timer.hpp>
 
-struct ChemistryParams {
+struct ChemistryParameters {
     double codeToCm;
     double codeToG;
     double codeToS;
@@ -435,8 +435,8 @@ __device__ float testTemperature(SpeciesT n0Value, SpeciesT& nValue, float t0, f
     return constants::kB * (cv1 * n1 * t - cv0 * n0 * t0) - dt * dedt;    // 8
 }
 
-__global__ void chemistryKernel(
-    ChemistryParams params, ChemAttribs* chems, int nchems, int* nextIndex, double* totalFlops) {
+__global__ void chemistryKernel(ChemistryParameters params, ChemistryAttributes* chems, int nchems,
+    int* nextIndex, double* totalFlops) {
     //	const int tid = threadIdx.x;
     //	auto tm = clock64();
     int index;
@@ -448,7 +448,7 @@ __global__ void chemistryKernel(
     int flops = 18;
     double myflops = 0.0;
     while (index < nchems) {
-        ChemAttribs& attr = chems[index];
+        ChemistryAttributes& attr = chems[index];
         SpeciesT nValue2;
         SpeciesT n0Value2;
         nValue2.h = attr.h;
@@ -614,22 +614,22 @@ __global__ void chemistryKernel(
     atomicAdd(totalFlops, myflops);
 }
 
-double cudaChemistryStep(Vector<ChemAttribs>& chems, float scale) {
+double cudaChemistryStep(Vector<ChemistryAttributes>& chems, float scale) {
     Timer tm;
     static auto const opts = getOptions();
     double* flops;
     int* index;
-    ChemAttribs* devChems;
-    ChemistryParams params;
-    int nblocks;
+    ChemistryAttributes* devChems;
+    ChemistryParameters params;
+    int numberBlocks;
     auto stream = cudaGetStream();
     for (int i = 0; i < NCOOL; i++) {
         coolingTotals[i] = 0.f;
     }
-    CUDA_CHECK(cudaMalloc(&devChems, sizeof(ChemAttribs) * chems.size()));
+    CUDA_CHECK(cudaMalloc(&devChems, sizeof(ChemistryAttributes) * chems.size()));
     CUDA_CHECK(cudaMallocManaged(&flops, sizeof(double)));
     CUDA_CHECK(cudaMallocManaged(&index, sizeof(int)));
-    CUDA_CHECK(cudaMemcpyAsync(devChems, chems.data(), sizeof(ChemAttribs) * chems.size(),
+    CUDA_CHECK(cudaMemcpyAsync(devChems, chems.data(), sizeof(ChemistryAttributes) * chems.size(),
         cudaMemcpyHostToDevice, stream));
     *index = 0;
     *flops = 0;
@@ -640,15 +640,15 @@ double cudaChemistryStep(Vector<ChemAttribs>& chems, float scale) {
     params.codeToG = opts.codeToG;
     params.codeToS = opts.codeToS;
     CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &nblocks, (void const*) chemistryKernel, CHEM_BLOCK_SIZE, 0));
-    nblocks *= cudaSmpCount();
+        &numberBlocks, (void const*) chemistryKernel, CHEM_BLOCK_SIZE, 0));
+    numberBlocks *= cudaSmpCount();
     tm.start();
-    chemistryKernel<<<nblocks, CHEM_BLOCK_SIZE, 0, stream>>>(
+    chemistryKernel<<<numberBlocks, CHEM_BLOCK_SIZE, 0, stream>>>(
         params, devChems, chems.size(), index, flops);
     synchronizeCudaStream(stream);
     tm.stop();
     //	PRINT("CHEM GFLOPS = %e\n", *flops / 1024.0 / 1024.0 / 1024.0 / tm.read());
-    CUDA_CHECK(cudaMemcpyAsync(chems.data(), devChems, sizeof(ChemAttribs) * chems.size(),
+    CUDA_CHECK(cudaMemcpyAsync(chems.data(), devChems, sizeof(ChemistryAttributes) * chems.size(),
         cudaMemcpyDeviceToHost, stream));
     auto rflops = *flops;
     CUDA_CHECK(cudaFree(flops));

@@ -100,7 +100,7 @@ struct SphTreeNeighborReturn {
 #define SPH_SET_ACTIVE 1
 #define SPH_SET_ALL 4
 
-struct SphTreeNeighborParams {
+struct SphTreeNeighborParameters {
     int runType = 0;
     float hWt = 1.0f;
     int minRung = 0;
@@ -216,7 +216,7 @@ struct SphRunReturn {
     }
 };
 
-struct SphRunParams {
+struct SphRunParameters {
     bool vsoft;
     int avType;
     int runType;
@@ -248,7 +248,7 @@ struct SphRunParams {
     double codeToG;
     double codeToCm;
     bool stars;
-    SphRunParams() {
+    SphRunParameters() {
         iter = 0;
         auto const opts = getOptions();
         hmin = opts.hmin;
@@ -324,10 +324,10 @@ struct CondUpdateReturn {
     }
 };
 CondUpdateReturn sphApplyConductionUpdate(int minrung);
-SphRunReturn sphRun(SphRunParams params, bool cuda = false);
+SphRunReturn sphRun(SphRunParameters params, bool cuda = false);
 #ifndef __CUDACC__
 hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
-    SphTreeNeighborParams params, TreeId self, Vector<TreeId> checklist, int level = 0);
+    SphTreeNeighborParameters params, TreeId self, Vector<TreeId> checklist, int level = 0);
 #endif
 Vector<SphValues> sphValuesAt(Vector<double> x, Vector<double> y, Vector<double> z);
 /*

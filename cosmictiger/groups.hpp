@@ -29,8 +29,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 struct ParticleData {
     Array<Fixed32, NDIM> x;
     Array<float, NDIM> v;
-    GroupInt lastGroup;
-    PartInt index;
+    GroupInteger lastGroup;
+    ParticleInteger index;
     int rank;
     template <class A>
     void serialize(A&& arc, unsigned) {

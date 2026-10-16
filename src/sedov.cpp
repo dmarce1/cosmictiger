@@ -828,7 +828,8 @@ SedReal sedRFind(SedReal* rArg) {
     /* Fortran I/O blocks */
 
     /* ..this routine returns as s the integral of the function func from a to b */
-    /* ..with fractional accuracy eps. */ /* ..jmax limits the number of steps; nsteps = 3**(jmax-1)
+    /* ..with fractional accuracy eps. */ /* ..jmax limits the number of steps; numberSteps =
+                                           * 3**(jmax-1)
                                            */
     /* ..integration is done via romberg algorithm. */
     /* ..it is assumed the call to choose triples the number of steps on each call */

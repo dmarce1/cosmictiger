@@ -33,7 +33,7 @@ struct Gadget2Header {
 struct ParticlesSet {
     Array<Vector<float>, NDIM> x;
     Array<Vector<float>, NDIM> v;
-    Vector<LcGroup> g;
+    Vector<LightconeGroup> g;
     void write(FILE* fp) const;
 };
 
@@ -42,9 +42,9 @@ void uncompressParticles(ParticlesSet& parts, CompressedParticles const& arc) {
     int id = 0;
     for (int i = 0; i < arc.blocks.size(); i++) {
         auto const& block = arc.blocks[i];
-        int const nparts = block.x[XDIM].size();
-        total += nparts;
-        for (int j = 0; j < nparts; j++) {
+        int const numberParticles = block.x[XDIM].size();
+        total += numberParticles;
+        for (int j = 0; j < numberParticles; j++) {
             for (int dim = 0; dim < NDIM; dim++) {
                 double x = (block.x[dim][j] + 0.5) / (1 << 15) - 1.0;
                 double v = (block.v[dim][j] + 0.5) / (1 << 15) - 1.0;
@@ -77,9 +77,9 @@ void ParticlesSet::write(FILE* fp) const {
         fwrite(v[dim].data(), sizeof(float), v[dim].size(), fp);
     }
     fwrite(&size, sizeof(int), 1, fp);
-    size = sizeof(LcGroup) * g.size();
+    size = sizeof(LightconeGroup) * g.size();
     fwrite(&size, sizeof(int), 1, fp);
-    fwrite(g.data(), sizeof(LcGroup), g.size(), fp);
+    fwrite(g.data(), sizeof(LightconeGroup), g.size(), fp);
     fwrite(&size, sizeof(int), 1, fp);
 }
 
@@ -148,10 +148,10 @@ int main(int argc, char* argv[]) {
     Options* opts = (Options*) malloc(sizeof(Options));
     fread(opts, sizeof(Options), 1, fpin);
     std::unordered_map<std::string, Vector<double>> db;
-    size_t haloCnt = 0;
-    size_t subhaloCnt = 0;
+    size_t haloCount = 0;
+    size_t subhaloCount = 0;
     for (int i = 0; i < numGroups; i++) {
-        printf("\r%i %li %li %li", i, haloCnt, subhaloCnt, haloCnt + subhaloCnt);
+        printf("\r%i %li %li %li", i, haloCount, subhaloCount, haloCount + subhaloCount);
         fflush(stdout);
         FILE* fpout = fopen("gadget.tmp", "wb");
         if (!fpout) {
@@ -163,7 +163,7 @@ int main(int argc, char* argv[]) {
         CompressedParticles arc;
         arc.read(fpin);
         uncompressParticles(parts, arc);
-        int nparts = arc.size();
+        int numberParticles = arc.size();
         double const xscale = opts->codeToCm * opts->hubble / constants::kMpcToCm;
         double const vscale = opts->codeToCm / opts->codeToS / 100000.0;
         Array<double, NDIM> minx;
@@ -192,8 +192,8 @@ int main(int argc, char* argv[]) {
         }
         header.boxSize = boxSize;
         header.npart[0] = 0;
-        header.npart[1] = nparts;
-        header.npartTotal[1] = nparts;
+        header.npart[1] = numberParticles;
+        header.npartTotal[1] = numberParticles;
         header.npartTotal[2] = 0;
         header.mass[1] = opts->codeToG * opts->hubble / constants::kM0;
         header.hubbleParam = opts->hubble;
@@ -226,7 +226,7 @@ int main(int argc, char* argv[]) {
         double const h = opts->hsoft * opts->codeToCm * opts->hubble / constants::kMpcToCm / 2.0;
         double const linkLen =
             opts->lcB;    /// opts->parts_dim * opts->code_to_cm * opts->hubble /
-                          /// constants::mpc_to_cm / box_size * pow(nparts, 1.0 / 3.0);
+                          /// constants::mpc_to_cm / box_size * pow(numberParticles, 1.0 / 3.0);
         fprintf(fpout, "FILE_FORMAT = \"GADGET2\"\n");
         fprintf(fpout, "h0 = %f\n", opts->hubble);
         fprintf(fpout, "Om = %f\n", opts->omegaM);
@@ -238,7 +238,8 @@ int main(int argc, char* argv[]) {
         fprintf(fpout, "FOF_LINKING_LENGTH = %e\n", linkLen);
         //	fprintf(fpout, "STRICT_SO_MASSES = 1\n");
         //		fprintf(fpout, "UNBOUND_THRESHOLD = -10000000.0\n");
-        //		fprintf(fpout, "AVG_PARTICLE_SPACING = %e\n", box_size / pow(nparts, 1.0 / 3.0));
+        //		fprintf(fpout, "AVG_PARTICLE_SPACING = %e\n", box_size / pow(numberParticles, 1.0
+        /// 3.0));
         fclose(fpout);
         if (system("./rockstar -c config.cfg ./gadget.tmp\n") != 0) {
             printf("Unable to execute rockstar\n");
@@ -283,9 +284,9 @@ int main(int argc, char* argv[]) {
             }
             if (bigj != -1) {
                 data["PID"][i] = data["id"][bigj];
-                subhaloCnt++;
+                subhaloCount++;
             } else {
-                haloCnt++;
+                haloCount++;
                 data["PID"][i] = -1;
             }
         }
@@ -296,8 +297,8 @@ int main(int argc, char* argv[]) {
                 db[fields[i]].begin(), data[fields[i]].begin(), data[fields[i]].end());
         }
     }
-    printf("\n%lli halos found\n", haloCnt);
-    printf("%lli subhalos found\n", subhaloCnt);
+    printf("\n%lli halos found\n", haloCount);
+    printf("%lli subhalos found\n", subhaloCount);
     fclose(fpin);
     return 0;
 }

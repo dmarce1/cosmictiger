@@ -98,7 +98,7 @@ MultiPos* treeAddMultipole(MultiPos const& mpos);
 struct TreeNode {
     Fixed32Range box;
     Array<TreeId, NCHILD> children;
-    Pair<PartInt> partRange;
+    Pair<ParticleInteger> partRange;
     Pair<int, int> procRange;
     Array<Fixed32, NDIM> pos;
     MultiPos* mpos;
@@ -111,7 +111,7 @@ struct TreeNode {
     CUDA_EXPORT
 
     CUDA_EXPORT
-    inline PartInt nparts() const {
+    inline ParticleInteger numberParticles() const {
         return partRange.second - partRange.first;
     }
     inline ParticleGlobalRange globalPartRange() const {
@@ -184,18 +184,18 @@ struct TreeCreateReturn {
     }
 };
 
-struct TreeCreateParams {
+struct TreeCreateParameters {
     int minRung;
     double theta;
-    PartInt parParts;
+    ParticleInteger parParts;
     int minLevel;
     bool leafPushed;
     bool doLeafSizes;
-    TreeCreateParams() {
+    TreeCreateParameters() {
         leafPushed = false;
         doLeafSizes = false;
     }
-    TreeCreateParams(int minRung, double theta, double hmax);
+    TreeCreateParameters(int minRung, double theta, double hmax);
     template <class A>
     void serialize(A&& arc, unsigned) {
         arc & parParts;
@@ -207,10 +207,10 @@ struct TreeCreateParams {
     }
 };
 
-TreeCreateReturn treeCreate(TreeCreateParams params, size_t key = 1,
+TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key = 1,
     Pair<int, int> procRange = Pair<int>(0, hpxSize()),
-    Pair<PartInt> partRange = Pair<PartInt>(-1, -1), Range<double> box = unitBox<double>(),
-    int depth = 0, bool localRoot = (hpxSize() == 1));
+    Pair<ParticleInteger> partRange = Pair<ParticleInteger>(-1, -1),
+    Range<double> box = unitBox<double>(), int depth = 0, bool localRoot = (hpxSize() == 1));
 void treeReset();
 void treeDestroy(bool freeTree = false);
 int treeMinLevel(double theta, double hsoft);

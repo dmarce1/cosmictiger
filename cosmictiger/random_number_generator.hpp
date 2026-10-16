@@ -17,10 +17,10 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef RA22ND_HPP_
-#define RA22ND_HPP_
+#ifndef RANDOM_NUMBER_GENERATOR_HPP_
+#define RANDOM_NUMBER_GENERATOR_HPP_
 
-class RndGen {
+class RandomNumberGenerator {
     // L’Ecuyer, Blouin and Coutre
     static constexpr unsigned kA1_ = 107374182;
     static constexpr unsigned kA5_ = 104480;
@@ -40,10 +40,10 @@ public:
         x4_ = (x3_ * a0) % kM_;
         x5_ = (x4_ * a0) % kM_;
     }
-    RndGen(int seed) {
+    RandomNumberGenerator(int seed) {
         reseed(seed);
     }
-    int rndNumber() {
+    int randomNumber() {
         long long const x0 = (kA1_ * x1_ + kA5_ * x5_) % kM_;
         x5_ = x4_;
         x4_ = x3_;
@@ -52,12 +52,12 @@ public:
         x1_ = x0;
         return (int) x0;
     }
-    int rndMax() const {
+    int randomMaximum() const {
         return kM_ - 1;
     }
-    float rndOne() {
-        return ((float) rndNumber() + 0.5f) / (float) rndMax();
+    float randomUnitInterval() {
+        return ((float) randomNumber() + 0.5f) / (float) randomMaximum();
     }
 };
 
-#endif /* RAND_HPP_ */
+#endif /* RANDOM_NUMBER_GENERATOR_HPP_ */

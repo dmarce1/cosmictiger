@@ -29,9 +29,9 @@
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/rockstar.hpp>
 
-void groupsTransmitParticles(Vector<std::pair<GroupInt, Vector<ParticleData>>> entries);
-Vector<GroupInt> groupsExist(Vector<GroupInt>);
-static void groupsRemoveIndexes(Vector<PartInt> indexes);
+void groupsTransmitParticles(Vector<std::pair<GroupInteger, Vector<ParticleData>>> entries);
+Vector<GroupInteger> groupsExist(Vector<GroupInteger>);
+static void groupsRemoveIndexes(Vector<ParticleInteger> indexes);
 
 HPX_PLAIN_ACTION(groupsAddParticles, GroupsAddParticlesAction);
 HPX_PLAIN_ACTION(groupsTransmitParticles, GroupsTransmitParticlesAction);
@@ -44,20 +44,20 @@ HPX_PLAIN_ACTION(groupsRemoveIndexes, GroupsRemoveIndexesAction);
 #define GROUP_TABLE_SIZE 1024
 
 struct GroupHashHi {
-    size_t operator()(GroupInt grp) const {
+    size_t operator()(GroupInteger grp) const {
         return grp / (GROUP_TABLE_SIZE * GROUP_WAVES);
     }
 };
 
 static Array<SpinlockType, GROUP_TABLE_SIZE> mutexes;
-static Array<std::unordered_map<GroupInt, Vector<ParticleData>, GroupHashHi>, GROUP_TABLE_SIZE>
+static Array<std::unordered_map<GroupInteger, Vector<ParticleData>, GroupHashHi>, GROUP_TABLE_SIZE>
     groupData;
 static Vector<GroupEntry> groups;
-static std::unordered_set<GroupInt> existingGroups;
-static Vector<GroupInt> localExistingGroups;
+static std::unordered_set<GroupInteger> existingGroups;
+static Vector<GroupInteger> localExistingGroups;
 static std::atomic<size_t> groupCandidates;
 
-void groupsRemoveIndexes(Vector<PartInt> indexes) {
+void groupsRemoveIndexes(Vector<ParticleInteger> indexes) {
     for (int i = 0; i < indexes.size(); i++) {
         particlesGroup(indexes[i]) = NO_GROUP;
     }
@@ -69,17 +69,17 @@ void groupsCull() {
     for (auto const& c : hpxChildren()) {
         futs1.push_back(hpx::async<GroupsCullAction>(c));
     }
-    std::unordered_set<GroupInt> finalExisting;
+    std::unordered_set<GroupInteger> finalExisting;
     MutexType mutex;
-    int const nthreads = hpxHardwareConcurrency();
-    for (int proc = 0; proc < nthreads; proc++) {
-        futs2.push_back(hpx::async([proc, nthreads, &mutex, &finalExisting]() {
-            std::unordered_map<int, Vector<GroupInt>> map;
-            for (int i = proc; i < localExistingGroups.size(); i += nthreads) {
+    int const numberThreads = hpxHardwareConcurrency();
+    for (int proc = 0; proc < numberThreads; proc++) {
+        futs2.push_back(hpx::async([proc, numberThreads, &mutex, &finalExisting]() {
+            std::unordered_map<int, Vector<GroupInteger>> map;
+            for (int i = proc; i < localExistingGroups.size(); i += numberThreads) {
                 auto const& grp = localExistingGroups[i];
                 map[particlesGroupHome(grp)].push_back(grp);
             }
-            Vector<hpx::future<Vector<GroupInt>>> futs;
+            Vector<hpx::future<Vector<GroupInteger>>> futs;
             for (auto i = map.begin(); i != map.end(); i++) {
                 futs.push_back(
                     hpx::async<GroupsExistAction>(hpxLocalities()[i->first], std::move(i->second)));
@@ -95,11 +95,11 @@ void groupsCull() {
     }
     hpx::wait_all(futs2.begin(), futs2.end());
     localExistingGroups = decltype(localExistingGroups)();
-    for (int proc = 0; proc < nthreads; proc++) {
-        futs1.push_back(hpx::async([proc, nthreads, &finalExisting]() {
-            PartInt const begin = (size_t) proc * particlesSize() / nthreads;
-            PartInt const end = (size_t) proc * particlesSize() / nthreads;
-            for (PartInt i = begin; i < end; i++) {
+    for (int proc = 0; proc < numberThreads; proc++) {
+        futs1.push_back(hpx::async([proc, numberThreads, &finalExisting]() {
+            ParticleInteger const begin = (size_t) proc * particlesSize() / numberThreads;
+            ParticleInteger const end = (size_t) proc * particlesSize() / numberThreads;
+            for (ParticleInteger i = begin; i < end; i++) {
                 if (particlesGroup(i) != NO_GROUP) {
                     if (finalExisting.find(particlesGroup(i)) == finalExisting.end()) {
                         particlesGroup(i) = NO_GROUP;
@@ -111,7 +111,7 @@ void groupsCull() {
     hpx::wait_all(futs1.begin(), futs1.end());
 }
 
-Vector<GroupInt> groupsExist(Vector<GroupInt> grps) {
+Vector<GroupInteger> groupsExist(Vector<GroupInteger> grps) {
     int i = 0;
     while (i < grps.size()) {
         if (existingGroups.find(grps[i]) != existingGroups.end()) {
@@ -186,13 +186,13 @@ void groupsReduce(double scaleFactor) {
     for (auto const& c : hpxChildren()) {
         futs.push_back(hpx::async<GroupsReduceAction>(c, scaleFactor));
     }
-    int const nthreads = GROUPS_REDUCE_OVERSUBSCRIBE * hpxHardwareConcurrency();
+    int const numberThreads = GROUPS_REDUCE_OVERSUBSCRIBE * hpxHardwareConcurrency();
     SpinlockType mutex;
     float const ainv = 1.0 / scaleFactor;
-    for (int proc = 0; proc < nthreads; proc++) {
-        futs.push_back(hpx::async([proc, nthreads, &mutex, &ainv, scaleFactor]() {
-            std::unordered_map<int, Vector<PartInt>> removeIndexes;
-            for (int bin = proc; bin < GROUP_TABLE_SIZE; bin += nthreads) {
+    for (int proc = 0; proc < numberThreads; proc++) {
+        futs.push_back(hpx::async([proc, numberThreads, &mutex, &ainv, scaleFactor]() {
+            std::unordered_map<int, Vector<ParticleInteger>> removeIndexes;
+            for (int bin = proc; bin < GROUP_TABLE_SIZE; bin += numberThreads) {
                 for (auto iter = groupData[bin].begin(); iter != groupData[bin].end(); iter++) {
                     groupCandidates++;
                     Vector<ParticleData>& parts = iter->second;
@@ -200,16 +200,16 @@ void groupsReduce(double scaleFactor) {
                     Vector<float> phi;
                     if (parts.size() >= getOptions().minGroup) {
                         auto rockstarGroups = rockstarFindSubgroups(parts, scaleFactor);
-                        int haloCnt = 0;
+                        int haloCount = 0;
                         for (int i = 0; i < rockstarGroups.size(); i++) {
                             if (rockstarGroups[i].parent == ROCKSTAR_NO_GROUP &&
                                 rockstarGroups[i].id != ROCKSTAR_NO_GROUP) {
-                                haloCnt++;
+                                haloCount++;
                             }
                         }
-                        if (haloCnt > 1) {
-                            PRINT("%i halos and %i subhalos found in group of %i\n", haloCnt,
-                                rockstarGroups.size() - haloCnt - 1, parts.size());
+                        if (haloCount > 1) {
+                            PRINT("%i halos and %i subhalos found in group of %i\n", haloCount,
+                                rockstarGroups.size() - haloCount - 1, parts.size());
                         }
                         bool removedOne;
                         DeviceVector<Array<Fixed32, NDIM>> xValue(parts.size());
@@ -383,12 +383,12 @@ void groupsReduce(double scaleFactor) {
     groupData = decltype(groupData)();
 }
 
-void groupsTransmitParticles(Vector<std::pair<GroupInt, Vector<ParticleData>>> entries) {
+void groupsTransmitParticles(Vector<std::pair<GroupInteger, Vector<ParticleData>>> entries) {
     Vector<hpx::future<void>> futs;
-    int const nthreads = hpxHardwareConcurrency();
-    for (int proc = 0; proc < nthreads; proc++) {
-        futs.push_back(hpx::async([nthreads, proc, &entries]() {
-            for (int i = proc; i < entries.size(); i += nthreads) {
+    int const numberThreads = hpxHardwareConcurrency();
+    for (int proc = 0; proc < numberThreads; proc++) {
+        futs.push_back(hpx::async([numberThreads, proc, &entries]() {
+            for (int i = proc; i < entries.size(); i += numberThreads) {
                 auto const grp = entries[i].first;
                 int const bin = (grp / GROUP_WAVES) % GROUP_TABLE_SIZE;
                 std::lock_guard<SpinlockType> lock(mutexes[bin]);
@@ -405,17 +405,18 @@ void groupsAddParticles(int wave, double scale) {
     for (auto const& c : hpxChildren()) {
         futs.push_back(hpx::async<GroupsAddParticlesAction>(c, wave, scale));
     }
-    int const nthreads = hpxHardwareConcurrency();
+    int const numberThreads = hpxHardwareConcurrency();
     SpinlockType mutex;
     float const ainv = 1.0 / scale;
-    for (int proc = 0; proc < nthreads; proc++) {
-        futs.push_back(hpx::async([proc, nthreads, wave, &mutex, ainv]() {
+    for (int proc = 0; proc < numberThreads; proc++) {
+        futs.push_back(hpx::async([proc, numberThreads, wave, &mutex, ainv]() {
             Vector<hpx::future<void>> futs;
-            std::unordered_map<int, std::unordered_map<GroupInt, Vector<ParticleData>>> localGroups;
-            PartInt const begin = (size_t) proc * particlesSize() / nthreads;
-            PartInt const end = (size_t) (proc + 1) * particlesSize() / nthreads;
-            for (PartInt i = begin; i < end; i++) {
-                auto const grp = (GroupInt) particlesGroup(i);
+            std::unordered_map<int, std::unordered_map<GroupInteger, Vector<ParticleData>>>
+                localGroups;
+            ParticleInteger const begin = (size_t) proc * particlesSize() / numberThreads;
+            ParticleInteger const end = (size_t) (proc + 1) * particlesSize() / numberThreads;
+            for (ParticleInteger i = begin; i < end; i++) {
+                auto const grp = (GroupInteger) particlesGroup(i);
                 if (grp != NO_GROUP) {
                     int const home = particlesGroupHome(grp);
                     if (grp % GROUP_WAVES == wave) {
@@ -437,7 +438,7 @@ void groupsAddParticles(int wave, double scale) {
                 }
             }
             for (auto iter = localGroups.begin(); iter != localGroups.end(); iter++) {
-                Vector<std::pair<GroupInt, Vector<ParticleData>>> data;
+                Vector<std::pair<GroupInteger, Vector<ParticleData>>> data;
                 data.reserve(iter->second.size());
                 for (auto j = iter->second.begin(); j != iter->second.end(); j++) {
                     data.push_back(std::move(*j));

@@ -21,9 +21,9 @@
 #define GRAVITY_HPP_
 
 #include <cosmictiger/cuda.hpp>
-#include <cosmictiger/cuda_mem.hpp>
+#include <cosmictiger/cuda_memory.hpp>
 #include <cosmictiger/fixed.hpp>
-#include <cosmictiger/fixedcapvec.hpp>
+#include <cosmictiger/fixed_capacity_vector.hpp>
 #include <cosmictiger/kick.hpp>
 #include <cosmictiger/tree.hpp>
 

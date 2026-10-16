@@ -23,7 +23,8 @@ struct Prehydro1Workspace {
     DeviceVector<SoftlensRecord> rec1;
 };
 
-__global__ void sphCudaPrehydro1(SphRunParams params, SphRunCudaData data, SphReduction* reduce) {
+__global__ void sphCudaPrehydro1(
+    SphRunParameters params, SphRunCudaData data, SphReduction* reduce) {
     int const tid = threadIdx.x;
     int const blockSize = blockDim.x;
     __shared__ int index;
@@ -35,7 +36,7 @@ __global__ void sphCudaPrehydro1(SphRunParams params, SphRunCudaData data, SphRe
     __syncthreads();
     new (&ws) Prehydro1Workspace();
     Array<Fixed32, NDIM> x;
-    while (index < data.nselfs) {
+    while (index < data.numberTargetNodes) {
         int flops = 0;
         __syncthreads();
         ws.rec1.resize(0);
@@ -138,7 +139,8 @@ struct Prehydro2Workspace {
     DeviceVector<int> neighbors;
 };
 
-__global__ void sphCudaPrehydro2(SphRunParams params, SphRunCudaData data, SphReduction* reduce) {
+__global__ void sphCudaPrehydro2(
+    SphRunParameters params, SphRunCudaData data, SphReduction* reduce) {
     int const tid = threadIdx.x;
     int const blockSize = blockDim.x;
     __shared__ int index;
@@ -150,7 +152,7 @@ __global__ void sphCudaPrehydro2(SphRunParams params, SphRunCudaData data, SphRe
     __syncthreads();
     new (&ws) Prehydro2Workspace();
     Array<Fixed32, NDIM> x;
-    while (index < data.nselfs) {
+    while (index < data.numberTargetNodes) {
         int flops = 0;
         __syncthreads();
         ws.rec1.resize(0);

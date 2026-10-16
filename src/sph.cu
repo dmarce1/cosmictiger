@@ -19,7 +19,7 @@
 
 #include <cosmictiger/sph_cuda.hpp>
 
-SphRunReturn sphRunCuda(SphRunParams params, SphRunCudaData data, cudaStream_t stream) {
+SphRunReturn sphRunCuda(SphRunParameters params, SphRunCudaData data, cudaStream_t stream) {
     SphRunReturn rc;
     SphReduction* reduce;
     CUDA_CHECK(cudaMallocManaged(&reduce, sizeof(SphReduction)));

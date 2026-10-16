@@ -63,7 +63,7 @@ __device__ inline float pressure(float eint, float rho, float gamma) {
 }
 #endif
 
-__global__ void sphCudaHydro(SphRunParams params, SphRunCudaData data, SphReduction* reduce) {
+__global__ void sphCudaHydro(SphRunParameters params, SphRunCudaData data, SphReduction* reduce) {
     int const tid = threadIdx.x;
     int const blockSize = blockDim.x;
     __shared__ int index;
@@ -84,7 +84,7 @@ __global__ void sphCudaHydro(SphRunParams params, SphRunCudaData data, SphReduct
     float const invgamma0 = 1.f / gamma0;
     float const log2fparamst0 = log2f(params.t0);
     flops += 16;
-    while (index < data.nselfs) {
+    while (index < data.numberTargetNodes) {
         __syncthreads();
         SphTreeNode const& self = data.trees[data.selfs[index]];
         ws.rec1.resize(0);

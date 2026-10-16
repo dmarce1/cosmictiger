@@ -23,8 +23,8 @@
 #include <cosmictiger/particles.hpp>
 
 __global__ void analyticGravityKernel(Fixed32* sinkx, Fixed32* sinky, Fixed32* sinkz,
-    Fixed32* sourcex, Fixed32* sourcey, Fixed32* sourcez, int nsource, double* rphi, double* rgx,
-    double* rgy, double* rgz, float hsoft);
+    Fixed32* sourcex, Fixed32* sourcey, Fixed32* sourcez, int numberSources, double* rphi,
+    double* rgx, double* rgy, double* rgz, float hsoft);
 
 #define ANALYTIC_BLOCK_SIZE 256
 
@@ -42,38 +42,41 @@ std::pair<Vector<double>, Array<Vector<double>, NDIM>> gravityAnalyticCallKernel
     double* devGx;
     double* devGy;
     double* devGz;
-    int const nsinks = sinkx.size();
-    (CUDA_MALLOC(&devSinkx, nsinks * sizeof(Fixed32)));
-    (CUDA_MALLOC(&devSinky, nsinks * sizeof(Fixed32)));
-    (CUDA_MALLOC(&devSinkz, nsinks * sizeof(Fixed32)));
-    (CUDA_MALLOC(&devPhi, nsinks * sizeof(double)));
-    (CUDA_MALLOC(&devGx, nsinks * sizeof(double)));
-    (CUDA_MALLOC(&devGy, nsinks * sizeof(double)));
-    (CUDA_MALLOC(&devGz, nsinks * sizeof(double)));
-    Vector<double> zero(nsinks, 0.0);
+    int const numberSinks = sinkx.size();
+    (CUDA_MALLOC(&devSinkx, numberSinks * sizeof(Fixed32)));
+    (CUDA_MALLOC(&devSinky, numberSinks * sizeof(Fixed32)));
+    (CUDA_MALLOC(&devSinkz, numberSinks * sizeof(Fixed32)));
+    (CUDA_MALLOC(&devPhi, numberSinks * sizeof(double)));
+    (CUDA_MALLOC(&devGx, numberSinks * sizeof(double)));
+    (CUDA_MALLOC(&devGy, numberSinks * sizeof(double)));
+    (CUDA_MALLOC(&devGz, numberSinks * sizeof(double)));
+    Vector<double> zero(numberSinks, 0.0);
     if (hpxRank() == 0) {
-        Vector<double> selfPhi1(nsinks, selfPhi() / getOptions().hsoft);
-        CUDA_CHECK(
-            cudaMemcpy(devPhi, selfPhi1.data(), nsinks * sizeof(double), cudaMemcpyHostToDevice));
+        Vector<double> selfPhi1(numberSinks, selfPhi() / getOptions().hsoft);
+        CUDA_CHECK(cudaMemcpy(
+            devPhi, selfPhi1.data(), numberSinks * sizeof(double), cudaMemcpyHostToDevice));
     } else {
         CUDA_CHECK(
-            cudaMemcpy(devPhi, zero.data(), nsinks * sizeof(double), cudaMemcpyHostToDevice));
+            cudaMemcpy(devPhi, zero.data(), numberSinks * sizeof(double), cudaMemcpyHostToDevice));
     }
-    CUDA_CHECK(cudaMemcpy(devGx, zero.data(), nsinks * sizeof(double), cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(devGy, zero.data(), nsinks * sizeof(double), cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(devGz, zero.data(), nsinks * sizeof(double), cudaMemcpyHostToDevice));
     CUDA_CHECK(
-        cudaMemcpy(devSinkx, sinkx.data(), nsinks * sizeof(Fixed32), cudaMemcpyHostToDevice));
+        cudaMemcpy(devGx, zero.data(), numberSinks * sizeof(double), cudaMemcpyHostToDevice));
     CUDA_CHECK(
-        cudaMemcpy(devSinky, sinky.data(), nsinks * sizeof(Fixed32), cudaMemcpyHostToDevice));
+        cudaMemcpy(devGy, zero.data(), numberSinks * sizeof(double), cudaMemcpyHostToDevice));
     CUDA_CHECK(
-        cudaMemcpy(devSinkz, sinkz.data(), nsinks * sizeof(Fixed32), cudaMemcpyHostToDevice));
-    PRINT("%li free\n", cudaFreeMem());
-    size_t const partsPerLoop = (size_t) cudaFreeMem() / (NDIM * sizeof(Fixed32)) * 85 / 100;
+        cudaMemcpy(devGz, zero.data(), numberSinks * sizeof(double), cudaMemcpyHostToDevice));
+    CUDA_CHECK(
+        cudaMemcpy(devSinkx, sinkx.data(), numberSinks * sizeof(Fixed32), cudaMemcpyHostToDevice));
+    CUDA_CHECK(
+        cudaMemcpy(devSinky, sinky.data(), numberSinks * sizeof(Fixed32), cudaMemcpyHostToDevice));
+    CUDA_CHECK(
+        cudaMemcpy(devSinkz, sinkz.data(), numberSinks * sizeof(Fixed32), cudaMemcpyHostToDevice));
+    PRINT("%li free\n", cudaFreeMemory());
+    size_t const partsPerLoop = (size_t) cudaFreeMemory() / (NDIM * sizeof(Fixed32)) * 85 / 100;
     int occupancy;
     CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&occupancy, analyticGravityKernel,
         ANALYTIC_BLOCK_SIZE, sizeof(double) * (NDIM + 1) * ANALYTIC_BLOCK_SIZE));
-    int numKernels = std::max((int) (occupancy * cudaSmpCount() / nsinks), 1);
+    int numKernels = std::max((int) (occupancy * cudaSmpCount() / numberSinks), 1);
     Vector<cudaStream_t> streams(numKernels);
     for (int i = 0; i < numKernels; i++) {
         cudaStreamCreate(&streams[i]);
@@ -94,7 +97,7 @@ std::pair<Vector<double>, Array<Vector<double>, NDIM>> gravityAnalyticCallKernel
         for (int j = 0; j < numKernels; j++) {
             int const begin = size_t(j) * size_t(totalSize) / size_t(numKernels);
             int const end = size_t(j + 1) * size_t(totalSize) / size_t(numKernels);
-            analyticGravityKernel<<<nsinks, ANALYTIC_BLOCK_SIZE, 0, streams[i]>>>(devSinkx,
+            analyticGravityKernel<<<numberSinks, ANALYTIC_BLOCK_SIZE, 0, streams[i]>>>(devSinkx,
                 devSinky, devSinkz, devSrcx + begin, devSrcy + begin, devSrcz + begin, end - begin,
                 devPhi, devGx, devGy, devGz, getOptions().hsoft);
         }
@@ -108,18 +111,18 @@ std::pair<Vector<double>, Array<Vector<double>, NDIM>> gravityAnalyticCallKernel
     for (int i = 0; i < numKernels; i++) {
         cudaStreamDestroy(streams[i]);
     }
-    rc.first.resize(nsinks);
+    rc.first.resize(numberSinks);
     for (int dim = 0; dim < NDIM; dim++) {
-        rc.second[dim].resize(nsinks);
+        rc.second[dim].resize(numberSinks);
     }
     CUDA_CHECK(
-        cudaMemcpy(rc.first.data(), devPhi, sizeof(double) * nsinks, cudaMemcpyDeviceToHost));
-    CUDA_CHECK(
-        cudaMemcpy(rc.second[XDIM].data(), devGx, sizeof(double) * nsinks, cudaMemcpyDeviceToHost));
-    CUDA_CHECK(
-        cudaMemcpy(rc.second[YDIM].data(), devGy, sizeof(double) * nsinks, cudaMemcpyDeviceToHost));
-    CUDA_CHECK(
-        cudaMemcpy(rc.second[ZDIM].data(), devGz, sizeof(double) * nsinks, cudaMemcpyDeviceToHost));
+        cudaMemcpy(rc.first.data(), devPhi, sizeof(double) * numberSinks, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(
+        rc.second[XDIM].data(), devGx, sizeof(double) * numberSinks, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(
+        rc.second[YDIM].data(), devGy, sizeof(double) * numberSinks, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(
+        rc.second[ZDIM].data(), devGz, sizeof(double) * numberSinks, cudaMemcpyDeviceToHost));
     CUDA_CHECK(cudaFree(devPhi));
     CUDA_CHECK(cudaFree(devGx));
     CUDA_CHECK(cudaFree(devGy));
@@ -131,8 +134,8 @@ std::pair<Vector<double>, Array<Vector<double>, NDIM>> gravityAnalyticCallKernel
 }
 
 __global__ void analyticGravityKernel(Fixed32* sinkx, Fixed32* sinky, Fixed32* sinkz,
-    Fixed32* sourcex, Fixed32* sourcey, Fixed32* sourcez, int nsource, double* rphi, double* rgx,
-    double* rgy, double* rgz, float h) {
+    Fixed32* sourcex, Fixed32* sourcey, Fixed32* sourcez, int numberSources, double* rphi,
+    double* rgx, double* rgy, double* rgz, float h) {
     __shared__ double phi[ANALYTIC_BLOCK_SIZE];
     __shared__ double gx[ANALYTIC_BLOCK_SIZE];
     __shared__ double gy[ANALYTIC_BLOCK_SIZE];
@@ -150,7 +153,7 @@ __global__ void analyticGravityKernel(Fixed32* sinkx, Fixed32* sinky, Fixed32* s
     float h2inv = 1.0 / h2;
     float h3inv = hinv * hinv * hinv;
     phi[tid] = gx[tid] = gy[tid] = gz[tid] = 0.0f;
-    for (int sourcei = tid; sourcei < nsource; sourcei += ANALYTIC_BLOCK_SIZE) {
+    for (int sourcei = tid; sourcei < numberSources; sourcei += ANALYTIC_BLOCK_SIZE) {
         float const xValue = distance(x, sourcex[sourcei]);
         float const yValue = distance(y, sourcey[sourcei]);
         float const zValue = distance(z, sourcez[sourcei]);

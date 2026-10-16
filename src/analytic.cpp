@@ -58,17 +58,17 @@ static ReturnType doAnalytic(
 #endif
 }
 
-Pair<double> analyticCompare(int nsamples) {
+Pair<double> analyticCompare(int numberSamples) {
 #ifdef USE_CUDA
     Timer tm;
     tm.start();
-    auto samples = particlesSample(nsamples);
+    auto samples = particlesSample(numberSamples);
     tm.stop();
     PRINT("particles_sample: %e\n", tm.read());
-    Vector<Fixed32> sinkx(nsamples);
-    Vector<Fixed32> sinky(nsamples);
-    Vector<Fixed32> sinkz(nsamples);
-    for (int i = 0; i < nsamples; i++) {
+    Vector<Fixed32> sinkx(numberSamples);
+    Vector<Fixed32> sinky(numberSamples);
+    Vector<Fixed32> sinkz(numberSamples);
+    for (int i = 0; i < numberSamples; i++) {
         sinkx[i] = samples[i].x[XDIM];
         sinky[i] = samples[i].x[YDIM];
         sinkz[i] = samples[i].x[ZDIM];
@@ -76,7 +76,7 @@ Pair<double> analyticCompare(int nsamples) {
     double const gm = getOptions().gm;
     auto results = doAnalytic(sinkx, sinky, sinkz);
     Vector<double> gerrs, phierrs;
-    for (int i = 0; i < nsamples; i++) {
+    for (int i = 0; i < numberSamples; i++) {
         double f1 = 0.0, f2 = 0.0;
         double g1 = 0.0, g2 = 0.0;
         for (int dim = 0; dim < NDIM; dim++) {
@@ -94,13 +94,13 @@ Pair<double> analyticCompare(int nsamples) {
         printf("%.10e %.10e %.10e | %.10e %.10e %.10e |%.10e %.10e %.10e \n", sinkx[i].toFloat(),
             sinky[i].toFloat(), sinkz[i].toFloat(), g1, g2, g2 / g1, f1, f2, f1 / f2);
     }
-    int index = 99 * nsamples / 100;
+    int index = 99 * numberSamples / 100;
     std::sort(phierrs.begin(), phierrs.end());
     std::sort(gerrs.begin(), gerrs.end());
     double phi100 = phierrs[index];
     double force100 = gerrs[index];
-    double phi50 = phierrs[nsamples / 2] + phierrs[nsamples / 2 + 1];
-    double force50 = gerrs[nsamples / 2] + gerrs[nsamples / 2 + 1];
+    double phi50 = phierrs[numberSamples / 2] + phierrs[numberSamples / 2 + 1];
+    double force50 = gerrs[numberSamples / 2] + gerrs[numberSamples / 2 + 1];
     phi50 *= 0.5;
     force50 *= 0.5;
     PRINT("Force 50  Error     = %e\n", force50);

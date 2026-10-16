@@ -109,7 +109,7 @@ int computeDx(int pValue2, char const* name = "position", bool trless = false, b
 
 int computeDxTensor(int pValue2, char const* name = "position") {
     Array<int, NDIM> n;
-    tprint("TensorSym<T,%i> dx;\n", pValue2);
+    tprint("SymmetricTensor<T,%i> dx;\n", pValue2);
     tprint("dx[0] = T(1);\n");
     tprint("dx[%i] = %s[0];\n", symIndex(1, 0, 0), name);
     tprint("dx[%i] = %s[1];\n", symIndex(0, 1, 0), name);
@@ -570,8 +570,8 @@ int computeDetraceEwald(std::string iname, std::string oname) {
 
 #define P ORDER
 template <int q>
-void constRefCompute(
-    int sign, TensorTrlessSym<int, q>& counts, TensorTrlessSym<int, q>& signs, Array<int, NDIM> n) {
+void constRefCompute(int sign, SymmetricTracelessTensor<int, q>& counts,
+    SymmetricTracelessTensor<int, q>& signs, Array<int, NDIM> n) {
     int flops = 0;
     if (n[2] >= 2 && !(n[0] == 0 && n[1] == 0 && n[2] == 2)) {
         auto n1 = n;
@@ -589,8 +589,9 @@ void constRefCompute(
 }
 
 template <int q>
-int printConstRef(std::string name, std::string& cmd, TensorTrlessSym<int, q> const& counts,
-    TensorTrlessSym<int, q> const& signs, Array<int, NDIM> n) {
+int printConstRef(std::string name, std::string& cmd,
+    SymmetricTracelessTensor<int, q> const& counts, SymmetricTracelessTensor<int, q> const& signs,
+    Array<int, NDIM> n) {
     int flops = 0;
     Array<int, NDIM> k;
     Array<int, NDIM> lastIndex;
@@ -670,8 +671,8 @@ int constReferenceTrless(std::string name) {
                 } else {
                     tprint("T const %s%i%i%i = ", name.c_str(), n[0], n[1], n[2]);
                 }
-                TensorTrlessSym<int, q> counts;
-                TensorTrlessSym<int, q> signs;
+                SymmetricTracelessTensor<int, q> counts;
+                SymmetricTracelessTensor<int, q> signs;
                 counts = 0;
                 signs = 1;
                 constRefCompute(+1, counts, signs, n);
@@ -696,8 +697,8 @@ int constReferenceTrlessTensor(std::string name, std::string oname) {
         for (n[1] = 0; n[1] < q - n[0]; n[1]++) {
             for (n[2] = 0; n[2] < q - n[0] - n[1]; n[2]++) {
                 tprint("%s[%i] = ", oname.c_str(), symIndex(n[0], n[1], n[2]));
-                TensorTrlessSym<int, q> counts;
-                TensorTrlessSym<int, q> signs;
+                SymmetricTracelessTensor<int, q> counts;
+                SymmetricTracelessTensor<int, q> signs;
                 counts = 0;
                 signs = 1;
                 constRefCompute(+1, counts, signs, n);
@@ -748,11 +749,13 @@ void doExpansion(bool two) {
     tprint("__noinline__\n");
     tprint("#endif\n");
     if (two) {
-        tprint("TensorTrlessSym<T, %i> l2P(TensorTrlessSym<T, %i> const& la, Array<T,NDIM> "
+        tprint("SymmetricTracelessTensor<T, %i> l2P(SymmetricTracelessTensor<T, %i> const& la, "
+               "Array<T,NDIM> "
                "position, bool doPhi) {\n",
             q, P);
     } else {
-        tprint("TensorTrlessSym<T, %i> l2L(TensorTrlessSym<T, %i> const& la, Array<T,NDIM> "
+        tprint("SymmetricTracelessTensor<T, %i> l2L(SymmetricTracelessTensor<T, %i> const& la, "
+               "Array<T,NDIM> "
                "position, bool doPhi) {\n",
             q, P);
     }
@@ -760,7 +763,7 @@ void doExpansion(bool two) {
     tprint("position[0] *= T(SCALE_FACTOR);\n");
     tprint("position[1] *= T(SCALE_FACTOR);\n");
     tprint("position[2] *= T(SCALE_FACTOR);\n");
-    tprint("TensorTrlessSym<T, %i> lb;\n", q);
+    tprint("SymmetricTracelessTensor<T, %i> lb;\n", q);
     flops += 3 + computeDx(P);
     Array<int, NDIM> n;
     Array<int, NDIM> k;
@@ -1042,7 +1045,8 @@ void doExpansionCuda() {
     tprint("#ifdef __CUDACC__\n");
     tprint("template<class T>\n");
     tprint("__device__\n");
-    tprint("TensorTrlessSym<T, %i> l2LCuda(TensorTrlessSym<T, %i> const& la, Array<T,NDIM> "
+    tprint("SymmetricTracelessTensor<T, %i> l2LCuda(SymmetricTracelessTensor<T, %i> const& la, "
+           "Array<T,NDIM> "
            "position, bool doPhi) {\n",
         q, P);
 
@@ -1052,8 +1056,8 @@ void doExpansionCuda() {
     tprint("position[0] *= T(SCALE_FACTOR);\n");
     tprint("position[1] *= T(SCALE_FACTOR);\n");
     tprint("position[2] *= T(SCALE_FACTOR);\n");
-    tprint("TensorTrlessSym<T, %i> lb;\n", q);
-    tprint("TensorSym<T, %i> lc;\n", q);
+    tprint("SymmetricTracelessTensor<T, %i> lb;\n", q);
+    tprint("SymmetricTensor<T, %i> lc;\n", q);
     tprint("for( int i = 0; i < EXPANSION_SIZE; i ++ ) {\n");
     indent();
     tprint("lb[i] = 0.0f;\n");
@@ -1103,7 +1107,8 @@ void doExpansionCuda() {
 
 void ewald(int directFlops) {
     tprint("template<class T>\n");
-    tprint("CUDA_EXPORT int ewaldGreensFunction(TensorTrlessSym<T,%i> &d, Array<T, NDIM> position) "
+    tprint("CUDA_EXPORT int ewaldGreensFunction(SymmetricTracelessTensor<T,%i> &d, Array<T, NDIM> "
+           "position) "
            "{\n",
         P);
     indent();
@@ -1115,8 +1120,8 @@ void ewald(int directFlops) {
     tprint("T r = sqrt(fmaf(position[0], position[0], fmaf(position[1], position[1], "
            "sqr(position[2]))));\n");    // 6
     tprint("T const fouroversqrtpi = T(%.9e);\n", 4.0 / sqrt(M_PI));
-    tprint("TensorSym<T, %i> dreal;\n", P);
-    tprint("TensorTrlessSym<T,%i> dfour;\n", P);
+    tprint("SymmetricTensor<T, %i> dreal;\n", P);
+    tprint("SymmetricTracelessTensor<T,%i> dfour;\n", P);
     tprint("dreal = 0.0f;\n");
     tprint("dfour = 0.0f;\n");
     tprint("d = 0.0f;\n");
@@ -1315,11 +1320,11 @@ int main() {
     tprint("#include <cosmictiger/math.hpp>\n");
     tprint("#include <cosmictiger/tensor.hpp>\n\n");
     tprint("template<class T>\n");
-    tprint("using Expansion = TensorTrlessSym<T,%i>;\n", P);
+    tprint("using Expansion = SymmetricTracelessTensor<T,%i>;\n", P);
     tprint("template<class T>\n");
-    tprint("using Expansion2 = TensorTrlessSym<T,%i>;\n", 2);
+    tprint("using Expansion2 = SymmetricTracelessTensor<T,%i>;\n", 2);
     tprint("template<class T>\n");
-    tprint("using Multipole = TensorTrlessSym<T,%i>;\n", P - 1);
+    tprint("using Multipole = SymmetricTracelessTensor<T,%i>;\n", P - 1);
     tprint("#define EXPANSION_SIZE %i\n", P * P + 1);
     tprint("#define MULTIPOLE_SIZE %i\n", (P - 1) * (P - 1) + 1);
     auto const maxval = 1000.0;
@@ -1331,7 +1336,8 @@ int main() {
 
     tprint("\n\ntemplate<class T>\n");
     tprint("CUDA_EXPORT\n");
-    tprint("inline int greensFunction(TensorTrlessSym<T, %i>& d, Array<T, NDIM> position, bool "
+    tprint("inline int greensFunction(SymmetricTracelessTensor<T, %i>& d, Array<T, NDIM> position, "
+           "bool "
            "scale = true) {\n",
         P);
     flops = 0;
@@ -1383,8 +1389,9 @@ int main() {
         flops = 0;
         tprint("\n\ntemplate<class T>\n");
         tprint("CUDA_EXPORT\n");
-        tprint("inline int m2L(TensorTrlessSym<T, %i>& l, TensorTrlessSym<T, %i> const& m, "
-               "TensorTrlessSym<T, %i> const& d, bool doPhi) {\n",
+        tprint("inline int m2L(SymmetricTracelessTensor<T, %i>& l, SymmetricTracelessTensor<T, %i> "
+               "const& m, "
+               "SymmetricTracelessTensor<T, %i> const& d, bool doPhi) {\n",
             pmax, P - 1, P);
         indent();
         int phiFlops = 0;
@@ -1525,10 +1532,10 @@ int main() {
 
     tprint("\n\ntemplate<class T>\n");
     tprint("CUDA_EXPORT\n");
-    tprint("TensorTrlessSym<T, %i> p2M(Array<T, NDIM>& position) {\n", P - 1);
+    tprint("SymmetricTracelessTensor<T, %i> p2M(Array<T, NDIM>& position) {\n", P - 1);
     flops = 0;
     indent();
-    tprint("TensorTrlessSym<T, %i> m;\n", P - 1);
+    tprint("SymmetricTracelessTensor<T, %i> m;\n", P - 1);
     tprint("position[0] *= -T(SCALE_FACTOR);\n");
     tprint("position[1] *= -T(SCALE_FACTOR);\n");
     tprint("position[2] *= -T(SCALE_FACTOR);\n");
@@ -1543,13 +1550,13 @@ int main() {
 
     tprint("\n\ntemplate<class T>\n");
     tprint("CUDA_EXPORT\n");
-    tprint(
-        "TensorTrlessSym<T, %i> m2M(TensorTrlessSym<T,%i> const& ma, Array<T, NDIM>& position) {\n",
+    tprint("SymmetricTracelessTensor<T, %i> m2M(SymmetricTracelessTensor<T,%i> const& ma, Array<T, "
+           "NDIM>& position) {\n",
         P - 1, P - 1);
     flops = 0;
     indent();
-    tprint("TensorSym<T, %i> mb;\n", P - 1);
-    tprint("TensorTrlessSym<T, %i> mc;\n", P - 1);
+    tprint("SymmetricTensor<T, %i> mb;\n", P - 1);
+    tprint("SymmetricTracelessTensor<T, %i> mc;\n", P - 1);
     tprint("position[0] *= -T(SCALE_FACTOR);\n");
     tprint("position[1] *= -T(SCALE_FACTOR);\n");
     tprint("position[2] *= -T(SCALE_FACTOR);\n");
@@ -1675,7 +1682,7 @@ int main() {
 #endif
 
     tprint("template<class T>\n");
-    tprint("CUDA_EXPORT int applyScaleFactorInv(TensorTrlessSym<T,%i> &l) {\n", P);
+    tprint("CUDA_EXPORT int applyScaleFactorInv(SymmetricTracelessTensor<T,%i> &l) {\n", P);
     indent();
     applyScaleFactorL<P>("l");
     tprint("return %i;\n", P * P + 1);
@@ -1683,7 +1690,7 @@ int main() {
     tprint("}\n");
 
     tprint("template<class T>\n");
-    tprint("CUDA_EXPORT int applyScaleFactor(TensorTrlessSym<T,%i> &m) {\n", P - 1);
+    tprint("CUDA_EXPORT int applyScaleFactor(SymmetricTracelessTensor<T,%i> &m) {\n", P - 1);
     indent();
     applyScaleFactorM<P - 1>("m");
     tprint("return %i;\n", (P - 1) * (P - 1) + 1);

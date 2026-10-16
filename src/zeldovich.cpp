@@ -11,7 +11,7 @@ HPX_PLAIN_ACTION(twolptPhase, TwolptPhaseAction);
 HPX_PLAIN_ACTION(phi1ToParticles, Phi1ToParticlesAction);
 HPX_PLAIN_ACTION(phi2ToParticles, Phi2ToParticlesAction);
 
-static Vector<Cmplx> delta2;
+static Vector<ComplexFloat> delta2;
 static std::vector<float> delta2Part;
 
 void twolptInit(int n) {
@@ -26,7 +26,7 @@ void twolptInit(int n) {
     int xspan = xend - xbegin;
     delta2.resize(xspan * n * n);
     for (int i = 0; i < xspan * n * n; i++) {
-        delta2[i] = Cmplx(0.0, 0.0);
+        delta2[i] = ComplexFloat(0.0, 0.0);
     }
     delta2Part.resize(xspan * n * n, 0.0);
     hpx::wait_all(futs.begin(), futs.end());
@@ -96,7 +96,7 @@ float phi1ToParticles(int n, float boxSize, float d1, float prefactor, int dim) 
     int xb = hpxRank() * n / hpxSize();
     int xe = (hpxRank() + 1) * n / hpxSize();
     int xspan = xe - xb;
-    PartInt count = xspan * n * n;
+    ParticleInteger count = xspan * n * n;
     if (dim == 0) {
         parts.resize(count);
         for (int xi = xb; xi < xe; xi++) {
@@ -105,7 +105,7 @@ float phi1ToParticles(int n, float boxSize, float d1, float prefactor, int dim) 
                 float const y = (float(yi) + 0.5f) / float(n);
                 for (int zi = 0; zi < n; zi++) {
                     float const z = (float(zi) + 0.5f) / float(n);
-                    PartInt index = n * n * (xi - xb) + n * yi + zi;
+                    ParticleInteger index = n * n * (xi - xb) + n * yi + zi;
                     parts.pos(0, index) = x;
                     parts.pos(1, index) = y;
                     parts.pos(2, index) = z;
@@ -121,7 +121,7 @@ float phi1ToParticles(int n, float boxSize, float d1, float prefactor, int dim) 
             float const y = (float(yi) + 0.5f) / float(n);
             for (int zi = 0; zi < n; zi++) {
                 float const z = (float(zi) + 0.5f) / float(n);
-                PartInt i0 = n * n * (xi - xb) + n * yi + zi;
+                ParticleInteger i0 = n * n * (xi - xb) + n * yi + zi;
                 double const dx = phi1[i0] * factor;
                 double x = parts.pos(dim, i0).toDouble() + dx;
                 constrainRange(x);
@@ -152,7 +152,7 @@ float phi2ToParticles(int n, float boxSize, float d2, float prefactor, int dim) 
     int xb = hpxRank() * n / hpxSize();
     int xe = (hpxRank() + 1) * n / hpxSize();
     int xspan = xe - xb;
-    PartInt count = xspan * n * n;
+    ParticleInteger count = xspan * n * n;
     auto phi2 = fourier3dReadReal(xb, xe, 0, n, 0, n);
     float const factor = d2 / boxSize;
     for (int xi = xb; xi < xe; xi++) {
@@ -161,7 +161,7 @@ float phi2ToParticles(int n, float boxSize, float d2, float prefactor, int dim) 
             float const y = (float(yi) + 0.5f) / float(n);
             for (int zi = 0; zi < n; zi++) {
                 float const z = (float(zi) + 0.5f) / float(n);
-                PartInt i0 = n * n * (xi - xb) + n * yi + zi;
+                ParticleInteger i0 = n * n * (xi - xb) + n * yi + zi;
                 double const dx = phi2[i0] * factor;
                 double x = parts.pos(dim, i0).toDouble() + dx;
                 constrainRange(x);
@@ -178,7 +178,8 @@ float phi2ToParticles(int n, float boxSize, float d2, float prefactor, int dim) 
     return dmax;
 }
 
-void twolpt(InterpFunctor<float> const denK, int n, float boxSize, int dim1, int dim2, int seed) {
+void twolpt(
+    InterpolationFunctor<float> const denK, int n, float boxSize, int dim1, int dim2, int seed) {
     if (hpxRank() == 0) {
         fourier3dInitialize(n);
     }
@@ -189,7 +190,7 @@ void twolpt(InterpFunctor<float> const denK, int n, float boxSize, int dim1, int
                 hpx::async<TwolptAction>(hpxLocalities()[i], denK, n, boxSize, dim1, dim2, seed));
         }
     }
-    Vector<Cmplx> yValue;
+    Vector<ComplexFloat> yValue;
     int xbegin = hpxRank() * n / hpxSize();
     int xend = (hpxRank() + 1) * n / hpxSize();
     int xspan = xend - xbegin;

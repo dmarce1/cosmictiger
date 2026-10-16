@@ -80,7 +80,7 @@ __device__ void cudaGravityCcDirect(CudaKickData const& data, Expansion<float>& 
 __device__ void cudaGravityCpDirect(CudaKickData const& data, Expansion<float>& lacc,
     TreeNode const& self, DeviceVector<int> const& partlist, bool doPhi) {
     __shared__ extern int shmemPtr[];
-    CudaKickShmem& shmem = *(CudaKickShmem*) shmemPtr;
+    CudaKickSharedMemory& shmem = *(CudaKickSharedMemory*) shmemPtr;
     auto const* mainSrcX = data.x;
     auto const* mainSrcY = data.y;
     auto const* mainSrcZ = data.z;
@@ -118,8 +118,8 @@ __device__ void cudaGravityCpDirect(CudaKickData const& data, Expansion<float>& 
                         break;
                     }
                 }
-                PartInt const imin = theseParts.first;
-                PartInt const imax =
+                ParticleInteger const imin = theseParts.first;
+                ParticleInteger const imax =
                     min(theseParts.first + (KICK_PP_MAX - partIndex), theseParts.second);
                 int const sz = imax - imin;
                 cuda::memcpy_async(
@@ -172,10 +172,10 @@ __device__ void cudaGravityPcDirect(
     CudaKickData const& data, TreeNode const& self, DeviceVector<int> const& multlist, bool doPhi) {
     int const& tid = threadIdx.x;
     __shared__ extern int shmemPtr[];
-    CudaKickShmem& shmem = *(CudaKickShmem*) shmemPtr;
+    CudaKickSharedMemory& shmem = *(CudaKickSharedMemory*) shmemPtr;
     auto& force = shmem.f;
     auto& multis = shmem.mpos;
-    int const nsink = self.partRange.second - self.partRange.first;
+    int const numberSinks = self.partRange.second - self.partRange.first;
     auto const* sinkX = data.x + self.partRange.first;
     auto const* sinkY = data.y + self.partRange.first;
     auto const* sinkZ = data.z + self.partRange.first;
@@ -202,7 +202,7 @@ __device__ void cudaGravityPcDirect(
             for (int j = 0; j < mend; j++) {
                 auto const& pos = multis[j].pos;
                 auto const& m = multis[j].multi;
-                for (int k = tid; k < nsink; k += WARP_SIZE) {
+                for (int k = tid; k < numberSinks; k += WARP_SIZE) {
                     auto& fValue = force[k];
                     l(0, 0, 0) = l(1, 0, 0) = l(0, 1, 0) = l(0, 0, 1) = 0.0f;
                     dx[XDIM] = distance(sinkX[k], pos[XDIM]);
@@ -261,9 +261,9 @@ __device__ void cudaGravityPpDirect(CudaKickData const& data, TreeNode const& se
     DeviceVector<int> const& partlist, float h, bool doPhi) {
     int const& tid = threadIdx.x;
     __shared__ extern int shmemPtr[];
-    CudaKickShmem& shmem = *(CudaKickShmem*) shmemPtr;
+    CudaKickSharedMemory& shmem = *(CudaKickSharedMemory*) shmemPtr;
     auto& force = shmem.f;
-    int const nsink = self.partRange.second - self.partRange.first;
+    int const numberSinks = self.partRange.second - self.partRange.first;
     auto const* sinkX = data.x + self.partRange.first;
     auto const* sinkY = data.y + self.partRange.first;
     auto const* sinkZ = data.z + self.partRange.first;
@@ -301,8 +301,8 @@ __device__ void cudaGravityPpDirect(CudaKickData const& data, TreeNode const& se
                         break;
                     }
                 }
-                PartInt const imin = theseParts.first;
-                PartInt const imax =
+                ParticleInteger const imin = theseParts.first;
+                ParticleInteger const imax =
                     min(theseParts.first + (KICK_PP_MAX - partIndex), theseParts.second);
                 int const sz = imax - imin;
                 cuda::memcpy_async(
@@ -337,9 +337,9 @@ __device__ void cudaGravityPpDirect(CudaKickData const& data, TreeNode const& se
             float r3inv;
             float r1inv;
             __syncwarp();
-            int kmid = (nsink / WARP_SIZE) * WARP_SIZE;
-            if (nsink - kmid >= WARP_SIZE / 2) {
-                kmid = nsink;
+            int kmid = (numberSinks / WARP_SIZE) * WARP_SIZE;
+            if (numberSinks - kmid >= WARP_SIZE / 2) {
+                kmid = numberSinks;
             }
             for (int k = tid; k < kmid; k += WARP_SIZE) {
                 fx = 0.f;
@@ -376,7 +376,7 @@ __device__ void cudaGravityPpDirect(CudaKickData const& data, TreeNode const& se
                 flops += 4;
                 fValue.phi += pot;
             }
-            for (int k = kmid; k < nsink; k++) {
+            for (int k = kmid; k < numberSinks; k++) {
                 fx = 0.f;
                 fy = 0.f;
                 fz = 0.f;
@@ -427,7 +427,7 @@ __device__ void cudaGravityPpDirect(CudaKickData const& data, TreeNode const& se
     if (tid == 0 && useGravityCounters) {
         atomicAdd(&iclose, close);
         atomicAdd(&idirect, direct);
-        atomicAdd(&inparts, nsink);
+        atomicAdd(&inparts, numberSinks);
     }
 
     __syncwarp();

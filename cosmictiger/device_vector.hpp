@@ -20,9 +20,9 @@
 #ifndef DEVICE_VECTOR_HPP_
 #define DEVICE_VECTOR_HPP_
 
-#include <cosmictiger/cuda_mem.hpp>
+#include <cosmictiger/cuda_memory.hpp>
 
-struct Threadid {
+struct ThreadIndex {
     CUDA_EXPORT
     inline bool operator==(int const tid) const {
 #ifdef __CUDA_ARCH__
@@ -41,7 +41,7 @@ struct Threadid {
     }
 };
 
-struct Blocksz {
+struct BlockSize {
     CUDA_EXPORT
     inline operator int() const {
 #ifdef __CUDA_ARCH__
@@ -56,13 +56,13 @@ template <class T>
 class DeviceVector {
     T* ptr_;
     T* newPtr_;
-    int sz_;
-    int cap_;
+    int size_;
+    int capacity_;
 
     CUDA_EXPORT
     inline void construct(int a, int b) {
-        Threadid tid;
-        Blocksz bsz;
+        ThreadIndex tid;
+        BlockSize bsz;
         syncthreads();
         for (int i = a + tid; i < b; i += (int) bsz) {
             new (ptr_ + i) T;
@@ -72,8 +72,8 @@ class DeviceVector {
 
     CUDA_EXPORT
     inline void destruct(int a, int b) {
-        Threadid tid;
-        Blocksz bsz;
+        ThreadIndex tid;
+        BlockSize bsz;
         syncthreads();
         for (int i = a + tid; i < b; i += (int) bsz) {
             (ptr_ + i)->~T();
@@ -83,18 +83,18 @@ class DeviceVector {
 
     CUDA_EXPORT
     inline void initialize() {
-        Threadid tid;
+        ThreadIndex tid;
         syncthreads();
         if (tid == 0) {
-            sz_ = 0;
-            cap_ = 0;
+            size_ = 0;
+            capacity_ = 0;
             ptr_ = nullptr;
         }
         syncthreads();
     }
     CUDA_EXPORT
     inline void destroy() {
-        Threadid tid;
+        ThreadIndex tid;
         syncthreads();
         if (tid == 0) {
             if (ptr_) {
@@ -107,19 +107,19 @@ class DeviceVector {
 public:
     CUDA_EXPORT
     inline int capacity() const {
-        return cap_;
+        return capacity_;
     }
     CUDA_EXPORT
     inline void swap(DeviceVector& other) {
-        auto const optr = other.ptr_;
-        auto const ocap = other.cap_;
-        auto const osz = other.sz_;
+        auto const previousData = other.ptr_;
+        auto const previousCapacity = other.capacity_;
+        auto const previousSize = other.size_;
         other.ptr_ = ptr_;
-        other.cap_ = cap_;
-        other.sz_ = sz_;
-        ptr_ = optr;
-        cap_ = ocap;
-        sz_ = osz;
+        other.capacity_ = capacity_;
+        other.size_ = size_;
+        ptr_ = previousData;
+        capacity_ = previousCapacity;
+        size_ = previousSize;
     }
     CUDA_EXPORT
     inline T* begin() {
@@ -127,7 +127,7 @@ public:
     }
     CUDA_EXPORT
     inline T* end() {
-        return ptr_ + sz_;
+        return ptr_ + size_;
     }
     CUDA_EXPORT
     inline DeviceVector() {
@@ -157,9 +157,9 @@ public:
         swap(other);
     }
     CUDA_EXPORT
-    inline DeviceVector(int sz0) {
+    inline DeviceVector(int initialSize) {
         initialize();
-        resize(sz0);
+        resize(initialSize);
     }
     CUDA_EXPORT
     inline ~DeviceVector() {
@@ -174,66 +174,66 @@ public:
         return ptr_;
     }
     CUDA_EXPORT
-    inline void resize(int newSz) {
-        Threadid tid;
-        destruct(newSz, sz_);
-        auto const osz = sz_;
-        if (newSz <= cap_) {
+    inline void resize(int newSize) {
+        ThreadIndex tid;
+        destruct(newSize, size_);
+        auto const previousSize = size_;
+        if (newSize <= capacity_) {
             syncthreads();
             if (tid == 0) {
-                sz_ = newSz;
+                size_ = newSize;
             }
             syncthreads();
         } else {
             syncthreads();
-            int newCap = 1024 / sizeof(T);
-            if (newCap < 1) {
-                newCap = 1;
+            int newCapacity = 1024 / sizeof(T);
+            if (newCapacity < 1) {
+                newCapacity = 1;
             }
             if (tid == 0) {
-                while (newCap < newSz) {
-                    newCap *= 2;
+                while (newCapacity < newSize) {
+                    newCapacity *= 2;
                 }
-                newPtr_ = (T*) cudaAllocate(sizeof(T) * newCap);
+                newPtr_ = (T*) cudaAllocate(sizeof(T) * newCapacity);
                 if (newPtr_ == nullptr) {
-                    PRINT("OOM in device_vector while requesting %i! \n", newCap);
+                    PRINT("OOM in device_vector while requesting %i! \n", newCapacity);
                     ALWAYS_ASSERT(false);
                 }
             }
             syncthreads();
             if (ptr_) {
-                copyCudaMemory(newPtr_, ptr_, sizeof(T) * sz_);
+                copyCudaMemory(newPtr_, ptr_, sizeof(T) * size_);
             }
             syncthreads();
             destroy();
             if (tid == 0) {
                 ptr_ = newPtr_;
-                cap_ = newCap;
-                sz_ = newSz;
+                capacity_ = newCapacity;
+                size_ = newSize;
             }
             syncthreads();
         }
-        construct(osz, sz_);
+        construct(previousSize, size_);
     }
     CUDA_EXPORT
     inline T& back() {
-        return ptr_[sz_ - 1];
+        return ptr_[size_ - 1];
     }
     CUDA_EXPORT
     inline T const& back() const {
-        return ptr_[sz_ - 1];
+        return ptr_[size_ - 1];
     }
     CUDA_EXPORT
     inline void popBack() {
-        Threadid tid;
+        ThreadIndex tid;
         if (tid == 0) {
-            sz_--;
+            size_--;
         }
         syncthreads();
     }
     CUDA_EXPORT
     inline void pushBack(T const& item) {
-        Threadid tid;
+        ThreadIndex tid;
         resize(size() + 1);
         if (tid == 0) {
             back() = item;
@@ -242,7 +242,7 @@ public:
     }
     CUDA_EXPORT
     inline void pushBack(T&& item) {
-        Threadid tid;
+        ThreadIndex tid;
         resize(size() + 1);
         if (tid == 0) {
             back() = std::move(item);
@@ -251,13 +251,13 @@ public:
     }
     CUDA_EXPORT
     inline int size() const {
-        return sz_;
+        return size_;
     }
     CUDA_EXPORT
     inline T& operator[](int i) {
 #ifdef CHECK_BOUNDS
-        if (i >= sz_) {
-            PRINT("A) Bound exceeded in device_vector %i %i %i\n", i, sz_, sizeof(T));
+        if (i >= size_) {
+            PRINT("A) Bound exceeded in device_vector %i %i %i\n", i, size_, sizeof(T));
             ALWAYS_ASSERT(false);
         }
 #endif
@@ -266,8 +266,8 @@ public:
     CUDA_EXPORT
     inline T const& operator[](int i) const {
 #ifdef CHECK_BOUNDS
-        if (i >= sz_) {
-            PRINT("B) Bound exceeded in device_vector %i %i %i\n", i, sz_, sizeof(T));
+        if (i >= size_) {
+            PRINT("B) Bound exceeded in device_vector %i %i %i\n", i, size_, sizeof(T));
             ALWAYS_ASSERT(false);
         }
 #endif
@@ -275,7 +275,7 @@ public:
     }
     template <class A>
     void serialize(A&& arc, unsigned) {
-        int size = sz_;
+        int size = size_;
         arc & size;
         resize(size);
         for (int i = 0; i < size; i++) {
@@ -284,6 +284,6 @@ public:
     }
 };
 
-#include <cosmictiger/cuda_mem.hpp>
+#include <cosmictiger/cuda_memory.hpp>
 
 #endif /* DEVICE_VECTOR_HPP_ */

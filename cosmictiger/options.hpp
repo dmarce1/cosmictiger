@@ -54,7 +54,7 @@ struct Options {
     int lcMapSize;
     int minGroup;
     int sliceRes;
-    int nsteps;
+    int numberSteps;
     double lcB;
     double sliceSize;
     double linkLen;
@@ -81,7 +81,7 @@ struct Options {
     double y0;
     double neff;
     double omegaK;
-    size_t nparts;
+    size_t numberParticles;
     std::string configFile;
     std::string test;
     std::string lcDir;
@@ -155,7 +155,7 @@ struct Options {
         arc & gcentral;
         arc & hcentral;
         arc & closePack;
-        arc & nparts;
+        arc & numberParticles;
         arc & useGlass;
         arc & createGlass;
         arc & gadget4Restart;
@@ -165,7 +165,7 @@ struct Options {
         arc & omegaK;
         arc & omegaLam;
         arc & bucketSize;
-        arc & nsteps;
+        arc & numberSteps;
         arc & nfour;
         arc & cuda;
         arc & doLc;

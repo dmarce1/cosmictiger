@@ -22,7 +22,7 @@
 
 #include <cosmictiger/chemistry.hpp>
 #include <cosmictiger/constants.hpp>
-#include <cosmictiger/cuda_mem.hpp>
+#include <cosmictiger/cuda_memory.hpp>
 #include <cosmictiger/cuda_reduce.hpp>
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/device_vector.hpp>
@@ -99,7 +99,7 @@ struct SphRunCudaData {
     float* shearSnk;
     SphRecord1* rec1Snk;
     SphRecord2* rec2Snk;
-    PartInt* dmIndexSnk;
+    ParticleInteger* dmIndexSnk;
     float* gxSnk;
     float* gySnk;
     float* gzSnk;
@@ -108,7 +108,7 @@ struct SphRunCudaData {
     SphRecord6* rec6Snk;
     float codeDifToCgs;
     float n;
-    int nselfs;
+    int numberTargetNodes;
     SphTreeNode* trees;
     int* selfs;
     int* neighbors;
@@ -148,17 +148,20 @@ struct SphReduction {
     float dtinvOmega;
 };
 
-SphRunReturn sphRunCuda(SphRunParams params, SphRunCudaData data, cudaStream_t stream);
+SphRunReturn sphRunCuda(SphRunParameters params, SphRunCudaData data, cudaStream_t stream);
 
 #ifdef __CUDACC__
 
-__global__ void sphCudaPrehydro1(SphRunParams params, SphRunCudaData data, SphReduction* reduce);
-__global__ void sphCudaPrehydro2(SphRunParams params, SphRunCudaData data, SphReduction* reduce);
-__global__ void sphCudaAux(SphRunParams params, SphRunCudaData data, SphReduction* reduce);
-__global__ void sphCudaCondInit(SphRunParams params, SphRunCudaData data, SphReduction* reduce);
-__global__ void sphCudaHydro(SphRunParams params, SphRunCudaData data, SphReduction* reduce);
-__global__ void sphCudaConduction(SphRunParams params, SphRunCudaData data, SphReduction* reduce);
-__global__ void sphCudaRungs(SphRunParams params, SphRunCudaData data, SphReduction* reduce);
+__global__ void sphCudaPrehydro1(
+    SphRunParameters params, SphRunCudaData data, SphReduction* reduce);
+__global__ void sphCudaPrehydro2(
+    SphRunParameters params, SphRunCudaData data, SphReduction* reduce);
+__global__ void sphCudaAux(SphRunParameters params, SphRunCudaData data, SphReduction* reduce);
+__global__ void sphCudaCondInit(SphRunParameters params, SphRunCudaData data, SphReduction* reduce);
+__global__ void sphCudaHydro(SphRunParameters params, SphRunCudaData data, SphReduction* reduce);
+__global__ void sphCudaConduction(
+    SphRunParameters params, SphRunCudaData data, SphReduction* reduce);
+__global__ void sphCudaRungs(SphRunParameters params, SphRunCudaData data, SphReduction* reduce);
 #endif
 
 struct SoftlensRecord {

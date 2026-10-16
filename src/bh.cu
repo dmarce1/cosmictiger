@@ -2,7 +2,7 @@
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/cuda_reduce.hpp>
 #include <cosmictiger/device_vector.hpp>
-#include <cosmictiger/fixedcapvec.hpp>
+#include <cosmictiger/fixed_capacity_vector.hpp>
 #include <cosmictiger/gravity.hpp>
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/stack_vector.hpp>
@@ -33,7 +33,7 @@ struct BhShmem {
 
 __global__ void bhTreeEvaluateKernel(BhTreeNode const* treeNodes, int const* sinkBuckets,
     float* phi, Array<float, NDIM> const* parts, float theta, float hsoft, float gm,
-    int* nextSinkBucket, int nsinks) {
+    int* nextSinkBucket, int numberSinks) {
     int const tid = threadIdx.x;
     int const bid = blockIdx.x;
     __shared__ BhShmem shmem;
@@ -47,7 +47,7 @@ __global__ void bhTreeEvaluateKernel(BhTreeNode const* treeNodes, int const* sin
     __syncwarp();
     __shared__ BhWorkspace ws;
     new (&ws) BhWorkspace();
-    while (si < nsinks) {
+    while (si < numberSinks) {
         int sinkIndex = sinkBuckets[si];
         auto& checklist = ws.checklist;
         auto& nextlist = ws.nextlist;
@@ -198,7 +198,7 @@ __global__ void bhTreeEvaluateKernel(BhTreeNode const* treeNodes, int const* sin
 
 __global__ void bhTreeEvaluatePointsKernel(BhTreeNode const* treeNodes, float* phi,
     Array<float, NDIM> const* parts, Array<float, NDIM> const* sinks, float theta, float hsoft,
-    float gm, int* nextSink, int nsinks) {
+    float gm, int* nextSink, int numberSinks) {
     int const tid = threadIdx.x;
     int const bid = blockIdx.x;
     __shared__ int si;
@@ -208,7 +208,7 @@ __global__ void bhTreeEvaluatePointsKernel(BhTreeNode const* treeNodes, float* p
     __syncwarp();
     __shared__ BhWorkspace ws;
     new (&ws) BhWorkspace();
-    while (si < nsinks) {
+    while (si < numberSinks) {
         Array<float, NDIM> const& sink = sinks[si];
         auto& checklist = ws.checklist;
         auto& nextlist = ws.nextlist;
@@ -357,18 +357,18 @@ DeviceVector<float> bhEvaluatePotentialGpu(DeviceVector<BhTreeNode> const& devTr
     BhWorkspace* workspaces;
     int* nextSinkBucket;
     int zero = 0;
-    int nblocks;
+    int numberBlocks;
     Timer tm1;
     CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &nblocks, (void const*) bhTreeEvaluateKernel, WARP_SIZE, sizeof(BhShmem)));
-    nblocks *= cudaSmpCount();
-    nblocks = std::min(nblocks, devSinkBuckets.size());
-    //	nblocks *= cuda_smp_count();
+        &numberBlocks, (void const*) bhTreeEvaluateKernel, WARP_SIZE, sizeof(BhShmem)));
+    numberBlocks *= cudaSmpCount();
+    numberBlocks = std::min(numberBlocks, devSinkBuckets.size());
+    //	numberBlocks *= cuda_smp_count();
     nextSinkBucket = (int*) cudaAllocate(sizeof(int));
     *nextSinkBucket = 0;
     tm1.start();
     DeviceVector<float> devPhi(devX.size());
-    bhTreeEvaluateKernel<<<nblocks, WARP_SIZE, 0, stream>>>(devTreeNodes.data(),
+    bhTreeEvaluateKernel<<<numberBlocks, WARP_SIZE, 0, stream>>>(devTreeNodes.data(),
         devSinkBuckets.data(), devPhi.data(), devX.data(), theta, hsoft, gm, nextSinkBucket,
         devSinkBuckets.size());
     synchronizeCudaStream(stream);
@@ -384,17 +384,17 @@ DeviceVector<float> bhEvaluatePotentialPointsGpu(DeviceVector<BhTreeNode> const&
     auto stream = cudaGetStream();
     int* nextSink;
     int zero = 0;
-    int nblocks;
+    int numberBlocks;
     Timer tm1;
     CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &nblocks, (void const*) bhTreeEvaluateKernel, WARP_SIZE, sizeof(BhShmem)));
-    nblocks *= cudaSmpCount();
-    nblocks = std::max(1, std::min(nblocks, devY.size() / BH_BUCKET_SIZE));
+        &numberBlocks, (void const*) bhTreeEvaluateKernel, WARP_SIZE, sizeof(BhShmem)));
+    numberBlocks *= cudaSmpCount();
+    numberBlocks = std::max(1, std::min(numberBlocks, devY.size() / BH_BUCKET_SIZE));
     nextSink = (int*) cudaAllocate(sizeof(int));
     *nextSink = 0;
     tm1.start();
     DeviceVector<float> devPhi(devY.size());
-    bhTreeEvaluatePointsKernel<<<nblocks, WARP_SIZE, 0, stream>>>(devTreeNodes.data(),
+    bhTreeEvaluatePointsKernel<<<numberBlocks, WARP_SIZE, 0, stream>>>(devTreeNodes.data(),
         devPhi.data(), devX.data(), devY.data(), theta, hsoft, gm, nextSink, devY.size());
     synchronizeCudaStream(stream);
     tm1.stop();

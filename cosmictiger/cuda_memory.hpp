@@ -33,9 +33,9 @@ inline void syncthreads() {
 #define CUDA_MEM_STACK_SIZE (1024 * 1024)
 #define CUDA_MEM_NBIN 32
 
-using CudaMemInt = uint64_t;
+using CudaMemoryInteger = uint64_t;
 
-class CudaMem {
+class CudaMemory {
     Array<Array<char*, CUDA_MEM_STACK_SIZE>, CUDA_MEM_NBIN> q_;
     Array<long long, CUDA_MEM_NBIN> qin_;
     Array<long long, CUDA_MEM_NBIN> qout_;
@@ -54,12 +54,12 @@ public:
     void* allocate(size_t sz);
     CUDA_EXPORT
     void free(void* ptr);
-    CudaMem(size_t heapSize);
-    ~CudaMem();
+    CudaMemory(size_t heapSize);
+    ~CudaMemory();
     void reset();
 };
 
-void cudaMemInit(size_t heapSize);
+void cudaMemoryInitialize(size_t heapSize);
 CUDA_EXPORT void* cudaAllocate(size_t sz);
 CUDA_EXPORT void cudaRelease(void* ptr);
 CUDA_EXPORT void copyCudaMemory(void* d, void* s, int sz);
