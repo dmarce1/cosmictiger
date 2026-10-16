@@ -112,20 +112,20 @@ struct LegacyOptionsLayout {
     double beta{};
     double viscosityEpsilon{};
     double alphaDecay{};
-    double gneighborNumber{};
-    double sneighborNumber{};
+    double darkMatterNeighborNumber{};
+    double sphNeighborNumber{};
     double hmin{};
     double hmax{};
     double damping{};
     double sigma8C{};
-    double dmMass{};
+    double darkMatterMass{};
     double sphMass{};
     double cfl{};
     double rho0B{};
     double rho0C{};
     double gamma{};
-    double gy{};
-    double gcentral{};
+    double yAcceleration{};
+    double centralAcceleration{};
     double hcentral{};
 };
 

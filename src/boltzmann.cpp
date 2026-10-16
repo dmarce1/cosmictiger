@@ -257,7 +257,7 @@ void einsteinBoltzmann(
     }
 }
 
-void einsteinBoltzmannInterpolationFunction(InterpolationFunctor<double>* dmKFunc,
+void einsteinBoltzmannInterpolationFunction(InterpolationFunctor<double>* darkMatterPowerFunction,
     InterpolationFunctor<double>* baryKFunc, CosState* u, ZeroOrderUniverse* uni, double kmin,
     double kmax, double norm, int n, double astart, double astop, bool cont, double ns) {
     double dlogk = 1.0e-2;
@@ -276,7 +276,7 @@ void einsteinBoltzmannInterpolationFunction(InterpolationFunctor<double>* dmKFun
     }
     hpx::wait_all(futs.begin(), futs.end());
 
-    std::vector<double> dmK(n), baryK(n);
+    std::vector<double> darkMatterPower(n), baryK(n);
     double oc = uni->params.omegaC;
     double ob = uni->params.omegaB;
     double om = oc + ob;
@@ -290,11 +290,12 @@ void einsteinBoltzmannInterpolationFunction(InterpolationFunctor<double>* dmKFun
     for (int i = 0; i < n; i++) {
         double k = ks[i];
         double eps = k / (astop * h);
-        dmK[i] = sqr(u[i][deltaci]);
+        darkMatterPower[i] = sqr(u[i][deltaci]);
         baryK[i] = sqr(u[i][deltabi]);
         //		vel_k[i] = sqr((ob * (eps * U[i][thetabi] + (double) 0.5 * U[i][hdoti]) + oc *
         //((double) 0.5 * U[i][hdoti]))); 	printf("%e %e\n", k, vel_k[i]);
     }
-    buildInterpolationFunction(dmKFunc, dmK, (double) exp(logkmin), (double) exp(logkmax));
+    buildInterpolationFunction(
+        darkMatterPowerFunction, darkMatterPower, (double) exp(logkmin), (double) exp(logkmax));
     buildInterpolationFunction(baryKFunc, baryK, (double) exp(logkmin), (double) exp(logkmax));
 }

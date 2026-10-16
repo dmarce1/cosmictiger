@@ -31,6 +31,7 @@
 #include <silo.h>
 
 #include <cosmictiger/constants.hpp>
+#include <cosmictiger/gravity.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/particles.hpp>
@@ -78,9 +79,54 @@ std::string readUnitsOutputText(DBfile* file, std::string const& name) {
 
 double readUnitsOutputScalar(DBfile* file, std::string const& name) {
     requireUnitsOutput(DBGetVarType(file, name.c_str()) == DB_DOUBLE, name + " scalar datatype");
+    requireUnitsOutput(DBGetVarLength(file, name.c_str()) == 1, name + " scalar length");
     double value;
     requireUnitsOutput(DBReadVar(file, name.c_str(), &value) >= 0, name + " read");
     return value;
+}
+
+int readUnitsOutputInteger(DBfile* file, std::string const& name) {
+    requireUnitsOutput(DBGetVarType(file, name.c_str()) == DB_INT, name + " integer datatype");
+    requireUnitsOutput(DBGetVarLength(file, name.c_str()) == 1, name + " scalar length");
+    int value;
+    requireUnitsOutput(DBReadVar(file, name.c_str(), &value) >= 0, name + " read");
+    return value;
+}
+
+void checkUnitsOutputCommandLine(DBfile* file) {
+    requireUnitsOutputClose(
+        readUnitsOutputScalar(file, "cli/hydro/viscosityAlpha"), 1.75, "scalar viscosity alpha");
+    requireUnitsOutputClose(
+        readUnitsOutputScalar(file, "cli/gravity/softening"), 0.125, "CLI softening units");
+    requireUnitsOutputClose(
+        readUnitsOutputScalar(file, "cli/gravity/timestepEta"), 0.3, "CLI timestep eta");
+    requireUnitsOutputClose(
+        readUnitsOutputScalar(file, "cli/hydro/minSupportRadius"), 0.2, "CLI minimum support");
+    requireUnitsOutputClose(
+        readUnitsOutputScalar(file, "cli/hydro/maxSupportRadius"), 0.4, "CLI maximum support");
+    requireUnitsOutputClose(readUnitsOutputScalar(file, "cli/units/massSolar"),
+        3.0e33 / constants::kM0, "CLI solar mass units");
+    requireUnitsOutput(readUnitsOutputInteger(file, "cli/hydro/enabled") == 1,
+        "boolean option stored as scalar integer");
+    requireUnitsOutput(readUnitsOutputInteger(file, "cli/output/siloInterval") == 1,
+        "integer option stored as scalar integer");
+    requireUnitsOutput(readUnitsOutputText(file, "cli/configuration") == "input with spaces.ini",
+        "configuration path preserves spaces");
+    requireUnitsOutput(readUnitsOutputText(file, "cli/output/units") == getOptions().outputUnits &&
+            readUnitsOutputText(file, "cli/output/frame") == getOptions().outputFrame,
+        "effective current output options");
+    requireUnitsOutput(
+        readUnitsOutputText(file, "cli/initial/gadget4Restart").empty(), "empty string option");
+    int const argc = readUnitsOutputInteger(file, "cli/argc");
+    requireUnitsOutput(argc > 1, "original process argument count");
+    bool foundHpxThreads = false;
+    bool foundTest = false;
+    for (int i = 0; i < argc; i++) {
+        auto const argument = readUnitsOutputText(file, "cli/argv/arg_" + std::to_string(i));
+        foundHpxThreads = foundHpxThreads || argument == "--hpx:threads=2";
+        foundTest = foundTest || argument == "--run.test=unitsOutput";
+    }
+    requireUnitsOutput(foundHpxThreads && foundTest, "original HPX and application arguments");
 }
 
 void checkUnitsOutputField(
@@ -99,6 +145,8 @@ void checkUnitsOutputField(
 void checkConvertedUnitsOutput(DBfile* file, bool cosmological, bool lab) {
     std::string const path =
         std::string(cosmological ? "cosmological/" : "cgs/") + (lab ? "lab/" : "comoving/");
+    requireUnitsOutput(
+        !DBInqVarExists(file, (path + "alpha").c_str()), "converted output omits particle alpha");
     double const a = 0.25;
     double const hubble = 0.7;
     double const length = 2.0e24;
@@ -207,7 +255,7 @@ void unitsOutputParticleFixture(bool initialize) {
             particlesType(i) = i == 2 ? SPH_TYPE : DARK_MATTER_TYPE;
             particlesCatIndex(i) = i == 2 ? 0 : NO_INDEX;
         }
-        sphParticlesDmIndex(0) = 2;
+        sphParticlesParticleIndex(0) = 2;
         sphParticlesIsstar(0) = false;
         sphParticlesSmoothingLength(0) = 0.03125;
         sphParticlesRho(0) = 8.0;
@@ -244,16 +292,25 @@ void unitsOutputTest() {
     options.codeToG = 3.0e33;
     options.codeToS = 5.0e15;
     options.hubble = 0.7;
-    options.dmMass = 0.75;
+    options.darkMatterMass = 0.75;
     options.sphMass = 0.25;
     options.outputUnits = "code";
     options.outputFrame = "comoving";
+    options.alpha0 = 1.75;
+    options.hsoft = 0.125 * selfPhi() / std::pow(double(options.numberOfParticles), 1.0 / NDIM);
+    options.eta = 0.3 / sqrt(selfPhi());
+    options.hmin = 0.2 / options.particlesPerDimension;
+    options.hmax = 0.4 / options.particlesPerDimension;
+    options.configFile = "input with spaces.ini";
     setOptions(options);
     unitsOutputParticleFixture(true);
     viewConfigure();
     viewOutputViews(0, 0.25, true);
     {
         auto file = openUnitsOutput(0);
+        checkUnitsOutputCommandLine(file.get());
+        requireUnitsOutput(
+            !DBInqVarExists(file.get(), "alpha"), "legacy output omits particle alpha");
         UnitsOutputMesh mesh(DBGetPointmesh(file.get(), "dark_matter"), DBFreePointmesh);
         requireUnitsOutput(bool(mesh) && mesh->datatype == DB_FLOAT && mesh->nels == 2 * hpxSize(),
             "legacy mesh schema");
@@ -277,6 +334,7 @@ void unitsOutputTest() {
     viewOutputViews(1, 0.25, true);
     {
         auto file = openUnitsOutput(1);
+        checkUnitsOutputCommandLine(file.get());
         for (bool cosmological : {false, true}) {
             for (bool lab : {false, true}) {
                 checkConvertedUnitsOutput(file.get(), cosmological, lab);
@@ -291,6 +349,7 @@ void unitsOutputTest() {
     viewOutputViews(2, 0.25, true);
     {
         auto file = openUnitsOutput(2);
+        checkUnitsOutputCommandLine(file.get());
         checkConvertedUnitsOutput(file.get(), false, true);
         requireUnitsOutput(!DBInqVarExists(file.get(), "cgs/comoving/gas") &&
                 !DBInqVarExists(file.get(), "cosmological/lab/gas"),
@@ -302,6 +361,7 @@ void unitsOutputTest() {
     viewOutputViews(3, 0.25, true);
     {
         auto file = openUnitsOutput(3);
+        checkUnitsOutputCommandLine(file.get());
         checkConvertedUnitsOutput(file.get(), true, false);
         requireUnitsOutput(!DBInqVarExists(file.get(), "cosmological/lab/gas") &&
                 !DBInqVarExists(file.get(), "cgs/comoving/gas"),

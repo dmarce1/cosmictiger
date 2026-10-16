@@ -938,7 +938,7 @@ SphRunReturn SphRunWorkspace::toGpu() {
         sizeof(int) * hostSelflist.size(), cudaMemcpyHostToDevice, stream));
     CUDA_CHECK(cudaMemcpyAsync(cudaData.neighbors, hostNeighbors.data(),
         sizeof(int) * hostNeighbors.size(), cudaMemcpyHostToDevice, stream));
-    cudaData.dmIndexSnk = &sphParticlesDmIndex(0);
+    cudaData.sinkParticleIndices = &sphParticlesParticleIndex(0);
     cudaData.saSnk = &sphParticlesSemiactive(0);
     cudaData.rungsSnk = &particlesRung(0);
     cudaData.omegaSnk = &sphParticlesOmega(0);
@@ -965,11 +965,11 @@ SphRunReturn SphRunWorkspace::toGpu() {
     cudaData.deint2Snk = &sphParticlesDeint2(0);
 #endif
     cudaData.dcoldMass = &sphParticlesDcoldMass(0);
-    cudaData.gxSnk = &sphParticlesGforce(XDIM, 0);
-    cudaData.gySnk = &sphParticlesGforce(YDIM, 0);
-    cudaData.gzSnk = &sphParticlesGforce(ZDIM, 0);
+    cudaData.gxSnk = &sphParticlesGravityAcceleration(XDIM, 0);
+    cudaData.gySnk = &sphParticlesGravityAcceleration(YDIM, 0);
+    cudaData.gzSnk = &sphParticlesGravityAcceleration(ZDIM, 0);
     cudaData.defGamma = getOptions().gamma;
-    cudaData.gsoft = getOptions().hsoft;
+    cudaData.gravitySofteningLength = getOptions().hsoft;
     cudaData.numberOfTargetNodes = hostSelflist.size();
     cudaData.chemistry = getOptions().chem;
     cudaData.convergedSnk = &sphParticlesConverged(0);
@@ -978,7 +978,7 @@ SphRunReturn SphRunWorkspace::toGpu() {
     cudaData.rec5Snk = &sphParticlesRec5(0);
     cudaData.rec6Snk = &sphParticlesRec6(0);
     cudaData.codeDifToCgs = sqr(getOptions().codeToCm) / getOptions().codeToS;
-    cudaData.gcentral = getOptions().gcentral;
+    cudaData.centralAcceleration = getOptions().centralAcceleration;
     cudaData.hcentral = getOptions().hcentral;
     cudaData.g = getOptions().gm;
     cudaData.y0 = getOptions().y0;
@@ -988,7 +988,7 @@ SphRunReturn SphRunWorkspace::toGpu() {
     //	PRINT("HSTAR = %e %e  %e  %e  \n", cuda_data.hstar0, rho_star_phys_cgs, rho_star_phys_code,
     // rho_star_co_code);
     cudaData.m = getOptions().sphMass;
-    cudaData.n = getOptions().sneighborNumber;
+    cudaData.n = getOptions().sphNeighborNumber;
     cudaData.kappa0 = 1.31 * pow(3.0, 1.5) * pow(constants::kB, 3.5) / 4.0 / sqrt(M_PI) /
         pow(constants::kE, 4) / sqrt(constants::kMe);
     //	cuda_data.dchem_snk = &sph_particles_dchem(0);

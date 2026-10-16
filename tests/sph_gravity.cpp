@@ -51,7 +51,7 @@ void initializePair(double separation) {
         particlesType(i) = i == 0 ? DARK_MATTER_TYPE : SPH_TYPE;
         particlesCatIndex(i) = i == 0 ? NO_INDEX : 0;
     }
-    sphParticlesDmIndex(0) = 1;
+    sphParticlesParticleIndex(0) = 1;
     sphParticlesSmoothingLength(0) = 0.02;
 #ifdef ENTROPY
     sphParticlesR2[0].A = 4.0;
@@ -60,7 +60,7 @@ void initializePair(double separation) {
 #endif
     sphParticlesR1[0].frac[0] = 0.75;
     sphParticlesR5[0].dfrac[0] = 0.125;
-    sphParticlesGforce(XDIM, 0) = 0.0;
+    sphParticlesGravityAcceleration(XDIM, 0) = 0.0;
 }
 TreeId findLeaf(TreeId node, ParticleInteger particle) {
     auto const* ptr = treeGetNode(node);
@@ -78,7 +78,7 @@ TreeId findLeaf(TreeId node, ParticleInteger particle) {
 }
 void verifyMappings() {
     for (ParticleInteger k = 0; k < sphParticlesSize(); k++) {
-        auto const i = sphParticlesDmIndex(k);
+        auto const i = sphParticlesParticleIndex(k);
         if (i < 0 || i >= particlesSize() || !particlesIsSph(i) || particlesCatIndex(i) != k) {
             throw std::runtime_error("Gas category mapping was not preserved");
         }
@@ -112,7 +112,7 @@ void resetKickState() {
         particlesRung(i) = 1;
         for (int dim = 0; dim < NDIM; dim++) {
             particlesVel(dim, i) = particlesIsSph(i) ? 0.125 * (dim + 1) : 0.0;
-            particlesGforce(dim, i) = 0.0;
+            particlesGravityAcceleration(dim, i) = 0.0;
         }
         particlesPot(i) = 0.0;
     }
@@ -120,16 +120,16 @@ void resetKickState() {
 void verifyKick(double inverseCube, double inverseRadius, double separation) {
     for (ParticleInteger i = 0; i < particlesSize(); i++) {
         bool const gas = particlesIsSph(i);
-        double const sourceMass = gas ? getOptions().dmMass : getOptions().sphMass;
+        double const sourceMass = gas ? getOptions().darkMatterMass : getOptions().sphMass;
         double const acceleration =
             kGravityScale * (gas ? 1.0 : -1.0) * sourceMass * separation * inverseCube;
-        requireClose("kick acceleration", particlesGforce(XDIM, i), acceleration);
+        requireClose("kick acceleration", particlesGravityAcceleration(XDIM, i), acceleration);
         requireClose("kick potential with self mass removed", particlesPot(i),
             -kGravityScale * sourceMass * inverseRadius, 2e-4);
-        requireClose("transverse force", particlesGforce(YDIM, i), 0.0);
+        requireClose("transverse force", particlesGravityAcceleration(YDIM, i), 0.0);
         if (gas) {
-            requireClose("gas acceleration handoff", sphParticlesGforce(XDIM, particlesCatIndex(i)),
-                acceleration);
+            requireClose("gas acceleration handoff",
+                sphParticlesGravityAcceleration(XDIM, particlesCatIndex(i)), acceleration);
             for (int dim = 0; dim < NDIM; dim++) {
                 requireClose("gas velocity must not be gravity-kicked twice", particlesVel(dim, i),
                     0.125 * (dim + 1));
@@ -153,16 +153,16 @@ void verifySynchronizedDiagnostics(KickReturn const& result) {
     }
     double const gasMass = getOptions().sphMass;
     double const initialSpeed2 = 0.125 * 0.125 * (1.0 + 4.0 + 9.0);
-    requireClose("synchronized kinetic diagnostic", kinetic + result.dmKineticCorrection,
+    requireClose("synchronized kinetic diagnostic", kinetic + result.darkMatterKineticCorrection,
         0.5 * gasMass * initialSpeed2);
-    requireClose(
-        "synchronized x momentum", xMomentum + result.dmXMomentumCorrection, gasMass * 0.125);
-    requireClose(
-        "synchronized y momentum", yMomentum + result.dmYMomentumCorrection, gasMass * 0.25);
-    requireClose(
-        "synchronized z momentum", zMomentum + result.dmZMomentumCorrection, gasMass * 0.375);
-    requireClose("synchronized momentum norm", momentumNorm + result.dmMomentumNormCorrection,
-        gasMass * std::sqrt(initialSpeed2));
+    requireClose("synchronized x momentum", xMomentum + result.darkMatterXMomentumCorrection,
+        gasMass * 0.125);
+    requireClose("synchronized y momentum", yMomentum + result.darkMatterYMomentumCorrection,
+        gasMass * 0.25);
+    requireClose("synchronized z momentum", zMomentum + result.darkMatterZMomentumCorrection,
+        gasMass * 0.375);
+    requireClose("synchronized momentum norm",
+        momentumNorm + result.darkMatterMomentumNormCorrection, gasMass * std::sqrt(initialSpeed2));
 }
 
 void runPairCase(bool useCuda, bool softened) {
@@ -171,10 +171,10 @@ void runPairCase(bool useCuda, bool softened) {
     auto const built = treeCreate(TreeCreateParameters(0, 0.5, getOptions().hsoft));
     verifyMappings();
     requireClose("root mixed mass", treeGetNode(built.id)->mpos->multi[0], 1.0);
-    ParticleInteger const gas = sphParticlesDmIndex(0);
-    ParticleInteger const dm = 1 - gas;
+    ParticleInteger const gas = sphParticlesParticleIndex(0);
+    ParticleInteger const darkMatterIndex = 1 - gas;
     double const separation =
-        particlesPos(XDIM, dm).toDouble() - particlesPos(XDIM, gas).toDouble();
+        particlesPos(XDIM, darkMatterIndex).toDouble() - particlesPos(XDIM, gas).toDouble();
     double inverseCube = 1.0 / (separation * separation * separation);
     double inverseRadius = 1.0 / separation;
     if (softened) {
@@ -241,7 +241,7 @@ void runPairCase(bool useCuda, bool softened) {
     auto const cpuResult =
         kick(params, local, origin, built.id, Vector<TreeId>{built.id}, Vector<TreeId>{}, nullptr);
     requireClose("CPU kick total potential", cpuResult.pot,
-        -kGravityScale * getOptions().dmMass * getOptions().sphMass * inverseRadius, 2e-4);
+        -kGravityScale * getOptions().darkMatterMass * getOptions().sphMass * inverseRadius, 2e-4);
     verifyKick(inverseCube, inverseRadius, separation);
     verifySynchronizedDiagnostics(cpuResult);
 #ifdef USE_CUDA
@@ -270,7 +270,7 @@ void checkpointPair() {
     if (file == nullptr) {
         throw std::runtime_error("Cannot create temporary checkpoint");
     }
-    ParticleInteger const gas = sphParticlesDmIndex(0);
+    ParticleInteger const gas = sphParticlesParticleIndex(0);
     auto const position = particlesPos(XDIM, gas);
     particlesSave(file);
     particlesPos(XDIM, gas) = 0.9;
@@ -281,7 +281,7 @@ void checkpointPair() {
     verifyMappings();
     requireClose("checkpoint particle count", particlesSize(), 2);
     requireClose("checkpoint gas count", sphParticlesSize(), 1);
-    requireClose("checkpoint position", particlesPos(XDIM, sphParticlesDmIndex(0)).toDouble(),
+    requireClose("checkpoint position", particlesPos(XDIM, sphParticlesParticleIndex(0)).toDouble(),
         position.toDouble());
     requireClose("checkpoint hydro length", sphParticlesSmoothingLength(0), 0.02);
     requireClose("checkpoint composition", sphParticlesR1[0].frac[0], 0.75);
@@ -300,20 +300,20 @@ void initializeSphDomainRegression() {
     sphParticlesR5[0].dfrac[0] = 20.0 + target;
     sphParticlesR6[0].dvel[XDIM] = 30.0 + target;
     sphParticlesDv2[YDIM][0] = 40.0 + target;
-    sphParticlesG[ZDIM][0] = 50.0 + target;
+    sphParticlesGravityAccelerations[ZDIM][0] = 50.0 + target;
 }
 HPX_PLAIN_ACTION(initializeSphDomainRegression, InitializeSphDomainRegressionAction);
 void validateSphDomainRegression() {
     using namespace detail;
     verifyMappings();
     requireClose("migrated gas count", sphParticlesSize(), 1);
-    auto const gas = sphParticlesDmIndex(0);
+    auto const gas = sphParticlesParticleIndex(0);
     int const target = int(particlesPos(XDIM, gas).toDouble() * hpxSize());
     requireClose("migration alpha", sphParticlesR1[0].alpha, 10.0 + target);
     requireClose("migration chemistry stage", sphParticlesR5[0].dfrac[0], 20.0 + target);
     requireClose("migration velocity stage", sphParticlesR6[0].dvel[XDIM], 30.0 + target);
     requireClose("migration predicted velocity", sphParticlesDv2[YDIM][0], 40.0 + target);
-    requireClose("migration gravity", sphParticlesG[ZDIM][0], 50.0 + target);
+    requireClose("migration gravity", sphParticlesGravityAccelerations[ZDIM][0], 50.0 + target);
     Array<double, NDIM> position;
     for (ParticleInteger i = 0; i < particlesSize(); i++) {
         for (int dim = 0; dim < NDIM; dim++) {
@@ -353,7 +353,7 @@ void sphGravityTest() {
     opts.stars = false;
     opts.doGroups = false;
     opts.doTracers = false;
-    opts.dmMass = 0.75;
+    opts.darkMatterMass = 0.75;
     opts.sphMass = 0.25;
     opts.bucketSize = 1;
     opts.numberOfParticles = 2 * hpxSize();
@@ -364,7 +364,7 @@ void sphGravityTest() {
         runPairCase(useCuda, true);
         checkpointPair();
         sphParticlesResize(2);
-        auto const secondGas = sphParticlesDmIndex(1);
+        auto const secondGas = sphParticlesParticleIndex(1);
         for (int dim = 0; dim < NDIM; dim++) {
             particlesPos(dim, secondGas) = 0.75;
             particlesVel(dim, secondGas) = 0.0;

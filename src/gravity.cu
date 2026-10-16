@@ -130,7 +130,8 @@ __device__ void cudaGravityCpDirect(CudaKickData const& data, Expansion<float>& 
                     sizeof(Fixed32) * sz, barrier);
                 for (int j = tid; j < sz; j += WARP_SIZE) {
                     sourceMass[particleIndex + j] = data.sph ?
-                        (data.type[imin + j] == DARK_MATTER_TYPE ? data.dmMass : data.sphMass) :
+                        (data.type[imin + j] == DARK_MATTER_TYPE ? data.darkMatterMass :
+                                                                   data.sphMass) :
                         1.0f;
                 }
                 __syncwarp();
@@ -313,7 +314,8 @@ __device__ void cudaGravityPpDirect(CudaKickData const& data, TreeNode const& se
                     sizeof(Fixed32) * sz, barrier);
                 for (int j = tid; j < sz; j += WARP_SIZE) {
                     sourceMass[particleIndex + j] = data.sph ?
-                        (data.type[imin + j] == DARK_MATTER_TYPE ? data.dmMass : data.sphMass) :
+                        (data.type[imin + j] == DARK_MATTER_TYPE ? data.darkMatterMass :
+                                                                   data.sphMass) :
                         1.0f;
                 }
                 __syncwarp();
@@ -357,7 +359,7 @@ __device__ void cudaGravityPpDirect(CudaKickData const& data, TreeNode const& se
                         direct++;
                     } else {
                         close++;
-                        gsoft(r3inv, r1inv, r2, hinv, h2inv, h3inv, doPhi);
+                        gravitySofteningKernel(r3inv, r1inv, r2, hinv, h2inv, h3inv, doPhi);
                     }
                     r3inv *= sourceMass[j];
                     if (doPhi) {
@@ -392,7 +394,7 @@ __device__ void cudaGravityPpDirect(CudaKickData const& data, TreeNode const& se
                         direct++;
                     } else {
                         close++;
-                        gsoft(r3inv, r1inv, r2, hinv, h2inv, h3inv, doPhi);
+                        gravitySofteningKernel(r3inv, r1inv, r2, hinv, h2inv, h3inv, doPhi);
                     }
                     r3inv *= sourceMass[j];
                     if (doPhi) {

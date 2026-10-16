@@ -52,24 +52,24 @@ void kernelAdjustOptions(Options& opts) {
     h = kernelStddev(kernelW<double>);
     PRINT("kernel width = %e\n", h0 / h);
     //	opts.neighbor_number *= pow(h0 / h, 3);
-    opts.sphBucketSize = 8.0 / M_PI * opts.sneighborNumber;
+    opts.sphBucketSize = 8.0 / M_PI * opts.sphNeighborNumber;
 #ifdef KERNEL_CUBIC_SPLINE
     opts.cfl = 0.20;
     opts.eta = 0.17;
-    opts.gneighborNumber = 60;
-    opts.sneighborNumber = 60;
+    opts.darkMatterNeighborNumber = 60;
+    opts.sphNeighborNumber = 60;
 #endif
 #ifdef KERNEL_QUARTIC_SPLINE
     opts.cfl = 0.16;
     opts.eta = 0.15;
-    opts.gneighborNumber = 117;
-    opts.sneighborNumber = 117;
+    opts.darkMatterNeighborNumber = 117;
+    opts.sphNeighborNumber = 117;
 #endif
 #ifdef KERNEL_QUINTIC_SPLINE
     opts.cfl = 0.13;
     opts.eta = 0.14;
-    opts.gneighborNumber = 203;
-    opts.sneighborNumber = 203;
+    opts.darkMatterNeighborNumber = 203;
+    opts.sphNeighborNumber = 203;
 #endif
     PRINT("Setting:\n");
     PRINT("SPH Bucket size       = %i\n", opts.sphBucketSize);

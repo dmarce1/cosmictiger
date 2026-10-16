@@ -128,7 +128,8 @@ __global__ void sphCudaRungs(SphRunParameters params, SphRunCudaData data, SphRe
                 if (tid == 0) {
                     if (rungI < maxRungJ - MAX_RUNG_DIF) {
                         changes++;
-                        data.rungsSnk[data.dmIndexSnk[sinkIndex]] = maxRungJ - MAX_RUNG_DIF;
+                        data.rungsSnk[data.sinkParticleIndices[sinkIndex]] =
+                            maxRungJ - MAX_RUNG_DIF;
                     }
                 }
             }

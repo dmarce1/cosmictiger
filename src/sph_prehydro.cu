@@ -79,7 +79,7 @@ __global__ void sphCudaPrehydro1(
         for (int i = self.particleRange.first; i < self.particleRange.second; i++) {
             __syncthreads();
             int const sink = self.sinkParticleRange.first - self.particleRange.first + i;
-            bool const active = data.rungsSnk[data.dmIndexSnk[sink]] >= params.minRung;
+            bool const active = data.rungsSnk[data.sinkParticleIndices[sink]] >= params.minRung;
             if (active && !data.convergedSnk[sink]) {
                 Array<Fixed32, NDIM> position;
                 position[XDIM] = data.x[i];
@@ -158,7 +158,7 @@ __global__ void sphCudaPrehydro2(
         for (int i = self.particleRange.first; i < self.particleRange.second; i++) {
             __syncthreads();
             int const sink = self.sinkParticleRange.first - self.particleRange.first + i;
-            bool const active = data.rungsSnk[data.dmIndexSnk[sink]] >= params.minRung;
+            bool const active = data.rungsSnk[data.sinkParticleIndices[sink]] >= params.minRung;
             Array<Fixed32, NDIM> position;
             position[XDIM] = data.x[i];
             position[YDIM] = data.y[i];

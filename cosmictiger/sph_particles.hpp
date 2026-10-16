@@ -161,9 +161,11 @@ SPH_PARTICLES_EXTERN SphRecord2* sphParticlesR2;
 SPH_PARTICLES_EXTERN SphRecord5* sphParticlesR5;
 SPH_PARTICLES_EXTERN SphRecord6* sphParticlesR6;
 
-SPH_PARTICLES_EXTERN ParticleInteger* sphParticlesDm;        // dark matter index
+SPH_PARTICLES_EXTERN ParticleInteger*
+    sphParticlesParticleIndices;                             // index in the shared particle arrays
 SPH_PARTICLES_EXTERN Array<float*, NDIM> sphParticlesDv2;    // dvel_pred
-SPH_PARTICLES_EXTERN Array<float*, NDIM> sphParticlesG;      // dvel_pred
+SPH_PARTICLES_EXTERN Array<float*, NDIM>
+    sphParticlesGravityAccelerations;    // gravitational acceleration
 SPH_PARTICLES_EXTERN float* sphParticlesDv;
 SPH_PARTICLES_EXTERN float* sphParticlesKap;
 SPH_PARTICLES_EXTERN float* sphParticlesE0;
@@ -401,21 +403,21 @@ inline float& sphParticlesPressure(ParticleInteger index) {
     return sphParticlesPre[index];
 }
 
-inline ParticleInteger& sphParticlesDmIndex(ParticleInteger index) {
+inline ParticleInteger& sphParticlesParticleIndex(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
-    return sphParticlesDm[index];
+    return sphParticlesParticleIndices[index];
 }
 
 inline Fixed32& sphParticlesPos(int dim, int index) {
-    return particlesPos(dim, sphParticlesDmIndex(index));
+    return particlesPos(dim, sphParticlesParticleIndex(index));
 }
 
 inline float& sphParticlesVel(int dim, int index) {
-    return particlesVel(dim, sphParticlesDmIndex(index));
+    return particlesVel(dim, sphParticlesParticleIndex(index));
 }
 
 inline char& sphParticlesRung(int index) {
-    return particlesRung(sphParticlesDmIndex(index));
+    return particlesRung(sphParticlesParticleIndex(index));
 }
 
 #ifdef ENTROPY
@@ -476,9 +478,9 @@ inline float& sphParticlesDivv(ParticleInteger index) {
     return sphParticlesDv[index];
 }
 
-inline float& sphParticlesGforce(int dim, ParticleInteger index) {
+inline float& sphParticlesGravityAcceleration(int dim, ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
-    return sphParticlesG[dim][index];
+    return sphParticlesGravityAccelerations[dim][index];
 }
 
 inline float sphParticlesEkin(ParticleInteger index) {

@@ -33,6 +33,7 @@
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/options.hpp>
+#include <cosmictiger/options_metadata.hpp>
 #include <cosmictiger/safe_io.hpp>
 #include <cosmictiger/tree.hpp>
 #include <cosmictiger/view.hpp>
@@ -40,6 +41,8 @@
 #define SHOW(label, opt) show(label, opts.opt)
 
 namespace detail {
+
+static std::vector<std::string> commandLineArguments;
 
 bool isFiniteOption(double value) {
     // Keep option validation effective when the solver is built with -ffast-math.
@@ -90,6 +93,102 @@ void setOptions(Options const& opts) {
     }
     globalOpts = opts;
     hpx::wait_all(futs.begin(), futs.end());
+}
+
+void recordCommandLineArguments(int argc, char* argv[]) {
+    detail::commandLineArguments.clear();
+    for (int i = 0; i < argc; i++) {
+        detail::commandLineArguments.emplace_back(argv[i]);
+    }
+}
+
+std::vector<std::string> const& getCommandLineArguments() {
+    return detail::commandLineArguments;
+}
+
+std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
+    // Undo storage normalization without undoing current runtime overrides or caps.
+    // In particular, Plummer softening is reported in mean box particle spacings,
+    // and the maximum SPH support remains capped at half the periodic box.
+    double const softening =
+        options.hsoft * std::pow(double(options.numberOfParticles), 1.0 / NDIM) / selfPhi();
+    double const timestepEta = options.eta * sqrt(selfPhi());
+    return {
+        {"configuration", options.configFile},
+        {"run.test", options.test},
+        {"run.maxIterations", options.maxIter},
+        {"run.numberOfSteps", options.numberOfSteps},
+        {"run.minRung", options.minrung},
+        {"compute.cuda", options.cuda},
+        {"compute.bucketSize", options.bucketSize},
+        {"checkpoint.readIndex", options.readCheck},
+        {"checkpoint.intervalSeconds", options.checkFreq},
+        {"initial.gadget4Restart", options.gadget4Restart},
+        {"initial.useGlass", options.useGlass},
+        {"initial.createGlass", options.createGlass},
+        {"initial.plummer", options.plummer},
+        {"initial.plummerRadius", options.plummerR},
+        {"initial.closePack", options.closePack},
+        {"initial.usePowerFile", options.usePowerFile},
+        {"initial.twoLpt", options.twolpt},
+        {"initial.particlesPerDimension", options.particlesPerDimension},
+        {"output.silo", options.outputSilo},
+        {"output.siloInterval", options.outputSiloInterval},
+        {"output.directory", options.outputDirectory},
+        {"output.units", options.outputUnits},
+        {"output.frame", options.outputFrame},
+        {"output.xMin", options.outputXMin},
+        {"output.xMax", options.outputXMax},
+        {"output.yMin", options.outputYMin},
+        {"output.yMax", options.outputYMax},
+        {"output.zMin", options.outputZMin},
+        {"output.zMax", options.outputZMax},
+        {"analysis.power", options.doPower},
+        {"analysis.groups", options.doGroups},
+        {"analysis.tracers", options.doTracers},
+        {"analysis.tracerCount", options.tracerCount},
+        {"analysis.slice", options.doSlice},
+        {"analysis.views", options.doViews},
+        {"analysis.viewSize", options.viewSize},
+        {"analysis.sliceResolution", options.sliceRes},
+        {"lightcone.enabled", options.doLc},
+        {"lightcone.directory", options.lcDir},
+        {"lightcone.linkingLength", options.lcB},
+        {"lightcone.mapSize", options.lcMapSize},
+        {"gravity.enabled", options.gravity},
+        {"gravity.openingAngle", options.theta},
+        {"gravity.softening", softening},
+        {"gravity.timestepEta", timestepEta},
+        {"cosmology.startRedshift", options.z0},
+        {"cosmology.endRedshift", options.z1},
+        {"cosmology.omegaK", options.omegaK},
+        {"cosmology.omegaLambda", options.omegaLam},
+        {"cosmology.omegaB", options.omegaB},
+        {"cosmology.omegaC", options.omegaC},
+        {"cosmology.nEff", options.neff},
+        {"cosmology.thetaCmb", options.thetaCmb},
+        {"cosmology.heliumFraction", options.y0},
+        {"cosmology.sigma8", options.sigma8},
+        {"cosmology.hubble", options.hubble},
+        {"cosmology.spectralIndex", options.ns},
+        {"units.massSolar", options.codeToG / constants::kM0},
+        {"hydro.enabled", options.sph},
+        {"hydro.chemistry", options.chem},
+        {"hydro.conduction", options.conduction},
+        {"hydro.diffusion", options.diffusion},
+        {"hydro.yReflect", options.yreflect},
+        {"hydro.yAcceleration", options.yAcceleration},
+        {"hydro.viscosityAlpha", options.alpha0},
+        {"hydro.viscosityBeta", options.beta},
+        {"hydro.viscosityEpsilon", options.viscosityEpsilon},
+        {"hydro.gamma", options.gamma},
+        {"hydro.centralAcceleration", options.centralAcceleration},
+        {"hydro.centralSoftening", options.hcentral},
+        {"hydro.minSupportRadius", options.hmin * options.particlesPerDimension},
+        {"hydro.maxSupportRadius", options.hmax * options.particlesPerDimension},
+        {"hydro.neighborNumber", options.sphNeighborNumber},
+        {"hydro.cfl", options.cfl},
+    };
 }
 
 bool processOptions(int argc, char* argv[]) {
@@ -238,7 +337,7 @@ bool processOptions(int argc, char* argv[]) {
         "legacy diffusion; true is unsupported in the Monaghan SPH baseline")("hydro.yReflect",
         po::value<bool>(&opts.yreflect)->default_value(false),
         "legacy reflecting y boundary; true is currently unsupported")("hydro.yAcceleration",
-        po::value<double>(&opts.gy)->default_value(0.0),
+        po::value<double>(&opts.yAcceleration)->default_value(0.0),
         "uniform gravitational acceleration in the y direction")("hydro.viscosityAlpha",
         po::value<double>(&opts.alpha0)->default_value(1.0),
         "constant linear artificial-viscosity coefficient alpha")("hydro.viscosityBeta",
@@ -248,14 +347,15 @@ bool processOptions(int argc, char* argv[]) {
         "viscosity denominator regularization eta^2 / h_Monaghan^2")("hydro.gamma",
         po::value<double>(&opts.gamma)->default_value(5.0 / 3.0),
         "ideal-gas adiabatic index")("hydro.centralAcceleration",
-        po::value<double>(&opts.gcentral)->default_value(0.0), "magnitude of the central force")(
-        "hydro.centralSoftening", po::value<double>(&opts.hcentral)->default_value(0.01),
+        po::value<double>(&opts.centralAcceleration)->default_value(0.0),
+        "magnitude of the central force")("hydro.centralSoftening",
+        po::value<double>(&opts.hcentral)->default_value(0.01),
         "softening length for the central force")("hydro.minSupportRadius",
         po::value<double>(&opts.hmin)->default_value(1.0e-6),
         "minimum kernel support radius (2 h_Monaghan), in interparticle spacings")(
         "hydro.maxSupportRadius", po::value<double>(&opts.hmax)->default_value(1000.0),
         "maximum kernel support radius in interparticle spacings; capped at half the box")(
-        "hydro.neighborNumber", po::value<double>(&opts.sneighborNumber)->default_value(60),
+        "hydro.neighborNumber", po::value<double>(&opts.sphNeighborNumber)->default_value(60),
         "kernel-weighted neighbor target within the support sphere, including self")(
         "hydro.cfl", po::value<double>(&opts.cfl)->default_value(0.25), "Courant time-step factor");
 
@@ -346,7 +446,8 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.yreflect) {
         THROW_ERROR("hydro.yReflect=true is unsupported in the Monaghan SPH baseline\n");
     }
-    if (!detail::isFiniteOption(opts.gy) || !detail::isFiniteOption(opts.gcentral) ||
+    if (!detail::isFiniteOption(opts.yAcceleration) ||
+        !detail::isFiniteOption(opts.centralAcceleration) ||
         !detail::isFiniteOption(opts.hcentral) || opts.hcentral <= 0.0) {
         THROW_ERROR("hydro.yAcceleration and hydro.centralAcceleration must be finite; "
                     "hydro.centralSoftening must be finite and positive\n");
@@ -363,7 +464,7 @@ bool processOptions(int argc, char* argv[]) {
     if (!detail::isFiniteOption(opts.cfl) || opts.cfl <= 0.0 || opts.cfl > 1.0) {
         THROW_ERROR("hydro.cfl must be finite and in (0, 1]\n");
     }
-    if (!detail::isFiniteOption(opts.sneighborNumber) || opts.sneighborNumber <= 32.0 / 3.0) {
+    if (!detail::isFiniteOption(opts.sphNeighborNumber) || opts.sphNeighborNumber <= 32.0 / 3.0) {
         THROW_ERROR(
             "hydro.neighborNumber must be finite and greater than 32/3 (the self-kernel floor)\n");
     }
@@ -383,11 +484,12 @@ bool processOptions(int argc, char* argv[]) {
     if (!detail::isPositiveFloatOption(opts.cfl)) {
         THROW_ERROR("hydro.cfl must remain finite and positive in single precision\n");
     }
-    if (!detail::isFiniteFloatOption(opts.sneighborNumber) ||
-        static_cast<float>(opts.sneighborNumber) <= static_cast<float>(32.0 / 3.0)) {
+    if (!detail::isFiniteFloatOption(opts.sphNeighborNumber) ||
+        static_cast<float>(opts.sphNeighborNumber) <= static_cast<float>(32.0 / 3.0)) {
         THROW_ERROR("hydro.neighborNumber must remain finite and above 32/3 in single precision\n");
     }
-    if (!detail::isFiniteFloatOption(opts.gy) || !detail::isFiniteFloatOption(opts.gcentral) ||
+    if (!detail::isFiniteFloatOption(opts.yAcceleration) ||
+        !detail::isFiniteFloatOption(opts.centralAcceleration) ||
         !detail::isPositiveFloatOption(opts.hcentral)) {
         THROW_ERROR("hydro.yAcceleration, hydro.centralAcceleration and hydro.centralSoftening "
                     "must be representable in single precision, with positive centralSoftening\n");
@@ -459,7 +561,7 @@ bool processOptions(int argc, char* argv[]) {
     opts.particleCacheLineSize = 131072 / (sizeof(Fixed32) * NDIM);
     opts.saveForce = opts.test == "force";
     opts.omegaM = opts.omegaB + opts.omegaC;
-    opts.dmMass = opts.sph ? opts.omegaC / opts.omegaM : 1.0;
+    opts.darkMatterMass = opts.sph ? opts.omegaC / opts.omegaM : 1.0;
     opts.sphMass = opts.sph ? opts.omegaB / opts.omegaM : 0.0;
     opts.rho0B = opts.numberOfParticles * opts.omegaB / opts.omegaM;
     opts.rho0C = opts.numberOfParticles * opts.omegaC / opts.omegaM;
@@ -525,7 +627,7 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("hydro.viscosityBeta", beta);
     SHOW("hydro.viscosityEpsilon", viscosityEpsilon);
     SHOW("hydro.gamma", gamma);
-    SHOW("hydro.neighborNumber", sneighborNumber);
+    SHOW("hydro.neighborNumber", sphNeighborNumber);
     show("hydro.minSupportRadius", opts.hmin * opts.particlesPerDimension);
     show("hydro.maxSupportRadius", opts.hmax * opts.particlesPerDimension);
     SHOW("hydro.cfl", cfl);

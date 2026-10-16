@@ -237,7 +237,7 @@ std::pair<double, double> sphParticlesApplyUpdates(
             ParticleInteger const b = (size_t) proc * sphParticlesSize() / numberOfThreads;
             ParticleInteger const e = (size_t) (proc + 1) * sphParticlesSize() / numberOfThreads;
             for (int i = b; i < e; i++) {
-                ParticleInteger const k = sphParticlesDmIndex(i);
+                ParticleInteger const k = sphParticlesParticleIndex(i);
                 auto const rung2 = sphParticlesRung(i);
                 float const dt2 = 0.5f * t0 / (1 << rung2);
                 if (phase == 0) {
@@ -357,7 +357,7 @@ void sphParticlesSoftlens2smoothlens(int minrung) {
             ParticleInteger const b = (size_t) proc * sphParticlesSize() / numberOfThreads;
             ParticleInteger const e = (size_t) (proc + 1) * sphParticlesSize() / numberOfThreads;
             for (int i = b; i < e; i++) {
-                ParticleInteger const k = sphParticlesDmIndex(i);
+                ParticleInteger const k = sphParticlesParticleIndex(i);
                 //		if( particles_rung(k) >= minrung || particles_semiactive(k)) {
                 sphParticlesSmoothingLength(i) = particlesSoftlen(k);
                 //	}
@@ -452,7 +452,7 @@ void visitSphCheckpointArrays(Visitor&& visit) {
     visit(sphParticlesR2, count);
     visit(sphParticlesR5, count);
     visit(sphParticlesR6, count);
-    visit(sphParticlesDm, count);
+    visit(sphParticlesParticleIndices, count);
     visit(sphParticlesDv, count);
     visit(sphParticlesKap, count);
     visit(sphParticlesE0, count);
@@ -470,7 +470,7 @@ void visitSphCheckpointArrays(Visitor&& visit) {
     visit(sphParticlesSt, count);
     for (int dim = 0; dim < NDIM; dim++) {
         visit(sphParticlesDv2[dim], count);
-        visit(sphParticlesG[dim], count);
+        visit(sphParticlesGravityAccelerations[dim], count);
     }
 }
 
@@ -566,7 +566,7 @@ void sphParticlesResize(ParticleInteger sz, bool parts2) {
         sphParticlesArrayResize(sphParticlesKap, newCapacity, true);
         sphParticlesArrayResize(sphParticlesOr, newCapacity, true);
         sphParticlesArrayResize(sphParticlesSa, newCapacity, true);
-        sphParticlesArrayResize(sphParticlesDm, newCapacity, true);
+        sphParticlesArrayResize(sphParticlesParticleIndices, newCapacity, true);
         sphParticlesArrayResize(sphParticlesE0, newCapacity, true);
         sphParticlesArrayResize(sphParticlesDe2, newCapacity, true);
         sphParticlesArrayResize(sphParticlesDe3, newCapacity, true);
@@ -577,7 +577,7 @@ void sphParticlesResize(ParticleInteger sz, bool parts2) {
         sphParticlesArrayResize(sphParticlesTc, newCapacity, false);
         for (int dim = 0; dim < NDIM; dim++) {
             sphParticlesArrayResize(sphParticlesDv2[dim], newCapacity, true);
-            sphParticlesArrayResize(sphParticlesG[dim], newCapacity, true);
+            sphParticlesArrayResize(sphParticlesGravityAccelerations[dim], newCapacity, true);
         }
         capacity = newCapacity;
     }
@@ -594,7 +594,7 @@ void sphParticlesResize(ParticleInteger sz, bool parts2) {
         sphParticlesR2[slot] = {};
         sphParticlesR5[slot] = {};
         sphParticlesR6[slot] = {};
-        sphParticlesDm[slot] = NO_INDEX;
+        sphParticlesParticleIndices[slot] = NO_INDEX;
         sphParticlesDv[slot] = 0.0f;
         sphParticlesKap[slot] = 0.0f;
         sphParticlesE0[slot] = 0.0f;
@@ -612,12 +612,12 @@ void sphParticlesResize(ParticleInteger sz, bool parts2) {
         sphParticlesSt[slot] = 0;
         for (int dim = 0; dim < NDIM; dim++) {
             sphParticlesDv2[dim][slot] = 0.0f;
-            sphParticlesG[dim][slot] = 0.0f;
+            sphParticlesGravityAccelerations[dim][slot] = 0.0f;
         }
         if (parts2) {
             particlesCatIndex(offset + i) = oldsz + i;
             particlesType(offset + i) = SPH_TYPE;
-            sphParticlesDmIndex(oldsz + i) = offset + i;
+            sphParticlesParticleIndex(oldsz + i) = offset + i;
         }
         sphParticlesAlpha(oldsz + i) = getOptions().alpha0;
         sphParticlesDivv(oldsz + i) = 0.f;
@@ -636,14 +636,14 @@ void sphParticlesResize(ParticleInteger sz, bool parts2) {
         for (int dim = 0; dim < NDIM; dim++) {
             sphParticlesDvel(dim, oldsz + i) = 0.0f;
             sphParticlesDvel0(dim, oldsz + i) = 0.0f;
-            sphParticlesGforce(dim, oldsz + i) = 0.0f;
+            sphParticlesGravityAcceleration(dim, oldsz + i) = 0.0f;
         }
     }
 }
 
 void sphParticlesFree() {
     bool const stars = getOptions().stars;
-    free(sphParticlesDm);
+    free(sphParticlesParticleIndices);
     bool cuda = false;
 #ifdef USE_CUDA
 #ifdef SPH_TOTAL_ENERGY
@@ -670,7 +670,7 @@ void sphParticlesResolveWithParticles() {
             ParticleInteger const b = (size_t) proc * sphParticlesSize() / numberOfThreads;
             ParticleInteger const e = (size_t) (proc + 1) * sphParticlesSize() / numberOfThreads;
             for (ParticleInteger i = b; i < e; i++) {
-                int const j = sphParticlesDmIndex(i);
+                int const j = sphParticlesParticleIndex(i);
                 particlesCatIndex(j) = i;
             }
         }));
@@ -916,7 +916,7 @@ void sphParticlesGlobalReadVels(
             ParticleInteger const sz = range.range.second - range.range.first;
             for (ParticleInteger i = range.range.first; i < range.range.second; i++) {
                 int const j = offset + i - range.range.first;
-                int const k = sphParticlesDmIndex(i);
+                int const k = sphParticlesParticleIndex(i);
                 vx[j] = particlesVel(XDIM, k);
                 vy[j] = particlesVel(YDIM, k);
                 vz[j] = particlesVel(ZDIM, k);
@@ -955,7 +955,7 @@ static Vector<Array<float, NDIM>> sphParticlesFetchVelsCacheLine(ParticleInteger
     ParticleInteger const begin = (index / lineSize) * lineSize;
     ParticleInteger const end = std::min(sphParticlesSize(), begin + lineSize);
     for (ParticleInteger i = begin; i < end; i++) {
-        int const k = sphParticlesDmIndex(i);
+        int const k = sphParticlesParticleIndex(i);
         line[i - begin][XDIM] = particlesVel(k, XDIM);
         line[i - begin][YDIM] = particlesVel(k, YDIM);
         line[i - begin][ZDIM] = particlesVel(k, ZDIM);

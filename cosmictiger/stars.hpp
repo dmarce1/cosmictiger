@@ -28,7 +28,7 @@ struct StarParticle {
     float z;
     int type;
     bool remove;
-    int dmIndex;
+    int particleIndex;
 };
 
 struct StarsStats {

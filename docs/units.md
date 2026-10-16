@@ -112,6 +112,27 @@ The input `units.massSolar` retains its existing meaning in solar masses,
 without an implicit `/h`. Choosing cosmological output does not reinterpret
 initial-condition or checkpoint parameters.
 
+## Run settings in Silo
+
+Every particle Silo file, including native code-unit output, records the public
+application settings under `/cli`. Dots in CLI names become directories: for
+example, `hydro.viscosityAlpha` is the single double-precision value
+`/cli/hydro/viscosityAlpha`. Integer and boolean settings use single integer
+values (booleans are 0 or 1); strings use null-terminated character arrays.
+The constant viscosity coefficient is not repeated as a particle `alpha` field.
+
+These are the effective settings at the snapshot, including defaults,
+configuration-file values, and runtime overrides or caps, expressed in the CLI's
+units. Thus support radii and gravity softening are recorded in interparticle
+spacings, and `units.massSolar` is in solar masses. The scalar settings are shared
+by all unit/frame views within the file.
+
+`/cli/argc` and `/cli/argv/arg_0`, `arg_1`, and so on preserve the original process
+argument list, including the executable and HPX flags, before HPX parses it.
+Each argument is stored separately to preserve spaces and empty strings. These
+arguments describe the invocation; the scalar settings describe the effective
+run state, so runtime overrides can differ from the original input.
+
 ## Time and type boundaries
 
 Cosmological integration uses conformal time, with `d tau = dt/a`, while

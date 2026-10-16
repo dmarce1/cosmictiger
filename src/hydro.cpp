@@ -147,13 +147,13 @@ void hydroDriver(double tmax, int numberOfSteps = 64) {
         sphStep1(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, &dumm1, true);
         SphRunReturn rc2 = sphStep2(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, &dummy, true);
         if (minrung == 0) {
-            double const ekin = dummy.kin + kr.dmKineticCorrection;
+            double const ekin = dummy.kin + kr.darkMatterKineticCorrection;
             double const eint = dummy.therm;
             double rhoMax = 0.0;
             double const epot = kr.pot;
-            double const xmom = dummy.xmom + kr.dmXMomentumCorrection;
-            double const ymom = dummy.ymom + kr.dmYMomentumCorrection;
-            double const zmom = dummy.zmom + kr.dmZMomentumCorrection;
+            double const xmom = dummy.xmom + kr.darkMatterXMomentumCorrection;
+            double const ymom = dummy.ymom + kr.darkMatterYMomentumCorrection;
+            double const zmom = dummy.zmom + kr.darkMatterZMomentumCorrection;
             for (ParticleInteger i = 0; i < sphParticlesSize(); i++) {
 #ifdef HOPKINS
                 rhoMax = std::max(rhoMax, double(sphParticlesRhoRho(i)));
@@ -196,7 +196,7 @@ void hydroPlummer() {
     double const a = 0.01;
     auto opts = getOptions();
     opts.sphMass = 1.;
-    opts.dmMass = 1.;
+    opts.darkMatterMass = 1.;
     double const m = opts.sphMass;
     setOptions(opts);
     double const g = opts.gm;
@@ -213,8 +213,8 @@ void hydroPlummer() {
         double r = sqrt(sqr(x, y, z));
         double dist = powf(1.0 + sqr(r / a), -2.5);
         if (rand1() < dist) {
-            double h =
-                pow(m * getOptions().sneighborNumber / (4.0 * M_PI / 3.0 * rho0 * dist), 1.0 / 3.0);
+            double h = pow(
+                m * getOptions().sphNeighborNumber / (4.0 * M_PI / 3.0 * rho0 * dist), 1.0 / 3.0);
             ParticleInteger k = particlesSize();
             particlesResize(k + 1);
             double phi = -g * m0Value / sqrt(r * r + a * a);
@@ -248,8 +248,8 @@ void hydroPlummer() {
         double r = sqrt(sqr(x, y, z));
         double dist = powf(1.0 + sqr(r / a), -2.5);
         if (rand1() < dist) {
-            double h =
-                pow(m * getOptions().sneighborNumber / (4.0 * M_PI / 3.0 * rho0 * dist), 1.0 / 3.0);
+            double h = pow(
+                m * getOptions().sphNeighborNumber / (4.0 * M_PI / 3.0 * rho0 * dist), 1.0 / 3.0);
             //			part_int k = sph_particles_size();
             //			sph_particles_resize(k + 1);
             double phi = -g * m0Value / sqrt(r * r + a * a);
@@ -279,7 +279,7 @@ void hydroPlummer() {
 #endif
             sphParticlesRung(k) = 0;
             sphParticlesSmoothingLength(k) = h;
-            particlesSoftlen(sphParticlesDmIndex(k)) = h;
+            particlesSoftlen(sphParticlesParticleIndex(k)) = h;
             ekin += 0.5 * m * sqr(v);
             pot += 0.5 * m * phi;
             k++;
@@ -347,7 +347,7 @@ void hydroStarTest() {
     solveSphereSurfaceProblem(xValue);
     for (int i = 0; i < xValue.size(); i++) {
         double const d = rho(radius[i] * r0);
-        double h = pow(m * getOptions().sneighborNumber / (4.0 * M_PI / 3.0 * d), 1.0 / 3.0);
+        double h = pow(m * getOptions().sphNeighborNumber / (4.0 * M_PI / 3.0 * d), 1.0 / 3.0);
         int const nValue = xValue[i][XDIM].size();
         for (int l = 0; l < nValue; l++) {
             ParticleInteger const k = sphParticlesSize();
@@ -421,7 +421,7 @@ void hydroRtTest() {
     double rho0 = 1.0;
     loParts = 4 * dim * dim * dim;
     hiParts = 2 * loParts;
-    double const gy = getOptions().gy;
+    double const yAcceleration = getOptions().yAcceleration;
     auto opts = getOptions();
     opts.sphMass = rho0 / loParts * 0.5;
     double const m = opts.sphMass;
@@ -429,7 +429,7 @@ void hydroRtTest() {
     rho1 = hiParts * m / 0.5;
     rho0 = loParts * m / 0.5;
 
-    if (gy >= 0.0) {
+    if (yAcceleration >= 0.0) {
         //	PRINT("Error gy must be negative for RT test\n");
         //	abort();
     }
@@ -445,10 +445,10 @@ void hydroRtTest() {
                 double z = (iz + 0.5) * dx;
                 double vy = v0 / 4.0 *
                     (1.0 + cos(8.0 * M_PI * (x - 0.5)) * (1.0 + cos(6.0 * M_PI * (x - 0.5))));
-                double p = 1.5 + fabs(rho0 * gy * (y - 0.5));
+                double p = 1.5 + fabs(rho0 * yAcceleration * (y - 0.5));
                 double eint = p / (getOptions().gamma - 1) / rho0;
                 double h =
-                    pow(m * getOptions().sneighborNumber / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
+                    pow(m * getOptions().sphNeighborNumber / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
                 sphParticlesPos(XDIM, i) = x;
@@ -482,12 +482,14 @@ void hydroRtTest() {
                 double vy = v0 / 4.0 *
                     (1.0 + cos(8.0 * M_PI * (x - 0.5)) * (1.0 + cos(6.0 * M_PI * (x - 0.5))));
                 double h =
-                    pow(m * getOptions().sneighborNumber / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
+                    pow(m * getOptions().sphNeighborNumber / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
                 if (y > 0.75 || y < 0.25) {
                     if (y >= 0.75) {
-                        p = 1.5 + fabs(rho1 * gy * (y - 0.75)) + fabs(rho0 * gy * .25);
+                        p = 1.5 + fabs(rho1 * yAcceleration * (y - 0.75)) +
+                            fabs(rho0 * yAcceleration * .25);
                     } else {
-                        p = 1.5 + fabs(rho1 * gy * (y - 0.25)) + fabs(rho0 * gy * .25);
+                        p = 1.5 + fabs(rho1 * yAcceleration * (y - 0.25)) +
+                            fabs(rho0 * yAcceleration * .25);
                     }
                     double eint = p / (getOptions().gamma - 1) / rho1;
                     sphParticlesResize(sphParticlesSize() + 1);
@@ -519,9 +521,11 @@ void hydroRtTest() {
                     (1.0 + cos(8.0 * M_PI * (x - 0.5)) * (1.0 + cos(6.0 * M_PI * (x - 0.5))));
                 if (y > 0.75 || y < 0.25) {
                     if (y >= 0.75) {
-                        p = 1.5 + fabs(rho1 * gy * (y - 0.75)) + fabs(rho0 * gy * .25);
+                        p = 1.5 + fabs(rho1 * yAcceleration * (y - 0.75)) +
+                            fabs(rho0 * yAcceleration * .25);
                     } else {
-                        p = 1.5 + fabs(rho1 * gy * (y - 0.25)) + fabs(rho0 * gy * .25);
+                        p = 1.5 + fabs(rho1 * yAcceleration * (y - 0.25)) +
+                            fabs(rho0 * yAcceleration * .25);
                     }
                     double eint = p / (getOptions().gamma - 1) / rho1;
                     sphParticlesResize(sphParticlesSize() + 1);
@@ -600,7 +604,7 @@ void hydroDiscTest() {
     double const rho = totalNumberOfParticles;
     double const p0 = 1.0e-30;
     double const m = 1.0;
-    double h = pow(m * getOptions().sneighborNumber / (4.0 * M_PI / 3.0 * rho), 1.0 / 3.0);
+    double h = pow(m * getOptions().sphNeighborNumber / (4.0 * M_PI / 3.0 * rho), 1.0 / 3.0);
     int i = 0;
     int const nz = 3;
     int dim = sqrt(totalNumberOfParticles) / nz;
@@ -685,7 +689,7 @@ void hydroSodTest() {
     sod.pr = p0;
     sod.gamma = getOptions().gamma;
     constexpr float kEta = 0.0;
-    double const ne = getOptions().sneighborNumber;
+    double const ne = getOptions().sphNeighborNumber;
     PRINT("Sod dimensions are %i and %i rho0 %e rho1 %e\n", 2 * rightDim, 2 * leftDim,
         rho0 / (m * ne) * (4.0 * M_PI / 3.0), rho1 / (m * ne) * (4.0 * M_PI / 3.0));
     for (int ix = 0; ix < leftDim; ix++) {
@@ -696,7 +700,7 @@ void hydroSodTest() {
                 double z = (iz) *dx;
                 double ent = p1 / powf(rho1, getOptions().gamma);
                 double h =
-                    pow(m * getOptions().sneighborNumber / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
+                    pow(m * getOptions().sphNeighborNumber / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
                 sphParticlesPos(XDIM, i) = x + rand1() * dx * kEta;
@@ -744,7 +748,7 @@ void hydroSodTest() {
                 double z = (iz) *dx;
                 double ent = p0 / powf(rho0, getOptions().gamma);
                 double h =
-                    pow(m * getOptions().sneighborNumber / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
+                    pow(m * getOptions().sphNeighborNumber / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
                 sphParticlesPos(XDIM, i) = x + rand1() * dx * kEta;
@@ -794,7 +798,7 @@ void hydroSodTest() {
     double norm1 = 0.0, norm2 = 0.0;
     for (int l = 0; l < kN; l++) {
         int const i = rand() % sphParticlesSize();
-        int const j = sphParticlesDmIndex(i);
+        int const j = sphParticlesParticleIndex(i);
         float x = particlesPos(XDIM, j).toDouble();
         float const h = sphParticlesSmoothingLength(i);
 #ifdef HOPKINS
@@ -866,7 +870,7 @@ void hydroHelmholtzTest() {
                 double z = (iz + 0.5) * dx;
                 double eint = p1 / rho1 / (getOptions().gamma - 1);
                 double h =
-                    pow(m * getOptions().sneighborNumber / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
+                    pow(m * getOptions().sphNeighborNumber / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
                 sphParticlesPos(XDIM, i) = x;
@@ -918,7 +922,7 @@ void hydroHelmholtzTest() {
                 double z = (iz + 0.5) * dx;
                 double eint = p0 / rho0 / (getOptions().gamma - 1);
                 double h =
-                    pow(m * getOptions().sneighborNumber / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
+                    pow(m * getOptions().sphNeighborNumber / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
                 sphParticlesPos(XDIM, i) = x;
@@ -996,7 +1000,7 @@ void hydroBlastTest() {
                 double vy = 0.0;
                 double vz = 0.0;
                 double h =
-                    pow(m * getOptions().sneighborNumber / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
+                    pow(m * getOptions().sphNeighborNumber / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
                 sphParticlesPos(XDIM, i) = x;
@@ -1052,7 +1056,7 @@ void hydroBlastTest() {
     constexpr int kN = 100000;
     for (int l = 0; l < kN; l++) {
         int const i = rand() % sphParticlesSize();
-        int const j = sphParticlesDmIndex(i);
+        int const j = sphParticlesParticleIndex(i);
         float x = particlesPos(XDIM, j).toDouble() - 0.5;
         float y = particlesPos(YDIM, j).toDouble() - 0.5;
         float z = particlesPos(ZDIM, j).toDouble() - 0.5;
@@ -1102,7 +1106,7 @@ void hydroWaveTest() {
                 double z = (iz + 0.5) * dx;
                 double eint = p0 / rho / (getOptions().gamma - 1);
                 double h =
-                    pow(m * getOptions().sneighborNumber / (4.0 * M_PI / 3.0 * rho), 1.0 / 3.0);
+                    pow(m * getOptions().sphNeighborNumber / (4.0 * M_PI / 3.0 * rho), 1.0 / 3.0);
                 //	PRINT( "%e\n", h);
                 if (ix == ndim / 2) {
                     x += 0.99 * dx;

@@ -170,7 +170,7 @@ struct ParticleSample {
 PARTICLES_EXTERN Array<Fixed32*, NDIM> particlesX;
 PARTICLES_EXTERN Array<float, NDIM>* particlesV;
 PARTICLES_EXTERN char* particlesR;
-PARTICLES_EXTERN Array<float*, NDIM> particlesG;
+PARTICLES_EXTERN Array<float*, NDIM> particlesGravityAccelerations;
 PARTICLES_EXTERN float* particlesS;
 PARTICLES_EXTERN float* particlesZ;
 PARTICLES_EXTERN float* particlesRh;
@@ -254,8 +254,8 @@ inline char& particlesType(ParticleInteger index) {
         CHECK_PART_BOUNDS(index);
         return particlesTy[index];
     } else {
-        static char dm = DARK_MATTER_TYPE;
-        return dm;
+        static char darkMatterType = DARK_MATTER_TYPE;
+        return darkMatterType;
     }
 }
 
@@ -264,11 +264,11 @@ inline float particlesMass(ParticleInteger index) {
         return 1.0f;
     }
     float const sphMass = getOptions().sphMass;
-    float const dmMass = getOptions().dmMass;
+    float const darkMatterMass = getOptions().darkMatterMass;
     if (particlesType(index) != DARK_MATTER_TYPE) {
         return sphMass;
     } else {
-        return dmMass;
+        return darkMatterMass;
     }
 }
 
@@ -326,9 +326,9 @@ inline float& particlesZeta(ParticleInteger index) {
     return particlesZ[index];
 }
 
-inline float& particlesGforce(int dim, ParticleInteger index) {
+inline float& particlesGravityAcceleration(int dim, ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
-    return particlesG[dim][index];
+    return particlesGravityAccelerations[dim][index];
 }
 
 inline GroupInteger particlesGroupInit(ParticleInteger index) {

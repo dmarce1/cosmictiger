@@ -455,7 +455,7 @@ static SphMigrationParticle packSphParticle(ParticleInteger index) {
 #endif
         for (int dim = 0; dim < NDIM; dim++) {
             gas.predictedVelocity[dim] = sphParticlesDv2[dim][i];
-            gas.gravity[dim] = sphParticlesG[dim][i];
+            gas.gravity[dim] = sphParticlesGravityAccelerations[dim][i];
         }
     }
     return result;
@@ -475,7 +475,7 @@ static void unpackSphParticle(
     if (record.part.type == SPH_TYPE) {
         auto const i = gasIndex;
         auto const& gas = record.gas;
-        sphParticlesDmIndex(i) = index;
+        sphParticlesParticleIndex(i) = index;
         sphParticlesR1[i].frac = gas.frac;
         sphParticlesR1[i].alpha = gas.alpha;
         sphParticlesR2[i].h = gas.h;
@@ -504,7 +504,7 @@ static void unpackSphParticle(
 #endif
         for (int dim = 0; dim < NDIM; dim++) {
             sphParticlesDv2[dim][i] = gas.predictedVelocity[dim];
-            sphParticlesG[dim][i] = gas.gravity[dim];
+            sphParticlesGravityAccelerations[dim][i] = gas.gravity[dim];
         }
     }
 }

@@ -231,7 +231,7 @@ struct SphRunParameters {
     float hmin;
     float hmax;
     int maxRung;
-    float gy;
+    float yAcceleration;
     float tau;
     int iter;
     float maxDt;
@@ -263,7 +263,7 @@ struct SphRunParameters {
         damping = opts.damping;
         diffusion = opts.diffusion;
         conduction = opts.conduction;
-        gy = opts.gy;
+        yAcceleration = opts.yAcceleration;
         maxDt = 1e30;
         alpha0 = opts.alpha0;
         alpha1 = opts.alpha1;
@@ -299,7 +299,7 @@ struct SphRunParameters {
         arc & adot;
         arc & iter;
         arc & maxDt;
-        arc & gy;
+        arc & yAcceleration;
         arc & avType;
         arc & tau;
         arc & tzero;

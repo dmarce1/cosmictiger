@@ -21,8 +21,11 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <set>
 #include <string>
 #include <system_error>
+#include <type_traits>
+#include <variant>
 
 #include <chealpix.h>
 #include <hpx/threading_base/annotated_function.hpp>
@@ -33,6 +36,7 @@
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/options.hpp>
+#include <cosmictiger/options_metadata.hpp>
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/sph.hpp>
 #include <cosmictiger/sph_particles.hpp>
@@ -76,7 +80,6 @@ struct SphParticleInfo : public DarkMatterParticleInfo {
     float hepp;
     float he;
     float zValue2;
-    float alpha;
     float coldFrac;
     template <typename A>
     void serialize(A&& arc, unsigned ver) {
@@ -93,7 +96,6 @@ struct SphParticleInfo : public DarkMatterParticleInfo {
         arc & coldFrac;
         arc & he;
         arc & zValue2;
-        arc & alpha;
     }
 };
 
@@ -114,12 +116,12 @@ struct StarParticleInfo : public DarkMatterParticleInfo {
 
 struct ViewReturn {
     Vector<Vector<SphParticleInfo>> hydro;
-    Vector<Vector<DarkMatterParticleInfo>> dm;
+    Vector<Vector<DarkMatterParticleInfo>> darkMatter;
     Vector<Vector<StarParticleInfo>> star;
     template <typename A>
     void serialize(A&& arc, unsigned) {
         arc & hydro;
-        arc & dm;
+        arc & darkMatter;
         arc & star;
     }
 };
@@ -140,6 +142,51 @@ void writeViewText(DBfile* db, char const* name, char const* value) {
 void writeViewScalar(DBfile* db, char const* name, double value) {
     int const size = 1;
     checkViewWrite(DBWrite(db, name, &value, &size, 1, DB_DOUBLE), name);
+}
+
+void writeViewInteger(DBfile* db, char const* name, int value) {
+    int const size = 1;
+    checkViewWrite(DBWrite(db, name, &value, &size, 1, DB_INT), name);
+}
+
+void writeViewCommandLine(DBfile* db) {
+    checkViewWrite(DBMkDir(db, "cli"), "cli");
+    checkViewWrite(DBSetDir(db, "cli"), "cli");
+    writeViewText(db, "value_convention",
+        "Effective application settings at this snapshot in CLI units, including defaults, "
+        "configuration files, and runtime overrides. Original process arguments are in argv.");
+    auto const& arguments = getCommandLineArguments();
+    writeViewInteger(db, "argc", arguments.size());
+    checkViewWrite(DBMkDir(db, "argv"), "argv");
+    for (size_t i = 0; i < arguments.size(); i++) {
+        auto const name = "argv/arg_" + std::to_string(i);
+        writeViewText(db, name.c_str(), arguments[i].c_str());
+    }
+    std::set<std::string> groups;
+    for (auto const& entry : getOptionsMetadata(getOptions())) {
+        std::string name = entry.name;
+        auto const separator = name.find('.');
+        if (separator != std::string::npos) {
+            auto const group = name.substr(0, separator);
+            if (groups.insert(group).second) {
+                checkViewWrite(DBMkDir(db, group.c_str()), group.c_str());
+            }
+            name[separator] = '/';
+        }
+        std::visit(
+            [db, &name](auto const& value) {
+                using Value = std::decay_t<decltype(value)>;
+                if constexpr (std::is_same_v<Value, std::string>) {
+                    writeViewText(db, name.c_str(), value.c_str());
+                } else if constexpr (std::is_same_v<Value, double>) {
+                    writeViewScalar(db, name.c_str(), value);
+                } else {
+                    writeViewInteger(db, name.c_str(), int(value));
+                }
+            },
+            entry.value);
+    }
+    checkViewWrite(DBSetDir(db, ".."), "..");
 }
 
 class ViewUnitConversion {
@@ -280,9 +327,9 @@ void writeConvertedView(DBfile* db, ViewReturn const& particles, int box, double
     writeViewScalar(db, "code_mass_g", getOptions().codeToG);
     writeViewScalar(db, "code_time_s", getOptions().codeToS);
 
-    if (!particles.dm[box].empty()) {
-        double const mass = getOptions().sph ? getOptions().dmMass : 1.0;
-        writeViewSpecies(db, "dark_matter", "", particles.dm[box], conversion, lengthUnit,
+    if (!particles.darkMatter[box].empty()) {
+        double const mass = getOptions().sph ? getOptions().darkMatterMass : 1.0;
+        writeViewSpecies(db, "dark_matter", "", particles.darkMatter[box], conversion, lengthUnit,
             velocityUnit, massUnit, mass, time);
     }
     auto const& gas = particles.hydro[box];
@@ -300,8 +347,6 @@ void writeConvertedView(DBfile* db, ViewReturn const& particles, int box, double
         writeViewField(db, "kernel_support_radius", "gas", gas, lengthUnit,
             [&conversion](
                 SphParticleInfo const& particle) { return conversion.length(particle.h); });
-        writeViewField(db, "alpha", "gas", gas, "1",
-            [](SphParticleInfo const& particle) { return double(particle.alpha); });
         if (getOptions().stars) {
             writeViewField(db, "cold_frac", "gas", gas, "1",
                 [](SphParticleInfo const& particle) { return double(particle.coldFrac); });
@@ -393,7 +438,7 @@ ViewReturn viewGetParticles(Vector<Range<double>> boxes = Vector<Range<double>>(
     }
     ViewReturn rc;
     rc.hydro.resize(boxes.size());
-    rc.dm.resize(boxes.size());
+    rc.darkMatter.resize(boxes.size());
     rc.star.resize(boxes.size());
     Vector<hpx::future<ViewReturn>> futs;
     for (auto& c : hpxChildren()) {
@@ -407,7 +452,7 @@ ViewReturn viewGetParticles(Vector<Range<double>> boxes = Vector<Range<double>>(
             [proc, numberOfThreads, boxes, chem, stars]() {
                 ViewReturn rc;
                 rc.hydro.resize(boxes.size());
-                rc.dm.resize(boxes.size());
+                rc.darkMatter.resize(boxes.size());
                 rc.star.resize(boxes.size());
                 ParticleInteger const b = (size_t) proc * particlesSize() / numberOfThreads;
                 ParticleInteger const e = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
@@ -429,7 +474,7 @@ ViewReturn viewGetParticles(Vector<Range<double>> boxes = Vector<Range<double>>(
                                 info.vy = particlesVel(YDIM, i);
                                 info.vz = particlesVel(ZDIM, i);
                                 info.rung = particlesRung(i);
-                                rc.dm[j].push_back(info);
+                                rc.darkMatter[j].push_back(info);
                                 break;
                             }
                             case SPH_TYPE: {
@@ -451,7 +496,6 @@ ViewReturn viewGetParticles(Vector<Range<double>> boxes = Vector<Range<double>>(
 #endif
                                     info.h = sphParticlesSmoothingLength(l);
                                     info.rung = particlesRung(i);
-                                    info.alpha = sphParticlesAlpha(l);
                                     if (chem) {
                                         info.hValue2 = sphParticlesH(l);
                                         info.hp = sphParticlesHp(l);
@@ -495,7 +539,8 @@ ViewReturn viewGetParticles(Vector<Range<double>> boxes = Vector<Range<double>>(
         auto tmp = f.get();
         for (int i = 0; i < boxes.size(); i++) {
             rc.hydro[i].insert(rc.hydro[i].begin(), tmp.hydro[i].begin(), tmp.hydro[i].end());
-            rc.dm[i].insert(rc.dm[i].begin(), tmp.dm[i].begin(), tmp.dm[i].end());
+            rc.darkMatter[i].insert(
+                rc.darkMatter[i].begin(), tmp.darkMatter[i].begin(), tmp.darkMatter[i].end());
             rc.star[i].insert(rc.star[i].begin(), tmp.star[i].begin(), tmp.star[i].end());
         }
     }
@@ -530,6 +575,7 @@ void viewOutputViews(int cycle, double a, bool force) {
         if (db == nullptr) {
             THROW_ERROR("Cannot create particle Silo file %s\n", filename.c_str());
         }
+        detail::writeViewCommandLine(db);
         ViewReturn parts;
         parts = viewGetParticles();
         if (getOptions().outputUnits != "code") {
@@ -542,31 +588,31 @@ void viewOutputViews(int cycle, double a, bool force) {
         float z0 = 1.0 / a - 1.0;
         float tm = cosmosTime(1e-6, a) * getOptions().codeToS * constants::kSecondsToYears / 1e9;
         DBAddOption(opts, DBOPT_TIME, &tm);
-        if (parts.dm[bi].size()) {
+        if (parts.darkMatter[bi].size()) {
             x.resize(0);
             y.resize(0);
             z.resize(0);
-            for (int i = 0; i < parts.dm[bi].size(); i++) {
-                x.push_back(parts.dm[bi][i].x.toFloat());
-                y.push_back(parts.dm[bi][i].y.toFloat());
-                z.push_back(parts.dm[bi][i].z.toFloat());
+            for (int i = 0; i < parts.darkMatter[bi].size(); i++) {
+                x.push_back(parts.darkMatter[bi][i].x.toFloat());
+                y.push_back(parts.darkMatter[bi][i].y.toFloat());
+                z.push_back(parts.darkMatter[bi][i].z.toFloat());
             }
             float* coords1[NDIM] = {x.data(), y.data(), z.data()};
             DBPutPointmesh(db, "dark_matter", NDIM, coords1, x.size(), DB_FLOAT, opts);
             x.resize(0);
             y.resize(0);
             z.resize(0);
-            for (int i = 0; i < parts.dm[bi].size(); i++) {
-                x.push_back(parts.dm[bi][i].vx * codeToVelocity);
-                y.push_back(parts.dm[bi][i].vy * codeToVelocity);
-                z.push_back(parts.dm[bi][i].vz * codeToVelocity);
+            for (int i = 0; i < parts.darkMatter[bi].size(); i++) {
+                x.push_back(parts.darkMatter[bi][i].vx * codeToVelocity);
+                y.push_back(parts.darkMatter[bi][i].vy * codeToVelocity);
+                z.push_back(parts.darkMatter[bi][i].vz * codeToVelocity);
             }
             DBPutPointvar1(db, "vx", "dark_matter", x.data(), x.size(), DB_FLOAT, opts);
             DBPutPointvar1(db, "vy", "dark_matter", y.data(), x.size(), DB_FLOAT, opts);
             DBPutPointvar1(db, "vz", "dark_matter", z.data(), x.size(), DB_FLOAT, opts);
             x.resize(0);
-            for (int i = 0; i < parts.dm[bi].size(); i++) {
-                x.push_back(parts.dm[bi][i].rung);
+            for (int i = 0; i < parts.darkMatter[bi].size(); i++) {
+                x.push_back(parts.darkMatter[bi][i].rung);
             }
             DBPutPointvar1(db, "rung", "dark_matter", x.data(), x.size(), DB_FLOAT, opts);
         }
@@ -614,12 +660,10 @@ void viewOutputViews(int cycle, double a, bool force) {
                 double const h = parts.hydro[bi][i].h;
                 x.push_back(parts.hydro[bi][i].rho * codeToDensity);
                 y.push_back(parts.hydro[bi][i].eint * codeToEnergy);
-                z.push_back(parts.hydro[bi][i].alpha);
             }
             //			PRINT( "h and ent\n");
             DBPutPointvar1(db, "rho", "gas", x.data(), x.size(), DB_FLOAT, opts);
             DBPutPointvar1(db, "eint", "gas", y.data(), x.size(), DB_FLOAT, opts);
-            DBPutPointvar1(db, "alpha", "gas", z.data(), z.size(), DB_FLOAT, opts);
             x.resize(0);
             y.resize(0);
             z.resize(0);

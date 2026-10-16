@@ -164,6 +164,7 @@ set(cosmictiger_header_files
     cosmictiger/math.hpp
     cosmictiger/memused.hpp
     cosmictiger/options.hpp
+    cosmictiger/options_metadata.hpp
     cosmictiger/output.hpp
     cosmictiger/particles.hpp
     cosmictiger/power.hpp

@@ -415,9 +415,9 @@ int particlesApplyUpdates(int minrung, float t0, float a) {
                     auto& vx = particlesVel(XDIM, i);
                     auto& vy = particlesVel(YDIM, i);
                     auto& vz = particlesVel(ZDIM, i);
-                    auto& gx = particlesGforce(XDIM, i);
-                    auto& gy = particlesGforce(YDIM, i);
-                    auto& gz = particlesGforce(ZDIM, i);
+                    auto& gx = particlesGravityAcceleration(XDIM, i);
+                    auto& gy = particlesGravityAcceleration(YDIM, i);
+                    auto& gz = particlesGravityAcceleration(ZDIM, i);
                     auto const& divv = particlesDivv(i);
                     auto const h = particlesSoftlen(i);
                     float const dtDivv = cfl *
@@ -983,7 +983,7 @@ void particlesDestroy() {
         futs.push_back(hpx::async<ParticlesDestroyAction>(c));
     }
     particlesX = decltype(particlesX)();
-    particlesG = decltype(particlesG)();
+    particlesGravityAccelerations = decltype(particlesGravityAccelerations)();
     particlesV = decltype(particlesV)();
     particlesP = decltype(particlesP)();
     particlesR = decltype(particlesR)();
@@ -1074,7 +1074,7 @@ void particlesResize(ParticleInteger sz, bool lock) {
         }
         if (getOptions().saveForce || getOptions().vsoft) {
             for (int dim = 0; dim < NDIM; dim++) {
-                particlesArrayResize(particlesG[dim], newCapacity, true);
+                particlesArrayResize(particlesGravityAccelerations[dim], newCapacity, true);
             }
             particlesArrayResize(particlesP, newCapacity, true);
         }
@@ -1131,9 +1131,9 @@ void particlesFree() {
     if (getOptions().saveForce || getOptions().vsoft) {
         for (int dim = 0; dim < NDIM; dim++) {
 #ifdef USE_CUDA
-            CUDA_CHECK(cudaFree(particlesG[dim]));
+            CUDA_CHECK(cudaFree(particlesGravityAccelerations[dim]));
 #else
-            free(particlesG[dim]);
+            free(particlesGravityAccelerations[dim]);
 #endif
         }
 #ifdef USE_CUDA
@@ -1463,7 +1463,7 @@ Vector<ParticleSample> particlesSample(int cnt) {
         }
         if (saveForce) {
             for (int dim = 0; dim < NDIM; dim++) {
-                sample.g[dim] = particlesGforce(dim, index);
+                sample.g[dim] = particlesGravityAcceleration(dim, index);
             }
             sample.p = particlesPot(index);
         }
@@ -1608,10 +1608,10 @@ void particlesResolveWithSphParticles() {
                 int const type = particlesType(i);
                 if (type == SPH_TYPE) {
                     ParticleInteger const index = particlesCatIndex(i);
-                    sphParticlesDmIndex(index) = i;
+                    sphParticlesParticleIndex(index) = i;
                 } else if (type == STAR_TYPE) {
                     ParticleInteger const index = particlesCatIndex(i);
-                    starsGet(index).dmIndex = i;
+                    starsGet(index).particleIndex = i;
                 }
             }
         }));

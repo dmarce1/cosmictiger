@@ -453,9 +453,9 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
                 forces.gz[j] *= gm;
                 forces.phi[j] *= gm;
                 if (saveForce) {
-                    particlesGforce(XDIM, i) = forces.gx[j];
-                    particlesGforce(YDIM, i) = forces.gy[j];
-                    particlesGforce(ZDIM, i) = forces.gz[j];
+                    particlesGravityAcceleration(XDIM, i) = forces.gx[j];
+                    particlesGravityAcceleration(YDIM, i) = forces.gy[j];
+                    particlesGravityAcceleration(ZDIM, i) = forces.gz[j];
                     particlesPot(i) = forces.phi[j];
                 }
                 auto& vx = particlesVel(XDIM, i);
@@ -507,9 +507,9 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
                     float const kin0 = 0.5f * mass * sqr(vx, vy, vz);
                     if (gas) {
                         ParticleInteger const k = particlesCatIndex(i);
-                        sphParticlesGforce(XDIM, k) = forces.gx[j];
-                        sphParticlesGforce(YDIM, k) = forces.gy[j];
-                        sphParticlesGforce(ZDIM, k) = forces.gz[j];
+                        sphParticlesGravityAcceleration(XDIM, k) = forces.gx[j];
+                        sphParticlesGravityAcceleration(YDIM, k) = forces.gy[j];
+                        sphParticlesGravityAcceleration(ZDIM, k) = forces.gz[j];
                     } else if (!params.firstCall) {
                         float const dt = 0.5f * rungDt[rung] * params.t0;
                         vx = fmaf(forces.gx[j], dt, vx);
@@ -535,12 +535,12 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
                         vx = fmaf(forces.gx[j], dt, vx);
                         vy = fmaf(forces.gy[j], dt, vy);
                         vz = fmaf(forces.gz[j], dt, vz);
-                        kr.dmKineticCorrection +=
+                        kr.darkMatterKineticCorrection +=
                             0.5f * mass * (sqr(syncVx, syncVy, syncVz) - sqr(vx, vy, vz));
-                        kr.dmXMomentumCorrection += mass * (syncVx - vx);
-                        kr.dmYMomentumCorrection += mass * (syncVy - vy);
-                        kr.dmZMomentumCorrection += mass * (syncVz - vz);
-                        kr.dmMomentumNormCorrection +=
+                        kr.darkMatterXMomentumCorrection += mass * (syncVx - vx);
+                        kr.darkMatterYMomentumCorrection += mass * (syncVy - vy);
+                        kr.darkMatterZMomentumCorrection += mass * (syncVz - vz);
+                        kr.darkMatterMomentumNormCorrection +=
                             mass * (sqrtf(sqr(syncVx, syncVy, syncVz)) - sqrtf(sqr(vx, vy, vz)));
                     }
                     kr.maxRung = std::max(kr.maxRung, (int) rung);

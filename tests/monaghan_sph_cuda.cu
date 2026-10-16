@@ -119,7 +119,7 @@ public:
         data_.rungs = data_.rungsSnk = allocate<char>(count);
         data_.convergedSnk = allocate<char>(count);
         data_.saSnk = allocate<char>(count);
-        data_.dmIndexSnk = allocate<ParticleInteger>(count);
+        data_.sinkParticleIndices = allocate<ParticleInteger>(count);
         data_.trees = allocate<SphTreeNode>(treeCount);
         data_.selfs = allocate<int>(treeCount);
         data_.neighbors = allocate<int>(treeCount);
@@ -129,7 +129,7 @@ public:
         data_.n = 32.0f;
         data_.defGamma = 5.0f / 3.0f;
         data_.eta = 0.25f;
-        data_.gsoft = 0.05f;
+        data_.gravitySofteningLength = 0.05f;
         params_.a = 1.0f;
         params_.adot = 0.0f;
         params_.minRung = 1;
@@ -144,7 +144,7 @@ public:
         params_.hmin = 0.1f;
         params_.hmax = 0.49f;
         for (int i = 0; i < count; i++) {
-            data_.dmIndexSnk[i] = i;
+            data_.sinkParticleIndices[i] = i;
             data_.rungs[i] = 1;
             data_.eint[i] = 1.0f;
             data_.h[i] = data_.rec2Snk[i].h = 0.2f;

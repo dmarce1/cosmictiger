@@ -53,7 +53,7 @@ struct SphRunCudaData {
 #endif
     float* kappa;
     float* coldFrac;
-    float gsoft;
+    float gravitySofteningLength;
     Array<float, NCHEMFRACS>* chem;
     float* divvSnk;
     float* rhoSnk;
@@ -69,7 +69,7 @@ struct SphRunCudaData {
     bool gravity;
     bool chemistry;
     char* convergedSnk;
-    float gcentral;
+    float centralAcceleration;
     float hcentral;
     float g;
     float t0;
@@ -99,7 +99,7 @@ struct SphRunCudaData {
     float* shearSnk;
     SphRecord1* rec1Snk;
     SphRecord2* rec2Snk;
-    ParticleInteger* dmIndexSnk;
+    ParticleInteger* sinkParticleIndices;
     float* gxSnk;
     float* gySnk;
     float* gzSnk;

@@ -221,7 +221,7 @@ __global__ void analyticGravityKernel(Fixed32* sinkx, Fixed32* sinky, Fixed32* s
             float const q2 = r2Value * h2inv;
             float rinv3;
             float rinv1;
-            gsoft(rinv3, rinv1, q2, h2, hinv, h3inv, true);
+            gravitySofteningKernel(rinv3, rinv1, q2, h2, hinv, h3inv, true);
             fx -= xValue * rinv3;
             fy -= yValue * rinv3;
             fz -= zValue * rinv3;

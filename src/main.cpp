@@ -35,6 +35,7 @@
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/memused.hpp>
 #include <cosmictiger/options.hpp>
+#include <cosmictiger/options_metadata.hpp>
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/rockstar.hpp>
 #include <cosmictiger/simd.hpp>
@@ -60,7 +61,7 @@ int hpx_main(int argc, char* argv[]) {
     FILE* fp = fopen("soft.txt", "wt");
     for (double r = 0.0; r < 1.0; r += 0.01) {
         double f, phi;
-        gsoft(f, phi, r * r, 1.0, 1.0, 1.0, true);
+        gravitySofteningKernel(f, phi, r * r, 1.0, 1.0, 1.0, true);
         fprintf(fp, "%e %e %e\n", r, phi, f);
     }
     fclose(fp);
@@ -130,6 +131,7 @@ int hpx_main(int argc, char* argv[]) {
 }
 
 int main(int argc, char* argv[]) {
+    recordCommandLineArguments(argc, argv);
     PRINT("STARTING MAIN\n");
     std::vector<std::string> cfg = {"hpx.commandline.allow_unknown=1"};
     cfg.push_back("hpx.stacks.small_size=524288");

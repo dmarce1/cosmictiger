@@ -85,7 +85,7 @@ double starsFind(float a, float dt, int minrung, int step, float t0) {
         futs.push_back(hpx::async(
             [proc, t0, numberOfThreads, a, minrung, &found, &mutex, &indices, dt, &rndGens]() {
                 double eloss = 0.0;
-                double const dmSoft = getOptions().hsoft;
+                double const darkMatterSofteningLength = getOptions().hsoft;
                 double const codeToS = getOptions().codeToS;
                 double const codeToG = getOptions().codeToG;
                 double const codeToCm = getOptions().codeToCm;
@@ -101,7 +101,7 @@ double starsFind(float a, float dt, int minrung, int step, float t0) {
                 for (ParticleInteger i = b; i < e; i++) {
                     if (!sphParticlesIsstar(i)) {
                         char rung = sphParticlesRung(i);
-                        ParticleInteger const kk = sphParticlesDmIndex(i);
+                        ParticleInteger const kk = sphParticlesParticleIndex(i);
                         double const rhoTot = particlesRho(kk) * codeToDensity;
 #ifdef HOPKINS
                         double const rhoB = sphParticlesRhoRho(i) * codeToDensity;

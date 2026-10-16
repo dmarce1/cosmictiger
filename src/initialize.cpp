@@ -869,7 +869,7 @@ static void initX0() {
                                                .value();
         double const density = getOptions().sphMass * getOptions().numberOfParticles;
         float const smoothLength = std::cbrt(
-            getOptions().sneighborNumber / ((4.0 * M_PI / 3.0) * getOptions().numberOfParticles));
+            getOptions().sphNeighborNumber / ((4.0 * M_PI / 3.0) * getOptions().numberOfParticles));
         for (ParticleInteger i = 0; i < count; i++) {
             particlesRung(count + i) = 0;
 #ifdef ENTROPY

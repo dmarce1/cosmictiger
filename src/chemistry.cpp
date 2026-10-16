@@ -56,7 +56,7 @@ Pair<double> chemistryDoStep(float a, int minrung, float t0, float adot, int dir
             Vector<ChemistryAttributes> chems;
             float const mass = getOptions().sphMass;
             float const stars = getOptions().stars;
-            int const n = getOptions().sneighborNumber;
+            int const n = getOptions().sphNeighborNumber;
             for (ParticleInteger i = b; i < e; i++) {
                 int rung1 = sphParticlesRung(i);
                 //	int rung2 = sph_particles_oldrung(i);
@@ -111,7 +111,7 @@ Pair<double> chemistryDoStep(float a, int minrung, float t0, float adot, int dir
                     if (t > 5e8) {
                         PRINT("T-------------> %e\n", t);
                         if (t > TMAX) {
-                            int k = sphParticlesDmIndex(i);
+                            int k = sphParticlesParticleIndex(i);
                             float vx = particlesVel(XDIM, k);
                             float vy = particlesVel(YDIM, k);
                             float vz = particlesVel(ZDIM, k);

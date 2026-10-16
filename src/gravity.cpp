@@ -143,7 +143,8 @@ void cpuGravityCp(Expansion<float>& lValue, Vector<TreeId> const& list, TreeId s
             }
             for (int i = 0; i < count; i++) {
                 masses[i] = getOptions().sph ?
-                    (types[i] == DARK_MATTER_TYPE ? getOptions().dmMass : getOptions().sphMass) :
+                    (types[i] == DARK_MATTER_TYPE ? getOptions().darkMatterMass :
+                                                    getOptions().sphMass) :
                     1.0f;
             }
             for (int i = count; i < numberOfSources; i++) {
@@ -326,7 +327,8 @@ void cpuGravityPp(
             }
             for (int i = 0; i < count; i++) {
                 masses[i] = getOptions().sph ?
-                    (types[i] == DARK_MATTER_TYPE ? getOptions().dmMass : getOptions().sphMass) :
+                    (types[i] == DARK_MATTER_TYPE ? getOptions().darkMatterMass :
+                                                    getOptions().sphMass) :
                     1.0f;
             }
             for (int i = count; i < numberOfSources; i++) {
@@ -367,7 +369,7 @@ void cpuGravityPp(
                     SimdFloat const rinv3Far = rinv1Far * sqr(rinv1Far);                  // 3
                     SimdFloat rinv3Near;                                                  // 3
                     SimdFloat rinv1Near, rinv1(0.0f);
-                    gsoft(rinv3Near, rinv1Near, r2, hinvI, h2invI, h3invI, doPhi);
+                    gravitySofteningKernel(rinv3Near, rinv1Near, r2, hinvI, h2invI, h3invI, doPhi);
                     SimdFloat const swFar = r2 > h2;                            // 1
                     SimdFloat const swNear = SimdFloat(1) - swFar;              // 1
                     SimdFloat rinv3 = rinv3Near * swNear + rinv3Far * swFar;    // 3

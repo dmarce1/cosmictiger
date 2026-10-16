@@ -33,13 +33,13 @@ struct CudaKickData {
     Fixed32* y;
     Fixed32* z;
     Array<float, NDIM>* vel;
-    float* sphGx;
-    float* sphGy;
-    float* sphGz;
+    float* sphGravityAccelerationX;
+    float* sphGravityAccelerationY;
+    float* sphGravityAccelerationZ;
     ParticleInteger* catIndex;
     char* type;
     bool sph;
-    float dmMass;
+    float darkMatterMass;
     float sphMass;
     bool vsoft;
     char* rungs;
@@ -108,11 +108,11 @@ struct KickReturn {
     double ymom;
     double zmom;
     double nmom;
-    double dmKineticCorrection;
-    double dmXMomentumCorrection;
-    double dmYMomentumCorrection;
-    double dmZMomentumCorrection;
-    double dmMomentumNormCorrection;
+    double darkMatterKineticCorrection;
+    double darkMatterXMomentumCorrection;
+    double darkMatterYMomentumCorrection;
+    double darkMatterZMomentumCorrection;
+    double darkMatterMomentumNormCorrection;
 
     CUDA_EXPORT
     KickReturn() {
@@ -121,11 +121,11 @@ struct KickReturn {
         kin = 0.0;
         xmom = ymom = zmom = nmom = 0.0;
         dkin = 0.0;
-        dmKineticCorrection = 0.0;
-        dmXMomentumCorrection = 0.0;
-        dmYMomentumCorrection = 0.0;
-        dmZMomentumCorrection = 0.0;
-        dmMomentumNormCorrection = 0.0;
+        darkMatterKineticCorrection = 0.0;
+        darkMatterXMomentumCorrection = 0.0;
+        darkMatterYMomentumCorrection = 0.0;
+        darkMatterZMomentumCorrection = 0.0;
+        darkMatterMomentumNormCorrection = 0.0;
     }
     CUDA_EXPORT
     KickReturn& operator+=(KickReturn const& other) {
@@ -139,11 +139,11 @@ struct KickReturn {
         zmom += other.zmom;
         nmom += other.nmom;
         dkin += other.dkin;
-        dmKineticCorrection += other.dmKineticCorrection;
-        dmXMomentumCorrection += other.dmXMomentumCorrection;
-        dmYMomentumCorrection += other.dmYMomentumCorrection;
-        dmZMomentumCorrection += other.dmZMomentumCorrection;
-        dmMomentumNormCorrection += other.dmMomentumNormCorrection;
+        darkMatterKineticCorrection += other.darkMatterKineticCorrection;
+        darkMatterXMomentumCorrection += other.darkMatterXMomentumCorrection;
+        darkMatterYMomentumCorrection += other.darkMatterYMomentumCorrection;
+        darkMatterZMomentumCorrection += other.darkMatterZMomentumCorrection;
+        darkMatterMomentumNormCorrection += other.darkMatterMomentumNormCorrection;
 
         return *this;
     }
@@ -157,11 +157,11 @@ struct KickReturn {
         arc & zmom;
         arc & nmom;
         arc & dkin;
-        arc & dmKineticCorrection;
-        arc & dmXMomentumCorrection;
-        arc & dmYMomentumCorrection;
-        arc & dmZMomentumCorrection;
-        arc & dmMomentumNormCorrection;
+        arc & darkMatterKineticCorrection;
+        arc & darkMatterXMomentumCorrection;
+        arc & darkMatterYMomentumCorrection;
+        arc & darkMatterZMomentumCorrection;
+        arc & darkMatterMomentumNormCorrection;
     }
 };
 

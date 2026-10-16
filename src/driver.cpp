@@ -1592,11 +1592,11 @@ void driver() {
                 }
                 // Gas is synchronized by SPH above; undo the diagnostic contribution
                 // of the next DM half-kick without changing stored particle momenta.
-                energies.kin += kr.dmKineticCorrection / sqr(a);
-                energies.xmom += kr.dmXMomentumCorrection / a;
-                energies.ymom += kr.dmYMomentumCorrection / a;
-                energies.zmom += kr.dmZMomentumCorrection / a;
-                energies.nmom += kr.dmMomentumNormCorrection / a;
+                energies.kin += kr.darkMatterKineticCorrection / sqr(a);
+                energies.xmom += kr.darkMatterXMomentumCorrection / a;
+                energies.ymom += kr.darkMatterYMomentumCorrection / a;
+                energies.zmom += kr.darkMatterZMomentumCorrection / a;
+                energies.nmom += kr.darkMatterMomentumNormCorrection / a;
                 energies.tckin = energies.kin * sqr(a);
             }
 
@@ -1822,7 +1822,7 @@ uint32_t checkpointFlags(Options const& opts) {
 
 CheckpointHeader checkpointHeader(Options const& opts) {
     return {kCheckpointMagic, opts.sph ? kSphCheckpointVersion : kCheckpointVersion,
-        checkpointFlags(opts), opts.dmMass, opts.sphMass, opts.gamma, opts.hsoft, opts.gm,
+        checkpointFlags(opts), opts.darkMatterMass, opts.sphMass, opts.gamma, opts.hsoft, opts.gm,
         opts.omegaM, opts.omegaR, opts.omegaLam, opts.codeToCm, opts.codeToS, opts.codeToG,
         opts.numberOfParticles, opts.numberOfSteps, opts.sph ? kMonaghanSph : 0U};
 }
@@ -1830,21 +1830,21 @@ CheckpointHeader checkpointHeader(Options const& opts) {
 bool checkpointCompatible(CheckpointHeader const& header, Options const& opts) {
     return header.version == (opts.sph ? kSphCheckpointVersion : kCheckpointVersion) &&
         header.flags == checkpointFlags(opts) &&
-        header.reserved == (opts.sph ? kMonaghanSph : 0U) && header.darkMatterMass == opts.dmMass &&
-        header.gasMass == opts.sphMass && header.gamma == opts.gamma &&
-        header.softening == opts.hsoft && header.gravitationalMass == opts.gm &&
-        header.omegaMatter == opts.omegaM && header.omegaRadiation == opts.omegaR &&
-        header.omegaLambda == opts.omegaLam && header.unitLength == opts.codeToCm &&
-        header.unitTime == opts.codeToS && header.unitMass == opts.codeToG &&
-        header.particlesPerSpecies == opts.numberOfParticles &&
+        header.reserved == (opts.sph ? kMonaghanSph : 0U) &&
+        header.darkMatterMass == opts.darkMatterMass && header.gasMass == opts.sphMass &&
+        header.gamma == opts.gamma && header.softening == opts.hsoft &&
+        header.gravitationalMass == opts.gm && header.omegaMatter == opts.omegaM &&
+        header.omegaRadiation == opts.omegaR && header.omegaLambda == opts.omegaLam &&
+        header.unitLength == opts.codeToCm && header.unitTime == opts.codeToS &&
+        header.unitMass == opts.codeToG && header.particlesPerSpecies == opts.numberOfParticles &&
         header.nominalSteps == opts.numberOfSteps;
 }
 
 // Stored only for Monaghan SPH checkpoints; the dark-matter layout is unchanged.
 std::array<double, 13> sphCheckpointParameters(Options const& opts) {
-    return {opts.alpha0, opts.beta, opts.viscosityEpsilon, opts.sneighborNumber, opts.hmin,
-        opts.hmax, opts.cfl, opts.eta, opts.gy, opts.gcentral, opts.hcentral, opts.damping,
-        opts.gravity ? 1.0 : 0.0};
+    return {opts.alpha0, opts.beta, opts.viscosityEpsilon, opts.sphNeighborNumber, opts.hmin,
+        opts.hmax, opts.cfl, opts.eta, opts.yAcceleration, opts.centralAcceleration, opts.hcentral,
+        opts.damping, opts.gravity ? 1.0 : 0.0};
 }
 
 void writeDriverState(FILE* fp, DriverParameters const& params) {
@@ -1973,7 +1973,7 @@ void checkpointStateTest() {
     changed.alpha0 += 0.25;
     ALWAYS_ASSERT(sphParameters != detail::sphCheckpointParameters(changed));
     changed = getOptions();
-    changed.sneighborNumber += 1.0;
+    changed.sphNeighborNumber += 1.0;
     ALWAYS_ASSERT(sphParameters != detail::sphCheckpointParameters(changed));
     changed = getOptions();
     changed.hmax *= 2.0;

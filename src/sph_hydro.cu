@@ -97,7 +97,7 @@ __global__ void sphCudaHydro(SphRunParameters params, SphRunCudaData data, SphRe
         for (int i = self.particleRange.first; i < self.particleRange.second; i++) {
             __syncthreads();
             int const sink = self.sinkParticleRange.first - self.particleRange.first + i;
-            int const previousRung = data.rungsSnk[data.dmIndexSnk[sink]];
+            int const previousRung = data.rungsSnk[data.sinkParticleIndices[sink]];
             if (previousRung < params.minRung) {
                 continue;
             }
@@ -165,16 +165,16 @@ __global__ void sphCudaHydro(SphRunParameters params, SphRunCudaData data, SphRe
                 float const gy = data.gravity ? data.gySnk[sink] : 0.0f;
                 float const gz = data.gravity ? data.gzSnk[sink] : 0.0f;
                 ax += gx;
-                ay += gy + params.gy;
+                ay += gy + params.yAcceleration;
                 az += gz;
-                if (data.gcentral != 0.0f) {
+                if (data.centralAcceleration != 0.0f) {
                     float const dx = distance(data.x[i], Fixed32(0.5));
                     float const dy = distance(data.y[i], Fixed32(0.5));
                     float const dz = distance(data.z[i], Fixed32(0.5));
                     float const radius = sqrtf(sqr(dx, dy, dz));
                     float const hinv = 1.0f / data.hcentral;
                     float const force =
-                        data.gcentral * kernelFqinv(radius * hinv) * hinv * hinv * hinv;
+                        data.centralAcceleration * kernelFqinv(radius * hinv) * hinv * hinv * hinv;
                     ax -= force * dx;
                     ay -= force * dy;
                     az -= force * dz;
@@ -211,14 +211,15 @@ __global__ void sphCudaHydro(SphRunParameters params, SphRunCudaData data, SphRe
                     float const gravityAcceleration = sqrtf(sqr(gx, gy, gz));
                     float const gravityDt = fminf(params.maxDt,
                         data.eta *
-                            sqrtf(params.a * data.gsoft / fmaxf(gravityAcceleration, 1.0e-30f)));
+                            sqrtf(params.a * data.gravitySofteningLength /
+                                fmaxf(gravityAcceleration, 1.0e-30f)));
                     ALWAYS_ASSERT(isfinite(hydroDt) && hydroDt > 0.0f);
                     int const hydroRung = max(1, int(ceilf(log2f(params.t0 / hydroDt))));
                     int const gravityRung = max(1, int(ceilf(log2f(params.t0 / gravityDt))));
                     int const nextRung = max(max(params.minRung, previousRung - 1),
                         max(hydroRung, data.gravity ? gravityRung : 1));
                     ALWAYS_ASSERT(nextRung < MAX_RUNG);
-                    data.rungsSnk[data.dmIndexSnk[sink]] = nextRung;
+                    data.rungsSnk[data.sinkParticleIndices[sink]] = nextRung;
                     maxRungHydro = max(maxRungHydro, hydroRung);
                     maxRungGrav = max(maxRungGrav, gravityRung);
                     maxRung = max(maxRung, nextRung);

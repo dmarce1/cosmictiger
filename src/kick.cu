@@ -75,11 +75,11 @@ __device__ void doKick(KickReturn& result, KickParameters params, CudaKickData c
     float zmomTot = 0.0f;
     float nmomTot = 0.0f;
     float dkinTot = 0.f;
-    float dmKineticCorrection = 0.0f;
-    float dmXMomentumCorrection = 0.0f;
-    float dmYMomentumCorrection = 0.0f;
-    float dmZMomentumCorrection = 0.0f;
-    float dmMomentumNormCorrection = 0.0f;
+    float darkMatterKineticCorrection = 0.0f;
+    float darkMatterXMomentumCorrection = 0.0f;
+    float darkMatterYMomentumCorrection = 0.0f;
+    float darkMatterZMomentumCorrection = 0.0f;
+    float darkMatterMomentumNormCorrection = 0.0f;
 
     float const& hsoft = params.h;
     FlopCounter<int> flops = 0;
@@ -115,7 +115,7 @@ __device__ void doKick(KickReturn& result, KickParameters params, CudaKickData c
         vy = vels[sinkIndex][YDIM];
         vz = vels[sinkIndex][ZDIM];
         float const mass = data.sph ?
-            (data.type[sinkIndex] == DARK_MATTER_TYPE ? data.dmMass : data.sphMass) :
+            (data.type[sinkIndex] == DARK_MATTER_TYPE ? data.darkMatterMass : data.sphMass) :
             1.0f;
         float const kin0 = 0.5f * mass * sqr(vx, vy, vz);
         if (params.htime) {
@@ -164,9 +164,9 @@ __device__ void doKick(KickReturn& result, KickParameters params, CudaKickData c
             bool const gas = data.sph && data.type[sinkIndex] == SPH_TYPE;
             if (gas) {
                 ParticleInteger const k = data.catIndex[sinkIndex];
-                data.sphGx[k] = fValue.gx;
-                data.sphGy[k] = fValue.gy;
-                data.sphGz[k] = fValue.gz;
+                data.sphGravityAccelerationX[k] = fValue.gx;
+                data.sphGravityAccelerationY[k] = fValue.gy;
+                data.sphGravityAccelerationZ[k] = fValue.gz;
             } else if (!params.firstCall) {
                 float const dt = 0.5f * rungDt[rungs[sinkIndex]] * params.t0;
                 vx = fmaf(fValue.gx, dt, vx);
@@ -199,12 +199,12 @@ __device__ void doKick(KickReturn& result, KickParameters params, CudaKickData c
                 vx = fmaf(fValue.gx, dt, vx);
                 vy = fmaf(fValue.gy, dt, vy);
                 vz = fmaf(fValue.gz, dt, vz);
-                dmKineticCorrection +=
+                darkMatterKineticCorrection +=
                     0.5f * mass * (sqr(syncVx, syncVy, syncVz) - sqr(vx, vy, vz));
-                dmXMomentumCorrection += mass * (syncVx - vx);
-                dmYMomentumCorrection += mass * (syncVy - vy);
-                dmZMomentumCorrection += mass * (syncVz - vz);
-                dmMomentumNormCorrection +=
+                darkMatterXMomentumCorrection += mass * (syncVx - vx);
+                darkMatterYMomentumCorrection += mass * (syncVy - vy);
+                darkMatterZMomentumCorrection += mass * (syncVz - vz);
+                darkMatterMomentumNormCorrection +=
                     mass * (sqrtf(sqr(syncVx, syncVy, syncVz)) - sqrtf(sqr(vx, vy, vz)));
             }
             maxRung = max(maxRung, (int) rungs[sinkIndex]);
@@ -224,11 +224,11 @@ __device__ void doKick(KickReturn& result, KickParameters params, CudaKickData c
     sharedReduceAdd(nmomTot);
     sharedReduceAdd(kinTot);
     sharedReduceAdd(dkinTot);
-    sharedReduceAdd(dmKineticCorrection);
-    sharedReduceAdd(dmXMomentumCorrection);
-    sharedReduceAdd(dmYMomentumCorrection);
-    sharedReduceAdd(dmZMomentumCorrection);
-    sharedReduceAdd(dmMomentumNormCorrection);
+    sharedReduceAdd(darkMatterKineticCorrection);
+    sharedReduceAdd(darkMatterXMomentumCorrection);
+    sharedReduceAdd(darkMatterYMomentumCorrection);
+    sharedReduceAdd(darkMatterZMomentumCorrection);
+    sharedReduceAdd(darkMatterMomentumNormCorrection);
 
     flops += 30;
     sharedReduceMax(maxRung);
@@ -241,11 +241,11 @@ __device__ void doKick(KickReturn& result, KickParameters params, CudaKickData c
         result.nmom += nmomTot;
         result.kin += kinTot;
         result.dkin += dkinTot;
-        result.dmKineticCorrection += dmKineticCorrection;
-        result.dmXMomentumCorrection += dmXMomentumCorrection;
-        result.dmYMomentumCorrection += dmYMomentumCorrection;
-        result.dmZMomentumCorrection += dmZMomentumCorrection;
-        result.dmMomentumNormCorrection += dmMomentumNormCorrection;
+        result.darkMatterKineticCorrection += darkMatterKineticCorrection;
+        result.darkMatterXMomentumCorrection += darkMatterXMomentumCorrection;
+        result.darkMatterYMomentumCorrection += darkMatterYMomentumCorrection;
+        result.darkMatterZMomentumCorrection += darkMatterZMomentumCorrection;
+        result.darkMatterMomentumNormCorrection += darkMatterMomentumNormCorrection;
 
         flops += 6;
     }
@@ -341,7 +341,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                         f.gx = f.gy = f.gz = 0.f;
                         float const mass = data.sph ?
                             (data.type[self.particleRange.first + l] == DARK_MATTER_TYPE ?
-                                    data.dmMass :
+                                    data.darkMatterMass :
                                     data.sphMass) :
                             1.0f;
                         f.phi = mass * selfPhi() * hinv;
@@ -597,11 +597,11 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
         atomicAdd(&rc->ymom, kr.ymom);
         atomicAdd(&rc->zmom, kr.zmom);
         atomicAdd(&rc->nmom, kr.nmom);
-        atomicAdd(&rc->dmKineticCorrection, kr.dmKineticCorrection);
-        atomicAdd(&rc->dmXMomentumCorrection, kr.dmXMomentumCorrection);
-        atomicAdd(&rc->dmYMomentumCorrection, kr.dmYMomentumCorrection);
-        atomicAdd(&rc->dmZMomentumCorrection, kr.dmZMomentumCorrection);
-        atomicAdd(&rc->dmMomentumNormCorrection, kr.dmMomentumNormCorrection);
+        atomicAdd(&rc->darkMatterKineticCorrection, kr.darkMatterKineticCorrection);
+        atomicAdd(&rc->darkMatterXMomentumCorrection, kr.darkMatterXMomentumCorrection);
+        atomicAdd(&rc->darkMatterYMomentumCorrection, kr.darkMatterYMomentumCorrection);
+        atomicAdd(&rc->darkMatterZMomentumCorrection, kr.darkMatterZMomentumCorrection);
+        atomicAdd(&rc->darkMatterMomentumNormCorrection, kr.darkMatterMomentumNormCorrection);
 
         atomicMax(&rc->maxRung, kr.maxRung);
     }
@@ -689,17 +689,17 @@ KickReturn cudaExecuteKicks(KickParameters kparams, Fixed32* devX, Fixed32* devY
     data.rungs = &particlesRung(0);
     data.sph = getOptions().sph;
     data.vsoft = false;
-    data.dmMass = getOptions().dmMass;
+    data.darkMatterMass = getOptions().darkMatterMass;
     data.sphMass = getOptions().sphMass;
     data.type = data.sph ? &particlesType(0) : nullptr;
     data.catIndex = data.sph ? &particlesCatIndex(0) : nullptr;
-    data.sphGx = data.sph ? &sphParticlesGforce(XDIM, 0) : nullptr;
-    data.sphGy = data.sph ? &sphParticlesGforce(YDIM, 0) : nullptr;
-    data.sphGz = data.sph ? &sphParticlesGforce(ZDIM, 0) : nullptr;
+    data.sphGravityAccelerationX = data.sph ? &sphParticlesGravityAcceleration(XDIM, 0) : nullptr;
+    data.sphGravityAccelerationY = data.sph ? &sphParticlesGravityAcceleration(YDIM, 0) : nullptr;
+    data.sphGravityAccelerationZ = data.sph ? &sphParticlesGravityAcceleration(ZDIM, 0) : nullptr;
     if (kparams.saveForce) {
-        data.gx = &particlesGforce(XDIM, 0);
-        data.gy = &particlesGforce(YDIM, 0);
-        data.gz = &particlesGforce(ZDIM, 0);
+        data.gx = &particlesGravityAcceleration(XDIM, 0);
+        data.gy = &particlesGravityAcceleration(YDIM, 0);
+        data.gz = &particlesGravityAcceleration(ZDIM, 0);
         data.pot = &particlesPot(0);
     } else {
         data.gx = data.gy = data.gz = data.pot = nullptr;

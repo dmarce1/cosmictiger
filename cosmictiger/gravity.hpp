@@ -74,7 +74,8 @@ void setGravityCounterUse(bool code);
 #define NFERRER 5
 
 template <class T>
-CUDA_EXPORT inline void gsoft(T& f, T& phi, T q2, T hinv, T h2inv, T h3inv, bool doPhi) {
+CUDA_EXPORT inline void gravitySofteningKernel(
+    T& f, T& phi, T q2, T hinv, T h2inv, T h3inv, bool doPhi) {
     constexpr float kAf[NFERRER][NFERRER] = {{1.0}, {2.5, -1.5},
         {35.0 / 8.0, -21.0 / 4.0, 15.0 / 8.0},
         {105.0 / 16.0, -189.0 / 16.0, 135.0 / 16.0, -35.0 / 16.0},
@@ -100,6 +101,6 @@ CUDA_EXPORT inline void gsoft(T& f, T& phi, T q2, T hinv, T h2inv, T h3inv, bool
 
 CUDA_EXPORT inline float selfPhi() {
     float f, phi;
-    gsoft(f, phi, 0.0f, 1.f, 1.f, 1.f, true);
+    gravitySofteningKernel(f, phi, 0.0f, 1.f, 1.f, 1.f, true);
     return phi;
 }
