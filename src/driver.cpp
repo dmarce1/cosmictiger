@@ -1378,7 +1378,8 @@ void driver() {
             PRINT("lc_particles_boundaries1 %e\n", tm.read());
             tm.reset();
             tm.start();
-            double const linkLen = getOptions().lcB * pow(getOptions().numberParticles, -NDIM);
+            double const linkLen =
+                getOptions().lcB * pow(getOptions().numberParticles, -1.0 / NDIM);
             lcFormTrees(tau, linkLen);
             tm.stop();
             PRINT("lc_form_trees %e\n", tm.read());

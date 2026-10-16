@@ -31,6 +31,7 @@ constexpr bool kVerbose = true;
 #include <cosmictiger/flops.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/kernel.hpp>
+#include <cosmictiger/particle_selection.hpp>
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/safe_io.hpp>
 #include <cosmictiger/sph_particles.hpp>
@@ -474,16 +475,10 @@ void particlesSetTracers(size_t count) {
             hpxLocalities()[hpxRank() + 1], count + particlesSize());
     }
 
-    double particlesPerTracer = getOptions().numberParticles / getOptions().tracerCount;
-    size_t cycles = count / particlesPerTracer;
-    double start = cycles * particlesPerTracer;
-    start -= count;
-    if (start < 0) {
-        start += particlesPerTracer;
-    }
-    memset(&particlesTracer(0), 0, particlesSize());
-    for (double r = start; r < particlesSize(); r += particlesPerTracer) {
-        particlesTracer((ParticleInteger) r) = 1;
+    if (particlesSize() > 0) {
+        size_t const totalCount = getOptions().numberParticles * (getOptions().sph ? 2 : 1);
+        detail::setTracerFlags(
+            &particlesTracer(0), particlesSize(), count, totalCount, getOptions().tracerCount);
     }
 
     if (hpxRank() < hpxSize() - 1) {

@@ -88,7 +88,7 @@ __device__ inline void erfcexp(float x, float* ec, float* ex) {    // 18 + FLOP_
 
 inline void erfcexp(double x, double* ec, double* ex) {    // 18 + FLOP_DIV + FLOP_EXP
     *ex = exp(-x * x);                                     // 2 + FLOP_EXP
-    *ec = erf(x);
+    *ec = erfc(x);
 }
 
 namespace math {

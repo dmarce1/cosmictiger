@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cassert>
 
 #include <cosmictiger/compress.hpp>
@@ -122,7 +123,8 @@ Vector<CompressedBlock> compressedLeavesToBlocks(
             }
             CompressedBlock entry;
             for (int dim = 0; dim < NDIM; dim++) {
-                entry.xc[dim] = xc[dim];
+                // The normalized +1 endpoint is outside the signed fixed-point range.
+                entry.xc[dim] = std::min(xc[dim], LightconeReal::max().toDouble());
                 entry.vc[dim] = xc[NDIM + dim];
             }
             xmax *= 1.0 + 1.0 / (1 << 16);
@@ -133,8 +135,8 @@ Vector<CompressedBlock> compressedLeavesToBlocks(
                 for (int dim = 0; dim < NDIM; dim++) {
                     auto& x = parts[i][dim];
                     auto& v = parts[i][NDIM + dim];
-                    x /= xmax;
-                    v /= vmax;
+                    x = xmax > 0.0 ? x / xmax : 0.0;
+                    v = vmax > 0.0 ? v / vmax : 0.0;
                     entry.x[dim].push_back(floor((1 << 15) * (1.0 + x)));
                     entry.v[dim].push_back(floor((1 << 15) * (1.0 + v)));
                 }
@@ -167,7 +169,14 @@ void compressedTreeCreate(Vector<Pair<int>>& leaves, Vector<Array<double, 2 * ND
             }
             lo++;
         }
-        int const mid = hi;
+        int mid = hi;
+        if (mid == partRange.first || mid == partRange.second) {
+            mid = partRange.first + numberParticles / 2;
+            std::nth_element(parts.begin() + partRange.first, parts.begin() + mid,
+                parts.begin() + partRange.second,
+                [xdim](auto const& left, auto const& right) { return left[xdim] < right[xdim]; });
+            xmid = parts[mid][xdim];
+        }
         auto leftRange = partRange;
         auto rightRange = partRange;
         auto leftBox = box;
@@ -182,6 +191,11 @@ void compressedTreeCreate(Vector<Pair<int>>& leaves, Vector<Array<double, 2 * ND
 #ifndef LC2GADGET2
 
 CompressedParticles compressParticles(Vector<LightconeEntry> const& inparts, LightconeGroup id) {
+    if (inparts.empty()) {
+        CompressedParticles arc{};
+        arc.groupId = id;
+        return arc;
+    }
     Vector<Array<double, 2 * NDIM>> particles;
     particles.reserve(inparts.size());
     Array<double, NDIM> xc;
@@ -226,8 +240,8 @@ CompressedParticles compressParticles(Vector<LightconeEntry> const& inparts, Lig
     }
     for (int i = 0; i < particles.size(); i++) {
         for (int dim = 0; dim < NDIM; dim++) {
-            particles[i][dim] /= xmax;
-            particles[i][NDIM + dim] /= vmax;
+            particles[i][dim] = xmax > 0.0 ? particles[i][dim] / xmax : 0.0;
+            particles[i][NDIM + dim] = vmax > 0.0 ? particles[i][NDIM + dim] / vmax : 0.0;
         }
         for (int dim = 0; dim < 2 * NDIM; dim++) {
             auto const& x = particles[i][dim];

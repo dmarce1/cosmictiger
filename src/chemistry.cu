@@ -410,9 +410,10 @@ __device__ float testTemperature(SpeciesT n0Value, SpeciesT& nValue, float t0, f
     float const hetot = nValue.he + nValue.hep + nValue.hepp;                 // 2
     float neMax = htot + 4.f * hetot;                                         // 2
     float neMin = neMax * 1e-20f;                                             // 1
+    float feMax;
     for (int i = 0; i < 29; i++) {
         float neMid = sqrtf(neMax * neMin);
-        float feMax, feMid;
+        float feMid;
         if (i == 0) {
             feMax = testElectronFraction(neMax, n0Value, nValue, t, dt, z, k1, k2, k3, k4, k5, k6,
                 k7, k8, k9, k11, k12, k14, k16, sigma20, sigma21, sigma22, flops);
@@ -550,8 +551,9 @@ __global__ void chemistryKernel(ChemistryParameters params, ChemistryAttributes*
            // 1 N.Hepp *= 4.0 * (double) rhoavoinv; attr.H = N.H;
            // 1 attr.H2 = N.H2; attr.Hep = N.Hep; attr.Hepp = N.Hepp; attr.Hn = N.Hn; attr.Hp =
            N.Hp; attr.He = N.He; } else {*/
+        float fMax;
         for (int i = 0; i < 27; i++) {
-            float fMid, fMax;
+            float fMid;
             tmid = sqrtf(tmax * tmin);    // 5
             nValue2 = nValue2.numberDensityToFractions();
             nValue2 = n0Value2;

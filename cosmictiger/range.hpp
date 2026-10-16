@@ -55,8 +55,8 @@ struct Range {
         Range<T, n> iValue;
         for (int dim = 0; dim < n; dim++) {
 #ifdef __CUDA_ARCH__
-            I.begin[dim] = max(begin[dim], other.begin[dim]);
-            I.end[dim] = min(end[dim], other.end[dim]);
+            iValue.begin[dim] = max(begin[dim], other.begin[dim]);
+            iValue.end[dim] = min(end[dim], other.end[dim]);
 #else
             iValue.begin[dim] = std::max(begin[dim], other.begin[dim]);
             iValue.end[dim] = std::min(end[dim], other.end[dim]);
@@ -68,15 +68,15 @@ struct Range {
     inline Range periodicIntersection(Range const& other) const {
         Range iValue;
 #ifdef __CUDA_ARCH__
-        for (int dim = 0; dim < N; dim++) {
-            I.begin[dim] = max(begin[dim], other.begin[dim]);
-            I.end[dim] = min(end[dim], other.end[dim]);
-            if (I.end[dim] <= I.begin[dim]) {
-                I.begin[dim] = max(begin[dim] + T(1), other.begin[dim]);
-                I.end[dim] = min(end[dim] + T(1), other.end[dim]);
-                if (I.end[dim] <= I.begin[dim]) {
-                    I.begin[dim] = max(begin[dim] - T(1), other.begin[dim]);
-                    I.end[dim] = min(end[dim] - T(1), other.end[dim]);
+        for (int dim = 0; dim < n; dim++) {
+            iValue.begin[dim] = max(begin[dim], other.begin[dim]);
+            iValue.end[dim] = min(end[dim], other.end[dim]);
+            if (iValue.end[dim] <= iValue.begin[dim]) {
+                iValue.begin[dim] = max(begin[dim] + T(1), other.begin[dim]);
+                iValue.end[dim] = min(end[dim] + T(1), other.end[dim]);
+                if (iValue.end[dim] <= iValue.begin[dim]) {
+                    iValue.begin[dim] = max(begin[dim] - T(1), other.begin[dim]);
+                    iValue.end[dim] = min(end[dim] - T(1), other.end[dim]);
                 }
             }
         }
@@ -100,15 +100,15 @@ struct Range {
     inline bool periodicIntersects(Range const& other) const {
         Range iValue;
 #ifdef __CUDA_ARCH__
-        for (int dim = 0; dim < N; dim++) {
-            I.begin[dim] = max(begin[dim], other.begin[dim]);
-            I.end[dim] = min(end[dim], other.end[dim]);
-            if (I.end[dim] <= I.begin[dim]) {
-                I.begin[dim] = max(begin[dim] + T(1), other.begin[dim]);
-                I.end[dim] = min(end[dim] + T(1), other.end[dim]);
-                if (I.end[dim] <= I.begin[dim]) {
-                    I.begin[dim] = max(begin[dim] - T(1), other.begin[dim]);
-                    I.end[dim] = min(end[dim] - T(1), other.end[dim]);
+        for (int dim = 0; dim < n; dim++) {
+            iValue.begin[dim] = max(begin[dim], other.begin[dim]);
+            iValue.end[dim] = min(end[dim], other.end[dim]);
+            if (iValue.end[dim] <= iValue.begin[dim]) {
+                iValue.begin[dim] = max(begin[dim] + T(1), other.begin[dim]);
+                iValue.end[dim] = min(end[dim] + T(1), other.end[dim]);
+                if (iValue.end[dim] <= iValue.begin[dim]) {
+                    iValue.begin[dim] = max(begin[dim] - T(1), other.begin[dim]);
+                    iValue.end[dim] = min(end[dim] - T(1), other.end[dim]);
                 }
             }
         }
@@ -126,7 +126,7 @@ struct Range {
             }
         }
 #endif
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < n; dim++) {
             if (iValue.end[dim] <= iValue.begin[dim]) {
                 return false;
             }

@@ -55,6 +55,16 @@ fields.
 ctest --test-dir build/release --output-on-failure
 ```
 
+The standalone tracer selection, numerical utility, and compression regressions
+run on the CPU without initializing a GPU:
+
+```sh
+ctest --test-dir build/release --output-on-failure -R '^(particle_selection|numerical_utilities|compression_)'
+```
+
+The numerical utility and compression targets still require CUDA headers. The
+build also compiles a device-side range regression without launching a kernel.
+
 The checks cover mixed-mass CPU/CUDA force evaluation, the gas gravity handoff,
 synchronized diagnostics, gas reordering, checkpoint payloads and configuration
 compatibility, a coarse Sod shock tube, dark-matter startup, and a short

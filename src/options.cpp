@@ -226,6 +226,9 @@ bool processOptions(int argc, char* argv[]) {
     if (!rc) {
         return false;
     }
+    if (opts.doTracers && opts.tracerCount <= 0) {
+        THROW_ERROR("tracer_count must be positive when do_tracers is enabled\n");
+    }
     opts.glass = 0;
     opts.stars = false;
     opts.vsoft = false;
