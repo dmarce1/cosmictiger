@@ -57,6 +57,52 @@ void testErfcexp() {
     }
 }
 
+void testPeriodicBoxSphere() {
+    Fixed32Range box;
+    Range<SimdDouble8> simdBox;
+    for (int dim = 0; dim < NDIM; dim++) {
+        box.begin[dim] = dim == XDIM ? 0.70 : 0.20;
+        box.end[dim] = dim == XDIM ? 0.80 : 0.30;
+        simdBox.begin[dim] = box.begin[dim].toDouble();
+        simdBox.end[dim] = box.end[dim].toDouble();
+    }
+    double const coordinates[8][NDIM] = {{0.75, 0.25, 0.25}, {0.81, 0.25, 0.25}, {0.85, 0.25, 0.25},
+        {0.25, 0.25, 0.25}, {0.75, 0.35, 0.25}, {0.75, 0.25, 0.35}, {0.70, 0.25, 0.25},
+        {0.50, 0.25, 0.25}};
+    float const radii[8] = {0.02f, 0.02f, 0.02f, 0.02f, 0.02f, 0.06f, 0.01f, 0.01f};
+    bool const expected[8] = {true, true, false, false, false, true, true, false};
+    Array<SimdInt, NDIM> simdPoints;
+    SimdFloat simdRadii;
+    for (int lane = 0; lane < SIMD_FLOAT_SIZE; lane++) {
+        Array<Fixed32, NDIM> point;
+        for (int dim = 0; dim < NDIM; dim++) {
+            point[dim] = coordinates[lane][dim];
+            simdPoints[dim][lane] = point[dim].raw();
+        }
+        simdRadii[lane] = radii[lane];
+        require(boxIntersectsSphere(box, point, radii[lane]) == expected[lane],
+            "Scalar box-sphere test disagrees with the geometry");
+    }
+    auto const intersections = boxIntersectsSphere(simdBox, simdPoints, simdRadii);
+    for (int lane = 0; lane < SIMD_FLOAT_SIZE; lane++) {
+        require(bool(intersections[lane]) == expected[lane],
+            "SIMD box-sphere test must preserve unsigned fixed-point positions");
+    }
+    box.begin[XDIM] = 0.95;
+    box.end[XDIM] = 0.99;
+    simdBox.begin[XDIM] = box.begin[XDIM].toDouble();
+    simdBox.end[XDIM] = box.end[XDIM].toDouble();
+    Array<Fixed32, NDIM> point;
+    for (int dim = 0; dim < NDIM; dim++) {
+        point[dim] = dim == XDIM ? 0.01 : 0.25;
+        simdPoints[dim] = point[dim].raw();
+    }
+    require(boxIntersectsSphere(box, point, 0.03f),
+        "Box-sphere test must account for the periodic boundary");
+    require(boxIntersectsSphere(simdBox, simdPoints, SimdFloat(0.03f)).sum() == SIMD_FLOAT_SIZE,
+        "SIMD box-sphere test must account for the periodic boundary");
+}
+
 template <int n>
 void testRanges() {
     Range<double, n> box(0.25);
@@ -99,6 +145,7 @@ void testRanges() {
 int main() {
     try {
         detail::testErfcexp();
+        detail::testPeriodicBoxSphere();
         detail::testRanges<6>();
         detail::testRanges<3>();
         detail::testRanges<2>();

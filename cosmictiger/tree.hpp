@@ -181,6 +181,7 @@ struct TreeCreateReturn {
         a & id;
         a & pos;
         a & radius;
+        a & box;
     }
 };
 

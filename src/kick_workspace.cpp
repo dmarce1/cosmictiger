@@ -73,6 +73,7 @@ void KickWorkspace::toGpu() {
     tm.start();
     auto const treeNodesRemoteBegin = treeNodesNextIndex();
     if (workitems_.size() == 0) {
+        kickSetRc(KickReturn());
         return;
     }
 
@@ -258,7 +259,7 @@ void KickWorkspace::toGpu() {
         futs2.push_back(hpx::async(
             HPX_PRIORITY_HI, [proc, numberOfThreads, &treeMap, &treeNodes, treeNodesRemoteBegin]() {
                 for (int i = treeNodesRemoteBegin + proc; i < treeNodesNextIndex();
-                     i += numberOfThreads) {
+                    i += numberOfThreads) {
                     if (treeNodes[i].children[LEFT].index != -1) {
                         ASSERT(treeMap.find(treeNodes[i].children[LEFT]) != treeMap.end());
                         ASSERT(treeMap.find(treeNodes[i].children[RIGHT]) != treeMap.end());
@@ -375,26 +376,25 @@ void KickWorkspace::addWork(std::shared_ptr<KickWorkspace> ptr, Expansion<float>
     item.l = l;
     item.pos = pos;
     item.self = self;
+    item.dchecklist = std::move(dchecks);
+    item.echecklist = std::move(echecks);
     bool doWork = false;
     {
         ParticleInteger const numberOfNodeParticles = treeGetNode(self)->numberOfParticles();
         std::lock_guard<MutexType> lock(mutex_);
+        for (auto const& id : item.dchecklist) {
+            ALWAYS_ASSERT(treeGetNode(id)->isLocal());
+            treeIds_.insert(id);
+        }
+        for (auto const& id : item.echecklist) {
+            ALWAYS_ASSERT(treeGetNode(id)->isLocal());
+            treeIds_.insert(id);
+        }
+        // Publish the work before another producer can observe completion.
+        workitems_.push_back(std::move(item));
         numberOfProcessedParticles_ += numberOfNodeParticles;
-        if (numberOfProcessedParticles_ == totalParticles_) {
-            doWork = true;
-        }
-        for (int i = 0; i < dchecks.size(); i++) {
-            treeIds_.insert(dchecks[i]);
-        }
-        for (int i = 0; i < echecks.size(); i++) {
-            treeIds_.insert(echecks[i]);
-        }
+        doWork = numberOfProcessedParticles_ == totalParticles_;
     }
-    item.dchecklist = std::move(dchecks);
-    item.echecklist = std::move(echecks);
-    std::unique_lock<MutexType> lock(mutex_);
-    workitems_.push_back(std::move(item));
-    lock.unlock();
     if (doWork) {
         ptr->toGpu();
     }

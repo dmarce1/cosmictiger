@@ -127,6 +127,8 @@ set(cosmictiger_source_files
     src/sph_tree.cpp
     src/stars.cpp
     tests/kernel_selection_cuda.cu
+    tests/fmm_tree.cpp
+    tests/fmm_walk.cpp
     tests/sph_gravity.cpp
     tests/units_output.cpp
 )
@@ -414,6 +416,30 @@ if(BUILD_TESTING)
         set_tests_properties(${test_name} PROPERTIES
             WORKING_DIRECTORY "${test_workdir}" RUN_SERIAL TRUE TIMEOUT 120)
     endforeach()
+    set(fmm_tree_workdir "${PROJECT_BINARY_DIR}/tests/fmm_tree")
+    file(MAKE_DIRECTORY "${fmm_tree_workdir}")
+    add_test(NAME fmm_tree COMMAND cosmictiger --run.test=fmmTree
+        --initial.particlesPerDimension=8 --hydro.enabled=false --compute.cuda=false
+        --hpx:threads=2 --hpx:bind=none)
+    set_tests_properties(fmm_tree PROPERTIES
+        WORKING_DIRECTORY "${fmm_tree_workdir}" RUN_SERIAL TRUE TIMEOUT 120)
+    foreach(fmm_backend IN ITEMS cpu cuda)
+        if(fmm_backend STREQUAL "cuda")
+            if(NOT COSMICTIGER_WITH_CUDA)
+                continue()
+            endif()
+            set(fmm_cuda true)
+        else()
+            set(fmm_cuda false)
+        endif()
+        set(fmm_walk_workdir "${PROJECT_BINARY_DIR}/tests/fmm_walk_${fmm_backend}")
+        file(MAKE_DIRECTORY "${fmm_walk_workdir}")
+        add_test(NAME fmm_walk_${fmm_backend} COMMAND cosmictiger --run.test=fmmWalk
+            --initial.particlesPerDimension=8 --hydro.enabled=false --compute.cuda=${fmm_cuda}
+            --hpx:threads=2 --hpx:bind=none)
+        set_tests_properties(fmm_walk_${fmm_backend} PROPERTIES
+            WORKING_DIRECTORY "${fmm_walk_workdir}" RUN_SERIAL TRUE TIMEOUT 120)
+    endforeach()
     foreach(kernel_backend IN ITEMS cpu cuda)
         if(kernel_backend STREQUAL "cuda" AND NOT COSMICTIGER_WITH_CUDA)
             continue()
@@ -453,6 +479,24 @@ if(BUILD_TESTING)
     set_tests_properties(rejected_options PROPERTIES WORKING_DIRECTORY "${rejected_options_workdir}"
         RUN_SERIAL TRUE TIMEOUT 20 WILL_FAIL TRUE)
     if(HPX_WITH_PARCELPORT_MPI AND MPIEXEC_EXECUTABLE)
+        set(fmm_tree_mpi_workdir "${PROJECT_BINARY_DIR}/tests/fmm_tree_mpi")
+        file(MAKE_DIRECTORY "${fmm_tree_mpi_workdir}")
+        add_test(NAME fmm_tree_mpi COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 3
+            ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS}
+            --run.test=fmmTree --initial.particlesPerDimension=8 --hydro.enabled=false
+            --compute.cuda=false --hpx:threads=2 --hpx:bind=none --hpx:localities=3)
+        set_tests_properties(fmm_tree_mpi PROPERTIES
+            WORKING_DIRECTORY "${fmm_tree_mpi_workdir}" RUN_SERIAL TRUE TIMEOUT 120)
+        if(COSMICTIGER_WITH_CUDA)
+            set(fmm_walk_mpi_workdir "${PROJECT_BINARY_DIR}/tests/fmm_walk_mpi")
+            file(MAKE_DIRECTORY "${fmm_walk_mpi_workdir}")
+            add_test(NAME fmm_walk_mpi COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 3
+                ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS}
+                --run.test=fmmWalk --initial.particlesPerDimension=8 --hydro.enabled=false
+                --compute.cuda=true --hpx:threads=2 --hpx:bind=none --hpx:localities=3)
+            set_tests_properties(fmm_walk_mpi PROPERTIES
+                WORKING_DIRECTORY "${fmm_walk_mpi_workdir}" RUN_SERIAL TRUE TIMEOUT 120)
+        endif()
         set(units_mpi_workdir "${PROJECT_BINARY_DIR}/tests/units_output_mpi")
         file(MAKE_DIRECTORY "${units_mpi_workdir}")
         add_test(NAME units_output_mpi COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2

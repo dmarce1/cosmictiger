@@ -384,8 +384,10 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
                 rbox.end[dim] = std::max(boxl.end[dim], boxr.end[dim]);
             } else if (ml[0] != 0.0) {
                 rbox = boxl;
-            } else {
+            } else if (mr[0] != 0.0) {
                 rbox = boxr;
+            } else {
+                rbox.begin[dim] = rbox.end[dim] = 0.5 * (box.begin[dim] + box.end[dim]);
             }
         }
         Array<double, NDIM> xlValue;
@@ -397,7 +399,10 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
         Array<double, NDIM> xc1, xc2;
         double radius1 = 0.0, radius2;
         bool tried1 = false;
-        if (numberOfParticles <= 64 * getOptions().bucketSize &&
+        // Global nodes have no rank-local particle range to rescan.
+        if (processRange.second - processRange.first == 1 && processRange.first == hpxRank() &&
+            particleRange.first >= 0 && numberOfParticles > 0 &&
+            numberOfParticles <= 64 * getOptions().bucketSize &&
             (rbox.end[xdim] - rbox.begin[xdim] <= 0.5)) {
             tried1 = true;
             for (int dim = 0; dim < NDIM; dim++) {
@@ -444,7 +449,7 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
             n[dim] = xlValue[dim] - xrValue[dim];    // 3
             norminv += sqr(n[dim]);                  // 6
         }
-        norminv = 1.0 / std::sqrt(norminv);    // 8
+        norminv = norminv > 0.0 ? 1.0 / std::sqrt(norminv) : 0.0;    // 8
         for (int dim = 0; dim < NDIM; dim++) {
             n[dim] *= norminv;            // 3
             n[dim] = std::abs(n[dim]);    // 3
@@ -453,13 +458,18 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
         r = 0.0;
         if (mr[0] != 0.0) {
             if (ml[0] != 0.0) {
-                for (int dim = 0; dim < NDIM; dim++) {
-                    double const xmax =
-                        std::max(xlValue[dim] + n[dim] * rlValue, xrValue[dim] + n[dim] * rrValue);
-                    double const xmin =
-                        std::min(xlValue[dim] - n[dim] * rlValue, xrValue[dim] - n[dim] * rrValue);
-                    xc2[dim] = (xmax + xmin) * 0.5;
-                    r += sqr((xmax - xmin) * 0.5);
+                if (norminv > 0.0) {
+                    for (int dim = 0; dim < NDIM; dim++) {
+                        double const xmax = std::max(
+                            xlValue[dim] + n[dim] * rlValue, xrValue[dim] + n[dim] * rrValue);
+                        double const xmin = std::min(
+                            xlValue[dim] - n[dim] * rlValue, xrValue[dim] - n[dim] * rrValue);
+                        xc2[dim] = (xmax + xmin) * 0.5;
+                        r += sqr((xmax - xmin) * 0.5);
+                    }
+                } else {
+                    xc2 = xlValue;
+                    r = std::max(sqr(rlValue), sqr(rrValue));
                 }
                 flops += 45;
             } else {
@@ -473,7 +483,7 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
                 r = rlValue * rlValue;
                 flops++;
             } else {
-                ALWAYS_ASSERT(false);
+                xc2 = rbox.begin;
                 flops += 6;
             }
         }
@@ -525,6 +535,9 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
         for (int dim = 0; dim < NDIM; dim++) {
             xminValue[dim] = box.end[dim];
             xmaxValue[dim] = box.begin[dim];
+            if (numberOfParticles == 0) {
+                xminValue[dim] = xmaxValue[dim] = 0.5 * (box.begin[dim] + box.end[dim]);
+            }
         }
         for (ParticleInteger i = particleRange.first; i < particleRange.second; i++) {
             for (int dim = 0; dim < NDIM; dim++) {

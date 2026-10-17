@@ -595,8 +595,18 @@ void bhTest() {
 
 void sphGravityTest();
 void unitsOutputTest();
+void fmmTreeTest();
+void fmmWalkTest();
 
 void test(std::string test) {
+    if (test == "fmmWalk") {
+        fmmWalkTest();
+        return;
+    }
+    if (test == "fmmTree") {
+        fmmTreeTest();
+        return;
+    }
     if (test == "unitsOutput") {
         unitsOutputTest();
         return;

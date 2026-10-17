@@ -36,31 +36,6 @@ constexpr bool kVerbose = true;
 
 HPX_PLAIN_ACTION(kick, KickAction);
 
-SimdFloat boxIntersectsSphere(
-    Range<SimdDouble8> const& box, Array<SimdInt, NDIM> const& x, SimdFloat r) {
-    SimdFloat d2 = 0.0f;
-    for (int dim = 0; dim < NDIM; dim++) {
-        SimdDouble8 const xValue = SimdDouble8(x[dim]) * SimdDouble8(Fixed32::kToFloatFactor_);
-        SimdDouble8 d2begin = xValue - box.begin[dim];
-        SimdDouble8 d2beginp1 = d2begin + SimdDouble8(1.0);
-        SimdDouble8 d2beginm1 = d2begin + SimdDouble8(-1.0);
-        d2begin = sqr(d2begin);
-        d2beginp1 = sqr(d2beginp1);
-        d2beginm1 = sqr(d2beginm1);
-        d2begin = min(d2begin, min(d2beginp1, d2beginm1));
-        SimdDouble8 d2end = xValue - box.end[dim];
-        SimdDouble8 d2endp1 = d2end + SimdDouble8(1.0);
-        SimdDouble8 d2endm1 = d2end + SimdDouble8(-1.0);
-        d2end = sqr(d2end);
-        d2endp1 = sqr(d2endp1);
-        d2endm1 = sqr(d2endm1);
-        d2end = min(d2end, min(d2endp1, d2endm1));
-        d2 +=
-            SimdFloat(((xValue < box.begin[dim]) + (xValue > box.end[dim])) * min(d2begin, d2end));
-    }
-    return d2 < sqr(r);
-}
-
 #define MAX_ACTIVE_WORKSPACES 1
 
 struct Workspace {
@@ -101,6 +76,15 @@ static void cleanupWorkspace(Workspace&& workspace) {
     workspace.nextlist.resize(0);
     workspace.leaflist.resize(0);
     localWorkspaces.push(std::move(workspace));
+}
+
+static bool sourcesAreSingleRank(Vector<TreeId> const& checklist) {
+    for (auto const& source : checklist) {
+        if (!treeGetNode(source)->isLocal()) {
+            return false;
+        }
+    }
+    return true;
 }
 
 hpx::future<KickReturn> kickFork(KickParameters params, Expansion<float> l,
@@ -191,6 +175,12 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
         localReturnFuture = localReturnPromise.get_future();
     }
     ASSERT(self.proc == hpxRank());
+    if (selfPtr->isLocal() && selfPtr->numberOfParticles() == 0) {
+        if (self.proc == 0 && self.index == 0) {
+            profilerExit();
+        }
+        return KickReturn();
+    }
     bool threadLeft = true;
     size_t cudaMemUsage;
     if (getOptions().cuda && params.gpu) {
@@ -203,11 +193,12 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
             (size_t) std::max((ParticleInteger) (rng.second - rng.first) / kickBlockCount(),
                 (ParticleInteger) getOptions().bucketSize));
         if (params.gpu && selfPtr->numberOfParticles() <= maximumGpuParticles &&
-            selfPtr->isLocal()) {
+            selfPtr->isLocal() && sourcesAreSingleRank(dchecklist) &&
+            sourcesAreSingleRank(echecklist)) {
             if (selfPtr->numberOfParticles()) {
+                particlesCovered += selfPtr->numberOfParticles();
                 cudaWorkspace->addWork(
                     cudaWorkspace, l, pos, self, std::move(dchecklist), std::move(echecklist));
-                particlesCovered += selfPtr->numberOfParticles();
             }
             if (selfPtr->localRoot) {
                 auto kr = localReturnFuture.get();
@@ -257,8 +248,8 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
     l = l2L(l, ldx, params.doPhi);
     flops += 1511 + params.doPhi * 178;
     SimdFloat myHsoft;
-    myHsoft = getOptions().hsoft;
-    float const hinv = 1.0f / getOptions().hsoft;
+    myHsoft = params.h;
+    float const hinv = 1.0f / params.h;
     ForceVectors forces;
     ParticleInteger const numberOfSelfParticles = selfPtr->numberOfParticles();
     if (selfPtr->leaf) {
@@ -419,10 +410,6 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
         cpuGravityCc(kGravityDirect, l, cclist, self, params.doPhi);
         if (selfPtr->leaf) {
             if (selfPtr->numberOfParticles() > 0) {
-                if (cudaWorkspace != nullptr) {
-                    cudaWorkspace->recordProcessedParticles(
-                        cudaWorkspace, selfPtr->numberOfParticles());
-                }
                 cpuGravityCp(l, cplist, self, params.doPhi);
                 cpuGravityPc(forces, params.doPhi, self, pclist);
                 cpuGravityPp(forces, params.doPhi, self, leaflist, params.h);
@@ -443,9 +430,9 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
                 for (ParticleInteger dim = 0; dim < NDIM; dim++) {
                     dx[dim] = distance(particlesPos(dim, i), selfPtr->pos[dim]);
                 }
-                auto const l2 = l2P(l, dx, true);
+                auto const l2 = l2P(l, dx, params.doPhi);
                 float const gravitySmoothingLength =
-                    getOptions().hsoft / selectedGravityKernel().supportPerSmoothing;
+                    params.h / selectedGravityKernel().supportPerSmoothing;
                 forces.phi[j] += SCALE_FACTOR1 * l2(0, 0, 0);
                 forces.gx[j] -= SCALE_FACTOR2 * l2(1, 0, 0);
                 forces.gy[j] -= SCALE_FACTOR2 * l2(0, 1, 0);
@@ -570,8 +557,11 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
             localReturnPromise.set_value(completed);
         }
         addCpuFlops(flops);
+        if (cudaWorkspace != nullptr) {
+            cudaWorkspace->recordProcessedParticles(cudaWorkspace, selfPtr->numberOfParticles());
+        }
         if (selfPtr->localRoot) {
-            return localReturn;
+            return kr;
         } else {
             return KickReturn();
         }

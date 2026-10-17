@@ -453,7 +453,7 @@ inline float distance(Fixed32 b, RangeFixed a) {
     return -distance(a, b);
 }
 
-__device__ inline bool boxIntersectsSphere(
+CUDA_EXPORT inline bool boxIntersectsSphere(
     Fixed32Range const& box, Array<Fixed32, NDIM> const& x, float r) {
     float d2 = 0.0f;
     for (int dim = 0; dim < NDIM; dim++) {
@@ -464,4 +464,33 @@ __device__ inline bool boxIntersectsSphere(
     }
     return d2 < sqr(r);
 }
+
+#ifndef __CUDACC__
+inline SimdFloat boxIntersectsSphere(
+    Range<SimdDouble8> const& box, Array<SimdInt, NDIM> const& x, SimdFloat r) {
+    SimdFloat d2 = 0.0f;
+    for (int dim = 0; dim < NDIM; dim++) {
+        SimdDouble8 xValue = SimdDouble8(x[dim]) * SimdDouble8(Fixed32::kToFloatFactor_);
+        // Positions are unsigned coordinates in [0, 1), not signed displacements.
+        xValue = xValue + (xValue < SimdDouble8(0.0));
+        SimdDouble8 d2begin = xValue - box.begin[dim];
+        SimdDouble8 d2beginp1 = d2begin + SimdDouble8(1.0);
+        SimdDouble8 d2beginm1 = d2begin + SimdDouble8(-1.0);
+        d2begin = sqr(d2begin);
+        d2beginp1 = sqr(d2beginp1);
+        d2beginm1 = sqr(d2beginm1);
+        d2begin = min(d2begin, min(d2beginp1, d2beginm1));
+        SimdDouble8 d2end = xValue - box.end[dim];
+        SimdDouble8 d2endp1 = d2end + SimdDouble8(1.0);
+        SimdDouble8 d2endm1 = d2end + SimdDouble8(-1.0);
+        d2end = sqr(d2end);
+        d2endp1 = sqr(d2endp1);
+        d2endm1 = sqr(d2endm1);
+        d2end = min(d2end, min(d2endp1, d2endm1));
+        d2 +=
+            SimdFloat(((xValue < box.begin[dim]) + (xValue > box.end[dim])) * min(d2begin, d2end));
+    }
+    return d2 < sqr(r);
+}
+#endif
 #endif /* RANGE_HPP_ */

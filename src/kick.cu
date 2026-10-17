@@ -353,65 +353,78 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                 if (numberOfSinks) {
                     nextlist.resize(0);
                     cclist.resize(0);
+                    leaflist.resize(0);
                     constexpr int kCc = 0;
-                    constexpr int kNext = 1;
-                    constexpr int kNlists = 2;
+                    constexpr int kLeaf = 1;
+                    constexpr int kNext = 2;
+                    constexpr int kNlists = 3;
                     Array<bool, kNlists> sw;
-                    DeviceVector<int>* lists[kNlists] = {&cclist, &nextlist};
+                    DeviceVector<int>* lists[kNlists] = {&cclist, &leaflist, &nextlist};
 
                     auto& checks = echecks;
                     float const thetainv = 1.f / globalParams.theta;
-                    int const maxi = roundUp(checks.size(), WARP_SIZE);
-                    for (int i = tid; i < maxi; i += WARP_SIZE) {
-                        for (int n = 0; n < kNlists; n++) {
-                            sw[n] = false;
-                        }
-                        if (i < checks.size()) {
-                            TreeNode const& other = treeNodes[checks[i]];
-                            if (other.numberOfParticles()) {
-                                for (int dim = 0; dim < NDIM; dim++) {
-                                    dx[dim] = distance(self.pos[dim], other.pos[dim]);    // 3
-                                }
-                                float r2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
-                                r2 =
-                                    fmaxf(r2, sqr(fmaxf(0.5f - (self.radius + other.radius), 0.f)));
-                                float const dcc = (self.radius + other.radius) * thetainv;
-                                sw[kCc] = r2 > sqr(dcc);
-                                flops += 24;
-                                if (!sw[kCc]) {
-                                    sw[kNext] = true;
-                                    ALWAYS_ASSERT(!other.leaf);
-                                }
-                            }
-                        }
-                        {
-                            Array<int, kNlists> l, total;
+                    do {
+                        int const maxi = roundUp(checks.size(), WARP_SIZE);
+                        for (int i = tid; i < maxi; i += WARP_SIZE) {
                             for (int n = 0; n < kNlists; n++) {
-                                l[n] = sw[n];
+                                sw[n] = false;
                             }
-                            computeIndicesArray(l, total);
-                            for (int n = 0; n < kNlists; n++) {
-                                int const start = lists[n]->size();
-                                __syncwarp();
-                                lists[n]->resize(start + total[n]);
-                                if (sw[n]) {
-                                    (*lists[n])[l[n] + start] = checks[i];
+                            if (i < checks.size()) {
+                                TreeNode const& other = treeNodes[checks[i]];
+                                if (other.numberOfParticles()) {
+                                    for (int dim = 0; dim < NDIM; dim++) {
+                                        dx[dim] = distance(self.pos[dim], other.pos[dim]);    // 3
+                                    }
+                                    float r2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
+                                    r2 = fmaxf(
+                                        r2, sqr(fmaxf(0.5f - (self.radius + other.radius), 0.f)));
+                                    float const dcc = (self.radius + other.radius) * thetainv;
+                                    sw[kCc] = r2 > sqr(dcc);
+                                    flops += 24;
+                                    if (!sw[kCc]) {
+                                        sw[kLeaf] = other.leaf;
+                                        sw[kNext] = !other.leaf;
+                                        ALWAYS_ASSERT(!other.leaf || !self.leaf);
+                                    }
+                                }
+                            }
+                            {
+                                Array<int, kNlists> l, total;
+                                for (int n = 0; n < kNlists; n++) {
+                                    l[n] = sw[n];
+                                }
+                                computeIndicesArray(l, total);
+                                for (int n = 0; n < kNlists; n++) {
+                                    int const start = lists[n]->size();
+                                    __syncwarp();
+                                    lists[n]->resize(start + total[n]);
+                                    if (sw[n]) {
+                                        (*lists[n])[l[n] + start] = checks[i];
+                                    }
                                 }
                             }
                         }
-                    }
-                    __syncwarp();
-                    checks.resize(NCHILD * nextlist.size());
-                    for (int i = tid; i < nextlist.size(); i += WARP_SIZE) {
-                        auto const& node = treeNodes[nextlist[i]];
-                        auto const& children = node.children;
-                        checks[NCHILD * i + LEFT] = children[LEFT].index;
-                        checks[NCHILD * i + RIGHT] = children[RIGHT].index;
-                    }
-                    nextlist.resize(0);
-                    __syncwarp();
+                        __syncwarp();
+                        checks.resize(NCHILD * nextlist.size());
+                        for (int i = tid; i < nextlist.size(); i += WARP_SIZE) {
+                            auto const& node = treeNodes[nextlist[i]];
+                            auto const& children = node.children;
+                            checks[NCHILD * i + LEFT] = children[LEFT].index;
+                            checks[NCHILD * i + RIGHT] = children[RIGHT].index;
+                        }
+                        nextlist.resize(0);
+                        __syncwarp();
+                    } while (checks.size() && self.leaf);
                     cudaGravityCcEwald(
                         data, lValue3.back().expansion, self, cclist, globalParams.doPhi);
+                    if (!self.leaf) {
+                        int const start = checks.size();
+                        checks.resize(start + leaflist.size());
+                        for (int i = tid; i < leaflist.size(); i += WARP_SIZE) {
+                            checks[start + i] = leaflist[i];
+                        }
+                        __syncwarp();
+                    }
                 }
                 if (numberOfSinks) {
                     nextlist.resize(0);
