@@ -22,10 +22,17 @@
 
 #include <array>
 #include <cstdint>
+#include <cstdio>
+#include <filesystem>
+#include <fstream>
+#include <memory>
 #include <string>
+#include <system_error>
 
 #include <dirent.h>
+#include <fcntl.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 #include <cosmictiger/chemistry.hpp>
 #include <cosmictiger/constants.hpp>
@@ -301,6 +308,29 @@ Vector<double> readCheckpointList() {
     }
     return chkpts;
 }
+
+namespace detail {
+
+void checkpointRedshiftAlias(int iteration, double redshift) {
+    char aliasName[128];
+    snprintf(aliasName, sizeof(aliasName), "checkpoint.z.%.1f", redshift);
+    std::error_code error;
+    auto const status = std::filesystem::symlink_status(aliasName, error);
+    if (!error && status.type() != std::filesystem::file_type::not_found) {
+        PRINT("Redshift checkpoint alias %s already exists; restart from checkpoint.%i\n",
+            aliasName, iteration);
+        return;
+    }
+    error.clear();
+    std::filesystem::create_directory_symlink(
+        "checkpoint." + std::to_string(iteration), aliasName, error);
+    if (error) {
+        PRINT("Unable to create redshift checkpoint alias %s; restart from checkpoint.%i\n",
+            aliasName, iteration);
+    }
+}
+
+}    // namespace detail
 
 static void flushTimings(bool reset) {
     auto const theta = getOptions().theta;
@@ -1439,6 +1469,7 @@ void driver() {
     double const hsoft0 = getOptions().gravitySupportRadius;
     bool doCheck = false;
     double checkz = 1.0 / a - 1.0;
+    int lastCheckpointIteration = -1;
     buckets50.start();
     EnergiesT energies0;
     double glassError = 1.0;
@@ -1457,12 +1488,10 @@ void driver() {
                 totalTime.start();
                 PRINT("WRITING CHECKPOINT FOR Z = %e\n", doCheck ? checkz : 1.0 / a - 1.0);
                 writeCheckpoint(params);
+                lastCheckpointIteration = params.iter;
                 tmr.reset();
-                if (doCheck) {
-                    char* cmd;
-                    asprintf(&cmd, "mv checkpoint.%i checkpoint.z.%.1f\n", params.iter, checkz);
-                    system(cmd);
-                    free(cmd);
+                if (doCheck && hpxRank() == 0) {
+                    detail::checkpointRedshiftAlias(params.iter, checkz);
                 }
                 doCheck = false;
             }
@@ -1729,6 +1758,17 @@ void driver() {
     fclose(fp);
     if (getOptions().doLc) {
         checkLc(true);
+    }
+    if (params.iter > 0 && params.iter != lastCheckpointIteration) {
+        totalTime.stop();
+        runtime += totalTime.read();
+        PRINT("Writing final checkpoint for iteration %i\n", params.iter);
+        writeCheckpoint(params);
+        if (doCheck && hpxRank() == 0) {
+            detail::checkpointRedshiftAlias(params.iter, checkz);
+        }
+    }
+    if (getOptions().doLc) {
         particlesFree();
     }
     KickWorkspace::clearBuffers();
@@ -1747,9 +1787,181 @@ bool dirExists(char const* path) {
 namespace detail {
 
 constexpr uint64_t kCheckpointMagic = 0x4354535048303031ULL;
-constexpr uint32_t kCheckpointVersion = 1;
-constexpr uint32_t kSphCheckpointVersion = 2;
+constexpr uint32_t kLegacyDarkMatterCheckpointVersion = 1;
+constexpr uint32_t kLegacySphCheckpointVersion = 2;
+constexpr uint32_t kCheckpointVersion = 3;
+constexpr uint32_t kCheckpointManifestVersion = 1;
 constexpr uint32_t kMonaghanSph = 1;
+constexpr uint64_t kFnvOffsetBasis = 14695981039346656037ULL;
+constexpr uint64_t kFnvPrime = 1099511628211ULL;
+
+namespace fs = std::filesystem;
+
+struct CheckpointFileInfo {
+    uint64_t size;
+    uint64_t checksum;
+};
+
+struct CheckpointFileCloser {
+    void operator()(FILE* file) const {
+        if (file != nullptr) {
+            fclose(file);
+        }
+    }
+};
+
+using CheckpointFile = std::unique_ptr<FILE, CheckpointFileCloser>;
+
+fs::path checkpointDirectory(int iteration) {
+    return "checkpoint." + std::to_string(iteration);
+}
+
+fs::path checkpointStagingDirectory(int iteration) {
+    return "checkpoint." + std::to_string(iteration) + ".incomplete";
+}
+
+fs::path checkpointRankFile(fs::path const& directory, int rank) {
+    return directory / ("checkpoint." + std::to_string(rank) + ".dat");
+}
+
+void syncDirectory(fs::path const& directory) {
+    int const fd = open(directory.c_str(), O_RDONLY | O_DIRECTORY);
+    if (fd < 0) {
+        THROW_ERROR("Unable to open checkpoint directory %s for sync\n", directory.c_str());
+    }
+    int const result = fsync(fd);
+    int const closeResult = close(fd);
+    if (result != 0 || closeResult != 0) {
+        THROW_ERROR("Unable to sync checkpoint directory %s\n", directory.c_str());
+    }
+}
+
+void flushAndCloseCheckpointFile(CheckpointFile& file, fs::path const& path) {
+    if (ferror(file.get()) != 0 || fflush(file.get()) != 0 || fsync(fileno(file.get())) != 0) {
+        THROW_ERROR("Unable to flush checkpoint file %s\n", path.c_str());
+    }
+    FILE* rawFile = file.release();
+    if (fclose(rawFile) != 0) {
+        THROW_ERROR("Unable to close checkpoint file %s\n", path.c_str());
+    }
+}
+
+CheckpointFileInfo checkpointFileInfo(fs::path const& path) {
+    std::ifstream file(path, std::ios::binary);
+    if (!file) {
+        THROW_ERROR("Unable to inspect checkpoint file %s\n", path.c_str());
+    }
+    std::array<char, 65536> buffer{};
+    CheckpointFileInfo info{0, kFnvOffsetBasis};
+    while (file) {
+        file.read(buffer.data(), buffer.size());
+        auto const bytes = file.gcount();
+        info.size += static_cast<uint64_t>(bytes);
+        for (std::streamsize i = 0; i < bytes; i++) {
+            info.checksum ^= static_cast<unsigned char>(buffer[i]);
+            info.checksum *= kFnvPrime;
+        }
+    }
+    if (!file.eof()) {
+        THROW_ERROR("Unable to read checkpoint file %s\n", path.c_str());
+    }
+    return info;
+}
+
+uint32_t checkpointFileVersion(fs::path const& path) {
+    std::ifstream file(path, std::ios::binary);
+    uint64_t magic = 0;
+    uint32_t version = 0;
+    if (!file.read(reinterpret_cast<char*>(&magic), sizeof(magic)) ||
+        !file.read(reinterpret_cast<char*>(&version), sizeof(version)) ||
+        magic != kCheckpointMagic) {
+        return 0;
+    }
+    return version;
+}
+
+void writeCheckpointManifest(fs::path const& directory, int iteration) {
+    fs::path const path = directory / "checkpoint.meta";
+    CheckpointFile file(fopen(path.c_str(), "wb"));
+    if (!file) {
+        THROW_ERROR("Unable to create checkpoint manifest %s\n", path.c_str());
+    }
+    if (fprintf(file.get(), "COSMICTIGER_CHECKPOINT %u %u %i %i\n", kCheckpointManifestVersion,
+            kCheckpointVersion, iteration, hpxSize()) < 0) {
+        THROW_ERROR("Unable to write checkpoint manifest %s\n", path.c_str());
+    }
+    for (int rank = 0; rank < hpxSize(); rank++) {
+        auto const rankPath = checkpointRankFile(directory, rank);
+        if (checkpointFileVersion(rankPath) != kCheckpointVersion) {
+            THROW_ERROR("Checkpoint rank %i has an unexpected format version\n", rank);
+        }
+        auto const info = checkpointFileInfo(rankPath);
+        if (fprintf(file.get(), "%i %llu %016llx\n", rank,
+                static_cast<unsigned long long>(info.size),
+                static_cast<unsigned long long>(info.checksum)) < 0) {
+            THROW_ERROR("Unable to write checkpoint manifest %s\n", path.c_str());
+        }
+    }
+    flushAndCloseCheckpointFile(file, path);
+}
+
+void validateCheckpointDirectory(fs::path const& directory, int iteration) {
+    if (!fs::is_directory(directory)) {
+        THROW_ERROR("Checkpoint directory %s does not exist\n", directory.c_str());
+    }
+    fs::path const manifestPath = directory / "checkpoint.meta";
+    if (!fs::exists(manifestPath)) {
+        // Checkpoints written before format 3 have no manifest or integrity hashes.
+        for (int rank = 0; rank < hpxSize(); rank++) {
+            auto const rankPath = checkpointRankFile(directory, rank);
+            if (!fs::is_regular_file(rankPath)) {
+                THROW_ERROR("Legacy checkpoint is missing rank file %s\n", rankPath.c_str());
+            }
+            if (checkpointFileVersion(rankPath) == kCheckpointVersion) {
+                THROW_ERROR("Format 3 checkpoint %s is missing its manifest\n", directory.c_str());
+            }
+        }
+        PRINT("Reading legacy checkpoint without integrity manifest\n");
+        return;
+    }
+    std::ifstream manifest(manifestPath);
+    std::string label;
+    uint32_t manifestVersion = 0;
+    uint32_t payloadVersion = 0;
+    int savedIteration = -1;
+    int rankCount = 0;
+    if (!(manifest >> label >> manifestVersion >> payloadVersion >> savedIteration >> rankCount) ||
+        label != "COSMICTIGER_CHECKPOINT" || manifestVersion != kCheckpointManifestVersion ||
+        payloadVersion != kCheckpointVersion || savedIteration != iteration ||
+        rankCount != hpxSize()) {
+        THROW_ERROR("Checkpoint manifest %s has an incompatible version, iteration or locality "
+                    "count\n",
+            manifestPath.c_str());
+    }
+    for (int rank = 0; rank < rankCount; rank++) {
+        int savedRank = -1;
+        uint64_t savedSize = 0;
+        uint64_t savedChecksum = 0;
+        if (!(manifest >> std::dec >> savedRank >> savedSize >> std::hex >> savedChecksum) ||
+            savedRank != rank) {
+            THROW_ERROR("Checkpoint manifest %s has an invalid rank entry\n", manifestPath.c_str());
+        }
+        auto const rankPath = checkpointRankFile(directory, rank);
+        if (checkpointFileVersion(rankPath) != kCheckpointVersion) {
+            THROW_ERROR(
+                "Checkpoint rank file %s has an incompatible format version\n", rankPath.c_str());
+        }
+        auto const actual = checkpointFileInfo(rankPath);
+        if (actual.size != savedSize || actual.checksum != savedChecksum) {
+            THROW_ERROR(
+                "Checkpoint rank file %s failed size or checksum validation\n", rankPath.c_str());
+        }
+    }
+    manifest >> std::ws;
+    if (manifest.peek() != std::char_traits<char>::eof()) {
+        THROW_ERROR("Checkpoint manifest %s has unexpected trailing data\n", manifestPath.c_str());
+    }
+}
 
 struct CheckpointHeader {
     uint64_t magic;
@@ -1858,16 +2070,18 @@ bool legacyCheckpointCompatible(Options const& opts) {
 }
 
 CheckpointHeader checkpointHeader(Options const& opts) {
-    return {kCheckpointMagic, opts.sph ? kSphCheckpointVersion : kCheckpointVersion,
-        checkpointFlags(opts), opts.darkMatterMass, opts.sphMass, opts.gamma,
-        opts.gravitySupportRadius, opts.gm, opts.omegaM, opts.omegaR, opts.omegaLam, opts.codeToCm,
-        opts.codeToS, opts.codeToG, opts.numberOfParticles, opts.numberOfSteps,
-        checkpointPhysicsCode(opts)};
+    return {kCheckpointMagic, kCheckpointVersion, checkpointFlags(opts), opts.darkMatterMass,
+        opts.sphMass, opts.gamma, opts.gravitySupportRadius, opts.gm, opts.omegaM, opts.omegaR,
+        opts.omegaLam, opts.codeToCm, opts.codeToS, opts.codeToG, opts.numberOfParticles,
+        opts.numberOfSteps, checkpointPhysicsCode(opts)};
 }
 
 bool checkpointCompatible(CheckpointHeader const& header, Options const& opts) {
-    return header.version == (opts.sph ? kSphCheckpointVersion : kCheckpointVersion) &&
-        header.flags == checkpointFlags(opts) && header.reserved == checkpointPhysicsCode(opts) &&
+    bool const supportedVersion = header.version == kCheckpointVersion ||
+        header.version ==
+            (opts.sph ? kLegacySphCheckpointVersion : kLegacyDarkMatterCheckpointVersion);
+    return supportedVersion && header.flags == checkpointFlags(opts) &&
+        header.reserved == checkpointPhysicsCode(opts) &&
         header.darkMatterMass == opts.darkMatterMass && header.gasMass == opts.sphMass &&
         header.gamma == opts.gamma && header.softening == opts.gravitySupportRadius &&
         header.gravitationalMass == opts.gm && header.omegaMatter == opts.omegaM &&
@@ -2059,8 +2273,9 @@ void checkpointStateTest() {
     auto legacySphOptions = getOptions();
     legacySphOptions.sph = true;
     legacySphOptions.sphSmoothing = false;
-    auto const legacySphHeader = detail::checkpointHeader(legacySphOptions);
-    ALWAYS_ASSERT(legacySphHeader.version == 2);
+    auto legacySphHeader = detail::checkpointHeader(legacySphOptions);
+    ALWAYS_ASSERT(legacySphHeader.version == detail::kCheckpointVersion);
+    legacySphHeader.version = detail::kLegacySphCheckpointVersion;
     ALWAYS_ASSERT((legacySphHeader.flags & (1U << 10)) == 0U);
     ALWAYS_ASSERT(detail::checkpointCompatible(legacySphHeader, legacySphOptions));
     legacySphOptions.sphSmoothing = true;
@@ -2104,35 +2319,47 @@ void checkpointStateTest() {
 
 void writeCheckpoint(DriverParameters params) {
     profilerEnter(__FUNCTION__);
-    //	params.step--;
+    auto const directory = detail::checkpointDirectory(params.iter);
+    auto const stagingDirectory = detail::checkpointStagingDirectory(params.iter);
     if (hpxRank() == 0) {
-        PRINT("Writing checkpoint\n");
-        std::string command;
-        command = std::string("mkdir -p checkpoint.") + std::to_string(params.iter);
-        if (system(command.c_str()) != 0) {
-            THROW_ERROR("Unable to execute : %s\n", command.c_str());
+        PRINT("Writing checkpoint %s\n", directory.c_str());
+        if (detail::fs::exists(directory)) {
+            THROW_ERROR("Refusing to replace existing checkpoint %s\n", directory.c_str());
+        }
+        if (!detail::fs::create_directory(stagingDirectory)) {
+            THROW_ERROR("Checkpoint staging directory %s already exists; inspect the incomplete "
+                        "checkpoint before retrying\n",
+                stagingDirectory.c_str());
         }
     }
     Vector<hpx::future<void>> futs;
     for (auto const& c : hpxChildren()) {
         futs.push_back(hpx::async<WriteCheckpointAction>(c, params));
     }
-    std::string const fname = std::string("checkpoint.") + std::to_string(params.iter) +
-        std::string("/checkpoint.") + std::to_string(hpxRank()) + std::string(".dat");
-    FILE* fp = fopen(fname.c_str(), "wb");
-    if (fp == nullptr) {
-        THROW_ERROR("Unable to open %s for writing\n", fname.c_str());
+    auto const rankPath = detail::checkpointRankFile(stagingDirectory, hpxRank());
+    detail::CheckpointFile file(fopen(rankPath.c_str(), "wb"));
+    if (!file) {
+        THROW_ERROR("Unable to open %s for writing\n", rankPath.c_str());
     }
-    detail::writeDriverState(fp, params);
-    particlesSave(fp);
-    domainsSave(fp);
+    detail::writeDriverState(file.get(), params);
+    particlesSave(file.get());
+    domainsSave(file.get());
     if (getOptions().doLc) {
-        lcSave(fp);
+        lcSave(file.get());
     }
-    fclose(fp);
-    hpx::wait_all(futs.begin(), futs.end());
+    detail::flushAndCloseCheckpointFile(file, rankPath);
+    for (auto& future : futs) {
+        future.get();
+    }
     if (hpxRank() == 0) {
-        PRINT("Done writing checkpoint\n");
+        detail::writeCheckpointManifest(stagingDirectory, params.iter);
+        detail::syncDirectory(stagingDirectory);
+        if (detail::fs::exists(directory)) {
+            THROW_ERROR("Refusing to replace existing checkpoint %s\n", directory.c_str());
+        }
+        detail::fs::rename(stagingDirectory, directory);
+        detail::syncDirectory(".");
+        PRINT("Done writing checkpoint %s\n", directory.c_str());
     }
     profilerExit();
 }
@@ -2141,26 +2368,35 @@ DriverParameters readCheckpoint() {
     DriverParameters params{};
     if (hpxRank() == 0) {
         PRINT("Reading checkpoint\n");
+        detail::validateCheckpointDirectory(
+            detail::checkpointDirectory(getOptions().readCheck), getOptions().readCheck);
     }
     Vector<hpx::future<DriverParameters>> futs;
     for (auto const& c : hpxChildren()) {
         futs.push_back(hpx::async<ReadCheckpointAction>(c));
     }
     int const iter = getOptions().readCheck;
-    std::string const fname = std::string("checkpoint.") + std::to_string(iter) +
-        std::string("/checkpoint.") + std::to_string(hpxRank()) + std::string(".dat");
-    FILE* fp = fopen(fname.c_str(), "rb");
-    if (fp == nullptr) {
-        THROW_ERROR("Unable to open %s for reading.\n", fname.c_str());
+    auto const rankPath = detail::checkpointRankFile(detail::checkpointDirectory(iter), hpxRank());
+    detail::CheckpointFile file(fopen(rankPath.c_str(), "rb"));
+    if (!file) {
+        THROW_ERROR("Unable to open %s for reading.\n", rankPath.c_str());
     }
-    params = detail::readDriverState(fp);
-    particlesLoad(fp);
-    domainsLoad(fp);
+    params = detail::readDriverState(file.get());
+    particlesLoad(file.get());
+    domainsLoad(file.get());
     if (getOptions().doLc) {
-        lcLoad(fp);
+        lcLoad(file.get());
     }
-    fclose(fp);
-    hpx::wait_all(futs.begin(), futs.end());
+    if (ferror(file.get()) != 0) {
+        THROW_ERROR("Unable to read checkpoint file %s\n", rankPath.c_str());
+    }
+    FILE* rawFile = file.release();
+    if (fclose(rawFile) != 0) {
+        THROW_ERROR("Unable to close checkpoint file %s\n", rankPath.c_str());
+    }
+    for (auto& future : futs) {
+        future.get();
+    }
     if (hpxRank() == 0) {
         PRINT("Done reading checkpoint\n");
     }

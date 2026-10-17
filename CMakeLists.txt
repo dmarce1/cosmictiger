@@ -546,4 +546,9 @@ if(BUILD_TESTING)
             ${PROJECT_BINARY_DIR}/tests/smoke_${smoke_mode})
         set_tests_properties(smoke_${smoke_mode} PROPERTIES RUN_SERIAL TRUE TIMEOUT 500)
     endforeach()
+    add_test(NAME checkpoint_integrity COMMAND ${Python3_EXECUTABLE}
+        ${PROJECT_SOURCE_DIR}/tests/run_checkpoint.py
+        $<TARGET_FILE:cosmictiger> ${PROJECT_SOURCE_DIR}/power.init
+        ${PROJECT_BINARY_DIR}/tests/checkpoint_integrity)
+    set_tests_properties(checkpoint_integrity PROPERTIES RUN_SERIAL TRUE TIMEOUT 600)
 endif()

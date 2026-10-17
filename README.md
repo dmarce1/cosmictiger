@@ -186,6 +186,34 @@ checkpoints remain readable in the original mode. Earlier SPH checkpoints are
 rejected because their formulation differs. New SPH checkpoints store and validate
 the viscosity, smoothing, timestep, and external-force parameters.
 
+### Checkpoint and restart
+
+Set `checkpoint.intervalSeconds` to a wall-clock interval in seconds. The default
+is `1000000000`, so periodic checkpointing is effectively disabled unless the
+interval is changed. CosmicTiger writes a checkpoint at a completed iteration
+boundary when the interval expires, and writes one more at normal exit. A
+`checkpoint.txt` file containing one redshift per line requests checkpoints
+when those redshifts are crossed.
+
+Each checkpoint remains in a numbered `checkpoint.N` directory, where `N` is
+the iteration. It contains one `checkpoint.R.dat` file per HPX locality and a
+versioned `checkpoint.meta` manifest with the locality count, file sizes, and
+checksums. Files are written in `checkpoint.N.incomplete` and the directory is
+renamed to `checkpoint.N` only after all localities finish and the manifest is
+durable. An interrupted write leaves the incomplete directory for inspection;
+it is not a restart candidate. Existing numbered checkpoints are never
+overwritten. Redshift requests may also create a `checkpoint.z.Z` symlink for
+convenience; the numbered directory is the restart source.
+
+Restart in the same working directory with `--checkpoint.readIndex=N`, using
+the same number of HPX localities and compatible physics, particle-layout,
+units, and timestep settings. A new checkpoint is validated against its
+manifest before any locality loads state. Older dark-matter and SPH checkpoint
+formats remain readable without a manifest, but their file integrity and
+locality count cannot be verified in advance. Rank payloads still use native
+binary structures, so moving checkpoints between different architectures or
+compiler ABIs is not guaranteed.
+
 ## Build
 
 Use CMake 3.24 or newer, C++20, HPX with CUDA and networking enabled, CUDA,
