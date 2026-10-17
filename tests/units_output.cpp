@@ -359,11 +359,11 @@ void unitsOutputTest() {
     options.outputUnits = "code";
     options.outputFrame = "comoving";
     options.alpha0 = 1.75;
-    options.hsoft = 0.125 * selectedGravityKernel().supportPerSmoothing /
+    options.gravitySupportRadius = 0.125 * selectedGravityKernel().supportRadiusPerEffectiveRadius /
         std::pow(double(options.numberOfParticles), 1.0 / NDIM);
     options.eta = 0.3;
-    options.hmin = 0.2 / options.particlesPerDimension;
-    options.hmax = 0.4 / options.particlesPerDimension;
+    options.hydroMinSupportRadius = 0.2 / options.particlesPerDimension;
+    options.hydroMaxSupportRadius = 0.4 / options.particlesPerDimension;
     options.configFile = "input with spaces.ini";
     setOptions(options);
     unitsOutputParticleFixture(true);

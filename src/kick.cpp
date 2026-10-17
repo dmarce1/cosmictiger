@@ -210,7 +210,7 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
         threadLeft = cudaWorkspace != nullptr;
     }
     KickReturn kr;
-    float const hfloat = params.h;
+    float const supportRadius = params.gravitySupportRadius;
     float const gm = params.gm;
     float const eta = params.eta;
     bool const saveForce = params.saveForce;
@@ -247,16 +247,17 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
     }
     l = l2L(l, ldx, params.doPhi);
     flops += 1511 + params.doPhi * 178;
-    SimdFloat myHsoft;
-    myHsoft = params.h;
-    float const hinv = 1.0f / params.h;
+    SimdFloat mySupportRadius;
+    mySupportRadius = params.gravitySupportRadius;
+    float const inverseSupportRadius = 1.0f / params.gravitySupportRadius;
     ForceVectors forces;
     ParticleInteger const numberOfSelfParticles = selfPtr->numberOfParticles();
     if (selfPtr->leaf) {
         forces = ForceVectors(numberOfSelfParticles);
         for (ParticleInteger i = 0; i < numberOfSelfParticles; i++) {
             forces.gx[i] = forces.gy[i] = forces.gz[i] = 0.0f;
-            forces.phi[i] = particlesMass(selfPtr->particleRange.first + i) * selfPhi() * hinv;
+            forces.phi[i] =
+                particlesMass(selfPtr->particleRange.first + i) * selfPhi() * inverseSupportRadius;
         }
     }
     {
@@ -293,7 +294,7 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
                 }
                 SimdFloat r2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);    // 5
                 r2 = max(r2, max(sqr(SimdFloat(0.5) - (selfRadius + otherRadius)), SimdFloat(0)));
-                auto const hsoft = myHsoft;
+                auto const supportRadius = mySupportRadius;
                 SimdFloat const dcc = (selfRadius + otherRadius) * thetainv;
                 SimdFloat const cc = r2 > sqr(dcc);
                 flops += maxi * 15;
@@ -353,8 +354,8 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
                     dx[dim] = SimdFloat(selfPos[dim] - otherPos[dim]) * kFixed2float;    // 3
                 }
                 SimdFloat r2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);    // 5
-                auto const hsoft = myHsoft;
-                auto const mind = selfRadius + otherRadius + hsoft;
+                auto const supportRadius = mySupportRadius;
+                auto const mind = selfRadius + otherRadius + supportRadius;
                 SimdFloat const dcc = max((selfRadius + otherRadius) * thetainv, mind);
                 SimdFloat const dcp = max((thetainv * selfRadius + otherRadius), mind);
                 SimdFloat const dpc = max((selfRadius + otherRadius * thetainv), mind);
@@ -412,7 +413,7 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
             if (selfPtr->numberOfParticles() > 0) {
                 cpuGravityCp(l, cplist, self, params.doPhi);
                 cpuGravityPc(forces, params.doPhi, self, pclist);
-                cpuGravityPp(forces, params.doPhi, self, leaflist, params.h);
+                cpuGravityPp(forces, params.doPhi, self, leaflist, params.gravitySupportRadius);
             }
         } else {
             ALWAYS_ASSERT(cplist.size() == 0);
@@ -431,8 +432,8 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
                     dx[dim] = distance(particlesPos(dim, i), selfPtr->pos[dim]);
                 }
                 auto const l2 = l2P(l, dx, params.doPhi);
-                float const gravitySmoothingLength =
-                    params.h / selectedGravityKernel().supportPerSmoothing;
+                float const gravityEffectiveRadius = params.gravitySupportRadius /
+                    selectedGravityKernel().supportRadiusPerEffectiveRadius;
                 forces.phi[j] += SCALE_FACTOR1 * l2(0, 0, 0);
                 forces.gx[j] -= SCALE_FACTOR2 * l2(1, 0, 0);
                 forces.gy[j] -= SCALE_FACTOR2 * l2(0, 1, 0);
@@ -472,7 +473,7 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
                     if (params.descending) {
                         g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]) + 1e-35f;    // 6
                         float const factor = eta * sqrtf(params.a);                     // 5
-                        float dt = std::min(factor * sqrtf(gravitySmoothingLength / sqrtf(g2)),
+                        float dt = std::min(factor * sqrtf(gravityEffectiveRadius / sqrtf(g2)),
                             (float) params.t0);    // 14
                         dt = std::min(params.maxDt, dt);
                         rung = std::max(params.minRung +
@@ -514,7 +515,7 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
                         float const syncVx = vx, syncVy = vy, syncVz = vz;
                         float const g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]) + 1e-35f;
                         float dt = std::min(
-                            eta * sqrtf(params.a) * sqrtf(gravitySmoothingLength / sqrtf(g2)),
+                            eta * sqrtf(params.a) * sqrtf(gravityEffectiveRadius / sqrtf(g2)),
                             params.t0);
                         dt = std::min(dt, params.maxDt);
                         rung = std::max(std::max((int) ceilf(log2f(params.t0 / dt)),

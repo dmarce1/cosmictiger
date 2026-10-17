@@ -19,6 +19,7 @@
 
 import argparse
 import configparser
+import math
 import os
 from pathlib import Path
 import re
@@ -57,6 +58,10 @@ def main():
                 "hydro.viscosityEpsilon", "hydro.neighborNumber", "gravity.enabled",
                 "gravity.sphSmoothing", "gravity.kernelFamily", "gravity.kernelDegree",
                 "hydro.kernelFamily", "hydro.kernelDegree",
+                "gravity.effectiveRadius", "gravity.supportRadius",
+                "hydro.minEffectiveRadius", "hydro.maxEffectiveRadius",
+                "hydro.minSupportRadius", "hydro.maxSupportRadius",
+                "hydro.centralEffectiveRadius", "hydro.centralSupportRadius",
                 "output.silo", "output.siloInterval", "output.directory", "output.units", "output.frame",
                 "output.xMin", "output.xMax", "output.yMin", "output.yMax",
                 "output.zMin", "output.zMax"}
@@ -133,6 +138,123 @@ mapSize = 8
             ["--hydro.kernelFamily=wendland", "--hydro.kernelDegree=8", "--hydro.neighborNumber=12"])):
         run(f"invalid_kernel_{index}", metadata_options + invalid, success=False)
 
+    def assertNumericSetting(output, key, expected):
+        match = re.search(r"^" + re.escape(key) + r"\s*:\s*(\S+)", output, re.MULTILINE)
+        if match is None or not math.isclose(float(match.group(1)), expected, rel_tol=1e-5):
+            raise RuntimeError(f"incorrect {key}: expected {expected}")
+
+    def assertIgnoredOption(output, ignoredKey):
+        if not any(ignoredKey in line and "warning" in line.lower() and "ignored" in line.lower()
+                   for line in output.splitlines()):
+            raise RuntimeError(f"missing warning that {ignoredKey} is ignored")
+
+    def assertNoRadiusWarning(output):
+        radiusKeys = ("effectiveRadius", "EffectiveRadius", "supportRadius", "SupportRadius",
+                      "gravity.softening", "hydro.centralSoftening")
+        if any("warning" in line.lower() and any(key in line for key in radiusKeys)
+               for line in output.splitlines()):
+            raise RuntimeError("a single radius representation produced a warning")
+
+    # Both radius representations describe the same kernel, including kernels
+    # whose support-to-effective-radius ratios differ.
+    for family, degree, ratio in (("ferrers", 8, math.sqrt(13) / 2),
+                                   ("spline", 3, math.sqrt(10 / 3)),
+                                   ("wendland", 5, math.sqrt(15) / 2)):
+        common = metadata_options + [f"--gravity.kernelFamily={family}",
+                                      f"--gravity.kernelDegree={degree}"]
+        for representation, value in (("effectiveRadius", 0.02), ("supportRadius", 0.02 * ratio)):
+            output = run(f"radius_{family}_{representation}", common + [
+                f"--gravity.{representation}={value}"])
+            assertNumericSetting(output, "gravity.effectiveRadius", 0.02)
+            assertNumericSetting(output, "gravity.supportRadius", 0.02 * ratio)
+            assertNoRadiusWarning(output)
+
+    gravityRatio = math.sqrt(13) / 2
+    hydroRatio = math.sqrt(10 / 3)
+    radiusPairs = (
+        ("gravity.effectiveRadius", "gravity.supportRadius", 0.02, gravityRatio),
+        ("hydro.centralEffectiveRadius", "hydro.centralSupportRadius", 0.02, gravityRatio),
+        ("hydro.minEffectiveRadius", "hydro.minSupportRadius", 0.01, hydroRatio),
+        ("hydro.maxEffectiveRadius", "hydro.maxSupportRadius", 0.1, hydroRatio),
+    )
+    radiusConfig = args.workdir / "radius.ini"
+    for effectiveKey, supportKey, effectiveRadius, ratio in radiusPairs:
+        supportRadius = effectiveRadius * ratio
+        conflictingSupport = 2 * supportRadius
+        for key, value in ((effectiveKey, effectiveRadius), (supportKey, supportRadius)):
+            output = run(f"radius_only_{key}", metadata_options + [f"--{key}={value}"])
+            assertNumericSetting(output, supportKey, supportRadius)
+            assertNoRadiusWarning(output)
+
+        # Explicit effective radii win across representations regardless of
+        # whether the winning value came from the command line or an INI.
+        sources = (
+            ("both_cli", "", [f"--{effectiveKey}={effectiveRadius}",
+                                f"--{supportKey}={conflictingSupport}"]),
+            ("effective_cli", f"{supportKey} = {conflictingSupport}\n",
+             [f"--{effectiveKey}={effectiveRadius}"]),
+            ("effective_ini", f"{effectiveKey} = {effectiveRadius}\n",
+             [f"--{supportKey}={conflictingSupport}"]),
+            ("both_ini", f"{effectiveKey} = {effectiveRadius}\n"
+                         f"{supportKey} = {conflictingSupport}\n", []),
+        )
+        for sourceName, configText, cliOptions in sources:
+            radiusConfig.write_text(configText)
+            output = run(f"radius_precedence_{effectiveKey}_{sourceName}", metadata_options +
+                         [f"--configuration={radiusConfig.resolve()}"] + cliOptions)
+            assertNumericSetting(output, supportKey, supportRadius)
+            assertIgnoredOption(output, supportKey)
+
+        # A losing support radius is ignored before physical validation.
+        for invalidValue in ("0", "-1", "nan", "inf"):
+            output = run(f"radius_ignored_{supportKey}_{invalidValue}", metadata_options +
+                         [f"--{effectiveKey}={effectiveRadius}", f"--{supportKey}={invalidValue}"])
+            assertNumericSetting(output, supportKey, supportRadius)
+            assertIgnoredOption(output, supportKey)
+
+        # Ordinary CLI-over-INI precedence still applies within each key.
+        for key, value in ((effectiveKey, effectiveRadius), (supportKey, supportRadius)):
+            radiusConfig.write_text(f"{key} = {2 * value}\n")
+            output = run(f"radius_same_key_{key}", metadata_options +
+                         [f"--configuration={radiusConfig.resolve()}", f"--{key}={value}"])
+            assertNumericSetting(output, supportKey, supportRadius)
+            assertNoRadiusWarning(output)
+
+    for effectiveKey, supportKey, aliasKey in (
+            ("gravity.effectiveRadius", "gravity.supportRadius", "gravity.softening"),
+            ("hydro.centralEffectiveRadius", "hydro.centralSupportRadius", "hydro.centralSoftening")):
+        # Legacy effective-radius aliases retain their meaning, and explicitly
+        # supplied aliases also take precedence over support-radius inputs.
+        output = run(f"radius_alias_{aliasKey}", metadata_options + [f"--{aliasKey}=0.02"])
+        assertNumericSetting(output, effectiveKey, 0.02)
+        assertNumericSetting(output, supportKey, 0.02 * gravityRatio)
+        assertNoRadiusWarning(output)
+        for winningKey, losingKey in ((effectiveKey, aliasKey), (aliasKey, supportKey)):
+            for winningSource in ("cli", "ini", "both_cli"):
+                if winningSource == "cli":
+                    radiusConfig.write_text(f"{losingKey} = 0.03\n")
+                    cliOptions = [f"--{winningKey}=0.02"]
+                elif winningSource == "ini":
+                    radiusConfig.write_text(f"{winningKey} = 0.02\n")
+                    cliOptions = [f"--{losingKey}=0.03"]
+                else:
+                    radiusConfig.write_text("")
+                    cliOptions = [f"--{winningKey}=0.02", f"--{losingKey}=0.03"]
+                output = run(f"radius_alias_precedence_{winningKey}_{winningSource}", metadata_options +
+                             [f"--configuration={radiusConfig.resolve()}"] + cliOptions)
+                assertNumericSetting(output, effectiveKey, 0.02)
+                assertNumericSetting(output, supportKey, 0.02 * gravityRatio)
+                assertIgnoredOption(output, losingKey)
+
+    # Defaulted legacy aliases and defaulted support bounds are fallbacks, not
+    # explicitly selected representations that can conflict with one another.
+    output = run("radius_defaults", metadata_options)
+    assertNoRadiusWarning(output)
+    for effectiveKey, supportKey, _, _ in radiusPairs:
+        for key in (effectiveKey, supportKey):
+            for value in ("0", "-1", "nan", "inf"):
+                run(f"invalid_{key}_{value}", metadata_options + [f"--{key}={value}"], success=False)
+
     def assertOutputSettings(output, outputUnits, outputFrame):
         for key, expectedValue in (("output.units", outputUnits), ("output.frame", outputFrame)):
             match = re.search(r"^" + re.escape(key) + r"\s*:\s*(\S+)", output, re.MULTILINE)
@@ -202,7 +324,10 @@ mapSize = 8
     # are introduced. Loading each through the executable also verifies comments
     # and empty-string defaults without running its physical problem.
     root = Path(__file__).resolve().parents[1]
-    expected_keys = option_names - {"help", "configuration"}
+    optional_keys = {"gravity.effectiveRadius", "gravity.supportRadius",
+                     "hydro.centralEffectiveRadius", "hydro.centralSupportRadius",
+                     "hydro.minEffectiveRadius", "hydro.maxEffectiveRadius"}
+    expected_keys = option_names - {"help", "configuration"} - optional_keys
     for path in [root / "default.ini", *sorted((root / "configurations").glob("*.ini"))]:
         ini = configparser.ConfigParser(interpolation=None, inline_comment_prefixes=("#",))
         ini.optionxform = str
@@ -211,11 +336,26 @@ mapSize = 8
         actual_keys = {f"{section}.{key}" for section in ini.sections() for key in ini[section]}
         if actual_keys != expected_keys:
             raise RuntimeError(f"{path.name} option coverage differs: {sorted(actual_keys ^ expected_keys)}")
+        # Alternatives stay commented so loading a complete example does not
+        # accidentally select two representations and trigger a warning.
+        documented_alternatives = set()
+        section = None
+        for line in path.read_text().splitlines():
+            section_match = re.fullmatch(r"\s*\[([^]]+)\]\s*", line)
+            if section_match:
+                section = section_match.group(1)
+            alternative_match = re.match(r"\s*[#;]\s*([A-Za-z][A-Za-z0-9]*)\s*=", line)
+            if section and alternative_match:
+                documented_alternatives.add(f"{section}.{alternative_match.group(1)}")
+        if not optional_keys <= documented_alternatives:
+            raise RuntimeError(f"{path.name} is missing commented radius alternatives: "
+                               f"{sorted(optional_keys - documented_alternatives)}")
         if ini["output"]["units"] != "code" or ini["output"]["frame"] != "comoving":
             raise RuntimeError(f"{path.name} must preserve native output defaults")
         output = run(f"complete_{path.stem}", metadata_options + [f"--configuration={path}"])
         if "Checkpoint state and mode validation passed" not in output:
             raise RuntimeError(f"{path.name} did not finish metadata validation")
+        assertNoRadiusWarning(output)
 
     invalid = [
         ("legacy_key", "--parts_dim=8", "parts_dim"),
@@ -271,7 +411,7 @@ mapSize = 8
         ("cfl_zero", "--hydro.cfl=0", "hydro.cfl"),
         ("cfl_large", "--hydro.cfl=1.1", "hydro.cfl"),
         ("neighbors", "--hydro.neighborNumber=10", "hydro.neighborNumber"),
-        ("min_radius", "--hydro.minSupportRadius=0", "support radii"),
+        ("min_radius", "--hydro.minSupportRadius=0", "hydro.minSupportRadius"),
         ("max_radius", "--hydro.maxSupportRadius=1e-7", "support radii"),
         ("chemistry", "--hydro.chemistry=true", "detached"),
         ("conduction", "--hydro.conduction=true", "detached"),

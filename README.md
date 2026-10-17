@@ -26,7 +26,8 @@ The old ungrouped and snake_case option names have been replaced. For example,
 and `--hydro.sph=true` is now `--hydro.enabled=true`.
 
 Use `--configuration=simulation.ini` to read an INI file. Both dotted keys and
-INI sections work; explicit command-line values override configuration values:
+INI sections work; explicit command-line values override configuration values
+for the same key. Radius representations use the precedence described below:
 
 ```ini
 [initial]
@@ -45,20 +46,22 @@ cfl = 0.22821773229381923
 maxIterations = 2
 ```
 
-[default.ini](default.ini) contains every application option at its source
-default, except `help` and `configuration`. The complete, independently editable
-problem files in [configurations/](configurations/README.md) contain the same
+[default.ini](default.ini) documents every application option except `help` and
+`configuration`, with active source defaults and commented radius alternatives.
+The complete, independently editable problem files in [configurations/](configurations/README.md) contain the same
 option set, with problem-specific values and inline help comments. Files are
 loaded explicitly; there is no implicit loading of `default.ini`.
 
-Gravity and SPH can select kernels independently. Both use the smoothing width
-`h = 2 sigma`, where sigma is the standard deviation along one coordinate axis:
+Gravity and SPH can select kernels independently. Both use an effective radius
+`effectiveRadius = 2 sigma`, where sigma is the standard deviation along one
+coordinate axis. This preserves the existing numerical length scale: adopting
+radius terminology does not introduce a factor-of-two conversion.
 
 ```ini
 [gravity]
 kernelFamily = ferrers
 kernelDegree = 8
-softening = 0.01876988456953534
+effectiveRadius = 0.01876988456953534
 [hydro]
 kernelFamily = wendland
 kernelDegree = 8
@@ -66,10 +69,24 @@ neighborNumber = 120
 ```
 
 The supported density polynomial degrees are spline 3–9, Wendland 2/5/8,
-and Ferrers 2/4/6/8. `gravity.softening` is this common width in mean particle
-spacings; `hydro.minSupportRadius` and `hydro.maxSupportRadius` explicitly bound
-the support radius H. See [kernel definitions and migration](docs/kernels.md)
-for timestep conventions and conversions from older parameter files.
+and Ferrers 2/4/6/8. Specify `gravity.effectiveRadius` or `gravity.supportRadius`,
+in mean particle spacings. The imposed central force similarly accepts
+`hydro.centralEffectiveRadius` or `hydro.centralSupportRadius`, in box units,
+using the gravity kernel. `gravity.softening` and `hydro.centralSoftening`
+remain aliases for their effective radii.
+
+SPH adapts each particle's support radius to its density. Its bounds accept
+`hydro.minEffectiveRadius` or `hydro.minSupportRadius`, and
+`hydro.maxEffectiveRadius` or `hydro.maxSupportRadius`, in initial interparticle
+spacings, using the hydro kernel. Neighbor and force evaluation use support
+radii; timestep limits use effective radii.
+
+Both representations may be supplied. An explicit effective-radius key wins
+over its legacy alias, and either wins over a support-radius key, including
+across command-line and INI inputs. A warning names each ignored key. To select
+a support radius in an example INI, remove or comment out its active effective
+radius or softening alias. See [kernel definitions and migration](docs/kernels.md)
+for conversions and timestep conventions.
 
 For the existing Kelvin–Helmholtz test, run from a build directory:
 
@@ -108,7 +125,7 @@ are also supported. `output.silo=false` disables particle output.
 `analysis.views` independently controls HEALPix maps.
 
 Gas particles are written as Silo CSG spheres in the `gas` mesh. Each sphere's
-radius is the stored SPH kernel support radius (`H = gamma_kernel h`), also available as the
+radius is the stored SPH kernel support radius, also available as the
 zone-centered `kernel_support_radius` field. Sphere centers and radii follow the
 selected output units and frame. Dark matter and stars remain point meshes.
 VisIt discretizes overlapping CSG zones for display, which can show seams where

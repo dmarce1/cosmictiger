@@ -165,7 +165,7 @@ void bhCreateTree(DeviceVector<BhTreeNode>& nodes, DeviceVector<int>& sinkBucket
 
 void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& sinkBuckets,
     DeviceVector<float>& phi, DeviceVector<Array<float, NDIM>>& parts, float theta) {
-    float const h = getOptions().hsoft;
+    float const h = getOptions().gravitySupportRadius;
     float const gm = getOptions().gm;
     float const hinv = 1.0 / h;
     float const h2 = h * h;
@@ -270,7 +270,7 @@ void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& si
 
 void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Array<float, NDIM> pt, float& phi,
     DeviceVector<Array<float, NDIM>>& parts, float theta) {
-    float const h = getOptions().hsoft;
+    float const h = getOptions().gravitySupportRadius;
     float const gm = getOptions().gm;
     float const hinv = 1.0f / h;
     float const h2 = h * h;
@@ -387,7 +387,7 @@ DeviceVector<float> bhEvaluatePotential(DeviceVector<Array<float, NDIM>>& x, boo
         Timer tm1;
         tm1.start();
         pot = bhEvaluatePotentialGpu(
-            nodes, x, sinkBuckets, 0.85, getOptions().hsoft, getOptions().gm);
+            nodes, x, sinkBuckets, 0.85, getOptions().gravitySupportRadius, getOptions().gm);
         tm1.stop();
         //		PRINT("1 %e\n", tm1.read());
     }
@@ -424,7 +424,8 @@ DeviceVector<float> bhEvaluatePoints(
     DeviceVector<float> pot(y.size());
     bhCreateTree(nodes, sinkBuckets, 0, x, sortOrder, box, 0, x.size(), BH_BUCKET_SIZE);
     if (gpu) {
-        pot = bhEvaluatePotentialPointsGpu(nodes, x, y, 0.85, getOptions().hsoft, getOptions().gm);
+        pot = bhEvaluatePotentialPointsGpu(
+            nodes, x, y, 0.85, getOptions().gravitySupportRadius, getOptions().gm);
     } else {
         for (int i = 0; i < y.size(); i++) {
             bhTreeEvaluatePoint(nodes, y[i], pot[i], x, 0.85);

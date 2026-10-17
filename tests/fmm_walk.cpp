@@ -50,7 +50,7 @@ KickParameters fmmWalkParameters(bool useCuda, float theta = kFmmWalkTheta) {
     params.a = 1.0f;
     params.t0 = 1.0f;
     params.theta = theta;
-    params.h = getOptions().hsoft;
+    params.gravitySupportRadius = getOptions().gravitySupportRadius;
     params.eta = getOptions().eta;
     params.gm = 1.0f;
     params.velInit = false;
@@ -90,7 +90,7 @@ void fmmWalkPrepareArena() {
     }
     fmmWalkResetKickState();
     particlesSortByRung(0);
-    treeCreate(TreeCreateParameters(0, kFmmWalkTheta, getOptions().hsoft));
+    treeCreate(TreeCreateParameters(0, kFmmWalkTheta, getOptions().gravitySupportRadius));
 }
 
 TreeId fmmWalkAddNode(Array<Fixed32, NDIM> const& position, float radius,
@@ -141,7 +141,7 @@ void fmmWalkVerifyEwald(std::string const& label, TreeId sink, Vector<TreeId> co
         -SCALE_FACTOR2 * value(0, 1, 0), -SCALE_FACTOR2 * value(0, 0, 1)};
     double const expectedEwaldPotential = SCALE_FACTOR1 * value(0, 0, 0);
     // The call's support may differ from the defaults used to build the tree.
-    float const support = 2.0f * getOptions().hsoft;
+    float const support = 2.0f * getOptions().gravitySupportRadius;
     double const selfPotential = selfPhi() * (1.0f / support);
     double const expectedPotential = selfPotential + expectedEwaldPotential;
     auto const* sinkNode = treeGetNode(sink);
@@ -153,7 +153,7 @@ void fmmWalkVerifyEwald(std::string const& label, TreeId sink, Vector<TreeId> co
             Expansion<float> local;
             local = 0.0f;
             auto params = fmmWalkParameters(backend != 0);
-            params.h = support;
+            params.gravitySupportRadius = support;
             params.doPhi = potentialMode != 0;
             auto const result =
                 kick(params, local, sinkNode->pos, sink, Vector<TreeId>{}, checklist, nullptr);
@@ -352,7 +352,7 @@ double fmmWalkVerifyDistributedForces(TreeId root) {
     }
     ForceVectors reference(1);
     reference.gx[0] = reference.gy[0] = reference.gz[0] = reference.phi[0] = 0.0f;
-    cpuGravityPp(reference, true, sink, sources, getOptions().hsoft);
+    cpuGravityPp(reference, true, sink, sources, getOptions().gravitySupportRadius);
     detail::fmmWalkRequireClose("distributed handoff x acceleration",
         particlesGravityAcceleration(XDIM, 0), reference.gx[0]);
     detail::fmmWalkRequireClose("distributed handoff y acceleration",
@@ -376,7 +376,7 @@ void fmmWalkTest() {
     options.doGroups = false;
     options.doTracers = false;
     options.bucketSize = 64;
-    options.hsoft = 0.005;
+    options.gravitySupportRadius = 0.005;
     options.numberOfParticles = hpxSize() == 1 ? 6 : hpxSize();
     setOptions(options);
     if (hpxSize() == 1) {
@@ -396,7 +396,7 @@ void fmmWalkTest() {
         domainsBegin(0);
         domainsEnd();
         particlesSortByRung(0);
-        auto const built = treeCreate(TreeCreateParameters(0, 0.1, options.hsoft));
+        auto const built = treeCreate(TreeCreateParameters(0, 0.1, options.gravitySupportRadius));
         // Three ranks give a one-rank left child and a global right child at the first handoff.
         // Omit Ewald here and force the nearby multiparticle sources open to a direct reference.
         auto const* root = treeGetNode(built.id);

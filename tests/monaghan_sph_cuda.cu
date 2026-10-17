@@ -129,7 +129,7 @@ public:
         data_.n = 32.0f;
         data_.defGamma = 5.0f / 3.0f;
         data_.eta = 0.25f;
-        data_.gravitySofteningLength = 0.05f;
+        data_.gravityEffectiveRadius = 0.05f;
         params_.a = 1.0f;
         params_.adot = 0.0f;
         params_.minRung = 1;
@@ -428,8 +428,8 @@ void testSelectedKernel() {
         gradient += 0.5 * dkernelWDq(radius / support) / std::pow(support, 4);
         pressurePair += (data.defGamma - 1.0f) * data.eint[i] / data.rho[i];
         double const sound = std::sqrt(data.defGamma * (data.defGamma - 1.0f) * data.eint[i]);
-        inverseCfl =
-            std::max(inverseCfl, sound * selectedHydroKernel().supportPerSmoothing / support);
+        inverseCfl = std::max(
+            inverseCfl, sound * selectedHydroKernel().supportRadiusPerEffectiveRadius / support);
     }
     fixture.hydro(1);
     requireClose("selected kernel CPU/CUDA pressure force", data.rec6Snk[0].dvel[XDIM],
@@ -453,13 +453,13 @@ void testSelectedCentralGravity() {
     data.y[0] = data.z[0] = 0.5;
     data.convergedSnk[0] = true;
     data.centralAcceleration = 0.07f;
-    data.hcentral = 0.3f;
+    data.centralSupportRadius = 0.3f;
     fixture.density();
     fixture.hydro();
     double const radius = distance(data.x[0], Fixed32(0.5));
     double const expected = -data.centralAcceleration * radius /
-        std::pow(double(data.hcentral), 3) *
-        radial_kernel::forceFactor(selectedGravityKernel(), radius / data.hcentral);
+        std::pow(double(data.centralSupportRadius), 3) *
+        radial_kernel::forceFactor(selectedGravityKernel(), radius / data.centralSupportRadius);
     requireClose(
         "selected gravity kernel central force", data.rec6Snk[0].dvel[XDIM], expected, 5.0e-6);
 }
@@ -472,7 +472,8 @@ void testDefaultTimestepCalibration() {
     fixture.params_.yAcceleration = 2.0f;
     fixture.params_.cfl = 0.25 * std::sqrt(5.0 / 6.0);
     double const oldCentralPotential = 693.0 / 256.0;
-    data.eta = 0.25 * std::sqrt(selectedGravityKernel().supportPerSmoothing / oldCentralPotential);
+    data.eta = 0.25 *
+        std::sqrt(selectedGravityKernel().supportRadiusPerEffectiveRadius / oldCentralPotential);
     fixture.density();
     fixture.hydro(1);
     double const sound = std::sqrt(data.defGamma * (data.defGamma - 1.0f) * data.eint[0]);
@@ -506,7 +507,7 @@ void testDefaultCompressionTimesteps(float gamma, bool thermalControls) {
     fixture.params_.alpha0 = fixture.params_.beta = 0.0f;
     fixture.params_.cfl = 0.25 * std::sqrt(5.0 / 6.0);
     double const oldEta = 0.25 / std::sqrt(693.0 / 256.0);
-    data.eta = oldEta * std::sqrt(selectedGravityKernel().supportPerSmoothing);
+    data.eta = oldEta * std::sqrt(selectedGravityKernel().supportRadiusPerEffectiveRadius);
     fixture.density();
     fixture.hydro(1);
     for (int i = 0; i < 2; i++) {

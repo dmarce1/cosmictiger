@@ -41,8 +41,8 @@ void drift(
     cudaDrift(rung, scale, dt, tau0, tau1, tauMax, drag);
     particlesMemadviseCpu();
     if (sph) {
-        float const hmin = getOptions().hmin;
-        float const hmax = getOptions().hmax;
+        float const hmin = getOptions().hydroMinSupportRadius;
+        float const hmax = getOptions().hydroMaxSupportRadius;
         for (ParticleInteger i = 0; i < sphParticlesSize(); i++) {
             if (rung >= 0 && sphParticlesRung(i) != rung) {
                 continue;

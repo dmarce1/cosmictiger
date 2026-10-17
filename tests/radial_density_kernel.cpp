@@ -18,7 +18,8 @@ using std::size_t;
 constexpr auto kDimensionOne = radial_kernel::makeDensityKernelTable<1>({Family::Wendland, 7});
 constexpr auto kDimensionTwenty = radial_kernel::makeDensityKernelTable<20>({Family::Spline, 9});
 static_assert(kDimensionOne.pieceCount == 1 && kDimensionOne.degree == 7);
-static_assert(kDimensionTwenty.pieceCount == 5 && kDimensionTwenty.supportPerSmoothing > 0);
+static_assert(
+    kDimensionTwenty.pieceCount == 5 && kDimensionTwenty.supportRadiusPerEffectiveRadius > 0);
 static_assert(radial_kernel::isValidDensity<4>({Family::Wendland, 9}));
 static_assert(!radial_kernel::isValidDensity<20>({Family::Wendland, 9}));
 static_assert(radial_kernel::makeDensityKernelTable<20>({Family::Wendland, 9}).pieceCount == 0);
@@ -97,8 +98,10 @@ void test(KernelSpec spec) {
     double const variance =
         integrate(table, [&](double q) { return area * std::pow(q, dimension + 1) * density(q); });
     close(mass, 1, 8e-14, "D-dimensional normalization");
-    close(variance, dimension / (4 * table.supportPerSmoothing * table.supportPerSmoothing), 8e-14,
-        "D-dimensional width");
+    close(variance,
+        dimension /
+            (4 * table.supportRadiusPerEffectiveRadius * table.supportRadiusPerEffectiveRadius),
+        8e-14, "D-dimensional width");
     auto const base = radial_kernel::makeKernelTable(spec);
     for (int i = 0; i <= 100; ++i) {
         double const q = double(i) / 100;
@@ -127,15 +130,15 @@ void test(KernelSpec spec) {
                 (std::pow(std::numbers::pi, dimension / 2.0) * std::tgamma(m + 1));
             close(density(q), normalizer * std::pow(1 - q * q, m), 8e-14,
                 "analytic Ferrers normalization");
-            close(table.supportPerSmoothing, std::sqrt(dimension + spec.degree + 2.0) / 2, 4e-15,
-                "analytic Ferrers width");
+            close(table.supportRadiusPerEffectiveRadius,
+                std::sqrt(dimension + spec.degree + 2.0) / 2, 4e-15, "analytic Ferrers width");
         }
         if constexpr (dimension == 3) {
             close(density(q), radial_kernel::value(base, q), 3e-14, "production 3D density parity");
             close(radial_kernel::derivative(table, q), radial_kernel::derivative(base, q), 3e-14,
                 "production 3D derivative parity");
-            close(table.supportPerSmoothing, base.supportPerSmoothing, 4e-15,
-                "production 3D width parity");
+            close(table.supportRadiusPerEffectiveRadius, base.supportRadiusPerEffectiveRadius,
+                4e-15, "production 3D width parity");
         }
         if (i > 0 && i < 100) {
             double const step = 1e-6;

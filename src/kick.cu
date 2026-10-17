@@ -81,7 +81,8 @@ __device__ void doKick(KickReturn& result, KickParameters params, CudaKickData c
     float darkMatterZMomentumCorrection = 0.0f;
     float darkMatterMomentumNormCorrection = 0.0f;
 
-    float const gravitySmoothingLength = params.h / selectedGravityKernel().supportPerSmoothing;
+    float const gravityEffectiveRadius =
+        params.gravitySupportRadius / selectedGravityKernel().supportRadiusPerEffectiveRadius;
     FlopCounter<int> flops = 0;
     for (int i = tid; i < numberOfSinks; i += WARP_SIZE) {
         Expansion2<float> l2;
@@ -144,7 +145,7 @@ __device__ void doKick(KickReturn& result, KickParameters params, CudaKickData c
 
             if (params.descending) {
                 g2 = sqr(fValue.gx, fValue.gy, fValue.gz);
-                dt = fminf(params.eta * sqrt(params.a * gravitySmoothingLength * rsqrtf(g2)),
+                dt = fminf(params.eta * sqrt(params.a * gravityEffectiveRadius * rsqrtf(g2)),
                     params.t0);    // 12
                 dt = fminf(params.maxDt, dt);
                 rung = rungs[sinkIndex];
@@ -189,7 +190,7 @@ __device__ void doKick(KickReturn& result, KickParameters params, CudaKickData c
                 float const syncVx = vx, syncVy = vy, syncVz = vz;
                 float const g2 = sqr(fValue.gx, fValue.gy, fValue.gz) + 1e-35f;
                 float dt =
-                    fminf(params.eta * sqrtf(params.a) * sqrtf(gravitySmoothingLength / sqrtf(g2)),
+                    fminf(params.eta * sqrtf(params.a) * sqrtf(gravityEffectiveRadius / sqrtf(g2)),
                         params.t0);
                 dt = fminf(dt, params.maxDt);
                 rung = max(max((int) ceilf(log2f(params.t0 / dt)),
@@ -273,8 +274,8 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
     auto& barrier = shmem.barrier;
     auto& force = shmem.f;
     auto& treeNodes = data.treeNodes;
-    float const& h = globalParams.h;
-    float const hinv = 1.f / h;
+    float const& supportRadius = globalParams.gravitySupportRadius;
+    float const inverseSupportRadius = 1.f / supportRadius;
     int index;
     auto group = cooperative_groups::this_thread_block();
     if (group.thread_rank() == 0) {
@@ -346,7 +347,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                                     data.darkMatterMass :
                                     data.sphMass) :
                             1.0f;
-                        f.phi = mass * selfPhi() * hinv;
+                        f.phi = mass * selfPhi() * inverseSupportRadius;
                     }
                 }
                 __syncwarp();
@@ -456,7 +457,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                                         dx[dim] = distance(self.pos[dim], other.pos[dim]);    // 3
                                     }
                                     float const r2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
-                                    float const mind = self.radius + other.radius + h;
+                                    float const mind = self.radius + other.radius + supportRadius;
                                     float const dcc =
                                         fmaxf((self.radius + other.radius) * thetainv, mind);
                                     auto const numberOfSelfParticles = self.numberOfParticles();
@@ -474,11 +475,13 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                                             fmaxf((self.radius + other.radius * thetainv), mind);
                                         sw[kPc] = (r2 > sqr(dpc) ||
                                                       !boxIntersectsSphere(self.box, other.pos,
-                                                          fmaxf(thetainv * other.radius, h))) &&
+                                                          fmaxf(thetainv * other.radius,
+                                                              supportRadius))) &&
                                             numberOfSelfParticles >= MIN_PARTS_PCCP;
                                         sw[kCp] = (r2 > sqr(dcp) ||
                                                       !boxIntersectsSphere(other.box, self.pos,
-                                                          fmaxf(thetainv * self.radius, h))) &&
+                                                          fmaxf(thetainv * self.radius,
+                                                              supportRadius))) &&
                                             numberOfOtherParticles >= MIN_PARTS_PCCP;
                                         if (sw[kPc] && sw[kCp]) {
                                             if (numberOfSelfParticles < numberOfOtherParticles) {
@@ -528,13 +531,14 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                     } while (checks.size() && self.leaf);
                     if (self.leaf) {
                         __syncwarp();
-                        float const h = globalParams.h;
+                        float const supportRadius = globalParams.gravitySupportRadius;
                         cudaGravityCcDirect(
                             data, lValue3.back().expansion, self, cclist, globalParams.doPhi);
                         cudaGravityCpDirect(
                             data, lValue3.back().expansion, self, cplist, globalParams.doPhi);
                         cudaGravityPcDirect(data, self, pclist, globalParams.doPhi);
-                        cudaGravityPpDirect(data, self, leaflist, h, globalParams.doPhi);
+                        cudaGravityPpDirect(
+                            data, self, leaflist, supportRadius, globalParams.doPhi);
                     } else {
                         int const start = checks.size();
                         checks.resize(start + leaflist.size());

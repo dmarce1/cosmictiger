@@ -85,7 +85,7 @@ double starsFind(float a, float dt, int minrung, int step, float t0) {
         futs.push_back(hpx::async(
             [proc, t0, numberOfThreads, a, minrung, &found, &mutex, &indices, dt, &rndGens]() {
                 double eloss = 0.0;
-                double const darkMatterSofteningLength = getOptions().hsoft;
+                double const darkMatterSofteningLength = getOptions().gravitySupportRadius;
                 double const codeToS = getOptions().codeToS;
                 double const codeToG = getOptions().codeToG;
                 double const codeToCm = getOptions().codeToCm;

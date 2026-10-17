@@ -969,8 +969,8 @@ SphRunReturn SphRunWorkspace::toGpu() {
     cudaData.gySnk = &sphParticlesGravityAcceleration(YDIM, 0);
     cudaData.gzSnk = &sphParticlesGravityAcceleration(ZDIM, 0);
     cudaData.defGamma = getOptions().gamma;
-    cudaData.gravitySofteningLength =
-        getOptions().hsoft / selectedGravityKernel().supportPerSmoothing;
+    cudaData.gravityEffectiveRadius =
+        getOptions().gravitySupportRadius / selectedGravityKernel().supportRadiusPerEffectiveRadius;
     cudaData.numberOfTargetNodes = hostSelflist.size();
     cudaData.chemistry = getOptions().chem;
     cudaData.convergedSnk = &sphParticlesConverged(0);
@@ -980,7 +980,7 @@ SphRunReturn SphRunWorkspace::toGpu() {
     cudaData.rec6Snk = &sphParticlesRec6(0);
     cudaData.codeDifToCgs = sqr(getOptions().codeToCm) / getOptions().codeToS;
     cudaData.centralAcceleration = getOptions().centralAcceleration;
-    cudaData.hcentral = getOptions().hcentral;
+    cudaData.centralSupportRadius = getOptions().centralSupportRadius;
     cudaData.g = getOptions().gm;
     cudaData.y0 = getOptions().y0;
     cudaData.rho0C = getOptions().rho0C;

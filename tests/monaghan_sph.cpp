@@ -121,17 +121,18 @@ void testViscosity() {
         monaghan_sph::viscosityMu(radiusSquared, velocityDotRadius, supportI, supportJ, epsilon);
     double const expectedMu = -0.096 / 0.3616;
     requireClose("paper smoothing scale in viscosity mu", mu, expectedMu, tolerance);
-    Real const supportPerSmoothing = Real(1.8257418583505538);
-    Real const meanEffectiveWidth = Real(0.5) * (supportI + supportJ) / supportPerSmoothing;
-    Real const effectiveMu = monaghan_sph::viscosityMu(
-        radiusSquared, velocityDotRadius, supportI, supportJ, epsilon, supportPerSmoothing);
+    Real const supportRadiusPerEffectiveRadius = Real(1.8257418583505538);
+    Real const meanEffectiveRadius =
+        Real(0.5) * (supportI + supportJ) / supportRadiusPerEffectiveRadius;
+    Real const effectiveMu = monaghan_sph::viscosityMu(radiusSquared, velocityDotRadius, supportI,
+        supportJ, epsilon, supportRadiusPerEffectiveRadius);
     requireClose("effective smoothing width in viscosity mu", effectiveMu,
-        meanEffectiveWidth * velocityDotRadius /
-            (radiusSquared + epsilon * meanEffectiveWidth * meanEffectiveWidth),
+        meanEffectiveRadius * velocityDotRadius /
+            (radiusSquared + epsilon * meanEffectiveRadius * meanEffectiveRadius),
         tolerance);
     requireClose("calibrated cubic viscosity preserves the paper scale",
         monaghan_sph::viscosityMu(radiusSquared, velocityDotRadius, supportI, supportJ, epsilon,
-            supportPerSmoothing, Real(0.9128709291752769)),
+            supportRadiusPerEffectiveRadius, Real(0.9128709291752769)),
         expectedMu, tolerance);
     requireClose("symmetric viscosity mu", mu,
         monaghan_sph::viscosityMu(radiusSquared, velocityDotRadius, supportJ, supportI, epsilon),

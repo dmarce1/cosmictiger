@@ -218,7 +218,7 @@ static void treeTest() {
     tm.reset();
 
     tm.start();
-    TreeCreateParameters tparams(0, 0.7, getOptions().hsoft);
+    TreeCreateParameters tparams(0, 0.7, getOptions().gravitySupportRadius);
     treeCreate(tparams);
     tm.stop();
     PRINT("tree_create: %e s\n", tm.read());
@@ -267,7 +267,7 @@ static void kickTest() {
     tm.reset();
     tm.reset();
     tm.start();
-    TreeCreateParameters tparams(0, getOptions().theta, getOptions().hsoft);
+    TreeCreateParameters tparams(0, getOptions().theta, getOptions().gravitySupportRadius);
     auto sr = treeCreate(tparams);
     tm.stop();
     PRINT("tree_create: %e s\n", tm.read());
@@ -290,7 +290,7 @@ static void kickTest() {
     kparams.minLevel = tparams.minLevel;
     kparams.saveForce = getOptions().saveForce;
     kparams.gm = getOptions().gm;
-    kparams.h = getOptions().hsoft;
+    kparams.gravitySupportRadius = getOptions().gravitySupportRadius;
     kparams.eta = getOptions().eta;
     kparams.a = 1.0;
     kparams.firstCall = true;
@@ -355,7 +355,7 @@ static void forceTest() {
         domainsBegin(0);
         domainsEnd();
         particlesSortByRung(0);
-        TreeCreateParameters tparams(0, thetas[iter], getOptions().hsoft);
+        TreeCreateParameters tparams(0, thetas[iter], getOptions().gravitySupportRadius);
         treeCreate(tparams);
         KickParameters kparams;
         kparams.nodeLoad = 10;
@@ -363,7 +363,7 @@ static void forceTest() {
         kparams.minLevel = tparams.minLevel;
         kparams.saveForce = getOptions().saveForce;
         kparams.gm = getOptions().gm;
-        kparams.h = getOptions().hsoft;
+        kparams.gravitySupportRadius = getOptions().gravitySupportRadius;
         kparams.eta = getOptions().eta;
         kparams.a = 1.0;
         kparams.firstCall = true;
@@ -428,7 +428,7 @@ static void bucketTest() {
             domainsBegin(0);
             domainsEnd();
             particlesSortByRung(0);
-            TreeCreateParameters tparams(0, getOptions().theta, getOptions().hsoft);
+            TreeCreateParameters tparams(0, getOptions().theta, getOptions().gravitySupportRadius);
             treeCreate(tparams);
             PRINT("Tree created\n");
             KickParameters kparams;
@@ -438,7 +438,7 @@ static void bucketTest() {
             kparams.minLevel = tparams.minLevel;
             kparams.saveForce = getOptions().saveForce;
             kparams.gm = getOptions().gm;
-            kparams.h = getOptions().hsoft;
+            kparams.gravitySupportRadius = getOptions().gravitySupportRadius;
             kparams.eta = getOptions().eta;
             kparams.a = 1.0;
             kparams.firstCall = true;
@@ -519,7 +519,7 @@ static void speedTest() {
             domainsBegin(0);
             domainsEnd();
             particlesSortByRung(0);
-            TreeCreateParameters tparams(0, thetas[ci], getOptions().hsoft);
+            TreeCreateParameters tparams(0, thetas[ci], getOptions().gravitySupportRadius);
             treeCreate(tparams);
             KickParameters kparams;
             kparams.nodeLoad = 10;
@@ -527,7 +527,7 @@ static void speedTest() {
             kparams.minLevel = tparams.minLevel;
             kparams.saveForce = getOptions().saveForce;
             kparams.gm = getOptions().gm;
-            kparams.h = getOptions().hsoft;
+            kparams.gravitySupportRadius = getOptions().gravitySupportRadius;
             kparams.eta = getOptions().eta;
             kparams.a = 1.0;
             kparams.firstCall = true;

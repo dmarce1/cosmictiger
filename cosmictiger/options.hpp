@@ -69,8 +69,8 @@ struct Options {
     double lcB;
     double sliceSize;
     double linkingLength;
-    // Internally stored compact support; public gravity.softening is h = 2 sigma.
-    double hsoft;
+    // Internally stored compact support; public gravity.effectiveRadius is 2 sigma.
+    double gravitySupportRadius;
     std::string gravityKernelFamily{"ferrers"};
     int gravityKernelDegree{8};
     std::string hydroKernelFamily{"spline"};
@@ -124,8 +124,8 @@ struct Options {
     double alphaDecay{};
     double darkMatterNeighborNumber{};
     double sphNeighborNumber{};
-    double hmin{};
-    double hmax{};
+    double hydroMinSupportRadius{};
+    double hydroMaxSupportRadius{};
     double damping{};
     double sigma8C{};
     double darkMatterMass{};
@@ -136,7 +136,7 @@ struct Options {
     double gamma{};
     double yAcceleration{};
     double centralAcceleration{};
-    double hcentral{};
+    double centralSupportRadius{};
 
     template <typename A>
     void serialize(A&& arc, unsigned) {
@@ -160,8 +160,8 @@ struct Options {
         arc & alphaDecay;
         arc & darkMatterNeighborNumber;
         arc & sphNeighborNumber;
-        arc & hmin;
-        arc & hmax;
+        arc & hydroMinSupportRadius;
+        arc & hydroMaxSupportRadius;
         arc & damping;
         arc & sigma8C;
         arc & darkMatterMass;
@@ -172,7 +172,7 @@ struct Options {
         arc & gamma;
         arc & yAcceleration;
         arc & centralAcceleration;
-        arc & hcentral;
+        arc & centralSupportRadius;
         arc & closePack;
         arc & numberOfParticles;
         arc & useGlass;
@@ -225,7 +225,7 @@ struct Options {
         arc & theta;
         arc & sliceSize;
         arc & linkingLength;
-        arc & hsoft;
+        arc & gravitySupportRadius;
         arc & gm;
         arc & eta;
         arc & codeToS;

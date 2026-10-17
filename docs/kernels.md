@@ -22,7 +22,7 @@ C4 for SPH:
 [gravity]
 kernelFamily = spline
 kernelDegree = 5
-softening = 0.01876988456953534
+effectiveRadius = 0.01876988456953534
 timestepEta = 0.20401599335954483
 
 [hydro]
@@ -38,65 +38,84 @@ The corresponding command-line keys are `--gravity.kernelFamily`,
 The example neighbor target is a configuration example, not a recommended value
 for all problems or a minimum required for Wendland kernels.
 
-## Common length convention
+## Effective and support radii
 
-The user-facing smoothing or softening width is
+The user-facing effective radius is
 
 \[
-h=2\sigma,\qquad
+R_{\mathrm{eff}}=2\sigma,\qquad
 \sigma^2=\frac13\int r^2 W(\mathbf r)\,d^3r,\qquad
 \int W(\mathbf r)\,d^3r=1.
 \]
 
-This is the resolution-based convention of
+This preserves the existing `2 sigma` numerical length scale; the radius name
+introduces no factor-of-two conversion. It is the resolution-based convention of
 [Dehnen and Aly (2012), section 2.1](https://arxiv.org/html/1204.2471#S2.SS1).
-Equal widths give the same leading long-wavelength smoothing term. They do not
-equalize central potential depth, maximum force, particle noise, or all higher
-moments. The width for gravity is computed from the equivalent mass density.
+Equal effective radii give the same leading long-wavelength smoothing term. They
+do not equalize central potential depth, maximum force, particle noise, or all
+higher moments. Gravity's effective radius is computed from its equivalent mass
+density.
 
-The compact support radius is a separate quantity, `H`. Internally the radial
-argument is `q = r/H` and the dimensional density is `H^-3` times the tabulated
-shape. The table computes `supportPerSmoothing = H/h` from its moments. Some
-3D conversions are:
+The compact support radius, \(R_{\mathrm{sup}}\), is the outer boundary of the
+kernel. Internally the radial argument is `q = r/supportRadius` and the dimensional
+density is `supportRadius^-3` times the tabulated shape. The table computes
+`supportRadiusPerEffectiveRadius = supportRadius/effectiveRadius` from its
+moments. Some 3D conversions are:
 
-| Kernel | `H/h` |
+| Kernel | `supportRadius/effectiveRadius` |
 | --- | ---: |
 | Cubic spline | `sqrt(10/3) = 1.8257418584` |
 | Wendland C2 | `sqrt(15)/2 = 1.9364916731` |
 | Wendland C4 | `sqrt(39/8) = 2.2079402166` |
 | Ferrers F4 | `sqrt(13)/2 = 1.8027756377` |
 
-`gravity.softening` specifies this `h` in mean box-particle spacings. Changing
-the gravity family at fixed `gravity.softening` changes the support radius and
-force profile while holding this width fixed. The separate
-`hydro.centralSoftening` option specifies `h` in box units for the imposed central
-force; that force uses the selected **gravity** kernel.
+The accepted radius options are:
 
-SPH still stores and solves for the support radius `H`, because neighbor searches
-must reach the support boundary. `hydro.minSupportRadius` and
-`hydro.maxSupportRadius` continue to specify `H`, in initial interparticle
-spacings. Their names and meaning have not been changed to `h`. The SPH timestep
-uses `h = H/supportPerSmoothing`.
+| Purpose | Effective-radius key | Support-radius key | Units and kernel |
+| --- | --- | --- | --- |
+| Gravity | `gravity.effectiveRadius` | `gravity.supportRadius` | Mean box-particle spacings; gravity kernel |
+| Imposed central force | `hydro.centralEffectiveRadius` | `hydro.centralSupportRadius` | Box units; gravity kernel |
+| SPH minimum | `hydro.minEffectiveRadius` | `hydro.minSupportRadius` | Initial interparticle spacings; hydro kernel |
+| SPH maximum | `hydro.maxEffectiveRadius` | `hydro.maxSupportRadius` | Initial interparticle spacings; hydro kernel |
+
+`gravity.softening` and `hydro.centralSoftening` remain aliases for the respective
+effective radii, preserving their numeric values and units. Changing a kernel at
+fixed effective radius changes its support radius using the factor above.
+
+Both representations may be specified. An explicit effective-radius key takes
+precedence over its legacy softening alias, and either takes precedence over a
+support-radius key. Each ignored key produces a warning identifying that key.
+This precedence applies across command-line and INI inputs; the command line
+overrides an INI value for the same key. Defaults do not count as explicit
+settings. To use support-radius input with a repository example INI, remove or
+comment out its active softening alias or effective-radius setting.
+
+SPH adapts and stores each particle's support radius because neighbor searches
+must reach the support boundary. Its minimum and maximum bounds can use either
+representation. The maximum support remains capped at half the box. Timesteps
+use effective radius, computed as
+`supportRadius / supportRadiusPerEffectiveRadius`; force and neighbor evaluation
+use support radius. Checkpoint field order and stored radius units are unchanged.
 
 The smoothing solve retains the kernel-weighted target
 
 \[
-N_{\mathrm{target}}=\frac{4\pi}{3}\frac{\rho H^3}{m}.
+N_{\mathrm{target}}=\frac{4\pi}{3}\frac{\rho R_{\mathrm{sup}}^3}{m}.
 \]
 
 This includes the self contribution. Consequently `hydro.neighborNumber` must
 exceed the selected kernel's self floor, `(4*pi/3)*value(0)`, rather than one
 universal threshold. Startup validation checks the floor in both double and
 single precision. It is `32/3` for the default cubic. The target is not an integer
-neighbor count. At equal `h`, kernels with wider support generally include more
-particles; at equal target, the achieved width can differ.
+neighbor count. At equal effective radius, kernels with larger support generally
+include more particles; at equal target, the achieved effective radius can differ.
 
 ## Density, gravity, and implementation
 
 `cosmictiger/radial_kernel.hpp` generates fixed-size, allocation-free tables of
 change points and Bernstein coefficients. `makeKernelTable` is `constexpr` and
 can construct tables at compile time. The same generated density determines its
-derivative, enclosed mass, gravitational potential, width conversion, and central
+derivative, enclosed mass, gravitational potential, radius conversion, and central
 potential. CPU scalar, CPU SIMD, and CUDA evaluators share this implementation.
 The SPH solver itself continues to require CUDA; adding CPU evaluators is not a
 CPU port of the complete density, neighbor, and hydrodynamics solver.
@@ -114,7 +133,7 @@ constexpr auto kTwentyDimensional = radial_kernel::makeDensityKernelTable<20>(
 
 These tables contain the same coefficient/change-point representation and work
 with the overloaded scalar, SIMD, and CUDA `value` and `derivative` evaluators.
-The normalization is `H^-dimension`, and their common width uses
+The normalization is `supportRadius^-dimension`, and their effective radius uses
 `sigma^2 = integral(r*r*W)/dimension`. Gravitational force and potential remain
 explicitly three-dimensional and accept the production `KernelTable` only.
 
@@ -139,15 +158,15 @@ The gravitational conventions are
 
 \[
 M(q)=4\pi\int_0^q s^2 w(s)\,ds,\qquad
-\mathbf a=-\frac{Gm}{H^3}\frac{M(q)}{q^3}\mathbf r,
+\mathbf a=-\frac{Gm}{R_{\mathrm{sup}}^3}\frac{M(q)}{q^3}\mathbf r,
 \]
 
 \[
-\Phi=-\frac{Gm}{H}\left[\frac{M(q)}q+
+\Phi=-\frac{Gm}{R_{\mathrm{sup}}}\left[\frac{M(q)}q+
 4\pi\int_q^1 s\,w(s)\,ds\right].
 \]
 
-Outside `H`, the interaction is exactly Newtonian. The evaluator returns a
+Outside the support radius, the interaction is exactly Newtonian. The evaluator returns a
 positive potential magnitude; the gravitational potential carries the minus
 sign shown above. The first span analytically removes the apparent divisions
 by zero, giving finite central potential and force factor and zero acceleration
@@ -163,16 +182,16 @@ lengths together.
 
 ## Timesteps and migration from the old convention
 
-The gravitational acceleration criterion now uses the common width:
+The gravitational acceleration criterion uses the effective radius:
 
 \[
-\Delta t_{\mathrm{grav}}=C_{\mathrm{grav}}\sqrt{h_{\mathrm{grav}}/|\mathbf a|},
+\Delta t_{\mathrm{grav}}=C_{\mathrm{grav}}\sqrt{R_{\mathrm{eff,grav}}/|\mathbf a|},
 \]
 
 with the existing cosmological conversions applied in the implementation.
 `gravity.timestepEta` is the prefactor `C_grav`. The Courant-viscous numerator
-similarly uses `h_hydro`. Equal widths do not guarantee equal timestep error
-for different kernel shapes; accuracy and stability still require validation for
+similarly uses the hydro effective radius. Equal effective radii do not guarantee
+equal timestep error for different kernel shapes; accuracy and stability still require validation for
 the selected problem and settings.
 
 Defaults have been converted to preserve the old Ferrers F4 support and gravity
@@ -180,12 +199,12 @@ acceleration limit, and the old cubic Courant-viscous limit:
 
 | Setting | Previous default | Current default |
 | --- | ---: | ---: |
-| `gravity.softening` | `0.0125` in Plummer-equivalent epsilon | `0.01876988456953534` in `h = 2 sigma` |
+| `gravity.softening` | `0.0125` in Plummer-equivalent epsilon | `0.01876988456953534` in `effectiveRadius = 2 sigma` |
 | `gravity.timestepEta` | `0.25` | `0.20401599335954483` |
 | `hydro.cfl` | `0.25` | `0.22821773229381923` |
 
 For an old explicit Ferrers F4 configuration, convert softening by
-`h = 1.5015907655628272 * epsilon`, gravity eta by
+`effectiveRadius = 1.5015907655628272 * epsilon`, gravity eta by
 `eta_new = 0.8160639734381793 * eta_old`, and the cubic Courant coefficient by
 `cfl_new = sqrt(5/6) * cfl_old`. Repository example configurations have been
 converted. Existing user configuration files need explicit migration: a numeric
@@ -193,8 +212,8 @@ value supplied under an old option name is not automatically recognized as an
 old convention. A change of kernel shape is a separate physical choice, not a
 unit conversion.
 
-Viscosity uses a fixed reference factor `sqrt(5/6)` times the mean common SPH
-width. This equals Monaghan's `H/2` for the cubic and preserves the meaning of
+Viscosity uses a fixed reference factor `sqrt(5/6)` times the mean SPH effective
+radius. This equals Monaghan's `supportRadius/2` for the cubic and preserves the meaning of
 the existing cubic `viscosityAlpha`, `viscosityBeta`, and regularization settings.
 The hydro acceleration limit additionally retains a fixed reference calibration
 `0.7115965735877551` multiplying gravity eta, so the default cubic/Ferrers

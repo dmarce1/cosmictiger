@@ -28,9 +28,10 @@ length denoted by \(h_M\):
 
 The code stores the **support radius** \(H\), equal to \(2h_M\) for this default
 cubic. Its dimensionless kernel has normalization \(8/\pi\), changes polynomial
-at \(r/H=1/2\), and vanishes at \(r/H=1\). The common smoothing width is now
+at \(r/H=1/2\), and vanishes at \(r/H=1\). The common effective radius is
 \(h=2\sigma\), where \(\sigma\) is the one-coordinate standard deviation of
-the normalized kernel. For the cubic, \(H=\sqrt{10/3}\,h\); thus the common
+the normalized kernel. It retains the existing `2 sigma` value without a
+factor-of-two conversion. For the cubic, \(H=\sqrt{10/3}\,h\); thus the common
 \(h\) and the paper's \(h_M\) are distinct.
 
 `hydro.kernelFamily` and `hydro.kernelDegree` can instead select cardinal splines
@@ -64,8 +65,11 @@ kernel-weighted count, including self, rather than an integer number of neighbor
 The self contribution imposes \(N_{\rm target}>(4\pi/3)w(0)\), which is
 \(32/3\) for the default cubic. Startup checks use the selected kernel's floor,
 including its single-precision representation. The solve respects the configured
-support-radius bounds, refreshes neighbors if the search box is too
-small, and caps each local solve at 128 iterations. Its relative residual tolerance
+radius bounds, supplied as `hydro.minEffectiveRadius`/`hydro.maxEffectiveRadius`
+or `hydro.minSupportRadius`/`hydro.maxSupportRadius` and converted with the selected
+hydro kernel. Explicit effective-radius settings take precedence with a warning
+naming each ignored support-radius setting. It refreshes neighbors if the search
+box is too small, and caps each local solve at 128 iterations. Its relative residual tolerance
 is \(10^{-4}\); a bound-limited solution need not attain the requested target.
 The periodic search uses one nearest image per pair, so the effective maximum
 support is also capped at half the box width; a requested minimum above that limit
@@ -110,9 +114,9 @@ The artificial viscosity follows equations 4.1–4.2, pp.550–551:
 \]
 
 and \(\Pi_{ij}=0\) otherwise. Arithmetic means are used for density and sound
-speed. The viscosity width is
-\(\bar\ell_{ij}=\sqrt{5/6}\,(h_i+h_j)/2\), using the common widths
-\(h_i=H_i/\texttt{supportPerSmoothing}\). The fixed factor makes
+speed. The viscosity length scale is
+\(\bar\ell_{ij}=\sqrt{5/6}\,(h_i+h_j)/2\), using the effective radii
+\(h_i=H_i/\texttt{supportRadiusPerEffectiveRadius}\). The fixed factor makes
 \(\bar\ell_{ij}=(H_i+H_j)/4\) for the cubic and preserves the previous
 interpretation of the viscosity parameters. The same factor applies to every
 selected family. Defaults remain the paper's \(\alpha=1\), \(\beta=2\), and
@@ -147,7 +151,7 @@ The code interprets two apparent issues in the printed p.563 formulas:
   negative for approaching particles. The implementation uses the nonnegative
   compression magnitude \(\max(-\mu,0)\).
 
-The numerator now uses the common \(h_i=2\sigma_i\). The Courant coefficient
+The numerator uses the effective radius \(h_i=2\sigma_i\). The Courant coefficient
 defaults to `0.22821773229381923`, converted from `0.25` by \(\sqrt{5/6}\)
 to preserve the default cubic Courant-viscous limit. The hydro acceleration
 coefficient is `gravity.timestepEta` times the fixed reference calibration
@@ -156,7 +160,7 @@ This preserves the former default cubic/Ferrers F4 hydro acceleration limit.
 The divergence and fractional thermal-energy bounds also apply the fixed
 \(\sqrt{5/6}\) reference conversion so their default physical limits are
 preserved. The explicit integrator retains its cosmological expansion limits.
-The gravity acceleration criterion uses its own common width, independently of
+The gravity acceleration criterion uses its own effective radius, independently of
 the selected hydro family. These reference conversions do not establish equal
 timestep accuracy for every kernel shape.
 
@@ -199,9 +203,21 @@ hydrodynamic controls are:
 | `hydro.viscosityBeta` | `2` | Quadratic viscosity coefficient |
 | `hydro.viscosityEpsilon` | `0.01` | Denominator coefficient multiplying \(\bar\ell^2\) |
 | `hydro.neighborNumber` | `60` | Kernel-weighted support-sphere count |
+| `hydro.minEffectiveRadius` | unset | Alternative minimum effective radius \(h=2\sigma\), in initial interparticle spacings |
 | `hydro.minSupportRadius` | `1e-6` | Minimum \(H\), in initial interparticle spacings |
+| `hydro.maxEffectiveRadius` | unset | Alternative maximum effective radius \(h=2\sigma\), in initial interparticle spacings |
 | `hydro.maxSupportRadius` | `1000` | Requested maximum \(H\), in initial interparticle spacings; capped at half the box |
-| `hydro.cfl` | `0.22821773229381923` | Courant-viscous coefficient using \(h=2\sigma\); also controls the calibrated fractional-energy bound |
+| `hydro.centralEffectiveRadius` | `0.0054772255750516604` | Imposed central-force effective radius in box units; uses the gravity kernel |
+| `hydro.centralSupportRadius` | derived | Alternative central-force support radius in box units; uses the gravity kernel |
+| `hydro.centralSoftening` | legacy alias | Alias for `hydro.centralEffectiveRadius` with the same value and units |
+| `hydro.cfl` | `0.22821773229381923` | Courant-viscous coefficient using the effective radius \(h=2\sigma\); also controls the calibrated fractional-energy bound |
+
+For each radius pair, an explicit effective-radius key wins over the
+support-radius key, including across CLI and INI inputs, with a warning naming
+the ignored key. For the central force, precedence is `centralEffectiveRadius`,
+then the `centralSoftening` alias, then `centralSupportRadius`. The command line
+still overrides INI values for the same key. See [kernel radii](kernels.md) for
+the equivalent gravity options and conversion factors.
 
 Old SPH checkpoints with formulation marker `reserved=0` are rejected. SPH
 checkpoints use version 2 and the low byte of `reserved` identifies the Monaghan
@@ -235,8 +251,8 @@ The separate `radial_kernel` and `radial_kernel_cuda` targets check the generate
 CPU/SIMD/CUDA tables, moments, gravitational force/potential consistency, and
 float behavior near zero and the support boundary; see [kernels.md](kernels.md).
 
-Historical validation on 2026-10-16, before selectable kernels and the common
-width conversion: the complete CUDA build and all 23 CTest checks passed,
+Historical validation on 2026-10-16, before selectable kernels and the effective
+radius conversion: the complete CUDA build and all 23 CTest checks passed,
 including grouped CLI/INI checks, CPU/CUDA mixed-mass gravity, SPH checkpoint
 compatibility, MPI migration and evolution, the coarse Sod problem, and a short
 cosmological SPH evolution with restart. At the smoke test's coarse resolution,

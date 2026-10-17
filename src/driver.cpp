@@ -903,7 +903,7 @@ std::pair<KickReturn, TreeCreateReturn> kickStep(int minrung, double scale, doub
     kparams.saveForce = getOptions().saveForce;
     kparams.gm = getOptions().gravity ? getOptions().gm : 0.0;
     kparams.eta = getOptions().eta;
-    kparams.h = getOptions().hsoft;
+    kparams.gravitySupportRadius = getOptions().gravitySupportRadius;
     kparams.a = scale;
     kparams.firstCall = firstCall;
     kparams.minRung = minrung;
@@ -1055,7 +1055,7 @@ std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int m
         kparams.saveForce = getOptions().saveForce;
         kparams.gm = getOptions().gm;
         kparams.eta = getOptions().eta;
-        kparams.h = getOptions().hsoft;
+        kparams.gravitySupportRadius = getOptions().gravitySupportRadius;
         kparams.a = scale;
         kparams.firstCall = tau == 0.0;
         kparams.minRung = levels[li];
@@ -1436,7 +1436,7 @@ void driver() {
         //	profiler_exit();
     };
     auto checkpointlist = readCheckpointList();
-    double const hsoft0 = getOptions().hsoft;
+    double const hsoft0 = getOptions().gravitySupportRadius;
     bool doCheck = false;
     double checkz = 1.0 / a - 1.0;
     buckets50.start();
@@ -1506,7 +1506,7 @@ void driver() {
             double theta;
             double const z = 1.0 / a - 1.0;
             auto opts = getOptions();
-            opts.hsoft = hsoft0;    // / a;
+            opts.gravitySupportRadius = hsoft0;    // / a;
             if (getOptions().createGlass) {
                 theta = 0.4;
             } else {
@@ -1859,16 +1859,17 @@ bool legacyCheckpointCompatible(Options const& opts) {
 
 CheckpointHeader checkpointHeader(Options const& opts) {
     return {kCheckpointMagic, opts.sph ? kSphCheckpointVersion : kCheckpointVersion,
-        checkpointFlags(opts), opts.darkMatterMass, opts.sphMass, opts.gamma, opts.hsoft, opts.gm,
-        opts.omegaM, opts.omegaR, opts.omegaLam, opts.codeToCm, opts.codeToS, opts.codeToG,
-        opts.numberOfParticles, opts.numberOfSteps, checkpointPhysicsCode(opts)};
+        checkpointFlags(opts), opts.darkMatterMass, opts.sphMass, opts.gamma,
+        opts.gravitySupportRadius, opts.gm, opts.omegaM, opts.omegaR, opts.omegaLam, opts.codeToCm,
+        opts.codeToS, opts.codeToG, opts.numberOfParticles, opts.numberOfSteps,
+        checkpointPhysicsCode(opts)};
 }
 
 bool checkpointCompatible(CheckpointHeader const& header, Options const& opts) {
     return header.version == (opts.sph ? kSphCheckpointVersion : kCheckpointVersion) &&
         header.flags == checkpointFlags(opts) && header.reserved == checkpointPhysicsCode(opts) &&
         header.darkMatterMass == opts.darkMatterMass && header.gasMass == opts.sphMass &&
-        header.gamma == opts.gamma && header.softening == opts.hsoft &&
+        header.gamma == opts.gamma && header.softening == opts.gravitySupportRadius &&
         header.gravitationalMass == opts.gm && header.omegaMatter == opts.omegaM &&
         header.omegaRadiation == opts.omegaR && header.omegaLambda == opts.omegaLam &&
         header.unitLength == opts.codeToCm && header.unitTime == opts.codeToS &&
@@ -1878,9 +1879,10 @@ bool checkpointCompatible(CheckpointHeader const& header, Options const& opts) {
 
 // Stored only for Monaghan SPH checkpoints; the dark-matter layout is unchanged.
 std::array<double, 13> sphCheckpointParameters(Options const& opts) {
-    return {opts.alpha0, opts.beta, opts.viscosityEpsilon, opts.sphNeighborNumber, opts.hmin,
-        opts.hmax, opts.cfl, opts.eta, opts.yAcceleration, opts.centralAcceleration, opts.hcentral,
-        opts.damping, opts.gravity ? 1.0 : 0.0};
+    return {opts.alpha0, opts.beta, opts.viscosityEpsilon, opts.sphNeighborNumber,
+        opts.hydroMinSupportRadius, opts.hydroMaxSupportRadius, opts.cfl, opts.eta,
+        opts.yAcceleration, opts.centralAcceleration, opts.centralSupportRadius, opts.damping,
+        opts.gravity ? 1.0 : 0.0};
 }
 
 void writeDriverState(FILE* fp, DriverParameters const& params) {
@@ -2075,7 +2077,7 @@ void checkpointStateTest() {
     changed.sphNeighborNumber += 1.0;
     ALWAYS_ASSERT(sphParameters != detail::sphCheckpointParameters(changed));
     changed = getOptions();
-    changed.hmax *= 2.0;
+    changed.hydroMaxSupportRadius *= 2.0;
     ALWAYS_ASSERT(sphParameters != detail::sphCheckpointParameters(changed));
     changed = getOptions();
     changed.numberOfSteps++;

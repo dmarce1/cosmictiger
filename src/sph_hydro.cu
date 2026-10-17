@@ -107,10 +107,10 @@ __global__ void sphCudaHydro(SphRunParameters params, SphRunCudaData data, SphRe
             if (previousRung < params.minRung) {
                 continue;
             }
-            float const hI = data.h[i];
+            float const supportRadiusI = data.h[i];
             float const rhoI = data.rho[i];
             float const energyI = data.eint[i];
-            ALWAYS_ASSERT(hI > 0.0f && rhoI > 0.0f && energyI > 0.0f);
+            ALWAYS_ASSERT(supportRadiusI > 0.0f && rhoI > 0.0f && energyI > 0.0f);
             float const pressureI = (gamma - 1.0f) * rhoI * energyI;
             float const soundI = sqrtf(gamma * (gamma - 1.0f) * energyI);
             float ax = 0.0f;
@@ -125,11 +125,11 @@ __global__ void sphCudaHydro(SphRunParameters params, SphRunCudaData data, SphRe
                 float const dy = distance(data.y[i], neighbor.y);
                 float const dz = distance(data.z[i], neighbor.z);
                 float const r2 = sqr(dx, dy, dz);
-                if (r2 == 0.0f || r2 >= fmaxf(sqr(hI), sqr(neighbor.h))) {
+                if (r2 == 0.0f || r2 >= fmaxf(sqr(supportRadiusI), sqr(neighbor.h))) {
                     continue;
                 }
                 float const radius = sqrtf(r2);
-                float const invHI = 1.0f / hI;
+                float const invHI = 1.0f / supportRadiusI;
                 float const invHJ = 1.0f / neighbor.h;
                 float const gradientI = dkernelWDq(radius * invHI) * sqr(sqr(invHI)) / radius;
                 float const gradientJ = dkernelWDq(radius * invHJ) * sqr(sqr(invHJ)) / radius;
@@ -140,8 +140,9 @@ __global__ void sphCudaHydro(SphRunParameters params, SphRunCudaData data, SphRe
                 float const peculiarDotR = vx * dx + vy * dy + vz * dz;
                 // Include Hubble motion only in physical pair approach/viscous heating.
                 float const physicalDotR = peculiarDotR + params.adot * r2;
-                float const mu = monaghan_sph::viscosityMu(r2, physicalDotR, hI, neighbor.h,
-                    params.viscosityEpsilon, float(selectedHydroKernel().supportPerSmoothing),
+                float const mu = monaghan_sph::viscosityMu(r2, physicalDotR, supportRadiusI,
+                    neighbor.h, params.viscosityEpsilon,
+                    float(selectedHydroKernel().supportRadiusPerEffectiveRadius),
                     kViscosityWidthScale);
                 float const pressureJ = (gamma - 1.0f) * neighbor.rho * neighbor.energy;
                 float const soundJ = sqrtf(gamma * (gamma - 1.0f) * neighbor.energy);
@@ -177,10 +178,11 @@ __global__ void sphCudaHydro(SphRunParameters params, SphRunCudaData data, SphRe
                     float const dy = distance(data.y[i], Fixed32(0.5));
                     float const dz = distance(data.z[i], Fixed32(0.5));
                     float const radius = sqrtf(sqr(dx, dy, dz));
-                    float const hinv = 1.0f / data.hcentral;
+                    float const inverseSupportRadius = 1.0f / data.centralSupportRadius;
                     float const force = data.centralAcceleration *
-                        radial_kernel::forceFactor(selectedGravityKernel(), radius * hinv) * hinv *
-                        hinv * hinv;
+                        radial_kernel::forceFactor(
+                            selectedGravityKernel(), radius * inverseSupportRadius) *
+                        inverseSupportRadius * inverseSupportRadius * inverseSupportRadius;
                     ax -= force * dx;
                     ay -= force * dy;
                     az -= force * dz;
@@ -198,18 +200,19 @@ __global__ void sphCudaHydro(SphRunParameters params, SphRunCudaData data, SphRe
                 if (params.phase == 1) {
                     data.deint1Snk[sink] = 0.0f;
                     data.divvSnk[sink] = divergence;
-                    float const smoothingLength = hI / selectedHydroKernel().supportPerSmoothing;
+                    float const effectiveRadius =
+                        supportRadiusI / selectedHydroKernel().supportRadiusPerEffectiveRadius;
                     // Section 10.3: max(-mu) is positive for approaching particles.
-                    float const dtinvCfl = soundI / smoothingLength;
+                    float const dtinvCfl = soundI / effectiveRadius;
                     float const dtinvVisc = 0.6f *
-                        (params.alpha0 * soundI + params.beta * maxCompression) / smoothingLength;
+                        (params.alpha0 * soundI + params.beta * maxCompression) / effectiveRadius;
                     // These two bounds contain no length; retain their original
                     // normalization when the public CFL coefficient uses 2 sigma.
                     float const dtinvDivv =
                         kViscosityWidthScale * params.a * fabsf(divergence) / 3.0f;
                     float const acceleration = sqrtf(sqr(ax, ay, az));
                     float const dtinvAcc = params.cfl *
-                        sqrtf(params.a * acceleration / smoothingLength) /
+                        sqrtf(params.a * acceleration / effectiveRadius) /
                         (data.eta * kHydroAccelerationScale);
                     float const dtinv = fmaxf(dtinvCfl + dtinvVisc, fmaxf(dtinvDivv, dtinvAcc));
                     float hydroDt =
@@ -222,7 +225,7 @@ __global__ void sphCudaHydro(SphRunParameters params, SphRunCudaData data, SphRe
                     float const gravityAcceleration = sqrtf(sqr(gx, gy, gz));
                     float const gravityDt = fminf(params.maxDt,
                         data.eta *
-                            sqrtf(params.a * data.gravitySofteningLength /
+                            sqrtf(params.a * data.gravityEffectiveRadius /
                                 fmaxf(gravityAcceleration, 1.0e-30f)));
                     ALWAYS_ASSERT(isfinite(hydroDt) && hydroDt > 0.0f);
                     int const hydroRung = max(1, int(ceilf(log2f(params.t0 / hydroDt))));
@@ -234,7 +237,7 @@ __global__ void sphCudaHydro(SphRunParameters params, SphRunCudaData data, SphRe
                     maxRungHydro = max(maxRungHydro, hydroRung);
                     maxRungGrav = max(maxRungGrav, gravityRung);
                     maxRung = max(maxRung, nextRung);
-                    maxSignal = fmaxf(maxSignal, (dtinvCfl + dtinvVisc) * smoothingLength);
+                    maxSignal = fmaxf(maxSignal, (dtinvCfl + dtinvVisc) * effectiveRadius);
                     atomicMax(&reduce->dtinvCfl, dtinvCfl);
                     atomicMax(&reduce->dtinvVisc, dtinvVisc);
                     atomicMax(&reduce->dtinvAcc, dtinvAcc);

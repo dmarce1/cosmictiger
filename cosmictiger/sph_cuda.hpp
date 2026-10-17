@@ -53,7 +53,7 @@ struct SphRunCudaData {
 #endif
     float* kappa;
     float* coldFrac;
-    float gravitySofteningLength;    // Effective gravitational smoothing width, h = 2 sigma.
+    float gravityEffectiveRadius;    // Effective gravitational smoothing radius, h = 2 sigma.
     Array<float, NCHEMFRACS>* chem;
     float* divvSnk;
     float* rhoSnk;
@@ -70,7 +70,7 @@ struct SphRunCudaData {
     bool chemistry;
     char* convergedSnk;
     float centralAcceleration;
-    float hcentral;
+    float centralSupportRadius;
     float g;
     float t0;
     float kappa0;

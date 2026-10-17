@@ -25,7 +25,7 @@ struct KernelSelectionProbe {
     int family;
     int degree;
     int pieceCount;
-    double supportPerSmoothing;
+    double supportRadiusPerEffectiveRadius;
     double centralPotential;
     float density;
     float force;
@@ -37,7 +37,7 @@ __device__ void probeKernelTable(
     result.family = static_cast<int>(table.spec.family);
     result.degree = table.spec.degree;
     result.pieceCount = table.pieceCount;
-    result.supportPerSmoothing = table.supportPerSmoothing;
+    result.supportRadiusPerEffectiveRadius = table.supportRadiusPerEffectiveRadius;
     result.centralPotential = table.centralPotential;
     result.density = radial_kernel::value(table, kKernelProbeRadius);
     result.force = radial_kernel::forceFactor(table, kKernelProbeRadius);
@@ -59,7 +59,7 @@ void verifyKernelProbe(char const* label, KernelSelectionProbe const& actual,
     radial_kernel::KernelTable const& expected) {
     if (actual.family != static_cast<int>(expected.spec.family) ||
         actual.degree != expected.spec.degree || actual.pieceCount != expected.pieceCount ||
-        actual.supportPerSmoothing != expected.supportPerSmoothing ||
+        actual.supportRadiusPerEffectiveRadius != expected.supportRadiusPerEffectiveRadius ||
         actual.centralPotential != expected.centralPotential) {
         throw std::runtime_error(
             std::string(label) + " startup CUDA kernel table differs from the selected host table");

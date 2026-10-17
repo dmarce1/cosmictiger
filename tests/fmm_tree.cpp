@@ -137,7 +137,7 @@ void fmmTreeTest() {
     options.doTracers = false;
     options.bucketSize = 4;
     options.numberOfParticles = detail::kFmmTreeParticlesPerRank * hpxSize();
-    options.hsoft = 0.001;
+    options.gravitySupportRadius = 0.001;
     setOptions(options);
     auto const initialize = [](bool empty) {
         Vector<hpx::future<void>> pending;
@@ -153,7 +153,7 @@ void fmmTreeTest() {
     domainsRebound();
     domainsBegin(0);
     domainsEnd();
-    auto const built = treeCreate(TreeCreateParameters(0, 0.5, options.hsoft));
+    auto const built = treeCreate(TreeCreateParameters(0, 0.5, options.gravitySupportRadius));
     detail::verifyTreeGeometry(built.id, false);
     detail::requireFmmTree(
         built.multi[0] == float(options.numberOfParticles), "clustered tree lost particle mass");
@@ -180,7 +180,7 @@ void fmmTreeTest() {
     // Preserve the distributed domain tree while removing every active particle.
     // With multiple localities this constructs an empty, multi-rank parent.
     initialize(true);
-    auto const empty = treeCreate(TreeCreateParameters(0, 0.5, options.hsoft));
+    auto const empty = treeCreate(TreeCreateParameters(0, 0.5, options.gravitySupportRadius));
     detail::verifyTreeGeometry(empty.id, true);
     treeDestroy(true);
     PRINT("FMM tree regression passed (%i localities)\n", hpxSize());

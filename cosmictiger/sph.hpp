@@ -252,8 +252,8 @@ struct SphRunParameters {
     SphRunParameters() {
         iter = 0;
         auto const opts = getOptions();
-        hmin = opts.hmin;
-        hmax = opts.hmax;
+        hmin = opts.hydroMinSupportRadius;
+        hmax = opts.hydroMaxSupportRadius;
         stars = opts.stars;
         vsoft = opts.vsoft;
         avType = opts.viscType;

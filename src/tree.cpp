@@ -295,7 +295,7 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
     }
     int flops = 0;
     stackTraceActivate();
-    double const h = getOptions().hsoft;
+    double const h = getOptions().gravitySupportRadius;
     int bucketSize = getOptions().bucketSize;
     TreeCreateReturn rc;
     if (depth >= MAX_DEPTH) {

@@ -110,8 +110,9 @@ void testTable(KernelSpec spec) {
     double const secondMoment =
         integrate(table, 0, 1, [&](double q) { return fourPi * q * q * q * q * density(q); });
     close(mass, 1, 4e-14, "unit mass");
-    close(secondMoment, 3 / (4 * table.supportPerSmoothing * table.supportPerSmoothing), 4e-14,
-        "variance width");
+    close(secondMoment,
+        3 / (4 * table.supportRadiusPerEffectiveRadius * table.supportRadiusPerEffectiveRadius),
+        4e-14, "variance width");
     close(radial_kernel::forceFactor(table, 0.0), fourPi * density(0) / 3, 4e-14,
         "central harmonic force");
     close(radial_kernel::potential(table, 0.0),
@@ -186,7 +187,7 @@ void testTable(KernelSpec spec) {
         close(radial_kernel::potential(table, q), 1 / q, 4e-15, "Newtonian exterior potential");
     }
     if (spec.family == Family::Ferrers) {
-        close(table.supportPerSmoothing, std::sqrt(spec.degree + 5.0) / 2, 4e-15,
+        close(table.supportRadiusPerEffectiveRadius, std::sqrt(spec.degree + 5.0) / 2, 4e-15,
             "Ferrers width conversion");
     }
 #if defined(RADIAL_KERNEL_TEST_SIMD)
@@ -218,10 +219,11 @@ void testTable(KernelSpec spec) {
 }
 
 void testLegacyKernels() {
-    close(kCubic.supportPerSmoothing, std::sqrt(10.0 / 3), 4e-15, "cubic width conversion");
-    close(radial_kernel::makeKernelTable({Family::Wendland, 5}).supportPerSmoothing,
+    close(kCubic.supportRadiusPerEffectiveRadius, std::sqrt(10.0 / 3), 4e-15,
+        "cubic width conversion");
+    close(radial_kernel::makeKernelTable({Family::Wendland, 5}).supportRadiusPerEffectiveRadius,
         std::sqrt(15.0) / 2, 4e-15, "Wendland C2 width");
-    close(radial_kernel::makeKernelTable({Family::Wendland, 8}).supportPerSmoothing,
+    close(radial_kernel::makeKernelTable({Family::Wendland, 8}).supportRadiusPerEffectiveRadius,
         std::sqrt(39.0 / 8), 4e-15, "Wendland C4 width");
     for (int i = 0; i <= 100; ++i) {
         double const q = static_cast<double>(i) / 100;

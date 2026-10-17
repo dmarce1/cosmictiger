@@ -142,11 +142,14 @@ std::vector<std::string> const& getCommandLineArguments() {
 
 std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
     // Undo storage normalization without undoing current runtime overrides or caps.
-    // Public softening is h = 2 sigma in mean box particle spacings.
+    // Public effective radius is 2 sigma in mean box particle spacings.
     auto const gravityTable = radial_kernel::makeKernelTable(
         detail::kernelSpec(options.gravityKernelFamily, options.gravityKernelDegree));
-    double const softening = options.hsoft *
-        std::pow(double(options.numberOfParticles), 1.0 / NDIM) / gravityTable.supportPerSmoothing;
+    auto const hydroTable = radial_kernel::makeKernelTable(
+        detail::kernelSpec(options.hydroKernelFamily, options.hydroKernelDegree));
+    double const effectiveRadius = options.gravitySupportRadius *
+        std::pow(double(options.numberOfParticles), 1.0 / NDIM) /
+        gravityTable.supportRadiusPerEffectiveRadius;
     double const timestepEta = options.eta;
     return {
         {"configuration", options.configFile},
@@ -194,7 +197,10 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"gravity.kernelFamily", options.gravityKernelFamily},
         {"gravity.kernelDegree", options.gravityKernelDegree},
         {"gravity.openingAngle", options.theta},
-        {"gravity.softening", softening},
+        {"gravity.softening", effectiveRadius},
+        {"gravity.effectiveRadius", effectiveRadius},
+        {"gravity.supportRadius",
+            options.gravitySupportRadius * std::pow(double(options.numberOfParticles), 1.0 / NDIM)},
         {"gravity.sphSmoothing", options.sphSmoothing},
         {"gravity.timestepEta", timestepEta},
         {"cosmology.startRedshift", options.z0},
@@ -223,9 +229,19 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"hydro.viscosityEpsilon", options.viscosityEpsilon},
         {"hydro.gamma", options.gamma},
         {"hydro.centralAcceleration", options.centralAcceleration},
-        {"hydro.centralSoftening", options.hcentral / gravityTable.supportPerSmoothing},
-        {"hydro.minSupportRadius", options.hmin * options.particlesPerDimension},
-        {"hydro.maxSupportRadius", options.hmax * options.particlesPerDimension},
+        {"hydro.centralSoftening",
+            options.centralSupportRadius / gravityTable.supportRadiusPerEffectiveRadius},
+        {"hydro.centralEffectiveRadius",
+            options.centralSupportRadius / gravityTable.supportRadiusPerEffectiveRadius},
+        {"hydro.centralSupportRadius", options.centralSupportRadius},
+        {"hydro.minEffectiveRadius",
+            options.hydroMinSupportRadius * options.particlesPerDimension /
+                hydroTable.supportRadiusPerEffectiveRadius},
+        {"hydro.maxEffectiveRadius",
+            options.hydroMaxSupportRadius * options.particlesPerDimension /
+                hydroTable.supportRadiusPerEffectiveRadius},
+        {"hydro.minSupportRadius", options.hydroMinSupportRadius * options.particlesPerDimension},
+        {"hydro.maxSupportRadius", options.hydroMaxSupportRadius * options.particlesPerDimension},
         {"hydro.neighborNumber", options.sphNeighborNumber},
         {"hydro.cfl", options.cfl},
     };
@@ -233,6 +249,8 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
 
 bool processOptions(int argc, char* argv[]) {
     Options opts{};
+    double gravityEffectiveRadius;
+    double centralEffectiveRadius;
     namespace po = hpx::program_options;
     bool rc;
     po::options_description runOpts("Run control");
@@ -335,8 +353,12 @@ bool processOptions(int argc, char* argv[]) {
         "gravity.enabled", po::value<bool>(&opts.gravity)->default_value(true), "enable gravity")(
         "gravity.openingAngle", po::value<double>(&opts.theta)->default_value(0.8),
         "opening angle for test problems")("gravity.softening",
-        po::value<double>(&opts.hsoft)->default_value(0.01876988456953534),
-        "gravitational h = 2 sigma in mean interparticle spacings")("gravity.kernelFamily",
+        po::value<double>(&gravityEffectiveRadius)->default_value(0.01876988456953534),
+        "legacy alias for gravity.effectiveRadius")("gravity.effectiveRadius", po::value<double>(),
+        "effective radius (2 sigma) in mean interparticle spacings; overrides supportRadius")(
+        "gravity.supportRadius", po::value<double>(),
+        "compact support radius in mean interparticle spacings; ignored when effectiveRadius is "
+        "specified")("gravity.kernelFamily",
         po::value<std::string>(&opts.gravityKernelFamily)->default_value("ferrers"),
         "density kernel family: spline, wendland, or ferrers")("gravity.kernelDegree",
         po::value<int>(&opts.gravityKernelDegree)->default_value(8),
@@ -344,7 +366,7 @@ bool processOptions(int argc, char* argv[]) {
         po::value<bool>(&opts.sphSmoothing)->default_value(false),
         "reserved adaptive-softening flag; fixed selected gravity kernel is currently used")(
         "gravity.timestepEta", po::value<double>(&opts.eta)->default_value(0.20401599335954483),
-        "prefactor C in dt = C sqrt(h/acceleration), h = 2 sigma");
+        "prefactor C in dt = C sqrt(effectiveRadius/acceleration), effectiveRadius = 2 sigma");
 
     po::options_description cosmologyOpts("Cosmology");
     cosmologyOpts.add_options()("cosmology.startRedshift",
@@ -395,21 +417,32 @@ bool processOptions(int argc, char* argv[]) {
         po::value<double>(&opts.beta)->default_value(2.0),
         "constant quadratic artificial-viscosity coefficient beta")("hydro.viscosityEpsilon",
         po::value<double>(&opts.viscosityEpsilon)->default_value(0.01),
-        "viscosity regularization relative to the calibrated width sqrt(5/6) h")("hydro.gamma",
-        po::value<double>(&opts.gamma)->default_value(5.0 / 3.0),
+        "viscosity regularization relative to the calibrated radius sqrt(5/6) effectiveRadius")(
+        "hydro.gamma", po::value<double>(&opts.gamma)->default_value(5.0 / 3.0),
         "ideal-gas adiabatic index")("hydro.centralAcceleration",
         po::value<double>(&opts.centralAcceleration)->default_value(0.0),
         "magnitude of the central force")("hydro.centralSoftening",
-        po::value<double>(&opts.hcentral)->default_value(0.005477225575051661),
-        "central-force h = 2 sigma in box units; uses the selected gravity kernel")(
-        "hydro.minSupportRadius", po::value<double>(&opts.hmin)->default_value(1.0e-6),
-        "minimum support radius H (not h), in interparticle spacings")("hydro.maxSupportRadius",
-        po::value<double>(&opts.hmax)->default_value(1000.0),
+        po::value<double>(&centralEffectiveRadius)->default_value(0.005477225575051661),
+        "legacy alias for hydro.centralEffectiveRadius")("hydro.centralEffectiveRadius",
+        po::value<double>(),
+        "central-force effective radius (2 sigma) in box units; overrides centralSupportRadius")(
+        "hydro.centralSupportRadius", po::value<double>(),
+        "central-force support radius in box units; uses the selected gravity kernel")(
+        "hydro.minSupportRadius",
+        po::value<double>(&opts.hydroMinSupportRadius)->default_value(1.0e-6),
+        "minimum support radius in interparticle spacings")("hydro.minEffectiveRadius",
+        po::value<double>(),
+        "minimum effective radius (2 sigma) in interparticle spacings; overrides "
+        "minSupportRadius")("hydro.maxSupportRadius",
+        po::value<double>(&opts.hydroMaxSupportRadius)->default_value(1000.0),
         "maximum kernel support radius in interparticle spacings; capped at half the box")(
-        "hydro.neighborNumber", po::value<double>(&opts.sphNeighborNumber)->default_value(60),
+        "hydro.maxEffectiveRadius", po::value<double>(),
+        "maximum effective radius (2 sigma) in interparticle spacings; overrides "
+        "maxSupportRadius")("hydro.neighborNumber",
+        po::value<double>(&opts.sphNeighborNumber)->default_value(60),
         "kernel-weighted neighbor target within the support sphere, including self")("hydro.cfl",
         po::value<double>(&opts.cfl)->default_value(0.22821773229381923),
-        "Courant time-step factor using h = 2 sigma");
+        "Courant time-step factor using effective radius (2 sigma)");
 
     po::options_description commandOpts("CosmicTiger options");
     commandOpts.add(runOpts)
@@ -454,6 +487,50 @@ bool processOptions(int argc, char* argv[]) {
         detail::kernelSpec(opts.gravityKernelFamily, opts.gravityKernelDegree));
     auto const hydroTable = radial_kernel::makeKernelTable(
         detail::kernelSpec(opts.hydroKernelFamily, opts.hydroKernelDegree));
+    // Resolve representations after both CLI and INI parsing. Only explicit
+    // effective radii override support radii; defaulted legacy aliases do not.
+    auto const resolveSupportRadius = [&](char const* effectiveKey, char const* supportKey,
+                                          char const* legacyKey, double defaultSupportRadius,
+                                          double supportRadiusPerEffectiveRadius) {
+        auto const explicitOption = [&](char const* key) {
+            return key != nullptr && vm.count(key) && !vm[key].defaulted();
+        };
+        char const* selectedEffectiveKey = explicitOption(effectiveKey) ? effectiveKey :
+            explicitOption(legacyKey)                                   ? legacyKey :
+                                                                          nullptr;
+        double supportRadius = defaultSupportRadius;
+        if (selectedEffectiveKey != nullptr) {
+            if (selectedEffectiveKey == effectiveKey && explicitOption(legacyKey)) {
+                PRINT("Warning: %s is ignored because %s is specified.\n", legacyKey, effectiveKey);
+            }
+            if (explicitOption(supportKey)) {
+                PRINT("Warning: %s is ignored because %s is specified.\n", supportKey,
+                    selectedEffectiveKey);
+            }
+            supportRadius = vm[selectedEffectiveKey].as<double>() * supportRadiusPerEffectiveRadius;
+        } else if (explicitOption(supportKey)) {
+            supportRadius = vm[supportKey].as<double>();
+        }
+        if (!detail::isFiniteOption(supportRadius) || supportRadius <= 0.0) {
+            THROW_ERROR("%s / %s%s%s must give a finite positive support radius\n", effectiveKey,
+                supportKey, legacyKey ? " / " : "", legacyKey ? legacyKey : "");
+        }
+        return supportRadius;
+    };
+    opts.gravitySupportRadius = resolveSupportRadius("gravity.effectiveRadius",
+        "gravity.supportRadius", "gravity.softening",
+        gravityEffectiveRadius * gravityTable.supportRadiusPerEffectiveRadius,
+        gravityTable.supportRadiusPerEffectiveRadius);
+    opts.centralSupportRadius = resolveSupportRadius("hydro.centralEffectiveRadius",
+        "hydro.centralSupportRadius", "hydro.centralSoftening",
+        centralEffectiveRadius * gravityTable.supportRadiusPerEffectiveRadius,
+        gravityTable.supportRadiusPerEffectiveRadius);
+    opts.hydroMinSupportRadius =
+        resolveSupportRadius("hydro.minEffectiveRadius", "hydro.minSupportRadius", nullptr,
+            opts.hydroMinSupportRadius, hydroTable.supportRadiusPerEffectiveRadius);
+    opts.hydroMaxSupportRadius =
+        resolveSupportRadius("hydro.maxEffectiveRadius", "hydro.maxSupportRadius", nullptr,
+            opts.hydroMaxSupportRadius, hydroTable.supportRadiusPerEffectiveRadius);
     double const selfNeighborFloor = 4.0 * M_PI / 3.0 * radial_kernel::value(hydroTable, 0.0);
     if (opts.outputSiloInterval <= 0) {
         THROW_ERROR("output.siloInterval must be positive\n");
@@ -505,7 +582,7 @@ bool processOptions(int argc, char* argv[]) {
     }
     if (!detail::isFiniteOption(opts.yAcceleration) ||
         !detail::isFiniteOption(opts.centralAcceleration) ||
-        !detail::isFiniteOption(opts.hcentral) || opts.hcentral <= 0.0) {
+        !detail::isFiniteOption(opts.centralSupportRadius) || opts.centralSupportRadius <= 0.0) {
         THROW_ERROR("hydro.yAcceleration and hydro.centralAcceleration must be finite; "
                     "hydro.centralSoftening must be finite and positive\n");
     }
@@ -526,8 +603,9 @@ bool processOptions(int argc, char* argv[]) {
         THROW_ERROR("hydro.neighborNumber must be finite and greater than the selected kernel "
                     "self-neighbor floor\n");
     }
-    if (!detail::isFiniteOption(opts.hmin) || !detail::isFiniteOption(opts.hmax) ||
-        opts.hmin <= 0.0 || opts.hmax < opts.hmin) {
+    if (!detail::isFiniteOption(opts.hydroMinSupportRadius) ||
+        !detail::isFiniteOption(opts.hydroMaxSupportRadius) || opts.hydroMinSupportRadius <= 0.0 ||
+        opts.hydroMaxSupportRadius < opts.hydroMinSupportRadius) {
         THROW_ERROR(
             "hydro support radii must be finite with 0 < minSupportRadius <= maxSupportRadius\n");
     }
@@ -549,12 +627,13 @@ bool processOptions(int argc, char* argv[]) {
     }
     if (!detail::isFiniteFloatOption(opts.yAcceleration) ||
         !detail::isFiniteFloatOption(opts.centralAcceleration) ||
-        !detail::isPositiveFloatOption(opts.hcentral)) {
+        !detail::isPositiveFloatOption(opts.centralSupportRadius)) {
         THROW_ERROR("hydro.yAcceleration, hydro.centralAcceleration and hydro.centralSoftening "
                     "must be representable in single precision, with positive centralSoftening\n");
     }
-    if (!detail::isPositiveFloatOption(opts.hmin / opts.particlesPerDimension) ||
-        !detail::isPositiveFloatOption(std::min(opts.hmax / opts.particlesPerDimension, 0.5))) {
+    if (!detail::isPositiveFloatOption(opts.hydroMinSupportRadius / opts.particlesPerDimension) ||
+        !detail::isPositiveFloatOption(
+            std::min(opts.hydroMaxSupportRadius / opts.particlesPerDimension, 0.5))) {
         THROW_ERROR("hydro support radii must remain finite and positive in single precision "
                     "after normalization by initial.particlesPerDimension\n");
     }
@@ -568,9 +647,10 @@ bool processOptions(int argc, char* argv[]) {
     opts.damping = 0.0;
     opts.sigma8C = opts.sigma8;
     opts.sphBucketSize = opts.bucketSize;
-    opts.hmin /= opts.particlesPerDimension;
-    opts.hmax = std::min(opts.hmax / opts.particlesPerDimension, 0.5);
-    if (opts.hmin > 0.5) {
+    opts.hydroMinSupportRadius /= opts.particlesPerDimension;
+    opts.hydroMaxSupportRadius =
+        std::min(opts.hydroMaxSupportRadius / opts.particlesPerDimension, 0.5);
+    if (opts.hydroMinSupportRadius > 0.5) {
         THROW_ERROR("hydro.minSupportRadius cannot exceed half the periodic box after "
                     "normalization by initial.particlesPerDimension\n");
     }
@@ -606,9 +686,7 @@ bool processOptions(int argc, char* argv[]) {
     } else {
         opts.chem = opts.stars = opts.conduction = opts.diffusion = false;
     }
-    opts.hsoft *= gravityTable.supportPerSmoothing;
-    opts.hcentral *= gravityTable.supportPerSmoothing;
-    if (!detail::isPositiveFloatOption(opts.hcentral)) {
+    if (!detail::isPositiveFloatOption(opts.centralSupportRadius)) {
         THROW_ERROR(
             "hydro.centralSoftening support must remain finite and positive in single precision\n");
     }
@@ -676,13 +754,15 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.particlesPerDimension % 2 == 1) {
         THROW_ERROR("initial.particlesPerDimension must be an even number\n");
     }
-    opts.hsoft *= pow(opts.numberOfParticles, -1.0 / NDIM);
+    opts.gravitySupportRadius *= pow(opts.numberOfParticles, -1.0 / NDIM);
     if (opts.plummer) {
-        opts.hsoft = gravityTable.supportPerSmoothing * 1.5015907655628273 *
+        opts.gravitySupportRadius = gravityTable.supportRadiusPerEffectiveRadius *
+            1.5015907655628273 *
             pow((4.0 / 3.0 * M_PI * pow(opts.plummerR, 3.0)) / opts.numberOfParticles, 1.0 / 3.0);
     }
-    if (opts.gravity && !detail::isPositiveFloatOption(opts.hsoft)) {
-        THROW_ERROR("gravity.softening must remain finite and positive in single precision "
+    if (opts.gravity && !detail::isPositiveFloatOption(opts.gravitySupportRadius)) {
+        THROW_ERROR("gravity.effectiveRadius / gravity.supportRadius (gravity.softening) must "
+                    "remain finite and positive in single precision "
                     "after normalization when gravity.enabled is true\n");
     }
     SHOW("hydro.enabled", sph);
@@ -694,8 +774,14 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("hydro.viscosityEpsilon", viscosityEpsilon);
     SHOW("hydro.gamma", gamma);
     SHOW("hydro.neighborNumber", sphNeighborNumber);
-    show("hydro.minSupportRadius", opts.hmin * opts.particlesPerDimension);
-    show("hydro.maxSupportRadius", opts.hmax * opts.particlesPerDimension);
+    show("hydro.minSupportRadius", opts.hydroMinSupportRadius * opts.particlesPerDimension);
+    show("hydro.maxSupportRadius", opts.hydroMaxSupportRadius * opts.particlesPerDimension);
+    show("hydro.minEffectiveRadius",
+        opts.hydroMinSupportRadius * opts.particlesPerDimension /
+            hydroTable.supportRadiusPerEffectiveRadius);
+    show("hydro.maxEffectiveRadius",
+        opts.hydroMaxSupportRadius * opts.particlesPerDimension /
+            hydroTable.supportRadiusPerEffectiveRadius);
     SHOW("hydro.cfl", cfl);
     PRINT("Simulation Options\n");
     PRINT("code_to_M_solar = %e\n", opts.codeToG / 1.98e33);
@@ -733,8 +819,16 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("gravity.timestepEta", eta);
     SHOW("gravity.gm", gm);
     show("gravity.softening",
-        opts.hsoft * std::pow(double(opts.numberOfParticles), 1.0 / NDIM) /
-            gravityTable.supportPerSmoothing);
+        opts.gravitySupportRadius * std::pow(double(opts.numberOfParticles), 1.0 / NDIM) /
+            gravityTable.supportRadiusPerEffectiveRadius);
+    show("gravity.effectiveRadius",
+        opts.gravitySupportRadius * std::pow(double(opts.numberOfParticles), 1.0 / NDIM) /
+            gravityTable.supportRadiusPerEffectiveRadius);
+    show("gravity.supportRadius",
+        opts.gravitySupportRadius * std::pow(double(opts.numberOfParticles), 1.0 / NDIM));
+    show("hydro.centralEffectiveRadius",
+        opts.centralSupportRadius / gravityTable.supportRadiusPerEffectiveRadius);
+    show("hydro.centralSupportRadius", opts.centralSupportRadius);
     SHOW("gravity.kernelFamily", gravityKernelFamily);
     SHOW("gravity.kernelDegree", gravityKernelDegree);
     SHOW("hydro.kernelFamily", hydroKernelFamily);

@@ -421,8 +421,10 @@ int particlesApplyUpdates(int minrung, float t0, float a) {
                     auto const& divv = particlesDivv(i);
                     auto const h = particlesSoftlen(i);
                     float const dtDivv = cfl *
-                        (3.f + dlogsmoothXDlogh(h, getOptions().hmin, getOptions().hmax)) * a /
-                        (fabs(divv) + 1e-37f);
+                        (3.f +
+                            dlogsmoothXDlogh(h, getOptions().hydroMinSupportRadius,
+                                getOptions().hydroMaxSupportRadius)) *
+                        a / (fabs(divv) + 1e-37f);
                     float dt = std::min(dtDivv, (float) (rungDt[rung] * t0));
                     auto newRung = (int) ceilf(log2f(t0 / dt));
                     rung = newRung;
@@ -1097,7 +1099,7 @@ void particlesResize(ParticleInteger sz, bool lock) {
         for (int i = oldsz; i < sz; i++) {
             particlesCatIndex(i) = NO_INDEX;
             particlesType(i) = DARK_MATTER_TYPE;
-            particlesSoftlen(i) = getOptions().hsoft;
+            particlesSoftlen(i) = getOptions().gravitySupportRadius;
             particlesZeta(i) = 0.0f;
             particlesDivv(i) = 0.0f;
             particlesRho(i) = 0.0f;
