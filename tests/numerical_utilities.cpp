@@ -84,9 +84,16 @@ void testPeriodicBoxSphere() {
             "Scalar box-sphere test disagrees with the geometry");
     }
     auto const intersections = boxIntersectsSphere(simdBox, simdPoints, simdRadii);
+    auto const distances = boxDistanceSquared(simdBox, simdPoints);
     for (int lane = 0; lane < SIMD_FLOAT_SIZE; lane++) {
         require(bool(intersections[lane]) == expected[lane],
             "SIMD box-sphere test must preserve unsigned fixed-point positions");
+        Array<Fixed32, NDIM> point;
+        for (int dim = 0; dim < NDIM; dim++) {
+            point[dim] = coordinates[lane][dim];
+        }
+        require(distances[lane] == boxDistanceSquared(box, point),
+            "Scalar and SIMD point-box distances must agree exactly");
     }
     box.begin[XDIM] = 0.95;
     box.end[XDIM] = 0.99;
@@ -101,6 +108,59 @@ void testPeriodicBoxSphere() {
         "Box-sphere test must account for the periodic boundary");
     require(boxIntersectsSphere(simdBox, simdPoints, SimdFloat(0.03f)).sum() == SIMD_FLOAT_SIZE,
         "SIMD box-sphere test must account for the periodic boundary");
+
+    for (int dim = 0; dim < NDIM; dim++) {
+        box.begin[dim] = 0.25;
+        box.end[dim] = 0.5;
+        simdBox.begin[dim] = 0.25;
+        simdBox.end[dim] = 0.5;
+        point[dim] = dim == XDIM ? 0.5 : 0.375;
+    }
+    point[XDIM].raw()++;
+    for (int dim = 0; dim < NDIM; dim++) {
+        simdPoints[dim] = point[dim].raw();
+    }
+    float const oneTickSquared = float(Fixed32::kToFloatFactor_ * Fixed32::kToFloatFactor_);
+    require(boxDistanceSquared(box, point) == oneTickSquared,
+        "Point-box containment must retain all 32 position bits");
+    require(boxDistanceSquared(simdBox, simdPoints)[0] == oneTickSquared,
+        "SIMD point-box containment must retain all 32 position bits");
+
+    // Exercise float rounding and unsigned coordinates near periodic boundaries.
+    for (int sample = 0; sample < 256; sample++) {
+        for (int dim = 0; dim < NDIM; dim++) {
+            box.begin[dim] = ((sample * 37 + dim * 43) % 193) / 256.0;
+            box.end[dim] = box.begin[dim].toDouble() + 0.125;
+            simdBox.begin[dim] = box.begin[dim].toDouble();
+            simdBox.end[dim] = box.end[dim].toDouble();
+        }
+        Array<Array<Fixed32, NDIM>, SIMD_FLOAT_SIZE> points;
+        for (int lane = 0; lane < SIMD_FLOAT_SIZE; lane++) {
+            for (int dim = 0; dim < NDIM; dim++) {
+                points[lane][dim] = ((sample * 97 + lane * 71 + dim * 83) % 1009) / 1009.0;
+                simdPoints[dim][lane] = points[lane][dim].raw();
+            }
+        }
+        auto const squaredDistances = boxDistanceSquared(simdBox, simdPoints);
+        for (int lane = 0; lane < SIMD_FLOAT_SIZE; lane++) {
+            require(squaredDistances[lane] == boxDistanceSquared(box, points[lane]),
+                "Periodic scalar/SIMD distance rounding differs");
+            double reference = 0.0;
+            for (int dim = 0; dim < NDIM; dim++) {
+                double nearest = 1.0;
+                double const coordinate = points[lane][dim].toDouble();
+                for (int shift = -1; shift <= 1; shift++) {
+                    double const lower = box.begin[dim].toDouble() + shift;
+                    double const upper = box.end[dim].toDouble() + shift;
+                    nearest = std::min(
+                        nearest, std::max(0.0, std::max(lower - coordinate, coordinate - upper)));
+                }
+                reference += nearest * nearest;
+            }
+            require(std::abs(squaredDistances[lane] - reference) < 2.0e-7,
+                "Periodic point-box distance differs from an independent interval reference");
+        }
+    }
 }
 
 template <int n>

@@ -23,6 +23,7 @@
 
 #include <cosmictiger/fast_future.hpp>
 #include <cosmictiger/flops.hpp>
+#include <cosmictiger/fmm_acceptance.hpp>
 #include <cosmictiger/gravity.hpp>
 #include <cosmictiger/kick.hpp>
 #include <cosmictiger/kick_workspace.hpp>
@@ -220,9 +221,7 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
     Vector<TreeId>& cplist = workspace.cplist;
     Vector<TreeId>& pclist = workspace.pclist;
     Vector<TreeId>& leaflist = workspace.leaflist;
-    SimdFloat const thetainv2(1.0 / sqr(params.theta));
-    SimdFloat const thetainv(1.0 / params.theta);
-    static SimdFloat const sinkBias(SINK_BIAS);
+    SimdFloat const thetainv(fmmInverseOpeningAngle(params.theta));
     Array<TreeNode const*, SIMD_FLOAT_SIZE> otherPtrs;
     Array<float, NDIM> ldx;
     SimdFloat selfRadius = selfPtr->radius;
@@ -232,6 +231,7 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
     Array<SimdFloat, NDIM> dx;
     SimdFloat otherRadius;
     SimdFloat otherLeaf;
+    SimdFloat otherSupportRadius;
     Range<SimdDouble8> otherBox;
     for (int dim = 0; dim < NDIM; dim++) {
         selfPos[dim] = selfPtr->pos[dim].raw();
@@ -247,8 +247,6 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
     }
     l = l2L(l, ldx, params.doPhi);
     flops += 1511 + params.doPhi * 178;
-    SimdFloat mySupportRadius;
-    mySupportRadius = params.gravitySupportRadius;
     float const inverseSupportRadius = 1.0f / params.gravitySupportRadius;
     ForceVectors forces;
     ParticleInteger const numberOfSelfParticles = selfPtr->numberOfParticles();
@@ -294,7 +292,6 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
                 }
                 SimdFloat r2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);    // 5
                 r2 = max(r2, max(sqr(SimdFloat(0.5) - (selfRadius + otherRadius)), SimdFloat(0)));
-                auto const supportRadius = mySupportRadius;
                 SimdFloat const dcc = (selfRadius + otherRadius) * thetainv;
                 SimdFloat const cc = r2 > sqr(dcc);
                 flops += maxi * 15;
@@ -342,6 +339,7 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
                     }
                     otherRadius[i] = otherPtrs[i]->radius;
                     otherLeaf[i] = otherPtrs[i]->leaf;
+                    otherSupportRadius[i] = otherPtrs[i]->maxGravitySupportRadius;
                 }
                 for (int i = maxi; i < SIMD_FLOAT_SIZE; i++) {
                     for (int dim = 0; dim < NDIM; dim++) {
@@ -349,21 +347,18 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
                     }
                     otherRadius[i] = 0.f;
                     otherLeaf[i] = 0;
+                    otherSupportRadius[i] = 0.f;
                 }
                 for (int dim = 0; dim < NDIM; dim++) {
                     dx[dim] = SimdFloat(selfPos[dim] - otherPos[dim]) * kFixed2float;    // 3
                 }
-                SimdFloat r2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);    // 5
-                auto const supportRadius = mySupportRadius;
-                auto const mind = selfRadius + otherRadius + supportRadius;
-                SimdFloat const dcc = max((selfRadius + otherRadius) * thetainv, mind);
-                SimdFloat const dcp = max((thetainv * selfRadius + otherRadius), mind);
-                SimdFloat const dpc = max((selfRadius + otherRadius * thetainv), mind);
-                SimdFloat const cc = r2 > sqr(dcc);
+                SimdFloat const r2 =
+                    fmaf(dx[XDIM], dx[XDIM], fmaf(dx[YDIM], dx[YDIM], dx[ZDIM] * dx[ZDIM]));
+                SimdFloat const pairSupportRadius = fmmPairSupportRadius(SimdFloat(supportRadius),
+                    SimdFloat(selfPtr->maxGravitySupportRadius), otherSupportRadius);
+                auto acceptance = computeFmmAcceptance(r2, selfRadius, otherRadius, SimdFloat(0),
+                    SimdFloat(0), pairSupportRadius, thetainv);
                 flops += maxi * 20;
-                SimdFloat pc, cp;
-                cp = SimdFloat(0);
-                pc = SimdFloat(0);
                 if (selfPtr->leaf) {
                     for (int i = 0; i < maxi; i++) {
                         for (int dim = 0; dim < NDIM; dim++) {
@@ -380,21 +375,21 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
                             otherBox.begin[dim][i] = otherBox.end[dim][i] = 0.0;
                         }
                     }
-                    auto const nocc = (SimdFloat(1) - cc) * otherLeaf;
-                    pc = nocc *
-                        ((r2 > sqr(dpc)) + boxIntersectsSphere(selfBox, otherPos, otherRadius)) *
-                        (dpc > dcp);
-                    cp = nocc *
-                        ((r2 > sqr(dcp)) + boxIntersectsSphere(otherBox, selfPos, selfRadius)) *
-                        (dcp > dpc);
+                    acceptance = computeFmmAcceptance(r2, selfRadius, otherRadius,
+                        boxDistanceSquared(selfBox, otherPos),
+                        boxDistanceSquared(otherBox, selfPos), pairSupportRadius, thetainv);
                     flops += maxi * 34;
                 }
                 for (int i = 0; i < maxi; i++) {
-                    if (cc[i]) {
+                    auto const interaction = selectFmmInteraction(bool(acceptance.cellCell[i]),
+                        bool(acceptance.particleCell[i]), bool(acceptance.cellParticle[i]),
+                        selfPtr->leaf && bool(otherLeaf[i]), numberOfSelfParticles,
+                        otherPtrs[i]->numberOfParticles(), selfPtr->radius, otherPtrs[i]->radius);
+                    if (interaction == FmmInteraction::CellCell) {
                         cclist.push_back(checklist[ci + i]);
-                    } else if (cp[i]) {
+                    } else if (interaction == FmmInteraction::CellParticle) {
                         cplist.push_back(checklist[ci + i]);
-                    } else if (pc[i]) {
+                    } else if (interaction == FmmInteraction::ParticleCell) {
                         pclist.push_back(checklist[ci + i]);
                     } else if (otherLeaf[i]) {
                         leaflist.push_back(checklist[ci + i]);

@@ -370,6 +370,8 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
             depth + 1, leftLocalRoot, false);
         auto const rcl = futl.get();
         auto const rcr = futr.get();
+        rc.maxGravitySupportRadius =
+            std::max(rcl.maxGravitySupportRadius, rcr.maxGravitySupportRadius);
         auto const& xl = rcl.pos;
         auto const& xr = rcr.pos;
         auto const& ml = rcl.multi;
@@ -530,6 +532,10 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
         children[LEFT] = rcl.id;
         children[RIGHT] = rcr.id;
     } else {
+        // PP currently uses one fixed compact support for every particle. A
+        // variable-support producer must instead reduce its actual particle
+        // supports here on every rebuild, leaving empty leaves at zero.
+        rc.maxGravitySupportRadius = numberOfParticles > 0 ? float(h) : 0.0f;
         Array<double, NDIM>& xminValue = rbox.begin;
         Array<double, NDIM>& xmaxValue = rbox.end;
         for (int dim = 0; dim < NDIM; dim++) {
@@ -611,6 +617,7 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
     }
     TreeNode node;
     node.radius = radius;
+    node.maxGravitySupportRadius = rc.maxGravitySupportRadius;
     node.children = children;
     node.localRoot = localRoot;
     node.particleRange = particleRange;
@@ -623,6 +630,14 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
     for (int dim = 0; dim < NDIM; dim++) {
         node.box.begin[dim] = rbox.begin[dim];
         node.box.end[dim] = rbox.end[dim];
+        // Stored bounds have fewer fractional bits than particle positions.
+        // Round outward so box-based acceptance cannot exclude an extremum.
+        if (node.box.begin[dim].toDouble() > rbox.begin[dim]) {
+            node.box.begin[dim].raw()--;
+        }
+        if (node.box.end[dim].toDouble() < rbox.end[dim]) {
+            node.box.end[dim].raw()++;
+        }
     }
     bool const global = processRange.second - processRange.first > 1;
     node.leaf = isleaf;

@@ -25,13 +25,13 @@
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/fixed_capacity_vector.hpp>
 #include <cosmictiger/flops.hpp>
+#include <cosmictiger/fmm_acceptance.hpp>
 #include <cosmictiger/fmm_kernels.hpp>
 #include <cosmictiger/gravity.hpp>
 #include <cosmictiger/kick.hpp>
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/timer.hpp>
 
-#define MIN_PARTS_PCCP 38
 #define MIN_PARTS2_CC 78
 
 /*__managed__ int node_count;
@@ -363,7 +363,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                     DeviceVector<int>* lists[kNlists] = {&cclist, &leaflist, &nextlist};
 
                     auto& checks = echecks;
-                    float const thetainv = 1.f / globalParams.theta;
+                    float const thetainv = fmmInverseOpeningAngle(globalParams.theta);
                     do {
                         int const maxi = roundUp(checks.size(), WARP_SIZE);
                         for (int i = tid; i < maxi; i += WARP_SIZE) {
@@ -443,7 +443,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                     DeviceVector<int>* lists[kNlists] = {
                         &cclist, &leaflist, &cplist, &pclist, &nextlist};
                     auto& checks = dchecks;
-                    float const thetainv = 1.f / globalParams.theta;
+                    float const thetainv = fmmInverseOpeningAngle(globalParams.theta);
                     do {
                         int const maxi = roundUp(checks.size(), WARP_SIZE);
                         for (int i = tid; i < maxi; i += WARP_SIZE) {
@@ -456,45 +456,29 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                                     for (int dim = 0; dim < NDIM; dim++) {
                                         dx[dim] = distance(self.pos[dim], other.pos[dim]);    // 3
                                     }
-                                    float const r2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
-                                    float const mind = self.radius + other.radius + supportRadius;
-                                    float const dcc =
-                                        fmaxf((self.radius + other.radius) * thetainv, mind);
-                                    auto const numberOfSelfParticles = self.numberOfParticles();
-                                    auto const numberOfOtherParticles = other.numberOfParticles();
-                                    sw[kCc] =
-                                        (r2 > sqr(dcc));    // && min(self_parts, (part_int)
-                                                            // (2*MIN_PARTS2_CC)) * min(other_parts,
-                                                            // (part_int) (2*MIN_PARTS2_CC)) >=
-                                                            // MIN_PARTS2_CC;
+                                    float const r2 = fmaf(dx[XDIM], dx[XDIM],
+                                        fmaf(dx[YDIM], dx[YDIM], dx[ZDIM] * dx[ZDIM]));
+                                    float const pairSupportRadius = fmmPairSupportRadius(
+                                        supportRadius, self.maxGravitySupportRadius,
+                                        other.maxGravitySupportRadius);
+                                    auto acceptance = computeFmmAcceptance(r2, self.radius,
+                                        other.radius, 0.0f, 0.0f, pairSupportRadius, thetainv);
                                     flops += 20;
-                                    if (!sw[kCc] && other.leaf && self.leaf) {
-                                        float const dcp =
-                                            fmaxf((self.radius * thetainv + other.radius), mind);
-                                        float const dpc =
-                                            fmaxf((self.radius + other.radius * thetainv), mind);
-                                        sw[kPc] = (r2 > sqr(dpc) ||
-                                                      !boxIntersectsSphere(self.box, other.pos,
-                                                          fmaxf(thetainv * other.radius,
-                                                              supportRadius))) &&
-                                            numberOfSelfParticles >= MIN_PARTS_PCCP;
-                                        sw[kCp] = (r2 > sqr(dcp) ||
-                                                      !boxIntersectsSphere(other.box, self.pos,
-                                                          fmaxf(thetainv * self.radius,
-                                                              supportRadius))) &&
-                                            numberOfOtherParticles >= MIN_PARTS_PCCP;
-                                        if (sw[kPc] && sw[kCp]) {
-                                            if (numberOfSelfParticles < numberOfOtherParticles) {
-                                                sw[kCp] = false;
-                                            } else if (numberOfSelfParticles >
-                                                numberOfOtherParticles) {
-                                                sw[kPc] = false;
-                                            } else {
-                                                sw[kCp] = sw[kPc] = false;
-                                            }
-                                        }
+                                    if (!acceptance.cellCell && other.leaf && self.leaf) {
+                                        acceptance = computeFmmAcceptance(r2, self.radius,
+                                            other.radius, boxDistanceSquared(self.box, other.pos),
+                                            boxDistanceSquared(other.box, self.pos),
+                                            pairSupportRadius, thetainv);
                                         flops += 33;
                                     }
+                                    auto const interaction = selectFmmInteraction(
+                                        bool(acceptance.cellCell), bool(acceptance.particleCell),
+                                        bool(acceptance.cellParticle), self.leaf && other.leaf,
+                                        self.numberOfParticles(), other.numberOfParticles(),
+                                        self.radius, other.radius);
+                                    sw[kCc] = interaction == FmmInteraction::CellCell;
+                                    sw[kPc] = interaction == FmmInteraction::ParticleCell;
+                                    sw[kCp] = interaction == FmmInteraction::CellParticle;
                                     if (!sw[kCc] && !sw[kCp] && !sw[kPc]) {
                                         sw[kLeaf] = other.leaf;
                                         sw[kNext] = !sw[kLeaf];

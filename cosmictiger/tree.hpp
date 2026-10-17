@@ -103,6 +103,9 @@ struct TreeNode {
     Array<Fixed32, NDIM> pos;
     MultiPos* mpos;
     float radius;
+    // Maximum actual compact gravity support among represented particles, not an
+    // effective smoothing length. Rebuild/refit after those supports change.
+    float maxGravitySupportRadius = 0.0f;
     struct {
         unsigned short depth : 14;
         unsigned short localRoot : 1;
@@ -138,6 +141,7 @@ struct TreeNode {
         arc & processRange;
         arc & particleRange;
         arc & radius;
+        arc & maxGravitySupportRadius;
         int localRoot0;
         int leaf0;
         int depth0;
@@ -157,6 +161,7 @@ struct TreeNode {
         arc & processRange;
         arc & particleRange;
         arc & radius;
+        arc & maxGravitySupportRadius;
         int localRoot0;
         int leaf0;
         int depth0;
@@ -174,6 +179,7 @@ struct TreeCreateReturn {
     Array<Fixed32, NDIM> pos;
     TreeId id;
     float radius;
+    float maxGravitySupportRadius = 0.0f;
     Range<double> box;
     template <class A>
     void serialize(A&& a, unsigned) {
@@ -181,6 +187,7 @@ struct TreeCreateReturn {
         a & id;
         a & pos;
         a & radius;
+        a & maxGravitySupportRadius;
         a & box;
     }
 };

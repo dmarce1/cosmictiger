@@ -308,6 +308,16 @@ if(BUILD_TESTING)
     add_test(NAME radial_kernel COMMAND radial_kernel_test)
     set_tests_properties(radial_kernel PROPERTIES TIMEOUT 30)
 
+    add_executable(fmm_acceptance_test tests/fmm_acceptance.cpp)
+    target_include_directories(fmm_acceptance_test PRIVATE ${PROJECT_SOURCE_DIR})
+    target_compile_options(fmm_acceptance_test PRIVATE -ffast-math)
+    if(COMPILER_SUPPORTS_MARCH_NATIVE)
+        target_compile_options(fmm_acceptance_test PRIVATE -march=native)
+        target_compile_definitions(fmm_acceptance_test PRIVATE FMM_ACCEPTANCE_TEST_SIMD)
+    endif()
+    add_test(NAME fmm_acceptance COMMAND fmm_acceptance_test)
+    set_tests_properties(fmm_acceptance PROPERTIES TIMEOUT 30)
+
     add_executable(radial_density_kernel_test tests/radial_density_kernel.cpp)
     target_include_directories(radial_density_kernel_test PRIVATE ${PROJECT_SOURCE_DIR})
     if(COMPILER_SUPPORTS_MARCH_NATIVE)
@@ -337,6 +347,16 @@ if(BUILD_TESTING)
     set_tests_properties(particle_selection PROPERTIES TIMEOUT 10)
 
     if(COSMICTIGER_WITH_CUDA)
+        add_executable(fmm_acceptance_cuda_test tests/fmm_acceptance_cuda.cu)
+        target_include_directories(fmm_acceptance_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_compile_definitions(fmm_acceptance_cuda_test PRIVATE USE_CUDA)
+        target_link_libraries(fmm_acceptance_cuda_test PRIVATE CUDA::cudart)
+        target_compile_options(fmm_acceptance_cuda_test PRIVATE
+            $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr;--use_fast_math;-Xcompiler=-ffast-math>)
+        add_test(NAME fmm_acceptance_cuda COMMAND fmm_acceptance_cuda_test)
+        set_tests_properties(fmm_acceptance_cuda PROPERTIES
+            RUN_SERIAL TRUE TIMEOUT 120 SKIP_RETURN_CODE 77)
+
         add_executable(radial_kernel_cuda_test tests/radial_kernel_cuda.cu)
         target_include_directories(radial_kernel_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_link_libraries(radial_kernel_cuda_test PRIVATE CUDA::cudart)

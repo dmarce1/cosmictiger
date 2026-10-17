@@ -13,6 +13,7 @@
 #include <string>
 
 #include <cosmictiger/domain.hpp>
+#include <cosmictiger/fmm_acceptance.hpp>
 #include <cosmictiger/gravity.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/kick.hpp>
@@ -95,7 +96,8 @@ void fmmWalkPrepareArena() {
 
 TreeId fmmWalkAddNode(Array<Fixed32, NDIM> const& position, float radius,
     Pair<ParticleInteger> particleRange, int depth, bool localRoot = false,
-    TreeId left = TreeId{-1, -1}, TreeId right = TreeId{-1, -1}, bool spansTwoRanks = false) {
+    TreeId left = TreeId{-1, -1}, TreeId right = TreeId{-1, -1}, bool spansTwoRanks = false,
+    float maxSupportRadius = 0.0f, bool tightParticleBox = false) {
     TreeNode node{};
     node.pos = position;
     node.radius = radius;
@@ -106,6 +108,15 @@ TreeId fmmWalkAddNode(Array<Fixed32, NDIM> const& position, float radius,
     node.leaf = left.index == -1;
     node.children[LEFT] = left;
     node.children[RIGHT] = right;
+    node.maxGravitySupportRadius = particleRange.first == particleRange.second ?
+        0.0f :
+        std::max(float(getOptions().gravitySupportRadius), maxSupportRadius);
+    if (!node.leaf) {
+        for (int child = 0; child < NCHILD; child++) {
+            node.maxGravitySupportRadius = std::max(node.maxGravitySupportRadius,
+                treeGetNode(node.children[child])->maxGravitySupportRadius);
+        }
+    }
     MultiPos multipole;
     multipole.pos = position;
     multipole.multi = 0.0f;
@@ -123,6 +134,16 @@ TreeId fmmWalkAddNode(Array<Fixed32, NDIM> const& position, float radius,
     for (int dim = 0; dim < NDIM; dim++) {
         node.box.begin[dim] = std::max(0.0, position[dim].toDouble() - radius);
         node.box.end[dim] = std::min(1.0, position[dim].toDouble() + radius);
+        if (tightParticleBox && particleRange.first != particleRange.second) {
+            node.box.begin[dim] = node.box.end[dim] =
+                particlesPos(dim, particleRange.first).toDouble();
+            for (ParticleInteger i = particleRange.first + 1; i < particleRange.second; i++) {
+                node.box.begin[dim] =
+                    std::min(node.box.begin[dim].toDouble(), particlesPos(dim, i).toDouble());
+                node.box.end[dim] =
+                    std::max(node.box.end[dim].toDouble(), particlesPos(dim, i).toDouble());
+            }
+        }
     }
     return TreeId{hpxRank(), int(treeAddRemote(node))};
 }
@@ -158,7 +179,7 @@ void fmmWalkVerifyEwald(std::string const& label, TreeId sink, Vector<TreeId> co
             auto const result =
                 kick(params, local, sinkNode->pos, sink, Vector<TreeId>{}, checklist, nullptr);
             for (ParticleInteger i = sinkNode->particleRange.first;
-                i < sinkNode->particleRange.second; i++) {
+                 i < sinkNode->particleRange.second; i++) {
                 for (int dim = 0; dim < NDIM; dim++) {
                     fmmWalkRequireClose(path + " acceleration " + std::to_string(dim),
                         particlesGravityAcceleration(dim, i), expectedAcceleration[dim]);
@@ -281,7 +302,7 @@ void fmmWalkDeferredSourceHandoff(bool useCuda) {
                     "deferred handoff total potential", result.pot, expectedTotalPotential);
             }
             for (ParticleInteger i = sinkNode->particleRange.first;
-                i < sinkNode->particleRange.second; i++) {
+                 i < sinkNode->particleRange.second; i++) {
                 for (int dim = 0; dim < NDIM; dim++) {
                     if (backend == 0) {
                         expectedAcceleration[i][dim] = particlesGravityAcceleration(dim, i);
@@ -302,17 +323,382 @@ void fmmWalkDeferredSourceHandoff(bool useCuda) {
     treeDestroy();
 }
 
+void fmmWalkSetHybridParticles(ParticleInteger secondParticleCount) {
+    // Two symmetric grids have nonzero higher moments while remaining well
+    // inside the conservative radii used by the synthetic leaves below.
+    for (ParticleInteger i = 0; i < 40; i++) {
+        fmmWalkSetParticlePosition(i,
+            fmmWalkPosition(0.25 + (i % 5 - 2) / 128.0, 0.375 + ((i / 5) % 4 - 1.5) / 128.0,
+                0.4375 + (i / 20 - 0.5) / 128.0));
+    }
+    int const columns = secondParticleCount == 40 ? 5 : 4;
+    int const layers = secondParticleCount / (columns * 4);
+    for (ParticleInteger i = 0; i < secondParticleCount; i++) {
+        fmmWalkSetParticlePosition(40 + i,
+            fmmWalkPosition(0.4375 + (i % columns - (columns - 1) * 0.5) / 64.0,
+                0.375 + ((i / columns) % 4 - 1.5) / 64.0,
+                0.4375 + (i / (columns * 4) - (layers - 1) * 0.5) / 64.0));
+    }
+}
+
+void fmmWalkRequireInteraction(
+    TreeId sink, TreeId source, float support, FmmInteraction expected, std::string const& label) {
+    auto const* sinkNode = treeGetNode(sink);
+    auto const* sourceNode = treeGetNode(source);
+    Array<float, NDIM> displacement;
+    for (int dim = 0; dim < NDIM; dim++) {
+        displacement[dim] = distance(sinkNode->pos[dim], sourceNode->pos[dim]);
+    }
+    float const distanceSquared = std::fma(displacement[XDIM], displacement[XDIM],
+        std::fma(displacement[YDIM], displacement[YDIM], sqr(displacement[ZDIM])));
+    float const pairSupport = fmmPairSupportRadius(
+        support, sinkNode->maxGravitySupportRadius, sourceNode->maxGravitySupportRadius);
+    auto const acceptance = computeFmmAcceptance(distanceSquared, sinkNode->radius,
+        sourceNode->radius, boxDistanceSquared(sinkNode->box, sourceNode->pos),
+        boxDistanceSquared(sourceNode->box, sinkNode->pos), pairSupport,
+        fmmInverseOpeningAngle(kFmmWalkTheta));
+    auto const actual = selectFmmInteraction(acceptance.cellCell != 0.0f,
+        acceptance.particleCell != 0.0f, acceptance.cellParticle != 0.0f,
+        sinkNode->leaf && sourceNode->leaf, sinkNode->numberOfParticles(),
+        sourceNode->numberOfParticles(), sinkNode->radius, sourceNode->radius);
+    if (actual != expected) {
+        throw std::runtime_error(label + ": synthetic geometry selected the wrong interaction");
+    }
+}
+
+ForceVectors fmmWalkInteractionReference(
+    TreeId sink, TreeId source, float support, FmmInteraction interaction) {
+    auto const* sinkNode = treeGetNode(sink);
+    auto const range = sinkNode->particleRange;
+    ForceVectors reference(sinkNode->numberOfParticles());
+    for (ParticleInteger i = range.first; i < range.second; i++) {
+        auto const j = i - range.first;
+        reference.gx[j] = reference.gy[j] = reference.gz[j] = 0.0f;
+        reference.phi[j] = particlesMass(i) * selfPhi() / support;
+    }
+    Vector<TreeId> const sources{source};
+    if (interaction == FmmInteraction::ParticleCell) {
+        cpuGravityPc(reference, true, sink, sources);
+    } else if (interaction == FmmInteraction::CellParticle ||
+        interaction == FmmInteraction::CellCell) {
+        Expansion<float> local;
+        local = 0.0f;
+        if (interaction == FmmInteraction::CellCell) {
+            cpuGravityCc(kGravityDirect, local, sources, sink, true);
+        } else {
+            cpuGravityCp(local, sources, sink, true);
+        }
+        for (ParticleInteger i = range.first; i < range.second; i++) {
+            Array<float, NDIM> displacement;
+            for (int dim = 0; dim < NDIM; dim++) {
+                displacement[dim] = distance(particlesPos(dim, i), sinkNode->pos[dim]);
+            }
+            auto const value = l2P(local, displacement, true);
+            auto const j = i - range.first;
+            reference.gx[j] -= SCALE_FACTOR2 * value(1, 0, 0);
+            reference.gy[j] -= SCALE_FACTOR2 * value(0, 1, 0);
+            reference.gz[j] -= SCALE_FACTOR2 * value(0, 0, 1);
+            reference.phi[j] += SCALE_FACTOR1 * value(0, 0, 0);
+        }
+    } else if (interaction == FmmInteraction::ParticleParticle) {
+        cpuGravityPp(reference, true, sink, sources, support);
+    }
+    return reference;
+}
+
+ForceVectors fmmWalkApplyInteraction(TreeId sink, TreeId source, float support, bool useCuda) {
+    auto const range = treeGetNode(sink)->particleRange;
+    auto const position = treeGetNode(sink)->pos;
+    fmmWalkResetKickState();
+    Expansion<float> local;
+    local = 0.0f;
+    auto params = fmmWalkParameters(useCuda);
+    params.gravitySupportRadius = support;
+    kick(params, local, position, sink, Vector<TreeId>{source}, Vector<TreeId>{}, nullptr);
+    ForceVectors result(range.second - range.first);
+    for (ParticleInteger i = range.first; i < range.second; i++) {
+        auto const j = i - range.first;
+        result.gx[j] = particlesGravityAcceleration(XDIM, i);
+        result.gy[j] = particlesGravityAcceleration(YDIM, i);
+        result.gz[j] = particlesGravityAcceleration(ZDIM, i);
+        result.phi[j] = particlesPot(i);
+    }
+    return result;
+}
+
+void fmmWalkCompareForces(
+    std::string const& label, ForceVectors const& actual, ForceVectors const& expected) {
+    for (size_t i = 0; i < actual.gx.size(); i++) {
+        fmmWalkRequireClose(label + " x acceleration", actual.gx[i], expected.gx[i]);
+        fmmWalkRequireClose(label + " y acceleration", actual.gy[i], expected.gy[i]);
+        fmmWalkRequireClose(label + " z acceleration", actual.gz[i], expected.gz[i]);
+        fmmWalkRequireClose(label + " potential", actual.phi[i], expected.phi[i]);
+    }
+}
+
+void fmmWalkRequireForceReciprocity(std::string const& label, std::array<TreeId, 2> const& sinks,
+    std::array<ForceVectors const*, 2> const& forces) {
+    std::array<double, NDIM> totalForce{};
+    std::array<double, NDIM> absoluteForce{};
+    double forceMagnitudeSum = 0.0;
+    for (int direction = 0; direction < 2; direction++) {
+        auto const range = treeGetNode(sinks[direction])->particleRange;
+        auto const& values = *forces[direction];
+        for (ParticleInteger i = range.first; i < range.second; i++) {
+            auto const j = i - range.first;
+            std::array<double, NDIM> const acceleration{values.gx[j], values.gy[j], values.gz[j]};
+            double forceSquared = 0.0;
+            for (int dim = 0; dim < NDIM; dim++) {
+                double const force = particlesMass(i) * acceleration[dim];
+                totalForce[dim] += force;
+                absoluteForce[dim] += std::abs(force);
+                forceSquared += force * force;
+            }
+            forceMagnitudeSum += std::sqrt(forceSquared);
+        }
+    }
+    double totalForceSquared = 0.0;
+    for (int dim = 0; dim < NDIM; dim++) {
+        totalForceSquared += totalForce[dim] * totalForce[dim];
+        fmmWalkRequireClose(label + " total-force reciprocity",
+            totalForce[dim] / std::max(1.0, absoluteForce[dim]), 0.0, 2.0e-5);
+    }
+    // Normalize the norm of the net force by the sum of individual force norms.
+    double const residual = std::sqrt(totalForceSquared) / std::max(1.0, forceMagnitudeSum);
+    fmmWalkRequireClose(label + " vector total-force reciprocity", residual, 0.0, 2.0e-5);
+    PRINT("FMM %s: normalized total-force residual = %.9e\n", label.c_str(), residual);
+}
+
+void fmmWalkReciprocalHybrid(bool useCuda) {
+    struct HybridCase {
+        char const* label;
+        ParticleInteger secondParticleCount;
+        float firstRadius;
+        float secondRadius;
+        std::array<FmmInteraction, 2> interactions;
+    };
+    std::array<HybridCase, 3> const cases{{
+        {"unequal counts PC/CP", 64, 0.0625f, 0.09375f,
+            {FmmInteraction::ParticleCell, FmmInteraction::CellParticle}},
+        {"equal counts, unequal radii CP/PC", 40, 0.0625f, 0.09375f,
+            {FmmInteraction::CellParticle, FmmInteraction::ParticleCell}},
+        {"equal counts and radii PP", 40, 0.078125f, 0.078125f,
+            {FmmInteraction::ParticleParticle, FmmInteraction::ParticleParticle}},
+    }};
+    for (auto const& testCase : cases) {
+        ParticleInteger const particleCount = 40 + testCase.secondParticleCount;
+        particlesResize(particleCount);
+        fmmWalkSetHybridParticles(testCase.secondParticleCount);
+        fmmWalkResetKickState();
+        particlesSortByRung(0);
+        treeCreate(TreeCreateParameters(0, kFmmWalkTheta, getOptions().gravitySupportRadius));
+        // The ordinary build initializes the arenas and may reorder particles.
+        // Restore the prescribed ranges before constructing the synthetic moments.
+        fmmWalkSetHybridParticles(testCase.secondParticleCount);
+        auto const first = fmmWalkAddNode(fmmWalkPosition(0.25, 0.375, 0.4375),
+            testCase.firstRadius, Pair<ParticleInteger>(0, 40), 4, true);
+        auto const second = fmmWalkAddNode(fmmWalkPosition(0.4375, 0.375, 0.4375),
+            testCase.secondRadius, Pair<ParticleInteger>(40, particleCount), 4, true);
+        std::array<TreeId, 2> const sinks{first, second};
+        int const supportModes = testCase.secondParticleCount == 64 ? 2 : 1;
+        for (int supportMode = 0; supportMode < supportModes; supportMode++) {
+            // Small support permits the prescribed hybrid/tie policy. Large
+            // support contains every cross pair and forces softened PP.
+            float const support = supportMode == 0 ? 0.015625f : 0.375f;
+            std::array<FmmInteraction, 2> const interactions = supportMode == 0 ?
+                testCase.interactions :
+                std::array<FmmInteraction, 2>{
+                    FmmInteraction::ParticleParticle, FmmInteraction::ParticleParticle};
+            std::array<ForceVectors, 2> references;
+            std::array<ForceVectors, 2> cpuForces;
+            std::string const mode = supportMode == 0 ? testCase.label : "softened PP fallback";
+            for (int direction = 0; direction < 2; direction++) {
+                fmmWalkRequireInteraction(
+                    sinks[direction], sinks[1 - direction], support, interactions[direction], mode);
+                references[direction] = fmmWalkInteractionReference(
+                    sinks[direction], sinks[1 - direction], support, interactions[direction]);
+            }
+            for (int backend = 0; backend < (useCuda ? 2 : 1); backend++) {
+                std::string const label = mode + (backend == 0 ? " CPU" : " CUDA");
+                std::array<ForceVectors, 2> backendForces;
+                for (int direction = 0; direction < 2; direction++) {
+                    auto& forces = backendForces[direction];
+                    forces = fmmWalkApplyInteraction(
+                        sinks[direction], sinks[1 - direction], support, backend != 0);
+                    fmmWalkCompareForces(
+                        label + " operator reference", forces, references[direction]);
+                    if (backend == 0) {
+                        cpuForces[direction] = forces;
+                    } else {
+                        fmmWalkCompareForces(
+                            label + " CPU agreement", forces, cpuForces[direction]);
+                    }
+                }
+                fmmWalkRequireForceReciprocity(
+                    label, sinks, {&backendForces[0], &backendForces[1]});
+                if (backend != 0) {
+                    fmmWalkRequireForceReciprocity(
+                        mode + " mixed CPU/CUDA", sinks, {&cpuForces[0], &backendForces[1]});
+                }
+            }
+        }
+        treeDestroy();
+    }
+}
+
+void fmmWalkRequireDistinctForces(
+    std::string const& label, ForceVectors const& direct, ForceVectors const& formerExpansion) {
+    double largestDifference = 0.0;
+    for (size_t i = 0; i < direct.gx.size(); i++) {
+        largestDifference = std::max(largestDifference,
+            std::abs(double(direct.gx[i]) - formerExpansion.gx[i]) /
+                std::max(1.0, std::abs(double(direct.gx[i]))));
+    }
+    // A missing metadata check must fail the actual force comparison, not just
+    // the helper-level interaction expectation above it.
+    if (largestDifference < 0.01) {
+        throw std::runtime_error(label + ": expansion is too close to PP to test metadata routing");
+    }
+}
+
+void fmmWalkCellSupportBounds(bool useCuda) {
+    struct SupportCase {
+        char const* label;
+        float firstRadius;
+        float secondRadius;
+        bool tightParticleBoxes;
+        bool refine;
+        std::array<FmmInteraction, 2> formerInteractions;
+    };
+    std::array<SupportCase, 4> const cases{{
+        {"cell support CC fallback", 0.0625f, 0.078125f, false, false,
+            {FmmInteraction::CellCell, FmmInteraction::CellCell}},
+        {"cell support radial hybrid fallback", 0.0625f, 0.09375f, false, false,
+            {FmmInteraction::ParticleCell, FmmInteraction::CellParticle}},
+        {"cell support box-only hybrid fallback", 0.125f, 0.078125f, true, false,
+            {FmmInteraction::ParticleCell, FmmInteraction::CellParticle}},
+        {"cell support CC refinement", 0.0625f, 0.078125f, false, true,
+            {FmmInteraction::CellCell, FmmInteraction::CellCell}},
+    }};
+    float const fixedSupport = 0.015625f;
+    float const largeCellSupport = 0.375f;
+    std::array<Array<Fixed32, NDIM>, 2> const centers{
+        fmmWalkPosition(0.25, 0.375, 0.4375), fmmWalkPosition(0.4375, 0.375, 0.4375)};
+    std::array<Array<Fixed32, NDIM>, 2> const particlePositions{
+        fmmWalkPosition(0.3125, 0.375, 0.4375), fmmWalkPosition(0.359375, 0.375, 0.4375)};
+    std::array<Pair<ParticleInteger>, 2> const ranges{
+        Pair<ParticleInteger>(0, 40), Pair<ParticleInteger>(40, 104)};
+    for (auto const& testCase : cases) {
+        particlesResize(104);
+        for (ParticleInteger i = 0; i < particlesSize(); i++) {
+            fmmWalkSetParticlePosition(i, particlePositions[i < 40 ? 0 : 1]);
+        }
+        fmmWalkResetKickState();
+        particlesSortByRung(0);
+        treeCreate(TreeCreateParameters(0, kFmmWalkTheta, fixedSupport));
+        // Concentrate each group near its facing cell edge so the omitted
+        // expansion terms remain measurable. The enclosing bounds stay valid.
+        for (ParticleInteger i = 0; i < particlesSize(); i++) {
+            fmmWalkSetParticlePosition(i, particlePositions[i < 40 ? 0 : 1]);
+        }
+        std::array<float, 2> const radii{testCase.firstRadius, testCase.secondRadius};
+        std::array<TreeId, 2> ordinary;
+        for (int side = 0; side < 2; side++) {
+            ordinary[side] = fmmWalkAddNode(centers[side], radii[side], ranges[side], 4, true,
+                TreeId{-1, -1}, TreeId{-1, -1}, false, fixedSupport, testCase.tightParticleBoxes);
+            if (testCase.tightParticleBoxes) {
+                float const centerThreshold = std::fma(fmmInverseOpeningAngle(kFmmWalkTheta),
+                    testCase.secondRadius, testCase.firstRadius);
+                if (0.1875f > centerThreshold) {
+                    throw std::runtime_error("Support fixture must require the box shortcut");
+                }
+            }
+        }
+        std::array<ForceVectors, 2> references;
+        for (int direction = 0; direction < 2; direction++) {
+            fmmWalkRequireInteraction(ordinary[direction], ordinary[1 - direction], fixedSupport,
+                testCase.formerInteractions[direction], testCase.label);
+            references[direction] = fmmWalkInteractionReference(ordinary[direction],
+                ordinary[1 - direction], fixedSupport, FmmInteraction::ParticleParticle);
+            auto const former = fmmWalkInteractionReference(ordinary[direction],
+                ordinary[1 - direction], fixedSupport, testCase.formerInteractions[direction]);
+            fmmWalkRequireDistinctForces(testCase.label, references[direction], former);
+        }
+        for (int largeSide = 0; largeSide < 2; largeSide++) {
+            std::array<TreeId, 2> sinks;
+            for (int side = 0; side < 2; side++) {
+                float const cellSupport = side == largeSide ? largeCellSupport : fixedSupport;
+                TreeId left{-1, -1};
+                TreeId right{-1, -1};
+                if (testCase.refine) {
+                    auto const midpoint = (ranges[side].first + ranges[side].second) / 2;
+                    left = fmmWalkAddNode(centers[side], radii[side],
+                        Pair<ParticleInteger>(ranges[side].first, midpoint), 5, false,
+                        TreeId{-1, -1}, TreeId{-1, -1}, false, cellSupport);
+                    right = fmmWalkAddNode(centers[side], radii[side],
+                        Pair<ParticleInteger>(midpoint, ranges[side].second), 5, false,
+                        TreeId{-1, -1}, TreeId{-1, -1}, false, cellSupport);
+                }
+                sinks[side] =
+                    fmmWalkAddNode(centers[side], radii[side], ranges[side], 4, true, left, right,
+                        false, testCase.refine ? 0.0f : cellSupport, testCase.tightParticleBoxes);
+                fmmWalkRequireClose("synthetic cell support maximum",
+                    treeGetNode(sinks[side])->maxGravitySupportRadius, cellSupport, 0.0);
+            }
+            // Only opening metadata differs. PP still uses fixedSupport; this
+            // tests conservative routing, not variable-softening PP physics.
+            std::string const mode =
+                std::string(testCase.label) + (largeSide == 0 ? " first large" : " second large");
+            std::array<ForceVectors, 2> cpuForces;
+            for (int direction = 0; direction < 2; direction++) {
+                fmmWalkRequireInteraction(sinks[direction], sinks[1 - direction], fixedSupport,
+                    FmmInteraction::ParticleParticle, mode);
+            }
+            for (int backend = 0; backend < (useCuda ? 2 : 1); backend++) {
+                std::string const label = mode + (backend == 0 ? " CPU" : " CUDA");
+                std::array<ForceVectors, 2> backendForces;
+                for (int direction = 0; direction < 2; direction++) {
+                    auto& forces = backendForces[direction];
+                    forces = fmmWalkApplyInteraction(
+                        sinks[direction], sinks[1 - direction], fixedSupport, backend != 0);
+                    fmmWalkCompareForces(
+                        label + " fixed-support PP reference", forces, references[direction]);
+                    if (backend == 0) {
+                        cpuForces[direction] = forces;
+                    } else {
+                        fmmWalkCompareForces(
+                            label + " CPU agreement", forces, cpuForces[direction]);
+                    }
+                }
+                fmmWalkRequireForceReciprocity(
+                    label, sinks, {&backendForces[0], &backendForces[1]});
+                if (backend != 0) {
+                    fmmWalkRequireForceReciprocity(
+                        mode + " mixed CPU/CUDA", sinks, {&cpuForces[0], &backendForces[1]});
+                }
+            }
+        }
+        treeDestroy();
+    }
+}
+
 void fmmWalkCollectLeaves(TreeId id, Vector<TreeId>& leaves) {
     auto const* node = treeGetNode(id);
+    float expectedSupportRadius = 0.0f;
     if (node->leaf) {
         if (node->numberOfParticles()) {
             leaves.push_back(id);
+            expectedSupportRadius = getOptions().gravitySupportRadius;
         }
     } else {
         for (int child = 0; child < NCHILD; child++) {
             fmmWalkCollectLeaves(node->children[child], leaves);
+            expectedSupportRadius = std::max(
+                expectedSupportRadius, treeGetNode(node->children[child])->maxGravitySupportRadius);
         }
     }
+    fmmWalkRequireClose("distributed cell support maximum", node->maxGravitySupportRadius,
+        expectedSupportRadius, 0.0);
 }
 
 }    // namespace detail
@@ -384,6 +770,8 @@ void fmmWalkTest() {
         detail::fmmWalkRepeatedSourceOpening(useCuda);
         detail::fmmWalkEmptyLocalRoot(useCuda);
         detail::fmmWalkDeferredSourceHandoff(useCuda);
+        detail::fmmWalkReciprocalHybrid(useCuda);
+        detail::fmmWalkCellSupportBounds(useCuda);
     } else {
         Vector<hpx::future<void>> pending;
         for (auto const& locality : hpxLocalities()) {
