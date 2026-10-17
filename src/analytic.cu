@@ -97,7 +97,7 @@ std::pair<Vector<double>, Array<Vector<double>, NDIM>> gravityAnalyticCallKernel
         for (int j = 0; j < numberOfKernels; j++) {
             int const begin = size_t(j) * size_t(totalSize) / size_t(numberOfKernels);
             int const end = size_t(j + 1) * size_t(totalSize) / size_t(numberOfKernels);
-            analyticGravityKernel<<<numberOfSinks, ANALYTIC_BLOCK_SIZE, 0, streams[i]>>>(devSinkx,
+            analyticGravityKernel<<<numberOfSinks, ANALYTIC_BLOCK_SIZE, 0, streams[j]>>>(devSinkx,
                 devSinky, devSinkz, devSrcx + begin, devSrcy + begin, devSrcz + begin, end - begin,
                 devPhi, devGx, devGy, devGz, getOptions().hsoft);
         }
@@ -148,10 +148,10 @@ __global__ void analyticGravityKernel(Fixed32* sinkx, Fixed32* sinky, Fixed32* s
     Fixed32 const y = sinky[bid];
     Fixed32 const z = sinkz[bid];
     float const cons1 = float(4.0f / sqrtf(M_PI));
-    float h2 = h * h;
-    float hinv = 1.0 / (h);
-    float h2inv = 1.0 / h2;
-    float h3inv = hinv * hinv * hinv;
+    float const h2 = h * h;
+    float const hinv = 1.0f / h;
+    float const h2inv = hinv * hinv;
+    float const h3inv = h2inv * hinv;
     phi[tid] = gx[tid] = gy[tid] = gz[tid] = 0.0f;
     for (int sourcei = tid; sourcei < numberOfSources; sourcei += ANALYTIC_BLOCK_SIZE) {
         float const xValue = distance(x, sourcex[sourcei]);
@@ -216,16 +216,20 @@ __global__ void analyticGravityKernel(Fixed32* sinkx, Fixed32* sinky, Fixed32* s
         }
         if (r2Value == 0.f) {
             phi[tid] += 2.837291f;
-            phi[tid] -= 15.0f / 8.0f * hinv;
+            phi[tid] -= selfPhi() * hinv;
         } else if (r2Value < h2) {
-            float const q2 = r2Value * h2inv;
-            float rinv3;
-            float rinv1;
-            gravitySofteningKernel(rinv3, rinv1, q2, h2, hinv, h3inv, true);
-            fx -= xValue * rinv3;
-            fy -= yValue * rinv3;
-            fz -= zValue * rinv3;
-            pot -= rinv1;
+            float softenedForce;
+            float softenedPotential;
+            gravitySofteningKernel(
+                softenedForce, softenedPotential, r2Value, hinv, h2inv, h3inv, true);
+            // The Ewald sum already includes the Newtonian central image.
+            float const inverseRadius = rsqrtf(r2Value);
+            float const forceCorrection =
+                softenedForce - inverseRadius * inverseRadius * inverseRadius;
+            fx -= xValue * forceCorrection;
+            fy -= yValue * forceCorrection;
+            fz -= zValue * forceCorrection;
+            pot -= softenedPotential - inverseRadius;
         }
         phi[tid] += pot;
         gx[tid] += fx;

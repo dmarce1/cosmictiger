@@ -305,7 +305,7 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
             bool show = false;
             bool factive = false;
             for (ParticleInteger i = selfPtr->particleRange.first;
-                 i < selfPtr->particleRange.second; i++) {
+                i < selfPtr->particleRange.second; i++) {
                 bool const active = sphParticlesRung(i) >= params.minRung;
                 float const h = params.hWt * sphParticlesSmoothingLength(i);
                 //				PRINT( "%e\n", params.h_wt);
@@ -969,7 +969,8 @@ SphRunReturn SphRunWorkspace::toGpu() {
     cudaData.gySnk = &sphParticlesGravityAcceleration(YDIM, 0);
     cudaData.gzSnk = &sphParticlesGravityAcceleration(ZDIM, 0);
     cudaData.defGamma = getOptions().gamma;
-    cudaData.gravitySofteningLength = getOptions().hsoft;
+    cudaData.gravitySofteningLength =
+        getOptions().hsoft / selectedGravityKernel().supportPerSmoothing;
     cudaData.numberOfTargetNodes = hostSelflist.size();
     cudaData.chemistry = getOptions().chem;
     cudaData.convergedSnk = &sphParticlesConverged(0);

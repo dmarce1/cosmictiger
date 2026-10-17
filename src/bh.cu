@@ -157,9 +157,8 @@ __global__ void bhTreeEvaluateKernel(BhTreeNode const* treeNodes, int const* sin
         }
 
         float const h = hsoft;
-        float const hinv = 1.0 / (2.f * h);
-        float const h2inv = 1.0 / (4.f * h * h);
-        float const h2 = 4.f * h * h;
+        float const hinv = 1.0f / h;
+        float const h2 = h * h;
         for (int i = 0; i < sinkSize; i++) {
             float thisPhi = 0.0;
             for (int j = tid; j < sourceX.size(); j += WARP_SIZE) {
@@ -173,12 +172,7 @@ __global__ void bhTreeEvaluateKernel(BhTreeNode const* treeNodes, int const* sin
                 if (r2 > h2) {
                     rinv1 = float(1) / r;    // 5
                 } else {
-                    float const r1overh1 = r * hinv;            // 1
-                    float const r2oh2 = r1overh1 * r1overh1;    // 1
-                    rinv1 = 3.0f / 8.0f;
-                    rinv1 = fmaf(rinv1, r2oh2, float(-5.0f / 4.0f));    // 2
-                    rinv1 = fmaf(rinv1, r2oh2, float(15.0f / 8.0f));    // 2
-                    rinv1 *= hinv;                                      // 1
+                    rinv1 = radial_kernel::potential(selectedGravityKernel(), r * hinv) * hinv;
                 }
                 thisPhi += -m * rinv1;
             }
@@ -310,9 +304,8 @@ __global__ void bhTreeEvaluatePointsKernel(BhTreeNode const* treeNodes, float* p
         }
 
         float const h = hsoft;
-        float const hinv = 1.0 / (2.f * h);
-        float const h2inv = 1.0 / (4.f * h * h);
-        float const h2 = 4.f * h * h;
+        float const hinv = 1.0f / h;
+        float const h2 = h * h;
         if (tid == 0) {
             phi[si] = 0.f;
         }
@@ -328,12 +321,7 @@ __global__ void bhTreeEvaluatePointsKernel(BhTreeNode const* treeNodes, float* p
             if (r2 > h2) {
                 rinv1 = float(1) / r;    // 5
             } else if (r2 > 0.f) {
-                float const r1overh1 = r * hinv;            // 1
-                float const r2oh2 = r1overh1 * r1overh1;    // 1
-                rinv1 = 3.0f / 8.0f;
-                rinv1 = fmaf(rinv1, r2oh2, float(-5.0f / 4.0f));    // 2
-                rinv1 = fmaf(rinv1, r2oh2, float(15.0f / 8.0f));    // 2
-                rinv1 *= hinv;                                      // 1
+                rinv1 = radial_kernel::potential(selectedGravityKernel(), r * hinv) * hinv;
             } else {
                 rinv1 = 0.0f;
             }

@@ -81,7 +81,7 @@ __device__ void doKick(KickReturn& result, KickParameters params, CudaKickData c
     float darkMatterZMomentumCorrection = 0.0f;
     float darkMatterMomentumNormCorrection = 0.0f;
 
-    float const& hsoft = params.h;
+    float const gravitySmoothingLength = params.h / selectedGravityKernel().supportPerSmoothing;
     FlopCounter<int> flops = 0;
     for (int i = tid; i < numberOfSinks; i += WARP_SIZE) {
         Expansion2<float> l2;
@@ -144,7 +144,8 @@ __device__ void doKick(KickReturn& result, KickParameters params, CudaKickData c
 
             if (params.descending) {
                 g2 = sqr(fValue.gx, fValue.gy, fValue.gz);
-                dt = fminf(params.eta * sqrt(params.a * hsoft * rsqrtf(g2)), params.t0);    // 12
+                dt = fminf(params.eta * sqrt(params.a * gravitySmoothingLength * rsqrtf(g2)),
+                    params.t0);    // 12
                 dt = fminf(params.maxDt, dt);
                 rung = rungs[sinkIndex];
                 rung =
@@ -188,7 +189,8 @@ __device__ void doKick(KickReturn& result, KickParameters params, CudaKickData c
                 float const syncVx = vx, syncVy = vy, syncVz = vz;
                 float const g2 = sqr(fValue.gx, fValue.gy, fValue.gz) + 1e-35f;
                 float dt =
-                    fminf(params.eta * sqrtf(params.a) * sqrtf(hsoft / sqrtf(g2)), params.t0);
+                    fminf(params.eta * sqrtf(params.a) * sqrtf(gravitySmoothingLength / sqrtf(g2)),
+                        params.t0);
                 dt = fminf(dt, params.maxDt);
                 rung = max(max((int) ceilf(log2f(params.t0 / dt)),
                                max((int) rungs[sinkIndex] - 1, params.minRung)),

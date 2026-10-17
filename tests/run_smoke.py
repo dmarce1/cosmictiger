@@ -55,6 +55,9 @@ def main():
     parser.add_argument("power_file", type=Path)
     parser.add_argument("workdir", type=Path)
     parser.add_argument("--mpi-exec", default="mpiexec")
+    parser.add_argument("--extra-option", action="append", default=[],
+                        help="forward an application argument, for example "
+                             "--extra-option=--hydro.kernelFamily=wendland")
     args = parser.parse_args()
     args.workdir.mkdir(parents=True, exist_ok=True)
     # These are dedicated CTest output files; remove previous run data so a failed
@@ -92,6 +95,7 @@ def main():
     else:
         command += ["--hydro.enabled=false", "--run.maxIterations=1",
                     "--compute.cuda=" + str(args.mode == "dm_cuda").lower()]
+    command += args.extra_option
     run_simulation(command, args.workdir, "run.log")
     if args.mode == "sod":
         output_log = (args.workdir / "run.log").read_text()

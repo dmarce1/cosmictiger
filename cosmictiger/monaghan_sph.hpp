@@ -58,14 +58,18 @@ COSMICTIGER_MONAGHAN_EXPORT inline Real kernelDerivative(Real q) {
     return -Real(6) * kNormalization * oneMinusQ * oneMinusQ;
 }
 
-// Equation (4.2). epsilon is eta^2 / hbar^2 (normally 0.01).
+// Equation (4.2). epsilon is eta^2 / hbar^2. The explicit scale factor
+// converts stored supports to a common smoothing width; its default retains
+// the historical cubic-spline convention for standalone Monaghan references.
 template <typename Real>
-COSMICTIGER_MONAGHAN_EXPORT inline Real viscosityMu(
-    Real radiusSquared, Real velocityDotRadius, Real supportI, Real supportJ, Real epsilon) {
+COSMICTIGER_MONAGHAN_EXPORT inline Real viscosityMu(Real radiusSquared, Real velocityDotRadius,
+    Real supportI, Real supportJ, Real epsilon, Real supportPerSmoothing = Real(2),
+    Real viscosityWidthScale = Real(1)) {
     if (velocityDotRadius >= Real(0)) {
         return Real(0);
     }
-    Real const smoothingLength = Real(0.25) * (supportI + supportJ);
+    Real const smoothingLength =
+        Real(0.5) * (supportI + supportJ) / supportPerSmoothing * viscosityWidthScale;
     return smoothingLength * velocityDotRadius /
         (radiusSquared + epsilon * smoothingLength * smoothingLength);
 }

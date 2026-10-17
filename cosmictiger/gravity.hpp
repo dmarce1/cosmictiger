@@ -20,10 +20,13 @@
 #ifndef GRAVITY_HPP_
 #define GRAVITY_HPP_
 
+#include <cmath>
+
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/cuda_memory.hpp>
 #include <cosmictiger/fixed.hpp>
 #include <cosmictiger/fixed_capacity_vector.hpp>
+#include <cosmictiger/kernel.hpp>
 #include <cosmictiger/kick.hpp>
 #include <cosmictiger/tree.hpp>
 
@@ -64,43 +67,27 @@ __device__ void cudaGravityCcEwald(
 __device__ void cudaGravityPpDirect(
     CudaKickData const& data, TreeNode const&, DeviceVector<int> const&, float h, bool);
 #endif
-#endif /* GRAVITY_HPP_ */
 
 void resetGravityCounters();
 void getGravityCounters(double& close, double& direct);
 void setGravityCounterUse(bool code);
 
-#define FERRER_N 4
-#define NFERRER 5
-
 template <class T>
-CUDA_EXPORT inline void gravitySofteningKernel(
-    T& f, T& phi, T q2, T hinv, T h2inv, T h3inv, bool doPhi) {
-    constexpr float kAf[NFERRER][NFERRER] = {{1.0}, {2.5, -1.5},
-        {35.0 / 8.0, -21.0 / 4.0, 15.0 / 8.0},
-        {105.0 / 16.0, -189.0 / 16.0, 135.0 / 16.0, -35.0 / 16.0},
-        {1155. / 128., -693. / 32., 1485. / 64., -385. / 32., 315. / 128.}};
-    constexpr float kAphi[NFERRER][NFERRER + 1] = {{1.5, -0.5}, {15.0 / 8.0, -5.0 / 4.0, 3.0 / 8.0},
-        {35.0 / 16.0, -35.0 / 16.0, 21.0 / 16.0, -5.0 / 16.0},
-        {315.0 / 128.0, -105.0 / 32.0, 189.0 / 64.0, -45.0 / 32.0, 35.0 / 128.0},
-        {693. / 256., -1155. / 256., 693. / 128., -495. / 128., 385. / 256., -63 / 256.}};
-    q2 *= h2inv;
-    f = kAf[FERRER_N][FERRER_N];
-    for (int n = FERRER_N - 1; n >= 0; n--) {
-        f = fmaf(f, q2, kAf[FERRER_N][n]);
-    }
-    f *= h3inv;
+CUDA_EXPORT inline void gravitySofteningKernel(T& force, T& phi, T radiusSquared, T inverseSupport,
+    T inverseSupportSquared, T inverseSupportCubed, bool doPhi) {
+    using std::sqrt;
+    T const q = sqrt(radiusSquared * inverseSupportSquared);
+    auto const& kernel = selectedGravityKernel();
+    force = radial_kernel::forceFactor(kernel, q) * inverseSupportCubed;
     if (doPhi) {
-        phi = kAphi[FERRER_N][FERRER_N + 1];
-        for (int n = FERRER_N; n >= 0; n--) {
-            phi = fmaf(phi, q2, kAphi[FERRER_N][n]);
-        }
-        phi *= hinv;    // 1
+        phi = radial_kernel::potential(kernel, q) * inverseSupport;
+    } else {
+        phi = T(0);
     }
 }
 
 CUDA_EXPORT inline float selfPhi() {
-    float f, phi;
-    gravitySofteningKernel(f, phi, 0.0f, 1.f, 1.f, 1.f, true);
-    return phi;
+    return selectedGravityKernel().centralPotential;
 }
+
+#endif /* GRAVITY_HPP_ */

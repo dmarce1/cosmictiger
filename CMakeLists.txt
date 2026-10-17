@@ -110,6 +110,7 @@ set(cosmictiger_source_files
     src/chemistry.cpp
     src/chemistry.cu
     src/hydro.cpp
+    src/kernel.cpp
     src/kernel.cu
     src/exact_sod.cpp
     src/sedov.cpp
@@ -125,6 +126,7 @@ set(cosmictiger_source_files
     src/sphere.cu
     src/sph_tree.cpp
     src/stars.cpp
+    tests/kernel_selection_cuda.cu
     tests/sph_gravity.cpp
     tests/units_output.cpp
 )
@@ -183,13 +185,14 @@ set(cosmictiger_header_files
     cosmictiger/timer.hpp
     cosmictiger/units.hpp
     cosmictiger/simulation_units.hpp
-    cosmictiger/legacy_options.hpp
     cosmictiger/unordered_set_ts.hpp
     cosmictiger/view.hpp
     cosmictiger/zero_order.hpp
     cosmictiger/chemistry.hpp
     cosmictiger/hydro.hpp
     cosmictiger/kernel.hpp
+    cosmictiger/radial_kernel.hpp
+    cosmictiger/radial_density_kernel.hpp
     cosmictiger/monaghan_sph.hpp
     cosmictiger/exact_sod.hpp
     cosmictiger/sph.hpp
@@ -248,13 +251,6 @@ add_custom_command(
     COMMENT "Generating FMM kernels for comparison with the checked-in header")
 add_custom_target(generate_fmm_kernels DEPENDS ${PROJECT_BINARY_DIR}/cosmictiger/fmm_kernels.hpp)
 
-add_executable(lc2rockstar src/lc2rockstar.cpp src/compress.cpp)
-target_compile_definitions(lc2rockstar PRIVATE LC2GADGET2)
-target_include_directories(lc2rockstar PRIVATE ${PROJECT_SOURCE_DIR})
-if(COSMICTIGER_WITH_CUDA)
-    target_link_libraries(lc2rockstar PRIVATE CUDA::cudart)
-endif()
-
 add_executable(healpix2silo src/healpix2silo.cpp)
 target_link_libraries(healpix2silo PRIVATE ${CHEALPIX_LIBRARY} ${SILO_LIBRARY} Boost::program_options dl)
 target_include_directories(healpix2silo PRIVATE ${PROJECT_SOURCE_DIR})
@@ -265,7 +261,7 @@ add_hpx_executable(groups2halofunc
 target_link_libraries(groups2halofunc PUBLIC Boost::program_options)
 target_include_directories(groups2halofunc PRIVATE ${PROJECT_SOURCE_DIR})
 
-foreach(tool_target IN ITEMS fmm_kernel_codegen lc2rockstar healpix2silo groups2halofunc)
+foreach(tool_target IN ITEMS fmm_kernel_codegen healpix2silo groups2halofunc)
     target_compile_options(${tool_target} PRIVATE -Wno-attributes -ffast-math)
     if(COMPILER_SUPPORTS_MARCH_NATIVE)
         target_compile_options(${tool_target} PRIVATE -march=native)
@@ -293,11 +289,6 @@ if(BUILD_TESTING)
     add_test(NAME units_fast_math COMMAND units_fast_math_test)
     set_tests_properties(units_fast_math PROPERTIES TIMEOUT 20)
 
-    add_executable(legacy_options_test tests/legacy_options.cpp)
-    target_include_directories(legacy_options_test PRIVATE ${PROJECT_SOURCE_DIR})
-    add_test(NAME legacy_options COMMAND legacy_options_test)
-    set_tests_properties(legacy_options PROPERTIES TIMEOUT 20)
-
     set(units_output_workdir "${PROJECT_BINARY_DIR}/tests/units_output")
     file(MAKE_DIRECTORY "${units_output_workdir}")
     add_test(NAME units_output COMMAND cosmictiger --run.test=unitsOutput
@@ -305,6 +296,24 @@ if(BUILD_TESTING)
         --hpx:threads=2 --hpx:bind=none)
     set_tests_properties(units_output PROPERTIES
         WORKING_DIRECTORY "${units_output_workdir}" RUN_SERIAL TRUE TIMEOUT 120)
+
+    add_executable(radial_kernel_test tests/radial_kernel.cpp)
+    target_include_directories(radial_kernel_test PRIVATE ${PROJECT_SOURCE_DIR})
+    if(COMPILER_SUPPORTS_MARCH_NATIVE)
+        target_compile_options(radial_kernel_test PRIVATE -march=native)
+        target_compile_definitions(radial_kernel_test PRIVATE RADIAL_KERNEL_TEST_SIMD)
+    endif()
+    add_test(NAME radial_kernel COMMAND radial_kernel_test)
+    set_tests_properties(radial_kernel PROPERTIES TIMEOUT 30)
+
+    add_executable(radial_density_kernel_test tests/radial_density_kernel.cpp)
+    target_include_directories(radial_density_kernel_test PRIVATE ${PROJECT_SOURCE_DIR})
+    if(COMPILER_SUPPORTS_MARCH_NATIVE)
+        target_compile_options(radial_density_kernel_test PRIVATE -march=native)
+        target_compile_definitions(radial_density_kernel_test PRIVATE RADIAL_KERNEL_TEST_SIMD)
+    endif()
+    add_test(NAME radial_density_kernel COMMAND radial_density_kernel_test)
+    set_tests_properties(radial_density_kernel PROPERTIES TIMEOUT 30)
 
     add_executable(monaghan_sph_test tests/monaghan_sph.cpp)
     target_include_directories(monaghan_sph_test PRIVATE ${PROJECT_SOURCE_DIR})
@@ -326,8 +335,16 @@ if(BUILD_TESTING)
     set_tests_properties(particle_selection PROPERTIES TIMEOUT 10)
 
     if(COSMICTIGER_WITH_CUDA)
+        add_executable(radial_kernel_cuda_test tests/radial_kernel_cuda.cu)
+        target_include_directories(radial_kernel_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_link_libraries(radial_kernel_cuda_test PRIVATE CUDA::cudart)
+        target_compile_options(radial_kernel_cuda_test PRIVATE
+            $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math>)
+        add_test(NAME radial_kernel_cuda COMMAND radial_kernel_cuda_test)
+        set_tests_properties(radial_kernel_cuda PROPERTIES RUN_SERIAL TRUE TIMEOUT 120 SKIP_RETURN_CODE 77)
+
         add_executable(monaghan_sph_cuda_test tests/monaghan_sph_cuda.cu
-            src/sph_prehydro.cu src/sph_hydro.cu src/cuda_memory.cu src/assert.cu)
+            src/sph_prehydro.cu src/sph_hydro.cu src/kernel.cpp src/kernel.cu src/cuda_memory.cu src/assert.cu)
         target_include_directories(monaghan_sph_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_compile_definitions(monaghan_sph_cuda_test PRIVATE
             USE_CUDA ORDER=${COSMICTIGER_WITH_ORDER})
@@ -396,6 +413,38 @@ if(BUILD_TESTING)
             --compute.cuda=${test_cuda} --hpx:threads=2 --hpx:bind=none)
         set_tests_properties(${test_name} PROPERTIES
             WORKING_DIRECTORY "${test_workdir}" RUN_SERIAL TRUE TIMEOUT 120)
+    endforeach()
+    foreach(kernel_backend IN ITEMS cpu cuda)
+        if(kernel_backend STREQUAL "cuda" AND NOT COSMICTIGER_WITH_CUDA)
+            continue()
+        endif()
+        set(kernel_backend_flag)
+        if(kernel_backend STREQUAL "cuda")
+            set(kernel_backend_flag --cuda)
+        endif()
+        add_test(NAME kernel_selection_${kernel_backend} COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/run_kernel_selection.py $<TARGET_FILE:cosmictiger>
+            ${PROJECT_BINARY_DIR}/tests/kernel_selection_${kernel_backend} ${kernel_backend_flag})
+        set_tests_properties(kernel_selection_${kernel_backend} PROPERTIES RUN_SERIAL TRUE TIMEOUT 900)
+    endforeach()
+    foreach(kernel_case IN ITEMS wendland_spline ferrers_wendland)
+        if(NOT COSMICTIGER_WITH_CUDA)
+            continue()
+        endif()
+        if(kernel_case STREQUAL "wendland_spline")
+            set(kernel_options --extra-option=--hydro.kernelFamily=wendland
+                --extra-option=--hydro.kernelDegree=8 --extra-option=--gravity.kernelFamily=spline
+                --extra-option=--gravity.kernelDegree=9)
+        else()
+            set(kernel_options --extra-option=--hydro.kernelFamily=ferrers
+                --extra-option=--hydro.kernelDegree=6 --extra-option=--gravity.kernelFamily=wendland
+                --extra-option=--gravity.kernelDegree=5)
+        endif()
+        add_test(NAME smoke_kernels_${kernel_case} COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/run_smoke.py sph $<TARGET_FILE:cosmictiger>
+            ${PROJECT_SOURCE_DIR}/power.init ${PROJECT_BINARY_DIR}/tests/smoke_kernels_${kernel_case}
+            --extra-option=--hydro.neighborNumber=120 ${kernel_options})
+        set_tests_properties(smoke_kernels_${kernel_case} PROPERTIES RUN_SERIAL TRUE TIMEOUT 600)
     endforeach()
     set(rejected_options_workdir "${PROJECT_BINARY_DIR}/tests/rejected_options")
     file(MAKE_DIRECTORY "${rejected_options_workdir}")

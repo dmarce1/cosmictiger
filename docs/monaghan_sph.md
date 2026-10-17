@@ -13,24 +13,39 @@ particle advection is used; the optional XSPH variant in equation 3.19 is not en
 
 ## Kernel and density
 
-The spline in section 7, pp.554–555, is
+The default spline in section 7, pp.554–555, is written here with the paper's
+length denoted by \(h_M\):
 
 \[
- W(r,h)=\frac{1}{\pi h^3}
+ W(r,h_M)=\frac{1}{\pi h_M^3}
  \begin{cases}
   1-\frac32q^2+\frac34q^3,&0\le q\le1,\\
   \frac14(2-q)^3,&1<q\le2,\\
   0,&q>2,
  \end{cases}
- \qquad q=r/h.
+ \qquad q=r/h_M.
 \]
 
-The code stores the **support radius** \(H=2h\). Consequently its dimensionless
-kernel has normalization \(8/\pi\), changes polynomial at \(r/H=1/2\), and vanishes
-at \(r/H=1\). Density includes the self contribution and uses the gather sum
+The code stores the **support radius** \(H\), equal to \(2h_M\) for this default
+cubic. Its dimensionless kernel has normalization \(8/\pi\), changes polynomial
+at \(r/H=1/2\), and vanishes at \(r/H=1\). The common smoothing width is now
+\(h=2\sigma\), where \(\sigma\) is the one-coordinate standard deviation of
+the normalized kernel. For the cubic, \(H=\sqrt{10/3}\,h\); thus the common
+\(h\) and the paper's \(h_M\) are distinct.
+
+`hydro.kernelFamily` and `hydro.kernelDegree` can instead select cardinal splines
+of degrees 3–9, Wendland C0/C2/C4, or Ferrers F1–F4. Gravity has an independent
+selection. See [kernel choices and length conventions](kernels.md) for the valid
+degrees, conversion factors, and migration of explicit old settings. Production
+gravity and SPH use three-dimensional tables; a separate arbitrary-dimensional
+density-table generator is available as described there. The existing SPH solver
+continues to require CUDA.
+
+Write the selected density kernel as \(W_H(r)=H^{-3}w(r/H)\). Density includes
+the self contribution and uses the gather sum
 
 \[
- \rho_i=\sum_j m_j W(r_{ij},H_i/2).
+ \rho_i=\sum_j m_j W_{H_i}(r_{ij}).
 \]
 
 This gather choice is a deliberate practical variation: equation 6.3 on p.553
@@ -46,8 +61,10 @@ For the current equal-mass gas particles, the smoothing solve holds
 
 so \(H_i\propto\rho_i^{-1/3}\), consistent with equation 6.2. The target is a
 kernel-weighted count, including self, rather than an integer number of neighbors.
-The self contribution imposes \(N_{\rm target}>32/3\). The solve respects the
-configured support-radius bounds, refreshes neighbors if the search box is too
+The self contribution imposes \(N_{\rm target}>(4\pi/3)w(0)\), which is
+\(32/3\) for the default cubic. Startup checks use the selected kernel's floor,
+including its single-precision representation. The solve respects the configured
+support-radius bounds, refreshes neighbors if the search box is too
 small, and caps each local solve at 128 iterations. Its relative residual tolerance
 is \(10^{-4}\); a bound-limited solution need not attain the requested target.
 The periodic search uses one nearest image per pair, so the effective maximum
@@ -63,7 +80,7 @@ Let \(\mathbf r_{ij}=\mathbf r_i-\mathbf r_j\),
 
 \[
  \nabla_i\widetilde W_{ij}
- =\tfrac12[\nabla_i W(r_{ij},H_i/2)+\nabla_i W(r_{ij},H_j/2)].
+ =\tfrac12[\nabla_i W_{H_i}(r_{ij})+\nabla_i W_{H_j}(r_{ij})].
 \]
 
 This is one of the two choices explicitly offered on p.554. A pair participates
@@ -86,15 +103,20 @@ Equations 6.4–6.5 give the physical-coordinate pair rates
 The artificial viscosity follows equations 4.1–4.2, pp.550–551:
 
 \[
- \mu_{ij}=\frac{\bar h_{ij}\,\mathbf v_{ij}\cdot\mathbf r_{ij}}
- {r_{ij}^2+\epsilon\bar h_{ij}^2},\quad
+ \mu_{ij}=\frac{\bar\ell_{ij}\,\mathbf v_{ij}\cdot\mathbf r_{ij}}
+ {r_{ij}^2+\epsilon\bar\ell_{ij}^2},\quad
  \Pi_{ij}=\frac{-\alpha\bar c_{ij}\mu_{ij}+\beta\mu_{ij}^2}{\bar\rho_{ij}}
  \quad\hbox{for }\mathbf v_{ij}\cdot\mathbf r_{ij}<0,
 \]
 
 and \(\Pi_{ij}=0\) otherwise. Arithmetic means are used for density and sound
-speed, and \(\bar h_{ij}=(H_i+H_j)/4\). The default values are the paper's
-\(\alpha=1\), \(\beta=2\), and \(\epsilon=0.01\).
+speed. The viscosity width is
+\(\bar\ell_{ij}=\sqrt{5/6}\,(h_i+h_j)/2\), using the common widths
+\(h_i=H_i/\texttt{supportPerSmoothing}\). The fixed factor makes
+\(\bar\ell_{ij}=(H_i+H_j)/4\) for the cubic and preserves the previous
+interpretation of the viscosity parameters. The same factor applies to every
+selected family. Defaults remain the paper's \(\alpha=1\), \(\beta=2\), and
+\(\epsilon=0.01\).
 
 The active formulation has no pressure-entropy weighting, grad-h factors, evolving
 viscosity coefficient, or shear limiter. The same symmetric pressure and viscosity
@@ -125,9 +147,18 @@ The code interprets two apparent issues in the printed p.563 formulas:
   negative for approaching particles. The implementation uses the nonnegative
   compression magnitude \(\max(-\mu,0)\).
 
-The Courant coefficient defaults to 0.25. The acceleration coefficient remains the
-existing `gravity.timestepEta` setting. The explicit integrator also limits fractional
-thermal-energy change, smoothing-length change, and cosmological expansion.
+The numerator now uses the common \(h_i=2\sigma_i\). The Courant coefficient
+defaults to `0.22821773229381923`, converted from `0.25` by \(\sqrt{5/6}\)
+to preserve the default cubic Courant-viscous limit. The hydro acceleration
+coefficient is `gravity.timestepEta` times the fixed reference calibration
+`0.7115965735877551`; the new default gravity eta is `0.20401599335954483`.
+This preserves the former default cubic/Ferrers F4 hydro acceleration limit.
+The divergence and fractional thermal-energy bounds also apply the fixed
+\(\sqrt{5/6}\) reference conversion so their default physical limits are
+preserved. The explicit integrator retains its cosmological expansion limits.
+The gravity acceleration criterion uses its own common width, independently of
+the selected hydro family. These reference conversions do not establish equal
+timestep accuracy for every kernel shape.
 
 CosmicTiger evolves comoving positions \(\mathbf x\), conformal time
 \(d\tau=dt/a\), stored velocity \(\mathbf w=a\mathbf v_{\rm pec}\), and stored
@@ -161,29 +192,35 @@ hydrodynamic controls are:
 | Option | Default | Meaning |
 | --- | ---: | --- |
 | `hydro.enabled` | `false` | Enable the Monaghan gas solver |
+| `hydro.kernelFamily` | `spline` | Density family: `spline`, `wendland`, or `ferrers` |
+| `hydro.kernelDegree` | `3` | Density polynomial degree; valid values depend on family |
 | `hydro.gamma` | `5/3` | Ideal-gas adiabatic index |
 | `hydro.viscosityAlpha` | `1` | Linear viscosity coefficient |
 | `hydro.viscosityBeta` | `2` | Quadratic viscosity coefficient |
-| `hydro.viscosityEpsilon` | `0.01` | Denominator coefficient \(\eta^2/\bar h^2\) |
+| `hydro.viscosityEpsilon` | `0.01` | Denominator coefficient multiplying \(\bar\ell^2\) |
 | `hydro.neighborNumber` | `60` | Kernel-weighted support-sphere count |
 | `hydro.minSupportRadius` | `1e-6` | Minimum \(H\), in initial interparticle spacings |
 | `hydro.maxSupportRadius` | `1000` | Requested maximum \(H\), in initial interparticle spacings; capped at half the box |
-| `hydro.cfl` | `0.25` | Courant-viscous and fractional-energy coefficient |
+| `hydro.cfl` | `0.22821773229381923` | Courant-viscous coefficient using \(h=2\sigma\); also controls the calibrated fractional-energy bound |
 
-Old SPH checkpoints with formulation marker `reserved=0` are rejected. New SPH
-checkpoints use version 2 and `reserved=1` to identify the Monaghan discretization.
-The version increase also makes earlier executables reject new SPH checkpoints. The native
-dark-matter checkpoint header remains unchanged. This prevents silently restarting
-an old SPH state under a different discretization. A separate parameter block
-also rejects changes to viscosity coefficients, smoothing constraints, timestep
-controls, gravity enablement, and external accelerations on SPH restart.
+Old SPH checkpoints with formulation marker `reserved=0` are rejected. SPH
+checkpoints use version 2 and the low byte of `reserved` identifies the Monaghan
+discretization. Additional bits encode independent gravity and hydro kernel
+selections; the default selections retain `reserved=1`. A change of kernel
+selection on restart is rejected. The native header layout is unchanged.
+A separate parameter block also rejects changes to viscosity coefficients,
+smoothing constraints, timestep
+controls, gravity enablement, and external accelerations on SPH restart. These
+checks still apply when migrating an old configuration to the new length and
+timestep conventions; old SPH checkpoints are not automatically converted.
 
 ## Validation scope
 
-The independent `monaghan_sph` CTest target exercises float and double kernel
-normalization, spline joins, analytic versus finite-difference derivatives, the
-\(H=2h\) convention, viscosity signs and coefficients, regularization, and invariance
-under length-unit changes and velocity boosts. Pair tests use unequal pressures,
+The independent `monaghan_sph` CTest target retains the reference cubic checks:
+float and double kernel normalization, spline joins, analytic versus
+finite-difference derivatives, the paper's \(H=2h_M\) convention, viscosity signs
+and coefficients, regularization, and invariance under length-unit changes and
+velocity boosts. Pair tests use unequal pressures,
 densities, masses, and supports to check net force, torque, and total energy rate,
 including a pair inside only one support. They also check separation, uniform
 translation, and the distinction between peculiar and physical thermal work.
@@ -192,9 +229,14 @@ The `monaghan_sph_cuda` target invokes the production density, smoothing, and
 hydrodynamics kernels. It checks lower, upper, and fixed support bounds; the
 weighted-neighbor residual; periodic support intersection; a uniform lattice;
 nonzero perturbations; timestep selection; unequal-support pair conservation;
-and homogeneous expansion with a nonmonatomic gamma.
+and homogeneous expansion with a nonmonatomic gamma. Selected-kernel checks
+exercise all 14 family/degree choices through the production SPH path.
+The separate `radial_kernel` and `radial_kernel_cuda` targets check the generated
+CPU/SIMD/CUDA tables, moments, gravitational force/potential consistency, and
+float behavior near zero and the support boundary; see [kernels.md](kernels.md).
 
-Validation on 2026-10-16: the complete CUDA build and all 23 CTest checks passed,
+Historical validation on 2026-10-16, before selectable kernels and the common
+width conversion: the complete CUDA build and all 23 CTest checks passed,
 including grouped CLI/INI checks, CPU/CUDA mixed-mass gravity, SPH checkpoint
 compatibility, MPI migration and evolution, the coarse Sod problem, and a short
 cosmological SPH evolution with restart. At the smoke test's coarse resolution,

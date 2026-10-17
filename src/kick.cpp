@@ -17,7 +17,6 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-constexpr bool kVerbose = true;
 #include <stack>
 
 #include <unistd.h>
@@ -32,6 +31,8 @@ constexpr bool kVerbose = true;
 #include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/stack_trace.hpp>
 #include <cosmictiger/timer.hpp>
+
+constexpr bool kVerbose = true;
 
 HPX_PLAIN_ACTION(kick, KickAction);
 
@@ -443,7 +444,8 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
                     dx[dim] = distance(particlesPos(dim, i), selfPtr->pos[dim]);
                 }
                 auto const l2 = l2P(l, dx, true);
-                float hsoft = getOptions().hsoft;
+                float const gravitySmoothingLength =
+                    getOptions().hsoft / selectedGravityKernel().supportPerSmoothing;
                 forces.phi[j] += SCALE_FACTOR1 * l2(0, 0, 0);
                 forces.gx[j] -= SCALE_FACTOR2 * l2(1, 0, 0);
                 forces.gy[j] -= SCALE_FACTOR2 * l2(0, 1, 0);
@@ -483,8 +485,8 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
                     if (params.descending) {
                         g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]) + 1e-35f;    // 6
                         float const factor = eta * sqrtf(params.a);                     // 5
-                        float dt =
-                            std::min(factor * sqrtf(hsoft / sqrtf(g2)), (float) params.t0);    // 14
+                        float dt = std::min(factor * sqrtf(gravitySmoothingLength / sqrtf(g2)),
+                            (float) params.t0);    // 14
                         dt = std::min(params.maxDt, dt);
                         rung = std::max(params.minRung +
                                 int((int) ceilf(log2f(params.t0 / dt)) > params.minRung),
@@ -524,8 +526,9 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
                     if (!gas) {
                         float const syncVx = vx, syncVy = vy, syncVz = vz;
                         float const g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]) + 1e-35f;
-                        float dt =
-                            std::min(eta * sqrtf(params.a) * sqrtf(hsoft / sqrtf(g2)), params.t0);
+                        float dt = std::min(
+                            eta * sqrtf(params.a) * sqrtf(gravitySmoothingLength / sqrtf(g2)),
+                            params.t0);
                         dt = std::min(dt, params.maxDt);
                         rung = std::max(std::max((int) ceilf(log2f(params.t0 / dt)),
                                             std::max((int) rung - 1, params.minRung)),

@@ -281,8 +281,7 @@ void cpuGravityPp(
     size_t nearCount = 0;
     size_t farCount = 0;
     if (list.size()) {
-        SimdFloat sinkHsoft;
-        sinkHsoft = getOptions().hsoft;
+        SimdFloat const sinkHsoft(hfloat);
         SimdFloat const hinvI = SimdFloat(1.f) / sinkHsoft;    // 4
         SimdFloat const h2invI = sqr(hinvI);                   // 1
         SimdFloat const h3invI = (hinvI) *h2invI;              // 1
@@ -367,15 +366,22 @@ void cpuGravityPp(
                     SimdFloat const r2 = max(sqr(dx[XDIM], dx[YDIM], dx[ZDIM]), tiny);    // 6
                     SimdFloat const rinv1Far = SimdFloat(1) / sqrt(r2);                   // 8
                     SimdFloat const rinv3Far = rinv1Far * sqr(rinv1Far);                  // 3
-                    SimdFloat rinv3Near;                                                  // 3
-                    SimdFloat rinv1Near, rinv1(0.0f);
-                    gravitySofteningKernel(rinv3Near, rinv1Near, r2, hinvI, h2invI, h3invI, doPhi);
-                    SimdFloat const swFar = r2 > h2;                            // 1
-                    SimdFloat const swNear = SimdFloat(1) - swFar;              // 1
-                    SimdFloat rinv3 = rinv3Near * swNear + rinv3Far * swFar;    // 3
+                    SimdFloat const swFar = r2 > h2;
+                    SimdFloat rinv3 = rinv3Far;
+                    SimdFloat rinv1(0.0f);
                     if (doPhi) {
-                        rinv1 = rinv1Near * swNear + rinv1Far * swFar;    // 3
-                        flops += 7;
+                        rinv1 = rinv1Far;
+                    }
+                    if (swFar.sum() != SIMD_FLOAT_SIZE) {
+                        SimdFloat rinv3Near, rinv1Near;
+                        gravitySofteningKernel(
+                            rinv3Near, rinv1Near, r2, hinvI, h2invI, h3invI, doPhi);
+                        SimdFloat const swNear = SimdFloat(1) - swFar;
+                        rinv3 = rinv3Near * swNear + rinv3Far * swFar;
+                        if (doPhi) {
+                            rinv1 = rinv1Near * swNear + rinv1Far * swFar;
+                            flops += 7;
+                        }
                     }
                     rinv3 *= mass;                     // 1
                     rinv1 *= mass;                     // 1

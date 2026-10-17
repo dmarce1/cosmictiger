@@ -188,8 +188,6 @@ void compressedTreeCreate(Vector<Pair<int>>& leaves, Vector<Array<double, 2 * ND
     }
 }
 
-#ifndef LC2GADGET2
-
 CompressedParticles compressParticles(
     Vector<LightconeEntry> const& inputParticles, LightconeGroup id) {
     if (inputParticles.empty()) {
@@ -266,5 +264,3 @@ CompressedParticles compressParticles(
     arc.groupId = id;
     return arc;
 }
-
-#endif

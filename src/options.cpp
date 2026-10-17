@@ -24,6 +24,7 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <stdexcept>
 
 #include <hpx/modules/program_options.hpp>
 
@@ -31,6 +32,7 @@
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/gravity.hpp>
 #include <cosmictiger/hpx.hpp>
+#include <cosmictiger/kernel.hpp>
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/options_metadata.hpp>
@@ -43,6 +45,25 @@
 namespace detail {
 
 static std::vector<std::string> commandLineArguments;
+
+radial_kernel::KernelSpec kernelSpec(std::string const& family, int degree) {
+    radial_kernel::Family kind;
+    if (family == "spline") {
+        kind = radial_kernel::Family::Spline;
+    } else if (family == "wendland") {
+        kind = radial_kernel::Family::Wendland;
+    } else if (family == "ferrers") {
+        kind = radial_kernel::Family::Ferrers;
+    } else {
+        throw std::invalid_argument("kernelFamily must be spline, wendland, or ferrers");
+    }
+    radial_kernel::KernelSpec const spec{kind, degree};
+    if (!radial_kernel::isValid(spec)) {
+        throw std::invalid_argument("kernelDegree must be 3..9 for spline, 2/5/8 for "
+                                    "wendland, or 2/4/6/8 for ferrers (density polynomial degree)");
+    }
+    return spec;
+}
 
 bool isFiniteOption(double value) {
     // Keep option validation effective when the solver is built with -ffast-math.
@@ -91,6 +112,19 @@ void setOptions(Options const& opts) {
     for (auto c : hpxChildren()) {
         futs.push_back(hpx::async<SetOptionsAction>(c, opts));
     }
+    auto const gravitySpec = detail::kernelSpec(opts.gravityKernelFamily, opts.gravityKernelDegree);
+    auto const hydroSpec = detail::kernelSpec(opts.hydroKernelFamily, opts.hydroKernelDegree);
+#ifdef USE_CUDA
+    if (opts.cuda) {
+        int count = 0;
+        auto const status = cudaGetDeviceCount(&count);
+        if (status != cudaSuccess || count == 0) {
+            throw std::runtime_error("compute.cuda=true requires an available CUDA device");
+        }
+        cudaSetDevice();
+    }
+#endif
+    setKernelSelections(gravitySpec, hydroSpec, opts.cuda);
     globalOpts = opts;
     hpx::wait_all(futs.begin(), futs.end());
 }
@@ -108,11 +142,12 @@ std::vector<std::string> const& getCommandLineArguments() {
 
 std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
     // Undo storage normalization without undoing current runtime overrides or caps.
-    // In particular, Plummer softening is reported in mean box particle spacings,
-    // and the maximum SPH support remains capped at half the periodic box.
-    double const softening =
-        options.hsoft * std::pow(double(options.numberOfParticles), 1.0 / NDIM) / selfPhi();
-    double const timestepEta = options.eta * sqrt(selfPhi());
+    // Public softening is h = 2 sigma in mean box particle spacings.
+    auto const gravityTable = radial_kernel::makeKernelTable(
+        detail::kernelSpec(options.gravityKernelFamily, options.gravityKernelDegree));
+    double const softening = options.hsoft *
+        std::pow(double(options.numberOfParticles), 1.0 / NDIM) / gravityTable.supportPerSmoothing;
+    double const timestepEta = options.eta;
     return {
         {"configuration", options.configFile},
         {"run.test", options.test},
@@ -156,8 +191,11 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"lightcone.linkingLength", options.lcB},
         {"lightcone.mapSize", options.lcMapSize},
         {"gravity.enabled", options.gravity},
+        {"gravity.kernelFamily", options.gravityKernelFamily},
+        {"gravity.kernelDegree", options.gravityKernelDegree},
         {"gravity.openingAngle", options.theta},
         {"gravity.softening", softening},
+        {"gravity.sphSmoothing", options.sphSmoothing},
         {"gravity.timestepEta", timestepEta},
         {"cosmology.startRedshift", options.z0},
         {"cosmology.endRedshift", options.z1},
@@ -173,6 +211,8 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"cosmology.spectralIndex", options.ns},
         {"units.massSolar", options.codeToG / constants::kM0},
         {"hydro.enabled", options.sph},
+        {"hydro.kernelFamily", options.hydroKernelFamily},
+        {"hydro.kernelDegree", options.hydroKernelDegree},
         {"hydro.chemistry", options.chem},
         {"hydro.conduction", options.conduction},
         {"hydro.diffusion", options.diffusion},
@@ -183,7 +223,7 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"hydro.viscosityEpsilon", options.viscosityEpsilon},
         {"hydro.gamma", options.gamma},
         {"hydro.centralAcceleration", options.centralAcceleration},
-        {"hydro.centralSoftening", options.hcentral},
+        {"hydro.centralSoftening", options.hcentral / gravityTable.supportPerSmoothing},
         {"hydro.minSupportRadius", options.hmin * options.particlesPerDimension},
         {"hydro.maxSupportRadius", options.hmax * options.particlesPerDimension},
         {"hydro.neighborNumber", options.sphNeighborNumber},
@@ -295,9 +335,16 @@ bool processOptions(int argc, char* argv[]) {
         "gravity.enabled", po::value<bool>(&opts.gravity)->default_value(true), "enable gravity")(
         "gravity.openingAngle", po::value<double>(&opts.theta)->default_value(0.8),
         "opening angle for test problems")("gravity.softening",
-        po::value<double>(&opts.hsoft)->default_value(1.0 / 80.0),
-        "dark-matter softening in interparticle spacings")("gravity.timestepEta",
-        po::value<double>(&opts.eta)->default_value(0.25), "gravity time-step criterion");
+        po::value<double>(&opts.hsoft)->default_value(0.01876988456953534),
+        "gravitational h = 2 sigma in mean interparticle spacings")("gravity.kernelFamily",
+        po::value<std::string>(&opts.gravityKernelFamily)->default_value("ferrers"),
+        "density kernel family: spline, wendland, or ferrers")("gravity.kernelDegree",
+        po::value<int>(&opts.gravityKernelDegree)->default_value(8),
+        "density degree: spline 3..9; wendland 2,5,8; ferrers 2,4,6,8")("gravity.sphSmoothing",
+        po::value<bool>(&opts.sphSmoothing)->default_value(false),
+        "reserved adaptive-softening flag; fixed selected gravity kernel is currently used")(
+        "gravity.timestepEta", po::value<double>(&opts.eta)->default_value(0.20401599335954483),
+        "prefactor C in dt = C sqrt(h/acceleration), h = 2 sigma");
 
     po::options_description cosmologyOpts("Cosmology");
     cosmologyOpts.add_options()("cosmology.startRedshift",
@@ -328,7 +375,11 @@ bool processOptions(int argc, char* argv[]) {
 
     po::options_description hydroOpts("Monaghan (1992) SPH");
     hydroOpts.add_options()("hydro.enabled", po::value<bool>(&opts.sph)->default_value(false),
-        "use density/internal-energy SPH")("hydro.chemistry",
+        "use density/internal-energy SPH")("hydro.kernelFamily",
+        po::value<std::string>(&opts.hydroKernelFamily)->default_value("spline"),
+        "density kernel family: spline, wendland, or ferrers")("hydro.kernelDegree",
+        po::value<int>(&opts.hydroKernelDegree)->default_value(3),
+        "density degree: spline 3..9; wendland 2,5,8; ferrers 2,4,6,8")("hydro.chemistry",
         po::value<bool>(&opts.chem)->default_value(false),
         "legacy chemistry; true is unsupported in the Monaghan SPH baseline")("hydro.conduction",
         po::value<bool>(&opts.conduction)->default_value(false),
@@ -344,20 +395,21 @@ bool processOptions(int argc, char* argv[]) {
         po::value<double>(&opts.beta)->default_value(2.0),
         "constant quadratic artificial-viscosity coefficient beta")("hydro.viscosityEpsilon",
         po::value<double>(&opts.viscosityEpsilon)->default_value(0.01),
-        "viscosity denominator regularization eta^2 / h_Monaghan^2")("hydro.gamma",
+        "viscosity regularization relative to the calibrated width sqrt(5/6) h")("hydro.gamma",
         po::value<double>(&opts.gamma)->default_value(5.0 / 3.0),
         "ideal-gas adiabatic index")("hydro.centralAcceleration",
         po::value<double>(&opts.centralAcceleration)->default_value(0.0),
         "magnitude of the central force")("hydro.centralSoftening",
-        po::value<double>(&opts.hcentral)->default_value(0.01),
-        "softening length for the central force")("hydro.minSupportRadius",
-        po::value<double>(&opts.hmin)->default_value(1.0e-6),
-        "minimum kernel support radius (2 h_Monaghan), in interparticle spacings")(
-        "hydro.maxSupportRadius", po::value<double>(&opts.hmax)->default_value(1000.0),
+        po::value<double>(&opts.hcentral)->default_value(0.005477225575051661),
+        "central-force h = 2 sigma in box units; uses the selected gravity kernel")(
+        "hydro.minSupportRadius", po::value<double>(&opts.hmin)->default_value(1.0e-6),
+        "minimum support radius H (not h), in interparticle spacings")("hydro.maxSupportRadius",
+        po::value<double>(&opts.hmax)->default_value(1000.0),
         "maximum kernel support radius in interparticle spacings; capped at half the box")(
         "hydro.neighborNumber", po::value<double>(&opts.sphNeighborNumber)->default_value(60),
-        "kernel-weighted neighbor target within the support sphere, including self")(
-        "hydro.cfl", po::value<double>(&opts.cfl)->default_value(0.25), "Courant time-step factor");
+        "kernel-weighted neighbor target within the support sphere, including self")("hydro.cfl",
+        po::value<double>(&opts.cfl)->default_value(0.22821773229381923),
+        "Courant time-step factor using h = 2 sigma");
 
     po::options_description commandOpts("CosmicTiger options");
     commandOpts.add(runOpts)
@@ -398,6 +450,11 @@ bool processOptions(int argc, char* argv[]) {
     if (!rc) {
         return false;
     }
+    auto const gravityTable = radial_kernel::makeKernelTable(
+        detail::kernelSpec(opts.gravityKernelFamily, opts.gravityKernelDegree));
+    auto const hydroTable = radial_kernel::makeKernelTable(
+        detail::kernelSpec(opts.hydroKernelFamily, opts.hydroKernelDegree));
+    double const selfNeighborFloor = 4.0 * M_PI / 3.0 * radial_kernel::value(hydroTable, 0.0);
     if (opts.outputSiloInterval <= 0) {
         THROW_ERROR("output.siloInterval must be positive\n");
     }
@@ -464,9 +521,10 @@ bool processOptions(int argc, char* argv[]) {
     if (!detail::isFiniteOption(opts.cfl) || opts.cfl <= 0.0 || opts.cfl > 1.0) {
         THROW_ERROR("hydro.cfl must be finite and in (0, 1]\n");
     }
-    if (!detail::isFiniteOption(opts.sphNeighborNumber) || opts.sphNeighborNumber <= 32.0 / 3.0) {
-        THROW_ERROR(
-            "hydro.neighborNumber must be finite and greater than 32/3 (the self-kernel floor)\n");
+    if (!detail::isFiniteOption(opts.sphNeighborNumber) ||
+        opts.sphNeighborNumber <= selfNeighborFloor) {
+        THROW_ERROR("hydro.neighborNumber must be finite and greater than the selected kernel "
+                    "self-neighbor floor\n");
     }
     if (!detail::isFiniteOption(opts.hmin) || !detail::isFiniteOption(opts.hmax) ||
         opts.hmin <= 0.0 || opts.hmax < opts.hmin) {
@@ -485,8 +543,9 @@ bool processOptions(int argc, char* argv[]) {
         THROW_ERROR("hydro.cfl must remain finite and positive in single precision\n");
     }
     if (!detail::isFiniteFloatOption(opts.sphNeighborNumber) ||
-        static_cast<float>(opts.sphNeighborNumber) <= static_cast<float>(32.0 / 3.0)) {
-        THROW_ERROR("hydro.neighborNumber must remain finite and above 32/3 in single precision\n");
+        static_cast<float>(opts.sphNeighborNumber) <= static_cast<float>(selfNeighborFloor)) {
+        THROW_ERROR("hydro.neighborNumber must remain finite and above the selected kernel "
+                    "self-neighbor floor in single precision\n");
     }
     if (!detail::isFiniteFloatOption(opts.yAcceleration) ||
         !detail::isFiniteFloatOption(opts.centralAcceleration) ||
@@ -526,6 +585,9 @@ bool processOptions(int argc, char* argv[]) {
         opts.diffusion = false;
         opts.gravity = opts.test == "star" || opts.test == "plummer";
     }
+    if (opts.sphSmoothing && !opts.sph) {
+        THROW_ERROR("gravity.sphSmoothing requires hydro.enabled=true\n");
+    }
     if (opts.sph) {
         opts.htime = false;
         if (!opts.cuda && opts.test != "sphGravity") {
@@ -544,8 +606,12 @@ bool processOptions(int argc, char* argv[]) {
     } else {
         opts.chem = opts.stars = opts.conduction = opts.diffusion = false;
     }
-    opts.hsoft *= selfPhi();
-    opts.eta /= sqrt(selfPhi());
+    opts.hsoft *= gravityTable.supportPerSmoothing;
+    opts.hcentral *= gravityTable.supportPerSmoothing;
+    if (!detail::isPositiveFloatOption(opts.hcentral)) {
+        THROW_ERROR(
+            "hydro.centralSoftening support must remain finite and positive in single precision\n");
+    }
     if (!detail::isPositiveFloatOption(opts.eta)) {
         THROW_ERROR("gravity.timestepEta must remain finite and positive in single precision "
                     "after normalization\n");
@@ -612,7 +678,7 @@ bool processOptions(int argc, char* argv[]) {
     }
     opts.hsoft *= pow(opts.numberOfParticles, -1.0 / NDIM);
     if (opts.plummer) {
-        opts.hsoft = selfPhi() *
+        opts.hsoft = gravityTable.supportPerSmoothing * 1.5015907655628273 *
             pow((4.0 / 3.0 * M_PI * pow(opts.plummerR, 3.0)) / opts.numberOfParticles, 1.0 / 3.0);
     }
     if (opts.gravity && !detail::isPositiveFloatOption(opts.hsoft)) {
@@ -666,7 +732,14 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("output.zMax", outputZMax);
     SHOW("gravity.timestepEta", eta);
     SHOW("gravity.gm", gm);
-    SHOW("gravity.softening", hsoft);
+    show("gravity.softening",
+        opts.hsoft * std::pow(double(opts.numberOfParticles), 1.0 / NDIM) /
+            gravityTable.supportPerSmoothing);
+    SHOW("gravity.kernelFamily", gravityKernelFamily);
+    SHOW("gravity.kernelDegree", gravityKernelDegree);
+    SHOW("hydro.kernelFamily", hydroKernelFamily);
+    SHOW("hydro.kernelDegree", hydroKernelDegree);
+    SHOW("gravity.sphSmoothing", sphSmoothing);
     SHOW("cosmology.hubble", hubble);
     SHOW("lightcone.linkingLength", lcB);
     SHOW("lightcone.minGroupSize", lcMinGroup);

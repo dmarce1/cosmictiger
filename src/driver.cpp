@@ -22,6 +22,7 @@
 
 #include <array>
 #include <cstdint>
+#include <string>
 
 #include <dirent.h>
 #include <sys/types.h>
@@ -1813,24 +1814,59 @@ uint32_t checkpointFlags(Options const& opts) {
     constexpr uint32_t kLightcone = 1U << 7;
     constexpr uint32_t kGroups = 1U << 8;
     constexpr uint32_t kTracers = 1U << 9;
+    // Older headers leave this bit clear and retain the fixed-softening behavior.
+    constexpr uint32_t kSphSmoothing = 1U << 10;
     return (opts.sph ? kSph : 0U) | (opts.chem ? kChemistry : 0U) | (opts.stars ? kStars : 0U) |
         (opts.conduction ? kConduction : 0U) | (opts.diffusion ? kDiffusion : 0U) |
         (opts.vsoft ? kVariableSoftening : 0U) | (opts.htime ? kHierarchical : 0U) |
         (opts.doLc ? kLightcone : 0U) | (opts.doGroups ? kGroups : 0U) |
-        (opts.doTracers ? kTracers : 0U);
+        (opts.doTracers ? kTracers : 0U) | (opts.sphSmoothing ? kSphSmoothing : 0U);
+}
+
+uint32_t checkpointKernelCode(std::string const& family, int degree) {
+    uint32_t familyCode = 0;
+    if (family == "spline") {
+        familyCode = 1;
+    } else if (family == "wendland") {
+        familyCode = 2;
+    } else if (family == "ferrers") {
+        familyCode = 3;
+    } else {
+        THROW_ERROR("Unknown checkpoint kernel family: %s\n", family.c_str());
+    }
+    if (degree < 0 || degree > 15) {
+        THROW_ERROR("Checkpoint kernel degree does not fit its selection field\n");
+    }
+    return (familyCode << 4) | static_cast<uint32_t>(degree);
+}
+
+uint32_t checkpointPhysicsCode(Options const& opts) {
+    // Preserve the existing low-byte formulation and native header layout.
+    // Historical default kernels encode zero in both new selection bytes.
+    uint32_t const gravityCode =
+        checkpointKernelCode(opts.gravityKernelFamily, opts.gravityKernelDegree) ^
+        checkpointKernelCode("ferrers", 8);
+    uint32_t const hydroCode =
+        checkpointKernelCode(opts.hydroKernelFamily, opts.hydroKernelDegree) ^
+        checkpointKernelCode("spline", 3);
+    return (opts.sph ? kMonaghanSph : 0U) | (gravityCode << 8) | (hydroCode << 16);
+}
+
+bool legacyCheckpointCompatible(Options const& opts) {
+    return !opts.sph && opts.htime && opts.gravityKernelFamily == "ferrers" &&
+        opts.gravityKernelDegree == 8;
 }
 
 CheckpointHeader checkpointHeader(Options const& opts) {
     return {kCheckpointMagic, opts.sph ? kSphCheckpointVersion : kCheckpointVersion,
         checkpointFlags(opts), opts.darkMatterMass, opts.sphMass, opts.gamma, opts.hsoft, opts.gm,
         opts.omegaM, opts.omegaR, opts.omegaLam, opts.codeToCm, opts.codeToS, opts.codeToG,
-        opts.numberOfParticles, opts.numberOfSteps, opts.sph ? kMonaghanSph : 0U};
+        opts.numberOfParticles, opts.numberOfSteps, checkpointPhysicsCode(opts)};
 }
 
 bool checkpointCompatible(CheckpointHeader const& header, Options const& opts) {
     return header.version == (opts.sph ? kSphCheckpointVersion : kCheckpointVersion) &&
-        header.flags == checkpointFlags(opts) &&
-        header.reserved == (opts.sph ? kMonaghanSph : 0U) &&
+        header.flags == checkpointFlags(opts) && header.reserved == checkpointPhysicsCode(opts) &&
         header.darkMatterMass == opts.darkMatterMass && header.gasMass == opts.sphMass &&
         header.gamma == opts.gamma && header.softening == opts.hsoft &&
         header.gravitationalMass == opts.gm && header.omegaMatter == opts.omegaM &&
@@ -1887,9 +1923,9 @@ DriverParameters readDriverState(FILE* fp) {
         }
         FREAD(&params, sizeof(params), 1, fp);
     } else {
-        if (getOptions().sph || !getOptions().htime) {
-            THROW_ERROR(
-                "Legacy checkpoints support only the original dark-matter hierarchical mode\n");
+        if (!legacyCheckpointCompatible(getOptions())) {
+            THROW_ERROR("Legacy checkpoints support only the original dark-matter hierarchical "
+                        "mode with the degree-eight Ferrers gravity kernel\n");
         }
         LegacyDriver old{};
         FREAD(&old, sizeof(old), 1, fp);
@@ -1968,6 +2004,69 @@ void checkpointStateTest() {
     changed = getOptions();
     changed.chem = !changed.chem;
     ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
+    changed = getOptions();
+    changed.sphSmoothing = !changed.sphSmoothing;
+    ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
+    auto const differentKernelDegree = [](std::string const& family, int degree) {
+        if (family == "spline") {
+            return degree == 3 ? 5 : 3;
+        }
+        if (family == "wendland") {
+            return degree == 2 ? 5 : 2;
+        }
+        return degree == 8 ? 6 : 8;
+    };
+    changed = getOptions();
+    changed.gravityKernelFamily = changed.gravityKernelFamily == "spline" ? "ferrers" : "spline";
+    changed.gravityKernelDegree = 8;
+    ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
+    auto const changedGravityHeader = detail::checkpointHeader(changed);
+    ALWAYS_ASSERT(detail::checkpointCompatible(changedGravityHeader, changed));
+    ALWAYS_ASSERT(!detail::checkpointCompatible(changedGravityHeader, getOptions()));
+    changed = getOptions();
+    changed.gravityKernelDegree =
+        differentKernelDegree(changed.gravityKernelFamily, changed.gravityKernelDegree);
+    ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
+    changed = getOptions();
+    changed.hydroKernelFamily = changed.hydroKernelFamily == "spline" ? "ferrers" : "spline";
+    changed.hydroKernelDegree = 8;
+    ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
+    auto const changedHydroHeader = detail::checkpointHeader(changed);
+    ALWAYS_ASSERT(detail::checkpointCompatible(changedHydroHeader, changed));
+    ALWAYS_ASSERT(!detail::checkpointCompatible(changedHydroHeader, getOptions()));
+    changed = getOptions();
+    changed.hydroKernelDegree =
+        differentKernelDegree(changed.hydroKernelFamily, changed.hydroKernelDegree);
+    ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
+    auto defaultKernelOptions = getOptions();
+    defaultKernelOptions.gravityKernelFamily = "ferrers";
+    defaultKernelOptions.gravityKernelDegree = 8;
+    defaultKernelOptions.hydroKernelFamily = "spline";
+    defaultKernelOptions.hydroKernelDegree = 3;
+    ALWAYS_ASSERT(detail::checkpointHeader(defaultKernelOptions).reserved ==
+        (defaultKernelOptions.sph ? detail::kMonaghanSph : 0U));
+    auto legacyKernelOptions = defaultKernelOptions;
+    legacyKernelOptions.sph = false;
+    legacyKernelOptions.htime = true;
+    ALWAYS_ASSERT(detail::legacyCheckpointCompatible(legacyKernelOptions));
+    legacyKernelOptions.gravityKernelFamily = "spline";
+    ALWAYS_ASSERT(!detail::legacyCheckpointCompatible(legacyKernelOptions));
+    legacyKernelOptions.gravityKernelFamily = "ferrers";
+    legacyKernelOptions.gravityKernelDegree = 6;
+    ALWAYS_ASSERT(!detail::legacyCheckpointCompatible(legacyKernelOptions));
+    auto legacySphOptions = getOptions();
+    legacySphOptions.sph = true;
+    legacySphOptions.sphSmoothing = false;
+    auto const legacySphHeader = detail::checkpointHeader(legacySphOptions);
+    ALWAYS_ASSERT(legacySphHeader.version == 2);
+    ALWAYS_ASSERT((legacySphHeader.flags & (1U << 10)) == 0U);
+    ALWAYS_ASSERT(detail::checkpointCompatible(legacySphHeader, legacySphOptions));
+    legacySphOptions.sphSmoothing = true;
+    ALWAYS_ASSERT(!detail::checkpointCompatible(legacySphHeader, legacySphOptions));
+    auto const smoothingHeader = detail::checkpointHeader(legacySphOptions);
+    ALWAYS_ASSERT(detail::checkpointCompatible(smoothingHeader, legacySphOptions));
+    legacySphOptions.sphSmoothing = false;
+    ALWAYS_ASSERT(!detail::checkpointCompatible(smoothingHeader, legacySphOptions));
     auto const sphParameters = detail::sphCheckpointParameters(getOptions());
     changed = getOptions();
     changed.alpha0 += 0.25;
@@ -1984,7 +2083,7 @@ void checkpointStateTest() {
     changed = getOptions();
     changed.numberOfParticles++;
     ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
-    if (!getOptions().sph) {
+    if (detail::legacyCheckpointCompatible(getOptions())) {
         detail::LegacyDriver legacy{};
         legacy.a = kScale;
         legacy.tau = kClock;

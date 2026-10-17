@@ -401,6 +401,132 @@ void testUnequalSupports() {
     }
 }
 
+// Exercise the production density and pressure kernels using the selected host
+// table as an independent CPU path. Core tests also check the table mathematics.
+void testSelectedKernel() {
+    Fixture fixture(2);
+    auto& data = fixture.data_;
+    data.x[0] = 0.40;
+    data.x[1] = 0.58;
+    for (int i = 0; i < 2; i++) {
+        data.y[i] = data.z[i] = 0.5;
+        data.convergedSnk[i] = true;
+        data.h[i] = data.rec2Snk[i].h = i == 0 ? 0.35f : 0.42f;
+        data.eint[i] = i == 0 ? 0.7f : 1.2f;
+    }
+    fixture.params_.alpha0 = fixture.params_.beta = 0.0f;
+    fixture.density();
+    double const radius = std::abs(distance(data.x[0], data.x[1]));
+    double gradient = 0.0;
+    double pressurePair = 0.0;
+    double inverseCfl = 0.0;
+    for (int i = 0; i < 2; i++) {
+        double const support = data.h[i];
+        double const expectedDensity =
+            data.m * (kernelW(0.0) + kernelW(radius / support)) / std::pow(support, 3);
+        requireClose("selected kernel CPU/CUDA density", data.rho[i], expectedDensity, 3.0e-6);
+        gradient += 0.5 * dkernelWDq(radius / support) / std::pow(support, 4);
+        pressurePair += (data.defGamma - 1.0f) * data.eint[i] / data.rho[i];
+        double const sound = std::sqrt(data.defGamma * (data.defGamma - 1.0f) * data.eint[i]);
+        inverseCfl =
+            std::max(inverseCfl, sound * selectedHydroKernel().supportPerSmoothing / support);
+    }
+    fixture.hydro(1);
+    requireClose("selected kernel CPU/CUDA pressure force", data.rec6Snk[0].dvel[XDIM],
+        data.m * pressurePair * gradient, 8.0e-6);
+    requireClose(
+        "selected kernel effective-width CFL", fixture.reduction_->dtinvCfl, inverseCfl, 3.0e-6);
+    fixture.checkConservation();
+
+    data.vx[0] = 0.1f;
+    data.vx[1] = -0.1f;
+    fixture.params_.alpha0 = 1.0f;
+    fixture.params_.beta = 2.0f;
+    fixture.hydro();
+    fixture.checkConservation();
+}
+
+void testSelectedCentralGravity() {
+    Fixture fixture(1);
+    auto& data = fixture.data_;
+    data.x[0] = 0.6;
+    data.y[0] = data.z[0] = 0.5;
+    data.convergedSnk[0] = true;
+    data.centralAcceleration = 0.07f;
+    data.hcentral = 0.3f;
+    fixture.density();
+    fixture.hydro();
+    double const radius = distance(data.x[0], Fixed32(0.5));
+    double const expected = -data.centralAcceleration * radius /
+        std::pow(double(data.hcentral), 3) *
+        radial_kernel::forceFactor(selectedGravityKernel(), radius / data.hcentral);
+    requireClose(
+        "selected gravity kernel central force", data.rec6Snk[0].dvel[XDIM], expected, 5.0e-6);
+}
+
+void testDefaultTimestepCalibration() {
+    Fixture fixture(1);
+    auto& data = fixture.data_;
+    data.x[0] = data.y[0] = data.z[0] = 0.5;
+    data.convergedSnk[0] = true;
+    fixture.params_.yAcceleration = 2.0f;
+    fixture.params_.cfl = 0.25 * std::sqrt(5.0 / 6.0);
+    double const oldCentralPotential = 693.0 / 256.0;
+    data.eta = 0.25 * std::sqrt(selectedGravityKernel().supportPerSmoothing / oldCentralPotential);
+    fixture.density();
+    fixture.hydro(1);
+    double const sound = std::sqrt(data.defGamma * (data.defGamma - 1.0f) * data.eint[0]);
+    double const oldSmoothingLength = 0.5 * data.h[0];
+    double const expectedSoundStep =
+        0.25 * oldSmoothingLength / (sound * (1.0 + 0.6 * fixture.params_.alpha0));
+    double const soundStep =
+        fixture.params_.cfl / (fixture.reduction_->dtinvCfl + fixture.reduction_->dtinvVisc);
+    requireClose("default cubic sound and viscosity timestep calibration", soundStep,
+        expectedSoundStep, 2.0e-7);
+    double const expectedAccelerationStep = 0.25 / std::sqrt(oldCentralPotential) *
+        std::sqrt(oldSmoothingLength / fixture.params_.yAcceleration);
+    double const accelerationStep = fixture.params_.cfl / fixture.reduction_->dtinvAcc;
+    requireClose("default cubic acceleration timestep calibration", accelerationStep,
+        expectedAccelerationStep, 2.0e-7);
+}
+
+void testDefaultCompressionTimesteps(float gamma, bool thermalControls) {
+    Fixture fixture(2);
+    auto& data = fixture.data_;
+    data.defGamma = gamma;
+    data.x[0] = 0.4;
+    data.x[1] = 0.6;
+    for (int i = 0; i < 2; i++) {
+        data.y[i] = data.z[i] = 0.5;
+        data.convergedSnk[i] = true;
+        data.h[i] = data.rec2Snk[i].h = 0.35f;
+        data.eint[i] = 1.0e-6f;
+        data.vx[i] = i == 0 ? 1.0f : -1.0f;
+    }
+    fixture.params_.alpha0 = fixture.params_.beta = 0.0f;
+    fixture.params_.cfl = 0.25 * std::sqrt(5.0 / 6.0);
+    double const oldEta = 0.25 / std::sqrt(693.0 / 256.0);
+    data.eta = oldEta * std::sqrt(selectedGravityKernel().supportPerSmoothing);
+    fixture.density();
+    fixture.hydro(1);
+    for (int i = 0; i < 2; i++) {
+        double const oldWidth = 0.5 * data.h[i];
+        double const sound = std::sqrt(gamma * (gamma - 1.0f) * data.eint[i]);
+        double const acceleration = std::abs(data.rec6Snk[i].dvel[XDIM]);
+        double const soundStep = 0.25 * oldWidth / sound;
+        double const accelerationStep = oldEta * std::sqrt(oldWidth / acceleration);
+        double const divergenceStep = 0.75 / std::abs(data.divvSnk[i]);
+        double const thermalStep = 0.25 * data.eint[i] / std::abs(data.deint2Snk[i]);
+        double const expectedStep = thermalControls ? thermalStep : divergenceStep;
+        require(expectedStep < soundStep && expectedStep < accelerationStep &&
+                expectedStep < (thermalControls ? divergenceStep : thermalStep),
+            "compression fixture must activate the intended timestep restriction");
+        int const expectedRung = int(std::ceil(std::log2(fixture.params_.t0 / expectedStep)));
+        require(data.rungs[i] == expectedRung,
+            "default divergence/thermal bound must preserve the historical timestep rung");
+    }
+}
+
 }    // namespace detail
 
 int main() {
@@ -411,9 +537,38 @@ int main() {
         detail::checkCuda(cudaSetDevice(0), "select CUDA device");
         cudaMemoryInitialize(4 * 1024 * 1024);
         detail::checkCuda(cudaGetLastError(), "production workspace allocator initialization");
+        setKernelSelections(
+            {radial_kernel::Family::Ferrers, 8}, {radial_kernel::Family::Spline, 3}, true);
         detail::testPeriodicSupport();
         detail::testLattice();
         detail::testUnequalSupports();
+        detail::testDefaultTimestepCalibration();
+        detail::testDefaultCompressionTimesteps(1.1f, false);
+        detail::testDefaultCompressionTimesteps(5.0f / 3.0f, true);
+        radial_kernel::KernelSpec const specifications[] = {
+            {radial_kernel::Family::Spline, 3},
+            {radial_kernel::Family::Spline, 4},
+            {radial_kernel::Family::Spline, 5},
+            {radial_kernel::Family::Spline, 6},
+            {radial_kernel::Family::Spline, 7},
+            {radial_kernel::Family::Spline, 8},
+            {radial_kernel::Family::Spline, 9},
+            {radial_kernel::Family::Wendland, 2},
+            {radial_kernel::Family::Wendland, 5},
+            {radial_kernel::Family::Wendland, 8},
+            {radial_kernel::Family::Ferrers, 2},
+            {radial_kernel::Family::Ferrers, 4},
+            {radial_kernel::Family::Ferrers, 6},
+            {radial_kernel::Family::Ferrers, 8},
+        };
+        size_t const count = sizeof(specifications) / sizeof(specifications[0]);
+        for (size_t i = 0; i < count; i++) {
+            auto const hydro = specifications[i];
+            auto const gravity = specifications[count - i - 1];
+            setKernelSelections(gravity, hydro, true);
+            detail::testSelectedKernel();
+            detail::testSelectedCentralGravity();
+        }
         std::puts("Monaghan SPH active CUDA kernel regressions passed (one block per launch)");
     } catch (std::exception const& error) {
         std::fprintf(stderr, "Monaghan SPH CUDA regression failed: %s\n", error.what());

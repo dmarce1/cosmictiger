@@ -21,6 +21,7 @@
 #include <cosmictiger/cuda_memory.hpp>
 #include <cosmictiger/ewald_indices.hpp>
 #include <cosmictiger/hpx.hpp>
+#include <cosmictiger/kernel.hpp>
 #include <cosmictiger/particles.hpp>
 
 #ifdef USE_CUDA
@@ -100,6 +101,8 @@ void cudaEndStream(cudaStream_t stream) {
 void cudaInit() {
     cudaSetDevice();
     CUDA_CHECK(cudaDeviceReset());
+    // Reset clears constant memory populated during option propagation.
+    uploadKernelSelections();
     /*	size_t value = 64;
         size_t oval = value;
         CUDA_CHECK(cudaDeviceSetLimit(cudaLimitMaxL2FetchGranularity , value));

@@ -168,7 +168,6 @@ void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& si
     float const h = getOptions().hsoft;
     float const gm = getOptions().gm;
     float const hinv = 1.0 / h;
-    float const h2inv = 1.0 / (h * h);
     float const h2 = h * h;
     SimdFloat const tiny(1e-20);
     int const numberOfThreads =
@@ -176,7 +175,7 @@ void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& si
     Vector<hpx::future<void>> futs;
     for (int proc = 0; proc < numberOfThreads; proc++) {
         futs.push_back(hpx::async([proc, numberOfThreads, &sinkBuckets, &nodes, &phi, &parts, h, gm,
-                                      hinv, h2inv, h2, theta, tiny]() {
+                                      hinv, h2, theta, tiny]() {
             for (int i = proc; i < sinkBuckets.size(); i += numberOfThreads) {
                 auto const& sinkBucket = sinkBuckets[i];
                 Vector<int> checklist(1, 0);
@@ -253,14 +252,11 @@ void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& si
                             SimdFloat const r = sqrt(r2);    // 4
                             SimdFloat const rinv1Far =
                                 SimdFloat(1) / (r + SimdFloat(1e-30));    // 5
-                            SimdFloat const q = r * hinv;                 // 1
-                            SimdFloat const q2 = sqr(q);                  // 1
-                            SimdFloat rinv1Near = SimdFloat(3.0 / 8.0);
-                            rinv1Near = fmaf(rinv1Near, q2, SimdFloat(-5.0 / 4.0));    // 2
-                            rinv1Near = fmaf(rinv1Near, q2, SimdFloat(15.0 / 8.0));    // 2
-                            rinv1Near *= hinv;                                         // 1
-                            auto const nearFlag = (SimdFloat(1) - farFlag);            // 1
-                            rinv1 = farFlag * rinv1Far + nearFlag * rinv1Near;         // 4
+                            SimdFloat const q = r * hinv;
+                            SimdFloat const rinv1Near =
+                                radial_kernel::potential(selectedGravityKernel(), q) * hinv;
+                            auto const nearFlag = (SimdFloat(1) - farFlag);       // 1
+                            rinv1 = farFlag * rinv1Far + nearFlag * rinv1Near;    // 4
                         }
                         phi[i] -= (mValue * rinv1).sum();    // 1
                     }
@@ -276,9 +272,8 @@ void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Array<float, NDI
     DeviceVector<Array<float, NDIM>>& parts, float theta) {
     float const h = getOptions().hsoft;
     float const gm = getOptions().gm;
-    float const hinv = 1.0 / (2.f * h);
-    float const h2inv = 1.0 / (4.f * h * h);
-    float const h2 = 4.f * h * h;
+    float const hinv = 1.0f / h;
+    float const h2 = h * h;
     SimdFloat const tiny(1e-20);
     int const numberOfThreads =
         std::max(std::min((int) parts.size() / 512, 2 * (int) hpxHardwareConcurrency()), 1);
@@ -342,21 +337,18 @@ void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Array<float, NDI
         for (int dim = 0; dim < NDIM; dim++) {
             dx[dim] = xValue[dim] - yValue[dim];    // 3
         }
-        SimdFloat const r2 = max(sqr(dx[XDIM], dx[YDIM], dx[ZDIM]), tiny);    // 5
-        SimdFloat const farFlag = r2 > h2;                                    // 1
+        SimdFloat const separationSquared = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
+        SimdFloat const r2 = max(separationSquared, tiny);
+        SimdFloat const farFlag = r2 > h2;    // 1
         SimdFloat rinv1;
         if (farFlag.sum() == SIMD_FLOAT_SIZE) {    // 7/8
             rinv1 = rsqrt(r2);                     // 5
         } else {
             SimdFloat const r = sqrt(r2);                                         // 4
             SimdFloat const rinv1Far = SimdFloat(1) / (r + SimdFloat(1e-30f));    // 5
-            SimdFloat const q = r * hinv;                                         // 1
-            SimdFloat const q2 = sqr(q);                                          // 1
-            SimdFloat rinv1Near = -5.0f / 16.0f;
-            rinv1Near = fmaf(rinv1Near, q2, SimdFloat(-5.0 / 4.0));    // 2
-            rinv1Near = fmaf(rinv1Near, q2, SimdFloat(15.0 / 8.0));    // 2
-            rinv1Near *= hinv;                                         //
-            rinv1Near *= r > SimdFloat(0);
+            SimdFloat const q = r * hinv;
+            SimdFloat const rinv1Near = radial_kernel::potential(selectedGravityKernel(), q) *
+                hinv * (separationSquared > SimdFloat(0));
             auto const nearFlag = (SimdFloat(1) - farFlag);       // 1
             rinv1 = farFlag * rinv1Far + nearFlag * rinv1Near;    // 4
         }

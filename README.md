@@ -40,7 +40,7 @@ viscosityBeta = 2.0
 viscosityEpsilon = 0.01
 gamma = 1.666666666666667
 neighborNumber = 60
-cfl = 0.25
+cfl = 0.22821773229381923
 [run]
 maxIterations = 2
 ```
@@ -50,6 +50,26 @@ default, except `help` and `configuration`. The complete, independently editable
 problem files in [configurations/](configurations/README.md) contain the same
 option set, with problem-specific values and inline help comments. Files are
 loaded explicitly; there is no implicit loading of `default.ini`.
+
+Gravity and SPH can select kernels independently. Both use the smoothing width
+`h = 2 sigma`, where sigma is the standard deviation along one coordinate axis:
+
+```ini
+[gravity]
+kernelFamily = ferrers
+kernelDegree = 8
+softening = 0.01876988456953534
+[hydro]
+kernelFamily = wendland
+kernelDegree = 8
+neighborNumber = 120
+```
+
+The supported density polynomial degrees are spline 3–9, Wendland 2/5/8,
+and Ferrers 2/4/6/8. `gravity.softening` is this common width in mean particle
+spacings; `hydro.minSupportRadius` and `hydro.maxSupportRadius` explicitly bound
+the support radius H. See [kernel definitions and migration](docs/kernels.md)
+for timestep conventions and conversions from older parameter files.
 
 For the existing Kelvin–Helmholtz test, run from a build directory:
 
@@ -88,7 +108,7 @@ are also supported. `output.silo=false` disables particle output.
 `analysis.views` independently controls HEALPix maps.
 
 Gas particles are written as Silo CSG spheres in the `gas` mesh. Each sphere's
-radius is the stored SPH kernel support radius (`H = 2h`), also available as the
+radius is the stored SPH kernel support radius (`H = gamma_kernel h`), also available as the
 zone-centered `kernel_support_radius` field. Sphere centers and radii follow the
 selected output units and frame. Dark matter and stars remain point meshes.
 VisIt discretizes overlapping CSG zones for display, which can show seams where
@@ -154,7 +174,23 @@ the viscosity, smoothing, timestep, and external-force parameters.
 Use CMake 3.24 or newer, C++20, HPX with CUDA and networking enabled, CUDA,
 serial FFTW3 (single precision), GSL, Silo, HEALPix C, Boost program options and
 Boost.Units headers,
-and a Fortran compiler. Select the CUDA architecture for the target machine:
+and a Fortran compiler.
+
+Run `./build.sh` in a terminal for the interactive builder. It uses a full-screen
+menu when `whiptail` is available, with a text menu as a fallback. Choose Release,
+RelWithDebInfo, Debug, or Profile (host gprof instrumentation), CUDA, job counts,
+HPX prefix, CUDA architectures, and additional dependency prefixes. Builds go in
+`build/<mode>` with live output and a `builder.*.log`. The default builds
+`cosmictiger` and `recfast`; building and running the test suite is opt-in. Build
+jobs are capped at half the available CPUs, and test concurrency accounts for
+two MPI localities with two HPX threads each.
+
+The builder uses `~/local/hpx/<build type>` when installed (Release for Profile),
+or normal CMake package discovery. It reuses existing dependency prefixes and
+CUDA architectures from this checkout's CMake build caches, so `./build.sh`
+needs no environment setup after a configured build. Override these defaults in
+the menu or through `CMAKE_PREFIX_PATH` and `CUDAARCHS`. Without a cached or
+explicit CUDA architecture, it uses `native`. For a manual build:
 
 ```sh
 cmake -S . -B build/release -DCMAKE_BUILD_TYPE=Release \

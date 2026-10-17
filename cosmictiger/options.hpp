@@ -38,6 +38,8 @@ struct Options {
     bool outputSilo;
     int outputSiloInterval;
     std::string outputDirectory;
+    std::string outputUnits{"code"};
+    std::string outputFrame{"comoving"};
     double outputXMin;
     double outputXMax;
     double outputYMin;
@@ -67,7 +69,12 @@ struct Options {
     double lcB;
     double sliceSize;
     double linkingLength;
+    // Internally stored compact support; public gravity.softening is h = 2 sigma.
     double hsoft;
+    std::string gravityKernelFamily{"ferrers"};
+    int gravityKernelDegree{8};
+    std::string hydroKernelFamily{"spline"};
+    int hydroKernelDegree{3};
     double gm;
     double eta;
     double codeToS;
@@ -98,6 +105,7 @@ struct Options {
 
     bool htime{};
     bool sph{};
+    bool sphSmoothing{};
     bool yreflect{};
     int viscType{};
     bool stars{};
@@ -129,10 +137,6 @@ struct Options {
     double yAcceleration{};
     double centralAcceleration{};
     double hcentral{};
-
-    // Append new fields: legacy lightcone files contain the preceding raw Options layout.
-    std::string outputUnits{"code"};
-    std::string outputFrame{"comoving"};
 
     template <typename A>
     void serialize(A&& arc, unsigned) {
@@ -243,6 +247,11 @@ struct Options {
         arc & neff;
         arc & configFile;
         arc & test;
+        arc & sphSmoothing;
+        arc & gravityKernelFamily;
+        arc & gravityKernelDegree;
+        arc & hydroKernelFamily;
+        arc & hydroKernelDegree;
     }
 };
 

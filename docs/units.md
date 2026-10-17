@@ -171,7 +171,3 @@ payload without requiring Boost quantity arithmetic inside kernels.
 Output settings are distributed with `Options` to HPX localities. They do not
 add fields to the on-disk checkpoint header or particle payload, and changing
 the requested output views does not change the simulation's restart contract.
-The separate legacy `lc2rockstar` reader consumes the old native `Options`
-prefix and restores only the scalar fields it uses. The added output selectors
-follow that prefix in memory. Legacy lightcone files remain tied to their
-original compiler/library ABI; embedded historical string bytes are ignored.

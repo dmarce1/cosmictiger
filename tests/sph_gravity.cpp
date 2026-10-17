@@ -19,9 +19,11 @@
 
 #include <cmath>
 #include <cstdio>
+#include <numbers>
 #include <stdexcept>
 #include <string>
 
+#include <cosmictiger/bh.hpp>
 #include <cosmictiger/domain.hpp>
 #include <cosmictiger/gravity.hpp>
 #include <cosmictiger/hpx.hpp>
@@ -31,6 +33,10 @@
 #include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/tree.hpp>
 
+#ifdef USE_CUDA
+void verifySelectedKernelsCuda();
+#endif
+
 namespace detail {
 constexpr float kGravityScale = 1.75f;
 void requireClose(char const* label, double actual, double expected, double tolerance = 3.0e-5) {
@@ -39,6 +45,24 @@ void requireClose(char const* label, double actual, double expected, double tole
             ", expected " + std::to_string(expected));
     }
 }
+
+void verifyKernelSelections() {
+    auto const verify = [](char const* label, radial_kernel::KernelTable const& table,
+                            std::string const& family, int degree) {
+        bool const familyMatches =
+            (family == "spline" && table.spec.family == radial_kernel::Family::Spline) ||
+            (family == "wendland" && table.spec.family == radial_kernel::Family::Wendland) ||
+            (family == "ferrers" && table.spec.family == radial_kernel::Family::Ferrers);
+        if (!familyMatches || table.spec.degree != degree) {
+            throw std::runtime_error(std::string(label) + " kernel table differs from its options");
+        }
+    };
+    auto const& options = getOptions();
+    verify("Gravity", selectedGravityKernel(), options.gravityKernelFamily,
+        options.gravityKernelDegree);
+    verify("Hydro", selectedHydroKernel(), options.hydroKernelFamily, options.hydroKernelDegree);
+}
+
 void initializePair(double separation) {
     particlesResize(2);
     sphParticlesResize(1, false);
@@ -165,8 +189,73 @@ void verifySynchronizedDiagnostics(KickReturn const& result) {
         momentumNorm + result.darkMatterMomentumNormCorrection, gasMass * std::sqrt(initialSpeed2));
 }
 
+template <class Function>
+double integrateReference(Function function, double begin, double end) {
+    constexpr int kIntervals = 1024;
+    double const step = (end - begin) / kIntervals;
+    // Endpoint values do not affect the integral; sample their interior limits.
+    double integral = function(std::nextafter(begin, end)) + function(std::nextafter(end, begin));
+    for (int i = 1; i < kIntervals; ++i) {
+        integral += (i % 2 == 0 ? 2.0 : 4.0) * function(begin + i * step);
+    }
+    return integral * step / 3.0;
+}
+
+void softenedPairReference(double separation, double& inverseCube, double& inverseRadius) {
+    auto const& kernel = selectedGravityKernel();
+    double const support = getOptions().hsoft;
+    double const q = separation / support;
+    double const fourPi = 4.0 * std::numbers::pi;
+    // Integrate the density independently of the force/potential antiderivative tables.
+    double const mass = fourPi *
+        integrateReference(
+            [&](double radius) { return radius * radius * radial_kernel::value(kernel, radius); },
+            0.0, q);
+    inverseCube = mass / (separation * separation * separation);
+    inverseRadius =
+        (mass / q +
+            fourPi *
+                integrateReference(
+                    [&](double radius) { return radius * radial_kernel::value(kernel, radius); }, q,
+                    1.0)) /
+        support;
+}
+
+void verifyBhPotentials(bool useCuda) {
+    double const separation = 0.25 * getOptions().hsoft;
+    DeviceVector<Array<float, NDIM>> sources(2);
+    for (int dim = 0; dim < NDIM; ++dim) {
+        sources[0][dim] = 0.375;
+        sources[1][dim] = dim == XDIM ? 0.375 + separation : 0.375;
+    }
+    // Match the stored float positions used by the independent halo-potential path.
+    double const actualSeparation = double(sources[1][XDIM]) - sources[0][XDIM];
+    double inverseCube, inverseRadius;
+    softenedPairReference(actualSeparation, inverseCube, inverseRadius);
+    double const expected = -getOptions().gm * inverseRadius;
+    auto potential = bhEvaluatePotential(sources, useCuda);
+    for (int i = 0; i < 2; ++i) {
+        requireClose("halo potential uses selected gravity kernel", potential[i], expected);
+    }
+    DeviceVector<Array<float, NDIM>> points(2);
+    for (int dim = 0; dim < NDIM; ++dim) {
+        points[0][dim] = 0.375;
+        points[1][dim] = dim == XDIM ? float(0.375 + 0.5 * actualSeparation) : 0.375;
+    }
+    potential = bhEvaluatePoints(points, sources, useCuda);
+    requireClose("halo point potential excludes coincident source", potential[0], expected);
+    double expectedMidpoint = 0.0;
+    for (int i = 0; i < 2; ++i) {
+        double const pointSeparation = std::abs(double(points[1][XDIM]) - sources[i][XDIM]);
+        softenedPairReference(pointSeparation, inverseCube, inverseRadius);
+        expectedMidpoint -= getOptions().gm * inverseRadius;
+    }
+    requireClose(
+        "halo midpoint potential uses selected gravity kernel", potential[1], expectedMidpoint);
+}
+
 void runPairCase(bool useCuda, bool softened) {
-    double const nominalSeparation = softened ? 0.0025 : 0.25;
+    double const nominalSeparation = softened ? 0.25 * getOptions().hsoft : 0.25;
     initializePair(nominalSeparation);
     auto const built = treeCreate(TreeCreateParameters(0, 0.5, getOptions().hsoft));
     verifyMappings();
@@ -178,23 +267,7 @@ void runPairCase(bool useCuda, bool softened) {
     double inverseCube = 1.0 / (separation * separation * separation);
     double inverseRadius = 1.0 / separation;
     if (softened) {
-        double const h = getOptions().hsoft;
-        double const q2 = separation * separation / (h * h);
-        inverseCube =
-            (1155.0 / 128.0 +
-                q2 *
-                    (-693.0 / 32.0 +
-                        q2 * (1485.0 / 64.0 + q2 * (-385.0 / 32.0 + q2 * 315.0 / 128.0)))) /
-            (h * h * h);
-        inverseRadius =
-            (693.0 / 256.0 +
-                q2 *
-                    (-1155.0 / 256.0 +
-                        q2 *
-                            (693.0 / 128.0 +
-                                q2 *
-                                    (-495.0 / 128.0 + q2 * (385.0 / 256.0 - q2 * 63.0 / 256.0))))) /
-            h;
+        softenedPairReference(separation, inverseCube, inverseRadius);
     }
     for (ParticleInteger sink = 0; sink < 2; sink++) {
         auto const self = findLeaf(built.id, sink);
@@ -237,12 +310,21 @@ void runPairCase(bool useCuda, bool softened) {
         origin[dim] = 0.0;
     }
     auto params = makeKickParams();
+    double const darkMatterAcceleration =
+        kGravityScale * getOptions().sphMass * separation * inverseCube;
+    double const gravitySmoothingLength =
+        getOptions().hsoft / selectedGravityKernel().supportPerSmoothing;
+    double const darkMatterTimestep =
+        params.eta * std::sqrt(gravitySmoothingLength / darkMatterAcceleration);
+    params.t0 = 2.2 * darkMatterTimestep;
     resetKickState();
     auto const cpuResult =
         kick(params, local, origin, built.id, Vector<TreeId>{built.id}, Vector<TreeId>{}, nullptr);
     requireClose("CPU kick total potential", cpuResult.pot,
         -kGravityScale * getOptions().darkMatterMass * getOptions().sphMass * inverseRadius, 2e-4);
     verifyKick(inverseCube, inverseRadius, separation);
+    requireClose(
+        "CPU gravity rung uses the variance smoothing length", particlesRung(darkMatterIndex), 2);
     verifySynchronizedDiagnostics(cpuResult);
 #ifdef USE_CUDA
     if (useCuda) {
@@ -256,6 +338,8 @@ void runPairCase(bool useCuda, bool softened) {
             particlesX[ZDIM], treeData(), Vector<KickWorkitem>{item});
         requireClose("CUDA kick total potential", cudaResult.pot, cpuResult.pot, 2e-4);
         verifyKick(inverseCube, inverseRadius, separation);
+        requireClose("CUDA gravity rung uses the variance smoothing length",
+            particlesRung(darkMatterIndex), 2);
         verifySynchronizedDiagnostics(cudaResult);
     }
 #else
@@ -338,6 +422,11 @@ void validateSphRemoteTreeCache() {
 HPX_PLAIN_ACTION(validateSphRemoteTreeCache, ValidateSphRemoteTreeCacheAction);
 
 void sphGravityTest() {
+#ifdef USE_CUDA
+    if (getOptions().cuda) {
+        verifySelectedKernelsCuda();
+    }
+#endif
     using namespace detail;
     resetGravityCounters();
     double closeCount, directCount;
@@ -359,7 +448,14 @@ void sphGravityTest() {
     opts.numberOfParticles = 2 * hpxSize();
     opts.hsoft = 0.01;
     setOptions(opts);
+    verifyKernelSelections();
     if (hpxSize() == 1) {
+        verifyBhPotentials(false);
+#ifdef USE_CUDA
+        if (useCuda) {
+            verifyBhPotentials(true);
+        }
+#endif
         runPairCase(useCuda, false);
         runPairCase(useCuda, true);
         checkpointPair();

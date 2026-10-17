@@ -55,6 +55,8 @@ def main():
     required = {"help", "configuration", "initial.particlesPerDimension", "compute.cuda",
                 "hydro.enabled", "hydro.viscosityAlpha", "hydro.viscosityBeta",
                 "hydro.viscosityEpsilon", "hydro.neighborNumber", "gravity.enabled",
+                "gravity.sphSmoothing", "gravity.kernelFamily", "gravity.kernelDegree",
+                "hydro.kernelFamily", "hydro.kernelDegree",
                 "output.silo", "output.siloInterval", "output.directory", "output.units", "output.frame",
                 "output.xMin", "output.xMax", "output.yMin", "output.yMax",
                 "output.zMin", "output.zMax"}
@@ -98,11 +100,38 @@ mapSize = 8
         match = re.search(r"^" + re.escape(name) + r"\s*:\s*(\S+)", configured, re.MULTILINE)
         if match is None or abs(float(match.group(1)) - value) > 1.0e-6:
             raise RuntimeError(f"configured {name} did not equal {value}")
+    if not re.search(r"^gravity\.sphSmoothing\s*:\s*F\s*$", configured, re.MULTILINE):
+        raise RuntimeError("gravity.sphSmoothing was not disabled by default")
     if "Checkpoint state and mode validation passed" not in configured:
         raise RuntimeError("configuration run did not finish the checkpoint regression")
 
     metadata_options = ["--run.test=checkpointState", "--compute.cuda=false",
                         "--hydro.enabled=false", "--initial.particlesPerDimension=8"]
+
+    # Selections survive option setup and checkpoints independently.
+    for gravity_family, gravity_degree, hydro_family, hydro_degree in (
+            ("spline", 9, "wendland", 8), ("wendland", 5, "ferrers", 6),
+            ("ferrers", 2, "spline", 4)):
+        output = run(f"kernels_{gravity_family}_{hydro_family}", metadata_options + [
+            f"--gravity.kernelFamily={gravity_family}", f"--gravity.kernelDegree={gravity_degree}",
+            f"--hydro.kernelFamily={hydro_family}", f"--hydro.kernelDegree={hydro_degree}",
+            "--hydro.neighborNumber=200", "--gravity.softening=0.02", "--gravity.timestepEta=0.15"])
+        for key, value in (("gravity.kernelFamily", gravity_family),
+                           ("gravity.kernelDegree", str(gravity_degree)),
+                           ("hydro.kernelFamily", hydro_family),
+                           ("hydro.kernelDegree", str(hydro_degree))):
+            if not re.search(r"^" + re.escape(key) + r"\s*:\s*" + value + r"\s*$", output, re.MULTILINE):
+                raise RuntimeError(f"independent kernel setting {key} was not applied")
+        for key, value in (("gravity.softening", 0.02), ("gravity.timestepEta", 0.15)):
+            match = re.search(r"^" + re.escape(key) + r"\s*:\s*(\S+)", output, re.MULTILINE)
+            if match is None or abs(float(match.group(1)) - value) > 1.e-8:
+                raise RuntimeError(f"kernel-independent setting {key} changed meaning")
+    for index, invalid in enumerate((
+            ["--gravity.kernelFamily=gaussian"], ["--hydro.kernelFamily=wendland", "--hydro.kernelDegree=9"],
+            ["--gravity.kernelFamily=ferrers", "--gravity.kernelDegree=9"],
+            ["--hydro.kernelDegree=10"], ["--gravity.kernelDegree=-1"],
+            ["--hydro.kernelFamily=wendland", "--hydro.kernelDegree=8", "--hydro.neighborNumber=12"])):
+        run(f"invalid_kernel_{index}", metadata_options + invalid, success=False)
 
     def assertOutputSettings(output, outputUnits, outputFrame):
         for key, expectedValue in (("output.units", outputUnits), ("output.frame", outputFrame)):
@@ -226,6 +255,7 @@ mapSize = 8
         ("softening_nan", "--gravity.softening=nan", "gravity.softening"),
         ("softening_inf", "--gravity.softening=inf", "gravity.softening"),
         ("softening_underflow", "--gravity.softening=1e-37", "gravity.softening"),
+        ("smoothing_without_hydro", "--gravity.sphSmoothing=true", "requires hydro.enabled=true"),
         ("alpha_overflow", "--hydro.viscosityAlpha=1e100", "single precision"),
         ("epsilon_underflow", "--hydro.viscosityEpsilon=1e-100", "single precision"),
         ("gamma_rounding", "--hydro.gamma=1.00000001", "single precision"),

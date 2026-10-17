@@ -42,7 +42,7 @@ struct HydroWorkspace {
 
 // Monaghan (1992), equations (4.1)-(4.2) and (6.4)-(6.5).
 // Positions and density are comoving; velocity and energy store a*v and a^2*u.
-// Stored h is the kernel support radius, twice the paper's smoothing length.
+// Stored h is the kernel support radius; physical smoothing widths are 2 sigma.
 __global__ void sphCudaHydro(SphRunParameters params, SphRunCudaData data, SphReduction* reduce) {
     int const tid = threadIdx.x;
     int const blockSize = blockDim.x;
@@ -56,6 +56,12 @@ __global__ void sphCudaHydro(SphRunParameters params, SphRunCudaData data, SphRe
     float const ainv = 1.0f / params.a;
     float const gamma = data.defGamma;
     float const massOverA = data.m * ainv;
+    // Keep the historical cubic viscosity scale while measuring every kernel
+    // with the same h = 2 sigma: h_Monaghan = sqrt(5/6) h for the cubic spline.
+    constexpr float kViscosityWidthScale = 0.9128709291752769f;
+    // Calibrate the hydro acceleration limit to the former cubic/Ferrers F4
+    // defaults after gravity eta and smoothing lengths adopt the common width.
+    constexpr float kHydroAccelerationScale = 0.7115965735877551f;
     int maxRungHydro = 0;
     int maxRungGrav = 0;
     int maxRung = 0;
@@ -125,10 +131,8 @@ __global__ void sphCudaHydro(SphRunParameters params, SphRunCudaData data, SphRe
                 float const radius = sqrtf(r2);
                 float const invHI = 1.0f / hI;
                 float const invHJ = 1.0f / neighbor.h;
-                float const gradientI =
-                    monaghan_sph::kernelDerivative(radius * invHI) * sqr(sqr(invHI)) / radius;
-                float const gradientJ =
-                    monaghan_sph::kernelDerivative(radius * invHJ) * sqr(sqr(invHJ)) / radius;
+                float const gradientI = dkernelWDq(radius * invHI) * sqr(sqr(invHI)) / radius;
+                float const gradientJ = dkernelWDq(radius * invHJ) * sqr(sqr(invHJ)) / radius;
                 float const gradient = 0.5f * (gradientI + gradientJ);
                 float const vx = data.vx[i] - neighbor.vx;
                 float const vy = data.vy[i] - neighbor.vy;
@@ -136,8 +140,9 @@ __global__ void sphCudaHydro(SphRunParameters params, SphRunCudaData data, SphRe
                 float const peculiarDotR = vx * dx + vy * dy + vz * dz;
                 // Include Hubble motion only in physical pair approach/viscous heating.
                 float const physicalDotR = peculiarDotR + params.adot * r2;
-                float const mu = monaghan_sph::viscosityMu(
-                    r2, physicalDotR, hI, neighbor.h, params.viscosityEpsilon);
+                float const mu = monaghan_sph::viscosityMu(r2, physicalDotR, hI, neighbor.h,
+                    params.viscosityEpsilon, float(selectedHydroKernel().supportPerSmoothing),
+                    kViscosityWidthScale);
                 float const pressureJ = (gamma - 1.0f) * neighbor.rho * neighbor.energy;
                 float const soundJ = sqrtf(gamma * (gamma - 1.0f) * neighbor.energy);
                 float const viscosity = monaghan_sph::artificialViscosity(
@@ -173,8 +178,9 @@ __global__ void sphCudaHydro(SphRunParameters params, SphRunCudaData data, SphRe
                     float const dz = distance(data.z[i], Fixed32(0.5));
                     float const radius = sqrtf(sqr(dx, dy, dz));
                     float const hinv = 1.0f / data.hcentral;
-                    float const force =
-                        data.centralAcceleration * kernelFqinv(radius * hinv) * hinv * hinv * hinv;
+                    float const force = data.centralAcceleration *
+                        radial_kernel::forceFactor(selectedGravityKernel(), radius * hinv) * hinv *
+                        hinv * hinv;
                     ax -= force * dx;
                     ay -= force * dy;
                     az -= force * dz;
@@ -192,21 +198,26 @@ __global__ void sphCudaHydro(SphRunParameters params, SphRunCudaData data, SphRe
                 if (params.phase == 1) {
                     data.deint1Snk[sink] = 0.0f;
                     data.divvSnk[sink] = divergence;
-                    float const smoothingLength = 0.5f * hI;
+                    float const smoothingLength = hI / selectedHydroKernel().supportPerSmoothing;
                     // Section 10.3: max(-mu) is positive for approaching particles.
                     float const dtinvCfl = soundI / smoothingLength;
                     float const dtinvVisc = 0.6f *
                         (params.alpha0 * soundI + params.beta * maxCompression) / smoothingLength;
-                    float const dtinvDivv = params.a * fabsf(divergence) / 3.0f;
+                    // These two bounds contain no length; retain their original
+                    // normalization when the public CFL coefficient uses 2 sigma.
+                    float const dtinvDivv =
+                        kViscosityWidthScale * params.a * fabsf(divergence) / 3.0f;
                     float const acceleration = sqrtf(sqr(ax, ay, az));
-                    float const dtinvAcc =
-                        params.cfl * sqrtf(params.a * acceleration / smoothingLength) / data.eta;
+                    float const dtinvAcc = params.cfl *
+                        sqrtf(params.a * acceleration / smoothingLength) /
+                        (data.eta * kHydroAccelerationScale);
                     float const dtinv = fmaxf(dtinvCfl + dtinvVisc, fmaxf(dtinvDivv, dtinvAcc));
                     float hydroDt =
                         fminf(params.maxDt, params.cfl * params.a / fmaxf(dtinv, 1.0e-30f));
                     // Bound fractional thermal change in the existing explicit integrator.
                     if (energyRate != 0.0f) {
-                        hydroDt = fminf(hydroDt, params.cfl * energyI / fabsf(energyRate));
+                        hydroDt = fminf(hydroDt,
+                            params.cfl / kViscosityWidthScale * energyI / fabsf(energyRate));
                     }
                     float const gravityAcceleration = sqrtf(sqr(gx, gy, gz));
                     float const gravityDt = fminf(params.maxDt,
