@@ -193,22 +193,22 @@ void testScalarCases(std::vector<AcceptanceCase> const& cases) {
 #if defined(FMM_ACCEPTANCE_TEST_SIMD)
 void testSimdCases(std::vector<AcceptanceCase> const& cases) {
     for (size_t start = 0; start < cases.size(); start += SIMD_FLOAT_SIZE) {
-        SimdFloat centerDistanceSquared;
-        SimdFloat sinkRadius;
-        SimdFloat sourceRadius;
-        SimdFloat sinkBoxToSourceCenterSquared;
-        SimdFloat sourceBoxToSinkCenterSquared;
-        SimdFloat pairSupportRadius;
-        SimdFloat inverseTheta;
+        SimdFloat centerDistanceSquared{};
+        SimdFloat sinkRadius{};
+        SimdFloat sourceRadius{};
+        SimdFloat sinkBoxToSourceCenterSquared{};
+        SimdFloat sourceBoxToSinkCenterSquared{};
+        SimdFloat pairSupportRadius{};
+        SimdFloat inverseTheta{};
         for (int lane = 0; lane < SIMD_FLOAT_SIZE; lane++) {
             auto const& value = cases[(start + lane) % cases.size()];
-            centerDistanceSquared[lane] = value.centerDistanceSquared;
-            sinkRadius[lane] = value.sinkRadius;
-            sourceRadius[lane] = value.sourceRadius;
-            sinkBoxToSourceCenterSquared[lane] = value.sinkBoxToSourceCenterSquared;
-            sourceBoxToSinkCenterSquared[lane] = value.sourceBoxToSinkCenterSquared;
-            pairSupportRadius[lane] = value.pairSupportRadius;
-            inverseTheta[lane] = value.inverseTheta;
+            simdSetLane(centerDistanceSquared, lane, value.centerDistanceSquared);
+            simdSetLane(sinkRadius, lane, value.sinkRadius);
+            simdSetLane(sourceRadius, lane, value.sourceRadius);
+            simdSetLane(sinkBoxToSourceCenterSquared, lane, value.sinkBoxToSourceCenterSquared);
+            simdSetLane(sourceBoxToSinkCenterSquared, lane, value.sourceBoxToSinkCenterSquared);
+            simdSetLane(pairSupportRadius, lane, value.pairSupportRadius);
+            simdSetLane(inverseTheta, lane, value.inverseTheta);
         }
         auto const acceptance = computeFmmAcceptance(centerDistanceSquared, sinkRadius,
             sourceRadius, sinkBoxToSourceCenterSquared, sourceBoxToSinkCenterSquared,
@@ -221,10 +221,10 @@ void testSimdCases(std::vector<AcceptanceCase> const& cases) {
                     acceptance.cellParticle[lane] == scalar.cellParticle &&
                     acceptance.supportSeparated[lane] == scalar.supportSeparated,
                 std::string(value.label) + ": SIMD/scalar mismatch");
-            auto const interaction = selectFmmInteraction(acceptance.cellCell[lane] != 0.0f,
-                acceptance.particleCell[lane] != 0.0f, acceptance.cellParticle[lane] != 0.0f,
-                value.bothLeaves, value.sinkParticleCount, value.sourceParticleCount,
-                value.sinkRadius, value.sourceRadius);
+            auto const interaction =
+                selectFmmInteraction(acceptance.cellCell[lane], acceptance.particleCell[lane],
+                    acceptance.cellParticle[lane], value.bothLeaves, value.sinkParticleCount,
+                    value.sourceParticleCount, value.sinkRadius, value.sourceRadius);
             require(interaction == value.expected, std::string(value.label) + ": SIMD selection");
         }
     }

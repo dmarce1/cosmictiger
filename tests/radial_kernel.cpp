@@ -192,26 +192,28 @@ void testTable(KernelSpec spec) {
     }
 #if defined(RADIAL_KERNEL_TEST_SIMD)
     for (int sample = 0; sample < 32; ++sample) {
-        SimdFloat radius;
+        SimdFloat radius{};
         for (int lane = 0; lane < SIMD_FLOAT_SIZE; ++lane) {
-            radius[lane] = static_cast<float>((sample * SIMD_FLOAT_SIZE + lane) % 31) / 15;
+            simdSetLane(
+                radius, lane, static_cast<float>((sample * SIMD_FLOAT_SIZE + lane) % 31) / 15);
         }
         if (sample == 0) {
-            radius[0] = 0;
-            radius[1] = 1e-30f;
-            radius[2] = 1e30f;
+            simdSetLane(radius, 0, 0);
+            simdSetLane(radius, 1, 1e-30f);
+            simdSetLane(radius, 2, 1e30f);
         }
         auto const values = radial_kernel::value(table, radius);
         auto const derivatives = radial_kernel::derivative(table, radius);
         auto const forces = radial_kernel::forceFactor(table, radius);
         auto const potentials = radial_kernel::potential(table, radius);
         for (int lane = 0; lane < SIMD_FLOAT_SIZE; ++lane) {
-            close(values[lane], radial_kernel::value(table, radius[lane]), 5e-6, "SIMD density");
-            close(derivatives[lane], radial_kernel::derivative(table, radius[lane]), 5e-6,
+            float const scalarRadius = radius[lane];
+            close(values[lane], radial_kernel::value(table, scalarRadius), 5e-6, "SIMD density");
+            close(derivatives[lane], radial_kernel::derivative(table, scalarRadius), 5e-6,
                 "SIMD derivative");
             close(
-                forces[lane], radial_kernel::forceFactor(table, radius[lane]), 5e-6, "SIMD force");
-            close(potentials[lane], radial_kernel::potential(table, radius[lane]), 5e-6,
+                forces[lane], radial_kernel::forceFactor(table, scalarRadius), 5e-6, "SIMD force");
+            close(potentials[lane], radial_kernel::potential(table, scalarRadius), 5e-6,
                 "SIMD potential");
         }
     }

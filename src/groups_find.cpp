@@ -184,26 +184,29 @@ hpx::future<size_t> groupsFind(TreeId self, Vector<TreeId> checklist, double lin
                 }
             }
             for (ParticleInteger k = myRng.first; k < myRng.second; k++) {
-                SimdInt sinkX = particlesPos(XDIM, k).raw();
-                SimdInt sinkY = particlesPos(YDIM, k).raw();
-                SimdInt sinkZ = particlesPos(ZDIM, k).raw();
+                SimdInt sinkX = simdBroadcast<SimdInt>(particlesPos(XDIM, k).raw());
+                SimdInt sinkY = simdBroadcast<SimdInt>(particlesPos(YDIM, k).raw());
+                SimdInt sinkZ = simdBroadcast<SimdInt>(particlesPos(ZDIM, k).raw());
                 for (int j = 0; j < totalSize; j += SIMD_FLOAT_SIZE) {
-                    static SimdFloat const toFloatFactor(kFixed2float);
+                    static SimdFloat const toFloatFactor = simdBroadcast<SimdFloat>(kFixed2float);
                     int const lmax = std::min(totalSize, j + SIMD_FLOAT_SIZE);
-                    SimdInt sourceX;
-                    SimdInt sourceY;
-                    SimdInt sourceZ;
+                    SimdInt sourceX = sinkX;
+                    SimdInt sourceY = sinkY;
+                    SimdInt sourceZ = sinkZ;
                     for (int l = j; l < lmax; l++) {
                         int const l0 = l - j;
-                        sourceX[l0] = xValue2[l].raw();
-                        sourceY[l0] = yValue2[l].raw();
-                        sourceZ[l0] = zValue2[l].raw();
+                        simdSetLane(sourceX, l0, xValue2[l].raw());
+                        simdSetLane(sourceY, l0, yValue2[l].raw());
+                        simdSetLane(sourceZ, l0, zValue2[l].raw());
                     }
-                    SimdFloat const x = SimdFloat(sourceX - sinkX) * toFloatFactor;
-                    SimdFloat const y = SimdFloat(sourceY - sinkY) * toFloatFactor;
-                    SimdFloat const z = SimdFloat(sourceZ - sinkZ) * toFloatFactor;
+                    SimdFloat const x =
+                        simdCast<SimdFloat>(simdPositionDifference(sourceX, sinkX)) * toFloatFactor;
+                    SimdFloat const y =
+                        simdCast<SimdFloat>(simdPositionDifference(sourceY, sinkY)) * toFloatFactor;
+                    SimdFloat const z =
+                        simdCast<SimdFloat>(simdPositionDifference(sourceZ, sinkZ)) * toFloatFactor;
                     SimdFloat const dist = sqr(x, y, z);
-                    SimdFloat const lt = dist < linkingLengthSquared;
+                    auto const lt = dist < linkingLengthSquared;
                     for (int l = j; l < lmax; l++) {
                         int const l0 = l - j;
                         if (lt[l0]) {
@@ -225,28 +228,35 @@ hpx::future<size_t> groupsFind(TreeId self, Vector<TreeId> checklist, double lin
             do {
                 foundLink = false;
                 for (ParticleInteger j = myRng.first; j < myRng.second; j++) {
-                    SimdInt sinkX = particlesPos(XDIM, j).raw();
-                    SimdInt sinkY = particlesPos(YDIM, j).raw();
-                    SimdInt sinkZ = particlesPos(ZDIM, j).raw();
+                    SimdInt sinkX = simdBroadcast<SimdInt>(particlesPos(XDIM, j).raw());
+                    SimdInt sinkY = simdBroadcast<SimdInt>(particlesPos(YDIM, j).raw());
+                    SimdInt sinkZ = simdBroadcast<SimdInt>(particlesPos(ZDIM, j).raw());
                     for (ParticleInteger k = j + 1; k < myRng.second; k += SIMD_FLOAT_SIZE) {
-                        static SimdFloat const toFloatFactor(kFixed2float);
+                        static SimdFloat const toFloatFactor =
+                            simdBroadcast<SimdFloat>(kFixed2float);
                         int const lmax = std::min(myRng.second, k + SIMD_FLOAT_SIZE);
-                        SimdInt sourceX;
-                        SimdInt sourceY;
-                        SimdInt sourceZ;
+                        SimdInt sourceX = sinkX;
+                        SimdInt sourceY = sinkY;
+                        SimdInt sourceZ = sinkZ;
                         for (int l = k; l < lmax; l++) {
                             int const l0 = l - k;
-                            sourceX[l0] = particlesPos(XDIM, l).raw();
-                            sourceY[l0] = particlesPos(YDIM, l).raw();
-                            sourceZ[l0] = particlesPos(ZDIM, l).raw();
+                            simdSetLane(sourceX, l0, particlesPos(XDIM, l).raw());
+                            simdSetLane(sourceY, l0, particlesPos(YDIM, l).raw());
+                            simdSetLane(sourceZ, l0, particlesPos(ZDIM, l).raw());
                         }
-                        SimdFloat const x = SimdFloat(sourceX - sinkX) * toFloatFactor;
-                        SimdFloat const y = SimdFloat(sourceY - sinkY) * toFloatFactor;
-                        SimdFloat const z = SimdFloat(sourceZ - sinkZ) * toFloatFactor;
+                        SimdFloat const x =
+                            simdCast<SimdFloat>(simdPositionDifference(sourceX, sinkX)) *
+                            toFloatFactor;
+                        SimdFloat const y =
+                            simdCast<SimdFloat>(simdPositionDifference(sourceY, sinkY)) *
+                            toFloatFactor;
+                        SimdFloat const z =
+                            simdCast<SimdFloat>(simdPositionDifference(sourceZ, sinkZ)) *
+                            toFloatFactor;
                         SimdFloat const dist = sqr(x, y, z);
-                        SimdFloat const lt = dist < linkingLengthSquared;
+                        auto const lt = dist < linkingLengthSquared;
                         for (int l = k; l < lmax; l++) {
-                            if (lt[l - k] == 1.0) {
+                            if (lt[l - k]) {
                                 auto& grpa = particlesGroup(l);
                                 auto& grpb = particlesGroup(j);
                                 if ((GroupInteger) grpa == NO_GROUP) {

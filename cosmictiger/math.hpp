@@ -115,18 +115,6 @@ CUDA_EXPORT inline T roundDown(T a, T b) {
     return (a / b) * b;
 }
 
-CUDA_EXPORT inline float anytrue(float x) {
-    return x;
-}
-
-#ifndef __CUDACC__
-
-inline float anytrue(SimdFloat const& x) {
-    return x.sum();
-}
-
-#endif
-
 CUDA_EXPORT
 inline double sinc(double x) {
     if (x == 0.0) {
@@ -156,15 +144,15 @@ inline float tsc(float x) {
 
 template <class T>
 CUDA_EXPORT inline T erfnearzero(T x) {
-    T const c[15] = {1.1283791670955126, -0.37612638903183752, 0.11283791670955126,
+    double const c[15] = {1.1283791670955126, -0.37612638903183752, 0.11283791670955126,
         -0.026866170645131252, 0.0052239776254421878, -0.00085483270234508528,
         0.00012055332981789664, -0.000014925650358406251, 1.6462114365889247e-6,
         -1.6365844691234924e-7, 1.4807192815879217e-8, -1.2290555301717927e-9,
         9.422759064650411e-11, -6.7113668551641104e-12, 4.4632242632864773e-13};
     T x2 = x * x;
-    T w = c[14];
+    T w = simdBroadcast<T>(c[14]);
     for (int i = 13; i >= 0; i--) {
-        w = fmaf(w, x2, c[i]);
+        w = simdFma(w, x2, simdBroadcast<T>(c[i]));
     }
     w *= x;
     return w;
@@ -172,40 +160,40 @@ CUDA_EXPORT inline T erfnearzero(T x) {
 
 template <class T>
 CUDA_EXPORT T expnearzero(T x) {
-    T c0 = 1.;
-    T c1 = 1.;
-    T c2 = 0.5;
-    T c3 = 0.166666666666667;
-    T c4 = 0.0416666666666667;
-    T c5 = 0.00833333333333333;
-    T c6 = 0.00138888888888889;
-    T c7 = 0.000198412698412698;
-    T c8 = 0.0000248015873015873;
-    T c9 = 2.75573192239859e-6;
-    T c10 = 2.75573192239859e-7;
-    T c11 = 2.50521083854417e-8;
-    T c12 = 2.08767569878681e-9;
-    T c13 = 1.60590438368216e-10;
-    T c14 = 1.1470745597729725e-11;
-    T c15 = 7.647163731819816e-13;
-    T c16 = 4.779477332387385e-14;
+    T c0 = simdBroadcast<T>(1.);
+    T c1 = simdBroadcast<T>(1.);
+    T c2 = simdBroadcast<T>(0.5);
+    T c3 = simdBroadcast<T>(0.166666666666667);
+    T c4 = simdBroadcast<T>(0.0416666666666667);
+    T c5 = simdBroadcast<T>(0.00833333333333333);
+    T c6 = simdBroadcast<T>(0.00138888888888889);
+    T c7 = simdBroadcast<T>(0.000198412698412698);
+    T c8 = simdBroadcast<T>(0.0000248015873015873);
+    T c9 = simdBroadcast<T>(2.75573192239859e-6);
+    T c10 = simdBroadcast<T>(2.75573192239859e-7);
+    T c11 = simdBroadcast<T>(2.50521083854417e-8);
+    T c12 = simdBroadcast<T>(2.08767569878681e-9);
+    T c13 = simdBroadcast<T>(1.60590438368216e-10);
+    T c14 = simdBroadcast<T>(1.1470745597729725e-11);
+    T c15 = simdBroadcast<T>(7.647163731819816e-13);
+    T c16 = simdBroadcast<T>(4.779477332387385e-14);
     T w = c16;
-    w = fmaf(w, x, c15);
-    w = fmaf(w, x, c14);
-    w = fmaf(w, x, c13);
-    w = fmaf(w, x, c12);
-    w = fmaf(w, x, c11);
-    w = fmaf(w, x, c10);
-    w = fmaf(w, x, c9);
-    w = fmaf(w, x, c8);
-    w = fmaf(w, x, c7);
-    w = fmaf(w, x, c6);
-    w = fmaf(w, x, c5);
-    w = fmaf(w, x, c4);
-    w = fmaf(w, x, c3);
-    w = fmaf(w, x, c2);
-    w = fmaf(w, x, c1);
-    w = fmaf(w, x, c0);
+    w = simdFma(w, x, c15);
+    w = simdFma(w, x, c14);
+    w = simdFma(w, x, c13);
+    w = simdFma(w, x, c12);
+    w = simdFma(w, x, c11);
+    w = simdFma(w, x, c10);
+    w = simdFma(w, x, c9);
+    w = simdFma(w, x, c8);
+    w = simdFma(w, x, c7);
+    w = simdFma(w, x, c6);
+    w = simdFma(w, x, c5);
+    w = simdFma(w, x, c4);
+    w = simdFma(w, x, c3);
+    w = simdFma(w, x, c2);
+    w = simdFma(w, x, c1);
+    w = simdFma(w, x, c0);
     return w;
 }
 

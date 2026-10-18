@@ -63,7 +63,7 @@ int computeDx(int pValue2, char const* name = "position", bool trless = false, b
         return trlessIndex(x, y, z, pValue2);
     }) :
                           std::function<int(int, int, int)>(symIndex);
-    tprint("x[%i] = %s(1);\n", index(0, 0, 0), dble ? "T" : "T");
+    tprint("x[%i] = simdBroadcast<T>(1);\n", index(0, 0, 0));
     tprint("x[%i] = %s[0];\n", index(1, 0, 0), name);
     tprint("x[%i] = %s[1];\n", index(0, 1, 0), name);
     tprint("x[%i] = %s[2];\n", index(0, 0, 1), name);
@@ -110,7 +110,7 @@ int computeDx(int pValue2, char const* name = "position", bool trless = false, b
 int computeDxTensor(int pValue2, char const* name = "position") {
     Array<int, NDIM> n;
     tprint("SymmetricTensor<T,%i> dx;\n", pValue2);
-    tprint("dx[0] = T(1);\n");
+    tprint("dx[0] = simdBroadcast<T>(1);\n");
     tprint("dx[%i] = %s[0];\n", symIndex(1, 0, 0), name);
     tprint("dx[%i] = %s[1];\n", symIndex(0, 1, 0), name);
     tprint("dx[%i] = %s[2];\n", symIndex(0, 0, 1), name);
@@ -162,14 +162,14 @@ int eqn(std::string a, Array<int, NDIM> n, std::string c, Array<int, NDIM> j) {
 }
 
 int mul(std::string a, Array<int, NDIM> n, double b, std::string c, Array<int, NDIM> j) {
-    tprint("%s%i%i%i = T(%.9e) * %s%i%i%i;\n", a.c_str(), n[0], n[1], n[2], b, c.c_str(), j[0],
-        j[1], j[2]);
+    tprint("%s%i%i%i = simdBroadcast<T>(%.9e) * %s%i%i%i;\n", a.c_str(), n[0], n[1], n[2], b,
+        c.c_str(), j[0], j[1], j[2]);
     return 1;
 }
 
 int fma(std::string a, Array<int, NDIM> n, double b, std::string c, Array<int, NDIM> j) {
-    tprint("%s%i%i%i = fmaf(T(%.9e), %s%i%i%i, %s%i%i%i);\n", a.c_str(), n[0], n[1], n[2], b,
-        c.c_str(), j[0], j[1], j[2], a.c_str(), n[0], n[1], n[2]);
+    tprint("%s%i%i%i = simdFma(simdBroadcast<T>(%.9e), %s%i%i%i, %s%i%i%i);\n", a.c_str(), n[0],
+        n[1], n[2], b, c.c_str(), j[0], j[1], j[2], a.c_str(), n[0], n[1], n[2]);
     return 2;
 }
 
@@ -222,7 +222,8 @@ int computeDetrace(std::string iname, std::string oname, char type = 'f') {
                                     flops++;
                                 } else {
                                     ASPRINTF(&str,
-                                        "T %sOrder%iTrace%iIndex%i%i%i = T(%.9e) * %s[%i];\n",
+                                        "T %sOrder%iTrace%iIndex%i%i%i = simdBroadcast<T>(%.9e) * "
+                                        "%s[%i];\n",
                                         iname.c_str(), n0, m0, j[0], j[1], j[2], factor,
                                         iname.c_str(), symIndex(p[0], p[1], p[2]));
                                     flops++;
@@ -243,7 +244,8 @@ int computeDetrace(std::string iname, std::string oname, char type = 'f') {
                                     flops++;
                                 } else {
                                     ASPRINTF(&str,
-                                        "%sOrder%iTrace%iIndex%i%i%i = fmaf(T(%.9e), %s[%i], "
+                                        "%sOrder%iTrace%iIndex%i%i%i = "
+                                        "simdFma(simdBroadcast<T>(%.9e), %s[%i], "
                                         "%sOrder%iTrace%iIndex%i%i%i);\n",
                                         iname.c_str(), n0, m0, j[0], j[1], j[2], factor,
                                         iname.c_str(), symIndex(p[0], p[1], p[2]), iname.c_str(),
@@ -309,7 +311,8 @@ int computeDetrace(std::string iname, std::string oname, char type = 'f') {
                                         flops++;
                                     } else {
                                         ASPRINTF(&str,
-                                            "%s[%i] = T(%.9e) * %sOrder%iTrace%iIndex%i%i%i;\n",
+                                            "%s[%i] = simdBroadcast<T>(%.9e) * "
+                                            "%sOrder%iTrace%iIndex%i%i%i;\n",
                                             oname.c_str(), trlessIndex(n[0], n[1], n[2], pValue),
                                             factor, iname.c_str(), n0, m0, p[0], p[1], p[2]);
                                         flops++;
@@ -325,7 +328,8 @@ int computeDetrace(std::string iname, std::string oname, char type = 'f') {
                                             symIndex(p[0], p[1], p[2]));
                                         flops++;
                                     } else {
-                                        ASPRINTF(&str, "%s[%i] = T(%.9e) * %s[%i];\n",
+                                        ASPRINTF(&str,
+                                            "%s[%i] = simdBroadcast<T>(%.9e) * %s[%i];\n",
                                             oname.c_str(), trlessIndex(n[0], n[1], n[2], pValue),
                                             factor, iname.c_str(), symIndex(p[0], p[1], p[2]));
                                         ;
@@ -363,14 +367,17 @@ int computeDetrace(std::string iname, std::string oname, char type = 'f') {
                                 } else {
                                     if (m0 > 0) {
                                         ASPRINTF(&str,
-                                            "%s[%i] = fmaf(T(%.9e), %sOrder%iTrace%iIndex%i%i%i, "
+                                            "%s[%i] = simdFma(simdBroadcast<T>(%.9e), "
+                                            "%sOrder%iTrace%iIndex%i%i%i, "
                                             "%s[%i]);\n",
                                             oname.c_str(), trlessIndex(n[0], n[1], n[2], pValue),
                                             factor, iname.c_str(), n0, m0, p[0], p[1], p[2],
                                             oname.c_str(), trlessIndex(n[0], n[1], n[2], pValue));
                                         flops += 2;
                                     } else {
-                                        ASPRINTF(&str, "%s[%i] = fmaf(T(%.9e), %s[%i], %s[%i]);\n",
+                                        ASPRINTF(&str,
+                                            "%s[%i] = simdFma(simdBroadcast<T>(%.9e), %s[%i], "
+                                            "%s[%i]);\n",
                                             oname.c_str(), trlessIndex(n[0], n[1], n[2], pValue),
                                             factor, iname.c_str(), symIndex(p[0], p[1], p[2]),
                                             oname.c_str(), trlessIndex(n[0], n[1], n[2], pValue));
@@ -446,9 +453,10 @@ int computeDetraceD(std::string iname, std::string oname, char type = 'f') {
                                         trlessIndex(p[0], p[1], p[2], pValue));
                                     flops++;
                                 } else {
-                                    ASPRINTF(&str, "%s[%i] = T(%.9e) * %s[%i];\n", oname.c_str(),
-                                        trlessIndex(n[0], n[1], n[2], pValue), factor,
-                                        iname.c_str(), trlessIndex(p[0], p[1], p[2], pValue));
+                                    ASPRINTF(&str, "%s[%i] = simdBroadcast<T>(%.9e) * %s[%i];\n",
+                                        oname.c_str(), trlessIndex(n[0], n[1], n[2], pValue),
+                                        factor, iname.c_str(),
+                                        trlessIndex(p[0], p[1], p[2], pValue));
                                     flops++;
                                 }
                                 asn.push_back(str);
@@ -466,7 +474,9 @@ int computeDetraceD(std::string iname, std::string oname, char type = 'f') {
                                         trlessIndex(p[0], p[1], p[2], pValue));
                                     flops += 1;
                                 } else {
-                                    ASPRINTF(&str, "%s[%i] = fmaf(T(%.9e), %s[%i], %s[%i]);\n",
+                                    ASPRINTF(&str,
+                                        "%s[%i] = simdFma(simdBroadcast<T>(%.9e), %s[%i], "
+                                        "%s[%i]);\n",
                                         oname.c_str(), trlessIndex(n[0], n[1], n[2], pValue),
                                         factor, iname.c_str(),
                                         trlessIndex(p[0], p[1], p[2], pValue), oname.c_str(),
@@ -531,7 +541,7 @@ int computeDetraceEwald(std::string iname, std::string oname) {
                             char* str;
                             if (close21(factor)) {
                                 ASPRINTF(&str,
-                                    "%s[%i] = fmaf(%s[%i], dRinvPower%iOrder%i, %s[%i]);\n",
+                                    "%s[%i] = simdFma(%s[%i], dRinvPower%iOrder%i, %s[%i]);\n",
                                     oname.c_str(), symIndex(n[0], n[1], n[2]), iname.c_str(),
                                     symIndex(p[0], p[1], p[2]), n0 - m0, m0, oname.c_str(),
                                     symIndex(n[0], n[1], n[2]));
@@ -543,7 +553,8 @@ int computeDetraceEwald(std::string iname, std::string oname) {
                                 flops += 2;
                             } else {
                                 ASPRINTF(&str,
-                                    "%s[%i] = fmaf(T(%.9e), %s[%i]*dRinvPower%iOrder%i, %s[%i]);\n",
+                                    "%s[%i] = simdFma(simdBroadcast<T>(%.9e), "
+                                    "%s[%i]*dRinvPower%iOrder%i, %s[%i]);\n",
                                     oname.c_str(), symIndex(n[0], n[1], n[2]), factor,
                                     iname.c_str(), symIndex(p[0], p[1], p[2]), n0 - m0, m0,
                                     oname.c_str(), symIndex(n[0], n[1], n[2]));
@@ -635,11 +646,11 @@ int printConstRef(std::string name, std::string& cmd,
                     fma = false;
                 }
                 if (fma) {
-                    cmd += "fmaf(";
+                    cmd += "simdFma(";
                 } else {
                     cmd += "(";
                 }
-                cmd += "T(";
+                cmd += "simdBroadcast<T>(";
                 cmd += std::to_string(counts[l]);
                 if (fma) {
                     cmd += "),";
@@ -760,9 +771,9 @@ void doExpansion(bool two) {
             q, P);
     }
     indent();
-    tprint("position[0] *= T(SCALE_FACTOR);\n");
-    tprint("position[1] *= T(SCALE_FACTOR);\n");
-    tprint("position[2] *= T(SCALE_FACTOR);\n");
+    tprint("position[0] *= simdBroadcast<T>(SCALE_FACTOR);\n");
+    tprint("position[1] *= simdBroadcast<T>(SCALE_FACTOR);\n");
+    tprint("position[2] *= simdBroadcast<T>(SCALE_FACTOR);\n");
     tprint("SymmetricTracelessTensor<T, %i> lb;\n", q);
     flops += 3 + computeDx(P);
     Array<int, NDIM> n;
@@ -823,16 +834,16 @@ void doExpansion(bool two) {
         auto const k = entries[0][j].k;
         auto const index = entries[0][j].ldest;
         if (!close21(lastFactor / factor)) {
-            tprint("lb[0] *= T(%.9e);\n", lastFactor / factor);
+            tprint("lb[0] *= simdBroadcast<T>(%.9e);\n", lastFactor / factor);
             lastFactor = factor;
             phiFlops++;
         }
-        tprint("lb[%i] = fmaf( x[%i], la%i%i%i, lb[%i]);\n", index, symIndex(k[0], k[1], k[2]),
+        tprint("lb[%i] = simdFma( x[%i], la%i%i%i, lb[%i]);\n", index, symIndex(k[0], k[1], k[2]),
             p[0], p[1], p[2], index);
         phiFlops += 2;
     }
     if (!close21(lastFactor)) {
-        tprint("lb[0] *= T(%.9e);\n", lastFactor);
+        tprint("lb[0] *= simdBroadcast<T>(%.9e);\n", lastFactor);
     }
     deindent();
     phiFlops++;
@@ -862,20 +873,21 @@ void doExpansion(bool two) {
                 auto const p = entries[i][j].p;
                 auto const k = entries[i][j].k;
                 if (!close21(factor / lastFactor)) {
-                    ASPRINTF(&str, "lb[%i] *= T(%.9e);\n", index, lastFactor / factor);
+                    ASPRINTF(
+                        &str, "lb[%i] *= simdBroadcast<T>(%.9e);\n", index, lastFactor / factor);
                     cmds.push_back(str);
                     free(str);
                     flops++;
                     lastFactor = factor;
                 }
-                ASPRINTF(&str, "lb[%i] = fmaf( x[%i], la%i%i%i, lb[%i]);\n", index,
+                ASPRINTF(&str, "lb[%i] = simdFma( x[%i], la%i%i%i, lb[%i]);\n", index,
                     symIndex(k[0], k[1], k[2]), p[0], p[1], p[2], index);
                 cmds.push_back(str);
                 free(str);
                 flops += 2;
             }
             if (!close21(lastFactor)) {
-                ASPRINTF(&str, "lb[%i] *= T(%.9e);\n", index, lastFactor);
+                ASPRINTF(&str, "lb[%i] *= simdBroadcast<T>(%.9e);\n", index, lastFactor);
                 cmds.push_back(str);
                 free(str);
             }
@@ -1053,9 +1065,9 @@ void doExpansionCuda() {
     indent();
 
     tprint("int const tid = threadIdx.x;\n");
-    tprint("position[0] *= T(SCALE_FACTOR);\n");
-    tprint("position[1] *= T(SCALE_FACTOR);\n");
-    tprint("position[2] *= T(SCALE_FACTOR);\n");
+    tprint("position[0] *= simdBroadcast<T>(SCALE_FACTOR);\n");
+    tprint("position[1] *= simdBroadcast<T>(SCALE_FACTOR);\n");
+    tprint("position[2] *= simdBroadcast<T>(SCALE_FACTOR);\n");
     tprint("SymmetricTracelessTensor<T, %i> lb;\n", q);
     tprint("SymmetricTensor<T, %i> lc;\n", q);
     tprint("for( int i = 0; i < EXPANSION_SIZE; i ++ ) {\n");
@@ -1075,14 +1087,14 @@ void doExpansionCuda() {
     tprint("for( int i = tid; i < %i; i+=WARP_SIZE) {\n",
         entries1.size() - 1 + (entries1.size() == entries2.size() ? 1 : 0));
     indent();
-    tprint("lb[ldest1[i]] = fmaf(factor1[i] * dx[xsrc1[i]], lc[lsrc1[i]], lb[ldest1[i]]);\n");
+    tprint("lb[ldest1[i]] = simdFma(factor1[i] * dx[xsrc1[i]], lc[lsrc1[i]], lb[ldest1[i]]);\n");
     deindent();
     tprint("}\n");
     tprint("if( doPhi ) {\n");
     indent();
     tprint("for( int i = tid; i < %i; i+=WARP_SIZE) {\n", phiEntries.size());
     indent();
-    tprint("lb[0] = fmaf(phiFactor[i] * dx[phiLsrc[i]], lc[phiLsrc[i]], lb[0]);\n");
+    tprint("lb[0] = simdFma(phiFactor[i] * dx[phiLsrc[i]], lc[phiLsrc[i]], lb[0]);\n");
     deindent();
     tprint("}\n");
     deindent();
@@ -1112,40 +1124,42 @@ void ewald(int directFlops) {
            "{\n",
         P);
     indent();
-    tprint("position[0] *= T(SCALE_FACTOR);\n");
-    tprint("position[1] *= T(SCALE_FACTOR);\n");
-    tprint("position[2] *= T(SCALE_FACTOR);\n");
+    tprint("position[0] *= simdBroadcast<T>(SCALE_FACTOR);\n");
+    tprint("position[1] *= simdBroadcast<T>(SCALE_FACTOR);\n");
+    tprint("position[2] *= simdBroadcast<T>(SCALE_FACTOR);\n");
     tprint("EwaldConst econst;\n");
     tprint("FlopCounter<int> flops = %i;\n", 7);
-    tprint("T r = sqrt(fmaf(position[0], position[0], fmaf(position[1], position[1], "
+    tprint("T r = simdSqrt(simdFma(position[0], position[0], simdFma(position[1], position[1], "
            "sqr(position[2]))));\n");    // 6
-    tprint("T const fouroversqrtpi = T(%.9e);\n", 4.0 / sqrt(M_PI));
+    tprint("T const fouroversqrtpi = simdBroadcast<T>(%.9e);\n", 4.0 / sqrt(M_PI));
     tprint("SymmetricTensor<T, %i> dreal;\n", P);
     tprint("SymmetricTracelessTensor<T,%i> dfour;\n", P);
     tprint("dreal = 0.0f;\n");
     tprint("dfour = 0.0f;\n");
     tprint("d = 0.0f;\n");
     tprint("auto const realsz = econst.nreal();\n");
-    tprint("T const zeroMask = r > T(0.0);\n");    // 1
+    tprint("auto const zeroMask = r > simdBroadcast<T>(0.0);\n");    // 1
     int theseFlops = 0;
 
     tprint("int icnt = 0;\n");
 
     tprint("Array<T, NDIM> dx;\n");
     tprint("dx = position;\n");
-    tprint("{\n");                                                             // 1
-    tprint("T r2 = fmaf(dx[0], dx[0], fmaf(dx[1], dx[1], sqr(dx[2])));\n");    // 5
+    tprint("{\n");                                                                   // 1
+    tprint("T r2 = simdFma(dx[0], dx[0], simdFma(dx[1], dx[1], sqr(dx[2])));\n");    // 5
     indent();
     tprint("icnt++;\n");
-    tprint("T const r = sqrt(r2);\n");                           // 1
-    tprint("T const n8r = T(-8*SCALE_FACTOR_INV2) * r;\n");      // 1
-    tprint("T const rinv = (r > T(0)) / max(r, 1.0e-20);\n");    // 2
-    tprint("T exp0 = expnearzero( -T(4*SCALE_FACTOR_INV2) * r2 );\n");
-    tprint("T erf0 = erfnearzero(T(2*SCALE_FACTOR_INV1) * r);\n");
-    tprint("T const expfactor = T(2.256758334191025*SCALE_FACTOR_INV1) * exp0;\n");    // 1
-    tprint("T e0 = expfactor * rinv;\n");                                              // 1
-    tprint("T const rinv0 = T(1);\n");                                                 // 2
-    tprint("T const rinv1 = rinv;\n");                                                 // 2
+    tprint("T const r = simdSqrt(r2);\n");                                    // 1
+    tprint("T const n8r = simdBroadcast<T>(-8*SCALE_FACTOR_INV2) * r;\n");    // 1
+    tprint("T const rinv = simdSelect(r > simdBroadcast<T>(0), simdBroadcast<T>(1), "
+           "simdBroadcast<T>(0)) / simdMax(r, simdBroadcast<T>(1.0e-20));\n");    // 2
+    tprint("T exp0 = expnearzero( -simdBroadcast<T>(4*SCALE_FACTOR_INV2) * r2 );\n");
+    tprint("T erf0 = erfnearzero(simdBroadcast<T>(2*SCALE_FACTOR_INV1) * r);\n");
+    tprint(
+        "T const expfactor = simdBroadcast<T>(2.256758334191025*SCALE_FACTOR_INV1) * exp0;\n");    // 1
+    tprint("T e0 = expfactor * rinv;\n");                // 1
+    tprint("T const rinv0 = simdBroadcast<T>(1);\n");    // 2
+    tprint("T const rinv1 = rinv;\n");                   // 2
     for (int l = 2; l < (P + 1) / 2; l++) {
         int const i = l / 2;
         int const j = l - i;
@@ -1154,7 +1168,8 @@ void ewald(int directFlops) {
     }
     tprint("T const d0 = erf0 * rinv;\n");    // 2
     for (int l = 1; l < P; l++) {
-        tprint("T const d%i = fmaf(T(%i) * d%i, rinv, e0);\n", l, -2 * l + 1, l - 1);    // (P-1)*4
+        tprint("T const d%i = simdFma(simdBroadcast<T>(%i) * d%i, rinv, e0);\n", l, -2 * l + 1,
+            l - 1);    // (P-1)*4
         if (l != P - 1) {
             tprint("e0 *= n8r;\n");    // (P-1)
         }
@@ -1178,8 +1193,7 @@ void ewald(int directFlops) {
     tprint("auto const drz = econst.d0();\n");
     tprint("for( int i = 0; i < %i; i++) {\n", (P + 2) * (P + 1) * P / 6);
     indent();
-    tprint("dreal[i] *= zeroMask;\n");
-    tprint("dreal[i] -= (T(1) - zeroMask) * drz[i];\n");
+    tprint("dreal[i] = simdSelect(zeroMask, dreal[i], -simdBroadcast<T>(drz[i]));\n");
     deindent();
     tprint("}\n");
     deindent();
@@ -1192,23 +1206,25 @@ void ewald(int directFlops) {
     tprint("Array<T, NDIM> dx;\n");
     tprint("for (int dim = 0; dim < NDIM; dim++) {\n");
     indent();
-    tprint("dx[dim] = position[dim] - T(SCALE_FACTOR) * n[dim];\n");    // 3
+    tprint("dx[dim] = position[dim] - simdBroadcast<T>(SCALE_FACTOR) * n[dim];\n");    // 3
     deindent();
     tprint("}\n");
-    tprint("T r2 = fmaf(dx[0], dx[0], fmaf(dx[1], dx[1], sqr(dx[2])));\n");    // 5
-    tprint("if (anytrue(r2 < T(SCALE_FACTOR2*EWALD_REAL_CUTOFF2))) {\n");      // 1
+    tprint("T r2 = simdFma(dx[0], dx[0], simdFma(dx[1], dx[1], sqr(dx[2])));\n");             // 5
+    tprint("if (simdAnyOf(r2 < simdBroadcast<T>(SCALE_FACTOR2*EWALD_REAL_CUTOFF2))) {\n");    // 1
     indent();
-    tprint("icnt++;\n");                                         // 1
-    tprint("T const r = sqrt(r2);\n");                           // 1
-    tprint("T const n8r = T(-8 * SCALE_FACTOR_INV2) * r;\n");    // 1
-    tprint("T const rinv = (r > T(0)) / max(r, 1.0e-20);\n");    // 2
+    tprint("icnt++;\n");                                                        // 1
+    tprint("T const r = simdSqrt(r2);\n");                                      // 1
+    tprint("T const n8r = simdBroadcast<T>(-8 * SCALE_FACTOR_INV2) * r;\n");    // 1
+    tprint("T const rinv = simdSelect(r > simdBroadcast<T>(0), simdBroadcast<T>(1), "
+           "simdBroadcast<T>(0)) / simdMax(r, simdBroadcast<T>(1.0e-20));\n");    // 2
     tprint("T exp0;\n");
     tprint("T erfc0;\n");
-    tprint("erfcexp(T(2.*SCALE_FACTOR_INV1) * r, &erfc0, &exp0);\n");                  // 20
-    tprint("T const expfactor = fouroversqrtpi  * T(SCALE_FACTOR_INV1) * exp0;\n");    // 1
-    tprint("T e0 = expfactor * rinv;\n");                                              // 1
-    tprint("T const rinv0 = T(1);\n");                                                 // 2
-    tprint("T const rinv1 = rinv;\n");                                                 // 2
+    tprint("erfcexp(simdBroadcast<T>(2.*SCALE_FACTOR_INV1) * r, &erfc0, &exp0);\n");    // 20
+    tprint(
+        "T const expfactor = fouroversqrtpi  * simdBroadcast<T>(SCALE_FACTOR_INV1) * exp0;\n");    // 1
+    tprint("T e0 = expfactor * rinv;\n");                // 1
+    tprint("T const rinv0 = simdBroadcast<T>(1);\n");    // 2
+    tprint("T const rinv1 = rinv;\n");                   // 2
     for (int l = 2; l < (P + 1) / 2; l++) {
         int const i = l / 2;
         int const j = l - i;
@@ -1217,7 +1233,8 @@ void ewald(int directFlops) {
     }
     tprint("T const d0 = -erfc0 * rinv;\n");    // 2
     for (int l = 1; l < P; l++) {
-        tprint("T const d%i = fmaf(T(%i) * d%i, rinv, e0);\n", l, -2 * l + 1, l - 1);    // (P-1)*4
+        tprint("T const d%i = simdFma(simdBroadcast<T>(%i) * d%i, rinv, e0);\n", l, -2 * l + 1,
+            l - 1);    // (P-1)*4
         if (l != P - 1) {
             tprint("e0 *= n8r;\n");    // (P-1)
         }
@@ -1252,10 +1269,12 @@ void ewald(int directFlops) {
     indent();
     tprint("auto const &h = econst.fourIndex(i);\n");
     tprint("auto const& d0Value = econst.fourExpansion(i);\n");
-    tprint("T const hdotx = fmaf(h[0], position[0], fmaf(h[1], position[1], h[2] * "
+    tprint("T const hdotx = simdFma(simdBroadcast<T>(h[0]), position[0], "
+           "simdFma(simdBroadcast<T>(h[1]), position[1], simdBroadcast<T>(h[2]) * "
            "position[2]));\n");    // 5
     tprint("T cn, sn;\n");
-    tprint("sincos(T(2.0 * M_PI * SCALE_FACTOR_INV1) * hdotx, &sn, &cn);\n");    // 35
+    tprint(
+        "sincos(simdBroadcast<T>(2.0 * M_PI * SCALE_FACTOR_INV1) * hdotx, &sn, &cn);\n");    // 35
     theseFlops = 40;
     bool iscos[P * P + 1];
     for (k[0] = 0; k[0] < P; k[0]++) {
@@ -1270,7 +1289,8 @@ void ewald(int directFlops) {
     int maxi = (P * P + 1);
     for (int i = 0; i < maxi; i++) {
         int j = i + maxi;
-        tprint("dfour[%i] = fmaf(%cn, d0Value[%i], dfour[%i]);\n", i, iscos[i] ? 'c' : 's', i, i);
+        tprint("dfour[%i] = simdFma(%cn, simdBroadcast<T>(d0Value[%i]), dfour[%i]);\n", i,
+            iscos[i] ? 'c' : 's', i, i);
         theseFlops += 2;
     }
 
@@ -1281,8 +1301,8 @@ void ewald(int directFlops) {
     int thoseFlops = computeDetrace<P>("dreal", "d", 'd');
     thoseFlops += 16 + 3 * (P * P + 1);
     tprint("flops += %i * foursz + %i;\n", theseFlops, thoseFlops + P * P + 1);
-    tprint("d = d + dfour;\n");                                             // P*P+1
-    tprint("d[0] = T(%.9e * SCALE_FACTOR_INV1) + d[0]; \n", M_PI / 4.0);    // 1
+    tprint("d = d + dfour;\n");                                                            // P*P+1
+    tprint("d[0] = simdBroadcast<T>(%.9e * SCALE_FACTOR_INV1) + d[0]; \n", M_PI / 4.0);    // 1
     tprint("return flops;\n");
     deindent();
     tprint("}\n");
@@ -1318,6 +1338,7 @@ int main() {
     tprint("#include <cosmictiger/float2double.hpp>\n");
     tprint("#include <cosmictiger/flops.hpp>\n");
     tprint("#include <cosmictiger/math.hpp>\n");
+    tprint("#include <cosmictiger/simd_math.hpp>\n");
     tprint("#include <cosmictiger/tensor.hpp>\n\n");
     tprint("template<class T>\n");
     tprint("using Expansion = SymmetricTracelessTensor<T,%i>;\n", P);
@@ -1344,15 +1365,16 @@ int main() {
     indent();
     tprint("if( scale ) {\n");
     indent();
-    tprint("position[0] *= T(SCALE_FACTOR);\n");
-    tprint("position[1] *= T(SCALE_FACTOR);\n");
-    tprint("position[2] *= T(SCALE_FACTOR);\n");
+    tprint("position[0] *= simdBroadcast<T>(SCALE_FACTOR);\n");
+    tprint("position[1] *= simdBroadcast<T>(SCALE_FACTOR);\n");
+    tprint("position[2] *= simdBroadcast<T>(SCALE_FACTOR);\n");
     deindent();
     tprint("}\n");
     tprint("auto r2 = sqr(position[0], position[1], position[2]);\n");
     tprint("r2 = sqr(position[0], position[1], position[2]);\n");
-    tprint("T const r = sqrt(r2);\n");
-    tprint("T const rinv1 = -(r > T(0)) / max(r, T(1e-20));\n");
+    tprint("T const r = simdSqrt(r2);\n");
+    tprint("T const rinv1 = -simdSelect(r > simdBroadcast<T>(0), simdBroadcast<T>(1), "
+           "simdBroadcast<T>(0)) / simdMax(r, simdBroadcast<T>(1e-20));\n");
     for (int i = 1; i < P; i++) {
         int const j = i / 2;
         int const k = i - j;
@@ -1452,17 +1474,17 @@ int main() {
                 auto const m = entries[i][j].m;
                 if (!close21(lastCoeff / coeff)) {
                     double factor = lastCoeff / coeff;
-                    tprint("l[%i] *= T(%.9e);\n", nindex, factor);
+                    tprint("l[%i] *= simdBroadcast<T>(%.9e);\n", nindex, factor);
                     lastCoeff = coeff;
                     fl++;
                 }
-                tprint("l[%i] = fmaf(m%i%i%i, d%i%i%i, l[%i]);\n", nindex, m[0], m[1], m[2],
+                tprint("l[%i] = simdFma(m%i%i%i, d%i%i%i, l[%i]);\n", nindex, m[0], m[1], m[2],
                     n[0] + m[0], n[1] + m[1], n[2] + m[2], trlessIndex(n[0], n[1], n[2], pmax));
                 fl += 2;
             }
             if (!close21(lastCoeff)) {
                 fl++;
-                tprint("l[%i] *= T(%.9e);\n", nindex, lastCoeff);
+                tprint("l[%i] *= simdBroadcast<T>(%.9e);\n", nindex, lastCoeff);
             }
             if (nindex == 0) {
                 deindent();
@@ -1495,21 +1517,22 @@ int main() {
                 auto const m = entries[i][j].m;
                 if (!close21(lastCoeff / coeff)) {
                     double factor = lastCoeff / coeff;
-                    ASPRINTF(&str, "l[%i] *= T(%.9e);\n", nindex, factor);
+                    ASPRINTF(&str, "l[%i] *= simdBroadcast<T>(%.9e);\n", nindex, factor);
                     cmds.push_back(str);
                     free(str);
                     lastCoeff = coeff;
                     fl++;
                 }
-                ASPRINTF(&str, "l[%i] = fmaf(m%i%i%i, d%i%i%i, l[%i]);\n", nindex, m[0], m[1], m[2],
-                    n[0] + m[0], n[1] + m[1], n[2] + m[2], trlessIndex(n[0], n[1], n[2], pmax));
+                ASPRINTF(&str, "l[%i] = simdFma(m%i%i%i, d%i%i%i, l[%i]);\n", nindex, m[0], m[1],
+                    m[2], n[0] + m[0], n[1] + m[1], n[2] + m[2],
+                    trlessIndex(n[0], n[1], n[2], pmax));
                 cmds.push_back(str);
                 free(str);
                 fl += 2;
             }
             if (!close21(lastCoeff)) {
                 fl++;
-                ASPRINTF(&str, "l[%i] *= T(%.9e);\n", nindex, lastCoeff);
+                ASPRINTF(&str, "l[%i] *= simdBroadcast<T>(%.9e);\n", nindex, lastCoeff);
                 cmds.push_back(str);
             }
         }
@@ -1536,9 +1559,9 @@ int main() {
     flops = 0;
     indent();
     tprint("SymmetricTracelessTensor<T, %i> m;\n", P - 1);
-    tprint("position[0] *= -T(SCALE_FACTOR);\n");
-    tprint("position[1] *= -T(SCALE_FACTOR);\n");
-    tprint("position[2] *= -T(SCALE_FACTOR);\n");
+    tprint("position[0] *= -simdBroadcast<T>(SCALE_FACTOR);\n");
+    tprint("position[1] *= -simdBroadcast<T>(SCALE_FACTOR);\n");
+    tprint("position[2] *= -simdBroadcast<T>(SCALE_FACTOR);\n");
     //	reference_trless("M", P - 1);
     flops += 6;
     flops += computeDx(P - 1);
@@ -1557,9 +1580,9 @@ int main() {
     indent();
     tprint("SymmetricTensor<T, %i> mb;\n", P - 1);
     tprint("SymmetricTracelessTensor<T, %i> mc;\n", P - 1);
-    tprint("position[0] *= -T(SCALE_FACTOR);\n");
-    tprint("position[1] *= -T(SCALE_FACTOR);\n");
-    tprint("position[2] *= -T(SCALE_FACTOR);\n");
+    tprint("position[0] *= -simdBroadcast<T>(SCALE_FACTOR);\n");
+    tprint("position[1] *= -simdBroadcast<T>(SCALE_FACTOR);\n");
+    tprint("position[2] *= -simdBroadcast<T>(SCALE_FACTOR);\n");
     flops += 6;
     flops += constReferenceTrless<P - 1>("ma");
     //	reference_sym("Mb", P - 1);
@@ -1634,13 +1657,14 @@ int main() {
                 auto const k = mentries[i][j].k;
                 auto const factor = mentries[i][j].factor;
                 if (!close21(lastFactor / factor)) {
-                    ASPRINTF(&str, "mb[%i] *= T(%.9e);\n", nindex, lastFactor / factor);
+                    ASPRINTF(
+                        &str, "mb[%i] *= simdBroadcast<T>(%.9e);\n", nindex, lastFactor / factor);
                     cmds.push_back(str);
                     flops++;
                     free(str);
                     lastFactor = factor;
                 }
-                ASPRINTF(&str, "mb[%i] = fmaf( x[%i], ma%i%i%i, mb[%i]);\n", nindex,
+                ASPRINTF(&str, "mb[%i] = simdFma( x[%i], ma%i%i%i, mb[%i]);\n", nindex,
                     symIndex(n[0] - k[0], n[1] - k[1], n[2] - k[2]), k[0], k[1], k[2],
                     symIndex(n[0], n[1], n[2]));
                 cmds.push_back(str);
@@ -1648,7 +1672,7 @@ int main() {
                 flops += 2;
             }
             if (!close21(lastFactor)) {
-                ASPRINTF(&str, "mb[%i] *= T(%.9e);\n", nindex, lastFactor);
+                ASPRINTF(&str, "mb[%i] *= simdBroadcast<T>(%.9e);\n", nindex, lastFactor);
                 cmds.push_back(str);
                 flops++;
                 free(str);

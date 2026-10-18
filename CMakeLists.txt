@@ -18,7 +18,10 @@
 cmake_minimum_required(VERSION 3.24)
 project(cosmictiger LANGUAGES CXX C Fortran)
 
-set(CMAKE_CXX_STANDARD 20)
+# C++20 uses experimental SIMD; C++26 selects standard SIMD when available.
+if(NOT DEFINED CMAKE_CXX_STANDARD)
+    set(CMAKE_CXX_STANDARD 20)
+endif()
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_STANDARD 20)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
@@ -181,6 +184,8 @@ set(cosmictiger_header_files
     cosmictiger/sedov.hpp
     cosmictiger/silo_spheres.hpp
     cosmictiger/simd.hpp
+    cosmictiger/simd_backend.hpp
+    cosmictiger/simd_math.hpp
     cosmictiger/stack_vector.hpp
     cosmictiger/stack_trace.hpp
     cosmictiger/test.hpp
@@ -247,12 +252,12 @@ if(COSMICTIGER_WITH_CUDA)
 endif()
 configure_file(power.init power.init COPYONLY)
 add_custom_command(
-    OUTPUT ${PROJECT_BINARY_DIR}/cosmictiger/fmm_kernels.hpp
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${PROJECT_BINARY_DIR}/cosmictiger
-    COMMAND fmm_kernel_codegen > ${PROJECT_BINARY_DIR}/cosmictiger/fmm_kernels.hpp
+    OUTPUT ${PROJECT_BINARY_DIR}/generated/cosmictiger/fmm_kernels.hpp
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${PROJECT_BINARY_DIR}/generated/cosmictiger
+    COMMAND fmm_kernel_codegen > ${PROJECT_BINARY_DIR}/generated/cosmictiger/fmm_kernels.hpp
     DEPENDS fmm_kernel_codegen
     COMMENT "Generating FMM kernels for comparison with the checked-in header")
-add_custom_target(generate_fmm_kernels DEPENDS ${PROJECT_BINARY_DIR}/cosmictiger/fmm_kernels.hpp)
+add_custom_target(generate_fmm_kernels DEPENDS ${PROJECT_BINARY_DIR}/generated/cosmictiger/fmm_kernels.hpp)
 
 add_executable(healpix2silo src/healpix2silo.cpp)
 target_link_libraries(healpix2silo PRIVATE ${CHEALPIX_LIBRARY} ${SILO_LIBRARY} Boost::program_options dl)
@@ -297,6 +302,28 @@ if(BUILD_TESTING)
     add_test(NAME units_fast_math COMMAND units_fast_math_test)
     set_tests_properties(units_fast_math PROPERTIES TIMEOUT 20)
 
+    include(CheckIncludeFileCXX)
+    check_include_file_cxx("experimental/simd" COSMICTIGER_HAS_EXPERIMENTAL_SIMD)
+    foreach(simd_variant IN ITEMS auto baseline native)
+        set(simd_target "simd_${simd_variant}_test")
+        add_executable(${simd_target} tests/simd.cpp)
+        target_include_directories(${simd_target} PRIVATE ${PROJECT_SOURCE_DIR})
+        if(NOT simd_variant STREQUAL "auto" AND COSMICTIGER_HAS_EXPERIMENTAL_SIMD)
+            target_compile_definitions(${simd_target} PRIVATE
+                COSMICTIGER_SIMD_USE_EXPERIMENTAL=1 COSMICTIGER_SIMD_EXPECT_STANDARD=0)
+        endif()
+        if(simd_variant STREQUAL "native" AND COMPILER_SUPPORTS_MARCH_NATIVE)
+            target_compile_options(${simd_target} PRIVATE -march=native)
+        elseif(simd_variant STREQUAL "baseline" AND
+                CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64|i.86)$" AND
+                CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+            target_compile_options(${simd_target} PRIVATE
+                -msse2 -mno-avx -mno-avx2 -mno-avx512f -mno-fma)
+        endif()
+        add_test(NAME simd_${simd_variant} COMMAND ${simd_target})
+        set_tests_properties(simd_${simd_variant} PROPERTIES TIMEOUT 20)
+    endforeach()
+
     set(units_output_workdir "${PROJECT_BINARY_DIR}/tests/units_output")
     file(MAKE_DIRECTORY "${units_output_workdir}")
     add_test(NAME units_output COMMAND cosmictiger --run.test=unitsOutput
@@ -307,9 +334,9 @@ if(BUILD_TESTING)
 
     add_executable(radial_kernel_test tests/radial_kernel.cpp)
     target_include_directories(radial_kernel_test PRIVATE ${PROJECT_SOURCE_DIR})
+    target_compile_definitions(radial_kernel_test PRIVATE RADIAL_KERNEL_TEST_SIMD)
     if(COMPILER_SUPPORTS_MARCH_NATIVE)
         target_compile_options(radial_kernel_test PRIVATE -march=native)
-        target_compile_definitions(radial_kernel_test PRIVATE RADIAL_KERNEL_TEST_SIMD)
     endif()
     add_test(NAME radial_kernel COMMAND radial_kernel_test)
     set_tests_properties(radial_kernel PROPERTIES TIMEOUT 30)
@@ -317,18 +344,18 @@ if(BUILD_TESTING)
     add_executable(fmm_acceptance_test tests/fmm_acceptance.cpp)
     target_include_directories(fmm_acceptance_test PRIVATE ${PROJECT_SOURCE_DIR})
     target_compile_options(fmm_acceptance_test PRIVATE -ffast-math)
+    target_compile_definitions(fmm_acceptance_test PRIVATE FMM_ACCEPTANCE_TEST_SIMD)
     if(COMPILER_SUPPORTS_MARCH_NATIVE)
         target_compile_options(fmm_acceptance_test PRIVATE -march=native)
-        target_compile_definitions(fmm_acceptance_test PRIVATE FMM_ACCEPTANCE_TEST_SIMD)
     endif()
     add_test(NAME fmm_acceptance COMMAND fmm_acceptance_test)
     set_tests_properties(fmm_acceptance PROPERTIES TIMEOUT 30)
 
     add_executable(radial_density_kernel_test tests/radial_density_kernel.cpp)
     target_include_directories(radial_density_kernel_test PRIVATE ${PROJECT_SOURCE_DIR})
+    target_compile_definitions(radial_density_kernel_test PRIVATE RADIAL_KERNEL_TEST_SIMD)
     if(COMPILER_SUPPORTS_MARCH_NATIVE)
         target_compile_options(radial_density_kernel_test PRIVATE -march=native)
-        target_compile_definitions(radial_density_kernel_test PRIVATE RADIAL_KERNEL_TEST_SIMD)
     endif()
     add_test(NAME radial_density_kernel COMMAND radial_density_kernel_test)
     set_tests_properties(radial_density_kernel PROPERTIES TIMEOUT 30)

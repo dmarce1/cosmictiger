@@ -71,15 +71,15 @@ void testPeriodicBoxSphere() {
         {0.50, 0.25, 0.25}};
     float const radii[8] = {0.02f, 0.02f, 0.02f, 0.02f, 0.02f, 0.06f, 0.01f, 0.01f};
     bool const expected[8] = {true, true, false, false, false, true, true, false};
-    Array<SimdInt, NDIM> simdPoints;
-    SimdFloat simdRadii;
+    Array<SimdInt, NDIM> simdPoints{};
+    SimdFloat simdRadii{};
     for (int lane = 0; lane < SIMD_FLOAT_SIZE; lane++) {
         Array<Fixed32, NDIM> point;
         for (int dim = 0; dim < NDIM; dim++) {
             point[dim] = coordinates[lane][dim];
-            simdPoints[dim][lane] = point[dim].raw();
+            simdSetLane(simdPoints[dim], lane, point[dim].raw());
         }
-        simdRadii[lane] = radii[lane];
+        simdSetLane(simdRadii, lane, radii[lane]);
         require(boxIntersectsSphere(box, point, radii[lane]) == expected[lane],
             "Scalar box-sphere test disagrees with the geometry");
     }
@@ -102,11 +102,11 @@ void testPeriodicBoxSphere() {
     Array<Fixed32, NDIM> point;
     for (int dim = 0; dim < NDIM; dim++) {
         point[dim] = dim == XDIM ? 0.01 : 0.25;
-        simdPoints[dim] = point[dim].raw();
+        simdPoints[dim] = simdBroadcast<SimdInt>(point[dim].raw());
     }
     require(boxIntersectsSphere(box, point, 0.03f),
         "Box-sphere test must account for the periodic boundary");
-    require(boxIntersectsSphere(simdBox, simdPoints, SimdFloat(0.03f)).sum() == SIMD_FLOAT_SIZE,
+    require(simdAllOf(boxIntersectsSphere(simdBox, simdPoints, SimdFloat(0.03f))),
         "SIMD box-sphere test must account for the periodic boundary");
 
     for (int dim = 0; dim < NDIM; dim++) {
@@ -118,7 +118,7 @@ void testPeriodicBoxSphere() {
     }
     point[XDIM].raw()++;
     for (int dim = 0; dim < NDIM; dim++) {
-        simdPoints[dim] = point[dim].raw();
+        simdPoints[dim] = simdBroadcast<SimdInt>(point[dim].raw());
     }
     float const oneTickSquared = float(Fixed32::kToFloatFactor_ * Fixed32::kToFloatFactor_);
     require(boxDistanceSquared(box, point) == oneTickSquared,
@@ -138,7 +138,7 @@ void testPeriodicBoxSphere() {
         for (int lane = 0; lane < SIMD_FLOAT_SIZE; lane++) {
             for (int dim = 0; dim < NDIM; dim++) {
                 points[lane][dim] = ((sample * 97 + lane * 71 + dim * 83) % 1009) / 1009.0;
-                simdPoints[dim][lane] = points[lane][dim].raw();
+                simdSetLane(simdPoints[dim], lane, points[lane][dim].raw());
             }
         }
         auto const squaredDistances = boxDistanceSquared(simdBox, simdPoints);

@@ -149,11 +149,11 @@ void test(KernelSpec spec) {
     }
     close(density(1.5), 0, 0, "compact support");
 #if defined(RADIAL_KERNEL_TEST_SIMD)
-    SimdFloat radii;
+    SimdFloat radii{};
     for (int lane = 0; lane < SIMD_FLOAT_SIZE; ++lane) {
-        radii[lane] = 2.0f * lane / SIMD_FLOAT_SIZE;
+        simdSetLane(radii, lane, 2.0f * lane / SIMD_FLOAT_SIZE);
     }
-    radii[1] = 1e-30f;
+    simdSetLane(radii, 1, 1e-30f);
     auto const values = radial_kernel::value(table, radii);
     auto const derivatives = radial_kernel::derivative(table, radii);
     for (int lane = 0; lane < SIMD_FLOAT_SIZE; ++lane) {

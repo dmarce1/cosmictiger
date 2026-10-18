@@ -75,14 +75,13 @@ void setGravityCounterUse(bool code);
 template <class T>
 CUDA_EXPORT inline void gravitySofteningKernel(T& force, T& phi, T radiusSquared, T inverseSupport,
     T inverseSupportSquared, T inverseSupportCubed, bool doPhi) {
-    using std::sqrt;
-    T const q = sqrt(radiusSquared * inverseSupportSquared);
+    T const q = simdSqrt(radiusSquared * inverseSupportSquared);
     auto const& kernel = selectedGravityKernel();
     force = radial_kernel::forceFactor(kernel, q) * inverseSupportCubed;
     if (doPhi) {
         phi = radial_kernel::potential(kernel, q) * inverseSupport;
     } else {
-        phi = T(0);
+        phi = simdBroadcast<T>(0);
     }
 }
 

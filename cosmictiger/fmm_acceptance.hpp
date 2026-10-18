@@ -10,6 +10,7 @@
 #include <cmath>
 
 #include <cosmictiger/cuda.hpp>
+#include <cosmictiger/simd_math.hpp>
 
 enum class FmmInteraction { CellCell, ParticleCell, CellParticle, ParticleParticle };
 
@@ -17,10 +18,12 @@ constexpr int kMinimumHybridParticleCount = 38;
 
 template <class T>
 struct FmmAcceptance {
-    T cellCell;
-    T particleCell;
-    T cellParticle;
-    T supportSeparated;
+    using Mask = decltype(T{} < T{});
+
+    Mask cellCell;
+    Mask particleCell;
+    Mask cellParticle;
+    Mask supportSeparated;
 };
 
 namespace detail {
@@ -35,20 +38,7 @@ CUDA_EXPORT inline double fmmMaximum(double left, double right) {
 
 template <class T>
 CUDA_EXPORT inline T fmmMaximum(T const& left, T const& right) {
-    return max(left, right);
-}
-
-CUDA_EXPORT inline float fmmMultiplyAdd(float first, float second, float third) {
-    return std::fma(first, second, third);
-}
-
-CUDA_EXPORT inline double fmmMultiplyAdd(double first, double second, double third) {
-    return std::fma(first, second, third);
-}
-
-template <class T>
-CUDA_EXPORT inline T fmmMultiplyAdd(T const& first, T const& second, T const& third) {
-    return fmaf(first, second, third);
+    return simdMax(left, right);
 }
 
 }    // namespace detail
@@ -72,37 +62,37 @@ CUDA_EXPORT inline T fmmPairSupportRadius(
 
 // Inputs describe enclosing cells and periodic minimum distances. The support
 // bound must cover the actual pair-softening law for every represented pair.
-// All returned fields are numeric zero/one masks, including SIMD instantiations.
+// Returned fields are booleans for scalars and native masks for SIMD packs.
 template <class T>
 CUDA_EXPORT inline FmmAcceptance<T> computeFmmAcceptance(T const& centerDistanceSquared,
     T const& sinkRadius, T const& sourceRadius, T const& sinkBoxToSourceCenterSquared,
     T const& sourceBoxToSinkCenterSquared, T const& pairSupportRadius, T const& inverseTheta) {
     T const radiusSum = sinkRadius + sourceRadius;
     T const supportDistance = radiusSum + pairSupportRadius;
-    T const centerSupportSeparated = T(centerDistanceSquared > supportDistance * supportDistance);
+    auto const centerSupportSeparated = centerDistanceSquared > supportDistance * supportDistance;
     T const sourceSupportDistance = sourceRadius + pairSupportRadius;
     T const sinkSupportDistance = sinkRadius + pairSupportRadius;
-    T const sourceSupportSeparated =
-        T(sinkBoxToSourceCenterSquared > sourceSupportDistance * sourceSupportDistance);
-    T const sinkSupportSeparated =
-        T(sourceBoxToSinkCenterSquared > sinkSupportDistance * sinkSupportDistance);
-    T const supportSeparated = detail::fmmMaximum(
-        centerSupportSeparated, detail::fmmMaximum(sourceSupportSeparated, sinkSupportSeparated));
+    auto const sourceSupportSeparated =
+        sinkBoxToSourceCenterSquared > sourceSupportDistance * sourceSupportDistance;
+    auto const sinkSupportSeparated =
+        sourceBoxToSinkCenterSquared > sinkSupportDistance * sinkSupportDistance;
+    auto const supportSeparated =
+        centerSupportSeparated || sourceSupportSeparated || sinkSupportSeparated;
 
     T const cellCellDistance = radiusSum * inverseTheta;
-    T const particleCellDistance = detail::fmmMultiplyAdd(inverseTheta, sourceRadius, sinkRadius);
-    T const cellParticleDistance = detail::fmmMultiplyAdd(inverseTheta, sinkRadius, sourceRadius);
+    T const particleCellDistance = simdFma(inverseTheta, sourceRadius, sinkRadius);
+    T const cellParticleDistance = simdFma(inverseTheta, sinkRadius, sourceRadius);
     T const sourceOpeningRadius = sourceRadius * inverseTheta;
     T const sinkOpeningRadius = sinkRadius * inverseTheta;
-    T const particleCellGeometry =
-        detail::fmmMaximum(T(centerDistanceSquared > particleCellDistance * particleCellDistance),
-            T(sinkBoxToSourceCenterSquared > sourceOpeningRadius * sourceOpeningRadius));
-    T const cellParticleGeometry =
-        detail::fmmMaximum(T(centerDistanceSquared > cellParticleDistance * cellParticleDistance),
-            T(sourceBoxToSinkCenterSquared > sinkOpeningRadius * sinkOpeningRadius));
+    auto const particleCellGeometry =
+        (centerDistanceSquared > particleCellDistance * particleCellDistance) ||
+        (sinkBoxToSourceCenterSquared > sourceOpeningRadius * sourceOpeningRadius);
+    auto const cellParticleGeometry =
+        (centerDistanceSquared > cellParticleDistance * cellParticleDistance) ||
+        (sourceBoxToSinkCenterSquared > sinkOpeningRadius * sinkOpeningRadius);
 
-    return {T(centerDistanceSquared > cellCellDistance * cellCellDistance) * centerSupportSeparated,
-        particleCellGeometry * supportSeparated, cellParticleGeometry * supportSeparated,
+    return {(centerDistanceSquared > cellCellDistance * cellCellDistance) && centerSupportSeparated,
+        particleCellGeometry && supportSeparated, cellParticleGeometry && supportSeparated,
         supportSeparated};
 }
 

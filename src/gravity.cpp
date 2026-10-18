@@ -31,7 +31,7 @@ void cpuGravityCc(GravityCcType type, Expansion<float>& lValue, Vector<TreeId> c
     TreeId self, bool doPhi) {
     FlopCounter<int> flops = 0;
     if (list.size()) {
-        static SimdFloat const toFloatFactor(kFixed2float);
+        static SimdFloat const toFloatFactor = simdBroadcast<SimdFloat>(kFixed2float);
         Vector<TreeNode const*> treePtrs(list.size());
         TreeNode const* selfPtr = treeGetNode(self);
         int const numberOfSinks = selfPtr->numberOfParticles();
@@ -55,10 +55,10 @@ void cpuGravityCc(GravityCcType type, Expansion<float>& lValue, Vector<TreeId> c
             auto const& m = treePtrs[i]->mpos->multi;
             auto const& y = treePtrs[i]->mpos->pos;
             for (int j = 0; j < MULTIPOLE_SIZE; j++) {
-                mValue[k][j][l] = m[j];
+                simdSetLane(mValue[k][j], l, m[j]);
             }
             for (int j = 0; j < NDIM; j++) {
-                yValue[k][j][l] = y[j].raw();
+                simdSetLane(yValue[k][j], l, y[j].raw());
             }
         }
         int const lastk = (treePtrs.size() - 1) / SIMD_FLOAT_SIZE;
@@ -67,24 +67,25 @@ void cpuGravityCc(GravityCcType type, Expansion<float>& lValue, Vector<TreeId> c
             int const k = i / SIMD_FLOAT_SIZE;
             int const l = i % SIMD_FLOAT_SIZE;
             for (int j = 0; j < MULTIPOLE_SIZE; j++) {
-                mValue[k][j][l] = 0.0;
+                simdSetLane(mValue[k][j], l, 0.0);
             }
             for (int j = 0; j < NDIM; j++) {
-                yValue[k][j][l] = yValue[lastk][j][lastl];
+                simdSetLane(yValue[k][j], l, yValue[lastk][j][lastl]);
             }
         }
-        Array<SimdInt, NDIM> x;
+        Array<SimdInt, NDIM> x{};
         for (int dim = 0; dim < NDIM; dim++) {
-            x[dim] = selfPtr->mpos->pos[dim].raw();
+            x[dim] = simdBroadcast<SimdInt>(selfPtr->mpos->pos[dim].raw());
         }
         Expansion<SimdFloat> l0;
-        l0 = SimdFloat(0.0f);
+        l0 = simdBroadcast<SimdFloat>(0.0f);
         for (int j = 0; j < numberOfSources; j++) {
             int const count =
                 std::min(SIMD_FLOAT_SIZE, (int) (treePtrs.size() - j * SIMD_FLOAT_SIZE));
-            Array<SimdFloat, NDIM> dx;
+            Array<SimdFloat, NDIM> dx{};
             for (int dim = 0; dim < NDIM; dim++) {
-                dx[dim] = SimdFloat(x[dim] - yValue[j][dim]) * toFloatFactor;
+                dx[dim] = simdCast<SimdFloat>(simdPositionDifference(x[dim], yValue[j][dim])) *
+                    toFloatFactor;
             }
             flops += 3 * count;
             Expansion<SimdFloat> d;
@@ -100,7 +101,7 @@ void cpuGravityCc(GravityCcType type, Expansion<float>& lValue, Vector<TreeId> c
             //			flops += SIMD_FLOAT_SIZE * apply_scale_factor_inv(L0);
         }
         for (int i = 0; i < EXPANSION_SIZE; i++) {
-            lValue[i] += l0[i].sum();
+            lValue[i] += simdSum(l0[i]);
         }
         flops += 7 * EXPANSION_SIZE;
     }
@@ -111,9 +112,9 @@ void cpuGravityCp(Expansion<float>& lValue, Vector<TreeId> const& list, TreeId s
     constexpr int kChunkSize = 32;
     FlopCounter<int> flops = 0;
     if (list.size()) {
-        static SimdFloat const toFloatFactor(kFixed2float);
-        SimdFloat const one(1.0);
-        SimdFloat const tiny(1.0e-20);
+        static SimdFloat const toFloatFactor = simdBroadcast<SimdFloat>(kFixed2float);
+        SimdFloat const one = simdBroadcast<SimdFloat>(1.0);
+        SimdFloat const tiny = simdBroadcast<SimdFloat>(1.0e-20);
         TreeNode const* selfPtr = treeGetNode(self);
         int const numberOfSinks = selfPtr->numberOfParticles();
         for (int li = 0; li < list.size(); li += kChunkSize) {
@@ -154,26 +155,27 @@ void cpuGravityCp(Expansion<float>& lValue, Vector<TreeId> const& list, TreeId s
                 masses[i] = 0.0;
             }
             auto const range = selfPtr->particleRange;
-            Array<SimdInt, NDIM> x;
-            Array<SimdInt, NDIM> yValue;
+            Array<SimdInt, NDIM> x{};
+            Array<SimdInt, NDIM> yValue{};
             for (int dim = 0; dim < NDIM; dim++) {
-                x[dim] = selfPtr->mpos->pos[dim].raw();
+                x[dim] = simdBroadcast<SimdInt>(selfPtr->mpos->pos[dim].raw());
             }
             Expansion<SimdFloat> l0;
-            l0 = SimdFloat(0.0f);
+            l0 = simdBroadcast<SimdFloat>(0.0f);
             for (int j = 0; j < numberOfSources; j += SIMD_FLOAT_SIZE) {
                 int const cnt = std::min(count - j, SIMD_FLOAT_SIZE);
                 int const k = j / SIMD_FLOAT_SIZE;
-                SimdFloat mass;
+                SimdFloat mass{};
                 for (int l = 0; l < SIMD_FLOAT_SIZE; l++) {
-                    yValue[XDIM][l] = srcx[j + l].raw();
-                    yValue[YDIM][l] = srcy[j + l].raw();
-                    yValue[ZDIM][l] = srcz[j + l].raw();
-                    mass[l] = masses[j + l];
+                    simdSetLane(yValue[XDIM], l, srcx[j + l].raw());
+                    simdSetLane(yValue[YDIM], l, srcy[j + l].raw());
+                    simdSetLane(yValue[ZDIM], l, srcz[j + l].raw());
+                    simdSetLane(mass, l, masses[j + l]);
                 }
-                Array<SimdFloat, NDIM> dx;
+                Array<SimdFloat, NDIM> dx{};
                 for (int dim = 0; dim < NDIM; dim++) {
-                    dx[dim] = SimdFloat(x[dim] - yValue[dim]) * toFloatFactor;
+                    dx[dim] = simdCast<SimdFloat>(simdPositionDifference(x[dim], yValue[dim])) *
+                        toFloatFactor;
                 }
                 flops += cnt * 3;
                 Expansion<SimdFloat> d;
@@ -184,7 +186,7 @@ void cpuGravityCp(Expansion<float>& lValue, Vector<TreeId> const& list, TreeId s
                 flops += cnt * EXPANSION_SIZE;
             }
             for (int i = 0; i < EXPANSION_SIZE; i++) {
-                lValue[i] += l0[i].sum();
+                lValue[i] += simdSum(l0[i]);
             }
             flops += 7 * EXPANSION_SIZE;
         }
@@ -195,7 +197,7 @@ void cpuGravityCp(Expansion<float>& lValue, Vector<TreeId> const& list, TreeId s
 void cpuGravityPc(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const& list) {
     FlopCounter<int> flops = 0;
     if (list.size()) {
-        static SimdFloat const toFloatFactor(kFixed2float);
+        static SimdFloat const toFloatFactor = simdBroadcast<SimdFloat>(kFixed2float);
         Vector<TreeNode const*> treePtrs(list.size());
         TreeNode const* selfPtr = treeGetNode(self);
         int const numberOfSinks = selfPtr->numberOfParticles();
@@ -220,10 +222,10 @@ void cpuGravityPc(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
             auto const& m = treePtrs[i]->mpos->multi;
             auto const& y = treePtrs[i]->mpos->pos;
             for (int j = 0; j < MULTIPOLE_SIZE; j++) {
-                mValue[k][j][l] = m[j];
+                simdSetLane(mValue[k][j], l, m[j]);
             }
             for (int j = 0; j < NDIM; j++) {
-                yValue[k][j][l] = y[j].raw();
+                simdSetLane(yValue[k][j], l, y[j].raw());
             }
         }
         int const lastk = (treePtrs.size() - 1) / SIMD_FLOAT_SIZE;
@@ -232,29 +234,30 @@ void cpuGravityPc(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
             int const k = i / SIMD_FLOAT_SIZE;
             int const l = i % SIMD_FLOAT_SIZE;
             for (int j = 0; j < MULTIPOLE_SIZE; j++) {
-                mValue[k][j][l] = 0.0;
+                simdSetLane(mValue[k][j], l, 0.0);
             }
             for (int j = 0; j < NDIM; j++) {
-                yValue[k][j][l] = yValue[lastk][j][lastl];
+                simdSetLane(yValue[k][j], l, yValue[lastk][j][lastl]);
             }
         }
         auto const range = selfPtr->particleRange;
-        Array<SimdInt, NDIM> x;
+        Array<SimdInt, NDIM> x{};
         for (ParticleInteger i = range.first; i < range.second; i++) {
             Expansion2<SimdFloat> lValue2;
-            lValue2(0, 0, 0) = SimdFloat(0.0f);
-            lValue2(1, 0, 0) = SimdFloat(0.0f);
-            lValue2(0, 1, 0) = SimdFloat(0.0f);
-            lValue2(0, 0, 1) = SimdFloat(0.0f);
+            lValue2(0, 0, 0) = simdBroadcast<SimdFloat>(0.0f);
+            lValue2(1, 0, 0) = simdBroadcast<SimdFloat>(0.0f);
+            lValue2(0, 1, 0) = simdBroadcast<SimdFloat>(0.0f);
+            lValue2(0, 0, 1) = simdBroadcast<SimdFloat>(0.0f);
             for (int dim = 0; dim < NDIM; dim++) {
-                x[dim] = particlesPos(dim, i).raw();
+                x[dim] = simdBroadcast<SimdInt>(particlesPos(dim, i).raw());
             }
             for (int j = 0; j < numberOfSources; j++) {
                 int const count =
                     std::min(SIMD_FLOAT_SIZE, (int) (treePtrs.size() - j * SIMD_FLOAT_SIZE));
-                Array<SimdFloat, NDIM> dx;
+                Array<SimdFloat, NDIM> dx{};
                 for (int dim = 0; dim < NDIM; dim++) {
-                    dx[dim] = SimdFloat(x[dim] - yValue[j][dim]) * toFloatFactor;
+                    dx[dim] = simdCast<SimdFloat>(simdPositionDifference(x[dim], yValue[j][dim])) *
+                        toFloatFactor;
                 }
                 flops += 3 * count;
                 Expansion<SimdFloat> d;
@@ -262,10 +265,10 @@ void cpuGravityPc(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
                 flops += count * m2L(lValue2, mValue[j], d, doPhi);
             }
             int const j = i - range.first;
-            f.gx[j] -= SCALE_FACTOR2 * lValue2(1, 0, 0).sum();
-            f.gy[j] -= SCALE_FACTOR2 * lValue2(0, 1, 0).sum();
-            f.gz[j] -= SCALE_FACTOR2 * lValue2(0, 0, 1).sum();
-            f.phi[j] += SCALE_FACTOR1 * lValue2(0, 0, 0).sum();
+            f.gx[j] -= SCALE_FACTOR2 * simdSum(lValue2(1, 0, 0));
+            f.gy[j] -= SCALE_FACTOR2 * simdSum(lValue2(0, 1, 0));
+            f.gz[j] -= SCALE_FACTOR2 * simdSum(lValue2(0, 0, 1));
+            f.phi[j] += SCALE_FACTOR1 * simdSum(lValue2(0, 0, 0));
             flops += 28;
         }
     }
@@ -279,22 +282,22 @@ void cpuGravityPp(
     tm.start();
     constexpr int kChunkSize = 32;
     if (list.size()) {
-        SimdFloat const sinkHsoft(hfloat);
-        SimdFloat const hinvI = SimdFloat(1.f) / sinkHsoft;
+        SimdFloat const sinkHsoft = simdBroadcast<SimdFloat>(hfloat);
+        SimdFloat const hinvI = simdBroadcast<SimdFloat>(1.f) / sinkHsoft;
         SimdFloat const h2invI = sqr(hinvI);
         SimdFloat const h3invI = hinvI * h2invI;
         SimdFloat const h2 = sqr(sinkHsoft);
         flops += 7;
-        static SimdFloat const toFloatFactor(kFixed2float);
-        SimdFloat const one(1.0);
-        SimdFloat const tiny(1.0e-20);
+        static SimdFloat const toFloatFactor = simdBroadcast<SimdFloat>(kFixed2float);
+        SimdFloat const one = simdBroadcast<SimdFloat>(1.0);
+        SimdFloat const tiny = simdBroadcast<SimdFloat>(1.0e-20);
         TreeNode const* selfPtr = treeGetNode(self);
         int const numberOfSinks = selfPtr->numberOfParticles();
         auto const range = selfPtr->particleRange;
         for (int li = 0; li < list.size(); li += kChunkSize) {
-            Array<SimdInt, NDIM> x;
-            Array<SimdInt, NDIM> yValue;
-            SimdInt srcType;
+            Array<SimdInt, NDIM> x{};
+            Array<SimdInt, NDIM> yValue{};
+            SimdInt srcType{};
             Array<TreeNode const*, kChunkSize> treePtrs;
             int numberOfSources = 0;
             int const maxi = std::min((int) list.size(), li + kChunkSize) - li;
@@ -334,61 +337,62 @@ void cpuGravityPp(
             //			feenableexcept (FE_INVALID);
             //			feenableexcept (FE_OVERFLOW);
             for (ParticleInteger i = range.first; i < range.second; i++) {
-                SimdFloat gx(0.0);
-                SimdFloat gy(0.0);
-                SimdFloat gz(0.0);
-                SimdFloat phi(0.0);
+                SimdFloat gx = simdBroadcast<SimdFloat>(0.0);
+                SimdFloat gy = simdBroadcast<SimdFloat>(0.0);
+                SimdFloat gz = simdBroadcast<SimdFloat>(0.0);
+                SimdFloat phi = simdBroadcast<SimdFloat>(0.0);
                 for (int dim = 0; dim < NDIM; dim++) {
-                    x[dim] = particlesPos(dim, i).raw();
+                    x[dim] = simdBroadcast<SimdInt>(particlesPos(dim, i).raw());
                 }
                 //					simd_float self_flags(0);
                 for (int j = 0; j < numberOfSources; j += SIMD_FLOAT_SIZE) {
                     int const& count = maxi;
                     int const k = j / SIMD_FLOAT_SIZE;
-                    SimdFloat sourceWeight;
+                    SimdFloat sourceWeight{};
                     for (int l = 0; l < SIMD_FLOAT_SIZE; l++) {
-                        yValue[XDIM][l] = srcx[j + l].raw();
-                        yValue[YDIM][l] = srcy[j + l].raw();
-                        yValue[ZDIM][l] = srcz[j + l].raw();
-                        sourceWeight[l] = sourceWeights[j + l];
+                        simdSetLane(yValue[XDIM], l, srcx[j + l].raw());
+                        simdSetLane(yValue[YDIM], l, srcy[j + l].raw());
+                        simdSetLane(yValue[ZDIM], l, srcz[j + l].raw());
+                        simdSetLane(sourceWeight, l, sourceWeights[j + l]);
                     }
-                    Array<SimdFloat, NDIM> dx;
+                    Array<SimdFloat, NDIM> dx{};
                     for (int dim = 0; dim < NDIM; dim++) {
-                        dx[dim] = SimdFloat(x[dim] - yValue[dim]) * toFloatFactor;    // 3
+                        dx[dim] = simdCast<SimdFloat>(simdPositionDifference(x[dim], yValue[dim])) *
+                            toFloatFactor;    // 3
                     }
                     SimdFloat const r2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
-                    SimdFloat const rinv1Far = SimdFloat(1) / sqrt(max(r2, tiny));    // 8
+                    SimdFloat const rinv1Far =
+                        simdBroadcast<SimdFloat>(1) / simdSqrt(simdMax(r2, tiny));    // 8
                     SimdFloat const rinv3Far = rinv1Far * sqr(rinv1Far);              // 3
-                    SimdFloat const swFar = r2 > h2;
+                    auto const swFar = r2 > h2;
                     SimdFloat rinv3 = rinv3Far;
-                    SimdFloat rinv1(0.0f);
+                    SimdFloat rinv1 = simdBroadcast<SimdFloat>(0.0f);
                     if (doPhi) {
                         rinv1 = rinv1Far;
                     }
-                    if (swFar.sum() != SIMD_FLOAT_SIZE) {
+                    if (!simdAllOf(swFar)) {
                         SimdFloat rinv3Near, rinv1Near;
                         gravitySofteningKernel(
                             rinv3Near, rinv1Near, r2, hinvI, h2invI, h3invI, doPhi);
-                        SimdFloat const swNear = SimdFloat(1) - swFar;
-                        rinv3 = rinv3Near * swNear + rinv3Far * swFar;
+                        rinv3 = simdSelect(swFar, rinv3Far, rinv3Near);
                         if (doPhi) {
-                            rinv1 = rinv1Near * swNear + rinv1Far * swFar;
+                            rinv1 = simdSelect(swFar, rinv1Far, rinv1Near);
                             flops += 7;
                         }
                     }
-                    rinv3 *= sourceWeight;             // 1
-                    rinv1 *= sourceWeight;             // 1
-                    gx = fmaf(rinv3, dx[XDIM], gx);    // 2
-                    gy = fmaf(rinv3, dx[YDIM], gy);    // 2
-                    gz = fmaf(rinv3, dx[ZDIM], gz);    // 2
-                    phi -= rinv1;                      // 1
+                    rinv3 *= sourceWeight;                // 1
+                    rinv1 *= sourceWeight;                // 1
+                    gx = simdFma(rinv3, dx[XDIM], gx);    // 2
+                    gy = simdFma(rinv3, dx[YDIM], gy);    // 2
+                    gz = simdFma(rinv3, dx[ZDIM], gz);    // 2
+                    phi -= rinv1;                         // 1
                     flops += 38;
                 }
                 int const j = i - range.first;
-                f.gx[j] -= gx.sum();
-                f.gy[j] -= gy.sum();
-                f.gz[j] -= gz.sum();
-                f.phi[j] += phi.sum();
+                f.gx[j] -= simdSum(gx);
+                f.gy[j] -= simdSum(gy);
+                f.gz[j] -= simdSum(gz);
+                f.phi[j] += simdSum(phi);
                 flops += 28;
             }
         }

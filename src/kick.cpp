@@ -225,20 +225,20 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
     Vector<TreeId>& cplist = workspace.cplist;
     Vector<TreeId>& pclist = workspace.pclist;
     Vector<TreeId>& leaflist = workspace.leaflist;
-    SimdFloat const thetainv(fmmInverseOpeningAngle(params.theta));
+    SimdFloat const thetainv = simdBroadcast<SimdFloat>(fmmInverseOpeningAngle(params.theta));
     Array<TreeNode const*, SIMD_FLOAT_SIZE> otherPtrs;
     Array<float, NDIM> ldx;
     SimdFloat selfRadius = selfPtr->radius;
-    Array<SimdInt, NDIM> selfPos;
-    Range<SimdDouble8> selfBox;
-    Array<SimdInt, NDIM> otherPos;
-    Array<SimdFloat, NDIM> dx;
-    SimdFloat otherRadius;
-    SimdFloat otherLeaf;
-    SimdFloat otherSupportRadius;
-    Range<SimdDouble8> otherBox;
+    Array<SimdInt, NDIM> selfPos{};
+    Range<SimdDouble8> selfBox{};
+    Array<SimdInt, NDIM> otherPos{};
+    Array<SimdFloat, NDIM> dx{};
+    SimdFloat otherRadius{};
+    SimdFloat otherLeaf{};
+    SimdFloat otherSupportRadius{};
+    Range<SimdDouble8> otherBox{};
     for (int dim = 0; dim < NDIM; dim++) {
-        selfPos[dim] = selfPtr->pos[dim].raw();
+        selfPos[dim] = simdBroadcast<SimdInt>(selfPtr->pos[dim].raw());
         selfBox.begin[dim] = (double) selfPtr->box.begin[dim].raw();
         selfBox.end[dim] = (double) selfPtr->box.end[dim].raw();
     }
@@ -276,28 +276,33 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
                 }
                 for (int i = 0; i < maxi; i++) {
                     for (int dim = 0; dim < NDIM; dim++) {
-                        otherPos[dim][i] = otherPtrs[i]->pos[dim].raw();
+                        simdSetLane(otherPos[dim], i, otherPtrs[i]->pos[dim].raw());
                     }
-                    otherRadius[i] = otherPtrs[i]->radius;
-                    otherLeaf[i] = otherPtrs[i]->leaf;
+                    simdSetLane(otherRadius, i, otherPtrs[i]->radius);
+                    simdSetLane(otherLeaf, i, otherPtrs[i]->leaf);
                 }
                 for (int i = maxi; i < SIMD_FLOAT_SIZE; i++) {
                     for (int dim = 0; dim < NDIM; dim++) {
-                        otherPos[dim][i] = 0.f;
+                        simdSetLane(otherPos[dim], i, 0.f);
                     }
-                    otherRadius[i] = 0.f;
-                    otherLeaf[i] = 0;
+                    simdSetLane(otherRadius, i, 0.f);
+                    simdSetLane(otherLeaf, i, 0);
                     for (int dim = 0; dim < NDIM; dim++) {
-                        otherBox.begin[dim][i] = otherBox.end[dim][i] = 0.0;
+                        simdSetLane(otherBox.begin[dim], i, 0.0);
+                        simdSetLane(otherBox.end[dim], i, 0.0);
                     }
                 }
                 for (int dim = 0; dim < NDIM; dim++) {
-                    dx[dim] = SimdFloat(selfPos[dim] - otherPos[dim]) * kFixed2float;    // 3
+                    dx[dim] =
+                        simdCast<SimdFloat>(simdPositionDifference(selfPos[dim], otherPos[dim])) *
+                        kFixed2float;    // 3
                 }
                 SimdFloat r2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);    // 5
-                r2 = max(r2, max(sqr(SimdFloat(0.5) - (selfRadius + otherRadius)), SimdFloat(0)));
+                r2 = simdMax(r2,
+                    simdMax(sqr(simdBroadcast<SimdFloat>(0.5) - (selfRadius + otherRadius)),
+                        simdBroadcast<SimdFloat>(0)));
                 SimdFloat const dcc = (selfRadius + otherRadius) * thetainv;
-                SimdFloat const cc = r2 > sqr(dcc);
+                auto const cc = r2 > sqr(dcc);
                 flops += maxi * 15;
                 for (int i = 0; i < maxi; i++) {
                     if (cc[i]) {
@@ -339,35 +344,39 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
                 }
                 for (int i = 0; i < maxi; i++) {
                     for (int dim = 0; dim < NDIM; dim++) {
-                        otherPos[dim][i] = otherPtrs[i]->pos[dim].raw();
+                        simdSetLane(otherPos[dim], i, otherPtrs[i]->pos[dim].raw());
                     }
-                    otherRadius[i] = otherPtrs[i]->radius;
-                    otherLeaf[i] = otherPtrs[i]->leaf;
-                    otherSupportRadius[i] = otherPtrs[i]->maxGravitySupportRadius;
+                    simdSetLane(otherRadius, i, otherPtrs[i]->radius);
+                    simdSetLane(otherLeaf, i, otherPtrs[i]->leaf);
+                    simdSetLane(otherSupportRadius, i, otherPtrs[i]->maxGravitySupportRadius);
                 }
                 for (int i = maxi; i < SIMD_FLOAT_SIZE; i++) {
                     for (int dim = 0; dim < NDIM; dim++) {
-                        otherPos[dim][i] = 0.f;
+                        simdSetLane(otherPos[dim], i, 0.f);
                     }
-                    otherRadius[i] = 0.f;
-                    otherLeaf[i] = 0;
-                    otherSupportRadius[i] = 0.f;
+                    simdSetLane(otherRadius, i, 0.f);
+                    simdSetLane(otherLeaf, i, 0);
+                    simdSetLane(otherSupportRadius, i, 0.f);
                 }
                 for (int dim = 0; dim < NDIM; dim++) {
-                    dx[dim] = SimdFloat(selfPos[dim] - otherPos[dim]) * kFixed2float;    // 3
+                    dx[dim] =
+                        simdCast<SimdFloat>(simdPositionDifference(selfPos[dim], otherPos[dim])) *
+                        kFixed2float;    // 3
                 }
                 SimdFloat const r2 =
-                    fmaf(dx[XDIM], dx[XDIM], fmaf(dx[YDIM], dx[YDIM], dx[ZDIM] * dx[ZDIM]));
-                SimdFloat const pairSupportRadius = fmmPairSupportRadius(SimdFloat(supportRadius),
-                    SimdFloat(selfPtr->maxGravitySupportRadius), otherSupportRadius);
-                auto acceptance = computeFmmAcceptance(r2, selfRadius, otherRadius, SimdFloat(0),
-                    SimdFloat(0), pairSupportRadius, thetainv);
+                    simdFma(dx[XDIM], dx[XDIM], simdFma(dx[YDIM], dx[YDIM], dx[ZDIM] * dx[ZDIM]));
+                SimdFloat const pairSupportRadius = fmmPairSupportRadius(
+                    simdBroadcast<SimdFloat>(supportRadius),
+                    simdBroadcast<SimdFloat>(selfPtr->maxGravitySupportRadius), otherSupportRadius);
+                auto acceptance =
+                    computeFmmAcceptance(r2, selfRadius, otherRadius, simdBroadcast<SimdFloat>(0),
+                        simdBroadcast<SimdFloat>(0), pairSupportRadius, thetainv);
                 flops += maxi * 20;
                 if (selfPtr->leaf) {
                     for (int i = 0; i < maxi; i++) {
                         for (int dim = 0; dim < NDIM; dim++) {
-                            otherBox.begin[dim][i] = otherPtrs[i]->box.begin[dim].raw();
-                            otherBox.end[dim][i] = otherPtrs[i]->box.end[dim].raw();
+                            simdSetLane(otherBox.begin[dim], i, otherPtrs[i]->box.begin[dim].raw());
+                            simdSetLane(otherBox.end[dim], i, otherPtrs[i]->box.end[dim].raw());
                         }
                     }
                     for (int dim = 0; dim < NDIM; dim++) {
@@ -376,7 +385,8 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
                     }
                     for (int i = maxi; i < SIMD_FLOAT_SIZE; i++) {
                         for (int dim = 0; dim < NDIM; dim++) {
-                            otherBox.begin[dim][i] = otherBox.end[dim][i] = 0.0;
+                            simdSetLane(otherBox.begin[dim], i, 0.0);
+                            simdSetLane(otherBox.end[dim], i, 0.0);
                         }
                     }
                     acceptance = computeFmmAcceptance(r2, selfRadius, otherRadius,

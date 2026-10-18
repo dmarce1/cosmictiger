@@ -82,14 +82,14 @@ namespace detail {
         DensityKernelTable<dimension> const& table, int piece, Real q) {
         double const a = table.changePoints[piece];
         double const b = table.changePoints[piece + 1];
-        return (clamp(q, a, b) - Real(a)) / Real(b - a);
+        return (clamp(q, a, b) - simdBroadcast<Real>(a)) / simdBroadcast<Real>(b - a);
     }
 
     template <size_t dimension, typename Real>
-    COSMICTIGER_DENSITY_HD inline Real densityMask(
+    COSMICTIGER_DENSITY_HD inline auto densityMask(
         DensityKernelTable<dimension> const& table, int piece, Real q) {
-        Real const upper = q < Real(table.changePoints[piece + 1]);
-        return piece == 0 ? upper : upper * Real(q >= Real(table.changePoints[piece]));
+        auto const upper = q < simdBroadcast<Real>(table.changePoints[piece + 1]);
+        return piece == 0 ? upper : upper && (q >= simdBroadcast<Real>(table.changePoints[piece]));
     }
 
 }    // namespace detail
@@ -184,17 +184,18 @@ constexpr DensityKernelTable<dimension> makeDensityKernelTable(KernelSpec spec) 
 
 template <size_t dimension, typename Real>
 COSMICTIGER_DENSITY_HD inline Real value(DensityKernelTable<dimension> const& table, Real q) {
-    Real result = Real(0);
+    Real result = simdBroadcast<Real>(0);
     for (int piece = 0; piece < table.pieceCount; ++piece) {
         if constexpr (std::is_arithmetic_v<Real>) {
-            if (q < Real(table.changePoints[piece + 1])) {
+            if (q < simdBroadcast<Real>(table.changePoints[piece + 1])) {
                 return detail::evaluate(table.coefficients[piece], table.degree,
                     detail::densityCoordinate(table, piece, q));
             }
         } else {
-            result += detail::densityMask(table, piece, q) *
+            result = simdSelect(detail::densityMask(table, piece, q),
                 detail::evaluate(table.coefficients[piece], table.degree,
-                    detail::densityCoordinate(table, piece, q));
+                    detail::densityCoordinate(table, piece, q)),
+                result);
         }
     }
     return result;
@@ -202,17 +203,18 @@ COSMICTIGER_DENSITY_HD inline Real value(DensityKernelTable<dimension> const& ta
 
 template <size_t dimension, typename Real>
 COSMICTIGER_DENSITY_HD inline Real derivative(DensityKernelTable<dimension> const& table, Real q) {
-    Real result = Real(0);
+    Real result = simdBroadcast<Real>(0);
     for (int piece = 0; piece < table.pieceCount; ++piece) {
         if constexpr (std::is_arithmetic_v<Real>) {
-            if (q < Real(table.changePoints[piece + 1])) {
+            if (q < simdBroadcast<Real>(table.changePoints[piece + 1])) {
                 return detail::evaluate(table.derivativeCoefficients[piece], table.degree - 1,
                     detail::densityCoordinate(table, piece, q));
             }
         } else {
-            result += detail::densityMask(table, piece, q) *
+            result = simdSelect(detail::densityMask(table, piece, q),
                 detail::evaluate(table.derivativeCoefficients[piece], table.degree - 1,
-                    detail::densityCoordinate(table, piece, q));
+                    detail::densityCoordinate(table, piece, q)),
+                result);
         }
     }
     return result;

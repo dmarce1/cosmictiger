@@ -4,6 +4,8 @@
 #include <numbers>
 #include <type_traits>
 
+#include <cosmictiger/simd_math.hpp>
+
 #if defined(__CUDACC__)
 #define COSMICTIGER_RADIAL_HD __host__ __device__
 #else
@@ -118,24 +120,21 @@ namespace detail {
 
     template <typename Real>
     COSMICTIGER_RADIAL_HD inline Real clamp(Real value, double lower, double upper) {
-        if constexpr (std::is_arithmetic_v<Real>) {
-            return value < Real(lower) ? Real(lower) : (value > Real(upper) ? Real(upper) : value);
-        } else {
-            Real const below = value < Real(lower);
-            Real const above = value > Real(upper);
-            return below * Real(lower) + above * Real(upper) + (Real(1) - below - above) * value;
-        }
+        Real const lowerBound = simdBroadcast<Real>(lower);
+        Real const upperBound = simdBroadcast<Real>(upper);
+        return simdSelect(
+            value < lowerBound, lowerBound, simdSelect(value > upperBound, upperBound, value));
     }
 
     template <typename Real>
     COSMICTIGER_RADIAL_HD inline Real evaluate(double const* coefficients, int degree, Real t) {
         Real work[kMaximumDegree + 4];
         for (int i = 0; i <= degree; ++i) {
-            work[i] = Real(coefficients[i]);
+            work[i] = simdBroadcast<Real>(coefficients[i]);
         }
         for (int remaining = degree; remaining > 0; --remaining) {
             for (int i = 0; i < remaining; ++i) {
-                work[i] = (Real(1) - t) * work[i] + t * work[i + 1];
+                work[i] = (simdBroadcast<Real>(1) - t) * work[i] + t * work[i + 1];
             }
         }
         return work[0];
@@ -145,16 +144,16 @@ namespace detail {
     COSMICTIGER_RADIAL_HD inline Real localCoordinate(KernelTable const& table, int piece, Real q) {
         double const a = table.changePoints[piece];
         double const b = table.changePoints[piece + 1];
-        return (clamp(q, a, b) - Real(a)) / Real(b - a);
+        return (clamp(q, a, b) - simdBroadcast<Real>(a)) / simdBroadcast<Real>(b - a);
     }
 
     template <typename Real>
-    COSMICTIGER_RADIAL_HD inline Real pieceMask(KernelTable const& table, int piece, Real q) {
-        Real const upper = q < Real(table.changePoints[piece + 1]);
+    COSMICTIGER_RADIAL_HD inline auto pieceMask(KernelTable const& table, int piece, Real q) {
+        auto const upper = q < simdBroadcast<Real>(table.changePoints[piece + 1]);
         if (piece == 0) {
             return upper;
         }
-        return upper * Real(q >= Real(table.changePoints[piece]));
+        return upper && (q >= simdBroadcast<Real>(table.changePoints[piece]));
     }
 
 }    // namespace detail
@@ -303,17 +302,18 @@ constexpr KernelTable makeKernelTable(KernelSpec spec) {
 
 template <typename Real>
 COSMICTIGER_RADIAL_HD inline Real value(KernelTable const& table, Real q) {
-    Real result = Real(0);
+    Real result = simdBroadcast<Real>(0);
     for (int piece = 0; piece < table.pieceCount; ++piece) {
         if constexpr (std::is_arithmetic_v<Real>) {
-            if (q < Real(table.changePoints[piece + 1])) {
+            if (q < simdBroadcast<Real>(table.changePoints[piece + 1])) {
                 return detail::evaluate(table.coefficients[piece], table.degree,
                     detail::localCoordinate(table, piece, q));
             }
         } else {
-            result += detail::pieceMask(table, piece, q) *
+            result = simdSelect(detail::pieceMask(table, piece, q),
                 detail::evaluate(table.coefficients[piece], table.degree,
-                    detail::localCoordinate(table, piece, q));
+                    detail::localCoordinate(table, piece, q)),
+                result);
         }
     }
     return result;
@@ -321,17 +321,18 @@ COSMICTIGER_RADIAL_HD inline Real value(KernelTable const& table, Real q) {
 
 template <typename Real>
 COSMICTIGER_RADIAL_HD inline Real derivative(KernelTable const& table, Real q) {
-    Real result = Real(0);
+    Real result = simdBroadcast<Real>(0);
     for (int piece = 0; piece < table.pieceCount; ++piece) {
         if constexpr (std::is_arithmetic_v<Real>) {
-            if (q < Real(table.changePoints[piece + 1])) {
+            if (q < simdBroadcast<Real>(table.changePoints[piece + 1])) {
                 return detail::evaluate(table.derivativeCoefficients[piece], table.degree - 1,
                     detail::localCoordinate(table, piece, q));
             }
         } else {
-            result += detail::pieceMask(table, piece, q) *
+            result = simdSelect(detail::pieceMask(table, piece, q),
                 detail::evaluate(table.derivativeCoefficients[piece], table.degree - 1,
-                    detail::localCoordinate(table, piece, q));
+                    detail::localCoordinate(table, piece, q)),
+                result);
         }
     }
     return result;
@@ -345,8 +346,8 @@ namespace detail {
         if (piece == 0) {
             return evaluate(table.centralForceCoefficients, table.degree, t);
         }
-        Real const inverseRadius =
-            Real(1) / clamp(q, table.changePoints[piece], table.changePoints[piece + 1]);
+        Real const inverseRadius = simdBroadcast<Real>(1) /
+            clamp(q, table.changePoints[piece], table.changePoints[piece + 1]);
         return evaluate(table.massCoefficients[piece], table.degree + 3, t) * inverseRadius *
             inverseRadius * inverseRadius;
     }
@@ -357,11 +358,11 @@ namespace detail {
         Real const t = localCoordinate(table, piece, q);
         if (piece == 0) {
             Real const radius = clamp(q, 0, table.changePoints[1]);
-            return Real(table.centralPotential) -
+            return simdBroadcast<Real>(table.centralPotential) -
                 radius * radius * evaluate(table.centralPotentialDropCoefficients, table.degree, t);
         }
-        Real const inverseRadius =
-            Real(1) / clamp(q, table.changePoints[piece], table.changePoints[piece + 1]);
+        Real const inverseRadius = simdBroadcast<Real>(1) /
+            clamp(q, table.changePoints[piece], table.changePoints[piece + 1]);
         return evaluate(table.massCoefficients[piece], table.degree + 3, t) * inverseRadius +
             evaluate(table.shellCoefficients[piece], table.degree + 2, t);
     }
@@ -372,23 +373,25 @@ namespace detail {
 // value is 4 pi W(0)/3; the actual central acceleration is zero.
 template <typename Real>
 COSMICTIGER_RADIAL_HD inline Real forceFactor(KernelTable const& table, Real q) {
-    Real result = Real(0);
+    Real result = simdBroadcast<Real>(0);
     for (int piece = 0; piece < table.pieceCount; ++piece) {
         if constexpr (std::is_arithmetic_v<Real>) {
-            if (q < Real(table.changePoints[piece + 1])) {
+            if (q < simdBroadcast<Real>(table.changePoints[piece + 1])) {
                 return detail::forceOnPiece(table, piece, q);
             }
         } else {
-            result += detail::pieceMask(table, piece, q) * detail::forceOnPiece(table, piece, q);
+            result = simdSelect(
+                detail::pieceMask(table, piece, q), detail::forceOnPiece(table, piece, q), result);
         }
     }
     if constexpr (std::is_arithmetic_v<Real>) {
-        Real const inverseRadius = Real(1) / q;
+        Real const inverseRadius = simdBroadcast<Real>(1) / q;
         return inverseRadius * inverseRadius * inverseRadius;
     } else {
-        Real const outside = q >= Real(1);
-        Real const inverseRadius = Real(1) / (outside * q + (Real(1) - outside));
-        return result + outside * inverseRadius * inverseRadius * inverseRadius;
+        auto const outside = q >= simdBroadcast<Real>(1);
+        Real const inverseRadius =
+            simdBroadcast<Real>(1) / simdSelect(outside, q, simdBroadcast<Real>(1));
+        return simdSelect(outside, inverseRadius * inverseRadius * inverseRadius, result);
     }
 }
 
@@ -396,22 +399,24 @@ COSMICTIGER_RADIAL_HD inline Real forceFactor(KernelTable const& table, Real q) 
 // times this value, with zero at infinity and exactly 1/q outside support.
 template <typename Real>
 COSMICTIGER_RADIAL_HD inline Real potential(KernelTable const& table, Real q) {
-    Real result = Real(0);
+    Real result = simdBroadcast<Real>(0);
     for (int piece = 0; piece < table.pieceCount; ++piece) {
         if constexpr (std::is_arithmetic_v<Real>) {
-            if (q < Real(table.changePoints[piece + 1])) {
+            if (q < simdBroadcast<Real>(table.changePoints[piece + 1])) {
                 return detail::potentialOnPiece(table, piece, q);
             }
         } else {
-            result +=
-                detail::pieceMask(table, piece, q) * detail::potentialOnPiece(table, piece, q);
+            result = simdSelect(detail::pieceMask(table, piece, q),
+                detail::potentialOnPiece(table, piece, q), result);
         }
     }
     if constexpr (std::is_arithmetic_v<Real>) {
-        return Real(1) / q;
+        return simdBroadcast<Real>(1) / q;
     } else {
-        Real const outside = q >= Real(1);
-        return result + outside / (outside * q + (Real(1) - outside));
+        auto const outside = q >= simdBroadcast<Real>(1);
+        Real const inverseRadius =
+            simdBroadcast<Real>(1) / simdSelect(outside, q, simdBroadcast<Real>(1));
+        return simdSelect(outside, inverseRadius, result);
     }
 }
 

@@ -89,10 +89,10 @@ int hpx_main(int argc, char* argv[]) {
             healpixInit();
             EwaldConst::init();
             FILE* fp = fopen("ewald.txt", "wt");
-            xValue[0] = xValue[1] = xValue[2] = 0.00;
+            xValue[0] = xValue[1] = xValue[2] = SimdFloat(0.0f);
             for (double x = 0.00; x < 0.5; x += 0.001) {
-                xValue[0] = x;
-                d = 0.0;
+                xValue[0] = simdBroadcast<SimdFloat>(x);
+                d = SimdFloat(0.0f);
                 ewaldGreensFunction(d, xValue);
                 fprintf(fp, "%e ", x);
                 for (int n = 0; n < LORDER; n++) {
@@ -101,7 +101,7 @@ int hpx_main(int argc, char* argv[]) {
                             if (l > 1 && !(l == 2 && n == 0 && m == 0)) {
                                 continue;
                             }
-                            fprintf(fp, "%e ", d(n, m, l)[0]);
+                            fprintf(fp, "%e ", double(d(n, m, l)[0]));
                         }
                     }
                 }

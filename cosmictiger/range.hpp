@@ -476,24 +476,29 @@ CUDA_EXPORT inline bool boxIntersectsSphere(
 inline SimdFloat boxDistanceSquared(Range<SimdDouble8> const& box, Array<SimdInt, NDIM> const& x) {
     SimdFloat d2 = 0.0f;
     for (int dim = 0; dim < NDIM; dim++) {
-        SimdDouble8 xValue = SimdDouble8(x[dim]) * SimdDouble8(Fixed32::kToFloatFactor_);
+        SimdDouble8 xValue =
+            simdCast<SimdDouble8>(x[dim]) * simdBroadcast<SimdDouble8>(Fixed32::kToFloatFactor_);
         // Positions are unsigned coordinates in [0, 1), not signed displacements.
-        xValue = xValue + (xValue < SimdDouble8(0.0));
+        xValue = simdSelect(xValue < SimdDouble8(0.0), xValue + SimdDouble8(1.0), xValue);
         // Match the scalar/device float rounding after exact coordinate subtraction.
-        SimdFloat beginDelta = SimdFloat(box.begin[dim] - xValue);
-        beginDelta -= beginDelta > SimdFloat(0.5f);
-        beginDelta += beginDelta < SimdFloat(-0.5f);
-        SimdFloat endDelta = SimdFloat(box.end[dim] - xValue);
-        endDelta -= endDelta > SimdFloat(0.5f);
-        endDelta += endDelta < SimdFloat(-0.5f);
-        SimdFloat const outside = SimdFloat((xValue < box.begin[dim]) + (xValue > box.end[dim]));
-        SimdFloat const delta = outside * min(abs(beginDelta), abs(endDelta));
-        d2 = fmaf(delta, delta, d2);
+        SimdFloat beginDelta = simdCast<SimdFloat>(box.begin[dim] - xValue);
+        beginDelta =
+            simdSelect(beginDelta > SimdFloat(0.5f), beginDelta - SimdFloat(1.f), beginDelta);
+        beginDelta =
+            simdSelect(beginDelta < SimdFloat(-0.5f), beginDelta + SimdFloat(1.f), beginDelta);
+        SimdFloat endDelta = simdCast<SimdFloat>(box.end[dim] - xValue);
+        endDelta = simdSelect(endDelta > SimdFloat(0.5f), endDelta - SimdFloat(1.f), endDelta);
+        endDelta = simdSelect(endDelta < SimdFloat(-0.5f), endDelta + SimdFloat(1.f), endDelta);
+        auto const outside = (xValue < box.begin[dim]) | (xValue > box.end[dim]);
+        auto const nearestDelta = simdMin(simdAbs(beginDelta), simdAbs(endDelta));
+        SimdFloat const delta = simdCast<SimdFloat>(
+            simdSelect(outside, simdCast<SimdDouble8>(nearestDelta), SimdDouble8(0.0)));
+        d2 = simdFma(delta, delta, d2);
     }
     return d2;
 }
 
-inline SimdFloat boxIntersectsSphere(
+inline auto boxIntersectsSphere(
     Range<SimdDouble8> const& box, Array<SimdInt, NDIM> const& x, SimdFloat r) {
     return boxDistanceSquared(box, x) < sqr(r);
 }

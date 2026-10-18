@@ -410,33 +410,34 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
             for (int dim = 0; dim < NDIM; dim++) {
                 xc1[dim] = 0.5 * (rbox.begin[dim] + rbox.end[dim]);    // 6
             }
-            Array<SimdInt, NDIM> xc;
+            Array<SimdInt, NDIM> xc{};
             for (int dim = 0; dim < NDIM; dim++) {
-                xc[dim] = Fixed32(xc1[dim]).raw();
+                xc[dim] = simdBroadcast<SimdInt>(Fixed32(xc1[dim]).raw());
             }
             flops += 6;
-            SimdFloat r2Max(0.0);
+            SimdFloat r2Max = simdBroadcast<SimdFloat>(0.0);
             for (ParticleInteger i = particleRange.first; i < particleRange.second;
                 i += SIMD_FLOAT_SIZE) {
-                SimdInt x;
-                Array<SimdFloat, NDIM> dx;
+                SimdInt x{};
+                Array<SimdFloat, NDIM> dx{};
                 int const maxj = std::min(particleRange.second - i, SIMD_FLOAT_SIZE);
                 for (int dim = 0; dim < NDIM; dim++) {
                     for (int j = 0; j < maxj; j++) {
-                        x[j] = particlesPos(dim, i + j).raw();
+                        simdSetLane(x, j, particlesPos(dim, i + j).raw());
                     }
                     for (int j = maxj; j < SIMD_FLOAT_SIZE; j++) {
-                        x[j] = xc[dim][0];
+                        simdSetLane(x, j, xc[dim][0]);
                     }
-                    dx[dim] = SimdFloat(x - xc[dim]) * toFloatFactor;    // 6
+                    dx[dim] = simdCast<SimdFloat>(simdPositionDifference(x, xc[dim])) *
+                        toFloatFactor;    // 6
                 }
                 flops += 18 + maxj * 6;
                 auto const r2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
-                r2Max = max(r2Max, r2);
+                r2Max = simdMax(r2Max, r2);
             }
             float r2 = 0.0f;
             for (int i = 0; i < SIMD_FLOAT_SIZE; i++) {
-                r2 = std::max(r2, r2Max[i]);
+                r2 = std::max(r2, static_cast<float>(r2Max[i]));
             }
             flops += 4 + SIMD_FLOAT_SIZE;
             radius1 = sqrt(r2);
@@ -514,15 +515,15 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
         for (int dim = 0; dim < NDIM; dim++) {
             x[dim] = xcValue[dim];    // 3
         }
-        Array<SimdDouble, NDIM> mdx;
-        Multipole<SimdDouble> simdM;
+        Array<SimdDouble, NDIM> mdx{};
+        Multipole<SimdDouble> simdM{};
         for (int i = 0; i < MULTIPOLE_SIZE; i++) {
-            simdM[i][LEFT] = ml[i];
-            simdM[i][RIGHT] = mr[i];
+            simdSetLane(simdM[i], LEFT, ml[i]);
+            simdSetLane(simdM[i], RIGHT, mr[i]);
         }
         for (int dim = 0; dim < NDIM; dim++) {
-            mdx[dim][LEFT] = xlValue[dim] - xcValue[dim];     // 3
-            mdx[dim][RIGHT] = xrValue[dim] - xcValue[dim];    // 3
+            simdSetLane(mdx[dim], LEFT, xlValue[dim] - xcValue[dim]);     // 3
+            simdSetLane(mdx[dim], RIGHT, xrValue[dim] - xcValue[dim]);    // 3
         }
         simdM = m2M<SimdDouble>(simdM, mdx);
         for (int i = 0; i < MULTIPOLE_SIZE; i++) {
@@ -575,35 +576,36 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
         ParticleInteger const maxi =
             roundUp(particleRange.second - particleRange.first, (ParticleInteger) SIMD_FLOAT_SIZE) +
             particleRange.first;
-        Array<SimdInt, NDIM> y;
+        Array<SimdInt, NDIM> y{};
         for (int dim = 0; dim < NDIM; dim++) {
-            y[dim] = Fixed32(xcValue[dim]).raw();
+            y[dim] = simdBroadcast<SimdInt>(Fixed32(xcValue[dim]).raw());
         }
 
         for (ParticleInteger i = particleRange.first; i < maxi; i += SIMD_FLOAT_SIZE) {
-            Array<SimdInt, NDIM> xValue;
-            SimdFloat mask;
+            Array<SimdInt, NDIM> xValue{};
+            SimdFloat mask{};
             ParticleInteger const maxj = std::min(i + SIMD_FLOAT_SIZE, particleRange.second);
             for (ParticleInteger j = i; j < maxj; j++) {
                 for (int dim = 0; dim < NDIM; dim++) {
-                    xValue[dim][j - i] = particlesPos(dim, j).raw();
+                    simdSetLane(xValue[dim], j - i, particlesPos(dim, j).raw());
                 }
-                mask[j - i] = particlesMass(j);
+                simdSetLane(mask, j - i, particlesMass(j));
             }
             for (ParticleInteger j = maxj; j < i + SIMD_FLOAT_SIZE; j++) {
-                mask[j - i] = 0.f;
+                simdSetLane(mask, j - i, 0.f);
                 for (int dim = 0; dim < NDIM; dim++) {
-                    xValue[dim][j - i] = particlesPos(dim, maxj - 1).raw();
+                    simdSetLane(xValue[dim], j - i, particlesPos(dim, maxj - 1).raw());
                 }
             }
-            Array<SimdFloat, NDIM> dx;
+            Array<SimdFloat, NDIM> dx{};
             for (int dim = 0; dim < NDIM; dim++) {
-                dx[dim] = SimdFloat(xValue[dim] - y[dim]) * toFloatFactor;    // 3
+                dx[dim] = simdCast<SimdFloat>(simdPositionDifference(xValue[dim], y[dim])) *
+                    toFloatFactor;    // 3
             }
             auto m = p2M(dx);    // 211
             for (int j = 0; j < MULTIPOLE_SIZE; j++) {
-                m[j] *= mask;               // MULTIPOLE_SIZE
-                mValue[j] += m[j].sum();    // MULTIPOLE_SIZE * 6
+                m[j] *= mask;                  // MULTIPOLE_SIZE
+                mValue[j] += simdSum(m[j]);    // MULTIPOLE_SIZE * 6
             }
             flops += 214 + MULTIPOLE_SIZE * 7;
         }

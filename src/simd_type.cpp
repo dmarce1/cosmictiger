@@ -17,14 +17,15 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-#include <stdio.h>
+#include <cstdio>
+
+#include <cosmictiger/simd_backend.hpp>
 
 int main() {
-#if defined(__AVX2__)
-    printf("Using AVX2");
-#elif defined(__AVX__)
-    printf("Using AVX");
+#if COSMICTIGER_SIMD_STANDARD
+    std::printf("Using std::simd");
 #else
-    printf("Error! No AVX!");
+    std::printf("Using std::experimental::simd");
 #endif
+    std::printf(" (%d float lanes, %d double lanes)\n", SIMD_FLOAT_SIZE, int(SimdDouble::size()));
 }

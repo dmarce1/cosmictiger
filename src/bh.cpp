@@ -169,7 +169,7 @@ void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& si
     float const gm = getOptions().gm;
     float const hinv = 1.0 / h;
     float const h2 = h * h;
-    SimdFloat const tiny(1e-20);
+    SimdFloat const tiny = simdBroadcast<SimdFloat>(1e-20);
     int const numberOfThreads =
         std::max(std::min((int) parts.size() / 512, 2 * (int) hpxHardwareConcurrency()), 1);
     Vector<hpx::future<void>> futs;
@@ -225,40 +225,40 @@ void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& si
                     sourcelist.push_back(src);
                 }
                 for (int i = myparts.first; i < myparts.second; i++) {
-                    Array<SimdFloat, NDIM> xValue;
+                    Array<SimdFloat, NDIM> xValue{};
                     for (int dim = 0; dim < NDIM; dim++) {
                         xValue[dim] = parts[i][dim];
                     }
                     for (int j = 0; j < sourcelist.size(); j += SIMD_FLOAT_SIZE) {
-                        Array<SimdFloat, NDIM> yValue;
-                        SimdFloat mValue;
+                        Array<SimdFloat, NDIM> yValue{};
+                        SimdFloat mValue{};
                         for (int k = 0; k < SIMD_FLOAT_SIZE; k++) {
                             auto const& src = sourcelist[j + k];
                             for (int dim = 0; dim < NDIM; dim++) {
-                                yValue[dim][k] = src.x[dim];
+                                simdSetLane(yValue[dim], k, src.x[dim]);
                             }
-                            mValue[k] = src.m;
+                            simdSetLane(mValue, k, src.m);
                         }
-                        Array<SimdFloat, NDIM> dx;
+                        Array<SimdFloat, NDIM> dx{};
                         for (int dim = 0; dim < NDIM; dim++) {
                             dx[dim] = xValue[dim] - yValue[dim];    // 3
                         }
-                        SimdFloat const r2 = max(sqr(dx[XDIM], dx[YDIM], dx[ZDIM]), tiny);    // 5
-                        SimdFloat const farFlag = r2 > h2;                                    // 1
-                        SimdFloat rinv1;
-                        if (farFlag.sum() == SIMD_FLOAT_SIZE) {    // 7/8
-                            rinv1 = rsqrt(r2);                     // 5
+                        SimdFloat const r2 =
+                            simdMax(sqr(dx[XDIM], dx[YDIM], dx[ZDIM]), tiny);    // 5
+                        auto const farFlag = r2 > h2;                            // 1
+                        SimdFloat rinv1{};
+                        if (simdAllOf(farFlag)) {     // 7/8
+                            rinv1 = simdRsqrt(r2);    // 5
                         } else {
-                            SimdFloat const r = sqrt(r2);    // 4
-                            SimdFloat const rinv1Far =
-                                SimdFloat(1) / (r + SimdFloat(1e-30));    // 5
+                            SimdFloat const r = simdSqrt(r2);    // 4
+                            SimdFloat const rinv1Far = simdBroadcast<SimdFloat>(1) /
+                                (r + simdBroadcast<SimdFloat>(1e-30));    // 5
                             SimdFloat const q = r * hinv;
                             SimdFloat const rinv1Near =
                                 radial_kernel::potential(selectedGravityKernel(), q) * hinv;
-                            auto const nearFlag = (SimdFloat(1) - farFlag);       // 1
-                            rinv1 = farFlag * rinv1Far + nearFlag * rinv1Near;    // 4
+                            rinv1 = simdSelect(farFlag, rinv1Far, rinv1Near);    // 4
                         }
-                        phi[i] -= (mValue * rinv1).sum();    // 1
+                        phi[i] -= simdSum(mValue * rinv1);    // 1
                     }
                     phi[i] *= gm;
                 }
@@ -274,7 +274,7 @@ void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Array<float, NDI
     float const gm = getOptions().gm;
     float const hinv = 1.0f / h;
     float const h2 = h * h;
-    SimdFloat const tiny(1e-20);
+    SimdFloat const tiny = simdBroadcast<SimdFloat>(1e-20);
     int const numberOfThreads =
         std::max(std::min((int) parts.size() / 512, 2 * (int) hpxHardwareConcurrency()), 1);
     Vector<hpx::future<void>> futs;
@@ -319,40 +319,41 @@ void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Array<float, NDI
         }
         sourcelist.push_back(src);
     }
-    Array<SimdFloat, NDIM> xValue;
+    Array<SimdFloat, NDIM> xValue{};
     for (int dim = 0; dim < NDIM; dim++) {
         xValue[dim] = pt[dim];
     }
     for (int j = 0; j < sourcelist.size(); j += SIMD_FLOAT_SIZE) {
-        Array<SimdFloat, NDIM> yValue;
-        SimdFloat mValue;
+        Array<SimdFloat, NDIM> yValue{};
+        SimdFloat mValue{};
         for (int k = 0; k < SIMD_FLOAT_SIZE; k++) {
             auto const& src = sourcelist[j + k];
             for (int dim = 0; dim < NDIM; dim++) {
-                yValue[dim][k] = src.x[dim];
+                simdSetLane(yValue[dim], k, src.x[dim]);
             }
-            mValue[k] = src.m;
+            simdSetLane(mValue, k, src.m);
         }
-        Array<SimdFloat, NDIM> dx;
+        Array<SimdFloat, NDIM> dx{};
         for (int dim = 0; dim < NDIM; dim++) {
             dx[dim] = xValue[dim] - yValue[dim];    // 3
         }
         SimdFloat const separationSquared = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
-        SimdFloat const r2 = max(separationSquared, tiny);
-        SimdFloat const farFlag = r2 > h2;    // 1
-        SimdFloat rinv1;
-        if (farFlag.sum() == SIMD_FLOAT_SIZE) {    // 7/8
-            rinv1 = rsqrt(r2);                     // 5
+        SimdFloat const r2 = simdMax(separationSquared, tiny);
+        auto const farFlag = r2 > h2;    // 1
+        SimdFloat rinv1{};
+        if (simdAllOf(farFlag)) {     // 7/8
+            rinv1 = simdRsqrt(r2);    // 5
         } else {
-            SimdFloat const r = sqrt(r2);                                         // 4
-            SimdFloat const rinv1Far = SimdFloat(1) / (r + SimdFloat(1e-30f));    // 5
+            SimdFloat const r = simdSqrt(r2);    // 4
+            SimdFloat const rinv1Far =
+                simdBroadcast<SimdFloat>(1) / (r + simdBroadcast<SimdFloat>(1e-30f));    // 5
             SimdFloat const q = r * hinv;
-            SimdFloat const rinv1Near = radial_kernel::potential(selectedGravityKernel(), q) *
-                hinv * (separationSquared > SimdFloat(0));
-            auto const nearFlag = (SimdFloat(1) - farFlag);       // 1
-            rinv1 = farFlag * rinv1Far + nearFlag * rinv1Near;    // 4
+            SimdFloat const rinv1Near = simdSelect(separationSquared > simdBroadcast<SimdFloat>(0),
+                radial_kernel::potential(selectedGravityKernel(), q) * hinv,
+                simdBroadcast<SimdFloat>(0));
+            rinv1 = simdSelect(farFlag, rinv1Far, rinv1Near);    // 4
         }
-        phi -= (mValue * rinv1).sum();    // 1
+        phi -= simdSum(mValue * rinv1);    // 1
     }
     phi *= gm;
 }
