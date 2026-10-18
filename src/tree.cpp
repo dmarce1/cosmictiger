@@ -230,17 +230,23 @@ static bool setCpu = false;
 
 void tree2Cpu() {
     if (!setCpu) {
-        if (setGpu) {
+#ifdef USE_CUDA
+        if (setGpu && cudaEnabled()) {
             cudaSetDevice();
             CUDA_CHECK(cudaMemAdvise(nodes, nodesSize * sizeof(TreeNode),
                 cudaMemAdviseUnsetReadMostly, cudaGetDevice()));
         }
+#endif
         setGpu = false;
         setCpu = true;
     }
 }
 
 void tree2Gpu() {
+#ifdef USE_CUDA
+    if (!cudaEnabled()) {
+        THROW_ERROR("GPU tree access requires compute.cuda=true\n");
+    }
     if (!setGpu) {
         cudaSetDevice();
         CUDA_CHECK(cudaMemAdvise(
@@ -248,6 +254,9 @@ void tree2Gpu() {
         setGpu = true;
         setCpu = false;
     }
+#else
+    THROW_ERROR("GPU tree access requested in a build without CUDA\n");
+#endif
 }
 
 static void treeAllocateNodes() {
@@ -264,11 +273,11 @@ static void treeAllocateNodes() {
             (size_t) NTREES_MIN);
     if (nodesSize < sz) {
         if (nodes != nullptr) {
-            CUDA_CHECK(cudaFree(nodes));
-            CUDA_CHECK(cudaFree(multis));
+            freeManagedMemory(nodes);
+            freeManagedMemory(multis);
         }
-        CUDA_CHECK(cudaMallocManaged(&nodes, sz * sizeof(TreeNode)));
-        CUDA_CHECK(cudaMallocManaged(&multis, sz * sizeof(MultiPos)));
+        nodes = static_cast<TreeNode*>(allocateManagedMemory(sz * sizeof(TreeNode)));
+        multis = static_cast<MultiPos*>(allocateManagedMemory(sz * sizeof(MultiPos)));
     }
     nodesSize = sz;
     populatedNodes.assign(sz, 0);

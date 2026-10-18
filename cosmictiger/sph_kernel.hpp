@@ -33,6 +33,9 @@ struct SphRunData {
     float* sourceVelocityY;
     float* sourceVelocityZ;
     float* sourceInternalEnergy;
+    // Optional local-composition EOS. Null retains the configured ideal gas.
+    float* sourcePressureEnergyRatio;
+    float* sourceAdiabaticIndex;
     float* sourceDensity;
     float* sourceSupportRadius;
     char* sourceRungs;

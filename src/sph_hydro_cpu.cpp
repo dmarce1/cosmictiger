@@ -29,7 +29,6 @@ SphRunReturn sphCpuHydro(
     SimdFloat const one(1.0f);
     SimdFloat const half(0.5f);
     SimdFloat const gammaMinusOne(adiabaticIndex - 1.0f);
-    SimdFloat const soundCoefficient(adiabaticIndex * (adiabaticIndex - 1.0f));
     SimdFloat const massOverScaleFactor(gasMassOverScaleFactor);
     SimdFloat const viscosityAlpha(parameters.viscosityAlpha);
     SimdFloat const viscosityBeta(parameters.viscosityBeta);
@@ -48,9 +47,14 @@ SphRunReturn sphCpuHydro(
         float const sinkDensity = data.sourceDensity[particleIndex];
         float const sinkInternalEnergy = data.sourceInternalEnergy[particleIndex];
         ALWAYS_ASSERT(sinkSupportRadius > 0.0f && sinkDensity > 0.0f && sinkInternalEnergy > 0.0f);
-        float const sinkPressure = (adiabaticIndex - 1.0f) * sinkDensity * sinkInternalEnergy;
+        float const sinkPressureEnergyRatio = data.sourcePressureEnergyRatio ?
+            data.sourcePressureEnergyRatio[particleIndex] :
+            adiabaticIndex - 1.0f;
+        float const sinkAdiabaticIndex =
+            data.sourceAdiabaticIndex ? data.sourceAdiabaticIndex[particleIndex] : adiabaticIndex;
+        float const sinkPressure = sinkPressureEnergyRatio * sinkDensity * sinkInternalEnergy;
         float const sinkSoundSpeed =
-            std::sqrt(adiabaticIndex * (adiabaticIndex - 1.0f) * sinkInternalEnergy);
+            std::sqrt(sinkAdiabaticIndex * sinkPressureEnergyRatio * sinkInternalEnergy);
         SimdFloat const support(sinkSupportRadius);
         SimdFloat const density(sinkDensity);
         SimdFloat const pressure(sinkPressure);
@@ -115,10 +119,19 @@ SphRunReturn sphCpuHydro(
                     viscosityRadius * physicalVelocityDotSeparation /
                         (pairSquaredSeparation + viscosityEpsilon * sqr(viscosityRadius)),
                     zero);
+            SimdFloat const neighborPressureEnergyRatio = data.sourcePressureEnergyRatio ?
+                simdSelect(interacts,
+                    detail::sphCpuLoad(data.sourcePressureEnergyRatio, neighbors, first, 1.0f),
+                    one) :
+                gammaMinusOne;
+            SimdFloat const neighborAdiabaticIndex = data.sourceAdiabaticIndex ?
+                simdSelect(interacts,
+                    detail::sphCpuLoad(data.sourceAdiabaticIndex, neighbors, first, 1.0f), one) :
+                SimdFloat(adiabaticIndex);
             SimdFloat const neighborPressure =
-                gammaMinusOne * neighborDensity * neighborInternalEnergy;
-            SimdFloat const neighborSoundSpeed =
-                simdSqrt(soundCoefficient * neighborInternalEnergy);
+                neighborPressureEnergyRatio * neighborDensity * neighborInternalEnergy;
+            SimdFloat const neighborSoundSpeed = simdSqrt(
+                neighborAdiabaticIndex * neighborPressureEnergyRatio * neighborInternalEnergy);
             SimdFloat const meanSoundSpeed = half * (soundSpeed + neighborSoundSpeed);
             SimdFloat const meanDensity = half * (density + neighborDensity);
             SimdFloat const viscosity = simdSelect(viscosityApproachRate < zero,
@@ -171,8 +184,13 @@ SphRunReturn sphCpuHydro(
         data.sinkAccelerations[sinkIndex].acceleration[XDIM] = accelerationX;
         data.sinkAccelerations[sinkIndex].acceleration[YDIM] = accelerationY;
         data.sinkAccelerations[sinkIndex].acceleration[ZDIM] = accelerationZ;
-        internalEnergyRate += (5.0f - 3.0f * adiabaticIndex) * parameters.expansionRate *
-            inverseScaleFactor * sinkInternalEnergy;
+        // E=a^2 u and homogeneous adiabatic work du/dt=-3 H P/rho give
+        // dE/dtau=(2-3 P/(rho*u)) (da/dtau)/a E for a composition-dependent EOS.
+        float const expansionCoefficient = data.sourcePressureEnergyRatio ?
+            2.0f - 3.0f * sinkPressureEnergyRatio :
+            5.0f - 3.0f * adiabaticIndex;
+        internalEnergyRate += expansionCoefficient * parameters.expansionRate * inverseScaleFactor *
+            sinkInternalEnergy;
         data.sinkInternalEnergyRate[sinkIndex] = internalEnergyRate;
         if (parameters.phase == 1) {
             float const effectiveRadius =

@@ -22,6 +22,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -85,8 +86,16 @@ int hpx_main(int argc, char* argv[]) {
                 stopMemuseDaemon();
                 return hpx::finalize();
             }
-            hpxInitCuda();
-            healpixInit();
+            if (getOptions().lightcone.enabled && !getOptions().compute.cuda) {
+                throw std::runtime_error("lightcone.enabled=true requires compute.cuda=true; "
+                                         "lightcone group finding has no CPU backend");
+            }
+#ifdef USE_CUDA
+            if (getOptions().compute.cuda) {
+                hpxInitCuda();
+                healpixInit();
+            }
+#endif
             EwaldConst::init();
             FILE* fp = fopen("ewald.txt", "wt");
             xValue[0] = xValue[1] = xValue[2] = SimdFloat(0.0f);

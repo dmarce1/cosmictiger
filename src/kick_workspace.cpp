@@ -66,6 +66,7 @@ bool mortonCompare(Array<Fixed32, NDIM> a, Array<Fixed32, NDIM> b) {
 }
 
 void KickWorkspace::toGpu() {
+#ifdef USE_CUDA
     cudaSetDevice();
     //	PRINT("Preparing gpu send on %i\n", hpx_rank());
 
@@ -346,6 +347,9 @@ void KickWorkspace::toGpu() {
     particlesResize(originalParticleCount);
     kickSetRc(kr);
     //	PRINT("GPU took %e seconds\n", tm.read());
+#else
+    THROW_ERROR("GPU gravity requested in a build without CUDA\n");
+#endif
 }
 
 void KickWorkspace::recordProcessedParticles(

@@ -403,3 +403,11 @@ void cpuGravityPp(
     }
     addCpuFlops(flops);
 }
+
+#ifndef USE_CUDA
+void resetGravityCounters() {}
+void setGravityCounterUse(bool) {}
+void getGravityCounters(double& close, double& direct) {
+    close = direct = 0.0;
+}
+#endif

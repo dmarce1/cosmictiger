@@ -110,8 +110,10 @@ void EwaldConst::initGpu() {
         }
     }
     ec.d0 = dValue;
-    cudaSetDevice();
-    CUDA_CHECK(cudaMemcpyToSymbol(ecDev, &ec, sizeof(EwaldConstants)));
+    if (cudaEnabled()) {
+        cudaSetDevice();
+        CUDA_CHECK(cudaMemcpyToSymbol(ecDev, &ec, sizeof(EwaldConstants)));
+    }
 }
 
 CUDA_EXPORT int EwaldConst::nfour() {

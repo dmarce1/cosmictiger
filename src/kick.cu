@@ -196,6 +196,10 @@ __device__ void doKick(KickReturn& result, KickParameters params, CudaKickData c
                 rung = max(max((int) ceilf(log2f(params.t0 / dt)),
                                max((int) rungs[sinkIndex] - 1, params.minRung)),
                     1);
+                if (params.fixedRung != 0) {
+                    maxRung = max(maxRung, int(rung));
+                    rung = params.fixedRung;
+                }
                 ALWAYS_ASSERT(rung >= 0 && rung < MAX_RUNG);
                 rungs[sinkIndex] = rung;
                 dt = 0.5f * rungDt[rung] * params.t0;

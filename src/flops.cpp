@@ -65,3 +65,10 @@ void addCpuFlops(int count) {
     cpuFlops += count;
 #endif
 }
+
+#ifndef USE_CUDA
+void resetGpuFlops() {}
+double getGpuFlops() {
+    return 0.0;
+}
+#endif

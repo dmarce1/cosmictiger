@@ -36,6 +36,13 @@
 #include <cosmictiger/assert.hpp>
 #include <cosmictiger/defs.hpp>
 
+// Host-accessible storage follows the selected backend, not the build's capabilities.
+bool cudaEnabled();
+void* allocateManagedMemory(size_t bytes);
+void freeManagedMemory(void* pointer) noexcept;
+void* allocatePinnedMemory(size_t bytes);
+void freePinnedMemory(void* pointer) noexcept;
+
 #ifdef USE_CUDA
 
 #define CUDA_MALLOC(a, b) cudaMalloc2(a, b, __FILE__, __LINE__)
@@ -135,17 +142,11 @@ public:
         if (count == 0) {
             return nullptr;
         }
-        void* pointer = nullptr;
-        if (cudaHostAlloc(&pointer, count * sizeof(T), cudaHostAllocDefault) != cudaSuccess) {
-            throw std::bad_alloc();
-        }
-        return static_cast<T*>(pointer);
+        return static_cast<T*>(allocatePinnedMemory(count * sizeof(T)));
     }
 
     void deallocate(T* pointer, size_t) noexcept {
-        if (pointer != nullptr) {
-            cudaFreeHost(pointer);
-        }
+        freePinnedMemory(pointer);
     }
 
     template <typename U>

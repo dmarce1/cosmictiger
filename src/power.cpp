@@ -30,6 +30,9 @@ static void computeDensityFolded(int m);
 HPX_PLAIN_ACTION(computeDensityFolded, ComputeDensityFoldedAction);
 
 PowerSpectrumT powerSpectrumCompute(int m) {
+    if (!cudaEnabled()) {
+        THROW_ERROR("Power-spectrum density assignment requires compute.cuda=true\n");
+    }
     int const n = getOptions().initial.fourierSize;
     fft3dInit(n, -1.0f);
     computeDensityFolded(m);
@@ -67,8 +70,10 @@ static void computeDensityFolded(int m) {
                 intbox.end[XDIM] = (j + 1) * nper + CLOUD_MAX;
                 intbox.end[YDIM] = (k + 1) * nper + CLOUD_MAX;
                 intbox.end[ZDIM] = (l + 1) * nper + CLOUD_MAX;
+#ifdef USE_CUDA
                 auto rho = accumulateDensityCuda(m, ndim, intbox);
                 fft3dAccumulateReal(intbox, rho);
+#endif
             }
         }
     }

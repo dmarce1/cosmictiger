@@ -641,7 +641,13 @@ size_t lcFindGroups() {
     }
     hpx::wait_all(futs2.begin(), futs2.end());
 
-    return cudaLightcone(leafNodes, particleMapPtr, treeMapPtr, &groupIdCounter);
+#ifdef USE_CUDA
+    if (cudaEnabled()) {
+        return cudaLightcone(leafNodes, particleMapPtr, treeMapPtr, &groupIdCounter);
+    }
+#endif
+    THROW_ERROR("Lightcone group finding requires compute.cuda=true\n");
+    return 0;
 }
 
 static LightconeParticles lcGetParticles1(int pix) {
@@ -849,8 +855,10 @@ void lcInit(double tau, double requestedTauMax) {
         futs.push_back(hpx::async<LcInitAction>(c, tau, requestedTauMax));
     }
     if (particleMapPtr == nullptr) {
-        CUDA_CHECK(cudaMallocManaged(&particleMapPtr, sizeof(LightconeParticleMapType)));
-        CUDA_CHECK(cudaMallocManaged(&treeMapPtr, sizeof(LightconeTreeMapType)));
+        particleMapPtr = static_cast<LightconeParticleMapType*>(
+            allocateManagedMemory(sizeof(LightconeParticleMapType)));
+        treeMapPtr =
+            static_cast<LightconeTreeMapType*>(allocateManagedMemory(sizeof(LightconeTreeMapType)));
         new (particleMapPtr) LightconeParticleMapType;
         new (treeMapPtr) LightconeTreeMapType;
     }

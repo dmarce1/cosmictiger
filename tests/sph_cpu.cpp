@@ -199,6 +199,11 @@ public:
         return particleOffset_ + count_ - index - 1;
     }
 
+    void enableCompositionEos() {
+        data_.sourcePressureEnergyRatio = allocate<float>(count_ + sourceOffset_ + 3);
+        data_.sourceAdiabaticIndex = allocate<float>(count_ + sourceOffset_ + 3);
+    }
+
     void publishSupport() {
         for (int i = 0; i < count_; i++) {
             data_.sourceSupportRadius[sourceIndex(i)] =
@@ -518,6 +523,55 @@ void testSelectedKernel() {
     fixture.params_.viscosityBeta = 2.0f;
     fixture.hydro();
     fixture.checkConservation();
+}
+
+void testCompositionEos() {
+    Fixture fixture(2);
+    fixture.enableCompositionEos();
+    auto& data = fixture.data_;
+    data.sourcePositionX[0] = 0.40;
+    data.sourcePositionX[1] = 0.58;
+    fixture.params_.viscosityAlpha = fixture.params_.viscosityBeta = 0.0f;
+    for (int i = 0; i < 2; ++i) {
+        data.sourcePositionY[i] = data.sourcePositionZ[i] = 0.5;
+        data.sinkSmoothingConverged[i] = true;
+        data.sourceSupportRadius[i] = data.sinkThermodynamicStates[i].supportRadius = 0.4f;
+        data.sourceInternalEnergy[i] = i == 0 ? 0.7f : 1.2f;
+        data.sourcePressureEnergyRatio[i] = i == 0 ? 0.4f : 0.3f;
+        data.sourceAdiabaticIndex[i] = i == 0 ? 1.3f : 1.6f;
+    }
+    fixture.density();
+    double const radius = std::abs(distance(data.sourcePositionX[0], data.sourcePositionX[1]));
+    double gradient = 0.0;
+    double pressurePair = 0.0;
+    double inverseCfl = 0.0;
+    for (int i = 0; i < 2; ++i) {
+        double const support = data.sourceSupportRadius[i];
+        gradient += 0.5 * dkernelWDq(radius / support) / std::pow(support, 4);
+        pressurePair += data.sourcePressureEnergyRatio[i] * data.sourceInternalEnergy[i] /
+            data.sourceDensity[i];
+        double const sound = std::sqrt(data.sourceAdiabaticIndex[i] *
+            data.sourcePressureEnergyRatio[i] * data.sourceInternalEnergy[i]);
+        inverseCfl = std::max(
+            inverseCfl, sound * selectedHydroKernel().supportRadiusPerEffectiveRadius / support);
+    }
+    fixture.hydro(1);
+    requireClose("composition-dependent pressure force",
+        data.sinkAccelerations[0].acceleration[XDIM], data.gasMass * pressurePair * gradient,
+        8.0e-6);
+    requireClose("composition-dependent sound speed", fixture.reduction_->inverseSoundTimestep,
+        inverseCfl, 3.0e-6);
+    fixture.checkConservation();
+    fixture.params_.scaleFactor = 0.6f;
+    fixture.params_.expansionRate = 0.09f;
+    fixture.hydro();
+    for (int i = 0; i < 2; ++i) {
+        double const expected = (2.0 - 3.0 * data.sourcePressureEnergyRatio[i]) *
+            fixture.params_.expansionRate / fixture.params_.scaleFactor *
+            data.sourceInternalEnergy[i];
+        requireClose("composition-dependent cosmological work", data.sinkInternalEnergyRate[i],
+            expected, 2.0e-6);
+    }
 }
 
 void testSelectedCentralGravity() {
@@ -918,6 +972,7 @@ int main() {
         detail::testUnequalSupports();
         detail::testDefaultTimestepCalibration();
         detail::testDefaultThermalTimestep();
+        detail::testCompositionEos();
         radial_kernel::KernelSpec const specifications[] = {
             {radial_kernel::Family::Spline, 3},
             {radial_kernel::Family::Spline, 4},

@@ -169,6 +169,7 @@ struct KickParameters {
     float sign;
     int minLevel;
     int minRung;
+    int fixedRung{};    // Nonzero only for synchronized primordial source splitting.
     float a;
     float t0;
     float theta;
@@ -200,6 +201,7 @@ struct KickParameters {
         arc & top;
         arc & maxDt;
         arc & minRung;
+        arc & fixedRung;
         arc & gpu;
         arc & a;
         arc & t0;

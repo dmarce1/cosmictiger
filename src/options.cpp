@@ -216,6 +216,21 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"cosmology.hubble", options.cosmology.hubble},
         {"cosmology.spectralIndex", options.cosmology.spectralIndex},
         {"units.massSolar", options.units.massG / constants::kM0},
+        {"chemistry.enabled", options.chemistry.enabled},
+        {"chemistry.network", options.chemistry.network},
+        {"chemistry.radiationFile", options.chemistry.radiationFile},
+        {"chemistry.synchronizedRung", options.chemistry.synchronizedRung},
+        {"chemistry.initialTemperature", options.chemistry.initialTemperature},
+        {"chemistry.hydrogenIonFraction", options.chemistry.hydrogenIonFraction},
+        {"chemistry.heliumIonFraction", options.chemistry.heliumIonFraction},
+        {"chemistry.heliumDoubleIonFraction", options.chemistry.heliumDoubleIonFraction},
+        {"chemistry.hydrogenMinusFraction", options.chemistry.hydrogenMinusFraction},
+        {"chemistry.molecularFraction", options.chemistry.molecularFraction},
+        {"chemistry.molecularIonFraction", options.chemistry.molecularIonFraction},
+        {"chemistry.relativeTolerance", options.chemistry.relativeTolerance},
+        {"chemistry.abundanceAbsoluteTolerance", options.chemistry.abundanceAbsoluteTolerance},
+        {"chemistry.energyAbsoluteTolerance", options.chemistry.energyAbsoluteTolerance},
+        {"chemistry.maxSubsteps", options.chemistry.maxSubsteps},
         {"hydro.enabled", options.hydro.enabled},
         {"hydro.kernelFamily", options.hydro.kernelFamily},
         {"hydro.kernelDegree", options.hydro.kernelDegree},
@@ -441,6 +456,42 @@ bool processOptions(int argc, char* argv[]) {
         po::value<double>(&opts.hydro.cfl)->default_value(0.22821773229381923),
         "Courant time-step factor using effective radius (2 sigma)");
 
+    po::options_description chemistryOpts("Primordial chemistry");
+    chemistryOpts.add_options()("chemistry.enabled",
+        po::value<bool>(&opts.chemistry.enabled)->default_value(false),
+        "evolve primordial thermochemistry (requires hydro.enabled)")("chemistry.network",
+        po::value<std::string>(&opts.chemistry.network)->default_value("atomic6"),
+        "atomic6 or molecular9; optically thin low-density gas")("chemistry.radiationFile",
+        po::value<std::string>(&opts.chemistry.radiationFile)->default_value(""),
+        "optional versioned redshift/photo-rate table; empty means no imposed UV")(
+        "chemistry.synchronizedRung",
+        po::value<int>(&opts.chemistry.synchronizedRung)->default_value(4),
+        "fixed common timestep rung; fail if hydro/gravity requires a finer step")(
+        "chemistry.initialTemperature",
+        po::value<double>(&opts.chemistry.initialTemperature)->default_value(1000.0),
+        "initial gas temperature in kelvin")("chemistry.hydrogenIonFraction",
+        po::value<double>(&opts.chemistry.hydrogenIonFraction)->default_value(2.0e-4),
+        "initial H+ fraction per H nucleus")("chemistry.heliumIonFraction",
+        po::value<double>(&opts.chemistry.heliumIonFraction)->default_value(0.0),
+        "initial He+ fraction per He nucleus")("chemistry.heliumDoubleIonFraction",
+        po::value<double>(&opts.chemistry.heliumDoubleIonFraction)->default_value(0.0),
+        "initial He++ fraction per He nucleus")("chemistry.hydrogenMinusFraction",
+        po::value<double>(&opts.chemistry.hydrogenMinusFraction)->default_value(0.0),
+        "initial H- fraction per H nucleus")("chemistry.molecularFraction",
+        po::value<double>(&opts.chemistry.molecularFraction)->default_value(0.0),
+        "initial fraction of H nuclei in H2")("chemistry.molecularIonFraction",
+        po::value<double>(&opts.chemistry.molecularIonFraction)->default_value(0.0),
+        "initial fraction of H nuclei in H2+")("chemistry.relativeTolerance",
+        po::value<double>(&opts.chemistry.relativeTolerance)->default_value(1.0e-4),
+        "local relative source tolerance (minimum 1e-5); not a global error guarantee")(
+        "chemistry.abundanceAbsoluteTolerance",
+        po::value<double>(&opts.chemistry.abundanceAbsoluteTolerance)->default_value(1.0e-12),
+        "absolute fractional-nuclei tolerance")("chemistry.energyAbsoluteTolerance",
+        po::value<double>(&opts.chemistry.energyAbsoluteTolerance)->default_value(1.0e-8),
+        "absolute thermal-energy tolerance, eV per H nucleus")("chemistry.maxSubsteps",
+        po::value<int>(&opts.chemistry.maxSubsteps)->default_value(4096),
+        "maximum accepted source substeps per half step");
+
     po::options_description commandOpts("CosmicTiger options");
     commandOpts.add(runOpts)
         .add(computeOpts)
@@ -452,7 +503,8 @@ bool processOptions(int argc, char* argv[]) {
         .add(gravityOpts)
         .add(cosmologyOpts)
         .add(unitsOpts)
-        .add(hydroOpts);
+        .add(hydroOpts)
+        .add(chemistryOpts);
     PRINT("Processing options\n");
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, commandOpts), vm);
@@ -651,6 +703,45 @@ bool processOptions(int argc, char* argv[]) {
         opts.hydro.enabled = true;
         opts.gravity.enabled = opts.run.test == "star" || opts.run.test == "plummer";
     }
+    if (opts.chemistry.enabled) {
+        if (!opts.hydro.enabled || (hydroTest && opts.run.test != "sphGravity") ||
+            opts.initial.createGlass || opts.initial.plummer) {
+            THROW_ERROR("chemistry.enabled requires cosmological SPH initial conditions\n");
+        }
+        if (opts.chemistry.network != "atomic6" && opts.chemistry.network != "molecular9") {
+            THROW_ERROR("chemistry.network must be atomic6 or molecular9\n");
+        }
+        if (opts.chemistry.synchronizedRung < 1 || opts.chemistry.synchronizedRung >= MAX_RUNG) {
+            THROW_ERROR("chemistry.synchronizedRung must be in [1, MAX_RUNG)\n");
+        }
+        if (!detail::isPositiveFloatOption(opts.chemistry.initialTemperature) ||
+            !detail::isPositiveFloatOption(opts.chemistry.relativeTolerance) ||
+            opts.chemistry.relativeTolerance < 1.0e-5 || opts.chemistry.relativeTolerance > 0.1 ||
+            !detail::isPositiveFloatOption(opts.chemistry.abundanceAbsoluteTolerance) ||
+            !detail::isPositiveFloatOption(opts.chemistry.energyAbsoluteTolerance) ||
+            opts.chemistry.maxSubsteps < 1) {
+            THROW_ERROR("Invalid chemistry temperature, tolerances or work bound\n");
+        }
+        double const fractions[] = {opts.chemistry.hydrogenIonFraction,
+            opts.chemistry.heliumIonFraction, opts.chemistry.heliumDoubleIonFraction,
+            opts.chemistry.hydrogenMinusFraction, opts.chemistry.molecularFraction,
+            opts.chemistry.molecularIonFraction};
+        for (double const fraction : fractions) {
+            if (!detail::isFiniteOption(fraction) || fraction < 0.0 || fraction > 1.0) {
+                THROW_ERROR("Initial chemistry fractions must be finite and in [0,1]\n");
+            }
+        }
+        if (fractions[0] + fractions[3] + fractions[4] + fractions[5] > 1.0 ||
+            fractions[1] + fractions[2] > 1.0 ||
+            (opts.chemistry.network == "atomic6" &&
+                fractions[3] + fractions[4] + fractions[5] != 0.0)) {
+            THROW_ERROR("Initial chemistry fractions violate nuclear closure/network\n");
+        }
+        if (!detail::isFiniteOption(opts.cosmology.heliumFraction) ||
+            opts.cosmology.heliumFraction < 0.0 || opts.cosmology.heliumFraction >= 1.0) {
+            THROW_ERROR("Chemistry requires helium mass fraction in [0,1)\n");
+        }
+    }
     if (opts.hydro.enabled) {
         opts.run.hierarchicalGravity = false;
         if (opts.initial.createGlass || opts.initial.plummer ||
@@ -758,6 +849,21 @@ bool processOptions(int argc, char* argv[]) {
                     "remain finite and positive in single precision "
                     "after normalization when gravity.enabled is true\n");
     }
+    SHOW("chemistry.enabled", chemistry.enabled);
+    SHOW("chemistry.network", chemistry.network);
+    SHOW("chemistry.radiationFile", chemistry.radiationFile);
+    SHOW("chemistry.synchronizedRung", chemistry.synchronizedRung);
+    SHOW("chemistry.initialTemperature", chemistry.initialTemperature);
+    SHOW("chemistry.hydrogenIonFraction", chemistry.hydrogenIonFraction);
+    SHOW("chemistry.heliumIonFraction", chemistry.heliumIonFraction);
+    SHOW("chemistry.heliumDoubleIonFraction", chemistry.heliumDoubleIonFraction);
+    SHOW("chemistry.hydrogenMinusFraction", chemistry.hydrogenMinusFraction);
+    SHOW("chemistry.molecularFraction", chemistry.molecularFraction);
+    SHOW("chemistry.molecularIonFraction", chemistry.molecularIonFraction);
+    SHOW("chemistry.relativeTolerance", chemistry.relativeTolerance);
+    SHOW("chemistry.abundanceAbsoluteTolerance", chemistry.abundanceAbsoluteTolerance);
+    SHOW("chemistry.energyAbsoluteTolerance", chemistry.energyAbsoluteTolerance);
+    SHOW("chemistry.maxSubsteps", chemistry.maxSubsteps);
     SHOW("hydro.enabled", hydro.enabled);
     SHOW("run.hierarchicalGravity", run.hierarchicalGravity);
     SHOW("hydro.viscosityAlpha", hydro.viscosityAlpha);

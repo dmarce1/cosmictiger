@@ -520,6 +520,9 @@ static std::function<void()> undoLastMemadvise = nullptr;
 
 void particlesMemadviseGpu() {
 #ifdef USE_CUDA
+    if (!cudaEnabled()) {
+        return;
+    }
     cudaSetDevice();
     if (undoLastMemadvise) {
         undoLastMemadvise();
@@ -543,6 +546,9 @@ void particlesMemadviseGpu() {
 
 void particlesMemadviseCpu() {
 #ifdef USE_CUDA
+    if (!cudaEnabled()) {
+        return;
+    }
     cudaSetDevice();
     int deviceid = cudaGetDevice();
     if (undoLastMemadvise) {
@@ -872,28 +878,19 @@ ParticleInteger particlesSize() {
 
 template <class T>
 void particlesArrayResize(T*& ptr, ParticleInteger newCapacity, bool reg) {
-    T* newPtr;
-#ifdef USE_CUDA
-    if (reg) {
-        cudaMallocManaged(&newPtr, sizeof(T) * newCapacity);
-    } else {
-        newPtr = (T*) malloc(sizeof(T) * newCapacity);
+    T* newPtr = static_cast<T*>(reg ? allocateManagedMemory(sizeof(T) * newCapacity) :
+                                      std::malloc(sizeof(T) * newCapacity));
+    if (newPtr == nullptr) {
+        throw std::bad_alloc();
     }
-#else
-    newPtr = (T*) malloc(sizeof(T) * newCapacity);
-#endif
     if (capacity > 0) {
         static_assert(std::is_trivially_copyable_v<T>);
         std::memcpy(newPtr, ptr, sizeof(T) * size);
-#ifdef USE_CUDA
         if (reg) {
-            cudaFree(ptr);
+            freeManagedMemory(ptr);
         } else {
-            free(ptr);
+            std::free(ptr);
         }
-#else
-        free(ptr);
-#endif
     }
     ptr = newPtr;
 }
@@ -951,50 +948,25 @@ void particlesResize(ParticleInteger sz, bool lock) {
 
 void particlesFree() {
     for (int dim = 0; dim < NDIM; dim++) {
-#ifdef USE_CUDA
-        CUDA_CHECK(cudaFree(particlesX[dim]));
-#else
-        free(particlesX[dim]);
-#endif
+        freeManagedMemory(particlesX[dim]);
     }
-#ifdef USE_CUDA
-    CUDA_CHECK(cudaFree(particlesV));
-#else
-    free(particlesV);
-#endif
-#ifdef USE_CUDA
-    CUDA_CHECK(cudaFree(particlesR));
-#else
-    free(particlesR);
-#endif
+    freeManagedMemory(particlesV);
+    freeManagedMemory(particlesR);
     if (getOptions().analysis.groups) {
         free(particlesLgrp);
     }
     if (getOptions().analysis.saveForce) {
         for (int dim = 0; dim < NDIM; dim++) {
-#ifdef USE_CUDA
-            CUDA_CHECK(cudaFree(particlesGravityAccelerations[dim]));
-#else
-            free(particlesGravityAccelerations[dim]);
-#endif
+            freeManagedMemory(particlesGravityAccelerations[dim]);
         }
-#ifdef USE_CUDA
-        CUDA_CHECK(cudaFree(particlesP));
-#else
-        free(particlesP);
-#endif
+        freeManagedMemory(particlesP);
     }
     if (getOptions().analysis.tracers) {
         free(particlesTr);
     }
     if (getOptions().hydro.enabled) {
-#ifdef USE_CUDA
-        CUDA_CHECK(cudaFree(particlesTy));
-        CUDA_CHECK(cudaFree(particlesSph));
-#else
-        free(particlesTy);
-        free(particlesSph);
-#endif
+        freeManagedMemory(particlesTy);
+        freeManagedMemory(particlesSph);
     }
 }
 

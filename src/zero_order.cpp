@@ -17,10 +17,10 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <cmath>
 #include <vector>
 
-#include <cosmictiger/math.hpp>
-#include <cosmictiger/options.hpp>
+#include <cosmictiger/recombination_thermal.hpp>
 #include <cosmictiger/safe_io.hpp>
 #include <cosmictiger/zero_order.hpp>
 
@@ -73,8 +73,9 @@ double ZeroOrderUniverse::redshiftToDensity(double z) const {
     double omegaM = params.omegaB + params.omegaC;
     double omegaR = params.omegaGam + params.omegaNu;
     double const omegaL = 1.0 - omegaM - omegaR;
-    double const h2 = sqr(params.hubble * constants::kH0) *
-        (omegaR / (a * a * a * a) + omegaM / (a * a * a) + omegaL);
+    double const hubbleToday = params.hubble * constants::kH0;
+    double const h2 =
+        hubbleToday * hubbleToday * (omegaR / (a * a * a * a) + omegaM / (a * a * a) + omegaL);
     return omegaM * 3.0 * h2 / (8.0 * M_PI * constants::kG);
 }
 
@@ -222,8 +223,8 @@ void createZeroOrderUniverse(ZeroOrderUniverse* uniPtr, std::function<double(dou
     // radiation at a temperature of %8.2e K." 					" \n   Its total matter density is
     // %.1f \% times the density of air at sea level.\n", 1 / a - 1, 			Trad, 100 * rho_b *
     // omega_m / omega_b / 1.274e-3);
-    double mu = (nH + 4 * nHe) * kMh / (nH + nHe + ne);
-    double sigmaC = mu / kMe * kC * (8.0 / 3.0) * omegaGam / (a * omegaM) * kSigmaT * ne / hubble;
+    double sigmaC =
+        recombination::comptonTemperatureCoupling(a, omegaGam, omegaB, nH, nHe, ne, hubble);
     double sigmaT = kC * kSigmaT * ne / hubble;
     thomson[0] = sigmaT;
     double p1, p2;
@@ -252,18 +253,10 @@ void createZeroOrderUniverse(ZeroOrderUniverse* uniPtr, std::function<double(dou
         ne *= rhoB;
         trad = tRadiation(a);
         double dt = dloga / hubble;
-        double const gamma = 1.0 - 1.0 / sqrt(2.0);
         ne = fxe(a) * nH;
-        mu = (nH + 4 * nHe) * kMh / (nH + nHe + ne);
-        sigmaC = mu / kMe * kC * (8.0 / 3.0) * omegaGam / (a * omegaM) * kSigmaT * ne / hubble;
-        double const dTgasdT1 =
-            ((tgas + gamma * dloga * sigmaC * trad) / (1 + gamma * dloga * (2 + sigmaC)) - tgas) /
-            (gamma * dloga);
-        double const t1 = tgas + (1 - 2 * gamma) * dTgasdT1 * dloga;
-        double const dTgasdT2 =
-            ((t1 + gamma * dloga * sigmaC * trad) / (1 + gamma * dloga * (2 + sigmaC)) - t1) /
-            (gamma * dloga);
-        tgas += 0.5 * (dTgasdT1 + dTgasdT2) * dloga;
+        sigmaC =
+            recombination::comptonTemperatureCoupling(a, omegaGam, omegaB, nH, nHe, ne, hubble);
+        tgas = recombination::advanceGasTemperature(tgas, trad, dloga, sigmaC);
         ne = fxe(a) * nH;
         n = nH + nHe;
         p = kB * (n + ne) * tgas;
@@ -284,7 +277,9 @@ void createZeroOrderUniverse(ZeroOrderUniverse* uniPtr, std::function<double(dou
         }
     }
     cs2 = (p - p1) / (rhoB - rho1);
-    soundSpeed2[nValue - 1] = cs2 / kC;
+    // Complete the final endpoint with a one-sided derivative in units of c^2;
+    // the loop already supplied the centered derivative at nValue - 1.
+    soundSpeed2[nValue] = cs2 / (kC * kC);
     //	print_time(t);
     uni.amin = amin;
     uni.amax = amax;

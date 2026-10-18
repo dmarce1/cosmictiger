@@ -250,12 +250,15 @@ float rockstarFindLinkLen(DeviceVector<RockstarTree>& trees, DeviceVector<Rockst
             p.minDist2 = std::numeric_limits<float>::max();
         }
         gpu = getOptions().compute.cuda && parts.size() > 4 * 1024;
+#ifdef USE_CUDA
         if (gpu) {
             DeviceVector<int> leaves;
             rockstarFindNeighbors(leaves, trees, trees.size() - 1, Vector<int>(1, trees.size() - 1),
                 maximumLinkingLength);
             rockstarAssignLinklenCuda(trees, leaves, parts, maximumLinkingLength, true);
-        } else {
+        } else
+#endif
+        {
             rockstarAssignLinkLen(
                 trees, parts, treeRoot, Vector<int>(1, treeRoot), maximumLinkingLength, true);
         }
@@ -291,12 +294,15 @@ void rockstarFindAllLinkLens(
     double maximumLinkingLength = getOptions().lightcone.linkingLength *
         pow(getOptions().initial.numberOfParticles, -1.0 / NDIM);
     bool gpu = getOptions().compute.cuda && parts.size() > 4 * 1024;
+#ifdef USE_CUDA
     if (gpu) {
         DeviceVector<int> leaves;
         rockstarFindNeighbors(leaves, trees, trees.size() - 1, Vector<int>(1, trees.size() - 1),
             maximumLinkingLength, false);
         rockstarAssignLinklenCuda(trees, leaves, parts, maximumLinkingLength, false);
-    } else {
+    } else
+#endif
+    {
         rockstarAssignLinkLen(
             trees, parts, treeRoot, Vector<int>(1, treeRoot), maximumLinkingLength, false);
     }
@@ -437,12 +443,15 @@ void rockstarFindSubgroups(DeviceVector<RockstarTree>& trees, DeviceVector<Rocks
     }
     int cnt;
     gpu = getOptions().compute.cuda && parts.size() > 4 * 1024;
+#ifdef USE_CUDA
     if (gpu) {
         DeviceVector<int> leaves;
         rockstarFindNeighbors(
             leaves, trees, trees.size() - 1, Vector<int>(1, trees.size() - 1), linkingLength);
         rockstarFindSubgroupsCuda(trees, leaves, parts, linkingLength, nextId);
-    } else {
+    } else
+#endif
+    {
         do {
             double pctActive = 0.0;
             for (int i = 0; i < trees.size(); i++) {

@@ -19,7 +19,9 @@
 
 #pragma once
 
+#ifdef USE_CUDA
 #include <cuda_fp16.h>
+#endif
 
 #include <cosmictiger/containers.hpp>
 #include <cosmictiger/cuda_unordered_map.hpp>
@@ -50,6 +52,7 @@ struct LightconeTreeNode {
     int pix;
 };
 
+#ifdef USE_CUDA
 using LightconeVelocityReal = __half;
 constexpr double kLcVelrealRange = 100.0;
 
@@ -60,6 +63,8 @@ inline LightconeVelocityReal float2velreal(float v, float vmax) {
 inline float velreal2float(LightconeVelocityReal i, float vmax) {
     return __half2float(i) / 10000.0 * vmax;
 }
+
+#endif
 
 using LightconeGroup = unsigned long long;
 

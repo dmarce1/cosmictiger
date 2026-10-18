@@ -115,11 +115,13 @@ set(cosmictiger_source_files
     src/tree.cpp
     src/view.cpp
     src/zero_order.cpp
+    src/recfast.cpp
     src/hydro.cpp
     src/kernel.cpp
     src/kernel.cu
     src/exact_sod.cpp
     src/sedov.cpp
+    src/sph_chemistry.cpp
     src/sph_particles.cpp
     src/sph.cpp
     src/sph_cpu.cpp
@@ -167,6 +169,7 @@ set(cosmictiger_header_files
     cosmictiger/interpolation.hpp
     cosmictiger/flops.hpp
     cosmictiger/fp16.hpp
+    cosmictiger/float_float.hpp
     cosmictiger/group_tree.hpp
     cosmictiger/groups.hpp
     cosmictiger/group_entry.hpp
@@ -205,6 +208,8 @@ set(cosmictiger_header_files
     cosmictiger/unordered_set_ts.hpp
     cosmictiger/view.hpp
     cosmictiger/zero_order.hpp
+    cosmictiger/recfast.hpp
+    cosmictiger/recombination_thermal.hpp
     cosmictiger/hydro.hpp
     cosmictiger/kernel.hpp
     cosmictiger/radial_kernel.hpp
@@ -224,6 +229,23 @@ if(NOT COSMICTIGER_WITH_CUDA)
     list(FILTER cosmictiger_source_files EXCLUDE REGEX "\\.cu$")
 endif()
 
+# Chemistry must not inherit the application's fast-math/FTZ settings: the
+# signed-complement and FloatFloat contracts require IEEE rounding and -0.
+find_package(Threads REQUIRED)
+add_library(primordial_chemistry STATIC src/primordial_chemistry.cpp)
+target_include_directories(primordial_chemistry PUBLIC ${PROJECT_SOURCE_DIR})
+target_link_libraries(primordial_chemistry PUBLIC Threads::Threads Boost::boost)
+target_compile_options(primordial_chemistry PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:-fno-fast-math;-ffp-contract=off>)
+if(COSMICTIGER_WITH_CUDA)
+    target_sources(primordial_chemistry PRIVATE src/primordial_chemistry.cu)
+    target_compile_definitions(primordial_chemistry PRIVATE USE_CUDA)
+    target_link_libraries(primordial_chemistry PUBLIC CUDA::cudart)
+    target_compile_options(primordial_chemistry PRIVATE
+        $<$<COMPILE_LANGUAGE:CUDA>:--ftz=false;--prec-div=true;--prec-sqrt=true;--fmad=false>)
+endif()
+set_source_files_properties(src/sph_chemistry.cpp PROPERTIES COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
+
 add_hpx_executable(cosmictiger
     DEPENDENCIES Boost::boost Boost::program_options GSL::gsl GSL::gslcblas
         ${FFTW3F_LIBRARY} ${SILO_LIBRARY} ${CHEALPIX_LIBRARY} dl quadmath
@@ -234,6 +256,7 @@ if(COSMICTIGER_BUILD_STF_BENCHMARKS)
     target_sources(cosmictiger PRIVATE benchmarks/stf_walk.cpp)
     set_source_files_properties(src/test.cpp PROPERTIES COMPILE_DEFINITIONS COSMICTIGER_STF_BENCHMARKS)
 endif()
+target_link_libraries(cosmictiger PRIVATE primordial_chemistry)
 target_include_directories(cosmictiger PRIVATE ${PROJECT_SOURCE_DIR})
 target_include_directories(cosmictiger SYSTEM PRIVATE
     ${FFTW3F_INCLUDE_DIR} ${SILO_INCLUDE_DIR} ${CHEALPIX_INCLUDE_DIR})
@@ -258,6 +281,10 @@ if(COSMICTIGER_WITH_CUDA)
 endif()
 
 add_executable(recfast recfast/recfast.f)
+# Do not silently change fixed-form equations by truncating long statements.
+if(CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(recfast PRIVATE -Werror=line-truncation)
+endif()
 add_executable(fmm_kernel_codegen src/fmm_kernel_codegen.cpp cosmictiger/tensor.hpp)
 target_link_libraries(fmm_kernel_codegen PRIVATE dl)
 target_include_directories(fmm_kernel_codegen PRIVATE ${PROJECT_SOURCE_DIR})
@@ -302,6 +329,76 @@ endforeach()
 
 include(CTest)
 if(BUILD_TESTING)
+    foreach(chemistry_test IN ITEMS primordial_rates primordial_solver primordial_units)
+        add_executable(${chemistry_test}_test tests/${chemistry_test}.cpp)
+        target_link_libraries(${chemistry_test}_test PRIVATE primordial_chemistry)
+        target_compile_options(${chemistry_test}_test PRIVATE -fno-fast-math -ffp-contract=off)
+        add_test(NAME ${chemistry_test} COMMAND ${chemistry_test}_test)
+        set_tests_properties(${chemistry_test} PROPERTIES TIMEOUT 180)
+    endforeach()
+    execute_process(COMMAND ${Python3_EXECUTABLE} -c "import numpy, scipy"
+        RESULT_VARIABLE PRIMORDIAL_SCIPY_STATUS OUTPUT_QUIET ERROR_QUIET)
+    if(PRIMORDIAL_SCIPY_STATUS EQUAL 0)
+        add_library(primordial_reference SHARED tests/primordial_reference.cpp)
+        target_include_directories(primordial_reference PRIVATE ${PROJECT_SOURCE_DIR})
+        target_link_libraries(primordial_reference PRIVATE Boost::boost)
+        target_compile_options(primordial_reference PRIVATE -fno-fast-math -ffp-contract=off)
+        add_test(NAME primordial_radau_reference COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/primordial_reference.py $<TARGET_FILE:primordial_reference>)
+        set_tests_properties(primordial_radau_reference PROPERTIES TIMEOUT 240
+            ENVIRONMENT "OPENBLAS_NUM_THREADS=1;OMP_NUM_THREADS=1;MKL_NUM_THREADS=1")
+    endif()
+    add_test(NAME primordial_integration_cpu COMMAND ${Python3_EXECUTABLE}
+        ${PROJECT_SOURCE_DIR}/tests/run_primordial_integration.py $<TARGET_FILE:cosmictiger>
+        ${PROJECT_SOURCE_DIR}/power.init ${PROJECT_BINARY_DIR}/tests/primordial_integration_cpu)
+    set_tests_properties(primordial_integration_cpu PROPERTIES TIMEOUT 1200 RUN_SERIAL TRUE)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        add_library(no_cuda_runtime SHARED tests/no_cuda_runtime.cpp)
+        add_test(NAME cpu_only_runtime COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/run_cpu_only.py $<TARGET_FILE:cosmictiger>
+            $<TARGET_FILE:no_cuda_runtime> ${PROJECT_BINARY_DIR}/tests/cpu_only)
+        set_tests_properties(cpu_only_runtime PROPERTIES TIMEOUT 250 RUN_SERIAL TRUE)
+    endif()
+    if(COSMICTIGER_WITH_CUDA)
+        target_compile_definitions(primordial_solver_test PRIVATE USE_CUDA)
+        add_executable(primordial_cuda_test tests/primordial_cuda.cu)
+        target_link_libraries(primordial_cuda_test PRIVATE primordial_chemistry CUDA::cudart)
+        target_compile_options(primordial_cuda_test PRIVATE
+            $<$<COMPILE_LANGUAGE:CUDA>:--ftz=false;--prec-div=true;--prec-sqrt=true;--fmad=false>)
+        add_test(NAME primordial_cuda COMMAND primordial_cuda_test)
+        set_tests_properties(primordial_cuda PROPERTIES TIMEOUT 240 SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
+    endif()
+    foreach(recfast_variant IN ITEMS standard fast_math)
+        set(recfast_target recfast_${recfast_variant}_test)
+        add_executable(${recfast_target} tests/recfast.cpp src/recfast.cpp)
+        target_include_directories(${recfast_target} PRIVATE ${PROJECT_SOURCE_DIR})
+        set(thermal_target recombination_thermal_${recfast_variant}_test)
+        add_executable(${thermal_target} tests/recombination_thermal.cpp)
+        target_include_directories(${thermal_target} PRIVATE ${PROJECT_SOURCE_DIR})
+        set(background_target recombination_background_${recfast_variant}_test)
+        add_executable(${background_target} tests/recombination_background.cpp
+            src/zero_order.cpp src/recfast.cpp)
+        target_include_directories(${background_target} PRIVATE ${PROJECT_SOURCE_DIR})
+        if(recfast_variant STREQUAL "fast_math")
+            target_compile_options(${recfast_target} PRIVATE -ffast-math)
+            target_compile_options(${thermal_target} PRIVATE -ffast-math)
+            target_compile_options(${background_target} PRIVATE -ffast-math)
+        endif()
+        add_test(NAME recfast_${recfast_variant} COMMAND ${recfast_target})
+        add_test(NAME recombination_thermal_${recfast_variant} COMMAND ${thermal_target})
+        add_test(NAME recombination_background_${recfast_variant} COMMAND ${background_target}
+            ${PROJECT_BINARY_DIR}/tests/recfast_history/fiducial/history.dat)
+        set_tests_properties(recombination_background_${recfast_variant}
+            PROPERTIES FIXTURES_REQUIRED recfast_history TIMEOUT 30)
+        set_tests_properties(recfast_${recfast_variant} recombination_thermal_${recfast_variant}
+            PROPERTIES TIMEOUT 30)
+    endforeach()
+    add_test(NAME recfast_history COMMAND ${Python3_EXECUTABLE}
+        ${PROJECT_SOURCE_DIR}/tests/run_recfast.py --executable $<TARGET_FILE:recfast>
+        --reader $<TARGET_FILE:recfast_standard_test> $<TARGET_FILE:recfast_fast_math_test>
+        --workdir ${PROJECT_BINARY_DIR}/tests/recfast_history)
+    set_tests_properties(recfast_history PROPERTIES FIXTURES_SETUP recfast_history TIMEOUT 90)
+
     add_executable(rockstar_eigenpair_test tests/rockstar_eigenpair.cpp src/math.cpp)
     target_include_directories(rockstar_eigenpair_test PRIVATE ${PROJECT_SOURCE_DIR})
     target_compile_definitions(rockstar_eigenpair_test PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
@@ -374,6 +471,18 @@ if(BUILD_TESTING)
     set_tests_properties(units_fast_math PROPERTIES TIMEOUT 20)
 
     include(CheckIncludeFileCXX)
+    foreach(float_float_variant IN ITEMS standard fast_math)
+        set(float_float_target float_float_${float_float_variant}_test)
+        add_executable(${float_float_target} tests/float_float.cpp)
+        target_include_directories(${float_float_target} PRIVATE ${PROJECT_SOURCE_DIR})
+        target_link_libraries(${float_float_target} PRIVATE Boost::boost)
+        if(float_float_variant STREQUAL "fast_math")
+            target_compile_options(${float_float_target} PRIVATE -ffast-math)
+        endif()
+        add_test(NAME float_float_${float_float_variant} COMMAND ${float_float_target})
+        set_tests_properties(float_float_${float_float_variant} PROPERTIES TIMEOUT 30)
+    endforeach()
+
     check_include_file_cxx("experimental/simd" COSMICTIGER_HAS_EXPERIMENTAL_SIMD)
     foreach(simd_variant IN ITEMS auto baseline native)
         set(simd_target "simd_${simd_variant}_test")
@@ -513,6 +622,20 @@ if(BUILD_TESTING)
     set_tests_properties(particle_selection PROPERTIES TIMEOUT 10)
 
     if(COSMICTIGER_WITH_CUDA)
+        foreach(float_float_variant IN ITEMS standard fast_math)
+            set(float_float_target float_float_cuda_${float_float_variant}_test)
+            add_executable(${float_float_target} tests/float_float_cuda.cu)
+            target_include_directories(${float_float_target} PRIVATE ${PROJECT_SOURCE_DIR})
+            target_link_libraries(${float_float_target} PRIVATE CUDA::cudart Boost::boost)
+            if(float_float_variant STREQUAL "fast_math")
+                target_compile_options(${float_float_target} PRIVATE
+                    $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math;-Xcompiler=-ffast-math>)
+            endif()
+            add_test(NAME float_float_cuda_${float_float_variant} COMMAND ${float_float_target})
+            set_tests_properties(float_float_cuda_${float_float_variant}
+                PROPERTIES TIMEOUT 30 SKIP_RETURN_CODE 77)
+        endforeach()
+
         add_executable(stf_kernels_cuda_test tests/stf_kernels_cuda.cu)
         target_include_directories(stf_kernels_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_link_libraries(stf_kernels_cuda_test PRIVATE CUDA::cudart)
@@ -547,6 +670,7 @@ if(BUILD_TESTING)
         set_tests_properties(radial_kernel_cuda PROPERTIES RUN_SERIAL TRUE TIMEOUT 120 SKIP_RETURN_CODE 77)
 
         add_executable(monaghan_sph_cuda_test tests/monaghan_sph_cuda.cu
+            tests/cuda_memory_backend.cpp
             src/sph_prehydro.cu src/sph_hydro.cu src/sph_rungs.cu
             src/sph_cpu.cpp src/sph_prehydro_cpu.cpp src/sph_hydro_cpu.cpp src/sph_rungs_cpu.cpp
             src/kernel.cpp src/kernel.cu src/cuda_memory.cu src/assert.cu)

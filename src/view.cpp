@@ -42,6 +42,7 @@
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/silo_spheres.hpp>
 #include <cosmictiger/sph.hpp>
+#include <cosmictiger/sph_chemistry.hpp>
 #include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/units.hpp>
 #include <cosmictiger/view.hpp>
@@ -74,12 +75,20 @@ struct SphParticleInfo : public DarkMatterParticleInfo {
     float eint;
     float rho;
     float h;
+    primordial::State chemistry;
     template <typename A>
     void serialize(A&& arc, unsigned ver) {
         DarkMatterParticleInfo::serialize(arc, ver);
         arc & eint;
         arc & rho;
         arc & h;
+        if (getOptions().chemistry.enabled) {
+            for (auto& abundance : chemistry.abundances) {
+                float raw = abundance.raw();
+                arc & raw;
+                abundance.setRaw(raw);
+            }
+        }
     }
 };
 
@@ -294,6 +303,37 @@ void writeViewSpecies(DBfile* db, char const* mesh, char const* prefix,
         [&conversion, mass](Particle const&) { return conversion.mass(mass); });
 }
 
+void writeChemistryFields(DBfile* db, Vector<SphParticleInfo> const& gas, double a) {
+    if (!getOptions().chemistry.enabled) {
+        return;
+    }
+    char const* names[] = {"chem_HI", "chem_HII", "chem_HeI", "chem_HeII", "chem_HeIII",
+        "chem_Hminus", "chem_H2", "chem_H2plus", "chem_electrons", "temperature",
+        "mean_molecular_weight", "frozen_gamma"};
+    std::vector<std::array<float, 12>> fields;
+    fields.reserve(gas.size());
+    for (auto const& particle : gas) {
+        fields.push_back(sphChemistryOutput(particle.chemistry, particle.eint, a));
+    }
+    for (size_t field = 0; field < 12; ++field) {
+        size_t index = 0;
+        writeViewField(db, names[field], "gas", gas, field == 9 ? "K" : "1",
+            [&](SphParticleInfo const&) { return double(fields[index++][field]); });
+    }
+    // Preserve the minority and branch bit even when displaying the dominant
+    // abundance as an ordinary floating value would round it to one.
+    for (int species = 0; species < primordial::kAbundanceCount; ++species) {
+        std::string const name = "chem_signed_fraction_" + std::to_string(species);
+        writeViewField(
+            db, name.c_str(), "gas", gas, "1", [species](SphParticleInfo const& particle) {
+                return double(particle.chemistry.abundances[species].raw());
+            });
+    }
+    writeViewText(db, "chemistry_fraction_convention",
+        "species counts per H nucleus; signed fractions preserve minority branches");
+    writeViewText(db, "chemistry_network", getOptions().chemistry.network.c_str());
+}
+
 void writeConvertedView(DBfile* db, ViewReturn const& particles, int box, double a, double time,
     bool cosmological, bool lab) {
     char const* lengthUnit = cosmological ? "Mpc/h" : "cm";
@@ -337,6 +377,7 @@ void writeConvertedView(DBfile* db, ViewReturn const& particles, int box, double
     if (!gas.empty()) {
         writeViewSpecies(db, "gas", "hydro_", gas, conversion, lengthUnit, velocityUnit, massUnit,
             getOptions().initial.gasMass, time);
+        writeChemistryFields(db, gas, a);
         writeViewField(
             db, "rho", "gas", gas, densityUnit, [&conversion](SphParticleInfo const& particle) {
                 return conversion.density(particle.rho);
@@ -434,6 +475,9 @@ ViewReturn viewGetParticles(Vector<Range<double>> boxes = Vector<Range<double>>(
                                 info.eint = sphParticlesInternalEnergy(l);
                                 info.rho = sphParticlesDensity(l);
                                 info.h = sphParticlesSupportRadius(l);
+                                if (getOptions().chemistry.enabled) {
+                                    info.chemistry = sphParticlesChemistryStates[l];
+                                }
                                 info.rung = particlesRung(i);
                                 rc.hydro[j].push_back(info);
                                 break;
@@ -550,6 +594,7 @@ void viewOutputViews(int cycle, double a, bool force) {
             detail::writeCodeGasField(db, "rho", x, opts);
             detail::writeCodeGasField(db, "eint", y, opts);
             detail::writeCodeGasField(db, "kernel_support_radius", z, opts);
+            detail::writeChemistryFields(db, parts.hydro[bi], a);
             x.resize(0);
             y.resize(0);
             z.resize(0);

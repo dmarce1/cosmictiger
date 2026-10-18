@@ -20,6 +20,7 @@
 
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/particles.hpp>
+#include <cosmictiger/primordial_types.hpp>
 
 #ifdef SPH_PARTICLES_CPP
 #define SPH_PARTICLES_EXTERN
@@ -45,6 +46,11 @@ struct SphThermodynamicState {
 struct SphAcceleration {
     Array<float, NDIM> acceleration;
 };
+
+// Optional chemistry storage. Abundances are authoritative; the source bridge
+// derives chemistry energy from the hydrodynamic stored a^2 u at each use.
+SPH_PARTICLES_EXTERN primordial::State* sphParticlesChemistryStates;
+SPH_PARTICLES_EXTERN Pair<float>* sphParticlesChemistryEos;
 
 SPH_PARTICLES_EXTERN SphThermodynamicState* sphParticlesThermodynamicStates;
 SPH_PARTICLES_EXTERN SphAcceleration* sphParticlesAccelerationStates;
@@ -75,6 +81,9 @@ void sphParticlesGlobalReadRungs(ParticleGlobalRange range, char*, ParticleInteg
 void sphParticlesGlobalReadVelocities(
     ParticleGlobalRange range, float*, float*, float*, ParticleInteger offset);
 void sphParticlesGlobalReadDensity(ParticleGlobalRange range, float*, ParticleInteger offset);
+void sphParticlesGlobalReadChemistryEos(ParticleGlobalRange range, float* pressureEnergyRatio,
+    float* adiabaticIndex, ParticleInteger offset);
+void sphParticlesRefreshChemistryEos(double scaleFactor);
 void sphParticlesResetConverged();
 void sphParticlesResetSemiactive();
 void sphParticlesLoad(FILE* fp);
@@ -154,6 +163,7 @@ inline float& sphParticlesDensity(ParticleInteger index) {
 }
 
 inline float sphParticlesPressure(ParticleInteger index) {
-    return (getOptions().hydro.gamma - 1.0f) * sphParticlesDensity(index) *
-        sphParticlesInternalEnergy(index);
+    float const ratio = getOptions().chemistry.enabled ? sphParticlesChemistryEos[index].first :
+                                                         getOptions().hydro.gamma - 1.0f;
+    return ratio * sphParticlesDensity(index) * sphParticlesInternalEnergy(index);
 }

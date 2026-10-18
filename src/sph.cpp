@@ -56,6 +56,8 @@ struct SphRunWorkspace {
     Vector<float, PinnedAllocator<float>> hostVelocityY;
     Vector<float, PinnedAllocator<float>> hostVelocityZ;
     Vector<float, PinnedAllocator<float>> hostInternalEnergy;
+    Vector<float, PinnedAllocator<float>> hostPressureEnergyRatio;
+    Vector<float, PinnedAllocator<float>> hostAdiabaticIndex;
     Vector<float, PinnedAllocator<float>> hostDensity;
     Vector<float, PinnedAllocator<float>> hostSupportRadius;
     Vector<char, PinnedAllocator<char>> hostRungs;
@@ -424,6 +426,10 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
     } else if (params.runType == SPH_RUN_HYDRO) {
         hostDensity.resize(particleStorageSize);
         hostInternalEnergy.resize(particleStorageSize);
+        if (getOptions().chemistry.enabled) {
+            hostPressureEnergyRatio.resize(particleStorageSize);
+            hostAdiabaticIndex.resize(particleStorageSize);
+        }
         hostVelocityX.resize(particleStorageSize);
         hostVelocityY.resize(particleStorageSize);
         hostVelocityZ.resize(particleStorageSize);
@@ -452,6 +458,10 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
                 } else if (params.runType == SPH_RUN_HYDRO) {
                     sphParticlesGlobalReadInternalEnergyAndSupportRadius(node.globalParticleRange(),
                         hostInternalEnergy.data(), hostSupportRadius.data(), offset);
+                    if (getOptions().chemistry.enabled) {
+                        sphParticlesGlobalReadChemistryEos(node.globalParticleRange(),
+                            hostPressureEnergyRatio.data(), hostAdiabaticIndex.data(), offset);
+                    }
                     sphParticlesGlobalReadVelocities(node.globalParticleRange(),
                         hostVelocityX.data(), hostVelocityY.data(), hostVelocityZ.data(), offset);
                     sphParticlesGlobalReadDensity(
@@ -474,6 +484,8 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
         copy(runData.sourceSupportRadius, hostSupportRadius);
         copy(runData.sourceRungs, hostRungs);
         copy(runData.sourceInternalEnergy, hostInternalEnergy);
+        copy(runData.sourcePressureEnergyRatio, hostPressureEnergyRatio);
+        copy(runData.sourceAdiabaticIndex, hostAdiabaticIndex);
         copy(runData.sourceDensity, hostDensity);
         copy(runData.sourceVelocityX, hostVelocityX);
         copy(runData.sourceVelocityY, hostVelocityY);
@@ -482,7 +494,9 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
         copy(runData.targetNodeIndices, hostTargetNodeIndices);
         copy(runData.neighborNodeIndices, hostNeighborNodeIndices);
     };
-    copySources([](auto*& destination, auto& source) { destination = source.data(); });
+    copySources([](auto*& destination, auto& source) {
+        destination = source.empty() ? nullptr : source.data();
+    });
     runData.sinkParticleIndices = &sphParticlesParticleIndex(0);
     runData.sinkSemiactive = &sphParticlesSemiactive(0);
     runData.sinkParticleRungs = &particlesRung(0);
@@ -564,6 +578,8 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
     CUDA_CHECK(cudaFree(runData.sourceRungs));
     CUDA_CHECK(cudaFree(runData.sourceSupportRadius));
     CUDA_CHECK(cudaFree(runData.sourceInternalEnergy));
+    CUDA_CHECK(cudaFree(runData.sourcePressureEnergyRatio));
+    CUDA_CHECK(cudaFree(runData.sourceAdiabaticIndex));
     CUDA_CHECK(cudaFree(runData.sourceDensity));
     CUDA_CHECK(cudaFree(runData.sourceVelocityX));
     CUDA_CHECK(cudaFree(runData.sourceVelocityY));

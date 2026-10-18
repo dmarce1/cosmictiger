@@ -30,14 +30,24 @@ __managed__ double numberOfProcessedSinkParticles;
 __managed__ bool useGravityCounters = false;
 
 void resetGravityCounters() {
+    if (!cudaEnabled()) {
+        return;
+    }
     iclose = idirect = numberOfProcessedSinkParticles = 0;
 }
 
 void setGravityCounterUse(bool code) {
+    if (!cudaEnabled()) {
+        return;
+    }
     useGravityCounters = code;
 }
 
 void getGravityCounters(double& close, double& direct) {
+    if (!cudaEnabled()) {
+        close = direct = 0.0;
+        return;
+    }
     if (numberOfProcessedSinkParticles == 0.0) {
         close = direct = 0.0;
     } else {

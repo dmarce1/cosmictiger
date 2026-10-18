@@ -20,7 +20,7 @@
 #ifndef CUDA_UNORDERED_MAP_HPP_
 #define CUDA_UNORDERED_MAP_HPP_
 
-#include <cuda/std/climits>
+#include <climits>
 
 #include <cosmictiger/device_vector.hpp>
 

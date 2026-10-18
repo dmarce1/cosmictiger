@@ -360,6 +360,8 @@ struct GasMigrationState {
     Array<float, NDIM> acceleration, predictedAcceleration, gravityAcceleration;
     float supportRadius, internalEnergy, predictedInternalEnergyRate, internalEnergyRate, density;
     char converged, semiactive;
+    Array<float, primordial::kAbundanceCount + 1> chemistry;
+    Pair<float> chemistryEos;
     template <class Archive>
     void serialize(Archive& arc, unsigned) {
         arc & acceleration;
@@ -372,6 +374,10 @@ struct GasMigrationState {
         arc & density;
         arc & converged;
         arc & semiactive;
+        if (getOptions().chemistry.enabled) {
+            arc & chemistry;
+            arc & chemistryEos;
+        }
     }
 };
 struct SphMigrationParticle {
@@ -408,6 +414,14 @@ static SphMigrationParticle packSphParticle(ParticleInteger index) {
         gas.converged = sphParticlesConvergenceFlags[i];
         gas.semiactive = sphParticlesSemiactiveFlags[i];
         gas.internalEnergy = sphParticlesThermodynamicStates[i].internalEnergy;
+        if (getOptions().chemistry.enabled) {
+            auto const& state = sphParticlesChemistryStates[i];
+            for (int species = 0; species < primordial::kAbundanceCount; ++species) {
+                gas.chemistry[species] = state.abundances[species].raw();
+            }
+            gas.chemistry[primordial::kAbundanceCount] = state.thermalEnergy;
+            gas.chemistryEos = sphParticlesChemistryEos[i];
+        }
         for (int dim = 0; dim < NDIM; dim++) {
             gas.predictedAcceleration[dim] = sphParticlesPredictedAccelerations[dim][i];
             gas.gravityAcceleration[dim] = sphParticlesGravityAccelerations[dim][i];
@@ -433,6 +447,14 @@ static void unpackSphParticle(
         sphParticlesConvergenceFlags[i] = gas.converged;
         sphParticlesSemiactiveFlags[i] = gas.semiactive;
         sphParticlesThermodynamicStates[i].internalEnergy = gas.internalEnergy;
+        if (getOptions().chemistry.enabled) {
+            auto& state = sphParticlesChemistryStates[i];
+            for (int species = 0; species < primordial::kAbundanceCount; ++species) {
+                state.abundances[species].setRaw(gas.chemistry[species]);
+            }
+            state.thermalEnergy = gas.chemistry[primordial::kAbundanceCount];
+            sphParticlesChemistryEos[i] = gas.chemistryEos;
+        }
         for (int dim = 0; dim < NDIM; dim++) {
             sphParticlesPredictedAccelerations[dim][i] = gas.predictedAcceleration[dim];
             sphParticlesGravityAccelerations[dim][i] = gas.gravityAcceleration[dim];

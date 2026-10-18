@@ -26,6 +26,16 @@ cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
 CN	Name:	RECFAST
 CV	Version: 1.5.2
+C
+C     References for this background recombination approximation:
+C     Seager, Sasselov & Scott (1999, 2000):
+C     https://arxiv.org/abs/astro-ph/9909275
+C     https://arxiv.org/abs/astro-ph/9912182
+C     Helium corrections: Wong, Moss & Scott (2008):
+C     https://arxiv.org/abs/0711.1357
+C     Matter temperature: Scott & Moss (2009), Eqs. (1)-(2):
+C     https://arxiv.org/abs/0902.3438
+C     Version history: https://www.astro.ubc.ca/people/scott/recfast.html
 C 
 CP	Purpose:  Calculate ionised fraction as a function of redshift.
 CP		  Solves for H and He simultaneously, and includes
@@ -36,7 +46,7 @@ CD	Description: Solves for ionisation history since recombination
 CD	using the equations in Seager, Sasselov & Scott (ApJ, 1999).
 CD	The Cosmological model can be flat or open.
 CD	The matter temperature is also followed, with an update from
-CD	Moss & Scott (2009).
+CD	Scott & Moss (2009).
 CD	The values for \alpha_B for H are from Hummer (1994).
 CD	The singlet HeI coefficient is a fit from the full code.
 CD	Additional He "fudge factors" are as described in Wong, Moss
@@ -662,8 +672,10 @@ c	(matches Hummer's table with <1% error for 10^2.8 < T/K < 10^4)
 	n = Nnow * (1.d0+z)**3
 	n_He = fHe * Nnow * (1.d0+z)**3
 	Trad = Tnow * (1.d0+z)
-	Hz = HO * dsqrt((1.d0+z)**4/(1.d0+z_eq)*OmegaT + OmegaT*(1.d0+z)**3
-	1	+ OmegaK*(1.d0+z)**2 + OmegaL)
+C     Keep every term within the fixed-form 72-column statement limit.
+C     Otherwise the matter exponent can merge with the curvature term.
+	Hz = HO * dsqrt((1.d0+z)**4/(1.d0+z_eq)*OmegaT
+	1	+ OmegaT*(1.d0+z)**3 + OmegaK*(1.d0+z)**2 + OmegaL)
 
 c	Also calculate derivative for use later
 	dHdz = (HO**2/2.d0/Hz)*(4.d0*(1.d0+z)**3/(1.d0+z_eq)*OmegaT 

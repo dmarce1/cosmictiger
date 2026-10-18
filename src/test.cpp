@@ -639,7 +639,14 @@ void test(std::string test) {
     } else if (test == "disc") {
         hydroDiscTest();
     } else if (test == "sphere") {
+#ifdef USE_CUDA
+        if (!cudaEnabled()) {
+            THROW_ERROR("Sphere surface test requires compute.cuda=true\n");
+        }
         sphereSurfaceTest();
+#else
+        THROW_ERROR("Sphere surface test requires CUDA support\n");
+#endif
     } else if (test == "plummer") {
         hydroPlummer();
     } else {

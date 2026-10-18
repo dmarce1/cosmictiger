@@ -160,6 +160,25 @@ struct Hydro {
     double damping{};
 };
 
+struct Chemistry {
+    // Source integration is initially restricted to globally synchronized steps.
+    bool enabled{false};
+    std::string network{"atomic6"};
+    std::string radiationFile{""};
+    int synchronizedRung{4};
+    double initialTemperature{1000.0};
+    double hydrogenIonFraction{2.0e-4};
+    double heliumIonFraction{0.0};
+    double heliumDoubleIonFraction{0.0};
+    double hydrogenMinusFraction{0.0};
+    double molecularFraction{0.0};
+    double molecularIonFraction{0.0};
+    double relativeTolerance{1.0e-4};
+    double abundanceAbsoluteTolerance{1.0e-12};
+    double energyAbsoluteTolerance{1.0e-8};
+    int maxSubsteps{4096};
+};
+
 struct Options {
     std::string configuration;
     Run run;
@@ -173,6 +192,7 @@ struct Options {
     Cosmology cosmology;
     Units units;
     Hydro hydro;
+    Chemistry chemistry;
 
     template <typename Archive>
     void serialize(Archive&& arc, unsigned) {
@@ -274,6 +294,21 @@ struct Options {
         arc & gravity.kernelDegree;
         arc & hydro.kernelFamily;
         arc & hydro.kernelDegree;
+        arc & chemistry.enabled;
+        arc & chemistry.network;
+        arc & chemistry.radiationFile;
+        arc & chemistry.synchronizedRung;
+        arc & chemistry.initialTemperature;
+        arc & chemistry.hydrogenIonFraction;
+        arc & chemistry.heliumIonFraction;
+        arc & chemistry.heliumDoubleIonFraction;
+        arc & chemistry.hydrogenMinusFraction;
+        arc & chemistry.molecularFraction;
+        arc & chemistry.molecularIonFraction;
+        arc & chemistry.relativeTolerance;
+        arc & chemistry.abundanceAbsoluteTolerance;
+        arc & chemistry.energyAbsoluteTolerance;
+        arc & chemistry.maxSubsteps;
     }
 };
 

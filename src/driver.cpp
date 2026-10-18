@@ -58,6 +58,7 @@
 #include <cosmictiger/profiler.hpp>
 #include <cosmictiger/simulation_units.hpp>
 #include <cosmictiger/sph.hpp>
+#include <cosmictiger/sph_chemistry.hpp>
 #include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/sph_tree.hpp>
 #include <cosmictiger/time.hpp>
@@ -74,6 +75,7 @@ double driftTime = 0.0;
 double flopsPerNode = 1e6;
 double flopsPerParticle = 1e5;
 bool usedGpu;
+static double synchronizedChemistryPressure = 0.0;
 
 struct Timing {
     double numberOfParticles;
@@ -456,6 +458,9 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     if (verbose) {
         PRINT("Doing SPH step with minrung = %i\n", minrung);
     }
+    bool const chemistry = getOptions().chemistry.enabled;
+    double const chemistryHalfStep =
+        chemistry ? std::ldexp(t0, -1 - getOptions().chemistry.synchronizedRung) : 0.0;
     sphParticlesApplyUpdates(minrung, 0, t0, tau);
 
     SphRunParameters runParameters;
@@ -571,6 +576,9 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     } while (needsNeighborRefresh);
     Timer timer;
 
+    if (chemistry) {
+        sphParticlesRefreshChemistryEos(scale);
+    }
     runParameters.phase = 0;
     runParameters.runType = SPH_RUN_HYDRO;
     timer.reset();
@@ -584,6 +592,14 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     timer.reset();
 
     sphParticlesApplyUpdates(minrung, 1, t0, tau);
+    if (chemistry && tau > 0.0) {
+        // Complete the previous Strang source half only after the old hydro
+        // predictor has been replaced. a at the half-interval midpoint gives
+        // second-order conformal-to-physical time conversion.
+        energies->heating += sphChemistryPendingHeating() +
+            sphChemistryAdvance(scale, scale - 0.5 * adot * chemistryHalfStep, chemistryHalfStep);
+        sphChemistryPendingHeating() = 0.0;
+    }
 
     auto eValue = particlesSumEnergies();
     energies->kin = eValue.kin / sqr(scale);
@@ -596,6 +612,12 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     }
     energies->therm = eValue.therm / sqr(scale);
 
+    if (chemistry) {
+        synchronizedChemistryPressure = sphChemistryPressureIntegral(scale);
+        sphChemistryPendingHeating() =
+            sphChemistryAdvance(scale, scale + 0.5 * adot * chemistryHalfStep, chemistryHalfStep);
+        sphParticlesRefreshChemistryEos(scale);
+    }
     runParameters.phase = 1;
     runParameters.runType = SPH_RUN_HYDRO;
     timer.reset();
@@ -642,6 +664,15 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
             PRINT("sph_run(SPH_RUN_RUNGS): tm = %e \n", timer.read());
         }
         timer.reset();
+    }
+    if (chemistry) {
+        if (maxRung > getOptions().chemistry.synchronizedRung) {
+            THROW_ERROR("Chemistry synchronized rung %i violates the hydro/gravity timestep bound "
+                        "%i; increase chemistry.synchronizedRung\n",
+                getOptions().chemistry.synchronizedRung, maxRung);
+        }
+        sphChemistrySetRungs();
+        maxRung = getOptions().chemistry.synchronizedRung;
     }
     sphParticlesApplyUpdates(minrung, 2, t0, tau);
     if (verbose) {
@@ -729,6 +760,8 @@ std::pair<KickReturn, TreeCreateReturn> kickStep(int minrung, double scale, doub
     kparams.a = scale;
     kparams.firstCall = firstCall;
     kparams.minRung = minrung;
+    kparams.fixedRung =
+        getOptions().chemistry.enabled ? getOptions().chemistry.synchronizedRung : 0;
     kparams.t0 = t0;
     kparams.theta = theta;
     Expansion<float> l;
@@ -1265,7 +1298,7 @@ void driver() {
     double const hsoft0 = getOptions().gravity.supportRadius;
     bool doCheck = false;
     double checkz = 1.0 / a - 1.0;
-    int lastCheckpointIteration = -1;
+    int lastCheckpointIteration = getOptions().checkpoint.readIndex >= 0 ? params.iter : -1;
     buckets50.start();
     EnergiesT energies0;
     double glassError = 1.0;
@@ -1277,7 +1310,8 @@ void driver() {
             stepTm.start();
             profilerEnter(__FUNCTION__);
             tmr.stop();
-            if ((params.iter > 0 && tmr.read() > getOptions().checkpoint.intervalSeconds) ||
+            if ((params.iter > 0 && params.iter != lastCheckpointIteration &&
+                    tmr.read() > getOptions().checkpoint.intervalSeconds) ||
                 doCheck) {
                 totalTime.stop();
                 runtime += totalTime.read();
@@ -1293,7 +1327,7 @@ void driver() {
                 doCheck = false;
             }
             tmr.start();
-            int minrung = minRung(itime);
+            int minrung = getOptions().chemistry.enabled ? 0 : minRung(itime);
             bool fullEval = minrung == 0;
             if (fullEval) {
                 int const number = step;
@@ -1413,6 +1447,11 @@ void driver() {
             if (getOptions().hydro.enabled) {
                 maxRung = std::max(
                     maxRung, sphStep2(minrung, a, tau, t0, 1, a * adot, &energies).maximumRung);
+                if (getOptions().chemistry.enabled &&
+                    maxRung > getOptions().chemistry.synchronizedRung) {
+                    THROW_ERROR("Chemistry synchronized rung violates the dark-matter gravity "
+                                "timestep bound; increase chemistry.synchronizedRung\n");
+                }
                 if (fullEval) {
                     energies.pot = kr.pot / a;
                 }
@@ -1461,7 +1500,15 @@ void driver() {
             if (!getOptions().initial.createGlass && !getOptions().initial.plummer) {
                 cosmosUpdate(adotdot, adot, a, dt);
             }
-            energies.cosmic += (a - a0) * (energies.tckin / (a0 * a0) + energies.therm);
+            // d[a(K+W+U)]/da = -K+U-3 integral(P dV) + source.
+            // For monatomic gamma=5/3 this reduces to the historical -(K+U).
+            // Peebles, Large-Scale Structure of the Universe (1980), energy
+            // equation; the gas term follows directly from dU=-P dV.
+            energies.cosmic += (a - a0) *
+                (energies.tckin / (a0 * a0) +
+                    (getOptions().chemistry.enabled ?
+                            -energies.therm + 3.0 * synchronizedChemistryPressure :
+                            energies.therm));
             double const dyears =
                 0.5 * (a0 + a) * dt * getOptions().units.timeSeconds / constants::kSpyr;
             auto const z0 = 1.0 / a0 - 1.0;
@@ -1819,10 +1866,11 @@ uint32_t checkpointFlags(Options const& opts) {
     constexpr uint32_t kLightcone = 1U << 7;
     constexpr uint32_t kGroups = 1U << 8;
     constexpr uint32_t kTracers = 1U << 9;
+    constexpr uint32_t kChemistry = 1U << 11;
     // Leave retired option bits unused so old incompatible headers remain rejected.
     return (opts.hydro.enabled ? kSph : 0U) | (opts.run.hierarchicalGravity ? kHierarchical : 0U) |
         (opts.lightcone.enabled ? kLightcone : 0U) | (opts.analysis.groups ? kGroups : 0U) |
-        (opts.analysis.tracers ? kTracers : 0U);
+        (opts.analysis.tracers ? kTracers : 0U) | (opts.chemistry.enabled ? kChemistry : 0U);
 }
 
 uint32_t checkpointKernelCode(std::string const& family, int degree) {
@@ -1907,6 +1955,26 @@ void writeDriverState(FILE* fp, DriverParameters const& params) {
             THROW_ERROR("Unable to write SPH checkpoint parameters\n");
         }
     }
+    if (getOptions().chemistry.enabled) {
+        auto const chemicalParameters = sphChemistryCheckpointParameters();
+        uint64_t const radiationChecksum = sphChemistryRadiationChecksum();
+        if (fwrite(chemicalParameters.data(), sizeof(double), chemicalParameters.size(), fp) !=
+                chemicalParameters.size() ||
+            fwrite(&radiationChecksum, sizeof(radiationChecksum), 1, fp) != 1) {
+            THROW_ERROR("Unable to write chemistry checkpoint parameters\n");
+        }
+        // Checkpoints are taken after drift: the closing source half is pending.
+        // tau=0 instead denotes the untouched initial state. Fixed rungs make the
+        // interval recoverable without a per-particle chemical clock.
+        std::array<double, 3> const sourcePhase = {params.tau == 0.0 ? 0.0 : 1.0,
+            std::ldexp(params.tauMax / getOptions().run.numberOfSteps,
+                -1 - getOptions().chemistry.synchronizedRung),
+            sphChemistryPendingHeating()};
+        if (fwrite(sourcePhase.data(), sizeof(double), sourcePhase.size(), fp) !=
+            sourcePhase.size()) {
+            THROW_ERROR("Unable to write chemistry source phase\n");
+        }
+    }
     if (fwrite(&params, sizeof(params), 1, fp) != 1) {
         THROW_ERROR("Unable to write checkpoint driver state\n");
     }
@@ -1933,7 +2001,51 @@ DriverParameters readDriverState(FILE* fp) {
                 THROW_ERROR("SPH checkpoint parameters differ from the requested run\n");
             }
         }
+        std::array<double, 3> sourcePhase{};
+        if (getOptions().chemistry.enabled) {
+            auto chemicalParameters = sphChemistryCheckpointParameters();
+            uint64_t radiationChecksum;
+            FREAD(chemicalParameters.data(), sizeof(double), chemicalParameters.size(), fp);
+            FREAD(&radiationChecksum, sizeof(radiationChecksum), 1, fp);
+            FREAD(sourcePhase.data(), sizeof(double), sourcePhase.size(), fp);
+            auto finiteCheckpointScalar = [](double value) {
+                uint64_t bits;
+                std::memcpy(&bits, &value, sizeof(bits));
+                return (bits & 0x7ff0000000000000ULL) != 0x7ff0000000000000ULL;
+            };
+            for (double value : chemicalParameters) {
+                if (!finiteCheckpointScalar(value)) {
+                    THROW_ERROR("Checkpoint chemistry parameters are not finite\n");
+                }
+            }
+            for (double value : sourcePhase) {
+                if (!finiteCheckpointScalar(value)) {
+                    THROW_ERROR("Checkpoint chemistry source phase is not finite\n");
+                }
+            }
+            if (chemicalParameters != sphChemistryCheckpointParameters() ||
+                radiationChecksum != sphChemistryRadiationChecksum()) {
+                THROW_ERROR("Checkpoint chemistry network, rates, EOS, radiation or solver "
+                            "settings differ\n");
+            }
+        }
+        if (getOptions().chemistry.enabled) {
+            // Inspect the exponent bits: this TU otherwise permits fast-math.
+            uint64_t bits;
+            std::memcpy(&bits, &sourcePhase[2], sizeof(bits));
+            if ((bits & 0x7ff0000000000000ULL) == 0x7ff0000000000000ULL) {
+                THROW_ERROR("Checkpoint chemistry energy ledger is not finite\n");
+            }
+            sphChemistryPendingHeating() = sourcePhase[2];
+        }
         FREAD(&params, sizeof(params), 1, fp);
+        if (getOptions().chemistry.enabled &&
+            (sourcePhase[0] != (params.tau == 0.0 ? 0.0 : 1.0) ||
+                sourcePhase[1] !=
+                    std::ldexp(params.tauMax / getOptions().run.numberOfSteps,
+                        -1 - getOptions().chemistry.synchronizedRung))) {
+            THROW_ERROR("Checkpoint chemistry source phase is inconsistent\n");
+        }
     } else {
         if (!legacyCheckpointCompatible(getOptions())) {
             THROW_ERROR("Legacy checkpoints support only the original dark-matter hierarchical "

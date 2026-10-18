@@ -237,6 +237,7 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
     }
     bool threadLeft = true;
     size_t cudaMemUsage;
+#ifdef USE_CUDA
     if (getOptions().compute.cuda && params.gpu) {
         if (params.gpu && cudaWorkspace == nullptr && selfPtr->isLocal()) {
             cudaWorkspace = std::make_shared<KickWorkspace>(params, selfPtr->numberOfParticles());
@@ -263,6 +264,7 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
         }
         threadLeft = cudaWorkspace != nullptr;
     }
+#endif
     KickReturn kr;
     float const supportRadius = params.gravitySupportRadius;
     float const gm = params.gm;
@@ -579,6 +581,12 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
                         rung = std::max(std::max((int) ceilf(log2f(params.t0 / dt)),
                                             std::max((int) rung - 1, params.minRung)),
                             1);
+                        if (params.fixedRung != 0) {
+                            // Preserve the required bound in the result; the driver rejects
+                            // an unsafe fixed step before drifting any particle.
+                            kr.maxRung = std::max(kr.maxRung, int(rung));
+                            rung = params.fixedRung;
+                        }
                         ALWAYS_ASSERT(rung >= 0 && rung < MAX_RUNG);
                         dt = 0.5f * rungDt[rung] * params.t0;
                         vx = fmaf(forces.gx[j], dt, vx);

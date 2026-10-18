@@ -17,7 +17,13 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <cerrno>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <fstream>
+#include <iomanip>
+#include <limits>
 
 #include <gsl/gsl_rng.h>
 
@@ -30,86 +36,44 @@
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/particles.hpp>
+#include <cosmictiger/recfast.hpp>
 #include <cosmictiger/simulation_units.hpp>
+#include <cosmictiger/sph_chemistry.hpp>
 #include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/zero_order.hpp>
 
-#define RECFAST_N 1000
-#define RECFAST_Z0 9990
-#define RECFAST_Z1 0
-#define RECFAST_DZ 10
-
+// Homogeneous H/He recombination for the internal linear power spectrum;
+// this does not evolve the composition of SPH particles. RECFAST returns
+// xe = n_e / n_H (hydrogen nuclei), rather than electrons per baryon.
+// Seager, Sasselov & Scott (1999, 2000):
+// https://arxiv.org/abs/astro-ph/9909275
+// https://arxiv.org/abs/astro-ph/9912182
+// Bundled v1.5.2 input/output conventions and correction switches:
+// https://www.astro.ubc.ca/people/scott/recfast.readme
 std::function<double(double)> runRecfast(CosmicParameters params) {
-    std::function<double(double)> func;
-    std::string filename = "recfast.in." + std::to_string(hpxRank());
-    FILE* fp = fopen(filename.c_str(), "wb");
-    if (fp == NULL) {
-        THROW_ERROR("Unable to write to %s\n", filename.c_str());
+    std::string const rank = std::to_string(hpxRank());
+    std::string const inputFilename = "recfast.in." + rank;
+    std::string const outputFilename = "recfast.out." + rank;
+    if (std::remove(outputFilename.c_str()) != 0 && errno != ENOENT) {
+        THROW_ERROR("Unable to remove old RECFAST output %s\n", outputFilename.c_str());
     }
-    filename = "recfast.out." + std::to_string(hpxRank());
-    FILE* fp1 = fopen(filename.c_str(), "rb");
-    if (fp1) {
-        fclose(fp1);
-        std::string command = "rm " + filename + "\n";
-        if (system(command.c_str()) != 0) {
-            THROW_ERROR("Unable to execute %s\n", command.c_str());
-        }
+    std::ofstream input(inputFilename);
+    if (!input) {
+        THROW_ERROR("Unable to write to %s\n", inputFilename.c_str());
     }
-    fprintf(fp, "%s\n", filename.c_str());
-    fprintf(fp, "%f %f %f\n", params.omegaB, params.omegaC, 1.0 - params.omegaB - params.omegaC);
-    fprintf(fp, "%f %f %f\n", 100 * params.hubble, params.theta * 2.73, params.y);
-    fprintf(fp, "1\n");
-    fprintf(fp, "6\n");
-    fclose(fp);
-    std::string cmd =
-        "cat recfast.in." + std::to_string(hpxRank()) + " | ./recfast 1> /dev/null 2> /dev/null";
-    if (system(cmd.c_str()) != 0) {
-        THROW_ERROR("Unable to run %s\n", cmd.c_str());
+    input << std::setprecision(std::numeric_limits<double>::max_digits10) << outputFilename << '\n'
+          << params.omegaB << ' ' << params.omegaC << ' ' << 1.0 - params.omegaB - params.omegaC
+          << '\n'
+          << 100 * params.hubble << ' ' << params.theta * 2.73 << ' ' << params.y << "\n1\n6\n";
+    input.close();
+    if (!input) {
+        THROW_ERROR("Unable to finish writing %s\n", inputFilename.c_str());
     }
-    fp = fopen(filename.c_str(), "rb");
-    char d1[2];
-    char d2[4];
-    if (fscanf(fp, " %s %s\n", d1, d2) == 0) {
-        THROW_ERROR("unable to read %s\n", filename.c_str());
+    std::string const command = "./recfast < " + inputFilename + " > /dev/null 2> /dev/null";
+    if (std::system(command.c_str()) != 0) {
+        THROW_ERROR("Unable to run %s\n", command.c_str());
     }
-    std::vector<double> xe;
-    for (int i = 0; i < RECFAST_N; i++) {
-        float z;
-        float thisXe;
-        if (fscanf(fp, "%f %f\n", &z, &thisXe) == 0) {
-            THROW_ERROR("unable to read %s\n", filename.c_str());
-        }
-        xe.push_back(thisXe);
-    }
-    std::vector<double> tmp;
-    for (int i = 0; i < RECFAST_N; i++) {
-        tmp.push_back(xe.back());
-        xe.pop_back();
-    }
-    xe = std::move(tmp);
-    fclose(fp);
-    auto interFunc = [xe](double a) {
-        double const z = 1.0 / a - 1.0;
-        int const i1 = std::min(std::max((int) (z / RECFAST_DZ), 1), RECFAST_N - 2);
-        if (i1 == RECFAST_N - 2) {
-            return (double) xe.back();
-        } else {
-            int const i0 = i1 - 1;
-            int const i2 = i1 + 1;
-            int const i3 = i1 + 2;
-            double const t = z / RECFAST_DZ - i1;
-            double const y0 = xe[i0];
-            double const y1 = xe[i1];
-            double const y2 = xe[i2];
-            double const y3 = xe[i3];
-            double const ct = t * (1.0 - t);
-            double const d = -0.5 * ct * ((1.0 - t) * y0 + t * y3);
-            double const b = (1.0 - t + ct * (1.0 - 1.5 * t)) * y1;
-            double const c = (t + ct * (1.5 * t - 0.5)) * y2;
-            return d + b + c;
-        }
-    };
-    return std::move(interFunc);
+    return recfast::loadIonizationHistory(outputFilename);
 }
 
 struct PowerSpectrumFunction {
@@ -862,8 +826,8 @@ static void initX0() {
         double const scale = 1.0 / (1.0 + getOptions().cosmology.startRedshift);
         auto const unitScales = units::scalesFromOptions(getOptions());
         units::CosmologicalContext const context(scale, getOptions().cosmology.hubble);
-        // The cosmological gas initial condition starts neutral at 1000 K.
-        // This fixed composition sets the initial energy; no chemistry is evolved.
+        // Without chemistry, the cosmological gas starts neutral at 1000 K.
+        // The enabled network replaces this energy/composition below.
         double const neutralNumber = 1.0 - 0.75 * getOptions().cosmology.heliumFraction;
         auto const initialTemperature = units::Temperature::from_value(1000.0);
         units::SpecificEnergy const physicalEnergy =
@@ -880,6 +844,9 @@ static void initX0() {
             sphParticlesThermodynamicState(i).internalEnergy = storedThermalEnergy;
             sphParticlesSupportRadius(i) = smoothLength;
             sphParticlesDensity(i) = density;
+            if (getOptions().chemistry.enabled) {
+                sphChemistryInitializeParticle(i, scale);
+            }
         }
     }
     for (auto& future : remoteFutures) {

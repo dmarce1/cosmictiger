@@ -197,10 +197,21 @@ CudaMemory::~CudaMemory() {
 __managed__ CudaMemory* memory;
 
 CUDA_EXPORT void* cudaAllocate(size_t sz) {
+#ifndef __CUDA_ARCH__
+    if (!cudaEnabled()) {
+        return allocateManagedMemory(sz);
+    }
+#endif
     return memory->allocate(sz);
 }
 
 CUDA_EXPORT void cudaRelease(void* ptr) {
+#ifndef __CUDA_ARCH__
+    if (!cudaEnabled()) {
+        freeManagedMemory(ptr);
+        return;
+    }
+#endif
     memory->free(ptr);
 }
 

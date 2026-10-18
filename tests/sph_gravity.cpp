@@ -17,7 +17,9 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <bit>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <numbers>
 #include <stdexcept>
@@ -61,6 +63,17 @@ void verifyKernelSelections() {
     verify("Gravity", selectedGravityKernel(), options.gravity.kernelFamily,
         options.gravity.kernelDegree);
     verify("Hydro", selectedHydroKernel(), options.hydro.kernelFamily, options.hydro.kernelDegree);
+}
+
+primordial::State migrationChemistryState(int target) {
+    primordial::State state{};
+    state.abundances[0] = primordial::SignedAbundance::fromMinority(0.0f, true);
+    state.abundances[1] = primordial::SignedAbundance::fromMinority(1.0e-25f, true);
+    for (int species = 2; species < primordial::kAbundanceCount; ++species) {
+        state.abundances[species].setRaw(0.01f * (species + target));
+    }
+    state.thermalEnergy = 60.0f + target;
+    return state;
 }
 
 void initializePair(double separation) {
@@ -395,6 +408,10 @@ void initializeSphDomainRegression() {
     sphParticlesAccelerationStates[0].acceleration[XDIM] = 30.0 + target;
     sphParticlesPredictedAccelerations[YDIM][0] = 40.0 + target;
     sphParticlesGravityAccelerations[ZDIM][0] = 50.0 + target;
+    if (getOptions().chemistry.enabled) {
+        sphParticlesChemistryStates[0] = migrationChemistryState(target);
+        sphParticlesChemistryEos[0] = {0.4f + 0.01f * target, 1.4f + 0.01f * target};
+    }
 }
 HPX_PLAIN_ACTION(initializeSphDomainRegression, InitializeSphDomainRegressionAction);
 void validateSphDomainRegression() {
@@ -411,6 +428,41 @@ void validateSphDomainRegression() {
     requireClose("migration predicted acceleration", sphParticlesPredictedAccelerations[YDIM][0],
         40.0 + target);
     requireClose("migration gravity", sphParticlesGravityAccelerations[ZDIM][0], 50.0 + target);
+    if (getOptions().chemistry.enabled) {
+        auto const expected = migrationChemistryState(target);
+        auto const& actual = sphParticlesChemistryStates[0];
+        for (int species = 0; species < primordial::kAbundanceCount; ++species) {
+            if (std::bit_cast<uint32_t>(actual.abundances[species].raw()) !=
+                std::bit_cast<uint32_t>(expected.abundances[species].raw())) {
+                throw std::runtime_error("Migration changed encoded chemical abundance bits");
+            }
+        }
+        requireClose("migration chemistry energy", actual.thermalEnergy, expected.thermalEnergy);
+        requireClose(
+            "migration pressure ratio", sphParticlesChemistryEos[0].first, 0.4f + 0.01f * target);
+        requireClose(
+            "migration adiabatic index", sphParticlesChemistryEos[0].second, 1.4f + 0.01f * target);
+    }
+    ParticleGlobalRange remote;
+    remote.proc = (hpxRank() + 1) % hpxSize();
+    remote.range = {0, 1};
+    float velocity[NDIM][3]{};
+    sphParticlesGlobalReadVelocities(remote, velocity[XDIM], velocity[YDIM], velocity[ZDIM], 1);
+    for (int dimension = 0; dimension < NDIM; ++dimension) {
+        requireClose("remote velocity cache", velocity[dimension][1], 0.125 * (dimension + 1));
+    }
+    if (getOptions().chemistry.enabled) {
+        Fixed32 positionX[3]{}, positionY[3]{}, positionZ[3]{};
+        sphParticlesGlobalReadPositions(remote, positionX, positionY, positionZ, 1);
+        int const remoteTarget = int(positionX[1].toDouble() * hpxSize());
+        float pressureRatio[3]{}, adiabaticIndex[3]{};
+        sphParticlesGlobalReadChemistryEos(remote, pressureRatio, adiabaticIndex, 1);
+        requireClose("remote pressure ratio cache", pressureRatio[1], 0.4f + 0.01f * remoteTarget);
+        requireClose(
+            "remote adiabatic index cache", adiabaticIndex[1], 1.4f + 0.01f * remoteTarget);
+        requireClose("EOS cache preserves preceding destination", pressureRatio[0], 0.0);
+        requireClose("EOS cache preserves following destination", adiabaticIndex[2], 0.0);
+    }
     Array<double, NDIM> position;
     for (ParticleInteger i = 0; i < particlesSize(); i++) {
         for (int dim = 0; dim < NDIM; dim++) {

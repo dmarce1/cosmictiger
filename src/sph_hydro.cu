@@ -32,6 +32,8 @@ struct HydroNeighbor {
     float velocityZ;
     float internalEnergy;
     float density;
+    float pressureEnergyRatio;
+    float adiabaticIndex;
 };
 
 struct HydroWorkspace {
@@ -106,7 +108,12 @@ __global__ void sphCudaHydro(
                         data.sourceVelocityY[sourceParticleIndex],
                         data.sourceVelocityZ[sourceParticleIndex],
                         data.sourceInternalEnergy[sourceParticleIndex],
-                        data.sourceDensity[sourceParticleIndex]};
+                        data.sourceDensity[sourceParticleIndex],
+                        data.sourcePressureEnergyRatio ?
+                            data.sourcePressureEnergyRatio[sourceParticleIndex] :
+                            adiabaticIndex - 1.0f,
+                        data.sourceAdiabaticIndex ? data.sourceAdiabaticIndex[sourceParticleIndex] :
+                                                    adiabaticIndex};
                 }
             }
         }
@@ -124,9 +131,15 @@ __global__ void sphCudaHydro(
             float const sinkInternalEnergy = data.sourceInternalEnergy[particleIndex];
             ALWAYS_ASSERT(
                 sinkSupportRadius > 0.0f && sinkDensity > 0.0f && sinkInternalEnergy > 0.0f);
-            float const sinkPressure = (adiabaticIndex - 1.0f) * sinkDensity * sinkInternalEnergy;
+            float const sinkPressureEnergyRatio = data.sourcePressureEnergyRatio ?
+                data.sourcePressureEnergyRatio[particleIndex] :
+                adiabaticIndex - 1.0f;
+            float const sinkAdiabaticIndex = data.sourceAdiabaticIndex ?
+                data.sourceAdiabaticIndex[particleIndex] :
+                adiabaticIndex;
+            float const sinkPressure = sinkPressureEnergyRatio * sinkDensity * sinkInternalEnergy;
             float const sinkSoundSpeed =
-                sqrtf(adiabaticIndex * (adiabaticIndex - 1.0f) * sinkInternalEnergy);
+                sqrtf(sinkAdiabaticIndex * sinkPressureEnergyRatio * sinkInternalEnergy);
             float accelerationX = 0.0f;
             float accelerationY = 0.0f;
             float accelerationZ = 0.0f;
@@ -172,9 +185,9 @@ __global__ void sphCudaHydro(
                         float(selectedHydroKernel().supportRadiusPerEffectiveRadius),
                         kViscosityWidthScale);
                 float const neighborPressure =
-                    (adiabaticIndex - 1.0f) * neighbor.density * neighbor.internalEnergy;
-                float const neighborSoundSpeed =
-                    sqrtf(adiabaticIndex * (adiabaticIndex - 1.0f) * neighbor.internalEnergy);
+                    neighbor.pressureEnergyRatio * neighbor.density * neighbor.internalEnergy;
+                float const neighborSoundSpeed = sqrtf(neighbor.adiabaticIndex *
+                    neighbor.pressureEnergyRatio * neighbor.internalEnergy);
                 float const viscosity = monaghan_sph::artificialViscosity(sinkDensity,
                     neighbor.density, sinkSoundSpeed, neighborSoundSpeed, viscosityApproachRate,
                     parameters.viscosityAlpha, parameters.viscosityBeta);
@@ -231,8 +244,12 @@ __global__ void sphCudaHydro(
                 data.sinkAccelerations[sinkIndex].acceleration[XDIM] = accelerationX;
                 data.sinkAccelerations[sinkIndex].acceleration[YDIM] = accelerationY;
                 data.sinkAccelerations[sinkIndex].acceleration[ZDIM] = accelerationZ;
-                // Homogeneous adiabatic expansion of a^2*u for any ideal-gas adiabatic index.
-                internalEnergyRate += (5.0f - 3.0f * adiabaticIndex) * parameters.expansionRate *
+                // E=a^2 u and homogeneous work du/dt=-3 H P/rho give
+                // dE/dtau=(2-3 P/(rho*u)) (da/dtau)/a E.
+                float const expansionCoefficient = data.sourcePressureEnergyRatio ?
+                    2.0f - 3.0f * sinkPressureEnergyRatio :
+                    5.0f - 3.0f * adiabaticIndex;
+                internalEnergyRate += expansionCoefficient * parameters.expansionRate *
                     inverseScaleFactor * sinkInternalEnergy;
                 data.sinkInternalEnergyRate[sinkIndex] = internalEnergyRate;
                 if (parameters.phase == 1) {

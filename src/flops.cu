@@ -23,11 +23,14 @@
 static __managed__ double gpuFlops = 0.0;
 
 void resetGpuFlops() {
+    if (!cudaEnabled()) {
+        return;
+    }
     gpuFlops = 0.0;
 }
 
 double getGpuFlops() {
-    return gpuFlops;
+    return cudaEnabled() ? gpuFlops : 0.0;
 }
 
 __device__ void addGpuFlops(int count) {
