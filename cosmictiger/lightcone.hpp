@@ -102,6 +102,11 @@ void lcParticleBoundaries1();
 void lcParticleBoundaries2();
 void lcFormTrees(double tmax, double linkingLength);
 size_t lcFindGroups();
+void prepareLightconeGroupIteration(DeviceVector<LightconeTreeId> const& leaves,
+    LightconeTreeMapType& treeMap, Pair<int> ownedPixels);
+size_t cpuLightcone(DeviceVector<LightconeTreeId> const& leaves,
+    LightconeParticleMapType& particleMap, LightconeTreeMapType& treeMap, LightconeGroup& nextGroup,
+    double linkingLength, int rank, int ranks);
 size_t lcFindNeighbors();
 void lcGroups2homes();
 void lcParts2groups(double a, double linkingLength, int index);
@@ -109,4 +114,4 @@ void lcSave(FILE* fp);
 void lcLoad(FILE* fp);
 size_t cudaLightcone(DeviceVector<LightconeTreeId> const& leaves,
     LightconeParticleMapType* particleMapPtr, LightconeTreeMapType* treeMapPtr,
-    LightconeGroup* nextGroup);
+    LightconeGroup* nextGroup, double linkingLength, int rank, int ranks, int maximumBlocks = 0);

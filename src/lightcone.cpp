@@ -501,7 +501,11 @@ std::pair<int, Range<double>> lcTreeCreate(int pix, Range<double> box, Pair<int>
         leaf = false;
         int const xdim = box.longestDim();
         double const xmid = 0.5 * (box.begin[xdim] + box.end[xdim]);
-        int const mid = lcParticlesSort(pix, particleRange, xmid, xdim);
+        int mid = lcParticlesSort(pix, particleRange, xmid, xdim);
+        if (mid == particleRange.first || mid == particleRange.second) {
+            // Coincident coordinates must still produce a finite tree.
+            mid = particleRange.first + (particleRange.second - particleRange.first) / 2;
+        }
         auto boxLeft = box;
         auto boxRight = box;
         auto leftParticleRange = particleRange;
@@ -541,7 +545,7 @@ std::pair<int, Range<double>> lcTreeCreate(int pix, Range<double> box, Pair<int>
     thisNode.lastActive = 0;
     int index = nodes.size();
     nodes.pushBack(thisNode);
-    if (leaf) {
+    if (leaf && pix >= myPixRange.first && pix < myPixRange.second) {
         LightconeTreeId selfid;
         selfid.index = index;
         selfid.pix = pix;
@@ -568,7 +572,12 @@ void lcFindNeighborsLocal(
         for (int ci = 0; ci < checklist.size(); ci++) {
             auto const check = checklist[ci];
             auto const& other = treeMap[check.pix][check.index];
-            if (mybox.intersection(other.box).volume() > 0) {
+            bool overlaps = other.particleRange.first != other.particleRange.second;
+            for (int dim = 0; dim < NDIM; dim++) {
+                overlaps = overlaps && mybox.begin[dim] <= other.box.end[dim] &&
+                    other.box.begin[dim] <= mybox.end[dim];
+            }
+            if (overlaps) {
                 if (other.children[LEFT].index == -1) {
                     leaflist.push_back(check);
                 } else {
@@ -629,25 +638,25 @@ size_t lcFindGroups() {
     size_t rc = 0;
     double const linkingLength = getOptions().lightcone.linkingLength *
         pow(getOptions().initial.numberOfParticles, -1.0 / NDIM);
-    Vector<hpx::future<void>> futs2;
-    for (int pix = myPixRange.first; pix < myPixRange.second; pix++) {
-        futs2.push_back(hpx::async([pix, &treeMap]() {
-            auto& nodes = treeMap[pix];
-            for (int i = 0; i < nodes.size(); i++) {
-                nodes[i].lastActive = nodes[i].active;
-                nodes[i].active = 0;
-            }
-        }));
-    }
-    hpx::wait_all(futs2.begin(), futs2.end());
+    prepareLightconeGroupIteration(leafNodes, treeMap, myPixRange);
 
 #ifdef USE_CUDA
     if (cudaEnabled()) {
-        return cudaLightcone(leafNodes, particleMapPtr, treeMapPtr, &groupIdCounter);
+        rc = cudaLightcone(leafNodes, particleMapPtr, treeMapPtr, &groupIdCounter, linkingLength,
+            hpxRank(), hpxSize());
+    } else {
+        rc = cpuLightcone(leafNodes, *particleMapPtr, treeMap, groupIdCounter, linkingLength,
+            hpxRank(), hpxSize());
     }
+#else
+    rc = cpuLightcone(
+        leafNodes, *particleMapPtr, treeMap, groupIdCounter, linkingLength, hpxRank(), hpxSize());
 #endif
-    THROW_ERROR("Lightcone group finding requires compute.cuda=true\n");
-    return 0;
+    hpx::wait_all(futs.begin(), futs.end());
+    for (auto& future : futs) {
+        rc += future.get();
+    }
+    return rc;
 }
 
 static LightconeParticles lcGetParticles1(int pix) {
@@ -711,6 +720,10 @@ void lcParticleBoundaries1() {
         particleMap[pix] = pfuts[i].get();
         i++;
     }
+    hpx::wait_all(futs.begin(), futs.end());
+    for (auto& future : futs) {
+        future.get();
+    }
 }
 
 void lcParticleBoundaries2() {
@@ -753,10 +766,16 @@ void lcParticleBoundaries2() {
             }));
         }
         hpx::wait_all(futs.begin(), futs.end());
+        for (auto& future : futs) {
+            future.get();
+        }
         i++;
     }
 
     hpx::wait_all(futs.begin(), futs.end());
+    for (auto& future : futs) {
+        future.get();
+    }
 }
 
 void lcFormTrees(double tau, double linkingLength) {
@@ -766,8 +785,13 @@ void lcFormTrees(double tau, double linkingLength) {
     for (auto const& c : hpxChildren()) {
         futs.push_back(hpx::async<LcFormTreesAction>(c, tau, linkingLength));
     }
-    for (auto iter = particleMap.begin(); iter != particleMap.end(); iter++) {
-        int const pix = iter->first;
+    // Include current boundary pixels, but never stale map entries from an
+    // earlier epoch with a larger HEALPix resolution.
+    Vector<int> pixels(bndPix.begin(), bndPix.end());
+    for (int pix = myPixRange.first; pix < myPixRange.second; pix++) {
+        pixels.push_back(pix);
+    }
+    for (int pix : pixels) {
         futs.push_back(hpx::async([pix, linkingLength, tau, &particleMap]() {
             auto& parts = particleMap[pix];
             Range<double> box;
@@ -805,18 +829,21 @@ void lcFormTrees(double tau, double linkingLength) {
             }
         }));
     }
+    hpx::wait_all(futs.begin(), futs.end());
+    for (auto& future : futs) {
+        future.get();
+    }
     std::sort(leafNodes.begin(), leafNodes.end(), [&treeMap](LightconeTreeId a, LightconeTreeId b) {
         if (a.pix < b.pix) {
             return true;
         } else if (a.pix > b.pix) {
             return false;
         } else {
-            auto const aValue = treeMap[a.pix][a.index];
-            auto const bValue = treeMap[b.pix][b.index];
+            auto const& aValue = treeMap[a.pix][a.index];
+            auto const& bValue = treeMap[b.pix][b.index];
             return aValue.particleRange.first < bValue.particleRange.first;
         }
     });
-    hpx::wait_all(futs.begin(), futs.end());
 }
 
 static Vector<int> pixNeighbors(int pix) {

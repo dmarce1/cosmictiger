@@ -560,8 +560,13 @@ void rockstarTest();
 void bhPotentialTest();
 void groupsCatalogueTest();
 void groupsCatalogueDistributedTest();
+void analysisBackendsTest();
 
 void test(std::string test) {
+    if (test == "analysisBackends") {
+        analysisBackendsTest();
+        return;
+    }
     if (test == "rockstar") {
         rockstarTest();
         return;

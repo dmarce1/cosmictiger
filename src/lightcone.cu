@@ -18,9 +18,7 @@
  */
 
 #include <cosmictiger/cuda_reduce.hpp>
-#include <cosmictiger/hpx.hpp>
 #include <cosmictiger/lightcone.hpp>
-#include <cosmictiger/options.hpp>
 
 #define BLOCK_SIZE 32
 
@@ -162,11 +160,15 @@ __global__ void cudaLightconeKernel(LightconeParticleMapType* particleMapPtr,
 
 size_t cudaLightcone(DeviceVector<LightconeTreeId> const& leaves,
     LightconeParticleMapType* particleMapPtr, LightconeTreeMapType* treeMapPtr,
-    LightconeGroup* nextIdValue) {
+    LightconeGroup* nextIdValue, double linkingLength, int rank, int ranks, int maximumBlocks) {
     int numberOfBlocks;
-    CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &numberOfBlocks, (void const*) cudaLightconeKernel, BLOCK_SIZE, 0));
-    numberOfBlocks *= cudaSmpCount();
+    if (maximumBlocks > 0) {
+        numberOfBlocks = maximumBlocks;
+    } else {
+        CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+            &numberOfBlocks, (void const*) cudaLightconeKernel, BLOCK_SIZE, 0));
+        numberOfBlocks *= cudaSmpCount();
+    }
     int* indexPtr;
     LightconeGroup* nextIdPtr;
     int* rcPtr;
@@ -176,11 +178,8 @@ size_t cudaLightcone(DeviceVector<LightconeTreeId> const& leaves,
     *rcPtr = 0;
     *indexPtr = 0;
     *nextIdPtr = *nextIdValue;
-    auto const b = getOptions().lightcone.linkingLength;
-    auto const numberOfParticles = getOptions().initial.numberOfParticles;
-    double const linkingLength = b * pow(numberOfParticles, -1.0 / NDIM);
     cudaLightconeKernel<<<numberOfBlocks, BLOCK_SIZE>>>(particleMapPtr, treeMapPtr, rcPtr,
-        leaves.data(), leaves.size(), indexPtr, nextIdPtr, linkingLength, hpxSize(), hpxRank());
+        leaves.data(), leaves.size(), indexPtr, nextIdPtr, linkingLength, ranks, rank);
     CUDA_CHECK(cudaDeviceSynchronize());
     PRINT("lc blocks = %i next id = %lli\n", numberOfBlocks, *nextIdPtr);
     size_t rc = *rcPtr;

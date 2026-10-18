@@ -18,57 +18,15 @@
  */
 
 #include <cosmictiger/cuda_memory.hpp>
-#include <cosmictiger/domain.hpp>
 #include <cosmictiger/fft.hpp>
-#include <cosmictiger/hpx.hpp>
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/power.hpp>
-
-#define BLOCK_SIZE 256
-
-__global__ void accumulateDensityKernel(Fixed32* xValue, Fixed32* yValue, Fixed32* zValue,
-    float* rho, float const* masses, int mfold, size_t numberOfParticles, int ndim,
-    Range<int64_t> intbox) {
-    int const tid = threadIdx.x;
-    int const bid = blockIdx.x;
-    int const gsz = gridDim.x;
-    ParticleInteger const ibegin = (size_t) bid * numberOfParticles / (size_t) gsz;
-    ParticleInteger const iend = (size_t) (bid + 1) * numberOfParticles / (size_t) gsz;
-    for (ParticleInteger i = ibegin + tid; i < iend; i += BLOCK_SIZE) {
-        ALWAYS_ASSERT(i < numberOfParticles);
-        float x = fmodf(mfold * xValue[i].toFloat(), 1.0f);
-        float y = fmodf(mfold * yValue[i].toFloat(), 1.0f);
-        float z = fmodf(mfold * zValue[i].toFloat(), 1.0f);
-        int const j = (x * ndim);
-        if (j >= intbox.begin[XDIM] + 1 && j < intbox.end[XDIM] - 1) {
-            int const k = (y * ndim);
-            if (k >= intbox.begin[YDIM] + 1 && k < intbox.end[YDIM] - 1) {
-                int const l = (z * ndim);
-                if (l >= intbox.begin[ZDIM] + 1 && l < intbox.end[ZDIM] - 1) {
-                    float const x0 = x * ndim - j;
-                    float const y0 = y * ndim - k;
-                    float const z0 = z * ndim - l;
-                    for (int j0 = CLOUD_MIN; j0 <= CLOUD_MAX; j0++) {
-                        float wtX = cloudWeight(x0 - j0);
-                        for (int k0 = CLOUD_MIN; k0 <= CLOUD_MAX; k0++) {
-                            float wtY = cloudWeight(y0 - k0);
-                            for (int l0 = CLOUD_MIN; l0 <= CLOUD_MAX; l0++) {
-                                float wtZ = cloudWeight(z0 - l0);
-                                float const mass = masses == nullptr ? 1.0f : masses[i];
-                                float const wt = wtX * wtY * wtZ * mass;
-                                atomicAdd(rho + intbox.index(j0 + j, k0 + k, l0 + l), wt);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
+#include <cosmictiger/power_cuda.hpp>
 
 Vector<float> accumulateDensityCuda(int m, int ndim, Range<int64_t> intbox) {
+    constexpr int kBlockSize = 256;
     int numberOfBlocks;
     auto const n3 = intbox.volume();
     Vector<float> rho(n3, 0.0f);
@@ -88,9 +46,9 @@ Vector<float> accumulateDensityCuda(int m, int ndim, Range<int64_t> intbox) {
         devRho[i] = 0.f;
     }
     CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &numberOfBlocks, (void const*) accumulateDensityKernel, BLOCK_SIZE, 0));
+        &numberOfBlocks, (void const*) accumulateDensityKernel, kBlockSize, 0));
     numberOfBlocks *= cudaSmpCount();
-    accumulateDensityKernel<<<numberOfBlocks, BLOCK_SIZE>>>(&particlesPos(XDIM, 0),
+    accumulateDensityKernel<<<numberOfBlocks, kBlockSize>>>(&particlesPos(XDIM, 0),
         &particlesPos(YDIM, 0), &particlesPos(ZDIM, 0), devRho, masses, m, particlesSize(), ndim,
         intbox);
     CUDA_CHECK(cudaDeviceSynchronize());

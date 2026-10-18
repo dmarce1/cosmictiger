@@ -97,6 +97,7 @@ set(cosmictiger_source_files
     src/kick.cu
     src/kick_workspace.cpp
     src/lightcone.cpp
+    src/lightcone_cpu.cpp
     src/lightcone.cu
     src/main.cpp
     src/math.cpp
@@ -105,7 +106,9 @@ set(cosmictiger_source_files
     src/output.cpp
     src/particles.cpp
     src/power.cpp
+    src/power_cpu.cpp
     src/power.cu
+    src/power_cuda.cu
     src/profiler.cpp
     src/rockstar_catalogue.cpp
     src/rockstar.cpp
@@ -136,6 +139,7 @@ set(cosmictiger_source_files
     src/sph_tree.cpp
     tests/kernel_selection_cuda.cu
     tests/bh.cpp
+    tests/analysis_backends.cpp
     tests/rockstar.cpp
     tests/fmm_tree.cpp
     tests/fmm_walk.cpp
@@ -186,6 +190,8 @@ set(cosmictiger_header_files
     cosmictiger/output.hpp
     cosmictiger/particles.hpp
     cosmictiger/power.hpp
+    cosmictiger/power_cpu.hpp
+    cosmictiger/power_cuda.hpp
     cosmictiger/profiler.hpp
     cosmictiger/random_number_generator.hpp
     cosmictiger/range.hpp
@@ -358,6 +364,18 @@ if(BUILD_TESTING)
             ${PROJECT_SOURCE_DIR}/tests/run_cpu_only.py $<TARGET_FILE:cosmictiger>
             $<TARGET_FILE:no_cuda_runtime> ${PROJECT_BINARY_DIR}/tests/cpu_only)
         set_tests_properties(cpu_only_runtime PROPERTIES TIMEOUT 250 RUN_SERIAL TRUE)
+        add_test(NAME analysis_cpu_runtime COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/run_analysis_cpu.py $<TARGET_FILE:cosmictiger>
+            ${PROJECT_BINARY_DIR}/tests/analysis_cpu_runtime
+            --guard $<TARGET_FILE:no_cuda_runtime>)
+        set_tests_properties(analysis_cpu_runtime PROPERTIES TIMEOUT 240 RUN_SERIAL TRUE)
+        if(MPIEXEC_EXECUTABLE)
+            add_test(NAME analysis_cpu_mpi COMMAND ${Python3_EXECUTABLE}
+                ${PROJECT_SOURCE_DIR}/tests/run_analysis_cpu.py $<TARGET_FILE:cosmictiger>
+                ${PROJECT_BINARY_DIR}/tests/analysis_cpu_mpi
+                --guard $<TARGET_FILE:no_cuda_runtime> --mpi-exec ${MPIEXEC_EXECUTABLE} --ranks 2)
+            set_tests_properties(analysis_cpu_mpi PROPERTIES TIMEOUT 240 RUN_SERIAL TRUE PROCESSORS 4)
+        endif()
     endif()
     if(COSMICTIGER_WITH_CUDA)
         target_compile_definitions(primordial_solver_test PRIVATE USE_CUDA)
@@ -563,6 +581,40 @@ if(BUILD_TESTING)
     target_include_directories(monaghan_sph_test PRIVATE ${PROJECT_SOURCE_DIR})
     add_test(NAME monaghan_sph COMMAND monaghan_sph_test)
     set_tests_properties(monaghan_sph PROPERTIES TIMEOUT 20)
+
+    foreach(analysis_kernel IN ITEMS power lightcone)
+        add_executable(${analysis_kernel}_cpu_test
+            tests/${analysis_kernel}_cpu.cpp src/${analysis_kernel}_cpu.cpp)
+        target_include_directories(${analysis_kernel}_cpu_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_link_libraries(${analysis_kernel}_cpu_test PRIVATE HPX::hpx)
+        target_compile_options(${analysis_kernel}_cpu_test PRIVATE -ffast-math)
+        add_test(NAME ${analysis_kernel}_cpu COMMAND ${analysis_kernel}_cpu_test)
+        set_tests_properties(${analysis_kernel}_cpu PROPERTIES TIMEOUT 60)
+    endforeach()
+
+    if(COSMICTIGER_WITH_CUDA)
+        add_executable(power_cuda_test tests/power_cuda.cu src/power_cpu.cpp src/power_cuda.cu
+            src/assert.cu)
+        target_include_directories(power_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_compile_definitions(power_cuda_test PRIVATE USE_CUDA)
+        target_link_libraries(power_cuda_test PRIVATE HPX::hpx CUDA::cudart)
+        target_compile_options(power_cuda_test PRIVATE
+            $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math>)
+        set_target_properties(power_cuda_test PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+        add_test(NAME power_cuda COMMAND power_cuda_test)
+        set_tests_properties(power_cuda PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+
+        add_executable(lightcone_cuda_test tests/lightcone_cuda.cu src/lightcone.cu
+            src/lightcone_cpu.cpp src/assert.cu)
+        target_include_directories(lightcone_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_compile_definitions(lightcone_cuda_test PRIVATE USE_CUDA ORDER=${COSMICTIGER_WITH_ORDER})
+        target_link_libraries(lightcone_cuda_test PRIVATE HPX::hpx CUDA::cudart)
+        target_compile_options(lightcone_cuda_test PRIVATE
+            $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math>)
+        set_target_properties(lightcone_cuda_test PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+        add_test(NAME lightcone_cuda COMMAND lightcone_cuda_test)
+        set_tests_properties(lightcone_cuda PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+    endif()
 
     # Compile CPU drift with ordinary host arrays and no CUDA device kernels.
     add_executable(drift_cpu_test tests/drift_cpu.cpp src/drift_cpu.cpp)

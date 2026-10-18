@@ -86,10 +86,6 @@ int hpx_main(int argc, char* argv[]) {
                 stopMemuseDaemon();
                 return hpx::finalize();
             }
-            if (getOptions().lightcone.enabled && !getOptions().compute.cuda) {
-                throw std::runtime_error("lightcone.enabled=true requires compute.cuda=true; "
-                                         "lightcone group finding has no CPU backend");
-            }
 #ifdef USE_CUDA
             if (getOptions().compute.cuda) {
                 hpxInitCuda();

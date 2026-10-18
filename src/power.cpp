@@ -17,22 +17,21 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include <cosmictiger/domain.hpp>
+#include <algorithm>
+
 #include <cosmictiger/fft.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/power.hpp>
+#include <cosmictiger/power_cpu.hpp>
 
 static void computeDensityFolded(int m);
 
 HPX_PLAIN_ACTION(computeDensityFolded, ComputeDensityFoldedAction);
 
 PowerSpectrumT powerSpectrumCompute(int m) {
-    if (!cudaEnabled()) {
-        THROW_ERROR("Power-spectrum density assignment requires compute.cuda=true\n");
-    }
     int const n = getOptions().initial.fourierSize;
     fft3dInit(n, -1.0f);
     computeDensityFolded(m);
@@ -45,10 +44,27 @@ PowerSpectrumT powerSpectrumCompute(int m) {
     return power;
 }
 
+Vector<float> accumulateDensityCpu(int fold, int gridSize, Range<int64_t> box) {
+    Vector<float> density(box.volume(), 0.0f);
+    size_t const particleCount = particlesSize();
+    if (particleCount == 0) {
+        return density;
+    }
+    Vector<float> masses;
+    if (getOptions().hydro.enabled) {
+        masses.resize(particleCount);
+        for (size_t index = 0; index < particleCount; index++) {
+            masses[index] = particlesMass(index);
+        }
+    }
+    accumulateDensityCpuKernel(&particlesPos(XDIM, 0), &particlesPos(YDIM, 0),
+        &particlesPos(ZDIM, 0), masses.empty() ? nullptr : masses.data(), particleCount, fold,
+        gridSize, box, density.data());
+    return density;
+}
+
 static void computeDensityFolded(int m) {
-    Vector<float> rho0;
     Vector<hpx::future<void>> futs1;
-    Vector<hpx::future<void>> futs2;
     for (auto c : hpxChildren()) {
         futs1.push_back(hpx::async<ComputeDensityFoldedAction>(c, m));
     }
@@ -56,26 +72,34 @@ static void computeDensityFolded(int m) {
     size_t const numberOfParticles = getOptions().initial.numberOfParticles;
     size_t const particlesPerRank = numberOfParticles / hpxSize();
     size_t nper = ndim;
-    while (sqr(nper) * nper > particlesPerRank) {
+    while (nper > 1 && sqr(nper) * nper > particlesPerRank) {
         nper /= 2;
     }
-    int const np = ndim / nper;
-    for (int j = 0; j < np; j++) {
-        for (int k = 0; k < np; k++) {
-            for (int l = 0; l < np; l++) {
+    for (size_t j = 0; j < ndim; j += nper) {
+        for (size_t k = 0; k < ndim; k += nper) {
+            for (size_t l = 0; l < ndim; l += nper) {
                 Range<int64_t> intbox;
-                intbox.begin[XDIM] = j * nper + CLOUD_MIN;
-                intbox.begin[YDIM] = k * nper + CLOUD_MIN;
-                intbox.begin[ZDIM] = l * nper + CLOUD_MIN;
-                intbox.end[XDIM] = (j + 1) * nper + CLOUD_MAX;
-                intbox.end[YDIM] = (k + 1) * nper + CLOUD_MAX;
-                intbox.end[ZDIM] = (l + 1) * nper + CLOUD_MAX;
+                intbox.begin[XDIM] = int64_t(j) + CLOUD_MIN;
+                intbox.begin[YDIM] = int64_t(k) + CLOUD_MIN;
+                intbox.begin[ZDIM] = int64_t(l) + CLOUD_MIN;
+                intbox.end[XDIM] = std::min(j + nper, ndim) + CLOUD_MAX;
+                intbox.end[YDIM] = std::min(k + nper, ndim) + CLOUD_MAX;
+                intbox.end[ZDIM] = std::min(l + nper, ndim) + CLOUD_MAX;
+                Vector<float> rho;
 #ifdef USE_CUDA
-                auto rho = accumulateDensityCuda(m, ndim, intbox);
-                fft3dAccumulateReal(intbox, rho);
+                if (cudaEnabled()) {
+                    rho = accumulateDensityCuda(m, ndim, intbox);
+                } else
 #endif
+                {
+                    rho = accumulateDensityCpu(m, ndim, intbox);
+                }
+                fft3dAccumulateReal(intbox, rho);
             }
         }
     }
     hpx::wait_all(futs1.begin(), futs1.end());
+    for (auto& future : futs1) {
+        future.get();
+    }
 }
