@@ -30,6 +30,9 @@ list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 option(COSMICTIGER_WITH_CUDA "Enable CUDA" ON)
 option(COSMICTIGER_WITH_LONG_LONG_PART_INT "Use long long to index local particles" OFF)
 set(COSMICTIGER_WITH_ORDER "7" CACHE STRING "Expansion order P+1")
+if(NOT COSMICTIGER_WITH_ORDER STREQUAL "7")
+    message(FATAL_ERROR "The checked-in STF kernels use source degree 5 and local degree 6")
+endif()
 if(COSMICTIGER_WITH_CUDA)
     if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
         set(CMAKE_CUDA_ARCHITECTURES native)
@@ -211,11 +214,20 @@ set(cosmictiger_header_files
     cosmictiger/stars.hpp
 )
 
+if(NOT COSMICTIGER_WITH_CUDA)
+    list(FILTER cosmictiger_source_files EXCLUDE REGEX "\\.cu$")
+endif()
+
 add_hpx_executable(cosmictiger
     DEPENDENCIES Boost::boost Boost::program_options GSL::gsl GSL::gslcblas
         ${FFTW3F_LIBRARY} ${SILO_LIBRARY} ${CHEALPIX_LIBRARY} dl quadmath
     SOURCES ${cosmictiger_source_files}
     HEADERS ${cosmictiger_header_files})
+option(COSMICTIGER_BUILD_STF_BENCHMARKS "Build the opt-in STF comparison harness" OFF)
+if(COSMICTIGER_BUILD_STF_BENCHMARKS)
+    target_sources(cosmictiger PRIVATE benchmarks/stf_walk.cpp)
+    set_source_files_properties(src/test.cpp PROPERTIES COMPILE_DEFINITIONS COSMICTIGER_STF_BENCHMARKS)
+endif()
 target_include_directories(cosmictiger PRIVATE ${PROJECT_SOURCE_DIR})
 target_include_directories(cosmictiger SYSTEM PRIVATE
     ${FFTW3F_INCLUDE_DIR} ${SILO_INCLUDE_DIR} ${CHEALPIX_INCLUDE_DIR})
@@ -252,12 +264,20 @@ if(COSMICTIGER_WITH_CUDA)
 endif()
 configure_file(power.init power.init COPYONLY)
 add_custom_command(
-    OUTPUT ${PROJECT_BINARY_DIR}/generated/cosmictiger/fmm_kernels.hpp
+    OUTPUT ${PROJECT_BINARY_DIR}/generated/cosmictiger/ewald_kernels.hpp
     COMMAND ${CMAKE_COMMAND} -E make_directory ${PROJECT_BINARY_DIR}/generated/cosmictiger
-    COMMAND fmm_kernel_codegen > ${PROJECT_BINARY_DIR}/generated/cosmictiger/fmm_kernels.hpp
+    COMMAND fmm_kernel_codegen > ${PROJECT_BINARY_DIR}/generated/cosmictiger/ewald_kernels.hpp
     DEPENDS fmm_kernel_codegen
-    COMMENT "Generating FMM kernels for comparison with the checked-in header")
-add_custom_target(generate_fmm_kernels DEPENDS ${PROJECT_BINARY_DIR}/generated/cosmictiger/fmm_kernels.hpp)
+    COMMENT "Generating Ewald derivatives for comparison with the checked-in header")
+add_custom_target(generate_fmm_kernels DEPENDS ${PROJECT_BINARY_DIR}/generated/cosmictiger/ewald_kernels.hpp)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_custom_target(generate_stf_kernels
+    COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/generate_stf_m2l.py
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    COMMENT "Generating source degree 5 and local degree 6 STF kernels")
+add_custom_target(check_stf_kernels
+    COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/generate_stf_m2l.py --check
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
 
 add_executable(healpix2silo src/healpix2silo.cpp)
 target_link_libraries(healpix2silo PRIVATE ${CHEALPIX_LIBRARY} ${SILO_LIBRARY} Boost::program_options dl)
@@ -278,7 +298,6 @@ endforeach()
 
 include(CTest)
 if(BUILD_TESTING)
-    find_package(Python3 REQUIRED COMPONENTS Interpreter)
     add_test(NAME grouped_options COMMAND ${Python3_EXECUTABLE}
         ${PROJECT_SOURCE_DIR}/tests/run_options.py $<TARGET_FILE:cosmictiger>
         ${PROJECT_BINARY_DIR}/tests/grouped_options)
@@ -341,6 +360,25 @@ if(BUILD_TESTING)
     add_test(NAME radial_kernel COMMAND radial_kernel_test)
     set_tests_properties(radial_kernel PROPERTIES TIMEOUT 30)
 
+    add_executable(stf_kernels_test tests/stf_kernels.cpp)
+    target_include_directories(stf_kernels_test PRIVATE ${PROJECT_SOURCE_DIR})
+    if(COMPILER_SUPPORTS_MARCH_NATIVE)
+        target_compile_options(stf_kernels_test PRIVATE -march=native)
+    endif()
+    add_test(NAME stf_kernels COMMAND stf_kernels_test)
+    set_tests_properties(stf_kernels PROPERTIES TIMEOUT 60)
+    # Exercise the CUDA-disabled Ewald initializer even in a CUDA-enabled build.
+    add_executable(stf_ewald_cpu_test tests/stf_ewald_cpu.cpp src/ewald_indices.cpp)
+    target_include_directories(stf_ewald_cpu_test PRIVATE ${PROJECT_SOURCE_DIR})
+    target_include_directories(stf_ewald_cpu_test SYSTEM PRIVATE ${CHEALPIX_INCLUDE_DIR})
+    target_compile_definitions(stf_ewald_cpu_test PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
+    target_link_libraries(stf_ewald_cpu_test PRIVATE HPX::hpx Boost::boost)
+    add_test(NAME stf_ewald_cpu COMMAND stf_ewald_cpu_test)
+    set_tests_properties(stf_ewald_cpu PROPERTIES TIMEOUT 30)
+    add_test(NAME stf_generated_current
+        COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/generate_stf_m2l.py --check)
+    set_tests_properties(stf_generated_current PROPERTIES TIMEOUT 120)
+
     add_executable(fmm_acceptance_test tests/fmm_acceptance.cpp)
     target_include_directories(fmm_acceptance_test PRIVATE ${PROJECT_SOURCE_DIR})
     target_compile_options(fmm_acceptance_test PRIVATE -ffast-math)
@@ -380,6 +418,21 @@ if(BUILD_TESTING)
     set_tests_properties(particle_selection PROPERTIES TIMEOUT 10)
 
     if(COSMICTIGER_WITH_CUDA)
+        add_executable(stf_kernels_cuda_test tests/stf_kernels_cuda.cu)
+        target_include_directories(stf_kernels_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_link_libraries(stf_kernels_cuda_test PRIVATE CUDA::cudart)
+        add_test(NAME stf_kernels_cuda COMMAND stf_kernels_cuda_test)
+        set_tests_properties(stf_kernels_cuda PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+
+        add_executable(stf_l2l_cuda_test tests/stf_l2l_cuda.cu)
+        target_include_directories(stf_l2l_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_compile_definitions(stf_l2l_cuda_test PRIVATE USE_CUDA ORDER=${COSMICTIGER_WITH_ORDER})
+        target_link_libraries(stf_l2l_cuda_test PRIVATE CUDA::cudart)
+        target_compile_options(stf_l2l_cuda_test PRIVATE
+            $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr;--use_fast_math>)
+        add_test(NAME stf_l2l_cuda COMMAND stf_l2l_cuda_test)
+        set_tests_properties(stf_l2l_cuda PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+
         add_executable(fmm_acceptance_cuda_test tests/fmm_acceptance_cuda.cu)
         target_include_directories(fmm_acceptance_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_compile_definitions(fmm_acceptance_cuda_test PRIVATE USE_CUDA)

@@ -1,0 +1,3 @@
+implementation,do_phi,threads,blocks,samples,rounds,repetitions,median_seconds,ns_per_translation,checksum
+stf_warp,0,32,32,32768,20,7,0.060616703,92.4937485,-591933.16169900959
+stf_warp,1,32,32,32768,20,7,0.0544236145,83.0438454,-592010.83487303322

@@ -88,17 +88,23 @@ void cpuGravityCc(GravityCcType type, Expansion<float>& lValue, Vector<TreeId> c
                     toFloatFactor;
             }
             flops += 3 * count;
-            Expansion<SimdFloat> d;
             if (type == kGravityDirect) {
-                flops += count * greensFunction(d, dx);
+                flops += count * m2LDirect(l0, mValue[j], dx, doPhi);
             } else {
-                flops += count * ewaldGreensFunction(d, dx);
-                //				flops += count * apply_scale_factor(M[j]);
+                Array<SimdFloat, NDIM> unwrappedPosition{};
+                for (int lane = 0; lane < SIMD_FLOAT_SIZE; lane++) {
+                    int const sourceIndex =
+                        std::min(j * SIMD_FLOAT_SIZE + lane, int(treePtrs.size()) - 1);
+                    for (int dim = 0; dim < NDIM; dim++) {
+                        simdSetLane(unwrappedPosition[dim], lane,
+                            selfPtr->mpos->pos[dim].toDouble() -
+                                treePtrs[sourceIndex]->mpos->pos[dim].toDouble());
+                    }
+                }
+                Expansion<SimdFloat> d;
+                flops += count * ewaldGreensFunction(d, dx, unwrappedPosition);
+                flops += count * m2L(l0, mValue[j], d, doPhi);
             }
-            m2L(l0, mValue[j], d, doPhi);
-        }
-        if (type == kGravityEwald) {
-            //			flops += SIMD_FLOAT_SIZE * apply_scale_factor_inv(L0);
         }
         for (int i = 0; i < EXPANSION_SIZE; i++) {
             lValue[i] += simdSum(l0[i]);
@@ -260,9 +266,7 @@ void cpuGravityPc(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
                         toFloatFactor;
                 }
                 flops += 3 * count;
-                Expansion<SimdFloat> d;
-                flops += count * greensFunction(d, dx);
-                flops += count * m2L(lValue2, mValue[j], d, doPhi);
+                flops += count * m2P(lValue2, mValue[j], dx, doPhi);
             }
             int const j = i - range.first;
             f.gx[j] -= SCALE_FACTOR2 * simdSum(lValue2(1, 0, 0));

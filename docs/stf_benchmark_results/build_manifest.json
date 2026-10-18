@@ -1,0 +1,154 @@
+{
+  "root": "/home/dmarce1/workspace/cosmictiger",
+  "baseline_header": "/tmp/cosmictiger_stf_baseline/fmm_kernels.hpp",
+  "baseline_sha256": "cf4f30ff47de11ab701565d69f7ebf5e1199c2172d7b7a6ee86a3a749d6655a7",
+  "current_header_sha256": "f999c9665f932b9f590cc0bda99660b7d79828271eb2f822f991c05768d96af4",
+  "cpu_source_sha256": "e1ba7e449acc42857a789f56efc95b500092508d71cda072559b75c7a09cbc77",
+  "cuda_source_sha256": "22d7eb017583b2374a6aeff60f0a97e779df89018f32e79992f0f4c4fae72fc2",
+  "builds": [
+    {
+      "name": "legacy_cpu_float",
+      "command": [
+        "g++-13",
+        "-std=c++20",
+        "-O3",
+        "-ffast-math",
+        "-march=native",
+        "-DNDEBUG",
+        "-DORDER=7",
+        "-DUSE_CUDA",
+        "-I/home/dmarce1/workspace/cosmictiger",
+        "-I/usr/local/cuda/include",
+        "-DCOSMICTIGER_STF_BENCHMARK_TYPE=0",
+        "-DCOSMICTIGER_STF_BASELINE_HEADER=\"/tmp/cosmictiger_stf_baseline/fmm_kernels.hpp\"",
+        "/home/dmarce1/workspace/cosmictiger/benchmarks/stf_kernels.cpp",
+        "-o",
+        "/tmp/cosmictiger_stf_bench/legacy_cpu_float"
+      ],
+      "exit_code": 0,
+      "seconds": 3.8525059009552933
+    },
+    {
+      "name": "stf_cpu_float",
+      "command": [
+        "g++-13",
+        "-std=c++20",
+        "-O3",
+        "-ffast-math",
+        "-march=native",
+        "-DNDEBUG",
+        "-DORDER=7",
+        "-DUSE_CUDA",
+        "-I/home/dmarce1/workspace/cosmictiger",
+        "-I/usr/local/cuda/include",
+        "-DCOSMICTIGER_STF_BENCHMARK_TYPE=0",
+        "/home/dmarce1/workspace/cosmictiger/benchmarks/stf_kernels.cpp",
+        "-o",
+        "/tmp/cosmictiger_stf_bench/stf_cpu_float"
+      ],
+      "exit_code": 0,
+      "seconds": 3.7902523549855687
+    },
+    {
+      "name": "legacy_cpu_simd_float8",
+      "command": [
+        "g++-13",
+        "-std=c++20",
+        "-O3",
+        "-ffast-math",
+        "-march=native",
+        "-DNDEBUG",
+        "-DORDER=7",
+        "-DUSE_CUDA",
+        "-I/home/dmarce1/workspace/cosmictiger",
+        "-I/usr/local/cuda/include",
+        "-DCOSMICTIGER_STF_BENCHMARK_TYPE=2",
+        "-DCOSMICTIGER_STF_BASELINE_HEADER=\"/tmp/cosmictiger_stf_baseline/fmm_kernels.hpp\"",
+        "/home/dmarce1/workspace/cosmictiger/benchmarks/stf_kernels.cpp",
+        "-o",
+        "/tmp/cosmictiger_stf_bench/legacy_cpu_simd_float8"
+      ],
+      "exit_code": 0,
+      "seconds": 63.231863541004714
+    },
+    {
+      "name": "stf_cpu_simd_float8",
+      "command": [
+        "g++-13",
+        "-std=c++20",
+        "-O3",
+        "-ffast-math",
+        "-march=native",
+        "-DNDEBUG",
+        "-DORDER=7",
+        "-DUSE_CUDA",
+        "-I/home/dmarce1/workspace/cosmictiger",
+        "-I/usr/local/cuda/include",
+        "-DCOSMICTIGER_STF_BENCHMARK_TYPE=2",
+        "/home/dmarce1/workspace/cosmictiger/benchmarks/stf_kernels.cpp",
+        "-o",
+        "/tmp/cosmictiger_stf_bench/stf_cpu_simd_float8"
+      ],
+      "exit_code": 0,
+      "seconds": 7.396157928043976
+    },
+    {
+      "name": "legacy_cuda_float",
+      "command": [
+        "/usr/local/cuda/bin/nvcc",
+        "-std=c++20",
+        "-O3",
+        "--use_fast_math",
+        "-DNDEBUG",
+        "-DORDER=7",
+        "-DUSE_CUDA",
+        "-I/home/dmarce1/workspace/cosmictiger",
+        "-arch=sm_86",
+        "--expt-relaxed-constexpr",
+        "-rdc=true",
+        "-ccbin",
+        "g++-13",
+        "--compiler-options=-O3,-ffast-math,-march=native",
+        "-DCOSMICTIGER_STF_BASELINE_HEADER=\"/tmp/cosmictiger_stf_baseline/fmm_kernels.hpp\"",
+        "/home/dmarce1/workspace/cosmictiger/benchmarks/stf_kernels_cuda.cu",
+        "-o",
+        "/tmp/cosmictiger_stf_bench/legacy_cuda_float"
+      ],
+      "exit_code": 0,
+      "seconds": 6.640869264956564
+    },
+    {
+      "name": "stf_cuda_float",
+      "command": [
+        "/usr/local/cuda/bin/nvcc",
+        "-std=c++20",
+        "-O3",
+        "--use_fast_math",
+        "-DNDEBUG",
+        "-DORDER=7",
+        "-DUSE_CUDA",
+        "-I/home/dmarce1/workspace/cosmictiger",
+        "-arch=sm_86",
+        "--expt-relaxed-constexpr",
+        "-rdc=true",
+        "-ccbin",
+        "g++-13",
+        "--compiler-options=-O3,-ffast-math,-march=native",
+        "/home/dmarce1/workspace/cosmictiger/benchmarks/stf_kernels_cuda.cu",
+        "-o",
+        "/tmp/cosmictiger_stf_bench/stf_cuda_float"
+      ],
+      "exit_code": 0,
+      "seconds": 6.363124980009161
+    }
+  ],
+  "generated_operators_sha256": "8158f642342f97f1a73aff0691d399ffa20810725bfd56e3542264d361f71163",
+  "binary_sha256": {
+    "legacy_cpu_float": "4d05542f819480a963c8348e69de4a8ee4ccefba8a3a150b93ed881a6cff92f1",
+    "stf_cpu_float": "afeaeb84c3bb4d7af0945ac3e30f212f6e925befd52b20d4802f6445191e61b5",
+    "legacy_cpu_simd_float8": "857f36198d5d4c95a6bbe75756aebf993f4ad40c49cea7afb896d7d0fcd81c15",
+    "stf_cpu_simd_float8": "06727f9b8458af5e14659453c2fc1e1107066b8a7631495450ccefdd157454c4",
+    "legacy_cuda_float": "fc1f83a113205de89195d3f49fbbd0fcb71ccec6c8b4615444ea23254ed7942b",
+    "stf_cuda_float": "4267a902f4bcfbd8ccae75ae438339948cf77fc700330c58f4873d4ead624ebc"
+  }
+}

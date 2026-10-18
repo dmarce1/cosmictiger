@@ -603,7 +603,17 @@ void unitsOutputTest();
 void fmmTreeTest();
 void fmmWalkTest();
 
+#ifdef COSMICTIGER_STF_BENCHMARKS
+void stfWalkBenchmark();
+#endif
+
 void test(std::string test) {
+#ifdef COSMICTIGER_STF_BENCHMARKS
+    if (test == "stfBenchmark") {
+        stfWalkBenchmark();
+        return;
+    }
+#endif
     if (test == "linearGrowth") {
         linearGrowthTest();
         return;

@@ -1,0 +1,62 @@
+[
+  {
+    "before": "walk_legacy_cpu",
+    "after": "walk_stf_cpu",
+    "fixture": "lattice",
+    "count": 32768,
+    "force_relative_l2": 1.6520197777005806e-05,
+    "force_max_absolute": 0.02605782963579345,
+    "potential_relative_l2": 0.00011024305760641054,
+    "potential_max_absolute": 0.0324249267578125
+  },
+  {
+    "before": "walk_legacy_cpu",
+    "after": "walk_stf_cpu",
+    "fixture": "clustered",
+    "count": 32768,
+    "force_relative_l2": 1.960680592131083e-07,
+    "force_max_absolute": 0.08769509500251425,
+    "potential_relative_l2": 1.4688241023720872e-06,
+    "potential_max_absolute": 0.044921875
+  },
+  {
+    "before": "walk_legacy_cuda",
+    "after": "walk_stf_cuda",
+    "fixture": "lattice",
+    "count": 32768,
+    "force_relative_l2": 0.01182428798453785,
+    "force_max_absolute": 11.497650623631605,
+    "potential_relative_l2": 0.001827592522207517,
+    "potential_max_absolute": 0.295806884765625
+  },
+  {
+    "before": "walk_legacy_cuda",
+    "after": "walk_stf_cuda",
+    "fixture": "clustered",
+    "count": 32768,
+    "force_relative_l2": 9.566237861062803e-05,
+    "force_max_absolute": 21.74219311444412,
+    "potential_relative_l2": 1.02268837012462e-05,
+    "potential_max_absolute": 0.2548828125
+  },
+  {
+    "before": "walk_stf_cpu",
+    "after": "walk_stf_cuda",
+    "fixture": "lattice",
+    "count": 32768,
+    "force_relative_l2": 9.125535327031713e-06,
+    "force_max_absolute": 0.024791714887946112,
+    "potential_relative_l2": 3.449149152354699e-05,
+    "potential_max_absolute": 0.01323699951171875
+  },
+  {
+    "before": "walk_stf_cpu",
+    "after": "walk_stf_cuda",
+    "fixture": "clustered",
+    "count": 32768,
+    "force_relative_l2": 2.1294398048697524e-07,
+    "force_max_absolute": 0.09430277302650374,
+    "potential_relative_l2": 2.9782386612195077e-07,
+    "potential_max_absolute": 0.017578125
+  }
+]

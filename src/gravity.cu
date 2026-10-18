@@ -53,7 +53,6 @@ __device__ void cudaGravityCcDirect(CudaKickData const& data, Expansion<float>& 
     FlopCounter<int> flops = 0;
     if (multlist.size()) {
         Expansion<float> l;
-        Expansion<float> d;
         for (int i = 0; i < EXPANSION_SIZE; i++) {
             l[i] = 0.0f;
         }
@@ -64,8 +63,7 @@ __device__ void cudaGravityCcDirect(CudaKickData const& data, Expansion<float>& 
             for (int dim = 0; dim < NDIM; dim++) {
                 dx[dim] = distance(self.mpos->pos[dim], other.mpos->pos[dim]);
             }
-            flops += 6 + greensFunction(d, dx);
-            flops += m2L(l, m, d, doPhi);
+            flops += 6 + m2LDirect(l, m, dx, doPhi);
         }
         sharedReduceAddArray(l);
         for (int i = tid; i < EXPANSION_SIZE; i += WARP_SIZE) {
@@ -199,7 +197,6 @@ __device__ void cudaGravityPcDirect(
             barrier.arrive_and_wait();
             Expansion2<float> l;
             Array<float, NDIM> dx;
-            Expansion<float> d;
             for (int j = 0; j < mend; j++) {
                 auto const& pos = multis[j].pos;
                 auto const& m = multis[j].multi;
@@ -209,8 +206,7 @@ __device__ void cudaGravityPcDirect(
                     dx[XDIM] = distance(sinkX[k], pos[XDIM]);
                     dx[YDIM] = distance(sinkY[k], pos[YDIM]);
                     dx[ZDIM] = distance(sinkZ[k], pos[ZDIM]);
-                    flops += 6 + greensFunction(d, dx);
-                    flops += m2L(l, m, d, doPhi);
+                    flops += 6 + m2P(l, m, dx, doPhi);
                     fValue.gx -= SCALE_FACTOR2 * l(1, 0, 0);
                     fValue.gy -= SCALE_FACTOR2 * l(0, 1, 0);
                     fValue.gz -= SCALE_FACTOR2 * l(0, 0, 1);
@@ -239,15 +235,16 @@ __device__ void cudaGravityCcEwald(CudaKickData const& data, Expansion<float>& l
         for (int i = tid; i < multlist.size(); i += WARP_SIZE) {
             TreeNode const& other = treeNodes[multlist[i]];
             Multipole<float> m = other.mpos->multi;
-            //	flops += apply_scale_factor(M);
             Array<float, NDIM> dx;
+            Array<float, NDIM> unwrappedPosition;
             for (int dim = 0; dim < NDIM; dim++) {
                 dx[dim] = distance(self.mpos->pos[dim], other.mpos->pos[dim]);
+                unwrappedPosition[dim] =
+                    self.mpos->pos[dim].toDouble() - other.mpos->pos[dim].toDouble();
             }
-            flops += 3 + ewaldGreensFunction(d, dx);
+            flops += 3 + ewaldGreensFunction(d, dx, unwrappedPosition);
             flops += m2L(l, m, d, doPhi);
         }
-        // flops += apply_scale_factor_inv(L);
         sharedReduceAddArray(l);
         for (int i = tid; i < EXPANSION_SIZE; i += WARP_SIZE) {
             lacc[i] += l[i];

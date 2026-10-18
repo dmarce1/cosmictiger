@@ -99,9 +99,9 @@ __device__ void doKick(KickReturn& result, KickParameters params, CudaKickData c
             continue;
         }
         ASSERT(sinkIndex >= 0);
-        dx[XDIM] = distance(sinkX[i], self.pos[XDIM]);    // 1
-        dx[YDIM] = distance(sinkY[i], self.pos[YDIM]);    // 1
-        dx[ZDIM] = distance(sinkZ[i], self.pos[ZDIM]);    // 1
+        dx[XDIM] = sinkX[i].toDouble() - self.pos[XDIM].toDouble();
+        dx[YDIM] = sinkY[i].toDouble() - self.pos[YDIM].toDouble();
+        dx[ZDIM] = sinkZ[i].toDouble() - self.pos[ZDIM].toDouble();
         l2 = l2P(lValue2, dx, params.doPhi);
         auto& fValue = force[i];
         fValue.phi += SCALE_FACTOR1 * l2(0, 0, 0);
@@ -218,7 +218,7 @@ __device__ void doKick(KickReturn& result, KickParameters params, CudaKickData c
         vels[sinkIndex][ZDIM] = vz;
         phiTot += 0.5f * mass * force[i].phi;
         dkinTot += kin1 - kin0;
-        flops += 557 + params.doPhi * 178;
+        flops += detail::stf::L2pKernel<6, true>::kFlops_ + 3;
     }
     sharedReduceAdd(phiTot);
     sharedReduceAdd(xmomTot);
@@ -324,7 +324,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
             case 0: {
                 Array<float, NDIM> dx;
                 for (int dim = 0; dim < NDIM; dim++) {
-                    dx[dim] = distance(self.pos[dim], lValue3.back().pos[dim]);
+                    dx[dim] = self.pos[dim].toDouble() - lValue3.back().pos[dim].toDouble();
                 }
                 flops += 3;
                 {
@@ -332,8 +332,11 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                     if (tid == 0) {
                         lValue3.back().expansion = thisL;
                         lValue3.back().pos = self.pos;
+                        flops += globalParams.doPhi ?
+                            detail::stf::L2lWarpKernel<6, true>::kFlops_ :
+                            detail::stf::L2lWarpKernel<6, true>::kFlopsNoPotential_;
+                        flops += 3 * WARP_SIZE;
                     }
-                    flops += 2650 + globalParams.doPhi * 332;
                 }
                 ParticleInteger const numberOfSinks =
                     self.particleRange.second - self.particleRange.first;

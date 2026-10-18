@@ -1,0 +1,35 @@
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -216,6 +216,11 @@
+         ${FFTW3F_LIBRARY} ${SILO_LIBRARY} ${CHEALPIX_LIBRARY} dl quadmath
+     SOURCES ${cosmictiger_source_files}
+     HEADERS ${cosmictiger_header_files})
++option(COSMICTIGER_BUILD_STF_BENCHMARKS "Build the opt-in STF comparison harness" OFF)
++if(COSMICTIGER_BUILD_STF_BENCHMARKS)
++    target_sources(cosmictiger PRIVATE benchmarks/stf_walk.cpp)
++    set_source_files_properties(src/test.cpp PROPERTIES COMPILE_DEFINITIONS COSMICTIGER_STF_BENCHMARKS)
++endif()
+ target_include_directories(cosmictiger PRIVATE ${PROJECT_SOURCE_DIR})
+ target_include_directories(cosmictiger SYSTEM PRIVATE
+     ${FFTW3F_INCLUDE_DIR} ${SILO_INCLUDE_DIR} ${CHEALPIX_INCLUDE_DIR})
+--- a/src/test.cpp
++++ b/src/test.cpp
+@@ -603,7 +603,17 @@
+ void fmmTreeTest();
+ void fmmWalkTest();
+-
++
++#ifdef COSMICTIGER_STF_BENCHMARKS
++void stfWalkBenchmark();
++#endif
++
+ void test(std::string test) {
++#ifdef COSMICTIGER_STF_BENCHMARKS
++    if (test == "stfBenchmark") {
++        stfWalkBenchmark();
++        return;
++    }
++#endif
+     if (test == "linearGrowth") {
+         linearGrowthTest();
+         return;

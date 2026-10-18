@@ -1,0 +1,166 @@
+{
+  "repository": "/home/dmarce1/workspace/cosmictiger",
+  "base_git_head": "91fccebc1a36eb9ae001aa617c53329c7ae74b3c",
+  "state_note": "STF changes are uncommitted shared workspace edits; file hashes identify final source used.",
+  "device": "NVIDIA GeForce RTX 3090 (sm_86)",
+  "timing_conditions": "Variants run serially with root and generator agents idle.32 blocks of32 threads.32768 expansions x20 rounds x7 repetitions; median CUDA event time. All outputs consumed.",
+  "timing_scope": "Production-shaped standalone L2L microbenchmark, not whole-tree performance. Same global expansion workspace, geometry within warp, lane0 in-place write and synchronization as production.",
+  "sources_sha256": {
+    "/home/dmarce1/workspace/cosmictiger/benchmarks/stf_l2l_cuda.cu": "45d4775eddd373601a42cb729ee2e1d07c4baac19ffa609ea395e6cc3f886dee",
+    "/home/dmarce1/workspace/cosmictiger/tests/stf_l2l_cuda.cu": "306413a5416abcd3b84fcd421865346ec7c546ccf56a0614600e54c7097f5466",
+    "/home/dmarce1/workspace/cosmictiger/cosmictiger/fmm_kernels.hpp": "f999c9665f932b9f590cc0bda99660b7d79828271eb2f822f991c05768d96af4",
+    "/home/dmarce1/workspace/cosmictiger/cosmictiger/gravity/stf/generated/generated_operators.hpp": "8158f642342f97f1a73aff0691d399ffa20810725bfd56e3542264d361f71163",
+    "/home/dmarce1/workspace/cosmictiger/cosmictiger/gravity/stf/generated/generated_config.hpp": "ae17c4cea15b5a58954a7dbac8550ddb8417c55dd4a6603e603fa7c9a63af0ad",
+    "/home/dmarce1/workspace/cosmictiger/tools/generate_stf_m2l.py": "219c412c215725cdb8e4bd7992186377f1b3163e0d9fb69d5fcab206ce85abc5",
+    "/tmp/cosmictiger_stf_baseline/fmm_kernels.hpp": "cf4f30ff47de11ab701565d69f7ebf5e1199c2172d7b7a6ee86a3a749d6655a7"
+  },
+  "variants": {
+    "legacy_warp": {
+      "build_command": "nvcc -std=c++20 -O3 --use_fast_math -DNDEBUG -DORDER=7 -DUSE_CUDA -I. -arch=sm_86 --expt-relaxed-constexpr -rdc=true --compiler-options=-O3,-ffast-math,-march=native '-DCOSMICTIGER_STF_BASELINE_HEADER=\"/tmp/cosmictiger_stf_baseline/fmm_kernels.hpp\"' benchmarks/stf_l2l_cuda.cu -o /tmp/cosmictiger_stf_l2l_bench/legacy_warp",
+      "timing_command": "/tmp/cosmictiger_stf_l2l_bench/legacy_warp 32768 20 7",
+      "binary_sha256": "f25c1994cb329ff0dd6a617674a19771580b8866d9df389adf709ed7cd02bd4e",
+      "timing_csv": "/tmp/cosmictiger_stf_l2l_bench/legacy_warp.csv",
+      "correctness_and_device_log": "/tmp/cosmictiger_stf_l2l_bench/legacy_warp.stderr",
+      "rows": [
+        {
+          "implementation": "legacy_warp",
+          "do_phi": "0",
+          "threads": "32",
+          "blocks": "32",
+          "samples": "32768",
+          "rounds": "20",
+          "repetitions": "7",
+          "median_seconds": "0.226747391",
+          "ns_per_translation": "345.989061",
+          "checksum": "-591933.17921917315"
+        },
+        {
+          "implementation": "legacy_warp",
+          "do_phi": "1",
+          "threads": "32",
+          "blocks": "32",
+          "samples": "32768",
+          "rounds": "20",
+          "repetitions": "7",
+          "median_seconds": "0.23855513",
+          "ns_per_translation": "364.006241",
+          "checksum": "-592010.85238902445"
+        }
+      ],
+      "registers": 101,
+      "stack_bytes": 872,
+      "reference_checks_pass": false
+    },
+    "stf_lane0": {
+      "build_command": "nvcc -std=c++20 -O3 --use_fast_math -DNDEBUG -DORDER=7 -DUSE_CUDA -I. -arch=sm_86 --expt-relaxed-constexpr -rdc=true --compiler-options=-O3,-ffast-math,-march=native -DCOSMICTIGER_STF_L2L_LANE0 benchmarks/stf_l2l_cuda.cu -o /tmp/cosmictiger_stf_l2l_bench/stf_lane0",
+      "timing_command": "/tmp/cosmictiger_stf_l2l_bench/stf_lane0 32768 20 7",
+      "binary_sha256": "4e5c48788625b917d04d81e535836624595f4fb96d49bf50309f00091ce5b070",
+      "timing_csv": "/tmp/cosmictiger_stf_l2l_bench/stf_lane0.csv",
+      "correctness_and_device_log": "/tmp/cosmictiger_stf_l2l_bench/stf_lane0.stderr",
+      "rows": [
+        {
+          "implementation": "stf_lane0",
+          "do_phi": "0",
+          "threads": "32",
+          "blocks": "32",
+          "samples": "32768",
+          "rounds": "20",
+          "repetitions": "7",
+          "median_seconds": "0.0444487686",
+          "ns_per_translation": "67.8234384",
+          "checksum": "-591933.16169352841"
+        },
+        {
+          "implementation": "stf_lane0",
+          "do_phi": "1",
+          "threads": "32",
+          "blocks": "32",
+          "samples": "32768",
+          "rounds": "20",
+          "repetitions": "7",
+          "median_seconds": "0.0417320976",
+          "ns_per_translation": "63.6781275",
+          "checksum": "-592010.83484353137"
+        }
+      ],
+      "registers": 96,
+      "stack_bytes": 0,
+      "reference_checks_pass": true
+    },
+    "stf_warp": {
+      "build_command": "nvcc -std=c++20 -O3 --use_fast_math -DNDEBUG -DORDER=7 -DUSE_CUDA -I. -arch=sm_86 --expt-relaxed-constexpr -rdc=true --compiler-options=-O3,-ffast-math,-march=native benchmarks/stf_l2l_cuda.cu -o /tmp/cosmictiger_stf_l2l_bench/stf_warp",
+      "timing_command": "/tmp/cosmictiger_stf_l2l_bench/stf_warp 32768 20 7",
+      "binary_sha256": "22bd94f1bc3b515b5317fc530ef0c99da89bf335fdf77f9ca5b1428187ed802e",
+      "timing_csv": "/tmp/cosmictiger_stf_l2l_bench/stf_warp.csv",
+      "correctness_and_device_log": "/tmp/cosmictiger_stf_l2l_bench/stf_warp.stderr",
+      "rows": [
+        {
+          "implementation": "stf_warp",
+          "do_phi": "0",
+          "threads": "32",
+          "blocks": "32",
+          "samples": "32768",
+          "rounds": "20",
+          "repetitions": "7",
+          "median_seconds": "0.060616703",
+          "ns_per_translation": "92.4937485",
+          "checksum": "-591933.16169900959"
+        },
+        {
+          "implementation": "stf_warp",
+          "do_phi": "1",
+          "threads": "32",
+          "blocks": "32",
+          "samples": "32768",
+          "rounds": "20",
+          "repetitions": "7",
+          "median_seconds": "0.0544236145",
+          "ns_per_translation": "83.0438454",
+          "checksum": "-592010.83487303322"
+        }
+      ],
+      "registers": 94,
+      "stack_bytes": 0,
+      "reference_checks_pass": true
+    }
+  },
+  "ratios": {
+    "0": {
+      "legacy_over_final_warp_speedup": 3.740675090057573,
+      "final_warp_over_lane0_time_ratio": 1.363743134851152
+    },
+    "1": {
+      "legacy_over_final_warp_speedup": 4.383301847917558,
+      "final_warp_over_lane0_time_ratio": 1.3041188342103809
+    }
+  },
+  "correctness": {
+    "reference": "Independent Cartesian degree6 finite Taylor expansion reconstructed by harmonicity plus separate constant Laplacian; full50 coefficients.",
+    "fixtures": "16: general harmonic, nonzero trace, pure constant/linear field, root uniform-density quadratic. Both doPhi.1 and17 alternating translations with in-place source overwrite. All32 returned lanes checked. Final warp additionally checks3 independent warps per block.",
+    "final_warp_max_cartesian_error": 5.07684563e-07,
+    "final_warp_max_own_scalar_error": 1.31130219e-06,
+    "threshold": "2e-5 * max(1,abs(expected))",
+    "final_warp_pass": true,
+    "lane0_pass": true,
+    "synccheck_command": "/usr/local/cuda/bin/compute-sanitizer --tool synccheck --error-exitcode 1 /tmp/cosmictiger_stf_l2l_bench/stf_warp --check",
+    "synccheck_exit_code": 0,
+    "synccheck_summary": "ERROR SUMMARY: 0 errors",
+    "synccheck_stdout": "/tmp/cosmictiger_stf_l2l_bench/stf_warp_synccheck.stdout",
+    "synccheck_stderr": "/tmp/cosmictiger_stf_l2l_bench/stf_warp_synccheck.stderr"
+  },
+  "known_legacy_defect": {
+    "proof": "ldest1/factor1/xsrc1/lsrc1 each contain616 entries; old l2LCuda loop has i<615. Last indices destination49(zz), source83(zzzzzz), monomial34(dz^4), factor1/24.",
+    "omitted_term": "zz += source_zzzzzz * dz^4 /24",
+    "sample8_17translations_predicted_trace_drift": 3.701609191973705e-05,
+    "sample8_17translations_measured_trace_drift": 3.701448440551758e-05,
+    "behavior": "Legacy --check fails; timing intentionally prints failures and continues only for historical performance comparison. STF variants always fail on any reference error.",
+    "legacy_max_cartesian_error": 0.000102395192
+  },
+  "previous_table_schedule": {
+    "binary": "/tmp/cosmictiger_stf_l2l_bench/stf_warp_table",
+    "binary_sha256": "28d50aaf7999d8816276efbea2bbee369a903dffd6977b5e4bd929357182027f",
+    "timing_csv": "/tmp/cosmictiger_stf_l2l_bench/stf_warp_table.csv",
+    "note": "Correct first cooperative implementation; replaced dynamic49-way basis indexing with two lane-owned registers and warp shuffles. Preserved only for comparison."
+  },
+  "ctest": "stf_l2l_cuda_test target; CTest stf_l2l_cuda, skip77 without device, TIMEOUT60,RUN_SERIAL. CMake builds without explicit RDC; standalone timing matches application RDC setting."
+}

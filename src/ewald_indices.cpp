@@ -17,6 +17,9 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <algorithm>
+#include <cmath>
+
 #include <chealpix.h>
 
 #include <cosmictiger/ewald_indices.hpp>
@@ -69,7 +72,7 @@ void EwaldConst::init() {
     EwaldConst::initGpu();
 #else
 
-    int n2max = 10;
+    int n2max = 12;
     int nmax = std::sqrt(n2max) + 1;
     Array<float, NDIM> thisH;
     int count = 0;
@@ -77,7 +80,11 @@ void EwaldConst::init() {
         for (int j = -nmax; j <= nmax; j++) {
             for (int k = -nmax; k <= nmax; k++) {
                 int const i2 = i * i + j * j + k * k;
-                if (i2 <= n2max && i2 > 0) {
+                double const x = std::max(std::abs(i) - 0.5, 0.0);
+                double const y = std::max(std::abs(j) - 0.5, 0.0);
+                double const z = std::max(std::abs(k) - 0.5, 0.0);
+                double const distance = std::sqrt(sqr(x, y, z));
+                if (distance < EWALD_REAL_CUTOFF && i2 > 0) {
                     thisH[0] = i;
                     thisH[1] = j;
                     thisH[2] = k;
@@ -123,21 +130,23 @@ void EwaldConst::init() {
             for (n[1] = 0; n[1] < LORDER - n[0]; n[1]++) {
                 for (n[2] = 0; n[2] < LORDER - n[0] - n[1]; n[2]++) {
                     int const n0 = n[0] + n[1] + n[2];
-                    d0Value(n) *= signs[n0 % 4] * pow(2.0 * M_PI, n0) * c0;
+                    d0Value(n) *= (signs[n0 % 4] * pow(2.0 * M_PI * SCALE_FACTOR_INV1, n0) * c0) *
+                        SCALE_FACTOR_INV1;
                 }
             }
         }
         ec.fourExpanse[count++] = d0Value.detraceD();
     }
     SymmetricTensor<float, LORDER> d;
-    for (int n = 0; n < EXPANSION_SIZE; n++) {
+    for (size_t n = 0; n < d.size(); n++) {
         d[n] = 0.0;
     }
     constexpr double kAlpha = 2.0;
     for (int n = 0; n < LORDER; n += 2) {
         for (int m = 0; m < LORDER - n; m += 2) {
             for (int l = 0; l < LORDER - n - m; l += 2) {
-                d(n, m, l) = pow(-2.0, (n + m + l) / 2 + 1) / ((n + m + l + 1.0) * sqrt(M_PI)) *
+                d(n, m, l) = pow(SCALE_FACTOR_INV1, n + m + l + 1) *
+                    pow(-2.0, (n + m + l) / 2 + 1) / ((n + m + l + 1.0) * sqrt(M_PI)) *
                     pow(kAlpha, n + m + l + 1) * doubleFactorial(n - 1) * doubleFactorial(m - 1) *
                     doubleFactorial(l - 1);
             }

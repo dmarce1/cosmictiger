@@ -1,0 +1,36 @@
+Internal ctest changing into directory: /home/dmarce1/workspace/cosmictiger/build/stf_validation
+Test project /home/dmarce1/workspace/cosmictiger/build/stf_validation
+      Start 10: stf_kernels
+ 1/15 Test #10: stf_kernels ......................   Passed    0.01 sec
+      Start 11: stf_ewald_cpu
+ 2/15 Test #11: stf_ewald_cpu ....................   Passed    0.01 sec
+      Start 12: stf_generated_current
+ 3/15 Test #12: stf_generated_current ............   Passed    2.51 sec
+      Start 18: stf_kernels_cuda
+ 4/15 Test #18: stf_kernels_cuda .................   Passed    0.34 sec
+      Start 19: stf_l2l_cuda
+ 5/15 Test #19: stf_l2l_cuda .....................   Passed    0.31 sec
+      Start 31: sph_gravity_cpu
+ 6/15 Test #31: sph_gravity_cpu ..................   Passed    0.95 sec
+      Start 32: sph_gravity_cuda
+ 7/15 Test #32: sph_gravity_cuda .................   Passed    0.74 sec
+      Start 35: fmm_tree
+ 8/15 Test #35: fmm_tree .........................   Passed    0.68 sec
+      Start 36: fmm_walk_cpu
+ 9/15 Test #36: fmm_walk_cpu .....................   Passed    0.69 sec
+      Start 37: fmm_walk_cuda
+10/15 Test #37: fmm_walk_cuda ....................   Passed    0.78 sec
+      Start 43: fmm_tree_mpi
+11/15 Test #43: fmm_tree_mpi .....................   Passed    1.91 sec
+      Start 44: fmm_walk_mpi
+12/15 Test #44: fmm_walk_mpi .....................   Passed    1.87 sec
+      Start 49: smoke_dm_cpu
+13/15 Test #49: smoke_dm_cpu .....................   Passed    2.95 sec
+      Start 50: smoke_dm_cuda
+14/15 Test #50: smoke_dm_cuda ....................   Passed    1.40 sec
+      Start 51: smoke_sph
+15/15 Test #51: smoke_sph ........................   Passed    3.02 sec
+
+100% tests passed, 0 tests failed out of 15
+
+Total Test time (real) =  18.25 sec

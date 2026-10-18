@@ -1,0 +1,3 @@
+implementation,do_phi,threads,blocks,samples,rounds,repetitions,median_seconds,ns_per_translation,checksum
+stf_lane0,0,32,32,32768,20,7,0.0444487686,67.8234384,-591933.16169352841
+stf_lane0,1,32,32,32768,20,7,0.0417320976,63.6781275,-592010.83484353137

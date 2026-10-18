@@ -1,0 +1,3 @@
+implementation,do_phi,threads,blocks,samples,rounds,repetitions,median_seconds,ns_per_translation,checksum
+legacy_warp,0,32,32,32768,20,7,0.226747391,345.989061,-591933.17921917315
+legacy_warp,1,32,32,32768,20,7,0.23855513,364.006241,-592010.85238902445

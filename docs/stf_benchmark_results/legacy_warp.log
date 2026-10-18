@@ -1,0 +1,10 @@
+legacy_warp: checking doPhi=0, steps=1, warps per block=1
+legacy_warp: checking doPhi=0, steps=17, warps per block=1
+legacy_warp: checking doPhi=1, steps=1, warps per block=1
+legacy_warp: checking doPhi=1, steps=17, warps per block=1
+legacy_warp: host scalar/Cartesian parity worst normalized error 4.43961233e-06, doPhi=1 steps=17 sample=5 lane=0 coefficient=0 actual=0.71069711446762085 expected=0.71069267485529519
+legacy_warp: CUDA return/Cartesian parity worst normalized error 0.000102395192, doPhi=0 steps=17 sample=9 lane=0 coefficient=49 actual=-0.69989761337637901 expected=-0.70000000856816769
+legacy_warp: CUDA/own scalar parity worst normalized error 0.000104459003, doPhi=0 steps=17 sample=9 lane=0 coefficient=49 actual=-0.69989761337637901 expected=-0.70000207237899303
+legacy_warp: post-sync expansion visibility worst normalized error 3.15683328e-07, doPhi=0 steps=1 sample=4 lane=0 coefficient=-1 actual=8.7111406326293945 expected=8.7111433825921267
+legacy_warp: REFERENCE CHECKS FAILED; retaining this legacy implementation only for historical timing comparison.
+NVIDIA GeForce RTX 3090; 32 one-warp blocks, one expansion per warp.

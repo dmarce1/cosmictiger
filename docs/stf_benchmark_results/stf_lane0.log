@@ -1,0 +1,10 @@
+stf_lane0: checking doPhi=0, steps=1, warps per block=1
+stf_lane0: checking doPhi=0, steps=17, warps per block=1
+stf_lane0: checking doPhi=1, steps=1, warps per block=1
+stf_lane0: checking doPhi=1, steps=17, warps per block=1
+stf_lane0: host scalar/Cartesian parity worst normalized error 1.03087841e-06, doPhi=1 steps=17 sample=15 lane=0 coefficient=0 actual=0.72976225614547729 expected=0.72976328702389137
+stf_lane0: CUDA return/Cartesian parity worst normalized error 2.14694607e-06, doPhi=1 steps=17 sample=4 lane=0 coefficient=0 actual=0.72102391719818115 expected=0.72102606414424808
+stf_lane0: CUDA/own scalar parity worst normalized error 2.2649765e-06, doPhi=1 steps=17 sample=4 lane=0 coefficient=0 actual=0.72102391719818115 expected=0.72102618217468262
+stf_lane0: post-sync expansion visibility worst normalized error 5.67983612e-07, doPhi=1 steps=17 sample=12 lane=0 coefficient=-1 actual=1.5368094444274902 expected=1.5368085715454072
+stf_lane0: Cartesian, own scalar, lane return, synchronized visibility, trace, linear field and doPhi checks passed.
+NVIDIA GeForce RTX 3090; 32 one-warp blocks, one expansion per warp.

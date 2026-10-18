@@ -37,6 +37,35 @@ constexpr bool kVerbose = true;
 
 HPX_PLAIN_ACTION(kick, KickAction);
 
+namespace detail {
+double kickBackgroundSecondMoment(Array<Fixed32, NDIM> center);
+}
+
+HPX_PLAIN_ACTION(detail::kickBackgroundSecondMoment, KickBackgroundSecondMomentAction);
+
+namespace detail {
+double kickBackgroundSecondMoment(Array<Fixed32, NDIM> center) {
+    Vector<hpx::future<double>> children;
+    for (auto const& locality : hpxChildren()) {
+        children.push_back(hpx::async<KickBackgroundSecondMomentAction>(locality, center));
+    }
+    double secondMoment = 0.0;
+    auto const range = particlesCurrentRange();
+    for (ParticleInteger i = range.first; i < range.second; i++) {
+        double radiusSquared = 0.0;
+        for (int dim = 0; dim < NDIM; dim++) {
+            double const displacement = particlesPos(dim, i).toDouble() - center[dim].toDouble();
+            radiusSquared += displacement * displacement;
+        }
+        secondMoment += double(particlesMass(i)) * radiusSquared;
+    }
+    for (auto& child : children) {
+        secondMoment += child.get();
+    }
+    return secondMoment;
+}
+}    // namespace detail
+
 #define MAX_ACTIVE_WORKSPACES 1
 
 struct Workspace {
@@ -186,6 +215,26 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
         }
         return KickReturn();
     }
+    if (self.proc == 0 && self.index == 0 && echecklist.size() == 1 && echecklist[0] == self) {
+        // The Ewald operators contain only the harmonic part. Add the uniform
+        // background once, using canonical coordinates rather than periodic
+        // nearest images. Its source trace is needed only for the potential
+        // gauge, so compute that scalar here instead of storing it in every
+        // source multipole.
+        Array<float, NDIM> displacement;
+        for (int dim = 0; dim < NDIM; dim++) {
+            displacement[dim] = selfPtr->pos[dim].toDouble() - pos[dim].toDouble();
+        }
+        l = l2L(l, displacement, params.doPhi);
+        pos = selfPtr->pos;
+        double const secondMoment = params.doPhi ? detail::kickBackgroundSecondMoment(pos) : 0.0;
+        Expansion<float> background;
+        background = 0.0f;
+        initializeBackgroundExpansion(background, selfPtr->mpos->multi, secondMoment);
+        for (int i = 0; i < EXPANSION_SIZE; i++) {
+            l[i] += background[i];
+        }
+    }
     bool threadLeft = true;
     size_t cudaMemUsage;
     if (getOptions().cuda && params.gpu) {
@@ -247,10 +296,10 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
         selfBox.end[dim] *= RangeFixed::kToFloatFactor_;
     }
     for (int dim = 0; dim < NDIM; dim++) {
-        ldx[dim] = distance(selfPtr->pos[dim], pos[dim]);
+        ldx[dim] = selfPtr->pos[dim].toDouble() - pos[dim].toDouble();
     }
     l = l2L(l, ldx, params.doPhi);
-    flops += 1511 + params.doPhi * 178;
+    flops += detail::stf::L2lKernel<6, true>::kFlops_ + 3;
     float const inverseSupportRadius = 1.0f / params.gravitySupportRadius;
     ForceVectors forces;
     ParticleInteger const numberOfSelfParticles = selfPtr->numberOfParticles();
@@ -438,7 +487,7 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
                 ParticleInteger const j = i - rng.first;
                 Array<float, NDIM> dx;
                 for (ParticleInteger dim = 0; dim < NDIM; dim++) {
-                    dx[dim] = distance(particlesPos(dim, i), selfPtr->pos[dim]);
+                    dx[dim] = particlesPos(dim, i).toDouble() - selfPtr->pos[dim].toDouble();
                 }
                 auto const l2 = l2P(l, dx, params.doPhi);
                 float const gravityEffectiveRadius = params.gravitySupportRadius /
@@ -547,7 +596,7 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
                     kr.pot += 0.5f * mass * forces.phi[j];
                     kr.dkin += 0.5f * mass * sqr(vx, vy, vz) - kin0;
                 }
-                flops += 570 + params.doPhi * 178;
+                flops += detail::stf::L2pKernel<6, true>::kFlops_ + 16;
             }
         }
         KickReturn completed;

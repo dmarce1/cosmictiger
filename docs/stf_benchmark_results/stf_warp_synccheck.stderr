@@ -1,0 +1,18 @@
+stf_warp: checking doPhi=0, steps=1, warps per block=1
+stf_warp: checking doPhi=0, steps=17, warps per block=1
+stf_warp: checking doPhi=1, steps=1, warps per block=1
+stf_warp: checking doPhi=1, steps=17, warps per block=1
+stf_warp: host scalar/Cartesian parity worst normalized error 1.03087841e-06, doPhi=1 steps=17 sample=15 lane=0 coefficient=0 actual=0.72976225614547729 expected=0.72976328702389137
+stf_warp: CUDA return/Cartesian parity worst normalized error 5.07684563e-07, doPhi=1 steps=17 sample=5 lane=0 coefficient=0 actual=0.71069216728210449 expected=0.71069267496666788
+stf_warp: CUDA/own scalar parity worst normalized error 1.31130219e-06, doPhi=1 steps=17 sample=1 lane=0 coefficient=0 actual=0.76948350667953491 expected=0.76948219537734985
+stf_warp: post-sync expansion visibility worst normalized error 3.95725591e-07, doPhi=1 steps=17 sample=12 lane=0 coefficient=-1 actual=1.5368070602416992 expected=1.536806452088058
+stf_warp: Cartesian, own scalar, lane return, synchronized visibility, trace, linear field and doPhi checks passed.
+stf_warp: checking doPhi=0, steps=1, warps per block=3
+stf_warp: checking doPhi=0, steps=17, warps per block=3
+stf_warp: checking doPhi=1, steps=1, warps per block=3
+stf_warp: checking doPhi=1, steps=17, warps per block=3
+stf_warp: host scalar/Cartesian parity worst normalized error 1.03087841e-06, doPhi=1 steps=17 sample=15 lane=0 coefficient=0 actual=0.72976225614547729 expected=0.72976328702389137
+stf_warp: CUDA return/Cartesian parity worst normalized error 5.07684563e-07, doPhi=1 steps=17 sample=5 lane=0 coefficient=0 actual=0.71069216728210449 expected=0.71069267496666788
+stf_warp: CUDA/own scalar parity worst normalized error 1.31130219e-06, doPhi=1 steps=17 sample=1 lane=0 coefficient=0 actual=0.76948350667953491 expected=0.76948219537734985
+stf_warp: post-sync expansion visibility worst normalized error 3.95725591e-07, doPhi=1 steps=17 sample=12 lane=0 coefficient=-1 actual=1.5368070602416992 expected=1.536806452088058
+stf_warp: Cartesian, own scalar, lane return, synchronized visibility, trace, linear field and doPhi checks passed.

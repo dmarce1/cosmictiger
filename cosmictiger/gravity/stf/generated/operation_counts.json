@@ -1,0 +1,177 @@
+{
+  "min_order": 5,
+  "max_order": 6,
+  "description": "Static emitted arithmetic counts. +, - and * each count one; signs are absorbed into arithmetic/accumulation. constant rational evaluation is compile time. Add listed output accumulations. Geometry normalization/public validation and sqrt/division are excluded. No claim of optimal instruction counts or measured hardware FLOPs.",
+  "kernels": [
+    {
+      "expansion_order": 6,
+      "centered": true,
+      "base_source_order": 5,
+      "arithmetic_base": {
+        "*": 451,
+        "+": 149,
+        "-": 188
+      },
+      "arithmetic_full": {
+        "*": 523,
+        "+": 156,
+        "-": 229
+      },
+      "trace_extra_arithmetic": {},
+      "base_accumulations": 49,
+      "full_extra_accumulations": 1,
+      "trace_accumulations": 0
+    },
+    {
+      "operator": "EwaldM2L",
+      "source_order": 5,
+      "order": 6,
+      "centered": true,
+      "arithmetic": {
+        "*": 1016,
+        "+": 450,
+        "-": 134
+      },
+      "accumulations": 49
+    },
+    {
+      "expansion_order": 6,
+      "centered": false,
+      "base_source_order": 5,
+      "arithmetic_base": {
+        "*": 570,
+        "+": 207,
+        "-": 232
+      },
+      "arithmetic_full": {
+        "*": 642,
+        "+": 214,
+        "-": 273
+      },
+      "trace_extra_arithmetic": {},
+      "base_accumulations": 49,
+      "full_extra_accumulations": 1,
+      "trace_accumulations": 0
+    },
+    {
+      "operator": "EwaldM2L",
+      "source_order": 5,
+      "order": 6,
+      "centered": false,
+      "arithmetic": {
+        "*": 1124,
+        "+": 508,
+        "-": 184
+      },
+      "accumulations": 49
+    }
+  ],
+  "operators": [
+    {
+      "operator": "M2M",
+      "order": 5,
+      "arithmetic": {
+        "*": 457,
+        "+": 252,
+        "-": 132
+      },
+      "accumulations": 36
+    },
+    {
+      "operator": "L2L",
+      "order": 6,
+      "arithmetic": {
+        "*": 640,
+        "+": 374,
+        "-": 179
+      },
+      "accumulations": 49,
+      "with_trace": false
+    },
+    {
+      "operator": "L2L",
+      "order": 6,
+      "arithmetic": {
+        "*": 643,
+        "+": 279,
+        "-": 276
+      },
+      "accumulations": 50,
+      "with_trace": true
+    },
+    {
+      "operator": "P2M",
+      "order": 5,
+      "arithmetic": {
+        "*": 266,
+        "+": 32,
+        "-": 54
+      },
+      "accumulations": 36
+    },
+    {
+      "operator": "P2L",
+      "order": 6,
+      "arithmetic": {
+        "*": 121,
+        "+": 6,
+        "-": 45
+      },
+      "accumulations": 49
+    },
+    {
+      "operator": "M2P",
+      "order": 5,
+      "arithmetic": {
+        "*": 156,
+        "+": 60,
+        "-": 53
+      },
+      "accumulations": 4,
+      "centered": true
+    },
+    {
+      "operator": "M2P",
+      "order": 5,
+      "arithmetic": {
+        "*": 163,
+        "+": 68,
+        "-": 52
+      },
+      "accumulations": 4,
+      "centered": false
+    },
+    {
+      "operator": "L2P",
+      "order": 6,
+      "arithmetic": {
+        "*": 260,
+        "+": 123,
+        "-": 100
+      },
+      "accumulations": 4,
+      "with_trace": false
+    },
+    {
+      "operator": "L2P",
+      "order": 6,
+      "arithmetic": {
+        "*": 262,
+        "+": 96,
+        "-": 129
+      },
+      "accumulations": 4,
+      "with_trace": true
+    },
+    {
+      "operator": "CUDA_L2L_WARP",
+      "order": 6,
+      "with_trace": true,
+      "schedule_rows": 22,
+      "phases": 3,
+      "shuffle_instructions_per_lane": 86,
+      "whole_warp_flops_with_potential": 8906,
+      "whole_warp_flops_without_potential": 6726
+    }
+  ]
+}

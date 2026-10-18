@@ -42,6 +42,14 @@ Array<Fixed32, NDIM> fmmWalkPosition(double x, double y, double z) {
     return position;
 }
 
+Array<Fixed32, NDIM> fmmWalkDistributedPosition(size_t rank) {
+    // Dyadic coordinates avoid fixed-point rounding, and unequal spacing keeps
+    // the middle particle's force away from cancellation at float precision.
+    double const offset = static_cast<double>(rank);
+    return fmmWalkPosition(0.25 + offset / 32.0 + offset * offset / 256.0,
+        0.375 + 3.0 * offset / 128.0, 0.4375 + offset / 64.0);
+}
+
 KickParameters fmmWalkParameters(bool useCuda, float theta = kFmmWalkTheta) {
     KickParameters params;
     params.htime = true;
@@ -701,13 +709,209 @@ void fmmWalkCollectLeaves(TreeId id, Vector<TreeId>& leaves) {
         expectedSupportRadius, 0.0);
 }
 
+struct FmmWalkPeriodicField {
+    double potential = 0.0;
+    std::array<double, NDIM> acceleration{};
+};
+
+FmmWalkPeriodicField fmmWalkDirectPeriodicReference(
+    size_t sink, Vector<Array<Fixed32, NDIM>> const& positions, Vector<double> const& masses) {
+    // Independently sum the zero-mean periodic Newtonian Green function.
+    // These larger real/reciprocal cubes converge beyond the production
+    // alpha=2 truncations without using any generated FMM coefficient.
+    constexpr double kPi = 3.141592653589793238462643383279502884;
+    constexpr double kAlpha = 2.0;
+    constexpr int kCutoff = 4;
+    double const inverseSqrtPi = 1.0 / std::sqrt(kPi);
+    FmmWalkPeriodicField result;
+    for (size_t source = 0; source < positions.size(); source++) {
+        double const mass = masses[source];
+        std::array<double, NDIM> separation;
+        for (int dim = 0; dim < NDIM; dim++) {
+            separation[dim] = positions[sink][dim].toDouble() - positions[source][dim].toDouble();
+            separation[dim] -= std::nearbyint(separation[dim]);
+        }
+        result.potential += mass * kPi / (kAlpha * kAlpha);
+        if (source == sink) {
+            // The direct softened self term is canceled by the kick's self
+            // subtraction. Retain the finite periodic self-image potential.
+            result.potential += mass * 2.0 * kAlpha * inverseSqrtPi;
+        }
+        for (int x = -kCutoff; x <= kCutoff; x++) {
+            for (int y = -kCutoff; y <= kCutoff; y++) {
+                for (int z = -kCutoff; z <= kCutoff; z++) {
+                    bool const origin = x == 0 && y == 0 && z == 0;
+                    std::array<double, NDIM> const displacement{
+                        separation[0] + x, separation[1] + y, separation[2] + z};
+                    double const radiusSquared = displacement[0] * displacement[0] +
+                        displacement[1] * displacement[1] + displacement[2] * displacement[2];
+                    if (!(source == sink && origin)) {
+                        double const radius = std::sqrt(radiusSquared);
+                        if (origin && radius <= getOptions().gravitySupportRadius) {
+                            throw std::runtime_error(
+                                "Periodic FMM reference requires separated particle pairs");
+                        }
+                        double const screened = std::erfc(kAlpha * radius) / radius;
+                        double const radial = (screened +
+                                                  2.0 * kAlpha * inverseSqrtPi *
+                                                      std::exp(-kAlpha * kAlpha * radiusSquared)) /
+                            radiusSquared;
+                        result.potential -= mass * screened;
+                        for (int dim = 0; dim < NDIM; dim++) {
+                            result.acceleration[dim] -= mass * radial * displacement[dim];
+                        }
+                    }
+                    if (!origin) {
+                        std::array<double, NDIM> const wave{
+                            2.0 * kPi * x, 2.0 * kPi * y, 2.0 * kPi * z};
+                        double const waveSquared = x * x + y * y + z * z;
+                        double const coefficient =
+                            std::exp(-kPi * kPi * waveSquared / (kAlpha * kAlpha)) /
+                            (kPi * waveSquared);
+                        double const phase = wave[0] * separation[0] + wave[1] * separation[1] +
+                            wave[2] * separation[2];
+                        result.potential -= mass * coefficient * std::cos(phase);
+                        for (int dim = 0; dim < NDIM; dim++) {
+                            result.acceleration[dim] -=
+                                mass * coefficient * std::sin(phase) * wave[dim];
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return result;
+}
+
+FmmWalkPeriodicField fmmWalkDirectPeriodicReference(ParticleInteger sink) {
+    auto const range = particlesCurrentRange();
+    Vector<Array<Fixed32, NDIM>> positions(range.second - range.first);
+    Vector<double> masses(positions.size());
+    for (ParticleInteger source = range.first; source < range.second; source++) {
+        for (int dim = 0; dim < NDIM; dim++) {
+            positions[source - range.first][dim] = particlesPos(dim, source);
+        }
+        masses[source - range.first] = particlesMass(source);
+    }
+    return fmmWalkDirectPeriodicReference(sink - range.first, positions, masses);
+}
+
+void fmmWalkPeriodicBackground(bool useCuda) {
+    constexpr float kTheta = 0.1f;
+    constexpr float kUntouchedPotential = 12345.0f;
+    constexpr float kUntouchedAcceleration = 6789.0f;
+    constexpr std::array<std::array<double, NDIM>, 6> kPositions{
+        {{0.96, 0.72, 0.82}, {0.04, 0.76, 0.88}, {0.11, 0.68, 0.91}, {0.89, 0.91, 0.73},
+            {0.72, 0.62, 0.69}, {0.84, 0.84, 0.95}}};
+    std::array<double, NDIM> const translation{0.20, 0.31, 0.17};
+    for (int scenario = 0; scenario < 3; scenario++) {
+        bool const translated = scenario == 1;
+        bool const selectedSubset = scenario == 2;
+        particlesResize(kPositions.size() + (selectedSubset ? 2 : 0));
+        for (size_t i = 0; i < kPositions.size(); i++) {
+            Array<Fixed32, NDIM> position;
+            for (int dim = 0; dim < NDIM; dim++) {
+                double const coordinate = kPositions[i][dim] + translated * translation[dim];
+                position[dim] = coordinate - std::floor(coordinate);
+            }
+            fmmWalkSetParticlePosition(i, position);
+        }
+        if (selectedSubset) {
+            // HOLD trees contain only their current rung range. These two
+            // excluded sources must not enter the root potential constant.
+            fmmWalkSetParticlePosition(6, fmmWalkPosition(0.21, 0.13, 0.25));
+            fmmWalkSetParticlePosition(7, fmmWalkPosition(0.44, 0.27, 0.16));
+        }
+        fmmWalkResetKickState();
+        particlesSortByRung(0);
+        if (selectedSubset) {
+            particlesRung(6) = particlesRung(7) = 0;
+            particlesSortByRung(1);
+        }
+        auto const range = particlesCurrentRange();
+        if (range.second - range.first != kPositions.size()) {
+            throw std::runtime_error("Periodic background regression selected the wrong sources");
+        }
+        auto const built =
+            treeCreate(TreeCreateParameters(0, kTheta, getOptions().gravitySupportRadius));
+        if (built.id.proc != 0 || built.id.index != 0) {
+            throw std::runtime_error("Periodic background regression requires the global root");
+        }
+        double dipoleSquared = 0.0;
+        for (int dim = 0; dim < NDIM; dim++) {
+            double dipole = 0.0;
+            for (ParticleInteger i = range.first; i < range.second; i++) {
+                dipole += particlesMass(i) *
+                    (particlesPos(dim, i).toDouble() - built.pos[dim].toDouble());
+            }
+            dipoleSquared += dipole * dipole;
+        }
+        if (dipoleSquared < 1.0e-4 || (translated == 0 && built.pos[YDIM].toDouble() <= 0.5)) {
+            throw std::runtime_error("Periodic background regression lost its off-center dipole");
+        }
+        Vector<FmmWalkPeriodicField> reference(particlesSize());
+        for (ParticleInteger i = range.first; i < range.second; i++) {
+            reference[i] = fmmWalkDirectPeriodicReference(i);
+        }
+        for (int backend = 0; backend < (useCuda ? 2 : 1); backend++) {
+            for (int potentialMode = 0; potentialMode < 2; potentialMode++) {
+                std::string const label = std::string("periodic root background ") +
+                    (translated ? "translated " : (selectedSubset ? "rung subset " : "original ")) +
+                    (backend ? "CUDA " : "CPU ") + (potentialMode ? "potential" : "force only");
+                fmmWalkResetKickState();
+                // Finite sentinels remain observable under production fast-math;
+                // isnan checks may otherwise be folded away by the compiler.
+                for (ParticleInteger i = 0; i < particlesSize(); i++) {
+                    particlesPot(i) = kUntouchedPotential;
+                    for (int dim = 0; dim < NDIM; dim++) {
+                        particlesGravityAcceleration(dim, i) = kUntouchedAcceleration;
+                    }
+                }
+                Expansion<float> local;
+                local = 0.0f;
+                auto params = fmmWalkParameters(backend != 0, kTheta);
+                params.doPhi = potentialMode != 0;
+                auto const origin = fmmWalkPosition(0.0, 0.0, 0.0);
+                auto const result = kick(params, local, origin, built.id, Vector<TreeId>{built.id},
+                    Vector<TreeId>{built.id}, nullptr);
+                double totalPotential = 0.0;
+                for (ParticleInteger i = range.first; i < range.second; i++) {
+                    for (int dim = 0; dim < NDIM; dim++) {
+                        fmmWalkRequireClose(label + " acceleration " + std::to_string(i) + ":" +
+                                std::to_string(dim),
+                            particlesGravityAcceleration(dim, i), reference[i].acceleration[dim]);
+                    }
+                    if (params.doPhi) {
+                        fmmWalkRequireClose(label + " potential " + std::to_string(i),
+                            particlesPot(i), reference[i].potential);
+                    }
+                    totalPotential += 0.5 * particlesMass(i) * reference[i].potential;
+                }
+                for (ParticleInteger i = 0; i < range.first; i++) {
+                    if (particlesPot(i) != kUntouchedPotential) {
+                        throw std::runtime_error(label + " changed an excluded particle");
+                    }
+                    for (int dim = 0; dim < NDIM; dim++) {
+                        if (particlesGravityAcceleration(dim, i) != kUntouchedAcceleration) {
+                            throw std::runtime_error(label + " changed an excluded particle");
+                        }
+                    }
+                }
+                if (params.doPhi) {
+                    fmmWalkRequireClose(label + " total potential", result.pot, totalPotential);
+                }
+            }
+        }
+        treeDestroy();
+        particlesSortByRung(0);
+    }
+}
+
 }    // namespace detail
 
 void fmmWalkInitializeDistributedParticles() {
     particlesResize(1);
-    detail::fmmWalkSetParticlePosition(0,
-        detail::fmmWalkPosition(
-            0.2 + 0.02 * hpxRank(), 0.3 + 0.025 * hpxRank(), 0.4 + 0.015 * hpxRank()));
+    detail::fmmWalkSetParticlePosition(0, detail::fmmWalkDistributedPosition(hpxRank()));
     detail::fmmWalkResetKickState();
 }
 HPX_PLAIN_ACTION(
@@ -715,6 +919,12 @@ HPX_PLAIN_ACTION(
 
 void fmmWalkResetDistributedKick() {
     detail::fmmWalkResetKickState();
+    for (ParticleInteger i = 0; i < particlesSize(); i++) {
+        particlesPot(i) = 12345.0f;
+        for (int dim = 0; dim < NDIM; dim++) {
+            particlesGravityAcceleration(dim, i) = 6789.0f;
+        }
+    }
 }
 HPX_PLAIN_ACTION(fmmWalkResetDistributedKick, FmmWalkResetDistributedKickAction);
 
@@ -750,6 +960,40 @@ double fmmWalkVerifyDistributedForces(TreeId root) {
 }
 HPX_PLAIN_ACTION(fmmWalkVerifyDistributedForces, FmmWalkVerifyDistributedForcesAction);
 
+double fmmWalkVerifyDistributedPeriodicForces() {
+    if (particlesSize() != 1) {
+        throw std::runtime_error("Periodic FMM regression requires one particle per rank");
+    }
+    Vector<Array<Fixed32, NDIM>> positions(hpxSize());
+    Vector<double> masses(hpxSize(), 1.0);
+    size_t sink = positions.size();
+    for (size_t rank = 0; rank < positions.size(); rank++) {
+        positions[rank] = detail::fmmWalkDistributedPosition(rank);
+        bool matches = true;
+        for (int dim = 0; dim < NDIM; dim++) {
+            matches = matches && positions[rank][dim].raw() == particlesPos(dim, 0).raw();
+        }
+        if (matches) {
+            sink = rank;
+        }
+    }
+    if (sink == positions.size()) {
+        throw std::runtime_error("Distributed periodic fixture lost a particle");
+    }
+    auto const reference = detail::fmmWalkDirectPeriodicReference(sink, positions, masses);
+    for (int dim = 0; dim < NDIM; dim++) {
+        detail::fmmWalkRequireClose("distributed periodic acceleration " + std::to_string(dim),
+            particlesGravityAcceleration(dim, 0), reference.acceleration[dim]);
+    }
+    // This close-spaced fixture has a small but nonzero source trace. Check
+    // potential tightly enough to detect omission of another rank's trace.
+    detail::fmmWalkRequireClose(
+        "distributed periodic potential", particlesPot(0), reference.potential, 2.0e-5);
+    return reference.potential;
+}
+HPX_PLAIN_ACTION(
+    fmmWalkVerifyDistributedPeriodicForces, FmmWalkVerifyDistributedPeriodicForcesAction);
+
 void fmmWalkTest() {
     auto const originalOptions = getOptions();
     auto options = originalOptions;
@@ -772,6 +1016,7 @@ void fmmWalkTest() {
         detail::fmmWalkDeferredSourceHandoff(useCuda);
         detail::fmmWalkReciprocalHybrid(useCuda);
         detail::fmmWalkCellSupportBounds(useCuda);
+        detail::fmmWalkPeriodicBackground(useCuda);
     } else {
         Vector<hpx::future<void>> pending;
         for (auto const& locality : hpxLocalities()) {
@@ -786,36 +1031,42 @@ void fmmWalkTest() {
         particlesSortByRung(0);
         auto const built = treeCreate(TreeCreateParameters(0, 0.1, options.gravitySupportRadius));
         // Three ranks give a one-rank left child and a global right child at the first handoff.
-        // Omit Ewald here and force the nearby multiparticle sources open to a direct reference.
+        // First force nearby sources open against the direct reference, then
+        // include Ewald to exercise the distributed root-background reduction.
         auto const* root = treeGetNode(built.id);
         if (!treeGetNode(root->children[LEFT])->isLocal() ||
             treeGetNode(root->children[RIGHT])->isLocal()) {
             throw std::runtime_error("Shallow FMM test requires a 1-rank/2-rank root split");
         }
         for (int backend = 0; backend < (useCuda ? 2 : 1); backend++) {
-            pending.clear();
-            for (auto const& locality : hpxLocalities()) {
-                pending.push_back(hpx::async<FmmWalkResetDistributedKickAction>(locality));
+            for (int periodic = 0; periodic < 2; periodic++) {
+                pending.clear();
+                for (auto const& locality : hpxLocalities()) {
+                    pending.push_back(hpx::async<FmmWalkResetDistributedKickAction>(locality));
+                }
+                for (auto& future : pending) {
+                    future.get();
+                }
+                Expansion<float> local;
+                local = 0.0f;
+                auto const origin = detail::fmmWalkPosition(0.0, 0.0, 0.0);
+                auto const ewaldSources = periodic ? Vector<TreeId>{built.id} : Vector<TreeId>{};
+                auto const result = kick(detail::fmmWalkParameters(backend != 0, 0.1f), local,
+                    origin, built.id, Vector<TreeId>{built.id}, ewaldSources, nullptr);
+                Vector<hpx::future<double>> references;
+                for (auto const& locality : hpxLocalities()) {
+                    references.push_back(periodic ?
+                            hpx::async<FmmWalkVerifyDistributedPeriodicForcesAction>(locality) :
+                            hpx::async<FmmWalkVerifyDistributedForcesAction>(locality, built.id));
+                }
+                double expectedPotential = 0.0;
+                for (auto& future : references) {
+                    expectedPotential += 0.5 * future.get();
+                }
+                detail::fmmWalkRequireClose(periodic ? "distributed periodic total potential" :
+                                                       "distributed handoff total potential",
+                    result.pot, expectedPotential, periodic ? 2.0e-5 : 2.0e-4);
             }
-            for (auto& future : pending) {
-                future.get();
-            }
-            Expansion<float> local;
-            local = 0.0f;
-            auto const origin = detail::fmmWalkPosition(0.0, 0.0, 0.0);
-            auto const result = kick(detail::fmmWalkParameters(backend != 0, 0.1f), local, origin,
-                built.id, Vector<TreeId>{built.id}, Vector<TreeId>{}, nullptr);
-            Vector<hpx::future<double>> references;
-            for (auto const& locality : hpxLocalities()) {
-                references.push_back(
-                    hpx::async<FmmWalkVerifyDistributedForcesAction>(locality, built.id));
-            }
-            double expectedPotential = 0.0;
-            for (auto& future : references) {
-                expectedPotential += 0.5 * future.get();
-            }
-            detail::fmmWalkRequireClose(
-                "distributed handoff total potential", result.pot, expectedPotential);
         }
         treeDestroy();
     }
