@@ -349,6 +349,7 @@ static void flushTimings(bool reset) {
 
 void doGroups(int number, double scale) {
     profilerEnter(__FUNCTION__);
+    groupsPrepareHistory(number);
 
     Timer total;
     total.start();

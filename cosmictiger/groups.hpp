@@ -30,6 +30,8 @@ struct ParticleData {
     Array<Fixed32, NDIM> x;
     Array<float, NDIM> v;
     GroupInteger lastGroup;
+    GroupInteger identity = NO_GROUP;
+    GroupInteger lastHost = NO_GROUP;
     ParticleInteger index;
     int rank;
     template <class A>
@@ -37,12 +39,15 @@ struct ParticleData {
         arc & x;
         arc & v;
         arc & lastGroup;
+        arc & identity;
+        arc & lastHost;
         arc & index;
         arc & rank;
     }
 };
 
 void groupsAddParticles(int wave, double scale);
+void groupsPrepareHistory(int number);
 void groupsReduce(double);
 std::pair<size_t, size_t> groupsSave(int number, double scale, double time);
 void groupsCull();

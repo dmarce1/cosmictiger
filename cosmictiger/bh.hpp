@@ -20,6 +20,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #ifndef BH_HPP_
 #define BH_HPP_
 
+#include <cmath>
+
 #include <cosmictiger/containers.hpp>
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/device_vector.hpp>
@@ -33,11 +35,32 @@ struct BhTreeNode {
     Pair<int> parts;
     float mass;
     float radius;
+    float meanSquaredRadius;
     BhTreeNode() {
         children[LEFT] = children[RIGHT] = -1;
         mass = 0;
+        radius = 0;
+        meanSquaredRadius = 0;
     }
 };
+
+inline constexpr float kBhMaximumRelativePotentialError = 0.04f;
+
+namespace detail {
+// ROCKSTAR Appendix B, Eq. B3, applied to the nearest point in the sink
+// bucket. Its Newtonian error bound only applies outside every source's
+// compact softening support, so overlapping supports must be opened.
+CUDA_EXPORT inline bool bhAcceptMonopole(float distanceSquared, BhTreeNode const& source,
+    float sinkRadius, float supportRadius, float relativeError) {
+    float const halfRadius = 0.5f * source.radius;
+    float const errorDistance =
+        halfRadius + sqrtf(halfRadius * halfRadius + source.meanSquaredRadius / relativeError);
+    float const supportDistance = source.radius + supportRadius;
+    float const minimumDistance =
+        sinkRadius + (errorDistance > supportDistance ? errorDistance : supportDistance);
+    return distanceSquared > minimumDistance * minimumDistance;
+}
+}    // namespace detail
 
 struct BhSource {
     Array<float, NDIM> x;
@@ -48,10 +71,10 @@ DeviceVector<float> bhEvaluatePotential(DeviceVector<Array<float, NDIM>>& x, boo
 DeviceVector<float> bhEvaluatePoints(
     DeviceVector<Array<float, NDIM>>& y, DeviceVector<Array<float, NDIM>>& x, bool gpu = false);
 DeviceVector<float> bhEvaluatePotentialGpu(DeviceVector<BhTreeNode> const& treeNodes,
-    DeviceVector<Array<float, NDIM>> const& x, DeviceVector<int> const sinkBuckets, float theta,
-    float hsoft, float gm);
+    DeviceVector<Array<float, NDIM>> const& x, DeviceVector<int> const sinkBuckets,
+    float relativeError, float hsoft, float gm, int maximumBlockCount = 0);
 DeviceVector<float> bhEvaluatePotentialPointsGpu(DeviceVector<BhTreeNode> const& treeNodes,
     DeviceVector<Array<float, NDIM>> const& x, DeviceVector<Array<float, NDIM>> const& y,
-    float theta, float hsoft, float gm);
+    float relativeError, float hsoft, float gm);
 
 #endif /* BH_HPP_ */

@@ -52,57 +52,6 @@ constexpr bool kVerbose = true;
  }
  */
 
-static void rockstarTest() {
-    /*feenableexcept (FE_DIVBYZERO);
-     feenableexcept (FE_INVALID);
-     feenableexcept (FE_OVERFLOW);
-
-     const int N = 1000000;
-     const int M = 2;
-     vector<rockstar_particle> parts;
-     array<array<float, 2 * NDIM>, M> X;
-     for (int i = 0; i < M; i++) {
-     for (int dim = 0; dim < 2 * NDIM; dim++) {
-     X[i][dim] = 2.0 * rand1() - 1.0;
-     }
-     }
-     for (int dim = 0; dim < 2 * NDIM; dim++) {
-     X[0][dim] = 0.0;
-     X[1][dim] = 0.0;
-     }
-     X[1][0] = 0.5;
-     X[1][NDIM] = 0.0000005;
-     X[0][0] = -.5;
-     X[0][NDIM] = -0.0000005;
-     for (int n = 0; n < M; n++) {
-     for (int i = n * N / M; i < (n + 1) * N / M; i++) {
-     rockstar_particle part;
-     //		PRINT( "%e\n", r );
-     part.x = rand_normal() * 0.001 + X[n][XDIM];
-     part.y = rand_normal() * 0.001 + X[n][YDIM];
-     part.z = rand_normal() * 0.001 + X[n][ZDIM];
-     float r = sqrt(sqr(part.x - X[n][XDIM], part.y - X[n][YDIM], part.z - X[n][ZDIM]));
-     float v0 = 0.75 * sqrt(get_options().GM / r * N / M) / sqrt(3);
-     part.vx = rand_normal() * v0 + X[n][NDIM + XDIM];
-     part.vy = rand_normal() * v0 + X[n][NDIM + YDIM];
-     part.vz = rand_normal() * v0 + X[n][NDIM + ZDIM];
-     parts.push_back(part);
-     }
-     }
-     for (int i = (M - 1) * N / M; i < N; i++) {
-     rockstar_particle part;
-     part.x = 2.0 * rand1() - 1.0;
-     part.y = 2.0 * rand1() - 1.0;
-     part.z = 2.0 * rand1() - 1.0;
-     part.vx = 2.0 * rand1() - 1.0;
-     part.vy = 2.0 * rand1() - 1.0;
-     part.vz = 2.0 * rand1() - 1.0;
-     //	parts.push_back(part);
-
-     }
-     rockstar_find_subgroups(parts);*/
-}
-
 static void fft1Test() {
     int const n = 100;
     Range<int64_t> box;
@@ -607,7 +556,28 @@ void fmmWalkTest();
 void stfWalkBenchmark();
 #endif
 
+void rockstarTest();
+void bhPotentialTest();
+void groupsCatalogueTest();
+void groupsCatalogueDistributedTest();
+
 void test(std::string test) {
+    if (test == "rockstar") {
+        rockstarTest();
+        return;
+    }
+    if (test == "bhPotential") {
+        bhPotentialTest();
+        return;
+    }
+    if (test == "groupsCatalogueDistributed") {
+        groupsCatalogueDistributedTest();
+        return;
+    }
+    if (test == "groupsCatalogue") {
+        groupsCatalogueTest();
+        return;
+    }
 #ifdef COSMICTIGER_STF_BENCHMARKS
     if (test == "stfBenchmark") {
         stfWalkBenchmark();

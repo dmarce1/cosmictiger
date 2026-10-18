@@ -8,10 +8,9 @@
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/rockstar.hpp>
+#include <cosmictiger/rockstar_core.hpp>
 #include <cosmictiger/simulation_units.hpp>
 #include <cosmictiger/timer.hpp>
-
-void rockstarFindSubgroups(DeviceVector<RockstarParticle>& parts, float scale = 1.0);
 
 void rockstarAssignLinkLen(DeviceVector<RockstarTree> const& trees,
     DeviceVector<RockstarParticle>& parts, int selfId, Vector<int> checklist, float linkingLength,
@@ -28,7 +27,7 @@ void rockstarAssignLinkLen(DeviceVector<RockstarTree> const& trees,
         for (int ci = 0; ci < checklist.size(); ci++) {
             auto const check = checklist[ci];
             auto const& other = trees[check];
-            if (mybox.intersection(other.box).volume() > 0) {
+            if (rockstar::detail::boxesOverlap(mybox, other.box, dimmax)) {
                 if (other.children[LEFT] == -1) {
                     leaflist.push_back(check);
                 } else {
@@ -47,14 +46,14 @@ void rockstarAssignLinkLen(DeviceVector<RockstarTree> const& trees,
             auto const other = trees[leafi];
             for (int pi = other.particleBegin; pi < other.particleEnd; pi++) {
                 auto const& part = parts[pi];
-                if (mybox.contains(part.xValue)) {
+                if (rockstar::detail::boxContains(mybox, part.xValue, dimmax)) {
                     for (int pj = self.particleBegin; pj < self.particleEnd; pj++) {
                         auto& mypart = parts[pj];
                         float r2 = 0.f;
                         for (int dim = 0; dim < dimmax; dim++) {
                             r2 += sqr(mypart.xValue[dim] - part.xValue[dim]);
                         }
-                        if (r2 <= linkingLengthSquared && r2 > 0.0) {
+                        if (pi != pj && r2 <= linkingLengthSquared) {
                             mypart.minDist2 = std::min(mypart.minDist2, r2);
                         }
                     }
@@ -73,7 +72,7 @@ void rockstarAssignLinkLen(DeviceVector<RockstarTree> const& trees,
 }
 
 void rockstarFindNeighbors(DeviceVector<int>& leaves, DeviceVector<RockstarTree>& trees, int selfId,
-    Vector<int> checklist, float linkingLength) {
+    Vector<int> checklist, float linkingLength, bool phase = true) {
     static thread_local Vector<int> nextlist;
     static thread_local Vector<int> leaflist;
     nextlist.resize(0);
@@ -85,7 +84,7 @@ void rockstarFindNeighbors(DeviceVector<int>& leaves, DeviceVector<RockstarTree>
         for (int ci = 0; ci < checklist.size(); ci++) {
             auto const check = checklist[ci];
             auto const& other = trees[check];
-            if (mybox.intersection(other.box).volume() > 0) {
+            if (rockstar::detail::boxesOverlap(mybox, other.box, phase ? 2 * NDIM : NDIM)) {
                 if (other.children[LEFT] == -1) {
                     leaflist.push_back(check);
                 } else {
@@ -106,9 +105,10 @@ void rockstarFindNeighbors(DeviceVector<int>& leaves, DeviceVector<RockstarTree>
     } else {
         checklist.insert(checklist.end(), leaflist.begin(), leaflist.end());
         if (checklist.size()) {
-            rockstarFindNeighbors(leaves, trees, self.children[LEFT], checklist, linkingLength);
             rockstarFindNeighbors(
-                leaves, trees, self.children[RIGHT], std::move(checklist), linkingLength);
+                leaves, trees, self.children[LEFT], checklist, linkingLength, phase);
+            rockstarFindNeighbors(
+                leaves, trees, self.children[RIGHT], std::move(checklist), linkingLength, phase);
         }
     }
 }
@@ -153,8 +153,8 @@ int rockstarFormTree(DeviceVector<RockstarParticle>& parts, DeviceVector<Rocksta
         }
         activeCount++;
     } else {
-        float midx;
-        int maxDim;
+        float midx = rng.begin[0];
+        int maxDim = 0;
         float totalMax = 0.0;
         for (int dim = 0; dim < 2 * NDIM; dim++) {
             float const xMax = rng.end[dim];
@@ -165,8 +165,17 @@ int rockstarFormTree(DeviceVector<RockstarParticle>& parts, DeviceVector<Rocksta
                 midx = (xMax + xMin) * 0.5f;
             }
         }
-        int const particleMid =
-            rockstarParticlesSort(parts, particleBegin, particleEnd, midx, maxDim);
+        int particleMid = rockstarParticlesSort(parts, particleBegin, particleEnd, midx, maxDim);
+        if (particleMid == particleBegin || particleMid == particleEnd) {
+            // Coincident coordinates and rounded midpoints must still produce
+            // two smaller nodes. Median partitioning also handles tied values.
+            particleMid = particleBegin + (particleEnd - particleBegin) / 2;
+            std::nth_element(parts.begin() + particleBegin, parts.begin() + particleMid,
+                parts.begin() + particleEnd, [maxDim](auto const& a, auto const& b) {
+                    return a.xValue[maxDim] < b.xValue[maxDim];
+                });
+            midx = parts[particleMid].xValue[maxDim];
+        }
         Range<float, 2 * NDIM> rngLeft = rng;
         Range<float, 2 * NDIM> rngRight = rng;
         rngRight.begin[maxDim] = midx;
@@ -205,6 +214,9 @@ int rockstarFormTree(DeviceVector<RockstarTree>& trees, DeviceVector<RockstarPar
 
 float rockstarFindLinkLen(DeviceVector<RockstarTree>& trees, DeviceVector<RockstarParticle>& parts,
     int treeRoot, float ff, bool gpu) {
+    if (parts.size() < 2) {
+        return 0.0f;
+    }
     Range<float, 2 * NDIM> rng = trees[treeRoot].box;
     //	PRINT("V %e\n", rng.volume());
     Vector<Pair<float, int>> seps;
@@ -212,7 +224,8 @@ float rockstarFindLinkLen(DeviceVector<RockstarTree>& trees, DeviceVector<Rockst
         if (trees[i].children[LEFT] == -1) {
             int count = trees[i].particleEnd - trees[i].particleBegin;
             if (count) {
-                float meanSep = pow(trees[i].box.volume() / count, 1.0 / 6.0);
+                float meanSep =
+                    rockstar::detail::initialLinkingLength(trees[i].box, count, 2 * NDIM);
                 seps.push_back(Pair<float, int>(meanSep, count));
             }
         }
@@ -235,7 +248,7 @@ float rockstarFindLinkLen(DeviceVector<RockstarTree>& trees, DeviceVector<Rockst
         for (auto& p : parts) {
             p.minDist2 = std::numeric_limits<float>::max();
         }
-        gpu = parts.size() > 4 * 1024;
+        gpu = getOptions().compute.cuda && parts.size() > 4 * 1024;
         if (gpu) {
             DeviceVector<int> leaves;
             rockstarFindNeighbors(leaves, trees, trees.size() - 1, Vector<int>(1, trees.size() - 1),
@@ -254,7 +267,12 @@ float rockstarFindLinkLen(DeviceVector<RockstarTree>& trees, DeviceVector<Rockst
         int const i1 = i0 + 1;
         if (dist2s[i1] == std::numeric_limits<float>::max()) {
             //		PRINT( "doubling\n");
-            maximumLinkingLength *= 2.0;
+            if (maximumLinkingLength == 0.0f) {
+                maximumLinkingLength = rockstar::detail::initialLinkingLength(
+                    trees[treeRoot].box, parts.size(), 2 * NDIM);
+            } else {
+                maximumLinkingLength *= 2.0;
+            }
         } else {
             maximumLinkingLength = (sqrt(dist2s[i0]) + sqrt(dist2s[i1])) * 0.5f;
             done = true;
@@ -271,11 +289,11 @@ void rockstarFindAllLinkLens(
     }
     double maximumLinkingLength = getOptions().lightcone.linkingLength *
         pow(getOptions().initial.numberOfParticles, -1.0 / NDIM);
-    bool gpu = parts.size() > 4 * 1024;
+    bool gpu = getOptions().compute.cuda && parts.size() > 4 * 1024;
     if (gpu) {
         DeviceVector<int> leaves;
         rockstarFindNeighbors(leaves, trees, trees.size() - 1, Vector<int>(1, trees.size() - 1),
-            maximumLinkingLength);
+            maximumLinkingLength, false);
         rockstarAssignLinklenCuda(trees, leaves, parts, maximumLinkingLength, false);
     } else {
         rockstarAssignLinkLen(
@@ -298,7 +316,7 @@ size_t rockstarFindSubgroups(DeviceVector<RockstarTree>& trees,
             auto const check = checklist[ci];
             auto const& other = trees[check];
             if (other.lastActive) {
-                if (mybox.intersection(other.box).volume() > 0) {
+                if (rockstar::detail::boxesOverlap(mybox, other.box, 2 * NDIM)) {
                     if (other.children[LEFT] == -1) {
                         leaflist.push_back(check);
                     } else {
@@ -320,7 +338,7 @@ size_t rockstarFindSubgroups(DeviceVector<RockstarTree>& trees,
                 auto const other = trees[leafi];
                 for (int pi = other.particleBegin; pi < other.particleEnd; pi++) {
                     auto& part = parts[pi];
-                    if (mybox.contains(part.xValue)) {
+                    if (rockstar::detail::boxContains(mybox, part.xValue, 2 * NDIM)) {
                         for (int pj = self.particleBegin; pj < self.particleEnd; pj++) {
                             auto& mypart = parts[pj];
                             float const dx = mypart.x - part.x;
@@ -417,7 +435,7 @@ void rockstarFindSubgroups(DeviceVector<RockstarTree>& trees, DeviceVector<Rocks
         trees[i].active = true;
     }
     int cnt;
-    gpu = parts.size() > 4 * 1024;
+    gpu = getOptions().compute.cuda && parts.size() > 4 * 1024;
     if (gpu) {
         DeviceVector<int> leaves;
         rockstarFindNeighbors(
@@ -476,174 +494,6 @@ struct RockstarSeed {
     Array<float, 2 * NDIM> x;
 };
 
-bool rockstarHaloBoundTo(Subgroup const& subhalo, Subgroup const& halo, double scale) {
-    DeviceVector<Array<float, NDIM>> xValue;
-    DeviceVector<Array<float, NDIM>> yValue;
-    for (int i = 0; i < subhalo.parts.size(); i++) {
-        Array<float, NDIM> x;
-        for (int dim = 0; dim < NDIM; dim++) {
-            x[dim] = subhalo.parts[i].xValue[dim];
-        }
-        yValue.pushBack(x);
-    }
-    for (int i = 0; i < halo.parts.size(); i++) {
-        Array<float, NDIM> x;
-        for (int dim = 0; dim < NDIM; dim++) {
-            x[dim] = halo.parts[i].xValue[dim];
-        }
-        xValue.pushBack(x);
-    }
-    auto const phi =
-        bhEvaluatePoints(yValue, xValue, xValue.size() > 4 * 1024 || yValue.size() > 4 * 1024);
-    double etot = 0.0;
-    for (int i = 0; i < subhalo.parts.size(); i++) {
-        float const dvx = subhalo.parts[i].vx - halo.vxb;
-        float const dvy = subhalo.parts[i].vy - halo.vyb;
-        float const dvz = subhalo.parts[i].vz - halo.vzb;
-        float const ekin = 0.5 * sqr(dvx, dvy, dvz);
-        etot += ekin + phi[i] / scale;
-    }
-    return etot < 0.0;
-}
-
-bool rockstarHaloBound(Subgroup& halo, Vector<RockstarParticle>& unboundParticles, float scale) {
-    DeviceVector<Array<float, NDIM>> x;
-    for (int i = 0; i < halo.parts.size(); i++) {
-        Array<float, NDIM> xValue;
-        for (int dim = 0; dim < NDIM; dim++) {
-            xValue[dim] = halo.parts[i].xValue[dim];
-        }
-        x.pushBack(xValue);
-    }
-    auto y = x;
-    auto phi = bhEvaluatePotential(x, x.size() > 4 * 1024);
-    auto phiTot = 0.0;
-    auto kinTot = 0.0;
-    int nunbound = 0;
-    int onparts = halo.parts.size();
-    for (int i = 0; i < halo.parts.size(); i++) {
-        float const dvx = halo.parts[i].vx - halo.vxb;
-        float const dvy = halo.parts[i].vy - halo.vyb;
-        float const dvz = halo.parts[i].vz - halo.vzb;
-        float const ekin = 0.5 * sqr(dvx, dvy, dvz);
-        kinTot += ekin;
-        phiTot += phi[i] / scale;
-        if (ekin + phi[i] / scale > 0.0) {
-            nunbound++;
-            unboundParticles.push_back(halo.parts[i]);
-            halo.parts[i] = halo.parts.back();
-            halo.parts.popBack();
-            i--;
-        }
-    }
-    halo.t = kinTot;
-    halo.w = 0.5 * phiTot;
-    // PRINT( "%e %e\n", halo.T, halo.W );
-    bool const rc = (nunbound * 2 < onparts) && (onparts - nunbound) >= ROCKSTAR_MIN_GROUP;
-    if (!rc) {
-        for (int i = 0; i < halo.parts.size(); i++) {
-            unboundParticles.push_back(halo.parts[i]);
-        }
-        halo.parts = decltype(halo.parts)();
-    }
-    // if( !rc ) {
-    //		PRINT( "%e\n", halo.T / (halo.W));
-    //	}
-    return rc;
-}
-
-Vector<int> rockstarAllSubgroups(Subgroup const& sg, Vector<Subgroup>& subgroups) {
-    Vector<int> sgs;
-    if (sg.parts.size() >= ROCKSTAR_MIN_GROUP) {
-        sgs.push_back(sg.id);
-    }
-    if (sg.children.size()) {
-        for (int i = 0; i < sg.children.size(); i++) {
-            int l;
-            for (l = 0; l < subgroups.size(); l++) {
-                if (subgroups[l].id == sg.children[i]) {
-                    break;
-                }
-            }
-            auto theseSgs = rockstarAllSubgroups(subgroups[l], subgroups);
-            sgs.insert(sgs.end(), theseSgs.begin(), theseSgs.end());
-        }
-    }
-    return sgs;
-}
-
-void rockstarSubgroupStatistics(Subgroup& sg, bool gpu) {
-    DeviceVector<RockstarTree> trees;
-    DeviceVector<RockstarParticle> parts;
-    for (int i = 0; i < sg.parts.size(); i++) {
-        if (sg.parts[i].subgroup == sg.id) {
-            parts.pushBack(sg.parts[i]);
-        }
-    }
-    float sigma2X = 0.0;
-    float sigma2V = 0.0;
-    float xcom = 0.0;
-    float ycom = 0.0;
-    float zcom = 0.0;
-    float vxcom = 0.0;
-    float vycom = 0.0;
-    float vzcom = 0.0;
-    int nValue = 0;
-    for (int i = 0; i < parts.size(); i++) {
-        xcom += parts[i].x;
-        ycom += parts[i].y;
-        zcom += parts[i].z;
-        vxcom += parts[i].vx;
-        vycom += parts[i].vy;
-        vzcom += parts[i].vz;
-        nValue++;
-    }
-    xcom /= parts.size();
-    ycom /= parts.size();
-    zcom /= parts.size();
-    vxcom /= parts.size();
-    vycom /= parts.size();
-    vzcom /= parts.size();
-    for (int i = 0; i < parts.size(); i++) {
-        sigma2X += sqr(parts[i].x - xcom);
-        sigma2X += sqr(parts[i].y - ycom);
-        sigma2X += sqr(parts[i].z - zcom);
-        sigma2V += sqr(parts[i].vx - vxcom);
-        sigma2V += sqr(parts[i].vy - vycom);
-        sigma2V += sqr(parts[i].vz - vzcom);
-        nValue++;
-    }
-    if (parts.size() >= ROCKSTAR_MIN_GROUP) {
-        float xfac = 1.0 / sqrt(sigma2X);
-        float vfac = 1.0 / sqrt(sigma2V);
-        for (int i = 0; i < parts.size(); i++) {
-            parts[i].x *= xfac;
-            parts[i].y *= xfac;
-            parts[i].z *= xfac;
-            parts[i].vx *= vfac;
-            parts[i].vy *= vfac;
-            parts[i].vz *= vfac;
-        }
-        int const rootId = rockstarFormTree(trees, parts);
-
-        float const linkingLength = rockstarFindLinkLen(trees, parts, rootId, ROCKSTAR_FF, gpu);
-    }
-    sg.hostParticleCount = parts.size();
-}
-
-Vector<RockstarParticle> rockstarGatherHaloParts(
-    Vector<Subgroup> const& subgroups, Subgroup const& sg) {
-    Vector<RockstarParticle> xValue;
-    for (int i = 0; i < sg.parts.size(); i++) {
-        xValue.push_back(sg.parts[i]);
-    }
-    for (int i = 0; i < sg.children.size(); i++) {
-        auto const tmp = rockstarGatherHaloParts(subgroups, subgroups[sg.children[i]]);
-        xValue.insert(xValue.end(), tmp.begin(), tmp.end());
-    }
-    return xValue;
-}
-
 Vector<Subgroup> rockstarSeeds(DeviceVector<RockstarParticle> parts, int& nextId, float rfac,
     float vfac, float scale, bool gpu, int depth = 0) {
     Vector<Subgroup> subgroups;
@@ -688,8 +538,8 @@ Vector<Subgroup> rockstarSeeds(DeviceVector<RockstarParticle> parts, int& nextId
     }
     sigma2X /= parts.size();
     sigma2V /= parts.size();
-    float sigmaX = sqrt(sigma2X);
-    float sigmaV = sqrt(sigma2V);
+    float sigmaX = rockstar::detail::normalizationScale(sigma2X);
+    float sigmaV = rockstar::detail::normalizationScale(sigma2V);
     float sigmainvX = 1.0 / sigmaX;
     float sigmainvV = 1.0 / sigmaV;
     for (int i = 0; i < parts.size(); i++) {
@@ -703,10 +553,18 @@ Vector<Subgroup> rockstarSeeds(DeviceVector<RockstarParticle> parts, int& nextId
     rfac *= sigmainvX;
     vfac *= sigmainvV;
     DeviceVector<RockstarTree> trees;
-    int const rootId = rockstarFormTree(trees, parts);
-    float const linkingLength = rockstarFindLinkLen(trees, parts, rootId, ROCKSTAR_FF, gpu);
-    rockstarFindSubgroups(trees, parts, linkingLength, nextId, gpu);
-    auto groupCounts = rockstarSubgroupCounts(parts);
+    std::unordered_map<int, Number> groupCounts;
+    if (parts.size() > ROCKSTAR_MIN_GROUP) {
+        int const rootId = rockstarFormTree(trees, parts);
+        float const linkingLength = rockstarFindLinkLen(trees, parts, rootId, ROCKSTAR_FF, gpu);
+        rockstarFindSubgroups(trees, parts, linkingLength, nextId, gpu);
+        groupCounts = rockstarSubgroupCounts(parts);
+        if (groupCounts.size() == 1 && groupCounts.begin()->second.n == parts.size()) {
+            // Tied nearest-neighbor distances can retain the entire parent.
+            // Such a level contains one seed and cannot be refined further.
+            groupCounts.clear();
+        }
+    }
 
     for (auto i = groupCounts.begin(); i != groupCounts.end(); i++) {
         DeviceVector<RockstarParticle> theseParticles;
@@ -724,114 +582,8 @@ Vector<Subgroup> rockstarSeeds(DeviceVector<RockstarParticle> parts, int& nextId
         subgroups.insert(subgroups.end(), theseGroups.begin(), theseGroups.end());
     }
 
-    auto const findSigmas = [rfac, vfac, scale](Subgroup& sg) {
-        float sigma2V = 0.0;
-        float sigma2X = 0.0;
-        Array<float, 2 * NDIM> xValue;
-        auto const ndim = pow(getOptions().initial.numberOfParticles, 1.0 / NDIM);
-        DeviceVector<RockstarParticle>& theseParticles = sg.parts;
-        for (int dim = 0; dim < 2 * NDIM; dim++) {
-            xValue[dim] = 0.0;
-        }
-        for (int j = 0; j < theseParticles.size(); j++) {
-            for (int dim = 0; dim < 2 * NDIM; dim++) {
-                xValue[dim] += theseParticles[j].xValue[dim];
-            }
-        }
-        for (int dim = 0; dim < 2 * NDIM; dim++) {
-            xValue[dim] /= theseParticles.size();
-        }
-        for (int j = 0; j < theseParticles.size(); j++) {
-            auto const& p = theseParticles[j];
-            float const dx = p.x - xValue[XDIM];
-            float const dy = p.y - xValue[YDIM];
-            float const dz = p.z - xValue[ZDIM];
-            float const dx2 = sqr(dx, dy, dz);
-            sigma2X += dx2;
-        }
-        sigma2X /= theseParticles.size();
-        double sigxNorm = sqrt(sigma2X / theseParticles.size());
-        if (sigxNorm < sg.sigmaXMin) {
-            sg.sigmaXMin = sigxNorm;
-            sg.x = xValue[XDIM];
-            sg.y = xValue[YDIM];
-            sg.z = xValue[ZDIM];
-        }
-        sg.vxb = xValue[NDIM + XDIM];
-        sg.vyb = xValue[NDIM + YDIM];
-        sg.vzb = xValue[NDIM + ZDIM];
-        sigma2X = 0.0;
-        struct RadialParticle {
-            double r;
-            float vx;
-            float vy;
-            float vz;
-        };
-        Vector<RadialParticle> radii;
-        for (int j = 0; j < theseParticles.size(); j++) {
-            auto const& p = theseParticles[j];
-            double const dx = p.x - sg.x;
-            double const dy = p.y - sg.y;
-            double const dz = p.z - sg.z;
-            double const dx2 = sqr(dx, dy, dz);
-            sigma2X += dx2;
-            RadialParticle p0;
-            p0.r = sqrt(dx2);
-            p0.vx = p.vx;
-            p0.vy = p.vy;
-            p0.vz = p.vz;
-            radii.push_back(p0);
-        }
-        std::sort(radii.begin(), radii.end(),
-            [](RadialParticle a, RadialParticle b) { return a.r < b.r; });
-        double mass = 0.0;
-        double volume = 0.0;
-        double const omegaM = getOptions().cosmology.omegaM;
-        double const x =
-            ((omegaM / (sqr(scale) * scale)) / (omegaM / (sqr(scale) * scale)) + (1.0 - omegaM)) -
-            1.0;
-        double y = (18.0 * M_PI * M_PI + 82.0 * x - 39.0 * sqr(x)) / (1.0 + x);
-        double rVir = pow(theseParticles.size() / (4.0 / 3.0 * M_PI * y), 1.0 / 3.0) / ndim;
-
-        sigma2X /= theseParticles.size();
-        sg.sigma2X = sigma2X;
-        sg.rVir = rVir;
-        int n;
-        float rfrac = 0.1;
-        n = 0;
-        sg.vxc = 0.0;
-        sg.vyc = 0.0;
-        sg.vzc = 0.0;
-        int rmax = std::max(ROCKSTAR_MIN_GROUP, (int) ((radii.size() + 0.5) / 10));
-        for (int j = 0; j < rmax; j++) {
-            sg.vxc += radii[j].vx;
-            sg.vyc += radii[j].vy;
-            sg.vzc += radii[j].vz;
-        }
-        sg.vxc /= rmax;
-        sg.vyc /= rmax;
-        sg.vzc /= rmax;
-        for (int j = 0; j < theseParticles.size(); j++) {
-            auto const& p = theseParticles[j];
-            float const dvx = p.vx - sg.vxc;
-            float const dvy = p.vy - sg.vyc;
-            float const dvz = p.vz - sg.vzc;
-            float const dv2 = sqr(dvx, dvy, dvz);
-            sigma2V += dv2;
-        }
-        sigma2V /= theseParticles.size();
-        sg.sigma2V = sigma2V;
-        float vcircMax = 0.0;
-        double h = getOptions().cosmology.hubble * constants::kH0 * getOptions().units.timeSeconds;
-        float const numberOfParticles = getOptions().initial.numberOfParticles;
-        for (int n = 1; n < radii.size(); n++) {
-            float vcirc = sqrt(3.0 * getOptions().cosmology.omegaM * sqr(h) * n /
-                (8.0 * M_PI * numberOfParticles * radii[n].r / rfac));
-            vcircMax = std::max(vcircMax, vcirc);
-        }
-        sg.vcircMax = vcircMax * vfac;
-        y *= (1.0 + x);
-        sg.rDyn = sqrt(2.0) * vcircMax / h / sqrt(y) * rfac;
+    auto const findSigmas = [rfac, vfac, scale](Subgroup& group) {
+        rockstarUpdateStatistics(group, rfac, vfac, scale);
     };
     if (subgroups.size() == 0) {
         int const subgrp = nextId++;
@@ -880,7 +632,11 @@ Vector<Subgroup> rockstarSeeds(DeviceVector<RockstarParticle> parts, int& nextId
                     break;
                 }
             }
-            if (!foundMerge) {
+            if (foundMerge) {
+                // A merged seed has a new center and dispersion; earlier
+                // candidates must be checked against that updated seed too.
+                k = 0;
+            } else {
                 k++;
             }
         }
@@ -912,9 +668,6 @@ Vector<Subgroup> rockstarSeeds(DeviceVector<RockstarParticle> parts, int& nextId
             findSigmas(subgroups[k]);
         }
     }
-    for (int i = 0; i < depth; i++) {
-        //		PRINT("\t");
-    }
     for (int k = 0; k < subgroups.size(); k++) {
         auto& parts = subgroups[k].parts;
         auto& sg = subgroups[k];
@@ -937,8 +690,10 @@ Vector<Subgroup> rockstarSeeds(DeviceVector<RockstarParticle> parts, int& nextId
         sg.vyc += avgVy;
         sg.vzc += avgVz;
         sg.rDyn *= sigmaX;
+        sg.rVir *= sigmaX;
         sg.sigma2V *= sigmaV * sigmaV;
         sg.sigma2X *= sigmaX * sigmaX;
+        sg.sigmaXMin *= sigmaX;
         sg.vcircMax *= sigmaV;
         for (int i = 0; i < parts.size(); i++) {
             parts[i].x *= sigmaX;
@@ -958,480 +713,73 @@ Vector<Subgroup> rockstarSeeds(DeviceVector<RockstarParticle> parts, int& nextId
         }
     }
     if (depth == 0) {
-        std::function<Vector<RockstarParticle>(Subgroup&)> const unbind =
-            [&unbind, &subgroups, scale](Subgroup& grp) {
-                Vector<RockstarParticle> unbounds;
-                for (int ci = 0; ci < grp.children.size(); ci++) {
-                    auto tmp = unbind(subgroups[grp.children[ci]]);
-                    for (auto const& p : tmp) {
-                        grp.parts.pushBack(p);
-                    }
-                }
-                rockstarHaloBound(grp, unbounds, scale);
-                return unbounds;
-            };
-
-        int bound = 0;
-        int unbound = 0;
-        int rebound = 0;
-        Vector<RockstarParticle> unbounds;
-        for (int k = 0; k < subgroups.size(); k++) {
-            int const psize = subgroups[k].parts.size();
-            if (subgroups[k].parent == -1) {
-                auto tmp = unbind(subgroups[k]);
-                unbounds.insert(unbounds.end(), tmp.begin(), tmp.end());
-            }
-            bound += psize;
-        }
-        int k = 0;
-        while (k < subgroups.size()) {
-            if (subgroups[k].parts.size() == 0) {
-                subgroups[k] = subgroups.back();
-                subgroups.pop_back();
-            } else {
-                k++;
-            }
-        }
-
-        unbound += unbounds.size();
-        bound -= unbound;
-        for (int k = 0; k < subgroups.size(); k++) {
-            auto& sgA = subgroups[k];
-            float maxMass = 0.0;
-            int minIndex = -1;
-            for (int l = 0; l < subgroups.size(); l++) {
-                auto& sgB = subgroups[l];
-                if (sgA.parts.size() < sgB.parts.size()) {
-                    if (sgB.parts.size() > maxMass) {
-                        float const dx = sgB.x - sgA.x;
-                        float const dy = sgB.y - sgA.y;
-                        float const dz = sgB.z - sgA.z;
-                        float const r = sqrt(sqr(dx, dy, dz));
-                        if (r < sgB.rVir) {
-                            maxMass = sgB.parts.size();
-                            minIndex = l;
-                        }
-                    }
-                }
-            }
-            if (minIndex != -1) {
-                auto& sgB = subgroups[minIndex];
-                sgA.parent = minIndex;
-                sgB.children.push_back(k);
-            } else {
-                sgA.parent = -1;
-            }
-        }
-        int haloCount = 0;
-        int subhaloCount = 0;
-        for (int k = 0; k < subgroups.size(); k++) {
-            if (subgroups[k].parent == -1) {
-                haloCount++;
-            } else {
-                subhaloCount++;
-            }
-        }
-        PRINT("%i %i\n", haloCount, subhaloCount);
+        rockstarFinalizeSubgroups(subgroups, scale);
     }
     return subgroups;
 }
 
-void rockstarFindSubgroups(DeviceVector<RockstarParticle>& parts, float scale) {
-    int nextId = 1;
-    rockstarSeeds(parts, nextId, 1.0, 1.0, scale, false);
-}
-
-Vector<RockstarRecord> rockstarFindSubgroups(Vector<LightconeEntry> const& parts, double tauMax) {
-    DeviceVector<RockstarParticle> rockstarParticles(parts.size());
-    Vector<RockstarRecord> recs;
-    double xc = 0.0;
-    double yc = 0.0;
-    double zc = 0.0;
-    for (int i = 0; i < parts.size(); i++) {
-        auto& pi = parts[i];
-        xc += pi.x.toDouble();
-        yc += pi.y.toDouble();
-        zc += pi.z.toDouble();
-    }
-
-    xc /= parts.size();
-    yc /= parts.size();
-    zc /= parts.size();
-    auto const thisTau = sqrt(sqr(xc, yc, zc));
-    auto const z0 = getOptions().cosmology.startRedshift;
-    auto const a0 = 1.0 / (z0 + 1.0);
-    //	double scale = cosmos_tau_to_scale(a0, tau_max - this_tau);
-    double scale = 1.0;
-    //	PRINT( "SCALE = %e %e %e\n", a0, this_tau, scale);
-    for (int i = 0; i < parts.size(); i++) {
-        auto& pi = parts[i];
-        auto& pj = rockstarParticles[i];
-        pj.x = pi.x.toDouble() - xc;
-        pj.y = pi.y.toDouble() - yc;
-        pj.z = pi.z.toDouble() - zc;
-        pj.vx = pi.vx;
-        pj.vy = pi.vy;
-        pj.vz = pi.vz;
-    }
-    int nextId = 1;
-    auto subgroups = rockstarSeeds(rockstarParticles, nextId, 1.0, 1.0, scale, false);
-    if (subgroups.size()) {
-        std::function<DeviceVector<RockstarParticle>(Subgroup const&)> const gatherSubparticles =
-            [&gatherSubparticles, &subgroups](Subgroup const& grp) {
-                DeviceVector<RockstarParticle> parts;
-                for (int i = 0; i < grp.parts.size(); i++) {
-                    parts.pushBack(grp.parts[i]);
-                }
-                for (int ci = 0; ci < grp.children.size(); ci++) {
-                    auto tmp = gatherSubparticles(subgroups[grp.children[ci]]);
-                    for (int i = 0; i < tmp.size(); i++) {
-                        parts.pushBack(tmp[i]);
-                    }
-                }
-                return parts;
-            };
-        for (int k = 0; k < subgroups.size(); k++) {
-            for (int iValue = 0; iValue < 2; iValue++) {
-                auto& grp = subgroups[k];
-                DeviceVector<RockstarParticle>* particlesPtr;
-                DeviceVector<RockstarParticle> haloParticles;
-                if (iValue == 0) {
-                    particlesPtr = &grp.parts;
-                } else {
-                    if (grp.children.size() == 0) {
-                        continue;
-                    }
-                    haloParticles = gatherSubparticles(grp);
-                    particlesPtr = &haloParticles;
-                }
-                auto& parts = *particlesPtr;
-                DeviceVector<RockstarTree> trees;
-                int const rootId = rockstarFormTree(trees, parts);
-                Vector<RockstarParticle> parts500;
-                rockstarFindAllLinkLens(trees, parts, rootId);
-                auto const ndim = pow(getOptions().initial.numberOfParticles, 1.0 / NDIM);
-                double const ll200 = pow(200, -1.0 / 3.0) / ndim;
-                double const ll500 = pow(500, -1.0 / 3.0) / ndim;
-                double const ll2500 = pow(2500, -1.0 / 3.0) / ndim;
-                double m200 = 0.0;
-                double m500 = 0.0;
-                double m2500 = 0.0;
-                for (int i = 0; i < parts.size(); i++) {
-                    double const dist = sqrt(parts[i].minDist2);
-                    if (dist < ll200) {
-                        m200 += 1.0;
-                        if (dist < ll500) {
-                            parts500.push_back(parts[i]);
-                            m500 += 1.0;
-                            if (dist < ll2500) {
-                                m2500 += 1.0;
-                            }
-                        }
-                    }
-                }
-                Vector<double> radii;
-                double rsValue, rho0, mvir, rvir, rKlypin, jx, jy, jz, jValue, etotValue, lambda,
-                    lambdaB, deltaX, deltaV, toW, rcomMax, rvmax;
-                double x = grp.x;
-                double y = grp.y;
-                double z = grp.z;
-                double vx = grp.vxc;
-                double vy = grp.vyc;
-                double vz = grp.vzc;
-                double xcom = 0.0;
-                double ycom = 0.0;
-                double zcom = 0.0;
-                double sigmaV = 0.0;
-                double sigmaVb = 0.0;
-                double sigmaX = 0.0;
-                double vxb = 0.0;
-                double vyb = 0.0;
-                double vzb = 0.0;
-                jx = 0.0;
-                jy = 0.0;
-                jz = 0.0;
-                etotValue = grp.t + grp.w;
-                for (int i = 0; i < parts.size(); i++) {
-                    double const dx = parts[i].x - x;
-                    double const dy = parts[i].y - y;
-                    double const dz = parts[i].z - z;
-                    sigmaX += sqr(dx, dy, dz);
-                    xcom += parts[i].x;
-                    ycom += parts[i].y;
-                    zcom += parts[i].z;
-                    double const dvx = parts[i].vx - vx;
-                    double const dvy = parts[i].vy - vy;
-                    double const dvz = parts[i].vz - vz;
-                    vxb += parts[i].vx;
-                    vyb += parts[i].vy;
-                    vzb += parts[i].vz;
-                    sigmaV += sqr(dvx, dvy, dvz);
-                    double const r = sqrt(sqr(dx, dy, dz));
-                    radii.push_back(r);
-                    jx += dy * dvz - dz * dvy;
-                    jy -= dx * dvz - dz * dvx;
-                    jz += dz * dvy - dy * dvz;
-                }
-                vxb /= parts.size();
-                vyb /= parts.size();
-                vzb /= parts.size();
-                for (int i = 0; i < parts.size(); i++) {
-                    double const dvx = parts[i].vx - vxb;
-                    double const dvy = parts[i].vy - vyb;
-                    double const dvz = parts[i].vz - vzb;
-                    sigmaVb += sqr(dvx, dvy, dvz);
-                }
-                sigmaX /= parts.size();
-                sigmaV /= parts.size();
-                sigmaVb /= parts.size();
-                sigmaV = sqrt(sigmaV);
-                sigmaX = sqrt(sigmaX);
-                sigmaVb = sqrt(sigmaVb);
-                xcom /= parts.size();
-                ycom /= parts.size();
-                zcom /= parts.size();
-                Array<Array<double, NDIM>, NDIM> ixx, ixx500;
-                for (int i = 0; i < NDIM; i++) {
-                    for (int j = 0; j < NDIM; j++) {
-                        ixx[i][j] = 0.0;
-                        ixx500[i][j] = 0.0;
-                    }
-                }
-                rcomMax = 0.0;
-                for (int i = 0; i < parts.size(); i++) {
-                    double const dx = parts[i].x - xcom;
-                    double const dy = parts[i].y - ycom;
-                    double const dz = parts[i].z - zcom;
-                    rcomMax = std::max(rcomMax, sqrt(sqr(dx, dy, dz)));
-                    ixx[XDIM][XDIM] += dx * dx;
-                    ixx[XDIM][YDIM] += dx * dy;
-                    ixx[XDIM][ZDIM] += dx * dz;
-                    ixx[YDIM][XDIM] += dy * dx;
-                    ixx[YDIM][YDIM] += dy * dy;
-                    ixx[YDIM][ZDIM] += dy * dz;
-                    ixx[ZDIM][XDIM] += dz * dx;
-                    ixx[ZDIM][YDIM] += dz * dy;
-                    ixx[ZDIM][ZDIM] += dz * dz;
-                }
-                double xcom500 = 0.0;
-                double ycom500 = 0.0;
-                double zcom500 = 0.0;
-                for (int i = 0; i < parts500.size(); i++) {
-                    xcom500 += parts500[i].x;
-                    ycom500 += parts500[i].y;
-                    zcom500 += parts500[i].z;
-                }
-                xcom500 /= parts500.size();
-                ycom500 /= parts500.size();
-                zcom500 /= parts500.size();
-                double rcommax500 = 0.0;
-                for (int i = 0; i < parts500.size(); i++) {
-                    double const dx = parts500[i].x - xcom500;
-                    double const dy = parts500[i].y - ycom500;
-                    double const dz = parts500[i].z - zcom500;
-                    rcommax500 = std::max(rcommax500, sqrt(sqr(dx, dy, dz)));
-                    ixx500[XDIM][XDIM] += dx * dx;
-                    ixx500[XDIM][YDIM] += dx * dy;
-                    ixx500[XDIM][ZDIM] += dx * dz;
-                    ixx500[YDIM][XDIM] += dy * dx;
-                    ixx500[YDIM][YDIM] += dy * dy;
-                    ixx500[YDIM][ZDIM] += dy * dz;
-                    ixx500[ZDIM][XDIM] += dz * dx;
-                    ixx500[ZDIM][YDIM] += dz * dy;
-                    ixx500[ZDIM][ZDIM] += dz * dz;
-                }
-                for (int i = 0; i < NDIM; i++) {
-                    for (int j = 0; j < NDIM; j++) {
-                        ixx[i][j] /= parts.size();
-                        ixx500[i][j] /= parts500.size();
-                    }
-                }
-                auto const lambda2 = findEigenpair(ixx, rcomMax);
-                auto const lambda0 = findEigenpair(ixx, 0.0);
-                auto const lambda1 = findEigenpair(ixx, 0.5 * (lambda2.first + lambda0.first));
-                double bOA = sqrt(lambda1.first / lambda2.first);
-                double cOA = sqrt(lambda0.first / lambda2.first);
-                Array<double, NDIM> aValue, a500;
-                for (int dim = 0; dim < NDIM; dim++) {
-                    aValue[dim] = lambda2.second[dim] * sqrt(lambda2.first);
-                }
-                double bOA500, cOA500;
-                if (parts500.size() >= ROCKSTAR_MIN_GROUP) {
-                    auto const lambda2 = findEigenpair(ixx500, rcommax500);
-                    auto const lambda0 = findEigenpair(ixx500, 0.0);
-                    auto const lambda1 =
-                        findEigenpair(ixx500, 0.5 * (lambda2.first + lambda0.first));
-                    bOA500 = sqrt(lambda1.first / lambda2.first);
-                    cOA500 = sqrt(lambda0.first / lambda2.first);
-                    for (int dim = 0; dim < NDIM; dim++) {
-                        a500[dim] = lambda2.second[dim] * sqrt(lambda2.first);
-                    }
-                } else {
-                    bOA500 = 0.0;
-                    cOA500 = 0.0;
-                    for (int dim = 0; dim < NDIM; dim++) {
-                        a500[dim] = 0.0;
-                    }
-                }
-                deltaX = sqrt(sqr(xcom - grp.x, ycom - grp.y, zcom - grp.z));
-                deltaV = sqrt(sqr(grp.vxb - grp.vxc, grp.vyb - grp.vyc, grp.vzb - grp.vzc));
-                jValue = sqrt(sqr(jx, jy, jz));
-                std::sort(radii.begin(), radii.end());
-                cosmosNfwFit(radii, rsValue, rho0);
-                double vcircMax = 0.0;
-                for (int i = 0; i < radii.size(); i++) {
-                    double menc = i + 1.0;
-                    double vcirc = sqrt(getOptions().gravity.gm / radii[i] * menc);
-                    if (vcirc > vcircMax) {
-                        rvmax = radii[i];
-                        vcircMax = vcirc;
-                    }
-                }
-                mvir = parts.size();
-                //	PRINT("%e %e %e %e\n", mvir, m200, m500, m2500);
-                double rmax = radii.back();
-                double const omegaM = getOptions().cosmology.omegaM;
-                x = ((omegaM / (sqr(scale) * scale)) / (omegaM / (sqr(scale) * scale)) +
-                        (1.0 - omegaM)) -
-                    1.0;
-                y = (18.0 * M_PI * M_PI + 82.0 * x - 39.0 * sqr(x)) / (1.0 + x);
-                rvir = pow(mvir / (4.0 / 3.0 * M_PI * y), 1.0 / 3.0) / ndim;
-                rKlypin = cosmosKlypinFit(vcircMax, radii.back(), mvir);
-                double const g = getOptions().gravity.gm;
-                lambda = jValue * sqrt(fabs(etotValue)) / g / pow(mvir, 2.5);
-                lambdaB = jValue / sqrt(2.0 * g * sqr(mvir) * mvir * rvir);
-                toW = grp.t / grp.w;
-                auto const unitScales = units::scalesFromOptions(getOptions());
-                double const convMass =
-                    (unitScales.massScale() * getOptions().cosmology.hubble / units::kSolarMass)
-                        .value();
-                double const convPos =
-                    (unitScales.lengthScale() * getOptions().cosmology.hubble / units::kMegaparsec)
-                        .value();
-                double const lengthConversionFactor = convPos * 1000.0;
-                double const convVel =
-                    (unitScales.velocityScale() / units::Velocity::from_value(1.e5)).value();
-                double const convAng = convMass * convPos * convVel;
-                double const convEne = convMass * sqr(convVel);
-                x += xc;
-                y += yc;
-                z += zc;
-                auto const thisTau = sqrt(sqr(x, y, z));
-                auto const z0 = getOptions().cosmology.startRedshift;
-                auto const a0 = 1.0 / (z0 + 1.0);
-                double a = cosmosTauToScale(a0, tauMax - thisTau);
-                double zValue = 1.0 / a - 1.0;
-                mvir *= convMass;
-                m200 *= convMass;
-                m500 *= convMass;
-                m2500 *= convMass;
-                rmax *= lengthConversionFactor;
-                rvir *= lengthConversionFactor;
-                rvmax *= lengthConversionFactor;
-                sigmaX *= lengthConversionFactor;
-                deltaX *= lengthConversionFactor;
-                rsValue *= lengthConversionFactor;
-                rKlypin *= lengthConversionFactor;
-                sigmaV *= convVel;
-                sigmaVb *= convVel;
-                vx *= convVel;
-                vy *= convVel;
-                vz *= convVel;
-                vxb *= convVel;
-                vyb *= convVel;
-                vzb *= convVel;
-                deltaV *= convVel;
-                vcircMax *= convVel;
-                etotValue *= convEne;
-                x = grp.x * convPos;
-                y = grp.y * convPos;
-                z = grp.z * convPos;
-                jx *= convAng;
-                jy *= convAng;
-                jz *= convAng;
-                for (int dim = 0; dim < NDIM; dim++) {
-                    aValue[dim] *= lengthConversionFactor;
-                }
-                RockstarRecord rec;
-
-                rec.id.haloId = k;
-                rec.id.sys = iValue;
-                rec.x = x;
-                rec.y = y;
-                rec.z = z;
-                rec.mvir = mvir;
-                rec.e = etotValue;
-                rec.jx = jx;
-                rec.jy = jy;
-                rec.jz = jz;
-                rec.pid = grp.parent;
-                rec.m200 = m200;
-                rec.m500 = m500;
-                rec.m2500 = m2500;
-                double const f16max = std::numeric_limits<Float16>::max();
-                if (rsValue > f16max) {
-                    PRINT("mvir %i rmax = %e Rs = %e RKly = %e f16max = %e\n", parts.size(), rmax,
-                        rsValue, rKlypin, f16max);
-                }
-                rec.vxc = double2float16(vx);
-                rec.vyc = double2float16(vy);
-                rec.vzc = double2float16(vz);
-                rec.vxb = double2float16(vxb);
-                rec.vyb = double2float16(vyb);
-                rec.vzb = double2float16(vzb);
-                rec.sigVb = double2float16(sigmaVb);
-                rec.rmax = double2float16(rmax);
-                rec.rvir = double2float16(rvir);
-                rec.rvmax = double2float16(rvmax);
-                rec.rs = double2float16(rsValue);
-                rec.rkly = double2float16(rKlypin);
-                rec.sigX = double2float16(sigmaX);
-                rec.deltaX = double2float16(deltaX);
-                rec.toW = double2float16(toW);
-                rec.sigV = double2float16(sigmaV);
-                rec.vcircMax = double2float16(vcircMax);
-                rec.deltaV = double2float16(deltaV);
-                rec.boa = double2float16(bOA);
-                rec.coa = double2float16(cOA);
-                rec.ax = double2float16(aValue[XDIM]);
-                rec.ay = double2float16(aValue[YDIM]);
-                rec.az = double2float16(aValue[ZDIM]);
-                rec.boa500 = double2float16(bOA500);
-                rec.coa500 = double2float16(cOA500);
-                rec.ax500 = double2float16(a500[XDIM]);
-                rec.ay500 = double2float16(a500[YDIM]);
-                rec.az500 = double2float16(a500[ZDIM]);
-                rec.lambda = double2float16(lambda);
-                rec.lambdaB = double2float16(lambdaB);
-                rec.zValue = double2float16(zValue);
-                recs.push_back(rec);
-            }
-        }
-    }
-    return recs;
-}
-
 Vector<Subgroup> rockstarFindSubgroups(Vector<ParticleData> const& parts, float scale) {
-    DeviceVector<RockstarParticle> rockstarParticles;
-    Array<Fixed32, NDIM> x0;
-    for (int dim = 0; dim < NDIM; dim++) {
-        x0[dim] = parts[0].x[dim];
+    if (parts.size() < ROCKSTAR_MIN_GROUP) {
+        return {};
     }
-    for (int i = 0; i < parts.size(); i++) {
-        Array<float, NDIM> x;
-        for (int dim = 0; dim < NDIM; dim++) {
-            x[dim] = distance(parts[i].x[dim], x0[dim]);
+    DeviceVector<RockstarParticle> particles;
+    for (auto const& input : parts) {
+        RockstarParticle particle{};
+        for (int dim = 0; dim < NDIM; ++dim) {
+            particle.xValue[dim] = distance(input.x[dim], parts[0].x[dim]);
+            particle.xValue[dim + NDIM] = input.v[dim];
         }
-        RockstarParticle part;
-        part.x = x[XDIM];
-        part.y = x[YDIM];
-        part.z = x[ZDIM];
-        part.vx = parts[i].v[XDIM];
-        part.vy = parts[i].v[YDIM];
-        part.vz = parts[i].v[ZDIM];
-        part.index = parts[i].index;
-        rockstarParticles.pushBack(part);
+        particle.index = input.index;
+        particle.rank = input.rank;
+        particle.identity = input.identity;
+        particle.previousHalo = input.lastGroup;
+        particle.previousHost = input.lastHost;
+        particles.pushBack(particle);
     }
     int nextId = 1;
-    return rockstarSeeds(rockstarParticles, nextId, 1.0, 1.0, scale, false);
+    return rockstarSeeds(
+        std::move(particles), nextId, 1.0f, 1.0f, scale, getOptions().compute.cuda);
+}
+
+Vector<RockstarRecord> rockstarFindSubgroups(Vector<LightconeEntry> const& input, double tauMax) {
+    Vector<RockstarRecord> records;
+    if (input.size() < ROCKSTAR_MIN_GROUP) {
+        return records;
+    }
+    Array<double, NDIM> origin{};
+    for (auto const& particle : input) {
+        origin[0] += particle.x.toDouble() / input.size();
+        origin[1] += particle.y.toDouble() / input.size();
+        origin[2] += particle.z.toDouble() / input.size();
+    }
+    double const distanceToGroup = sqrt(sqr(origin[0], origin[1], origin[2]));
+    double const initialScale = 1.0 / (1.0 + getOptions().cosmology.startRedshift);
+    double const scale = cosmosTauToScale(initialScale, std::max(0.0, tauMax - distanceToGroup));
+    DeviceVector<RockstarParticle> particles;
+    for (size_t i = 0; i < input.size(); ++i) {
+        RockstarParticle particle{};
+        particle.x = input[i].x.toDouble() - origin[0];
+        particle.y = input[i].y.toDouble() - origin[1];
+        particle.z = input[i].z.toDouble() - origin[2];
+        particle.vx = input[i].vx;
+        particle.vy = input[i].vy;
+        particle.vz = input[i].vz;
+        particle.identity = i;
+        particle.index = i;
+        particles.pushBack(particle);
+    }
+    int nextId = 1;
+    auto groups =
+        rockstarSeeds(std::move(particles), nextId, 1.0f, 1.0f, scale, getOptions().compute.cuda);
+    for (size_t i = 0; i < groups.size(); ++i) {
+        if (groups[i].massVir >= ROCKSTAR_MIN_GROUP) {
+            auto record = rockstarMakeRecord(groups, i, scale, origin);
+            double const radius = sqrt(
+                sqr(origin[0] + groups[i].x, origin[1] + groups[i].y, origin[2] + groups[i].z));
+            double const haloScale = cosmosTauToScale(initialScale, std::max(0.0, tauMax - radius));
+            record.zValue = double2float16(1.0 / haloScale - 1.0);
+            records.push_back(record);
+        }
+    }
+    return records;
 }

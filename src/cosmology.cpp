@@ -24,6 +24,7 @@
 #include <cosmictiger/flops.hpp>
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/options.hpp>
+#include <cosmictiger/rockstar_properties.hpp>
 #include <cosmictiger/simulation_units.hpp>
 
 void cosmosUpdate0(double& adotdot, double& adot, double& a, double dt) {
@@ -159,95 +160,12 @@ double cosmosConformalTime(double a0, double a1) {
     return t;
 }
 
-#define Power(a, b) pow(a, b)
-#define Log(a) log(a)
-
 double cosmosKlypinFit(double vmax, double rvir, double mvir) {
-    double f0 = vmax * vmax * rvir / mvir / getOptions().gravity.gm;
-    double c;
-    if (fabs(f0 - 1.0) < 1e-5) {
-        c = 2.16258;
-    } else {
-        f0 *= 4.62499;
-        double err;
-        double cinvMax = 1.0 / 2.16258;
-        double cinvMin = 0.0;
-        auto const func = [f0](double c) { return c / (log(1 + c) - c / (1 + c)) - f0; };
-        do {
-            double cinvMid = (cinvMax + cinvMin) * 0.5;
-            double fMid = func(1.0 / cinvMid);
-            double fMax = func(1.0 / cinvMax);
-            if (fMid * fMax < 0.0) {
-                cinvMin = cinvMid;
-            } else {
-                cinvMax = cinvMid;
-            }
-            err = fabs(fMid);
-            c = 1.0 / cinvMid;
-        } while (err > 1.0e-6);
-    }
-    return rvir / c;
+    return rockstar::klypinScaleRadius(vmax, rvir, mvir * getOptions().gravity.gm);
 }
 
 void cosmosNfwFit(Vector<double> radii, double& rs, double& rhoNfw) {
-    double err;
-    double rmax = radii.back();
-    double npart = radii.size();
-    int numberOfBins = std::max(1, std::min(50, (int) npart / 15));
-    Vector<double> rbnd(numberOfBins + 1);
-    rbnd[0] = 0.0;
-    for (int n = 1; n < numberOfBins; n++) {
-        double j = (double) n / numberOfBins * npart;
-        double k = j - (int) j;
-        double r0 = radii[j] * (1.0 - k) + radii[j + 1] * k;
-        rbnd[n] = r0;
-    }
-    rbnd[numberOfBins] = rmax;
-    double rho0 = npart / (4.0 / 3.0 * M_PI * sqr(rmax) * rmax);
-
-    double cinvMin = 0.0;
-    double cinvMax = 1.0;
-    double c;
-
-    do {
-        double cinvMid = 0.5 * (cinvMax + cinvMin);
-        double cmin = 1.0 / cinvMid;
-        double cmax = 1.0 / cinvMax;
-        double fmin = 0.0;
-        double fmax = 0.0;
-        for (int i = 0; i < numberOfBins; i++) {
-            double dr = (rbnd[i + 1] - rbnd[i]);
-            if (dr > 0.0) {
-                double vol =
-                    4.0 / 3.0 * M_PI * (sqr(rbnd[i + 1]) * rbnd[i + 1] - sqr(rbnd[i]) * rbnd[i]);
-                double rho = npart / numberOfBins / vol;
-                double x = 0.5 * (rbnd[i] + rbnd[i + 1]) / rmax;
-                c = cmin;
-                fmin += (-2 * c * rho0 *
-                            (c * (2 + c * (3 + c * x)) - 2 * Power(1 + c, 2) * Log(1 + c)) *
-                            (c *
-                                    (c * (1 + c) * rho0 + 3 * rho * x +
-                                        3 * c * rho * Power(x, 2) * (2 + c * x)) -
-                                3 * (1 + c) * rho * x * Power(1 + c * x, 2) * Log(1 + c))) /
-                    (9. * Power(x, 2) * Power(1 + c * x, 5) * Power(-c + (1 + c) * Log(1 + c), 3));
-                c = cmax;
-                fmax += (-2 * c * rho0 *
-                            (c * (2 + c * (3 + c * x)) - 2 * Power(1 + c, 2) * Log(1 + c)) *
-                            (c *
-                                    (c * (1 + c) * rho0 + 3 * rho * x +
-                                        3 * c * rho * Power(x, 2) * (2 + c * x)) -
-                                3 * (1 + c) * rho * x * Power(1 + c * x, 2) * Log(1 + c))) /
-                    (9. * Power(x, 2) * Power(1 + c * x, 5) * Power(-c + (1 + c) * Log(1 + c), 3));
-            }
-        }
-        if (fmax * fmin < 0.0) {
-            cinvMin = cinvMid;
-        } else {
-            cinvMax = cinvMid;
-        }
-        c = 0.5 / cinvMin + 0.5 / cinvMax;
-        err = cinvMax / cinvMin - 1.0;
-    } while (err > 1.0e-6);
-    rs = rmax / c;
-    rhoNfw = sqr(c) * c * rho0 / (3.0 * (log(1 + c) - c / (1 + c)));
+    auto const fit = rockstar::nfwFit(radii);
+    rs = fit.scaleRadius;
+    rhoNfw = fit.density;
 }

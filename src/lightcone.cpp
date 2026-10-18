@@ -149,7 +149,9 @@ size_t lcAddParticleEntries(EntryLists const& entries, double scale, double tau)
                             pi.pos[ZDIM] = pj.z;
                             double const tau1 =
                                 sqrtf(sqr(pj.x.toDouble(), pj.y.toDouble(), pj.z.toDouble()));
-                            auto const a = scale + cosmosDadtau(scale) * (tau1 - tau);
+                            auto const a = lightconeEmissionScale(
+                                scale, cosmosDadtau(scale), tau, tauMax, tau1);
+                            ALWAYS_ASSERT(a > 0.0);
                             pi.vel[XDIM] = pj.vx / a;
                             pi.vel[YDIM] = pj.vy / a;
                             pi.vel[ZDIM] = pj.vz / a;

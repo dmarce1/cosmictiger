@@ -22,3 +22,9 @@ struct LightconeEntry {
 
 size_t lcAddParticles(
     std::vector<std::vector<LightconeEntry>> const& entries, double scale, double tau);
+
+// Positions encode the remaining light-travel conformal time, not emission time.
+inline double lightconeEmissionScale(
+    double scale, double derivative, double tau, double tauMax, double radius) {
+    return scale + derivative * (tauMax - radius - tau);
+}

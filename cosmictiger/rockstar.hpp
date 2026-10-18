@@ -1,5 +1,7 @@
 #pragma once
 
+#include <limits>
+
 #include <cosmictiger/containers.hpp>
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/fp16.hpp>
@@ -40,6 +42,11 @@ struct RockstarParticle {
     int subgroup;
     ParticleInteger index;
     float minDist2;
+    int rank = 0;
+    GroupInteger identity = NO_GROUP;
+    GroupInteger previousHalo = NO_GROUP;
+    GroupInteger previousHost = NO_GROUP;
+    int ordinal = -1;
 };
 
 struct RockstarTree {
@@ -110,28 +117,35 @@ struct RockstarRecord {
 };
 
 struct Subgroup {
-    int id;
+    int id = -1;
     int parent;
+    int internalParent = -1;
+    GroupInteger catalogueId = NO_GROUP;
+    double massVir = 0.0;
+    double mass200 = 0.0;
+    double mass500 = 0.0;
+    double mass2500 = 0.0;
+    double radius500 = 0.0;
     Vector<int> children;
     DeviceVector<RockstarParticle> parts;
-    float x;
-    float y;
-    float z;
-    float vxc;
-    float vyc;
-    float vzc;
-    float vxb;
-    float vyb;
-    float vzb;
-    float t;
-    float w;
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+    float vxc = 0.0f;
+    float vyc = 0.0f;
+    float vzc = 0.0f;
+    float vxb = 0.0f;
+    float vyb = 0.0f;
+    float vzb = 0.0f;
+    float t = 0.0f;
+    float w = 0.0f;
     float sigmaXMin;
-    float rDyn;
-    float sigma2V;
-    float sigma2X;
-    float vcircMax;
-    float rVir;
-    int hostParticleCount;
+    float rDyn = 0.0f;
+    float sigma2V = 0.0f;
+    float sigma2X = 0.0f;
+    float vcircMax = 0.0f;
+    double rVir = 0.0;
+    int hostParticleCount = 0;
     int depth;
     Subgroup() {
         depth = -1;
@@ -148,3 +162,17 @@ void rockstarAssignLinklenCuda(DeviceVector<RockstarTree> const& nodes,
     DeviceVector<int> const& leaves, DeviceVector<RockstarParticle>& parts, float linkingLength,
     bool phase);
 bool rockstarCudaFree();
+
+// Shared by the recursive finder, snapshot writer, and lightcone writer.
+void rockstarUpdateStatistics(
+    Subgroup& group, float positionFactor, float velocityFactor, float scale);
+void rockstarFinalizeSubgroups(Vector<Subgroup>& groups, float scale);
+// Final catalogue thresholding after unbinding, preserving enclosing-host mass.
+void rockstarPruneCatalogueGroups(Vector<Subgroup>& groups, float scale);
+DeviceVector<RockstarParticle> rockstarGatherParticles(Vector<Subgroup> const& groups, int index);
+RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, float scale,
+    Array<double, NDIM> const& origin, bool inclusive = true);
+GroupEntry rockstarMakeGroupEntry(
+    Vector<Subgroup> const& groups, int index, float scale, Array<double, NDIM> const& origin);
+// A single candidate, exposed for independent unbinding regressions.
+bool rockstarHaloBound(Subgroup& halo, Vector<RockstarParticle>& unboundParticles, float scale);

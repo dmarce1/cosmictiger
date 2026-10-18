@@ -32,7 +32,7 @@ struct BhShmem {
 };
 
 __global__ void bhTreeEvaluateKernel(BhTreeNode const* treeNodes, int const* sinkBuckets,
-    float* phi, Array<float, NDIM> const* parts, float theta, float hsoft, float gm,
+    float* phi, Array<float, NDIM> const* parts, float relativeError, float hsoft, float gm,
     int* nextSinkBucket, int numberOfSinks) {
     int const tid = threadIdx.x;
     int const bid = blockIdx.x;
@@ -56,11 +56,14 @@ __global__ void bhTreeEvaluateKernel(BhTreeNode const* treeNodes, int const* sin
         auto& sourceZ = ws.sourceZ;
         auto& srcM = ws.srcM;
         auto& leaflist = ws.leaflist;
+        sourceX.resize(0);
+        sourceY.resize(0);
+        sourceZ.resize(0);
+        srcM.resize(0);
         checklist.resize(1);
         checklist[0] = 0;
         auto const& self = treeNodes[sinkIndex];
         float const myRadius = self.radius;
-        float const thetainv = 1.0 / theta;
         int sinkSize = self.parts.second - self.parts.first;
         for (int i = tid; i < sinkSize; i += WARP_SIZE) {
             sinkX[i] = parts[self.parts.first + i][XDIM];
@@ -75,12 +78,11 @@ __global__ void bhTreeEvaluateKernel(BhTreeNode const* treeNodes, int const* sin
                 bool next = false;
                 if (ci < checklist.size()) {
                     auto const& other = treeNodes[checklist[ci]];
-                    float const otherRadius = other.radius;
                     float const dx = self.pos[XDIM] - other.pos[XDIM];
                     float const dy = self.pos[YDIM] - other.pos[YDIM];
                     float const dz = self.pos[ZDIM] - other.pos[ZDIM];
                     float const r2 = sqr(dx, dy, dz);
-                    if (r2 > sqr(thetainv * (otherRadius + myRadius))) {
+                    if (detail::bhAcceptMonopole(r2, other, myRadius, hsoft, relativeError)) {
                         source = true;
                     } else if (other.children[LEFT] == -1) {
                         leaf = true;
@@ -191,8 +193,8 @@ __global__ void bhTreeEvaluateKernel(BhTreeNode const* treeNodes, int const* sin
 }
 
 __global__ void bhTreeEvaluatePointsKernel(BhTreeNode const* treeNodes, float* phi,
-    Array<float, NDIM> const* parts, Array<float, NDIM> const* sinks, float theta, float hsoft,
-    float gm, int* nextSink, int numberOfSinks) {
+    Array<float, NDIM> const* parts, Array<float, NDIM> const* sinks, float relativeError,
+    float hsoft, float gm, int* nextSink, int numberOfSinks) {
     int const tid = threadIdx.x;
     int const bid = blockIdx.x;
     __shared__ int si;
@@ -211,9 +213,12 @@ __global__ void bhTreeEvaluatePointsKernel(BhTreeNode const* treeNodes, float* p
         auto& sourceZ = ws.sourceZ;
         auto& srcM = ws.srcM;
         auto& leaflist = ws.leaflist;
+        sourceX.resize(0);
+        sourceY.resize(0);
+        sourceZ.resize(0);
+        srcM.resize(0);
         checklist.resize(1);
         checklist[0] = 0;
-        float const thetainv = 1.0 / theta;
         while (checklist.size()) {
             int maxci = roundUp(checklist.size(), WARP_SIZE);
             for (int ci = tid; ci < maxci; ci += WARP_SIZE) {
@@ -222,12 +227,11 @@ __global__ void bhTreeEvaluatePointsKernel(BhTreeNode const* treeNodes, float* p
                 bool next = false;
                 if (ci < checklist.size()) {
                     auto const& other = treeNodes[checklist[ci]];
-                    float const otherRadius = other.radius;
                     float const dx = sink[XDIM] - other.pos[XDIM];
                     float const dy = sink[YDIM] - other.pos[YDIM];
                     float const dz = sink[ZDIM] - other.pos[ZDIM];
                     float const r2 = sqr(dx, dy, dz);
-                    if (r2 > sqr(thetainv * (otherRadius))) {
+                    if (detail::bhAcceptMonopole(r2, other, 0.0f, hsoft, relativeError)) {
                         source = true;
                     } else if (other.children[LEFT] == -1) {
                         leaf = true;
@@ -340,7 +344,7 @@ __global__ void bhTreeEvaluatePointsKernel(BhTreeNode const* treeNodes, float* p
 
 DeviceVector<float> bhEvaluatePotentialGpu(DeviceVector<BhTreeNode> const& devTreeNodes,
     DeviceVector<Array<float, NDIM>> const& devX, DeviceVector<int> const devSinkBuckets,
-    float theta, float hsoft, float gm) {
+    float relativeError, float hsoft, float gm, int maximumBlockCount) {
     auto stream = cudaGetStream();
     BhWorkspace* workspaces;
     int* nextSinkBucket;
@@ -351,13 +355,18 @@ DeviceVector<float> bhEvaluatePotentialGpu(DeviceVector<BhTreeNode> const& devTr
         &numberOfBlocks, (void const*) bhTreeEvaluateKernel, WARP_SIZE, sizeof(BhShmem)));
     numberOfBlocks *= cudaSmpCount();
     numberOfBlocks = std::min(numberOfBlocks, devSinkBuckets.size());
+    // A bounded launch also lets regression tests exercise multiple buckets
+    // per workspace without constructing a device-sized halo.
+    if (maximumBlockCount > 0) {
+        numberOfBlocks = std::min(numberOfBlocks, maximumBlockCount);
+    }
     //	numberOfBlocks *= cuda_smp_count();
     nextSinkBucket = (int*) cudaAllocate(sizeof(int));
     *nextSinkBucket = 0;
     tm1.start();
     DeviceVector<float> devPhi(devX.size());
     bhTreeEvaluateKernel<<<numberOfBlocks, WARP_SIZE, 0, stream>>>(devTreeNodes.data(),
-        devSinkBuckets.data(), devPhi.data(), devX.data(), theta, hsoft, gm, nextSinkBucket,
+        devSinkBuckets.data(), devPhi.data(), devX.data(), relativeError, hsoft, gm, nextSinkBucket,
         devSinkBuckets.size());
     synchronizeCudaStream(stream);
     tm1.stop();
@@ -368,14 +377,14 @@ DeviceVector<float> bhEvaluatePotentialGpu(DeviceVector<BhTreeNode> const& devTr
 
 DeviceVector<float> bhEvaluatePotentialPointsGpu(DeviceVector<BhTreeNode> const& devTreeNodes,
     DeviceVector<Array<float, NDIM>> const& devX, DeviceVector<Array<float, NDIM>> const& devY,
-    float theta, float hsoft, float gm) {
+    float relativeError, float hsoft, float gm) {
     auto stream = cudaGetStream();
     int* nextSink;
     int zero = 0;
     int numberOfBlocks;
     Timer tm1;
     CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &numberOfBlocks, (void const*) bhTreeEvaluateKernel, WARP_SIZE, sizeof(BhShmem)));
+        &numberOfBlocks, (void const*) bhTreeEvaluatePointsKernel, WARP_SIZE, 0));
     numberOfBlocks *= cudaSmpCount();
     numberOfBlocks = std::max(1, std::min(numberOfBlocks, devY.size() / BH_BUCKET_SIZE));
     nextSink = (int*) cudaAllocate(sizeof(int));
@@ -383,7 +392,7 @@ DeviceVector<float> bhEvaluatePotentialPointsGpu(DeviceVector<BhTreeNode> const&
     tm1.start();
     DeviceVector<float> devPhi(devY.size());
     bhTreeEvaluatePointsKernel<<<numberOfBlocks, WARP_SIZE, 0, stream>>>(devTreeNodes.data(),
-        devPhi.data(), devX.data(), devY.data(), theta, hsoft, gm, nextSink, devY.size());
+        devPhi.data(), devX.data(), devY.data(), relativeError, hsoft, gm, nextSink, devY.size());
     synchronizeCudaStream(stream);
     tm1.stop();
     ALWAYS_ASSERT(devY.size());

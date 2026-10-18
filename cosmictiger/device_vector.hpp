@@ -130,6 +130,18 @@ public:
         return ptr_ + size_;
     }
     CUDA_EXPORT
+    inline T const* begin() const {
+        return ptr_;
+    }
+    CUDA_EXPORT
+    inline T const* end() const {
+        return ptr_ + size_;
+    }
+    CUDA_EXPORT
+    inline bool empty() const {
+        return size_ == 0;
+    }
+    CUDA_EXPORT
     inline DeviceVector() {
         initialize();
     }

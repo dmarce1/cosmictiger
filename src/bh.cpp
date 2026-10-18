@@ -17,7 +17,9 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include <fenv.h>
+#include <algorithm>
+#include <cmath>
+#include <limits>
 
 #include <cosmictiger/assert.hpp>
 #include <cosmictiger/bh.hpp>
@@ -53,118 +55,69 @@ int bhSort(DeviceVector<Array<float, NDIM>>& parts, Vector<int>& sortOrder, int 
 void bhCreateTree(DeviceVector<BhTreeNode>& nodes, DeviceVector<int>& sinkBuckets, int self,
     DeviceVector<Array<float, NDIM>>& parts, Vector<int>& sortOrder, Range<float> box, int begin,
     int end, int bucketSize, int depth = 0) {
-    /*feenableexcept (FE_DIVBYZERO);
-     feenableexcept (FE_INVALID);
-     feenableexcept (FE_OVERFLOW);*/
-    auto* nodePtr = &nodes[self];
-    Array<float, NDIM> com;
-    float radius;
-    if (end - begin <= bucketSize) {
-        nodePtr->parts.first = begin;
-        nodePtr->parts.second = end;
-        sinkBuckets.pushBack(self);
-        nodePtr->mass = end - begin;
-        for (int dim = 0; dim < NDIM; dim++) {
-            com[dim] = 0.0;
-        }
-        if (nodePtr->mass > 0.0) {
-            for (int i = begin; i < end; i++) {
-                for (int dim = 0; dim < NDIM; dim++) {
-                    com[dim] += parts[i][dim];
-                }
-            }
-            float const massinv = 1.0f / nodePtr->mass;
-            for (int dim = 0; dim < NDIM; dim++) {
-                com[dim] *= massinv;
-            }
-        }
-        radius = 0.0;
-        for (int i = begin; i < end; i++) {
-            float r2 = 0.0;
-            for (int dim = 0; dim < NDIM; dim++) {
-                r2 += sqr(com[dim] - parts[i][dim]);
-            }
-            radius = std::max(radius, r2);
-        }
-        radius = std::sqrt(radius);
-        nodePtr->radius = radius;
-        nodePtr->pos = com;
-    } else {
-        int const xdim = box.longestDim();
-        float const xmid = (box.begin[xdim] + box.end[xdim]) * 0.5;
-        int const mid = bhSort(parts, sortOrder, begin, end, xmid, xdim);
-        auto boxl = box;
-        auto boxr = box;
-        boxl.end[xdim] = boxr.begin[xdim] = xmid;
-        nodePtr->children[LEFT] = nodes.size();
-        nodePtr->children[RIGHT] = nodes.size() + 1;
-        nodes.resize(nodes.size() + NCHILD);
-        nodePtr = &nodes[self];
-        bhCreateTree(nodes, sinkBuckets, nodePtr->children[LEFT], parts, sortOrder, boxl, begin,
-            mid, bucketSize, depth + 1);
-        nodePtr = &nodes[self];
-        bhCreateTree(nodes, sinkBuckets, nodePtr->children[RIGHT], parts, sortOrder, boxr, mid, end,
-            bucketSize, depth + 1);
-        nodePtr = &nodes[self];
-        auto const& childl = nodes[nodePtr->children[LEFT]];
-        auto const& childr = nodes[nodePtr->children[RIGHT]];
-        nodePtr->mass = childl.mass + childr.mass;
-        if (childl.mass == 0.0) {
-            for (int dim = 0; dim < NDIM; dim++) {
-                com[dim] = childr.pos[dim];
-            }
-            radius = childr.radius;
-        } else if (childr.mass == 0.0) {
-            for (int dim = 0; dim < NDIM; dim++) {
-                com[dim] = childl.pos[dim];
-            }
-            radius = childl.radius;
-        } else {
-            float const massinv = 1.0f / nodePtr->mass;
-            for (int dim = 0; dim < NDIM; dim++) {
-                com[dim] =
-                    (childl.mass * childl.pos[dim] + childr.mass * childr.pos[dim]) * massinv;
-            }
-            float r2l = 0.0;
-            float r2r = 0.0;
-            float r2 = 0.0;
-            for (int dim = 0; dim < NDIM; dim++) {
-                r2l += sqr(com[dim] - childl.pos[dim]);
-                r2r += sqr(com[dim] - childr.pos[dim]);
-            }
-            r2 = std::max(r2,
-                (float) sqr(box.begin[XDIM] - com[XDIM], box.begin[YDIM] - com[YDIM],
-                    box.begin[ZDIM] - com[ZDIM]));
-            r2 = std::max(r2,
-                (float) sqr(box.begin[XDIM] - com[XDIM], box.begin[YDIM] - com[YDIM],
-                    box.end[ZDIM] - com[ZDIM]));
-            r2 = std::max(r2,
-                (float) sqr(box.begin[XDIM] - com[XDIM], box.end[YDIM] - com[YDIM],
-                    box.begin[ZDIM] - com[ZDIM]));
-            r2 = std::max(r2,
-                (float) sqr(box.begin[XDIM] - com[XDIM], box.end[YDIM] - com[YDIM],
-                    box.end[ZDIM] - com[ZDIM]));
-            r2 = std::max(r2,
-                (float) sqr(box.end[XDIM] - com[XDIM], box.begin[YDIM] - com[YDIM],
-                    box.begin[ZDIM] - com[ZDIM]));
-            r2 = std::max(r2,
-                (float) sqr(box.end[XDIM] - com[XDIM], box.begin[YDIM] - com[YDIM],
-                    box.end[ZDIM] - com[ZDIM]));
-            r2 = std::max(r2,
-                (float) sqr(box.end[XDIM] - com[XDIM], box.end[YDIM] - com[YDIM],
-                    box.begin[ZDIM] - com[ZDIM]));
-            r2 = std::max(r2,
-                (float) sqr(box.end[XDIM] - com[XDIM], box.end[YDIM] - com[YDIM],
-                    box.end[ZDIM] - com[ZDIM]));
-            radius = std::sqrt(r2);
-        }
-        nodePtr->radius = radius;
-        nodePtr->pos = com;
+    ALWAYS_ASSERT(begin < end);
+    // Recompute tight bounds after every split, including the count-based
+    // fallback for coincident points or a midpoint rounded onto a boundary.
+    Array<double, NDIM> sum{};
+    for (int dim = 0; dim < NDIM; ++dim) {
+        box.begin[dim] = std::numeric_limits<float>::max();
+        box.end[dim] = -std::numeric_limits<float>::max();
     }
+    for (int i = begin; i < end; ++i) {
+        for (int dim = 0; dim < NDIM; ++dim) {
+            sum[dim] += parts[i][dim];
+            box.begin[dim] = std::min(box.begin[dim], parts[i][dim]);
+            box.end[dim] = std::max(box.end[dim], parts[i][dim]);
+        }
+    }
+    auto& node = nodes[self];
+    node.parts = {begin, end};
+    node.mass = end - begin;
+    for (int dim = 0; dim < NDIM; ++dim) {
+        node.pos[dim] = sum[dim] / node.mass;
+    }
+    double maximumSquaredRadius = 0.0;
+    double sumSquaredRadius = 0.0;
+    for (int i = begin; i < end; ++i) {
+        double squaredRadius = 0.0;
+        for (int dim = 0; dim < NDIM; ++dim) {
+            double const displacement = double(parts[i][dim]) - node.pos[dim];
+            squaredRadius += displacement * displacement;
+        }
+        maximumSquaredRadius = std::max(maximumSquaredRadius, squaredRadius);
+        sumSquaredRadius += squaredRadius;
+    }
+    // Round the enclosing radius outward; underestimating it would invalidate
+    // the nearest-sink and compact-support guards in the acceptance criterion.
+    node.radius = std::nextafter(
+        float(std::sqrt(maximumSquaredRadius)), std::numeric_limits<float>::infinity());
+    node.meanSquaredRadius =
+        std::nextafter(float(sumSquaredRadius / node.mass), std::numeric_limits<float>::infinity());
+    if (end - begin <= bucketSize) {
+        sinkBuckets.pushBack(self);
+        return;
+    }
+    int const dimension = box.longestDim();
+    float const midpoint = float(0.5 * (double(box.begin[dimension]) + box.end[dimension]));
+    int middle = bhSort(parts, sortOrder, begin, end, midpoint, dimension);
+    // Every child must contain fewer particles. Limit highly unbalanced spatial
+    // recursion too; equal-position clouds then terminate in ordinary buckets.
+    if (middle == begin || middle == end || depth >= 32) {
+        middle = begin + (end - begin) / 2;
+    }
+    int const left = nodes.size();
+    int const right = left + 1;
+    node.children[LEFT] = left;
+    node.children[RIGHT] = right;
+    nodes.resize(nodes.size() + NCHILD);
+    bhCreateTree(
+        nodes, sinkBuckets, left, parts, sortOrder, box, begin, middle, bucketSize, depth + 1);
+    bhCreateTree(
+        nodes, sinkBuckets, right, parts, sortOrder, box, middle, end, bucketSize, depth + 1);
 }
 
 void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& sinkBuckets,
-    DeviceVector<float>& phi, DeviceVector<Array<float, NDIM>>& parts, float theta) {
+    DeviceVector<float>& phi, DeviceVector<Array<float, NDIM>>& parts, float relativeError) {
     float const h = getOptions().gravity.supportRadius;
     float const gm = getOptions().gravity.gm;
     float const hinv = 1.0 / h;
@@ -175,7 +128,7 @@ void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& si
     Vector<hpx::future<void>> futs;
     for (int proc = 0; proc < numberOfThreads; proc++) {
         futs.push_back(hpx::async([proc, numberOfThreads, &sinkBuckets, &nodes, &phi, &parts, h, gm,
-                                      hinv, h2, theta, tiny]() {
+                                      hinv, h2, relativeError, tiny]() {
             for (int i = proc; i < sinkBuckets.size(); i += numberOfThreads) {
                 auto const& sinkBucket = sinkBuckets[i];
                 Vector<int> checklist(1, 0);
@@ -187,7 +140,6 @@ void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& si
                 for (int i = myparts.first; i < myparts.second; i++) {
                     phi[i] = selfPhi() * hinv;
                 }
-                float const thetainv = 1.0f / theta;
                 while (checklist.size()) {
                     nextlist.resize(0);
                     for (int ci = 0; ci < checklist.size(); ci++) {
@@ -196,7 +148,7 @@ void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& si
                         float const dy = mypos[YDIM] - node.pos[YDIM];
                         float const dz = mypos[ZDIM] - node.pos[ZDIM];
                         float const r2 = sqr(dx, dy, dz);
-                        if (r2 > sqr(thetainv * (node.radius + myradius))) {
+                        if (detail::bhAcceptMonopole(r2, node, myradius, h, relativeError)) {
                             BhSource source;
                             source.x = node.pos;
                             source.m = node.mass;
@@ -243,14 +195,14 @@ void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& si
                         for (int dim = 0; dim < NDIM; dim++) {
                             dx[dim] = xValue[dim] - yValue[dim];    // 3
                         }
-                        SimdFloat const r2 =
-                            simdMax(sqr(dx[XDIM], dx[YDIM], dx[ZDIM]), tiny);    // 5
-                        auto const farFlag = r2 > h2;                            // 1
+                        SimdFloat const separationSquared = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
+                        SimdFloat const r2 = simdMax(separationSquared, tiny);
+                        auto const farFlag = separationSquared > h2;
                         SimdFloat rinv1{};
                         if (simdAllOf(farFlag)) {     // 7/8
                             rinv1 = simdRsqrt(r2);    // 5
                         } else {
-                            SimdFloat const r = simdSqrt(r2);    // 4
+                            SimdFloat const r = simdSqrt(separationSquared);
                             SimdFloat const rinv1Far = simdBroadcast<SimdFloat>(1) /
                                 (r + simdBroadcast<SimdFloat>(1e-30));    // 5
                             SimdFloat const q = r * hinv;
@@ -269,7 +221,7 @@ void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& si
 }
 
 void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Array<float, NDIM> pt, float& phi,
-    DeviceVector<Array<float, NDIM>>& parts, float theta) {
+    DeviceVector<Array<float, NDIM>>& parts, float relativeError) {
     float const h = getOptions().gravity.supportRadius;
     float const gm = getOptions().gravity.gm;
     float const hinv = 1.0f / h;
@@ -282,7 +234,6 @@ void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Array<float, NDI
     Vector<int> nextlist;
     Vector<BhSource> sourcelist;
     phi = 0.0;
-    float const thetainv = 1.0f / theta;
     while (checklist.size()) {
         nextlist.resize(0);
         for (int ci = 0; ci < checklist.size(); ci++) {
@@ -291,7 +242,7 @@ void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Array<float, NDI
             float const dy = pt[YDIM] - node.pos[YDIM];
             float const dz = pt[ZDIM] - node.pos[ZDIM];
             float const r2 = sqr(dx, dy, dz);
-            if (r2 > sqr(thetainv * node.radius)) {
+            if (detail::bhAcceptMonopole(r2, node, 0.0f, h, relativeError)) {
                 BhSource source;
                 source.x = node.pos;
                 source.m = node.mass;
@@ -339,12 +290,12 @@ void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Array<float, NDI
         }
         SimdFloat const separationSquared = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
         SimdFloat const r2 = simdMax(separationSquared, tiny);
-        auto const farFlag = r2 > h2;    // 1
+        auto const farFlag = separationSquared > h2;
         SimdFloat rinv1{};
         if (simdAllOf(farFlag)) {     // 7/8
             rinv1 = simdRsqrt(r2);    // 5
         } else {
-            SimdFloat const r = simdSqrt(r2);    // 4
+            SimdFloat const r = simdSqrt(separationSquared);
             SimdFloat const rinv1Far =
                 simdBroadcast<SimdFloat>(1) / (r + simdBroadcast<SimdFloat>(1e-30f));    // 5
             SimdFloat const q = r * hinv;
@@ -359,7 +310,17 @@ void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Array<float, NDI
 }
 
 DeviceVector<float> bhEvaluatePotential(DeviceVector<Array<float, NDIM>>& x, bool gpu) {
-    ALWAYS_ASSERT(x.size() > 1);
+    gpu = gpu && getOptions().compute.cuda;
+#ifndef USE_CUDA
+    gpu = false;
+#endif
+    if (x.size() <= 1) {
+        DeviceVector<float> potential(x.size());
+        if (x.size() == 1) {
+            potential[0] = 0.0f;
+        }
+        return potential;
+    }
     DeviceVector<BhTreeNode> nodes(1);
     Range<float> box;
     for (int dim = 0; dim < NDIM; dim++) {
@@ -383,14 +344,16 @@ DeviceVector<float> bhEvaluatePotential(DeviceVector<Array<float, NDIM>>& x, boo
     DeviceVector<float> pot(x.size());
     bhCreateTree(nodes, sinkBuckets, 0, x, sortOrder, box, 0, x.size(), BH_BUCKET_SIZE);
     if (!gpu) {
-        bhTreeEvaluate(nodes, sinkBuckets, pot, x, 0.85);
+        bhTreeEvaluate(nodes, sinkBuckets, pot, x, kBhMaximumRelativePotentialError);
     } else {
+#ifdef USE_CUDA
         Timer tm1;
         tm1.start();
-        pot = bhEvaluatePotentialGpu(nodes, x, sinkBuckets, 0.85,
+        pot = bhEvaluatePotentialGpu(nodes, x, sinkBuckets, kBhMaximumRelativePotentialError,
             getOptions().gravity.supportRadius, getOptions().gravity.gm);
         tm1.stop();
         //		PRINT("1 %e\n", tm1.read());
+#endif
     }
     rpot.resize(x.size());
     for (int i = 0; i < sortOrder.size(); i++) {
@@ -401,7 +364,17 @@ DeviceVector<float> bhEvaluatePotential(DeviceVector<Array<float, NDIM>>& x, boo
 
 DeviceVector<float> bhEvaluatePoints(
     DeviceVector<Array<float, NDIM>>& y, DeviceVector<Array<float, NDIM>>& x, bool gpu) {
-    ALWAYS_ASSERT(x.size() > 1);
+    gpu = gpu && getOptions().compute.cuda;
+#ifndef USE_CUDA
+    gpu = false;
+#endif
+    if (x.size() == 0 || y.size() == 0) {
+        DeviceVector<float> potential(y.size());
+        for (int i = 0; i < potential.size(); ++i) {
+            potential[i] = 0.0f;
+        }
+        return potential;
+    }
     DeviceVector<BhTreeNode> nodes(1);
     Range<float> box;
     for (int dim = 0; dim < NDIM; dim++) {
@@ -425,11 +398,13 @@ DeviceVector<float> bhEvaluatePoints(
     DeviceVector<float> pot(y.size());
     bhCreateTree(nodes, sinkBuckets, 0, x, sortOrder, box, 0, x.size(), BH_BUCKET_SIZE);
     if (gpu) {
-        pot = bhEvaluatePotentialPointsGpu(
-            nodes, x, y, 0.85, getOptions().gravity.supportRadius, getOptions().gravity.gm);
+#ifdef USE_CUDA
+        pot = bhEvaluatePotentialPointsGpu(nodes, x, y, kBhMaximumRelativePotentialError,
+            getOptions().gravity.supportRadius, getOptions().gravity.gm);
+#endif
     } else {
         for (int i = 0; i < y.size(); i++) {
-            bhTreeEvaluatePoint(nodes, y[i], pot[i], x, 0.85);
+            bhTreeEvaluatePoint(nodes, y[i], pot[i], x, kBhMaximumRelativePotentialError);
         }
     }
     return pot;

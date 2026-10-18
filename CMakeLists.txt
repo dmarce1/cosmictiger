@@ -107,6 +107,7 @@ set(cosmictiger_source_files
     src/power.cpp
     src/power.cu
     src/profiler.cpp
+    src/rockstar_catalogue.cpp
     src/rockstar.cpp
     src/rockstar.cu
     src/stack_trace.cpp
@@ -132,6 +133,8 @@ set(cosmictiger_source_files
     src/sphere.cu
     src/sph_tree.cpp
     tests/kernel_selection_cuda.cu
+    tests/bh.cpp
+    tests/rockstar.cpp
     tests/fmm_tree.cpp
     tests/fmm_walk.cpp
     tests/sph_gravity.cpp
@@ -184,6 +187,8 @@ set(cosmictiger_header_files
     cosmictiger/random_number_generator.hpp
     cosmictiger/range.hpp
     cosmictiger/rockstar.hpp
+    cosmictiger/rockstar_core.hpp
+    cosmictiger/rockstar_properties.hpp
     cosmictiger/safe_io.hpp
     cosmictiger/sedov.hpp
     cosmictiger/silo_spheres.hpp
@@ -297,6 +302,54 @@ endforeach()
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(rockstar_eigenpair_test tests/rockstar_eigenpair.cpp src/math.cpp)
+    target_include_directories(rockstar_eigenpair_test PRIVATE ${PROJECT_SOURCE_DIR})
+    target_compile_definitions(rockstar_eigenpair_test PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
+    add_test(NAME rockstar_eigenpair COMMAND rockstar_eigenpair_test)
+    set_tests_properties(rockstar_eigenpair PROPERTIES TIMEOUT 30)
+    foreach(halo_unit IN ITEMS rockstar_core rockstar_properties lightcone_epoch)
+        add_executable(${halo_unit}_test tests/${halo_unit}.cpp)
+        target_include_directories(${halo_unit}_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_compile_definitions(${halo_unit}_test PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
+        add_test(NAME ${halo_unit} COMMAND ${halo_unit}_test)
+        set_tests_properties(${halo_unit} PROPERTIES TIMEOUT 30)
+    endforeach()
+    add_executable(rockstar_properties_fast_math_test tests/rockstar_properties.cpp)
+    target_include_directories(rockstar_properties_fast_math_test PRIVATE ${PROJECT_SOURCE_DIR})
+    target_compile_options(rockstar_properties_fast_math_test PRIVATE -ffast-math)
+    add_test(NAME rockstar_properties_fast_math COMMAND rockstar_properties_fast_math_test)
+    set_tests_properties(rockstar_properties_fast_math PROPERTIES TIMEOUT 30)
+    foreach(halo_mode IN ITEMS rockstar bhPotential groupsCatalogue)
+        foreach(halo_backend IN ITEMS cpu cuda)
+            if(halo_backend STREQUAL "cuda" AND (NOT COSMICTIGER_WITH_CUDA OR halo_mode STREQUAL "groupsCatalogue"))
+                continue()
+            endif()
+            if(halo_backend STREQUAL "cuda")
+                set(halo_cuda true)
+            else()
+                set(halo_cuda false)
+            endif()
+            set(halo_workdir "${PROJECT_BINARY_DIR}/tests/${halo_mode}_${halo_backend}")
+            file(MAKE_DIRECTORY "${halo_workdir}")
+            add_test(NAME ${halo_mode}_${halo_backend} COMMAND cosmictiger
+                --run.test=${halo_mode} --compute.cuda=${halo_cuda} --hydro.enabled=false
+                --initial.particlesPerDimension=8 --analysis.groups=true
+                --hpx:threads=2 --hpx:bind=none)
+            set_tests_properties(${halo_mode}_${halo_backend} PROPERTIES
+                WORKING_DIRECTORY "${halo_workdir}" TIMEOUT 180 PROCESSORS 2)
+        endforeach()
+    endforeach()
+    if(MPIEXEC_EXECUTABLE)
+        set(halo_mpi_workdir "${PROJECT_BINARY_DIR}/tests/groupsCatalogue_mpi")
+        file(MAKE_DIRECTORY "${halo_mpi_workdir}")
+        add_test(NAME groupsCatalogue_mpi COMMAND ${MPIEXEC_EXECUTABLE}
+            ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger>
+            --run.test=groupsCatalogueDistributed --compute.cuda=false --hydro.enabled=false
+            --initial.particlesPerDimension=8 --analysis.groups=true
+            --hpx:threads=2 --hpx:bind=none --hpx:localities=2 ${MPIEXEC_POSTFLAGS})
+        set_tests_properties(groupsCatalogue_mpi PROPERTIES
+            WORKING_DIRECTORY "${halo_mpi_workdir}" TIMEOUT 240 PROCESSORS 4 RUN_SERIAL TRUE)
+    endif()
     add_test(NAME grouped_options COMMAND ${Python3_EXECUTABLE}
         ${PROJECT_SOURCE_DIR}/tests/run_options.py $<TARGET_FILE:cosmictiger>
         ${PROJECT_BINARY_DIR}/tests/grouped_options)
