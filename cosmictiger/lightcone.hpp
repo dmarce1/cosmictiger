@@ -24,9 +24,8 @@
 #include <cosmictiger/containers.hpp>
 #include <cosmictiger/cuda_unordered_map.hpp>
 #include <cosmictiger/fixed.hpp>
+#include <cosmictiger/lightcone_entry.hpp>
 #include <cosmictiger/range.hpp>
-
-using LightconeReal = Fixed<int, 31>;
 
 #define LC_NO_GROUP (0xFFFFFFFFFFFFFFULL)
 #define LC_EDGE_GROUP (0x0ULL)
@@ -48,12 +47,6 @@ struct LightconeTreeNode {
     int active;
     int lastActive;
     DeviceVector<LightconeTreeId> neighbors;
-    int pix;
-};
-
-struct LightconeEntry {
-    LightconeReal x, y, z;
-    float vx, vy, vz;
     int pix;
 };
 

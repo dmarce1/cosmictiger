@@ -43,6 +43,15 @@ using SimdStorage = std::experimental::fixed_size_simd<Value, laneCount>;
 template <class Value, int laneCount>
 using SimdVector = detail::SimdStorage<Value, laneCount>;
 
+// Use the compilation target's native width when the algorithm has no fixed shape.
+#if COSMICTIGER_SIMD_STANDARD
+template <class Value>
+using NativeSimdVector = std::simd::vec<Value>;
+#else
+template <class Value>
+using NativeSimdVector = std::experimental::native_simd<Value>;
+#endif
+
 // Logical widths are independent of the target's hardware register width.
 #define SIMD_FLOAT4_SIZE 4
 #define SIMD_FLOAT8_SIZE 8

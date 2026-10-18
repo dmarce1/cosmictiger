@@ -169,7 +169,9 @@ cosmological conversions, and deliberate implementation choices. The normal
 dark-matter-only mode keeps its hierarchical gravity integrator. Enable gas explicitly
 with `--hydro.enabled=true`; gas runs use the ordinary block-timestep gravity/SPH path.
 Select SIMD CPU SPH with `--compute.cuda=false` or CUDA SPH with `--compute.cuda=true`.
-The full application still requires CUDA for operations outside SPH, including drift.
+Particle drift also follows `compute.cuda`: the CPU path uses SIMD position updates
+and HPX workers, including rung filtering, glass damping, and lightcone crossings.
+The full application still requires CUDA for other initialization and analysis paths.
 
 Cosmological gas runs initialize a displaced gas lattice alongside the dark
 matter lattice. `initial.particlesPerDimension` specifies the lattice size for each species. With

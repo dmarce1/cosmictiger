@@ -28,4 +28,6 @@ void drift(double scale, double dt, double tau0, double tau1, double tauMax, int
 
 void cudaDrift(int rung, float a, float dt, float tau0, float tau1, float tauMax, double drag);
 
+void cpuDrift(int rung, float a, float dt, float tau0, float tau1, float tauMax, double drag);
+
 #endif /* DRIFT_HPP_ */

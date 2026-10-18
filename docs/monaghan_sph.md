@@ -49,8 +49,9 @@ process separate tree leaves, with eight-lane SIMD packs over their neighbors.
 All source fields are staged before a phase updates local sinks, including sources
 fetched from other MPI ranks.
 
-The complete executable still requires CUDA for existing operations outside SPH,
-including particle drift. The standalone `sph_cpu_test` target can be built with
+Particle drift also uses the CPU when `compute.cuda=false`. The complete executable
+still requires CUDA for other initialization and analysis paths.
+The standalone `sph_cpu_test` target can be built with
 `COSMICTIGER_WITH_CUDA=OFF` and does not call a CUDA device. The installed HPX
 library may itself link the CUDA runtime.
 

@@ -110,8 +110,10 @@ static int lcNextFileNumber() {
     }
 }
 
-size_t lcAddParticles(
-    DeviceVector<DeviceVector<LightconeEntry>> const& entries, double scale, double tau) {
+namespace detail {
+
+template <class EntryLists>
+size_t lcAddParticleEntries(EntryLists const& entries, double scale, double tau) {
     int const start = particleBuffer.size();
     Vector<size_t> counts(entries.size() + 1);
     size_t count = 0;
@@ -128,43 +130,55 @@ size_t lcAddParticles(
     Vector<float> pix(npix, 0.0);
     int minPix = npix;
     int maxPix = 0;
-    MutexType mutex;
     if (counts.back()) {
-        for (int proc = 0; proc < numberOfThreads; proc++) {
-            futs.push_back(hpx::async([&pix, npix, &mutex, &minPix, &maxPix, scale, tau, &index,
-                                          start, numberOfThreads, proc, &entries, &counts]() {
-                int k = index++;
-                int thisMinPix = npix;
-                int thisMaxPix = 0;
-                while (k < entries.size()) {
-                    auto& entry = entries[k];
-                    int const b = start + counts[k];
-                    int const e = start + counts[k + 1];
-                    for (int i = b; i < e; i++) {
-                        int const j = i - b;
-                        auto& pi = particleBuffer[i];
-                        auto const& pj = entry[j];
-                        pi.pos[XDIM] = pj.x;
-                        pi.pos[YDIM] = pj.y;
-                        pi.pos[ZDIM] = pj.z;
-                        double const tau1 =
-                            sqrtf(sqr(pj.x.toDouble(), pj.y.toDouble(), pj.z.toDouble()));
-                        pix[pj.pix] += 1.0 / sqr(tau1);
-                        auto const a = scale + cosmosDadtau(scale) * (tau1 - tau);
-                        pi.vel[XDIM] = pj.vx / a;
-                        pi.vel[YDIM] = pj.vy / a;
-                        pi.vel[ZDIM] = pj.vz / a;
-                        thisMaxPix = std::max(thisMaxPix, pj.pix);
-                        thisMinPix = std::min(thisMinPix, pj.pix);
+        futs.reserve(numberOfThreads);
+        try {
+            for (int proc = 0; proc < numberOfThreads; proc++) {
+                futs.push_back(hpx::async([scale, tau, &index, start, &entries, &counts]() {
+                    int k = index++;
+                    while (k < entries.size()) {
+                        auto const& entry = entries[k];
+                        int const b = start + counts[k];
+                        int const e = start + counts[k + 1];
+                        for (int i = b; i < e; i++) {
+                            int const j = i - b;
+                            auto& pi = particleBuffer[i];
+                            auto const& pj = entry[j];
+                            pi.pos[XDIM] = pj.x;
+                            pi.pos[YDIM] = pj.y;
+                            pi.pos[ZDIM] = pj.z;
+                            double const tau1 =
+                                sqrtf(sqr(pj.x.toDouble(), pj.y.toDouble(), pj.z.toDouble()));
+                            auto const a = scale + cosmosDadtau(scale) * (tau1 - tau);
+                            pi.vel[XDIM] = pj.vx / a;
+                            pi.vel[YDIM] = pj.vy / a;
+                            pi.vel[ZDIM] = pj.vz / a;
+                        }
+                        k = index++;
                     }
-                    k = index++;
-                }
-                std::lock_guard<MutexType> lock(mutex);
-                maxPix = std::max(maxPix, thisMaxPix);
-                minPix = std::min(minPix, thisMinPix);
-            }));
+                }));
+            }
+        } catch (...) {
+            hpx::wait_all(futs.begin(), futs.end());
+            throw;
         }
         hpx::wait_all(futs.begin(), futs.end());
+        for (auto& future : futs) {
+            future.get();
+        }
+        // Different entry lists can contribute to the same pixel. Accumulate
+        // after the workers finish so both CPU and CUDA lists avoid shared writes.
+        for (size_t listIndex = 0; listIndex < entries.size(); listIndex++) {
+            auto const& entryList = entries[listIndex];
+            for (size_t entryIndex = 0; entryIndex < entryList.size(); entryIndex++) {
+                auto const& entry = entryList[entryIndex];
+                double const radius =
+                    sqrtf(sqr(entry.x.toDouble(), entry.y.toDouble(), entry.z.toDouble()));
+                pix[entry.pix] += 1.0 / sqr(radius);
+                minPix = std::min(minPix, entry.pix);
+                maxPix = std::max(maxPix, entry.pix);
+            }
+        }
         std::string filename = getOptions().lightcone.directory + "/lc.healpix." +
             std::to_string(epoch) + "." + std::to_string(hpxRank());
         FILE* fp = fopen(filename.c_str(), "wb");
@@ -179,6 +193,18 @@ size_t lcAddParticles(
         fclose(fp);
     }
     return 0;
+}
+
+}    // namespace detail
+
+size_t lcAddParticles(
+    DeviceVector<DeviceVector<LightconeEntry>> const& entries, double scale, double tau) {
+    return detail::lcAddParticleEntries(entries, scale, tau);
+}
+
+size_t lcAddParticles(
+    std::vector<std::vector<LightconeEntry>> const& entries, double scale, double tau) {
+    return detail::lcAddParticleEntries(entries, scale, tau);
 }
 
 int lcNside() {

@@ -75,6 +75,7 @@ set(cosmictiger_source_files
     src/cuda.cpp
     src/cuda_memory.cu
     src/drift.cpp
+    src/drift_cpu.cpp
     src/drift.cu
     src/driver.cpp
     src/domain.cpp
@@ -152,6 +153,7 @@ set(cosmictiger_header_files
     cosmictiger/device_vector.hpp
     cosmictiger/domain.hpp
     cosmictiger/drift.hpp
+    cosmictiger/drift_cpu.hpp
     cosmictiger/driver.hpp
     cosmictiger/ewald_indices.hpp
     cosmictiger/fixed.hpp
@@ -170,6 +172,7 @@ set(cosmictiger_header_files
     cosmictiger/kick.hpp
     cosmictiger/kick_workspace.hpp
     cosmictiger/lightcone.hpp
+    cosmictiger/lightcone_entry.hpp
     cosmictiger/math.hpp
     cosmictiger/memused.hpp
     cosmictiger/options.hpp
@@ -398,6 +401,36 @@ if(BUILD_TESTING)
     target_include_directories(monaghan_sph_test PRIVATE ${PROJECT_SOURCE_DIR})
     add_test(NAME monaghan_sph COMMAND monaghan_sph_test)
     set_tests_properties(monaghan_sph PROPERTIES TIMEOUT 20)
+
+    # Compile CPU drift with ordinary host arrays and no CUDA device kernels.
+    add_executable(drift_cpu_test tests/drift_cpu.cpp src/drift_cpu.cpp)
+    target_include_directories(drift_cpu_test PRIVATE ${PROJECT_SOURCE_DIR})
+    target_include_directories(drift_cpu_test SYSTEM PRIVATE ${CHEALPIX_INCLUDE_DIR})
+    target_link_libraries(drift_cpu_test PRIVATE HPX::hpx ${CHEALPIX_LIBRARY})
+    target_compile_options(drift_cpu_test PRIVATE -ffast-math)
+    if(COMPILER_SUPPORTS_MARCH_NATIVE)
+        target_compile_options(drift_cpu_test PRIVATE -march=native)
+    endif()
+    add_test(NAME drift_cpu COMMAND drift_cpu_test)
+    set_tests_properties(drift_cpu PROPERTIES TIMEOUT 30)
+
+    add_hpx_executable(drift_dispatch_test
+        SOURCES tests/drift_dispatch.cpp src/drift.cpp src/drift_cpu.cpp)
+    target_include_directories(drift_dispatch_test PRIVATE ${PROJECT_SOURCE_DIR})
+    target_include_directories(drift_dispatch_test SYSTEM PRIVATE ${CHEALPIX_INCLUDE_DIR})
+    target_compile_definitions(drift_dispatch_test PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
+    target_link_libraries(drift_dispatch_test PRIVATE ${CHEALPIX_LIBRARY})
+    target_compile_options(drift_dispatch_test PRIVATE -ffast-math)
+    if(COMPILER_SUPPORTS_MARCH_NATIVE)
+        target_compile_options(drift_dispatch_test PRIVATE -march=native)
+    endif()
+    if(COSMICTIGER_WITH_CUDA)
+        target_compile_definitions(drift_dispatch_test PRIVATE USE_CUDA)
+        target_link_libraries(drift_dispatch_test PRIVATE CUDA::cudart)
+    endif()
+    add_test(NAME drift_dispatch COMMAND drift_dispatch_test --hpx:threads=2 --hpx:bind=none)
+    set_tests_properties(drift_dispatch PROPERTIES TIMEOUT 30 PROCESSORS 2
+        ENVIRONMENT "CUDA_VISIBLE_DEVICES=")
 
     # Compile the production SIMD path without USE_CUDA or device kernels.
     add_executable(sph_cpu_test tests/sph_cpu.cpp src/sph_cpu.cpp
