@@ -733,6 +733,8 @@ bool processOptions(int argc, char* argv[]) {
         opts.cosmology.omegaK =
             1.0 - opts.cosmology.omegaM - opts.cosmology.omegaR - opts.cosmology.omegaLambda;
     }
+    // ROCKSTAR Sec. III.1 and Table 2: outer FOF linking length b=0.28.
+    // Behroozi, Wechsler & Wu (2013), https://arxiv.org/html/1110.4372v3
     opts.analysis.linkingLength = pow(opts.initial.numberOfParticles, -1.0 / NDIM) * 0.28;
     opts.analysis.minGroupSize = 20;
     if (opts.initial.createGlass) {

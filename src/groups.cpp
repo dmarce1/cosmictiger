@@ -98,6 +98,7 @@ void groupsInstallHistory(Vector<Pair<GroupInteger>> entries) {
 }
 
 void groupsPrepareHistory(int number) {
+    // ROCKSTAR Sec. III.4: prior halo/core membership supplies temporal hosts.
     // Particle previous-halo tags move with particles. The sidecars supply the
     // corresponding previous host even after a restart or rank redistribution.
     Vector<Pair<GroupInteger>> entries;
@@ -321,6 +322,7 @@ std::pair<size_t, size_t> groupsSave(int number, double scale, double time) {
         groupCandidates += tmp.second;
     }
     if (hpxRank() == 0) {
+        // ROCKSTAR Sec. III.5.4: descendant = maximum exclusive particle overlap.
         // Particle-based descendants use exclusive overlap counts, independent
         // of inclusive spherical-overdensity masses. A missing descendant is
         // represented explicitly for a previously catalogued halo.

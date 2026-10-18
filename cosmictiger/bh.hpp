@@ -44,12 +44,15 @@ struct BhTreeNode {
     }
 };
 
+// Behroozi, Wechsler & Wu (2013), https://arxiv.org/html/1110.4372v3,
+// Appendix B, following Eq. (B3): potential-error target.
 inline constexpr float kBhMaximumRelativePotentialError = 0.04f;
 
 namespace detail {
-// ROCKSTAR Appendix B, Eq. B3, applied to the nearest point in the sink
-// bucket. Its Newtonian error bound only applies outside every source's
-// compact softening support, so overlapping supports must be opened.
+// ROCKSTAR Appendix B: Eq. (B1) bounds the monopole error; Eq. (B3) inverts it.
+// Here source.radius is r_max and source.meanSquaredRadius is sigma_x^2 (B2).
+// Our sink-bucket extension uses its nearest possible point. Our additional
+// compact-support guard keeps the Newtonian bound outside softened sources.
 CUDA_EXPORT inline bool bhAcceptMonopole(float distanceSquared, BhTreeNode const& source,
     float sinkRadius, float supportRadius, float relativeError) {
     float const halfRadius = 0.5f * source.radius;

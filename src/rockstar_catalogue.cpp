@@ -15,6 +15,9 @@
 #include <cosmictiger/rockstar_properties.hpp>
 #include <cosmictiger/simulation_units.hpp>
 
+// ROCKSTAR section/equation references: Behroozi, Wechsler & Wu (2013),
+// https://arxiv.org/html/1110.4372v3
+
 namespace detail {
 
 constexpr double kFourPiOverThree = 4.0 * M_PI / 3.0;
@@ -58,6 +61,7 @@ Array<double, NDIM> bulkVelocity(DeviceVector<RockstarParticle> const& particles
     return result;
 }
 
+// Sec. III.5.1: the core-velocity aperture is 0.1 Rvir.
 void coreVelocity(Subgroup& group, DeviceVector<RockstarParticle> const& particles, double radius) {
     Array<double, NDIM> velocity{};
     size_t count = 0;
@@ -111,6 +115,8 @@ void energies(Subgroup& group, DeviceVector<RockstarParticle> const& particles, 
             double const dv = particles[i].xValue[dim + NDIM] - velocity[dim];
             kinetic += 0.5 * dv * dv;
         }
+        // Our units: BH returns comoving specific potential; phi/a is physical.
+        // The factor 1/2 counts each pair once in the total binding energy.
         potential += 0.5 * phi[i] / scale;
     }
     group.t = kinetic;
@@ -154,6 +160,7 @@ void compactGroups(Vector<Subgroup>& groups, std::vector<bool> const& keep) {
     rebuildChildren(groups);
 }
 
+// Sec. III.4: associate cores by their largest previous-halo contribution.
 std::pair<GroupInteger, GroupInteger> previousCore(Subgroup const& group) {
     std::unordered_map<GroupInteger, size_t> counts;
     std::unordered_map<GroupInteger, GroupInteger> hosts;
@@ -189,6 +196,7 @@ std::pair<GroupInteger, GroupInteger> previousCore(Subgroup const& group) {
     return {winner, winner == NO_GROUP ? NO_GROUP : hosts[winner]};
 }
 
+// Sec. III.4 uses Eq. (3) to choose internal parents before SO masses exist.
 void internalHierarchy(Vector<Subgroup>& groups) {
     for (size_t i = 0; i < groups.size(); ++i) {
         double closest = std::numeric_limits<double>::max();
@@ -217,7 +225,7 @@ void internalHierarchy(Vector<Subgroup>& groups) {
     for (auto const& group : groups) {
         previous.push_back(previousCore(group));
     }
-    // Preserve a previous host's identity when overlapping major-merger cores
+    // Sec. III.4: preserve a previous host's identity when major-merger cores
     // exchange which one has the larger current exclusive particle count.
     for (size_t i = 0; i < groups.size(); ++i) {
         int const parent = groups[i].internalParent;
@@ -238,7 +246,8 @@ void measureMasses(Vector<Subgroup>& groups, double scale) {
         auto particles = rockstarGatherParticles(groups, i);
         auto const radii = sortedRadii(particles, groups[i]);
         auto const virial = rockstar::sphericalOverdensity(radii, mean * density.meanMatter);
-        // Public m200/m500/m2500 fields consistently mean critical-density SO masses.
+        // Sec. III.5.2 permits critical- or background-density SO thresholds.
+        // Our public m200/m500/m2500 fields consistently use critical density.
         auto const mass200 =
             rockstar::sphericalOverdensity(radii, mean * 200.0 / density.matterFraction);
         auto const mass500 =
@@ -273,6 +282,7 @@ struct Shape {
     std::array<double, 3> major{};
 };
 
+// Sec. III.5.4, Eq. (11): mass-distribution tensor; callers exclude substructure.
 Shape shape(DeviceVector<RockstarParticle> const& particles, Subgroup const& group) {
     Shape result;
     if (particles.empty()) {
@@ -301,6 +311,7 @@ Shape shape(DeviceVector<RockstarParticle> const& particles, Subgroup const& gro
 
 }    // namespace detail
 
+// Secs. III.4 and III.5.2: host mass includes descendants, not vice versa.
 DeviceVector<RockstarParticle> rockstarGatherParticles(Vector<Subgroup> const& groups, int index) {
     auto result = groups[index].parts;
     for (int child : groups[index].children) {
@@ -331,6 +342,7 @@ void rockstarUpdateStatistics(
             positionVariance += dx * dx / group.parts.size();
         }
     }
+    // Sec. III.5.1: retain the center minimizing sigma_x/sqrt(N).
     double const error = std::sqrt(positionVariance / group.parts.size());
     if (error <= group.sigmaXMin) {
         group.sigmaXMin = error;
@@ -371,6 +383,7 @@ void rockstarUpdateStatistics(
         }
     }
     group.vcircMax = circular * velocityFactor;
+    // Sec. III.3, Eq. (4), expressed in our comoving coordinate units.
     group.rDyn = std::max(1.e-15,
                      circular /
                          std::sqrt(detail::kFourPiOverThree * getOptions().gravity.gm *
@@ -378,6 +391,7 @@ void rockstarUpdateStatistics(
         positionFactor;
 }
 
+// Sec. III.5.3: single-pass unbinding and the default 50% bound-fraction cut.
 bool rockstarHaloBound(Subgroup& halo, Vector<RockstarParticle>& unboundParticles, float scale) {
     auto const phi = detail::potentials(halo.parts);
     size_t const originalCount = halo.parts.size();
@@ -423,8 +437,9 @@ void rockstarFinalizeSubgroups(Vector<Subgroup>& groups, float scale) {
     };
     std::vector<BindingSystem> systems(groups.size());
     std::vector<int> bindingRoot(groups.size());
-    // Freeze pre-unbinding potentials. A major merger is tested in the combined
-    // system, including its bulk velocity, while membership remains separate.
+    // Sec. III.5.3: freeze potentials for one pass; >=1:3 mergers use the
+    // combined potential. Sec. III.5.1 supplies the substructure-inclusive bulk
+    // velocity. Particle memberships remain separate within the binding system.
     for (size_t i = 0; i < groups.size(); ++i) {
         int root = i;
         while (groups[root].internalParent >= 0) {
@@ -540,7 +555,7 @@ void rockstarPruneCatalogueGroups(Vector<Subgroup>& groups, float scale) {
     for (auto& group : groups) {
         detail::energies(group, group.parts, scale);
     }
-    // Output host relations use SO containment; internal children remain intact
+    // Sec. III.4: output host relations use SO containment; internal children remain intact
     // for inclusive mass measurements and are deliberately separate.
     for (size_t i = 0; i < groups.size(); ++i) {
         groups[i].parent = -1;
@@ -609,6 +624,7 @@ RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, flo
             center[dim] += particle.xValue[dim] / double(particles.size());
         }
     }
+    // Sec. III.5.4: Vmax from the enclosed radial mass profile.
     double circular = 0.0;
     double circularRadius = 0.0;
     for (size_t i = 0; i < radii.size();) {
@@ -683,6 +699,7 @@ RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, flo
     record.rs = double2float16(rs * lengthConversion);
     record.rkly = double2float16(klypin * lengthConversion);
     record.vcircMax = double2float16(circular * velocityConversion);
+    // Sec. III.5.4: peak/COM and core/bulk offsets, followed by T/|U|.
     record.deltaX =
         double2float16(std::sqrt(std::pow(center[0] - group.x, 2) +
                            std::pow(center[1] - group.y, 2) + std::pow(center[2] - group.z, 2)) *
@@ -692,9 +709,11 @@ RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, flo
             std::pow(bulk[2] - measured.vzc, 2)) *
         velocityConversion);
     record.toW = double2float16(measured.w < 0.0 ? measured.t / -measured.w : 0.0);
+    // Sec. III.5.4, Eq. (9): Peebles spin; our sums use unit particle masses.
     record.lambda = double2float16(mass > 0.0 ?
             angularMagnitude * std::sqrt(std::abs(energy)) / (gm * std::pow(mass, 2.5)) :
             0.0);
+    // Eq. (10): Bullock spin, with physical Rvir = scale * comoving Rvir.
     record.lambdaB = double2float16(mass > 0.0 && virial.radius > 0.0 ?
             angularMagnitude / std::sqrt(2.0 * gm * mass * mass * mass * scale * virial.radius) :
             0.0);
@@ -785,7 +804,7 @@ GroupEntry rockstarMakeGroupEntry(
     entry.r75 = percentile(0.75);
     entry.r90 = percentile(0.9);
     entry.rmax = radii.empty() ? 0.0 : radii.back();
-    // Exclusive particle overlaps provide the particle-based merger tree links.
+    // Sec. III.5.4: exclusive overlaps supply the particle-based merger tree links.
     for (auto const& particle : group.parts) {
         if (particle.previousHalo != NO_GROUP) {
             ++entry.parents[particle.previousHalo];

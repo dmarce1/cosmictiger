@@ -76,6 +76,8 @@ void bhCreateTree(DeviceVector<BhTreeNode>& nodes, DeviceVector<int>& sinkBucket
     for (int dim = 0; dim < NDIM; ++dim) {
         node.pos[dim] = sum[dim] / node.mass;
     }
+    // ROCKSTAR Appendix B, Eq. (B2): equal-mass cell variance about its COM.
+    // The maximum radius supplies r_max in Eqs. (B1) and (B3); see bh.hpp.
     double maximumSquaredRadius = 0.0;
     double sumSquaredRadius = 0.0;
     for (int i = begin; i < end; ++i) {

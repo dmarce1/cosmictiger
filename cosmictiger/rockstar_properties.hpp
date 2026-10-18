@@ -19,6 +19,9 @@
 
 namespace rockstar {
 
+// ROCKSTAR references: Behroozi, Wechsler & Wu (2013), arXiv:1110.4372v3,
+// https://arxiv.org/html/1110.4372v3
+
 namespace detail {
 
     // Production builds enable -ffast-math, which may discard std::isfinite checks.
@@ -36,6 +39,7 @@ struct SphericalOverdensity {
     double radius = 0.0;
 };
 
+// ROCKSTAR Sec. III.5.2: spherical-overdensity masses.
 // Use the outermost complete radial shell above the requested mean number density.
 // Between particles, M(<r) is constant, so this boundary gives both an integer
 // particle mass and exactly the requested mean density. The next shell, if any,
@@ -74,6 +78,7 @@ struct VirialOverdensity {
     double meanMatter;
 };
 
+// ROCKSTAR Secs. III.3 (Eq. (4)) and III.5.2 adopt Bryan & Norman's virial density.
 // Bryan & Norman's fits are calibrated for flat matter+Lambda cosmologies and,
 // with openMatterOnly=true, open matter-only cosmologies. Including radiation
 // in Omega_m(a) is an extrapolation, not a new spherical-collapse fit.
@@ -111,6 +116,7 @@ inline VirialOverdensity virialOverdensity(
 
 namespace detail {
 
+    // ROCKSTAR Sec. III.5.4, Eq. (8): dimensionless NFW enclosed-mass function.
     inline double nfwMassIntegral(double radiusRatio) {
         if (radiusRatio < 1.e-3) {
             return radiusRatio * radiusRatio *
@@ -134,6 +140,8 @@ struct NfwFit {
     double density = 0.0;
 };
 
+// ROCKSTAR Sec. III.5.4: maximum-likelihood NFW fit with equal-mass radial bins.
+// The shell-integrated multinomial objective below is our numerical realization.
 inline NfwFit nfwFit(std::vector<double> const& sortedRadii) {
     size_t const particleCount = sortedRadii.size();
     size_t const targetBins = std::min(size_t(50), particleCount / 15);
@@ -237,6 +245,7 @@ inline NfwFit nfwFit(std::vector<double> const& sortedRadii) {
     return {scaleRadius, density};
 }
 
+// ROCKSTAR Sec. III.5.4, Eqs. (5)-(8): invert c/f(c) for Rs = Rvir/c.
 inline double klypinScaleRadius(
     double maximumCircularVelocity, double virialRadius, double gravitationalMass) {
     if (!(maximumCircularVelocity > 0.0) || !detail::isFinite(maximumCircularVelocity) ||
@@ -244,6 +253,7 @@ inline double klypinScaleRadius(
         !detail::isFinite(gravitationalMass)) {
         return 0.0;
     }
+    // Eq. (6), using the root of Eq. (5) at higher precision.
     constexpr double kMaximumRadiusRatio = 2.1625815870646098;
     double const velocityRatio =
         maximumCircularVelocity * maximumCircularVelocity * virialRadius / gravitationalMass;

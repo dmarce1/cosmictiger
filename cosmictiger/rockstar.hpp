@@ -8,12 +8,17 @@
 #include <cosmictiger/groups.hpp>
 #include <cosmictiger/lightcone.hpp>
 
+// Paper references in this implementation use Behroozi, Wechsler & Wu (2013),
+// arXiv:1110.4372v3: https://arxiv.org/html/1110.4372v3
+
 // #define ROCKSTAR_CPU_BUCKET_SIZE 32
 #define ROCKSTAR_BUCKET_SIZE 64
 #define ROCKSTAR_NO_GROUP 0x7FFFFFFF
 #define ROCKSTAR_HAS_GROUP -1
+// Sec. III.2: refinement fraction and minimum seed size.
 #define ROCKSTAR_FF 0.7
 #define ROCKSTAR_MIN_GROUP 10
+// Sec. III.5.3: minimum retained bound fraction.
 #define ROCKSTAR_MIN_BOUND 0.5
 #define ROCKSTAR_TARGET_BLOCKS (1024)
 
