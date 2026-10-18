@@ -467,7 +467,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                                     auto acceptance = computeFmmAcceptance(r2, self.radius,
                                         other.radius, 0.0f, 0.0f, pairSupportRadius, thetainv);
                                     flops += 20;
-                                    if (!acceptance.cellCell && other.leaf && self.leaf) {
+                                    if (!acceptance.cellCell && (other.leaf || self.leaf)) {
                                         acceptance = computeFmmAcceptance(r2, self.radius,
                                             other.radius, boxDistanceSquared(self.box, other.pos),
                                             boxDistanceSquared(other.box, self.pos),
@@ -476,8 +476,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                                     }
                                     auto const interaction = selectFmmInteraction(
                                         bool(acceptance.cellCell), bool(acceptance.particleCell),
-                                        bool(acceptance.cellParticle), self.leaf && other.leaf,
-                                        self.numberOfParticles(), other.numberOfParticles(),
+                                        bool(acceptance.cellParticle), self.leaf, other.leaf,
                                         self.radius, other.radius);
                                     sw[kCc] = interaction == FmmInteraction::CellCell;
                                     sw[kPc] = interaction == FmmInteraction::ParticleCell;
@@ -534,6 +533,9 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                         cudaGravityCcDirect(
                             data, lValue3.back().expansion, self, cclist, globalParams.doPhi);
                         barrier.arrive_and_wait();
+                        // CP reuses the barrier, so finish the checklist copy before calling it.
+                        cudaGravityCpDirect(
+                            data, lValue3.back().expansion, self, cplist, globalParams.doPhi);
                     }
                 }
                 if (self.leaf) {

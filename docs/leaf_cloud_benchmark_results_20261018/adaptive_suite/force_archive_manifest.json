@@ -1,0 +1,46 @@
+[
+  {
+    "backend": "cpu",
+    "variant": "before",
+    "representative_pair": 0,
+    "identical_repeat_count": 5,
+    "original_path": "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/adaptive_suite/runs/cpu_pair0_before/stf_walk_forces.csv",
+    "archive_file": "cpu_before_forces.csv.gz",
+    "archive_bytes": 6851003,
+    "archive_sha256": "c1d8b4872b9c95af373907c3163b580f1e2b816183398bf12727462b6da4c5a5",
+    "csv_sha256": "4882405e6577103c15b42dc03a10ddddd5b629dbfe3432d82324357814970254"
+  },
+  {
+    "backend": "cpu",
+    "variant": "after",
+    "representative_pair": 0,
+    "identical_repeat_count": 5,
+    "original_path": "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/adaptive_suite/runs/cpu_pair0_after/stf_walk_forces.csv",
+    "archive_file": "cpu_after_forces.csv.gz",
+    "archive_bytes": 6851456,
+    "archive_sha256": "e04c13005581042af9392f8c4be69f876b5dc2c849abbf4f1e856d0a596a7590",
+    "csv_sha256": "721f12a3767b8a12f2dcceeb4ac17c1f233056dae6b3dacbb0c5bab516be28b5"
+  },
+  {
+    "backend": "cuda",
+    "variant": "before",
+    "representative_pair": 0,
+    "identical_repeat_count": 5,
+    "original_path": "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/adaptive_suite/runs/cuda_pair0_before/stf_walk_forces.csv",
+    "archive_file": "cuda_before_forces.csv.gz",
+    "archive_bytes": 6756997,
+    "archive_sha256": "879161494bcc5d76ce63194dc43041e21b7e436f9fd76b8238c29292c27ba1f9",
+    "csv_sha256": "e260299e9f0c0edf95c4a1f0c919c96a664573db33ec45656eee4cb1ca4f051f"
+  },
+  {
+    "backend": "cuda",
+    "variant": "after",
+    "representative_pair": 0,
+    "identical_repeat_count": 5,
+    "original_path": "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/adaptive_suite/runs/cuda_pair0_after/stf_walk_forces.csv",
+    "archive_file": "cuda_after_forces.csv.gz",
+    "archive_bytes": 6757189,
+    "archive_sha256": "52fab25421047651afdf68d4c756af4490eb49e9d6a665684e14374c5d181232",
+    "csv_sha256": "7270f0832aae645436b21f5f1b5cfe0cd0788da285604e20a96182b0deab43e3"
+  }
+]

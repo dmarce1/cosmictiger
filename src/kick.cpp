@@ -421,7 +421,7 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
                     computeFmmAcceptance(r2, selfRadius, otherRadius, simdBroadcast<SimdFloat>(0),
                         simdBroadcast<SimdFloat>(0), pairSupportRadius, thetainv);
                 flops += maxi * 20;
-                if (selfPtr->leaf) {
+                if (selfPtr->leaf || simdAnyOf(otherLeaf != simdBroadcast<SimdFloat>(0.0f))) {
                     for (int i = 0; i < maxi; i++) {
                         for (int dim = 0; dim < NDIM; dim++) {
                             simdSetLane(otherBox.begin[dim], i, otherPtrs[i]->box.begin[dim].raw());
@@ -446,8 +446,7 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
                 for (int i = 0; i < maxi; i++) {
                     auto const interaction = selectFmmInteraction(bool(acceptance.cellCell[i]),
                         bool(acceptance.particleCell[i]), bool(acceptance.cellParticle[i]),
-                        selfPtr->leaf && bool(otherLeaf[i]), numberOfSelfParticles,
-                        otherPtrs[i]->numberOfParticles(), selfPtr->radius, otherPtrs[i]->radius);
+                        selfPtr->leaf, bool(otherLeaf[i]), selfPtr->radius, otherPtrs[i]->radius);
                     if (interaction == FmmInteraction::CellCell) {
                         cclist.push_back(checklist[ci + i]);
                     } else if (interaction == FmmInteraction::CellParticle) {
@@ -467,14 +466,15 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
             nextlist.resize(0);
         } while (checklist.size() && selfPtr->leaf);
         cpuGravityCc(kGravityDirect, l, cclist, self, params.doPhi);
+        // Internal sinks pass these source-leaf contributions to their children via L2L.
+        cpuGravityCp(l, cplist, self, params.doPhi);
         if (selfPtr->leaf) {
             if (selfPtr->numberOfParticles() > 0) {
-                cpuGravityCp(l, cplist, self, params.doPhi);
                 cpuGravityPc(forces, params.doPhi, self, pclist);
                 cpuGravityPp(forces, params.doPhi, self, leaflist, params.gravitySupportRadius);
             }
         } else {
-            ALWAYS_ASSERT(cplist.size() == 0);
+            ALWAYS_ASSERT(pclist.size() == 0);
             checklist.insert(checklist.end(), leaflist.begin(), leaflist.end());
         }
     }

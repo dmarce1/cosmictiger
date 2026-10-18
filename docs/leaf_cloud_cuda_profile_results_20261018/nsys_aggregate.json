@@ -1,0 +1,742 @@
+{
+  "method": "Arithmetic means across 3 pairs x 15 post-warmup samples per phi and variant. Means preserve additive kick=kernel+residual decomposition. Median and median-of-run-medians also included.",
+  "caveats": [
+    "Nsight profiling perturbs absolute timing; use original unprofiled benchmark for headline performance.",
+    "Nonkernel residual is measured wall kick minus the CUDA kernel; it includes host preparation, CPU computations, memory-fault handling, and synchronization.",
+    "Launch-window UVM metrics include inter-sample reset/tree work and cannot locate CPU fault time specifically inside the kick timer.",
+    "Final sample lacks a following launch, so post-kernel migration metrics cover 42 instead of45 samples for phi1.",
+    "Summed transfer durations are not page-fault service durations; API durations overlap kernel execution."
+  ],
+  "groups": {
+    "0": {
+      "metrics": {
+        "kick_ms": {
+          "before": {
+            "n": 45,
+            "mean": 17.0500846,
+            "median": 16.929063000000003,
+            "median_of_run_medians": 16.909917
+          },
+          "after": {
+            "n": 45,
+            "mean": 18.28894186666667,
+            "median": 18.309885,
+            "median_of_run_medians": 18.382351
+          },
+          "mean_delta": 1.2388572666666668,
+          "mean_percent": 7.265988971495583
+        },
+        "kernel_ms": {
+          "before": {
+            "n": 45,
+            "mean": 5.255918266666667,
+            "median": 5.053909,
+            "median_of_run_medians": 5.185361
+          },
+          "after": {
+            "n": 45,
+            "mean": 5.485023311111111,
+            "median": 5.467627,
+            "median_of_run_medians": 5.467627
+          },
+          "mean_delta": 0.22910504444444424,
+          "mean_percent": 4.358991765481619
+        },
+        "nonkernel_kick_ms": {
+          "before": {
+            "n": 45,
+            "mean": 11.794166333333333,
+            "median": 11.763563999999999,
+            "median_of_run_medians": 11.704815000000002
+          },
+          "after": {
+            "n": 45,
+            "mean": 12.803918555555557,
+            "median": 12.705787,
+            "median_of_run_medians": 12.700607
+          },
+          "mean_delta": 1.0097522222222235,
+          "mean_percent": 8.561454821680828
+        },
+        "launch_api_ms": {
+          "before": {
+            "n": 45,
+            "mean": 0.02830242222222222,
+            "median": 0.027962,
+            "median_of_run_medians": 0.028022
+          },
+          "after": {
+            "n": 45,
+            "mean": 0.029264266666666667,
+            "median": 0.028332,
+            "median_of_run_medians": 0.028332
+          },
+          "mean_delta": 0.0009618444444444464,
+          "mean_percent": 3.398452743345885
+        },
+        "launch_to_kernel_start_ms": {
+          "before": {
+            "n": 45,
+            "mean": 0.15441404444444445,
+            "median": 0.118305,
+            "median_of_run_medians": 0.11823
+          },
+          "after": {
+            "n": 45,
+            "mean": 0.15578615555555556,
+            "median": 0.118119,
+            "median_of_run_medians": 0.117619
+          },
+          "mean_delta": 0.0013721111111111017,
+          "mean_percent": 0.8885921718116541
+        },
+        "kernel_end_to_sync_end_ms": {
+          "before": {
+            "n": 45,
+            "mean": 0.020085044444444443,
+            "median": 0.019928,
+            "median_of_run_medians": 0.018306
+          },
+          "after": {
+            "n": 45,
+            "mean": 0.022814022222222223,
+            "median": 0.022686,
+            "median_of_run_medians": 0.022656
+          },
+          "mean_delta": 0.00272897777777778,
+          "mean_percent": 13.587113463085316
+        },
+        "postlaunch_memcpy_api_ms": {
+          "before": {
+            "n": 45,
+            "mean": 5.3936938,
+            "median": 5.224702,
+            "median_of_run_medians": 5.286494
+          },
+          "after": {
+            "n": 45,
+            "mean": 5.625239155555556,
+            "median": 5.572981,
+            "median_of_run_medians": 5.572981
+          },
+          "mean_delta": 0.23154535555555533,
+          "mean_percent": 4.292890255571336
+        },
+        "kernel_end_to_memcpy_return_ms": {
+          "before": {
+            "n": 45,
+            "mean": 0.011939444444444445,
+            "median": 0.012381,
+            "median_of_run_medians": 0.010573
+          },
+          "after": {
+            "n": 45,
+            "mean": 0.01398091111111111,
+            "median": 0.014434,
+            "median_of_run_medians": 0.013995
+          },
+          "mean_delta": 0.002041466666666665,
+          "mean_percent": 17.09850635149596
+        },
+        "uvm_htod_kernel_bytes": {
+          "before": {
+            "n": 45,
+            "mean": 2398708.6222222224,
+            "median": 2314240,
+            "median_of_run_medians": 2314240
+          },
+          "after": {
+            "n": 45,
+            "mean": 2397252.2666666666,
+            "median": 2314240,
+            "median_of_run_medians": 2314240
+          },
+          "mean_delta": -1456.3555555557832,
+          "mean_percent": -0.060714150191638526
+        },
+        "uvm_htod_kernel_count": {
+          "before": {
+            "n": 45,
+            "mean": 89.42222222222222,
+            "median": 90,
+            "median_of_run_medians": 89
+          },
+          "after": {
+            "n": 45,
+            "mean": 87.71111111111111,
+            "median": 86,
+            "median_of_run_medians": 86
+          },
+          "mean_delta": -1.7111111111111086,
+          "mean_percent": -1.9135188866799178
+        },
+        "uvm_htod_kernel_sum_duration_ms": {
+          "before": {
+            "n": 45,
+            "mean": 0.2657972,
+            "median": 0.26577,
+            "median_of_run_medians": 0.266317
+          },
+          "after": {
+            "n": 45,
+            "mean": 0.2644906888888889,
+            "median": 0.261487,
+            "median_of_run_medians": 0.259596
+          },
+          "mean_delta": -0.0013065111111111305,
+          "mean_percent": -0.49154434701010036
+        },
+        "uvm_htod_kernel_max_cause_span_ms": {
+          "before": {
+            "n": 45,
+            "mean": 1.5843683333333334,
+            "median": 1.164128,
+            "median_of_run_medians": 1.166336
+          },
+          "after": {
+            "n": 45,
+            "mean": 1.4393922666666668,
+            "median": 1.091042,
+            "median_of_run_medians": 1.032132
+          },
+          "mean_delta": -0.14497606666666663,
+          "mean_percent": -9.150401684793412
+        },
+        "uvm_dtoh_postkernel_bytes": {
+          "before": {
+            "n": 45,
+            "mean": 1988016.3555555556,
+            "median": 1986560,
+            "median_of_run_medians": 1986560
+          },
+          "after": {
+            "n": 45,
+            "mean": 1986560,
+            "median": 1986560,
+            "median_of_run_medians": 1986560
+          },
+          "mean_delta": -1456.3555555555504,
+          "mean_percent": -0.07325671901469687
+        },
+        "uvm_dtoh_postkernel_count": {
+          "before": {
+            "n": 45,
+            "mean": 45.93333333333333,
+            "median": 46,
+            "median_of_run_medians": 46
+          },
+          "after": {
+            "n": 45,
+            "mean": 45.93333333333333,
+            "median": 46,
+            "median_of_run_medians": 46
+          },
+          "mean_delta": 0.0,
+          "mean_percent": 0.0
+        },
+        "uvm_dtoh_postkernel_sum_duration_ms": {
+          "before": {
+            "n": 45,
+            "mean": 0.15736691111111112,
+            "median": 0.154915,
+            "median_of_run_medians": 0.156227
+          },
+          "after": {
+            "n": 45,
+            "mean": 0.15392784444444443,
+            "median": 0.150948,
+            "median_of_run_medians": 0.151204
+          },
+          "mean_delta": -0.0034390666666666847,
+          "mean_percent": -2.1853810577996815
+        },
+        "uvm_dtoh_postkernel_max_cause_span_ms": {
+          "before": {
+            "n": 45,
+            "mean": 4.56173,
+            "median": 4.453094,
+            "median_of_run_medians": 4.455526
+          },
+          "after": {
+            "n": 45,
+            "mean": 4.588184688888889,
+            "median": 4.47751,
+            "median_of_run_medians": 4.481861
+          },
+          "mean_delta": 0.026454688888889244,
+          "mean_percent": 0.5799266701205298
+        },
+        "explicit_htod_bytes": {
+          "before": {
+            "n": 45,
+            "mean": 364260,
+            "median": 364260,
+            "median_of_run_medians": 364260
+          },
+          "after": {
+            "n": 45,
+            "mean": 349480,
+            "median": 349480,
+            "median_of_run_medians": 349480
+          },
+          "mean_delta": -14780,
+          "mean_percent": -4.057541316641959
+        },
+        "explicit_htod_device_ms": {
+          "before": {
+            "n": 45,
+            "mean": 0.021285822222222223,
+            "median": 0.021055,
+            "median_of_run_medians": 0.021056
+          },
+          "after": {
+            "n": 45,
+            "mean": 0.020524266666666666,
+            "median": 0.020288,
+            "median_of_run_medians": 0.020288
+          },
+          "mean_delta": -0.000761555555555557,
+          "mean_percent": -3.577759635521616
+        },
+        "prelaunch_memcpy_api_ms": {
+          "before": {
+            "n": 45,
+            "mean": 0.058284777777777776,
+            "median": 0.049833,
+            "median_of_run_medians": 0.049833
+          },
+          "after": {
+            "n": 45,
+            "mean": 0.05278215555555556,
+            "median": 0.051095,
+            "median_of_run_medians": 0.052418
+          },
+          "mean_delta": -0.0055026222222222185,
+          "mean_percent": -9.440925112903496
+        }
+      },
+      "pairs": [
+        {
+          "pair": 0,
+          "kick_ms": {
+            "before": 17.213186733333334,
+            "after": 18.200212066666666,
+            "delta": 0.9870253333333316
+          },
+          "kernel_ms": {
+            "before": 5.203404666666667,
+            "after": 5.479842533333334,
+            "delta": 0.2764378666666669
+          },
+          "nonkernel_kick_ms": {
+            "before": 12.009782066666666,
+            "after": 12.720369533333335,
+            "delta": 0.7105874666666683
+          }
+        },
+        {
+          "pair": 1,
+          "kick_ms": {
+            "before": 17.114647533333333,
+            "after": 18.2704262,
+            "delta": 1.1557786666666665
+          },
+          "kernel_ms": {
+            "before": 5.3780388,
+            "after": 5.5589912,
+            "delta": 0.18095240000000068
+          },
+          "nonkernel_kick_ms": {
+            "before": 11.736608733333334,
+            "after": 12.711435,
+            "delta": 0.9748262666666658
+          }
+        },
+        {
+          "pair": 2,
+          "kick_ms": {
+            "before": 16.822419533333335,
+            "after": 18.396187333333334,
+            "delta": 1.5737677999999988
+          },
+          "kernel_ms": {
+            "before": 5.186311333333333,
+            "after": 5.4162362,
+            "delta": 0.2299248666666669
+          },
+          "nonkernel_kick_ms": {
+            "before": 11.6361082,
+            "after": 12.979951133333334,
+            "delta": 1.3438429333333328
+          }
+        }
+      ],
+      "nonkernel_share_of_mean_kick_delta": 0.8150674410936094
+    },
+    "1": {
+      "metrics": {
+        "kick_ms": {
+          "before": {
+            "n": 45,
+            "mean": 17.02056188888889,
+            "median": 16.904927999999998,
+            "median_of_run_medians": 16.884411
+          },
+          "after": {
+            "n": 45,
+            "mean": 18.1417896,
+            "median": 18.054943,
+            "median_of_run_medians": 18.131313
+          },
+          "mean_delta": 1.1212277111111106,
+          "mean_percent": 6.58748940505339
+        },
+        "kernel_ms": {
+          "before": {
+            "n": 45,
+            "mean": 5.3681258,
+            "median": 5.352974,
+            "median_of_run_medians": 5.352974
+          },
+          "after": {
+            "n": 45,
+            "mean": 5.467593755555556,
+            "median": 5.370924,
+            "median_of_run_medians": 5.370924
+          },
+          "mean_delta": 0.09946795555555621,
+          "mean_percent": 1.852936374098316
+        },
+        "nonkernel_kick_ms": {
+          "before": {
+            "n": 45,
+            "mean": 11.652436088888889,
+            "median": 11.640447000000002,
+            "median_of_run_medians": 11.600255
+          },
+          "after": {
+            "n": 45,
+            "mean": 12.674195844444444,
+            "median": 12.687396999999999,
+            "median_of_run_medians": 12.656379999999999
+          },
+          "mean_delta": 1.0217597555555553,
+          "mean_percent": 8.768636427277626
+        },
+        "launch_api_ms": {
+          "before": {
+            "n": 45,
+            "mean": 0.026099066666666667,
+            "median": 0.026589,
+            "median_of_run_medians": 0.025618
+          },
+          "after": {
+            "n": 45,
+            "mean": 0.028686244444444446,
+            "median": 0.028242,
+            "median_of_run_medians": 0.028222
+          },
+          "mean_delta": 0.002587177777777779,
+          "mean_percent": 9.91291302030384
+        },
+        "launch_to_kernel_start_ms": {
+          "before": {
+            "n": 45,
+            "mean": 0.12613302222222222,
+            "median": 0.116544,
+            "median_of_run_medians": 0.114692
+          },
+          "after": {
+            "n": 45,
+            "mean": 0.1341432,
+            "median": 0.117666,
+            "median_of_run_medians": 0.117666
+          },
+          "mean_delta": 0.008010177777777766,
+          "mean_percent": 6.350579441175498
+        },
+        "kernel_end_to_sync_end_ms": {
+          "before": {
+            "n": 45,
+            "mean": 0.019270066666666665,
+            "median": 0.018903,
+            "median_of_run_medians": 0.018707
+          },
+          "after": {
+            "n": 45,
+            "mean": 0.020774133333333333,
+            "median": 0.020543,
+            "median_of_run_medians": 0.01961
+          },
+          "mean_delta": 0.0015040666666666681,
+          "mean_percent": 7.8051970067566
+        },
+        "postlaunch_memcpy_api_ms": {
+          "before": {
+            "n": 45,
+            "mean": 5.4797162,
+            "median": 5.454389,
+            "median_of_run_medians": 5.454389
+          },
+          "after": {
+            "n": 45,
+            "mean": 5.584943955555556,
+            "median": 5.472612,
+            "median_of_run_medians": 5.472612
+          },
+          "mean_delta": 0.10522775555555519,
+          "mean_percent": 1.9203139672736187
+        },
+        "kernel_end_to_memcpy_return_ms": {
+          "before": {
+            "n": 45,
+            "mean": 0.011841133333333333,
+            "median": 0.011961,
+            "median_of_run_medians": 0.011344
+          },
+          "after": {
+            "n": 45,
+            "mean": 0.012173466666666667,
+            "median": 0.012604,
+            "median_of_run_medians": 0.012227
+          },
+          "mean_delta": 0.0003323333333333338,
+          "mean_percent": 2.8066007195257248
+        },
+        "uvm_htod_kernel_bytes": {
+          "before": {
+            "n": 45,
+            "mean": 2388514.1333333333,
+            "median": 2314240,
+            "median_of_run_medians": 2314240
+          },
+          "after": {
+            "n": 45,
+            "mean": 2384145.066666667,
+            "median": 2314240,
+            "median_of_run_medians": 2314240
+          },
+          "mean_delta": -4369.066666666418,
+          "mean_percent": -0.18291985823709947
+        },
+        "uvm_htod_kernel_count": {
+          "before": {
+            "n": 45,
+            "mean": 89.71111111111111,
+            "median": 89,
+            "median_of_run_medians": 90
+          },
+          "after": {
+            "n": 45,
+            "mean": 86.08888888888889,
+            "median": 85,
+            "median_of_run_medians": 84
+          },
+          "mean_delta": -3.62222222222222,
+          "mean_percent": -4.037651721575425
+        },
+        "uvm_htod_kernel_sum_duration_ms": {
+          "before": {
+            "n": 45,
+            "mean": 0.2655755777777778,
+            "median": 0.261679,
+            "median_of_run_medians": 0.25988599999999995
+          },
+          "after": {
+            "n": 45,
+            "mean": 0.25918653333333336,
+            "median": 0.254929,
+            "median_of_run_medians": 0.25768
+          },
+          "mean_delta": -0.006389044444444436,
+          "mean_percent": -2.4057349316172867
+        },
+        "uvm_htod_kernel_max_cause_span_ms": {
+          "before": {
+            "n": 45,
+            "mean": 1.312471,
+            "median": 1.160128,
+            "median_of_run_medians": 1.160128
+          },
+          "after": {
+            "n": 45,
+            "mean": 1.1395960444444444,
+            "median": 0.985989,
+            "median_of_run_medians": 0.923686
+          },
+          "mean_delta": -0.17287495555555554,
+          "mean_percent": -13.17171621739113
+        },
+        "uvm_dtoh_postkernel_bytes": {
+          "before": {
+            "n": 42,
+            "mean": 1991241.142857143,
+            "median": 1986560.0,
+            "median_of_run_medians": 1986560.0
+          },
+          "after": {
+            "n": 42,
+            "mean": 1986560,
+            "median": 1986560.0,
+            "median_of_run_medians": 1986560.0
+          },
+          "mean_delta": -4681.142857142957,
+          "mean_percent": -0.23508668821628476
+        },
+        "uvm_dtoh_postkernel_count": {
+          "before": {
+            "n": 42,
+            "mean": 48.095238095238095,
+            "median": 48.0,
+            "median_of_run_medians": 48.0
+          },
+          "after": {
+            "n": 42,
+            "mean": 48,
+            "median": 48.0,
+            "median_of_run_medians": 48.0
+          },
+          "mean_delta": -0.0952380952380949,
+          "mean_percent": -0.1980198019801973
+        },
+        "uvm_dtoh_postkernel_sum_duration_ms": {
+          "before": {
+            "n": 42,
+            "mean": 0.15758838095238095,
+            "median": 0.15361999999999998,
+            "median_of_run_medians": 0.153474
+          },
+          "after": {
+            "n": 42,
+            "mean": 0.15793709523809524,
+            "median": 0.1539865,
+            "median_of_run_medians": 0.1539865
+          },
+          "mean_delta": 0.00034871428571428553,
+          "mean_percent": 0.22128172369488192
+        },
+        "uvm_dtoh_postkernel_max_cause_span_ms": {
+          "before": {
+            "n": 42,
+            "mean": 4.505179166666666,
+            "median": 4.484373,
+            "median_of_run_medians": 4.481460500000001
+          },
+          "after": {
+            "n": 42,
+            "mean": 4.515120119047619,
+            "median": 4.4298465,
+            "median_of_run_medians": 4.426742
+          },
+          "mean_delta": 0.00994095238095305,
+          "mean_percent": 0.2206560940906653
+        },
+        "explicit_htod_bytes": {
+          "before": {
+            "n": 45,
+            "mean": 364260,
+            "median": 364260,
+            "median_of_run_medians": 364260
+          },
+          "after": {
+            "n": 45,
+            "mean": 349480,
+            "median": 349480,
+            "median_of_run_medians": 349480
+          },
+          "mean_delta": -14780,
+          "mean_percent": -4.057541316641959
+        },
+        "explicit_htod_device_ms": {
+          "before": {
+            "n": 45,
+            "mean": 0.021049755555555556,
+            "median": 0.020991,
+            "median_of_run_medians": 0.020991
+          },
+          "after": {
+            "n": 45,
+            "mean": 0.020332933333333334,
+            "median": 0.020223,
+            "median_of_run_medians": 0.020223
+          },
+          "mean_delta": -0.0007168222222222222,
+          "mean_percent": -3.405370767039786
+        },
+        "prelaunch_memcpy_api_ms": {
+          "before": {
+            "n": 45,
+            "mean": 0.04645051111111111,
+            "median": 0.04822,
+            "median_of_run_medians": 0.042699
+          },
+          "after": {
+            "n": 45,
+            "mean": 0.05249215555555556,
+            "median": 0.051146,
+            "median_of_run_medians": 0.051146
+          },
+          "mean_delta": 0.006041644444444445,
+          "mean_percent": 13.006626407172652
+        }
+      },
+      "pairs": [
+        {
+          "pair": 0,
+          "kick_ms": {
+            "before": 17.0844794,
+            "after": 18.24765,
+            "delta": 1.1631706000000008
+          },
+          "kernel_ms": {
+            "before": 5.3055844,
+            "after": 5.4801114,
+            "delta": 0.17452700000000032
+          },
+          "nonkernel_kick_ms": {
+            "before": 11.778895,
+            "after": 12.7675386,
+            "delta": 0.9886435999999996
+          }
+        },
+        {
+          "pair": 1,
+          "kick_ms": {
+            "before": 16.860673466666668,
+            "after": 18.055355866666666,
+            "delta": 1.1946823999999978
+          },
+          "kernel_ms": {
+            "before": 5.292558666666666,
+            "after": 5.455930533333333,
+            "delta": 0.16337186666666703
+          },
+          "nonkernel_kick_ms": {
+            "before": 11.5681148,
+            "after": 12.599425333333334,
+            "delta": 1.0313105333333343
+          }
+        },
+        {
+          "pair": 2,
+          "kick_ms": {
+            "before": 17.1165328,
+            "after": 18.122362933333335,
+            "delta": 1.0058301333333333
+          },
+          "kernel_ms": {
+            "before": 5.5062343333333335,
+            "after": 5.466739333333333,
+            "delta": -0.0394950000000005
+          },
+          "nonkernel_kick_ms": {
+            "before": 11.610298466666666,
+            "after": 12.6556236,
+            "delta": 1.0453251333333338
+          }
+        }
+      ],
+      "nonkernel_share_of_mean_kick_delta": 0.9112865704532178
+    }
+  }
+}

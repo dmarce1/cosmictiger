@@ -5,9 +5,7 @@
  Distributed under the GNU General Public License, version 2 or later.
  */
 
-#include <array>
 #include <cmath>
-#include <cstdint>
 #include <cstdio>
 #include <limits>
 #include <stdexcept>
@@ -31,9 +29,8 @@ struct AcceptanceCase {
     float sourceBoxToSinkCenterSquared;
     float pairSupportRadius;
     float inverseTheta;
-    std::int64_t sinkParticleCount;
-    std::int64_t sourceParticleCount;
-    bool bothLeaves;
+    bool sinkLeaf;
+    bool sourceLeaf;
     bool supportSeparated;
     FmmInteraction expected;
 };
@@ -57,68 +54,68 @@ FmmInteraction reciprocalInteraction(FmmInteraction interaction) {
 AcceptanceCase reciprocalCase(AcceptanceCase value) {
     std::swap(value.sinkRadius, value.sourceRadius);
     std::swap(value.sinkBoxToSourceCenterSquared, value.sourceBoxToSinkCenterSquared);
-    std::swap(value.sinkParticleCount, value.sourceParticleCount);
+    std::swap(value.sinkLeaf, value.sourceLeaf);
     value.expected = reciprocalInteraction(value.expected);
     return value;
 }
 
 std::vector<AcceptanceCase> acceptanceCases() {
     std::vector<AcceptanceCase> cases;
-    cases.push_back({"CC takes precedence, including internal cells", 16.0f, 1.0f, 1.0f, 9.0f, 9.0f,
-        0.5f, 1.5f, 37, 39, false, true, FmmInteraction::CellCell});
+    for (bool sinkLeaf : {false, true}) {
+        for (bool sourceLeaf : {false, true}) {
+            cases.push_back({"CC takes precedence at every tree level", 16.0f, 1.0f, 1.0f, 9.0f,
+                9.0f, 0.5f, 1.5f, sinkLeaf, sourceLeaf, true, FmmInteraction::CellCell});
+        }
+    }
 
     // The source-center distance to the sink box resolves this anisotropic pair
     // even though the enclosing-sphere PC angular bound is exactly tangent.
-    for (std::int64_t count : {37, 38, 39}) {
-        cases.push_back({"PC particle threshold", 1.0f, 0.5f, 0.25f, 0.36f, 0.5625f, 0.1f, 2.0f,
-            count, 91, true, true,
-            count >= 38 ? FmmInteraction::ParticleCell : FmmInteraction::ParticleParticle});
-        auto reverse = reciprocalCase(cases.back());
-        reverse.label = "CP particle threshold";
-        cases.push_back(reverse);
-    }
-    cases.push_back({"hybrid interactions require two leaves", 1.0f, 0.5f, 0.25f, 0.36f, 0.5625f,
-        0.1f, 2.0f, 38, 91, false, true, FmmInteraction::ParticleParticle});
+    cases.push_back({"PC between two leaves", 1.0f, 0.5f, 0.25f, 0.36f, 0.5625f, 0.1f, 2.0f, true,
+        true, true, FmmInteraction::ParticleCell});
+    cases.push_back({"PC from an internal source into a sink leaf", 1.0f, 0.5f, 0.25f, 0.36f,
+        0.5625f, 0.1f, 2.0f, true, false, true, FmmInteraction::ParticleCell});
+    cases.push_back({"PC cannot expose particles from an internal sink", 1.0f, 0.5f, 0.25f, 0.36f,
+        0.5625f, 0.1f, 2.0f, false, true, true, FmmInteraction::ParticleParticle});
+    cases.push_back({"internal pair must descend when CC fails", 1.0f, 0.5f, 0.25f, 0.36f, 0.5625f,
+        0.1f, 2.0f, false, false, true, FmmInteraction::ParticleParticle});
 
-    // Both angular tests pass through the boxes, while CC fails. Choosing the
-    // smaller explicit-particle side must reverse PC/CP when the pair is swapped.
-    for (auto const counts : std::array<std::array<std::int64_t, 2>, 6>{
-             {{38, 39}, {39, 38}, {38, 38}, {37, 39}, {39, 37}, {37, 37}}}) {
-        FmmInteraction expected = FmmInteraction::ParticleParticle;
-        if (counts[0] == 38 && counts[1] == 39) {
-            expected = FmmInteraction::ParticleCell;
-        } else if (counts[0] == 39 && counts[1] == 38) {
-            expected = FmmInteraction::CellParticle;
-        } else if (counts[0] == 37 && counts[1] == 39) {
-            expected = FmmInteraction::CellParticle;
-        } else if (counts[0] == 39 && counts[1] == 37) {
-            expected = FmmInteraction::ParticleCell;
-        }
-        cases.push_back({"reciprocal hybrid tie selection", 1.69f, 0.5f, 0.5f, 1.21f, 1.21f, 0.1f,
-            2.0f, counts[0], counts[1], true, true, expected});
-    }
-    cases.push_back({"counts above float integer precision", 1.69f, 0.5f, 0.5f, 1.21f, 1.21f, 0.1f,
-        2.0f, 16777216, 16777217, true, true, FmmInteraction::ParticleCell});
-
-    cases.push_back({"equal counts prefer the smaller source cell", 1.69f, 0.5f, 0.25f, 1.21f,
-        1.21f, 0.1f, 2.0f, 38, 38, true, true, FmmInteraction::ParticleCell});
-    auto reverseRadiusTie = reciprocalCase(cases.back());
-    reverseRadiusTie.label = "equal counts prefer the smaller sink cell";
-    cases.push_back(reverseRadiusTie);
-    cases.push_back({"count preference overrides radius preference", 1.69f, 0.25f, 0.5f, 1.21f,
-        1.21f, 0.1f, 2.0f, 38, 39, true, true, FmmInteraction::ParticleCell});
-    cases.push_back({"precise integer counts override radius preference", 1.69f, 0.25f, 0.5f, 1.21f,
-        1.21f, 0.1f, 2.0f, 16777216, 16777217, true, true, FmmInteraction::ParticleCell});
-    cases.push_back({"radius preference does not bypass particle threshold", 1.69f, 0.5f, 0.25f,
-        1.21f, 1.21f, 0.1f, 2.0f, 37, 37, true, true, FmmInteraction::ParticleParticle});
+    // Both hybrid geometries pass while CC fails. A leaf can interact with an
+    // internal cloud even when the reciprocal particle side is unavailable.
+    cases.push_back({"PC is the eligible hybrid for a sink leaf", 1.69f, 0.5f, 0.5f, 1.21f, 1.21f,
+        0.1f, 2.0f, true, false, true, FmmInteraction::ParticleCell});
+    cases.push_back({"CP is the eligible hybrid for a source leaf", 1.69f, 0.5f, 0.5f, 1.21f, 1.21f,
+        0.1f, 2.0f, false, true, true, FmmInteraction::CellParticle});
+    cases.push_back({"two internal clouds cannot use either hybrid", 1.69f, 0.5f, 0.5f, 1.21f,
+        1.21f, 0.1f, 2.0f, false, false, true, FmmInteraction::ParticleParticle});
+    cases.push_back({"two leaves prefer the smaller source cloud", 1.69f, 0.5f, 0.25f, 1.21f, 1.21f,
+        0.1f, 2.0f, true, true, true, FmmInteraction::ParticleCell});
+    auto reverseRadius = reciprocalCase(cases.back());
+    reverseRadius.label = "two leaves prefer the smaller sink cloud";
+    cases.push_back(reverseRadius);
+    cases.push_back({"leaf eligibility overrides the smaller cloud preference", 1.69f, 0.25f, 0.5f,
+        1.21f, 1.21f, 0.1f, 2.0f, true, false, true, FmmInteraction::ParticleCell});
     float const lowerRadius = std::nextafter(0.5f, 0.0f);
     float const upperRadius = std::nextafter(0.5f, std::numeric_limits<float>::infinity());
-    cases.push_back({"adjacent smaller source radius breaks count tie", 1.69f, 0.5f, lowerRadius,
-        1.21f, 1.21f, 0.1f, 2.0f, 39, 39, true, true, FmmInteraction::ParticleCell});
-    cases.push_back({"exactly equal radii preserve PP count tie", 1.69f, 0.5f, 0.5f, 1.21f, 1.21f,
-        0.1f, 2.0f, 39, 39, true, true, FmmInteraction::ParticleParticle});
-    cases.push_back({"adjacent larger source radius breaks count tie", 1.69f, 0.5f, upperRadius,
-        1.21f, 1.21f, 0.1f, 2.0f, 39, 39, true, true, FmmInteraction::CellParticle});
+    cases.push_back({"adjacent smaller source radius selects PC", 1.69f, 0.5f, lowerRadius, 1.21f,
+        1.21f, 0.1f, 2.0f, true, true, true, FmmInteraction::ParticleCell});
+    cases.push_back({"equal radii retain reciprocal PP fallback", 1.69f, 0.5f, 0.5f, 1.21f, 1.21f,
+        0.1f, 2.0f, true, true, true, FmmInteraction::ParticleParticle});
+    cases.push_back({"adjacent larger source radius selects CP", 1.69f, 0.5f, upperRadius, 1.21f,
+        1.21f, 0.1f, 2.0f, true, true, true, FmmInteraction::CellParticle});
+
+    // Internal-cloud eligibility must retain strict angular opening boundaries.
+    for (float center : {std::nextafter(0.390625f, 0.0f), 0.390625f,
+             std::nextafter(0.390625f, std::numeric_limits<float>::infinity())}) {
+        cases.push_back({"strict center opening for an internal source", center, 0.125f, 0.25f,
+            0.0f, 0.0f, 0.0625f, 2.0f, true, false, true,
+            center > 0.390625f ? FmmInteraction::ParticleCell : FmmInteraction::ParticleParticle});
+    }
+    for (float boxDistance : {std::nextafter(0.25f, 0.0f), 0.25f,
+             std::nextafter(0.25f, std::numeric_limits<float>::infinity())}) {
+        cases.push_back({"strict box opening for an internal source", 0.49f, 0.5f, 0.25f,
+            boxDistance, 0.0f, 0.1f, 2.0f, true, false, true,
+            boxDistance > 0.25f ? FmmInteraction::ParticleCell : FmmInteraction::ParticleParticle});
+    }
 
     // Every separation bound is exactly tangent to support. Angular acceptance
     // alone must not permit either an expansion or a box shortcut.
@@ -127,7 +124,7 @@ std::vector<AcceptanceCase> acceptanceCases() {
     for (float center : {lowerCenter, 0.25f, upperCenter}) {
         bool const separated = center > 0.25f;
         cases.push_back({"strict center support boundary", center, 0.125f, 0.25f, 0.140625f,
-            0.0625f, 0.125f, 1.25f, 38, 39, true, separated,
+            0.0625f, 0.125f, 1.25f, true, false, separated,
             separated ? FmmInteraction::CellCell : FmmInteraction::ParticleParticle});
     }
     float const lowerBox = std::nextafter(0.0625f, 0.0f);
@@ -135,7 +132,7 @@ std::vector<AcceptanceCase> acceptanceCases() {
     for (float boxDistance : {lowerBox, 0.0625f, upperBox}) {
         bool const separated = boxDistance > 0.0625f;
         cases.push_back({"strict box support boundary", 0.49f, 0.5f, 0.125f, boxDistance, 0.330625f,
-            0.125f, 1.5f, 38, 39, true, separated,
+            0.125f, 1.5f, true, false, separated,
             separated ? FmmInteraction::ParticleCell : FmmInteraction::ParticleParticle});
     }
 
@@ -144,11 +141,17 @@ std::vector<AcceptanceCase> acceptanceCases() {
     // because each center is 5/16 from the other box. That pair is softened.
     cases.push_back(
         {"CUDA shortcut must include source extent", 0.19140625f, 0.125f, 0.125f, 0.09765625f,
-            0.09765625f, 0.25f, 2.0f, 38, 39, true, false, FmmInteraction::ParticleParticle});
+            0.09765625f, 0.25f, 2.0f, true, false, false, FmmInteraction::ParticleParticle});
     cases.push_back({"same geometry with smaller pair support", 0.19140625f, 0.125f, 0.125f,
-        0.09765625f, 0.09765625f, 0.125f, 2.0f, 38, 39, true, true, FmmInteraction::ParticleCell});
+        0.09765625f, 0.09765625f, 0.125f, 2.0f, true, false, true, FmmInteraction::ParticleCell});
     cases.push_back({"coincident cells remain PP", 0.0f, 0.125f, 0.125f, 0.0f, 0.0f, 0.125f, 2.0f,
-        38, 39, true, false, FmmInteraction::ParticleParticle});
+        true, true, false, FmmInteraction::ParticleParticle});
+    // Include both orientations in the SIMD packs as well as in the scalar
+    // reciprocity assertions, especially CP contributions to internal sinks.
+    size_t const originalCaseCount = cases.size();
+    for (size_t i = 0; i < originalCaseCount; ++i) {
+        cases.push_back(reciprocalCase(cases[i]));
+    }
     return cases;
 }
 
@@ -163,10 +166,9 @@ template <class T>
 void testScalarCases(std::vector<AcceptanceCase> const& cases) {
     for (auto const& value : cases) {
         auto const acceptance = evaluate<T>(value);
-        auto const interaction =
-            selectFmmInteraction(acceptance.cellCell != T(0), acceptance.particleCell != T(0),
-                acceptance.cellParticle != T(0), value.bothLeaves, value.sinkParticleCount,
-                value.sourceParticleCount, value.sinkRadius, value.sourceRadius);
+        auto const interaction = selectFmmInteraction(acceptance.cellCell != T(0),
+            acceptance.particleCell != T(0), acceptance.cellParticle != T(0), value.sinkLeaf,
+            value.sourceLeaf, value.sinkRadius, value.sourceRadius);
         require(interaction == value.expected, std::string(value.label) + ": interaction");
         require((acceptance.supportSeparated != T(0)) == value.supportSeparated,
             std::string(value.label) + ": support separation");
@@ -183,8 +185,7 @@ void testScalarCases(std::vector<AcceptanceCase> const& cases) {
             std::string(value.label) + ": geometry is not reciprocal");
         auto const reverseInteraction = selectFmmInteraction(reverseAcceptance.cellCell != T(0),
             reverseAcceptance.particleCell != T(0), reverseAcceptance.cellParticle != T(0),
-            reverse.bothLeaves, reverse.sinkParticleCount, reverse.sourceParticleCount,
-            reverse.sinkRadius, reverse.sourceRadius);
+            reverse.sinkLeaf, reverse.sourceLeaf, reverse.sinkRadius, reverse.sourceRadius);
         require(reverseInteraction == reciprocalInteraction(interaction),
             std::string(value.label) + ": selection is not reciprocal");
     }
@@ -221,10 +222,9 @@ void testSimdCases(std::vector<AcceptanceCase> const& cases) {
                     acceptance.cellParticle[lane] == scalar.cellParticle &&
                     acceptance.supportSeparated[lane] == scalar.supportSeparated,
                 std::string(value.label) + ": SIMD/scalar mismatch");
-            auto const interaction =
-                selectFmmInteraction(acceptance.cellCell[lane], acceptance.particleCell[lane],
-                    acceptance.cellParticle[lane], value.bothLeaves, value.sinkParticleCount,
-                    value.sourceParticleCount, value.sinkRadius, value.sourceRadius);
+            auto const interaction = selectFmmInteraction(acceptance.cellCell[lane],
+                acceptance.particleCell[lane], acceptance.cellParticle[lane], value.sinkLeaf,
+                value.sourceLeaf, value.sinkRadius, value.sourceRadius);
             require(interaction == value.expected, std::string(value.label) + ": SIMD selection");
         }
     }

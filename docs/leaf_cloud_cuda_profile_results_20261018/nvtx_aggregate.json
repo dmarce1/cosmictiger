@@ -1,0 +1,3005 @@
+{
+  "method": "Two alternating pairs, 15 measured samples per phi and variant per pair, one warmup excluded per phi. Arithmetic means of 30 samples; scope payloads are counts of nodes/workitems, not particle interactions.",
+  "conclusion": "New CPU internal CP operators and increased direct-walk classification time delay the GPU launch. CPU Ewald operator workload, GPU preparation, transfers, and workitem count stay essentially unchanged.",
+  "caveats": [
+    "Per-label union_ms removes self-overlap across workers, but different labels still overlap and must not be added.",
+    "Summed range time can include HPX suspension and does not measure active CPU utilization.",
+    "NVTX instrumentation changes absolute timing; original uninstrumented comparison is the performance result.",
+    "CPU direct-walk range covers acceptance/list classification as a whole; individual opening tests are not separately timed.",
+    "CP-without-Ewald is an overlap diagnostic, not proof of a task dependency critical path."
+  ],
+  "groups": {
+    "0": {
+      "scalars": {
+        "kick_ms": {
+          "before": {
+            "n": 30,
+            "mean": 18.083478500000002,
+            "median": 17.962538
+          },
+          "after": {
+            "n": 30,
+            "mean": 19.1546287,
+            "median": 19.0114505
+          },
+          "mean_delta": 1.0711501999999982
+        },
+        "root_ms": {
+          "before": {
+            "n": 30,
+            "mean": 18.0100079,
+            "median": 17.8950975
+          },
+          "after": {
+            "n": 30,
+            "mean": 19.084471266666668,
+            "median": 18.942732
+          },
+          "mean_delta": 1.0744633666666665
+        },
+        "kernel_ms": {
+          "before": {
+            "n": 30,
+            "mean": 5.401917766666666,
+            "median": 5.372683
+          },
+          "after": {
+            "n": 30,
+            "mean": 5.338048,
+            "median": 5.151071
+          },
+          "mean_delta": -0.06386976666666655
+        },
+        "pre_kernel_ms": {
+          "before": {
+            "n": 30,
+            "mean": 12.5125609,
+            "median": 12.501431499999999
+          },
+          "after": {
+            "n": 30,
+            "mean": 13.653867133333334,
+            "median": 13.6848905
+          },
+          "mean_delta": 1.1413062333333333
+        },
+        "post_kernel_ms": {
+          "before": {
+            "n": 30,
+            "mean": 0.09552923333333334,
+            "median": 0.0865695
+          },
+          "after": {
+            "n": 30,
+            "mean": 0.09255613333333333,
+            "median": 0.0836345
+          },
+          "mean_delta": -0.0029731000000000063
+        },
+        "root_minus_stdout_ms": {
+          "before": {
+            "n": 30,
+            "mean": -0.07347059999999991,
+            "median": -0.07059650000000062
+          },
+          "after": {
+            "n": 30,
+            "mean": -0.07015743333333309,
+            "median": -0.0701710000000002
+          },
+          "mean_delta": 0.0033131666666668252
+        },
+        "uncovered_wall_ms": {
+          "before": {
+            "n": 30,
+            "mean": 0.49332363333333357,
+            "median": 0.4964935000000015
+          },
+          "after": {
+            "n": 30,
+            "mean": 0.47002790000000005,
+            "median": 0.4635705000000012
+          },
+          "mean_delta": -0.023295733333333513
+        }
+      },
+      "labels": {
+        "cpu.gravity.cc.direct": {
+          "count": {
+            "before": {
+              "n": 30,
+              "mean": 706,
+              "median": 706.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 705,
+              "median": 705.0
+            },
+            "mean_delta": -1
+          },
+          "summed_range_ms": {
+            "before": {
+              "n": 30,
+              "mean": 1.5549506666666666,
+              "median": 1.5446944999999999
+            },
+            "after": {
+              "n": 30,
+              "mean": 1.4546514666666668,
+              "median": 1.459241
+            },
+            "mean_delta": -0.10029919999999981
+          },
+          "union_ms": {
+            "before": {
+              "n": 30,
+              "mean": 1.4986387333333333,
+              "median": 1.485944
+            },
+            "after": {
+              "n": 30,
+              "mean": 1.4067695666666666,
+              "median": 1.407011
+            },
+            "mean_delta": -0.09186916666666667
+          },
+          "union_pre_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 1.4986387333333333,
+              "median": 1.485944
+            },
+            "after": {
+              "n": 30,
+              "mean": 1.4067695666666666,
+              "median": 1.407011
+            },
+            "mean_delta": -0.09186916666666667
+          },
+          "union_during_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_post_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "payload_uint64_sum": {
+            "before": {
+              "n": 30,
+              "mean": 14484,
+              "median": 14484.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 13708,
+              "median": 13708.0
+            },
+            "mean_delta": -776
+          }
+        },
+        "cpu.gravity.cc.ewald": {
+          "count": {
+            "before": {
+              "n": 30,
+              "mean": 166,
+              "median": 166.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 166,
+              "median": 166.0
+            },
+            "mean_delta": 0
+          },
+          "summed_range_ms": {
+            "before": {
+              "n": 30,
+              "mean": 13.8930481,
+              "median": 13.8885565
+            },
+            "after": {
+              "n": 30,
+              "mean": 13.9308989,
+              "median": 13.931550000000001
+            },
+            "mean_delta": 0.03785080000000107
+          },
+          "union_ms": {
+            "before": {
+              "n": 30,
+              "mean": 9.348239733333333,
+              "median": 9.3520955
+            },
+            "after": {
+              "n": 30,
+              "mean": 9.4822193,
+              "median": 9.4869865
+            },
+            "mean_delta": 0.13397956666666744
+          },
+          "union_pre_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 9.348239733333333,
+              "median": 9.3520955
+            },
+            "after": {
+              "n": 30,
+              "mean": 9.4822193,
+              "median": 9.4869865
+            },
+            "mean_delta": 0.13397956666666744
+          },
+          "union_during_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_post_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "payload_uint64_sum": {
+            "before": {
+              "n": 30,
+              "mean": 3494,
+              "median": 3494.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 3494,
+              "median": 3494.0
+            },
+            "mean_delta": 0
+          }
+        },
+        "cpu.gravity.cp.internal": {
+          "count": {
+            "before": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 349,
+              "median": 349.0
+            },
+            "mean_delta": 349
+          },
+          "summed_range_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 1.9849389666666666,
+              "median": 1.986696
+            },
+            "mean_delta": 1.9849389666666666
+          },
+          "union_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 1.8560669666666667,
+              "median": 1.8564910000000001
+            },
+            "mean_delta": 1.8560669666666667
+          },
+          "union_pre_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 1.8560669666666667,
+              "median": 1.8564910000000001
+            },
+            "mean_delta": 1.8560669666666667
+          },
+          "union_during_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_post_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "payload_uint64_sum": {
+            "before": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 1724,
+              "median": 1724.0
+            },
+            "mean_delta": 1724
+          }
+        },
+        "cpu.gravity.cp.leaf": {
+          "count": {
+            "before": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "mean_delta": 0
+          },
+          "summed_range_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "mean_delta": 0
+          },
+          "union_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_pre_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_during_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_post_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "payload_uint64_sum": {
+            "before": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "mean_delta": 0
+          }
+        },
+        "cpu.gravity.pc": {
+          "count": {
+            "before": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "mean_delta": 0
+          },
+          "summed_range_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "mean_delta": 0
+          },
+          "union_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_pre_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_during_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_post_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "payload_uint64_sum": {
+            "before": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "mean_delta": 0
+          }
+        },
+        "cpu.gravity.pp": {
+          "count": {
+            "before": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "mean_delta": 0
+          },
+          "summed_range_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "mean_delta": 0
+          },
+          "union_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_pre_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_during_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_post_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "payload_uint64_sum": {
+            "before": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "mean_delta": 0
+          }
+        },
+        "cpu.walk.direct": {
+          "count": {
+            "before": {
+              "n": 30,
+              "mean": 737,
+              "median": 737.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 737,
+              "median": 737.0
+            },
+            "mean_delta": 0
+          },
+          "summed_range_ms": {
+            "before": {
+              "n": 30,
+              "mean": 1.0268480333333334,
+              "median": 1.0267445
+            },
+            "after": {
+              "n": 30,
+              "mean": 1.6146103,
+              "median": 1.6088555
+            },
+            "mean_delta": 0.5877622666666666
+          },
+          "union_ms": {
+            "before": {
+              "n": 30,
+              "mean": 1.0037236333333333,
+              "median": 1.000782
+            },
+            "after": {
+              "n": 30,
+              "mean": 1.5530301333333334,
+              "median": 1.550277
+            },
+            "mean_delta": 0.5493065000000001
+          },
+          "union_pre_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 1.0037236333333333,
+              "median": 1.000782
+            },
+            "after": {
+              "n": 30,
+              "mean": 1.5530301333333334,
+              "median": 1.550277
+            },
+            "mean_delta": 0.5493065000000001
+          },
+          "union_during_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_post_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "payload_uint64_sum": {
+            "before": {
+              "n": 30,
+              "mean": 33491,
+              "median": 33491.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 31686,
+              "median": 31686.0
+            },
+            "mean_delta": -1805
+          }
+        },
+        "cpu.walk.ewald": {
+          "count": {
+            "before": {
+              "n": 30,
+              "mean": 737,
+              "median": 737.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 737,
+              "median": 737.0
+            },
+            "mean_delta": 0
+          },
+          "summed_range_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.4476359,
+              "median": 0.437249
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.4342101666666667,
+              "median": 0.428713
+            },
+            "mean_delta": -0.0134257333333333
+          },
+          "union_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.4430436,
+              "median": 0.433692
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.42992046666666667,
+              "median": 0.42278400000000005
+            },
+            "mean_delta": -0.013123133333333314
+          },
+          "union_pre_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.4430436,
+              "median": 0.433692
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.42992046666666667,
+              "median": 0.42278400000000005
+            },
+            "mean_delta": -0.013123133333333314
+          },
+          "union_during_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_post_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "payload_uint64_sum": {
+            "before": {
+              "n": 30,
+              "mean": 8735,
+              "median": 8735.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 8735,
+              "median": 8735.0
+            },
+            "mean_delta": 0
+          }
+        },
+        "gpu.add_work.set_insert": {
+          "count": {
+            "before": {
+              "n": 30,
+              "mean": 736,
+              "median": 736.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 736,
+              "median": 736.0
+            },
+            "mean_delta": 0
+          },
+          "summed_range_ms": {
+            "before": {
+              "n": 30,
+              "mean": 1.2077569,
+              "median": 1.1983665000000001
+            },
+            "after": {
+              "n": 30,
+              "mean": 1.1233985333333334,
+              "median": 1.1190099999999998
+            },
+            "mean_delta": -0.08435836666666652
+          },
+          "union_ms": {
+            "before": {
+              "n": 30,
+              "mean": 1.2077569,
+              "median": 1.1983665000000001
+            },
+            "after": {
+              "n": 30,
+              "mean": 1.1233985333333334,
+              "median": 1.1190099999999998
+            },
+            "mean_delta": -0.08435836666666652
+          },
+          "union_pre_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 1.2077569,
+              "median": 1.1983665000000001
+            },
+            "after": {
+              "n": 30,
+              "mean": 1.1233985333333334,
+              "median": 1.1190099999999998
+            },
+            "mean_delta": -0.08435836666666652
+          },
+          "union_during_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_post_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "payload_uint64_sum": {
+            "before": {
+              "n": 30,
+              "mean": 46878,
+              "median": 46878.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 43183,
+              "median": 43183.0
+            },
+            "mean_delta": -3695
+          }
+        },
+        "gpu.advice_to_gpu": {
+          "count": {
+            "before": {
+              "n": 30,
+              "mean": 1,
+              "median": 1.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 1,
+              "median": 1.0
+            },
+            "mean_delta": 0
+          },
+          "summed_range_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.14079503333333335,
+              "median": 0.139391
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.1389744,
+              "median": 0.138709
+            },
+            "mean_delta": -0.001820633333333349
+          },
+          "union_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.14079503333333335,
+              "median": 0.139391
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.1389744,
+              "median": 0.138709
+            },
+            "mean_delta": -0.001820633333333349
+          },
+          "union_pre_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.14079503333333335,
+              "median": 0.139391
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.1389744,
+              "median": 0.138709
+            },
+            "mean_delta": -0.001820633333333349
+          },
+          "union_during_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_post_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "payload_uint64_sum": {
+            "before": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "mean_delta": 0
+          }
+        },
+        "gpu.execute": {
+          "count": {
+            "before": {
+              "n": 30,
+              "mean": 1,
+              "median": 1.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 1,
+              "median": 1.0
+            },
+            "mean_delta": 0
+          },
+          "summed_range_ms": {
+            "before": {
+              "n": 30,
+              "mean": 5.6978362,
+              "median": 5.6533985
+            },
+            "after": {
+              "n": 30,
+              "mean": 5.6196904666666665,
+              "median": 5.4217665
+            },
+            "mean_delta": -0.07814573333333374
+          },
+          "union_ms": {
+            "before": {
+              "n": 30,
+              "mean": 5.6978362,
+              "median": 5.6533985
+            },
+            "after": {
+              "n": 30,
+              "mean": 5.6196904666666665,
+              "median": 5.4217665
+            },
+            "mean_delta": -0.07814573333333374
+          },
+          "union_pre_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.23646786666666667,
+              "median": 0.218557
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.2247874,
+              "median": 0.216333
+            },
+            "mean_delta": -0.011680466666666667
+          },
+          "union_during_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 5.401917766666666,
+              "median": 5.372683
+            },
+            "after": {
+              "n": 30,
+              "mean": 5.338048,
+              "median": 5.151071
+            },
+            "mean_delta": -0.06386976666666655
+          },
+          "union_post_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.05945056666666667,
+              "median": 0.0549385
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.05685506666666667,
+              "median": 0.051847
+            },
+            "mean_delta": -0.0025955000000000006
+          },
+          "payload_uint64_sum": {
+            "before": {
+              "n": 30,
+              "mean": 736,
+              "median": 736.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 736,
+              "median": 736.0
+            },
+            "mean_delta": 0
+          }
+        },
+        "gpu.prepare": {
+          "count": {
+            "before": {
+              "n": 30,
+              "mean": 1,
+              "median": 1.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 1,
+              "median": 1.0
+            },
+            "mean_delta": 0
+          },
+          "summed_range_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.9359050333333333,
+              "median": 0.9633855
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.9274279333333333,
+              "median": 1.0010655
+            },
+            "mean_delta": -0.008477100000000015
+          },
+          "union_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.9359050333333333,
+              "median": 0.9633855
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.9274279333333333,
+              "median": 1.0010655
+            },
+            "mean_delta": -0.008477100000000015
+          },
+          "union_pre_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.9359050333333333,
+              "median": 0.9633855
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.9274279333333333,
+              "median": 1.0010655
+            },
+            "mean_delta": -0.008477100000000015
+          },
+          "union_during_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_post_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "payload_uint64_sum": {
+            "before": {
+              "n": 30,
+              "mean": 736,
+              "median": 736.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 736,
+              "median": 736.0
+            },
+            "mean_delta": 0
+          }
+        },
+        "gpu.restore": {
+          "count": {
+            "before": {
+              "n": 30,
+              "mean": 1,
+              "median": 1.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 1,
+              "median": 1.0
+            },
+            "mean_delta": 0
+          },
+          "summed_range_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0282988,
+              "median": 0.0256625
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.027068633333333335,
+              "median": 0.025332
+            },
+            "mean_delta": -0.0012301666666666641
+          },
+          "union_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0282988,
+              "median": 0.0256625
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.027068633333333335,
+              "median": 0.025332
+            },
+            "mean_delta": -0.0012301666666666641
+          },
+          "union_pre_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_during_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_post_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0282988,
+              "median": 0.0256625
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.027068633333333335,
+              "median": 0.025332
+            },
+            "mean_delta": -0.0012301666666666641
+          },
+          "payload_uint64_sum": {
+            "before": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "mean_delta": 0
+          }
+        }
+      },
+      "overlap": {
+        "cp_with_ewald_ms": {
+          "before": {
+            "n": 30,
+            "mean": 0,
+            "median": 0.0
+          },
+          "after": {
+            "n": 30,
+            "mean": 0.8186378,
+            "median": 0.8225100000000003
+          },
+          "mean_delta": 0.8186378
+        },
+        "cp_without_ewald_ms": {
+          "before": {
+            "n": 30,
+            "mean": 0,
+            "median": 0.0
+          },
+          "after": {
+            "n": 30,
+            "mean": 1.0374291666666666,
+            "median": 1.0329555000000004
+          },
+          "mean_delta": 1.0374291666666666
+        },
+        "walk_with_ewald_ms": {
+          "before": {
+            "n": 30,
+            "mean": 0.5702679333333335,
+            "median": 0.5598969999999998
+          },
+          "after": {
+            "n": 30,
+            "mean": 0.7552175,
+            "median": 0.7548775000000003
+          },
+          "mean_delta": 0.1849495666666665
+        },
+        "walk_without_ewald_ms": {
+          "before": {
+            "n": 30,
+            "mean": 0.43345570000000005,
+            "median": 0.4404610000000001
+          },
+          "after": {
+            "n": 30,
+            "mean": 0.7978126333333334,
+            "median": 0.8064914999999999
+          },
+          "mean_delta": 0.36435693333333335
+        },
+        "cp_or_walk_with_ewald_ms": {
+          "before": {
+            "n": 30,
+            "mean": 0.5702679333333335,
+            "median": 0.5598969999999998
+          },
+          "after": {
+            "n": 30,
+            "mean": 1.5738553,
+            "median": 1.5803875
+          },
+          "mean_delta": 1.0035873666666664
+        },
+        "cp_or_walk_without_ewald_ms": {
+          "before": {
+            "n": 30,
+            "mean": 0.43345570000000005,
+            "median": 0.4404610000000001
+          },
+          "after": {
+            "n": 30,
+            "mean": 1.6539758000000002,
+            "median": 1.6797150000000005
+          },
+          "mean_delta": 1.2205201
+        }
+      },
+      "pairs": {
+        "0": {
+          "root_ms": {
+            "before": {
+              "n": 15,
+              "mean": 18.035169133333333,
+              "median": 17.729368
+            },
+            "after": {
+              "n": 15,
+              "mean": 19.149668000000002,
+              "median": 18.957675
+            },
+            "mean_delta": 1.1144988666666684
+          },
+          "pre_kernel_ms": {
+            "before": {
+              "n": 15,
+              "mean": 12.494604866666666,
+              "median": 12.449116
+            },
+            "after": {
+              "n": 15,
+              "mean": 13.68816,
+              "median": 13.779891
+            },
+            "mean_delta": 1.1935551333333336
+          },
+          "kernel_ms": {
+            "before": {
+              "n": 15,
+              "mean": 5.4456444,
+              "median": 5.298108
+            },
+            "after": {
+              "n": 15,
+              "mean": 5.3712035333333334,
+              "median": 5.152799
+            },
+            "mean_delta": -0.0744408666666665
+          },
+          "post_kernel_ms": {
+            "before": {
+              "n": 15,
+              "mean": 0.09491986666666667,
+              "median": 0.08511
+            },
+            "after": {
+              "n": 15,
+              "mean": 0.09030446666666667,
+              "median": 0.080414
+            },
+            "mean_delta": -0.004615400000000006
+          }
+        },
+        "1": {
+          "root_ms": {
+            "before": {
+              "n": 15,
+              "mean": 17.984846666666666,
+              "median": 17.903538
+            },
+            "after": {
+              "n": 15,
+              "mean": 19.019274533333334,
+              "median": 18.83628
+            },
+            "mean_delta": 1.0344278666666682
+          },
+          "pre_kernel_ms": {
+            "before": {
+              "n": 15,
+              "mean": 12.530516933333333,
+              "median": 12.517863
+            },
+            "after": {
+              "n": 15,
+              "mean": 13.619574266666667,
+              "median": 13.667419
+            },
+            "mean_delta": 1.0890573333333347
+          },
+          "kernel_ms": {
+            "before": {
+              "n": 15,
+              "mean": 5.358191133333333,
+              "median": 5.45769
+            },
+            "after": {
+              "n": 15,
+              "mean": 5.304892466666667,
+              "median": 5.027745
+            },
+            "mean_delta": -0.053298666666666605
+          },
+          "post_kernel_ms": {
+            "before": {
+              "n": 15,
+              "mean": 0.0961386,
+              "median": 0.087173
+            },
+            "after": {
+              "n": 15,
+              "mean": 0.0948078,
+              "median": 0.083793
+            },
+            "mean_delta": -0.001330800000000007
+          }
+        }
+      }
+    },
+    "1": {
+      "scalars": {
+        "kick_ms": {
+          "before": {
+            "n": 30,
+            "mean": 17.8505006,
+            "median": 17.5894495
+          },
+          "after": {
+            "n": 30,
+            "mean": 19.118272466666667,
+            "median": 19.141183499999997
+          },
+          "mean_delta": 1.267771866666667
+        },
+        "root_ms": {
+          "before": {
+            "n": 30,
+            "mean": 17.786653233333332,
+            "median": 17.513672
+          },
+          "after": {
+            "n": 30,
+            "mean": 19.054249833333333,
+            "median": 19.079759000000003
+          },
+          "mean_delta": 1.267596600000001
+        },
+        "kernel_ms": {
+          "before": {
+            "n": 30,
+            "mean": 5.308385666666666,
+            "median": 5.056834
+          },
+          "after": {
+            "n": 30,
+            "mean": 5.401030333333333,
+            "median": 5.344988
+          },
+          "mean_delta": 0.09264466666666671
+        },
+        "pre_kernel_ms": {
+          "before": {
+            "n": 30,
+            "mean": 12.393962333333333,
+            "median": 12.388943000000001
+          },
+          "after": {
+            "n": 30,
+            "mean": 13.573798566666667,
+            "median": 13.539482
+          },
+          "mean_delta": 1.1798362333333348
+        },
+        "post_kernel_ms": {
+          "before": {
+            "n": 30,
+            "mean": 0.08430523333333333,
+            "median": 0.0798045
+          },
+          "after": {
+            "n": 30,
+            "mean": 0.07942093333333333,
+            "median": 0.076766
+          },
+          "mean_delta": -0.004884299999999994
+        },
+        "root_minus_stdout_ms": {
+          "before": {
+            "n": 30,
+            "mean": -0.06384736666666697,
+            "median": -0.061084499999999764
+          },
+          "after": {
+            "n": 30,
+            "mean": -0.06402263333333286,
+            "median": -0.06111900000000148
+          },
+          "mean_delta": -0.00017526666666588253
+        },
+        "uncovered_wall_ms": {
+          "before": {
+            "n": 30,
+            "mean": 0.5989695999999997,
+            "median": 0.5946350000000002
+          },
+          "after": {
+            "n": 30,
+            "mean": 0.5764583000000001,
+            "median": 0.5803060000000002
+          },
+          "mean_delta": -0.022511299999999568
+        }
+      },
+      "labels": {
+        "cpu.gravity.cc.direct": {
+          "count": {
+            "before": {
+              "n": 30,
+              "mean": 706,
+              "median": 706.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 705,
+              "median": 705.0
+            },
+            "mean_delta": -1
+          },
+          "summed_range_ms": {
+            "before": {
+              "n": 30,
+              "mean": 1.5551098333333333,
+              "median": 1.5447955
+            },
+            "after": {
+              "n": 30,
+              "mean": 1.4502213,
+              "median": 1.4453945
+            },
+            "mean_delta": -0.10488853333333337
+          },
+          "union_ms": {
+            "before": {
+              "n": 30,
+              "mean": 1.4971772,
+              "median": 1.482764
+            },
+            "after": {
+              "n": 30,
+              "mean": 1.4036423666666666,
+              "median": 1.4022320000000001
+            },
+            "mean_delta": -0.09353483333333346
+          },
+          "union_pre_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 1.4971772,
+              "median": 1.482764
+            },
+            "after": {
+              "n": 30,
+              "mean": 1.4036423666666666,
+              "median": 1.4022320000000001
+            },
+            "mean_delta": -0.09353483333333346
+          },
+          "union_during_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_post_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "payload_uint64_sum": {
+            "before": {
+              "n": 30,
+              "mean": 14484,
+              "median": 14484.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 13708,
+              "median": 13708.0
+            },
+            "mean_delta": -776
+          }
+        },
+        "cpu.gravity.cc.ewald": {
+          "count": {
+            "before": {
+              "n": 30,
+              "mean": 166,
+              "median": 166.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 166,
+              "median": 166.0
+            },
+            "mean_delta": 0
+          },
+          "summed_range_ms": {
+            "before": {
+              "n": 30,
+              "mean": 13.887022433333334,
+              "median": 13.884986000000001
+            },
+            "after": {
+              "n": 30,
+              "mean": 13.957096766666666,
+              "median": 13.9453015
+            },
+            "mean_delta": 0.07007433333333246
+          },
+          "union_ms": {
+            "before": {
+              "n": 30,
+              "mean": 9.316959266666666,
+              "median": 9.3192155
+            },
+            "after": {
+              "n": 30,
+              "mean": 9.611053366666667,
+              "median": 9.589343
+            },
+            "mean_delta": 0.2940941000000006
+          },
+          "union_pre_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 9.316959266666666,
+              "median": 9.3192155
+            },
+            "after": {
+              "n": 30,
+              "mean": 9.611053366666667,
+              "median": 9.589343
+            },
+            "mean_delta": 0.2940941000000006
+          },
+          "union_during_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_post_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "payload_uint64_sum": {
+            "before": {
+              "n": 30,
+              "mean": 3494,
+              "median": 3494.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 3494,
+              "median": 3494.0
+            },
+            "mean_delta": 0
+          }
+        },
+        "cpu.gravity.cp.internal": {
+          "count": {
+            "before": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 349,
+              "median": 349.0
+            },
+            "mean_delta": 349
+          },
+          "summed_range_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 1.9649226333333334,
+              "median": 1.9683760000000001
+            },
+            "mean_delta": 1.9649226333333334
+          },
+          "union_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 1.8477177,
+              "median": 1.8463765
+            },
+            "mean_delta": 1.8477177
+          },
+          "union_pre_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 1.8477177,
+              "median": 1.8463765
+            },
+            "mean_delta": 1.8477177
+          },
+          "union_during_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_post_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "payload_uint64_sum": {
+            "before": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 1724,
+              "median": 1724.0
+            },
+            "mean_delta": 1724
+          }
+        },
+        "cpu.gravity.cp.leaf": {
+          "count": {
+            "before": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "mean_delta": 0
+          },
+          "summed_range_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "mean_delta": 0
+          },
+          "union_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_pre_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_during_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_post_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "payload_uint64_sum": {
+            "before": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "mean_delta": 0
+          }
+        },
+        "cpu.gravity.pc": {
+          "count": {
+            "before": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "mean_delta": 0
+          },
+          "summed_range_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "mean_delta": 0
+          },
+          "union_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_pre_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_during_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_post_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "payload_uint64_sum": {
+            "before": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "mean_delta": 0
+          }
+        },
+        "cpu.gravity.pp": {
+          "count": {
+            "before": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "mean_delta": 0
+          },
+          "summed_range_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "mean_delta": 0
+          },
+          "union_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_pre_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_during_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_post_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "payload_uint64_sum": {
+            "before": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "mean_delta": 0
+          }
+        },
+        "cpu.walk.direct": {
+          "count": {
+            "before": {
+              "n": 30,
+              "mean": 737,
+              "median": 737.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 737,
+              "median": 737.0
+            },
+            "mean_delta": 0
+          },
+          "summed_range_ms": {
+            "before": {
+              "n": 30,
+              "mean": 1.0208439333333335,
+              "median": 1.0172425
+            },
+            "after": {
+              "n": 30,
+              "mean": 1.5981128,
+              "median": 1.5962934999999998
+            },
+            "mean_delta": 0.5772688666666665
+          },
+          "union_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.9966904,
+              "median": 0.994201
+            },
+            "after": {
+              "n": 30,
+              "mean": 1.5412627666666667,
+              "median": 1.540009
+            },
+            "mean_delta": 0.5445723666666668
+          },
+          "union_pre_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.9966904,
+              "median": 0.994201
+            },
+            "after": {
+              "n": 30,
+              "mean": 1.5412627666666667,
+              "median": 1.540009
+            },
+            "mean_delta": 0.5445723666666668
+          },
+          "union_during_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_post_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "payload_uint64_sum": {
+            "before": {
+              "n": 30,
+              "mean": 33491,
+              "median": 33491.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 31686,
+              "median": 31686.0
+            },
+            "mean_delta": -1805
+          }
+        },
+        "cpu.walk.ewald": {
+          "count": {
+            "before": {
+              "n": 30,
+              "mean": 737,
+              "median": 737.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 737,
+              "median": 737.0
+            },
+            "mean_delta": 0
+          },
+          "summed_range_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.4481794,
+              "median": 0.43524850000000004
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.4325847,
+              "median": 0.4230415
+            },
+            "mean_delta": -0.015594700000000017
+          },
+          "union_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.4431155,
+              "median": 0.430731
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.4278713333333333,
+              "median": 0.42020199999999996
+            },
+            "mean_delta": -0.01524416666666667
+          },
+          "union_pre_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.4431155,
+              "median": 0.430731
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.4278713333333333,
+              "median": 0.42020199999999996
+            },
+            "mean_delta": -0.01524416666666667
+          },
+          "union_during_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_post_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "payload_uint64_sum": {
+            "before": {
+              "n": 30,
+              "mean": 8735,
+              "median": 8735.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 8735,
+              "median": 8735.0
+            },
+            "mean_delta": 0
+          }
+        },
+        "gpu.add_work.set_insert": {
+          "count": {
+            "before": {
+              "n": 30,
+              "mean": 736,
+              "median": 736.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 736,
+              "median": 736.0
+            },
+            "mean_delta": 0
+          },
+          "summed_range_ms": {
+            "before": {
+              "n": 30,
+              "mean": 1.1965217,
+              "median": 1.2011415
+            },
+            "after": {
+              "n": 30,
+              "mean": 1.1143637666666666,
+              "median": 1.11237
+            },
+            "mean_delta": -0.08215793333333332
+          },
+          "union_ms": {
+            "before": {
+              "n": 30,
+              "mean": 1.1965217,
+              "median": 1.2011414999999999
+            },
+            "after": {
+              "n": 30,
+              "mean": 1.1143637666666666,
+              "median": 1.11237
+            },
+            "mean_delta": -0.08215793333333332
+          },
+          "union_pre_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 1.1965217,
+              "median": 1.2011414999999999
+            },
+            "after": {
+              "n": 30,
+              "mean": 1.1143637666666666,
+              "median": 1.11237
+            },
+            "mean_delta": -0.08215793333333332
+          },
+          "union_during_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_post_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "payload_uint64_sum": {
+            "before": {
+              "n": 30,
+              "mean": 46878,
+              "median": 46878.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 43183,
+              "median": 43183.0
+            },
+            "mean_delta": -3695
+          }
+        },
+        "gpu.advice_to_gpu": {
+          "count": {
+            "before": {
+              "n": 30,
+              "mean": 1,
+              "median": 1.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 1,
+              "median": 1.0
+            },
+            "mean_delta": 0
+          },
+          "summed_range_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.13750426666666668,
+              "median": 0.13632
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.13319266666666665,
+              "median": 0.13238699999999998
+            },
+            "mean_delta": -0.0043116000000000265
+          },
+          "union_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.13750426666666668,
+              "median": 0.13632
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.13319266666666665,
+              "median": 0.13238699999999998
+            },
+            "mean_delta": -0.0043116000000000265
+          },
+          "union_pre_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.13750426666666668,
+              "median": 0.13632
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.13319266666666665,
+              "median": 0.13238699999999998
+            },
+            "mean_delta": -0.0043116000000000265
+          },
+          "union_during_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_post_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "payload_uint64_sum": {
+            "before": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "mean_delta": 0
+          }
+        },
+        "gpu.execute": {
+          "count": {
+            "before": {
+              "n": 30,
+              "mean": 1,
+              "median": 1.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 1,
+              "median": 1.0
+            },
+            "mean_delta": 0
+          },
+          "summed_range_ms": {
+            "before": {
+              "n": 30,
+              "mean": 5.6134571,
+              "median": 5.32135
+            },
+            "after": {
+              "n": 30,
+              "mean": 5.683439433333334,
+              "median": 5.601497999999999
+            },
+            "mean_delta": 0.06998233333333381
+          },
+          "union_ms": {
+            "before": {
+              "n": 30,
+              "mean": 5.6134571,
+              "median": 5.32135
+            },
+            "after": {
+              "n": 30,
+              "mean": 5.683439433333334,
+              "median": 5.601497999999999
+            },
+            "mean_delta": 0.06998233333333381
+          },
+          "union_pre_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.24935823333333332,
+              "median": 0.214762
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.2299089,
+              "median": 0.21384
+            },
+            "mean_delta": -0.01944933333333332
+          },
+          "union_during_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 5.308385666666666,
+              "median": 5.056834
+            },
+            "after": {
+              "n": 30,
+              "mean": 5.401030333333333,
+              "median": 5.344988
+            },
+            "mean_delta": 0.09264466666666671
+          },
+          "union_post_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0557132,
+              "median": 0.053983
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0525002,
+              "median": 0.051222000000000004
+            },
+            "mean_delta": -0.0032130000000000006
+          },
+          "payload_uint64_sum": {
+            "before": {
+              "n": 30,
+              "mean": 736,
+              "median": 736.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 736,
+              "median": 736.0
+            },
+            "mean_delta": 0
+          }
+        },
+        "gpu.prepare": {
+          "count": {
+            "before": {
+              "n": 30,
+              "mean": 1,
+              "median": 1.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 1,
+              "median": 1.0
+            },
+            "mean_delta": 0
+          },
+          "summed_range_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.7808006666666667,
+              "median": 0.7727040000000001
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.7829024,
+              "median": 0.7719475
+            },
+            "mean_delta": 0.0021017333333333
+          },
+          "union_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.7808006666666667,
+              "median": 0.7727040000000001
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.7829024,
+              "median": 0.7719475
+            },
+            "mean_delta": 0.0021017333333333
+          },
+          "union_pre_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.7808006666666667,
+              "median": 0.7727040000000001
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.7829024,
+              "median": 0.7719475
+            },
+            "mean_delta": 0.0021017333333333
+          },
+          "union_during_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_post_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "payload_uint64_sum": {
+            "before": {
+              "n": 30,
+              "mean": 736,
+              "median": 736.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 736,
+              "median": 736.0
+            },
+            "mean_delta": 0
+          }
+        },
+        "gpu.restore": {
+          "count": {
+            "before": {
+              "n": 30,
+              "mean": 1,
+              "median": 1.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 1,
+              "median": 1.0
+            },
+            "mean_delta": 0
+          },
+          "summed_range_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.023085433333333332,
+              "median": 0.0223265
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.021434066666666668,
+              "median": 0.020638499999999997
+            },
+            "mean_delta": -0.0016513666666666642
+          },
+          "union_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.023085433333333332,
+              "median": 0.0223265
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.021434066666666668,
+              "median": 0.020638499999999997
+            },
+            "mean_delta": -0.0016513666666666642
+          },
+          "union_pre_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_during_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.0,
+              "median": 0.0
+            },
+            "mean_delta": 0.0
+          },
+          "union_post_kernel_ms": {
+            "before": {
+              "n": 30,
+              "mean": 0.023085433333333332,
+              "median": 0.0223265
+            },
+            "after": {
+              "n": 30,
+              "mean": 0.021434066666666668,
+              "median": 0.020638499999999997
+            },
+            "mean_delta": -0.0016513666666666642
+          },
+          "payload_uint64_sum": {
+            "before": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "after": {
+              "n": 30,
+              "mean": 0,
+              "median": 0.0
+            },
+            "mean_delta": 0
+          }
+        }
+      },
+      "overlap": {
+        "cp_with_ewald_ms": {
+          "before": {
+            "n": 30,
+            "mean": 0,
+            "median": 0.0
+          },
+          "after": {
+            "n": 30,
+            "mean": 0.89342,
+            "median": 0.8946719999999999
+          },
+          "mean_delta": 0.89342
+        },
+        "cp_without_ewald_ms": {
+          "before": {
+            "n": 30,
+            "mean": 0,
+            "median": 0.0
+          },
+          "after": {
+            "n": 30,
+            "mean": 0.9542977,
+            "median": 0.9636825000000002
+          },
+          "mean_delta": 0.9542977
+        },
+        "walk_with_ewald_ms": {
+          "before": {
+            "n": 30,
+            "mean": 0.5772344,
+            "median": 0.5749344999999992
+          },
+          "after": {
+            "n": 30,
+            "mean": 0.8002328000000001,
+            "median": 0.8063995000000004
+          },
+          "mean_delta": 0.22299840000000004
+        },
+        "walk_without_ewald_ms": {
+          "before": {
+            "n": 30,
+            "mean": 0.419456,
+            "median": 0.42016849999999983
+          },
+          "after": {
+            "n": 30,
+            "mean": 0.7410299666666668,
+            "median": 0.7408554999999999
+          },
+          "mean_delta": 0.32157396666666677
+        },
+        "cp_or_walk_with_ewald_ms": {
+          "before": {
+            "n": 30,
+            "mean": 0.5772344,
+            "median": 0.5749344999999992
+          },
+          "after": {
+            "n": 30,
+            "mean": 1.6936528000000002,
+            "median": 1.6796974999999996
+          },
+          "mean_delta": 1.1164184000000001
+        },
+        "cp_or_walk_without_ewald_ms": {
+          "before": {
+            "n": 30,
+            "mean": 0.419456,
+            "median": 0.42016849999999983
+          },
+          "after": {
+            "n": 30,
+            "mean": 1.5291637666666666,
+            "median": 1.535908
+          },
+          "mean_delta": 1.1097077666666666
+        }
+      },
+      "pairs": {
+        "0": {
+          "root_ms": {
+            "before": {
+              "n": 15,
+              "mean": 17.7564162,
+              "median": 17.475333
+            },
+            "after": {
+              "n": 15,
+              "mean": 19.0434242,
+              "median": 18.823685
+            },
+            "mean_delta": 1.2870080000000002
+          },
+          "pre_kernel_ms": {
+            "before": {
+              "n": 15,
+              "mean": 12.4371628,
+              "median": 12.438388
+            },
+            "after": {
+              "n": 15,
+              "mean": 13.5995484,
+              "median": 13.577797
+            },
+            "mean_delta": 1.1623856000000004
+          },
+          "kernel_ms": {
+            "before": {
+              "n": 15,
+              "mean": 5.230932466666666,
+              "median": 4.857252
+            },
+            "after": {
+              "n": 15,
+              "mean": 5.368293733333333,
+              "median": 5.157567
+            },
+            "mean_delta": 0.13736126666666681
+          },
+          "post_kernel_ms": {
+            "before": {
+              "n": 15,
+              "mean": 0.08832093333333334,
+              "median": 0.082304
+            },
+            "after": {
+              "n": 15,
+              "mean": 0.07558206666666667,
+              "median": 0.075563
+            },
+            "mean_delta": -0.012738866666666668
+          }
+        },
+        "1": {
+          "root_ms": {
+            "before": {
+              "n": 15,
+              "mean": 17.816890266666668,
+              "median": 17.811576
+            },
+            "after": {
+              "n": 15,
+              "mean": 19.065075466666666,
+              "median": 19.099381
+            },
+            "mean_delta": 1.2481851999999982
+          },
+          "pre_kernel_ms": {
+            "before": {
+              "n": 15,
+              "mean": 12.350761866666668,
+              "median": 12.349848
+            },
+            "after": {
+              "n": 15,
+              "mean": 13.548048733333333,
+              "median": 13.524954
+            },
+            "mean_delta": 1.1972868666666656
+          },
+          "kernel_ms": {
+            "before": {
+              "n": 15,
+              "mean": 5.385838866666667,
+              "median": 5.258206
+            },
+            "after": {
+              "n": 15,
+              "mean": 5.433766933333334,
+              "median": 5.347484
+            },
+            "mean_delta": 0.0479280666666666
+          },
+          "post_kernel_ms": {
+            "before": {
+              "n": 15,
+              "mean": 0.08028953333333333,
+              "median": 0.079614
+            },
+            "after": {
+              "n": 15,
+              "mean": 0.0832598,
+              "median": 0.07731
+            },
+            "mean_delta": 0.0029702666666666655
+          }
+        }
+      }
+    }
+  }
+}

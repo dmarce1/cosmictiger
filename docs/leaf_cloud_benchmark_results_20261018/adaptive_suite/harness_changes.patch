@@ -1,0 +1,153 @@
+--- benchmarks/stf_walk.cpp
++++ adaptive_suite/stf_walk.cpp
+@@ -19,15 +19,20 @@
+ #include <fstream>
+ #include <iomanip>
+ #include <limits>
++#include <map>
+ #include <stdexcept>
+ #include <string>
++#include <utility>
+ #include <vector>
+ 
+ #include <hpx/runtime_local/runtime_local_fwd.hpp>
++#include <hpx/threading_base/thread_helpers.hpp>
++#include <hpx/threading_base/thread_pool_base.hpp>
+ 
+ #include <cosmictiger/hpx.hpp>
+ #include <cosmictiger/kick.hpp>
+ #include <cosmictiger/kick_workspace.hpp>
++#include <cosmictiger/memused.hpp>
+ #include <cosmictiger/options.hpp>
+ #include <cosmictiger/particles.hpp>
+ #include <cosmictiger/tree.hpp>
+@@ -67,7 +72,23 @@
+     return (double(value & 0xffffu) / 65535. - 0.5) * 0.2;
+ }
+ 
+-std::vector<Array<Fixed32, NDIM>> stfWalkPositions(bool clustered) {
++bool stfWalkFixtureSelected(char const* fixture) {
++    char const* selection = std::getenv("COSMICTIGER_STF_WALK_FIXTURE");
++    if (selection == nullptr || std::string(selection) == "all") {
++        return true;
++    }
++    std::string const selected(selection);
++    if (selected != "lattice" && selected != "clustered" && selected != "adaptive") {
++        throw std::invalid_argument(
++            "COSMICTIGER_STF_WALK_FIXTURE must be all, lattice, clustered, or adaptive");
++    }
++    return selected == fixture;
++}
++
++std::vector<Array<Fixed32, NDIM>> stfWalkPositions(std::string const& fixture) {
++    bool const clustered = fixture == "clustered";
++    bool const adaptive = fixture == "adaptive";
++    std::array<double, NDIM> const clusterCenter{0.41, 0.47, 0.53};
+     std::vector<Array<Fixed32, NDIM>> positions(kStfWalkParticles);
+     for (int z = 0; z < kStfWalkSide; ++z) {
+         for (int y = 0; y < kStfWalkSide; ++y) {
+@@ -82,7 +103,14 @@
+                             (coordinate - half * (kStfWalkSide / 2)) / (kStfWalkSide / 2) - 0.5;
+                         positions[index][dim] = 0.25 + 0.5 * half + 0.24 * local;
+                     } else {
+-                        positions[index][dim] = coordinate / kStfWalkSide;
++                        double const basePosition = coordinate / kStfWalkSide;
++                        // Odd multiplication permutes all 32768 indices: exactly three
++                        // quarters enter the dense region without choosing a spatial slab.
++                        bool const denseParticle =
++                            ((uint32_t(index) * 2654435761u) & 32767u) < 24576u;
++                        positions[index][dim] = adaptive && denseParticle ?
++                            clusterCenter[dim] + 0.18 * (basePosition - 0.5) :
++                            basePosition;
+                     }
+                 }
+             }
+@@ -186,9 +214,37 @@
+     return values[values.size() / 2];
+ }
+ 
+-void stfWalkFixture(bool clustered, bool doPhi, int samples, std::ofstream& forceOutput) {
+-    auto const positions = stfWalkPositions(clustered);
+-    char const* fixture = clustered ? "clustered" : "lattice";
++void stfWalkLeafHistogram(TreeId root, char const* fixture) {
++    std::map<std::pair<int, ParticleInteger>, size_t> histogram;
++    std::vector<TreeId> pending{root};
++    size_t occupiedParticles = 0;
++    while (!pending.empty()) {
++        TreeId const id = pending.back();
++        pending.pop_back();
++        auto const* node = treeGetNode(id);
++        ParticleInteger const count = node->numberOfParticles();
++        if (node->leaf) {
++            if (count > 0) {
++                ++histogram[{int(node->depth), count}];
++                occupiedParticles += size_t(count);
++            }
++        } else {
++            for (int child = 0; child < NCHILD; ++child) {
++                pending.push_back(node->children[child]);
++            }
++        }
++    }
++    if (occupiedParticles != kStfWalkParticles) {
++        throw std::runtime_error("STF walk leaf histogram lost particles");
++    }
++    for (auto const& entry : histogram) {
++        PRINT("STF_WALK_LEAF_HISTOGRAM,%s,%i,%zu,%zu\n", fixture, entry.first.first,
++            size_t(entry.first.second), entry.second);
++    }
++}
++
++void stfWalkFixture(char const* fixture, bool doPhi, int samples, std::ofstream& forceOutput) {
++    auto const positions = stfWalkPositions(fixture);
+     char const* backend = getOptions().cuda ? "cuda" : "cpu";
+     std::vector<double> setupTimes, treeTimes, kickTimes, totalTimes;
+     uint64_t expectedPositionHash = 0;
+@@ -207,12 +263,20 @@
+             if (built.id.proc != 0 || built.id.index != 0) {
+                 throw std::runtime_error("STF walk benchmark requires the complete local root");
+             }
++            // Inspect only the force-only warmup, after tree timing and before kick
++            // timing. No histogram traversal or printing occurs in measured samples.
++            if (sample == -1 && !doPhi) {
++                stfWalkLeafHistogram(built.id, fixture);
++            }
+             Expansion<float> local;
+             local = 0.0f;
+             auto const params = stfWalkParameters(doPhi, treeParams.minLevel);
+             auto const kickBegin = std::chrono::steady_clock::now();
+             auto const result = kick(params, local, built.pos, built.id, Vector<TreeId>{built.id},
+                 Vector<TreeId>{built.id}, nullptr);
++            // Particle completion can precede trailing empty-node descents. Wait
++            // for the pool before timing ends and before a later tree reuses nodes.
++            hpx::this_thread::get_pool()->wait();
+             auto const kickEnd = std::chrono::steady_clock::now();
+             auto const checksums = stfWalkChecksums(doPhi);
+             if (sample == -1) {
+@@ -263,6 +327,10 @@
+         throw std::invalid_argument(
+             "STF complete-walk benchmark requires one HPX locality with two worker threads");
+     }
++    // The benchmark needs pool quiescence between reconstructed trees. Stop the
++    // background memory observer so that it cannot keep the pool non-idle.
++    stopMemuseDaemon();
++    hpx::this_thread::get_pool()->wait();
+     auto const originalOptions = getOptions();
+     auto options = originalOptions;
+     options.sph = false;
+@@ -292,9 +360,12 @@
+               "checksum,total_potential\n");
+         PRINT("STF_WALK_MEDIAN_HEADER,fixture,backend,do_phi,samples,particles,setup_seconds,tree_"
+               "seconds,kick_seconds,tree_plus_kick_seconds,position_hash\n");
+-        for (bool clustered : {false, true}) {
+-            for (bool doPhi : {false, true}) {
+-                detail::stfWalkFixture(clustered, doPhi, samples, forces);
++        PRINT("STF_WALK_LEAF_HISTOGRAM_HEADER,fixture,depth,particles_per_leaf,leaves\n");
++        for (char const* fixture : {"lattice", "clustered", "adaptive"}) {
++            if (detail::stfWalkFixtureSelected(fixture)) {
++                for (bool doPhi : {false, true}) {
++                    detail::stfWalkFixture(fixture, doPhi, samples, forces);
++                }
+             }
+         }
+         // Retain the allocated particle arena: particlesDestroy currently

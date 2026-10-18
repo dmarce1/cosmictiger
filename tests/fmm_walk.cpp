@@ -366,9 +366,8 @@ void fmmWalkRequireInteraction(
         boxDistanceSquared(sourceNode->box, sinkNode->pos), pairSupport,
         fmmInverseOpeningAngle(kFmmWalkTheta));
     auto const actual = selectFmmInteraction(acceptance.cellCell != 0.0f,
-        acceptance.particleCell != 0.0f, acceptance.cellParticle != 0.0f,
-        sinkNode->leaf && sourceNode->leaf, sinkNode->numberOfParticles(),
-        sourceNode->numberOfParticles(), sinkNode->radius, sourceNode->radius);
+        acceptance.particleCell != 0.0f, acceptance.cellParticle != 0.0f, sinkNode->leaf,
+        sourceNode->leaf, sinkNode->radius, sourceNode->radius);
     if (actual != expected) {
         throw std::runtime_error(label + ": synthetic geometry selected the wrong interaction");
     }
@@ -485,11 +484,13 @@ void fmmWalkReciprocalHybrid(bool useCuda) {
         float secondRadius;
         std::array<FmmInteraction, 2> interactions;
     };
-    std::array<HybridCase, 3> const cases{{
-        {"unequal counts PC/CP", 64, 0.0625f, 0.09375f,
-            {FmmInteraction::ParticleCell, FmmInteraction::CellParticle}},
+    std::array<HybridCase, 4> const cases{{
+        {"unequal counts CP/PC", 64, 0.0625f, 0.09375f,
+            {FmmInteraction::CellParticle, FmmInteraction::ParticleCell}},
         {"equal counts, unequal radii CP/PC", 40, 0.0625f, 0.09375f,
             {FmmInteraction::CellParticle, FmmInteraction::ParticleCell}},
+        {"unequal counts, equal radii PP", 64, 0.078125f, 0.078125f,
+            {FmmInteraction::ParticleParticle, FmmInteraction::ParticleParticle}},
         {"equal counts and radii PP", 40, 0.078125f, 0.078125f,
             {FmmInteraction::ParticleParticle, FmmInteraction::ParticleParticle}},
     }};
@@ -554,18 +555,152 @@ void fmmWalkReciprocalHybrid(bool useCuda) {
     }
 }
 
-void fmmWalkRequireDistinctForces(
-    std::string const& label, ForceVectors const& direct, ForceVectors const& formerExpansion) {
+void fmmWalkRequireDistinctForces(std::string const& label, ForceVectors const& expected,
+    ForceVectors const& alternative, double minimumDifference = 0.01) {
     double largestDifference = 0.0;
-    for (size_t i = 0; i < direct.gx.size(); i++) {
+    for (size_t i = 0; i < expected.gx.size(); i++) {
         largestDifference = std::max(largestDifference,
-            std::abs(double(direct.gx[i]) - formerExpansion.gx[i]) /
-                std::max(1.0, std::abs(double(direct.gx[i]))));
+            std::abs(double(expected.gx[i]) - alternative.gx[i]) /
+                std::max(1.0, std::abs(double(expected.gx[i]))));
     }
-    // A missing metadata check must fail the actual force comparison, not just
-    // the helper-level interaction expectation above it.
-    if (largestDifference < 0.01) {
-        throw std::runtime_error(label + ": expansion is too close to PP to test metadata routing");
+    // An incorrect traversal must fail the actual force comparison, not just
+    // the helper-level interaction expectation.
+    if (largestDifference < minimumDifference) {
+        throw std::runtime_error(label + ": alternative forces cannot distinguish the interaction");
+    }
+}
+
+void fmmWalkInternalCloudHybrid(bool useCuda) {
+    struct HybridCase {
+        char const* label;
+        float cloudRadius;
+        float leafRadius;
+        bool tightLeafBox;
+    };
+    std::array<HybridCase, 2> const cases{{
+        {"internal cloud radial PC/CP", 0.0625f, 0.09375f, false},
+        {"internal cloud box-only PC/CP", 0.078125f, 0.125f, true},
+    }};
+    std::array<double, 7> const coordinates{
+        0.1875, 0.21875, 0.28125, 0.3125, 0.359375, 0.4375, 0.515625};
+    float const support = 0.015625f;
+    float const largeSupport = 0.375f;
+    for (auto const& testCase : cases) {
+        for (int supportMode = 0; supportMode < 3; supportMode++) {
+            bool const accepted = supportMode == 0;
+            float const cloudSupport = supportMode == 1 ? largeSupport : support;
+            float const leafSupport = supportMode == 2 ? largeSupport : support;
+            particlesResize(coordinates.size());
+            for (size_t i = 0; i < coordinates.size(); i++) {
+                fmmWalkSetParticlePosition(i, fmmWalkPosition(coordinates[i], 0.375, 0.4375));
+            }
+            fmmWalkResetKickState();
+            particlesSortByRung(0);
+            treeCreate(TreeCreateParameters(0, kFmmWalkTheta, support));
+            for (size_t i = 0; i < coordinates.size(); i++) {
+                fmmWalkSetParticlePosition(i, fmmWalkPosition(coordinates[i], 0.375, 0.4375));
+            }
+            // Both translated children must receive the parent's CP expansion.
+            // The cloud has four particles and the explicit leaf has three.
+            std::array<TreeId, 2> const children{
+                fmmWalkAddNode(fmmWalkPosition(0.203125, 0.375, 0.4375), 0.015625f,
+                    Pair<ParticleInteger>(0, 2), 5, false, TreeId{-1, -1}, TreeId{-1, -1}, false,
+                    cloudSupport),
+                fmmWalkAddNode(fmmWalkPosition(0.296875, 0.375, 0.4375), 0.015625f,
+                    Pair<ParticleInteger>(2, 4), 5, false, TreeId{-1, -1}, TreeId{-1, -1}, false,
+                    cloudSupport)};
+            auto const cloud =
+                fmmWalkAddNode(fmmWalkPosition(0.25, 0.375, 0.4375), testCase.cloudRadius,
+                    Pair<ParticleInteger>(0, 4), 4, true, children[0], children[1]);
+            auto const leaf = fmmWalkAddNode(fmmWalkPosition(0.4375, 0.375, 0.4375),
+                testCase.leafRadius, Pair<ParticleInteger>(4, 7), 4, true, TreeId{-1, -1},
+                TreeId{-1, -1}, false, leafSupport, testCase.tightLeafBox);
+            if (testCase.tightLeafBox &&
+                0.1875f > std::fma(fmmInverseOpeningAngle(kFmmWalkTheta), testCase.cloudRadius,
+                              testCase.leafRadius)) {
+                throw std::runtime_error("Internal cloud fixture must require the box shortcut");
+            }
+            std::array<TreeId, 2> const sinks{cloud, leaf};
+            std::array<FmmInteraction, 2> const interactions = accepted ?
+                std::array<FmmInteraction, 2>{
+                    FmmInteraction::CellParticle, FmmInteraction::ParticleCell} :
+                std::array<FmmInteraction, 2>{
+                    FmmInteraction::ParticleParticle, FmmInteraction::ParticleParticle};
+            std::string const mode = std::string(testCase.label) +
+                (accepted ?
+                        "" :
+                        (supportMode == 1 ? " cloud support fallback" : " leaf support fallback"));
+            std::array<ForceVectors, 2> references;
+            for (int direction = 0; direction < 2; direction++) {
+                auto const sink = sinks[direction];
+                auto const source = sinks[1 - direction];
+                fmmWalkRequireInteraction(sink, source, support, interactions[direction], mode);
+                references[direction] =
+                    fmmWalkInteractionReference(sink, source, support, interactions[direction]);
+                if (accepted) {
+                    // Prove that opening the cloud cannot accidentally satisfy
+                    // the parent-operator reference. The alternative uses the
+                    // actual interactions accepted after one level of descent.
+                    auto const range = treeGetNode(sink)->particleRange;
+                    ForceVectors opened(range.second - range.first);
+                    for (int child = 0; child < NCHILD; child++) {
+                        auto const childSink = direction == 0 ? children[child] : leaf;
+                        auto const childSource = direction == 0 ? leaf : children[child];
+                        auto const childInteraction = testCase.tightLeafBox && child == RIGHT ?
+                            interactions[direction] :
+                            FmmInteraction::CellCell;
+                        fmmWalkRequireInteraction(
+                            childSink, childSource, support, childInteraction, mode + " opened");
+                        auto const childReference = fmmWalkInteractionReference(
+                            childSink, childSource, support, childInteraction);
+                        auto const childRange = treeGetNode(childSink)->particleRange;
+                        for (ParticleInteger i = childRange.first; i < childRange.second; i++) {
+                            auto const j = i - range.first;
+                            auto const k = i - childRange.first;
+                            if (direction == 0 || child == LEFT) {
+                                opened.gx[j] = childReference.gx[k];
+                                opened.gy[j] = childReference.gy[k];
+                                opened.gz[j] = childReference.gz[k];
+                                opened.phi[j] = childReference.phi[k];
+                            } else {
+                                opened.gx[j] += childReference.gx[k];
+                                opened.gy[j] += childReference.gy[k];
+                                opened.gz[j] += childReference.gz[k];
+                                opened.phi[j] +=
+                                    childReference.phi[k] - particlesMass(i) * selfPhi() / support;
+                            }
+                        }
+                    }
+                    fmmWalkRequireDistinctForces(
+                        mode + " premature opening", references[direction], opened, 1.0e-3);
+                }
+            }
+            std::array<ForceVectors, 2> cpuForces;
+            for (int backend = 0; backend < (useCuda ? 2 : 1); backend++) {
+                std::string const label = mode + (backend == 0 ? " CPU" : " CUDA");
+                std::array<ForceVectors, 2> backendForces;
+                for (int direction = 0; direction < 2; direction++) {
+                    auto& forces = backendForces[direction];
+                    forces = fmmWalkApplyInteraction(
+                        sinks[direction], sinks[1 - direction], support, backend != 0);
+                    fmmWalkCompareForces(
+                        label + " operator reference", forces, references[direction]);
+                    if (backend == 0) {
+                        cpuForces[direction] = forces;
+                    } else {
+                        fmmWalkCompareForces(
+                            label + " CPU agreement", forces, cpuForces[direction]);
+                    }
+                }
+                fmmWalkRequireForceReciprocity(
+                    label, sinks, {&backendForces[0], &backendForces[1]});
+                if (backend != 0) {
+                    fmmWalkRequireForceReciprocity(
+                        mode + " mixed CPU/CUDA", sinks, {&cpuForces[0], &backendForces[1]});
+                }
+            }
+            treeDestroy();
+        }
     }
 }
 
@@ -582,7 +717,7 @@ void fmmWalkCellSupportBounds(bool useCuda) {
         {"cell support CC fallback", 0.0625f, 0.078125f, false, false,
             {FmmInteraction::CellCell, FmmInteraction::CellCell}},
         {"cell support radial hybrid fallback", 0.0625f, 0.09375f, false, false,
-            {FmmInteraction::ParticleCell, FmmInteraction::CellParticle}},
+            {FmmInteraction::CellParticle, FmmInteraction::ParticleCell}},
         {"cell support box-only hybrid fallback", 0.125f, 0.078125f, true, false,
             {FmmInteraction::ParticleCell, FmmInteraction::CellParticle}},
         {"cell support CC refinement", 0.0625f, 0.078125f, false, true,
@@ -1015,6 +1150,7 @@ void fmmWalkTest() {
         detail::fmmWalkEmptyLocalRoot(useCuda);
         detail::fmmWalkDeferredSourceHandoff(useCuda);
         detail::fmmWalkReciprocalHybrid(useCuda);
+        detail::fmmWalkInternalCloudHybrid(useCuda);
         detail::fmmWalkCellSupportBounds(useCuda);
         detail::fmmWalkPeriodicBackground(useCuda);
     } else {

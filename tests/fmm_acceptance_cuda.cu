@@ -43,9 +43,8 @@ struct AcceptanceInput {
     float sinkSupport;
     float sourceSupport;
     float theta;
-    long long sinkCount;
-    long long sourceCount;
-    bool bothLeaves;
+    bool sinkLeaf;
+    bool sourceLeaf;
 };
 
 struct AcceptanceResult {
@@ -63,9 +62,8 @@ struct SelectionInput {
     bool cellCell;
     bool particleCell;
     bool cellParticle;
-    bool bothLeaves;
-    long long sinkCount;
-    long long sourceCount;
+    bool sinkLeaf;
+    bool sourceLeaf;
     float sinkRadius;
     float sourceRadius;
 };
@@ -88,8 +86,8 @@ CUDA_EXPORT AcceptanceResult evaluate(AcceptanceInput const& input) {
         input.sourceRadius, input.sinkBoxDistanceSquared, input.sourceBoxDistanceSquared,
         fmmPairSupportRadius(0.0f, input.sinkSupport, input.sourceSupport), inverseTheta);
     auto const selected = selectFmmInteraction(accepted.cellCell != 0.0f,
-        accepted.particleCell != 0.0f, accepted.cellParticle != 0.0f, input.bothLeaves,
-        input.sinkCount, input.sourceCount, input.sinkRadius, input.sourceRadius);
+        accepted.particleCell != 0.0f, accepted.cellParticle != 0.0f, input.sinkLeaf,
+        input.sourceLeaf, input.sinkRadius, input.sourceRadius);
     return {accepted, selected, inverseTheta};
 }
 
@@ -113,9 +111,9 @@ __global__ void evaluateSelections(
     int const index = blockIdx.x * blockDim.x + threadIdx.x;
     if (index < count) {
         auto const& input = inputs[index];
-        results[index] = selectFmmInteraction(input.cellCell, input.particleCell,
-            input.cellParticle, input.bothLeaves, input.sinkCount, input.sourceCount,
-            input.sinkRadius, input.sourceRadius);
+        results[index] =
+            selectFmmInteraction(input.cellCell, input.particleCell, input.cellParticle,
+                input.sinkLeaf, input.sourceLeaf, input.sinkRadius, input.sourceRadius);
     }
 }
 
@@ -123,7 +121,7 @@ AcceptanceInput reversed(AcceptanceInput input) {
     std::swap(input.sinkRadius, input.sourceRadius);
     std::swap(input.sinkBoxDistanceSquared, input.sourceBoxDistanceSquared);
     std::swap(input.sinkSupport, input.sourceSupport);
-    std::swap(input.sinkCount, input.sourceCount);
+    std::swap(input.sinkLeaf, input.sourceLeaf);
     return input;
 }
 
@@ -170,14 +168,14 @@ void runAcceptance() {
         inputs.push_back(reversed(input));
     };
     // Far cells, overlapping supports, and each one-sided geometric opening.
-    add({0.25f, .03125f, .0625f, 0.0f, 0.0f, .015625f, .03125f, .8f, 38, 80, true});
-    add({.000625f, .001f, .01f, .000576f, .000225f, .02f, .01f, .8f, 38, 80, true});
-    add({.015625f, .0625f, .015625f, .00390625f, 0.0f, .00390625f, .0078125f, .5f, 38, 80, true});
+    add({0.25f, .03125f, .0625f, 0.0f, 0.0f, .015625f, .03125f, .8f, true, true});
+    add({.000625f, .001f, .01f, .000576f, .000225f, .02f, .01f, .8f, true, true});
+    add({.015625f, .0625f, .015625f, .00390625f, 0.0f, .00390625f, .0078125f, .5f, true, true});
     // Exactly representable support boundary, then its adjacent float values.
     float const boundary = .015625f;
     for (float distanceSquared : {std::nextafter(boundary, 0.0f), boundary,
              std::nextafter(boundary, std::numeric_limits<float>::infinity())}) {
-        add({distanceSquared, .03125f, .03125f, 0.0f, 0.0f, .0625f, .015625f, .8f, 38, 80, true});
+        add({distanceSquared, .03125f, .03125f, 0.0f, 0.0f, .0625f, .015625f, .8f, true, true});
     }
     // Boundary probes isolate center and box alternatives, including reciprocal
     // inequalities whose fused multiply-add must agree under CUDA fast math.
@@ -196,7 +194,7 @@ void runAcceptance() {
                                  std::nextafter(
                                      distanceSquared, std::numeric_limits<float>::infinity())}) {
                             add({probe, sinkRadius, sourceRadius, 0.0f, 0.0f, support,
-                                .5f * support, theta, 38, 39, true});
+                                .5f * support, theta, true, true});
                         }
                     }
                     float const boxBoundary = sourceRadius + support;
@@ -206,10 +204,21 @@ void runAcceptance() {
                             std::nextafter(
                                 boxBoundarySquared, std::numeric_limits<float>::infinity())}) {
                         add({0.0f, sinkRadius, sourceRadius, probe, 0.0f, .5f * support, support,
-                            theta, 38, 39, true});
+                            theta, true, true});
                     }
                 }
             }
+        }
+    }
+    // Exercise accepted and rejected geometry at each tree-level orientation.
+    // Reversing each input also exchanges the explicit leaf and internal cloud.
+    for (bool sinkLeaf : {false, true}) {
+        for (bool sourceLeaf : {false, true}) {
+            add({0.25f, .03125f, .0625f, 0.0f, 0.0f, .015625f, .03125f, .8f, sinkLeaf, sourceLeaf});
+            add({.015625f, .0625f, .015625f, .00390625f, 0.0f, .00390625f, .0078125f, .5f, sinkLeaf,
+                sourceLeaf});
+            add({1.69f, .5f, .5f, 1.21f, 1.21f, .1f, .1f, .5f, sinkLeaf, sourceLeaf});
+            add({.000625f, .001f, .01f, .000576f, .000225f, .02f, .01f, .8f, sinkLeaf, sourceLeaf});
         }
     }
     auto const results = runDevice<AcceptanceInput, AcceptanceResult>(inputs,
@@ -246,21 +255,55 @@ void runAcceptance() {
 }
 
 void runSelections() {
+    struct SelectionCase {
+        char const* label;
+        SelectionInput input;
+        FmmInteraction expected;
+    };
+    std::vector<SelectionCase> const cases = {
+        {"CC takes priority over both hybrids", {true, true, true, true, true, .25f, .5f},
+            FmmInteraction::CellCell},
+        {"CC can join two internal cells", {true, false, false, false, false, .25f, .5f},
+            FmmInteraction::CellCell},
+        {"PC joins a sink leaf to an internal source", {false, true, false, true, false, .25f, .5f},
+            FmmInteraction::ParticleCell},
+        {"CP joins an internal sink to a source leaf", {false, false, true, false, true, .5f, .25f},
+            FmmInteraction::CellParticle},
+        {"PC requires an explicit sink leaf", {false, true, false, false, true, .25f, .5f},
+            FmmInteraction::ParticleParticle},
+        {"CP requires an explicit source leaf", {false, false, true, true, false, .5f, .25f},
+            FmmInteraction::ParticleParticle},
+        {"two internal cells must descend after CC fails",
+            {false, true, true, false, false, .25f, .5f}, FmmInteraction::ParticleParticle},
+        {"leaf eligibility takes priority over cloud radius",
+            {false, true, true, true, false, .25f, .5f}, FmmInteraction::ParticleCell},
+        {"the sole accepted geometry takes priority over cloud radius",
+            {false, true, false, true, true, .25f, .5f}, FmmInteraction::ParticleCell},
+        {"two eligible hybrids expand the smaller source cloud",
+            {false, true, true, true, true, .5f, .25f}, FmmInteraction::ParticleCell},
+        {"two eligible hybrids expand the smaller sink cloud",
+            {false, true, true, true, true, .25f, .5f}, FmmInteraction::CellParticle},
+        {"identical leaves retain reciprocal PP fallback",
+            {false, true, true, true, true, .5f, .5f}, FmmInteraction::ParticleParticle},
+        {"failed geometry retains PP fallback", {false, false, false, true, true, .25f, .5f},
+            FmmInteraction::ParticleParticle},
+    };
     std::vector<SelectionInput> inputs;
-    long long const counts[] = {0, 37, 38, 39, 16777216, 16777217};
+    auto const add = [&](SelectionInput const& input) {
+        inputs.push_back(input);
+        inputs.push_back({input.cellCell, input.cellParticle, input.particleCell, input.sourceLeaf,
+            input.sinkLeaf, input.sourceRadius, input.sinkRadius});
+    };
+    for (auto const& value : cases) {
+        add(value.input);
+    }
     float const radii[] = {.03125f, std::nextafter(.03125f, 0.0f),
         std::nextafter(.03125f, std::numeric_limits<float>::infinity()), .0625f};
-    for (int masks = 0; masks < 16; ++masks) {
-        for (long long sinkCount : counts) {
-            for (long long sourceCount : counts) {
-                for (float sinkRadius : radii) {
-                    for (float sourceRadius : radii) {
-                        inputs.push_back({bool(masks & 1), bool(masks & 2), bool(masks & 4),
-                            bool(masks & 8), sinkCount, sourceCount, sinkRadius, sourceRadius});
-                        inputs.push_back({bool(masks & 1), bool(masks & 4), bool(masks & 2),
-                            bool(masks & 8), sourceCount, sinkCount, sourceRadius, sinkRadius});
-                    }
-                }
+    for (int masks = 0; masks < 32; ++masks) {
+        for (float sinkRadius : radii) {
+            for (float sourceRadius : radii) {
+                add({bool(masks & 1), bool(masks & 2), bool(masks & 4), bool(masks & 8),
+                    bool(masks & 16), sinkRadius, sourceRadius});
             }
         }
     }
@@ -268,42 +311,28 @@ void runSelections() {
         inputs, [](SelectionInput const* deviceInputs, FmmInteraction* deviceResults, int count) {
             evaluateSelections<<<(count + 31) / 32, 32>>>(deviceInputs, deviceResults, count);
         });
+    for (size_t i = 0; i < cases.size(); ++i) {
+        require(results[2 * i] == cases[i].expected &&
+                results[2 * i + 1] == transposed(cases[i].expected),
+            cases[i].label);
+    }
     for (size_t i = 0; i < inputs.size(); ++i) {
         auto const& input = inputs[i];
-        auto const expected = selectFmmInteraction(input.cellCell, input.particleCell,
-            input.cellParticle, input.bothLeaves, input.sinkCount, input.sourceCount,
-            input.sinkRadius, input.sourceRadius);
+        auto const expected =
+            selectFmmInteraction(input.cellCell, input.particleCell, input.cellParticle,
+                input.sinkLeaf, input.sourceLeaf, input.sinkRadius, input.sourceRadius);
         auto const label = "Selection case " + std::to_string(i);
         require(results[i] == expected, label + " host/device mismatch");
         if (i % 2 == 0) {
             require(results[i] == transposed(results[i + 1]), label + " reciprocal mismatch");
         }
-        bool const particleCell = input.particleCell && input.sinkCount >= 38;
-        bool const cellParticle = input.cellParticle && input.sourceCount >= 38;
         if (input.cellCell) {
             require(results[i] == FmmInteraction::CellCell, label + " CC priority");
-        } else if (!input.bothLeaves || (!particleCell && !cellParticle)) {
-            require(results[i] == FmmInteraction::ParticleParticle, label + " PP fallback");
-        } else if (particleCell && !cellParticle) {
-            require(results[i] == FmmInteraction::ParticleCell,
-                label + " sole eligible PC ignores count and radius preference");
-        } else if (cellParticle && !particleCell) {
-            require(results[i] == FmmInteraction::CellParticle,
-                label + " sole eligible CP ignores count and radius preference");
-        } else if (input.sinkCount != input.sourceCount) {
-            require(results[i] ==
-                    (input.sinkCount < input.sourceCount ? FmmInteraction::ParticleCell :
-                                                           FmmInteraction::CellParticle),
-                label + " explicit count ordering takes priority over radius");
-        } else if (input.sinkRadius != input.sourceRadius) {
-            require(results[i] ==
-                    (input.sourceRadius < input.sinkRadius ? FmmInteraction::ParticleCell :
-                                                             FmmInteraction::CellParticle),
-                label + " equal counts prefer the smaller cell radius");
-        } else {
-            require(results[i] == FmmInteraction::ParticleParticle,
-                label + " equal counts and radii retain PP fallback");
         }
+        require(input.sinkLeaf || results[i] != FmmInteraction::ParticleCell,
+            label + " PC must expose particles only from a leaf");
+        require(input.sourceLeaf || results[i] != FmmInteraction::CellParticle,
+            label + " CP must expose particles only from a leaf");
     }
 }
 

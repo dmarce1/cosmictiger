@@ -14,8 +14,6 @@
 
 enum class FmmInteraction { CellCell, ParticleCell, CellParticle, ParticleParticle };
 
-constexpr int kMinimumHybridParticleCount = 38;
-
 template <class T>
 struct FmmAcceptance {
     using Mask = decltype(T{} < T{});
@@ -96,30 +94,18 @@ CUDA_EXPORT inline FmmAcceptance<T> computeFmmAcceptance(T const& centerDistance
         supportSeparated};
 }
 
-// Select reciprocal PC/CP interactions using the smaller explicit-particle side.
-// Equal counts expand the smaller-radius cell; equal radii fall back to PP.
-// Integer counts preserve ties even beyond the exact-integer range of float.
-template <class Count>
+// Only the explicit-particle side must be a leaf. When both hybrids qualify,
+// keep the smaller-radius cell as the cloud; equal radii fall back to PP to
+// preserve reciprocal selection without a particle-count heuristic.
 CUDA_EXPORT inline FmmInteraction selectFmmInteraction(bool cellCellAccepted,
-    bool particleCellAccepted, bool cellParticleAccepted, bool bothLeaves, Count sinkParticleCount,
-    Count sourceParticleCount, float sinkRadius, float sourceRadius) {
+    bool particleCellAccepted, bool cellParticleAccepted, bool sinkLeaf, bool sourceLeaf,
+    float sinkRadius, float sourceRadius) {
     if (cellCellAccepted) {
         return FmmInteraction::CellCell;
     }
-    if (!bothLeaves) {
-        return FmmInteraction::ParticleParticle;
-    }
-    bool const particleCell =
-        particleCellAccepted && sinkParticleCount >= kMinimumHybridParticleCount;
-    bool const cellParticle =
-        cellParticleAccepted && sourceParticleCount >= kMinimumHybridParticleCount;
+    bool const particleCell = particleCellAccepted && sinkLeaf;
+    bool const cellParticle = cellParticleAccepted && sourceLeaf;
     if (particleCell && cellParticle) {
-        if (sinkParticleCount < sourceParticleCount) {
-            return FmmInteraction::ParticleCell;
-        }
-        if (sourceParticleCount < sinkParticleCount) {
-            return FmmInteraction::CellParticle;
-        }
         if (sourceRadius < sinkRadius) {
             return FmmInteraction::ParticleCell;
         }

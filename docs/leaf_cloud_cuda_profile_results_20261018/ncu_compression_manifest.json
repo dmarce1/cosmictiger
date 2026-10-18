@@ -1,0 +1,20 @@
+[
+  {
+    "source": "ncu_after_source.csv",
+    "compressed": "ncu_after_source.csv.gz",
+    "uncompressed_bytes": 16891065,
+    "compressed_bytes": 611388,
+    "uncompressed_sha256": "1a2f35dcae0915b08dfa25e2797a0070e4bcbcb8d67c41b69356b53cedb270e9",
+    "verified_decompressed_sha256": "1a2f35dcae0915b08dfa25e2797a0070e4bcbcb8d67c41b69356b53cedb270e9",
+    "compressed_sha256": "673a6cc22bc07d609235285d621028b4afd41540011e276e59c2ed9919b7b6e7"
+  },
+  {
+    "source": "ncu_before_source.csv",
+    "compressed": "ncu_before_source.csv.gz",
+    "uncompressed_bytes": 16836184,
+    "compressed_bytes": 604353,
+    "uncompressed_sha256": "b3e6eaeedbe923728cd964acc197b0334e0dc6a4d8922b7277a864eac8116667",
+    "verified_decompressed_sha256": "b3e6eaeedbe923728cd964acc197b0334e0dc6a4d8922b7277a864eac8116667",
+    "compressed_sha256": "03b9a4a75a428c2efe9ec0591b8915ced8107c4ce6e4f60099f98d68a9f13179"
+  }
+]

@@ -1,0 +1,207 @@
+--- /home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/baseline_source/src/kick.cpp
++++ host_ranges/kick_before.cpp
+@@ -32,6 +32,7 @@
+ #include <cosmictiger/sph_particles.hpp>
+ #include <cosmictiger/stack_trace.hpp>
+ #include <cosmictiger/timer.hpp>
++#include "profile_ranges.hpp"
+ 
+ constexpr bool kVerbose = true;
+ 
+@@ -188,6 +189,7 @@
+ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> pos, TreeId self,
+     Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
+     std::shared_ptr<KickWorkspace> cudaWorkspace) {
++    detail::HostProfileRange rootProfile("kick.root", self.proc == 0 && self.index == 0);
+     FlopCounter<int> flops = 0;
+     if (self.proc == 0 && self.index == 0) {
+         profilerEnter(__FUNCTION__);
+@@ -316,6 +318,7 @@
+         cclist.resize(0);
+         leaflist.resize(0);
+         auto& checklist = echecklist;
++        detail::HostProfileRange checklistProfile("cpu.walk.ewald", true, checklist.size());
+         do {
+             for (int ci = 0; ci < checklist.size(); ci += SIMD_FLOAT_SIZE) {
+                 int const maxci = std::min((int) checklist.size(), ci + SIMD_FLOAT_SIZE);
+@@ -371,7 +374,11 @@
+             std::swap(checklist, nextlist);
+             nextlist.resize(0);
+         } while (checklist.size() && selfPtr->leaf);
+-        cpuGravityCc(kGravityEwald, l, cclist, self, params.doPhi);
++        checklistProfile.finish();
++        {
++            detail::HostProfileRange gravityProfile("cpu.gravity.cc.ewald", cclist.size() != 0, cclist.size());
++            cpuGravityCc(kGravityEwald, l, cclist, self, params.doPhi);
++        }
+         if (!selfPtr->leaf) {
+             checklist.insert(checklist.end(), leaflist.begin(), leaflist.end());
+         }
+@@ -384,6 +391,7 @@
+         cplist.resize(0);
+         leaflist.resize(0);
+         auto& checklist = dchecklist;
++        detail::HostProfileRange checklistProfile("cpu.walk.direct", true, checklist.size());
+         do {
+             for (int ci = 0; ci < checklist.size(); ci += SIMD_FLOAT_SIZE) {
+                 int const maxci = std::min((int) checklist.size(), ci + SIMD_FLOAT_SIZE);
+@@ -466,12 +474,25 @@
+             std::swap(checklist, nextlist);
+             nextlist.resize(0);
+         } while (checklist.size() && selfPtr->leaf);
+-        cpuGravityCc(kGravityDirect, l, cclist, self, params.doPhi);
++        checklistProfile.finish();
++        {
++            detail::HostProfileRange gravityProfile("cpu.gravity.cc.direct", cclist.size() != 0, cclist.size());
++            cpuGravityCc(kGravityDirect, l, cclist, self, params.doPhi);
++        }
+         if (selfPtr->leaf) {
+             if (selfPtr->numberOfParticles() > 0) {
+-                cpuGravityCp(l, cplist, self, params.doPhi);
+-                cpuGravityPc(forces, params.doPhi, self, pclist);
+-                cpuGravityPp(forces, params.doPhi, self, leaflist, params.gravitySupportRadius);
++                {
++                    detail::HostProfileRange gravityProfile(selfPtr->leaf ? "cpu.gravity.cp.leaf" : "cpu.gravity.cp.internal", cplist.size() != 0, cplist.size());
++                    cpuGravityCp(l, cplist, self, params.doPhi);
++                }
++                {
++                    detail::HostProfileRange gravityProfile("cpu.gravity.pc", pclist.size() != 0, pclist.size());
++                    cpuGravityPc(forces, params.doPhi, self, pclist);
++                }
++                {
++                    detail::HostProfileRange gravityProfile("cpu.gravity.pp", leaflist.size() != 0, leaflist.size());
++                    cpuGravityPp(forces, params.doPhi, self, leaflist, params.gravitySupportRadius);
++                }
+             }
+         } else {
+             ALWAYS_ASSERT(cplist.size() == 0);
+--- /home/dmarce1/workspace/cosmictiger/src/kick.cpp
++++ host_ranges/kick_after.cpp
+@@ -32,6 +32,7 @@
+ #include <cosmictiger/sph_particles.hpp>
+ #include <cosmictiger/stack_trace.hpp>
+ #include <cosmictiger/timer.hpp>
++#include "profile_ranges.hpp"
+ 
+ constexpr bool kVerbose = true;
+ 
+@@ -188,6 +189,7 @@
+ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> pos, TreeId self,
+     Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
+     std::shared_ptr<KickWorkspace> cudaWorkspace) {
++    detail::HostProfileRange rootProfile("kick.root", self.proc == 0 && self.index == 0);
+     FlopCounter<int> flops = 0;
+     if (self.proc == 0 && self.index == 0) {
+         profilerEnter(__FUNCTION__);
+@@ -316,6 +318,7 @@
+         cclist.resize(0);
+         leaflist.resize(0);
+         auto& checklist = echecklist;
++        detail::HostProfileRange checklistProfile("cpu.walk.ewald", true, checklist.size());
+         do {
+             for (int ci = 0; ci < checklist.size(); ci += SIMD_FLOAT_SIZE) {
+                 int const maxci = std::min((int) checklist.size(), ci + SIMD_FLOAT_SIZE);
+@@ -371,7 +374,11 @@
+             std::swap(checklist, nextlist);
+             nextlist.resize(0);
+         } while (checklist.size() && selfPtr->leaf);
+-        cpuGravityCc(kGravityEwald, l, cclist, self, params.doPhi);
++        checklistProfile.finish();
++        {
++            detail::HostProfileRange gravityProfile("cpu.gravity.cc.ewald", cclist.size() != 0, cclist.size());
++            cpuGravityCc(kGravityEwald, l, cclist, self, params.doPhi);
++        }
+         if (!selfPtr->leaf) {
+             checklist.insert(checklist.end(), leaflist.begin(), leaflist.end());
+         }
+@@ -384,6 +391,7 @@
+         cplist.resize(0);
+         leaflist.resize(0);
+         auto& checklist = dchecklist;
++        detail::HostProfileRange checklistProfile("cpu.walk.direct", true, checklist.size());
+         do {
+             for (int ci = 0; ci < checklist.size(); ci += SIMD_FLOAT_SIZE) {
+                 int const maxci = std::min((int) checklist.size(), ci + SIMD_FLOAT_SIZE);
+@@ -465,13 +473,26 @@
+             std::swap(checklist, nextlist);
+             nextlist.resize(0);
+         } while (checklist.size() && selfPtr->leaf);
+-        cpuGravityCc(kGravityDirect, l, cclist, self, params.doPhi);
++        checklistProfile.finish();
++        {
++            detail::HostProfileRange gravityProfile("cpu.gravity.cc.direct", cclist.size() != 0, cclist.size());
++            cpuGravityCc(kGravityDirect, l, cclist, self, params.doPhi);
++        }
+         // Internal sinks pass these source-leaf contributions to their children via L2L.
+-        cpuGravityCp(l, cplist, self, params.doPhi);
++        {
++            detail::HostProfileRange gravityProfile(selfPtr->leaf ? "cpu.gravity.cp.leaf" : "cpu.gravity.cp.internal", cplist.size() != 0, cplist.size());
++            cpuGravityCp(l, cplist, self, params.doPhi);
++        }
+         if (selfPtr->leaf) {
+             if (selfPtr->numberOfParticles() > 0) {
+-                cpuGravityPc(forces, params.doPhi, self, pclist);
+-                cpuGravityPp(forces, params.doPhi, self, leaflist, params.gravitySupportRadius);
++                {
++                    detail::HostProfileRange gravityProfile("cpu.gravity.pc", pclist.size() != 0, pclist.size());
++                    cpuGravityPc(forces, params.doPhi, self, pclist);
++                }
++                {
++                    detail::HostProfileRange gravityProfile("cpu.gravity.pp", leaflist.size() != 0, leaflist.size());
++                    cpuGravityPp(forces, params.doPhi, self, leaflist, params.gravitySupportRadius);
++                }
+             }
+         } else {
+             ALWAYS_ASSERT(pclist.size() == 0);
+--- /home/dmarce1/workspace/cosmictiger/src/kick_workspace.cpp
++++ host_ranges/kick_workspace.cpp
+@@ -22,6 +22,7 @@
+ #include <cosmictiger/kick_workspace.hpp>
+ #include <cosmictiger/particles.hpp>
+ #include <cosmictiger/timer.hpp>
++#include "profile_ranges.hpp"
+ 
+ HPX_PLAIN_ACTION(KickWorkspace::clearBuffers, ClearBuffersAction);
+ 
+@@ -66,6 +67,7 @@
+ }
+ 
+ void KickWorkspace::toGpu() {
++    detail::HostProfileRange preparationProfile("gpu.prepare", true, workitems_.size());
+     cudaSetDevice();
+     //	PRINT("Preparing gpu send on %i\n", hpx_rank());
+ 
+@@ -337,10 +339,16 @@
+     //	PRINT("Took %e seconds to prepare gpu send\n", tm.read());
+     tm.reset();
+     tm.start();
++    preparationProfile.finish();
++    detail::HostProfileRange adviceProfile("gpu.advice_to_gpu");
+     tree2Gpu();
+     particlesMemadviseGpu();
++    adviceProfile.finish();
++    detail::HostProfileRange executeProfile("gpu.execute", true, workitems_.size());
+     auto const kr = cudaExecuteKicks(params_, &particlesPos(XDIM, 0), &particlesPos(YDIM, 0),
+         &particlesPos(ZDIM, 0), treeNodes, std::move(workitems_));
++    executeProfile.finish();
++    detail::HostProfileRange restoreProfile("gpu.restore");
+     tree2Cpu();
+     tm.stop();
+     particlesResize(originalParticleCount);
+@@ -382,6 +390,8 @@
+     {
+         ParticleInteger const numberOfNodeParticles = treeGetNode(self)->numberOfParticles();
+         std::lock_guard<MutexType> lock(mutex_);
++        detail::HostProfileRange insertionProfile("gpu.add_work.set_insert", true,
++            item.dchecklist.size() + item.echecklist.size());
+         for (auto const& id : item.dchecklist) {
+             ALWAYS_ASSERT(treeGetNode(id)->isLocal());
+             treeIds_.insert(id);
+@@ -390,6 +400,7 @@
+             ALWAYS_ASSERT(treeGetNode(id)->isLocal());
+             treeIds_.insert(id);
+         }
++        insertionProfile.finish();
+         // Publish the work before another producer can observe completion.
+         workitems_.push_back(std::move(item));
+         numberOfProcessedParticles_ += numberOfNodeParticles;

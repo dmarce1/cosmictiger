@@ -1,0 +1,5 @@
+Generating SQLite file /home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/adaptive_suite/cuda_profile/walk.sqlite from /home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/adaptive_suite/cuda_profile/walk.nsys-rep
+Processing [/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/adaptive_suite/cuda_profile/walk.sqlite] with [/opt/nvidia/nsight-systems/2024.6.2/host-linux-x64/reports/cuda_gpu_kern_sum.py]... 
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+100.0,22019124,4,5504781.0,5091805.0,4854045,6981469,1001043.1,"cudaKickKernel(KickReturn *, KickParameters, CudaKickData, CudaKickParameters *, int, int *)"
+

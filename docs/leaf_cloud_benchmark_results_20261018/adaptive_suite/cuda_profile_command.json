@@ -1,0 +1,39 @@
+{
+  "command": [
+    "/usr/local/cuda/bin/nsys",
+    "profile",
+    "--trace=cuda",
+    "--sample=none",
+    "--cpuctxsw=none",
+    "--force-overwrite=true",
+    "-o",
+    "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/adaptive_suite/cuda_profile/walk",
+    "taskset",
+    "-c",
+    "1,2",
+    "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/adaptive_suite/cosmictiger_after",
+    "--run.test=stfBenchmark",
+    "--initial.particlesPerDimension=32",
+    "--hydro.enabled=false",
+    "--gravity.openingAngle=0.8",
+    "--gravity.effectiveRadius=0.01876988456953534",
+    "--gravity.kernelFamily=ferrers",
+    "--gravity.kernelDegree=4",
+    "--hpx:threads=2",
+    "--hpx:bind=none",
+    "--analysis.views=false",
+    "--analysis.power=false",
+    "--analysis.groups=false",
+    "--lightcone.enabled=false",
+    "--compute.cuda=true"
+  ],
+  "environment": {
+    "COSMICTIGER_STF_WALK_SAMPLES": "1",
+    "COSMICTIGER_STF_WALK_FIXTURE": "adaptive",
+    "OMP_NUM_THREADS": "2",
+    "OMP_THREAD_LIMIT": "2"
+  },
+  "cwd": "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/adaptive_suite/cuda_profile",
+  "profile_exit_code": 0,
+  "timing_use": "Excluded from all performance statistics; verifies actual CUDA kernel execution."
+}

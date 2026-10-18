@@ -1,0 +1,386 @@
+{
+  "comparisons": [
+    {
+      "reference": "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/adaptive_suite/runs/cpu_pair0_before/stf_walk_forces.csv",
+      "candidate": "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/adaptive_suite/runs/cpu_pair0_after/stf_walk_forces.csv",
+      "reference_sha256": "4882405e6577103c15b42dc03a10ddddd5b629dbfe3432d82324357814970254",
+      "candidate_sha256": "721f12a3767b8a12f2dcceeb4ac17c1f233056dae6b3dacbb0c5bab516be28b5",
+      "fixtures": {
+        "adaptive": {
+          "particles": 32768,
+          "acceleration": {
+            "reference_rms": 1257120.266849234,
+            "difference_rms": 1885.3952147502491,
+            "relative_l2": 0.001499773143802449,
+            "max_absolute_norm": 23466.721531386538,
+            "max_absolute_component": 17288.625,
+            "max_pointwise_relative_nonzero_reference": 0.060088070103541995,
+            "zero_reference_count": 0,
+            "changed_zero_reference_count": 0
+          },
+          "potential": {
+            "reference_rms": 165486.18146085588,
+            "difference_rms": 4.866231628805642,
+            "relative_l2": 2.9405667505577807e-05,
+            "max_absolute_norm": 258.03125,
+            "max_absolute_component": 258.03125,
+            "max_pointwise_relative_nonzero_reference": 0.5013122535846688,
+            "zero_reference_count": 0,
+            "changed_zero_reference_count": 0
+          }
+        },
+        "clustered": {
+          "particles": 32768,
+          "acceleration": {
+            "reference_rms": 120496.25827695087,
+            "difference_rms": 0.0,
+            "relative_l2": 0.0,
+            "max_absolute_norm": 0.0,
+            "max_absolute_component": 0.0,
+            "max_pointwise_relative_nonzero_reference": 0.0,
+            "zero_reference_count": 0,
+            "changed_zero_reference_count": 0
+          },
+          "potential": {
+            "reference_rms": 11223.012146804935,
+            "difference_rms": 0.0,
+            "relative_l2": 0.0,
+            "max_absolute_norm": 0.0,
+            "max_absolute_component": 0.0,
+            "max_pointwise_relative_nonzero_reference": 0.0,
+            "zero_reference_count": 0,
+            "changed_zero_reference_count": 0
+          }
+        },
+        "lattice": {
+          "particles": 32768,
+          "acceleration": {
+            "reference_rms": 628.2145719398502,
+            "difference_rms": 0.0,
+            "relative_l2": 0.0,
+            "max_absolute_norm": 0.0,
+            "max_absolute_component": 0.0,
+            "max_pointwise_relative_nonzero_reference": 0.0,
+            "zero_reference_count": 0,
+            "changed_zero_reference_count": 0
+          },
+          "potential": {
+            "reference_rms": 89.59590538165367,
+            "difference_rms": 0.0,
+            "relative_l2": 0.0,
+            "max_absolute_norm": 0.0,
+            "max_absolute_component": 0.0,
+            "max_pointwise_relative_nonzero_reference": 0.0,
+            "zero_reference_count": 0,
+            "changed_zero_reference_count": 0
+          }
+        }
+      },
+      "kind": "before_vs_after",
+      "backend": "cpu"
+    },
+    {
+      "reference": "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/adaptive_suite/runs/cuda_pair0_before/stf_walk_forces.csv",
+      "candidate": "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/adaptive_suite/runs/cuda_pair0_after/stf_walk_forces.csv",
+      "reference_sha256": "e260299e9f0c0edf95c4a1f0c919c96a664573db33ec45656eee4cb1ca4f051f",
+      "candidate_sha256": "7270f0832aae645436b21f5f1b5cfe0cd0788da285604e20a96182b0deab43e3",
+      "fixtures": {
+        "adaptive": {
+          "particles": 32768,
+          "acceleration": {
+            "reference_rms": 1257120.2820455628,
+            "difference_rms": 1885.3957708017817,
+            "relative_l2": 0.0014997735679945444,
+            "max_absolute_norm": 23466.989136379492,
+            "max_absolute_component": 17288.875,
+            "max_pointwise_relative_nonzero_reference": 0.06008836341043354,
+            "zero_reference_count": 0,
+            "changed_zero_reference_count": 0
+          },
+          "potential": {
+            "reference_rms": 165486.18232736376,
+            "difference_rms": 4.866043611896417,
+            "relative_l2": 2.940453120291602e-05,
+            "max_absolute_norm": 258.0703125,
+            "max_absolute_component": 258.0703125,
+            "max_pointwise_relative_nonzero_reference": 0.5144303797468355,
+            "zero_reference_count": 0,
+            "changed_zero_reference_count": 0
+          }
+        },
+        "clustered": {
+          "particles": 32768,
+          "acceleration": {
+            "reference_rms": 120496.26570692855,
+            "difference_rms": 0.0,
+            "relative_l2": 0.0,
+            "max_absolute_norm": 0.0,
+            "max_absolute_component": 0.0,
+            "max_pointwise_relative_nonzero_reference": 0.0,
+            "zero_reference_count": 0,
+            "changed_zero_reference_count": 0
+          },
+          "potential": {
+            "reference_rms": 11223.01282694507,
+            "difference_rms": 0.0,
+            "relative_l2": 0.0,
+            "max_absolute_norm": 0.0,
+            "max_absolute_component": 0.0,
+            "max_pointwise_relative_nonzero_reference": 0.0,
+            "zero_reference_count": 0,
+            "changed_zero_reference_count": 0
+          }
+        },
+        "lattice": {
+          "particles": 32768,
+          "acceleration": {
+            "reference_rms": 628.2146926566984,
+            "difference_rms": 0.0,
+            "relative_l2": 0.0,
+            "max_absolute_norm": 0.0,
+            "max_absolute_component": 0.0,
+            "max_pointwise_relative_nonzero_reference": 0.0,
+            "zero_reference_count": 0,
+            "changed_zero_reference_count": 0
+          },
+          "potential": {
+            "reference_rms": 89.59619099270098,
+            "difference_rms": 0.0,
+            "relative_l2": 0.0,
+            "max_absolute_norm": 0.0,
+            "max_absolute_component": 0.0,
+            "max_pointwise_relative_nonzero_reference": 0.0,
+            "zero_reference_count": 0,
+            "changed_zero_reference_count": 0
+          }
+        }
+      },
+      "kind": "before_vs_after",
+      "backend": "cuda"
+    },
+    {
+      "reference": "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/adaptive_suite/runs/cpu_pair0_before/stf_walk_forces.csv",
+      "candidate": "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/adaptive_suite/runs/cuda_pair0_before/stf_walk_forces.csv",
+      "reference_sha256": "4882405e6577103c15b42dc03a10ddddd5b629dbfe3432d82324357814970254",
+      "candidate_sha256": "e260299e9f0c0edf95c4a1f0c919c96a664573db33ec45656eee4cb1ca4f051f",
+      "fixtures": {
+        "adaptive": {
+          "particles": 32768,
+          "acceleration": {
+            "reference_rms": 1257120.266849234,
+            "difference_rms": 0.2471228931155208,
+            "relative_l2": 1.965785610432436e-07,
+            "max_absolute_norm": 1.3764197215965774,
+            "max_absolute_component": 1.25,
+            "max_pointwise_relative_nonzero_reference": 2.981053753918643e-06,
+            "zero_reference_count": 0,
+            "changed_zero_reference_count": 0
+          },
+          "potential": {
+            "reference_rms": 165486.18146085588,
+            "difference_rms": 0.03091891131421145,
+            "relative_l2": 1.8683681647174276e-07,
+            "max_absolute_norm": 0.140625,
+            "max_absolute_component": 0.140625,
+            "max_pointwise_relative_nonzero_reference": 0.008257978462564484,
+            "zero_reference_count": 0,
+            "changed_zero_reference_count": 0
+          }
+        },
+        "clustered": {
+          "particles": 32768,
+          "acceleration": {
+            "reference_rms": 120496.25827695087,
+            "difference_rms": 0.025658952871280553,
+            "relative_l2": 2.1294398048697524e-07,
+            "max_absolute_norm": 0.09430277302650374,
+            "max_absolute_component": 0.09375,
+            "max_pointwise_relative_nonzero_reference": 4.20819902586414e-06,
+            "zero_reference_count": 0,
+            "changed_zero_reference_count": 0
+          },
+          "potential": {
+            "reference_rms": 11223.012146804935,
+            "difference_rms": 0.00334248086709506,
+            "relative_l2": 2.9782386612195077e-07,
+            "max_absolute_norm": 0.017578125,
+            "max_absolute_component": 0.017578125,
+            "max_pointwise_relative_nonzero_reference": 2.863811036583611e-06,
+            "zero_reference_count": 0,
+            "changed_zero_reference_count": 0
+          }
+        },
+        "lattice": {
+          "particles": 32768,
+          "acceleration": {
+            "reference_rms": 628.2145719398502,
+            "difference_rms": 0.005732794269193209,
+            "relative_l2": 9.125535327031713e-06,
+            "max_absolute_norm": 0.024791714887946112,
+            "max_absolute_component": 0.02447509765625,
+            "max_pointwise_relative_nonzero_reference": 0.00041778976513158635,
+            "zero_reference_count": 0,
+            "changed_zero_reference_count": 0
+          },
+          "potential": {
+            "reference_rms": 89.59590538165367,
+            "difference_rms": 0.0030902964110158257,
+            "relative_l2": 3.449149152354699e-05,
+            "max_absolute_norm": 0.01323699951171875,
+            "max_absolute_component": 0.01323699951171875,
+            "max_pointwise_relative_nonzero_reference": 0.00015346850782826653,
+            "zero_reference_count": 0,
+            "changed_zero_reference_count": 0
+          }
+        }
+      },
+      "kind": "cpu_vs_cuda",
+      "variant": "before"
+    },
+    {
+      "reference": "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/adaptive_suite/runs/cpu_pair0_after/stf_walk_forces.csv",
+      "candidate": "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/adaptive_suite/runs/cuda_pair0_after/stf_walk_forces.csv",
+      "reference_sha256": "721f12a3767b8a12f2dcceeb4ac17c1f233056dae6b3dacbb0c5bab516be28b5",
+      "candidate_sha256": "7270f0832aae645436b21f5f1b5cfe0cd0788da285604e20a96182b0deab43e3",
+      "fixtures": {
+        "adaptive": {
+          "particles": 32768,
+          "acceleration": {
+            "reference_rms": 1257108.143571455,
+            "difference_rms": 0.24161728658860543,
+            "relative_l2": 1.92200876133193e-07,
+            "max_absolute_norm": 1.537614325017818,
+            "max_absolute_component": 1.5,
+            "max_pointwise_relative_nonzero_reference": 2.9661230092292556e-06,
+            "zero_reference_count": 0,
+            "changed_zero_reference_count": 0
+          },
+          "potential": {
+            "reference_rms": 165485.63491880853,
+            "difference_rms": 0.030463012125890167,
+            "relative_l2": 1.840825165328465e-07,
+            "max_absolute_norm": 0.15625,
+            "max_absolute_component": 0.15625,
+            "max_pointwise_relative_nonzero_reference": 0.00040763851870433663,
+            "zero_reference_count": 0,
+            "changed_zero_reference_count": 0
+          }
+        },
+        "clustered": {
+          "particles": 32768,
+          "acceleration": {
+            "reference_rms": 120496.25827695087,
+            "difference_rms": 0.025658952871280553,
+            "relative_l2": 2.1294398048697524e-07,
+            "max_absolute_norm": 0.09430277302650374,
+            "max_absolute_component": 0.09375,
+            "max_pointwise_relative_nonzero_reference": 4.20819902586414e-06,
+            "zero_reference_count": 0,
+            "changed_zero_reference_count": 0
+          },
+          "potential": {
+            "reference_rms": 11223.012146804935,
+            "difference_rms": 0.00334248086709506,
+            "relative_l2": 2.9782386612195077e-07,
+            "max_absolute_norm": 0.017578125,
+            "max_absolute_component": 0.017578125,
+            "max_pointwise_relative_nonzero_reference": 2.863811036583611e-06,
+            "zero_reference_count": 0,
+            "changed_zero_reference_count": 0
+          }
+        },
+        "lattice": {
+          "particles": 32768,
+          "acceleration": {
+            "reference_rms": 628.2145719398502,
+            "difference_rms": 0.005732794269193209,
+            "relative_l2": 9.125535327031713e-06,
+            "max_absolute_norm": 0.024791714887946112,
+            "max_absolute_component": 0.02447509765625,
+            "max_pointwise_relative_nonzero_reference": 0.00041778976513158635,
+            "zero_reference_count": 0,
+            "changed_zero_reference_count": 0
+          },
+          "potential": {
+            "reference_rms": 89.59590538165367,
+            "difference_rms": 0.0030902964110158257,
+            "relative_l2": 3.449149152354699e-05,
+            "max_absolute_norm": 0.01323699951171875,
+            "max_absolute_component": 0.01323699951171875,
+            "max_pointwise_relative_nonzero_reference": 0.00015346850782826653,
+            "zero_reference_count": 0,
+            "changed_zero_reference_count": 0
+          }
+        }
+      },
+      "kind": "cpu_vs_cuda",
+      "variant": "after"
+    }
+  ],
+  "repeat_consistency": [
+    {
+      "backend": "cpu",
+      "variant": "after",
+      "processes": 5,
+      "byte_identical": true,
+      "sha256_groups": {
+        "721f12a3767b8a12f2dcceeb4ac17c1f233056dae6b3dacbb0c5bab516be28b5": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ]
+      },
+      "differences_from_first_process": []
+    },
+    {
+      "backend": "cpu",
+      "variant": "before",
+      "processes": 5,
+      "byte_identical": true,
+      "sha256_groups": {
+        "4882405e6577103c15b42dc03a10ddddd5b629dbfe3432d82324357814970254": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ]
+      },
+      "differences_from_first_process": []
+    },
+    {
+      "backend": "cuda",
+      "variant": "after",
+      "processes": 5,
+      "byte_identical": true,
+      "sha256_groups": {
+        "7270f0832aae645436b21f5f1b5cfe0cd0788da285604e20a96182b0deab43e3": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ]
+      },
+      "differences_from_first_process": []
+    },
+    {
+      "backend": "cuda",
+      "variant": "before",
+      "processes": 5,
+      "byte_identical": true,
+      "sha256_groups": {
+        "e260299e9f0c0edf95c4a1f0c919c96a664573db33ec45656eee4cb1ca4f051f": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ]
+      },
+      "differences_from_first_process": []
+    }
+  ]
+}

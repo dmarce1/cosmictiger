@@ -1,0 +1,25 @@
+--- baseline/src/kick.cpp
++++ leaf_only/src/kick.cpp
+@@ -446,8 +446,8 @@
+                 for (int i = 0; i < maxi; i++) {
+                     auto const interaction = selectFmmInteraction(bool(acceptance.cellCell[i]),
+                         bool(acceptance.particleCell[i]), bool(acceptance.cellParticle[i]),
+-                        selfPtr->leaf && bool(otherLeaf[i]), numberOfSelfParticles,
+-                        otherPtrs[i]->numberOfParticles(), selfPtr->radius, otherPtrs[i]->radius);
++                        selfPtr->leaf && bool(otherLeaf[i]), selfPtr->leaf && bool(otherLeaf[i]),
++                        selfPtr->radius, otherPtrs[i]->radius);
+                     if (interaction == FmmInteraction::CellCell) {
+                         cclist.push_back(checklist[ci + i]);
+                     } else if (interaction == FmmInteraction::CellParticle) {
+--- baseline/src/kick.cu
++++ leaf_only/src/kick.cu
+@@ -477,8 +477,7 @@
+                                     auto const interaction = selectFmmInteraction(
+                                         bool(acceptance.cellCell), bool(acceptance.particleCell),
+                                         bool(acceptance.cellParticle), self.leaf && other.leaf,
+-                                        self.numberOfParticles(), other.numberOfParticles(),
+-                                        self.radius, other.radius);
++                                        self.leaf && other.leaf, self.radius, other.radius);
+                                     sw[kCc] = interaction == FmmInteraction::CellCell;
+                                     sw[kPc] = interaction == FmmInteraction::ParticleCell;
+                                     sw[kCp] = interaction == FmmInteraction::CellParticle;

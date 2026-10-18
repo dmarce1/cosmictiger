@@ -1,0 +1,3770 @@
+[
+  {
+    "variant": "before",
+    "backend": "cpu",
+    "pair": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "1,2",
+      "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/cosmictiger_before",
+      "--run.test=stfBenchmark",
+      "--initial.particlesPerDimension=32",
+      "--hydro.enabled=false",
+      "--gravity.openingAngle=0.8",
+      "--gravity.effectiveRadius=0.01876988456953534",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--hpx:threads=2",
+      "--hpx:bind=none",
+      "--analysis.views=false",
+      "--analysis.power=false",
+      "--analysis.groups=false",
+      "--lightcone.enabled=false",
+      "--compute.cuda=false"
+    ],
+    "cwd": "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/runs/cpu_pair0_before",
+    "environment": {
+      "COSMICTIGER_STF_WALK_SAMPLES": "15",
+      "OMP_NUM_THREADS": "2",
+      "OMP_THREAD_LIMIT": "2"
+    },
+    "exit_code": 0,
+    "wall_seconds": 5.422232876997441,
+    "config": "STF_WALK_CONFIG,particles=32768,threads=2,cuda=0,theta=0.80000000000000004,support=0.0008798383391969691,bucket=64,samples=15,warmup=1,gm=1",
+    "medians": [
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "samples": 15,
+        "particles": 32768,
+        "reset_seconds": 0.000161735,
+        "tree_seconds": 0.00198814,
+        "kick_seconds": 0.109006873,
+        "total_seconds": 0.111022856,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "samples": 15,
+        "particles": 32768,
+        "reset_seconds": 0.000160713,
+        "tree_seconds": 0.001937144,
+        "kick_seconds": 0.110327445,
+        "total_seconds": 0.112322628,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "samples": 15,
+        "particles": 32768,
+        "reset_seconds": 0.000159311,
+        "tree_seconds": 0.002694843,
+        "kick_seconds": 0.018949183,
+        "total_seconds": 0.021682519,
+        "position_hash": "9330035828812934027"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "samples": 15,
+        "particles": 32768,
+        "reset_seconds": 0.000158709,
+        "tree_seconds": 0.002656411,
+        "kick_seconds": 0.020419726,
+        "total_seconds": 0.023126632,
+        "position_hash": "9330035828812934027"
+      }
+    ],
+    "samples": [
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 0,
+        "reset_seconds": 0.000161795,
+        "tree_seconds": 0.002430325,
+        "kick_seconds": 0.109432306
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 1,
+        "reset_seconds": 0.000162948,
+        "tree_seconds": 0.002381853,
+        "kick_seconds": 0.109198385
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 2,
+        "reset_seconds": 0.000159171,
+        "tree_seconds": 0.002026773,
+        "kick_seconds": 0.109006873
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 3,
+        "reset_seconds": 0.000163809,
+        "tree_seconds": 0.001899393,
+        "kick_seconds": 0.109207302
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 4,
+        "reset_seconds": 0.000162887,
+        "tree_seconds": 0.001999852,
+        "kick_seconds": 0.108868593
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 5,
+        "reset_seconds": 0.000173748,
+        "tree_seconds": 0.001984413,
+        "kick_seconds": 0.108727156
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 6,
+        "reset_seconds": 0.000161294,
+        "tree_seconds": 0.001943075,
+        "kick_seconds": 0.108838546
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 7,
+        "reset_seconds": 0.000166033,
+        "tree_seconds": 0.002053082,
+        "kick_seconds": 0.108768935
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 8,
+        "reset_seconds": 0.000160503,
+        "tree_seconds": 0.001870147,
+        "kick_seconds": 0.121282999
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 9,
+        "reset_seconds": 0.000161735,
+        "tree_seconds": 0.002095313,
+        "kick_seconds": 0.108168122
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 10,
+        "reset_seconds": 0.000159892,
+        "tree_seconds": 0.001998701,
+        "kick_seconds": 0.109219665
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 11,
+        "reset_seconds": 0.000161555,
+        "tree_seconds": 0.001867252,
+        "kick_seconds": 0.108841242
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 12,
+        "reset_seconds": 0.000160232,
+        "tree_seconds": 0.001963754,
+        "kick_seconds": 0.109059102
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 13,
+        "reset_seconds": 0.000160603,
+        "tree_seconds": 0.00198814,
+        "kick_seconds": 0.109373505
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 14,
+        "reset_seconds": 0.000168538,
+        "tree_seconds": 0.001896166,
+        "kick_seconds": 0.108606248
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 0,
+        "reset_seconds": 0.000161384,
+        "tree_seconds": 0.001869276,
+        "kick_seconds": 0.11003887
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 1,
+        "reset_seconds": 0.000160453,
+        "tree_seconds": 0.001946732,
+        "kick_seconds": 0.109059463
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 2,
+        "reset_seconds": 0.00015928,
+        "tree_seconds": 0.00186622,
+        "kick_seconds": 0.110291768
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 3,
+        "reset_seconds": 0.000160443,
+        "tree_seconds": 0.002069434,
+        "kick_seconds": 0.109564776
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 4,
+        "reset_seconds": 0.000160953,
+        "tree_seconds": 0.001877662,
+        "kick_seconds": 0.110279164
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 5,
+        "reset_seconds": 0.000161224,
+        "tree_seconds": 0.002042863,
+        "kick_seconds": 0.110931444
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 6,
+        "reset_seconds": 0.000160873,
+        "tree_seconds": 0.002023477,
+        "kick_seconds": 0.110327445
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 7,
+        "reset_seconds": 0.000160713,
+        "tree_seconds": 0.002001415,
+        "kick_seconds": 0.117014208
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 8,
+        "reset_seconds": 0.000160974,
+        "tree_seconds": 0.001927566,
+        "kick_seconds": 0.110721378
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 9,
+        "reset_seconds": 0.000160593,
+        "tree_seconds": 0.001946872,
+        "kick_seconds": 0.110488088
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 10,
+        "reset_seconds": 0.000160403,
+        "tree_seconds": 0.001911576,
+        "kick_seconds": 0.109550059
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 11,
+        "reset_seconds": 0.000160994,
+        "tree_seconds": 0.001902319,
+        "kick_seconds": 0.108940499
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 12,
+        "reset_seconds": 0.000165402,
+        "tree_seconds": 0.001937144,
+        "kick_seconds": 0.110385484
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 13,
+        "reset_seconds": 0.000160182,
+        "tree_seconds": 0.001927215,
+        "kick_seconds": 0.115516543
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 14,
+        "reset_seconds": 0.000159791,
+        "tree_seconds": 0.001952433,
+        "kick_seconds": 0.128595613
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 0,
+        "reset_seconds": 0.000159881,
+        "tree_seconds": 0.002694843,
+        "kick_seconds": 0.018928764
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 1,
+        "reset_seconds": 0.000159641,
+        "tree_seconds": 0.00292098,
+        "kick_seconds": 0.021208204
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 2,
+        "reset_seconds": 0.000159311,
+        "tree_seconds": 0.00276733,
+        "kick_seconds": 0.018915189
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 3,
+        "reset_seconds": 0.000170331,
+        "tree_seconds": 0.002719791,
+        "kick_seconds": 0.018825249
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 4,
+        "reset_seconds": 0.000173657,
+        "tree_seconds": 0.002800793,
+        "kick_seconds": 0.018927492
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 5,
+        "reset_seconds": 0.000158208,
+        "tree_seconds": 0.002655259,
+        "kick_seconds": 0.018905811
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 6,
+        "reset_seconds": 0.000159912,
+        "tree_seconds": 0.002648195,
+        "kick_seconds": 0.019396176
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 7,
+        "reset_seconds": 0.00015897,
+        "tree_seconds": 0.00272483,
+        "kick_seconds": 0.021205619
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 8,
+        "reset_seconds": 0.000167025,
+        "tree_seconds": 0.002881194,
+        "kick_seconds": 0.019133621
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 9,
+        "reset_seconds": 0.000158348,
+        "tree_seconds": 0.002743685,
+        "kick_seconds": 0.018908055
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 10,
+        "reset_seconds": 0.000158488,
+        "tree_seconds": 0.0026721,
+        "kick_seconds": 0.01895292
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 11,
+        "reset_seconds": 0.00015876,
+        "tree_seconds": 0.002632516,
+        "kick_seconds": 0.020245608
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 12,
+        "reset_seconds": 0.00015894,
+        "tree_seconds": 0.002654237,
+        "kick_seconds": 0.018949183
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 13,
+        "reset_seconds": 0.000163839,
+        "tree_seconds": 0.002605154,
+        "kick_seconds": 0.018893448
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 14,
+        "reset_seconds": 0.000158819,
+        "tree_seconds": 0.00262973,
+        "kick_seconds": 0.02061209
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 0,
+        "reset_seconds": 0.000158569,
+        "tree_seconds": 0.002769203,
+        "kick_seconds": 0.020659128
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 1,
+        "reset_seconds": 0.000158279,
+        "tree_seconds": 0.002584876,
+        "kick_seconds": 0.020234146
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 2,
+        "reset_seconds": 0.00015901,
+        "tree_seconds": 0.002624511,
+        "kick_seconds": 0.02266945
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 3,
+        "reset_seconds": 0.00015882,
+        "tree_seconds": 0.002665177,
+        "kick_seconds": 0.020419726
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 4,
+        "reset_seconds": 0.000160112,
+        "tree_seconds": 0.002761358,
+        "kick_seconds": 0.020419125
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 5,
+        "reset_seconds": 0.000158399,
+        "tree_seconds": 0.002656932,
+        "kick_seconds": 0.020963783
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 6,
+        "reset_seconds": 0.00015897,
+        "tree_seconds": 0.002763001,
+        "kick_seconds": 0.020363631
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 7,
+        "reset_seconds": 0.000166524,
+        "tree_seconds": 0.002648736,
+        "kick_seconds": 0.020370423
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 8,
+        "reset_seconds": 0.000158569,
+        "tree_seconds": 0.002580718,
+        "kick_seconds": 0.020328364
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 9,
+        "reset_seconds": 0.000158639,
+        "tree_seconds": 0.002698701,
+        "kick_seconds": 0.020761352
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 10,
+        "reset_seconds": 0.00015892,
+        "tree_seconds": 0.002656411,
+        "kick_seconds": 0.020341469
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 11,
+        "reset_seconds": 0.000158709,
+        "tree_seconds": 0.002617017,
+        "kick_seconds": 0.022577096
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 12,
+        "reset_seconds": 0.000158329,
+        "tree_seconds": 0.002573985,
+        "kick_seconds": 0.020380894
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 13,
+        "reset_seconds": 0.000158609,
+        "tree_seconds": 0.002582732,
+        "kick_seconds": 0.020520356
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 14,
+        "reset_seconds": 0.00015914,
+        "tree_seconds": 0.002699252,
+        "kick_seconds": 0.020429786
+      }
+    ],
+    "force_csv": "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/runs/cpu_pair0_before/stf_walk_forces.csv",
+    "force_csv_sha256": "62f2b9c439b5950ee22c038e21388addaabca001d1689396773b3ce4e0b3433b"
+  },
+  {
+    "variant": "after",
+    "backend": "cpu",
+    "pair": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "1,2",
+      "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/cosmictiger_after",
+      "--run.test=stfBenchmark",
+      "--initial.particlesPerDimension=32",
+      "--hydro.enabled=false",
+      "--gravity.openingAngle=0.8",
+      "--gravity.effectiveRadius=0.01876988456953534",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--hpx:threads=2",
+      "--hpx:bind=none",
+      "--analysis.views=false",
+      "--analysis.power=false",
+      "--analysis.groups=false",
+      "--lightcone.enabled=false",
+      "--compute.cuda=false"
+    ],
+    "cwd": "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/runs/cpu_pair0_after",
+    "environment": {
+      "COSMICTIGER_STF_WALK_SAMPLES": "15",
+      "OMP_NUM_THREADS": "2",
+      "OMP_THREAD_LIMIT": "2"
+    },
+    "exit_code": 0,
+    "wall_seconds": 5.372728879970964,
+    "config": "STF_WALK_CONFIG,particles=32768,threads=2,cuda=0,theta=0.80000000000000004,support=0.0008798383391969691,bucket=64,samples=15,warmup=1,gm=1",
+    "medians": [
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "samples": 15,
+        "particles": 32768,
+        "reset_seconds": 0.000161876,
+        "tree_seconds": 0.001887019,
+        "kick_seconds": 0.108669197,
+        "total_seconds": 0.110550917,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "samples": 15,
+        "particles": 32768,
+        "reset_seconds": 0.000160713,
+        "tree_seconds": 0.001904011,
+        "kick_seconds": 0.109892845,
+        "total_seconds": 0.111804761,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "samples": 15,
+        "particles": 32768,
+        "reset_seconds": 0.000160433,
+        "tree_seconds": 0.002606537,
+        "kick_seconds": 0.019018724,
+        "total_seconds": 0.021710412,
+        "position_hash": "9330035828812934027"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "samples": 15,
+        "particles": 32768,
+        "reset_seconds": 0.000159151,
+        "tree_seconds": 0.002617507,
+        "kick_seconds": 0.020452258,
+        "total_seconds": 0.023104781,
+        "position_hash": "9330035828812934027"
+      }
+    ],
+    "samples": [
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 0,
+        "reset_seconds": 0.000159731,
+        "tree_seconds": 0.002390178,
+        "kick_seconds": 0.10887801
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 1,
+        "reset_seconds": 0.000174469,
+        "tree_seconds": 0.00235416,
+        "kick_seconds": 0.108412813
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 2,
+        "reset_seconds": 0.000167666,
+        "tree_seconds": 0.001842215,
+        "kick_seconds": 0.108569178
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 3,
+        "reset_seconds": 0.000166063,
+        "tree_seconds": 0.001887019,
+        "kick_seconds": 0.108532649
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 4,
+        "reset_seconds": 0.000161876,
+        "tree_seconds": 0.001991827,
+        "kick_seconds": 0.108725563
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 5,
+        "reset_seconds": 0.000167306,
+        "tree_seconds": 0.00185584,
+        "kick_seconds": 0.108147593
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 6,
+        "reset_seconds": 0.000160964,
+        "tree_seconds": 0.001847234,
+        "kick_seconds": 0.113519686
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 7,
+        "reset_seconds": 0.000160623,
+        "tree_seconds": 0.001841854,
+        "kick_seconds": 0.108676891
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 8,
+        "reset_seconds": 0.000159221,
+        "tree_seconds": 0.001824181,
+        "kick_seconds": 0.108726736
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 9,
+        "reset_seconds": 0.000160253,
+        "tree_seconds": 0.001978202,
+        "kick_seconds": 0.108640973
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 10,
+        "reset_seconds": 0.00016478,
+        "tree_seconds": 0.001902188,
+        "kick_seconds": 0.108857182
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 11,
+        "reset_seconds": 0.000161174,
+        "tree_seconds": 0.00196138,
+        "kick_seconds": 0.108992588
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 12,
+        "reset_seconds": 0.000165643,
+        "tree_seconds": 0.001831043,
+        "kick_seconds": 0.108669197
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 13,
+        "reset_seconds": 0.000162406,
+        "tree_seconds": 0.001884515,
+        "kick_seconds": 0.108414166
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 14,
+        "reset_seconds": 0.000160983,
+        "tree_seconds": 0.001983892,
+        "kick_seconds": 0.108394539
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 0,
+        "reset_seconds": 0.000165041,
+        "tree_seconds": 0.001848808,
+        "kick_seconds": 0.110255409
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 1,
+        "reset_seconds": 0.000159431,
+        "tree_seconds": 0.001854368,
+        "kick_seconds": 0.108974653
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 2,
+        "reset_seconds": 0.00015917,
+        "tree_seconds": 0.001861432,
+        "kick_seconds": 0.109007766
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 3,
+        "reset_seconds": 0.000160102,
+        "tree_seconds": 0.001904011,
+        "kick_seconds": 0.109305317
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 4,
+        "reset_seconds": 0.000164239,
+        "tree_seconds": 0.001911916,
+        "kick_seconds": 0.109892845
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 5,
+        "reset_seconds": 0.00015909,
+        "tree_seconds": 0.001907388,
+        "kick_seconds": 0.124122125
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 6,
+        "reset_seconds": 0.00016449,
+        "tree_seconds": 0.001933056,
+        "kick_seconds": 0.108929218
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 7,
+        "reset_seconds": 0.00016397,
+        "tree_seconds": 0.001904813,
+        "kick_seconds": 0.109891964
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 8,
+        "reset_seconds": 0.000160963,
+        "tree_seconds": 0.001971889,
+        "kick_seconds": 0.111436787
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 9,
+        "reset_seconds": 0.000161014,
+        "tree_seconds": 0.001946943,
+        "kick_seconds": 0.109364258
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 10,
+        "reset_seconds": 0.000160713,
+        "tree_seconds": 0.001915443,
+        "kick_seconds": 0.109948189
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 11,
+        "reset_seconds": 0.000159641,
+        "tree_seconds": 0.001897039,
+        "kick_seconds": 0.110078476
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 12,
+        "reset_seconds": 0.000159831,
+        "tree_seconds": 0.001883383,
+        "kick_seconds": 0.110010578
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 13,
+        "reset_seconds": 0.000166925,
+        "tree_seconds": 0.001877502,
+        "kick_seconds": 0.11014989
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 14,
+        "reset_seconds": 0.000159992,
+        "tree_seconds": 0.001897499,
+        "kick_seconds": 0.10983684
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 0,
+        "reset_seconds": 0.000160433,
+        "tree_seconds": 0.002625062,
+        "kick_seconds": 0.01923401
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 1,
+        "reset_seconds": 0.000160943,
+        "tree_seconds": 0.002637015,
+        "kick_seconds": 0.019073397
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 2,
+        "reset_seconds": 0.000168809,
+        "tree_seconds": 0.003143309,
+        "kick_seconds": 0.020449303
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 3,
+        "reset_seconds": 0.000165262,
+        "tree_seconds": 0.002749737,
+        "kick_seconds": 0.019597836
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 4,
+        "reset_seconds": 0.000163429,
+        "tree_seconds": 0.002848573,
+        "kick_seconds": 0.018955435
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 5,
+        "reset_seconds": 0.000167246,
+        "tree_seconds": 0.002516527,
+        "kick_seconds": 0.020550122
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 6,
+        "reset_seconds": 0.000158489,
+        "tree_seconds": 0.002595486,
+        "kick_seconds": 0.01926556
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 7,
+        "reset_seconds": 0.00015897,
+        "tree_seconds": 0.002621425,
+        "kick_seconds": 0.018953631
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 8,
+        "reset_seconds": 0.000160393,
+        "tree_seconds": 0.002511447,
+        "kick_seconds": 0.018951477
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 9,
+        "reset_seconds": 0.000158369,
+        "tree_seconds": 0.002581851,
+        "kick_seconds": 0.020476914
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 10,
+        "reset_seconds": 0.00015925,
+        "tree_seconds": 0.002618469,
+        "kick_seconds": 0.018959733
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 11,
+        "reset_seconds": 0.000158699,
+        "tree_seconds": 0.002569196,
+        "kick_seconds": 0.018984389
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 12,
+        "reset_seconds": 0.000158388,
+        "tree_seconds": 0.002546975,
+        "kick_seconds": 0.018918174
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 13,
+        "reset_seconds": 0.000168258,
+        "tree_seconds": 0.002562093,
+        "kick_seconds": 0.019018724
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 14,
+        "reset_seconds": 0.000163448,
+        "tree_seconds": 0.002606537,
+        "kick_seconds": 0.018974801
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 0,
+        "reset_seconds": 0.00015896,
+        "tree_seconds": 0.002490157,
+        "kick_seconds": 0.02120611
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 1,
+        "reset_seconds": 0.00016465,
+        "tree_seconds": 0.002672512,
+        "kick_seconds": 0.02152417
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 2,
+        "reset_seconds": 0.000158729,
+        "tree_seconds": 0.002635622,
+        "kick_seconds": 0.020158173
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 3,
+        "reset_seconds": 0.000160022,
+        "tree_seconds": 0.002518601,
+        "kick_seconds": 0.020353722
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 4,
+        "reset_seconds": 0.00015893,
+        "tree_seconds": 0.002602138,
+        "kick_seconds": 0.021919516
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 5,
+        "reset_seconds": 0.000158909,
+        "tree_seconds": 0.002664877,
+        "kick_seconds": 0.020434986
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 6,
+        "reset_seconds": 0.00015883,
+        "tree_seconds": 0.002609682,
+        "kick_seconds": 0.020340427
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 7,
+        "reset_seconds": 0.000167676,
+        "tree_seconds": 0.002699722,
+        "kick_seconds": 0.020537539
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 8,
+        "reset_seconds": 0.000159671,
+        "tree_seconds": 0.002617507,
+        "kick_seconds": 0.020452258
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 9,
+        "reset_seconds": 0.000179709,
+        "tree_seconds": 0.002587671,
+        "kick_seconds": 0.020392806
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 10,
+        "reset_seconds": 0.000159151,
+        "tree_seconds": 0.002588122,
+        "kick_seconds": 0.020344304
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 11,
+        "reset_seconds": 0.000160603,
+        "tree_seconds": 0.002612487,
+        "kick_seconds": 0.02210687
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 12,
+        "reset_seconds": 0.000160482,
+        "tree_seconds": 0.002824437,
+        "kick_seconds": 0.020526489
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 13,
+        "reset_seconds": 0.00015894,
+        "tree_seconds": 0.002740169,
+        "kick_seconds": 0.020364612
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 14,
+        "reset_seconds": 0.00015895,
+        "tree_seconds": 0.002679865,
+        "kick_seconds": 0.02244662
+      }
+    ],
+    "force_csv": "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/runs/cpu_pair0_after/stf_walk_forces.csv",
+    "force_csv_sha256": "62f2b9c439b5950ee22c038e21388addaabca001d1689396773b3ce4e0b3433b"
+  },
+  {
+    "variant": "after",
+    "backend": "cpu",
+    "pair": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "1,2",
+      "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/cosmictiger_after",
+      "--run.test=stfBenchmark",
+      "--initial.particlesPerDimension=32",
+      "--hydro.enabled=false",
+      "--gravity.openingAngle=0.8",
+      "--gravity.effectiveRadius=0.01876988456953534",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--hpx:threads=2",
+      "--hpx:bind=none",
+      "--analysis.views=false",
+      "--analysis.power=false",
+      "--analysis.groups=false",
+      "--lightcone.enabled=false",
+      "--compute.cuda=false"
+    ],
+    "cwd": "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/runs/cpu_pair1_after",
+    "environment": {
+      "COSMICTIGER_STF_WALK_SAMPLES": "15",
+      "OMP_NUM_THREADS": "2",
+      "OMP_THREAD_LIMIT": "2"
+    },
+    "exit_code": 0,
+    "wall_seconds": 5.372415165998973,
+    "config": "STF_WALK_CONFIG,particles=32768,threads=2,cuda=0,theta=0.80000000000000004,support=0.0008798383391969691,bucket=64,samples=15,warmup=1,gm=1",
+    "medians": [
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "samples": 15,
+        "particles": 32768,
+        "reset_seconds": 0.000161555,
+        "tree_seconds": 0.001899713,
+        "kick_seconds": 0.108105805,
+        "total_seconds": 0.109928213,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "samples": 15,
+        "particles": 32768,
+        "reset_seconds": 0.000160072,
+        "tree_seconds": 0.001881048,
+        "kick_seconds": 0.109541493,
+        "total_seconds": 0.111438441,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "samples": 15,
+        "particles": 32768,
+        "reset_seconds": 0.000160413,
+        "tree_seconds": 0.002610644,
+        "kick_seconds": 0.019220094,
+        "total_seconds": 0.021854082,
+        "position_hash": "9330035828812934027"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "samples": 15,
+        "particles": 32768,
+        "reset_seconds": 0.000159421,
+        "tree_seconds": 0.002595105,
+        "kick_seconds": 0.020429516,
+        "total_seconds": 0.023033246,
+        "position_hash": "9330035828812934027"
+      }
+    ],
+    "samples": [
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 0,
+        "reset_seconds": 0.000173527,
+        "tree_seconds": 0.002342439,
+        "kick_seconds": 0.108769216
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 1,
+        "reset_seconds": 0.000159721,
+        "tree_seconds": 0.002315948,
+        "kick_seconds": 0.108182599
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 2,
+        "reset_seconds": 0.000168037,
+        "tree_seconds": 0.001891948,
+        "kick_seconds": 0.108548539
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 3,
+        "reset_seconds": 0.000160794,
+        "tree_seconds": 0.001905535,
+        "kick_seconds": 0.108016516
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 4,
+        "reset_seconds": 0.000161555,
+        "tree_seconds": 0.002024469,
+        "kick_seconds": 0.108372738
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 5,
+        "reset_seconds": 0.000161916,
+        "tree_seconds": 0.002005854,
+        "kick_seconds": 0.108564059
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 6,
+        "reset_seconds": 0.000159531,
+        "tree_seconds": 0.001894884,
+        "kick_seconds": 0.108117797
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 7,
+        "reset_seconds": 0.000173517,
+        "tree_seconds": 0.001892701,
+        "kick_seconds": 0.107374374
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 8,
+        "reset_seconds": 0.000158749,
+        "tree_seconds": 0.00187125,
+        "kick_seconds": 0.107485844
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 9,
+        "reset_seconds": 0.000161464,
+        "tree_seconds": 0.001857724,
+        "kick_seconds": 0.10801309
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 10,
+        "reset_seconds": 0.000161004,
+        "tree_seconds": 0.001822408,
+        "kick_seconds": 0.108105805
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 11,
+        "reset_seconds": 0.000161004,
+        "tree_seconds": 0.00186641,
+        "kick_seconds": 0.108342391
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 12,
+        "reset_seconds": 0.000170301,
+        "tree_seconds": 0.001899713,
+        "kick_seconds": 0.107751376
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 13,
+        "reset_seconds": 0.000168347,
+        "tree_seconds": 0.001903691,
+        "kick_seconds": 0.107645887
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 14,
+        "reset_seconds": 0.000172135,
+        "tree_seconds": 0.001931303,
+        "kick_seconds": 0.107655997
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 0,
+        "reset_seconds": 0.000160182,
+        "tree_seconds": 0.001888662,
+        "kick_seconds": 0.109676066
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 1,
+        "reset_seconds": 0.000159431,
+        "tree_seconds": 0.00200406,
+        "kick_seconds": 0.108704994
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 2,
+        "reset_seconds": 0.000159631,
+        "tree_seconds": 0.001918499,
+        "kick_seconds": 0.109541493
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 3,
+        "reset_seconds": 0.00015904,
+        "tree_seconds": 0.001827778,
+        "kick_seconds": 0.108778293
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 4,
+        "reset_seconds": 0.00015891,
+        "tree_seconds": 0.001881048,
+        "kick_seconds": 0.109295268
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 5,
+        "reset_seconds": 0.000161765,
+        "tree_seconds": 0.001801929,
+        "kick_seconds": 0.109636512
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 6,
+        "reset_seconds": 0.000160072,
+        "tree_seconds": 0.001868705,
+        "kick_seconds": 0.110004766
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 7,
+        "reset_seconds": 0.000162577,
+        "tree_seconds": 0.001953485,
+        "kick_seconds": 0.10988474
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 8,
+        "reset_seconds": 0.00016969,
+        "tree_seconds": 0.00185524,
+        "kick_seconds": 0.110049451
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 9,
+        "reset_seconds": 0.000160042,
+        "tree_seconds": 0.00188215,
+        "kick_seconds": 0.10886131
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 10,
+        "reset_seconds": 0.000160383,
+        "tree_seconds": 0.001846653,
+        "kick_seconds": 0.109473484
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 11,
+        "reset_seconds": 0.000159892,
+        "tree_seconds": 0.001837827,
+        "kick_seconds": 0.109331847
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 12,
+        "reset_seconds": 0.000158909,
+        "tree_seconds": 0.00186661,
+        "kick_seconds": 0.108993249
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 13,
+        "reset_seconds": 0.000165372,
+        "tree_seconds": 0.001959306,
+        "kick_seconds": 0.109890551
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 14,
+        "reset_seconds": 0.000162627,
+        "tree_seconds": 0.001902198,
+        "kick_seconds": 0.110005057
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 0,
+        "reset_seconds": 0.000167286,
+        "tree_seconds": 0.002596066,
+        "kick_seconds": 0.019196529
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 1,
+        "reset_seconds": 0.000161344,
+        "tree_seconds": 0.002741702,
+        "kick_seconds": 0.019220094
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 2,
+        "reset_seconds": 0.00015921,
+        "tree_seconds": 0.002621986,
+        "kick_seconds": 0.019006672
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 3,
+        "reset_seconds": 0.000161344,
+        "tree_seconds": 0.003028833,
+        "kick_seconds": 0.019233179
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 4,
+        "reset_seconds": 0.000160413,
+        "tree_seconds": 0.002610644,
+        "kick_seconds": 0.019581866
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 5,
+        "reset_seconds": 0.000160754,
+        "tree_seconds": 0.002613429,
+        "kick_seconds": 0.019240653
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 6,
+        "reset_seconds": 0.000162427,
+        "tree_seconds": 0.002672872,
+        "kick_seconds": 0.021327419
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 7,
+        "reset_seconds": 0.000160733,
+        "tree_seconds": 0.002675978,
+        "kick_seconds": 0.019066735
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 8,
+        "reset_seconds": 0.000172816,
+        "tree_seconds": 0.002605475,
+        "kick_seconds": 0.019006
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 9,
+        "reset_seconds": 0.000159531,
+        "tree_seconds": 0.002599653,
+        "kick_seconds": 0.019092283
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 10,
+        "reset_seconds": 0.000158589,
+        "tree_seconds": 0.002561622,
+        "kick_seconds": 0.019398179
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 11,
+        "reset_seconds": 0.000158068,
+        "tree_seconds": 0.002579045,
+        "kick_seconds": 0.018990861
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 12,
+        "reset_seconds": 0.000158369,
+        "tree_seconds": 0.002558626,
+        "kick_seconds": 0.019807923
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 13,
+        "reset_seconds": 0.000158319,
+        "tree_seconds": 0.002694763,
+        "kick_seconds": 0.019440831
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 14,
+        "reset_seconds": 0.000158378,
+        "tree_seconds": 0.002521296,
+        "kick_seconds": 0.019006291
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 0,
+        "reset_seconds": 0.000158259,
+        "tree_seconds": 0.002573744,
+        "kick_seconds": 0.020376545
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 1,
+        "reset_seconds": 0.00015887,
+        "tree_seconds": 0.002542246,
+        "kick_seconds": 0.020254615
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 2,
+        "reset_seconds": 0.00015905,
+        "tree_seconds": 0.002542115,
+        "kick_seconds": 0.020400661
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 3,
+        "reset_seconds": 0.000158419,
+        "tree_seconds": 0.00249718,
+        "kick_seconds": 0.021152349
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 4,
+        "reset_seconds": 0.00015899,
+        "tree_seconds": 0.002565479,
+        "kick_seconds": 0.022093394
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 5,
+        "reset_seconds": 0.000160583,
+        "tree_seconds": 0.002656461,
+        "kick_seconds": 0.020320009
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 6,
+        "reset_seconds": 0.000161915,
+        "tree_seconds": 0.002600645,
+        "kick_seconds": 0.020432601
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 7,
+        "reset_seconds": 0.00015905,
+        "tree_seconds": 0.002588272,
+        "kick_seconds": 0.020413164
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 8,
+        "reset_seconds": 0.000165622,
+        "tree_seconds": 0.002608991,
+        "kick_seconds": 0.020833277
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 9,
+        "reset_seconds": 0.000160904,
+        "tree_seconds": 0.002603401,
+        "kick_seconds": 0.020648709
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 10,
+        "reset_seconds": 0.000160452,
+        "tree_seconds": 0.002665437,
+        "kick_seconds": 0.020429516
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 11,
+        "reset_seconds": 0.000160693,
+        "tree_seconds": 0.002731341,
+        "kick_seconds": 0.020248043
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 12,
+        "reset_seconds": 0.0001588,
+        "tree_seconds": 0.002588342,
+        "kick_seconds": 0.021618297
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 13,
+        "reset_seconds": 0.000159421,
+        "tree_seconds": 0.002894209,
+        "kick_seconds": 0.021419823
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 14,
+        "reset_seconds": 0.000163649,
+        "tree_seconds": 0.002595105,
+        "kick_seconds": 0.020388288
+      }
+    ],
+    "force_csv": "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/runs/cpu_pair1_after/stf_walk_forces.csv",
+    "force_csv_sha256": "62f2b9c439b5950ee22c038e21388addaabca001d1689396773b3ce4e0b3433b"
+  },
+  {
+    "variant": "before",
+    "backend": "cpu",
+    "pair": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "1,2",
+      "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/cosmictiger_before",
+      "--run.test=stfBenchmark",
+      "--initial.particlesPerDimension=32",
+      "--hydro.enabled=false",
+      "--gravity.openingAngle=0.8",
+      "--gravity.effectiveRadius=0.01876988456953534",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--hpx:threads=2",
+      "--hpx:bind=none",
+      "--analysis.views=false",
+      "--analysis.power=false",
+      "--analysis.groups=false",
+      "--lightcone.enabled=false",
+      "--compute.cuda=false"
+    ],
+    "cwd": "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/runs/cpu_pair1_before",
+    "environment": {
+      "COSMICTIGER_STF_WALK_SAMPLES": "15",
+      "OMP_NUM_THREADS": "2",
+      "OMP_THREAD_LIMIT": "2"
+    },
+    "exit_code": 0,
+    "wall_seconds": 5.522918561997358,
+    "config": "STF_WALK_CONFIG,particles=32768,threads=2,cuda=0,theta=0.80000000000000004,support=0.0008798383391969691,bucket=64,samples=15,warmup=1,gm=1",
+    "medians": [
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "samples": 15,
+        "particles": 32768,
+        "reset_seconds": 0.000160323,
+        "tree_seconds": 0.001960548,
+        "kick_seconds": 0.108598895,
+        "total_seconds": 0.110533082,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "samples": 15,
+        "particles": 32768,
+        "reset_seconds": 0.000161255,
+        "tree_seconds": 0.001953234,
+        "kick_seconds": 0.110107129,
+        "total_seconds": 0.112054342,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "samples": 15,
+        "particles": 32768,
+        "reset_seconds": 0.000158959,
+        "tree_seconds": 0.002690875,
+        "kick_seconds": 0.019088035,
+        "total_seconds": 0.021758441,
+        "position_hash": "9330035828812934027"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "samples": 15,
+        "particles": 32768,
+        "reset_seconds": 0.000159732,
+        "tree_seconds": 0.002717726,
+        "kick_seconds": 0.020529384,
+        "total_seconds": 0.023260325,
+        "position_hash": "9330035828812934027"
+      }
+    ],
+    "samples": [
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 0,
+        "reset_seconds": 0.00015881,
+        "tree_seconds": 0.002366023,
+        "kick_seconds": 0.109192735
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 1,
+        "reset_seconds": 0.00017493,
+        "tree_seconds": 0.002418121,
+        "kick_seconds": 0.10872875
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 2,
+        "reset_seconds": 0.000160843,
+        "tree_seconds": 0.001940359,
+        "kick_seconds": 0.108598895
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 3,
+        "reset_seconds": 0.000159972,
+        "tree_seconds": 0.001907468,
+        "kick_seconds": 0.127242221
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 4,
+        "reset_seconds": 0.000160002,
+        "tree_seconds": 0.002017516,
+        "kick_seconds": 0.109288967
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 5,
+        "reset_seconds": 0.000161334,
+        "tree_seconds": 0.001958695,
+        "kick_seconds": 0.115699138
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 6,
+        "reset_seconds": 0.000160322,
+        "tree_seconds": 0.001904523,
+        "kick_seconds": 0.108530115
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 7,
+        "reset_seconds": 0.000160372,
+        "tree_seconds": 0.001889694,
+        "kick_seconds": 0.108643388
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 8,
+        "reset_seconds": 0.00015882,
+        "tree_seconds": 0.001965468,
+        "kick_seconds": 0.10806603
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 9,
+        "reset_seconds": 0.00015896,
+        "tree_seconds": 0.002042603,
+        "kick_seconds": 0.108636645
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 10,
+        "reset_seconds": 0.000165101,
+        "tree_seconds": 0.001957563,
+        "kick_seconds": 0.108227645
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 11,
+        "reset_seconds": 0.000160323,
+        "tree_seconds": 0.002094992,
+        "kick_seconds": 0.108088792
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 12,
+        "reset_seconds": 0.000159441,
+        "tree_seconds": 0.001969355,
+        "kick_seconds": 0.108417482
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 13,
+        "reset_seconds": 0.000166244,
+        "tree_seconds": 0.001960548,
+        "kick_seconds": 0.107524438
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 14,
+        "reset_seconds": 0.000172284,
+        "tree_seconds": 0.001864096,
+        "kick_seconds": 0.108382948
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 0,
+        "reset_seconds": 0.000158369,
+        "tree_seconds": 0.001988802,
+        "kick_seconds": 0.110188333
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 1,
+        "reset_seconds": 0.000163047,
+        "tree_seconds": 0.002023988,
+        "kick_seconds": 0.110546649
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 2,
+        "reset_seconds": 0.000159682,
+        "tree_seconds": 0.001953234,
+        "kick_seconds": 0.109718396
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 3,
+        "reset_seconds": 0.000159551,
+        "tree_seconds": 0.001978763,
+        "kick_seconds": 0.109552724
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 4,
+        "reset_seconds": 0.000162337,
+        "tree_seconds": 0.001931633,
+        "kick_seconds": 0.129451759
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 5,
+        "reset_seconds": 0.000160844,
+        "tree_seconds": 0.001988651,
+        "kick_seconds": 0.109797196
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 6,
+        "reset_seconds": 0.000168307,
+        "tree_seconds": 0.002086096,
+        "kick_seconds": 0.110374273
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 7,
+        "reset_seconds": 0.000160443,
+        "tree_seconds": 0.001947213,
+        "kick_seconds": 0.110107129
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 8,
+        "reset_seconds": 0.000162867,
+        "tree_seconds": 0.002140377,
+        "kick_seconds": 0.109469617
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 9,
+        "reset_seconds": 0.000185951,
+        "tree_seconds": 0.001906696,
+        "kick_seconds": 0.109382974
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 10,
+        "reset_seconds": 0.000158339,
+        "tree_seconds": 0.001894043,
+        "kick_seconds": 0.109811953
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 11,
+        "reset_seconds": 0.000161255,
+        "tree_seconds": 0.001893943,
+        "kick_seconds": 0.129417033
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 12,
+        "reset_seconds": 0.000163879,
+        "tree_seconds": 0.001882341,
+        "kick_seconds": 0.109453256
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 13,
+        "reset_seconds": 0.000166053,
+        "tree_seconds": 0.001968614,
+        "kick_seconds": 0.129002632
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 14,
+        "reset_seconds": 0.000158318,
+        "tree_seconds": 0.001914781,
+        "kick_seconds": 0.110430399
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 0,
+        "reset_seconds": 0.000160572,
+        "tree_seconds": 0.003151484,
+        "kick_seconds": 0.019351371
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 1,
+        "reset_seconds": 0.000178737,
+        "tree_seconds": 0.002688051,
+        "kick_seconds": 0.019123522
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 2,
+        "reset_seconds": 0.00015862,
+        "tree_seconds": 0.002690875,
+        "kick_seconds": 0.019255631
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 3,
+        "reset_seconds": 0.000158809,
+        "tree_seconds": 0.002686207,
+        "kick_seconds": 0.018847812
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 4,
+        "reset_seconds": 0.00015879,
+        "tree_seconds": 0.002611265,
+        "kick_seconds": 0.019103033
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 5,
+        "reset_seconds": 0.000158959,
+        "tree_seconds": 0.0027146,
+        "kick_seconds": 0.019043841
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 6,
+        "reset_seconds": 0.000167647,
+        "tree_seconds": 0.002712326,
+        "kick_seconds": 0.018960644
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 7,
+        "reset_seconds": 0.000158769,
+        "tree_seconds": 0.002752352,
+        "kick_seconds": 0.01888389
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 8,
+        "reset_seconds": 0.000157296,
+        "tree_seconds": 0.002620624,
+        "kick_seconds": 0.019096962
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 9,
+        "reset_seconds": 0.00015905,
+        "tree_seconds": 0.002679674,
+        "kick_seconds": 0.019088035
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 10,
+        "reset_seconds": 0.000160132,
+        "tree_seconds": 0.002742623,
+        "kick_seconds": 0.019137027
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 11,
+        "reset_seconds": 0.000167185,
+        "tree_seconds": 0.002590807,
+        "kick_seconds": 0.018993156
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 12,
+        "reset_seconds": 0.000163338,
+        "tree_seconds": 0.002901924,
+        "kick_seconds": 0.018961917
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 13,
+        "reset_seconds": 0.000158149,
+        "tree_seconds": 0.002672731,
+        "kick_seconds": 0.019706792
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 14,
+        "reset_seconds": 0.00015883,
+        "tree_seconds": 0.002715102,
+        "kick_seconds": 0.019024956
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 0,
+        "reset_seconds": 0.000159972,
+        "tree_seconds": 0.002701576,
+        "kick_seconds": 0.020465763
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 1,
+        "reset_seconds": 0.000167246,
+        "tree_seconds": 0.002805512,
+        "kick_seconds": 0.020592182
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 2,
+        "reset_seconds": 0.000168578,
+        "tree_seconds": 0.002765587,
+        "kick_seconds": 0.020468429
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 3,
+        "reset_seconds": 0.000160072,
+        "tree_seconds": 0.0026456,
+        "kick_seconds": 0.020999209
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 4,
+        "reset_seconds": 0.000159611,
+        "tree_seconds": 0.002759575,
+        "kick_seconds": 0.02050075
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 5,
+        "reset_seconds": 0.00015891,
+        "tree_seconds": 0.002776908,
+        "kick_seconds": 0.020545264
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 6,
+        "reset_seconds": 0.000159732,
+        "tree_seconds": 0.002663835,
+        "kick_seconds": 0.02038427
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 7,
+        "reset_seconds": 0.00015906,
+        "tree_seconds": 0.002759665,
+        "kick_seconds": 0.020515688
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 8,
+        "reset_seconds": 0.000157817,
+        "tree_seconds": 0.002631163,
+        "kick_seconds": 0.020453981
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 9,
+        "reset_seconds": 0.000167947,
+        "tree_seconds": 0.00265071,
+        "kick_seconds": 0.021017945
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 10,
+        "reset_seconds": 0.000157807,
+        "tree_seconds": 0.002717726,
+        "kick_seconds": 0.020657626
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 11,
+        "reset_seconds": 0.000168128,
+        "tree_seconds": 0.002627696,
+        "kick_seconds": 0.020529384
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 12,
+        "reset_seconds": 0.000158579,
+        "tree_seconds": 0.002770126,
+        "kick_seconds": 0.020610637
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 13,
+        "reset_seconds": 0.000158469,
+        "tree_seconds": 0.002631494,
+        "kick_seconds": 0.020584217
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 14,
+        "reset_seconds": 0.000170332,
+        "tree_seconds": 0.002720963,
+        "kick_seconds": 0.020354383
+      }
+    ],
+    "force_csv": "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/runs/cpu_pair1_before/stf_walk_forces.csv",
+    "force_csv_sha256": "62f2b9c439b5950ee22c038e21388addaabca001d1689396773b3ce4e0b3433b"
+  },
+  {
+    "variant": "before",
+    "backend": "cpu",
+    "pair": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "1,2",
+      "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/cosmictiger_before",
+      "--run.test=stfBenchmark",
+      "--initial.particlesPerDimension=32",
+      "--hydro.enabled=false",
+      "--gravity.openingAngle=0.8",
+      "--gravity.effectiveRadius=0.01876988456953534",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--hpx:threads=2",
+      "--hpx:bind=none",
+      "--analysis.views=false",
+      "--analysis.power=false",
+      "--analysis.groups=false",
+      "--lightcone.enabled=false",
+      "--compute.cuda=false"
+    ],
+    "cwd": "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/runs/cpu_pair2_before",
+    "environment": {
+      "COSMICTIGER_STF_WALK_SAMPLES": "15",
+      "OMP_NUM_THREADS": "2",
+      "OMP_THREAD_LIMIT": "2"
+    },
+    "exit_code": 0,
+    "wall_seconds": 5.473023537022527,
+    "config": "STF_WALK_CONFIG,particles=32768,threads=2,cuda=0,theta=0.80000000000000004,support=0.0008798383391969691,bucket=64,samples=15,warmup=1,gm=1",
+    "medians": [
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "samples": 15,
+        "particles": 32768,
+        "reset_seconds": 0.000161535,
+        "tree_seconds": 0.001959847,
+        "kick_seconds": 0.108704213,
+        "total_seconds": 0.110696381,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "samples": 15,
+        "particles": 32768,
+        "reset_seconds": 0.000160964,
+        "tree_seconds": 0.001906476,
+        "kick_seconds": 0.109815079,
+        "total_seconds": 0.111830722,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "samples": 15,
+        "particles": 32768,
+        "reset_seconds": 0.000159461,
+        "tree_seconds": 0.00269824,
+        "kick_seconds": 0.019165501,
+        "total_seconds": 0.021822342,
+        "position_hash": "9330035828812934027"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "samples": 15,
+        "particles": 32768,
+        "reset_seconds": 0.000160052,
+        "tree_seconds": 0.002697227,
+        "kick_seconds": 0.020507873,
+        "total_seconds": 0.023212475,
+        "position_hash": "9330035828812934027"
+      }
+    ],
+    "samples": [
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 0,
+        "reset_seconds": 0.000165753,
+        "tree_seconds": 0.002304306,
+        "kick_seconds": 0.108392075
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 1,
+        "reset_seconds": 0.000162296,
+        "tree_seconds": 0.002408503,
+        "kick_seconds": 0.127431147
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 2,
+        "reset_seconds": 0.000160072,
+        "tree_seconds": 0.001938186,
+        "kick_seconds": 0.108698323
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 3,
+        "reset_seconds": 0.000168739,
+        "tree_seconds": 0.0019135,
+        "kick_seconds": 0.108704213
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 4,
+        "reset_seconds": 0.000167136,
+        "tree_seconds": 0.002014139,
+        "kick_seconds": 0.108665711
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 5,
+        "reset_seconds": 0.00015903,
+        "tree_seconds": 0.001942795,
+        "kick_seconds": 0.108660892
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 6,
+        "reset_seconds": 0.000160553,
+        "tree_seconds": 0.002004792,
+        "kick_seconds": 0.10895671
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 7,
+        "reset_seconds": 0.000161515,
+        "tree_seconds": 0.001939378,
+        "kick_seconds": 0.108931012
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 8,
+        "reset_seconds": 0.000169951,
+        "tree_seconds": 0.002002147,
+        "kick_seconds": 0.108441338
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 9,
+        "reset_seconds": 0.000160823,
+        "tree_seconds": 0.001991927,
+        "kick_seconds": 0.109113506
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 10,
+        "reset_seconds": 0.000161374,
+        "tree_seconds": 0.002002467,
+        "kick_seconds": 0.108330208
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 11,
+        "reset_seconds": 0.000160583,
+        "tree_seconds": 0.00187107,
+        "kick_seconds": 0.127843295
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 12,
+        "reset_seconds": 0.000161535,
+        "tree_seconds": 0.001959847,
+        "kick_seconds": 0.108345477
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 13,
+        "reset_seconds": 0.000164511,
+        "tree_seconds": 0.001940951,
+        "kick_seconds": 0.108817257
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 14,
+        "reset_seconds": 0.000162377,
+        "tree_seconds": 0.001904102,
+        "kick_seconds": 0.120085892
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 0,
+        "reset_seconds": 0.000161575,
+        "tree_seconds": 0.001895526,
+        "kick_seconds": 0.108805154
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 1,
+        "reset_seconds": 0.000160202,
+        "tree_seconds": 0.002033957,
+        "kick_seconds": 0.109522377
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 2,
+        "reset_seconds": 0.000160804,
+        "tree_seconds": 0.002122584,
+        "kick_seconds": 0.109721923
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 3,
+        "reset_seconds": 0.000160964,
+        "tree_seconds": 0.002045799,
+        "kick_seconds": 0.109362305
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 4,
+        "reset_seconds": 0.000167827,
+        "tree_seconds": 0.001848386,
+        "kick_seconds": 0.109680575
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 5,
+        "reset_seconds": 0.00016966,
+        "tree_seconds": 0.001917076,
+        "kick_seconds": 0.109441554
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 6,
+        "reset_seconds": 0.000159391,
+        "tree_seconds": 0.001857344,
+        "kick_seconds": 0.109973378
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 7,
+        "reset_seconds": 0.000159541,
+        "tree_seconds": 0.001900675,
+        "kick_seconds": 0.128784119
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 8,
+        "reset_seconds": 0.000159651,
+        "tree_seconds": 0.001922156,
+        "kick_seconds": 0.129286567
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 9,
+        "reset_seconds": 0.0001643,
+        "tree_seconds": 0.001965828,
+        "kick_seconds": 0.109815079
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 10,
+        "reset_seconds": 0.000161174,
+        "tree_seconds": 0.001864887,
+        "kick_seconds": 0.109992603
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 11,
+        "reset_seconds": 0.00015883,
+        "tree_seconds": 0.001906476,
+        "kick_seconds": 0.109634839
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 12,
+        "reset_seconds": 0.000160032,
+        "tree_seconds": 0.00185009,
+        "kick_seconds": 0.110252744
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 13,
+        "reset_seconds": 0.000164591,
+        "tree_seconds": 0.001869907,
+        "kick_seconds": 0.128889568
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 14,
+        "reset_seconds": 0.000162176,
+        "tree_seconds": 0.00199877,
+        "kick_seconds": 0.109909367
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 0,
+        "reset_seconds": 0.00015909,
+        "tree_seconds": 0.00269824,
+        "kick_seconds": 0.019616041
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 1,
+        "reset_seconds": 0.000158949,
+        "tree_seconds": 0.002818215,
+        "kick_seconds": 0.018962287
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 2,
+        "reset_seconds": 0.000159111,
+        "tree_seconds": 0.002659336,
+        "kick_seconds": 0.019225755
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 3,
+        "reset_seconds": 0.000162676,
+        "tree_seconds": 0.002769514,
+        "kick_seconds": 0.019185268
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 4,
+        "reset_seconds": 0.000160403,
+        "tree_seconds": 0.002761258,
+        "kick_seconds": 0.018945015
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 5,
+        "reset_seconds": 0.000158799,
+        "tree_seconds": 0.002678923,
+        "kick_seconds": 0.01884146
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 6,
+        "reset_seconds": 0.000158338,
+        "tree_seconds": 0.002689343,
+        "kick_seconds": 0.01903791
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 7,
+        "reset_seconds": 0.000159531,
+        "tree_seconds": 0.00280962,
+        "kick_seconds": 0.018865175
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 8,
+        "reset_seconds": 0.000159461,
+        "tree_seconds": 0.002891785,
+        "kick_seconds": 0.020423935
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 9,
+        "reset_seconds": 0.000157948,
+        "tree_seconds": 0.002695264,
+        "kick_seconds": 0.018876466
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 10,
+        "reset_seconds": 0.000159221,
+        "tree_seconds": 0.002654658,
+        "kick_seconds": 0.019335852
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 11,
+        "reset_seconds": 0.000164921,
+        "tree_seconds": 0.002709711,
+        "kick_seconds": 0.020791408
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 12,
+        "reset_seconds": 0.000168157,
+        "tree_seconds": 0.002656841,
+        "kick_seconds": 0.019165501
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 13,
+        "reset_seconds": 0.000168097,
+        "tree_seconds": 0.002984469,
+        "kick_seconds": 0.019828171
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 14,
+        "reset_seconds": 0.000160893,
+        "tree_seconds": 0.002691066,
+        "kick_seconds": 0.01908522
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 0,
+        "reset_seconds": 0.000160422,
+        "tree_seconds": 0.002697288,
+        "kick_seconds": 0.020515187
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 1,
+        "reset_seconds": 0.000159471,
+        "tree_seconds": 0.002680075,
+        "kick_seconds": 0.020446999
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 2,
+        "reset_seconds": 0.000167055,
+        "tree_seconds": 0.002643145,
+        "kick_seconds": 0.020515727
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 3,
+        "reset_seconds": 0.000159902,
+        "tree_seconds": 0.002643416,
+        "kick_seconds": 0.021395758
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 4,
+        "reset_seconds": 0.000158799,
+        "tree_seconds": 0.002755788,
+        "kick_seconds": 0.020499648
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 5,
+        "reset_seconds": 0.000160082,
+        "tree_seconds": 0.002660729,
+        "kick_seconds": 0.022160521
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 6,
+        "reset_seconds": 0.000164461,
+        "tree_seconds": 0.002670747,
+        "kick_seconds": 0.020507873
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 7,
+        "reset_seconds": 0.000159652,
+        "tree_seconds": 0.002697227,
+        "kick_seconds": 0.020436318
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 8,
+        "reset_seconds": 0.000160853,
+        "tree_seconds": 0.002780344,
+        "kick_seconds": 0.020559481
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 9,
+        "reset_seconds": 0.000160693,
+        "tree_seconds": 0.002925828,
+        "kick_seconds": 0.020599606
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 10,
+        "reset_seconds": 0.000159591,
+        "tree_seconds": 0.002689843,
+        "kick_seconds": 0.02046405
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 11,
+        "reset_seconds": 0.00015905,
+        "tree_seconds": 0.002929185,
+        "kick_seconds": 0.020330147
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 12,
+        "reset_seconds": 0.000160332,
+        "tree_seconds": 0.00268799,
+        "kick_seconds": 0.020473268
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 13,
+        "reset_seconds": 0.00015881,
+        "tree_seconds": 0.002736712,
+        "kick_seconds": 0.020420097
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 14,
+        "reset_seconds": 0.000160052,
+        "tree_seconds": 0.002730631,
+        "kick_seconds": 0.02113687
+      }
+    ],
+    "force_csv": "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/runs/cpu_pair2_before/stf_walk_forces.csv",
+    "force_csv_sha256": "62f2b9c439b5950ee22c038e21388addaabca001d1689396773b3ce4e0b3433b"
+  },
+  {
+    "variant": "after",
+    "backend": "cpu",
+    "pair": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "1,2",
+      "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/cosmictiger_after",
+      "--run.test=stfBenchmark",
+      "--initial.particlesPerDimension=32",
+      "--hydro.enabled=false",
+      "--gravity.openingAngle=0.8",
+      "--gravity.effectiveRadius=0.01876988456953534",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--hpx:threads=2",
+      "--hpx:bind=none",
+      "--analysis.views=false",
+      "--analysis.power=false",
+      "--analysis.groups=false",
+      "--lightcone.enabled=false",
+      "--compute.cuda=false"
+    ],
+    "cwd": "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/runs/cpu_pair2_after",
+    "environment": {
+      "COSMICTIGER_STF_WALK_SAMPLES": "15",
+      "OMP_NUM_THREADS": "2",
+      "OMP_THREAD_LIMIT": "2"
+    },
+    "exit_code": 0,
+    "wall_seconds": 5.422852841031272,
+    "config": "STF_WALK_CONFIG,particles=32768,threads=2,cuda=0,theta=0.80000000000000004,support=0.0008798383391969691,bucket=64,samples=15,warmup=1,gm=1",
+    "medians": [
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "samples": 15,
+        "particles": 32768,
+        "reset_seconds": 0.000160433,
+        "tree_seconds": 0.001872031,
+        "kick_seconds": 0.10807656,
+        "total_seconds": 0.109900631,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "samples": 15,
+        "particles": 32768,
+        "reset_seconds": 0.000160463,
+        "tree_seconds": 0.001878884,
+        "kick_seconds": 0.109841479,
+        "total_seconds": 0.111690246,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "samples": 15,
+        "particles": 32768,
+        "reset_seconds": 0.000158829,
+        "tree_seconds": 0.002623468,
+        "kick_seconds": 0.01908519,
+        "total_seconds": 0.021748162,
+        "position_hash": "9330035828812934027"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "samples": 15,
+        "particles": 32768,
+        "reset_seconds": 0.00015909,
+        "tree_seconds": 0.002630572,
+        "kick_seconds": 0.020441598,
+        "total_seconds": 0.023068514,
+        "position_hash": "9330035828812934027"
+      }
+    ],
+    "samples": [
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 0,
+        "reset_seconds": 0.000167185,
+        "tree_seconds": 0.002300088,
+        "kick_seconds": 0.108305912
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 1,
+        "reset_seconds": 0.000161274,
+        "tree_seconds": 0.002341977,
+        "kick_seconds": 0.108255477
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 2,
+        "reset_seconds": 0.000160563,
+        "tree_seconds": 0.001846804,
+        "kick_seconds": 0.108514085
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 3,
+        "reset_seconds": 0.000170983,
+        "tree_seconds": 0.001871891,
+        "kick_seconds": 0.108420198
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 4,
+        "reset_seconds": 0.000160433,
+        "tree_seconds": 0.001969155,
+        "kick_seconds": 0.107762818
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 5,
+        "reset_seconds": 0.000159851,
+        "tree_seconds": 0.001917267,
+        "kick_seconds": 0.107691894
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 6,
+        "reset_seconds": 0.000160042,
+        "tree_seconds": 0.001870739,
+        "kick_seconds": 0.107774791
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 7,
+        "reset_seconds": 0.000165512,
+        "tree_seconds": 0.001824071,
+        "kick_seconds": 0.10807656
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 8,
+        "reset_seconds": 0.0001592,
+        "tree_seconds": 0.001862153,
+        "kick_seconds": 0.107956563
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 9,
+        "reset_seconds": 0.000158879,
+        "tree_seconds": 0.00193533,
+        "kick_seconds": 0.108464501
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 10,
+        "reset_seconds": 0.000159751,
+        "tree_seconds": 0.001895625,
+        "kick_seconds": 0.107756926
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 11,
+        "reset_seconds": 0.000159692,
+        "tree_seconds": 0.001851302,
+        "kick_seconds": 0.122988839
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 12,
+        "reset_seconds": 0.000167245,
+        "tree_seconds": 0.002021452,
+        "kick_seconds": 0.108360185
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 13,
+        "reset_seconds": 0.000162387,
+        "tree_seconds": 0.001872031,
+        "kick_seconds": 0.107788657
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 14,
+        "reset_seconds": 0.00015902,
+        "tree_seconds": 0.00185538,
+        "kick_seconds": 0.107681364
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 0,
+        "reset_seconds": 0.000157968,
+        "tree_seconds": 0.001941602,
+        "kick_seconds": 0.109387513
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 1,
+        "reset_seconds": 0.00015927,
+        "tree_seconds": 0.001837727,
+        "kick_seconds": 0.109269701
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 2,
+        "reset_seconds": 0.000165703,
+        "tree_seconds": 0.001813731,
+        "kick_seconds": 0.109505877
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 3,
+        "reset_seconds": 0.000159902,
+        "tree_seconds": 0.001872282,
+        "kick_seconds": 0.109017094
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 4,
+        "reset_seconds": 0.000160463,
+        "tree_seconds": 0.001878884,
+        "kick_seconds": 0.110013133
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 5,
+        "reset_seconds": 0.000161956,
+        "tree_seconds": 0.00191395,
+        "kick_seconds": 0.110238467
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 6,
+        "reset_seconds": 0.000161514,
+        "tree_seconds": 0.001904783,
+        "kick_seconds": 0.10994784
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 7,
+        "reset_seconds": 0.000162967,
+        "tree_seconds": 0.001953605,
+        "kick_seconds": 0.109151257
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 8,
+        "reset_seconds": 0.000175731,
+        "tree_seconds": 0.001888503,
+        "kick_seconds": 0.109189258
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 9,
+        "reset_seconds": 0.000160092,
+        "tree_seconds": 0.001827587,
+        "kick_seconds": 0.109349922
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 10,
+        "reset_seconds": 0.000159751,
+        "tree_seconds": 0.001884705,
+        "kick_seconds": 0.109954482
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 11,
+        "reset_seconds": 0.000159331,
+        "tree_seconds": 0.001848767,
+        "kick_seconds": 0.109841479
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 12,
+        "reset_seconds": 0.00015915,
+        "tree_seconds": 0.001850691,
+        "kick_seconds": 0.110315443
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 13,
+        "reset_seconds": 0.000161604,
+        "tree_seconds": 0.001872722,
+        "kick_seconds": 0.110085299
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 14,
+        "reset_seconds": 0.000160884,
+        "tree_seconds": 0.00190849,
+        "kick_seconds": 0.110452862
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 0,
+        "reset_seconds": 0.000167355,
+        "tree_seconds": 0.002623468,
+        "kick_seconds": 0.020679596
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 1,
+        "reset_seconds": 0.000158659,
+        "tree_seconds": 0.002588253,
+        "kick_seconds": 0.01898988
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 2,
+        "reset_seconds": 0.00015925,
+        "tree_seconds": 0.003016621,
+        "kick_seconds": 0.01908519
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 3,
+        "reset_seconds": 0.000158899,
+        "tree_seconds": 0.002691737,
+        "kick_seconds": 0.018988176
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 4,
+        "reset_seconds": 0.000158829,
+        "tree_seconds": 0.002579927,
+        "kick_seconds": 0.020208759
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 5,
+        "reset_seconds": 0.00015925,
+        "tree_seconds": 0.002734478,
+        "kick_seconds": 0.019013684
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 6,
+        "reset_seconds": 0.000158399,
+        "tree_seconds": 0.002558716,
+        "kick_seconds": 0.019017993
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 7,
+        "reset_seconds": 0.00015895,
+        "tree_seconds": 0.002514143,
+        "kick_seconds": 0.019062356
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 8,
+        "reset_seconds": 0.000159952,
+        "tree_seconds": 0.002654777,
+        "kick_seconds": 0.020317203
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 9,
+        "reset_seconds": 0.0001588,
+        "tree_seconds": 0.00273581,
+        "kick_seconds": 0.018924587
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 10,
+        "reset_seconds": 0.000158499,
+        "tree_seconds": 0.002680517,
+        "kick_seconds": 0.020545143
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 11,
+        "reset_seconds": 0.000158028,
+        "tree_seconds": 0.002562494,
+        "kick_seconds": 0.019023673
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 12,
+        "reset_seconds": 0.000158639,
+        "tree_seconds": 0.002642925,
+        "kick_seconds": 0.020640524
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 13,
+        "reset_seconds": 0.000159441,
+        "tree_seconds": 0.002591538,
+        "kick_seconds": 0.019113463
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "sample": 14,
+        "reset_seconds": 0.000157237,
+        "tree_seconds": 0.002514914,
+        "kick_seconds": 0.021216009
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 0,
+        "reset_seconds": 0.000159922,
+        "tree_seconds": 0.002638327,
+        "kick_seconds": 0.020441598
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 1,
+        "reset_seconds": 0.00015905,
+        "tree_seconds": 0.002592209,
+        "kick_seconds": 0.020135251
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 2,
+        "reset_seconds": 0.000157878,
+        "tree_seconds": 0.00253943,
+        "kick_seconds": 0.020598033
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 3,
+        "reset_seconds": 0.000167846,
+        "tree_seconds": 0.002668314,
+        "kick_seconds": 0.021397881
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 4,
+        "reset_seconds": 0.000158168,
+        "tree_seconds": 0.002545292,
+        "kick_seconds": 0.020360846
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 5,
+        "reset_seconds": 0.000169129,
+        "tree_seconds": 0.002630572,
+        "kick_seconds": 0.020503134
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 6,
+        "reset_seconds": 0.00015875,
+        "tree_seconds": 0.002621074,
+        "kick_seconds": 0.020356197
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 7,
+        "reset_seconds": 0.000158699,
+        "tree_seconds": 0.002522117,
+        "kick_seconds": 0.02026735
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 8,
+        "reset_seconds": 0.00015909,
+        "tree_seconds": 0.00253977,
+        "kick_seconds": 0.020504637
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 9,
+        "reset_seconds": 0.000158238,
+        "tree_seconds": 0.002657383,
+        "kick_seconds": 0.020518513
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 10,
+        "reset_seconds": 0.000159521,
+        "tree_seconds": 0.002675497,
+        "kick_seconds": 0.020243395
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 11,
+        "reset_seconds": 0.000158779,
+        "tree_seconds": 0.002591398,
+        "kick_seconds": 0.020329707
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 12,
+        "reset_seconds": 0.000165192,
+        "tree_seconds": 0.00270389,
+        "kick_seconds": 0.020634051
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 13,
+        "reset_seconds": 0.000162286,
+        "tree_seconds": 0.002838914,
+        "kick_seconds": 0.022563811
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "sample": 14,
+        "reset_seconds": 0.000159551,
+        "tree_seconds": 0.002710333,
+        "kick_seconds": 0.020358181
+      }
+    ],
+    "force_csv": "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/runs/cpu_pair2_after/stf_walk_forces.csv",
+    "force_csv_sha256": "62f2b9c439b5950ee22c038e21388addaabca001d1689396773b3ce4e0b3433b"
+  }
+]

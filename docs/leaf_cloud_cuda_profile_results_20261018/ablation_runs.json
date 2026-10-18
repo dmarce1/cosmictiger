@@ -1,0 +1,1820 @@
+[
+  {
+    "variant": "before",
+    "pair": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "1,2",
+      "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/adaptive_suite/cosmictiger_before",
+      "--run.test=stfBenchmark",
+      "--initial.particlesPerDimension=32",
+      "--hydro.enabled=false",
+      "--gravity.openingAngle=0.8",
+      "--gravity.effectiveRadius=0.01876988456953534",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--hpx:threads=2",
+      "--hpx:bind=none",
+      "--analysis.views=false",
+      "--analysis.power=false",
+      "--analysis.groups=false",
+      "--lightcone.enabled=false",
+      "--compute.cuda=true"
+    ],
+    "medians": [
+      {
+        "potential": 0,
+        "tree_seconds": 0.003079065,
+        "kick_seconds": 0.016474096,
+        "total_seconds": 0.019716847
+      },
+      {
+        "potential": 1,
+        "tree_seconds": 0.003098571,
+        "kick_seconds": 0.01690477,
+        "total_seconds": 0.020100212
+      }
+    ],
+    "samples": [
+      {
+        "potential": 0,
+        "sample": -1,
+        "kick_seconds": 0.028727969
+      },
+      {
+        "potential": 0,
+        "sample": 0,
+        "kick_seconds": 0.0161864
+      },
+      {
+        "potential": 0,
+        "sample": 1,
+        "kick_seconds": 0.016474096
+      },
+      {
+        "potential": 0,
+        "sample": 2,
+        "kick_seconds": 0.018557224
+      },
+      {
+        "potential": 0,
+        "sample": 3,
+        "kick_seconds": 0.01643846
+      },
+      {
+        "potential": 0,
+        "sample": 4,
+        "kick_seconds": 0.016483925
+      },
+      {
+        "potential": 0,
+        "sample": 5,
+        "kick_seconds": 0.017535266
+      },
+      {
+        "potential": 0,
+        "sample": 6,
+        "kick_seconds": 0.016903277
+      },
+      {
+        "potential": 0,
+        "sample": 7,
+        "kick_seconds": 0.016116649
+      },
+      {
+        "potential": 0,
+        "sample": 8,
+        "kick_seconds": 0.015840314
+      },
+      {
+        "potential": 0,
+        "sample": 9,
+        "kick_seconds": 0.016395559
+      },
+      {
+        "potential": 0,
+        "sample": 10,
+        "kick_seconds": 0.016771951
+      },
+      {
+        "potential": 0,
+        "sample": 11,
+        "kick_seconds": 0.016084279
+      },
+      {
+        "potential": 0,
+        "sample": 12,
+        "kick_seconds": 0.016039746
+      },
+      {
+        "potential": 0,
+        "sample": 13,
+        "kick_seconds": 0.017732243
+      },
+      {
+        "potential": 0,
+        "sample": 14,
+        "kick_seconds": 0.016858053
+      },
+      {
+        "potential": 1,
+        "sample": -1,
+        "kick_seconds": 0.016400368
+      },
+      {
+        "potential": 1,
+        "sample": 0,
+        "kick_seconds": 0.017291461
+      },
+      {
+        "potential": 1,
+        "sample": 1,
+        "kick_seconds": 0.018296958
+      },
+      {
+        "potential": 1,
+        "sample": 2,
+        "kick_seconds": 0.016716218
+      },
+      {
+        "potential": 1,
+        "sample": 3,
+        "kick_seconds": 0.016242404
+      },
+      {
+        "potential": 1,
+        "sample": 4,
+        "kick_seconds": 0.017535728
+      },
+      {
+        "potential": 1,
+        "sample": 5,
+        "kick_seconds": 0.01733347
+      },
+      {
+        "potential": 1,
+        "sample": 6,
+        "kick_seconds": 0.016429092
+      },
+      {
+        "potential": 1,
+        "sample": 7,
+        "kick_seconds": 0.01690477
+      },
+      {
+        "potential": 1,
+        "sample": 8,
+        "kick_seconds": 0.01725827
+      },
+      {
+        "potential": 1,
+        "sample": 9,
+        "kick_seconds": 0.016103455
+      },
+      {
+        "potential": 1,
+        "sample": 10,
+        "kick_seconds": 0.016689378
+      },
+      {
+        "potential": 1,
+        "sample": 11,
+        "kick_seconds": 0.018315241
+      },
+      {
+        "potential": 1,
+        "sample": 12,
+        "kick_seconds": 0.016040567
+      },
+      {
+        "potential": 1,
+        "sample": 13,
+        "kick_seconds": 0.016404807
+      },
+      {
+        "potential": 1,
+        "sample": 14,
+        "kick_seconds": 0.017063356
+      }
+    ],
+    "force_csv": "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/cuda_regression_profile/ablation_pair0_before/stf_walk_forces.csv",
+    "force_sha256": "2def56aa25e36a18dc7be837f090b67bb3804389c36db377ba7a8d6220434142"
+  },
+  {
+    "variant": "leaf_only",
+    "pair": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "1,2",
+      "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/cuda_regression_profile/leaf_only/cosmictiger_leaf_only",
+      "--run.test=stfBenchmark",
+      "--initial.particlesPerDimension=32",
+      "--hydro.enabled=false",
+      "--gravity.openingAngle=0.8",
+      "--gravity.effectiveRadius=0.01876988456953534",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--hpx:threads=2",
+      "--hpx:bind=none",
+      "--analysis.views=false",
+      "--analysis.power=false",
+      "--analysis.groups=false",
+      "--lightcone.enabled=false",
+      "--compute.cuda=true"
+    ],
+    "medians": [
+      {
+        "potential": 0,
+        "tree_seconds": 0.003090817,
+        "kick_seconds": 0.016709045,
+        "total_seconds": 0.019798649
+      },
+      {
+        "potential": 1,
+        "tree_seconds": 0.003089785,
+        "kick_seconds": 0.01651843,
+        "total_seconds": 0.019610639
+      }
+    ],
+    "samples": [
+      {
+        "potential": 0,
+        "sample": -1,
+        "kick_seconds": 0.030965725
+      },
+      {
+        "potential": 0,
+        "sample": 0,
+        "kick_seconds": 0.016448569
+      },
+      {
+        "potential": 0,
+        "sample": 1,
+        "kick_seconds": 0.016765721
+      },
+      {
+        "potential": 0,
+        "sample": 2,
+        "kick_seconds": 0.017945973
+      },
+      {
+        "potential": 0,
+        "sample": 3,
+        "kick_seconds": 0.017127035
+      },
+      {
+        "potential": 0,
+        "sample": 4,
+        "kick_seconds": 0.016636339
+      },
+      {
+        "potential": 0,
+        "sample": 5,
+        "kick_seconds": 0.018026323
+      },
+      {
+        "potential": 0,
+        "sample": 6,
+        "kick_seconds": 0.016709045
+      },
+      {
+        "potential": 0,
+        "sample": 7,
+        "kick_seconds": 0.016473737
+      },
+      {
+        "potential": 0,
+        "sample": 8,
+        "kick_seconds": 0.016428311
+      },
+      {
+        "potential": 0,
+        "sample": 9,
+        "kick_seconds": 0.017316018
+      },
+      {
+        "potential": 0,
+        "sample": 10,
+        "kick_seconds": 0.016082957
+      },
+      {
+        "potential": 0,
+        "sample": 11,
+        "kick_seconds": 0.015799969
+      },
+      {
+        "potential": 0,
+        "sample": 12,
+        "kick_seconds": 0.016758087
+      },
+      {
+        "potential": 0,
+        "sample": 13,
+        "kick_seconds": 0.018411372
+      },
+      {
+        "potential": 0,
+        "sample": 14,
+        "kick_seconds": 0.01572557
+      },
+      {
+        "potential": 1,
+        "sample": -1,
+        "kick_seconds": 0.015967522
+      },
+      {
+        "potential": 1,
+        "sample": 0,
+        "kick_seconds": 0.017775555
+      },
+      {
+        "potential": 1,
+        "sample": 1,
+        "kick_seconds": 0.01619725
+      },
+      {
+        "potential": 1,
+        "sample": 2,
+        "kick_seconds": 0.015672491
+      },
+      {
+        "potential": 1,
+        "sample": 3,
+        "kick_seconds": 0.016567241
+      },
+      {
+        "potential": 1,
+        "sample": 4,
+        "kick_seconds": 0.017164976
+      },
+      {
+        "potential": 1,
+        "sample": 5,
+        "kick_seconds": 0.015788218
+      },
+      {
+        "potential": 1,
+        "sample": 6,
+        "kick_seconds": 0.016009971
+      },
+      {
+        "potential": 1,
+        "sample": 7,
+        "kick_seconds": 0.01651843
+      },
+      {
+        "potential": 1,
+        "sample": 8,
+        "kick_seconds": 0.017524657
+      },
+      {
+        "potential": 1,
+        "sample": 9,
+        "kick_seconds": 0.016648062
+      },
+      {
+        "potential": 1,
+        "sample": 10,
+        "kick_seconds": 0.016363791
+      },
+      {
+        "potential": 1,
+        "sample": 11,
+        "kick_seconds": 0.016704928
+      },
+      {
+        "potential": 1,
+        "sample": 12,
+        "kick_seconds": 0.018004142
+      },
+      {
+        "potential": 1,
+        "sample": 13,
+        "kick_seconds": 0.015872465
+      },
+      {
+        "potential": 1,
+        "sample": 14,
+        "kick_seconds": 0.016366817
+      }
+    ],
+    "force_csv": "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/cuda_regression_profile/ablation_pair0_leaf_only/stf_walk_forces.csv",
+    "force_sha256": "540b89ade00df2f0bbc11c7d473f74b396affe950129ca6b36b179585d97e279"
+  },
+  {
+    "variant": "after",
+    "pair": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "1,2",
+      "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/adaptive_suite/cosmictiger_after",
+      "--run.test=stfBenchmark",
+      "--initial.particlesPerDimension=32",
+      "--hydro.enabled=false",
+      "--gravity.openingAngle=0.8",
+      "--gravity.effectiveRadius=0.01876988456953534",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--hpx:threads=2",
+      "--hpx:bind=none",
+      "--analysis.views=false",
+      "--analysis.power=false",
+      "--analysis.groups=false",
+      "--lightcone.enabled=false",
+      "--compute.cuda=true"
+    ],
+    "medians": [
+      {
+        "potential": 0,
+        "tree_seconds": 0.003094043,
+        "kick_seconds": 0.017302754,
+        "total_seconds": 0.020387129
+      },
+      {
+        "potential": 1,
+        "tree_seconds": 0.003081239,
+        "kick_seconds": 0.017613393,
+        "total_seconds": 0.020707216
+      }
+    ],
+    "samples": [
+      {
+        "potential": 0,
+        "sample": -1,
+        "kick_seconds": 0.02736125
+      },
+      {
+        "potential": 0,
+        "sample": 0,
+        "kick_seconds": 0.017330215
+      },
+      {
+        "potential": 0,
+        "sample": 1,
+        "kick_seconds": 0.017359018
+      },
+      {
+        "potential": 0,
+        "sample": 2,
+        "kick_seconds": 0.017165477
+      },
+      {
+        "potential": 0,
+        "sample": 3,
+        "kick_seconds": 0.017481437
+      },
+      {
+        "potential": 0,
+        "sample": 4,
+        "kick_seconds": 0.017093623
+      },
+      {
+        "potential": 0,
+        "sample": 5,
+        "kick_seconds": 0.017302754
+      },
+      {
+        "potential": 0,
+        "sample": 6,
+        "kick_seconds": 0.017624664
+      },
+      {
+        "potential": 0,
+        "sample": 7,
+        "kick_seconds": 0.018979241
+      },
+      {
+        "potential": 0,
+        "sample": 8,
+        "kick_seconds": 0.017131443
+      },
+      {
+        "potential": 0,
+        "sample": 9,
+        "kick_seconds": 0.017636897
+      },
+      {
+        "potential": 0,
+        "sample": 10,
+        "kick_seconds": 0.017023132
+      },
+      {
+        "potential": 0,
+        "sample": 11,
+        "kick_seconds": 0.016596646
+      },
+      {
+        "potential": 0,
+        "sample": 12,
+        "kick_seconds": 0.017054671
+      },
+      {
+        "potential": 0,
+        "sample": 13,
+        "kick_seconds": 0.018811118
+      },
+      {
+        "potential": 0,
+        "sample": 14,
+        "kick_seconds": 0.017146552
+      },
+      {
+        "potential": 1,
+        "sample": -1,
+        "kick_seconds": 0.017138817
+      },
+      {
+        "potential": 1,
+        "sample": 0,
+        "kick_seconds": 0.020134687
+      },
+      {
+        "potential": 1,
+        "sample": 1,
+        "kick_seconds": 0.017222323
+      },
+      {
+        "potential": 1,
+        "sample": 2,
+        "kick_seconds": 0.018071398
+      },
+      {
+        "potential": 1,
+        "sample": 3,
+        "kick_seconds": 0.017911018
+      },
+      {
+        "potential": 1,
+        "sample": 4,
+        "kick_seconds": 0.01716149
+      },
+      {
+        "potential": 1,
+        "sample": 5,
+        "kick_seconds": 0.017073746
+      },
+      {
+        "potential": 1,
+        "sample": 6,
+        "kick_seconds": 0.018214424
+      },
+      {
+        "potential": 1,
+        "sample": 7,
+        "kick_seconds": 0.017277716
+      },
+      {
+        "potential": 1,
+        "sample": 8,
+        "kick_seconds": 0.017555716
+      },
+      {
+        "potential": 1,
+        "sample": 9,
+        "kick_seconds": 0.018475822
+      },
+      {
+        "potential": 1,
+        "sample": 10,
+        "kick_seconds": 0.017613393
+      },
+      {
+        "potential": 1,
+        "sample": 11,
+        "kick_seconds": 0.016953522
+      },
+      {
+        "potential": 1,
+        "sample": 12,
+        "kick_seconds": 0.019666263
+      },
+      {
+        "potential": 1,
+        "sample": 13,
+        "kick_seconds": 0.01725256
+      },
+      {
+        "potential": 1,
+        "sample": 14,
+        "kick_seconds": 0.017699704
+      }
+    ],
+    "force_csv": "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/cuda_regression_profile/ablation_pair0_after/stf_walk_forces.csv",
+    "force_sha256": "0563a1b3bb33d34e33840b2bd18f1ceb5f33e3979a1c3a145019bd618c42045c"
+  },
+  {
+    "variant": "after",
+    "pair": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "1,2",
+      "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/adaptive_suite/cosmictiger_after",
+      "--run.test=stfBenchmark",
+      "--initial.particlesPerDimension=32",
+      "--hydro.enabled=false",
+      "--gravity.openingAngle=0.8",
+      "--gravity.effectiveRadius=0.01876988456953534",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--hpx:threads=2",
+      "--hpx:bind=none",
+      "--analysis.views=false",
+      "--analysis.power=false",
+      "--analysis.groups=false",
+      "--lightcone.enabled=false",
+      "--compute.cuda=true"
+    ],
+    "medians": [
+      {
+        "potential": 0,
+        "tree_seconds": 0.003110614,
+        "kick_seconds": 0.01747787,
+        "total_seconds": 0.020665338
+      },
+      {
+        "potential": 1,
+        "tree_seconds": 0.003112557,
+        "kick_seconds": 0.017521743,
+        "total_seconds": 0.020673975
+      }
+    ],
+    "samples": [
+      {
+        "potential": 0,
+        "sample": -1,
+        "kick_seconds": 0.030271902
+      },
+      {
+        "potential": 0,
+        "sample": 0,
+        "kick_seconds": 0.017640134
+      },
+      {
+        "potential": 0,
+        "sample": 1,
+        "kick_seconds": 0.017990548
+      },
+      {
+        "potential": 0,
+        "sample": 2,
+        "kick_seconds": 0.017322371
+      },
+      {
+        "potential": 0,
+        "sample": 3,
+        "kick_seconds": 0.017730933
+      },
+      {
+        "potential": 0,
+        "sample": 4,
+        "kick_seconds": 0.01775106
+      },
+      {
+        "potential": 0,
+        "sample": 5,
+        "kick_seconds": 0.01747787
+      },
+      {
+        "potential": 0,
+        "sample": 6,
+        "kick_seconds": 0.017383675
+      },
+      {
+        "potential": 0,
+        "sample": 7,
+        "kick_seconds": 0.017895249
+      },
+      {
+        "potential": 0,
+        "sample": 8,
+        "kick_seconds": 0.017183872
+      },
+      {
+        "potential": 0,
+        "sample": 9,
+        "kick_seconds": 0.01695782
+      },
+      {
+        "potential": 0,
+        "sample": 10,
+        "kick_seconds": 0.017366072
+      },
+      {
+        "potential": 0,
+        "sample": 11,
+        "kick_seconds": 0.018525756
+      },
+      {
+        "potential": 0,
+        "sample": 12,
+        "kick_seconds": 0.017359471
+      },
+      {
+        "potential": 0,
+        "sample": 13,
+        "kick_seconds": 0.017433077
+      },
+      {
+        "potential": 0,
+        "sample": 14,
+        "kick_seconds": 0.018271651
+      },
+      {
+        "potential": 1,
+        "sample": -1,
+        "kick_seconds": 0.01767624
+      },
+      {
+        "potential": 1,
+        "sample": 0,
+        "kick_seconds": 0.019649413
+      },
+      {
+        "potential": 1,
+        "sample": 1,
+        "kick_seconds": 0.017556177
+      },
+      {
+        "potential": 1,
+        "sample": 2,
+        "kick_seconds": 0.017496676
+      },
+      {
+        "potential": 1,
+        "sample": 3,
+        "kick_seconds": 0.018607348
+      },
+      {
+        "potential": 1,
+        "sample": 4,
+        "kick_seconds": 0.017362946
+      },
+      {
+        "potential": 1,
+        "sample": 5,
+        "kick_seconds": 0.017521743
+      },
+      {
+        "potential": 1,
+        "sample": 6,
+        "kick_seconds": 0.018248879
+      },
+      {
+        "potential": 1,
+        "sample": 7,
+        "kick_seconds": 0.017418791
+      },
+      {
+        "potential": 1,
+        "sample": 8,
+        "kick_seconds": 0.017491316
+      },
+      {
+        "potential": 1,
+        "sample": 9,
+        "kick_seconds": 0.017985908
+      },
+      {
+        "potential": 1,
+        "sample": 10,
+        "kick_seconds": 0.01784714
+      },
+      {
+        "potential": 1,
+        "sample": 11,
+        "kick_seconds": 0.017130132
+      },
+      {
+        "potential": 1,
+        "sample": 12,
+        "kick_seconds": 0.018359516
+      },
+      {
+        "potential": 1,
+        "sample": 13,
+        "kick_seconds": 0.017404875
+      },
+      {
+        "potential": 1,
+        "sample": 14,
+        "kick_seconds": 0.017388905
+      }
+    ],
+    "force_csv": "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/cuda_regression_profile/ablation_pair1_after/stf_walk_forces.csv",
+    "force_sha256": "0563a1b3bb33d34e33840b2bd18f1ceb5f33e3979a1c3a145019bd618c42045c"
+  },
+  {
+    "variant": "leaf_only",
+    "pair": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "1,2",
+      "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/cuda_regression_profile/leaf_only/cosmictiger_leaf_only",
+      "--run.test=stfBenchmark",
+      "--initial.particlesPerDimension=32",
+      "--hydro.enabled=false",
+      "--gravity.openingAngle=0.8",
+      "--gravity.effectiveRadius=0.01876988456953534",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--hpx:threads=2",
+      "--hpx:bind=none",
+      "--analysis.views=false",
+      "--analysis.power=false",
+      "--analysis.groups=false",
+      "--lightcone.enabled=false",
+      "--compute.cuda=true"
+    ],
+    "medians": [
+      {
+        "potential": 0,
+        "tree_seconds": 0.003109482,
+        "kick_seconds": 0.016404178,
+        "total_seconds": 0.01955154
+      },
+      {
+        "potential": 1,
+        "tree_seconds": 0.003113901,
+        "kick_seconds": 0.016698317,
+        "total_seconds": 0.019889611
+      }
+    ],
+    "samples": [
+      {
+        "potential": 0,
+        "sample": -1,
+        "kick_seconds": 0.027957374
+      },
+      {
+        "potential": 0,
+        "sample": 0,
+        "kick_seconds": 0.016690663
+      },
+      {
+        "potential": 0,
+        "sample": 1,
+        "kick_seconds": 0.016823019
+      },
+      {
+        "potential": 0,
+        "sample": 2,
+        "kick_seconds": 0.016392396
+      },
+      {
+        "potential": 0,
+        "sample": 3,
+        "kick_seconds": 0.017463325
+      },
+      {
+        "potential": 0,
+        "sample": 4,
+        "kick_seconds": 0.017138038
+      },
+      {
+        "potential": 0,
+        "sample": 5,
+        "kick_seconds": 0.015966832
+      },
+      {
+        "potential": 0,
+        "sample": 6,
+        "kick_seconds": 0.016061839
+      },
+      {
+        "potential": 0,
+        "sample": 7,
+        "kick_seconds": 0.018253559
+      },
+      {
+        "potential": 0,
+        "sample": 8,
+        "kick_seconds": 0.016125357
+      },
+      {
+        "potential": 0,
+        "sample": 9,
+        "kick_seconds": 0.016404178
+      },
+      {
+        "potential": 0,
+        "sample": 10,
+        "kick_seconds": 0.016876018
+      },
+      {
+        "potential": 0,
+        "sample": 11,
+        "kick_seconds": 0.015771647
+      },
+      {
+        "potential": 0,
+        "sample": 12,
+        "kick_seconds": 0.015933419
+      },
+      {
+        "potential": 0,
+        "sample": 13,
+        "kick_seconds": 0.016050027
+      },
+      {
+        "potential": 0,
+        "sample": 14,
+        "kick_seconds": 0.016820806
+      },
+      {
+        "potential": 1,
+        "sample": -1,
+        "kick_seconds": 0.017586263
+      },
+      {
+        "potential": 1,
+        "sample": 0,
+        "kick_seconds": 0.016177325
+      },
+      {
+        "potential": 1,
+        "sample": 1,
+        "kick_seconds": 0.016838709
+      },
+      {
+        "potential": 1,
+        "sample": 2,
+        "kick_seconds": 0.018376749
+      },
+      {
+        "potential": 1,
+        "sample": 3,
+        "kick_seconds": 0.016082087
+      },
+      {
+        "potential": 1,
+        "sample": 4,
+        "kick_seconds": 0.016250972
+      },
+      {
+        "potential": 1,
+        "sample": 5,
+        "kick_seconds": 0.017319105
+      },
+      {
+        "potential": 1,
+        "sample": 6,
+        "kick_seconds": 0.016685393
+      },
+      {
+        "potential": 1,
+        "sample": 7,
+        "kick_seconds": 0.01597634
+      },
+      {
+        "potential": 1,
+        "sample": 8,
+        "kick_seconds": 0.016983189
+      },
+      {
+        "potential": 1,
+        "sample": 9,
+        "kick_seconds": 0.017465038
+      },
+      {
+        "potential": 1,
+        "sample": 10,
+        "kick_seconds": 0.017300351
+      },
+      {
+        "potential": 1,
+        "sample": 11,
+        "kick_seconds": 0.016192874
+      },
+      {
+        "potential": 1,
+        "sample": 12,
+        "kick_seconds": 0.016698317
+      },
+      {
+        "potential": 1,
+        "sample": 13,
+        "kick_seconds": 0.018948245
+      },
+      {
+        "potential": 1,
+        "sample": 14,
+        "kick_seconds": 0.016586208
+      }
+    ],
+    "force_csv": "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/cuda_regression_profile/ablation_pair1_leaf_only/stf_walk_forces.csv",
+    "force_sha256": "540b89ade00df2f0bbc11c7d473f74b396affe950129ca6b36b179585d97e279"
+  },
+  {
+    "variant": "before",
+    "pair": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "1,2",
+      "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/adaptive_suite/cosmictiger_before",
+      "--run.test=stfBenchmark",
+      "--initial.particlesPerDimension=32",
+      "--hydro.enabled=false",
+      "--gravity.openingAngle=0.8",
+      "--gravity.effectiveRadius=0.01876988456953534",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--hpx:threads=2",
+      "--hpx:bind=none",
+      "--analysis.views=false",
+      "--analysis.power=false",
+      "--analysis.groups=false",
+      "--lightcone.enabled=false",
+      "--compute.cuda=true"
+    ],
+    "medians": [
+      {
+        "potential": 0,
+        "tree_seconds": 0.0030977,
+        "kick_seconds": 0.016473908,
+        "total_seconds": 0.019613848
+      },
+      {
+        "potential": 1,
+        "tree_seconds": 0.003069888,
+        "kick_seconds": 0.016379673,
+        "total_seconds": 0.019487661
+      }
+    ],
+    "samples": [
+      {
+        "potential": 0,
+        "sample": -1,
+        "kick_seconds": 0.029108924
+      },
+      {
+        "potential": 0,
+        "sample": 0,
+        "kick_seconds": 0.016853156
+      },
+      {
+        "potential": 0,
+        "sample": 1,
+        "kick_seconds": 0.018074174
+      },
+      {
+        "potential": 0,
+        "sample": 2,
+        "kick_seconds": 0.016401754
+      },
+      {
+        "potential": 0,
+        "sample": 3,
+        "kick_seconds": 0.016682728
+      },
+      {
+        "potential": 0,
+        "sample": 4,
+        "kick_seconds": 0.016902698
+      },
+      {
+        "potential": 0,
+        "sample": 5,
+        "kick_seconds": 0.018561162
+      },
+      {
+        "potential": 0,
+        "sample": 6,
+        "kick_seconds": 0.016413416
+      },
+      {
+        "potential": 0,
+        "sample": 7,
+        "kick_seconds": 0.016312287
+      },
+      {
+        "potential": 0,
+        "sample": 8,
+        "kick_seconds": 0.018319041
+      },
+      {
+        "potential": 0,
+        "sample": 9,
+        "kick_seconds": 0.016200999
+      },
+      {
+        "potential": 0,
+        "sample": 10,
+        "kick_seconds": 0.015804289
+      },
+      {
+        "potential": 0,
+        "sample": 11,
+        "kick_seconds": 0.016473908
+      },
+      {
+        "potential": 0,
+        "sample": 12,
+        "kick_seconds": 0.016755724
+      },
+      {
+        "potential": 0,
+        "sample": 13,
+        "kick_seconds": 0.016099099
+      },
+      {
+        "potential": 0,
+        "sample": 14,
+        "kick_seconds": 0.015999092
+      },
+      {
+        "potential": 1,
+        "sample": -1,
+        "kick_seconds": 0.01665158
+      },
+      {
+        "potential": 1,
+        "sample": 0,
+        "kick_seconds": 0.01748763
+      },
+      {
+        "potential": 1,
+        "sample": 1,
+        "kick_seconds": 0.016223301
+      },
+      {
+        "potential": 1,
+        "sample": 2,
+        "kick_seconds": 0.016379673
+      },
+      {
+        "potential": 1,
+        "sample": 3,
+        "kick_seconds": 0.016525234
+      },
+      {
+        "potential": 1,
+        "sample": 4,
+        "kick_seconds": 0.0160995
+      },
+      {
+        "potential": 1,
+        "sample": 5,
+        "kick_seconds": 0.016221848
+      },
+      {
+        "potential": 1,
+        "sample": 6,
+        "kick_seconds": 0.0163088
+      },
+      {
+        "potential": 1,
+        "sample": 7,
+        "kick_seconds": 0.016865559
+      },
+      {
+        "potential": 1,
+        "sample": 8,
+        "kick_seconds": 0.017881174
+      },
+      {
+        "potential": 1,
+        "sample": 9,
+        "kick_seconds": 0.01618029
+      },
+      {
+        "potential": 1,
+        "sample": 10,
+        "kick_seconds": 0.01625532
+      },
+      {
+        "potential": 1,
+        "sample": 11,
+        "kick_seconds": 0.018568617
+      },
+      {
+        "potential": 1,
+        "sample": 12,
+        "kick_seconds": 0.016579405
+      },
+      {
+        "potential": 1,
+        "sample": 13,
+        "kick_seconds": 0.016188365
+      },
+      {
+        "potential": 1,
+        "sample": 14,
+        "kick_seconds": 0.01688165
+      }
+    ],
+    "force_csv": "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/cuda_regression_profile/ablation_pair1_before/stf_walk_forces.csv",
+    "force_sha256": "2def56aa25e36a18dc7be837f090b67bb3804389c36db377ba7a8d6220434142"
+  },
+  {
+    "variant": "leaf_only",
+    "pair": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "1,2",
+      "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/cuda_regression_profile/leaf_only/cosmictiger_leaf_only",
+      "--run.test=stfBenchmark",
+      "--initial.particlesPerDimension=32",
+      "--hydro.enabled=false",
+      "--gravity.openingAngle=0.8",
+      "--gravity.effectiveRadius=0.01876988456953534",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--hpx:threads=2",
+      "--hpx:bind=none",
+      "--analysis.views=false",
+      "--analysis.power=false",
+      "--analysis.groups=false",
+      "--lightcone.enabled=false",
+      "--compute.cuda=true"
+    ],
+    "medians": [
+      {
+        "potential": 0,
+        "tree_seconds": 0.003158354,
+        "kick_seconds": 0.016452419,
+        "total_seconds": 0.019597166
+      },
+      {
+        "potential": 1,
+        "tree_seconds": 0.003174643,
+        "kick_seconds": 0.01696187,
+        "total_seconds": 0.020127788
+      }
+    ],
+    "samples": [
+      {
+        "potential": 0,
+        "sample": -1,
+        "kick_seconds": 0.02958342
+      },
+      {
+        "potential": 0,
+        "sample": 0,
+        "kick_seconds": 0.016439204
+      },
+      {
+        "potential": 0,
+        "sample": 1,
+        "kick_seconds": 0.016306456
+      },
+      {
+        "potential": 0,
+        "sample": 2,
+        "kick_seconds": 0.016600114
+      },
+      {
+        "potential": 0,
+        "sample": 3,
+        "kick_seconds": 0.017025368
+      },
+      {
+        "potential": 0,
+        "sample": 4,
+        "kick_seconds": 0.016452419
+      },
+      {
+        "potential": 0,
+        "sample": 5,
+        "kick_seconds": 0.016992767
+      },
+      {
+        "potential": 0,
+        "sample": 6,
+        "kick_seconds": 0.018290007
+      },
+      {
+        "potential": 0,
+        "sample": 7,
+        "kick_seconds": 0.016419437
+      },
+      {
+        "potential": 0,
+        "sample": 8,
+        "kick_seconds": 0.016544389
+      },
+      {
+        "potential": 0,
+        "sample": 9,
+        "kick_seconds": 0.017530971
+      },
+      {
+        "potential": 0,
+        "sample": 10,
+        "kick_seconds": 0.016393529
+      },
+      {
+        "potential": 0,
+        "sample": 11,
+        "kick_seconds": 0.016193686
+      },
+      {
+        "potential": 0,
+        "sample": 12,
+        "kick_seconds": 0.015851899
+      },
+      {
+        "potential": 0,
+        "sample": 13,
+        "kick_seconds": 0.018371088
+      },
+      {
+        "potential": 0,
+        "sample": 14,
+        "kick_seconds": 0.015971933
+      },
+      {
+        "potential": 1,
+        "sample": -1,
+        "kick_seconds": 0.016295646
+      },
+      {
+        "potential": 1,
+        "sample": 0,
+        "kick_seconds": 0.017010089
+      },
+      {
+        "potential": 1,
+        "sample": 1,
+        "kick_seconds": 0.017572189
+      },
+      {
+        "potential": 1,
+        "sample": 2,
+        "kick_seconds": 0.016083751
+      },
+      {
+        "potential": 1,
+        "sample": 3,
+        "kick_seconds": 0.016755125
+      },
+      {
+        "potential": 1,
+        "sample": 4,
+        "kick_seconds": 0.018113578
+      },
+      {
+        "potential": 1,
+        "sample": 5,
+        "kick_seconds": 0.016716361
+      },
+      {
+        "potential": 1,
+        "sample": 6,
+        "kick_seconds": 0.01696187
+      },
+      {
+        "potential": 1,
+        "sample": 7,
+        "kick_seconds": 0.01759962
+      },
+      {
+        "potential": 1,
+        "sample": 8,
+        "kick_seconds": 0.01672645
+      },
+      {
+        "potential": 1,
+        "sample": 9,
+        "kick_seconds": 0.016436509
+      },
+      {
+        "potential": 1,
+        "sample": 10,
+        "kick_seconds": 0.017045436
+      },
+      {
+        "potential": 1,
+        "sample": 11,
+        "kick_seconds": 0.017561879
+      },
+      {
+        "potential": 1,
+        "sample": 12,
+        "kick_seconds": 0.016738713
+      },
+      {
+        "potential": 1,
+        "sample": 13,
+        "kick_seconds": 0.017254706
+      },
+      {
+        "potential": 1,
+        "sample": 14,
+        "kick_seconds": 0.016701805
+      }
+    ],
+    "force_csv": "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/cuda_regression_profile/ablation_pair2_leaf_only/stf_walk_forces.csv",
+    "force_sha256": "540b89ade00df2f0bbc11c7d473f74b396affe950129ca6b36b179585d97e279"
+  },
+  {
+    "variant": "before",
+    "pair": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "1,2",
+      "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/adaptive_suite/cosmictiger_before",
+      "--run.test=stfBenchmark",
+      "--initial.particlesPerDimension=32",
+      "--hydro.enabled=false",
+      "--gravity.openingAngle=0.8",
+      "--gravity.effectiveRadius=0.01876988456953534",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--hpx:threads=2",
+      "--hpx:bind=none",
+      "--analysis.views=false",
+      "--analysis.power=false",
+      "--analysis.groups=false",
+      "--lightcone.enabled=false",
+      "--compute.cuda=true"
+    ],
+    "medians": [
+      {
+        "potential": 0,
+        "tree_seconds": 0.003129139,
+        "kick_seconds": 0.016799878,
+        "total_seconds": 0.019918237
+      },
+      {
+        "potential": 1,
+        "tree_seconds": 0.003175926,
+        "kick_seconds": 0.016776975,
+        "total_seconds": 0.019935769
+      }
+    ],
+    "samples": [
+      {
+        "potential": 0,
+        "sample": -1,
+        "kick_seconds": 0.027440032
+      },
+      {
+        "potential": 0,
+        "sample": 0,
+        "kick_seconds": 0.01733686
+      },
+      {
+        "potential": 0,
+        "sample": 1,
+        "kick_seconds": 0.016481353
+      },
+      {
+        "potential": 0,
+        "sample": 2,
+        "kick_seconds": 0.016856965
+      },
+      {
+        "potential": 0,
+        "sample": 3,
+        "kick_seconds": 0.016580128
+      },
+      {
+        "potential": 0,
+        "sample": 4,
+        "kick_seconds": 0.018554803
+      },
+      {
+        "potential": 0,
+        "sample": 5,
+        "kick_seconds": 0.016799878
+      },
+      {
+        "potential": 0,
+        "sample": 6,
+        "kick_seconds": 0.016661309
+      },
+      {
+        "potential": 0,
+        "sample": 7,
+        "kick_seconds": 0.018734949
+      },
+      {
+        "potential": 0,
+        "sample": 8,
+        "kick_seconds": 0.016377429
+      },
+      {
+        "potential": 0,
+        "sample": 9,
+        "kick_seconds": 0.01606149
+      },
+      {
+        "potential": 0,
+        "sample": 10,
+        "kick_seconds": 0.016996314
+      },
+      {
+        "potential": 0,
+        "sample": 11,
+        "kick_seconds": 0.018652905
+      },
+      {
+        "potential": 0,
+        "sample": 12,
+        "kick_seconds": 0.016695243
+      },
+      {
+        "potential": 0,
+        "sample": 13,
+        "kick_seconds": 0.016196562
+      },
+      {
+        "potential": 0,
+        "sample": 14,
+        "kick_seconds": 0.017666625
+      },
+      {
+        "potential": 1,
+        "sample": -1,
+        "kick_seconds": 0.017987033
+      },
+      {
+        "potential": 1,
+        "sample": 0,
+        "kick_seconds": 0.01673698
+      },
+      {
+        "potential": 1,
+        "sample": 1,
+        "kick_seconds": 0.017317132
+      },
+      {
+        "potential": 1,
+        "sample": 2,
+        "kick_seconds": 0.016776975
+      },
+      {
+        "potential": 1,
+        "sample": 3,
+        "kick_seconds": 0.01680105
+      },
+      {
+        "potential": 1,
+        "sample": 4,
+        "kick_seconds": 0.018340432
+      },
+      {
+        "potential": 1,
+        "sample": 5,
+        "kick_seconds": 0.016855822
+      },
+      {
+        "potential": 1,
+        "sample": 6,
+        "kick_seconds": 0.016606186
+      },
+      {
+        "potential": 1,
+        "sample": 7,
+        "kick_seconds": 0.017883099
+      },
+      {
+        "potential": 1,
+        "sample": 8,
+        "kick_seconds": 0.016283344
+      },
+      {
+        "potential": 1,
+        "sample": 9,
+        "kick_seconds": 0.016444094
+      },
+      {
+        "potential": 1,
+        "sample": 10,
+        "kick_seconds": 0.016705863
+      },
+      {
+        "potential": 1,
+        "sample": 11,
+        "kick_seconds": 0.017753907
+      },
+      {
+        "potential": 1,
+        "sample": 12,
+        "kick_seconds": 0.016350279
+      },
+      {
+        "potential": 1,
+        "sample": 13,
+        "kick_seconds": 0.016350459
+      },
+      {
+        "potential": 1,
+        "sample": 14,
+        "kick_seconds": 0.017919437
+      }
+    ],
+    "force_csv": "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/cuda_regression_profile/ablation_pair2_before/stf_walk_forces.csv",
+    "force_sha256": "2def56aa25e36a18dc7be837f090b67bb3804389c36db377ba7a8d6220434142"
+  },
+  {
+    "variant": "after",
+    "pair": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "1,2",
+      "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/adaptive_suite/cosmictiger_after",
+      "--run.test=stfBenchmark",
+      "--initial.particlesPerDimension=32",
+      "--hydro.enabled=false",
+      "--gravity.openingAngle=0.8",
+      "--gravity.effectiveRadius=0.01876988456953534",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--hpx:threads=2",
+      "--hpx:bind=none",
+      "--analysis.views=false",
+      "--analysis.power=false",
+      "--analysis.groups=false",
+      "--lightcone.enabled=false",
+      "--compute.cuda=true"
+    ],
+    "medians": [
+      {
+        "potential": 0,
+        "tree_seconds": 0.00316722,
+        "kick_seconds": 0.017804944,
+        "total_seconds": 0.021141859
+      },
+      {
+        "potential": 1,
+        "tree_seconds": 0.003120383,
+        "kick_seconds": 0.017676123,
+        "total_seconds": 0.020790664
+      }
+    ],
+    "samples": [
+      {
+        "potential": 0,
+        "sample": -1,
+        "kick_seconds": 0.029518691
+      },
+      {
+        "potential": 0,
+        "sample": 0,
+        "kick_seconds": 0.017757625
+      },
+      {
+        "potential": 0,
+        "sample": 1,
+        "kick_seconds": 0.017804944
+      },
+      {
+        "potential": 0,
+        "sample": 2,
+        "kick_seconds": 0.018712256
+      },
+      {
+        "potential": 0,
+        "sample": 3,
+        "kick_seconds": 0.017757566
+      },
+      {
+        "potential": 0,
+        "sample": 4,
+        "kick_seconds": 0.018475696
+      },
+      {
+        "potential": 0,
+        "sample": 5,
+        "kick_seconds": 0.018025224
+      },
+      {
+        "potential": 0,
+        "sample": 6,
+        "kick_seconds": 0.0188751
+      },
+      {
+        "potential": 0,
+        "sample": 7,
+        "kick_seconds": 0.019149573
+      },
+      {
+        "potential": 0,
+        "sample": 8,
+        "kick_seconds": 0.017487231
+      },
+      {
+        "potential": 0,
+        "sample": 9,
+        "kick_seconds": 0.01822092
+      },
+      {
+        "potential": 0,
+        "sample": 10,
+        "kick_seconds": 0.017404547
+      },
+      {
+        "potential": 0,
+        "sample": 11,
+        "kick_seconds": 0.017165039
+      },
+      {
+        "potential": 0,
+        "sample": 12,
+        "kick_seconds": 0.017708704
+      },
+      {
+        "potential": 0,
+        "sample": 13,
+        "kick_seconds": 0.018311499
+      },
+      {
+        "potential": 0,
+        "sample": 14,
+        "kick_seconds": 0.017680972
+      },
+      {
+        "potential": 1,
+        "sample": -1,
+        "kick_seconds": 0.017592818
+      },
+      {
+        "potential": 1,
+        "sample": 0,
+        "kick_seconds": 0.017257072
+      },
+      {
+        "potential": 1,
+        "sample": 1,
+        "kick_seconds": 0.017328625
+      },
+      {
+        "potential": 1,
+        "sample": 2,
+        "kick_seconds": 0.017676123
+      },
+      {
+        "potential": 1,
+        "sample": 3,
+        "kick_seconds": 0.018121214
+      },
+      {
+        "potential": 1,
+        "sample": 4,
+        "kick_seconds": 0.017298178
+      },
+      {
+        "potential": 1,
+        "sample": 5,
+        "kick_seconds": 0.017506968
+      },
+      {
+        "potential": 1,
+        "sample": 6,
+        "kick_seconds": 0.019192072
+      },
+      {
+        "potential": 1,
+        "sample": 7,
+        "kick_seconds": 0.018026096
+      },
+      {
+        "potential": 1,
+        "sample": 8,
+        "kick_seconds": 0.01977511
+      },
+      {
+        "potential": 1,
+        "sample": 9,
+        "kick_seconds": 0.017890564
+      },
+      {
+        "potential": 1,
+        "sample": 10,
+        "kick_seconds": 0.017465049
+      },
+      {
+        "potential": 1,
+        "sample": 11,
+        "kick_seconds": 0.019489708
+      },
+      {
+        "potential": 1,
+        "sample": 12,
+        "kick_seconds": 0.017606403
+      },
+      {
+        "potential": 1,
+        "sample": 13,
+        "kick_seconds": 0.017596244
+      },
+      {
+        "potential": 1,
+        "sample": 14,
+        "kick_seconds": 0.018296461
+      }
+    ],
+    "force_csv": "/home/dmarce1/workspace/cosmictiger/build/leaf_cloud_benchmark_20261018/cuda_regression_profile/ablation_pair2_after/stf_walk_forces.csv",
+    "force_sha256": "0563a1b3bb33d34e33840b2bd18f1ceb5f33e3979a1c3a145019bd618c42045c"
+  }
+]
