@@ -23,7 +23,6 @@ constexpr bool kVerbose = true;
 
 #include <cosmictiger/analytic.hpp>
 #include <cosmictiger/bh.hpp>
-#include <cosmictiger/chemistry.hpp>
 #include <cosmictiger/domain.hpp>
 #include <cosmictiger/drift.hpp>
 #include <cosmictiger/driver.hpp>
@@ -37,7 +36,6 @@ constexpr bool kVerbose = true;
 #include <cosmictiger/rockstar.hpp>
 #include <cosmictiger/safe_io.hpp>
 #include <cosmictiger/sphere.hpp>
-#include <cosmictiger/stars.hpp>
 #include <cosmictiger/test.hpp>
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/tree.hpp>
@@ -664,8 +662,6 @@ void test(std::string test) {
         hydroHelmholtzTest();
     } else if (test == "bh") {
         bhTest();
-    } else if (test == "stars") {
-        starsTestMass();
     } else if (test == "star") {
         hydroStarTest();
     } else if (test == "disc") {
@@ -674,9 +670,6 @@ void test(std::string test) {
         sphereSurfaceTest();
     } else if (test == "plummer") {
         hydroPlummer();
-    } else if (test == "chemistry") {
-        testCudaChemistryKernel();
-        //	chemistry_test();
     } else {
         THROW_ERROR("test %s is not known\n", test.c_str());
     }

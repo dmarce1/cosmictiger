@@ -17,20 +17,14 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include <cmath>
-
-#include <cosmictiger/cosmology.hpp>
 #include <cosmictiger/drift.hpp>
 #include <cosmictiger/hpx.hpp>
-#include <cosmictiger/options.hpp>
-#include <cosmictiger/sph_particles.hpp>
 
 HPX_PLAIN_ACTION(drift, DriftAction);
 
 void drift(
     double scale, double dt, double tau0, double tau1, double tauMax, int rung, double drag) {
     profilerEnter(__FUNCTION__);
-    bool const sph = getOptions().sph;
     Vector<hpx::future<void>> futures;
     if (rung < 0) {
         for (auto const& child : hpxChildren()) {
@@ -40,24 +34,6 @@ void drift(
     }
     cudaDrift(rung, scale, dt, tau0, tau1, tauMax, drag);
     particlesMemadviseCpu();
-    if (sph) {
-        float const hmin = getOptions().hydroMinSupportRadius;
-        float const hmax = getOptions().hydroMaxSupportRadius;
-        for (ParticleInteger i = 0; i < sphParticlesSize(); i++) {
-            if (rung >= 0 && sphParticlesRung(i) != rung) {
-                continue;
-            }
-            if (sphParticlesIsstar(i)) {
-                continue;
-            }
-            float& h = sphParticlesSmoothingLength(i);
-            float const divv = sphParticlesDivv(i);
-            // Predict the comoving support from the peculiar divergence (Monaghan 6.2).
-            // The next density solve enforces the neighbor constraint.
-            double const dloghdt = divv / 3.0;
-            h = std::clamp(h * std::exp(dloghdt * dt), double(hmin), double(hmax));
-        }
-    }
     for (auto& future : futures) {
         future.get();
     }

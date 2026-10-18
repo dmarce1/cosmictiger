@@ -318,16 +318,9 @@ void unitsOutputParticleFixture(bool initialize) {
             particlesCatIndex(i) = i == 2 ? 0 : NO_INDEX;
         }
         sphParticlesParticleIndex(0) = 2;
-        sphParticlesIsstar(0) = false;
-        sphParticlesSmoothingLength(0) = 0.03125;
-        sphParticlesRho(0) = 8.0;
-        sphParticlesAlpha(0) = 1.0;
-#ifdef ENTROPY
-        sphParticlesR2[0].A =
-            4.0 * (getOptions().gamma - 1.0) / std::pow(8.0, getOptions().gamma - 1.0);
-#else
-        sphParticlesR2[0].eint = 4.0;
-#endif
+        sphParticlesSupportRadius(0) = 0.03125;
+        sphParticlesDensity(0) = 8.0;
+        sphParticlesThermodynamicStates[0].internalEnergy = 4.0;
     } else {
         detail::requireUnitsOutput(particlesPos(XDIM, 0).raw() == 0x80000000U &&
                 particlesPos(XDIM, 1).raw() == 0x80000001U,
@@ -343,8 +336,7 @@ void unitsOutputTest() {
     auto const originalOptions = getOptions();
     auto options = originalOptions;
     options.sph = true;
-    options.stars = false;
-    options.chem = false;
+
     options.outputSilo = true;
     options.outputSiloInterval = 1;
     options.outputDirectory = "units_output_fixture";

@@ -56,7 +56,7 @@ def main():
     required = {"help", "configuration", "initial.particlesPerDimension", "compute.cuda",
                 "hydro.enabled", "hydro.viscosityAlpha", "hydro.viscosityBeta",
                 "hydro.viscosityEpsilon", "hydro.neighborNumber", "gravity.enabled",
-                "gravity.sphSmoothing", "gravity.kernelFamily", "gravity.kernelDegree",
+                "gravity.kernelFamily", "gravity.kernelDegree",
                 "hydro.kernelFamily", "hydro.kernelDegree",
                 "gravity.effectiveRadius", "gravity.supportRadius",
                 "hydro.minEffectiveRadius", "hydro.maxEffectiveRadius",
@@ -67,6 +67,10 @@ def main():
                 "output.zMin", "output.zMax"}
     if not required <= option_names:
         raise RuntimeError(f"grouped help is missing {sorted(required - option_names)}")
+    removed_options = {"hydro.chemistry", "hydro.conduction", "hydro.diffusion",
+                       "hydro.yReflect", "gravity.sphSmoothing"}
+    if removed_options & option_names:
+        raise RuntimeError(f"removed options remain in help: {sorted(removed_options & option_names)}")
     for name in option_names - {"help", "configuration"}:
         if not re.fullmatch(r"[a-z][A-Za-z0-9]*\.[a-z][A-Za-z0-9]*", name):
             raise RuntimeError(f"option does not use groupName.optionName: {name}")
@@ -106,8 +110,6 @@ mapSize = 8
         match = re.search(r"^" + re.escape(name) + r"\s*:\s*(\S+)", configured, re.MULTILINE)
         if match is None or abs(float(match.group(1)) - value) > 1.0e-6:
             raise RuntimeError(f"configured {name} did not equal {value}")
-    if not re.search(r"^gravity\.sphSmoothing\s*:\s*F\s*$", configured, re.MULTILINE):
-        raise RuntimeError("gravity.sphSmoothing was not disabled by default")
     if "Checkpoint state and mode validation passed" not in configured:
         raise RuntimeError("configuration run did not finish the checkpoint regression")
 
@@ -401,7 +403,7 @@ mapSize = 8
         ("softening_nan", "--gravity.softening=nan", "gravity.softening"),
         ("softening_inf", "--gravity.softening=inf", "gravity.softening"),
         ("softening_underflow", "--gravity.softening=1e-37", "gravity.softening"),
-        ("smoothing_obsolete", "--gravity.sphSmoothing=true", "fixed comoving"),
+        ("smoothing_obsolete", "--gravity.sphSmoothing=true", "gravity.sphSmoothing"),
         ("adaptive_option_removed", "--gravity.softeningMode=adaptive", "gravity.softeningMode"),
         ("alpha_overflow", "--hydro.viscosityAlpha=1e100", "single precision"),
         ("epsilon_underflow", "--hydro.viscosityEpsilon=1e-100", "single precision"),
@@ -414,25 +416,24 @@ mapSize = 8
         ("epsilon", "--hydro.viscosityEpsilon=0", "hydro.viscosityEpsilon"),
         ("gamma", "--hydro.gamma=1", "hydro.gamma"),
         ("central_softening", "--hydro.centralSoftening=0", "hydro.centralSoftening"),
-        ("reflection", "--hydro.yReflect=true", "unsupported"),
+        ("reflection", "--hydro.yReflect=true", "hydro.yReflect"),
         ("cfl_zero", "--hydro.cfl=0", "hydro.cfl"),
         ("cfl_large", "--hydro.cfl=1.1", "hydro.cfl"),
         ("neighbors", "--hydro.neighborNumber=10", "hydro.neighborNumber"),
         ("min_radius", "--hydro.minSupportRadius=0", "hydro.minSupportRadius"),
         ("max_radius", "--hydro.maxSupportRadius=1e-7", "support radii"),
-        ("chemistry", "--hydro.chemistry=true", "detached"),
-        ("conduction", "--hydro.conduction=true", "detached"),
-        ("diffusion", "--hydro.diffusion=true", "detached"),
+        ("chemistry", "--hydro.chemistry=true", "hydro.chemistry"),
+        ("conduction", "--hydro.conduction=true", "hydro.conduction"),
+        ("diffusion", "--hydro.diffusion=true", "hydro.diffusion"),
     ]
     for name, option, diagnostic in invalid:
         output = run(name, [option], success=False)
         if diagnostic not in output:
             raise RuntimeError(f"{name} failed without its expected diagnostic: {diagnostic}")
-    output = run("smoothing_with_hydro", [
-        "--run.test=checkpointState", "--compute.cuda=false", "--hydro.enabled=true",
-        "--gravity.sphSmoothing=true"], success=False)
-    if "fixed comoving" not in output:
-        raise RuntimeError("SPH gravity smoothing was not rejected explicitly")
+    for option in sorted(removed_options):
+        output = run(f"removed_{option}", [f"--{option}=false"], success=False)
+        if option not in output:
+            raise RuntimeError(f"removed option {option} failed without naming the option")
     for parameter in ("omegaB", "omegaC"):
         for value in ("0", "-0.1", "nan", "inf"):
             output = run(f"invalid_class_mass_{parameter}_{value}", [

@@ -145,7 +145,7 @@ void cpuGravityCp(Expansion<float>& lValue, Vector<TreeId> const& list, TreeId s
             int count = 0;
             for (int i = 0; i < maxi; i++) {
                 particlesGlobalReadPos(treePtrs[i]->globalParticleRange(), srcx.data(), srcy.data(),
-                    srcz.data(), types.data(), nullptr, count);
+                    srcz.data(), types.data(), count);
                 count += treePtrs[i]->numberOfParticles();
             }
             for (int i = 0; i < count; i++) {
@@ -322,7 +322,7 @@ void cpuGravityPp(
             int count = 0;
             for (int i = 0; i < maxi; i++) {
                 particlesGlobalReadPos(treePtrs[i]->globalParticleRange(), srcx.data(), srcy.data(),
-                    srcz.data(), types.data(), nullptr, count);
+                    srcz.data(), types.data(), count);
                 count += treePtrs[i]->numberOfParticles();
             }
             for (int i = 0; i < count; i++) {

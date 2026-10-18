@@ -184,7 +184,7 @@ equal large powers near the support boundary.
 
 ## Fixed comoving gravitational softening
 
-Gas, dark matter, and stars use the same selected gravity kernel and one fixed
+Gas and dark matter use the same selected gravity kernel and one fixed
 comoving support radius. Set that radius with `gravity.effectiveRadius`,
 `gravity.supportRadius`, or the legacy effective-radius alias `gravity.softening`.
 The configured radius remains constant in comoving coordinates during evolution;
@@ -194,14 +194,12 @@ solve a neighbor constraint or use the gas smoothing radius.
 SPH density, pressure, viscosity, and thermal work retain their variable,
 gas-only smoothing radii and independently selected hydro kernel. Selecting the
 same kernel family for gravity and SPH does not tie their lengths together.
-`gravity.sphSmoothing=false` is retained for configuration compatibility;
-`gravity.sphSmoothing=true` is rejected with a fixed-gravity diagnostic.
+The obsolete `gravity.sphSmoothing` option has been removed.
 
 Particle masses are constant within each class and may differ between classes.
 Cosmological initial conditions retain equal gas and dark-matter counts, with
 code class masses `omegaB/omegaM` and `omegaC/omegaM`, respectively. Physical
-masses are these values times the `units.massSolar` unit. Stars use the gas-class
-mass in the existing class convention. SPH CUDA data carry one gas-class mass
+masses are these values times the `units.massSolar` unit. SPH CUDA data carry one gas-class mass
 scalar, with no mass value stored per SPH particle.
 
 The hierarchical gravity path remains available for dark-matter-only runs.
@@ -250,7 +248,7 @@ The hydro acceleration limit additionally retains a fixed reference calibration
 `0.7115965735877551` multiplying gravity eta, preserving the historical
 cubic/Ferrers F4 acceleration calibration through the radius-unit conversion.
 These factors are independent of the selected kernel family.
-The divergence and fractional thermal-energy timestep bounds apply the same
+The additional fractional thermal-energy timestep bound applies the same
 fixed reference conversion to preserve their old default physical limits.
 
 Kernel selections are encoded in the checkpoint physics marker. Restarting with

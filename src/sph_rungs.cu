@@ -22,128 +22,143 @@
 namespace detail {
 
 struct RungsWorkspace {
-    DeviceVector<Fixed32> x;
-    DeviceVector<Fixed32> y;
-    DeviceVector<Fixed32> z;
-    DeviceVector<float> h;
+    DeviceVector<Fixed32> positionX;
+    DeviceVector<Fixed32> positionY;
+    DeviceVector<Fixed32> positionZ;
+    DeviceVector<float> supportRadius;
     DeviceVector<char> rungs;
 };
 
 }    // namespace detail
 
-__global__ void sphCudaRungs(SphRunParameters params, SphRunCudaData data, SphReduction* reduce) {
-    int const tid = threadIdx.x;
+__global__ void sphCudaRungs(
+    SphRunParameters parameters, SphRunCudaData data, SphReduction* reduction) {
+    int const threadIndex = threadIdx.x;
     int const blockSize = blockDim.x;
-    __shared__ int index;
-    __shared__ detail::RungsWorkspace ws;
-    if (tid == 0) {
-        index = atomicAdd(&reduce->counter, 1);
+    __shared__ int targetNodeIndex;
+    __shared__ detail::RungsWorkspace workspace;
+    if (threadIndex == 0) {
+        targetNodeIndex = atomicAdd(&reduction->nextNodeIndex, 1);
     }
     __syncthreads();
-    new (&ws) detail::RungsWorkspace();
-    int flops = 0;
-    Array<Fixed32, NDIM> x;
+    new (&workspace) detail::RungsWorkspace();
+    int floatingPointOperations = 0;
+    Array<Fixed32, NDIM> position;
     int changes = 0;
-    while (index < data.numberOfTargetNodes) {
+    while (targetNodeIndex < data.numberOfTargetNodes) {
         __syncthreads();
-        ws.x.resize(0);
-        ws.y.resize(0);
-        ws.z.resize(0);
-        ws.h.resize(0);
-        ws.rungs.resize(0);
-        SphTreeNode const& self = data.trees[data.selfs[index]];
-        for (int ni = self.neighborRange.first; ni < self.neighborRange.second; ni++) {
-            SphTreeNode const& other = data.trees[data.neighbors[ni]];
-            int const maxpi =
-                roundUp(other.particleRange.second - other.particleRange.first, blockSize) +
-                other.particleRange.first;
-            for (int pi = other.particleRange.first + tid; pi < maxpi; pi += blockSize) {
+        workspace.positionX.resize(0);
+        workspace.positionY.resize(0);
+        workspace.positionZ.resize(0);
+        workspace.supportRadius.resize(0);
+        workspace.rungs.resize(0);
+        SphTreeNode const& targetNode = data.treeNodes[data.targetNodeIndices[targetNodeIndex]];
+        for (int neighborNodeIndex = targetNode.neighborRange.first;
+            neighborNodeIndex < targetNode.neighborRange.second; neighborNodeIndex++) {
+            SphTreeNode const& neighborNode =
+                data.treeNodes[data.neighborNodeIndices[neighborNodeIndex]];
+            int const roundedSourceEnd =
+                roundUp(neighborNode.particleRange.second - neighborNode.particleRange.first,
+                    blockSize) +
+                neighborNode.particleRange.first;
+            for (int sourceParticleIndex = neighborNode.particleRange.first + threadIndex;
+                sourceParticleIndex < roundedSourceEnd; sourceParticleIndex += blockSize) {
                 bool contains = false;
-                int j;
+                int neighborIndex;
                 int total;
                 int rung;
-                if (pi < other.particleRange.second) {
-                    rung = data.rungs[pi];
-                    if (rung >= params.minRung) {
-                        x[XDIM] = data.x[pi];
-                        x[YDIM] = data.y[pi];
-                        x[ZDIM] = data.z[pi];
-                        if (self.outerBox.contains(x)) {
+                if (sourceParticleIndex < neighborNode.particleRange.second) {
+                    rung = data.sourceRungs[sourceParticleIndex];
+                    if (rung >= parameters.minimumRung) {
+                        position[XDIM] = data.sourcePositionX[sourceParticleIndex];
+                        position[YDIM] = data.sourcePositionY[sourceParticleIndex];
+                        position[ZDIM] = data.sourcePositionZ[sourceParticleIndex];
+                        if (targetNode.outerBox.contains(position)) {
                             contains = true;
                         } else {
-                            contains = sphSupportIntersects(self.innerBox, x, data.h[pi]);
+                            contains = sphSupportIntersects(targetNode.innerBox, position,
+                                data.sourceSupportRadius[sourceParticleIndex]);
                         }
                     }
                 }
-                j = contains;
-                computeIndices<RUNGS_BLOCK_SIZE>(j, total);
-                int const offset = ws.x.size();
+                neighborIndex = contains;
+                computeIndices<RUNGS_BLOCK_SIZE>(neighborIndex, total);
+                int const offset = workspace.positionX.size();
                 __syncthreads();
                 int const nextSize = offset + total;
-                ws.x.resize(nextSize);
-                ws.y.resize(nextSize);
-                ws.z.resize(nextSize);
-                ws.h.resize(nextSize);
-                ws.rungs.resize(nextSize);
+                workspace.positionX.resize(nextSize);
+                workspace.positionY.resize(nextSize);
+                workspace.positionZ.resize(nextSize);
+                workspace.supportRadius.resize(nextSize);
+                workspace.rungs.resize(nextSize);
                 if (contains) {
-                    ASSERT(j < total);
-                    int const k = offset + j;
-                    ws.x[k] = x[XDIM];
-                    ws.y[k] = x[YDIM];
-                    ws.z[k] = x[ZDIM];
-                    ws.h[k] = data.h[pi];
-                    ws.rungs[k] = rung;
+                    ASSERT(neighborIndex < total);
+                    int const k = offset + neighborIndex;
+                    workspace.positionX[k] = position[XDIM];
+                    workspace.positionY[k] = position[YDIM];
+                    workspace.positionZ[k] = position[ZDIM];
+                    workspace.supportRadius[k] = data.sourceSupportRadius[sourceParticleIndex];
+                    workspace.rungs[k] = rung;
                 }
             }
         }
-        for (int i = self.particleRange.first; i < self.particleRange.second; i++) {
+        for (int particleIndex = targetNode.particleRange.first;
+            particleIndex < targetNode.particleRange.second; particleIndex++) {
             __syncthreads();
-            if (data.rungs[i] >= params.minRung) {
-                int const sinkIndex = self.sinkParticleRange.first - self.particleRange.first + i;
-                auto const xI = data.x[i];
-                auto const yI = data.y[i];
-                auto const zI = data.z[i];
-                auto const hI = data.rec2Snk[sinkIndex].h;
-                int const rungI = data.rungs[i];
-                auto const h2I = sqr(hI);
-                int const jmax = roundUp(ws.x.size(), blockSize);
-                int maxRungJ = 0;
-                for (int j = tid; j < jmax; j += blockSize) {
-                    if (j < ws.x.size()) {
-                        auto const xJ = ws.x[j];
-                        auto const yJ = ws.y[j];
-                        auto const zJ = ws.z[j];
-                        int const rungJ = ws.rungs[j];
-                        float const xIj = distance(xI, xJ);     // 1
-                        float const yIj = distance(yI, yJ);     // 1
-                        float const zIj = distance(zI, zJ);     // 1
-                        float const r2 = sqr(xIj, yIj, zIj);    // 5
-                        if (r2 < fmaxf(h2I, sqr(ws.h[j]))) {
-                            maxRungJ = max(maxRungJ, rungJ);
+            if (data.sourceRungs[particleIndex] >= parameters.minimumRung) {
+                int const sinkIndex = targetNode.sinkParticleRange.first -
+                    targetNode.particleRange.first + particleIndex;
+                auto const sinkPositionX = data.sourcePositionX[particleIndex];
+                auto const sinkPositionY = data.sourcePositionY[particleIndex];
+                auto const sinkPositionZ = data.sourcePositionZ[particleIndex];
+                auto const sinkSupportRadius =
+                    data.sinkThermodynamicStates[sinkIndex].supportRadius;
+                int const sinkRung = data.sourceRungs[particleIndex];
+                auto const squaredSinkSupportRadius = sqr(sinkSupportRadius);
+                int const roundedNeighborEnd = roundUp(workspace.positionX.size(), blockSize);
+                int maximumNeighborRung = 0;
+                for (int neighborIndex = threadIndex; neighborIndex < roundedNeighborEnd;
+                    neighborIndex += blockSize) {
+                    if (neighborIndex < workspace.positionX.size()) {
+                        auto const neighborPositionX = workspace.positionX[neighborIndex];
+                        auto const neighborPositionY = workspace.positionY[neighborIndex];
+                        auto const neighborPositionZ = workspace.positionZ[neighborIndex];
+                        int const neighborRung = workspace.rungs[neighborIndex];
+                        float const separationX =
+                            distance(sinkPositionX, neighborPositionX);    // 1
+                        float const separationY =
+                            distance(sinkPositionY, neighborPositionY);    // 1
+                        float const separationZ =
+                            distance(sinkPositionZ, neighborPositionZ);    // 1
+                        float const squaredSeparation =
+                            sqr(separationX, separationY, separationZ);    // 5
+                        if (squaredSeparation < fmaxf(squaredSinkSupportRadius,
+                                                    sqr(workspace.supportRadius[neighborIndex]))) {
+                            maximumNeighborRung = max(maximumNeighborRung, neighborRung);
                         }
-                        flops += 9;
+                        floatingPointOperations += 9;
                     }
                 }
-                sharedReduceMax<RUNGS_BLOCK_SIZE>(maxRungJ);
-                if (tid == 0) {
-                    if (rungI < maxRungJ - MAX_RUNG_DIF) {
+                sharedReduceMax<RUNGS_BLOCK_SIZE>(maximumNeighborRung);
+                if (threadIndex == 0) {
+                    if (sinkRung < maximumNeighborRung - MAX_NEIGHBOR_RUNG_DIFFERENCE) {
                         changes++;
-                        data.rungsSnk[data.sinkParticleIndices[sinkIndex]] =
-                            maxRungJ - MAX_RUNG_DIF;
+                        data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]] =
+                            maximumNeighborRung - MAX_NEIGHBOR_RUNG_DIFFERENCE;
                     }
                 }
             }
         }
-        sharedReduceAdd<int, RUNGS_BLOCK_SIZE>(flops);
-        if (tid == 0) {
-            index = atomicAdd(&reduce->counter, 1);
-            atomicAdd(&reduce->flops, flops);
+        sharedReduceAdd<int, RUNGS_BLOCK_SIZE>(floatingPointOperations);
+        if (threadIndex == 0) {
+            targetNodeIndex = atomicAdd(&reduction->nextNodeIndex, 1);
+            atomicAdd(&reduction->floatingPointOperations, floatingPointOperations);
         }
-        flops = 0;
+        floatingPointOperations = 0;
         __syncthreads();
     }
-    if (tid == 0) {
-        atomicAdd(&reduce->flag, changes);
+    if (threadIndex == 0) {
+        atomicAdd(&reduction->pendingChanges, changes);
     }
-    (&ws)->~RungsWorkspace();
+    (&workspace)->~RungsWorkspace();
 }

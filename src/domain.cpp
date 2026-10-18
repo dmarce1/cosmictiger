@@ -357,50 +357,29 @@ void domainsTransmitParticles(Vector<Particle> parts) {
 // Ordinary SPH timesteps migrate the complete gas state together with its
 // gravity particle. Category indices are local and are rebuilt at the receiver.
 struct GasMigrationState {
-    Array<float, NCHEMFRACS> frac, dfrac;
-    Array<float, NDIM> dvel, predictedVelocity, gravity;
-    float alpha, h, energy, dfcold;
-    float dvValue, kapValue, e0Value, de3Value, de2Value, fp2Value, preValue, fp1Value, s2Value,
-        fcValue, rhValue, tcValue;
-    char orValue, saValue, stValue;
+    Array<float, NDIM> acceleration, predictedAcceleration, gravityAcceleration;
+    float supportRadius, internalEnergy, predictedInternalEnergyRate, internalEnergyRate, density;
+    char converged, semiactive;
     template <class Archive>
     void serialize(Archive& arc, unsigned) {
-        arc & frac;
-        arc & dfrac;
-        arc & dvel;
-        arc & predictedVelocity;
-        arc & gravity;
-        arc & alpha;
-        arc & h;
-        arc & energy;
-        arc & dfcold;
-        arc & dvValue;
-        arc & kapValue;
-        arc & e0Value;
-        arc & de3Value;
-        arc & de2Value;
-        arc & fp2Value;
-        arc & preValue;
-        arc & fp1Value;
-        arc & s2Value;
-        arc & fcValue;
-        arc & rhValue;
-        arc & tcValue;
-        arc & orValue;
-        arc & saValue;
-        arc & stValue;
+        arc & acceleration;
+        arc & predictedAcceleration;
+        arc & gravityAcceleration;
+        arc & supportRadius;
+        arc & internalEnergy;
+        arc & predictedInternalEnergyRate;
+        arc & internalEnergyRate;
+        arc & density;
+        arc & converged;
+        arc & semiactive;
     }
 };
 struct SphMigrationParticle {
     Particle part;
     GasMigrationState gas{};
-    Array<float, 4> auxiliary{};
-    Array<char, 2> flags{};
     template <class Archive>
     void serialize(Archive& arc, unsigned) {
         arc & part;
-        arc & auxiliary;
-        arc & flags;
         if (part.type == SPH_TYPE) {
             arc & gas;
         }
@@ -417,45 +396,21 @@ HPX_PLAIN_ACTION(receiveSphParticles, ReceiveSphParticlesAction);
 static SphMigrationParticle packSphParticle(ParticleInteger index) {
     SphMigrationParticle result;
     result.part = particlesGetParticle(index);
-    ALWAYS_ASSERT(result.part.type != STAR_TYPE);
-    result.auxiliary[0] = particlesSoftlen(index);
-    result.auxiliary[1] = particlesZeta(index);
-    result.auxiliary[2] = particlesRho(index);
-    result.auxiliary[3] = particlesDivv(index);
-    result.flags[0] = particlesConverged(index);
-    result.flags[1] = particlesSemiactive(index);
+    ALWAYS_ASSERT(result.part.type == DARK_MATTER_TYPE || result.part.type == SPH_TYPE);
     if (result.part.type == SPH_TYPE) {
         auto const i = particlesCatIndex(index);
         auto& gas = result.gas;
-        gas.frac = sphParticlesR1[i].frac;
-        gas.alpha = sphParticlesR1[i].alpha;
-        gas.h = sphParticlesR2[i].h;
-        gas.dfrac = sphParticlesR5[i].dfrac;
-        gas.dfcold = sphParticlesR5[i].dfcold;
-        gas.dvel = sphParticlesR6[i].dvel;
-        gas.dvValue = sphParticlesDv[i];
-        gas.kapValue = sphParticlesKap[i];
-        gas.e0Value = sphParticlesE0[i];
-        gas.de3Value = sphParticlesDe3[i];
-        gas.de2Value = sphParticlesDe2[i];
-        gas.fp2Value = sphParticlesFp2[i];
-        gas.preValue = sphParticlesPre[i];
-        gas.fp1Value = sphParticlesFp1[i];
-        gas.s2Value = sphParticlesS2[i];
-        gas.fcValue = sphParticlesFc[i];
-        gas.rhValue = sphParticlesRh[i];
-        gas.tcValue = sphParticlesTc[i];
-        gas.orValue = sphParticlesOr[i];
-        gas.saValue = sphParticlesSa[i];
-        gas.stValue = sphParticlesSt[i];
-#ifdef ENTROPY
-        gas.energy = sphParticlesR2[i].entropy;
-#else
-        gas.energy = sphParticlesR2[i].eint;
-#endif
+        gas.supportRadius = sphParticlesThermodynamicStates[i].supportRadius;
+        gas.acceleration = sphParticlesAccelerationStates[i].acceleration;
+        gas.predictedInternalEnergyRate = sphParticlesPredictedInternalEnergyRates[i];
+        gas.internalEnergyRate = sphParticlesInternalEnergyRates[i];
+        gas.density = sphParticlesDensities[i];
+        gas.converged = sphParticlesConvergenceFlags[i];
+        gas.semiactive = sphParticlesSemiactiveFlags[i];
+        gas.internalEnergy = sphParticlesThermodynamicStates[i].internalEnergy;
         for (int dim = 0; dim < NDIM; dim++) {
-            gas.predictedVelocity[dim] = sphParticlesDv2[dim][i];
-            gas.gravity[dim] = sphParticlesGravityAccelerations[dim][i];
+            gas.predictedAcceleration[dim] = sphParticlesPredictedAccelerations[dim][i];
+            gas.gravityAcceleration[dim] = sphParticlesGravityAccelerations[dim][i];
         }
     }
     return result;
@@ -466,45 +421,21 @@ static void unpackSphParticle(
         record.part.catIndex = gasIndex;
     }
     particlesSetParticle(record.part, index);
-    particlesSoftlen(index) = record.auxiliary[0];
-    particlesZeta(index) = record.auxiliary[1];
-    particlesRho(index) = record.auxiliary[2];
-    particlesDivv(index) = record.auxiliary[3];
-    particlesConverged(index) = record.flags[0];
-    particlesSemiactive(index) = record.flags[1];
     if (record.part.type == SPH_TYPE) {
         auto const i = gasIndex;
         auto const& gas = record.gas;
         sphParticlesParticleIndex(i) = index;
-        sphParticlesR1[i].frac = gas.frac;
-        sphParticlesR1[i].alpha = gas.alpha;
-        sphParticlesR2[i].h = gas.h;
-        sphParticlesR5[i].dfrac = gas.dfrac;
-        sphParticlesR5[i].dfcold = gas.dfcold;
-        sphParticlesR6[i].dvel = gas.dvel;
-        sphParticlesDv[i] = gas.dvValue;
-        sphParticlesKap[i] = gas.kapValue;
-        sphParticlesE0[i] = gas.e0Value;
-        sphParticlesDe3[i] = gas.de3Value;
-        sphParticlesDe2[i] = gas.de2Value;
-        sphParticlesFp2[i] = gas.fp2Value;
-        sphParticlesPre[i] = gas.preValue;
-        sphParticlesFp1[i] = gas.fp1Value;
-        sphParticlesS2[i] = gas.s2Value;
-        sphParticlesFc[i] = gas.fcValue;
-        sphParticlesRh[i] = gas.rhValue;
-        sphParticlesTc[i] = gas.tcValue;
-        sphParticlesOr[i] = gas.orValue;
-        sphParticlesSa[i] = gas.saValue;
-        sphParticlesSt[i] = gas.stValue;
-#ifdef ENTROPY
-        sphParticlesR2[i].entropy = gas.energy;
-#else
-        sphParticlesR2[i].eint = gas.energy;
-#endif
+        sphParticlesThermodynamicStates[i].supportRadius = gas.supportRadius;
+        sphParticlesAccelerationStates[i].acceleration = gas.acceleration;
+        sphParticlesPredictedInternalEnergyRates[i] = gas.predictedInternalEnergyRate;
+        sphParticlesInternalEnergyRates[i] = gas.internalEnergyRate;
+        sphParticlesDensities[i] = gas.density;
+        sphParticlesConvergenceFlags[i] = gas.converged;
+        sphParticlesSemiactiveFlags[i] = gas.semiactive;
+        sphParticlesThermodynamicStates[i].internalEnergy = gas.internalEnergy;
         for (int dim = 0; dim < NDIM; dim++) {
-            sphParticlesDv2[dim][i] = gas.predictedVelocity[dim];
-            sphParticlesGravityAccelerations[dim][i] = gas.gravity[dim];
+            sphParticlesPredictedAccelerations[dim][i] = gas.predictedAcceleration[dim];
+            sphParticlesGravityAccelerations[dim][i] = gas.gravityAcceleration[dim];
         }
     }
 }

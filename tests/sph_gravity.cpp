@@ -76,14 +76,10 @@ void initializePair(double separation) {
         particlesCatIndex(i) = i == 0 ? NO_INDEX : 0;
     }
     sphParticlesParticleIndex(0) = 1;
-    sphParticlesSmoothingLength(0) = 0.02;
-#ifdef ENTROPY
-    sphParticlesR2[0].A = 4.0;
-#else
-    sphParticlesR2[0].eint = 4.0;
-#endif
-    sphParticlesR1[0].frac[0] = 0.75;
-    sphParticlesR5[0].dfrac[0] = 0.125;
+    sphParticlesSupportRadius(0) = 0.02;
+    sphParticlesThermodynamicStates[0].internalEnergy = 4.0;
+    sphParticlesPredictedInternalEnergyRate(0) = 0.75;
+    sphParticlesInternalEnergyRate(0) = 0.125;
     sphParticlesGravityAcceleration(XDIM, 0) = 0.0;
 }
 TreeId findLeaf(TreeId node, ParticleInteger particle) {
@@ -257,7 +253,7 @@ void verifyBhPotentials(bool useCuda) {
 void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f) {
     double const nominalSeparation = softened ? 0.25 * getOptions().gravitySupportRadius : 0.25;
     initializePair(nominalSeparation);
-    sphParticlesSmoothingLength(0) = hydroSupport;
+    sphParticlesSupportRadius(0) = hydroSupport;
     auto const built = treeCreate(TreeCreateParameters(0, 0.5, getOptions().gravitySupportRadius));
     verifyMappings();
     requireClose("root mixed mass", treeGetNode(built.id)->mpos->multi[0], 1.0);
@@ -351,7 +347,7 @@ void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f) {
     }
 #endif
     requireClose(
-        "gravity leaves hydro smoothing unchanged", sphParticlesSmoothingLength(0), hydroSupport);
+        "gravity leaves hydro smoothing unchanged", sphParticlesSupportRadius(0), hydroSupport);
     treeDestroy(true);
 }
 void checkpointPair() {
@@ -363,7 +359,10 @@ void checkpointPair() {
     auto const position = particlesPos(XDIM, gas);
     particlesSave(file);
     particlesPos(XDIM, gas) = 0.9;
-    sphParticlesSmoothingLength(0) = 0.5;
+    sphParticlesSupportRadius(0) = 0.5;
+    sphParticlesThermodynamicStates[0].internalEnergy = 99.0;
+    sphParticlesPredictedInternalEnergyRate(0) = 99.0;
+    sphParticlesInternalEnergyRate(0) = 99.0;
     std::rewind(file);
     particlesLoad(file);
     std::fclose(file);
@@ -372,9 +371,12 @@ void checkpointPair() {
     requireClose("checkpoint gas count", sphParticlesSize(), 1);
     requireClose("checkpoint position", particlesPos(XDIM, sphParticlesParticleIndex(0)).toDouble(),
         position.toDouble());
-    requireClose("checkpoint hydro length", sphParticlesSmoothingLength(0), 0.02);
-    requireClose("checkpoint composition", sphParticlesR1[0].frac[0], 0.75);
-    requireClose("checkpoint chemistry stage", sphParticlesR5[0].dfrac[0], 0.125);
+    requireClose("checkpoint hydro length", sphParticlesSupportRadius(0), 0.02);
+    requireClose(
+        "checkpoint internal energy", sphParticlesThermodynamicStates[0].internalEnergy, 4.0);
+    requireClose("checkpoint predicted internal-energy rate",
+        sphParticlesPredictedInternalEnergyRate(0), 0.75);
+    requireClose("checkpoint thermal stage", sphParticlesInternalEnergyRate(0), 0.125);
 }
 }    // namespace detail
 
@@ -385,10 +387,10 @@ void initializeSphDomainRegression() {
     for (ParticleInteger i = 0; i < 2; i++) {
         particlesPos(XDIM, i) = (target + (i == 0 ? 0.25 : 0.75)) / hpxSize();
     }
-    sphParticlesR1[0].alpha = 10.0 + target;
-    sphParticlesR5[0].dfrac[0] = 20.0 + target;
-    sphParticlesR6[0].dvel[XDIM] = 30.0 + target;
-    sphParticlesDv2[YDIM][0] = 40.0 + target;
+    sphParticlesPredictedInternalEnergyRate(0) = 10.0 + target;
+    sphParticlesInternalEnergyRate(0) = 20.0 + target;
+    sphParticlesAccelerationStates[0].acceleration[XDIM] = 30.0 + target;
+    sphParticlesPredictedAccelerations[YDIM][0] = 40.0 + target;
     sphParticlesGravityAccelerations[ZDIM][0] = 50.0 + target;
 }
 HPX_PLAIN_ACTION(initializeSphDomainRegression, InitializeSphDomainRegressionAction);
@@ -398,10 +400,13 @@ void validateSphDomainRegression() {
     requireClose("migrated gas count", sphParticlesSize(), 1);
     auto const gas = sphParticlesParticleIndex(0);
     int const target = int(particlesPos(XDIM, gas).toDouble() * hpxSize());
-    requireClose("migration alpha", sphParticlesR1[0].alpha, 10.0 + target);
-    requireClose("migration chemistry stage", sphParticlesR5[0].dfrac[0], 20.0 + target);
-    requireClose("migration velocity stage", sphParticlesR6[0].dvel[XDIM], 30.0 + target);
-    requireClose("migration predicted velocity", sphParticlesDv2[YDIM][0], 40.0 + target);
+    requireClose("migration predicted internal-energy rate",
+        sphParticlesPredictedInternalEnergyRate(0), 10.0 + target);
+    requireClose("migration thermal stage", sphParticlesInternalEnergyRate(0), 20.0 + target);
+    requireClose("migration acceleration stage",
+        sphParticlesAccelerationStates[0].acceleration[XDIM], 30.0 + target);
+    requireClose("migration predicted acceleration", sphParticlesPredictedAccelerations[YDIM][0],
+        40.0 + target);
     requireClose("migration gravity", sphParticlesGravityAccelerations[ZDIM][0], 50.0 + target);
     Array<double, NDIM> position;
     for (ParticleInteger i = 0; i < particlesSize(); i++) {
@@ -441,10 +446,10 @@ void sphGravityTest() {
     auto opts = getOptions();
     bool const useCuda = opts.cuda;
     opts.sph = true;
-    opts.vsoft = false;
+
     opts.gravity = true;
     opts.saveForce = true;
-    opts.stars = false;
+
     opts.doGroups = false;
     opts.doTracers = false;
     opts.darkMatterMass = 0.75;

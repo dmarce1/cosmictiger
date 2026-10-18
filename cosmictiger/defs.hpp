@@ -28,18 +28,6 @@
 #define COUNT_FLOPS
 
 // Density/internal-energy SPH follows Monaghan (1992).
-#define IMPLICIT_CONDUCTION
-#define SPH_DIFFUSION_TOLER1 1e-3f
-#define SPH_DIFFUSION_TOLER2 1e-4f
-#define SPH_DIFFUSION_TOLER3 1e-5f
-#define BETA_SN 0.1
-#define Z_SN 0.04
-#define HE_SN 0.10
-#define T_SN 1e8
-#define TSTAR0 (2.1e9)
-#define SPH_MAX_SOFT (EWALD_DIST * 0.5f)
-#define SN_REMNANT_RATE 0.5f
-#define SELF_PHI float(15.0 / 8.0)
 #define SPH_TREE_NODE_ALLOCATION_SIZE 4
 
 #ifndef NDEBUG

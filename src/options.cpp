@@ -201,7 +201,6 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"gravity.effectiveRadius", effectiveRadius},
         {"gravity.supportRadius",
             options.gravitySupportRadius * std::pow(double(options.numberOfParticles), 1.0 / NDIM)},
-        {"gravity.sphSmoothing", options.sphSmoothing},
         {"gravity.timestepEta", timestepEta},
         {"cosmology.startRedshift", options.z0},
         {"cosmology.endRedshift", options.z1},
@@ -219,10 +218,6 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"hydro.enabled", options.sph},
         {"hydro.kernelFamily", options.hydroKernelFamily},
         {"hydro.kernelDegree", options.hydroKernelDegree},
-        {"hydro.chemistry", options.chem},
-        {"hydro.conduction", options.conduction},
-        {"hydro.diffusion", options.diffusion},
-        {"hydro.yReflect", options.yreflect},
         {"hydro.yAcceleration", options.yAcceleration},
         {"hydro.viscosityAlpha", options.alpha0},
         {"hydro.viscosityBeta", options.beta},
@@ -362,10 +357,8 @@ bool processOptions(int argc, char* argv[]) {
         po::value<std::string>(&opts.gravityKernelFamily)->default_value("ferrers"),
         "density kernel family: spline, wendland, or ferrers")("gravity.kernelDegree",
         po::value<int>(&opts.gravityKernelDegree)->default_value(4),
-        "density degree: spline 3..9; wendland 2,5,8; ferrers 2,4,6,8")("gravity.sphSmoothing",
-        po::value<bool>(&opts.sphSmoothing)->default_value(false),
-        "must remain false; gas uses the same fixed gravity radius as dark matter and stars")(
-        "gravity.timestepEta", po::value<double>(&opts.eta)->default_value(0.20401599335954483),
+        "density degree: spline 3..9; wendland 2,5,8; ferrers 2,4,6,8")("gravity.timestepEta",
+        po::value<double>(&opts.eta)->default_value(0.20401599335954483),
         "prefactor C in dt = C sqrt(effectiveRadius/acceleration), effectiveRadius = 2 sigma");
 
     po::options_description cosmologyOpts("Cosmology");
@@ -401,15 +394,7 @@ bool processOptions(int argc, char* argv[]) {
         po::value<std::string>(&opts.hydroKernelFamily)->default_value("spline"),
         "density kernel family: spline, wendland, or ferrers")("hydro.kernelDegree",
         po::value<int>(&opts.hydroKernelDegree)->default_value(3),
-        "density degree: spline 3..9; wendland 2,5,8; ferrers 2,4,6,8")("hydro.chemistry",
-        po::value<bool>(&opts.chem)->default_value(false),
-        "legacy chemistry; true is unsupported in the Monaghan SPH baseline")("hydro.conduction",
-        po::value<bool>(&opts.conduction)->default_value(false),
-        "legacy conduction; true is unsupported in the Monaghan SPH baseline")("hydro.diffusion",
-        po::value<bool>(&opts.diffusion)->default_value(false),
-        "legacy diffusion; true is unsupported in the Monaghan SPH baseline")("hydro.yReflect",
-        po::value<bool>(&opts.yreflect)->default_value(false),
-        "legacy reflecting y boundary; true is currently unsupported")("hydro.yAcceleration",
+        "density degree: spline 3..9; wendland 2,5,8; ferrers 2,4,6,8")("hydro.yAcceleration",
         po::value<double>(&opts.yAcceleration)->default_value(0.0),
         "uniform gravitational acceleration in the y direction")("hydro.viscosityAlpha",
         po::value<double>(&opts.alpha0)->default_value(1.0),
@@ -532,11 +517,6 @@ bool processOptions(int argc, char* argv[]) {
         resolveSupportRadius("hydro.maxEffectiveRadius", "hydro.maxSupportRadius", nullptr,
             opts.hydroMaxSupportRadius, hydroTable.supportRadiusPerEffectiveRadius);
     double const selfNeighborFloor = 4.0 * M_PI / 3.0 * radial_kernel::value(hydroTable, 0.0);
-    if (opts.sphSmoothing) {
-        THROW_ERROR("gravity.sphSmoothing must be false; gravity uses one fixed comoving "
-                    "kernel radius for gas, dark matter, and stars independently of SPH "
-                    "smoothing\n");
-    }
     if (opts.outputSiloInterval <= 0) {
         THROW_ERROR("output.siloInterval must be positive\n");
     }
@@ -577,13 +557,6 @@ bool processOptions(int argc, char* argv[]) {
     }
     if (opts.bucketSize <= 0) {
         THROW_ERROR("compute.bucketSize must be positive\n");
-    }
-    if (opts.chem || opts.conduction || opts.diffusion) {
-        THROW_ERROR("hydro.chemistry, hydro.conduction and hydro.diffusion are detached from SPH; "
-                    "leave them false\n");
-    }
-    if (opts.yreflect) {
-        THROW_ERROR("hydro.yReflect=true is unsupported in the Monaghan SPH baseline\n");
     }
     if (!detail::isFiniteOption(opts.yAcceleration) ||
         !detail::isFiniteOption(opts.centralAcceleration) ||
@@ -642,15 +615,8 @@ bool processOptions(int argc, char* argv[]) {
         THROW_ERROR("hydro support radii must remain finite and positive in single precision "
                     "after normalization by initial.particlesPerDimension\n");
     }
-    opts.alpha1 = opts.alpha0;
-    opts.alphaDecay = 0.1;
-    opts.viscType = 2;
-    opts.glass = 0;
-    opts.stars = false;
-    opts.vsoft = false;
     opts.htime = true;
     opts.damping = 0.0;
-    opts.sigma8C = opts.sigma8;
     opts.sphBucketSize = opts.bucketSize;
     opts.hydroMinSupportRadius /= opts.particlesPerDimension;
     opts.hydroMaxSupportRadius =
@@ -664,10 +630,6 @@ bool processOptions(int argc, char* argv[]) {
         opts.test == "disc" || opts.test == "star" || opts.test == "plummer";
     if (hydroTest) {
         opts.sph = true;
-        opts.chem = false;
-        opts.stars = false;
-        opts.conduction = false;
-        opts.diffusion = false;
         opts.gravity = opts.test == "star" || opts.test == "plummer";
     }
     if (opts.sph) {
@@ -682,11 +644,6 @@ bool processOptions(int argc, char* argv[]) {
             THROW_ERROR(
                 "The lightcone and halo finders require equal-mass dark matter particles\n");
         }
-        if (opts.stars && !opts.chem) {
-            THROW_ERROR("Star formation requires hydro.chemistry=true\n");
-        }
-    } else {
-        opts.chem = opts.stars = opts.conduction = opts.diffusion = false;
     }
     if (!detail::isPositiveFloatOption(opts.centralSupportRadius)) {
         THROW_ERROR(
@@ -717,8 +674,6 @@ bool processOptions(int argc, char* argv[]) {
         THROW_ERROR("hydro.enabled requires finite positive gas and dark-matter class masses "
                     "from cosmology.omegaB and cosmology.omegaC\n");
     }
-    opts.rho0B = opts.numberOfParticles * opts.omegaB / opts.omegaM;
-    opts.rho0C = opts.numberOfParticles * opts.omegaC / opts.omegaM;
 
     opts.codeToG *= constants::kM0;
     opts.codeToCm = pow(opts.codeToG * (8.0 * M_PI) * opts.numberOfParticles * constants::kG /
@@ -777,8 +732,6 @@ bool processOptions(int argc, char* argv[]) {
     }
     SHOW("hydro.enabled", sph);
     SHOW("run.hierarchicalGravity", htime);
-    SHOW("hydro.chemistry", chem);
-    SHOW("hydro.stars", stars);
     SHOW("hydro.viscosityAlpha", alpha0);
     SHOW("hydro.viscosityBeta", beta);
     SHOW("hydro.viscosityEpsilon", viscosityEpsilon);
@@ -843,7 +796,6 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("gravity.kernelDegree", gravityKernelDegree);
     SHOW("hydro.kernelFamily", hydroKernelFamily);
     SHOW("hydro.kernelDegree", hydroKernelDegree);
-    SHOW("gravity.sphSmoothing", sphSmoothing);
     SHOW("cosmology.hubble", hubble);
     SHOW("lightcone.linkingLength", lcB);
     SHOW("lightcone.minGroupSize", lcMinGroup);

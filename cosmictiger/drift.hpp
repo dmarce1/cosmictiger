@@ -23,29 +23,6 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/particles.hpp>
 
-struct DriftReturn {
-    double kin;
-    double therm;
-    double vol;
-    double momx;
-    double momy;
-    double momz;
-    double coldMass;
-    double flops;
-    ParticleInteger nmapped;
-    template <class Arc>
-    void serialize(Arc&& a, unsigned) {
-        a & vol;
-        a & therm;
-        a & kin;
-        a & momx;
-        a & momy;
-        a & momz;
-        a & nmapped;
-        a & flops;
-    }
-};
-
 void drift(double scale, double dt, double tau0, double tau1, double tauMax, int rung = -1,
     double drag = 0.0);
 

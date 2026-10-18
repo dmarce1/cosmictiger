@@ -243,7 +243,7 @@ void KickWorkspace::toGpu() {
                             source.proc = rank;
                             source.range = ranges[k];
                             particlesGlobalReadPos(
-                                source, x.data(), y.data(), z.data(), types.data(), nullptr, 0);
+                                source, x.data(), y.data(), z.data(), types.data(), 0);
                             std::memcpy(&particlesType(localRange.first), types.data(),
                                 numberOfParticles * sizeof(char));
                         }

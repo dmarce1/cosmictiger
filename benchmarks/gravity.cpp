@@ -434,10 +434,8 @@ void simdBenchmark() {
     auto const originalHydro = selectedHydroKernel().spec;
     auto options = originalOptions;
     options.sph = false;
-    options.vsoft = false;
     options.gravity = true;
     options.saveForce = false;
-    options.stars = false;
     options.doGroups = false;
     options.doTracers = false;
     options.bucketSize = 64;

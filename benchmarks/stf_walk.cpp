@@ -266,10 +266,8 @@ void stfWalkBenchmark() {
     auto const originalOptions = getOptions();
     auto options = originalOptions;
     options.sph = false;
-    options.vsoft = false;
     options.gravity = true;
     options.saveForce = true;
-    options.stars = false;
     options.doGroups = false;
     options.doTracers = false;
     options.bucketSize = 64;

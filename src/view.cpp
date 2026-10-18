@@ -43,7 +43,6 @@
 #include <cosmictiger/silo_spheres.hpp>
 #include <cosmictiger/sph.hpp>
 #include <cosmictiger/sph_particles.hpp>
-#include <cosmictiger/stars.hpp>
 #include <cosmictiger/units.hpp>
 #include <cosmictiger/view.hpp>
 
@@ -75,57 +74,22 @@ struct SphParticleInfo : public DarkMatterParticleInfo {
     float eint;
     float rho;
     float h;
-    float hValue2;
-    float hp;
-    float h2;
-    float hn;
-    float hep;
-    float hepp;
-    float he;
-    float zValue2;
-    float coldFrac;
     template <typename A>
     void serialize(A&& arc, unsigned ver) {
         DarkMatterParticleInfo::serialize(arc, ver);
         arc & eint;
         arc & rho;
         arc & h;
-        arc & hValue2;
-        arc & hp;
-        arc & h2;
-        arc & hn;
-        arc & hep;
-        arc & hepp;
-        arc & coldFrac;
-        arc & he;
-        arc & zValue2;
-    }
-};
-
-struct StarParticleInfo : public DarkMatterParticleInfo {
-    float yValue2;
-    float zValue2;
-    float m;
-    float zform;
-    template <typename A>
-    void serialize(A&& arc, unsigned ver) {
-        DarkMatterParticleInfo::serialize(arc, ver);
-        arc & yValue2;
-        arc & zValue2;
-        arc & m;
-        arc & zform;
     }
 };
 
 struct ViewReturn {
     Vector<Vector<SphParticleInfo>> hydro;
     Vector<Vector<DarkMatterParticleInfo>> darkMatter;
-    Vector<Vector<StarParticleInfo>> star;
     template <typename A>
     void serialize(A&& arc, unsigned) {
         arc & hydro;
         arc & darkMatter;
-        arc & star;
     }
 };
 
@@ -337,7 +301,6 @@ void writeConvertedView(DBfile* db, ViewReturn const& particles, int box, double
     char const* densityUnit = cosmological ? "(Msun/h)/(Mpc/h)^3" : "g/cm^3";
     char const* energyUnit = cosmological ? "(km/s)^2" : "erg/g";
     ViewUnitConversion const conversion(a, cosmological, lab);
-    ViewUnitConversion const cgsLab(a, false, true);
     writeViewText(db, "unit_system", cosmological ? "cosmological" : "cgs");
     writeViewText(db, "frame", lab ? "lab" : "comoving");
     writeViewText(db, "position_convention", lab ? "proper" : "comoving");
@@ -384,58 +347,6 @@ void writeConvertedView(DBfile* db, ViewReturn const& particles, int box, double
         writeViewField(db, "kernel_support_radius", "gas", gas, lengthUnit,
             [&conversion](
                 SphParticleInfo const& particle) { return conversion.length(particle.h); });
-        if (getOptions().stars) {
-            writeViewField(db, "cold_frac", "gas", gas, "1",
-                [](SphParticleInfo const& particle) { return double(particle.coldFrac); });
-        }
-        if (getOptions().chem) {
-            struct ChemistryField {
-                char const* name;
-                float SphParticleInfo::* member;
-            };
-            ChemistryField const fields[] = {{"H", &SphParticleInfo::hValue2},
-                {"He", &SphParticleInfo::he}, {"Hp", &SphParticleInfo::hp},
-                {"Hn", &SphParticleInfo::hn}, {"H2", &SphParticleInfo::h2},
-                {"Hep", &SphParticleInfo::hep}, {"Hepp", &SphParticleInfo::hepp},
-                {"Z", &SphParticleInfo::zValue2}};
-            for (auto const& field : fields) {
-                writeViewField(
-                    db, field.name, "gas", gas, "1", [&field](SphParticleInfo const& particle) {
-                        return double(particle.*(field.member));
-                    });
-            }
-            // Preserve the existing chemistry model; only centralize its CGS conversion.
-            writeViewField(db, "T", "gas", gas, "K", [&cgsLab](SphParticleInfo const& particle) {
-                double const helium = particle.he + particle.hep + particle.hepp;
-                double const count = particle.hValue2 + 2.f * particle.hp + .5f * particle.h2 +
-                    .25f * particle.he + .5f * particle.hep + .75f * particle.hepp +
-                    particle.zValue2 / 10.0;
-                double const rho = cgsLab.density(particle.rho);
-                double const numberDensity = count * constants::kAvo * rho;
-                double const heatCapacity =
-                    (1.5 + 0.5 * particle.h2 / (1. - .75 * helium - 0.5 * particle.h2)) *
-                    double(constants::kB);
-                double temperature =
-                    cgsLab.specificEnergy(particle.eint) * rho / (numberDensity * heatCapacity);
-                if (getOptions().stars) {
-                    temperature /= 1.f - particle.coldFrac;
-                }
-                return temperature;
-            });
-        }
-    }
-    if (!particles.star[box].empty()) {
-        writeViewSpecies(db, "stars", "star_", particles.star[box], conversion, lengthUnit,
-            velocityUnit, massUnit, getOptions().sphMass, time);
-        writeViewField(db, "star_Y", "stars", particles.star[box], "1",
-            [](StarParticleInfo const& particle) { return double(particle.yValue2); });
-        writeViewField(db, "star_Z", "stars", particles.star[box], "1",
-            [](StarParticleInfo const& particle) { return double(particle.zValue2); });
-        writeViewField(db, "star_M", "stars", particles.star[box], massUnit,
-            [&conversion](
-                StarParticleInfo const& particle) { return conversion.mass(particle.m); });
-        writeViewField(db, "star_zform", "stars", particles.star[box], "1",
-            [](StarParticleInfo const& particle) { return double(particle.zform); });
     }
 }
 
@@ -476,21 +387,17 @@ ViewReturn viewGetParticles(Vector<Range<double>> boxes = Vector<Range<double>>(
     ViewReturn rc;
     rc.hydro.resize(boxes.size());
     rc.darkMatter.resize(boxes.size());
-    rc.star.resize(boxes.size());
     Vector<hpx::future<ViewReturn>> futs;
     for (auto& c : hpxChildren()) {
         futs.push_back(hpx::async<ViewGetParticlesAction>(c, boxes));
     }
-    bool const chem = getOptions().chem;
-    bool const stars = getOptions().stars;
     int const numberOfThreads = hpxHardwareConcurrency();
     for (int proc = 0; proc < numberOfThreads; proc++) {
         futs.push_back(hpx::async(hpx::annotated_function(
-            [proc, numberOfThreads, boxes, chem, stars]() {
+            [proc, numberOfThreads, boxes]() {
                 ViewReturn rc;
                 rc.hydro.resize(boxes.size());
                 rc.darkMatter.resize(boxes.size());
-                rc.star.resize(boxes.size());
                 ParticleInteger const b = (size_t) proc * particlesSize() / numberOfThreads;
                 ParticleInteger const e = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
                 for (ParticleInteger i = b; i < e; i++) {
@@ -517,50 +424,17 @@ ViewReturn viewGetParticles(Vector<Range<double>> boxes = Vector<Range<double>>(
                             case SPH_TYPE: {
                                 SphParticleInfo info{};
                                 int const l = particlesCatIndex(i);
-                                if (!sphParticlesIsstar(l)) {
-                                    info.x = particlesPos(XDIM, i);
-                                    info.y = particlesPos(YDIM, i);
-                                    info.z = particlesPos(ZDIM, i);
-                                    info.vx = particlesVel(XDIM, i);
-                                    info.vy = particlesVel(YDIM, i);
-                                    info.vz = particlesVel(ZDIM, i);
-#ifdef HOPKINS
-                                    info.eint = sphParticlesEintPre(l);
-                                    info.rho = sphParticlesRhoRho(l);
-#else
-                                    info.eint = sphParticlesEint(l);
-                                    info.rho = sphParticlesRho(l);
-#endif
-                                    info.h = sphParticlesSmoothingLength(l);
-                                    info.rung = particlesRung(i);
-                                    if (chem) {
-                                        info.hValue2 = sphParticlesH(l);
-                                        info.hp = sphParticlesHp(l);
-                                        info.hn = sphParticlesHn(l);
-                                        info.h2 = sphParticlesH2(l);
-                                        info.hep = sphParticlesHep(l);
-                                        info.hepp = sphParticlesHepp(l);
-                                        info.zValue2 = sphParticlesZ(l);
-                                        info.he = sphParticlesHe0(l);
-                                    }
-                                    if (stars) {
-                                        info.coldFrac = sphParticlesColdMass(l);
-                                    } else {
-                                        info.coldFrac = 0.0;
-                                    }
-                                    rc.hydro[j].push_back(info);
-                                } else {
-                                    int const k = particlesCatIndex(i);
-                                    StarParticleInfo info{};
-                                    info.x = particlesPos(XDIM, i);
-                                    info.y = particlesPos(YDIM, i);
-                                    info.z = particlesPos(ZDIM, i);
-                                    info.vx = particlesVel(XDIM, i);
-                                    info.vy = particlesVel(YDIM, i);
-                                    info.vz = particlesVel(ZDIM, i);
-                                    info.rung = particlesRung(i);
-                                    rc.star[j].push_back(info);
-                                }
+                                info.x = particlesPos(XDIM, i);
+                                info.y = particlesPos(YDIM, i);
+                                info.z = particlesPos(ZDIM, i);
+                                info.vx = particlesVel(XDIM, i);
+                                info.vy = particlesVel(YDIM, i);
+                                info.vz = particlesVel(ZDIM, i);
+                                info.eint = sphParticlesInternalEnergy(l);
+                                info.rho = sphParticlesDensity(l);
+                                info.h = sphParticlesSupportRadius(l);
+                                info.rung = particlesRung(i);
+                                rc.hydro[j].push_back(info);
                                 break;
                             }
                             }
@@ -578,7 +452,6 @@ ViewReturn viewGetParticles(Vector<Range<double>> boxes = Vector<Range<double>>(
             rc.hydro[i].insert(rc.hydro[i].begin(), tmp.hydro[i].begin(), tmp.hydro[i].end());
             rc.darkMatter[i].insert(
                 rc.darkMatter[i].begin(), tmp.darkMatter[i].begin(), tmp.darkMatter[i].end());
-            rc.star[i].insert(rc.star[i].begin(), tmp.star[i].begin(), tmp.star[i].end());
         }
     }
     return rc;
@@ -590,19 +463,10 @@ void viewOutputViews(int cycle, double a, bool force) {
         return;
     }
     profilerEnter("view_output_views");
-    bool const chem = getOptions().chem;
-    bool const stars = getOptions().stars;
-    double const codeToCm = getOptions().codeToCm;
-    double const codeToS = getOptions().codeToS;
-    double const codeToG = getOptions().codeToG;
-    //	const double code_to_velocity = code_to_cm / code_to_s / a;
-    //	const double code_to_energy = sqr(code_to_cm / code_to_s / a);
-    //	const double code_to_density = code_to_g / (code_to_cm * sqr(code_to_cm));
     double const codeToVelocity = 1.;
     double const codeToEnergy = 1.;
     double const codeToDensity = 1.;
     for (int bi = 0; bi < viewBoxes.size(); bi++) {
-        bool stars = getOptions().stars;
         PRINT("Outputing view for box (%e %e) (%e %e) (%e %e)\n", viewBoxes[bi].begin[XDIM],
             viewBoxes[bi].end[XDIM], viewBoxes[bi].begin[YDIM], viewBoxes[bi].end[YDIM],
             viewBoxes[bi].begin[ZDIM], viewBoxes[bi].end[ZDIM]);
@@ -673,13 +537,6 @@ void viewOutputViews(int cycle, double a, bool force) {
                 x.push_back(parts.hydro[bi][i].rung);
             }
             detail::writeCodeGasField(db, "hydro_rung", x, opts);
-            if (stars) {
-                x.resize(0);
-                for (int i = 0; i < parts.hydro[bi].size(); i++) {
-                    x.push_back(parts.hydro[bi][i].coldFrac);
-                }
-                detail::writeCodeGasField(db, "cold_frac", x, opts);
-            }
             x.resize(0);
             y.resize(0);
             z.resize(0);
@@ -694,104 +551,6 @@ void viewOutputViews(int cycle, double a, bool force) {
             x.resize(0);
             y.resize(0);
             z.resize(0);
-            if (chem) {
-                double const codeToEnergyDensity = getOptions().codeToG /
-                    (getOptions().codeToCm * sqr(getOptions().codeToS));    // 7
-                double const codeToDensity =
-                    pow(getOptions().codeToCm, -3) * getOptions().codeToG;    // 10
-                Vector<float> p, q, t, u, w, s;
-                for (int i = 0; i < parts.hydro[bi].size(); i++) {
-                    x.push_back(parts.hydro[bi][i].hp);
-                    y.push_back(parts.hydro[bi][i].hn);
-                    z.push_back(parts.hydro[bi][i].h2);
-                    p.push_back(parts.hydro[bi][i].hep);
-                    q.push_back(parts.hydro[bi][i].hepp);
-                    u.push_back(parts.hydro[bi][i].he);
-                    s.push_back(parts.hydro[bi][i].hValue2);
-                    w.push_back(parts.hydro[bi][i].zValue2);
-                    double const h = parts.hydro[bi][i].h;
-                    double rho = parts.hydro[bi][i].rho;
-                    double const hp = parts.hydro[bi][i].hp;
-                    double const hn = parts.hydro[bi][i].hn;
-                    double const h2 = parts.hydro[bi][i].h2;
-                    double const he = parts.hydro[bi][i].he;
-                    double const zValue = parts.hydro[bi][i].zValue2;
-                    double const hep = parts.hydro[bi][i].hep;
-                    double const hepp = parts.hydro[bi][i].hepp;
-                    double const yValue = he + hep + hepp;
-                    double const hValue = parts.hydro[bi][i].hValue2;
-                    double n = hValue + 2.f * hp + .5f * h2 + .25f * he + .5f * hep + .75f * hepp +
-                        zValue / 10.0;
-                    rho *= codeToDensity * pow(a, -3);
-                    n *= constants::kAvo * rho;                                     // 8
-                    double cv = 1.5 + 0.5 * h2 / (1. - .75 * yValue - 0.5 * h2);    // 4
-                    double gamma = 1. + 1. / cv;                                    // 5
-                    cv *= double(constants::kB);                                    // 1
-                    double eint = parts.hydro[bi][i].eint;                          // 11
-                    eint /= sqr(a);
-                    eint *= sqr(getOptions().codeToCm / getOptions().codeToS);
-                    // PRINT( "%e\n",  (code_to_energy_density * pow(code_to_density, -gamma)));
-                    double energy = eint * rho;
-                    double tValue = energy / (n * cv);    // 5
-                    if (stars) {
-                        tValue /= 1.f - parts.hydro[bi][i].coldFrac;
-                    }
-                    //	PRINT("%e %e %e %e %e %e \n", energy, n, cv, rho, K, T);
-                    t.push_back(tValue);
-                }
-                detail::writeCodeGasField(db, "H", s, opts);
-                detail::writeCodeGasField(db, "He", u, opts);
-                detail::writeCodeGasField(db, "Hp", x, opts);
-                detail::writeCodeGasField(db, "Hn", y, opts);
-                detail::writeCodeGasField(db, "H2", z, opts);
-                detail::writeCodeGasField(db, "Hep", p, opts);
-                detail::writeCodeGasField(db, "Hepp", q, opts);
-                detail::writeCodeGasField(db, "Z", w, opts);
-                detail::writeCodeGasField(db, "T", t, opts);
-            }
-        }
-        if (parts.star[bi].size()) {
-            x.resize(0);
-            y.resize(0);
-            z.resize(0);
-            for (int i = 0; i < parts.star[bi].size(); i++) {
-                x.push_back(parts.star[bi][i].x.toFloat());
-                y.push_back(parts.star[bi][i].y.toFloat());
-                z.push_back(parts.star[bi][i].z.toFloat());
-            }
-            float* coords3[NDIM] = {x.data(), y.data(), z.data()};
-            DBPutPointmesh(db, "stars", NDIM, coords3, x.size(), DB_FLOAT, opts);
-            x.resize(0);
-            y.resize(0);
-            z.resize(0);
-            for (int i = 0; i < parts.star[bi].size(); i++) {
-                x.push_back(parts.star[bi][i].vx * codeToVelocity);
-                y.push_back(parts.star[bi][i].vy * codeToVelocity);
-                z.push_back(parts.star[bi][i].vz * codeToVelocity);
-            }
-            DBPutPointvar1(db, "star_vx", "stars", x.data(), x.size(), DB_FLOAT, opts);
-            DBPutPointvar1(db, "star_vy", "stars", y.data(), x.size(), DB_FLOAT, opts);
-            DBPutPointvar1(db, "star_vz", "stars", z.data(), x.size(), DB_FLOAT, opts);
-            x.resize(0);
-            for (int i = 0; i < parts.star[bi].size(); i++) {
-                x.push_back(parts.star[bi][i].rung);
-            }
-            DBPutPointvar1(db, "star_rung", "stars", x.data(), x.size(), DB_FLOAT, opts);
-
-            Vector<float> p;
-            x.resize(0);
-            y.resize(0);
-            z.resize(0);
-            for (int i = 0; i < parts.star[bi].size(); i++) {
-                x.push_back(parts.star[bi][i].yValue2);
-                y.push_back(parts.star[bi][i].zValue2);
-                z.push_back(parts.star[bi][i].m);
-                p.push_back(parts.star[bi][i].zform);
-            }
-            DBPutPointvar1(db, "star_Y", "stars", x.data(), x.size(), DB_FLOAT, opts);
-            DBPutPointvar1(db, "star_Z", "stars", y.data(), x.size(), DB_FLOAT, opts);
-            DBPutPointvar1(db, "star_M", "stars", z.data(), x.size(), DB_FLOAT, opts);
-            DBPutPointvar1(db, "star_zform", "stars", p.data(), x.size(), DB_FLOAT, opts);
         }
         DBFreeOptlist(opts);
         DBClose(db);

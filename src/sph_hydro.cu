@@ -22,69 +22,75 @@
 
 namespace detail {
 
-struct HydroRecord {
-    Fixed32 x;
-    Fixed32 y;
-    Fixed32 z;
-    float h;
-    float vx;
-    float vy;
-    float vz;
-    float energy;
-    float rho;
+struct HydroNeighbor {
+    Fixed32 positionX;
+    Fixed32 positionY;
+    Fixed32 positionZ;
+    float supportRadius;
+    float velocityX;
+    float velocityY;
+    float velocityZ;
+    float internalEnergy;
+    float density;
 };
 
 struct HydroWorkspace {
-    DeviceVector<HydroRecord> neighbors;
+    DeviceVector<HydroNeighbor> neighbors;
 };
 
 }    // namespace detail
 
 // Monaghan (1992), equations (4.1)-(4.2) and (6.4)-(6.5).
-// Positions and density are comoving; velocity and energy store a*v and a^2*u.
-// Stored h is the kernel support radius; physical smoothing widths are 2 sigma.
-__global__ void sphCudaHydro(SphRunParameters params, SphRunCudaData data, SphReduction* reduce) {
-    int const tid = threadIdx.x;
+// Positions and density are comoving; velocity and internal energy store a*v and a^2*u.
+// The stored radius is the compact-support radius; the effective smoothing width is 2 sigma.
+__global__ void sphCudaHydro(
+    SphRunParameters parameters, SphRunCudaData data, SphReduction* reduction) {
+    int const threadIndex = threadIdx.x;
     int const blockSize = blockDim.x;
-    __shared__ int index;
+    __shared__ int targetNodeIndex;
     __shared__ detail::HydroWorkspace workspace;
     new (&workspace) detail::HydroWorkspace();
-    if (tid == 0) {
-        index = atomicAdd(&reduce->counter, 1);
+    if (threadIndex == 0) {
+        targetNodeIndex = atomicAdd(&reduction->nextNodeIndex, 1);
     }
     __syncthreads();
-    float const ainv = 1.0f / params.a;
-    float const gasMassOverScaleFactor = data.gasMass * ainv;
-    float const gamma = data.defGamma;
+    float const inverseScaleFactor = 1.0f / parameters.scaleFactor;
+    float const gasMassOverScaleFactor = data.gasMass * inverseScaleFactor;
+    float const adiabaticIndex = data.adiabaticIndex;
     // Keep the historical cubic viscosity scale while measuring every kernel
-    // with the same h = 2 sigma: h_Monaghan = sqrt(5/6) h for the cubic spline.
+    // with the same effective width of 2 sigma: the paper smoothing length is
+    // sqrt(5/6) times this width for the cubic spline.
     constexpr float kViscosityWidthScale = 0.9128709291752769f;
     // Calibrate the hydro acceleration limit to the former cubic/Ferrers F4
     // defaults after gravity eta and smoothing lengths adopt the common width.
     constexpr float kHydroAccelerationScale = 0.7115965735877551f;
-    int maxRungHydro = 0;
-    int maxRungGrav = 0;
-    int maxRung = 0;
-    float maxSignal = 0.0f;
-    while (index < data.numberOfTargetNodes) {
+    int maximumHydroRung = 0;
+    int maximumGravityRung = 0;
+    int maximumRung = 0;
+    float maximumSignalSpeed = 0.0f;
+    while (targetNodeIndex < data.numberOfTargetNodes) {
         __syncthreads();
-        SphTreeNode const& self = data.trees[data.selfs[index]];
+        SphTreeNode const& targetNode = data.treeNodes[data.targetNodeIndices[targetNodeIndex]];
         workspace.neighbors.resize(0);
         // The union of both supports is required by the symmetric gradient.
-        for (int ni = self.neighborRange.first; ni < self.neighborRange.second; ni++) {
-            auto const& other = data.trees[data.neighbors[ni]];
-            int const end = other.particleRange.first +
-                roundUp(other.particleRange.second - other.particleRange.first, blockSize);
-            for (int pi = other.particleRange.first + tid; pi < end; pi += blockSize) {
+        for (int neighborNodeIndex = targetNode.neighborRange.first;
+            neighborNodeIndex < targetNode.neighborRange.second; neighborNodeIndex++) {
+            auto const& neighborNode = data.treeNodes[data.neighborNodeIndices[neighborNodeIndex]];
+            int const end = neighborNode.particleRange.first +
+                roundUp(neighborNode.particleRange.second - neighborNode.particleRange.first,
+                    blockSize);
+            for (int sourceParticleIndex = neighborNode.particleRange.first + threadIndex;
+                sourceParticleIndex < end; sourceParticleIndex += blockSize) {
                 bool contains = false;
                 Array<Fixed32, NDIM> position;
-                if (pi < other.particleRange.second) {
-                    position[XDIM] = data.x[pi];
-                    position[YDIM] = data.y[pi];
-                    position[ZDIM] = data.z[pi];
-                    contains = self.outerBox.contains(position);
+                if (sourceParticleIndex < neighborNode.particleRange.second) {
+                    position[XDIM] = data.sourcePositionX[sourceParticleIndex];
+                    position[YDIM] = data.sourcePositionY[sourceParticleIndex];
+                    position[ZDIM] = data.sourcePositionZ[sourceParticleIndex];
+                    contains = targetNode.outerBox.contains(position);
                     if (!contains) {
-                        contains = sphSupportIntersects(self.innerBox, position, data.h[pi]);
+                        contains = sphSupportIntersects(targetNode.innerBox, position,
+                            data.sourceSupportRadius[sourceParticleIndex]);
                     }
                 }
                 int slot = contains;
@@ -95,167 +101,203 @@ __global__ void sphCudaHydro(SphRunParameters params, SphRunCudaData data, SphRe
                 workspace.neighbors.resize(offset + total);
                 if (contains) {
                     workspace.neighbors[offset + slot] = {position[XDIM], position[YDIM],
-                        position[ZDIM], data.h[pi], data.vx[pi], data.vy[pi], data.vz[pi],
-                        data.eint[pi], data.rho[pi]};
+                        position[ZDIM], data.sourceSupportRadius[sourceParticleIndex],
+                        data.sourceVelocityX[sourceParticleIndex],
+                        data.sourceVelocityY[sourceParticleIndex],
+                        data.sourceVelocityZ[sourceParticleIndex],
+                        data.sourceInternalEnergy[sourceParticleIndex],
+                        data.sourceDensity[sourceParticleIndex]};
                 }
             }
         }
-        for (int i = self.particleRange.first; i < self.particleRange.second; i++) {
+        for (int particleIndex = targetNode.particleRange.first;
+            particleIndex < targetNode.particleRange.second; particleIndex++) {
             __syncthreads();
-            int const sink = self.sinkParticleRange.first - self.particleRange.first + i;
-            int const previousRung = data.rungsSnk[data.sinkParticleIndices[sink]];
-            if (previousRung < params.minRung) {
+            int const sinkIndex =
+                targetNode.sinkParticleRange.first - targetNode.particleRange.first + particleIndex;
+            int const previousRung = data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]];
+            if (previousRung < parameters.minimumRung) {
                 continue;
             }
-            float const supportRadiusI = data.h[i];
-            float const rhoI = data.rho[i];
-            float const energyI = data.eint[i];
-            ALWAYS_ASSERT(supportRadiusI > 0.0f && rhoI > 0.0f && energyI > 0.0f);
-            float const pressureI = (gamma - 1.0f) * rhoI * energyI;
-            float const soundI = sqrtf(gamma * (gamma - 1.0f) * energyI);
-            float ax = 0.0f;
-            float ay = 0.0f;
-            float az = 0.0f;
-            float energyRate = 0.0f;
-            float divergence = 0.0f;
-            float maxCompression = 0.0f;
-            for (int j = tid; j < workspace.neighbors.size(); j += blockSize) {
-                auto const& neighbor = workspace.neighbors[j];
-                float const dx = distance(data.x[i], neighbor.x);
-                float const dy = distance(data.y[i], neighbor.y);
-                float const dz = distance(data.z[i], neighbor.z);
-                float const r2 = sqr(dx, dy, dz);
-                if (r2 == 0.0f || r2 >= fmaxf(sqr(supportRadiusI), sqr(neighbor.h))) {
+            float const sinkSupportRadius = data.sourceSupportRadius[particleIndex];
+            float const sinkDensity = data.sourceDensity[particleIndex];
+            float const sinkInternalEnergy = data.sourceInternalEnergy[particleIndex];
+            ALWAYS_ASSERT(
+                sinkSupportRadius > 0.0f && sinkDensity > 0.0f && sinkInternalEnergy > 0.0f);
+            float const sinkPressure = (adiabaticIndex - 1.0f) * sinkDensity * sinkInternalEnergy;
+            float const sinkSoundSpeed =
+                sqrtf(adiabaticIndex * (adiabaticIndex - 1.0f) * sinkInternalEnergy);
+            float accelerationX = 0.0f;
+            float accelerationY = 0.0f;
+            float accelerationZ = 0.0f;
+            float internalEnergyRate = 0.0f;
+            float maximumCompression = 0.0f;
+            for (int neighborIndex = threadIndex; neighborIndex < workspace.neighbors.size();
+                neighborIndex += blockSize) {
+                auto const& neighbor = workspace.neighbors[neighborIndex];
+                float const separationX =
+                    distance(data.sourcePositionX[particleIndex], neighbor.positionX);
+                float const separationY =
+                    distance(data.sourcePositionY[particleIndex], neighbor.positionY);
+                float const separationZ =
+                    distance(data.sourcePositionZ[particleIndex], neighbor.positionZ);
+                float const squaredSeparation = sqr(separationX, separationY, separationZ);
+                if (squaredSeparation == 0.0f ||
+                    squaredSeparation >=
+                        fmaxf(sqr(sinkSupportRadius), sqr(neighbor.supportRadius))) {
                     continue;
                 }
-                float const radius = sqrtf(r2);
-                float const invHI = 1.0f / supportRadiusI;
-                float const invHJ = 1.0f / neighbor.h;
-                float const gradientI = dkernelWDq(radius * invHI) * sqr(sqr(invHI)) / radius;
-                float const gradientJ = dkernelWDq(radius * invHJ) * sqr(sqr(invHJ)) / radius;
-                float const gradient = 0.5f * (gradientI + gradientJ);
-                float const vx = data.vx[i] - neighbor.vx;
-                float const vy = data.vy[i] - neighbor.vy;
-                float const vz = data.vz[i] - neighbor.vz;
-                float const peculiarDotR = vx * dx + vy * dy + vz * dz;
+                float const radius = sqrtf(squaredSeparation);
+                float const inverseSinkSupportRadius = 1.0f / sinkSupportRadius;
+                float const inverseNeighborSupportRadius = 1.0f / neighbor.supportRadius;
+                float const sinkGradient = dkernelWDq(radius * inverseSinkSupportRadius) *
+                    sqr(sqr(inverseSinkSupportRadius)) / radius;
+                float const neighborGradient = dkernelWDq(radius * inverseNeighborSupportRadius) *
+                    sqr(sqr(inverseNeighborSupportRadius)) / radius;
+                float const gradient = 0.5f * (sinkGradient + neighborGradient);
+                float const relativeVelocityX =
+                    data.sourceVelocityX[particleIndex] - neighbor.velocityX;
+                float const relativeVelocityY =
+                    data.sourceVelocityY[particleIndex] - neighbor.velocityY;
+                float const relativeVelocityZ =
+                    data.sourceVelocityZ[particleIndex] - neighbor.velocityZ;
+                float const peculiarVelocityDotSeparation = relativeVelocityX * separationX +
+                    relativeVelocityY * separationY + relativeVelocityZ * separationZ;
                 // Include Hubble motion only in physical pair approach/viscous heating.
-                float const physicalDotR = peculiarDotR + params.adot * r2;
-                float const mu = monaghan_sph::viscosityMu(r2, physicalDotR, supportRadiusI,
-                    neighbor.h, params.viscosityEpsilon,
-                    float(selectedHydroKernel().supportRadiusPerEffectiveRadius),
-                    kViscosityWidthScale);
-                float const pressureJ = (gamma - 1.0f) * neighbor.rho * neighbor.energy;
-                float const soundJ = sqrtf(gamma * (gamma - 1.0f) * neighbor.energy);
-                float const viscosity = monaghan_sph::artificialViscosity(
-                    rhoI, neighbor.rho, soundI, soundJ, mu, params.alpha0, params.beta);
-                float const pressurePair =
-                    monaghan_sph::pressureCoefficient(rhoI, neighbor.rho, pressureI, pressureJ);
+                float const physicalVelocityDotSeparation =
+                    peculiarVelocityDotSeparation + parameters.expansionRate * squaredSeparation;
+                float const viscosityApproachRate =
+                    monaghan_sph::viscosityMu(squaredSeparation, physicalVelocityDotSeparation,
+                        sinkSupportRadius, neighbor.supportRadius, parameters.viscosityEpsilon,
+                        float(selectedHydroKernel().supportRadiusPerEffectiveRadius),
+                        kViscosityWidthScale);
+                float const neighborPressure =
+                    (adiabaticIndex - 1.0f) * neighbor.density * neighbor.internalEnergy;
+                float const neighborSoundSpeed =
+                    sqrtf(adiabaticIndex * (adiabaticIndex - 1.0f) * neighbor.internalEnergy);
+                float const viscosity = monaghan_sph::artificialViscosity(sinkDensity,
+                    neighbor.density, sinkSoundSpeed, neighborSoundSpeed, viscosityApproachRate,
+                    parameters.viscosityAlpha, parameters.viscosityBeta);
+                float const pressurePair = monaghan_sph::pressureCoefficient(
+                    sinkDensity, neighbor.density, sinkPressure, neighborPressure);
                 float const force = gasMassOverScaleFactor * (pressurePair + viscosity) * gradient;
-                ax -= force * dx;
-                ay -= force * dy;
-                az -= force * dz;
-                energyRate += gasMassOverScaleFactor *
-                    monaghan_sph::pairEnergyRate(
-                        pressurePair, viscosity, peculiarDotR * gradient, physicalDotR * gradient);
-                divergence -= gasMassOverScaleFactor / rhoI * peculiarDotR * gradientI;
-                maxCompression = fmaxf(maxCompression, -mu);
+                accelerationX -= force * separationX;
+                accelerationY -= force * separationY;
+                accelerationZ -= force * separationZ;
+                internalEnergyRate += gasMassOverScaleFactor *
+                    monaghan_sph::pairEnergyRate(pressurePair, viscosity,
+                        peculiarVelocityDotSeparation * gradient,
+                        physicalVelocityDotSeparation * gradient);
+                maximumCompression = fmaxf(maximumCompression, -viscosityApproachRate);
             }
-            sharedReduceAdd<float, HYDRO_BLOCK_SIZE>(ax);
-            sharedReduceAdd<float, HYDRO_BLOCK_SIZE>(ay);
-            sharedReduceAdd<float, HYDRO_BLOCK_SIZE>(az);
-            sharedReduceAdd<float, HYDRO_BLOCK_SIZE>(energyRate);
-            sharedReduceAdd<float, HYDRO_BLOCK_SIZE>(divergence);
-            sharedReduceMax<HYDRO_BLOCK_SIZE>(maxCompression);
-            if (tid == 0) {
-                float const gx = data.gravity ? data.gxSnk[sink] : 0.0f;
-                float const gy = data.gravity ? data.gySnk[sink] : 0.0f;
-                float const gz = data.gravity ? data.gzSnk[sink] : 0.0f;
-                ax += gx;
-                ay += gy + params.yAcceleration;
-                az += gz;
+            sharedReduceAdd<float, HYDRO_BLOCK_SIZE>(accelerationX);
+            sharedReduceAdd<float, HYDRO_BLOCK_SIZE>(accelerationY);
+            sharedReduceAdd<float, HYDRO_BLOCK_SIZE>(accelerationZ);
+            sharedReduceAdd<float, HYDRO_BLOCK_SIZE>(internalEnergyRate);
+            sharedReduceMax<HYDRO_BLOCK_SIZE>(maximumCompression);
+            if (threadIndex == 0) {
+                float const gravityAccelerationX =
+                    data.selfGravityEnabled ? data.sinkGravityAccelerationX[sinkIndex] : 0.0f;
+                float const gravityAccelerationY =
+                    data.selfGravityEnabled ? data.sinkGravityAccelerationY[sinkIndex] : 0.0f;
+                float const gravityAccelerationZ =
+                    data.selfGravityEnabled ? data.sinkGravityAccelerationZ[sinkIndex] : 0.0f;
+                accelerationX += gravityAccelerationX;
+                accelerationY += gravityAccelerationY + parameters.uniformAccelerationY;
+                accelerationZ += gravityAccelerationZ;
                 if (data.centralAcceleration != 0.0f) {
-                    float const dx = distance(data.x[i], Fixed32(0.5));
-                    float const dy = distance(data.y[i], Fixed32(0.5));
-                    float const dz = distance(data.z[i], Fixed32(0.5));
-                    float const radius = sqrtf(sqr(dx, dy, dz));
+                    float const separationX =
+                        distance(data.sourcePositionX[particleIndex], Fixed32(0.5));
+                    float const separationY =
+                        distance(data.sourcePositionY[particleIndex], Fixed32(0.5));
+                    float const separationZ =
+                        distance(data.sourcePositionZ[particleIndex], Fixed32(0.5));
+                    float const radius = sqrtf(sqr(separationX, separationY, separationZ));
                     float const inverseSupportRadius = 1.0f / data.centralSupportRadius;
                     float const force = data.centralAcceleration *
                         radial_kernel::forceFactor(
                             selectedGravityKernel(), radius * inverseSupportRadius) *
                         inverseSupportRadius * inverseSupportRadius * inverseSupportRadius;
-                    ax -= force * dx;
-                    ay -= force * dy;
-                    az -= force * dz;
+                    accelerationX -= force * separationX;
+                    accelerationY -= force * separationY;
+                    accelerationZ -= force * separationZ;
                 }
-                ax -= params.damping * data.vx[i];
-                ay -= params.damping * data.vy[i];
-                az -= params.damping * data.vz[i];
-                data.rec6Snk[sink].dvel[XDIM] = ax;
-                data.rec6Snk[sink].dvel[YDIM] = ay;
-                data.rec6Snk[sink].dvel[ZDIM] = az;
-                // Homogeneous adiabatic expansion of a^2*u for arbitrary gamma.
-                energyRate += (5.0f - 3.0f * gamma) * params.adot * ainv * energyI;
-                data.deint2Snk[sink] = energyRate;
-                data.rec1Snk[sink].alpha = params.alpha0;
-                if (params.phase == 1) {
-                    data.deint1Snk[sink] = 0.0f;
-                    data.divvSnk[sink] = divergence;
+                accelerationX -=
+                    parameters.velocityDampingRate * data.sourceVelocityX[particleIndex];
+                accelerationY -=
+                    parameters.velocityDampingRate * data.sourceVelocityY[particleIndex];
+                accelerationZ -=
+                    parameters.velocityDampingRate * data.sourceVelocityZ[particleIndex];
+                data.sinkAccelerations[sinkIndex].acceleration[XDIM] = accelerationX;
+                data.sinkAccelerations[sinkIndex].acceleration[YDIM] = accelerationY;
+                data.sinkAccelerations[sinkIndex].acceleration[ZDIM] = accelerationZ;
+                // Homogeneous adiabatic expansion of a^2*u for any ideal-gas adiabatic index.
+                internalEnergyRate += (5.0f - 3.0f * adiabaticIndex) * parameters.expansionRate *
+                    inverseScaleFactor * sinkInternalEnergy;
+                data.sinkInternalEnergyRate[sinkIndex] = internalEnergyRate;
+                if (parameters.phase == 1) {
                     float const effectiveRadius =
-                        supportRadiusI / selectedHydroKernel().supportRadiusPerEffectiveRadius;
-                    // Section 10.3: max(-mu) is positive for approaching particles.
-                    float const dtinvCfl = soundI / effectiveRadius;
-                    float const dtinvVisc = 0.6f *
-                        (params.alpha0 * soundI + params.beta * maxCompression) / effectiveRadius;
-                    // These two bounds contain no length; retain their original
-                    // normalization when the public CFL coefficient uses 2 sigma.
-                    float const dtinvDivv =
-                        kViscosityWidthScale * params.a * fabsf(divergence) / 3.0f;
-                    float const acceleration = sqrtf(sqr(ax, ay, az));
-                    float const dtinvAcc = params.cfl *
-                        sqrtf(params.a * acceleration / effectiveRadius) /
-                        (data.eta * kHydroAccelerationScale);
-                    float const dtinv = fmaxf(dtinvCfl + dtinvVisc, fmaxf(dtinvDivv, dtinvAcc));
-                    float hydroDt =
-                        fminf(params.maxDt, params.cfl * params.a / fmaxf(dtinv, 1.0e-30f));
+                        sinkSupportRadius / selectedHydroKernel().supportRadiusPerEffectiveRadius;
+                    // Section 10.3: the maximum compression is positive for approaching particles.
+                    float const inverseSoundTimestep = sinkSoundSpeed / effectiveRadius;
+                    float const inverseViscosityTimestep = 0.6f *
+                        (parameters.viscosityAlpha * sinkSoundSpeed +
+                            parameters.viscosityBeta * maximumCompression) /
+                        effectiveRadius;
+                    float const acceleration =
+                        sqrtf(sqr(accelerationX, accelerationY, accelerationZ));
+                    float const inverseAccelerationTimestep = parameters.courantFactor *
+                        sqrtf(parameters.scaleFactor * acceleration / effectiveRadius) /
+                        (data.accelerationTimestepFactor * kHydroAccelerationScale);
+                    float const inverseTimestep =
+                        fmaxf(inverseSoundTimestep + inverseViscosityTimestep,
+                            inverseAccelerationTimestep);
+                    float hydroTimestep = fminf(parameters.maximumTimestep,
+                        parameters.courantFactor * parameters.scaleFactor /
+                            fmaxf(inverseTimestep, 1.0e-30f));
                     // Bound fractional thermal change in the existing explicit integrator.
-                    if (energyRate != 0.0f) {
-                        hydroDt = fminf(hydroDt,
-                            params.cfl / kViscosityWidthScale * energyI / fabsf(energyRate));
+                    if (internalEnergyRate != 0.0f) {
+                        hydroTimestep = fminf(hydroTimestep,
+                            parameters.courantFactor / kViscosityWidthScale * sinkInternalEnergy /
+                                fabsf(internalEnergyRate));
                     }
-                    float const gravityAcceleration = sqrtf(sqr(gx, gy, gz));
-                    float const gravityDt = fminf(params.maxDt,
-                        data.eta *
-                            sqrtf(params.a * data.gravityEffectiveRadius /
+                    float const gravityAcceleration = sqrtf(
+                        sqr(gravityAccelerationX, gravityAccelerationY, gravityAccelerationZ));
+                    float const gravityTimestep = fminf(parameters.maximumTimestep,
+                        data.accelerationTimestepFactor *
+                            sqrtf(parameters.scaleFactor * data.gravityEffectiveRadius /
                                 fmaxf(gravityAcceleration, 1.0e-30f)));
-                    ALWAYS_ASSERT(isfinite(hydroDt) && hydroDt > 0.0f);
-                    int const hydroRung = max(1, int(ceilf(log2f(params.t0 / hydroDt))));
-                    int const gravityRung = max(1, int(ceilf(log2f(params.t0 / gravityDt))));
-                    int const nextRung = max(max(params.minRung, previousRung - 1),
-                        max(hydroRung, data.gravity ? gravityRung : 1));
+                    ALWAYS_ASSERT(isfinite(hydroTimestep) && hydroTimestep > 0.0f);
+                    int const hydroRung =
+                        max(1, int(ceilf(log2f(parameters.baseTimestep / hydroTimestep))));
+                    int const gravityRung =
+                        max(1, int(ceilf(log2f(parameters.baseTimestep / gravityTimestep))));
+                    int const nextRung = max(max(parameters.minimumRung, previousRung - 1),
+                        max(hydroRung, data.selfGravityEnabled ? gravityRung : 1));
                     ALWAYS_ASSERT(nextRung < MAX_RUNG);
-                    data.rungsSnk[data.sinkParticleIndices[sink]] = nextRung;
-                    maxRungHydro = max(maxRungHydro, hydroRung);
-                    maxRungGrav = max(maxRungGrav, gravityRung);
-                    maxRung = max(maxRung, nextRung);
-                    maxSignal = fmaxf(maxSignal, (dtinvCfl + dtinvVisc) * effectiveRadius);
-                    atomicMax(&reduce->dtinvCfl, dtinvCfl);
-                    atomicMax(&reduce->dtinvVisc, dtinvVisc);
-                    atomicMax(&reduce->dtinvAcc, dtinvAcc);
-                    atomicMax(&reduce->dtinvDivv, dtinvDivv);
+                    data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]] = nextRung;
+                    maximumHydroRung = max(maximumHydroRung, hydroRung);
+                    maximumGravityRung = max(maximumGravityRung, gravityRung);
+                    maximumRung = max(maximumRung, nextRung);
+                    maximumSignalSpeed = fmaxf(maximumSignalSpeed,
+                        (inverseSoundTimestep + inverseViscosityTimestep) * effectiveRadius);
+                    atomicMax(&reduction->inverseSoundTimestep, inverseSoundTimestep);
+                    atomicMax(&reduction->inverseViscosityTimestep, inverseViscosityTimestep);
+                    atomicMax(&reduction->inverseAccelerationTimestep, inverseAccelerationTimestep);
                 }
             }
         }
         __syncthreads();
-        if (tid == 0) {
-            index = atomicAdd(&reduce->counter, 1);
+        if (threadIndex == 0) {
+            targetNodeIndex = atomicAdd(&reduction->nextNodeIndex, 1);
         }
         __syncthreads();
     }
-    if (tid == 0) {
-        atomicMax(&reduce->vsigMax, maxSignal);
-        atomicMax(&reduce->maxRung, maxRung);
-        atomicMax(&reduce->maxRungHydro, maxRungHydro);
-        atomicMax(&reduce->maxRungGrav, maxRungGrav);
+    if (threadIndex == 0) {
+        atomicMax(&reduction->maximumSignalSpeed, maximumSignalSpeed);
+        atomicMax(&reduction->maximumRung, maximumRung);
+        atomicMax(&reduction->maximumHydroRung, maximumHydroRung);
+        atomicMax(&reduction->maximumGravityRung, maximumGravityRung);
     }
     (&workspace)->~HydroWorkspace();
 }

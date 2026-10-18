@@ -696,7 +696,6 @@ KickReturn cudaExecuteKicks(KickParameters kparams, Fixed32* devX, Fixed32* devY
     data.vel = particlesVelData();
     data.rungs = &particlesRung(0);
     data.sph = getOptions().sph;
-    data.vsoft = false;
     data.darkMatterMass = getOptions().darkMatterMass;
     data.sphMass = getOptions().sphMass;
     data.type = data.sph ? &particlesType(0) : nullptr;

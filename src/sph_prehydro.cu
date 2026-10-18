@@ -21,48 +21,51 @@
 
 namespace detail {
 
-struct Prehydro1Workspace {
-    DeviceVector<SoftlensRecord> positions;
+struct SmoothingWorkspace {
+    DeviceVector<SphNeighborPosition> positions;
 };
 
-struct Prehydro2Record {
-    float h;
+struct NeighborActivity {
+    float supportRadius;
     char rung;
 };
 
-struct Prehydro2Workspace {
-    DeviceVector<SoftlensRecord> positions;
-    DeviceVector<Prehydro2Record> particles;
+struct DensityWorkspace {
+    DeviceVector<SphNeighborPosition> positions;
+    DeviceVector<NeighborActivity> particles;
 };
 
 }    // namespace detail
 
 __global__ void sphCudaPrehydro1(
-    SphRunParameters params, SphRunCudaData data, SphReduction* reduce) {
-    int const tid = threadIdx.x;
+    SphRunParameters parameters, SphRunCudaData data, SphReduction* reduction) {
+    int const threadIndex = threadIdx.x;
     int const blockSize = blockDim.x;
-    __shared__ int index;
-    __shared__ detail::Prehydro1Workspace workspace;
-    new (&workspace) detail::Prehydro1Workspace();
-    if (tid == 0) {
-        index = atomicAdd(&reduce->counter, 1);
+    __shared__ int targetNodeIndex;
+    __shared__ detail::SmoothingWorkspace workspace;
+    new (&workspace) detail::SmoothingWorkspace();
+    if (threadIndex == 0) {
+        targetNodeIndex = atomicAdd(&reduction->nextNodeIndex, 1);
     }
     __syncthreads();
-    while (index < data.numberOfTargetNodes) {
-        SphTreeNode const& self = data.trees[data.selfs[index]];
+    while (targetNodeIndex < data.numberOfTargetNodes) {
+        SphTreeNode const& targetNode = data.treeNodes[data.targetNodeIndices[targetNodeIndex]];
         workspace.positions.resize(0);
-        for (int ni = self.neighborRange.first; ni < self.neighborRange.second; ni++) {
-            auto const& other = data.trees[data.neighbors[ni]];
-            int const end = other.particleRange.first +
-                roundUp(other.particleRange.second - other.particleRange.first, blockSize);
-            for (int pi = other.particleRange.first + tid; pi < end; pi += blockSize) {
+        for (int neighborNodeIndex = targetNode.neighborRange.first;
+            neighborNodeIndex < targetNode.neighborRange.second; neighborNodeIndex++) {
+            auto const& neighborNode = data.treeNodes[data.neighborNodeIndices[neighborNodeIndex]];
+            int const end = neighborNode.particleRange.first +
+                roundUp(neighborNode.particleRange.second - neighborNode.particleRange.first,
+                    blockSize);
+            for (int sourceParticleIndex = neighborNode.particleRange.first + threadIndex;
+                sourceParticleIndex < end; sourceParticleIndex += blockSize) {
                 bool contains = false;
                 Array<Fixed32, NDIM> position;
-                if (pi < other.particleRange.second) {
-                    position[XDIM] = data.x[pi];
-                    position[YDIM] = data.y[pi];
-                    position[ZDIM] = data.z[pi];
-                    contains = self.outerBox.contains(position);
+                if (sourceParticleIndex < neighborNode.particleRange.second) {
+                    position[XDIM] = data.sourcePositionX[sourceParticleIndex];
+                    position[YDIM] = data.sourcePositionY[sourceParticleIndex];
+                    position[ZDIM] = data.sourcePositionZ[sourceParticleIndex];
+                    contains = targetNode.outerBox.contains(position);
                 }
                 int slot = contains;
                 int total;
@@ -72,73 +75,79 @@ __global__ void sphCudaPrehydro1(
                 workspace.positions.resize(offset + total);
                 if (contains) {
                     workspace.positions[offset + slot] = {
-                        position[XDIM], position[YDIM], position[ZDIM], SPH_TYPE};
+                        position[XDIM], position[YDIM], position[ZDIM]};
                 }
             }
         }
-        for (int i = self.particleRange.first; i < self.particleRange.second; i++) {
+        for (int particleIndex = targetNode.particleRange.first;
+            particleIndex < targetNode.particleRange.second; particleIndex++) {
             __syncthreads();
-            int const sink = self.sinkParticleRange.first - self.particleRange.first + i;
-            bool const active = data.rungsSnk[data.sinkParticleIndices[sink]] >= params.minRung;
-            if (active && !data.convergedSnk[sink]) {
+            int const sinkIndex =
+                targetNode.sinkParticleRange.first - targetNode.particleRange.first + particleIndex;
+            bool const active = data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]] >=
+                parameters.minimumRung;
+            if (active && !data.sinkSmoothingConverged[sinkIndex]) {
                 Array<Fixed32, NDIM> position;
-                position[XDIM] = data.x[i];
-                position[YDIM] = data.y[i];
-                position[ZDIM] = data.z[i];
-                float& h = data.rec2Snk[sink].h;
-                float weightedCount;
-                bool const converged =
-                    computeSoftlens<PREHYDRO1_BLOCK_SIZE>(h, params.hmin, params.hmax, data.n,
-                        workspace.positions, position, self.outerBox, SPH_TYPE, weightedCount);
-                if (tid == 0) {
-                    data.convergedSnk[sink] = converged;
+                position[XDIM] = data.sourcePositionX[particleIndex];
+                position[YDIM] = data.sourcePositionY[particleIndex];
+                position[ZDIM] = data.sourcePositionZ[particleIndex];
+                float& supportRadius = data.sinkThermodynamicStates[sinkIndex].supportRadius;
+                bool const converged = solveSphSupportRadius<PREHYDRO1_BLOCK_SIZE>(supportRadius,
+                    parameters.minimumSupportRadius, parameters.maximumSupportRadius,
+                    data.targetNeighborCount, workspace.positions, position, targetNode.outerBox);
+                if (threadIndex == 0) {
+                    data.sinkSmoothingConverged[sinkIndex] = converged;
                     if (converged) {
-                        atomicMin(&reduce->hmin, h);
-                        atomicMax(&reduce->hmax, h);
+                        atomicMin(&reduction->minimumSupportRadius, supportRadius);
+                        atomicMax(&reduction->maximumSupportRadius, supportRadius);
                     } else {
-                        atomicAdd(&reduce->flag, 1);
+                        atomicAdd(&reduction->pendingChanges, 1);
                     }
                 }
             }
         }
         __syncthreads();
-        if (tid == 0) {
-            index = atomicAdd(&reduce->counter, 1);
+        if (threadIndex == 0) {
+            targetNodeIndex = atomicAdd(&reduction->nextNodeIndex, 1);
         }
         __syncthreads();
     }
-    (&workspace)->~Prehydro1Workspace();
+    (&workspace)->~SmoothingWorkspace();
 }
 
 __global__ void sphCudaPrehydro2(
-    SphRunParameters params, SphRunCudaData data, SphReduction* reduce) {
-    int const tid = threadIdx.x;
+    SphRunParameters parameters, SphRunCudaData data, SphReduction* reduction) {
+    int const threadIndex = threadIdx.x;
     int const blockSize = blockDim.x;
-    __shared__ int index;
-    __shared__ detail::Prehydro2Workspace workspace;
-    new (&workspace) detail::Prehydro2Workspace();
-    if (tid == 0) {
-        index = atomicAdd(&reduce->counter, 1);
+    __shared__ int targetNodeIndex;
+    __shared__ detail::DensityWorkspace workspace;
+    new (&workspace) detail::DensityWorkspace();
+    if (threadIndex == 0) {
+        targetNodeIndex = atomicAdd(&reduction->nextNodeIndex, 1);
     }
     __syncthreads();
-    while (index < data.numberOfTargetNodes) {
-        SphTreeNode const& self = data.trees[data.selfs[index]];
+    while (targetNodeIndex < data.numberOfTargetNodes) {
+        SphTreeNode const& targetNode = data.treeNodes[data.targetNodeIndices[targetNodeIndex]];
         workspace.positions.resize(0);
         workspace.particles.resize(0);
-        for (int ni = self.neighborRange.first; ni < self.neighborRange.second; ni++) {
-            auto const& other = data.trees[data.neighbors[ni]];
-            int const end = other.particleRange.first +
-                roundUp(other.particleRange.second - other.particleRange.first, blockSize);
-            for (int pi = other.particleRange.first + tid; pi < end; pi += blockSize) {
+        for (int neighborNodeIndex = targetNode.neighborRange.first;
+            neighborNodeIndex < targetNode.neighborRange.second; neighborNodeIndex++) {
+            auto const& neighborNode = data.treeNodes[data.neighborNodeIndices[neighborNodeIndex]];
+            int const end = neighborNode.particleRange.first +
+                roundUp(neighborNode.particleRange.second - neighborNode.particleRange.first,
+                    blockSize);
+            for (int sourceParticleIndex = neighborNode.particleRange.first + threadIndex;
+                sourceParticleIndex < end; sourceParticleIndex += blockSize) {
                 bool contains = false;
                 Array<Fixed32, NDIM> position;
-                if (pi < other.particleRange.second) {
-                    position[XDIM] = data.x[pi];
-                    position[YDIM] = data.y[pi];
-                    position[ZDIM] = data.z[pi];
-                    contains = self.outerBox.contains(position);
+                if (sourceParticleIndex < neighborNode.particleRange.second) {
+                    position[XDIM] = data.sourcePositionX[sourceParticleIndex];
+                    position[YDIM] = data.sourcePositionY[sourceParticleIndex];
+                    position[ZDIM] = data.sourcePositionZ[sourceParticleIndex];
+                    contains = targetNode.outerBox.contains(position);
                     if (!contains) {
-                        contains = sphSupportIntersects(self.innerBox, position, data.h[pi]);
+                        contains = sphSupportIntersects(targetNode.innerBox, position,
+                            data.sourceSupportRadius[sourceParticleIndex]);
                     }
                 }
                 int slot = contains;
@@ -150,85 +159,90 @@ __global__ void sphCudaPrehydro2(
                 workspace.particles.resize(offset + total);
                 if (contains) {
                     workspace.positions[offset + slot] = {
-                        position[XDIM], position[YDIM], position[ZDIM], SPH_TYPE};
-                    workspace.particles[offset + slot] = {data.h[pi], data.rungs[pi]};
+                        position[XDIM], position[YDIM], position[ZDIM]};
+                    workspace.particles[offset + slot] = {
+                        data.sourceSupportRadius[sourceParticleIndex],
+                        data.sourceRungs[sourceParticleIndex]};
                 }
             }
         }
-        for (int i = self.particleRange.first; i < self.particleRange.second; i++) {
+        for (int particleIndex = targetNode.particleRange.first;
+            particleIndex < targetNode.particleRange.second; particleIndex++) {
             __syncthreads();
-            int const sink = self.sinkParticleRange.first - self.particleRange.first + i;
-            bool const active = data.rungsSnk[data.sinkParticleIndices[sink]] >= params.minRung;
+            int const sinkIndex =
+                targetNode.sinkParticleRange.first - targetNode.particleRange.first + particleIndex;
+            bool const active = data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]] >=
+                parameters.minimumRung;
             Array<Fixed32, NDIM> position;
-            position[XDIM] = data.x[i];
-            position[YDIM] = data.y[i];
-            position[ZDIM] = data.z[i];
-            float& h = data.rec2Snk[sink].h;
+            position[XDIM] = data.sourcePositionX[particleIndex];
+            position[YDIM] = data.sourcePositionY[particleIndex];
+            position[ZDIM] = data.sourcePositionZ[particleIndex];
+            float& supportRadius = data.sinkThermodynamicStates[sinkIndex].supportRadius;
             int semiactive = active;
             if (!active) {
-                for (int j = tid; j < workspace.positions.size(); j += blockSize) {
-                    auto const& neighbor = workspace.positions[j];
-                    auto const& particle = workspace.particles[j];
-                    if (particle.rung >= params.minRung) {
-                        float const dx = distance(position[XDIM], neighbor.x);
-                        float const dy = distance(position[YDIM], neighbor.y);
-                        float const dz = distance(position[ZDIM], neighbor.z);
-                        if (sqr(dx, dy, dz) < fmaxf(sqr(h), sqr(particle.h))) {
+                for (int neighborIndex = threadIndex; neighborIndex < workspace.positions.size();
+                    neighborIndex += blockSize) {
+                    auto const& neighbor = workspace.positions[neighborIndex];
+                    auto const& particle = workspace.particles[neighborIndex];
+                    if (particle.rung >= parameters.minimumRung) {
+                        float const separationX = distance(position[XDIM], neighbor.positionX);
+                        float const separationY = distance(position[YDIM], neighbor.positionY);
+                        float const separationZ = distance(position[ZDIM], neighbor.positionZ);
+                        if (sqr(separationX, separationY, separationZ) <
+                            fmaxf(sqr(supportRadius), sqr(particle.supportRadius))) {
                             semiactive++;
                         }
                     }
                 }
                 sharedReduceAdd<int, PREHYDRO2_BLOCK_SIZE>(semiactive);
             }
-            if (tid == 0) {
-                data.saSnk[sink] = semiactive != 0;
+            if (threadIndex == 0) {
+                data.sinkSemiactive[sinkIndex] = semiactive != 0;
             }
             if (!semiactive) {
                 continue;
             }
             bool converged = true;
-            if (!active && !params.vsoft && !data.convergedSnk[sink]) {
-                float weightedCount;
-                converged = computeSoftlens<PREHYDRO2_BLOCK_SIZE>(h, params.hmin, params.hmax,
-                    data.n, workspace.positions, position, self.outerBox, SPH_TYPE, weightedCount);
+            if (!active && !data.sinkSmoothingConverged[sinkIndex]) {
+                converged = solveSphSupportRadius<PREHYDRO2_BLOCK_SIZE>(supportRadius,
+                    parameters.minimumSupportRadius, parameters.maximumSupportRadius,
+                    data.targetNeighborCount, workspace.positions, position, targetNode.outerBox);
             }
             if (!converged) {
-                if (tid == 0) {
-                    data.convergedSnk[sink] = false;
-                    atomicAdd(&reduce->flag, 1);
+                if (threadIndex == 0) {
+                    data.sinkSmoothingConverged[sinkIndex] = false;
+                    atomicAdd(&reduction->pendingChanges, 1);
                 }
                 continue;
             }
-            float const hinv = 1.0f / h;
-            float const normalization = data.gasMass * hinv * hinv * hinv;
+            float const inverseSupportRadius = 1.0f / supportRadius;
+            float const normalization =
+                data.gasMass * inverseSupportRadius * inverseSupportRadius * inverseSupportRadius;
             float density = 0.0f;
-            for (int j = tid; j < workspace.positions.size(); j += blockSize) {
-                auto const& neighbor = workspace.positions[j];
-                float const dx = distance(position[XDIM], neighbor.x);
-                float const dy = distance(position[YDIM], neighbor.y);
-                float const dz = distance(position[ZDIM], neighbor.z);
-                float const q = sqrtf(sqr(dx, dy, dz)) * hinv;
-                density += normalization * kernelW(q);
+            for (int neighborIndex = threadIndex; neighborIndex < workspace.positions.size();
+                neighborIndex += blockSize) {
+                auto const& neighbor = workspace.positions[neighborIndex];
+                float const separationX = distance(position[XDIM], neighbor.positionX);
+                float const separationY = distance(position[YDIM], neighbor.positionY);
+                float const separationZ = distance(position[ZDIM], neighbor.positionZ);
+                float const normalizedRadius =
+                    sqrtf(sqr(separationX, separationY, separationZ)) * inverseSupportRadius;
+                density += normalization * kernelW(normalizedRadius);
             }
             sharedReduceAdd<float, PREHYDRO2_BLOCK_SIZE>(density);
-            if (tid == 0) {
-                ALWAYS_ASSERT(h > 0.0f && density > 0.0f);
-                data.rhoSnk[sink] = density;
-                data.preSnk[sink] = (data.defGamma - 1.0f) * density * data.eint[i];
-                // Classical SPH uses the symmetric kernel gradient directly.
-                data.omegaSnk[sink] = 1.0f;
-                data.omegaPSnk[sink] = 1.0f;
-                data.shearSnk[sink] = 0.0f;
-                data.convergedSnk[sink] = true;
-                atomicMin(&reduce->hmin, h);
-                atomicMax(&reduce->hmax, h);
+            if (threadIndex == 0) {
+                ALWAYS_ASSERT(supportRadius > 0.0f && density > 0.0f);
+                data.sinkDensity[sinkIndex] = density;
+                data.sinkSmoothingConverged[sinkIndex] = true;
+                atomicMin(&reduction->minimumSupportRadius, supportRadius);
+                atomicMax(&reduction->maximumSupportRadius, supportRadius);
             }
         }
         __syncthreads();
-        if (tid == 0) {
-            index = atomicAdd(&reduce->counter, 1);
+        if (threadIndex == 0) {
+            targetNodeIndex = atomicAdd(&reduction->nextNodeIndex, 1);
         }
         __syncthreads();
     }
-    (&workspace)->~Prehydro2Workspace();
+    (&workspace)->~DensityWorkspace();
 }

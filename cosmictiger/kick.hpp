@@ -41,7 +41,6 @@ struct CudaKickData {
     bool sph;
     float darkMatterMass;
     float sphMass;
-    bool vsoft;
     char* rungs;
     float* gx;
     float* gy;

@@ -112,7 +112,7 @@ struct SphTreeCreateReturn {
     size_t leafNodes;
     int maxDepth;
     int minDepth;
-    double flops;
+    double floatingPointOperations;
     template <typename A>
     void serialize(A&& a, unsigned) {
         a & activeLeafNodes;
@@ -123,21 +123,21 @@ struct SphTreeCreateReturn {
         a & id;
         a & numberOfActiveParticles;
         a & nodeCount;
-        a & flops;
+        a & floatingPointOperations;
         a & maxDepth;
         a & minDepth;
     }
 };
 
 struct SphTreeCreateParameters {
-    int minRung;
-    float hWt;
+    int minimumRung;
+    float supportRadiusMultiplier;
     SphTreeCreateParameters() = default;
-    SphTreeCreateParameters(int minRung, float hWt);
+    SphTreeCreateParameters(int minimumRung, float supportRadiusMultiplier);
     template <typename A>
     void serialize(A&& arc, unsigned) {
-        arc & minRung;
-        arc & hWt;
+        arc & minimumRung;
+        arc & supportRadiusMultiplier;
     }
 };
 

@@ -373,7 +373,7 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
         auto const oboxr = rcr.outerBox;
         minDepth = std::min(rcl.minDepth, rcr.minDepth);
         maxDepth = std::max(rcl.maxDepth, rcr.maxDepth);
-        totalFlops += rcl.flops + rcr.flops;
+        totalFlops += rcl.floatingPointOperations + rcr.floatingPointOperations;
         numberOfActiveParticles = rcl.numberOfActiveParticles + rcr.numberOfActiveParticles;
         children[LEFT] = rcl.id;
         children[RIGHT] = rcr.id;
@@ -405,21 +405,21 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
         }
         auto const tiny = 2.0 * RangeFixed::min().toDouble();
         for (ParticleInteger i = particleRange.first; i < particleRange.second; i++) {
-            float const h = params.hWt * sphParticlesSmoothingLength(i);
+            float const h = params.supportRadiusMultiplier * sphParticlesSupportRadius(i);
             Array<Fixed32, NDIM> xValue;
             for (int dim = 0; dim < NDIM; dim++) {
-                xValue[dim] = sphParticlesPos(dim, i);
+                xValue[dim] = sphParticlesPosition(dim, i);
             }
             for (int dim = 0; dim < NDIM; dim++) {
                 double const x = xValue[dim].toDouble();
                 innerBox.begin[dim] = std::min(innerBox.begin[dim].toDouble(), x - tiny);
                 innerBox.end[dim] = std::max(innerBox.end[dim].toDouble(), x + tiny);
-                if (sphParticlesRung(i) >= params.minRung) {
+                if (sphParticlesRung(i) >= params.minimumRung) {
                     outerBox.begin[dim] = std::min(outerBox.begin[dim].toDouble(), x - h - tiny);
                     outerBox.end[dim] = std::max(outerBox.end[dim].toDouble(), x + h + tiny);
                 }
             }
-            if (sphParticlesRung(i) >= params.minRung) {
+            if (sphParticlesRung(i) >= params.minimumRung) {
                 numberOfActiveParticles++;
             }
         }
@@ -495,7 +495,7 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
     rc.nodeCount = node.nodeCount;
     rc.numberOfActiveParticles = numberOfActiveParticles;
     totalFlops += flops;
-    rc.flops = totalFlops;
+    rc.floatingPointOperations = totalFlops;
     rc.minDepth = minDepth;
     rc.maxDepth = maxDepth;
     if (localRoot) {

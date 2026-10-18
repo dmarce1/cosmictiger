@@ -113,8 +113,6 @@ set(cosmictiger_source_files
     src/tree.cpp
     src/view.cpp
     src/zero_order.cpp
-    src/chemistry.cpp
-    src/chemistry.cu
     src/hydro.cpp
     src/kernel.cpp
     src/kernel.cu
@@ -123,15 +121,11 @@ set(cosmictiger_source_files
     src/sph_particles.cpp
     src/sph.cpp
     src/sph.cu
-    src/sph_aux.cu
-    src/sph_cond_init.cu
     src/sph_prehydro.cu
-    src/sph_conduction.cu
     src/sph_hydro.cu
     src/sph_rungs.cu
     src/sphere.cu
     src/sph_tree.cpp
-    src/stars.cpp
     tests/kernel_selection_cuda.cu
     tests/fmm_tree.cpp
     tests/fmm_walk.cpp
@@ -199,7 +193,6 @@ set(cosmictiger_header_files
     cosmictiger/unordered_set_ts.hpp
     cosmictiger/view.hpp
     cosmictiger/zero_order.hpp
-    cosmictiger/chemistry.hpp
     cosmictiger/hydro.hpp
     cosmictiger/kernel.hpp
     cosmictiger/radial_kernel.hpp
@@ -211,7 +204,6 @@ set(cosmictiger_header_files
     cosmictiger/sph_particles.hpp
     cosmictiger/sph_tree.hpp
     cosmictiger/sphere.hpp
-    cosmictiger/stars.hpp
 )
 
 if(NOT COSMICTIGER_WITH_CUDA)
@@ -247,9 +239,7 @@ if(COSMICTIGER_WITH_CUDA)
         $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math;-lineinfo>)
     set_target_properties(cosmictiger PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
     set_source_files_properties(src/drift.cu PROPERTIES COMPILE_OPTIONS -maxrregcount=64)
-    set_source_files_properties(src/chemistry.cu PROPERTIES COMPILE_OPTIONS -maxrregcount=40)
-    set_source_files_properties(src/sph.cu src/sph_prehydro.cu src/sph_aux.cu
-        src/sph_cond_init.cu src/sph_hydro.cu src/sph_conduction.cu src/sph_rungs.cu
+    set_source_files_properties(src/sph.cu src/sph_prehydro.cu src/sph_hydro.cu src/sph_rungs.cu
         PROPERTIES COMPILE_OPTIONS -maxrregcount=128)
 endif()
 

@@ -19,12 +19,14 @@ use nominal resolution 32, except the blast and disc profiles, which use 64.
 These are starting resolutions for experimentation, not convergence claims.
 Each problem configuration enables full-box particle Silo output in `./output`,
 at every synchronized coarse step. `default.ini` sets `output.silo=false`.
-Gravity uses the same fixed comoving Ferrers F2 kernel for gas, dark matter,
-and stars. Set its radius with `gravity.effectiveRadius`, `gravity.supportRadius`,
+Gravity uses the same fixed comoving Ferrers F2 kernel for gas and dark matter.
+Set its radius with `gravity.effectiveRadius`, `gravity.supportRadius`,
 or the legacy effective-radius alias `gravity.softening`. SPH uses a separate
 variable smoothing radius and defaults to the cubic spline with 42 weighted
 neighbors. All gas evolution requires CUDA. HPX thread/locality settings remain
-on the command line and are not application INI options.
+on the command line and are not application INI options. Removed chemistry,
+conduction, diffusion, reflecting-boundary, and SPH-gravity-smoothing options
+are absent from these files and are rejected in older configurations.
 
 | Configuration | Selection | Problem-specific settings |
 | --- | --- | --- |

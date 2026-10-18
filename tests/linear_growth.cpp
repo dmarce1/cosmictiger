@@ -231,7 +231,7 @@ struct LinearExperiment {
                 particlesCatIndex(index) = kind == 0 ? NO_INDEX : index - perSpecies;
                 if (kind == 1) {
                     sphParticlesParticleIndex(index - perSpecies) = index;
-                    sphParticlesSmoothingLength(index - perSpecies) = 1.0 / side;
+                    sphParticlesSupportRadius(index - perSpecies) = 1.0 / side;
                 }
             }
             PositionKey key{};
@@ -854,9 +854,9 @@ void linearGrowthTest() {
     }
     options.gravity = true;
     options.htime = false;
-    options.vsoft = false;
+
     options.saveForce = true;
-    options.stars = false;
+
     options.doGroups = false;
     options.doTracers = false;
     options.numberOfParticles = size_t(options.particlesPerDimension) *

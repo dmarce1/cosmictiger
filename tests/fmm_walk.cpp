@@ -187,7 +187,7 @@ void fmmWalkVerifyEwald(std::string const& label, TreeId sink, Vector<TreeId> co
             auto const result =
                 kick(params, local, sinkNode->pos, sink, Vector<TreeId>{}, checklist, nullptr);
             for (ParticleInteger i = sinkNode->particleRange.first;
-                 i < sinkNode->particleRange.second; i++) {
+                i < sinkNode->particleRange.second; i++) {
                 for (int dim = 0; dim < NDIM; dim++) {
                     fmmWalkRequireClose(path + " acceleration " + std::to_string(dim),
                         particlesGravityAcceleration(dim, i), expectedAcceleration[dim]);
@@ -310,7 +310,7 @@ void fmmWalkDeferredSourceHandoff(bool useCuda) {
                     "deferred handoff total potential", result.pot, expectedTotalPotential);
             }
             for (ParticleInteger i = sinkNode->particleRange.first;
-                 i < sinkNode->particleRange.second; i++) {
+                i < sinkNode->particleRange.second; i++) {
                 for (int dim = 0; dim < NDIM; dim++) {
                     if (backend == 0) {
                         expectedAcceleration[i][dim] = particlesGravityAcceleration(dim, i);
@@ -1134,10 +1134,10 @@ void fmmWalkTest() {
     auto options = originalOptions;
     bool const useCuda = options.cuda;
     options.sph = false;
-    options.vsoft = false;
+
     options.gravity = true;
     options.saveForce = true;
-    options.stars = false;
+
     options.doGroups = false;
     options.doTracers = false;
     options.bucketSize = 64;

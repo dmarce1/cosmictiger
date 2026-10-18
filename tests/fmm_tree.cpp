@@ -202,8 +202,7 @@ void fmmTreeTest() {
     detail::verifyTreeReturnArchive();
     auto options = getOptions();
     options.sph = false;
-    options.vsoft = false;
-    options.stars = false;
+
     options.doGroups = false;
     options.doTracers = false;
     options.bucketSize = 4;

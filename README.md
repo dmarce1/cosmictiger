@@ -127,7 +127,7 @@ are also supported. `output.silo=false` disables particle output.
 Gas particles are written as Silo CSG spheres in the `gas` mesh. Each sphere's
 radius is the stored SPH kernel support radius, also available as the
 zone-centered `kernel_support_radius` field. Sphere centers and radii follow the
-selected output units and frame. Dark matter and stars remain point meshes.
+selected output units and frame. Dark matter uses a point mesh.
 VisIt discretizes overlapping CSG zones for display, which can show seams where
 spheres overlap.
 
@@ -173,18 +173,21 @@ For a small cosmological run from a build directory containing `power.init`:
 ```
 
 The gas controls appear under `hydro.*` in `--help` and can also be
-specified in the INI configuration file. Chemistry, diffusion, and conduction
-are detached; enabling their legacy flags is rejected. Star formation and adaptive gravitational
-softening are not exposed by this integration; gas smoothing lengths remain
-adaptive. The legacy equal-mass lightcone and halo finders, and dark-matter-only
-Gadget/Plummer/glass loaders, reject SPH runs.
+specified in the INI configuration file. Stellar particles, star formation,
+chemistry, diffusion, and conduction have been removed. Their former options,
+`hydro.yReflect`, and `gravity.sphSmoothing` are no longer accepted, including
+false entries in older INI files. Gas smoothing lengths remain adaptive;
+gravity uses one fixed comoving radius for gas and dark matter. The legacy
+equal-mass lightcone and halo finders, and dark-matter-only Gadget/Plummer/glass
+loaders, reject SPH runs.
 
 Gas state, including fields used by staggered timesteps, follows particles during
 domain redistribution and is retained in versioned checkpoints. Restart using
 the same physics and particle-layout options. Existing main-branch dark-matter
 checkpoints remain readable in the original mode. Earlier SPH checkpoints are
-rejected because their formulation differs. New SPH checkpoints store and validate
-the viscosity, smoothing, timestep, and external-force parameters.
+rejected because the reduced gas state has a different particle layout. New SPH
+checkpoints store and validate the layout, kernel selection, viscosity, smoothing,
+timestep, and external-force parameters.
 
 ### Checkpoint and restart
 

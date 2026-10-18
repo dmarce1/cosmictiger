@@ -34,7 +34,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <cosmictiger/chemistry.hpp>
 #include <cosmictiger/constants.hpp>
 #include <cosmictiger/cosmology.hpp>
 #include <cosmictiger/defs.hpp>
@@ -61,7 +60,6 @@
 #include <cosmictiger/sph.hpp>
 #include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/sph_tree.hpp>
-#include <cosmictiger/stars.hpp>
 #include <cosmictiger/time.hpp>
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/view.hpp>
@@ -420,89 +418,59 @@ void doGroups(int number, double scale) {
     profilerExit();
 }
 
-SphTreeCreateReturn sphStep1(int minrung, double scale, double tau, double t0, int phase,
-    double adot, int maxRung, int iter, double dt, double* eheat, bool verbose) {
-    bool const stars = getOptions().stars;
-    bool const diff = getOptions().diffusion;
-    bool const chem = getOptions().chem;
+SphTreeCreateReturn sphStep1(int minrung, bool verbose) {
     verbose = true;
-    *eheat = 0.0;
     if (verbose) {
         PRINT("Doing SPH step with minrung = %i\n", minrung);
     }
-    SphTreeCreateParameters tparams;
+    SphTreeCreateParameters treeParameters;
 
-    Timer tm;
-    Timer totalTm;
-    totalTm.start();
-    tparams.minRung = minrung;
-    tparams.hWt = (1.0 + SMOOTHLEN_BUFFER);
-    TreeId rootId;
-    rootId.proc = 0;
-    rootId.index = 0;
-    SphTreeCreateReturn sr;
-    Vector<TreeId> checklist;
-    checklist.push_back(rootId);
-    SphTreeNeighborParameters tnparams;
+    Timer timer;
+    treeParameters.minimumRung = minrung;
+    treeParameters.supportRadiusMultiplier = (1.0 + SMOOTHLEN_BUFFER);
+    SphTreeCreateReturn treeResult;
 
-    tnparams.hWt = (1.0 + SMOOTHLEN_BUFFER);
-    tnparams.minRung = minrung;
-
-    tm.start();
+    timer.start();
     if (verbose) {
-        PRINT("starting sph_tree_create = %e\n", tm.read());
+        PRINT("starting sph_tree_create = %e\n", timer.read());
     }
     profilerEnter("sph_tree_create");
-    sr = sphTreeCreate(tparams);
+    treeResult = sphTreeCreate(treeParameters);
     profilerExit();
-    tm.stop();
+    timer.stop();
     if (verbose) {
-        PRINT("sph_tree_create time = %e %i\n", tm.read(), sr.numberOfActiveParticles);
+        PRINT("sph_tree_create time = %e %i\n", timer.read(), treeResult.numberOfActiveParticles);
     }
-    tm.reset();
-    return sr;
+    timer.reset();
+    return treeResult;
 }
 
 SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phase, double adot,
-    int maxRung, int iter, double dt, EnergiesT* energies, bool verbose) {
-    bool const stars = getOptions().stars;
-    bool const diff = getOptions().diffusion;
-    bool const chem = getOptions().chem;
-    bool const conduction = getOptions().conduction;
-    bool const vsoft = getOptions().vsoft;
-    float dtinvCfl;
-    float dtinvVisc;
-    float dtinvDiff;
-    float dtinvCond;
-    float dtinvAcc;
-    float dtinvDivv;
-    float dtinvOmega;
+    EnergiesT* energies, bool verbose) {
+    float inverseSoundTimestep;
+    float inverseViscosityTimestep;
+    float inverseAccelerationTimestep;
     verbose = true;
-    double flops;
     if (verbose) {
         PRINT("Doing SPH step with minrung = %i\n", minrung);
     }
     sphParticlesApplyUpdates(minrung, 0, t0, tau);
 
-    SphRunParameters sparams;
+    SphRunParameters runParameters;
     if (adot != 0.0) {
-        sparams.maxDt = SCALE_DT * scale / fabs(adot);
+        runParameters.maximumTimestep = SCALE_DT * scale / fabs(adot);
     }
-    sparams.adot = adot;
-    sparams.tau = tau;
-    sparams.tzero = tau == 0.0;
-    sparams.maxRung = maxRung;
-    sparams.a = scale;
-    sparams.t0 = t0;
-    sparams.minRung = minrung;
-    bool cont;
-    SphRunReturn kr;
-    sparams.set = SPH_SET_ACTIVE;
-    sparams.phase = phase;
-    bool const glass = getOptions().glass;
-    SphTreeNeighborParameters tnparams;
-    tnparams.hWt = (1.0 + SMOOTHLEN_BUFFER);
-    tnparams.minRung = minrung;
+    runParameters.expansionRate = adot;
+    runParameters.scaleFactor = scale;
+    runParameters.baseTimestep = t0;
+    runParameters.minimumRung = minrung;
+    bool needsNeighborRefresh;
+    SphRunReturn result;
+
+    runParameters.phase = phase;
+    SphTreeNeighborParameters neighborParameters;
+    neighborParameters.supportRadiusMultiplier = (1.0 + SMOOTHLEN_BUFFER);
+    neighborParameters.minimumRung = minrung;
     TreeId rootId;
     rootId.proc = 0;
     rootId.index = 0;
@@ -510,149 +478,110 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     checklist.push_back(rootId);
 
     profilerEnter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
-    tnparams.seti = SPH_INTERACTIONS_I;
-    tnparams.runType = SPH_TREE_NEIGHBOR_NEIGHBORS;
-    sphTreeNeighbor(tnparams, rootId, checklist).get();
+    neighborParameters.innerSelection = SPH_INTERACTIONS_I;
+    neighborParameters.runType = SPH_TREE_NEIGHBOR_NEIGHBORS;
+    sphTreeNeighbor(neighborParameters, rootId, checklist).get();
     profilerExit();
 
-    sparams.phase = 0;
+    runParameters.phase = 0;
     int densityIterations = 0;
-    if (!vsoft) {
-        sphParticlesResetConverged();
-        do {
-            if (++densityIterations > 256) {
-                THROW_ERROR("SPH smoothing lengths did not converge after 256 tree rebuilds\n");
-            }
-            sparams.set = SPH_SET_ACTIVE;
-            sparams.runType = SPH_RUN_PREHYDRO1;
-            Timer tm;
-            tm.start();
-            kr = sphRun(sparams, true);
-            tm.stop();
-            if (verbose) {
-                PRINT("sph_run(SPH_RUN_PREHYDRO1): tm = %e min_h = %e max_h = %e\n", tm.read(),
-                    kr.hmin, kr.hmax);
-            }
-            tm.reset();
-            cont = kr.rc;
-            tnparams.hWt = (1.0 + SMOOTHLEN_BUFFER);
-            tnparams.runType = SPH_TREE_NEIGHBOR_BOXES;
-            tnparams.seto = cont ? SPH_SET_ACTIVE : SPH_SET_ALL;
-            tnparams.seti = cont ? SPH_SET_ALL : SPH_SET_ALL;
-            //			tnparams.set = SPH_SET_ACTIVE;
-            tm.start();
-            profilerEnter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
-            sphTreeNeighbor(tnparams, rootId, Vector<TreeId>()).get();
-            profilerExit();
-            tm.stop();
-            PRINT("%e\n", tm.read());
-            tm.reset();
-            tm.start();
-            tnparams.seti = cont ? SPH_INTERACTIONS_I : SPH_INTERACTIONS_IJ;
-            tnparams.runType = SPH_TREE_NEIGHBOR_NEIGHBORS;
-            profilerEnter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_BOXES");
-            sphTreeNeighbor(tnparams, rootId, checklist).get();
-            profilerExit();
-            tm.stop();
-            PRINT("%e\n", tm.read());
-            tm.reset();
+    sphParticlesResetConverged();
+    do {
+        if (++densityIterations > 256) {
+            THROW_ERROR("SPH smoothing lengths did not converge after 256 tree rebuilds\n");
+        }
 
-            kr = SphRunReturn();
-        } while (cont);
-    } else {
-        sphParticlesSoftlens2smoothlens(minrung);
-
-        Timer tm;
-        tnparams.hWt = 1.01;
-        tnparams.runType = SPH_TREE_NEIGHBOR_BOXES;
-        tnparams.seto = SPH_SET_ALL;
-        tnparams.seti = SPH_SET_ALL;
-        //			tnparams.set = SPH_SET_ACTIVE;
-        tm.start();
+        runParameters.runType = SPH_RUN_PREHYDRO1;
+        Timer timer;
+        timer.start();
+        result = sphRun(runParameters, true);
+        timer.stop();
+        if (verbose) {
+            PRINT("sph_run(SPH_RUN_PREHYDRO1): tm = %e min_h = %e max_h = %e\n", timer.read(),
+                result.minimumSupportRadius, result.maximumSupportRadius);
+        }
+        timer.reset();
+        needsNeighborRefresh = result.needsAnotherPass;
+        neighborParameters.supportRadiusMultiplier = (1.0 + SMOOTHLEN_BUFFER);
+        neighborParameters.runType = SPH_TREE_NEIGHBOR_BOXES;
+        neighborParameters.outerSelection = needsNeighborRefresh ? SPH_SET_ACTIVE : SPH_SET_ALL;
+        neighborParameters.innerSelection = SPH_SET_ALL;
+        timer.start();
         profilerEnter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
-        sphTreeNeighbor(tnparams, rootId, Vector<TreeId>()).get();
+        sphTreeNeighbor(neighborParameters, rootId, Vector<TreeId>()).get();
         profilerExit();
-        tm.stop();
-        PRINT("%e\n", tm.read());
-        tm.reset();
-        tm.start();
-        tnparams.seti = SPH_INTERACTIONS_IJ;
-        tnparams.runType = SPH_TREE_NEIGHBOR_NEIGHBORS;
+        timer.stop();
+        PRINT("%e\n", timer.read());
+        timer.reset();
+        timer.start();
+        neighborParameters.innerSelection =
+            needsNeighborRefresh ? SPH_INTERACTIONS_I : SPH_INTERACTIONS_IJ;
+        neighborParameters.runType = SPH_TREE_NEIGHBOR_NEIGHBORS;
         profilerEnter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_BOXES");
-        sphTreeNeighbor(tnparams, rootId, checklist).get();
+        sphTreeNeighbor(neighborParameters, rootId, checklist).get();
         profilerExit();
-        tm.stop();
-        PRINT("%e\n", tm.read());
-        tm.reset();
-    }
+        timer.stop();
+        PRINT("%e\n", timer.read());
+        timer.reset();
+
+        result = SphRunReturn();
+    } while (needsNeighborRefresh);
     sphParticlesResetConverged();
     densityIterations = 0;
     do {
         if (++densityIterations > 256) {
             THROW_ERROR("SPH neighbor densities did not converge after 256 tree rebuilds\n");
         }
-        sparams.set = SPH_SET_ACTIVE;
-        sparams.runType = SPH_RUN_PREHYDRO2;
-        Timer tm;
-        tm.start();
-        kr = sphRun(sparams, true);
-        tm.stop();
-        if (verbose) {
-            PRINT("sph_run(SPH_RUN_PREHYDRO2): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin,
-                kr.hmax);
-        }
-        tm.reset();
-        if (vsoft) {
-            break;
-        }
-        cont = kr.rc;
-        tnparams.hWt = cont ? (1.0 + SMOOTHLEN_BUFFER) : 1.01;
-        tnparams.runType = SPH_TREE_NEIGHBOR_BOXES;
-        tnparams.seto = SPH_SET_ALL;
-        tnparams.seti = SPH_SET_ALL;
-        //			tnparams.set = SPH_SET_ACTIVE;
-        tm.start();
-        profilerEnter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
-        sphTreeNeighbor(tnparams, rootId, Vector<TreeId>()).get();
-        profilerExit();
-        tm.stop();
-        PRINT("%e\n", tm.read());
-        tm.reset();
-        tm.start();
-        tnparams.seti = SPH_INTERACTIONS_IJ;
-        tnparams.runType = SPH_TREE_NEIGHBOR_NEIGHBORS;
-        profilerEnter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_BOXES");
-        sphTreeNeighbor(tnparams, rootId, checklist).get();
-        profilerExit();
-        tm.stop();
-        PRINT("%e\n", tm.read());
-        tm.reset();
-        kr = SphRunReturn();
-    } while (cont);
-    Timer tm;
 
-    sparams.phase = 0;
-    sparams.runType = SPH_RUN_HYDRO;
-    tm.reset();
-    tm.start();
-    kr = sphRun(sparams, true);
-    tm.stop();
-    maxRung = 0;
+        runParameters.runType = SPH_RUN_PREHYDRO2;
+        Timer timer;
+        timer.start();
+        result = sphRun(runParameters, true);
+        timer.stop();
+        if (verbose) {
+            PRINT("sph_run(SPH_RUN_PREHYDRO2): tm = %e min_h = %e max_h = %e\n", timer.read(),
+                result.minimumSupportRadius, result.maximumSupportRadius);
+        }
+        timer.reset();
+        needsNeighborRefresh = result.needsAnotherPass;
+        neighborParameters.supportRadiusMultiplier =
+            needsNeighborRefresh ? (1.0 + SMOOTHLEN_BUFFER) : 1.01;
+        neighborParameters.runType = SPH_TREE_NEIGHBOR_BOXES;
+        neighborParameters.outerSelection = SPH_SET_ALL;
+        neighborParameters.innerSelection = SPH_SET_ALL;
+        timer.start();
+        profilerEnter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
+        sphTreeNeighbor(neighborParameters, rootId, Vector<TreeId>()).get();
+        profilerExit();
+        timer.stop();
+        PRINT("%e\n", timer.read());
+        timer.reset();
+        timer.start();
+        neighborParameters.innerSelection = SPH_INTERACTIONS_IJ;
+        neighborParameters.runType = SPH_TREE_NEIGHBOR_NEIGHBORS;
+        profilerEnter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_BOXES");
+        sphTreeNeighbor(neighborParameters, rootId, checklist).get();
+        profilerExit();
+        timer.stop();
+        PRINT("%e\n", timer.read());
+        timer.reset();
+        result = SphRunReturn();
+    } while (needsNeighborRefresh);
+    Timer timer;
+
+    runParameters.phase = 0;
+    runParameters.runType = SPH_RUN_HYDRO;
+    timer.reset();
+    timer.start();
+    result = sphRun(runParameters, true);
+    timer.stop();
+    int maxRung = 0;
     if (verbose) {
-        PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
+        PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", timer.read());
     }
-    tm.reset();
+    timer.reset();
 
     sphParticlesApplyUpdates(minrung, 1, t0, tau);
-
-    if (chem && tau > 0.0) {
-        PRINT("Doing chemistry step\n");
-        Timer tm;
-        tm.start();
-        energies->heating -= chemistryDoStep(scale, minrung, t0, cosmosDadt(scale), -1).first;
-        tm.stop();
-        PRINT("Took %e s\n", tm.read());
-    }
 
     auto eValue = particlesSumEnergies();
     energies->kin = eValue.kin / sqr(scale);
@@ -665,230 +594,88 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     }
     energies->therm = eValue.therm / sqr(scale);
 
-#ifdef IMPLICIT_CONDUCTION
-    if (conduction) {
-        tnparams.hWt = 1.01;
-        tnparams.runType = SPH_TREE_NEIGHBOR_BOXES;
-        tnparams.seti = SPH_SET_ALL;
-        tnparams.seto = SPH_SET_ALL;
-        tm.start();
-        profilerEnter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
-        sphTreeNeighbor(tnparams, rootId, Vector<TreeId>()).get();
-        profilerExit();
-        tm.stop();
-        tm.reset();
-        tm.start();
-        tnparams.seti = SPH_INTERACTIONS_IJ;
-        tnparams.runType = SPH_TREE_NEIGHBOR_NEIGHBORS;
-        profilerEnter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_BOXES");
-        sphTreeNeighbor(tnparams, rootId, checklist).get();
-        profilerExit();
-        tm.stop();
-        tm.reset();
-
-        Timer dtm;
-        dtm.start();
-
-        sphParticlesResetConverged();
-
-        sparams.runType = SPH_RUN_COND_INIT;
-        tm.reset();
-        tm.start();
-        sphRun(sparams, true);
-        tm.stop();
-        if (verbose) {
-            PRINT("sph_run(SPH_RUN_COND_INIT): tm = %e \n", tm.read());
-        }
-        tm.reset();
-        CondUpdateReturn err;
-        do {
-            sparams.runType = SPH_RUN_CONDUCTION;
-            tm.reset();
-            tm.start();
-            sphRun(sparams, true);
-            tm.stop();
-            err = sphApplyConductionUpdate(minrung);
-            if (verbose) {
-                PRINT("sph_run(SPH_RUN_CONDUCTION): tm = %e err_max = %e err_rms = %e\n", tm.read(),
-                    err.errMax, err.errRms);
-            }
-            tm.reset();
-        } while (err.errMax > SPH_DIFFUSION_TOLER1 || err.errRms > SPH_DIFFUSION_TOLER2);
-        dtm.stop();
-        PRINT("Conduction took %e seconds total\n", dtm.read());
-    }
-#endif
-    bool foundStars = false;
-    if (stars && minrung <= 1) {
-        //	sph_particles_entropy_to_energy();
-        double eloss = 0.0;
-        if (eloss = starsFind(scale, dt, minrung, iter, t0)) {
-            energies->heating += eloss;
-        }
-        PRINT("%e----------------------------------------------------------------------------------"
-              "-------------------------------------\n",
-            eloss);
-        starsStatistics(scale);
-        foundStars = true;
-    }
-
-#ifdef HOPKINS
-    bool rerun2 = true;
-#else
-    bool rerun2 = foundStars;
-#endif
-    if (rerun2) {
-        sparams.phase = 0;
-        int doneiters = 0;
-        sphParticlesResetConverged();
-        do {
-            sparams.set = SPH_SET_ACTIVE;
-            sparams.runType = SPH_RUN_PREHYDRO2;
-            Timer tm;
-            tm.start();
-            kr = sphRun(sparams, true);
-            tm.stop();
-            if (verbose) {
-                PRINT("sph_run(SPH_RUN_PREHYDRO2): tm = %e min_h = %e max_h = %e\n", tm.read(),
-                    kr.hmin, kr.hmax);
-            }
-            tm.reset();
-            cont = kr.rc;
-            tnparams.hWt = cont ? (1.0 + SMOOTHLEN_BUFFER) : 1.01;
-            tnparams.runType = SPH_TREE_NEIGHBOR_BOXES;
-            tnparams.seto = SPH_SET_ALL;
-            tnparams.seti = SPH_SET_ALL;
-            //			tnparams.set = SPH_SET_ACTIVE;
-            tm.start();
-            profilerEnter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
-            sphTreeNeighbor(tnparams, rootId, Vector<TreeId>()).get();
-            profilerExit();
-            tm.stop();
-            tm.reset();
-
-            tm.start();
-            tnparams.seti = SPH_INTERACTIONS_IJ;
-            tnparams.runType = SPH_TREE_NEIGHBOR_NEIGHBORS;
-            profilerEnter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_BOXES");
-            sphTreeNeighbor(tnparams, rootId, checklist).get();
-            profilerExit();
-            tm.stop();
-            tm.reset();
-            kr = SphRunReturn();
-        } while (cont);
-        if (stars && minrung <= 1) {
-            //		sph_particles_energy_to_entropy();
-        }
-    } else if (stars && minrung <= 1) {
-        //		sph_particles_energy_to_entropy();
-    }
-
-    sparams.phase = 1;
-    sparams.runType = SPH_RUN_HYDRO;
-    tm.reset();
-    tm.start();
-    kr = sphRun(sparams, true);
-    dtinvCfl = kr.dtinvCfl;
-    dtinvDivv = kr.dtinvDivv;
-    dtinvVisc = kr.dtinvVisc;
-    dtinvDiff = kr.dtinvDiff;
-    dtinvCond = kr.dtinvCond;
-    dtinvAcc = kr.dtinvAcc;
-    dtinvOmega = kr.dtinvOmega;
-    tm.stop();
-    maxRung = std::max(kr.maxRung, maxRung);
+    runParameters.phase = 1;
+    runParameters.runType = SPH_RUN_HYDRO;
+    timer.reset();
+    timer.start();
+    result = sphRun(runParameters, true);
+    inverseSoundTimestep = result.inverseSoundTimestep;
+    inverseViscosityTimestep = result.inverseViscosityTimestep;
+    inverseAccelerationTimestep = result.inverseAccelerationTimestep;
+    timer.stop();
+    maxRung = std::max(result.maximumRung, maxRung);
     if (verbose) {
-        PRINT("sph_run(SPH_RUN_HYDRO): tm = %e max_vsig = %e max_rung = %i, %i\n", tm.read(),
-            kr.maxVsig, kr.maxRungHydro, kr.maxRungGrav);
+        PRINT("sph_run(SPH_RUN_HYDRO): tm = %e max_vsig = %e max_rung = %i, %i\n", timer.read(),
+            result.maximumSignalSpeed, result.maximumHydroRung, result.maximumGravityRung);
     }
-    tm.reset();
+    timer.reset();
 
-    tnparams.hWt = 1.01;
-    tnparams.runType = SPH_TREE_NEIGHBOR_BOXES;
-    tnparams.seti = SPH_SET_ALL;
-    tnparams.seto = SPH_SET_ACTIVE;
-    tm.start();
+    neighborParameters.supportRadiusMultiplier = 1.01;
+    neighborParameters.runType = SPH_TREE_NEIGHBOR_BOXES;
+    neighborParameters.innerSelection = SPH_SET_ALL;
+    neighborParameters.outerSelection = SPH_SET_ACTIVE;
+    timer.start();
     profilerEnter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
-    sphTreeNeighbor(tnparams, rootId, Vector<TreeId>()).get();
+    sphTreeNeighbor(neighborParameters, rootId, Vector<TreeId>()).get();
     profilerExit();
-    tm.stop();
-    tm.reset();
-    tm.start();
-    tnparams.seti = SPH_INTERACTIONS_IJ;
-    tnparams.runType = SPH_TREE_NEIGHBOR_NEIGHBORS;
+    timer.stop();
+    timer.reset();
+    timer.start();
+    neighborParameters.innerSelection = SPH_INTERACTIONS_IJ;
+    neighborParameters.runType = SPH_TREE_NEIGHBOR_NEIGHBORS;
     profilerEnter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_BOXES");
-    sphTreeNeighbor(tnparams, rootId, checklist).get();
+    sphTreeNeighbor(neighborParameters, rootId, checklist).get();
     profilerExit();
-    tm.stop();
-    tm.reset();
+    timer.stop();
+    timer.reset();
 
     bool rc = true;
     while (rc) {
-        sparams.runType = SPH_RUN_RUNGS;
-        tm.start();
-        rc = sphRun(sparams, true).rc;
+        runParameters.runType = SPH_RUN_RUNGS;
+        timer.start();
+        rc = sphRun(runParameters, true).needsAnotherPass;
         //	max_rung = kr.max_rung;
-        tm.stop();
+        timer.stop();
         if (verbose) {
-            PRINT("sph_run(SPH_RUN_RUNGS): tm = %e \n", tm.read());
+            PRINT("sph_run(SPH_RUN_RUNGS): tm = %e \n", timer.read());
         }
-        tm.reset();
+        timer.reset();
     }
     sphParticlesApplyUpdates(minrung, 2, t0, tau);
     if (verbose) {
-        PRINT("Completing SPH step with max_rungs = %i, %i\n", kr.maxRungHydro, kr.maxRungGrav);
+        PRINT("Completing SPH step with max_rungs = %i, %i\n", result.maximumHydroRung,
+            result.maximumGravityRung);
     }
 
-#ifdef ENTROPY
-    sphParticlesCacheFreeEntr();
-#else
-    sphParticlesCacheFreeEint();
-#endif
-
-    sphParticlesCacheFree1();
+    sphParticlesClearHydroCaches();
 
     sphTreeDestroy(true);
-    sphParticlesCacheFree2();
+    sphParticlesClearCaches();
     sphParticlesResetSemiactive();
     //	PRINT( "%i\n", max_rung);
 
-    float dtinvMax = std::max(dtinvCfl, dtinvVisc);
-    dtinvMax = std::max(dtinvMax, dtinvDiff);
-    dtinvMax = std::max(dtinvMax, dtinvCond);
-    dtinvMax = std::max(dtinvMax, dtinvAcc);
-    dtinvMax = std::max(dtinvMax, dtinvDivv);
-    dtinvMax = std::max(dtinvMax, dtinvOmega);
+    float maximumInverseTimestep = std::max(inverseSoundTimestep, inverseViscosityTimestep);
+    maximumInverseTimestep = std::max(maximumInverseTimestep, inverseAccelerationTimestep);
     FILE* fp = fopen("timestep.txt", "at");
-    fprintf(fp, "%e %i %e %e %e %e %e %e %e ", tau, maxRung, dtinvCfl, dtinvVisc, dtinvDiff,
-        dtinvCond, dtinvAcc, dtinvDivv, dtinvOmega);
-    if (dtinvMax == dtinvCfl) {
+    fprintf(fp, "%e %i %e %e %e ", tau, maxRung, inverseSoundTimestep, inverseViscosityTimestep,
+        inverseAccelerationTimestep);
+    if (maximumInverseTimestep == inverseSoundTimestep) {
         PRINT("CFL");
         fprintf(fp, "%s\n", "CFL");
-    } else if (dtinvMax == dtinvVisc) {
+    } else if (maximumInverseTimestep == inverseViscosityTimestep) {
         PRINT("VISCOSITY");
         fprintf(fp, "%s\n", "VISCOSITY");
-    } else if (dtinvMax == dtinvDiff) {
-        PRINT("DIFFUSION");
-        fprintf(fp, "%s\n", "DIFFUSION");
-    } else if (dtinvMax == dtinvCond) {
-        PRINT("CONDUCTION");
-        fprintf(fp, "%s\n", "CONDUCTION");
-    } else if (dtinvMax == dtinvAcc) {
+    } else if (maximumInverseTimestep == inverseAccelerationTimestep) {
         PRINT("ACCELERATION");
         fprintf(fp, "%s\n", "ACCELERATION");
-    } else if (dtinvMax == dtinvDivv) {
-        PRINT("VELOCITY DIVERGENCE");
-        fprintf(fp, "%s\n", "DIVV");
-    } else if (dtinvMax == dtinvOmega) {
-        PRINT("OMEGA");
-        fprintf(fp, "%s\n", "OMEGA");
+
     } else {
         ALWAYS_ASSERT(false);
     }
     PRINT(" LIMITED TIMESTEP\n");
     fclose(fp);
-    kr.maxRung = maxRung;
-    return kr;
+    result.maximumRung = maxRung;
+    return result;
 }
 
 std::pair<KickReturn, TreeCreateReturn> kickStep(int minrung, double scale, double dadt, double t0,
@@ -911,7 +698,6 @@ std::pair<KickReturn, TreeCreateReturn> kickStep(int minrung, double scale, doub
     auto sr = treeCreate(tparams);
     profilerExit();
     PRINT("Done with tree\n");
-    bool const vsoft = getOptions().vsoft;
 
     tm.stop();
     sortTime += tm.read();
@@ -1599,10 +1385,9 @@ void driver() {
                 //			particles_displace(rand1(), rand1(), rand1());
             }
             if (getOptions().sph) {
-                double heating = 0.0;
                 tmp = kickStep(minrung, a, a * adot, t0, theta, tau == 0.0, fullEval);
                 // Migration must finish before the SPH tree stores gas indices.
-                sphStep1(minrung, a, tau, t0, 1, a * adot, maxRung, iter, dt, &heating);
+                sphStep1(minrung);
             } else {
                 tmp = kickStepHierarchical(om, maxRung, a, adot, tau, t0, theta, &energies,
                     minrung0, fullEval, &lcFut, nocrop, sqrt(glassError));
@@ -1619,9 +1404,8 @@ void driver() {
             int maxRung0 = maxRung;
             maxRung = kr.maxRung;
             if (getOptions().sph) {
-                maxRung = std::max(maxRung,
-                    sphStep2(minrung, a, tau, t0, 1, a * adot, maxRung, iter, dt, &energies)
-                        .maxRung);
+                maxRung = std::max(
+                    maxRung, sphStep2(minrung, a, tau, t0, 1, a * adot, &energies).maximumRung);
                 if (fullEval) {
                     energies.pot = kr.pot / a;
                 }
@@ -1793,10 +1577,10 @@ namespace detail {
 
 constexpr uint64_t kCheckpointMagic = 0x4354535048303031ULL;
 constexpr uint32_t kLegacyDarkMatterCheckpointVersion = 1;
-constexpr uint32_t kLegacySphCheckpointVersion = 2;
 constexpr uint32_t kCheckpointVersion = 3;
 constexpr uint32_t kCheckpointManifestVersion = 1;
 constexpr uint32_t kMonaghanSph = 1;
+constexpr uint32_t kCompactSphLayout = 1U << 24;
 constexpr uint64_t kFnvOffsetBasis = 14695981039346656037ULL;
 constexpr uint64_t kFnvPrime = 1099511628211ULL;
 
@@ -2022,22 +1806,14 @@ struct LegacyDriver {
 
 uint32_t checkpointFlags(Options const& opts) {
     constexpr uint32_t kSph = 1U << 0;
-    constexpr uint32_t kChemistry = 1U << 1;
-    constexpr uint32_t kStars = 1U << 2;
-    constexpr uint32_t kConduction = 1U << 3;
-    constexpr uint32_t kDiffusion = 1U << 4;
-    constexpr uint32_t kVariableSoftening = 1U << 5;
     constexpr uint32_t kHierarchical = 1U << 6;
     constexpr uint32_t kLightcone = 1U << 7;
     constexpr uint32_t kGroups = 1U << 8;
     constexpr uint32_t kTracers = 1U << 9;
-    // Older headers leave this bit clear and retain the fixed-softening behavior.
-    constexpr uint32_t kSphSmoothing = 1U << 10;
-    return (opts.sph ? kSph : 0U) | (opts.chem ? kChemistry : 0U) | (opts.stars ? kStars : 0U) |
-        (opts.conduction ? kConduction : 0U) | (opts.diffusion ? kDiffusion : 0U) |
-        (opts.vsoft ? kVariableSoftening : 0U) | (opts.htime ? kHierarchical : 0U) |
+    // Leave retired option bits unused so old incompatible headers remain rejected.
+    return (opts.sph ? kSph : 0U) | (opts.htime ? kHierarchical : 0U) |
         (opts.doLc ? kLightcone : 0U) | (opts.doGroups ? kGroups : 0U) |
-        (opts.doTracers ? kTracers : 0U) | (opts.sphSmoothing ? kSphSmoothing : 0U);
+        (opts.doTracers ? kTracers : 0U);
 }
 
 uint32_t checkpointKernelCode(std::string const& family, int degree) {
@@ -2066,7 +1842,8 @@ uint32_t checkpointPhysicsCode(Options const& opts) {
     uint32_t const hydroCode =
         checkpointKernelCode(opts.hydroKernelFamily, opts.hydroKernelDegree) ^
         checkpointKernelCode("spline", 3);
-    return (opts.sph ? kMonaghanSph : 0U) | (gravityCode << 8) | (hydroCode << 16);
+    return (opts.sph ? kMonaghanSph | kCompactSphLayout : 0U) | (gravityCode << 8) |
+        (hydroCode << 16);
 }
 
 bool legacyCheckpointCompatible(Options const& opts) {
@@ -2083,8 +1860,7 @@ CheckpointHeader checkpointHeader(Options const& opts) {
 
 bool checkpointCompatible(CheckpointHeader const& header, Options const& opts) {
     bool const supportedVersion = header.version == kCheckpointVersion ||
-        header.version ==
-            (opts.sph ? kLegacySphCheckpointVersion : kLegacyDarkMatterCheckpointVersion);
+        (!opts.sph && header.version == kLegacyDarkMatterCheckpointVersion);
     return supportedVersion && header.flags == checkpointFlags(opts) &&
         header.reserved == checkpointPhysicsCode(opts) &&
         header.darkMatterMass == opts.darkMatterMass && header.gasMass == opts.sphMass &&
@@ -2223,11 +1999,12 @@ void checkpointStateTest() {
     changed.htime = !changed.htime;
     ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
     changed = getOptions();
-    changed.chem = !changed.chem;
-    ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
-    changed = getOptions();
-    changed.sphSmoothing = !changed.sphSmoothing;
-    ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
+    auto removedPhysics = header;
+    removedPhysics.flags |= 1U << 1;
+    ALWAYS_ASSERT(!detail::checkpointCompatible(removedPhysics, changed));
+    removedPhysics = header;
+    removedPhysics.flags |= 1U << 10;
+    ALWAYS_ASSERT(!detail::checkpointCompatible(removedPhysics, changed));
     auto const differentKernelDegree = [](std::string const& family, int degree) {
         if (family == "spline") {
             return degree == 3 ? 5 : 3;
@@ -2265,7 +2042,7 @@ void checkpointStateTest() {
     defaultKernelOptions.hydroKernelFamily = "spline";
     defaultKernelOptions.hydroKernelDegree = 3;
     ALWAYS_ASSERT(detail::checkpointHeader(defaultKernelOptions).reserved ==
-        (defaultKernelOptions.sph ? detail::kMonaghanSph : 0U));
+        (defaultKernelOptions.sph ? detail::kMonaghanSph | detail::kCompactSphLayout : 0U));
     auto legacyKernelOptions = defaultKernelOptions;
     legacyKernelOptions.sph = false;
     legacyKernelOptions.htime = true;
@@ -2277,18 +2054,18 @@ void checkpointStateTest() {
     ALWAYS_ASSERT(!detail::legacyCheckpointCompatible(legacyKernelOptions));
     auto legacySphOptions = getOptions();
     legacySphOptions.sph = true;
-    legacySphOptions.sphSmoothing = false;
     auto legacySphHeader = detail::checkpointHeader(legacySphOptions);
     ALWAYS_ASSERT(legacySphHeader.version == detail::kCheckpointVersion);
-    legacySphHeader.version = detail::kLegacySphCheckpointVersion;
-    ALWAYS_ASSERT((legacySphHeader.flags & (1U << 10)) == 0U);
     ALWAYS_ASSERT(detail::checkpointCompatible(legacySphHeader, legacySphOptions));
-    legacySphOptions.sphSmoothing = true;
+    legacySphHeader.reserved &= ~detail::kCompactSphLayout;
     ALWAYS_ASSERT(!detail::checkpointCompatible(legacySphHeader, legacySphOptions));
-    auto const smoothingHeader = detail::checkpointHeader(legacySphOptions);
-    ALWAYS_ASSERT(detail::checkpointCompatible(smoothingHeader, legacySphOptions));
-    legacySphOptions.sphSmoothing = false;
-    ALWAYS_ASSERT(!detail::checkpointCompatible(smoothingHeader, legacySphOptions));
+    legacySphHeader.version = 2;
+    ALWAYS_ASSERT(!detail::checkpointCompatible(legacySphHeader, legacySphOptions));
+    auto legacyDarkMatterOptions = getOptions();
+    legacyDarkMatterOptions.sph = false;
+    auto legacyDarkMatterHeader = detail::checkpointHeader(legacyDarkMatterOptions);
+    legacyDarkMatterHeader.version = detail::kLegacyDarkMatterCheckpointVersion;
+    ALWAYS_ASSERT(detail::checkpointCompatible(legacyDarkMatterHeader, legacyDarkMatterOptions));
     auto const sphParameters = detail::sphCheckpointParameters(getOptions());
     changed = getOptions();
     changed.alpha0 += 0.25;

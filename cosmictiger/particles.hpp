@@ -46,7 +46,6 @@ static
 
 #define DARK_MATTER_TYPE 0
 #define SPH_TYPE 1
-#define STAR_TYPE 2
 
 #ifdef LONG_LONG_PART_INT
 using ParticleInteger = long long;
@@ -175,13 +174,7 @@ PARTICLES_EXTERN Array<Fixed32*, NDIM> particlesX;
 PARTICLES_EXTERN Array<float, NDIM>* particlesV;
 PARTICLES_EXTERN char* particlesR;
 PARTICLES_EXTERN Array<float*, NDIM> particlesGravityAccelerations;
-PARTICLES_EXTERN float* particlesS;
-PARTICLES_EXTERN float* particlesZ;
-PARTICLES_EXTERN float* particlesRh;
-PARTICLES_EXTERN char* particlesC;
-PARTICLES_EXTERN char* particlesSa;
 PARTICLES_EXTERN float* particlesP;
-PARTICLES_EXTERN float* particlesDv;
 PARTICLES_EXTERN std::atomic<GroupInteger>* particlesGrp
 #ifdef PARTICLES_CPP
     = nullptr
@@ -202,22 +195,19 @@ ParticleInteger particlesSize();
 std::unordered_map<int, ParticleInteger> particlesGroupsInit();
 void particlesGroupsDestroy();
 void particlesResize(ParticleInteger, bool lock = true);
-void particlesResetConverged();
 void particlesRandomInit();
 void particlesResolveWithSphParticles();
-int particlesApplyUpdates(int minrung, float t0, float a);
 void particlesPopRungs();
 void particlesPushRungs();
 void particlesDisplace(double dx, double dy, double dz);
 void particlesDestroy();
 void particlesSortBySph(Pair<ParticleInteger> rng);
-void particlesGlobalReadPos(ParticleGlobalRange, Fixed32* x, Fixed32* y, Fixed32* z, char* type,
-    float* zeta, ParticleInteger offset);
+void particlesGlobalReadPos(
+    ParticleGlobalRange, Fixed32* x, Fixed32* y, Fixed32* z, char* type, ParticleInteger offset);
 inline void particlesGlobalReadPos(
     ParticleGlobalRange range, Fixed32* x, Fixed32* y, Fixed32* z, ParticleInteger offset) {
-    particlesGlobalReadPos(range, x, y, z, nullptr, nullptr, offset);
+    particlesGlobalReadPos(range, x, y, z, nullptr, offset);
 }
-void particlesGlobalReadSoftlens(ParticleGlobalRange range, float* h, ParticleInteger offset);
 void particlesGlobalReadPosAndGroup(ParticleGlobalRange range, Fixed32* x, Fixed32* y, Fixed32* z,
     GroupInteger* g, ParticleInteger offset);
 ParticleInteger particlesSort(Pair<ParticleInteger> rng, double xm, int xdim);
@@ -276,29 +266,9 @@ inline float particlesMass(ParticleInteger index) {
     }
 }
 
-inline float& particlesDivv(ParticleInteger index) {
-    CHECK_PART_BOUNDS(index);
-    return particlesDv[index];
-}
-
 inline float& particlesPot(ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     return particlesP[index];
-}
-
-inline float& particlesRho(ParticleInteger index) {
-    CHECK_PART_BOUNDS(index);
-    return particlesRh[index];
-}
-
-inline char& particlesConverged(ParticleInteger index) {
-    CHECK_PART_BOUNDS(index);
-    return particlesC[index];
-}
-
-inline char& particlesSemiactive(ParticleInteger index) {
-    CHECK_PART_BOUNDS(index);
-    return particlesSa[index];
 }
 
 inline Fixed32& particlesPos(int dim, ParticleInteger index) {
@@ -318,16 +288,6 @@ inline Array<float, NDIM>* particlesVelData() {
 inline char& particlesRung(ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     return particlesR[index];
-}
-
-inline float& particlesSoftlen(ParticleInteger index) {
-    CHECK_PART_BOUNDS(index);
-    return particlesS[index];
-}
-
-inline float& particlesZeta(ParticleInteger index) {
-    CHECK_PART_BOUNDS(index);
-    return particlesZ[index];
 }
 
 inline float& particlesGravityAcceleration(int dim, ParticleInteger index) {

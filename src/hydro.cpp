@@ -126,7 +126,6 @@ void hydroDriver(double tmax, int numberOfSteps = 64) {
     double t0 = tmax / numberOfSteps;
     int step = 0;
     int mainStep = 0;
-    float e0, ent0;
     double etot0 = 0.0;
     double const m = getOptions().sphMass;
     domainsRebound();
@@ -143,9 +142,8 @@ void hydroDriver(double tmax, int numberOfSteps = 64) {
             auto tmp = kickStep(minrung, 1.0, 0.0, t0, 0.5, t == 0.0, minrung == 0);
             kr = tmp.first;
         }
-        double dumm1;
-        sphStep1(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, &dumm1, true);
-        SphRunReturn rc2 = sphStep2(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, &dummy, true);
+        sphStep1(minrung, true);
+        SphRunReturn rc2 = sphStep2(minrung, 1.0, t, t0, 1, 0.0, &dummy, true);
         if (minrung == 0) {
             double const ekin = dummy.kin + kr.darkMatterKineticCorrection;
             double const eint = dummy.therm;
@@ -155,11 +153,7 @@ void hydroDriver(double tmax, int numberOfSteps = 64) {
             double const ymom = dummy.ymom + kr.darkMatterYMomentumCorrection;
             double const zmom = dummy.zmom + kr.darkMatterZMomentumCorrection;
             for (ParticleInteger i = 0; i < sphParticlesSize(); i++) {
-#ifdef HOPKINS
-                rhoMax = std::max(rhoMax, double(sphParticlesRhoRho(i)));
-#else
-                rhoMax = std::max(rhoMax, double(sphParticlesRho(i)));
-#endif
+                rhoMax = std::max(rhoMax, double(sphParticlesDensity(i)));
             }
             FILE* fp = fopen("energy.dat", "at");
             double const etot = ekin + eint + epot;
@@ -174,16 +168,12 @@ void hydroDriver(double tmax, int numberOfSteps = 64) {
             fclose(fp);
         }
         if (!getOptions().gravity) {
-            kr.maxRung = rc2.maxRung;
+            kr.maxRung = rc2.maximumRung;
         }
-        int maxrung = std::max((int) rc2.maxRung, (int) kr.maxRung);
+        int maxrung = std::max((int) rc2.maximumRung, (int) kr.maxRung);
         double dt = t0 / (1 << maxrung);
         drift(1.0, dt, t, t + dt, tmax);
         itime = inc(itime, maxrung);
-        if (t == 0.0) {
-            e0 = rc2.ekin + rc2.etherm;
-            ent0 = rc2.ent;
-        }
         t += dt;
         PRINT("%i %e %e %i %i\n", step, t, dt, minrung, maxrung);
         step++;
@@ -191,6 +181,7 @@ void hydroDriver(double tmax, int numberOfSteps = 64) {
     viewOutputViews(mainStep, 1.0, true);
 }
 
+// Problem initializer: run.test=plummer exercises gas and dark matter in a bound sphere.
 void hydroPlummer() {
     ParticleInteger nValue = pow(getOptions().particlesPerDimension, 3);
     double const a = 0.01;
@@ -236,7 +227,6 @@ void hydroPlummer() {
             particlesVel(YDIM, k) = y * v;
             particlesVel(ZDIM, k) = z * v;
             particlesRung(k) = 0;
-            particlesSoftlen(k) = h;
         }
     }
     sphParticlesResize(0);
@@ -254,9 +244,9 @@ void hydroPlummer() {
             //			sph_particles_resize(k + 1);
             double phi = -g * m0Value / sqrt(r * r + a * a);
             double v = sqrt(-phi / 2.0);
-            sphParticlesPos(XDIM, k) = x - 0.5;
-            sphParticlesPos(YDIM, k) = y - 0.5;
-            sphParticlesPos(ZDIM, k) = z - 0.5;
+            sphParticlesPosition(XDIM, k) = x - 0.5;
+            sphParticlesPosition(YDIM, k) = y - 0.5;
+            sphParticlesPosition(ZDIM, k) = z - 0.5;
             x = rand1();
             y = rand1();
             v *= sqrt(-2.0 * log(x)) * cos(2.0 * M_PI * y);
@@ -267,19 +257,13 @@ void hydroPlummer() {
             x *= norminv;
             y *= norminv;
             z *= norminv;
-            sphParticlesVel(XDIM, k) = x * v;
-            sphParticlesVel(YDIM, k) = y * v;
-            sphParticlesVel(ZDIM, k) = z * v;
+            sphParticlesVelocity(XDIM, k) = x * v;
+            sphParticlesVelocity(YDIM, k) = y * v;
+            sphParticlesVelocity(ZDIM, k) = z * v;
             float const eint = 1e-3 * (v * v * 0.5);
-#ifdef ENTROPY
-            sphParticlesRec2(k).entropy =
-                eint * (getOptions().gamma - 1.0) / pow(rho0, getOptions().gamma - 1.0);
-#else
-            sphParticlesRec2(k).eint = eint;
-#endif
+            sphParticlesThermodynamicState(k).internalEnergy = eint;
             sphParticlesRung(k) = 0;
-            sphParticlesSmoothingLength(k) = h;
-            particlesSoftlen(sphParticlesParticleIndex(k)) = h;
+            sphParticlesSupportRadius(k) = h;
             ekin += 0.5 * m * sqr(v);
             pot += 0.5 * m * phi;
             k++;
@@ -290,6 +274,8 @@ void hydroPlummer() {
     hydroDriver(100.0 * tdyn, 1024);
 }
 
+// Problem initializer: run.test=star is a self-gravitating polytropic gas sphere.
+// It uses only SPH particles; damping below relaxes the initial gas distribution.
 void hydroStarTest() {
     ParticleInteger totalNumberOfParticles = pow(getOptions().particlesPerDimension, 3);
     double const r0 = 20.0;
@@ -352,22 +338,17 @@ void hydroStarTest() {
         for (int l = 0; l < nValue; l++) {
             ParticleInteger const k = sphParticlesSize();
             sphParticlesResize(k + 1);
-            sphParticlesPos(XDIM, k) = xValue[i][XDIM][l] * radius[i] + 0.5;
-            sphParticlesPos(YDIM, k) = xValue[i][YDIM][l] * radius[i] + 0.5;
-            sphParticlesPos(ZDIM, k) = xValue[i][ZDIM][l] * radius[i] + 0.5;
-            sphParticlesSmoothingLength(k) = h;
+            sphParticlesPosition(XDIM, k) = xValue[i][XDIM][l] * radius[i] + 0.5;
+            sphParticlesPosition(YDIM, k) = xValue[i][YDIM][l] * radius[i] + 0.5;
+            sphParticlesPosition(ZDIM, k) = xValue[i][ZDIM][l] * radius[i] + 0.5;
+            sphParticlesSupportRadius(k) = h;
             double const pValue = kValue * pow(d, 1.0 + 1.0 / npoly);
             double const eValue = pValue * npoly;
             double const eint = eValue / d;
-#ifdef ENTROPY
-            sphParticlesRec2(k).entropy =
-                eint * (getOptions().gamma - 1.) / pow(d, getOptions().gamma - 1.);
-#else
-            sphParticlesRec2(k).eint = eint;
-#endif
-            sphParticlesVel(XDIM, k) = 0;
-            sphParticlesVel(YDIM, k) = 0;
-            sphParticlesVel(ZDIM, k) = 0;
+            sphParticlesThermodynamicState(k).internalEnergy = eint;
+            sphParticlesVelocity(XDIM, k) = 0;
+            sphParticlesVelocity(YDIM, k) = 0;
+            sphParticlesVelocity(ZDIM, k) = 0;
             sphParticlesRung(k) = 0;
         }
     }
@@ -378,12 +359,10 @@ void hydroStarTest() {
     opts = getOptions();
     opts.damping = 1.0;
     opts.alpha0 = 0.0;
-    opts.alpha1 = 0.0;
     setOptions(opts);
     hydroDriver(10.0 * tdyn, 25);
     opts.damping = 0.0;
     opts.alpha0 = 0.05;
-    opts.alpha1 = 1.5;
     setOptions(opts);
     hydroDriver(100.0 * tdyn, 250);
     int const nsample = 1000;
@@ -391,14 +370,10 @@ void hydroStarTest() {
     double norm = 0.0;
     for (int i = 0; i < nsample; i++) {
         ParticleInteger const k = rand() % sphParticlesSize();
-#ifdef HOPKINS
-        float const d0 = sphParticlesRhoRho(k);
-#else
-        float const d0 = sphParticlesRho(k);
-#endif
-        float const x = sphParticlesPos(XDIM, k).toDouble();
-        float const y = sphParticlesPos(YDIM, k).toDouble();
-        float const z = sphParticlesPos(ZDIM, k).toDouble();
+        float const d0 = sphParticlesDensity(k);
+        float const x = sphParticlesPosition(XDIM, k).toDouble();
+        float const y = sphParticlesPosition(YDIM, k).toDouble();
+        float const z = sphParticlesPosition(ZDIM, k).toDouble();
         float const r = sqrt(sqr(x - 0.5, y - 0.5, z - 0.5));
         float d1 = 0.0;
         if (r < rmax) {
@@ -412,6 +387,7 @@ void hydroStarTest() {
     PRINT("L2 Error = %e\n", l2);
 }
 
+// Problem initializer: run.test=rt uses uniform y acceleration for Rayleigh-Taylor instability.
 void hydroRtTest() {
     ParticleInteger totalNumberOfParticles = pow(getOptions().particlesPerDimension, 3);
     ParticleInteger hiParts = 2 * totalNumberOfParticles / 3;
@@ -450,22 +426,17 @@ void hydroRtTest() {
                 double h =
                     pow(m * getOptions().sphNeighborNumber / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
                 sphParticlesResize(sphParticlesSize() + 1);
-                sphParticlesSmoothingLength(i) = h;
-                sphParticlesPos(XDIM, i) = x;
-                sphParticlesPos(YDIM, i) = y;
-                sphParticlesPos(ZDIM, i) = z;
-                sphParticlesVel(XDIM, i) = 0;
-                sphParticlesVel(YDIM, i) = vy;
+                sphParticlesSupportRadius(i) = h;
+                sphParticlesPosition(XDIM, i) = x;
+                sphParticlesPosition(YDIM, i) = y;
+                sphParticlesPosition(ZDIM, i) = z;
+                sphParticlesVelocity(XDIM, i) = 0;
+                sphParticlesVelocity(YDIM, i) = vy;
                 ;
-                sphParticlesVel(ZDIM, i) = 0;
+                sphParticlesVelocity(ZDIM, i) = 0;
                 ;
                 sphParticlesRung(i) = 0;
-#ifdef ENTROPY
-                sphParticlesRec2(i).entropy =
-                    eint * (getOptions().gamma - 1.) / pow(rho0, getOptions().gamma - 1.);
-#else
-                sphParticlesRec2(i).eint = eint;
-#endif
+                sphParticlesThermodynamicState(i).internalEnergy = eint;
 
                 ;
                 i++;
@@ -493,23 +464,18 @@ void hydroRtTest() {
                     }
                     double eint = p / (getOptions().gamma - 1) / rho1;
                     sphParticlesResize(sphParticlesSize() + 1);
-                    sphParticlesSmoothingLength(i) = h;
-                    sphParticlesPos(XDIM, i) = x;
-                    sphParticlesPos(YDIM, i) = y;
-                    sphParticlesPos(ZDIM, i) = z;
-                    sphParticlesVel(XDIM, i) = 0;
+                    sphParticlesSupportRadius(i) = h;
+                    sphParticlesPosition(XDIM, i) = x;
+                    sphParticlesPosition(YDIM, i) = y;
+                    sphParticlesPosition(ZDIM, i) = z;
+                    sphParticlesVelocity(XDIM, i) = 0;
                     ;
-                    sphParticlesVel(YDIM, i) = vy;
+                    sphParticlesVelocity(YDIM, i) = vy;
                     ;
-                    sphParticlesVel(ZDIM, i) = 0;
+                    sphParticlesVelocity(ZDIM, i) = 0;
                     ;
                     sphParticlesRung(i) = 0;
-#ifdef ENTROPY
-                    sphParticlesRec2(i).entropy =
-                        eint * (getOptions().gamma - 1.) / pow(rho0, getOptions().gamma - 1.);
-#else
-                    sphParticlesRec2(i).eint = eint;
-#endif
+                    sphParticlesThermodynamicState(i).internalEnergy = eint;
 
                     ;
                     i++;
@@ -529,23 +495,18 @@ void hydroRtTest() {
                     }
                     double eint = p / (getOptions().gamma - 1) / rho1;
                     sphParticlesResize(sphParticlesSize() + 1);
-                    sphParticlesSmoothingLength(i) = h;
-                    sphParticlesPos(XDIM, i) = x;
-                    sphParticlesPos(YDIM, i) = y;
-                    sphParticlesPos(ZDIM, i) = z;
-                    sphParticlesVel(XDIM, i) = 0;
+                    sphParticlesSupportRadius(i) = h;
+                    sphParticlesPosition(XDIM, i) = x;
+                    sphParticlesPosition(YDIM, i) = y;
+                    sphParticlesPosition(ZDIM, i) = z;
+                    sphParticlesVelocity(XDIM, i) = 0;
                     ;
-                    sphParticlesVel(YDIM, i) = vy;
+                    sphParticlesVelocity(YDIM, i) = vy;
                     ;
-                    sphParticlesVel(ZDIM, i) = 0;
+                    sphParticlesVelocity(ZDIM, i) = 0;
                     ;
                     sphParticlesRung(i) = 0;
-#ifdef ENTROPY
-                    sphParticlesRec2(i).entropy =
-                        eint * (getOptions().gamma - 1.) / pow(rho1, getOptions().gamma - 1.);
-#else
-                    sphParticlesRec2(i).eint = eint;
-#endif
+                    sphParticlesThermodynamicState(i).internalEnergy = eint;
 
                     i++;
                 }
@@ -597,6 +558,7 @@ void hydroRtTest() {
     hydroDriver(kT, 256);
 }
 
+// Problem initializer: run.test=disc uses an imposed central potential for an orbiting gas disc.
 void hydroDiscTest() {
     ParticleInteger totalNumberOfParticles = pow(getOptions().particlesPerDimension, 3);
     double const rinner = 0.2;
@@ -620,10 +582,10 @@ void hydroDiscTest() {
                 if (r > rinner && r < router) {
                     double eint = p0 / rho / (getOptions().gamma - 1);
                     sphParticlesResize(sphParticlesSize() + 1);
-                    sphParticlesSmoothingLength(i) = h;
-                    sphParticlesPos(XDIM, i) = x;
-                    sphParticlesPos(YDIM, i) = y;
-                    sphParticlesPos(ZDIM, i) = z;
+                    sphParticlesSupportRadius(i) = h;
+                    sphParticlesPosition(XDIM, i) = x;
+                    sphParticlesPosition(YDIM, i) = y;
+                    sphParticlesPosition(ZDIM, i) = z;
                     double const v = 1.00 * sqrt(1 / r);
                     double const vx = -(y - 0.5) / r * v;
                     double const vy = (x - 0.5) / r * v;
@@ -634,16 +596,11 @@ void hydroDiscTest() {
                     } else {
                         sgn = 1.0;
                     }
-                    sphParticlesVel(XDIM, i) = sgn * vx;
-                    sphParticlesVel(YDIM, i) = sgn * vy;
-                    sphParticlesVel(ZDIM, i) = vz;
+                    sphParticlesVelocity(XDIM, i) = sgn * vx;
+                    sphParticlesVelocity(YDIM, i) = sgn * vy;
+                    sphParticlesVelocity(ZDIM, i) = vz;
                     sphParticlesRung(i) = 0;
-#ifdef ENTROPY
-                    sphParticlesRec2(i).entropy =
-                        eint * (getOptions().gamma - 1.) / pow(rho, getOptions().gamma - 1.);
-#else
-                    sphParticlesRec2(i).eint = eint;
-#endif
+                    sphParticlesThermodynamicState(i).internalEnergy = eint;
 
                     ;
                     i++;
@@ -655,6 +612,7 @@ void hydroDiscTest() {
     hydroDriver(t, 1024);
 }
 
+// Problem initializer: run.test=sod checks the ideal-gas shock tube without self-gravity.
 void hydroSodTest() {
     ParticleInteger totalNumberOfParticles = pow(getOptions().particlesPerDimension, 3);
     double rho0 = 0.125;
@@ -702,37 +660,31 @@ void hydroSodTest() {
                 double h =
                     pow(m * getOptions().sphNeighborNumber / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
                 sphParticlesResize(sphParticlesSize() + 1);
-                sphParticlesSmoothingLength(i) = h;
-                sphParticlesPos(XDIM, i) = x + rand1() * dx * kEta;
-                sphParticlesPos(YDIM, i) = y + rand1() * dx * kEta;
-                sphParticlesPos(ZDIM, i) = z + rand1() * dx * kEta;
-                sphParticlesVel(XDIM, i) = vx0;
-                sphParticlesVel(YDIM, i) = vy0;
-                sphParticlesVel(ZDIM, i) = vz0;
+                sphParticlesSupportRadius(i) = h;
+                sphParticlesPosition(XDIM, i) = x + rand1() * dx * kEta;
+                sphParticlesPosition(YDIM, i) = y + rand1() * dx * kEta;
+                sphParticlesPosition(ZDIM, i) = z + rand1() * dx * kEta;
+                sphParticlesVelocity(XDIM, i) = vx0;
+                sphParticlesVelocity(YDIM, i) = vy0;
+                sphParticlesVelocity(ZDIM, i) = vz0;
                 sphParticlesRung(i) = 0;
-#ifdef ENTROPY
-                sphParticlesRec2(i).entropy = ent;
-#else
-                sphParticlesRec2(i).eint = p1 / (getOptions().gamma - 1.0) / rho1;
-#endif
+                sphParticlesThermodynamicState(i).internalEnergy =
+                    p1 / (getOptions().gamma - 1.0) / rho1;
                 i++;
                 x = (ix + 0.5) * dx;
                 y = (iy + 0.5) * dx;
                 z = (iz + 0.5) * dx;
                 sphParticlesResize(sphParticlesSize() + 1);
-                sphParticlesSmoothingLength(i) = h;
-                sphParticlesPos(XDIM, i) = x + rand1() * dx * kEta;
-                sphParticlesPos(YDIM, i) = y + rand1() * dx * kEta;
-                sphParticlesPos(ZDIM, i) = z + rand1() * dx * kEta;
-                sphParticlesVel(XDIM, i) = vx0;
-                sphParticlesVel(YDIM, i) = vy0;
-                sphParticlesVel(ZDIM, i) = vz0;
+                sphParticlesSupportRadius(i) = h;
+                sphParticlesPosition(XDIM, i) = x + rand1() * dx * kEta;
+                sphParticlesPosition(YDIM, i) = y + rand1() * dx * kEta;
+                sphParticlesPosition(ZDIM, i) = z + rand1() * dx * kEta;
+                sphParticlesVelocity(XDIM, i) = vx0;
+                sphParticlesVelocity(YDIM, i) = vy0;
+                sphParticlesVelocity(ZDIM, i) = vz0;
                 sphParticlesRung(i) = 0;
-#ifdef ENTROPY
-                sphParticlesRec2(i).entropy = ent;
-#else
-                sphParticlesRec2(i).eint = p1 / (getOptions().gamma - 1.0) / rho1;
-#endif
+                sphParticlesThermodynamicState(i).internalEnergy =
+                    p1 / (getOptions().gamma - 1.0) / rho1;
                 i++;
                 //			PRINT("%i\n", i);
             }
@@ -750,20 +702,17 @@ void hydroSodTest() {
                 double h =
                     pow(m * getOptions().sphNeighborNumber / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
                 sphParticlesResize(sphParticlesSize() + 1);
-                sphParticlesSmoothingLength(i) = h;
-                sphParticlesPos(XDIM, i) = x + rand1() * dx * kEta;
-                sphParticlesPos(YDIM, i) = y + rand1() * dx * kEta;
-                sphParticlesPos(ZDIM, i) = z + rand1() * dx * kEta;
-                sphParticlesVel(XDIM, i) = 0;
-                sphParticlesVel(YDIM, i) = 0;
-                sphParticlesVel(ZDIM, i) = 0;
+                sphParticlesSupportRadius(i) = h;
+                sphParticlesPosition(XDIM, i) = x + rand1() * dx * kEta;
+                sphParticlesPosition(YDIM, i) = y + rand1() * dx * kEta;
+                sphParticlesPosition(ZDIM, i) = z + rand1() * dx * kEta;
+                sphParticlesVelocity(XDIM, i) = 0;
+                sphParticlesVelocity(YDIM, i) = 0;
+                sphParticlesVelocity(ZDIM, i) = 0;
                 ;
                 sphParticlesRung(i) = 0;
-#ifdef ENTROPY
-                sphParticlesRec2(i).entropy = ent;
-#else
-                sphParticlesRec2(i).eint = p0 / (getOptions().gamma - 1.0) / rho0;
-#endif
+                sphParticlesThermodynamicState(i).internalEnergy =
+                    p0 / (getOptions().gamma - 1.0) / rho0;
                 ;
                 //		PRINT("%i\n", i);
                 i++;
@@ -771,20 +720,17 @@ void hydroSodTest() {
                 y = (iy + 0.5) * dx;
                 z = (iz + 0.5) * dx;
                 sphParticlesResize(sphParticlesSize() + 1);
-                sphParticlesSmoothingLength(i) = h;
-                sphParticlesPos(XDIM, i) = x + rand1() * dx * kEta;
-                sphParticlesPos(YDIM, i) = y + rand1() * dx * kEta;
-                sphParticlesPos(ZDIM, i) = z + rand1() * dx * kEta;
-                sphParticlesVel(XDIM, i) = 0;
-                sphParticlesVel(YDIM, i) = 0;
-                sphParticlesVel(ZDIM, i) = 0;
+                sphParticlesSupportRadius(i) = h;
+                sphParticlesPosition(XDIM, i) = x + rand1() * dx * kEta;
+                sphParticlesPosition(YDIM, i) = y + rand1() * dx * kEta;
+                sphParticlesPosition(ZDIM, i) = z + rand1() * dx * kEta;
+                sphParticlesVelocity(XDIM, i) = 0;
+                sphParticlesVelocity(YDIM, i) = 0;
+                sphParticlesVelocity(ZDIM, i) = 0;
                 ;
                 sphParticlesRung(i) = 0;
-#ifdef ENTROPY
-                sphParticlesRec2(i).entropy = ent;
-#else
-                sphParticlesRec2(i).eint = p0 / (getOptions().gamma - 1.0) / rho0;
-#endif
+                sphParticlesThermodynamicState(i).internalEnergy =
+                    p0 / (getOptions().gamma - 1.0) / rho0;
                 ;
                 i++;
             }
@@ -800,15 +746,10 @@ void hydroSodTest() {
         int const i = rand() % sphParticlesSize();
         int const j = sphParticlesParticleIndex(i);
         float x = particlesPos(XDIM, j).toDouble();
-        float const h = sphParticlesSmoothingLength(i);
-#ifdef HOPKINS
-        float const rho = sphParticlesRhoRho(i);
-        float const p = sphParticlesPressure(i);
-#else
-        float const rho = sphParticlesRho(i);
-        float const eint = sphParticlesEint(i);
+        float const h = sphParticlesSupportRadius(i);
+        float const rho = sphParticlesDensity(i);
+        float const eint = sphParticlesInternalEnergy(i);
         float const p = (getOptions().gamma - 1.0) * rho * eint;
-#endif
         SodStateT state;
         float x0 = x;
         x0 -= 0.5;
@@ -833,6 +774,7 @@ void hydroSodTest() {
     fclose(fp);
 }
 
+// Problem initializer: run.test=helmholtz checks Kelvin-Helmholtz shear flow.
 void hydroHelmholtzTest() {
     ParticleInteger totalNumberOfParticles = pow(getOptions().particlesPerDimension, 3);
     double rho1 = 0.5;
@@ -872,40 +814,30 @@ void hydroHelmholtzTest() {
                 double h =
                     pow(m * getOptions().sphNeighborNumber / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
                 sphParticlesResize(sphParticlesSize() + 1);
-                sphParticlesSmoothingLength(i) = h;
-                sphParticlesPos(XDIM, i) = x;
-                sphParticlesPos(YDIM, i) = y;
-                sphParticlesPos(ZDIM, i) = z;
-                sphParticlesVel(XDIM, i) = kEta * sin(kFreq * 2.0 * M_PI * y);
-                sphParticlesVel(YDIM, i) = vy1;
-                sphParticlesVel(ZDIM, i) = 0.0;
+                sphParticlesSupportRadius(i) = h;
+                sphParticlesPosition(XDIM, i) = x;
+                sphParticlesPosition(YDIM, i) = y;
+                sphParticlesPosition(ZDIM, i) = z;
+                sphParticlesVelocity(XDIM, i) = kEta * sin(kFreq * 2.0 * M_PI * y);
+                sphParticlesVelocity(YDIM, i) = vy1;
+                sphParticlesVelocity(ZDIM, i) = 0.0;
                 sphParticlesRung(i) = 0;
-#ifdef ENTROPY
-                sphParticlesRec2(i).entropy =
-                    eint * (getOptions().gamma - 1.) / pow(rho1, getOptions().gamma - 1.);
-#else
-                sphParticlesRec2(i).eint = eint;
-#endif
+                sphParticlesThermodynamicState(i).internalEnergy = eint;
 
                 i++;
                 x = (ix) *dx;
                 y = (iy) *dx;
                 z = (iz) *dx;
                 sphParticlesResize(sphParticlesSize() + 1);
-                sphParticlesSmoothingLength(i) = h;
-                sphParticlesPos(XDIM, i) = x;
-                sphParticlesPos(YDIM, i) = y;
-                sphParticlesPos(ZDIM, i) = z;
-                sphParticlesVel(XDIM, i) = kEta * sin(kFreq * 2.0 * M_PI * y);
-                sphParticlesVel(YDIM, i) = vy1;
-                sphParticlesVel(ZDIM, i) = 0.0;
+                sphParticlesSupportRadius(i) = h;
+                sphParticlesPosition(XDIM, i) = x;
+                sphParticlesPosition(YDIM, i) = y;
+                sphParticlesPosition(ZDIM, i) = z;
+                sphParticlesVelocity(XDIM, i) = kEta * sin(kFreq * 2.0 * M_PI * y);
+                sphParticlesVelocity(YDIM, i) = vy1;
+                sphParticlesVelocity(ZDIM, i) = 0.0;
                 sphParticlesRung(i) = 0;
-#ifdef ENTROPY
-                sphParticlesRec2(i).entropy =
-                    eint * (getOptions().gamma - 1.) / pow(rho1, getOptions().gamma - 1.);
-#else
-                sphParticlesRec2(i).eint = eint;
-#endif
+                sphParticlesThermodynamicState(i).internalEnergy = eint;
 
                 i++;
                 //			PRINT("%i\n", i);
@@ -924,20 +856,15 @@ void hydroHelmholtzTest() {
                 double h =
                     pow(m * getOptions().sphNeighborNumber / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
                 sphParticlesResize(sphParticlesSize() + 1);
-                sphParticlesSmoothingLength(i) = h;
-                sphParticlesPos(XDIM, i) = x;
-                sphParticlesPos(YDIM, i) = y;
-                sphParticlesPos(ZDIM, i) = z;
-                sphParticlesVel(XDIM, i) = kEta * sin(kFreq * 2.0 * M_PI * y);
-                sphParticlesVel(YDIM, i) = vy0;
-                sphParticlesVel(ZDIM, i) = 0.0;
+                sphParticlesSupportRadius(i) = h;
+                sphParticlesPosition(XDIM, i) = x;
+                sphParticlesPosition(YDIM, i) = y;
+                sphParticlesPosition(ZDIM, i) = z;
+                sphParticlesVelocity(XDIM, i) = kEta * sin(kFreq * 2.0 * M_PI * y);
+                sphParticlesVelocity(YDIM, i) = vy0;
+                sphParticlesVelocity(ZDIM, i) = 0.0;
                 sphParticlesRung(i) = 0;
-#ifdef ENTROPY
-                sphParticlesRec2(i).entropy =
-                    eint * (getOptions().gamma - 1.) / pow(rho0, getOptions().gamma - 1.);
-#else
-                sphParticlesRec2(i).eint = eint;
-#endif
+                sphParticlesThermodynamicState(i).internalEnergy = eint;
                 ;
 
                 //		PRINT("%i\n", i);
@@ -946,20 +873,15 @@ void hydroHelmholtzTest() {
                 y = (iy) *dx;
                 z = (iz) *dx;
                 sphParticlesResize(sphParticlesSize() + 1);
-                sphParticlesSmoothingLength(i) = h;
-                sphParticlesPos(XDIM, i) = x;
-                sphParticlesPos(YDIM, i) = y;
-                sphParticlesPos(ZDIM, i) = z;
-                sphParticlesVel(XDIM, i) = kEta * sin(kFreq * 2.0 * M_PI * y);
-                sphParticlesVel(YDIM, i) = vy0;
-                sphParticlesVel(ZDIM, i) = 0.0;
+                sphParticlesSupportRadius(i) = h;
+                sphParticlesPosition(XDIM, i) = x;
+                sphParticlesPosition(YDIM, i) = y;
+                sphParticlesPosition(ZDIM, i) = z;
+                sphParticlesVelocity(XDIM, i) = kEta * sin(kFreq * 2.0 * M_PI * y);
+                sphParticlesVelocity(YDIM, i) = vy0;
+                sphParticlesVelocity(ZDIM, i) = 0.0;
                 sphParticlesRung(i) = 0;
-#ifdef ENTROPY
-                sphParticlesRec2(i).entropy =
-                    eint * (getOptions().gamma - 1.) / pow(rho0, getOptions().gamma - 1.);
-#else
-                sphParticlesRec2(i).eint = eint;
-#endif
+                sphParticlesThermodynamicState(i).internalEnergy = eint;
 
                 ;
                 //		PRINT("%i\n", i);
@@ -970,6 +892,7 @@ void hydroHelmholtzTest() {
     hydroDriver(10.00, 1024);
 }
 
+// Problem initializer: run.test=blast checks an ideal-gas blast wave.
 void hydroBlastTest() {
     ParticleInteger totalNumberOfParticles = pow(getOptions().particlesPerDimension, 3);
     double rho0 = 1.0;
@@ -1002,20 +925,15 @@ void hydroBlastTest() {
                 double h =
                     pow(m * getOptions().sphNeighborNumber / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
                 sphParticlesResize(sphParticlesSize() + 1);
-                sphParticlesSmoothingLength(i) = h;
-                sphParticlesPos(XDIM, i) = x;
-                sphParticlesPos(YDIM, i) = y;
-                sphParticlesPos(ZDIM, i) = z;
-                sphParticlesVel(XDIM, i) = vx;
-                sphParticlesVel(YDIM, i) = vy;
-                sphParticlesVel(ZDIM, i) = vz;
+                sphParticlesSupportRadius(i) = h;
+                sphParticlesPosition(XDIM, i) = x;
+                sphParticlesPosition(YDIM, i) = y;
+                sphParticlesPosition(ZDIM, i) = z;
+                sphParticlesVelocity(XDIM, i) = vx;
+                sphParticlesVelocity(YDIM, i) = vy;
+                sphParticlesVelocity(ZDIM, i) = vz;
                 sphParticlesRung(i) = 0;
-#ifdef ENTROPY
-                sphParticlesRec2(i).entropy =
-                    eint * (getOptions().gamma - 1.) / pow(rho0, getOptions().gamma - 1.);
-#else
-                sphParticlesRec2(i).eint = eint;
-#endif
+                sphParticlesThermodynamicState(i).internalEnergy = eint;
                 ;
                 i++;
                 x = (ix + 0.0) * dx;
@@ -1029,20 +947,15 @@ void hydroBlastTest() {
                 vy = 0.0;
                 vz = 0.0;
                 sphParticlesResize(sphParticlesSize() + 1);
-                sphParticlesSmoothingLength(i) = h;
-                sphParticlesPos(XDIM, i) = x;
-                sphParticlesPos(YDIM, i) = y;
-                sphParticlesPos(ZDIM, i) = z;
-                sphParticlesVel(XDIM, i) = vx;
-                sphParticlesVel(YDIM, i) = vy;
-                sphParticlesVel(ZDIM, i) = vz;
+                sphParticlesSupportRadius(i) = h;
+                sphParticlesPosition(XDIM, i) = x;
+                sphParticlesPosition(YDIM, i) = y;
+                sphParticlesPosition(ZDIM, i) = z;
+                sphParticlesVelocity(XDIM, i) = vx;
+                sphParticlesVelocity(YDIM, i) = vy;
+                sphParticlesVelocity(ZDIM, i) = vz;
                 sphParticlesRung(i) = 0;
-#ifdef ENTROPY
-                sphParticlesRec2(i).entropy =
-                    eint * (getOptions().gamma - 1.) / pow(rho0, getOptions().gamma - 1.);
-#else
-                sphParticlesRec2(i).eint = eint;
-#endif
+                sphParticlesThermodynamicState(i).internalEnergy = eint;
                 ;
                 i++;
             }
@@ -1060,11 +973,7 @@ void hydroBlastTest() {
         float x = particlesPos(XDIM, j).toDouble() - 0.5;
         float y = particlesPos(YDIM, j).toDouble() - 0.5;
         float z = particlesPos(ZDIM, j).toDouble() - 0.5;
-#ifdef HOPKINS
-        float const rho = sphParticlesRhoRho(i);
-#else
-        float const rho = sphParticlesRho(i);
-#endif
+        float const rho = sphParticlesDensity(i);
         double time = t;
         double r = sqrt(sqr(x, y, z));
         double rmax = sqrt(1.5);
@@ -1114,20 +1023,15 @@ void hydroWaveTest() {
                     x -= 0.99 * dx;
                 }
                 sphParticlesResize(sphParticlesSize() + 1);
-                sphParticlesSmoothingLength(i) = h;
-                sphParticlesPos(XDIM, i) = x;
-                sphParticlesPos(YDIM, i) = y;
-                sphParticlesPos(ZDIM, i) = z;
-                sphParticlesVel(XDIM, i) = 0.f;
-                sphParticlesVel(YDIM, i) = 0.f;
-                sphParticlesVel(ZDIM, i) = 0.f;
+                sphParticlesSupportRadius(i) = h;
+                sphParticlesPosition(XDIM, i) = x;
+                sphParticlesPosition(YDIM, i) = y;
+                sphParticlesPosition(ZDIM, i) = z;
+                sphParticlesVelocity(XDIM, i) = 0.f;
+                sphParticlesVelocity(YDIM, i) = 0.f;
+                sphParticlesVelocity(ZDIM, i) = 0.f;
                 sphParticlesRung(i) = 0;
-#ifdef ENTROPY
-                sphParticlesRec2(i).entropy =
-                    eint * (getOptions().gamma - 1.) / pow(rho, getOptions().gamma - 1.);
-#else
-                sphParticlesRec2(i).eint = eint;
-#endif
+                sphParticlesThermodynamicState(i).internalEnergy = eint;
                 i++;
                 //			PRINT("%i\n", i);
             }

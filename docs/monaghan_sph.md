@@ -6,10 +6,10 @@ This implementation follows the nonrelativistic SPH equations in J. J. Monaghan,
 the supplied scan, ADS identifier `1992ARA&A..30..543M`.
 
 The active fluid model uses density and specific internal energy with an ideal-gas
-equation of state. Stars, chemistry, thermal conduction, and species diffusion
-remain in the source tree but are detached from this baseline. Requests to enable
-the retained chemistry, conduction, or diffusion options fail explicitly. Ordinary
-particle advection is used; the optional XSPH variant in equation 3.19 is not enabled.
+equation of state. Stellar particles, star formation, chemistry, thermal conduction,
+and species diffusion have been removed, along with their particle storage and
+solver branches. Their former options are no longer accepted. Ordinary particle
+advection is used; the optional XSPH variant in equation 3.19 is not enabled.
 
 ## Kernel and density
 
@@ -137,7 +137,10 @@ identity does not imply exact conservation by a finite-step asynchronous integra
 The existing individual-rung predictor/corrector integration and particle drift
 are retained. Section 10.3, p.563, permits leapfrog and predictor/corrector methods.
 Neighbor rung limiting uses the union of the two supports and immutable source-rung
-snapshots during each pass; it does not wake inactive particles.
+snapshots during each pass; it does not wake inactive particles. The support radius
+is held fixed during drift; active particles and selected inactive neighbors solve
+the neighbor constraint before hydro;
+there is no separate radius predictor or divergence timestep bound.
 
 The Courant-viscous limit uses
 
@@ -161,9 +164,8 @@ to preserve the default cubic Courant-viscous limit. The hydro acceleration
 coefficient is `gravity.timestepEta` times the fixed reference calibration
 `0.7115965735877551`; the new default gravity eta is `0.20401599335954483`.
 This preserves the former default cubic/Ferrers F4 hydro acceleration limit.
-The divergence and fractional thermal-energy bounds also apply the fixed
-\(\sqrt{5/6}\) reference conversion so their default physical limits are
-preserved. The explicit integrator retains its cosmological expansion limits.
+The additional fractional thermal-energy bound applies the fixed
+\(\sqrt{5/6}\) reference conversion to preserve its previous physical limit. The explicit integrator retains its cosmological expansion limits.
 The gravity acceleration criterion uses its own effective radius, independently of
 the selected hydro family. These reference conversions do not establish equal
 timestep accuracy for every kernel shape.
@@ -171,7 +173,7 @@ timestep accuracy for every kernel shape.
 CosmicTiger evolves comoving positions \(\mathbf x\), conformal time
 \(d\tau=dt/a\), stored velocity \(\mathbf w=a\mathbf v_{\rm pec}\), and stored
 specific internal energy \(E=a^2u\). Density is comoving. The driver passes
-\(a\,da/dt\) to the SPH `adot` field; this differs from the driver's own physical
+\(a\,da/dt\) to the SPH `expansionRate` field; this differs from the driver's own physical
 \(da/dt\) field. The scaled physical relative velocity used for viscosity is
 
 \[
@@ -223,23 +225,30 @@ then the `centralSoftening` alias, then `centralSupportRadius`. The command line
 still overrides INI values for the same key. See [kernel radii](kernels.md) for
 the equivalent gravity options and conversion factors.
 
-Gas, dark matter, and stars share one fixed comoving gravity kernel radius.
+Gas and dark matter share one fixed comoving gravity kernel radius.
 SPH density, pressure, viscosity, and thermal work retain the gas-only hydro
 kernel and variable smoothing radii. See
 [gravitational softening](kernels.md#fixed-comoving-gravitational-softening) for
 the gravity radius options and their independence from SPH smoothing.
 
-Old SPH checkpoints with formulation marker `reserved=0` are rejected. New
-checkpoints use version 3, and the low byte of `reserved` identifies the Monaghan
-discretization. Additional bits encode independent gravity and hydro kernel
-selections. Historical marker values retain their original kernel meanings;
-the new Ferrers F2 default changes the selected gravity marker. A change of
-kernel selection on restart is rejected.
+Checkpoints use version 3, and the low byte of `reserved` identifies the Monaghan
+discretization. The next two bytes encode independent gravity and hydro kernel
+selections. Bit 24 identifies the compact gas layout after removal of stellar,
+chemistry, and obsolete solver fields. Older SPH checkpoints lack this bit and
+are rejected before particle data are loaded; the gas payload also has its own
+version 2 header. Compatible dark-matter checkpoint layouts remain unchanged.
+Historical kernel marker values retain their original meanings; the Ferrers F2
+default changes the selected gravity marker. A change of kernel selection on
+restart is rejected.
 A separate parameter block also rejects changes to viscosity coefficients,
 smoothing constraints, timestep
 controls, gravity enablement, and external accelerations on SPH restart. These
 checks still apply when migrating an old configuration to the new length and
 timestep conventions; old SPH checkpoints are not automatically converted.
+Remove `hydro.chemistry`, `hydro.conduction`, `hydro.diffusion`, `hydro.yReflect`,
+and `gravity.sphSmoothing` from older INI files, including entries set to false.
+The retained `run.test=star` fixture is a self-gravitating gas sphere; it does
+not use stellar particles or star formation.
 
 ## Validation scope
 

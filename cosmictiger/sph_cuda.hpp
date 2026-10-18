@@ -17,10 +17,9 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef SPH_CUDA123_HPP_
-#define SPH_CUDA123_HPP_
+#ifndef SPH_CUDA_HPP_
+#define SPH_CUDA_HPP_
 
-#include <cosmictiger/chemistry.hpp>
 #include <cosmictiger/constants.hpp>
 #include <cosmictiger/cuda_memory.hpp>
 #include <cosmictiger/cuda_reduce.hpp>
@@ -33,142 +32,88 @@
 #include <cosmictiger/sph_tree.hpp>
 #include <cosmictiger/timer.hpp>
 
-#define ETA 0.01f
-
 struct SphRunCudaData {
-    Fixed32* x;
-    Fixed32* y;
-    Fixed32* z;
-    char* stars;
-#ifdef ENTROPY
-    float* dentr1Snk;
-    float* dentr2Snk;
-    float* entr0Snk;
-    float* entr;
-#else
-    float* deint1Snk;
-    float* deint2Snk;
-    float* eint0Snk;
-    float* eint;
-#endif
-    float* kappa;
-    float* coldFrac;
-    float gravityEffectiveRadius;    // Effective gravitational smoothing radius, h = 2 sigma.
-    Array<float, NCHEMFRACS>* chem;
-    float* divvSnk;
-    float* rhoSnk;
-    float* mmw;
-    float* gradT;
-    float* shearv;
-    float* coldMassSnk;
-    float* dcoldMass;
-    char* saSnk;
-    float defGamma;
-    bool conduction;
-    float* rho;
-    bool gravity;
-    bool chemistry;
-    char* convergedSnk;
-    float centralAcceleration;
-    float centralSupportRadius;
-    float g;
-    float t0;
-    float kappa0;
-    float rho0C;
-    float* alpha;
-    float* alpha0;
-    float rho0B;
-    //	float* Z;
-    //	float* Y;
-    float y0;
-    float* gx;
-    float* gy;
-    float* gz;
-    float* vx;
-    float* vy;
-    float* vz;
-    float* omega;
-    float* omegaP;
-    float* pre;
-    float* h;
-    char* rungs;
-    char* rungsSnk;
-    float* omegaSnk;
-    float* omegaPSnk;
-    float* preSnk;
-    float* shearSnk;
-    SphRecord1* rec1Snk;
-    SphRecord2* rec2Snk;
+    // Staged source arrays, including the sources that are also local sinks.
+    Fixed32* sourcePositionX;
+    Fixed32* sourcePositionY;
+    Fixed32* sourcePositionZ;
+    float* sourceVelocityX;
+    float* sourceVelocityY;
+    float* sourceVelocityZ;
+    float* sourceInternalEnergy;
+    float* sourceDensity;
+    float* sourceSupportRadius;
+    char* sourceRungs;
+
+    // Local sink arrays indexed by the SPH particle index.
+    float* sinkInternalEnergyRate;
+    float* sinkDensity;
+    char* sinkSemiactive;
+    char* sinkSmoothingConverged;
+    SphThermodynamicState* sinkThermodynamicStates;
+    SphAcceleration* sinkAccelerations;
+    float* sinkGravityAccelerationX;
+    float* sinkGravityAccelerationY;
+    float* sinkGravityAccelerationZ;
     ParticleInteger* sinkParticleIndices;
-    float* gxSnk;
-    float* gySnk;
-    float* gzSnk;
-    float* kapSnk;
-    SphRecord5* rec5Snk;
-    SphRecord6* rec6Snk;
-    float codeDifToCgs;
-    float n;
+    char* sinkParticleRungs;    // Indexed through sinkParticleIndices into the full particle array.
+
     int numberOfTargetNodes;
-    SphTreeNode* trees;
-    int* selfs;
-    int* neighbors;
+    SphTreeNode* treeNodes;
+    int* targetNodeIndices;
+    int* neighborNodeIndices;
+    float targetNeighborCount;    // Weighted neighbor target for the support-radius solve.
     float gasMass;
-    float eta;
+    float adiabaticIndex;    // Ideal-gas index shared by all gas particles.
+    bool selfGravityEnabled;
+    float gravityEffectiveRadius;        // Twice the gravity kernel standard deviation.
+    float accelerationTimestepFactor;    // Coefficient of the acceleration timestep bound.
+    // Optional external central potential, used by the orbiting-disc problem.
+    float centralAcceleration;     // Zero disables this force.
+    float centralSupportRadius;    // Support radius of the selected gravity kernel.
 };
 
 #define PREHYDRO1_BLOCK_SIZE 160
 #define PREHYDRO2_BLOCK_SIZE 64
 #define HYDRO_BLOCK_SIZE 96
-#define AUX_BLOCK_SIZE 64
 #define RUNGS_BLOCK_SIZE 256
 
-#define COND_INIT_BLOCK_SIZE 32
-#define CONDUCTION_BLOCK_SIZE 32
-
-#define SPH_DIFFUSION_C 0.03f
-#define MAX_RUNG_DIF 1
-#define SPH_SMOOTHLEN_TOLER float(1.0e-4)
+#define MAX_NEIGHBOR_RUNG_DIFFERENCE 1
+#define SPH_SUPPORT_RADIUS_TOLERANCE float(1.0e-4)
 
 struct SphReduction {
-    int counter;
-    int flag;
-    float hmin;
-    float hmax;
-    float vsigMax;
-    double flops;
-    int maxRungHydro;
-    int maxRungGrav;
-    int maxRung;
-    float dtinvCfl;
-    float dtinvVisc;
-    float dtinvDiff;
-    float dtinvCond;
-    float dtinvAcc;
-    float dtinvDivv;
-    float dtinvOmega;
+    int nextNodeIndex;
+    int pendingChanges;
+    float minimumSupportRadius;
+    float maximumSupportRadius;
+    float maximumSignalSpeed;
+    double floatingPointOperations;
+    int maximumHydroRung;
+    int maximumGravityRung;
+    int maximumRung;
+    float inverseSoundTimestep;
+    float inverseViscosityTimestep;
+    float inverseAccelerationTimestep;
 };
 
-SphRunReturn sphRunCuda(SphRunParameters params, SphRunCudaData data, cudaStream_t stream);
+SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, cudaStream_t stream);
 
 #ifdef __CUDACC__
 
 __global__ void sphCudaPrehydro1(
-    SphRunParameters params, SphRunCudaData data, SphReduction* reduce);
+    SphRunParameters parameters, SphRunCudaData data, SphReduction* reduction);
 __global__ void sphCudaPrehydro2(
-    SphRunParameters params, SphRunCudaData data, SphReduction* reduce);
-__global__ void sphCudaAux(SphRunParameters params, SphRunCudaData data, SphReduction* reduce);
-__global__ void sphCudaCondInit(SphRunParameters params, SphRunCudaData data, SphReduction* reduce);
-__global__ void sphCudaHydro(SphRunParameters params, SphRunCudaData data, SphReduction* reduce);
-__global__ void sphCudaConduction(
-    SphRunParameters params, SphRunCudaData data, SphReduction* reduce);
-__global__ void sphCudaRungs(SphRunParameters params, SphRunCudaData data, SphReduction* reduce);
+    SphRunParameters parameters, SphRunCudaData data, SphReduction* reduction);
+__global__ void sphCudaHydro(
+    SphRunParameters parameters, SphRunCudaData data, SphReduction* reduction);
+__global__ void sphCudaRungs(
+    SphRunParameters parameters, SphRunCudaData data, SphReduction* reduction);
 #endif
 
-struct SoftlensRecord {
-    Fixed32 x;
-    Fixed32 y;
-    Fixed32 z;
-    char type;
+struct SphNeighborPosition {
+    Fixed32 positionX;
+    Fixed32 positionY;
+    Fixed32 positionZ;
 };
 
 // A source can reach any sink in this box through a periodic image. Expanding
@@ -185,79 +130,87 @@ CUDA_EXPORT inline bool sphSupportIntersects(
 
 #ifdef __CUDACC__
 template <int blockSize>
-inline __device__ bool computeSoftlens(float& h, float hmin, float hmax, float n,
-    DeviceVector<SoftlensRecord> const& rec, Array<Fixed32, NDIM> const& x,
-    Fixed32Range const& obox, int typeI, float& wcount) {
-    int const tid = threadIdx.x;
+inline __device__ bool solveSphSupportRadius(float& supportRadius, float minimumSupportRadius,
+    float maximumSupportRadius, float targetNeighborCount,
+    DeviceVector<SphNeighborPosition> const& neighbors, Array<Fixed32, NDIM> const& position,
+    Fixed32Range const& neighborSearchBox) {
+    int const threadIndex = threadIdx.x;
     int const runtimeBlockSize = blockDim.x;
-    ALWAYS_ASSERT(hmin > 0.0f && hmax >= hmin && n > 0.0f);
-    if (tid == 0) {
-        h = fminf(fmaxf(h, hmin), hmax);
+    ALWAYS_ASSERT(minimumSupportRadius > 0.0f && maximumSupportRadius >= minimumSupportRadius &&
+        targetNeighborCount > 0.0f);
+    if (threadIndex == 0) {
+        supportRadius = fminf(fmaxf(supportRadius, minimumSupportRadius), maximumSupportRadius);
     }
     __syncthreads();
-    float lower = hmin;
-    float upper = hmax;
-    float const target = n * float(3.0 / (4.0 * M_PI));
+    float lower = minimumSupportRadius;
+    float upper = maximumSupportRadius;
+    float const target = targetNeighborCount * float(3.0 / (4.0 * M_PI));
     // rho H^3 / m = sum W(r/H) is held fixed, giving H proportional to rho^-1/3.
-    // hmin and hmax bound the support radius without modifying the density sum.
+    // minimumSupportRadius and maximumSupportRadius bound the support radius without modifying the
+    // density sum.
     for (int iteration = 0; iteration < 128; iteration++) {
         int boxExceeded = false;
         for (int dim = 0; dim < NDIM; dim++) {
-            if (obox.end[dim] < RangeFixed(x[dim]) + RangeFixed(h) + RangeFixed::min() ||
-                RangeFixed(x[dim]) < obox.begin[dim] + RangeFixed(h) + RangeFixed::min()) {
+            if (neighborSearchBox.end[dim] <
+                    RangeFixed(position[dim]) + RangeFixed(supportRadius) + RangeFixed::min() ||
+                RangeFixed(position[dim]) <
+                    neighborSearchBox.begin[dim] + RangeFixed(supportRadius) + RangeFixed::min()) {
                 boxExceeded = true;
             }
         }
         if (boxExceeded) {
             return false;
         }
-        float const hinv = 1.0f / h;
+        float const inverseSupportRadius = 1.0f / supportRadius;
         float sum = 0.0f;
         float derivative = 0.0f;
-        for (int j = tid; j < rec.size(); j += runtimeBlockSize) {
-            auto const& neighbor = rec[j];
-            if (neighbor.type == typeI) {
-                float const dx = distance(x[XDIM], neighbor.x);
-                float const dy = distance(x[YDIM], neighbor.y);
-                float const dz = distance(x[ZDIM], neighbor.z);
-                float const q = sqrtf(sqr(dx, dy, dz)) * hinv;
-                if (q < 1.0f) {
-                    sum += kernelW(q);
-                    derivative -= q * dkernelWDq(q) * hinv;
-                }
+        for (int neighborIndex = threadIndex; neighborIndex < neighbors.size();
+            neighborIndex += runtimeBlockSize) {
+            auto const& neighbor = neighbors[neighborIndex];
+            float const separationX = distance(position[XDIM], neighbor.positionX);
+            float const separationY = distance(position[YDIM], neighbor.positionY);
+            float const separationZ = distance(position[ZDIM], neighbor.positionZ);
+            float const normalizedRadius =
+                sqrtf(sqr(separationX, separationY, separationZ)) * inverseSupportRadius;
+            if (normalizedRadius < 1.0f) {
+                sum += kernelW(normalizedRadius);
+                derivative -=
+                    normalizedRadius * dkernelWDq(normalizedRadius) * inverseSupportRadius;
             }
         }
         sharedReduceAdd<float, blockSize>(sum);
         sharedReduceAdd<float, blockSize>(derivative);
-        wcount = float(4.0 * M_PI / 3.0) * sum;
         float const residual = sum - target;
-        if (fabsf(residual) <= SPH_SMOOTHLEN_TOLER * target || (h <= hmin && residual >= 0.0f) ||
-            (h >= hmax && residual <= 0.0f)) {
+        if (fabsf(residual) <= SPH_SUPPORT_RADIUS_TOLERANCE * target ||
+            (supportRadius <= minimumSupportRadius && residual >= 0.0f) ||
+            (supportRadius >= maximumSupportRadius && residual <= 0.0f)) {
             return true;
         }
         if (residual > 0.0f) {
-            upper = h;
+            upper = supportRadius;
         } else {
-            lower = h;
+            lower = supportRadius;
         }
-        float change = derivative > 0.0f ? -residual / derivative : 0.2f * h;
-        change = fminf(fmaxf(change, -0.2f * h), 0.2f * h);
-        float next = fminf(fmaxf(h + change, hmin), hmax);
+        float change = derivative > 0.0f ? -residual / derivative : 0.2f * supportRadius;
+        change = fminf(fmaxf(change, -0.2f * supportRadius), 0.2f * supportRadius);
+        float next =
+            fminf(fmaxf(supportRadius + change, minimumSupportRadius), maximumSupportRadius);
         if (next < lower || next > upper) {
             next = 0.5f * (lower + upper);
         }
-        if (next == h) {
+        if (next == supportRadius) {
             return true;
         }
         __syncthreads();
-        if (tid == 0) {
-            h = next;
+        if (threadIndex == 0) {
+            supportRadius = next;
         }
         __syncthreads();
     }
-    if (tid == 0) {
-        PRINT("SPH smoothing-length solve did not converge: h=%e bounds=[%e,%e] target=%e\n", h,
-            hmin, hmax, n);
+    if (threadIndex == 0) {
+        PRINT("SPH smoothing-length solve did not converge: supportRadius=%e bounds=[%e,%e] "
+              "target=%e\n",
+            supportRadius, minimumSupportRadius, maximumSupportRadius, targetNeighborCount);
         __trap();
     }
     return false;

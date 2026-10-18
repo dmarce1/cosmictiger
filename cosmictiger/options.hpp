@@ -105,36 +105,23 @@ struct Options {
 
     bool htime{};
     bool sph{};
-    bool sphSmoothing{};
-    bool yreflect{};
-    int viscType{};
-    bool stars{};
-    bool chem{};
-    bool conduction{};
-    bool vsoft{};
     bool gravity{};
-    int glass{};
-    double kernel{};
-    bool diffusion{};
     int sphBucketSize{};
     double alpha0{};
-    double alpha1{};
     double beta{};
     double viscosityEpsilon{};
-    double alphaDecay{};
-    double darkMatterNeighborNumber{};
     double sphNeighborNumber{42.0};
     double hydroMinSupportRadius{};
     double hydroMaxSupportRadius{};
+    // Velocity damping during the self-gravitating polytropic gas relaxation test.
     double damping{};
-    double sigma8C{};
     double darkMatterMass{};
     double sphMass{};
     double cfl{};
-    double rho0B{};
-    double rho0C{};
     double gamma{};
+    // Uniform external acceleration for the Rayleigh-Taylor gas test.
     double yAcceleration{};
+    // Fixed central potential for the orbiting-disc gas test.
     double centralAcceleration{};
     double centralSupportRadius{};
 
@@ -142,33 +129,18 @@ struct Options {
     void serialize(A&& arc, unsigned) {
         arc & htime;
         arc & sph;
-        arc & yreflect;
-        arc & viscType;
-        arc & stars;
-        arc & chem;
-        arc & conduction;
-        arc & vsoft;
         arc & gravity;
-        arc & glass;
-        arc & kernel;
-        arc & diffusion;
         arc & sphBucketSize;
         arc & alpha0;
-        arc & alpha1;
         arc & beta;
         arc & viscosityEpsilon;
-        arc & alphaDecay;
-        arc & darkMatterNeighborNumber;
         arc & sphNeighborNumber;
         arc & hydroMinSupportRadius;
         arc & hydroMaxSupportRadius;
         arc & damping;
-        arc & sigma8C;
         arc & darkMatterMass;
         arc & sphMass;
         arc & cfl;
-        arc & rho0B;
-        arc & rho0C;
         arc & gamma;
         arc & yAcceleration;
         arc & centralAcceleration;
@@ -247,7 +219,6 @@ struct Options {
         arc & neff;
         arc & configFile;
         arc & test;
-        arc & sphSmoothing;
         arc & gravityKernelFamily;
         arc & gravityKernelDegree;
         arc & hydroKernelFamily;

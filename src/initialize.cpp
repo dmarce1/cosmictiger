@@ -859,11 +859,12 @@ static void initX0() {
         double const scale = 1.0 / (1.0 + getOptions().z0);
         auto const unitScales = units::scalesFromOptions(getOptions());
         units::CosmologicalContext const context(scale, getOptions().hubble);
+        // The cosmological gas initial condition starts neutral at 1000 K.
+        // This fixed composition sets the initial energy; no chemistry is evolved.
         double const neutralNumber = 1.0 - 0.75 * getOptions().y0;
         auto const initialTemperature = units::Temperature::from_value(1000.0);
         units::SpecificEnergy const physicalEnergy =
             1.5 * units::kBoltzmann * units::kParticlesPerGram * neutralNumber * initialTemperature;
-        double const thermalEnergy = (physicalEnergy / unitScales.specificEnergyScale()).value();
         double const storedThermalEnergy = units::toStoredSpecificEnergy(
             units::PhysicalSpecificEnergy(physicalEnergy), unitScales, context)
                                                .value();
@@ -872,33 +873,9 @@ static void initX0() {
             getOptions().sphNeighborNumber / ((4.0 * M_PI / 3.0) * getOptions().numberOfParticles));
         for (ParticleInteger i = 0; i < count; i++) {
             particlesRung(count + i) = 0;
-#ifdef ENTROPY
-            sphParticlesRec2(i).entropy = thermalEnergy * (getOptions().gamma - 1.0) /
-                std::pow(density / (scale * scale * scale), getOptions().gamma - 1.0);
-#else
-            sphParticlesRec2(i).eint = storedThermalEnergy;
-#endif
-            sphParticlesSmoothingLength(i) = smoothLength;
-            sphParticlesAlpha(i) = getOptions().alpha0;
-            sphParticlesShear(i) = 0.0f;
-            sphParticlesOmega(i) = 1.0f;
-            sphParticlesOmegaP(i) = 1.0f;
-            sphParticlesColdMass(i) = 0.0f;
-#ifdef HOPKINS
-            sphParticlesRhoRho(i) = density;
-#else
-            sphParticlesRho(i) = density;
-#endif
-            sphParticlesPressure(i) =
-                density * thermalEnergy * scale * scale * (getOptions().gamma - 1.0);
-            sphParticlesH(i) = 1.0 - getOptions().y0;
-            sphParticlesHe0(i) = getOptions().y0;
-            sphParticlesHn(i) = 1.0e-30f;
-            sphParticlesHp(i) = 1.0e-30f;
-            sphParticlesH2(i) = 1.0e-30f;
-            sphParticlesHep(i) = 1.0e-30f;
-            sphParticlesHepp(i) = 1.0e-30f;
-            sphParticlesZ(i) = 1.0e-30f;
+            sphParticlesThermodynamicState(i).internalEnergy = storedThermalEnergy;
+            sphParticlesSupportRadius(i) = smoothLength;
+            sphParticlesDensity(i) = density;
         }
     }
     for (auto& future : remoteFutures) {
