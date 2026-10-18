@@ -107,7 +107,7 @@ def main():
                "--initial.particlesPerDimension=8", "--hydro.enabled=false",
                "--compute.cuda=false", "--analysis.views=false",
                "--lightcone.enabled=false", "--analysis.power=false",
-               "--analysis.groups=false"]
+               "--analysis.groups=false", "--gravity.kernelDegree=8"]
     baseline = prepareCase(baseWorkdir, "baseline", powerFile, recfast)
     # The first step crosses this redshift. Its checkpoint must keep a numbered
     # restart path, while the second step must produce a final checkpoint.

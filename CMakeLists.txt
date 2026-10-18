@@ -130,6 +130,7 @@ set(cosmictiger_source_files
     tests/fmm_tree.cpp
     tests/fmm_walk.cpp
     tests/sph_gravity.cpp
+    tests/linear_growth.cpp
     tests/units_output.cpp
 )
 
@@ -277,6 +278,11 @@ if(BUILD_TESTING)
         ${PROJECT_SOURCE_DIR}/tests/run_options.py $<TARGET_FILE:cosmictiger>
         ${PROJECT_BINARY_DIR}/tests/grouped_options)
     set_tests_properties(grouped_options PROPERTIES RUN_SERIAL TRUE TIMEOUT 240)
+
+    add_test(NAME linear_growth_response COMMAND ${Python3_EXECUTABLE}
+        ${PROJECT_SOURCE_DIR}/tests/run_linear_growth.py $<TARGET_FILE:cosmictiger>
+        ${PROJECT_BINARY_DIR}/tests/linear_growth_response)
+    set_tests_properties(linear_growth_response PROPERTIES RUN_SERIAL TRUE TIMEOUT 200)
 
     add_executable(units_test tests/units.cpp)
     target_include_directories(units_test PRIVATE ${PROJECT_SOURCE_DIR})
@@ -546,6 +552,11 @@ if(BUILD_TESTING)
             ${PROJECT_BINARY_DIR}/tests/smoke_${smoke_mode})
         set_tests_properties(smoke_${smoke_mode} PROPERTIES RUN_SERIAL TRUE TIMEOUT 500)
     endforeach()
+    add_test(NAME smoke_dm_min_rung COMMAND ${Python3_EXECUTABLE}
+        ${PROJECT_SOURCE_DIR}/tests/run_smoke.py dm_cpu
+        $<TARGET_FILE:cosmictiger> ${PROJECT_SOURCE_DIR}/power.init
+        ${PROJECT_BINARY_DIR}/tests/smoke_dm_min_rung --minimum-rung=10)
+    set_tests_properties(smoke_dm_min_rung PROPERTIES RUN_SERIAL TRUE TIMEOUT 500)
     add_test(NAME checkpoint_integrity COMMAND ${Python3_EXECUTABLE}
         ${PROJECT_SOURCE_DIR}/tests/run_checkpoint.py
         $<TARGET_FILE:cosmictiger> ${PROJECT_SOURCE_DIR}/power.init

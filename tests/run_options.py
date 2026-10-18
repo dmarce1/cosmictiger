@@ -100,7 +100,8 @@ mapSize = 8
                 "hydro.viscosityBeta": 1.5, "hydro.viscosityEpsilon": 0.02,
                 "hydro.gamma": 1.4, "hydro.neighborNumber": 48.0,
                 "hydro.cfl": 0.3, "lightcone.mapSize": 8.0,
-                "hydro.minSupportRadius": 1.0e-6, "hydro.maxSupportRadius": 4.0}
+                "hydro.minSupportRadius": 1.0e-6, "hydro.maxSupportRadius": 4.0,
+                "gravity.kernelDegree": 4.0}
     for name, value in expected.items():
         match = re.search(r"^" + re.escape(name) + r"\s*:\s*(\S+)", configured, re.MULTILINE)
         if match is None or abs(float(match.group(1)) - value) > 1.0e-6:
@@ -155,6 +156,11 @@ mapSize = 8
                for line in output.splitlines()):
             raise RuntimeError("a single radius representation produced a warning")
 
+    defaults = run("independent_defaults", metadata_options)
+    for key, value in (("gravity.kernelDegree", 4),
+                       ("hydro.neighborNumber", 42), ("hydro.kernelDegree", 3)):
+        assertNumericSetting(defaults, key, value)
+
     # Both radius representations describe the same kernel, including kernels
     # whose support-to-effective-radius ratios differ.
     for family, degree, ratio in (("ferrers", 8, math.sqrt(13) / 2),
@@ -169,7 +175,7 @@ mapSize = 8
             assertNumericSetting(output, "gravity.supportRadius", 0.02 * ratio)
             assertNoRadiusWarning(output)
 
-    gravityRatio = math.sqrt(13) / 2
+    gravityRatio = 1.5
     hydroRatio = math.sqrt(10 / 3)
     radiusPairs = (
         ("gravity.effectiveRadius", "gravity.supportRadius", 0.02, gravityRatio),
@@ -395,7 +401,8 @@ mapSize = 8
         ("softening_nan", "--gravity.softening=nan", "gravity.softening"),
         ("softening_inf", "--gravity.softening=inf", "gravity.softening"),
         ("softening_underflow", "--gravity.softening=1e-37", "gravity.softening"),
-        ("smoothing_without_hydro", "--gravity.sphSmoothing=true", "requires hydro.enabled=true"),
+        ("smoothing_obsolete", "--gravity.sphSmoothing=true", "fixed comoving"),
+        ("adaptive_option_removed", "--gravity.softeningMode=adaptive", "gravity.softeningMode"),
         ("alpha_overflow", "--hydro.viscosityAlpha=1e100", "single precision"),
         ("epsilon_underflow", "--hydro.viscosityEpsilon=1e-100", "single precision"),
         ("gamma_rounding", "--hydro.gamma=1.00000001", "single precision"),
@@ -421,6 +428,19 @@ mapSize = 8
         output = run(name, [option], success=False)
         if diagnostic not in output:
             raise RuntimeError(f"{name} failed without its expected diagnostic: {diagnostic}")
+    output = run("smoothing_with_hydro", [
+        "--run.test=checkpointState", "--compute.cuda=false", "--hydro.enabled=true",
+        "--gravity.sphSmoothing=true"], success=False)
+    if "fixed comoving" not in output:
+        raise RuntimeError("SPH gravity smoothing was not rejected explicitly")
+    for parameter in ("omegaB", "omegaC"):
+        for value in ("0", "-0.1", "nan", "inf"):
+            output = run(f"invalid_class_mass_{parameter}_{value}", [
+                "--run.test=sphGravity", "--compute.cuda=false", "--hydro.enabled=true",
+                "--initial.particlesPerDimension=8", f"--cosmology.{parameter}={value}"],
+                success=False)
+            if "class masses" not in output:
+                raise RuntimeError(f"invalid {parameter} did not produce a class-mass diagnostic")
     output = run("support_half_box", ["--initial.particlesPerDimension=8",
                                       "--hydro.minSupportRadius=5"], success=False)
     if "half the periodic box" not in output:

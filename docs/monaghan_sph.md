@@ -34,6 +34,8 @@ the normalized kernel. It retains the existing `2 sigma` value without a
 factor-of-two conversion. For the cubic, \(H=\sqrt{10/3}\,h\); thus the common
 \(h\) and the paper's \(h_M\) are distinct.
 
+The default `hydro.neighborNumber` is 42. The name cubic B-spline refers to this
+radial M4 kernel; it is not a tensor-product bicubic interpolation.
 `hydro.kernelFamily` and `hydro.kernelDegree` can instead select cardinal splines
 of degrees 3–9, Wendland C0/C2/C4, or Ferrers F1–F4. Gravity has an independent
 selection. See [kernel choices and length conventions](kernels.md) for the valid
@@ -54,7 +56,9 @@ writes the adaptive density interpolant with the **source** length \(h_j\).
 Section 6 permits summation instead of integrating the continuity equation, but
 does not prescribe this gather solve or its numerical parameters.
 
-For the current equal-mass gas particles, the smoothing solve holds
+Gas particles share one constant class mass. Other particle classes may have
+different constant masses; there is no per-particle SPH mass field. The gas
+smoothing solve holds
 
 \[
  \frac{4\pi}{3}\frac{\rho_i H_i^3}{m}=N_{\rm target},
@@ -202,7 +206,7 @@ hydrodynamic controls are:
 | `hydro.viscosityAlpha` | `1` | Linear viscosity coefficient |
 | `hydro.viscosityBeta` | `2` | Quadratic viscosity coefficient |
 | `hydro.viscosityEpsilon` | `0.01` | Denominator coefficient multiplying \(\bar\ell^2\) |
-| `hydro.neighborNumber` | `60` | Kernel-weighted support-sphere count |
+| `hydro.neighborNumber` | `42` | Kernel-weighted support-sphere count |
 | `hydro.minEffectiveRadius` | unset | Alternative minimum effective radius \(h=2\sigma\), in initial interparticle spacings |
 | `hydro.minSupportRadius` | `1e-6` | Minimum \(H\), in initial interparticle spacings |
 | `hydro.maxEffectiveRadius` | unset | Alternative maximum effective radius \(h=2\sigma\), in initial interparticle spacings |
@@ -219,11 +223,18 @@ then the `centralSoftening` alias, then `centralSupportRadius`. The command line
 still overrides INI values for the same key. See [kernel radii](kernels.md) for
 the equivalent gravity options and conversion factors.
 
-Old SPH checkpoints with formulation marker `reserved=0` are rejected. SPH
-checkpoints use version 2 and the low byte of `reserved` identifies the Monaghan
+Gas, dark matter, and stars share one fixed comoving gravity kernel radius.
+SPH density, pressure, viscosity, and thermal work retain the gas-only hydro
+kernel and variable smoothing radii. See
+[gravitational softening](kernels.md#fixed-comoving-gravitational-softening) for
+the gravity radius options and their independence from SPH smoothing.
+
+Old SPH checkpoints with formulation marker `reserved=0` are rejected. New
+checkpoints use version 3, and the low byte of `reserved` identifies the Monaghan
 discretization. Additional bits encode independent gravity and hydro kernel
-selections; the default selections retain `reserved=1`. A change of kernel
-selection on restart is rejected. The native header layout is unchanged.
+selections. Historical marker values retain their original kernel meanings;
+the new Ferrers F2 default changes the selected gravity marker. A change of
+kernel selection on restart is rejected.
 A separate parameter block also rejects changes to viscosity coefficients,
 smoothing constraints, timestep
 controls, gravity enablement, and external accelerations on SPH restart. These

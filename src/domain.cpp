@@ -603,7 +603,9 @@ void domainsBegin(int rung) {
             while (begin < currentRange.second) {
                 ParticleInteger const end = std::min(begin + kChunkSize, currentRange.second);
                 for (ParticleInteger i = begin; i < end; i++) {
-                    if (particlesRung(i) == rung) {
+                    // Ordinary timesteps drift every rung together. Rebalance
+                    // all particles before building their common gravity tree.
+                    if (!getOptions().htime || particlesRung(i) == rung) {
                         Array<double, NDIM> x;
                         for (ParticleInteger dim = 0; dim < NDIM; dim++) {
                             x[dim] = particlesPos(dim, i).toDouble();

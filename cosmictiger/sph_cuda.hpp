@@ -112,7 +112,7 @@ struct SphRunCudaData {
     SphTreeNode* trees;
     int* selfs;
     int* neighbors;
-    float m;
+    float gasMass;
     float eta;
 };
 

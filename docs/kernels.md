@@ -1,8 +1,10 @@
 # Smoothing and gravitational softening kernels
 
-Gravity and SPH can select different spherical density kernels. The default
-remains the cubic spline for SPH and Ferrers F4 for gravity. The production
-three-dimensional table and evaluators support the following 14 choices:
+Gravity and SPH select independent spherical density kernels and radii. The
+defaults are the radial cubic B-spline (M4) with 42 weighted neighbors for SPH,
+and fixed comoving Ferrers F2 gravity for all particle classes, whose density
+is proportional to `(1-q*q)^2`. The production three-dimensional table and
+evaluators support the following 14 choices:
 
 | `kernelFamily` | Allowed `kernelDegree` | Shape or interpretation |
 | --- | --- | --- |
@@ -67,16 +69,23 @@ moments. Some 3D conversions are:
 | Cubic spline | `sqrt(10/3) = 1.8257418584` |
 | Wendland C2 | `sqrt(15)/2 = 1.9364916731` |
 | Wendland C4 | `sqrt(39/8) = 2.2079402166` |
+| Ferrers F2 | `3/2 = 1.5` |
 | Ferrers F4 | `sqrt(13)/2 = 1.8027756377` |
 
 The accepted radius options are:
 
 | Purpose | Effective-radius key | Support-radius key | Units and kernel |
 | --- | --- | --- | --- |
-| Gravity | `gravity.effectiveRadius` | `gravity.supportRadius` | Mean box-particle spacings; gravity kernel |
+| Fixed comoving gravity | `gravity.effectiveRadius` | `gravity.supportRadius` | Initial reference spacings; gravity kernel |
 | Imposed central force | `hydro.centralEffectiveRadius` | `hydro.centralSupportRadius` | Box units; gravity kernel |
 | SPH minimum | `hydro.minEffectiveRadius` | `hydro.minSupportRadius` | Initial interparticle spacings; hydro kernel |
 | SPH maximum | `hydro.maxEffectiveRadius` | `hydro.maxSupportRadius` | Initial interparticle spacings; hydro kernel |
+
+Gravity's reference spacing is `numberOfParticles^-1/3` in box units, preserving
+the existing radius-input convention. Cosmological SPH runs use
+`numberOfParticles` particles per class, so this is the initial reference
+spacing for one class, not the smaller mean spacing of the combined gas and
+dark-matter population.
 
 `gravity.softening` and `hydro.centralSoftening` remain aliases for the respective
 effective radii, preserving their numeric values and units. Changing a kernel at
@@ -173,12 +182,30 @@ by zero, giving finite central potential and force factor and zero acceleration
 at zero separation. Integrated Bernstein coefficients avoid subtracting nearly
 equal large powers near the support boundary.
 
-`gravity.sphSmoothing` remains a stored option/checkpoint flag. This kernel
-selection work does not implement adaptive gravitational softening tied to each
-gas particle's SPH radius or the associated conservation corrections. Gravity
-uses the selected gravity family with the existing gravitational softening
-scale machinery. Selecting the same family for gravity and SPH does not tie their
-lengths together.
+## Fixed comoving gravitational softening
+
+Gas, dark matter, and stars use the same selected gravity kernel and one fixed
+comoving support radius. Set that radius with `gravity.effectiveRadius`,
+`gravity.supportRadius`, or the legacy effective-radius alias `gravity.softening`.
+The configured radius remains constant in comoving coordinates during evolution;
+its physical length scales with the cosmological scale factor. Gravity does not
+solve a neighbor constraint or use the gas smoothing radius.
+
+SPH density, pressure, viscosity, and thermal work retain their variable,
+gas-only smoothing radii and independently selected hydro kernel. Selecting the
+same kernel family for gravity and SPH does not tie their lengths together.
+`gravity.sphSmoothing=false` is retained for configuration compatibility;
+`gravity.sphSmoothing=true` is rejected with a fixed-gravity diagnostic.
+
+Particle masses are constant within each class and may differ between classes.
+Cosmological initial conditions retain equal gas and dark-matter counts, with
+code class masses `omegaB/omegaM` and `omegaC/omegaM`, respectively. Physical
+masses are these values times the `units.massSolar` unit. Stars use the gas-class
+mass in the existing class convention. SPH CUDA data carry one gas-class mass
+scalar, with no mass value stored per SPH particle.
+
+The hierarchical gravity path remains available for dark-matter-only runs.
+Glass generation (`initial.createGlass=true`) uses its repulsive gravity and drag.
 
 ## Timesteps and migration from the old convention
 
@@ -194,14 +221,18 @@ similarly uses the hydro effective radius. Equal effective radii do not guarante
 equal timestep error for different kernel shapes; accuracy and stability still require validation for
 the selected problem and settings.
 
-Defaults have been converted to preserve the old Ferrers F4 support and gravity
-acceleration limit, and the old cubic Courant-viscous limit:
+The earlier radius-unit conversion preserved the Ferrers F4 support and gravity
+acceleration limit, and the cubic Courant-viscous limit, using these values:
 
 | Setting | Previous default | Current default |
 | --- | ---: | ---: |
 | `gravity.softening` | `0.0125` in Plummer-equivalent epsilon | `0.01876988456953534` in `effectiveRadius = 2 sigma` |
 | `gravity.timestepEta` | `0.25` | `0.20401599335954483` |
 | `hydro.cfl` | `0.25` | `0.22821773229381923` |
+
+These numeric values remain in use. The Ferrers F2 default changes the kernel
+shape and does not preserve the former Ferrers F4 support at the same effective
+radius.
 
 For an old explicit Ferrers F4 configuration, convert softening by
 `effectiveRadius = 1.5015907655628272 * epsilon`, gravity eta by
@@ -216,19 +247,23 @@ Viscosity uses a fixed reference factor `sqrt(5/6)` times the mean SPH effective
 radius. This equals Monaghan's `supportRadius/2` for the cubic and preserves the meaning of
 the existing cubic `viscosityAlpha`, `viscosityBeta`, and regularization settings.
 The hydro acceleration limit additionally retains a fixed reference calibration
-`0.7115965735877551` multiplying gravity eta, so the default cubic/Ferrers
-acceleration behavior is preserved after the two length conventions change.
+`0.7115965735877551` multiplying gravity eta, preserving the historical
+cubic/Ferrers F4 acceleration calibration through the radius-unit conversion.
 These factors are independent of the selected kernel family.
 The divergence and fractional thermal-energy timestep bounds apply the same
 fixed reference conversion to preserve their old default physical limits.
 
 Kernel selections are encoded in the checkpoint physics marker. Restarting with
-different selections is rejected. The native header layout is unchanged, and
-default selections retain their historical kernel marker. Existing SPH parameter
-checks still apply, including timestep coefficients; preserving the header layout
-does not imply that every old checkpoint accepts a newly converted configuration.
+different selections is rejected. Checkpoints retain the version 3 format.
+Historical kernel marker values retain their original meaning, so the Ferrers F2
+default does not reinterpret a Ferrers F4 checkpoint. Existing SPH parameter checks still
+apply, including timestep coefficients and the hydro neighbor target.
 
 ## Validation scope
+
+The `run.test=force` direct reference supports fixed-softening, dark-matter-only
+runs. It requires `hydro.enabled=false`; `run.test=sphGravity` exercises mixed
+particle-class gravity with the common fixed radius.
 
 The `radial_kernel` test covers all 14 kernels: unit mass and second moments,
 independent polynomial references, derivatives, support joins, gravity against

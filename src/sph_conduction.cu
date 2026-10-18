@@ -57,9 +57,8 @@ __global__ void sphCudaConduction(
     __syncthreads();
     new (&ws) ConductionWorkspace();
     float const gamma0 = data.defGamma;
-    float const m = data.m;
     Array<Fixed32, NDIM> x;
-    float const cons = -2.f * sqr(params.a) * m;
+    float const cons = -2.f * sqr(params.a) * data.gasMass;
     int flops = 4;
     while (index < data.numberOfTargetNodes) {
         __syncthreads();

@@ -200,7 +200,7 @@ __global__ void sphCudaPrehydro2(
                 continue;
             }
             float const hinv = 1.0f / h;
-            float const normalization = data.m * hinv * hinv * hinv;
+            float const normalization = data.gasMass * hinv * hinv * hinv;
             float density = 0.0f;
             for (int j = tid; j < workspace.positions.size(); j += blockSize) {
                 auto const& neighbor = workspace.positions[j];

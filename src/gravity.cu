@@ -352,19 +352,18 @@ __device__ void cudaGravityPpDirect(CudaKickData const& data, TreeNode const& se
                     dx0 = distance(sinkX[k], sourceX[j]);    // 1
                     dx1 = distance(sinkY[k], sourceY[j]);    // 1
                     dx2 = distance(sinkZ[k], sourceZ[j]);    // 1
-                    auto const r2 = sqr(dx0, dx1, dx2);    // 5
+                    auto const r2 = sqr(dx0, dx1, dx2);      // 5
                     if (r2 > h2) {
-                        r1inv = rsqrt(r2);             // 4
-                        r3inv = sqr(r1inv) * r1inv;    // 2
+                        float const inverseRadius = rsqrt(r2);
+                        r3inv = sqr(inverseRadius) * inverseRadius;
+                        r1inv = doPhi ? inverseRadius : 0.0f;
                         direct++;
                     } else {
                         close++;
                         gravitySofteningKernel(r3inv, r1inv, r2, hinv, h2inv, h3inv, doPhi);
                     }
                     r3inv *= sourceMass[j];
-                    if (doPhi) {
-                        r1inv *= sourceMass[j];
-                    }
+                    r1inv *= sourceMass[j];
                     fx = fmaf(dx0, r3inv, fx);    // 2
                     fy = fmaf(dx1, r3inv, fy);    // 2
                     fz = fmaf(dx2, r3inv, fz);    // 2
@@ -387,19 +386,18 @@ __device__ void cudaGravityPpDirect(CudaKickData const& data, TreeNode const& se
                     dx0 = distance(sinkX[k], sourceX[j]);    // 2
                     dx1 = distance(sinkY[k], sourceY[j]);    // 2
                     dx2 = distance(sinkZ[k], sourceZ[j]);    // 2
-                    auto const r2 = sqr(dx0, dx1, dx2);    // 5
+                    auto const r2 = sqr(dx0, dx1, dx2);      // 5
                     if (r2 > h2) {
-                        r1inv = rsqrt(r2);             // 4
-                        r3inv = sqr(r1inv) * r1inv;    // 2
+                        float const inverseRadius = rsqrt(r2);
+                        r3inv = sqr(inverseRadius) * inverseRadius;
+                        r1inv = doPhi ? inverseRadius : 0.0f;
                         direct++;
                     } else {
                         close++;
                         gravitySofteningKernel(r3inv, r1inv, r2, hinv, h2inv, h3inv, doPhi);
                     }
                     r3inv *= sourceMass[j];
-                    if (doPhi) {
-                        r1inv *= sourceMass[j];
-                    }
+                    r1inv *= sourceMass[j];
                     fx = fmaf(dx0, r3inv, fx);    // 2
                     fy = fmaf(dx1, r3inv, fy);    // 2
                     fz = fmaf(dx2, r3inv, fz);    // 2

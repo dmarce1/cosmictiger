@@ -1,6 +1,6 @@
 # Problem configurations
 
-Each INI contains all 73 application options except the top-level `help` and
+Each INI contains every application option except the top-level `help` and
 `configuration` options. INI sections correspond to the CLI groups, and each
 entry carries its help text as an inline comment. Values start from the current
 CUDA-enabled source defaults, with the overrides described below. Edit any
@@ -19,8 +19,12 @@ use nominal resolution 32, except the blast and disc profiles, which use 64.
 These are starting resolutions for experimentation, not convergence claims.
 Each problem configuration enables full-box particle Silo output in `./output`,
 at every synchronized coarse step. `default.ini` sets `output.silo=false`.
-All gas evolution requires CUDA. HPX thread/locality settings remain on the
-command line and are not application INI options.
+Gravity uses the same fixed comoving Ferrers F2 kernel for gas, dark matter,
+and stars. Set its radius with `gravity.effectiveRadius`, `gravity.supportRadius`,
+or the legacy effective-radius alias `gravity.softening`. SPH uses a separate
+variable smoothing radius and defaults to the cubic spline with 42 weighted
+neighbors. All gas evolution requires CUDA. HPX thread/locality settings remain
+on the command line and are not application INI options.
 
 | Configuration | Selection | Problem-specific settings |
 | --- | --- | --- |
@@ -33,8 +37,16 @@ command line and are not application INI options.
 | [legacyPlummer.ini](legacyPlummer.ini) | `run.test=plummer` | Legacy hydro-driver test; see limitations below. |
 | [plummer.ini](plummer.ini) | Empty test; `initial.plummer=true` | Dark-matter Plummer model through the normal driver. |
 | [cosmologyDarkMatter.ini](cosmologyDarkMatter.ini) | Empty test; `hydro.enabled=false` | Cosmological dark matter with the source cosmology defaults. |
-| [cosmologySph.ini](cosmologySph.ini) | Empty test; `hydro.enabled=true` | Cosmological gas and dark matter, resolution per species. |
+| [cosmologySph.ini](cosmologySph.ini) | Empty test; `hydro.enabled=true` | Cosmological gas and dark matter, resolution per class. |
 | [createGlass.ini](createGlass.ini) | Empty test; `initial.createGlass=true` | Glass generation on one HPX locality; writes `glass.bin`. |
+
+Particle masses are constant within each class and may differ between classes.
+The standard cosmological SPH lattice retains `N^3` gas and `N^3` dark-matter
+particles for `initial.particlesPerDimension=N`. Their code masses are
+`omegaB/(omegaB+omegaC)` and `omegaC/(omegaB+omegaC)`; `units.massSolar` sets the
+physical mass unit. Gravity radius inputs retain the initial reference spacing
+of one class, not the spacing of the combined population. Hydro test fixtures
+retain their existing class masses and thermodynamic normalization.
 
 ## Output and duration
 

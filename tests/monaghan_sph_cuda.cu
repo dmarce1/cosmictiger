@@ -111,6 +111,9 @@ public:
         data_.omegaPSnk = allocate<float>(count);
         data_.shearSnk = allocate<float>(count);
         data_.divvSnk = allocate<float>(count);
+        data_.gxSnk = allocate<float>(count);
+        data_.gySnk = allocate<float>(count);
+        data_.gzSnk = allocate<float>(count);
         data_.deint1Snk = allocate<float>(count);
         data_.deint2Snk = allocate<float>(count);
         data_.rec1Snk = allocate<SphRecord1>(count);
@@ -125,7 +128,7 @@ public:
         data_.neighbors = allocate<int>(treeCount);
         reduction_ = allocate<SphReduction>(1);
         data_.numberOfTargetNodes = treeCount;
-        data_.m = 1.0f / count;
+        data_.gasMass = 1.0f / count;
         data_.n = 32.0f;
         data_.defGamma = 5.0f / 3.0f;
         data_.eta = 0.25f;
@@ -148,6 +151,7 @@ public:
             data_.rungs[i] = 1;
             data_.eint[i] = 1.0f;
             data_.h[i] = data_.rec2Snk[i].h = 0.2f;
+            data_.gxSnk[i] = data_.gySnk[i] = data_.gzSnk[i] = 0.0f;
         }
         for (int tree = 0; tree < treeCount; tree++) {
             data_.selfs[tree] = data_.neighbors[tree] = tree;
@@ -234,15 +238,15 @@ public:
         double absoluteForce = 0.0;
         for (int i = 0; i < count_; i++) {
             auto const& acceleration = data_.rec6Snk[i].dvel;
-            double const kinetic = data_.m *
+            double const kinetic = data_.gasMass *
                 (data_.vx[i] * acceleration[XDIM] + data_.vy[i] * acceleration[YDIM] +
                     data_.vz[i] * acceleration[ZDIM]);
-            double const thermal = data_.m * data_.deint2Snk[i];
+            double const thermal = data_.gasMass * data_.deint2Snk[i];
             energy += kinetic + thermal;
             absoluteEnergy += std::abs(kinetic) + std::abs(thermal);
             for (int dim = 0; dim < NDIM; dim++) {
-                momentum[dim] += data_.m * acceleration[dim];
-                absoluteForce += std::abs(data_.m * acceleration[dim]);
+                momentum[dim] += data_.gasMass * acceleration[dim];
+                absoluteForce += std::abs(data_.gasMass * acceleration[dim]);
             }
         }
         for (int dim = 0; dim < NDIM; dim++) {
@@ -307,8 +311,8 @@ void testLattice() {
     fixture.density();
     for (int i = 0; i < fixture.count_; i++) {
         double const support = fixture.data_.h[i];
-        double const count =
-            4.0 * kPi / 3.0 * fixture.data_.rho[i] * support * support * support / fixture.data_.m;
+        double const count = 4.0 * kPi / 3.0 * fixture.data_.rho[i] * support * support * support /
+            fixture.data_.gasMass;
         requireClose("weighted neighbor target", count, fixture.data_.n, 2.0e-4);
         requireClose("uniform lattice density", fixture.data_.rho[i], fixture.data_.rho[0], 2.0e-5);
         requireClose("uniform lattice continuum density", fixture.data_.rho[i], 1.0, 0.03);
@@ -423,7 +427,7 @@ void testSelectedKernel() {
     for (int i = 0; i < 2; i++) {
         double const support = data.h[i];
         double const expectedDensity =
-            data.m * (kernelW(0.0) + kernelW(radius / support)) / std::pow(support, 3);
+            data.gasMass * (kernelW(0.0) + kernelW(radius / support)) / std::pow(support, 3);
         requireClose("selected kernel CPU/CUDA density", data.rho[i], expectedDensity, 3.0e-6);
         gradient += 0.5 * dkernelWDq(radius / support) / std::pow(support, 4);
         pressurePair += (data.defGamma - 1.0f) * data.eint[i] / data.rho[i];
@@ -433,7 +437,7 @@ void testSelectedKernel() {
     }
     fixture.hydro(1);
     requireClose("selected kernel CPU/CUDA pressure force", data.rec6Snk[0].dvel[XDIM],
-        data.m * pressurePair * gradient, 8.0e-6);
+        data.gasMass * pressurePair * gradient, 8.0e-6);
     requireClose(
         "selected kernel effective-width CFL", fixture.reduction_->dtinvCfl, inverseCfl, 3.0e-6);
     fixture.checkConservation();
@@ -462,6 +466,30 @@ void testSelectedCentralGravity() {
         radial_kernel::forceFactor(selectedGravityKernel(), radius / data.centralSupportRadius);
     requireClose(
         "selected gravity kernel central force", data.rec6Snk[0].dvel[XDIM], expected, 5.0e-6);
+}
+
+void testFixedGravityTimestep() {
+    Fixture fixture(1);
+    auto& data = fixture.data_;
+    data.x[0] = data.y[0] = data.z[0] = 0.5;
+    data.convergedSnk[0] = true;
+    data.eint[0] = 1.0e-6f;
+    data.gravity = true;
+    data.gravityEffectiveRadius = 0.08f / selectedGravityKernel().supportRadiusPerEffectiveRadius;
+    data.gxSnk[0] = 0.1f;
+    fixture.density();
+    fixture.hydro(1);
+    double const gravityStep =
+        data.eta * std::sqrt(fixture.params_.a * data.gravityEffectiveRadius / data.gxSnk[0]);
+    int const expectedGravityRung =
+        std::max(1, int(std::ceil(std::log2(fixture.params_.t0 / gravityStep))));
+    require(fixture.reduction_->maxRungGrav == expectedGravityRung,
+        "gas gravity timestep must use the shared fixed gravity radius");
+    data.h[0] = data.rec2Snk[0].h = 0.3f;
+    fixture.density();
+    fixture.hydro(1);
+    require(fixture.reduction_->maxRungGrav == expectedGravityRung,
+        "changing gas smoothing must not change the gravity timestep");
 }
 
 void testDefaultTimestepCalibration() {
@@ -569,6 +597,7 @@ int main() {
             setKernelSelections(gravity, hydro, true);
             detail::testSelectedKernel();
             detail::testSelectedCentralGravity();
+            detail::testFixedGravityTimestep();
         }
         std::puts("Monaghan SPH active CUDA kernel regressions passed (one block per launch)");
     } catch (std::exception const& error) {

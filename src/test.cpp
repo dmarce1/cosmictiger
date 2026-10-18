@@ -336,6 +336,10 @@ static void kickTest() {
 DriverParameters readCheckpoint();
 
 static void forceTest() {
+    if (getOptions().sph) {
+        THROW_ERROR("run.test=force requires hydro.enabled=false; "
+                    "use run.test=sphGravity for mixed-particle validation\n");
+    }
     Timer tm;
     Timer tmMain;
     constexpr int kNiter = 1;
@@ -594,11 +598,16 @@ void bhTest() {
 }
 
 void sphGravityTest();
+void linearGrowthTest();
 void unitsOutputTest();
 void fmmTreeTest();
 void fmmWalkTest();
 
 void test(std::string test) {
+    if (test == "linearGrowth") {
+        linearGrowthTest();
+        return;
+    }
     if (test == "fmmWalk") {
         fmmWalkTest();
         return;

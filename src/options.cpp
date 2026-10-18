@@ -355,16 +355,16 @@ bool processOptions(int argc, char* argv[]) {
         "opening angle for test problems")("gravity.softening",
         po::value<double>(&gravityEffectiveRadius)->default_value(0.01876988456953534),
         "legacy alias for gravity.effectiveRadius")("gravity.effectiveRadius", po::value<double>(),
-        "effective radius (2 sigma) in mean interparticle spacings; overrides supportRadius")(
-        "gravity.supportRadius", po::value<double>(),
-        "compact support radius in mean interparticle spacings; ignored when effectiveRadius is "
+        "fixed comoving effective radius (2 sigma) in initial reference spacings; overrides "
+        "supportRadius")("gravity.supportRadius", po::value<double>(),
+        "compact support radius in initial reference spacings; ignored when effectiveRadius is "
         "specified")("gravity.kernelFamily",
         po::value<std::string>(&opts.gravityKernelFamily)->default_value("ferrers"),
         "density kernel family: spline, wendland, or ferrers")("gravity.kernelDegree",
-        po::value<int>(&opts.gravityKernelDegree)->default_value(8),
+        po::value<int>(&opts.gravityKernelDegree)->default_value(4),
         "density degree: spline 3..9; wendland 2,5,8; ferrers 2,4,6,8")("gravity.sphSmoothing",
         po::value<bool>(&opts.sphSmoothing)->default_value(false),
-        "reserved adaptive-softening flag; fixed selected gravity kernel is currently used")(
+        "must remain false; gas uses the same fixed gravity radius as dark matter and stars")(
         "gravity.timestepEta", po::value<double>(&opts.eta)->default_value(0.20401599335954483),
         "prefactor C in dt = C sqrt(effectiveRadius/acceleration), effectiveRadius = 2 sigma");
 
@@ -439,7 +439,7 @@ bool processOptions(int argc, char* argv[]) {
         "hydro.maxEffectiveRadius", po::value<double>(),
         "maximum effective radius (2 sigma) in interparticle spacings; overrides "
         "maxSupportRadius")("hydro.neighborNumber",
-        po::value<double>(&opts.sphNeighborNumber)->default_value(60),
+        po::value<double>(&opts.sphNeighborNumber)->default_value(42),
         "kernel-weighted neighbor target within the support sphere, including self")("hydro.cfl",
         po::value<double>(&opts.cfl)->default_value(0.22821773229381923),
         "Courant time-step factor using effective radius (2 sigma)");
@@ -532,6 +532,11 @@ bool processOptions(int argc, char* argv[]) {
         resolveSupportRadius("hydro.maxEffectiveRadius", "hydro.maxSupportRadius", nullptr,
             opts.hydroMaxSupportRadius, hydroTable.supportRadiusPerEffectiveRadius);
     double const selfNeighborFloor = 4.0 * M_PI / 3.0 * radial_kernel::value(hydroTable, 0.0);
+    if (opts.sphSmoothing) {
+        THROW_ERROR("gravity.sphSmoothing must be false; gravity uses one fixed comoving "
+                    "kernel radius for gas, dark matter, and stars independently of SPH "
+                    "smoothing\n");
+    }
     if (opts.outputSiloInterval <= 0) {
         THROW_ERROR("output.siloInterval must be positive\n");
     }
@@ -665,12 +670,9 @@ bool processOptions(int argc, char* argv[]) {
         opts.diffusion = false;
         opts.gravity = opts.test == "star" || opts.test == "plummer";
     }
-    if (opts.sphSmoothing && !opts.sph) {
-        THROW_ERROR("gravity.sphSmoothing requires hydro.enabled=true\n");
-    }
     if (opts.sph) {
         opts.htime = false;
-        if (!opts.cuda && opts.test != "sphGravity") {
+        if (!opts.cuda && opts.test != "sphGravity" && opts.test != "linearGrowth") {
             THROW_ERROR("SPH requires the CUDA backend\n");
         }
         if (opts.createGlass || opts.plummer || !opts.gadget4Restart.empty()) {
@@ -707,6 +709,14 @@ bool processOptions(int argc, char* argv[]) {
     opts.omegaM = opts.omegaB + opts.omegaC;
     opts.darkMatterMass = opts.sph ? opts.omegaC / opts.omegaM : 1.0;
     opts.sphMass = opts.sph ? opts.omegaB / opts.omegaM : 0.0;
+    if (!detail::isPositiveFloatOption(opts.darkMatterMass) ||
+        (opts.sph &&
+            (!detail::isPositiveFloatOption(opts.sphMass) ||
+                !detail::isPositiveFloatOption(opts.omegaB) ||
+                !detail::isPositiveFloatOption(opts.omegaC)))) {
+        THROW_ERROR("hydro.enabled requires finite positive gas and dark-matter class masses "
+                    "from cosmology.omegaB and cosmology.omegaC\n");
+    }
     opts.rho0B = opts.numberOfParticles * opts.omegaB / opts.omegaM;
     opts.rho0C = opts.numberOfParticles * opts.omegaC / opts.omegaM;
 

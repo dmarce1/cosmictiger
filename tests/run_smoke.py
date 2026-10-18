@@ -55,6 +55,8 @@ def main():
     parser.add_argument("power_file", type=Path)
     parser.add_argument("workdir", type=Path)
     parser.add_argument("--mpi-exec", default="mpiexec")
+    parser.add_argument("--minimum-rung", type=int,
+                        help="set and verify the minimum starting timestep rung")
     parser.add_argument("--extra-option", action="append", default=[],
                         help="forward an application argument, for example "
                              "--extra-option=--hydro.kernelFamily=wendland")
@@ -96,6 +98,8 @@ def main():
         command += ["--hydro.enabled=false", "--run.maxIterations=1",
                     "--compute.cuda=" + str(args.mode == "dm_cuda").lower()]
     command += args.extra_option
+    if args.minimum_rung is not None:
+        command += [f"--run.minRung={args.minimum_rung}"]
     run_simulation(command, args.workdir, "run.log")
     if args.mode == "sod":
         output_log = (args.workdir / "run.log").read_text()
@@ -134,6 +138,10 @@ def main():
             raise RuntimeError(f"{args.mode} progress contains incomplete rows")
         if any(not math.isfinite(value) for row in rows for value in row):
             raise RuntimeError(f"{args.mode} progress contains nonfinite values")
+        if args.minimum_rung is not None:
+            if any(row[8] < args.minimum_rung for row in rows) or any(
+                    row[7] < args.minimum_rung for row in rows[1:]):
+                raise RuntimeError(f"{args.mode} ignored minimum starting rung {args.minimum_rung}")
         energies = [[float(value) for value in line.split()]
                     for line in (args.workdir / "energy.txt").read_text().splitlines()]
         if not energies or any(len(row) != 10 for row in energies) or any(not math.isfinite(value) for row in energies for value in row):
@@ -144,14 +152,27 @@ def main():
             checkpoints = list(args.workdir.glob("checkpoint.[0-9]*/checkpoint.0.dat"))
             if not checkpoints:
                 raise RuntimeError("SPH smoke test did not save a checkpoint")
-            checkpoint = max(int(path.parent.name.split(".")[1]) for path in checkpoints)
-            (args.workdir / "progress.txt").unlink()
+            # The periodic checkpoint is saved before this iteration. The final
+            # checkpoint is saved after it, so resuming that newer checkpoint
+            # would correctly advance one step beyond the reference row.
+            checkpoint = int(expected[1])
+            if not (args.workdir / f"checkpoint.{checkpoint}" / "checkpoint.0.dat").is_file():
+                raise RuntimeError("SPH smoke test did not save the reference iteration checkpoint")
+            restart_directory = args.workdir / "restart"
+            if restart_directory.exists():
+                shutil.rmtree(restart_directory)
+            restart_directory.mkdir()
+            shutil.copytree(args.workdir / f"checkpoint.{checkpoint}",
+                            restart_directory / f"checkpoint.{checkpoint}")
+            shutil.copyfile(args.power_file, restart_directory / "power.init")
+            if recfast.exists():
+                shutil.copy2(recfast, restart_directory / "recfast")
             restart_command = [arg for arg in command
                                if not arg.startswith(("--run.maxIterations=", "--checkpoint.intervalSeconds="))]
             restart_command += [f"--checkpoint.readIndex={checkpoint}", "--run.maxIterations=0"]
-            run_simulation(restart_command, args.workdir, "restart.log")
+            run_simulation(restart_command, restart_directory, "restart.log")
             restarted = []
-            for line in (args.workdir / "progress.txt").read_text().splitlines():
+            for line in (restart_directory / "progress.txt").read_text().splitlines():
                 fields = line.split()
                 if fields and re.fullmatch(r"[+\-]?[0-9].*", fields[0]):
                     restarted.append([float(value) for value in fields])
@@ -163,7 +184,8 @@ def main():
             # timings and throughput. Particle payloads have a separate test.
             for index in (1, 2, 3, 4, 5, 6, 7, 8):
                 if not math.isclose(restarted[0][index], expected[index], rel_tol=1e-6, abs_tol=1e-12):
-                    raise RuntimeError("SPH restart clock differs from uninterrupted evolution")
+                    raise RuntimeError(f"SPH restart column {index} differs: "
+                                       f"{restarted[0][index]} != {expected[index]}")
             print(f"SPH checkpoint {checkpoint}: resumed physical clock matches uninterrupted evolution")
     return 0
 

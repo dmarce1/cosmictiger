@@ -254,12 +254,15 @@ void verifyBhPotentials(bool useCuda) {
         "halo midpoint potential uses selected gravity kernel", potential[1], expectedMidpoint);
 }
 
-void runPairCase(bool useCuda, bool softened) {
+void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f) {
     double const nominalSeparation = softened ? 0.25 * getOptions().gravitySupportRadius : 0.25;
     initializePair(nominalSeparation);
+    sphParticlesSmoothingLength(0) = hydroSupport;
     auto const built = treeCreate(TreeCreateParameters(0, 0.5, getOptions().gravitySupportRadius));
     verifyMappings();
     requireClose("root mixed mass", treeGetNode(built.id)->mpos->multi[0], 1.0);
+    requireClose("gravity tree support is independent of hydro smoothing",
+        built.maxGravitySupportRadius, getOptions().gravitySupportRadius);
     ParticleInteger const gas = sphParticlesParticleIndex(0);
     ParticleInteger const darkMatterIndex = 1 - gas;
     double const separation =
@@ -347,6 +350,8 @@ void runPairCase(bool useCuda, bool softened) {
         throw std::runtime_error("CUDA regression requested from a non-CUDA build");
     }
 #endif
+    requireClose(
+        "gravity leaves hydro smoothing unchanged", sphParticlesSmoothingLength(0), hydroSupport);
     treeDestroy(true);
 }
 void checkpointPair() {
@@ -457,6 +462,8 @@ void sphGravityTest() {
         }
 #endif
         runPairCase(useCuda, false);
+        runPairCase(useCuda, true, 0.001f);
+        runPairCase(useCuda, true, 0.1f);
         runPairCase(useCuda, true);
         checkpointPair();
         sphParticlesResize(2);

@@ -922,6 +922,10 @@ std::pair<KickReturn, TreeCreateReturn> kickStep(int minrung, double scale, doub
     if (dadt != 0.0) {
         kparams.maxDt = SCALE_DT * scale / fabs(dadt);
     }
+    // The ordinary path visits every starting particle, including rung zero,
+    // while the chosen step must still honor the configured starting-rung floor.
+    kparams.maxDt =
+        std::min(kparams.maxDt, std::ldexp(static_cast<float>(t0), -getOptions().minrung));
     kparams.htime = false;
     kparams.ascending = kparams.descending = kparams.top = true;
     kparams.doPhi = fullEval;
@@ -1535,7 +1539,8 @@ void driver() {
             double theta;
             double const z = 1.0 / a - 1.0;
             auto opts = getOptions();
-            opts.gravitySupportRadius = hsoft0;    // / a;
+            opts.gravitySupportRadius =
+                hsoft0;    // Fixed comoving support for every particle type.
             if (getOptions().createGlass) {
                 theta = 0.4;
             } else {

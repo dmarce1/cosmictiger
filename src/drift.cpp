@@ -32,7 +32,7 @@ void drift(
     profilerEnter(__FUNCTION__);
     bool const sph = getOptions().sph;
     Vector<hpx::future<void>> futures;
-    if (sph && rung < 0) {
+    if (rung < 0) {
         for (auto const& child : hpxChildren()) {
             futures.push_back(
                 hpx::async<DriftAction>(child, scale, dt, tau0, tau1, tauMax, rung, drag));

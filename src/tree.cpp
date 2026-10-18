@@ -417,7 +417,7 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
             flops += 6;
             SimdFloat r2Max(0.0);
             for (ParticleInteger i = particleRange.first; i < particleRange.second;
-                 i += SIMD_FLOAT_SIZE) {
+                i += SIMD_FLOAT_SIZE) {
                 SimdInt x;
                 Array<SimdFloat, NDIM> dx;
                 int const maxj = std::min(particleRange.second - i, SIMD_FLOAT_SIZE);
@@ -532,9 +532,8 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
         children[LEFT] = rcl.id;
         children[RIGHT] = rcr.id;
     } else {
-        // PP currently uses one fixed compact support for every particle. A
-        // variable-support producer must instead reduce its actual particle
-        // supports here on every rebuild, leaving empty leaves at zero.
+        // All species use the same fixed comoving gravity support. Gas smoothing
+        // lengths belong only to the hydrodynamic tree and neighbor searches.
         rc.maxGravitySupportRadius = numberOfParticles > 0 ? float(h) : 0.0f;
         Array<double, NDIM>& xminValue = rbox.begin;
         Array<double, NDIM>& xmaxValue = rbox.end;

@@ -54,8 +54,8 @@ __global__ void sphCudaHydro(SphRunParameters params, SphRunCudaData data, SphRe
     }
     __syncthreads();
     float const ainv = 1.0f / params.a;
+    float const gasMassOverScaleFactor = data.gasMass * ainv;
     float const gamma = data.defGamma;
-    float const massOverA = data.m * ainv;
     // Keep the historical cubic viscosity scale while measuring every kernel
     // with the same h = 2 sigma: h_Monaghan = sqrt(5/6) h for the cubic spline.
     constexpr float kViscosityWidthScale = 0.9128709291752769f;
@@ -150,14 +150,14 @@ __global__ void sphCudaHydro(SphRunParameters params, SphRunCudaData data, SphRe
                     rhoI, neighbor.rho, soundI, soundJ, mu, params.alpha0, params.beta);
                 float const pressurePair =
                     monaghan_sph::pressureCoefficient(rhoI, neighbor.rho, pressureI, pressureJ);
-                float const force = massOverA * (pressurePair + viscosity) * gradient;
+                float const force = gasMassOverScaleFactor * (pressurePair + viscosity) * gradient;
                 ax -= force * dx;
                 ay -= force * dy;
                 az -= force * dz;
-                energyRate += massOverA *
+                energyRate += gasMassOverScaleFactor *
                     monaghan_sph::pairEnergyRate(
                         pressurePair, viscosity, peculiarDotR * gradient, physicalDotR * gradient);
-                divergence -= massOverA / rhoI * peculiarDotR * gradientI;
+                divergence -= gasMassOverScaleFactor / rhoI * peculiarDotR * gradientI;
                 maxCompression = fmaxf(maxCompression, -mu);
             }
             sharedReduceAdd<float, HYDRO_BLOCK_SIZE>(ax);

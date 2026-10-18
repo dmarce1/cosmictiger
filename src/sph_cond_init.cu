@@ -140,7 +140,6 @@ __global__ void sphCudaCondInit(
                 }
             }
         }
-        float const& m = data.m;
         flops++;
         for (int i = self.particleRange.first; i < self.particleRange.second; i++) {
             __syncthreads();
@@ -254,10 +253,10 @@ __global__ void sphCudaCondInit(
                             }
                         }
                     }
-                    float const tmp = m / (params.a * rhoI * eintI);    // 5
-                    gradx *= tmp;                                       // 1
-                    grady *= tmp;                                       // 1
-                    gradz *= tmp;                                       // 1
+                    float const tmp = data.gasMass / (params.a * rhoI * eintI);    // 5
+                    gradx *= tmp;                                                  // 1
+                    grady *= tmp;                                                  // 1
+                    gradz *= tmp;                                                  // 1
                     flops += 8;
                     sharedReduceAdd<float, COND_INIT_BLOCK_SIZE>(gradx);    // 31
                     sharedReduceAdd<float, COND_INIT_BLOCK_SIZE>(grady);    // 31

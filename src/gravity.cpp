@@ -278,14 +278,12 @@ void cpuGravityPp(
     Timer tm;
     tm.start();
     constexpr int kChunkSize = 32;
-    size_t nearCount = 0;
-    size_t farCount = 0;
     if (list.size()) {
         SimdFloat const sinkHsoft(hfloat);
-        SimdFloat const hinvI = SimdFloat(1.f) / sinkHsoft;    // 4
-        SimdFloat const h2invI = sqr(hinvI);                   // 1
-        SimdFloat const h3invI = (hinvI) *h2invI;              // 1
-        SimdFloat const h2 = sqr(sinkHsoft);                   // 1;
+        SimdFloat const hinvI = SimdFloat(1.f) / sinkHsoft;
+        SimdFloat const h2invI = sqr(hinvI);
+        SimdFloat const h3invI = hinvI * h2invI;
+        SimdFloat const h2 = sqr(sinkHsoft);
         flops += 7;
         static SimdFloat const toFloatFactor(kFixed2float);
         SimdFloat const one(1.0);
@@ -308,16 +306,12 @@ void cpuGravityPp(
             Vector<Fixed32> srcx;
             Vector<Fixed32> srcy;
             Vector<Fixed32> srcz;
-            Vector<float> zetas;
-            Vector<float> hs;
-            Vector<char> type;
-            Vector<float> masses;
-            Vector<char> types;
+            Vector<float> sourceWeights;
+            Vector<char> types(numberOfSources);
             srcx.resize(numberOfSources);
             srcy.resize(numberOfSources);
             srcz.resize(numberOfSources);
-            masses.resize(numberOfSources);
-            types.resize(numberOfSources);
+            sourceWeights.resize(numberOfSources);
             int count = 0;
             for (int i = 0; i < maxi; i++) {
                 particlesGlobalReadPos(treePtrs[i]->globalParticleRange(), srcx.data(), srcy.data(),
@@ -325,7 +319,7 @@ void cpuGravityPp(
                 count += treePtrs[i]->numberOfParticles();
             }
             for (int i = 0; i < count; i++) {
-                masses[i] = getOptions().sph ?
+                sourceWeights[i] = getOptions().sph ?
                     (types[i] == DARK_MATTER_TYPE ? getOptions().darkMatterMass :
                                                     getOptions().sphMass) :
                     1.0f;
@@ -334,9 +328,8 @@ void cpuGravityPp(
                 srcx[i] = 0.f;
                 srcy[i] = 0.f;
                 srcz[i] = 0.f;
-                masses[i] = 0.0f;
+                sourceWeights[i] = 0.0f;
             }
-            SimdFloat const tiny = 1.0e-15;
             //			feenableexcept (FE_DIVBYZERO);
             //			feenableexcept (FE_INVALID);
             //			feenableexcept (FE_OVERFLOW);
@@ -352,20 +345,20 @@ void cpuGravityPp(
                 for (int j = 0; j < numberOfSources; j += SIMD_FLOAT_SIZE) {
                     int const& count = maxi;
                     int const k = j / SIMD_FLOAT_SIZE;
-                    SimdFloat mass;
+                    SimdFloat sourceWeight;
                     for (int l = 0; l < SIMD_FLOAT_SIZE; l++) {
                         yValue[XDIM][l] = srcx[j + l].raw();
                         yValue[YDIM][l] = srcy[j + l].raw();
                         yValue[ZDIM][l] = srcz[j + l].raw();
-                        mass[l] = masses[j + l];
+                        sourceWeight[l] = sourceWeights[j + l];
                     }
                     Array<SimdFloat, NDIM> dx;
                     for (int dim = 0; dim < NDIM; dim++) {
                         dx[dim] = SimdFloat(x[dim] - yValue[dim]) * toFloatFactor;    // 3
                     }
-                    SimdFloat const r2 = max(sqr(dx[XDIM], dx[YDIM], dx[ZDIM]), tiny);    // 6
-                    SimdFloat const rinv1Far = SimdFloat(1) / sqrt(r2);                   // 8
-                    SimdFloat const rinv3Far = rinv1Far * sqr(rinv1Far);                  // 3
+                    SimdFloat const r2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
+                    SimdFloat const rinv1Far = SimdFloat(1) / sqrt(max(r2, tiny));    // 8
+                    SimdFloat const rinv3Far = rinv1Far * sqr(rinv1Far);              // 3
                     SimdFloat const swFar = r2 > h2;
                     SimdFloat rinv3 = rinv3Far;
                     SimdFloat rinv1(0.0f);
@@ -383,8 +376,8 @@ void cpuGravityPp(
                             flops += 7;
                         }
                     }
-                    rinv3 *= mass;                     // 1
-                    rinv1 *= mass;                     // 1
+                    rinv3 *= sourceWeight;             // 1
+                    rinv1 *= sourceWeight;             // 1
                     gx = fmaf(rinv3, dx[XDIM], gx);    // 2
                     gy = fmaf(rinv3, dx[YDIM], gy);    // 2
                     gz = fmaf(rinv3, dx[ZDIM], gz);    // 2

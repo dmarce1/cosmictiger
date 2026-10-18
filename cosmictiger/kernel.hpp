@@ -31,7 +31,7 @@ namespace detail {
 inline radial_kernel::KernelTable hydroKernel =
     radial_kernel::makeKernelTable({radial_kernel::Family::Spline, 3});
 inline radial_kernel::KernelTable gravityKernel =
-    radial_kernel::makeKernelTable({radial_kernel::Family::Ferrers, 8});
+    radial_kernel::makeKernelTable({radial_kernel::Family::Ferrers, 4});
 #ifdef __CUDACC__
 extern __device__ __constant__ radial_kernel::KernelTable deviceHydroKernel;
 extern __device__ __constant__ radial_kernel::KernelTable deviceGravityKernel;

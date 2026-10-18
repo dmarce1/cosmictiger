@@ -177,6 +177,10 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
     }
     ASSERT(self.proc == hpxRank());
     if (selfPtr->isLocal() && selfPtr->numberOfParticles() == 0) {
+        if (selfPtr->localRoot) {
+            // Complete the promise while HPX is alive, including on empty ranks.
+            kickSetRc(KickReturn());
+        }
         if (self.proc == 0 && self.index == 0) {
             profilerExit();
         }
@@ -254,8 +258,8 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
         forces = ForceVectors(numberOfSelfParticles);
         for (ParticleInteger i = 0; i < numberOfSelfParticles; i++) {
             forces.gx[i] = forces.gy[i] = forces.gz[i] = 0.0f;
-            forces.phi[i] =
-                particlesMass(selfPtr->particleRange.first + i) * selfPhi() * inverseSupportRadius;
+            ParticleInteger const particleIndex = selfPtr->particleRange.first + i;
+            forces.phi[i] = particlesMass(particleIndex) * selfPhi() * inverseSupportRadius;
         }
     }
     {
@@ -488,7 +492,7 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
                     kr.dkin += kin1 - kin0;
                 } else {
                     float const mass = particlesMass(i);
-                    bool const gas = particlesType(i) == SPH_TYPE;
+                    bool const gas = getOptions().sph && particlesType(i) == SPH_TYPE;
                     float const kin0 = 0.5f * mass * sqr(vx, vy, vz);
                     if (gas) {
                         ParticleInteger const k = particlesCatIndex(i);

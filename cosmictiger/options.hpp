@@ -69,10 +69,10 @@ struct Options {
     double lcB;
     double sliceSize;
     double linkingLength;
-    // Internally stored compact support; public gravity.effectiveRadius is 2 sigma.
+    // Fixed comoving compact support; public gravity.effectiveRadius is 2 sigma.
     double gravitySupportRadius;
     std::string gravityKernelFamily{"ferrers"};
-    int gravityKernelDegree{8};
+    int gravityKernelDegree{4};
     std::string hydroKernelFamily{"spline"};
     int hydroKernelDegree{3};
     double gm;
@@ -123,7 +123,7 @@ struct Options {
     double viscosityEpsilon{};
     double alphaDecay{};
     double darkMatterNeighborNumber{};
-    double sphNeighborNumber{};
+    double sphNeighborNumber{42.0};
     double hydroMinSupportRadius{};
     double hydroMaxSupportRadius{};
     double damping{};
