@@ -695,9 +695,9 @@ KickReturn cudaExecuteKicks(KickParameters kparams, Fixed32* devX, Fixed32* devY
     data.treeNodes = devTreeNodes;
     data.vel = particlesVelData();
     data.rungs = &particlesRung(0);
-    data.sph = getOptions().sph;
-    data.darkMatterMass = getOptions().darkMatterMass;
-    data.sphMass = getOptions().sphMass;
+    data.sph = getOptions().hydro.enabled;
+    data.darkMatterMass = getOptions().initial.darkMatterMass;
+    data.sphMass = getOptions().initial.gasMass;
     data.type = data.sph ? &particlesType(0) : nullptr;
     data.catIndex = data.sph ? &particlesCatIndex(0) : nullptr;
     data.sphGravityAccelerationX = data.sph ? &sphParticlesGravityAcceleration(XDIM, 0) : nullptr;

@@ -30,6 +30,7 @@
 
 #include <cuda_runtime.h>
 
+#include <cosmictiger/sph_cpu.hpp>
 #include <cosmictiger/sph_cuda.hpp>
 
 // Only the options-constructor and host assertion services are replaced here.
@@ -63,7 +64,7 @@ void require(bool condition, char const* label) {
 }
 
 void requireClose(char const* label, double actual, double expected, double tolerance) {
-    if (!std::isfinite(actual) ||
+    if (!std::isfinite(actual) || !std::isfinite(expected) ||
         std::abs(actual - expected) > tolerance * std::max(1.0, std::abs(expected))) {
         throw std::runtime_error(std::string(label) + ": got " + std::to_string(actual) +
             ", expected " + std::to_string(expected));
@@ -95,7 +96,7 @@ public:
     SphRunCudaData data_{};
     SphReduction* reduction_;
 
-    explicit Fixture(int count, int treeCount = 1)
+    explicit Fixture(int count, int treeCount = 1, bool separateSources = false)
       : count_(count) {
         data_.sourcePositionX = allocate<Fixed32>(count);
         data_.sourcePositionY = allocate<Fixed32>(count);
@@ -105,14 +106,16 @@ public:
         data_.sourceVelocityZ = allocate<float>(count);
         data_.sourceInternalEnergy = allocate<float>(count);
         data_.sourceSupportRadius = allocate<float>(count);
-        data_.sourceDensity = data_.sinkDensity = allocate<float>(count);
+        data_.sourceDensity = allocate<float>(count);
+        data_.sinkDensity = separateSources ? allocate<float>(count) : data_.sourceDensity;
         data_.sinkGravityAccelerationX = allocate<float>(count);
         data_.sinkGravityAccelerationY = allocate<float>(count);
         data_.sinkGravityAccelerationZ = allocate<float>(count);
         data_.sinkInternalEnergyRate = allocate<float>(count);
         data_.sinkThermodynamicStates = allocate<SphThermodynamicState>(count);
         data_.sinkAccelerations = allocate<SphAcceleration>(count);
-        data_.sourceRungs = data_.sinkParticleRungs = allocate<char>(count);
+        data_.sourceRungs = allocate<char>(count);
+        data_.sinkParticleRungs = separateSources ? allocate<char>(count) : data_.sourceRungs;
         data_.sinkSmoothingConverged = allocate<char>(count);
         data_.sinkSemiactive = allocate<char>(count);
         data_.sinkParticleIndices = allocate<ParticleInteger>(count);
@@ -140,7 +143,7 @@ public:
         params_.maximumSupportRadius = 0.49f;
         for (int i = 0; i < count; i++) {
             data_.sinkParticleIndices[i] = i;
-            data_.sourceRungs[i] = 1;
+            data_.sourceRungs[i] = data_.sinkParticleRungs[i] = 1;
             data_.sourceInternalEnergy[i] = 1.0f;
             data_.sourceSupportRadius[i] = data_.sinkThermodynamicStates[i].supportRadius = 0.2f;
             data_.sinkGravityAccelerationX[i] = data_.sinkGravityAccelerationY[i] =
@@ -252,6 +255,219 @@ public:
             "active-kernel total energy rate", energy, 0.0, 3.0e-5 * std::max(1.0, absoluteEnergy));
     }
 };
+
+// Run both backends from the same immutable sources and initial sink state.
+// CPU writes go to host copies; the following CUDA launch owns the managed sinks.
+void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
+    auto& data = fixture.data_;
+    require(data.sourceDensity != data.sinkDensity && data.sourceRungs != data.sinkParticleRungs,
+        "CPU/CUDA parity requires independent source snapshots");
+    fixture.params_.runType = runType;
+    fixture.params_.phase = phase;
+    SphRunData cpuData = data;
+    std::vector<float> density(data.sinkDensity, data.sinkDensity + fixture.count_);
+    std::vector<float> energyRate(
+        data.sinkInternalEnergyRate, data.sinkInternalEnergyRate + fixture.count_);
+    std::vector<SphAcceleration> acceleration(
+        data.sinkAccelerations, data.sinkAccelerations + fixture.count_);
+    std::vector<SphThermodynamicState> thermodynamicStates(
+        data.sinkThermodynamicStates, data.sinkThermodynamicStates + fixture.count_);
+    std::vector<char> rungs(data.sinkParticleRungs, data.sinkParticleRungs + fixture.count_);
+    std::vector<char> semiactive(data.sinkSemiactive, data.sinkSemiactive + fixture.count_);
+    std::vector<char> converged(
+        data.sinkSmoothingConverged, data.sinkSmoothingConverged + fixture.count_);
+    std::vector<float> const sourceDensity(data.sourceDensity, data.sourceDensity + fixture.count_);
+    std::vector<float> const sourceSupport(
+        data.sourceSupportRadius, data.sourceSupportRadius + fixture.count_);
+    std::vector<char> const sourceRungs(data.sourceRungs, data.sourceRungs + fixture.count_);
+    cpuData.sinkDensity = density.data();
+    cpuData.sinkInternalEnergyRate = energyRate.data();
+    cpuData.sinkAccelerations = acceleration.data();
+    cpuData.sinkThermodynamicStates = thermodynamicStates.data();
+    cpuData.sinkParticleRungs = rungs.data();
+    cpuData.sinkSemiactive = semiactive.data();
+    cpuData.sinkSmoothingConverged = converged.data();
+    SphRunReturn cpuResult;
+    for (int node = 0; node < data.numberOfTargetNodes; node++) {
+        cpuResult += sphRunCpuNode(fixture.params_, cpuData, node);
+    }
+    *fixture.reduction_ = {};
+    fixture.reduction_->minimumSupportRadius = std::numeric_limits<float>::max();
+    switch (runType) {
+    case SPH_RUN_PREHYDRO1:
+        sphCudaPrehydro1<<<1, PREHYDRO1_BLOCK_SIZE>>>(fixture.params_, data, fixture.reduction_);
+        break;
+    case SPH_RUN_PREHYDRO2:
+        sphCudaPrehydro2<<<1, PREHYDRO2_BLOCK_SIZE>>>(fixture.params_, data, fixture.reduction_);
+        break;
+    case SPH_RUN_HYDRO:
+        sphCudaHydro<<<1, HYDRO_BLOCK_SIZE>>>(fixture.params_, data, fixture.reduction_);
+        break;
+    case SPH_RUN_RUNGS:
+        sphCudaRungs<<<1, RUNGS_BLOCK_SIZE>>>(fixture.params_, data, fixture.reduction_);
+        break;
+    default:
+        require(false, "invalid CPU/CUDA parity phase");
+    }
+    checkCuda(cudaGetLastError(), "CPU/CUDA parity launch");
+    checkCuda(cudaDeviceSynchronize(), "CPU/CUDA parity execution");
+    auto const& cudaResult = *fixture.reduction_;
+    require(cpuResult.needsAnotherPass == (cudaResult.pendingChanges != 0),
+        "CPU/CUDA pending-change parity");
+    require(cpuResult.maximumHydroRung == cudaResult.maximumHydroRung &&
+            cpuResult.maximumGravityRung == cudaResult.maximumGravityRung &&
+            cpuResult.maximumRung == cudaResult.maximumRung,
+        "CPU/CUDA rung-reduction parity");
+    requireClose("CPU/CUDA operation count", cpuResult.floatingPointOperations,
+        cudaResult.floatingPointOperations, 0.0);
+    requireClose("CPU/CUDA minimum support", cpuResult.minimumSupportRadius,
+        cudaResult.minimumSupportRadius, 3.0e-5);
+    requireClose("CPU/CUDA maximum support", cpuResult.maximumSupportRadius,
+        cudaResult.maximumSupportRadius, 3.0e-5);
+    requireClose("CPU/CUDA signal speed", cpuResult.maximumSignalSpeed,
+        cudaResult.maximumSignalSpeed, 5.0e-5);
+    requireClose("CPU/CUDA sound timestep", cpuResult.inverseSoundTimestep,
+        cudaResult.inverseSoundTimestep, 5.0e-5);
+    requireClose("CPU/CUDA viscosity timestep", cpuResult.inverseViscosityTimestep,
+        cudaResult.inverseViscosityTimestep, 5.0e-5);
+    requireClose("CPU/CUDA acceleration timestep", cpuResult.inverseAccelerationTimestep,
+        cudaResult.inverseAccelerationTimestep, 5.0e-5);
+    for (int i = 0; i < fixture.count_; i++) {
+        requireClose("CPU/CUDA density", density[i], data.sinkDensity[i], 5.0e-5);
+        requireClose("CPU/CUDA support", thermodynamicStates[i].supportRadius,
+            data.sinkThermodynamicStates[i].supportRadius, 3.0e-5);
+        require(
+            thermodynamicStates[i].internalEnergy == data.sinkThermodynamicStates[i].internalEnergy,
+            "CPU/CUDA kernels preserve stored internal energy");
+        requireClose(
+            "CPU/CUDA thermal rate", energyRate[i], data.sinkInternalEnergyRate[i], 5.0e-5);
+        for (int dim = 0; dim < NDIM; dim++) {
+            requireClose("CPU/CUDA acceleration", acceleration[i].acceleration[dim],
+                data.sinkAccelerations[i].acceleration[dim], 5.0e-5);
+        }
+        require(rungs[i] == data.sinkParticleRungs[i], "CPU/CUDA particle-rung parity");
+        require(semiactive[i] == data.sinkSemiactive[i], "CPU/CUDA semiactive parity");
+        require(converged[i] == data.sinkSmoothingConverged[i], "CPU/CUDA convergence parity");
+        require(data.sourceDensity[i] == sourceDensity[i] &&
+                data.sourceSupportRadius[i] == sourceSupport[i] &&
+                data.sourceRungs[i] == sourceRungs[i],
+            "CPU/CUDA phases must preserve source snapshots");
+    }
+}
+
+void testCpuCudaParity() {
+    // Three unequal leaves and 19 neighbors exercise indirection and SIMD tails.
+    Fixture fixture(19, 3, true);
+    auto& data = fixture.data_;
+    std::vector<int> sinkIndices(fixture.count_);
+    int const sinkBegins[] = {7, 13, 0};
+    for (int tree = 0; tree < 3; tree++) {
+        auto& node = data.treeNodes[tree];
+        int const count = node.particleRange.second - node.particleRange.first;
+        node.sinkParticleRange = {sinkBegins[tree], sinkBegins[tree] + count};
+        data.targetNodeIndices[tree] = 2 - tree;
+        data.neighborNodeIndices[tree] = (tree + 1) % 3;
+        for (int source = node.particleRange.first; source < node.particleRange.second; source++) {
+            sinkIndices[source] = node.sinkParticleRange.first + source - node.particleRange.first;
+        }
+    }
+    fixture.params_.minimumRung = 2;
+    fixture.params_.minimumSupportRadius = 0.03f;
+    fixture.params_.maximumSupportRadius = 0.24f;
+    fixture.params_.scaleFactor = 0.7f;
+    fixture.params_.expansionRate = 0.08f;
+    fixture.params_.baseTimestep = 1.11f;
+    fixture.params_.maximumTimestep = 0.7f;
+    fixture.params_.uniformAccelerationY = 0.03f;
+    fixture.params_.velocityDampingRate = 0.04f;
+    data.adiabaticIndex = 1.4f;
+    data.selfGravityEnabled = true;
+    data.centralAcceleration = 0.002f;
+    data.centralSupportRadius = 0.2f;
+    for (int source = 0; source < fixture.count_; source++) {
+        int const sink = sinkIndices[source];
+        int const particle = (2 * source) % fixture.count_;
+        data.sinkParticleIndices[sink] = particle;
+        double const positionX = 0.96 + 0.009 * source;
+        data.sourcePositionX[source] = positionX - std::floor(positionX);
+        data.sourcePositionY[source] = 0.48 + 0.005 * (source % 3);
+        data.sourcePositionZ[source] = 0.49 + 0.004 * (source % 5);
+        data.sourceSupportRadius[source] = data.sinkThermodynamicStates[sink].supportRadius =
+            0.08f + 0.005f * (source % 4);
+        data.sourceInternalEnergy[source] = data.sinkThermodynamicStates[sink].internalEnergy =
+            0.7f + 0.03f * source;
+        data.sourceVelocityX[source] = 0.03f * (source % 3 - 1);
+        data.sourceVelocityY[source] = -0.02f * (source % 5 - 2);
+        data.sourceVelocityZ[source] = 0.01f * (source % 2 ? 1 : -1);
+        data.sourceRungs[source] = data.sinkParticleRungs[particle] = source % 3 ? 1 : 3;
+        data.sinkGravityAccelerationX[sink] = 0.01f * (source % 3 - 1);
+        data.sinkGravityAccelerationY[sink] = -0.005f;
+        data.sinkGravityAccelerationZ[sink] = 0.002f;
+    }
+    auto publishSupport = [&] {
+        for (int source = 0; source < fixture.count_; source++) {
+            data.sourceSupportRadius[source] =
+                data.sinkThermodynamicStates[sinkIndices[source]].supportRadius;
+        }
+    };
+    auto publishRungs = [&] {
+        for (int source = 0; source < fixture.count_; source++) {
+            data.sourceRungs[source] =
+                data.sinkParticleRungs[data.sinkParticleIndices[sinkIndices[source]]];
+        }
+    };
+    compareCpuCudaPhase(fixture, SPH_RUN_PREHYDRO1);
+    publishSupport();
+    compareCpuCudaPhase(fixture, SPH_RUN_PREHYDRO2);
+    publishSupport();
+    for (int source = 0; source < fixture.count_; source++) {
+        data.sourceDensity[source] = data.sinkDensity[sinkIndices[source]];
+    }
+    compareCpuCudaPhase(fixture, SPH_RUN_HYDRO, 0);
+    compareCpuCudaPhase(fixture, SPH_RUN_HYDRO, 1);
+    fixture.params_.minimumRung = 1;
+    for (int source = 0; source < fixture.count_; source++) {
+        data.sinkParticleRungs[data.sinkParticleIndices[sinkIndices[source]]] = source == 0 ? 6 : 1;
+    }
+    publishRungs();
+    compareCpuCudaPhase(fixture, SPH_RUN_RUNGS);
+    publishRungs();
+    compareCpuCudaPhase(fixture, SPH_RUN_RUNGS);
+
+    // Keep an invalid thermodynamic state in a gathered but excluded SIMD lane.
+    int const excluded = fixture.count_ - 1;
+    int const excludedSink = sinkIndices[excluded];
+    data.sourcePositionX[excluded] = data.sourcePositionY[excluded] =
+        data.sourcePositionZ[excluded] = 0.5;
+    data.sourceRungs[excluded] = data.sinkParticleRungs[data.sinkParticleIndices[excludedSink]] = 0;
+    data.sourceSupportRadius[excluded] = data.sinkThermodynamicStates[excludedSink].supportRadius =
+        0.025f;
+    data.sourceDensity[excluded] = data.sourceInternalEnergy[excluded] = 0.0f;
+    data.sinkDensity[excludedSink] = -9.0f;
+    compareCpuCudaPhase(fixture, SPH_RUN_PREHYDRO2);
+    require(!data.sinkSemiactive[excludedSink] && data.sinkDensity[excludedSink] == -9.0f,
+        "distant inactive particle must leave density untouched");
+    for (int source = 0; source < excluded; source++) {
+        data.sourceDensity[source] = data.sinkDensity[sinkIndices[source]];
+    }
+    compareCpuCudaPhase(fixture, SPH_RUN_HYDRO, 0);
+    compareCpuCudaPhase(fixture, SPH_RUN_HYDRO, 1);
+
+    // The same periodic particles now exceed an intentionally unexpanded box.
+    for (int tree = 0; tree < 3; tree++) {
+        for (int dim = 0; dim < NDIM; dim++) {
+            data.treeNodes[tree].outerBox.begin[dim] = 0.0;
+            data.treeNodes[tree].outerBox.end[dim] = 1.0;
+        }
+    }
+    for (int sink = 0; sink < fixture.count_; sink++) {
+        data.sinkSmoothingConverged[sink] = false;
+        data.sinkThermodynamicStates[sink].supportRadius = 0.1f;
+    }
+    compareCpuCudaPhase(fixture, SPH_RUN_PREHYDRO1);
+    require(fixture.reduction_->pendingChanges > 0,
+        "undersized neighbor boxes must request another pass on both backends");
+}
 
 void initializeLattice(Fixture& fixture, int side) {
     int i = 0;
@@ -613,8 +829,9 @@ int main() {
             detail::testSelectedKernel();
             detail::testSelectedCentralGravity();
             detail::testFixedGravityTimestep();
+            detail::testCpuCudaParity();
         }
-        std::puts("Monaghan SPH active CUDA kernel regressions passed (one block per launch)");
+        std::puts("Monaghan SPH CUDA kernels and SIMD CPU parity passed (one block per launch)");
     } catch (std::exception const& error) {
         std::fprintf(stderr, "Monaghan SPH CUDA regression failed: %s\n", error.what());
         return 1;

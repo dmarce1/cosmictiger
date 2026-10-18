@@ -55,6 +55,7 @@ def main():
     parser.add_argument("power_file", type=Path)
     parser.add_argument("workdir", type=Path)
     parser.add_argument("--mpi-exec", default="mpiexec")
+    parser.add_argument("--cpu", action="store_true", help="run hydrodynamics on the SIMD CPU backend")
     parser.add_argument("--minimum-rung", type=int,
                         help="set and verify the minimum starting timestep rung")
     parser.add_argument("--extra-option", action="append", default=[],
@@ -97,6 +98,9 @@ def main():
     else:
         command += ["--hydro.enabled=false", "--run.maxIterations=1",
                     "--compute.cuda=" + str(args.mode == "dm_cuda").lower()]
+    if args.cpu:
+        command = ["--compute.cuda=false" if value == "--compute.cuda=true" else value
+                   for value in command]
     command += args.extra_option
     if args.minimum_rung is not None:
         command += [f"--run.minRung={args.minimum_rung}"]

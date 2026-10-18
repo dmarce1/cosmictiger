@@ -120,6 +120,10 @@ set(cosmictiger_source_files
     src/sedov.cpp
     src/sph_particles.cpp
     src/sph.cpp
+    src/sph_cpu.cpp
+    src/sph_prehydro_cpu.cpp
+    src/sph_hydro_cpu.cpp
+    src/sph_rungs_cpu.cpp
     src/sph.cu
     src/sph_prehydro.cu
     src/sph_hydro.cu
@@ -201,6 +205,8 @@ set(cosmictiger_header_files
     cosmictiger/exact_sod.hpp
     cosmictiger/sph.hpp
     cosmictiger/sph_cuda.hpp
+    cosmictiger/sph_cpu.hpp
+    cosmictiger/sph_kernel.hpp
     cosmictiger/sph_particles.hpp
     cosmictiger/sph_tree.hpp
     cosmictiger/sphere.hpp
@@ -393,6 +399,19 @@ if(BUILD_TESTING)
     add_test(NAME monaghan_sph COMMAND monaghan_sph_test)
     set_tests_properties(monaghan_sph PROPERTIES TIMEOUT 20)
 
+    # Compile the production SIMD path without USE_CUDA or device kernels.
+    add_executable(sph_cpu_test tests/sph_cpu.cpp src/sph_cpu.cpp
+        src/sph_prehydro_cpu.cpp src/sph_hydro_cpu.cpp src/sph_rungs_cpu.cpp src/kernel.cpp)
+    target_include_directories(sph_cpu_test PRIVATE ${PROJECT_SOURCE_DIR})
+    target_compile_definitions(sph_cpu_test PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
+    target_link_libraries(sph_cpu_test PRIVATE HPX::hpx)
+    target_compile_options(sph_cpu_test PRIVATE -ffast-math)
+    if(COMPILER_SUPPORTS_MARCH_NATIVE)
+        target_compile_options(sph_cpu_test PRIVATE -march=native)
+    endif()
+    add_test(NAME sph_cpu COMMAND sph_cpu_test)
+    set_tests_properties(sph_cpu PROPERTIES TIMEOUT 120)
+
     add_executable(silo_spheres_test tests/silo_spheres.cpp)
     target_include_directories(silo_spheres_test PRIVATE ${PROJECT_SOURCE_DIR} ${SILO_INCLUDE_DIR})
     target_link_libraries(silo_spheres_test PRIVATE ${SILO_LIBRARY})
@@ -442,13 +461,20 @@ if(BUILD_TESTING)
         set_tests_properties(radial_kernel_cuda PROPERTIES RUN_SERIAL TRUE TIMEOUT 120 SKIP_RETURN_CODE 77)
 
         add_executable(monaghan_sph_cuda_test tests/monaghan_sph_cuda.cu
-            src/sph_prehydro.cu src/sph_hydro.cu src/kernel.cpp src/kernel.cu src/cuda_memory.cu src/assert.cu)
+            src/sph_prehydro.cu src/sph_hydro.cu src/sph_rungs.cu
+            src/sph_cpu.cpp src/sph_prehydro_cpu.cpp src/sph_hydro_cpu.cpp src/sph_rungs_cpu.cpp
+            src/kernel.cpp src/kernel.cu src/cuda_memory.cu src/assert.cu)
         target_include_directories(monaghan_sph_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_compile_definitions(monaghan_sph_cuda_test PRIVATE
             USE_CUDA ORDER=${COSMICTIGER_WITH_ORDER})
         target_link_libraries(monaghan_sph_cuda_test PRIVATE CUDA::cudart HPX::hpx)
         target_compile_options(monaghan_sph_cuda_test PRIVATE
-            $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr;--use_fast_math>)
+            $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr;--use_fast_math>
+            $<$<COMPILE_LANGUAGE:CXX>:-ffast-math>)
+        if(COMPILER_SUPPORTS_MARCH_NATIVE)
+            target_compile_options(monaghan_sph_cuda_test PRIVATE
+                $<$<COMPILE_LANGUAGE:CXX>:-march=native>)
+        endif()
         set_target_properties(monaghan_sph_cuda_test PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
         add_test(NAME monaghan_sph_cuda COMMAND monaghan_sph_cuda_test)
         set_tests_properties(monaghan_sph_cuda PROPERTIES RUN_SERIAL TRUE TIMEOUT 120)
@@ -614,7 +640,19 @@ if(BUILD_TESTING)
             $<TARGET_FILE:cosmictiger> ${PROJECT_SOURCE_DIR}/power.init
             ${PROJECT_BINARY_DIR}/tests/smoke_sph_mpi --mpi-exec=${MPIEXEC_EXECUTABLE})
         set_tests_properties(smoke_sph_mpi PROPERTIES RUN_SERIAL TRUE TIMEOUT 260)
+        add_test(NAME smoke_sph_cpu_mpi COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/run_smoke.py sph_mpi
+            $<TARGET_FILE:cosmictiger> ${PROJECT_SOURCE_DIR}/power.init
+            ${PROJECT_BINARY_DIR}/tests/smoke_sph_cpu_mpi --mpi-exec=${MPIEXEC_EXECUTABLE} --cpu)
+        set_tests_properties(smoke_sph_cpu_mpi PROPERTIES RUN_SERIAL TRUE TIMEOUT 260)
     endif()
+    foreach(smoke_mode IN ITEMS sod sph)
+        add_test(NAME smoke_${smoke_mode}_cpu COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/run_smoke.py ${smoke_mode}
+            $<TARGET_FILE:cosmictiger> ${PROJECT_SOURCE_DIR}/power.init
+            ${PROJECT_BINARY_DIR}/tests/smoke_${smoke_mode}_cpu --cpu)
+        set_tests_properties(smoke_${smoke_mode}_cpu PROPERTIES RUN_SERIAL TRUE TIMEOUT 500)
+    endforeach()
     foreach(smoke_mode IN ITEMS sod dm_cpu dm_cuda sph)
         add_test(NAME smoke_${smoke_mode} COMMAND ${Python3_EXECUTABLE}
             ${PROJECT_SOURCE_DIR}/tests/run_smoke.py ${smoke_mode}

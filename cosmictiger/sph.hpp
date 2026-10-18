@@ -145,13 +145,13 @@ struct SphRunParameters {
     float velocityDampingRate;    // Velocity damping used while relaxing the gas sphere.
     SphRunParameters() {
         auto const opts = getOptions();
-        minimumSupportRadius = opts.hydroMinSupportRadius;
-        maximumSupportRadius = opts.hydroMaxSupportRadius;
-        velocityDampingRate = opts.damping;
-        uniformAccelerationY = opts.yAcceleration;
-        viscosityAlpha = opts.alpha0;
-        viscosityBeta = opts.beta;
-        viscosityEpsilon = opts.viscosityEpsilon;
+        minimumSupportRadius = opts.hydro.minSupportRadius;
+        maximumSupportRadius = opts.hydro.maxSupportRadius;
+        velocityDampingRate = opts.hydro.damping;
+        uniformAccelerationY = opts.hydro.yAcceleration;
+        viscosityAlpha = opts.hydro.viscosityAlpha;
+        viscosityBeta = opts.hydro.viscosityBeta;
+        viscosityEpsilon = opts.hydro.viscosityEpsilon;
     }
     template <typename Archive>
     void serialize(Archive&& arc, unsigned) {

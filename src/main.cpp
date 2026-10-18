@@ -80,7 +80,7 @@ int hpx_main(int argc, char* argv[]) {
     try {
         if (processOptions(argc, argv)) {
             // Help, invalid options and the metadata-only checkpoint test need no GPU.
-            if (getOptions().test == "checkpointState" && !getOptions().sph) {
+            if (getOptions().run.test == "checkpointState" && !getOptions().hydro.enabled) {
                 checkpointStateTest();
                 stopMemuseDaemon();
                 return hpx::finalize();
@@ -108,8 +108,8 @@ int hpx_main(int argc, char* argv[]) {
                 fprintf(fp, "\n");
             }
             fclose(fp);
-            if (getOptions().test != "") {
-                test(getOptions().test);
+            if (getOptions().run.test != "") {
+                test(getOptions().run.test);
             } else {
                 driver();
             }

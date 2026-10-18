@@ -192,7 +192,7 @@ HPX_PLAIN_ACTION(initializeFmmTreeRegression, InitializeFmmTreeRegressionAction)
 ParticleInteger setFmmTreeRegressionSupport(float supportRadius) {
     detail::requireFmmTree(hpxChildren().empty(), "support fixture requires a terminal locality");
     auto options = getOptions();
-    options.gravitySupportRadius = supportRadius;
+    options.gravity.supportRadius = supportRadius;
     setOptions(options);
     return particlesSize();
 }
@@ -201,13 +201,13 @@ HPX_PLAIN_ACTION(setFmmTreeRegressionSupport, SetFmmTreeRegressionSupportAction)
 void fmmTreeTest() {
     detail::verifyTreeReturnArchive();
     auto options = getOptions();
-    options.sph = false;
+    options.hydro.enabled = false;
 
-    options.doGroups = false;
-    options.doTracers = false;
-    options.bucketSize = 4;
-    options.numberOfParticles = detail::kFmmTreeParticlesPerRank * hpxSize();
-    options.gravitySupportRadius = 0.001;
+    options.analysis.groups = false;
+    options.analysis.tracers = false;
+    options.compute.bucketSize = 4;
+    options.initial.numberOfParticles = detail::kFmmTreeParticlesPerRank * hpxSize();
+    options.gravity.supportRadius = 0.001;
     setOptions(options);
     auto const initialize = [](bool empty) {
         Vector<hpx::future<void>> pending;
@@ -223,13 +223,13 @@ void fmmTreeTest() {
     domainsRebound();
     domainsBegin(0);
     domainsEnd();
-    auto const built = treeCreate(TreeCreateParameters(0, 0.5, options.gravitySupportRadius));
-    detail::verifyTreeGeometry(built.id, false, float(options.gravitySupportRadius));
+    auto const built = treeCreate(TreeCreateParameters(0, 0.5, options.gravity.supportRadius));
+    detail::verifyTreeGeometry(built.id, false, float(options.gravity.supportRadius));
     detail::verifyTreeNodeArchive(built.id);
-    detail::requireFmmTree(built.maxGravitySupportRadius == float(options.gravitySupportRadius),
+    detail::requireFmmTree(built.maxGravitySupportRadius == float(options.gravity.supportRadius),
         "clustered tree return has the wrong fixed gravity support");
-    detail::requireFmmTree(
-        built.multi[0] == float(options.numberOfParticles), "clustered tree lost particle mass");
+    detail::requireFmmTree(built.multi[0] == float(options.initial.numberOfParticles),
+        "clustered tree lost particle mass");
     detail::requireFmmTree(built.radius > 0.0f, "clustered global node has zero radius");
     auto const* root = treeGetNode(built.id);
     for (int dim = 0; dim < NDIM; dim++) {
@@ -276,9 +276,9 @@ void fmmTreeTest() {
                                    .get();
             detail::requireFmmTree(count > 0, "distinct-support locality has no particles");
             auto const heterogeneous =
-                treeCreate(TreeCreateParameters(0, 0.5, options.gravitySupportRadius));
-            detail::verifyTreeGeometry(heterogeneous.id, false, float(options.gravitySupportRadius),
-                distinctRank, kDistinctSupportRadius);
+                treeCreate(TreeCreateParameters(0, 0.5, options.gravity.supportRadius));
+            detail::verifyTreeGeometry(heterogeneous.id, false,
+                float(options.gravity.supportRadius), distinctRank, kDistinctSupportRadius);
             detail::requireFmmTree(heterogeneous.maxGravitySupportRadius == kDistinctSupportRadius,
                 "distributed parent did not receive the remote maximum gravity support");
             treeDestroy(true);
@@ -292,8 +292,8 @@ void fmmTreeTest() {
     // Preserve the distributed domain tree while removing every active particle.
     // With multiple localities this constructs an empty, multi-rank parent.
     initialize(true);
-    auto const empty = treeCreate(TreeCreateParameters(0, 0.5, options.gravitySupportRadius));
-    detail::verifyTreeGeometry(empty.id, true, float(options.gravitySupportRadius));
+    auto const empty = treeCreate(TreeCreateParameters(0, 0.5, options.gravity.supportRadius));
+    detail::verifyTreeGeometry(empty.id, true, float(options.gravity.supportRadius));
     detail::requireFmmTree(empty.maxGravitySupportRadius == 0.0f,
         "empty tree return has a nonzero maximum gravity support");
     treeDestroy(true);

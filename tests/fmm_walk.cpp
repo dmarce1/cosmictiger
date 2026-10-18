@@ -59,8 +59,8 @@ KickParameters fmmWalkParameters(bool useCuda, float theta = kFmmWalkTheta) {
     params.a = 1.0f;
     params.t0 = 1.0f;
     params.theta = theta;
-    params.gravitySupportRadius = getOptions().gravitySupportRadius;
-    params.eta = getOptions().eta;
+    params.gravitySupportRadius = getOptions().gravity.supportRadius;
+    params.eta = getOptions().gravity.timestepEta;
     params.gm = 1.0f;
     params.velInit = false;
     params.saveForce = true;
@@ -99,7 +99,7 @@ void fmmWalkPrepareArena() {
     }
     fmmWalkResetKickState();
     particlesSortByRung(0);
-    treeCreate(TreeCreateParameters(0, kFmmWalkTheta, getOptions().gravitySupportRadius));
+    treeCreate(TreeCreateParameters(0, kFmmWalkTheta, getOptions().gravity.supportRadius));
 }
 
 TreeId fmmWalkAddNode(Array<Fixed32, NDIM> const& position, float radius,
@@ -118,7 +118,7 @@ TreeId fmmWalkAddNode(Array<Fixed32, NDIM> const& position, float radius,
     node.children[RIGHT] = right;
     node.maxGravitySupportRadius = particleRange.first == particleRange.second ?
         0.0f :
-        std::max(float(getOptions().gravitySupportRadius), maxSupportRadius);
+        std::max(float(getOptions().gravity.supportRadius), maxSupportRadius);
     if (!node.leaf) {
         for (int child = 0; child < NCHILD; child++) {
             node.maxGravitySupportRadius = std::max(node.maxGravitySupportRadius,
@@ -170,7 +170,7 @@ void fmmWalkVerifyEwald(std::string const& label, TreeId sink, Vector<TreeId> co
         -SCALE_FACTOR2 * value(0, 1, 0), -SCALE_FACTOR2 * value(0, 0, 1)};
     double const expectedEwaldPotential = SCALE_FACTOR1 * value(0, 0, 0);
     // The call's support may differ from the defaults used to build the tree.
-    float const support = 2.0f * getOptions().gravitySupportRadius;
+    float const support = 2.0f * getOptions().gravity.supportRadius;
     double const selfPotential = selfPhi() * (1.0f / support);
     double const expectedPotential = selfPotential + expectedEwaldPotential;
     auto const* sinkNode = treeGetNode(sink);
@@ -500,7 +500,7 @@ void fmmWalkReciprocalHybrid(bool useCuda) {
         fmmWalkSetHybridParticles(testCase.secondParticleCount);
         fmmWalkResetKickState();
         particlesSortByRung(0);
-        treeCreate(TreeCreateParameters(0, kFmmWalkTheta, getOptions().gravitySupportRadius));
+        treeCreate(TreeCreateParameters(0, kFmmWalkTheta, getOptions().gravity.supportRadius));
         // The ordinary build initializes the arenas and may reorder particles.
         // Restore the prescribed ranges before constructing the synthetic moments.
         fmmWalkSetHybridParticles(testCase.secondParticleCount);
@@ -831,7 +831,7 @@ void fmmWalkCollectLeaves(TreeId id, Vector<TreeId>& leaves) {
     if (node->leaf) {
         if (node->numberOfParticles()) {
             leaves.push_back(id);
-            expectedSupportRadius = getOptions().gravitySupportRadius;
+            expectedSupportRadius = getOptions().gravity.supportRadius;
         }
     } else {
         for (int child = 0; child < NCHILD; child++) {
@@ -882,7 +882,7 @@ FmmWalkPeriodicField fmmWalkDirectPeriodicReference(
                         displacement[1] * displacement[1] + displacement[2] * displacement[2];
                     if (!(source == sink && origin)) {
                         double const radius = std::sqrt(radiusSquared);
-                        if (origin && radius <= getOptions().gravitySupportRadius) {
+                        if (origin && radius <= getOptions().gravity.supportRadius) {
                             throw std::runtime_error(
                                 "Periodic FMM reference requires separated particle pairs");
                         }
@@ -968,7 +968,7 @@ void fmmWalkPeriodicBackground(bool useCuda) {
             throw std::runtime_error("Periodic background regression selected the wrong sources");
         }
         auto const built =
-            treeCreate(TreeCreateParameters(0, kTheta, getOptions().gravitySupportRadius));
+            treeCreate(TreeCreateParameters(0, kTheta, getOptions().gravity.supportRadius));
         if (built.id.proc != 0 || built.id.index != 0) {
             throw std::runtime_error("Periodic background regression requires the global root");
         }
@@ -1083,7 +1083,7 @@ double fmmWalkVerifyDistributedForces(TreeId root) {
     }
     ForceVectors reference(1);
     reference.gx[0] = reference.gy[0] = reference.gz[0] = reference.phi[0] = 0.0f;
-    cpuGravityPp(reference, true, sink, sources, getOptions().gravitySupportRadius);
+    cpuGravityPp(reference, true, sink, sources, getOptions().gravity.supportRadius);
     detail::fmmWalkRequireClose("distributed handoff x acceleration",
         particlesGravityAcceleration(XDIM, 0), reference.gx[0]);
     detail::fmmWalkRequireClose("distributed handoff y acceleration",
@@ -1132,17 +1132,17 @@ HPX_PLAIN_ACTION(
 void fmmWalkTest() {
     auto const originalOptions = getOptions();
     auto options = originalOptions;
-    bool const useCuda = options.cuda;
-    options.sph = false;
+    bool const useCuda = options.compute.cuda;
+    options.hydro.enabled = false;
 
-    options.gravity = true;
-    options.saveForce = true;
+    options.gravity.enabled = true;
+    options.analysis.saveForce = true;
 
-    options.doGroups = false;
-    options.doTracers = false;
-    options.bucketSize = 64;
-    options.gravitySupportRadius = 0.005;
-    options.numberOfParticles = hpxSize() == 1 ? 6 : hpxSize();
+    options.analysis.groups = false;
+    options.analysis.tracers = false;
+    options.compute.bucketSize = 64;
+    options.gravity.supportRadius = 0.005;
+    options.initial.numberOfParticles = hpxSize() == 1 ? 6 : hpxSize();
     setOptions(options);
     if (hpxSize() == 1) {
         detail::fmmWalkRejectedSourceLeaf(useCuda);
@@ -1165,7 +1165,7 @@ void fmmWalkTest() {
         domainsBegin(0);
         domainsEnd();
         particlesSortByRung(0);
-        auto const built = treeCreate(TreeCreateParameters(0, 0.1, options.gravitySupportRadius));
+        auto const built = treeCreate(TreeCreateParameters(0, 0.1, options.gravity.supportRadius));
         // Three ranks give a one-rank left child and a global right child at the first handoff.
         // First force nearby sources open against the direct reference, then
         // include Ewald to exercise the distributed root-background reduction.

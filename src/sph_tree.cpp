@@ -184,7 +184,7 @@ void sphTreeCacheClear() {
 static SphTreeNode const* treeCacheRead(TreeId id);
 
 void SphTreeAllocator::reset() {
-    int const treeCacheLineSize = getOptions().treeCacheLineSize;
+    int const treeCacheLineSize = getOptions().compute.treeCacheLineSize;
     next_ = (nextId += treeCacheLineSize);
     last_ = std::min(next_ + treeCacheLineSize, (int) nodes.size());
     if (next_ >= nodes.size()) {
@@ -262,8 +262,8 @@ FastFuture<SphTreeCreateReturn> sphTreeCreateFork(SphTreeCreateParameters params
 }
 
 static void sphTreeAllocateNodes() {
-    int const treeCacheLineSize = getOptions().treeCacheLineSize;
-    static int const bucketSize = getOptions().sphBucketSize;
+    int const treeCacheLineSize = getOptions().compute.treeCacheLineSize;
+    static int const bucketSize = getOptions().compute.sphBucketSize;
     Vector<hpx::future<void>> futs;
     for (auto const& c : hpxChildren()) {
         futs.push_back(hpx::async<SphTreeAllocateNodesAction>(c));
@@ -287,7 +287,7 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
     bool localRoot) {
     // PRINT( "%i\n", depth);
     stackTraceActivate();
-    static int const bucketSize = getOptions().sphBucketSize;
+    static int const bucketSize = getOptions().compute.sphBucketSize;
     SphTreeCreateReturn rc;
     if (depth >= MAX_DEPTH) {
         THROW_ERROR("%s\n", "Maximum depth exceeded\n");
@@ -467,7 +467,7 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
     node.sinkParticleRange = particleRange;
     ParticleInteger const numberOfParticles = particleRange.second - particleRange.first;
     bool const global = processRange.second - processRange.first > 1;
-    node.leaf = !global && (numberOfParticles <= getOptions().sphBucketSize);
+    node.leaf = !global && (numberOfParticles <= getOptions().compute.sphBucketSize);
     /*	if ( BUCKET_SIZE <= get_options().sph_bucket_size) {
      if (node.leaf) {
      std::lock_guard<mutex_type> lock(leaf_part_range_mutex);
@@ -561,7 +561,7 @@ void sphTreeSetBoxes(TreeId id, Fixed32Range const& ibox, Fixed32Range const& ob
 }
 
 static SphTreeNode const* treeCacheRead(TreeId id) {
-    int const lineSize = getOptions().treeCacheLineSize;
+    int const lineSize = getOptions().compute.treeCacheLineSize;
     TreeId lineId;
     lineId.proc = id.proc;
     ASSERT(lineId.proc >= 0 && lineId.proc < hpxSize());
@@ -614,7 +614,7 @@ static SphTreeNode const* treeCacheRead(TreeId id) {
 }
 
 static Vector<SphTreeNode> sphTreeFetchCacheLine(int index) {
-    int const lineSize = getOptions().treeCacheLineSize;
+    int const lineSize = getOptions().compute.treeCacheLineSize;
     Vector<SphTreeNode> line(lineSize);
     int const begin = (index / lineSize) * lineSize;
     int const end = std::min(begin + lineSize, int(nodes.size()));

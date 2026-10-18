@@ -73,8 +73,8 @@ struct LinearExperiment {
     std::string loadFile;
 
     explicit LinearExperiment(Options const& options)
-      : side(options.particlesPerDimension)
-      , species(options.sph ? 2 : 1)
+      : side(options.initial.particlesPerDimension)
+      , species(options.hydro.enabled ? 2 : 1)
       , perSpecies(size_t(side) * side * side)
       , reference(perSpecies * species)
       , loadFile(linearEnvironment("COSMICTIGER_LINEAR_GROWTH_LOAD_FILE", "")) {
@@ -256,9 +256,9 @@ struct LinearExperiment {
             }
         }
         particlesSortByRung(0);
-        auto const built =
-            treeCreate(TreeCreateParameters(0, options.theta, options.gravitySupportRadius));
-        if (built.maxGravitySupportRadius != float(options.gravitySupportRadius)) {
+        auto const built = treeCreate(
+            TreeCreateParameters(0, options.gravity.openingAngle, options.gravity.supportRadius));
+        if (built.maxGravitySupportRadius != float(options.gravity.supportRadius)) {
             throw std::runtime_error(
                 "Linear-growth tree changed the configured fixed gravity support");
         }
@@ -269,14 +269,14 @@ struct LinearExperiment {
         parameters.minRung = 0;
         parameters.a = 1.0;
         parameters.t0 = 0.001;
-        parameters.theta = options.theta;
-        parameters.gravitySupportRadius = options.gravitySupportRadius;
-        parameters.eta = options.eta;
-        parameters.gm = options.gm;
+        parameters.theta = options.gravity.openingAngle;
+        parameters.gravitySupportRadius = options.gravity.supportRadius;
+        parameters.eta = options.gravity.timestepEta;
+        parameters.gm = options.gravity.gm;
         parameters.velInit = false;
         parameters.saveForce = true;
         parameters.firstCall = true;
-        parameters.gpu = options.cuda;
+        parameters.gpu = options.compute.cuda;
         parameters.nodeLoad = 1.0;
         parameters.ascending = true;
         parameters.descending = true;
@@ -384,22 +384,23 @@ void writeLinearMetadata(LinearExperiment const& experiment, LinearSample const&
            << "  \"paired_evolution\": "
            << (linearEnvironment("COSMICTIGER_LINEAR_GROWTH_PAIRED", "0") == "1" ? "true" : "false")
            << ",\n"
-           << "  \"mass_dm\": " << (options.sph ? options.darkMatterMass : 1.0) << ",\n"
-           << "  \"mass_gas\": " << (options.sph ? options.sphMass : 0.0) << ",\n"
-           << "  \"gm\": " << options.gm << ",\n"
-           << "  \"kernel_family\": \"" << options.gravityKernelFamily << "\",\n"
-           << "  \"kernel_degree\": " << options.gravityKernelDegree << ",\n"
+           << "  \"mass_dm\": " << (options.hydro.enabled ? options.initial.darkMatterMass : 1.0)
+           << ",\n"
+           << "  \"mass_gas\": " << (options.hydro.enabled ? options.initial.gasMass : 0.0) << ",\n"
+           << "  \"gm\": " << options.gravity.gm << ",\n"
+           << "  \"kernel_family\": \"" << options.gravity.kernelFamily << "\",\n"
+           << "  \"kernel_degree\": " << options.gravity.kernelDegree << ",\n"
            << "  \"softening_mode\": \"fixed\",\n"
-           << "  \"configured_support_radius_box\": " << options.gravitySupportRadius
+           << "  \"configured_support_radius_box\": " << options.gravity.supportRadius
            << ",\n"
            // Retain the historical metadata key; fixed gravity has no neighbor target.
            << "  \"neighbor_number\": 0,\n"
-           << "  \"theta\": " << options.theta << ",\n"
-           << "  \"backend\": \"" << (options.cuda ? "cuda" : "cpu") << "\",\n"
-           << "  \"omega_m\": " << options.omegaM << ",\n"
-           << "  \"omega_r\": " << options.omegaR << ",\n"
-           << "  \"omega_k\": " << options.omegaK << ",\n"
-           << "  \"omega_lambda\": " << options.omegaLam << ",\n"
+           << "  \"theta\": " << options.gravity.openingAngle << ",\n"
+           << "  \"backend\": \"" << (options.compute.cuda ? "cuda" : "cpu") << "\",\n"
+           << "  \"omega_m\": " << options.cosmology.omegaM << ",\n"
+           << "  \"omega_r\": " << options.cosmology.omegaR << ",\n"
+           << "  \"omega_k\": " << options.cosmology.omegaK << ",\n"
+           << "  \"omega_lambda\": " << options.cosmology.omegaLambda << ",\n"
            << "  \"baseline_force_rms\": " << std::sqrt(baselineSquared) << ",\n"
            << "  \"baseline_force_max\": " << baselineMaximum << ",\n"
            << "  \"baseline_force_rms_dm\": " << std::sqrt(baselineSpeciesSquared[0]) << ",\n"
@@ -602,10 +603,10 @@ LinearState linearDerivative(
     LinearExperiment const& experiment, LinearState const& state, double logScale) {
     auto const& options = getOptions();
     double const scale = std::exp(logScale);
-    double const matter = options.omegaM / std::pow(scale, 3);
-    double const radiation = options.omegaR / std::pow(scale, 4);
-    double const curvature = options.omegaK / (scale * scale);
-    double const hubbleSquared = matter + radiation + curvature + options.omegaLam;
+    double const matter = options.cosmology.omegaM / std::pow(scale, 3);
+    double const radiation = options.cosmology.omegaR / std::pow(scale, 4);
+    double const curvature = options.cosmology.omegaK / (scale * scale);
+    double const hubbleSquared = matter + radiation + curvature + options.cosmology.omegaLambda;
     double const drag =
         2.0 - (3.0 * matter + 4.0 * radiation + 2.0 * curvature) / (2.0 * hubbleSquared);
     double const gravity = 1.5 * matter / hubbleSquared / kLinearFourPi;
@@ -845,26 +846,28 @@ void evolveLinearModes(LinearExperiment const& experiment, std::string const& fi
 
 void linearGrowthTest() {
     auto options = getOptions();
-    if (hpxSize() != 1 || options.particlesPerDimension < 4 || options.particlesPerDimension > 32 ||
-        options.closePack || options.useGlass) {
+    if (hpxSize() != 1 || options.initial.particlesPerDimension < 4 ||
+        options.initial.particlesPerDimension > 32 || options.initial.closePack ||
+        options.initial.useGlass) {
         throw std::runtime_error(
             "linearGrowth requires one locality, 4 <= N <= 32 and no standard glass/close-pack "
             "loader; "
             "use COSMICTIGER_LINEAR_GROWTH_LOAD_FILE for a custom particle load");
     }
-    options.gravity = true;
-    options.htime = false;
+    options.gravity.enabled = true;
+    options.run.hierarchicalGravity = false;
 
-    options.saveForce = true;
+    options.analysis.saveForce = true;
 
-    options.doGroups = false;
-    options.doTracers = false;
-    options.numberOfParticles = size_t(options.particlesPerDimension) *
-        options.particlesPerDimension * options.particlesPerDimension;
+    options.analysis.groups = false;
+    options.analysis.tracers = false;
+    options.initial.numberOfParticles = size_t(options.initial.particlesPerDimension) *
+        options.initial.particlesPerDimension * options.initial.particlesPerDimension;
     // G rho_comoving = 1 makes the measured response independent of code units.
-    double const massSum =
-        options.sph ? double(float(options.darkMatterMass)) + double(float(options.sphMass)) : 1.0;
-    options.gm = 1.0 / (options.numberOfParticles * massSum);
+    double const massSum = options.hydro.enabled ?
+        double(float(options.initial.darkMatterMass)) + double(float(options.initial.gasMass)) :
+        1.0;
+    options.gravity.gm = 1.0 / (options.initial.numberOfParticles * massSum);
     setOptions(options);
     detail::LinearExperiment const experiment(options);
     auto const baseline = experiment.force(detail::LinearField(experiment.reference.size()));
@@ -880,5 +883,5 @@ void linearGrowthTest() {
         detail::evolveLinearModes(experiment, evolveFile);
     }
     PRINT("Linear growth diagnostic complete (%s, %i species, N=%i)\n",
-        options.cuda ? "CUDA" : "CPU", experiment.species, experiment.side);
+        options.compute.cuda ? "CUDA" : "CPU", experiment.species, experiment.side);
 }

@@ -138,7 +138,7 @@ std::pair<size_t, size_t> groupsSave(int number, double scale, double time) {
             THROW_ERROR("Unable to open %s for writing\n", fname.c_str());
         }
         GroupHeader header;
-        header.boxLength = getOptions().codeToCm / constants::kMpcToCm;
+        header.boxLength = getOptions().units.lengthCm / constants::kMpcToCm;
         header.time = time;
         header.number = number;
         header.scale = scale;
@@ -198,7 +198,7 @@ void groupsReduce(double scaleFactor) {
                     Vector<ParticleData>& parts = iter->second;
 
                     Vector<float> phi;
-                    if (parts.size() >= getOptions().minGroup) {
+                    if (parts.size() >= getOptions().analysis.minGroupSize) {
                         auto rockstarGroups = rockstarFindSubgroups(parts, scaleFactor);
                         int haloCount = 0;
                         for (int i = 0; i < rockstarGroups.size(); i++) {

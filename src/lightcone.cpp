@@ -124,7 +124,7 @@ size_t lcAddParticles(
     int const numberOfThreads = hpxHardwareConcurrency();
     Vector<hpx::future<void>> futs;
     std::atomic<int> index(0);
-    size_t const npix = sqr((size_t) getOptions().lcMapSize) * 12;
+    size_t const npix = sqr((size_t) getOptions().lightcone.mapSize) * 12;
     Vector<float> pix(npix, 0.0);
     int minPix = npix;
     int maxPix = 0;
@@ -165,13 +165,13 @@ size_t lcAddParticles(
             }));
         }
         hpx::wait_all(futs.begin(), futs.end());
-        std::string filename = getOptions().lcDir + "/lc.healpix." + std::to_string(epoch) + "." +
-            std::to_string(hpxRank());
+        std::string filename = getOptions().lightcone.directory + "/lc.healpix." +
+            std::to_string(epoch) + "." + std::to_string(hpxRank());
         FILE* fp = fopen(filename.c_str(), "wb");
         if (fp == nullptr) {
             THROW_ERROR("Unable to open %s for writing\n", filename.c_str());
         }
-        int nside = getOptions().lcMapSize;
+        int nside = getOptions().lightcone.mapSize;
         FWRITE(&nside, sizeof(int), 1, fp);
         FWRITE(&minPix, sizeof(int), 1, fp);
         FWRITE(&maxPix, sizeof(int), 1, fp);
@@ -220,7 +220,7 @@ size_t lcTimeToFlush(double tau, double requestedTauMax) {
         int const nside = computeNside(tau);
         int const npix = nside == 0 ? 1 : 12 * sqr(nside);
         size_t const ranks = std::min(npix, hpxSize());
-        size_t const particlesPerRank = getOptions().numberOfParticles / hpxSize();
+        size_t const particlesPerRank = getOptions().initial.numberOfParticles / hpxSize();
         /*		double factor = 1.0 / 8.0;
          double tm = tau / tau_max * 64;
          if (tm > 63.0) {
@@ -308,8 +308,8 @@ void lcParts2groups(double a, double linkingLength, int ti) {
         }));
     }
     hpx::wait_all(futs.begin(), futs.end());
-    std::string filename = getOptions().lcDir + "/lc.groups." + std::to_string(epoch) + "." +
-        std::to_string(hpxRank());
+    std::string filename = getOptions().lightcone.directory + "/lc.groups." +
+        std::to_string(epoch) + "." + std::to_string(hpxRank());
     FILE* fp = fopen(filename.c_str(), "wb");
     if (fp == nullptr) {
         THROW_ERROR("Unable to open %s for writing\n", filename.c_str());
@@ -571,8 +571,8 @@ size_t lcFindNeighbors() {
         futs.push_back(hpx::async<LcFindNeighborsAction>(c));
     }
     size_t rc = 0;
-    double const linkingLength =
-        getOptions().lcB * pow(getOptions().numberOfParticles, -1.0 / NDIM);
+    double const linkingLength = getOptions().lightcone.linkingLength *
+        pow(getOptions().initial.numberOfParticles, -1.0 / NDIM);
     for (int pix = myPixRange.first; pix < myPixRange.second; pix++) {
         futs.push_back(hpx::async([pix, linkingLength, &treeMap]() {
             Vector<int> checkPix;
@@ -599,8 +599,8 @@ size_t lcFindGroups() {
         futs.push_back(hpx::async<LcFindGroupsAction>(c));
     }
     size_t rc = 0;
-    double const linkingLength =
-        getOptions().lcB * pow(getOptions().numberOfParticles, -1.0 / NDIM);
+    double const linkingLength = getOptions().lightcone.linkingLength *
+        pow(getOptions().initial.numberOfParticles, -1.0 / NDIM);
     Vector<hpx::future<void>> futs2;
     for (int pix = myPixRange.first; pix < myPixRange.second; pix++) {
         futs2.push_back(hpx::async([pix, &treeMap]() {
@@ -804,8 +804,8 @@ static int computeNside(double tau) {
     double nside = std::sqrt(8.0 * hpxHardwareConcurrency() * hpxSize() / 12.0);
     double const w0 = std::max((tauMax - tau) / tauMax, 0.0);
     nside = std::min(nside,
-        (pow(getOptions().numberOfParticles, 1.0 / NDIM) * std::sqrt(3) / getOptions().lcB / 2.0 *
-            w0));
+        (pow(getOptions().initial.numberOfParticles, 1.0 / NDIM) * std::sqrt(3) /
+            getOptions().lightcone.linkingLength / 2.0 * w0));
     nsideValue = 1;
     while (nsideValue < nside) {
         nsideValue *= 2;

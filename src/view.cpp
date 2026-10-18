@@ -170,8 +170,9 @@ class ViewUnitConversion {
 
 public:
     ViewUnitConversion(double a, bool cosmological, bool lab)
-      : scales_(getOptions().codeToCm, getOptions().codeToG, getOptions().codeToS)
-      , context_(a, getOptions().hubble)
+      : scales_(
+            getOptions().units.lengthCm, getOptions().units.massG, getOptions().units.timeSeconds)
+      , context_(a, getOptions().cosmology.hubble)
       , cosmological_(cosmological)
       , lab_(lab) {}
 
@@ -322,20 +323,20 @@ void writeConvertedView(DBfile* db, ViewReturn const& particles, int box, double
     writeViewText(db, "time_convention", "cosmological_age");
     writeViewScalar(db, "time", time);
     writeViewScalar(db, "scale_factor", a);
-    writeViewScalar(db, "hubble_parameter", getOptions().hubble);
-    writeViewScalar(db, "code_length_cm", getOptions().codeToCm);
-    writeViewScalar(db, "code_mass_g", getOptions().codeToG);
-    writeViewScalar(db, "code_time_s", getOptions().codeToS);
+    writeViewScalar(db, "hubble_parameter", getOptions().cosmology.hubble);
+    writeViewScalar(db, "code_length_cm", getOptions().units.lengthCm);
+    writeViewScalar(db, "code_mass_g", getOptions().units.massG);
+    writeViewScalar(db, "code_time_s", getOptions().units.timeSeconds);
 
     if (!particles.darkMatter[box].empty()) {
-        double const mass = getOptions().sph ? getOptions().darkMatterMass : 1.0;
+        double const mass = getOptions().hydro.enabled ? getOptions().initial.darkMatterMass : 1.0;
         writeViewSpecies(db, "dark_matter", "", particles.darkMatter[box], conversion, lengthUnit,
             velocityUnit, massUnit, mass, time);
     }
     auto const& gas = particles.hydro[box];
     if (!gas.empty()) {
         writeViewSpecies(db, "gas", "hydro_", gas, conversion, lengthUnit, velocityUnit, massUnit,
-            getOptions().sphMass, time);
+            getOptions().initial.gasMass, time);
         writeViewField(
             db, "rho", "gas", gas, densityUnit, [&conversion](SphParticleInfo const& particle) {
                 return conversion.density(particle.rho);
@@ -352,17 +353,17 @@ void writeConvertedView(DBfile* db, ViewReturn const& particles, int box, double
 
 void writeConvertedViews(DBfile* db, ViewReturn const& particles, int box, double a) {
     double const time =
-        cosmosTime(1e-6, a) * getOptions().codeToS * constants::kSecondsToYears / 1e9;
+        cosmosTime(1e-6, a) * getOptions().units.timeSeconds * constants::kSecondsToYears / 1e9;
     for (bool cosmological : {false, true}) {
         char const* systemName = cosmological ? "cosmological" : "cgs";
-        if (getOptions().outputUnits != "both" && getOptions().outputUnits != systemName) {
+        if (getOptions().output.units != "both" && getOptions().output.units != systemName) {
             continue;
         }
         checkViewWrite(DBMkDir(db, systemName), systemName);
         checkViewWrite(DBSetDir(db, systemName), systemName);
         for (bool lab : {false, true}) {
             char const* frameName = lab ? "lab" : "comoving";
-            if (getOptions().outputFrame != "both" && getOptions().outputFrame != frameName) {
+            if (getOptions().output.frame != "both" && getOptions().output.frame != frameName) {
                 continue;
             }
             checkViewWrite(DBMkDir(db, frameName), frameName);
@@ -458,8 +459,8 @@ ViewReturn viewGetParticles(Vector<Range<double>> boxes = Vector<Range<double>>(
 }
 
 void viewOutputViews(int cycle, double a, bool force) {
-    if (!getOptions().outputSilo || viewBoxes.empty() ||
-        (!force && cycle % getOptions().outputSiloInterval != 0)) {
+    if (!getOptions().output.silo || viewBoxes.empty() ||
+        (!force && cycle % getOptions().output.siloInterval != 0)) {
         return;
     }
     profilerEnter("view_output_views");
@@ -470,7 +471,7 @@ void viewOutputViews(int cycle, double a, bool force) {
         PRINT("Outputing view for box (%e %e) (%e %e) (%e %e)\n", viewBoxes[bi].begin[XDIM],
             viewBoxes[bi].end[XDIM], viewBoxes[bi].begin[YDIM], viewBoxes[bi].end[YDIM],
             viewBoxes[bi].begin[ZDIM], viewBoxes[bi].end[ZDIM]);
-        auto const filename = std::filesystem::path(getOptions().outputDirectory) /
+        auto const filename = std::filesystem::path(getOptions().output.directory) /
             ("view." + std::to_string(bi) + "." + std::to_string(cycle) + ".silo");
         DBfile* db = DBCreateReal(filename.c_str(), DB_CLOBBER, DB_LOCAL, "Meshless", DB_PDB);
         if (db == nullptr) {
@@ -479,7 +480,7 @@ void viewOutputViews(int cycle, double a, bool force) {
         detail::writeViewCommandLine(db);
         ViewReturn parts;
         parts = viewGetParticles();
-        if (getOptions().outputUnits != "code") {
+        if (getOptions().output.units != "code") {
             detail::writeConvertedViews(db, parts, bi, a);
             detail::checkViewWrite(DBClose(db), filename.c_str());
             continue;
@@ -487,7 +488,8 @@ void viewOutputViews(int cycle, double a, bool force) {
         Vector<float> x, y, z;
         auto opts = DBMakeOptlist(1);
         float z0 = 1.0 / a - 1.0;
-        float tm = cosmosTime(1e-6, a) * getOptions().codeToS * constants::kSecondsToYears / 1e9;
+        float tm =
+            cosmosTime(1e-6, a) * getOptions().units.timeSeconds * constants::kSecondsToYears / 1e9;
         DBAddOption(opts, DBOPT_TIME, &tm);
         if (parts.darkMatter[bi].size()) {
             x.resize(0);
@@ -561,29 +563,29 @@ void viewOutputViews(int cycle, double a, bool force) {
 void viewConfigure() {
     viewBoxes.clear();
     auto const& opts = getOptions();
-    if (!opts.outputSilo) {
+    if (!opts.output.silo) {
         PRINT("Silo particle output: disabled (output.silo=false)\n");
         return;
     }
     std::error_code directoryError;
-    std::filesystem::create_directories(opts.outputDirectory, directoryError);
+    std::filesystem::create_directories(opts.output.directory, directoryError);
     if (directoryError) {
-        THROW_ERROR("Cannot create output.directory %s: %s\n", opts.outputDirectory.c_str(),
+        THROW_ERROR("Cannot create output.directory %s: %s\n", opts.output.directory.c_str(),
             directoryError.message().c_str());
     }
     Range<double> viewBox;
-    viewBox.begin[XDIM] = opts.outputXMin;
-    viewBox.end[XDIM] = opts.outputXMax;
-    viewBox.begin[YDIM] = opts.outputYMin;
-    viewBox.end[YDIM] = opts.outputYMax;
-    viewBox.begin[ZDIM] = opts.outputZMin;
-    viewBox.end[ZDIM] = opts.outputZMax;
+    viewBox.begin[XDIM] = opts.output.xMin;
+    viewBox.end[XDIM] = opts.output.xMax;
+    viewBox.begin[YDIM] = opts.output.yMin;
+    viewBox.end[YDIM] = opts.output.yMax;
+    viewBox.begin[ZDIM] = opts.output.zMin;
+    viewBox.end[ZDIM] = opts.output.zMax;
     viewBoxes.push_back(viewBox);
     PRINT("Silo particle output: x [%g, %g], y [%g, %g], z [%g, %g], every %d synchronized coarse "
           "steps\n",
-        opts.outputXMin, opts.outputXMax, opts.outputYMin, opts.outputYMax, opts.outputZMin,
-        opts.outputZMax, opts.outputSiloInterval);
-    PRINT("Silo particle output directory: %s\n", opts.outputDirectory.c_str());
+        opts.output.xMin, opts.output.xMax, opts.output.yMin, opts.output.yMax, opts.output.zMin,
+        opts.output.zMax, opts.output.siloInterval);
+    PRINT("Silo particle output directory: %s\n", opts.output.directory.c_str());
 }
 
 Vector<float> outputView(int number, double time) {
@@ -594,7 +596,7 @@ Vector<float> outputView(int number, double time) {
         valFuts.push_back(hpx::async<OutputViewAction>(c, number, time));
     }
     int const numberOfThreads = hpxHardwareConcurrency();
-    int const nside = getOptions().viewSize;
+    int const nside = getOptions().analysis.viewSize;
     int const npix = 12 * sqr(nside);
     Vector<std::atomic<float>> values(npix);
     for (auto& v : values) {

@@ -41,8 +41,18 @@ of degrees 3–9, Wendland C0/C2/C4, or Ferrers F1–F4. Gravity has an independ
 selection. See [kernel choices and length conventions](kernels.md) for the valid
 degrees, conversion factors, and migration of explicit old settings. Production
 gravity and SPH use three-dimensional tables; a separate arbitrary-dimensional
-density-table generator is available as described there. The existing SPH solver
-continues to require CUDA.
+density-table generator is available as described there. Select SIMD CPU SPH with
+`--compute.cuda=false`, or CUDA SPH with `--compute.cuda=true`. Both backends
+implement support-radius solving, density, forces/heating, and neighbor timestep
+propagation using the same kernel selections and length conventions. CPU workers
+process separate tree leaves, with eight-lane SIMD packs over their neighbors.
+All source fields are staged before a phase updates local sinks, including sources
+fetched from other MPI ranks.
+
+The complete executable still requires CUDA for existing operations outside SPH,
+including particle drift. The standalone `sph_cpu_test` target can be built with
+`COSMICTIGER_WITH_CUDA=OFF` and does not call a CUDA device. The installed HPX
+library may itself link the CUDA runtime.
 
 Write the selected density kernel as \(W_H(r)=H^{-3}w(r/H)\). Density includes
 the self contribution and uses the gather sum
@@ -267,6 +277,19 @@ weighted-neighbor residual; periodic support intersection; a uniform lattice;
 nonzero perturbations; timestep selection; unequal-support pair conservation;
 and homogeneous expansion with a nonmonatomic gamma. Selected-kernel checks
 exercise all 14 family/degree choices through the production SPH path.
+The same target compares all four SIMD CPU passes directly with CUDA, including
+both hydro phases, permuted source/sink mappings, periodic positions, inactive and
+semiactive particles, support-search retries, and immutable source snapshots.
+
+The `sph_cpu` regression exercises the production SIMD code with ordinary host
+allocations. It checks independent analytic density/force/timestep references,
+pair conservation, expansion, every kernel selection, SIMD tails, periodic
+geometry, activity, support bounds/retries, and iterative neighbor rung changes.
+On Linux it enables floating-point traps to catch invalid arithmetic in masked
+lanes. `smoke_sod_cpu`, `smoke_sph_cpu`, and `smoke_sph_cpu_mpi` cover shock-tube
+evolution, cosmological evolution with restart, and two-rank MPI evolution through
+the application driver.
+
 The separate `radial_kernel` and `radial_kernel_cuda` targets check the generated
 CPU/SIMD/CUDA tables, moments, gravitational force/potential consistency, and
 float behavior near zero and the support boundary; see [kernels.md](kernels.md).

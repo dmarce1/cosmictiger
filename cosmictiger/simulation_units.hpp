@@ -13,11 +13,11 @@
 namespace units {
 
 inline UnitScales scalesFromOptions(Options const& options) {
-    return UnitScales(options.codeToCm, options.codeToG, options.codeToS);
+    return UnitScales(options.units.lengthCm, options.units.massG, options.units.timeSeconds);
 }
 
 inline double normalizedHubble100(Options const& options) {
-    return (kHubble100 * Time::from_value(options.codeToS)).value();
+    return (kHubble100 * Time::from_value(options.units.timeSeconds)).value();
 }
 
 }    // namespace units

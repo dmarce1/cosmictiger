@@ -68,7 +68,7 @@ def main():
     if not required <= option_names:
         raise RuntimeError(f"grouped help is missing {sorted(required - option_names)}")
     removed_options = {"hydro.chemistry", "hydro.conduction", "hydro.diffusion",
-                       "hydro.yReflect", "gravity.sphSmoothing"}
+                       "hydro.yReflect", "gravity.sphSmoothing", "cosmology.omegaK"}
     if removed_options & option_names:
         raise RuntimeError(f"removed options remain in help: {sorted(removed_options & option_names)}")
     for name in option_names - {"help", "configuration"}:
@@ -430,10 +430,17 @@ mapSize = 8
         output = run(name, [option], success=False)
         if diagnostic not in output:
             raise RuntimeError(f"{name} failed without its expected diagnostic: {diagnostic}")
+    removed_config = args.workdir / "removed_option.ini"
     for option in sorted(removed_options):
-        output = run(f"removed_{option}", [f"--{option}=false"], success=False)
-        if option not in output:
-            raise RuntimeError(f"removed option {option} failed without naming the option")
+        value = "0.1" if option == "cosmology.omegaK" else "false"
+        group, name = option.split(".")
+        removed_config.write_text(f"[{group}]\n{name} = {value}\n")
+        for source, arguments in (
+                ("cli", [f"--{option}={value}"]),
+                ("ini", [f"--configuration={removed_config.resolve()}"])):
+            output = run(f"removed_{source}_{option}", arguments, success=False)
+            if option not in output or not re.search(r"unrecogni[sz]ed option", output):
+                raise RuntimeError(f"removed {source} option {option} was not rejected explicitly")
     for parameter in ("omegaB", "omegaC"):
         for value in ("0", "-0.1", "nan", "inf"):
             output = run(f"invalid_class_mass_{parameter}_{value}", [

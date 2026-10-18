@@ -52,7 +52,7 @@ std::pair<Vector<double>, Array<Vector<double>, NDIM>> gravityAnalyticCallKernel
     (CUDA_MALLOC(&devGz, numberOfSinks * sizeof(double)));
     Vector<double> zero(numberOfSinks, 0.0);
     if (hpxRank() == 0) {
-        Vector<double> selfPhi1(numberOfSinks, selfPhi() / getOptions().gravitySupportRadius);
+        Vector<double> selfPhi1(numberOfSinks, selfPhi() / getOptions().gravity.supportRadius);
         CUDA_CHECK(cudaMemcpy(
             devPhi, selfPhi1.data(), numberOfSinks * sizeof(double), cudaMemcpyHostToDevice));
     } else {
@@ -99,7 +99,7 @@ std::pair<Vector<double>, Array<Vector<double>, NDIM>> gravityAnalyticCallKernel
             int const end = size_t(j + 1) * size_t(totalSize) / size_t(numberOfKernels);
             analyticGravityKernel<<<numberOfSinks, ANALYTIC_BLOCK_SIZE, 0, streams[j]>>>(devSinkx,
                 devSinky, devSinkz, devSrcx + begin, devSrcy + begin, devSrcz + begin, end - begin,
-                devPhi, devGx, devGy, devGz, getOptions().gravitySupportRadius);
+                devPhi, devGx, devGy, devGz, getOptions().gravity.supportRadius);
         }
         for (int i = 0; i < numberOfKernels; i++) {
             synchronizeCudaStream(streams[i]);

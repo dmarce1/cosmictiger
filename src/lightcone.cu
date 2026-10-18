@@ -176,8 +176,8 @@ size_t cudaLightcone(DeviceVector<LightconeTreeId> const& leaves,
     *rcPtr = 0;
     *indexPtr = 0;
     *nextIdPtr = *nextIdValue;
-    auto const b = getOptions().lcB;
-    auto const numberOfParticles = getOptions().numberOfParticles;
+    auto const b = getOptions().lightcone.linkingLength;
+    auto const numberOfParticles = getOptions().initial.numberOfParticles;
     double const linkingLength = b * pow(numberOfParticles, -1.0 / NDIM);
     cudaLightconeKernel<<<numberOfBlocks, BLOCK_SIZE>>>(particleMapPtr, treeMapPtr, rcPtr,
         leaves.data(), leaves.size(), indexPtr, nextIdPtr, linkingLength, hpxSize(), hpxRank());

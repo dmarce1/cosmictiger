@@ -30,7 +30,7 @@ static void computeDensityFolded(int m);
 HPX_PLAIN_ACTION(computeDensityFolded, ComputeDensityFoldedAction);
 
 PowerSpectrumT powerSpectrumCompute(int m) {
-    int const n = getOptions().nfour;
+    int const n = getOptions().initial.fourierSize;
     fft3dInit(n, -1.0f);
     computeDensityFolded(m);
     fft3dExecute();
@@ -49,8 +49,8 @@ static void computeDensityFolded(int m) {
     for (auto c : hpxChildren()) {
         futs1.push_back(hpx::async<ComputeDensityFoldedAction>(c, m));
     }
-    size_t const ndim = getOptions().nfour;
-    size_t const numberOfParticles = getOptions().numberOfParticles;
+    size_t const ndim = getOptions().initial.fourierSize;
+    size_t const numberOfParticles = getOptions().initial.numberOfParticles;
     size_t const particlesPerRank = numberOfParticles / hpxSize();
     size_t nper = ndim;
     while (sqr(nper) * nper > particlesPerRank) {

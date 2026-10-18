@@ -149,9 +149,9 @@ void cpuGravityCp(Expansion<float>& lValue, Vector<TreeId> const& list, TreeId s
                 count += treePtrs[i]->numberOfParticles();
             }
             for (int i = 0; i < count; i++) {
-                masses[i] = getOptions().sph ?
-                    (types[i] == DARK_MATTER_TYPE ? getOptions().darkMatterMass :
-                                                    getOptions().sphMass) :
+                masses[i] = getOptions().hydro.enabled ?
+                    (types[i] == DARK_MATTER_TYPE ? getOptions().initial.darkMatterMass :
+                                                    getOptions().initial.gasMass) :
                     1.0f;
             }
             for (int i = count; i < numberOfSources; i++) {
@@ -326,9 +326,9 @@ void cpuGravityPp(
                 count += treePtrs[i]->numberOfParticles();
             }
             for (int i = 0; i < count; i++) {
-                sourceWeights[i] = getOptions().sph ?
-                    (types[i] == DARK_MATTER_TYPE ? getOptions().darkMatterMass :
-                                                    getOptions().sphMass) :
+                sourceWeights[i] = getOptions().hydro.enabled ?
+                    (types[i] == DARK_MATTER_TYPE ? getOptions().initial.darkMatterMass :
+                                                    getOptions().initial.gasMass) :
                     1.0f;
             }
             for (int i = count; i < numberOfSources; i++) {

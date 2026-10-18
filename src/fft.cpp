@@ -176,7 +176,7 @@ PowerSpectrumT fft3dPowerSpectrum() {
     Vector<float> kbins;
     double const boxSize =
         (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
-    int const nfour = getOptions().nfour;
+    int const nfour = getOptions().initial.fourierSize;
     double const ns = std::max(nfour / 8.0, 64.0);
     double const kmin = 0.999999;
     double const kmax = nfour / 2.0;
@@ -245,7 +245,7 @@ static PowerSpectrumReturn powerSpectrumCompute(Vector<float> const& kbins) {
     for (auto c : hpxChildren()) {
         futs.push_back(hpx::async<PowerSpectrumComputeAction>(c, kbins));
     }
-    int64_t const n = getOptions().particlesPerDimension;
+    int64_t const n = getOptions().initial.particlesPerDimension;
     float const boxSize =
         (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
     auto const& box = cmplxMybox[ZDIM];
@@ -315,7 +315,7 @@ static PowerSpectrumReturn powerSpectrumCompute2(
     for (auto c : hpxChildren()) {
         futs.push_back(hpx::async<PowerSpectrumCompute2Action>(c, rc, kbins));
     }
-    int64_t const n = getOptions().particlesPerDimension;
+    int64_t const n = getOptions().initial.particlesPerDimension;
     float const boxSize =
         (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
     auto const& box = cmplxMybox[ZDIM];

@@ -27,11 +27,11 @@
 #include <cosmictiger/simulation_units.hpp>
 
 void cosmosUpdate0(double& adotdot, double& adot, double& a, double dt) {
-    double const omegaM = getOptions().omegaM;
-    double const omegaR = getOptions().omegaR;
-    double const omegaLam = getOptions().omegaLam;
-    double const omegaK = getOptions().omegaK;
-    auto const h = units::normalizedHubble100(getOptions()) * getOptions().hubble;
+    double const omegaM = getOptions().cosmology.omegaM;
+    double const omegaR = getOptions().cosmology.omegaR;
+    double const omegaLam = getOptions().cosmology.omegaLambda;
+    double const omegaK = getOptions().cosmology.omegaK;
+    auto const h = units::normalizedHubble100(getOptions()) * getOptions().cosmology.hubble;
     double const adot0 = adot;
 
     adotdot = a * sqr(h) * (-omegaR / (sqr(sqr(a))) - 0.5 * omegaM / (sqr(a) * a) + omegaLam);
@@ -87,11 +87,11 @@ double cosmosGrowthFactor(double omegaM, float a) {
 }
 
 double cosmosDadt(double a) {
-    auto const h = units::normalizedHubble100(getOptions()) * getOptions().hubble;
-    auto const omegaM = getOptions().omegaM;
-    auto const omegaR = getOptions().omegaR;
-    auto const omegaK = getOptions().omegaK;
-    auto const omegaLam = getOptions().omegaLam;
+    auto const h = units::normalizedHubble100(getOptions()) * getOptions().cosmology.hubble;
+    auto const omegaM = getOptions().cosmology.omegaM;
+    auto const omegaR = getOptions().cosmology.omegaR;
+    auto const omegaK = getOptions().cosmology.omegaK;
+    auto const omegaLam = getOptions().cosmology.omegaLambda;
     addCpuFlops(27);
     return h * a *
         std::sqrt(omegaR / (a * a * a * a) + omegaM / (a * a * a) + omegaK / (a * a) + omegaLam);
@@ -163,7 +163,7 @@ double cosmosConformalTime(double a0, double a1) {
 #define Log(a) log(a)
 
 double cosmosKlypinFit(double vmax, double rvir, double mvir) {
-    double f0 = vmax * vmax * rvir / mvir / getOptions().gm;
+    double f0 = vmax * vmax * rvir / mvir / getOptions().gravity.gm;
     double c;
     if (fabs(f0 - 1.0) < 1e-5) {
         c = 2.16258;

@@ -184,7 +184,7 @@ double particlesActivePct() {
         numActive += f.get();
     }
     if (hpxRank() == 0) {
-        numActive /= getOptions().numberOfParticles;
+        numActive /= getOptions().initial.numberOfParticles;
     }
     return numActive;
 }
@@ -249,7 +249,7 @@ struct LineIdType {
 
 struct LineIdHash {
     inline size_t operator()(LineIdType id) const {
-        ParticleInteger const lineSize = getOptions().particleCacheLineSize;
+        ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
         ParticleInteger const i = id.index / lineSize;
         return i * (hpxSize() - 1) + ((id.proc < hpxRank()) ? id.proc : id.proc - 1);
     }
@@ -410,9 +410,10 @@ void particlesSetTracers(size_t count) {
     }
 
     if (particlesSize() > 0) {
-        size_t const totalCount = getOptions().numberOfParticles * (getOptions().sph ? 2 : 1);
-        detail::setTracerFlags(
-            &particlesTracer(0), particlesSize(), count, totalCount, getOptions().tracerCount);
+        size_t const totalCount =
+            getOptions().initial.numberOfParticles * (getOptions().hydro.enabled ? 2 : 1);
+        detail::setTracerFlags(&particlesTracer(0), particlesSize(), count, totalCount,
+            getOptions().analysis.tracerCount);
     }
 
     if (hpxRank() < hpxSize() - 1) {
@@ -573,7 +574,7 @@ void particlesMemadviseCpu() {
 
 void particlesGlobalReadPosAndGroup(ParticleGlobalRange range, Fixed32* x, Fixed32* y, Fixed32* z,
     GroupInteger* g, ParticleInteger offset) {
-    ParticleInteger const lineSize = getOptions().particleCacheLineSize;
+    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
     if (range.range.first != range.range.second) {
         if (range.proc == hpxRank()) {
             ParticleInteger const dif = offset - range.range.first;
@@ -738,8 +739,8 @@ void particlesSetMinrung(int minrung) {
 
 void particlesGlobalReadPos(ParticleGlobalRange range, Fixed32* x, Fixed32* y, Fixed32* z,
     char* types, ParticleInteger offset) {
-    static bool const sph = getOptions().sph;
-    ParticleInteger const lineSize = getOptions().particleCacheLineSize;
+    static bool const sph = getOptions().hydro.enabled;
+    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
     if (range.range.first != range.range.second) {
         if (range.proc == hpxRank()) {
             ParticleInteger const dif = offset - range.range.first;
@@ -750,7 +751,7 @@ void particlesGlobalReadPos(ParticleGlobalRange range, Fixed32* x, Fixed32* y, F
             if (types) {
                 for (int i = range.range.first; i < range.range.second; i++) {
                     int const j = offset + i - range.range.first;
-                    if (getOptions().sph) {
+                    if (getOptions().hydro.enabled) {
                         ParticleInteger const k = particlesCatIndex(i);
                         int type = particlesType(i);
                         types[j] = type;
@@ -776,7 +777,7 @@ void particlesGlobalReadPos(ParticleGlobalRange range, Fixed32* x, Fixed32* y, F
                     y[destIndex] = ptr[srcIndex].x[YDIM];
                     z[destIndex] = ptr[srcIndex].x[ZDIM];
                     if (types) {
-                        if (getOptions().sph) {
+                        if (getOptions().hydro.enabled) {
                             types[destIndex] = ptr[srcIndex].type;
                         } else {
                             types[destIndex] = DARK_MATTER_TYPE;
@@ -794,8 +795,8 @@ static ParticlesCacheEntry const* particlesCacheReadLine(LineIdType lineId) {
 }
 
 static Vector<ParticlesCacheEntry> particlesFetchCacheLine(ParticleInteger index) {
-    bool const sph = getOptions().sph;
-    ParticleInteger const lineSize = getOptions().particleCacheLineSize;
+    bool const sph = getOptions().hydro.enabled;
+    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
     Vector<ParticlesCacheEntry> line(lineSize);
     ParticleInteger const begin = (index / lineSize) * lineSize;
     ParticleInteger const end = std::min(particlesSize(), begin + lineSize);
@@ -804,7 +805,7 @@ static Vector<ParticlesCacheEntry> particlesFetchCacheLine(ParticleInteger index
         for (int dim = 0; dim < NDIM; dim++) {
             ln.x[dim] = particlesPos(dim, i);
         }
-        if (getOptions().sph) {
+        if (getOptions().hydro.enabled) {
             int type = particlesType(i);
             auto const kk = particlesCatIndex(i);
             ln.type = type;
@@ -816,7 +817,7 @@ static Vector<ParticlesCacheEntry> particlesFetchCacheLine(ParticleInteger index
 }
 
 static Vector<GroupParticle> particlesGroupFetchCacheLine(ParticleInteger index) {
-    ParticleInteger const lineSize = getOptions().particleCacheLineSize;
+    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
     Vector<GroupParticle> line(lineSize);
     ParticleInteger const begin = (index / lineSize) * lineSize;
     ParticleInteger const end = std::min(particlesSize(), begin + lineSize);
@@ -830,7 +831,7 @@ static Vector<GroupParticle> particlesGroupFetchCacheLine(ParticleInteger index)
 }
 
 void particlesIncGroupCacheEpoch() {
-    ParticleInteger const lineSize = getOptions().particleCacheLineSize;
+    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
     Vector<hpx::future<void>> futs;
     auto const children = hpxChildren();
     for (auto const& c : children) {
@@ -841,7 +842,7 @@ void particlesIncGroupCacheEpoch() {
 }
 
 static Vector<GroupInteger> particlesGroupRefreshCacheLine(ParticleInteger index) {
-    ParticleInteger const lineSize = getOptions().particleCacheLineSize;
+    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
     Vector<GroupInteger> line(lineSize);
     ParticleInteger const begin = (index / lineSize) * lineSize;
     ParticleInteger const end = std::min(particlesSize(), begin + lineSize);
@@ -914,22 +915,22 @@ void particlesResize(ParticleInteger sz, bool lock) {
         }
         particlesArrayResize(particlesV, newCapacity, true);
         particlesArrayResize(particlesR, newCapacity, true);
-        if (getOptions().doGroups) {
+        if (getOptions().analysis.groups) {
             particlesArrayResize(particlesLgrp, newCapacity, false);
             for (ParticleInteger i = capacity; i < newCapacity; i++) {
                 particlesLgrp[i] = NO_GROUP;
             }
         }
-        if (getOptions().saveForce) {
+        if (getOptions().analysis.saveForce) {
             for (int dim = 0; dim < NDIM; dim++) {
                 particlesArrayResize(particlesGravityAccelerations[dim], newCapacity, true);
             }
             particlesArrayResize(particlesP, newCapacity, true);
         }
-        if (getOptions().doTracers) {
+        if (getOptions().analysis.tracers) {
             particlesArrayResize(particlesTr, newCapacity, false);
         }
-        if (getOptions().sph) {
+        if (getOptions().hydro.enabled) {
             particlesArrayResize(particlesSph, newCapacity, true);
             particlesArrayResize(particlesTy, newCapacity, true);
         }
@@ -940,7 +941,7 @@ void particlesResize(ParticleInteger sz, bool lock) {
     }
     int oldsz = size;
     size = sz;
-    if (getOptions().sph) {
+    if (getOptions().hydro.enabled) {
         for (int i = oldsz; i < sz; i++) {
             particlesCatIndex(i) = NO_INDEX;
             particlesType(i) = DARK_MATTER_TYPE;
@@ -966,10 +967,10 @@ void particlesFree() {
 #else
     free(particlesR);
 #endif
-    if (getOptions().doGroups) {
+    if (getOptions().analysis.groups) {
         free(particlesLgrp);
     }
-    if (getOptions().saveForce) {
+    if (getOptions().analysis.saveForce) {
         for (int dim = 0; dim < NDIM; dim++) {
 #ifdef USE_CUDA
             CUDA_CHECK(cudaFree(particlesGravityAccelerations[dim]));
@@ -983,10 +984,10 @@ void particlesFree() {
         free(particlesP);
 #endif
     }
-    if (getOptions().doTracers) {
+    if (getOptions().analysis.tracers) {
         free(particlesTr);
     }
-    if (getOptions().sph) {
+    if (getOptions().hydro.enabled) {
 #ifdef USE_CUDA
         CUDA_CHECK(cudaFree(particlesTy));
         CUDA_CHECK(cudaFree(particlesSph));
@@ -1003,7 +1004,7 @@ void particlesRandomInit() {
     for (auto const& c : children) {
         futs.push_back(hpx::async<ParticlesRandomInitAction>(c));
     }
-    size_t const totalNumberOfParticles = getOptions().numberOfParticles;
+    size_t const totalNumberOfParticles = getOptions().initial.numberOfParticles;
     size_t const begin = (size_t) (hpxRank()) * totalNumberOfParticles / hpxSize();
     size_t const end = (size_t) (hpxRank() + 1) * totalNumberOfParticles / hpxSize();
     size_t const localParticleCount = end - begin;
@@ -1104,8 +1105,8 @@ ParticleInteger particlesSort(Pair<ParticleInteger> rng, double xm, int xdim) {
     ParticleInteger lo = begin;
     ParticleInteger hi = end;
     Fixed32 xmid(xm);
-    bool const doGroups = getOptions().doGroups;
-    bool const doTracers = getOptions().doTracers;
+    bool const doGroups = getOptions().analysis.groups;
+    bool const doTracers = getOptions().analysis.tracers;
     auto& xptrDim = particlesX[xdim];
     auto& x = particlesX[XDIM];
     auto& y = particlesX[YDIM];
@@ -1129,7 +1130,7 @@ ParticleInteger particlesSort(Pair<ParticleInteger> rng, double xm, int xdim) {
                     if (doTracers) {
                         std::swap(particlesTr[hi], particlesTr[lo]);
                     }
-                    if (getOptions().sph) {
+                    if (getOptions().hydro.enabled) {
                         std::swap(particlesSph[hi], particlesSph[lo]);
                         std::swap(particlesTy[hi], particlesTy[lo]);
                     }
@@ -1168,8 +1169,8 @@ void particlesSortByRung(int minrung) {
         end = particlesSize();
         ParticleInteger lo = begin;
         ParticleInteger hi = end;
-        bool const doGroups = getOptions().doGroups;
-        bool const doTracers = getOptions().doTracers;
+        bool const doGroups = getOptions().analysis.groups;
+        bool const doTracers = getOptions().analysis.tracers;
         auto& x = particlesX[XDIM];
         auto& y = particlesX[YDIM];
         auto& z = particlesX[ZDIM];
@@ -1189,7 +1190,7 @@ void particlesSortByRung(int minrung) {
                         if (doTracers) {
                             std::swap(particlesTr[hi], particlesTr[lo]);
                         }
-                        if (getOptions().sph) {
+                        if (getOptions().hydro.enabled) {
                             std::swap(particlesSph[hi], particlesSph[lo]);
                             std::swap(particlesTy[hi], particlesTy[lo]);
                         }
@@ -1208,7 +1209,7 @@ void particlesSortByRung(int minrung) {
 }
 
 void particlesGlobalReadRungs(ParticleGlobalRange range, char* r, ParticleInteger offset) {
-    ParticleInteger const lineSize = getOptions().particleCacheLineSize;
+    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
     if (range.range.first != range.range.second) {
         if (range.proc == hpxRank()) {
             ParticleInteger const dif = offset - range.range.first;
@@ -1241,7 +1242,7 @@ static char const* particlesCacheReadLineRungs(LineIdType lineId) {
 }
 
 static Vector<char> particlesFetchCacheLineRungs(ParticleInteger index) {
-    ParticleInteger const lineSize = getOptions().particleCacheLineSize;
+    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
     Vector<char> line(lineSize);
     ParticleInteger const begin = (index / lineSize) * lineSize;
     ParticleInteger const end = std::min(particlesSize(), begin + lineSize);
@@ -1253,7 +1254,7 @@ static Vector<char> particlesFetchCacheLineRungs(ParticleInteger index) {
 }
 
 Vector<ParticleSample> particlesSample(int cnt) {
-    bool const saveForce = getOptions().saveForce;
+    bool const saveForce = getOptions().analysis.saveForce;
     Vector<ParticleSample> parts;
     Vector<hpx::future<Vector<ParticleSample>>> futs;
     if (hpxRank() == 0) {
@@ -1300,7 +1301,7 @@ void particlesLoad(FILE* fp) {
     ParticleInteger sphSize = 0;
     ParticleInteger size;
     FREAD(&size, sizeof(ParticleInteger), 1, fp);
-    if (getOptions().sph) {
+    if (getOptions().hydro.enabled) {
         FREAD(&sphSize, sizeof(ParticleInteger), 1, fp);
         PRINT("Reading %i total particles %i sph\n", size, sphSize);
         if (sphSize < 0 || sphSize > size) {
@@ -1318,13 +1319,13 @@ void particlesLoad(FILE* fp) {
     FREAD(&particlesPos(ZDIM, 0), sizeof(Fixed32), particlesSize(), fp);
     FREAD(particlesVelData(), sizeof(Array<float, NDIM>), particlesSize(), fp);
     FREAD(&particlesRung(0), sizeof(char), particlesSize(), fp);
-    if (getOptions().doGroups) {
+    if (getOptions().analysis.groups) {
         FREAD(&particlesLastgroup(0), sizeof(GroupInteger), particlesSize(), fp);
     }
-    if (getOptions().doTracers) {
+    if (getOptions().analysis.tracers) {
         FREAD(&particlesTracer(0), sizeof(char), particlesSize(), fp);
     }
-    if (getOptions().sph) {
+    if (getOptions().hydro.enabled) {
         FREAD(&particlesType(0), sizeof(char), particlesSize(), fp);
         FREAD(&particlesCatIndex(0), sizeof(ParticleInteger), particlesSize(), fp);
         sphParticlesLoad(fp);
@@ -1336,10 +1337,10 @@ void particlesLoad(FILE* fp) {
 }
 
 void particlesSave(FILE* fp) {
-    ParticleInteger sphSize = getOptions().sph ? sphParticlesSize() : 0;
+    ParticleInteger sphSize = getOptions().hydro.enabled ? sphParticlesSize() : 0;
     ParticleInteger size = particlesSize();
     fwrite(&size, sizeof(ParticleInteger), 1, fp);
-    if (getOptions().sph) {
+    if (getOptions().hydro.enabled) {
         fwrite(&sphSize, sizeof(ParticleInteger), 1, fp);
     }
     fwrite(&particlesPos(XDIM, 0), sizeof(Fixed32), particlesSize(), fp);
@@ -1347,13 +1348,13 @@ void particlesSave(FILE* fp) {
     fwrite(&particlesPos(ZDIM, 0), sizeof(Fixed32), particlesSize(), fp);
     fwrite(particlesVelData(), sizeof(Array<float, NDIM>), particlesSize(), fp);
     fwrite(&particlesRung(0), sizeof(char), particlesSize(), fp);
-    if (getOptions().doGroups) {
+    if (getOptions().analysis.groups) {
         fwrite(&particlesLastgroup(0), sizeof(GroupInteger), particlesSize(), fp);
     }
-    if (getOptions().doTracers) {
+    if (getOptions().analysis.tracers) {
         fwrite(&particlesTracer(0), sizeof(char), particlesSize(), fp);
     }
-    if (getOptions().sph) {
+    if (getOptions().hydro.enabled) {
         fwrite(&particlesType(0), sizeof(char), particlesSize(), fp);
         fwrite(&particlesCatIndex(0), sizeof(ParticleInteger), particlesSize(), fp);
         sphParticlesSave(fp);
@@ -1366,7 +1367,7 @@ void particlesSave(FILE* fp) {
 
 void particlesSaveGlass(char const* filename) {
     FILE* fp = fopen(filename, "wb");
-    ParticleInteger size = getOptions().particlesPerDimension;
+    ParticleInteger size = getOptions().initial.particlesPerDimension;
     fwrite(&size, sizeof(ParticleInteger), 1, fp);
     for (ParticleInteger i = 0; i < particlesSize(); i++) {
         if (particlesType(i) == DARK_MATTER_TYPE) {
@@ -1422,8 +1423,8 @@ void particlesResolveWithSphParticles() {
 
 void particlesGlobalReadVels(
     ParticleGlobalRange range, float* vx, float* vy, float* vz, ParticleInteger offset) {
-    static bool const sph = getOptions().sph;
-    ParticleInteger const lineSize = getOptions().particleCacheLineSize;
+    static bool const sph = getOptions().hydro.enabled;
+    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
     if (range.range.first != range.range.second) {
         if (range.proc == hpxRank()) {
             ParticleInteger const dif = offset - range.range.first;
@@ -1462,8 +1463,8 @@ static Array<float, NDIM> const* particlesCacheReadLineVels(LineIdType lineId) {
 }
 
 static Vector<Array<float, NDIM>> particlesFetchCacheLineVels(ParticleInteger index) {
-    static bool const sph = getOptions().sph;
-    ParticleInteger const lineSize = getOptions().particleCacheLineSize;
+    static bool const sph = getOptions().hydro.enabled;
+    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
     Vector<Array<float, NDIM>> line(lineSize);
     ParticleInteger const begin = (index / lineSize) * lineSize;
     ParticleInteger const end = std::min(particlesSize(), begin + lineSize);
@@ -1496,7 +1497,7 @@ EnergiesT particlesSumEnergies() {
                 float const vy = particlesVel(YDIM, i);
                 float const vz = particlesVel(ZDIM, i);
                 float const m = particlesMass(i);
-                if (getOptions().saveForce) {
+                if (getOptions().analysis.saveForce) {
                     energies.pot += 0.5 * m * particlesPot(i);
                 }
                 energies.kin += 0.5 * m * (sqr(vx) + sqr(vy) + sqr(vz));
@@ -1626,7 +1627,7 @@ GadgetIoHeader particlesReadGadget4(std::string fnameBase) {
         // particles_pos(YDIM,i).to_double(), particles_pos(ZDIM,i).to_double());
         for (int dim = 0; dim < NDIM; dim++) {
             particlesVel(dim, i) *=
-                sqrt(a) * a * 1e5 * getOptions().codeToS / getOptions().codeToCm;
+                sqrt(a) * a * 1e5 * getOptions().units.timeSeconds / getOptions().units.lengthCm;
         }
     }
     FREAD(&size, sizeof(int), 1, fp);

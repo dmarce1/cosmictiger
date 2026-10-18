@@ -63,7 +63,7 @@ struct TreeId {
 
 struct TreeIdHash {
     inline size_t operator()(TreeId id) const {
-        int const lineSize = getOptions().treeCacheLineSize;
+        int const lineSize = getOptions().compute.treeCacheLineSize;
         int const i = id.index / lineSize;
         return i * (hpxSize() - 1) + ((id.proc < hpxRank()) ? id.proc : id.proc - 1);
     }

@@ -165,8 +165,8 @@ void bhCreateTree(DeviceVector<BhTreeNode>& nodes, DeviceVector<int>& sinkBucket
 
 void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& sinkBuckets,
     DeviceVector<float>& phi, DeviceVector<Array<float, NDIM>>& parts, float theta) {
-    float const h = getOptions().gravitySupportRadius;
-    float const gm = getOptions().gm;
+    float const h = getOptions().gravity.supportRadius;
+    float const gm = getOptions().gravity.gm;
     float const hinv = 1.0 / h;
     float const h2 = h * h;
     SimdFloat const tiny = simdBroadcast<SimdFloat>(1e-20);
@@ -270,8 +270,8 @@ void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& si
 
 void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Array<float, NDIM> pt, float& phi,
     DeviceVector<Array<float, NDIM>>& parts, float theta) {
-    float const h = getOptions().gravitySupportRadius;
-    float const gm = getOptions().gm;
+    float const h = getOptions().gravity.supportRadius;
+    float const gm = getOptions().gravity.gm;
     float const hinv = 1.0f / h;
     float const h2 = h * h;
     SimdFloat const tiny = simdBroadcast<SimdFloat>(1e-20);
@@ -387,8 +387,8 @@ DeviceVector<float> bhEvaluatePotential(DeviceVector<Array<float, NDIM>>& x, boo
     } else {
         Timer tm1;
         tm1.start();
-        pot = bhEvaluatePotentialGpu(
-            nodes, x, sinkBuckets, 0.85, getOptions().gravitySupportRadius, getOptions().gm);
+        pot = bhEvaluatePotentialGpu(nodes, x, sinkBuckets, 0.85,
+            getOptions().gravity.supportRadius, getOptions().gravity.gm);
         tm1.stop();
         //		PRINT("1 %e\n", tm1.read());
     }
@@ -426,7 +426,7 @@ DeviceVector<float> bhEvaluatePoints(
     bhCreateTree(nodes, sinkBuckets, 0, x, sortOrder, box, 0, x.size(), BH_BUCKET_SIZE);
     if (gpu) {
         pot = bhEvaluatePotentialPointsGpu(
-            nodes, x, y, 0.85, getOptions().gravitySupportRadius, getOptions().gm);
+            nodes, x, y, 0.85, getOptions().gravity.supportRadius, getOptions().gravity.gm);
     } else {
         for (int i = 0; i < y.size(); i++) {
             bhTreeEvaluatePoint(nodes, y[i], pot[i], x, 0.85);

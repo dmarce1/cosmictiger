@@ -22,207 +22,258 @@
 #include <stddef.h>
 #include <string>
 
-struct Options {
-    int bucketSize;
-    int nfour;
-    bool cuda;
-    bool closePack;
-    bool useGlass;
-    bool saveForce;
-    bool doLc;
-    bool doPower;
-    bool doGroups;
-    bool doTracers;
-    bool doSlice;
-    bool doViews;
-    bool outputSilo;
-    int outputSiloInterval;
-    std::string outputDirectory;
-    std::string outputUnits{"code"};
-    std::string outputFrame{"comoving"};
-    double outputXMin;
-    double outputXMax;
-    double outputYMin;
-    double outputYMax;
-    double outputZMin;
-    double outputZMax;
-    bool twolpt;
-    bool usePowerFile;
-    bool plummer;
-    double plummerR;
-    bool createGlass;
-    int readCheck;
-    int tracerCount;
-    int particlesPerDimension;
-    int treeCacheLineSize;
-    int treeAllocLineSize;
-    int particleCacheLineSize;
-    int checkFreq;
-    int maxIter;
-    int minrung;
-    int viewSize;
-    int lcMinGroup;
-    int lcMapSize;
-    int minGroup;
-    int sliceRes;
-    int numberOfSteps;
-    double lcB;
-    double sliceSize;
-    double linkingLength;
-    // Fixed comoving compact support; public gravity.effectiveRadius is 2 sigma.
-    double gravitySupportRadius;
-    std::string gravityKernelFamily{"ferrers"};
-    int gravityKernelDegree{4};
-    std::string hydroKernelFamily{"spline"};
-    int hydroKernelDegree{3};
-    double gm;
-    double eta;
-    double codeToS;
-    double codeToCm;
-    double codeToG;
-    double omegaM;
-    double omegaR;
-    double z0;
-    double z1;
-    double hubble;
-    double sigma8;
-    double theta;
-    double omegaB;
-    double omegaLam;
-    double omegaC;
-    double omegaGam;
-    double omegaNu;
-    double thetaCmb;
-    double ns;
-    double y0;
-    double neff;
-    double omegaK;
-    size_t numberOfParticles;
-    std::string configFile;
-    std::string test;
-    std::string lcDir;
-    std::string gadget4Restart;
+// Public data groups mirror the CLI/INI category names. Radius aliases are
+// resolved during parsing; canonical radii and unit conversions are stored below.
+struct Run {
+    std::string test{};
+    int maxIterations{};
+    int numberOfSteps{};
+    int minRung{};
+    // Derived run mode: use hierarchical gravity steps for dark matter.
+    bool hierarchicalGravity{};
+};
 
-    bool htime{};
-    bool sph{};
-    bool gravity{};
+struct Compute {
+    bool cuda{};
+    int bucketSize{};
     int sphBucketSize{};
-    double alpha0{};
-    double beta{};
-    double viscosityEpsilon{};
-    double sphNeighborNumber{42.0};
-    double hydroMinSupportRadius{};
-    double hydroMaxSupportRadius{};
-    // Velocity damping during the self-gravitating polytropic gas relaxation test.
-    double damping{};
+    int treeCacheLineSize{};
+    int treeAllocLineSize{};
+    int particleCacheLineSize{};
+};
+
+struct Checkpoint {
+    int readIndex{};
+    int intervalSeconds{};
+};
+
+struct Initial {
+    std::string gadget4Restart{};
+    bool useGlass{};
+    bool createGlass{};
+    bool plummer{};
+    double plummerRadius{};
+    bool closePack{};
+    bool usePowerFile{};
+    bool twoLpt{};
+    int particlesPerDimension{};
+    size_t numberOfParticles{};
+    // Derived initial-condition mesh and particle population.
+    int fourierSize{};
     double darkMatterMass{};
-    double sphMass{};
-    double cfl{};
+    double gasMass{};
+};
+
+struct Output {
+    bool silo{};
+    int siloInterval{};
+    std::string directory{};
+    std::string units{"code"};
+    std::string frame{"comoving"};
+    double xMin{};
+    double xMax{};
+    double yMin{};
+    double yMax{};
+    double zMin{};
+    double zMax{};
+};
+
+struct Analysis {
+    bool power{};
+    bool groups{};
+    bool tracers{};
+    int tracerCount{};
+    bool slice{};
+    bool views{};
+    int viewSize{};
+    int sliceResolution{};
+    double sliceSize{};
+    double linkingLength{};
+    int minGroupSize{};
+    bool saveForce{};
+};
+
+struct Lightcone {
+    bool enabled{};
+    std::string directory{};
+    double linkingLength{};
+    int mapSize{};
+};
+
+struct Gravity {
+    bool enabled{};
+    std::string kernelFamily{"ferrers"};
+    int kernelDegree{4};
+    double openingAngle{};
+    // Fixed comoving compact support in box units; effectiveRadius is 2 sigma.
+    double supportRadius{};
+    double timestepEta{};
+    double gm{};
+};
+
+struct Cosmology {
+    double startRedshift{};
+    double endRedshift{};
+    // Derived from the density budget; not a configurable input.
+    double omegaK{};
+    double omegaLambda{};
+    double omegaB{};
+    double omegaC{};
+    double nEff{};
+    double thetaCmb{};
+    double heliumFraction{};
+    double sigma8{};
+    double hubble{};
+    double spectralIndex{};
+    double omegaM{};
+    double omegaR{};
+    double omegaGamma{};
+    double omegaNu{};
+};
+
+struct Units {
+    // Canonical code-unit conversions; units.massSolar is converted to grams at startup.
+    double massG{};
+    double lengthCm{};
+    double timeSeconds{};
+};
+
+struct Hydro {
+    bool enabled{};
+    std::string kernelFamily{"spline"};
+    int kernelDegree{3};
+    double viscosityAlpha{};
+    double viscosityBeta{};
+    double viscosityEpsilon{};
     double gamma{};
+    double cfl{};
+    double neighborNumber{42.0};
+    // Canonical support bounds in box units, normalized from input particle spacings.
+    double minSupportRadius{};
+    double maxSupportRadius{};
     // Uniform external acceleration for the Rayleigh-Taylor gas test.
     double yAcceleration{};
     // Fixed central potential for the orbiting-disc gas test.
     double centralAcceleration{};
     double centralSupportRadius{};
+    // Velocity damping during the self-gravitating gas relaxation test.
+    double damping{};
+};
 
-    template <typename A>
-    void serialize(A&& arc, unsigned) {
-        arc & htime;
-        arc & sph;
-        arc & gravity;
-        arc & sphBucketSize;
-        arc & alpha0;
-        arc & beta;
-        arc & viscosityEpsilon;
-        arc & sphNeighborNumber;
-        arc & hydroMinSupportRadius;
-        arc & hydroMaxSupportRadius;
-        arc & damping;
-        arc & darkMatterMass;
-        arc & sphMass;
-        arc & cfl;
-        arc & gamma;
-        arc & yAcceleration;
-        arc & centralAcceleration;
-        arc & centralSupportRadius;
-        arc & closePack;
-        arc & numberOfParticles;
-        arc & useGlass;
-        arc & createGlass;
-        arc & gadget4Restart;
-        arc & minrung;
-        arc & plummer;
-        arc & plummerR;
-        arc & omegaK;
-        arc & omegaLam;
-        arc & bucketSize;
-        arc & numberOfSteps;
-        arc & nfour;
-        arc & cuda;
-        arc & doLc;
-        arc & saveForce;
-        arc & doPower;
-        arc & doGroups;
-        arc & doTracers;
-        arc & doSlice;
-        arc & doViews;
-        arc & outputSilo;
-        arc & outputSiloInterval;
-        arc & outputDirectory;
-        arc & outputUnits;
-        arc & outputFrame;
-        arc & outputXMin;
-        arc & outputXMax;
-        arc & outputYMin;
-        arc & outputYMax;
-        arc & outputZMin;
-        arc & outputZMax;
-        arc & twolpt;
-        arc & usePowerFile;
-        arc & lcDir;
-        arc & tracerCount;
-        arc & particlesPerDimension;
-        arc & treeCacheLineSize;
-        arc & treeAllocLineSize;
-        arc & particleCacheLineSize;
-        arc & readCheck;
-        arc & checkFreq;
-        arc & maxIter;
-        arc & lcMinGroup;
-        arc & minGroup;
-        arc & viewSize;
-        arc & sliceRes;
-        arc & lcMapSize;
-        arc & lcB;
-        arc & theta;
-        arc & sliceSize;
-        arc & linkingLength;
-        arc & gravitySupportRadius;
-        arc & gm;
-        arc & eta;
-        arc & codeToS;
-        arc & codeToCm;
-        arc & codeToG;
-        arc & omegaM;
-        arc & omegaR;
-        arc & z0;
-        arc & z1;
-        arc & hubble;
-        arc & sigma8;
-        arc & omegaB;
-        arc & omegaC;
-        arc & omegaGam;
-        arc & omegaNu;
-        arc & thetaCmb;
-        arc & ns;
-        arc & y0;
-        arc & neff;
-        arc & configFile;
-        arc & test;
-        arc & gravityKernelFamily;
-        arc & gravityKernelDegree;
-        arc & hydroKernelFamily;
-        arc & hydroKernelDegree;
+struct Options {
+    std::string configuration;
+    Run run;
+    Compute compute;
+    Checkpoint checkpoint;
+    Initial initial;
+    Output output;
+    Analysis analysis;
+    Lightcone lightcone;
+    Gravity gravity;
+    Cosmology cosmology;
+    Units units;
+    Hydro hydro;
+
+    template <typename Archive>
+    void serialize(Archive&& arc, unsigned) {
+        // Preserve the historical scalar wire order independently of grouping.
+        int retiredLightconeMinGroup = 20;
+        arc & run.hierarchicalGravity;
+        arc & hydro.enabled;
+        arc & gravity.enabled;
+        arc & compute.sphBucketSize;
+        arc & hydro.viscosityAlpha;
+        arc & hydro.viscosityBeta;
+        arc & hydro.viscosityEpsilon;
+        arc & hydro.neighborNumber;
+        arc & hydro.minSupportRadius;
+        arc & hydro.maxSupportRadius;
+        arc & hydro.damping;
+        arc & initial.darkMatterMass;
+        arc & initial.gasMass;
+        arc & hydro.cfl;
+        arc & hydro.gamma;
+        arc & hydro.yAcceleration;
+        arc & hydro.centralAcceleration;
+        arc & hydro.centralSupportRadius;
+        arc & initial.closePack;
+        arc & initial.numberOfParticles;
+        arc & initial.useGlass;
+        arc & initial.createGlass;
+        arc & initial.gadget4Restart;
+        arc & run.minRung;
+        arc & initial.plummer;
+        arc & initial.plummerRadius;
+        arc & cosmology.omegaK;
+        arc & cosmology.omegaLambda;
+        arc & compute.bucketSize;
+        arc & run.numberOfSteps;
+        arc & initial.fourierSize;
+        arc & compute.cuda;
+        arc & lightcone.enabled;
+        arc & analysis.saveForce;
+        arc & analysis.power;
+        arc & analysis.groups;
+        arc & analysis.tracers;
+        arc & analysis.slice;
+        arc & analysis.views;
+        arc & output.silo;
+        arc & output.siloInterval;
+        arc & output.directory;
+        arc & output.units;
+        arc & output.frame;
+        arc & output.xMin;
+        arc & output.xMax;
+        arc & output.yMin;
+        arc & output.yMax;
+        arc & output.zMin;
+        arc & output.zMax;
+        arc & initial.twoLpt;
+        arc & initial.usePowerFile;
+        arc & lightcone.directory;
+        arc & analysis.tracerCount;
+        arc & initial.particlesPerDimension;
+        arc & compute.treeCacheLineSize;
+        arc & compute.treeAllocLineSize;
+        arc & compute.particleCacheLineSize;
+        arc & checkpoint.readIndex;
+        arc & checkpoint.intervalSeconds;
+        arc & run.maxIterations;
+        arc & retiredLightconeMinGroup;
+        arc & analysis.minGroupSize;
+        arc & analysis.viewSize;
+        arc & analysis.sliceResolution;
+        arc & lightcone.mapSize;
+        arc & lightcone.linkingLength;
+        arc & gravity.openingAngle;
+        arc & analysis.sliceSize;
+        arc & analysis.linkingLength;
+        arc & gravity.supportRadius;
+        arc & gravity.gm;
+        arc & gravity.timestepEta;
+        arc & units.timeSeconds;
+        arc & units.lengthCm;
+        arc & units.massG;
+        arc & cosmology.omegaM;
+        arc & cosmology.omegaR;
+        arc & cosmology.startRedshift;
+        arc & cosmology.endRedshift;
+        arc & cosmology.hubble;
+        arc & cosmology.sigma8;
+        arc & cosmology.omegaB;
+        arc & cosmology.omegaC;
+        arc & cosmology.omegaGamma;
+        arc & cosmology.omegaNu;
+        arc & cosmology.thetaCmb;
+        arc & cosmology.spectralIndex;
+        arc & cosmology.heliumFraction;
+        arc & cosmology.nEff;
+        arc & configuration;
+        arc & run.test;
+        arc & gravity.kernelFamily;
+        arc & gravity.kernelDegree;
+        arc & hydro.kernelFamily;
+        arc & hydro.kernelDegree;
     }
 };
 

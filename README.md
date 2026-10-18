@@ -20,6 +20,15 @@ for all options and defaults. HPX's own options retain their `--hpx:*` syntax.
 | `units` | Particle mass unit in solar masses |
 | `hydro` | SPH, equation of state, smoothing radii, and artificial viscosity |
 
+In C++, each category is an ordinary public struct in `Options`: `Gravity gravity`,
+`Output output`, and likewise `Run`, `Compute`, `Checkpoint`, `Initial`, `Analysis`,
+`Lightcone`, `Cosmology`, `Units`, and `Hydro`. Code accesses members directly, for
+example `getOptions().gravity.enabled` or `options.output.directory`.
+Radius aliases resolve to canonical support radii in box units; unit conversions
+are stored as `units.massG`, `units.lengthCm`, and `units.timeSeconds`.
+Curvature `cosmology.omegaK` is derived from the density budget and is no longer an
+accepted input, since a supplied value was always overwritten.
+
 The old ungrouped and snake_case option names have been replaced. For example,
 `--parts_dim=16 --max_iter=2 --cuda=true` is now
 `--initial.particlesPerDimension=16 --run.maxIterations=2 --compute.cuda=true`,
@@ -157,8 +166,10 @@ symmetric pressure forces and thermal work, and constant alpha/beta artificial
 viscosity. It is integrated with the Cartesian FMM and particle storage. See
 [the formulation and paper references](docs/monaghan_sph.md) for the equations,
 cosmological conversions, and deliberate implementation choices. The normal
-dark-matter-only mode keeps its hierarchical gravity integrator. Enable gas explicitly with `--hydro.enabled=true`; gas runs use
-the ordinary block-timestep gravity/SPH path and require CUDA.
+dark-matter-only mode keeps its hierarchical gravity integrator. Enable gas explicitly
+with `--hydro.enabled=true`; gas runs use the ordinary block-timestep gravity/SPH path.
+Select SIMD CPU SPH with `--compute.cuda=false` or CUDA SPH with `--compute.cuda=true`.
+The full application still requires CUDA for operations outside SPH, including drift.
 
 Cosmological gas runs initialize a displaced gas lattice alongside the dark
 matter lattice. `initial.particlesPerDimension` specifies the lattice size for each species. With

@@ -216,7 +216,7 @@ static void treeTest() {
     tm.reset();
 
     tm.start();
-    TreeCreateParameters tparams(0, 0.7, getOptions().gravitySupportRadius);
+    TreeCreateParameters tparams(0, 0.7, getOptions().gravity.supportRadius);
     treeCreate(tparams);
     tm.stop();
     PRINT("tree_create: %e s\n", tm.read());
@@ -241,7 +241,7 @@ static void kickTest() {
     Timer totalTime;
     double totalFlops = 0.0;
     tm.start();
-    initialize(getOptions().z0);
+    initialize(getOptions().cosmology.startRedshift);
     tm.stop();
     PRINT("initialize: %e s\n", tm.read());
     tm.reset();
@@ -265,7 +265,8 @@ static void kickTest() {
     tm.reset();
     tm.reset();
     tm.start();
-    TreeCreateParameters tparams(0, getOptions().theta, getOptions().gravitySupportRadius);
+    TreeCreateParameters tparams(
+        0, getOptions().gravity.openingAngle, getOptions().gravity.supportRadius);
     auto sr = treeCreate(tparams);
     tm.stop();
     PRINT("tree_create: %e s\n", tm.read());
@@ -286,15 +287,15 @@ static void kickTest() {
     kparams.gpu = true;
     kparams.nodeLoad = 10;
     kparams.minLevel = tparams.minLevel;
-    kparams.saveForce = getOptions().saveForce;
-    kparams.gm = getOptions().gm;
-    kparams.gravitySupportRadius = getOptions().gravitySupportRadius;
-    kparams.eta = getOptions().eta;
+    kparams.saveForce = getOptions().analysis.saveForce;
+    kparams.gm = getOptions().gravity.gm;
+    kparams.gravitySupportRadius = getOptions().gravity.supportRadius;
+    kparams.eta = getOptions().gravity.timestepEta;
     kparams.a = 1.0;
     kparams.firstCall = true;
     kparams.minRung = 0;
     kparams.t0 = 1.0;
-    kparams.theta = getOptions().theta;
+    kparams.theta = getOptions().gravity.openingAngle;
     Expansion<float> l;
     for (int i = 0; i < EXPANSION_SIZE; i++) {
         l[i] = 0.0f;
@@ -334,7 +335,7 @@ static void kickTest() {
 DriverParameters readCheckpoint();
 
 static void forceTest() {
-    if (getOptions().sph) {
+    if (getOptions().hydro.enabled) {
         THROW_ERROR("run.test=force requires hydro.enabled=false; "
                     "use run.test=sphGravity for mixed-particle validation\n");
     }
@@ -342,11 +343,11 @@ static void forceTest() {
     Timer tmMain;
     constexpr int kNiter = 1;
     tmMain.start();
-    auto const readCheck = getOptions().readCheck;
+    auto const readCheck = getOptions().checkpoint.readIndex;
     if (readCheck != -1) {
         readCheckpoint();
     } else {
-        initialize(getOptions().z0);
+        initialize(getOptions().cosmology.startRedshift);
     }
     constexpr int kNthetas = 16;
     double const thetas[kNthetas] = {
@@ -357,16 +358,16 @@ static void forceTest() {
         domainsBegin(0);
         domainsEnd();
         particlesSortByRung(0);
-        TreeCreateParameters tparams(0, thetas[iter], getOptions().gravitySupportRadius);
+        TreeCreateParameters tparams(0, thetas[iter], getOptions().gravity.supportRadius);
         treeCreate(tparams);
         KickParameters kparams;
         kparams.nodeLoad = 10;
         kparams.gpu = true;
         kparams.minLevel = tparams.minLevel;
-        kparams.saveForce = getOptions().saveForce;
-        kparams.gm = getOptions().gm;
-        kparams.gravitySupportRadius = getOptions().gravitySupportRadius;
-        kparams.eta = getOptions().eta;
+        kparams.saveForce = getOptions().analysis.saveForce;
+        kparams.gm = getOptions().gravity.gm;
+        kparams.gravitySupportRadius = getOptions().gravity.supportRadius;
+        kparams.eta = getOptions().gravity.timestepEta;
         kparams.a = 1.0;
         kparams.firstCall = true;
         kparams.minRung = 0;
@@ -417,8 +418,8 @@ static void bucketTest() {
     //		free(buffer);
     for (int bucketSize = 64; bucketSize <= 256; bucketSize += 8) {
         auto opts = getOptions();
-        opts.bucketSize = bucketSize;
-        opts.readCheck = 999999;
+        opts.compute.bucketSize = bucketSize;
+        opts.checkpoint.readIndex = 999999;
         //			opts.theta = thetas[ci];
         setOptions(opts);
         //	read_checkpoint();
@@ -430,7 +431,8 @@ static void bucketTest() {
             domainsBegin(0);
             domainsEnd();
             particlesSortByRung(0);
-            TreeCreateParameters tparams(0, getOptions().theta, getOptions().gravitySupportRadius);
+            TreeCreateParameters tparams(
+                0, getOptions().gravity.openingAngle, getOptions().gravity.supportRadius);
             treeCreate(tparams);
             PRINT("Tree created\n");
             KickParameters kparams;
@@ -438,16 +440,16 @@ static void bucketTest() {
             kparams.gpu = true;
             kparams.maxDt = 1.0;
             kparams.minLevel = tparams.minLevel;
-            kparams.saveForce = getOptions().saveForce;
-            kparams.gm = getOptions().gm;
-            kparams.gravitySupportRadius = getOptions().gravitySupportRadius;
-            kparams.eta = getOptions().eta;
+            kparams.saveForce = getOptions().analysis.saveForce;
+            kparams.gm = getOptions().gravity.gm;
+            kparams.gravitySupportRadius = getOptions().gravity.supportRadius;
+            kparams.eta = getOptions().gravity.timestepEta;
             kparams.a = 1.0;
             kparams.firstCall = true;
             kparams.minRung = 0;
             kparams.t0 = 1.0;
             kparams.doPhi = false;
-            kparams.theta = getOptions().theta;
+            kparams.theta = getOptions().gravity.openingAngle;
             kparams.top = true;
             kparams.ascending = kparams.descending = false;
             Expansion<float> l;
@@ -511,9 +513,9 @@ static void speedTest() {
         free(buffer);
         for (int iter = 0; iter < counts[ci]; iter++) {
             auto opts = getOptions();
-            opts.bucketSize = buckets[ci];
-            opts.readCheck = 999999;
-            opts.theta = thetas[ci];
+            opts.compute.bucketSize = buckets[ci];
+            opts.checkpoint.readIndex = 999999;
+            opts.gravity.openingAngle = thetas[ci];
             setOptions(opts);
             readCheckpoint();
             tm.start();
@@ -521,16 +523,16 @@ static void speedTest() {
             domainsBegin(0);
             domainsEnd();
             particlesSortByRung(0);
-            TreeCreateParameters tparams(0, thetas[ci], getOptions().gravitySupportRadius);
+            TreeCreateParameters tparams(0, thetas[ci], getOptions().gravity.supportRadius);
             treeCreate(tparams);
             KickParameters kparams;
             kparams.nodeLoad = 10;
             kparams.gpu = true;
             kparams.minLevel = tparams.minLevel;
-            kparams.saveForce = getOptions().saveForce;
-            kparams.gm = getOptions().gm;
-            kparams.gravitySupportRadius = getOptions().gravitySupportRadius;
-            kparams.eta = getOptions().eta;
+            kparams.saveForce = getOptions().analysis.saveForce;
+            kparams.gm = getOptions().gravity.gm;
+            kparams.gravitySupportRadius = getOptions().gravity.supportRadius;
+            kparams.eta = getOptions().gravity.timestepEta;
             kparams.a = 1.0;
             kparams.firstCall = true;
             kparams.minRung = 0;

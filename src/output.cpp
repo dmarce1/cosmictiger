@@ -72,13 +72,13 @@ void outputSlice(int number, double time) {
     profilerEnter("output_slice");
     constexpr int kNdim = 2;
     auto pixels = outputGetSlice();
-    int const res = getOptions().sliceRes;
+    int const res = getOptions().analysis.sliceResolution;
     std::string const filename =
         std::string("slice.") + std::to_string(number) + std::string(".silo");
     DBfile* db = DBCreateReal(filename.c_str(), DB_CLOBBER, DB_LOCAL, "Data", DB_PDB);
     Vector<float> x(res + 1);
     Vector<float> y(res + 1);
-    float const hubble = getOptions().hubble;
+    float const hubble = getOptions().cosmology.hubble;
     float const c0 =
         (units::scalesFromOptions(getOptions()).lengthScale() * double(hubble) / units::kMegaparsec)
             .value();
@@ -108,14 +108,14 @@ void outputSlice(int number, double time) {
 
 Vector<float> outputGetSlice() {
     Vector<hpx::future<Vector<float>>> futs;
-    int const res = getOptions().sliceRes;
+    int const res = getOptions().analysis.sliceResolution;
     Vector<float> pixels(sqr(res), 0.0);
     for (auto const& c : hpxChildren()) {
         futs.push_back(hpx::async<OutputGetSliceAction>(c));
     }
     for (int i = 0; i < particlesSize(); i++) {
         double const z = particlesPos(ZDIM, i).toDouble();
-        if (z < getOptions().sliceSize) {
+        if (z < getOptions().analysis.sliceSize) {
             double const x = particlesPos(XDIM, i).toDouble();
             double const y = particlesPos(YDIM, i).toDouble();
             int const xi = x * res;

@@ -269,8 +269,8 @@ void rockstarFindAllLinkLens(
     for (auto& p : parts) {
         p.minDist2 = std::numeric_limits<float>::max();
     }
-    double maximumLinkingLength =
-        getOptions().lcB * pow(getOptions().numberOfParticles, -1.0 / NDIM);
+    double maximumLinkingLength = getOptions().lightcone.linkingLength *
+        pow(getOptions().initial.numberOfParticles, -1.0 / NDIM);
     bool gpu = parts.size() > 4 * 1024;
     if (gpu) {
         DeviceVector<int> leaves;
@@ -728,7 +728,7 @@ Vector<Subgroup> rockstarSeeds(DeviceVector<RockstarParticle> parts, int& nextId
         float sigma2V = 0.0;
         float sigma2X = 0.0;
         Array<float, 2 * NDIM> xValue;
-        auto const ndim = pow(getOptions().numberOfParticles, 1.0 / NDIM);
+        auto const ndim = pow(getOptions().initial.numberOfParticles, 1.0 / NDIM);
         DeviceVector<RockstarParticle>& theseParticles = sg.parts;
         for (int dim = 0; dim < 2 * NDIM; dim++) {
             xValue[dim] = 0.0;
@@ -786,7 +786,7 @@ Vector<Subgroup> rockstarSeeds(DeviceVector<RockstarParticle> parts, int& nextId
             [](RadialParticle a, RadialParticle b) { return a.r < b.r; });
         double mass = 0.0;
         double volume = 0.0;
-        double const omegaM = getOptions().omegaM;
+        double const omegaM = getOptions().cosmology.omegaM;
         double const x =
             ((omegaM / (sqr(scale) * scale)) / (omegaM / (sqr(scale) * scale)) + (1.0 - omegaM)) -
             1.0;
@@ -822,10 +822,10 @@ Vector<Subgroup> rockstarSeeds(DeviceVector<RockstarParticle> parts, int& nextId
         sigma2V /= theseParticles.size();
         sg.sigma2V = sigma2V;
         float vcircMax = 0.0;
-        double h = getOptions().hubble * constants::kH0 * getOptions().codeToS;
-        float const numberOfParticles = getOptions().numberOfParticles;
+        double h = getOptions().cosmology.hubble * constants::kH0 * getOptions().units.timeSeconds;
+        float const numberOfParticles = getOptions().initial.numberOfParticles;
         for (int n = 1; n < radii.size(); n++) {
-            float vcirc = sqrt(3.0 * getOptions().omegaM * sqr(h) * n /
+            float vcirc = sqrt(3.0 * getOptions().cosmology.omegaM * sqr(h) * n /
                 (8.0 * M_PI * numberOfParticles * radii[n].r / rfac));
             vcircMax = std::max(vcircMax, vcirc);
         }
@@ -1058,7 +1058,7 @@ Vector<RockstarRecord> rockstarFindSubgroups(Vector<LightconeEntry> const& parts
     yc /= parts.size();
     zc /= parts.size();
     auto const thisTau = sqrt(sqr(xc, yc, zc));
-    auto const z0 = getOptions().z0;
+    auto const z0 = getOptions().cosmology.startRedshift;
     auto const a0 = 1.0 / (z0 + 1.0);
     //	double scale = cosmos_tau_to_scale(a0, tau_max - this_tau);
     double scale = 1.0;
@@ -1109,7 +1109,7 @@ Vector<RockstarRecord> rockstarFindSubgroups(Vector<LightconeEntry> const& parts
                 int const rootId = rockstarFormTree(trees, parts);
                 Vector<RockstarParticle> parts500;
                 rockstarFindAllLinkLens(trees, parts, rootId);
-                auto const ndim = pow(getOptions().numberOfParticles, 1.0 / NDIM);
+                auto const ndim = pow(getOptions().initial.numberOfParticles, 1.0 / NDIM);
                 double const ll200 = pow(200, -1.0 / 3.0) / ndim;
                 double const ll500 = pow(500, -1.0 / 3.0) / ndim;
                 double const ll2500 = pow(2500, -1.0 / 3.0) / ndim;
@@ -1281,7 +1281,7 @@ Vector<RockstarRecord> rockstarFindSubgroups(Vector<LightconeEntry> const& parts
                 double vcircMax = 0.0;
                 for (int i = 0; i < radii.size(); i++) {
                     double menc = i + 1.0;
-                    double vcirc = sqrt(getOptions().gm / radii[i] * menc);
+                    double vcirc = sqrt(getOptions().gravity.gm / radii[i] * menc);
                     if (vcirc > vcircMax) {
                         rvmax = radii[i];
                         vcircMax = vcirc;
@@ -1290,22 +1290,24 @@ Vector<RockstarRecord> rockstarFindSubgroups(Vector<LightconeEntry> const& parts
                 mvir = parts.size();
                 //	PRINT("%e %e %e %e\n", mvir, m200, m500, m2500);
                 double rmax = radii.back();
-                double const omegaM = getOptions().omegaM;
+                double const omegaM = getOptions().cosmology.omegaM;
                 x = ((omegaM / (sqr(scale) * scale)) / (omegaM / (sqr(scale) * scale)) +
                         (1.0 - omegaM)) -
                     1.0;
                 y = (18.0 * M_PI * M_PI + 82.0 * x - 39.0 * sqr(x)) / (1.0 + x);
                 rvir = pow(mvir / (4.0 / 3.0 * M_PI * y), 1.0 / 3.0) / ndim;
                 rKlypin = cosmosKlypinFit(vcircMax, radii.back(), mvir);
-                double const g = getOptions().gm;
+                double const g = getOptions().gravity.gm;
                 lambda = jValue * sqrt(fabs(etotValue)) / g / pow(mvir, 2.5);
                 lambdaB = jValue / sqrt(2.0 * g * sqr(mvir) * mvir * rvir);
                 toW = grp.t / grp.w;
                 auto const unitScales = units::scalesFromOptions(getOptions());
                 double const convMass =
-                    (unitScales.massScale() * getOptions().hubble / units::kSolarMass).value();
+                    (unitScales.massScale() * getOptions().cosmology.hubble / units::kSolarMass)
+                        .value();
                 double const convPos =
-                    (unitScales.lengthScale() * getOptions().hubble / units::kMegaparsec).value();
+                    (unitScales.lengthScale() * getOptions().cosmology.hubble / units::kMegaparsec)
+                        .value();
                 double const lengthConversionFactor = convPos * 1000.0;
                 double const convVel =
                     (unitScales.velocityScale() / units::Velocity::from_value(1.e5)).value();
@@ -1315,7 +1317,7 @@ Vector<RockstarRecord> rockstarFindSubgroups(Vector<LightconeEntry> const& parts
                 y += yc;
                 z += zc;
                 auto const thisTau = sqrt(sqr(x, y, z));
-                auto const z0 = getOptions().z0;
+                auto const z0 = getOptions().cosmology.startRedshift;
                 auto const a0 = 1.0 / (z0 + 1.0);
                 double a = cosmosTauToScale(a0, tauMax - thisTau);
                 double zValue = 1.0 / a - 1.0;

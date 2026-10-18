@@ -141,7 +141,7 @@ FastFuture<GroupTreeReturn> groupTreeCreateFork(size_t key, Pair<int, int> proce
 
 GroupTreeReturn groupTreeCreate(size_t key, Pair<int, int> processRange,
     Pair<ParticleInteger> particleRange, GroupRange box, int depth, bool localRoot) {
-    int const treeCacheLineSize = getOptions().treeCacheLineSize;
+    int const treeCacheLineSize = getOptions().compute.treeCacheLineSize;
     if (depth >= MAX_DEPTH) {
         THROW_ERROR("%s\n", "Maximum depth exceeded\n");
     }
@@ -243,7 +243,7 @@ void groupTreeSetActive(TreeId id, bool b) {
 }
 
 void GroupTreeAllocator::reset() {
-    int const treeCacheLineSize = getOptions().treeCacheLineSize;
+    int const treeCacheLineSize = getOptions().compute.treeCacheLineSize;
     next_ = (nextId += treeCacheLineSize);
     last_ = std::min(next_ + treeCacheLineSize, (int) nodes.size());
     if (next_ >= nodes.size()) {
@@ -305,7 +305,7 @@ GroupTreeNode const* groupTreeGetNode(TreeId id) {
 }
 
 static GroupTreeNode const* groupTreeCacheRead(TreeId id) {
-    int const lineSize = getOptions().treeCacheLineSize;
+    int const lineSize = getOptions().compute.treeCacheLineSize;
     TreeId lineId;
     GroupTreeNode const* ptr;
     lineId.proc = id.proc;
@@ -365,7 +365,7 @@ static GroupTreeNode const* groupTreeCacheRead(TreeId id) {
 }
 
 static Vector<GroupTreeNode> groupTreeFetchCacheLine(int index) {
-    int const lineSize = getOptions().treeCacheLineSize;
+    int const lineSize = getOptions().compute.treeCacheLineSize;
     Vector<GroupTreeNode> line;
     line.reserve(lineSize);
     int const begin = (index / lineSize) * lineSize;
@@ -377,7 +377,7 @@ static Vector<GroupTreeNode> groupTreeFetchCacheLine(int index) {
 }
 
 static Vector<unsigned> groupTreeRefreshCacheLine(int index) {
-    int const lineSize = getOptions().treeCacheLineSize;
+    int const lineSize = getOptions().compute.treeCacheLineSize;
     Vector<unsigned> line;
     line.reserve(lineSize);
     int const begin = (index / lineSize) * lineSize;
@@ -389,7 +389,7 @@ static Vector<unsigned> groupTreeRefreshCacheLine(int index) {
 }
 
 void groupTreeIncCacheEpoch() {
-    ParticleInteger const lineSize = getOptions().particleCacheLineSize;
+    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
     Vector<hpx::future<void>> futs;
     auto const children = hpxChildren();
     for (auto const& c : children) {

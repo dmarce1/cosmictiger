@@ -62,7 +62,7 @@ using UnitsOutputCsgMesh = std::unique_ptr<DBcsgmesh, decltype(&DBFreeCsgmesh)>;
 using UnitsOutputCsgField = std::unique_ptr<DBcsgvar, decltype(&DBFreeCsgvar)>;
 
 UnitsOutputFile openUnitsOutput(int cycle) {
-    auto const filename = std::filesystem::path(getOptions().outputDirectory) /
+    auto const filename = std::filesystem::path(getOptions().output.directory) /
         ("view.0." + std::to_string(cycle) + ".silo");
     UnitsOutputFile file(DBOpen(filename.c_str(), DB_UNKNOWN, DB_READ), DBClose);
     requireUnitsOutput(bool(file), "open " + filename.string());
@@ -114,8 +114,8 @@ void checkUnitsOutputCommandLine(DBfile* file) {
         "integer option stored as scalar integer");
     requireUnitsOutput(readUnitsOutputText(file, "cli/configuration") == "input with spaces.ini",
         "configuration path preserves spaces");
-    requireUnitsOutput(readUnitsOutputText(file, "cli/output/units") == getOptions().outputUnits &&
-            readUnitsOutputText(file, "cli/output/frame") == getOptions().outputFrame,
+    requireUnitsOutput(readUnitsOutputText(file, "cli/output/units") == getOptions().output.units &&
+            readUnitsOutputText(file, "cli/output/frame") == getOptions().output.frame,
         "effective current output options");
     requireUnitsOutput(
         readUnitsOutputText(file, "cli/initial/gadget4Restart").empty(), "empty string option");
@@ -335,28 +335,29 @@ void unitsOutputTest() {
     using namespace detail;
     auto const originalOptions = getOptions();
     auto options = originalOptions;
-    options.sph = true;
+    options.hydro.enabled = true;
 
-    options.outputSilo = true;
-    options.outputSiloInterval = 1;
-    options.outputDirectory = "units_output_fixture";
-    options.outputXMin = options.outputYMin = options.outputZMin = 0.0;
-    options.outputXMax = options.outputYMax = options.outputZMax = 1.0;
-    options.codeToCm = 2.0e24;
-    options.codeToG = 3.0e33;
-    options.codeToS = 5.0e15;
-    options.hubble = 0.7;
-    options.darkMatterMass = 0.75;
-    options.sphMass = 0.25;
-    options.outputUnits = "code";
-    options.outputFrame = "comoving";
-    options.alpha0 = 1.75;
-    options.gravitySupportRadius = 0.125 * selectedGravityKernel().supportRadiusPerEffectiveRadius /
-        std::pow(double(options.numberOfParticles), 1.0 / NDIM);
-    options.eta = 0.3;
-    options.hydroMinSupportRadius = 0.2 / options.particlesPerDimension;
-    options.hydroMaxSupportRadius = 0.4 / options.particlesPerDimension;
-    options.configFile = "input with spaces.ini";
+    options.output.silo = true;
+    options.output.siloInterval = 1;
+    options.output.directory = "units_output_fixture";
+    options.output.xMin = options.output.yMin = options.output.zMin = 0.0;
+    options.output.xMax = options.output.yMax = options.output.zMax = 1.0;
+    options.units.lengthCm = 2.0e24;
+    options.units.massG = 3.0e33;
+    options.units.timeSeconds = 5.0e15;
+    options.cosmology.hubble = 0.7;
+    options.initial.darkMatterMass = 0.75;
+    options.initial.gasMass = 0.25;
+    options.output.units = "code";
+    options.output.frame = "comoving";
+    options.hydro.viscosityAlpha = 1.75;
+    options.gravity.supportRadius = 0.125 *
+        selectedGravityKernel().supportRadiusPerEffectiveRadius /
+        std::pow(double(options.initial.numberOfParticles), 1.0 / NDIM);
+    options.gravity.timestepEta = 0.3;
+    options.hydro.minSupportRadius = 0.2 / options.initial.particlesPerDimension;
+    options.hydro.maxSupportRadius = 0.4 / options.initial.particlesPerDimension;
+    options.configuration = "input with spaces.ini";
     setOptions(options);
     unitsOutputParticleFixture(true);
     viewConfigure();
@@ -382,8 +383,8 @@ void unitsOutputTest() {
         requireUnitsOutput(
             !DBInqVarExists(file.get(), "cgs/lab/gas"), "code-unit output selection");
     }
-    options.outputUnits = "both";
-    options.outputFrame = "both";
+    options.output.units = "both";
+    options.output.frame = "both";
     setOptions(options);
     viewOutputViews(1, 0.25, true);
     {
@@ -397,8 +398,8 @@ void unitsOutputTest() {
         requireUnitsOutput(
             !DBInqVarExists(file.get(), "gas"), "converted selection omits code mesh");
     }
-    options.outputUnits = "cgs";
-    options.outputFrame = "lab";
+    options.output.units = "cgs";
+    options.output.frame = "lab";
     setOptions(options);
     viewOutputViews(2, 0.25, true);
     {
@@ -409,8 +410,8 @@ void unitsOutputTest() {
                 !DBInqVarExists(file.get(), "cosmological/lab/gas"),
             "CGS lab selection");
     }
-    options.outputUnits = "cosmological";
-    options.outputFrame = "comoving";
+    options.output.units = "cosmological";
+    options.output.frame = "comoving";
     setOptions(options);
     viewOutputViews(3, 0.25, true);
     {

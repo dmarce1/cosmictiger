@@ -77,7 +77,7 @@ Vector<float> accumulateDensityCuda(int m, int ndim, Range<int64_t> intbox) {
     }
     float* devRho;
     float* masses = nullptr;
-    if (getOptions().sph) {
+    if (getOptions().hydro.enabled) {
         masses = static_cast<float*>(cudaAllocate(particlesSize() * sizeof(float)));
         for (ParticleInteger i = 0; i < particlesSize(); i++) {
             masses[i] = particlesMass(i);

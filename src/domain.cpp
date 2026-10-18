@@ -224,7 +224,7 @@ void domainsRebound() {
     domains[0].box = unitBox<double>();
     domains[0].processRange.first = 0;
     domains[0].processRange.second = hpxSize();
-    domains[0].totalCount = getOptions().numberOfParticles;
+    domains[0].totalCount = getOptions().initial.numberOfParticles;
     domains[0].midhi = 1.0;
     domains[0].midlo = 0.0;
     domains[0].key = 1;
@@ -507,7 +507,7 @@ static void endSphMigration() {
 }
 
 void domainsBegin(int rung) {
-    if (getOptions().sph) {
+    if (getOptions().hydro.enabled) {
         beginSphMigration(rung);
         return;
     }
@@ -536,7 +536,7 @@ void domainsBegin(int rung) {
                 for (ParticleInteger i = begin; i < end; i++) {
                     // Ordinary timesteps drift every rung together. Rebalance
                     // all particles before building their common gravity tree.
-                    if (!getOptions().htime || particlesRung(i) == rung) {
+                    if (!getOptions().run.hierarchicalGravity || particlesRung(i) == rung) {
                         Array<double, NDIM> x;
                         for (ParticleInteger dim = 0; dim < NDIM; dim++) {
                             x[dim] = particlesPos(dim, i).toDouble();
@@ -578,7 +578,7 @@ void domainsBegin(int rung) {
 }
 
 void domainsEnd() {
-    if (getOptions().sph) {
+    if (getOptions().hydro.enabled) {
         endSphMigration();
         return;
     }

@@ -203,7 +203,7 @@ double sampleDensityDistribution(std::function<double(double)> const& f) {
  }
  */
 void plummerInit(double r0) {
-    auto const numberOfParticles = getOptions().numberOfParticles;
+    auto const numberOfParticles = getOptions().initial.numberOfParticles;
     particlesResize(numberOfParticles);
     auto const pdf = [](double x) {
         if (x > 0.0) {
@@ -230,7 +230,7 @@ void plummerInit(double r0) {
         //		r = sample_density_distribution(nfw_density);
         r = sampleDensityDistribution(
             [](double r) { return (3.0 / (4.0 * M_PI)) * pow(1.0 + sqr(r), -2.5); });
-        r *= getOptions().plummerR;
+        r *= getOptions().initial.plummerRadius;
         double nx, ny, nz, n2;
         do {
             nx = 2.0 * rand1() - 1.0;
@@ -247,9 +247,9 @@ void plummerInit(double r0) {
         double z = z0 + r * nz;
         // double e = abs();
         //	double v = sqrt(-2.0 * log(rand1())) * abs(cos(2.0 * M_PI * rand1()));
-        double v = sqrt(
-            getOptions().gm * numberOfParticles / sqrt(sqr(getOptions().plummerR) + sqr(r)) / 2);
-        double v0 = sqrt(getOptions().gm * numberOfParticles * 0.25);
+        double v = sqrt(getOptions().gravity.gm * numberOfParticles /
+            sqrt(sqr(getOptions().initial.plummerRadius) + sqr(r)) / 2);
+        double v0 = sqrt(getOptions().gravity.gm * numberOfParticles * 0.25);
         do {
             nx = 2.0 * rand1() - 1.0;
             ny = 2.0 * rand1() - 1.0;
@@ -331,7 +331,7 @@ void checkpointRedshiftAlias(int iteration, double redshift) {
 }    // namespace detail
 
 static void flushTimings(bool reset) {
-    auto const theta = getOptions().theta;
+    auto const theta = getOptions().gravity.openingAngle;
     char* fname;
     asprintf(&fname, "buckets.%.2f.txt", theta);
     FILE* fp = fopen(fname, "wt");
@@ -373,7 +373,8 @@ void doGroups(int number, double scale) {
         Vector<TreeId> checklist;
         checklist.push_back(rootId);
         tm.start();
-        active = groupsFind(rootId, std::move(checklist), getOptions().linkingLength).get();
+        active =
+            groupsFind(rootId, std::move(checklist), getOptions().analysis.linkingLength).get();
         tm.stop();
         PRINT("%i groups_find = %e active = %li\n", iter, tm.read(), active);
         tm.reset();
@@ -406,8 +407,8 @@ void doGroups(int number, double scale) {
     PRINT("groups_cull %e\n", tm.read());
     tm.reset();
     tm.start();
-    auto ngroups = groupsSave(
-        number, scale, cosmosTime(1.0e-6 * scale, scale) * getOptions().codeToS / constants::kSpyr);
+    auto ngroups = groupsSave(number, scale,
+        cosmosTime(1.0e-6 * scale, scale) * getOptions().units.timeSeconds / constants::kSpyr);
     tm.stop();
     PRINT("groups_save %e\n", tm.read());
     total.stop();
@@ -690,7 +691,7 @@ std::pair<KickReturn, TreeCreateReturn> kickStep(int minrung, double scale, doub
     domainTime += tm.read();
     tm.reset();
     tm.start();
-    bool const sph = getOptions().sph;
+    bool const sph = getOptions().hydro.enabled;
     // ALWAYS_ASSERT(sph_particles_max_smooth_len() != INFINITY);
     TreeCreateParameters tparams(minrung, theta, 0.f);
     PRINT("Create tree %i %e\n", minrung, theta);
@@ -711,19 +712,19 @@ std::pair<KickReturn, TreeCreateReturn> kickStep(int minrung, double scale, doub
     // The ordinary path visits every starting particle, including rung zero,
     // while the chosen step must still honor the configured starting-rung floor.
     kparams.maxDt =
-        std::min(kparams.maxDt, std::ldexp(static_cast<float>(t0), -getOptions().minrung));
+        std::min(kparams.maxDt, std::ldexp(static_cast<float>(t0), -getOptions().run.minRung));
     kparams.htime = false;
     kparams.ascending = kparams.descending = kparams.top = true;
     kparams.doPhi = fullEval;
     kparams.sign = 1.0;
     kparams.nodeLoad = flopsPerNode / flopsPerParticle;
-    kparams.gpu = getOptions().cuda;
+    kparams.gpu = getOptions().compute.cuda;
     usedGpu = kparams.gpu;
     kparams.minLevel = tparams.minLevel;
-    kparams.saveForce = getOptions().saveForce;
-    kparams.gm = getOptions().gravity ? getOptions().gm : 0.0;
-    kparams.eta = getOptions().eta;
-    kparams.gravitySupportRadius = getOptions().gravitySupportRadius;
+    kparams.saveForce = getOptions().analysis.saveForce;
+    kparams.gm = getOptions().gravity.enabled ? getOptions().gravity.gm : 0.0;
+    kparams.eta = getOptions().gravity.timestepEta;
+    kparams.gravitySupportRadius = getOptions().gravity.supportRadius;
     kparams.a = scale;
     kparams.firstCall = firstCall;
     kparams.minRung = minrung;
@@ -818,7 +819,7 @@ std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int m
         if (top && minrung == minrung0) {
             auto counts = particlesRungCounts();
             if (counts.size() > minrung0 + 1) {
-                auto const total = getOptions().numberOfParticles;
+                auto const total = getOptions().initial.numberOfParticles;
                 //				PRINT("Rungs\n");
                 for (int i = 0; i < counts.size(); i++) {
                     //					PRINT("%i %li %f %%\n", i, counts[i], 100.0 * counts[i] /
@@ -861,21 +862,21 @@ std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int m
         } else {
             kparams.top = top;
         }
-        kparams.sign = getOptions().createGlass ? -1.0 : 1.0;
+        kparams.sign = getOptions().initial.createGlass ? -1.0 : 1.0;
         kparams.ascending = ascending || top;
         if (clipTop && top) {
             kparams.descending = false;
         } else {
             kparams.descending = !ascending || top;
         }
-        kparams.velInit = getOptions().plummer;
+        kparams.velInit = getOptions().initial.plummer;
         kparams.nodeLoad = flopsPerNode / flopsPerParticle;
         kparams.gpu = true;
         kparams.minLevel = tparams.minLevel;
-        kparams.saveForce = getOptions().saveForce;
-        kparams.gm = getOptions().gm;
-        kparams.eta = getOptions().eta;
-        kparams.gravitySupportRadius = getOptions().gravitySupportRadius;
+        kparams.saveForce = getOptions().analysis.saveForce;
+        kparams.gm = getOptions().gravity.gm;
+        kparams.eta = getOptions().gravity.timestepEta;
+        kparams.gravitySupportRadius = getOptions().gravity.supportRadius;
         kparams.a = scale;
         kparams.firstCall = tau == 0.0;
         kparams.minRung = levels[li];
@@ -940,11 +941,11 @@ std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int m
                 *lcFut = hpx::make_ready_future();
             }
             double a = 1.0 / cosmosAinv(adot, scale, dt);
-            if (getOptions().plummer) {
+            if (getOptions().initial.plummer) {
                 a = 1.0;
             }
             //			PRINT( "%e %e %e\n", a, a0, a1);
-            drift(a, dt, tau, tau + dt, getOptions().numberOfSteps * t0, levels[li], drag);
+            drift(a, dt, tau, tau + dt, getOptions().run.numberOfSteps * t0, levels[li], drag);
             tm.stop();
             // PRINT("Drift took %e\n", tm.read());
         }
@@ -958,7 +959,7 @@ std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int m
         minrung++;
     }
     totalTime.stop();
-    int bucketSize = getOptions().bucketSize;
+    int bucketSize = getOptions().compute.bucketSize;
     if (timings.size() <= bucketSize) {
         timings.resize(bucketSize + 1);
     }
@@ -979,15 +980,15 @@ double doPowerSpectrum(int num, double a) {
     profilerEnter(__FUNCTION__);
     int const m = 8;
     PRINT("Computing power spectrum\n");
-    double const h = getOptions().hubble;
-    auto const glass = getOptions().createGlass;
-    double const omegaM = getOptions().omegaM;
+    double const h = getOptions().cosmology.hubble;
+    auto const glass = getOptions().initial.createGlass;
+    double const omegaM = getOptions().cosmology.omegaM;
     double const boxSize =
         (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
-    double const n3 = pow((double) getOptions().nfour, 3);
+    double const n3 = pow((double) getOptions().initial.fourierSize, 3);
     double const d1 = cosmosGrowthFactor(omegaM, a) / cosmosGrowthFactor(omegaM, 1.0);
     double factor = pow(boxSize, 3) / n3 / (glass ? 1.0 : (n3 * sqr(d1)));
-    if (getOptions().closePack) {
+    if (getOptions().initial.closePack) {
         factor *= 0.25;
     }
     double maxpow = 0.0;
@@ -1004,7 +1005,7 @@ double doPowerSpectrum(int num, double a) {
         //		kmax = sqrt(power0.k.front() * kmax * M);
         //	}
         double const c1 = h * h * h * factor;
-        double const kshot = 2.0 * M_PI * getOptions().particlesPerDimension / boxSize;
+        double const kshot = 2.0 * M_PI * getOptions().initial.particlesPerDimension / boxSize;
         for (int i = 0; i < power0.p.size(); i++) {
             double const k = power0.k[i];
             if (k >= kmin && k <= kmax) {
@@ -1025,10 +1026,10 @@ double doPowerSpectrum(int num, double a) {
 
 void outputTimeFile() {
     profilerEnter(__FUNCTION__);
-    double const a0 = 1.0 / (1.0 + getOptions().z0);
+    double const a0 = 1.0 / (1.0 + getOptions().cosmology.startRedshift);
     double const tauMax = cosmosConformalTime(a0, 1.0);
     double a = a0;
-    int m = getOptions().numberOfSteps;
+    int m = getOptions().run.numberOfSteps;
     int n = 64;
     double const dtau = tauMax / (m * n);
     double tau = cosmosConformalTime(a0 * 1.0e-6, a0);
@@ -1042,7 +1043,7 @@ void outputTimeFile() {
         fp, "%4s %13s %13s %13s %13s\n", "step", "real yrs", "conformal yrs", "scale", "redshift");
     for (int i = 0; i <= m; i++) {
         z = 1.0 / a - 1.0;
-        double const c0 = getOptions().codeToS / constants::kSpyr;
+        double const c0 = getOptions().units.timeSeconds / constants::kSpyr;
         fprintf(fp, "%4i %13.4e %13.4e %13.4e %13.4e\n", i, t * c0, tau * c0, a, z);
         for (int j = 0; j < n; j++) {
             double const dadt1 = cosmosDadtau(a);
@@ -1057,7 +1058,7 @@ void outputTimeFile() {
 }
 
 void saveGlass() {
-    int const n = getOptions().particlesPerDimension;
+    int const n = getOptions().initial.particlesPerDimension;
     FILE* fp = fopen("glass.bin", "wb");
     fwrite(&n, sizeof(int), 1, fp);
     fwrite(&particlesPos(XDIM, 0), sizeof(Fixed32), particlesSize(), fp);
@@ -1077,16 +1078,16 @@ void driver() {
     Timer buckets2;
     hpx::future<void> lcFut = hpx::make_ready_future();
     int buckets[11] = {80, 112, 112, 128, 128, 160, 176, 184, 184, 184, 192};
-    double a0 = 1.0 / (1.0 + getOptions().z0);
-    if (getOptions().readCheck != -1) {
+    double a0 = 1.0 / (1.0 + getOptions().cosmology.startRedshift);
+    if (getOptions().checkpoint.readIndex != -1) {
         params = readCheckpoint();
     } else {
         outputTimeFile();
-        if (getOptions().createGlass) {
+        if (getOptions().initial.createGlass) {
             if (hpxSize() != 1) {
                 THROW_ERROR("Create glass can only be done with a single locality\n");
             }
-            size_t const numberOfParticles = getOptions().numberOfParticles;
+            size_t const numberOfParticles = getOptions().initial.numberOfParticles;
             size_t const b = hpxRank() * numberOfParticles / hpxSize();
             size_t const e = (hpxRank() + 1) * numberOfParticles / hpxSize();
             particlesResize(e - b);
@@ -1106,7 +1107,7 @@ void driver() {
             params.a = 1.0;
             params.adot = 0.0;
         } else {
-            if (getOptions().plummer) {
+            if (getOptions().initial.plummer) {
                 params.tauMax = 1.0e-4;
                 params.a = 1.0;
                 params.adot = 0.0;
@@ -1115,10 +1116,10 @@ void driver() {
                 params.a = a0;
                 params.adot = cosmosDadt(a0);
                 params.tauMax = cosmosConformalTime(a0, 1.0);
-                initialize(getOptions().z0);
+                initialize(getOptions().cosmology.startRedshift);
             }
         }
-        if (getOptions().doTracers) {
+        if (getOptions().analysis.tracers) {
             particlesSetTracers();
         }
         params.step = 0;
@@ -1132,33 +1133,37 @@ void driver() {
         params.minrung0 = 0;
         params.runtime = 0.0;
         params.totalProcessed = 0;
-        params.years = cosmosTime(1e-6 * a0, a0) * getOptions().codeToS / constants::kSpyr;
+        params.years =
+            cosmosTime(1e-6 * a0, a0) * getOptions().units.timeSeconds / constants::kSpyr;
         auto tmp1 = particlesSumEnergies();
         params.energies.tckin = tmp1.kin;
         //		write_checkpoint(params);
     }
-    auto const gadgetFile = getOptions().gadget4Restart;
+    auto const gadgetFile = getOptions().initial.gadget4Restart;
     if (gadgetFile != "") {
         auto header = particlesReadGadget4(gadgetFile);
         auto const numberOfParticles = header.npartTotal[1];
         auto opts = getOptions();
-        opts.codeToG = header.mass[1] * 1e10 / opts.hubble;
-        opts.codeToG *= constants::kM0;
-        opts.codeToCm = pow(opts.codeToG * (8.0 * M_PI) * numberOfParticles * constants::kG /
-                (3.0 * opts.omegaM * sqr(constants::kH0 * opts.hubble)),
-            1.0 / 3.0);
-        opts.codeToS = opts.codeToCm / constants::kC;
-        double hValue = constants::kH0 * opts.codeToS;
-        opts.gm = opts.omegaM * 3.0 * sqr(hValue * opts.hubble) / (8.0 * M_PI) / numberOfParticles;
+        opts.units.massG = header.mass[1] * 1e10 / opts.cosmology.hubble;
+        opts.units.massG *= constants::kM0;
+        opts.units.lengthCm =
+            pow(opts.units.massG * (8.0 * M_PI) * numberOfParticles * constants::kG /
+                    (3.0 * opts.cosmology.omegaM * sqr(constants::kH0 * opts.cosmology.hubble)),
+                1.0 / 3.0);
+        opts.units.timeSeconds = opts.units.lengthCm / constants::kC;
+        double hValue = constants::kH0 * opts.units.timeSeconds;
+        opts.gravity.gm = opts.cosmology.omegaM * 3.0 * sqr(hValue * opts.cosmology.hubble) /
+            (8.0 * M_PI) / numberOfParticles;
         setOptions(opts);
         params.a = 1.0 / (header.redshift + 1.0);
         params.adot = cosmosDadt(a0);
         params.tauMax = cosmosConformalTime(params.a, 1.0);
-        params.years = cosmosTime(1e-6 * a0, params.a) * getOptions().codeToS / constants::kSpyr;
-        PRINT("box_size = %e Mpc\n", opts.codeToCm / constants::kMpcToCm);
-        PRINT("code_to_g = %e\n", opts.codeToG);
-        PRINT("code_to_cm = %e\n", opts.codeToCm);
-        PRINT("code_to_s = %e\n", opts.codeToS);
+        params.years =
+            cosmosTime(1e-6 * a0, params.a) * getOptions().units.timeSeconds / constants::kSpyr;
+        PRINT("box_size = %e Mpc\n", opts.units.lengthCm / constants::kMpcToCm);
+        PRINT("code_to_g = %e\n", opts.units.massG);
+        PRINT("code_to_cm = %e\n", opts.units.lengthCm);
+        PRINT("code_to_s = %e\n", opts.units.timeSeconds);
     }
     PRINT("tau_max = %e\n", params.tauMax);
     auto& years = params.years;
@@ -1172,20 +1177,20 @@ void driver() {
     auto& bucketSize = params.bucketSize;
     auto& itime = params.itime;
     auto& minrung0 = params.minrung0;
-    minrung0 = std::max(minrung0, getOptions().minrung);
+    minrung0 = std::max(minrung0, getOptions().run.minRung);
     auto& iter = params.iter;
     int& step = params.step;
     auto& totalProcessed = params.totalProcessed;
     auto& runtime = params.runtime;
-    int numberOfSteps = getOptions().numberOfSteps;
-    double z0 = getOptions().z0;
+    int numberOfSteps = getOptions().run.numberOfSteps;
+    double z0 = getOptions().cosmology.startRedshift;
     double dloga = log(z0 + 1.0) / numberOfSteps;
     double pot;
     int thisIter = 0;
     double lastTheta = -1.0;
     Timer reset;
     reset.start();
-    if (getOptions().doLc) {
+    if (getOptions().lightcone.enabled) {
         lcInit(tau, tauMax);
     }
     double dt = 0.0;
@@ -1209,8 +1214,8 @@ void driver() {
             PRINT("lc_particles_boundaries1 %e\n", tm.read());
             tm.reset();
             tm.start();
-            double const linkingLength =
-                getOptions().lcB * pow(getOptions().numberOfParticles, -1.0 / NDIM);
+            double const linkingLength = getOptions().lightcone.linkingLength *
+                pow(getOptions().initial.numberOfParticles, -1.0 / NDIM);
             lcFormTrees(tau, linkingLength);
             tm.stop();
             PRINT("lc_form_trees %e\n", tm.read());
@@ -1256,7 +1261,7 @@ void driver() {
         //	profiler_exit();
     };
     auto checkpointlist = readCheckpointList();
-    double const hsoft0 = getOptions().gravitySupportRadius;
+    double const hsoft0 = getOptions().gravity.supportRadius;
     bool doCheck = false;
     double checkz = 1.0 / a - 1.0;
     int lastCheckpointIteration = -1;
@@ -1265,13 +1270,14 @@ void driver() {
     double glassError = 1.0;
     for (;; step++) {
         //		PRINT("STEP  = %i\n", step);
-        double t0 = tauMax / getOptions().numberOfSteps;
+        double t0 = tauMax / getOptions().run.numberOfSteps;
         do {
             Timer stepTm;
             stepTm.start();
             profilerEnter(__FUNCTION__);
             tmr.stop();
-            if ((params.iter > 0 && tmr.read() > getOptions().checkFreq) || doCheck) {
+            if ((params.iter > 0 && tmr.read() > getOptions().checkpoint.intervalSeconds) ||
+                doCheck) {
                 totalTime.stop();
                 runtime += totalTime.read();
                 totalTime.reset();
@@ -1290,16 +1296,16 @@ void driver() {
             bool fullEval = minrung == 0;
             if (fullEval) {
                 int const number = step;
-                if (getOptions().doTracers) {
+                if (getOptions().analysis.tracers) {
                     outputTracers(number);
                 }
-                if (getOptions().doSlice) {
+                if (getOptions().analysis.slice) {
                     outputSlice(number, years);
                 }
                 if (fullEval) {
                     viewOutputViews((tau + 1e-6 * t0) / t0, a);
                 }
-                if (getOptions().doViews) {
+                if (getOptions().analysis.views) {
                     Timer tm;
                     tm.start();
                     outputView(number, years);
@@ -1325,9 +1331,9 @@ void driver() {
             double theta;
             double const z = 1.0 / a - 1.0;
             auto opts = getOptions();
-            opts.gravitySupportRadius =
+            opts.gravity.supportRadius =
                 hsoft0;    // Fixed comoving support for every particle type.
-            if (getOptions().createGlass) {
+            if (getOptions().initial.createGlass) {
                 theta = 0.4;
             } else {
                 /*				if (z > 20.0) {
@@ -1345,7 +1351,7 @@ void driver() {
                     theta = 0.61;
                 }
             }
-            auto const ts = 100 * tau / t0 / getOptions().numberOfSteps;
+            auto const ts = 100 * tau / t0 / getOptions().run.numberOfSteps;
             if (ts <= 10.0) {
                 bucketSize = 112;
             } else if (ts < 55.0) {
@@ -1354,15 +1360,15 @@ void driver() {
                 bucketSize = 184;
             }
             // bucket_size = 128;
-            opts.bucketSize = bucketSize;
-            opts.theta = theta;
+            opts.compute.bucketSize = bucketSize;
+            opts.gravity.openingAngle = theta;
             setOptions(opts);
             lastTheta = theta;
             std::pair<KickReturn, TreeCreateReturn> tmp;
             bool nocrop = false;
             if (int(tau / t0) % 8 == 0 && fullEval) {
                 nocrop = true;
-                minrung0 = std::max(minrung0 - 1, getOptions().minrung);
+                minrung0 = std::max(minrung0 - 1, getOptions().run.minRung);
             }
             int thisMinrung = std::max(minrung, minrung0);
             int om = thisMinrung;
@@ -1372,19 +1378,19 @@ void driver() {
             if (fullEval) {
                 //				kick_workspace::clear_buffers();
                 //				tree_destroy(true);
-                if (getOptions().doPower) {
+                if (getOptions().analysis.power) {
                     doPowerSpectrum(step, a);
                 }
 #ifndef CHECK_MUTUAL_SORT
-                if (getOptions().doGroups) {
+                if (getOptions().analysis.groups) {
                     doGroups(step, a);
                 }
 #endif
             }
-            if (getOptions().useGlass && minrung == minrung0) {
+            if (getOptions().initial.useGlass && minrung == minrung0) {
                 //			particles_displace(rand1(), rand1(), rand1());
             }
-            if (getOptions().sph) {
+            if (getOptions().hydro.enabled) {
                 tmp = kickStep(minrung, a, a * adot, t0, theta, tau == 0.0, fullEval);
                 // Migration must finish before the SPH tree stores gas indices.
                 sphStep1(minrung);
@@ -1403,7 +1409,7 @@ void driver() {
             KickReturn kr = tmp.first;
             int maxRung0 = maxRung;
             maxRung = kr.maxRung;
-            if (getOptions().sph) {
+            if (getOptions().hydro.enabled) {
                 maxRung = std::max(
                     maxRung, sphStep2(minrung, a, tau, t0, 1, a * adot, &energies).maximumRung);
                 if (fullEval) {
@@ -1428,7 +1434,7 @@ void driver() {
                     energies.cosmic = -energy;
                     energy = 0.0;
                 }
-                double const norm = getOptions().sph ?
+                double const norm = getOptions().hydro.enabled ?
                     energies.kin + fabs(energies.pot) + energies.therm + fabs(energies.heating) +
                         fabs(energies.cosmic) :
                     energies.kin + fabs(energies.pot) + energies.cosmic;
@@ -1451,11 +1457,12 @@ void driver() {
             //			PRINT("Done kicking\n");
             double adotdot;
             double a0 = a;
-            if (!getOptions().createGlass && !getOptions().plummer) {
+            if (!getOptions().initial.createGlass && !getOptions().initial.plummer) {
                 cosmosUpdate(adotdot, adot, a, dt);
             }
             energies.cosmic += (a - a0) * (energies.tckin / (a0 * a0) + energies.therm);
-            double const dyears = 0.5 * (a0 + a) * dt * getOptions().codeToS / constants::kSpyr;
+            double const dyears =
+                0.5 * (a0 + a) * dt * getOptions().units.timeSeconds / constants::kSpyr;
             auto const z0 = 1.0 / a0 - 1.0;
             auto const z1 = 1.0 / a - 1.0;
             for (auto& z : checkpointlist) {
@@ -1468,7 +1475,7 @@ void driver() {
             //			PRINT("%e %e\n", a1, a);
             Timer dtm;
             dtm.start();
-            if (getOptions().sph) {
+            if (getOptions().hydro.enabled) {
                 drift(2.0 / (1.0 / a0 + 1.0 / a), dt, tau, tau + dt, tauMax);
             }
             dtm.stop();
@@ -1484,7 +1491,7 @@ void driver() {
             runtime += totalTime.read();
             double pps = totalProcessed / runtime;
             //	PRINT( "%e %e %e %e\n", kr.node_flops, kr.part_flops, sr.flops, dr.flops);
-            double const numberOfParticles = getOptions().numberOfParticles;
+            double const numberOfParticles = getOptions().initial.numberOfParticles;
             double close, direct;
             getGravityCounters(close, direct);
             direct += close;
@@ -1513,10 +1520,10 @@ void driver() {
             tau += dt;
             thisIter++;
             years += dyears;
-            if (1.0 / a < getOptions().z1 + 1.0) {
+            if (1.0 / a < getOptions().cosmology.endRedshift + 1.0) {
                 PRINT("Reached minimum redshift, exiting...\n");
                 break;
-            } else if (thisIter > getOptions().maxIter) {
+            } else if (thisIter > getOptions().run.maxIterations) {
                 PRINT("Reached maximum iteration, exiting...\n");
                 break;
             }
@@ -1527,25 +1534,26 @@ void driver() {
             if (jiter > 100) {
                 //			abort();
             }
-            if (getOptions().doLc && minRung(itime) <= minrung0) {
+            if (getOptions().lightcone.enabled && minRung(itime) <= minrung0) {
                 checkLc(false);
             }
             lcFut = hpx::make_ready_future();
 
         } while (itime != 0);
-        if (thisIter > getOptions().maxIter || 1.0 / a < getOptions().z1 + 1.0) {
+        if (thisIter > getOptions().run.maxIterations ||
+            1.0 / a < getOptions().cosmology.endRedshift + 1.0) {
             break;
-        } else if (getOptions().createGlass && std::abs(glassError) < 1.0e-5) {
+        } else if (getOptions().initial.createGlass && std::abs(glassError) < 1.0e-5) {
             saveGlass();
             break;
         }
     }
     buckets2.stop();
     FILE* fp = fopen("buckets.txt", "at");
-    fprintf(fp, "%i %e %e %e\n", getOptions().bucketSize, buckets50.read(), buckets20.read(),
-        buckets2.read());
+    fprintf(fp, "%i %e %e %e\n", getOptions().compute.bucketSize, buckets50.read(),
+        buckets20.read(), buckets2.read());
     fclose(fp);
-    if (getOptions().doLc) {
+    if (getOptions().lightcone.enabled) {
         checkLc(true);
     }
     if (params.iter > 0 && params.iter != lastCheckpointIteration) {
@@ -1557,7 +1565,7 @@ void driver() {
             detail::checkpointRedshiftAlias(params.iter, checkz);
         }
     }
-    if (getOptions().doLc) {
+    if (getOptions().lightcone.enabled) {
         particlesFree();
     }
     KickWorkspace::clearBuffers();
@@ -1811,9 +1819,9 @@ uint32_t checkpointFlags(Options const& opts) {
     constexpr uint32_t kGroups = 1U << 8;
     constexpr uint32_t kTracers = 1U << 9;
     // Leave retired option bits unused so old incompatible headers remain rejected.
-    return (opts.sph ? kSph : 0U) | (opts.htime ? kHierarchical : 0U) |
-        (opts.doLc ? kLightcone : 0U) | (opts.doGroups ? kGroups : 0U) |
-        (opts.doTracers ? kTracers : 0U);
+    return (opts.hydro.enabled ? kSph : 0U) | (opts.run.hierarchicalGravity ? kHierarchical : 0U) |
+        (opts.lightcone.enabled ? kLightcone : 0U) | (opts.analysis.groups ? kGroups : 0U) |
+        (opts.analysis.tracers ? kTracers : 0U);
 }
 
 uint32_t checkpointKernelCode(std::string const& family, int degree) {
@@ -1837,47 +1845,53 @@ uint32_t checkpointPhysicsCode(Options const& opts) {
     // Preserve the existing low-byte formulation and native header layout.
     // Historical default kernels encode zero in both new selection bytes.
     uint32_t const gravityCode =
-        checkpointKernelCode(opts.gravityKernelFamily, opts.gravityKernelDegree) ^
+        checkpointKernelCode(opts.gravity.kernelFamily, opts.gravity.kernelDegree) ^
         checkpointKernelCode("ferrers", 8);
     uint32_t const hydroCode =
-        checkpointKernelCode(opts.hydroKernelFamily, opts.hydroKernelDegree) ^
+        checkpointKernelCode(opts.hydro.kernelFamily, opts.hydro.kernelDegree) ^
         checkpointKernelCode("spline", 3);
-    return (opts.sph ? kMonaghanSph | kCompactSphLayout : 0U) | (gravityCode << 8) |
+    return (opts.hydro.enabled ? kMonaghanSph | kCompactSphLayout : 0U) | (gravityCode << 8) |
         (hydroCode << 16);
 }
 
 bool legacyCheckpointCompatible(Options const& opts) {
-    return !opts.sph && opts.htime && opts.gravityKernelFamily == "ferrers" &&
-        opts.gravityKernelDegree == 8;
+    return !opts.hydro.enabled && opts.run.hierarchicalGravity &&
+        opts.gravity.kernelFamily == "ferrers" && opts.gravity.kernelDegree == 8;
 }
 
 CheckpointHeader checkpointHeader(Options const& opts) {
-    return {kCheckpointMagic, kCheckpointVersion, checkpointFlags(opts), opts.darkMatterMass,
-        opts.sphMass, opts.gamma, opts.gravitySupportRadius, opts.gm, opts.omegaM, opts.omegaR,
-        opts.omegaLam, opts.codeToCm, opts.codeToS, opts.codeToG, opts.numberOfParticles,
-        opts.numberOfSteps, checkpointPhysicsCode(opts)};
+    return {kCheckpointMagic, kCheckpointVersion, checkpointFlags(opts),
+        opts.initial.darkMatterMass, opts.initial.gasMass, opts.hydro.gamma,
+        opts.gravity.supportRadius, opts.gravity.gm, opts.cosmology.omegaM, opts.cosmology.omegaR,
+        opts.cosmology.omegaLambda, opts.units.lengthCm, opts.units.timeSeconds, opts.units.massG,
+        opts.initial.numberOfParticles, opts.run.numberOfSteps, checkpointPhysicsCode(opts)};
 }
 
 bool checkpointCompatible(CheckpointHeader const& header, Options const& opts) {
     bool const supportedVersion = header.version == kCheckpointVersion ||
-        (!opts.sph && header.version == kLegacyDarkMatterCheckpointVersion);
+        (!opts.hydro.enabled && header.version == kLegacyDarkMatterCheckpointVersion);
     return supportedVersion && header.flags == checkpointFlags(opts) &&
         header.reserved == checkpointPhysicsCode(opts) &&
-        header.darkMatterMass == opts.darkMatterMass && header.gasMass == opts.sphMass &&
-        header.gamma == opts.gamma && header.softening == opts.gravitySupportRadius &&
-        header.gravitationalMass == opts.gm && header.omegaMatter == opts.omegaM &&
-        header.omegaRadiation == opts.omegaR && header.omegaLambda == opts.omegaLam &&
-        header.unitLength == opts.codeToCm && header.unitTime == opts.codeToS &&
-        header.unitMass == opts.codeToG && header.particlesPerSpecies == opts.numberOfParticles &&
-        header.nominalSteps == opts.numberOfSteps;
+        header.darkMatterMass == opts.initial.darkMatterMass &&
+        header.gasMass == opts.initial.gasMass && header.gamma == opts.hydro.gamma &&
+        header.softening == opts.gravity.supportRadius &&
+        header.gravitationalMass == opts.gravity.gm &&
+        header.omegaMatter == opts.cosmology.omegaM &&
+        header.omegaRadiation == opts.cosmology.omegaR &&
+        header.omegaLambda == opts.cosmology.omegaLambda &&
+        header.unitLength == opts.units.lengthCm && header.unitTime == opts.units.timeSeconds &&
+        header.unitMass == opts.units.massG &&
+        header.particlesPerSpecies == opts.initial.numberOfParticles &&
+        header.nominalSteps == opts.run.numberOfSteps;
 }
 
 // Stored only for Monaghan SPH checkpoints; the dark-matter layout is unchanged.
 std::array<double, 13> sphCheckpointParameters(Options const& opts) {
-    return {opts.alpha0, opts.beta, opts.viscosityEpsilon, opts.sphNeighborNumber,
-        opts.hydroMinSupportRadius, opts.hydroMaxSupportRadius, opts.cfl, opts.eta,
-        opts.yAcceleration, opts.centralAcceleration, opts.centralSupportRadius, opts.damping,
-        opts.gravity ? 1.0 : 0.0};
+    return {opts.hydro.viscosityAlpha, opts.hydro.viscosityBeta, opts.hydro.viscosityEpsilon,
+        opts.hydro.neighborNumber, opts.hydro.minSupportRadius, opts.hydro.maxSupportRadius,
+        opts.hydro.cfl, opts.gravity.timestepEta, opts.hydro.yAcceleration,
+        opts.hydro.centralAcceleration, opts.hydro.centralSupportRadius, opts.hydro.damping,
+        opts.gravity.enabled ? 1.0 : 0.0};
 }
 
 void writeDriverState(FILE* fp, DriverParameters const& params) {
@@ -1885,7 +1899,7 @@ void writeDriverState(FILE* fp, DriverParameters const& params) {
     if (fwrite(&header, sizeof(header), 1, fp) != 1) {
         THROW_ERROR("Unable to write checkpoint header\n");
     }
-    if (getOptions().sph) {
+    if (getOptions().hydro.enabled) {
         auto const sphParameters = sphCheckpointParameters(getOptions());
         if (fwrite(sphParameters.data(), sizeof(double), sphParameters.size(), fp) !=
             sphParameters.size()) {
@@ -1911,7 +1925,7 @@ DriverParameters readDriverState(FILE* fp) {
             THROW_ERROR("Checkpoint physics, particle layout or integrator differs from the "
                         "requested run\n");
         }
-        if (getOptions().sph) {
+        if (getOptions().hydro.enabled) {
             auto sphParameters = sphCheckpointParameters(getOptions());
             FREAD(sphParameters.data(), sizeof(double), sphParameters.size(), fp);
             if (sphParameters != sphCheckpointParameters(getOptions())) {
@@ -1983,20 +1997,20 @@ void checkpointStateTest() {
     ALWAYS_ASSERT(restored.energies.therm == kThermal && restored.energies.heating == kHeating);
     auto changed = getOptions();
     auto const header = detail::checkpointHeader(changed);
-    changed.outputUnits = "both";
-    changed.outputFrame = "lab";
+    changed.output.units = "both";
+    changed.output.frame = "lab";
     ALWAYS_ASSERT(detail::checkpointCompatible(header, changed));
     changed = getOptions();
-    if (changed.sph) {
+    if (changed.hydro.enabled) {
         auto oldFormulation = header;
         oldFormulation.reserved = 0;
         oldFormulation.version = 1;
         ALWAYS_ASSERT(!detail::checkpointCompatible(oldFormulation, changed));
     }
-    changed.sph = !changed.sph;
+    changed.hydro.enabled = !changed.hydro.enabled;
     ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
     changed = getOptions();
-    changed.htime = !changed.htime;
+    changed.run.hierarchicalGravity = !changed.run.hierarchicalGravity;
     ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
     changed = getOptions();
     auto removedPhysics = header;
@@ -2015,45 +2029,46 @@ void checkpointStateTest() {
         return degree == 8 ? 6 : 8;
     };
     changed = getOptions();
-    changed.gravityKernelFamily = changed.gravityKernelFamily == "spline" ? "ferrers" : "spline";
-    changed.gravityKernelDegree = 8;
+    changed.gravity.kernelFamily = changed.gravity.kernelFamily == "spline" ? "ferrers" : "spline";
+    changed.gravity.kernelDegree = 8;
     ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
     auto const changedGravityHeader = detail::checkpointHeader(changed);
     ALWAYS_ASSERT(detail::checkpointCompatible(changedGravityHeader, changed));
     ALWAYS_ASSERT(!detail::checkpointCompatible(changedGravityHeader, getOptions()));
     changed = getOptions();
-    changed.gravityKernelDegree =
-        differentKernelDegree(changed.gravityKernelFamily, changed.gravityKernelDegree);
+    changed.gravity.kernelDegree =
+        differentKernelDegree(changed.gravity.kernelFamily, changed.gravity.kernelDegree);
     ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
     changed = getOptions();
-    changed.hydroKernelFamily = changed.hydroKernelFamily == "spline" ? "ferrers" : "spline";
-    changed.hydroKernelDegree = 8;
+    changed.hydro.kernelFamily = changed.hydro.kernelFamily == "spline" ? "ferrers" : "spline";
+    changed.hydro.kernelDegree = 8;
     ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
     auto const changedHydroHeader = detail::checkpointHeader(changed);
     ALWAYS_ASSERT(detail::checkpointCompatible(changedHydroHeader, changed));
     ALWAYS_ASSERT(!detail::checkpointCompatible(changedHydroHeader, getOptions()));
     changed = getOptions();
-    changed.hydroKernelDegree =
-        differentKernelDegree(changed.hydroKernelFamily, changed.hydroKernelDegree);
+    changed.hydro.kernelDegree =
+        differentKernelDegree(changed.hydro.kernelFamily, changed.hydro.kernelDegree);
     ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
     auto defaultKernelOptions = getOptions();
-    defaultKernelOptions.gravityKernelFamily = "ferrers";
-    defaultKernelOptions.gravityKernelDegree = 8;
-    defaultKernelOptions.hydroKernelFamily = "spline";
-    defaultKernelOptions.hydroKernelDegree = 3;
+    defaultKernelOptions.gravity.kernelFamily = "ferrers";
+    defaultKernelOptions.gravity.kernelDegree = 8;
+    defaultKernelOptions.hydro.kernelFamily = "spline";
+    defaultKernelOptions.hydro.kernelDegree = 3;
     ALWAYS_ASSERT(detail::checkpointHeader(defaultKernelOptions).reserved ==
-        (defaultKernelOptions.sph ? detail::kMonaghanSph | detail::kCompactSphLayout : 0U));
+        (defaultKernelOptions.hydro.enabled ? detail::kMonaghanSph | detail::kCompactSphLayout :
+                                              0U));
     auto legacyKernelOptions = defaultKernelOptions;
-    legacyKernelOptions.sph = false;
-    legacyKernelOptions.htime = true;
+    legacyKernelOptions.hydro.enabled = false;
+    legacyKernelOptions.run.hierarchicalGravity = true;
     ALWAYS_ASSERT(detail::legacyCheckpointCompatible(legacyKernelOptions));
-    legacyKernelOptions.gravityKernelFamily = "spline";
+    legacyKernelOptions.gravity.kernelFamily = "spline";
     ALWAYS_ASSERT(!detail::legacyCheckpointCompatible(legacyKernelOptions));
-    legacyKernelOptions.gravityKernelFamily = "ferrers";
-    legacyKernelOptions.gravityKernelDegree = 6;
+    legacyKernelOptions.gravity.kernelFamily = "ferrers";
+    legacyKernelOptions.gravity.kernelDegree = 6;
     ALWAYS_ASSERT(!detail::legacyCheckpointCompatible(legacyKernelOptions));
     auto legacySphOptions = getOptions();
-    legacySphOptions.sph = true;
+    legacySphOptions.hydro.enabled = true;
     auto legacySphHeader = detail::checkpointHeader(legacySphOptions);
     ALWAYS_ASSERT(legacySphHeader.version == detail::kCheckpointVersion);
     ALWAYS_ASSERT(detail::checkpointCompatible(legacySphHeader, legacySphOptions));
@@ -2062,25 +2077,25 @@ void checkpointStateTest() {
     legacySphHeader.version = 2;
     ALWAYS_ASSERT(!detail::checkpointCompatible(legacySphHeader, legacySphOptions));
     auto legacyDarkMatterOptions = getOptions();
-    legacyDarkMatterOptions.sph = false;
+    legacyDarkMatterOptions.hydro.enabled = false;
     auto legacyDarkMatterHeader = detail::checkpointHeader(legacyDarkMatterOptions);
     legacyDarkMatterHeader.version = detail::kLegacyDarkMatterCheckpointVersion;
     ALWAYS_ASSERT(detail::checkpointCompatible(legacyDarkMatterHeader, legacyDarkMatterOptions));
     auto const sphParameters = detail::sphCheckpointParameters(getOptions());
     changed = getOptions();
-    changed.alpha0 += 0.25;
+    changed.hydro.viscosityAlpha += 0.25;
     ALWAYS_ASSERT(sphParameters != detail::sphCheckpointParameters(changed));
     changed = getOptions();
-    changed.sphNeighborNumber += 1.0;
+    changed.hydro.neighborNumber += 1.0;
     ALWAYS_ASSERT(sphParameters != detail::sphCheckpointParameters(changed));
     changed = getOptions();
-    changed.hydroMaxSupportRadius *= 2.0;
+    changed.hydro.maxSupportRadius *= 2.0;
     ALWAYS_ASSERT(sphParameters != detail::sphCheckpointParameters(changed));
     changed = getOptions();
-    changed.numberOfSteps++;
+    changed.run.numberOfSteps++;
     ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
     changed = getOptions();
-    changed.numberOfParticles++;
+    changed.initial.numberOfParticles++;
     ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
     if (detail::legacyCheckpointCompatible(getOptions())) {
         detail::LegacyDriver legacy{};
@@ -2126,7 +2141,7 @@ void writeCheckpoint(DriverParameters params) {
     detail::writeDriverState(file.get(), params);
     particlesSave(file.get());
     domainsSave(file.get());
-    if (getOptions().doLc) {
+    if (getOptions().lightcone.enabled) {
         lcSave(file.get());
     }
     detail::flushAndCloseCheckpointFile(file, rankPath);
@@ -2151,13 +2166,14 @@ DriverParameters readCheckpoint() {
     if (hpxRank() == 0) {
         PRINT("Reading checkpoint\n");
         detail::validateCheckpointDirectory(
-            detail::checkpointDirectory(getOptions().readCheck), getOptions().readCheck);
+            detail::checkpointDirectory(getOptions().checkpoint.readIndex),
+            getOptions().checkpoint.readIndex);
     }
     Vector<hpx::future<DriverParameters>> futs;
     for (auto const& c : hpxChildren()) {
         futs.push_back(hpx::async<ReadCheckpointAction>(c));
     }
-    int const iter = getOptions().readCheck;
+    int const iter = getOptions().checkpoint.readIndex;
     auto const rankPath = detail::checkpointRankFile(detail::checkpointDirectory(iter), hpxRank());
     detail::CheckpointFile file(fopen(rankPath.c_str(), "rb"));
     if (!file) {
@@ -2166,7 +2182,7 @@ DriverParameters readCheckpoint() {
     params = detail::readDriverState(file.get());
     particlesLoad(file.get());
     domainsLoad(file.get());
-    if (getOptions().doLc) {
+    if (getOptions().lightcone.enabled) {
         lcLoad(file.get());
     }
     if (ferror(file.get()) != 0) {

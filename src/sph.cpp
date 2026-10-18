@@ -20,7 +20,6 @@
 #include <fenv.h>
 #include <stack>
 
-#include <cuda_runtime.h>
 #include <unistd.h>
 
 #include <cosmictiger/constants.hpp>
@@ -30,7 +29,10 @@
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/safe_io.hpp>
 #include <cosmictiger/sph.hpp>
+#include <cosmictiger/sph_cpu.hpp>
+#ifdef USE_CUDA
 #include <cosmictiger/sph_cuda.hpp>
+#endif
 #include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/stack_trace.hpp>
 #include <cosmictiger/timer.hpp>
@@ -67,7 +69,7 @@ struct SphRunWorkspace {
     std::unordered_map<int, Pair<int>> neighborRanges;
     MutexType mutex;
     void addWork(TreeId selfid);
-    SphRunReturn toGpu();
+    SphRunReturn run(bool useCuda);
     SphRunWorkspace(SphRunParameters p) {
         params = p;
     }
@@ -304,8 +306,8 @@ SphRunReturn sphRun(SphRunParameters params, bool cuda) {
     feenableexcept(FE_DIVBYZERO);
     feenableexcept(FE_INVALID);
     feenableexcept(FE_OVERFLOW);
-    params.courantFactor = getOptions().cfl;
-    if (getOptions().cuda == false) {
+    params.courantFactor = getOptions().hydro.cfl;
+    if (getOptions().compute.cuda == false) {
         cuda = false;
     }
     SphRunReturn rc;
@@ -321,8 +323,6 @@ SphRunReturn sphRun(SphRunParameters params, bool cuda) {
     }
     static std::atomic<int> next;
     next = 0;
-    static std::atomic<int> gpuWork;
-    gpuWork = 0;
     for (int proc = 0; proc < numberOfThreads; proc++) {
         futs2.push_back(hpx::async([proc, numberOfThreads, params, cuda, workspacePtr]() {
             SphRunReturn rc;
@@ -350,12 +350,7 @@ SphRunReturn sphRun(SphRunParameters params, bool cuda) {
                     break;
                 }
                 if (test) {
-                    if (cuda) {
-                        gpuWork++;
-                        workspacePtr->addWork(selfid);
-                    } else {
-                        ALWAYS_ASSERT(false);
-                    }
+                    workspacePtr->addWork(selfid);
                 }
 
                 index = next++;
@@ -366,8 +361,8 @@ SphRunReturn sphRun(SphRunParameters params, bool cuda) {
     for (auto& f : futs2) {
         rc += f.get();
     }
-    if (cuda && gpuWork) {
-        rc += workspacePtr->toGpu();
+    if (!workspacePtr->hostTargetNodeIndices.empty()) {
+        rc += workspacePtr->run(cuda);
     }
     for (auto& f : futs) {
         rc += f.get();
@@ -413,7 +408,7 @@ void SphRunWorkspace::addWork(TreeId selfid) {
     r.second = neighborEnd;
 }
 
-SphRunReturn SphRunWorkspace::toGpu() {
+SphRunReturn SphRunWorkspace::run(bool useCuda) {
     size_t particleStorageSize = 0;
     for (auto const& node : hostTrees) {
         particleStorageSize += node.particleRange.second - node.particleRange.first;
@@ -471,50 +466,44 @@ SphRunReturn SphRunWorkspace::toGpu() {
     for (auto& future : futs) {
         future.get();
     }
-    SphRunCudaData cudaData{};
-    auto stream = cudaGetStream();
-    auto const copyToDevice = [stream](auto*& device, auto const& host) {
-        if (!host.empty()) {
-            size_t const bytes = sizeof(*device) * host.size();
-            CUDA_CHECK(cudaMalloc(&device, bytes));
-            CUDA_CHECK(cudaMemcpyAsync(device, host.data(), bytes, cudaMemcpyHostToDevice, stream));
-        }
+    SphRunData runData{};
+    auto const copySources = [&](auto const& copy) {
+        copy(runData.sourcePositionX, hostPositionX);
+        copy(runData.sourcePositionY, hostPositionY);
+        copy(runData.sourcePositionZ, hostPositionZ);
+        copy(runData.sourceSupportRadius, hostSupportRadius);
+        copy(runData.sourceRungs, hostRungs);
+        copy(runData.sourceInternalEnergy, hostInternalEnergy);
+        copy(runData.sourceDensity, hostDensity);
+        copy(runData.sourceVelocityX, hostVelocityX);
+        copy(runData.sourceVelocityY, hostVelocityY);
+        copy(runData.sourceVelocityZ, hostVelocityZ);
+        copy(runData.treeNodes, hostTrees);
+        copy(runData.targetNodeIndices, hostTargetNodeIndices);
+        copy(runData.neighborNodeIndices, hostNeighborNodeIndices);
     };
-    copyToDevice(cudaData.sourcePositionX, hostPositionX);
-    copyToDevice(cudaData.sourcePositionY, hostPositionY);
-    copyToDevice(cudaData.sourcePositionZ, hostPositionZ);
-    copyToDevice(cudaData.sourceSupportRadius, hostSupportRadius);
-    copyToDevice(cudaData.sourceRungs, hostRungs);
-    copyToDevice(cudaData.sourceInternalEnergy, hostInternalEnergy);
-    copyToDevice(cudaData.sourceDensity, hostDensity);
-    copyToDevice(cudaData.sourceVelocityX, hostVelocityX);
-    copyToDevice(cudaData.sourceVelocityY, hostVelocityY);
-    copyToDevice(cudaData.sourceVelocityZ, hostVelocityZ);
-    copyToDevice(cudaData.treeNodes, hostTrees);
-    copyToDevice(cudaData.targetNodeIndices, hostTargetNodeIndices);
-    copyToDevice(cudaData.neighborNodeIndices, hostNeighborNodeIndices);
-    cudaData.sinkParticleIndices = &sphParticlesParticleIndex(0);
-    cudaData.sinkSemiactive = &sphParticlesSemiactive(0);
-    cudaData.sinkParticleRungs = &particlesRung(0);
-    cudaData.sinkDensity = &sphParticlesDensity(0);
-    cudaData.sinkThermodynamicStates = &sphParticlesThermodynamicState(0);
-    cudaData.sinkInternalEnergyRate = &sphParticlesInternalEnergyRate(0);
-    cudaData.sinkGravityAccelerationX = &sphParticlesGravityAcceleration(XDIM, 0);
-    cudaData.sinkGravityAccelerationY = &sphParticlesGravityAcceleration(YDIM, 0);
-    cudaData.sinkGravityAccelerationZ = &sphParticlesGravityAcceleration(ZDIM, 0);
-    cudaData.adiabaticIndex = getOptions().gamma;
-    cudaData.gravityEffectiveRadius =
-        getOptions().gravitySupportRadius / selectedGravityKernel().supportRadiusPerEffectiveRadius;
-    cudaData.numberOfTargetNodes = hostTargetNodeIndices.size();
-    cudaData.sinkSmoothingConverged = &sphParticlesConverged(0);
-    cudaData.selfGravityEnabled = getOptions().gravity;
-    cudaData.sinkAccelerations = &sphParticlesAccelerationState(0);
-    cudaData.centralAcceleration = getOptions().centralAcceleration;
-    cudaData.centralSupportRadius = getOptions().centralSupportRadius;
-    cudaData.targetNeighborCount = getOptions().sphNeighborNumber;
-    cudaData.gasMass = getOptions().sphMass;
-    cudaData.accelerationTimestepFactor = getOptions().eta;
-    PRINT("Sending %i %i\n", params.runType, hostTargetNodeIndices.size());
+    copySources([](auto*& destination, auto& source) { destination = source.data(); });
+    runData.sinkParticleIndices = &sphParticlesParticleIndex(0);
+    runData.sinkSemiactive = &sphParticlesSemiactive(0);
+    runData.sinkParticleRungs = &particlesRung(0);
+    runData.sinkDensity = &sphParticlesDensity(0);
+    runData.sinkThermodynamicStates = &sphParticlesThermodynamicState(0);
+    runData.sinkInternalEnergyRate = &sphParticlesInternalEnergyRate(0);
+    runData.sinkGravityAccelerationX = &sphParticlesGravityAcceleration(XDIM, 0);
+    runData.sinkGravityAccelerationY = &sphParticlesGravityAcceleration(YDIM, 0);
+    runData.sinkGravityAccelerationZ = &sphParticlesGravityAcceleration(ZDIM, 0);
+    runData.adiabaticIndex = getOptions().hydro.gamma;
+    runData.gravityEffectiveRadius = getOptions().gravity.supportRadius /
+        selectedGravityKernel().supportRadiusPerEffectiveRadius;
+    runData.numberOfTargetNodes = hostTargetNodeIndices.size();
+    runData.sinkSmoothingConverged = &sphParticlesConverged(0);
+    runData.selfGravityEnabled = getOptions().gravity.enabled;
+    runData.sinkAccelerations = &sphParticlesAccelerationState(0);
+    runData.centralAcceleration = getOptions().hydro.centralAcceleration;
+    runData.centralSupportRadius = getOptions().hydro.centralSupportRadius;
+    runData.targetNeighborCount = getOptions().hydro.neighborNumber;
+    runData.gasMass = getOptions().initial.gasMass;
+    runData.accelerationTimestepFactor = getOptions().gravity.timestepEta;
 
     for (int i = 0; i < hostTargetNodeIndices.size(); i++) {
         auto const& node = hostTrees[hostTargetNodeIndices[i]];
@@ -528,22 +517,67 @@ SphRunReturn SphRunWorkspace::toGpu() {
         ALWAYS_ASSERT(found);
     }
 
-    auto rc = sphRunCuda(params, cudaData, stream);
+    if (!useCuda) {
+        // A complete source snapshot is staged before any worker updates sinks.
+        std::atomic<int> nextNode(0);
+        Vector<hpx::future<SphRunReturn>> workers;
+        int const workerCount =
+            std::min(hpxHardwareConcurrency(), int(hostTargetNodeIndices.size()));
+        workers.reserve(workerCount);
+        try {
+            for (int worker = 0; worker < workerCount; worker++) {
+                workers.push_back(hpx::async([&]() {
+                    SphRunReturn result;
+                    for (int nodeIndex = nextNode++; nodeIndex < runData.numberOfTargetNodes;
+                        nodeIndex = nextNode++) {
+                        result += sphRunCpuNode(params, runData, nodeIndex);
+                    }
+                    return result;
+                }));
+            }
+        } catch (...) {
+            hpx::wait_all(workers.begin(), workers.end());
+            throw;
+        }
+        // Keep the staged arrays and referenced stack state alive even if a
+        // worker reports an allocation or numerical failure through its future.
+        hpx::wait_all(workers.begin(), workers.end());
+        SphRunReturn result;
+        for (auto& worker : workers) {
+            result += worker.get();
+        }
+        return result;
+    }
+#ifdef USE_CUDA
+    auto const stream = cudaGetStream();
+    copySources([stream](auto*& device, auto const& host) {
+        device = nullptr;
+        if (!host.empty()) {
+            size_t const bytes = sizeof(*device) * host.size();
+            CUDA_CHECK(cudaMalloc(&device, bytes));
+            CUDA_CHECK(cudaMemcpyAsync(device, host.data(), bytes, cudaMemcpyHostToDevice, stream));
+        }
+    });
+    auto rc = sphRunCuda(params, runData, stream);
     synchronizeCudaStream(stream);
     cudaEndStream(stream);
-    CUDA_CHECK(cudaFree(cudaData.sourceRungs));
-    CUDA_CHECK(cudaFree(cudaData.sourceSupportRadius));
-    CUDA_CHECK(cudaFree(cudaData.sourceInternalEnergy));
-    CUDA_CHECK(cudaFree(cudaData.sourceDensity));
-    CUDA_CHECK(cudaFree(cudaData.sourceVelocityX));
-    CUDA_CHECK(cudaFree(cudaData.sourceVelocityY));
-    CUDA_CHECK(cudaFree(cudaData.sourceVelocityZ));
-    CUDA_CHECK(cudaFree(cudaData.sourcePositionX));
-    CUDA_CHECK(cudaFree(cudaData.sourcePositionY));
-    CUDA_CHECK(cudaFree(cudaData.sourcePositionZ));
-    CUDA_CHECK(cudaFree(cudaData.treeNodes));
-    CUDA_CHECK(cudaFree(cudaData.targetNodeIndices));
-    CUDA_CHECK(cudaFree(cudaData.neighborNodeIndices));
+    CUDA_CHECK(cudaFree(runData.sourceRungs));
+    CUDA_CHECK(cudaFree(runData.sourceSupportRadius));
+    CUDA_CHECK(cudaFree(runData.sourceInternalEnergy));
+    CUDA_CHECK(cudaFree(runData.sourceDensity));
+    CUDA_CHECK(cudaFree(runData.sourceVelocityX));
+    CUDA_CHECK(cudaFree(runData.sourceVelocityY));
+    CUDA_CHECK(cudaFree(runData.sourceVelocityZ));
+    CUDA_CHECK(cudaFree(runData.sourcePositionX));
+    CUDA_CHECK(cudaFree(runData.sourcePositionY));
+    CUDA_CHECK(cudaFree(runData.sourcePositionZ));
+    CUDA_CHECK(cudaFree(runData.treeNodes));
+    CUDA_CHECK(cudaFree(runData.targetNodeIndices));
+    CUDA_CHECK(cudaFree(runData.neighborNodeIndices));
 
     return rc;
+#else
+    ALWAYS_ASSERT(false);
+    return {};
+#endif
 }

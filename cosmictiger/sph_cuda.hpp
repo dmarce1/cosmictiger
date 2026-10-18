@@ -28,58 +28,17 @@
 #include <cosmictiger/kernel.hpp>
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/sph.hpp>
+#include <cosmictiger/sph_kernel.hpp>
 #include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/sph_tree.hpp>
 #include <cosmictiger/timer.hpp>
 
-struct SphRunCudaData {
-    // Staged source arrays, including the sources that are also local sinks.
-    Fixed32* sourcePositionX;
-    Fixed32* sourcePositionY;
-    Fixed32* sourcePositionZ;
-    float* sourceVelocityX;
-    float* sourceVelocityY;
-    float* sourceVelocityZ;
-    float* sourceInternalEnergy;
-    float* sourceDensity;
-    float* sourceSupportRadius;
-    char* sourceRungs;
-
-    // Local sink arrays indexed by the SPH particle index.
-    float* sinkInternalEnergyRate;
-    float* sinkDensity;
-    char* sinkSemiactive;
-    char* sinkSmoothingConverged;
-    SphThermodynamicState* sinkThermodynamicStates;
-    SphAcceleration* sinkAccelerations;
-    float* sinkGravityAccelerationX;
-    float* sinkGravityAccelerationY;
-    float* sinkGravityAccelerationZ;
-    ParticleInteger* sinkParticleIndices;
-    char* sinkParticleRungs;    // Indexed through sinkParticleIndices into the full particle array.
-
-    int numberOfTargetNodes;
-    SphTreeNode* treeNodes;
-    int* targetNodeIndices;
-    int* neighborNodeIndices;
-    float targetNeighborCount;    // Weighted neighbor target for the support-radius solve.
-    float gasMass;
-    float adiabaticIndex;    // Ideal-gas index shared by all gas particles.
-    bool selfGravityEnabled;
-    float gravityEffectiveRadius;        // Twice the gravity kernel standard deviation.
-    float accelerationTimestepFactor;    // Coefficient of the acceleration timestep bound.
-    // Optional external central potential, used by the orbiting-disc problem.
-    float centralAcceleration;     // Zero disables this force.
-    float centralSupportRadius;    // Support radius of the selected gravity kernel.
-};
+using SphRunCudaData = SphRunData;
 
 #define PREHYDRO1_BLOCK_SIZE 160
 #define PREHYDRO2_BLOCK_SIZE 64
 #define HYDRO_BLOCK_SIZE 96
 #define RUNGS_BLOCK_SIZE 256
-
-#define MAX_NEIGHBOR_RUNG_DIFFERENCE 1
-#define SPH_SUPPORT_RADIUS_TOLERANCE float(1.0e-4)
 
 struct SphReduction {
     int nextNodeIndex;
@@ -96,7 +55,9 @@ struct SphReduction {
     float inverseAccelerationTimestep;
 };
 
+#ifdef USE_CUDA
 SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, cudaStream_t stream);
+#endif
 
 #ifdef __CUDACC__
 
@@ -115,18 +76,6 @@ struct SphNeighborPosition {
     Fixed32 positionY;
     Fixed32 positionZ;
 };
-
-// A source can reach any sink in this box through a periodic image. Expanding
-// the unwrapped interval before testing avoids inconsistent endpoint wrapping.
-CUDA_EXPORT inline bool sphSupportIntersects(
-    Fixed32Range const& sinkBox, Array<Fixed32, NDIM> const& sourcePosition, float sourceSupport) {
-    Fixed32Range expanded = sinkBox;
-    for (int dim = 0; dim < NDIM; dim++) {
-        expanded.begin[dim] -= RangeFixed(sourceSupport);
-        expanded.end[dim] += RangeFixed(sourceSupport);
-    }
-    return expanded.contains(sourcePosition);
-}
 
 #ifdef __CUDACC__
 template <int blockSize>

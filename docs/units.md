@@ -154,7 +154,7 @@ existing position without changing its storage:
 
 ```cpp
 auto const scales = units::scalesFromOptions(getOptions());
-units::CosmologicalContext const context(a, getOptions().hubble);
+units::CosmologicalContext const context(a, getOptions().cosmology.hubble);
 units::ComovingPosition<Fixed32> const position(particlesPos(XDIM, i));
 auto const proper = units::toProperLength(position, scales, context);
 double const centimeters = proper.quantity().value();

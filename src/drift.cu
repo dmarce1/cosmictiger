@@ -173,7 +173,7 @@ void cudaDrift(int rung, float a, float dt, float tau0, float tau1, float tauMax
     if (rng.first == rng.second) {
         return;
     }
-    bool const doLc = getOptions().doLc && tauMax - tau1 < 1.0f;
+    bool const doLc = getOptions().lightcone.enabled && tauMax - tau1 < 1.0f;
     numberOfBlocks = std::min(numberOfBlocks, std::max((rng.second - rng.first) / BLOCK_SIZE, 1));
     auto cnt = rng.second - rng.first;
     if (doLc) {
@@ -189,9 +189,9 @@ void cudaDrift(int rung, float a, float dt, float tau0, float tau1, float tauMax
     Fixed32* z = &particlesPos(ZDIM, rng.first);
     auto* vels = particlesVelData() + rng.first;
     auto const* rungs = &particlesRung(rng.first);
-    drag = getOptions().createGlass ? M_PI : 0.0;
+    drag = getOptions().initial.createGlass ? M_PI : 0.0;
     cudaDriftKernel<<<numberOfBlocks, BLOCK_SIZE>>>(x, y, z, vels, rungs, cnt, rung, a, dt, tau0,
-        tau1, tauMax, doLc, getOptions().lcMapSize, drag);
+        tau1, tauMax, doLc, getOptions().lightcone.mapSize, drag);
     CUDA_CHECK(cudaDeviceSynchronize());
     cnt = 0;
     static size_t totalCnt = 0;

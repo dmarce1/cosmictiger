@@ -146,7 +146,7 @@ struct PowerSpectrumFunction {
         return std::exp(a + b * x + c * x * x + d * x * x * x);
     }
     float sigma8Integrand(float x) const {
-        float r = 8 / getOptions().hubble;
+        float r = 8 / getOptions().cosmology.hubble;
         float const c0 = float(9) / (2. * float(M_PI) * float(M_PI)) / powf(r, 6);
         float k = std::exp(x);
         float pValue = (*this)(k);
@@ -168,7 +168,7 @@ struct PowerSpectrumFunction {
             float logk = logkmin + i * dlogk;
             sum += (2.0 / 3.0) * sigma8Integrand(logk) * dlogk;
         }
-        sum = sqr(getOptions().sigma8) / sum;
+        sum = sqr(getOptions().cosmology.sigma8) / sum;
         for (int i = 0; i < pValue2.size(); i++) {
             pValue2[i] *= sum;
         }
@@ -221,20 +221,20 @@ PowerSpectrumFunction computePowerSpectrum() {
     Vector<CosState> states(nk);
 
     auto& uni = zeroverse;
-    params.omegaB = getOptions().omegaB;
-    params.omegaC = getOptions().omegaC;
-    params.omegaGam = getOptions().omegaGam;
-    params.omegaNu = getOptions().omegaNu;
-    params.y = getOptions().y0;
-    params.neff = getOptions().neff;
-    params.theta = getOptions().thetaCmb;
-    params.hubble = getOptions().hubble;
+    params.omegaB = getOptions().cosmology.omegaB;
+    params.omegaC = getOptions().cosmology.omegaC;
+    params.omegaGam = getOptions().cosmology.omegaGamma;
+    params.omegaNu = getOptions().cosmology.omegaNu;
+    params.y = getOptions().cosmology.heliumFraction;
+    params.neff = getOptions().cosmology.nEff;
+    params.theta = getOptions().cosmology.thetaCmb;
+    params.hubble = getOptions().cosmology.hubble;
     PRINT("Computing zero order universe...");
     fflush(stdout);
     auto fxe = runRecfast(params);
     createZeroOrderUniverse(&uni, fxe, 1.1, params);
     PRINT("Done.\n");
-    auto const ns = getOptions().ns;
+    auto const ns = getOptions().cosmology.spectralIndex;
     fflush(stdout);
     double kmin;
     double kmax;
@@ -270,13 +270,14 @@ PowerSpectrumFunction computePowerSpectrum() {
 
 void initialize(double z0) {
     initX0();
-    int64_t const n = getOptions().nfour;
-    float const omegaM = getOptions().omegaM;
+    int64_t const n = getOptions().initial.fourierSize;
+    float const omegaM = getOptions().cosmology.omegaM;
     float const a0 = 1.0 / (z0 + 1.0);
     float const d1Value2 = cosmosGrowthFactor(omegaM, a0) / cosmosGrowthFactor(omegaM, 1.0);
     float const om = omegaM / (omegaM + (a0 * a0 * a0) * (1.0 - omegaM));
     float const f1 = std::pow(om, 5.f / 9.f);
-    float const h0 = constants::kH0 * getOptions().codeToS * getOptions().hubble;
+    float const h0 =
+        constants::kH0 * getOptions().units.timeSeconds * getOptions().cosmology.hubble;
     float const hValue = h0 * std::sqrt(omegaM / (a0 * a0 * a0) + 1.0 - omegaM);
     float prefac1 = f1 * hValue * a0 * a0;
     float const d2Value = -3.f * sqr(d1Value2) / 7.f;
@@ -295,7 +296,7 @@ void initialize(double z0) {
         PRINT("dxmax = %e\n", dxmax);
         fft3dDestroy();
     }
-    if (getOptions().twolpt) {
+    if (getOptions().initial.twoLpt) {
         twolptInit();
 
         PRINT("2LPT phase 1\n");
@@ -372,7 +373,7 @@ void twolptF2delta2Inv() {
 }
 
 void twolptCorrection1() {
-    int const n = getOptions().nfour;
+    int const n = getOptions().initial.fourierSize;
     if (hpxRank() == 0) {
         fft3dInit(n);
     }
@@ -390,7 +391,7 @@ void twolptCorrection1() {
 }
 
 void twolptCorrection2(int dim) {
-    int const n = getOptions().nfour;
+    int const n = getOptions().initial.fourierSize;
     if (hpxRank() == 0) {
         fft3dInit(n);
     }
@@ -445,12 +446,13 @@ void twolptCorrection2(int dim) {
 }
 
 void twolptGenerate(int dim1, int dim2) {
-    int64_t const n = getOptions().nfour;
+    int64_t const n = getOptions().initial.fourierSize;
     float const boxSize =
         (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
     float const factor = std::pow(boxSize, -1.5) * n * n * n;
     Vector<ComplexFloat> yValue;
-    static auto power = getOptions().usePowerFile ? readPowerSpectrum() : computePowerSpectrum();
+    static auto power =
+        getOptions().initial.usePowerFile ? readPowerSpectrum() : computePowerSpectrum();
     auto const box = fft3dComplexRange();
     yValue.resize(box.volume());
     Array<int64_t, NDIM> iValue;
@@ -560,7 +562,7 @@ void twolptGenerate(int dim1, int dim2) {
 }
 
 void twolpt(int dim1, int dim2) {
-    int const n = getOptions().nfour;
+    int const n = getOptions().initial.fourierSize;
     if (hpxRank() == 0) {
         fft3dInit(n);
     }
@@ -661,14 +663,14 @@ static Range<int64_t> findMyBox() {
     Range<int64_t> box;
     for (int dim = 0; dim < NDIM; dim++) {
         box.begin[dim] = 0;
-        box.end[dim] = getOptions().nfour;
+        box.end[dim] = getOptions().initial.fourierSize;
     }
     return findMyBox(box, 0, hpxSize(), 0);
 }
 
 static void clearX0() {
     Vector<hpx::future<void>> futures;
-    if (getOptions().sph) {
+    if (getOptions().hydro.enabled) {
         for (auto const& child : hpxChildren()) {
             futures.push_back(hpx::async<ClearX0Action>(child));
         }
@@ -683,16 +685,16 @@ static void clearX0() {
 
 static void initX0() {
     Vector<hpx::future<void>> remoteFutures;
-    if (getOptions().sph) {
+    if (getOptions().hydro.enabled) {
         for (auto const& child : hpxChildren()) {
             remoteFutures.push_back(hpx::async<InitX0Action>(child));
         }
     }
     Vector<hpx::future<void>> futs;
-    double const ninv = 1.0 / getOptions().particlesPerDimension;
+    double const ninv = 1.0 / getOptions().initial.particlesPerDimension;
     auto const ibox = findMyBox();
-    auto const glass = getOptions().useGlass;
-    auto const closePack = getOptions().closePack;
+    auto const glass = getOptions().initial.useGlass;
+    auto const closePack = getOptions().initial.closePack;
     if (!glass) {
         auto box = findMyBox();
         Array<int64_t, NDIM> iValue;
@@ -710,7 +712,8 @@ static void initX0() {
                     if (closePack) {
                         for (int dim1 = 0; dim1 < NDIM; dim1++) {
                             double x = iValue[dim1] * ninv;
-                            x0Value[dim1][index] = x + (getOptions().sph ? 0.25 * ninv : 0.25);
+                            x0Value[dim1][index] =
+                                x + (getOptions().hydro.enabled ? 0.25 * ninv : 0.25);
                             x0Value[dim1][index + 1] = x + 0.75 * ninv;
                         }
                         index += 2;
@@ -731,7 +734,7 @@ static void initX0() {
             THROW_ERROR("Unable to open glass.bin\n");
         }
         int glassParticlesPerDimension;
-        int particlesPerDimension = getOptions().particlesPerDimension;
+        int particlesPerDimension = getOptions().initial.particlesPerDimension;
         for (int dim = 0; dim < NDIM; dim++) {
             box.begin[dim] = (double) ibox.begin[dim] / particlesPerDimension;
             box.end[dim] = (double) ibox.end[dim] / particlesPerDimension;
@@ -839,7 +842,7 @@ static void initX0() {
         particlesVel(ZDIM, i) = 0.0;
         particlesRung(i) = 0;
     }
-    if (getOptions().sph) {
+    if (getOptions().hydro.enabled) {
         // numberOfParticles counts one species; the two species carry complementary mass fractions.
         ParticleInteger const count = particlesSize();
         sphParticlesResize(count);
@@ -856,21 +859,22 @@ static void initX0() {
                 particlesVel(dim, count + i) = 0.0;
             }
         }
-        double const scale = 1.0 / (1.0 + getOptions().z0);
+        double const scale = 1.0 / (1.0 + getOptions().cosmology.startRedshift);
         auto const unitScales = units::scalesFromOptions(getOptions());
-        units::CosmologicalContext const context(scale, getOptions().hubble);
+        units::CosmologicalContext const context(scale, getOptions().cosmology.hubble);
         // The cosmological gas initial condition starts neutral at 1000 K.
         // This fixed composition sets the initial energy; no chemistry is evolved.
-        double const neutralNumber = 1.0 - 0.75 * getOptions().y0;
+        double const neutralNumber = 1.0 - 0.75 * getOptions().cosmology.heliumFraction;
         auto const initialTemperature = units::Temperature::from_value(1000.0);
         units::SpecificEnergy const physicalEnergy =
             1.5 * units::kBoltzmann * units::kParticlesPerGram * neutralNumber * initialTemperature;
         double const storedThermalEnergy = units::toStoredSpecificEnergy(
             units::PhysicalSpecificEnergy(physicalEnergy), unitScales, context)
                                                .value();
-        double const density = getOptions().sphMass * getOptions().numberOfParticles;
-        float const smoothLength = std::cbrt(
-            getOptions().sphNeighborNumber / ((4.0 * M_PI / 3.0) * getOptions().numberOfParticles));
+        double const density =
+            getOptions().initial.gasMass * getOptions().initial.numberOfParticles;
+        float const smoothLength = std::cbrt(getOptions().hydro.neighborNumber /
+            ((4.0 * M_PI / 3.0) * getOptions().initial.numberOfParticles));
         for (ParticleInteger i = 0; i < count; i++) {
             particlesRung(count + i) = 0;
             sphParticlesThermodynamicState(i).internalEnergy = storedThermalEnergy;
@@ -887,13 +891,13 @@ static float zeldovichEnd(int dim, bool initializeParticles, float d1Value, floa
     // PRINT( "enter zeldovich_end\n");
     float dxmax = 0.0;
     SpinlockType mutex;
-    int64_t const n = getOptions().nfour;
+    int64_t const n = getOptions().initial.fourierSize;
     double const boxSize =
         (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
     auto box = findMyBox();
-    bool const glass = getOptions().useGlass;
+    bool const glass = getOptions().initial.useGlass;
     for (int dim = 0; dim < NDIM; dim++) {
-        box.end[dim] += CLOUD_MAX + (getOptions().sph ? 1 : 0);
+        box.end[dim] += CLOUD_MAX + (getOptions().hydro.enabled ? 1 : 0);
         box.begin[dim] += CLOUD_MIN;
     }
     Vector<hpx::future<float>> futs;
@@ -921,7 +925,7 @@ static float zeldovichEnd(int dim, bool initializeParticles, float d1Value, floa
                     int j1 = y0 * n;
                     int k1 = z0 * n;
                     double t[NDIM] = {x0 * n - i1, y0 * n - j1, z0 * n - k1};
-                    if (getOptions().sph) {
+                    if (getOptions().hydro.enabled) {
                         // A positive gas offset may wrap through the upper periodic boundary.
                         if (i1 < box.begin[XDIM] - CLOUD_MIN) {
                             i1 += n;
@@ -955,7 +959,7 @@ static float zeldovichEnd(int dim, bool initializeParticles, float d1Value, floa
                     }
                     particlesPos(dim, i) = x;
                     particlesVel(dim, i) += prefac1 * dx;
-                    double const ndim = pow(getOptions().numberOfParticles, 1.0 / NDIM);
+                    double const ndim = pow(getOptions().initial.numberOfParticles, 1.0 / NDIM);
                     dxmax = std::max(std::abs(dxmax), dx * ndim);
                 }
                 return (float) dxmax;
@@ -970,7 +974,7 @@ static float zeldovichEnd(int dim, bool initializeParticles, float d1Value, floa
 
 static PowerSpectrumFunction readPowerSpectrum() {
     PowerSpectrumFunction func;
-    float const h = getOptions().hubble;
+    float const h = getOptions().cosmology.hubble;
     FILE* fp = fopen("power.init", "rt");
     Vector<std::pair<float, float>> data;
     if (!fp) {

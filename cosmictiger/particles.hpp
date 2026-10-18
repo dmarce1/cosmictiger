@@ -125,8 +125,8 @@ struct Particle {
     char type;
     template <class A>
     void serialize(A&& a, unsigned) {
-        static bool doGroups = getOptions().doGroups;
-        static bool doTracers = getOptions().doTracers;
+        static bool doGroups = getOptions().analysis.groups;
+        static bool doTracers = getOptions().analysis.tracers;
         for (int dim = 0; dim < NDIM; dim++) {
             a& x[dim];
             a& v[dim];
@@ -138,7 +138,7 @@ struct Particle {
         if (doTracers) {
             a & t;
         }
-        if (getOptions().sph) {
+        if (getOptions().hydro.enabled) {
             a & catIndex;
             a & type;
         }
@@ -243,8 +243,8 @@ double particlesActivePct();
 Pair<ParticleInteger, ParticleInteger> particlesCurrentRange();
 
 inline char& particlesType(ParticleInteger index) {
-    static bool const sph = getOptions().sph;
-    if (getOptions().sph) {
+    static bool const sph = getOptions().hydro.enabled;
+    if (getOptions().hydro.enabled) {
         CHECK_PART_BOUNDS(index);
         return particlesTy[index];
     } else {
@@ -254,11 +254,11 @@ inline char& particlesType(ParticleInteger index) {
 }
 
 inline float particlesMass(ParticleInteger index) {
-    if (!getOptions().sph) {
+    if (!getOptions().hydro.enabled) {
         return 1.0f;
     }
-    float const sphMass = getOptions().sphMass;
-    float const darkMatterMass = getOptions().darkMatterMass;
+    float const sphMass = getOptions().initial.gasMass;
+    float const darkMatterMass = getOptions().initial.darkMatterMass;
     if (particlesType(index) != DARK_MATTER_TYPE) {
         return sphMass;
     } else {
@@ -323,8 +323,8 @@ inline ParticleInteger& particlesCatIndex(ParticleInteger index) {
 }
 
 inline Particle particlesGetParticle(ParticleInteger index) {
-    static bool doGroups = getOptions().doGroups;
-    static bool doTracers = getOptions().doTracers;
+    static bool doGroups = getOptions().analysis.groups;
+    static bool doTracers = getOptions().analysis.tracers;
     CHECK_PART_BOUNDS(index);
     Particle p;
     for (int dim = 0; dim < NDIM; dim++) {
@@ -338,7 +338,7 @@ inline Particle particlesGetParticle(ParticleInteger index) {
     if (doTracers) {
         p.t = particlesTracer(index);
     }
-    if (getOptions().sph) {
+    if (getOptions().hydro.enabled) {
         p.type = particlesType(index);
         p.catIndex = particlesCatIndex(index);
     }
@@ -346,8 +346,8 @@ inline Particle particlesGetParticle(ParticleInteger index) {
 }
 
 inline void particlesSetParticle(Particle p, ParticleInteger index) {
-    static bool doGroups = getOptions().doGroups;
-    static bool doTracers = getOptions().doTracers;
+    static bool doGroups = getOptions().analysis.groups;
+    static bool doTracers = getOptions().analysis.tracers;
     CHECK_PART_BOUNDS(index);
     for (int dim = 0; dim < NDIM; dim++) {
         particlesPos(dim, index) = p.x[dim];
@@ -360,7 +360,7 @@ inline void particlesSetParticle(Particle p, ParticleInteger index) {
     if (doTracers) {
         particlesTracer(index) = p.t;
     }
-    if (getOptions().sph) {
+    if (getOptions().hydro.enabled) {
         particlesType(index) = p.type;
         particlesCatIndex(index) = p.catIndex;
     }
@@ -411,7 +411,7 @@ struct EnergiesT {
         arc & pot;
         arc & kin;
         arc & tckin;
-        if (getOptions().sph) {
+        if (getOptions().hydro.enabled) {
             arc & therm;
             arc & heating;
         }

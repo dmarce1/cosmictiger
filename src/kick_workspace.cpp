@@ -235,7 +235,7 @@ void KickWorkspace::toGpu() {
                             memcpy(&particlesPos(dim, localRange.first), &data[sz * dim + index],
                                 numberOfParticles * sizeof(Fixed32));
                         }
-                        if (getOptions().sph) {
+                        if (getOptions().hydro.enabled) {
                             Vector<Fixed32> x(numberOfParticles), y(numberOfParticles),
                                 z(numberOfParticles);
                             Vector<char> types(numberOfParticles);

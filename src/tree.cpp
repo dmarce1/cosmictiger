@@ -128,14 +128,14 @@ static void resetLastCacheEntries() {
 static TreeNode const* treeCacheRead(TreeId id);
 
 MultiPos* treeAddMultipole(MultiPos const& mpos) {
-    int const treeAllocLineSize = getOptions().treeAllocLineSize;
+    int const treeAllocLineSize = getOptions().compute.treeAllocLineSize;
     auto* ptr = &multis[nextMultId++ + treeAllocLineSize];
     *ptr = mpos;
     return ptr;
 }
 
 void TreeAllocator::reset() {
-    int const treeAllocLineSize = getOptions().treeAllocLineSize;
+    int const treeAllocLineSize = getOptions().compute.treeAllocLineSize;
     next_ = (nextId += treeAllocLineSize);
     nextMultId += treeAllocLineSize;
     last_ = std::min(next_ + treeAllocLineSize, (int) nodesSize);
@@ -210,7 +210,7 @@ FastFuture<TreeCreateReturn> treeCreateFork(TreeCreateParameters params, size_t 
 }
 
 size_t treeAddRemote(TreeNode const& remote) {
-    int const treeAllocLineSize = getOptions().treeAllocLineSize;
+    int const treeAllocLineSize = getOptions().compute.treeAllocLineSize;
     if (nextId + treeAllocLineSize >= nodesSize) {
         PRINT("TREE ALLOCATION EXCEEDED\n");
         abort();
@@ -251,8 +251,8 @@ void tree2Gpu() {
 }
 
 static void treeAllocateNodes() {
-    int const treeAllocLineSize = getOptions().treeAllocLineSize;
-    static int const bucketSize = getOptions().bucketSize;
+    int const treeAllocLineSize = getOptions().compute.treeAllocLineSize;
+    static int const bucketSize = getOptions().compute.bucketSize;
     Vector<hpx::future<void>> futs;
     for (auto const& c : hpxChildren()) {
         futs.push_back(hpx::async<TreeAllocateNodesAction>(c));
@@ -284,7 +284,7 @@ static void treeAllocateNodes() {
 }
 
 long long treeNodesNextIndex() {
-    int const treeAllocLineSize = getOptions().treeAllocLineSize;
+    int const treeAllocLineSize = getOptions().compute.treeAllocLineSize;
     return nextId + treeAllocLineSize;
 }
 
@@ -295,8 +295,8 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
     }
     int flops = 0;
     stackTraceActivate();
-    double const h = getOptions().gravitySupportRadius;
-    int bucketSize = getOptions().bucketSize;
+    double const h = getOptions().gravity.supportRadius;
+    int bucketSize = getOptions().compute.bucketSize;
     TreeCreateReturn rc;
     if (depth >= MAX_DEPTH) {
         THROW_ERROR("%s\n", "Maximum depth exceeded\n");
@@ -404,7 +404,7 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
         // Global nodes have no rank-local particle range to rescan.
         if (processRange.second - processRange.first == 1 && processRange.first == hpxRank() &&
             particleRange.first >= 0 && numberOfParticles > 0 &&
-            numberOfParticles <= 64 * getOptions().bucketSize &&
+            numberOfParticles <= 64 * getOptions().compute.bucketSize &&
             (rbox.end[xdim] - rbox.begin[xdim] <= 0.5)) {
             tried1 = true;
             for (int dim = 0; dim < NDIM; dim++) {
@@ -649,7 +649,7 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
     populatedNodes[index] = true;
     rc.id.index = index;
     rc.id.proc = hpxRank();
-    if (localRoot && getOptions().sph) {
+    if (localRoot && getOptions().hydro.enabled) {
         particlesResolveWithSphParticles();
     }
     if (key == 1) {
@@ -734,7 +734,7 @@ TreeNode const* treeGetNode(TreeId id) {
 }
 
 static TreeNode const* treeCacheRead(TreeId id) {
-    int const lineSize = getOptions().treeCacheLineSize;
+    int const lineSize = getOptions().compute.treeCacheLineSize;
     TreeId lineId;
     TreeNode const* ptr;
     lineId.proc = id.proc;
@@ -787,7 +787,7 @@ static TreeNode const* treeCacheRead(TreeId id) {
 }
 
 static Vector<TreeNode> treeFetchCacheLine(int index) {
-    int const lineSize = getOptions().treeCacheLineSize;
+    int const lineSize = getOptions().compute.treeCacheLineSize;
     ALWAYS_ASSERT(index >= 0 && size_t(index) < nodesSize);
     Vector<TreeNode> line;
     line.reserve(lineSize);

@@ -237,7 +237,7 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
     }
     bool threadLeft = true;
     size_t cudaMemUsage;
-    if (getOptions().cuda && params.gpu) {
+    if (getOptions().compute.cuda && params.gpu) {
         if (params.gpu && cudaWorkspace == nullptr && selfPtr->isLocal()) {
             cudaWorkspace = std::make_shared<KickWorkspace>(params, selfPtr->numberOfParticles());
         }
@@ -245,7 +245,7 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
         auto const rng = particlesCurrentRange();
         maximumGpuParticles = std::min((size_t) maximumGpuParticles,
             (size_t) std::max((ParticleInteger) (rng.second - rng.first) / kickBlockCount(),
-                (ParticleInteger) getOptions().bucketSize));
+                (ParticleInteger) getOptions().compute.bucketSize));
         if (params.gpu && selfPtr->numberOfParticles() <= maximumGpuParticles &&
             selfPtr->isLocal() && sourcesAreSingleRank(dchecklist) &&
             sourcesAreSingleRank(echecklist)) {
@@ -551,7 +551,7 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
                     kr.dkin += kin1 - kin0;
                 } else {
                     float const mass = particlesMass(i);
-                    bool const gas = getOptions().sph && particlesType(i) == SPH_TYPE;
+                    bool const gas = getOptions().hydro.enabled && particlesType(i) == SPH_TYPE;
                     float const kin0 = 0.5f * mass * sqr(vx, vy, vz);
                     if (gas) {
                         ParticleInteger const k = particlesCatIndex(i);

@@ -73,7 +73,7 @@ Pair<double> analyticCompare(int numberOfSamples) {
         sinky[i] = samples[i].x[YDIM];
         sinkz[i] = samples[i].x[ZDIM];
     }
-    double const gm = getOptions().gm;
+    double const gm = getOptions().gravity.gm;
     auto results = doAnalytic(sinkx, sinky, sinkz);
     Vector<double> gerrs, phierrs;
     for (int i = 0; i < numberOfSamples; i++) {

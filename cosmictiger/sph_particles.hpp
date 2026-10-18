@@ -154,6 +154,6 @@ inline float& sphParticlesDensity(ParticleInteger index) {
 }
 
 inline float sphParticlesPressure(ParticleInteger index) {
-    return (getOptions().gamma - 1.0f) * sphParticlesDensity(index) *
+    return (getOptions().hydro.gamma - 1.0f) * sphParticlesDensity(index) *
         sphParticlesInternalEnergy(index);
 }
