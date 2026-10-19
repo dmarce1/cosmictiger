@@ -115,6 +115,8 @@ struct Gravity {
     std::string kernelFamily{"ferrers"};
     int kernelDegree{4};
     double openingAngle{};
+    // CPU walk: open only the larger of two rejected cells instead of both.
+    bool openLargerCell{};
     // Fixed comoving compact support in box units; effectiveRadius is 2 sigma.
     double supportRadius{};
     double timestepEta{};
@@ -284,6 +286,7 @@ struct Options {
         arc & lightcone.mapSize;
         arc & lightcone.linkingLength;
         arc & gravity.openingAngle;
+        arc & gravity.openLargerCell;
         arc & analysis.sliceSize;
         arc & analysis.linkingLength;
         arc & gravity.supportRadius;

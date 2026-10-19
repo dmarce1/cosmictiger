@@ -249,7 +249,31 @@ potential error rises again: the single-precision floor the order cap is based
 on. A matched-accuracy comparison needs the opening angle varied per order; the
 theta sweep below provides it.
 
-### Bucket sweep, Nsight Systems split and theta sweep
+### Selected defaults and what remains
 
-*Pending: recorded under `buckets_order7/`, `nsys_adaptive_order7/` and
-`theta_sweep/` as the queued runs complete.*
+Measured basis for the defaults: residency stays at the register limit (8 blocks
+per SM at orders 6 and above), since lowering it to the baseline's 6 did not
+help any fixture; the active expansion and the sink forces stay in shared
+memory, since moving either to global backing did not help; and
+`compute.cudaKickListReserve` defaults to 4096 entries, the only variant that
+recovered part of the adaptive-fixture loss (0.919x to 0.959x) without costing
+the other fixtures. These are measured on one workstation with a shared GPU and
+should be re-checked where the balance between pool allocation and traversal
+differs.
+
+Not yet measured (the runs were queued and then paused under a machine-wide
+resource cap): the bucket sweep at 32, 64, 128, 256, 512 and 1024 with
+whole-bucket, 128- and 64-sink tiles and global force backing
+(`buckets_order7/`), the Nsight Systems host/kernel split of the remaining
+adaptive-fixture gap (`nsys_adaptive_order7/`), and the theta sweep that
+compares orders at matched force error (`theta_sweep/`). Buckets above 128
+require a build with `COSMICTIGER_WITH_MAX_BUCKET=1024`; `build/order_shared_arena`
+is configured that way. The commands are in `benchmarks/run_cuda_kick_arena.py`
+(`--buckets`, `--orders`, `--theta`, `--policy`) and the summaries come from
+`benchmarks/compare_kick_arena_runs.py` and `benchmarks/summarize_kick_profiles.py`.
+
+Known limitation: the kernel's pool allocator (`cudaAllocate`/`cudaRelease`)
+scans lock-free queues with atomics and already costs about 18% of the baseline
+kernel's warp instructions; more resident blocks raise that cost. A per-launch
+slab for the per-block list storage would remove it and is the natural next step
+if the adaptive-fixture gap matters.
