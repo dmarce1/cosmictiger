@@ -52,12 +52,17 @@ struct BlockSize {
     }
 };
 
+// Growable array whose storage normally comes from the cudaAllocate pool. A
+// vector may instead be attached to caller-provided storage (a region of a
+// per-launch slab); it then touches the pool only if it outgrows that region,
+// and never releases the attached storage.
 template <class T>
 class DeviceVector {
     T* ptr_;
     T* newPtr_;
     int size_;
     int capacity_;
+    bool pooled_;    // ptr_ came from the pool and is released by destroy()
 
     CUDA_EXPORT
     inline void construct(int a, int b) {
@@ -89,6 +94,7 @@ class DeviceVector {
             size_ = 0;
             capacity_ = 0;
             ptr_ = nullptr;
+            pooled_ = true;
         }
         syncthreads();
     }
@@ -97,7 +103,7 @@ class DeviceVector {
         ThreadIndex tid;
         syncthreads();
         if (tid == 0) {
-            if (ptr_) {
+            if (ptr_ && pooled_) {
                 cudaRelease(ptr_);
             }
         }
@@ -114,12 +120,15 @@ public:
         auto const previousData = other.ptr_;
         auto const previousCapacity = other.capacity_;
         auto const previousSize = other.size_;
+        auto const previousPooled = other.pooled_;
         other.ptr_ = ptr_;
         other.capacity_ = capacity_;
         other.size_ = size_;
+        other.pooled_ = pooled_;
         ptr_ = previousData;
         capacity_ = previousCapacity;
         size_ = previousSize;
+        pooled_ = previousPooled;
     }
     CUDA_EXPORT
     inline T* begin() {
@@ -173,6 +182,12 @@ public:
         initialize();
         resize(initialSize);
     }
+    // Collective: an empty vector on caller-provided storage; see attach().
+    CUDA_EXPORT
+    inline DeviceVector(T* storage, int storageCapacity) {
+        initialize();
+        attach(storage, storageCapacity);
+    }
     CUDA_EXPORT
     inline ~DeviceVector() {
         destroy();
@@ -184,6 +199,31 @@ public:
     CUDA_EXPORT
     inline T const* data() const {
         return ptr_;
+    }
+    // Collective: use caller-provided storage for up to storageCapacity
+    // elements. The live elements move there; the previous pool block, if any,
+    // is released. Growth beyond storageCapacity falls back to the pool, and
+    // the attached storage is never released by this vector.
+    CUDA_EXPORT
+    inline void attach(T* storage, int storageCapacity) {
+        ThreadIndex tid;
+        syncthreads();
+        if (size_ > storageCapacity) {
+            PRINT("device_vector attach: %i live elements exceed the storage of %i\n", size_,
+                storageCapacity);
+            ALWAYS_ASSERT(false);
+        }
+        if (ptr_ && size_) {
+            copyCudaMemory(storage, ptr_, sizeof(T) * size_);
+        }
+        syncthreads();
+        destroy();
+        if (tid == 0) {
+            ptr_ = storage;
+            capacity_ = storageCapacity;
+            pooled_ = false;
+        }
+        syncthreads();
     }
     // Collective: move the live elements into a pool block of at least
     // minimumCapacity elements (grown by doubling from the default block).
@@ -214,6 +254,7 @@ public:
         if (tid == 0) {
             ptr_ = newPtr_;
             capacity_ = newCapacity;
+            pooled_ = true;
         }
         syncthreads();
     }
