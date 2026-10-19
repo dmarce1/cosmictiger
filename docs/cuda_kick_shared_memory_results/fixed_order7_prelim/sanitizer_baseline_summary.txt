@@ -1,0 +1,2 @@
+/tmp/claude-1000/-home-dmarce1-workspace-cosmictiger/765541c5-5b91-4b03-b04b-7071cc6a863c/scratchpad/sanitizer_baseline/racecheck.log:========= RACECHECK SUMMARY: 100 hazards displayed (0 errors, 132 warnings)
+/tmp/claude-1000/-home-dmarce1-workspace-cosmictiger/765541c5-5b91-4b03-b04b-7071cc6a863c/scratchpad/sanitizer_baseline/synccheck.log:========= ERROR SUMMARY: 32 errors
