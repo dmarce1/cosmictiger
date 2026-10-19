@@ -1,0 +1,13 @@
+Test project /home/dmarce1/workspace/cosmictiger/.claude/worktrees/modest-borg-b7dbb2/build/arena_b1024
+    Start 73: sph_gravity_cuda
+1/4 Test #73: sph_gravity_cuda .................   Passed    1.15 sec
+    Start 76: fmm_tree
+2/4 Test #76: fmm_tree .........................   Passed    0.08 sec
+    Start 77: fmm_walk_cpu
+3/4 Test #77: fmm_walk_cpu .....................   Passed    0.19 sec
+    Start 78: fmm_walk_cuda
+4/4 Test #78: fmm_walk_cuda ....................   Passed    1.38 sec
+
+100% tests passed, 0 tests failed out of 4
+
+Total Test time (real) =   2.80 sec

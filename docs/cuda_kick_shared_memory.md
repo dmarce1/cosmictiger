@@ -988,6 +988,24 @@ clustered potential case, the three-pair repeat puts it level with both
 within 1-3%, so that was run noise (one pair of the repeat's pinned-164
 lattice run was slow, hence its 1.23 range).
 
+After merging `main` (34d4aa88 keeps empty source cells out of the CPU
+walk, 327555a8 replaces `FastFuture`), the rebuilt binary passes the same
+regressions (`validation/ctest_cap1024_handoff_rule_merged.log`) and the
+re-check at 262,144 particles (`run_merged.sh`) gives the same picture: the
+rule within 1-3% of the pinned 328 and 1.05-1.22x faster than 164 on the
+clustered and adaptive fixtures, level on the lattice.
+
+262,144 particles, 8 threads, after merging main, bucket 128 (`t8_n64_merged/`):
+
+| fixture | potential | pinned 164 | pinned 328 | automatic rule |
+|---|---:|---:|---:|---:|
+| lattice | 0 | 24.48 ms, 1.042x (0.998-1.086) | 23.83 ms, 1.014x (0.991-1.037) | 23.52 ms |
+| lattice | 1 | 24.46 ms, 1.007x (0.990-1.025) | 25.06 ms, 1.032x (1.012-1.053) | 24.29 ms |
+| clustered | 0 | 15.80 ms, 1.050x (1.017-1.083) | 14.86 ms, 0.987x (0.919-1.054) | 15.05 ms |
+| clustered | 1 | 18.18 ms, 1.152x (1.121-1.182) | 15.26 ms, 0.967x (0.961-0.973) | 15.78 ms |
+| adaptive | 0 | 24.59 ms, 1.174x (1.091-1.257) | 20.61 ms, 0.982x (0.964-0.999) | 21.00 ms |
+| adaptive | 1 | 26.83 ms, 1.216x (1.137-1.295) | 22.75 ms, 1.030x (0.999-1.061) | 22.10 ms |
+
 ### What remains
 
 - The arena kernel itself is 0.6 ms (10%) slower than the baseline's on the

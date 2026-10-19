@@ -1,0 +1,385 @@
+{
+  "timing": [
+    {
+      "binary": "merged",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 21.0029365,
+      "kick_ms_min": 20.205543,
+      "kick_ms_max": 21.80033,
+      "pairs": 2
+    },
+    {
+      "binary": "merged",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 22.097586000000003,
+      "kick_ms_min": 21.588612,
+      "kick_ms_max": 22.60656,
+      "pairs": 2
+    },
+    {
+      "binary": "merged",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 15.0503065,
+      "kick_ms_min": 14.991581,
+      "kick_ms_max": 15.109032,
+      "pairs": 2
+    },
+    {
+      "binary": "merged",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 15.782902000000002,
+      "kick_ms_min": 15.697381,
+      "kick_ms_max": 15.868423,
+      "pairs": 2
+    },
+    {
+      "binary": "merged",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 23.5211305,
+      "kick_ms_min": 22.793764,
+      "kick_ms_max": 24.248497,
+      "pairs": 2
+    },
+    {
+      "binary": "merged",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 24.288257,
+      "kick_ms_min": 23.98507,
+      "kick_ms_max": 24.591444,
+      "pairs": 2
+    },
+    {
+      "binary": "merged",
+      "policy": "handoff164",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 24.5931865,
+      "kick_ms_min": 23.790252000000002,
+      "kick_ms_max": 25.396121,
+      "pairs": 2
+    },
+    {
+      "binary": "merged",
+      "policy": "handoff164",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 26.8269395,
+      "kick_ms_min": 25.701377,
+      "kick_ms_max": 27.952502,
+      "pairs": 2
+    },
+    {
+      "binary": "merged",
+      "policy": "handoff164",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 15.804362999999999,
+      "kick_ms_min": 15.250188,
+      "kick_ms_max": 16.358538,
+      "pairs": 2
+    },
+    {
+      "binary": "merged",
+      "policy": "handoff164",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 18.178641000000002,
+      "kick_ms_min": 17.596593000000002,
+      "kick_ms_max": 18.760689,
+      "pairs": 2
+    },
+    {
+      "binary": "merged",
+      "policy": "handoff164",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 24.482914,
+      "kick_ms_min": 24.208612000000002,
+      "kick_ms_max": 24.757216,
+      "pairs": 2
+    },
+    {
+      "binary": "merged",
+      "policy": "handoff164",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 24.462064499999997,
+      "kick_ms_min": 24.334549,
+      "kick_ms_max": 24.589579999999998,
+      "pairs": 2
+    },
+    {
+      "binary": "merged",
+      "policy": "handoff328",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 20.606745,
+      "kick_ms_min": 20.195124,
+      "kick_ms_max": 21.018366,
+      "pairs": 2
+    },
+    {
+      "binary": "merged",
+      "policy": "handoff328",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 22.748262999999998,
+      "kick_ms_min": 22.590329999999998,
+      "kick_ms_max": 22.906196,
+      "pairs": 2
+    },
+    {
+      "binary": "merged",
+      "policy": "handoff328",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 14.857678,
+      "kick_ms_min": 13.783673,
+      "kick_ms_max": 15.931682999999998,
+      "pairs": 2
+    },
+    {
+      "binary": "merged",
+      "policy": "handoff328",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 15.262917000000002,
+      "kick_ms_min": 15.079917,
+      "kick_ms_max": 15.445917,
+      "pairs": 2
+    },
+    {
+      "binary": "merged",
+      "policy": "handoff328",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 23.830513999999997,
+      "kick_ms_min": 23.627125999999997,
+      "kick_ms_max": 24.033901999999998,
+      "pairs": 2
+    },
+    {
+      "binary": "merged",
+      "policy": "handoff328",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 25.064651,
+      "kick_ms_min": 24.884136,
+      "kick_ms_max": 25.245166,
+      "pairs": 2
+    }
+  ],
+  "references": [],
+  "arena_lines": [
+    {
+      "binary": "merged",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 8944 bytes: control 528, expansion shared, forces shared tile 128, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes"
+    },
+    {
+      "binary": "merged",
+      "policy": "handoff164",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 8944 bytes: control 528, expansion shared, forces shared tile 128, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes"
+    },
+    {
+      "binary": "merged",
+      "policy": "handoff328",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 8944 bytes: control 528, expansion shared, forces shared tile 128, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes"
+    }
+  ],
+  "comparisons": [
+    {
+      "kind": "vs_merged",
+      "binary": "merged",
+      "policy": "handoff164",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "result": {
+        "adaptive": {
+          "acceleration": {
+            "relative_l2": 8.801165628737897e-08,
+            "max_pointwise_relative": 5.574412982865718e-06,
+            "median_pointwise_relative": 8.447946509752126e-08
+          },
+          "potential": {
+            "relative_l2": 5.991354436808125e-08,
+            "max_pointwise_relative": 0.1471698113207547,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "clustered": {
+          "acceleration": {
+            "relative_l2": 8.557523780068746e-08,
+            "max_pointwise_relative": 4.8573866090401895e-06,
+            "median_pointwise_relative": 6.270885022509993e-08
+          },
+          "potential": {
+            "relative_l2": 1.538373122589284e-07,
+            "max_pointwise_relative": 4.153832842877119e-06,
+            "median_pointwise_relative": 1.10147012676389e-07
+          }
+        },
+        "lattice": {
+          "acceleration": {
+            "relative_l2": 1.2805668271513398e-05,
+            "max_pointwise_relative": 0.0010484403219620424,
+            "median_pointwise_relative": 1.1744601900022714e-05
+          },
+          "potential": {
+            "relative_l2": 9.870438209413038e-05,
+            "max_pointwise_relative": 1.4,
+            "median_pointwise_relative": 5.7740887778181196e-05
+          }
+        }
+      }
+    },
+    {
+      "kind": "vs_merged",
+      "binary": "merged",
+      "policy": "handoff328",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "result": {
+        "adaptive": {
+          "acceleration": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "clustered": {
+          "acceleration": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "lattice": {
+          "acceleration": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          }
+        }
+      }
+    }
+  ],
+  "repeat_export_hashes": [
+    {
+      "binary": "merged",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "distinct_exports": 1
+    },
+    {
+      "binary": "merged",
+      "policy": "handoff164",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "distinct_exports": 1
+    },
+    {
+      "binary": "merged",
+      "policy": "handoff328",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "distinct_exports": 1
+    }
+  ]
+}

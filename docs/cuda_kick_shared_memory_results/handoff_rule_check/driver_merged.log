@@ -1,0 +1,10 @@
+== docs/cuda_kick_shared_memory_results/handoff_rule_check/t8_n64_merged 15:45:13 load 3.16 4.83 5.35 GPU apps: 0
+merged_auto_cuda_b128_o7_pair0: lattice/phi=0 22.794 ms, lattice/phi=1 23.985 ms, clustered/phi=0 15.109 ms, clustered/phi=1 15.868 ms, adaptive/phi=0 21.800 ms, adaptive/phi=1 22.607 ms
+merged_handoff164_cuda_b128_o7_pair0: lattice/phi=0 24.757 ms, lattice/phi=1 24.590 ms, clustered/phi=0 16.359 ms, clustered/phi=1 18.761 ms, adaptive/phi=0 23.790 ms, adaptive/phi=1 25.701 ms
+merged_handoff328_cuda_b128_o7_pair0: lattice/phi=0 23.627 ms, lattice/phi=1 25.245 ms, clustered/phi=0 15.932 ms, clustered/phi=1 15.446 ms, adaptive/phi=0 21.018 ms, adaptive/phi=1 22.590 ms
+merged_handoff328_cuda_b128_o7_pair1: lattice/phi=0 24.034 ms, lattice/phi=1 24.884 ms, clustered/phi=0 13.784 ms, clustered/phi=1 15.080 ms, adaptive/phi=0 20.195 ms, adaptive/phi=1 22.906 ms
+merged_handoff164_cuda_b128_o7_pair1: lattice/phi=0 24.209 ms, lattice/phi=1 24.335 ms, clustered/phi=0 15.250 ms, clustered/phi=1 17.597 ms, adaptive/phi=0 25.396 ms, adaptive/phi=1 27.953 ms
+merged_auto_cuda_b128_o7_pair1: lattice/phi=0 24.248 ms, lattice/phi=1 24.591 ms, clustered/phi=0 14.992 ms, clustered/phi=1 15.697 ms, adaptive/phi=0 20.206 ms, adaptive/phi=1 21.589 ms
+Completed; see docs/cuda_kick_shared_memory_results/handoff_rule_check/t8_n64_merged/summary.md
+docs/cuda_kick_shared_memory_results/handoff_rule_check/t8_n64_merged: worst pair spread 1.156 ('merged', 'handoff328', 'cuda', 128, 7, 'clustered', False), load at start 3.16, process wall 6.4-6.5 s
+merged check exit 0
