@@ -12,7 +12,7 @@
 // Legacy timing reports reference failures and continues for historical timing
 // comparisons; --check and both STF variants always fail on reference errors.
 //
-// Every FMM order from kFmmMinOrder to kFmmMaxOrder (local degrees 2 to 9) is
+// Every FMM order from kFmmMinOrder to kFmmMaxOrder (local degrees 2 to 8) is
 // compiled in. --check validates all of them; timing runs one order, the
 // build's default (kFmmDefaultOrder) unless --order N selects another. The STF
 // variants also check L2lWarpKernel::translateInto, which writes the completed
@@ -749,7 +749,7 @@ int main(int argc, char** argv) {
             detail::forEachOrder(run);
         } else if (!detail::withOrder(order, run)) {
             throw std::invalid_argument(
-                "--order must name an FMM order this build validates (3 to 10 for the STF "
+                "--order must name an FMM order this build validates (3 to 9 for the STF "
                 "variants, 7 for the legacy baseline)");
         }
         return 0;

@@ -36,9 +36,10 @@ using Expansion = Coefficients<double, KernelLayout<order>::kLocalCount_>;
 // local degree p + 1) over the Cartesian, binomial, polynomial and remainder
 // oracles with this file's fixtures (GCC 13, -O3 -ffast-math -march=native):
 //   order  3: 6.9e-16    order  4: 1.0e-15    order  5: 1.3e-15    order  6: 3.3e-15
-//   order  7: 4.6e-15    order  8: 1.2e-14    order  9: 2.5e-14    order 10: 5.7e-14
-// The SIMD/scalar parity worst cases were 1.7e-6 (float, order 10; budget 2e-5)
-// and 4.9e-16 (double, order 10; budget 3e-12). The oracle discrepancy roughly
+//   order  7: 4.6e-15    order  8: 1.2e-14    order  9: 2.5e-14
+// (order 10, since dropped from the supported range, measured 5.7e-14.)
+// The SIMD/scalar parity worst cases were 5.1e-7 (float, order 9; budget 2e-5)
+// and 2.5e-16 (double, order 9; budget 3e-12). The oracle discrepancy roughly
 // doubles per order, so one budget covers every supported order.
 constexpr double kOracleTolerance = 3e-11;
 

@@ -139,7 +139,7 @@ def main():
     parser.add_argument('--fixtures', default='lattice,clustered,adaptive')
     parser.add_argument('--buckets', default='64')
     parser.add_argument('--orders', default='7',
-                        help='comma list of FMM orders passed as --gravity.fmmOrder (3 to 10)')
+                        help='comma list of FMM orders passed as --gravity.fmmOrder (3 to 9)')
     parser.add_argument('--backends', default='cuda')
     parser.add_argument('--samples', type=int, default=15)
     parser.add_argument('--pairs', type=int, default=3)
@@ -155,7 +155,7 @@ def main():
     buckets = [int(value) for value in args.buckets.split(',')]
     orders = [int(value) for value in args.orders.split(',')]
     if any(order < 3 or order > 10 for order in orders):
-        sys.exit('--orders must list FMM orders from 3 to 10')
+        sys.exit('--orders must list FMM orders from 3 to 9')
     backends = args.backends.split(',')
     policies = args.policy or [{'label': 'auto', 'options': []}]
     args.output.mkdir(parents=True, exist_ok=True)

@@ -402,7 +402,7 @@ bool processOptions(int argc, char* argv[]) {
     gravityOpts.add_options()("gravity.enabled",
         po::value<bool>(&opts.gravity.enabled)->default_value(true), "enable gravity")(
         "gravity.fmmOrder", po::value<int>(&opts.gravity.fmmOrder)->default_value(kFmmDefaultOrder),
-        "FMM order (multipole degree plus two), 3 to 10; every order is compiled in")(
+        "FMM order (multipole degree plus two), 3 to 9; every order is compiled in")(
         "gravity.openingAngle", po::value<double>(&opts.gravity.openingAngle)->default_value(0.8),
         "opening angle for test problems")("gravity.softening",
         po::value<double>(&gravityEffectiveRadius)->default_value(0.01876988456953534),

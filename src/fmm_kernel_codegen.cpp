@@ -736,7 +736,6 @@ int main() {
     ewald<7>();
     ewald<8>();
     ewald<9>();
-    ewald<10>();
     tprint("} // namespace detail\n");
     return 0;
 }

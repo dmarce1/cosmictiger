@@ -111,7 +111,7 @@ struct Lightcone {
 
 struct Gravity {
     bool enabled{};
-    int fmmOrder{};    // FMM order (multipole degree + 2) selected at run time, 3..10
+    int fmmOrder{};    // FMM order (multipole degree + 2) selected at run time, 3..9
     std::string kernelFamily{"ferrers"};
     int kernelDegree{4};
     double openingAngle{};

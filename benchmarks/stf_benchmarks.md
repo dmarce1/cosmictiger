@@ -102,8 +102,8 @@ one expansion per 32-thread block, including the caller's in-place update and
 synchronization. Compile it with the same CUDA flags above for the generated
 warp implementation, with `COSMICTIGER_STF_L2L_LANE0` for the interim scalar-lane
 implementation, or with `COSMICTIGER_STF_BASELINE_HEADER` for the legacy warp.
-Run `--check` for validation alone, which covers every FMM order 3 through 10
-(local degrees 2 through 9), or pass sample, round, and repetition counts for
+Run `--check` for validation alone, which covers every FMM order 3 through 9
+(local degrees 2 through 8), or pass sample, round, and repetition counts for
 timing. Timing runs one order: the build's default (`ORDER`, 7) unless
 `--order N` selects another; `--order` also narrows `--check` to that order. The
 generated warp build also validates and times `translateInto`, which writes into

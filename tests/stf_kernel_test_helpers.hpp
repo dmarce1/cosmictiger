@@ -30,7 +30,7 @@ namespace kernels = cosmictiger::gravity::stf::detail;
 // degree p + 1; the generated kernels must cover that whole range.
 static_assert(cosmictiger::gravity::stf::kMinLocalDegree <= fmmLocalDegree(kFmmMinOrder) &&
         cosmictiger::gravity::stf::kMaxLocalDegree >= fmmLocalDegree(kFmmMaxOrder),
-    "The generated STF kernels do not cover FMM orders 3 to 10");
+    "The generated STF kernels do not cover FMM orders 3 to 9");
 
 constexpr int kFieldCount = 4;
 constexpr int kGeometryCount = 12;

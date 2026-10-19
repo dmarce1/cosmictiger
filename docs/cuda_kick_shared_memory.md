@@ -9,12 +9,13 @@ compute capability 8.6, CUDA 12.8, GCC 13.3); everything else is design.
 
 The FMM order equals the multipole degree p plus two: source multipoles carry
 degree p, local expansions degree p + 1, and the Ewald derivative tensors ranks
-0 through p + 1. Orders 3 through 10 are supported. Order 3 (dipoles with
+0 through p + 1. Orders 3 through 9 are supported. Order 3 (dipoles with
 quadratic expansions) is the smallest order whose local expansion can hold the
 periodic uniform-background quadratic; a degree-1 expansion keeps only the
-z-squared Laplacian slot of that term, so order 2 is not offered. Order 10
-(degree-8 multipoles, degree-9 expansions) is the largest: single precision
-gains little beyond it.
+z-squared Laplacian slot of that term, so order 2 is not offered. Order 9
+(degree-7 multipoles, degree-8 expansions) is the largest: the CUDA single
+precision parity test showed order 10's host/device roundoff gap (6.9e-6)
+approaching the 2e-5 budget, so single precision stops gaining there.
 
 | order | multipole coefficients | positioned multipole bytes | local coefficients | local expansion bytes |
 |---:|---:|---:|---:|---:|
@@ -25,7 +26,6 @@ gains little beyond it.
 | 7 | 36 | 156 | 50 | 200 |
 | 8 | 49 | 208 | 65 | 260 |
 | 9 | 64 | 268 | 82 | 328 |
-| 10 | 81 | 336 | 101 | 404 |
 
 Every order is compiled into the binary and the run selects one with
 `gravity.fmmOrder` (default: the build's `COSMICTIGER_WITH_ORDER`, 7). The
@@ -43,7 +43,7 @@ order-dependent code is instantiated per order from templates:
 - `cosmictiger/fmm_kernels.hpp`: operator wrappers that deduce the degrees from
   their tensor arguments over the generated STF kernels.
 - Generated code: `tools/generate_stf_m2l.py` emits one fully specialized
-  kernel class per degree for local degrees 2 through 9 into a single header set
+  kernel class per degree for local degrees 2 through 8 into a single header set
   in the build tree (`ninja cosmictiger_generated_kernels`), and
   `src/fmm_kernel_codegen.cpp` emits one Ewald derivative overload per order.
   Parsing the whole set costs about two seconds with g++ and three with nvcc.
@@ -52,7 +52,7 @@ order-dependent code is instantiated per order from templates:
   from `src/fmm_instance_*.in`; they explicitly instantiate the heavy CPU and
   CUDA templates so the orders compile in parallel.
 - Ewald tables (`EwaldConst`) are filled once for the runtime order into
-  buffers sized for order 10 (about 41 KB of constant memory).
+  buffers sized for order 9 (about 29 KB of constant memory).
 
 ## Bucket cap
 

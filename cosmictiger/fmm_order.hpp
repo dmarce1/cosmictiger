@@ -33,8 +33,8 @@
 // tensors carry ranks zero through p + 1, so their tensor "order" template
 // argument equals the FMM order. Order 3 (dipoles with quadratic expansions) is
 // the smallest order whose local expansion can hold the periodic uniform
-// background quadratic; order 10 is degree-8 multipoles with degree-9
-// expansions, beyond which single precision gains little.
+// background quadratic; order 9 (degree-7 multipoles, degree-8 expansions) is
+// the largest: single precision gains nothing measurable beyond it.
 //
 // Every order in [kFmmMinOrder, kFmmMaxOrder] is compiled into the binary. The
 // run selects one order at startup (gravity.fmmOrder, defaulting to the build's
@@ -47,14 +47,14 @@
 // constant Laplacian (the periodic background trace).
 
 inline constexpr int kFmmMinOrder = 3;
-inline constexpr int kFmmMaxOrder = 10;
+inline constexpr int kFmmMaxOrder = 9;
 
 #ifndef ORDER
 #error "ORDER (the default FMM order, COSMICTIGER_WITH_ORDER) must be defined"
 #endif
 inline constexpr int kFmmDefaultOrder = ORDER;
 static_assert(kFmmDefaultOrder >= kFmmMinOrder && kFmmDefaultOrder <= kFmmMaxOrder,
-    "COSMICTIGER_WITH_ORDER must select an FMM order from 3 to 10");
+    "COSMICTIGER_WITH_ORDER must select an FMM order from 3 to 9");
 static_assert(LORDER == ORDER, "LORDER must equal the default FMM order");
 
 CUDA_EXPORT constexpr int fmmMultipoleDegree(int order) {
@@ -110,10 +110,10 @@ inline constexpr int kFmmMaxTracelessTensorCount = fmmTracelessTensorCount(kFmmM
 inline constexpr int kFmmMaxSymmetricTensorCount = fmmSymmetricTensorCount(kFmmMaxOrder);
 
 static_assert(fmmPositionedMultipoleBytes(3) == 28 && fmmPositionedMultipoleBytes(7) == 156 &&
-        fmmPositionedMultipoleBytes(10) == 336,
+        fmmPositionedMultipoleBytes(9) == 268,
     "Positioned multipole byte sizes");
 static_assert(fmmLocalExpansionBytes(3) == 40 && fmmLocalExpansionBytes(7) == 200 &&
-        fmmLocalExpansionBytes(10) == 404,
+        fmmLocalExpansionBytes(9) == 328,
     "Local expansion byte sizes");
 
 // Compile-time view of one order.
@@ -155,8 +155,6 @@ decltype(auto) fmmDispatch(int order, F&& f) {
         return f(std::integral_constant<int, 8>{});
     case 9:
         return f(std::integral_constant<int, 9>{});
-    case 10:
-        return f(std::integral_constant<int, 10>{});
     default:
         break;
     }

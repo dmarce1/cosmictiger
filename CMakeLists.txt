@@ -31,17 +31,17 @@ option(COSMICTIGER_WITH_CUDA "Enable CUDA" ON)
 option(COSMICTIGER_WITH_LONG_LONG_PART_INT "Use long long to index local particles" OFF)
 # FMM order: multipole degree p plus two. Source multipoles carry degree p,
 # local expansions degree p + 1, and Ewald derivatives ranks through p + 1.
-# Every order from 3 to 10 is compiled in (per-order instantiations) and the
+# Every order from 3 to 9 is compiled in (per-order instantiations) and the
 # run selects one with gravity.fmmOrder; this value is only that option's
 # default. Order 3 (dipoles, quadratic expansions) is the smallest order whose
-# local expansion holds the periodic background quadratic; order 10 is degree-8
-# multipoles with degree-9 expansions (single precision gains little beyond that).
-set(COSMICTIGER_WITH_ORDER "7" CACHE STRING "Default FMM order (gravity.fmmOrder), 3 to 10")
-if(NOT COSMICTIGER_WITH_ORDER MATCHES "^(3|4|5|6|7|8|9|10)$")
+# local expansion holds the periodic background quadratic; order 9 (degree-7
+# multipoles, degree-8 expansions) is where single precision stops gaining.
+set(COSMICTIGER_WITH_ORDER "7" CACHE STRING "Default FMM order (gravity.fmmOrder), 3 to 9")
+if(NOT COSMICTIGER_WITH_ORDER MATCHES "^(3|4|5|6|7|8|9)$")
     message(FATAL_ERROR
-        "COSMICTIGER_WITH_ORDER must be an integer from 3 to 10; got '${COSMICTIGER_WITH_ORDER}'")
+        "COSMICTIGER_WITH_ORDER must be an integer from 3 to 9; got '${COSMICTIGER_WITH_ORDER}'")
 endif()
-set(COSMICTIGER_FMM_ORDERS 3 4 5 6 7 8 9 10)
+set(COSMICTIGER_FMM_ORDERS 3 4 5 6 7 8 9)
 # Compile-time cap on the tree leaf bucket. compute.bucketSize may be any
 # runtime value up to this power of two; leaves then hold between half the
 # runtime bucket plus one and the runtime bucket particles. The CUDA kick
@@ -73,7 +73,7 @@ find_library(SILO_LIBRARY NAMES siloh5 silo REQUIRED)
 find_path(CHEALPIX_INCLUDE_DIR chealpix.h REQUIRED)
 find_library(CHEALPIX_LIBRARY NAMES chealpix REQUIRED)
 
-message(STATUS "cosmictiger default FMM order = ${COSMICTIGER_WITH_ORDER} (orders 3 to 10 compiled)")
+message(STATUS "cosmictiger default FMM order = ${COSMICTIGER_WITH_ORDER} (orders 3 to 9 compiled)")
 message(STATUS "cosmictiger maximum bucket size = ${COSMICTIGER_WITH_MAX_BUCKET}")
 
 include(CheckCXXCompilerFlag)
@@ -366,7 +366,7 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E make_directory ${COSMICTIGER_GENERATED_INCLUDE_DIR}/cosmictiger
     COMMAND fmm_kernel_codegen > ${COSMICTIGER_GENERATED_EWALD_HEADER}
     DEPENDS fmm_kernel_codegen
-    COMMENT "Generating Ewald derivatives for FMM orders 3 to 10")
+    COMMENT "Generating Ewald derivatives for FMM orders 3 to 9")
 add_custom_target(generate_fmm_kernels DEPENDS ${COSMICTIGER_GENERATED_EWALD_HEADER})
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 set(COSMICTIGER_STF_GENERATOR_SOURCES
@@ -382,7 +382,7 @@ add_custom_command(
         --output-dir ${COSMICTIGER_GENERATED_STF_DIR} --no-format
     DEPENDS ${COSMICTIGER_STF_GENERATOR_SOURCES}
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-    COMMENT "Generating STF kernels for FMM orders 3 to 10")
+    COMMENT "Generating STF kernels for FMM orders 3 to 9")
 add_custom_target(generate_stf_kernels DEPENDS ${COSMICTIGER_GENERATED_STF_FILES})
 add_custom_target(cosmictiger_generated_kernels
     DEPENDS ${COSMICTIGER_GENERATED_STF_FILES} ${COSMICTIGER_GENERATED_EWALD_HEADER})

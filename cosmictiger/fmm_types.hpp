@@ -91,7 +91,7 @@ struct FmmMultiPos {
 
 static_assert(std::is_standard_layout_v<FmmMultiPos<kFmmDefaultOrder>>);
 static_assert(sizeof(FmmMultiPos<7>) == fmmPositionedMultipoleBytes(7));
-static_assert(sizeof(FmmMultiPos<10>) == fmmPositionedMultipoleBytes(10));
+static_assert(sizeof(FmmMultiPos<9>) == fmmPositionedMultipoleBytes(9));
 
 template <int order>
 CUDA_EXPORT inline FmmMultiPos<order>& fmmMultiPos(MultipolePosition* record) {

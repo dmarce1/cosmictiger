@@ -457,7 +457,7 @@ def emitEwaldKernel(sourceOrder, expansionOrder, centered):
                             'arithmetic': g.counts(live), 'accumulations': len(result)}
 
 
-def generate(minLocalDegree=2, maxLocalDegree=9):
+def generate(minLocalDegree=2, maxLocalDegree=8):
     """Emit every (source degree p, local degree p + 1) pair in the inclusive range.
 
     Each degree becomes its own fully specialized kernel class, so all FMM orders
@@ -529,8 +529,8 @@ def main():
     ap.add_argument('--check',action='store_true',help='fail if the files in --output-dir differ')
     ap.add_argument('--min-order',dest='minLocalDegree',type=int,default=2,
                     help='smallest local degree to emit; FMM order is local degree + 1 (default: 2)')
-    ap.add_argument('--max-order',dest='maxLocalDegree',type=int,default=9,
-                    help='largest local degree to emit (default: 9)')
+    ap.add_argument('--max-order',dest='maxLocalDegree',type=int,default=8,
+                    help='largest local degree to emit (default: 8)')
     ap.add_argument('--output-dir',dest='outputDir',type=Path,required=True,
                     help='directory receiving the generated headers and operation counts')
     ap.add_argument('--no-format',dest='noFormat',action='store_true',
@@ -538,8 +538,8 @@ def main():
     args=ap.parse_args()
     if args.minLocalDegree < 2 or args.maxLocalDegree < args.minLocalDegree:
         ap.error('local degrees must form an inclusive range starting at 2 or more')
-    if args.maxLocalDegree > 9:
-        ap.error('local degree must be at most 9 (FMM order 10), the supported production range')
+    if args.maxLocalDegree > 8:
+        ap.error('local degree must be at most 8 (FMM order 9), the supported production range')
     outputs=generate(args.minLocalDegree,args.maxLocalDegree)
     notice = (projectRoot / 'tools/stf/generated_notice.txt').read_text()
     for name, cpp in list(outputs.items()):

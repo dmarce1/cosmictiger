@@ -5,8 +5,8 @@ The FMM uses the STF generator imported from
 at commit `7ba8f1829fdede7348a1418b7cb36c0e7a955302`. Its Boost license is retained
 in `cosmictiger/gravity/stf/LICENSE`; the surrounding application remains GPL.
 
-Kernels are generated for every supported FMM order, 3 through 10: source
-degrees 1 through 8 paired with local degrees 2 through 9. A run selects one
+Kernels are generated for every supported FMM order, 3 through 9: source
+degrees 1 through 7 paired with local degrees 2 through 8. A run selects one
 order with `gravity.fmmOrder` (default 7, the build's `COSMICTIGER_WITH_ORDER`),
 and `fmmDispatch()` switches to that order's instantiation at coarse boundaries.
 At order 7 the source stores 36 coefficients and the local stores 49 STF
@@ -92,7 +92,7 @@ ninja -C build cosmictiger_generated_kernels
 
 That target runs `python3 tools/generate_stf_m2l.py --output-dir
 build/generated/cosmictiger/gravity/stf/generated`, which emits one specialized
-kernel class per degree for local degrees 2 through 9 (`generated_config.hpp`
+kernel class per degree for local degrees 2 through 8 (`generated_config.hpp`
 records the range as `kMinLocalDegree`/`kMaxLocalDegree`), and
 `fmm_kernel_codegen`, which writes one `ewaldCorrectionDerivatives` overload per
 order into `build/generated/cosmictiger/ewald_kernels.hpp`. The former checked-in
@@ -102,7 +102,7 @@ translation generator has been removed from `src/fmm_kernel_codegen.cpp`.
 
 `stf_kernels` checks independent Cartesian polynomial references, translations,
 nonzero dipoles, constant Laplacians, the truncated direct-particle remainder
-series, and SIMD lanes for every FMM order 3 through 10 in one executable,
+series, and SIMD lanes for every FMM order 3 through 9 in one executable,
 printing one pass line per order with the worst normalized discrepancy it saw.
 `stf_kernels_cuda` executes the same operations on the device in float and
 double, one launch per order. The complete `fmmWalk` regression compares
@@ -111,7 +111,7 @@ runtime order, including periodic seams and excluded inactive particles.
 
 `stf_l2l_cuda` independently checks every coefficient and every lane after one
 and 17 translations, both potential modes, nonzero traces, linear fields, and
-multiple warps per block, at every local degree 2 through 9. It checks
+multiple warps per block, at every local degree 2 through 8. It checks
 `translate` through the caller's synchronized in-place update pattern and
 `translateInto` through ping-pong shared-memory source and target expansions.
 The old CUDA generator omitted the last of 616 nonpotential terms,
@@ -121,7 +121,7 @@ in the unchanged legacy baseline, which exists only at local degree six.
 `stf_ewald_cpu` also compiles the CUDA-disabled Ewald initializer and checks its
 image list, self terms, normalization, and periodic potential/gradient values at
 the default order and, after re-filling the tables through `setFmmOrder` and
-`EwaldConst::init`, at orders 3 and 10. CPU runtime validation uses
+`EwaldConst::init`, at orders 3 and 9. CPU runtime validation uses
 `--compute.cuda=false` in the CUDA-enabled application. A complete
 `COSMICTIGER_WITH_CUDA=OFF` application build still has pre-existing
 unconditional CUDA calls elsewhere in the application.
