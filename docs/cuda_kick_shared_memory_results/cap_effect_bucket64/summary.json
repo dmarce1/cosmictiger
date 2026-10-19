@@ -1,0 +1,385 @@
+{
+  "timing": [
+    {
+      "binary": "arena_cap1024",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 20.515963000000003,
+      "kick_ms_min": 20.489826,
+      "kick_ms_max": 20.991629,
+      "pairs": 3
+    },
+    {
+      "binary": "arena_cap1024",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 20.80586,
+      "kick_ms_min": 20.628585,
+      "kick_ms_max": 21.179720999999997,
+      "pairs": 3
+    },
+    {
+      "binary": "arena_cap1024",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 8.678087,
+      "kick_ms_min": 8.380215,
+      "kick_ms_max": 8.680477000000002,
+      "pairs": 3
+    },
+    {
+      "binary": "arena_cap1024",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 8.752984,
+      "kick_ms_min": 8.540608,
+      "kick_ms_max": 8.890411,
+      "pairs": 3
+    },
+    {
+      "binary": "arena_cap1024",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 31.635208999999996,
+      "kick_ms_min": 31.514633,
+      "kick_ms_max": 31.964895,
+      "pairs": 3
+    },
+    {
+      "binary": "arena_cap1024",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 31.665126,
+      "kick_ms_min": 31.625391000000004,
+      "kick_ms_max": 32.207612,
+      "pairs": 3
+    },
+    {
+      "binary": "arena_cap128",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 20.986366,
+      "kick_ms_min": 20.701245,
+      "kick_ms_max": 21.217829000000002,
+      "pairs": 3
+    },
+    {
+      "binary": "arena_cap128",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 21.037803,
+      "kick_ms_min": 20.871715,
+      "kick_ms_max": 21.174899,
+      "pairs": 3
+    },
+    {
+      "binary": "arena_cap128",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 8.440931,
+      "kick_ms_min": 8.296126,
+      "kick_ms_max": 8.457921,
+      "pairs": 3
+    },
+    {
+      "binary": "arena_cap128",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 8.638239,
+      "kick_ms_min": 8.556764999999999,
+      "kick_ms_max": 8.803742,
+      "pairs": 3
+    },
+    {
+      "binary": "arena_cap128",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 31.874861999999997,
+      "kick_ms_min": 31.867273,
+      "kick_ms_max": 31.976806000000003,
+      "pairs": 3
+    },
+    {
+      "binary": "arena_cap128",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 32.120002,
+      "kick_ms_min": 31.735444,
+      "kick_ms_max": 32.172926999999994,
+      "pairs": 3
+    },
+    {
+      "binary": "baseline",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 19.396377,
+      "kick_ms_min": 19.363339,
+      "kick_ms_max": 19.448947,
+      "pairs": 3
+    },
+    {
+      "binary": "baseline",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 19.471799,
+      "kick_ms_min": 19.093261000000002,
+      "kick_ms_max": 19.861604,
+      "pairs": 3
+    },
+    {
+      "binary": "baseline",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 8.865393,
+      "kick_ms_min": 8.822667,
+      "kick_ms_max": 8.942390999999999,
+      "pairs": 3
+    },
+    {
+      "binary": "baseline",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 8.977383999999999,
+      "kick_ms_min": 8.87226,
+      "kick_ms_max": 9.177772000000001,
+      "pairs": 3
+    },
+    {
+      "binary": "baseline",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 33.062484000000005,
+      "kick_ms_min": 32.820227,
+      "kick_ms_max": 33.148682,
+      "pairs": 3
+    },
+    {
+      "binary": "baseline",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 32.940492,
+      "kick_ms_min": 32.851686,
+      "kick_ms_max": 33.184965,
+      "pairs": 3
+    }
+  ],
+  "references": [],
+  "arena_lines": [
+    {
+      "binary": "arena_cap1024",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 7904 bytes: control 504, expansion shared, forces shared tile 64, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes"
+    },
+    {
+      "binary": "arena_cap128",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 7904 bytes: control 504, expansion shared, forces shared tile 64, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes"
+    },
+    {
+      "binary": "baseline",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "line": "Occupancy is 6 shmem size = 15184 numregs = 255"
+    }
+  ],
+  "comparisons": [
+    {
+      "kind": "vs_baseline",
+      "binary": "arena_cap1024",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "result": {
+        "adaptive": {
+          "acceleration": {
+            "relative_l2": 5.0509598423447816e-08,
+            "max_pointwise_relative": 1.2205666672539023e-06,
+            "median_pointwise_relative": 8.51477575693859e-09
+          },
+          "potential": {
+            "relative_l2": 3.883267224558606e-08,
+            "max_pointwise_relative": 3.9357682619647354e-05,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "clustered": {
+          "acceleration": {
+            "relative_l2": 2.3264061188237705e-08,
+            "max_pointwise_relative": 3.578911643124574e-06,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 3.5958137902282535e-08,
+            "max_pointwise_relative": 6.177300890149058e-07,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "lattice": {
+          "acceleration": {
+            "relative_l2": 1.004143248610325e-06,
+            "max_pointwise_relative": 6.535899726806978e-05,
+            "median_pointwise_relative": 5.319132993817208e-07
+          },
+          "potential": {
+            "relative_l2": 3.5842468934207256e-06,
+            "max_pointwise_relative": 7.045313105456595e-05,
+            "median_pointwise_relative": 0.0
+          }
+        }
+      }
+    },
+    {
+      "kind": "vs_baseline",
+      "binary": "arena_cap128",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "result": {
+        "adaptive": {
+          "acceleration": {
+            "relative_l2": 5.0509598423447816e-08,
+            "max_pointwise_relative": 1.2205666672539023e-06,
+            "median_pointwise_relative": 8.51477575693859e-09
+          },
+          "potential": {
+            "relative_l2": 3.883267224558606e-08,
+            "max_pointwise_relative": 3.9357682619647354e-05,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "clustered": {
+          "acceleration": {
+            "relative_l2": 2.3264061188237705e-08,
+            "max_pointwise_relative": 3.578911643124574e-06,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 3.5958137902282535e-08,
+            "max_pointwise_relative": 6.177300890149058e-07,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "lattice": {
+          "acceleration": {
+            "relative_l2": 1.004143248610325e-06,
+            "max_pointwise_relative": 6.535899726806978e-05,
+            "median_pointwise_relative": 5.319132993817208e-07
+          },
+          "potential": {
+            "relative_l2": 3.5842468934207256e-06,
+            "max_pointwise_relative": 7.045313105456595e-05,
+            "median_pointwise_relative": 0.0
+          }
+        }
+      }
+    }
+  ],
+  "repeat_export_hashes": [
+    {
+      "binary": "arena_cap1024",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "distinct_exports": 1
+    },
+    {
+      "binary": "arena_cap128",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "distinct_exports": 1
+    },
+    {
+      "binary": "baseline",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "distinct_exports": 1
+    }
+  ]
+}

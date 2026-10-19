@@ -241,6 +241,9 @@ KickReturn cudaExecuteKicks(
 // Shared-memory policy of the runtime order's kick kernel (selected once per order).
 CudaKickArenaLayout const& kickArenaLayout();
 #endif
+// Resident blocks per multiprocessor whose particle share sets the CPU/GPU
+// handoff threshold (see kickBlockCount in kick.cu); measured, not derived.
+constexpr int kKickHandoffBlocksPerMultiprocessor = 2;
 int kickBlockCount();
 size_t kickEstimateCudaMemoryUsage(double theta, int numberOfParticles, int checkCount);
 

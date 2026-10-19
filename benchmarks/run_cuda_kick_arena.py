@@ -118,7 +118,7 @@ def parse_log(text, samples, fixtures):
         elif line.startswith('STF_WALK_LEAF_HISTOGRAM,'):
             run['leaf_histogram'].append(dict(fixture=fields[1], depth=int(fields[2]),
                                               particles=int(fields[3]), leaves=int(fields[4])))
-        elif line.startswith('CUDA kick arena:'):
+        elif line.startswith('CUDA kick arena'):
             run['arena'] = line.strip()
         elif line.startswith('Occupancy is '):
             run['occupancy'] = line.strip()
@@ -146,7 +146,8 @@ def main():
     parser.add_argument('--reference', type=int, default=0,
                         help='particles compared with the direct Ewald sum (0 disables)')
     parser.add_argument('--theta', default='0.8')
-    parser.add_argument('--cpus', default='1,2', help='taskset CPU list for the two HPX workers')
+    parser.add_argument('--cpus', default='1,2', help='taskset CPU list for the HPX workers')
+    parser.add_argument('--threads', type=int, default=2, help='HPX worker threads per process')
     parser.add_argument('--extra-option', action='append', default=[],
                         help='additional application option passed to every run')
     parser.add_argument('--timeout', type=int, default=1800)
@@ -169,6 +170,7 @@ def main():
         'policies': policies, 'fixtures': fixtures, 'buckets': buckets, 'orders': orders,
         'backends': backends,
         'samples': args.samples, 'pairs': args.pairs, 'reference': args.reference,
+        'threads': args.threads, 'cpus': args.cpus,
         'git_head': subprocess.run(['git', 'rev-parse', 'HEAD'], capture_output=True, text=True,
                                    cwd=Path(__file__).resolve().parent).stdout.strip(),
         'nvidia_smi': subprocess.run(['nvidia-smi', '--query-gpu=name,driver_version,clocks.sm,'
@@ -184,7 +186,7 @@ def main():
     common = ['--run.test=stfBenchmark', '--initial.particlesPerDimension=32',
               '--hydro.enabled=false', f'--gravity.openingAngle={args.theta}',
               '--gravity.effectiveRadius=0.01876988456953534', '--gravity.kernelFamily=ferrers',
-              '--gravity.kernelDegree=4', '--hpx:threads=2', '--hpx:bind=none',
+              '--gravity.kernelDegree=4', f'--hpx:threads={args.threads}', '--hpx:bind=none',
               '--analysis.views=false', '--analysis.power=false', '--analysis.groups=false',
               '--lightcone.enabled=false'] + args.extra_option
     runs = []
@@ -210,7 +212,7 @@ def main():
                                    COSMICTIGER_STF_WALK_BUCKET=str(bucket),
                                    COSMICTIGER_STF_WALK_FIXTURE='all' if len(fixtures) == 3 else fixtures[0],
                                    COSMICTIGER_STF_WALK_REFERENCE=str(args.reference),
-                                   OMP_NUM_THREADS='2', OMP_THREAD_LIMIT='2')
+                                   OMP_NUM_THREADS=str(args.threads), OMP_THREAD_LIMIT=str(args.threads))
                         if len(fixtures) not in (1, 3):
                             sys.exit('The harness selects one fixture or all three')
                         logfile = directory / 'stdout.log'
