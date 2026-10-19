@@ -9,6 +9,7 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <random>
 #include <stdexcept>
 #include <string>
 
@@ -19,6 +20,7 @@
 #include <cosmictiger/gravity.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/kick.hpp>
+#include <cosmictiger/kick_interaction_counts.hpp>
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/tree.hpp>
@@ -357,8 +359,8 @@ void fmmWalkSetHybridParticles(ParticleInteger secondParticleCount) {
     }
 }
 
-void fmmWalkRequireInteraction(
-    TreeId sink, TreeId source, float support, FmmInteraction expected, std::string const& label) {
+// The interaction the walk selects for this pair, with the cost rule.
+FmmInteraction fmmWalkSelectInteraction(TreeId sink, TreeId source, float support) {
     auto const* sinkNode = treeGetNode(sink);
     auto const* sourceNode = treeGetNode(source);
     Array<float, NDIM> displacement;
@@ -373,10 +375,19 @@ void fmmWalkRequireInteraction(
         sourceNode->radius, boxDistanceSquared(sinkNode->box, sourceNode->pos),
         boxDistanceSquared(sourceNode->box, sinkNode->pos), pairSupport,
         fmmInverseOpeningAngle(kFmmWalkTheta));
-    auto const actual = selectFmmInteraction(acceptance.cellCell != 0.0f,
-        acceptance.particleCell != 0.0f, acceptance.cellParticle != 0.0f, sinkNode->leaf,
-        sourceNode->leaf, sinkNode->radius, sourceNode->radius);
-    if (actual != expected) {
+    auto const hybridFlopsPerParticle =
+        fmmDispatch([](auto order) { return FmmHybridCost<order.value>::kHybridPerParticle_; });
+    auto const particlePairFlops =
+        fmmDispatch([](auto order) { return FmmHybridCost<order.value>::kParticlePair_; });
+    return selectFmmInteraction(acceptance.cellCell != 0.0f, acceptance.particleCell != 0.0f,
+        acceptance.cellParticle != 0.0f, sinkNode->leaf, sourceNode->leaf, sinkNode->radius,
+        sourceNode->radius, int(sinkNode->numberOfParticles()),
+        int(sourceNode->numberOfParticles()), hybridFlopsPerParticle, particlePairFlops);
+}
+
+void fmmWalkRequireInteraction(
+    TreeId sink, TreeId source, float support, FmmInteraction expected, std::string const& label) {
+    if (fmmWalkSelectInteraction(sink, source, support) != expected) {
         throw std::runtime_error(label + ": synthetic geometry selected the wrong interaction");
     }
 }
@@ -496,12 +507,13 @@ void fmmWalkReciprocalHybrid(bool useCuda) {
         std::array<FmmInteraction, 2> interactions;
     };
     std::array<HybridCase, 4> const cases{{
-        {"unequal counts CP/PC", 64, 0.0625f, 0.09375f,
-            {FmmInteraction::CellParticle, FmmInteraction::ParticleCell}},
+        // The cost rule evaluates the leaf with fewer particles explicitly.
+        {"unequal counts PC/CP", 64, 0.0625f, 0.09375f,
+            {FmmInteraction::ParticleCell, FmmInteraction::CellParticle}},
         {"equal counts, unequal radii CP/PC", 40, 0.0625f, 0.09375f,
             {FmmInteraction::CellParticle, FmmInteraction::ParticleCell}},
-        {"unequal counts, equal radii PP", 64, 0.078125f, 0.078125f,
-            {FmmInteraction::ParticleParticle, FmmInteraction::ParticleParticle}},
+        {"unequal counts, equal radii PC/CP", 64, 0.078125f, 0.078125f,
+            {FmmInteraction::ParticleCell, FmmInteraction::CellParticle}},
         {"equal counts and radii PP", 40, 0.078125f, 0.078125f,
             {FmmInteraction::ParticleParticle, FmmInteraction::ParticleParticle}},
     }};
@@ -657,11 +669,16 @@ void fmmWalkInternalCloudHybrid(bool useCuda) {
                     for (int child = 0; child < NCHILD; child++) {
                         auto const childSink = direction == 0 ? children[child] : leaf;
                         auto const childSource = direction == 0 ? leaf : children[child];
-                        auto const childInteraction = testCase.tightLeafBox && child == RIGHT ?
-                            interactions[direction] :
-                            FmmInteraction::CellCell;
-                        fmmWalkRequireInteraction(
-                            childSink, childSource, support, childInteraction, mode + " opened");
+                        // The left child is far enough for CC; the right child of
+                        // the tight-box case is a leaf pair handled explicitly, by
+                        // whichever of hybrid or direct summation the cost rule picks.
+                        auto const childInteraction =
+                            fmmWalkSelectInteraction(childSink, childSource, support);
+                        bool const explicitPair = testCase.tightLeafBox && child == RIGHT;
+                        if ((childInteraction == FmmInteraction::CellCell) == explicitPair) {
+                            throw std::runtime_error(
+                                mode + " opened: unexpected child interaction");
+                        }
                         auto const childReference = fmmWalkInteractionReference(
                             childSink, childSource, support, childInteraction);
                         auto const childRange = treeGetNode(childSink)->particleRange;
@@ -728,7 +745,7 @@ void fmmWalkCellSupportBounds(bool useCuda) {
         {"cell support CC fallback", 0.0625f, 0.078125f, false, false,
             {FmmInteraction::CellCell, FmmInteraction::CellCell}},
         {"cell support radial hybrid fallback", 0.0625f, 0.09375f, false, false,
-            {FmmInteraction::CellParticle, FmmInteraction::ParticleCell}},
+            {FmmInteraction::ParticleCell, FmmInteraction::CellParticle}},
         {"cell support box-only hybrid fallback", 0.125f, 0.078125f, true, false,
             {FmmInteraction::ParticleCell, FmmInteraction::CellParticle}},
         {"cell support CC refinement", 0.0625f, 0.078125f, false, true,
@@ -1053,6 +1070,172 @@ void fmmWalkPeriodicBackground(bool useCuda) {
     }
 }
 
+// A dense Plummer clump beside a sparse uniform background gives same-depth
+// cells with very different radii, where the lockstep walk opens cells that
+// the open-larger rule leaves closed. Every rule variant must stay reciprocal
+// and agree with the lockstep forces to the expansion error on both backends,
+// and the open-larger variants must actually defer sources.
+void fmmWalkOpenLargerCell(bool useCuda) {
+    constexpr ParticleInteger kClumpCount = 1536;
+    constexpr ParticleInteger kBackgroundCount = 512;
+    constexpr ParticleInteger kCount = kClumpCount + kBackgroundCount;
+    constexpr double kPlummerRadius = 0.02;
+    constexpr double kClumpCutoff = 0.15;
+    constexpr double kPi = 3.141592653589793238462643383279502884;
+    struct Variant {
+        char const* label;
+        bool openLargerCell;
+    };
+    constexpr std::array<Variant, 2> kVariants{{{"lockstep", false}, {"open-larger", true}}};
+    std::array<double, NDIM> const clumpCenter{0.3, 0.4, 0.5};
+    particlesResize(kCount);
+    std::mt19937 generator(20261019u);
+    std::uniform_real_distribution<double> uniform(0.0, 1.0);
+    for (ParticleInteger i = 0; i < kCount; i++) {
+        std::array<double, NDIM> coordinate;
+        if (i < kClumpCount) {
+            double radius;
+            do {
+                // Inverse of the Plummer mass fraction; the cutoff keeps the clump compact.
+                double const fraction = std::max(uniform(generator), 1.0e-12);
+                radius = kPlummerRadius / std::sqrt(std::pow(fraction, -2.0 / 3.0) - 1.0);
+            } while (radius > kClumpCutoff);
+            double const cosine = 2.0 * uniform(generator) - 1.0;
+            double const sine = std::sqrt(std::max(0.0, 1.0 - cosine * cosine));
+            double const azimuth = 2.0 * kPi * uniform(generator);
+            coordinate = {clumpCenter[XDIM] + radius * sine * std::cos(azimuth),
+                clumpCenter[YDIM] + radius * sine * std::sin(azimuth),
+                clumpCenter[ZDIM] + radius * cosine};
+        } else {
+            coordinate = {uniform(generator), uniform(generator), uniform(generator)};
+        }
+        Array<Fixed32, NDIM> position;
+        for (int dim = 0; dim < NDIM; dim++) {
+            double wrapped = coordinate[dim] - std::floor(coordinate[dim]);
+            if (wrapped >= 1.0) {
+                wrapped = 0.0;
+            }
+            position[dim] = wrapped;
+        }
+        fmmWalkSetParticlePosition(i, position);
+    }
+    fmmWalkResetKickState();
+    particlesSortByRung(0);
+    auto const built =
+        treeCreate(TreeCreateParameters(0, kFmmWalkTheta, getOptions().gravity.supportRadius));
+    auto const range = particlesCurrentRange();
+    if (range.second - range.first != kCount) {
+        throw std::runtime_error("Open-larger regression lost particles");
+    }
+    auto const baseOptions = getOptions();
+    using Forces = Vector<std::array<double, NDIM>>;
+    // Runs one backend with the current options; returns the forces and the
+    // net-force residual, the norm of the summed force over the sum of norms.
+    auto const run = [&](bool cuda, Forces& forces) {
+        fmmWalkResetKickState();
+        ExpansionBuffer local;
+        local.zero();
+        auto const origin = fmmWalkPosition(0.0, 0.0, 0.0);
+        kick(fmmWalkParameters(cuda), local, origin, built.id, Vector<TreeId>{built.id},
+            Vector<TreeId>{built.id}, nullptr);
+        forces.resize(kCount);
+        std::array<double, NDIM> total{};
+        double magnitudeSum = 0.0;
+        for (ParticleInteger i = range.first; i < range.second; i++) {
+            double squared = 0.0;
+            for (int dim = 0; dim < NDIM; dim++) {
+                double const force = particlesMass(i) * particlesGravityAcceleration(dim, i);
+                forces[i - range.first][dim] = force;
+                total[dim] += force;
+                squared += force * force;
+            }
+            magnitudeSum += std::sqrt(squared);
+        }
+        return std::sqrt(total[XDIM] * total[XDIM] + total[YDIM] * total[YDIM] +
+                   total[ZDIM] * total[ZDIM]) /
+            std::max(1.0, magnitudeSum);
+    };
+    // Rms difference over rms reference, and the largest per-particle
+    // difference normalized by the larger of the particle's reference force
+    // and the rms force, so that particles near the clump center, where the
+    // net force cancels, do not dominate.
+    auto const compare = [&](Forces const& reference, Forces const& actual, double& rms,
+                             double& maximum) {
+        double forceSquaredSum = 0.0;
+        double differenceSquaredSum = 0.0;
+        Vector<double> forceNorms(kCount);
+        Vector<double> differenceNorms(kCount);
+        for (ParticleInteger i = 0; i < kCount; i++) {
+            double forceSquared = 0.0;
+            double differenceSquared = 0.0;
+            for (int dim = 0; dim < NDIM; dim++) {
+                double const difference = actual[i][dim] - reference[i][dim];
+                forceSquared += reference[i][dim] * reference[i][dim];
+                differenceSquared += difference * difference;
+            }
+            forceSquaredSum += forceSquared;
+            differenceSquaredSum += differenceSquared;
+            forceNorms[i] = std::sqrt(forceSquared);
+            differenceNorms[i] = std::sqrt(differenceSquared);
+        }
+        double const rmsForce = std::sqrt(forceSquaredSum / kCount);
+        rms = std::sqrt(differenceSquaredSum / kCount) / rmsForce;
+        maximum = 0.0;
+        for (ParticleInteger i = 0; i < kCount; i++) {
+            maximum = std::max(maximum, differenceNorms[i] / std::max(forceNorms[i], rmsForce));
+        }
+    };
+    Forces lockstepForces;
+    for (auto const& variant : kVariants) {
+        auto options = baseOptions;
+        options.gravity.openLargerCell = variant.openLargerCell;
+        setOptions(options);
+        kickResetInteractionCounts();
+        Forces cpuForces;
+        double const cpuResidual = run(false, cpuForces);
+        auto const c = kickInteractionCounts();
+        PRINT("FMM %s walk: tests %lld ccDirect %lld ccEwald %lld cp %lld pc %lld ppLeafPairs "
+              "%lld ppPairs %lld opened %lld deferred %lld, net-force residual %.3e\n",
+            variant.label, c.acceptanceTests, c.cellCellDirect, c.cellCellEwald, c.cellParticle,
+            c.particleCell, c.particleParticleLeafPairs, c.particleParticlePairs, c.sourceOpenings,
+            c.deferredSources, cpuResidual);
+        std::string const label = std::string("FMM ") + variant.label;
+        fmmWalkRequireClose(label + " CPU net-force reciprocity", cpuResidual, 0.0, 2.0e-5);
+        if (c.cellParticle != c.particleCell) {
+            throw std::runtime_error(label + ": CP and PC counts differ");
+        }
+        if (variant.openLargerCell ? c.deferredSources == 0 : c.deferredSources != 0) {
+            throw std::runtime_error(label + ": unexpected deferred-source count");
+        }
+        if (!variant.openLargerCell) {
+            lockstepForces = cpuForces;
+        } else {
+            double rms, maximum;
+            compare(lockstepForces, cpuForces, rms, maximum);
+            PRINT("%s versus lockstep: rms difference / rms force %.3e, maximum normalized "
+                  "difference %.3e\n",
+                label.c_str(), rms, maximum);
+            fmmWalkRequireClose(label + " versus lockstep rms force difference", rms, 0.0, 1.0e-2);
+        }
+        if (useCuda) {
+            Forces cudaForces;
+            double const cudaResidual = run(true, cudaForces);
+            double rms, maximum;
+            compare(cpuForces, cudaForces, rms, maximum);
+            PRINT("%s CUDA versus CPU: rms difference / rms force %.3e, maximum normalized "
+                  "difference %.3e, net-force residual %.3e\n",
+                label.c_str(), rms, maximum, cudaResidual);
+            fmmWalkRequireClose(label + " CUDA net-force reciprocity", cudaResidual, 0.0, 2.0e-5);
+            fmmWalkRequireClose(label + " CUDA versus CPU rms force difference", rms, 0.0, 1.0e-3);
+            fmmWalkRequireClose(
+                label + " CUDA versus CPU maximum force difference", maximum, 0.0, 1.0e-2);
+        }
+    }
+    setOptions(baseOptions);
+    treeDestroy();
+    particlesSortByRung(0);
+}
+
 }    // namespace detail
 
 void fmmWalkInitializeDistributedParticles() {
@@ -1164,6 +1347,7 @@ void fmmWalkTest() {
         detail::fmmWalkInternalCloudHybrid(useCuda);
         detail::fmmWalkCellSupportBounds(useCuda);
         detail::fmmWalkPeriodicBackground(useCuda);
+        detail::fmmWalkOpenLargerCell(useCuda);
     } else {
         Vector<hpx::future<void>> pending;
         for (auto const& locality : hpxLocalities()) {

@@ -26,8 +26,10 @@
 #include <cosmictiger/fmm_order.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/kick.hpp>
+#include <cosmictiger/kick_interaction_counts.hpp>
 #include <cosmictiger/kick_walk.hpp>
 #include <cosmictiger/kick_workspace.hpp>
+#include <cosmictiger/options.hpp>
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/tree.hpp>
 
@@ -210,6 +212,7 @@ hpx::future<KickReturn> kickFork(KickParameters params, ExpansionBuffer const& l
 KickReturn kick(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDIM> pos, TreeId self,
     Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
     std::shared_ptr<KickWorkspace> cudaWorkspace) {
+    params.openLargerCell = getOptions().gravity.openLargerCell;
     return fmmDispatch([&](auto orderTag) {
         return kickWalk<decltype(orderTag)::value>(params, std::move(l), pos, self,
             std::move(dchecklist), std::move(echecklist), std::move(cudaWorkspace));
@@ -225,4 +228,68 @@ void kickSetRc(KickReturn kr) {
         localReturnSent = true;
     }
     localReturnPromise.set_value(completed);
+}
+
+namespace {
+
+struct KickInteractionCounters {
+    std::atomic<long long> acceptanceTests{0};
+    std::atomic<long long> cellCellDirect{0};
+    std::atomic<long long> cellCellEwald{0};
+    std::atomic<long long> cellParticle{0};
+    std::atomic<long long> cellParticleAtLeafSinks{0};
+    std::atomic<long long> particleCell{0};
+    std::atomic<long long> particleCellFromLeafSources{0};
+    std::atomic<long long> particleParticleLeafPairs{0};
+    std::atomic<long long> particleParticlePairs{0};
+    std::atomic<long long> sourceOpenings{0};
+    std::atomic<long long> deferredSources{0};
+};
+
+KickInteractionCounters interactionCounters;
+
+}    // namespace
+
+void kickResetInteractionCounts() {
+    interactionCounters.acceptanceTests = 0;
+    interactionCounters.cellCellDirect = 0;
+    interactionCounters.cellCellEwald = 0;
+    interactionCounters.cellParticle = 0;
+    interactionCounters.cellParticleAtLeafSinks = 0;
+    interactionCounters.particleCell = 0;
+    interactionCounters.particleCellFromLeafSources = 0;
+    interactionCounters.particleParticleLeafPairs = 0;
+    interactionCounters.particleParticlePairs = 0;
+    interactionCounters.sourceOpenings = 0;
+    interactionCounters.deferredSources = 0;
+}
+
+void kickAddInteractionCounts(KickInteractionCounts const& counts) {
+    interactionCounters.acceptanceTests += counts.acceptanceTests;
+    interactionCounters.cellCellDirect += counts.cellCellDirect;
+    interactionCounters.cellCellEwald += counts.cellCellEwald;
+    interactionCounters.cellParticle += counts.cellParticle;
+    interactionCounters.cellParticleAtLeafSinks += counts.cellParticleAtLeafSinks;
+    interactionCounters.particleCell += counts.particleCell;
+    interactionCounters.particleCellFromLeafSources += counts.particleCellFromLeafSources;
+    interactionCounters.particleParticleLeafPairs += counts.particleParticleLeafPairs;
+    interactionCounters.particleParticlePairs += counts.particleParticlePairs;
+    interactionCounters.sourceOpenings += counts.sourceOpenings;
+    interactionCounters.deferredSources += counts.deferredSources;
+}
+
+KickInteractionCounts kickInteractionCounts() {
+    KickInteractionCounts counts;
+    counts.acceptanceTests = interactionCounters.acceptanceTests;
+    counts.cellCellDirect = interactionCounters.cellCellDirect;
+    counts.cellCellEwald = interactionCounters.cellCellEwald;
+    counts.cellParticle = interactionCounters.cellParticle;
+    counts.cellParticleAtLeafSinks = interactionCounters.cellParticleAtLeafSinks;
+    counts.particleCell = interactionCounters.particleCell;
+    counts.particleCellFromLeafSources = interactionCounters.particleCellFromLeafSources;
+    counts.particleParticleLeafPairs = interactionCounters.particleParticleLeafPairs;
+    counts.particleParticlePairs = interactionCounters.particleParticlePairs;
+    counts.sourceOpenings = interactionCounters.sourceOpenings;
+    counts.deferredSources = interactionCounters.deferredSources;
+    return counts;
 }

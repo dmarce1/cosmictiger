@@ -95,6 +95,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
 #include <cosmictiger/fmm_kernels.hpp>
 #include <cosmictiger/gravity.hpp>
 #include <cosmictiger/kernel.hpp>
+#include <cosmictiger/kick_interaction_counts.hpp>
 #include <cosmictiger/kick_workspace.hpp>
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/options.hpp>
@@ -104,6 +105,47 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
 #include <cosmictiger/simd.hpp>
 #include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/stack_trace.hpp>
+
+namespace detail {
+
+// Resolves a rejected source cell that is not a leaf. The lockstep rule opens
+// the source: a leaf sink retests the children here and an internal sink hands
+// them to its children, so cell pairs meet at equal depth. The open-larger rule
+// depends only on the unordered pair, which keeps the accepted pair set
+// reciprocal from both sides: a larger source is opened and retested here, a
+// smaller source is handed down unopened for the sink's children, and equal
+// radii open both, as the lockstep rule does. A leaf sink always opens.
+inline long long kickCountOccupied(Vector<TreeId> const& ids);
+
+inline void kickOpenOrDefer(bool openLargerCell, TreeNode const* sink, TreeNode const* source,
+    TreeId sourceId, Vector<TreeId>& retry, Vector<TreeId>& deferred,
+    KickInteractionCounts& counts) {
+    auto const& children = source->children;
+    if (!openLargerCell || sink->leaf || source->radius > sink->radius) {
+        retry.push_back(children[LEFT]);
+        retry.push_back(children[RIGHT]);
+        counts.sourceOpenings++;
+    } else if (source->radius < sink->radius) {
+        deferred.push_back(sourceId);
+        counts.deferredSources++;
+    } else {
+        deferred.push_back(children[LEFT]);
+        deferred.push_back(children[RIGHT]);
+        counts.sourceOpenings++;
+    }
+}
+
+// Empty cells reach every neighbour's lists but never walk themselves, so
+// they are left out of the counters to keep reciprocal counts comparable.
+inline long long kickCountOccupied(Vector<TreeId> const& ids) {
+    long long count = 0;
+    for (auto const& id : ids) {
+        count += treeGetNode(id)->numberOfParticles() != 0;
+    }
+    return count;
+}
+
+}    // namespace detail
 
 template <int order>
 KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDIM> pos, TreeId self,
@@ -195,6 +237,10 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
     Vector<TreeId>& pclist = workspace.pclist;
     Vector<TreeId>& leaflist = workspace.leaflist;
     SimdFloat const thetainv = simdBroadcast<SimdFloat>(fmmInverseOpeningAngle(params.theta));
+    // Internal sinks retest opened sources at their own level under the
+    // open-larger rule, and hand down only what the rule defers.
+    bool const openLargerCell = params.openLargerCell;
+    KickInteractionCounts counts{};
     Array<TreeNode const*, SIMD_FLOAT_SIZE> otherPtrs;
     Array<float, NDIM> ldx;
     SimdFloat selfRadius = selfPtr->radius;
@@ -279,18 +325,19 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
                     } else if (otherLeaf[i]) {
                         leaflist.push_back(checklist[ci + i]);
                     } else {
-                        auto const childChecks = otherPtrs[i]->children;
-                        nextlist.push_back(childChecks[LEFT]);
-                        nextlist.push_back(childChecks[RIGHT]);
+                        detail::kickOpenOrDefer(openLargerCell, selfPtr, otherPtrs[i],
+                            checklist[ci + i], nextlist, leaflist, counts);
                     }
                     if (!cc[i]) {
                         ALWAYS_ASSERT(!otherLeaf[i] || !selfPtr->leaf);
                     }
                 }
+                counts.acceptanceTests += maxi;
             }
             std::swap(checklist, nextlist);
             nextlist.resize(0);
-        } while (checklist.size() && selfPtr->leaf);
+        } while (checklist.size() && (selfPtr->leaf || openLargerCell));
+        counts.cellCellEwald += detail::kickCountOccupied(cclist);
         cpuGravityCc<order>(kGravityEwald, expansion, cclist, self, params.doPhi);
         if (!selfPtr->leaf) {
             checklist.insert(checklist.end(), leaflist.begin(), leaflist.end());
@@ -366,7 +413,10 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
                 for (int i = 0; i < maxi; i++) {
                     auto const interaction = selectFmmInteraction(bool(acceptance.cellCell[i]),
                         bool(acceptance.particleCell[i]), bool(acceptance.cellParticle[i]),
-                        selfPtr->leaf, bool(otherLeaf[i]), selfPtr->radius, otherPtrs[i]->radius);
+                        selfPtr->leaf, bool(otherLeaf[i]), selfPtr->radius, otherPtrs[i]->radius,
+                        int(numberOfSelfParticles), int(otherPtrs[i]->numberOfParticles()),
+                        FmmHybridCost<order>::kHybridPerParticle_,
+                        FmmHybridCost<order>::kParticlePair_);
                     if (interaction == FmmInteraction::CellCell) {
                         cclist.push_back(checklist[ci + i]);
                     } else if (interaction == FmmInteraction::CellParticle) {
@@ -376,15 +426,32 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
                     } else if (otherLeaf[i]) {
                         leaflist.push_back(checklist[ci + i]);
                     } else {
-                        auto const childChecks = otherPtrs[i]->children;
-                        nextlist.push_back(childChecks[LEFT]);
-                        nextlist.push_back(childChecks[RIGHT]);
+                        detail::kickOpenOrDefer(openLargerCell, selfPtr, otherPtrs[i],
+                            checklist[ci + i], nextlist, leaflist, counts);
                     }
                 }
+                counts.acceptanceTests += maxi;
             }
             std::swap(checklist, nextlist);
             nextlist.resize(0);
-        } while (checklist.size() && selfPtr->leaf);
+        } while (checklist.size() && (selfPtr->leaf || openLargerCell));
+        counts.cellCellDirect += detail::kickCountOccupied(cclist);
+        counts.cellParticle += detail::kickCountOccupied(cplist);
+        counts.particleCell += detail::kickCountOccupied(pclist);
+        if (selfPtr->leaf) {
+            counts.cellParticleAtLeafSinks += detail::kickCountOccupied(cplist);
+            for (auto const& id : pclist) {
+                TreeNode const* source = treeGetNode(id);
+                counts.particleCellFromLeafSources += source->leaf && source->numberOfParticles();
+            }
+            for (auto const& id : leaflist) {
+                ParticleInteger const sourceCount = treeGetNode(id)->numberOfParticles();
+                if (sourceCount != 0) {
+                    counts.particleParticleLeafPairs++;
+                    counts.particleParticlePairs += (long long) numberOfSelfParticles * sourceCount;
+                }
+            }
+        }
         cpuGravityCc<order>(kGravityDirect, expansion, cclist, self, params.doPhi);
         // Internal sinks pass these source-leaf contributions to their children via L2L.
         cpuGravityCp<order>(expansion, cplist, self, params.doPhi);
@@ -527,6 +594,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
         }
         detail::kickAccumulateLeafReturn(
             kr, selfPtr->numberOfParticles(), cudaWorkspace == nullptr);
+        kickAddInteractionCounts(counts);
         addCpuFlops(flops);
         if (cudaWorkspace != nullptr) {
             cudaWorkspace->recordProcessedParticles(cudaWorkspace, selfPtr->numberOfParticles());
@@ -573,6 +641,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
         }
         flops += 12;
 
+        kickAddInteractionCounts(counts);
         addCpuFlops(flops);
         return kr;
     }

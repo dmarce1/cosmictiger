@@ -178,8 +178,12 @@ struct KickParameters {
     bool descending;
     bool top;
     bool doPhi;
+    // Opening rule, stamped by kick() from the options so that the CPU walk,
+    // the remote kick action and the CUDA kernel apply the same rule.
+    bool openLargerCell;
     KickParameters() {
         htime = true;
+        openLargerCell = false;
         maxDt = 1e30;
         doPhi = true;
         velInit = false;
@@ -208,6 +212,7 @@ struct KickParameters {
         arc & minLevel;
         arc & doPhi;
         arc & velInit;
+        arc & openLargerCell;
     }
 };
 

@@ -231,6 +231,46 @@ void testSimdCases(std::vector<AcceptanceCase> const& cases) {
 }
 #endif
 
+// For a leaf pair the cheapest of the valid hybrids and direct summation is
+// taken, from the particle counts and the per-order costs; equal counts keep
+// the radius rule, and the decision mirrors between the sides.
+void testHybridCosts() {
+    using Interaction = FmmInteraction;
+    float const hybrid = 300.0f;
+    float const pair = 38.0f;
+    auto const select = [&](bool particleCell, bool cellParticle, int sinkCount, int sourceCount,
+                            float sinkRadius = 1.0f, float sourceRadius = 1.0f) {
+        return selectFmmInteraction(false, particleCell, cellParticle, true, true, sinkRadius,
+            sourceRadius, sinkCount, sourceCount, hybrid, pair);
+    };
+    require(select(true, true, 2, 2) == Interaction::ParticleParticle, "tiny leaves sum directly");
+    require(select(true, true, 64, 40) == Interaction::CellParticle,
+        "the leaf with fewer particles is evaluated explicitly");
+    require(select(true, true, 40, 64) == Interaction::ParticleCell,
+        "the leaf with fewer particles is evaluated explicitly, mirrored");
+    require(select(true, false, 64, 40) == Interaction::ParticleCell,
+        "a lone valid hybrid beats direct summation");
+    require(select(true, false, 1, 7) == Interaction::ParticleParticle,
+        "direct summation beats a costlier lone hybrid");
+    require(select(true, true, 32, 32, 2.0f, 1.0f) == Interaction::ParticleCell,
+        "equal counts keep the smaller cloud");
+    require(select(true, true, 32, 32) == Interaction::ParticleParticle,
+        "equal counts and radii fall back to direct summation");
+    require(selectFmmInteraction(false, true, true, true, true, 2.0f, 1.0f, 64, 40) ==
+            Interaction::ParticleCell,
+        "without costs the radius rule decides");
+    require(selectFmmInteraction(false, true, true, true, false, 1.0f, 1.0f, 1, 1000, hybrid,
+                pair) == Interaction::ParticleCell,
+        "a leaf against an internal cell is not costed");
+    for (int a : {1, 4, 40, 64}) {
+        for (int b : {1, 4, 40, 64}) {
+            auto const forward = select(true, true, a, b, 1.0f, 1.5f);
+            auto const reverse = select(true, true, b, a, 1.5f, 1.0f);
+            require(reverse == reciprocalInteraction(forward), "cost choice is not reciprocal");
+        }
+    }
+}
+
 }    // namespace detail
 
 int main() {
@@ -242,6 +282,7 @@ int main() {
         detail::testSimdCases(cases);
 #endif
         detail::require(fmmInverseOpeningAngle(0.5f) == 2.0f, "inverse opening angle");
+        detail::testHybridCosts();
     } catch (std::exception const& error) {
         std::fprintf(stderr, "FMM acceptance test failed: %s\n", error.what());
         return 1;

@@ -94,17 +94,33 @@ CUDA_EXPORT inline FmmAcceptance<T> computeFmmAcceptance(T const& centerDistance
         supportSeparated};
 }
 
-// Only the explicit-particle side must be a leaf. When both hybrids qualify,
-// keep the smaller-radius cell as the cloud; equal radii fall back to PP to
-// preserve reciprocal selection without a particle-count heuristic.
+// Only the explicit-particle side must be a leaf. For a leaf pair, the walk
+// takes the cheapest of the valid hybrids and direct summation: direct
+// summation costs sinkCount * sourceCount * particlePairFlops, a hybrid costs
+// hybridFlopsPerParticle for every particle of the leaf that is evaluated
+// explicitly. Equal costs keep the smaller-radius cell as the cloud, and equal
+// radii fall back to PP, so the decision depends only on the unordered pair
+// and mirrors between the two sides. Zero costs leave the radius rule alone;
+// a leaf against an internal cell is never costed, since its alternative is
+// opening the cell, not direct summation.
 CUDA_EXPORT inline FmmInteraction selectFmmInteraction(bool cellCellAccepted,
     bool particleCellAccepted, bool cellParticleAccepted, bool sinkLeaf, bool sourceLeaf,
-    float sinkRadius, float sourceRadius) {
+    float sinkRadius, float sourceRadius, int sinkCount = 0, int sourceCount = 0,
+    float hybridFlopsPerParticle = 0.0f, float particlePairFlops = 0.0f) {
     if (cellCellAccepted) {
         return FmmInteraction::CellCell;
     }
-    bool const particleCell = particleCellAccepted && sinkLeaf;
-    bool const cellParticle = cellParticleAccepted && sourceLeaf;
+    bool particleCell = particleCellAccepted && sinkLeaf;
+    bool cellParticle = cellParticleAccepted && sourceLeaf;
+    if (sinkLeaf && sourceLeaf && hybridFlopsPerParticle > 0.0f && particlePairFlops > 0.0f) {
+        float const pairFlops = float(sinkCount) * float(sourceCount) * particlePairFlops;
+        particleCell = particleCell && float(sinkCount) * hybridFlopsPerParticle <= pairFlops;
+        cellParticle = cellParticle && float(sourceCount) * hybridFlopsPerParticle <= pairFlops;
+        if (particleCell && cellParticle && sinkCount != sourceCount) {
+            return sinkCount < sourceCount ? FmmInteraction::ParticleCell :
+                                             FmmInteraction::CellParticle;
+        }
+    }
     if (particleCell && cellParticle) {
         if (sourceRadius < sinkRadius) {
             return FmmInteraction::ParticleCell;

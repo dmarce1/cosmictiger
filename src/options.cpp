@@ -406,8 +406,8 @@ bool processOptions(int argc, char* argv[]) {
         "FMM order (multipole degree plus two), 3 to 9; every order is compiled in")(
         "gravity.openingAngle", po::value<double>(&opts.gravity.openingAngle)->default_value(0.8),
         "opening angle for test problems")("gravity.openLargerCell",
-        po::value<bool>(&opts.gravity.openLargerCell)->default_value(false),
-        "CPU tree walk opens only the larger of two rejected cells; requires compute.cuda=false")(
+        po::value<bool>(&opts.gravity.openLargerCell)->default_value(true),
+        "tree walk opens only the larger of two rejected cells instead of both")(
         "gravity.softening",
         po::value<double>(&gravityEffectiveRadius)->default_value(0.01876988456953534),
         "legacy alias for gravity.effectiveRadius")("gravity.effectiveRadius", po::value<double>(),
@@ -662,10 +662,6 @@ bool processOptions(int argc, char* argv[]) {
     }
     if (opts.gravity.fmmOrder < kFmmMinOrder || opts.gravity.fmmOrder > kFmmMaxOrder) {
         THROW_ERROR("gravity.fmmOrder must be between %i and %i\n", kFmmMinOrder, kFmmMaxOrder);
-    }
-    if (opts.gravity.openLargerCell && opts.compute.cuda) {
-        THROW_ERROR("gravity.openLargerCell requires compute.cuda=false: the CUDA walk still "
-                    "opens both cells, and mixing the two rules breaks reciprocity\n");
     }
     if (opts.compute.bucketSize > MAX_BUCKET_SIZE) {
         THROW_ERROR("compute.bucketSize must not exceed the compile-time maximum %i "
@@ -943,7 +939,10 @@ bool processOptions(int argc, char* argv[]) {
         "Box size = %e cm/h\n", opts.units.lengthCm / constants::kMpcToCm * opts.cosmology.hubble);
     if (opts.initial.plummer) {
         opts.gravity.gm = 1.0 / opts.initial.numberOfParticles;
-        opts.gravity.openingAngle = 0.4;
+        // The model's default angle; an explicit gravity.openingAngle takes precedence.
+        if (vm.count("gravity.openingAngle") == 0 || vm["gravity.openingAngle"].defaulted()) {
+            opts.gravity.openingAngle = 0.4;
+        }
     }
 #ifdef CHECK_MUTUAL_SORT
     opts.analysis.groups = true;

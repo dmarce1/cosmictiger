@@ -115,7 +115,7 @@ struct Gravity {
     std::string kernelFamily{"ferrers"};
     int kernelDegree{4};
     double openingAngle{};
-    // CPU walk: open only the larger of two rejected cells instead of both.
+    // Open only the larger of two rejected cells instead of both.
     bool openLargerCell{};
     // Fixed comoving compact support in box units; effectiveRadius is 2 sigma.
     double supportRadius{};

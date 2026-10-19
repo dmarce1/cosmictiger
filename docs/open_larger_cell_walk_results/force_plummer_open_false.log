@@ -1,0 +1,114 @@
+walk theta 0.200 openLargerCell 0: tests 505012 ccDirect 103892 ccEwald 43068 cp 35326 pc 39648 ppLeafPairs 90200 ppPairs 590102766 opened 128590 deferred 0
+walk theta 0.200 openLargerCell 0: rank-local net force residual 5.297e-10
+Force 50  Error     = 4.309555e-03
+Force 99  Error     = 3.143459e-01
+Potential 50  Error = 1.037887e-03
+Potential 99  Error = 1.005588e-02
+2.000000e-01 4.309555e-03 3.143459e-01
+walk theta 0.250 openLargerCell 0: tests 329930 ccDirect 53062 ccEwald 26358 cp 31090 pc 32238 ppLeafPairs 60432 ppPairs 414829340 opened 84938 deferred 0
+walk theta 0.250 openLargerCell 0: rank-local net force residual 9.711e-10
+Force 50  Error     = 4.309581e-03
+Force 99  Error     = 3.143356e-01
+Potential 50  Error = 1.038058e-03
+Potential 99  Error = 1.005555e-02
+2.500000e-01 4.309581e-03 3.143356e-01
+walk theta 0.300 openLargerCell 0: tests 236498 ccDirect 29510 ccEwald 18782 cp 27812 pc 28116 ppLeafPairs 42336 ppPairs 300787240 opened 61174 deferred 0
+walk theta 0.300 openLargerCell 0: rank-local net force residual 4.942e-10
+Force 50  Error     = 4.309733e-03
+Force 99  Error     = 3.143280e-01
+Potential 50  Error = 1.037955e-03
+Potential 99  Error = 1.005629e-02
+3.000000e-01 4.309733e-03 3.143280e-01
+walk theta 0.350 openLargerCell 0: tests 192862 ccDirect 26270 ccEwald 13840 cp 24560 pc 24694 ppLeafPairs 32690 ppPairs 232697632 opened 50058 deferred 0
+walk theta 0.350 openLargerCell 0: rank-local net force residual 1.146e-09
+Force 50  Error     = 4.309787e-03
+Force 99  Error     = 3.145588e-01
+Potential 50  Error = 1.037750e-03
+Potential 99  Error = 1.005686e-02
+3.500000e-01 4.309787e-03 3.145588e-01
+walk theta 0.400 openLargerCell 0: tests 162966 ccDirect 25844 ccEwald 10340 cp 21468 pc 21534 ppLeafPairs 25736 ppPairs 183680674 opened 42326 deferred 0
+walk theta 0.400 openLargerCell 0: rank-local net force residual 1.607e-09
+Force 50  Error     = 4.310202e-03
+Force 99  Error     = 3.143220e-01
+Potential 50  Error = 1.037887e-03
+Potential 99  Error = 1.001896e-02
+4.000000e-01 4.310202e-03 3.143220e-01
+walk theta 0.450 openLargerCell 0: tests 132136 ccDirect 21152 ccEwald 8162 cp 18436 pc 18484 ppLeafPairs 19392 ppPairs 140737722 opened 34082 deferred 0
+walk theta 0.450 openLargerCell 0: rank-local net force residual 5.591e-10
+Force 50  Error     = 4.310454e-03
+Force 99  Error     = 3.135048e-01
+Potential 50  Error = 1.038195e-03
+Potential 99  Error = 1.002947e-02
+4.500000e-01 4.310454e-03 3.135048e-01
+walk theta 0.500 openLargerCell 0: tests 111288 ccDirect 22174 ccEwald 6520 cp 14606 pc 14626 ppLeafPairs 15634 ppPairs 112616328 opened 28694 deferred 0
+walk theta 0.500 openLargerCell 0: rank-local net force residual 1.540e-09
+Force 50  Error     = 4.254198e-03
+Force 99  Error     = 3.141196e-01
+Potential 50  Error = 1.038777e-03
+Potential 99  Error = 9.982530e-03
+5.000000e-01 4.254198e-03 3.141196e-01
+walk theta 0.550 openLargerCell 0: tests 96180 ccDirect 22332 ccEwald 5348 cp 11368 pc 11382 ppLeafPairs 13910 ppPairs 100074676 opened 24782 deferred 0
+walk theta 0.550 openLargerCell 0: rank-local net force residual 7.711e-10
+Force 50  Error     = 4.368693e-03
+Force 99  Error     = 3.135632e-01
+Potential 50  Error = 1.038494e-03
+Potential 99  Error = 9.960369e-03
+5.500000e-01 4.368693e-03 3.135632e-01
+walk theta 0.600 openLargerCell 0: tests 87688 ccDirect 22544 ccEwald 4412 cp 9590 pc 9592 ppLeafPairs 12570 ppPairs 90765518 opened 22560 deferred 0
+walk theta 0.600 openLargerCell 0: rank-local net force residual 1.587e-09
+Force 50  Error     = 4.355930e-03
+Force 99  Error     = 3.095491e-01
+Potential 50  Error = 1.037676e-03
+Potential 99  Error = 1.011431e-02
+6.000000e-01 4.355930e-03 3.095491e-01
+walk theta 0.650 openLargerCell 0: tests 73964 ccDirect 18680 ccEwald 3922 cp 7778 pc 7784 ppLeafPairs 11298 ppPairs 81564392 opened 18924 deferred 0
+walk theta 0.650 openLargerCell 0: rank-local net force residual 1.773e-09
+Force 50  Error     = 4.404738e-03
+Force 99  Error     = 3.086434e-01
+Potential 50  Error = 1.038701e-03
+Potential 99  Error = 1.015223e-02
+6.500000e-01 4.404738e-03 3.086434e-01
+walk theta 0.700 openLargerCell 0: tests 67044 ccDirect 17990 ccEwald 3456 cp 6420 pc 6426 ppLeafPairs 10422 ppPairs 75249790 opened 17140 deferred 0
+walk theta 0.700 openLargerCell 0: rank-local net force residual 2.410e-09
+Force 50  Error     = 4.461318e-03
+Force 99  Error     = 3.089102e-01
+Potential 50  Error = 1.040155e-03
+Potential 99  Error = 1.015231e-02
+7.000000e-01 4.461318e-03 3.089102e-01
+walk theta 0.750 openLargerCell 0: tests 59898 ccDirect 17264 ccEwald 3012 cp 4974 pc 4978 ppLeafPairs 9646 ppPairs 69947742 opened 15316 deferred 0
+walk theta 0.750 openLargerCell 0: rank-local net force residual 2.701e-09
+Force 50  Error     = 4.726906e-03
+Force 99  Error     = 3.074758e-01
+Potential 50  Error = 1.036515e-03
+Potential 99  Error = 1.033639e-02
+7.500000e-01 4.726906e-03 3.074758e-01
+walk theta 0.800 openLargerCell 0: tests 52358 ccDirect 16494 ccEwald 2618 cp 3178 pc 3178 ppLeafPairs 9324 ppPairs 67432662 opened 13320 deferred 0
+walk theta 0.800 openLargerCell 0: rank-local net force residual 4.024e-09
+Force 50  Error     = 5.679640e-03
+Force 99  Error     = 3.025014e-01
+Potential 50  Error = 1.018026e-03
+Potential 99  Error = 1.326339e-02
+8.000000e-01 5.679640e-03 3.025014e-01
+walk theta 0.850 openLargerCell 0: tests 47798 ccDirect 15510 ccEwald 2362 cp 2338 pc 2338 ppLeafPairs 9124 ppPairs 66257874 opened 12148 deferred 0
+walk theta 0.850 openLargerCell 0: rank-local net force residual 3.015e-09
+Force 50  Error     = 6.011379e-03
+Force 99  Error     = 2.990206e-01
+Potential 50  Error = 1.031594e-03
+Potential 99  Error = 1.538012e-02
+8.500000e-01 6.011379e-03 2.990206e-01
+walk theta 0.900 openLargerCell 0: tests 46306 ccDirect 15398 ccEwald 2244 cp 2108 pc 2108 ppLeafPairs 8924 ppPairs 65276786 opened 11758 deferred 0
+walk theta 0.900 openLargerCell 0: rank-local net force residual 3.178e-09
+Force 50  Error     = 6.530719e-03
+Force 99  Error     = 2.991933e-01
+Potential 50  Error = 1.040445e-03
+Potential 99  Error = 1.474354e-02
+9.000000e-01 6.530719e-03 2.991933e-01
+walk theta 0.950 openLargerCell 0: tests 44290 ccDirect 15026 ccEwald 1966 cp 1854 pc 1854 ppLeafPairs 8768 ppPairs 64494974 opened 11248 deferred 0
+walk theta 0.950 openLargerCell 0: rank-local net force residual 4.545e-09
+Force 50  Error     = 6.631406e-03
+Force 99  Error     = 2.992113e-01
+Potential 50  Error = 1.019171e-03
+Potential 99  Error = 1.528328e-02
+9.500000e-01 6.631406e-03 2.992113e-01
+AVERAGE TIME = 1.171467e+00
+EXIT 0

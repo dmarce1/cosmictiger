@@ -61,6 +61,8 @@ struct CudaKickControl {
     DeviceVector<int> cclist;
     DeviceVector<int> pclist;
     DeviceVector<int> nextlist;
+    DeviceVector<int>
+        bothlist;    // equal radii: opened sources whose children go to the sink's children
     DeviceVector<CudaExpansionType<order>> ancestors;    // expansions awaiting their right child
     DeviceVector<CudaExpansionType<order>> current;    // active expansion when not in shared memory
     DeviceVector<float> forceBacking;    // whole-bucket forces when not in shared memory

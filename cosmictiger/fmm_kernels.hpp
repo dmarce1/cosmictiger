@@ -102,9 +102,8 @@ CUDA_EXPORT int m2P(Expansion2<Real>& local, StfTensor<Real, sourceDegree> const
     }
     Real const inverseRadius = detail::fmmInverseRadius(position);
     Array<Real, NDIM + 1> field{};
-    detail::stf::M2pKernel<sourceDegree, centered>::add(field, source,
-        position[0] * inverseRadius, position[1] * inverseRadius, position[2] * inverseRadius,
-        inverseRadius, inverseRadius);
+    detail::stf::M2pKernel<sourceDegree, centered>::add(field, source, position[0] * inverseRadius,
+        position[1] * inverseRadius, position[2] * inverseRadius, inverseRadius, inverseRadius);
     if (doPhi) {
         local[0] += field[0];
     }
@@ -233,3 +232,28 @@ __device__ void l2LCudaInto(Real* target, StfTensor<Real, degree, true> const& s
         position[2] * simdBroadcast<Real>(SCALE_FACTOR), doPhi);
 }
 #endif
+
+// Flop costs of the interactions that can replace direct summation for a leaf
+// pair, from the generated kernel counts plus the per-particle overhead of the
+// CPU operators. Both backends use these constants, so the choice is the same
+// on either side of a CPU/CUDA handoff.
+template <int order>
+struct FmmHybridCost {
+    static constexpr int kMultipoleDegree_ = FmmOrder<order>::kMultipoleDegree_;
+    static constexpr int kLocalDegree_ = FmmOrder<order>::kLocalDegree_;
+    // M2P per sink particle: the kernel, the displacement and the accumulation.
+    static constexpr float kParticleCellPerParticle_ =
+        float(detail::stf::M2pKernel<kMultipoleDegree_, false>::kFlops_) + 18.0f + 7.0f;
+    // P2L per source particle: the Green function, the displacement and the
+    // accumulation into the local expansion.
+    static constexpr float kCellParticlePerParticle_ =
+        float(detail::stf::P2lKernel<kLocalDegree_>::kFlops_) + 14.0f + 3.0f +
+        float(FmmOrder<order>::kLocalCoefficients_);
+    // Both walks evaluate a pairing: every explicit particle costs one M2P on
+    // its own side and one P2L on the other side, so charge the mean per side.
+    static constexpr float kHybridPerParticle_ =
+        0.5f * (kParticleCellPerParticle_ + kCellParticlePerParticle_);
+    // Newtonian pair in the direct kernel. Hybrids are considered only for
+    // support-separated pairs, which never take the softened branch.
+    static constexpr float kParticlePair_ = 38.0f;
+};

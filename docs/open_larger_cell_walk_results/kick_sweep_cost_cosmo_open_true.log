@@ -1,0 +1,64 @@
+theta 0.2 EXIT 0
+tree_kick: 8.520829e+00 s
+walk theta 0.200 openLargerCell 1: tests 62993247 ccDirect 15371616 ccEwald 10454879 cp 1879642 pc 1879642 ppLeafPairs 1755585 ppPairs 12215846 opened 15773539 deferred 15065602
+walk theta 0.200 openLargerCell 1: cp at leaf sinks 1288, cp at internal sinks 1878354; pc from leaf sources 1288, pc from internal sources 1878354
+theta 0.25 EXIT 0
+tree_kick: 4.273082e+00 s
+walk theta 0.250 openLargerCell 1: tests 27763922 ccDirect 6203460 ccEwald 5389931 cp 768831 pc 768831 ppLeafPairs 747470 ppPairs 15658782 opened 6943399 deferred 6729441
+walk theta 0.250 openLargerCell 1: cp at leaf sinks 10065, cp at internal sinks 758766; pc from leaf sources 10065, pc from internal sources 758766
+theta 0.3 EXIT 0
+tree_kick: 2.054088e+00 s
+walk theta 0.300 openLargerCell 1: tests 12758846 ccDirect 2233770 ccEwald 2852989 cp 518371 pc 518371 ppLeafPairs 263142 ppPairs 17262102 opened 3189711 deferred 2977284
+walk theta 0.300 openLargerCell 1: cp at leaf sinks 179900, cp at internal sinks 338471; pc from leaf sources 179900, pc from internal sources 338471
+theta 0.35 EXIT 0
+tree_kick: 1.220144e+00 s
+walk theta 0.350 openLargerCell 1: tests 7724870 ccDirect 1560856 ccEwald 1488021 cp 321460 pc 321460 ppLeafPairs 177098 ppPairs 11654806 opened 1931217 deferred 1803543
+walk theta 0.350 openLargerCell 1: cp at leaf sinks 115282, cp at internal sinks 206178; pc from leaf sources 115282, pc from internal sources 206178
+theta 0.4 EXIT 0
+tree_kick: 7.305545e-01 s
+walk theta 0.400 openLargerCell 1: tests 4963762 ccDirect 1122892 ccEwald 817302 cp 208640 pc 208640 ppLeafPairs 130390 ppPairs 8702068 opened 1240940 deferred 1150139
+walk theta 0.400 openLargerCell 1: cp at leaf sinks 74455, cp at internal sinks 134185; pc from leaf sources 74455, pc from internal sources 134185
+theta 0.45 EXIT 0
+tree_kick: 3.986159e-01 s
+walk theta 0.450 openLargerCell 1: tests 2189474 ccDirect 311386 ccEwald 472844 cp 110477 pc 110477 ppLeafPairs 93122 ppPairs 25795016 opened 547368 deferred 493818
+walk theta 0.450 openLargerCell 1: cp at leaf sinks 33483, cp at internal sinks 76994; pc from leaf sources 33483, pc from internal sources 76994
+theta 0.5 EXIT 0
+tree_kick: 2.639191e-01 s
+walk theta 0.500 openLargerCell 1: tests 1532230 ccDirect 249996 ccEwald 285612 cp 80560 pc 80560 ppLeafPairs 72620 ppPairs 20338856 opened 383057 deferred 346147
+walk theta 0.500 openLargerCell 1: cp at leaf sinks 28679, cp at internal sinks 51881; pc from leaf sources 28679, pc from internal sources 51881
+theta 0.55 EXIT 0
+tree_kick: 1.662751e-01 s
+walk theta 0.550 openLargerCell 1: tests 1116926 ccDirect 201256 ccEwald 182045 cp 59330 pc 59330 ppLeafPairs 59524 ppPairs 16764444 opened 279231 deferred 248896
+walk theta 0.550 openLargerCell 1: cp at leaf sinks 23128, cp at internal sinks 36202; pc from leaf sources 23128, pc from internal sources 36202
+theta 0.6 EXIT 0
+tree_kick: 1.106046e-01 s
+walk theta 0.600 openLargerCell 1: tests 843906 ccDirect 158662 ccEwald 125148 cp 46863 pc 46863 ppLeafPairs 47188 ppPairs 13583404 opened 210976 deferred 185137
+walk theta 0.600 openLargerCell 1: cp at leaf sinks 20633, cp at internal sinks 26230; pc from leaf sources 20633, pc from internal sources 26230
+theta 0.65 EXIT 0
+tree_kick: 1.081103e-01 s
+walk theta 0.650 openLargerCell 1: tests 435370 ccDirect 73480 ccEwald 89812 cp 14791 pc 14791 ppLeafPairs 26474 ppPairs 29275442 opened 108842 deferred 97902
+walk theta 0.650 openLargerCell 1: cp at leaf sinks 6149, cp at internal sinks 8642; pc from leaf sources 6149, pc from internal sources 8642
+theta 0.7 EXIT 0
+tree_kick: 7.644367e-02 s
+walk theta 0.700 openLargerCell 1: tests 350966 ccDirect 60586 ccEwald 70544 cp 11880 pc 11880 ppLeafPairs 22182 ppPairs 24591314 opened 87741 deferred 77827
+walk theta 0.700 openLargerCell 1: cp at leaf sinks 6207, cp at internal sinks 5673; pc from leaf sources 6207, pc from internal sources 5673
+theta 0.75 EXIT 0
+tree_kick: 5.871032e-02 s
+walk theta 0.750 openLargerCell 1: tests 289630 ccDirect 49628 ccEwald 57319 cp 10067 pc 10067 ppLeafPairs 19270 ppPairs 21404106 opened 72407 deferred 63593
+walk theta 0.750 openLargerCell 1: cp at leaf sinks 5393, cp at internal sinks 4674; pc from leaf sources 5393, pc from internal sources 4674
+theta 0.8 EXIT 0
+tree_kick: 5.644511e-02 s
+walk theta 0.800 openLargerCell 1: tests 175382 ccDirect 24812 ccEwald 45892 cp 4180 pc 4180 ppLeafPairs 9650 ppPairs 42408192 opened 43845 deferred 33304
+walk theta 0.800 openLargerCell 1: cp at leaf sinks 1523, cp at internal sinks 2657; pc from leaf sources 1523, pc from internal sources 2657
+theta 0.85 EXIT 0
+tree_kick: 5.048053e-02 s
+walk theta 0.850 openLargerCell 1: tests 148214 ccDirect 22968 ccEwald 37420 cp 3373 pc 3373 ppLeafPairs 7996 ppPairs 34996394 opened 37053 deferred 29228
+walk theta 0.850 openLargerCell 1: cp at leaf sinks 1438, cp at internal sinks 1935; pc from leaf sources 1438, pc from internal sources 1935
+theta 0.9 EXIT 0
+tree_kick: 4.182320e-02 s
+walk theta 0.900 openLargerCell 1: tests 129094 ccDirect 22078 ccEwald 31350 cp 2629 pc 2629 ppLeafPairs 6884 ppPairs 30581950 opened 32273 deferred 26650
+walk theta 0.900 openLargerCell 1: cp at leaf sinks 1307, cp at internal sinks 1322; pc from leaf sources 1307, pc from internal sources 1322
+theta 0.95 EXIT 0
+tree_kick: 3.402678e-02 s
+walk theta 0.950 openLargerCell 1: tests 105218 ccDirect 19256 ccEwald 24750 cp 2167 pc 2167 ppLeafPairs 5288 ppPairs 23720640 opened 26304 deferred 22040
+walk theta 0.950 openLargerCell 1: cp at leaf sinks 1366, cp at internal sinks 801; pc from leaf sources 1366, pc from internal sources 801

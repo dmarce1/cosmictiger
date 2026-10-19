@@ -19,6 +19,9 @@
 
 constexpr bool kVerbose = true;
 
+#include <algorithm>
+#include <array>
+#include <cmath>
 #include <fenv.h>
 
 #include <cosmictiger/analytic.hpp>
@@ -31,6 +34,7 @@ constexpr bool kVerbose = true;
 #include <cosmictiger/hydro.hpp>
 #include <cosmictiger/initialize.hpp>
 #include <cosmictiger/kick.hpp>
+#include <cosmictiger/kick_interaction_counts.hpp>
 #include <cosmictiger/kick_workspace.hpp>
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/rockstar.hpp>
@@ -184,13 +188,20 @@ static void treeTest() {
     tm.reset();
 }
 
+static void reportKickInteractions(double theta);
+void plummerInit(double r0);
+
 static void kickTest() {
     Timer tm;
 
     Timer totalTime;
     double totalFlops = 0.0;
     tm.start();
-    initialize(getOptions().cosmology.startRedshift);
+    if (getOptions().initial.plummer) {
+        plummerInit(1e-3);
+    } else {
+        initialize(getOptions().cosmology.startRedshift);
+    }
     tm.stop();
     PRINT("initialize: %e s\n", tm.read());
     tm.reset();
@@ -256,9 +267,11 @@ static void kickTest() {
     rootId.index = 0;
     Vector<TreeId> checklist;
     checklist.push_back(rootId);
+    kickResetInteractionCounts();
     auto kr = kick(kparams, l, pos, rootId, checklist, checklist, nullptr);
     tm.stop();
     PRINT("tree_kick: %e s\n", tm.read());
+    reportKickInteractions(kparams.theta);
     tm.reset();
     tm.start();
     treeDestroy();
@@ -281,6 +294,41 @@ static void kickTest() {
 
 DriverParameters readCheckpoint();
 
+// Rank-local CPU walk counters and the net force from the saved accelerations.
+static void reportKickInteractions(double theta) {
+    auto const counts = kickInteractionCounts();
+    PRINT("walk theta %.3f openLargerCell %i: tests %lld ccDirect %lld ccEwald %lld cp %lld pc "
+          "%lld ppLeafPairs %lld ppPairs %lld opened %lld deferred %lld\n",
+        theta, int(getOptions().gravity.openLargerCell), counts.acceptanceTests,
+        counts.cellCellDirect, counts.cellCellEwald, counts.cellParticle, counts.particleCell,
+        counts.particleParticleLeafPairs, counts.particleParticlePairs, counts.sourceOpenings,
+        counts.deferredSources);
+    PRINT("walk theta %.3f openLargerCell %i: cp at leaf sinks %lld, cp at internal sinks %lld; pc "
+          "from leaf sources %lld, pc from internal sources %lld\n",
+        theta, int(getOptions().gravity.openLargerCell), counts.cellParticleAtLeafSinks,
+        counts.cellParticle - counts.cellParticleAtLeafSinks, counts.particleCellFromLeafSources,
+        counts.particleCell - counts.particleCellFromLeafSources);
+    if (getOptions().analysis.saveForce) {
+        auto const range = particlesCurrentRange();
+        std::array<double, NDIM> total{};
+        double magnitudeSum = 0.0;
+        for (ParticleInteger i = range.first; i < range.second; i++) {
+            double squared = 0.0;
+            for (int dim = 0; dim < NDIM; dim++) {
+                double const force = particlesMass(i) * particlesGravityAcceleration(dim, i);
+                total[dim] += force;
+                squared += force * force;
+            }
+            magnitudeSum += std::sqrt(squared);
+        }
+        double const residual = std::sqrt(total[XDIM] * total[XDIM] + total[YDIM] * total[YDIM] +
+                                    total[ZDIM] * total[ZDIM]) /
+            std::max(1.0, magnitudeSum);
+        PRINT("walk theta %.3f openLargerCell %i: rank-local net force residual %.3e\n", theta,
+            int(getOptions().gravity.openLargerCell), residual);
+    }
+}
+
 static void forceTest() {
     if (getOptions().hydro.enabled) {
         THROW_ERROR("run.test=force requires hydro.enabled=false; "
@@ -293,6 +341,9 @@ static void forceTest() {
     auto const readCheck = getOptions().checkpoint.readIndex;
     if (readCheck != -1) {
         readCheckpoint();
+    } else if (getOptions().initial.plummer) {
+        // The driver's clustered model, for walks whose cost depends on radius contrast.
+        plummerInit(1e-3);
     } else {
         initialize(getOptions().cosmology.startRedshift);
     }
@@ -331,7 +382,9 @@ static void forceTest() {
         rootId.index = 0;
         Vector<TreeId> checklist;
         checklist.push_back(rootId);
+        kickResetInteractionCounts();
         auto kr = kick(kparams, l, pos, rootId, checklist, checklist, nullptr);
+        reportKickInteractions(thetas[iter]);
         treeDestroy(false);
         tmMain.stop();
         tm.reset();
