@@ -9,9 +9,11 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <set>
 #include <stdexcept>
 
+#include <cosmictiger/assert.hpp>
 #include <cosmictiger/ewald_kernels.hpp>
 #include <cosmictiger/hpx.hpp>
 
@@ -20,6 +22,15 @@
 Vector<hpx::id_type> const& hpxChildren() {
     static Vector<hpx::id_type> const children;
     return children;
+}
+
+// fmmDispatch() asserts on an unsupported order; the project's assert reports
+// the HPX rank, which this runtime-free test does not have.
+void cosmictigerAssert(char const* condition, bool satisfied, char const* file, int line) {
+    if (!satisfied) {
+        std::fprintf(stderr, "%s:%d: assertion \"%s\" failed\n", file, line, condition);
+        std::abort();
+    }
 }
 
 namespace detail {
@@ -71,7 +82,7 @@ void checkImageIndices() {
 }
 
 void checkSelfDerivatives() {
-    auto const derivatives = EwaldConst::d0();
+    auto const derivatives = EwaldConst::d0<kFmmDefaultOrder>();
     for (int x = 0; x < LORDER; ++x) {
         for (int y = 0; y < LORDER - x; ++y) {
             for (int z = 0; z < LORDER - x - y; ++z) {
@@ -98,7 +109,7 @@ void checkSelfDerivatives() {
 void checkFourierScaling() {
     for (int image = 0; image < EwaldConst::nfour(); ++image) {
         auto const& wave = EwaldConst::fourIndex(image);
-        auto const& derivative = EwaldConst::fourExpansion(image);
+        auto const& derivative = EwaldConst::fourExpansion<kFmmDefaultOrder>(image);
         double const h2 = wave[0] * wave[0] + wave[1] * wave[1] + wave[2] * wave[2];
         double const amplitude = -std::exp(-kPi * kPi * h2 / (kAlpha * kAlpha)) / (kPi * h2);
         // Ranks zero through two retain the complete Fourier derivatives; STF

@@ -18,11 +18,14 @@
  */
 
 #include <algorithm>
+#include <cmath>
 
 #include <cosmictiger/ewald_indices.hpp>
-#include <cosmictiger/fmm_kernels.hpp>
+#include <cosmictiger/ewald_tables.hpp>
+#include <cosmictiger/fmm_order.hpp>
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/safe_io.hpp>
+
 EwaldConstants ec;
 __constant__ EwaldConstants ecDev;
 
@@ -74,84 +77,10 @@ void EwaldConst::initGpu() {
         }
     }
     std::sort(ec.fourIndices.begin(), ec.fourIndices.end(), sortFunc);
-    count = 0;
-    for (int i = 0; i < NFOUR; i++) {
-        Array<float, NDIM> h = ec.fourIndices[i];
-        auto d0 = vectorToSymTensor<float, LORDER>(h);
-        float const h2 = sqr(h[0]) + sqr(h[1]) + sqr(h[2]);    // 5 OP
-        float const c0 = -1.0 / h2 * exp(-M_PI * M_PI * h2 / 4.0) / M_PI;
-        Array<int, NDIM> n;
-        int const signs[4] = {1, -1, -1, 1};
-        for (n[0] = 0; n[0] < LORDER; n[0]++) {
-            for (n[1] = 0; n[1] < LORDER - n[0]; n[1]++) {
-                for (n[2] = 0; n[2] < LORDER - n[0] - n[1]; n[2]++) {
-                    int const n0 = n[0] + n[1] + n[2];
-                    d0(n) *= (signs[n0 % 4] * pow(2.0 * M_PI * SCALE_FACTOR_INV1, n0) * c0) *
-                        SCALE_FACTOR_INV1;
-                }
-            }
-        }
-        ec.fourExpanse[count] = d0.detraceD();
-        count++;
-    }
-    SymmetricTensor<float, LORDER> dValue;
-    for (int n = 0; n < (LORDER + 2) * (LORDER + 1) * LORDER / 6; n++) {
-        dValue[n] = 0.0;
-    }
-    constexpr double kAlpha = 2.0;
-    for (int n = 0; n < LORDER; n += 2) {
-        for (int m = 0; m < LORDER - n; m += 2) {
-            for (int l = 0; l < LORDER - n - m; l += 2) {
-                dValue(n, m, l) = pow(SCALE_FACTOR_INV1, n + m + l + 1) *
-                    pow(-2.0, (n + m + l) / 2 + 1) / ((n + m + l + 1.0) * sqrt(M_PI)) *
-                    pow(kAlpha, n + m + l + 1) * doubleFactorial(n - 1) * doubleFactorial(m - 1) *
-                    doubleFactorial(l - 1);
-            }
-        }
-    }
-    ec.d0 = dValue;
+    // Derivative tables for the runtime order (ewald_tables.hpp).
+    fmmDispatch([](auto orderTag) { ewaldFillTables<decltype(orderTag)::value>(ec); });
     if (cudaEnabled()) {
         cudaSetDevice();
         CUDA_CHECK(cudaMemcpyToSymbol(ecDev, &ec, sizeof(EwaldConstants)));
     }
-}
-
-CUDA_EXPORT int EwaldConst::nfour() {
-    return NFOUR;
-}
-
-CUDA_EXPORT int EwaldConst::nreal() {
-    return NREAL;
-}
-
-CUDA_EXPORT SymmetricTensor<float, LORDER> const EwaldConst::d0() {
-#ifdef __CUDA_ARCH__
-    return ecDev.d0;
-#else
-    return ec.d0;
-#endif
-}
-
-CUDA_EXPORT Array<float, NDIM> const& EwaldConst::realIndex(int i) {
-#ifdef __CUDA_ARCH__
-    return ecDev.realIndices[i];
-#else
-    return ec.realIndices[i];
-#endif
-}
-
-CUDA_EXPORT Array<float, NDIM> const& EwaldConst::fourIndex(int i) {
-#ifdef __CUDA_ARCH__
-    return ecDev.fourIndices[i];
-#else
-    return ec.fourIndices[i];
-#endif
-}
-
-CUDA_EXPORT SymmetricTracelessTensor<float, LORDER> const& EwaldConst::fourExpansion(int i) {
-#ifdef __CUDA_ARCH__
-    return ecDev.fourExpanse[i];
-#else
-    return ec.fourExpanse[i];
-#endif
 }

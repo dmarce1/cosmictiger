@@ -28,11 +28,33 @@
 #error "COSMICTIGER_FMM_INSTANCE_ORDER must name the instantiated FMM order"
 #endif
 
+#include <cosmictiger/ewald_tables.hpp>
 #include <cosmictiger/fmm_order.hpp>
+#include <cosmictiger/gravity_cpu.hpp>
+#include <cosmictiger/kick_walk.hpp>
+#include <cosmictiger/tree_multipole.hpp>
 
 static_assert(COSMICTIGER_FMM_INSTANCE_ORDER >= kFmmMinOrder &&
     COSMICTIGER_FMM_INSTANCE_ORDER <= kFmmMaxOrder);
 
-// Order-templated definitions and their explicit instantiations are added here
-// by the CPU conversion (gravity_cpu.hpp, kick_walk.hpp, tree_multipole.hpp,
-// ewald_tables.hpp).
+// CPU gravity operators (gravity_cpu.hpp).
+template void cpuGravityCc<COSMICTIGER_FMM_INSTANCE_ORDER>(GravityCcType,
+    FmmExpansion<float, COSMICTIGER_FMM_INSTANCE_ORDER>&, Vector<TreeId> const&, TreeId, bool);
+template void cpuGravityCp<COSMICTIGER_FMM_INSTANCE_ORDER>(
+    FmmExpansion<float, COSMICTIGER_FMM_INSTANCE_ORDER>&, Vector<TreeId> const&, TreeId, bool);
+template void cpuGravityPc<COSMICTIGER_FMM_INSTANCE_ORDER>(
+    ForceVectors&, int, TreeId, Vector<TreeId> const&);
+
+// CPU tree walk (kick_walk.hpp).
+template KickReturn kickWalk<COSMICTIGER_FMM_INSTANCE_ORDER>(KickParameters, ExpansionBuffer,
+    Array<Fixed32, NDIM>, TreeId, Vector<TreeId>, Vector<TreeId>, std::shared_ptr<KickWorkspace>);
+
+// Tree multipole construction (tree_multipole.hpp).
+template int treeComputeMultipole<COSMICTIGER_FMM_INSTANCE_ORDER>(MultipoleBuffer&,
+    MultipoleBuffer const&, MultipoleBuffer const&, Array<double, NDIM> const&,
+    Array<double, NDIM> const&, Array<double, NDIM> const&);
+template int treeComputeMultipole<COSMICTIGER_FMM_INSTANCE_ORDER>(
+    MultipoleBuffer&, Pair<ParticleInteger>, Array<double, NDIM> const&);
+
+// Ewald tables (ewald_tables.hpp).
+template void ewaldFillTables<COSMICTIGER_FMM_INSTANCE_ORDER>(EwaldConstants&);

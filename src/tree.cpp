@@ -19,6 +19,7 @@
 
 constexpr bool kVerbose = true;
 
+#include <cstddef>
 #include <exception>
 #include <memory>
 #include <shared_mutex>
@@ -29,6 +30,8 @@ constexpr bool kVerbose = true;
 #include <cosmictiger/domain.hpp>
 #include <cosmictiger/fast_future.hpp>
 #include <cosmictiger/flops.hpp>
+#include <cosmictiger/fmm_order.hpp>
+#include <cosmictiger/fmm_types.hpp>
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/safe_io.hpp>
@@ -36,6 +39,7 @@ constexpr bool kVerbose = true;
 #include <cosmictiger/stack_trace.hpp>
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/tree.hpp>
+#include <cosmictiger/tree_multipole.hpp>
 
 static Vector<TreeNode> treeFetchCacheLine(int);
 static void treeAllocateNodes();
@@ -65,7 +69,10 @@ public:
 static Vector<TreeAllocator*> allocatorList;
 static thread_local TreeAllocator allocator;
 static TreeNode* nodes = nullptr;
-static MultiPos* multis = nullptr;
+// Positioned multipole arena: one record of multipoleStride bytes per node slot,
+// sized for the runtime FMM order when the arena is (re)allocated.
+static char* multis = nullptr;
+static size_t multipoleStride = 0;
 // Cache lines span reserved allocator slots, including holes between threads.
 static std::vector<unsigned char> populatedNodes;
 static Vector<Pair<ParticleInteger>> leafParticleRanges;
@@ -127,11 +134,47 @@ static void resetLastCacheEntries() {
 
 static TreeNode const* treeCacheRead(TreeId id);
 
-MultiPos* treeAddMultipole(MultiPos const& mpos) {
+// The coefficients follow the position header without padding for every order.
+static_assert(offsetof(FmmMultiPos<kFmmMinOrder>, multi) == sizeof(MultipolePosition) &&
+        offsetof(FmmMultiPos<kFmmMaxOrder>, multi) == sizeof(MultipolePosition),
+    "Positioned multipole coefficients must directly follow the position");
+
+static MultipolePosition* treeMultipoleRecord(size_t index) {
+    return reinterpret_cast<MultipolePosition*>(multis + index * multipoleStride);
+}
+
+static float* treeMultipoleCoefficients(MultipolePosition* record) {
+    return reinterpret_cast<float*>(reinterpret_cast<char*>(record) + sizeof(MultipolePosition));
+}
+
+static float const* treeMultipoleCoefficients(MultipolePosition const* record) {
+    return reinterpret_cast<float const*>(
+        reinterpret_cast<char const*>(record) + sizeof(MultipolePosition));
+}
+
+static void treeWriteMultipole(MultipolePosition* record, MultipoleBuffer const& multipole) {
+    int const count = fmmMultipoleCoefficientCount(fmmOrder());
+    float* coefficients = treeMultipoleCoefficients(record);
+    for (int i = 0; i < count; i++) {
+        coefficients[i] = multipole[i];
+    }
+}
+
+MultipolePosition* treeAddMultipole(
+    Array<Fixed32, NDIM> const& pos, MultipoleBuffer const& multipole) {
     int const treeAllocLineSize = getOptions().compute.treeAllocLineSize;
-    auto* ptr = &multis[nextMultId++ + treeAllocLineSize];
-    *ptr = mpos;
+    MultipolePosition* ptr = treeMultipoleRecord(nextMultId++ + treeAllocLineSize);
+    ptr->pos = pos;
+    treeWriteMultipole(ptr, multipole);
     return ptr;
+}
+
+void treeReadMultipole(MultipolePosition const* record, MultipoleBuffer& multipole) {
+    int const count = fmmMultipoleCoefficientCount(fmmOrder());
+    float const* coefficients = treeMultipoleCoefficients(record);
+    for (int i = 0; i < count; i++) {
+        multipole[i] = coefficients[i];
+    }
 }
 
 void TreeAllocator::reset() {
@@ -271,13 +314,15 @@ static void treeAllocateNodes() {
     size_t const sz =
         std::max(size_t(size_t(TREE_NODE_ALLOCATION_SIZE) * particlesSize() / bucketSize),
             (size_t) NTREES_MIN);
-    if (nodesSize < sz) {
+    size_t const stride = fmmPositionedMultipoleBytes(fmmOrder());
+    if (nodesSize < sz || multipoleStride != stride) {
         if (nodes != nullptr) {
             freeManagedMemory(nodes);
             freeManagedMemory(multis);
         }
         nodes = static_cast<TreeNode*>(allocateManagedMemory(sz * sizeof(TreeNode)));
-        multis = static_cast<MultiPos*>(allocateManagedMemory(sz * sizeof(MultiPos)));
+        multis = static_cast<char*>(allocateManagedMemory(sz * stride));
+        multipoleStride = stride;
     }
     nodesSize = sz;
     populatedNodes.assign(sz, 0);
@@ -325,7 +370,7 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
     }
     Array<TreeId, NCHILD> children;
     Array<Fixed32, NDIM>& x = rc.pos;
-    Multipole<float>& multi = rc.multi;
+    MultipoleBuffer& multi = rc.multi;
     auto& rbox = rc.box;
     float& radius = rc.radius;
     Array<double, NDIM> xcValue;
@@ -524,21 +569,10 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
         for (int dim = 0; dim < NDIM; dim++) {
             x[dim] = xcValue[dim];    // 3
         }
-        Array<SimdDouble, NDIM> mdx{};
-        Multipole<SimdDouble> simdM{};
-        for (int i = 0; i < MULTIPOLE_SIZE; i++) {
-            simdSetLane(simdM[i], LEFT, ml[i]);
-            simdSetLane(simdM[i], RIGHT, mr[i]);
-        }
-        for (int dim = 0; dim < NDIM; dim++) {
-            simdSetLane(mdx[dim], LEFT, xlValue[dim] - xcValue[dim]);     // 3
-            simdSetLane(mdx[dim], RIGHT, xrValue[dim] - xcValue[dim]);    // 3
-        }
-        simdM = m2M<SimdDouble>(simdM, mdx);
-        for (int i = 0; i < MULTIPOLE_SIZE; i++) {
-            multi[i] = simdM[i][LEFT] + simdM[i][RIGHT];
-        }
-        flops += 2 * detail::stf::M2mKernel<kFmmMultipoleDegree>::kFlops_ + 6 + MULTIPOLE_SIZE * 2;
+        flops += fmmDispatch([&](auto orderTag) {
+            return treeComputeMultipole<decltype(orderTag)::value>(
+                multi, ml, mr, xlValue, xrValue, xcValue);
+        });
         children[LEFT] = rcl.id;
         children[RIGHT] = rcr.id;
     } else {
@@ -577,50 +611,9 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
         }
         radius = std::sqrt(r);
         children[LEFT].index = children[RIGHT].index = -1;
-        Multipole<double> mValue;
-        for (int i = 0; i < MULTIPOLE_SIZE; i++) {
-            mValue[i] = 0.0;
-        }
-        Array<double, NDIM> dx;
-        ParticleInteger const maxi =
-            roundUp(particleRange.second - particleRange.first, (ParticleInteger) SIMD_FLOAT_SIZE) +
-            particleRange.first;
-        Array<SimdInt, NDIM> y{};
-        for (int dim = 0; dim < NDIM; dim++) {
-            y[dim] = simdBroadcast<SimdInt>(Fixed32(xcValue[dim]).raw());
-        }
-
-        for (ParticleInteger i = particleRange.first; i < maxi; i += SIMD_FLOAT_SIZE) {
-            Array<SimdInt, NDIM> xValue{};
-            SimdFloat mask{};
-            ParticleInteger const maxj = std::min(i + SIMD_FLOAT_SIZE, particleRange.second);
-            for (ParticleInteger j = i; j < maxj; j++) {
-                for (int dim = 0; dim < NDIM; dim++) {
-                    simdSetLane(xValue[dim], j - i, particlesPos(dim, j).raw());
-                }
-                simdSetLane(mask, j - i, particlesMass(j));
-            }
-            for (ParticleInteger j = maxj; j < i + SIMD_FLOAT_SIZE; j++) {
-                simdSetLane(mask, j - i, 0.f);
-                for (int dim = 0; dim < NDIM; dim++) {
-                    simdSetLane(xValue[dim], j - i, particlesPos(dim, maxj - 1).raw());
-                }
-            }
-            Array<SimdFloat, NDIM> dx{};
-            for (int dim = 0; dim < NDIM; dim++) {
-                dx[dim] = simdCast<SimdFloat>(simdPositionDifference(xValue[dim], y[dim])) *
-                    toFloatFactor;    // 3
-            }
-            auto m = p2M(dx);
-            for (int j = 0; j < MULTIPOLE_SIZE; j++) {
-                m[j] *= mask;                  // MULTIPOLE_SIZE
-                mValue[j] += simdSum(m[j]);    // MULTIPOLE_SIZE * 6
-            }
-            flops += detail::stf::P2mKernel<kFmmMultipoleDegree>::kFlops_ + 6 + MULTIPOLE_SIZE * 7;
-        }
-        for (int i = 0; i < MULTIPOLE_SIZE; i++) {
-            multi[i] = mValue[i];
-        }
+        flops += fmmDispatch([&](auto orderTag) {
+            return treeComputeMultipole<decltype(orderTag)::value>(multi, particleRange, xcValue);
+        });
         for (int dim = 0; dim < NDIM; dim++) {
             x[dim] = xcValue[dim];
         }
@@ -633,9 +626,9 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
     node.particleRange = particleRange;
     node.processRange = processRange;
     node.pos = x;
-    node.mpos = multis + index;
+    node.mpos = treeMultipoleRecord(index);
     node.mpos->pos = x;
-    node.mpos->multi = multi;
+    treeWriteMultipole(node.mpos, multi);
     node.depth = depth;
     for (int dim = 0; dim < NDIM; dim++) {
         node.box.begin[dim] = rbox.begin[dim];
@@ -802,8 +795,10 @@ static Vector<TreeNode> treeFetchCacheLine(int index) {
     line.reserve(lineSize);
     int const begin = (index / lineSize) * lineSize;
     int const end = std::min(size_t(begin) + size_t(lineSize), nodesSize);
-    static MultiPos emptyMultipole = [] {
-        MultiPos empty;
+    // A zeroed record sized for the largest order is a zeroed record of the
+    // runtime order: every per-order view reads only its leading coefficients.
+    static FmmMultiPos<kFmmMaxOrder> emptyMultipole = [] {
+        FmmMultiPos<kFmmMaxOrder> empty;
         empty.multi = 0.0f;
         for (int dim = 0; dim < NDIM; dim++) {
             empty.pos[dim] = 0.0;
@@ -816,7 +811,7 @@ static Vector<TreeNode> treeFetchCacheLine(int index) {
         } else {
             // Unused slots preserve cache offsets but never dereference arena garbage.
             TreeNode empty{};
-            empty.mpos = &emptyMultipole;
+            empty.mpos = reinterpret_cast<MultipolePosition*>(&emptyMultipole);
             empty.leaf = true;
             empty.processRange = Pair<int>(hpxRank(), hpxRank() + 1);
             for (int child = 0; child < NCHILD; child++) {
