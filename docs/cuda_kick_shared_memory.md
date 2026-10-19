@@ -166,6 +166,20 @@ runtime-order binary:
 - `fmmTree` and the mixed-mass `sphGravity` regression (which exercises the
   mass-plane instantiation) pass at orders 3, 7 and 9.
 
+## A pre-existing CPU-path potential offset (measured)
+
+The direct Ewald reference built into the walk harness
+(`COSMICTIGER_STF_WALK_REFERENCE`) exposes a discrepancy that is independent of
+this work: on the adaptive fixture at theta 0.8 the CPU-only walk's potentials
+differ from the direct sum by 1.5% in relative L2 with a 1.5% median per
+particle (a near-constant offset, so particles with small potentials show
+relative errors above 100%), while the CUDA walk agrees to 1e-4 and both walks
+give identical forces (relative L2 2.1e-3 against the direct sum). The
+unchanged baseline binary reproduces the CPU numbers digit for digit
+(`docs/cuda_kick_shared_memory_results/agreement_cpu_cuda/`), so the offset
+predates the runtime-order and arena changes. It is reported here and left for
+separate work.
+
 ## Measurements
 
 *Benchmark stages (allocation variants, orders at matched accuracy, bucket sweep,
