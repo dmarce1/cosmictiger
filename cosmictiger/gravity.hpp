@@ -48,30 +48,20 @@ using GravityCcType = int;
 constexpr GravityCcType kGravityDirect = 0;
 constexpr GravityCcType kGravityEwald = 1;
 
-void cpuGravityCc(GravityCcType, Expansion<float>&, Vector<TreeId> const&, TreeId, bool doPhi);
-void cpuGravityCp(Expansion<float>&, Vector<TreeId> const&, TreeId, bool doPhi);
+// Order-templated CPU operators; definitions live in gravity_cpu.hpp and are
+// instantiated once per FMM order by the per-order instance translation units.
+template <int order>
+void cpuGravityCc(
+    GravityCcType, FmmExpansion<float, order>&, Vector<TreeId> const&, TreeId, bool doPhi);
+template <int order>
+void cpuGravityCp(FmmExpansion<float, order>&, Vector<TreeId> const&, TreeId, bool doPhi);
+template <int order>
 void cpuGravityPc(ForceVectors&, int, TreeId, Vector<TreeId> const&);
 void cpuGravityPp(ForceVectors&, int, TreeId, Vector<TreeId> const&, float h);
 
 void showTimings();
 
-#ifdef __CUDACC__
-__device__ void cudaGravityCcDirect(
-    CudaKickData const&, Expansion<float>&, TreeNode const&, DeviceVector<int> const&, bool doPhi);
-// equalMass skips the staged mass plane; the layout omits it in that mode.
-template <bool equalMass>
-__device__ void cudaGravityCpDirect(CudaKickData const&, CudaKickControl&, Expansion<float>&,
-    TreeNode const&, DeviceVector<int> const&, bool doPhi);
-// PC and PP act on the sink tile [sinkBegin, sinkBegin + sinkCount) of the leaf
-// and accumulate into the control block's force planes.
-__device__ void cudaGravityPcDirect(CudaKickData const& data, CudaKickControl&, TreeNode const&,
-    int sinkBegin, int sinkCount, DeviceVector<int> const&, bool);
-__device__ void cudaGravityCcEwald(
-    CudaKickData const&, Expansion<float>&, TreeNode const&, DeviceVector<int> const&, bool doPhi);
-template <bool equalMass>
-__device__ void cudaGravityPpDirect(CudaKickData const& data, CudaKickControl&, TreeNode const&,
-    int sinkBegin, int sinkCount, DeviceVector<int> const&, float h, bool);
-#endif
+// CUDA operators are order-templated device functions in cosmictiger/gravity_cuda.hpp.
 
 void resetGravityCounters();
 void getGravityCounters(double& close, double& direct);

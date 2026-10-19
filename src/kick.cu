@@ -278,6 +278,8 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
     if (!sharedExpansion) {
         control.current.resize(1);
     }
+    // Every lane ran the constructor; only lane zero fills the resolved layout.
+    __syncwarp();
     if (tid == 0) {
         control.layout = layout;
         control.sourceX = reinterpret_cast<Fixed32*>(arena + layout.sourceOffset);
@@ -776,7 +778,7 @@ int kickSharedBudget(KickDeviceResources const& resources, int residency) {
 // Fill the arena for a budget; returns false when the minimum tiles do not fit.
 bool kickBuildLayout(Compute const& compute, bool massPlane, int residency, int budget,
     CudaKickArenaLayout& layout) {
-    layout = CudaKickArenaLayout();
+    layout = CudaKickArenaLayout{};
     layout.residency = residency;
     layout.budgetBytes = budget;
     layout.massPlane = massPlane;
@@ -867,7 +869,7 @@ CudaKickArenaLayout kickSelectLayout() {
     int residency = compute.cudaKickResidency > 0 ?
         std::min(compute.cudaKickResidency, registerLimit) :
         registerLimit;
-    CudaKickArenaLayout layout;
+    CudaKickArenaLayout layout{};
     while (residency >= 1) {
         int budget = kickSharedBudget(resources, residency);
         while (budget > 0 && kickBuildLayout(compute, massPlane, residency, budget, layout)) {

@@ -31,16 +31,17 @@ option(COSMICTIGER_WITH_CUDA "Enable CUDA" ON)
 option(COSMICTIGER_WITH_LONG_LONG_PART_INT "Use long long to index local particles" OFF)
 # FMM order: multipole degree p plus two. Source multipoles carry degree p,
 # local expansions degree p + 1, and Ewald derivatives ranks through p + 1.
-# Order 3 (dipoles, quadratic expansions) is the smallest order whose local
-# expansion holds the periodic background quadratic; order 10 is degree-8
+# Every order from 3 to 10 is compiled in (per-order instantiations) and the
+# run selects one with gravity.fmmOrder; this value is only that option's
+# default. Order 3 (dipoles, quadratic expansions) is the smallest order whose
+# local expansion holds the periodic background quadratic; order 10 is degree-8
 # multipoles with degree-9 expansions (single precision gains little beyond that).
-set(COSMICTIGER_WITH_ORDER "7" CACHE STRING "Expansion order P+1")
+set(COSMICTIGER_WITH_ORDER "7" CACHE STRING "Default FMM order (gravity.fmmOrder), 3 to 10")
 if(NOT COSMICTIGER_WITH_ORDER MATCHES "^(3|4|5|6|7|8|9|10)$")
     message(FATAL_ERROR
-        "COSMICTIGER_WITH_ORDER must be an integer from 3 to 10 (multipole degree 1 to 8); got '${COSMICTIGER_WITH_ORDER}'")
+        "COSMICTIGER_WITH_ORDER must be an integer from 3 to 10; got '${COSMICTIGER_WITH_ORDER}'")
 endif()
-math(EXPR COSMICTIGER_MULTIPOLE_DEGREE "${COSMICTIGER_WITH_ORDER} - 2")
-math(EXPR COSMICTIGER_LOCAL_DEGREE "${COSMICTIGER_WITH_ORDER} - 1")
+set(COSMICTIGER_FMM_ORDERS 3 4 5 6 7 8 9 10)
 # Compile-time cap on the tree leaf bucket. compute.bucketSize may be any
 # runtime value up to this power of two; leaves then hold between half the
 # runtime bucket plus one and the runtime bucket particles. The CUDA kick
@@ -72,7 +73,7 @@ find_library(SILO_LIBRARY NAMES siloh5 silo REQUIRED)
 find_path(CHEALPIX_INCLUDE_DIR chealpix.h REQUIRED)
 find_library(CHEALPIX_LIBRARY NAMES chealpix REQUIRED)
 
-message(STATUS "cosmictiger expansion order P+1 = ${COSMICTIGER_WITH_ORDER} (multipole degree ${COSMICTIGER_MULTIPOLE_DEGREE}, local degree ${COSMICTIGER_LOCAL_DEGREE})")
+message(STATUS "cosmictiger default FMM order = ${COSMICTIGER_WITH_ORDER} (orders 3 to 10 compiled)")
 message(STATUS "cosmictiger maximum bucket size = ${COSMICTIGER_WITH_MAX_BUCKET}")
 
 include(CheckCXXCompilerFlag)
@@ -107,6 +108,7 @@ set(cosmictiger_source_files
     src/flops.cpp
     src/flops.cu
     src/fft.cpp
+    src/fmm_order.cpp
     src/gravity.cpp
     src/gravity.cu
     src/group_tree.cpp
@@ -192,6 +194,9 @@ set(cosmictiger_header_files
     cosmictiger/fixed.hpp
     cosmictiger/fft.hpp
     cosmictiger/fixed_capacity_vector.hpp
+    cosmictiger/fmm_kernels.hpp
+    cosmictiger/fmm_order.hpp
+    cosmictiger/fmm_types.hpp
     cosmictiger/gravity.hpp
     cosmictiger/initialize.hpp
     cosmictiger/interpolation.hpp
@@ -332,17 +337,15 @@ endif()
 add_executable(fmm_kernel_codegen src/fmm_kernel_codegen.cpp cosmictiger/tensor.hpp)
 target_link_libraries(fmm_kernel_codegen PRIVATE dl)
 target_include_directories(fmm_kernel_codegen PRIVATE ${PROJECT_SOURCE_DIR})
-target_compile_definitions(fmm_kernel_codegen PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
 if(COSMICTIGER_WITH_CUDA)
     target_compile_definitions(fmm_kernel_codegen PRIVATE USE_CUDA)
     target_link_libraries(fmm_kernel_codegen PRIVATE CUDA::cudart)
 endif()
 configure_file(power.init power.init COPYONLY)
-# Order-specific generated kernels. The checked-in headers under
-# cosmictiger/ are the formatted default-order (p = 5) reference and are checked
-# by check_stf_kernels; every build compiles against the copies generated here
-# for the configured order, which shadow the checked-in files through an
-# include directory placed ahead of the source tree.
+# Generated kernels for every FMM order, produced in the build tree. The STF
+# generator emits one specialized kernel class per degree into one header set and
+# the Ewald codegen one derivative overload per order, so a single build serves
+# all orders and selects one at run time.
 set(COSMICTIGER_GENERATED_INCLUDE_DIR ${PROJECT_BINARY_DIR}/generated)
 set(COSMICTIGER_GENERATED_STF_DIR
     ${COSMICTIGER_GENERATED_INCLUDE_DIR}/cosmictiger/gravity/stf/generated)
@@ -358,7 +361,7 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E make_directory ${COSMICTIGER_GENERATED_INCLUDE_DIR}/cosmictiger
     COMMAND fmm_kernel_codegen > ${COSMICTIGER_GENERATED_EWALD_HEADER}
     DEPENDS fmm_kernel_codegen
-    COMMENT "Generating Ewald derivatives for expansion order ${COSMICTIGER_WITH_ORDER}")
+    COMMENT "Generating Ewald derivatives for FMM orders 3 to 10")
 add_custom_target(generate_fmm_kernels DEPENDS ${COSMICTIGER_GENERATED_EWALD_HEADER})
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 set(COSMICTIGER_STF_GENERATOR_SOURCES
@@ -371,14 +374,14 @@ set(COSMICTIGER_STF_GENERATOR_SOURCES
 add_custom_command(
     OUTPUT ${COSMICTIGER_GENERATED_STF_FILES}
     COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/generate_stf_m2l.py
-        --min-order ${COSMICTIGER_MULTIPOLE_DEGREE} --max-order ${COSMICTIGER_LOCAL_DEGREE}
         --output-dir ${COSMICTIGER_GENERATED_STF_DIR} --no-format
     DEPENDS ${COSMICTIGER_STF_GENERATOR_SOURCES}
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-    COMMENT "Generating source degree ${COSMICTIGER_MULTIPOLE_DEGREE} and local degree ${COSMICTIGER_LOCAL_DEGREE} STF kernels")
+    COMMENT "Generating STF kernels for FMM orders 3 to 10")
+add_custom_target(generate_stf_kernels DEPENDS ${COSMICTIGER_GENERATED_STF_FILES})
 add_custom_target(cosmictiger_generated_kernels
     DEPENDS ${COSMICTIGER_GENERATED_STF_FILES} ${COSMICTIGER_GENERATED_EWALD_HEADER})
-# Compile a target against the generated kernels for the configured order.
+# Compile a target against the generated kernels and the order/bucket defaults.
 function(cosmictiger_use_generated_kernels target)
     target_include_directories(${target} BEFORE PRIVATE ${COSMICTIGER_GENERATED_INCLUDE_DIR})
     target_compile_definitions(${target} PRIVATE ORDER=${COSMICTIGER_WITH_ORDER}
@@ -386,13 +389,21 @@ function(cosmictiger_use_generated_kernels target)
     add_dependencies(${target} cosmictiger_generated_kernels)
 endfunction()
 cosmictiger_use_generated_kernels(cosmictiger)
-add_custom_target(generate_stf_kernels
-    COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/generate_stf_m2l.py
-    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-    COMMENT "Regenerating the checked-in default source degree 5 and local degree 6 STF kernels")
-add_custom_target(check_stf_kernels
-    COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/generate_stf_m2l.py --check
-    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+# Per-order instantiation units: the heavy order-specific code (CPU gravity and
+# walk, tree multipoles, Ewald tables, CUDA kick) compiles once per order in its
+# own translation unit, so the orders build in parallel.
+set(COSMICTIGER_FMM_INSTANCE_DIR ${PROJECT_BINARY_DIR}/instances)
+foreach(fmm_order IN LISTS COSMICTIGER_FMM_ORDERS)
+    set(FMM_INSTANCE_ORDER ${fmm_order})
+    configure_file(src/fmm_instance_cpu.cpp.in
+        ${COSMICTIGER_FMM_INSTANCE_DIR}/fmm_instance_cpu_${fmm_order}.cpp @ONLY)
+    target_sources(cosmictiger PRIVATE ${COSMICTIGER_FMM_INSTANCE_DIR}/fmm_instance_cpu_${fmm_order}.cpp)
+    if(COSMICTIGER_WITH_CUDA)
+        configure_file(src/fmm_instance_cuda.cu.in
+            ${COSMICTIGER_FMM_INSTANCE_DIR}/fmm_instance_cuda_${fmm_order}.cu @ONLY)
+        target_sources(cosmictiger PRIVATE ${COSMICTIGER_FMM_INSTANCE_DIR}/fmm_instance_cuda_${fmm_order}.cu)
+    endif()
+endforeach()
 
 add_executable(healpix2silo src/healpix2silo.cpp)
 target_link_libraries(healpix2silo PRIVATE ${CHEALPIX_LIBRARY} ${SILO_LIBRARY} Boost::program_options dl)
@@ -649,7 +660,7 @@ if(BUILD_TESTING)
     add_test(NAME stf_kernels COMMAND stf_kernels_test)
     set_tests_properties(stf_kernels PROPERTIES TIMEOUT 60)
     # Exercise the CUDA-disabled Ewald initializer even in a CUDA-enabled build.
-    add_executable(stf_ewald_cpu_test tests/stf_ewald_cpu.cpp src/ewald_indices.cpp)
+    add_executable(stf_ewald_cpu_test tests/stf_ewald_cpu.cpp src/ewald_indices.cpp src/fmm_order.cpp)
     target_include_directories(stf_ewald_cpu_test PRIVATE ${PROJECT_SOURCE_DIR})
     target_include_directories(stf_ewald_cpu_test SYSTEM PRIVATE ${CHEALPIX_INCLUDE_DIR})
     target_compile_definitions(stf_ewald_cpu_test PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
@@ -657,9 +668,6 @@ if(BUILD_TESTING)
     target_link_libraries(stf_ewald_cpu_test PRIVATE HPX::hpx Boost::boost)
     add_test(NAME stf_ewald_cpu COMMAND stf_ewald_cpu_test)
     set_tests_properties(stf_ewald_cpu PROPERTIES TIMEOUT 30)
-    add_test(NAME stf_generated_current
-        COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/generate_stf_m2l.py --check)
-    set_tests_properties(stf_generated_current PROPERTIES TIMEOUT 120)
 
     add_executable(fmm_acceptance_test tests/fmm_acceptance.cpp)
     target_include_directories(fmm_acceptance_test PRIVATE ${PROJECT_SOURCE_DIR})

@@ -109,6 +109,7 @@ struct Lightcone {
 
 struct Gravity {
     bool enabled{};
+    int fmmOrder{};    // FMM order (multipole degree + 2) selected at run time, 3..10
     std::string kernelFamily{"ferrers"};
     int kernelDegree{4};
     double openingAngle{};
@@ -269,6 +270,7 @@ struct Options {
         arc & compute.cudaKickMultipoleTile;
         arc & compute.cudaKickSharedExpansion;
         arc & compute.cudaKickHandoffBlocks;
+        arc & gravity.fmmOrder;
         arc & checkpoint.readIndex;
         arc & checkpoint.intervalSeconds;
         arc & run.maxIterations;

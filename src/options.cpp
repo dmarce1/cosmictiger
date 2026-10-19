@@ -30,6 +30,7 @@
 
 #include <cosmictiger/constants.hpp>
 #include <cosmictiger/defs.hpp>
+#include <cosmictiger/fmm_order.hpp>
 #include <cosmictiger/gravity.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/kernel.hpp>
@@ -126,6 +127,7 @@ void setOptions(Options const& opts) {
     }
 #endif
     setKernelSelections(gravitySpec, hydroSpec, opts.compute.cuda);
+    setFmmOrder(opts.gravity.fmmOrder);
     globalOpts = opts;
     hpx::wait_all(futs.begin(), futs.end());
 }
@@ -201,6 +203,7 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"lightcone.linkingLength", options.lightcone.linkingLength},
         {"lightcone.mapSize", options.lightcone.mapSize},
         {"gravity.enabled", options.gravity.enabled},
+        {"gravity.fmmOrder", options.gravity.fmmOrder},
         {"gravity.kernelFamily", options.gravity.kernelFamily},
         {"gravity.kernelDegree", options.gravity.kernelDegree},
         {"gravity.openingAngle", options.gravity.openingAngle},
@@ -393,6 +396,8 @@ bool processOptions(int argc, char* argv[]) {
     po::options_description gravityOpts("Gravity");
     gravityOpts.add_options()("gravity.enabled",
         po::value<bool>(&opts.gravity.enabled)->default_value(true), "enable gravity")(
+        "gravity.fmmOrder", po::value<int>(&opts.gravity.fmmOrder)->default_value(kFmmDefaultOrder),
+        "FMM order (multipole degree plus two), 3 to 10; every order is compiled in")(
         "gravity.openingAngle", po::value<double>(&opts.gravity.openingAngle)->default_value(0.8),
         "opening angle for test problems")("gravity.softening",
         po::value<double>(&gravityEffectiveRadius)->default_value(0.01876988456953534),
@@ -645,6 +650,9 @@ bool processOptions(int argc, char* argv[]) {
     }
     if (opts.compute.bucketSize <= 0) {
         THROW_ERROR("compute.bucketSize must be positive\n");
+    }
+    if (opts.gravity.fmmOrder < kFmmMinOrder || opts.gravity.fmmOrder > kFmmMaxOrder) {
+        THROW_ERROR("gravity.fmmOrder must be between %i and %i\n", kFmmMinOrder, kFmmMaxOrder);
     }
     if (opts.compute.bucketSize > MAX_BUCKET_SIZE) {
         THROW_ERROR("compute.bucketSize must not exceed the compile-time maximum %i "
@@ -933,6 +941,7 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("units.massG", units.massG);
     SHOW("units.timeSeconds", units.timeSeconds);
     SHOW("compute.cuda", compute.cuda);
+    SHOW("gravity.fmmOrder", gravity.fmmOrder);
     SHOW("compute.cudaKickResidency", compute.cudaKickResidency);
     SHOW("compute.cudaKickSinkTile", compute.cudaKickSinkTile);
     SHOW("compute.cudaKickParticleTile", compute.cudaKickParticleTile);

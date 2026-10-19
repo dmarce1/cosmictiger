@@ -22,6 +22,7 @@
 
 #include <atomic>
 
+#include <cosmictiger/fmm_types.hpp>
 #include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/tree.hpp>
 
@@ -65,8 +66,11 @@ struct CudaKickData {
 // are initialized only after the cell interactions, so the scratch expansion
 // aliases them. Interaction lists, ancestor expansions and checklist stacks
 // stay in growable global backing owned by the control block.
+// Plain aggregate: the device control block is constructed by every lane, and a
+// value-initialized member would race with lane zero's later assignment.
 struct CudaKickArenaLayout {
-    int totalBytes{};
+    int order;    // FMM order the layout was selected for
+    int totalBytes;
     int controlOffset{};
     int expansionOffset{};    // -1: the active expansion stays in global backing
     int arenaOffset{};
@@ -84,56 +88,6 @@ struct CudaKickArenaLayout {
 };
 
 struct KickReturn;
-
-#ifdef __CUDACC__
-
-#include <cosmictiger/stack_vector.hpp>
-
-struct ExpansionType {
-    Array<Fixed32, NDIM> pos;
-    Expansion<float> expansion;
-};
-
-struct SearchParameters {
-    int self;
-    int phase;
-};
-
-struct CudaKickForceTile {
-    float* gx;
-    float* gy;
-    float* gz;
-    float* phi;
-};
-
-// Persistent per-block control state. Element storage of the vectors and
-// stacks lives in the cudaAllocate pool; only these objects are in shared memory.
-struct CudaKickControl {
-    StackVector<int> echecks;
-    StackVector<int> dchecks;
-    DeviceVector<int> leaflist;
-    DeviceVector<int> cplist;
-    DeviceVector<int> cclist;
-    DeviceVector<int> pclist;
-    DeviceVector<int> nextlist;
-    DeviceVector<ExpansionType> ancestors;    // expansions awaiting their right child
-    DeviceVector<ExpansionType> current;      // active expansion when not in shared memory
-    DeviceVector<float> forceBacking;         // whole-bucket forces when not in shared memory
-    DeviceVector<SearchParameters> params;
-    BarrierType barrier;
-    // Resolved arena pointers.
-    Fixed32* sourceX;
-    Fixed32* sourceY;
-    Fixed32* sourceZ;
-    float* sourceMass;
-    char* multipoles;
-    float* scratchExpansion;
-    Expansion<float>* expansion;
-    Array<Fixed32, NDIM>* expansionPos;
-    CudaKickForceTile forces;
-    CudaKickArenaLayout layout;
-};
-#endif
 
 struct KickReturn {
     int maxRung;
@@ -257,7 +211,7 @@ struct KickParameters {
 };
 
 struct KickWorkitem {
-    Expansion<float> l;
+    ExpansionBuffer l;
     Array<Fixed32, NDIM> pos;
     TreeId self;
     Vector<TreeId> dchecklist;
@@ -267,19 +221,21 @@ struct KickWorkitem {
 struct KickWorkspace;
 
 #ifndef __CUDACC__
-KickReturn kick(KickParameters, Expansion<float> l, Array<Fixed32, NDIM> pos, TreeId self,
+// The expansion buffer carries the local expansion of the runtime FMM order;
+// kick() dispatches to the per-order walk instantiation.
+KickReturn kick(KickParameters, ExpansionBuffer l, Array<Fixed32, NDIM> pos, TreeId self,
     Vector<TreeId> dchecklist, Vector<TreeId> echecklist, std::shared_ptr<KickWorkspace>);
 #endif
 void kickShowTimings();
 void kickSetRc(KickReturn kr);
 #ifdef USE_CUDA
+// Dispatches to the per-order CUDA kick instantiation for fmmOrder().
 KickReturn cudaExecuteKicks(
     KickParameters params, Fixed32*, Fixed32*, Fixed32*, TreeNode*, Vector<KickWorkitem> workitems);
-#endif
-int kickBlockCount();
-#ifdef USE_CUDA
+// Shared-memory policy of the runtime order's kick kernel (selected once per order).
 CudaKickArenaLayout const& kickArenaLayout();
 #endif
+int kickBlockCount();
 size_t kickEstimateCudaMemoryUsage(double theta, int numberOfParticles, int checkCount);
 
 #endif /* KICK_HPP_ */

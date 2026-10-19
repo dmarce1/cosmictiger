@@ -19,75 +19,152 @@
 
 #pragma once
 
+#include <type_traits>
+#include <utility>
+
+#include <cosmictiger/assert.hpp>
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/defs.hpp>
 
-// Expansion-order conventions shared by the STF kernels, the Ewald derivative
-// generator, and the CUDA kick workspace.
+// FMM order conventions.
 //
-// The build selects the FMM order (COSMICTIGER_WITH_ORDER, the legacy ORDER
-// macro). It equals the multipole degree p plus two: source multipoles carry
+// The FMM order equals the multipole degree p plus two: source multipoles carry
 // degree p, local expansions carry degree p + 1, and the Ewald derivative
-// tensors carry ranks zero through p + 1, so their "order" template argument
-// is p + 2. Order 3 (dipoles with quadratic expansions) is the smallest order
-// whose local expansion can hold the periodic uniform-background quadratic;
-// order 10 is degree-8 multipoles with degree-9 expansions.
+// tensors carry ranks zero through p + 1, so their tensor "order" template
+// argument equals the FMM order. Order 3 (dipoles with quadratic expansions) is
+// the smallest order whose local expansion can hold the periodic uniform
+// background quadratic; order 10 is degree-8 multipoles with degree-9
+// expansions, beyond which single precision gains little.
+//
+// Every order in [kFmmMinOrder, kFmmMaxOrder] is compiled into the binary. The
+// run selects one order at startup (gravity.fmmOrder, defaulting to the build's
+// COSMICTIGER_WITH_ORDER) and fmmDispatch() switches to the matching
+// instantiation at coarse boundaries: tree construction, a CPU walk, a CUDA
+// launch. Inner loops never test the order.
+//
 // Coefficient counts use compact rank-major STF storage: a degree-d harmonic
 // tensor stores (d + 1)^2 coefficients, and local expansions append one
 // constant Laplacian (the periodic background trace).
 
+inline constexpr int kFmmMinOrder = 3;
+inline constexpr int kFmmMaxOrder = 10;
+
 #ifndef ORDER
-#error \
-    "ORDER (the FMM order, multipole degree + 2) must be defined; configure COSMICTIGER_WITH_ORDER"
+#error "ORDER (the default FMM order, COSMICTIGER_WITH_ORDER) must be defined"
 #endif
+inline constexpr int kFmmDefaultOrder = ORDER;
+static_assert(kFmmDefaultOrder >= kFmmMinOrder && kFmmDefaultOrder <= kFmmMaxOrder,
+    "COSMICTIGER_WITH_ORDER must select an FMM order from 3 to 10");
+static_assert(LORDER == ORDER, "LORDER must equal the default FMM order");
 
-inline constexpr int kFmmLegacyOrder = ORDER;
-inline constexpr int kFmmMultipoleDegree = ORDER - 2;
-inline constexpr int kFmmLocalDegree = ORDER - 1;
-inline constexpr int kFmmEwaldTensorOrder = ORDER;
+CUDA_EXPORT constexpr int fmmMultipoleDegree(int order) {
+    return order - 2;
+}
 
-static_assert(kFmmMultipoleDegree >= 1 && kFmmMultipoleDegree <= 8,
-    "Supported FMM orders are 3 through 10 (multipole degrees 1 through 8)");
-static_assert(kFmmLocalDegree == kFmmMultipoleDegree + 1, "Local degree is always p + 1");
-static_assert(kFmmEwaldTensorOrder == LORDER, "LORDER must equal the legacy expansion order");
+CUDA_EXPORT constexpr int fmmLocalDegree(int order) {
+    return order - 1;
+}
 
 CUDA_EXPORT constexpr int fmmHarmonicCoefficientCount(int degree) {
     return (degree + 1) * (degree + 1);
 }
 
-CUDA_EXPORT constexpr int fmmMultipoleCoefficientCount(int multipoleDegree) {
-    return fmmHarmonicCoefficientCount(multipoleDegree);
+CUDA_EXPORT constexpr int fmmMultipoleCoefficientCount(int order) {
+    return fmmHarmonicCoefficientCount(fmmMultipoleDegree(order));
+}
+
+CUDA_EXPORT constexpr int fmmLocalHarmonicCoefficientCount(int order) {
+    return fmmHarmonicCoefficientCount(fmmLocalDegree(order));
 }
 
 // The index of the constant Laplacian stored after the harmonic coefficients.
-CUDA_EXPORT constexpr int fmmLocalTraceIndex(int localDegree) {
-    return fmmHarmonicCoefficientCount(localDegree);
+CUDA_EXPORT constexpr int fmmLocalTraceIndex(int order) {
+    return fmmLocalHarmonicCoefficientCount(order);
 }
 
-CUDA_EXPORT constexpr int fmmLocalCoefficientCount(int localDegree) {
-    return fmmHarmonicCoefficientCount(localDegree) + 1;
+CUDA_EXPORT constexpr int fmmLocalCoefficientCount(int order) {
+    return fmmLocalHarmonicCoefficientCount(order) + 1;
 }
 
-// A positioned multipole stores the coefficients plus three Fixed32 positions.
-CUDA_EXPORT constexpr int fmmPositionedMultipoleBytes(int multipoleDegree) {
-    return 4 * (fmmMultipoleCoefficientCount(multipoleDegree) + NDIM);
+// A positioned multipole stores NDIM Fixed32 positions followed by the coefficients.
+CUDA_EXPORT constexpr int fmmPositionedMultipoleBytes(int order) {
+    return int(sizeof(float)) * (fmmMultipoleCoefficientCount(order) + NDIM);
 }
 
-CUDA_EXPORT constexpr int fmmLocalExpansionBytes(int localDegree) {
-    return 4 * fmmLocalCoefficientCount(localDegree);
+CUDA_EXPORT constexpr int fmmLocalExpansionBytes(int order) {
+    return int(sizeof(float)) * fmmLocalCoefficientCount(order);
 }
 
-inline constexpr int kFmmMultipoleCoefficients = fmmMultipoleCoefficientCount(kFmmMultipoleDegree);
-inline constexpr int kFmmLocalHarmonicCoefficients = fmmHarmonicCoefficientCount(kFmmLocalDegree);
-inline constexpr int kFmmLocalTraceIndex = fmmLocalTraceIndex(kFmmLocalDegree);
-inline constexpr int kFmmLocalCoefficients = fmmLocalCoefficientCount(kFmmLocalDegree);
-inline constexpr int kFmmPositionedMultipoleBytes =
-    fmmPositionedMultipoleBytes(kFmmMultipoleDegree);
-inline constexpr int kFmmLocalExpansionBytes = fmmLocalExpansionBytes(kFmmLocalDegree);
+// Ewald derivative tensors: SymmetricTracelessTensor<T, order> holds ranks 0..order-1.
+CUDA_EXPORT constexpr int fmmTracelessTensorCount(int order) {
+    return order * order + 1;
+}
 
-static_assert(fmmPositionedMultipoleBytes(1) == 28 && fmmPositionedMultipoleBytes(5) == 156 &&
-        fmmPositionedMultipoleBytes(8) == 336,
+CUDA_EXPORT constexpr int fmmSymmetricTensorCount(int order) {
+    return order * (order + 1) * (order + 2) / 6;
+}
+
+inline constexpr int kFmmMaxMultipoleCoefficients = fmmMultipoleCoefficientCount(kFmmMaxOrder);
+inline constexpr int kFmmMaxLocalCoefficients = fmmLocalCoefficientCount(kFmmMaxOrder);
+inline constexpr int kFmmMaxTracelessTensorCount = fmmTracelessTensorCount(kFmmMaxOrder);
+inline constexpr int kFmmMaxSymmetricTensorCount = fmmSymmetricTensorCount(kFmmMaxOrder);
+
+static_assert(fmmPositionedMultipoleBytes(3) == 28 && fmmPositionedMultipoleBytes(7) == 156 &&
+        fmmPositionedMultipoleBytes(10) == 336,
     "Positioned multipole byte sizes");
-static_assert(fmmLocalExpansionBytes(2) == 40 && fmmLocalExpansionBytes(6) == 200 &&
-        fmmLocalExpansionBytes(9) == 404,
+static_assert(fmmLocalExpansionBytes(3) == 40 && fmmLocalExpansionBytes(7) == 200 &&
+        fmmLocalExpansionBytes(10) == 404,
     "Local expansion byte sizes");
+
+// Compile-time view of one order.
+template <int order>
+struct FmmOrder {
+    static_assert(order >= kFmmMinOrder && order <= kFmmMaxOrder, "Unsupported FMM order");
+    static constexpr int kOrder_ = order;
+    static constexpr int kMultipoleDegree_ = fmmMultipoleDegree(order);
+    static constexpr int kLocalDegree_ = fmmLocalDegree(order);
+    static constexpr int kMultipoleCoefficients_ = fmmMultipoleCoefficientCount(order);
+    static constexpr int kLocalHarmonicCoefficients_ = fmmLocalHarmonicCoefficientCount(order);
+    static constexpr int kLocalTraceIndex_ = fmmLocalTraceIndex(order);
+    static constexpr int kLocalCoefficients_ = fmmLocalCoefficientCount(order);
+    static constexpr int kPositionedMultipoleBytes_ = fmmPositionedMultipoleBytes(order);
+    static constexpr int kLocalExpansionBytes_ = fmmLocalExpansionBytes(order);
+    static constexpr int kEwaldTensorOrder_ = order;
+};
+
+// The order selected for this run. setFmmOrder validates the range; options
+// parsing calls it before any tree, kick or Ewald table is built.
+int fmmOrder();
+void setFmmOrder(int order);
+
+// Call f(std::integral_constant<int, order>{}) for the runtime order.
+template <class F>
+decltype(auto) fmmDispatch(int order, F&& f) {
+    switch (order) {
+    case 3:
+        return f(std::integral_constant<int, 3>{});
+    case 4:
+        return f(std::integral_constant<int, 4>{});
+    case 5:
+        return f(std::integral_constant<int, 5>{});
+    case 6:
+        return f(std::integral_constant<int, 6>{});
+    case 7:
+        return f(std::integral_constant<int, 7>{});
+    case 8:
+        return f(std::integral_constant<int, 8>{});
+    case 9:
+        return f(std::integral_constant<int, 9>{});
+    case 10:
+        return f(std::integral_constant<int, 10>{});
+    default:
+        break;
+    }
+    ALWAYS_ASSERT(false);
+    return f(std::integral_constant<int, kFmmDefaultOrder>{});
+}
+
+template <class F>
+decltype(auto) fmmDispatch(F&& f) {
+    return fmmDispatch(fmmOrder(), std::forward<F>(f));
+}
