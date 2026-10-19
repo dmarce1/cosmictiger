@@ -1,0 +1,6 @@
+== docs/cuda_kick_shared_memory_results/pp_schedule/ncu_bucket512/head/source.csv
+     48 rows samples=       131 exec=       37107  cosmictigerCudaAssert(const char *, bool, const char *, int)
+    280 rows samples=      1042 exec=      189819  cudaRelease(void *)
+    456 rows samples=     13262 exec=     3413728  cudaAllocate(unsigned long)
+     56 rows samples=      1540 exec=      352450  addGpuFlops(int)
+  47792 rows samples=    508669 exec=   282213734  void cudaKickKernel<(int)7>(KickReturn *, KickParameters, CudaKickData, CudaKickParameters<T1> *, int, int *, 

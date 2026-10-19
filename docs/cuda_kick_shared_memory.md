@@ -88,7 +88,11 @@ Reusable phase arena, sized for the largest simultaneously live set
   plane only for mixed-mass runs; equal-mass runs instantiate PP/CP without it)
   or staged positioned multipoles with a 16-byte stride. The two tiles overlap,
   because PC and PP never run concurrently. PC accumulates all staged
-  multipoles in registers and writes each sink once.
+  multipoles in registers and writes each sink once. PP reads the planes
+  through pointers derived from the dynamic shared-memory symbol (so the
+  compiler emits shared-memory loads), four sources per 16-byte load, and
+  gives each lane two sinks on complete 64-sink chunks; see "PP loop schedule
+  at low occupancy" below.
 
 Lifetimes: staged tiles are refilled only after every lane has finished reading
 them (`__syncwarp()` after each use); the checklist copy and CP share one
@@ -790,6 +794,180 @@ roundoff (acceleration relative L2 at most 2.1e-7 adaptive, 4.3e-7
 clustered, 1.1e-6 lattice at bucket 256), since the coarser handoff moves
 cell interactions between the SIMD CPU walk and the GPU.
 
+### PP loop schedule at low occupancy (`pp_schedule/`)
+
+The kernel-side loss at buckets 256 and 512 was in the PP loop's schedule, not
+its arithmetic. The SASS view of the `ncu_bucket512/` reports shows three
+causes, all in the regime where one warp per multiprocessor has to hide its
+own latency:
+
+- The staged source planes were read through the pointers resolved in the
+  control block. Reloaded from shared memory those are generic pointers, so
+  every staged source cost three 64-bit address computations (`IMAD.WIDE`) and
+  three generic loads (`LD.E`), whereas the baseline's planes sit at
+  compile-time offsets of its shared union and load as `LDS` with immediate
+  offsets.
+- Neither loop was unrolled: one source per iteration and one dependency chain
+  per lane (load, fixed-point difference, conversion, `rsqrt`, accumulate),
+  about 35 SASS instructions per pair in the arena and 31 in the baseline,
+  issued at 4.2 to 4.8 cycles per instruction.
+- The per-pair `if (r2 > h2)` split the body into one basic block per pair, so
+  unrolling alone could not overlap the reciprocal square roots: a first
+  version that only unrolled (four sources per 16-byte load, two sinks per
+  lane) cut the kernel's instructions by 13% but left the latency at 4.6
+  cycles per instruction and the kernel at 25.2 ms
+  (`kernel_quick_bucket512/v1.txt`).
+
+The loop now (`cosmictiger/gravity_cuda.hpp`, `detail::cudaStagedSources`,
+`detail::cudaPpSinkGroup` and `detail::cudaPpInversePowers`):
+
+- derives the plane pointers from the `extern __shared__` symbol and the
+  layout offsets, so the loads compile to `LDS`;
+- loads four consecutive sources per plane with one 16-byte `LDS.128` (the
+  planes are 16-byte aligned by construction: the arena offset and the force
+  region are multiples of the 16-byte arena alignment and the plane stride is
+  a multiple of 128 bytes);
+- gives each lane two sinks, k and k + 32, while every lane has two (complete
+  64-sink chunks, so lane utilization on partial groups is exactly the
+  one-sink pass's), then one sink per lane for the rest, and keeps the
+  lane-split loop for a trailing group of fewer than 16 sinks;
+- computes the plain inverse powers of all 4 x 2 pairs in one straight-line
+  block (24 fixed-point differences, 8 `MUFU.RSQ`, 16 multiplies), takes the
+  lane's smallest r2 with 7 `FMNMX`, and only when that is inside the support
+  radius runs the per-pair softened substitution. The softened pairs are
+  counted and the direct count is the pair total minus them. The potential
+  accumulates unconditionally and is stored only with doPhi, which removes
+  the per-pair select.
+
+The fast path of the two-sink body is about 170 SASS instructions for 8 pairs
+(21 per pair against 35): one basic block from the loads to the branch over
+the softening block, then an accumulation block of 24 `FFMA` and 8 `FADD`.
+Per sink the accumulation order over the staged sources is unchanged, so the
+forces are bit-identical to the one-sink loop's: the force exports of the
+head and the new loop agree exactly (`pass_b/head_vs_arena.md` from
+`benchmarks/compare_kick_arena_binaries.py`: relative L2 and maximum pointwise
+difference 0 for accelerations and potentials at every bucket and fixture),
+and the direct-reference errors are the same to every printed digit. The
+compiler now keeps `cudaGravityPpDirect` as a called subroutine instead of
+inlining it (its prologue saves eight registers); the 16 inlined copies of
+the softening kernel are what make it 18,000 instructions long.
+
+Nsight Compute replay of the second force-only kick kernel, adaptive fixture,
+bucket 512, `--set full` (`ncu_bucket512/`; the baseline column is the earlier
+replay of the same binary in `../ncu_bucket512/baseline`, "arena head" the
+arena before this change, same walk as the new loop):
+
+| metric | baseline | arena head | arena, PP schedule |
+|---|---:|---:|---:|
+| kernel duration | 28.05 ms | 26.08 ms | 25.13 ms |
+| warp instructions executed | 344.6 M | 285.4 M | 214.0 M |
+| issue-active cycles (% of active) | 23.7 | 20.9 | 25.6 |
+| cycles per issued instruction | 4.23 | 4.78 | 3.91 |
+| stall, short scoreboard (per issue) | 0.72 | 1.16 | 1.25 |
+| stall, long scoreboard (per issue) | 0.65 | 0.51 | 0.34 |
+| stall, wait (per issue) | 1.29 | 1.54 | 0.83 |
+| stall, no instruction (per issue) | 0.16 | 0.18 | 0.18 |
+| shared-memory load wavefronts | 19.8 M | 15.0 M | 5.09 M |
+| local-memory load sectors | 14.17 M | 0.80 M | 1.19 M |
+| local-memory store sectors | 14.81 M | 2.25 M | 2.29 M |
+
+The arena head already runs below the baseline here because the merged walk
+(opening the larger cell on both walks, hybrids by counted flops) issues 17%
+fewer instructions; the new loop removes another 25% of the instructions and
+two thirds of the shared-memory loads and brings the issue rate above the
+baseline's. The PP routine's share of the kernel's stall samples drops from
+58% (baseline, `cudaGravityPpDirect` as its own function) to 35%
+(`ncu_bucket512/baseline_sections.txt`, `arena/sections.txt`); the kernel
+body holds the other 60%, and by source line
+(`benchmarks/summarize_ncu_source.py` on the SASS-with-source export) the
+Ewald cell interactions (`ewald_kernels.hpp` and the `simd_math.hpp` and
+`cmath` functions they call) account for more than half of the attributed
+samples. That is the remaining low-occupancy bound.
+
+At small buckets the kernel does not regress (`kernel_small_buckets/`, same
+replay, second force-only kick):
+
+| fixture, bucket | arena head | arena, PP schedule | warp instructions |
+|---|---:|---:|---:|
+| clustered, 32 | 1.85 ms | 1.84 ms | 49.0 M to 46.7 M |
+| clustered, 64 | 1.82 ms | 1.74 ms | 49.2 M to 45.2 M |
+| adaptive, 64 | 7.63 ms | 7.22 ms | 145.0 M to 141.0 M |
+
+Whole-kick times (`run.sh`, `run_pass_b.sh`: baseline, arena head and the new
+loop, buckets 32 to 512, 15 samples, direct reference over 1,024 particles).
+Three passes of the same three binaries are kept: the development run
+(`pass_dev/`, three pairs, one disturbed by a sibling session's build), pass A
+(`pass_a/`, three pairs, its first disturbed on the CPU-bound cells by profile
+exports and other sessions' runs alongside it) and pass B (`pass_b/`, five
+pairs, run under the sessions' shared GPU benchmark lock with
+`wait_quiet_then_pass_b.sh`; no run exceeded 4.1 s and every tree build took
+its quiet-machine 2 ms, but an IDE was indexing on the desktop). The tables
+are pass B's:
+
+lattice (forces only):
+
+| bucket | baseline | arena head (old loop) | arena, PP schedule | speedup vs baseline (paired range) | speedup vs head (paired range) |
+|---:|---:|---:|---:|---:|---:|
+| 32 | 33.58 ms | 16.37 ms | 16.39 ms | 2.048x (2.027-2.160) | 0.998x (0.954-1.041) |
+| 64 | 33.08 ms | 15.62 ms | 15.45 ms | 2.141x (2.122-2.189) | 1.011x (0.988-1.035) |
+| 128 | 15.36 ms | 15.54 ms | 15.58 ms | 0.986x (0.954-1.017) | 0.997x (0.986-1.028) |
+| 256 | 12.37 ms | 11.56 ms | 10.97 ms | 1.128x (0.967-1.151) | 1.054x (0.954-1.081) |
+| 512 | 11.17 ms | 10.53 ms | 9.88 ms | 1.131x (0.959-1.335) | 1.067x (0.959-1.104) |
+
+clustered (forces only):
+
+| bucket | baseline | arena head (old loop) | arena, PP schedule | speedup vs baseline (paired range) | speedup vs head (paired range) |
+|---:|---:|---:|---:|---:|---:|
+| 32 | 8.89 ms | 6.95 ms | 7.03 ms | 1.264x (1.260-1.370) | 0.988x (0.954-1.019) |
+| 64 | 8.77 ms | 6.69 ms | 6.80 ms | 1.289x (1.190-1.335) | 0.984x (0.956-1.000) |
+| 128 | 6.44 ms | 7.61 ms | 7.40 ms | 0.869x (0.839-0.937) | 1.028x (0.992-1.037) |
+| 256 | 7.36 ms | 7.82 ms | 6.33 ms | 1.163x (1.113-1.221) | 1.235x (1.168-1.313) |
+| 512 | 10.19 ms | 10.36 ms | 5.97 ms | 1.708x (1.564-2.122) | 1.736x (1.604-1.966) |
+
+adaptive (forces only):
+
+| bucket | baseline | arena head (old loop) | arena, PP schedule | speedup vs baseline (paired range) | speedup vs head (paired range) |
+|---:|---:|---:|---:|---:|---:|
+| 32 | 18.47 ms | 13.04 ms | 13.48 ms | 1.371x (1.329-1.516) | 0.968x (0.924-1.146) |
+| 64 | 19.24 ms | 13.01 ms | 12.70 ms | 1.514x (1.390-1.685) | 1.024x (0.923-1.086) |
+| 128 | 16.23 ms | 12.76 ms | 12.79 ms | 1.269x (1.220-1.322) | 0.997x (0.969-1.049) |
+| 256 | 18.73 ms | 18.16 ms | 18.30 ms | 1.024x (0.945-1.141) | 0.993x (0.947-1.052) |
+| 512 | 28.71 ms | 27.26 ms | 28.54 ms | 1.006x (0.991-1.156) | 0.955x (0.933-1.044) |
+
+adaptive (forces + potential):
+
+| bucket | baseline | arena head (old loop) | arena, PP schedule | speedup vs baseline (paired range) | speedup vs head (paired range) |
+|---:|---:|---:|---:|---:|---:|
+| 32 | 18.80 ms | 13.38 ms | 13.44 ms | 1.399x (1.338-1.494) | 0.996x (0.947-1.041) |
+| 64 | 19.03 ms | 12.98 ms | 13.41 ms | 1.418x (1.324-1.671) | 0.968x (0.890-1.078) |
+| 128 | 16.90 ms | 13.32 ms | 12.68 ms | 1.333x (1.261-1.391) | 1.051x (0.980-1.057) |
+| 256 | 18.91 ms | 18.81 ms | 18.23 ms | 1.037x (0.932-1.161) | 1.031x (0.976-1.080) |
+| 512 | 29.64 ms | 28.89 ms | 29.22 ms | 1.014x (0.982-1.154) | 0.989x (0.973-1.055) |
+
+Speedups are the baseline's or head's median over the new loop's; the paired
+range is the min-max of the per-pair ratio. The new loop is level with the
+head at buckets 32 to 128 (within 3%, where the kick is dominated by the
+CPU walk and a fully occupied kernel), 5 to 7% faster on the lattice and
+1.24x and 1.74x faster on the clustered fixture at buckets 256 and 512: the
+clustered leaves hold many softened pairs, whose per-pair branches cost the
+old loop most. On the adaptive fixture the whole kick at buckets 256 and 512
+is level with the baseline and the head within the pair spread, which in
+pass B was wide on the GPU-bound cell (new loop 26.2 to 28.6 ms at bucket
+512, head 26.6 to 29.9 ms, baseline 28.3 to 33.0 ms, with an IDE indexing
+on the desktop). In the quiet windows of the other two passes (`pass_a/`
+pairs 1 and 2, `pass_dev/` pairs 0 and 1, the development run of the same
+binaries) that cell was tight and ordered: new loop 26.1 to 26.7 ms, head
+26.8 to 27.5 ms, baseline 28.6 to 29.4 ms, in line with the 25.1, 26.1 and
+28.1 ms kernel replays above plus about 2 ms of host time. At bucket 256
+the same windows give 17.2 to 17.8 ms for the new loop against 17.1 to
+17.8 ms for the head and 18.1 to 18.8 ms for the baseline.
+
+Direct-reference errors are unchanged from the head's to every printed digit
+(the walk differs from the baseline's, so they differ from the baseline's as
+documented for the merged walk), and the force exports of the new loop equal
+the head's bit for bit in every pass (`pass_*/head_vs_arena.md`).
+
+
 ### What remains
 
 - The arena kernel itself is 0.6 ms (10%) slower than the baseline's on the
@@ -798,10 +976,11 @@ cell interactions between the SIMD CPU walk and the GPU.
   per-launch slab for the per-block list storage would remove those calls from
   the kernel; it is the next kernel-side step.
 - At small problems where the launch holds fewer warps than the GPU can keep
-  resident (64 leaves at bucket 512), the arena's PP loop hides less
-  shared-memory and `rsqrt` latency than the baseline's and runs 25% slower;
-  unrolling the source loop or processing two sinks per lane would address it.
-  At buckets 32 to 128 the kernel is level with or faster than the baseline.
+  resident (64 leaves at bucket 512), the PP loop is no longer the bound: with
+  the restructured loop it holds about a third of the kernel's stall samples
+  and the walk with its Ewald cell interactions (`cudaGravityCcEwald`, one
+  multipole per lane, a few multipoles per leaf) holds most of the rest. That
+  loop is the next candidate for the same treatment.
 - The handoff default is measured with two CPU worker threads and 32,768
   particles; a check at production sizes and thread counts, where the
   16,384-particle cap and a parallel CPU walk change the balance, is still

@@ -1,0 +1,18 @@
+== ../../ncu_bucket512/baseline/kick.ncu-rep (page source export)
+     48 rows samples=        93 exec=       23856  cosmictigerCudaAssert(const char *, bool, const char *, int)
+   1600 rows samples=       179 exec=       28110  copyCudaMemory(void *, void *, int)
+    280 rows samples=       845 exec=      180228  cudaRelease(void *)
+    456 rows samples=     12513 exec=     2920825  cudaAllocate(unsigned long)
+    184 rows samples=       613 exec=      372983  EwaldConst::d0()
+     24 rows samples=      5820 exec=     2030440  EwaldConst::fourExpansion(int)
+     24 rows samples=      5999 exec=     2030440  EwaldConst::fourIndex(int)
+     24 rows samples=     10761 exec=     3142768  EwaldConst::realIndex(int)
+     16 rows samples=       125 exec=        4414  EwaldConst::nreal()
+     16 rows samples=       127 exec=        4414  EwaldConst::nfour()
+     56 rows samples=      1613 exec=      352450  addGpuFlops(int)
+   4656 rows samples=    336829 exec=   185573689  cudaGravityPpDirect(const CudaKickData &, const TreeNode &, const DeviceVector<int> &, float, bool)
+   4368 rows samples=    174790 exec=   136026353  cudaGravityCcEwald(const CudaKickData &, StfTensor<float, (int)6, (bool)1> &, const TreeNode &, const DeviceVe
+   1168 rows samples=      3054 exec=     2169533  cudaGravityPcDirect(const CudaKickData &, const TreeNode &, const DeviceVector<int> &, bool)
+   3736 rows samples=      4407 exec=     2294833  cudaGravityCpDirect(const CudaKickData &, StfTensor<float, (int)6, (bool)1> &, const TreeNode &, const DeviceV
+   1824 rows samples=      4457 exec=     2480726  cudaGravityCcDirect(const CudaKickData &, StfTensor<float, (int)6, (bool)1> &, const TreeNode &, const DeviceV
+  13472 rows samples=     24335 exec=     5442707  cudaKickKernel(KickReturn *, KickParameters, CudaKickData, CudaKickParameters *, int, int *)

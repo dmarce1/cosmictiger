@@ -1,0 +1,7 @@
+== docs/cuda_kick_shared_memory_results/pp_schedule/ncu_bucket512/arena/source.csv
+     48 rows samples=       139 exec=       37107  cosmictigerCudaAssert(const char *, bool, const char *, int)
+    280 rows samples=      1072 exec=      184572  cudaRelease(void *)
+    456 rows samples=     13336 exec=     3434756  cudaAllocate(unsigned long)
+     56 rows samples=      1637 exec=      352450  addGpuFlops(int)
+  17968 rows samples=    115878 exec=   118805486  void cudaGravityPpDirect<(int)7, (bool)1>(const CudaKickData &, CudaKickControl<T1> &, const TreeNode &, int, 
+  38512 rows samples=    199839 exec=    92049053  void cudaKickKernel<(int)7>(KickReturn *, KickParameters, CudaKickData, CudaKickParameters<T1> *, int, int *, 
