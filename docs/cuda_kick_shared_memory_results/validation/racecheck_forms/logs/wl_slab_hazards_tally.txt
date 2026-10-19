@@ -1,0 +1,30 @@
+hazard records: 83626 {('RAW', 'Warp Level Programming'): 83626}
+same vs different thread: {('RAW', 'same thread'): 17505, ('RAW', 'different threads'): 66121}
+blocks with hazards: 52
+by read location: {'gravity_cuda.hpp:319': 11569, 'gravity_cuda.hpp:318': 11522, 'gravity_cuda.hpp:320': 11507, 'gravity_cuda.hpp:151': 9494, 'gravity_cuda.hpp:150': 9383, 'gravity_cuda.hpp:149': 9255, 'gravity_cuda.hpp:354': 7220, 'gravity_cuda.hpp:353': 6980, 'gravity_cuda.hpp:355': 6696}
+by write location: {'barrier.h:957': 83626}
+analysis reports: 123
+     2 x  barrier.h:957 vs gravity_cuda.hpp:149 [12 hazards]
+     3 x  barrier.h:957 vs gravity_cuda.hpp:149 [160 hazards]
+     2 x  barrier.h:957 vs gravity_cuda.hpp:150 [12 hazards]
+     3 x  barrier.h:957 vs gravity_cuda.hpp:150 [160 hazards]
+     2 x  barrier.h:957 vs gravity_cuda.hpp:151 [12 hazards]
+     3 x  barrier.h:957 vs gravity_cuda.hpp:151 [160 hazards]
+    10 x  barrier.h:957 vs gravity_cuda.hpp:318 [160 hazards]
+     8 x  barrier.h:957 vs gravity_cuda.hpp:318 [256 hazards]
+     2 x  barrier.h:957 vs gravity_cuda.hpp:318 [320 hazards]
+     2 x  barrier.h:957 vs gravity_cuda.hpp:318 [512 hazards]
+    10 x  barrier.h:957 vs gravity_cuda.hpp:319 [160 hazards]
+     8 x  barrier.h:957 vs gravity_cuda.hpp:319 [256 hazards]
+     2 x  barrier.h:957 vs gravity_cuda.hpp:319 [320 hazards]
+     2 x  barrier.h:957 vs gravity_cuda.hpp:319 [512 hazards]
+    10 x  barrier.h:957 vs gravity_cuda.hpp:320 [160 hazards]
+     8 x  barrier.h:957 vs gravity_cuda.hpp:320 [256 hazards]
+     2 x  barrier.h:957 vs gravity_cuda.hpp:320 [320 hazards]
+     2 x  barrier.h:957 vs gravity_cuda.hpp:320 [512 hazards]
+     4 x  barrier.h:957 vs gravity_cuda.hpp:353 [16 hazards]
+    10 x  barrier.h:957 vs gravity_cuda.hpp:353 [24 hazards]
+     4 x  barrier.h:957 vs gravity_cuda.hpp:354 [16 hazards]
+    10 x  barrier.h:957 vs gravity_cuda.hpp:354 [24 hazards]
+     4 x  barrier.h:957 vs gravity_cuda.hpp:355 [16 hazards]
+    10 x  barrier.h:957 vs gravity_cuda.hpp:355 [24 hazards]

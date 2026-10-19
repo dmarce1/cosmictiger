@@ -99,8 +99,9 @@ a warp barrier. compute-sanitizer memcheck is clean for the fmmWalk regression
 and racecheck reports no errors; its warnings (126 in the committed order-7
 log, `sanitizer/racecheck_order_7.log`) all pair the `cuda::memcpy_async`
 staging writes with the later reads of the staged tile, accesses that the
-`cuda::barrier` wait orders but the tool does not relate (see the list slab
-section for the counts with and without the slab). synccheck reports 32
+`cuda::barrier` wait orders. Whether a build gets these warnings depends on
+how ptxas addresses the barrier, not on the staging code (see the racecheck
+staging warnings section). synccheck reports 32
 "missing init/wait" diagnostics on the `cuda::barrier` objects in dynamic
 shared memory; the unchanged baseline kernel reports the same 32, so these are
 a pre-existing tool interaction, not a new hazard.
@@ -968,22 +969,118 @@ pool, and the committed log of the pre-slab arena build e2c00fdb
 (`sanitizer/racecheck_order_7.log`) reports 126. Every warning pairs a
 `cuda::memcpy_async` staging write with a later read of the staged tile (CP,
 the PP main loop and its tail loop), accesses that are ordered by the
-`cuda::barrier` wait and the `__syncwarp()` after it; the tool evidently does
-not relate them through the barrier in some builds. The force exports of the
+`cuda::barrier` wait and the `__syncwarp()` after it; the tool does not
+relate them through the barrier in some builds (why is explained in the
+racecheck staging warnings section). The force exports of the
 slab and head binaries are bit-identical on every fixture and bucket
 (`list_slab/summary.md`, acceleration and potential relative L2 of 0), so the
 staging is not racing in fact.
+
+### racecheck staging warnings (`validation/racecheck_forms/`)
+
+The racecheck warnings of the list slab section are an effect of how a given
+build addresses the `cuda::barrier` in SASS, which the tool's `memcpy_async`
+tracking does not follow in one of the two shapes ptxas produces; they are not
+an ordering gap in the staging. The evidence, all on the CUDA `fmmWalk`
+regression at order 7 with compute-sanitizer 2025.1.0 (CUDA 12.8, driver
+595.99.02), one GPU job at a time under the shared lock:
+
+- What the tool reports. With `--racecheck-report all --print-level info`
+  every hazard record of the slab binary reads "(Warp Level Programming)
+  Potential RAW hazard detected (invalid memcpy_async synchronization)", the
+  write at the 4-byte `cp.async` inside `cuda::memcpy_async` (barrier.h:957)
+  and the read at a CP or PP tile read; 17,505 of the 83,626 records dumped
+  before the run was stopped name the same thread as writer and reader
+  (`logs/wl_slab_hazards_tally.txt`, sample in
+  `logs/wl_slab_hazards_sample.log`). That category is the tool's "copy
+  target read before the commit or wait that completes it"; a thread reading
+  its own copy target after the barrier wait can only land there if the tool
+  did not connect the wait to the copies. With `--racecheck-memcpy-async no`
+  the slab binary reports 0 warnings (`logs/wl_slab_memcpy_async_off.log`):
+  there is no other hazard. The head binary reports 0 either way.
+
+- What the builds differ in. Per `memcpy_async` the staging compiles to an
+  `LDGSTS.E` loop and one `ARRIVES.LDGSTSBAR.64 [barrier]`
+  (`cp.async.mbarrier.arrive`); `arrive_and_wait()` compiles to
+  `ATOMS.ARRIVE.64 [barrier]` and a polling `LDS` of the barrier's upper word
+  (`mbarrier.test_wait` on sm_86). The order-7 kernel of every frozen binary
+  of this series (`forms_summary.txt`, from `scripts/survey_one.sh`, which
+  runs `nvdisasm -g` on the extracted cubin) shows one of two shapes. In the
+  clean head binary the barrier address is held in a per-thread register:
+  `ARRIVES [UR4]` (that register moved to a uniform register),
+  `ATOMS.ARRIVE.64 [R12+URZ]`, `LDS [R12+0x4]`. In the slab binary and in the
+  four gifted-euler binaries the control block base is a uniform register and
+  all three instructions address the barrier as `[UR47+0x1d0]`. The
+  instruction sequences are otherwise the same, and the slab commit did not
+  touch the staging source; the kernel's extra constructor path changed a
+  register-allocation choice.
+
+  | binary | barrier operands (arrive-on, arrive, test_wait) | racecheck warnings |
+  | --- | --- | --- |
+  | wizardly-leakey head eebab5b1 | `[UR4]`, `[R12+URZ]`, `[R12+0x4]` | 0 (five runs) |
+  | wizardly-leakey slab eedcc53a | `[UR47+0x1d0]` for all three | 138 (four runs) |
+  | gifted-euler final e2c00fdb | `[URn+0x1d0]` for all three | 126 (committed log) |
+  | gifted-euler 231325d5, fix, fix2 | `[URn+0x1d0]` for all three | not run |
+  | unruffled-robinson head cf66eacc (v1, v2 alike) | `[UR4]`, `[R+URZ]`, `[R+0x4]` | 0 (head, one run) |
+  | modest-borg handoff b730980c | `[UR4]`, `[R196+UR40]`, `[R196+UR40+0x4]` | 0 (two runs) |
+  | this branch, scratch build (`build/racecheck`) | kernel-inlined CP sites `[UR40+0x1d0]` for all three; out-of-line PP `[UR]`, `[R+URZ]`, `[R+0x4]` | 9 reports, all CP lines |
+
+  Where ptxas keeps a CP or PP instantiation out of line (the handoff, the
+  PP-loop v1/v2 and this branch's builds have separate
+  `cudaGravityCpDirect<7, …>` and `cudaGravityPpDirect<7, …>` functions), the
+  control block arrives in a register and the staging there takes the clean
+  shape (`outofline_forms.txt`); that is why this branch's build reports only
+  its kernel-inlined CP copies. The PC multipole copy and the checklist copy
+  are never in the reports because neither issues a `cp.async`: the PC call
+  passes an untyped byte count, so libcu++ deduces 1-byte alignment and takes
+  its synchronous per-thread copy, and the checklist copy is global to global.
+
+- Variants of the staging in the scratch build of this branch
+  (`scripts/apply_variant.py`, diffs in `variants/`, each rebuilt from the
+  committed source, racecheck in `logs/`):
+
+  | variant | change in `cudaStageParticleSources` | arrive-on operand at the staging sites | racecheck |
+  | --- | --- | --- | --- |
+  | base | committed source | `[UR40+0x1d0]` | 9 reports (6,285 hazard records printed) |
+  | launder_copy | the barrier reference passed to the three `memcpy_async` calls goes through an empty `asm volatile` | `[URn]`; arrive and test_wait unchanged, `[UR40+0x1d0]` | 0 |
+  | launder_wait | the same for the `arrive_and_wait()` call only | `[UR40+0x1d0]`; arrive `[R4+URZ]`, test_wait `[R42+0x4]` | 9 reports |
+  | launder_both | both | `[URn]`, `[R+URZ]`, `[R+0x4]` | 0 |
+  | block_sync | `group.sync()` added after `arrive_and_wait()` | as base, plus a `BAR.SYNC` | 9 reports |
+  | sync_copy | per-lane plain copies and `__syncwarp()`, no barrier | no `cp.async` in the staging | 0 |
+
+  Only the operand form of the `cp.async.mbarrier.arrive` changes the
+  result: with a uniform register plus an immediate offset the tool does not
+  connect the copies to the barrier, and every later read of the tile, by
+  the copying lane included, is reported as an unsynchronized
+  `memcpy_async`; the forms of the arrive and the wait, and an extra block
+  barrier, make no difference. The `fmmWalk` regression passes in every
+  binary and variant above.
+
+The staging is the documented `cuda::memcpy_async(group, …, barrier)` plus
+`barrier.arrive_and_wait()` pattern: each lane's copies arrive on the barrier,
+the phase completes only when every copy has landed, and the tile is read
+after the wait and a `__syncwarp()`. The force exports of the slab and head
+binaries are bit-identical (list slab section). The staging code is therefore
+unchanged, and the warnings of builds in which ptxas addresses the control
+block through a uniform register are recorded as a compute-sanitizer 2025.1.0
+modelling artefact. A build that has to pass racecheck cleanly can hide the
+barrier address from the compiler as `launder_copy` does (the same
+instructions with a different operand form) or copy synchronously as
+`sync_copy` does (no `cp.async` and no barrier in the staging); neither was
+adopted here, the first because it steers a compiler choice to suit the tool
+and the second because its cost was not measured.
 
 ### What remains
 
 - The per-launch list slab removed the pool allocator from the kernel (above);
   the remaining kernel-side difference to the baseline at the same work
   division is in the PP and PC loops themselves, not in list handling.
-- compute-sanitizer racecheck reports the `memcpy_async` staging warnings for
-  some builds of the same staging code and not for others (none for the head
-  build, 126 and 138 for two other builds); understanding what the tool keys
-  on, or restructuring the staging so that it reports none in every build,
-  is open.
+- The PC multipole staging passes an untyped byte count to
+  `cuda::memcpy_async`, so libcu++ deduces 1-byte alignment and copies
+  synchronously through registers; the barrier wait after it then orders
+  nothing. A `cuda::aligned_size_t<16>` count, if the multipole records are
+  16-byte aligned in global memory, would make it a `cp.async` copy like the
+  particle planes. Not measured.
 - At small problems where the launch holds fewer warps than the GPU can keep
   resident (64 leaves at bucket 512), the arena's PP loop hides less
   shared-memory and `rsqrt` latency than the baseline's and runs 25% slower;

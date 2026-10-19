@@ -1,0 +1,405 @@
+========= COMPUTE-SANITIZER
+STARTING MAIN
+128
+std::atomic<int> is lock free!
+tree_node size = 96
+Detected 1 processes per node
+Hyperthreading detected
+Starting mem use daemon
+Processing options
+box_size = 2.679408e+00 Mpc
+lc map size = 1.157762e-01
+chemistry.enabled                 : F
+chemistry.network                 : atomic6
+chemistry.radiationFile           : 
+chemistry.synchronizedRung        : 4
+chemistry.initialTemperature      : 1.000000e+03
+chemistry.hydrogenIonFraction     : 2.000000e-04
+chemistry.heliumIonFraction       : 0.000000e+00
+chemistry.heliumDoubleIonFraction : 0.000000e+00
+chemistry.hydrogenMinusFraction   : 0.000000e+00
+chemistry.molecularFraction       : 0.000000e+00
+chemistry.molecularIonFraction    : 0.000000e+00
+chemistry.relativeTolerance       : 1.000000e-04
+chemistry.abundanceAbsoluteTolerance: 1.000000e-12
+chemistry.energyAbsoluteTolerance : 1.000000e-08
+chemistry.maxSubsteps             : 4096
+hydro.enabled                     : F
+run.hierarchicalGravity           : T
+hydro.viscosityAlpha              : 1.000000e+00
+hydro.viscosityBeta               : 2.000000e+00
+hydro.viscosityEpsilon            : 1.000000e-02
+hydro.gamma                       : 1.666667e+00
+hydro.neighborNumber              : 4.200000e+01
+hydro.minSupportRadius            : 1.000000e-06
+hydro.maxSupportRadius            : 4.000000e+00
+hydro.minEffectiveRadius          : 5.477226e-07
+hydro.maxEffectiveRadius          : 2.190890e+00
+hydro.cfl                         : 2.282177e-01
+Simulation Options
+code_to_M_solar = 1.492195e+09
+Box size = 1.803778e+00 cm/h
+checkpoint.intervalSeconds        : 1000000000
+units.lengthCm                    : 8.267791e+24
+units.massG                       : 2.954545e+42
+units.timeSeconds                 : 2.757838e+14
+compute.cuda                      : T
+gravity.fmmOrder                  : 7
+compute.cudaKickResidency         : 0
+compute.cudaKickSinkTile          : 0
+compute.cudaKickParticleTile      : 0
+compute.cudaKickMultipoleTile     : 0
+compute.cudaKickSharedExpansion   : T
+compute.cudaKickHandoffBlocks     : 0
+compute.cudaKickListReserve       : 4096
+lightcone.enabled                 : F
+analysis.groups                   : F
+analysis.power                    : F
+analysis.slice                    : F
+analysis.tracers                  : F
+analysis.views                    : F
+output.silo                       : F
+output.siloInterval               : 1
+output.directory                  : ./output
+output.units                      : code
+output.frame                      : comoving
+output.xMin                       : 0.000000e+00
+output.xMax                       : 1.000000e+00
+output.yMin                       : 0.000000e+00
+output.yMax                       : 1.000000e+00
+output.zMin                       : 0.000000e+00
+output.zMax                       : 1.000000e+00
+gravity.timestepEta               : 2.040160e-01
+gravity.gm                        : 2.653104e-11
+gravity.softening                 : 1.876988e-02
+gravity.effectiveRadius           : 1.876988e-02
+gravity.supportRadius             : 2.815483e-02
+hydro.centralEffectiveRadius      : 5.477226e-03
+hydro.centralSupportRadius        : 8.215838e-03
+gravity.kernelFamily              : ferrers
+gravity.kernelDegree              : 4
+hydro.kernelFamily                : spline
+hydro.kernelDegree                : 3
+cosmology.hubble                  : 6.732000e-01
+lightcone.linkingLength           : 2.800000e-01
+lightcone.mapSize                 : 1
+analysis.linkingLength            : 3.500000e-02
+run.maxIterations                 : 1000000
+run.treeOpeningAngle              : 0.000000e+00
+analysis.minGroupSize             : 20
+cosmology.omegaB                  : 4.938900e-02
+cosmology.omegaC                  : 2.650300e-01
+cosmology.omegaGamma              : 5.522212e-05
+cosmology.omegaM                  : 3.144190e-01
+cosmology.omegaNu                 : 3.820094e-05
+cosmology.omegaR                  : 9.342306e-05
+compute.particleCacheLineSize     : 10922
+initial.particlesPerDimension     : 8
+checkpoint.readIndex              : -1
+analysis.saveForce                : F
+cosmology.sigma8                  : 8.607000e-01
+analysis.sliceResolution          : 4096
+analysis.sliceSize                : 1.000000e+00
+cosmology.thetaCmb                : 9.983516e-01
+gravity.openingAngle              : 8.000000e-01
+analysis.tracerCount              : 1000000
+compute.treeCacheLineSize         : 682
+initial.twoLpt                    : F
+initial.usePowerFile              : T
+analysis.viewSize                 : 1024
+cosmology.startRedshift           : 4.900000e+01
+cosmology.endRedshift             : 0.000000e+00
+cosmology.spectralIndex           : 9.660500e-01
+cosmology.heliumFraction          : 2.454006e-01
+cosmology.nEff                    : 3.046000e+00
+configuration                     : 
+run.test                          : fmmWalk
+Silo particle output: disabled (output.silo=false)
+MAX MEMUSED = 0.461529 GB
+count = 178 178
+Detected a hardware concurrency of 12
+CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 8048 bytes: control 648, expansion shared, forces shared tile 64, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes; list slab 145792 bytes per block (4096 entries per list)
+FMM unequal counts PC/CP CPU: normalized total-force residual = 1.658382379e-09
+FMM unequal counts PC/CP CUDA: normalized total-force residual = 9.950294598e-09
+FMM unequal counts PC/CP mixed CPU/CUDA: normalized total-force residual = 9.950294400e-09
+FMM softened PP fallback CPU: normalized total-force residual = 8.542230477e-09
+FMM softened PP fallback CUDA: normalized total-force residual = 3.873221482e-09
+FMM softened PP fallback mixed CPU/CUDA: normalized total-force residual = 3.799794711e-08
+FMM equal counts, unequal radii CP/PC CPU: normalized total-force residual = 2.328940155e-08
+FMM equal counts, unequal radii CP/PC CUDA: normalized total-force residual = 5.175297656e-09
+FMM equal counts, unequal radii CP/PC mixed CPU/CUDA: normalized total-force residual = 2.070182290e-08
+FMM unequal counts, equal radii PC/CP CPU: normalized total-force residual = 1.658382379e-09
+FMM unequal counts, equal radii PC/CP CUDA: normalized total-force residual = 9.950294598e-09
+FMM unequal counts, equal radii PC/CP mixed CPU/CUDA: normalized total-force residual = 9.950294400e-09
+FMM softened PP fallback CPU: normalized total-force residual = 8.542230477e-09
+FMM softened PP fallback CUDA: normalized total-force residual = 3.873221482e-09
+FMM softened PP fallback mixed CPU/CUDA: normalized total-force residual = 3.799794711e-08
+FMM equal counts and radii PP CPU: normalized total-force residual = 3.711167810e-10
+FMM equal counts and radii PP CUDA: normalized total-force residual = 3.920552917e-09
+FMM equal counts and radii PP mixed CPU/CUDA: normalized total-force residual = 1.488711851e-08
+FMM internal cloud radial PC/CP CPU: normalized total-force residual = 2.048388942e-08
+MAX MEMUSED = 0.786987 GB
+MAX MEMUSED = 0.805004 GB
+MAX MEMUSED = 0.873062 GB
+========= Warning: (Warp Level Programming) Potential RAW hazard detected (invalid memcpy_async synchronization) at __shared__ 0x1770 in block (0,0,0) :
+=========     Write Thread (0,0,0) at RKNS_11KernelTableES1_+0x605a0 in barrier.h:957
+=========     Read Thread (0,0,0) at DeviceVector<CudaExpansionType<(int)3>>::DeviceVector()+0x610f0 in gravity_cuda.hpp:151
+=========     Current Value : 0
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: void cudaKickKernel<7>(KickReturn*, KickParameters, CudaKickData, CudaKickParameters<7>*, int, int*, CudaKickArenaLayout, char*) [0xa94668] in cosmictiger_base
+=========         Host Frame: KickReturn cudaExecuteKicksImpl<7>(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >) [0xa95905] in cosmictiger_base
+=========         Host Frame: auto cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}::operator()<std::integral_constant<int, 7> >(std::integral_constant<int, 7>) const [0x4cf420] in cosmictiger_base
+=========         Host Frame: decltype(auto) fmmDispatch<cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}>(int, cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}&&) [0x4cf7b0] in cosmictiger_base
+=========         Host Frame: decltype(auto) fmmDispatch<cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}>(cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}&&) [0x4cf879] in cosmictiger_base
+=========         Host Frame: cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >) [0x4cf90e] in cosmictiger_base
+=========         Host Frame: KickWorkspace::toGpu() [0x4e45c8] in cosmictiger_base
+=========         Host Frame: KickWorkspace::addWork(std::shared_ptr<KickWorkspace>, ExpansionBuffer const&, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >&&, Vector<TreeId, std::allocator<TreeId> >&&) [0x4e52dc] in cosmictiger_base
+=========         Host Frame: KickReturn kickWalk<7>(KickParameters, ExpansionBuffer, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >, Vector<TreeId, std::allocator<TreeId> >, std::shared_ptr<KickWorkspace>) [0xa90f68] in cosmictiger_base
+=========         Host Frame: auto kick(KickParameters, ExpansionBuffer, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >, Vector<TreeId, std::allocator<TreeId> >, std::shared_ptr<KickWorkspace>)::{lambda(auto:1)#1}::operator()<std::integral_constant<int, 7> >(std::integral_constant<int, 7>) const [clone .isra.0] [0x4ade39] in cosmictiger_base
+=========         Host Frame: kick(KickParameters, ExpansionBuffer, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >, Vector<TreeId, std::allocator<TreeId> >, std::shared_ptr<KickWorkspace>) [0x4adfdb] in cosmictiger_base
+=========         Host Frame: detail::fmmWalkApplyInteraction(TreeId, TreeId, float, bool) [0x9b9594] in cosmictiger_base
+=========         Host Frame: detail::fmmWalkInternalCloudHybrid(bool) [0x9c6132] in cosmictiger_base
+=========         Host Frame: fmmWalkTest() [0x9cbfa2] in cosmictiger_base
+=========         Host Frame: hpx_main(int, char**) [0x5b3be4] in cosmictiger_base
+=========         Host Frame: hpx_main() [0xb28863] in cosmictiger_base
+=========         Host Frame: hpx::runtime::run_helper(hpx::function<int (), false> const&, int&, bool, void (*)(unsigned long)) [0x2470c9] in libhpx_core.so
+=========         Host Frame: hpx::runtime_distributed::run_helper(hpx::function<int (), false> const&, int&) [0x687417] in libhpx.so.1
+=========         Host Frame: std::pair<hpx::threads::thread_schedule_state, hpx::threads::thread_id> hpx::util::detail::callable_vtable<std::pair<hpx::threads::thread_schedule_state, hpx::threads::thread_id> (hpx::threads::thread_restart_state)>::_invoke<hpx::threads::detail::thread_function<hpx::detail::bound<std::pair<hpx::threads::thread_schedule_state, hpx::threads::thread_id> (hpx::runtime_distributed::*)(hpx::function<int (), false> const&, int&), hpx::util::pack_c<unsigned long, 0ul, 1ul, 2ul>, hpx::runtime_distributed*, hpx::function<int (), false>, int&> > >(void*, hpx::threads::thread_restart_state&&) [0x68f0a5] in libhpx.so.1
+=========         Host Frame: hpx::threads::coroutines::detail::coroutine_impl::operator()() [0x146fee] in libhpx_core.so
+=========         Host Frame: void hpx::threads::coroutines::detail::lx::trampoline<hpx::threads::coroutines::detail::coroutine_impl>(void*) [0x145cde] in libhpx_core.so
+========= 
+========= Warning: (Warp Level Programming) Potential RAW hazard detected (invalid memcpy_async synchronization) at __shared__ 0x1771 in block (0,0,0) :
+=========     Write Thread (0,0,0) at RKNS_11KernelTableES1_+0x605a0 in barrier.h:957
+=========     Read Thread (0,0,0) at DeviceVector<CudaExpansionType<(int)3>>::DeviceVector()+0x610f0 in gravity_cuda.hpp:151
+=========     Current Value : 0
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: void cudaKickKernel<7>(KickReturn*, KickParameters, CudaKickData, CudaKickParameters<7>*, int, int*, CudaKickArenaLayout, char*) [0xa94668] in cosmictiger_base
+=========         Host Frame: KickReturn cudaExecuteKicksImpl<7>(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >) [0xa95905] in cosmictiger_base
+=========         Host Frame: auto cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}::operator()<std::integral_constant<int, 7> >(std::integral_constant<int, 7>) const [0x4cf420] in cosmictiger_base
+=========         Host Frame: decltype(auto) fmmDispatch<cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}>(int, cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}&&) [0x4cf7b0] in cosmictiger_base
+=========         Host Frame: decltype(auto) fmmDispatch<cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}>(cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}&&) [0x4cf879] in cosmictiger_base
+=========         Host Frame: cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >) [0x4cf90e] in cosmictiger_base
+=========         Host Frame: KickWorkspace::toGpu() [0x4e45c8] in cosmictiger_base
+=========         Host Frame: KickWorkspace::addWork(std::shared_ptr<KickWorkspace>, ExpansionBuffer const&, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >&&, Vector<TreeId, std::allocator<TreeId> >&&) [0x4e52dc] in cosmictiger_base
+=========         Host Frame: KickReturn kickWalk<7>(KickParameters, ExpansionBuffer, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >, Vector<TreeId, std::allocator<TreeId> >, std::shared_ptr<KickWorkspace>) [0xa90f68] in cosmictiger_base
+=========         Host Frame: auto kick(KickParameters, ExpansionBuffer, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >, Vector<TreeId, std::allocator<TreeId> >, std::shared_ptr<KickWorkspace>)::{lambda(auto:1)#1}::operator()<std::integral_constant<int, 7> >(std::integral_constant<int, 7>) const [clone .isra.0] [0x4ade39] in cosmictiger_base
+=========         Host Frame: kick(KickParameters, ExpansionBuffer, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >, Vector<TreeId, std::allocator<TreeId> >, std::shared_ptr<KickWorkspace>) [0x4adfdb] in cosmictiger_base
+=========         Host Frame: detail::fmmWalkApplyInteraction(TreeId, TreeId, float, bool) [0x9b9594] in cosmictiger_base
+=========         Host Frame: detail::fmmWalkInternalCloudHybrid(bool) [0x9c6132] in cosmictiger_base
+=========         Host Frame: fmmWalkTest() [0x9cbfa2] in cosmictiger_base
+=========         Host Frame: hpx_main(int, char**) [0x5b3be4] in cosmictiger_base
+=========         Host Frame: hpx_main() [0xb28863] in cosmictiger_base
+=========         Host Frame: hpx::runtime::run_helper(hpx::function<int (), false> const&, int&, bool, void (*)(unsigned long)) [0x2470c9] in libhpx_core.so
+=========         Host Frame: hpx::runtime_distributed::run_helper(hpx::function<int (), false> const&, int&) [0x687417] in libhpx.so.1
+=========         Host Frame: std::pair<hpx::threads::thread_schedule_state, hpx::threads::thread_id> hpx::util::detail::callable_vtable<std::pair<hpx::threads::thread_schedule_state, hpx::threads::thread_id> (hpx::threads::thread_restart_state)>::_invoke<hpx::threads::detail::thread_function<hpx::detail::bound<std::pair<hpx::threads::thread_schedule_state, hpx::threads::thread_id> (hpx::runtime_distributed::*)(hpx::function<int (), false> const&, int&), hpx::util::pack_c<unsigned long, 0ul, 1ul, 2ul>, hpx::runtime_distributed*, hpx::function<int (), false>, int&> > >(void*, hpx::threads::thread_restart_state&&) [0x68f0a5] in libhpx.so.1
+=========         Host Frame: hpx::threads::coroutines::detail::coroutine_impl::operator()() [0x146fee] in libhpx_core.so
+=========         Host Frame: void hpx::threads::coroutines::detail::lx::trampoline<hpx::threads::coroutines::detail::coroutine_impl>(void*) [0x145cde] in libhpx_core.so
+========= 
+========= Warning: (Warp Level Programming) Potential RAW hazard detected (invalid memcpy_async synchronization) at __shared__ 0x1772 in block (0,0,0) :
+=========     Write Thread (0,0,0) at RKNS_11KernelTableES1_+0x605a0 in barrier.h:957
+=========     Read Thread (0,0,0) at DeviceVector<CudaExpansionType<(int)3>>::DeviceVector()+0x610f0 in gravity_cuda.hpp:151
+=========     Current Value : 0
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: void cudaKickKernel<7>(KickReturn*, KickParameters, CudaKickData, CudaKickParameters<7>*, int, int*, CudaKickArenaLayout, char*) [0xa94668] in cosmictiger_base
+=========         Host Frame: KickReturn cudaExecuteKicksImpl<7>(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >) [0xa95905] in cosmictiger_base
+=========         Host Frame: auto cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}::operator()<std::integral_constant<int, 7> >(std::integral_constant<int, 7>) const [0x4cf420] in cosmictiger_base
+=========         Host Frame: decltype(auto) fmmDispatch<cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}>(int, cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}&&) [0x4cf7b0] in cosmictiger_base
+=========         Host Frame: decltype(auto) fmmDispatch<cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}>(cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}&&) [0x4cf879] in cosmictiger_base
+=========         Host Frame: cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >) [0x4cf90e] in cosmictiger_base
+=========         Host Frame: KickWorkspace::toGpu() [0x4e45c8] in cosmictiger_base
+=========         Host Frame: KickWorkspace::addWork(std::shared_ptr<KickWorkspace>, ExpansionBuffer const&, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >&&, Vector<TreeId, std::allocator<TreeId> >&&) [0x4e52dc] in cosmictiger_base
+=========         Host Frame: KickReturn kickWalk<7>(KickParameters, ExpansionBuffer, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >, Vector<TreeId, std::allocator<TreeId> >, std::shared_ptr<KickWorkspace>) [0xa90f68] in cosmictiger_base
+=========         Host Frame: auto kick(KickParameters, ExpansionBuffer, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >, Vector<TreeId, std::allocator<TreeId> >, std::shared_ptr<KickWorkspace>)::{lambda(auto:1)#1}::operator()<std::integral_constant<int, 7> >(std::integral_constant<int, 7>) const [clone .isra.0] [0x4ade39] in cosmictiger_base
+=========         Host Frame: kick(KickParameters, ExpansionBuffer, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >, Vector<TreeId, std::allocator<TreeId> >, std::shared_ptr<KickWorkspace>) [0x4adfdb] in cosmictiger_base
+=========         Host Frame: detail::fmmWalkApplyInteraction(TreeId, TreeId, float, bool) [0x9b9594] in cosmictiger_base
+=========         Host Frame: detail::fmmWalkInternalCloudHybrid(bool) [0x9c6132] in cosmictiger_base
+=========         Host Frame: fmmWalkTest() [0x9cbfa2] in cosmictiger_base
+=========         Host Frame: hpx_main(int, char**) [0x5b3be4] in cosmictiger_base
+=========         Host Frame: hpx_main() [0xb28863] in cosmictiger_base
+=========         Host Frame: hpx::runtime::run_helper(hpx::function<int (), false> const&, int&, bool, void (*)(unsigned long)) [0x2470c9] in libhpx_core.so
+=========         Host Frame: hpx::runtime_distributed::run_helper(hpx::function<int (), false> const&, int&) [0x687417] in libhpx.so.1
+=========         Host Frame: std::pair<hpx::threads::thread_schedule_state, hpx::threads::thread_id> hpx::util::detail::callable_vtable<std::pair<hpx::threads::thread_schedule_state, hpx::threads::thread_id> (hpx::threads::thread_restart_state)>::_invoke<hpx::threads::detail::thread_function<hpx::detail::bound<std::pair<hpx::threads::thread_schedule_state, hpx::threads::thread_id> (hpx::runtime_distributed::*)(hpx::function<int (), false> const&, int&), hpx::util::pack_c<unsigned long, 0ul, 1ul, 2ul>, hpx::runtime_distributed*, hpx::function<int (), false>, int&> > >(void*, hpx::threads::thread_restart_state&&) [0x68f0a5] in libhpx.so.1
+=========         Host Frame: hpx::threads::coroutines::detail::coroutine_impl::operator()() [0x146fee] in libhpx_core.so
+=========         Host Frame: void hpx::threads::coroutines::detail::lx::trampoline<hpx::threads::coroutines::detail::coroutine_impl>(void*) [0x145cde] in libhpx_core.so
+========= 
+========= Warning: (Warp Level Programming) Potential RAW hazard detected (invalid memcpy_async synchronization) at __shared__ 0x1773 in block (0,0,0) :
+=========     Write Thread (0,0,0) at RKNS_11KernelTableES1_+0x605a0 in barrier.h:957
+=========     Read Thread (0,0,0) at DeviceVector<CudaExpansionType<(int)3>>::DeviceVector()+0x610f0 in gravity_cuda.hpp:151
+=========     Current Value : 112
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: void cudaKickKernel<7>(KickReturn*, KickParameters, CudaKickData, CudaKickParameters<7>*, int, int*, CudaKickArenaLayout, char*) [0xa94668] in cosmictiger_base
+=========         Host Frame: KickReturn cudaExecuteKicksImpl<7>(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >) [0xa95905] in cosmictiger_base
+=========         Host Frame: auto cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}::operator()<std::integral_constant<int, 7> >(std::integral_constant<int, 7>) const [0x4cf420] in cosmictiger_base
+=========         Host Frame: decltype(auto) fmmDispatch<cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}>(int, cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}&&) [0x4cf7b0] in cosmictiger_base
+=========         Host Frame: decltype(auto) fmmDispatch<cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}>(cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}&&) [0x4cf879] in cosmictiger_base
+=========         Host Frame: cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >) [0x4cf90e] in cosmictiger_base
+=========         Host Frame: KickWorkspace::toGpu() [0x4e45c8] in cosmictiger_base
+=========         Host Frame: KickWorkspace::addWork(std::shared_ptr<KickWorkspace>, ExpansionBuffer const&, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >&&, Vector<TreeId, std::allocator<TreeId> >&&) [0x4e52dc] in cosmictiger_base
+=========         Host Frame: KickReturn kickWalk<7>(KickParameters, ExpansionBuffer, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >, Vector<TreeId, std::allocator<TreeId> >, std::shared_ptr<KickWorkspace>) [0xa90f68] in cosmictiger_base
+=========         Host Frame: auto kick(KickParameters, ExpansionBuffer, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >, Vector<TreeId, std::allocator<TreeId> >, std::shared_ptr<KickWorkspace>)::{lambda(auto:1)#1}::operator()<std::integral_constant<int, 7> >(std::integral_constant<int, 7>) const [clone .isra.0] [0x4ade39] in cosmictiger_base
+=========         Host Frame: kick(KickParameters, ExpansionBuffer, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >, Vector<TreeId, std::allocator<TreeId> >, std::shared_ptr<KickWorkspace>) [0x4adfdb] in cosmictiger_base
+=========         Host Frame: detail::fmmWalkApplyInteraction(TreeId, TreeId, float, bool) [0x9b9594] in cosmictiger_base
+=========         Host Frame: detail::fmmWalkInternalCloudHybrid(bool) [0x9c6132] in cosmictiger_base
+=========         Host Frame: fmmWalkTest() [0x9cbfa2] in cosmictiger_base
+=========         Host Frame: hpx_main(int, char**) [0x5b3be4] in cosmictiger_base
+=========         Host Frame: hpx_main() [0xb28863] in cosmictiger_base
+=========         Host Frame: hpx::runtime::run_helper(hpx::function<int (), false> const&, int&, bool, void (*)(unsigned long)) [0x2470c9] in libhpx_core.so
+=========         Host Frame: hpx::runtime_distributed::run_helper(hpx::function<int (), false> const&, int&) [0x687417] in libhpx.so.1
+=========         Host Frame: std::pair<hpx::threads::thread_schedule_state, hpx::threads::thread_id> hpx::util::detail::callable_vtable<std::pair<hpx::threads::thread_schedule_state, hpx::threads::thread_id> (hpx::threads::thread_restart_state)>::_invoke<hpx::threads::detail::thread_function<hpx::detail::bound<std::pair<hpx::threads::thread_schedule_state, hpx::threads::thread_id> (hpx::runtime_distributed::*)(hpx::function<int (), false> const&, int&), hpx::util::pack_c<unsigned long, 0ul, 1ul, 2ul>, hpx::runtime_distributed*, hpx::function<int (), false>, int&> > >(void*, hpx::threads::thread_restart_state&&) [0x68f0a5] in libhpx.so.1
+=========         Host Frame: hpx::threads::coroutines::detail::coroutine_impl::operator()() [0x146fee] in libhpx_core.so
+=========         Host Frame: void hpx::threads::coroutines::detail::lx::trampoline<hpx::threads::coroutines::detail::coroutine_impl>(void*) [0x145cde] in libhpx_core.so
+========= 
+========= Warning: (Warp Level Programming) Potential RAW hazard detected (invalid memcpy_async synchronization) at __shared__ 0x1774 in block (0,0,0) :
+=========     Write Thread (1,0,0) at RKNS_11KernelTableES1_+0x605a0 in barrier.h:957
+=========     Read Thread (1,0,0) at DeviceVector<CudaExpansionType<(int)3>>::DeviceVector()+0x610f0 in gravity_cuda.hpp:151
+=========     Current Value : 0
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: void cudaKickKernel<7>(KickReturn*, KickParameters, CudaKickData, CudaKickParameters<7>*, int, int*, CudaKickArenaLayout, char*) [0xa94668] in cosmictiger_base
+=========         Host Frame: KickReturn cudaExecuteKicksImpl<7>(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >) [0xa95905] in cosmictiger_base
+=========         Host Frame: auto cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}::operator()<std::integral_constant<int, 7> >(std::integral_constant<int, 7>) const [0x4cf420] in cosmictiger_base
+=========         Host Frame: decltype(auto) fmmDispatch<cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}>(int, cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}&&) [0x4cf7b0] in cosmictiger_base
+=========         Host Frame: decltype(auto) fmmDispatch<cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}>(cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}&&) [0x4cf879] in cosmictiger_base
+=========         Host Frame: cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >) [0x4cf90e] in cosmictiger_base
+=========         Host Frame: KickWorkspace::toGpu() [0x4e45c8] in cosmictiger_base
+=========         Host Frame: KickWorkspace::addWork(std::shared_ptr<KickWorkspace>, ExpansionBuffer const&, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >&&, Vector<TreeId, std::allocator<TreeId> >&&) [0x4e52dc] in cosmictiger_base
+=========         Host Frame: KickReturn kickWalk<7>(KickParameters, ExpansionBuffer, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >, Vector<TreeId, std::allocator<TreeId> >, std::shared_ptr<KickWorkspace>) [0xa90f68] in cosmictiger_base
+=========         Host Frame: auto kick(KickParameters, ExpansionBuffer, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >, Vector<TreeId, std::allocator<TreeId> >, std::shared_ptr<KickWorkspace>)::{lambda(auto:1)#1}::operator()<std::integral_constant<int, 7> >(std::integral_constant<int, 7>) const [clone .isra.0] [0x4ade39] in cosmictiger_base
+=========         Host Frame: kick(KickParameters, ExpansionBuffer, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >, Vector<TreeId, std::allocator<TreeId> >, std::shared_ptr<KickWorkspace>) [0x4adfdb] in cosmictiger_base
+=========         Host Frame: detail::fmmWalkApplyInteraction(TreeId, TreeId, float, bool) [0x9b9594] in cosmictiger_base
+=========         Host Frame: detail::fmmWalkInternalCloudHybrid(bool) [0x9c6132] in cosmictiger_base
+=========         Host Frame: fmmWalkTest() [0x9cbfa2] in cosmictiger_base
+=========         Host Frame: hpx_main(int, char**) [0x5b3be4] in cosmictiger_base
+=========         Host Frame: hpx_main() [0xb28863] in cosmictiger_base
+=========         Host Frame: hpx::runtime::run_helper(hpx::function<int (), false> const&, int&, bool, void (*)(unsigned long)) [0x2470c9] in libhpx_core.so
+=========         Host Frame: hpx::runtime_distributed::run_helper(hpx::function<int (), false> const&, int&) [0x687417] in libhpx.so.1
+=========         Host Frame: std::pair<hpx::threads::thread_schedule_state, hpx::threads::thread_id> hpx::util::detail::callable_vtable<std::pair<hpx::threads::thread_schedule_state, hpx::threads::thread_id> (hpx::threads::thread_restart_state)>::_invoke<hpx::threads::detail::thread_function<hpx::detail::bound<std::pair<hpx::threads::thread_schedule_state, hpx::threads::thread_id> (hpx::runtime_distributed::*)(hpx::function<int (), false> const&, int&), hpx::util::pack_c<unsigned long, 0ul, 1ul, 2ul>, hpx::runtime_distributed*, hpx::function<int (), false>, int&> > >(void*, hpx::threads::thread_restart_state&&) [0x68f0a5] in libhpx.so.1
+=========         Host Frame: hpx::threads::coroutines::detail::coroutine_impl::operator()() [0x146fee] in libhpx_core.so
+=========         Host Frame: void hpx::threads::coroutines::detail::lx::trampoline<hpx::threads::coroutines::detail::coroutine_impl>(void*) [0x145cde] in libhpx_core.so
+========= 
+========= Warning: (Warp Level Programming) Potential RAW hazard detected (invalid memcpy_async synchronization) at __shared__ 0x1775 in block (0,0,0) :
+=========     Write Thread (1,0,0) at RKNS_11KernelTableES1_+0x605a0 in barrier.h:957
+=========     Read Thread (1,0,0) at DeviceVector<CudaExpansionType<(int)3>>::DeviceVector()+0x610f0 in gravity_cuda.hpp:151
+=========     Current Value : 0
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: void cudaKickKernel<7>(KickReturn*, KickParameters, CudaKickData, CudaKickParameters<7>*, int, int*, CudaKickArenaLayout, char*) [0xa94668] in cosmictiger_base
+=========         Host Frame: KickReturn cudaExecuteKicksImpl<7>(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >) [0xa95905] in cosmictiger_base
+=========         Host Frame: auto cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}::operator()<std::integral_constant<int, 7> >(std::integral_constant<int, 7>) const [0x4cf420] in cosmictiger_base
+=========         Host Frame: decltype(auto) fmmDispatch<cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}>(int, cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}&&) [0x4cf7b0] in cosmictiger_base
+=========         Host Frame: decltype(auto) fmmDispatch<cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}>(cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}&&) [0x4cf879] in cosmictiger_base
+=========         Host Frame: cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >) [0x4cf90e] in cosmictiger_base
+=========         Host Frame: KickWorkspace::toGpu() [0x4e45c8] in cosmictiger_base
+=========         Host Frame: KickWorkspace::addWork(std::shared_ptr<KickWorkspace>, ExpansionBuffer const&, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >&&, Vector<TreeId, std::allocator<TreeId> >&&) [0x4e52dc] in cosmictiger_base
+=========         Host Frame: KickReturn kickWalk<7>(KickParameters, ExpansionBuffer, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >, Vector<TreeId, std::allocator<TreeId> >, std::shared_ptr<KickWorkspace>) [0xa90f68] in cosmictiger_base
+=========         Host Frame: auto kick(KickParameters, ExpansionBuffer, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >, Vector<TreeId, std::allocator<TreeId> >, std::shared_ptr<KickWorkspace>)::{lambda(auto:1)#1}::operator()<std::integral_constant<int, 7> >(std::integral_constant<int, 7>) const [clone .isra.0] [0x4ade39] in cosmictiger_base
+=========         Host Frame: kick(KickParameters, ExpansionBuffer, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >, Vector<TreeId, std::allocator<TreeId> >, std::shared_ptr<KickWorkspace>) [0x4adfdb] in cosmictiger_base
+=========         Host Frame: detail::fmmWalkApplyInteraction(TreeId, TreeId, float, bool) [0x9b9594] in cosmictiger_base
+=========         Host Frame: detail::fmmWalkInternalCloudHybrid(bool) [0x9c6132] in cosmictiger_base
+=========         Host Frame: fmmWalkTest() [0x9cbfa2] in cosmictiger_base
+=========         Host Frame: hpx_main(int, char**) [0x5b3be4] in cosmictiger_base
+=========         Host Frame: hpx_main() [0xb28863] in cosmictiger_base
+=========         Host Frame: hpx::runtime::run_helper(hpx::function<int (), false> const&, int&, bool, void (*)(unsigned long)) [0x2470c9] in libhpx_core.so
+=========         Host Frame: hpx::runtime_distributed::run_helper(hpx::function<int (), false> const&, int&) [0x687417] in libhpx.so.1
+=========         Host Frame: std::pair<hpx::threads::thread_schedule_state, hpx::threads::thread_id> hpx::util::detail::callable_vtable<std::pair<hpx::threads::thread_schedule_state, hpx::threads::thread_id> (hpx::threads::thread_restart_state)>::_invoke<hpx::threads::detail::thread_function<hpx::detail::bound<std::pair<hpx::threads::thread_schedule_state, hpx::threads::thread_id> (hpx::runtime_distributed::*)(hpx::function<int (), false> const&, int&), hpx::util::pack_c<unsigned long, 0ul, 1ul, 2ul>, hpx::runtime_distributed*, hpx::function<int (), false>, int&> > >(void*, hpx::threads::thread_restart_state&&) [0x68f0a5] in libhpx.so.1
+=========         Host Frame: hpx::threads::coroutines::detail::coroutine_impl::operator()() [0x146fee] in libhpx_core.so
+=========         Host Frame: void hpx::threads::coroutines::detail::lx::trampoline<hpx::threads::coroutines::detail::coroutine_impl>(void*) [0x145cde] in libhpx_core.so
+========= 
+========= Warning: (Warp Level Programming) Potential RAW hazard detected (invalid memcpy_async synchronization) at __shared__ 0x1776 in block (0,0,0) :
+=========     Write Thread (1,0,0) at RKNS_11KernelTableES1_+0x605a0 in barrier.h:957
+=========     Read Thread (1,0,0) at DeviceVector<CudaExpansionType<(int)3>>::DeviceVector()+0x610f0 in gravity_cuda.hpp:151
+=========     Current Value : 0
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: void cudaKickKernel<7>(KickReturn*, KickParameters, CudaKickData, CudaKickParameters<7>*, int, int*, CudaKickArenaLayout, char*) [0xa94668] in cosmictiger_base
+=========         Host Frame: KickReturn cudaExecuteKicksImpl<7>(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >) [0xa95905] in cosmictiger_base
+=========         Host Frame: auto cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}::operator()<std::integral_constant<int, 7> >(std::integral_constant<int, 7>) const [0x4cf420] in cosmictiger_base
+=========         Host Frame: decltype(auto) fmmDispatch<cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}>(int, cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}&&) [0x4cf7b0] in cosmictiger_base
+=========         Host Frame: decltype(auto) fmmDispatch<cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}>(cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}&&) [0x4cf879] in cosmictiger_base
+=========         Host Frame: cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >) [0x4cf90e] in cosmictiger_base
+=========         Host Frame: KickWorkspace::toGpu() [0x4e45c8] in cosmictiger_base
+=========         Host Frame: KickWorkspace::addWork(std::shared_ptr<KickWorkspace>, ExpansionBuffer const&, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >&&, Vector<TreeId, std::allocator<TreeId> >&&) [0x4e52dc] in cosmictiger_base
+=========         Host Frame: KickReturn kickWalk<7>(KickParameters, ExpansionBuffer, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >, Vector<TreeId, std::allocator<TreeId> >, std::shared_ptr<KickWorkspace>) [0xa90f68] in cosmictiger_base
+=========         Host Frame: auto kick(KickParameters, ExpansionBuffer, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >, Vector<TreeId, std::allocator<TreeId> >, std::shared_ptr<KickWorkspace>)::{lambda(auto:1)#1}::operator()<std::integral_constant<int, 7> >(std::integral_constant<int, 7>) const [clone .isra.0] [0x4ade39] in cosmictiger_base
+=========         Host Frame: kick(KickParameters, ExpansionBuffer, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >, Vector<TreeId, std::allocator<TreeId> >, std::shared_ptr<KickWorkspace>) [0x4adfdb] in cosmictiger_base
+=========         Host Frame: detail::fmmWalkApplyInteraction(TreeId, TreeId, float, bool) [0x9b9594] in cosmictiger_base
+=========         Host Frame: detail::fmmWalkInternalCloudHybrid(bool) [0x9c6132] in cosmictiger_base
+=========         Host Frame: fmmWalkTest() [0x9cbfa2] in cosmictiger_base
+=========         Host Frame: hpx_main(int, char**) [0x5b3be4] in cosmictiger_base
+=========         Host Frame: hpx_main() [0xb28863] in cosmictiger_base
+=========         Host Frame: hpx::runtime::run_helper(hpx::function<int (), false> const&, int&, bool, void (*)(unsigned long)) [0x2470c9] in libhpx_core.so
+=========         Host Frame: hpx::runtime_distributed::run_helper(hpx::function<int (), false> const&, int&) [0x687417] in libhpx.so.1
+=========         Host Frame: std::pair<hpx::threads::thread_schedule_state, hpx::threads::thread_id> hpx::util::detail::callable_vtable<std::pair<hpx::threads::thread_schedule_state, hpx::threads::thread_id> (hpx::threads::thread_restart_state)>::_invoke<hpx::threads::detail::thread_function<hpx::detail::bound<std::pair<hpx::threads::thread_schedule_state, hpx::threads::thread_id> (hpx::runtime_distributed::*)(hpx::function<int (), false> const&, int&), hpx::util::pack_c<unsigned long, 0ul, 1ul, 2ul>, hpx::runtime_distributed*, hpx::function<int (), false>, int&> > >(void*, hpx::threads::thread_restart_state&&) [0x68f0a5] in libhpx.so.1
+=========         Host Frame: hpx::threads::coroutines::detail::coroutine_impl::operator()() [0x146fee] in libhpx_core.so
+=========         Host Frame: void hpx::threads::coroutines::detail::lx::trampoline<hpx::threads::coroutines::detail::coroutine_impl>(void*) [0x145cde] in libhpx_core.so
+========= 
+========= Warning: (Warp Level Programming) Potential RAW hazard detected (invalid memcpy_async synchronization) at __shared__ 0x1777 in block (0,0,0) :
+=========     Write Thread (1,0,0) at RKNS_11KernelTableES1_+0x605a0 in barrier.h:957
+=========     Read Thread (1,0,0) at DeviceVector<CudaExpansionType<(int)3>>::DeviceVector()+0x610f0 in gravity_cuda.hpp:151
+=========     Current Value : 112
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: void cudaKickKernel<7>(KickReturn*, KickParameters, CudaKickData, CudaKickParameters<7>*, int, int*, CudaKickArenaLayout, char*) [0xa94668] in cosmictiger_base
+=========         Host Frame: KickReturn cudaExecuteKicksImpl<7>(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >) [0xa95905] in cosmictiger_base
+=========         Host Frame: auto cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}::operator()<std::integral_constant<int, 7> >(std::integral_constant<int, 7>) const [0x4cf420] in cosmictiger_base
+=========         Host Frame: decltype(auto) fmmDispatch<cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}>(int, cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}&&) [0x4cf7b0] in cosmictiger_base
+=========         Host Frame: decltype(auto) fmmDispatch<cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}>(cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}&&) [0x4cf879] in cosmictiger_base
+=========         Host Frame: cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >) [0x4cf90e] in cosmictiger_base
+=========         Host Frame: KickWorkspace::toGpu() [0x4e45c8] in cosmictiger_base
+=========         Host Frame: KickWorkspace::addWork(std::shared_ptr<KickWorkspace>, ExpansionBuffer const&, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >&&, Vector<TreeId, std::allocator<TreeId> >&&) [0x4e52dc] in cosmictiger_base
+=========         Host Frame: KickReturn kickWalk<7>(KickParameters, ExpansionBuffer, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >, Vector<TreeId, std::allocator<TreeId> >, std::shared_ptr<KickWorkspace>) [0xa90f68] in cosmictiger_base
+=========         Host Frame: auto kick(KickParameters, ExpansionBuffer, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >, Vector<TreeId, std::allocator<TreeId> >, std::shared_ptr<KickWorkspace>)::{lambda(auto:1)#1}::operator()<std::integral_constant<int, 7> >(std::integral_constant<int, 7>) const [clone .isra.0] [0x4ade39] in cosmictiger_base
+=========         Host Frame: kick(KickParameters, ExpansionBuffer, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >, Vector<TreeId, std::allocator<TreeId> >, std::shared_ptr<KickWorkspace>) [0x4adfdb] in cosmictiger_base
+=========         Host Frame: detail::fmmWalkApplyInteraction(TreeId, TreeId, float, bool) [0x9b9594] in cosmictiger_base
+=========         Host Frame: detail::fmmWalkInternalCloudHybrid(bool) [0x9c6132] in cosmictiger_base
+=========         Host Frame: fmmWalkTest() [0x9cbfa2] in cosmictiger_base
+=========         Host Frame: hpx_main(int, char**) [0x5b3be4] in cosmictiger_base
+=========         Host Frame: hpx_main() [0xb28863] in cosmictiger_base
+=========         Host Frame: hpx::runtime::run_helper(hpx::function<int (), false> const&, int&, bool, void (*)(unsigned long)) [0x2470c9] in libhpx_core.so
+=========         Host Frame: hpx::runtime_distributed::run_helper(hpx::function<int (), false> const&, int&) [0x687417] in libhpx.so.1
+=========         Host Frame: std::pair<hpx::threads::thread_schedule_state, hpx::threads::thread_id> hpx::util::detail::callable_vtable<std::pair<hpx::threads::thread_schedule_state, hpx::threads::thread_id> (hpx::threads::thread_restart_state)>::_invoke<hpx::threads::detail::thread_function<hpx::detail::bound<std::pair<hpx::threads::thread_schedule_state, hpx::threads::thread_id> (hpx::runtime_distributed::*)(hpx::function<int (), false> const&, int&), hpx::util::pack_c<unsigned long, 0ul, 1ul, 2ul>, hpx::runtime_distributed*, hpx::function<int (), false>, int&> > >(void*, hpx::threads::thread_restart_state&&) [0x68f0a5] in libhpx.so.1
+=========         Host Frame: hpx::threads::coroutines::detail::coroutine_impl::operator()() [0x146fee] in libhpx_core.so
+=========         Host Frame: void hpx::threads::coroutines::detail::lx::trampoline<hpx::threads::coroutines::detail::coroutine_impl>(void*) [0x145cde] in libhpx_core.so
+========= 
+========= Warning: (Warp Level Programming) Potential RAW hazard detected (invalid memcpy_async synchronization) at __shared__ 0x1778 in block (0,0,0) :
+=========     Write Thread (2,0,0) at RKNS_11KernelTableES1_+0x605a0 in barrier.h:957
+=========     Read Thread (2,0,0) at DeviceVector<CudaExpansionType<(int)3>>::DeviceVector()+0x610f0 in gravity_cuda.hpp:151
+=========     Current Value : 0
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: void cudaKickKernel<7>(KickReturn*, KickParameters, CudaKickData, CudaKickParameters<7>*, int, int*, CudaKickArenaLayout, char*) [0xa94668] in cosmictiger_base
+=========         Host Frame: KickReturn cudaExecuteKicksImpl<7>(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >) [0xa95905] in cosmictiger_base
+=========         Host Frame: auto cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}::operator()<std::integral_constant<int, 7> >(std::integral_constant<int, 7>) const [0x4cf420] in cosmictiger_base
+=========         Host Frame: decltype(auto) fmmDispatch<cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}>(int, cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}&&) [0x4cf7b0] in cosmictiger_base
+=========         Host Frame: decltype(auto) fmmDispatch<cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}>(cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}&&) [0x4cf879] in cosmictiger_base
+=========         Host Frame: cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >) [0x4cf90e] in cosmictiger_base
+=========         Host Frame: KickWorkspace::toGpu() [0x4e45c8] in cosmictiger_base
+=========         Host Frame: KickWorkspace::addWork(std::shared_ptr<KickWorkspace>, ExpansionBuffer const&, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >&&, Vector<TreeId, std::allocator<TreeId> >&&) [0x4e52dc] in cosmictiger_base
+=========         Host Frame: KickReturn kickWalk<7>(KickParameters, ExpansionBuffer, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >, Vector<TreeId, std::allocator<TreeId> >, std::shared_ptr<KickWorkspace>) [0xa90f68] in cosmictiger_base
+=========         Host Frame: auto kick(KickParameters, ExpansionBuffer, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >, Vector<TreeId, std::allocator<TreeId> >, std::shared_ptr<KickWorkspace>)::{lambda(auto:1)#1}::operator()<std::integral_constant<int, 7> >(std::integral_constant<int, 7>) const [clone .isra.0] [0x4ade39] in cosmictiger_base
+=========         Host Frame: kick(KickParameters, ExpansionBuffer, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >, Vector<TreeId, std::allocator<TreeId> >, std::shared_ptr<KickWorkspace>) [0x4adfdb] in cosmictiger_base
+=========         Host Frame: detail::fmmWalkApplyInteraction(TreeId, TreeId, float, bool) [0x9b9594] in cosmictiger_base
+=========         Host Frame: detail::fmmWalkInternalCloudHybrid(bool) [0x9c6132] in cosmictiger_base
+=========         Host Frame: fmmWalkTest() [0x9cbfa2] in cosmictiger_base
+=========         Host Frame: hpx_main(int, char**) [0x5b3be4] in cosmictiger_base
+=========         Host Frame: hpx_main() [0xb28863] in cosmictiger_base
+=========         Host Frame: hpx::runtime::run_helper(hpx::function<int (), false> const&, int&, bool, void (*)(unsigned long)) [0x2470c9] in libhpx_core.so
+=========         Host Frame: hpx::runtime_distributed::run_helper(hpx::function<int (), false> const&, int&) [0x687417] in libhpx.so.1
+=========         Host Frame: std::pair<hpx::threads::thread_schedule_state, hpx::threads::thread_id> hpx::util::detail::callable_vtable<std::pair<hpx::threads::thread_schedule_state, hpx::threads::thread_id> (hpx::threads::thread_restart_state)>::_invoke<hpx::threads::detail::thread_function<hpx::detail::bound<std::pair<hpx::threads::thread_schedule_state, hpx::threads::thread_id> (hpx::runtime_distributed::*)(hpx::function<int (), false> const&, int&), hpx::util::pack_c<unsigned long, 0ul, 1ul, 2ul>, hpx::runtime_distributed*, hpx::function<int (), false>, int&> > >(void*, hpx::threads::thread_restart_state&&) [0x68f0a5] in libhpx.so.1
+=========         Host Frame: hpx::threads::coroutines::detail::coroutine_impl::operator()() [0x146fee] in libhpx_core.so
+=========         Host Frame: void hpx::threads::coroutines::detail::lx::trampoline<hpx::threads::coroutines::detail::coroutine_impl>(void*) [0x145cde] in libhpx_core.so
+========= 
+========= Warning: (Warp Level Programming) Potential RAW hazard detected (invalid memcpy_async synchronization) at __shared__ 0x1779 in block (0,0,0) :
+=========     Write Thread (2,0,0) at RKNS_11KernelTableES1_+0x605a0 in barrier.h:957
+=========     Read Thread (2,0,0) at DeviceVector<CudaExpansionType<(int)3>>::DeviceVector()+0x610f0 in gravity_cuda.hpp:151
+=========     Current Value : 0
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========         Host Frame: void cudaKickKernel<7>(KickReturn*, KickParameters, CudaKickData, CudaKickParameters<7>*, int, int*, CudaKickArenaLayout, char*) [0xa94668] in cosmictiger_base
+=========         Host Frame: KickReturn cudaExecuteKicksImpl<7>(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >) [0xa95905] in cosmictiger_base
+=========         Host Frame: auto cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}::operator()<std::integral_constant<int, 7> >(std::integral_constant<int, 7>) const [0x4cf420] in cosmictiger_base
+=========         Host Frame: decltype(auto) fmmDispatch<cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}>(int, cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}&&) [0x4cf7b0] in cosmictiger_base
+=========         Host Frame: decltype(auto) fmmDispatch<cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}>(cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >)::{lambda(auto:1)#1}&&) [0x4cf879] in cosmictiger_base
+=========         Host Frame: cudaExecuteKicks(KickParameters, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, Fixed<unsigned int, 32>*, TreeNode*, Vector<KickWorkitem, std::allocator<KickWorkitem> >) [0x4cf90e] in cosmictiger_base
+=========         Host Frame: KickWorkspace::toGpu() [0x4e45c8] in cosmictiger_base
+=========         Host Frame: KickWorkspace::addWork(std::shared_ptr<KickWorkspace>, ExpansionBuffer const&, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >&&, Vector<TreeId, std::allocator<TreeId> >&&) [0x4e52dc] in cosmictiger_base
+=========         Host Frame: KickReturn kickWalk<7>(KickParameters, ExpansionBuffer, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >, Vector<TreeId, std::allocator<TreeId> >, std::shared_ptr<KickWorkspace>) [0xa90f68] in cosmictiger_base
+=========         Host Frame: auto kick(KickParameters, ExpansionBuffer, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >, Vector<TreeId, std::allocator<TreeId> >, std::shared_ptr<KickWorkspace>)::{lambda(auto:1)#1}::operator()<std::integral_constant<int, 7> >(std::integral_constant<int, 7>) const [clone .isra.0] [0x4ade39] in cosmictiger_base
+=========         Host Frame: kick(KickParameters, ExpansionBuffer, Array<Fixed<unsigned int, 32>, 3>, TreeId, Vector<TreeId, std::allocator<TreeId> >, Vector<TreeId, std::allocator<TreeId> >, std::shared_ptr<KickWorkspace>) [0x4adfdb] in cosmictiger_base
+=========         Host Frame: detail::fmmWalkApplyInteraction(TreeId, TreeId, float, bool) [0x9b9594] in cosmictiger_base
+=========         Host Frame: detail::fmmWalkInternalCloudHybrid(bool) [0x9c6132] in cosmictiger_base
+=========         Host Frame: fmmWalkTest() 

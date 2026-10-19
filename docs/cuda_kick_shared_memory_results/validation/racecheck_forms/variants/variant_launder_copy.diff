@@ -1,0 +1,29 @@
+diff --git a/cosmictiger/gravity_cuda.hpp b/cosmictiger/gravity_cuda.hpp
+index 0e228992..ecd7b661 100644
+--- a/cosmictiger/gravity_cuda.hpp
++++ b/cosmictiger/gravity_cuda.hpp
+@@ -52,6 +52,9 @@ __device__ int cudaStageParticleSources(CudaKickData const& data, CudaKickContro
+     auto const* treeNodes = data.treeNodes;
+     int const capacity = control.layout.particleCapacity;
+     int const partsz = partlist.size();
++    // Diagnostic variant: hide the barrier address from the compiler.
++    auto* copyBarrier = &control.barrier;
++    asm volatile("" : "+l"(copyBarrier));
+     int particleIndex = 0;
+     while (particleIndex < capacity && i < partsz) {
+         while (i + 1 < partsz) {
+@@ -68,11 +71,11 @@ __device__ int cudaStageParticleSources(CudaKickData const& data, CudaKickContro
+             min(particleRange.first + (capacity - particleIndex), particleRange.second);
+         int const sz = imax - imin;
+         cuda::memcpy_async(group, control.sourceX + particleIndex, data.x + imin,
+-            sizeof(Fixed32) * sz, control.barrier);
++            sizeof(Fixed32) * sz, *copyBarrier);
+         cuda::memcpy_async(group, control.sourceY + particleIndex, data.y + imin,
+-            sizeof(Fixed32) * sz, control.barrier);
++            sizeof(Fixed32) * sz, *copyBarrier);
+         cuda::memcpy_async(group, control.sourceZ + particleIndex, data.z + imin,
+-            sizeof(Fixed32) * sz, control.barrier);
++            sizeof(Fixed32) * sz, *copyBarrier);
+         if constexpr (!equalMass) {
+             for (int j = tid; j < sz; j += WARP_SIZE) {
+                 control.sourceMass[particleIndex + j] =

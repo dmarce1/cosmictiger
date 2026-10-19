@@ -1,0 +1,13 @@
+========= RACECHECK SUMMARY: 6285 hazards displayed (0 errors, 6285 warnings)
+hazard records: 6276 {('RAW', 'Warp Level Programming'): 6276}
+same vs different thread: {('RAW', 'same thread'): 4404, ('RAW', 'different threads'): 1872}
+blocks with hazards: 16
+by read location: {'gravity_cuda.hpp:151': 2092, 'gravity_cuda.hpp:150': 2092, 'gravity_cuda.hpp:149': 2092}
+by write location: {'barrier.h:957': 6276}
+analysis reports: 9
+     2 x  barrier.h:957 vs gravity_cuda.hpp:149 [12 hazards]
+     1 x  barrier.h:957 vs gravity_cuda.hpp:149 [2068 hazards]
+     2 x  barrier.h:957 vs gravity_cuda.hpp:150 [12 hazards]
+     1 x  barrier.h:957 vs gravity_cuda.hpp:150 [2068 hazards]
+     2 x  barrier.h:957 vs gravity_cuda.hpp:151 [12 hazards]
+     1 x  barrier.h:957 vs gravity_cuda.hpp:151 [2068 hazards]
