@@ -129,6 +129,45 @@ Options (all default to automatic): `compute.cudaKickResidency`,
 `compute.cudaKickHandoffBlocks` (pins the CPU/GPU handoff divisor so allocation
 variants can be compared at identical work division).
 
+## Compiled kernel resources (measured)
+
+`cuobjdump --dump-resource-usage` on the linked binary (CUDA 12.8, sm_86,
+`--use_fast_math`, one 32-thread block). Registers saturate at 255 from order 6
+upward; the stack frame, which holds the per-lane spills of the Ewald and
+cell-interaction expansions, grows steeply with order.
+
+| order | registers | stack bytes | static shared bytes | register-limited blocks/SM |
+|---:|---:|---:|---:|---:|
+| 3 | 234 | 264 | 0 | 8 |
+| 4 | 224 | 296 | 0 | 9 (8 achieved) |
+| 5 | 230 | 328 | 0 | 8 |
+| 6 | 255 | 376 | 0 | 8 |
+| 7 | 255 | 544 | 0 | 8 |
+| 8 | 255 | 936 | 0 | 8 |
+| 9 | 255 | 2160 | 0 | 8 |
+
+Each per-order CUDA instance unit compiles in 22 to 29 seconds; parsing the
+all-order generated headers costs about 2 seconds with g++ and 3 with nvcc.
+
+## Validation (measured)
+
+`docs/cuda_kick_shared_memory_results/validation/status.txt` records, for the
+runtime-order binary:
+
+- `stf_kernels_test`, `stf_kernels_cuda_test`, `stf_l2l_cuda_test` and
+  `stf_ewald_cpu_test` pass for every order 3 through 9 in one executable
+  (independent Cartesian polynomial, binomial-series and remainder oracles,
+  SIMD and host/device parity, the cooperative L2L at every local degree with
+  `translate` and `translateInto`, and the Ewald tables refilled at orders 3,
+  7 and 9).
+- The CUDA `fmmWalk` regression (CPU and CUDA against operator references,
+  periodic Ewald sums, hybrid leaf-cloud paths, reciprocity) passes at every
+  order 3 through 9.
+- `fmmTree` and the mixed-mass `sphGravity` regression (which exercises the
+  mass-plane instantiation) pass at orders 3, 7 and 9.
+
 ## Measurements
 
-*To be completed from the benchmark runs in `docs/cuda_kick_shared_memory_results/`.*
+*Benchmark stages (allocation variants, orders at matched accuracy, bucket sweep,
+fixed handoff) are recorded under `docs/cuda_kick_shared_memory_results/` and
+summarized below once complete.*
