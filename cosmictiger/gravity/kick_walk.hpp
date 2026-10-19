@@ -108,14 +108,19 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
 
 namespace detail {
 
-// Adds an opened child to a list unless it holds no particles. The Ewald leaf
-// criterion splits sparse boxes down to single particles beside empty siblings,
-// and an empty cell contributes nothing: keeping it out of every list spares
-// its acceptance tests, its own opening and its zero-mass M2L, as the CUDA walk
-// does by skipping empty sources at the test. The walk's lists start from the
-// root and grow only here, so no list ever holds an empty cell.
+// Adds an opened child to a list unless it is known to hold no particles. The
+// Ewald leaf criterion splits sparse boxes down to single particles beside
+// empty siblings, and an empty cell contributes nothing: keeping it out of
+// every list spares its acceptance tests, its own opening and its zero-mass
+// M2L, as the CUDA walk does by skipping empty sources at the test. Only a
+// single-rank node knows its particle count: a node spanning several ranks has
+// no rank-local particle range (treeCreate leaves it at (-1, -1), so
+// numberOfParticles() reads zero) and its particles live in its single-rank
+// descendants, so it is always kept. The walk's lists start from the root and
+// grow only here, so no list ever holds an empty single-rank cell.
 inline void kickPushOccupied(Vector<TreeId>& list, TreeId id) {
-    if (treeGetNode(id)->numberOfParticles() != 0) {
+    TreeNode const* node = treeGetNode(id);
+    if (!node->isLocal() || node->numberOfParticles() != 0) {
         list.push_back(id);
     }
 }
