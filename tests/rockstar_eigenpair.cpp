@@ -2,7 +2,7 @@
 #include <cstdio>
 #include <cstdlib>
 
-#include <cosmictiger/math.hpp>
+#include <cosmictiger/math/math.hpp>
 
 void cosmictigerAssert(char const* expression, bool condition, char const* file, int line) {
     if (!condition) {

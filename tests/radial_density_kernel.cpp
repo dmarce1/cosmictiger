@@ -4,9 +4,9 @@
 #include <numbers>
 #include <stdexcept>
 
-#include <cosmictiger/radial_density_kernel.hpp>
+#include <cosmictiger/math/radial_density_kernel.hpp>
 #if defined(RADIAL_KERNEL_TEST_SIMD)
-#include <cosmictiger/simd.hpp>
+#include <cosmictiger/math/simd.hpp>
 #endif
 
 namespace detail {

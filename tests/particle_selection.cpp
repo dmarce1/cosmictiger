@@ -23,7 +23,7 @@
 #include <stdexcept>
 #include <vector>
 
-#include <cosmictiger/particle_selection.hpp>
+#include <cosmictiger/particles/particle_selection.hpp>
 
 namespace detail {
 

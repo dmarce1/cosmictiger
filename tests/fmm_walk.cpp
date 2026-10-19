@@ -13,17 +13,17 @@
 #include <stdexcept>
 #include <string>
 
-#include <cosmictiger/domain.hpp>
-#include <cosmictiger/fmm_acceptance.hpp>
-#include <cosmictiger/fmm_kernels.hpp>
-#include <cosmictiger/fmm_order.hpp>
-#include <cosmictiger/gravity.hpp>
-#include <cosmictiger/hpx.hpp>
-#include <cosmictiger/kick.hpp>
-#include <cosmictiger/kick_interaction_counts.hpp>
-#include <cosmictiger/options.hpp>
-#include <cosmictiger/particles.hpp>
-#include <cosmictiger/tree.hpp>
+#include <cosmictiger/core/hpx.hpp>
+#include <cosmictiger/core/options.hpp>
+#include <cosmictiger/fmm/fmm_acceptance.hpp>
+#include <cosmictiger/fmm/fmm_kernels.hpp>
+#include <cosmictiger/fmm/fmm_order.hpp>
+#include <cosmictiger/gravity/gravity.hpp>
+#include <cosmictiger/gravity/kick.hpp>
+#include <cosmictiger/gravity/kick_interaction_counts.hpp>
+#include <cosmictiger/gravity/tree.hpp>
+#include <cosmictiger/particles/domain.hpp>
+#include <cosmictiger/particles/particles.hpp>
 
 namespace detail {
 

@@ -15,7 +15,7 @@
 #include <stdexcept>
 #include <vector>
 
-#include <cosmictiger/rockstar_properties.hpp>
+#include <cosmictiger/analysis/rockstar_properties.hpp>
 
 namespace detail {
 

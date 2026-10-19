@@ -1,7 +1,7 @@
 #include <cosmictiger/direct.hpp>
-#include <cosmictiger/domain.hpp>
-#include <cosmictiger/gravity.hpp>
+#include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/particle_server.hpp>
+#include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/random_number_generator.hpp>
 
 struct TestParticle {

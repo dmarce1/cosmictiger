@@ -15,7 +15,7 @@
 #include <hpx/include/async.hpp>
 #include <hpx/runtime_local/runtime_local_fwd.hpp>
 
-#include <cosmictiger/cuda_stream.hpp>
+#include <cosmictiger/cuda/cuda_stream.hpp>
 
 void cudaAsyncTestLaunch(int* values, int count, cudaStream_t stream, bool invalid);
 

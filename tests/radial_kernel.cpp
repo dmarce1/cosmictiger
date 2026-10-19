@@ -7,9 +7,9 @@
 #include <string>
 #include <type_traits>
 
-#include <cosmictiger/radial_kernel.hpp>
+#include <cosmictiger/math/radial_kernel.hpp>
 #if defined(RADIAL_KERNEL_TEST_SIMD)
-#include <cosmictiger/simd.hpp>
+#include <cosmictiger/math/simd.hpp>
 #endif
 
 namespace detail {

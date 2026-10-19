@@ -8,8 +8,8 @@
 #ifndef FLOAT23DOUBLE_HPP_
 #define FLOAT23DOUBLE_HPP_
 
-#include <cosmictiger/defs.hpp>
-#include <cosmictiger/simd.hpp>
+#include <cosmictiger/core/defs.hpp>
+#include <cosmictiger/math/simd.hpp>
 
 template <class T>
 struct Todouble {};

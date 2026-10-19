@@ -156,7 +156,7 @@ consistent temperature inversion. A dimensionful molecular number density must
 never be used as a dimensionless fraction in a heat-capacity formula.
 
 Keep the stored energy convention `E = a² u`, where `u` is physical thermal
-specific energy. The current helpers in `cosmictiger/units.hpp` already encode
+specific energy. The current helpers in `cosmictiger/math/units.hpp` already encode
 the boundary conversions:
 
 - `rhoProper = rhoStored * units.massG / units.lengthCm³ / a³`;
@@ -188,7 +188,7 @@ and CUDA; backend files schedule work and marshal state.
 
 The implemented files are `primordial_types.hpp`, `primordial_rates.hpp`,
 `primordial_eos.hpp`, `primordial_solver.hpp`, and `primordial_chemistry.hpp`,
-with dispatch in `src/primordial_chemistry.cpp` and `.cu`. The core stores
+with dispatch in `src/chemistry/primordial_chemistry.cpp` and `.cu`. The core stores
 fractional nuclei as signed complements in float and thermal energy in eV/H.
 Rate/transcendental evaluation and EOS temperature use FP32. Elemental/charge
 closure, cancelling polynomial evaluation, source sums, Newton residuals,
@@ -211,8 +211,8 @@ retain independent error tests and acceptance. Independent binary64 references
 belong in validation and do not require FP64 production kernels.
 
 Production CPU support has a separate application gate. The original audit
-found unconditional CUDA calls in `src/kick_workspace.cpp`, CUDA allocations in
-`src/lightcone.cpp`, `__device__` in `cosmictiger/healpix.hpp`, and unconditional
+found unconditional CUDA calls in `src/gravity/kick_workspace.cpp`, CUDA allocations in
+`src/analysis/lightcone.cpp`, `__device__` in `cosmictiger/analysis/healpix.hpp`, and unconditional
 `hpxInitCuda()` in `src/main.cpp`. The implementation addresses these dependencies;
 a full CUDA-OFF build and no-GPU startup remain required evidence, as does CPU
 selection in a CUDA-enabled executable without device initialization. Unsupported
@@ -275,12 +275,12 @@ reads them, following the existing SPH staging convention.
 
 | Existing component | Required change |
 | --- | --- |
-| `cosmictiger/options.hpp`, `src/options.cpp`, `cosmictiger/options_metadata.hpp` | Add a `chemistry` group for enablement, network, radiation model, tolerances and bounded solver work; validate incompatible selections and serialize the new fields |
-| `cosmictiger/sph_particles.hpp`, `src/sph_particles.cpp` | Add optional abundance storage and integration-stage state; include it in allocation, free, swap, sorting, checkpoint visitation, and particle migration |
-| `src/driver.cpp`, `src/sph.cpp` | Add explicit chemistry scheduling, rung/timestep coupling, reduction of failures, and cache invalidation |
-| `src/sph_hydro_cpu.cpp`, `src/sph_hydro.cu`, prehydro/rung code | Consume the shared EOS pressure and sound speed; replace constant-γ assumptions when molecular thermodynamics is selected |
-| `cosmictiger/sph_kernel.hpp` (`SphRunData`) and SPH remote caches | Stage required EOS/source fields consistently across CPU, CUDA and MPI localities |
-| `src/initialize.cpp` | Replace the fixed neutral 1000 K chemistry-enabled initialization with explicit abundances and thermal state from a named initial-condition model |
+| `cosmictiger/core/options.hpp`, `src/core/options.cpp`, `cosmictiger/core/options_metadata.hpp` | Add a `chemistry` group for enablement, network, radiation model, tolerances and bounded solver work; validate incompatible selections and serialize the new fields |
+| `cosmictiger/sph/sph_particles.hpp`, `src/sph/sph_particles.cpp` | Add optional abundance storage and integration-stage state; include it in allocation, free, swap, sorting, checkpoint visitation, and particle migration |
+| `src/core/driver.cpp`, `src/sph/sph.cpp` | Add explicit chemistry scheduling, rung/timestep coupling, reduction of failures, and cache invalidation |
+| `src/sph/sph_hydro_cpu.cpp`, `src/sph/sph_hydro.cu`, prehydro/rung code | Consume the shared EOS pressure and sound speed; replace constant-γ assumptions when molecular thermodynamics is selected |
+| `cosmictiger/sph/sph_kernel.hpp` (`SphRunData`) and SPH remote caches | Stage required EOS/source fields consistently across CPU, CUDA and MPI localities |
+| `src/cosmology/initialize.cpp` | Replace the fixed neutral 1000 K chemistry-enabled initialization with explicit abundances and thermal state from a named initial-condition model |
 | Checkpoint code and output writers | Save species convention, network/rate/EOS/radiation versions, tables, units, particle state and split/rung timing; expose species, temperature and chemistry diagnostics |
 | `CMakeLists.txt`, `tests/` | Add independent CPU tests, CUDA parity tests, integration/restart tests and controlled benchmarks |
 

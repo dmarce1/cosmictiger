@@ -3,7 +3,7 @@
 #include <cstdlib>
 #include <stdexcept>
 
-#include <cosmictiger/lightcone_entry.hpp>
+#include <cosmictiger/analysis/lightcone_entry.hpp>
 
 void cosmictigerAssert(char const* expression, bool condition, char const* file, int line) {
     if (!condition) {

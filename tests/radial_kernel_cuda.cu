@@ -7,8 +7,8 @@
 
 #include <cuda_runtime.h>
 
-#include <cosmictiger/radial_density_kernel.hpp>
-#include <cosmictiger/radial_kernel.hpp>
+#include <cosmictiger/math/radial_density_kernel.hpp>
+#include <cosmictiger/math/radial_kernel.hpp>
 
 namespace detail {
 

@@ -9,8 +9,8 @@
 #include <string>
 #include <vector>
 
-#include <cosmictiger/group_header.hpp>
-#include <cosmictiger/rockstar_record.hpp>
+#include <cosmictiger/analysis/group_header.hpp>
+#include <cosmictiger/analysis/rockstar_record.hpp>
 
 namespace detail {
 

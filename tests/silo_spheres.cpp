@@ -26,7 +26,7 @@
 
 #include <silo.h>
 
-#include <cosmictiger/silo_spheres.hpp>
+#include <cosmictiger/io/silo_spheres.hpp>
 
 namespace detail {
 

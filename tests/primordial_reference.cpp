@@ -1,6 +1,6 @@
 // Host-only adapter for an independent SciPy Radau integration of the exact
 // production RHS. FP64 appears only in this reference boundary, not the solver.
-#include <cosmictiger/primordial_solver.hpp>
+#include <cosmictiger/chemistry/primordial_solver.hpp>
 
 namespace {
 primordial::Environment environment(int caseIndex) {

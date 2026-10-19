@@ -13,7 +13,7 @@
 #include <streambuf>
 #include <string>
 
-#include <cosmictiger/recfast.hpp>
+#include <cosmictiger/cosmology/recfast.hpp>
 
 namespace detail {
 

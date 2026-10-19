@@ -25,7 +25,7 @@
 #include <stdexcept>
 #include <type_traits>
 
-#include <cosmictiger/fp16.hpp>
+#include <cosmictiger/math/fp16.hpp>
 
 static_assert(sizeof(Float16) == sizeof(std::uint16_t), "Binary16 must occupy exactly two bytes");
 static_assert(

@@ -7,7 +7,7 @@
 
 #include <cuda_runtime.h>
 
-#include <cosmictiger/primordial_chemistry.hpp>
+#include <cosmictiger/chemistry/primordial_chemistry.hpp>
 
 namespace {
 bool close(float left, float right, float scale, float absolute = 1.e-30f) {

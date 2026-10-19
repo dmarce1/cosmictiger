@@ -27,8 +27,8 @@
 #include <stdexcept>
 #include <string>
 
-#include <cosmictiger/monaghan_sph.hpp>
-#include <cosmictiger/vector3.hpp>
+#include <cosmictiger/math/vector3.hpp>
+#include <cosmictiger/sph/monaghan_sph.hpp>
 
 namespace detail {
 

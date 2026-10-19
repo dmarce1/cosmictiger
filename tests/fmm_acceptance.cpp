@@ -13,9 +13,9 @@
 #include <utility>
 #include <vector>
 
-#include <cosmictiger/fmm_acceptance.hpp>
+#include <cosmictiger/fmm/fmm_acceptance.hpp>
 #if defined(FMM_ACCEPTANCE_TEST_SIMD)
-#include <cosmictiger/simd.hpp>
+#include <cosmictiger/math/simd.hpp>
 #endif
 
 namespace detail {

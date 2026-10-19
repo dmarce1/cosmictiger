@@ -86,186 +86,211 @@ set(cosmictiger_source_files
     healpix/healpix_tables.cc
     healpix/pointing.cc
     healpix/string_utils.cc
-    src/analytic.cu
-    src/analytic.cpp
-    src/assert.cpp
-    src/assert.cu
-    src/bh.cpp
-    src/bh.cu
-    src/boltzmann.cpp
-    src/compress.cpp
-    src/cosmology.cpp
-    src/cuda.cpp
-    src/cuda_stream.cpp
-    src/cuda_memory.cu
-    src/drift.cpp
-    src/drift_cpu.cpp
-    src/drift.cu
-    src/driver.cpp
-    src/domain.cpp
-    src/ewald_indices.cpp
-    src/ewald_indices.cu
-    src/flops.cpp
-    src/flops.cu
-    src/fft.cpp
-    src/fmm_order.cpp
-    src/gravity.cpp
-    src/gravity.cu
-    src/group_tree.cpp
-    src/groups.cpp
-    src/group_entry.cpp
-    src/groups_find.cpp
-    src/initialize.cpp
-    src/hpx.cpp
-    src/healpix.cu
-    src/kick.cpp
-    src/kick.cu
-    src/kick_workspace.cpp
-    src/lightcone.cpp
-    src/lightcone_cpu.cpp
-    src/lightcone.cu
+    src/analysis/compress.cpp
+    src/analysis/group_entry.cpp
+    src/analysis/group_tree.cpp
+    src/analysis/groups.cpp
+    src/analysis/groups_find.cpp
+    src/analysis/healpix.cu
+    src/analysis/lightcone.cpp
+    src/analysis/lightcone.cu
+    src/analysis/lightcone_cpu.cpp
+    src/analysis/power.cpp
+    src/analysis/power.cu
+    src/analysis/power_cpu.cpp
+    src/analysis/power_cuda.cu
+    src/analysis/rockstar.cpp
+    src/analysis/rockstar.cu
+    src/analysis/rockstar_catalogue.cpp
+    src/core/assert.cpp
+    src/core/assert.cu
+    src/core/driver.cpp
+    src/core/flops.cpp
+    src/core/flops.cu
+    src/core/hpx.cpp
+    src/core/memused.cpp
+    src/core/options.cpp
+    src/core/profiler.cpp
+    src/core/stack_trace.cpp
+    src/cosmology/boltzmann.cpp
+    src/cosmology/cosmology.cpp
+    src/cosmology/fft.cpp
+    src/cosmology/initialize.cpp
+    src/cosmology/recfast.cpp
+    src/cosmology/zero_order.cpp
+    src/cuda/cuda.cpp
+    src/cuda/cuda_memory.cu
+    src/cuda/cuda_stream.cpp
+    src/fmm/ewald_indices.cpp
+    src/fmm/ewald_indices.cu
+    src/fmm/fmm_order.cpp
+    src/gravity/bh.cpp
+    src/gravity/bh.cu
+    src/gravity/gravity.cpp
+    src/gravity/gravity.cu
+    src/gravity/kick.cpp
+    src/gravity/kick.cu
+    src/gravity/kick_workspace.cpp
+    src/gravity/tree.cpp
+    src/io/output.cpp
+    src/io/view.cpp
     src/main.cpp
-    src/math.cpp
-    src/memused.cpp
-    src/options.cpp
-    src/output.cpp
-    src/particles.cpp
-    src/power.cpp
-    src/power_cpu.cpp
-    src/power.cu
-    src/power_cuda.cu
-    src/profiler.cpp
-    src/rockstar_catalogue.cpp
-    src/rockstar.cpp
-    src/rockstar.cu
-    src/stack_trace.cpp
-    src/test.cpp
-    src/tree.cpp
-    src/view.cpp
-    src/zero_order.cpp
-    src/recfast.cpp
-    src/hydro.cpp
-    src/kernel.cpp
-    src/kernel.cu
-    src/exact_sod.cpp
-    src/sedov.cpp
-    src/sph_chemistry.cpp
-    src/sph_particles.cpp
-    src/sph.cpp
-    src/sph_cpu.cpp
-    src/sph_prehydro_cpu.cpp
-    src/sph_hydro_cpu.cpp
-    src/sph_rungs_cpu.cpp
-    src/sph.cu
-    src/sph_prehydro.cu
-    src/sph_hydro.cu
-    src/sph_rungs.cu
-    src/sphere.cu
-    src/sph_tree.cpp
-    tests/kernel_selection_cuda.cu
-    tests/bh.cpp
+    src/math/kernel.cpp
+    src/math/kernel.cu
+    src/math/math.cpp
+    src/particles/domain.cpp
+    src/particles/drift.cpp
+    src/particles/drift.cu
+    src/particles/drift_cpu.cpp
+    src/particles/particles.cpp
+    src/problems/analytic.cpp
+    src/problems/analytic.cu
+    src/problems/exact_sod.cpp
+    src/problems/hydro.cpp
+    src/problems/sedov.cpp
+    src/problems/sphere.cu
+    src/problems/test.cpp
+    src/sph/sph.cpp
+    src/sph/sph.cu
+    src/sph/sph_chemistry.cpp
+    src/sph/sph_cpu.cpp
+    src/sph/sph_hydro.cu
+    src/sph/sph_hydro_cpu.cpp
+    src/sph/sph_particles.cpp
+    src/sph/sph_prehydro.cu
+    src/sph/sph_prehydro_cpu.cpp
+    src/sph/sph_rungs.cu
+    src/sph/sph_rungs_cpu.cpp
+    src/sph/sph_tree.cpp
     tests/analysis_backends.cpp
-    tests/rockstar.cpp
+    tests/bh.cpp
     tests/fmm_tree.cpp
     tests/fmm_walk.cpp
-    tests/sph_gravity.cpp
+    tests/kernel_selection_cuda.cu
     tests/linear_growth.cpp
+    tests/rockstar.cpp
+    tests/sph_gravity.cpp
     tests/units_output.cpp
 )
 
 set(cosmictiger_header_files
-    cosmictiger/assert.hpp
-    cosmictiger/bh.hpp
-    cosmictiger/boltzmann.hpp
-    cosmictiger/complex.hpp
-    cosmictiger/containers.hpp
-    cosmictiger/compress.hpp
-    cosmictiger/cosmology.hpp
-    cosmictiger/cuda.hpp
-    cosmictiger/cuda_stream.hpp
-    cosmictiger/cuda_reduce.hpp
-    cosmictiger/defs.hpp
-    cosmictiger/device_vector.hpp
-    cosmictiger/domain.hpp
-    cosmictiger/drift.hpp
-    cosmictiger/drift_cpu.hpp
-    cosmictiger/driver.hpp
-    cosmictiger/ewald_indices.hpp
-    cosmictiger/fixed.hpp
-    cosmictiger/fft.hpp
-    cosmictiger/fixed_capacity_vector.hpp
-    cosmictiger/fmm_cpu_instances.hpp
-    cosmictiger/fmm_kernels.hpp
-    cosmictiger/fmm_order.hpp
-    cosmictiger/fmm_types.hpp
-    cosmictiger/gravity_cuda.hpp
-    cosmictiger/kick_cuda.hpp
-    cosmictiger/kick_cuda_impl.hpp
-    cosmictiger/kick_cuda_instances.hpp
-    cosmictiger/gravity.hpp
-    cosmictiger/initialize.hpp
-    cosmictiger/interpolation.hpp
-    cosmictiger/flops.hpp
-    cosmictiger/fp16.hpp
-    cosmictiger/float_float.hpp
-    cosmictiger/group_tree.hpp
-    cosmictiger/groups.hpp
-    cosmictiger/group_entry.hpp
-    cosmictiger/group_header.hpp
-    cosmictiger/groups_find.hpp
-    cosmictiger/hpx.hpp
-    cosmictiger/kick.hpp
-    cosmictiger/kick_workspace.hpp
-    cosmictiger/lightcone.hpp
-    cosmictiger/lightcone_entry.hpp
-    cosmictiger/math.hpp
-    cosmictiger/memused.hpp
-    cosmictiger/options.hpp
-    cosmictiger/options_metadata.hpp
-    cosmictiger/output.hpp
-    cosmictiger/particles.hpp
-    cosmictiger/power.hpp
-    cosmictiger/power_cpu.hpp
-    cosmictiger/power_cuda.hpp
-    cosmictiger/profiler.hpp
+    cosmictiger/analysis/compress.hpp
+    cosmictiger/analysis/group_entry.hpp
+    cosmictiger/analysis/group_header.hpp
+    cosmictiger/analysis/group_tree.hpp
+    cosmictiger/analysis/groups.hpp
+    cosmictiger/analysis/groups_find.hpp
+    cosmictiger/analysis/healpix.hpp
+    cosmictiger/analysis/lightcone.hpp
+    cosmictiger/analysis/lightcone_entry.hpp
+    cosmictiger/analysis/power.hpp
+    cosmictiger/analysis/power_cpu.hpp
+    cosmictiger/analysis/power_cuda.hpp
+    cosmictiger/analysis/rockstar.hpp
+    cosmictiger/analysis/rockstar_core.hpp
+    cosmictiger/analysis/rockstar_properties.hpp
+    cosmictiger/analysis/rockstar_record.hpp
+    cosmictiger/chemistry/primordial_chemistry.hpp
+    cosmictiger/chemistry/primordial_eos.hpp
+    cosmictiger/chemistry/primordial_float_environment.hpp
+    cosmictiger/chemistry/primordial_rates.hpp
+    cosmictiger/chemistry/primordial_solver.hpp
+    cosmictiger/chemistry/primordial_types.hpp
+    cosmictiger/chemistry/primordial_units.hpp
+    cosmictiger/core/assert.hpp
+    cosmictiger/core/containers.hpp
+    cosmictiger/core/defs.hpp
+    cosmictiger/core/driver.hpp
+    cosmictiger/core/fixed_capacity_vector.hpp
+    cosmictiger/core/flops.hpp
+    cosmictiger/core/hpx.hpp
+    cosmictiger/core/memused.hpp
+    cosmictiger/core/options.hpp
+    cosmictiger/core/options_metadata.hpp
+    cosmictiger/core/profiler.hpp
+    cosmictiger/core/safe_io.hpp
+    cosmictiger/core/semaphore.hpp
+    cosmictiger/core/stack_trace.hpp
+    cosmictiger/core/stack_vector.hpp
+    cosmictiger/core/time.hpp
+    cosmictiger/core/timer.hpp
+    cosmictiger/core/unordered_set_ts.hpp
+    cosmictiger/cosmology/boltzmann.hpp
+    cosmictiger/cosmology/cosmology.hpp
+    cosmictiger/cosmology/fft.hpp
+    cosmictiger/cosmology/initialize.hpp
+    cosmictiger/cosmology/recfast.hpp
+    cosmictiger/cosmology/recombination_thermal.hpp
+    cosmictiger/cosmology/zero_order.hpp
+    cosmictiger/cuda/cuda.hpp
+    cosmictiger/cuda/cuda_memory.hpp
+    cosmictiger/cuda/cuda_reduce.hpp
+    cosmictiger/cuda/cuda_stream.hpp
+    cosmictiger/cuda/cuda_unordered_map.hpp
+    cosmictiger/cuda/device_vector.hpp
+    cosmictiger/float2double.hpp
+    cosmictiger/fmm/ewald_indices.hpp
+    cosmictiger/fmm/ewald_tables.hpp
+    cosmictiger/fmm/fmm_acceptance.hpp
+    cosmictiger/fmm/fmm_kernels.hpp
+    cosmictiger/fmm/fmm_order.hpp
+    cosmictiger/fmm/fmm_scale.hpp
+    cosmictiger/fmm/fmm_types.hpp
+    cosmictiger/gravity/bh.hpp
+    cosmictiger/gravity/fmm_cpu_instances.hpp
+    cosmictiger/gravity/gravity.hpp
+    cosmictiger/gravity/gravity_cpu.hpp
+    cosmictiger/gravity/gravity_cuda.hpp
+    cosmictiger/gravity/kick.hpp
+    cosmictiger/gravity/kick_cuda.hpp
+    cosmictiger/gravity/kick_cuda_impl.hpp
+    cosmictiger/gravity/kick_cuda_instances.hpp
+    cosmictiger/gravity/kick_interaction_counts.hpp
+    cosmictiger/gravity/kick_walk.hpp
+    cosmictiger/gravity/kick_workspace.hpp
+    cosmictiger/gravity/tree.hpp
+    cosmictiger/gravity/tree_multipole.hpp
+    cosmictiger/io/output.hpp
+    cosmictiger/io/silo_spheres.hpp
+    cosmictiger/io/view.hpp
+    cosmictiger/math/complex.hpp
+    cosmictiger/math/constants.hpp
+    cosmictiger/math/fixed.hpp
+    cosmictiger/math/float_float.hpp
+    cosmictiger/math/fp16.hpp
+    cosmictiger/math/interpolation.hpp
+    cosmictiger/math/kernel.hpp
+    cosmictiger/math/math.hpp
+    cosmictiger/math/radial_density_kernel.hpp
+    cosmictiger/math/radial_kernel.hpp
+    cosmictiger/math/range.hpp
+    cosmictiger/math/simd.hpp
+    cosmictiger/math/simd_backend.hpp
+    cosmictiger/math/simd_math.hpp
+    cosmictiger/math/simulation_units.hpp
+    cosmictiger/math/tensor.hpp
+    cosmictiger/math/units.hpp
+    cosmictiger/math/vector3.hpp
+    cosmictiger/particles/domain.hpp
+    cosmictiger/particles/drift.hpp
+    cosmictiger/particles/drift_cpu.hpp
+    cosmictiger/particles/particle_selection.hpp
+    cosmictiger/particles/particles.hpp
+    cosmictiger/problems/analytic.hpp
+    cosmictiger/problems/exact_sod.hpp
+    cosmictiger/problems/hydro.hpp
+    cosmictiger/problems/sedov.hpp
+    cosmictiger/problems/sphere.hpp
+    cosmictiger/problems/test.hpp
     cosmictiger/random_number_generator.hpp
-    cosmictiger/range.hpp
-    cosmictiger/rockstar.hpp
-    cosmictiger/rockstar_record.hpp
-    cosmictiger/rockstar_core.hpp
-    cosmictiger/rockstar_properties.hpp
-    cosmictiger/safe_io.hpp
-    cosmictiger/sedov.hpp
-    cosmictiger/silo_spheres.hpp
-    cosmictiger/simd.hpp
-    cosmictiger/simd_backend.hpp
-    cosmictiger/simd_math.hpp
-    cosmictiger/stack_vector.hpp
-    cosmictiger/stack_trace.hpp
-    cosmictiger/test.hpp
-    cosmictiger/tree.hpp
-    cosmictiger/timer.hpp
-    cosmictiger/units.hpp
-    cosmictiger/simulation_units.hpp
-    cosmictiger/unordered_set_ts.hpp
-    cosmictiger/view.hpp
-    cosmictiger/zero_order.hpp
-    cosmictiger/recfast.hpp
-    cosmictiger/recombination_thermal.hpp
-    cosmictiger/hydro.hpp
-    cosmictiger/kernel.hpp
-    cosmictiger/radial_kernel.hpp
-    cosmictiger/radial_density_kernel.hpp
-    cosmictiger/monaghan_sph.hpp
-    cosmictiger/vector3.hpp
-    cosmictiger/exact_sod.hpp
-    cosmictiger/sph.hpp
-    cosmictiger/sph_cuda.hpp
-    cosmictiger/sph_cpu.hpp
-    cosmictiger/sph_kernel.hpp
-    cosmictiger/sph_particles.hpp
-    cosmictiger/sph_tree.hpp
-    cosmictiger/sphere.hpp
+    cosmictiger/sph/monaghan_sph.hpp
+    cosmictiger/sph/sph.hpp
+    cosmictiger/sph/sph_chemistry.hpp
+    cosmictiger/sph/sph_cpu.hpp
+    cosmictiger/sph/sph_cuda.hpp
+    cosmictiger/sph/sph_kernel.hpp
+    cosmictiger/sph/sph_particles.hpp
+    cosmictiger/sph/sph_tree.hpp
 )
 
 if(NOT COSMICTIGER_WITH_CUDA)
@@ -274,32 +299,32 @@ endif()
 
 # Keep the C++23 standard half type in one host-only translation unit. The
 # public two-byte storage type remains usable by the C++20/CUDA application.
-add_library(cosmictiger_fp16 STATIC src/fp16.cpp)
+add_library(cosmictiger_fp16 STATIC src/math/fp16.cpp)
 set_target_properties(cosmictiger_fp16 PROPERTIES
     CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
 target_include_directories(cosmictiger_fp16 PUBLIC ${PROJECT_SOURCE_DIR})
 target_compile_options(cosmictiger_fp16 PRIVATE -fno-fast-math -ffp-contract=off)
 
-add_executable(halo_catalog_export src/halo_catalog_export.cpp)
+add_executable(halo_catalog_export src/tools/halo_catalog_export.cpp)
 target_link_libraries(halo_catalog_export PRIVATE cosmictiger_fp16)
 target_compile_options(halo_catalog_export PRIVATE -fno-fast-math)
 
 # Chemistry must not inherit the application's fast-math/FTZ settings: the
 # signed-complement and FloatFloat contracts require IEEE rounding and -0.
 find_package(Threads REQUIRED)
-add_library(primordial_chemistry STATIC src/primordial_chemistry.cpp)
+add_library(primordial_chemistry STATIC src/chemistry/primordial_chemistry.cpp)
 target_include_directories(primordial_chemistry PUBLIC ${PROJECT_SOURCE_DIR})
 target_link_libraries(primordial_chemistry PUBLIC Threads::Threads Boost::boost)
 target_compile_options(primordial_chemistry PRIVATE
     $<$<COMPILE_LANGUAGE:CXX>:-fno-fast-math;-ffp-contract=off>)
 if(COSMICTIGER_WITH_CUDA)
-    target_sources(primordial_chemistry PRIVATE src/primordial_chemistry.cu)
+    target_sources(primordial_chemistry PRIVATE src/chemistry/primordial_chemistry.cu)
     target_compile_definitions(primordial_chemistry PRIVATE USE_CUDA)
     target_link_libraries(primordial_chemistry PUBLIC CUDA::cudart)
     target_compile_options(primordial_chemistry PRIVATE
         $<$<COMPILE_LANGUAGE:CUDA>:--ftz=false;--prec-div=true;--prec-sqrt=true;--fmad=false>)
 endif()
-set_source_files_properties(src/sph_chemistry.cpp PROPERTIES COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
+set_source_files_properties(src/sph/sph_chemistry.cpp PROPERTIES COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
 
 add_hpx_executable(cosmictiger
     DEPENDENCIES Boost::boost Boost::program_options GSL::gsl GSL::gslcblas
@@ -309,7 +334,7 @@ add_hpx_executable(cosmictiger
 option(COSMICTIGER_BUILD_STF_BENCHMARKS "Build the opt-in STF comparison harness" OFF)
 if(COSMICTIGER_BUILD_STF_BENCHMARKS)
     target_sources(cosmictiger PRIVATE benchmarks/stf_walk.cpp)
-    set_source_files_properties(src/test.cpp PROPERTIES COMPILE_DEFINITIONS COSMICTIGER_STF_BENCHMARKS)
+    set_source_files_properties(src/problems/test.cpp PROPERTIES COMPILE_DEFINITIONS COSMICTIGER_STF_BENCHMARKS)
 endif()
 target_link_libraries(cosmictiger PRIVATE primordial_chemistry cosmictiger_fp16)
 target_include_directories(cosmictiger PRIVATE ${PROJECT_SOURCE_DIR})
@@ -330,8 +355,8 @@ if(COSMICTIGER_WITH_CUDA)
     target_compile_options(cosmictiger PRIVATE
         $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math;-lineinfo>)
     set_target_properties(cosmictiger PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
-    set_source_files_properties(src/drift.cu PROPERTIES COMPILE_OPTIONS -maxrregcount=64)
-    set_source_files_properties(src/sph.cu src/sph_prehydro.cu src/sph_hydro.cu src/sph_rungs.cu
+    set_source_files_properties(src/particles/drift.cu PROPERTIES COMPILE_OPTIONS -maxrregcount=64)
+    set_source_files_properties(src/sph/sph.cu src/sph/sph_prehydro.cu src/sph/sph_hydro.cu src/sph/sph_rungs.cu
         PROPERTIES COMPILE_OPTIONS -maxrregcount=128)
 endif()
 
@@ -340,7 +365,7 @@ add_executable(recfast recfast/recfast.f)
 if(CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
     target_compile_options(recfast PRIVATE -Werror=line-truncation)
 endif()
-add_executable(fmm_kernel_codegen src/fmm_kernel_codegen.cpp cosmictiger/tensor.hpp)
+add_executable(fmm_kernel_codegen src/fmm/fmm_kernel_codegen.cpp cosmictiger/math/tensor.hpp)
 target_link_libraries(fmm_kernel_codegen PRIVATE dl)
 target_include_directories(fmm_kernel_codegen PRIVATE ${PROJECT_SOURCE_DIR})
 if(COSMICTIGER_WITH_CUDA)
@@ -354,9 +379,9 @@ configure_file(power.init power.init COPYONLY)
 # all orders and selects one at run time.
 set(COSMICTIGER_GENERATED_INCLUDE_DIR ${PROJECT_BINARY_DIR}/generated)
 set(COSMICTIGER_GENERATED_STF_DIR
-    ${COSMICTIGER_GENERATED_INCLUDE_DIR}/cosmictiger/gravity/stf/generated)
+    ${COSMICTIGER_GENERATED_INCLUDE_DIR}/cosmictiger/fmm)
 set(COSMICTIGER_GENERATED_EWALD_HEADER
-    ${COSMICTIGER_GENERATED_INCLUDE_DIR}/cosmictiger/ewald_kernels.hpp)
+    ${COSMICTIGER_GENERATED_INCLUDE_DIR}/cosmictiger/fmm/ewald_kernels.hpp)
 set(COSMICTIGER_GENERATED_STF_FILES
     ${COSMICTIGER_GENERATED_STF_DIR}/generated_config.hpp
     ${COSMICTIGER_GENERATED_STF_DIR}/generated_m2l.hpp
@@ -364,7 +389,7 @@ set(COSMICTIGER_GENERATED_STF_FILES
     ${COSMICTIGER_GENERATED_STF_DIR}/operation_counts.json)
 add_custom_command(
     OUTPUT ${COSMICTIGER_GENERATED_EWALD_HEADER}
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${COSMICTIGER_GENERATED_INCLUDE_DIR}/cosmictiger
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${COSMICTIGER_GENERATED_INCLUDE_DIR}/cosmictiger/fmm
     COMMAND fmm_kernel_codegen > ${COSMICTIGER_GENERATED_EWALD_HEADER}
     DEPENDS fmm_kernel_codegen
     COMMENT "Generating Ewald derivatives for FMM orders 3 to 9")
@@ -376,7 +401,7 @@ set(COSMICTIGER_STF_GENERATOR_SOURCES
     ${PROJECT_SOURCE_DIR}/tools/stf/stf_particles.py
     ${PROJECT_SOURCE_DIR}/tools/stf/stf_translations.py
     ${PROJECT_SOURCE_DIR}/tools/stf/generated_notice.txt
-    ${PROJECT_SOURCE_DIR}/cosmictiger/defs.hpp)
+    ${PROJECT_SOURCE_DIR}/cosmictiger/core/defs.hpp)
 add_custom_command(
     OUTPUT ${COSMICTIGER_GENERATED_STF_FILES}
     COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/generate_stf_m2l.py
@@ -401,23 +426,23 @@ cosmictiger_use_generated_kernels(cosmictiger)
 set(COSMICTIGER_FMM_INSTANCE_DIR ${PROJECT_BINARY_DIR}/instances)
 foreach(fmm_order IN LISTS COSMICTIGER_FMM_ORDERS)
     set(FMM_INSTANCE_ORDER ${fmm_order})
-    configure_file(src/fmm_instance_cpu.cpp.in
+    configure_file(src/gravity/fmm_instance_cpu.cpp.in
         ${COSMICTIGER_FMM_INSTANCE_DIR}/fmm_instance_cpu_${fmm_order}.cpp @ONLY)
     target_sources(cosmictiger PRIVATE ${COSMICTIGER_FMM_INSTANCE_DIR}/fmm_instance_cpu_${fmm_order}.cpp)
     if(COSMICTIGER_WITH_CUDA)
-        configure_file(src/fmm_instance_cuda.cu.in
+        configure_file(src/gravity/fmm_instance_cuda.cu.in
             ${COSMICTIGER_FMM_INSTANCE_DIR}/fmm_instance_cuda_${fmm_order}.cu @ONLY)
         target_sources(cosmictiger PRIVATE ${COSMICTIGER_FMM_INSTANCE_DIR}/fmm_instance_cuda_${fmm_order}.cu)
     endif()
 endforeach()
 
-add_executable(healpix2silo src/healpix2silo.cpp)
+add_executable(healpix2silo src/tools/healpix2silo.cpp)
 target_link_libraries(healpix2silo PRIVATE ${CHEALPIX_LIBRARY} ${SILO_LIBRARY} Boost::program_options dl)
 target_include_directories(healpix2silo PRIVATE ${PROJECT_SOURCE_DIR})
 target_include_directories(healpix2silo SYSTEM PRIVATE ${CHEALPIX_INCLUDE_DIR} ${SILO_INCLUDE_DIR})
 
 add_hpx_executable(groups2halofunc
-    SOURCES src/assert.cpp src/hpx.cpp src/groups2halofunc.cpp src/group_entry.cpp)
+    SOURCES src/core/assert.cpp src/core/hpx.cpp src/tools/groups2halofunc.cpp src/analysis/group_entry.cpp)
 target_link_libraries(groups2halofunc PUBLIC Boost::program_options)
 target_include_directories(groups2halofunc PRIVATE ${PROJECT_SOURCE_DIR})
 
@@ -493,14 +518,14 @@ if(BUILD_TESTING)
     endif()
     foreach(recfast_variant IN ITEMS standard fast_math)
         set(recfast_target recfast_${recfast_variant}_test)
-        add_executable(${recfast_target} tests/recfast.cpp src/recfast.cpp)
+        add_executable(${recfast_target} tests/recfast.cpp src/cosmology/recfast.cpp)
         target_include_directories(${recfast_target} PRIVATE ${PROJECT_SOURCE_DIR})
         set(thermal_target recombination_thermal_${recfast_variant}_test)
         add_executable(${thermal_target} tests/recombination_thermal.cpp)
         target_include_directories(${thermal_target} PRIVATE ${PROJECT_SOURCE_DIR})
         set(background_target recombination_background_${recfast_variant}_test)
         add_executable(${background_target} tests/recombination_background.cpp
-            src/zero_order.cpp src/recfast.cpp)
+            src/cosmology/zero_order.cpp src/cosmology/recfast.cpp)
         target_include_directories(${background_target} PRIVATE ${PROJECT_SOURCE_DIR})
         if(recfast_variant STREQUAL "fast_math")
             target_compile_options(${recfast_target} PRIVATE -ffast-math)
@@ -533,7 +558,7 @@ if(BUILD_TESTING)
         set_tests_properties(fp16_${fp16_variant} PROPERTIES TIMEOUT 30)
     endforeach()
 
-    add_executable(rockstar_eigenpair_test tests/rockstar_eigenpair.cpp src/math.cpp)
+    add_executable(rockstar_eigenpair_test tests/rockstar_eigenpair.cpp src/math/math.cpp)
     target_include_directories(rockstar_eigenpair_test PRIVATE ${PROJECT_SOURCE_DIR})
     target_compile_definitions(rockstar_eigenpair_test PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
     cosmictiger_use_generated_kernels(rockstar_eigenpair_test)
@@ -666,7 +691,7 @@ if(BUILD_TESTING)
     add_test(NAME stf_kernels COMMAND stf_kernels_test)
     set_tests_properties(stf_kernels PROPERTIES TIMEOUT 60)
     # Exercise the CUDA-disabled Ewald initializer even in a CUDA-enabled build.
-    add_executable(stf_ewald_cpu_test tests/stf_ewald_cpu.cpp src/ewald_indices.cpp src/fmm_order.cpp)
+    add_executable(stf_ewald_cpu_test tests/stf_ewald_cpu.cpp src/fmm/ewald_indices.cpp src/fmm/fmm_order.cpp)
     target_include_directories(stf_ewald_cpu_test PRIVATE ${PROJECT_SOURCE_DIR})
     target_include_directories(stf_ewald_cpu_test SYSTEM PRIVATE ${CHEALPIX_INCLUDE_DIR})
     target_compile_definitions(stf_ewald_cpu_test PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
@@ -701,7 +726,7 @@ if(BUILD_TESTING)
 
     foreach(analysis_kernel IN ITEMS power lightcone)
         add_executable(${analysis_kernel}_cpu_test
-            tests/${analysis_kernel}_cpu.cpp src/${analysis_kernel}_cpu.cpp)
+            tests/${analysis_kernel}_cpu.cpp src/analysis/${analysis_kernel}_cpu.cpp)
         target_include_directories(${analysis_kernel}_cpu_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_link_libraries(${analysis_kernel}_cpu_test PRIVATE HPX::hpx)
         target_compile_options(${analysis_kernel}_cpu_test PRIVATE -ffast-math)
@@ -710,8 +735,8 @@ if(BUILD_TESTING)
     endforeach()
 
     if(COSMICTIGER_WITH_CUDA)
-        add_executable(power_cuda_test tests/power_cuda.cu src/power_cpu.cpp src/power_cuda.cu
-            src/assert.cu)
+        add_executable(power_cuda_test tests/power_cuda.cu src/analysis/power_cpu.cpp src/analysis/power_cuda.cu
+            src/core/assert.cu)
         target_include_directories(power_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_compile_definitions(power_cuda_test PRIVATE USE_CUDA)
         target_link_libraries(power_cuda_test PRIVATE HPX::hpx CUDA::cudart)
@@ -721,8 +746,8 @@ if(BUILD_TESTING)
         add_test(NAME power_cuda COMMAND power_cuda_test)
         set_tests_properties(power_cuda PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
 
-        add_executable(lightcone_cuda_test tests/lightcone_cuda.cu src/lightcone.cu
-            src/lightcone_cpu.cpp src/assert.cu src/cuda_stream.cpp)
+        add_executable(lightcone_cuda_test tests/lightcone_cuda.cu src/analysis/lightcone.cu
+            src/analysis/lightcone_cpu.cpp src/core/assert.cu src/cuda/cuda_stream.cpp)
         target_include_directories(lightcone_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_compile_definitions(lightcone_cuda_test PRIVATE USE_CUDA ORDER=${COSMICTIGER_WITH_ORDER})
         cosmictiger_use_generated_kernels(lightcone_cuda_test)
@@ -734,7 +759,7 @@ if(BUILD_TESTING)
         set_tests_properties(lightcone_cuda PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
 
         add_hpx_executable(cuda_async_test
-            SOURCES tests/cuda_async.cpp tests/cuda_async.cu src/cuda_stream.cpp)
+            SOURCES tests/cuda_async.cpp tests/cuda_async.cu src/cuda/cuda_stream.cpp)
         target_include_directories(cuda_async_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_compile_definitions(cuda_async_test PRIVATE USE_CUDA)
         target_link_libraries(cuda_async_test PRIVATE CUDA::cudart)
@@ -744,7 +769,7 @@ if(BUILD_TESTING)
     endif()
 
     # Compile CPU drift with ordinary host arrays and no CUDA device kernels.
-    add_executable(drift_cpu_test tests/drift_cpu.cpp src/drift_cpu.cpp)
+    add_executable(drift_cpu_test tests/drift_cpu.cpp src/particles/drift_cpu.cpp)
     target_include_directories(drift_cpu_test PRIVATE ${PROJECT_SOURCE_DIR})
     target_include_directories(drift_cpu_test SYSTEM PRIVATE ${CHEALPIX_INCLUDE_DIR})
     target_link_libraries(drift_cpu_test PRIVATE HPX::hpx ${CHEALPIX_LIBRARY})
@@ -756,7 +781,7 @@ if(BUILD_TESTING)
     set_tests_properties(drift_cpu PROPERTIES TIMEOUT 30)
 
     add_hpx_executable(drift_dispatch_test
-        SOURCES tests/drift_dispatch.cpp src/drift.cpp src/drift_cpu.cpp)
+        SOURCES tests/drift_dispatch.cpp src/particles/drift.cpp src/particles/drift_cpu.cpp)
     target_include_directories(drift_dispatch_test PRIVATE ${PROJECT_SOURCE_DIR})
     target_include_directories(drift_dispatch_test SYSTEM PRIVATE ${CHEALPIX_INCLUDE_DIR})
     target_compile_definitions(drift_dispatch_test PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
@@ -775,8 +800,8 @@ if(BUILD_TESTING)
         ENVIRONMENT "CUDA_VISIBLE_DEVICES=")
 
     # Compile the production SIMD path without USE_CUDA or device kernels.
-    add_executable(sph_cpu_test tests/sph_cpu.cpp src/sph_cpu.cpp
-        src/sph_prehydro_cpu.cpp src/sph_hydro_cpu.cpp src/sph_rungs_cpu.cpp src/kernel.cpp)
+    add_executable(sph_cpu_test tests/sph_cpu.cpp src/sph/sph_cpu.cpp
+        src/sph/sph_prehydro_cpu.cpp src/sph/sph_hydro_cpu.cpp src/sph/sph_rungs_cpu.cpp src/math/kernel.cpp)
     target_include_directories(sph_cpu_test PRIVATE ${PROJECT_SOURCE_DIR})
     target_compile_definitions(sph_cpu_test PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
     cosmictiger_use_generated_kernels(sph_cpu_test)
@@ -854,9 +879,9 @@ if(BUILD_TESTING)
 
         add_executable(monaghan_sph_cuda_test tests/monaghan_sph_cuda.cu
             tests/cuda_memory_backend.cpp
-            src/sph_prehydro.cu src/sph_hydro.cu src/sph_rungs.cu
-            src/sph_cpu.cpp src/sph_prehydro_cpu.cpp src/sph_hydro_cpu.cpp src/sph_rungs_cpu.cpp
-            src/kernel.cpp src/kernel.cu src/cuda_memory.cu src/assert.cu)
+            src/sph/sph_prehydro.cu src/sph/sph_hydro.cu src/sph/sph_rungs.cu
+            src/sph/sph_cpu.cpp src/sph/sph_prehydro_cpu.cpp src/sph/sph_hydro_cpu.cpp src/sph/sph_rungs_cpu.cpp
+            src/math/kernel.cpp src/math/kernel.cu src/cuda/cuda_memory.cu src/core/assert.cu)
         target_include_directories(monaghan_sph_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_compile_definitions(monaghan_sph_cuda_test PRIVATE
             USE_CUDA ORDER=${COSMICTIGER_WITH_ORDER})
@@ -875,7 +900,7 @@ if(BUILD_TESTING)
 
         # These host regressions need CUDA headers, but do not initialize or run a GPU.
         add_executable(numerical_utilities_test tests/numerical_utilities.cpp)
-        add_executable(compression_test tests/compression.cpp src/compress.cpp)
+        add_executable(compression_test tests/compression.cpp src/analysis/compress.cpp)
         foreach(test_target IN ITEMS numerical_utilities_test compression_test)
             target_include_directories(${test_target} PRIVATE ${PROJECT_SOURCE_DIR})
             target_compile_definitions(${test_target} PRIVATE USE_CUDA)

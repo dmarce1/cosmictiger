@@ -10,10 +10,10 @@
 #include <cmath>
 #include <utility>
 
-#include <cosmictiger/fmm_order.hpp>
-#include <cosmictiger/gravity/stf/generated/generated_config.hpp>
-#include <cosmictiger/gravity/stf/generated/generated_m2l.hpp>
-#include <cosmictiger/gravity/stf/generated/generated_operators.hpp>
+#include <cosmictiger/fmm/fmm_order.hpp>
+#include <cosmictiger/fmm/generated_config.hpp>
+#include <cosmictiger/fmm/generated_m2l.hpp>
+#include <cosmictiger/fmm/generated_operators.hpp>
 
 #ifdef __CUDACC__
 #define COSMICTIGER_STF_TEST_HD __host__ __device__

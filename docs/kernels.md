@@ -121,7 +121,7 @@ include more particles; at equal target, the achieved effective radius can diffe
 
 ## Density, gravity, and implementation
 
-`cosmictiger/radial_kernel.hpp` generates fixed-size, allocation-free tables of
+`cosmictiger/math/radial_kernel.hpp` generates fixed-size, allocation-free tables of
 change points and Bernstein coefficients. `makeKernelTable` is `constexpr` and
 can construct tables at compile time. The same generated density determines its
 derivative, enclosed mass, gravitational potential, radius conversion, and central
@@ -129,7 +129,7 @@ potential. CPU scalar, CPU SIMD, and CUDA evaluators share this implementation.
 The SPH solver itself continues to require CUDA; adding CPU evaluators is not a
 CPU port of the complete density, neighbor, and hydrodynamics solver.
 
-The separate `cosmictiger/radial_density_kernel.hpp` provides
+The separate `cosmictiger/math/radial_density_kernel.hpp` provides
 `makeDensityKernelTable<dimension>(KernelSpec)` for any positive compile-time
 dimension, with a distinct density-only table type. For example:
 

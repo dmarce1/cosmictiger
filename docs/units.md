@@ -149,7 +149,7 @@ the explicit run scales and cosmological context. Native particle arrays,
 CUDA payloads, and checkpoints retain their existing numerical representation;
 only output and host conversion boundaries extract physical scalar values.
 
-For a host calculation, include `cosmictiger/simulation_units.hpp` and wrap the
+For a host calculation, include `cosmictiger/math/simulation_units.hpp` and wrap the
 existing position without changing its storage:
 
 ```cpp

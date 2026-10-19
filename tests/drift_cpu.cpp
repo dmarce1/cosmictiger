@@ -29,8 +29,8 @@
 #include <string>
 #include <vector>
 
-#include <cosmictiger/drift_cpu.hpp>
-#include <cosmictiger/simd_backend.hpp>
+#include <cosmictiger/math/simd_backend.hpp>
+#include <cosmictiger/particles/drift_cpu.hpp>
 
 void cosmictigerAssert(char const* condition, bool value, char const* file, int line) {
     if (!value) {

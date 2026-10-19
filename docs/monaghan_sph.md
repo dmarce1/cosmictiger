@@ -16,15 +16,15 @@ advection is used; the optional XSPH variant in equation 3.19 is not enabled.
 
 ## Notation in the code
 
-The computation code transcribes the paper. `cosmictiger/monaghan_sph.hpp` holds the
+The computation code transcribes the paper. `cosmictiger/sph/monaghan_sph.hpp` holds the
 per-pair formulae, and the pair, density, and support-radius loops in
-`src/sph_hydro_cpu.cpp`, `src/sph_hydro.cu`, `src/sph_prehydro_cpu.cpp`,
-`src/sph_prehydro.cu`, and `cosmictiger/sph_cuda.hpp` apply them to the staged particle
+`src/sph/sph_hydro_cpu.cpp`, `src/sph/sph_hydro.cu`, `src/sph/sph_prehydro_cpu.cpp`,
+`src/sph/sph_prehydro.cu`, and `cosmictiger/sph/sph_cuda.hpp` apply them to the staged particle
 arrays. Inside those regions the local variables carry the paper's symbols and each
 block names the equation it implements; function parameters and data fields keep their
 descriptive names, and the regions are fenced with
 `NOLINTBEGIN/NOLINTEND(readability-identifier-naming)`. Relative positions and
-velocities use the `Vector3` class of `cosmictiger/vector3.hpp`, which supplies
+velocities use the `Vector3` class of `cosmictiger/math/vector3.hpp`, which supplies
 `dot`, `norm`, and the arithmetic operators for scalar, SIMD-pack, and device element
 types.
 

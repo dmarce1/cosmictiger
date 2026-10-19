@@ -23,8 +23,8 @@
 #include <limits>
 #include <stdexcept>
 
-#include <cosmictiger/math.hpp>
-#include <cosmictiger/range.hpp>
+#include <cosmictiger/math/math.hpp>
+#include <cosmictiger/math/range.hpp>
 
 void cosmictigerAssert(char const* expression, bool condition, char const* file, int line) {
     if (!condition) {

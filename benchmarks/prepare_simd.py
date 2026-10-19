@@ -15,7 +15,7 @@ import tempfile
 
 
 DEFAULT_BASELINE = "b50b0404f9dcbc074e8e1b55f7f4e30b8e0c44ea"
-NEW_HEADERS = ("cosmictiger/simd_backend.hpp", "cosmictiger/simd_math.hpp")
+NEW_HEADERS = ("cosmictiger/math/simd_backend.hpp", "cosmictiger/math/simd_math.hpp")
 HARNESS = "benchmarks/gravity.cpp"
 CACHE_PATHS = (
     "HPX_DIR",
@@ -122,7 +122,7 @@ def instrument_source(directory, harness_bytes):
     harness_path = directory / HARNESS
     harness_path.parent.mkdir(parents=True, exist_ok=True)
     harness_path.write_bytes(harness_bytes)
-    dispatcher = directory / "src/test.cpp"
+    dispatcher = directory / "src/problems/test.cpp"
     original = dispatcher.read_text()
     anchor = "void test(std::string test) {"
     if original.count(anchor) != 1 or 'test == "simdBenchmark"' in original:
@@ -172,7 +172,7 @@ def compile_provenance(variant):
         relative = filename.relative_to(source).as_posix()
         commands[relative] = [token.replace(str(source), "<SOURCE>")
                               .replace(str(build), "<BUILD>") for token in command]
-    if HARNESS not in commands or "src/gravity.cpp" not in commands:
+    if HARNESS not in commands or "src/gravity/gravity.cpp" not in commands:
         raise ValueError("Compile database is missing benchmark or production gravity commands")
     variant["compile_commands_sha256"] = sha256(commands_path)
     variant["normalized_compile_commands"] = commands

@@ -15,8 +15,8 @@
 
 #include <cuda_runtime.h>
 
-#include <cosmictiger/fmm_acceptance.hpp>
-#include <cosmictiger/range.hpp>
+#include <cosmictiger/fmm/fmm_acceptance.hpp>
+#include <cosmictiger/math/range.hpp>
 
 void cosmictigerAssert(char const* condition, bool value, char const* file, int line) {
     if (!value) {

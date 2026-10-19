@@ -31,21 +31,21 @@ Every order is compiled into the binary and the run selects one with
 `gravity.fmmOrder` (default: the build's `COSMICTIGER_WITH_ORDER`, 7). The
 order-dependent code is instantiated per order from templates:
 
-- `cosmictiger/fmm_order.hpp`: constexpr coefficient counts, byte sizes, the
+- `cosmictiger/fmm/fmm_order.hpp`: constexpr coefficient counts, byte sizes, the
   `FmmOrder<order>` traits, the runtime `fmmOrder()` and `fmmDispatch()`, which
   switches to the matching instantiation at coarse boundaries (tree build, a
   CPU walk, a CUDA launch). Inner loops never test the order.
-- `cosmictiger/fmm_types.hpp`: `FmmMultipole<Real, order>`,
+- `cosmictiger/fmm/fmm_types.hpp`: `FmmMultipole<Real, order>`,
   `FmmExpansion<Real, order>`, the position-first multipole record
   `FmmMultiPos<order>` (tree nodes point at its order-agnostic
   `MultipolePosition` header), and the max-size transport buffers
   `ExpansionBuffer` / `MultipoleBuffer` used by order-agnostic interfaces.
-- `cosmictiger/fmm_kernels.hpp`: operator wrappers that deduce the degrees from
+- `cosmictiger/fmm/fmm_kernels.hpp`: operator wrappers that deduce the degrees from
   their tensor arguments over the generated STF kernels.
 - Generated code: `tools/generate_stf_m2l.py` emits one fully specialized
   kernel class per degree for local degrees 2 through 8 into a single header set
   in the build tree (`ninja cosmictiger_generated_kernels`), and
-  `src/fmm_kernel_codegen.cpp` emits one Ewald derivative overload per order.
+  `src/fmm/fmm_kernel_codegen.cpp` emits one Ewald derivative overload per order.
   Parsing the whole set costs about two seconds with g++ and three with nvcc.
 - Per-order translation units: CMake configures
   `instances/fmm_instance_cpu_<order>.cpp` and `fmm_instance_cuda_<order>.cu`
@@ -65,7 +65,7 @@ whenever the shared budget allows and only then falls back to bounded tiles.
 ## Shared-memory arena
 
 One 32-thread warp per block. The dynamic shared memory of a block follows a
-host-computed `CudaKickArenaLayout` (`cosmictiger/kick.hpp`):
+host-computed `CudaKickArenaLayout` (`cosmictiger/gravity/kick.hpp`):
 
 Persistent region
 
@@ -921,7 +921,7 @@ below one is faster:
   divisor should grow with the particle count: by a factor two between the
   two measured sizes, which is the cube root of their ratio.
 
-Rule (implemented in `kickBlockCount(particles)`, `src/kick.cu`): the divisor
+Rule (implemented in `kickBlockCount(particles)`, `src/gravity/kick.cu`): the divisor
 is `kKickHandoffBlocksPerMultiprocessor = 2` times the multiprocessor count,
 times the cube root of the particle count over
 `kKickHandoffReferenceParticles = 32,768`, clamped between 1 and

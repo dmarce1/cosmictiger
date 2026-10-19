@@ -11,7 +11,7 @@
 
 #include <cuda_runtime.h>
 
-#include <cosmictiger/power_cuda.hpp>
+#include <cosmictiger/analysis/power_cuda.hpp>
 
 #include "power_test_helpers.hpp"
 

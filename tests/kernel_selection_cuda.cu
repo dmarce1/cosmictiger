@@ -14,8 +14,8 @@
 
 #include <cuda_runtime.h>
 
-#include <cosmictiger/cuda.hpp>
-#include <cosmictiger/kernel.hpp>
+#include <cosmictiger/cuda/cuda.hpp>
+#include <cosmictiger/math/kernel.hpp>
 
 namespace detail {
 

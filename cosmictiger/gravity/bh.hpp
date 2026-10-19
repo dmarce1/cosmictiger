@@ -1,0 +1,83 @@
+/*
+CosmicTiger - A cosmological N-Body code
+Copyright (C) 2021  Dominic C. Marcello
+
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2
+of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+*/
+
+#ifndef BH_HPP_
+#define BH_HPP_
+
+#include <cmath>
+
+#include <cosmictiger/core/containers.hpp>
+#include <cosmictiger/core/defs.hpp>
+#include <cosmictiger/core/fixed_capacity_vector.hpp>
+#include <cosmictiger/cuda/device_vector.hpp>
+#include <cosmictiger/math/fixed.hpp>
+#include <cosmictiger/math/range.hpp>
+
+struct BhTreeNode {
+    Array<float, NDIM> pos;
+    Array<int, NDIM> children;
+    Pair<int> parts;
+    float mass;
+    float radius;
+    float meanSquaredRadius;
+    BhTreeNode() {
+        children[LEFT] = children[RIGHT] = -1;
+        mass = 0;
+        radius = 0;
+        meanSquaredRadius = 0;
+    }
+};
+
+// Behroozi, Wechsler & Wu (2013), https://arxiv.org/html/1110.4372v3,
+// Appendix B, following Eq. (B3): potential-error target.
+inline constexpr float kBhMaximumRelativePotentialError = 0.04f;
+
+namespace detail {
+// ROCKSTAR Appendix B: Eq. (B1) bounds the monopole error; Eq. (B3) inverts it.
+// Here source.radius is r_max and source.meanSquaredRadius is sigma_x^2 (B2).
+// Our sink-bucket extension uses its nearest possible point. Our additional
+// compact-support guard keeps the Newtonian bound outside softened sources.
+CUDA_EXPORT inline bool bhAcceptMonopole(float distanceSquared, BhTreeNode const& source,
+    float sinkRadius, float supportRadius, float relativeError) {
+    float const halfRadius = 0.5f * source.radius;
+    float const errorDistance =
+        halfRadius + sqrtf(halfRadius * halfRadius + source.meanSquaredRadius / relativeError);
+    float const supportDistance = source.radius + supportRadius;
+    float const minimumDistance =
+        sinkRadius + (errorDistance > supportDistance ? errorDistance : supportDistance);
+    return distanceSquared > minimumDistance * minimumDistance;
+}
+}    // namespace detail
+
+struct BhSource {
+    Array<float, NDIM> x;
+    float m;
+};
+
+DeviceVector<float> bhEvaluatePotential(DeviceVector<Array<float, NDIM>>& x, bool gpu = false);
+DeviceVector<float> bhEvaluatePoints(
+    DeviceVector<Array<float, NDIM>>& y, DeviceVector<Array<float, NDIM>>& x, bool gpu = false);
+DeviceVector<float> bhEvaluatePotentialGpu(DeviceVector<BhTreeNode> const& treeNodes,
+    DeviceVector<Array<float, NDIM>> const& x, DeviceVector<int> const sinkBuckets,
+    float relativeError, float hsoft, float gm, int maximumBlockCount = 0);
+DeviceVector<float> bhEvaluatePotentialPointsGpu(DeviceVector<BhTreeNode> const& treeNodes,
+    DeviceVector<Array<float, NDIM>> const& x, DeviceVector<Array<float, NDIM>> const& y,
+    float relativeError, float hsoft, float gm);
+
+#endif /* BH_HPP_ */

@@ -17,11 +17,11 @@
 #include <system_error>
 #include <vector>
 
-#include <cosmictiger/constants.hpp>
-#include <cosmictiger/cosmology.hpp>
-#include <cosmictiger/gravity.hpp>
-#include <cosmictiger/options.hpp>
-#include <cosmictiger/rockstar.hpp>
+#include <cosmictiger/analysis/rockstar.hpp>
+#include <cosmictiger/core/options.hpp>
+#include <cosmictiger/cosmology/cosmology.hpp>
+#include <cosmictiger/gravity/gravity.hpp>
+#include <cosmictiger/math/constants.hpp>
 
 // These production stages are also exercised before catalogue finalization so
 // that later unbinding or seed merging cannot hide a connectivity regression.

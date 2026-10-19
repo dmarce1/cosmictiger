@@ -156,7 +156,7 @@ walk sample count, and use each exact argument array in `walk_runs.json`.
 Recover the microbenchmark baseline header with:
 
 ```sh
-git show 91fccebc1a36eb9ae001aa617c53329c7ae74b3c:cosmictiger/fmm_kernels.hpp > /tmp/fmm_kernels_before.hpp
+git show 91fccebc1a36eb9ae001aa617c53329c7ae74b3c:cosmictiger/fmm/fmm_kernels.hpp > /tmp/fmm_kernels_before.hpp
 ```
 
 Raw per-particle exports remain in the recorded `/tmp`

@@ -28,8 +28,8 @@
 #endif
 #include COSMICTIGER_STF_BASELINE_HEADER
 #else
-#include <cosmictiger/fmm_kernels.hpp>
-#include <cosmictiger/fmm_order.hpp>
+#include <cosmictiger/fmm/fmm_kernels.hpp>
+#include <cosmictiger/fmm/fmm_order.hpp>
 #endif
 
 #ifndef COSMICTIGER_STF_BENCHMARK_TYPE

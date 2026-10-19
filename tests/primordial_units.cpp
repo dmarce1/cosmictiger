@@ -4,7 +4,7 @@
 #include <limits>
 #include <stdexcept>
 
-#include <cosmictiger/primordial_units.hpp>
+#include <cosmictiger/chemistry/primordial_units.hpp>
 
 int main() {
     auto require = [](bool condition) {

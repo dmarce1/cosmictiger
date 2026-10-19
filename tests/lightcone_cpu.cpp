@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 
-#include <cosmictiger/lightcone.hpp>
+#include <cosmictiger/analysis/lightcone.hpp>
 
 void cosmictigerAssert(char const* expression, bool condition, char const* file, int line) {
     if (!condition) {

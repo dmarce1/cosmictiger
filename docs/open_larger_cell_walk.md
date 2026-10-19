@@ -23,7 +23,7 @@ for the force sweeps.
 Each sink node walks its own checklist of source nodes. The acceptance test
 is symmetric in the two cells: it compares the centre distance with the sum of
 the two radii divided by theta, plus the support-separation terms in
-`cosmictiger/fmm_acceptance.hpp`. An internal sink makes one pass over its
+`cosmictiger/fmm/fmm_acceptance.hpp`. An internal sink makes one pass over its
 list, opens every rejected internal source, and hands the opened children plus
 every rejected source leaf down to both of its children. Only a leaf sink keeps
 iterating. Cell-cell pairs therefore always meet at equal depth, except that a
@@ -45,7 +45,7 @@ particle-cell selections mirror each other the same way.
 The lockstep descent is not what protects momentum; the symmetric, deterministic
 pair decision is. Any rule that depends only on the unordered pair keeps it.
 For a rejected pair whose source is not a leaf, `detail::kickOpenOrDefer` in
-`cosmictiger/kick_walk.hpp` now does one of three things:
+`cosmictiger/gravity/kick_walk.hpp` now does one of three things:
 
 - Source larger than the sink, or the sink is a leaf: open the source and retest
   its children at the current sink level. Internal sinks now iterate their list
@@ -61,7 +61,7 @@ their particles. In clustered regions those radii differ by large factors, and
 the test only cares about their sum, so opening the smaller cell doubles the
 pair count for almost no gain.
 
-The CUDA walk in `cosmictiger/kick_cuda_impl.hpp` applies the same rule with
+The CUDA walk in `cosmictiger/gravity/kick_cuda_impl.hpp` applies the same rule with
 a device twin of the helper, `cudaOpenOrDefer`, a `bothlist` for the
 equal-radius case whose children go to the sink's children, and the per-level
 loop iterating for internal sinks when the rule is on.
@@ -70,10 +70,10 @@ loop iterating for internal sinks when the rule is on.
 
 A cell-particle or particle-cell interaction stands in for direct summation
 of a leaf pair, and whichever side is evaluated explicitly, both walks have to
-pick the same pairing. The selection in `cosmictiger/fmm_acceptance.hpp` now
+pick the same pairing. The selection in `cosmictiger/fmm/fmm_acceptance.hpp` now
 compares flop counts whose only runtime inputs are the two particle counts;
 the per-order costs come from the generated kernels through
-`FmmHybridCost<order>` in `cosmictiger/fmm_kernels.hpp`:
+`FmmHybridCost<order>` in `cosmictiger/fmm/fmm_kernels.hpp`:
 
 - direct summation: sinkCount times sourceCount times 38 flops, the Newtonian
   pair of the direct kernel. Hybrids are only considered for support-separated
@@ -112,7 +112,7 @@ under both rules.
 
 ## Counters
 
-`cosmictiger/kick_interaction_counts.hpp` adds rank-local counters filled by
+`cosmictiger/gravity/kick_interaction_counts.hpp` adds rank-local counters filled by
 the CPU walk: acceptance tests, direct and Ewald M2L, cell-particle,
 particle-cell, particle-particle leaf pairs and particle pairs, source openings
 and deferred sources. Sources without particles never enter the lists (see
@@ -131,7 +131,7 @@ children onto the retry or deferred list, so an empty child was tested by the
 sink, handed down to both sink children when it failed, and evaluated as a
 zero-mass M2L wherever it was accepted. The CUDA walk skips a source with no
 particles at the acceptance test. The CPU walk now keeps them out of the lists
-instead: `detail::kickPushOccupied` in `cosmictiger/kick_walk.hpp` drops a
+instead: `detail::kickPushOccupied` in `cosmictiger/gravity/kick_walk.hpp` drops a
 child with no particles when `kickOpenOrDefer` opens its parent, in both the
 Ewald and the direct pass. The lists start from the root and grow only there,
 so no list ever holds an empty cell. The accepted pair set for occupied cells
@@ -277,7 +277,7 @@ exclude empty source cells; CP and PC are equal at every angle for both rules.
 
 `run.treeOpeningAngle` makes `run.test=force` build the tree once at that
 angle and sweep only the kick's opening angle, from the tree's angle to 0.95
-in steps of 0.025. The tree's Ewald leaf criterion in `src/tree.cpp` bounds a
+in steps of 0.025. The tree's Ewald leaf criterion in `src/gravity/tree.cpp` bounds a
 leaf's enclosing radius by 0.25 theta_tree / (1 + theta_tree), which is
 exactly the bound the Ewald pass needs for a leaf pair at the nearest image
 distance to be accepted at any kick angle of at least theta_tree, so larger

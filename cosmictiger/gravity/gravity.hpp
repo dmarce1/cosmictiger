@@ -1,0 +1,87 @@
+/*
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2026  Dominic C. Marcello
+
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
+
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+#ifndef GRAVITY_HPP_
+#define GRAVITY_HPP_
+
+#include <cmath>
+
+#include <cosmictiger/core/fixed_capacity_vector.hpp>
+#include <cosmictiger/cuda/cuda.hpp>
+#include <cosmictiger/cuda/cuda_memory.hpp>
+#include <cosmictiger/gravity/kick.hpp>
+#include <cosmictiger/gravity/tree.hpp>
+#include <cosmictiger/math/fixed.hpp>
+#include <cosmictiger/math/kernel.hpp>
+
+struct ForceVectors {
+    Vector<float> phi;
+    Vector<float> gx;
+    Vector<float> gy;
+    Vector<float> gz;
+    ForceVectors() = default;
+    ForceVectors(int sz) {
+        phi.resize(sz);
+        gx.resize(sz);
+        gy.resize(sz);
+        gz.resize(sz);
+    }
+};
+
+using GravityCcType = int;
+constexpr GravityCcType kGravityDirect = 0;
+constexpr GravityCcType kGravityEwald = 1;
+
+// Order-templated CPU operators; definitions live in gravity_cpu.hpp and are
+// instantiated once per FMM order by the per-order instance translation units.
+template <int order>
+void cpuGravityCc(
+    GravityCcType, FmmExpansion<float, order>&, Vector<TreeId> const&, TreeId, bool doPhi);
+template <int order>
+void cpuGravityCp(FmmExpansion<float, order>&, Vector<TreeId> const&, TreeId, bool doPhi);
+template <int order>
+void cpuGravityPc(ForceVectors&, int, TreeId, Vector<TreeId> const&);
+void cpuGravityPp(ForceVectors&, int, TreeId, Vector<TreeId> const&, float h);
+
+void showTimings();
+
+// CUDA operators are order-templated device functions in cosmictiger/gravity_cuda.hpp.
+
+void resetGravityCounters();
+void getGravityCounters(double& close, double& direct);
+void setGravityCounterUse(bool code);
+
+template <class T>
+CUDA_EXPORT inline void gravitySofteningKernel(T& force, T& phi, T radiusSquared, T inverseSupport,
+    T inverseSupportSquared, T inverseSupportCubed, bool doPhi) {
+    T const q = simdSqrt(radiusSquared * inverseSupportSquared);
+    auto const& kernel = selectedGravityKernel();
+    force = radial_kernel::forceFactor(kernel, q) * inverseSupportCubed;
+    if (doPhi) {
+        phi = radial_kernel::potential(kernel, q) * inverseSupport;
+    } else {
+        phi = simdBroadcast<T>(0);
+    }
+}
+
+CUDA_EXPORT inline float selfPhi() {
+    return selectedGravityKernel().centralPotential;
+}
+
+#endif /* GRAVITY_HPP_ */

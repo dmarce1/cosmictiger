@@ -3,7 +3,7 @@
 
 #include <cuda_runtime.h>
 
-#include <cosmictiger/cuda.hpp>
+#include <cosmictiger/cuda/cuda.hpp>
 
 // Standalone kernel tests initialize the CUDA pool explicitly and have no
 // application Options object. They always exercise the CUDA allocation path.

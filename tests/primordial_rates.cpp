@@ -4,7 +4,7 @@
 #include <initializer_list>
 #include <limits>
 
-#include <cosmictiger/primordial_rates.hpp>
+#include <cosmictiger/chemistry/primordial_rates.hpp>
 
 namespace {
 void require(bool condition, char const* message) {

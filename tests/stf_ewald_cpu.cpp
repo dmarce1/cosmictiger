@@ -14,11 +14,11 @@
 #include <stdexcept>
 #include <string>
 
-#include <cosmictiger/assert.hpp>
-#include <cosmictiger/ewald_indices.hpp>
-#include <cosmictiger/ewald_kernels.hpp>
-#include <cosmictiger/fmm_order.hpp>
-#include <cosmictiger/hpx.hpp>
+#include <cosmictiger/core/assert.hpp>
+#include <cosmictiger/core/hpx.hpp>
+#include <cosmictiger/fmm/ewald_indices.hpp>
+#include <cosmictiger/fmm/ewald_kernels.hpp>
+#include <cosmictiger/fmm/fmm_order.hpp>
 
 // This standalone test exercises the actual CUDA-disabled initializer without
 // starting a distributed runtime. No child locality needs initialization.

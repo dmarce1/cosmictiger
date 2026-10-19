@@ -17,8 +17,8 @@
 
 #include <hpx/hpx_init.hpp>
 
-#include <cosmictiger/drift.hpp>
-#include <cosmictiger/lightcone_entry.hpp>
+#include <cosmictiger/analysis/lightcone_entry.hpp>
+#include <cosmictiger/particles/drift.hpp>
 
 Array<Fixed32*, NDIM> particlesX;
 Array<float, NDIM>* particlesV = nullptr;

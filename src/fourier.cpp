@@ -1,5 +1,5 @@
+#include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/fourier.hpp>
-#include <cosmictiger/hpx.hpp>
 #include <cosmictiger/vector.hpp>
 
 static std::vector<Vector<ComplexFloat>> y;

@@ -7,7 +7,7 @@
 #include <stdexcept>
 #include <vector>
 
-#include <cosmictiger/rockstar_core.hpp>
+#include <cosmictiger/analysis/rockstar_core.hpp>
 
 namespace {
 struct Box {

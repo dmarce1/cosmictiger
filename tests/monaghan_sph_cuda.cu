@@ -30,8 +30,8 @@
 
 #include <cuda_runtime.h>
 
-#include <cosmictiger/sph_cpu.hpp>
-#include <cosmictiger/sph_cuda.hpp>
+#include <cosmictiger/sph/sph_cpu.hpp>
+#include <cosmictiger/sph/sph_cuda.hpp>
 
 // Only the options-constructor and host assertion services are replaced here.
 // Density, smoothing, forces, heating, device assertions, and allocation use the

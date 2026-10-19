@@ -26,13 +26,13 @@
 #include <hpx/serialization/input_archive.hpp>
 #include <hpx/serialization/output_archive.hpp>
 
-#include <cosmictiger/domain.hpp>
-#include <cosmictiger/fmm_order.hpp>
-#include <cosmictiger/fmm_types.hpp>
-#include <cosmictiger/hpx.hpp>
-#include <cosmictiger/options.hpp>
-#include <cosmictiger/particles.hpp>
-#include <cosmictiger/tree.hpp>
+#include <cosmictiger/core/hpx.hpp>
+#include <cosmictiger/core/options.hpp>
+#include <cosmictiger/fmm/fmm_order.hpp>
+#include <cosmictiger/fmm/fmm_types.hpp>
+#include <cosmictiger/gravity/tree.hpp>
+#include <cosmictiger/particles/domain.hpp>
+#include <cosmictiger/particles/particles.hpp>
 
 namespace detail {
 constexpr int kFmmTreeParticlesPerRank = 8;

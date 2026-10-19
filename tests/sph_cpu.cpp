@@ -31,7 +31,7 @@
 #include <string>
 #include <vector>
 
-#include <cosmictiger/sph_cpu.hpp>
+#include <cosmictiger/sph/sph_cpu.hpp>
 
 // The fixture owns ordinary host arrays and calls the production SIMD kernels.
 // It does not start an HPX runtime or alias staged source snapshots with sinks.

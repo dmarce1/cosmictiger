@@ -7,8 +7,8 @@
 #include <exception>
 #include <limits>
 
-#include <cosmictiger/recfast.hpp>
-#include <cosmictiger/zero_order.hpp>
+#include <cosmictiger/cosmology/recfast.hpp>
+#include <cosmictiger/cosmology/zero_order.hpp>
 
 namespace detail {
 

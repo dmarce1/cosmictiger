@@ -32,7 +32,7 @@
 
 #include <cuda_runtime.h>
 
-#include <cosmictiger/fmm_order.hpp>
+#include <cosmictiger/fmm/fmm_order.hpp>
 
 #ifdef COSMICTIGER_STF_BASELINE_HEADER
 #if ORDER != 7
@@ -40,7 +40,7 @@
 #endif
 #include COSMICTIGER_STF_BASELINE_HEADER
 #else
-#include <cosmictiger/fmm_kernels.hpp>
+#include <cosmictiger/fmm/fmm_kernels.hpp>
 #endif
 
 #if !defined(COSMICTIGER_STF_BASELINE_HEADER) && !defined(COSMICTIGER_STF_L2L_LANE0)

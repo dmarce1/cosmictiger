@@ -3,7 +3,7 @@
 The FMM uses the STF generator imported from
 [`dmarce1/experimental`](https://github.com/dmarce1/experimental/tree/7ba8f1829fdede7348a1418b7cb36c0e7a955302)
 at commit `7ba8f1829fdede7348a1418b7cb36c0e7a955302`. Its Boost license is retained
-in `cosmictiger/gravity/stf/LICENSE`; the surrounding application remains GPL.
+in `tools/stf/LICENSE`; the surrounding application remains GPL.
 
 Kernels are generated for every supported FMM order, 3 through 9: source
 degrees 1 through 7 paired with local degrees 2 through 8. A run selects one
@@ -91,14 +91,14 @@ ninja -C build cosmictiger_generated_kernels
 ```
 
 That target runs `python3 tools/generate_stf_m2l.py --output-dir
-build/generated/cosmictiger/gravity/stf/generated`, which emits one specialized
+build/generated/cosmictiger/fmm`, which emits one specialized
 kernel class per degree for local degrees 2 through 8 (`generated_config.hpp`
 records the range as `kMinLocalDegree`/`kMaxLocalDegree`), and
 `fmm_kernel_codegen`, which writes one `ewaldCorrectionDerivatives` overload per
-order into `build/generated/cosmictiger/ewald_kernels.hpp`. The former checked-in
+order into `build/generated/cosmictiger/fmm/ewald_kernels.hpp`. The former checked-in
 `cosmictiger/gravity/stf/generated/` directory and the generator's `--check`
 comparison against it are gone; regenerate by rebuilding. The former Cartesian
-translation generator has been removed from `src/fmm_kernel_codegen.cpp`.
+translation generator has been removed from `src/fmm/fmm_kernel_codegen.cpp`.
 
 `stf_kernels` checks independent Cartesian polynomial references, translations,
 nonzero dipoles, constant Laplacians, the truncated direct-particle remainder

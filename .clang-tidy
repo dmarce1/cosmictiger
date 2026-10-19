@@ -1,5 +1,5 @@
 Checks: '-*,readability-identifier-naming'
-HeaderFilterRegex: '(^|/)(cosmictiger|src|tests)/[^/]+\.(hpp|cpp|cu)$'
+HeaderFilterRegex: '(^|/)(cosmictiger|src|tests)/([^/]+/)?[^/]+\.(hpp|cpp|cu)$'
 FormatStyle: none
 CheckOptions:
   readability-identifier-naming.GetConfigPerFile: false

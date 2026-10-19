@@ -30,13 +30,13 @@
 
 #include <silo.h>
 
-#include <cosmictiger/constants.hpp>
-#include <cosmictiger/gravity.hpp>
-#include <cosmictiger/hpx.hpp>
-#include <cosmictiger/options.hpp>
-#include <cosmictiger/particles.hpp>
-#include <cosmictiger/sph_particles.hpp>
-#include <cosmictiger/view.hpp>
+#include <cosmictiger/core/hpx.hpp>
+#include <cosmictiger/core/options.hpp>
+#include <cosmictiger/gravity/gravity.hpp>
+#include <cosmictiger/io/view.hpp>
+#include <cosmictiger/math/constants.hpp>
+#include <cosmictiger/particles/particles.hpp>
+#include <cosmictiger/sph/sph_particles.hpp>
 
 namespace detail {
 

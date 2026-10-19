@@ -20,7 +20,7 @@
 #include <xmmintrin.h>
 #endif
 
-#include <cosmictiger/float_float.hpp>
+#include <cosmictiger/math/float_float.hpp>
 
 namespace detail {
 

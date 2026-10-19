@@ -11,11 +11,11 @@
 
 #include <healpix/healpix_base.h>
 
-#include <cosmictiger/hpx.hpp>
-#include <cosmictiger/lightcone.hpp>
-#include <cosmictiger/options.hpp>
-#include <cosmictiger/particles.hpp>
-#include <cosmictiger/power.hpp>
+#include <cosmictiger/analysis/lightcone.hpp>
+#include <cosmictiger/analysis/power.hpp>
+#include <cosmictiger/core/hpx.hpp>
+#include <cosmictiger/core/options.hpp>
+#include <cosmictiger/particles/particles.hpp>
 
 namespace detail {
 

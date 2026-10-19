@@ -31,10 +31,10 @@ blank lines between groups. Do not apply project naming changes to bundled
 # Paper-notation exception
 
 The SPH computation code that transcribes Monaghan (1992), ARA&A 30, 543 names its
-local variables with the paper's symbols instead of camelCase: `cosmictiger/monaghan_sph.hpp`
-and the pair, density, and support-radius loops in `src/sph_hydro_cpu.cpp`,
-`src/sph_hydro.cu`, `src/sph_prehydro_cpu.cpp`, `src/sph_prehydro.cu`, and
-`cosmictiger/sph_cuda.hpp`. Those regions use the Unicode letters the compilers accept
+local variables with the paper's symbols instead of camelCase: `cosmictiger/sph/monaghan_sph.hpp`
+and the pair, density, and support-radius loops in `src/sph/sph_hydro_cpu.cpp`,
+`src/sph/sph_hydro.cu`, `src/sph/sph_prehydro_cpu.cpp`, `src/sph/sph_prehydro.cu`, and
+`cosmictiger/sph/sph_cuda.hpp`. Those regions use the Unicode letters the compilers accept
 (`ρ_a`, `P_b`, `Π_ab`, `μ_ab`, `h_ab`, `gradW̃_ab`, `δt_cv`, `ΣW`) and cite the equation
 they implement; function parameters, data fields, and everything outside them keep the
 descriptive names above. Fence such regions with

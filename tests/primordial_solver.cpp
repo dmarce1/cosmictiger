@@ -8,8 +8,8 @@
 #include <string>
 #include <vector>
 
-#include <cosmictiger/primordial_chemistry.hpp>
-#include <cosmictiger/primordial_float_environment.hpp>
+#include <cosmictiger/chemistry/primordial_chemistry.hpp>
+#include <cosmictiger/chemistry/primordial_float_environment.hpp>
 
 namespace {
 void require(bool condition, char const* message) {

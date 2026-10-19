@@ -6,7 +6,7 @@
 #include <cstdlib>
 #include <limits>
 
-#include <cosmictiger/recombination_thermal.hpp>
+#include <cosmictiger/cosmology/recombination_thermal.hpp>
 
 namespace detail {
 

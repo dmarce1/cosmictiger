@@ -19,7 +19,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #include <cstdio>
 
-#include <cosmictiger/simd_backend.hpp>
+#include <cosmictiger/math/simd_backend.hpp>
 
 int main() {
 #if COSMICTIGER_SIMD_STANDARD

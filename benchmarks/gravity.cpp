@@ -25,14 +25,14 @@
 
 #include <hpx/runtime_local/runtime_local_fwd.hpp>
 
-#include <cosmictiger/fmm_kernels.hpp>
-#include <cosmictiger/fmm_order.hpp>
-#include <cosmictiger/gravity.hpp>
-#include <cosmictiger/hpx.hpp>
-#include <cosmictiger/kernel.hpp>
-#include <cosmictiger/options.hpp>
-#include <cosmictiger/particles.hpp>
-#include <cosmictiger/tree.hpp>
+#include <cosmictiger/core/hpx.hpp>
+#include <cosmictiger/core/options.hpp>
+#include <cosmictiger/fmm/fmm_kernels.hpp>
+#include <cosmictiger/fmm/fmm_order.hpp>
+#include <cosmictiger/gravity/gravity.hpp>
+#include <cosmictiger/gravity/tree.hpp>
+#include <cosmictiger/math/kernel.hpp>
+#include <cosmictiger/particles/particles.hpp>
 
 // This source is injected into each comparison snapshot by the benchmark runner.
 // It deliberately uses only scalar/public interfaces common to both snapshots.

@@ -21,12 +21,12 @@
 #include <utility>
 #include <vector>
 
-#include <cosmictiger/hpx.hpp>
-#include <cosmictiger/kick.hpp>
-#include <cosmictiger/options.hpp>
-#include <cosmictiger/particles.hpp>
-#include <cosmictiger/sph_particles.hpp>
-#include <cosmictiger/tree.hpp>
+#include <cosmictiger/core/hpx.hpp>
+#include <cosmictiger/core/options.hpp>
+#include <cosmictiger/gravity/kick.hpp>
+#include <cosmictiger/gravity/tree.hpp>
+#include <cosmictiger/particles/particles.hpp>
+#include <cosmictiger/sph/sph_particles.hpp>
 
 namespace detail {
 

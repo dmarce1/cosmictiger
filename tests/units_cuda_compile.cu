@@ -19,8 +19,8 @@
 
 #include <type_traits>
 
-#include <cosmictiger/fixed.hpp>
-#include <cosmictiger/units.hpp>
+#include <cosmictiger/math/fixed.hpp>
+#include <cosmictiger/math/units.hpp>
 
 // Only the host boundary is typed; the kernel payload retains the original Fixed32.
 double unitsFixedPositionHostCompileRegression(

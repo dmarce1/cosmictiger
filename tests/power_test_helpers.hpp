@@ -19,8 +19,8 @@
 #include <string>
 #include <vector>
 
-#include <cosmictiger/fft.hpp>
-#include <cosmictiger/power_cpu.hpp>
+#include <cosmictiger/analysis/power_cpu.hpp>
+#include <cosmictiger/cosmology/fft.hpp>
 
 namespace detail {
 

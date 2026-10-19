@@ -14,7 +14,7 @@
 #include <string>
 #include <vector>
 
-#include <cosmictiger/simd_math.hpp>
+#include <cosmictiger/math/simd_math.hpp>
 
 #include "stf_kernel_test_helpers.hpp"
 

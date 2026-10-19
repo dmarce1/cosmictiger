@@ -8,9 +8,9 @@
 #include <string>
 #include <vector>
 
-#include <cosmictiger/bh.hpp>
-#include <cosmictiger/gravity.hpp>
-#include <cosmictiger/options.hpp>
+#include <cosmictiger/core/options.hpp>
+#include <cosmictiger/gravity/bh.hpp>
+#include <cosmictiger/gravity/gravity.hpp>
 
 namespace detail {
 using BhPositions = DeviceVector<Array<float, NDIM>>;

@@ -30,16 +30,16 @@
 #include <hpx/threading_base/thread_helpers.hpp>
 #include <hpx/threading_base/thread_pool_base.hpp>
 
-#include <cosmictiger/analytic.hpp>
-#include <cosmictiger/fmm_order.hpp>
-#include <cosmictiger/fmm_types.hpp>
-#include <cosmictiger/hpx.hpp>
-#include <cosmictiger/kick.hpp>
-#include <cosmictiger/kick_workspace.hpp>
-#include <cosmictiger/memused.hpp>
-#include <cosmictiger/options.hpp>
-#include <cosmictiger/particles.hpp>
-#include <cosmictiger/tree.hpp>
+#include <cosmictiger/core/hpx.hpp>
+#include <cosmictiger/core/memused.hpp>
+#include <cosmictiger/core/options.hpp>
+#include <cosmictiger/fmm/fmm_order.hpp>
+#include <cosmictiger/fmm/fmm_types.hpp>
+#include <cosmictiger/gravity/kick.hpp>
+#include <cosmictiger/gravity/kick_workspace.hpp>
+#include <cosmictiger/gravity/tree.hpp>
+#include <cosmictiger/particles/particles.hpp>
+#include <cosmictiger/problems/analytic.hpp>
 
 namespace detail {
 

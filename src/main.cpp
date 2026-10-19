@@ -27,25 +27,25 @@
 #include <utility>
 #include <vector>
 
-#include <cosmictiger/driver.hpp>
-#include <cosmictiger/ewald_indices.hpp>
-#include <cosmictiger/fmm_kernels.hpp>
-#include <cosmictiger/fmm_order.hpp>
-#include <cosmictiger/fmm_types.hpp>
-#include <cosmictiger/fp16.hpp>
-#include <cosmictiger/gravity.hpp>
-#include <cosmictiger/healpix.hpp>
-#include <cosmictiger/hpx.hpp>
-#include <cosmictiger/memused.hpp>
-#include <cosmictiger/options.hpp>
-#include <cosmictiger/options_metadata.hpp>
-#include <cosmictiger/particles.hpp>
-#include <cosmictiger/rockstar.hpp>
-#include <cosmictiger/simd.hpp>
-#include <cosmictiger/sph.hpp>
-#include <cosmictiger/test.hpp>
-#include <cosmictiger/tree.hpp>
-#include <cosmictiger/unordered_set_ts.hpp>
+#include <cosmictiger/analysis/healpix.hpp>
+#include <cosmictiger/analysis/rockstar.hpp>
+#include <cosmictiger/core/driver.hpp>
+#include <cosmictiger/core/hpx.hpp>
+#include <cosmictiger/core/memused.hpp>
+#include <cosmictiger/core/options.hpp>
+#include <cosmictiger/core/options_metadata.hpp>
+#include <cosmictiger/core/unordered_set_ts.hpp>
+#include <cosmictiger/fmm/ewald_indices.hpp>
+#include <cosmictiger/fmm/fmm_kernels.hpp>
+#include <cosmictiger/fmm/fmm_order.hpp>
+#include <cosmictiger/fmm/fmm_types.hpp>
+#include <cosmictiger/gravity/gravity.hpp>
+#include <cosmictiger/gravity/tree.hpp>
+#include <cosmictiger/math/fp16.hpp>
+#include <cosmictiger/math/simd.hpp>
+#include <cosmictiger/particles/particles.hpp>
+#include <cosmictiger/problems/test.hpp>
+#include <cosmictiger/sph/sph.hpp>
 
 int hpx_main(int argc, char* argv[]) {
     /*	simd_double8 x;

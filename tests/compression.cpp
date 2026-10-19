@@ -27,7 +27,7 @@
 #include <string>
 #include <vector>
 
-#include <cosmictiger/compress.hpp>
+#include <cosmictiger/analysis/compress.hpp>
 
 void cosmictigerAssert(char const* expression, bool condition, char const* file, int line) {
     if (!condition) {

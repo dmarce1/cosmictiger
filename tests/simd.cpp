@@ -25,7 +25,7 @@
 #include <limits>
 #include <stdexcept>
 
-#include <cosmictiger/simd.hpp>
+#include <cosmictiger/math/simd.hpp>
 
 namespace detail {
 
