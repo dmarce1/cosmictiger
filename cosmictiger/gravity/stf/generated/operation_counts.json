@@ -167,9 +167,12 @@
       "operator": "CUDA_L2L_WARP",
       "order": 6,
       "with_trace": true,
+      "coefficients": 50,
       "schedule_rows": 22,
       "phases": 3,
+      "basis_words_per_lane": 2,
       "shuffle_instructions_per_lane": 86,
+      "shuffle_instructions_per_lane_into": 50,
       "whole_warp_flops_with_potential": 8906,
       "whole_warp_flops_without_potential": 6726
     }

@@ -99,7 +99,11 @@ synchronization. Compile it with the same CUDA flags above for the generated
 warp implementation, with `COSMICTIGER_STF_L2L_LANE0` for the interim scalar-lane
 implementation, or with `COSMICTIGER_STF_BASELINE_HEADER` for the legacy warp.
 Run `--check` for validation alone, or pass sample, round, and repetition counts
-for timing. The legacy implementation has a known omitted translation term;
+for timing. The generated warp build also validates and times `translateInto`,
+which writes into a shared-memory expansion instead of broadcasting to every
+lane; its rows carry the `_into` suffix, and the CSV includes the local degree.
+The legacy header is degree-six only, so its build requires `ORDER=7`.
+The legacy implementation has a known omitted translation term;
 its diagnostic error is reported separately from timing and must not be treated
 as a passing correctness result.
 

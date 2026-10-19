@@ -5853,95 +5853,91 @@ public:
 #ifdef __CUDACC__
 // Read-only GLOBAL storage: row/lane loads coalesce instead of serializing
 // divergent constant-memory accesses. Internal linkage needs no device RDC.
+// Entry layout: basis | primary << 8 | secondary << 16 | kind << 24.
 static __device__ unsigned int const l2lWarpSchedule6[22][32] = {
-    {262209u, 262274u, 262339u, 262404u, 262469u, 262534u, 262599u, 262664u, 1310977u, 1311042u,
-        1311171u, 1311300u, 1311365u, 1311430u, 1311559u, 1311624u, 2359617u, 2359682u, 2359811u,
-        2359940u, 2360005u, 2360070u, 2360199u, 2360264u, 3408321u, 3408386u, 3686787u, 3408708u,
-        3408773u, 3408838u, 3707591u, 3711752u},
-    {262729u, 262794u, 262859u, 262924u, 262989u, 263054u, 263119u, 263184u, 1311753u, 1311818u,
-        1311883u, 1311948u, 1312077u, 1312142u, 1312207u, 1312336u, 2360393u, 2360458u, 2360523u,
-        2360588u, 2360717u, 2360782u, 2360847u, 2360976u, 3409225u, 3409290u, 3409355u, 3409420u,
-        3736717u, 3740878u, 3745039u, 3409872u},
-    {263249u, 263314u, 263379u, 263444u, 263509u, 263574u, 263639u, 263704u, 1312401u, 1312466u,
-        1312531u, 1312596u, 1312725u, 1312790u, 1312855u, 1312920u, 2361041u, 2361106u, 2361171u,
-        2361236u, 2361365u, 2361430u, 2361495u, 2361560u, 3409937u, 3410002u, 3410067u, 3410132u,
-        3774165u, 3778326u, 3782487u, 3786648u},
-    {263769u, 263834u, 263899u, 263964u, 264029u, 264094u, 264159u, 264224u, 1313049u, 1313114u,
-        1313179u, 1313244u, 1313309u, 1313374u, 1313503u, 1313568u, 2361689u, 2361754u, 2361819u,
-        2361884u, 2361949u, 2362014u, 2362143u, 2362208u, 3410649u, 3410714u, 3410779u, 3410844u,
-        3410909u, 3410974u, 3819935u, 3824096u},
-    {264289u, 264354u, 264419u, 264484u, 264549u, 264614u, 264679u, 264744u, 1313633u, 1313698u,
-        1313763u, 1048576u, 1048576u, 1048576u, 1048576u, 1048576u, 2362273u, 2362338u, 2362403u,
-        2097152u, 2097152u, 2097152u, 2097152u, 2097152u, 3828257u, 3832418u, 3836579u, 3145728u,
-        3145728u, 3145728u, 3145728u, 3145728u},
-    {264809u, 264874u, 264939u, 265004u, 265069u, 265134u, 265199u, 265264u, 1048576u, 1048576u,
-        1048576u, 1048576u, 1048576u, 1048576u, 1048576u, 1048576u, 2097152u, 2097152u, 2097152u,
-        2097152u, 2097152u, 2097152u, 2097152u, 2097152u, 3145728u, 3145728u, 3145728u, 3145728u,
-        3145728u, 3145728u, 3145728u, 3145728u},
-    {4457025u, 4457090u, 4457283u, 4457476u, 5505665u, 5505730u, 5505923u, 5506116u, 6554305u,
-        6554370u, 6554563u, 6554756u, 7603009u, 7603074u, 7901891u, 7603524u, 8651649u, 8651714u,
-        8954627u, 8652164u, 9700353u, 9700418u, 10748993u, 10749058u, 11797633u, 11797698u,
-        12846273u, 12846338u, 13894977u, 13895042u, 14943617u, 14943682u},
-    {4457541u, 4457606u, 4457799u, 4457864u, 5506181u, 5506246u, 5506439u, 5506504u, 6554821u,
-        6554886u, 6555079u, 6555144u, 7603589u, 7603654u, 7931015u, 7935176u, 8652229u, 8652294u,
-        8983751u, 8987912u, 9700675u, 9700932u, 10749315u, 10749572u, 11797955u, 11798212u,
-        12846595u, 12846852u, 14222467u, 13895620u, 15275203u, 14944260u},
-    {4458057u, 4458122u, 4458187u, 4458252u, 5506697u, 5506762u, 5506827u, 5506892u, 6555337u,
-        6555402u, 6555467u, 6555532u, 7604169u, 7604234u, 7604299u, 7604364u, 8652809u, 8652874u,
-        8652939u, 8653004u, 9700997u, 9701062u, 10749637u, 10749702u, 11798277u, 11798342u,
-        12846917u, 12846982u, 13895685u, 13895750u, 14944325u, 14944390u},
-    {4458445u, 4458510u, 4458575u, 4458768u, 5507085u, 5507150u, 5507215u, 5507408u, 6555725u,
-        6555790u, 6555855u, 6556048u, 7968461u, 7972622u, 7976783u, 7604944u, 9021197u, 9025358u,
-        9029519u, 8653584u, 9701319u, 9701384u, 10749959u, 10750024u, 11798599u, 11798664u,
-        12847239u, 12847304u, 14259911u, 14264072u, 15312647u, 15316808u},
-    {4458833u, 4458898u, 4458963u, 4459028u, 5507473u, 5507538u, 5507603u, 5507668u, 6556113u,
-        6556178u, 6556243u, 6556308u, 7605009u, 7605074u, 7605139u, 7605204u, 8653649u, 8653714u,
-        8653779u, 8653844u, 9701641u, 9701706u, 10750281u, 10750346u, 11798921u, 11798986u,
-        12847561u, 12847626u, 13896393u, 13896458u, 14945033u, 14945098u},
-    {4459221u, 4459286u, 4459351u, 4459416u, 5507861u, 5507926u, 5507991u, 5508056u, 6556501u,
-        6556566u, 6556631u, 6556696u, 8014229u, 8018390u, 8022551u, 8026712u, 9066965u, 9071126u,
-        9075287u, 9079448u, 9701771u, 9701836u, 10750411u, 10750476u, 11799051u, 11799116u,
-        12847691u, 12847756u, 13896523u, 13896588u, 14945163u, 14945228u},
-    {4194304u, 4194304u, 4194304u, 4194304u, 5242880u, 5242880u, 5242880u, 5242880u, 6291456u,
-        6291456u, 6291456u, 6291456u, 7340032u, 7340032u, 7340032u, 7340032u, 8388608u, 8388608u,
-        8388608u, 8388608u, 9702093u, 9702158u, 10750733u, 10750798u, 11799373u, 11799438u,
-        12848013u, 12848078u, 14305677u, 14309838u, 15358413u, 15362574u},
-    {4194304u, 4194304u, 4194304u, 4194304u, 5242880u, 5242880u, 5242880u, 5242880u, 6291456u,
-        6291456u, 6291456u, 6291456u, 7340032u, 7340032u, 7340032u, 7340032u, 8388608u, 8388608u,
-        8388608u, 8388608u, 9702223u, 9437184u, 10750863u, 10485760u, 11799503u, 11534336u,
-        12848143u, 12582912u, 14313999u, 13631488u, 15366735u, 14680064u},
-    {15992257u, 15992322u, 17040961u, 17041026u, 18089601u, 18089666u, 19138241u, 19138306u,
-        20186881u, 20186946u, 21235521u, 21235586u, 22284225u, 22284290u, 23332865u, 23332930u,
-        24381505u, 24381570u, 25430145u, 25430210u, 26478849u, 27527489u, 28576129u, 29624769u,
-        30673409u, 31722049u, 32770753u, 33819393u, 34868033u, 35916673u, 36965313u, 0u},
-    {16327939u, 15992900u, 17041347u, 17041668u, 18089987u, 18090308u, 19138627u, 19138948u,
-        20187267u, 20187588u, 21235907u, 21236228u, 22648515u, 22284996u, 23701251u, 23333636u,
-        24753987u, 24382276u, 25806723u, 25430916u, 26478914u, 27527554u, 28576194u, 29624834u,
-        30673474u, 31722114u, 32770818u, 33819458u, 34868098u, 35916738u, 36965378u, 0u},
-    {15992965u, 15993030u, 17041733u, 17041798u, 18090373u, 18090438u, 19139013u, 19139078u,
-        20187653u, 20187718u, 21236293u, 21236358u, 22285061u, 22285126u, 23333701u, 23333766u,
-        24382341u, 24382406u, 25430981u, 25431046u, 26479299u, 27527939u, 28576579u, 29625219u,
-        30673859u, 31722499u, 33180035u, 34232771u, 35285507u, 36338243u, 37390979u, 0u},
-    {16365383u, 16369544u, 17042119u, 17042184u, 18090759u, 18090824u, 19139399u, 19139464u,
-        20188039u, 20188104u, 21236679u, 21236744u, 22694279u, 22698440u, 23747015u, 23751176u,
-        24799751u, 24803912u, 25852487u, 25856648u, 26214400u, 27262976u, 28311552u, 29360128u,
-        30408704u, 31457280u, 32505856u, 33554432u, 34603008u, 35651584u, 36700160u, 0u},
-    {15993673u, 15993738u, 16777216u, 16777216u, 17825792u, 17825792u, 18874368u, 18874368u,
-        19922944u, 19922944u, 20971520u, 20971520u, 22020096u, 22020096u, 23068672u, 23068672u,
-        24117248u, 24117248u, 25165824u, 25165824u, 26214400u, 27262976u, 28311552u, 29360128u,
-        30408704u, 31457280u, 32505856u, 33554432u, 34603008u, 35651584u, 36700160u, 0u},
-    {15993803u, 15993868u, 16777216u, 16777216u, 17825792u, 17825792u, 18874368u, 18874368u,
-        19922944u, 19922944u, 20971520u, 20971520u, 22020096u, 22020096u, 23068672u, 23068672u,
-        24117248u, 24117248u, 25165824u, 25165824u, 26214400u, 27262976u, 28311552u, 29360128u,
-        30408704u, 31457280u, 32505856u, 33554432u, 34603008u, 35651584u, 36700160u, 0u},
-    {16411149u, 16415310u, 16777216u, 16777216u, 17825792u, 17825792u, 18874368u, 18874368u,
-        19922944u, 19922944u, 20971520u, 20971520u, 22020096u, 22020096u, 23068672u, 23068672u,
-        24117248u, 24117248u, 25165824u, 25165824u, 26214400u, 27262976u, 28311552u, 29360128u,
-        30408704u, 31457280u, 32505856u, 33554432u, 34603008u, 35651584u, 36700160u, 0u},
-    {16419471u, 15728640u, 16777216u, 16777216u, 17825792u, 17825792u, 18874368u, 18874368u,
-        19922944u, 19922944u, 20971520u, 20971520u, 22020096u, 22020096u, 23068672u, 23068672u,
-        24117248u, 24117248u, 25165824u, 25165824u, 26214400u, 27262976u, 28311552u, 29360128u,
-        30408704u, 31457280u, 32505856u, 33554432u, 34603008u, 35651584u, 36700160u, 0u},
+    {16777473u, 16777730u, 16777987u, 16778244u, 16778501u, 16778758u, 16779015u, 16779272u,
+        16778241u, 16778498u, 16779011u, 16779524u, 16779781u, 16780038u, 16780551u, 16780808u,
+        16778497u, 16778754u, 16779267u, 16779780u, 16780037u, 16780294u, 16780807u, 16781064u,
+        16779009u, 16779266u, 33818115u, 16780548u, 16780805u, 16781062u, 34147079u, 34212872u},
+    {16779529u, 16779786u, 16780043u, 16780300u, 16780557u, 16780814u, 16781071u, 16781328u,
+        16781321u, 16781578u, 16781835u, 16782092u, 16782605u, 16782862u, 16783119u, 16783632u,
+        16781577u, 16781834u, 16782091u, 16782348u, 16782861u, 16783118u, 16783375u, 16783888u,
+        16782601u, 16782858u, 16783115u, 16783372u, 34607629u, 34673422u, 34739215u, 16785168u},
+    {16781585u, 16781842u, 16782099u, 16782356u, 16782613u, 16782870u, 16783127u, 16783384u,
+        16783889u, 16784146u, 16784403u, 16784660u, 16785173u, 16785430u, 16785687u, 16785944u,
+        16784145u, 16784402u, 16784659u, 16784916u, 16785429u, 16785686u, 16785943u, 16786200u,
+        16785425u, 16785682u, 16785939u, 16786196u, 35199765u, 35265558u, 35331351u, 35397144u},
+    {16783641u, 16783898u, 16784155u, 16784412u, 16784669u, 16784926u, 16785183u, 16785440u,
+        16786457u, 16786714u, 16786971u, 16787228u, 16787485u, 16787742u, 16788255u, 16788512u,
+        16786713u, 16786970u, 16787227u, 16787484u, 16787741u, 16787998u, 16788511u, 16788768u,
+        16788249u, 16788506u, 16788763u, 16789020u, 16789277u, 16789534u, 35923487u, 35989280u},
+    {16785697u, 16785954u, 16786211u, 16786468u, 16786725u, 16786982u, 16787239u, 16787496u,
+        16788769u, 16789026u, 16789283u, 0u, 0u, 0u, 0u, 0u, 16789025u, 16789282u, 16789539u, 0u,
+        0u, 0u, 0u, 0u, 36055073u, 36120866u, 36186659u, 0u, 0u, 0u, 0u, 0u},
+    {16787753u, 16788010u, 16788267u, 16788524u, 16788781u, 16789038u, 16789295u, 16789552u, 0u, 0u,
+        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+    {16779521u, 16779778u, 16780547u, 16781316u, 16779777u, 16780034u, 16780803u, 16781572u,
+        16780033u, 16780290u, 16781059u, 16781828u, 16780545u, 16780802u, 34147075u, 16782596u,
+        16780801u, 16781058u, 34212867u, 16782852u, 16781313u, 16781570u, 16781569u, 16781826u,
+        16781825u, 16782082u, 16782081u, 16782338u, 16782593u, 16782850u, 16782849u, 16783106u},
+    {16781573u, 16781830u, 16782599u, 16782856u, 16781829u, 16782086u, 16782855u, 16783112u,
+        16782085u, 16782342u, 16783111u, 16783368u, 16782853u, 16783110u, 34607623u, 34673416u,
+        16783109u, 16783366u, 34673415u, 34739208u, 16782595u, 16783620u, 16782851u, 16783876u,
+        16783107u, 16784132u, 16783363u, 16784388u, 34607619u, 16785156u, 34673411u, 16785412u},
+    {16783625u, 16783882u, 16784139u, 16784396u, 16783881u, 16784138u, 16784395u, 16784652u,
+        16784137u, 16784394u, 16784651u, 16784908u, 16785161u, 16785418u, 16785675u, 16785932u,
+        16785417u, 16785674u, 16785931u, 16786188u, 16783877u, 16784134u, 16784133u, 16784390u,
+        16784389u, 16784646u, 16784645u, 16784902u, 16785413u, 16785670u, 16785669u, 16785926u},
+    {16785165u, 16785422u, 16785679u, 16786448u, 16785421u, 16785678u, 16785935u, 16786704u,
+        16785677u, 16785934u, 16786191u, 16786960u, 35199757u, 35265550u, 35331343u, 16788240u,
+        35265549u, 35331342u, 35397135u, 16788496u, 16785159u, 16785416u, 16785415u, 16785672u,
+        16785671u, 16785928u, 16785927u, 16786184u, 35199751u, 35265544u, 35265543u, 35331336u},
+    {16786705u, 16786962u, 16787219u, 16787476u, 16786961u, 16787218u, 16787475u, 16787732u,
+        16787217u, 16787474u, 16787731u, 16787988u, 16788497u, 16788754u, 16789011u, 16789268u,
+        16788753u, 16789010u, 16789267u, 16789524u, 16786441u, 16786698u, 16786697u, 16786954u,
+        16786953u, 16787210u, 16787209u, 16787466u, 16788233u, 16788490u, 16788489u, 16788746u},
+    {16788245u, 16788502u, 16788759u, 16789016u, 16788501u, 16788758u, 16789015u, 16789272u,
+        16788757u, 16789014u, 16789271u, 16789528u, 35923477u, 35989270u, 36055063u, 36120856u,
+        35989269u, 36055062u, 36120855u, 36186648u, 16786955u, 16787212u, 16787211u, 16787468u,
+        16787467u, 16787724u, 16787723u, 16787980u, 16788747u, 16789004u, 16789003u, 16789260u},
+    {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 16788237u,
+        16788494u, 16788493u, 16788750u, 16788749u, 16789006u, 16789005u, 16789262u, 35923469u,
+        35989262u, 35989261u, 36055054u},
+    {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 16788751u, 0u,
+        16789007u, 0u, 16789263u, 0u, 16789519u, 0u, 36055055u, 0u, 36120847u, 0u},
+    {16783105u, 16783362u, 16783617u, 16783874u, 16783873u, 16784130u, 16784129u, 16784386u,
+        16784385u, 16784642u, 16784641u, 16784898u, 16785153u, 16785410u, 16785409u, 16785666u,
+        16785665u, 16785922u, 16785921u, 16786178u, 16786433u, 16786689u, 16786945u, 16787201u,
+        16787457u, 16787713u, 16788225u, 16788481u, 16788737u, 16788993u, 16789249u, 0u},
+    {34739203u, 16785668u, 16785155u, 16786436u, 16785411u, 16786692u, 16785667u, 16786948u,
+        16785923u, 16787204u, 16786179u, 16787460u, 35199747u, 16788228u, 35265539u, 16788484u,
+        35331331u, 16788740u, 35397123u, 16788996u, 16786690u, 16786946u, 16787202u, 16787458u,
+        16787714u, 16787970u, 16788482u, 16788738u, 16788994u, 16789250u, 16789506u, 0u},
+    {16785925u, 16786182u, 16786693u, 16786950u, 16786949u, 16787206u, 16787205u, 16787462u,
+        16787461u, 16787718u, 16787717u, 16787974u, 16788485u, 16788742u, 16788741u, 16788998u,
+        16788997u, 16789254u, 16789253u, 16789510u, 16788227u, 16788483u, 16788739u, 16788995u,
+        16789251u, 16789507u, 35923459u, 35989251u, 36055043u, 36120835u, 36186627u, 0u},
+    {35331335u, 35397128u, 16788231u, 16788488u, 16788487u, 16788744u, 16788743u, 16789000u,
+        16788999u, 16789256u, 16789255u, 16789512u, 35923463u, 35989256u, 35989255u, 36055048u,
+        36055047u, 36120840u, 36120839u, 36186632u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+    {16788745u, 16789002u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+    {16789259u, 16789516u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+    {36055053u, 36120846u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+    {36186639u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+};
+// Per phase, the output coefficient reduced by each lane's group. Inactive
+// lanes hold zero and are excluded by the generated active-lane bounds.
+static __device__ unsigned char const l2lWarpTargets6[3][32] = {
+    {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 1u, 1u, 1u, 1u, 1u, 1u, 1u, 1u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u,
+        3u, 3u, 3u, 3u, 3u, 3u, 3u, 3u},
+    {4u, 4u, 4u, 4u, 5u, 5u, 5u, 5u, 6u, 6u, 6u, 6u, 7u, 7u, 7u, 7u, 8u, 8u, 8u, 8u, 9u, 9u, 10u,
+        10u, 11u, 11u, 12u, 12u, 13u, 13u, 14u, 14u},
+    {15u, 15u, 16u, 16u, 17u, 17u, 18u, 18u, 19u, 19u, 20u, 20u, 21u, 21u, 22u, 22u, 23u, 23u, 24u,
+        24u, 25u, 26u, 27u, 28u, 29u, 30u, 31u, 32u, 33u, 34u, 35u, 0u},
 };
 
 template <int order, bool withTrace>
@@ -5953,17 +5949,40 @@ public:
     // Includes replicated basis work and padded rows, excludes index/shuffle work.
     static constexpr int kFlops_ = 8906;
     static constexpr int kFlopsNoPotential_ = 6726;
+    static constexpr int kDegree_ = 6;
+    static constexpr int kTraceIndex_ = 49;
+    static constexpr int kCoefficients_ = 50;
+    static constexpr int kBasisWords_ = 2;
+    static constexpr int kScheduleRows_ = 22;
+    static constexpr int kPhases_ = 3;
     template <typename Real, typename Expansion, typename Source>
     __device__ static void translate(Expansion& target, Source const& source, Real const dx,
         Real const dy, Real const dz, bool doPhi) {
         // Contract: all 32 lanes enter with identical source/geometry; target
         // is private per lane. Every lane receives the complete expansion.
+        execute<true>(target, source, dx, dy, dz, doPhi);
+    }
+    template <typename Real, typename Source>
+    __device__ static void translateInto(Real* target, Source const& source, Real const dx,
+        Real const dy, Real const dz, bool doPhi) {
+        // Contract: all 32 lanes enter with identical source/geometry; target
+        // addresses 50 values that never alias source. Group leaders store
+        // their coefficient once; strided lanes copy the unchanged ones. Every
+        // source read and target write is complete when this returns.
+        execute<false>(target, source, dx, dy, dz, doPhi);
+    }
+
+private:
+    template <bool kReplicate, typename Real, typename Target, typename Source>
+    __device__ static void execute(Target& target, Source const& source, Real const dx,
+        Real const dy, Real const dz, bool doPhi) {
         int const lane = threadIdx.x & 31;
         constexpr unsigned int kMask = 0xffffffffu;
-        // Two registers per lane hold the complete distributed Taylor basis.
-        // Shuffles avoid a large register-selection tree for dynamic indexing.
-        Real basisLow = simdBroadcast<Real>(0);
-        Real basisHigh = simdBroadcast<Real>(0);
+        // 2 register(s) per lane hold the complete distributed Taylor basis:
+        // basis index i lives in word i >> 5 on lane i & 31. Shuffles avoid a
+        // large register-selection tree for dynamic indexing.
+        Real basis0 = simdBroadcast<Real>(0);
+        Real basis1 = simdBroadcast<Real>(0);
         [[maybe_unused]] constexpr auto kCoefficient1 = 1;
         [[maybe_unused]] constexpr auto kCoefficient8 = 1.0 / 2.0;
         [[maybe_unused]] constexpr auto kCoefficient20 = 1.0 / 6.0;
@@ -6072,112 +6091,112 @@ public:
         Real const t209 = t175 + t208;
         Real const t213 = dz * t209;
         if (lane == 0) {
-            basisLow = simdBroadcast<Real>(kCoefficient1);
+            basis0 = simdBroadcast<Real>(kCoefficient1);
         }
         if (lane == 1) {
-            basisLow = dy;
+            basis0 = dy;
         }
         if (lane == 2) {
-            basisLow = dx;
+            basis0 = dx;
         }
         if (lane == 3) {
-            basisLow = dz;
+            basis0 = dz;
         }
         if (lane == 4) {
-            basisLow = t14;
+            basis0 = t14;
         }
         if (lane == 5) {
-            basisLow = t15;
+            basis0 = t15;
         }
         if (lane == 6) {
-            basisLow = t17;
+            basis0 = t17;
         }
         if (lane == 7) {
-            basisLow = t18;
+            basis0 = t18;
         }
         if (lane == 8) {
-            basisLow = t19;
+            basis0 = t19;
         }
         if (lane == 9) {
-            basisLow = t23;
+            basis0 = t23;
         }
         if (lane == 10) {
-            basisLow = t24;
+            basis0 = t24;
         }
         if (lane == 11) {
-            basisLow = t25;
+            basis0 = t25;
         }
         if (lane == 12) {
-            basisLow = t28;
+            basis0 = t28;
         }
         if (lane == 13) {
-            basisLow = t33;
+            basis0 = t33;
         }
         if (lane == 14) {
-            basisLow = t34;
+            basis0 = t34;
         }
         if (lane == 15) {
-            basisLow = t38;
+            basis0 = t38;
         }
         if (lane == 16) {
-            basisLow = t49;
+            basis0 = t49;
         }
         if (lane == 17) {
-            basisLow = t56;
+            basis0 = t56;
         }
         if (lane == 18) {
-            basisLow = t69;
+            basis0 = t69;
         }
         if (lane == 19) {
-            basisLow = t87;
+            basis0 = t87;
         }
         if (lane == 20) {
-            basisLow = t92;
+            basis0 = t92;
         }
         if (lane == 21) {
-            basisLow = t98;
+            basis0 = t98;
         }
         if (lane == 22) {
-            basisLow = t99;
+            basis0 = t99;
         }
         if (lane == 23) {
-            basisLow = t101;
+            basis0 = t101;
         }
         if (lane == 24) {
-            basisLow = t104;
+            basis0 = t104;
         }
         if (lane == 25) {
-            basisLow = t118;
+            basis0 = t118;
         }
         if (lane == 26) {
-            basisLow = t119;
+            basis0 = t119;
         }
         if (lane == 27) {
-            basisLow = t142;
+            basis0 = t142;
         }
         if (lane == 28) {
-            basisLow = t161;
+            basis0 = t161;
         }
         if (lane == 29) {
-            basisLow = t162;
+            basis0 = t162;
         }
         if (lane == 30) {
-            basisLow = t171;
+            basis0 = t171;
         }
         if (lane == 31) {
-            basisLow = t180;
+            basis0 = t180;
         }
         if (lane == 0) {
-            basisHigh = t181;
+            basis1 = t181;
         }
         if (lane == 1) {
-            basisHigh = t205;
+            basis1 = t205;
         }
         if (lane == 2) {
-            basisHigh = t206;
+            basis1 = t206;
         }
         if (lane == 3) {
-            basisHigh = t213;
+            basis1 = t213;
         }
         if (doPhi) {
             Real const t218 = t6 * simdBroadcast<Real>(kCoefficient214);
@@ -6249,65 +6268,65 @@ public:
             Real const t452 = t175 + t451;
             Real const t456 = t19 * t452;
             if (lane == 4) {
-                basisHigh = t230;
+                basis1 = t230;
             }
             if (lane == 5) {
-                basisHigh = t241;
+                basis1 = t241;
             }
             if (lane == 6) {
-                basisHigh = t294;
+                basis1 = t294;
             }
             if (lane == 7) {
-                basisHigh = t330;
+                basis1 = t330;
             }
             if (lane == 8) {
-                basisHigh = t348;
+                basis1 = t348;
             }
             if (lane == 9) {
-                basisHigh = t386;
+                basis1 = t386;
             }
             if (lane == 10) {
-                basisHigh = t393;
+                basis1 = t393;
             }
             if (lane == 11) {
-                basisHigh = t411;
+                basis1 = t411;
             }
             if (lane == 12) {
-                basisHigh = t412;
+                basis1 = t412;
             }
             if (lane == 13) {
-                basisHigh = t430;
+                basis1 = t430;
             }
             if (lane == 14) {
-                basisHigh = t447;
+                basis1 = t447;
             }
             if (lane == 15) {
-                basisHigh = t448;
+                basis1 = t448;
             }
             if (lane == 16) {
-                basisHigh = t456;
+                basis1 = t456;
             }
         }
         {
-            // Fixed contraction phase 0: 6 rows.
+            // Fixed contraction phase 0: 6 rows, 4 outputs.
             int const groupWidth = 8;
+            int const targetIndex = __ldg(&l2lWarpTargets6[0][lane]);
             Real partial = simdBroadcast<Real>(0);
-            unsigned int const firstEntry = __ldg(&l2lWarpSchedule6[0][lane]);
 #pragma unroll
             for (int row = 0; row < 6; ++row) {
                 unsigned int entry = __ldg(&l2lWarpSchedule6[row][lane]);
                 if (!doPhi && lane < 8) {
-                    entry = 0;
+                    entry = 0u;
                 }
-                int const basisIndex = entry & 63u;
-                int const primaryIndex = (entry >> 6) & 63u;
-                int const secondaryIndex = (entry >> 12) & 63u;
-                int const kind = (entry >> 18) & 3u;
+                int const basisIndex = entry & 255u;
+                int const primaryIndex = (entry >> 8) & 255u;
+                int const secondaryIndex = (entry >> 16) & 255u;
+                int const kind = (entry >> 24) & 3u;
                 Real const sourceValue =
                     source[primaryIndex] + simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
-                Real const lowValue = __shfl_sync(kMask, basisLow, basisIndex & 31);
-                Real const highValue = __shfl_sync(kMask, basisHigh, basisIndex & 31);
-                Real const basisValue = basisIndex < 32 ? lowValue : highValue;
+                Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
+                Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
+                Real const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
                 Real const weight =
                     simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
                 partial = simdFma(weight, sourceValue, partial);
@@ -6321,8 +6340,9 @@ public:
             Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
             partial +=
                 (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
-            if ((lane & (groupWidth - 1)) == 0 && lane < 32) {
-                partial += source[(firstEntry >> 20) & 63u];
+            bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
+            if (leader) {
+                partial += source[targetIndex];
             }
             if (doPhi && lane == 0) {
                 partial = simdFma(simdBroadcast<Real>(0.5) * dz * dz, source[49], partial);
@@ -6330,28 +6350,34 @@ public:
             if (lane == 24) {
                 partial = simdFma(dz, source[49], partial);
             }
-            target[0] = __shfl_sync(kMask, partial, 0);
-            target[1] = __shfl_sync(kMask, partial, 8);
-            target[2] = __shfl_sync(kMask, partial, 16);
-            target[3] = __shfl_sync(kMask, partial, 24);
+            if constexpr (kReplicate) {
+                target[0] = __shfl_sync(kMask, partial, 0);
+                target[1] = __shfl_sync(kMask, partial, 8);
+                target[2] = __shfl_sync(kMask, partial, 16);
+                target[3] = __shfl_sync(kMask, partial, 24);
+            } else {
+                if (leader) {
+                    target[targetIndex] = partial;
+                }
+            }
         }
         {
-            // Fixed contraction phase 1: 8 rows.
+            // Fixed contraction phase 1: 8 rows, 11 outputs.
             int const groupWidth = lane < 20 ? 4 : (2);
+            int const targetIndex = __ldg(&l2lWarpTargets6[1][lane]);
             Real partial = simdBroadcast<Real>(0);
-            unsigned int const firstEntry = __ldg(&l2lWarpSchedule6[6][lane]);
 #pragma unroll
             for (int row = 6; row < 14; ++row) {
                 unsigned int entry = __ldg(&l2lWarpSchedule6[row][lane]);
-                int const basisIndex = entry & 63u;
-                int const primaryIndex = (entry >> 6) & 63u;
-                int const secondaryIndex = (entry >> 12) & 63u;
-                int const kind = (entry >> 18) & 3u;
+                int const basisIndex = entry & 255u;
+                int const primaryIndex = (entry >> 8) & 255u;
+                int const secondaryIndex = (entry >> 16) & 255u;
+                int const kind = (entry >> 24) & 3u;
                 Real const sourceValue =
                     source[primaryIndex] + simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
-                Real const lowValue = __shfl_sync(kMask, basisLow, basisIndex & 31);
-                Real const highValue = __shfl_sync(kMask, basisHigh, basisIndex & 31);
-                Real const basisValue = basisIndex < 32 ? lowValue : highValue;
+                Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
+                Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
+                Real const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
                 Real const weight =
                     simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
                 partial = simdFma(weight, sourceValue, partial);
@@ -6362,38 +6388,45 @@ public:
             Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
             partial +=
                 (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
-            if ((lane & (groupWidth - 1)) == 0 && lane < 32) {
-                partial += source[(firstEntry >> 20) & 63u];
+            bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
+            if (leader) {
+                partial += source[targetIndex];
             }
-            target[4] = __shfl_sync(kMask, partial, 0);
-            target[5] = __shfl_sync(kMask, partial, 4);
-            target[6] = __shfl_sync(kMask, partial, 8);
-            target[7] = __shfl_sync(kMask, partial, 12);
-            target[8] = __shfl_sync(kMask, partial, 16);
-            target[9] = __shfl_sync(kMask, partial, 20);
-            target[10] = __shfl_sync(kMask, partial, 22);
-            target[11] = __shfl_sync(kMask, partial, 24);
-            target[12] = __shfl_sync(kMask, partial, 26);
-            target[13] = __shfl_sync(kMask, partial, 28);
-            target[14] = __shfl_sync(kMask, partial, 30);
+            if constexpr (kReplicate) {
+                target[4] = __shfl_sync(kMask, partial, 0);
+                target[5] = __shfl_sync(kMask, partial, 4);
+                target[6] = __shfl_sync(kMask, partial, 8);
+                target[7] = __shfl_sync(kMask, partial, 12);
+                target[8] = __shfl_sync(kMask, partial, 16);
+                target[9] = __shfl_sync(kMask, partial, 20);
+                target[10] = __shfl_sync(kMask, partial, 22);
+                target[11] = __shfl_sync(kMask, partial, 24);
+                target[12] = __shfl_sync(kMask, partial, 26);
+                target[13] = __shfl_sync(kMask, partial, 28);
+                target[14] = __shfl_sync(kMask, partial, 30);
+            } else {
+                if (leader) {
+                    target[targetIndex] = partial;
+                }
+            }
         }
         {
-            // Fixed contraction phase 2: 8 rows.
+            // Fixed contraction phase 2: 8 rows, 21 outputs.
             int const groupWidth = lane < 20 ? 2 : (lane < 31 ? 1 : (1));
+            int const targetIndex = __ldg(&l2lWarpTargets6[2][lane]);
             Real partial = simdBroadcast<Real>(0);
-            unsigned int const firstEntry = __ldg(&l2lWarpSchedule6[14][lane]);
 #pragma unroll
             for (int row = 14; row < 22; ++row) {
                 unsigned int entry = __ldg(&l2lWarpSchedule6[row][lane]);
-                int const basisIndex = entry & 63u;
-                int const primaryIndex = (entry >> 6) & 63u;
-                int const secondaryIndex = (entry >> 12) & 63u;
-                int const kind = (entry >> 18) & 3u;
+                int const basisIndex = entry & 255u;
+                int const primaryIndex = (entry >> 8) & 255u;
+                int const secondaryIndex = (entry >> 16) & 255u;
+                int const kind = (entry >> 24) & 3u;
                 Real const sourceValue =
                     source[primaryIndex] + simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
-                Real const lowValue = __shfl_sync(kMask, basisLow, basisIndex & 31);
-                Real const highValue = __shfl_sync(kMask, basisHigh, basisIndex & 31);
-                Real const basisValue = basisIndex < 32 ? lowValue : highValue;
+                Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
+                Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
+                Real const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
                 Real const weight =
                     simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
                 partial = simdFma(weight, sourceValue, partial);
@@ -6401,50 +6434,69 @@ public:
             Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
             partial +=
                 (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
-            if ((lane & (groupWidth - 1)) == 0 && lane < 31) {
-                partial += source[(firstEntry >> 20) & 63u];
+            bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 31;
+            if (leader) {
+                partial += source[targetIndex];
             }
-            target[15] = __shfl_sync(kMask, partial, 0);
-            target[16] = __shfl_sync(kMask, partial, 2);
-            target[17] = __shfl_sync(kMask, partial, 4);
-            target[18] = __shfl_sync(kMask, partial, 6);
-            target[19] = __shfl_sync(kMask, partial, 8);
-            target[20] = __shfl_sync(kMask, partial, 10);
-            target[21] = __shfl_sync(kMask, partial, 12);
-            target[22] = __shfl_sync(kMask, partial, 14);
-            target[23] = __shfl_sync(kMask, partial, 16);
-            target[24] = __shfl_sync(kMask, partial, 18);
-            target[25] = __shfl_sync(kMask, partial, 20);
-            target[26] = __shfl_sync(kMask, partial, 21);
-            target[27] = __shfl_sync(kMask, partial, 22);
-            target[28] = __shfl_sync(kMask, partial, 23);
-            target[29] = __shfl_sync(kMask, partial, 24);
-            target[30] = __shfl_sync(kMask, partial, 25);
-            target[31] = __shfl_sync(kMask, partial, 26);
-            target[32] = __shfl_sync(kMask, partial, 27);
-            target[33] = __shfl_sync(kMask, partial, 28);
-            target[34] = __shfl_sync(kMask, partial, 29);
-            target[35] = __shfl_sync(kMask, partial, 30);
+            if constexpr (kReplicate) {
+                target[15] = __shfl_sync(kMask, partial, 0);
+                target[16] = __shfl_sync(kMask, partial, 2);
+                target[17] = __shfl_sync(kMask, partial, 4);
+                target[18] = __shfl_sync(kMask, partial, 6);
+                target[19] = __shfl_sync(kMask, partial, 8);
+                target[20] = __shfl_sync(kMask, partial, 10);
+                target[21] = __shfl_sync(kMask, partial, 12);
+                target[22] = __shfl_sync(kMask, partial, 14);
+                target[23] = __shfl_sync(kMask, partial, 16);
+                target[24] = __shfl_sync(kMask, partial, 18);
+                target[25] = __shfl_sync(kMask, partial, 20);
+                target[26] = __shfl_sync(kMask, partial, 21);
+                target[27] = __shfl_sync(kMask, partial, 22);
+                target[28] = __shfl_sync(kMask, partial, 23);
+                target[29] = __shfl_sync(kMask, partial, 24);
+                target[30] = __shfl_sync(kMask, partial, 25);
+                target[31] = __shfl_sync(kMask, partial, 26);
+                target[32] = __shfl_sync(kMask, partial, 27);
+                target[33] = __shfl_sync(kMask, partial, 28);
+                target[34] = __shfl_sync(kMask, partial, 29);
+                target[35] = __shfl_sync(kMask, partial, 30);
+            } else {
+                if (leader) {
+                    target[targetIndex] = partial;
+                }
+            }
         }
-        target[36] = source[36];
-        target[37] = source[37];
-        target[38] = source[38];
-        target[39] = source[39];
-        target[40] = source[40];
-        target[41] = source[41];
-        target[42] = source[42];
-        target[43] = source[43];
-        target[44] = source[44];
-        target[45] = source[45];
-        target[46] = source[46];
-        target[47] = source[47];
-        target[48] = source[48];
-        target[49] = source[49];
-        if (!doPhi) {
-            target[0] = source[0];
+        if constexpr (kReplicate) {
+            target[36] = source[36];
+            target[37] = source[37];
+            target[38] = source[38];
+            target[39] = source[39];
+            target[40] = source[40];
+            target[41] = source[41];
+            target[42] = source[42];
+            target[43] = source[43];
+            target[44] = source[44];
+            target[45] = source[45];
+            target[46] = source[46];
+            target[47] = source[47];
+            target[48] = source[48];
+            target[49] = source[49];
+            if (!doPhi) {
+                target[0] = source[0];
+            }
+        } else {
+            // Top-rank coefficients and the trace copy through unchanged.
+            for (int index = 36 + lane; index <= 49; index += 32) {
+                target[index] = source[index];
+            }
+            // Lane zero led the potential group, so this restore is same-thread.
+            if (!doPhi && lane == 0) {
+                target[0] = source[0];
+            }
         }
         // The caller may overwrite shared source storage from lane zero on
-        // return. Finish EVERY lane source read before permitting that write.
+        // return. Finish EVERY lane source read (and every target write)
+        // before permitting that write.
         __syncwarp(kMask);
     }
 };

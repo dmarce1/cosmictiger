@@ -20,14 +20,34 @@ arithmetic. P2M, L2P, and contraction against precomputed harmonic Ewald
 derivatives were added to the imported rational-expression generator.
 
 CUDA L2L has a generated cooperative schedule in `tools/stf/stf_cuda.py`.
-All 32 lanes translate one expansion using aligned lane groups, then broadcast
-the completed coefficients to every lane. The degree-six schedule uses 22 rows,
-three phases, and 86 shuffle instructions per lane. Its tables use coalesced
-read-only global loads, and the polynomial basis uses lane-owned registers and
-shuffle lookups to avoid expensive dynamic register-array indexing. A final
-warp barrier completes all source reads before
-the caller can overwrite the expansion from lane zero. Generation asserts that
-every symbolic Taylor term appears exactly once.
+It emits one fully specialized `L2lWarpKernel<L, true>` for the requested local
+degree `L` in 2 through 11; the schedule table, the per-phase target table, the
+basis register count, the lane-group widths and the phase code are compile-time
+constants of that degree. All 32 lanes translate one expansion using aligned
+power-of-two lane groups. Each 32-bit schedule entry packs three 8-bit
+coefficient indices (basis, primary, secondary) and a 2-bit kind (padding,
+direct term, or trace-reduced `nz = 2` term); the output coefficient of each
+group comes from a separate per-phase `l2lWarpTargets` table. Both tables use
+coalesced read-only global loads. The polynomial basis is distributed over
+`ceil((L + 1)^2 / 32)` lane-owned registers (two at degree six, five at degree
+eleven): basis index `i` lives in word `i >> 5` on lane `i & 31`, and each row
+fetches it with one shuffle per word plus a constant selection chain, avoiding
+dynamic register-array indexing.
+
+Two entry points share that schedule. `translate` broadcasts every completed
+coefficient to all lanes' private expansions, as the production tree walk
+expects today. `translateInto` writes into a non-aliasing target of
+`(L + 1)^2 + 1` values (for example a shared-memory expansion): each group's
+leader stores its coefficient once, strided lanes copy the unchanged top-rank
+coefficients and trace, and no broadcast shuffles are issued. Both end with a
+warp barrier that completes all source reads and target writes before the caller
+can overwrite the expansion. The degree-six schedule uses 22 rows, three phases,
+and 86 shuffle instructions per lane (50 for `translateInto`); degree eleven
+uses 137 rows, 22 phases, and 873 shuffles per lane (752 for `translateInto`).
+Generation asserts that every symbolic Taylor term appears exactly once, that
+every output below the top rank owns exactly one aligned lane group inside the
+warp, that packed indices and kinds fit their fields, and that padded entries
+are kind zero.
 
 ## Constant background
 
@@ -79,8 +99,9 @@ Ewald sum, including periodic seams and excluded inactive particles.
 
 `stf_l2l_cuda` independently checks every coefficient and every lane after one
 and 17 translations, both potential modes, nonzero traces, linear fields, and
-multiple warps per block. It also checks the caller's synchronized in-place
-update pattern. The old CUDA generator omitted the last of 616 nonpotential
+multiple warps per block, at whichever local degree `ORDER` selects. It checks
+`translate` through the caller's synchronized in-place update pattern and
+`translateInto` through ping-pong shared-memory source and target expansions. The old CUDA generator omitted the last of 616 nonpotential
 terms, `Lzzzzzz * dz^4 / 24` in `Lzz`; the repeated-shift checks detect that trace
 drift in the unchanged legacy baseline.
 
