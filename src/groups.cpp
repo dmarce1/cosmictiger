@@ -292,16 +292,7 @@ std::pair<size_t, size_t> groupsSave(int number, double scale, double time) {
     std::string const directory = "groups." + std::to_string(number) + "/";
     std::string const rank = std::to_string(hpxRank());
     std::string const recordName = directory + "rockstar." + rank + ".dat";
-    FILE* recordFile = fopen(recordName.c_str(), "wb");
-    if (recordFile == nullptr) {
-        throw std::runtime_error("Cannot write ROCKSTAR catalogue: " + recordName);
-    }
-    size_t const recordsWritten =
-        fwrite(rockstarRecords.data(), sizeof(RockstarRecord), rockstarRecords.size(), recordFile);
-    int const recordClose = fclose(recordFile);
-    if (recordsWritten != rockstarRecords.size() || recordClose != 0) {
-        throw std::runtime_error("Incomplete ROCKSTAR catalogue: " + recordName);
-    }
+    rockstarWriteCatalogue(recordName, rockstarRecords.data(), rockstarRecords.size());
     std::string const historyName = directory + "rockstar_hosts." + rank + ".dat";
     std::ofstream history(historyName);
     for (auto const& entry : haloHosts) {

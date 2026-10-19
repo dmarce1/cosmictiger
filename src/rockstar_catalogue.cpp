@@ -1,9 +1,15 @@
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cmath>
+#include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <functional>
 #include <limits>
 #include <numeric>
+#include <stdexcept>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -17,6 +23,53 @@
 
 // ROCKSTAR section/equation references: Behroozi, Wechsler & Wu (2013),
 // https://arxiv.org/html/1110.4372v3
+
+Float16 rockstarEncodeHalf(double value, char const* fieldName) {
+    Float16 encoded;
+    try {
+        encoded = double2float16(value);
+    } catch (std::overflow_error const&) {
+        throw std::overflow_error("ROCKSTAR field " + std::string(fieldName) + " = " +
+            std::to_string(value) + " exceeds IEEE binary16 finite range [-65504, 65504]");
+    }
+    if ((encoded.bits & 0x7c00u) == 0x7c00u) {
+        throw std::domain_error("Nonfinite ROCKSTAR field " + std::string(fieldName));
+    }
+    return encoded;
+}
+
+void rockstarWriteCatalogue(
+    std::string const& filename, RockstarRecord const* records, size_t count) {
+    static_assert(
+        std::endian::native == std::endian::little || std::endian::native == std::endian::big);
+    // Preserve the raw record offsets, but never leave an old encoding marker
+    // attached to a partial rewrite. Readers require this sidecar for new files.
+    std::string const formatPath = filename + ".format";
+    std::filesystem::remove(formatPath);
+    FILE* output = std::fopen(filename.c_str(), "wb");
+    if (output == nullptr) {
+        throw std::runtime_error("Cannot write ROCKSTAR catalogue: " + filename);
+    }
+    size_t const written =
+        count == 0 ? 0 : std::fwrite(records, sizeof(RockstarRecord), count, output);
+    int const closeResult = std::fclose(output);
+    if (written != count || closeResult != 0) {
+        throw std::runtime_error("Incomplete ROCKSTAR catalogue: " + filename);
+    }
+    std::string const temporaryPath = formatPath + ".tmp";
+    std::ofstream format(temporaryPath);
+    format << "format_version 2\n"
+           << "float16 ieee754_binary16\n"
+           << "record_size " << sizeof(RockstarRecord) << '\n'
+           << "record_count " << count << '\n'
+           << "byte_order " << (std::endian::native == std::endian::little ? "little" : "big")
+           << '\n';
+    format.close();
+    if (!format) {
+        throw std::runtime_error("Cannot write ROCKSTAR format metadata: " + temporaryPath);
+    }
+    std::filesystem::rename(temporaryPath, formatPath);
+}
 
 namespace detail {
 
@@ -684,50 +737,55 @@ RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, flo
     record.jx = angular[0] * angularConversion;
     record.jy = angular[1] * angularConversion;
     record.jz = angular[2] * angularConversion;
-    record.vxc = double2float16(measured.vxc * velocityConversion);
-    record.vyc = double2float16(measured.vyc * velocityConversion);
-    record.vzc = double2float16(measured.vzc * velocityConversion);
-    record.vxb = double2float16(bulk[0] * velocityConversion);
-    record.vyb = double2float16(bulk[1] * velocityConversion);
-    record.vzb = double2float16(bulk[2] * velocityConversion);
-    record.sigV = double2float16(std::sqrt(sigmaCore) * velocityConversion);
-    record.sigVb = double2float16(std::sqrt(sigmaBulk) * velocityConversion);
-    record.sigX = double2float16(std::sqrt(sigmaX) * lengthConversion);
-    record.rvir = double2float16(virial.radius * lengthConversion);
-    record.rmax = double2float16((radii.empty() ? 0.0 : radii.back()) * lengthConversion);
-    record.rvmax = double2float16(circularRadius * lengthConversion);
-    record.rs = double2float16(rs * lengthConversion);
-    record.rkly = double2float16(klypin * lengthConversion);
-    record.vcircMax = double2float16(circular * velocityConversion);
+    record.vxc = rockstarEncodeHalf(measured.vxc * velocityConversion, "vxc");
+    record.vyc = rockstarEncodeHalf(measured.vyc * velocityConversion, "vyc");
+    record.vzc = rockstarEncodeHalf(measured.vzc * velocityConversion, "vzc");
+    record.vxb = rockstarEncodeHalf(bulk[0] * velocityConversion, "vxb");
+    record.vyb = rockstarEncodeHalf(bulk[1] * velocityConversion, "vyb");
+    record.vzb = rockstarEncodeHalf(bulk[2] * velocityConversion, "vzb");
+    record.sigV = rockstarEncodeHalf(std::sqrt(sigmaCore) * velocityConversion, "sigV");
+    record.sigVb = rockstarEncodeHalf(std::sqrt(sigmaBulk) * velocityConversion, "sigVb");
+    record.sigX = rockstarEncodeHalf(std::sqrt(sigmaX) * lengthConversion, "sigX");
+    record.rvir = rockstarEncodeHalf(virial.radius * lengthConversion, "rvir");
+    record.rmax =
+        rockstarEncodeHalf((radii.empty() ? 0.0 : radii.back()) * lengthConversion, "rmax");
+    record.rvmax = rockstarEncodeHalf(circularRadius * lengthConversion, "rvmax");
+    record.rs = rockstarEncodeHalf(rs * lengthConversion, "rs");
+    record.rkly = rockstarEncodeHalf(klypin * lengthConversion, "rkly");
+    record.vcircMax = rockstarEncodeHalf(circular * velocityConversion, "vcircMax");
     // Sec. III.5.4: peak/COM and core/bulk offsets, followed by T/|U|.
-    record.deltaX =
-        double2float16(std::sqrt(std::pow(center[0] - group.x, 2) +
-                           std::pow(center[1] - group.y, 2) + std::pow(center[2] - group.z, 2)) *
-            lengthConversion);
-    record.deltaV = double2float16(
+    record.deltaX = rockstarEncodeHalf(
+        std::sqrt(std::pow(center[0] - group.x, 2) + std::pow(center[1] - group.y, 2) +
+            std::pow(center[2] - group.z, 2)) *
+            lengthConversion,
+        "deltaX");
+    record.deltaV = rockstarEncodeHalf(
         std::sqrt(std::pow(bulk[0] - measured.vxc, 2) + std::pow(bulk[1] - measured.vyc, 2) +
             std::pow(bulk[2] - measured.vzc, 2)) *
-        velocityConversion);
-    record.toW = double2float16(measured.w < 0.0 ? measured.t / -measured.w : 0.0);
+            velocityConversion,
+        "deltaV");
+    record.toW = rockstarEncodeHalf(measured.w < 0.0 ? measured.t / -measured.w : 0.0, "toW");
     // Sec. III.5.4, Eq. (9): Peebles spin; our sums use unit particle masses.
-    record.lambda = double2float16(mass > 0.0 ?
+    record.lambda = rockstarEncodeHalf(mass > 0.0 ?
             angularMagnitude * std::sqrt(std::abs(energy)) / (gm * std::pow(mass, 2.5)) :
-            0.0);
+            0.0,
+        "lambda");
     // Eq. (10): Bullock spin, with physical Rvir = scale * comoving Rvir.
-    record.lambdaB = double2float16(mass > 0.0 && virial.radius > 0.0 ?
+    record.lambdaB = rockstarEncodeHalf(mass > 0.0 && virial.radius > 0.0 ?
             angularMagnitude / std::sqrt(2.0 * gm * mass * mass * mass * scale * virial.radius) :
-            0.0);
-    record.boa = double2float16(haloShape.bOverA);
-    record.coa = double2float16(haloShape.cOverA);
-    record.ax = double2float16(haloShape.major[0] * lengthConversion);
-    record.ay = double2float16(haloShape.major[1] * lengthConversion);
-    record.az = double2float16(haloShape.major[2] * lengthConversion);
-    record.boa500 = double2float16(shape500.bOverA);
-    record.coa500 = double2float16(shape500.cOverA);
-    record.ax500 = double2float16(shape500.major[0] * lengthConversion);
-    record.ay500 = double2float16(shape500.major[1] * lengthConversion);
-    record.az500 = double2float16(shape500.major[2] * lengthConversion);
-    record.zValue = double2float16(1.0 / scale - 1.0);
+            0.0,
+        "lambdaB");
+    record.boa = rockstarEncodeHalf(haloShape.bOverA, "boa");
+    record.coa = rockstarEncodeHalf(haloShape.cOverA, "coa");
+    record.ax = rockstarEncodeHalf(haloShape.major[0] * lengthConversion, "ax");
+    record.ay = rockstarEncodeHalf(haloShape.major[1] * lengthConversion, "ay");
+    record.az = rockstarEncodeHalf(haloShape.major[2] * lengthConversion, "az");
+    record.boa500 = rockstarEncodeHalf(shape500.bOverA, "boa500");
+    record.coa500 = rockstarEncodeHalf(shape500.cOverA, "coa500");
+    record.ax500 = rockstarEncodeHalf(shape500.major[0] * lengthConversion, "ax500");
+    record.ay500 = rockstarEncodeHalf(shape500.major[1] * lengthConversion, "ay500");
+    record.az500 = rockstarEncodeHalf(shape500.major[2] * lengthConversion, "az500");
+    record.zValue = rockstarEncodeHalf(1.0 / scale - 1.0, "zValue");
     return record;
 }
 

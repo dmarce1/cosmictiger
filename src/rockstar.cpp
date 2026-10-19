@@ -792,7 +792,7 @@ Vector<RockstarRecord> rockstarFindSubgroups(Vector<LightconeEntry> const& input
             double const radius = sqrt(
                 sqr(origin[0] + groups[i].x, origin[1] + groups[i].y, origin[2] + groups[i].z));
             double const haloScale = cosmosTauToScale(initialScale, std::max(0.0, tauMax - radius));
-            record.zValue = double2float16(1.0 / haloScale - 1.0);
+            record.zValue = rockstarEncodeHalf(1.0 / haloScale - 1.0, "zValue");
             records.push_back(record);
         }
     }

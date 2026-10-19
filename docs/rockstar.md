@@ -1,5 +1,8 @@
 # ROCKSTAR halo finding
 
+For local snapshot browsing, filtering, spatial plots, host/subhalo inspection,
+and CSV selections, see [Halo Explorer](halo_viewer.md).
+
 The implementation follows the phase-space hierarchy, halo assignment, unbinding,
 and property definitions in [Behroozi, Wechsler & Wu, arXiv:1110.4372v3](https://arxiv.org/html/1110.4372v3).
 The paper is the algorithm reference; this code is an independent implementation,
@@ -66,7 +69,37 @@ uses `a * r_comoving cross (v - v_bulk)`. Circular velocity uses
 
 ## Catalogue conventions
 
-The existing `RockstarRecord` field order and binary layout are retained.
+The existing `RockstarRecord` field order and two-byte half-field storage are
+retained. Half fields now contain standard IEEE 754 binary16 bits, with signed
+zero, subnormals, and round-to-nearest, ties-to-even conversion in the default
+floating-point environment. Conversions use C++23 `std::float16_t` in a small
+host-only library; the simulation and CUDA sources can remain C++20. The host
+compiler and standard library must provide `<stdfloat>` and `std::float16_t`.
+Every finite input outside `[-65504, 65504]` is rejected before conversion,
+including values that could round back to the largest finite half. Catalogue
+packing also rejects nonfinite properties and reports the offending field name.
+
+Both snapshot and lightcone files have a companion `<filename>.format` sidecar:
+
+```
+format_version 2
+float16 ieee754_binary16
+record_size 128
+record_count <number of records>
+byte_order little
+```
+
+The writer records the actual native record size and byte order (`little` or
+`big`). The sidecar is published only after the data file closes successfully,
+and an old sidecar is removed before rewriting a data file. Snapshot readers
+must also require `rockstar_hosts.complete` to establish completion of all ranks.
+These sidecars identify the half encoding; the remaining raw C++ record layout
+is still native ABI dependent. Older files without the sidecar have an
+unidentified encoding and must not be silently interpreted as IEEE binary16.
+The former encoding used exponent zero and exponent 31 differently; any older
+catalogue that needs preservation must be decoded with its original codec before
+conversion, with the new finite-range checks applied.
+
 `mvir` uses the Bryan–Norman virial threshold. The public fields `m200`, `m500`, and
 `m2500` mean **M200c, M500c, and M2500c**, respectively; their reference is the
 critical density at the measurement epoch, not the mean matter density.
@@ -127,9 +160,19 @@ NFW fits with fewer than two resolved radial bins, degenerate shells, or a
 likelihood optimum at the finite search boundary return zero scale radius and
 scale density. The Klypin estimate returns zero for inconsistent or nonfinite
 inputs; `Vmax=Vvir` uses the limiting concentration `2.162581587`. Half-precision
-record fields retain their existing precision and range.
+record fields retain 11 significand bits for normal values; their maximum finite
+magnitude is now 65504, and the smallest positive subnormal is `2^-24`.
 
 ## Regression coverage
+
+`fp16_standard` and `fp16_fast_math` check all 65,536 binary16 representations,
+every finite adjacent-value rounding midpoint and its binary64 neighbors for
+both signs, signed zeros, subnormals, special values, and strict overflow checks.
+The second test compiles the caller with fast-math while the standard conversion
+library retains IEEE compilation settings. The runtime `rockstar_cpu` test also
+round-trips generated snapshot and lightcone records and synthetic half boundary
+patterns through the shared catalogue writer, checking all fields and format
+sidecars, along with field-specific overflow/nonfinite errors.
 
 `rockstar_properties` checks SO membership/density consistency, equal-radius ties,
 multiple crossings, distant dense pairs, cosmology limits, rotated and degenerate

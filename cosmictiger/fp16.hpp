@@ -8,76 +8,81 @@
 #ifndef FP16_HPP_
 #define FP16_HPP_
 
-#include <math.h>
+#include <cstdint>
+#include <limits>
+#include <type_traits>
 
+// IEEE 754 binary16 storage. The bits are sign:1, exponent:5, fraction:10.
 struct Float16 {
-    unsigned short m : 10;
-    unsigned short e : 5;
-    unsigned short s : 1;
+    std::uint16_t bits;
 };
 
-inline Float16 double2float16(double r) {
-    Float16 f16;
-    if (r == 0.0) {
-        f16.m = 0;
-        f16.e = 0;
-        f16.s = 0;
-    } else {
-        double absr = fabs(r);
-        double e = floor(log2(absr));
-        double m = (absr * pow(2.0, -e) - 1.0) * double(1 << 10);
-        int m0 = round(m);
-        int e0 = e;
-        if (m0 == 1024) {
-            m0 = 0;
-            e0++;
-        }
-        e0 += 15;
-        if (e0 > 31) {
-            PRINT("fp16 overflow with %e\n", r);
-            abort();
-        } else if (e0 < 0) {
-            f16 = double2float16(0.0);
-        } else {
-            f16.e = e0;
-            f16.m = m0;
-            f16.s = r < 0.0;
-        }
-    }
-    return f16;
-}
+static_assert(sizeof(Float16) == 2);
+static_assert(std::is_trivial_v<Float16> && std::is_standard_layout_v<Float16>);
 
-inline double float162double(Float16 f) {
-    double r;
-    if (f.s == 0 && f.e == 0 && f.m == 0) {
-        r = 0.0;
-    } else {
-        r = (1.0 + f.m / double(1 << 10)) * double(1ULL << f.e) / double(1 << 15);
-        if (f.s) {
-            r = -r;
-        }
-    }
-    return r;
-}
+// The out-of-line converters use C++23 std::float16_t; this storage header also
+// remains usable by the C++20 CUDA compiler. Finite magnitudes above 65504 throw
+// std::overflow_error. Conversion follows the default round-to-nearest,
+// ties-to-even environment, and supports signed zeros, subnormals, infinities,
+// and NaNs according to the standard floating-point implementation.
+Float16 double2float16(double value);
+double float162double(Float16 value);
 
 namespace std {
 template <>
 struct numeric_limits<Float16> {
-    static double max() {
-        Float16 f;
-        f.e = 0x1F;
-        f.m = 0x3FF;
-        f.s = 0x0;
-        return float162double(f);
+    static constexpr bool is_specialized = true;
+    static constexpr bool is_signed = true;
+    static constexpr bool is_integer = false;
+    static constexpr bool is_exact = false;
+    static constexpr bool has_infinity = true;
+    static constexpr bool has_quiet_NaN = true;
+    static constexpr bool has_signaling_NaN = true;
+    static constexpr float_denorm_style has_denorm = denorm_present;
+    static constexpr bool has_denorm_loss = false;
+    static constexpr float_round_style round_style = round_to_nearest;
+    static constexpr bool is_iec559 = true;
+    static constexpr bool is_bounded = true;
+    static constexpr bool is_modulo = false;
+    static constexpr int digits = 11;
+    static constexpr int digits10 = 3;
+    static constexpr int max_digits10 = 5;
+    static constexpr int radix = 2;
+    static constexpr int min_exponent = -13;
+    static constexpr int min_exponent10 = -4;
+    static constexpr int max_exponent = 16;
+    static constexpr int max_exponent10 = 4;
+    static constexpr bool traps = false;
+    static constexpr bool tinyness_before = false;
+
+    static constexpr Float16 min() noexcept {
+        return {0x0400};
     }
-    static double min() {
-        Float16 f;
-        f.e = 0x0;
-        f.m = 0x1;
-        f.s = 0x0;
-        return float162double(f);
+    static constexpr Float16 lowest() noexcept {
+        return {0xfbff};
+    }
+    static constexpr Float16 max() noexcept {
+        return {0x7bff};
+    }
+    static constexpr Float16 epsilon() noexcept {
+        return {0x1400};
+    }
+    static constexpr Float16 round_error() noexcept {
+        return {0x3800};
+    }
+    static constexpr Float16 infinity() noexcept {
+        return {0x7c00};
+    }
+    static constexpr Float16 quiet_NaN() noexcept {
+        return {0x7e00};
+    }
+    static constexpr Float16 signaling_NaN() noexcept {
+        return {0x7d00};
+    }
+    static constexpr Float16 denorm_min() noexcept {
+        return {0x0001};
     }
 };
-
 }    // namespace std
+
 #endif /* FP16_HPP_ */

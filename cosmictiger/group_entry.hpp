@@ -25,15 +25,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #include <cosmictiger/containers.hpp>
 #include <cosmictiger/defs.hpp>
+#include <cosmictiger/group_header.hpp>
 
 using GroupInteger = long long;
-
-struct GroupHeader {
-    int number;
-    double time;
-    double boxLength;
-    double scale;
-};
 
 struct GroupEntry {
     GroupInteger id;

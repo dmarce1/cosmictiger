@@ -1,12 +1,14 @@
 #pragma once
 
 #include <limits>
+#include <string>
 
 #include <cosmictiger/containers.hpp>
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/fp16.hpp>
 #include <cosmictiger/groups.hpp>
 #include <cosmictiger/lightcone.hpp>
+#include <cosmictiger/rockstar_record.hpp>
 
 // Paper references in this implementation use Behroozi, Wechsler & Wu (2013),
 // arXiv:1110.4372v3: https://arxiv.org/html/1110.4372v3
@@ -65,62 +67,6 @@ struct RockstarTree {
     DeviceVector<int> neighbors;
 };
 
-union RockstarId {
-    struct {
-        unsigned long long fofId : 48;
-        unsigned long long haloId : 15;
-        unsigned long long sys : 1;
-    };
-    unsigned long long id;
-};
-
-struct RockstarRecord {
-    RockstarId id;
-    double x;
-    double y;
-    double z;
-    float mvir;
-    float e;
-    float jx;
-    float jy;
-    float jz;
-    float m200;
-    float m500;
-    float m2500;
-    short pid;
-    Float16 zValue;
-    Float16 rmax;
-    Float16 rvir;
-    Float16 rvmax;
-    Float16 rs;
-    Float16 rkly;
-    Float16 sigX;
-    Float16 deltaX;
-    Float16 toW;
-    Float16 sigV;
-    Float16 sigVb;
-    Float16 vcircMax;
-    Float16 deltaV;
-    Float16 boa;
-    Float16 coa;
-    Float16 ax;
-    Float16 ay;
-    Float16 az;
-    Float16 boa500;
-    Float16 coa500;
-    Float16 ax500;
-    Float16 ay500;
-    Float16 az500;
-    Float16 lambda;
-    Float16 lambdaB;
-    Float16 vxc;
-    Float16 vyc;
-    Float16 vzc;
-    Float16 vxb;
-    Float16 vyb;
-    Float16 vzb;
-};
-
 struct Subgroup {
     int id = -1;
     int parent;
@@ -177,6 +123,11 @@ void rockstarPruneCatalogueGroups(Vector<Subgroup>& groups, float scale);
 DeviceVector<RockstarParticle> rockstarGatherParticles(Vector<Subgroup> const& groups, int index);
 RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, float scale,
     Array<double, NDIM> const& origin, bool inclusive = true);
+// Checked IEEE binary16 storage for finite physical catalogue properties.
+Float16 rockstarEncodeHalf(double value, char const* fieldName);
+// Publish native records and an encoding sidecar after a successful close.
+void rockstarWriteCatalogue(
+    std::string const& filename, RockstarRecord const* records, size_t count);
 GroupEntry rockstarMakeGroupEntry(
     Vector<Subgroup> const& groups, int index, float scale, Array<double, NDIM> const& origin);
 // A single candidate, exposed for independent unbinding regressions.

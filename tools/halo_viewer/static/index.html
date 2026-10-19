@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Halo Explorer · CosmicTiger</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="/" aria-label="Halo Explorer home"><span class="brand-symbol" aria-hidden="true"><i></i></span><span>Halo Explorer<small>COSMICTIGER</small></span></a>
+    <div class="header-context"><span class="status-dot" aria-hidden="true"></span> Local catalog workspace</div>
+    <span class="version-label">SNAPSHOT EXPLORER <span>01</span></span>
+  </header>
+  <div id="app-error" class="error-banner" role="alert" hidden></div>
+  <div id="empty-workspace" class="empty-workspace" hidden>
+    <div class="empty-orbit" aria-hidden="true">✦</div>
+    <p class="eyebrow">YOUR HALO WORKSPACE</p><h1>Start with a snapshot.</h1>
+    <p>Import a completed CosmicTiger ROCKSTAR snapshot to explore its halos, spatial structure, and host relationships.</p>
+    <pre><code id="import-command">python3 tools/halo_viewer/halo_viewer.py import SNAPSHOT_DIRECTORY --database halos.sqlite</code></pre>
+    <p class="muted">Import runs from the command line. Refresh this page when the import completes.</p>
+    <button id="reload-catalogs" class="button primary" type="button">Check for catalogs <span aria-hidden="true">↻</span></button>
+  </div>
+  <div id="app-layout" class="app-layout" hidden>
+    <aside class="filter-sidebar" aria-label="Catalog and halo filters">
+      <div class="sidebar-heading"><span class="eyebrow">CATALOG</span><span class="sidebar-index">01</span></div>
+      <label class="field-label" for="catalog-select">Snapshot catalog</label>
+      <select id="catalog-select" aria-label="Snapshot catalog"></select>
+      <div id="catalog-context" class="catalog-context"></div>
+      <div class="sidebar-divider"></div>
+      <form id="filter-form">
+        <div class="filter-heading"><h2>Filter halos</h2><span id="filter-count" class="count-badge">0</span></div>
+        <label class="field-label" for="halo-id">Halo ID</label>
+        <input id="halo-id" name="halo_id" inputmode="numeric" autocomplete="off" placeholder="Exact ID…" aria-describedby="id-help">
+        <span id="id-help" class="field-hint">Persistent snapshot ID</span>
+        <label class="field-label" for="halo-kind">Classification</label>
+        <select id="halo-kind" name="kind"><option value="all">All halos</option><option value="distinct">Distinct halos</option><option value="subhalo">Subhalos</option></select>
+        <fieldset class="range-field"><legend>Virial mass <span>M☉/h</span></legend><div class="range-inputs"><input name="mvir_min" type="number" min="0" step="any" placeholder="Min" aria-label="Minimum virial mass"><span>–</span><input name="mvir_max" type="number" min="0" step="any" placeholder="Max" aria-label="Maximum virial mass"></div></fieldset>
+        <fieldset class="range-field"><legend>Virial radius <span>ckpc/h</span></legend><div class="range-inputs"><input name="rvir_min" type="number" min="0" step="any" placeholder="Min" aria-label="Minimum virial radius"><span>–</span><input name="rvir_max" type="number" min="0" step="any" placeholder="Max" aria-label="Maximum virial radius"></div></fieldset>
+        <fieldset class="range-field"><legend>Maximum circular velocity <span>km/s</span></legend><div class="range-inputs"><input name="vcircMax_min" type="number" min="0" step="any" placeholder="Min" aria-label="Minimum maximum circular velocity"><span>–</span><input name="vcircMax_max" type="number" min="0" step="any" placeholder="Max" aria-label="Maximum maximum circular velocity"></div></fieldset>
+        <fieldset class="range-field"><legend>Spin <span>λ · dimensionless</span></legend><div class="range-inputs"><input name="lambda_min" type="number" min="0" step="any" placeholder="Min" aria-label="Minimum spin"><span>–</span><input name="lambda_max" type="number" min="0" step="any" placeholder="Max" aria-label="Maximum spin"></div></fieldset>
+        <details class="region-filter"><summary>Spatial region <span>cMpc/h</span></summary><p>Bound a volume or use one axis to define a slice.</p><div class="region-head"><span>Axis</span><span>Minimum</span><span>Maximum</span></div><div class="region-row"><label for="x-min">X</label><input id="x-min" name="x_min" type="number" step="any" placeholder="Min" aria-label="Minimum X"><input name="x_max" type="number" step="any" placeholder="Max" aria-label="Maximum X"></div><div class="region-row"><label for="y-min">Y</label><input id="y-min" name="y_min" type="number" step="any" placeholder="Min" aria-label="Minimum Y"><input name="y_max" type="number" step="any" placeholder="Max" aria-label="Maximum Y"></div><div class="region-row"><label for="z-min">Z</label><input id="z-min" name="z_min" type="number" step="any" placeholder="Min" aria-label="Minimum Z"><input name="z_max" type="number" step="any" placeholder="Max" aria-label="Maximum Z"></div></details>
+        <p id="filter-error" class="filter-error" role="alert" hidden></p>
+        <div class="filter-actions"><button class="button primary" type="submit">Apply filters <span aria-hidden="true">→</span></button><button class="button quiet" type="reset">Reset</button></div>
+      </form>
+      <div class="sidebar-foot"><span class="status-dot" aria-hidden="true"></span> Queries and exports use the full catalog.<br><span>Spatial samples are labeled separately.</span></div>
+    </aside>
+    <main class="main-content">
+      <section class="catalog-overview" aria-label="Catalog overview"><div><p class="eyebrow">EXPLORE THE STRUCTURE</p><h1 id="catalog-title">Snapshot catalog</h1><p id="catalog-subtitle" class="muted"></p></div><div class="overview-metrics"><div><span>CATALOG HALOS</span><strong id="catalog-total">—</strong></div><div><span>DISTINCT</span><strong id="catalog-hosts">—</strong></div><div><span>SUBHALOS</span><strong id="catalog-subhalos">—</strong></div></div></section>
+      <div class="workspace">
+        <section class="panel spatial-panel" aria-labelledby="spatial-heading"><div class="panel-header"><div><span class="section-number">01 /</span><h2 id="spatial-heading">Spatial distribution</h2></div><div class="projection-control" role="group" aria-label="Spatial projection"><button type="button" data-view="xy" aria-pressed="true">XY</button><button type="button" data-view="xz" aria-pressed="false">XZ</button><button type="button" data-view="yz" aria-pressed="false">YZ</button></div></div><div class="plot-meta"><span id="point-count" role="status">Loading spatial distribution…</span><span class="coordinate-label">COMOVING · Mpc/h</span></div><div class="plot-wrap"><canvas id="spatial-canvas" aria-label="Halo spatial projection. Select a halo using the catalog table for keyboard access." role="img"></canvas><div id="plot-tooltip" class="plot-tooltip" hidden></div><div id="plot-empty" class="plot-empty" hidden>No halos match this selection.<small>Adjust the filters to widen your search.</small></div></div><div class="plot-footer"><span>Click a point to inspect a halo</span><div class="mass-legend"><span>LOW MASS</span><i></i><span>HIGH MASS</span></div></div></section>
+        <aside class="panel details-panel" aria-labelledby="details-heading"><div class="panel-header"><div><span class="section-number">03 /</span><h2 id="details-heading">Halo inspector</h2></div><span id="selection-dot" class="selection-dot" hidden></span></div><div id="detail-empty" class="detail-empty"><div class="selection-glyph" aria-hidden="true">⌖</div><h3>A closer look.</h3><p>Select a halo on the map or in the table to inspect its properties and connections.</p><div class="detail-empty-hint"><span>01</span> Explore a region<br><span>02</span> Select a halo<br><span>03</span> Follow its host &amp; subhalos</div></div><div id="halo-detail" hidden></div></aside>
+        <section class="panel table-panel" aria-labelledby="table-heading"><div class="panel-header"><div><span class="section-number">02 /</span><h2 id="table-heading">Halo catalog</h2><span id="match-count" class="count-badge">—</span></div><span class="export-actions"><a id="export-link" class="button export-button" href="#">Export selection <span aria-hidden="true">↗</span></a><a id="metadata-link" class="metadata-link" href="#">Selection metadata <span aria-hidden="true">↓</span></a></span></div><div id="table-status" class="table-status" role="status" aria-live="polite"></div><div class="table-scroll"><table id="halo-table"><thead><tr><th scope="col" aria-sort="none"><button type="button" data-sort="halo_id">Halo ID <span aria-hidden="true">↕</span></button></th><th scope="col">Type</th><th scope="col" aria-sort="descending"><button type="button" data-sort="mvir">Mvir <span aria-hidden="true">↓</span><small>M☉/h</small></button></th><th scope="col" aria-sort="none"><button type="button" data-sort="rvir">Rvir <span aria-hidden="true">↕</span><small>ckpc/h</small></button></th><th scope="col" aria-sort="none"><button type="button" data-sort="vcircMax">Vmax <span aria-hidden="true">↕</span><small>km/s</small></button></th></tr></thead><tbody id="halo-table-body"></tbody></table></div><div class="table-footer"><span id="page-info">—</span><div class="pagination"><button id="previous-page" type="button" aria-label="Previous page">←</button><span id="page-number">1</span><button id="next-page" type="button" aria-label="Next page">→</button></div></div></section>
+      </div>
+      <footer class="workspace-footer"><span>CosmicTiger / ROCKSTAR</span><span>Coordinates and radii are comoving. Masses are in M☉/h.</span></footer>
+    </main>
+  </div>
+</body>
+</html>

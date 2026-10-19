@@ -2,14 +2,19 @@
 #include <array>
 #include <bit>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <limits>
 #include <map>
+#include <memory>
 #include <random>
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 #include <vector>
 
 #include <cosmictiger/constants.hpp>
@@ -46,6 +51,265 @@ void requireRockstarClose(double actual, double expected, double relative,
     requireRockstar(rockstarTestFinite(actual) &&
             std::abs(actual - expected) <= absolute + relative * std::abs(expected),
         message + ": got " + std::to_string(actual) + ", expected " + std::to_string(expected));
+}
+
+struct RockstarHalfField {
+    char const* name;
+    Float16 RockstarRecord::*member;
+};
+
+constexpr std::array<RockstarHalfField, 31> kRockstarHalfFields{{
+    {"zValue", &RockstarRecord::zValue},
+    {"rmax", &RockstarRecord::rmax},
+    {"rvir", &RockstarRecord::rvir},
+    {"rvmax", &RockstarRecord::rvmax},
+    {"rs", &RockstarRecord::rs},
+    {"rkly", &RockstarRecord::rkly},
+    {"sigX", &RockstarRecord::sigX},
+    {"deltaX", &RockstarRecord::deltaX},
+    {"toW", &RockstarRecord::toW},
+    {"sigV", &RockstarRecord::sigV},
+    {"sigVb", &RockstarRecord::sigVb},
+    {"vcircMax", &RockstarRecord::vcircMax},
+    {"deltaV", &RockstarRecord::deltaV},
+    {"boa", &RockstarRecord::boa},
+    {"coa", &RockstarRecord::coa},
+    {"ax", &RockstarRecord::ax},
+    {"ay", &RockstarRecord::ay},
+    {"az", &RockstarRecord::az},
+    {"boa500", &RockstarRecord::boa500},
+    {"coa500", &RockstarRecord::coa500},
+    {"ax500", &RockstarRecord::ax500},
+    {"ay500", &RockstarRecord::ay500},
+    {"az500", &RockstarRecord::az500},
+    {"lambda", &RockstarRecord::lambda},
+    {"lambdaB", &RockstarRecord::lambdaB},
+    {"vxc", &RockstarRecord::vxc},
+    {"vyc", &RockstarRecord::vyc},
+    {"vzc", &RockstarRecord::vzc},
+    {"vxb", &RockstarRecord::vxb},
+    {"vyb", &RockstarRecord::vyb},
+    {"vzb", &RockstarRecord::vzb},
+}};
+
+class RockstarCatalogueDirectory {
+    std::filesystem::path path_;
+
+public:
+    RockstarCatalogueDirectory() {
+        std::random_device random;
+        for (int attempt = 0; attempt < 16; ++attempt) {
+            auto const candidate = std::filesystem::temp_directory_path() /
+                ("cosmictiger_rockstar_roundtrip_" + std::to_string(random()) + "_" +
+                    std::to_string(random()));
+            if (std::filesystem::create_directory(candidate)) {
+                path_ = candidate;
+                return;
+            }
+        }
+        throw std::runtime_error("ROCKSTAR: unable to create catalogue test directory");
+    }
+
+    ~RockstarCatalogueDirectory() {
+        std::error_code error;
+        std::filesystem::remove_all(path_, error);
+    }
+
+    std::filesystem::path const& path() const {
+        return path_;
+    }
+};
+
+void requireRockstarRecordEqual(
+    RockstarRecord const& actual, RockstarRecord const& expected, std::string const& context) {
+    requireRockstar(actual.id.id == expected.id.id && actual.pid == expected.pid,
+        context + ": catalogue or host ID changed");
+    std::array<double RockstarRecord::*, 3> const positions{
+        &RockstarRecord::x, &RockstarRecord::y, &RockstarRecord::z};
+    for (auto const member : positions) {
+        requireRockstar(
+            std::bit_cast<uint64_t>(actual.*member) == std::bit_cast<uint64_t>(expected.*member),
+            context + ": position changed");
+    }
+    std::array<float RockstarRecord::*, 8> const properties{&RockstarRecord::mvir,
+        &RockstarRecord::e, &RockstarRecord::jx, &RockstarRecord::jy, &RockstarRecord::jz,
+        &RockstarRecord::m200, &RockstarRecord::m500, &RockstarRecord::m2500};
+    for (auto const member : properties) {
+        requireRockstar(
+            std::bit_cast<uint32_t>(actual.*member) == std::bit_cast<uint32_t>(expected.*member),
+            context + ": float property changed");
+    }
+    for (auto const& field : kRockstarHalfFields) {
+        auto const actualHalf = actual.*field.member;
+        auto const expectedHalf = expected.*field.member;
+        requireRockstar(actualHalf.bits == expectedHalf.bits,
+            context + ": IEEE half bits changed for " + field.name);
+        requireRockstar(std::bit_cast<uint64_t>(float162double(actualHalf)) ==
+                std::bit_cast<uint64_t>(float162double(expectedHalf)),
+            context + ": decoded IEEE half changed for " + field.name);
+    }
+}
+
+void checkRockstarCatalogueRoundtrip(
+    RockstarRecord const* records, size_t count, std::string const& context) {
+    // These are the existing native-layout offsets, before the IEEE conversion.
+    static_assert(sizeof(RockstarRecord) == 128);
+    static_assert(offsetof(RockstarRecord, pid) == 64);
+    static_assert(offsetof(RockstarRecord, zValue) == 66);
+    static_assert(offsetof(RockstarRecord, vzb) == 126);
+    RockstarCatalogueDirectory directory;
+    auto const filename = (directory.path() / "catalogue.dat").string();
+    rockstarWriteCatalogue(filename, records, count);
+    requireRockstar(std::filesystem::file_size(filename) == count * sizeof(RockstarRecord),
+        context + ": catalogue record count or native layout changed");
+    std::unique_ptr<FILE, void (*)(FILE*)> input(
+        std::fopen(filename.c_str(), "rb"), [](FILE* file) { std::fclose(file); });
+    requireRockstar(bool(input), context + ": cannot reopen written catalogue");
+    std::vector<RockstarRecord> restored(count);
+    requireRockstar(count == 0 ||
+            std::fread(restored.data(), sizeof(RockstarRecord), count, input.get()) == count,
+        context + ": incomplete catalogue read");
+    requireRockstar(std::fgetc(input.get()) == EOF && !std::ferror(input.get()),
+        context + ": trailing bytes or catalogue read failure");
+    for (size_t i = 0; i < count; ++i) {
+        requireRockstarRecordEqual(
+            restored[i], records[i], context + " record " + std::to_string(i));
+    }
+    std::ifstream format(filename + ".format");
+    requireRockstar(bool(format), context + ": missing format metadata");
+    std::map<std::string, std::string> metadata;
+    std::string key;
+    std::string value;
+    while (format >> key) {
+        requireRockstar(bool(format >> value), context + ": incomplete format metadata entry");
+        requireRockstar(metadata.emplace(key, value).second,
+            context + ": duplicate format metadata key " + key);
+    }
+    requireRockstar(format.eof() && !format.bad(), context + ": unreadable format metadata");
+    requireRockstar(metadata.size() == 5 && metadata["format_version"] == "2" &&
+            metadata["float16"] == "ieee754_binary16" &&
+            metadata["record_size"] == std::to_string(sizeof(RockstarRecord)) &&
+            metadata["record_count"] == std::to_string(count) &&
+            metadata["byte_order"] ==
+                (std::endian::native == std::endian::little ? "little" : "big"),
+        context + ": incorrect IEEE catalogue format metadata");
+}
+
+void checkRockstarCataloguePublication() {
+    RockstarCatalogueDirectory directory;
+    auto const filename = (directory.path() / "catalogue.dat").string();
+    auto const requireCount = [&](size_t count) {
+        requireRockstar(std::filesystem::file_size(filename) == count * sizeof(RockstarRecord),
+            "rewritten catalogue has stale records");
+        std::ifstream format(filename + ".format");
+        std::map<std::string, std::string> metadata;
+        std::string key;
+        std::string value;
+        while (format >> key >> value) {
+            metadata.emplace(key, value);
+        }
+        requireRockstar(metadata["format_version"] == "2" &&
+                metadata["float16"] == "ieee754_binary16" &&
+                metadata["record_count"] == std::to_string(count),
+            "rewritten catalogue has missing or stale format metadata");
+    };
+    RockstarRecord const record{};
+    rockstarWriteCatalogue(filename, &record, 1);
+    requireCount(1);
+    rockstarWriteCatalogue(filename, nullptr, 0);
+    requireCount(0);
+    requireRockstar(
+        std::filesystem::remove(filename) && std::filesystem::create_directory(filename),
+        "unable to prepare catalogue write-failure fixture");
+    bool failed = false;
+    try {
+        rockstarWriteCatalogue(filename, &record, 1);
+    } catch (std::runtime_error const&) {
+        failed = true;
+    }
+    requireRockstar(failed, "catalogue write failure was not reported");
+    requireRockstar(!std::filesystem::exists(filename + ".format"),
+        "failed catalogue write left a stale format marker");
+}
+
+void checkRockstarCatalogueHalfBoundaries() {
+    struct HalfCase {
+        uint16_t bits;
+        double value;
+    };
+    std::array<HalfCase, 13> const cases{{
+        {0x0000, 0.0},
+        {0x8000, -0.0},
+        {0x0001, 0x1p-24},
+        {0x8001, -0x1p-24},
+        {0x03ff, 1023.0 * 0x1p-24},
+        {0x0400, 0x1p-14},
+        {0x3c00, 1.0},
+        {0x3c01, 1.0 + 0x1p-10},
+        {0xc000, -2.0},
+        {0x7bff, 65504.0},
+        {0xfbff, -65504.0},
+        {0x7c00, std::numeric_limits<double>::infinity()},
+        {0xfc00, -std::numeric_limits<double>::infinity()},
+    }};
+    std::array<RockstarRecord, 14> records{};
+    for (size_t i = 0; i < records.size(); ++i) {
+        auto& record = records[i];
+        record.id.fofId = UINT64_C(0xabcdef123456) + i;
+        record.id.haloId = 32767 - i;
+        record.id.sys = i % 2;
+        record.pid = int(i) - 1;
+        record.x = 1.0 + i * 0x1p-40;
+        record.y = -0.0;
+        record.z = -3.25;
+        record.mvir = 1.25f;
+        record.e = -2.5f;
+        record.jx = -0.0f;
+        record.jy = 0.125f;
+        record.jz = -0.25f;
+        record.m200 = 2.0f;
+        record.m500 = 1.5f;
+        record.m2500 = 0.75f;
+        for (size_t fieldIndex = 0; fieldIndex < kRockstarHalfFields.size(); ++fieldIndex) {
+            auto const& field = kRockstarHalfFields[fieldIndex];
+            size_t const caseIndex = (i + fieldIndex) % records.size();
+            auto& half = record.*field.member;
+            if (caseIndex < cases.size()) {
+                half = double2float16(cases[caseIndex].value);
+                requireRockstar(half.bits == cases[caseIndex].bits,
+                    std::string("catalogue known IEEE encoding for ") + field.name);
+                requireRockstar(std::bit_cast<uint64_t>(float162double(half)) ==
+                        std::bit_cast<uint64_t>(cases[caseIndex].value),
+                    std::string("catalogue known IEEE decoding for ") + field.name);
+            } else {
+                // Raw I/O preserves even a NaN payload; production packing rejects nonfinite
+                // values.
+                half.bits = 0x7e55;
+            }
+        }
+    }
+    checkRockstarCatalogueRoundtrip(records.data(), records.size(), "IEEE boundary catalogue");
+    checkRockstarCatalogueRoundtrip(records.data(), 0, "empty catalogue");
+    for (double value : {65505.0, -65505.0}) {
+        bool overflow = false;
+        try {
+            rockstarEncodeHalf(value, "vxc");
+        } catch (std::overflow_error const& error) {
+            overflow = std::string(error.what()).find("vxc") != std::string::npos;
+        }
+        requireRockstar(overflow, "catalogue overflow must identify the offending field");
+    }
+    for (double value : {std::numeric_limits<double>::infinity(),
+             -std::numeric_limits<double>::infinity(), std::numeric_limits<double>::quiet_NaN()}) {
+        bool rejected = false;
+        try {
+            rockstarEncodeHalf(value, "rvir");
+        } catch (std::domain_error const& error) {
+            rejected = std::string(error.what()).find("rvir") != std::string::npos;
+        }
+        requireRockstar(
+            rejected, "catalogue nonfinite rejection must identify the offending field");
+    }
 }
 
 RockstarParticle rockstarTestParticle(float x, float y, float z, int index) {
@@ -545,6 +809,8 @@ void checkRockstarRecordInvariance() {
     requireRockstarClose(float162double(earlier.vcircMax),
         std::sqrt(2.0) * float162double(record.vcircMax), 2.e-3,
         "physical circular velocity epoch factor");
+    std::array<RockstarRecord, 3> const records{record, translated, earlier};
+    checkRockstarCatalogueRoundtrip(records.data(), records.size(), "snapshot catalogue");
 }
 
 void checkRockstarLightconeEpoch() {
@@ -564,6 +830,7 @@ void checkRockstarLightconeEpoch() {
     requireRockstarClose(float162double(records[0].rvir),
         1000.0 * rockstarTestRadius(30, rockstarTestVirialDensity(0.5)), 2.e-3,
         "lightcone halo properties must use its emission epoch");
+    checkRockstarCatalogueRoundtrip(records.data(), records.size(), "lightcone catalogue");
 }
 
 }    // namespace detail
@@ -586,6 +853,8 @@ void rockstarTest() {
     options.units.timeSeconds = options.units.lengthCm / 1.e5;
     setOptions(options);
     try {
+        detail::checkRockstarCatalogueHalfBoundaries();
+        detail::checkRockstarCataloguePublication();
         detail::checkRockstarUnbindingOrder();
         detail::checkRockstarSphericalOverdensities();
         detail::checkRockstarCoreAperture();

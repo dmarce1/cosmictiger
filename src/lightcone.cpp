@@ -338,14 +338,11 @@ void lcParts2groups(double a, double linkingLength, int ti) {
     hpx::wait_all(futs.begin(), futs.end());
     std::string filename = getOptions().lightcone.directory + "/lc.groups." +
         std::to_string(epoch) + "." + std::to_string(hpxRank());
-    FILE* fp = fopen(filename.c_str(), "wb");
-    if (fp == nullptr) {
-        THROW_ERROR("Unable to open %s for writing\n", filename.c_str());
+    for (auto& future : futs) {
+        // Encoding failures in a worker must prevent catalogue publication.
+        future.get();
     }
-    if (fwrite(recs.data(), sizeof(RockstarRecord), recs.size(), fp) != recs.size()) {
-        THROW_ERROR("Unable to write data for %s\n", filename.c_str());
-    }
-    fclose(fp);
+    rockstarWriteCatalogue(filename, recs.data(), recs.size());
     epoch++;
 }
 

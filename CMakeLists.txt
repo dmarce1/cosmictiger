@@ -177,6 +177,7 @@ set(cosmictiger_header_files
     cosmictiger/group_tree.hpp
     cosmictiger/groups.hpp
     cosmictiger/group_entry.hpp
+    cosmictiger/group_header.hpp
     cosmictiger/groups_find.hpp
     cosmictiger/hpx.hpp
     cosmictiger/kick.hpp
@@ -196,6 +197,7 @@ set(cosmictiger_header_files
     cosmictiger/random_number_generator.hpp
     cosmictiger/range.hpp
     cosmictiger/rockstar.hpp
+    cosmictiger/rockstar_record.hpp
     cosmictiger/rockstar_core.hpp
     cosmictiger/rockstar_properties.hpp
     cosmictiger/safe_io.hpp
@@ -235,6 +237,18 @@ if(NOT COSMICTIGER_WITH_CUDA)
     list(FILTER cosmictiger_source_files EXCLUDE REGEX "\\.cu$")
 endif()
 
+# Keep the C++23 standard half type in one host-only translation unit. The
+# public two-byte storage type remains usable by the C++20/CUDA application.
+add_library(cosmictiger_fp16 STATIC src/fp16.cpp)
+set_target_properties(cosmictiger_fp16 PROPERTIES
+    CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+target_include_directories(cosmictiger_fp16 PUBLIC ${PROJECT_SOURCE_DIR})
+target_compile_options(cosmictiger_fp16 PRIVATE -fno-fast-math -ffp-contract=off)
+
+add_executable(halo_catalog_export src/halo_catalog_export.cpp)
+target_link_libraries(halo_catalog_export PRIVATE cosmictiger_fp16)
+target_compile_options(halo_catalog_export PRIVATE -fno-fast-math)
+
 # Chemistry must not inherit the application's fast-math/FTZ settings: the
 # signed-complement and FloatFloat contracts require IEEE rounding and -0.
 find_package(Threads REQUIRED)
@@ -262,7 +276,7 @@ if(COSMICTIGER_BUILD_STF_BENCHMARKS)
     target_sources(cosmictiger PRIVATE benchmarks/stf_walk.cpp)
     set_source_files_properties(src/test.cpp PROPERTIES COMPILE_DEFINITIONS COSMICTIGER_STF_BENCHMARKS)
 endif()
-target_link_libraries(cosmictiger PRIVATE primordial_chemistry)
+target_link_libraries(cosmictiger PRIVATE primordial_chemistry cosmictiger_fp16)
 target_include_directories(cosmictiger PRIVATE ${PROJECT_SOURCE_DIR})
 target_include_directories(cosmictiger SYSTEM PRIVATE
     ${FFTW3F_INCLUDE_DIR} ${SILO_INCLUDE_DIR} ${CHEALPIX_INCLUDE_DIR})
@@ -335,6 +349,16 @@ endforeach()
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(halo_catalog_fixture tests/halo_catalog_fixture.cpp)
+    target_link_libraries(halo_catalog_fixture PRIVATE cosmictiger_fp16)
+    target_compile_options(halo_catalog_fixture PRIVATE -fno-fast-math)
+    add_test(NAME halo_viewer COMMAND ${Python3_EXECUTABLE}
+        ${PROJECT_SOURCE_DIR}/tests/run_halo_viewer.py
+        --exporter $<TARGET_FILE:halo_catalog_export>
+        --fixture $<TARGET_FILE:halo_catalog_fixture>
+        --viewer ${PROJECT_SOURCE_DIR}/tools/halo_viewer/halo_viewer.py)
+    set_tests_properties(halo_viewer PROPERTIES TIMEOUT 180 PROCESSORS 2)
+
     foreach(chemistry_test IN ITEMS primordial_rates primordial_solver primordial_units)
         add_executable(${chemistry_test}_test tests/${chemistry_test}.cpp)
         target_link_libraries(${chemistry_test}_test PRIVATE primordial_chemistry)
@@ -416,6 +440,17 @@ if(BUILD_TESTING)
         --reader $<TARGET_FILE:recfast_standard_test> $<TARGET_FILE:recfast_fast_math_test>
         --workdir ${PROJECT_BINARY_DIR}/tests/recfast_history)
     set_tests_properties(recfast_history PROPERTIES FIXTURES_SETUP recfast_history TIMEOUT 90)
+
+    foreach(fp16_variant IN ITEMS standard fast_math)
+        add_executable(fp16_${fp16_variant}_test tests/fp16.cpp)
+        target_include_directories(fp16_${fp16_variant}_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_link_libraries(fp16_${fp16_variant}_test PRIVATE cosmictiger_fp16)
+        if(fp16_variant STREQUAL "fast_math")
+            target_compile_options(fp16_${fp16_variant}_test PRIVATE -ffast-math)
+        endif()
+        add_test(NAME fp16_${fp16_variant} COMMAND fp16_${fp16_variant}_test)
+        set_tests_properties(fp16_${fp16_variant} PROPERTIES TIMEOUT 30)
+    endforeach()
 
     add_executable(rockstar_eigenpair_test tests/rockstar_eigenpair.cpp src/math.cpp)
     target_include_directories(rockstar_eigenpair_test PRIVATE ${PROJECT_SOURCE_DIR})
