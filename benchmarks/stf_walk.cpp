@@ -385,8 +385,12 @@ void stfWalkFixture(char const* fixture, bool doPhi, int samples, std::ofstream&
             if (doPhi && sample == samples - 1) {
                 stfWalkSaveForces(forceOutput, fixture);
                 int const referenceSamples = stfWalkReferenceSamples();
-                if (referenceSamples > 0) {
+                // The direct Ewald sum runs on the device and reads the device
+                // kernel table, which only a CUDA-enabled run uploads.
+                if (referenceSamples > 0 && getOptions().compute.cuda) {
                     stfWalkReferenceErrors(fixture, backend, referenceSamples);
+                } else if (referenceSamples > 0) {
+                    PRINT("STF_WALK_REFERENCE_SKIPPED,%s,%s,cpu_only_run\n", fixture, backend);
                 }
             }
             treeDestroy();
