@@ -10,10 +10,15 @@ setting it tabulates the median over pairs of the per-process median kick time
 of each policy, the pairwise ratio of the reference policy's time to the
 policy's (above one: the policy is faster than the reference) with its range
 over pairs, and names the fastest policy. The reference defaults to
-handoff164, the two-blocks-per-multiprocessor default.
+handoff164, the two-blocks-per-multiprocessor default. A second table gives,
+per stage and policy, the geometric mean over all cases of the policy's time
+relative to the reference and the worst case (both below one: faster), and a
+closing table each stage's load average at the start and its worst pair
+spread (slowest over fastest per-process median of one policy across pairs).
 """
 import argparse
 import json
+import math
 from pathlib import Path
 import re
 from statistics import median
@@ -27,8 +32,11 @@ def load_stage(directory):
         for row in run['medians']:
             cell = (run['bucket'], row['fixture'], row['potential'])
             cells.setdefault(cell, {}).setdefault(run['policy'], {})[run['pair']] = row['kick_seconds']
+    spread = max((max(t.values()) / min(t.values()) for cell in cells.values() for t in cell.values()
+                  if len(t) > 1), default=1.0)
     return dict(threads=metadata.get('threads', 2), side=metadata.get('particles_per_dimension', 32),
-                particles=runs[0]['medians'][0]['particles'], cells=cells, metadata=metadata)
+                particles=runs[0]['medians'][0]['particles'], cells=cells, metadata=metadata,
+                spread=spread, wall=[run['wall_seconds'] for run in runs])
 
 
 def policy_key(policy):
@@ -79,12 +87,39 @@ def main():
                              reference_over_fastest=loss))
             lines.append(f'| {cell[0]} | {cell[1]} | {int(cell[2])} | ' + ' | '.join(fields) +
                          f' | {fastest} |')
+    lines += ['', f'### Time relative to {args.reference}, geometric mean over cases (worst case)', '']
+    all_policies = sorted({p for stage in stages for cell in stage['cells'].values() for p in cell},
+                          key=policy_key)
+    lines += ['| particles | threads | ' + ' | '.join(all_policies) + ' |',
+              '|---:|---:|' + '---:|' * len(all_policies)]
+    for stage in stages:
+        fields = []
+        for policy in all_policies:
+            ratios = []
+            for cell, times in stage['cells'].items():
+                reference = times.get(args.reference)
+                values = times.get(policy)
+                if reference and values:
+                    ratios.append(median(values.values()) / median(reference.values()))
+            if ratios:
+                mean = math.exp(sum(math.log(r) for r in ratios) / len(ratios))
+                fields.append(f'{mean:.3f} ({max(ratios):.3f})')
+            else:
+                fields.append('')
+        lines.append(f'| {stage["particles"]:,} | {stage["threads"]} | ' + ' | '.join(fields) + ' |')
     lines += ['', f'### Fastest policy per case (reference {args.reference} time over the fastest time)', '',
               '| particles | threads | bucket | fixture | potential | fastest | reference / fastest |',
               '|---:|---:|---:|---|---:|---|---:|']
     for row in best:
         lines.append(f'| {row["particles"]:,} | {row["threads"]} | {row["bucket"]} | {row["fixture"]} | '
                      f'{int(row["potential"])} | {row["fastest"]} | {row["reference_over_fastest"]:.3f} |')
+    lines += ['', '### Stage conditions', '',
+              '| particles | threads | load average at start | worst pair spread | process wall s |',
+              '|---:|---:|---:|---:|---:|']
+    for stage in stages:
+        lines.append(f'| {stage["particles"]:,} | {stage["threads"]} | '
+                     f'{stage["metadata"]["load_average"][0]:.2f} | {stage["spread"]:.3f} | '
+                     f'{min(stage["wall"]):.1f}-{max(stage["wall"]):.1f} |')
     text = '\n'.join(lines).lstrip('\n') + '\n'
     if args.output:
         args.output.write_text(text)

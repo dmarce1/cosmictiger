@@ -156,6 +156,12 @@ def main():
     parser.add_argument('--extra-option', action='append', default=[],
                         help='additional application option passed to every run')
     parser.add_argument('--timeout', type=int, default=1800)
+    parser.add_argument('--idle-wait', default=None, metavar='PATTERN',
+                        help='before each process, wait while a process whose name matches this '
+                             'pgrep -x pattern (e.g. "ninja|ncu|nsys") is running')
+    parser.add_argument('--wait-gpu-idle', action='store_true',
+                        help='before each process, wait while nvidia-smi lists any compute process '
+                             '(a cosmictiger run shows as main-thread#0 to pgrep, not by name)')
     args = parser.parse_args()
     if args.threads < 1:
         sys.exit('--threads must be positive')
@@ -227,6 +233,9 @@ def main():
                         if len(fixtures) not in (1, 3):
                             sys.exit('The harness selects one fixture or all three')
                         logfile = directory / 'stdout.log'
+                        while busy(args):
+                            print(f'waiting for other work to finish before {name}', flush=True)
+                            time.sleep(15)
                         begin = time.monotonic()
                         with logfile.open('w') as stream:
                             status = subprocess.run(command, cwd=directory, env=env, stdout=stream,
@@ -251,6 +260,18 @@ def main():
     (args.output / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n')
     (args.output / 'summary.md').write_text(render(summary))
     print('Completed; see ' + str(args.output / 'summary.md'), flush=True)
+
+
+def busy(args):
+    if args.idle_wait and subprocess.run(['pgrep', '-x', args.idle_wait],
+                                         capture_output=True).returncode == 0:
+        return True
+    if args.wait_gpu_idle:
+        apps = subprocess.run(['nvidia-smi', '--query-compute-apps=pid', '--format=csv,noheader'],
+                              capture_output=True, text=True).stdout.strip()
+        if apps:
+            return True
+    return False
 
 
 def summarize(runs, args):
