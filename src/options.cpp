@@ -30,6 +30,7 @@
 
 #include <cosmictiger/constants.hpp>
 #include <cosmictiger/defs.hpp>
+#include <cosmictiger/fmm_order.hpp>
 #include <cosmictiger/gravity.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/kernel.hpp>
@@ -126,6 +127,7 @@ void setOptions(Options const& opts) {
     }
 #endif
     setKernelSelections(gravitySpec, hydroSpec, opts.compute.cuda);
+    setFmmOrder(opts.gravity.fmmOrder);
     globalOpts = opts;
     hpx::wait_all(futs.begin(), futs.end());
 }
@@ -160,6 +162,13 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"run.minRung", options.run.minRung},
         {"compute.cuda", options.compute.cuda},
         {"compute.bucketSize", options.compute.bucketSize},
+        {"compute.cudaKickResidency", options.compute.cudaKickResidency},
+        {"compute.cudaKickSinkTile", options.compute.cudaKickSinkTile},
+        {"compute.cudaKickParticleTile", options.compute.cudaKickParticleTile},
+        {"compute.cudaKickMultipoleTile", options.compute.cudaKickMultipoleTile},
+        {"compute.cudaKickSharedExpansion", options.compute.cudaKickSharedExpansion},
+        {"compute.cudaKickHandoffBlocks", options.compute.cudaKickHandoffBlocks},
+        {"compute.cudaKickListReserve", options.compute.cudaKickListReserve},
         {"checkpoint.readIndex", options.checkpoint.readIndex},
         {"checkpoint.intervalSeconds", options.checkpoint.intervalSeconds},
         {"initial.gadget4Restart", options.initial.gadget4Restart},
@@ -195,9 +204,11 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"lightcone.linkingLength", options.lightcone.linkingLength},
         {"lightcone.mapSize", options.lightcone.mapSize},
         {"gravity.enabled", options.gravity.enabled},
+        {"gravity.fmmOrder", options.gravity.fmmOrder},
         {"gravity.kernelFamily", options.gravity.kernelFamily},
         {"gravity.kernelDegree", options.gravity.kernelDegree},
         {"gravity.openingAngle", options.gravity.openingAngle},
+        {"gravity.openLargerCell", options.gravity.openLargerCell},
         {"gravity.softening", effectiveRadius},
         {"gravity.effectiveRadius", effectiveRadius},
         {"gravity.supportRadius",
@@ -286,7 +297,28 @@ bool processOptions(int argc, char* argv[]) {
             "use CUDA (not enabled for this build)")
 #endif
             ("compute.bucketSize", po::value<int>(&opts.compute.bucketSize)->default_value(128),
-                "tree leaf bucket size");
+                "tree leaf bucket size")("compute.cudaKickResidency",
+                po::value<int>(&opts.compute.cudaKickResidency)->default_value(0),
+                "resident CUDA kick blocks per multiprocessor; 0 uses the register limit")(
+                "compute.cudaKickSinkTile",
+                po::value<int>(&opts.compute.cudaKickSinkTile)->default_value(0),
+                "CUDA kick shared sink-force tile; 0 automatic, -1 global force storage")(
+                "compute.cudaKickParticleTile",
+                po::value<int>(&opts.compute.cudaKickParticleTile)->default_value(0),
+                "CUDA kick staged particle sources per tile; 0 automatic")(
+                "compute.cudaKickMultipoleTile",
+                po::value<int>(&opts.compute.cudaKickMultipoleTile)->default_value(0),
+                "CUDA kick staged multipoles per tile; 0 automatic")(
+                "compute.cudaKickSharedExpansion",
+                po::value<bool>(&opts.compute.cudaKickSharedExpansion)->default_value(true),
+                "keep the active CUDA kick local expansion in shared memory")(
+                "compute.cudaKickHandoffBlocks",
+                po::value<int>(&opts.compute.cudaKickHandoffBlocks)->default_value(0),
+                "fixed CUDA block count for the CPU/GPU handoff threshold; 0 derives it")(
+                "compute.cudaKickListReserve",
+                po::value<int>(&opts.compute.cudaKickListReserve)->default_value(4096),
+                "entries reserved per CUDA kick interaction list at block start; 0 grows on "
+                "demand");
 
     po::options_description checkpointOpts("Checkpoints");
     checkpointOpts.add_options()("checkpoint.readIndex",
@@ -370,8 +402,13 @@ bool processOptions(int argc, char* argv[]) {
     po::options_description gravityOpts("Gravity");
     gravityOpts.add_options()("gravity.enabled",
         po::value<bool>(&opts.gravity.enabled)->default_value(true), "enable gravity")(
+        "gravity.fmmOrder", po::value<int>(&opts.gravity.fmmOrder)->default_value(kFmmDefaultOrder),
+        "FMM order (multipole degree plus two), 3 to 9; every order is compiled in")(
         "gravity.openingAngle", po::value<double>(&opts.gravity.openingAngle)->default_value(0.8),
-        "opening angle for test problems")("gravity.softening",
+        "opening angle for test problems")("gravity.openLargerCell",
+        po::value<bool>(&opts.gravity.openLargerCell)->default_value(false),
+        "CPU tree walk opens only the larger of two rejected cells; requires compute.cuda=false")(
+        "gravity.softening",
         po::value<double>(&gravityEffectiveRadius)->default_value(0.01876988456953534),
         "legacy alias for gravity.effectiveRadius")("gravity.effectiveRadius", po::value<double>(),
         "fixed comoving effective radius (2 sigma) in initial reference spacings; overrides "
@@ -622,6 +659,24 @@ bool processOptions(int argc, char* argv[]) {
     }
     if (opts.compute.bucketSize <= 0) {
         THROW_ERROR("compute.bucketSize must be positive\n");
+    }
+    if (opts.gravity.fmmOrder < kFmmMinOrder || opts.gravity.fmmOrder > kFmmMaxOrder) {
+        THROW_ERROR("gravity.fmmOrder must be between %i and %i\n", kFmmMinOrder, kFmmMaxOrder);
+    }
+    if (opts.gravity.openLargerCell && opts.compute.cuda) {
+        THROW_ERROR("gravity.openLargerCell requires compute.cuda=false: the CUDA walk still "
+                    "opens both cells, and mixing the two rules breaks reciprocity\n");
+    }
+    if (opts.compute.bucketSize > MAX_BUCKET_SIZE) {
+        THROW_ERROR("compute.bucketSize must not exceed the compile-time maximum %i "
+                    "(COSMICTIGER_WITH_MAX_BUCKET)\n",
+            int(MAX_BUCKET_SIZE));
+    }
+    if (opts.compute.cudaKickResidency < 0 || opts.compute.cudaKickSinkTile < -1 ||
+        opts.compute.cudaKickParticleTile < 0 || opts.compute.cudaKickMultipoleTile < 0 ||
+        opts.compute.cudaKickHandoffBlocks < 0 || opts.compute.cudaKickListReserve < 0) {
+        THROW_ERROR("compute.cudaKick* tile and residency options must be nonnegative "
+                    "(cudaKickSinkTile may be -1 for global force storage)\n");
     }
     if (!detail::isFiniteOption(opts.hydro.yAcceleration) ||
         !detail::isFiniteOption(opts.hydro.centralAcceleration) ||
@@ -899,6 +954,14 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("units.massG", units.massG);
     SHOW("units.timeSeconds", units.timeSeconds);
     SHOW("compute.cuda", compute.cuda);
+    SHOW("gravity.fmmOrder", gravity.fmmOrder);
+    SHOW("compute.cudaKickResidency", compute.cudaKickResidency);
+    SHOW("compute.cudaKickSinkTile", compute.cudaKickSinkTile);
+    SHOW("compute.cudaKickParticleTile", compute.cudaKickParticleTile);
+    SHOW("compute.cudaKickMultipoleTile", compute.cudaKickMultipoleTile);
+    SHOW("compute.cudaKickSharedExpansion", compute.cudaKickSharedExpansion);
+    SHOW("compute.cudaKickHandoffBlocks", compute.cudaKickHandoffBlocks);
+    SHOW("compute.cudaKickListReserve", compute.cudaKickListReserve);
     SHOW("lightcone.enabled", lightcone.enabled);
     SHOW("analysis.groups", analysis.groups);
     SHOW("analysis.power", analysis.power);

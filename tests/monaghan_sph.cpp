@@ -28,6 +28,7 @@
 #include <string>
 
 #include <cosmictiger/monaghan_sph.hpp>
+#include <cosmictiger/vector3.hpp>
 
 namespace detail {
 
@@ -328,6 +329,34 @@ void testPhysicalVelocitySplit() {
         monaghan_sph::pairEnergyRate(30.0, contractingViscosity, 0.0, 0.4), 1.0e-14);
 }
 
+void testVector3() {
+    Vector3<double> const u(1.0, -2.0, 3.0);
+    Vector3<double> const v(-0.5, 4.0, 2.0);
+    requireClose("dot product", u.dot(v), -2.5, 1.0e-15);
+    requireClose("squared norm", u.squaredNorm(), 14.0, 1.0e-15);
+    requireClose("norm", u.norm(), std::sqrt(14.0), 1.0e-15);
+    Vector3<double> w = u + v;
+    w -= v;
+    w = 2.0 * w;
+    w = w * 0.5;
+    w = w / 1.0;
+    w = -(-w);
+    w += Vector3<double>(0.0);
+    Vector3<double> const difference = u - v;
+    double const expectedDifference[3] = {1.5, -6.0, 1.0};
+    Vector3<float> const converted(u);
+    Vector3<double> const first = simdSelect(true, u, v);
+    Vector3<double> const second = simdSelect(false, u, v);
+    for (int dim = 0; dim < 3; dim++) {
+        requireClose("vector arithmetic", w[dim], u[dim], 1.0e-15);
+        requireClose("vector difference", difference[dim], expectedDifference[dim], 1.0e-15);
+        requireClose("vector conversion", converted[dim], u[dim], 1.0e-7);
+        require(first[dim] == u[dim] && second[dim] == v[dim], "vector selection");
+        require(Vector3<double>(1.5)[dim] == 1.5, "broadcast construction");
+    }
+    require(Vector3<double>::size() == 3, "three components");
+}
+
 }    // namespace detail
 
 int main() {
@@ -338,6 +367,7 @@ int main() {
         detail::testViscosity<float>();
         detail::testPairConservation();
         detail::testPhysicalVelocitySplit();
+        detail::testVector3();
         std::puts("Monaghan SPH formula regressions passed");
     } catch (std::exception const& error) {
         std::fprintf(stderr, "Monaghan SPH regression failed: %s\n", error.what());

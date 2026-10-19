@@ -282,8 +282,8 @@ struct LinearExperiment {
         parameters.descending = true;
         parameters.top = true;
         parameters.doPhi = true;
-        Expansion<float> local;
-        local = 0.0f;
+        ExpansionBuffer local;
+        local.zero();
         Array<Fixed32, NDIM> origin{};
         kick(parameters, local, origin, built.id, Vector<TreeId>{built.id},
             Vector<TreeId>{built.id}, nullptr);

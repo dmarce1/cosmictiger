@@ -14,6 +14,8 @@
 
 #include <cosmictiger/domain.hpp>
 #include <cosmictiger/fmm_acceptance.hpp>
+#include <cosmictiger/fmm_kernels.hpp>
+#include <cosmictiger/fmm_order.hpp>
 #include <cosmictiger/gravity.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/kick.hpp>
@@ -125,20 +127,23 @@ TreeId fmmWalkAddNode(Array<Fixed32, NDIM> const& position, float radius,
                 treeGetNode(node.children[child])->maxGravitySupportRadius);
         }
     }
-    MultiPos multipole;
-    multipole.pos = position;
-    multipole.multi = 0.0f;
-    for (ParticleInteger i = particleRange.first; i < particleRange.second; i++) {
-        Array<float, NDIM> displacement;
-        for (int dim = 0; dim < NDIM; dim++) {
-            displacement[dim] = distance(particlesPos(dim, i), position[dim]);
+    MultipoleBuffer multipole;
+    multipole.zero();
+    fmmDispatch([&](auto order) {
+        auto& moments = multipole.multipole<order.value>();
+        for (ParticleInteger i = particleRange.first; i < particleRange.second; i++) {
+            Array<float, NDIM> displacement;
+            for (int dim = 0; dim < NDIM; dim++) {
+                displacement[dim] = distance(particlesPos(dim, i), position[dim]);
+            }
+            auto const particleMultipole = p2M<order.value>(displacement);
+            for (int coefficient = 0; coefficient < FmmOrder<order.value>::kMultipoleCoefficients_;
+                coefficient++) {
+                moments[coefficient] += particlesMass(i) * particleMultipole[coefficient];
+            }
         }
-        auto const particleMultipole = p2M(displacement);
-        for (int coefficient = 0; coefficient < MULTIPOLE_SIZE; coefficient++) {
-            multipole.multi[coefficient] += particlesMass(i) * particleMultipole[coefficient];
-        }
-    }
-    node.mpos = treeAddMultipole(multipole);
+    });
+    node.mpos = treeAddMultipole(position, multipole);
     for (int dim = 0; dim < NDIM; dim++) {
         node.box.begin[dim] = std::max(0.0, position[dim].toDouble() - radius);
         node.box.end[dim] = std::min(1.0, position[dim].toDouble() + radius);
@@ -158,14 +163,17 @@ TreeId fmmWalkAddNode(Array<Fixed32, NDIM> const& position, float radius,
 
 void fmmWalkVerifyEwald(std::string const& label, TreeId sink, Vector<TreeId> const& checklist,
     Vector<TreeId> const& sourceLeaves, bool useCuda) {
-    Expansion<float> reference;
-    reference = 0.0f;
-    cpuGravityCc(kGravityEwald, reference, sourceLeaves, sink, true);
+    ExpansionBuffer reference;
+    reference.zero();
     Array<float, NDIM> displacement;
     for (int dim = 0; dim < NDIM; dim++) {
         displacement[dim] = 0.0f;
     }
-    auto const value = l2P(reference, displacement, true);
+    auto const value = fmmDispatch([&](auto order) {
+        auto& expansion = reference.expansion<order.value>();
+        cpuGravityCc<order.value>(kGravityEwald, expansion, sourceLeaves, sink, true);
+        return l2P(expansion, displacement, true);
+    });
     std::array<double, NDIM> const expectedAcceleration = {-SCALE_FACTOR2 * value(1, 0, 0),
         -SCALE_FACTOR2 * value(0, 1, 0), -SCALE_FACTOR2 * value(0, 0, 1)};
     double const expectedEwaldPotential = SCALE_FACTOR1 * value(0, 0, 0);
@@ -179,8 +187,8 @@ void fmmWalkVerifyEwald(std::string const& label, TreeId sink, Vector<TreeId> co
             std::string const path = label + (backend == 0 ? " CPU" : " CUDA") +
                 (potentialMode == 0 ? " without potential" : " with potential");
             fmmWalkResetKickState();
-            Expansion<float> local;
-            local = 0.0f;
+            ExpansionBuffer local;
+            local.zero();
             auto params = fmmWalkParameters(backend != 0);
             params.gravitySupportRadius = support;
             params.doPhi = potentialMode != 0;
@@ -249,8 +257,8 @@ void fmmWalkEmptyLocalRoot(bool useCuda) {
     auto const origin = fmmWalkPosition(0.3, 0.35, 0.4);
     auto const root = fmmWalkAddNode(origin, 0.0f, Pair<ParticleInteger>(0, 0), 0, true);
     for (int backend = 0; backend < (useCuda ? 2 : 1); backend++) {
-        Expansion<float> local;
-        local = 0.0f;
+        ExpansionBuffer local;
+        local.zero();
         auto const result = kick(fmmWalkParameters(backend != 0), local, origin, root,
             Vector<TreeId>{root}, Vector<TreeId>{root}, nullptr);
         fmmWalkRequireClose("empty local root potential", result.pot, 0.0);
@@ -296,8 +304,8 @@ void fmmWalkDeferredSourceHandoff(bool useCuda) {
         double expectedTotalPotential = 0.0;
         for (int backend = 0; backend < (useCuda ? 2 : 1); backend++) {
             fmmWalkResetKickState();
-            Expansion<float> local;
-            local = 0.0f;
+            ExpansionBuffer local;
+            local.zero();
             auto const params = fmmWalkParameters(backend != 0);
             Vector<TreeId> directSources = ewald ? Vector<TreeId>{} : Vector<TreeId>{source};
             Vector<TreeId> ewaldSources = ewald ? Vector<TreeId>{source} : Vector<TreeId>{};
@@ -385,28 +393,31 @@ ForceVectors fmmWalkInteractionReference(
     }
     Vector<TreeId> const sources{source};
     if (interaction == FmmInteraction::ParticleCell) {
-        cpuGravityPc(reference, true, sink, sources);
+        fmmDispatch([&](auto order) { cpuGravityPc<order.value>(reference, true, sink, sources); });
     } else if (interaction == FmmInteraction::CellParticle ||
         interaction == FmmInteraction::CellCell) {
-        Expansion<float> local;
-        local = 0.0f;
-        if (interaction == FmmInteraction::CellCell) {
-            cpuGravityCc(kGravityDirect, local, sources, sink, true);
-        } else {
-            cpuGravityCp(local, sources, sink, true);
-        }
-        for (ParticleInteger i = range.first; i < range.second; i++) {
-            Array<float, NDIM> displacement;
-            for (int dim = 0; dim < NDIM; dim++) {
-                displacement[dim] = distance(particlesPos(dim, i), sinkNode->pos[dim]);
+        ExpansionBuffer local;
+        local.zero();
+        fmmDispatch([&](auto order) {
+            auto& expansion = local.expansion<order.value>();
+            if (interaction == FmmInteraction::CellCell) {
+                cpuGravityCc<order.value>(kGravityDirect, expansion, sources, sink, true);
+            } else {
+                cpuGravityCp<order.value>(expansion, sources, sink, true);
             }
-            auto const value = l2P(local, displacement, true);
-            auto const j = i - range.first;
-            reference.gx[j] -= SCALE_FACTOR2 * value(1, 0, 0);
-            reference.gy[j] -= SCALE_FACTOR2 * value(0, 1, 0);
-            reference.gz[j] -= SCALE_FACTOR2 * value(0, 0, 1);
-            reference.phi[j] += SCALE_FACTOR1 * value(0, 0, 0);
-        }
+            for (ParticleInteger i = range.first; i < range.second; i++) {
+                Array<float, NDIM> displacement;
+                for (int dim = 0; dim < NDIM; dim++) {
+                    displacement[dim] = distance(particlesPos(dim, i), sinkNode->pos[dim]);
+                }
+                auto const value = l2P(expansion, displacement, true);
+                auto const j = i - range.first;
+                reference.gx[j] -= SCALE_FACTOR2 * value(1, 0, 0);
+                reference.gy[j] -= SCALE_FACTOR2 * value(0, 1, 0);
+                reference.gz[j] -= SCALE_FACTOR2 * value(0, 0, 1);
+                reference.phi[j] += SCALE_FACTOR1 * value(0, 0, 0);
+            }
+        });
     } else if (interaction == FmmInteraction::ParticleParticle) {
         cpuGravityPp(reference, true, sink, sources, support);
     }
@@ -417,8 +428,8 @@ ForceVectors fmmWalkApplyInteraction(TreeId sink, TreeId source, float support, 
     auto const range = treeGetNode(sink)->particleRange;
     auto const position = treeGetNode(sink)->pos;
     fmmWalkResetKickState();
-    Expansion<float> local;
-    local = 0.0f;
+    ExpansionBuffer local;
+    local.zero();
     auto params = fmmWalkParameters(useCuda);
     params.gravitySupportRadius = support;
     kick(params, local, position, sink, Vector<TreeId>{source}, Vector<TreeId>{}, nullptr);
@@ -1002,8 +1013,8 @@ void fmmWalkPeriodicBackground(bool useCuda) {
                         particlesGravityAcceleration(dim, i) = kUntouchedAcceleration;
                     }
                 }
-                Expansion<float> local;
-                local = 0.0f;
+                ExpansionBuffer local;
+                local.zero();
                 auto params = fmmWalkParameters(backend != 0, kTheta);
                 params.doPhi = potentialMode != 0;
                 auto const origin = fmmWalkPosition(0.0, 0.0, 0.0);
@@ -1183,8 +1194,8 @@ void fmmWalkTest() {
                 for (auto& future : pending) {
                     future.get();
                 }
-                Expansion<float> local;
-                local = 0.0f;
+                ExpansionBuffer local;
+                local.zero();
                 auto const origin = detail::fmmWalkPosition(0.0, 0.0, 0.0);
                 auto const ewaldSources = periodic ? Vector<TreeId>{built.id} : Vector<TreeId>{};
                 auto const result = kick(detail::fmmWalkParameters(backend != 0, 0.1f), local,

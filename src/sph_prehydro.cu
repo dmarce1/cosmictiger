@@ -18,6 +18,7 @@
  */
 
 #include <cosmictiger/sph_cuda.hpp>
+#include <cosmictiger/vector3.hpp>
 
 namespace detail {
 
@@ -215,24 +216,29 @@ __global__ void sphCudaPrehydro2(
                 }
                 continue;
             }
-            float const inverseSupportRadius = 1.0f / supportRadius;
-            float const normalization =
-                data.gasMass * inverseSupportRadius * inverseSupportRadius * inverseSupportRadius;
-            float density = 0.0f;
+            // Equation 3.8 of Monaghan (1992) (the interpolant 2.7 at r_a): ρ_a = Σ_b m_b W_ab,
+            // with the sink's own support radius in W(r, H_a) = w(r/H_a)/H_a³, a gather form of
+            // equation 6.3 (which uses h_b). Every gas particle has mass m_b = gasMass, and the
+            // sum includes b = a. Each thread accumulates part of the sum.
+            // NOLINTBEGIN(readability-identifier-naming)
+            float const H_a = supportRadius;
+            float const one_over_H_a = 1.0f / H_a;
+            float const m_b_over_H_a3 = data.gasMass * one_over_H_a * one_over_H_a * one_over_H_a;
+            float ρ_a = 0.0f;
             for (int neighborIndex = threadIndex; neighborIndex < workspace.positions.size();
                 neighborIndex += blockSize) {
                 auto const& neighbor = workspace.positions[neighborIndex];
-                float const separationX = distance(position[XDIM], neighbor.positionX);
-                float const separationY = distance(position[YDIM], neighbor.positionY);
-                float const separationZ = distance(position[ZDIM], neighbor.positionZ);
-                float const normalizedRadius =
-                    sqrtf(sqr(separationX, separationY, separationZ)) * inverseSupportRadius;
-                density += normalization * kernelW(normalizedRadius);
+                Vector3<float> const r_ab(distance(position[XDIM], neighbor.positionX),
+                    distance(position[YDIM], neighbor.positionY),
+                    distance(position[ZDIM], neighbor.positionZ));
+                float const q_ab = sqrtf(r_ab.dot(r_ab)) * one_over_H_a;    // r_ab/H_a
+                ρ_a += m_b_over_H_a3 * kernelW(q_ab);
             }
-            sharedReduceAdd<float, PREHYDRO2_BLOCK_SIZE>(density);
+            sharedReduceAdd<float, PREHYDRO2_BLOCK_SIZE>(ρ_a);
+            // NOLINTEND(readability-identifier-naming)
             if (threadIndex == 0) {
-                ALWAYS_ASSERT(supportRadius > 0.0f && density > 0.0f);
-                data.sinkDensity[sinkIndex] = density;
+                ALWAYS_ASSERT(H_a > 0.0f && ρ_a > 0.0f);
+                data.sinkDensity[sinkIndex] = ρ_a;
                 data.sinkSmoothingConverged[sinkIndex] = true;
                 atomicMin(&reduction->minimumSupportRadius, supportRadius);
                 atomicMax(&reduction->maximumSupportRadius, supportRadius);

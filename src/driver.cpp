@@ -764,10 +764,8 @@ std::pair<KickReturn, TreeCreateReturn> kickStep(int minrung, double scale, doub
         getOptions().chemistry.enabled ? getOptions().chemistry.synchronizedRung : 0;
     kparams.t0 = t0;
     kparams.theta = theta;
-    Expansion<float> l;
-    for (int i = 0; i < EXPANSION_SIZE; i++) {
-        l[i] = 0.0f;
-    }
+    ExpansionBuffer l;
+    l.zero();
     Array<Fixed32, NDIM> pos;
     for (int dim = 0; dim < NDIM; dim++) {
         pos[dim] = 0.f;
@@ -918,10 +916,8 @@ std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int m
         kparams.t0 = t0;
         kparams.maxDt = SCALE_DT / adot;
         kparams.theta = theta;
-        Expansion<float> l;
-        for (int i = 0; i < EXPANSION_SIZE; i++) {
-            l[i] = 0.0f;
-        }
+        ExpansionBuffer l;
+        l.zero();
         Array<Fixed32, NDIM> pos;
         for (int dim = 0; dim < NDIM; dim++) {
             pos[dim] = 0.f;

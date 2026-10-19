@@ -414,7 +414,6 @@ int computeDetraceEwald(std::string iname, std::string oname) {
     return flops;
 }
 
-#define P ORDER
 template <int q>
 void constRefCompute(int sign, SymmetricTracelessTensor<int, q>& counts,
     SymmetricTracelessTensor<int, q>& signs, Array<int, NDIM> n) {
@@ -505,7 +504,10 @@ int printConstRef(std::string name, std::string& cmd,
     return flops;
 }
 
+// Emit the Ewald correction derivatives for one FMM order P (tensor ranks 0..P-1).
+template <int P>
 void ewald() {
+    tprint("// FMM order %i.\n", P);
     tprint("template<class T>\n");
     tprint("CUDA_EXPORT int ewaldCorrectionDerivatives(SymmetricTracelessTensor<T,%i> &d, Array<T, "
            "NDIM> "
@@ -516,7 +518,6 @@ void ewald() {
     tprint("position[0] *= simdBroadcast<T>(SCALE_FACTOR);\n");
     tprint("position[1] *= simdBroadcast<T>(SCALE_FACTOR);\n");
     tprint("position[2] *= simdBroadcast<T>(SCALE_FACTOR);\n");
-    tprint("EwaldConst econst;\n");
     tprint("FlopCounter<int> flops = %i;\n", 7);
     tprint("T r = simdSqrt(simdFma(position[0], position[0], simdFma(position[1], position[1], "
            "sqr(position[2]))));\n");    // 6
@@ -526,7 +527,7 @@ void ewald() {
     tprint("dreal = 0.0f;\n");
     tprint("dfour = 0.0f;\n");
     tprint("d = 0.0f;\n");
-    tprint("auto const realsz = econst.nreal();\n");
+    tprint("auto const realsz = EwaldConst::nreal();\n");
     tprint("auto const zeroMask = r > simdBroadcast<T>(0.0);\n");    // 1
     int theseFlops = 0;
 
@@ -579,7 +580,7 @@ void ewald() {
     theseFlops += 37 + 7 * (P - 1) + P * (P + 1) / 2;
 
     theseFlops += computeDetraceEwald<P>("x", "dreal");
-    tprint("auto const drz = econst.d0();\n");
+    tprint("auto const drz = EwaldConst::d0<%i>();\n", P);
     tprint("for( int i = 0; i < %i; i++) {\n", (P + 2) * (P + 1) * P / 6);
     indent();
     tprint("dreal[i] = simdSelect(zeroMask, dreal[i], -simdBroadcast<T>(drz[i]));\n");
@@ -591,7 +592,7 @@ void ewald() {
 
     tprint("for (int i = 0; i < realsz; i++) {\n");
     indent();
-    tprint("auto const n = econst.realIndex(i);\n");
+    tprint("auto const n = EwaldConst::realIndex(i);\n");
     tprint("Array<T, NDIM> dx;\n");
     tprint("for (int dim = 0; dim < NDIM; dim++) {\n");
     indent();
@@ -653,11 +654,11 @@ void ewald() {
     deindent();
     tprint("}\n");
 
-    tprint("auto const foursz = econst.nfour();\n");
+    tprint("auto const foursz = EwaldConst::nfour();\n");
     tprint("for (int i = 0; i < foursz; i++) {\n");
     indent();
-    tprint("auto const &h = econst.fourIndex(i);\n");
-    tprint("auto const& d0Value = econst.fourExpansion(i);\n");
+    tprint("auto const &h = EwaldConst::fourIndex(i);\n");
+    tprint("auto const& d0Value = EwaldConst::fourExpansion<%i>(i);\n", P);
     tprint("T const hdotx = simdFma(simdBroadcast<T>(h[0]), position[0], "
            "simdFma(simdBroadcast<T>(h[1]), position[1], simdBroadcast<T>(h[2]) * "
            "position[2]));\n");    // 5
@@ -727,7 +728,14 @@ int main() {
     tprint("#include <cosmictiger/simd_math.hpp>\n");
     tprint("#include <cosmictiger/tensor.hpp>\n\n");
     tprint("namespace detail {\n");
-    ewald();
+    // One overload per supported FMM order; the caller's tensor order selects it.
+    ewald<3>();
+    ewald<4>();
+    ewald<5>();
+    ewald<6>();
+    ewald<7>();
+    ewald<8>();
+    ewald<9>();
     tprint("} // namespace detail\n");
     return 0;
 }

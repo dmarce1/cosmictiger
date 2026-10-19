@@ -245,10 +245,8 @@ static void kickTest() {
     kparams.minRung = 0;
     kparams.t0 = 1.0;
     kparams.theta = getOptions().gravity.openingAngle;
-    Expansion<float> l;
-    for (int i = 0; i < EXPANSION_SIZE; i++) {
-        l[i] = 0.0f;
-    }
+    ExpansionBuffer l;
+    l.zero();
     Array<Fixed32, NDIM> pos;
     for (int dim = 0; dim < NDIM; dim++) {
         pos[dim] = 0.f;
@@ -322,10 +320,8 @@ static void forceTest() {
         kparams.minRung = 0;
         kparams.t0 = 1.0;
         kparams.theta = thetas[iter];
-        Expansion<float> l;
-        for (int i = 0; i < EXPANSION_SIZE; i++) {
-            l[i] = 0.0f;
-        }
+        ExpansionBuffer l;
+        l.zero();
         Array<Fixed32, NDIM> pos;
         for (int dim = 0; dim < NDIM; dim++) {
             pos[dim] = 0.f;
@@ -401,10 +397,8 @@ static void bucketTest() {
             kparams.theta = getOptions().gravity.openingAngle;
             kparams.top = true;
             kparams.ascending = kparams.descending = false;
-            Expansion<float> l;
-            for (int i = 0; i < EXPANSION_SIZE; i++) {
-                l[i] = 0.0f;
-            }
+            ExpansionBuffer l;
+            l.zero();
             Array<Fixed32, NDIM> pos;
             for (int dim = 0; dim < NDIM; dim++) {
                 pos[dim] = 0.f;
@@ -487,10 +481,8 @@ static void speedTest() {
             kparams.minRung = 0;
             kparams.t0 = 1.0;
             kparams.theta = thetas[ci];
-            Expansion<float> l;
-            for (int i = 0; i < EXPANSION_SIZE; i++) {
-                l[i] = 0.0f;
-            }
+            ExpansionBuffer l;
+            l.zero();
             Array<Fixed32, NDIM> pos;
             for (int dim = 0; dim < NDIM; dim++) {
                 pos[dim] = 0.f;

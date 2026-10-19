@@ -23,16 +23,11 @@
 #include <hpx/serialization/serialization_fwd.hpp>
 
 #include <cosmictiger/fixed.hpp>
-#include <cosmictiger/fmm_kernels.hpp>
+#include <cosmictiger/fmm_types.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/range.hpp>
-
-struct MultipolePos {
-    Multipole<float> m;
-    Array<Fixed32, NDIM> pos;
-};
 
 struct TreeId {
     int proc;
@@ -83,17 +78,13 @@ struct TreeIdHashHi {
     }
 };
 
-struct MultiPos {
-    Multipole<float> multi;
-    Array<Fixed32, NDIM> pos;
-    template <class A>
-    void serialize(A&& arc, unsigned) {
-        arc & multi;
-        arc & pos;
-    }
-};
-
-MultiPos* treeAddMultipole(MultiPos const& mpos);
+// Tree multipoles live in an arena of runtime-order positioned records
+// (fmmPositionedMultipoleBytes(fmmOrder()) bytes each). Nodes point at the
+// order-agnostic position header; per-order code views the moments through
+// fmmMultiPos<order>(node.mpos).
+MultipolePosition* treeAddMultipole(
+    Array<Fixed32, NDIM> const& pos, MultipoleBuffer const& multipole);
+void treeReadMultipole(MultipolePosition const* record, MultipoleBuffer& multipole);
 
 struct TreeNode {
     Fixed32Range box;
@@ -101,7 +92,7 @@ struct TreeNode {
     Pair<ParticleInteger> particleRange;
     Pair<int, int> processRange;
     Array<Fixed32, NDIM> pos;
-    MultiPos* mpos;
+    MultipolePosition* mpos;
     float radius;
     // Maximum actual compact gravity support among represented particles, not an
     // effective smoothing length. Rebuild/refit after those supports change.
@@ -132,9 +123,11 @@ struct TreeNode {
     HPX_SERIALIZATION_SPLIT_MEMBER();
     template <class A>
     void load(A&& arc, unsigned) {
-        MultiPos thisMpos;
-        arc & thisMpos;
-        mpos = treeAddMultipole(thisMpos);
+        Array<Fixed32, NDIM> multipolePosition;
+        MultipoleBuffer multipole;
+        arc & multipolePosition;
+        arc & multipole;
+        mpos = treeAddMultipole(multipolePosition, multipole);
         arc & box;
         arc & pos;
         arc & children;
@@ -154,7 +147,10 @@ struct TreeNode {
     }
     template <class A>
     void save(A&& arc, unsigned) const {
-        arc&* mpos;
+        MultipoleBuffer multipole;
+        treeReadMultipole(mpos, multipole);
+        arc & mpos->pos;
+        arc & multipole;
         arc & box;
         arc & pos;
         arc & children;
@@ -175,7 +171,7 @@ struct TreeNode {
 };
 
 struct TreeCreateReturn {
-    Multipole<float> multi;
+    MultipoleBuffer multi;
     Array<Fixed32, NDIM> pos;
     TreeId id;
     float radius;

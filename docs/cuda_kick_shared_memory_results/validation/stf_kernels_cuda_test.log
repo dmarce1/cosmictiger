@@ -1,0 +1,8 @@
+STF CUDA order 3 (degree 1/2) float/double kernel parity passed; worst normalized discrepancy: float 3.0e-08, double 5.6e-17.
+STF CUDA order 4 (degree 2/3) float/double kernel parity passed; worst normalized discrepancy: float 3.0e-08, double 5.6e-17.
+STF CUDA order 5 (degree 3/4) float/double kernel parity passed; worst normalized discrepancy: float 3.0e-08, double 5.6e-17.
+STF CUDA order 6 (degree 4/5) float/double kernel parity passed; worst normalized discrepancy: float 3.0e-08, double 5.6e-17.
+STF CUDA order 7 (degree 5/6) float/double kernel parity passed; worst normalized discrepancy: float 6.0e-08, double 8.3e-17.
+STF CUDA order 8 (degree 6/7) float/double kernel parity passed; worst normalized discrepancy: float 3.1e-07, double 1.7e-16.
+STF CUDA order 9 (degree 7/8) float/double kernel parity passed; worst normalized discrepancy: float 9.9e-07, double 3.3e-15.
+STF CUDA float/double kernel parity checks passed for FMM orders 3 to 9.

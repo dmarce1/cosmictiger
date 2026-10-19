@@ -1,0 +1,252 @@
+stf_warp translate: checking local degree 2, doPhi=0, steps=1, warps per block=1
+stf_warp translate: checking local degree 2, doPhi=0, steps=17, warps per block=1
+stf_warp translate: checking local degree 2, doPhi=1, steps=1, warps per block=1
+stf_warp translate: checking local degree 2, doPhi=1, steps=17, warps per block=1
+stf_warp translate: local degree 2: host scalar/Cartesian parity worst normalized error 1.02620333e-06, doPhi=1 steps=17 sample=5 lane=0 coefficient=0 actual=0.71072357892990112 expected=0.71072460513323554
+stf_warp translate: local degree 2: CUDA return/Cartesian parity worst normalized error 4.94436611e-07, doPhi=1 steps=17 sample=15 lane=0 coefficient=0 actual=0.72976279258728027 expected=0.72976328702389137
+stf_warp translate: local degree 2: CUDA return/own scalar parity worst normalized error 5.36441803e-07, doPhi=1 steps=17 sample=3 lane=0 coefficient=0 actual=0.73526942729949951 expected=0.73526889085769653
+stf_warp translate: local degree 2: post-sync expansion visibility worst normalized error 8.18062599e-08, doPhi=0 steps=1 sample=13 lane=0 coefficient=-1 actual=-4.8270235061645508 expected=-4.8270239010453224
+stf_warp translate: Cartesian, own scalar, every lane, synchronized visibility, trace, linear field and doPhi checks passed at local degree 2.
+stf_warp translate: checking local degree 2, doPhi=0, steps=1, warps per block=3
+stf_warp translate: checking local degree 2, doPhi=0, steps=17, warps per block=3
+stf_warp translate: checking local degree 2, doPhi=1, steps=1, warps per block=3
+stf_warp translate: checking local degree 2, doPhi=1, steps=17, warps per block=3
+stf_warp translate: local degree 2: host scalar/Cartesian parity worst normalized error 1.02620333e-06, doPhi=1 steps=17 sample=5 lane=0 coefficient=0 actual=0.71072357892990112 expected=0.71072460513323554
+stf_warp translate: local degree 2: CUDA return/Cartesian parity worst normalized error 4.94436611e-07, doPhi=1 steps=17 sample=15 lane=0 coefficient=0 actual=0.72976279258728027 expected=0.72976328702389137
+stf_warp translate: local degree 2: CUDA return/own scalar parity worst normalized error 5.36441803e-07, doPhi=1 steps=17 sample=3 lane=0 coefficient=0 actual=0.73526942729949951 expected=0.73526889085769653
+stf_warp translate: local degree 2: post-sync expansion visibility worst normalized error 8.18062599e-08, doPhi=0 steps=1 sample=13 lane=0 coefficient=-1 actual=-4.8270235061645508 expected=-4.8270239010453224
+stf_warp translate: Cartesian, own scalar, every lane, synchronized visibility, trace, linear field and doPhi checks passed at local degree 2.
+stf_warp translateInto: checking local degree 2, doPhi=0, steps=1, warps per block=1
+stf_warp translateInto: checking local degree 2, doPhi=0, steps=17, warps per block=1
+stf_warp translateInto: checking local degree 2, doPhi=1, steps=1, warps per block=1
+stf_warp translateInto: checking local degree 2, doPhi=1, steps=17, warps per block=1
+stf_warp translateInto: local degree 2: host scalar/Cartesian parity worst normalized error 1.02620333e-06, doPhi=1 steps=17 sample=5 lane=0 coefficient=0 actual=0.71072357892990112 expected=0.71072460513323554
+stf_warp translateInto: local degree 2: CUDA shared target/Cartesian parity worst normalized error 4.94436611e-07, doPhi=1 steps=17 sample=15 lane=0 coefficient=0 actual=0.72976279258728027 expected=0.72976328702389137
+stf_warp translateInto: local degree 2: CUDA shared target/own scalar parity worst normalized error 5.36441803e-07, doPhi=1 steps=17 sample=3 lane=0 coefficient=0 actual=0.73526942729949951 expected=0.73526889085769653
+stf_warp translateInto: local degree 2: post-sync expansion visibility worst normalized error 8.18062599e-08, doPhi=0 steps=1 sample=13 lane=0 coefficient=-1 actual=-4.8270235061645508 expected=-4.8270239010453224
+stf_warp translateInto: Cartesian, own scalar, every lane, synchronized visibility, trace, linear field and doPhi checks passed at local degree 2.
+stf_warp translateInto: checking local degree 2, doPhi=0, steps=1, warps per block=3
+stf_warp translateInto: checking local degree 2, doPhi=0, steps=17, warps per block=3
+stf_warp translateInto: checking local degree 2, doPhi=1, steps=1, warps per block=3
+stf_warp translateInto: checking local degree 2, doPhi=1, steps=17, warps per block=3
+stf_warp translateInto: local degree 2: host scalar/Cartesian parity worst normalized error 1.02620333e-06, doPhi=1 steps=17 sample=5 lane=0 coefficient=0 actual=0.71072357892990112 expected=0.71072460513323554
+stf_warp translateInto: local degree 2: CUDA shared target/Cartesian parity worst normalized error 4.94436611e-07, doPhi=1 steps=17 sample=15 lane=0 coefficient=0 actual=0.72976279258728027 expected=0.72976328702389137
+stf_warp translateInto: local degree 2: CUDA shared target/own scalar parity worst normalized error 5.36441803e-07, doPhi=1 steps=17 sample=3 lane=0 coefficient=0 actual=0.73526942729949951 expected=0.73526889085769653
+stf_warp translateInto: local degree 2: post-sync expansion visibility worst normalized error 8.18062599e-08, doPhi=0 steps=1 sample=13 lane=0 coefficient=-1 actual=-4.8270235061645508 expected=-4.8270239010453224
+stf_warp translateInto: Cartesian, own scalar, every lane, synchronized visibility, trace, linear field and doPhi checks passed at local degree 2.
+stf_warp translate: checking local degree 3, doPhi=0, steps=1, warps per block=1
+stf_warp translate: checking local degree 3, doPhi=0, steps=17, warps per block=1
+stf_warp translate: checking local degree 3, doPhi=1, steps=1, warps per block=1
+stf_warp translate: checking local degree 3, doPhi=1, steps=17, warps per block=1
+stf_warp translate: local degree 3: host scalar/Cartesian parity worst normalized error 1.31047627e-06, doPhi=1 steps=17 sample=5 lane=0 coefficient=0 actual=0.71068906784057617 expected=0.71069037831684789
+stf_warp translate: local degree 3: CUDA return/Cartesian parity worst normalized error 5.00607038e-07, doPhi=1 steps=17 sample=13 lane=0 coefficient=0 actual=0.71036988496780396 expected=0.71036938436076591
+stf_warp translate: local degree 3: CUDA return/own scalar parity worst normalized error 1.31130219e-06, doPhi=1 steps=17 sample=5 lane=0 coefficient=0 actual=0.71069037914276123 expected=0.71068906784057617
+stf_warp translate: local degree 3: post-sync expansion visibility worst normalized error 7.79989407e-08, doPhi=1 steps=1 sample=4 lane=0 coefficient=-1 actual=1.6178963184356689 expected=1.6178964446298778
+stf_warp translate: Cartesian, own scalar, every lane, synchronized visibility, trace, linear field and doPhi checks passed at local degree 3.
+stf_warp translate: checking local degree 3, doPhi=0, steps=1, warps per block=3
+stf_warp translate: checking local degree 3, doPhi=0, steps=17, warps per block=3
+stf_warp translate: checking local degree 3, doPhi=1, steps=1, warps per block=3
+stf_warp translate: checking local degree 3, doPhi=1, steps=17, warps per block=3
+stf_warp translate: local degree 3: host scalar/Cartesian parity worst normalized error 1.31047627e-06, doPhi=1 steps=17 sample=5 lane=0 coefficient=0 actual=0.71068906784057617 expected=0.71069037831684789
+stf_warp translate: local degree 3: CUDA return/Cartesian parity worst normalized error 5.00607038e-07, doPhi=1 steps=17 sample=13 lane=0 coefficient=0 actual=0.71036988496780396 expected=0.71036938436076591
+stf_warp translate: local degree 3: CUDA return/own scalar parity worst normalized error 1.31130219e-06, doPhi=1 steps=17 sample=5 lane=0 coefficient=0 actual=0.71069037914276123 expected=0.71068906784057617
+stf_warp translate: local degree 3: post-sync expansion visibility worst normalized error 7.79989407e-08, doPhi=1 steps=1 sample=4 lane=0 coefficient=-1 actual=1.6178963184356689 expected=1.6178964446298778
+stf_warp translate: Cartesian, own scalar, every lane, synchronized visibility, trace, linear field and doPhi checks passed at local degree 3.
+stf_warp translateInto: checking local degree 3, doPhi=0, steps=1, warps per block=1
+stf_warp translateInto: checking local degree 3, doPhi=0, steps=17, warps per block=1
+stf_warp translateInto: checking local degree 3, doPhi=1, steps=1, warps per block=1
+stf_warp translateInto: checking local degree 3, doPhi=1, steps=17, warps per block=1
+stf_warp translateInto: local degree 3: host scalar/Cartesian parity worst normalized error 1.31047627e-06, doPhi=1 steps=17 sample=5 lane=0 coefficient=0 actual=0.71068906784057617 expected=0.71069037831684789
+stf_warp translateInto: local degree 3: CUDA shared target/Cartesian parity worst normalized error 5.00607038e-07, doPhi=1 steps=17 sample=13 lane=0 coefficient=0 actual=0.71036988496780396 expected=0.71036938436076591
+stf_warp translateInto: local degree 3: CUDA shared target/own scalar parity worst normalized error 1.31130219e-06, doPhi=1 steps=17 sample=5 lane=0 coefficient=0 actual=0.71069037914276123 expected=0.71068906784057617
+stf_warp translateInto: local degree 3: post-sync expansion visibility worst normalized error 7.79989407e-08, doPhi=1 steps=1 sample=4 lane=0 coefficient=-1 actual=1.6178963184356689 expected=1.6178964446298778
+stf_warp translateInto: Cartesian, own scalar, every lane, synchronized visibility, trace, linear field and doPhi checks passed at local degree 3.
+stf_warp translateInto: checking local degree 3, doPhi=0, steps=1, warps per block=3
+stf_warp translateInto: checking local degree 3, doPhi=0, steps=17, warps per block=3
+stf_warp translateInto: checking local degree 3, doPhi=1, steps=1, warps per block=3
+stf_warp translateInto: checking local degree 3, doPhi=1, steps=17, warps per block=3
+stf_warp translateInto: local degree 3: host scalar/Cartesian parity worst normalized error 1.31047627e-06, doPhi=1 steps=17 sample=5 lane=0 coefficient=0 actual=0.71068906784057617 expected=0.71069037831684789
+stf_warp translateInto: local degree 3: CUDA shared target/Cartesian parity worst normalized error 5.00607038e-07, doPhi=1 steps=17 sample=13 lane=0 coefficient=0 actual=0.71036988496780396 expected=0.71036938436076591
+stf_warp translateInto: local degree 3: CUDA shared target/own scalar parity worst normalized error 1.31130219e-06, doPhi=1 steps=17 sample=5 lane=0 coefficient=0 actual=0.71069037914276123 expected=0.71068906784057617
+stf_warp translateInto: local degree 3: post-sync expansion visibility worst normalized error 7.79989407e-08, doPhi=1 steps=1 sample=4 lane=0 coefficient=-1 actual=1.6178963184356689 expected=1.6178964446298778
+stf_warp translateInto: Cartesian, own scalar, every lane, synchronized visibility, trace, linear field and doPhi checks passed at local degree 3.
+stf_warp translate: checking local degree 4, doPhi=0, steps=1, warps per block=1
+stf_warp translate: checking local degree 4, doPhi=0, steps=17, warps per block=1
+stf_warp translate: checking local degree 4, doPhi=1, steps=1, warps per block=1
+stf_warp translate: checking local degree 4, doPhi=1, steps=17, warps per block=1
+stf_warp translate: local degree 4: host scalar/Cartesian parity worst normalized error 1.68678557e-06, doPhi=1 steps=17 sample=8 lane=0 coefficient=0 actual=0.77357929944992065 expected=0.77357761266434777
+stf_warp translate: local degree 4: CUDA return/Cartesian parity worst normalized error 5.11062539e-07, doPhi=1 steps=17 sample=1 lane=0 coefficient=0 actual=0.76948410272598267 expected=0.7694835916634436
+stf_warp translate: local degree 4: CUDA return/own scalar parity worst normalized error 1.66893005e-06, doPhi=1 steps=17 sample=8 lane=0 coefficient=0 actual=0.77357763051986694 expected=0.77357929944992065
+stf_warp translate: local degree 4: post-sync expansion visibility worst normalized error 2.15194978e-07, doPhi=1 steps=1 sample=8 lane=0 coefficient=-1 actual=2.0924956798553467 expected=2.0924952295608819
+stf_warp translate: Cartesian, own scalar, every lane, synchronized visibility, trace, linear field and doPhi checks passed at local degree 4.
+stf_warp translate: checking local degree 4, doPhi=0, steps=1, warps per block=3
+stf_warp translate: checking local degree 4, doPhi=0, steps=17, warps per block=3
+stf_warp translate: checking local degree 4, doPhi=1, steps=1, warps per block=3
+stf_warp translate: checking local degree 4, doPhi=1, steps=17, warps per block=3
+stf_warp translate: local degree 4: host scalar/Cartesian parity worst normalized error 1.68678557e-06, doPhi=1 steps=17 sample=8 lane=0 coefficient=0 actual=0.77357929944992065 expected=0.77357761266434777
+stf_warp translate: local degree 4: CUDA return/Cartesian parity worst normalized error 5.11062539e-07, doPhi=1 steps=17 sample=1 lane=0 coefficient=0 actual=0.76948410272598267 expected=0.7694835916634436
+stf_warp translate: local degree 4: CUDA return/own scalar parity worst normalized error 1.66893005e-06, doPhi=1 steps=17 sample=8 lane=0 coefficient=0 actual=0.77357763051986694 expected=0.77357929944992065
+stf_warp translate: local degree 4: post-sync expansion visibility worst normalized error 2.15194978e-07, doPhi=1 steps=1 sample=8 lane=0 coefficient=-1 actual=2.0924956798553467 expected=2.0924952295608819
+stf_warp translate: Cartesian, own scalar, every lane, synchronized visibility, trace, linear field and doPhi checks passed at local degree 4.
+stf_warp translateInto: checking local degree 4, doPhi=0, steps=1, warps per block=1
+stf_warp translateInto: checking local degree 4, doPhi=0, steps=17, warps per block=1
+stf_warp translateInto: checking local degree 4, doPhi=1, steps=1, warps per block=1
+stf_warp translateInto: checking local degree 4, doPhi=1, steps=17, warps per block=1
+stf_warp translateInto: local degree 4: host scalar/Cartesian parity worst normalized error 1.68678557e-06, doPhi=1 steps=17 sample=8 lane=0 coefficient=0 actual=0.77357929944992065 expected=0.77357761266434777
+stf_warp translateInto: local degree 4: CUDA shared target/Cartesian parity worst normalized error 5.11062539e-07, doPhi=1 steps=17 sample=1 lane=0 coefficient=0 actual=0.76948410272598267 expected=0.7694835916634436
+stf_warp translateInto: local degree 4: CUDA shared target/own scalar parity worst normalized error 1.66893005e-06, doPhi=1 steps=17 sample=8 lane=0 coefficient=0 actual=0.77357763051986694 expected=0.77357929944992065
+stf_warp translateInto: local degree 4: post-sync expansion visibility worst normalized error 2.15194978e-07, doPhi=1 steps=1 sample=8 lane=0 coefficient=-1 actual=2.0924956798553467 expected=2.0924952295608819
+stf_warp translateInto: Cartesian, own scalar, every lane, synchronized visibility, trace, linear field and doPhi checks passed at local degree 4.
+stf_warp translateInto: checking local degree 4, doPhi=0, steps=1, warps per block=3
+stf_warp translateInto: checking local degree 4, doPhi=0, steps=17, warps per block=3
+stf_warp translateInto: checking local degree 4, doPhi=1, steps=1, warps per block=3
+stf_warp translateInto: checking local degree 4, doPhi=1, steps=17, warps per block=3
+stf_warp translateInto: local degree 4: host scalar/Cartesian parity worst normalized error 1.68678557e-06, doPhi=1 steps=17 sample=8 lane=0 coefficient=0 actual=0.77357929944992065 expected=0.77357761266434777
+stf_warp translateInto: local degree 4: CUDA shared target/Cartesian parity worst normalized error 5.11062539e-07, doPhi=1 steps=17 sample=1 lane=0 coefficient=0 actual=0.76948410272598267 expected=0.7694835916634436
+stf_warp translateInto: local degree 4: CUDA shared target/own scalar parity worst normalized error 1.66893005e-06, doPhi=1 steps=17 sample=8 lane=0 coefficient=0 actual=0.77357763051986694 expected=0.77357929944992065
+stf_warp translateInto: local degree 4: post-sync expansion visibility worst normalized error 2.15194978e-07, doPhi=1 steps=1 sample=8 lane=0 coefficient=-1 actual=2.0924956798553467 expected=2.0924952295608819
+stf_warp translateInto: Cartesian, own scalar, every lane, synchronized visibility, trace, linear field and doPhi checks passed at local degree 4.
+stf_warp translate: checking local degree 5, doPhi=0, steps=1, warps per block=1
+stf_warp translate: checking local degree 5, doPhi=0, steps=17, warps per block=1
+stf_warp translate: checking local degree 5, doPhi=1, steps=1, warps per block=1
+stf_warp translate: checking local degree 5, doPhi=1, steps=17, warps per block=1
+stf_warp translate: local degree 5: host scalar/Cartesian parity worst normalized error 1.61492892e-06, doPhi=1 steps=17 sample=4 lane=0 coefficient=0 actual=0.72102445363998413 expected=0.72102606856890172
+stf_warp translate: local degree 5: CUDA return/Cartesian parity worst normalized error 5.25621039e-07, doPhi=1 steps=17 sample=5 lane=0 coefficient=0 actual=0.71069216728210449 expected=0.71069269290314352
+stf_warp translate: local degree 5: CUDA return/own scalar parity worst normalized error 1.60932541e-06, doPhi=1 steps=17 sample=4 lane=0 coefficient=0 actual=0.72102606296539307 expected=0.72102445363998413
+stf_warp translate: local degree 5: post-sync expansion visibility worst normalized error 4.97038314e-07, doPhi=0 steps=17 sample=4 lane=0 coefficient=-1 actual=1.7402389049530029 expected=1.7402397699188441
+stf_warp translate: Cartesian, own scalar, every lane, synchronized visibility, trace, linear field and doPhi checks passed at local degree 5.
+stf_warp translate: checking local degree 5, doPhi=0, steps=1, warps per block=3
+stf_warp translate: checking local degree 5, doPhi=0, steps=17, warps per block=3
+stf_warp translate: checking local degree 5, doPhi=1, steps=1, warps per block=3
+stf_warp translate: checking local degree 5, doPhi=1, steps=17, warps per block=3
+stf_warp translate: local degree 5: host scalar/Cartesian parity worst normalized error 1.61492892e-06, doPhi=1 steps=17 sample=4 lane=0 coefficient=0 actual=0.72102445363998413 expected=0.72102606856890172
+stf_warp translate: local degree 5: CUDA return/Cartesian parity worst normalized error 5.25621039e-07, doPhi=1 steps=17 sample=5 lane=0 coefficient=0 actual=0.71069216728210449 expected=0.71069269290314352
+stf_warp translate: local degree 5: CUDA return/own scalar parity worst normalized error 1.60932541e-06, doPhi=1 steps=17 sample=4 lane=0 coefficient=0 actual=0.72102606296539307 expected=0.72102445363998413
+stf_warp translate: local degree 5: post-sync expansion visibility worst normalized error 4.97038314e-07, doPhi=0 steps=17 sample=4 lane=0 coefficient=-1 actual=1.7402389049530029 expected=1.7402397699188441
+stf_warp translate: Cartesian, own scalar, every lane, synchronized visibility, trace, linear field and doPhi checks passed at local degree 5.
+stf_warp translateInto: checking local degree 5, doPhi=0, steps=1, warps per block=1
+stf_warp translateInto: checking local degree 5, doPhi=0, steps=17, warps per block=1
+stf_warp translateInto: checking local degree 5, doPhi=1, steps=1, warps per block=1
+stf_warp translateInto: checking local degree 5, doPhi=1, steps=17, warps per block=1
+stf_warp translateInto: local degree 5: host scalar/Cartesian parity worst normalized error 1.61492892e-06, doPhi=1 steps=17 sample=4 lane=0 coefficient=0 actual=0.72102445363998413 expected=0.72102606856890172
+stf_warp translateInto: local degree 5: CUDA shared target/Cartesian parity worst normalized error 5.25621039e-07, doPhi=1 steps=17 sample=5 lane=0 coefficient=0 actual=0.71069216728210449 expected=0.71069269290314352
+stf_warp translateInto: local degree 5: CUDA shared target/own scalar parity worst normalized error 1.60932541e-06, doPhi=1 steps=17 sample=4 lane=0 coefficient=0 actual=0.72102606296539307 expected=0.72102445363998413
+stf_warp translateInto: local degree 5: post-sync expansion visibility worst normalized error 4.97038314e-07, doPhi=0 steps=17 sample=4 lane=0 coefficient=-1 actual=1.7402389049530029 expected=1.7402397699188441
+stf_warp translateInto: Cartesian, own scalar, every lane, synchronized visibility, trace, linear field and doPhi checks passed at local degree 5.
+stf_warp translateInto: checking local degree 5, doPhi=0, steps=1, warps per block=3
+stf_warp translateInto: checking local degree 5, doPhi=0, steps=17, warps per block=3
+stf_warp translateInto: checking local degree 5, doPhi=1, steps=1, warps per block=3
+stf_warp translateInto: checking local degree 5, doPhi=1, steps=17, warps per block=3
+stf_warp translateInto: local degree 5: host scalar/Cartesian parity worst normalized error 1.61492892e-06, doPhi=1 steps=17 sample=4 lane=0 coefficient=0 actual=0.72102445363998413 expected=0.72102606856890172
+stf_warp translateInto: local degree 5: CUDA shared target/Cartesian parity worst normalized error 5.25621039e-07, doPhi=1 steps=17 sample=5 lane=0 coefficient=0 actual=0.71069216728210449 expected=0.71069269290314352
+stf_warp translateInto: local degree 5: CUDA shared target/own scalar parity worst normalized error 1.60932541e-06, doPhi=1 steps=17 sample=4 lane=0 coefficient=0 actual=0.72102606296539307 expected=0.72102445363998413
+stf_warp translateInto: local degree 5: post-sync expansion visibility worst normalized error 4.97038314e-07, doPhi=0 steps=17 sample=4 lane=0 coefficient=-1 actual=1.7402389049530029 expected=1.7402397699188441
+stf_warp translateInto: Cartesian, own scalar, every lane, synchronized visibility, trace, linear field and doPhi checks passed at local degree 5.
+stf_warp translate: checking local degree 6, doPhi=0, steps=1, warps per block=1
+stf_warp translate: checking local degree 6, doPhi=0, steps=17, warps per block=1
+stf_warp translate: checking local degree 6, doPhi=1, steps=1, warps per block=1
+stf_warp translate: checking local degree 6, doPhi=1, steps=17, warps per block=1
+stf_warp translate: local degree 6: host scalar/Cartesian parity worst normalized error 2.08734142e-06, doPhi=1 steps=17 sample=4 lane=0 coefficient=0 actual=0.72102397680282593 expected=0.72102606414424808
+stf_warp translate: local degree 6: CUDA return/Cartesian parity worst normalized error 5.07684563e-07, doPhi=1 steps=17 sample=5 lane=0 coefficient=0 actual=0.71069216728210449 expected=0.71069267496666788
+stf_warp translate: local degree 6: CUDA return/own scalar parity worst normalized error 2.08616257e-06, doPhi=1 steps=17 sample=4 lane=0 coefficient=0 actual=0.72102606296539307 expected=0.72102397680282593
+stf_warp translate: local degree 6: post-sync expansion visibility worst normalized error 3.95725591e-07, doPhi=1 steps=17 sample=12 lane=0 coefficient=-1 actual=1.5368070602416992 expected=1.536806452088058
+stf_warp translate: Cartesian, own scalar, every lane, synchronized visibility, trace, linear field and doPhi checks passed at local degree 6.
+stf_warp translate: checking local degree 6, doPhi=0, steps=1, warps per block=3
+stf_warp translate: checking local degree 6, doPhi=0, steps=17, warps per block=3
+stf_warp translate: checking local degree 6, doPhi=1, steps=1, warps per block=3
+stf_warp translate: checking local degree 6, doPhi=1, steps=17, warps per block=3
+stf_warp translate: local degree 6: host scalar/Cartesian parity worst normalized error 2.08734142e-06, doPhi=1 steps=17 sample=4 lane=0 coefficient=0 actual=0.72102397680282593 expected=0.72102606414424808
+stf_warp translate: local degree 6: CUDA return/Cartesian parity worst normalized error 5.07684563e-07, doPhi=1 steps=17 sample=5 lane=0 coefficient=0 actual=0.71069216728210449 expected=0.71069267496666788
+stf_warp translate: local degree 6: CUDA return/own scalar parity worst normalized error 2.08616257e-06, doPhi=1 steps=17 sample=4 lane=0 coefficient=0 actual=0.72102606296539307 expected=0.72102397680282593
+stf_warp translate: local degree 6: post-sync expansion visibility worst normalized error 3.95725591e-07, doPhi=1 steps=17 sample=12 lane=0 coefficient=-1 actual=1.5368070602416992 expected=1.536806452088058
+stf_warp translate: Cartesian, own scalar, every lane, synchronized visibility, trace, linear field and doPhi checks passed at local degree 6.
+stf_warp translateInto: checking local degree 6, doPhi=0, steps=1, warps per block=1
+stf_warp translateInto: checking local degree 6, doPhi=0, steps=17, warps per block=1
+stf_warp translateInto: checking local degree 6, doPhi=1, steps=1, warps per block=1
+stf_warp translateInto: checking local degree 6, doPhi=1, steps=17, warps per block=1
+stf_warp translateInto: local degree 6: host scalar/Cartesian parity worst normalized error 2.08734142e-06, doPhi=1 steps=17 sample=4 lane=0 coefficient=0 actual=0.72102397680282593 expected=0.72102606414424808
+stf_warp translateInto: local degree 6: CUDA shared target/Cartesian parity worst normalized error 5.07684563e-07, doPhi=1 steps=17 sample=5 lane=0 coefficient=0 actual=0.71069216728210449 expected=0.71069267496666788
+stf_warp translateInto: local degree 6: CUDA shared target/own scalar parity worst normalized error 2.08616257e-06, doPhi=1 steps=17 sample=4 lane=0 coefficient=0 actual=0.72102606296539307 expected=0.72102397680282593
+stf_warp translateInto: local degree 6: post-sync expansion visibility worst normalized error 3.95725591e-07, doPhi=1 steps=17 sample=12 lane=0 coefficient=-1 actual=1.5368070602416992 expected=1.536806452088058
+stf_warp translateInto: Cartesian, own scalar, every lane, synchronized visibility, trace, linear field and doPhi checks passed at local degree 6.
+stf_warp translateInto: checking local degree 6, doPhi=0, steps=1, warps per block=3
+stf_warp translateInto: checking local degree 6, doPhi=0, steps=17, warps per block=3
+stf_warp translateInto: checking local degree 6, doPhi=1, steps=1, warps per block=3
+stf_warp translateInto: checking local degree 6, doPhi=1, steps=17, warps per block=3
+stf_warp translateInto: local degree 6: host scalar/Cartesian parity worst normalized error 2.08734142e-06, doPhi=1 steps=17 sample=4 lane=0 coefficient=0 actual=0.72102397680282593 expected=0.72102606414424808
+stf_warp translateInto: local degree 6: CUDA shared target/Cartesian parity worst normalized error 5.07684563e-07, doPhi=1 steps=17 sample=5 lane=0 coefficient=0 actual=0.71069216728210449 expected=0.71069267496666788
+stf_warp translateInto: local degree 6: CUDA shared target/own scalar parity worst normalized error 2.08616257e-06, doPhi=1 steps=17 sample=4 lane=0 coefficient=0 actual=0.72102606296539307 expected=0.72102397680282593
+stf_warp translateInto: local degree 6: post-sync expansion visibility worst normalized error 3.95725591e-07, doPhi=1 steps=17 sample=12 lane=0 coefficient=-1 actual=1.5368070602416992 expected=1.536806452088058
+stf_warp translateInto: Cartesian, own scalar, every lane, synchronized visibility, trace, linear field and doPhi checks passed at local degree 6.
+stf_warp translate: checking local degree 7, doPhi=0, steps=1, warps per block=1
+stf_warp translate: checking local degree 7, doPhi=0, steps=17, warps per block=1
+stf_warp translate: checking local degree 7, doPhi=1, steps=1, warps per block=1
+stf_warp translate: checking local degree 7, doPhi=1, steps=17, warps per block=1
+stf_warp translate: local degree 7: host scalar/Cartesian parity worst normalized error 1.78948186e-06, doPhi=1 steps=17 sample=4 lane=0 coefficient=0 actual=0.7210242748260498 expected=0.72102606430790539
+stf_warp translate: local degree 7: CUDA return/Cartesian parity worst normalized error 5.07178794e-07, doPhi=1 steps=17 sample=5 lane=0 coefficient=0 actual=0.71069216728210449 expected=0.7106926744608989
+stf_warp translate: local degree 7: CUDA return/own scalar parity worst normalized error 1.78813934e-06, doPhi=1 steps=17 sample=4 lane=0 coefficient=0 actual=0.72102606296539307 expected=0.7210242748260498
+stf_warp translate: local degree 7: post-sync expansion visibility worst normalized error 6.24684617e-07, doPhi=1 steps=1 sample=4 lane=0 coefficient=-1 actual=0.744251549243927 expected=0.74425217392854393
+stf_warp translate: Cartesian, own scalar, every lane, synchronized visibility, trace, linear field and doPhi checks passed at local degree 7.
+stf_warp translate: checking local degree 7, doPhi=0, steps=1, warps per block=3
+stf_warp translate: checking local degree 7, doPhi=0, steps=17, warps per block=3
+stf_warp translate: checking local degree 7, doPhi=1, steps=1, warps per block=3
+stf_warp translate: checking local degree 7, doPhi=1, steps=17, warps per block=3
+stf_warp translate: local degree 7: host scalar/Cartesian parity worst normalized error 1.78948186e-06, doPhi=1 steps=17 sample=4 lane=0 coefficient=0 actual=0.7210242748260498 expected=0.72102606430790539
+stf_warp translate: local degree 7: CUDA return/Cartesian parity worst normalized error 5.07178794e-07, doPhi=1 steps=17 sample=5 lane=0 coefficient=0 actual=0.71069216728210449 expected=0.7106926744608989
+stf_warp translate: local degree 7: CUDA return/own scalar parity worst normalized error 1.78813934e-06, doPhi=1 steps=17 sample=4 lane=0 coefficient=0 actual=0.72102606296539307 expected=0.7210242748260498
+stf_warp translate: local degree 7: post-sync expansion visibility worst normalized error 6.24684617e-07, doPhi=1 steps=1 sample=4 lane=0 coefficient=-1 actual=0.744251549243927 expected=0.74425217392854393
+stf_warp translate: Cartesian, own scalar, every lane, synchronized visibility, trace, linear field and doPhi checks passed at local degree 7.
+stf_warp translateInto: checking local degree 7, doPhi=0, steps=1, warps per block=1
+stf_warp translateInto: checking local degree 7, doPhi=0, steps=17, warps per block=1
+stf_warp translateInto: checking local degree 7, doPhi=1, steps=1, warps per block=1
+stf_warp translateInto: checking local degree 7, doPhi=1, steps=17, warps per block=1
+stf_warp translateInto: local degree 7: host scalar/Cartesian parity worst normalized error 1.78948186e-06, doPhi=1 steps=17 sample=4 lane=0 coefficient=0 actual=0.7210242748260498 expected=0.72102606430790539
+stf_warp translateInto: local degree 7: CUDA shared target/Cartesian parity worst normalized error 5.07178794e-07, doPhi=1 steps=17 sample=5 lane=0 coefficient=0 actual=0.71069216728210449 expected=0.7106926744608989
+stf_warp translateInto: local degree 7: CUDA shared target/own scalar parity worst normalized error 1.78813934e-06, doPhi=1 steps=17 sample=4 lane=0 coefficient=0 actual=0.72102606296539307 expected=0.7210242748260498
+stf_warp translateInto: local degree 7: post-sync expansion visibility worst normalized error 6.24684617e-07, doPhi=1 steps=1 sample=4 lane=0 coefficient=-1 actual=0.744251549243927 expected=0.74425217392854393
+stf_warp translateInto: Cartesian, own scalar, every lane, synchronized visibility, trace, linear field and doPhi checks passed at local degree 7.
+stf_warp translateInto: checking local degree 7, doPhi=0, steps=1, warps per block=3
+stf_warp translateInto: checking local degree 7, doPhi=0, steps=17, warps per block=3
+stf_warp translateInto: checking local degree 7, doPhi=1, steps=1, warps per block=3
+stf_warp translateInto: checking local degree 7, doPhi=1, steps=17, warps per block=3
+stf_warp translateInto: local degree 7: host scalar/Cartesian parity worst normalized error 1.78948186e-06, doPhi=1 steps=17 sample=4 lane=0 coefficient=0 actual=0.7210242748260498 expected=0.72102606430790539
+stf_warp translateInto: local degree 7: CUDA shared target/Cartesian parity worst normalized error 5.07178794e-07, doPhi=1 steps=17 sample=5 lane=0 coefficient=0 actual=0.71069216728210449 expected=0.7106926744608989
+stf_warp translateInto: local degree 7: CUDA shared target/own scalar parity worst normalized error 1.78813934e-06, doPhi=1 steps=17 sample=4 lane=0 coefficient=0 actual=0.72102606296539307 expected=0.7210242748260498
+stf_warp translateInto: local degree 7: post-sync expansion visibility worst normalized error 6.24684617e-07, doPhi=1 steps=1 sample=4 lane=0 coefficient=-1 actual=0.744251549243927 expected=0.74425217392854393
+stf_warp translateInto: Cartesian, own scalar, every lane, synchronized visibility, trace, linear field and doPhi checks passed at local degree 7.
+stf_warp translate: checking local degree 8, doPhi=0, steps=1, warps per block=1
+stf_warp translate: checking local degree 8, doPhi=0, steps=17, warps per block=1
+stf_warp translate: checking local degree 8, doPhi=1, steps=1, warps per block=1
+stf_warp translate: checking local degree 8, doPhi=1, steps=17, warps per block=1
+stf_warp translate: local degree 8: host scalar/Cartesian parity worst normalized error 1.81599943e-06, doPhi=1 steps=17 sample=13 lane=0 coefficient=0 actual=0.71037191152572632 expected=0.71037009552629504
+stf_warp translate: local degree 8: CUDA return/Cartesian parity worst normalized error 5.07107359e-07, doPhi=1 steps=17 sample=5 lane=0 coefficient=0 actual=0.71069216728210449 expected=0.7106926743894636
+stf_warp translate: local degree 8: CUDA return/own scalar parity worst normalized error 1.78813934e-06, doPhi=1 steps=17 sample=4 lane=0 coefficient=0 actual=0.72102606296539307 expected=0.7210242748260498
+stf_warp translate: local degree 8: post-sync expansion visibility worst normalized error 8.51345249e-07, doPhi=0 steps=1 sample=4 lane=0 coefficient=-1 actual=0.68921321630477905 expected=0.68921236495953053
+stf_warp translate: Cartesian, own scalar, every lane, synchronized visibility, trace, linear field and doPhi checks passed at local degree 8.
+stf_warp translate: checking local degree 8, doPhi=0, steps=1, warps per block=3
+stf_warp translate: checking local degree 8, doPhi=0, steps=17, warps per block=3
+stf_warp translate: checking local degree 8, doPhi=1, steps=1, warps per block=3
+stf_warp translate: checking local degree 8, doPhi=1, steps=17, warps per block=3
+stf_warp translate: local degree 8: host scalar/Cartesian parity worst normalized error 1.81599943e-06, doPhi=1 steps=17 sample=13 lane=0 coefficient=0 actual=0.71037191152572632 expected=0.71037009552629504
+stf_warp translate: local degree 8: CUDA return/Cartesian parity worst normalized error 5.07107359e-07, doPhi=1 steps=17 sample=5 lane=0 coefficient=0 actual=0.71069216728210449 expected=0.7106926743894636
+stf_warp translate: local degree 8: CUDA return/own scalar parity worst normalized error 1.78813934e-06, doPhi=1 steps=17 sample=4 lane=0 coefficient=0 actual=0.72102606296539307 expected=0.7210242748260498
+stf_warp translate: local degree 8: post-sync expansion visibility worst normalized error 8.51345249e-07, doPhi=0 steps=1 sample=4 lane=0 coefficient=-1 actual=0.68921321630477905 expected=0.68921236495953053
+stf_warp translate: Cartesian, own scalar, every lane, synchronized visibility, trace, linear field and doPhi checks passed at local degree 8.
+stf_warp translateInto: checking local degree 8, doPhi=0, steps=1, warps per block=1
+stf_warp translateInto: checking local degree 8, doPhi=0, steps=17, warps per block=1
+stf_warp translateInto: checking local degree 8, doPhi=1, steps=1, warps per block=1
+stf_warp translateInto: checking local degree 8, doPhi=1, steps=17, warps per block=1
+stf_warp translateInto: local degree 8: host scalar/Cartesian parity worst normalized error 1.81599943e-06, doPhi=1 steps=17 sample=13 lane=0 coefficient=0 actual=0.71037191152572632 expected=0.71037009552629504
+stf_warp translateInto: local degree 8: CUDA shared target/Cartesian parity worst normalized error 5.07107359e-07, doPhi=1 steps=17 sample=5 lane=0 coefficient=0 actual=0.71069216728210449 expected=0.7106926743894636
+stf_warp translateInto: local degree 8: CUDA shared target/own scalar parity worst normalized error 1.78813934e-06, doPhi=1 steps=17 sample=4 lane=0 coefficient=0 actual=0.72102606296539307 expected=0.7210242748260498
+stf_warp translateInto: local degree 8: post-sync expansion visibility worst normalized error 8.51345249e-07, doPhi=0 steps=1 sample=4 lane=0 coefficient=-1 actual=0.68921321630477905 expected=0.68921236495953053
+stf_warp translateInto: Cartesian, own scalar, every lane, synchronized visibility, trace, linear field and doPhi checks passed at local degree 8.
+stf_warp translateInto: checking local degree 8, doPhi=0, steps=1, warps per block=3
+stf_warp translateInto: checking local degree 8, doPhi=0, steps=17, warps per block=3
+stf_warp translateInto: checking local degree 8, doPhi=1, steps=1, warps per block=3
+stf_warp translateInto: checking local degree 8, doPhi=1, steps=17, warps per block=3
+stf_warp translateInto: local degree 8: host scalar/Cartesian parity worst normalized error 1.81599943e-06, doPhi=1 steps=17 sample=13 lane=0 coefficient=0 actual=0.71037191152572632 expected=0.71037009552629504
+stf_warp translateInto: local degree 8: CUDA shared target/Cartesian parity worst normalized error 5.07107359e-07, doPhi=1 steps=17 sample=5 lane=0 coefficient=0 actual=0.71069216728210449 expected=0.7106926743894636
+stf_warp translateInto: local degree 8: CUDA shared target/own scalar parity worst normalized error 1.78813934e-06, doPhi=1 steps=17 sample=4 lane=0 coefficient=0 actual=0.72102606296539307 expected=0.7210242748260498
+stf_warp translateInto: local degree 8: post-sync expansion visibility worst normalized error 8.51345249e-07, doPhi=0 steps=1 sample=4 lane=0 coefficient=-1 actual=0.68921321630477905 expected=0.68921236495953053
+stf_warp translateInto: Cartesian, own scalar, every lane, synchronized visibility, trace, linear field and doPhi checks passed at local degree 8.

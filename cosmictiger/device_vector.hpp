@@ -185,46 +185,59 @@ public:
     inline T const* data() const {
         return ptr_;
     }
+    // Collective: move the live elements into a pool block of at least
+    // minimumCapacity elements (grown by doubling from the default block).
+    CUDA_EXPORT
+    inline void grow(int minimumCapacity) {
+        ThreadIndex tid;
+        syncthreads();
+        int newCapacity = 1024 / sizeof(T);
+        if (newCapacity < 1) {
+            newCapacity = 1;
+        }
+        while (newCapacity < minimumCapacity) {
+            newCapacity *= 2;
+        }
+        if (tid == 0) {
+            newPtr_ = (T*) cudaAllocate(sizeof(T) * newCapacity);
+            if (newPtr_ == nullptr) {
+                PRINT("OOM in device_vector while requesting %i! \n", newCapacity);
+                ALWAYS_ASSERT(false);
+            }
+        }
+        syncthreads();
+        if (ptr_) {
+            copyCudaMemory(newPtr_, ptr_, sizeof(T) * size_);
+        }
+        syncthreads();
+        destroy();
+        if (tid == 0) {
+            ptr_ = newPtr_;
+            capacity_ = newCapacity;
+        }
+        syncthreads();
+    }
+    // Collective: guarantee capacity for newCapacity elements without
+    // changing the size, so later growth needs no pool traffic.
+    CUDA_EXPORT
+    inline void reserve(int newCapacity) {
+        if (newCapacity > capacity_) {
+            grow(newCapacity);
+        }
+    }
     CUDA_EXPORT
     inline void resize(int newSize) {
         ThreadIndex tid;
         destruct(newSize, size_);
         auto const previousSize = size_;
-        if (newSize <= capacity_) {
-            syncthreads();
-            if (tid == 0) {
-                size_ = newSize;
-            }
-            syncthreads();
-        } else {
-            syncthreads();
-            int newCapacity = 1024 / sizeof(T);
-            if (newCapacity < 1) {
-                newCapacity = 1;
-            }
-            if (tid == 0) {
-                while (newCapacity < newSize) {
-                    newCapacity *= 2;
-                }
-                newPtr_ = (T*) cudaAllocate(sizeof(T) * newCapacity);
-                if (newPtr_ == nullptr) {
-                    PRINT("OOM in device_vector while requesting %i! \n", newCapacity);
-                    ALWAYS_ASSERT(false);
-                }
-            }
-            syncthreads();
-            if (ptr_) {
-                copyCudaMemory(newPtr_, ptr_, sizeof(T) * size_);
-            }
-            syncthreads();
-            destroy();
-            if (tid == 0) {
-                ptr_ = newPtr_;
-                capacity_ = newCapacity;
-                size_ = newSize;
-            }
-            syncthreads();
+        if (newSize > capacity_) {
+            grow(newSize);
         }
+        syncthreads();
+        if (tid == 0) {
+            size_ = newSize;
+        }
+        syncthreads();
         construct(previousSize, size_);
     }
     CUDA_EXPORT

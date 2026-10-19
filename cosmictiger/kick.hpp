@@ -22,10 +22,18 @@
 
 #include <atomic>
 
+#include <cosmictiger/fmm_types.hpp>
 #include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/tree.hpp>
 
-#define KICK_C_MAX 32
+// Runtime compute.bucketSize is validated against this power-of-two cap. Tree
+// leaves hold between half the runtime bucket plus one and the runtime bucket
+// particles, and the CUDA kick arena is tuned for a runtime bucket equal to the
+// cap: its automatic sink-force tile covers the whole bucket when it fits.
+inline constexpr int kMaxBucketSize = MAX_BUCKET_SIZE;
+static_assert(
+    kMaxBucketSize >= 32 && kMaxBucketSize <= 1024 && (kMaxBucketSize & (kMaxBucketSize - 1)) == 0,
+    "MAX_BUCKET_SIZE must be a power of two from 32 to 1024");
 
 struct CudaKickData {
     TreeNode* treeNodes;
@@ -48,55 +56,39 @@ struct CudaKickData {
     float* pot;
 };
 
+// Host-computed byte layout of one block's dynamic shared memory.
+//
+// Persistent region: the control block (list/stack control objects, the
+// staging barrier and the resolved region pointers) and, when enabled, the
+// active local expansion with its position. Reusable phase arena: the L2L
+// output scratch, then the sink-force planes followed by the particle-source
+// planes or the staged positioned multipoles, which overlap each other. Forces
+// are initialized only after the cell interactions, so the scratch expansion
+// aliases them. Interaction lists, ancestor expansions and checklist stacks
+// stay in growable global backing owned by the control block.
+// Plain aggregate: the device control block is constructed by every lane, and a
+// value-initialized member would race with lane zero's later assignment.
+struct CudaKickArenaLayout {
+    int order;    // FMM order the layout was selected for
+    int totalBytes;
+    int controlOffset;
+    int expansionOffset;    // -1: the active expansion stays in global backing
+    int arenaOffset;
+    int arenaBytes;
+    int forceOffset;          // arena-relative; -1: forces use whole-bucket global backing
+    int sourceOffset;         // arena-relative
+    int scratchOffset;        // arena-relative L2L output expansion
+    int sinkCapacity;         // sink-force tile; 0 with global force backing
+    int particleCapacity;     // staged particle sources, a multiple of WARP_SIZE
+    int multipoleCapacity;    // staged positioned multipoles
+    int multipoleStride;      // bytes per staged multipole, a multiple of 16
+    bool massPlane;           // mixed-mass sources stage a mass plane
+    int residency;            // resident blocks per multiprocessor the budget targets
+    int budgetBytes;          // dynamic shared bytes allowed per block at that residency
+    int listReserve;          // entries reserved per interaction list and checklist stack; 0: none
+};
+
 struct KickReturn;
-
-#ifdef __CUDACC__
-
-#include <cosmictiger/stack_vector.hpp>
-
-#define KICK_PP_MAX (32 * 29)
-
-struct ExpansionType {
-    Array<Fixed32, NDIM> pos;
-    Expansion<float> expansion;
-};
-
-struct SearchParameters {
-    int self;
-    int phase;
-};
-
-struct ForceType {
-    float gx;
-    float gy;
-    float gz;
-    float phi;
-};
-
-struct CudaKickSharedMemory {
-    union {
-        struct {
-            Array<Fixed32, KICK_PP_MAX> x;
-            Array<Fixed32, KICK_PP_MAX> y;
-            Array<Fixed32, KICK_PP_MAX> z;
-            Array<float, KICK_PP_MAX> mass;
-        } xValue;
-        Array<MultiPos, KICK_C_MAX> mpos;
-    };
-    DeviceVector<ForceType> f;
-    StackVector<int> echecks;
-    StackVector<int> dchecks;
-    DeviceVector<int> leaflist;
-    DeviceVector<int> closelist;
-    DeviceVector<int> cplist;
-    DeviceVector<int> cclist;
-    DeviceVector<int> pclist;
-    DeviceVector<int> nextlist;
-    DeviceVector<ExpansionType> l;
-    DeviceVector<SearchParameters> params;
-    BarrierType barrier;
-};
-#endif
 
 struct KickReturn {
     int maxRung;
@@ -220,7 +212,7 @@ struct KickParameters {
 };
 
 struct KickWorkitem {
-    Expansion<float> l;
+    ExpansionBuffer l;
     Array<Fixed32, NDIM> pos;
     TreeId self;
     Vector<TreeId> dchecklist;
@@ -230,14 +222,19 @@ struct KickWorkitem {
 struct KickWorkspace;
 
 #ifndef __CUDACC__
-KickReturn kick(KickParameters, Expansion<float> l, Array<Fixed32, NDIM> pos, TreeId self,
+// The expansion buffer carries the local expansion of the runtime FMM order;
+// kick() dispatches to the per-order walk instantiation.
+KickReturn kick(KickParameters, ExpansionBuffer l, Array<Fixed32, NDIM> pos, TreeId self,
     Vector<TreeId> dchecklist, Vector<TreeId> echecklist, std::shared_ptr<KickWorkspace>);
 #endif
 void kickShowTimings();
 void kickSetRc(KickReturn kr);
 #ifdef USE_CUDA
+// Dispatches to the per-order CUDA kick instantiation for fmmOrder().
 KickReturn cudaExecuteKicks(
     KickParameters params, Fixed32*, Fixed32*, Fixed32*, TreeNode*, Vector<KickWorkitem> workitems);
+// Shared-memory policy of the runtime order's kick kernel (selected once per order).
+CudaKickArenaLayout const& kickArenaLayout();
 #endif
 int kickBlockCount();
 size_t kickEstimateCudaMemoryUsage(double theta, int numberOfParticles, int checkCount);

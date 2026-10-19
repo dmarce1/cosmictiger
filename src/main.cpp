@@ -30,6 +30,8 @@
 #include <cosmictiger/driver.hpp>
 #include <cosmictiger/ewald_indices.hpp>
 #include <cosmictiger/fmm_kernels.hpp>
+#include <cosmictiger/fmm_order.hpp>
+#include <cosmictiger/fmm_types.hpp>
 #include <cosmictiger/fp16.hpp>
 #include <cosmictiger/gravity.hpp>
 #include <cosmictiger/healpix.hpp>
@@ -50,9 +52,6 @@ int hpx_main(int argc, char* argv[]) {
      for( x[0] = 0.0; x[0] < 0.87; x[0] += 0.01 ) {
      PRINT( "%e %e\n", -x[0], (erfnearzero(-x)[0] - erf(-x[0]))/erf(-x[0]));
      }*/
-
-    Expansion<SimdFloat> d;
-    Array<SimdFloat, NDIM> xValue;
 
     std::atomic<int> i;
     PRINT("%i\n", sizeof(RockstarRecord));
@@ -93,26 +92,34 @@ int hpx_main(int argc, char* argv[]) {
             }
 #endif
             EwaldConst::init();
-            FILE* fp = fopen("ewald.txt", "wt");
-            xValue[0] = xValue[1] = xValue[2] = SimdFloat(0.0f);
-            for (double x = 0.00; x < 0.5; x += 0.001) {
-                xValue[0] = simdBroadcast<SimdFloat>(x);
-                d = SimdFloat(0.0f);
-                ewaldGreensFunction(d, xValue);
-                fprintf(fp, "%e ", x);
-                for (int n = 0; n < LORDER; n++) {
-                    for (int m = 0; m < LORDER - n; m++) {
-                        for (int l = 0; l < LORDER - n - m; l++) {
-                            if (l > 1 && !(l == 2 && n == 0 && m == 0)) {
-                                continue;
+            // Debug dump of the Ewald Green's function along x for the runtime order.
+            fmmDispatch([](auto orderTag) {
+                constexpr int kOrder = decltype(orderTag)::value;
+                FmmExpansion<SimdFloat, kOrder> d;
+                Array<SimdFloat, NDIM> xValue;
+                FILE* fp = fopen("ewald.txt", "wt");
+                xValue[0] = xValue[1] = xValue[2] = SimdFloat(0.0f);
+                for (double x = 0.00; x < 0.5; x += 0.001) {
+                    xValue[0] = simdBroadcast<SimdFloat>(x);
+                    d = SimdFloat(0.0f);
+                    ewaldGreensFunction(d, xValue);
+                    fprintf(fp, "%e ", x);
+                    for (int n = 0; n < kOrder; n++) {
+                        for (int m = 0; m < kOrder - n; m++) {
+                            for (int l = 0; l < kOrder - n - m; l++) {
+                                if (l > 1 && !(l == 2 && n == 0 && m == 0)) {
+                                    continue;
+                                }
+                                fprintf(fp, "%e ",
+                                    double(static_cast<FmmExpansion<SimdFloat, kOrder> const&>(d)(
+                                        n, m, l)[0]));
                             }
-                            fprintf(fp, "%e ", double(static_cast<Expansion<SimdFloat> const&>(d)(n, m, l)[0]));
                         }
                     }
+                    fprintf(fp, "\n");
                 }
-                fprintf(fp, "\n");
-            }
-            fclose(fp);
+                fclose(fp);
+            });
             if (getOptions().run.test != "") {
                 test(getOptions().run.test);
             } else {

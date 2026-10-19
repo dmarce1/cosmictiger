@@ -374,7 +374,7 @@ void KickWorkspace::clearBuffers() {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
-void KickWorkspace::addWork(std::shared_ptr<KickWorkspace> ptr, Expansion<float> l,
+void KickWorkspace::addWork(std::shared_ptr<KickWorkspace> ptr, ExpansionBuffer const& l,
     Array<Fixed32, NDIM> pos, TreeId self, Vector<TreeId>&& dchecks, Vector<TreeId>&& echecks) {
     KickWorkitem item;
     item.l = l;

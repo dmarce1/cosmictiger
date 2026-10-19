@@ -5,9 +5,13 @@ The FMM uses the STF generator imported from
 at commit `7ba8f1829fdede7348a1418b7cb36c0e7a955302`. Its Boost license is retained
 in `cosmictiger/gravity/stf/LICENSE`; the surrounding application remains GPL.
 
-Only the production degrees are generated: source degree 5 and local degree 6.
-The source stores 36 coefficients. The local stores 49 STF coefficients and one
-constant Laplacian. Indices are rank-major, with `nz=0` followed by `nz=1`.
+Kernels are generated for every supported FMM order, 3 through 9: source
+degrees 1 through 7 paired with local degrees 2 through 8. A run selects one
+order with `gravity.fmmOrder` (default 7, the build's `COSMICTIGER_WITH_ORDER`),
+and `fmmDispatch()` switches to that order's instantiation at coarse boundaries.
+At order 7 the source stores 36 coefficients and the local stores 49 STF
+coefficients and one constant Laplacian; in general a degree-`d` tensor stores
+`(d + 1)^2` coefficients. Indices are rank-major, with `nz=0` followed by `nz=1`.
 Moments are positive raw STF moments multiplied by `S^rank`, and local
 coefficients are derivatives of the negative potential divided by `S^(rank+1)`,
 where `S=1000` preserves the existing numerical normalization.
@@ -20,14 +24,34 @@ arithmetic. P2M, L2P, and contraction against precomputed harmonic Ewald
 derivatives were added to the imported rational-expression generator.
 
 CUDA L2L has a generated cooperative schedule in `tools/stf/stf_cuda.py`.
-All 32 lanes translate one expansion using aligned lane groups, then broadcast
-the completed coefficients to every lane. The degree-six schedule uses 22 rows,
-three phases, and 86 shuffle instructions per lane. Its tables use coalesced
-read-only global loads, and the polynomial basis uses lane-owned registers and
-shuffle lookups to avoid expensive dynamic register-array indexing. A final
-warp barrier completes all source reads before
-the caller can overwrite the expansion from lane zero. Generation asserts that
-every symbolic Taylor term appears exactly once.
+It emits one fully specialized `L2lWarpKernel<L, true>` for the requested local
+degree `L` in 2 through 11; the schedule table, the per-phase target table, the
+basis register count, the lane-group widths and the phase code are compile-time
+constants of that degree. All 32 lanes translate one expansion using aligned
+power-of-two lane groups. Each 32-bit schedule entry packs three 8-bit
+coefficient indices (basis, primary, secondary) and a 2-bit kind (padding,
+direct term, or trace-reduced `nz = 2` term); the output coefficient of each
+group comes from a separate per-phase `l2lWarpTargets` table. Both tables use
+coalesced read-only global loads. The polynomial basis is distributed over
+`ceil((L + 1)^2 / 32)` lane-owned registers (two at degree six, five at degree
+eleven): basis index `i` lives in word `i >> 5` on lane `i & 31`, and each row
+fetches it with one shuffle per word plus a constant selection chain, avoiding
+dynamic register-array indexing.
+
+Two entry points share that schedule. `translate` broadcasts every completed
+coefficient to all lanes' private expansions, as the production tree walk
+expects today. `translateInto` writes into a non-aliasing target of
+`(L + 1)^2 + 1` values (for example a shared-memory expansion): each group's
+leader stores its coefficient once, strided lanes copy the unchanged top-rank
+coefficients and trace, and no broadcast shuffles are issued. Both end with a
+warp barrier that completes all source reads and target writes before the caller
+can overwrite the expansion. The degree-six schedule uses 22 rows, three phases,
+and 86 shuffle instructions per lane (50 for `translateInto`); degree eleven
+uses 137 rows, 22 phases, and 873 shuffles per lane (752 for `translateInto`).
+Generation asserts that every symbolic Taylor term appears exactly once, that
+every output below the top rank owns exactly one aligned lane group inside the
+warp, that packed indices and kinds fit their fields, and that padded entries
+are kind zero.
 
 ## Constant background
 
@@ -59,36 +83,48 @@ harmonic.
 
 ## Regeneration and validation
 
+The generated kernels are no longer checked in. The build produces them for
+every order in its own tree, and every test target includes them from there:
+
 ```
-python3 tools/generate_stf_m2l.py
-python3 tools/generate_stf_m2l.py --check
-cmake --build build/stf_validation --target generate_fmm_kernels
+ninja -C build cosmictiger_generated_kernels
 ```
 
-The last command regenerates only the Ewald derivative formulas into
-`build/stf_validation/generated/cosmictiger/ewald_kernels.hpp`; formatting that
-file with the project clang-format configuration must reproduce the checked-in
-`cosmictiger/ewald_kernels.hpp`. The former Cartesian translation generator has
-been removed from `src/fmm_kernel_codegen.cpp`.
+That target runs `python3 tools/generate_stf_m2l.py --output-dir
+build/generated/cosmictiger/gravity/stf/generated`, which emits one specialized
+kernel class per degree for local degrees 2 through 8 (`generated_config.hpp`
+records the range as `kMinLocalDegree`/`kMaxLocalDegree`), and
+`fmm_kernel_codegen`, which writes one `ewaldCorrectionDerivatives` overload per
+order into `build/generated/cosmictiger/ewald_kernels.hpp`. The former checked-in
+`cosmictiger/gravity/stf/generated/` directory and the generator's `--check`
+comparison against it are gone; regenerate by rebuilding. The former Cartesian
+translation generator has been removed from `src/fmm_kernel_codegen.cpp`.
 
 `stf_kernels` checks independent Cartesian polynomial references, translations,
-nonzero dipoles, constant Laplacians, and SIMD lanes. `stf_kernels_cuda` executes
-the same operations on the device in float and double. The complete `fmmWalk`
-regression compares periodic forces and absolute potentials with an independent
-Ewald sum, including periodic seams and excluded inactive particles.
+nonzero dipoles, constant Laplacians, the truncated direct-particle remainder
+series, and SIMD lanes for every FMM order 3 through 9 in one executable,
+printing one pass line per order with the worst normalized discrepancy it saw.
+`stf_kernels_cuda` executes the same operations on the device in float and
+double, one launch per order. The complete `fmmWalk` regression compares
+periodic forces and absolute potentials with an independent Ewald sum at the
+runtime order, including periodic seams and excluded inactive particles.
 
 `stf_l2l_cuda` independently checks every coefficient and every lane after one
 and 17 translations, both potential modes, nonzero traces, linear fields, and
-multiple warps per block. It also checks the caller's synchronized in-place
-update pattern. The old CUDA generator omitted the last of 616 nonpotential
-terms, `Lzzzzzz * dz^4 / 24` in `Lzz`; the repeated-shift checks detect that trace
-drift in the unchanged legacy baseline.
+multiple warps per block, at every local degree 2 through 8. It checks
+`translate` through the caller's synchronized in-place update pattern and
+`translateInto` through ping-pong shared-memory source and target expansions.
+The old CUDA generator omitted the last of 616 nonpotential terms,
+`Lzzzzzz * dz^4 / 24` in `Lzz`; the repeated-shift checks detect that trace drift
+in the unchanged legacy baseline, which exists only at local degree six.
 
 `stf_ewald_cpu` also compiles the CUDA-disabled Ewald initializer and checks its
-image list, self terms, normalization, and periodic potential/gradient values.
-CPU runtime validation uses `--compute.cuda=false` in the CUDA-enabled
-application. A complete `COSMICTIGER_WITH_CUDA=OFF` application build still has
-pre-existing unconditional CUDA calls elsewhere in the application.
+image list, self terms, normalization, and periodic potential/gradient values at
+the default order and, after re-filling the tables through `setFmmOrder` and
+`EwaldConst::init`, at orders 3 and 9. CPU runtime validation uses
+`--compute.cuda=false` in the CUDA-enabled application. A complete
+`COSMICTIGER_WITH_CUDA=OFF` application build still has pre-existing
+unconditional CUDA calls elsewhere in the application.
 
 ## Benchmarks
 
@@ -96,7 +132,9 @@ The opt-in `COSMICTIGER_BUILD_STF_BENCHMARKS=ON` build adds
 `--run.test=stfBenchmark`, which measures deterministic 32^3-particle lattice and
 clustered trees with potential both enabled and disabled. It reports tree and
 kick timings separately, uses one warmup and five measured repetitions by
-default, and writes forces outside the measured interval.
+default, writes forces outside the measured interval, and records the runtime
+FMM order in its `STF_WALK_CONFIG` line. `benchmarks/run_cuda_kick_arena.py`
+takes `--orders` to sweep `gravity.fmmOrder` values.
 
 `benchmarks/stf_kernels.cpp` and `benchmarks/stf_kernels_cuda.cu` measure individual
 operators. `COSMICTIGER_STF_BASELINE_HEADER` selects an external legacy header so

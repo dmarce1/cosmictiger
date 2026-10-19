@@ -40,6 +40,15 @@ struct Compute {
     int treeCacheLineSize{};
     int treeAllocLineSize{};
     int particleCacheLineSize{};
+    // CUDA kick shared-memory policy; zero selects the automatic choice.
+    int cudaKickResidency{};           // resident kick blocks per multiprocessor
+    int cudaKickSinkTile{};            // shared sink-force tile; -1 keeps forces in global memory
+    int cudaKickParticleTile{};        // staged particle sources
+    int cudaKickMultipoleTile{};       // staged positioned multipoles
+    bool cudaKickSharedExpansion{};    // keep the active local expansion in shared memory
+    int cudaKickHandoffBlocks{};       // pins the CPU/GPU handoff divisor; zero derives it
+    int cudaKickListReserve{};    // pool entries reserved per kick list at block start; zero grows
+                                  // on demand
 };
 
 struct Checkpoint {
@@ -102,9 +111,12 @@ struct Lightcone {
 
 struct Gravity {
     bool enabled{};
+    int fmmOrder{};    // FMM order (multipole degree + 2) selected at run time, 3..9
     std::string kernelFamily{"ferrers"};
     int kernelDegree{4};
     double openingAngle{};
+    // CPU walk: open only the larger of two rejected cells instead of both.
+    bool openLargerCell{};
     // Fixed comoving compact support in box units; effectiveRadius is 2 sigma.
     double supportRadius{};
     double timestepEta{};
@@ -256,6 +268,14 @@ struct Options {
         arc & compute.treeCacheLineSize;
         arc & compute.treeAllocLineSize;
         arc & compute.particleCacheLineSize;
+        arc & compute.cudaKickResidency;
+        arc & compute.cudaKickSinkTile;
+        arc & compute.cudaKickParticleTile;
+        arc & compute.cudaKickMultipoleTile;
+        arc & compute.cudaKickSharedExpansion;
+        arc & compute.cudaKickHandoffBlocks;
+        arc & compute.cudaKickListReserve;
+        arc & gravity.fmmOrder;
         arc & checkpoint.readIndex;
         arc & checkpoint.intervalSeconds;
         arc & run.maxIterations;
@@ -266,6 +286,7 @@ struct Options {
         arc & lightcone.mapSize;
         arc & lightcone.linkingLength;
         arc & gravity.openingAngle;
+        arc & gravity.openLargerCell;
         arc & analysis.sliceSize;
         arc & analysis.linkingLength;
         arc & gravity.supportRadius;

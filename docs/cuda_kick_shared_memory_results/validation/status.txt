@@ -1,0 +1,18 @@
+stf_kernels_test exit 0 : STF kernel checks passed for FMM orders 3 to 9.
+stf_kernels_cuda_test exit 0 : STF CUDA float/double kernel parity checks passed for FMM orders 3 to 9.
+stf_l2l_cuda_test exit 0 : stf_warp translateInto: Cartesian, own scalar, every lane, synchronized visibility, trace, linear field and doPhi checks passed at local degree 8.
+stf_ewald_cpu_test exit 0 : CPU Ewald initialization and independent periodic potential/gradient passed.
+fmmWalk order 3 exit 0 : 1 passed, CUDA kick arena (FMM order 3): 234 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynam
+fmmWalk order 4 exit 0 : 1 passed, CUDA kick arena (FMM order 4): 224 registers, 0 static shared bytes, 8 blocks/SM (register limit 9), budget 11776, dynam
+fmmWalk order 5 exit 0 : 1 passed, CUDA kick arena (FMM order 5): 230 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynam
+fmmWalk order 6 exit 0 : 1 passed, CUDA kick arena (FMM order 6): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynam
+fmmWalk order 7 exit 0 : 1 passed, CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynam
+fmmWalk order 8 exit 0 : 1 passed, CUDA kick arena (FMM order 8): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynam
+fmmWalk order 9 exit 0 : 1 passed, CUDA kick arena (FMM order 9): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynam
+fmmTree order 3 exit 0 : 1 passed lines
+sphGravity order 3 exit 0 : 3 passed lines, CUDA kick arena (FMM order 3): 234 registers, 0 static shared bytes, 8 blocks/SM (register limit 8),
+fmmTree order 7 exit 0 : 1 passed lines
+sphGravity order 7 exit 0 : 3 passed lines, CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8),
+fmmTree order 9 exit 0 : 1 passed lines
+sphGravity order 9 exit 0 : 3 passed lines, CUDA kick arena (FMM order 9): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8),
+DONE

@@ -1,0 +1,4 @@
+**/stf_walk_forces.csv
+*.nsys-rep
+*.sqlite
+*.ncu-rep

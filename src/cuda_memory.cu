@@ -220,16 +220,30 @@ void cudaMemoryInitialize(size_t heapSize) {
     new (memory) CudaMemory(heapSize);
 }
 
+// Collective block copy. A plain strided copy needs no static shared barrier:
+// re-initializing one on every call raced with lagging waiters of the previous
+// phase (compute-sanitizer synccheck reported missing waits).
 void copyCudaMemory(void* dest, void* src, int size) {
 #ifdef __CUDA_ARCH__
-    __shared__ BarrierType barrier;
-    auto group = cooperative_groups::this_thread_block();
-    if (group.thread_rank() == 0) {
-        init(&barrier, group.size());
+    int const tid = threadIdx.x;
+    int const stride = blockDim.x;
+    syncthreads();
+    if (size % int(sizeof(int)) == 0 && (reinterpret_cast<size_t>(dest) % sizeof(int)) == 0 &&
+        (reinterpret_cast<size_t>(src) % sizeof(int)) == 0) {
+        int const count = size / int(sizeof(int));
+        auto* destination = static_cast<int*>(dest);
+        auto const* source = static_cast<int const*>(src);
+        for (int i = tid; i < count; i += stride) {
+            destination[i] = source[i];
+        }
+    } else {
+        auto* destination = static_cast<char*>(dest);
+        auto const* source = static_cast<char const*>(src);
+        for (int i = tid; i < size; i += stride) {
+            destination[i] = source[i];
+        }
     }
     syncthreads();
-    cuda::memcpy_async(group, dest, src, size, barrier);
-    barrier.arrive_and_wait();
 #else
     memcpy(dest, src, size);
 #endif

@@ -1,0 +1,12 @@
+=== synccheck start Mon Oct 19 10:44:04 AM CDT 2026
+=== synccheck exit 1 Mon Oct 19 10:44:07 AM CDT 2026
+========= ERROR SUMMARY: 32 errors
+=== racecheck start Mon Oct 19 10:44:07 AM CDT 2026
+=== racecheck exit 1 Mon Oct 19 10:44:18 AM CDT 2026
+FMM walk regression passed (CPU and CUDA, 1 rank(s))
+========= RACECHECK SUMMARY: 100 hazards displayed (0 errors, 408 warnings)
+=== memcheck start Mon Oct 19 10:44:18 AM CDT 2026
+=== memcheck exit 0 Mon Oct 19 10:44:20 AM CDT 2026
+FMM walk regression passed (CPU and CUDA, 1 rank(s))
+========= ERROR SUMMARY: 0 errors
+DONE

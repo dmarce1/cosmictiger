@@ -1,0 +1,4 @@
+CPU Ewald tables and periodic potential/gradient passed at FMM order 7.
+CPU Ewald tables and periodic potential/gradient passed at FMM order 3.
+CPU Ewald tables and periodic potential/gradient passed at FMM order 9.
+CPU Ewald initialization and independent periodic potential/gradient passed.

@@ -1,0 +1,49 @@
+{
+  "utc": "2026-10-19T16:58:11.572888+00:00",
+  "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+  "command": "/home/dmarce1/workspace/cosmictiger/benchmarks/run_cuda_kick_arena.py --binary arena=/tmp/claude-1000/-home-dmarce1-workspace-cosmictiger/765541c5-5b91-4b03-b04b-7071cc6a863c/scratchpad/cosmictiger_b128:arena --policy auto= --output /home/dmarce1/workspace/cosmictiger/docs/cuda_kick_shared_memory_results/orders_bucket64 --fixtures lattice,clustered,adaptive --buckets 64 --backends cuda --samples 15 --pairs 2 --reference 1024 --orders 3,4,5,6,7,8,9",
+  "binaries": [
+    {
+      "label": "arena",
+      "path": "/tmp/claude-1000/-home-dmarce1-workspace-cosmictiger/765541c5-5b91-4b03-b04b-7071cc6a863c/scratchpad/cosmictiger_b128",
+      "arena": true,
+      "sha256": "3840aaf75479c5476a5c16ad138184b84f40fbff01b49de3e76f04f82a1ab2e7"
+    }
+  ],
+  "policies": [
+    {
+      "label": "auto",
+      "options": []
+    }
+  ],
+  "fixtures": [
+    "lattice",
+    "clustered",
+    "adaptive"
+  ],
+  "buckets": [
+    64
+  ],
+  "orders": [
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "backends": [
+    "cuda"
+  ],
+  "samples": 15,
+  "pairs": 2,
+  "reference": 1024,
+  "git_head": "0d1b10377cb79c029d320d2b93667607c30c1813",
+  "nvidia_smi": "name, driver_version, clocks.current.sm [MHz], clocks.current.memory [MHz], utilization.gpu [%], memory.used [MiB]\nNVIDIA GeForce RTX 3090, 595.99.02, 630 MHz, 5001 MHz, 25 %, 4964 MiB\n",
+  "load_average": [
+    7.44580078125,
+    6.82421875,
+    4.8486328125
+  ]
+}

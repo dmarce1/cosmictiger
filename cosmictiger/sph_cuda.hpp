@@ -33,6 +33,7 @@
 #include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/sph_tree.hpp>
 #include <cosmictiger/timer.hpp>
+#include <cosmictiger/vector3.hpp>
 
 using SphRunCudaData = SphRunData;
 
@@ -79,6 +80,13 @@ struct SphNeighborPosition {
 };
 
 #ifdef __CUDACC__
+// Section 6 of Monaghan (1992): the resolution length follows the local density,
+// h_a ∝ ρ_a^(−1/ν) with ν = 3 (equations 6.1-6.2). Instead of integrating equation 6.2 or
+// 6.7, the solve holds (4π/3) ρ_a H_a³/m = N_target, i.e. ΣW = Σ_b w(r_ab/H_a) = 3 N_target/(4π)
+// for the selected kernel W(r, H) = w(r/H)/H³, by a bounded Newton iteration on the support
+// radius H_a = supportRadius with dΣW/dH_a = −Σ_b q_ab w'(q_ab)/H_a, q_ab = r_ab/H_a. The
+// bounds limit the support radius without modifying the density sum.
+// NOLINTBEGIN(readability-identifier-naming)
 template <int blockSize>
 inline __device__ bool solveSphSupportRadius(float& supportRadius, float minimumSupportRadius,
     float maximumSupportRadius, float targetNeighborCount,
@@ -94,10 +102,7 @@ inline __device__ bool solveSphSupportRadius(float& supportRadius, float minimum
     __syncthreads();
     float lower = minimumSupportRadius;
     float upper = maximumSupportRadius;
-    float const target = targetNeighborCount * float(3.0 / (4.0 * M_PI));
-    // rho H^3 / m = sum W(r/H) is held fixed, giving H proportional to rho^-1/3.
-    // minimumSupportRadius and maximumSupportRadius bound the support radius without modifying the
-    // density sum.
+    float const ΣW_target = targetNeighborCount * float(3.0 / (4.0 * M_PI));
     for (int iteration = 0; iteration < 128; iteration++) {
         int boxExceeded = false;
         for (int dim = 0; dim < NDIM; dim++) {
@@ -111,27 +116,25 @@ inline __device__ bool solveSphSupportRadius(float& supportRadius, float minimum
         if (boxExceeded) {
             return false;
         }
-        float const inverseSupportRadius = 1.0f / supportRadius;
-        float sum = 0.0f;
-        float derivative = 0.0f;
+        float const one_over_H_a = 1.0f / supportRadius;
+        float ΣW = 0.0f;
+        float dΣW_dH_a = 0.0f;
         for (int neighborIndex = threadIndex; neighborIndex < neighbors.size();
             neighborIndex += runtimeBlockSize) {
             auto const& neighbor = neighbors[neighborIndex];
-            float const separationX = distance(position[XDIM], neighbor.positionX);
-            float const separationY = distance(position[YDIM], neighbor.positionY);
-            float const separationZ = distance(position[ZDIM], neighbor.positionZ);
-            float const normalizedRadius =
-                sqrtf(sqr(separationX, separationY, separationZ)) * inverseSupportRadius;
-            if (normalizedRadius < 1.0f) {
-                sum += kernelW(normalizedRadius);
-                derivative -=
-                    normalizedRadius * dkernelWDq(normalizedRadius) * inverseSupportRadius;
+            Vector3<float> const r_ab(distance(position[XDIM], neighbor.positionX),
+                distance(position[YDIM], neighbor.positionY),
+                distance(position[ZDIM], neighbor.positionZ));
+            float const q_ab = sqrtf(r_ab.dot(r_ab)) * one_over_H_a;
+            if (q_ab < 1.0f) {
+                ΣW += kernelW(q_ab);
+                dΣW_dH_a -= q_ab * dkernelWDq(q_ab) * one_over_H_a;
             }
         }
-        sharedReduceAdd<float, blockSize>(sum);
-        sharedReduceAdd<float, blockSize>(derivative);
-        float const residual = sum - target;
-        if (fabsf(residual) <= SPH_SUPPORT_RADIUS_TOLERANCE * target ||
+        sharedReduceAdd<float, blockSize>(ΣW);
+        sharedReduceAdd<float, blockSize>(dΣW_dH_a);
+        float const residual = ΣW - ΣW_target;
+        if (fabsf(residual) <= SPH_SUPPORT_RADIUS_TOLERANCE * ΣW_target ||
             (supportRadius <= minimumSupportRadius && residual >= 0.0f) ||
             (supportRadius >= maximumSupportRadius && residual <= 0.0f)) {
             return true;
@@ -141,7 +144,7 @@ inline __device__ bool solveSphSupportRadius(float& supportRadius, float minimum
         } else {
             lower = supportRadius;
         }
-        float change = derivative > 0.0f ? -residual / derivative : 0.2f * supportRadius;
+        float change = dΣW_dH_a > 0.0f ? -residual / dΣW_dH_a : 0.2f * supportRadius;
         change = fminf(fmaxf(change, -0.2f * supportRadius), 0.2f * supportRadius);
         float next =
             fminf(fmaxf(supportRadius + change, minimumSupportRadius), maximumSupportRadius);
@@ -165,6 +168,7 @@ inline __device__ bool solveSphSupportRadius(float& supportRadius, float minimum
     }
     return false;
 }
+// NOLINTEND(readability-identifier-naming)
 #endif
 
 #endif /* SPH_CUDA_HPP_ */

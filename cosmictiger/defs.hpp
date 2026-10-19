@@ -100,4 +100,9 @@
 #define LORDER ORDER
 #define MORDER (LORDER - 1)
 
+// Compile-time cap on compute.bucketSize (COSMICTIGER_WITH_MAX_BUCKET); see kick.hpp.
+#ifndef MAX_BUCKET_SIZE
+#define MAX_BUCKET_SIZE 128
+#endif
+
 #endif /* DEFS_HPP_ */
