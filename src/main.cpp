@@ -27,7 +27,7 @@
 #include <utility>
 #include <vector>
 
-#include <cosmictiger/analysis/healpix.hpp>
+#include <cosmictiger/analysis/lightcone.hpp>
 #include <cosmictiger/analysis/rockstar.hpp>
 #include <cosmictiger/core/driver.hpp>
 #include <cosmictiger/core/hpx.hpp>
@@ -41,6 +41,7 @@
 #include <cosmictiger/fmm/fmm_types.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/tree.hpp>
+#include <cosmictiger/io/checkpoint.hpp>
 #include <cosmictiger/math/fp16.hpp>
 #include <cosmictiger/math/simd.hpp>
 #include <cosmictiger/particles/particles.hpp>

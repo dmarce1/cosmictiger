@@ -21,7 +21,7 @@
 
 // Order-templated CUDA gravity operators of the kick kernel. They are
 // instantiated only inside the per-order kick instance translation units
-// (kick_cuda_instances.hpp), which include this header through kick_cuda_impl.hpp.
+// (kick_cuda_instances.hpp), which include this header through kick_cuda_kernel.hpp.
 
 #include <cooperative_groups.h>
 #include <cuda/barrier>
@@ -32,7 +32,7 @@
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/kick_cuda.hpp>
 
-// Interaction counters shared by every order (defined in gravity.cu).
+// Interaction counters shared by every order (defined in kick.cu).
 extern __managed__ double iclose;
 extern __managed__ double idirect;
 extern __managed__ double numberOfProcessedSinkParticles;

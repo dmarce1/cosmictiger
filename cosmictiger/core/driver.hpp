@@ -66,8 +66,6 @@ struct DriverParameters {
     }
 };
 
-void writeCheckpoint(DriverParameters params);
-DriverParameters readCheckpoint();
 SphTreeCreateReturn sphStep1(int minrung, bool verbose = true);
 SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phase, double adot,
     EnergiesT* energies, bool verbose = true);
@@ -75,4 +73,3 @@ std::pair<KickReturn, TreeCreateReturn> kickStep(
     int minrung, double scale, double, double t0, double theta, bool firstCall, bool fullEval);
 
 void driver();
-void checkpointStateTest();

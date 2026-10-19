@@ -166,3 +166,22 @@ template <class F>
 decltype(auto) fmmDispatch(F&& f) {
     return fmmDispatch(fmmOrder(), std::forward<F>(f));
 }
+
+// Internal normalized FMM coordinate scale. Physical lengths use the unit box.
+#define SCALE_FACTOR 1.000000e+03f
+#define SCALE_FACTOR0 1.000000e+00f
+#define SCALE_FACTOR_INV0 1.000000e+00f
+#define SCALE_FACTOR1 1.000000e+03f
+#define SCALE_FACTOR_INV1 1.000000e-03f
+#define SCALE_FACTOR2 1.000000e+06f
+#define SCALE_FACTOR_INV2 1.000000e-06f
+#define SCALE_FACTOR3 1.000000e+09f
+#define SCALE_FACTOR_INV3 1.000000e-09f
+#define SCALE_FACTOR4 1.000000e+12f
+#define SCALE_FACTOR_INV4 1.000000e-12f
+#define SCALE_FACTOR5 1.000000e+15f
+#define SCALE_FACTOR_INV5 1.000000e-15f
+#define SCALE_FACTOR6 1.000000e+18f
+#define SCALE_FACTOR_INV6 1.000000e-18f
+#define SCALE_FACTOR7 1.000000e+21f
+#define SCALE_FACTOR_INV7 1.000000e-21f

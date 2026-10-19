@@ -15,6 +15,7 @@
 #include <cosmictiger/analysis/power.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/cosmology/fft.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
 namespace detail {

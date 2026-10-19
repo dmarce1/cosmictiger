@@ -61,7 +61,7 @@ their particles. In clustered regions those radii differ by large factors, and
 the test only cares about their sum, so opening the smaller cell doubles the
 pair count for almost no gain.
 
-The CUDA walk in `cosmictiger/gravity/kick_cuda_impl.hpp` applies the same rule with
+The CUDA walk in `cosmictiger/gravity/kick_cuda_kernel.hpp` applies the same rule with
 a device twin of the helper, `cudaOpenOrDefer`, a `bothlist` for the
 equal-radius case whose children go to the sink's children, and the per-level
 loop iterating for internal sinks when the rule is on.

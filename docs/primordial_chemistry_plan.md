@@ -212,7 +212,7 @@ belong in validation and do not require FP64 production kernels.
 
 Production CPU support has a separate application gate. The original audit
 found unconditional CUDA calls in `src/gravity/kick_workspace.cpp`, CUDA allocations in
-`src/analysis/lightcone.cpp`, `__device__` in `cosmictiger/analysis/healpix.hpp`, and unconditional
+`src/analysis/lightcone.cpp`, `__device__` in `cosmictiger/analysis/lightcone.hpp`, and unconditional
 `hpxInitCuda()` in `src/main.cpp`. The implementation addresses these dependencies;
 a full CUDA-OFF build and no-GPU startup remain required evidence, as does CPU
 selection in a CUDA-enabled executable without device initialization. Unsupported

@@ -36,11 +36,13 @@ constexpr bool kVerbose = true;
 #include <cosmictiger/gravity/kick_interaction_counts.hpp>
 #include <cosmictiger/gravity/kick_workspace.hpp>
 #include <cosmictiger/gravity/tree.hpp>
+#include <cosmictiger/io/checkpoint.hpp>
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/drift.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #include <cosmictiger/problems/analytic.hpp>
 #include <cosmictiger/problems/hydro.hpp>
+#include <cosmictiger/problems/plummer.hpp>
 #include <cosmictiger/problems/sphere.hpp>
 #include <cosmictiger/problems/test.hpp>
 
@@ -189,7 +191,6 @@ static void treeTest() {
 }
 
 static void reportKickInteractions(double theta);
-void plummerInit(double r0);
 
 static void kickTest() {
     Timer tm;
@@ -291,8 +292,6 @@ static void kickTest() {
     fclose(fp);
     KickWorkspace::clearBuffers();
 }
-
-DriverParameters readCheckpoint();
 
 // Rank-local CPU walk counters and the net force from the saved accelerations.
 static void reportKickInteractions(double theta) {

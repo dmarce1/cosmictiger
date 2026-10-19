@@ -127,11 +127,11 @@ set(cosmictiger_source_files
     src/gravity/bh.cpp
     src/gravity/bh.cu
     src/gravity/gravity.cpp
-    src/gravity/gravity.cu
     src/gravity/kick.cpp
     src/gravity/kick.cu
     src/gravity/kick_workspace.cpp
     src/gravity/tree.cpp
+    src/io/checkpoint.cpp
     src/io/output.cpp
     src/io/view.cpp
     src/main.cpp
@@ -147,6 +147,7 @@ set(cosmictiger_source_files
     src/problems/analytic.cu
     src/problems/exact_sod.cpp
     src/problems/hydro.cpp
+    src/problems/plummer.cpp
     src/problems/sedov.cpp
     src/problems/sphere.cu
     src/problems/test.cpp
@@ -166,6 +167,7 @@ set(cosmictiger_source_files
     tests/bh.cpp
     tests/fmm_tree.cpp
     tests/fmm_walk.cpp
+    tests/groups_catalogue.cpp
     tests/kernel_selection_cuda.cu
     tests/linear_growth.cpp
     tests/rockstar.cpp
@@ -180,7 +182,6 @@ set(cosmictiger_header_files
     cosmictiger/analysis/group_tree.hpp
     cosmictiger/analysis/groups.hpp
     cosmictiger/analysis/groups_find.hpp
-    cosmictiger/analysis/healpix.hpp
     cosmictiger/analysis/lightcone.hpp
     cosmictiger/analysis/lightcone_entry.hpp
     cosmictiger/analysis/power.hpp
@@ -228,13 +229,11 @@ set(cosmictiger_header_files
     cosmictiger/cuda/cuda_stream.hpp
     cosmictiger/cuda/cuda_unordered_map.hpp
     cosmictiger/cuda/device_vector.hpp
-    cosmictiger/float2double.hpp
     cosmictiger/fmm/ewald_indices.hpp
     cosmictiger/fmm/ewald_tables.hpp
     cosmictiger/fmm/fmm_acceptance.hpp
     cosmictiger/fmm/fmm_kernels.hpp
     cosmictiger/fmm/fmm_order.hpp
-    cosmictiger/fmm/fmm_scale.hpp
     cosmictiger/fmm/fmm_types.hpp
     cosmictiger/gravity/bh.hpp
     cosmictiger/gravity/fmm_cpu_instances.hpp
@@ -243,13 +242,15 @@ set(cosmictiger_header_files
     cosmictiger/gravity/gravity_cuda.hpp
     cosmictiger/gravity/kick.hpp
     cosmictiger/gravity/kick_cuda.hpp
-    cosmictiger/gravity/kick_cuda_impl.hpp
     cosmictiger/gravity/kick_cuda_instances.hpp
+    cosmictiger/gravity/kick_cuda_kernel.hpp
+    cosmictiger/gravity/kick_cuda_launch.hpp
     cosmictiger/gravity/kick_interaction_counts.hpp
     cosmictiger/gravity/kick_walk.hpp
     cosmictiger/gravity/kick_workspace.hpp
     cosmictiger/gravity/tree.hpp
     cosmictiger/gravity/tree_multipole.hpp
+    cosmictiger/io/checkpoint.hpp
     cosmictiger/io/output.hpp
     cosmictiger/io/silo_spheres.hpp
     cosmictiger/io/view.hpp
@@ -279,10 +280,10 @@ set(cosmictiger_header_files
     cosmictiger/problems/analytic.hpp
     cosmictiger/problems/exact_sod.hpp
     cosmictiger/problems/hydro.hpp
+    cosmictiger/problems/plummer.hpp
     cosmictiger/problems/sedov.hpp
     cosmictiger/problems/sphere.hpp
     cosmictiger/problems/test.hpp
-    cosmictiger/random_number_generator.hpp
     cosmictiger/sph/monaghan_sph.hpp
     cosmictiger/sph/sph.hpp
     cosmictiger/sph/sph_chemistry.hpp

@@ -9,7 +9,6 @@
 #include <cosmictiger/core/containers.hpp>
 #include <cosmictiger/fmm/ewald_kernels.hpp>
 #include <cosmictiger/fmm/fmm_order.hpp>
-#include <cosmictiger/fmm/fmm_scale.hpp>
 #include <cosmictiger/fmm/fmm_types.hpp>
 #include <cosmictiger/fmm/generated_config.hpp>
 #include <cosmictiger/fmm/generated_m2l.hpp>

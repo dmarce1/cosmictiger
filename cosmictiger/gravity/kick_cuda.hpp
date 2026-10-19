@@ -20,7 +20,8 @@
 #pragma once
 
 // CUDA kick: order-templated declarations. The kernel, its device operators and
-// the host launch/layout code are templates defined in kick_cuda_impl.hpp and
+// the host launch/layout code are templates defined in kick_cuda_kernel.hpp and
+// kick_cuda_launch.hpp and
 // instantiated once per FMM order by the CMake-generated instance translation
 // units (kick_cuda_instances.hpp). kick.cu dispatches on the runtime order.
 
@@ -96,7 +97,7 @@ template <int order>
 __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, CudaKickData data,
     CudaKickParameters<order>* params, int itemCount, int* nextItem, CudaKickArenaLayout layout);
 
-// Per-order host entry points, defined in kick_cuda_impl.hpp.
+// Per-order host entry points, defined in kick_cuda_launch.hpp.
 template <int order>
 KickReturn cudaExecuteKicksImpl(KickParameters params, Fixed32* devX, Fixed32* devY, Fixed32* devZ,
     TreeNode* devTreeNodes, Vector<KickWorkitem> workitems);

@@ -37,13 +37,6 @@ Range<int64_t> fft3dComplexRange();
 Range<int64_t> fft3dRealRange();
 Vector<ComplexFloat>& fft3dComplexVector();
 
-struct PowerSpectrumT {
-    Vector<float> p;
-    Vector<float> k;
-    Vector<float> perr;
-};
-
-PowerSpectrumT fft3dPowerSpectrum();
 void fft3d2silo(bool real);
 /*
  inline CUDA_EXPORT float cloud_weight(float x) {

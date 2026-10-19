@@ -722,7 +722,6 @@ int main() {
         "// Generated Ewald correction; STF translations come from tools/generate_stf_m2l.py.\n");
     tprint("#pragma once\n\n");
     tprint("#include <cosmictiger/fmm/ewald_indices.hpp>\n");
-    tprint("#include <cosmictiger/fmm/fmm_scale.hpp>\n");
     tprint("#include <cosmictiger/core/flops.hpp>\n");
     tprint("#include <cosmictiger/math/math.hpp>\n");
     tprint("#include <cosmictiger/math/simd_math.hpp>\n");

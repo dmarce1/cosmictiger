@@ -21,7 +21,7 @@
 
 // Explicit instantiations of the order-templated CPU code for the order named
 // by COSMICTIGER_FMM_INSTANCE_ORDER (one translation unit per order, generated
-// by CMake from src/fmm_instance_cpu.cpp.in). The dispatchers in gravity.cpp,
+// by CMake from src/gravity/fmm_instance_cpu.cpp.in). The dispatchers in gravity.cpp,
 // kick.cpp, tree.cpp and ewald_indices.cpp call these through fmmDispatch().
 
 #ifndef COSMICTIGER_FMM_INSTANCE_ORDER

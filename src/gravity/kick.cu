@@ -23,6 +23,7 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/cuda/cuda.hpp>
 #include <cosmictiger/fmm/fmm_order.hpp>
+#include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/kick_cuda.hpp>
 
@@ -73,4 +74,39 @@ int kickBlockCount(ParticleInteger particles) {
     double const scale = std::clamp(
         std::cbrt(double(particles) / kKickHandoffReferenceParticles), 1.0, kKickHandoffMaxScale);
     return int(std::lround(referenceBlocks * scale));
+}
+
+// The CUDA operators are order templates in gravity_cuda.hpp; this unit owns
+// the interaction counters they share.
+
+__managed__ double iclose;
+__managed__ double idirect;
+__managed__ double numberOfProcessedSinkParticles;
+__managed__ bool useGravityCounters = false;
+
+void resetGravityCounters() {
+    if (!cudaEnabled()) {
+        return;
+    }
+    iclose = idirect = numberOfProcessedSinkParticles = 0;
+}
+
+void setGravityCounterUse(bool code) {
+    if (!cudaEnabled()) {
+        return;
+    }
+    useGravityCounters = code;
+}
+
+void getGravityCounters(double& close, double& direct) {
+    if (!cudaEnabled()) {
+        close = direct = 0.0;
+        return;
+    }
+    if (numberOfProcessedSinkParticles == 0.0) {
+        close = direct = 0.0;
+    } else {
+        close = iclose / numberOfProcessedSinkParticles;
+        direct = idirect / numberOfProcessedSinkParticles;
+    }
 }

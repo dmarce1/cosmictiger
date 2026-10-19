@@ -29,6 +29,14 @@
 #include <cosmictiger/math/fixed.hpp>
 #include <cosmictiger/math/range.hpp>
 
+// HEALPix nested-scheme pixel lookup on the device (healpix.cu).
+#ifdef USE_CUDA
+void healpixInit();
+#endif
+#ifdef __CUDACC__
+__device__ void vec2pixNest(long const nside, double* vec, long* ipix);
+#endif
+
 #define LC_NO_GROUP (0xFFFFFFFFFFFFFFULL)
 #define LC_EDGE_GROUP (0x0ULL)
 

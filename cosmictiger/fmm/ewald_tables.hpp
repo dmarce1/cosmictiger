@@ -25,7 +25,6 @@
 #include <cosmictiger/core/defs.hpp>
 #include <cosmictiger/fmm/ewald_indices.hpp>
 #include <cosmictiger/fmm/fmm_order.hpp>
-#include <cosmictiger/fmm/fmm_scale.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/tensor.hpp>
 

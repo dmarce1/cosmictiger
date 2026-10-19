@@ -20,6 +20,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #ifndef GROUPS_HPP_
 #define GROUPS_HPP_
 
+#include <functional>
+#include <unordered_map>
+
 #include <cosmictiger/core/containers.hpp>
 #include <cosmictiger/core/defs.hpp>
 #include <cosmictiger/core/safe_io.hpp>
@@ -51,5 +54,19 @@ void groupsPrepareHistory(int number);
 void groupsReduce(double);
 std::pair<size_t, size_t> groupsSave(int number, double scale, double time);
 void groupsCull();
+
+namespace detail {
+// Read access to the finder's local tables for the catalogue tests
+// (tests/groups_catalogue.cpp): the group entries of the current snapshot, the
+// membership updates queued for the next cull, the halo hosts restored from the
+// previous snapshot, and a visit over every candidate group's collected
+// particles.
+Vector<GroupEntry> const& groupsLocalEntries();
+Vector<Pair<ParticleInteger, GroupInteger>> const& groupsPendingAssignments();
+std::unordered_map<GroupInteger, GroupInteger> const& groupsPreviousHaloHosts();
+void groupsResetHistory();
+void groupsForEachCandidate(
+    std::function<void(GroupInteger, Vector<ParticleData> const&)> const& visit);
+}    // namespace detail
 
 #endif /* GROUPS_HPP_ */
