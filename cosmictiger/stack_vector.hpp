@@ -59,6 +59,12 @@ public:
         }
         __syncthreads();
     }
+    // Collective: reserve storage for `entries` stacked elements and `depth`
+    // levels so the traversal grows without pool allocations.
+    __device__ inline void reserve(int entries, int depth) {
+        dat_.reserve(entries);
+        bounds_.reserve(depth + 2);
+    }
     __device__ inline void push(T const& a) {
         int const& tid = threadIdx.x;
         ASSERT(bounds_.size() >= 2);

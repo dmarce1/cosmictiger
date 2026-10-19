@@ -168,6 +168,7 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"compute.cudaKickMultipoleTile", options.compute.cudaKickMultipoleTile},
         {"compute.cudaKickSharedExpansion", options.compute.cudaKickSharedExpansion},
         {"compute.cudaKickHandoffBlocks", options.compute.cudaKickHandoffBlocks},
+        {"compute.cudaKickListReserve", options.compute.cudaKickListReserve},
         {"checkpoint.readIndex", options.checkpoint.readIndex},
         {"checkpoint.intervalSeconds", options.checkpoint.intervalSeconds},
         {"initial.gadget4Restart", options.initial.gadget4Restart},
@@ -312,7 +313,11 @@ bool processOptions(int argc, char* argv[]) {
                 "keep the active CUDA kick local expansion in shared memory")(
                 "compute.cudaKickHandoffBlocks",
                 po::value<int>(&opts.compute.cudaKickHandoffBlocks)->default_value(0),
-                "fixed CUDA block count for the CPU/GPU handoff threshold; 0 derives it");
+                "fixed CUDA block count for the CPU/GPU handoff threshold; 0 derives it")(
+                "compute.cudaKickListReserve",
+                po::value<int>(&opts.compute.cudaKickListReserve)->default_value(0),
+                "entries reserved per CUDA kick interaction list at block start; 0 grows on "
+                "demand");
 
     po::options_description checkpointOpts("Checkpoints");
     checkpointOpts.add_options()("checkpoint.readIndex",
@@ -661,7 +666,7 @@ bool processOptions(int argc, char* argv[]) {
     }
     if (opts.compute.cudaKickResidency < 0 || opts.compute.cudaKickSinkTile < -1 ||
         opts.compute.cudaKickParticleTile < 0 || opts.compute.cudaKickMultipoleTile < 0 ||
-        opts.compute.cudaKickHandoffBlocks < 0) {
+        opts.compute.cudaKickHandoffBlocks < 0 || opts.compute.cudaKickListReserve < 0) {
         THROW_ERROR("compute.cudaKick* tile and residency options must be nonnegative "
                     "(cudaKickSinkTile may be -1 for global force storage)\n");
     }
@@ -948,6 +953,7 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("compute.cudaKickMultipoleTile", compute.cudaKickMultipoleTile);
     SHOW("compute.cudaKickSharedExpansion", compute.cudaKickSharedExpansion);
     SHOW("compute.cudaKickHandoffBlocks", compute.cudaKickHandoffBlocks);
+    SHOW("compute.cudaKickListReserve", compute.cudaKickListReserve);
     SHOW("lightcone.enabled", lightcone.enabled);
     SHOW("analysis.groups", analysis.groups);
     SHOW("analysis.power", analysis.power);

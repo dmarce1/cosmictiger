@@ -71,20 +71,21 @@ struct CudaKickData {
 struct CudaKickArenaLayout {
     int order;    // FMM order the layout was selected for
     int totalBytes;
-    int controlOffset{};
-    int expansionOffset{};    // -1: the active expansion stays in global backing
-    int arenaOffset{};
-    int arenaBytes{};
-    int forceOffset{};          // arena-relative; -1: forces use whole-bucket global backing
-    int sourceOffset{};         // arena-relative
-    int scratchOffset{};        // arena-relative L2L output expansion
-    int sinkCapacity{};         // sink-force tile; 0 with global force backing
-    int particleCapacity{};     // staged particle sources, a multiple of WARP_SIZE
-    int multipoleCapacity{};    // staged positioned multipoles
-    int multipoleStride{};      // bytes per staged multipole, a multiple of 16
-    bool massPlane{};           // mixed-mass sources stage a mass plane
-    int residency{};            // resident blocks per multiprocessor the budget targets
-    int budgetBytes{};          // dynamic shared bytes allowed per block at that residency
+    int controlOffset;
+    int expansionOffset;    // -1: the active expansion stays in global backing
+    int arenaOffset;
+    int arenaBytes;
+    int forceOffset;          // arena-relative; -1: forces use whole-bucket global backing
+    int sourceOffset;         // arena-relative
+    int scratchOffset;        // arena-relative L2L output expansion
+    int sinkCapacity;         // sink-force tile; 0 with global force backing
+    int particleCapacity;     // staged particle sources, a multiple of WARP_SIZE
+    int multipoleCapacity;    // staged positioned multipoles
+    int multipoleStride;      // bytes per staged multipole, a multiple of 16
+    bool massPlane;           // mixed-mass sources stage a mass plane
+    int residency;            // resident blocks per multiprocessor the budget targets
+    int budgetBytes;          // dynamic shared bytes allowed per block at that residency
+    int listReserve;          // entries reserved per interaction list and checklist stack; 0: none
 };
 
 struct KickReturn;

@@ -280,6 +280,18 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
     if (!sharedExpansion) {
         control.current.resize(1);
     }
+    if (layout.listReserve > 0) {
+        // One pool allocation per list now instead of doubling growth later.
+        control.dchecks.reserve(layout.listReserve, CUDA_MAX_DEPTH);
+        control.echecks.reserve(layout.listReserve, CUDA_MAX_DEPTH);
+        control.leaflist.reserve(layout.listReserve);
+        control.cplist.reserve(layout.listReserve);
+        control.cclist.reserve(layout.listReserve);
+        control.pclist.reserve(layout.listReserve);
+        control.nextlist.reserve(layout.listReserve);
+        control.ancestors.reserve(CUDA_MAX_DEPTH);
+        control.params.reserve(CUDA_MAX_DEPTH);
+    }
     // Every lane ran the constructor; only lane zero fills the resolved layout.
     __syncwarp();
     if (tid == 0) {
@@ -788,6 +800,7 @@ bool kickBuildLayout(Compute const& compute, bool massPlane, int residency, int 
     layout = CudaKickArenaLayout{};
     layout.order = order;
     layout.residency = residency;
+    layout.listReserve = compute.cudaKickListReserve;
     layout.budgetBytes = budget;
     layout.massPlane = massPlane;
     int const controlBytes = kickRoundUp(int(sizeof(CudaKickControl<order>)), kKickArenaAlignment);
