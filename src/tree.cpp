@@ -28,7 +28,6 @@ constexpr bool kVerbose = true;
 
 #include <cosmictiger/cuda_memory.hpp>
 #include <cosmictiger/domain.hpp>
-#include <cosmictiger/fast_future.hpp>
 #include <cosmictiger/flops.hpp>
 #include <cosmictiger/fmm_order.hpp>
 #include <cosmictiger/fmm_types.hpp>
@@ -227,10 +226,10 @@ TreeCreateParameters::TreeCreateParameters(int minimumRung, double openingAngle,
     parallelParticleThreshold = 0;
 }
 
-FastFuture<TreeCreateReturn> treeCreateFork(TreeCreateParameters params, size_t key,
+hpx::future<TreeCreateReturn> treeCreateFork(TreeCreateParameters params, size_t key,
     Pair<int, int> const& processRange, Pair<ParticleInteger> const& particleRange,
     Range<double> const& box, int const depth, bool const localRoot, bool threadme) {
-    FastFuture<TreeCreateReturn> rc;
+    hpx::future<TreeCreateReturn> rc;
     bool remote = false;
     if (processRange.first != hpxRank()) {
         threadme = true;
@@ -239,7 +238,8 @@ FastFuture<TreeCreateReturn> treeCreateFork(TreeCreateParameters params, size_t 
         threadme = particleRange.second - particleRange.first >= params.parallelParticleThreshold;
     }
     if (!threadme) {
-        rc.setValue(treeCreate(params, key, processRange, particleRange, box, depth, localRoot));
+        rc = hpx::make_ready_future(
+            treeCreate(params, key, processRange, particleRange, box, depth, localRoot));
     } else if (remote) {
         rc = hpx::async<TreeCreateAction>(hpxLocalities()[processRange.first], params, key,
             processRange, particleRange, box, depth, localRoot);
