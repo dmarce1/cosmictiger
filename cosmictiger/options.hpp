@@ -29,6 +29,9 @@ struct Run {
     int maxIterations{};
     int numberOfSteps{};
     int minRung{};
+    // run.test=force: build the tree once at this opening angle and sweep only
+    // the kick's angle upward from it; zero rebuilds the tree at every angle.
+    double treeOpeningAngle{};
     // Derived run mode: use hierarchical gravity steps for dark matter.
     bool hierarchicalGravity{};
 };
@@ -234,6 +237,7 @@ struct Options {
         arc & initial.createGlass;
         arc & initial.gadget4Restart;
         arc & run.minRung;
+        arc & run.treeOpeningAngle;
         arc & initial.plummer;
         arc & initial.plummerRadius;
         arc & cosmology.omegaK;

@@ -347,17 +347,43 @@ static void forceTest() {
     } else {
         initialize(getOptions().cosmology.startRedshift);
     }
-    constexpr int kNthetas = 16;
-    double const thetas[kNthetas] = {
-        0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95};
-    for (int iter = 0; iter < kNthetas; iter++) {
-        tmMain.start();
+    // The sweep rebuilds the tree at every angle unless run.treeOpeningAngle is
+    // set; then one tree serves every kick angle from there up to 0.95 in steps
+    // of 0.025, so the two opening rules can be compared at equal accuracy on
+    // the same tree. The tree's Ewald leaf criterion admits every larger angle.
+    double const treeTheta = getOptions().run.treeOpeningAngle;
+    bool const fixedTree = treeTheta > 0.0;
+    Vector<double> thetas;
+    if (fixedTree) {
+        constexpr double kStep = 0.025;
+        for (int k = 0; treeTheta + kStep * k <= 0.95 + 1e-9; k++) {
+            thetas.push_back(treeTheta + kStep * k);
+        }
+    } else {
+        for (double const theta : {0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75,
+                 0.8, 0.85, 0.9, 0.95}) {
+            thetas.push_back(theta);
+        }
+    }
+    auto const buildTree = [](double theta) {
         domainsRebound();
         domainsBegin(0);
         domainsEnd();
         particlesSortByRung(0);
-        TreeCreateParameters tparams(0, thetas[iter], getOptions().gravity.supportRadius);
+        TreeCreateParameters tparams(0, theta, getOptions().gravity.supportRadius);
         treeCreate(tparams);
+        return tparams;
+    };
+    TreeCreateParameters tparams(0, treeTheta, getOptions().gravity.supportRadius);
+    if (fixedTree) {
+        tparams = buildTree(treeTheta);
+        PRINT("tree built once at theta %.3f\n", treeTheta);
+    }
+    for (int iter = 0; iter < thetas.size(); iter++) {
+        tmMain.start();
+        if (!fixedTree) {
+            tparams = buildTree(thetas[iter]);
+        }
         KickParameters kparams;
         kparams.nodeLoad = 10;
         kparams.gpu = true;
@@ -383,9 +409,15 @@ static void forceTest() {
         Vector<TreeId> checklist;
         checklist.push_back(rootId);
         kickResetInteractionCounts();
+        Timer tmKick;
+        tmKick.start();
         auto kr = kick(kparams, l, pos, rootId, checklist, checklist, nullptr);
+        tmKick.stop();
+        PRINT("tree_kick: %e s\n", tmKick.read());
         reportKickInteractions(thetas[iter]);
-        treeDestroy(false);
+        if (!fixedTree) {
+            treeDestroy(false);
+        }
         tmMain.stop();
         tm.reset();
         tm.start();
@@ -396,6 +428,9 @@ static void forceTest() {
         FILE* fp = fopen("force_accuracy.txt", "at");
         fprintf(fp, "%e %e %e\n", thetas[iter], rc.first, rc.second);
         fclose(fp);
+    }
+    if (fixedTree) {
+        treeDestroy(false);
     }
 
     KickWorkspace::clearBuffers();
