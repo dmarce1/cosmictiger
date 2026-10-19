@@ -23,9 +23,13 @@
 #include <vector>
 
 #ifdef COSMICTIGER_STF_BASELINE_HEADER
+#if ORDER != 7
+#error "The legacy baseline header implements only multipole degree five (ORDER 7)"
+#endif
 #include COSMICTIGER_STF_BASELINE_HEADER
 #else
 #include <cosmictiger/fmm_kernels.hpp>
+#include <cosmictiger/fmm_order.hpp>
 #endif
 
 #ifndef COSMICTIGER_STF_BENCHMARK_TYPE
@@ -36,10 +40,36 @@ namespace detail {
 
 using std::size_t;
 
+// The microbenchmark times the build's default FMM order; every order is
+// compiled into the application, but the legacy header knows only order seven.
 #ifdef COSMICTIGER_STF_BASELINE_HEADER
 constexpr char const* kImplementation = "legacy";
+template <class Real>
+using BenchmarkMultipole = Multipole<Real>;
+template <class Real>
+using BenchmarkExpansion = Expansion<Real>;
+constexpr int kMultipoleCount = MULTIPOLE_SIZE;
+constexpr int kExpansionCount = EXPANSION_SIZE;
+
+// Legacy P2M mutates its argument; the copy keeps the caller's position intact.
+template <class Real>
+CUDA_EXPORT BenchmarkMultipole<Real> benchmarkP2m(Array<Real, NDIM> position) {
+    return p2M(position);
+}
 #else
 constexpr char const* kImplementation = "stf";
+constexpr int kBenchmarkOrder = kFmmDefaultOrder;
+template <class Real>
+using BenchmarkMultipole = FmmMultipole<Real, kBenchmarkOrder>;
+template <class Real>
+using BenchmarkExpansion = FmmExpansion<Real, kBenchmarkOrder>;
+constexpr int kMultipoleCount = FmmOrder<kBenchmarkOrder>::kMultipoleCoefficients_;
+constexpr int kExpansionCount = FmmOrder<kBenchmarkOrder>::kLocalCoefficients_;
+
+template <class Real>
+CUDA_EXPORT BenchmarkMultipole<Real> benchmarkP2m(Array<Real, NDIM> const& position) {
+    return p2M<kBenchmarkOrder>(position);
+}
 #endif
 
 enum class BenchmarkOperator { P2m, M2m, CcDirect, PcDirect, L2l, L2p };
@@ -48,19 +78,19 @@ template <class Real>
 struct BenchmarkInput {
     Array<Real, NDIM> displacement;
     Array<Real, NDIM> separation;
-    Multipole<Real> multipole;
-    Expansion<Real> local;
+    BenchmarkMultipole<Real> multipole;
+    BenchmarkExpansion<Real> local;
 };
 
 template <BenchmarkOperator operation>
 CUDA_EXPORT constexpr int resultCount() {
     if constexpr (operation == BenchmarkOperator::P2m || operation == BenchmarkOperator::M2m) {
-        return MULTIPOLE_SIZE;
+        return kMultipoleCount;
     } else if constexpr (operation == BenchmarkOperator::PcDirect ||
         operation == BenchmarkOperator::L2p) {
         return 4;
     } else {
-        return EXPANSION_SIZE;
+        return kExpansionCount;
     }
 }
 
@@ -107,7 +137,7 @@ BenchmarkInput<Real> makeBenchmarkInput(int sample) {
     // Legacy P2M mutates its argument and stores odd source ranks with the
     // opposite sign. Each implementation prepares its own representation of
     // the same physical point mass before the timed region.
-    input.multipole = p2M(particlePosition);
+    input.multipole = benchmarkP2m<Real>(particlePosition);
     greensFunction(input.local, input.separation);
     return input;
 }
@@ -116,8 +146,7 @@ template <BenchmarkOperator operation, bool doPhi, class Real>
 CUDA_EXPORT void evaluateBenchmark(
     BenchmarkInput<Real> const& input, BenchmarkResult<operation, Real>& output) {
     if constexpr (operation == BenchmarkOperator::P2m) {
-        auto displacement = input.displacement;
-        auto const result = p2M(displacement);
+        auto const result = benchmarkP2m<Real>(input.displacement);
         for (int i = 0; i < resultCount<operation>(); ++i) {
             output[i] = result[i];
         }
@@ -128,10 +157,10 @@ CUDA_EXPORT void evaluateBenchmark(
             output[i] = result[i];
         }
     } else if constexpr (operation == BenchmarkOperator::CcDirect) {
-        Expansion<Real> result{};
+        BenchmarkExpansion<Real> result{};
         result = simdBroadcast<Real>(0);
 #ifdef COSMICTIGER_STF_BASELINE_HEADER
-        Expansion<Real> derivatives;
+        BenchmarkExpansion<Real> derivatives;
         greensFunction(derivatives, input.separation);
         m2L(result, input.multipole, derivatives, doPhi);
 #else
@@ -144,7 +173,7 @@ CUDA_EXPORT void evaluateBenchmark(
         Expansion2<Real> result{};
         result = simdBroadcast<Real>(0);
 #ifdef COSMICTIGER_STF_BASELINE_HEADER
-        Expansion<Real> derivatives;
+        BenchmarkExpansion<Real> derivatives;
         greensFunction(derivatives, input.separation);
         m2L(result, input.multipole, derivatives, doPhi);
 #else

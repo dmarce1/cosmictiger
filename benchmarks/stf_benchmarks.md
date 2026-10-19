@@ -33,7 +33,11 @@ header's inline constant-memory arrays. CUDA headers are also needed for the
 host compiler because the legacy header declares CUDA storage. Override
 `--cxx`, `--cuda-root`, and `--arch` together for a different toolchain.
 `--skip-cuda` omits the CUDA binaries; it does not remove the CUDA-header
-requirement for this legacy source.
+requirement for this legacy source. The STF variants include the generated
+kernels from a configured build tree (`ninja -C build
+cosmictiger_generated_kernels`), so the compile commands need
+`-I<build>/generated` in addition to the source root; they time the build's
+default FMM order (`ORDER`, 7), the only order the legacy header implements.
 
 Use a fresh output directory. The build manifest records compiler versions,
 exact argument arrays, source/header hashes, and executable hashes. Builds do
@@ -98,11 +102,14 @@ one expansion per 32-thread block, including the caller's in-place update and
 synchronization. Compile it with the same CUDA flags above for the generated
 warp implementation, with `COSMICTIGER_STF_L2L_LANE0` for the interim scalar-lane
 implementation, or with `COSMICTIGER_STF_BASELINE_HEADER` for the legacy warp.
-Run `--check` for validation alone, or pass sample, round, and repetition counts
-for timing. The generated warp build also validates and times `translateInto`,
-which writes into a shared-memory expansion instead of broadcasting to every
-lane; its rows carry the `_into` suffix, and the CSV includes the local degree.
-The legacy header is degree-six only, so its build requires `ORDER=7`.
+Run `--check` for validation alone, which covers every FMM order 3 through 10
+(local degrees 2 through 9), or pass sample, round, and repetition counts for
+timing. Timing runs one order: the build's default (`ORDER`, 7) unless
+`--order N` selects another; `--order` also narrows `--check` to that order. The
+generated warp build also validates and times `translateInto`, which writes into
+a shared-memory expansion instead of broadcasting to every lane; its rows carry
+the `_into` suffix, and the CSV includes the local degree. The legacy header is
+degree-six only, so its build requires `ORDER=7` and validates that order alone.
 The legacy implementation has a known omitted translation term;
 its diagnostic error is reported separately from timing and must not be treated
 as a passing correctness result.
@@ -132,9 +139,12 @@ each iteration and provides the complete root direct and Ewald checklists.
 Each case has one warmup and five measured samples; override the latter with
 `COSMICTIGER_STF_WALK_SAMPLES`.
 
-`STF_WALK_CONFIG` records the actual workload settings. `STF_WALK_SAMPLE` and
+`STF_WALK_CONFIG` records the actual workload settings, including the runtime
+FMM order (`order=`, from `--gravity.fmmOrder`). `STF_WALK_SAMPLE` and
 `STF_WALK_MEDIAN` report reset, tree, and kick times separately, plus an
 order-independent input-position fingerprint and force/potential checksums.
+`run_cuda_kick_arena.py --orders 5,7,9` sweeps orders; the order appears in run
+names, result keys, and every summary table.
 Checksums, file output, tree cleanup, and kick workspace cleanup are outside
 the timed tree/kick intervals.
 

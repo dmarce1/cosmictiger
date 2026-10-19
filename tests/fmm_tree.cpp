@@ -27,6 +27,8 @@
 #include <hpx/serialization/output_archive.hpp>
 
 #include <cosmictiger/domain.hpp>
+#include <cosmictiger/fmm_order.hpp>
+#include <cosmictiger/fmm_types.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/particles.hpp>
@@ -58,7 +60,10 @@ void verifyTreeReturnArchive() {
     expected.id.index = 17;
     expected.radius = 0.125f;
     expected.maxGravitySupportRadius = 0.21875f;
-    for (int i = 0; i < MULTIPOLE_SIZE; i++) {
+    // The archive carries the runtime order's coefficients of the max-size buffer.
+    int const coefficientCount = fmmMultipoleCoefficientCount(fmmOrder());
+    expected.multi.zero();
+    for (int i = 0; i < coefficientCount; i++) {
         expected.multi[i] = float(i + 1);
     }
     for (int dim = 0; dim < NDIM; dim++) {
@@ -72,6 +77,7 @@ void verifyTreeReturnArchive() {
         archive << expected;
     }
     TreeCreateReturn actual;
+    actual.multi.zero();
     actual.maxGravitySupportRadius = -1.0f;
     for (int dim = 0; dim < NDIM; dim++) {
         actual.box.begin[dim] = actual.box.end[dim] = -1.0;
@@ -83,7 +89,7 @@ void verifyTreeReturnArchive() {
     requireFmmTree(actual.id == expected.id && actual.radius == expected.radius &&
             actual.maxGravitySupportRadius == expected.maxGravitySupportRadius,
         "tree-return metadata did not survive the HPX archive");
-    for (int i = 0; i < MULTIPOLE_SIZE; i++) {
+    for (int i = 0; i < coefficientCount; i++) {
         requireFmmTree(
             actual.multi[i] == expected.multi[i], "multipole did not survive the HPX archive");
     }
@@ -131,8 +137,12 @@ void verifyTreeNodeArchive(TreeId id) {
                 actual.mpos->pos[dim] == expected.mpos->pos[dim],
             "tree-node bounds or position did not survive the HPX archive");
     }
-    for (int i = 0; i < MULTIPOLE_SIZE; ++i) {
-        requireFmmTree(actual.mpos->multi[i] == expected.mpos->multi[i],
+    MultipoleBuffer actualMultipole;
+    MultipoleBuffer expectedMultipole;
+    treeReadMultipole(actual.mpos, actualMultipole);
+    treeReadMultipole(expected.mpos, expectedMultipole);
+    for (int i = 0; i < fmmMultipoleCoefficientCount(fmmOrder()); ++i) {
+        requireFmmTree(actualMultipole[i] == expectedMultipole[i],
             "tree-node multipole did not survive the HPX archive");
     }
 }
@@ -146,12 +156,15 @@ float verifyTreeGeometry(TreeId id, bool empty, float supportRadius, int distinc
         requireFmmTree(
             node->box.begin[dim] <= node->box.end[dim], "node has reversed particle bounds");
     }
-    for (int i = 0; i < MULTIPOLE_SIZE; i++) {
-        requireFmmTree(std::isfinite(node->mpos->multi[i]), "node has a nonfinite multipole");
-        if (empty) {
-            requireFmmTree(node->mpos->multi[i] == 0.0f, "empty node has a nonzero multipole");
+    fmmDispatch([&](auto order) {
+        auto const& multipole = fmmMultiPos<order.value>(node->mpos).multi;
+        for (int i = 0; i < FmmOrder<order.value>::kMultipoleCoefficients_; i++) {
+            requireFmmTree(std::isfinite(multipole[i]), "node has a nonfinite multipole");
+            if (empty) {
+                requireFmmTree(multipole[i] == 0.0f, "empty node has a nonzero multipole");
+            }
         }
-    }
+    });
     if (empty) {
         requireFmmTree(node->radius == 0.0f, "empty node has a nonzero radius");
     }

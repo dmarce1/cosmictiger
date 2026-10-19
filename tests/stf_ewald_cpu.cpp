@@ -12,9 +12,12 @@
 #include <cstdlib>
 #include <set>
 #include <stdexcept>
+#include <string>
 
 #include <cosmictiger/assert.hpp>
+#include <cosmictiger/ewald_indices.hpp>
 #include <cosmictiger/ewald_kernels.hpp>
+#include <cosmictiger/fmm_order.hpp>
 #include <cosmictiger/hpx.hpp>
 
 // This standalone test exercises the actual CUDA-disabled initializer without
@@ -81,11 +84,14 @@ void checkImageIndices() {
     }
 }
 
+// The self-interaction table holds ranks zero through order - 1 of the
+// derivatives of -erf(alpha r)/r at the origin.
+template <int order>
 void checkSelfDerivatives() {
-    auto const derivatives = EwaldConst::d0<kFmmDefaultOrder>();
-    for (int x = 0; x < LORDER; ++x) {
-        for (int y = 0; y < LORDER - x; ++y) {
-            for (int z = 0; z < LORDER - x - y; ++z) {
+    auto const& derivatives = EwaldConst::d0<order>();
+    for (int x = 0; x < order; ++x) {
+        for (int y = 0; y < order - x; ++y) {
+            for (int z = 0; z < order - x - y; ++z) {
                 int const rank = x + y + z;
                 double expected = 0;
                 if ((x % 2 == 0) && (y % 2 == 0) && (z % 2 == 0)) {
@@ -106,10 +112,11 @@ void checkSelfDerivatives() {
     }
 }
 
+template <int order>
 void checkFourierScaling() {
     for (int image = 0; image < EwaldConst::nfour(); ++image) {
         auto const& wave = EwaldConst::fourIndex(image);
-        auto const& derivative = EwaldConst::fourExpansion<kFmmDefaultOrder>(image);
+        auto const& derivative = EwaldConst::fourExpansion<order>(image);
         double const h2 = wave[0] * wave[0] + wave[1] * wave[1] + wave[2] * wave[2];
         double const amplitude = -std::exp(-kPi * kPi * h2 / (kAlpha * kAlpha)) / (kPi * h2);
         // Ranks zero through two retain the complete Fourier derivatives; STF
@@ -182,6 +189,7 @@ std::array<double, 4> directEwaldCorrection(Position const& position) {
     return result;
 }
 
+template <int order>
 void checkPeriodicField() {
     constexpr std::array<Position, 7> kPositions{{{0., 0., 0.}, {.01, -.02, .03}, {.1, 0., 0.},
         {.23, -.17, .31}, {-.23, .17, -.31}, {.499, -.497, .11}, {-.49, .48, .47}}};
@@ -191,7 +199,7 @@ void checkPeriodicField() {
         for (int d = 0; d < 3; ++d) {
             separation[d] = position[d];
         }
-        SymmetricTracelessTensor<double, LORDER> actual;
+        SymmetricTracelessTensor<double, order> actual;
         ewaldCorrectionDerivatives(actual, separation);
         requireNear(actual(0, 0, 0) * SCALE_FACTOR, expected[0], 2e-5,
             "CPU Ewald independent periodic potential");
@@ -202,15 +210,39 @@ void checkPeriodicField() {
     }
 }
 
+// Select the order, fill the tables for it, and check every table and the
+// generated derivative of that order. Re-filling for a new order is part of
+// the contract: EwaldConstants::order must report the order just built.
+template <int order>
+void checkOrder() {
+    setFmmOrder(order);
+    EwaldConst::init();
+    if (EwaldConst::constants().order != order) {
+        throw std::runtime_error("EwaldConst::init did not fill the tables for FMM order " +
+            std::to_string(order) + " (EwaldConstants::order reports " +
+            std::to_string(EwaldConst::constants().order) + ")");
+    }
+    checkImageIndices();
+    checkSelfDerivatives<order>();
+    checkFourierScaling<order>();
+    checkPeriodicField<order>();
+    std::printf(
+        "CPU Ewald tables and periodic potential/gradient passed at FMM order %d.\n", order);
+}
+
 }    // namespace detail
 
 int main() {
     try {
-        EwaldConst::init();
-        detail::checkImageIndices();
-        detail::checkSelfDerivatives();
-        detail::checkFourierScaling();
-        detail::checkPeriodicField();
+        // The build's default order first, then the smallest and largest
+        // supported orders through re-filled tables.
+        detail::checkOrder<kFmmDefaultOrder>();
+        if constexpr (kFmmDefaultOrder != kFmmMinOrder) {
+            detail::checkOrder<kFmmMinOrder>();
+        }
+        if constexpr (kFmmDefaultOrder != kFmmMaxOrder) {
+            detail::checkOrder<kFmmMaxOrder>();
+        }
         std::puts("CPU Ewald initialization and independent periodic potential/gradient passed.");
         return 0;
     } catch (std::exception const& error) {

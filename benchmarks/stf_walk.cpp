@@ -31,6 +31,8 @@
 #include <hpx/threading_base/thread_pool_base.hpp>
 
 #include <cosmictiger/analytic.hpp>
+#include <cosmictiger/fmm_order.hpp>
+#include <cosmictiger/fmm_types.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/kick.hpp>
 #include <cosmictiger/kick_workspace.hpp>
@@ -348,8 +350,8 @@ void stfWalkFixture(char const* fixture, bool doPhi, int samples, std::ofstream&
             if (sample == -1 && !doPhi) {
                 stfWalkLeafHistogram(built.id, fixture);
             }
-            Expansion<float> local;
-            local = 0.0f;
+            ExpansionBuffer local;
+            local.zero();
             auto const params = stfWalkParameters(doPhi, treeParams.minLevel);
             auto const kickBegin = std::chrono::steady_clock::now();
             auto const result = kick(params, local, built.pos, built.id, Vector<TreeId>{built.id},
@@ -433,11 +435,11 @@ void stfWalkBenchmark() {
         }
         forces << "fixture,x_raw,y_raw,z_raw,x,y,z,gx,gy,gz,phi\n" << std::setprecision(17);
         particlesResize(options.initial.numberOfParticles);
-        PRINT("STF_WALK_CONFIG,particles=%zu,threads=%i,cuda=%i,theta=%.17g,support=%.17g,bucket=%"
-              "i,samples=%i,warmup=1,gm=1\n",
+        PRINT("STF_WALK_CONFIG,particles=%zu,threads=%i,cuda=%i,order=%i,theta=%.17g,support=%."
+              "17g,bucket=%i,samples=%i,warmup=1,gm=1\n",
             options.initial.numberOfParticles, int(hpx::get_num_worker_threads()),
-            int(options.compute.cuda), options.gravity.openingAngle, options.gravity.supportRadius,
-            options.compute.bucketSize, samples);
+            int(options.compute.cuda), fmmOrder(), options.gravity.openingAngle,
+            options.gravity.supportRadius, options.compute.bucketSize, samples);
         PRINT("STF_WALK_SAMPLE_HEADER,fixture,backend,do_phi,sample,setup_seconds,tree_seconds,"
               "kick_seconds,position_hash,gx_checksum,gy_checksum,gz_checksum,g2_checksum,phi_"
               "checksum,total_potential\n");

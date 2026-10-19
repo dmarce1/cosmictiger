@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Run the opt-in STF walk benchmark over binaries, kick policies and buckets.
 
-Each process runs --run.test=stfBenchmark once for one binary, policy, backend
-and bucket, cycling through the selected fixtures with potential off and on.
+Each process runs --run.test=stfBenchmark once for one binary, policy, backend,
+bucket and FMM order (--gravity.fmmOrder), cycling through the selected fixtures
+with potential off and on.
 Processes alternate between binaries and policies within each pair so slow
 drifts affect every variant alike. Whole-kick times come from the harness; the
 CUDA kick arena line and force exports are collected for every run, and the
@@ -137,6 +138,8 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--fixtures', default='lattice,clustered,adaptive')
     parser.add_argument('--buckets', default='64')
+    parser.add_argument('--orders', default='7',
+                        help='comma list of FMM orders passed as --gravity.fmmOrder (3 to 10)')
     parser.add_argument('--backends', default='cuda')
     parser.add_argument('--samples', type=int, default=15)
     parser.add_argument('--pairs', type=int, default=3)
@@ -150,6 +153,9 @@ def main():
     args = parser.parse_args()
     fixtures = args.fixtures.split(',')
     buckets = [int(value) for value in args.buckets.split(',')]
+    orders = [int(value) for value in args.orders.split(',')]
+    if any(order < 3 or order > 10 for order in orders):
+        sys.exit('--orders must list FMM orders from 3 to 10')
     backends = args.backends.split(',')
     policies = args.policy or [{'label': 'auto', 'options': []}]
     args.output.mkdir(parents=True, exist_ok=True)
@@ -160,7 +166,8 @@ def main():
         'platform': platform.platform(),
         'command': shlex.join(sys.argv),
         'binaries': [dict(binary, sha256=digest(binary['path'])) for binary in args.binary],
-        'policies': policies, 'fixtures': fixtures, 'buckets': buckets, 'backends': backends,
+        'policies': policies, 'fixtures': fixtures, 'buckets': buckets, 'orders': orders,
+        'backends': backends,
         'samples': args.samples, 'pairs': args.pairs, 'reference': args.reference,
         'git_head': subprocess.run(['git', 'rev-parse', 'HEAD'], capture_output=True, text=True,
                                    cwd=Path(__file__).resolve().parent).stdout.strip(),
@@ -186,42 +193,45 @@ def main():
         for binary, policy in order:
             for backend in backends:
                 for bucket in buckets:
-                    name = f'{binary["label"]}_{policy["label"]}_{backend}_b{bucket}_pair{pair}'
-                    directory = args.output / 'runs' / name
-                    directory.mkdir(parents=True)
-                    command = ['taskset', '-c', args.cpus, binary['path'], *common,
-                               '--compute.cuda=' + ('true' if backend == 'cuda' else 'false'),
-                               f'--compute.bucketSize={bucket}']
-                    if binary['arena']:
-                        command += policy['options']
-                    env = dict(os.environ, COSMICTIGER_STF_WALK_SAMPLES=str(args.samples),
-                               COSMICTIGER_STF_WALK_BUCKET=str(bucket),
-                               COSMICTIGER_STF_WALK_FIXTURE='all' if len(fixtures) == 3 else fixtures[0],
-                               COSMICTIGER_STF_WALK_REFERENCE=str(args.reference),
-                               OMP_NUM_THREADS='2', OMP_THREAD_LIMIT='2')
-                    if len(fixtures) not in (1, 3):
-                        sys.exit('The harness selects one fixture or all three')
-                    logfile = directory / 'stdout.log'
-                    begin = time.monotonic()
-                    with logfile.open('w') as stream:
-                        status = subprocess.run(command, cwd=directory, env=env, stdout=stream,
-                                                stderr=subprocess.STDOUT,
-                                                timeout=args.timeout).returncode
-                    duration = time.monotonic() - begin
-                    text = logfile.read_text()
-                    if status:
-                        raise RuntimeError(f'{name} exited {status}; see {logfile}')
-                    run = parse_log(text, args.samples, fixtures)
-                    forces = directory / 'stf_walk_forces.csv'
-                    run.update(binary=binary['label'], policy=policy['label'], backend=backend,
-                               bucket=bucket, pair=pair, command=command, cwd=str(directory),
-                               wall_seconds=duration, force_csv=str(forces),
-                               force_csv_sha256=digest(forces))
-                    runs.append(run)
-                    (args.output / 'runs.json').write_text(json.dumps(runs, indent=2) + '\n')
-                    print(name + ': ' + ', '.join(
-                        f'{row["fixture"]}/phi={int(row["potential"])} {1e3 * row["kick_seconds"]:.3f} ms'
-                        for row in run['medians']), flush=True)
+                    for order in orders:
+                        name = (f'{binary["label"]}_{policy["label"]}_{backend}_b{bucket}'
+                                f'_o{order}_pair{pair}')
+                        directory = args.output / 'runs' / name
+                        directory.mkdir(parents=True)
+                        command = ['taskset', '-c', args.cpus, binary['path'], *common,
+                                   '--compute.cuda=' + ('true' if backend == 'cuda' else 'false'),
+                                   f'--compute.bucketSize={bucket}',
+                                   f'--gravity.fmmOrder={order}']
+                        if binary['arena']:
+                            command += policy['options']
+                        env = dict(os.environ, COSMICTIGER_STF_WALK_SAMPLES=str(args.samples),
+                                   COSMICTIGER_STF_WALK_BUCKET=str(bucket),
+                                   COSMICTIGER_STF_WALK_FIXTURE='all' if len(fixtures) == 3 else fixtures[0],
+                                   COSMICTIGER_STF_WALK_REFERENCE=str(args.reference),
+                                   OMP_NUM_THREADS='2', OMP_THREAD_LIMIT='2')
+                        if len(fixtures) not in (1, 3):
+                            sys.exit('The harness selects one fixture or all three')
+                        logfile = directory / 'stdout.log'
+                        begin = time.monotonic()
+                        with logfile.open('w') as stream:
+                            status = subprocess.run(command, cwd=directory, env=env, stdout=stream,
+                                                    stderr=subprocess.STDOUT,
+                                                    timeout=args.timeout).returncode
+                        duration = time.monotonic() - begin
+                        text = logfile.read_text()
+                        if status:
+                            raise RuntimeError(f'{name} exited {status}; see {logfile}')
+                        run = parse_log(text, args.samples, fixtures)
+                        forces = directory / 'stf_walk_forces.csv'
+                        run.update(binary=binary['label'], policy=policy['label'], backend=backend,
+                                   bucket=bucket, order=order, pair=pair, command=command,
+                                   cwd=str(directory), wall_seconds=duration,
+                                   force_csv=str(forces), force_csv_sha256=digest(forces))
+                        runs.append(run)
+                        (args.output / 'runs.json').write_text(json.dumps(runs, indent=2) + '\n')
+                        print(name + ': ' + ', '.join(
+                            f'{row["fixture"]}/phi={int(row["potential"])} {1e3 * row["kick_seconds"]:.3f} ms'
+                            for row in run['medians']), flush=True)
     summary = summarize(runs, args)
     (args.output / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n')
     (args.output / 'summary.md').write_text(render(summary))
@@ -232,82 +242,89 @@ def summarize(runs, args):
     timing = {}
     for run in runs:
         for row in run['medians']:
-            key = (run['binary'], run['policy'], run['backend'], run['bucket'], row['fixture'],
-                   row['potential'])
+            key = (run['binary'], run['policy'], run['backend'], run['bucket'], run['order'],
+                   row['fixture'], row['potential'])
             timing.setdefault(key, []).append(row['kick_seconds'])
     table = []
     for key, values in sorted(timing.items()):
         table.append(dict(binary=key[0], policy=key[1], backend=key[2], bucket=key[3],
-                          fixture=key[4], potential=key[5],
+                          order=key[4], fixture=key[5], potential=key[6],
                           kick_ms_median=1e3 * statistics.median(values),
                           kick_ms_min=1e3 * min(values), kick_ms_max=1e3 * max(values),
                           pairs=len(values)))
     references = [dict(binary=run['binary'], policy=run['policy'], backend=run['backend'],
-                       bucket=run['bucket'], pair=run['pair'], **reference)
+                       bucket=run['bucket'], order=run['order'], pair=run['pair'], **reference)
                   for run in runs for reference in run['references']]
-    arenas = sorted({(run['binary'], run['policy'], run['backend'], run['bucket'],
+    arenas = sorted({(run['binary'], run['policy'], run['backend'], run['bucket'], run['order'],
                       run['arena'] or run['occupancy'] or '') for run in runs})
     # Compare every CUDA export with the matching CPU export of the same binary,
-    # policy and bucket, and every variant with the first binary's CUDA export.
+    # policy, bucket and order, and every variant with the first binary's CUDA
+    # export at the same bucket and order.
     comparisons = []
-    first_pair = {(run['binary'], run['policy'], run['backend'], run['bucket']): run
+    first_pair = {(run['binary'], run['policy'], run['backend'], run['bucket'], run['order']): run
                   for run in runs if run['pair'] == 0}
     reference_label = args.binary[0]['label']
     for key, run in sorted(first_pair.items()):
-        cpu = first_pair.get((key[0], key[1], 'cpu', key[3]))
+        cpu = first_pair.get((key[0], key[1], 'cpu', key[3], key[4]))
         if key[2] == 'cuda' and cpu is not None:
             comparisons.append(dict(kind='cuda_vs_cpu', binary=key[0], policy=key[1],
-                                    bucket=key[3],
+                                    bucket=key[3], order=key[4],
                                     result=compare_forces(cpu['force_csv'], run['force_csv'])))
-        base = first_pair.get((reference_label, 'auto', key[2], key[3]))
+        base = first_pair.get((reference_label, 'auto', key[2], key[3], key[4]))
         if base is not None and base is not run:
             comparisons.append(dict(kind='vs_' + reference_label, binary=key[0], policy=key[1],
-                                    backend=key[2], bucket=key[3],
+                                    backend=key[2], bucket=key[3], order=key[4],
                                     result=compare_forces(base['force_csv'], run['force_csv'])))
     repeat_hashes = {}
     for run in runs:
-        repeat_hashes.setdefault((run['binary'], run['policy'], run['backend'], run['bucket']),
-                                 set()).add(run['force_csv_sha256'])
+        repeat_hashes.setdefault((run['binary'], run['policy'], run['backend'], run['bucket'],
+                                  run['order']), set()).add(run['force_csv_sha256'])
     return {'timing': table, 'references': references,
-            'arena_lines': [dict(binary=a[0], policy=a[1], backend=a[2], bucket=a[3], line=a[4])
-                            for a in arenas],
+            'arena_lines': [dict(binary=a[0], policy=a[1], backend=a[2], bucket=a[3], order=a[4],
+                                 line=a[5]) for a in arenas],
             'comparisons': comparisons,
             'repeat_export_hashes': [dict(binary=k[0], policy=k[1], backend=k[2], bucket=k[3],
-                                          distinct_exports=len(v)) for k, v in sorted(repeat_hashes.items())]}
+                                          order=k[4], distinct_exports=len(v))
+                                     for k, v in sorted(repeat_hashes.items())]}
 
 
 def render(summary):
-    lines = ['| binary | policy | backend | bucket | fixture | potential | kick ms (median) | min | max | pairs |',
-             '|---|---|---|---:|---|---:|---:|---:|---:|---:|']
+    lines = ['| binary | policy | backend | bucket | order | fixture | potential | kick ms (median) | min | max | pairs |',
+             '|---|---|---|---:|---:|---|---:|---:|---:|---:|---:|']
     for row in summary['timing']:
         lines.append(f'| {row["binary"]} | {row["policy"]} | {row["backend"]} | {row["bucket"]} | '
-                     f'{row["fixture"]} | {int(row["potential"])} | {row["kick_ms_median"]:.3f} | '
-                     f'{row["kick_ms_min"]:.3f} | {row["kick_ms_max"]:.3f} | {row["pairs"]} |')
+                     f'{row["order"]} | {row["fixture"]} | {int(row["potential"])} | '
+                     f'{row["kick_ms_median"]:.3f} | {row["kick_ms_min"]:.3f} | '
+                     f'{row["kick_ms_max"]:.3f} | {row["pairs"]} |')
     if summary['references']:
-        lines += ['', '| binary | policy | backend | bucket | fixture | force rel L2 | force p99 | '
-                  'potential rel L2 | potential p99 |', '|---|---|---|---:|---|---:|---:|---:|---:|']
+        lines += ['', '| binary | policy | backend | bucket | order | fixture | force rel L2 | '
+                  'force p99 | potential rel L2 | potential p99 |',
+                  '|---|---|---|---:|---:|---|---:|---:|---:|---:|']
         seen = set()
         for row in summary['references']:
-            key = (row['binary'], row['policy'], row['backend'], row['bucket'], row['fixture'])
+            key = (row['binary'], row['policy'], row['backend'], row['bucket'], row['order'],
+                   row['fixture'])
             if key in seen:
                 continue
             seen.add(key)
             lines.append(f'| {row["binary"]} | {row["policy"]} | {row["backend"]} | {row["bucket"]} | '
-                         f'{row["fixture"]} | {row["force_relative_l2"]:.3e} | '
+                         f'{row["order"]} | {row["fixture"]} | {row["force_relative_l2"]:.3e} | '
                          f'{row["force_relative_p99"]:.3e} | {row["potential_relative_l2"]:.3e} | '
                          f'{row["potential_relative_p99"]:.3e} |')
-    lines += ['', '| binary | policy | backend | bucket | kernel policy line |', '|---|---|---|---:|---|']
+    lines += ['', '| binary | policy | backend | bucket | order | kernel policy line |',
+              '|---|---|---|---:|---:|---|']
     for row in summary['arena_lines']:
         lines.append(f'| {row["binary"]} | {row["policy"]} | {row["backend"]} | {row["bucket"]} | '
-                     f'`{row["line"]}` |')
-    lines += ['', '| comparison | binary | policy | bucket | fixture | acceleration rel L2 | '
-              'acceleration max pointwise | potential rel L2 |', '|---|---|---|---:|---|---:|---:|---:|']
+                     f'{row["order"]} | `{row["line"]}` |')
+    lines += ['', '| comparison | binary | policy | bucket | order | fixture | acceleration rel L2 | '
+              'acceleration max pointwise | potential rel L2 |',
+              '|---|---|---|---:|---:|---|---:|---:|---:|']
     for item in summary['comparisons']:
         for fixture, result in item['result'].items():
             acceleration = result['acceleration']
             potential = result['potential']
             lines.append(f'| {item["kind"]} | {item["binary"]} | {item["policy"]} | {item["bucket"]} | '
-                         f'{fixture} | {acceleration["relative_l2"]:.3e} | '
+                         f'{item["order"]} | {fixture} | {acceleration["relative_l2"]:.3e} | '
                          f'{acceleration["max_pointwise_relative"]:.3e} | '
                          f'{potential["relative_l2"]:.3e} |')
     return '\n'.join(lines) + '\n'

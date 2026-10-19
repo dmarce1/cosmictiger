@@ -27,6 +27,8 @@
 
 #include <cosmictiger/bh.hpp>
 #include <cosmictiger/domain.hpp>
+#include <cosmictiger/fmm_kernels.hpp>
+#include <cosmictiger/fmm_order.hpp>
 #include <cosmictiger/gravity.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/kick.hpp>
@@ -46,6 +48,13 @@ void requireClose(char const* label, double actual, double expected, double tole
         throw std::runtime_error(std::string(label) + ": got " + std::to_string(actual) +
             ", expected " + std::to_string(expected));
     }
+}
+
+// The monopole is the first coefficient of the runtime order's multipole.
+float nodeMass(TreeNode const* node) {
+    MultipoleBuffer multipole;
+    treeReadMultipole(node->mpos, multipole);
+    return multipole[0];
 }
 
 void verifyKernelSelections() {
@@ -270,7 +279,7 @@ void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f) {
     sphParticlesSupportRadius(0) = hydroSupport;
     auto const built = treeCreate(TreeCreateParameters(0, 0.5, getOptions().gravity.supportRadius));
     verifyMappings();
-    requireClose("root mixed mass", treeGetNode(built.id)->mpos->multi[0], 1.0);
+    requireClose("root mixed mass", nodeMass(treeGetNode(built.id)), 1.0);
     requireClose("gravity tree support is independent of hydro smoothing",
         built.maxGravitySupportRadius, getOptions().gravity.supportRadius);
     ParticleInteger const gas = sphParticlesParticleIndex(0);
@@ -294,30 +303,33 @@ void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f) {
         requireClose("CPU particle-particle mass", direct.gx[0], expected);
         requireClose("CPU particle-particle potential", direct.phi[0], -sourceMass * inverseRadius);
         if (!softened) {
-            requireClose("leaf monopole mass", treeGetNode(source)->mpos->multi[0], sourceMass);
+            requireClose("leaf monopole mass", nodeMass(treeGetNode(source)), sourceMass);
             ForceVectors far(1);
-            cpuGravityPc(far, true, self, sources);
+            fmmDispatch([&](auto order) { cpuGravityPc<order.value>(far, true, self, sources); });
             requireClose("CPU particle-cell mass", far.gx[0], expected);
             for (int path = 0; path < 2; path++) {
-                Expansion<float> local;
-                local = 0.0f;
-                if (path == 0) {
-                    cpuGravityCp(local, sources, self, true);
-                } else {
-                    cpuGravityCc(kGravityDirect, local, sources, self, true);
-                }
+                ExpansionBuffer local;
+                local.zero();
                 Array<float, NDIM> dx;
                 for (int dim = 0; dim < NDIM; dim++) {
                     dx[dim] = distance(particlesPos(dim, sink), treeGetNode(self)->pos[dim]);
                 }
-                auto const value = l2P(local, dx, true);
+                auto const value = fmmDispatch([&](auto order) {
+                    auto& expansion = local.expansion<order.value>();
+                    if (path == 0) {
+                        cpuGravityCp<order.value>(expansion, sources, self, true);
+                    } else {
+                        cpuGravityCc<order.value>(kGravityDirect, expansion, sources, self, true);
+                    }
+                    return l2P(expansion, dx, true);
+                });
                 requireClose(path == 0 ? "CPU cell-particle mass" : "CPU cell-cell mass",
                     -SCALE_FACTOR2 * value(1, 0, 0), expected);
             }
         }
     }
-    Expansion<float> local;
-    local = 0.0f;
+    ExpansionBuffer local;
+    local.zero();
     Array<Fixed32, NDIM> origin;
     for (int dim = 0; dim < NDIM; dim++) {
         origin[dim] = 0.0;
@@ -480,7 +492,8 @@ void validateSphRemoteTreeCache() {
     remote.proc = (hpxRank() + 1) % hpxSize();
     remote.index = 0;
     auto const* node = treeGetNode(remote);
-    if (!(node->mpos->multi[0] > 0.0f && node->mpos->multi[0] <= float(hpxSize()))) {
+    float const rootMass = detail::nodeMass(node);
+    if (!(rootMass > 0.0f && rootMass <= float(hpxSize()))) {
         throw std::runtime_error("Remote tree cache lost the populated root multipole");
     }
 }

@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <map>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 #include <cosmictiger/simd_math.hpp>
@@ -22,16 +23,28 @@ namespace detail {
 using Index = std::array<int, 3>;
 using Position = std::array<double, 3>;
 using Polynomial = std::map<Index, double>;
-using Multipole = Coefficients<double, kMultipoleCount>;
-using Expansion = Coefficients<double, kLocalCount>;
 using Field = Coefficients<double, kFieldCount>;
+template <int order>
+using Multipole = Coefficients<double, KernelLayout<order>::kMultipoleCount_>;
+template <int order>
+using Expansion = Coefficients<double, KernelLayout<order>::kLocalCount_>;
 
 // The Cartesian oracles below carry full (non-compact) coefficients, so their
 // rounding grows with the rank through the harmonic projection's alternating
-// trace sums. The budget is relative to the largest coefficient of each rank;
-// measured discrepancies stay within 1e-15 to 5e-15 for multipole degrees two
-// through five and grow slowly, so one budget covers every supported degree.
+// trace sums. The budget is relative to the largest coefficient of each rank.
+// Measured worst normalized discrepancies per FMM order (multipole degree p,
+// local degree p + 1) over the Cartesian, binomial, polynomial and remainder
+// oracles with this file's fixtures (GCC 13, -O3 -ffast-math -march=native):
+//   order  3: 6.9e-16    order  4: 1.0e-15    order  5: 1.3e-15    order  6: 3.3e-15
+//   order  7: 4.6e-15    order  8: 1.2e-14    order  9: 2.5e-14    order 10: 5.7e-14
+// The SIMD/scalar parity worst cases were 1.7e-6 (float, order 10; budget 2e-5)
+// and 4.9e-16 (double, order 10; budget 3e-12). The oracle discrepancy roughly
+// doubles per order, so one budget covers every supported order.
 constexpr double kOracleTolerance = 3e-11;
+
+// Worst normalized discrepancy seen per check label, reset for every order and
+// reported with that order's pass line.
+std::map<std::string, double> worstDiscrepancy;
 
 struct Particle {
     double mass;
@@ -124,8 +137,10 @@ Polynomial harmonicProjection(Polynomial const& raw, int rank) {
     return result;
 }
 
-Multipole projectedMoments(std::vector<Particle> const& particles, double scale) {
-    Multipole result{};
+template <int order>
+Multipole<order> projectedMoments(std::vector<Particle> const& particles, double scale) {
+    constexpr int kMultipoleDegree = KernelLayout<order>::kMultipoleDegree_;
+    Multipole<order> result{};
     for (auto const& particle : particles) {
         Polynomial const linear{{{1, 0, 0}, particle.position[0]},
             {{0, 1, 0}, particle.position[1]}, {{0, 0, 1}, particle.position[2]}};
@@ -169,17 +184,19 @@ Polynomial greenDerivatives(Position const& separation, int order) {
 
 void near(double actual, double expected, double scale, char const* label,
     double tolerance = kOracleTolerance) {
-    if (!std::isfinite(actual) ||
-        std::abs(actual - expected) > tolerance * std::max(scale, 1e-24)) {
+    double const normalized = std::abs(actual - expected) / std::max(scale, 1e-24);
+    auto& worst = worstDiscrepancy[label];
+    worst = std::isfinite(actual) ? std::max(worst, normalized) : INFINITY;
+    if (!std::isfinite(actual) || normalized > tolerance) {
         std::fprintf(stderr, "%s: %.17g != %.17g; difference %.3g, scale %.3g\n", label, actual,
             expected, actual - expected, scale);
         throw std::runtime_error(label);
     }
 }
 
-template <int order, typename Actual, typename Expected>
+template <int degree, typename Actual, typename Expected>
 void compareRanks(Actual const& actual, Expected const& expected, char const* label) {
-    for (int rank = 0; rank <= order; ++rank) {
+    for (int rank = 0; rank <= degree; ++rank) {
         double scale = 0;
         for (int i = rank * rank; i < (rank + 1) * (rank + 1); ++i) {
             scale = std::max(scale, std::abs(expected[i]));
@@ -195,11 +212,13 @@ std::vector<Particle> particleCloud() {
         {.8, {.17, -.16, -.11}}, {1.1, {.03, .05, .12}}};
 }
 
+template <int order>
 void testParticleMomentsAndTranslation() {
+    constexpr int kMultipoleDegree = KernelLayout<order>::kMultipoleDegree_;
     auto const particles = particleCloud();
     for (auto const scales : {std::array<double, 2>{.6, 1.3}, {1.4, .7}}) {
-        auto const expected = projectedMoments(particles, scales[0]);
-        Multipole actual{};
+        auto const expected = projectedMoments<order>(particles, scales[0]);
+        Multipole<order> actual{};
         for (auto const& particle : particles) {
             kernels::P2mKernel<kMultipoleDegree>::add(actual, particle.mass,
                 particle.position[0] / scales[0], particle.position[1] / scales[0],
@@ -213,8 +232,8 @@ void testParticleMomentsAndTranslation() {
                 particle.position[d] += displacement[d];
             }
         }
-        auto const translatedExpected = projectedMoments(shifted, scales[1]);
-        Multipole translated{};
+        auto const translatedExpected = projectedMoments<order>(shifted, scales[1]);
+        Multipole<order> translated{};
         kernels::M2mKernel<kMultipoleDegree>::add(translated, actual, displacement[0] / scales[1],
             displacement[1] / scales[1], displacement[2] / scales[1], scales[0] / scales[1]);
         compareRanks<kMultipoleDegree>(
@@ -222,8 +241,10 @@ void testParticleMomentsAndTranslation() {
     }
 }
 
-template <bool centered>
+template <int order, bool centered>
 void testInteractions() {
+    constexpr int kMultipoleDegree = KernelLayout<order>::kMultipoleDegree_;
+    constexpr int kLocalDegree = KernelLayout<order>::kLocalDegree_;
     // Both modes intentionally receive a nonzero dipole so that omission is tested.
     auto const particles = particleCloud();
     constexpr std::array<Position, 7> kDirections{{{1.3, -.9, 1.7}, {-1.3, .9, -1.7}, {2.1, 0, 0},
@@ -235,7 +256,7 @@ void testInteractions() {
         double const inverseRadius = 1 /
             std::sqrt(separation[0] * separation[0] + separation[1] * separation[1] +
                 separation[2] * separation[2]);
-        auto const source = projectedMoments(particles, sourceScale);
+        auto const source = projectedMoments<order>(particles, sourceScale);
         auto const derivatives = greenDerivatives(separation, kLocalDegree);
         Polynomial raw;
         for (int rank = 0; rank <= kMultipoleDegree; ++rank) {
@@ -250,7 +271,7 @@ void testInteractions() {
         }
         // Source rank n and local rank k interact only while n + k stays within
         // the local degree.
-        Expansion expected{}, actual{}, pointExpected{}, pointActual{};
+        Expansion<order> expected{}, actual{}, pointExpected{}, pointActual{};
         for (int rank = 0; rank <= kLocalDegree; ++rank) {
             for (auto const& a : indices(rank)) {
                 if (a[2] > 1) {
@@ -268,13 +289,13 @@ void testInteractions() {
                     1.7 * derivatives.at(a) * std::pow(targetScale, rank);
             }
         }
-        kernels::M2lKernel<kLocalDegree, centered>::template add<double, Expansion, Multipole,
-            kMultipoleDegree>(actual, source, separation[0] * inverseRadius,
+        kernels::M2lKernel<kLocalDegree, centered>::template add<double, Expansion<order>,
+            Multipole<order>, kMultipoleDegree>(actual, source, separation[0] * inverseRadius,
             separation[1] * inverseRadius, separation[2] * inverseRadius, inverseRadius,
             sourceScale * inverseRadius, targetScale * inverseRadius);
         compareRanks<kLocalDegree>(actual, expected, "M2L full Cartesian derivative oracle");
-        Expansion ewald{}, storedDerivatives{}, unscaledExpected{};
-        auto const unscaledSource = projectedMoments(particles, 1.);
+        Expansion<order> ewald{}, storedDerivatives{}, unscaledExpected{};
+        auto const unscaledSource = projectedMoments<order>(particles, 1.);
         for (int rank = 0; rank <= kLocalDegree; ++rank) {
             for (auto const& index : indices(rank)) {
                 if (index[2] <= 1) {
@@ -312,14 +333,14 @@ void testInteractions() {
     }
 }
 
-Polynomial potentialPolynomial(double background) {
+Polynomial potentialPolynomial(int localDegree, double background) {
     Polynomial result, raw{{{0, 0, 0}, 1}};
     Polynomial const linear{{{1, 0, 0}, .31}, {{0, 1, 0}, -.27}, {{0, 0, 1}, .43}};
-    for (int rank = 0; rank <= kLocalDegree; ++rank) {
+    for (int rank = 0; rank <= localDegree; ++rank) {
         for (auto const& [index, value] : harmonicProjection(raw, rank)) {
             result[index] += (rank % 2 ? -.4 : .4) * value / factorial(rank);
         }
-        raw = multiply(raw, linear, kLocalDegree);
+        raw = multiply(raw, linear, localDegree);
     }
     for (int d = 0; d < 3; ++d) {
         Index index{};
@@ -347,9 +368,11 @@ double polynomialDerivative(
     return result;
 }
 
-Expansion localAt(
+template <int order>
+Expansion<order> localAt(
     Polynomial const& polynomial, Position const& position, double scale, double background) {
-    Expansion result{};
+    constexpr int kLocalDegree = KernelLayout<order>::kLocalDegree_;
+    Expansion<order> result{};
     for (int rank = 0; rank <= kLocalDegree; ++rank) {
         for (auto const& index : indices(rank)) {
             if (index[2] <= 1) {
@@ -358,19 +381,21 @@ Expansion localAt(
             }
         }
     }
-    result[kLocalTraceIndex] = background * scale * scale;
+    result[KernelLayout<order>::kLocalTraceIndex_] = background * scale * scale;
     return result;
 }
 
-template <bool withTrace>
+template <int order, bool withTrace>
 void testLocalTranslation() {
+    constexpr int kLocalDegree = KernelLayout<order>::kLocalDegree_;
+    constexpr int kLocalTraceIndex = KernelLayout<order>::kLocalTraceIndex_;
     double const background = withTrace ? -1.7 : 0;
-    auto const polynomial = potentialPolynomial(background);
+    auto const polynomial = potentialPolynomial(kLocalDegree, background);
     Position const displacement{.13, -.17, .09};
     for (auto const scales : {std::array<double, 2>{.6, 1.3}, {1.4, .7}}) {
-        auto const source = localAt(polynomial, {}, scales[0], background);
-        auto const expected = localAt(polynomial, displacement, scales[1], background);
-        Expansion actual{};
+        auto const source = localAt<order>(polynomial, {}, scales[0], background);
+        auto const expected = localAt<order>(polynomial, displacement, scales[1], background);
+        Expansion<order> actual{};
         kernels::L2lKernel<kLocalDegree, withTrace>::add(actual, source,
             displacement[0] / scales[0], displacement[1] / scales[0], displacement[2] / scales[0],
             scales[1] / scales[0]);
@@ -402,16 +427,16 @@ struct AxialRemainder {
     double acceleration;
 };
 
-AxialRemainder closedFormRemainder(double q) {
-    double const tail = std::pow(q, kMultipoleDegree + 1);
+AxialRemainder closedFormRemainder(int multipoleDegree, double q) {
+    double const tail = std::pow(q, multipoleDegree + 1);
     return {-tail / (2 * (1 - q)),
-        -tail * ((kMultipoleDegree + 2) - (kMultipoleDegree + 1) * q) / (4 * (1 - q) * (1 - q))};
+        -tail * ((multipoleDegree + 2) - (multipoleDegree + 1) * q) / (4 * (1 - q) * (1 - q))};
 }
 
-AxialRemainder bruteForceRemainder(double q) {
+AxialRemainder bruteForceRemainder(int multipoleDegree, double q) {
     AxialRemainder remainder{};
-    double power = std::pow(q, kMultipoleDegree + 1);
-    for (int n = kMultipoleDegree + 1; power > 1e-40; ++n) {
+    double power = std::pow(q, multipoleDegree + 1);
+    for (int n = multipoleDegree + 1; power > 1e-40; ++n) {
         remainder.potential -= power / 2;
         remainder.acceleration -= (n + 1) * power / 4;
         power *= q;
@@ -419,15 +444,17 @@ AxialRemainder bruteForceRemainder(double q) {
     return remainder;
 }
 
+template <int order>
 void testDirectParticleRemainder() {
+    constexpr int kMultipoleDegree = KernelLayout<order>::kMultipoleDegree_;
     for (double q : {.3, .15, .075}) {
-        auto const closedForm = closedFormRemainder(q);
-        auto const series = bruteForceRemainder(q);
+        auto const closedForm = closedFormRemainder(kMultipoleDegree, q);
+        auto const series = bruteForceRemainder(kMultipoleDegree, q);
         near(closedForm.potential, series.potential, std::abs(series.potential),
             "Direct particle potential remainder closed form", 1e-12);
         near(closedForm.acceleration, series.acceleration, std::abs(series.acceleration),
             "Direct particle acceleration remainder closed form", 1e-12);
-        Multipole source{};
+        Multipole<order> source{};
         kernels::P2mKernel<kMultipoleDegree>::add(source, 1., 2 * q, 0., 0.);
         Field field{};
         kernels::M2pKernel<kMultipoleDegree, false>::add(field, source, 1., 0., 0., .5, .5);
@@ -442,53 +469,78 @@ void testDirectParticleRemainder() {
     }
 }
 
-template <typename Real, int lanes>
+template <int order, typename Real, int lanes>
 void testSimd() {
     using Pack = SimdVector<Real, lanes>;
+    using Layout = KernelLayout<order>;
     constexpr double kTolerance = sizeof(Real) == sizeof(float) ? 2e-5 : 3e-12;
     for (int batch = 0; batch < 3; ++batch) {
-        std::array<KernelInput<Real>, lanes> input{};
+        std::array<KernelInput<Real, order>, lanes> input{};
         for (int lane = 0; lane < lanes; ++lane) {
-            input[lane] = makeKernelInput<Real>(batch * lanes + lane);
+            input[lane] = makeKernelInput<Real, order>(batch * lanes + lane);
         }
-        KernelInput<Pack> packed{};
-        for (int i = 0; i < kMultipoleCount; ++i) {
+        KernelInput<Pack, order> packed{};
+        for (int i = 0; i < Layout::kMultipoleCount_; ++i) {
             packed.multipole[i] = Pack([&](auto lane) { return input[lane].multipole[i]; });
         }
-        for (int i = 0; i < kLocalCount; ++i) {
+        for (int i = 0; i < Layout::kLocalCount_; ++i) {
             packed.local[i] = Pack([&](auto lane) { return input[lane].local[i]; });
         }
         for (int i = 0; i < kGeometryCount; ++i) {
             packed.geometry[i] = Pack([&](auto lane) { return input[lane].geometry[i]; });
         }
-        KernelResult<Pack> actual{};
+        KernelResult<Pack, order> actual{};
         evaluateKernels(packed, actual);
         for (int lane = 0; lane < lanes; ++lane) {
-            KernelResult<Real> expected{};
+            KernelResult<Real, order> expected{};
             evaluateKernels(input[lane], expected);
-            for (int i = 0; i < kResultCount; ++i) {
+            for (int i = 0; i < Layout::kResultCount_; ++i) {
                 near(actual[i][lane], expected[i], std::max(1., std::abs(double(expected[i]))),
-                    "SIMD/scalar kernel coefficient parity", kTolerance);
+                    sizeof(Real) == sizeof(float) ? "SIMD/scalar float kernel coefficient parity" :
+                                                    "SIMD/scalar double kernel coefficient parity",
+                    kTolerance);
             }
         }
     }
+}
+
+template <int order>
+void testOrder() {
+    worstDiscrepancy.clear();
+    testParticleMomentsAndTranslation<order>();
+    testInteractions<order, false>();
+    testInteractions<order, true>();
+    testLocalTranslation<order, false>();
+    testLocalTranslation<order, true>();
+    testDirectParticleRemainder<order>();
+    testSimd<order, float, 8>();
+    testSimd<order, double, 2>();
+    double worstOracle = 0;
+    double worstSimdFloat = 0;
+    double worstSimdDouble = 0;
+    for (auto const& [label, value] : worstDiscrepancy) {
+        if (label.rfind("SIMD/scalar float", 0) == 0) {
+            worstSimdFloat = std::max(worstSimdFloat, value);
+        } else if (label.rfind("SIMD/scalar double", 0) == 0) {
+            worstSimdDouble = std::max(worstSimdDouble, value);
+        } else {
+            worstOracle = std::max(worstOracle, value);
+        }
+    }
+    std::printf("STF order %d (degree %d/%d) scalar, Cartesian reference, background, dipole and "
+                "SIMD checks passed; worst normalized discrepancy: oracles %.1e, SIMD float %.1e, "
+                "SIMD double %.1e.\n",
+        order, KernelLayout<order>::kMultipoleDegree_, KernelLayout<order>::kLocalDegree_,
+        worstOracle, worstSimdFloat, worstSimdDouble);
 }
 
 }    // namespace detail
 
 int main() {
     try {
-        detail::testParticleMomentsAndTranslation();
-        detail::testInteractions<false>();
-        detail::testInteractions<true>();
-        detail::testLocalTranslation<false>();
-        detail::testLocalTranslation<true>();
-        detail::testDirectParticleRemainder();
-        detail::testSimd<float, 8>();
-        detail::testSimd<double, 2>();
-        std::printf("STF degree %d/%d scalar, Cartesian reference, background, dipole and SIMD "
-                    "checks passed.\n",
-            detail::kMultipoleDegree, detail::kLocalDegree);
+        detail::forEachFmmOrder([](auto order) { detail::testOrder<order.value>(); });
+        std::printf(
+            "STF kernel checks passed for FMM orders %d to %d.\n", kFmmMinOrder, kFmmMaxOrder);
         return 0;
     } catch (std::exception const& error) {
         std::fprintf(stderr, "STF kernel test failed: %s\n", error.what());

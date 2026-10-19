@@ -25,6 +25,8 @@
 
 #include <hpx/runtime_local/runtime_local_fwd.hpp>
 
+#include <cosmictiger/fmm_kernels.hpp>
+#include <cosmictiger/fmm_order.hpp>
 #include <cosmictiger/gravity.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/kernel.hpp>
@@ -184,25 +186,29 @@ TreeId benchmarkAddNode(
     node.leaf = true;
     node.children[LEFT] = node.children[RIGHT] = TreeId{-1, -1};
     node.maxGravitySupportRadius = kBenchmarkSupport;
-    MultiPos multipole;
-    multipole.pos = center;
-    multipole.multi = 0.0f;
+    MultipoleBuffer multipole;
+    multipole.zero();
     double radiusSquared = 0;
-    for (ParticleInteger index = range.first; index < range.second; ++index) {
-        Array<float, NDIM> displacement;
-        double particleRadiusSquared = 0;
-        for (int dimension = 0; dimension < NDIM; ++dimension) {
-            displacement[dimension] = distance(particlesPos(dimension, index), center[dimension]);
-            particleRadiusSquared += double(displacement[dimension]) * displacement[dimension];
+    fmmDispatch([&](auto order) {
+        auto& moments = multipole.multipole<order.value>();
+        for (ParticleInteger index = range.first; index < range.second; ++index) {
+            Array<float, NDIM> displacement;
+            double particleRadiusSquared = 0;
+            for (int dimension = 0; dimension < NDIM; ++dimension) {
+                displacement[dimension] =
+                    distance(particlesPos(dimension, index), center[dimension]);
+                particleRadiusSquared += double(displacement[dimension]) * displacement[dimension];
+            }
+            radiusSquared = std::max(radiusSquared, particleRadiusSquared);
+            auto const moment = p2M<order.value>(displacement);
+            for (int coefficient = 0; coefficient < FmmOrder<order.value>::kMultipoleCoefficients_;
+                ++coefficient) {
+                moments[coefficient] += particlesMass(index) * moment[coefficient];
+            }
         }
-        radiusSquared = std::max(radiusSquared, particleRadiusSquared);
-        auto const moment = p2M(displacement);
-        for (int coefficient = 0; coefficient < MULTIPOLE_SIZE; ++coefficient) {
-            multipole.multi[coefficient] += particlesMass(index) * moment[coefficient];
-        }
-    }
+    });
     node.radius = float(std::sqrt(radiusSquared));
-    node.mpos = treeAddMultipole(multipole);
+    node.mpos = treeAddMultipole(center, multipole);
     // The direct operator entry points do not use opening boxes. A complete
     // periodic-domain box remains conservative for cells crossing the seam.
     for (int dimension = 0; dimension < NDIM; ++dimension) {
@@ -266,11 +272,11 @@ private:
 };
 
 struct BenchmarkOutput {
-    Expansion<float> expansion;
+    ExpansionBuffer expansion;
     ForceVectors forces{kBenchmarkSinkParticles};
 
     void clear() {
-        expansion = 0.0f;
+        expansion.zero();
         for (int index = 0; index < kBenchmarkSinkParticles; ++index) {
             forces.gx[index] = forces.gy[index] = forces.gz[index] = forces.phi[index] = 0.0f;
         }
@@ -284,32 +290,41 @@ bool benchmarkHasExpansion(BenchmarkOperator operation) {
 
 void benchmarkInvoke(
     BenchmarkCase const& testCase, BenchmarkArena const& arena, BenchmarkOutput& output) {
-    switch (testCase.operation) {
-    case BenchmarkOperator::CcDirect:
-        cpuGravityCc(kGravityDirect, output.expansion, arena.sources_, arena.sink_, testCase.doPhi);
-        break;
-    case BenchmarkOperator::CcEwald:
-        cpuGravityCc(kGravityEwald, output.expansion, arena.sources_, arena.sink_, testCase.doPhi);
-        break;
-    case BenchmarkOperator::Cp:
-        // This production entry point currently computes all coefficients even
-        // when doPhi is false. Keep both modes to expose that actual behavior.
-        cpuGravityCp(output.expansion, arena.sources_, arena.sink_, testCase.doPhi);
-        break;
-    case BenchmarkOperator::Pc:
-        cpuGravityPc(output.forces, testCase.doPhi, arena.sink_, arena.sources_);
-        break;
-    case BenchmarkOperator::Pp:
-        cpuGravityPp(output.forces, testCase.doPhi, arena.sink_, arena.sources_, kBenchmarkSupport);
-        break;
-    }
+    // The runtime FMM order selects the instantiated operator outside the timed
+    // call, as the production walk does.
+    fmmDispatch([&](auto order) {
+        auto& expansion = output.expansion.expansion<order.value>();
+        switch (testCase.operation) {
+        case BenchmarkOperator::CcDirect:
+            cpuGravityCc<order.value>(
+                kGravityDirect, expansion, arena.sources_, arena.sink_, testCase.doPhi);
+            break;
+        case BenchmarkOperator::CcEwald:
+            cpuGravityCc<order.value>(
+                kGravityEwald, expansion, arena.sources_, arena.sink_, testCase.doPhi);
+            break;
+        case BenchmarkOperator::Cp:
+            // This production entry point currently computes all coefficients even
+            // when doPhi is false. Keep both modes to expose that actual behavior.
+            cpuGravityCp<order.value>(expansion, arena.sources_, arena.sink_, testCase.doPhi);
+            break;
+        case BenchmarkOperator::Pc:
+            cpuGravityPc<order.value>(output.forces, testCase.doPhi, arena.sink_, arena.sources_);
+            break;
+        case BenchmarkOperator::Pp:
+            cpuGravityPp(
+                output.forces, testCase.doPhi, arena.sink_, arena.sources_, kBenchmarkSupport);
+            break;
+        }
+    });
 }
 
 std::vector<double> benchmarkValues(
     BenchmarkCase const& testCase, BenchmarkArena const& arena, BenchmarkOutput const& output) {
     std::vector<double> values;
     if (benchmarkHasExpansion(testCase.operation)) {
-        for (int coefficient = 0; coefficient < EXPANSION_SIZE; ++coefficient) {
+        int const coefficientCount = fmmLocalCoefficientCount(fmmOrder());
+        for (int coefficient = 0; coefficient < coefficientCount; ++coefficient) {
             values.push_back(output.expansion[coefficient]);
         }
         // Preserve all expansion coefficients and also record their physical
@@ -321,7 +336,9 @@ std::vector<double> benchmarkValues(
                 displacement[dimension] =
                     distance(particlesPos(dimension, index), center[dimension]);
             }
-            auto const force = l2P(output.expansion, displacement, testCase.doPhi);
+            auto const force = fmmDispatch([&](auto order) {
+                return l2P(output.expansion.expansion<order.value>(), displacement, testCase.doPhi);
+            });
             values.push_back(-SCALE_FACTOR2 * force(1, 0, 0));
             values.push_back(-SCALE_FACTOR2 * force(0, 1, 0));
             values.push_back(-SCALE_FACTOR2 * force(0, 0, 1));
@@ -404,7 +421,7 @@ void simdBenchmark() {
     if (hpxSize() != 1 || hpx::get_num_worker_threads() != 1) {
         throw std::invalid_argument("SIMD gravity benchmark requires one rank and one HPX thread");
     }
-    if (getOptions().cuda) {
+    if (getOptions().compute.cuda) {
         throw std::invalid_argument("SIMD gravity benchmark requires --compute.cuda=false");
     }
     auto const settings = detail::benchmarkSettings();
@@ -433,14 +450,14 @@ void simdBenchmark() {
     auto const originalGravity = selectedGravityKernel().spec;
     auto const originalHydro = selectedHydroKernel().spec;
     auto options = originalOptions;
-    options.sph = false;
-    options.gravity = true;
-    options.saveForce = false;
-    options.doGroups = false;
-    options.doTracers = false;
-    options.bucketSize = 64;
-    options.gravitySupportRadius = detail::kBenchmarkSupport;
-    options.numberOfParticles = 32 + 33 * 8;
+    options.hydro.enabled = false;
+    options.gravity.enabled = true;
+    options.analysis.saveForce = false;
+    options.analysis.groups = false;
+    options.analysis.tracers = false;
+    options.compute.bucketSize = 64;
+    options.gravity.supportRadius = detail::kBenchmarkSupport;
+    options.initial.numberOfParticles = 32 + 33 * 8;
     setOptions(options);
     setKernelSelections(originalGravity, originalHydro, false);
     try {

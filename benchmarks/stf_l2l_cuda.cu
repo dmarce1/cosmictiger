@@ -12,9 +12,13 @@
 // Legacy timing reports reference failures and continues for historical timing
 // comparisons; --check and both STF variants always fail on reference errors.
 //
-// The local degree follows ORDER through cosmictiger/fmm_order.hpp. The STF
+// Every FMM order from kFmmMinOrder to kFmmMaxOrder (local degrees 2 to 9) is
+// compiled in. --check validates all of them; timing runs one order, the
+// build's default (kFmmDefaultOrder) unless --order N selects another. The STF
 // variants also check L2lWarpKernel::translateInto, which writes the completed
-// expansion into a shared-memory target distinct from its source.
+// expansion into a shared-memory target distinct from its source. The legacy
+// baseline header implements only local degree six, so it is restricted to
+// ORDER 7 and validated at that order alone.
 
 #include <algorithm>
 #include <array>
@@ -23,6 +27,7 @@
 #include <cstdlib>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <cuda_runtime.h>
@@ -48,21 +53,58 @@ namespace detail {
 
 #ifdef COSMICTIGER_STF_BASELINE_HEADER
 constexpr char const* kImplementation = "legacy_warp";
+// The legacy header provides one fixed-degree expansion type.
+template <int order>
+using LocalExpansion = Expansion<float>;
+static_assert(FmmOrder<7>::kLocalCoefficients_ == EXPANSION_SIZE,
+    "Legacy expansion storage must match the order-seven traits");
 #elif defined(COSMICTIGER_STF_L2L_LANE0)
 constexpr char const* kImplementation = "stf_lane0";
+template <int order>
+using LocalExpansion = FmmExpansion<float, order>;
 #else
 constexpr char const* kImplementation = "stf_warp";
+template <int order>
+using LocalExpansion = FmmExpansion<float, order>;
 #endif
 constexpr int kLanes = 32;
 constexpr int kMaxWarpsPerBlock = 4;
 constexpr int kValidationSamples = 16;
-constexpr int kDegree = kFmmLocalDegree;
-constexpr int kHarmonicCoefficients = kFmmLocalHarmonicCoefficients;
-constexpr int kTraceIndex = kFmmLocalTraceIndex;
-constexpr int kCoefficients = kFmmLocalCoefficients;
-static_assert(kCoefficients == EXPANSION_SIZE, "Expansion storage must match the order traits");
-using Canonical = std::array<double, kCoefficients>;
 using Position = std::array<double, 3>;
+template <int order>
+using Canonical = std::array<double, FmmOrder<order>::kLocalCoefficients_>;
+
+// Call f(std::integral_constant<int, order>{}) for every order this build
+// validates; the legacy header supports only order seven. The standalone
+// binary does not link the application's assertion handler, so it does not
+// use fmmDispatch.
+template <class F, int... offsets>
+void forEachOrderImpl(F&& f, std::integer_sequence<int, offsets...>) {
+    (f(std::integral_constant<int, kFmmMinOrder + offsets>{}), ...);
+}
+
+template <class F>
+void forEachOrder(F&& f) {
+#ifdef COSMICTIGER_STF_BASELINE_HEADER
+    f(std::integral_constant<int, 7>{});
+#else
+    forEachOrderImpl(
+        std::forward<F>(f), std::make_integer_sequence<int, kFmmMaxOrder - kFmmMinOrder + 1>{});
+#endif
+}
+
+// Call f for one runtime order; returns false when this build lacks it.
+template <class F>
+bool withOrder(int order, F&& f) {
+    bool found = false;
+    forEachOrder([&](auto candidate) {
+        if (candidate.value == order) {
+            f(candidate);
+            found = true;
+        }
+    });
+    return found;
+}
 
 // Which generated entry point a check or timing exercises.
 enum class Variant { kReturned, kSharedTarget };
@@ -71,8 +113,9 @@ char const* variantName(Variant variant) {
     return variant == Variant::kReturned ? "translate" : "translateInto";
 }
 
+template <int order>
 struct Fixture {
-    Expansion<float> source;
+    LocalExpansion<order> source;
     Array<float, NDIM> displacement;
 };
 
@@ -87,19 +130,24 @@ int canonicalIndex(int x, int y, int z) {
     return rank * rank + (z == 0 ? x : rank + 1 + x);
 }
 
-double component(Canonical const& source, int x, int y, int z) {
+template <int order>
+double component(Canonical<order> const& source, int x, int y, int z) {
     if (z <= 1) {
         return source[canonicalIndex(x, y, z)];
     }
-    double value = -component(source, x + 2, y, z - 2) - component(source, x, y + 2, z - 2);
+    double value =
+        -component<order>(source, x + 2, y, z - 2) - component<order>(source, x, y + 2, z - 2);
     if (x == 0 && y == 0 && z == 2) {
-        value += source[kTraceIndex];
+        value += source[FmmOrder<order>::kLocalTraceIndex_];
     }
     return value;
 }
 
-Canonical canonical(Expansion<float> const& source) {
-    Canonical result{};
+template <int order>
+Canonical<order> canonical(LocalExpansion<order> const& source) {
+    constexpr int kDegree = FmmOrder<order>::kLocalDegree_;
+    constexpr int kTraceIndex = FmmOrder<order>::kLocalTraceIndex_;
+    Canonical<order> result{};
     for (int rank = 0; rank <= kDegree; ++rank) {
         for (int z = 0; z <= 1 && z <= rank; ++z) {
             for (int x = 0; x <= rank - z; ++x) {
@@ -117,8 +165,11 @@ Canonical canonical(Expansion<float> const& source) {
     return result;
 }
 
-Expansion<float> stored(Canonical const& source) {
-    Expansion<float> result{};
+template <int order>
+LocalExpansion<order> stored(Canonical<order> const& source) {
+    constexpr int kDegree = FmmOrder<order>::kLocalDegree_;
+    constexpr int kTraceIndex = FmmOrder<order>::kLocalTraceIndex_;
+    LocalExpansion<order> result{};
     for (int rank = 0; rank <= kDegree; ++rank) {
         for (int z = 0; z <= 1 && z <= rank; ++z) {
             for (int x = 0; x <= rank - z; ++x) {
@@ -136,9 +187,12 @@ Expansion<float> stored(Canonical const& source) {
     return result;
 }
 
-Fixture fixture(int sample) {
-    Fixture result{};
-    Canonical source{};
+template <int order>
+Fixture<order> fixture(int sample) {
+    constexpr int kHarmonicCoefficients = FmmOrder<order>::kLocalHarmonicCoefficients_;
+    constexpr int kTraceIndex = FmmOrder<order>::kLocalTraceIndex_;
+    Fixture<order> result{};
+    Canonical<order> source{};
     int const kind = sample % 4;
     if (kind < 2) {
         for (int i = 0; i < kHarmonicCoefficients; ++i) {
@@ -156,7 +210,7 @@ Fixture fixture(int sample) {
     source[canonicalIndex(1, 0, 0)] = .12;
     source[canonicalIndex(0, 1, 0)] = -.23;
     source[canonicalIndex(0, 0, 1)] = .31;
-    result.source = stored(source);
+    result.source = stored<order>(source);
     for (int d = 0; d < 3; ++d) {
         result.displacement[d] =
             sample % 7 == 0 ? 0.f : float(.00017 * std::sin(.71 * (sample + 1) + .37 * d));
@@ -164,7 +218,11 @@ Fixture fixture(int sample) {
     return result;
 }
 
-Canonical translateReference(Canonical const& source, Position const& displacement, bool doPhi) {
+template <int order>
+Canonical<order> translateReference(
+    Canonical<order> const& source, Position const& displacement, bool doPhi) {
+    constexpr int kDegree = FmmOrder<order>::kLocalDegree_;
+    constexpr int kTraceIndex = FmmOrder<order>::kLocalTraceIndex_;
     // Full Cartesian finite Taylor translation, independent of either generated
     // DAG and of the old CUDA term tables/reduction layout.
     double powers[3][kDegree + 1]{};
@@ -174,7 +232,7 @@ Canonical translateReference(Canonical const& source, Position const& displaceme
             powers[d][n] = powers[d][n - 1] * displacement[d] / n;
         }
     }
-    Canonical result{};
+    Canonical<order> result{};
     for (int rank = 0; rank <= kDegree; ++rank) {
         for (int z = 0; z <= 1 && z <= rank; ++z) {
             for (int x = 0; x <= rank - z; ++x) {
@@ -183,8 +241,8 @@ Canonical translateReference(Canonical const& source, Position const& displaceme
                 for (int bx = 0; bx <= kDegree - rank; ++bx) {
                     for (int by = 0; by <= kDegree - rank - bx; ++by) {
                         for (int bz = 0; bz <= kDegree - rank - bx - by; ++bz) {
-                            value += component(source, x + bx, y + by, z + bz) * powers[0][bx] *
-                                powers[1][by] * powers[2][bz];
+                            value += component<order>(source, x + bx, y + by, z + bz) *
+                                powers[0][bx] * powers[1][by] * powers[2][bz];
                         }
                     }
                 }
@@ -199,10 +257,11 @@ Canonical translateReference(Canonical const& source, Position const& displaceme
     return result;
 }
 
-__device__ Expansion<float> warpTranslate(
-    Expansion<float> const& source, Array<float, NDIM> position, bool doPhi) {
+template <int order>
+__device__ LocalExpansion<order> warpTranslate(
+    LocalExpansion<order> const& source, Array<float, NDIM> position, bool doPhi) {
 #ifdef COSMICTIGER_STF_L2L_LANE0
-    Expansion<float> result{};
+    LocalExpansion<order> result{};
     if (threadIdx.x == 0) {
         result = l2L(source, position, doPhi);
     }
@@ -212,14 +271,16 @@ __device__ Expansion<float> warpTranslate(
 #endif
 }
 
-__global__ void validateWarp(Fixture const* input, Expansion<float>* workspace,
-    Expansion<float>* returned, float* observed, bool doPhi, int steps) {
+template <int order>
+__global__ void validateWarp(Fixture<order> const* input, LocalExpansion<order>* workspace,
+    LocalExpansion<order>* returned, float* observed, bool doPhi, int steps) {
+    constexpr int kCoefficients = FmmOrder<order>::kLocalCoefficients_;
     int const sample = blockIdx.x * (blockDim.x / kLanes) + threadIdx.x / kLanes;
     int const lane = threadIdx.x & (kLanes - 1);
     if (sample >= kValidationSamples) {
         return;
     }
-    for (int i = lane; i < EXPANSION_SIZE; i += kLanes) {
+    for (int i = lane; i < kCoefficients; i += kLanes) {
         workspace[sample][i] = input[sample].source[i];
     }
     __syncwarp();
@@ -228,7 +289,7 @@ __global__ void validateWarp(Fixture const* input, Expansion<float>* workspace,
         for (int d = 0; d < NDIM; ++d) {
             displacement[d] *= step % 2 ? -1.f : 1.f;
         }
-        auto const result = warpTranslate(workspace[sample], displacement, doPhi);
+        auto const result = warpTranslate<order>(workspace[sample], displacement, doPhi);
         if (step == steps - 1) {
             returned[sample * kLanes + lane] = result;
         }
@@ -240,7 +301,7 @@ __global__ void validateWarp(Fixture const* input, Expansion<float>* workspace,
         __syncwarp();
         float checksum = 0;
         float const volatile* coefficients = &workspace[sample][0];
-        for (int i = 0; i < EXPANSION_SIZE; ++i) {
+        for (int i = 0; i < kCoefficients; ++i) {
             checksum += (i + 1) * coefficients[i];
         }
         observed[sample * kLanes + lane] = checksum;
@@ -251,24 +312,26 @@ __global__ void validateWarp(Fixture const* input, Expansion<float>* workspace,
 #if COSMICTIGER_STF_L2L_SHARED_TARGET
 // Translate one shared expansion into another, as a tree walk does when it
 // keeps its local expansion stack in shared memory. The target never aliases
-// the source; the generated kernel ends with a warp barrier, so every lane may
-// read the completed target immediately after the call.
-__device__ void warpTranslateInto(Expansion<float>& target, Expansion<float> const& source,
-    Array<float, NDIM> const& position, bool doPhi) {
-    stf::L2lWarpKernel<kFmmLocalDegree, true>::translateInto(&target[0], source,
-        position[0] * SCALE_FACTOR, position[1] * SCALE_FACTOR, position[2] * SCALE_FACTOR, doPhi);
+// the source; the production wrapper ends with a warp barrier, so every lane
+// may read the completed target immediately after the call.
+template <int order>
+__device__ void warpTranslateInto(LocalExpansion<order>& target,
+    LocalExpansion<order> const& source, Array<float, NDIM> const& position, bool doPhi) {
+    l2LCudaInto(&target[0], source, position, doPhi);
 }
 
-__global__ void validateWarpInto(
-    Fixture const* input, Expansion<float>* returned, float* observed, bool doPhi, int steps) {
-    __shared__ Expansion<float> buffers[kMaxWarpsPerBlock][2];
+template <int order>
+__global__ void validateWarpInto(Fixture<order> const* input, LocalExpansion<order>* returned,
+    float* observed, bool doPhi, int steps) {
+    constexpr int kCoefficients = FmmOrder<order>::kLocalCoefficients_;
+    __shared__ LocalExpansion<order> buffers[kMaxWarpsPerBlock][2];
     int const warp = threadIdx.x / kLanes;
     int const sample = blockIdx.x * (blockDim.x / kLanes) + warp;
     int const lane = threadIdx.x & (kLanes - 1);
     if (sample >= kValidationSamples) {
         return;
     }
-    for (int i = lane; i < EXPANSION_SIZE; i += kLanes) {
+    for (int i = lane; i < kCoefficients; i += kLanes) {
         buffers[warp][0][i] = input[sample].source[i];
     }
     __syncwarp();
@@ -280,15 +343,16 @@ __global__ void validateWarpInto(
         }
         // Ping-pong: the previous source becomes the next target. Its last
         // reads completed inside the previous call's closing warp barrier.
-        warpTranslateInto(buffers[warp][1 - current], buffers[warp][current], displacement, doPhi);
+        warpTranslateInto<order>(
+            buffers[warp][1 - current], buffers[warp][current], displacement, doPhi);
         current = 1 - current;
         float checksum = 0;
-        for (int i = 0; i < EXPANSION_SIZE; ++i) {
+        for (int i = 0; i < kCoefficients; ++i) {
             checksum += (i + 1) * buffers[warp][current][i];
         }
         observed[sample * kLanes + lane] = checksum;
         if (step == steps - 1) {
-            for (int i = 0; i < EXPANSION_SIZE; ++i) {
+            for (int i = 0; i < kCoefficients; ++i) {
                 returned[sample * kLanes + lane][i] = buffers[warp][current][i];
             }
         }
@@ -327,8 +391,12 @@ void close(
     }
 }
 
-void validate(Fixture const* deviceInput, std::vector<Fixture> const& input,
+template <int order>
+void validate(Fixture<order> const* deviceInput, std::vector<Fixture<order>> const& input,
     bool allowReferenceErrors, int warps = 1, Variant variant = Variant::kReturned) {
+    using Local = LocalExpansion<order>;
+    constexpr int kDegree = FmmOrder<order>::kLocalDegree_;
+    constexpr int kCoefficients = FmmOrder<order>::kLocalCoefficients_;
     if (warps < 1 || warps > kMaxWarpsPerBlock) {
         throw std::invalid_argument("Unsupported number of warps per block");
     }
@@ -337,29 +405,30 @@ void validate(Fixture const* deviceInput, std::vector<Fixture> const& input,
     }
     comparisonErrors.clear();
     std::string const device = variant == Variant::kReturned ? "CUDA return" : "CUDA shared target";
-    Expansion<float>* workspace = nullptr;
-    Expansion<float>* returned = nullptr;
+    Local* workspace = nullptr;
+    Local* returned = nullptr;
     float* observed = nullptr;
     checkCuda(cudaMalloc(&workspace, kValidationSamples * sizeof(*workspace)));
     checkCuda(cudaMalloc(&returned, kValidationSamples * kLanes * sizeof(*returned)));
     checkCuda(cudaMalloc(&observed, kValidationSamples * kLanes * sizeof(*observed)));
-    std::vector<Expansion<float>> output(kValidationSamples * kLanes);
+    std::vector<Local> output(kValidationSamples * kLanes);
     std::vector<float> checksums(kValidationSamples * kLanes);
     for (bool doPhi : {false, true}) {
         for (int steps : {1, 17}) {
             validationDoPhi = doPhi;
             validationSteps = steps;
-            std::fprintf(stderr, "%s %s: checking doPhi=%d, steps=%d, warps per block=%d\n",
-                kImplementation, variantName(variant), int(doPhi), steps, warps);
+            std::fprintf(stderr,
+                "%s %s: checking local degree %d, doPhi=%d, steps=%d, warps per block=%d\n",
+                kImplementation, variantName(variant), kDegree, int(doPhi), steps, warps);
             int const blocks = (kValidationSamples + warps - 1) / warps;
             if (variant == Variant::kReturned) {
-                validateWarp<<<blocks, kLanes * warps>>>(
+                validateWarp<order><<<blocks, kLanes * warps>>>(
                     deviceInput, workspace, returned, observed, doPhi, steps);
             }
 #if COSMICTIGER_STF_L2L_SHARED_TARGET
             else {
-                validateWarpInto<<<blocks, kLanes * warps>>>(
-                    deviceInput, returned, observed, doPhi, steps);
+                validateWarpInto<order>
+                    <<<blocks, kLanes * warps>>>(deviceInput, returned, observed, doPhi, steps);
             }
 #endif
             checkCuda(cudaGetLastError());
@@ -369,7 +438,7 @@ void validate(Fixture const* deviceInput, std::vector<Fixture> const& input,
             checkCuda(cudaMemcpy(checksums.data(), observed, checksums.size() * sizeof(*observed),
                 cudaMemcpyDeviceToHost));
             for (int sample = 0; sample < kValidationSamples; ++sample) {
-                auto expected = canonical(input[sample].source);
+                auto expected = canonical<order>(input[sample].source);
                 auto scalar = input[sample].source;
                 for (int step = 0; step < steps; ++step) {
                     auto shift = input[sample].displacement;
@@ -378,10 +447,10 @@ void validate(Fixture const* deviceInput, std::vector<Fixture> const& input,
                         shift[d] *= step % 2 ? -1.f : 1.f;
                         normalized[d] = double(shift[d] * SCALE_FACTOR);
                     }
-                    expected = translateReference(expected, normalized, doPhi);
+                    expected = translateReference<order>(expected, normalized, doPhi);
                     scalar = l2L(scalar, shift, doPhi);
                 }
-                auto const scalarCanonical = canonical(scalar);
+                auto const scalarCanonical = canonical<order>(scalar);
                 double checksum = 0;
                 for (int i = 0; i < kCoefficients; ++i) {
                     close(scalarCanonical[i], expected[i], "host scalar/Cartesian parity", sample,
@@ -392,7 +461,7 @@ void validate(Fixture const* deviceInput, std::vector<Fixture> const& input,
                     checksum += (i + 1) * double(output[sample * kLanes][i]);
                 }
                 for (int lane = 0; lane < kLanes; ++lane) {
-                    auto const actual = canonical(output[sample * kLanes + lane]);
+                    auto const actual = canonical<order>(output[sample * kLanes + lane]);
                     for (int i = 0; i < kCoefficients; ++i) {
 #ifdef COSMICTIGER_STF_L2L_LANE0
                         double const laneExpected = lane == 0 ? expected[i] : 0.;
@@ -418,12 +487,11 @@ void validate(Fixture const* deviceInput, std::vector<Fixture> const& input,
     bool passed = true;
     for (auto const& error : comparisonErrors) {
         std::fprintf(stderr,
-            "%s %s: %s worst normalized error %.9g, doPhi=%d steps=%d sample=%d lane=%d "
-            "coefficient=%d "
-            "actual=%.17g expected=%.17g\n",
-            kImplementation, variantName(variant), error.label.c_str(), error.relativeError,
-            int(error.doPhi), error.steps, error.sample, error.lane, error.coefficient,
-            error.actual, error.expected);
+            "%s %s: local degree %d: %s worst normalized error %.9g, doPhi=%d steps=%d sample=%d "
+            "lane=%d coefficient=%d actual=%.17g expected=%.17g\n",
+            kImplementation, variantName(variant), kDegree, error.label.c_str(),
+            error.relativeError, int(error.doPhi), error.steps, error.sample, error.lane,
+            error.coefficient, error.actual, error.expected);
         passed = passed && std::isfinite(error.actual) && error.relativeError <= 2e-5;
     }
     if (!passed) {
@@ -442,21 +510,44 @@ void validate(Fixture const* deviceInput, std::vector<Fixture> const& input,
         kImplementation, variantName(variant), kDegree);
 }
 
+template <int order>
+void validateOrder(
+    Fixture<order> const* deviceInput, std::vector<Fixture<order>> const& inputs, bool checkOnly) {
+#ifdef COSMICTIGER_STF_BASELINE_HEADER
+    validate<order>(deviceInput, inputs, !checkOnly);
+#else
+    (void) checkOnly;
+    validate<order>(deviceInput, inputs, false);
+#ifndef COSMICTIGER_STF_L2L_LANE0
+    // Only the new implementation promises warp-relative lane indexing.
+    // The timing launch remains exactly one warp per block, as in production.
+    validate<order>(deviceInput, inputs, false, 3);
+    // The shared-memory target entry point, with one warp and several warps
+    // per block, each warp owning distinct source and target buffers.
+    validate<order>(deviceInput, inputs, false, 1, Variant::kSharedTarget);
+    validate<order>(deviceInput, inputs, false, 3, Variant::kSharedTarget);
+#endif
+#endif
+}
+
 #ifndef COSMICTIGER_STF_L2L_VALIDATE_ONLY
-__global__ void benchmarkWarp(Fixture const* input, Expansion<float>* workspace,
-    Expansion<float>* output, int count, bool doPhi) {
+template <int order>
+__global__ void benchmarkWarp(Fixture<order> const* input, LocalExpansion<order>* workspace,
+    LocalExpansion<order>* output, int count, bool doPhi) {
+    constexpr int kCoefficients = FmmOrder<order>::kLocalCoefficients_;
     int const lane = threadIdx.x;
     for (int sample = blockIdx.x; sample < count; sample += gridDim.x) {
-        for (int i = lane; i < EXPANSION_SIZE; i += kLanes) {
+        for (int i = lane; i < kCoefficients; i += kLanes) {
             workspace[blockIdx.x][i] = input[sample].source[i];
         }
         __syncwarp();
-        auto const result = warpTranslate(workspace[blockIdx.x], input[sample].displacement, doPhi);
+        auto const result =
+            warpTranslate<order>(workspace[blockIdx.x], input[sample].displacement, doPhi);
         if (lane == 0) {
             workspace[blockIdx.x] = result;
         }
         __syncwarp();
-        for (int i = lane; i < EXPANSION_SIZE; i += kLanes) {
+        for (int i = lane; i < kCoefficients; i += kLanes) {
             output[sample][i] = workspace[blockIdx.x][i];
         }
         __syncwarp();
@@ -464,17 +555,19 @@ __global__ void benchmarkWarp(Fixture const* input, Expansion<float>* workspace,
 }
 
 #if COSMICTIGER_STF_L2L_SHARED_TARGET
+template <int order>
 __global__ void benchmarkWarpInto(
-    Fixture const* input, Expansion<float>* output, int count, bool doPhi) {
-    __shared__ Expansion<float> buffers[2];
+    Fixture<order> const* input, LocalExpansion<order>* output, int count, bool doPhi) {
+    constexpr int kCoefficients = FmmOrder<order>::kLocalCoefficients_;
+    __shared__ LocalExpansion<order> buffers[2];
     int const lane = threadIdx.x;
     for (int sample = blockIdx.x; sample < count; sample += gridDim.x) {
-        for (int i = lane; i < EXPANSION_SIZE; i += kLanes) {
+        for (int i = lane; i < kCoefficients; i += kLanes) {
             buffers[0][i] = input[sample].source[i];
         }
         __syncwarp();
-        warpTranslateInto(buffers[1], buffers[0], input[sample].displacement, doPhi);
-        for (int i = lane; i < EXPANSION_SIZE; i += kLanes) {
+        warpTranslateInto<order>(buffers[1], buffers[0], input[sample].displacement, doPhi);
+        for (int i = lane; i < kCoefficients; i += kLanes) {
             output[sample][i] = buffers[1][i];
         }
         __syncwarp();
@@ -482,10 +575,14 @@ __global__ void benchmarkWarpInto(
 }
 #endif
 
-void benchmark(Fixture const* input, int samples, int rounds, int repetitions, int blocks,
+template <int order>
+void benchmark(Fixture<order> const* input, int samples, int rounds, int repetitions, int blocks,
     bool doPhi, Variant variant) {
-    Expansion<float>* workspace = nullptr;
-    Expansion<float>* output = nullptr;
+    using Local = LocalExpansion<order>;
+    constexpr int kDegree = FmmOrder<order>::kLocalDegree_;
+    constexpr int kCoefficients = FmmOrder<order>::kLocalCoefficients_;
+    Local* workspace = nullptr;
+    Local* output = nullptr;
     cudaEvent_t begin = nullptr, end = nullptr;
     checkCuda(cudaMalloc(&workspace, blocks * sizeof(*workspace)));
     checkCuda(cudaMalloc(&output, samples * sizeof(*output)));
@@ -493,11 +590,11 @@ void benchmark(Fixture const* input, int samples, int rounds, int repetitions, i
     checkCuda(cudaEventCreate(&end));
     auto const launch = [&]() {
         if (variant == Variant::kReturned) {
-            benchmarkWarp<<<blocks, kLanes>>>(input, workspace, output, samples, doPhi);
+            benchmarkWarp<order><<<blocks, kLanes>>>(input, workspace, output, samples, doPhi);
         }
 #if COSMICTIGER_STF_L2L_SHARED_TARGET
         else {
-            benchmarkWarpInto<<<blocks, kLanes>>>(input, output, samples, doPhi);
+            benchmarkWarpInto<order><<<blocks, kLanes>>>(input, output, samples, doPhi);
         }
 #endif
         checkCuda(cudaGetLastError());
@@ -517,12 +614,12 @@ void benchmark(Fixture const* input, int samples, int rounds, int repetitions, i
         checkCuda(cudaEventElapsedTime(&elapsed, begin, end));
         timings.push_back(double(elapsed) * 1e-3);
     }
-    std::vector<Expansion<float>> results(samples);
+    std::vector<Local> results(samples);
     checkCuda(
         cudaMemcpy(results.data(), output, samples * sizeof(*output), cudaMemcpyDeviceToHost));
     double checksum = 0;
     for (auto const& result : results) {
-        auto const coefficients = canonical(result);
+        auto const coefficients = canonical<order>(result);
         for (int i = 0; i < kCoefficients; ++i) {
             checksum += (i + 1) * coefficients[i];
         }
@@ -550,6 +647,51 @@ int positiveArgument(char const* argument, int maximum) {
 }
 #endif
 
+// Validate one order and, unless checkOnly, time it.
+template <int order>
+void runOrder(bool checkOnly, int samples, int rounds, int repetitions) {
+    std::vector<Fixture<order>> inputs(std::max(kValidationSamples, samples));
+    for (int sample = 0; sample < int(inputs.size()); ++sample) {
+        inputs[sample] = fixture<order>(sample);
+    }
+    Fixture<order>* deviceInput = nullptr;
+    checkCuda(cudaMalloc(&deviceInput, inputs.size() * sizeof(*deviceInput)));
+    try {
+        checkCuda(cudaMemcpy(deviceInput, inputs.data(), inputs.size() * sizeof(*deviceInput),
+            cudaMemcpyHostToDevice));
+        validateOrder<order>(deviceInput, inputs, checkOnly);
+#ifndef COSMICTIGER_STF_L2L_VALIDATE_ONLY
+        if (!checkOnly) {
+            cudaDeviceProp properties{};
+            checkCuda(cudaGetDeviceProperties(&properties, 0));
+            int const blocks = std::min(32, std::max(1, (properties.multiProcessorCount - 1) / 2));
+            std::fprintf(stderr, "%s; %d one-warp blocks, one expansion per warp, FMM order %d.\n",
+                properties.name, blocks, order);
+            std::puts(
+                "implementation,local_degree,do_phi,threads,blocks,samples,rounds,repetitions,"
+                "median_seconds,ns_per_translation,checksum");
+            for (bool doPhi : {false, true}) {
+                benchmark<order>(
+                    deviceInput, samples, rounds, repetitions, blocks, doPhi, Variant::kReturned);
+            }
+#if COSMICTIGER_STF_L2L_SHARED_TARGET
+            for (bool doPhi : {false, true}) {
+                benchmark<order>(deviceInput, samples, rounds, repetitions, blocks, doPhi,
+                    Variant::kSharedTarget);
+            }
+#endif
+        }
+#else
+        (void) rounds;
+        (void) repetitions;
+#endif
+    } catch (...) {
+        cudaFree(deviceInput);
+        throw;
+    }
+    checkCuda(cudaFree(deviceInput));
+}
+
 }    // namespace detail
 
 int main(int argc, char** argv) {
@@ -563,64 +705,53 @@ int main(int argc, char** argv) {
     try {
         detail::checkCuda(deviceStatus);
         bool checkOnly = true;
+        // Zero selects every order this build validates.
+        int order = 0;
         int samples = detail::kValidationSamples, rounds = 0, repetitions = 0;
 #ifndef COSMICTIGER_STF_L2L_VALIDATE_ONLY
-        checkOnly = argc == 2 && std::string(argv[1]) == "--check";
-        if (argc > 4) {
+        checkOnly = false;
+        std::vector<std::string> positional;
+        for (int i = 1; i < argc; ++i) {
+            std::string const argument(argv[i]);
+            if (argument == "--check") {
+                checkOnly = true;
+            } else if (argument == "--order" && i + 1 < argc) {
+                order = detail::positiveArgument(argv[++i], kFmmMaxOrder);
+            } else {
+                positional.push_back(argument);
+            }
+        }
+        if (positional.size() > 3 || (checkOnly && !positional.empty())) {
             throw std::invalid_argument(
-                "Usage: stf_l2l_cuda [--check | samples rounds repetitions]");
+                "Usage: stf_l2l_cuda [--order N] [--check | samples rounds repetitions]");
         }
         if (!checkOnly) {
-            samples = argc > 1 ? detail::positiveArgument(argv[1], 1000000) : 32768;
-            rounds = argc > 2 ? detail::positiveArgument(argv[2], 100000) : 20;
-            repetitions = argc > 3 ? detail::positiveArgument(argv[3], 100) : 7;
+            if (order == 0) {
+                order = kFmmDefaultOrder;
+            }
+            samples = positional.size() > 0 ?
+                detail::positiveArgument(positional[0].c_str(), 1000000) :
+                32768;
+            rounds = positional.size() > 1 ?
+                detail::positiveArgument(positional[1].c_str(), 100000) :
+                20;
+            repetitions =
+                positional.size() > 2 ? detail::positiveArgument(positional[2].c_str(), 100) : 7;
         }
-#endif
-        std::vector<detail::Fixture> inputs(std::max(detail::kValidationSamples, samples));
-        for (int sample = 0; sample < int(inputs.size()); ++sample) {
-            inputs[sample] = detail::fixture(sample);
-        }
-        detail::Fixture* deviceInput = nullptr;
-        detail::checkCuda(cudaMalloc(&deviceInput, inputs.size() * sizeof(*deviceInput)));
-        detail::checkCuda(cudaMemcpy(deviceInput, inputs.data(),
-            inputs.size() * sizeof(*deviceInput), cudaMemcpyHostToDevice));
-#ifdef COSMICTIGER_STF_BASELINE_HEADER
-        detail::validate(deviceInput, inputs, !checkOnly);
 #else
-        detail::validate(deviceInput, inputs, false);
-#ifndef COSMICTIGER_STF_L2L_LANE0
-        // Only the new implementation promises warp-relative lane indexing.
-        // The timing launch remains exactly one warp per block, as in production.
-        detail::validate(deviceInput, inputs, false, 3);
-        // The shared-memory target entry point, with one warp and several warps
-        // per block, each warp owning distinct source and target buffers.
-        detail::validate(deviceInput, inputs, false, 1, detail::Variant::kSharedTarget);
-        detail::validate(deviceInput, inputs, false, 3, detail::Variant::kSharedTarget);
+        (void) argc;
+        (void) argv;
 #endif
-#endif
-#ifndef COSMICTIGER_STF_L2L_VALIDATE_ONLY
-        if (!checkOnly) {
-            cudaDeviceProp properties{};
-            detail::checkCuda(cudaGetDeviceProperties(&properties, 0));
-            int const blocks = std::min(32, std::max(1, (properties.multiProcessorCount - 1) / 2));
-            std::fprintf(stderr, "%s; %d one-warp blocks, one expansion per warp.\n",
-                properties.name, blocks);
-            std::puts(
-                "implementation,local_degree,do_phi,threads,blocks,samples,rounds,repetitions,"
-                "median_seconds,ns_per_translation,checksum");
-            for (bool doPhi : {false, true}) {
-                detail::benchmark(deviceInput, samples, rounds, repetitions, blocks, doPhi,
-                    detail::Variant::kReturned);
-            }
-#if COSMICTIGER_STF_L2L_SHARED_TARGET
-            for (bool doPhi : {false, true}) {
-                detail::benchmark(deviceInput, samples, rounds, repetitions, blocks, doPhi,
-                    detail::Variant::kSharedTarget);
-            }
-#endif
+        auto const run = [&](auto selected) {
+            detail::runOrder<selected.value>(checkOnly, samples, rounds, repetitions);
+        };
+        if (order == 0) {
+            detail::forEachOrder(run);
+        } else if (!detail::withOrder(order, run)) {
+            throw std::invalid_argument(
+                "--order must name an FMM order this build validates (3 to 10 for the STF "
+                "variants, 7 for the legacy baseline)");
         }
-#endif
-        detail::checkCuda(cudaFree(deviceInput));
         return 0;
     } catch (std::exception const& error) {
         std::fprintf(stderr, "CUDA L2L check/benchmark failed: %s\n", error.what());
