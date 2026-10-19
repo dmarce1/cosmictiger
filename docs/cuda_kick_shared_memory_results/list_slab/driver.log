@@ -1,0 +1,32 @@
+2026-10-19T14:27:37-05:00 GPU lock acquired
+head_auto_cuda_b64_o7_pair0: lattice/phi=0 15.280 ms, lattice/phi=1 15.156 ms, clustered/phi=0 6.428 ms, clustered/phi=1 6.605 ms, adaptive/phi=0 12.177 ms, adaptive/phi=1 12.247 ms
+head_auto_cuda_b128_o7_pair0: lattice/phi=0 15.177 ms, lattice/phi=1 15.182 ms, clustered/phi=0 7.317 ms, clustered/phi=1 7.612 ms, adaptive/phi=0 12.232 ms, adaptive/phi=1 12.515 ms
+head_matched_cuda_b64_o7_pair0: lattice/phi=0 31.591 ms, lattice/phi=1 31.373 ms, clustered/phi=0 8.370 ms, clustered/phi=1 8.670 ms, adaptive/phi=0 19.321 ms, adaptive/phi=1 20.429 ms
+head_matched_cuda_b128_o7_pair0: lattice/phi=0 14.682 ms, lattice/phi=1 14.925 ms, clustered/phi=0 6.191 ms, clustered/phi=1 6.457 ms, adaptive/phi=0 17.699 ms, adaptive/phi=1 18.292 ms
+slab_auto_cuda_b64_o7_pair0: lattice/phi=0 14.983 ms, lattice/phi=1 15.053 ms, clustered/phi=0 6.126 ms, clustered/phi=1 6.343 ms, adaptive/phi=0 12.681 ms, adaptive/phi=1 11.926 ms
+slab_auto_cuda_b128_o7_pair0: lattice/phi=0 14.987 ms, lattice/phi=1 15.369 ms, clustered/phi=0 6.937 ms, clustered/phi=1 7.283 ms, adaptive/phi=0 12.619 ms, adaptive/phi=1 12.575 ms
+slab_matched_cuda_b64_o7_pair0: lattice/phi=0 30.753 ms, lattice/phi=1 30.515 ms, clustered/phi=0 6.831 ms, clustered/phi=1 7.132 ms, adaptive/phi=0 18.922 ms, adaptive/phi=1 19.300 ms
+slab_matched_cuda_b128_o7_pair0: lattice/phi=0 14.200 ms, lattice/phi=1 14.418 ms, clustered/phi=0 6.270 ms, clustered/phi=1 6.556 ms, adaptive/phi=0 17.007 ms, adaptive/phi=1 17.687 ms
+baseline_auto_cuda_b64_o7_pair0: lattice/phi=0 32.482 ms, lattice/phi=1 32.585 ms, clustered/phi=0 8.760 ms, clustered/phi=1 8.317 ms, adaptive/phi=0 18.922 ms, adaptive/phi=1 18.819 ms
+baseline_auto_cuda_b128_o7_pair0: lattice/phi=0 14.825 ms, lattice/phi=1 15.077 ms, clustered/phi=0 6.294 ms, clustered/phi=1 6.584 ms, adaptive/phi=0 15.884 ms, adaptive/phi=1 16.861 ms
+baseline_auto_cuda_b64_o7_pair1: lattice/phi=0 32.457 ms, lattice/phi=1 32.667 ms, clustered/phi=0 8.226 ms, clustered/phi=1 8.410 ms, adaptive/phi=0 18.612 ms, adaptive/phi=1 18.834 ms
+baseline_auto_cuda_b128_o7_pair1: lattice/phi=0 14.738 ms, lattice/phi=1 14.767 ms, clustered/phi=0 6.306 ms, clustered/phi=1 6.435 ms, adaptive/phi=0 15.845 ms, adaptive/phi=1 16.708 ms
+slab_matched_cuda_b64_o7_pair1: lattice/phi=0 30.426 ms, lattice/phi=1 30.433 ms, clustered/phi=0 6.770 ms, clustered/phi=1 6.899 ms, adaptive/phi=0 18.980 ms, adaptive/phi=1 18.953 ms
+slab_matched_cuda_b128_o7_pair1: lattice/phi=0 14.398 ms, lattice/phi=1 14.152 ms, clustered/phi=0 6.398 ms, clustered/phi=1 6.497 ms, adaptive/phi=0 17.001 ms, adaptive/phi=1 17.896 ms
+slab_auto_cuda_b64_o7_pair1: lattice/phi=0 14.985 ms, lattice/phi=1 14.975 ms, clustered/phi=0 5.963 ms, clustered/phi=1 6.346 ms, adaptive/phi=0 11.899 ms, adaptive/phi=1 11.927 ms
+slab_auto_cuda_b128_o7_pair1: lattice/phi=0 14.840 ms, lattice/phi=1 15.059 ms, clustered/phi=0 6.922 ms, clustered/phi=1 7.257 ms, adaptive/phi=0 12.685 ms, adaptive/phi=1 12.488 ms
+head_matched_cuda_b64_o7_pair1: lattice/phi=0 31.580 ms, lattice/phi=1 31.706 ms, clustered/phi=0 8.410 ms, clustered/phi=1 8.568 ms, adaptive/phi=0 19.731 ms, adaptive/phi=1 19.519 ms
+head_matched_cuda_b128_o7_pair1: lattice/phi=0 14.543 ms, lattice/phi=1 14.853 ms, clustered/phi=0 6.232 ms, clustered/phi=1 6.461 ms, adaptive/phi=0 17.568 ms, adaptive/phi=1 18.349 ms
+head_auto_cuda_b64_o7_pair1: lattice/phi=0 15.389 ms, lattice/phi=1 15.272 ms, clustered/phi=0 6.415 ms, clustered/phi=1 6.807 ms, adaptive/phi=0 12.351 ms, adaptive/phi=1 13.260 ms
+head_auto_cuda_b128_o7_pair1: lattice/phi=0 15.455 ms, lattice/phi=1 15.375 ms, clustered/phi=0 7.272 ms, clustered/phi=1 7.628 ms, adaptive/phi=0 13.194 ms, adaptive/phi=1 12.539 ms
+head_auto_cuda_b64_o7_pair2: lattice/phi=0 15.318 ms, lattice/phi=1 15.337 ms, clustered/phi=0 6.363 ms, clustered/phi=1 6.774 ms, adaptive/phi=0 12.718 ms, adaptive/phi=1 12.586 ms
+head_auto_cuda_b128_o7_pair2: lattice/phi=0 14.972 ms, lattice/phi=1 15.251 ms, clustered/phi=0 7.301 ms, clustered/phi=1 7.664 ms, adaptive/phi=0 12.547 ms, adaptive/phi=1 12.582 ms
+head_matched_cuda_b64_o7_pair2: lattice/phi=0 31.372 ms, lattice/phi=1 31.837 ms, clustered/phi=0 8.325 ms, clustered/phi=1 8.398 ms, adaptive/phi=0 19.606 ms, adaptive/phi=1 20.592 ms
+head_matched_cuda_b128_o7_pair2: lattice/phi=0 14.734 ms, lattice/phi=1 14.946 ms, clustered/phi=0 6.139 ms, clustered/phi=1 6.523 ms, adaptive/phi=0 17.764 ms, adaptive/phi=1 18.566 ms
+slab_auto_cuda_b64_o7_pair2: lattice/phi=0 14.845 ms, lattice/phi=1 15.030 ms, clustered/phi=0 6.085 ms, clustered/phi=1 6.279 ms, adaptive/phi=0 11.882 ms, adaptive/phi=1 11.979 ms
+slab_auto_cuda_b128_o7_pair2: lattice/phi=0 14.913 ms, lattice/phi=1 15.118 ms, clustered/phi=0 7.002 ms, clustered/phi=1 7.278 ms, adaptive/phi=0 12.135 ms, adaptive/phi=1 12.365 ms
+slab_matched_cuda_b64_o7_pair2: lattice/phi=0 30.711 ms, lattice/phi=1 30.815 ms, clustered/phi=0 6.845 ms, clustered/phi=1 6.940 ms, adaptive/phi=0 19.037 ms, adaptive/phi=1 19.957 ms
+slab_matched_cuda_b128_o7_pair2: lattice/phi=0 14.523 ms, lattice/phi=1 14.660 ms, clustered/phi=0 6.248 ms, clustered/phi=1 6.668 ms, adaptive/phi=0 17.801 ms, adaptive/phi=1 17.387 ms
+baseline_auto_cuda_b64_o7_pair2: lattice/phi=0 32.573 ms, lattice/phi=1 32.919 ms, clustered/phi=0 8.436 ms, clustered/phi=1 8.428 ms, adaptive/phi=0 18.326 ms, adaptive/phi=1 18.705 ms
+baseline_auto_cuda_b128_o7_pair2: lattice/phi=0 14.902 ms, lattice/phi=1 15.610 ms, clustered/phi=0 6.509 ms, clustered/phi=1 6.625 ms, adaptive/phi=0 16.795 ms, adaptive/phi=1 17.259 ms
+Completed; see docs/cuda_kick_shared_memory_results/list_slab/summary.md

@@ -41,12 +41,7 @@ class StackVector {
         ASSERT(bounds_.size() >= 2);
         return bounds_.back();
     }
-
-public:
-    __device__ inline int depth() const {
-        return bounds_.size() - 2;
-    }
-    __device__ inline StackVector() {
+    __device__ inline void initialize() {
         int const& tid = threadIdx.x;
         bounds_.resize(2);
         if (tid == 0) {
@@ -58,6 +53,21 @@ public:
             init(&barrier_, group.size());
         }
         __syncthreads();
+    }
+
+public:
+    __device__ inline int depth() const {
+        return bounds_.size() - 2;
+    }
+    __device__ inline StackVector() {
+        initialize();
+    }
+    // Collective: an empty stack on caller-provided storage for `entries`
+    // stacked elements and `depth` levels; the pool is used only beyond that.
+    __device__ inline StackVector(T* entries, int entryCapacity, int* bounds, int depth)
+      : dat_(entries, entryCapacity)
+      , bounds_(bounds, depth + 2) {
+        initialize();
     }
     // Collective: reserve storage for `entries` stacked elements and `depth`
     // levels so the traversal grows without pool allocations.

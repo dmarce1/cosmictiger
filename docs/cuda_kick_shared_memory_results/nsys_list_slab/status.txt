@@ -1,0 +1,19 @@
+adaptive64_baseline_1 exit 0
+adaptive64_head_1 exit 0
+adaptive64_slab_1 exit 0
+adaptive128_baseline_1 exit 0
+adaptive128_head_1 exit 0
+adaptive128_slab_1 exit 0
+adaptive64_slab_2 exit 0
+adaptive64_head_2 exit 0
+adaptive64_baseline_2 exit 0
+adaptive128_slab_2 exit 0
+adaptive128_head_2 exit 0
+adaptive128_baseline_2 exit 0
+adaptive64_baseline_3 exit 0
+adaptive64_head_3 exit 0
+adaptive64_slab_3 exit 0
+adaptive128_baseline_3 exit 0
+adaptive128_head_3 exit 0
+adaptive128_slab_3 exit 0
+DONE
