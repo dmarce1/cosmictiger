@@ -2,3 +2,5 @@
 *.nsys-rep
 *.sqlite
 *.ncu-rep
+**/ewald.txt
+**/soft.txt

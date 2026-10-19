@@ -1,0 +1,163 @@
+STARTING MAIN
+128
+std::atomic<int> is lock free!
+tree_node size = 96
+Detected 1 processes per node
+Hyperthreading detected
+Starting mem use daemon
+Processing options
+box_size = 1.071763e+01 Mpc
+lc map size = 9.262096e-01
+chemistry.enabled                 : F
+chemistry.network                 : atomic6
+chemistry.radiationFile           : 
+chemistry.synchronizedRung        : 4
+chemistry.initialTemperature      : 1.000000e+03
+chemistry.hydrogenIonFraction     : 2.000000e-04
+chemistry.heliumIonFraction       : 0.000000e+00
+chemistry.heliumDoubleIonFraction : 0.000000e+00
+chemistry.hydrogenMinusFraction   : 0.000000e+00
+chemistry.molecularFraction       : 0.000000e+00
+chemistry.molecularIonFraction    : 0.000000e+00
+chemistry.relativeTolerance       : 1.000000e-04
+chemistry.abundanceAbsoluteTolerance: 1.000000e-12
+chemistry.energyAbsoluteTolerance : 1.000000e-08
+chemistry.maxSubsteps             : 4096
+hydro.enabled                     : F
+run.hierarchicalGravity           : T
+hydro.viscosityAlpha              : 1.000000e+00
+hydro.viscosityBeta               : 2.000000e+00
+hydro.viscosityEpsilon            : 1.000000e-02
+hydro.gamma                       : 1.666667e+00
+hydro.neighborNumber              : 4.200000e+01
+hydro.minSupportRadius            : 1.000000e-06
+hydro.maxSupportRadius            : 1.600000e+01
+hydro.minEffectiveRadius          : 5.477226e-07
+hydro.maxEffectiveRadius          : 8.763561e+00
+hydro.cfl                         : 2.282177e-01
+Simulation Options
+code_to_M_solar = 1.492195e+09
+Box size = 7.215111e+00 cm/h
+checkpoint.intervalSeconds        : 1000000000
+units.lengthCm                    : 3.307117e+25
+units.massG                       : 2.954545e+42
+units.timeSeconds                 : 1.103135e+15
+compute.cuda                      : T
+gravity.fmmOrder                  : 7
+compute.cudaKickResidency         : 6
+compute.cudaKickSinkTile          : 0
+compute.cudaKickParticleTile      : 0
+compute.cudaKickMultipoleTile     : 0
+compute.cudaKickSharedExpansion   : T
+compute.cudaKickHandoffBlocks     : 0
+compute.cudaKickListReserve       : 4096
+lightcone.enabled                 : F
+analysis.groups                   : F
+analysis.power                    : F
+analysis.slice                    : F
+analysis.tracers                  : F
+analysis.views                    : F
+output.silo                       : F
+output.siloInterval               : 1
+output.directory                  : ./output
+output.units                      : code
+output.frame                      : comoving
+output.xMin                       : 0.000000e+00
+output.xMax                       : 1.000000e+00
+output.yMin                       : 0.000000e+00
+output.yMax                       : 1.000000e+00
+output.zMin                       : 0.000000e+00
+output.zMax                       : 1.000000e+00
+gravity.timestepEta               : 2.040160e-01
+gravity.gm                        : 6.632759e-12
+gravity.softening                 : 1.876988e-02
+gravity.effectiveRadius           : 1.876988e-02
+gravity.supportRadius             : 2.815483e-02
+hydro.centralEffectiveRadius      : 5.477226e-03
+hydro.centralSupportRadius        : 8.215838e-03
+gravity.kernelFamily              : ferrers
+gravity.kernelDegree              : 4
+hydro.kernelFamily                : spline
+hydro.kernelDegree                : 3
+cosmology.hubble                  : 6.732000e-01
+lightcone.linkingLength           : 2.800000e-01
+lightcone.mapSize                 : 1
+analysis.linkingLength            : 8.750000e-03
+run.maxIterations                 : 1000000
+analysis.minGroupSize             : 20
+cosmology.omegaB                  : 4.938900e-02
+cosmology.omegaC                  : 2.650300e-01
+cosmology.omegaGamma              : 5.522212e-05
+cosmology.omegaM                  : 3.144190e-01
+cosmology.omegaNu                 : 3.820094e-05
+cosmology.omegaR                  : 9.342306e-05
+compute.particleCacheLineSize     : 10922
+initial.particlesPerDimension     : 32
+checkpoint.readIndex              : -1
+analysis.saveForce                : F
+cosmology.sigma8                  : 8.607000e-01
+analysis.sliceResolution          : 4096
+analysis.sliceSize                : 1.000000e+00
+cosmology.thetaCmb                : 9.983516e-01
+gravity.openingAngle              : 8.000000e-01
+analysis.tracerCount              : 1000000
+compute.treeCacheLineSize         : 682
+initial.twoLpt                    : F
+initial.usePowerFile              : T
+analysis.viewSize                 : 1024
+cosmology.startRedshift           : 4.900000e+01
+cosmology.endRedshift             : 0.000000e+00
+cosmology.spectralIndex           : 9.660500e-01
+cosmology.heliumFraction          : 2.454006e-01
+cosmology.nEff                    : 3.046000e+00
+configuration                     : 
+run.test                          : stfBenchmark
+Silo particle output: disabled (output.silo=false)
+count = 178 178
+STF_WALK_CONFIG,particles=32768,threads=2,cuda=1,order=7,theta=0.80000000000000004,support=0.0008798383391969691,bucket=32,samples=15,warmup=1,gm=1
+STF_WALK_SAMPLE_HEADER,fixture,backend,do_phi,sample,setup_seconds,tree_seconds,kick_seconds,position_hash,gx_checksum,gy_checksum,gz_checksum,g2_checksum,phi_checksum,total_potential
+STF_WALK_MEDIAN_HEADER,fixture,backend,do_phi,samples,particles,setup_seconds,tree_seconds,kick_seconds,tree_plus_kick_seconds,position_hash
+STF_WALK_LEAF_HISTOGRAM_HEADER,fixture,depth,particles_per_leaf,leaves
+STF_WALK_REFERENCE_HEADER,fixture,backend,samples,force_relative_l2,force_relative_p50,force_relative_p99,force_relative_max,potential_relative_l2,potential_relative_p50,potential_relative_p99,potential_relative_max
+Detected a hardware concurrency of 12
+STF_WALK_LEAF_HISTOGRAM,lattice,10,32,1024
+CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 16000, dynamic shared 7392 bytes: control 504, expansion shared, forces shared tile 32, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes
+STF_WALK_SAMPLE,lattice,cuda,0,-1,0.00102953,0.004097763,0.10964697,11269758616088069014,113282.74458049666,193565.2314232871,-300761.68472041981,12830369647.138666,0,0
+STF_WALK_SAMPLE,lattice,cuda,0,0,0.000179939,0.00307777,0.093337974,11269758616088069014,113282.74458049666,193565.2314232871,-300761.68472041981,12830369647.138666,0,0
+STF_WALK_SAMPLE,lattice,cuda,0,1,0.000177525,0.003079113,0.093460124,11269758616088069014,113282.74458049666,193565.2314232871,-300761.68472041981,12830369647.138666,0,0
+STF_WALK_SAMPLE,lattice,cuda,0,2,0.000178507,0.003229116,0.091071513,11269758616088069014,113282.74458049666,193565.2314232871,-300761.68472041981,12830369647.138666,0,0
+STF_WALK_SAMPLE,lattice,cuda,0,3,0.000178386,0.003150848,0.091208862,11269758616088069014,113282.74458049666,193565.2314232871,-300761.68472041981,12830369647.138666,0,0
+STF_WALK_SAMPLE,lattice,cuda,0,4,0.000177394,0.003124368,0.093890326,11269758616088069014,113282.74458049666,193565.2314232871,-300761.68472041981,12830369647.138666,0,0
+STF_WALK_SAMPLE,lattice,cuda,0,5,0.000186261,0.003079033,0.09310237,11269758616088069014,113282.74458049666,193565.2314232871,-300761.68472041981,12830369647.138666,0,0
+STF_WALK_SAMPLE,lattice,cuda,0,6,0.000177314,0.003054076,0.091993331,11269758616088069014,113282.74458049666,193565.2314232871,-300761.68472041981,12830369647.138666,0,0
+STF_WALK_SAMPLE,lattice,cuda,0,7,0.000176933,0.003014711,0.09146245,11269758616088069014,113282.74458049666,193565.2314232871,-300761.68472041981,12830369647.138666,0,0
+STF_WALK_SAMPLE,lattice,cuda,0,8,0.000177625,0.003286183,0.090538027,11269758616088069014,113282.74458049666,193565.2314232871,-300761.68472041981,12830369647.138666,0,0
+STF_WALK_SAMPLE,lattice,cuda,0,9,0.000175921,0.003139507,0.091115987,11269758616088069014,113282.74458049666,193565.2314232871,-300761.68472041981,12830369647.138666,0,0
+STF_WALK_SAMPLE,lattice,cuda,0,10,0.000178487,0.003076558,0.091271881,11269758616088069014,113282.74458049666,193565.2314232871,-300761.68472041981,12830369647.138666,0,0
+STF_WALK_SAMPLE,lattice,cuda,0,11,0.000178747,0.003185463,0.091281489,11269758616088069014,113282.74458049666,193565.2314232871,-300761.68472041981,12830369647.138666,0,0
+STF_WALK_SAMPLE,lattice,cuda,0,12,0.000186992,0.003067861,0.090587321,11269758616088069014,113282.74458049666,193565.2314232871,-300761.68472041981,12830369647.138666,0,0
+STF_WALK_SAMPLE,lattice,cuda,0,13,0.000177524,0.003073522,0.090409446,11269758616088069014,113282.74458049666,193565.2314232871,-300761.68472041981,12830369647.138666,0,0
+STF_WALK_SAMPLE,lattice,cuda,0,14,0.000176432,0.002994573,0.090809811,11269758616088069014,113282.74458049666,193565.2314232871,-300761.68472041981,12830369647.138666,0,0
+STF_WALK_MEDIAN,lattice,cuda,0,15,32768,0.000177625,0.003079033,0.091271881,0.09435971,11269758616088069014
+STF_WALK_SAMPLE,lattice,cuda,1,-1,0.000176112,0.003030622,0.091692033,11269758616088069014,113282.74458049666,193565.2314232871,-300761.68472041981,12830369647.138666,16230235.096209662,1474506.0279541016
+STF_WALK_SAMPLE,lattice,cuda,1,0,0.000177224,0.003010213,0.090895913,11269758616088069014,113282.74458049666,193565.2314232871,-300761.68472041981,12830369647.138666,16230235.096209662,1474506.0279541016
+STF_WALK_SAMPLE,lattice,cuda,1,1,0.000177424,0.003044237,0.090557275,11269758616088069014,113282.74458049666,193565.2314232871,-300761.68472041981,12830369647.138666,16230235.096209662,1474506.0279541016
+STF_WALK_SAMPLE,lattice,cuda,1,2,0.000176593,0.002995175,0.091130073,11269758616088069014,113282.74458049666,193565.2314232871,-300761.68472041981,12830369647.138666,16230235.096209662,1474506.0279541016
+STF_WALK_SAMPLE,lattice,cuda,1,3,0.000176944,0.003036192,0.09138776,11269758616088069014,113282.74458049666,193565.2314232871,-300761.68472041981,12830369647.138666,16230235.096209662,1474506.0279541016
+STF_WALK_SAMPLE,lattice,cuda,1,4,0.000178426,0.002993341,0.090815872,11269758616088069014,113282.74458049666,193565.2314232871,-300761.68472041981,12830369647.138666,16230235.096209662,1474506.0279541016
+STF_WALK_SAMPLE,lattice,cuda,1,5,0.000177744,0.00309369,0.091242726,11269758616088069014,113282.74458049666,193565.2314232871,-300761.68472041981,12830369647.138666,16230235.096209662,1474506.0279541016
+STF_WALK_SAMPLE,lattice,cuda,1,6,0.00018043,0.003107987,0.093475765,11269758616088069014,113282.74458049666,193565.2314232871,-300761.68472041981,12830369647.138666,16230235.096209662,1474506.0279541016
+STF_WALK_SAMPLE,lattice,cuda,1,7,0.000193956,0.003210801,0.092554578,11269758616088069014,113282.74458049666,193565.2314232871,-300761.68472041981,12830369647.138666,16230235.096209662,1474506.0279541016
+STF_WALK_SAMPLE,lattice,cuda,1,8,0.000177534,0.003020372,0.091285377,11269758616088069014,113282.74458049666,193565.2314232871,-300761.68472041981,12830369647.138666,16230235.096209662,1474506.0279541016
+STF_WALK_SAMPLE,lattice,cuda,1,9,0.000177685,0.003011766,0.090480911,11269758616088069014,113282.74458049666,193565.2314232871,-300761.68472041981,12830369647.138666,16230235.096209662,1474506.0279541016
+STF_WALK_SAMPLE,lattice,cuda,1,10,0.000177204,0.00304052,0.091678348,11269758616088069014,113282.74458049666,193565.2314232871,-300761.68472041981,12830369647.138666,16230235.096209662,1474506.0279541016
+STF_WALK_SAMPLE,lattice,cuda,1,11,0.000176403,0.002988021,0.093968804,11269758616088069014,113282.74458049666,193565.2314232871,-300761.68472041981,12830369647.138666,16230235.096209662,1474506.0279541016
+STF_WALK_SAMPLE,lattice,cuda,1,12,0.00019102,0.003023688,0.093088455,11269758616088069014,113282.74458049666,193565.2314232871,-300761.68472041981,12830369647.138666,16230235.096209662,1474506.0279541016
+STF_WALK_SAMPLE,lattice,cuda,1,13,0.000177424,0.003000065,0.09212016,11269758616088069014,113282.74458049666,193565.2314232871,-300761.68472041981,12830369647.138666,16230235.096209662,1474506.0279541016
+STF_WALK_SAMPLE,lattice,cuda,1,14,0.000192333,0.003383737,0.095117359,11269758616088069014,113282.74458049666,193565.2314232871,-300761.68472041981,12830369647.138666,16230235.096209662,1474506.0279541016
+STF_WALK_MEDIAN,lattice,cuda,1,15,32768,0.000177534,0.003023688,0.09138776,0.094423952,11269758616088069014
+Collecting data...
+Generating '/tmp/nsys-report-1bd9.qdstrm'
+[1/1] [0%                          ] kick.nsys-rep[1/1] [0%                          ] kick.nsys-rep[1/1] [====28%                     ] kick.nsys-rep[1/1] [===========52%              ] kick.nsys-rep[1/1] [==================76%       ] kick.nsys-rep[1/1] [==================77%       ] kick.nsys-rep[1/1] [========================100%] kick.nsys-rep[1/1] [========================100%] kick.nsys-rep
+Generated:
+    /home/dmarce1/workspace/cosmictiger/.claude/worktrees/gifted-euler-74225b/docs/cuda_kick_shared_memory_results/nsys_adaptive_order7/lattice32_arena_res6_2/kick.nsys-rep
