@@ -1,0 +1,5540 @@
+[
+  {
+    "medians": [
+      {
+        "fixture": "lattice",
+        "backend": "cuda",
+        "potential": false,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000414083,
+        "tree_seconds": 0.001802111,
+        "kick_seconds": 0.020369167,
+        "total_seconds": 0.022334808,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cuda",
+        "potential": true,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000182155,
+        "tree_seconds": 0.001618875,
+        "kick_seconds": 0.019312677,
+        "total_seconds": 0.020934137,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cuda",
+        "potential": false,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000418161,
+        "tree_seconds": 0.002323338,
+        "kick_seconds": 0.007667124,
+        "total_seconds": 0.009990462,
+        "position_hash": "9330035828812934027"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cuda",
+        "potential": true,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000178508,
+        "tree_seconds": 0.002303731,
+        "kick_seconds": 0.00785586,
+        "total_seconds": 0.010144582,
+        "position_hash": "9330035828812934027"
+      },
+      {
+        "fixture": "adaptive",
+        "backend": "cuda",
+        "potential": false,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000413232,
+        "tree_seconds": 0.002299603,
+        "kick_seconds": 0.013082274,
+        "total_seconds": 0.015381877,
+        "position_hash": "10382969522388005973"
+      },
+      {
+        "fixture": "adaptive",
+        "backend": "cuda",
+        "potential": true,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000180282,
+        "tree_seconds": 0.002318398,
+        "kick_seconds": 0.013054881,
+        "total_seconds": 0.015373279,
+        "position_hash": "10382969522388005973"
+      }
+    ],
+    "samples": [
+      {
+        "fixture": "lattice",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.002056613,
+        "kick_seconds": 0.020278195,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "lattice",
+        "potential": false,
+        "sample": 1,
+        "tree_seconds": 0.001802111,
+        "kick_seconds": 0.020585696,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "lattice",
+        "potential": false,
+        "sample": 2,
+        "tree_seconds": 0.001644383,
+        "kick_seconds": 0.020369167,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "lattice",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.00162146,
+        "kick_seconds": 0.019312677,
+        "total_potential": 78286.78503417969
+      },
+      {
+        "fixture": "lattice",
+        "potential": true,
+        "sample": 1,
+        "tree_seconds": 0.001618875,
+        "kick_seconds": 0.020007462,
+        "total_potential": 78286.78503417969
+      },
+      {
+        "fixture": "lattice",
+        "potential": true,
+        "sample": 2,
+        "tree_seconds": 0.001597674,
+        "kick_seconds": 0.019191778,
+        "total_potential": 78286.78503417969
+      },
+      {
+        "fixture": "clustered",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.002645708,
+        "kick_seconds": 0.009020575,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "clustered",
+        "potential": false,
+        "sample": 1,
+        "tree_seconds": 0.002323338,
+        "kick_seconds": 0.007667124,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "clustered",
+        "potential": false,
+        "sample": 2,
+        "tree_seconds": 0.002305585,
+        "kick_seconds": 0.00747509,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "clustered",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.002378322,
+        "kick_seconds": 0.008029369,
+        "total_potential": -176248629.40625
+      },
+      {
+        "fixture": "clustered",
+        "potential": true,
+        "sample": 1,
+        "tree_seconds": 0.002288722,
+        "kick_seconds": 0.00785586,
+        "total_potential": -176248629.40625
+      },
+      {
+        "fixture": "clustered",
+        "potential": true,
+        "sample": 2,
+        "tree_seconds": 0.002303731,
+        "kick_seconds": 0.007668786,
+        "total_potential": -176248629.40625
+      },
+      {
+        "fixture": "adaptive",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.002309051,
+        "kick_seconds": 0.013634439,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "adaptive",
+        "potential": false,
+        "sample": 1,
+        "tree_seconds": 0.002294533,
+        "kick_seconds": 0.012785392,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "adaptive",
+        "potential": false,
+        "sample": 2,
+        "tree_seconds": 0.002299603,
+        "kick_seconds": 0.013082274,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "adaptive",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.002299432,
+        "kick_seconds": 0.012919676,
+        "total_potential": -2314496209.284424
+      },
+      {
+        "fixture": "adaptive",
+        "potential": true,
+        "sample": 1,
+        "tree_seconds": 0.002318398,
+        "kick_seconds": 0.013054881,
+        "total_potential": -2314496209.284424
+      },
+      {
+        "fixture": "adaptive",
+        "potential": true,
+        "sample": 2,
+        "tree_seconds": 0.002381528,
+        "kick_seconds": 0.013096731,
+        "total_potential": -2314496209.284424
+      }
+    ],
+    "references": [
+      {
+        "fixture": "lattice",
+        "backend": "cuda",
+        "samples": 1024,
+        "force_relative_l2": 4.49219506,
+        "force_relative_p50": 4.35547072,
+        "force_relative_p99": 22.4817136,
+        "force_relative_max": 78.9021596,
+        "potential_relative_l2": 1.47062862,
+        "potential_relative_p50": 0.594853411,
+        "potential_relative_p99": 4.03651164,
+        "potential_relative_max": 4.78092359
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cuda",
+        "samples": 1024,
+        "force_relative_l2": 0.0403521316,
+        "force_relative_p50": 0.0326773255,
+        "force_relative_p99": 0.137900457,
+        "force_relative_max": 0.214506242,
+        "potential_relative_l2": 0.0107464524,
+        "potential_relative_p50": 0.00781914451,
+        "potential_relative_p99": 0.125963812,
+        "potential_relative_max": 0.28674616
+      },
+      {
+        "fixture": "adaptive",
+        "backend": "cuda",
+        "samples": 1024,
+        "force_relative_l2": 0.0276597109,
+        "force_relative_p50": 0.0289180453,
+        "force_relative_p99": 0.666948085,
+        "force_relative_max": 1.37339844,
+        "potential_relative_l2": 0.00387018215,
+        "potential_relative_p50": 0.00280962594,
+        "potential_relative_p99": 0.709286137,
+        "potential_relative_max": 4.61576989
+      }
+    ],
+    "leaf_histogram": [
+      {
+        "fixture": "lattice",
+        "depth": 9,
+        "particles": 64,
+        "leaves": 512
+      },
+      {
+        "fixture": "clustered",
+        "depth": 12,
+        "particles": 64,
+        "leaves": 512
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 7,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 8,
+        "leaves": 23
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 9,
+        "leaves": 28
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 10,
+        "leaves": 47
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 11,
+        "leaves": 47
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 12,
+        "leaves": 28
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 13,
+        "leaves": 6
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 14,
+        "leaves": 40
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 15,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 16,
+        "leaves": 42
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 17,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 18,
+        "leaves": 10
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 19,
+        "leaves": 38
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 20,
+        "leaves": 50
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 21,
+        "leaves": 16
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 22,
+        "leaves": 25
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 23,
+        "leaves": 63
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 24,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 4,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 5,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 9,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 1,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 3,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 5,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 7,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 8,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 1,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 2,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 3,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 4,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 17,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 21,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 22,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 23,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 24,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 25,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 26,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 27,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 28,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 29,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 30,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 32,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 33,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 36,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 37,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 38,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 39,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 40,
+        "leaves": 5
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 41,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 42,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 43,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 44,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 45,
+        "leaves": 6
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 46,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 47,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 48,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 49,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 50,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 51,
+        "leaves": 18
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 52,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 53,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 54,
+        "leaves": 25
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 55,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 56,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 57,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 58,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 59,
+        "leaves": 13
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 60,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 61,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 62,
+        "leaves": 18
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 63,
+        "leaves": 18
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 64,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 19,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 21,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 22,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 23,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 24,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 25,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 26,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 27,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 28,
+        "leaves": 20
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 29,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 30,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 31,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 32,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 33,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 34,
+        "leaves": 15
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 35,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 36,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 37,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 38,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 39,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 40,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 41,
+        "leaves": 13
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 42,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 43,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 44,
+        "leaves": 10
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 45,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 46,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 47,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 48,
+        "leaves": 10
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 49,
+        "leaves": 8
+      }
+    ],
+    "arena": null,
+    "occupancy": null,
+    "binary": "arena",
+    "policy": "auto",
+    "backend": "cuda",
+    "bucket": 64,
+    "order": 3,
+    "pair": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "1,2",
+      "/tmp/claude-1000/-home-dmarce1-workspace-cosmictiger/765541c5-5b91-4b03-b04b-7071cc6a863c/scratchpad/cosmictiger_b128",
+      "--run.test=stfBenchmark",
+      "--initial.particlesPerDimension=32",
+      "--hydro.enabled=false",
+      "--gravity.openingAngle=0.8",
+      "--gravity.effectiveRadius=0.01876988456953534",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--hpx:threads=2",
+      "--hpx:bind=none",
+      "--analysis.views=false",
+      "--analysis.power=false",
+      "--analysis.groups=false",
+      "--lightcone.enabled=false",
+      "--compute.cuda=true",
+      "--compute.bucketSize=64",
+      "--gravity.fmmOrder=3"
+    ],
+    "cwd": "/home/dmarce1/workspace/cosmictiger/docs/cuda_kick_shared_memory_results/agreement_cpu_cuda/runs/arena_auto_cuda_b64_o3_pair0",
+    "wall_seconds": 2.0184080179969897,
+    "force_csv": "/home/dmarce1/workspace/cosmictiger/docs/cuda_kick_shared_memory_results/agreement_cpu_cuda/runs/arena_auto_cuda_b64_o3_pair0/stf_walk_forces.csv",
+    "force_csv_sha256": "767a50bbda9ccdfd38b468f8c0333430cc73cdb2d01e8915a7bd9a623800c3ce"
+  },
+  {
+    "medians": [
+      {
+        "fixture": "lattice",
+        "backend": "cuda",
+        "potential": false,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000182075,
+        "tree_seconds": 0.002333517,
+        "kick_seconds": 0.032349052,
+        "total_seconds": 0.034860907,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cuda",
+        "potential": true,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000180732,
+        "tree_seconds": 0.002130974,
+        "kick_seconds": 0.032006585,
+        "total_seconds": 0.034289156,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cuda",
+        "potential": false,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000430014,
+        "tree_seconds": 0.00288958,
+        "kick_seconds": 0.008189131,
+        "total_seconds": 0.011522461,
+        "position_hash": "9330035828812934027"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cuda",
+        "potential": true,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000181363,
+        "tree_seconds": 0.002853301,
+        "kick_seconds": 0.008525417,
+        "total_seconds": 0.011396562,
+        "position_hash": "9330035828812934027"
+      },
+      {
+        "fixture": "adaptive",
+        "backend": "cuda",
+        "potential": false,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000419905,
+        "tree_seconds": 0.003033482,
+        "kick_seconds": 0.020133801,
+        "total_seconds": 0.023167283,
+        "position_hash": "10382969522388005973"
+      },
+      {
+        "fixture": "adaptive",
+        "backend": "cuda",
+        "potential": true,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000181193,
+        "tree_seconds": 0.00307461,
+        "kick_seconds": 0.02044988,
+        "total_seconds": 0.02352449,
+        "position_hash": "10382969522388005973"
+      }
+    ],
+    "samples": [
+      {
+        "fixture": "lattice",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.002185176,
+        "kick_seconds": 0.031869725,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "lattice",
+        "potential": false,
+        "sample": 1,
+        "tree_seconds": 0.002511855,
+        "kick_seconds": 0.032349052,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "lattice",
+        "potential": false,
+        "sample": 2,
+        "tree_seconds": 0.002333517,
+        "kick_seconds": 0.032695378,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "lattice",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.002282571,
+        "kick_seconds": 0.032006585,
+        "total_potential": 1462413.865234375
+      },
+      {
+        "fixture": "lattice",
+        "potential": true,
+        "sample": 1,
+        "tree_seconds": 0.002105566,
+        "kick_seconds": 0.031918839,
+        "total_potential": 1462413.865234375
+      },
+      {
+        "fixture": "lattice",
+        "potential": true,
+        "sample": 2,
+        "tree_seconds": 0.002130974,
+        "kick_seconds": 0.032660182,
+        "total_potential": 1462413.865234375
+      },
+      {
+        "fixture": "clustered",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.003400968,
+        "kick_seconds": 0.008136011,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "clustered",
+        "potential": false,
+        "sample": 1,
+        "tree_seconds": 0.002873299,
+        "kick_seconds": 0.008649162,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "clustered",
+        "potential": false,
+        "sample": 2,
+        "tree_seconds": 0.00288958,
+        "kick_seconds": 0.008189131,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "clustered",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.002853301,
+        "kick_seconds": 0.008260607,
+        "total_potential": -174711017.21875
+      },
+      {
+        "fixture": "clustered",
+        "potential": true,
+        "sample": 1,
+        "tree_seconds": 0.002871145,
+        "kick_seconds": 0.008525417,
+        "total_potential": -174711017.21875
+      },
+      {
+        "fixture": "clustered",
+        "potential": true,
+        "sample": 2,
+        "tree_seconds": 0.002838583,
+        "kick_seconds": 0.009042767,
+        "total_potential": -174711017.21875
+      },
+      {
+        "fixture": "adaptive",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.003033482,
+        "kick_seconds": 0.020133801,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "adaptive",
+        "potential": false,
+        "sample": 1,
+        "tree_seconds": 0.003056896,
+        "kick_seconds": 0.021382424,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "adaptive",
+        "potential": false,
+        "sample": 2,
+        "tree_seconds": 0.002985331,
+        "kick_seconds": 0.019734595,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "adaptive",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.00307461,
+        "kick_seconds": 0.02044988,
+        "total_potential": -2308707247.130005
+      },
+      {
+        "fixture": "adaptive",
+        "potential": true,
+        "sample": 1,
+        "tree_seconds": 0.003048471,
+        "kick_seconds": 0.022435017,
+        "total_potential": -2308707247.130005
+      },
+      {
+        "fixture": "adaptive",
+        "potential": true,
+        "sample": 2,
+        "tree_seconds": 0.003080942,
+        "kick_seconds": 0.019857157,
+        "total_potential": -2308707247.130005
+      }
+    ],
+    "references": [
+      {
+        "fixture": "lattice",
+        "backend": "cuda",
+        "samples": 1024,
+        "force_relative_l2": 0.341842847,
+        "force_relative_p50": 0.223070974,
+        "force_relative_p99": 1.85742205,
+        "force_relative_max": 6.31888245,
+        "potential_relative_l2": 0.0361276769,
+        "potential_relative_p50": 0.017414492,
+        "potential_relative_p99": 0.118067936,
+        "potential_relative_max": 0.157357793
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cuda",
+        "samples": 1024,
+        "force_relative_l2": 0.00481487169,
+        "force_relative_p50": 0.00261334697,
+        "force_relative_p99": 0.0263062648,
+        "force_relative_max": 0.0426827825,
+        "potential_relative_l2": 0.00057518295,
+        "potential_relative_p50": 0.000248179093,
+        "potential_relative_p99": 0.00809315913,
+        "potential_relative_max": 0.0162641477
+      },
+      {
+        "fixture": "adaptive",
+        "backend": "cuda",
+        "samples": 1024,
+        "force_relative_l2": 0.00211051464,
+        "force_relative_p50": 0.0012379303,
+        "force_relative_p99": 0.0408456484,
+        "force_relative_max": 0.0886395826,
+        "potential_relative_l2": 0.000102454063,
+        "potential_relative_p50": 3.27631983e-05,
+        "potential_relative_p99": 0.0266037467,
+        "potential_relative_max": 0.0898533481
+      }
+    ],
+    "leaf_histogram": [
+      {
+        "fixture": "lattice",
+        "depth": 9,
+        "particles": 64,
+        "leaves": 512
+      },
+      {
+        "fixture": "clustered",
+        "depth": 12,
+        "particles": 64,
+        "leaves": 512
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 7,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 8,
+        "leaves": 23
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 9,
+        "leaves": 28
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 10,
+        "leaves": 47
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 11,
+        "leaves": 47
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 12,
+        "leaves": 28
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 13,
+        "leaves": 6
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 14,
+        "leaves": 40
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 15,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 16,
+        "leaves": 42
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 17,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 18,
+        "leaves": 10
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 19,
+        "leaves": 38
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 20,
+        "leaves": 50
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 21,
+        "leaves": 16
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 22,
+        "leaves": 25
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 23,
+        "leaves": 63
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 24,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 4,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 5,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 9,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 1,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 3,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 5,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 7,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 8,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 1,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 2,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 3,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 4,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 17,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 21,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 22,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 23,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 24,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 25,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 26,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 27,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 28,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 29,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 30,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 32,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 33,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 36,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 37,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 38,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 39,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 40,
+        "leaves": 5
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 41,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 42,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 43,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 44,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 45,
+        "leaves": 6
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 46,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 47,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 48,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 49,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 50,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 51,
+        "leaves": 18
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 52,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 53,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 54,
+        "leaves": 25
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 55,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 56,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 57,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 58,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 59,
+        "leaves": 13
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 60,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 61,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 62,
+        "leaves": 18
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 63,
+        "leaves": 18
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 64,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 19,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 21,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 22,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 23,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 24,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 25,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 26,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 27,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 28,
+        "leaves": 20
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 29,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 30,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 31,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 32,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 33,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 34,
+        "leaves": 15
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 35,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 36,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 37,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 38,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 39,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 40,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 41,
+        "leaves": 13
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 42,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 43,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 44,
+        "leaves": 10
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 45,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 46,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 47,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 48,
+        "leaves": 10
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 49,
+        "leaves": 8
+      }
+    ],
+    "arena": null,
+    "occupancy": null,
+    "binary": "arena",
+    "policy": "auto",
+    "backend": "cuda",
+    "bucket": 64,
+    "order": 7,
+    "pair": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "1,2",
+      "/tmp/claude-1000/-home-dmarce1-workspace-cosmictiger/765541c5-5b91-4b03-b04b-7071cc6a863c/scratchpad/cosmictiger_b128",
+      "--run.test=stfBenchmark",
+      "--initial.particlesPerDimension=32",
+      "--hydro.enabled=false",
+      "--gravity.openingAngle=0.8",
+      "--gravity.effectiveRadius=0.01876988456953534",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--hpx:threads=2",
+      "--hpx:bind=none",
+      "--analysis.views=false",
+      "--analysis.power=false",
+      "--analysis.groups=false",
+      "--lightcone.enabled=false",
+      "--compute.cuda=true",
+      "--compute.bucketSize=64",
+      "--gravity.fmmOrder=7"
+    ],
+    "cwd": "/home/dmarce1/workspace/cosmictiger/docs/cuda_kick_shared_memory_results/agreement_cpu_cuda/runs/arena_auto_cuda_b64_o7_pair0",
+    "wall_seconds": 2.167974750002031,
+    "force_csv": "/home/dmarce1/workspace/cosmictiger/docs/cuda_kick_shared_memory_results/agreement_cpu_cuda/runs/arena_auto_cuda_b64_o7_pair0/stf_walk_forces.csv",
+    "force_csv_sha256": "cb240a70da2045f4fa7f4abf1f0f6b72f2f77dd16f12f83f0db9f52a17ca596b"
+  },
+  {
+    "medians": [
+      {
+        "fixture": "lattice",
+        "backend": "cuda",
+        "potential": false,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000405698,
+        "tree_seconds": 0.003565068,
+        "kick_seconds": 0.080382452,
+        "total_seconds": 0.08394752,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cuda",
+        "potential": true,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000180161,
+        "tree_seconds": 0.003481951,
+        "kick_seconds": 0.079321413,
+        "total_seconds": 0.082803364,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cuda",
+        "potential": false,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000426548,
+        "tree_seconds": 0.00562632,
+        "kick_seconds": 0.011848939,
+        "total_seconds": 0.017613731,
+        "position_hash": "9330035828812934027"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cuda",
+        "potential": true,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000182816,
+        "tree_seconds": 0.005618765,
+        "kick_seconds": 0.011274842,
+        "total_seconds": 0.016873037,
+        "position_hash": "9330035828812934027"
+      },
+      {
+        "fixture": "adaptive",
+        "backend": "cuda",
+        "potential": false,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000417229,
+        "tree_seconds": 0.004973134,
+        "kick_seconds": 0.039456445,
+        "total_seconds": 0.044429579,
+        "position_hash": "10382969522388005973"
+      },
+      {
+        "fixture": "adaptive",
+        "backend": "cuda",
+        "potential": true,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000181734,
+        "tree_seconds": 0.004953306,
+        "kick_seconds": 0.041942781,
+        "total_seconds": 0.046907399,
+        "position_hash": "10382969522388005973"
+      }
+    ],
+    "samples": [
+      {
+        "fixture": "lattice",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.003919529,
+        "kick_seconds": 0.079808897,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "lattice",
+        "potential": false,
+        "sample": 1,
+        "tree_seconds": 0.003565068,
+        "kick_seconds": 0.080382452,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "lattice",
+        "potential": false,
+        "sample": 2,
+        "tree_seconds": 0.003450602,
+        "kick_seconds": 0.080680607,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "lattice",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.003463906,
+        "kick_seconds": 0.079300674,
+        "total_potential": 1461650.4074707031
+      },
+      {
+        "fixture": "lattice",
+        "potential": true,
+        "sample": 1,
+        "tree_seconds": 0.00351339,
+        "kick_seconds": 0.08057221,
+        "total_potential": 1461650.4074707031
+      },
+      {
+        "fixture": "lattice",
+        "potential": true,
+        "sample": 2,
+        "tree_seconds": 0.003481951,
+        "kick_seconds": 0.079321413,
+        "total_potential": 1461650.4074707031
+      },
+      {
+        "fixture": "clustered",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.005764792,
+        "kick_seconds": 0.011848939,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "clustered",
+        "potential": false,
+        "sample": 1,
+        "tree_seconds": 0.00562632,
+        "kick_seconds": 0.011765781,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "clustered",
+        "potential": false,
+        "sample": 2,
+        "tree_seconds": 0.005588077,
+        "kick_seconds": 0.01240964,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "clustered",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.005618765,
+        "kick_seconds": 0.011254272,
+        "total_potential": -174770972.984375
+      },
+      {
+        "fixture": "clustered",
+        "potential": true,
+        "sample": 1,
+        "tree_seconds": 0.005526,
+        "kick_seconds": 0.011274842,
+        "total_potential": -174770972.984375
+      },
+      {
+        "fixture": "clustered",
+        "potential": true,
+        "sample": 2,
+        "tree_seconds": 0.005624076,
+        "kick_seconds": 0.01131054,
+        "total_potential": -174770972.984375
+      },
+      {
+        "fixture": "adaptive",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.004916637,
+        "kick_seconds": 0.039933478,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "adaptive",
+        "potential": false,
+        "sample": 1,
+        "tree_seconds": 0.005010684,
+        "kick_seconds": 0.0393535,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "adaptive",
+        "potential": false,
+        "sample": 2,
+        "tree_seconds": 0.004973134,
+        "kick_seconds": 0.039456445,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "adaptive",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.004887882,
+        "kick_seconds": 0.043095232,
+        "total_potential": -2308712607.7521973
+      },
+      {
+        "fixture": "adaptive",
+        "potential": true,
+        "sample": 1,
+        "tree_seconds": 0.004953306,
+        "kick_seconds": 0.041724237,
+        "total_potential": -2308712607.7521973
+      },
+      {
+        "fixture": "adaptive",
+        "potential": true,
+        "sample": 2,
+        "tree_seconds": 0.004964618,
+        "kick_seconds": 0.041942781,
+        "total_potential": -2308712607.7521973
+      }
+    ],
+    "references": [
+      {
+        "fixture": "lattice",
+        "backend": "cuda",
+        "samples": 1024,
+        "force_relative_l2": 0.209749967,
+        "force_relative_p50": 0.135042266,
+        "force_relative_p99": 1.20865348,
+        "force_relative_max": 4.47693363,
+        "potential_relative_l2": 0.0341728717,
+        "potential_relative_p50": 0.00999047709,
+        "potential_relative_p99": 0.12353996,
+        "potential_relative_max": 0.152488286
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cuda",
+        "samples": 1024,
+        "force_relative_l2": 0.00298331533,
+        "force_relative_p50": 0.00189019709,
+        "force_relative_p99": 0.0121008482,
+        "force_relative_max": 0.019513164,
+        "potential_relative_l2": 0.000605544485,
+        "potential_relative_p50": 0.000268704028,
+        "potential_relative_p99": 0.0073671727,
+        "potential_relative_max": 0.0112000514
+      },
+      {
+        "fixture": "adaptive",
+        "backend": "cuda",
+        "samples": 1024,
+        "force_relative_l2": 0.000939268615,
+        "force_relative_p50": 0.000387521737,
+        "force_relative_p99": 0.0311746763,
+        "force_relative_max": 0.159824179,
+        "potential_relative_l2": 6.06497449e-05,
+        "potential_relative_p50": 8.14089497e-06,
+        "potential_relative_p99": 0.0211974035,
+        "potential_relative_max": 0.127711596
+      }
+    ],
+    "leaf_histogram": [
+      {
+        "fixture": "lattice",
+        "depth": 9,
+        "particles": 64,
+        "leaves": 512
+      },
+      {
+        "fixture": "clustered",
+        "depth": 12,
+        "particles": 64,
+        "leaves": 512
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 7,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 8,
+        "leaves": 23
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 9,
+        "leaves": 28
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 10,
+        "leaves": 47
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 11,
+        "leaves": 47
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 12,
+        "leaves": 28
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 13,
+        "leaves": 6
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 14,
+        "leaves": 40
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 15,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 16,
+        "leaves": 42
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 17,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 18,
+        "leaves": 10
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 19,
+        "leaves": 38
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 20,
+        "leaves": 50
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 21,
+        "leaves": 16
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 22,
+        "leaves": 25
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 23,
+        "leaves": 63
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 24,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 4,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 5,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 9,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 1,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 3,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 5,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 7,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 8,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 1,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 2,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 3,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 4,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 17,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 21,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 22,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 23,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 24,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 25,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 26,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 27,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 28,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 29,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 30,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 32,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 33,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 36,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 37,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 38,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 39,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 40,
+        "leaves": 5
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 41,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 42,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 43,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 44,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 45,
+        "leaves": 6
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 46,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 47,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 48,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 49,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 50,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 51,
+        "leaves": 18
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 52,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 53,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 54,
+        "leaves": 25
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 55,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 56,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 57,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 58,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 59,
+        "leaves": 13
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 60,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 61,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 62,
+        "leaves": 18
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 63,
+        "leaves": 18
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 64,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 19,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 21,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 22,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 23,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 24,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 25,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 26,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 27,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 28,
+        "leaves": 20
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 29,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 30,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 31,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 32,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 33,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 34,
+        "leaves": 15
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 35,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 36,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 37,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 38,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 39,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 40,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 41,
+        "leaves": 13
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 42,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 43,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 44,
+        "leaves": 10
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 45,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 46,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 47,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 48,
+        "leaves": 10
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 49,
+        "leaves": 8
+      }
+    ],
+    "arena": null,
+    "occupancy": null,
+    "binary": "arena",
+    "policy": "auto",
+    "backend": "cuda",
+    "bucket": 64,
+    "order": 9,
+    "pair": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "1,2",
+      "/tmp/claude-1000/-home-dmarce1-workspace-cosmictiger/765541c5-5b91-4b03-b04b-7071cc6a863c/scratchpad/cosmictiger_b128",
+      "--run.test=stfBenchmark",
+      "--initial.particlesPerDimension=32",
+      "--hydro.enabled=false",
+      "--gravity.openingAngle=0.8",
+      "--gravity.effectiveRadius=0.01876988456953534",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--hpx:threads=2",
+      "--hpx:bind=none",
+      "--analysis.views=false",
+      "--analysis.power=false",
+      "--analysis.groups=false",
+      "--lightcone.enabled=false",
+      "--compute.cuda=true",
+      "--compute.bucketSize=64",
+      "--gravity.fmmOrder=9"
+    ],
+    "cwd": "/home/dmarce1/workspace/cosmictiger/docs/cuda_kick_shared_memory_results/agreement_cpu_cuda/runs/arena_auto_cuda_b64_o9_pair0",
+    "wall_seconds": 2.768724242996541,
+    "force_csv": "/home/dmarce1/workspace/cosmictiger/docs/cuda_kick_shared_memory_results/agreement_cpu_cuda/runs/arena_auto_cuda_b64_o9_pair0/stf_walk_forces.csv",
+    "force_csv_sha256": "585a414021ac50ea980f7b29589654307697b7bbee57599cde2914d22c964423"
+  },
+  {
+    "medians": [
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000181574,
+        "tree_seconds": 0.001789387,
+        "kick_seconds": 0.05694115,
+        "total_seconds": 0.058683158,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000179811,
+        "tree_seconds": 0.001412694,
+        "kick_seconds": 0.058478168,
+        "total_seconds": 0.059935637,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000183838,
+        "tree_seconds": 0.001994636,
+        "kick_seconds": 0.01533187,
+        "total_seconds": 0.017475948,
+        "position_hash": "9330035828812934027"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.00017405,
+        "tree_seconds": 0.001957114,
+        "kick_seconds": 0.016885442,
+        "total_seconds": 0.018860259,
+        "position_hash": "9330035828812934027"
+      },
+      {
+        "fixture": "adaptive",
+        "backend": "cpu",
+        "potential": false,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000178287,
+        "tree_seconds": 0.002008111,
+        "kick_seconds": 0.062874329,
+        "total_seconds": 0.06488244,
+        "position_hash": "10382969522388005973"
+      },
+      {
+        "fixture": "adaptive",
+        "backend": "cpu",
+        "potential": true,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000174501,
+        "tree_seconds": 0.001895678,
+        "kick_seconds": 0.06215646,
+        "total_seconds": 0.064122942,
+        "position_hash": "10382969522388005973"
+      }
+    ],
+    "samples": [
+      {
+        "fixture": "lattice",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.00188072,
+        "kick_seconds": 0.057149715,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "lattice",
+        "potential": false,
+        "sample": 1,
+        "tree_seconds": 0.001789387,
+        "kick_seconds": 0.056893771,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "lattice",
+        "potential": false,
+        "sample": 2,
+        "tree_seconds": 0.001362268,
+        "kick_seconds": 0.05694115,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "lattice",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.001412694,
+        "kick_seconds": 0.05820426,
+        "total_potential": 78293.0886964798
+      },
+      {
+        "fixture": "lattice",
+        "potential": true,
+        "sample": 1,
+        "tree_seconds": 0.001377778,
+        "kick_seconds": 0.058560374,
+        "total_potential": 78293.0886964798
+      },
+      {
+        "fixture": "lattice",
+        "potential": true,
+        "sample": 2,
+        "tree_seconds": 0.001457469,
+        "kick_seconds": 0.058478168,
+        "total_potential": 78293.0886964798
+      },
+      {
+        "fixture": "clustered",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.002543785,
+        "kick_seconds": 0.015301222,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "clustered",
+        "potential": false,
+        "sample": 1,
+        "tree_seconds": 0.001994636,
+        "kick_seconds": 0.01533187,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "clustered",
+        "potential": false,
+        "sample": 2,
+        "tree_seconds": 0.001955942,
+        "kick_seconds": 0.015520006,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "clustered",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.00200222,
+        "kick_seconds": 0.016885442,
+        "total_potential": -176248620.43371582
+      },
+      {
+        "fixture": "clustered",
+        "potential": true,
+        "sample": 1,
+        "tree_seconds": 0.001957114,
+        "kick_seconds": 0.016903145,
+        "total_potential": -176248620.43371582
+      },
+      {
+        "fixture": "clustered",
+        "potential": true,
+        "sample": 2,
+        "tree_seconds": 0.001945152,
+        "kick_seconds": 0.016808907,
+        "total_potential": -176248620.43371582
+      },
+      {
+        "fixture": "adaptive",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.001960421,
+        "kick_seconds": 0.06304917,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "adaptive",
+        "potential": false,
+        "sample": 1,
+        "tree_seconds": 0.002008111,
+        "kick_seconds": 0.062874329,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "adaptive",
+        "potential": false,
+        "sample": 2,
+        "tree_seconds": 0.002032698,
+        "kick_seconds": 0.062281948,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "adaptive",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.00188085,
+        "kick_seconds": 0.062672206,
+        "total_potential": -2314496205.7068443
+      },
+      {
+        "fixture": "adaptive",
+        "potential": true,
+        "sample": 1,
+        "tree_seconds": 0.001966482,
+        "kick_seconds": 0.06215646,
+        "total_potential": -2314496205.7068443
+      },
+      {
+        "fixture": "adaptive",
+        "potential": true,
+        "sample": 2,
+        "tree_seconds": 0.001895678,
+        "kick_seconds": 0.061866862,
+        "total_potential": -2314496205.7068443
+      }
+    ],
+    "references": [
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "samples": 1024,
+        "force_relative_l2": 4.49219635,
+        "force_relative_p50": 4.35547215,
+        "force_relative_p99": 22.4816979,
+        "force_relative_max": 78.9021808,
+        "potential_relative_l2": 0.99439875,
+        "potential_relative_p50": 0.980114663,
+        "potential_relative_p99": 1.09764735,
+        "potential_relative_max": 1.11864278
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "samples": 1024,
+        "force_relative_l2": 0.0403521376,
+        "force_relative_p50": 0.0326773623,
+        "force_relative_p99": 0.137900477,
+        "force_relative_max": 0.214506089,
+        "potential_relative_l2": 0.290927246,
+        "potential_relative_p50": 0.33368114,
+        "potential_relative_p99": 5.06809249,
+        "potential_relative_max": 15.5893002
+      },
+      {
+        "fixture": "adaptive",
+        "backend": "cpu",
+        "samples": 1024,
+        "force_relative_l2": 0.0276597122,
+        "force_relative_p50": 0.0289180812,
+        "force_relative_p99": 0.666947821,
+        "force_relative_max": 1.37339793,
+        "potential_relative_l2": 0.017685566,
+        "potential_relative_p50": 0.016895162,
+        "potential_relative_p99": 2.40956753,
+        "potential_relative_max": 12.2279585
+      }
+    ],
+    "leaf_histogram": [
+      {
+        "fixture": "lattice",
+        "depth": 9,
+        "particles": 64,
+        "leaves": 512
+      },
+      {
+        "fixture": "clustered",
+        "depth": 12,
+        "particles": 64,
+        "leaves": 512
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 7,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 8,
+        "leaves": 23
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 9,
+        "leaves": 28
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 10,
+        "leaves": 47
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 11,
+        "leaves": 47
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 12,
+        "leaves": 28
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 13,
+        "leaves": 6
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 14,
+        "leaves": 40
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 15,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 16,
+        "leaves": 42
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 17,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 18,
+        "leaves": 10
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 19,
+        "leaves": 38
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 20,
+        "leaves": 50
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 21,
+        "leaves": 16
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 22,
+        "leaves": 25
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 23,
+        "leaves": 63
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 24,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 4,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 5,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 9,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 1,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 3,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 5,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 7,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 8,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 1,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 2,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 3,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 4,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 17,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 21,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 22,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 23,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 24,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 25,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 26,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 27,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 28,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 29,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 30,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 32,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 33,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 36,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 37,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 38,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 39,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 40,
+        "leaves": 5
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 41,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 42,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 43,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 44,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 45,
+        "leaves": 6
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 46,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 47,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 48,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 49,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 50,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 51,
+        "leaves": 18
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 52,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 53,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 54,
+        "leaves": 25
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 55,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 56,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 57,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 58,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 59,
+        "leaves": 13
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 60,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 61,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 62,
+        "leaves": 18
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 63,
+        "leaves": 18
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 64,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 19,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 21,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 22,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 23,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 24,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 25,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 26,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 27,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 28,
+        "leaves": 20
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 29,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 30,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 31,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 32,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 33,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 34,
+        "leaves": 15
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 35,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 36,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 37,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 38,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 39,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 40,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 41,
+        "leaves": 13
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 42,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 43,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 44,
+        "leaves": 10
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 45,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 46,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 47,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 48,
+        "leaves": 10
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 49,
+        "leaves": 8
+      }
+    ],
+    "arena": null,
+    "occupancy": null,
+    "binary": "arena",
+    "policy": "auto",
+    "backend": "cpu",
+    "bucket": 64,
+    "order": 3,
+    "pair": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "1,2",
+      "/tmp/claude-1000/-home-dmarce1-workspace-cosmictiger/765541c5-5b91-4b03-b04b-7071cc6a863c/scratchpad/cosmictiger_b128",
+      "--run.test=stfBenchmark",
+      "--initial.particlesPerDimension=32",
+      "--hydro.enabled=false",
+      "--gravity.openingAngle=0.8",
+      "--gravity.effectiveRadius=0.01876988456953534",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--hpx:threads=2",
+      "--hpx:bind=none",
+      "--analysis.views=false",
+      "--analysis.power=false",
+      "--analysis.groups=false",
+      "--lightcone.enabled=false",
+      "--compute.cuda=false",
+      "--compute.bucketSize=64",
+      "--gravity.fmmOrder=3"
+    ],
+    "cwd": "/home/dmarce1/workspace/cosmictiger/docs/cuda_kick_shared_memory_results/agreement_cpu_cuda/runs/arena_auto_cpu_b64_o3_pair0",
+    "wall_seconds": 2.268195561999164,
+    "force_csv": "/home/dmarce1/workspace/cosmictiger/docs/cuda_kick_shared_memory_results/agreement_cpu_cuda/runs/arena_auto_cpu_b64_o3_pair0/stf_walk_forces.csv",
+    "force_csv_sha256": "897a1bef0883d355a5932f4113e75220a2a1c475276184e4dc2b8bde7b29cccb"
+  },
+  {
+    "medians": [
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000183157,
+        "tree_seconds": 0.002233357,
+        "kick_seconds": 0.104988852,
+        "total_seconds": 0.107041078,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000183207,
+        "tree_seconds": 0.001798624,
+        "kick_seconds": 0.106942861,
+        "total_seconds": 0.108713292,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000172637,
+        "tree_seconds": 0.002511053,
+        "kick_seconds": 0.020061883,
+        "total_seconds": 0.022638439,
+        "position_hash": "9330035828812934027"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000176865,
+        "tree_seconds": 0.002511234,
+        "kick_seconds": 0.021411557,
+        "total_seconds": 0.023974088,
+        "position_hash": "9330035828812934027"
+      },
+      {
+        "fixture": "adaptive",
+        "backend": "cpu",
+        "potential": false,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000174099,
+        "tree_seconds": 0.002493249,
+        "kick_seconds": 0.117570925,
+        "total_seconds": 0.120092537,
+        "position_hash": "10382969522388005973"
+      },
+      {
+        "fixture": "adaptive",
+        "backend": "cpu",
+        "potential": true,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000176605,
+        "tree_seconds": 0.002479182,
+        "kick_seconds": 0.118476329,
+        "total_seconds": 0.120955511,
+        "position_hash": "10382969522388005973"
+      }
+    ],
+    "samples": [
+      {
+        "fixture": "lattice",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.002233357,
+        "kick_seconds": 0.10618693,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "lattice",
+        "potential": false,
+        "sample": 1,
+        "tree_seconds": 0.00224,
+        "kick_seconds": 0.104801078,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "lattice",
+        "potential": false,
+        "sample": 2,
+        "tree_seconds": 0.00175929,
+        "kick_seconds": 0.104988852,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "lattice",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.001851685,
+        "kick_seconds": 0.107812988,
+        "total_potential": 1462409.2247638702
+      },
+      {
+        "fixture": "lattice",
+        "potential": true,
+        "sample": 1,
+        "tree_seconds": 0.001770431,
+        "kick_seconds": 0.106942861,
+        "total_potential": 1462409.2247638702
+      },
+      {
+        "fixture": "lattice",
+        "potential": true,
+        "sample": 2,
+        "tree_seconds": 0.001798624,
+        "kick_seconds": 0.106425111,
+        "total_potential": 1462409.2247638702
+      },
+      {
+        "fixture": "clustered",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.00288462,
+        "kick_seconds": 0.020061883,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "clustered",
+        "potential": false,
+        "sample": 1,
+        "tree_seconds": 0.002506584,
+        "kick_seconds": 0.020000496,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "clustered",
+        "potential": false,
+        "sample": 2,
+        "tree_seconds": 0.002511053,
+        "kick_seconds": 0.020127386,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "clustered",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.002511234,
+        "kick_seconds": 0.021411557,
+        "total_potential": -174711006.91046143
+      },
+      {
+        "fixture": "clustered",
+        "potential": true,
+        "sample": 1,
+        "tree_seconds": 0.002500153,
+        "kick_seconds": 0.02163502,
+        "total_potential": -174711006.91046143
+      },
+      {
+        "fixture": "clustered",
+        "potential": true,
+        "sample": 2,
+        "tree_seconds": 0.002563933,
+        "kick_seconds": 0.021410155,
+        "total_potential": -174711006.91046143
+      },
+      {
+        "fixture": "adaptive",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.002473172,
+        "kick_seconds": 0.120549735,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "adaptive",
+        "potential": false,
+        "sample": 1,
+        "tree_seconds": 0.002493249,
+        "kick_seconds": 0.113834844,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "adaptive",
+        "potential": false,
+        "sample": 2,
+        "tree_seconds": 0.002521612,
+        "kick_seconds": 0.117570925,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "adaptive",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.002479182,
+        "kick_seconds": 0.118476329,
+        "total_potential": -2308707242.5661774
+      },
+      {
+        "fixture": "adaptive",
+        "potential": true,
+        "sample": 1,
+        "tree_seconds": 0.002473031,
+        "kick_seconds": 0.111889662,
+        "total_potential": -2308707242.5661774
+      },
+      {
+        "fixture": "adaptive",
+        "potential": true,
+        "sample": 2,
+        "tree_seconds": 0.002501605,
+        "kick_seconds": 0.119546745,
+        "total_potential": -2308707242.5661774
+      }
+    ],
+    "references": [
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "samples": 1024,
+        "force_relative_l2": 0.34184284,
+        "force_relative_p50": 0.223074028,
+        "force_relative_p99": 1.85741859,
+        "force_relative_max": 6.31889505,
+        "potential_relative_l2": 0.96537499,
+        "potential_relative_p50": 0.965428669,
+        "potential_relative_p99": 0.972016599,
+        "potential_relative_max": 0.974349786
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "samples": 1024,
+        "force_relative_l2": 0.00481487319,
+        "force_relative_p50": 0.00261324132,
+        "force_relative_p99": 0.0263070442,
+        "force_relative_max": 0.0426827659,
+        "potential_relative_l2": 0.280521444,
+        "potential_relative_p50": 0.320724885,
+        "potential_relative_p99": 4.26549182,
+        "potential_relative_max": 13.6191807
+      },
+      {
+        "fixture": "adaptive",
+        "backend": "cpu",
+        "samples": 1024,
+        "force_relative_l2": 0.00211051453,
+        "force_relative_p50": 0.00123780002,
+        "force_relative_p99": 0.0408458866,
+        "force_relative_max": 0.088639619,
+        "potential_relative_l2": 0.0152099188,
+        "potential_relative_p50": 0.0146198318,
+        "potential_relative_p99": 2.14153434,
+        "potential_relative_max": 9.96096639
+      }
+    ],
+    "leaf_histogram": [
+      {
+        "fixture": "lattice",
+        "depth": 9,
+        "particles": 64,
+        "leaves": 512
+      },
+      {
+        "fixture": "clustered",
+        "depth": 12,
+        "particles": 64,
+        "leaves": 512
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 7,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 8,
+        "leaves": 23
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 9,
+        "leaves": 28
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 10,
+        "leaves": 47
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 11,
+        "leaves": 47
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 12,
+        "leaves": 28
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 13,
+        "leaves": 6
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 14,
+        "leaves": 40
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 15,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 16,
+        "leaves": 42
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 17,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 18,
+        "leaves": 10
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 19,
+        "leaves": 38
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 20,
+        "leaves": 50
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 21,
+        "leaves": 16
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 22,
+        "leaves": 25
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 23,
+        "leaves": 63
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 24,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 4,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 5,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 9,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 1,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 3,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 5,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 7,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 8,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 1,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 2,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 3,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 4,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 17,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 21,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 22,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 23,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 24,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 25,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 26,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 27,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 28,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 29,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 30,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 32,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 33,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 36,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 37,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 38,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 39,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 40,
+        "leaves": 5
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 41,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 42,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 43,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 44,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 45,
+        "leaves": 6
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 46,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 47,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 48,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 49,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 50,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 51,
+        "leaves": 18
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 52,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 53,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 54,
+        "leaves": 25
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 55,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 56,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 57,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 58,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 59,
+        "leaves": 13
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 60,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 61,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 62,
+        "leaves": 18
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 63,
+        "leaves": 18
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 64,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 19,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 21,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 22,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 23,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 24,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 25,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 26,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 27,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 28,
+        "leaves": 20
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 29,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 30,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 31,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 32,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 33,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 34,
+        "leaves": 15
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 35,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 36,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 37,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 38,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 39,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 40,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 41,
+        "leaves": 13
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 42,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 43,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 44,
+        "leaves": 10
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 45,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 46,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 47,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 48,
+        "leaves": 10
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 49,
+        "leaves": 8
+      }
+    ],
+    "arena": null,
+    "occupancy": null,
+    "binary": "arena",
+    "policy": "auto",
+    "backend": "cpu",
+    "bucket": 64,
+    "order": 7,
+    "pair": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "1,2",
+      "/tmp/claude-1000/-home-dmarce1-workspace-cosmictiger/765541c5-5b91-4b03-b04b-7071cc6a863c/scratchpad/cosmictiger_b128",
+      "--run.test=stfBenchmark",
+      "--initial.particlesPerDimension=32",
+      "--hydro.enabled=false",
+      "--gravity.openingAngle=0.8",
+      "--gravity.effectiveRadius=0.01876988456953534",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--hpx:threads=2",
+      "--hpx:bind=none",
+      "--analysis.views=false",
+      "--analysis.power=false",
+      "--analysis.groups=false",
+      "--lightcone.enabled=false",
+      "--compute.cuda=false",
+      "--compute.bucketSize=64",
+      "--gravity.fmmOrder=7"
+    ],
+    "cwd": "/home/dmarce1/workspace/cosmictiger/docs/cuda_kick_shared_memory_results/agreement_cpu_cuda/runs/arena_auto_cpu_b64_o7_pair0",
+    "wall_seconds": 3.219245361004141,
+    "force_csv": "/home/dmarce1/workspace/cosmictiger/docs/cuda_kick_shared_memory_results/agreement_cpu_cuda/runs/arena_auto_cpu_b64_o7_pair0/stf_walk_forces.csv",
+    "force_csv_sha256": "721f12a3767b8a12f2dcceeb4ac17c1f233056dae6b3dacbb0c5bab516be28b5"
+  },
+  {
+    "medians": [
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": false,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000183677,
+        "tree_seconds": 0.003635,
+        "kick_seconds": 0.270730178,
+        "total_seconds": 0.274365178,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "potential": true,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000183307,
+        "tree_seconds": 0.003194987,
+        "kick_seconds": 0.271718663,
+        "total_seconds": 0.27491365,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": false,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000171715,
+        "tree_seconds": 0.005173792,
+        "kick_seconds": 0.028684752,
+        "total_seconds": 0.033859767,
+        "position_hash": "9330035828812934027"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "potential": true,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000173418,
+        "tree_seconds": 0.005090735,
+        "kick_seconds": 0.029912055,
+        "total_seconds": 0.035017999,
+        "position_hash": "9330035828812934027"
+      },
+      {
+        "fixture": "adaptive",
+        "backend": "cpu",
+        "potential": false,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000172526,
+        "tree_seconds": 0.004306892,
+        "kick_seconds": 0.290761832,
+        "total_seconds": 0.294975507,
+        "position_hash": "10382969522388005973"
+      },
+      {
+        "fixture": "adaptive",
+        "backend": "cpu",
+        "potential": true,
+        "samples": 3,
+        "particles": 32768,
+        "reset_seconds": 0.000173429,
+        "tree_seconds": 0.004276393,
+        "kick_seconds": 0.300164082,
+        "total_seconds": 0.304465032,
+        "position_hash": "10382969522388005973"
+      }
+    ],
+    "samples": [
+      {
+        "fixture": "lattice",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.003635,
+        "kick_seconds": 0.270730178,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "lattice",
+        "potential": false,
+        "sample": 1,
+        "tree_seconds": 0.003702307,
+        "kick_seconds": 0.274660696,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "lattice",
+        "potential": false,
+        "sample": 2,
+        "tree_seconds": 0.003125315,
+        "kick_seconds": 0.270612532,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "lattice",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.003214935,
+        "kick_seconds": 0.272125326,
+        "total_potential": 1461653.6080913544
+      },
+      {
+        "fixture": "lattice",
+        "potential": true,
+        "sample": 1,
+        "tree_seconds": 0.003194987,
+        "kick_seconds": 0.271718663,
+        "total_potential": 1461653.6080913544
+      },
+      {
+        "fixture": "lattice",
+        "potential": true,
+        "sample": 2,
+        "tree_seconds": 0.003168517,
+        "kick_seconds": 0.271544133,
+        "total_potential": 1461653.6080913544
+      },
+      {
+        "fixture": "clustered",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.005431781,
+        "kick_seconds": 0.028684752,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "clustered",
+        "potential": false,
+        "sample": 1,
+        "tree_seconds": 0.005173792,
+        "kick_seconds": 0.028685975,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "clustered",
+        "potential": false,
+        "sample": 2,
+        "tree_seconds": 0.005118498,
+        "kick_seconds": 0.028553855,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "clustered",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.005213528,
+        "kick_seconds": 0.029912055,
+        "total_potential": -174770969.4650879
+      },
+      {
+        "fixture": "clustered",
+        "potential": true,
+        "sample": 1,
+        "tree_seconds": 0.005090735,
+        "kick_seconds": 0.029927264,
+        "total_potential": -174770969.4650879
+      },
+      {
+        "fixture": "clustered",
+        "potential": true,
+        "sample": 2,
+        "tree_seconds": 0.005042965,
+        "kick_seconds": 0.029810343,
+        "total_potential": -174770969.4650879
+      },
+      {
+        "fixture": "adaptive",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.004213675,
+        "kick_seconds": 0.290761832,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "adaptive",
+        "potential": false,
+        "sample": 1,
+        "tree_seconds": 0.004318022,
+        "kick_seconds": 0.29108417,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "adaptive",
+        "potential": false,
+        "sample": 2,
+        "tree_seconds": 0.004306892,
+        "kick_seconds": 0.289390874,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "adaptive",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.004276393,
+        "kick_seconds": 0.300188639,
+        "total_potential": -2308712603.0950594
+      },
+      {
+        "fixture": "adaptive",
+        "potential": true,
+        "sample": 1,
+        "tree_seconds": 0.004231609,
+        "kick_seconds": 0.286047244,
+        "total_potential": -2308712603.0950594
+      },
+      {
+        "fixture": "adaptive",
+        "potential": true,
+        "sample": 2,
+        "tree_seconds": 0.004441657,
+        "kick_seconds": 0.300164082,
+        "total_potential": -2308712603.0950594
+      }
+    ],
+    "references": [
+      {
+        "fixture": "lattice",
+        "backend": "cpu",
+        "samples": 1024,
+        "force_relative_l2": 0.209750127,
+        "force_relative_p50": 0.135041727,
+        "force_relative_p99": 1.20867355,
+        "force_relative_max": 4.47687778,
+        "potential_relative_l2": 0.965427272,
+        "potential_relative_p50": 0.965369586,
+        "potential_relative_p99": 0.971877495,
+        "potential_relative_max": 0.974101828
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cpu",
+        "samples": 1024,
+        "force_relative_l2": 0.00298332771,
+        "force_relative_p50": 0.0018901825,
+        "force_relative_p99": 0.0121005771,
+        "force_relative_max": 0.0195131071,
+        "potential_relative_l2": 0.28101172,
+        "potential_relative_p50": 0.320472865,
+        "potential_relative_p99": 4.33425044,
+        "potential_relative_max": 13.8478537
+      },
+      {
+        "fixture": "adaptive",
+        "backend": "cpu",
+        "samples": 1024,
+        "force_relative_l2": 0.000939270793,
+        "force_relative_p50": 0.000387610696,
+        "force_relative_p99": 0.0311744345,
+        "force_relative_max": 0.159824291,
+        "potential_relative_l2": 0.0152071696,
+        "potential_relative_p50": 0.0146498848,
+        "potential_relative_p99": 2.13671038,
+        "potential_relative_max": 9.92044964
+      }
+    ],
+    "leaf_histogram": [
+      {
+        "fixture": "lattice",
+        "depth": 9,
+        "particles": 64,
+        "leaves": 512
+      },
+      {
+        "fixture": "clustered",
+        "depth": 12,
+        "particles": 64,
+        "leaves": 512
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 7,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 8,
+        "leaves": 23
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 9,
+        "leaves": 28
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 10,
+        "leaves": 47
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 11,
+        "leaves": 47
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 12,
+        "leaves": 28
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 13,
+        "leaves": 6
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 14,
+        "leaves": 40
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 15,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 16,
+        "leaves": 42
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 17,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 18,
+        "leaves": 10
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 19,
+        "leaves": 38
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 20,
+        "leaves": 50
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 21,
+        "leaves": 16
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 22,
+        "leaves": 25
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 23,
+        "leaves": 63
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 24,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 4,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 5,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 9,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 1,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 3,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 5,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 7,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 8,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 1,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 2,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 3,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 4,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 17,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 21,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 22,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 23,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 24,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 25,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 26,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 27,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 28,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 29,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 30,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 32,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 33,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 36,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 37,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 38,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 39,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 40,
+        "leaves": 5
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 41,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 42,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 43,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 44,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 45,
+        "leaves": 6
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 46,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 47,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 48,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 49,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 50,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 51,
+        "leaves": 18
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 52,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 53,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 54,
+        "leaves": 25
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 55,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 56,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 57,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 58,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 59,
+        "leaves": 13
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 60,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 61,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 62,
+        "leaves": 18
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 63,
+        "leaves": 18
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 64,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 19,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 21,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 22,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 23,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 24,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 25,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 26,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 27,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 28,
+        "leaves": 20
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 29,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 30,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 31,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 32,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 33,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 34,
+        "leaves": 15
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 35,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 36,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 37,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 38,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 39,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 40,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 41,
+        "leaves": 13
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 42,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 43,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 44,
+        "leaves": 10
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 45,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 46,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 47,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 48,
+        "leaves": 10
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 49,
+        "leaves": 8
+      }
+    ],
+    "arena": null,
+    "occupancy": null,
+    "binary": "arena",
+    "policy": "auto",
+    "backend": "cpu",
+    "bucket": 64,
+    "order": 9,
+    "pair": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "1,2",
+      "/tmp/claude-1000/-home-dmarce1-workspace-cosmictiger/765541c5-5b91-4b03-b04b-7071cc6a863c/scratchpad/cosmictiger_b128",
+      "--run.test=stfBenchmark",
+      "--initial.particlesPerDimension=32",
+      "--hydro.enabled=false",
+      "--gravity.openingAngle=0.8",
+      "--gravity.effectiveRadius=0.01876988456953534",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--hpx:threads=2",
+      "--hpx:bind=none",
+      "--analysis.views=false",
+      "--analysis.power=false",
+      "--analysis.groups=false",
+      "--lightcone.enabled=false",
+      "--compute.cuda=false",
+      "--compute.bucketSize=64",
+      "--gravity.fmmOrder=9"
+    ],
+    "cwd": "/home/dmarce1/workspace/cosmictiger/docs/cuda_kick_shared_memory_results/agreement_cpu_cuda/runs/arena_auto_cpu_b64_o9_pair0",
+    "wall_seconds": 6.175234315996931,
+    "force_csv": "/home/dmarce1/workspace/cosmictiger/docs/cuda_kick_shared_memory_results/agreement_cpu_cuda/runs/arena_auto_cpu_b64_o9_pair0/stf_walk_forces.csv",
+    "force_csv_sha256": "4948de66bc72e0706b1bda06c58df3444ffc2dedaadf90247533395921f2b196"
+  }
+]

@@ -179,6 +179,77 @@ the reference there and prints `STF_WALK_REFERENCE_SKIPPED`.
 
 ## Measurements
 
-*Benchmark stages (allocation variants, orders at matched accuracy, bucket sweep,
-fixed handoff) are recorded under `docs/cuda_kick_shared_memory_results/` and
-summarized below once complete.*
+All timings: RTX 3090 shared with the desktop, two HPX workers pinned to cores
+1 and 2, 32,768 particles, theta 0.8 unless stated, Ferrers-4 softening, CUDA
+backend. Values are medians over paired processes of each process's median kick
+time (one warmup, 15 samples per case); the paired range is the min-max of the
+per-pair ratio. "baseline" is the unchanged commit 585ee6c0 (fixed order 7,
+15,184-byte shared union, 6 blocks per SM, 492 blocks); "arena" is this work at
+order 7. Raw data, commands, per-sample times and force exports are under
+`docs/cuda_kick_shared_memory_results/` (force CSVs are not committed).
+
+### Allocation variants at order 7, bucket 64 (`variants_order7_bucket64/`)
+
+Speedup is baseline time over variant time (above one: variant faster).
+
+| variant | lattice (forces) | clustered (forces) | adaptive (forces) | adaptive (forces + potential) |
+|---|---:|---:|---:|---:|
+| baseline, 6 blocks/SM | 33.40 ms | 8.77 ms | 19.20 ms | 19.73 ms |
+| arena auto (8 blocks/SM, shared expansion and forces, 512-particle tile) | 32.14 ms, 1.046x (1.039-1.064) | 8.38 ms, 1.082x (1.036-1.082) | 20.81 ms, 0.919x (0.917-0.941) | 21.37 ms, 0.923x |
+| arena, residency 6 | 32.18 ms, 1.039x | 8.38 ms, 1.041x | 21.19 ms, 0.908x | 20.98 ms, 0.941x |
+| arena, residency 7 | 31.88 ms, 1.048x | 8.11 ms, 1.074x | 20.61 ms, 0.932x | 20.84 ms, 0.948x |
+| arena, global active expansion | 32.28 ms, 1.037x | 8.93 ms, 1.007x | 20.41 ms, 0.941x | 20.64 ms, 0.949x |
+| arena, global whole-bucket forces | 32.83 ms, 1.018x | 9.11 ms, 0.984x | 20.57 ms, 0.928x | 20.73 ms, 0.946x |
+| arena, lists reserved (4096) | 31.92 ms, 1.047x | 8.41 ms, 1.043x | 20.18 ms, 0.959x | 20.35 ms, 0.959x |
+| arena, residency 6 + lists reserved | 32.09 ms, 1.041x | 8.47 ms, 1.040x | 20.61 ms, 0.932x | 20.55 ms, 0.950x |
+
+The arena is 4-5% faster than the baseline on the lattice and 4-8% faster on
+the clustered fixture, and 4-9% slower on the adaptive fixture (1,082 leaves of
+1 to 64 particles, depths 9 to 17), for every policy. Keeping the forces or the
+active expansion in global memory, or lowering the residency to the baseline's
+6 blocks, does not recover the adaptive loss, so it is not the shared-memory
+layout itself; reserving the list capacities (one pool allocation per list
+instead of doubling growth) recovers about half of it.
+
+### Fixed CPU/GPU handoff (`handoff_fixed_order7/`)
+
+With `compute.cudaKickHandoffBlocks=492` the arena divides work between CPU and
+GPU exactly as the baseline does. The picture is unchanged: lattice 1.027x,
+clustered 1.046x, adaptive 0.927x (0.918-0.933) for forces, 0.935x with the
+potential. The adaptive gap is therefore not the handoff threshold either.
+
+### Kernel attribution (preliminary, `fixed_order7_prelim/`)
+
+Nsight Compute replay of the force-only adaptive kick kernel put the kernel
+itself 0.3 ms slower (5.55 versus 5.25 ms) with the whole difference in the
+pool allocator (`cudaAllocate` 42.0 M to 64.3 M warp instructions, `cudaRelease`
+9.4 M to 14.9 M) while PP, PC, CP, CC and the walk were within 1-6%. The
+remaining 1 to 1.5 ms of the adaptive gap lies outside the kernel; the Nsight
+Systems host/kernel split below is the next measurement.
+
+### Orders at bucket 64, theta 0.8 (`orders_bucket64/`)
+
+Force and potential errors are relative L2 against the direct periodic sum over
+1,024 sampled particles (the lattice's forces nearly cancel, so its relative
+errors are large by construction). Times are with the potential.
+
+| order | adaptive ms | adaptive force err | adaptive potential err | clustered ms | clustered force err | clustered potential err | lattice ms | lattice force err |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 3 | 13.40 | 2.77e-2 | 3.87e-3 | 8.10 | 4.04e-2 | 1.08e-2 | 19.40 | 4.49 |
+| 4 | 14.09 | 1.63e-2 | 1.59e-3 | 7.90 | 2.77e-2 | 7.72e-3 | 20.67 | 4.38 |
+| 5 | 14.82 | 6.51e-3 | 4.60e-4 | 8.02 | 1.20e-2 | 2.50e-3 | 20.31 | 7.10e-1 |
+| 6 | 16.72 | 3.74e-3 | 1.83e-4 | 9.08 | 6.46e-3 | 7.72e-4 | 25.08 | 4.43e-1 |
+| 7 | 21.85 | 2.11e-3 | 1.03e-4 | 9.10 | 4.82e-3 | 5.75e-4 | 33.62 | 3.42e-1 |
+| 8 | 27.81 | 1.38e-3 | 6.67e-5 | 10.45 | 2.98e-3 | 4.35e-4 | 48.62 | 2.43e-1 |
+| 9 | 43.18 | 9.39e-4 | 6.07e-5 | 12.61 | 2.98e-3 | 6.06e-4 | 84.50 | 2.10e-1 |
+
+Every order runs through the same binary (`gravity.fmmOrder`). On the clustered
+fixture the force error stops improving between orders 8 and 9 and the
+potential error rises again: the single-precision floor the order cap is based
+on. A matched-accuracy comparison needs the opening angle varied per order; the
+theta sweep below provides it.
+
+### Bucket sweep, Nsight Systems split and theta sweep
+
+*Pending: recorded under `buckets_order7/`, `nsys_adaptive_order7/` and
+`theta_sweep/` as the queued runs complete.*
