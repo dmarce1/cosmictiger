@@ -1,0 +1,13 @@
+baseline_auto_cuda_b512_o7_pair0: lattice/phi=0 12.401 ms, lattice/phi=1 11.131 ms, clustered/phi=0 10.272 ms, clustered/phi=1 9.912 ms, adaptive/phi=0 29.078 ms, adaptive/phi=1 29.509 ms
+baseline_auto_cuda_b1024_o7_pair0: lattice/phi=0 16.294 ms, lattice/phi=1 17.433 ms, clustered/phi=0 16.717 ms, clustered/phi=1 18.136 ms, adaptive/phi=0 81.392 ms, adaptive/phi=1 82.775 ms
+arena_fix_auto_cuda_b512_o7_pair0: lattice/phi=0 12.946 ms, lattice/phi=1 13.094 ms, clustered/phi=0 9.703 ms, clustered/phi=1 10.755 ms, adaptive/phi=0 33.727 ms, adaptive/phi=1 35.253 ms
+arena_fix_auto_cuda_b1024_o7_pair0: lattice/phi=0 18.832 ms, lattice/phi=1 20.456 ms, clustered/phi=0 16.506 ms, clustered/phi=1 17.919 ms, adaptive/phi=0 79.978 ms, adaptive/phi=1 80.518 ms
+arena_fix_tile128_cuda_b512_o7_pair0: lattice/phi=0 12.391 ms, lattice/phi=1 11.883 ms, clustered/phi=0 10.348 ms, clustered/phi=1 11.035 ms, adaptive/phi=0 34.605 ms, adaptive/phi=1 34.981 ms
+arena_fix_tile128_cuda_b1024_o7_pair0: lattice/phi=0 19.061 ms, lattice/phi=1 20.396 ms, clustered/phi=0 16.747 ms, clustered/phi=1 18.057 ms, adaptive/phi=0 80.343 ms, adaptive/phi=1 81.811 ms
+arena_fix_tile128_cuda_b512_o7_pair1: lattice/phi=0 12.028 ms, lattice/phi=1 13.320 ms, clustered/phi=0 10.214 ms, clustered/phi=1 10.984 ms, adaptive/phi=0 34.589 ms, adaptive/phi=1 35.076 ms
+arena_fix_tile128_cuda_b1024_o7_pair1: lattice/phi=0 20.474 ms, lattice/phi=1 20.229 ms, clustered/phi=0 16.852 ms, clustered/phi=1 17.581 ms, adaptive/phi=0 79.935 ms, adaptive/phi=1 82.012 ms
+arena_fix_auto_cuda_b512_o7_pair1: lattice/phi=0 12.296 ms, lattice/phi=1 11.879 ms, clustered/phi=0 10.078 ms, clustered/phi=1 10.398 ms, adaptive/phi=0 33.895 ms, adaptive/phi=1 36.005 ms
+arena_fix_auto_cuda_b1024_o7_pair1: lattice/phi=0 19.170 ms, lattice/phi=1 20.476 ms, clustered/phi=0 16.466 ms, clustered/phi=1 18.051 ms, adaptive/phi=0 80.480 ms, adaptive/phi=1 81.996 ms
+baseline_auto_cuda_b512_o7_pair1: lattice/phi=0 10.771 ms, lattice/phi=1 11.040 ms, clustered/phi=0 10.295 ms, clustered/phi=1 10.661 ms, adaptive/phi=0 28.863 ms, adaptive/phi=1 29.087 ms
+baseline_auto_cuda_b1024_o7_pair1: lattice/phi=0 16.504 ms, lattice/phi=1 17.332 ms, clustered/phi=0 16.113 ms, clustered/phi=1 17.441 ms, adaptive/phi=0 81.723 ms, adaptive/phi=1 83.186 ms
+Completed; see docs/cuda_kick_shared_memory_results/layout_fix_bucket1024/summary.md
