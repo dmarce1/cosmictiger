@@ -913,9 +913,15 @@ bool kickBuildLayout(Compute const& compute, bool massPlane, int residency, int 
         } else if (multipoleAuto && multipoleCapacity > 1) {
             multipoleCapacity--;
         } else if (sinkAuto && sinkCapacity > kKickDefaultSinkTile) {
+            // A smaller sink tile frees force bytes; restart the source tiles
+            // from their defaults instead of keeping them at the trimmed minimum.
             sinkCapacity = kKickDefaultSinkTile;
+            particleCapacity = particleAuto ? kKickDefaultParticleTile : particleCapacity;
+            multipoleCapacity = multipoleAuto ? multipoleTarget : multipoleCapacity;
         } else if (sinkAuto && sinkCapacity > WARP_SIZE) {
             sinkCapacity -= WARP_SIZE;
+            particleCapacity = particleAuto ? kKickDefaultParticleTile : particleCapacity;
+            multipoleCapacity = multipoleAuto ? multipoleTarget : multipoleCapacity;
         } else {
             return false;
         }
@@ -944,7 +950,11 @@ CudaKickArenaLayout kickSelectLayout() {
             CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
                 &achieved, (void const*) cudaKickKernel<order>, WARP_SIZE, layout.totalBytes));
             if (achieved >= residency) {
-                layout.residency = std::min(achieved, registerLimit);
+                // The launch uses residency blocks per multiprocessor (and the
+                // CPU/GPU handoff divides by that count), so a requested
+                // residency below the achievable occupancy must be kept, not
+                // replaced by what the calculator says would fit.
+                layout.residency = std::min(residency, registerLimit);
                 PRINT("CUDA kick arena (FMM order %i): %i registers, %i static shared bytes, %i "
                       "blocks/SM "
                       "(register limit %i), budget %i, dynamic shared %i bytes: control %i, "

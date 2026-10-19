@@ -1,0 +1,10 @@
+baseline_auto_cuda_b64_o7_pair0: lattice/phi=0 33.149 ms, lattice/phi=1 32.940 ms, clustered/phi=0 8.865 ms, clustered/phi=1 8.977 ms, adaptive/phi=0 19.363 ms, adaptive/phi=1 19.862 ms
+arena_cap128_auto_cuda_b64_o7_pair0: lattice/phi=0 31.977 ms, lattice/phi=1 31.735 ms, clustered/phi=0 8.296 ms, clustered/phi=1 8.557 ms, adaptive/phi=0 20.986 ms, adaptive/phi=1 21.038 ms
+arena_cap1024_auto_cuda_b64_o7_pair0: lattice/phi=0 31.965 ms, lattice/phi=1 32.208 ms, clustered/phi=0 8.680 ms, clustered/phi=1 8.890 ms, adaptive/phi=0 20.490 ms, adaptive/phi=1 21.180 ms
+arena_cap1024_auto_cuda_b64_o7_pair1: lattice/phi=0 31.635 ms, lattice/phi=1 31.665 ms, clustered/phi=0 8.380 ms, clustered/phi=1 8.753 ms, adaptive/phi=0 20.992 ms, adaptive/phi=1 20.806 ms
+arena_cap128_auto_cuda_b64_o7_pair1: lattice/phi=0 31.875 ms, lattice/phi=1 32.120 ms, clustered/phi=0 8.458 ms, clustered/phi=1 8.638 ms, adaptive/phi=0 20.701 ms, adaptive/phi=1 20.872 ms
+baseline_auto_cuda_b64_o7_pair1: lattice/phi=0 32.820 ms, lattice/phi=1 32.852 ms, clustered/phi=0 8.942 ms, clustered/phi=1 9.178 ms, adaptive/phi=0 19.396 ms, adaptive/phi=1 19.472 ms
+baseline_auto_cuda_b64_o7_pair2: lattice/phi=0 33.062 ms, lattice/phi=1 33.185 ms, clustered/phi=0 8.823 ms, clustered/phi=1 8.872 ms, adaptive/phi=0 19.449 ms, adaptive/phi=1 19.093 ms
+arena_cap128_auto_cuda_b64_o7_pair2: lattice/phi=0 31.867 ms, lattice/phi=1 32.173 ms, clustered/phi=0 8.441 ms, clustered/phi=1 8.804 ms, adaptive/phi=0 21.218 ms, adaptive/phi=1 21.175 ms
+arena_cap1024_auto_cuda_b64_o7_pair2: lattice/phi=0 31.515 ms, lattice/phi=1 31.625 ms, clustered/phi=0 8.678 ms, clustered/phi=1 8.541 ms, adaptive/phi=0 20.516 ms, adaptive/phi=1 20.629 ms
+Completed; see docs/cuda_kick_shared_memory_results/cap_effect_bucket64/summary.md

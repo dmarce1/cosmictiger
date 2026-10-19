@@ -1,0 +1,1319 @@
+{
+  "timing": [
+    {
+      "binary": "arena",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 21.003865,
+      "kick_ms_min": 20.99772,
+      "kick_ms_max": 21.010009999999998,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 21.278261999999998,
+      "kick_ms_min": 21.107794,
+      "kick_ms_max": 21.448729999999998,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 11.463658,
+      "kick_ms_min": 11.382175,
+      "kick_ms_max": 11.545141,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 11.9741605,
+      "kick_ms_min": 11.968549,
+      "kick_ms_max": 11.979772,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 91.291445,
+      "kick_ms_min": 90.509256,
+      "kick_ms_max": 92.073634,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 90.93311500000002,
+      "kick_ms_min": 90.671412,
+      "kick_ms_max": 91.194818,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 20.7002785,
+      "kick_ms_min": 20.359665,
+      "kick_ms_max": 21.040892,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 20.972071000000003,
+      "kick_ms_min": 20.766001,
+      "kick_ms_max": 21.178141,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 8.3869385,
+      "kick_ms_min": 8.362421999999999,
+      "kick_ms_max": 8.411455,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 8.50417,
+      "kick_ms_min": 8.402629,
+      "kick_ms_max": 8.605711,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 31.731205,
+      "kick_ms_min": 31.562945000000003,
+      "kick_ms_max": 31.899465000000003,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 31.560083000000002,
+      "kick_ms_min": 31.446796,
+      "kick_ms_max": 31.67337,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 19.18926,
+      "kick_ms_min": 19.099209,
+      "kick_ms_max": 19.279311,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 19.437783,
+      "kick_ms_min": 19.267277999999997,
+      "kick_ms_max": 19.608288,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 8.528335,
+      "kick_ms_min": 8.448805,
+      "kick_ms_max": 8.607864999999999,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 8.8904125,
+      "kick_ms_min": 8.625107999999999,
+      "kick_ms_max": 9.155717000000001,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 31.8173525,
+      "kick_ms_min": 31.816098,
+      "kick_ms_max": 31.818607,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 32.0060935,
+      "kick_ms_min": 31.561011,
+      "kick_ms_max": 32.451176,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 19.9428155,
+      "kick_ms_min": 19.863481999999998,
+      "kick_ms_max": 20.022149,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 20.108307,
+      "kick_ms_min": 20.083967,
+      "kick_ms_max": 20.132647,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 8.421649,
+      "kick_ms_min": 8.335201,
+      "kick_ms_max": 8.508097,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 8.407492,
+      "kick_ms_min": 8.283584,
+      "kick_ms_max": 8.5314,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 31.839605,
+      "kick_ms_min": 31.30024,
+      "kick_ms_max": 32.37897,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 31.604862499999996,
+      "kick_ms_min": 31.344583000000004,
+      "kick_ms_max": 31.865142,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "res6",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 21.140607499999998,
+      "kick_ms_min": 21.047662000000003,
+      "kick_ms_max": 21.233552999999997,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "res6",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 21.304747499999998,
+      "kick_ms_min": 21.181114,
+      "kick_ms_max": 21.428380999999998,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "res6",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 11.1551315,
+      "kick_ms_min": 10.908091,
+      "kick_ms_max": 11.402172,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "res6",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 11.768232,
+      "kick_ms_min": 11.452967999999998,
+      "kick_ms_max": 12.083496,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "res6",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 91.2868975,
+      "kick_ms_min": 91.091732,
+      "kick_ms_max": 91.482063,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "res6",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 91.1766545,
+      "kick_ms_min": 90.97169099999999,
+      "kick_ms_max": 91.381618,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "res6",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 20.454049,
+      "kick_ms_min": 20.129231,
+      "kick_ms_max": 20.778866999999998,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "res6",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 20.8311,
+      "kick_ms_min": 20.609968,
+      "kick_ms_max": 21.052232,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "res6",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 8.3171975,
+      "kick_ms_min": 8.255471,
+      "kick_ms_max": 8.378924,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "res6",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 8.516768,
+      "kick_ms_min": 8.494451,
+      "kick_ms_max": 8.539085,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "res6",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 31.534153999999994,
+      "kick_ms_min": 31.40262,
+      "kick_ms_max": 31.665687999999996,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "res6",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 31.4208805,
+      "kick_ms_min": 31.310737,
+      "kick_ms_max": 31.531024,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "reserve0",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 21.946070999999996,
+      "kick_ms_min": 21.863661,
+      "kick_ms_max": 22.028481,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "reserve0",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 21.754966500000002,
+      "kick_ms_min": 21.572352,
+      "kick_ms_max": 21.937581,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "reserve0",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 10.9344455,
+      "kick_ms_min": 10.825415,
+      "kick_ms_max": 11.043476,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "reserve0",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 11.818707000000002,
+      "kick_ms_min": 11.697799,
+      "kick_ms_max": 11.939615,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "reserve0",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 90.620606,
+      "kick_ms_min": 90.413119,
+      "kick_ms_max": 90.828093,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "reserve0",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 90.595128,
+      "kick_ms_min": 90.321767,
+      "kick_ms_max": 90.868489,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "reserve0",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 21.093244000000002,
+      "kick_ms_min": 20.794757,
+      "kick_ms_max": 21.391731,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "reserve0",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 21.135268,
+      "kick_ms_min": 20.970748,
+      "kick_ms_max": 21.299788,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "reserve0",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 8.5160325,
+      "kick_ms_min": 8.280648999999999,
+      "kick_ms_max": 8.751415999999999,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "reserve0",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 8.7380755,
+      "kick_ms_min": 8.721720000000001,
+      "kick_ms_max": 8.754431,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "reserve0",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 31.890971499999996,
+      "kick_ms_min": 31.782857999999997,
+      "kick_ms_max": 31.999084999999997,
+      "pairs": 2
+    },
+    {
+      "binary": "arena",
+      "policy": "reserve0",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 31.7161875,
+      "kick_ms_min": 31.546001999999998,
+      "kick_ms_max": 31.886373000000003,
+      "pairs": 2
+    },
+    {
+      "binary": "baseline",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 18.8594835,
+      "kick_ms_min": 18.681154,
+      "kick_ms_max": 19.037813,
+      "pairs": 2
+    },
+    {
+      "binary": "baseline",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 18.7572,
+      "kick_ms_min": 18.669441,
+      "kick_ms_max": 18.844959000000003,
+      "pairs": 2
+    },
+    {
+      "binary": "baseline",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 9.454085000000001,
+      "kick_ms_min": 8.973353999999999,
+      "kick_ms_max": 9.934816000000001,
+      "pairs": 2
+    },
+    {
+      "binary": "baseline",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 9.539005,
+      "kick_ms_min": 9.364692000000002,
+      "kick_ms_max": 9.713318000000001,
+      "pairs": 2
+    },
+    {
+      "binary": "baseline",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 33.7129905,
+      "kick_ms_min": 33.529202,
+      "kick_ms_max": 33.896779,
+      "pairs": 2
+    },
+    {
+      "binary": "baseline",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 33.740382499999996,
+      "kick_ms_min": 33.721323999999996,
+      "kick_ms_max": 33.759441,
+      "pairs": 2
+    },
+    {
+      "binary": "baseline",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 19.100788,
+      "kick_ms_min": 19.092416,
+      "kick_ms_max": 19.10916,
+      "pairs": 2
+    },
+    {
+      "binary": "baseline",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 19.417675,
+      "kick_ms_min": 19.280099,
+      "kick_ms_max": 19.555251,
+      "pairs": 2
+    },
+    {
+      "binary": "baseline",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 8.818146500000001,
+      "kick_ms_min": 8.732801,
+      "kick_ms_max": 8.903492,
+      "pairs": 2
+    },
+    {
+      "binary": "baseline",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 9.0207235,
+      "kick_ms_min": 8.939249,
+      "kick_ms_max": 9.102198000000001,
+      "pairs": 2
+    },
+    {
+      "binary": "baseline",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 33.151773,
+      "kick_ms_min": 33.123277,
+      "kick_ms_max": 33.180268999999996,
+      "pairs": 2
+    },
+    {
+      "binary": "baseline",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 33.225341500000006,
+      "kick_ms_min": 32.957775000000005,
+      "kick_ms_max": 33.492908,
+      "pairs": 2
+    }
+  ],
+  "references": [],
+  "arena_lines": [
+    {
+      "binary": "arena",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 7392 bytes: control 504, expansion shared, forces shared tile 32, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes"
+    },
+    {
+      "binary": "arena",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 7904 bytes: control 504, expansion shared, forces shared tile 64, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes"
+    },
+    {
+      "binary": "arena",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 7392 bytes: control 504, expansion shared, forces shared tile 32, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes"
+    },
+    {
+      "binary": "arena",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 7904 bytes: control 504, expansion shared, forces shared tile 64, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes"
+    },
+    {
+      "binary": "arena",
+      "policy": "res6",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 16000, dynamic shared 7392 bytes: control 504, expansion shared, forces shared tile 32, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes"
+    },
+    {
+      "binary": "arena",
+      "policy": "res6",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 16000, dynamic shared 7904 bytes: control 504, expansion shared, forces shared tile 64, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes"
+    },
+    {
+      "binary": "arena",
+      "policy": "reserve0",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 7392 bytes: control 504, expansion shared, forces shared tile 32, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes"
+    },
+    {
+      "binary": "arena",
+      "policy": "reserve0",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 7904 bytes: control 504, expansion shared, forces shared tile 64, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes"
+    },
+    {
+      "binary": "baseline",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "line": "Occupancy is 6 shmem size = 15184 numregs = 255"
+    },
+    {
+      "binary": "baseline",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "line": "Occupancy is 6 shmem size = 15184 numregs = 255"
+    }
+  ],
+  "comparisons": [
+    {
+      "kind": "vs_baseline",
+      "binary": "arena",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "result": {
+        "adaptive": {
+          "acceleration": {
+            "relative_l2": 6.572876042377683e-08,
+            "max_pointwise_relative": 1.2125878726408246e-06,
+            "median_pointwise_relative": 3.720498585978441e-08
+          },
+          "potential": {
+            "relative_l2": 5.019084008814028e-08,
+            "max_pointwise_relative": 0.0008358408559010365,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "clustered": {
+          "acceleration": {
+            "relative_l2": 9.926463258166908e-08,
+            "max_pointwise_relative": 1.9297543677794697e-06,
+            "median_pointwise_relative": 8.47912820694029e-08
+          },
+          "potential": {
+            "relative_l2": 1.34809593678423e-07,
+            "max_pointwise_relative": 1.453973574294646e-06,
+            "median_pointwise_relative": 1.0031237284674062e-07
+          }
+        },
+        "lattice": {
+          "acceleration": {
+            "relative_l2": 4.752848965110367e-06,
+            "max_pointwise_relative": 0.00015407274305057558,
+            "median_pointwise_relative": 4.3201925720373985e-06
+          },
+          "potential": {
+            "relative_l2": 1.8897032442864325e-05,
+            "max_pointwise_relative": 7.879543273019011e-05,
+            "median_pointwise_relative": 1.168166300164453e-05
+          }
+        }
+      }
+    },
+    {
+      "kind": "vs_baseline",
+      "binary": "arena",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "result": {
+        "adaptive": {
+          "acceleration": {
+            "relative_l2": 5.0509598423447816e-08,
+            "max_pointwise_relative": 1.2205666672539023e-06,
+            "median_pointwise_relative": 8.51477575693859e-09
+          },
+          "potential": {
+            "relative_l2": 3.883267224558606e-08,
+            "max_pointwise_relative": 3.9357682619647354e-05,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "clustered": {
+          "acceleration": {
+            "relative_l2": 2.3264061188237705e-08,
+            "max_pointwise_relative": 3.578911643124574e-06,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 3.5958137902282535e-08,
+            "max_pointwise_relative": 6.177300890149058e-07,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "lattice": {
+          "acceleration": {
+            "relative_l2": 1.004143248610325e-06,
+            "max_pointwise_relative": 6.535899726806978e-05,
+            "median_pointwise_relative": 5.319132993817208e-07
+          },
+          "potential": {
+            "relative_l2": 3.5842468934207256e-06,
+            "max_pointwise_relative": 7.045313105456595e-05,
+            "median_pointwise_relative": 0.0
+          }
+        }
+      }
+    },
+    {
+      "kind": "vs_baseline",
+      "binary": "arena",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "result": {
+        "adaptive": {
+          "acceleration": {
+            "relative_l2": 2.256346224369142e-08,
+            "max_pointwise_relative": 5.889166981031234e-07,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 1.5014484022407502e-08,
+            "max_pointwise_relative": 3.471981112422749e-05,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "clustered": {
+          "acceleration": {
+            "relative_l2": 1.9401495166989526e-08,
+            "max_pointwise_relative": 5.891289092503158e-07,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 2.560937409589697e-08,
+            "max_pointwise_relative": 3.0567158339408555e-07,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "lattice": {
+          "acceleration": {
+            "relative_l2": 7.078152960197603e-07,
+            "max_pointwise_relative": 2.0828371863696616e-05,
+            "median_pointwise_relative": 3.9845435086535086e-07
+          },
+          "potential": {
+            "relative_l2": 2.239534653757835e-06,
+            "max_pointwise_relative": 1.3133614830477867e-05,
+            "median_pointwise_relative": 0.0
+          }
+        }
+      }
+    },
+    {
+      "kind": "vs_baseline",
+      "binary": "arena",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "result": {
+        "adaptive": {
+          "acceleration": {
+            "relative_l2": 4.589173810965043e-08,
+            "max_pointwise_relative": 1.2205666672539023e-06,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 3.593615573241599e-08,
+            "max_pointwise_relative": 3.471981112422749e-05,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "clustered": {
+          "acceleration": {
+            "relative_l2": 2.3264061188237705e-08,
+            "max_pointwise_relative": 3.578911643124574e-06,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 3.5958137902282535e-08,
+            "max_pointwise_relative": 6.177300890149058e-07,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "lattice": {
+          "acceleration": {
+            "relative_l2": 1.004143248610325e-06,
+            "max_pointwise_relative": 6.535899726806978e-05,
+            "median_pointwise_relative": 5.319132993817208e-07
+          },
+          "potential": {
+            "relative_l2": 3.5842468934207256e-06,
+            "max_pointwise_relative": 7.045313105456595e-05,
+            "median_pointwise_relative": 0.0
+          }
+        }
+      }
+    },
+    {
+      "kind": "vs_baseline",
+      "binary": "arena",
+      "policy": "res6",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "result": {
+        "adaptive": {
+          "acceleration": {
+            "relative_l2": 6.572876042377683e-08,
+            "max_pointwise_relative": 1.2125878726408246e-06,
+            "median_pointwise_relative": 3.720498585978441e-08
+          },
+          "potential": {
+            "relative_l2": 5.019084008814028e-08,
+            "max_pointwise_relative": 0.0008358408559010365,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "clustered": {
+          "acceleration": {
+            "relative_l2": 9.926463258166908e-08,
+            "max_pointwise_relative": 1.9297543677794697e-06,
+            "median_pointwise_relative": 8.47912820694029e-08
+          },
+          "potential": {
+            "relative_l2": 1.34809593678423e-07,
+            "max_pointwise_relative": 1.453973574294646e-06,
+            "median_pointwise_relative": 1.0031237284674062e-07
+          }
+        },
+        "lattice": {
+          "acceleration": {
+            "relative_l2": 4.752848965110367e-06,
+            "max_pointwise_relative": 0.00015407274305057558,
+            "median_pointwise_relative": 4.3201925720373985e-06
+          },
+          "potential": {
+            "relative_l2": 1.8897032442864325e-05,
+            "max_pointwise_relative": 7.879543273019011e-05,
+            "median_pointwise_relative": 1.168166300164453e-05
+          }
+        }
+      }
+    },
+    {
+      "kind": "vs_baseline",
+      "binary": "arena",
+      "policy": "res6",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "result": {
+        "adaptive": {
+          "acceleration": {
+            "relative_l2": 5.0509598423447816e-08,
+            "max_pointwise_relative": 1.2205666672539023e-06,
+            "median_pointwise_relative": 8.51477575693859e-09
+          },
+          "potential": {
+            "relative_l2": 3.883267224558606e-08,
+            "max_pointwise_relative": 3.9357682619647354e-05,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "clustered": {
+          "acceleration": {
+            "relative_l2": 2.3264061188237705e-08,
+            "max_pointwise_relative": 3.578911643124574e-06,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 3.5958137902282535e-08,
+            "max_pointwise_relative": 6.177300890149058e-07,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "lattice": {
+          "acceleration": {
+            "relative_l2": 1.004143248610325e-06,
+            "max_pointwise_relative": 6.535899726806978e-05,
+            "median_pointwise_relative": 5.319132993817208e-07
+          },
+          "potential": {
+            "relative_l2": 3.5842468934207256e-06,
+            "max_pointwise_relative": 7.045313105456595e-05,
+            "median_pointwise_relative": 0.0
+          }
+        }
+      }
+    },
+    {
+      "kind": "vs_baseline",
+      "binary": "arena",
+      "policy": "reserve0",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "result": {
+        "adaptive": {
+          "acceleration": {
+            "relative_l2": 6.572876042377683e-08,
+            "max_pointwise_relative": 1.2125878726408246e-06,
+            "median_pointwise_relative": 3.720498585978441e-08
+          },
+          "potential": {
+            "relative_l2": 5.019084008814028e-08,
+            "max_pointwise_relative": 0.0008358408559010365,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "clustered": {
+          "acceleration": {
+            "relative_l2": 9.926463258166908e-08,
+            "max_pointwise_relative": 1.9297543677794697e-06,
+            "median_pointwise_relative": 8.47912820694029e-08
+          },
+          "potential": {
+            "relative_l2": 1.34809593678423e-07,
+            "max_pointwise_relative": 1.453973574294646e-06,
+            "median_pointwise_relative": 1.0031237284674062e-07
+          }
+        },
+        "lattice": {
+          "acceleration": {
+            "relative_l2": 4.752848965110367e-06,
+            "max_pointwise_relative": 0.00015407274305057558,
+            "median_pointwise_relative": 4.3201925720373985e-06
+          },
+          "potential": {
+            "relative_l2": 1.8897032442864325e-05,
+            "max_pointwise_relative": 7.879543273019011e-05,
+            "median_pointwise_relative": 1.168166300164453e-05
+          }
+        }
+      }
+    },
+    {
+      "kind": "vs_baseline",
+      "binary": "arena",
+      "policy": "reserve0",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "result": {
+        "adaptive": {
+          "acceleration": {
+            "relative_l2": 5.0509598423447816e-08,
+            "max_pointwise_relative": 1.2205666672539023e-06,
+            "median_pointwise_relative": 8.51477575693859e-09
+          },
+          "potential": {
+            "relative_l2": 3.883267224558606e-08,
+            "max_pointwise_relative": 3.9357682619647354e-05,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "clustered": {
+          "acceleration": {
+            "relative_l2": 2.3264061188237705e-08,
+            "max_pointwise_relative": 3.578911643124574e-06,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 3.5958137902282535e-08,
+            "max_pointwise_relative": 6.177300890149058e-07,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "lattice": {
+          "acceleration": {
+            "relative_l2": 1.004143248610325e-06,
+            "max_pointwise_relative": 6.535899726806978e-05,
+            "median_pointwise_relative": 5.319132993817208e-07
+          },
+          "potential": {
+            "relative_l2": 3.5842468934207256e-06,
+            "max_pointwise_relative": 7.045313105456595e-05,
+            "median_pointwise_relative": 0.0
+          }
+        }
+      }
+    }
+  ],
+  "repeat_export_hashes": [
+    {
+      "binary": "arena",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "distinct_exports": 1
+    },
+    {
+      "binary": "arena",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "distinct_exports": 1
+    },
+    {
+      "binary": "arena",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "distinct_exports": 1
+    },
+    {
+      "binary": "arena",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "distinct_exports": 1
+    },
+    {
+      "binary": "arena",
+      "policy": "res6",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "distinct_exports": 1
+    },
+    {
+      "binary": "arena",
+      "policy": "res6",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "distinct_exports": 1
+    },
+    {
+      "binary": "arena",
+      "policy": "reserve0",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "distinct_exports": 1
+    },
+    {
+      "binary": "arena",
+      "policy": "reserve0",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "distinct_exports": 1
+    },
+    {
+      "binary": "baseline",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 32,
+      "order": 7,
+      "distinct_exports": 1
+    },
+    {
+      "binary": "baseline",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "distinct_exports": 1
+    }
+  ]
+}
