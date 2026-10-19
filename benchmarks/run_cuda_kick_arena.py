@@ -3,7 +3,9 @@
 
 Each process runs --run.test=stfBenchmark once for one binary, policy, backend,
 bucket and FMM order (--gravity.fmmOrder), cycling through the selected fixtures
-with potential off and on.
+with potential off and on. --threads sets the HPX worker threads of every
+process (pinned with taskset to --cpus, by default CPUs 1 through the thread
+count) and --particles-per-dimension the fixture side (32: 32,768 particles).
 Processes alternate between binaries and policies within each pair so slow
 drifts affect every variant alike. Whole-kick times come from the harness; the
 CUDA kick arena line and force exports are collected for every run, and the
@@ -146,12 +148,19 @@ def main():
     parser.add_argument('--reference', type=int, default=0,
                         help='particles compared with the direct Ewald sum (0 disables)')
     parser.add_argument('--theta', default='0.8')
-    parser.add_argument('--cpus', default='1,2', help='taskset CPU list for the HPX workers')
+    parser.add_argument('--cpus', default=None,
+                        help='taskset CPU list for the HPX workers (default: 1-THREADS)')
     parser.add_argument('--threads', type=int, default=2, help='HPX worker threads per process')
+    parser.add_argument('--particles-per-dimension', type=int, default=32,
+                        help='fixture side passed as --initial.particlesPerDimension')
     parser.add_argument('--extra-option', action='append', default=[],
                         help='additional application option passed to every run')
     parser.add_argument('--timeout', type=int, default=1800)
     args = parser.parse_args()
+    if args.threads < 1:
+        sys.exit('--threads must be positive')
+    if args.cpus is None:
+        args.cpus = f'1-{args.threads}'
     fixtures = args.fixtures.split(',')
     buckets = [int(value) for value in args.buckets.split(',')]
     orders = [int(value) for value in args.orders.split(',')]
@@ -171,6 +180,7 @@ def main():
         'backends': backends,
         'samples': args.samples, 'pairs': args.pairs, 'reference': args.reference,
         'threads': args.threads, 'cpus': args.cpus,
+        'particles_per_dimension': args.particles_per_dimension,
         'git_head': subprocess.run(['git', 'rev-parse', 'HEAD'], capture_output=True, text=True,
                                    cwd=Path(__file__).resolve().parent).stdout.strip(),
         'nvidia_smi': subprocess.run(['nvidia-smi', '--query-gpu=name,driver_version,clocks.sm,'
@@ -183,7 +193,8 @@ def main():
     for binary in args.binary:
         for policy in (policies if binary['arena'] else [{'label': 'auto', 'options': []}]):
             variants.append((binary, policy))
-    common = ['--run.test=stfBenchmark', '--initial.particlesPerDimension=32',
+    common = ['--run.test=stfBenchmark',
+              f'--initial.particlesPerDimension={args.particles_per_dimension}',
               '--hydro.enabled=false', f'--gravity.openingAngle={args.theta}',
               '--gravity.effectiveRadius=0.01876988456953534', '--gravity.kernelFamily=ferrers',
               '--gravity.kernelDegree=4', f'--hpx:threads={args.threads}', '--hpx:bind=none',

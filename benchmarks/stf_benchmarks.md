@@ -132,9 +132,12 @@ The test entry point is:
 ```
 
 Run each build/backend in its own empty working directory. The harness requires
-one locality and two HPX workers. It creates 32^3 particles directly, without
-power-spectrum initial conditions, for a jittered lattice and eight dense
-clusters. It resets positions, velocities, forces, potentials, and rungs before
+one locality and runs on the configured number of HPX worker threads
+(`--hpx:threads`, recorded as `threads=` in `STF_WALK_CONFIG`). It creates
+`initial.particlesPerDimension` cubed particles directly (32^3 above; the
+adaptive fixture's dense-cube selection is exact for power-of-two counts),
+without power-spectrum initial conditions, for a jittered lattice and eight
+dense clusters. It resets positions, velocities, forces, potentials, and rungs before
 each iteration and provides the complete root direct and Ewald checklists.
 Each case has one warmup and five measured samples; override the latter with
 `COSMICTIGER_STF_WALK_SAMPLES`.

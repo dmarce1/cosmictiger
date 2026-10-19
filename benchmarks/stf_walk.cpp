@@ -45,9 +45,6 @@ namespace detail {
 
 using std::size_t;
 
-constexpr int kStfWalkSide = 32;
-constexpr size_t kStfWalkParticles = size_t(kStfWalkSide) * kStfWalkSide * kStfWalkSide;
-
 bool stfWalkIsFinite(float value) {
     static_assert(sizeof(float) == sizeof(uint32_t) && std::numeric_limits<float>::is_iec559);
     uint32_t bits;
@@ -87,9 +84,21 @@ int stfWalkBucketSize() {
 }
 
 // Particles compared with the direct Ewald reference after the last
-// potential-enabled sample; zero disables the comparison.
+// potential-enabled sample; zero disables the comparison, and counts above the
+// particle number compare every particle.
 int stfWalkReferenceSamples() {
-    return int(stfWalkEnvironmentInteger("COSMICTIGER_STF_WALK_REFERENCE", 0, 0, 32768));
+    return int(stfWalkEnvironmentInteger("COSMICTIGER_STF_WALK_REFERENCE", 0, 0, 1 << 24));
+}
+
+// Particles per dimension of the fixtures: initial.particlesPerDimension (32 in
+// the original fixed workload, 32,768 particles).
+int stfWalkSide() {
+    int const side = getOptions().initial.particlesPerDimension;
+    if (side < 2) {
+        throw std::invalid_argument(
+            "STF walk benchmark requires initial.particlesPerDimension of at least 2");
+    }
+    return side;
 }
 
 bool stfWalkFixtureSelected(char const* fixture) {
@@ -113,29 +122,32 @@ double stfWalkJitter(size_t particle, int dimension) {
     return (double(value & 0xffffu) / 65535. - 0.5) * 0.2;
 }
 
-std::vector<Array<Fixed32, NDIM>> stfWalkPositions(std::string const& fixture) {
+std::vector<Array<Fixed32, NDIM>> stfWalkPositions(std::string const& fixture, int side) {
     bool const clustered = fixture == "clustered";
     bool const adaptive = fixture == "adaptive";
     std::array<double, NDIM> const clusterCenter{0.41, 0.47, 0.53};
-    std::vector<Array<Fixed32, NDIM>> positions(kStfWalkParticles);
-    for (int z = 0; z < kStfWalkSide; ++z) {
-        for (int y = 0; y < kStfWalkSide; ++y) {
-            for (int x = 0; x < kStfWalkSide; ++x) {
-                size_t const index = (size_t(z) * kStfWalkSide + y) * kStfWalkSide + x;
+    size_t const count = size_t(side) * side * side;
+    double const halfSide = 0.5 * side;
+    std::vector<Array<Fixed32, NDIM>> positions(count);
+    for (int z = 0; z < side; ++z) {
+        for (int y = 0; y < side; ++y) {
+            for (int x = 0; x < side; ++x) {
+                size_t const index = (size_t(z) * side + y) * side + x;
                 std::array<int, NDIM> const cell{x, y, z};
                 for (int dim = 0; dim < NDIM; ++dim) {
                     double const coordinate = cell[dim] + 0.5 + stfWalkJitter(index, dim);
                     if (clustered) {
-                        int const half = cell[dim] / (kStfWalkSide / 2);
-                        double const local =
-                            (coordinate - half * (kStfWalkSide / 2)) / (kStfWalkSide / 2) - 0.5;
+                        int const half = 2 * cell[dim] / side;
+                        double const local = (coordinate - half * halfSide) / halfSide - 0.5;
                         positions[index][dim] = 0.25 + 0.5 * half + 0.24 * local;
                     } else {
-                        double const basePosition = coordinate / kStfWalkSide;
-                        // Odd multiplication permutes all 32768 indices: exactly three
-                        // quarters enter the dense cube without choosing a spatial slab.
+                        double const basePosition = coordinate / side;
+                        // Odd multiplication permutes all indices of a power-of-two
+                        // count (it is the original mask for 32,768): exactly three
+                        // quarters enter the dense cube without choosing a spatial
+                        // slab; other counts place about three quarters there.
                         bool const denseParticle =
-                            ((uint32_t(index) * 2654435761u) & 32767u) < 24576u;
+                            (uint32_t(index) * 2654435761u) % uint32_t(count) < 3 * count / 4;
                         positions[index][dim] = adaptive && denseParticle ?
                             clusterCenter[dim] + 0.18 * (basePosition - 0.5) :
                             basePosition;
@@ -264,7 +276,7 @@ void stfWalkLeafHistogram(TreeId root, char const* fixture) {
             }
         }
     }
-    if (occupiedParticles != kStfWalkParticles) {
+    if (occupiedParticles != size_t(particlesSize())) {
         throw std::runtime_error("STF walk leaf histogram lost particles");
     }
     for (auto const& entry : histogram) {
@@ -326,7 +338,7 @@ void stfWalkReferenceErrors(char const* fixture, char const* backend, int count)
 }
 
 void stfWalkFixture(char const* fixture, bool doPhi, int samples, std::ofstream& forceOutput) {
-    auto const positions = stfWalkPositions(fixture);
+    auto const positions = stfWalkPositions(fixture, stfWalkSide());
     char const* backend = getOptions().compute.cuda ? "cuda" : "cpu";
     std::vector<double> setupTimes, treeTimes, kickTimes, totalTimes;
     uint64_t expectedPositionHash = 0;
@@ -413,9 +425,10 @@ void stfWalkFixture(char const* fixture, bool doPhi, int samples, std::ofstream&
 }    // namespace detail
 
 void stfWalkBenchmark() {
-    if (hpxSize() != 1 || hpx::get_num_worker_threads() != 2) {
-        throw std::invalid_argument(
-            "STF complete-walk benchmark requires one HPX locality with two worker threads");
+    // Any worker-thread count (--hpx:threads) is accepted and recorded in
+    // STF_WALK_CONFIG; the CPU side of the walk scales with it.
+    if (hpxSize() != 1) {
+        throw std::invalid_argument("STF complete-walk benchmark requires one HPX locality");
     }
     // The benchmark needs pool quiescence between reconstructed trees. Stop the
     // background memory observer so that it cannot keep the pool non-idle.
@@ -429,7 +442,8 @@ void stfWalkBenchmark() {
     options.analysis.groups = false;
     options.analysis.tracers = false;
     options.compute.bucketSize = detail::stfWalkBucketSize();
-    options.initial.numberOfParticles = detail::kStfWalkParticles;
+    int const side = detail::stfWalkSide();
+    options.initial.numberOfParticles = size_t(side) * side * side;
     setOptions(options);
     try {
         int const samples = detail::stfWalkSamples();
