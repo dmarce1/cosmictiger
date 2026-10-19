@@ -11,6 +11,7 @@
 
 #include <cosmictiger/simd_math.hpp>
 #include <cosmictiger/sph_kernel.hpp>
+#include <cosmictiger/vector3.hpp>
 
 // Each invocation owns one target leaf. Sources remain immutable for the entire
 // phase, including when another leaf updates the corresponding local sink.
@@ -68,11 +69,18 @@ inline SimdFloat::mask_type sphCpuValidLanes(std::vector<int> const& neighbors, 
     }) > SimdFloat(0.0f);
 }
 
-inline Array<SimdFloat, NDIM> sphCpuSeparations(
+inline Vector3<SimdFloat> sphCpuLoad3(float const* x, float const* y, float const* z,
+    std::vector<int> const& neighbors, size_t first, float padding) {
+    return Vector3<SimdFloat>(sphCpuLoad(x, neighbors, first, padding),
+        sphCpuLoad(y, neighbors, first, padding), sphCpuLoad(z, neighbors, first, padding));
+}
+
+// Sink minus source positions, r_a - r_b, for one pack of neighbors.
+inline Vector3<SimdFloat> sphCpuSeparations(
     SphRunData const& data, int particleIndex, std::vector<int> const& neighbors, size_t first) {
     Fixed32 const* positions[NDIM] = {
         data.sourcePositionX, data.sourcePositionY, data.sourcePositionZ};
-    Array<SimdFloat, NDIM> separation;
+    Vector3<SimdFloat> separation;
     for (int dim = 0; dim < NDIM; dim++) {
         int const sinkPosition = static_cast<int32_t>(positions[dim][particleIndex].raw());
         SimdInt const sourcePosition([&](auto lane) {

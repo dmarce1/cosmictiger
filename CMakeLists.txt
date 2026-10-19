@@ -257,6 +257,7 @@ set(cosmictiger_header_files
     cosmictiger/radial_kernel.hpp
     cosmictiger/radial_density_kernel.hpp
     cosmictiger/monaghan_sph.hpp
+    cosmictiger/vector3.hpp
     cosmictiger/exact_sod.hpp
     cosmictiger/sph.hpp
     cosmictiger/sph_cuda.hpp

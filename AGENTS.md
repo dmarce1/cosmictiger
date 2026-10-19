@@ -27,3 +27,17 @@ Follow `.clang-format` for changed project source. Keep trailing `const` and
 group includes as standard headers, dependencies, then project headers, with
 blank lines between groups. Do not apply project naming changes to bundled
 `healpix/` or `recfast/`.
+
+# Paper-notation exception
+
+The SPH computation code that transcribes Monaghan (1992), ARA&A 30, 543 names its
+local variables with the paper's symbols instead of camelCase: `cosmictiger/monaghan_sph.hpp`
+and the pair, density, and support-radius loops in `src/sph_hydro_cpu.cpp`,
+`src/sph_hydro.cu`, `src/sph_prehydro_cpu.cpp`, `src/sph_prehydro.cu`, and
+`cosmictiger/sph_cuda.hpp`. Those regions use the Unicode letters the compilers accept
+(`ρ_a`, `P_b`, `Π_ab`, `μ_ab`, `h_ab`, `gradW̃_ab`, `δt_cv`, `ΣW`) and cite the equation
+they implement; function parameters, data fields, and everything outside them keep the
+descriptive names above. Fence such regions with
+`NOLINTBEGIN/NOLINTEND(readability-identifier-naming)`. GCC 13 and CUDA 12.8 reject `∇`,
+`∂`, and superscript digits in identifiers; write `gradW̃_ab`, `r_ab2`, and `η2` instead.
+See `docs/monaghan_sph.md` for the symbol table.

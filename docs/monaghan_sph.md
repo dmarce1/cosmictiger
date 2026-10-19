@@ -2,14 +2,53 @@
 
 This implementation follows the nonrelativistic SPH equations in J. J. Monaghan,
 *Smoothed Particle Hydrodynamics*, **Annual Review of Astronomy and Astrophysics**
-30 (1992), 543–574. Equation and printed-page references below were checked against
-the supplied scan, ADS identifier `1992ARA&A..30..543M`.
+30 (1992), 543–574,
+[doi:10.1146/annurev.aa.30.090192.002551](https://doi.org/10.1146/annurev.aa.30.090192.002551),
+ADS bibcode `1992ARA&A..30..543M`
+([open-access scan](https://articles.adsabs.harvard.edu/pdf/1992ARA%26A..30..543M)).
+Equation and printed-page references below were checked against that scan.
 
 The active fluid model uses density and specific internal energy with an ideal-gas
 equation of state. Stellar particles, star formation, chemistry, thermal conduction,
 and species diffusion have been removed, along with their particle storage and
 solver branches. Their former options are no longer accepted. Ordinary particle
 advection is used; the optional XSPH variant in equation 3.19 is not enabled.
+
+## Notation in the code
+
+The computation code transcribes the paper. `cosmictiger/monaghan_sph.hpp` holds the
+per-pair formulae, and the pair, density, and support-radius loops in
+`src/sph_hydro_cpu.cpp`, `src/sph_hydro.cu`, `src/sph_prehydro_cpu.cpp`,
+`src/sph_prehydro.cu`, and `cosmictiger/sph_cuda.hpp` apply them to the staged particle
+arrays. Inside those regions the local variables carry the paper's symbols and each
+block names the equation it implements; function parameters and data fields keep their
+descriptive names, and the regions are fenced with
+`NOLINTBEGIN/NOLINTEND(readability-identifier-naming)`. Relative positions and
+velocities use the `Vector3` class of `cosmictiger/vector3.hpp`, which supplies
+`dot`, `norm`, and the arithmetic operators for scalar, SIMD-pack, and device element
+types.
+
+| Paper | Code | Meaning |
+| --- | --- | --- |
+| \(a\), \(b\) | `_a`, `_b`, `_ab` suffixes | the sink and a neighbor |
+| \(m_b\) | `m_b`, `m_b_over_a` | the common gas mass, and divided by the scale factor |
+| \(\rho_a, P_a, u_a, c_a, \gamma_a\) | `ρ_a`, `P_a`, `u_a`, `c_a`, `γ_a` | density, pressure, specific energy, sound speed, adiabatic index |
+| \(h_a\) | `H_a` | stored support radius, \(2h_a\) for the cubic spline |
+| \(h\) in equation 4.2 | `h_ab` | pair viscosity length \(\tfrac12(h_a+h_b)\) |
+| \(\mathbf r_{ab}, \mathbf v_{ab}\) | `r_ab`, `v_ab` | \(\mathbf r_a-\mathbf r_b\), \(\mathbf v_a-\mathbf v_b\) |
+| \(r_{ab}^2\), \(\eta^2\) | `r_ab2`, `η2` | squares; superscript digits are not identifier characters |
+| \(\nabla_a\widetilde W_{ab}\) | `gradW̃_ab`, `F_ab` | symmetric kernel gradient, equal to `F_ab * r_ab` |
+| \(\Pi_{ab}, \mu_{ab}\) | `Π_ab`, `μ_ab` | artificial viscosity and its velocity measure |
+| \(\alpha, \beta, \eta^2/h^2\) | `α`, `β`, `ε` | viscosity constants |
+| \(\bar c_{ab}, \bar\rho_{ab}\) | `c̄_ab`, `ρ̄_ab` | pair averages |
+| \(P_b/\rho_b^2+P_a/\rho_a^2\) | `P_over_ρ2_ab` | symmetric pressure term |
+| \(\max_b\mu_{ab}\) | `μ_max` | compression magnitude \(\max_b(-\mu_{ab})\) |
+| \(\delta t_{\rm cv}, \delta t_{\rm f}\) | `one_over_δt_cv`, `one_over_δt_f` | reciprocals of the section 10.3 limits |
+| \(\sum_b W_{ab}\) | `ΣW`, `dΣW_dH_a` | support-radius constraint sum and its derivative |
+
+Quantities summed over SIMD lanes carry a `_pack` suffix until they are reduced.
+GCC 13 and CUDA 12.8 accept Greek letters, combining marks, and subscript letters in
+identifiers but reject `∇`, `∂`, and superscript digits, hence `gradW̃_ab` and `r_ab2`.
 
 ## Kernel and density
 
@@ -119,7 +158,8 @@ Equations 6.4–6.5 give the physical-coordinate pair rates
  P_i=(\gamma-1)\rho_i u_i,\qquad c_i^2=\gamma(\gamma-1)u_i.
 \]
 
-The artificial viscosity follows equations 4.1–4.2, pp.550–551:
+The artificial viscosity follows equation 4.1, the unnumbered definition of
+\(\Pi_{ij}\) that follows it, and equation 4.2, pp.550–551:
 
 \[
  \mu_{ij}=\frac{\bar\ell_{ij}\,\mathbf v_{ij}\cdot\mathbf r_{ij}}
