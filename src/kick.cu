@@ -222,7 +222,7 @@ __device__ void doKick(KickReturn& result, KickParameters params, CudaKickData c
         vels[sinkIndex][ZDIM] = vz;
         phiTot += 0.5f * mass * force[i].phi;
         dkinTot += kin1 - kin0;
-        flops += detail::stf::L2pKernel<6, true>::kFlops_ + 3;
+        flops += detail::stf::L2pKernel<kFmmLocalDegree, true>::kFlops_ + 3;
     }
     sharedReduceAdd(phiTot);
     sharedReduceAdd(xmomTot);
@@ -337,8 +337,8 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                         lValue3.back().expansion = thisL;
                         lValue3.back().pos = self.pos;
                         flops += globalParams.doPhi ?
-                            detail::stf::L2lWarpKernel<6, true>::kFlops_ :
-                            detail::stf::L2lWarpKernel<6, true>::kFlopsNoPotential_;
+                            detail::stf::L2lWarpKernel<kFmmLocalDegree, true>::kFlops_ :
+                            detail::stf::L2lWarpKernel<kFmmLocalDegree, true>::kFlopsNoPotential_;
                         flops += 3 * WARP_SIZE;
                     }
                 }

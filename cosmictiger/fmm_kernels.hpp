@@ -8,12 +8,19 @@
 
 #include <cosmictiger/containers.hpp>
 #include <cosmictiger/ewald_kernels.hpp>
+#include <cosmictiger/fmm_order.hpp>
 #include <cosmictiger/fmm_scale.hpp>
+#include <cosmictiger/gravity/stf/generated/generated_config.hpp>
 #include <cosmictiger/gravity/stf/generated/generated_m2l.hpp>
 #include <cosmictiger/gravity/stf/generated/generated_operators.hpp>
 #include <cosmictiger/simd_math.hpp>
 
-static_assert(LORDER == 7, "Regenerate STF kernels before changing the expansion order");
+// The generated STF operators are emitted for one (source degree, local degree)
+// pair. The build directory shadows the checked-in defaults when
+// COSMICTIGER_WITH_ORDER selects another order; see fmm_order.hpp.
+static_assert(cosmictiger::gravity::stf::kMinOrder == kFmmMultipoleDegree &&
+        cosmictiger::gravity::stf::kMaxOrder == kFmmLocalDegree,
+    "Generated STF kernels do not match ORDER; regenerate with tools/generate_stf_m2l.py");
 
 // Compact rank-major STF storage. Only local expansions carry a Laplacian;
 // source moments contain exactly (degree + 1)^2 coefficients, including dipoles.
@@ -50,13 +57,15 @@ public:
 };
 
 template <class Real>
-using Multipole = StfTensor<Real, 5>;
+using Multipole = StfTensor<Real, kFmmMultipoleDegree>;
 template <class Real>
-using Expansion = StfTensor<Real, 6, true>;
+using Expansion = StfTensor<Real, kFmmLocalDegree, true>;
 template <class Real>
 using Expansion2 = StfTensor<Real, 1>;
-#define MULTIPOLE_SIZE 36
-#define EXPANSION_SIZE 50
+#define MULTIPOLE_SIZE kFmmMultipoleCoefficients
+#define EXPANSION_SIZE kFmmLocalCoefficients
+static_assert(sizeof(Multipole<float>) == 4 * kFmmMultipoleCoefficients, "Multipole storage");
+static_assert(sizeof(Expansion<float>) == kFmmLocalExpansionBytes, "Local expansion storage");
 
 namespace detail {
 namespace stf = cosmictiger::gravity::stf::detail;
@@ -74,7 +83,7 @@ CUDA_EXPORT Real fmmInverseRadius(Array<Real, NDIM> const& position) {
 template <class Real>
 CUDA_EXPORT Multipole<Real> p2M(Array<Real, NDIM> const& position) {
     Multipole<Real> result{};
-    detail::stf::P2mKernel<5>::add(result, simdBroadcast<Real>(1),
+    detail::stf::P2mKernel<kFmmMultipoleDegree>::add(result, simdBroadcast<Real>(1),
         position[0] * simdBroadcast<Real>(SCALE_FACTOR),
         position[1] * simdBroadcast<Real>(SCALE_FACTOR),
         position[2] * simdBroadcast<Real>(SCALE_FACTOR));
@@ -84,7 +93,8 @@ CUDA_EXPORT Multipole<Real> p2M(Array<Real, NDIM> const& position) {
 template <class Real>
 CUDA_EXPORT Multipole<Real> m2M(Multipole<Real> const& source, Array<Real, NDIM> position) {
     Multipole<Real> result{};
-    detail::stf::M2mKernel<5>::add(result, source, position[0] * simdBroadcast<Real>(SCALE_FACTOR),
+    detail::stf::M2mKernel<kFmmMultipoleDegree>::add(result, source,
+        position[0] * simdBroadcast<Real>(SCALE_FACTOR),
         position[1] * simdBroadcast<Real>(SCALE_FACTOR),
         position[2] * simdBroadcast<Real>(SCALE_FACTOR), simdBroadcast<Real>(1));
     return result;
@@ -100,9 +110,10 @@ CUDA_EXPORT int greensFunction(
     }
     Real const inverseRadius = detail::fmmInverseRadius(position);
     local = simdBroadcast<Real>(0);
-    detail::stf::P2lKernel<6>::add(local, simdBroadcast<Real>(1), position[0] * inverseRadius,
-        position[1] * inverseRadius, position[2] * inverseRadius, inverseRadius, inverseRadius);
-    return detail::stf::P2lKernel<6>::kFlops_ + 14;
+    detail::stf::P2lKernel<kFmmLocalDegree>::add(local, simdBroadcast<Real>(1),
+        position[0] * inverseRadius, position[1] * inverseRadius, position[2] * inverseRadius,
+        inverseRadius, inverseRadius);
+    return detail::stf::P2lKernel<kFmmLocalDegree>::kFlops_ + 14;
 }
 
 // Direct M2L uses the imported partial-contraction kernel, avoiding the
@@ -115,13 +126,14 @@ CUDA_EXPORT int m2LDirect(
     }
     Real const inverseRadius = detail::fmmInverseRadius(position);
     Real const oldPotential = local[0];
-    detail::stf::M2lKernel<6, centered>::template add<Real, Expansion<Real>, Multipole<Real>, 5>(
-        local, source, position[0] * inverseRadius, position[1] * inverseRadius,
-        position[2] * inverseRadius, inverseRadius, inverseRadius, inverseRadius);
+    detail::stf::M2lKernel<kFmmLocalDegree, centered>::template add<Real, Expansion<Real>,
+        Multipole<Real>, kFmmMultipoleDegree>(local, source, position[0] * inverseRadius,
+        position[1] * inverseRadius, position[2] * inverseRadius, inverseRadius, inverseRadius,
+        inverseRadius);
     if (!doPhi) {
         local[0] = oldPotential;
     }
-    return detail::stf::M2lKernel<6, centered>::kFlops_ + 14;
+    return detail::stf::M2lKernel<kFmmLocalDegree, centered>::kFlops_ + 14;
 }
 
 template <class Real, bool centered = false>
@@ -132,15 +144,16 @@ CUDA_EXPORT int m2P(Expansion2<Real>& local, Multipole<Real> const& source,
     }
     Real const inverseRadius = detail::fmmInverseRadius(position);
     Array<Real, NDIM + 1> field{};
-    detail::stf::M2pKernel<5, centered>::add(field, source, position[0] * inverseRadius,
-        position[1] * inverseRadius, position[2] * inverseRadius, inverseRadius, inverseRadius);
+    detail::stf::M2pKernel<kFmmMultipoleDegree, centered>::add(field, source,
+        position[0] * inverseRadius, position[1] * inverseRadius, position[2] * inverseRadius,
+        inverseRadius, inverseRadius);
     if (doPhi) {
         local[0] += field[0];
     }
     local(1, 0, 0) -= field[1];
     local(0, 1, 0) -= field[2];
     local(0, 0, 1) -= field[3];
-    return detail::stf::M2pKernel<5, centered>::kFlops_ + 18;
+    return detail::stf::M2pKernel<kFmmMultipoleDegree, centered>::kFlops_ + 18;
 }
 
 // Ewald is evaluated on the nearest-image branch. Harmonicize it using the
@@ -148,9 +161,9 @@ CUDA_EXPORT int m2P(Expansion2<Real>& local, Multipole<Real> const& source,
 template <class Real>
 CUDA_EXPORT int ewaldGreensFunction(Expansion<Real>& local,
     Array<Real, NDIM> const& wrappedPosition, Array<Real, NDIM> const& unwrappedPosition) {
-    SymmetricTracelessTensor<Real, 7> derivatives;
+    SymmetricTracelessTensor<Real, kFmmEwaldTensorOrder> derivatives;
     int const flops = detail::ewaldCorrectionDerivatives(derivatives, wrappedPosition);
-    for (int rank = 0; rank <= 6; rank++) {
+    for (int rank = 0; rank <= kFmmLocalDegree; rank++) {
         for (int nz = 0; nz <= 1 && nz <= rank; nz++) {
             for (int nx = 0; nx <= rank - nz; nx++) {
                 int const ny = rank - nx - nz;
@@ -171,7 +184,7 @@ CUDA_EXPORT int ewaldGreensFunction(Expansion<Real>& local,
     local[0] += simdBroadcast<Real>(0.5 * SCALE_FACTOR_INV1) * coefficient * radiusSquared;
     local(2, 0, 0) += coefficient * simdBroadcast<Real>(SCALE_FACTOR_INV3);
     local(0, 2, 0) += coefficient * simdBroadcast<Real>(SCALE_FACTOR_INV3);
-    local[49] = simdBroadcast<Real>(0);
+    local[kFmmLocalTraceIndex] = simdBroadcast<Real>(0);
     return flops + 25;
 }
 
@@ -184,18 +197,19 @@ template <class Real, bool centered = false>
 CUDA_EXPORT int m2L(Expansion<Real>& local, Multipole<Real> const& source,
     Expansion<Real> const& derivatives, bool doPhi) {
     Real const oldPotential = local[0];
-    detail::stf::EwaldM2lKernel<6, centered>::template add<Real>(local, source, derivatives);
+    detail::stf::EwaldM2lKernel<kFmmLocalDegree, centered>::template add<Real>(
+        local, source, derivatives);
     if (!doPhi) {
         local[0] = oldPotential;
     }
-    return detail::stf::EwaldM2lKernel<6, centered>::kFlops_;
+    return detail::stf::EwaldM2lKernel<kFmmLocalDegree, centered>::kFlops_;
 }
 
 template <class Real>
 CUDA_EXPORT Expansion<Real> l2L(
     Expansion<Real> const& source, Array<Real, NDIM> position, bool doPhi) {
     Expansion<Real> result{};
-    detail::stf::L2lKernel<6, true>::add(result, source,
+    detail::stf::L2lKernel<kFmmLocalDegree, true>::add(result, source,
         position[0] * simdBroadcast<Real>(SCALE_FACTOR),
         position[1] * simdBroadcast<Real>(SCALE_FACTOR),
         position[2] * simdBroadcast<Real>(SCALE_FACTOR), simdBroadcast<Real>(1));
@@ -209,7 +223,7 @@ template <class Real>
 CUDA_EXPORT Expansion2<Real> l2P(
     Expansion<Real> const& source, Array<Real, NDIM> position, bool doPhi) {
     Array<Real, NDIM + 1> field{};
-    detail::stf::L2pKernel<6, true>::add(field, source,
+    detail::stf::L2pKernel<kFmmLocalDegree, true>::add(field, source,
         position[0] * simdBroadcast<Real>(SCALE_FACTOR),
         position[1] * simdBroadcast<Real>(SCALE_FACTOR),
         position[2] * simdBroadcast<Real>(SCALE_FACTOR), simdBroadcast<Real>(1));
@@ -230,7 +244,7 @@ inline void initializeBackgroundExpansion(
     local(0, 1, 0) = coefficient * rootMultipole(0, 1, 0) * SCALE_FACTOR_INV3;
     local(0, 0, 1) = coefficient * rootMultipole(0, 0, 1) * SCALE_FACTOR_INV3;
     local(2, 0, 0) = local(0, 2, 0) = -coefficient * rootMultipole[0] * SCALE_FACTOR_INV3;
-    local[49] = -4.0 * M_PI * rootMultipole[0] * SCALE_FACTOR_INV3;
+    local[kFmmLocalTraceIndex] = -4.0 * M_PI * rootMultipole[0] * SCALE_FACTOR_INV3;
 }
 
 #ifdef __CUDACC__
@@ -238,7 +252,7 @@ template <class Real>
 __device__ Expansion<Real> l2LCuda(
     Expansion<Real> const& source, Array<Real, NDIM> position, bool doPhi) {
     Expansion<Real> result{};
-    detail::stf::L2lWarpKernel<6, true>::translate(result, source,
+    detail::stf::L2lWarpKernel<kFmmLocalDegree, true>::translate(result, source,
         position[0] * simdBroadcast<Real>(SCALE_FACTOR),
         position[1] * simdBroadcast<Real>(SCALE_FACTOR),
         position[2] * simdBroadcast<Real>(SCALE_FACTOR), doPhi);

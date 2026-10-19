@@ -538,7 +538,7 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
         for (int i = 0; i < MULTIPOLE_SIZE; i++) {
             multi[i] = simdM[i][LEFT] + simdM[i][RIGHT];
         }
-        flops += 2 * detail::stf::M2mKernel<5>::kFlops_ + 6 + MULTIPOLE_SIZE * 2;
+        flops += 2 * detail::stf::M2mKernel<kFmmMultipoleDegree>::kFlops_ + 6 + MULTIPOLE_SIZE * 2;
         children[LEFT] = rcl.id;
         children[RIGHT] = rcr.id;
     } else {
@@ -616,7 +616,7 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
                 m[j] *= mask;                  // MULTIPOLE_SIZE
                 mValue[j] += simdSum(m[j]);    // MULTIPOLE_SIZE * 6
             }
-            flops += detail::stf::P2mKernel<5>::kFlops_ + 6 + MULTIPOLE_SIZE * 7;
+            flops += detail::stf::P2mKernel<kFmmMultipoleDegree>::kFlops_ + 6 + MULTIPOLE_SIZE * 7;
         }
         for (int i = 0; i < MULTIPOLE_SIZE; i++) {
             multi[i] = mValue[i];

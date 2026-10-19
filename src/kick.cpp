@@ -296,7 +296,7 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
         ldx[dim] = selfPtr->pos[dim].toDouble() - pos[dim].toDouble();
     }
     l = l2L(l, ldx, params.doPhi);
-    flops += detail::stf::L2lKernel<6, true>::kFlops_ + 3;
+    flops += detail::stf::L2lKernel<kFmmLocalDegree, true>::kFlops_ + 3;
     float const inverseSupportRadius = 1.0f / params.gravitySupportRadius;
     ForceVectors forces;
     ParticleInteger const numberOfSelfParticles = selfPtr->numberOfParticles();
@@ -599,7 +599,7 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
                     kr.pot += 0.5f * mass * forces.phi[j];
                     kr.dkin += 0.5f * mass * sqr(vx, vy, vz) - kin0;
                 }
-                flops += detail::stf::L2pKernel<6, true>::kFlops_ + 16;
+                flops += detail::stf::L2pKernel<kFmmLocalDegree, true>::kFlops_ + 16;
             }
         }
         KickReturn completed;
