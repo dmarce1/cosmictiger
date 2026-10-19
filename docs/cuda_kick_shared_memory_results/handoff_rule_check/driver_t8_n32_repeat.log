@@ -1,0 +1,11 @@
+rule_handoff164_cuda_b128_o7_pair0: lattice/phi=0 12.712 ms, lattice/phi=1 10.340 ms, clustered/phi=0 5.728 ms, clustered/phi=1 5.784 ms, adaptive/phi=0 13.159 ms, adaptive/phi=1 13.662 ms
+rule_auto_cuda_b128_o7_pair0: lattice/phi=0 10.338 ms, lattice/phi=1 9.936 ms, clustered/phi=0 5.768 ms, clustered/phi=1 5.912 ms, adaptive/phi=0 13.392 ms, adaptive/phi=1 13.813 ms
+rule_handoff328_cuda_b128_o7_pair0: lattice/phi=0 9.584 ms, lattice/phi=1 9.824 ms, clustered/phi=0 5.817 ms, clustered/phi=1 5.815 ms, adaptive/phi=0 14.054 ms, adaptive/phi=1 14.004 ms
+rule_handoff328_cuda_b128_o7_pair1: lattice/phi=0 10.356 ms, lattice/phi=1 10.479 ms, clustered/phi=0 6.166 ms, clustered/phi=1 5.922 ms, adaptive/phi=0 13.735 ms, adaptive/phi=1 13.793 ms
+rule_auto_cuda_b128_o7_pair1: lattice/phi=0 9.691 ms, lattice/phi=1 9.791 ms, clustered/phi=0 5.845 ms, clustered/phi=1 6.369 ms, adaptive/phi=0 13.670 ms, adaptive/phi=1 13.913 ms
+rule_handoff164_cuda_b128_o7_pair1: lattice/phi=0 10.503 ms, lattice/phi=1 10.082 ms, clustered/phi=0 5.805 ms, clustered/phi=1 5.895 ms, adaptive/phi=0 13.137 ms, adaptive/phi=1 13.944 ms
+rule_handoff164_cuda_b128_o7_pair2: lattice/phi=0 10.609 ms, lattice/phi=1 10.030 ms, clustered/phi=0 5.591 ms, clustered/phi=1 6.099 ms, adaptive/phi=0 13.756 ms, adaptive/phi=1 12.809 ms
+rule_auto_cuda_b128_o7_pair2: lattice/phi=0 10.175 ms, lattice/phi=1 9.821 ms, clustered/phi=0 5.665 ms, clustered/phi=1 5.932 ms, adaptive/phi=0 13.493 ms, adaptive/phi=1 13.927 ms
+rule_handoff328_cuda_b128_o7_pair2: lattice/phi=0 10.000 ms, lattice/phi=1 9.733 ms, clustered/phi=0 5.608 ms, clustered/phi=1 5.889 ms, adaptive/phi=0 13.762 ms, adaptive/phi=1 14.134 ms
+Completed; see docs/cuda_kick_shared_memory_results/handoff_rule_check/t8_n32_repeat/summary.md
+repeat exit 0

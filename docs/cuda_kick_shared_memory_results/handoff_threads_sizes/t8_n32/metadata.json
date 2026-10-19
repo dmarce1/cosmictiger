@@ -1,0 +1,72 @@
+{
+  "utc": "2026-10-19T18:52:41.398489+00:00",
+  "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+  "command": "benchmarks/run_cuda_kick_arena.py --binary arena=build/arena_b1024/frozen/cosmictiger_b1024_handoff:arena --policy handoff82=--compute.cudaKickHandoffBlocks=82 --policy handoff164=--compute.cudaKickHandoffBlocks=164 --policy handoff328=--compute.cudaKickHandoffBlocks=328 --policy handoff492=--compute.cudaKickHandoffBlocks=492 --policy handoff656=--compute.cudaKickHandoffBlocks=656 --output docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t8_n32 --fixtures lattice,clustered,adaptive --buckets 128 --orders 7 --threads 8 --particles-per-dimension 32 --pairs 2 --samples 11 --reference 0 --timeout 3600",
+  "binaries": [
+    {
+      "label": "arena",
+      "path": "/home/dmarce1/workspace/cosmictiger/.claude/worktrees/modest-borg-b7dbb2/build/arena_b1024/frozen/cosmictiger_b1024_handoff",
+      "arena": true,
+      "sha256": "119f4d643ae71abb25e8330d3555e0a1b6e005e11633d7b188ddc4241d315a43"
+    }
+  ],
+  "policies": [
+    {
+      "label": "handoff82",
+      "options": [
+        "--compute.cudaKickHandoffBlocks=82"
+      ]
+    },
+    {
+      "label": "handoff164",
+      "options": [
+        "--compute.cudaKickHandoffBlocks=164"
+      ]
+    },
+    {
+      "label": "handoff328",
+      "options": [
+        "--compute.cudaKickHandoffBlocks=328"
+      ]
+    },
+    {
+      "label": "handoff492",
+      "options": [
+        "--compute.cudaKickHandoffBlocks=492"
+      ]
+    },
+    {
+      "label": "handoff656",
+      "options": [
+        "--compute.cudaKickHandoffBlocks=656"
+      ]
+    }
+  ],
+  "fixtures": [
+    "lattice",
+    "clustered",
+    "adaptive"
+  ],
+  "buckets": [
+    128
+  ],
+  "orders": [
+    7
+  ],
+  "backends": [
+    "cuda"
+  ],
+  "samples": 11,
+  "pairs": 2,
+  "reference": 0,
+  "threads": 8,
+  "cpus": "1-8",
+  "particles_per_dimension": 32,
+  "git_head": "b730980c4e94b041324fe2145dc7fc9c9a688dca",
+  "nvidia_smi": "name, driver_version, clocks.current.sm [MHz], clocks.current.memory [MHz], utilization.gpu [%], memory.used [MiB]\nNVIDIA GeForce RTX 3090, 595.99.02, 1965 MHz, 9501 MHz, 13 %, 4623 MiB\n",
+  "load_average": [
+    3.5146484375,
+    4.98486328125,
+    4.330078125
+  ]
+}

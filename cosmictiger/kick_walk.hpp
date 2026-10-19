@@ -205,8 +205,9 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
         }
         size_t maximumGpuParticles = CUDA_KICK_PARTS_MAX;
         auto const rng = particlesCurrentRange();
+        ParticleInteger const rangeParticles = rng.second - rng.first;
         maximumGpuParticles = std::min((size_t) maximumGpuParticles,
-            (size_t) std::max((ParticleInteger) (rng.second - rng.first) / kickBlockCount(),
+            (size_t) std::max(rangeParticles / kickBlockCount(rangeParticles),
                 (ParticleInteger) getOptions().compute.bucketSize));
         if (params.gpu && selfPtr->numberOfParticles() <= maximumGpuParticles &&
             selfPtr->isLocal() && detail::kickSourcesAreSingleRank(dchecklist) &&

@@ -700,11 +700,10 @@ The adaptive fixture sets the limit: 200-particle subtrees are its optimum
 800 or 1,600 leave the GPU with too few, too unequal workitems (0.5x and
 0.3x). The lattice and clustered fixtures keep gaining down to 400-800
 particles (2.6-2.8x and 1.6-1.7x at bucket 64) but 200 particles takes most
-of it (2.3x and 1.5x). The harness pins two worker threads (it refuses other
-counts), so the balance with more CPU threads is not measured here; with
-more threads the CPU walk is cheaper and the optimum can only move toward
-finer subtrees, where 200 particles still costs less than the launch-coupled
-50.
+of it (2.3x and 1.5x). The harness pinned two worker threads when this was
+measured; the sweep over thread counts and particle counts
+(`handoff_threads_sizes/`, below) measures the balance with 4 to 12 threads
+and at 262,144 particles.
 
 ### Selected defaults
 
@@ -714,9 +713,11 @@ finer subtrees, where 200 particles still costs less than the launch-coupled
   32,768 particles), the measured optimum of the adaptive fixture and within
   10-20% of the best division of the other two; `compute.cudaKickHandoffBlocks`
   still pins it. This replaces both the arena's 656-block divisor (which lost
-  the bucket-32 case 2.7x) and the baseline's 492. Above about 2.7 million
-  particles per rank the `CUDA_KICK_PARTS_MAX` cap of 16,384 particles decides
-  instead, as before.
+  the bucket-32 case 2.7x) and the baseline's 492. The sweep over thread and
+  particle counts below (`handoff_threads_sizes/`) later made the divisor
+  grow as the cube root of the particle count, to four blocks per
+  multiprocessor at 262,144 particles and above; the final check of this
+  section measured the 164-block rule.
 - Residency: the register limit (8 blocks per SM at orders 6 to 9) stays the
   default. Lowering it to 6 or 7 does not change the kernel time at any bucket
   once the handoff is separated from it, and the option now really launches
@@ -790,6 +791,203 @@ roundoff (acceleration relative L2 at most 2.1e-7 adaptive, 4.3e-7
 clustered, 1.1e-6 lattice at bucket 256), since the coarser handoff moves
 cell interactions between the SIMD CPU walk and the GPU.
 
+### Handoff at larger thread and particle counts (`handoff_threads_sizes/`)
+
+The harness now runs on the configured `--hpx:threads` and builds its
+fixtures from `initial.particlesPerDimension`, so the handoff divisor can be
+measured away from two threads and 32,768 particles. Divisors of 82, 164,
+328, 492 and 656 blocks (1, 2, 4, 6 and 8 blocks per multiprocessor) at 2,
+4, 8 and 12 worker threads (pinned to CPUs 1 through the thread count, the
+distinct physical cores of the 12-core workstation) for 32,768 and 262,144
+particles (sides 32 and 64), all three fixtures, bucket 128, two pairs of 11
+samples, forces and potential (the tables show forces only; the potential
+rows agree). The binary includes the open-larger-cell walk of commit
+92d735c6 from `main`, so absolute times are not comparable with the earlier
+tables (the clustered fixture at bucket 128 takes 7.8 ms here against 6.1 ms
+above with the same division); every comparison here is within one binary.
+The column headers give the handoff threshold `max(N / divisor, bucket)`.
+At 32,768 particles the bucket clamps the three largest divisors to the same
+128-particle threshold, so their three columns are repeat measurements of one
+division and show the noise floor (2-4%). At 262,144 particles the
+thresholds are 3,197, 1,598, 799, 532 and 399 particles; the lattice
+(2,048 leaves of exactly 128) hands off nodes of 2,048, 1,024, 512, 512 and
+256 particles, that is 128, 256, 512, 512 and 1,024 workitems for 656
+resident blocks.
+
+Other sessions were building and timing on the workstation during this
+sweep. A stage whose pairs disagreed by more than 20% (clean stages stay
+within 16%) was discarded (kept under `handoff_threads_sizes_contaminated/`)
+and repeated behind a shared GPU lock, a quiet half minute without builds or
+GPU processes (`nvidia-smi`; a running cosmictiger is named `main-thread#0`
+by HPX, so process names do not identify it) and the per-process idle wait of
+the driver; `sweep_summary.md` lists each final stage's load average and worst
+pair spread (`benchmarks/check_kick_arena_pairs.py`,
+`benchmarks/summarize_kick_handoff_sweep.py`).
+
+Speedup is the 164-block time over the variant's time, pairwise.
+
+lattice (32,768 particles, forces only):
+
+| threads | 82 (399) | 164 (199) | 328 (128) | 492 (128) | 656 (128) |
+|---:|---:|---:|---:|---:|---:|
+| 2 | 12.23 ms, 1.327x (1.276-1.377) | 16.20 ms | 16.70 ms, 0.970x (0.965-0.976) | 16.11 ms, 1.006x (0.988-1.024) | 16.31 ms, 0.993x (0.984-1.003) |
+| 4 | 10.56 ms, 1.123x (1.076-1.169) | 11.83 ms | 11.84 ms, 1.000x (0.955-1.045) | 12.16 ms, 0.974x (0.942-1.006) | 12.06 ms, 0.984x (0.921-1.048) |
+| 8 | 9.67 ms, 1.035x (0.994-1.075) | 10.00 ms | 9.96 ms, 1.004x (0.987-1.022) | 9.94 ms, 1.006x (0.998-1.013) | 10.03 ms, 0.997x (0.974-1.020) |
+| 12 | 10.39 ms, 0.949x (0.946-0.952) | 9.86 ms | 10.29 ms, 0.959x (0.944-0.974) | 9.75 ms, 1.011x (1.008-1.014) | 10.28 ms, 0.960x (0.927-0.992) |
+
+clustered (32,768 particles, forces only):
+
+| threads | 82 (399) | 164 (199) | 328 (128) | 492 (128) | 656 (128) |
+|---:|---:|---:|---:|---:|---:|
+| 2 | 6.49 ms, 1.203x (1.165-1.241) | 7.81 ms | 7.89 ms, 0.990x (0.963-1.018) | 7.82 ms, 0.999x (0.998-0.999) | 7.76 ms, 1.007x (0.984-1.030) |
+| 4 | 5.70 ms, 1.047x (1.038-1.055) | 5.97 ms | 5.99 ms, 0.996x (0.969-1.023) | 6.20 ms, 0.964x (0.911-1.018) | 6.01 ms, 0.993x (0.952-1.035) |
+| 8 | 5.88 ms, 0.976x (0.960-0.992) | 5.74 ms | 5.67 ms, 1.012x (1.012-1.012) | 5.72 ms, 1.004x (0.974-1.034) | 5.67 ms, 1.012x (0.980-1.044) |
+| 12 | 6.33 ms, 0.998x (0.978-1.019) | 6.32 ms | 6.00 ms, 1.054x (1.051-1.057) | 6.09 ms, 1.038x (1.015-1.061) | 6.07 ms, 1.041x (1.019-1.064) |
+
+adaptive (32,768 particles, forces only):
+
+| threads | 82 (399) | 164 (199) | 328 (128) | 492 (128) | 656 (128) |
+|---:|---:|---:|---:|---:|---:|
+| 2 | 19.92 ms, 0.829x (0.824-0.835) | 16.52 ms | 19.84 ms, 0.833x (0.813-0.853) | 19.86 ms, 0.832x (0.823-0.841) | 19.96 ms, 0.828x (0.813-0.842) |
+| 4 | 18.88 ms, 0.735x (0.686-0.785) | 13.85 ms | 16.00 ms, 0.871x (0.789-0.953) | 16.56 ms, 0.836x (0.820-0.852) | 15.53 ms, 0.892x (0.859-0.925) |
+| 8 | 18.85 ms, 0.738x (0.734-0.743) | 13.92 ms | 13.66 ms, 1.020x (0.989-1.051) | 14.13 ms, 0.985x (0.975-0.996) | 14.42 ms, 0.967x (0.926-1.008) |
+| 12 | 19.47 ms, 0.712x (0.688-0.736) | 13.87 ms | 14.05 ms, 0.988x (0.940-1.036) | 13.78 ms, 1.006x (0.968-1.044) | 14.23 ms, 0.974x (0.948-1.000) |
+
+lattice (262,144 particles, forces only):
+
+| threads | 82 (3,196) | 164 (1,598) | 328 (799) | 492 (532) | 656 (399) |
+|---:|---:|---:|---:|---:|---:|
+| 2 | 38.68 ms, 0.853x (0.808-0.897) | 33.00 ms | 47.81 ms, 0.690x (0.643-0.738) | 49.18 ms, 0.671x (0.627-0.715) | 104.44 ms, 0.316x (0.297-0.335) |
+| 4 | 33.41 ms, 0.787x (0.743-0.831) | 26.25 ms | 31.50 ms, 0.834x (0.799-0.868) | 31.71 ms, 0.828x (0.793-0.863) | 58.10 ms, 0.452x (0.438-0.465) |
+| 8 | 32.94 ms, 0.700x (0.669-0.731) | 23.01 ms | 23.50 ms, 0.979x (0.974-0.985) | 23.70 ms, 0.971x (0.956-0.986) | 36.56 ms, 0.629x (0.628-0.631) |
+| 12 | 34.90 ms, 0.665x (0.660-0.671) | 23.22 ms | 22.95 ms, 1.012x (0.983-1.042) | 22.16 ms, 1.048x (1.046-1.050) | 32.38 ms, 0.717x (0.701-0.734) |
+
+clustered (262,144 particles, forces only):
+
+| threads | 82 (3,196) | 164 (1,598) | 328 (799) | 492 (532) | 656 (399) |
+|---:|---:|---:|---:|---:|---:|
+| 2 | 25.44 ms, 0.757x (0.698-0.815) | 19.19 ms | 18.28 ms, 1.050x (1.003-1.097) | 17.55 ms, 1.097x (1.009-1.185) | 20.39 ms, 0.943x (0.878-1.008) |
+| 4 | 23.24 ms, 0.744x (0.720-0.768) | 17.30 ms | 14.98 ms, 1.156x (1.100-1.211) | 15.81 ms, 1.094x (1.062-1.127) | 17.03 ms, 1.016x (1.012-1.019) |
+| 8 | 23.26 ms, 0.686x (0.672-0.700) | 15.93 ms | 14.57 ms, 1.095x (1.015-1.174) | 14.39 ms, 1.106x (1.072-1.139) | 15.53 ms, 1.027x (0.948-1.107) |
+| 12 | 23.99 ms, 0.727x (0.703-0.750) | 17.43 ms | 15.98 ms, 1.091x (1.050-1.132) | 15.31 ms, 1.138x (1.128-1.149) | 17.05 ms, 1.023x (0.982-1.063) |
+
+adaptive (262,144 particles, forces only):
+
+| threads | 82 (3,196) | 164 (1,598) | 328 (799) | 492 (532) | 656 (399) |
+|---:|---:|---:|---:|---:|---:|
+| 2 | 44.88 ms, 0.674x (0.656-0.692) | 30.23 ms | 28.50 ms, 1.061x (1.039-1.083) | 29.44 ms, 1.028x (0.995-1.061) | 36.27 ms, 0.834x (0.824-0.843) |
+| 4 | 41.83 ms, 0.646x (0.625-0.666) | 27.00 ms | 22.77 ms, 1.186x (1.166-1.206) | 23.66 ms, 1.141x (1.105-1.177) | 25.22 ms, 1.071x (1.031-1.111) |
+| 8 | 40.07 ms, 0.637x (0.628-0.646) | 25.50 ms | 21.29 ms, 1.198x (1.187-1.209) | 21.84 ms, 1.168x (1.127-1.209) | 22.47 ms, 1.135x (1.103-1.166) |
+| 12 | 43.57 ms, 0.621x (0.620-0.623) | 27.08 ms | 21.68 ms, 1.250x (1.215-1.285) | 22.97 ms, 1.179x (1.161-1.198) | 21.42 ms, 1.264x (1.256-1.273) |
+
+Time relative to the 164-block division, geometric mean over the six cases
+(three fixtures, potential off and on) and, in parentheses, the worst case;
+below one is faster:
+
+| particles | threads | handoff82 | handoff164 | handoff328 | handoff492 | handoff656 |
+|---:|---:|---:|---:|---:|---:|---:|
+| 32,768 | 2 | 0.930 (1.279) | 1.000 (1.000) | 1.074 (1.201) | 1.057 (1.202) | 1.061 (1.208) |
+| 32,768 | 4 | 1.068 (1.452) | 1.000 (1.000) | 1.058 (1.198) | 1.068 (1.196) | 1.057 (1.187) |
+| 32,768 | 8 | 1.119 (1.391) | 1.000 (1.000) | 0.993 (1.030) | 1.008 (1.044) | 1.011 (1.047) |
+| 32,768 | 12 | 1.149 (1.419) | 1.000 (1.000) | 1.011 (1.043) | 1.003 (1.070) | 1.015 (1.043) |
+| 262,144 | 2 | 1.327 (1.485) | 1.000 (1.000) | 1.071 (1.449) | 1.078 (1.490) | 1.540 (3.165) |
+| 262,144 | 4 | 1.422 (1.549) | 1.000 (1.000) | 0.951 (1.213) | 0.991 (1.232) | 1.258 (2.216) |
+| 262,144 | 8 | 1.490 (1.599) | 1.000 (1.000) | 0.906 (1.021) | 0.918 (1.042) | 1.106 (1.622) |
+| 262,144 | 12 | 1.497 (1.611) | 1.000 (1.000) | 0.881 (0.988) | 0.873 (0.954) | 1.018 (1.394) |
+
+- 32,768 particles: two blocks per multiprocessor (200-particle subtrees)
+  stays the best or tied division at every thread count. The adaptive fixture
+  needs it: 400-particle subtrees (82 blocks) lose 1.2-1.4x at every thread
+  count, and the 128-particle division loses 1.1-1.2x at 2-4 threads and is
+  level at 8-12. The coarser division's gain on the lattice and clustered
+  fixtures (1.33x and 1.20x at 2 threads) shrinks to 1.12x and 1.05x at 4
+  threads and is gone at 8-12 (0.95-1.04x), so more threads do not move the
+  optimum here; they only remove the CPU-bound penalty of finer divisions.
+- 262,144 particles: the 164-block division (256 workitems) under-fills the
+  GPU. Four blocks per multiprocessor (328, 512 workitems) is 1.19-1.25x
+  faster on the adaptive fixture and 1.09-1.16x on the clustered one from 4
+  threads up, and level or better on the lattice from 8 threads (0.98x at 8,
+  1.01x at 12). Six blocks (492) gives the lattice the same 512 workitems and
+  matches 328 within a few percent (4-5% better on the lattice at 12 threads,
+  worse on the adaptive fixture at 4-8). Eight blocks (656, 1,024 workitems)
+  ties 328 on the adaptive fixture at 12 threads but stays CPU-bound on the
+  lattice at every thread count (0.32x at 2, 0.45x at 4, 0.63x at 8, 0.72x at
+  12): the CPU walk cost grows with the workitem count divided by the thread
+  count, while the GPU gain saturates once the launch is full. At 2 threads
+  the coarser 164 remains the better compromise (328 gains 5-11% on the
+  clustered and adaptive fixtures and loses 31% on the lattice).
+- The thread count therefore does not set the optimum from 4 threads up; the
+  particle count does, through the number of workitems the GPU gets. The
+  divisor should grow with the particle count: by a factor two between the
+  two measured sizes, which is the cube root of their ratio.
+
+Rule (implemented in `kickBlockCount(particles)`, `src/kick.cu`): the divisor
+is `kKickHandoffBlocksPerMultiprocessor = 2` times the multiprocessor count,
+times the cube root of the particle count over
+`kKickHandoffReferenceParticles = 32,768`, clamped between 1 and
+`kKickHandoffMaxScale = 2`: 164 blocks at or below 32,768 particles, 328 at or
+above 262,144, interpolated between (238 at 100,000). The threshold
+`N / divisor` then grows as `N^(2/3)`: the CPU walks one level deeper for
+every eightfold increase in particles and the GPU receives twice the
+workitems. Above 262,144 particles the divisor is held at four blocks per
+multiprocessor, the largest measured value, so the 16,384-particle cap of
+`CUDA_KICK_PARTS_MAX` decides above about 5.4 million particles per rank.
+The thread count does not enter the rule: at 2 threads it costs the lattice
+at 262,144 particles, but production runs use the workers the node has.
+`compute.cudaKickHandoffBlocks` still pins the divisor.
+
+### Check of the cube-root rule (`handoff_rule_check/`)
+
+The rebuilt binary (`validation/ctest_cap1024_handoff_rule.log`: the CUDA
+`fmmWalk`, `fmmTree` and `sphGravity` regressions and the CPU `fmmWalk` pass)
+with the automatic divisor against the pinned 164 and 328 at both particle
+counts, 8 worker threads, bucket 128, order 7, two pairs of 11 samples (the
+32,768-particle stage repeated with three pairs). Speedup is the pinned
+division's time over the automatic rule's time, pairwise (above one: the
+rule is faster).
+
+32,768 particles, 8 threads, bucket 128 (`t8_n32/`):
+
+| fixture | potential | pinned 164 | pinned 328 | automatic rule |
+|---|---:|---:|---:|---:|
+| lattice | 0 | 10.14 ms, 0.938x (0.905-0.970) | 10.08 ms, 0.933x (0.891-0.975) | 10.82 ms |
+| lattice | 1 | 9.99 ms, 0.956x (0.951-0.961) | 10.14 ms, 0.970x (0.954-0.987) | 10.45 ms |
+| clustered | 0 | 5.72 ms, 1.008x (0.986-1.030) | 5.77 ms, 1.017x (0.987-1.047) | 5.67 ms |
+| clustered | 1 | 5.98 ms, 0.904x (0.898-0.911) | 6.16 ms, 0.932x (0.926-0.939) | 6.61 ms |
+| adaptive | 0 | 14.10 ms, 1.011x (0.997-1.024) | 14.73 ms, 1.057x (1.020-1.094) | 13.95 ms |
+| adaptive | 1 | 13.72 ms, 0.974x (0.939-1.009) | 14.02 ms, 0.995x (0.965-1.025) | 14.09 ms |
+
+262,144 particles, 8 threads, bucket 128 (`t8_n64/`):
+
+| fixture | potential | pinned 164 | pinned 328 | automatic rule |
+|---|---:|---:|---:|---:|
+| lattice | 0 | 25.56 ms, 1.088x (1.039-1.137) | 24.55 ms, 1.045x (0.994-1.096) | 23.52 ms |
+| lattice | 1 | 24.81 ms, 0.999x (0.963-1.035) | 24.37 ms, 0.981x (0.961-1.001) | 24.86 ms |
+| clustered | 0 | 16.77 ms, 1.153x (1.126-1.179) | 14.85 ms, 1.020x (0.989-1.051) | 14.56 ms |
+| clustered | 1 | 19.39 ms, 1.177x (1.114-1.241) | 16.20 ms, 0.983x (0.982-0.984) | 16.49 ms |
+| adaptive | 0 | 26.37 ms, 1.248x (1.203-1.292) | 21.67 ms, 1.025x (1.024-1.026) | 21.14 ms |
+| adaptive | 1 | 28.64 ms, 1.232x (1.209-1.254) | 23.36 ms, 1.004x (0.988-1.020) | 23.26 ms |
+
+32,768 particles, 8 threads, three pairs, bucket 128 (`t8_n32_repeat/`):
+
+| fixture | potential | pinned 164 | pinned 328 | automatic rule |
+|---|---:|---:|---:|---:|
+| lattice | 0 | 10.61 ms, 1.084x (1.043-1.230) | 10.00 ms, 0.983x (0.927-1.069) | 10.18 ms |
+| lattice | 1 | 10.08 ms, 1.030x (1.021-1.041) | 9.82 ms, 0.991x (0.989-1.070) | 9.82 ms |
+| clustered | 0 | 5.73 ms, 0.993x (0.987-0.993) | 5.82 ms, 1.008x (0.990-1.055) | 5.77 ms |
+| clustered | 1 | 5.90 ms, 0.978x (0.926-1.028) | 5.89 ms, 0.984x (0.930-0.993) | 5.93 ms |
+| adaptive | 0 | 13.16 ms, 0.983x (0.961-1.020) | 13.76 ms, 1.020x (1.005-1.049) | 13.49 ms |
+| adaptive | 1 | 13.66 ms, 0.989x (0.920-1.002) | 14.00 ms, 1.014x (0.991-1.015) | 13.91 ms |
+
+At 262,144 particles the rule reproduces the pinned 328 within 2-4% and is
+1.15-1.25x faster than the previous 164-block default on the clustered and
+adaptive fixtures and level to 1.09x faster on the lattice. At 32,768
+particles the rule is the 164-block division by construction; the first
+stage put it 5-10% behind both pinned divisions on the lattice and the
+clustered potential case, the three-pair repeat puts it level with both
+within 1-3%, so that was run noise (one pair of the repeat's pinned-164
+lattice run was slow, hence its 1.23 range).
+
 ### What remains
 
 - The arena kernel itself is 0.6 ms (10%) slower than the baseline's on the
@@ -802,10 +1000,12 @@ cell interactions between the SIMD CPU walk and the GPU.
   shared-memory and `rsqrt` latency than the baseline's and runs 25% slower;
   unrolling the source loop or processing two sinks per lane would address it.
   At buckets 32 to 128 the kernel is level with or faster than the baseline.
-- The handoff default is measured with two CPU worker threads and 32,768
-  particles; a check at production sizes and thread counts, where the
-  16,384-particle cap and a parallel CPU walk change the balance, is still
-  worth running (`compute.cudaKickHandoffBlocks` sweeps need no rebuild).
+- The handoff rule is measured up to 262,144 particles and 12 threads and
+  holds four blocks per multiprocessor above that size. Whether the divisor
+  should keep growing toward the 656 resident blocks at millions of particles
+  per rank, where the GPU work dwarfs the CPU walk, is unmeasured; a sweep at
+  side 128 (2.1 million particles) takes a few minutes per stage with the
+  current harness (`compute.cudaKickHandoffBlocks` sweeps need no rebuild).
 - The theta sweep shows order 7 at theta 0.8 is not the cheapest route to its
   own force error; a lower order with a smaller opening angle is, down to
   about 2e-4. The production order and opening angle should be chosen from

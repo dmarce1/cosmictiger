@@ -1,0 +1,362 @@
+== docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t2_n32 13:51:46 load 1.99 5.09 4.32 other cosmictiger: 0
+arena_handoff82_cuda_b128_o7_pair0: lattice/phi=0 12.652 ms, lattice/phi=1 13.123 ms, clustered/phi=0 6.567 ms, clustered/phi=1 6.916 ms, adaptive/phi=0 20.087 ms, adaptive/phi=1 20.202 ms
+arena_handoff164_cuda_b128_o7_pair0: lattice/phi=0 16.150 ms, lattice/phi=1 16.091 ms, clustered/phi=0 7.652 ms, clustered/phi=1 8.203 ms, adaptive/phi=0 16.765 ms, adaptive/phi=1 15.367 ms
+arena_handoff328_cuda_b128_o7_pair0: lattice/phi=0 16.555 ms, lattice/phi=1 16.561 ms, clustered/phi=0 7.945 ms, clustered/phi=1 8.002 ms, adaptive/phi=0 19.658 ms, adaptive/phi=1 18.487 ms
+arena_handoff492_cuda_b128_o7_pair0: lattice/phi=0 16.340 ms, lattice/phi=1 16.076 ms, clustered/phi=0 7.664 ms, clustered/phi=1 8.001 ms, adaptive/phi=0 19.939 ms, adaptive/phi=1 18.197 ms
+arena_handoff656_cuda_b128_o7_pair0: lattice/phi=0 16.411 ms, lattice/phi=1 16.429 ms, clustered/phi=0 7.779 ms, clustered/phi=1 8.075 ms, adaptive/phi=0 19.916 ms, adaptive/phi=1 18.631 ms
+arena_handoff656_cuda_b128_o7_pair1: lattice/phi=0 16.216 ms, lattice/phi=1 15.925 ms, clustered/phi=0 7.738 ms, clustered/phi=1 8.178 ms, adaptive/phi=0 20.004 ms, adaptive/phi=1 18.684 ms
+arena_handoff492_cuda_b128_o7_pair1: lattice/phi=0 15.883 ms, lattice/phi=1 16.108 ms, clustered/phi=0 7.973 ms, clustered/phi=1 8.220 ms, adaptive/phi=0 19.781 ms, adaptive/phi=1 18.933 ms
+arena_handoff328_cuda_b128_o7_pair1: lattice/phi=0 16.848 ms, lattice/phi=1 16.563 ms, clustered/phi=0 7.829 ms, clustered/phi=1 8.536 ms, adaptive/phi=0 20.021 ms, adaptive/phi=1 18.653 ms
+arena_handoff164_cuda_b128_o7_pair1: lattice/phi=0 16.257 ms, lattice/phi=1 16.281 ms, clustered/phi=0 7.968 ms, clustered/phi=1 8.257 ms, adaptive/phi=0 16.273 ms, adaptive/phi=1 15.802 ms
+arena_handoff82_cuda_b128_o7_pair1: lattice/phi=0 11.805 ms, lattice/phi=1 12.522 ms, clustered/phi=0 6.421 ms, clustered/phi=1 6.951 ms, adaptive/phi=0 19.747 ms, adaptive/phi=1 19.660 ms
+Completed; see docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t2_n32/summary.md
+== docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t4_n32 13:52:14 load 2.56 4.97 4.30 other cosmictiger: 0
+arena_handoff82_cuda_b128_o7_pair0: lattice/phi=0 10.328 ms, lattice/phi=1 10.466 ms, clustered/phi=0 5.866 ms, clustered/phi=1 6.044 ms, adaptive/phi=0 18.734 ms, adaptive/phi=1 18.974 ms
+arena_handoff164_cuda_b128_o7_pair0: lattice/phi=0 11.525 ms, lattice/phi=1 11.794 ms, clustered/phi=0 6.160 ms, clustered/phi=1 6.995 ms, adaptive/phi=0 14.715 ms, adaptive/phi=1 13.554 ms
+arena_handoff328_cuda_b128_o7_pair0: lattice/phi=0 11.203 ms, lattice/phi=1 11.640 ms, clustered/phi=0 6.122 ms, clustered/phi=1 6.727 ms, adaptive/phi=0 16.559 ms, adaptive/phi=1 15.948 ms
+arena_handoff492_cuda_b128_o7_pair0: lattice/phi=0 12.292 ms, lattice/phi=1 11.516 ms, clustered/phi=0 5.954 ms, clustered/phi=1 6.672 ms, adaptive/phi=0 16.020 ms, adaptive/phi=1 14.977 ms
+arena_handoff656_cuda_b128_o7_pair0: lattice/phi=0 11.828 ms, lattice/phi=1 11.548 ms, clustered/phi=0 6.133 ms, clustered/phi=1 6.485 ms, adaptive/phi=0 16.122 ms, adaptive/phi=1 15.482 ms
+arena_handoff656_cuda_b128_o7_pair1: lattice/phi=0 11.588 ms, lattice/phi=1 11.701 ms, clustered/phi=0 5.932 ms, clustered/phi=1 6.619 ms, adaptive/phi=0 16.587 ms, adaptive/phi=1 14.958 ms
+arena_handoff492_cuda_b128_o7_pair1: lattice/phi=0 11.729 ms, lattice/phi=1 11.625 ms, clustered/phi=0 6.286 ms, clustered/phi=1 12.000 ms, adaptive/phi=0 23.493 ms, adaptive/phi=1 21.088 ms
+arena_handoff328_cuda_b128_o7_pair1: lattice/phi=0 11.797 ms, lattice/phi=1 12.536 ms, clustered/phi=0 6.550 ms, clustered/phi=1 6.856 ms, adaptive/phi=0 15.762 ms, adaptive/phi=1 14.794 ms
+arena_handoff164_cuda_b128_o7_pair1: lattice/phi=0 12.106 ms, lattice/phi=1 11.688 ms, clustered/phi=0 6.193 ms, clustered/phi=1 6.578 ms, adaptive/phi=0 13.640 ms, adaptive/phi=1 14.593 ms
+arena_handoff82_cuda_b128_o7_pair1: lattice/phi=0 9.816 ms, lattice/phi=1 10.206 ms, clustered/phi=0 5.733 ms, clustered/phi=1 6.072 ms, adaptive/phi=0 18.192 ms, adaptive/phi=1 18.834 ms
+Completed; see docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t4_n32/summary.md
+== docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t8_n32 13:52:41 load 3.51 4.98 4.33 other cosmictiger: 0
+arena_handoff82_cuda_b128_o7_pair0: lattice/phi=0 9.994 ms, lattice/phi=1 9.857 ms, clustered/phi=0 5.645 ms, clustered/phi=1 6.248 ms, adaptive/phi=0 18.783 ms, adaptive/phi=1 19.725 ms
+arena_handoff164_cuda_b128_o7_pair0: lattice/phi=0 9.931 ms, lattice/phi=1 9.742 ms, clustered/phi=0 5.597 ms, clustered/phi=1 5.896 ms, adaptive/phi=0 13.947 ms, adaptive/phi=1 13.989 ms
+arena_handoff328_cuda_b128_o7_pair0: lattice/phi=0 9.720 ms, lattice/phi=1 9.987 ms, clustered/phi=0 5.531 ms, clustered/phi=1 5.853 ms, adaptive/phi=0 13.276 ms, adaptive/phi=1 13.519 ms
+arena_handoff492_cuda_b128_o7_pair0: lattice/phi=0 9.799 ms, lattice/phi=1 10.540 ms, clustered/phi=0 5.745 ms, clustered/phi=1 5.814 ms, adaptive/phi=0 14.311 ms, adaptive/phi=1 14.128 ms
+arena_handoff656_cuda_b128_o7_pair0: lattice/phi=0 10.195 ms, lattice/phi=1 10.433 ms, clustered/phi=0 5.710 ms, clustered/phi=1 5.988 ms, adaptive/phi=0 13.840 ms, adaptive/phi=1 14.005 ms
+arena_handoff656_cuda_b128_o7_pair1: lattice/phi=0 9.861 ms, lattice/phi=1 10.169 ms, clustered/phi=0 5.630 ms, clustered/phi=1 5.935 ms, adaptive/phi=0 15.002 ms, adaptive/phi=1 13.887 ms
+arena_handoff492_cuda_b128_o7_pair1: lattice/phi=0 10.083 ms, lattice/phi=1 10.016 ms, clustered/phi=0 5.686 ms, clustered/phi=1 6.164 ms, adaptive/phi=0 13.948 ms, adaptive/phi=1 13.868 ms
+arena_handoff328_cuda_b128_o7_pair1: lattice/phi=0 10.191 ms, lattice/phi=1 10.281 ms, clustered/phi=0 5.806 ms, clustered/phi=1 6.079 ms, adaptive/phi=0 14.041 ms, adaptive/phi=1 13.602 ms
+arena_handoff164_cuda_b128_o7_pair1: lattice/phi=0 10.060 ms, lattice/phi=1 9.942 ms, clustered/phi=0 5.878 ms, clustered/phi=1 5.990 ms, adaptive/phi=0 13.892 ms, adaptive/phi=1 14.186 ms
+arena_handoff82_cuda_b128_o7_pair1: lattice/phi=0 9.354 ms, lattice/phi=1 9.840 ms, clustered/phi=0 6.125 ms, clustered/phi=1 6.204 ms, adaptive/phi=0 18.925 ms, adaptive/phi=1 19.456 ms
+Completed; see docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t8_n32/summary.md
+== docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t12_n32 13:53:05 load 5.45 5.34 4.46 other cosmictiger: 0
+arena_handoff82_cuda_b128_o7_pair0: lattice/phi=0 10.252 ms, lattice/phi=1 9.739 ms, clustered/phi=0 6.302 ms, clustered/phi=1 6.518 ms, adaptive/phi=0 19.512 ms, adaptive/phi=1 20.062 ms
+arena_handoff164_cuda_b128_o7_pair0: lattice/phi=0 9.755 ms, lattice/phi=1 9.510 ms, clustered/phi=0 6.161 ms, clustered/phi=1 6.078 ms, adaptive/phi=0 14.362 ms, adaptive/phi=1 14.220 ms
+arena_handoff328_cuda_b128_o7_pair0: lattice/phi=0 10.018 ms, lattice/phi=1 9.813 ms, clustered/phi=0 5.862 ms, clustered/phi=1 6.155 ms, adaptive/phi=0 13.863 ms, adaptive/phi=1 13.962 ms
+arena_handoff492_cuda_b128_o7_pair0: lattice/phi=0 9.621 ms, lattice/phi=1 9.602 ms, clustered/phi=0 6.070 ms, clustered/phi=1 6.164 ms, adaptive/phi=0 13.756 ms, adaptive/phi=1 15.033 ms
+arena_handoff656_cuda_b128_o7_pair0: lattice/phi=0 10.521 ms, lattice/phi=1 9.430 ms, clustered/phi=0 6.046 ms, clustered/phi=1 6.548 ms, adaptive/phi=0 14.358 ms, adaptive/phi=1 14.948 ms
+arena_handoff656_cuda_b128_o7_pair1: lattice/phi=0 10.046 ms, lattice/phi=1 9.604 ms, clustered/phi=0 6.096 ms, clustered/phi=1 6.277 ms, adaptive/phi=0 14.106 ms, adaptive/phi=1 13.909 ms
+arena_handoff492_cuda_b128_o7_pair1: lattice/phi=0 9.887 ms, lattice/phi=1 9.679 ms, clustered/phi=0 6.110 ms, clustered/phi=1 6.185 ms, adaptive/phi=0 13.812 ms, adaptive/phi=1 14.916 ms
+arena_handoff328_cuda_b128_o7_pair1: lattice/phi=0 10.558 ms, lattice/phi=1 9.725 ms, clustered/phi=0 6.133 ms, clustered/phi=1 6.405 ms, adaptive/phi=0 14.229 ms, adaptive/phi=1 14.850 ms
+arena_handoff164_cuda_b128_o7_pair1: lattice/phi=0 9.968 ms, lattice/phi=1 9.619 ms, clustered/phi=0 6.484 ms, clustered/phi=1 6.286 ms, adaptive/phi=0 13.371 ms, adaptive/phi=1 13.771 ms
+arena_handoff82_cuda_b128_o7_pair1: lattice/phi=0 10.535 ms, lattice/phi=1 9.891 ms, clustered/phi=0 6.363 ms, clustered/phi=1 6.657 ms, adaptive/phi=0 19.435 ms, adaptive/phi=1 19.663 ms
+Completed; see docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t12_n32/summary.md
+== docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t2_n64 13:53:30 load 8.46 6.05 4.72 other cosmictiger: 0
+arena_handoff82_cuda_b128_o7_pair0: lattice/phi=0 34.249 ms, lattice/phi=1 37.717 ms, clustered/phi=0 24.457 ms, clustered/phi=1 28.131 ms, adaptive/phi=0 42.640 ms, adaptive/phi=1 46.274 ms
+arena_handoff164_cuda_b128_o7_pair0: lattice/phi=0 31.262 ms, lattice/phi=1 32.235 ms, clustered/phi=0 18.153 ms, clustered/phi=1 20.446 ms, adaptive/phi=0 29.340 ms, adaptive/phi=1 31.266 ms
+arena_handoff328_cuda_b128_o7_pair0: lattice/phi=0 47.793 ms, lattice/phi=1 48.256 ms, clustered/phi=0 18.072 ms, clustered/phi=1 19.414 ms, adaptive/phi=0 30.297 ms, adaptive/phi=1 29.453 ms
+arena_handoff492_cuda_b128_o7_pair0: lattice/phi=0 46.413 ms, lattice/phi=1 48.644 ms, clustered/phi=0 18.981 ms, clustered/phi=1 20.808 ms, adaptive/phi=0 29.824 ms, adaptive/phi=1 31.856 ms
+arena_handoff656_cuda_b128_o7_pair0: lattice/phi=0 104.431 ms, lattice/phi=1 106.438 ms, clustered/phi=0 20.115 ms, clustered/phi=1 22.041 ms, adaptive/phi=0 37.025 ms, adaptive/phi=1 38.684 ms
+arena_handoff656_cuda_b128_o7_pair1: lattice/phi=0 106.930 ms, lattice/phi=1 107.957 ms, clustered/phi=0 21.866 ms, clustered/phi=1 23.003 ms, adaptive/phi=0 38.003 ms, adaptive/phi=1 39.949 ms
+arena_handoff492_cuda_b128_o7_pair1: lattice/phi=0 48.102 ms, lattice/phi=1 50.985 ms, clustered/phi=0 18.350 ms, clustered/phi=1 20.601 ms, adaptive/phi=0 32.137 ms, adaptive/phi=1 52.195 ms
+arena_handoff328_cuda_b128_o7_pair1: lattice/phi=0 65.574 ms, lattice/phi=1 64.089 ms, clustered/phi=0 18.180 ms, clustered/phi=1 32.416 ms, adaptive/phi=0 54.144 ms, adaptive/phi=1 57.308 ms
+arena_handoff164_cuda_b128_o7_pair1: lattice/phi=0 51.054 ms, lattice/phi=1 33.909 ms, clustered/phi=0 18.926 ms, clustered/phi=1 20.926 ms, adaptive/phi=0 29.369 ms, adaptive/phi=1 31.153 ms
+arena_handoff82_cuda_b128_o7_pair1: lattice/phi=0 35.941 ms, lattice/phi=1 37.774 ms, clustered/phi=0 24.805 ms, clustered/phi=1 28.580 ms, adaptive/phi=0 42.716 ms, adaptive/phi=1 46.085 ms
+Completed; see docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t2_n64/summary.md
+waiting for a running ninja build 13:55:01
+waiting for a running ninja build 13:55:16
+waiting for a running ninja build 13:55:31
+waiting for a running ninja build 13:55:46
+waiting for a running ninja build 13:56:01
+waiting for a running ninja build 13:56:16
+waiting for a running ninja build 13:56:31
+waiting for a running ninja build 13:56:46
+waiting for a running ninja build 13:57:01
+waiting for a running ninja build 13:57:16
+waiting for a running ninja build 13:57:31
+waiting for a running ninja build 13:57:46
+waiting for a running ninja build 13:58:01
+waiting for a running ninja build 13:58:16
+waiting for a running ninja build 13:58:31
+waiting for a running ninja build 13:58:47
+waiting for a running ninja build 13:59:02
+waiting for a running ninja build 13:59:17
+waiting for a running ninja build 13:59:32
+waiting for a running ninja build 13:59:47
+waiting for a running ninja build 14:00:02
+waiting for a running ninja build 14:00:17
+== docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t4_n64 14:00:32 load 5.31 8.03 6.44 other cosmictiger: 0
+arena_handoff82_cuda_b128_o7_pair0: lattice/phi=0 33.421 ms, lattice/phi=1 35.760 ms, clustered/phi=0 23.111 ms, clustered/phi=1 26.298 ms, adaptive/phi=0 41.302 ms, adaptive/phi=1 44.631 ms
+arena_handoff164_cuda_b128_o7_pair0: lattice/phi=0 26.558 ms, lattice/phi=1 26.670 ms, clustered/phi=0 16.326 ms, clustered/phi=1 18.323 ms, adaptive/phi=0 26.321 ms, adaptive/phi=1 29.119 ms
+arena_handoff328_cuda_b128_o7_pair0: lattice/phi=0 58.515 ms, lattice/phi=1 53.741 ms, clustered/phi=0 21.949 ms, clustered/phi=1 25.538 ms, adaptive/phi=0 39.320 ms, adaptive/phi=1 43.719 ms
+arena_handoff492_cuda_b128_o7_pair0: lattice/phi=0 36.829 ms, lattice/phi=1 36.379 ms, clustered/phi=0 23.440 ms, clustered/phi=1 17.150 ms, adaptive/phi=0 24.244 ms, adaptive/phi=1 25.678 ms
+arena_handoff656_cuda_b128_o7_pair0: lattice/phi=0 60.180 ms, lattice/phi=1 61.651 ms, clustered/phi=0 23.501 ms, clustered/phi=1 28.696 ms, adaptive/phi=0 41.472 ms, adaptive/phi=1 38.527 ms
+arena_handoff656_cuda_b128_o7_pair1: lattice/phi=0 81.571 ms, lattice/phi=1 86.471 ms, clustered/phi=0 23.522 ms, clustered/phi=1 26.344 ms, adaptive/phi=0 39.407 ms, adaptive/phi=1 36.888 ms
+arena_handoff492_cuda_b128_o7_pair1: lattice/phi=0 48.240 ms, lattice/phi=1 46.263 ms, clustered/phi=0 22.644 ms, clustered/phi=1 24.691 ms, adaptive/phi=0 34.338 ms, adaptive/phi=1 36.404 ms
+arena_handoff328_cuda_b128_o7_pair1: lattice/phi=0 44.553 ms, lattice/phi=1 46.041 ms, clustered/phi=0 26.437 ms, clustered/phi=1 23.909 ms, adaptive/phi=0 33.336 ms, adaptive/phi=1 37.487 ms
+arena_handoff164_cuda_b128_o7_pair1: lattice/phi=0 37.359 ms, lattice/phi=1 39.483 ms, clustered/phi=0 24.272 ms, clustered/phi=1 28.705 ms, adaptive/phi=0 39.572 ms, adaptive/phi=1 39.586 ms
+arena_handoff82_cuda_b128_o7_pair1: lattice/phi=0 42.003 ms, lattice/phi=1 44.499 ms, clustered/phi=0 35.248 ms, clustered/phi=1 34.403 ms, adaptive/phi=0 54.471 ms, adaptive/phi=1 66.350 ms
+Completed; see docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t4_n64/summary.md
+waiting for a running ninja build 14:02:08
+waiting for a running ninja build 14:02:23
+waiting for a running ninja build 14:02:38
+waiting for a running ninja build 14:02:53
+waiting for a running ninja build 14:03:08
+waiting for a running ninja build 14:03:23
+=== restart 14:04:23 with per-process idle wait
+skip docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t2_n32 (exists)
+waiting for a running build or benchmark 14:04:23
+== docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t4_n32 attempt 1 14:04:38 load 6.01 8.41 7.08 other cosmictiger: 0
+arena_handoff82_cuda_b128_o7_pair0: lattice/phi=0 18.907 ms, lattice/phi=1 17.302 ms, clustered/phi=0 8.605 ms, clustered/phi=1 8.919 ms, adaptive/phi=0 25.831 ms, adaptive/phi=1 24.949 ms
+arena_handoff164_cuda_b128_o7_pair0: lattice/phi=0 12.412 ms, lattice/phi=1 19.397 ms, clustered/phi=0 11.197 ms, clustered/phi=1 8.453 ms, adaptive/phi=0 17.990 ms, adaptive/phi=1 18.259 ms
+arena_handoff328_cuda_b128_o7_pair0: lattice/phi=0 19.801 ms, lattice/phi=1 18.449 ms, clustered/phi=0 11.259 ms, clustered/phi=1 11.980 ms, adaptive/phi=0 23.527 ms, adaptive/phi=1 22.423 ms
+arena_handoff492_cuda_b128_o7_pair0: lattice/phi=0 22.079 ms, lattice/phi=1 20.987 ms, clustered/phi=0 12.049 ms, clustered/phi=1 10.679 ms, adaptive/phi=0 20.997 ms, adaptive/phi=1 24.519 ms
+arena_handoff656_cuda_b128_o7_pair0: lattice/phi=0 18.574 ms, lattice/phi=1 16.051 ms, clustered/phi=0 9.949 ms, clustered/phi=1 12.547 ms, adaptive/phi=0 22.915 ms, adaptive/phi=1 23.913 ms
+arena_handoff656_cuda_b128_o7_pair1: lattice/phi=0 19.979 ms, lattice/phi=1 18.296 ms, clustered/phi=0 9.984 ms, clustered/phi=1 10.368 ms, adaptive/phi=0 21.181 ms, adaptive/phi=1 17.736 ms
+arena_handoff492_cuda_b128_o7_pair1: lattice/phi=0 21.026 ms, lattice/phi=1 23.892 ms, clustered/phi=0 10.527 ms, clustered/phi=1 10.621 ms, adaptive/phi=0 18.775 ms, adaptive/phi=1 26.169 ms
+arena_handoff328_cuda_b128_o7_pair1: lattice/phi=0 11.912 ms, lattice/phi=1 12.101 ms, clustered/phi=0 5.954 ms, clustered/phi=1 6.211 ms, adaptive/phi=0 15.182 ms, adaptive/phi=1 15.276 ms
+arena_handoff164_cuda_b128_o7_pair1: lattice/phi=0 11.850 ms, lattice/phi=1 11.768 ms, clustered/phi=0 6.233 ms, clustered/phi=1 6.685 ms, adaptive/phi=0 14.263 ms, adaptive/phi=1 13.689 ms
+=== restart 14:05:57 with quiet-window gate
+skip docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t2_n32 (exists)
+== docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t4_n32 attempt 1 14:06:58 load 1.85 6.02 6.39 other cosmictiger: 0
+arena_handoff82_cuda_b128_o7_pair0: lattice/phi=0 12.301 ms, lattice/phi=1 15.584 ms, clustered/phi=0 10.362 ms, clustered/phi=1 12.308 ms, adaptive/phi=0 23.756 ms, adaptive/phi=1 25.786 ms
+=== restart 14:07:39 with shared GPU lock
+skip docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t2_n32 (exists)
+waiting for a running build or benchmark 14:07:39
+waiting for a running build or benchmark 14:07:49
+waiting for a running build or benchmark 14:08:19
+waiting for a running build or benchmark 14:08:29
+waiting for a running build or benchmark 14:08:39
+== docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t4_n32 attempt 1 14:09:49 load 1.75 4.26 5.66 other cosmictiger: 0
+arena_handoff82_cuda_b128_o7_pair0: lattice/phi=0 13.361 ms, lattice/phi=1 19.622 ms, clustered/phi=0 11.243 ms, clustered/phi=1 10.112 ms, adaptive/phi=0 26.634 ms, adaptive/phi=1 21.977 ms
+arena_handoff164_cuda_b128_o7_pair0: lattice/phi=0 17.919 ms, lattice/phi=1 18.198 ms, clustered/phi=0 11.034 ms, clustered/phi=1 12.817 ms, adaptive/phi=0 17.097 ms, adaptive/phi=1 25.725 ms
+arena_handoff328_cuda_b128_o7_pair0: lattice/phi=0 18.682 ms, lattice/phi=1 18.028 ms, clustered/phi=0 10.981 ms, clustered/phi=1 11.911 ms, adaptive/phi=0 21.563 ms, adaptive/phi=1 22.306 ms
+arena_handoff492_cuda_b128_o7_pair0: lattice/phi=0 20.763 ms, lattice/phi=1 19.675 ms, clustered/phi=0 8.907 ms, clustered/phi=1 10.489 ms, adaptive/phi=0 23.365 ms, adaptive/phi=1 22.078 ms
+arena_handoff656_cuda_b128_o7_pair0: lattice/phi=0 18.719 ms, lattice/phi=1 18.296 ms, clustered/phi=0 10.542 ms, clustered/phi=1 10.207 ms, adaptive/phi=0 20.901 ms, adaptive/phi=1 22.070 ms
+arena_handoff656_cuda_b128_o7_pair1: lattice/phi=0 18.074 ms, lattice/phi=1 18.457 ms, clustered/phi=0 10.269 ms, clustered/phi=1 10.133 ms, adaptive/phi=0 21.309 ms, adaptive/phi=1 21.463 ms
+arena_handoff492_cuda_b128_o7_pair1: lattice/phi=0 18.104 ms, lattice/phi=1 19.179 ms, clustered/phi=0 9.869 ms, clustered/phi=1 12.383 ms, adaptive/phi=0 24.603 ms, adaptive/phi=1 20.939 ms
+arena_handoff328_cuda_b128_o7_pair1: lattice/phi=0 19.555 ms, lattice/phi=1 18.511 ms, clustered/phi=0 9.851 ms, clustered/phi=1 8.704 ms, adaptive/phi=0 19.156 ms, adaptive/phi=1 22.937 ms
+arena_handoff164_cuda_b128_o7_pair1: lattice/phi=0 20.298 ms, lattice/phi=1 18.260 ms, clustered/phi=0 11.937 ms, clustered/phi=1 11.796 ms, adaptive/phi=0 26.957 ms, adaptive/phi=1 22.817 ms
+arena_handoff82_cuda_b128_o7_pair1: lattice/phi=0 18.216 ms, lattice/phi=1 17.655 ms, clustered/phi=0 11.131 ms, clustered/phi=1 9.046 ms, adaptive/phi=0 24.407 ms, adaptive/phi=1 27.362 ms
+Completed; see docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t4_n32/summary.md
+docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t4_n32: worst pair spread 1.577 ('arena', 'handoff164', 'cuda', 128, 7, 'adaptive', False), load at start 3.09, process wall 3.3-4.3 s
+contaminated: moved to docs/cuda_kick_shared_memory_results/handoff_threads_sizes_contaminated
+waiting for a running build or benchmark 14:11:34
+waiting for a running build or benchmark 14:11:44
+waiting for a running build or benchmark 14:11:54
+waiting for a running build or benchmark 14:12:04
+=== restart 14:12:33 with nvidia-smi gate
+skip docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t2_n32 (exists)
+waiting for a running build or benchmark 14:12:33
+waiting for a running build or benchmark 14:12:43
+waiting for a running build or benchmark 14:12:54
+waiting for a running build or benchmark 14:13:04
+waiting for a running build or benchmark 14:13:14
+waiting for a running build or benchmark 14:13:24
+waiting for a running build or benchmark 14:13:34
+waiting for a running build or benchmark 14:13:44
+waiting for a running build or benchmark 14:14:24
+waiting for a running build or benchmark 14:14:34
+waiting for a running build or benchmark 14:14:44
+waiting for a running build or benchmark 14:14:54
+waiting for a running build or benchmark 14:15:04
+waiting for a running build or benchmark 14:15:14
+waiting for a running build or benchmark 14:15:24
+waiting for a running build or benchmark 14:15:34
+waiting for a running build or benchmark 14:15:45
+waiting for a running build or benchmark 14:15:55
+waiting for a running build or benchmark 14:16:05
+waiting for a running build or benchmark 14:16:15
+waiting for a running build or benchmark 14:16:25
+waiting for a running build or benchmark 14:16:35
+waiting for a running build or benchmark 14:16:45
+waiting for a running build or benchmark 14:16:55
+waiting for a running build or benchmark 14:17:05
+waiting for a running build or benchmark 14:17:15
+waiting for a running build or benchmark 14:17:25
+waiting for a running build or benchmark 14:18:06
+waiting for a running build or benchmark 14:18:16
+waiting for a running build or benchmark 14:18:26
+waiting for a running build or benchmark 14:18:36
+waiting for a running build or benchmark 14:18:46
+waiting for a running build or benchmark 14:18:56
+waiting for a running build or benchmark 14:19:06
+waiting for a running build or benchmark 14:19:16
+waiting for a running build or benchmark 14:19:26
+waiting for a running build or benchmark 14:19:36
+waiting for a running build or benchmark 14:19:46
+waiting for a running build or benchmark 14:19:57
+waiting for a running build or benchmark 14:20:07
+waiting for a running build or benchmark 14:20:17
+waiting for a running build or benchmark 14:20:27
+waiting for a running build or benchmark 14:20:37
+waiting for a running build or benchmark 14:20:47
+waiting for a running build or benchmark 14:20:57
+waiting for a running build or benchmark 14:21:07
+waiting for a running build or benchmark 14:21:17
+waiting for a running build or benchmark 14:21:27
+waiting for a running build or benchmark 14:21:37
+waiting for a running build or benchmark 14:21:47
+waiting for a running build or benchmark 14:21:57
+waiting for a running build or benchmark 14:22:07
+waiting for a running build or benchmark 14:22:17
+waiting for a running build or benchmark 14:22:28
+waiting for a running build or benchmark 14:22:38
+waiting for a running build or benchmark 14:22:48
+waiting for a running build or benchmark 14:22:58
+waiting for a running build or benchmark 14:23:08
+waiting for a running build or benchmark 14:23:18
+waiting for a running build or benchmark 14:23:28
+waiting for a running build or benchmark 14:23:38
+waiting for a running build or benchmark 14:23:48
+waiting for a running build or benchmark 14:23:58
+waiting for a running build or benchmark 14:24:08
+waiting for a running build or benchmark 14:24:18
+waiting for a running build or benchmark 14:24:28
+waiting for a running build or benchmark 14:24:38
+waiting for a running build or benchmark 14:24:48
+waiting for a running build or benchmark 14:24:58
+waiting for a running build or benchmark 14:25:08
+waiting for a running build or benchmark 14:25:49
+waiting for a running build or benchmark 14:25:59
+waiting for a running build or benchmark 14:26:09
+waiting for a running build or benchmark 14:26:19
+waiting for a running build or benchmark 14:26:29
+waiting for a running build or benchmark 14:26:39
+waiting for a running build or benchmark 14:26:49
+waiting for a running build or benchmark 14:27:09
+waiting for a running build or benchmark 14:27:19
+waiting for a running build or benchmark 14:27:29
+waiting for a running build or benchmark 14:27:40
+waiting for a running build or benchmark 14:27:50
+waiting for a running build or benchmark 14:28:00
+waiting for a running build or benchmark 14:28:10
+=== restart 14:35:56 after the PP-loop session's window, lock first
+skip docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t2_n32 (exists)
+== docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t4_n32 attempt 1 14:52:54 load 4.17 5.53 5.09 GPU apps: 0
+arena_handoff82_cuda_b128_o7_pair0: lattice/phi=0 11.123 ms, lattice/phi=1 10.956 ms, clustered/phi=0 5.618 ms, clustered/phi=1 6.051 ms, adaptive/phi=0 18.208 ms, adaptive/phi=1 18.476 ms
+arena_handoff164_cuda_b128_o7_pair0: lattice/phi=0 11.964 ms, lattice/phi=1 11.690 ms, clustered/phi=0 5.832 ms, clustered/phi=1 6.361 ms, adaptive/phi=0 14.288 ms, adaptive/phi=1 13.520 ms
+arena_handoff328_cuda_b128_o7_pair0: lattice/phi=0 11.446 ms, lattice/phi=1 12.134 ms, clustered/phi=0 6.016 ms, clustered/phi=1 6.608 ms, adaptive/phi=0 14.993 ms, adaptive/phi=1 15.221 ms
+arena_handoff492_cuda_b128_o7_pair0: lattice/phi=0 11.896 ms, lattice/phi=1 11.576 ms, clustered/phi=0 6.403 ms, clustered/phi=1 6.676 ms, adaptive/phi=0 16.771 ms, adaptive/phi=1 15.815 ms
+arena_handoff656_cuda_b128_o7_pair0: lattice/phi=0 11.418 ms, lattice/phi=1 11.616 ms, clustered/phi=0 6.128 ms, clustered/phi=1 6.766 ms, adaptive/phi=0 15.447 ms, adaptive/phi=1 16.125 ms
+arena_handoff656_cuda_b128_o7_pair1: lattice/phi=0 12.697 ms, lattice/phi=1 12.031 ms, clustered/phi=0 5.897 ms, clustered/phi=1 6.364 ms, adaptive/phi=0 15.614 ms, adaptive/phi=1 15.579 ms
+arena_handoff492_cuda_b128_o7_pair1: lattice/phi=0 12.416 ms, lattice/phi=1 11.772 ms, clustered/phi=0 5.994 ms, clustered/phi=1 6.418 ms, adaptive/phi=0 16.358 ms, adaptive/phi=1 14.962 ms
+arena_handoff328_cuda_b128_o7_pair1: lattice/phi=0 12.242 ms, lattice/phi=1 11.692 ms, clustered/phi=0 5.962 ms, clustered/phi=1 6.283 ms, adaptive/phi=0 17.005 ms, adaptive/phi=1 16.787 ms
+arena_handoff164_cuda_b128_o7_pair1: lattice/phi=0 11.693 ms, lattice/phi=1 12.048 ms, clustered/phi=0 6.101 ms, clustered/phi=1 6.442 ms, adaptive/phi=0 13.410 ms, adaptive/phi=1 13.196 ms
+arena_handoff82_cuda_b128_o7_pair1: lattice/phi=0 9.998 ms, lattice/phi=1 10.898 ms, clustered/phi=0 5.783 ms, clustered/phi=1 6.199 ms, adaptive/phi=0 19.546 ms, adaptive/phi=1 20.307 ms
+Completed; see docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t4_n32/summary.md
+docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t4_n32: worst pair spread 1.134 ('arena', 'handoff328', 'cuda', 128, 7, 'adaptive', False), load at start 4.17, process wall 2.4-2.6 s
+skip docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t4_n32 (exists)
+skip docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t8_n32 (exists)
+skip docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t12_n32 (exists)
+== docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t2_n64 attempt 1 15:01:54 load 2.88 3.47 4.25 GPU apps: 0
+arena_handoff82_cuda_b128_o7_pair0: lattice/phi=0 38.243 ms, lattice/phi=1 41.670 ms, clustered/phi=0 26.401 ms, clustered/phi=1 29.650 ms, adaptive/phi=0 45.652 ms, adaptive/phi=1 47.992 ms
+arena_handoff164_cuda_b128_o7_pair0: lattice/phi=0 30.896 ms, lattice/phi=1 32.297 ms, clustered/phi=0 18.421 ms, clustered/phi=1 20.667 ms, adaptive/phi=0 29.953 ms, adaptive/phi=1 32.639 ms
+arena_handoff328_cuda_b128_o7_pair0: lattice/phi=0 48.068 ms, lattice/phi=1 48.121 ms, clustered/phi=0 18.367 ms, clustered/phi=1 18.278 ms, adaptive/phi=0 28.823 ms, adaptive/phi=1 30.703 ms
+arena_handoff492_cuda_b128_o7_pair0: lattice/phi=0 49.262 ms, lattice/phi=1 47.926 ms, clustered/phi=0 18.260 ms, clustered/phi=1 19.874 ms, adaptive/phi=0 28.221 ms, adaptive/phi=1 31.755 ms
+arena_handoff656_cuda_b128_o7_pair0: lattice/phi=0 103.944 ms, lattice/phi=1 106.232 ms, clustered/phi=0 20.982 ms, clustered/phi=1 20.941 ms, adaptive/phi=0 36.333 ms, adaptive/phi=1 36.904 ms
+arena_handoff656_cuda_b128_o7_pair1: lattice/phi=0 104.933 ms, lattice/phi=1 104.913 ms, clustered/phi=0 19.808 ms, clustered/phi=1 20.553 ms, adaptive/phi=0 36.200 ms, adaptive/phi=1 38.122 ms
+arena_handoff492_cuda_b128_o7_pair1: lattice/phi=0 49.092 ms, lattice/phi=1 47.580 ms, clustered/phi=0 16.847 ms, clustered/phi=1 17.885 ms, adaptive/phi=0 30.658 ms, adaptive/phi=1 33.372 ms
+arena_handoff328_cuda_b128_o7_pair1: lattice/phi=0 47.554 ms, lattice/phi=1 48.067 ms, clustered/phi=0 18.192 ms, clustered/phi=1 20.579 ms, adaptive/phi=0 28.185 ms, adaptive/phi=1 31.065 ms
+arena_handoff164_cuda_b128_o7_pair1: lattice/phi=0 35.103 ms, lattice/phi=1 35.178 ms, clustered/phi=0 19.963 ms, clustered/phi=1 22.136 ms, adaptive/phi=0 30.511 ms, adaptive/phi=1 36.114 ms
+arena_handoff82_cuda_b128_o7_pair1: lattice/phi=0 39.126 ms, lattice/phi=1 42.327 ms, clustered/phi=0 24.480 ms, clustered/phi=1 27.492 ms, adaptive/phi=0 44.117 ms, adaptive/phi=1 49.915 ms
+Completed; see docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t2_n64/summary.md
+docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t2_n64: worst pair spread 1.136 ('arena', 'handoff164', 'cuda', 128, 7, 'lattice', False), load at start 2.88, process wall 7.5-9.4 s
+skip docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t2_n64 (exists)
+== docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t4_n64 attempt 1 15:08:18 load 4.00 4.58 4.59 GPU apps: 0
+arena_handoff82_cuda_b128_o7_pair0: lattice/phi=0 34.070 ms, lattice/phi=1 37.384 ms, clustered/phi=0 23.302 ms, clustered/phi=1 25.661 ms, adaptive/phi=0 41.883 ms, adaptive/phi=1 45.782 ms
+arena_handoff164_cuda_b128_o7_pair0: lattice/phi=0 26.107 ms, lattice/phi=1 26.781 ms, clustered/phi=0 18.163 ms, clustered/phi=1 18.701 ms, adaptive/phi=0 27.422 ms, adaptive/phi=1 27.929 ms
+arena_handoff328_cuda_b128_o7_pair0: lattice/phi=0 32.165 ms, lattice/phi=1 34.757 ms, clustered/phi=0 17.098 ms, clustered/phi=1 16.565 ms, adaptive/phi=0 23.684 ms, adaptive/phi=1 26.180 ms
+arena_handoff492_cuda_b128_o7_pair0: lattice/phi=0 35.419 ms, lattice/phi=1 34.105 ms, clustered/phi=0 17.944 ms, clustered/phi=1 17.584 ms, adaptive/phi=0 26.608 ms, adaptive/phi=1 26.008 ms
+arena_handoff656_cuda_b128_o7_pair0: lattice/phi=0 60.992 ms, lattice/phi=1 63.189 ms, clustered/phi=0 15.903 ms, clustered/phi=1 19.473 ms, adaptive/phi=0 27.157 ms, adaptive/phi=1 28.232 ms
+waiting for other work to finish before arena_handoff656_cuda_b128_o7_pair1
+waiting for other work to finish before arena_handoff656_cuda_b128_o7_pair1
+waiting for other work to finish before arena_handoff656_cuda_b128_o7_pair1
+waiting for other work to finish before arena_handoff656_cuda_b128_o7_pair1
+waiting for other work to finish before arena_handoff656_cuda_b128_o7_pair1
+waiting for other work to finish before arena_handoff656_cuda_b128_o7_pair1
+waiting for other work to finish before arena_handoff656_cuda_b128_o7_pair1
+waiting for other work to finish before arena_handoff656_cuda_b128_o7_pair1
+waiting for other work to finish before arena_handoff656_cuda_b128_o7_pair1
+waiting for other work to finish before arena_handoff656_cuda_b128_o7_pair1
+waiting for other work to finish before arena_handoff656_cuda_b128_o7_pair1
+waiting for other work to finish before arena_handoff656_cuda_b128_o7_pair1
+waiting for other work to finish before arena_handoff656_cuda_b128_o7_pair1
+waiting for other work to finish before arena_handoff656_cuda_b128_o7_pair1
+waiting for other work to finish before arena_handoff656_cuda_b128_o7_pair1
+waiting for other work to finish before arena_handoff656_cuda_b128_o7_pair1
+waiting for other work to finish before arena_handoff656_cuda_b128_o7_pair1
+waiting for other work to finish before arena_handoff656_cuda_b128_o7_pair1
+waiting for other work to finish before arena_handoff656_cuda_b128_o7_pair1
+arena_handoff656_cuda_b128_o7_pair1: lattice/phi=0 58.017 ms, lattice/phi=1 59.842 ms, clustered/phi=0 16.863 ms, clustered/phi=1 16.883 ms, adaptive/phi=0 26.945 ms, adaptive/phi=1 28.131 ms
+arena_handoff492_cuda_b128_o7_pair1: lattice/phi=0 31.475 ms, lattice/phi=1 31.719 ms, clustered/phi=0 14.167 ms, clustered/phi=1 16.613 ms, adaptive/phi=0 23.933 ms, adaptive/phi=1 26.163 ms
+arena_handoff328_cuda_b128_o7_pair1: lattice/phi=0 30.730 ms, lattice/phi=1 31.078 ms, clustered/phi=0 15.819 ms, clustered/phi=1 17.360 ms, adaptive/phi=0 22.922 ms, adaptive/phi=1 25.492 ms
+arena_handoff164_cuda_b128_o7_pair1: lattice/phi=0 25.917 ms, lattice/phi=1 28.424 ms, clustered/phi=0 16.224 ms, clustered/phi=1 18.087 ms, adaptive/phi=0 25.476 ms, adaptive/phi=1 28.296 ms
+arena_handoff82_cuda_b128_o7_pair1: lattice/phi=0 31.382 ms, lattice/phi=1 37.440 ms, clustered/phi=0 22.790 ms, clustered/phi=1 25.683 ms, adaptive/phi=0 44.375 ms, adaptive/phi=1 43.449 ms
+Completed; see docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t4_n64/summary.md
+docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t4_n64: worst pair spread 1.267 ('arena', 'handoff492', 'cuda', 128, 7, 'clustered', False), load at start 4.00, process wall 6.8-10.6 s
+contaminated: moved to docs/cuda_kick_shared_memory_results/handoff_threads_sizes_contaminated
+waiting for a running build or benchmark 15:18:19
+waiting for a running build or benchmark 15:18:29
+waiting for a running build or benchmark 15:18:39
+waiting for a running build or benchmark 15:18:49
+waiting for a running build or benchmark 15:18:59
+waiting for a running build or benchmark 15:19:09
+waiting for a running build or benchmark 15:19:19
+waiting for a running build or benchmark 15:19:29
+== docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t4_n64 attempt 2 15:20:10 load 3.87 6.23 6.20 GPU apps: 0
+waiting for other work to finish before arena_handoff82_cuda_b128_o7_pair0
+waiting for other work to finish before arena_handoff82_cuda_b128_o7_pair0
+waiting for other work to finish before arena_handoff82_cuda_b128_o7_pair0
+waiting for other work to finish before arena_handoff82_cuda_b128_o7_pair0
+waiting for other work to finish before arena_handoff82_cuda_b128_o7_pair0
+waiting for other work to finish before arena_handoff82_cuda_b128_o7_pair0
+waiting for other work to finish before arena_handoff82_cuda_b128_o7_pair0
+waiting for other work to finish before arena_handoff82_cuda_b128_o7_pair0
+waiting for other work to finish before arena_handoff82_cuda_b128_o7_pair0
+waiting for other work to finish before arena_handoff82_cuda_b128_o7_pair0
+waiting for other work to finish before arena_handoff82_cuda_b128_o7_pair0
+waiting for other work to finish before arena_handoff82_cuda_b128_o7_pair0
+arena_handoff82_cuda_b128_o7_pair0: lattice/phi=0 32.655 ms, lattice/phi=1 35.849 ms, clustered/phi=0 23.095 ms, clustered/phi=1 27.955 ms, adaptive/phi=0 41.477 ms, adaptive/phi=1 45.698 ms
+arena_handoff164_cuda_b128_o7_pair0: lattice/phi=0 27.129 ms, lattice/phi=1 27.480 ms, clustered/phi=0 17.744 ms, clustered/phi=1 18.978 ms, adaptive/phi=0 27.638 ms, adaptive/phi=1 31.048 ms
+waiting for other work to finish before arena_handoff328_cuda_b128_o7_pair0
+waiting for other work to finish before arena_handoff328_cuda_b128_o7_pair0
+waiting for other work to finish before arena_handoff328_cuda_b128_o7_pair0
+waiting for other work to finish before arena_handoff328_cuda_b128_o7_pair0
+waiting for other work to finish before arena_handoff328_cuda_b128_o7_pair0
+waiting for other work to finish before arena_handoff328_cuda_b128_o7_pair0
+arena_handoff328_cuda_b128_o7_pair0: lattice/phi=0 31.253 ms, lattice/phi=1 32.565 ms, clustered/phi=0 14.647 ms, clustered/phi=1 16.328 ms, adaptive/phi=0 22.926 ms, adaptive/phi=1 22.814 ms
+arena_handoff492_cuda_b128_o7_pair0: lattice/phi=0 31.442 ms, lattice/phi=1 33.326 ms, clustered/phi=0 15.743 ms, clustered/phi=1 16.770 ms, adaptive/phi=0 23.473 ms, adaptive/phi=1 25.776 ms
+arena_handoff656_cuda_b128_o7_pair0: lattice/phi=0 58.281 ms, lattice/phi=1 60.125 ms, clustered/phi=0 17.530 ms, clustered/phi=1 17.681 ms, adaptive/phi=0 24.876 ms, adaptive/phi=1 27.138 ms
+arena_handoff656_cuda_b128_o7_pair1: lattice/phi=0 57.909 ms, lattice/phi=1 60.399 ms, clustered/phi=0 16.533 ms, clustered/phi=1 17.773 ms, adaptive/phi=0 25.566 ms, adaptive/phi=1 28.176 ms
+arena_handoff492_cuda_b128_o7_pair1: lattice/phi=0 31.987 ms, lattice/phi=1 33.643 ms, clustered/phi=0 15.869 ms, clustered/phi=1 17.400 ms, adaptive/phi=0 23.847 ms, adaptive/phi=1 26.039 ms
+arena_handoff328_cuda_b128_o7_pair1: lattice/phi=0 31.752 ms, lattice/phi=1 33.394 ms, clustered/phi=0 15.321 ms, clustered/phi=1 16.446 ms, adaptive/phi=0 22.605 ms, adaptive/phi=1 24.485 ms
+arena_handoff164_cuda_b128_o7_pair1: lattice/phi=0 25.378 ms, lattice/phi=1 26.900 ms, clustered/phi=0 16.849 ms, clustered/phi=1 18.034 ms, adaptive/phi=0 26.361 ms, adaptive/phi=1 29.176 ms
+arena_handoff82_cuda_b128_o7_pair1: lattice/phi=0 34.164 ms, lattice/phi=1 38.160 ms, clustered/phi=0 23.389 ms, clustered/phi=1 27.016 ms, adaptive/phi=0 42.182 ms, adaptive/phi=1 47.160 ms
+Completed; see docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t4_n64/summary.md
+docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t4_n64: worst pair spread 1.073 ('arena', 'handoff328', 'cuda', 128, 7, 'adaptive', True), load at start 3.87, process wall 6.7-7.5 s
+skip docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t4_n64 (exists)
+== docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t8_n64 attempt 1 15:26:45 load 3.87 4.95 5.64 GPU apps: 0
+arena_handoff82_cuda_b128_o7_pair0: lattice/phi=0 34.351 ms, lattice/phi=1 36.120 ms, clustered/phi=0 24.973 ms, clustered/phi=1 26.730 ms, adaptive/phi=0 41.831 ms, adaptive/phi=1 44.843 ms
+arena_handoff164_cuda_b128_o7_pair0: lattice/phi=0 22.989 ms, lattice/phi=1 24.628 ms, clustered/phi=0 16.770 ms, clustered/phi=1 18.949 ms, adaptive/phi=0 26.255 ms, adaptive/phi=1 28.292 ms
+arena_handoff328_cuda_b128_o7_pair0: lattice/phi=0 23.601 ms, lattice/phi=1 23.795 ms, clustered/phi=0 14.284 ms, clustered/phi=1 16.050 ms, adaptive/phi=0 22.114 ms, adaptive/phi=1 21.730 ms
+arena_handoff492_cuda_b128_o7_pair0: lattice/phi=0 24.036 ms, lattice/phi=1 24.918 ms, clustered/phi=0 14.718 ms, clustered/phi=1 15.694 ms, adaptive/phi=0 21.716 ms, adaptive/phi=1 22.627 ms
+arena_handoff656_cuda_b128_o7_pair0: lattice/phi=0 36.419 ms, lattice/phi=1 37.915 ms, clustered/phi=0 15.155 ms, clustered/phi=1 16.917 ms, adaptive/phi=0 22.510 ms, adaptive/phi=1 24.538 ms
+arena_handoff656_cuda_b128_o7_pair1: lattice/phi=0 36.700 ms, lattice/phi=1 39.363 ms, clustered/phi=0 15.906 ms, clustered/phi=1 17.115 ms, adaptive/phi=0 22.427 ms, adaptive/phi=1 23.765 ms
+arena_handoff492_cuda_b128_o7_pair1: lattice/phi=0 23.369 ms, lattice/phi=1 24.732 ms, clustered/phi=0 14.069 ms, clustered/phi=1 15.869 ms, adaptive/phi=0 21.955 ms, adaptive/phi=1 22.701 ms
+arena_handoff328_cuda_b128_o7_pair1: lattice/phi=0 23.397 ms, lattice/phi=1 24.719 ms, clustered/phi=0 14.858 ms, clustered/phi=1 15.636 ms, adaptive/phi=0 20.468 ms, adaptive/phi=1 22.065 ms
+arena_handoff164_cuda_b128_o7_pair1: lattice/phi=0 23.037 ms, lattice/phi=1 23.018 ms, clustered/phi=0 15.086 ms, clustered/phi=1 17.417 ms, adaptive/phi=0 24.740 ms, adaptive/phi=1 26.378 ms
+arena_handoff82_cuda_b128_o7_pair1: lattice/phi=0 31.525 ms, lattice/phi=1 34.059 ms, clustered/phi=0 21.538 ms, clustered/phi=1 24.748 ms, adaptive/phi=0 38.319 ms, adaptive/phi=1 42.563 ms
+Completed; see docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t8_n64/summary.md
+docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t8_n64: worst pair spread 1.159 ('arena', 'handoff82', 'cuda', 128, 7, 'clustered', False), load at start 3.87, process wall 6.3-7.4 s
+skip docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t8_n64 (exists)
+== docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t12_n64 attempt 1 15:31:37 load 3.17 4.70 5.42 GPU apps: 0
+arena_handoff82_cuda_b128_o7_pair0: lattice/phi=0 35.421 ms, lattice/phi=1 37.493 ms, clustered/phi=0 23.825 ms, clustered/phi=1 27.105 ms, adaptive/phi=0 43.827 ms, adaptive/phi=1 48.006 ms
+arena_handoff164_cuda_b128_o7_pair0: lattice/phi=0 23.378 ms, lattice/phi=1 24.710 ms, clustered/phi=0 17.869 ms, clustered/phi=1 19.983 ms, adaptive/phi=0 27.285 ms, adaptive/phi=1 28.446 ms
+arena_handoff328_cuda_b128_o7_pair0: lattice/phi=0 22.440 ms, lattice/phi=1 22.624 ms, clustered/phi=0 15.780 ms, clustered/phi=1 17.291 ms, adaptive/phi=0 21.234 ms, adaptive/phi=1 23.709 ms
+arena_handoff492_cuda_b128_o7_pair0: lattice/phi=0 22.258 ms, lattice/phi=1 21.568 ms, clustered/phi=0 15.554 ms, clustered/phi=1 16.877 ms, adaptive/phi=0 23.498 ms, adaptive/phi=1 24.492 ms
+arena_handoff656_cuda_b128_o7_pair0: lattice/phi=0 31.861 ms, lattice/phi=1 33.499 ms, clustered/phi=0 16.804 ms, clustered/phi=1 18.464 ms, adaptive/phi=0 21.722 ms, adaptive/phi=1 22.913 ms
+arena_handoff656_cuda_b128_o7_pair1: lattice/phi=0 32.889 ms, lattice/phi=1 34.247 ms, clustered/phi=0 17.296 ms, clustered/phi=1 17.882 ms, adaptive/phi=0 21.113 ms, adaptive/phi=1 25.311 ms
+arena_handoff492_cuda_b128_o7_pair1: lattice/phi=0 22.056 ms, lattice/phi=1 21.965 ms, clustered/phi=0 15.059 ms, clustered/phi=1 17.240 ms, adaptive/phi=0 22.439 ms, adaptive/phi=1 23.935 ms
+arena_handoff328_cuda_b128_o7_pair1: lattice/phi=0 23.456 ms, lattice/phi=1 22.558 ms, clustered/phi=0 16.177 ms, clustered/phi=1 17.215 ms, adaptive/phi=0 22.123 ms, adaptive/phi=1 24.035 ms
+arena_handoff164_cuda_b128_o7_pair1: lattice/phi=0 23.060 ms, lattice/phi=1 24.887 ms, clustered/phi=0 16.989 ms, clustered/phi=1 19.774 ms, adaptive/phi=0 26.874 ms, adaptive/phi=1 29.935 ms
+arena_handoff82_cuda_b128_o7_pair1: lattice/phi=0 34.377 ms, lattice/phi=1 37.532 ms, clustered/phi=0 24.153 ms, clustered/phi=1 27.969 ms, adaptive/phi=0 43.323 ms, adaptive/phi=1 46.039 ms
+Completed; see docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t12_n64/summary.md
+docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t12_n64: worst pair spread 1.105 ('arena', 'handoff656', 'cuda', 128, 7, 'adaptive', True), load at start 3.17, process wall 6.4-7.6 s
+skip docs/cuda_kick_shared_memory_results/handoff_threads_sizes/t12_n64 (exists)
+sweep exit 0

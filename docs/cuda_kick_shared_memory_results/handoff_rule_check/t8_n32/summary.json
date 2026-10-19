@@ -1,0 +1,385 @@
+{
+  "timing": [
+    {
+      "binary": "rule",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 13.9475415,
+      "kick_ms_min": 13.736629,
+      "kick_ms_max": 14.158453999999999,
+      "pairs": 2
+    },
+    {
+      "binary": "rule",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 14.092304,
+      "kick_ms_min": 13.763509,
+      "kick_ms_max": 14.421099,
+      "pairs": 2
+    },
+    {
+      "binary": "rule",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 5.6749635,
+      "kick_ms_min": 5.564365,
+      "kick_ms_max": 5.7855620000000005,
+      "pairs": 2
+    },
+    {
+      "binary": "rule",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 6.609561,
+      "kick_ms_min": 6.525678,
+      "kick_ms_max": 6.6934439999999995,
+      "pairs": 2
+    },
+    {
+      "binary": "rule",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 10.821851,
+      "kick_ms_min": 10.454328,
+      "kick_ms_max": 11.189374,
+      "pairs": 2
+    },
+    {
+      "binary": "rule",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 10.447569999999999,
+      "kick_ms_min": 10.296039,
+      "kick_ms_max": 10.599101,
+      "pairs": 2
+    },
+    {
+      "binary": "rule",
+      "policy": "handoff164",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 14.098781,
+      "kick_ms_min": 13.699518000000001,
+      "kick_ms_max": 14.498044,
+      "pairs": 2
+    },
+    {
+      "binary": "rule",
+      "policy": "handoff164",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 13.719024999999998,
+      "kick_ms_min": 13.544586,
+      "kick_ms_max": 13.893464,
+      "pairs": 2
+    },
+    {
+      "binary": "rule",
+      "policy": "handoff164",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 5.719808,
+      "kick_ms_min": 5.707255,
+      "kick_ms_max": 5.732361,
+      "pairs": 2
+    },
+    {
+      "binary": "rule",
+      "policy": "handoff164",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 5.9783254999999995,
+      "kick_ms_min": 5.861104,
+      "kick_ms_max": 6.095547,
+      "pairs": 2
+    },
+    {
+      "binary": "rule",
+      "policy": "handoff164",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 10.136674,
+      "kick_ms_min": 10.129575,
+      "kick_ms_max": 10.143773,
+      "pairs": 2
+    },
+    {
+      "binary": "rule",
+      "policy": "handoff164",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 9.988674499999998,
+      "kick_ms_min": 9.894151,
+      "kick_ms_max": 10.083198,
+      "pairs": 2
+    },
+    {
+      "binary": "rule",
+      "policy": "handoff328",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 14.733293,
+      "kick_ms_min": 14.439674,
+      "kick_ms_max": 15.026912,
+      "pairs": 2
+    },
+    {
+      "binary": "rule",
+      "policy": "handoff328",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 14.016430999999999,
+      "kick_ms_min": 13.919513,
+      "kick_ms_max": 14.113349000000001,
+      "pairs": 2
+    },
+    {
+      "binary": "rule",
+      "policy": "handoff328",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 5.7682995,
+      "kick_ms_min": 5.7102,
+      "kick_ms_max": 5.826399,
+      "pairs": 2
+    },
+    {
+      "binary": "rule",
+      "policy": "handoff328",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 6.160514000000001,
+      "kick_ms_min": 6.125213,
+      "kick_ms_max": 6.1958150000000005,
+      "pairs": 2
+    },
+    {
+      "binary": "rule",
+      "policy": "handoff328",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 10.0816,
+      "kick_ms_min": 9.971015999999999,
+      "kick_ms_max": 10.192184,
+      "pairs": 2
+    },
+    {
+      "binary": "rule",
+      "policy": "handoff328",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 10.135722,
+      "kick_ms_min": 10.11077,
+      "kick_ms_max": 10.160674,
+      "pairs": 2
+    }
+  ],
+  "references": [],
+  "arena_lines": [
+    {
+      "binary": "rule",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 8944 bytes: control 528, expansion shared, forces shared tile 128, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes"
+    },
+    {
+      "binary": "rule",
+      "policy": "handoff164",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 8944 bytes: control 528, expansion shared, forces shared tile 128, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes"
+    },
+    {
+      "binary": "rule",
+      "policy": "handoff328",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 8944 bytes: control 528, expansion shared, forces shared tile 128, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes"
+    }
+  ],
+  "comparisons": [
+    {
+      "kind": "vs_rule",
+      "binary": "rule",
+      "policy": "handoff164",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "result": {
+        "adaptive": {
+          "acceleration": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "clustered": {
+          "acceleration": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "lattice": {
+          "acceleration": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          }
+        }
+      }
+    },
+    {
+      "kind": "vs_rule",
+      "binary": "rule",
+      "policy": "handoff328",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "result": {
+        "adaptive": {
+          "acceleration": {
+            "relative_l2": 1.1810464355040287e-07,
+            "max_pointwise_relative": 5.72212036637721e-06,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 6.288202269584522e-08,
+            "max_pointwise_relative": 0.0009284558452927288,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "clustered": {
+          "acceleration": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "lattice": {
+          "acceleration": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          }
+        }
+      }
+    }
+  ],
+  "repeat_export_hashes": [
+    {
+      "binary": "rule",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "distinct_exports": 1
+    },
+    {
+      "binary": "rule",
+      "policy": "handoff164",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "distinct_exports": 1
+    },
+    {
+      "binary": "rule",
+      "policy": "handoff328",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "distinct_exports": 1
+    }
+  ]
+}
