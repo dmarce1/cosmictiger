@@ -567,14 +567,14 @@ void particlesMemadviseCpu() {
         CUDA_CHECK(cudaMemAdvise(&particlesRung(0) + begin, count * sizeof(char),
             cudaMemAdviseUnsetPreferredLocation, cudaCpuDeviceId));
     };
+    CudaStream stream(deviceid);
     for (int dim = 0; dim < NDIM; dim++) {
-        CUDA_CHECK(cudaMemPrefetchAsync(
-            &particlesPos(dim, begin), count * sizeof(Fixed32), cudaCpuDeviceId, 0));
+        stream.prefetchAsync(&particlesPos(dim, begin), count * sizeof(Fixed32), cudaCpuDeviceId);
     }
-    CUDA_CHECK(cudaMemPrefetchAsync(
-        &particlesVel(XDIM, begin), count * sizeof(Array<float, NDIM>), cudaCpuDeviceId, 0));
-    CUDA_CHECK(
-        cudaMemPrefetchAsync(&particlesRung(begin), count * sizeof(char), cudaCpuDeviceId, 0));
+    stream.prefetchAsync(
+        &particlesVel(XDIM, begin), count * sizeof(Array<float, NDIM>), cudaCpuDeviceId);
+    stream.prefetchAsync(&particlesRung(begin), count * sizeof(char), cudaCpuDeviceId);
+    stream.wait();
 #endif
 }
 

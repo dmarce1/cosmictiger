@@ -1,3 +1,5 @@
+#include <atomic>
+
 #include <cosmictiger/cuda_reduce.hpp>
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/rockstar.hpp>
@@ -12,6 +14,28 @@ __global__ void rockstarAssignLinklenKernel(RockstarTree const* nodes, int const
 
 static std::atomic<int> blocksUsed(0);
 
+namespace detail {
+
+class RockstarBlocksLease {
+public:
+    explicit RockstarBlocksLease(int count)
+      : count_(count) {
+        blocksUsed += count_;
+    }
+
+    ~RockstarBlocksLease() {
+        blocksUsed -= count_;
+    }
+
+    RockstarBlocksLease(RockstarBlocksLease const&) = delete;
+    RockstarBlocksLease& operator=(RockstarBlocksLease const&) = delete;
+
+private:
+    int count_;
+};
+
+}    // namespace detail
+
 bool rockstarCudaFree() {
     return blocksUsed < cudaSmpCount();
 }
@@ -22,12 +46,12 @@ void rockstarAssignLinklenCuda(DeviceVector<RockstarTree> const& nodes,
     if (leaves.size() == 0) {
         return;
     }
-    auto stream = cudaGetStream();
-    blocksUsed += leaves.size();
-    rockstarAssignLinklenKernel<<<leaves.size(), BLOCK_SIZE, 0, stream>>>(
+    detail::RockstarBlocksLease const blocks(leaves.size());
+    CudaStream stream(cudaGetDevice());
+    rockstarAssignLinklenKernel<<<leaves.size(), BLOCK_SIZE, 0, stream.nativeHandle()>>>(
         nodes.data(), leaves.data(), parts.data(), linkingLength, phase);
-    cudaEndStream(stream);
-    blocksUsed -= leaves.size();
+    stream.checkLaunch();
+    stream.wait();
 }
 
 void rockstarFindSubgroupsCuda(DeviceVector<RockstarTree>& nodes, DeviceVector<int> const& leaves,
@@ -45,12 +69,12 @@ void rockstarFindSubgroupsCuda(DeviceVector<RockstarTree>& nodes, DeviceVector<i
     DeviceVector<int> numberOfChangedLeaves(1);
     do {
         numberOfChangedLeaves[0] = 0;
-        auto stream = cudaGetStream();
-        blocksUsed += leaves.size();
-        rockstarFindSubgroupsKernel<<<leaves.size(), BLOCK_SIZE, 0, stream>>>(
+        detail::RockstarBlocksLease const blocks(leaves.size());
+        CudaStream stream(cudaGetDevice());
+        rockstarFindSubgroupsKernel<<<leaves.size(), BLOCK_SIZE, 0, stream.nativeHandle()>>>(
             nodes.data(), leaves.data(), parts.data(), linkingLength, numberOfChangedLeaves.data());
-        cudaEndStream(stream);
-        blocksUsed -= leaves.size();
+        stream.checkLaunch();
+        stream.wait();
     } while (numberOfChangedLeaves[0] != 0);
 }
 

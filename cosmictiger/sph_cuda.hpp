@@ -21,6 +21,7 @@
 #define SPH_CUDA_HPP_
 
 #include <cosmictiger/constants.hpp>
+#include <cosmictiger/cuda.hpp>
 #include <cosmictiger/cuda_memory.hpp>
 #include <cosmictiger/cuda_reduce.hpp>
 #include <cosmictiger/defs.hpp>
@@ -56,7 +57,7 @@ struct SphReduction {
 };
 
 #ifdef USE_CUDA
-SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, cudaStream_t stream);
+SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, CudaStream& stream);
 #endif
 
 #ifdef __CUDACC__

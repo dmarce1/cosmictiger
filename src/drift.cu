@@ -190,9 +190,11 @@ void cudaDrift(int rung, float a, float dt, float tau0, float tau1, float tauMax
     auto* vels = particlesVelData() + rng.first;
     auto const* rungs = &particlesRung(rng.first);
     drag = getOptions().initial.createGlass ? M_PI : 0.0;
-    cudaDriftKernel<<<numberOfBlocks, BLOCK_SIZE>>>(x, y, z, vels, rungs, cnt, rung, a, dt, tau0,
-        tau1, tauMax, doLc, getOptions().lightcone.mapSize, drag);
-    CUDA_CHECK(cudaDeviceSynchronize());
+    CudaStream stream(cudaGetDevice());
+    cudaDriftKernel<<<numberOfBlocks, BLOCK_SIZE, 0, stream.nativeHandle()>>>(x, y, z, vels, rungs,
+        cnt, rung, a, dt, tau0, tau1, tauMax, doLc, getOptions().lightcone.mapSize, drag);
+    stream.checkLaunch();
+    stream.wait();
     cnt = 0;
     static size_t totalCnt = 0;
     if (doLc) {

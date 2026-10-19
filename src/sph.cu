@@ -17,12 +17,25 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <memory>
+
 #include <cosmictiger/sph_cuda.hpp>
 
-SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, cudaStream_t stream) {
+SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, CudaStream& stream) {
     SphRunReturn result;
     SphReduction* reduction;
     CUDA_CHECK(cudaMallocManaged(&reduction, sizeof(SphReduction)));
+    auto const releaseReduction = [&stream](SphReduction* pointer) noexcept {
+        // This reduction belongs to the callee while the stream belongs to its
+        // caller; finish outstanding work before releasing it on every exit.
+        try {
+            stream.wait();
+        } catch (...) {
+        }
+        cudaFree(pointer);
+    };
+    std::unique_ptr<SphReduction, decltype(releaseReduction)> reductionOwner(
+        reduction, releaseReduction);
     reduction->nextNodeIndex = reduction->pendingChanges = 0;
     reduction->minimumSupportRadius = std::numeric_limits<float>::max();
     reduction->maximumSupportRadius = 0.0f;
@@ -58,24 +71,28 @@ SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, cudaSt
     timer.start();
     switch (parameters.runType) {
     case SPH_RUN_PREHYDRO1: {
-        sphCudaPrehydro1<<<smoothingBlockCount, PREHYDRO1_BLOCK_SIZE, 0, stream>>>(
+        sphCudaPrehydro1<<<smoothingBlockCount, PREHYDRO1_BLOCK_SIZE, 0, stream.nativeHandle()>>>(
             parameters, data, reduction);
-        synchronizeCudaStream(stream);
+        stream.checkLaunch();
+        stream.wait();
         result.needsAnotherPass = reduction->pendingChanges;
         result.minimumSupportRadius = reduction->minimumSupportRadius;
         result.maximumSupportRadius = reduction->maximumSupportRadius;
     } break;
     case SPH_RUN_PREHYDRO2: {
-        sphCudaPrehydro2<<<densityBlockCount, PREHYDRO2_BLOCK_SIZE, 0, stream>>>(
+        sphCudaPrehydro2<<<densityBlockCount, PREHYDRO2_BLOCK_SIZE, 0, stream.nativeHandle()>>>(
             parameters, data, reduction);
-        synchronizeCudaStream(stream);
+        stream.checkLaunch();
+        stream.wait();
         result.needsAnotherPass = reduction->pendingChanges;
         result.minimumSupportRadius = reduction->minimumSupportRadius;
         result.maximumSupportRadius = reduction->maximumSupportRadius;
     } break;
     case SPH_RUN_RUNGS: {
-        sphCudaRungs<<<rungBlockCount, RUNGS_BLOCK_SIZE, 0, stream>>>(parameters, data, reduction);
-        synchronizeCudaStream(stream);
+        sphCudaRungs<<<rungBlockCount, RUNGS_BLOCK_SIZE, 0, stream.nativeHandle()>>>(
+            parameters, data, reduction);
+        stream.checkLaunch();
+        stream.wait();
         result.maximumSignalSpeed = reduction->maximumSignalSpeed;
         result.maximumGravityRung = reduction->maximumGravityRung;
         result.maximumHydroRung = reduction->maximumHydroRung;
@@ -83,8 +100,10 @@ SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, cudaSt
         result.needsAnotherPass = reduction->pendingChanges;
     } break;
     case SPH_RUN_HYDRO: {
-        sphCudaHydro<<<hydroBlockCount, HYDRO_BLOCK_SIZE, 0, stream>>>(parameters, data, reduction);
-        synchronizeCudaStream(stream);
+        sphCudaHydro<<<hydroBlockCount, HYDRO_BLOCK_SIZE, 0, stream.nativeHandle()>>>(
+            parameters, data, reduction);
+        stream.checkLaunch();
+        stream.wait();
         result.maximumSignalSpeed = reduction->maximumSignalSpeed;
         result.maximumGravityRung = reduction->maximumGravityRung;
         result.maximumHydroRung = reduction->maximumHydroRung;
@@ -98,7 +117,6 @@ SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, cudaSt
     result.floatingPointOperations = reduction->floatingPointOperations;
     PRINT("GFLOPS = %e\n",
         reduction->floatingPointOperations / (1024.0 * 1024.0 * 1024.0) / timer.read());
-    CUDA_CHECK(cudaFree(reduction));
 
     return result;
 }

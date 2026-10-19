@@ -17,6 +17,9 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <memory>
+#include <stdexcept>
+
 #include <cosmictiger/cuda_reduce.hpp>
 #include <cosmictiger/lightcone.hpp>
 
@@ -172,20 +175,31 @@ size_t cudaLightcone(DeviceVector<LightconeTreeId> const& leaves,
     int* indexPtr;
     LightconeGroup* nextIdPtr;
     int* rcPtr;
-    nextIdPtr = (LightconeGroup*) cudaAllocate(sizeof(LightconeGroup));
-    indexPtr = (int*) cudaAllocate(sizeof(int));
-    rcPtr = (int*) cudaAllocate(sizeof(int));
+    std::unique_ptr<LightconeGroup, decltype(&cudaRelease)> nextIdOwner(
+        static_cast<LightconeGroup*>(cudaAllocate(sizeof(LightconeGroup))), cudaRelease);
+    std::unique_ptr<int, decltype(&cudaRelease)> indexOwner(
+        static_cast<int*>(cudaAllocate(sizeof(int))), cudaRelease);
+    std::unique_ptr<int, decltype(&cudaRelease)> resultOwner(
+        static_cast<int*>(cudaAllocate(sizeof(int))), cudaRelease);
+    nextIdPtr = nextIdOwner.get();
+    indexPtr = indexOwner.get();
+    rcPtr = resultOwner.get();
     *rcPtr = 0;
     *indexPtr = 0;
     *nextIdPtr = *nextIdValue;
-    cudaLightconeKernel<<<numberOfBlocks, BLOCK_SIZE>>>(particleMapPtr, treeMapPtr, rcPtr,
-        leaves.data(), leaves.size(), indexPtr, nextIdPtr, linkingLength, ranks, rank);
-    CUDA_CHECK(cudaDeviceSynchronize());
+    int device;
+    auto const status = cudaGetDevice(&device);
+    if (status != cudaSuccess) {
+        throw std::runtime_error(cudaGetErrorString(status));
+    }
+    CudaStream stream(device);
+    cudaLightconeKernel<<<numberOfBlocks, BLOCK_SIZE, 0, stream.nativeHandle()>>>(particleMapPtr,
+        treeMapPtr, rcPtr, leaves.data(), leaves.size(), indexPtr, nextIdPtr, linkingLength, ranks,
+        rank);
+    stream.checkLaunch();
+    stream.wait();
     PRINT("lc blocks = %i next id = %lli\n", numberOfBlocks, *nextIdPtr);
     size_t rc = *rcPtr;
     *nextIdValue = *nextIdPtr;
-    cudaRelease(rcPtr);
-    cudaRelease(indexPtr);
-    cudaRelease(nextIdPtr);
     return rc;
 }

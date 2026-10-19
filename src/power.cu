@@ -17,6 +17,8 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <memory>
+
 #include <cosmictiger/cuda_memory.hpp>
 #include <cosmictiger/fft.hpp>
 #include <cosmictiger/math.hpp>
@@ -34,28 +36,29 @@ Vector<float> accumulateDensityCuda(int m, int ndim, Range<int64_t> intbox) {
         return rho;
     }
     float* devRho;
+    std::unique_ptr<float, decltype(&cudaRelease)> massOwner(nullptr, cudaRelease);
     float* masses = nullptr;
     if (getOptions().hydro.enabled) {
-        masses = static_cast<float*>(cudaAllocate(particlesSize() * sizeof(float)));
+        massOwner.reset(static_cast<float*>(cudaAllocate(particlesSize() * sizeof(float))));
+        masses = massOwner.get();
         for (ParticleInteger i = 0; i < particlesSize(); i++) {
             masses[i] = particlesMass(i);
         }
     }
     CUDA_CHECK(cudaMallocManaged(&devRho, n3 * sizeof(float)));
+    std::unique_ptr<float, decltype(&cudaFree)> densityOwner(devRho, cudaFree);
     for (int i = 0; i < n3; i++) {
         devRho[i] = 0.f;
     }
     CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
         &numberOfBlocks, (void const*) accumulateDensityKernel, kBlockSize, 0));
     numberOfBlocks *= cudaSmpCount();
-    accumulateDensityKernel<<<numberOfBlocks, kBlockSize>>>(&particlesPos(XDIM, 0),
-        &particlesPos(YDIM, 0), &particlesPos(ZDIM, 0), devRho, masses, m, particlesSize(), ndim,
-        intbox);
-    CUDA_CHECK(cudaDeviceSynchronize());
+    CudaStream stream(cudaGetDevice());
+    accumulateDensityKernel<<<numberOfBlocks, kBlockSize, 0, stream.nativeHandle()>>>(
+        &particlesPos(XDIM, 0), &particlesPos(YDIM, 0), &particlesPos(ZDIM, 0), devRho, masses, m,
+        particlesSize(), ndim, intbox);
+    stream.checkLaunch();
+    stream.wait();
     memcpy(rho.data(), devRho, sizeof(float) * n3);
-    CUDA_CHECK(cudaFree(devRho));
-    if (masses != nullptr) {
-        cudaRelease(masses);
-    }
     return rho;
 }

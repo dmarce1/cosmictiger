@@ -16,6 +16,9 @@
  along with this program; if not, write to the Free Software
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
+#include <memory>
+#include <vector>
+
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/gravity.hpp>
@@ -43,93 +46,99 @@ std::pair<Vector<double>, Array<Vector<double>, NDIM>> gravityAnalyticCallKernel
     double* devGy;
     double* devGz;
     int const numberOfSinks = sinkx.size();
-    (CUDA_MALLOC(&devSinkx, numberOfSinks * sizeof(Fixed32)));
-    (CUDA_MALLOC(&devSinky, numberOfSinks * sizeof(Fixed32)));
-    (CUDA_MALLOC(&devSinkz, numberOfSinks * sizeof(Fixed32)));
-    (CUDA_MALLOC(&devPhi, numberOfSinks * sizeof(double)));
-    (CUDA_MALLOC(&devGx, numberOfSinks * sizeof(double)));
-    (CUDA_MALLOC(&devGy, numberOfSinks * sizeof(double)));
-    (CUDA_MALLOC(&devGz, numberOfSinks * sizeof(double)));
+    auto const allocate = []<typename T>(T*& pointer, size_t bytes) {
+        CUDA_MALLOC(&pointer, bytes);
+        return std::unique_ptr<T, decltype(&cudaFree)>(pointer, cudaFree);
+    };
+    auto sinkXOwner = allocate(devSinkx, numberOfSinks * sizeof(Fixed32));
+    auto sinkYOwner = allocate(devSinky, numberOfSinks * sizeof(Fixed32));
+    auto sinkZOwner = allocate(devSinkz, numberOfSinks * sizeof(Fixed32));
+    auto potentialOwner = allocate(devPhi, numberOfSinks * sizeof(double));
+    auto forceXOwner = allocate(devGx, numberOfSinks * sizeof(double));
+    auto forceYOwner = allocate(devGy, numberOfSinks * sizeof(double));
+    auto forceZOwner = allocate(devGz, numberOfSinks * sizeof(double));
     Vector<double> zero(numberOfSinks, 0.0);
-    if (hpxRank() == 0) {
-        Vector<double> selfPhi1(numberOfSinks, selfPhi() / getOptions().gravity.supportRadius);
-        CUDA_CHECK(cudaMemcpy(
-            devPhi, selfPhi1.data(), numberOfSinks * sizeof(double), cudaMemcpyHostToDevice));
-    } else {
-        CUDA_CHECK(cudaMemcpy(
-            devPhi, zero.data(), numberOfSinks * sizeof(double), cudaMemcpyHostToDevice));
+    Vector<double> initialPotential(
+        numberOfSinks, hpxRank() == 0 ? selfPhi() / getOptions().gravity.supportRadius : 0.0);
+    {
+        CudaStream copies(cudaGetDevice());
+        copies.copyAsync(devPhi, initialPotential.data(), numberOfSinks * sizeof(double),
+            cudaMemcpyHostToDevice);
+        copies.copyAsync(
+            devGx, zero.data(), numberOfSinks * sizeof(double), cudaMemcpyHostToDevice);
+        copies.copyAsync(
+            devGy, zero.data(), numberOfSinks * sizeof(double), cudaMemcpyHostToDevice);
+        copies.copyAsync(
+            devGz, zero.data(), numberOfSinks * sizeof(double), cudaMemcpyHostToDevice);
+        copies.copyAsync(
+            devSinkx, sinkx.data(), numberOfSinks * sizeof(Fixed32), cudaMemcpyHostToDevice);
+        copies.copyAsync(
+            devSinky, sinky.data(), numberOfSinks * sizeof(Fixed32), cudaMemcpyHostToDevice);
+        copies.copyAsync(
+            devSinkz, sinkz.data(), numberOfSinks * sizeof(Fixed32), cudaMemcpyHostToDevice);
+        // Independent nonblocking kernel streams cannot inherit default-stream
+        // ordering, so all shared inputs must be ready before their launches.
+        copies.wait();
     }
-    CUDA_CHECK(
-        cudaMemcpy(devGx, zero.data(), numberOfSinks * sizeof(double), cudaMemcpyHostToDevice));
-    CUDA_CHECK(
-        cudaMemcpy(devGy, zero.data(), numberOfSinks * sizeof(double), cudaMemcpyHostToDevice));
-    CUDA_CHECK(
-        cudaMemcpy(devGz, zero.data(), numberOfSinks * sizeof(double), cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(
-        devSinkx, sinkx.data(), numberOfSinks * sizeof(Fixed32), cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(
-        devSinky, sinky.data(), numberOfSinks * sizeof(Fixed32), cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(
-        devSinkz, sinkz.data(), numberOfSinks * sizeof(Fixed32), cudaMemcpyHostToDevice));
     PRINT("%li free\n", cudaFreeMemory());
     size_t const particlesPerLoop = (size_t) cudaFreeMemory() / (NDIM * sizeof(Fixed32)) * 85 / 100;
     int occupancy;
     CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&occupancy, analyticGravityKernel,
         ANALYTIC_BLOCK_SIZE, sizeof(double) * (NDIM + 1) * ANALYTIC_BLOCK_SIZE));
     int numberOfKernels = std::max((int) (occupancy * cudaSmpCount() / numberOfSinks), 1);
-    Vector<cudaStream_t> streams(numberOfKernels);
+    std::vector<std::unique_ptr<CudaStream>> streams;
+    streams.reserve(numberOfKernels);
     for (int i = 0; i < numberOfKernels; i++) {
-        cudaStreamCreate(&streams[i]);
+        streams.push_back(std::make_unique<CudaStream>(cudaGetDevice()));
     }
     PRINT("%li particles per loop, %li kernels\n", particlesPerLoop, numberOfKernels);
     for (size_t i = 0; i < particlesSize(); i += particlesPerLoop) {
         int const totalSize =
             std::min(size_t(particlesSize()), size_t(i) + size_t(particlesPerLoop)) - size_t(i);
-        (CUDA_MALLOC(&devSrcx, totalSize * sizeof(Fixed32)));
-        (CUDA_MALLOC(&devSrcy, totalSize * sizeof(Fixed32)));
-        (CUDA_MALLOC(&devSrcz, totalSize * sizeof(Fixed32)));
-        CUDA_CHECK(cudaMemcpy(
-            devSrcx, &particlesPos(0, i), totalSize * sizeof(Fixed32), cudaMemcpyHostToDevice));
-        CUDA_CHECK(cudaMemcpy(
-            devSrcy, &particlesPos(1, i), totalSize * sizeof(Fixed32), cudaMemcpyHostToDevice));
-        CUDA_CHECK(cudaMemcpy(
-            devSrcz, &particlesPos(2, i), totalSize * sizeof(Fixed32), cudaMemcpyHostToDevice));
-        for (int j = 0; j < numberOfKernels; j++) {
-            int const begin = size_t(j) * size_t(totalSize) / size_t(numberOfKernels);
-            int const end = size_t(j + 1) * size_t(totalSize) / size_t(numberOfKernels);
-            analyticGravityKernel<<<numberOfSinks, ANALYTIC_BLOCK_SIZE, 0, streams[j]>>>(devSinkx,
-                devSinky, devSinkz, devSrcx + begin, devSrcy + begin, devSrcz + begin, end - begin,
-                devPhi, devGx, devGy, devGz, getOptions().gravity.supportRadius);
+        auto sourceXOwner = allocate(devSrcx, totalSize * sizeof(Fixed32));
+        auto sourceYOwner = allocate(devSrcy, totalSize * sizeof(Fixed32));
+        auto sourceZOwner = allocate(devSrcz, totalSize * sizeof(Fixed32));
+        try {
+            CudaStream copies(cudaGetDevice());
+            copies.copyAsync(
+                devSrcx, &particlesPos(0, i), totalSize * sizeof(Fixed32), cudaMemcpyHostToDevice);
+            copies.copyAsync(
+                devSrcy, &particlesPos(1, i), totalSize * sizeof(Fixed32), cudaMemcpyHostToDevice);
+            copies.copyAsync(
+                devSrcz, &particlesPos(2, i), totalSize * sizeof(Fixed32), cudaMemcpyHostToDevice);
+            copies.wait();
+            for (int j = 0; j < numberOfKernels; j++) {
+                int const begin = size_t(j) * size_t(totalSize) / size_t(numberOfKernels);
+                int const end = size_t(j + 1) * size_t(totalSize) / size_t(numberOfKernels);
+                analyticGravityKernel<<<numberOfSinks, ANALYTIC_BLOCK_SIZE, 0,
+                    streams[j]->nativeHandle()>>>(devSinkx, devSinky, devSinkz, devSrcx + begin,
+                    devSrcy + begin, devSrcz + begin, end - begin, devPhi, devGx, devGy, devGz,
+                    getOptions().gravity.supportRadius);
+                streams[j]->checkLaunch();
+            }
+            for (auto const& stream : streams) {
+                stream->wait();
+            }
+        } catch (...) {
+            // Every concurrent reader must drain before source owners unwind.
+            streams.clear();
+            throw;
         }
-        for (int i = 0; i < numberOfKernels; i++) {
-            synchronizeCudaStream(streams[i]);
-        }
-        CUDA_CHECK(cudaFree(devSrcx));
-        CUDA_CHECK(cudaFree(devSrcy));
-        CUDA_CHECK(cudaFree(devSrcz));
-    }
-    for (int i = 0; i < numberOfKernels; i++) {
-        cudaStreamDestroy(streams[i]);
     }
     rc.first.resize(numberOfSinks);
     for (int dim = 0; dim < NDIM; dim++) {
         rc.second[dim].resize(numberOfSinks);
     }
-    CUDA_CHECK(cudaMemcpy(
-        rc.first.data(), devPhi, sizeof(double) * numberOfSinks, cudaMemcpyDeviceToHost));
-    CUDA_CHECK(cudaMemcpy(
-        rc.second[XDIM].data(), devGx, sizeof(double) * numberOfSinks, cudaMemcpyDeviceToHost));
-    CUDA_CHECK(cudaMemcpy(
-        rc.second[YDIM].data(), devGy, sizeof(double) * numberOfSinks, cudaMemcpyDeviceToHost));
-    CUDA_CHECK(cudaMemcpy(
-        rc.second[ZDIM].data(), devGz, sizeof(double) * numberOfSinks, cudaMemcpyDeviceToHost));
-    CUDA_CHECK(cudaFree(devPhi));
-    CUDA_CHECK(cudaFree(devGx));
-    CUDA_CHECK(cudaFree(devGy));
-    CUDA_CHECK(cudaFree(devGz));
-    CUDA_CHECK(cudaFree(devSinkx));
-    CUDA_CHECK(cudaFree(devSinky));
-    CUDA_CHECK(cudaFree(devSinkz));
+    CudaStream copies(cudaGetDevice());
+    copies.copyAsync(
+        rc.first.data(), devPhi, sizeof(double) * numberOfSinks, cudaMemcpyDeviceToHost);
+    copies.copyAsync(
+        rc.second[XDIM].data(), devGx, sizeof(double) * numberOfSinks, cudaMemcpyDeviceToHost);
+    copies.copyAsync(
+        rc.second[YDIM].data(), devGy, sizeof(double) * numberOfSinks, cudaMemcpyDeviceToHost);
+    copies.copyAsync(
+        rc.second[ZDIM].data(), devGz, sizeof(double) * numberOfSinks, cudaMemcpyDeviceToHost);
+    copies.wait();
     return rc;
 }
 

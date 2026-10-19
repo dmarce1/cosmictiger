@@ -42,6 +42,10 @@ if(COSMICTIGER_WITH_CUDA)
 endif()
 
 find_package(HPX REQUIRED NO_CMAKE_PACKAGE_REGISTRY)
+if(COSMICTIGER_WITH_CUDA AND NOT HPX_WITH_CUDA)
+    message(FATAL_ERROR
+        "CUDA builds require HPX built with HPX_WITH_CUDA=ON; otherwise configure COSMICTIGER_WITH_CUDA=OFF")
+endif()
 find_package(Boost REQUIRED COMPONENTS program_options)
 find_package(GSL REQUIRED)
 find_path(FFTW3F_INCLUDE_DIR fftw3.h REQUIRED)
@@ -73,6 +77,7 @@ set(cosmictiger_source_files
     src/compress.cpp
     src/cosmology.cpp
     src/cuda.cpp
+    src/cuda_stream.cpp
     src/cuda_memory.cu
     src/drift.cpp
     src/drift_cpu.cpp
@@ -157,6 +162,7 @@ set(cosmictiger_header_files
     cosmictiger/compress.hpp
     cosmictiger/cosmology.hpp
     cosmictiger/cuda.hpp
+    cosmictiger/cuda_stream.hpp
     cosmictiger/cuda_reduce.hpp
     cosmictiger/defs.hpp
     cosmictiger/device_vector.hpp
@@ -640,7 +646,7 @@ if(BUILD_TESTING)
         set_tests_properties(power_cuda PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
 
         add_executable(lightcone_cuda_test tests/lightcone_cuda.cu src/lightcone.cu
-            src/lightcone_cpu.cpp src/assert.cu)
+            src/lightcone_cpu.cpp src/assert.cu src/cuda_stream.cpp)
         target_include_directories(lightcone_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_compile_definitions(lightcone_cuda_test PRIVATE USE_CUDA ORDER=${COSMICTIGER_WITH_ORDER})
         target_link_libraries(lightcone_cuda_test PRIVATE HPX::hpx CUDA::cudart)
@@ -649,6 +655,15 @@ if(BUILD_TESTING)
         set_target_properties(lightcone_cuda_test PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
         add_test(NAME lightcone_cuda COMMAND lightcone_cuda_test)
         set_tests_properties(lightcone_cuda PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+
+        add_hpx_executable(cuda_async_test
+            SOURCES tests/cuda_async.cpp tests/cuda_async.cu src/cuda_stream.cpp)
+        target_include_directories(cuda_async_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_compile_definitions(cuda_async_test PRIVATE USE_CUDA)
+        target_link_libraries(cuda_async_test PRIVATE CUDA::cudart)
+        add_test(NAME cuda_async COMMAND cuda_async_test --hpx:threads=1 --hpx:bind=none)
+        set_tests_properties(cuda_async PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE
+            SKIP_RETURN_CODE 77 PROCESSORS 1 ENVIRONMENT "OMP_NUM_THREADS=1;OMP_THREAD_LIMIT=1")
     endif()
 
     # Compile CPU drift with ordinary host arrays and no CUDA device kernels.

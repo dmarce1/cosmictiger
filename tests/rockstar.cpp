@@ -640,6 +640,8 @@ std::vector<int> rockstarCanonicalPartition(DeviceVector<RockstarParticle> const
 }
 
 void checkRockstarCudaConnectivity() {
+    // Run once per backend, keeping allocation and dispatch modes fixed until
+    // every fixture buffer has been destroyed.
     constexpr int kLeaves = 65;
     constexpr int kLeafSize = 64;
     DeviceVector<RockstarParticle> particles;
@@ -683,17 +685,16 @@ void checkRockstarCudaConnectivity() {
     }
     // In each leaf, both lane-zero anchors (indices 0 and 32) are isolated.
     // The old kernel fragmented every real component in all other lanes.
-    auto cpuParticles = particles;
-    DeviceVector<RockstarTree> cpuTrees;
-    rockstarFormTree(cpuTrees, cpuParticles);
     int nextId = 1;
-    rockstarFindSubgroups(cpuTrees, cpuParticles, 1.0f, nextId, false);
-    requireRockstar(rockstarCanonicalPartition(cpuParticles) == expected,
-        "CPU component fixture disagrees with analytic phase-space components");
-    auto options = getOptions();
-    options.compute.cuda = true;
-    setOptions(options);
-    nextId = 1;
+    if (!getOptions().compute.cuda) {
+        auto cpuParticles = particles;
+        DeviceVector<RockstarTree> cpuTrees;
+        rockstarFormTree(cpuTrees, cpuParticles);
+        rockstarFindSubgroups(cpuTrees, cpuParticles, 1.0f, nextId, false);
+        requireRockstar(rockstarCanonicalPartition(cpuParticles) == expected,
+            "CPU component fixture disagrees with analytic phase-space components");
+        return;
+    }
     auto gpuParticles = particles;
     rockstarFindSubgroupsCuda(manualNodes, leaves, gpuParticles, 1.0f, nextId);
     requireRockstar(rockstarCanonicalPartition(gpuParticles) == expected,
@@ -708,8 +709,6 @@ void checkRockstarCudaConnectivity() {
     auto const coincident = rockstarFindSubgroups(makeRockstarSnapshot(4097, false), 1.0f);
     requireRockstar(coincident.size() == 1 && coincident[0].parts.size() == 4097,
         "CUDA nearest-neighbor and full finder lost coincident particles");
-    options.compute.cuda = false;
-    setOptions(options);
 }
 #endif
 
@@ -869,6 +868,11 @@ void rockstarTest() {
 #ifdef USE_CUDA
         if (original.compute.cuda) {
             detail::checkRockstarCudaConnectivity();
+            options.compute.cuda = true;
+            setOptions(options);
+            detail::checkRockstarCudaConnectivity();
+            options.compute.cuda = false;
+            setOptions(options);
         }
 #endif
     } catch (...) {

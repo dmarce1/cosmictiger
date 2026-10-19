@@ -21,7 +21,12 @@
 #include <cstring>
 #include <mutex>
 #include <new>
+#include <stdexcept>
 #include <unordered_map>
+
+#ifdef USE_CUDA
+#include <hpx/async_cuda/cuda_exception.hpp>
+#endif
 
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/cuda_memory.hpp>
@@ -197,32 +202,18 @@ int cudaSmpCount() {
     return count;
 }
 
-cudaStream_t cudaGetStream() {
-    cudaStream_t stream;
-    cudaSetDevice();
-    CUDA_CHECK(cudaStreamCreate(&stream));
-    return stream;
-}
-
-void synchronizeCudaStream(cudaStream_t stream) {
-    int device;
-    CUDA_CHECK(cudaGetDevice(&device));
-    while (cudaStreamQuery(stream) != cudaSuccess) {
-        hpxYield();
-    }
-    CUDA_CHECK(cudaSetDevice(device));
-}
-
-void cudaEndStream(cudaStream_t stream) {
-    CUDA_CHECK(cudaStreamSynchronize(stream));
-    CUDA_CHECK(cudaStreamDestroy(stream));
-}
-
 void cudaInit() {
     cudaSetDevice();
-    CUDA_CHECK(cudaDeviceReset());
-    // Reset clears constant memory populated during option propagation.
-    uploadKernelSelections();
+    static std::once_flag initialized;
+    std::call_once(initialized, [] {
+        if (detail::cudaStreamEventsInitialized()) {
+            throw std::logic_error("CUDA initialization must precede HPX CUDA stream use");
+        }
+        hpx::cuda::experimental::check_cuda_error(cudaDeviceReset());
+        // Reset clears constant memory populated during option propagation.
+        uploadKernelSelections();
+        cudaMemoryInitialize(HEAP_SIZE);
+    });
     /*	size_t value = 64;
         size_t oval = value;
         CUDA_CHECK(cudaDeviceSetLimit(cudaLimitMaxL2FetchGranularity , value));
@@ -230,7 +221,7 @@ void cudaInit() {
         if (value != oval) {
             THROW_ERROR("Unable to set stack size to %li\n", oval);
         }*/
-    cudaMemoryInitialize(HEAP_SIZE);
+    detail::initializeCudaStreamRuntime();
 }
 
 #endif

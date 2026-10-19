@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <iomanip>
 #include <limits>
@@ -38,6 +39,14 @@ using std::size_t;
 
 constexpr int kStfWalkSide = 32;
 constexpr size_t kStfWalkParticles = size_t(kStfWalkSide) * kStfWalkSide * kStfWalkSide;
+
+bool stfWalkIsFinite(float value) {
+    static_assert(sizeof(float) == sizeof(uint32_t) && std::numeric_limits<float>::is_iec559);
+    uint32_t bits;
+    std::memcpy(&bits, &value, sizeof(bits));
+    // Floating-point classification can be optimized away under -ffast-math.
+    return (bits & 0x7f800000u) != 0x7f800000u;
+}
 
 struct StfWalkChecksums {
     uint64_t positions = 0;
@@ -113,14 +122,14 @@ KickParameters stfWalkParameters(bool doPhi, int minLevel) {
     params.minRung = 0;
     params.a = 1.0f;
     params.t0 = 1.0f;
-    params.theta = options.theta;
-    params.gravitySupportRadius = options.gravitySupportRadius;
-    params.eta = options.eta;
+    params.theta = options.gravity.openingAngle;
+    params.gravitySupportRadius = options.gravity.supportRadius;
+    params.eta = options.gravity.timestepEta;
     params.gm = 1.0f;
     params.velInit = false;
     params.saveForce = true;
     params.firstCall = true;
-    params.gpu = options.cuda;
+    params.gpu = options.compute.cuda;
     params.nodeLoad = 1.0f;
     params.maxDt = 1.0e30f;
     params.ascending = false;
@@ -143,18 +152,20 @@ StfWalkChecksums stfWalkChecksums(bool doPhi) {
         // A commutative sum preserves the fingerprint across tree reordering.
         result.positions += positionHash;
         for (int dim = 0; dim < NDIM; ++dim) {
-            double const acceleration = particlesGravityAcceleration(dim, index);
-            if (!std::isfinite(acceleration)) {
+            float const accelerationValue = particlesGravityAcceleration(dim, index);
+            if (!stfWalkIsFinite(accelerationValue)) {
                 throw std::runtime_error("STF walk left a particle force unset or nonfinite");
             }
+            double const acceleration = accelerationValue;
             result.acceleration[dim] += weight * acceleration;
             result.accelerationSquared += acceleration * acceleration;
         }
         if (doPhi) {
-            double const potential = particlesPot(index);
-            if (!std::isfinite(potential)) {
+            float const potentialValue = particlesPot(index);
+            if (!stfWalkIsFinite(potentialValue)) {
                 throw std::runtime_error("STF walk left a particle potential unset or nonfinite");
             }
+            double const potential = potentialValue;
             result.potential += weight * potential;
         }
     }
@@ -189,7 +200,7 @@ double stfWalkMedian(std::vector<double> values) {
 void stfWalkFixture(bool clustered, bool doPhi, int samples, std::ofstream& forceOutput) {
     auto const positions = stfWalkPositions(clustered);
     char const* fixture = clustered ? "clustered" : "lattice";
-    char const* backend = getOptions().cuda ? "cuda" : "cpu";
+    char const* backend = getOptions().compute.cuda ? "cuda" : "cpu";
     std::vector<double> setupTimes, treeTimes, kickTimes, totalTimes;
     uint64_t expectedPositionHash = 0;
     for (int sample = -1; sample < samples; ++sample) {
@@ -199,7 +210,7 @@ void stfWalkFixture(bool clustered, bool doPhi, int samples, std::ofstream& forc
             stfWalkReset(positions);
             auto const setupEnd = std::chrono::steady_clock::now();
             TreeCreateParameters treeParams(
-                0, getOptions().theta, getOptions().gravitySupportRadius);
+                0, getOptions().gravity.openingAngle, getOptions().gravity.supportRadius);
             auto const treeBegin = std::chrono::steady_clock::now();
             auto const built = treeCreate(treeParams);
             auto const treeEnd = std::chrono::steady_clock::now();
@@ -265,13 +276,13 @@ void stfWalkBenchmark() {
     }
     auto const originalOptions = getOptions();
     auto options = originalOptions;
-    options.sph = false;
-    options.gravity = true;
-    options.saveForce = true;
-    options.doGroups = false;
-    options.doTracers = false;
-    options.bucketSize = 64;
-    options.numberOfParticles = detail::kStfWalkParticles;
+    options.hydro.enabled = false;
+    options.gravity.enabled = true;
+    options.analysis.saveForce = true;
+    options.analysis.groups = false;
+    options.analysis.tracers = false;
+    options.compute.bucketSize = 64;
+    options.initial.numberOfParticles = detail::kStfWalkParticles;
     setOptions(options);
     try {
         int const samples = detail::stfWalkSamples();
@@ -280,11 +291,12 @@ void stfWalkBenchmark() {
             throw std::runtime_error("Cannot open stf_walk_forces.csv");
         }
         forces << "fixture,x_raw,y_raw,z_raw,x,y,z,gx,gy,gz,phi\n" << std::setprecision(17);
-        particlesResize(options.numberOfParticles);
+        particlesResize(options.initial.numberOfParticles);
         PRINT("STF_WALK_CONFIG,particles=%zu,threads=%i,cuda=%i,theta=%.17g,support=%.17g,bucket=%"
               "i,samples=%i,warmup=1,gm=1\n",
-            options.numberOfParticles, int(hpx::get_num_worker_threads()), int(options.cuda),
-            options.theta, options.gravitySupportRadius, options.bucketSize, samples);
+            options.initial.numberOfParticles, int(hpx::get_num_worker_threads()),
+            int(options.compute.cuda), options.gravity.openingAngle, options.gravity.supportRadius,
+            options.compute.bucketSize, samples);
         PRINT("STF_WALK_SAMPLE_HEADER,fixture,backend,do_phi,sample,setup_seconds,tree_seconds,"
               "kick_seconds,position_hash,gx_checksum,gy_checksum,gz_checksum,g2_checksum,phi_"
               "checksum,total_potential\n");

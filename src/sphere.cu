@@ -183,24 +183,33 @@ void solveSphereSurfaceProblem(Vector<Array<Vector<float>, NDIM>>& xValue) {
         CUDA_CHECK(cudaMallocManaged(&devZ[i], sizeof(float) * nValue));
         devN[i] = xValue[i][XDIM].size();
     }
-    auto stream = cudaGetStream();
-    sphereSurfaceKernel<<<xValue.size(), BLOCK_SIZE, 0, stream>>>(devX, devY, devZ, devN);
-    while (cudaStreamSynchronize(stream) != cudaSuccess) {
-        hpxYield();
+    auto const releaseBuffers = [&]() {
+        for (int i = 0; i < xValue.size(); i++) {
+            CUDA_CHECK(cudaFree(devX[i]));
+            CUDA_CHECK(cudaFree(devY[i]));
+            CUDA_CHECK(cudaFree(devZ[i]));
+        }
+        CUDA_CHECK(cudaFree(devX));
+        CUDA_CHECK(cudaFree(devY));
+        CUDA_CHECK(cudaFree(devZ));
+        CUDA_CHECK(cudaFree(devN));
+    };
+    try {
+        CudaStream stream(cudaGetDevice());
+        sphereSurfaceKernel<<<xValue.size(), BLOCK_SIZE, 0, stream.nativeHandle()>>>(
+            devX, devY, devZ, devN);
+        stream.checkLaunch();
+        stream.wait();
+    } catch (...) {
+        releaseBuffers();
+        throw;
     }
-    cudaEndStream(stream);
     for (int i = 0; i < xValue.size(); i++) {
         memcpy(xValue[i][XDIM].data(), devX[i], sizeof(float) * devN[i]);
         memcpy(xValue[i][YDIM].data(), devY[i], sizeof(float) * devN[i]);
         memcpy(xValue[i][ZDIM].data(), devZ[i], sizeof(float) * devN[i]);
-        CUDA_CHECK(cudaFree(devX[i]));
-        CUDA_CHECK(cudaFree(devY[i]));
-        CUDA_CHECK(cudaFree(devZ[i]));
     }
-    CUDA_CHECK(cudaFree(devX));
-    CUDA_CHECK(cudaFree(devY));
-    CUDA_CHECK(cudaFree(devZ));
-    CUDA_CHECK(cudaFree(devN));
+    releaseBuffers();
 }
 
 void sphereSurfaceTest() {

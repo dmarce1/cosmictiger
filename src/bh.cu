@@ -1,3 +1,5 @@
+#include <memory>
+
 #include <cosmictiger/bh.hpp>
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/cuda_reduce.hpp>
@@ -345,7 +347,6 @@ __global__ void bhTreeEvaluatePointsKernel(BhTreeNode const* treeNodes, float* p
 DeviceVector<float> bhEvaluatePotentialGpu(DeviceVector<BhTreeNode> const& devTreeNodes,
     DeviceVector<Array<float, NDIM>> const& devX, DeviceVector<int> const devSinkBuckets,
     float relativeError, float hsoft, float gm, int maximumBlockCount) {
-    auto stream = cudaGetStream();
     BhWorkspace* workspaces;
     int* nextSinkBucket;
     int zero = 0;
@@ -361,24 +362,25 @@ DeviceVector<float> bhEvaluatePotentialGpu(DeviceVector<BhTreeNode> const& devTr
         numberOfBlocks = std::min(numberOfBlocks, maximumBlockCount);
     }
     //	numberOfBlocks *= cuda_smp_count();
-    nextSinkBucket = (int*) cudaAllocate(sizeof(int));
+    std::unique_ptr<int, decltype(&cudaRelease)> counterOwner(
+        static_cast<int*>(cudaAllocate(sizeof(int))), cudaRelease);
+    nextSinkBucket = counterOwner.get();
     *nextSinkBucket = 0;
     tm1.start();
     DeviceVector<float> devPhi(devX.size());
-    bhTreeEvaluateKernel<<<numberOfBlocks, WARP_SIZE, 0, stream>>>(devTreeNodes.data(),
-        devSinkBuckets.data(), devPhi.data(), devX.data(), relativeError, hsoft, gm, nextSinkBucket,
-        devSinkBuckets.size());
-    synchronizeCudaStream(stream);
+    CudaStream stream(cudaGetDevice());
+    bhTreeEvaluateKernel<<<numberOfBlocks, WARP_SIZE, 0, stream.nativeHandle()>>>(
+        devTreeNodes.data(), devSinkBuckets.data(), devPhi.data(), devX.data(), relativeError,
+        hsoft, gm, nextSinkBucket, devSinkBuckets.size());
+    stream.checkLaunch();
+    stream.wait();
     tm1.stop();
-    cudaEndStream(stream);
-    cudaRelease(nextSinkBucket);
     return devPhi;
 }
 
 DeviceVector<float> bhEvaluatePotentialPointsGpu(DeviceVector<BhTreeNode> const& devTreeNodes,
     DeviceVector<Array<float, NDIM>> const& devX, DeviceVector<Array<float, NDIM>> const& devY,
     float relativeError, float hsoft, float gm) {
-    auto stream = cudaGetStream();
     int* nextSink;
     int zero = 0;
     int numberOfBlocks;
@@ -387,16 +389,19 @@ DeviceVector<float> bhEvaluatePotentialPointsGpu(DeviceVector<BhTreeNode> const&
         &numberOfBlocks, (void const*) bhTreeEvaluatePointsKernel, WARP_SIZE, 0));
     numberOfBlocks *= cudaSmpCount();
     numberOfBlocks = std::max(1, std::min(numberOfBlocks, devY.size() / BH_BUCKET_SIZE));
-    nextSink = (int*) cudaAllocate(sizeof(int));
+    std::unique_ptr<int, decltype(&cudaRelease)> counterOwner(
+        static_cast<int*>(cudaAllocate(sizeof(int))), cudaRelease);
+    nextSink = counterOwner.get();
     *nextSink = 0;
     tm1.start();
     DeviceVector<float> devPhi(devY.size());
-    bhTreeEvaluatePointsKernel<<<numberOfBlocks, WARP_SIZE, 0, stream>>>(devTreeNodes.data(),
-        devPhi.data(), devX.data(), devY.data(), relativeError, hsoft, gm, nextSink, devY.size());
-    synchronizeCudaStream(stream);
+    CudaStream stream(cudaGetDevice());
+    bhTreeEvaluatePointsKernel<<<numberOfBlocks, WARP_SIZE, 0, stream.nativeHandle()>>>(
+        devTreeNodes.data(), devPhi.data(), devX.data(), devY.data(), relativeError, hsoft, gm,
+        nextSink, devY.size());
+    stream.checkLaunch();
+    stream.wait();
     tm1.stop();
     ALWAYS_ASSERT(devY.size());
-    cudaEndStream(stream);
-    cudaRelease(nextSink);
     return devPhi;
 }

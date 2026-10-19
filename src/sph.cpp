@@ -18,7 +18,9 @@
  */
 
 #include <fenv.h>
+#include <memory>
 #include <stack>
+#include <vector>
 
 #include <unistd.h>
 
@@ -563,33 +565,22 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
         return result;
     }
 #ifdef USE_CUDA
-    auto const stream = cudaGetStream();
-    copySources([stream](auto*& device, auto const& host) {
+    std::vector<std::unique_ptr<void, decltype(&cudaFree)>> sourceBuffers;
+    sourceBuffers.reserve(15);
+    // Declared after the source owners so failure drains submitted copies or
+    // kernels before their device allocations are released.
+    CudaStream stream(cudaGetDevice());
+    copySources([&](auto*& device, auto const& host) {
         device = nullptr;
         if (!host.empty()) {
             size_t const bytes = sizeof(*device) * host.size();
             CUDA_CHECK(cudaMalloc(&device, bytes));
-            CUDA_CHECK(cudaMemcpyAsync(device, host.data(), bytes, cudaMemcpyHostToDevice, stream));
+            sourceBuffers.emplace_back(device, cudaFree);
+            stream.copyAsync(device, host.data(), bytes, cudaMemcpyHostToDevice);
         }
     });
     auto rc = sphRunCuda(params, runData, stream);
-    synchronizeCudaStream(stream);
-    cudaEndStream(stream);
-    CUDA_CHECK(cudaFree(runData.sourceRungs));
-    CUDA_CHECK(cudaFree(runData.sourceSupportRadius));
-    CUDA_CHECK(cudaFree(runData.sourceInternalEnergy));
-    CUDA_CHECK(cudaFree(runData.sourcePressureEnergyRatio));
-    CUDA_CHECK(cudaFree(runData.sourceAdiabaticIndex));
-    CUDA_CHECK(cudaFree(runData.sourceDensity));
-    CUDA_CHECK(cudaFree(runData.sourceVelocityX));
-    CUDA_CHECK(cudaFree(runData.sourceVelocityY));
-    CUDA_CHECK(cudaFree(runData.sourceVelocityZ));
-    CUDA_CHECK(cudaFree(runData.sourcePositionX));
-    CUDA_CHECK(cudaFree(runData.sourcePositionY));
-    CUDA_CHECK(cudaFree(runData.sourcePositionZ));
-    CUDA_CHECK(cudaFree(runData.treeNodes));
-    CUDA_CHECK(cudaFree(runData.targetNodeIndices));
-    CUDA_CHECK(cudaFree(runData.neighborNodeIndices));
+    stream.wait();
 
     return rc;
 #else

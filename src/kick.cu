@@ -728,13 +728,14 @@ KickReturn cudaExecuteKicks(KickParameters kparams, Fixed32* devX, Fixed32* devY
         ikickParams[i] = std::move(params);
     }
     cudaSetDevice();
-    CUDA_CHECK(
-        cudaMemcpyAsync(devDataPtr, dataPtr, sizeof(char) * allocSize, cudaMemcpyHostToDevice, 0));
-    cudaKickKernel<<<numberOfBlocks, WARP_SIZE, sizeof(CudaKickSharedMemory)>>>(
+    CudaStream stream(cudaGetDevice());
+    stream.copyAsync(devDataPtr, dataPtr, sizeof(char) * allocSize, cudaMemcpyHostToDevice);
+    cudaKickKernel<<<numberOfBlocks, WARP_SIZE, sizeof(CudaKickSharedMemory),
+        stream.nativeHandle()>>>(
         devReturnArg, kparams, data, devIkickParams, workitems.size(), devCurrentIndex);
-    CUDA_CHECK(
-        cudaMemcpyAsync(result, devReturnArg, sizeof(KickReturn), cudaMemcpyDeviceToHost, 0));
-    CUDA_CHECK(cudaDeviceSynchronize());
+    stream.checkLaunch();
+    stream.copyAsync(result, devReturnArg, sizeof(KickReturn), cudaMemcpyDeviceToHost);
+    stream.wait();
     return *result;
 }
 

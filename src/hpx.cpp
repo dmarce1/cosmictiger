@@ -92,6 +92,9 @@ void hpxInitCuda() {
         futures.push_back(hpx::async<HpxInitCudaAction>(child));
     }
     hpx::wait_all(futures.begin(), futures.end());
+    for (auto& future : futures) {
+        future.get();
+    }
 }
 
 int hpxRank() {

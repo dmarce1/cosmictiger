@@ -34,6 +34,9 @@
 #endif
 
 #include <cosmictiger/assert.hpp>
+#ifdef USE_CUDA
+#include <cosmictiger/cuda_stream.hpp>
+#endif
 #include <cosmictiger/defs.hpp>
 
 // Host-accessible storage follows the selected backend, not the build's capabilities.
@@ -162,10 +165,7 @@ size_t cudaFreeMemory();
 size_t cudaTotalMemory();
 int cudaSmpCount();
 void cudaInit();
-cudaStream_t cudaGetStream();
-void cudaEndStream(cudaStream_t stream);
 int cudaGetDevice();
-void synchronizeCudaStream(cudaStream_t stream);
 
 void cudaAllocate(void** ptr, size_t size, char const* file, int line);
 

@@ -159,27 +159,22 @@ hpx::future<KickReturn> kickFork(KickParameters params, Expansion<float> l,
         rc = hpx::async<KickAction>(hpxLocalities()[selfPtr->processRange.first], params, l, pos,
             self, std::move(dchecklist), std::move(echecklist), nullptr);
     } else {
+        auto run = [params, self, l, pos, cudaWorkspace](
+                       Vector<TreeId> dchecklist, Vector<TreeId> echecklist) {
+            struct ThreadCountGuard {
+                std::atomic<int>& count;
+                ~ThreadCountGuard() {
+                    --count;
+                }
+            } guard{numberOfThreads};
+            return kick(
+                params, l, pos, self, std::move(dchecklist), std::move(echecklist), cudaWorkspace);
+        };
         if (allLocal) {
-            rc = hpx::async(
-                [params, self, l, pos, cudaWorkspace](
-                    Vector<TreeId> dchecklist, Vector<TreeId> echecklist) {
-                    auto rc = kick(params, l, pos, self, std::move(dchecklist),
-                        std::move(echecklist), cudaWorkspace);
-                    numberOfThreads--;
-                    return rc;
-                },
-                std::move(dchecklist), std::move(echecklist));
+            rc = hpx::async(std::move(run), std::move(dchecklist), std::move(echecklist));
         } else {
             rc = hpx::async(
-                HPX_PRIORITY_HI,
-                [params, self, l, pos, cudaWorkspace](
-                    Vector<TreeId> dchecklist, Vector<TreeId> echecklist) {
-                    auto rc = kick(params, l, pos, self, std::move(dchecklist),
-                        std::move(echecklist), cudaWorkspace);
-                    numberOfThreads--;
-                    return rc;
-                },
-                std::move(dchecklist), std::move(echecklist));
+                HPX_PRIORITY_HI, std::move(run), std::move(dchecklist), std::move(echecklist));
         }
     }
     return rc;
@@ -639,11 +634,20 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
         std::array<hpx::future<KickReturn>, NCHILD> futs;
         futs[RIGHT] = kickFork(params, l, selfPtr->pos, selfPtr->children[RIGHT], dchecklist,
             echecklist, cudaWorkspace, threadLeft);
-        futs[LEFT] = kickFork(params, l, selfPtr->pos, selfPtr->children[LEFT],
-            std::move(dchecklist), std::move(echecklist), cudaWorkspace, false);
+        try {
+            futs[LEFT] = kickFork(params, l, selfPtr->pos, selfPtr->children[LEFT],
+                std::move(dchecklist), std::move(echecklist), cudaWorkspace, false);
+        } catch (...) {
+            // Keep shared tree data alive until the asynchronous sibling exits.
+            futs[RIGHT].wait();
+            throw;
+        }
+        hpx::wait_all(futs);
+        // Surface launch/completion failures before waiting for a result that
+        // only a successful GPU batch can publish.
+        auto const rcl = futs[LEFT].get();
+        auto const rcr = futs[RIGHT].get();
         if (selfPtr->processRange.second - selfPtr->processRange.first > 1) {
-            auto const rcl = futs[LEFT].get();
-            auto const rcr = futs[RIGHT].get();
             kr += rcl;
             kr += rcr;
             flops += 12;
