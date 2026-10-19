@@ -194,16 +194,18 @@ def main():
             for backend in backends:
                 for bucket in buckets:
                     for order in orders:
+                        if not binary['arena'] and order != 7:
+                            # A fixed-order baseline binary only measures order 7.
+                            continue
                         name = (f'{binary["label"]}_{policy["label"]}_{backend}_b{bucket}'
                                 f'_o{order}_pair{pair}')
                         directory = args.output / 'runs' / name
                         directory.mkdir(parents=True)
                         command = ['taskset', '-c', args.cpus, binary['path'], *common,
                                    '--compute.cuda=' + ('true' if backend == 'cuda' else 'false'),
-                                   f'--compute.bucketSize={bucket}',
-                                   f'--gravity.fmmOrder={order}']
+                                   f'--compute.bucketSize={bucket}']
                         if binary['arena']:
-                            command += policy['options']
+                            command += [f'--gravity.fmmOrder={order}'] + policy['options']
                         env = dict(os.environ, COSMICTIGER_STF_WALK_SAMPLES=str(args.samples),
                                    COSMICTIGER_STF_WALK_BUCKET=str(bucket),
                                    COSMICTIGER_STF_WALK_FIXTURE='all' if len(fixtures) == 3 else fixtures[0],
@@ -252,9 +254,13 @@ def summarize(runs, args):
                           kick_ms_median=1e3 * statistics.median(values),
                           kick_ms_min=1e3 * min(values), kick_ms_max=1e3 * max(values),
                           pairs=len(values)))
-    references = [dict(binary=run['binary'], policy=run['policy'], backend=run['backend'],
-                       bucket=run['bucket'], order=run['order'], pair=run['pair'], **reference)
-                  for run in runs for reference in run['references']]
+    references = []
+    for run in runs:
+        for reference in run['references']:
+            record = dict(reference)
+            record.update(binary=run['binary'], policy=run['policy'], backend=run['backend'],
+                          bucket=run['bucket'], order=run['order'], pair=run['pair'])
+            references.append(record)
     arenas = sorted({(run['binary'], run['policy'], run['backend'], run['bucket'], run['order'],
                       run['arena'] or run['occupancy'] or '') for run in runs})
     # Compare every CUDA export with the matching CPU export of the same binary,
