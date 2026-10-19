@@ -20,15 +20,21 @@
 #include <fstream>
 #include <iomanip>
 #include <limits>
+#include <map>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <hpx/runtime_local/runtime_local_fwd.hpp>
+#include <hpx/threading_base/thread_helpers.hpp>
+#include <hpx/threading_base/thread_pool_base.hpp>
 
+#include <cosmictiger/analytic.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/kick.hpp>
 #include <cosmictiger/kick_workspace.hpp>
+#include <cosmictiger/memused.hpp>
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/tree.hpp>
@@ -55,17 +61,46 @@ struct StfWalkChecksums {
     double potential = 0;
 };
 
-int stfWalkSamples() {
-    char const* text = std::getenv("COSMICTIGER_STF_WALK_SAMPLES");
+long stfWalkEnvironmentInteger(char const* name, long fallback, long minimum, long maximum) {
+    char const* text = std::getenv(name);
     if (text == nullptr) {
-        return 5;
+        return fallback;
     }
     char* end = nullptr;
-    long const count = std::strtol(text, &end, 10);
-    if (end == text || *end != '\0' || count < 1 || count > 100) {
-        throw std::invalid_argument("COSMICTIGER_STF_WALK_SAMPLES must be between 1 and 100");
+    long const value = std::strtol(text, &end, 10);
+    if (end == text || *end != '\0' || value < minimum || value > maximum) {
+        throw std::invalid_argument(std::string(name) + " must be between " +
+            std::to_string(minimum) + " and " + std::to_string(maximum));
     }
-    return int(count);
+    return value;
+}
+
+int stfWalkSamples() {
+    return int(stfWalkEnvironmentInteger("COSMICTIGER_STF_WALK_SAMPLES", 5, 1, 100));
+}
+
+// Tree leaf bucket size; the default matches the original fixed workload.
+int stfWalkBucketSize() {
+    return int(stfWalkEnvironmentInteger("COSMICTIGER_STF_WALK_BUCKET", 64, 1, 8192));
+}
+
+// Particles compared with the direct Ewald reference after the last
+// potential-enabled sample; zero disables the comparison.
+int stfWalkReferenceSamples() {
+    return int(stfWalkEnvironmentInteger("COSMICTIGER_STF_WALK_REFERENCE", 0, 0, 32768));
+}
+
+bool stfWalkFixtureSelected(char const* fixture) {
+    char const* selection = std::getenv("COSMICTIGER_STF_WALK_FIXTURE");
+    if (selection == nullptr || std::string(selection) == "all") {
+        return true;
+    }
+    std::string const selected(selection);
+    if (selected != "lattice" && selected != "clustered" && selected != "adaptive") {
+        throw std::invalid_argument(
+            "COSMICTIGER_STF_WALK_FIXTURE must be all, lattice, clustered, or adaptive");
+    }
+    return selected == fixture;
 }
 
 double stfWalkJitter(size_t particle, int dimension) {
@@ -76,7 +111,10 @@ double stfWalkJitter(size_t particle, int dimension) {
     return (double(value & 0xffffu) / 65535. - 0.5) * 0.2;
 }
 
-std::vector<Array<Fixed32, NDIM>> stfWalkPositions(bool clustered) {
+std::vector<Array<Fixed32, NDIM>> stfWalkPositions(std::string const& fixture) {
+    bool const clustered = fixture == "clustered";
+    bool const adaptive = fixture == "adaptive";
+    std::array<double, NDIM> const clusterCenter{0.41, 0.47, 0.53};
     std::vector<Array<Fixed32, NDIM>> positions(kStfWalkParticles);
     for (int z = 0; z < kStfWalkSide; ++z) {
         for (int y = 0; y < kStfWalkSide; ++y) {
@@ -91,7 +129,14 @@ std::vector<Array<Fixed32, NDIM>> stfWalkPositions(bool clustered) {
                             (coordinate - half * (kStfWalkSide / 2)) / (kStfWalkSide / 2) - 0.5;
                         positions[index][dim] = 0.25 + 0.5 * half + 0.24 * local;
                     } else {
-                        positions[index][dim] = coordinate / kStfWalkSide;
+                        double const basePosition = coordinate / kStfWalkSide;
+                        // Odd multiplication permutes all 32768 indices: exactly three
+                        // quarters enter the dense cube without choosing a spatial slab.
+                        bool const denseParticle =
+                            ((uint32_t(index) * 2654435761u) & 32767u) < 24576u;
+                        positions[index][dim] = adaptive && denseParticle ?
+                            clusterCenter[dim] + 0.18 * (basePosition - 0.5) :
+                            basePosition;
                     }
                 }
             }
@@ -197,9 +242,89 @@ double stfWalkMedian(std::vector<double> values) {
     return values[values.size() / 2];
 }
 
-void stfWalkFixture(bool clustered, bool doPhi, int samples, std::ofstream& forceOutput) {
-    auto const positions = stfWalkPositions(clustered);
-    char const* fixture = clustered ? "clustered" : "lattice";
+void stfWalkLeafHistogram(TreeId root, char const* fixture) {
+    std::map<std::pair<int, ParticleInteger>, size_t> histogram;
+    std::vector<TreeId> pending{root};
+    size_t occupiedParticles = 0;
+    while (!pending.empty()) {
+        TreeId const id = pending.back();
+        pending.pop_back();
+        auto const* node = treeGetNode(id);
+        ParticleInteger const count = node->numberOfParticles();
+        if (node->leaf) {
+            if (count > 0) {
+                ++histogram[{int(node->depth), count}];
+                occupiedParticles += size_t(count);
+            }
+        } else {
+            for (int child = 0; child < NCHILD; ++child) {
+                pending.push_back(node->children[child]);
+            }
+        }
+    }
+    if (occupiedParticles != kStfWalkParticles) {
+        throw std::runtime_error("STF walk leaf histogram lost particles");
+    }
+    for (auto const& entry : histogram) {
+        PRINT("STF_WALK_LEAF_HISTOGRAM,%s,%i,%zu,%zu\n", fixture, entry.first.first,
+            size_t(entry.first.second), entry.second);
+    }
+}
+
+// Compare the saved forces and potentials of a deterministic particle sample
+// with the direct periodic (Ewald) sum. The kick used gm = 1, as does the sum.
+void stfWalkReferenceErrors(char const* fixture, char const* backend, int count) {
+    int const stride = std::max<int>(1, int(particlesSize()) / count);
+    Vector<Fixed32> sinkx;
+    Vector<Fixed32> sinky;
+    Vector<Fixed32> sinkz;
+    std::vector<ParticleInteger> indices;
+    for (ParticleInteger index = 0; index < particlesSize() && int(indices.size()) < count;
+        index += stride) {
+        indices.push_back(index);
+        sinkx.push_back(particlesPos(XDIM, index));
+        sinky.push_back(particlesPos(YDIM, index));
+        sinkz.push_back(particlesPos(ZDIM, index));
+    }
+    auto const reference = gravityAnalyticCallKernel(sinkx, sinky, sinkz);
+    std::vector<double> forceErrors;
+    std::vector<double> potentialErrors;
+    double forceDifference = 0;
+    double forceNorm = 0;
+    double potentialDifference = 0;
+    double potentialNorm = 0;
+    for (size_t i = 0; i < indices.size(); ++i) {
+        double difference = 0;
+        double norm = 0;
+        for (int dim = 0; dim < NDIM; ++dim) {
+            double const expected = reference.second[dim][i];
+            double const actual = particlesGravityAcceleration(dim, indices[i]);
+            difference += (actual - expected) * (actual - expected);
+            norm += expected * expected;
+        }
+        double const expectedPotential = reference.first[i];
+        double const actualPotential = particlesPot(indices[i]);
+        forceErrors.push_back(std::sqrt(difference / std::max(norm, 1e-300)));
+        potentialErrors.push_back(
+            std::abs(actualPotential - expectedPotential) / std::abs(expectedPotential));
+        forceDifference += difference;
+        forceNorm += norm;
+        potentialDifference +=
+            (actualPotential - expectedPotential) * (actualPotential - expectedPotential);
+        potentialNorm += expectedPotential * expectedPotential;
+    }
+    std::sort(forceErrors.begin(), forceErrors.end());
+    std::sort(potentialErrors.begin(), potentialErrors.end());
+    size_t const p99 = std::min(forceErrors.size() - 1, 99 * forceErrors.size() / 100);
+    PRINT("STF_WALK_REFERENCE,%s,%s,%zu,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g\n", fixture,
+        backend, indices.size(), std::sqrt(forceDifference / forceNorm),
+        forceErrors[forceErrors.size() / 2], forceErrors[p99], forceErrors.back(),
+        std::sqrt(potentialDifference / potentialNorm), potentialErrors[potentialErrors.size() / 2],
+        potentialErrors[p99], potentialErrors.back());
+}
+
+void stfWalkFixture(char const* fixture, bool doPhi, int samples, std::ofstream& forceOutput) {
+    auto const positions = stfWalkPositions(fixture);
     char const* backend = getOptions().compute.cuda ? "cuda" : "cpu";
     std::vector<double> setupTimes, treeTimes, kickTimes, totalTimes;
     uint64_t expectedPositionHash = 0;
@@ -218,12 +343,20 @@ void stfWalkFixture(bool clustered, bool doPhi, int samples, std::ofstream& forc
             if (built.id.proc != 0 || built.id.index != 0) {
                 throw std::runtime_error("STF walk benchmark requires the complete local root");
             }
+            // Inspect only the force-only warmup, after tree timing and before kick
+            // timing. No histogram traversal or printing occurs in measured samples.
+            if (sample == -1 && !doPhi) {
+                stfWalkLeafHistogram(built.id, fixture);
+            }
             Expansion<float> local;
             local = 0.0f;
             auto const params = stfWalkParameters(doPhi, treeParams.minLevel);
             auto const kickBegin = std::chrono::steady_clock::now();
             auto const result = kick(params, local, built.pos, built.id, Vector<TreeId>{built.id},
                 Vector<TreeId>{built.id}, nullptr);
+            // Particle completion can precede trailing empty-node descents. Wait
+            // for the pool before timing ends and before a later tree reuses nodes.
+            hpx::this_thread::get_pool()->wait();
             auto const kickEnd = std::chrono::steady_clock::now();
             auto const checksums = stfWalkChecksums(doPhi);
             if (sample == -1) {
@@ -249,6 +382,10 @@ void stfWalkFixture(bool clustered, bool doPhi, int samples, std::ofstream& forc
                 checksums.potential, doPhi ? result.pot : 0.0);
             if (doPhi && sample == samples - 1) {
                 stfWalkSaveForces(forceOutput, fixture);
+                int const referenceSamples = stfWalkReferenceSamples();
+                if (referenceSamples > 0) {
+                    stfWalkReferenceErrors(fixture, backend, referenceSamples);
+                }
             }
             treeDestroy();
             treeReady = false;
@@ -274,6 +411,10 @@ void stfWalkBenchmark() {
         throw std::invalid_argument(
             "STF complete-walk benchmark requires one HPX locality with two worker threads");
     }
+    // The benchmark needs pool quiescence between reconstructed trees. Stop the
+    // background memory observer so that it cannot keep the pool non-idle.
+    stopMemuseDaemon();
+    hpx::this_thread::get_pool()->wait();
     auto const originalOptions = getOptions();
     auto options = originalOptions;
     options.hydro.enabled = false;
@@ -281,7 +422,7 @@ void stfWalkBenchmark() {
     options.analysis.saveForce = true;
     options.analysis.groups = false;
     options.analysis.tracers = false;
-    options.compute.bucketSize = 64;
+    options.compute.bucketSize = detail::stfWalkBucketSize();
     options.initial.numberOfParticles = detail::kStfWalkParticles;
     setOptions(options);
     try {
@@ -302,9 +443,15 @@ void stfWalkBenchmark() {
               "checksum,total_potential\n");
         PRINT("STF_WALK_MEDIAN_HEADER,fixture,backend,do_phi,samples,particles,setup_seconds,tree_"
               "seconds,kick_seconds,tree_plus_kick_seconds,position_hash\n");
-        for (bool clustered : {false, true}) {
-            for (bool doPhi : {false, true}) {
-                detail::stfWalkFixture(clustered, doPhi, samples, forces);
+        PRINT("STF_WALK_LEAF_HISTOGRAM_HEADER,fixture,depth,particles_per_leaf,leaves\n");
+        PRINT("STF_WALK_REFERENCE_HEADER,fixture,backend,samples,force_relative_l2,force_relative_"
+              "p50,force_relative_p99,force_relative_max,potential_relative_l2,potential_relative_"
+              "p50,potential_relative_p99,potential_relative_max\n");
+        for (char const* fixture : {"lattice", "clustered", "adaptive"}) {
+            if (detail::stfWalkFixtureSelected(fixture)) {
+                for (bool doPhi : {false, true}) {
+                    detail::stfWalkFixture(fixture, doPhi, samples, forces);
+                }
             }
         }
         // Retain the allocated particle arena: particlesDestroy currently

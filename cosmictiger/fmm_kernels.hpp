@@ -258,4 +258,15 @@ __device__ Expansion<Real> l2LCuda(
         position[2] * simdBroadcast<Real>(SCALE_FACTOR), doPhi);
     return result;
 }
+
+// Cooperative translation: group leaders write their coefficients straight into
+// `target`, which must not alias `source`. Complete on return for every lane.
+template <class Real, int localDegree = kFmmLocalDegree>
+__device__ void l2LCudaInto(
+    Real* target, Expansion<Real> const& source, Array<Real, NDIM> position, bool doPhi) {
+    detail::stf::L2lWarpKernel<localDegree, true>::translateInto(target, source,
+        position[0] * simdBroadcast<Real>(SCALE_FACTOR),
+        position[1] * simdBroadcast<Real>(SCALE_FACTOR),
+        position[2] * simdBroadcast<Real>(SCALE_FACTOR), doPhi);
+}
 #endif

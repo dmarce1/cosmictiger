@@ -25,16 +25,20 @@
 // Expansion-order conventions shared by the STF kernels, the Ewald derivative
 // generator, and the CUDA kick workspace.
 //
-// The build selects the legacy ORDER value (COSMICTIGER_WITH_ORDER). It equals
-// the multipole degree p plus two: source multipoles carry degree p, local
-// expansions carry degree p + 1, and the Ewald derivative tensors carry ranks
-// zero through p + 1, so their legacy "order" template argument is p + 2.
+// The build selects the FMM order (COSMICTIGER_WITH_ORDER, the legacy ORDER
+// macro). It equals the multipole degree p plus two: source multipoles carry
+// degree p, local expansions carry degree p + 1, and the Ewald derivative
+// tensors carry ranks zero through p + 1, so their "order" template argument
+// is p + 2. Order 3 (dipoles with quadratic expansions) is the smallest order
+// whose local expansion can hold the periodic uniform-background quadratic;
+// order 10 is degree-8 multipoles with degree-9 expansions.
 // Coefficient counts use compact rank-major STF storage: a degree-d harmonic
 // tensor stores (d + 1)^2 coefficients, and local expansions append one
 // constant Laplacian (the periodic background trace).
 
 #ifndef ORDER
-#error "ORDER (the legacy expansion order p + 2) must be defined; configure COSMICTIGER_WITH_ORDER"
+#error \
+    "ORDER (the FMM order, multipole degree + 2) must be defined; configure COSMICTIGER_WITH_ORDER"
 #endif
 
 inline constexpr int kFmmLegacyOrder = ORDER;
@@ -42,8 +46,8 @@ inline constexpr int kFmmMultipoleDegree = ORDER - 2;
 inline constexpr int kFmmLocalDegree = ORDER - 1;
 inline constexpr int kFmmEwaldTensorOrder = ORDER;
 
-static_assert(kFmmMultipoleDegree >= 2 && kFmmMultipoleDegree <= 10,
-    "Supported multipole degrees are 2 through 10 (COSMICTIGER_WITH_ORDER 4 through 12)");
+static_assert(kFmmMultipoleDegree >= 1 && kFmmMultipoleDegree <= 8,
+    "Supported FMM orders are 3 through 10 (multipole degrees 1 through 8)");
 static_assert(kFmmLocalDegree == kFmmMultipoleDegree + 1, "Local degree is always p + 1");
 static_assert(kFmmEwaldTensorOrder == LORDER, "LORDER must equal the legacy expansion order");
 
@@ -81,9 +85,9 @@ inline constexpr int kFmmPositionedMultipoleBytes =
     fmmPositionedMultipoleBytes(kFmmMultipoleDegree);
 inline constexpr int kFmmLocalExpansionBytes = fmmLocalExpansionBytes(kFmmLocalDegree);
 
-static_assert(fmmPositionedMultipoleBytes(2) == 48 && fmmPositionedMultipoleBytes(5) == 156 &&
-        fmmPositionedMultipoleBytes(10) == 496,
+static_assert(fmmPositionedMultipoleBytes(1) == 28 && fmmPositionedMultipoleBytes(5) == 156 &&
+        fmmPositionedMultipoleBytes(8) == 336,
     "Positioned multipole byte sizes");
-static_assert(fmmLocalExpansionBytes(3) == 68 && fmmLocalExpansionBytes(6) == 200 &&
-        fmmLocalExpansionBytes(11) == 580,
+static_assert(fmmLocalExpansionBytes(2) == 40 && fmmLocalExpansionBytes(6) == 200 &&
+        fmmLocalExpansionBytes(9) == 404,
     "Local expansion byte sizes");

@@ -41,12 +41,12 @@ struct Compute {
     int treeAllocLineSize{};
     int particleCacheLineSize{};
     // CUDA kick shared-memory policy; zero selects the automatic choice.
-    int cudaKickResidency{};    // resident kick blocks per multiprocessor
-    int cudaKickSinkTile{};    // shared sink-force tile; -1 keeps forces in global memory
-    int cudaKickParticleTile{};    // staged particle sources
-    int cudaKickMultipoleTile{};    // staged positioned multipoles
+    int cudaKickResidency{};           // resident kick blocks per multiprocessor
+    int cudaKickSinkTile{};            // shared sink-force tile; -1 keeps forces in global memory
+    int cudaKickParticleTile{};        // staged particle sources
+    int cudaKickMultipoleTile{};       // staged positioned multipoles
     bool cudaKickSharedExpansion{};    // keep the active local expansion in shared memory
-    int cudaKickHandoffBlocks{};    // pins the CPU/GPU handoff divisor; zero derives it
+    int cudaKickHandoffBlocks{};       // pins the CPU/GPU handoff divisor; zero derives it
 };
 
 struct Checkpoint {

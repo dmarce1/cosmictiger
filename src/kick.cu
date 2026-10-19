@@ -373,9 +373,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                 {
                     // Cooperative translation into the scratch expansion, then
                     // publish it as the active expansion at this node's center.
-                    detail::stf::L2lWarpKernel<kFmmLocalDegree, true>::translateInto(scratch,
-                        expansion, dx[XDIM] * SCALE_FACTOR, dx[YDIM] * SCALE_FACTOR,
-                        dx[ZDIM] * SCALE_FACTOR, globalParams.doPhi);
+                    l2LCudaInto(scratch, expansion, dx, globalParams.doPhi);
                     detail::cudaCopyExpansion(&expansion[0], scratch);
                     if (tid < NDIM) {
                         expansionPos[tid] = self.pos[tid];
@@ -591,8 +589,8 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                             cudaGravityPcDirect(data, control, self, sinkBegin, sinkCount, pclist,
                                 globalParams.doPhi);
                             if (equalMass) {
-                                cudaGravityPpDirect<true>(data, control, self, sinkBegin,
-                                    sinkCount, leaflist, supportRadius, globalParams.doPhi);
+                                cudaGravityPpDirect<true>(data, control, self, sinkBegin, sinkCount,
+                                    leaflist, supportRadius, globalParams.doPhi);
                             } else {
                                 cudaGravityPpDirect<false>(data, control, self, sinkBegin,
                                     sinkCount, leaflist, supportRadius, globalParams.doPhi);
@@ -707,6 +705,7 @@ constexpr int kKickSharedAllocationGranularity = 128;
 constexpr int kKickArenaAlignment = 16;
 constexpr int kKickDefaultSinkTile = 128;
 constexpr int kKickDefaultParticleTile = 512;
+constexpr int kKickDefaultMultipoleTile = 32;
 constexpr int kKickMaximumMultipoleTile = 64;
 constexpr int kKickMinimumParticleTile = WARP_SIZE;
 
@@ -729,8 +728,8 @@ KickDeviceResources kickDeviceResources() {
     resources.staticSharedBytes = int(attr.sharedSizeBytes);
     int const device = cudaGetDevice();
     int threads;
-    CUDA_CHECK(cudaDeviceGetAttribute(&resources.sharedPerMultiprocessor,
-        cudaDevAttrMaxSharedMemoryPerMultiprocessor, device));
+    CUDA_CHECK(cudaDeviceGetAttribute(
+        &resources.sharedPerMultiprocessor, cudaDevAttrMaxSharedMemoryPerMultiprocessor, device));
     CUDA_CHECK(cudaDeviceGetAttribute(
         &resources.reservedSharedPerBlock, cudaDevAttrReservedSharedMemoryPerBlock, device));
     CUDA_CHECK(cudaDeviceGetAttribute(
@@ -754,7 +753,8 @@ int kickRoundDown(int value, int multiple) {
 
 // Warps allocate registers in units of 256, with per-thread counts rounded to 8.
 int kickRegisterResidencyLimit(KickDeviceResources const& resources) {
-    int const registersPerWarp = kickRoundUp(kickRoundUp(resources.numberOfRegisters, 8) * WARP_SIZE, 256);
+    int const registersPerWarp =
+        kickRoundUp(kickRoundUp(resources.numberOfRegisters, 8) * WARP_SIZE, 256);
     int limit = resources.registersPerMultiprocessor / std::max(1, registersPerWarp);
     limit = std::min(limit, resources.maximumBlocksPerMultiprocessor);
     limit = std::min(limit, resources.maximumWarpsPerMultiprocessor);
@@ -785,7 +785,8 @@ bool kickBuildLayout(Compute const& compute, bool massPlane, int residency, int 
     int offset = controlBytes;
     if (compute.cudaKickSharedExpansion) {
         layout.expansionOffset = offset;
-        offset += kickRoundUp(kFmmLocalExpansionBytes + NDIM * int(sizeof(Fixed32)), kKickArenaAlignment);
+        offset +=
+            kickRoundUp(kFmmLocalExpansionBytes + NDIM * int(sizeof(Fixed32)), kKickArenaAlignment);
     } else {
         layout.expansionOffset = -1;
     }
@@ -795,17 +796,21 @@ bool kickBuildLayout(Compute const& compute, bool massPlane, int residency, int 
     if (arenaBudget < scratchBytes) {
         return false;
     }
-    int const bucket = compute.bucketSize;
+    // Leaves never exceed the runtime bucket, which is capped by kMaxBucketSize,
+    // so an automatic tile first tries to hold the whole bucket and only then
+    // falls back to bounded sink tiles.
+    int const bucket = std::min(compute.bucketSize, kMaxBucketSize);
     bool const sinkAuto = compute.cudaKickSinkTile == 0;
     int sinkCapacity = 0;
     if (compute.cudaKickSinkTile > 0) {
         sinkCapacity = kickRoundUp(compute.cudaKickSinkTile, WARP_SIZE);
     } else if (sinkAuto) {
-        sinkCapacity = std::min(kickRoundUp(bucket, WARP_SIZE), kKickDefaultSinkTile);
+        sinkCapacity = kickRoundUp(bucket, WARP_SIZE);
     }
-    int const particleBytesPerSource = int(sizeof(Fixed32)) * NDIM + (massPlane ? int(sizeof(float)) : 0);
+    int const particleBytesPerSource =
+        int(sizeof(Fixed32)) * NDIM + (massPlane ? int(sizeof(float)) : 0);
     layout.multipoleStride = kickRoundUp(int(sizeof(MultiPos)), kKickArenaAlignment);
-    int const multipoleTarget = kFmmMultipoleDegree <= 7 ? 32 : 16;
+    int const multipoleTarget = kKickDefaultMultipoleTile;
     bool const particleAuto = compute.cudaKickParticleTile <= 0;
     bool const multipoleAuto = compute.cudaKickMultipoleTile <= 0;
     int particleCapacity = particleAuto ? kKickDefaultParticleTile :
@@ -813,7 +818,8 @@ bool kickBuildLayout(Compute const& compute, bool massPlane, int residency, int 
     int multipoleCapacity = multipoleAuto ? multipoleTarget : compute.cudaKickMultipoleTile;
     while (true) {
         int const forceBytes = 4 * int(sizeof(float)) * sinkCapacity;
-        int const particleBytes = kickRoundUp(particleBytesPerSource * particleCapacity, kKickArenaAlignment);
+        int const particleBytes =
+            kickRoundUp(particleBytesPerSource * particleCapacity, kKickArenaAlignment);
         int const multipoleBytes = multipoleCapacity * layout.multipoleStride;
         int const sourceBytes = std::max(particleBytes, multipoleBytes);
         int const arenaBytes = std::max(forceBytes + sourceBytes, scratchBytes);
@@ -843,6 +849,8 @@ bool kickBuildLayout(Compute const& compute, bool massPlane, int residency, int 
             particleCapacity -= WARP_SIZE;
         } else if (multipoleAuto && multipoleCapacity > 1) {
             multipoleCapacity--;
+        } else if (sinkAuto && sinkCapacity > kKickDefaultSinkTile) {
+            sinkCapacity = kKickDefaultSinkTile;
         } else if (sinkAuto && sinkCapacity > WARP_SIZE) {
             sinkCapacity -= WARP_SIZE;
         } else {
@@ -856,8 +864,9 @@ CudaKickArenaLayout kickSelectLayout() {
     bool const massPlane = getOptions().hydro.enabled;
     auto const resources = kickDeviceResources();
     int const registerLimit = kickRegisterResidencyLimit(resources);
-    int residency = compute.cudaKickResidency > 0 ? std::min(compute.cudaKickResidency, registerLimit) :
-                                                     registerLimit;
+    int residency = compute.cudaKickResidency > 0 ?
+        std::min(compute.cudaKickResidency, registerLimit) :
+        registerLimit;
     CudaKickArenaLayout layout;
     while (residency >= 1) {
         int budget = kickSharedBudget(resources, residency);
@@ -877,12 +886,11 @@ CudaKickArenaLayout kickSelectLayout() {
                       "%i x %i bytes\n",
                     resources.numberOfRegisters, resources.staticSharedBytes, layout.residency,
                     registerLimit, layout.budgetBytes, layout.totalBytes,
-                    int(sizeof(CudaKickControl)),
-                    layout.expansionOffset >= 0 ? "shared" : "global",
-                    layout.sinkCapacity > 0 ? (std::string("shared tile ") +
-                                                  std::to_string(layout.sinkCapacity))
-                                                  .c_str() :
-                                              "global whole bucket",
+                    int(sizeof(CudaKickControl)), layout.expansionOffset >= 0 ? "shared" : "global",
+                    layout.sinkCapacity > 0 ?
+                        (std::string("shared tile ") + std::to_string(layout.sinkCapacity))
+                            .c_str() :
+                        "global whole bucket",
                     layout.particleCapacity, layout.massPlane ? "with" : "without",
                     layout.multipoleCapacity, layout.multipoleStride);
                 return layout;
@@ -895,7 +903,8 @@ CudaKickArenaLayout kickSelectLayout() {
         }
         residency--;
     }
-    throw std::runtime_error("No CUDA kick shared-memory layout fits the requested residency and tiles");
+    throw std::runtime_error(
+        "No CUDA kick shared-memory layout fits the requested residency and tiles");
 }
 
 }    // namespace detail

@@ -231,7 +231,8 @@ __device__ void cudaGravityPcDirect(CudaKickData const& data, CudaKickControl& c
                 l(0, 0, 0) = l(1, 0, 0) = l(0, 1, 0) = l(0, 0, 1) = 0.0f;
                 Array<float, NDIM> dx;
                 for (int j = 0; j < mend; j++) {
-                    MultiPos const& mp = *reinterpret_cast<MultiPos const*>(multipoles + j * stride);
+                    MultiPos const& mp =
+                        *reinterpret_cast<MultiPos const*>(multipoles + j * stride);
                     dx[XDIM] = distance(sinkX[k], mp.pos[XDIM]);
                     dx[YDIM] = distance(sinkY[k], mp.pos[YDIM]);
                     dx[ZDIM] = distance(sinkZ[k], mp.pos[ZDIM]);

@@ -646,6 +646,11 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.compute.bucketSize <= 0) {
         THROW_ERROR("compute.bucketSize must be positive\n");
     }
+    if (opts.compute.bucketSize > MAX_BUCKET_SIZE) {
+        THROW_ERROR("compute.bucketSize must not exceed the compile-time maximum %i "
+                    "(COSMICTIGER_WITH_MAX_BUCKET)\n",
+            int(MAX_BUCKET_SIZE));
+    }
     if (opts.compute.cudaKickResidency < 0 || opts.compute.cudaKickSinkTile < -1 ||
         opts.compute.cudaKickParticleTile < 0 || opts.compute.cudaKickMultipoleTile < 0 ||
         opts.compute.cudaKickHandoffBlocks < 0) {

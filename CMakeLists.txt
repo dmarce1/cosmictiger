@@ -29,16 +29,27 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 option(COSMICTIGER_WITH_CUDA "Enable CUDA" ON)
 option(COSMICTIGER_WITH_LONG_LONG_PART_INT "Use long long to index local particles" OFF)
-# Legacy expansion order: multipole degree p plus two. Source multipoles carry
-# degree p, local expansions degree p + 1, and Ewald derivatives ranks through
-# p + 1. Supported multipole degrees are 2 through 10 (orders 4 through 12).
+# FMM order: multipole degree p plus two. Source multipoles carry degree p,
+# local expansions degree p + 1, and Ewald derivatives ranks through p + 1.
+# Order 3 (dipoles, quadratic expansions) is the smallest order whose local
+# expansion holds the periodic background quadratic; order 10 is degree-8
+# multipoles with degree-9 expansions (single precision gains little beyond that).
 set(COSMICTIGER_WITH_ORDER "7" CACHE STRING "Expansion order P+1")
-if(NOT COSMICTIGER_WITH_ORDER MATCHES "^(4|5|6|7|8|9|10|11|12)$")
+if(NOT COSMICTIGER_WITH_ORDER MATCHES "^(3|4|5|6|7|8|9|10)$")
     message(FATAL_ERROR
-        "COSMICTIGER_WITH_ORDER must be an integer from 4 to 12 (multipole degree 2 to 10); got '${COSMICTIGER_WITH_ORDER}'")
+        "COSMICTIGER_WITH_ORDER must be an integer from 3 to 10 (multipole degree 1 to 8); got '${COSMICTIGER_WITH_ORDER}'")
 endif()
 math(EXPR COSMICTIGER_MULTIPOLE_DEGREE "${COSMICTIGER_WITH_ORDER} - 2")
 math(EXPR COSMICTIGER_LOCAL_DEGREE "${COSMICTIGER_WITH_ORDER} - 1")
+# Compile-time cap on the tree leaf bucket. compute.bucketSize may be any
+# runtime value up to this power of two; leaves then hold between half the
+# runtime bucket plus one and the runtime bucket particles. The CUDA kick
+# shared-memory policy is tuned for a runtime bucket equal to this cap.
+set(COSMICTIGER_WITH_MAX_BUCKET "128" CACHE STRING "Maximum tree leaf bucket size (power of two)")
+if(NOT COSMICTIGER_WITH_MAX_BUCKET MATCHES "^(32|64|128|256|512|1024)$")
+    message(FATAL_ERROR
+        "COSMICTIGER_WITH_MAX_BUCKET must be a power of two from 32 to 1024; got '${COSMICTIGER_WITH_MAX_BUCKET}'")
+endif()
 if(COSMICTIGER_WITH_CUDA)
     if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
         set(CMAKE_CUDA_ARCHITECTURES native)
@@ -62,6 +73,7 @@ find_path(CHEALPIX_INCLUDE_DIR chealpix.h REQUIRED)
 find_library(CHEALPIX_LIBRARY NAMES chealpix REQUIRED)
 
 message(STATUS "cosmictiger expansion order P+1 = ${COSMICTIGER_WITH_ORDER} (multipole degree ${COSMICTIGER_MULTIPOLE_DEGREE}, local degree ${COSMICTIGER_LOCAL_DEGREE})")
+message(STATUS "cosmictiger maximum bucket size = ${COSMICTIGER_WITH_MAX_BUCKET}")
 
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
@@ -369,7 +381,8 @@ add_custom_target(cosmictiger_generated_kernels
 # Compile a target against the generated kernels for the configured order.
 function(cosmictiger_use_generated_kernels target)
     target_include_directories(${target} BEFORE PRIVATE ${COSMICTIGER_GENERATED_INCLUDE_DIR})
-    target_compile_definitions(${target} PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
+    target_compile_definitions(${target} PRIVATE ORDER=${COSMICTIGER_WITH_ORDER}
+        MAX_BUCKET_SIZE=${COSMICTIGER_WITH_MAX_BUCKET})
     add_dependencies(${target} cosmictiger_generated_kernels)
 endfunction()
 cosmictiger_use_generated_kernels(cosmictiger)

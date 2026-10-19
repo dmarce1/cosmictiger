@@ -520,8 +520,8 @@ def main():
     args=ap.parse_args()
     if args.minOrder < 0 or args.maxOrder < 2 or args.minOrder != args.maxOrder - 1:
         ap.error('source degree must be one less than local degree, with local degree >= 2')
-    if args.maxOrder > 11:
-        ap.error('local degree must be at most 11 (multipole degree 10): the CUDA L2L schedule packs eight-bit coefficient indices')
+    if args.maxOrder > 9:
+        ap.error('local degree must be at most 9 (FMM order 10), the supported production range')
     outputs=generate(args.minOrder,args.maxOrder)
     notice = (projectRoot / 'tools/stf/generated_notice.txt').read_text()
     for name, cpp in list(outputs.items()):
