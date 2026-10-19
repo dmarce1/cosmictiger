@@ -1,0 +1,29 @@
+2026-10-19T12:55:18-05:00 start
+2026-10-19T12:55:20-05:00 ctest cap1024 exit 0
+2026-10-19T12:55:55-05:00 cap_effect_bucket64 exit 0
+2026-10-19T13:02:45-05:00 buckets_order7 exit 0
+2026-10-19T13:03:14-05:00 nsys_adaptive_order7 exit 0
+2026-10-19T13:09:21-05:00 theta_sweep exit 0
+2026-10-19T13:09:21-05:00 DONE
+2026-10-19T13:09:38-05:00 followup start
+2026-10-19T13:10:13-05:00 build fix exit 0
+2026-10-19T13:10:15-05:00 ctest fix exit 0
+2026-10-19T13:12:41-05:00 nsys_adaptive_order7 rerun exit 0
+2026-10-19T13:14:01-05:00 handoff_bucket32 exit 0
+2026-10-19T13:14:52-05:00 layout_fix_bucket1024 exit 0
+2026-10-19T13:14:52-05:00 FOLLOWUP DONE
+2026-10-19T13:15:52-05:00 followup2 start
+2026-10-19T13:16:31-05:00 build fix2 exit 0
+2026-10-19T13:16:33-05:00 ctest fix2 exit 0
+2026-10-19T13:19:03-05:00 residency_handoff exit 0
+2026-10-19T13:19:55-05:00 ncu_bucket512 exit 0
+2026-10-19T13:19:55-05:00 FOLLOWUP2 DONE
+2026-10-19T13:20:02-05:00 followup3 start
+2026-10-19T13:21:41-05:00 handoff_coarse exit 0
+2026-10-19T13:21:42-05:00 handoff_threads4 exit 0
+2026-10-19T13:21:42-05:00 FOLLOWUP3 DONE
+2026-10-19T13:24:46-05:00 handoff_coarse rerun exit 0
+2026-10-19T13:25:15-05:00 final start
+2026-10-19T13:27:38-05:00 build final exit 0
+2026-10-19T13:27:40-05:00 ctest final exit 0
+2026-10-19T13:29:51-05:00 final_defaults exit 0

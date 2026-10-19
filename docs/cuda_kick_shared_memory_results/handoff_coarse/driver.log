@@ -1,0 +1,25 @@
+baseline_auto_cuda_b64_o7_pair0: lattice/phi=0 33.258 ms, lattice/phi=1 32.897 ms, clustered/phi=0 8.726 ms, clustered/phi=1 8.746 ms, adaptive/phi=0 18.959 ms, adaptive/phi=1 19.765 ms
+baseline_auto_cuda_b128_o7_pair0: lattice/phi=0 15.353 ms, lattice/phi=1 15.264 ms, clustered/phi=0 6.615 ms, clustered/phi=1 6.976 ms, adaptive/phi=0 16.984 ms, adaptive/phi=1 16.322 ms
+arena_auto_cuda_b64_o7_pair0: lattice/phi=0 31.374 ms, lattice/phi=1 31.088 ms, clustered/phi=0 8.598 ms, clustered/phi=1 8.457 ms, adaptive/phi=0 20.606 ms, adaptive/phi=1 20.602 ms
+arena_auto_cuda_b128_o7_pair0: lattice/phi=0 15.011 ms, lattice/phi=1 14.807 ms, clustered/phi=0 6.351 ms, clustered/phi=1 6.731 ms, adaptive/phi=0 18.432 ms, adaptive/phi=1 17.672 ms
+arena_handoff164_cuda_b64_o7_pair0: lattice/phi=0 14.514 ms, lattice/phi=1 14.282 ms, clustered/phi=0 5.997 ms, clustered/phi=1 6.123 ms, adaptive/phi=0 15.293 ms, adaptive/phi=1 14.488 ms
+arena_handoff164_cuda_b128_o7_pair0: lattice/phi=0 14.162 ms, lattice/phi=1 14.419 ms, clustered/phi=0 5.999 ms, clustered/phi=1 6.333 ms, adaptive/phi=0 15.693 ms, adaptive/phi=1 14.680 ms
+arena_handoff82_cuda_b64_o7_pair0: lattice/phi=0 12.285 ms, lattice/phi=1 11.914 ms, clustered/phi=0 5.472 ms, clustered/phi=1 5.715 ms, adaptive/phi=0 20.356 ms, adaptive/phi=1 20.541 ms
+arena_handoff82_cuda_b128_o7_pair0: lattice/phi=0 12.133 ms, lattice/phi=1 12.330 ms, clustered/phi=0 6.013 ms, clustered/phi=1 6.339 ms, adaptive/phi=0 19.565 ms, adaptive/phi=1 20.016 ms
+arena_handoff41_cuda_b64_o7_pair0: lattice/phi=0 12.730 ms, lattice/phi=1 12.792 ms, clustered/phi=0 4.917 ms, clustered/phi=1 5.494 ms, adaptive/phi=0 34.943 ms, adaptive/phi=1 35.705 ms
+arena_handoff41_cuda_b128_o7_pair0: lattice/phi=0 11.912 ms, lattice/phi=1 12.830 ms, clustered/phi=0 5.787 ms, clustered/phi=1 6.587 ms, adaptive/phi=0 33.790 ms, adaptive/phi=1 34.574 ms
+arena_handoff20_cuda_b64_o7_pair0: lattice/phi=0 19.158 ms, lattice/phi=1 20.347 ms, clustered/phi=0 6.618 ms, clustered/phi=1 8.069 ms, adaptive/phi=0 62.550 ms, adaptive/phi=1 66.446 ms
+arena_handoff20_cuda_b128_o7_pair0: lattice/phi=0 19.162 ms, lattice/phi=1 20.166 ms, clustered/phi=0 8.880 ms, clustered/phi=1 10.520 ms, adaptive/phi=0 63.636 ms, adaptive/phi=1 65.393 ms
+arena_handoff20_cuda_b64_o7_pair1: lattice/phi=0 19.520 ms, lattice/phi=1 20.229 ms, clustered/phi=0 6.998 ms, clustered/phi=1 8.251 ms, adaptive/phi=0 62.820 ms, adaptive/phi=1 64.065 ms
+arena_handoff20_cuda_b128_o7_pair1: lattice/phi=0 18.923 ms, lattice/phi=1 20.248 ms, clustered/phi=0 9.148 ms, clustered/phi=1 10.333 ms, adaptive/phi=0 63.718 ms, adaptive/phi=1 64.592 ms
+arena_handoff41_cuda_b64_o7_pair1: lattice/phi=0 12.260 ms, lattice/phi=1 12.930 ms, clustered/phi=0 5.339 ms, clustered/phi=1 5.847 ms, adaptive/phi=0 34.674 ms, adaptive/phi=1 35.489 ms
+arena_handoff41_cuda_b128_o7_pair1: lattice/phi=0 12.216 ms, lattice/phi=1 12.848 ms, clustered/phi=0 6.180 ms, clustered/phi=1 7.033 ms, adaptive/phi=0 34.510 ms, adaptive/phi=1 35.838 ms
+arena_handoff82_cuda_b64_o7_pair1: lattice/phi=0 11.549 ms, lattice/phi=1 12.193 ms, clustered/phi=0 5.440 ms, clustered/phi=1 5.854 ms, adaptive/phi=0 20.339 ms, adaptive/phi=1 20.751 ms
+arena_handoff82_cuda_b128_o7_pair1: lattice/phi=0 11.527 ms, lattice/phi=1 12.593 ms, clustered/phi=0 5.859 ms, clustered/phi=1 6.436 ms, adaptive/phi=0 19.802 ms, adaptive/phi=1 20.902 ms
+arena_handoff164_cuda_b64_o7_pair1: lattice/phi=0 14.503 ms, lattice/phi=1 14.474 ms, clustered/phi=0 6.001 ms, clustered/phi=1 6.251 ms, adaptive/phi=0 16.093 ms, adaptive/phi=1 15.391 ms
+arena_handoff164_cuda_b128_o7_pair1: lattice/phi=0 14.491 ms, lattice/phi=1 14.555 ms, clustered/phi=0 6.168 ms, clustered/phi=1 6.391 ms, adaptive/phi=0 15.299 ms, adaptive/phi=1 14.055 ms
+arena_auto_cuda_b64_o7_pair1: lattice/phi=0 31.218 ms, lattice/phi=1 31.104 ms, clustered/phi=0 8.625 ms, clustered/phi=1 8.933 ms, adaptive/phi=0 21.217 ms, adaptive/phi=1 21.137 ms
+arena_auto_cuda_b128_o7_pair1: lattice/phi=0 15.132 ms, lattice/phi=1 14.986 ms, clustered/phi=0 6.447 ms, clustered/phi=1 7.043 ms, adaptive/phi=0 18.794 ms, adaptive/phi=1 18.075 ms
+baseline_auto_cuda_b64_o7_pair1: lattice/phi=0 32.500 ms, lattice/phi=1 32.433 ms, clustered/phi=0 8.772 ms, clustered/phi=1 9.176 ms, adaptive/phi=0 19.715 ms, adaptive/phi=1 19.664 ms
+baseline_auto_cuda_b128_o7_pair1: lattice/phi=0 15.395 ms, lattice/phi=1 15.471 ms, clustered/phi=0 7.002 ms, clustered/phi=1 7.243 ms, adaptive/phi=0 17.462 ms, adaptive/phi=1 16.493 ms
+Completed; see docs/cuda_kick_shared_memory_results/handoff_coarse/summary.md

@@ -1,0 +1,3 @@
+baseline exit 0
+arena exit 0
+DONE
