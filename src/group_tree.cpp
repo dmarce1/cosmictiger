@@ -20,7 +20,6 @@
 #include <unordered_set>
 
 #include <cosmictiger/domain.hpp>
-#include <cosmictiger/fast_future.hpp>
 #include <cosmictiger/group_tree.hpp>
 
 static Vector<GroupTreeNode> groupTreeFetchCacheLine(int index);
@@ -104,10 +103,10 @@ static void resetLastCacheEntries() {
     }
 }
 
-FastFuture<GroupTreeReturn> groupTreeCreateFork(size_t key, Pair<int, int> processRange,
+hpx::future<GroupTreeReturn> groupTreeCreateFork(size_t key, Pair<int, int> processRange,
     Pair<ParticleInteger> particleRange, GroupRange box, int depth, bool localRoot, bool threadme) {
     static std::atomic<int> numberOfThreads(0);
-    FastFuture<GroupTreeReturn> rc;
+    hpx::future<GroupTreeReturn> rc;
     bool remote = false;
     if (processRange.first != hpxRank()) {
         threadme = true;
@@ -125,7 +124,8 @@ FastFuture<GroupTreeReturn> groupTreeCreateFork(size_t key, Pair<int, int> proce
         }
     }
     if (!threadme) {
-        rc.setValue(groupTreeCreate(key, processRange, particleRange, box, depth, localRoot));
+        rc = hpx::make_ready_future(
+            groupTreeCreate(key, processRange, particleRange, box, depth, localRoot));
     } else if (remote) {
         rc = hpx::async<GroupTreeCreateAction>(hpxLocalities()[processRange.first], key,
             processRange, particleRange, box, depth, localRoot);

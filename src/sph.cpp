@@ -25,7 +25,6 @@
 #include <unistd.h>
 
 #include <cosmictiger/constants.hpp>
-#include <cosmictiger/fast_future.hpp>
 #include <cosmictiger/gravity.hpp>
 #include <cosmictiger/kernel.hpp>
 #include <cosmictiger/math.hpp>

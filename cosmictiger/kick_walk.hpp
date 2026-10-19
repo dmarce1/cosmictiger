@@ -108,6 +108,18 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
 
 namespace detail {
 
+// Adds an opened child to a list unless it holds no particles. The Ewald leaf
+// criterion splits sparse boxes down to single particles beside empty siblings,
+// and an empty cell contributes nothing: keeping it out of every list spares
+// its acceptance tests, its own opening and its zero-mass M2L, as the CUDA walk
+// does by skipping empty sources at the test. The walk's lists start from the
+// root and grow only here, so no list ever holds an empty cell.
+inline void kickPushOccupied(Vector<TreeId>& list, TreeId id) {
+    if (treeGetNode(id)->numberOfParticles() != 0) {
+        list.push_back(id);
+    }
+}
+
 // Resolves a rejected source cell that is not a leaf. The lockstep rule opens
 // the source: a leaf sink retests the children here and an internal sink hands
 // them to its children, so cell pairs meet at equal depth. The open-larger rule
@@ -115,34 +127,22 @@ namespace detail {
 // reciprocal from both sides: a larger source is opened and retested here, a
 // smaller source is handed down unopened for the sink's children, and equal
 // radii open both, as the lockstep rule does. A leaf sink always opens.
-inline long long kickCountOccupied(Vector<TreeId> const& ids);
-
 inline void kickOpenOrDefer(bool openLargerCell, TreeNode const* sink, TreeNode const* source,
     TreeId sourceId, Vector<TreeId>& retry, Vector<TreeId>& deferred,
     KickInteractionCounts& counts) {
     auto const& children = source->children;
     if (!openLargerCell || sink->leaf || source->radius > sink->radius) {
-        retry.push_back(children[LEFT]);
-        retry.push_back(children[RIGHT]);
+        kickPushOccupied(retry, children[LEFT]);
+        kickPushOccupied(retry, children[RIGHT]);
         counts.sourceOpenings++;
     } else if (source->radius < sink->radius) {
         deferred.push_back(sourceId);
         counts.deferredSources++;
     } else {
-        deferred.push_back(children[LEFT]);
-        deferred.push_back(children[RIGHT]);
+        kickPushOccupied(deferred, children[LEFT]);
+        kickPushOccupied(deferred, children[RIGHT]);
         counts.sourceOpenings++;
     }
-}
-
-// Empty cells reach every neighbour's lists but never walk themselves, so
-// they are left out of the counters to keep reciprocal counts comparable.
-inline long long kickCountOccupied(Vector<TreeId> const& ids) {
-    long long count = 0;
-    for (auto const& id : ids) {
-        count += treeGetNode(id)->numberOfParticles() != 0;
-    }
-    return count;
 }
 
 }    // namespace detail
@@ -338,7 +338,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
             std::swap(checklist, nextlist);
             nextlist.resize(0);
         } while (checklist.size() && (selfPtr->leaf || openLargerCell));
-        counts.cellCellEwald += detail::kickCountOccupied(cclist);
+        counts.cellCellEwald += cclist.size();
         cpuGravityCc<order>(kGravityEwald, expansion, cclist, self, params.doPhi);
         if (!selfPtr->leaf) {
             checklist.insert(checklist.end(), leaflist.begin(), leaflist.end());
@@ -436,21 +436,18 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
             std::swap(checklist, nextlist);
             nextlist.resize(0);
         } while (checklist.size() && (selfPtr->leaf || openLargerCell));
-        counts.cellCellDirect += detail::kickCountOccupied(cclist);
-        counts.cellParticle += detail::kickCountOccupied(cplist);
-        counts.particleCell += detail::kickCountOccupied(pclist);
+        counts.cellCellDirect += cclist.size();
+        counts.cellParticle += cplist.size();
+        counts.particleCell += pclist.size();
         if (selfPtr->leaf) {
-            counts.cellParticleAtLeafSinks += detail::kickCountOccupied(cplist);
+            counts.cellParticleAtLeafSinks += cplist.size();
             for (auto const& id : pclist) {
-                TreeNode const* source = treeGetNode(id);
-                counts.particleCellFromLeafSources += source->leaf && source->numberOfParticles();
+                counts.particleCellFromLeafSources += treeGetNode(id)->leaf;
             }
+            counts.particleParticleLeafPairs += leaflist.size();
             for (auto const& id : leaflist) {
-                ParticleInteger const sourceCount = treeGetNode(id)->numberOfParticles();
-                if (sourceCount != 0) {
-                    counts.particleParticleLeafPairs++;
-                    counts.particleParticlePairs += (long long) numberOfSelfParticles * sourceCount;
-                }
+                counts.particleParticlePairs +=
+                    (long long) numberOfSelfParticles * treeGetNode(id)->numberOfParticles();
             }
         }
         cpuGravityCc<order>(kGravityDirect, expansion, cclist, self, params.doPhi);

@@ -9,8 +9,9 @@
 
 // Rank-local counters of the CPU tree walk, summed over every sink node since
 // the last reset. Cell pairs count once per sink: the walk evaluates each
-// reciprocal pair from both sides. Sources without particles are not counted.
-// The CUDA walk does not report counts.
+// reciprocal pair from both sides. Sources without particles never enter the
+// walk's lists, so they are neither tested nor counted. The CUDA walk does not
+// report counts.
 struct KickInteractionCounts {
     long long acceptanceTests;                // acceptance evaluations, both passes
     long long cellCellDirect;                 // M2L, direct pass

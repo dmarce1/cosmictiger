@@ -9,7 +9,10 @@ and the CUDA kernel apply the same rule and the accepted pair set stays
 reciprocal across a CPU/CUDA handoff.
 
 The hybrid choice for a leaf pair that fails the cell-cell test is a flop
-comparison rather than a radius rule: see "Hybrids by cost" below.
+comparison rather than a radius rule: see "Hybrids by cost" below. Source
+cells without particles never enter the walk's lists: see "Empty source
+cells". The two rules are compared at equal force error on one tree in
+"Equal accuracy on one tree" under Results.
 
 Branch: `order_aware_cuda_shared_memory`. Results from 2026-10-19 on the
 24-core workstation, CPU walk with 8 HPX threads, FMM order 7, 32768 particles
@@ -112,12 +115,61 @@ under both rules.
 `cosmictiger/kick_interaction_counts.hpp` adds rank-local counters filled by
 the CPU walk: acceptance tests, direct and Ewald M2L, cell-particle,
 particle-cell, particle-particle leaf pairs and particle pairs, source openings
-and deferred sources. Sources without particles are not counted, because an
-empty sibling cell reaches every neighbour's lists while its own walk returns
-before counting anything. `run.test=force` prints the counters and the
+and deferred sources. Sources without particles never enter the lists (see
+"Empty source cells"), so they are neither tested nor counted and the cell
+counters are plain list sizes. `run.test=force` prints the counters and the
 rank-local net force residual, the norm of the summed force divided by the sum
 of force norms, after every kick; `run.test=kick` prints the counters and the
 kick time at `gravity.openingAngle`.
+
+## Empty source cells
+
+The Ewald leaf criterion splits a sparse box down to single particles beside
+empty siblings, and the tree keeps those empty cells as leaves of radius zero.
+The walk used to treat them like any other source: an opened cell pushed both
+children onto the retry or deferred list, so an empty child was tested by the
+sink, handed down to both sink children when it failed, and evaluated as a
+zero-mass M2L wherever it was accepted. The CUDA walk skips a source with no
+particles at the acceptance test. The CPU walk now keeps them out of the lists
+instead: `detail::kickPushOccupied` in `cosmictiger/kick_walk.hpp` drops a
+child with no particles when `kickOpenOrDefer` opens its parent, in both the
+Ewald and the direct pass. The lists start from the root and grow only there,
+so no list ever holds an empty cell. The accepted pair set for occupied cells
+is unchanged; the only effect on the forces is roundoff, because removing a
+zero entry from an M2L list shifts the sources behind it into other SIMD lanes
+of `cpuGravityCc` and changes the order of the final lane sum.
+
+Walk regression fixture (`fmm_walk_cpu_ctest_empty_skip.log` against the
+earlier `fmm_walk_cpu_cuda_ctest.log`): acceptance tests fell from 32116 to
+31345 for the lockstep rule and from 31472 to 31207 for the open-larger rule;
+every M2L, hybrid, pair, opening and deferral count is identical; the
+net-force residuals moved from 3.924e-9 to 3.923e-9 and from 1.774e-9 to
+1.764e-9, and the rms force difference between the rules stayed at 7.665e-4.
+
+Plummer model, 32768 particles, 5 HPX threads, `run.test=kick`, the walk
+before the change (`kick_empty_before_*.log`, the binary of the previous
+commit) and after it (`kick_empty_after_*.log`), run back to back:
+
+| theta | rule | tests before | after | change | M2L direct | M2L Ewald | PP pairs | kick s before | after |
+|---|---|---|---|---|---|---|---|---|---|
+| 0.2 | lockstep | 505012 | 429894 | -14.9% | 62534 | 31292 | 591029358 | 0.34 | 0.33 |
+| 0.2 | open-larger | 516366 | 501650 | -2.9% | 48058 | 27694 | 590659954 | 0.28 | 0.29 |
+| 0.8 | lockstep | 52358 | 51614 | -1.4% | 15974 | 2398 | 67435294 | 0.056 | 0.053 |
+| 0.8 | open-larger | 57960 | 57598 | -0.6% | 11608 | 1846 | 66473574 | 0.044 | 0.047 |
+
+The M2L, hybrid and pair counts are the same before and after because the
+counters already excluded empty sources; what the old walk spent on them shows
+only in the acceptance tests, 75118 fewer at theta 0.2 with the lockstep rule,
+and in the earlier count under Observations of 103892 direct M2L list entries
+with empty cells against 62534 without, that is 41358 zero-mass M2L
+evaluations at that angle. The lockstep walk tested many more empty cells than
+the open-larger walk because it hands every opened child down to both sink
+children, and an empty leaf that failed there was handed down again by every
+sink below until some ancestor accepted it, whereas the open-larger walk
+retests an opened child once, at the sink's own level. The kick time is within
+the timing noise at both angles: on this model the kick is dominated by the
+particle pairs, 591 million at theta 0.2 and 67 million at theta 0.8, and the
+M2L evaluations the walk no longer does were cheap zero-mass ones.
 
 ## Reproduce
 
@@ -141,7 +193,17 @@ docs/open_larger_cell_walk_results/run_count_sweep.sh plummer cosmo
 runs `run.test=kick` per opening angle without touching the GPU, and
 `parse_kick_sweep.py` merges its counters and kick times with the force errors
 and residuals of the force sweep. The counter change between the two sweeps
-only affects what is counted, not the walk, so the forces are the same.
+only affects what is counted, not the walk, so the forces are the same. Both
+scripts take `ROOT`, `BIN`, `THREADS` and (the count sweep) `THETAS` from the
+environment. The equal-accuracy sweep
+
+```bash
+TREE_THETA=0.4 docs/open_larger_cell_walk_results/run_fixed_tree_sweep.sh cosmo
+```
+
+runs `run.test=force` with `--run.treeOpeningAngle=0.4` for both rules, and
+`parse_fixed_tree_sweep.py ROOT cosmo 0.4` tabulates it and reads off the
+open-larger work at the lockstep median error.
 
 ## Results
 
@@ -211,6 +273,94 @@ exclude empty source cells; CP and PC are equal at every angle for both rules.
 | 0.90 | 38998 | 22078 | 0.57 | 49750 | 31350 | 132666 | 129094 | 31398108 | 30581950 | 1834 | 2629 | 26650 | 0.05 | 0.04 | 7.1e-10 | 6.6e-10 | 1.87e-02 | 2.51e-02 | 2.46e-01 | 2.98e-01 |
 | 0.95 | 33506 | 19256 | 0.57 | 42712 | 24750 | 113914 | 105218 | 25280288 | 23720640 | 1800 | 2167 | 22040 | 0.05 | 0.03 | 7.2e-10 | 6.2e-10 | 3.13e-02 | 3.75e-02 | 4.24e-01 | 4.40e-01 |
 
+### Equal accuracy on one tree, cosmological initial condition
+
+`run.treeOpeningAngle` makes `run.test=force` build the tree once at that
+angle and sweep only the kick's opening angle, from the tree's angle to 0.95
+in steps of 0.025. The tree's Ewald leaf criterion in `src/tree.cpp` bounds a
+leaf's enclosing radius by 0.25 theta_tree / (1 + theta_tree), which is
+exactly the bound the Ewald pass needs for a leaf pair at the nearest image
+distance to be accepted at any kick angle of at least theta_tree, so larger
+kick angles never meet an unacceptable leaf pair. Both rules then walk the
+same tree at the same angles, and the comparison is read off at equal median
+force error: for each lockstep angle, the open-larger angle with the same
+median error is found by log-linear interpolation between adjacent sweep
+points, its counts and kick time are interpolated linearly in the angle, and
+the ratio to the lockstep value is tabulated (`parse_fixed_tree_sweep.py`).
+The median error comes from `analyticCompare` on 1000 randomly sampled
+particles against the direct periodic sum, and its sampling noise is about
+10 percent, which moves a matched angle by up to one sweep step; the ratios
+are a band, not a curve. 32768 particles, 8 HPX threads, CPU walk, trees
+built at theta 0.2, 0.4 and 0.6 (`force_fixed_tree*_cosmo_open_*.log`,
+trimmed to their summary lines); `tables_fixed_tree.md` holds all six tables.
+The first row of each sweep reproduces the per-angle sweep's counts at that
+angle, since it is the same tree.
+
+Tree built at theta 0.4, kick angle swept, lockstep (L) versus open-larger (O):
+
+| kick theta | M2L direct L | O | M2L Ewald L | O | PP pairs L | O | CP=PC L | O | kick s L | O | residual L | O | force error 50% L | O | 99% L | O |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 0.400 | 2325314 | 1122892 | 1259506 | 817302 | 8916660 | 8702068 | 111850 | 208640 | 0.74 | 0.43 | 4.8e-10 | 4.3e-10 | 3.10e-04 | 4.13e-04 | 3.05e-03 | 3.78e-03 |
+| 0.425 | 1957014 | 966320 | 971443 | 620029 | 7680190 | 7536430 | 91185 | 170406 | 0.59 | 0.40 | 5.6e-10 | 5.7e-10 | 5.57e-04 | 6.90e-04 | 5.89e-03 | 5.96e-03 |
+| 0.450 | 1669484 | 833954 | 738640 | 472844 | 6530054 | 6416868 | 76851 | 143080 | 0.48 | 0.30 | 6.2e-10 | 5.8e-10 | 9.29e-04 | 1.15e-03 | 1.03e-02 | 1.12e-02 |
+| 0.475 | 1435100 | 722694 | 557803 | 366379 | 5867592 | 5774948 | 63376 | 119251 | 0.37 | 0.26 | 5.2e-10 | 5.2e-10 | 1.21e-03 | 1.46e-03 | 1.31e-02 | 1.24e-02 |
+| 0.500 | 1245746 | 633302 | 418690 | 285612 | 5406900 | 5332144 | 52151 | 99088 | 0.30 | 0.20 | 4.6e-10 | 4.2e-10 | 1.64e-03 | 1.89e-03 | 1.49e-02 | 1.65e-02 |
+| 0.525 | 1087916 | 561056 | 325618 | 227506 | 4908584 | 4844384 | 43637 | 83282 | 0.21 | 0.16 | 3.5e-10 | 5.1e-10 | 2.02e-03 | 2.41e-03 | 2.08e-02 | 2.25e-02 |
+| 0.550 | 959154 | 499010 | 264949 | 182045 | 4504802 | 4449892 | 36720 | 70592 | 0.18 | 0.15 | 4.6e-10 | 5.9e-10 | 2.61e-03 | 2.96e-03 | 2.62e-02 | 2.80e-02 |
+| 0.575 | 848834 | 443456 | 221815 | 148707 | 4149324 | 4097456 | 31567 | 60835 | 0.15 | 0.11 | 3.8e-10 | 5.3e-10 | 3.35e-03 | 3.86e-03 | 2.95e-02 | 3.31e-02 |
+| 0.600 | 754794 | 396308 | 186346 | 125148 | 3730692 | 3673094 | 27853 | 53090 | 0.13 | 0.11 | 5.7e-10 | 5.1e-10 | 4.27e-03 | 4.67e-03 | 3.45e-02 | 4.26e-02 |
+| 0.625 | 666972 | 352382 | 150082 | 104898 | 3263556 | 3206120 | 26076 | 47579 | 0.12 | 0.09 | 5.1e-10 | 4.8e-10 | 5.49e-03 | 7.13e-03 | 5.28e-02 | 6.01e-02 |
+| 0.650 | 591046 | 315752 | 122584 | 89812 | 2866624 | 2817778 | 23403 | 41947 | 0.10 | 0.08 | 5.9e-10 | 5.6e-10 | 7.96e-03 | 8.60e-03 | 7.18e-02 | 7.47e-02 |
+| 0.675 | 531780 | 286852 | 106594 | 79230 | 2514784 | 2460134 | 20101 | 36747 | 0.08 | 0.06 | 5.2e-10 | 5.0e-10 | 9.91e-03 | 1.20e-02 | 7.97e-02 | 1.07e-01 |
+| 0.700 | 481692 | 263272 | 93646 | 70544 | 2227724 | 2163712 | 17987 | 32228 | 0.07 | 0.06 | 5.3e-10 | 5.2e-10 | 9.95e-03 | 1.38e-02 | 1.03e-01 | 1.22e-01 |
+| 0.725 | 439496 | 243800 | 84904 | 63928 | 2087688 | 2014948 | 16091 | 28006 | 0.07 | 0.05 | 4.8e-10 | 4.2e-10 | 1.27e-02 | 1.60e-02 | 1.24e-01 | 1.34e-01 |
+| 0.750 | 398556 | 225726 | 75193 | 57319 | 1981642 | 1883694 | 14379 | 24249 | 0.06 | 0.05 | 5.3e-10 | 6.2e-10 | 1.58e-02 | 1.84e-02 | 1.50e-01 | 1.72e-01 |
+| 0.775 | 356582 | 204642 | 67084 | 51128 | 1808182 | 1682504 | 13562 | 21910 | 0.05 | 0.05 | 5.8e-10 | 5.1e-10 | 1.88e-02 | 2.08e-02 | 1.75e-01 | 2.33e-01 |
+| 0.800 | 318584 | 185026 | 60880 | 45892 | 1589946 | 1470680 | 13355 | 20533 | 0.05 | 0.04 | 6.1e-10 | 4.4e-10 | 2.56e-02 | 2.76e-02 | 2.77e-01 | 2.94e-01 |
+| 0.825 | 287424 | 169578 | 56374 | 41300 | 1386862 | 1299066 | 12803 | 18885 | 0.05 | 0.04 | 5.9e-10 | 7.2e-10 | 3.52e-02 | 3.73e-02 | 3.21e-01 | 3.05e-01 |
+| 0.850 | 258078 | 156334 | 53464 | 37420 | 1241224 | 1178568 | 10940 | 16025 | 0.05 | 0.04 | 6.4e-10 | 5.6e-10 | 4.35e-02 | 4.83e-02 | 4.06e-01 | 4.28e-01 |
+| 0.875 | 238024 | 148238 | 51874 | 34502 | 1141212 | 1099462 | 8828 | 12548 | 0.05 | 0.03 | 7.5e-10 | 6.6e-10 | 5.58e-02 | 5.97e-02 | 4.83e-01 | 4.88e-01 |
+| 0.900 | 219394 | 140514 | 49750 | 31350 | 1076338 | 1045108 | 7227 | 9689 | 0.04 | 0.03 | 7.1e-10 | 7.0e-10 | 6.72e-02 | 7.35e-02 | 5.20e-01 | 5.80e-01 |
+| 0.925 | 201460 | 131286 | 46789 | 28285 | 1019250 | 995982 | 5875 | 7679 | 0.04 | 0.03 | 7.0e-10 | 7.6e-10 | 8.12e-02 | 8.11e-02 | 5.92e-01 | 6.40e-01 |
+| 0.950 | 184650 | 120736 | 42712 | 24750 | 975428 | 956856 | 4959 | 6538 | 0.03 | 0.03 | 7.1e-10 | 6.3e-10 | 8.43e-02 | 9.08e-02 | 7.85e-01 | 7.33e-01 |
+
+Open-larger work at the lockstep median error, tree built at theta 0.4:
+
+| lockstep theta | median error | open-larger theta at that error | M2L direct O/L | M2L Ewald O/L | M2L total O/L | PP pairs O/L | kick time O/L |
+|---|---|---|---|---|---|---|---|
+| 0.400 | 3.10e-04 | outside the open-larger sweep | | | | | |
+| 0.425 | 5.57e-04 | 0.415 | 0.53 | 0.72 | 0.59 | 1.04 | 0.69 |
+| 0.450 | 9.29e-04 | 0.440 | 0.53 | 0.72 | 0.59 | 1.05 | 0.71 |
+| 0.475 | 1.21e-03 | 0.456 | 0.56 | 0.80 | 0.63 | 1.07 | 0.79 |
+| 0.500 | 1.64e-03 | 0.486 | 0.55 | 0.79 | 0.61 | 1.03 | 0.78 |
+| 0.525 | 2.02e-03 | 0.507 | 0.56 | 0.83 | 0.63 | 1.06 | 0.94 |
+| 0.550 | 2.61e-03 | 0.535 | 0.56 | 0.79 | 0.61 | 1.04 | 0.85 |
+| 0.575 | 3.35e-03 | 0.562 | 0.56 | 0.75 | 0.60 | 1.03 | 0.88 |
+| 0.600 | 4.27e-03 | 0.588 | 0.55 | 0.73 | 0.59 | 1.04 | 0.86 |
+| 0.625 | 5.49e-03 | 0.610 | 0.57 | 0.78 | 0.61 | 1.07 | 0.89 |
+| 0.650 | 7.96e-03 | 0.640 | 0.56 | 0.78 | 0.60 | 1.04 | 0.84 |
+| 0.675 | 9.91e-03 | 0.661 | 0.57 | 0.80 | 0.61 | 1.06 | 0.94 |
+| 0.700 | 9.95e-03 | 0.661 | 0.63 | 0.91 | 0.67 | 1.19 | 1.03 |
+| 0.725 | 1.27e-02 | 0.686 | 0.63 | 0.89 | 0.67 | 1.12 | 0.88 |
+| 0.750 | 1.58e-02 | 0.723 | 0.62 | 0.86 | 0.65 | 1.02 | 0.91 |
+| 0.775 | 1.88e-02 | 0.755 | 0.62 | 0.84 | 0.66 | 1.02 | 0.99 |
+| 0.800 | 2.56e-02 | 0.793 | 0.60 | 0.78 | 0.63 | 0.96 | 0.79 |
+| 0.825 | 3.52e-02 | 0.820 | 0.60 | 0.75 | 0.62 | 0.96 | 0.73 |
+| 0.850 | 4.35e-02 | 0.840 | 0.63 | 0.73 | 0.64 | 0.99 | 0.69 |
+| 0.875 | 5.58e-02 | 0.867 | 0.63 | 0.68 | 0.64 | 0.99 | 0.69 |
+| 0.900 | 6.72e-02 | 0.889 | 0.66 | 0.66 | 0.66 | 0.99 | 0.77 |
+| 0.925 | 8.12e-02 | 0.925 | 0.65 | 0.60 | 0.64 | 0.98 | 0.72 |
+| 0.950 | 8.43e-02 | 0.934 | 0.69 | 0.63 | 0.68 | 1.01 | 0.82 |
+
+Over the matched angles of each tree, median (range) of the open-larger to
+lockstep ratios, and of the angle offset lockstep minus open-larger:
+
+| tree theta | matched angles | angle offset | M2L direct O/L | M2L Ewald O/L | M2L total O/L | PP pairs O/L | kick time O/L |
+|---|---|---|---|---|---|---|---|
+| 0.2 | 30 | 0.01 (-0.01 to 0.03) | 0.59 (0.54 to 0.69) | 0.74 (0.59 to 0.95) | 0.61 (0.55 to 0.75) | 0.53 (0.40 to 0.74) | 0.71 (0.60 to 0.90) |
+| 0.4 | 22 | 0.01 (-0.00 to 0.04) | 0.60 (0.53 to 0.69) | 0.78 (0.60 to 0.91) | 0.63 (0.59 to 0.68) | 1.04 (0.96 to 1.19) | 0.84 (0.69 to 1.03) |
+| 0.6 | 14 | 0.01 (-0.00 to 0.03) | 0.55 (0.52 to 0.58) | 0.77 (0.61 to 0.83) | 0.62 (0.58 to 0.64) | 1.02 (0.96 to 1.10) | 0.89 (0.78 to 0.96) |
+
 ## Observations
 
 - Momentum: the net-force residual stays at 1e-10 to 6e-9 for both rules at
@@ -238,8 +388,23 @@ exclude empty source cells; CP and PC are equal at every angle for both rules.
   angles the lockstep walk also sums most of its leaf pairs directly under
   the cost rule, which is exact. A fair cost
   comparison needs equal accuracy, so the open-larger run should use a
-  slightly smaller theta; the sweep rebuilds the tree per theta, so that
-  comparison is not available from these runs.
+  slightly smaller theta: see the next point.
+- Equal accuracy: on one tree the open-larger rule reaches the lockstep
+  rule's median force error at an angle 0.01 to 0.03 smaller, and there it
+  does 55 to 65 percent of the lockstep M2L work, 53 to 69 percent of the
+  direct M2L and 60 to 95 percent of the Ewald M2L, on all three trees. The
+  fixed-angle comparison overstated the direct M2L saving (45 to 61 percent)
+  by about the one sweep step the error penalty costs. Particle pairs are
+  unchanged on the trees built at theta 0.4 and 0.6, but halved on the tree
+  built at theta 0.2, whose leaves hold a few particles: under the cost rule
+  the lockstep walk sums its leaf pairs directly while the open-larger walk
+  keeps the larger cell closed and uses a hybrid, 16826 against 1879642
+  hybrids at theta 0.2. The kick time at equal error is 0.6 to 1.0 of the
+  lockstep time, with medians of 0.71, 0.84 and 0.89 on the three trees,
+  inside the 20 percent timing noise. The Ewald M2L count at a given kick
+  angle is the same on all three trees, 1259506 lockstep and 817302
+  open-larger at theta 0.4, because the Ewald pass is decided above the
+  leaves.
 - Hybrids: with empty cells counted, the cell-particle and particle-cell
   counts differed by up to 12 percent at theta 0.2. An empty sibling cell is
   tested as a source by every neighbour, but its own walk returns before
@@ -252,14 +417,18 @@ exclude empty source cells; CP and PC are equal at every angle for both rules.
 - Empty cells cost real work: excluding them removed 40 percent of the direct
   M2L entries of the Plummer model at theta 0.2 (103892 to 62534) and 2 percent
   on the cosmological model. The Ewald criterion splits large sparse boxes down
-  to single particles with empty siblings, and the CPU walk tests and
-  evaluates those zero-mass cells like any other source; the CUDA Ewald pass
-  already skips them. Dropping empty sources from the checklist is an easy
-  saving on clustered trees, independent of the opening rule.
+  to single particles with empty siblings, and the CPU walk tested and
+  evaluated those zero-mass cells like any other source; the CUDA Ewald pass
+  already skipped them. The walk now keeps them out of its lists: see "Empty
+  source cells" for the measured effect.
 
 ## Follow-ups
 
-- Compare the rules at equal force error on one tree: build the tree once and
-  sweep the kick's theta only.
-- Skip zero-mass source cells in the CPU walk, as the CUDA Ewald pass does.
+- Repeat the equal-accuracy comparison on the CUDA walk, by kick time, since
+  the CUDA walk reports no counts.
+- Pin the analytic sample, or enlarge it, so the matched angle is not blurred
+  by the 10 percent sampling noise of the median error.
+- The kick-time ratio at equal error lags the M2L ratio (0.7 to 0.9 against
+  0.6); profile where the open-larger kick spends the difference, in the
+  acceptance tests it repeats at the sink's level or in the extra hybrids.
 

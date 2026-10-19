@@ -25,7 +25,6 @@
 #include <unordered_set>
 
 #include <cosmictiger/domain.hpp>
-#include <cosmictiger/fast_future.hpp>
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/safe_io.hpp>
@@ -223,11 +222,11 @@ SphTreeAllocator::~SphTreeAllocator() {
     allocatorMtx--;
 }
 
-FastFuture<SphTreeCreateReturn> sphTreeCreateFork(SphTreeCreateParameters params, size_t key,
+hpx::future<SphTreeCreateReturn> sphTreeCreateFork(SphTreeCreateParameters params, size_t key,
     Pair<int, int> const& processRange, Pair<ParticleInteger> const& particleRange,
     Range<double> const& box, int const depth, bool const localRoot, bool threadme) {
     static std::atomic<int> numberOfThreads(0);
-    FastFuture<SphTreeCreateReturn> rc;
+    hpx::future<SphTreeCreateReturn> rc;
     bool remote = false;
     if (processRange.first != hpxRank()) {
         threadme = true;
@@ -245,7 +244,8 @@ FastFuture<SphTreeCreateReturn> sphTreeCreateFork(SphTreeCreateParameters params
         }
     }
     if (!threadme) {
-        rc.setValue(sphTreeCreate(params, key, processRange, particleRange, box, depth, localRoot));
+        rc = hpx::make_ready_future(
+            sphTreeCreate(params, key, processRange, particleRange, box, depth, localRoot));
     } else if (remote) {
         //		PRINT( "%i calling local on %i at %li\n", hpx_rank(), proc_range.first, time(NULL));
         rc = hpx::async<SphTreeCreateAction>(hpxLocalities()[processRange.first], params, key,

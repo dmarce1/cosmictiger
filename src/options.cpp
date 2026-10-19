@@ -160,6 +160,7 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"run.maxIterations", options.run.maxIterations},
         {"run.numberOfSteps", options.run.numberOfSteps},
         {"run.minRung", options.run.minRung},
+        {"run.treeOpeningAngle", options.run.treeOpeningAngle},
         {"compute.cuda", options.compute.cuda},
         {"compute.bucketSize", options.compute.bucketSize},
         {"compute.cudaKickResidency", options.compute.cudaKickResidency},
@@ -286,7 +287,10 @@ bool processOptions(int argc, char* argv[]) {
         "maximum number of time steps")("run.numberOfSteps",
         po::value<int>(&opts.run.numberOfSteps)->default_value(64),
         "number of super time steps")("run.minRung",
-        po::value<int>(&opts.run.minRung)->default_value(0), "minimum starting rung");
+        po::value<int>(&opts.run.minRung)->default_value(0), "minimum starting rung")(
+        "run.treeOpeningAngle", po::value<double>(&opts.run.treeOpeningAngle)->default_value(0.0),
+        "run.test=force: build the tree once at this opening angle and sweep only the kick's "
+        "angle upward from it; 0 rebuilds the tree at every angle");
 
     po::options_description computeOpts("Compute");
     computeOpts.add_options()
@@ -1000,6 +1004,7 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("lightcone.mapSize", lightcone.mapSize);
     SHOW("analysis.linkingLength", analysis.linkingLength);
     SHOW("run.maxIterations", run.maxIterations);
+    SHOW("run.treeOpeningAngle", run.treeOpeningAngle);
     SHOW("analysis.minGroupSize", analysis.minGroupSize);
     SHOW("cosmology.omegaB", cosmology.omegaB);
     SHOW("cosmology.omegaC", cosmology.omegaC);
