@@ -194,9 +194,14 @@ set(cosmictiger_header_files
     cosmictiger/fixed.hpp
     cosmictiger/fft.hpp
     cosmictiger/fixed_capacity_vector.hpp
+    cosmictiger/fmm_cpu_instances.hpp
     cosmictiger/fmm_kernels.hpp
     cosmictiger/fmm_order.hpp
     cosmictiger/fmm_types.hpp
+    cosmictiger/gravity_cuda.hpp
+    cosmictiger/kick_cuda.hpp
+    cosmictiger/kick_cuda_impl.hpp
+    cosmictiger/kick_cuda_instances.hpp
     cosmictiger/gravity.hpp
     cosmictiger/initialize.hpp
     cosmictiger/interpolation.hpp
