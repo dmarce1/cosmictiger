@@ -1,0 +1,272 @@
+STARTING MAIN
+128
+std::atomic<int> is lock free!
+tree_node size = 96
+Detected 1 processes per node
+Hyperthreading detected
+Starting mem use daemon
+Processing options
+box_size = 1.071763e+01 Mpc
+lc map size = 9.262096e-01
+chemistry.enabled                 : F
+chemistry.network                 : atomic6
+chemistry.radiationFile           : 
+chemistry.synchronizedRung        : 4
+chemistry.initialTemperature      : 1.000000e+03
+chemistry.hydrogenIonFraction     : 2.000000e-04
+chemistry.heliumIonFraction       : 0.000000e+00
+chemistry.heliumDoubleIonFraction : 0.000000e+00
+chemistry.hydrogenMinusFraction   : 0.000000e+00
+chemistry.molecularFraction       : 0.000000e+00
+chemistry.molecularIonFraction    : 0.000000e+00
+chemistry.relativeTolerance       : 1.000000e-04
+chemistry.abundanceAbsoluteTolerance: 1.000000e-12
+chemistry.energyAbsoluteTolerance : 1.000000e-08
+chemistry.maxSubsteps             : 4096
+hydro.enabled                     : F
+run.hierarchicalGravity           : T
+hydro.viscosityAlpha              : 1.000000e+00
+hydro.viscosityBeta               : 2.000000e+00
+hydro.viscosityEpsilon            : 1.000000e-02
+hydro.gamma                       : 1.666667e+00
+hydro.neighborNumber              : 4.200000e+01
+hydro.minSupportRadius            : 1.000000e-06
+hydro.maxSupportRadius            : 1.600000e+01
+hydro.minEffectiveRadius          : 5.477226e-07
+hydro.maxEffectiveRadius          : 8.763561e+00
+hydro.cfl                         : 2.282177e-01
+Simulation Options
+code_to_M_solar = 1.492195e+09
+Box size = 7.215111e+00 cm/h
+checkpoint.intervalSeconds        : 1000000000
+units.lengthCm                    : 3.307117e+25
+units.massG                       : 2.954545e+42
+units.timeSeconds                 : 1.103135e+15
+compute.cuda                      : T
+gravity.fmmOrder                  : 7
+compute.cudaKickResidency         : 0
+compute.cudaKickSinkTile          : 0
+compute.cudaKickParticleTile      : 0
+compute.cudaKickMultipoleTile     : 0
+compute.cudaKickSharedExpansion   : T
+compute.cudaKickHandoffBlocks     : 492
+compute.cudaKickListReserve       : 4096
+lightcone.enabled                 : F
+analysis.groups                   : F
+analysis.power                    : F
+analysis.slice                    : F
+analysis.tracers                  : F
+analysis.views                    : F
+output.silo                       : F
+output.siloInterval               : 1
+output.directory                  : ./output
+output.units                      : code
+output.frame                      : comoving
+output.xMin                       : 0.000000e+00
+output.xMax                       : 1.000000e+00
+output.yMin                       : 0.000000e+00
+output.yMax                       : 1.000000e+00
+output.zMin                       : 0.000000e+00
+output.zMax                       : 1.000000e+00
+gravity.timestepEta               : 2.040160e-01
+gravity.gm                        : 6.632759e-12
+gravity.softening                 : 1.876988e-02
+gravity.effectiveRadius           : 1.876988e-02
+gravity.supportRadius             : 2.815483e-02
+hydro.centralEffectiveRadius      : 5.477226e-03
+hydro.centralSupportRadius        : 8.215838e-03
+gravity.kernelFamily              : ferrers
+gravity.kernelDegree              : 4
+hydro.kernelFamily                : spline
+hydro.kernelDegree                : 3
+cosmology.hubble                  : 6.732000e-01
+lightcone.linkingLength           : 2.800000e-01
+lightcone.mapSize                 : 1
+analysis.linkingLength            : 8.750000e-03
+run.maxIterations                 : 1000000
+analysis.minGroupSize             : 20
+cosmology.omegaB                  : 4.938900e-02
+cosmology.omegaC                  : 2.650300e-01
+cosmology.omegaGamma              : 5.522212e-05
+cosmology.omegaM                  : 3.144190e-01
+cosmology.omegaNu                 : 3.820094e-05
+cosmology.omegaR                  : 9.342306e-05
+compute.particleCacheLineSize     : 10922
+initial.particlesPerDimension     : 32
+checkpoint.readIndex              : -1
+analysis.saveForce                : F
+cosmology.sigma8                  : 8.607000e-01
+analysis.sliceResolution          : 4096
+analysis.sliceSize                : 1.000000e+00
+cosmology.thetaCmb                : 9.983516e-01
+gravity.openingAngle              : 8.000000e-01
+analysis.tracerCount              : 1000000
+compute.treeCacheLineSize         : 682
+initial.twoLpt                    : F
+initial.usePowerFile              : T
+analysis.viewSize                 : 1024
+cosmology.startRedshift           : 4.900000e+01
+cosmology.endRedshift             : 0.000000e+00
+cosmology.spectralIndex           : 9.660500e-01
+cosmology.heliumFraction          : 2.454006e-01
+cosmology.nEff                    : 3.046000e+00
+configuration                     : 
+run.test                          : stfBenchmark
+Silo particle output: disabled (output.silo=false)
+count = 178 178
+STF_WALK_CONFIG,particles=32768,threads=2,cuda=1,order=7,theta=0.80000000000000004,support=0.0008798383391969691,bucket=128,samples=15,warmup=1,gm=1
+STF_WALK_SAMPLE_HEADER,fixture,backend,do_phi,sample,setup_seconds,tree_seconds,kick_seconds,position_hash,gx_checksum,gy_checksum,gz_checksum,g2_checksum,phi_checksum,total_potential
+STF_WALK_MEDIAN_HEADER,fixture,backend,do_phi,samples,particles,setup_seconds,tree_seconds,kick_seconds,tree_plus_kick_seconds,position_hash
+STF_WALK_LEAF_HISTOGRAM_HEADER,fixture,depth,particles_per_leaf,leaves
+STF_WALK_REFERENCE_HEADER,fixture,backend,samples,force_relative_l2,force_relative_p50,force_relative_p99,force_relative_max,potential_relative_l2,potential_relative_p50,potential_relative_p99,potential_relative_max
+Detected a hardware concurrency of 12
+STF_WALK_LEAF_HISTOGRAM,adaptive,9,7,4
+STF_WALK_LEAF_HISTOGRAM,adaptive,9,8,23
+STF_WALK_LEAF_HISTOGRAM,adaptive,9,9,28
+STF_WALK_LEAF_HISTOGRAM,adaptive,9,10,47
+STF_WALK_LEAF_HISTOGRAM,adaptive,9,11,47
+STF_WALK_LEAF_HISTOGRAM,adaptive,9,12,28
+STF_WALK_LEAF_HISTOGRAM,adaptive,9,13,6
+STF_WALK_LEAF_HISTOGRAM,adaptive,9,14,40
+STF_WALK_LEAF_HISTOGRAM,adaptive,9,15,11
+STF_WALK_LEAF_HISTOGRAM,adaptive,9,16,42
+STF_WALK_LEAF_HISTOGRAM,adaptive,9,17,9
+STF_WALK_LEAF_HISTOGRAM,adaptive,9,18,10
+STF_WALK_LEAF_HISTOGRAM,adaptive,9,19,38
+STF_WALK_LEAF_HISTOGRAM,adaptive,9,20,50
+STF_WALK_LEAF_HISTOGRAM,adaptive,9,21,16
+STF_WALK_LEAF_HISTOGRAM,adaptive,9,22,25
+STF_WALK_LEAF_HISTOGRAM,adaptive,9,23,63
+STF_WALK_LEAF_HISTOGRAM,adaptive,9,24,17
+STF_WALK_LEAF_HISTOGRAM,adaptive,10,4,1
+STF_WALK_LEAF_HISTOGRAM,adaptive,10,5,1
+STF_WALK_LEAF_HISTOGRAM,adaptive,10,9,2
+STF_WALK_LEAF_HISTOGRAM,adaptive,11,1,1
+STF_WALK_LEAF_HISTOGRAM,adaptive,11,3,1
+STF_WALK_LEAF_HISTOGRAM,adaptive,11,5,2
+STF_WALK_LEAF_HISTOGRAM,adaptive,11,7,1
+STF_WALK_LEAF_HISTOGRAM,adaptive,11,8,1
+STF_WALK_LEAF_HISTOGRAM,adaptive,12,1,2
+STF_WALK_LEAF_HISTOGRAM,adaptive,12,2,1
+STF_WALK_LEAF_HISTOGRAM,adaptive,12,3,1
+STF_WALK_LEAF_HISTOGRAM,adaptive,12,4,3
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,69,1
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,70,2
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,71,2
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,72,1
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,74,1
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,75,1
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,76,2
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,79,2
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,80,1
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,81,3
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,84,1
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,85,1
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,87,1
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,88,3
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,89,2
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,90,4
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,91,10
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,92,1
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,93,3
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,95,3
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,96,1
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,97,2
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,98,2
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,99,4
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,100,2
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,101,1
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,102,4
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,103,4
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,104,3
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,105,5
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,106,2
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,107,6
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,108,4
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,109,5
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,110,7
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,111,6
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,112,4
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,113,5
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,114,4
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,115,5
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,116,7
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,117,5
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,118,4
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,119,2
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,120,3
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,121,1
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,122,1
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,123,3
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,124,3
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,125,1
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,126,3
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,127,1
+STF_WALK_LEAF_HISTOGRAM,adaptive,15,128,2
+STF_WALK_LEAF_HISTOGRAM,adaptive,16,57,1
+STF_WALK_LEAF_HISTOGRAM,adaptive,16,58,1
+STF_WALK_LEAF_HISTOGRAM,adaptive,16,59,1
+STF_WALK_LEAF_HISTOGRAM,adaptive,16,60,3
+STF_WALK_LEAF_HISTOGRAM,adaptive,16,61,1
+STF_WALK_LEAF_HISTOGRAM,adaptive,16,62,4
+STF_WALK_LEAF_HISTOGRAM,adaptive,16,63,3
+STF_WALK_LEAF_HISTOGRAM,adaptive,16,64,7
+STF_WALK_LEAF_HISTOGRAM,adaptive,16,65,5
+STF_WALK_LEAF_HISTOGRAM,adaptive,16,66,6
+STF_WALK_LEAF_HISTOGRAM,adaptive,16,67,10
+STF_WALK_LEAF_HISTOGRAM,adaptive,16,68,10
+STF_WALK_LEAF_HISTOGRAM,adaptive,16,69,11
+STF_WALK_LEAF_HISTOGRAM,adaptive,16,70,8
+STF_WALK_LEAF_HISTOGRAM,adaptive,16,71,6
+STF_WALK_LEAF_HISTOGRAM,adaptive,16,72,6
+STF_WALK_LEAF_HISTOGRAM,adaptive,16,73,1
+STF_WALK_LEAF_HISTOGRAM,adaptive,16,74,1
+STF_WALK_LEAF_HISTOGRAM,adaptive,16,75,5
+STF_WALK_LEAF_HISTOGRAM,adaptive,16,76,1
+STF_WALK_LEAF_HISTOGRAM,adaptive,16,78,4
+STF_WALK_LEAF_HISTOGRAM,adaptive,16,79,7
+STF_WALK_LEAF_HISTOGRAM,adaptive,16,80,5
+STF_WALK_LEAF_HISTOGRAM,adaptive,16,81,5
+STF_WALK_LEAF_HISTOGRAM,adaptive,16,82,2
+STF_WALK_LEAF_HISTOGRAM,adaptive,16,83,2
+STF_WALK_LEAF_HISTOGRAM,adaptive,16,85,2
+CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 8944 bytes: control 528, expansion shared, forces shared tile 128, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes
+STF_WALK_SAMPLE,adaptive,cuda,0,-1,0.001078945,0.004401489,0.037068655,10382969522388005973,-1135782260.1723576,-3439655994.091177,-5734401687.5765133,51781577058630016,0,0
+STF_WALK_SAMPLE,adaptive,cuda,0,0,0.000431574,0.003142515,0.020004018,10382969522388005973,-1135782260.1723576,-3439655994.091177,-5734401687.5765133,51781577058630016,0,0
+STF_WALK_SAMPLE,adaptive,cuda,0,1,0.000456792,0.00305468,0.02108154,10382969522388005973,-1135782260.1723576,-3439655994.091177,-5734401687.5765133,51781577058630016,0,0
+STF_WALK_SAMPLE,adaptive,cuda,0,2,0.000453064,0.003070871,0.018801071,10382969522388005973,-1135782260.1723576,-3439655994.091177,-5734401687.5765133,51781577058630016,0,0
+STF_WALK_SAMPLE,adaptive,cuda,0,3,0.000454777,0.003181609,0.020945474,10382969522388005973,-1135782260.1723576,-3439655994.091177,-5734401687.5765133,51781577058630016,0,0
+STF_WALK_SAMPLE,adaptive,cuda,0,4,0.000438937,0.003234779,0.019721677,10382969522388005973,-1135782260.1723576,-3439655994.091177,-5734401687.5765133,51781577058630016,0,0
+STF_WALK_SAMPLE,adaptive,cuda,0,5,0.000436123,0.003159007,0.021546638,10382969522388005973,-1135782260.1723576,-3439655994.091177,-5734401687.5765133,51781577058630016,0,0
+STF_WALK_SAMPLE,adaptive,cuda,0,6,0.000611423,0.00365407,0.018288183,10382969522388005973,-1135782260.1723576,-3439655994.091177,-5734401687.5765133,51781577058630016,0,0
+STF_WALK_SAMPLE,adaptive,cuda,0,7,0.000443997,0.003116437,0.020423149,10382969522388005973,-1135782260.1723576,-3439655994.091177,-5734401687.5765133,51781577058630016,0,0
+STF_WALK_SAMPLE,adaptive,cuda,0,8,0.000434018,0.003140281,0.017431729,10382969522388005973,-1135782260.1723576,-3439655994.091177,-5734401687.5765133,51781577058630016,0,0
+STF_WALK_SAMPLE,adaptive,cuda,0,9,0.000436453,0.003176981,0.019507112,10382969522388005973,-1135782260.1723576,-3439655994.091177,-5734401687.5765133,51781577058630016,0,0
+STF_WALK_SAMPLE,adaptive,cuda,0,10,0.000454046,0.003033419,0.020173609,10382969522388005973,-1135782260.1723576,-3439655994.091177,-5734401687.5765133,51781577058630016,0,0
+STF_WALK_SAMPLE,adaptive,cuda,0,11,0.000438026,0.003098232,0.017179253,10382969522388005973,-1135782260.1723576,-3439655994.091177,-5734401687.5765133,51781577058630016,0,0
+STF_WALK_SAMPLE,adaptive,cuda,0,12,0.000455679,0.003131635,0.017749718,10382969522388005973,-1135782260.1723576,-3439655994.091177,-5734401687.5765133,51781577058630016,0,0
+STF_WALK_SAMPLE,adaptive,cuda,0,13,0.0004454,0.003047046,0.016985788,10382969522388005973,-1135782260.1723576,-3439655994.091177,-5734401687.5765133,51781577058630016,0,0
+STF_WALK_SAMPLE,adaptive,cuda,0,14,0.000444237,0.003147394,0.019830471,10382969522388005973,-1135782260.1723576,-3439655994.091177,-5734401687.5765133,51781577058630016,0,0
+STF_WALK_MEDIAN,adaptive,cuda,0,15,32768,0.000444237,0.003140281,0.019721677,0.022956456,10382969522388005973
+STF_WALK_SAMPLE,adaptive,cuda,1,-1,0.000430792,0.003054549,0.01760775,10382969522388005973,-1135782260.1723576,-3439655994.091177,-5734401687.5765133,51781577058630016,-25254323729.925163,-2308705139.1170654
+STF_WALK_SAMPLE,adaptive,cuda,1,0,0.000177235,0.00300195,0.017097118,10382969522388005973,-1135782260.1723576,-3439655994.091177,-5734401687.5765133,51781577058630016,-25254323729.925163,-2308705139.1170654
+STF_WALK_SAMPLE,adaptive,cuda,1,1,0.000177064,0.003071592,0.018529759,10382969522388005973,-1135782260.1723576,-3439655994.091177,-5734401687.5765133,51781577058630016,-25254323729.925163,-2308705139.1170654
+STF_WALK_SAMPLE,adaptive,cuda,1,2,0.000176924,0.003047807,0.017921472,10382969522388005973,-1135782260.1723576,-3439655994.091177,-5734401687.5765133,51781577058630016,-25254323729.925163,-2308705139.1170654
+STF_WALK_SAMPLE,adaptive,cuda,1,3,0.000182414,0.003118069,0.018502577,10382969522388005973,-1135782260.1723576,-3439655994.091177,-5734401687.5765133,51781577058630016,-25254323729.925163,-2308705139.1170654
+STF_WALK_SAMPLE,adaptive,cuda,1,4,0.000185941,0.002996129,0.017759557,10382969522388005973,-1135782260.1723576,-3439655994.091177,-5734401687.5765133,51781577058630016,-25254323729.925163,-2308705139.1170654
+STF_WALK_SAMPLE,adaptive,cuda,1,5,0.000176583,0.003029081,0.016714696,10382969522388005973,-1135782260.1723576,-3439655994.091177,-5734401687.5765133,51781577058630016,-25254323729.925163,-2308705139.1170654
+STF_WALK_SAMPLE,adaptive,cuda,1,6,0.000176302,0.00304451,0.018315485,10382969522388005973,-1135782260.1723576,-3439655994.091177,-5734401687.5765133,51781577058630016,-25254323729.925163,-2308705139.1170654
+STF_WALK_SAMPLE,adaptive,cuda,1,7,0.000176583,0.00317146,0.01997829,10382969522388005973,-1135782260.1723576,-3439655994.091177,-5734401687.5765133,51781577058630016,-25254323729.925163,-2308705139.1170654
+STF_WALK_SAMPLE,adaptive,cuda,1,8,0.000176192,0.003177301,0.017995302,10382969522388005973,-1135782260.1723576,-3439655994.091177,-5734401687.5765133,51781577058630016,-25254323729.925163,-2308705139.1170654
+STF_WALK_SAMPLE,adaptive,cuda,1,9,0.000176713,0.003082572,0.019528091,10382969522388005973,-1135782260.1723576,-3439655994.091177,-5734401687.5765133,51781577058630016,-25254323729.925163,-2308705139.1170654
+STF_WALK_SAMPLE,adaptive,cuda,1,10,0.000182895,0.003010256,0.017861599,10382969522388005973,-1135782260.1723576,-3439655994.091177,-5734401687.5765133,51781577058630016,-25254323729.925163,-2308705139.1170654
+STF_WALK_SAMPLE,adaptive,cuda,1,11,0.000176844,0.003114142,0.022429011,10382969522388005973,-1135782260.1723576,-3439655994.091177,-5734401687.5765133,51781577058630016,-25254323729.925163,-2308705139.1170654
+STF_WALK_SAMPLE,adaptive,cuda,1,12,0.000177374,0.003206526,0.017060489,10382969522388005973,-1135782260.1723576,-3439655994.091177,-5734401687.5765133,51781577058630016,-25254323729.925163,-2308705139.1170654
+STF_WALK_SAMPLE,adaptive,cuda,1,13,0.000187314,0.003177241,0.02025935,10382969522388005973,-1135782260.1723576,-3439655994.091177,-5734401687.5765133,51781577058630016,-25254323729.925163,-2308705139.1170654
+STF_WALK_SAMPLE,adaptive,cuda,1,14,0.000177695,0.003131715,0.01714611,10382969522388005973,-1135782260.1723576,-3439655994.091177,-5734401687.5765133,51781577058630016,-25254323729.925163,-2308705139.1170654
+STF_WALK_MEDIAN,adaptive,cuda,1,15,32768,0.000177064,0.003082572,0.017995302,0.021172603,10382969522388005973
+Collecting data...
+Generating '/tmp/nsys-report-9a16.qdstrm'
+[1/1] [0%                          ] kick.nsys-rep[1/1] [0%                          ] kick.nsys-rep[1/1] [====26%                     ] kick.nsys-rep[1/1] [===========52%              ] kick.nsys-rep[1/1] [===================79%      ] kick.nsys-rep[1/1] [========================100%] kick.nsys-rep[1/1] [========================100%] kick.nsys-rep
+Generated:
+    /home/dmarce1/workspace/cosmictiger/.claude/worktrees/wizardly-leakey-12daaf/docs/cuda_kick_shared_memory_results/nsys_list_slab_matched/adaptive128_head_matched_3/kick.nsys-rep

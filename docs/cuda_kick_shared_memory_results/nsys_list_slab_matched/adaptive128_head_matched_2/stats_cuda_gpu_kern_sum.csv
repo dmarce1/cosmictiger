@@ -1,0 +1,2 @@
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+100.0,298376859,32,9324276.8,9053546.0,7530061,19091984,2088285.6,"void cudaKickKernel<(int)7>(KickReturn *, KickParameters, CudaKickData, CudaKickParameters<T1> *, int, int *, CudaKickArenaLayout)"

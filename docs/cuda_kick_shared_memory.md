@@ -912,16 +912,45 @@ automatic policy, 15 samples:
   difference. At bucket 128 the kernel gains 0.3 to 0.4 ms (5 to 6%): with
   200-particle subtrees the launch holds about 164 workitems for 656 blocks,
   so fewer blocks compete for the allocator at any one time.
-- The head kernel is slower than the baseline's at bucket 64 (7.2 against 5.0
+- The head kernel is slower than the baseline's at bucket 64 (7.1 against 5.1
   ms) not because of the arena but because the two-blocks-per-SM handoff gives
   the GPU more of the walk (host 6.8 against 14.4 ms): the whole kick is 13.9
-  against 19.7 ms. The slab kernel at the baseline's own work division is the
-  measurement that answers the earlier kernel-time criterion (5.6 against 5.1
-  ms); its Nsight Systems stage (`nsys_list_slab_matched/`) was queued behind
-  the other sessions' GPU work when this was written and is reported below as
-  soon as it has run; the whole-kick numbers of the matched policy above
-  (slab 3 to 6% faster than the head on the adaptive fixture, 2% slower than
-  the baseline at bucket 64 and 7% at 128) bound what it can show.
+  against 19.7 ms. The kernel comparison that the earlier criterion (5.6
+  against 5.1 ms) meant needs the same work division, measured next.
+
+Host and kernel split at the baseline's work division
+(`nsys_list_slab_matched/nsys_run.sh`: the arena binaries with
+`compute.cudaKickHandoffBlocks=492` and `gravity.openLargerCell=false`, plus
+the three automatic-policy variants again; three rounds, medians over the
+rounds; one build of another session ran during the first 15 s and two
+round-2 host shares at bucket 128 show CPU contention, see the summary, so
+the kernel columns are the reliable ones):
+
+| fixture, bucket | variant | whole kick (ms) | kick kernel (ms) | host (ms) | with potential: whole kick | kernel | host |
+|---|---|---:|---:|---:|---:|---:|---:|
+| adaptive, bucket 64 | baseline | 19.95 | 5.11 | 14.90 | 19.79 | 5.05 | 14.64 |
+| adaptive, bucket 64 | head, matched | 21.34 | 6.64 | 14.87 | 21.05 | 6.29 | 14.87 |
+| adaptive, bucket 64 | slab, matched | 20.39 | 5.45 | 14.61 | 20.03 | 5.07 | 14.58 |
+| adaptive, bucket 64 | head | 13.60 | 7.11 | 6.97 | 13.38 | 6.64 | 6.59 |
+| adaptive, bucket 64 | slab | 13.80 | 6.75 | 6.98 | 12.74 | 6.10 | 6.72 |
+| adaptive, bucket 128 | baseline | 18.20 | 8.27 | 9.63 | 16.92 | 7.23 | 9.50 |
+| adaptive, bucket 128 | head, matched | 19.83 | 9.53 | 9.90 | 18.30 | 8.65 | 9.89 |
+| adaptive, bucket 128 | slab, matched | 19.01 | 9.12 | 9.76 | 18.18 | 8.63 | 9.52 |
+| adaptive, bucket 128 | head | 14.18 | 6.84 | 7.04 | 13.52 | 6.46 | 6.89 |
+| adaptive, bucket 128 | slab | 13.74 | 6.49 | 7.23 | 12.79 | 5.85 | 6.89 |
+
+- At the baseline's division the host shares agree to 0.3 ms, as they must,
+  and the kernels compare like for like. At bucket 64 the head kernel is 1.5
+  ms (30%) above the baseline's and the slab kernel 0.34 ms (7%) above it,
+  5.45 against 5.11 ms; with the potential the two are equal (5.07 against
+  5.05 ms). The slab therefore removes about 80% of the arena kernel's gap to
+  the baseline at the division the earlier criterion was stated for; the rest
+  is in the PP and PC loops (the bucket-512 attribution above), not in list
+  handling. At bucket 128 the arena kernel is further from the baseline (head
+  9.5 against 8.3 ms) and the slab recovers a third of it (9.1 ms).
+- The automatic-policy rows repeat the first split within noise (slab kernel
+  6.75 against 6.33 ms there; the clean rounds of the two stages differ by
+  that much for the head as well).
 
 
 Nsight Compute replay of the second force-only kick kernel on the adaptive
@@ -977,8 +1006,10 @@ staging is not racing in fact.
 ### What remains
 
 - The per-launch list slab removed the pool allocator from the kernel (above);
-  the remaining kernel-side difference to the baseline at the same work
-  division is in the PP and PC loops themselves, not in list handling.
+  at the baseline's work division the kernel is now within 7% of the
+  baseline's at bucket 64 (equal with the potential) and 10% at 128, and the
+  remaining difference is in the PP and PC loops themselves, not in list
+  handling.
 - compute-sanitizer racecheck reports the `memcpy_async` staging warnings for
   some builds of the same staging code and not for others (none for the head
   build, 126 and 138 for two other builds); understanding what the tool keys
