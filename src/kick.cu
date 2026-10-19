@@ -55,10 +55,15 @@ CudaKickArenaLayout const& kickArenaLayout() {
 // twice the workitems, and four blocks per multiprocessor (800-particle
 // subtrees) is 10-25% faster on the clustered and adaptive fixtures from four
 // threads up while eight blocks (400-particle subtrees) leaves the CPU walk
-// dominant again. The divisor therefore grows as the cube root of the
-// particle count between those two sizes and holds the endpoint values
-// outside them; compute.cudaKickHandoffBlocks pins it for experiments. The
-// CPU walk calls this at every node, so the device query is cached.
+// dominant again; at 2,097,152 particles six blocks per multiprocessor
+// (4,262-particle subtrees) is 4-9% faster on average than four and never
+// more than 3% slower, while eight or more blocks gain 16-27% on the
+// clustered and adaptive fixtures but lose 17-28% on the lattice at 8 and 12
+// threads alike. The divisor therefore grows as the cube root of the
+// particle count from two blocks per multiprocessor at 32,768 particles to
+// six at 884,736 and holds the endpoint values outside that range;
+// compute.cudaKickHandoffBlocks pins it for experiments. The CPU walk calls
+// this at every node, so the device query is cached.
 int kickBlockCount(ParticleInteger particles) {
     int const handoff = getOptions().compute.cudaKickHandoffBlocks;
     if (handoff > 0) {

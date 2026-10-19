@@ -1,0 +1,56 @@
+== docs/cuda_kick_shared_memory_results/handoff_large_sizes/t8_n128 attempt 1 16:56:01 load 6.10 5.41 4.70 GPU apps: 0
+arena_handoff328_cuda_b128_o7_pair0: lattice/phi=0 79.867 ms, lattice/phi=1 95.502 ms, clustered/phi=0 76.105 ms, clustered/phi=1 87.362 ms, adaptive/phi=0 88.335 ms, adaptive/phi=1 113.617 ms
+arena_handoff492_cuda_b128_o7_pair0: lattice/phi=0 83.226 ms, lattice/phi=1 95.400 ms, clustered/phi=0 76.728 ms, clustered/phi=1 94.771 ms, adaptive/phi=0 82.532 ms, adaptive/phi=1 98.486 ms
+arena_handoff656_cuda_b128_o7_pair0: lattice/phi=0 101.251 ms, lattice/phi=1 116.720 ms, clustered/phi=0 65.370 ms, clustered/phi=1 85.097 ms, adaptive/phi=0 76.070 ms, adaptive/phi=1 90.480 ms
+arena_handoff984_cuda_b128_o7_pair0: lattice/phi=0 106.096 ms, lattice/phi=1 116.823 ms, clustered/phi=0 65.821 ms, clustered/phi=1 75.299 ms, adaptive/phi=0 77.761 ms, adaptive/phi=1 93.787 ms
+arena_handoff1312_cuda_b128_o7_pair0: lattice/phi=0 103.205 ms, lattice/phi=1 114.212 ms, clustered/phi=0 61.953 ms, clustered/phi=1 77.527 ms, adaptive/phi=0 78.980 ms, adaptive/phi=1 92.841 ms
+arena_handoff1312_cuda_b128_o7_pair1: lattice/phi=0 103.837 ms, lattice/phi=1 113.820 ms, clustered/phi=0 65.675 ms, clustered/phi=1 75.554 ms, adaptive/phi=0 78.908 ms, adaptive/phi=1 93.651 ms
+arena_handoff984_cuda_b128_o7_pair1: lattice/phi=0 102.617 ms, lattice/phi=1 115.508 ms, clustered/phi=0 64.629 ms, clustered/phi=1 78.667 ms, adaptive/phi=0 77.728 ms, adaptive/phi=1 95.306 ms
+arena_handoff656_cuda_b128_o7_pair1: lattice/phi=0 100.315 ms, lattice/phi=1 113.964 ms, clustered/phi=0 70.526 ms, clustered/phi=1 88.294 ms, adaptive/phi=0 74.575 ms, adaptive/phi=1 92.459 ms
+arena_handoff492_cuda_b128_o7_pair1: lattice/phi=0 83.345 ms, lattice/phi=1 101.225 ms, clustered/phi=0 77.328 ms, clustered/phi=1 91.449 ms, adaptive/phi=0 79.015 ms, adaptive/phi=1 91.613 ms
+arena_handoff328_cuda_b128_o7_pair1: lattice/phi=0 83.756 ms, lattice/phi=1 103.764 ms, clustered/phi=0 76.694 ms, clustered/phi=1 94.114 ms, adaptive/phi=0 94.879 ms, adaptive/phi=1 106.241 ms
+Completed; see docs/cuda_kick_shared_memory_results/handoff_large_sizes/t8_n128/summary.md
+docs/cuda_kick_shared_memory_results/handoff_large_sizes/t8_n128: worst pair spread 1.087 ('arena', 'handoff328', 'cuda', 128, 7, 'lattice', True), load at start 6.10, process wall 35.2-44.0 s
+skip docs/cuda_kick_shared_memory_results/handoff_large_sizes/t8_n128 (exists)
+== docs/cuda_kick_shared_memory_results/handoff_large_sizes/t12_n128 attempt 1 17:03:03 load 5.42 6.74 5.75 GPU apps: 0
+arena_handoff328_cuda_b128_o7_pair0: lattice/phi=0 80.979 ms, lattice/phi=1 103.475 ms, clustered/phi=0 80.240 ms, clustered/phi=1 96.684 ms, adaptive/phi=0 92.330 ms, adaptive/phi=1 112.917 ms
+arena_handoff492_cuda_b128_o7_pair0: lattice/phi=0 78.206 ms, lattice/phi=1 101.278 ms, clustered/phi=0 80.825 ms, clustered/phi=1 90.244 ms, adaptive/phi=0 74.527 ms, adaptive/phi=1 90.640 ms
+arena_handoff656_cuda_b128_o7_pair0: lattice/phi=0 97.362 ms, lattice/phi=1 110.893 ms, clustered/phi=0 66.648 ms, clustered/phi=1 80.243 ms, adaptive/phi=0 72.642 ms, adaptive/phi=1 89.568 ms
+arena_handoff984_cuda_b128_o7_pair0: lattice/phi=0 97.772 ms, lattice/phi=1 115.339 ms, clustered/phi=0 68.804 ms, clustered/phi=1 79.253 ms, adaptive/phi=0 84.638 ms, adaptive/phi=1 96.942 ms
+arena_handoff1312_cuda_b128_o7_pair0: lattice/phi=0 90.241 ms, lattice/phi=1 104.047 ms, clustered/phi=0 64.847 ms, clustered/phi=1 74.609 ms, adaptive/phi=0 80.548 ms, adaptive/phi=1 89.418 ms
+arena_handoff1312_cuda_b128_o7_pair1: lattice/phi=0 96.330 ms, lattice/phi=1 110.131 ms, clustered/phi=0 69.402 ms, clustered/phi=1 83.608 ms, adaptive/phi=0 76.579 ms, adaptive/phi=1 88.469 ms
+arena_handoff984_cuda_b128_o7_pair1: lattice/phi=0 96.072 ms, lattice/phi=1 108.865 ms, clustered/phi=0 62.383 ms, clustered/phi=1 75.541 ms, adaptive/phi=0 76.729 ms, adaptive/phi=1 89.886 ms
+arena_handoff656_cuda_b128_o7_pair1: lattice/phi=0 97.778 ms, lattice/phi=1 109.677 ms, clustered/phi=0 70.281 ms, clustered/phi=1 80.658 ms, adaptive/phi=0 77.049 ms, adaptive/phi=1 90.042 ms
+arena_handoff492_cuda_b128_o7_pair1: lattice/phi=0 95.224 ms, lattice/phi=1 107.606 ms, clustered/phi=0 90.649 ms, clustered/phi=1 106.628 ms, adaptive/phi=0 85.530 ms, adaptive/phi=1 90.486 ms
+arena_handoff328_cuda_b128_o7_pair1: lattice/phi=0 83.839 ms, lattice/phi=1 97.992 ms, clustered/phi=0 69.127 ms, clustered/phi=1 84.207 ms, adaptive/phi=0 83.075 ms, adaptive/phi=1 100.139 ms
+Completed; see docs/cuda_kick_shared_memory_results/handoff_large_sizes/t12_n128/summary.md
+docs/cuda_kick_shared_memory_results/handoff_large_sizes/t12_n128: worst pair spread 1.218 ('arena', 'handoff492', 'cuda', 128, 7, 'lattice', False), load at start 5.42, process wall 35.2-41.0 s
+contaminated: moved to docs/cuda_kick_shared_memory_results/handoff_large_sizes_contaminated
+== docs/cuda_kick_shared_memory_results/handoff_large_sizes/t12_n128 attempt 2 17:09:54 load 12.43 10.18 7.63 GPU apps: 0
+arena_handoff328_cuda_b128_o7_pair0: lattice/phi=0 89.152 ms, lattice/phi=1 94.561 ms, clustered/phi=0 73.110 ms, clustered/phi=1 89.518 ms, adaptive/phi=0 88.022 ms, adaptive/phi=1 103.864 ms
+arena_handoff492_cuda_b128_o7_pair0: lattice/phi=0 92.709 ms, lattice/phi=1 108.626 ms, clustered/phi=0 83.747 ms, clustered/phi=1 102.211 ms, adaptive/phi=0 95.471 ms, adaptive/phi=1 110.174 ms
+arena_handoff656_cuda_b128_o7_pair0: lattice/phi=0 111.325 ms, lattice/phi=1 127.723 ms, clustered/phi=0 87.503 ms, clustered/phi=1 101.918 ms, adaptive/phi=0 83.157 ms, adaptive/phi=1 97.916 ms
+arena_handoff984_cuda_b128_o7_pair0: lattice/phi=0 98.477 ms, lattice/phi=1 110.144 ms, clustered/phi=0 76.150 ms, clustered/phi=1 84.809 ms, adaptive/phi=0 89.393 ms, adaptive/phi=1 102.144 ms
+arena_handoff1312_cuda_b128_o7_pair0: lattice/phi=0 107.575 ms, lattice/phi=1 120.837 ms, clustered/phi=0 75.860 ms, clustered/phi=1 87.431 ms, adaptive/phi=0 87.798 ms, adaptive/phi=1 98.345 ms
+arena_handoff1312_cuda_b128_o7_pair1: lattice/phi=0 106.961 ms, lattice/phi=1 113.518 ms, clustered/phi=0 74.288 ms, clustered/phi=1 84.131 ms, adaptive/phi=0 85.061 ms, adaptive/phi=1 98.199 ms
+arena_handoff984_cuda_b128_o7_pair1: lattice/phi=0 107.245 ms, lattice/phi=1 116.652 ms, clustered/phi=0 73.219 ms, clustered/phi=1 88.276 ms, adaptive/phi=0 88.655 ms, adaptive/phi=1 102.714 ms
+arena_handoff656_cuda_b128_o7_pair1: lattice/phi=0 105.662 ms, lattice/phi=1 116.982 ms, clustered/phi=0 83.282 ms, clustered/phi=1 96.294 ms, adaptive/phi=0 91.046 ms, adaptive/phi=1 107.210 ms
+arena_handoff492_cuda_b128_o7_pair1: lattice/phi=0 99.982 ms, lattice/phi=1 111.390 ms, clustered/phi=0 90.820 ms, clustered/phi=1 109.001 ms, adaptive/phi=0 94.937 ms, adaptive/phi=1 109.493 ms
+arena_handoff328_cuda_b128_o7_pair1: lattice/phi=0 108.893 ms, lattice/phi=1 122.790 ms, clustered/phi=0 95.953 ms, clustered/phi=1 115.634 ms, adaptive/phi=0 108.963 ms, adaptive/phi=1 129.312 ms
+Completed; see docs/cuda_kick_shared_memory_results/handoff_large_sizes/t12_n128/summary.md
+docs/cuda_kick_shared_memory_results/handoff_large_sizes/t12_n128: worst pair spread 1.312 ('arena', 'handoff328', 'cuda', 128, 7, 'clustered', False), load at start 12.43, process wall 38.8-48.3 s
+contaminated: moved to docs/cuda_kick_shared_memory_results/handoff_large_sizes_contaminated
+== docs/cuda_kick_shared_memory_results/handoff_large_sizes/t12_n128 attempt 3 17:17:44 load 8.25 11.28 9.63 GPU apps: 0
+arena_handoff328_cuda_b128_o7_pair0: lattice/phi=0 90.864 ms, lattice/phi=1 104.095 ms, clustered/phi=0 80.134 ms, clustered/phi=1 94.590 ms, adaptive/phi=0 91.796 ms, adaptive/phi=1 109.836 ms
+arena_handoff492_cuda_b128_o7_pair0: lattice/phi=0 76.516 ms, lattice/phi=1 94.777 ms, clustered/phi=0 69.802 ms, clustered/phi=1 86.982 ms, adaptive/phi=0 78.715 ms, adaptive/phi=1 91.772 ms
+arena_handoff656_cuda_b128_o7_pair0: lattice/phi=0 100.362 ms, lattice/phi=1 109.398 ms, clustered/phi=0 75.266 ms, clustered/phi=1 86.132 ms, adaptive/phi=0 79.916 ms, adaptive/phi=1 95.947 ms
+arena_handoff984_cuda_b128_o7_pair0: lattice/phi=0 98.826 ms, lattice/phi=1 112.213 ms, clustered/phi=0 71.224 ms, clustered/phi=1 83.843 ms, adaptive/phi=0 79.564 ms, adaptive/phi=1 91.573 ms
+arena_handoff1312_cuda_b128_o7_pair0: lattice/phi=0 93.226 ms, lattice/phi=1 103.989 ms, clustered/phi=0 69.594 ms, clustered/phi=1 78.221 ms, adaptive/phi=0 81.122 ms, adaptive/phi=1 89.617 ms
+arena_handoff1312_cuda_b128_o7_pair1: lattice/phi=0 90.952 ms, lattice/phi=1 101.777 ms, clustered/phi=0 70.877 ms, clustered/phi=1 77.216 ms, adaptive/phi=0 78.232 ms, adaptive/phi=1 89.037 ms
+arena_handoff984_cuda_b128_o7_pair1: lattice/phi=0 92.985 ms, lattice/phi=1 102.127 ms, clustered/phi=0 62.082 ms, clustered/phi=1 75.338 ms, adaptive/phi=0 76.583 ms, adaptive/phi=1 88.721 ms
+arena_handoff656_cuda_b128_o7_pair1: lattice/phi=0 91.159 ms, lattice/phi=1 102.670 ms, clustered/phi=0 67.546 ms, clustered/phi=1 79.324 ms, adaptive/phi=0 76.167 ms, adaptive/phi=1 90.097 ms
+arena_handoff492_cuda_b128_o7_pair1: lattice/phi=0 79.309 ms, lattice/phi=1 92.167 ms, clustered/phi=0 76.010 ms, clustered/phi=1 87.054 ms, adaptive/phi=0 74.027 ms, adaptive/phi=1 92.943 ms
+arena_handoff328_cuda_b128_o7_pair1: lattice/phi=0 78.662 ms, lattice/phi=1 91.582 ms, clustered/phi=0 72.902 ms, clustered/phi=1 87.805 ms, adaptive/phi=0 84.662 ms, adaptive/phi=1 102.059 ms
+Completed; see docs/cuda_kick_shared_memory_results/handoff_large_sizes/t12_n128/summary.md
+docs/cuda_kick_shared_memory_results/handoff_large_sizes/t12_n128: worst pair spread 1.155 ('arena', 'handoff328', 'cuda', 128, 7, 'lattice', False), load at start 8.25, process wall 38.5-48.0 s
+SWEEP EXIT 0

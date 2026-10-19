@@ -1,0 +1,58 @@
+{
+  "utc": "2026-10-19T22:31:07.202642+00:00",
+  "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+  "command": "benchmarks/run_cuda_kick_arena.py --binary rule=build/arena_b1024/frozen/cosmictiger_b1024_handoff_large_rule:arena --policy auto= --policy handoff328=--compute.cudaKickHandoffBlocks=328 --policy handoff492=--compute.cudaKickHandoffBlocks=492 --output docs/cuda_kick_shared_memory_results/handoff_rule_check_large/t8_n128 --fixtures lattice,clustered,adaptive --buckets 128 --orders 7 --threads 8 --particles-per-dimension 128 --pairs 2 --samples 11 --reference 0 --timeout 7200 --idle-wait 'ninja|ncu|nsys' --wait-gpu-idle",
+  "binaries": [
+    {
+      "label": "rule",
+      "path": "/home/dmarce1/workspace/cosmictiger/.claude/worktrees/sharp-allen-467f7a/build/arena_b1024/frozen/cosmictiger_b1024_handoff_large_rule",
+      "arena": true,
+      "sha256": "eef7e2f1e71c3be1a6b614de50e232d287ad092f61533901b3680eab68e9e160"
+    }
+  ],
+  "policies": [
+    {
+      "label": "auto",
+      "options": []
+    },
+    {
+      "label": "handoff328",
+      "options": [
+        "--compute.cudaKickHandoffBlocks=328"
+      ]
+    },
+    {
+      "label": "handoff492",
+      "options": [
+        "--compute.cudaKickHandoffBlocks=492"
+      ]
+    }
+  ],
+  "fixtures": [
+    "lattice",
+    "clustered",
+    "adaptive"
+  ],
+  "buckets": [
+    128
+  ],
+  "orders": [
+    7
+  ],
+  "backends": [
+    "cuda"
+  ],
+  "samples": 11,
+  "pairs": 2,
+  "reference": 0,
+  "threads": 8,
+  "cpus": "1-8",
+  "particles_per_dimension": 128,
+  "git_head": "dd4b4b8bd221c0d37f725e8e0792e6936551cefb",
+  "nvidia_smi": "name, driver_version, clocks.current.sm [MHz], clocks.current.memory [MHz], utilization.gpu [%], memory.used [MiB]\nNVIDIA GeForce RTX 3090, 595.99.02, 1230 MHz, 5001 MHz, 19 %, 4707 MiB\n",
+  "load_average": [
+    17.38916015625,
+    23.810546875,
+    17.36572265625
+  ]
+}

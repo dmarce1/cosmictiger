@@ -318,7 +318,7 @@ bool processOptions(int argc, char* argv[]) {
                 "keep the active CUDA kick local expansion in shared memory")(
                 "compute.cudaKickHandoffBlocks",
                 po::value<int>(&opts.compute.cudaKickHandoffBlocks)->default_value(0),
-                "CUDA block count dividing the particles for the CPU/GPU handoff threshold; 0 derives it from the particle count (two blocks per multiprocessor at 32768 particles, growing as the cube root to four at 262144 and above)")(
+                "CUDA block count dividing the particles for the CPU/GPU handoff threshold; 0 derives it from the particle count (two blocks per multiprocessor at 32768 particles, growing as the cube root to six at 884736 and above)")(
                 "compute.cudaKickListReserve",
                 po::value<int>(&opts.compute.cudaKickListReserve)->default_value(4096),
                 "entries reserved per CUDA kick interaction list at block start; 0 grows on "

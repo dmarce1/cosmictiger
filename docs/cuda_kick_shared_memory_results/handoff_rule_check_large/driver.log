@@ -1,0 +1,35 @@
+== docs/cuda_kick_shared_memory_results/handoff_rule_check_large/t8_n128 17:31:07 load 17.39 23.81 17.37 GPU apps: 0
+rule_auto_cuda_b128_o7_pair0: lattice/phi=0 80.321 ms, lattice/phi=1 93.631 ms, clustered/phi=0 69.396 ms, clustered/phi=1 80.812 ms, adaptive/phi=0 72.892 ms, adaptive/phi=1 86.121 ms
+rule_handoff328_cuda_b128_o7_pair0: lattice/phi=0 72.379 ms, lattice/phi=1 86.914 ms, clustered/phi=0 70.483 ms, clustered/phi=1 79.410 ms, adaptive/phi=0 80.725 ms, adaptive/phi=1 97.735 ms
+rule_handoff492_cuda_b128_o7_pair0: lattice/phi=0 77.297 ms, lattice/phi=1 92.153 ms, clustered/phi=0 73.053 ms, clustered/phi=1 88.668 ms, adaptive/phi=0 77.193 ms, adaptive/phi=1 89.838 ms
+rule_handoff492_cuda_b128_o7_pair1: lattice/phi=0 74.641 ms, lattice/phi=1 86.515 ms, clustered/phi=0 67.336 ms, clustered/phi=1 82.442 ms, adaptive/phi=0 71.747 ms, adaptive/phi=1 86.718 ms
+rule_handoff328_cuda_b128_o7_pair1: lattice/phi=0 72.133 ms, lattice/phi=1 90.372 ms, clustered/phi=0 65.942 ms, clustered/phi=1 79.222 ms, adaptive/phi=0 79.855 ms, adaptive/phi=1 93.270 ms
+rule_auto_cuda_b128_o7_pair1: lattice/phi=0 79.140 ms, lattice/phi=1 91.347 ms, clustered/phi=0 73.615 ms, clustered/phi=1 86.208 ms, adaptive/phi=0 75.464 ms, adaptive/phi=1 88.751 ms
+Traceback (most recent call last):
+  File "/home/dmarce1/workspace/cosmictiger/.claude/worktrees/sharp-allen-467f7a/benchmarks/run_cuda_kick_arena.py", line 374, in <module>
+    main()
+  File "/home/dmarce1/workspace/cosmictiger/.claude/worktrees/sharp-allen-467f7a/benchmarks/run_cuda_kick_arena.py", line 259, in main
+    summary = summarize(runs, args)
+              ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/dmarce1/workspace/cosmictiger/.claude/worktrees/sharp-allen-467f7a/benchmarks/run_cuda_kick_arena.py", line 317, in summarize
+    result=compare_forces(base['force_csv'], run['force_csv'])))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/dmarce1/workspace/cosmictiger/.claude/worktrees/sharp-allen-467f7a/benchmarks/run_cuda_kick_arena.py", line 83, in compare_forces
+    candidate = read_rows(candidate_path)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/dmarce1/workspace/cosmictiger/.claude/worktrees/sharp-allen-467f7a/benchmarks/run_cuda_kick_arena.py", line 52, in read_rows
+    with Path(path).open(newline='') as handle:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/pathlib.py", line 1015, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'docs/cuda_kick_shared_memory_results/handoff_rule_check_large/t8_n128/runs/rule_handoff328_cuda_b128_o7_pair0/stf_walk_forces.csv'
+CHECK EXIT 1
+
+Note added after the run: the traceback above is the driver's closing
+summary step (force comparison across policies) failing because the
+2.1-million-particle force exports (900 MB each) were deleted by hand while
+it still read them; all six runs had been recorded in runs.json before. The
+pair check was run by hand afterwards:
+docs/cuda_kick_shared_memory_results/handoff_rule_check_large/t8_n128: worst pair spread 1.085 ('rule', 'handoff492', 'cuda', 128, 7, 'clustered', False), load at start 17.39, process wall 36.4-52.8 s
+Force digests (runs.json force_csv_sha256): auto 73b87f58..., handoff492 73b87f58..., handoff328 a7eb6a75... in both pairs.

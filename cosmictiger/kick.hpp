@@ -245,10 +245,11 @@ CudaKickArenaLayout const& kickArenaLayout();
 // derived: kKickHandoffBlocksPerMultiprocessor resident blocks' worth of
 // subtrees at kKickHandoffReferenceParticles particles, growing as the cube
 // root of the particle count (one more CPU level per eightfold increase) up
-// to kKickHandoffMaxScale times that many blocks.
+// to kKickHandoffMaxScale times that many blocks (reached at 27 times the
+// reference count, 884,736 particles).
 constexpr int kKickHandoffBlocksPerMultiprocessor = 2;
 constexpr double kKickHandoffReferenceParticles = 32768.0;
-constexpr double kKickHandoffMaxScale = 2.0;
+constexpr double kKickHandoffMaxScale = 3.0;
 int kickBlockCount(ParticleInteger particles);
 size_t kickEstimateCudaMemoryUsage(double theta, int numberOfParticles, int checkCount);
 
