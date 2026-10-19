@@ -58,14 +58,19 @@ void showTimings();
 #ifdef __CUDACC__
 __device__ void cudaGravityCcDirect(
     CudaKickData const&, Expansion<float>&, TreeNode const&, DeviceVector<int> const&, bool doPhi);
-__device__ void cudaGravityCpDirect(
-    CudaKickData const&, Expansion<float>&, TreeNode const&, DeviceVector<int> const&, bool doPhi);
-__device__ void cudaGravityPcDirect(
-    CudaKickData const& data, TreeNode const&, DeviceVector<int> const&, bool);
+// equalMass skips the staged mass plane; the layout omits it in that mode.
+template <bool equalMass>
+__device__ void cudaGravityCpDirect(CudaKickData const&, CudaKickControl&, Expansion<float>&,
+    TreeNode const&, DeviceVector<int> const&, bool doPhi);
+// PC and PP act on the sink tile [sinkBegin, sinkBegin + sinkCount) of the leaf
+// and accumulate into the control block's force planes.
+__device__ void cudaGravityPcDirect(CudaKickData const& data, CudaKickControl&, TreeNode const&,
+    int sinkBegin, int sinkCount, DeviceVector<int> const&, bool);
 __device__ void cudaGravityCcEwald(
     CudaKickData const&, Expansion<float>&, TreeNode const&, DeviceVector<int> const&, bool doPhi);
-__device__ void cudaGravityPpDirect(
-    CudaKickData const& data, TreeNode const&, DeviceVector<int> const&, float h, bool);
+template <bool equalMass>
+__device__ void cudaGravityPpDirect(CudaKickData const& data, CudaKickControl&, TreeNode const&,
+    int sinkBegin, int sinkCount, DeviceVector<int> const&, float h, bool);
 #endif
 
 void resetGravityCounters();

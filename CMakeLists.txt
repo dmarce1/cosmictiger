@@ -29,10 +29,16 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 option(COSMICTIGER_WITH_CUDA "Enable CUDA" ON)
 option(COSMICTIGER_WITH_LONG_LONG_PART_INT "Use long long to index local particles" OFF)
+# Legacy expansion order: multipole degree p plus two. Source multipoles carry
+# degree p, local expansions degree p + 1, and Ewald derivatives ranks through
+# p + 1. Supported multipole degrees are 2 through 10 (orders 4 through 12).
 set(COSMICTIGER_WITH_ORDER "7" CACHE STRING "Expansion order P+1")
-if(NOT COSMICTIGER_WITH_ORDER STREQUAL "7")
-    message(FATAL_ERROR "The checked-in STF kernels use source degree 5 and local degree 6")
+if(NOT COSMICTIGER_WITH_ORDER MATCHES "^(4|5|6|7|8|9|10|11|12)$")
+    message(FATAL_ERROR
+        "COSMICTIGER_WITH_ORDER must be an integer from 4 to 12 (multipole degree 2 to 10); got '${COSMICTIGER_WITH_ORDER}'")
 endif()
+math(EXPR COSMICTIGER_MULTIPOLE_DEGREE "${COSMICTIGER_WITH_ORDER} - 2")
+math(EXPR COSMICTIGER_LOCAL_DEGREE "${COSMICTIGER_WITH_ORDER} - 1")
 if(COSMICTIGER_WITH_CUDA)
     if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
         set(CMAKE_CUDA_ARCHITECTURES native)
@@ -55,7 +61,7 @@ find_library(SILO_LIBRARY NAMES siloh5 silo REQUIRED)
 find_path(CHEALPIX_INCLUDE_DIR chealpix.h REQUIRED)
 find_library(CHEALPIX_LIBRARY NAMES chealpix REQUIRED)
 
-message(STATUS "cosmictiger expansion order P+1 = ${COSMICTIGER_WITH_ORDER}")
+message(STATUS "cosmictiger expansion order P+1 = ${COSMICTIGER_WITH_ORDER} (multipole degree ${COSMICTIGER_MULTIPOLE_DEGREE}, local degree ${COSMICTIGER_LOCAL_DEGREE})")
 
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
@@ -320,18 +326,57 @@ if(COSMICTIGER_WITH_CUDA)
     target_link_libraries(fmm_kernel_codegen PRIVATE CUDA::cudart)
 endif()
 configure_file(power.init power.init COPYONLY)
+# Order-specific generated kernels. The checked-in headers under
+# cosmictiger/ are the formatted default-order (p = 5) reference and are checked
+# by check_stf_kernels; every build compiles against the copies generated here
+# for the configured order, which shadow the checked-in files through an
+# include directory placed ahead of the source tree.
+set(COSMICTIGER_GENERATED_INCLUDE_DIR ${PROJECT_BINARY_DIR}/generated)
+set(COSMICTIGER_GENERATED_STF_DIR
+    ${COSMICTIGER_GENERATED_INCLUDE_DIR}/cosmictiger/gravity/stf/generated)
+set(COSMICTIGER_GENERATED_EWALD_HEADER
+    ${COSMICTIGER_GENERATED_INCLUDE_DIR}/cosmictiger/ewald_kernels.hpp)
+set(COSMICTIGER_GENERATED_STF_FILES
+    ${COSMICTIGER_GENERATED_STF_DIR}/generated_config.hpp
+    ${COSMICTIGER_GENERATED_STF_DIR}/generated_m2l.hpp
+    ${COSMICTIGER_GENERATED_STF_DIR}/generated_operators.hpp
+    ${COSMICTIGER_GENERATED_STF_DIR}/operation_counts.json)
 add_custom_command(
-    OUTPUT ${PROJECT_BINARY_DIR}/generated/cosmictiger/ewald_kernels.hpp
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${PROJECT_BINARY_DIR}/generated/cosmictiger
-    COMMAND fmm_kernel_codegen > ${PROJECT_BINARY_DIR}/generated/cosmictiger/ewald_kernels.hpp
+    OUTPUT ${COSMICTIGER_GENERATED_EWALD_HEADER}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${COSMICTIGER_GENERATED_INCLUDE_DIR}/cosmictiger
+    COMMAND fmm_kernel_codegen > ${COSMICTIGER_GENERATED_EWALD_HEADER}
     DEPENDS fmm_kernel_codegen
-    COMMENT "Generating Ewald derivatives for comparison with the checked-in header")
-add_custom_target(generate_fmm_kernels DEPENDS ${PROJECT_BINARY_DIR}/generated/cosmictiger/ewald_kernels.hpp)
+    COMMENT "Generating Ewald derivatives for expansion order ${COSMICTIGER_WITH_ORDER}")
+add_custom_target(generate_fmm_kernels DEPENDS ${COSMICTIGER_GENERATED_EWALD_HEADER})
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
+set(COSMICTIGER_STF_GENERATOR_SOURCES
+    ${PROJECT_SOURCE_DIR}/tools/generate_stf_m2l.py
+    ${PROJECT_SOURCE_DIR}/tools/stf/stf_cuda.py
+    ${PROJECT_SOURCE_DIR}/tools/stf/stf_particles.py
+    ${PROJECT_SOURCE_DIR}/tools/stf/stf_translations.py
+    ${PROJECT_SOURCE_DIR}/tools/stf/generated_notice.txt
+    ${PROJECT_SOURCE_DIR}/cosmictiger/defs.hpp)
+add_custom_command(
+    OUTPUT ${COSMICTIGER_GENERATED_STF_FILES}
+    COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/generate_stf_m2l.py
+        --min-order ${COSMICTIGER_MULTIPOLE_DEGREE} --max-order ${COSMICTIGER_LOCAL_DEGREE}
+        --output-dir ${COSMICTIGER_GENERATED_STF_DIR} --no-format
+    DEPENDS ${COSMICTIGER_STF_GENERATOR_SOURCES}
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    COMMENT "Generating source degree ${COSMICTIGER_MULTIPOLE_DEGREE} and local degree ${COSMICTIGER_LOCAL_DEGREE} STF kernels")
+add_custom_target(cosmictiger_generated_kernels
+    DEPENDS ${COSMICTIGER_GENERATED_STF_FILES} ${COSMICTIGER_GENERATED_EWALD_HEADER})
+# Compile a target against the generated kernels for the configured order.
+function(cosmictiger_use_generated_kernels target)
+    target_include_directories(${target} BEFORE PRIVATE ${COSMICTIGER_GENERATED_INCLUDE_DIR})
+    target_compile_definitions(${target} PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
+    add_dependencies(${target} cosmictiger_generated_kernels)
+endfunction()
+cosmictiger_use_generated_kernels(cosmictiger)
 add_custom_target(generate_stf_kernels
     COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/generate_stf_m2l.py
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-    COMMENT "Generating source degree 5 and local degree 6 STF kernels")
+    COMMENT "Regenerating the checked-in default source degree 5 and local degree 6 STF kernels")
 add_custom_target(check_stf_kernels
     COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/generate_stf_m2l.py --check
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
@@ -461,12 +506,14 @@ if(BUILD_TESTING)
     add_executable(rockstar_eigenpair_test tests/rockstar_eigenpair.cpp src/math.cpp)
     target_include_directories(rockstar_eigenpair_test PRIVATE ${PROJECT_SOURCE_DIR})
     target_compile_definitions(rockstar_eigenpair_test PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
+    cosmictiger_use_generated_kernels(rockstar_eigenpair_test)
     add_test(NAME rockstar_eigenpair COMMAND rockstar_eigenpair_test)
     set_tests_properties(rockstar_eigenpair PROPERTIES TIMEOUT 30)
     foreach(halo_unit IN ITEMS rockstar_core rockstar_properties lightcone_epoch)
         add_executable(${halo_unit}_test tests/${halo_unit}.cpp)
         target_include_directories(${halo_unit}_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_compile_definitions(${halo_unit}_test PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
+        cosmictiger_use_generated_kernels(${halo_unit}_test)
         add_test(NAME ${halo_unit} COMMAND ${halo_unit}_test)
         set_tests_properties(${halo_unit} PROPERTIES TIMEOUT 30)
     endforeach()
@@ -582,6 +629,7 @@ if(BUILD_TESTING)
 
     add_executable(stf_kernels_test tests/stf_kernels.cpp)
     target_include_directories(stf_kernels_test PRIVATE ${PROJECT_SOURCE_DIR})
+    cosmictiger_use_generated_kernels(stf_kernels_test)
     if(COMPILER_SUPPORTS_MARCH_NATIVE)
         target_compile_options(stf_kernels_test PRIVATE -march=native)
     endif()
@@ -592,6 +640,7 @@ if(BUILD_TESTING)
     target_include_directories(stf_ewald_cpu_test PRIVATE ${PROJECT_SOURCE_DIR})
     target_include_directories(stf_ewald_cpu_test SYSTEM PRIVATE ${CHEALPIX_INCLUDE_DIR})
     target_compile_definitions(stf_ewald_cpu_test PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
+    cosmictiger_use_generated_kernels(stf_ewald_cpu_test)
     target_link_libraries(stf_ewald_cpu_test PRIVATE HPX::hpx Boost::boost)
     add_test(NAME stf_ewald_cpu COMMAND stf_ewald_cpu_test)
     set_tests_properties(stf_ewald_cpu PROPERTIES TIMEOUT 30)
@@ -649,6 +698,7 @@ if(BUILD_TESTING)
             src/lightcone_cpu.cpp src/assert.cu src/cuda_stream.cpp)
         target_include_directories(lightcone_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_compile_definitions(lightcone_cuda_test PRIVATE USE_CUDA ORDER=${COSMICTIGER_WITH_ORDER})
+        cosmictiger_use_generated_kernels(lightcone_cuda_test)
         target_link_libraries(lightcone_cuda_test PRIVATE HPX::hpx CUDA::cudart)
         target_compile_options(lightcone_cuda_test PRIVATE
             $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math>)
@@ -683,6 +733,7 @@ if(BUILD_TESTING)
     target_include_directories(drift_dispatch_test PRIVATE ${PROJECT_SOURCE_DIR})
     target_include_directories(drift_dispatch_test SYSTEM PRIVATE ${CHEALPIX_INCLUDE_DIR})
     target_compile_definitions(drift_dispatch_test PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
+    cosmictiger_use_generated_kernels(drift_dispatch_test)
     target_link_libraries(drift_dispatch_test PRIVATE ${CHEALPIX_LIBRARY})
     target_compile_options(drift_dispatch_test PRIVATE -ffast-math)
     if(COMPILER_SUPPORTS_MARCH_NATIVE)
@@ -701,6 +752,7 @@ if(BUILD_TESTING)
         src/sph_prehydro_cpu.cpp src/sph_hydro_cpu.cpp src/sph_rungs_cpu.cpp src/kernel.cpp)
     target_include_directories(sph_cpu_test PRIVATE ${PROJECT_SOURCE_DIR})
     target_compile_definitions(sph_cpu_test PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
+    cosmictiger_use_generated_kernels(sph_cpu_test)
     target_link_libraries(sph_cpu_test PRIVATE HPX::hpx)
     target_compile_options(sph_cpu_test PRIVATE -ffast-math)
     if(COMPILER_SUPPORTS_MARCH_NATIVE)
@@ -740,6 +792,7 @@ if(BUILD_TESTING)
 
         add_executable(stf_kernels_cuda_test tests/stf_kernels_cuda.cu)
         target_include_directories(stf_kernels_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
+        cosmictiger_use_generated_kernels(stf_kernels_cuda_test)
         target_link_libraries(stf_kernels_cuda_test PRIVATE CUDA::cudart)
         add_test(NAME stf_kernels_cuda COMMAND stf_kernels_cuda_test)
         set_tests_properties(stf_kernels_cuda PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
@@ -747,6 +800,7 @@ if(BUILD_TESTING)
         add_executable(stf_l2l_cuda_test tests/stf_l2l_cuda.cu)
         target_include_directories(stf_l2l_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_compile_definitions(stf_l2l_cuda_test PRIVATE USE_CUDA ORDER=${COSMICTIGER_WITH_ORDER})
+        cosmictiger_use_generated_kernels(stf_l2l_cuda_test)
         target_link_libraries(stf_l2l_cuda_test PRIVATE CUDA::cudart)
         target_compile_options(stf_l2l_cuda_test PRIVATE
             $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr;--use_fast_math>)
@@ -779,6 +833,7 @@ if(BUILD_TESTING)
         target_include_directories(monaghan_sph_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_compile_definitions(monaghan_sph_cuda_test PRIVATE
             USE_CUDA ORDER=${COSMICTIGER_WITH_ORDER})
+        cosmictiger_use_generated_kernels(monaghan_sph_cuda_test)
         target_link_libraries(monaghan_sph_cuda_test PRIVATE CUDA::cudart HPX::hpx)
         target_compile_options(monaghan_sph_cuda_test PRIVATE
             $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr;--use_fast_math>

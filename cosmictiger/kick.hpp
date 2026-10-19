@@ -25,8 +25,6 @@
 #include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/tree.hpp>
 
-#define KICK_C_MAX 32
-
 struct CudaKickData {
     TreeNode* treeNodes;
     Fixed32* x;
@@ -48,13 +46,39 @@ struct CudaKickData {
     float* pot;
 };
 
+// Host-computed byte layout of one block's dynamic shared memory.
+//
+// Persistent region: the control block (list/stack control objects, the
+// staging barrier and the resolved region pointers) and, when enabled, the
+// active local expansion with its position. Reusable phase arena: the L2L
+// output scratch, then the sink-force planes followed by the particle-source
+// planes or the staged positioned multipoles, which overlap each other. Forces
+// are initialized only after the cell interactions, so the scratch expansion
+// aliases them. Interaction lists, ancestor expansions and checklist stacks
+// stay in growable global backing owned by the control block.
+struct CudaKickArenaLayout {
+    int totalBytes{};
+    int controlOffset{};
+    int expansionOffset{};    // -1: the active expansion stays in global backing
+    int arenaOffset{};
+    int arenaBytes{};
+    int forceOffset{};    // arena-relative; -1: forces use whole-bucket global backing
+    int sourceOffset{};    // arena-relative
+    int scratchOffset{};    // arena-relative L2L output expansion
+    int sinkCapacity{};    // sink-force tile; 0 with global force backing
+    int particleCapacity{};    // staged particle sources, a multiple of WARP_SIZE
+    int multipoleCapacity{};    // staged positioned multipoles
+    int multipoleStride{};    // bytes per staged multipole, a multiple of 16
+    bool massPlane{};    // mixed-mass sources stage a mass plane
+    int residency{};    // resident blocks per multiprocessor the budget targets
+    int budgetBytes{};    // dynamic shared bytes allowed per block at that residency
+};
+
 struct KickReturn;
 
 #ifdef __CUDACC__
 
 #include <cosmictiger/stack_vector.hpp>
-
-#define KICK_PP_MAX (32 * 29)
 
 struct ExpansionType {
     Array<Fixed32, NDIM> pos;
@@ -66,35 +90,39 @@ struct SearchParameters {
     int phase;
 };
 
-struct ForceType {
-    float gx;
-    float gy;
-    float gz;
-    float phi;
+struct CudaKickForceTile {
+    float* gx;
+    float* gy;
+    float* gz;
+    float* phi;
 };
 
-struct CudaKickSharedMemory {
-    union {
-        struct {
-            Array<Fixed32, KICK_PP_MAX> x;
-            Array<Fixed32, KICK_PP_MAX> y;
-            Array<Fixed32, KICK_PP_MAX> z;
-            Array<float, KICK_PP_MAX> mass;
-        } xValue;
-        Array<MultiPos, KICK_C_MAX> mpos;
-    };
-    DeviceVector<ForceType> f;
+// Persistent per-block control state. Element storage of the vectors and
+// stacks lives in the cudaAllocate pool; only these objects are in shared memory.
+struct CudaKickControl {
     StackVector<int> echecks;
     StackVector<int> dchecks;
     DeviceVector<int> leaflist;
-    DeviceVector<int> closelist;
     DeviceVector<int> cplist;
     DeviceVector<int> cclist;
     DeviceVector<int> pclist;
     DeviceVector<int> nextlist;
-    DeviceVector<ExpansionType> l;
+    DeviceVector<ExpansionType> ancestors;    // expansions awaiting their right child
+    DeviceVector<ExpansionType> current;    // active expansion when not in shared memory
+    DeviceVector<float> forceBacking;    // whole-bucket forces when not in shared memory
     DeviceVector<SearchParameters> params;
     BarrierType barrier;
+    // Resolved arena pointers.
+    Fixed32* sourceX;
+    Fixed32* sourceY;
+    Fixed32* sourceZ;
+    float* sourceMass;
+    char* multipoles;
+    float* scratchExpansion;
+    Expansion<float>* expansion;
+    Array<Fixed32, NDIM>* expansionPos;
+    CudaKickForceTile forces;
+    CudaKickArenaLayout layout;
 };
 #endif
 
@@ -240,6 +268,9 @@ KickReturn cudaExecuteKicks(
     KickParameters params, Fixed32*, Fixed32*, Fixed32*, TreeNode*, Vector<KickWorkitem> workitems);
 #endif
 int kickBlockCount();
+#ifdef USE_CUDA
+CudaKickArenaLayout const& kickArenaLayout();
+#endif
 size_t kickEstimateCudaMemoryUsage(double theta, int numberOfParticles, int checkCount);
 
 #endif /* KICK_HPP_ */

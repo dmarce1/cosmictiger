@@ -160,6 +160,12 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"run.minRung", options.run.minRung},
         {"compute.cuda", options.compute.cuda},
         {"compute.bucketSize", options.compute.bucketSize},
+        {"compute.cudaKickResidency", options.compute.cudaKickResidency},
+        {"compute.cudaKickSinkTile", options.compute.cudaKickSinkTile},
+        {"compute.cudaKickParticleTile", options.compute.cudaKickParticleTile},
+        {"compute.cudaKickMultipoleTile", options.compute.cudaKickMultipoleTile},
+        {"compute.cudaKickSharedExpansion", options.compute.cudaKickSharedExpansion},
+        {"compute.cudaKickHandoffBlocks", options.compute.cudaKickHandoffBlocks},
         {"checkpoint.readIndex", options.checkpoint.readIndex},
         {"checkpoint.intervalSeconds", options.checkpoint.intervalSeconds},
         {"initial.gadget4Restart", options.initial.gadget4Restart},
@@ -286,7 +292,24 @@ bool processOptions(int argc, char* argv[]) {
             "use CUDA (not enabled for this build)")
 #endif
             ("compute.bucketSize", po::value<int>(&opts.compute.bucketSize)->default_value(128),
-                "tree leaf bucket size");
+                "tree leaf bucket size")("compute.cudaKickResidency",
+                po::value<int>(&opts.compute.cudaKickResidency)->default_value(0),
+                "resident CUDA kick blocks per multiprocessor; 0 uses the register limit")(
+                "compute.cudaKickSinkTile",
+                po::value<int>(&opts.compute.cudaKickSinkTile)->default_value(0),
+                "CUDA kick shared sink-force tile; 0 automatic, -1 global force storage")(
+                "compute.cudaKickParticleTile",
+                po::value<int>(&opts.compute.cudaKickParticleTile)->default_value(0),
+                "CUDA kick staged particle sources per tile; 0 automatic")(
+                "compute.cudaKickMultipoleTile",
+                po::value<int>(&opts.compute.cudaKickMultipoleTile)->default_value(0),
+                "CUDA kick staged multipoles per tile; 0 automatic")(
+                "compute.cudaKickSharedExpansion",
+                po::value<bool>(&opts.compute.cudaKickSharedExpansion)->default_value(true),
+                "keep the active CUDA kick local expansion in shared memory")(
+                "compute.cudaKickHandoffBlocks",
+                po::value<int>(&opts.compute.cudaKickHandoffBlocks)->default_value(0),
+                "fixed CUDA block count for the CPU/GPU handoff threshold; 0 derives it");
 
     po::options_description checkpointOpts("Checkpoints");
     checkpointOpts.add_options()("checkpoint.readIndex",
@@ -623,6 +646,12 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.compute.bucketSize <= 0) {
         THROW_ERROR("compute.bucketSize must be positive\n");
     }
+    if (opts.compute.cudaKickResidency < 0 || opts.compute.cudaKickSinkTile < -1 ||
+        opts.compute.cudaKickParticleTile < 0 || opts.compute.cudaKickMultipoleTile < 0 ||
+        opts.compute.cudaKickHandoffBlocks < 0) {
+        THROW_ERROR("compute.cudaKick* tile and residency options must be nonnegative "
+                    "(cudaKickSinkTile may be -1 for global force storage)\n");
+    }
     if (!detail::isFiniteOption(opts.hydro.yAcceleration) ||
         !detail::isFiniteOption(opts.hydro.centralAcceleration) ||
         !detail::isFiniteOption(opts.hydro.centralSupportRadius) ||
@@ -899,6 +928,12 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("units.massG", units.massG);
     SHOW("units.timeSeconds", units.timeSeconds);
     SHOW("compute.cuda", compute.cuda);
+    SHOW("compute.cudaKickResidency", compute.cudaKickResidency);
+    SHOW("compute.cudaKickSinkTile", compute.cudaKickSinkTile);
+    SHOW("compute.cudaKickParticleTile", compute.cudaKickParticleTile);
+    SHOW("compute.cudaKickMultipoleTile", compute.cudaKickMultipoleTile);
+    SHOW("compute.cudaKickSharedExpansion", compute.cudaKickSharedExpansion);
+    SHOW("compute.cudaKickHandoffBlocks", compute.cudaKickHandoffBlocks);
     SHOW("lightcone.enabled", lightcone.enabled);
     SHOW("analysis.groups", analysis.groups);
     SHOW("analysis.power", analysis.power);

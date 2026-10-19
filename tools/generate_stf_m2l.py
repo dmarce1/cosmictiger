@@ -515,9 +515,13 @@ def main():
     ap.add_argument('--min-order',dest='minOrder',type=int,default=5,help='source degree (default: 5)')
     ap.add_argument('--max-order',dest='maxOrder',type=int,default=6,help='local degree (default: 6)')
     ap.add_argument('--output-dir',dest='outputDir',type=Path,help='write all generated files here instead of source defaults')
+    ap.add_argument('--no-format',dest='noFormat',action='store_true',
+                    help='skip clang-format (build-directory generation; compiled code is unchanged)')
     args=ap.parse_args()
     if args.minOrder < 0 or args.maxOrder < 2 or args.minOrder != args.maxOrder - 1:
         ap.error('source degree must be one less than local degree, with local degree >= 2')
+    if args.maxOrder > 11:
+        ap.error('local degree must be at most 11 (multipole degree 10): the CUDA L2L schedule packs eight-bit coefficient indices')
     outputs=generate(args.minOrder,args.maxOrder)
     notice = (projectRoot / 'tools/stf/generated_notice.txt').read_text()
     for name, cpp in list(outputs.items()):
@@ -525,8 +529,9 @@ def main():
             continue
         cpp = re.sub(r'\bstruct (\w+(?:<[^{}]*>)?)\s*\{', r'class \1 {\npublic:', cpp)
         cpp = re.sub(r'\bstruct (\w+);', r'class \1;', cpp)
-        cpp = subprocess.run(['clang-format', '--style=file', '--assume-filename=' + str(outputDirectory / name)],
-                             input=cpp, text=True, capture_output=True, check=True).stdout
+        if not args.noFormat:
+            cpp = subprocess.run(['clang-format', '--style=file', '--assume-filename=' + str(outputDirectory / name)],
+                                 input=cpp, text=True, capture_output=True, check=True).stdout
         outputs[name] = notice + '\n' + cpp
 
     failed=[]

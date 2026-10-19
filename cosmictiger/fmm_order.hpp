@@ -81,7 +81,7 @@ inline constexpr int kFmmPositionedMultipoleBytes =
     fmmPositionedMultipoleBytes(kFmmMultipoleDegree);
 inline constexpr int kFmmLocalExpansionBytes = fmmLocalExpansionBytes(kFmmLocalDegree);
 
-static_assert(fmmPositionedMultipoleBytes(2) == 48 && fmmPositionedMultipoleBytes(5) == 208 &&
+static_assert(fmmPositionedMultipoleBytes(2) == 48 && fmmPositionedMultipoleBytes(5) == 156 &&
         fmmPositionedMultipoleBytes(10) == 496,
     "Positioned multipole byte sizes");
 static_assert(fmmLocalExpansionBytes(3) == 68 && fmmLocalExpansionBytes(6) == 200 &&
