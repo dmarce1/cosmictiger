@@ -1,0 +1,20 @@
+{
+  "utc": "2026-10-20T13:23:06.277076+00:00",
+  "command": "benchmarks/run_production_accuracy.py accuracy --binary /home/dmarce1/workspace/cosmictiger/build/order_shared_arena/cosmictiger --output /home/dmarce1/workspace/cosmictiger/docs/production_accuracy_results_20261020/order5_theta041 --order 5 --theta .41 --baseline /home/dmarce1/workspace/cosmictiger/docs/production_accuracy_results_20261020/baseline/summary.json",
+  "binary": "/home/dmarce1/workspace/cosmictiger/build/order_shared_arena/cosmictiger",
+  "binary_sha256": "39c040a8dd7d85dfaf91006ee424309f5e906d8ada7faf4c84054fb94f85257e",
+  "git_head": "788c45a0245c387cf315c4b07e9d33442d7f1ee7",
+  "git_diff_sha256": "a1f00cfcc87f8617d352fa36c95debe5104a82a2544ae36c82437778351df5ed",
+  "driver_sha256": "213c4494bcc02211d95254482a0f37c11b389fc5c3af363bae7f0c3938d2b10e",
+  "settings": {
+    "bucket": 184,
+    "side": 64,
+    "threads": 8,
+    "reference_sinks": 1024,
+    "effective_radius": 0.01876988456953534,
+    "kernel_family": "ferrers",
+    "kernel_degree": 4,
+    "omp_threads": 1,
+    "cpus": "1-8"
+  }
+}

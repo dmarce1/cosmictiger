@@ -21,6 +21,7 @@
 #include <iomanip>
 #include <limits>
 #include <map>
+#include <numeric>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -287,18 +288,48 @@ void stfWalkLeafHistogram(TreeId root, char const* fixture) {
 
 // Compare the saved forces and potentials of a deterministic particle sample
 // with the direct periodic (Ewald) sum. The kick used gm = 1, as does the sum.
-void stfWalkReferenceErrors(char const* fixture, char const* backend, int count) {
-    int const stride = std::max<int>(1, int(particlesSize()) / count);
+void stfWalkReferenceErrors(char const* fixture, char const* backend, int count,
+    std::vector<Array<Fixed32, NDIM>> const& positions, std::ofstream& stream) {
+    size_t const sampleCount = std::min(size_t(count), positions.size());
+    // Select physical particles before tree ordering. A coprime permutation
+    // avoids the coordinate planes selected by a simple lattice-index stride.
+    size_t step = 2654435761u % positions.size();
+    while (std::gcd(step, positions.size()) != 1) {
+        ++step;
+    }
     Vector<Fixed32> sinkx;
     Vector<Fixed32> sinky;
     Vector<Fixed32> sinkz;
-    std::vector<ParticleInteger> indices;
-    for (ParticleInteger index = 0; index < particlesSize() && int(indices.size()) < count;
-        index += stride) {
-        indices.push_back(index);
-        sinkx.push_back(particlesPos(XDIM, index));
-        sinky.push_back(particlesPos(YDIM, index));
-        sinkz.push_back(particlesPos(ZDIM, index));
+    std::map<std::array<uint32_t, NDIM>, size_t> selected;
+    for (size_t i = 0; i < sampleCount; ++i) {
+        auto const& position = positions[(i * step) % positions.size()];
+        std::array<uint32_t, NDIM> key;
+        for (int dim = 0; dim < NDIM; ++dim) {
+            key[dim] = uint32_t(position[dim].raw());
+        }
+        if (!selected.emplace(key, i).second) {
+            throw std::runtime_error("STF reference sample contains duplicate coordinates");
+        }
+        sinkx.push_back(position[XDIM]);
+        sinky.push_back(position[YDIM]);
+        sinkz.push_back(position[ZDIM]);
+    }
+    std::vector<ParticleInteger> indices(sampleCount, particlesSize());
+    for (ParticleInteger index = 0; index < particlesSize(); ++index) {
+        std::array<uint32_t, NDIM> key;
+        for (int dim = 0; dim < NDIM; ++dim) {
+            key[dim] = uint32_t(particlesPos(dim, index).raw());
+        }
+        auto const found = selected.find(key);
+        if (found != selected.end()) {
+            if (indices[found->second] != particlesSize()) {
+                throw std::runtime_error("STF reference coordinate matches multiple particles");
+            }
+            indices[found->second] = index;
+        }
+    }
+    if (std::find(indices.begin(), indices.end(), particlesSize()) != indices.end()) {
+        throw std::runtime_error("STF reference sample lost a physical particle");
     }
     auto const reference = gravityAnalyticCallKernel(sinkx, sinky, sinkz);
     std::vector<double> forceErrors;
@@ -308,6 +339,18 @@ void stfWalkReferenceErrors(char const* fixture, char const* backend, int count)
     double potentialDifference = 0;
     double potentialNorm = 0;
     for (size_t i = 0; i < indices.size(); ++i) {
+        stream << fixture;
+        for (int dim = 0; dim < NDIM; ++dim) {
+            stream << ',' << uint32_t(particlesPos(dim, indices[i]).raw());
+        }
+        for (int dim = 0; dim < NDIM; ++dim) {
+            stream << ',' << particlesGravityAcceleration(dim, indices[i]);
+        }
+        stream << ',' << particlesPot(indices[i]);
+        for (int dim = 0; dim < NDIM; ++dim) {
+            stream << ',' << reference.second[dim][i];
+        }
+        stream << ',' << reference.first[i] << '\n';
         double difference = 0;
         double norm = 0;
         for (int dim = 0; dim < NDIM; ++dim) {
@@ -319,13 +362,17 @@ void stfWalkReferenceErrors(char const* fixture, char const* backend, int count)
         double const expectedPotential = reference.first[i];
         double const actualPotential = particlesPot(indices[i]);
         forceErrors.push_back(std::sqrt(difference / std::max(norm, 1e-300)));
-        potentialErrors.push_back(
-            std::abs(actualPotential - expectedPotential) / std::abs(expectedPotential));
+        potentialErrors.push_back(std::abs(actualPotential - expectedPotential) /
+            std::max(std::abs(expectedPotential), 1e-300));
         forceDifference += difference;
         forceNorm += norm;
         potentialDifference +=
             (actualPotential - expectedPotential) * (actualPotential - expectedPotential);
         potentialNorm += expectedPotential * expectedPotential;
+    }
+    stream.flush();
+    if (!stream) {
+        throw std::runtime_error("Failed to write stf_walk_reference.csv");
     }
     std::sort(forceErrors.begin(), forceErrors.end());
     std::sort(potentialErrors.begin(), potentialErrors.end());
@@ -337,7 +384,8 @@ void stfWalkReferenceErrors(char const* fixture, char const* backend, int count)
         potentialErrors[p99], potentialErrors.back());
 }
 
-void stfWalkFixture(char const* fixture, bool doPhi, int samples, std::ofstream& forceOutput) {
+void stfWalkFixture(char const* fixture, bool doPhi, int samples, std::ofstream& forceOutput,
+    std::ofstream& referenceOutput) {
     auto const positions = stfWalkPositions(fixture, stfWalkSide());
     char const* backend = getOptions().compute.cuda ? "cuda" : "cpu";
     std::vector<double> setupTimes, treeTimes, kickTimes, totalTimes;
@@ -395,12 +443,15 @@ void stfWalkFixture(char const* fixture, bool doPhi, int samples, std::ofstream&
                 checksums.acceleration[1], checksums.acceleration[2], checksums.accelerationSquared,
                 checksums.potential, doPhi ? result.pot : 0.0);
             if (doPhi && sample == samples - 1) {
-                stfWalkSaveForces(forceOutput, fixture);
+                if (forceOutput.is_open()) {
+                    stfWalkSaveForces(forceOutput, fixture);
+                }
                 int const referenceSamples = stfWalkReferenceSamples();
                 // The direct Ewald sum runs on the device and reads the device
                 // kernel table, which only a CUDA-enabled run uploads.
                 if (referenceSamples > 0 && getOptions().compute.cuda) {
-                    stfWalkReferenceErrors(fixture, backend, referenceSamples);
+                    stfWalkReferenceErrors(
+                        fixture, backend, referenceSamples, positions, referenceOutput);
                 } else if (referenceSamples > 0) {
                     PRINT("STF_WALK_REFERENCE_SKIPPED,%s,%s,cpu_only_run\n", fixture, backend);
                 }
@@ -447,11 +498,24 @@ void stfWalkBenchmark() {
     setOptions(options);
     try {
         int const samples = detail::stfWalkSamples();
-        std::ofstream forces("stf_walk_forces.csv");
-        if (!forces) {
-            throw std::runtime_error("Cannot open stf_walk_forces.csv");
+        std::ofstream forces;
+        if (detail::stfWalkEnvironmentInteger("COSMICTIGER_STF_WALK_EXPORT_FORCES", 1, 0, 1)) {
+            forces.open("stf_walk_forces.csv");
+            if (!forces) {
+                throw std::runtime_error("Cannot open stf_walk_forces.csv");
+            }
+            forces << "fixture,x_raw,y_raw,z_raw,x,y,z,gx,gy,gz,phi\n" << std::setprecision(17);
         }
-        forces << "fixture,x_raw,y_raw,z_raw,x,y,z,gx,gy,gz,phi\n" << std::setprecision(17);
+        std::ofstream references;
+        if (detail::stfWalkReferenceSamples() > 0 && options.compute.cuda) {
+            references.open("stf_walk_reference.csv");
+            if (!references) {
+                throw std::runtime_error("Cannot open stf_walk_reference.csv");
+            }
+            references << "fixture,x_raw,y_raw,z_raw,gx,gy,gz,phi,reference_gx,reference_gy,"
+                          "reference_gz,reference_phi\n"
+                       << std::setprecision(17);
+        }
         particlesResize(options.initial.numberOfParticles);
         PRINT("STF_WALK_CONFIG,particles=%zu,threads=%i,cuda=%i,order=%i,theta=%.17g,support=%."
               "17g,bucket=%i,samples=%i,warmup=1,gm=1\n",
@@ -470,7 +534,7 @@ void stfWalkBenchmark() {
         for (char const* fixture : {"lattice", "clustered", "adaptive"}) {
             if (detail::stfWalkFixtureSelected(fixture)) {
                 for (bool doPhi : {false, true}) {
-                    detail::stfWalkFixture(fixture, doPhi, samples, forces);
+                    detail::stfWalkFixture(fixture, doPhi, samples, forces, references);
                 }
             }
         }

@@ -1,0 +1,383 @@
+[1/88] Building CXX object CMakeFiles/cosmictiger_fp16.dir/src/math/fp16.cpp.o
+[2/88] Building CXX object CMakeFiles/cosmictiger.dir/healpix/error_handling.cc.o
+[3/88] Linking CXX static library libcosmictiger_fp16.a
+[4/88] Building CXX object CMakeFiles/cosmictiger.dir/healpix/geom_utils.cc.o
+[5/88] Building CXX object CMakeFiles/cosmictiger.dir/healpix/healpix_tables.cc.o
+[6/88] Building CXX object CMakeFiles/cosmictiger.dir/healpix/pointing.cc.o
+[7/88] Building CXX object CMakeFiles/cosmictiger.dir/src/analysis/group_entry.cpp.o
+[8/88] Building CXX object CMakeFiles/primordial_chemistry.dir/src/chemistry/primordial_chemistry.cpp.o
+[9/88] Linking CXX static library libprimordial_chemistry.a
+[10/88] Building CXX object CMakeFiles/cosmictiger.dir/healpix/string_utils.cc.o
+[11/88] Building CXX object CMakeFiles/cosmictiger.dir/src/analysis/compress.cpp.o
+[12/88] Building CXX object CMakeFiles/cosmictiger.dir/healpix/healpix_base.cc.o
+[13/88] Building CXX object CMakeFiles/cosmictiger.dir/src/analysis/lightcone_cpu.cpp.o
+[14/88] Building CXX object CMakeFiles/cosmictiger.dir/src/analysis/power_cpu.cpp.o
+[15/88] Building CXX object CMakeFiles/cosmictiger.dir/src/analysis/groups_find.cpp.o
+[16/88] Building CXX object CMakeFiles/cosmictiger.dir/src/analysis/rockstar.cpp.o
+[17/88] Building CXX object CMakeFiles/cosmictiger.dir/src/analysis/power.cpp.o
+[18/88] Building CXX object CMakeFiles/cosmictiger.dir/src/analysis/group_tree.cpp.o
+[19/88] Building CXX object CMakeFiles/cosmictiger.dir/src/core/assert.cpp.o
+[20/88] Building CXX object CMakeFiles/cosmictiger.dir/src/analysis/rockstar_catalogue.cpp.o
+[21/88] Building CXX object CMakeFiles/cosmictiger.dir/src/analysis/groups.cpp.o
+[22/88] Building CXX object CMakeFiles/cosmictiger.dir/src/core/driver.cpp.o
+[23/88] Building CXX object CMakeFiles/cosmictiger.dir/src/core/flops.cpp.o
+[24/88] Building CXX object CMakeFiles/cosmictiger.dir/src/core/profiler.cpp.o
+[25/88] Building CXX object CMakeFiles/cosmictiger.dir/src/core/memused.cpp.o
+/home/dmarce1/workspace/cosmictiger/src/core/memused.cpp: In function ‘void startMemuseDaemon()’:
+/home/dmarce1/workspace/cosmictiger/src/core/memused.cpp:84:15: warning: ‘bool hpx::apply(F&&, Ts&& ...) [with F = void (&)(); Ts = {}]’ is deprecated: hpx::apply is deprecated, use hpx::post instead (This functionality is deprecated starting HPX V1.9 and will be removed in the future. You can define HPX_HAVE_DEPRECATION_WARNINGS_V1_9=0 to acknowledge that you have received this warning.) [-Wdeprecated-declarations]
+   84 |     hpx::apply(memuseDaemon);
+      |     ~~~~~~~~~~^~~~~~~~~~~~~~
+In file included from /home/dmarce1/local/hpx/Release/include/hpx/modules/async_base.hpp:17,
+                 from /home/dmarce1/local/hpx/Release/include/hpx/executors/dataflow.hpp:17,
+                 from /home/dmarce1/local/hpx/Release/include/hpx/async_local/dataflow.hpp:11,
+                 from /home/dmarce1/local/hpx/Release/include/hpx/parallel/util/partitioner.hpp:13,
+                 from /home/dmarce1/local/hpx/Release/include/hpx/parallel/algorithms/adjacent_find.hpp:139,
+                 from /home/dmarce1/local/hpx/Release/include/hpx/parallel/algorithm.hpp:17,
+                 from /home/dmarce1/local/hpx/Release/include/hpx/algorithm.hpp:10,
+                 from /home/dmarce1/local/hpx/Release/include/hpx/hpx.hpp:9,
+                 from /home/dmarce1/workspace/cosmictiger/cosmictiger/core/hpx.hpp:24,
+                 from /home/dmarce1/workspace/cosmictiger/src/core/memused.cpp:5:
+/home/dmarce1/local/hpx/Release/include/hpx/async_base/post.hpp:64:26: note: declared here
+   64 |     HPX_FORCEINLINE bool apply(F&& f, Ts&&... ts)
+      |                          ^~~~~
+[26/88] Building CXX object CMakeFiles/cosmictiger.dir/src/analysis/lightcone.cpp.o
+[27/88] Building CXX object CMakeFiles/cosmictiger.dir/src/core/hpx.cpp.o
+/home/dmarce1/workspace/cosmictiger/src/core/hpx.cpp: In function ‘bool detectHyperthreading()’:
+/home/dmarce1/workspace/cosmictiger/src/core/hpx.cpp:120:14: warning: ignoring return value of ‘size_t fread(void*, size_t, size_t, FILE*)’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+  120 |         fread(&c, sizeof(char), 1, fp);
+      |         ~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~
+[28/88] Building CXX object CMakeFiles/cosmictiger.dir/src/cosmology/cosmology.cpp.o
+[29/88] Building CXX object CMakeFiles/cosmictiger.dir/src/cosmology/recfast.cpp.o
+[30/88] Building CXX object CMakeFiles/cosmictiger.dir/src/core/stack_trace.cpp.o
+[31/88] Building CXX object CMakeFiles/cosmictiger.dir/src/cosmology/zero_order.cpp.o
+[32/88] Building CXX object CMakeFiles/cosmictiger.dir/src/core/options.cpp.o
+[33/88] Building CXX object CMakeFiles/cosmictiger.dir/src/cosmology/boltzmann.cpp.o
+[34/88] Building CXX object CMakeFiles/cosmictiger.dir/src/fmm/fmm_order.cpp.o
+[35/88] Building CXX object CMakeFiles/cosmictiger.dir/src/cuda/cuda_stream.cpp.o
+[36/88] Building CXX object CMakeFiles/cosmictiger.dir/src/cuda/cuda.cpp.o
+[37/88] Building CXX object CMakeFiles/cosmictiger.dir/src/fmm/ewald_indices.cpp.o
+[38/88] Building CXX object CMakeFiles/cosmictiger.dir/src/gravity/gravity.cpp.o
+[39/88] Building CXX object CMakeFiles/cosmictiger.dir/src/gravity/bh.cpp.o
+[40/88] Building CXX object CMakeFiles/cosmictiger.dir/src/cosmology/initialize.cpp.o
+[41/88] Building CXX object CMakeFiles/cosmictiger.dir/src/gravity/kick.cpp.o
+[42/88] Building CXX object CMakeFiles/cosmictiger.dir/src/cosmology/fft.cpp.o
+[43/88] Building CXX object CMakeFiles/cosmictiger.dir/src/io/checkpoint.cpp.o
+[44/88] Building CXX object CMakeFiles/cosmictiger.dir/src/gravity/kick_workspace.cpp.o
+[45/88] Building CXX object CMakeFiles/cosmictiger.dir/src/math/kernel.cpp.o
+[46/88] Building CXX object CMakeFiles/cosmictiger.dir/src/math/math.cpp.o
+[47/88] Building CXX object CMakeFiles/cosmictiger.dir/src/gravity/tree.cpp.o
+[48/88] Building CXX object CMakeFiles/cosmictiger.dir/src/io/output.cpp.o
+[49/88] Building CXX object CMakeFiles/cosmictiger.dir/src/particles/drift_cpu.cpp.o
+[50/88] Building CXX object CMakeFiles/cosmictiger.dir/src/particles/drift.cpp.o
+[51/88] Building CXX object CMakeFiles/cosmictiger.dir/src/problems/exact_sod.cpp.o
+[52/88] Building CXX object CMakeFiles/cosmictiger.dir/src/io/view.cpp.o
+[53/88] Building CXX object CMakeFiles/cosmictiger.dir/src/problems/analytic.cpp.o
+[54/88] Building CXX object CMakeFiles/cosmictiger.dir/src/problems/sedov.cpp.o
+[55/88] Building CXX object CMakeFiles/cosmictiger.dir/src/problems/plummer.cpp.o
+[56/88] Building CXX object CMakeFiles/cosmictiger.dir/src/problems/hydro.cpp.o
+[57/88] Building CXX object CMakeFiles/cosmictiger.dir/src/problems/sphere.cpp.o
+[58/88] Building CXX object CMakeFiles/cosmictiger.dir/src/particles/domain.cpp.o
+[59/88] Building CXX object CMakeFiles/cosmictiger.dir/src/problems/test.cpp.o
+/home/dmarce1/workspace/cosmictiger/src/problems/test.cpp: In function ‘void bucketTest()’:
+/home/dmarce1/workspace/cosmictiger/src/problems/test.cpp:440:35: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  440 |     static char* checkpoints[] = {"checkpoint.z.48.9", "checkpoint.z.20.0", "checkpoint.z.10.5",
+      |                                   ^~~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/src/problems/test.cpp:440:56: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  440 |     static char* checkpoints[] = {"checkpoint.z.48.9", "checkpoint.z.20.0", "checkpoint.z.10.5",
+      |                                                        ^~~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/src/problems/test.cpp:440:77: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  440 |     static char* checkpoints[] = {"checkpoint.z.48.9", "checkpoint.z.20.0", "checkpoint.z.10.5",
+      |                                                                             ^~~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/src/problems/test.cpp:441:9: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  441 |         "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6", "checkpoint.z.1.7",
+      |         ^~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/src/problems/test.cpp:441:29: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  441 |         "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6", "checkpoint.z.1.7",
+      |                             ^~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/src/problems/test.cpp:441:49: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  441 |         "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6", "checkpoint.z.1.7",
+      |                                                 ^~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/src/problems/test.cpp:441:69: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  441 |         "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6", "checkpoint.z.1.7",
+      |                                                                     ^~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/src/problems/test.cpp:442:9: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  442 |         "checkpoint.z.1.1", "checkpoint.z.0.6", "checkpoint.z.0.3", "checkpoint.z.0.1"};
+      |         ^~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/src/problems/test.cpp:442:29: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  442 |         "checkpoint.z.1.1", "checkpoint.z.0.6", "checkpoint.z.0.3", "checkpoint.z.0.1"};
+      |                             ^~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/src/problems/test.cpp:442:49: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  442 |         "checkpoint.z.1.1", "checkpoint.z.0.6", "checkpoint.z.0.3", "checkpoint.z.0.1"};
+      |                                                 ^~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/src/problems/test.cpp:442:69: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  442 |         "checkpoint.z.1.1", "checkpoint.z.0.6", "checkpoint.z.0.3", "checkpoint.z.0.1"};
+      |                                                                     ^~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/src/problems/test.cpp: In function ‘void speedTest()’:
+/home/dmarce1/workspace/cosmictiger/src/problems/test.cpp:516:35: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  516 |     static char* checkpoints[] = {"checkpoint.z.48.9", "checkpoint.z.20.0", "checkpoint.z.10.5",
+      |                                   ^~~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/src/problems/test.cpp:516:56: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  516 |     static char* checkpoints[] = {"checkpoint.z.48.9", "checkpoint.z.20.0", "checkpoint.z.10.5",
+      |                                                        ^~~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/src/problems/test.cpp:516:77: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  516 |     static char* checkpoints[] = {"checkpoint.z.48.9", "checkpoint.z.20.0", "checkpoint.z.10.5",
+      |                                                                             ^~~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/src/problems/test.cpp:517:9: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  517 |         "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6", "checkpoint.z.1.7",
+      |         ^~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/src/problems/test.cpp:517:29: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  517 |         "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6", "checkpoint.z.1.7",
+      |                             ^~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/src/problems/test.cpp:517:49: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  517 |         "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6", "checkpoint.z.1.7",
+      |                                                 ^~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/src/problems/test.cpp:517:69: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  517 |         "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6", "checkpoint.z.1.7",
+      |                                                                     ^~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/src/problems/test.cpp:518:9: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  518 |         "checkpoint.z.1.1", "checkpoint.z.0.6", "checkpoint.z.0.3", "checkpoint.z.0.1"};
+      |         ^~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/src/problems/test.cpp:518:29: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  518 |         "checkpoint.z.1.1", "checkpoint.z.0.6", "checkpoint.z.0.3", "checkpoint.z.0.1"};
+      |                             ^~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/src/problems/test.cpp:518:49: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  518 |         "checkpoint.z.1.1", "checkpoint.z.0.6", "checkpoint.z.0.3", "checkpoint.z.0.1"};
+      |                                                 ^~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/src/problems/test.cpp:518:69: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  518 |         "checkpoint.z.1.1", "checkpoint.z.0.6", "checkpoint.z.0.3", "checkpoint.z.0.1"};
+      |                                                                     ^~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/src/problems/test.cpp:539:15: warning: ignoring return value of ‘int system(const char*)’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+  539 |         system("rm -r checkpoint.999999\n");
+      |         ~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/src/problems/test.cpp:540:17: warning: ignoring return value of ‘int asprintf(char**, const char*, ...)’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+  540 |         asprintf(&buffer, "cp -r %s checkpoint.999999\n", checkpoints[ci]);
+      |         ~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/src/problems/test.cpp:541:15: warning: ignoring return value of ‘int system(const char*)’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+  541 |         system(buffer);
+      |         ~~~~~~^~~~~~~~
+/home/dmarce1/workspace/cosmictiger/src/problems/test.cpp: In function ‘void bucketTest()’:
+/home/dmarce1/workspace/cosmictiger/src/problems/test.cpp:502:17: warning: ignoring return value of ‘int asprintf(char**, const char*, ...)’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+  502 |         asprintf(&buffer, "buckets.txt");
+      |         ~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+[60/88] Building CXX object CMakeFiles/cosmictiger.dir/src/sph/sph_cpu.cpp.o
+[61/88] Building CXX object CMakeFiles/cosmictiger.dir/src/sph/sph_hydro_cpu.cpp.o
+[62/88] Building CXX object CMakeFiles/cosmictiger.dir/src/sph/sph.cpp.o
+[63/88] Building CXX object CMakeFiles/cosmictiger.dir/src/sph/sph_chemistry.cpp.o
+[64/88] Building CXX object CMakeFiles/cosmictiger.dir/src/sph/sph_prehydro_cpu.cpp.o
+[65/88] Building CXX object CMakeFiles/cosmictiger.dir/src/sph/sph_rungs_cpu.cpp.o
+[66/88] Building CXX object CMakeFiles/cosmictiger.dir/tests/bh.cpp.o
+[67/88] Building CXX object CMakeFiles/cosmictiger.dir/src/sph/sph_tree.cpp.o
+/home/dmarce1/workspace/cosmictiger/src/sph/sph_tree.cpp: In function ‘const SphTreeNode* treeCacheRead(TreeId)’:
+/home/dmarce1/workspace/cosmictiger/src/sph/sph_tree.cpp:593:31: warning: ‘bool hpx::apply(F&&, Ts&& ...) [with F = treeCacheRead(TreeId)::<lambda()>; Ts = {}]’ is deprecated: hpx::apply is deprecated, use hpx::post instead (This functionality is deprecated starting HPX V1.9 and will be removed in the future. You can define HPX_HAVE_DEPRECATION_WARNINGS_V1_9=0 to acknowledge that you have received this warning.) [-Wdeprecated-declarations]
+  593 |                     hpx::apply([promise, lineId]() {
+      |                     ~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+  594 |                         try {
+      |                         ~~~~~  
+  595 |                             auto remote = hpx::async<SphTreeFetchCacheLineAction>(
+      |                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  596 |                                 hpxLocalities()[lineId.proc], lineId.index);
+      |                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  597 |                             promise->set_value(remote.get());
+      |                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  598 |                         } catch (...) {
+      |                         ~~~~~~~~~~~~~~~
+  599 |                             promise->set_exception(std::current_exception());
+      |                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  600 |                         }
+      |                         ~      
+  601 |                     });
+      |                     ~~         
+In file included from /home/dmarce1/local/hpx/Release/include/hpx/modules/async_base.hpp:17,
+                 from /home/dmarce1/local/hpx/Release/include/hpx/executors/dataflow.hpp:17,
+                 from /home/dmarce1/local/hpx/Release/include/hpx/async_local/dataflow.hpp:11,
+                 from /home/dmarce1/local/hpx/Release/include/hpx/parallel/util/partitioner.hpp:13,
+                 from /home/dmarce1/local/hpx/Release/include/hpx/parallel/algorithms/adjacent_find.hpp:139,
+                 from /home/dmarce1/local/hpx/Release/include/hpx/parallel/algorithm.hpp:17,
+                 from /home/dmarce1/local/hpx/Release/include/hpx/algorithm.hpp:10,
+                 from /home/dmarce1/local/hpx/Release/include/hpx/hpx.hpp:9,
+                 from /home/dmarce1/workspace/cosmictiger/cosmictiger/core/hpx.hpp:24,
+                 from /home/dmarce1/workspace/cosmictiger/cosmictiger/particles/particles.hpp:30,
+                 from /home/dmarce1/workspace/cosmictiger/cosmictiger/particles/domain.hpp:25,
+                 from /home/dmarce1/workspace/cosmictiger/src/sph/sph_tree.cpp:30:
+/home/dmarce1/local/hpx/Release/include/hpx/async_base/post.hpp:64:26: note: declared here
+   64 |     HPX_FORCEINLINE bool apply(F&& f, Ts&&... ts)
+      |                          ^~~~~
+[68/88] Building CXX object CMakeFiles/cosmictiger.dir/tests/analysis_backends.cpp.o
+/home/dmarce1/workspace/cosmictiger/tests/analysis_backends.cpp: In function ‘Vector<LightconeParticle> analysisReadLightconeBuffer()’:
+/home/dmarce1/workspace/cosmictiger/tests/analysis_backends.cpp:142:49: warning: ignoring attributes on template argument ‘int (*)(FILE*)’ [-Wignored-attributes]
+  142 |     std::unique_ptr<FILE, decltype(&std::fclose)> file(std::tmpfile(), &std::fclose);
+      |                                                 ^
+[69/88] Building CXX object CMakeFiles/cosmictiger.dir/src/particles/particles.cpp.o
+[70/88] Building CXX object CMakeFiles/cosmictiger.dir/tests/fmm_tree.cpp.o
+[71/88] Building CXX object CMakeFiles/cosmictiger.dir/tests/linear_growth.cpp.o
+[72/88] Building CXX object CMakeFiles/cosmictiger.dir/tests/rockstar.cpp.o
+[73/88] Building CXX object CMakeFiles/cosmictiger.dir/tests/fmm_walk.cpp.o
+[74/88] Building CXX object CMakeFiles/cosmictiger.dir/src/sph/sph_particles.cpp.o
+/home/dmarce1/workspace/cosmictiger/src/sph/sph_particles.cpp: In instantiation of ‘const T* readSphCacheLine(LineIdType, Array<std::unordered_map<LineIdType, std::shared_ptr<hpx::shared_future<Vector<T> > >, LineIdHashHi>, 1024>&, Array<hpx::detail::spinlock<true>, 1024>&) [with Action = SphParticlesFetchCacheLineAction; T = Array<Fixed<unsigned int, 32>, 3>]’:
+/home/dmarce1/workspace/cosmictiger/src/sph/sph_particles.cpp:457:62:   required from here
+/home/dmarce1/workspace/cosmictiger/src/sph/sph_particles.cpp:152:27: warning: ‘bool hpx::apply(F&&, Ts&& ...) [with F = readSphCacheLine<SphParticlesFetchCacheLineAction, Array<Fixed<unsigned int, 32>, 3> >(LineIdType, Array<std::unordered_map<LineIdType, std::shared_ptr<hpx::shared_future<Vector<Array<Fixed<unsigned int, 32>, 3> > > >, LineIdHashHi>, 1024>&, Array<hpx::detail::spinlock<true>, 1024>&)::<lambda()>; Ts = {}]’ is deprecated: hpx::apply is deprecated, use hpx::post instead (This functionality is deprecated starting HPX V1.9 and will be removed in the future. You can define HPX_HAVE_DEPRECATION_WARNINGS_V1_9=0 to acknowledge that you have received this warning.) [-Wdeprecated-declarations]
+  152 |                 hpx::apply([promise, lineId]() {
+      |                 ~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+  153 |                     try {
+      |                     ~~~~~  
+  154 |                         auto remote =
+      |                         ~~~~~~~~~~~~~
+  155 |                             hpx::async<Action>(hpxLocalities()[lineId.proc], lineId.index);
+      |                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  156 |                         promise->set_value(remote.get());
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  157 |                     } catch (...) {
+      |                     ~~~~~~~~~~~~~~~
+  158 |                         promise->set_exception(std::current_exception());
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  159 |                     }
+      |                     ~      
+  160 |                 });
+      |                 ~~         
+In file included from /home/dmarce1/local/hpx/Release/include/hpx/modules/async_base.hpp:17,
+                 from /home/dmarce1/local/hpx/Release/include/hpx/executors/dataflow.hpp:17,
+                 from /home/dmarce1/local/hpx/Release/include/hpx/async_local/dataflow.hpp:11,
+                 from /home/dmarce1/local/hpx/Release/include/hpx/parallel/util/partitioner.hpp:13,
+                 from /home/dmarce1/local/hpx/Release/include/hpx/parallel/algorithms/adjacent_find.hpp:139,
+                 from /home/dmarce1/local/hpx/Release/include/hpx/parallel/algorithm.hpp:17,
+                 from /home/dmarce1/local/hpx/Release/include/hpx/algorithm.hpp:10,
+                 from /home/dmarce1/local/hpx/Release/include/hpx/hpx.hpp:9,
+                 from /home/dmarce1/workspace/cosmictiger/cosmictiger/core/hpx.hpp:24,
+                 from /home/dmarce1/workspace/cosmictiger/src/sph/sph_particles.cpp:29:
+/home/dmarce1/local/hpx/Release/include/hpx/async_base/post.hpp:64:26: note: declared here
+   64 |     HPX_FORCEINLINE bool apply(F&& f, Ts&&... ts)
+      |                          ^~~~~
+/home/dmarce1/workspace/cosmictiger/src/sph/sph_particles.cpp: In instantiation of ‘const T* readSphCacheLine(LineIdType, Array<std::unordered_map<LineIdType, std::shared_ptr<hpx::shared_future<Vector<T> > >, LineIdHashHi>, 1024>&, Array<hpx::detail::spinlock<true>, 1024>&) [with Action = SphParticlesFetchThermodynamicCacheLineAction; T = Pair<float>]’:
+/home/dmarce1/workspace/cosmictiger/src/sph/sph_particles.cpp:517:75:   required from here
+/home/dmarce1/workspace/cosmictiger/src/sph/sph_particles.cpp:152:27: warning: ‘bool hpx::apply(F&&, Ts&& ...) [with F = readSphCacheLine<SphParticlesFetchThermodynamicCacheLineAction, Pair<float> >(LineIdType, Array<std::unordered_map<LineIdType, std::shared_ptr<hpx::shared_future<Vector<Pair<float> > > >, LineIdHashHi>, 1024>&, Array<hpx::detail::spinlock<true>, 1024>&)::<lambda()>; Ts = {}]’ is deprecated: hpx::apply is deprecated, use hpx::post instead (This functionality is deprecated starting HPX V1.9 and will be removed in the future. You can define HPX_HAVE_DEPRECATION_WARNINGS_V1_9=0 to acknowledge that you have received this warning.) [-Wdeprecated-declarations]
+  152 |                 hpx::apply([promise, lineId]() {
+      |                 ~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+  153 |                     try {
+      |                     ~~~~~  
+  154 |                         auto remote =
+      |                         ~~~~~~~~~~~~~
+  155 |                             hpx::async<Action>(hpxLocalities()[lineId.proc], lineId.index);
+      |                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  156 |                         promise->set_value(remote.get());
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  157 |                     } catch (...) {
+      |                     ~~~~~~~~~~~~~~~
+  158 |                         promise->set_exception(std::current_exception());
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  159 |                     }
+      |                     ~      
+  160 |                 });
+      |                 ~~         
+/home/dmarce1/local/hpx/Release/include/hpx/async_base/post.hpp:64:26: note: declared here
+   64 |     HPX_FORCEINLINE bool apply(F&& f, Ts&&... ts)
+      |                          ^~~~~
+/home/dmarce1/workspace/cosmictiger/src/sph/sph_particles.cpp: In instantiation of ‘const T* readSphCacheLine(LineIdType, Array<std::unordered_map<LineIdType, std::shared_ptr<hpx::shared_future<Vector<T> > >, LineIdHashHi>, 1024>&, Array<hpx::detail::spinlock<true>, 1024>&) [with Action = SphParticlesFetchRungCacheLineAction; T = char]’:
+/home/dmarce1/workspace/cosmictiger/src/sph/sph_particles.cpp:565:66:   required from here
+/home/dmarce1/workspace/cosmictiger/src/sph/sph_particles.cpp:152:27: warning: ‘bool hpx::apply(F&&, Ts&& ...) [with F = readSphCacheLine<SphParticlesFetchRungCacheLineAction, char>(LineIdType, Array<std::unordered_map<LineIdType, std::shared_ptr<hpx::shared_future<Vector<char> > >, LineIdHashHi>, 1024>&, Array<hpx::detail::spinlock<true>, 1024>&)::<lambda()>; Ts = {}]’ is deprecated: hpx::apply is deprecated, use hpx::post instead (This functionality is deprecated starting HPX V1.9 and will be removed in the future. You can define HPX_HAVE_DEPRECATION_WARNINGS_V1_9=0 to acknowledge that you have received this warning.) [-Wdeprecated-declarations]
+  152 |                 hpx::apply([promise, lineId]() {
+      |                 ~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+  153 |                     try {
+      |                     ~~~~~  
+  154 |                         auto remote =
+      |                         ~~~~~~~~~~~~~
+  155 |                             hpx::async<Action>(hpxLocalities()[lineId.proc], lineId.index);
+      |                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  156 |                         promise->set_value(remote.get());
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  157 |                     } catch (...) {
+      |                     ~~~~~~~~~~~~~~~
+  158 |                         promise->set_exception(std::current_exception());
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  159 |                     }
+      |                     ~      
+  160 |                 });
+      |                 ~~         
+/home/dmarce1/local/hpx/Release/include/hpx/async_base/post.hpp:64:26: note: declared here
+   64 |     HPX_FORCEINLINE bool apply(F&& f, Ts&&... ts)
+      |                          ^~~~~
+/home/dmarce1/workspace/cosmictiger/src/sph/sph_particles.cpp: In instantiation of ‘const T* readSphCacheLine(LineIdType, Array<std::unordered_map<LineIdType, std::shared_ptr<hpx::shared_future<Vector<T> > >, LineIdHashHi>, 1024>&, Array<hpx::detail::spinlock<true>, 1024>&) [with Action = SphParticlesFetchVelocityCacheLineAction; T = Array<float, 3>]’:
+/home/dmarce1/workspace/cosmictiger/src/sph/sph_particles.cpp:618:70:   required from here
+/home/dmarce1/workspace/cosmictiger/src/sph/sph_particles.cpp:152:27: warning: ‘bool hpx::apply(F&&, Ts&& ...) [with F = readSphCacheLine<SphParticlesFetchVelocityCacheLineAction, Array<float, 3> >(LineIdType, Array<std::unordered_map<LineIdType, std::shared_ptr<hpx::shared_future<Vector<Array<float, 3> > > >, LineIdHashHi>, 1024>&, Array<hpx::detail::spinlock<true>, 1024>&)::<lambda()>; Ts = {}]’ is deprecated: hpx::apply is deprecated, use hpx::post instead (This functionality is deprecated starting HPX V1.9 and will be removed in the future. You can define HPX_HAVE_DEPRECATION_WARNINGS_V1_9=0 to acknowledge that you have received this warning.) [-Wdeprecated-declarations]
+  152 |                 hpx::apply([promise, lineId]() {
+      |                 ~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+  153 |                     try {
+      |                     ~~~~~  
+  154 |                         auto remote =
+      |                         ~~~~~~~~~~~~~
+  155 |                             hpx::async<Action>(hpxLocalities()[lineId.proc], lineId.index);
+      |                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  156 |                         promise->set_value(remote.get());
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  157 |                     } catch (...) {
+      |                     ~~~~~~~~~~~~~~~
+  158 |                         promise->set_exception(std::current_exception());
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  159 |                     }
+      |                     ~      
+  160 |                 });
+      |                 ~~         
+/home/dmarce1/local/hpx/Release/include/hpx/async_base/post.hpp:64:26: note: declared here
+   64 |     HPX_FORCEINLINE bool apply(F&& f, Ts&&... ts)
+      |                          ^~~~~
+/home/dmarce1/workspace/cosmictiger/src/sph/sph_particles.cpp: In instantiation of ‘const T* readSphCacheLine(LineIdType, Array<std::unordered_map<LineIdType, std::shared_ptr<hpx::shared_future<Vector<T> > >, LineIdHashHi>, 1024>&, Array<hpx::detail::spinlock<true>, 1024>&) [with Action = SphParticlesFetchDensityCacheLineAction; T = float]’:
+/home/dmarce1/workspace/cosmictiger/src/sph/sph_particles.cpp:668:69:   required from here
+/home/dmarce1/workspace/cosmictiger/src/sph/sph_particles.cpp:152:27: warning: ‘bool hpx::apply(F&&, Ts&& ...) [with F = readSphCacheLine<SphParticlesFetchDensityCacheLineAction, float>(LineIdType, Array<std::unordered_map<LineIdType, std::shared_ptr<hpx::shared_future<Vector<float> > >, LineIdHashHi>, 1024>&, Array<hpx::detail::spinlock<true>, 1024>&)::<lambda()>; Ts = {}]’ is deprecated: hpx::apply is deprecated, use hpx::post instead (This functionality is deprecated starting HPX V1.9 and will be removed in the future. You can define HPX_HAVE_DEPRECATION_WARNINGS_V1_9=0 to acknowledge that you have received this warning.) [-Wdeprecated-declarations]
+  152 |                 hpx::apply([promise, lineId]() {
+      |                 ~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+  153 |                     try {
+      |                     ~~~~~  
+  154 |                         auto remote =
+      |                         ~~~~~~~~~~~~~
+  155 |                             hpx::async<Action>(hpxLocalities()[lineId.proc], lineId.index);
+      |                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  156 |                         promise->set_value(remote.get());
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  157 |                     } catch (...) {
+      |                     ~~~~~~~~~~~~~~~
+  158 |                         promise->set_exception(std::current_exception());
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  159 |                     }
+      |                     ~      
+  160 |                 });
+      |                 ~~         
+/home/dmarce1/local/hpx/Release/include/hpx/async_base/post.hpp:64:26: note: declared here
+   64 |     HPX_FORCEINLINE bool apply(F&& f, Ts&&... ts)
+      |                          ^~~~~
+/home/dmarce1/workspace/cosmictiger/src/sph/sph_particles.cpp: In instantiation of ‘const T* readSphCacheLine(LineIdType, Array<std::unordered_map<LineIdType, std::shared_ptr<hpx::shared_future<Vector<T> > >, LineIdHashHi>, 1024>&, Array<hpx::detail::spinlock<true>, 1024>&) [with Action = SphParticlesFetchChemistryEosCacheLineAction; T = Pair<float>]’:
+/home/dmarce1/workspace/cosmictiger/src/sph/sph_particles.cpp:716:74:   required from here
+/home/dmarce1/workspace/cosmictiger/src/sph/sph_particles.cpp:152:27: warning: ‘bool hpx::apply(F&&, Ts&& ...) [with F = readSphCacheLine<SphParticlesFetchChemistryEosCacheLineAction, Pair<float> >(LineIdType, Array<std::unordered_map<LineIdType, std::shared_ptr<hpx::shared_future<Vector<Pair<float> > > >, LineIdHashHi>, 1024>&, Array<hpx::detail::spinlock<true>, 1024>&)::<lambda()>; Ts = {}]’ is deprecated: hpx::apply is deprecated, use hpx::post instead (This functionality is deprecated starting HPX V1.9 and will be removed in the future. You can define HPX_HAVE_DEPRECATION_WARNINGS_V1_9=0 to acknowledge that you have received this warning.) [-Wdeprecated-declarations]
+  152 |                 hpx::apply([promise, lineId]() {
+      |                 ~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+  153 |                     try {
+      |                     ~~~~~  
+  154 |                         auto remote =
+      |                         ~~~~~~~~~~~~~
+  155 |                             hpx::async<Action>(hpxLocalities()[lineId.proc], lineId.index);
+      |                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  156 |                         promise->set_value(remote.get());
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  157 |                     } catch (...) {
+      |                     ~~~~~~~~~~~~~~~
+  158 |                         promise->set_exception(std::current_exception());
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  159 |                     }
+      |                     ~      
+  160 |                 });
+      |                 ~~         
+/home/dmarce1/local/hpx/Release/include/hpx/async_base/post.hpp:64:26: note: declared here
+   64 |     HPX_FORCEINLINE bool apply(F&& f, Ts&&... ts)
+      |                          ^~~~~
+[75/88] Building CXX object CMakeFiles/cosmictiger.dir/tests/groups_catalogue.cpp.o
+[76/88] Building CXX object CMakeFiles/cosmictiger.dir/benchmarks/stf_walk.cpp.o
+[77/88] Building CXX object CMakeFiles/cosmictiger.dir/tests/sph_gravity.cpp.o
+[78/88] Building CXX object CMakeFiles/cosmictiger.dir/tests/units_output.cpp.o
+[79/88] Building CXX object CMakeFiles/cosmictiger.dir/instances/fmm_instance_cpu_3.cpp.o
+[80/88] Building CXX object CMakeFiles/cosmictiger.dir/instances/fmm_instance_cpu_4.cpp.o
+[81/88] Building CXX object CMakeFiles/cosmictiger.dir/instances/fmm_instance_cpu_5.cpp.o
+[82/88] Building CXX object CMakeFiles/cosmictiger.dir/instances/fmm_instance_cpu_6.cpp.o
+[83/88] Building CXX object CMakeFiles/cosmictiger.dir/src/main.cpp.o
+[84/88] Building CXX object CMakeFiles/cosmictiger.dir/instances/fmm_instance_cpu_7.cpp.o
+[85/88] Building CXX object CMakeFiles/cosmictiger.dir/instances/fmm_instance_cpu_8.cpp.o
+[86/88] Building CXX object CMakeFiles/cosmictiger.dir/instances/fmm_instance_cpu_9.cpp.o
+[87/88] Linking CXX executable CMakeFiles/cosmictiger.dir/cmake_device_link.o
+[88/88] Linking CXX executable cosmictiger

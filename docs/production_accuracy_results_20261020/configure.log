@@ -1,0 +1,7 @@
+-- Using jemalloc allocator.
+-- MPI version:  3.1
+-- cosmictiger default FMM order = 7 (orders 3 to 9 compiled)
+-- cosmictiger maximum bucket size = 1024
+-- Configuring done (1.4s)
+-- Generating done (0.1s)
+-- Build files have been written to: /home/dmarce1/workspace/cosmictiger/build/order_shared_arena

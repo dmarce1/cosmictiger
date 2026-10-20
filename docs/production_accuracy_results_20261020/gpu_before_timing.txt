@@ -1,0 +1,2 @@
+name, driver_version, utilization.gpu [%], temperature.gpu, power.draw [W], clocks.current.sm [MHz]
+NVIDIA GeForce RTX 3090, 595.99.02, 21 %, 51, 94.04 W, 270 MHz

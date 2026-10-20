@@ -1,0 +1,42 @@
+{
+  "baseline": {
+    "order": 7,
+    "theta": 0.61
+  },
+  "initial_candidates": [
+    {
+      "order": 6,
+      "theta": 0.51
+    },
+    {
+      "order": 5,
+      "theta": 0.41
+    }
+  ],
+  "maximum_tighter_retries_per_candidate": 1,
+  "fixtures": [
+    "clustered",
+    "adaptive"
+  ],
+  "side": 64,
+  "bucket": 184,
+  "hpx_workers": 8,
+  "reference_sinks": 1024,
+  "timing_pairs": 3,
+  "timing_samples": 11,
+  "timing_metric": "tree plus complete kick",
+  "required_improvement": "at least approximately 5%, repeatable beyond observed noise",
+  "war_thunder": "OFF, explicit user status",
+  "stop_before_production_defaults": true,
+  "retry_candidates": [
+    {
+      "order": 6,
+      "theta": 0.35
+    },
+    {
+      "order": 5,
+      "theta": 0.32
+    }
+  ],
+  "retry_rationale": "Each initial candidate failed the strict accuracy gate. One smaller angle per candidate was selected to cover its largest observed excess error; no further angular search was performed."
+}

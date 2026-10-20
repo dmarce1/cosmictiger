@@ -1,0 +1,2 @@
+name, driver_version, utilization.gpu [%], temperature.gpu
+NVIDIA GeForce RTX 3090, 595.99.02, 59 %, 47

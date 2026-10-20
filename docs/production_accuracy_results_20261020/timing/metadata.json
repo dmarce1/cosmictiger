@@ -1,0 +1,42 @@
+{
+  "utc": "2026-10-20T13:25:26.950788+00:00",
+  "command": "benchmarks/run_production_accuracy.py timing --binary /home/dmarce1/workspace/cosmictiger/build/order_shared_arena/cosmictiger --output /home/dmarce1/workspace/cosmictiger/docs/production_accuracy_results_20261020/timing --baseline /home/dmarce1/workspace/cosmictiger/docs/production_accuracy_results_20261020/baseline/summary.json --candidate 6:.35=/home/dmarce1/workspace/cosmictiger/docs/production_accuracy_results_20261020/order6_theta035/summary.json --candidate 5:.32=/home/dmarce1/workspace/cosmictiger/docs/production_accuracy_results_20261020/order5_theta032/summary.json",
+  "binary": "/home/dmarce1/workspace/cosmictiger/build/order_shared_arena/cosmictiger",
+  "binary_sha256": "39c040a8dd7d85dfaf91006ee424309f5e906d8ada7faf4c84054fb94f85257e",
+  "git_head": "788c45a0245c387cf315c4b07e9d33442d7f1ee7",
+  "git_diff_sha256": "a1f00cfcc87f8617d352fa36c95debe5104a82a2544ae36c82437778351df5ed",
+  "driver_sha256": "213c4494bcc02211d95254482a0f37c11b389fc5c3af363bae7f0c3938d2b10e",
+  "settings": {
+    "bucket": 184,
+    "side": 64,
+    "threads": 8,
+    "reference_sinks": 1024,
+    "effective_radius": 0.01876988456953534,
+    "kernel_family": "ferrers",
+    "kernel_degree": 4,
+    "omp_threads": 1,
+    "cpus": "1-8"
+  },
+  "baseline_summary": "/home/dmarce1/workspace/cosmictiger/docs/production_accuracy_results_20261020/baseline/summary.json",
+  "baseline_summary_sha256": "f123828b23fdbe093a91df403172060ca869e3c48ea2b414e9b2bffaa126426f",
+  "candidates": [
+    {
+      "config": {
+        "order": 6,
+        "theta": 0.35
+      },
+      "summary": "/home/dmarce1/workspace/cosmictiger/docs/production_accuracy_results_20261020/order6_theta035/summary.json",
+      "sha256": "3ba7fe26e5effb27ff67bdfbeb6a7de8a82d9508c21521009f1b5a5c17e1aea3"
+    },
+    {
+      "config": {
+        "order": 5,
+        "theta": 0.32
+      },
+      "summary": "/home/dmarce1/workspace/cosmictiger/docs/production_accuracy_results_20261020/order5_theta032/summary.json",
+      "sha256": "726e1960410804697d108876e3d394d91b265a36775583830fc106c8d6a59225"
+    }
+  ],
+  "pairs": 3,
+  "samples": 11
+}
