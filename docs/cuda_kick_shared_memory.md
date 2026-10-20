@@ -1640,7 +1640,7 @@ instructions with a different operand form) or copy synchronously as
 adopted here, the first because it steers a compiler choice to suit the tool
 and the second because its cost was not measured.
 
-### Landing on the reorganized layout (`validation/merge_reorganized/`)
+### Landing on the reorganized layout (`validation/merge_reorganized/`, `landing_timing_order7_b64/`)
 
 The three follow-up branches above were cut before the source reorganization
 (2ce9c788 moved the sources into subdirectories, 565759b6 split
@@ -1680,14 +1680,46 @@ now reads the planes through the shared-memory symbol, is not reported. No
 hazard kind appears that the slab and head logs did not already show (0, 126
 and 138 warnings there, 0 errors throughout).
 
-Not measured: the paired whole-kick timing of the merged binary against the
-pre-merge `main` (order 7, bucket 64, adaptive fixture) was not run, because
-the workstation's gaming cap (six CPU threads, a quarter of the GPU, no kick
-arena driver runs) was in force while the merges landed. The branch
-measurements in the list slab and PP loop schedule sections stand as the
-record of the two changes' effect; the merged code reproduces them
-unchanged, so no change beyond run noise is expected, but it is unverified
-on the merged head.
+Whole-kick timing of the merged head against the pre-merge `main`
+(`landing_timing_order7_b64/run.sh`, run after the gaming cap was lifted):
+819d0013 and 00909d26 (the latter checked out detached) were built from the
+same 1024-bucket Release configuration and timed with the automatic policy at
+bucket 64, order 7, five pairs of 15 samples, direct reference over 1,024
+particles, under the shared GPU lock. The machine was quiet: no other GPU
+client, tree builds of 2.0 to 3.0 ms in every run, every process 2.9 to 3.0 s
+of wall time, pair spreads at most 8% (one-minute load 4.3 at the start,
+mostly the IO wait of a backup). The merged binary's force exports are
+bit-identical to the pre-merge binary's on all three fixtures
+(`premerge_vs_merged.md`) and the direct-reference errors agree to every
+printed digit (adaptive force error 2.26e-3, potential 1.16e-4), as the
+branches found against their heads. The policy line differs only by the slab
+branch's control block (528 to 648 bytes, dynamic shared 7,920 to 8,048
+bytes) and the `list slab 145792 bytes per block` field. Speedup is the
+pre-merge time over the merged time, paired range in parentheses:
+
+| fixture | potential | pre-merge 00909d26 | merged 819d0013 | speedup |
+|---|---:|---:|---:|---:|
+| lattice | no | 15.27 ms | 14.62 ms | 1.050x (1.027-1.057) |
+| lattice | yes | 15.17 ms | 14.65 ms | 1.035x (1.026-1.058) |
+| clustered | no | 6.26 ms | 5.56 ms | 1.096x (1.017-1.142) |
+| clustered | yes | 6.15 ms | 5.90 ms | 1.046x (1.039-1.060) |
+| adaptive | no | 12.30 ms | 12.12 ms | 1.013x (0.972-1.041) |
+| adaptive | yes | 12.40 ms | 12.40 ms | 1.000x (0.989-1.010) |
+
+No cell regresses. The lattice and clustered gains are at or above what the
+list slab measured against its own head at bucket 64 (1.022x and 1.054x), the
+PP loop schedule adding a little where that section found it level within 3%.
+The adaptive fixture, which the slab branch improved most (1.038x for forces,
+1.055x with the potential), is level after the merge: 1.013x and 1.000x with
+paired ranges that include one. The pre-merge adaptive times here (12.30 and
+12.40 ms) match the slab section's head (12.35 and 12.59 ms), while the merged
+times (12.12 and 12.40 ms) lie between that head and the slab binary (11.90 and
+11.93 ms), so the merged head shows less than half of the slab's measured
+adaptive gain at bucket 64. Five pairs cannot tell whether that shortfall is
+real: the slab's own adaptive pair range was 0.960-1.070 and this stage's is
+0.972-1.041. The racecheck commit changed no code, and the merge placed the
+slab and PP hunks unchanged (above), so a kernel-side cause is unlikely; a
+matched-division Nsight Systems split of the two binaries would settle it.
 
 ### What remains
 
@@ -1717,10 +1749,12 @@ on the merged head.
   that reads the tree's clustering could beat the fixed rule; the lattice
   penalty of the finer divisions is thread-independent there and was not
   profiled (`handoff_large_sizes/`).
-- The whole-kick time of the merged binary against the pre-merge `main`
-  (order 7, bucket 64, adaptive fixture) is unmeasured; the list slab and PP
-  loop schedule measurements predate the merge (Landing on the reorganized
-  layout).
+- The landing is timed at bucket 64 only (Landing on the reorganized layout):
+  lattice 1.05x, clustered 1.05-1.10x and adaptive level (1.00-1.01x, below
+  the slab branch's 1.04-1.06x against its head, within the pair spreads of
+  both). Buckets 128 to 512, where the PP loop schedule's gains were measured
+  on the branch, and a host/kernel split of the adaptive cell on the merged
+  head are unmeasured.
 - The theta sweep shows order 7 at theta 0.8 is not the cheapest route to its
   own force error; a lower order with a smaller opening angle is, down to
   about 2e-4. The production order and opening angle should be chosen from

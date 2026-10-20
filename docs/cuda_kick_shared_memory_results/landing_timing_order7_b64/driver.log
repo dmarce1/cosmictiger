@@ -1,0 +1,26 @@
+22:18:27 not quiet:  load=8.48
+22:18:47 not quiet:  load=10.88
+22:19:07 not quiet:  load=12.59
+22:19:27 not quiet:  load=9.95
+22:19:47 not quiet:  load=8.10
+22:20:07 not quiet:  load=6.94
+22:21:28 quiet for 60 s (load 4.31); taking the GPU lock
+2026-10-19T22:21:28-05:00 GPU lock acquired, load 4.31
+premerge_auto_cuda_b64_o7_pair0: lattice/phi=0 15.483 ms, lattice/phi=1 15.515 ms, clustered/phi=0 6.324 ms, clustered/phi=1 6.154 ms, adaptive/phi=0 12.299 ms, adaptive/phi=1 12.392 ms
+merged_auto_cuda_b64_o7_pair0: lattice/phi=0 14.653 ms, lattice/phi=1 14.794 ms, clustered/phi=0 5.773 ms, clustered/phi=1 5.900 ms, adaptive/phi=0 12.138 ms, adaptive/phi=1 12.398 ms
+merged_auto_cuda_b64_o7_pair1: lattice/phi=0 14.492 ms, lattice/phi=1 14.644 ms, clustered/phi=0 5.899 ms, clustered/phi=1 5.918 ms, adaptive/phi=0 11.861 ms, adaptive/phi=1 12.308 ms
+premerge_auto_cuda_b64_o7_pair1: lattice/phi=0 15.271 ms, lattice/phi=1 15.492 ms, clustered/phi=0 5.998 ms, clustered/phi=1 6.202 ms, adaptive/phi=0 12.353 ms, adaptive/phi=1 12.397 ms
+premerge_auto_cuda_b64_o7_pair2: lattice/phi=0 15.342 ms, lattice/phi=1 15.165 ms, clustered/phi=0 6.011 ms, clustered/phi=1 6.107 ms, adaptive/phi=0 12.356 ms, adaptive/phi=1 12.476 ms
+merged_auto_cuda_b64_o7_pair2: lattice/phi=0 14.616 ms, lattice/phi=1 14.652 ms, clustered/phi=0 5.500 ms, clustered/phi=1 5.877 ms, adaptive/phi=0 12.120 ms, adaptive/phi=1 12.353 ms
+merged_auto_cuda_b64_o7_pair3: lattice/phi=0 14.677 ms, lattice/phi=1 14.784 ms, clustered/phi=0 5.477 ms, clustered/phi=1 5.769 ms, adaptive/phi=0 12.619 ms, adaptive/phi=1 12.467 ms
+premerge_auto_cuda_b64_o7_pair3: lattice/phi=0 15.078 ms, lattice/phi=1 15.170 ms, clustered/phi=0 6.256 ms, clustered/phi=1 6.112 ms, adaptive/phi=0 12.264 ms, adaptive/phi=1 12.326 ms
+premerge_auto_cuda_b64_o7_pair4: lattice/phi=0 15.035 ms, lattice/phi=1 15.076 ms, clustered/phi=0 6.258 ms, clustered/phi=1 6.177 ms, adaptive/phi=0 12.028 ms, adaptive/phi=1 12.406 ms
+merged_auto_cuda_b64_o7_pair4: lattice/phi=0 14.595 ms, lattice/phi=1 14.571 ms, clustered/phi=0 5.562 ms, clustered/phi=1 5.903 ms, adaptive/phi=0 12.013 ms, adaptive/phi=1 12.462 ms
+Completed; see docs/cuda_kick_shared_memory_results/landing_timing_order7_b64/summary.md
+docs/cuda_kick_shared_memory_results/landing_timing_order7_b64: worst pair spread 1.077 ('merged', 'auto', 'cuda', 64, 7, 'clustered', False), load at start 4.31, process wall 2.9-3.0 s
+| reference | candidate | backend | bucket | order | fixture | acceleration rel L2 | acceleration max pointwise | potential rel L2 | potential max pointwise |
+|---|---|---|---:|---:|---|---:|---:|---:|---:|
+| premerge | merged | cuda | 64 | 7 | adaptive | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| premerge | merged | cuda | 64 | 7 | clustered | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| premerge | merged | cuda | 64 | 7 | lattice | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+
