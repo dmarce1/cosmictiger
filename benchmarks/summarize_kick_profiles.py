@@ -29,7 +29,7 @@ from pathlib import Path
 def nsys(directory):
     rows = {}
     for sub in sorted(Path(directory).iterdir()):
-        if not sub.is_dir():
+        if not (sub / 'run.log').exists():
             continue
         variant = sub.name.rsplit('_', 1)[0]
         kicks = []

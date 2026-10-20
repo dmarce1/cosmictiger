@@ -1,0 +1,9 @@
+Generating SQLite file kick.sqlite from kick.nsys-rep
+Processing [kick.sqlite] with [/opt/nvidia/nsight-systems/2024.6.2/host-linux-x64/reports/cuda_gpu_kern_sum.py] to [stats_cuda_gpu_kern_sum.csv]... PROCESSED
+
+Processing [kick.sqlite] with [/opt/nvidia/nsight-systems/2024.6.2/host-linux-x64/reports/cuda_gpu_trace.py] to [stats_cuda_gpu_trace.csv]... PROCESSED
+
+Processing [kick.sqlite] with [/opt/nvidia/nsight-systems/2024.6.2/host-linux-x64/reports/cuda_api_sum.py] to [stats_cuda_api_sum.csv]... PROCESSED
+
+Processing [kick.sqlite] with [/opt/nvidia/nsight-systems/2024.6.2/host-linux-x64/reports/cuda_api_trace.py] to [stats_cuda_api_trace.csv]... PROCESSED
+
