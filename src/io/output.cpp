@@ -17,13 +17,40 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <filesystem>
+#include <stdexcept>
+#include <string>
+#include <system_error>
+
 #include <silo.h>
 
+#include <cosmictiger/core/options.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/constants.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/simulation_units.hpp>
 #include <cosmictiger/particles/particles.hpp>
+
+std::string outputPath(std::string const& filename) {
+    auto const& options = getOptions();
+    std::filesystem::path const requested(filename);
+    if (!options.run.test.empty() || options.output.directory.empty()) {
+        return filename;
+    }
+    auto const path = requested.is_absolute() ?
+        requested :
+        std::filesystem::path(options.output.directory) / requested;
+    auto const parent = path.parent_path();
+    if (!parent.empty()) {
+        std::error_code error;
+        std::filesystem::create_directories(parent, error);
+        if (error) {
+            throw std::runtime_error(
+                "Cannot create output directory " + parent.string() + ": " + error.message());
+        }
+    }
+    return path.string();
+}
 
 Vector<float> outputGetSlice();
 
@@ -63,7 +90,7 @@ void outputParticles(std::string const filename, Vector<OutputParticle> const& p
 
 void outputTracers(int number) {
     profilerEnter("output_tracers");
-    std::string filename = "tracers." + std::to_string(number) + ".silo";
+    std::string const filename = outputPath("tracers." + std::to_string(number) + ".silo");
     outputParticles(filename, particlesGetTracers());
     profilerExit();
 }
@@ -73,8 +100,7 @@ void outputSlice(int number, double time) {
     constexpr int kNdim = 2;
     auto pixels = outputGetSlice();
     int const res = getOptions().analysis.sliceResolution;
-    std::string const filename =
-        std::string("slice.") + std::to_string(number) + std::string(".silo");
+    std::string const filename = outputPath("slice." + std::to_string(number) + ".silo");
     DBfile* db = DBCreateReal(filename.c_str(), DB_CLOBBER, DB_LOCAL, "Data", DB_PDB);
     Vector<float> x(res + 1);
     Vector<float> y(res + 1);

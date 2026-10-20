@@ -4,6 +4,7 @@
 
 #include <boost/stacktrace.hpp>
 
+#include <cosmictiger/core/diagnostic_output.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/stack_trace.hpp>
 
@@ -27,7 +28,7 @@ static void handler(int sig) {
         break;
     }
     std::cout << "\nStack trace:\n" << boost::stacktrace::stacktrace() << "\n";
-    std::ofstream fp("stack_trace.txt", std::ios::app);
+    std::ofstream fp(stackTraceOutputPath(), std::ios::app);
     fp << "\nStack trace:\n %s\n" << boost::stacktrace::stacktrace() << "\n";
     fp.close();
     exit(1);

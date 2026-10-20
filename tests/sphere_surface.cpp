@@ -16,7 +16,7 @@
 
 #include <hpx/hpx_init.hpp>
 
-#include <cosmictiger/problems/sphere.hpp>
+#include <cosmictiger/sph/sphere.hpp>
 
 namespace detail {
 

@@ -37,6 +37,7 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/io/checkpoint.hpp>
+#include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/particles.hpp>
@@ -68,8 +69,9 @@ namespace detail {
 void checkpointRedshiftAlias(int iteration, double redshift) {
     char aliasName[128];
     snprintf(aliasName, sizeof(aliasName), "checkpoint.z.%.1f", redshift);
+    auto const aliasPath = outputPath(aliasName);
     std::error_code error;
-    auto const status = std::filesystem::symlink_status(aliasName, error);
+    auto const status = std::filesystem::symlink_status(aliasPath, error);
     if (!error && status.type() != std::filesystem::file_type::not_found) {
         PRINT("Redshift checkpoint alias %s already exists; restart from checkpoint.%i\n",
             aliasName, iteration);
@@ -77,7 +79,7 @@ void checkpointRedshiftAlias(int iteration, double redshift) {
     }
     error.clear();
     std::filesystem::create_directory_symlink(
-        "checkpoint." + std::to_string(iteration), aliasName, error);
+        "checkpoint." + std::to_string(iteration), aliasPath, error);
     if (error) {
         PRINT("Unable to create redshift checkpoint alias %s; restart from checkpoint.%i\n",
             aliasName, iteration);
@@ -92,6 +94,7 @@ constexpr uint64_t kCheckpointMagic = 0x4354535048303031ULL;
 constexpr uint32_t kLegacyDarkMatterCheckpointVersion = 1;
 constexpr uint32_t kCheckpointVersion = 3;
 constexpr uint32_t kCheckpointManifestVersion = 1;
+constexpr uint32_t kScenarioManifestVersion = 2;
 constexpr uint32_t kMonaghanSph = 1;
 constexpr uint32_t kCompactSphLayout = 1U << 24;
 constexpr uint64_t kFnvOffsetBasis = 14695981039346656037ULL;
@@ -115,11 +118,11 @@ struct CheckpointFileCloser {
 using CheckpointFile = std::unique_ptr<FILE, CheckpointFileCloser>;
 
 fs::path checkpointDirectory(int iteration) {
-    return "checkpoint." + std::to_string(iteration);
+    return outputPath("checkpoint." + std::to_string(iteration));
 }
 
 fs::path checkpointStagingDirectory(int iteration) {
-    return "checkpoint." + std::to_string(iteration) + ".incomplete";
+    return outputPath("checkpoint." + std::to_string(iteration) + ".incomplete");
 }
 
 fs::path checkpointRankFile(fs::path const& directory, int rank) {
@@ -182,13 +185,59 @@ uint32_t checkpointFileVersion(fs::path const& path) {
     return version;
 }
 
+void writeCheckpointScenario(fs::path const& directory) {
+    auto const& options = getOptions();
+    if (!options.run.test.empty()) {
+        return;
+    }
+    auto const path = directory / "scenario.meta";
+    CheckpointFile file(fopen(path.c_str(), "wb"));
+    if (!file ||
+        fprintf(file.get(), "COSMICTIGER_SCENARIO 1\n%s\n%.17g\n%d\n", options.run.scenario.c_str(),
+            options.run.endTime, int(options.gravity.enabled)) < 0) {
+        THROW_ERROR("Unable to write checkpoint scenario metadata %s\n", path.c_str());
+    }
+    flushAndCloseCheckpointFile(file, path);
+}
+
+void validateCheckpointScenario(fs::path const& directory) {
+    if (!getOptions().run.test.empty()) {
+        return;
+    }
+    auto const path = directory / "scenario.meta";
+    std::ifstream file(path);
+    if (!file) {
+        THROW_ERROR("Checkpoint %s has no scenario metadata; use its original executable to "
+                    "resume a checkpoint written before first-class scenarios\n",
+            directory.c_str());
+    }
+    std::string label;
+    std::string scenario;
+    int version = 0;
+    int gravity = -1;
+    double endTime = -1.0;
+    if (!(file >> label >> version >> scenario >> endTime >> gravity) ||
+        label != "COSMICTIGER_SCENARIO" || version != 1 || scenario != getOptions().run.scenario ||
+        endTime != getOptions().run.endTime || gravity != int(getOptions().gravity.enabled)) {
+        THROW_ERROR("Checkpoint scenario, run.endTime or gravity.enabled differs from the "
+                    "requested run: %s\n",
+            path.c_str());
+    }
+    file >> std::ws;
+    if (file.peek() != std::char_traits<char>::eof()) {
+        THROW_ERROR("Checkpoint scenario metadata %s has unexpected trailing data\n", path.c_str());
+    }
+}
+
 void writeCheckpointManifest(fs::path const& directory, int iteration) {
     fs::path const path = directory / "checkpoint.meta";
     CheckpointFile file(fopen(path.c_str(), "wb"));
     if (!file) {
         THROW_ERROR("Unable to create checkpoint manifest %s\n", path.c_str());
     }
-    if (fprintf(file.get(), "COSMICTIGER_CHECKPOINT %u %u %i %i\n", kCheckpointManifestVersion,
+    auto const manifestVersion =
+        getOptions().run.test.empty() ? kScenarioManifestVersion : kCheckpointManifestVersion;
+    if (fprintf(file.get(), "COSMICTIGER_CHECKPOINT %u %u %i %i\n", manifestVersion,
             kCheckpointVersion, iteration, hpxSize()) < 0) {
         THROW_ERROR("Unable to write checkpoint manifest %s\n", path.c_str());
     }
@@ -204,6 +253,14 @@ void writeCheckpointManifest(fs::path const& directory, int iteration) {
             THROW_ERROR("Unable to write checkpoint manifest %s\n", path.c_str());
         }
     }
+    if (manifestVersion == kScenarioManifestVersion) {
+        auto const info = checkpointFileInfo(directory / "scenario.meta");
+        if (fprintf(file.get(), "SCENARIO %llu %016llx\n",
+                static_cast<unsigned long long>(info.size),
+                static_cast<unsigned long long>(info.checksum)) < 0) {
+            THROW_ERROR("Unable to write scenario checksum to %s\n", path.c_str());
+        }
+    }
     flushAndCloseCheckpointFile(file, path);
 }
 
@@ -211,6 +268,7 @@ void validateCheckpointDirectory(fs::path const& directory, int iteration) {
     if (!fs::is_directory(directory)) {
         THROW_ERROR("Checkpoint directory %s does not exist\n", directory.c_str());
     }
+    validateCheckpointScenario(directory);
     fs::path const manifestPath = directory / "checkpoint.meta";
     if (!fs::exists(manifestPath)) {
         // Checkpoints written before format 3 have no manifest or integrity hashes.
@@ -233,7 +291,10 @@ void validateCheckpointDirectory(fs::path const& directory, int iteration) {
     int savedIteration = -1;
     int rankCount = 0;
     if (!(manifest >> label >> manifestVersion >> payloadVersion >> savedIteration >> rankCount) ||
-        label != "COSMICTIGER_CHECKPOINT" || manifestVersion != kCheckpointManifestVersion ||
+        label != "COSMICTIGER_CHECKPOINT" ||
+        (manifestVersion != kCheckpointManifestVersion &&
+            manifestVersion != kScenarioManifestVersion) ||
+        (getOptions().run.test.empty() && manifestVersion != kScenarioManifestVersion) ||
         payloadVersion != kCheckpointVersion || savedIteration != iteration ||
         rankCount != hpxSize()) {
         THROW_ERROR("Checkpoint manifest %s has an incompatible version, iteration or locality "
@@ -257,6 +318,20 @@ void validateCheckpointDirectory(fs::path const& directory, int iteration) {
         if (actual.size != savedSize || actual.checksum != savedChecksum) {
             THROW_ERROR(
                 "Checkpoint rank file %s failed size or checksum validation\n", rankPath.c_str());
+        }
+    }
+    if (manifestVersion == kScenarioManifestVersion) {
+        std::string scenarioLabel;
+        uint64_t savedSize = 0;
+        uint64_t savedChecksum = 0;
+        if (!(manifest >> scenarioLabel >> std::dec >> savedSize >> std::hex >> savedChecksum) ||
+            scenarioLabel != "SCENARIO") {
+            THROW_ERROR(
+                "Checkpoint manifest %s has an invalid scenario entry\n", manifestPath.c_str());
+        }
+        auto const actual = checkpointFileInfo(directory / "scenario.meta");
+        if (actual.size != savedSize || actual.checksum != savedChecksum) {
+            THROW_ERROR("Checkpoint scenario metadata failed size or checksum validation\n");
         }
     }
     manifest >> std::ws;
@@ -719,13 +794,14 @@ void writeCheckpoint(DriverParameters params) {
         future.get();
     }
     if (hpxRank() == 0) {
+        detail::writeCheckpointScenario(stagingDirectory);
         detail::writeCheckpointManifest(stagingDirectory, params.iter);
         detail::syncDirectory(stagingDirectory);
         if (detail::fs::exists(directory)) {
             THROW_ERROR("Refusing to replace existing checkpoint %s\n", directory.c_str());
         }
         detail::fs::rename(stagingDirectory, directory);
-        detail::syncDirectory(".");
+        detail::syncDirectory(directory.has_parent_path() ? directory.parent_path() : ".");
         PRINT("Done writing checkpoint %s\n", directory.c_str());
     }
     profilerExit();

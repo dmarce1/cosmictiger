@@ -50,8 +50,10 @@
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/drift.hpp>
 #include <cosmictiger/particles/particles.hpp>
-#include <cosmictiger/problems/hydro.hpp>
-#include <cosmictiger/problems/plummer.hpp>
+#include <cosmictiger/scenarios/cosmology.hpp>
+#include <cosmictiger/scenarios/glass.hpp>
+#include <cosmictiger/scenarios/plummer.hpp>
+#include <cosmictiger/scenarios/scenario.hpp>
 #include <cosmictiger/sph/sph.hpp>
 #include <cosmictiger/sph/sph_chemistry.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
@@ -83,7 +85,7 @@ static void flushTimings(bool reset) {
     auto const theta = getOptions().gravity.openingAngle;
     char* fname;
     asprintf(&fname, "buckets.%.2f.txt", theta);
-    FILE* fp = fopen(fname, "wt");
+    FILE* fp = fopen(outputPath(fname).c_str(), "wt");
     free(fname);
     for (int i = 0; i < timings.size(); i++) {
         if (timings[i].numberOfParticles > 0.0) {
@@ -214,6 +216,8 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     if (adot != 0.0) {
         runParameters.maximumTimestep = SCALE_DT * scale / fabs(adot);
     }
+    runParameters.maximumTimestep = std::min(runParameters.maximumTimestep,
+        std::ldexp(static_cast<float>(t0), -getOptions().run.minRung));
     runParameters.expansionRate = adot;
     runParameters.scaleFactor = scale;
     runParameters.baseTimestep = t0;
@@ -436,7 +440,7 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
 
     float maximumInverseTimestep = std::max(inverseSoundTimestep, inverseViscosityTimestep);
     maximumInverseTimestep = std::max(maximumInverseTimestep, inverseAccelerationTimestep);
-    FILE* fp = fopen("timestep.txt", "at");
+    FILE* fp = fopen(outputPath("timestep.txt").c_str(), "at");
     fprintf(fp, "%e %i %e %e %e ", tau, maxRung, inverseSoundTimestep, inverseViscosityTimestep,
         inverseAccelerationTimestep);
     if (maximumInverseTimestep == inverseSoundTimestep) {
@@ -533,6 +537,42 @@ std::pair<KickReturn, TreeCreateReturn> kickStep(int minrung, double scale, doub
     particlesCacheFree();
     PRINT("kick done\n");
     return std::make_pair(kr, sr);
+}
+
+std::pair<KickReturn, TreeCreateReturn> advanceForces(int minRung, double scale,
+    double scaleDerivative, double time, double baseTimestep, double theta, bool firstCall,
+    bool fullEvaluation, EnergiesT& energies) {
+    std::pair<KickReturn, TreeCreateReturn> result{};
+    if (getOptions().gravity.enabled) {
+        result = kickStep(
+            minRung, scale, scaleDerivative, baseTimestep, theta, firstCall, fullEvaluation);
+    } else {
+        // Migration must finish before the SPH tree captures gas particle indices.
+        domainsBegin(minRung);
+        domainsEnd();
+    }
+    auto& gravity = result.first;
+    if (getOptions().hydro.enabled) {
+        sphStep1(minRung);
+        gravity.maxRung = std::max(int(gravity.maxRung),
+            sphStep2(minRung, scale, time, baseTimestep, 1, scaleDerivative, &energies)
+                .maximumRung);
+        if (getOptions().chemistry.enabled &&
+            gravity.maxRung > getOptions().chemistry.synchronizedRung) {
+            THROW_ERROR("Chemistry synchronized rung violates the gravity timestep bound; "
+                        "increase chemistry.synchronizedRung\n");
+        }
+        if (fullEvaluation) {
+            energies.pot = gravity.pot / scale;
+        }
+        energies.kin += gravity.darkMatterKineticCorrection / sqr(scale);
+        energies.xmom += gravity.darkMatterXMomentumCorrection / scale;
+        energies.ymom += gravity.darkMatterYMomentumCorrection / scale;
+        energies.zmom += gravity.darkMatterZMomentumCorrection / scale;
+        energies.nmom += gravity.darkMatterMomentumNormCorrection / scale;
+        energies.tckin = energies.kin * sqr(scale);
+    }
+    return result;
 }
 
 std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int maxRung,
@@ -770,7 +810,7 @@ double doPowerSpectrum(int num, double a) {
     }
     double maxpow = 0.0;
     std::string filename = "power." + std::to_string(num) + ".txt";
-    FILE* fp = fopen(filename.c_str(), "wt");
+    FILE* fp = fopen(outputPath(filename).c_str(), "wt");
     if (fp == NULL) {
         THROW_ERROR("Unable to open %s for writing\n", filename.c_str());
     }
@@ -812,7 +852,7 @@ void outputTimeFile() {
     double tau = cosmosConformalTime(a0 * 1.0e-6, a0);
     double t = cosmosTime(a0 * 1.0e-6, a0);
     double z;
-    FILE* fp = fopen("time.txt", "wt");
+    FILE* fp = fopen(outputPath("time.txt").c_str(), "wt");
     if (fp == NULL) {
         THROW_ERROR("Unable to open time.txt for reading\n");
     }
@@ -834,17 +874,11 @@ void outputTimeFile() {
     profilerExit();
 }
 
-void saveGlass() {
-    int const n = getOptions().initial.particlesPerDimension;
-    FILE* fp = fopen("glass.bin", "wb");
-    fwrite(&n, sizeof(int), 1, fp);
-    fwrite(&particlesPos(XDIM, 0), sizeof(Fixed32), particlesSize(), fp);
-    fwrite(&particlesPos(YDIM, 0), sizeof(Fixed32), particlesSize(), fp);
-    fwrite(&particlesPos(ZDIM, 0), sizeof(Fixed32), particlesSize(), fp);
-    fclose(fp);
-}
-
 void driver() {
+    if (scenarios::definition(getOptions().run.scenario).fixedTime) {
+        runFixedScenario();
+        return;
+    }
     Timer totalTime;
     totalTime.start();
     Timer tmr;
@@ -860,41 +894,15 @@ void driver() {
         params = readCheckpoint();
     } else {
         outputTimeFile();
-        if (getOptions().initial.createGlass) {
-            if (hpxSize() != 1) {
-                THROW_ERROR("Create glass can only be done with a single locality\n");
-            }
-            size_t const numberOfParticles = getOptions().initial.numberOfParticles;
-            size_t const b = hpxRank() * numberOfParticles / hpxSize();
-            size_t const e = (hpxRank() + 1) * numberOfParticles / hpxSize();
-            particlesResize(e - b);
-            for (ParticleInteger i = 0; i < e - b; i++) {
-                double const x = rand1();
-                double const y = rand1();
-                double const z = rand1();
-                particlesPos(XDIM, i) = x;
-                particlesPos(YDIM, i) = y;
-                particlesPos(ZDIM, i) = z;
-                particlesVel(XDIM, i) = 0.0;
-                particlesVel(YDIM, i) = 0.0;
-                particlesVel(ZDIM, i) = 0.0;
-                particlesRung(0) = 0;
-            }
-            params.tauMax = 1.0;
-            params.a = 1.0;
-            params.adot = 0.0;
+        if (getOptions().run.scenario == "glass") {
+            scenarios::initializeGlass(params);
+        } else if (getOptions().run.scenario == "plummer") {
+            scenarios::initializePlummer(params);
         } else {
-            if (getOptions().initial.plummer) {
-                params.tauMax = 1.0e-4;
-                params.a = 1.0;
-                params.adot = 0.0;
-                plummerInit(1e-3);
-            } else {
-                params.a = a0;
-                params.adot = cosmosDadt(a0);
-                params.tauMax = cosmosConformalTime(a0, 1.0);
-                initialize(getOptions().cosmology.startRedshift);
-            }
+            scenarios::initializeCosmology(params);
+        }
+        if (getOptions().run.endTime > 0.0) {
+            params.tauMax = getOptions().run.endTime;
         }
         if (getOptions().analysis.tracers) {
             particlesSetTracers();
@@ -1111,8 +1119,8 @@ void driver() {
             auto opts = getOptions();
             opts.gravity.supportRadius =
                 hsoft0;    // Fixed comoving support for every particle type.
-            if (getOptions().initial.createGlass) {
-                theta = 0.4;
+            if (getOptions().run.scenario != "cosmology") {
+                theta = getOptions().gravity.openingAngle;
             } else {
                 /*				if (z > 20.0) {
                  theta = 0.41;
@@ -1169,9 +1177,8 @@ void driver() {
                 //			particles_displace(rand1(), rand1(), rand1());
             }
             if (getOptions().hydro.enabled) {
-                tmp = kickStep(minrung, a, a * adot, t0, theta, tau == 0.0, fullEval);
-                // Migration must finish before the SPH tree stores gas indices.
-                sphStep1(minrung);
+                tmp = advanceForces(
+                    minrung, a, a * adot, tau, t0, theta, tau == 0.0, fullEval, energies);
             } else {
                 tmp = kickStepHierarchical(om, maxRung, a, adot, tau, t0, theta, &energies,
                     minrung0, fullEval, &lcFut, nocrop, sqrt(glassError));
@@ -1187,26 +1194,6 @@ void driver() {
             KickReturn kr = tmp.first;
             int maxRung0 = maxRung;
             maxRung = kr.maxRung;
-            if (getOptions().hydro.enabled) {
-                maxRung = std::max(
-                    maxRung, sphStep2(minrung, a, tau, t0, 1, a * adot, &energies).maximumRung);
-                if (getOptions().chemistry.enabled &&
-                    maxRung > getOptions().chemistry.synchronizedRung) {
-                    THROW_ERROR("Chemistry synchronized rung violates the dark-matter gravity "
-                                "timestep bound; increase chemistry.synchronizedRung\n");
-                }
-                if (fullEval) {
-                    energies.pot = kr.pot / a;
-                }
-                // Gas is synchronized by SPH above; undo the diagnostic contribution
-                // of the next DM half-kick without changing stored particle momenta.
-                energies.kin += kr.darkMatterKineticCorrection / sqr(a);
-                energies.xmom += kr.darkMatterXMomentumCorrection / a;
-                energies.ymom += kr.darkMatterYMomentumCorrection / a;
-                energies.zmom += kr.darkMatterZMomentumCorrection / a;
-                energies.nmom += kr.darkMatterMomentumNormCorrection / a;
-                energies.tckin = energies.kin * sqr(a);
-            }
 
             //			PRINT("GRAVITY max_rung = %i\n", kr.max_rung);
             if (minrung <= 0) {
@@ -1217,15 +1204,15 @@ void driver() {
                     energies.cosmic = -energy;
                     energy = 0.0;
                 }
-                double const norm = getOptions().hydro.enabled ?
-                    energies.kin + fabs(energies.pot) + energies.therm + fabs(energies.heating) +
-                        fabs(energies.cosmic) :
-                    energies.kin + fabs(energies.pot) + energies.cosmic;
+                double const norm = std::max(fabs(energies.kin) + fabs(energies.pot) +
+                        fabs(energies.therm) + fabs(energies.heating) + fabs(energies.cosmic),
+                    1.0e-30);
                 double const err = (energy - energy0) / norm;
                 if (tau > 0.0) {
-                    glassError = fabs(energies0.pot - a * energies.pot) / (a * energies.pot);
+                    glassError = fabs(energies0.pot - a * energies.pot) /
+                        std::max(fabs(a * energies.pot), 1.0e-30);
                 }
-                FILE* fp = fopen("energy.txt", "at");
+                FILE* fp = fopen(outputPath("energy.txt").c_str(), "at");
                 double const momentumNorm = energies.nmom > 0.0 ? energies.nmom : 1.0;
                 fprintf(fp, "%e %e %e %e %e %e %e %e %e %e\n", tau / t0, a,
                     energies.xmom / momentumNorm, energies.ymom / momentumNorm,
@@ -1271,7 +1258,7 @@ void driver() {
             }
             dtm.stop();
             driftTime += dtm.read();
-            FILE* textfp = fopen("progress.txt", "at");
+            FILE* textfp = fopen(outputPath("progress.txt").c_str(), "at");
             if (textfp == nullptr) {
                 THROW_ERROR("unable to open progress.txt for writing\n");
             }
@@ -1311,7 +1298,9 @@ void driver() {
             tau += dt;
             thisIter++;
             years += dyears;
-            if (1.0 / a < getOptions().cosmology.endRedshift + 1.0) {
+            if (tau >= tauMax ||
+                (getOptions().run.scenario == "cosmology" &&
+                    1.0 / a < getOptions().cosmology.endRedshift + 1.0)) {
                 PRINT("Reached minimum redshift, exiting...\n");
                 break;
             } else if (thisIter > getOptions().run.maxIterations) {
@@ -1331,16 +1320,21 @@ void driver() {
             lcFut = hpx::make_ready_future();
 
         } while (itime != 0);
-        if (thisIter > getOptions().run.maxIterations ||
-            1.0 / a < getOptions().cosmology.endRedshift + 1.0) {
+        if (tau >= tauMax || thisIter > getOptions().run.maxIterations ||
+            (getOptions().run.scenario == "cosmology" &&
+                1.0 / a < getOptions().cosmology.endRedshift + 1.0)) {
             break;
         } else if (getOptions().initial.createGlass && std::abs(glassError) < 1.0e-5) {
-            saveGlass();
+            scenarios::saveGlass();
             break;
         }
     }
+    viewOutputViews(params.step + 1, a, true);
+    if (getOptions().initial.createGlass) {
+        scenarios::saveGlass();
+    }
     buckets2.stop();
-    FILE* fp = fopen("buckets.txt", "at");
+    FILE* fp = fopen(outputPath("buckets.txt").c_str(), "at");
     fprintf(fp, "%i %e %e %e\n", getOptions().compute.bucketSize, buckets50.read(),
         buckets20.read(), buckets2.read());
     fclose(fp);

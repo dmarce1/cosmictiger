@@ -21,6 +21,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <limits>
@@ -35,6 +36,7 @@
 #include <cosmictiger/cosmology/initialize.hpp>
 #include <cosmictiger/cosmology/recfast.hpp>
 #include <cosmictiger/cosmology/zero_order.hpp>
+#include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/constants.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/simulation_units.hpp>
@@ -52,8 +54,8 @@
 // https://www.astro.ubc.ca/people/scott/recfast.readme
 std::function<double(double)> runRecfast(CosmicParameters params) {
     std::string const rank = std::to_string(hpxRank());
-    std::string const inputFilename = "recfast.in." + rank;
-    std::string const outputFilename = "recfast.out." + rank;
+    std::string const inputFilename = outputPath("recfast.in." + rank);
+    std::string const outputFilename = outputPath("recfast.out." + rank);
     if (std::remove(outputFilename.c_str()) != 0 && errno != ENOENT) {
         THROW_ERROR("Unable to remove old RECFAST output %s\n", outputFilename.c_str());
     }
@@ -61,7 +63,8 @@ std::function<double(double)> runRecfast(CosmicParameters params) {
     if (!input) {
         THROW_ERROR("Unable to write to %s\n", inputFilename.c_str());
     }
-    input << std::setprecision(std::numeric_limits<double>::max_digits10) << outputFilename << '\n'
+    input << std::setprecision(std::numeric_limits<double>::max_digits10)
+          << std::filesystem::path(outputFilename).filename().string() << '\n'
           << params.omegaB << ' ' << params.omegaC << ' ' << 1.0 - params.omegaB - params.omegaC
           << '\n'
           << 100 * params.hubble << ' ' << params.theta * 2.73 << ' ' << params.y << "\n1\n6\n";
@@ -69,7 +72,20 @@ std::function<double(double)> runRecfast(CosmicParameters params) {
     if (!input) {
         THROW_ERROR("Unable to finish writing %s\n", inputFilename.c_str());
     }
-    std::string const command = "./recfast < " + inputFilename + " > /dev/null 2> /dev/null";
+    auto const shellQuote = [](std::string const& value) {
+        std::string quoted = "'";
+        for (char character : value) {
+            quoted += character == '\'' ? "'\\''" : std::string(1, character);
+        }
+        return quoted + "'";
+    };
+    auto const childDirectory =
+        std::filesystem::absolute(std::filesystem::path(outputFilename)).parent_path();
+    auto const executable = std::filesystem::absolute("recfast");
+    std::string const command = "cd " + shellQuote(childDirectory.string()) + " && " +
+        shellQuote(executable.string()) + " < " +
+        shellQuote(std::filesystem::path(inputFilename).filename().string()) +
+        " > /dev/null 2> /dev/null";
     if (std::system(command.c_str()) != 0) {
         THROW_ERROR("Unable to run %s\n", command.c_str());
     }
@@ -220,7 +236,7 @@ PowerSpectrumFunction computePowerSpectrum() {
         double const logkmin = log(kmin);
         double const logkmax = log(kmax);
         double const dlogk = (logkmax - logkmin) / m;
-        FILE* fp = fopen("power.dat", "wt");
+        FILE* fp = fopen(outputPath("power.dat").c_str(), "wt");
         double const lh = params.hubble;
         double const lh3 = lh * lh * lh;
         for (int i = 1; i < m - 2; i++) {

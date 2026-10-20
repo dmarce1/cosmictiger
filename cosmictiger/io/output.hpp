@@ -20,6 +20,12 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #ifndef OUTPUT_HPP_
 #define OUTPUT_HPP_
 
+#include <string>
+
+// Resolve simulation output beneath output.directory; developer test modes retain
+// their existing working-directory files. Absolute paths are already resolved.
+std::string outputPath(std::string const& filename);
+
 void outputTracers(int number);
 void outputSlice(int number, double time);
 

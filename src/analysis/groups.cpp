@@ -34,6 +34,7 @@
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/gravity/bh.hpp>
+#include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/constants.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/particles/particles.hpp>
@@ -101,7 +102,7 @@ void groupsPrepareHistory(int number) {
     Vector<Pair<GroupInteger>> entries;
     int latest = -1;
     std::filesystem::path latestDirectory;
-    for (auto const& item : std::filesystem::directory_iterator(".")) {
+    for (auto const& item : std::filesystem::directory_iterator(outputPath("."))) {
         if (!item.is_directory()) {
             continue;
         }
@@ -240,11 +241,11 @@ Vector<GroupInteger> groupsExist(Vector<GroupInteger> grps) {
 std::pair<size_t, size_t> groupsSave(int number, double scale, double time) {
     if (hpxRank() == 0) {
         PRINT("Writing group database\n");
-        std::filesystem::create_directories("groups." + std::to_string(number));
+        std::filesystem::create_directories(outputPath("groups." + std::to_string(number)));
         // Invalidate a previous attempt before touching its per-rank files.
-        std::filesystem::remove("groups." + std::to_string(number) + "/rockstar_hosts.complete");
-        std::string const fname =
-            std::string("groups.") + std::to_string(number) + std::string("/groups.dat");
+        std::filesystem::remove(
+            outputPath("groups." + std::to_string(number) + "/rockstar_hosts.complete"));
+        std::string const fname = outputPath("groups." + std::to_string(number) + "/groups.dat");
         FILE* fp = fopen(fname.c_str(), "wb");
         if (fp == NULL) {
             THROW_ERROR("Unable to open %s for writing\n", fname.c_str());
@@ -266,9 +267,8 @@ std::pair<size_t, size_t> groupsSave(int number, double scale, double time) {
         futs.push_back(hpx::async<GroupsSaveAction>(c, number, scale, time));
     }
 
-    std::string const fname = std::string("groups.") + std::to_string(number) +
-        std::string("/groups.") + std::to_string(number) + "." + std::to_string(hpxRank()) +
-        std::string(".dat");
+    std::string const fname = outputPath("groups." + std::to_string(number) + "/groups." +
+        std::to_string(number) + "." + std::to_string(hpxRank()) + ".dat");
     FILE* fp = fopen(fname.c_str(), "wb");
     if (fp == NULL) {
         THROW_ERROR("Unable to open %s\n", fname.c_str());
@@ -286,7 +286,7 @@ std::pair<size_t, size_t> groupsSave(int number, double scale, double time) {
     if (groupWriteFailed || groupClose != 0) {
         throw std::runtime_error("Incomplete group catalogue: " + fname);
     }
-    std::string const directory = "groups." + std::to_string(number) + "/";
+    std::string const directory = outputPath("groups." + std::to_string(number)) + "/";
     std::string const rank = std::to_string(hpxRank());
     std::string const recordName = directory + "rockstar." + rank + ".dat";
     rockstarWriteCatalogue(recordName, rockstarRecords.data(), rockstarRecords.size());

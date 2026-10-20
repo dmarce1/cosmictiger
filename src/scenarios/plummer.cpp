@@ -20,62 +20,47 @@
 #include <cmath>
 #include <functional>
 
+#include <cosmictiger/core/driver.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/particles/particles.hpp>
-#include <cosmictiger/problems/plummer.hpp>
+#include <cosmictiger/scenarios/plummer.hpp>
 
-double nfwDensity(double r) {
-    double rmax = 10.0;
-    return 1.0 / r / sqr(1.0 + r) / (4.0 * M_PI * (-1.0 + 1.0 / (1.0 + rmax) + log(1.0 + rmax)));
-}
+namespace scenarios {
 
-double sampleDensityDistribution(std::function<double(double)> const& f) {
-    double target = rand1();
-    double menc = 0.0;
-    double r = 0.0;
-    double dr = 0.001;
-    double iValue, i0;
-    iValue = 0.0;
-    while (menc < target) {
-        menc += 0.5 * iValue * dr;
-        i0 = 0.5 * iValue;
-        r += dr;
-        iValue = f(r) * 4.0 * M_PI * sqr(r);
-        i0 += 0.5 * iValue;
-        menc += 0.5 * iValue * dr;
+namespace detail {
+
+    double sampleDensityDistribution(std::function<double(double)> const& f) {
+        double target = rand1();
+        double menc = 0.0;
+        double r = 0.0;
+        double dr = 0.001;
+        double iValue, i0;
+        iValue = 0.0;
+        while (menc < target) {
+            menc += 0.5 * iValue * dr;
+            i0 = 0.5 * iValue;
+            r += dr;
+            iValue = f(r) * 4.0 * M_PI * sqr(r);
+            i0 += 0.5 * iValue;
+            menc += 0.5 * iValue * dr;
+        }
+        double dr2 = (menc - target) / i0;
+        r -= dr2;
+        return r;
     }
-    double dr2 = (menc - target) / i0;
-    r -= dr2;
-    return r;
-}
-void plummerInit(double r0) {
+}    // namespace detail
+
+void initializePlummerParticles() {
     auto const numberOfParticles = getOptions().initial.numberOfParticles;
     particlesResize(numberOfParticles);
-    auto const pdf = [](double x) {
-        if (x > 0.0) {
-            return sqr(x) * pow(1.0 + sqr(x), -2.5);
-        } else {
-            return pow(1.0 + sqr(1.0 / x), -2.5) / sqr(sqr(x));
-        }
-    };
-
-    /*	distribution_init([](float x, float y, float z) {
-     float r = sqrt(sqr(x - 0.51, y - 0.51, z - 0.51));
-     r *= 4.0;
-     return 1.0 / r / sqr(1+r);
-     return 1000*pow(1.0+sqr(r),-2.5);
-     });
-     return;*/
-
     double x0 = 0.5;
     double y0 = 0.5;
     double z0 = 0.5;
 
     for (ParticleInteger i = 0; i < numberOfParticles; i += 2) {
-        double r, p;
-        //		r = sample_density_distribution(nfw_density);
-        r = sampleDensityDistribution(
+        double r;
+        r = detail::sampleDensityDistribution(
             [](double r) { return (3.0 / (4.0 * M_PI)) * pow(1.0 + sqr(r), -2.5); });
         r *= getOptions().initial.plummerRadius;
         double nx, ny, nz, n2;
@@ -92,11 +77,8 @@ void plummerInit(double r0) {
         double x = x0 + r * nx;
         double y = y0 + r * ny;
         double z = z0 + r * nz;
-        // double e = abs();
-        //	double v = sqrt(-2.0 * log(rand1())) * abs(cos(2.0 * M_PI * rand1()));
         double v = sqrt(getOptions().gravity.gm * numberOfParticles /
             sqrt(sqr(getOptions().initial.plummerRadius) + sqr(r)) / 2);
-        double v0 = sqrt(getOptions().gravity.gm * numberOfParticles * 0.25);
         do {
             nx = 2.0 * rand1() - 1.0;
             ny = 2.0 * rand1() - 1.0;
@@ -124,16 +106,13 @@ void plummerInit(double r0) {
         particlesVel(ZDIM, i + 1) = -vz;
         particlesRung(i + 1) = 0;
         particlesRung(i) = 0;
-        /*if (i % 4 == 0) {
-            particles_pos(XDIM, i) += 0.025;
-            particles_vel(XDIM, i) -= 50.0 * v0;
-            particles_pos(XDIM, i + 1) += 0.025;
-            particles_vel(XDIM, i + 1) -= 50.0 * v0;
-        } else {
-            particles_pos(XDIM, i) -= 0.025;
-            particles_vel(XDIM, i) += 50.0 * v0;
-            particles_pos(XDIM, i + 1) -= 0.025;
-            particles_vel(XDIM, i + 1) += 50.0 * v0;
-        }*/
     }
 }
+void initializePlummer(DriverParameters& state) {
+    state.a = 1.0;
+    state.adot = 0.0;
+    state.tauMax = 1.0e-4;
+    initializePlummerParticles();
+}
+
+}    // namespace scenarios

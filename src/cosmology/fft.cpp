@@ -24,6 +24,7 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/cosmology/fft.hpp>
 #include <cosmictiger/cuda/cuda.hpp>
+#include <cosmictiger/io/output.hpp>
 
 #define MAX_BOX_SIZE (8 * 1024 * 1024)
 
@@ -71,7 +72,8 @@ HPX_PLAIN_ACTION(finishForceReal, FinishForceRealAction);
 
 void fft3d2silo(bool real) {
     if (real) {
-        DBfile* db = DBCreateReal("real.silo", DB_CLOBBER, DB_LOCAL, "", DB_PDB);
+        DBfile* db =
+            DBCreateReal(outputPath("real.silo").c_str(), DB_CLOBBER, DB_LOCAL, "", DB_PDB);
         char const* coordnames[] = {"x", "y", "z"};
         Vector<float> x;
         Vector<float> y;
@@ -94,7 +96,8 @@ void fft3d2silo(bool real) {
             DB_NODECENT, NULL);
         DBClose(db);
     } else {
-        DBfile* db = DBCreateReal("complex.silo", DB_CLOBBER, DB_LOCAL, "", DB_PDB);
+        DBfile* db =
+            DBCreateReal(outputPath("complex.silo").c_str(), DB_CLOBBER, DB_LOCAL, "", DB_PDB);
         char const* coordnames[] = {"z", "y", "x"};
         Vector<float> x;
         Vector<float> y;

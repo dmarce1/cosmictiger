@@ -42,11 +42,12 @@
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #include <cosmictiger/io/checkpoint.hpp>
+#include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/fp16.hpp>
 #include <cosmictiger/math/simd.hpp>
 #include <cosmictiger/particles/particles.hpp>
-#include <cosmictiger/problems/test.hpp>
 #include <cosmictiger/sph/sph.hpp>
+#include <tests/test.hpp>
 
 int hpx_main(int argc, char* argv[]) {
     /*	simd_double8 x;
@@ -59,13 +60,6 @@ int hpx_main(int argc, char* argv[]) {
     for (double q = 0.0; q < 1.0; q += 0.01) {
         //		PRINT( "%e %e %e\n",q, sph_Wh3(q,1.0),sph_dWh3dq(q,1.0));
     }
-    FILE* fp = fopen("soft.txt", "wt");
-    for (double r = 0.0; r < 1.0; r += 0.01) {
-        double f, phi;
-        gravitySofteningKernel(f, phi, r * r, 1.0, 1.0, 1.0, true);
-        fprintf(fp, "%e %e %e\n", r, phi, f);
-    }
-    fclose(fp);
     if (!i.is_lock_free()) {
         PRINT("std::atomic<int> is not lock free!\n");
         PRINT("std::atomic<int> must be lock_free for CosmicTiger to run properly.\n");
@@ -76,14 +70,27 @@ int hpx_main(int argc, char* argv[]) {
     }
     PRINT("tree_node size = %i\n", sizeof(TreeNode));
     hpxInit();
-    PRINT("Starting mem use daemon\n");
-    startMemuseDaemon();
+    bool daemonStarted = false;
     try {
         if (processOptions(argc, argv)) {
+            startMemuseDaemon();
+            daemonStarted = true;
+            FILE* fp = fopen(outputPath("soft.txt").c_str(), "wt");
+            if (fp == nullptr) {
+                THROW_ERROR("Unable to write soft.txt\n");
+            }
+            for (double r = 0.0; r < 1.0; r += 0.01) {
+                double f, phi;
+                gravitySofteningKernel(f, phi, r * r, 1.0, 1.0, 1.0, true);
+                fprintf(fp, "%e %e %e\n", r, phi, f);
+            }
+            fclose(fp);
+
             // Help, invalid options and the metadata-only checkpoint test need no GPU.
             if (getOptions().run.test == "checkpointState" && !getOptions().hydro.enabled) {
                 checkpointStateTest();
                 stopMemuseDaemon();
+                daemonStarted = false;
                 return hpx::finalize();
             }
 #ifdef USE_CUDA
@@ -98,7 +105,10 @@ int hpx_main(int argc, char* argv[]) {
                 constexpr int kOrder = decltype(orderTag)::value;
                 FmmExpansion<SimdFloat, kOrder> d;
                 Array<SimdFloat, NDIM> xValue;
-                FILE* fp = fopen("ewald.txt", "wt");
+                FILE* fp = fopen(outputPath("ewald.txt").c_str(), "wt");
+                if (fp == nullptr) {
+                    THROW_ERROR("Unable to write ewald.txt\n");
+                }
                 xValue[0] = xValue[1] = xValue[2] = SimdFloat(0.0f);
                 for (double x = 0.00; x < 0.5; x += 0.001) {
                     xValue[0] = simdBroadcast<SimdFloat>(x);
@@ -130,16 +140,22 @@ int hpx_main(int argc, char* argv[]) {
         particlesDestroy();
     } catch (std::exception const& error) {
         PRINT("CosmicTiger failed: %s\n", error.what());
-        stopMemuseDaemon();
+        if (daemonStarted) {
+            stopMemuseDaemon();
+        }
         hpx::finalize();
         return EXIT_FAILURE;
     } catch (...) {
         PRINT("CosmicTiger failed with an unknown exception\n");
-        stopMemuseDaemon();
+        if (daemonStarted) {
+            stopMemuseDaemon();
+        }
         hpx::finalize();
         return EXIT_FAILURE;
     }
-    stopMemuseDaemon();
+    if (daemonStarted) {
+        stopMemuseDaemon();
+    }
     return hpx::finalize();
 }
 

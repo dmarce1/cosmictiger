@@ -122,9 +122,14 @@ def instrument_source(directory, harness_bytes):
     harness_path = directory / HARNESS
     harness_path.parent.mkdir(parents=True, exist_ok=True)
     harness_path.write_bytes(harness_bytes)
-    dispatcher = directory / "src/problems/test.cpp"
-    original = dispatcher.read_text()
     anchor = "void test(std::string test) {"
+    # Historical snapshots may keep the dispatcher among application sources.
+    candidates = [directory / "tests/test.cpp", *(directory / "src").rglob("test.cpp")]
+    dispatchers = [path for path in candidates if path.is_file() and anchor in path.read_text()]
+    if len(dispatchers) != 1:
+        raise ValueError(f"Expected one test dispatcher in {directory}, found {len(dispatchers)}")
+    dispatcher = dispatchers[0]
+    original = dispatcher.read_text()
     if original.count(anchor) != 1 or 'test == "simdBenchmark"' in original:
         raise ValueError(f"Unexpected test dispatcher in {dispatcher}")
     replacement = (

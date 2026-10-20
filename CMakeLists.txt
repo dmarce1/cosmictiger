@@ -105,6 +105,7 @@ set(cosmictiger_source_files
     src/core/assert.cpp
     src/core/assert.cu
     src/core/driver.cpp
+    src/core/scenario_driver.cpp
     src/core/flops.cpp
     src/core/flops.cu
     src/core/hpx.cpp
@@ -124,6 +125,8 @@ set(cosmictiger_source_files
     src/fmm/ewald_indices.cpp
     src/fmm/ewald_indices.cu
     src/fmm/fmm_order.cpp
+    src/gravity/analytic.cpp
+    src/gravity/analytic.cu
     src/gravity/bh.cpp
     src/gravity/bh.cu
     src/gravity/gravity.cpp
@@ -143,15 +146,19 @@ set(cosmictiger_source_files
     src/particles/drift.cu
     src/particles/drift_cpu.cpp
     src/particles/particles.cpp
-    src/problems/analytic.cpp
-    src/problems/analytic.cu
-    src/problems/exact_sod.cpp
-    src/problems/hydro.cpp
-    src/problems/plummer.cpp
-    src/problems/sedov.cpp
-    src/problems/sphere.cpp
-    src/problems/sphere.cu
-    src/problems/test.cpp
+    src/scenarios/scenario.cpp
+    src/scenarios/plummer.cpp
+    src/scenarios/sod.cpp
+    src/scenarios/blast.cpp
+    src/scenarios/rayleigh_taylor.cpp
+    src/scenarios/kelvin_helmholtz.cpp
+    src/scenarios/disc.cpp
+    src/scenarios/polytropic_star.cpp
+    src/scenarios/hydro_wave.cpp
+    src/scenarios/cosmology.cpp
+    src/scenarios/glass.cpp
+    src/sph/exact_sod.cpp
+    src/sph/sedov.cpp
     src/sph/sph.cpp
     src/sph/sph.cu
     src/sph/sph_chemistry.cpp
@@ -164,6 +171,8 @@ set(cosmictiger_source_files
     src/sph/sph_rungs.cu
     src/sph/sph_rungs_cpu.cpp
     src/sph/sph_tree.cpp
+    src/sph/sphere.cpp
+    src/sph/sphere.cu
     tests/analysis_backends.cpp
     tests/bh.cpp
     tests/fmm_tree.cpp
@@ -173,6 +182,7 @@ set(cosmictiger_source_files
     tests/linear_growth.cpp
     tests/rockstar.cpp
     tests/sph_gravity.cpp
+    tests/test.cpp
     tests/units_output.cpp
 )
 
@@ -203,6 +213,7 @@ set(cosmictiger_header_files
     cosmictiger/core/containers.hpp
     cosmictiger/core/defs.hpp
     cosmictiger/core/driver.hpp
+    cosmictiger/core/diagnostic_output.hpp
     cosmictiger/core/fixed_capacity_vector.hpp
     cosmictiger/core/flops.hpp
     cosmictiger/core/hpx.hpp
@@ -236,6 +247,7 @@ set(cosmictiger_header_files
     cosmictiger/fmm/fmm_kernels.hpp
     cosmictiger/fmm/fmm_order.hpp
     cosmictiger/fmm/fmm_types.hpp
+    cosmictiger/gravity/analytic.hpp
     cosmictiger/gravity/bh.hpp
     cosmictiger/gravity/fmm_cpu_instances.hpp
     cosmictiger/gravity/gravity.hpp
@@ -278,14 +290,20 @@ set(cosmictiger_header_files
     cosmictiger/particles/drift_cpu.hpp
     cosmictiger/particles/particle_selection.hpp
     cosmictiger/particles/particles.hpp
-    cosmictiger/problems/analytic.hpp
-    cosmictiger/problems/exact_sod.hpp
-    cosmictiger/problems/hydro.hpp
-    cosmictiger/problems/plummer.hpp
-    cosmictiger/problems/sedov.hpp
-    cosmictiger/problems/sphere.hpp
-    cosmictiger/problems/test.hpp
+    cosmictiger/scenarios/scenario.hpp
+    cosmictiger/scenarios/plummer.hpp
+    cosmictiger/scenarios/sod.hpp
+    cosmictiger/scenarios/blast.hpp
+    cosmictiger/scenarios/rayleigh_taylor.hpp
+    cosmictiger/scenarios/kelvin_helmholtz.hpp
+    cosmictiger/scenarios/disc.hpp
+    cosmictiger/scenarios/polytropic_star.hpp
+    cosmictiger/scenarios/hydro_wave.hpp
+    cosmictiger/scenarios/cosmology.hpp
+    cosmictiger/scenarios/glass.hpp
+    cosmictiger/sph/exact_sod.hpp
     cosmictiger/sph/monaghan_sph.hpp
+    cosmictiger/sph/sedov.hpp
     cosmictiger/sph/sph.hpp
     cosmictiger/sph/sph_chemistry.hpp
     cosmictiger/sph/sph_cpu.hpp
@@ -293,6 +311,8 @@ set(cosmictiger_header_files
     cosmictiger/sph/sph_kernel.hpp
     cosmictiger/sph/sph_particles.hpp
     cosmictiger/sph/sph_tree.hpp
+    cosmictiger/sph/sphere.hpp
+    tests/test.hpp
 )
 
 if(NOT COSMICTIGER_WITH_CUDA)
@@ -327,6 +347,10 @@ if(COSMICTIGER_WITH_CUDA)
         $<$<COMPILE_LANGUAGE:CUDA>:--ftz=false;--prec-div=true;--prec-sqrt=true;--fmad=false>)
 endif()
 set_source_files_properties(src/sph/sph_chemistry.cpp PROPERTIES COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
+# The adaptive Boltzmann solve needs finite-value checks and accurate
+# cancellation in the synchronous Einstein constraints.
+set_source_files_properties(src/cosmology/boltzmann.cpp PROPERTIES
+    COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
 
 add_hpx_executable(cosmictiger
     DEPENDENCIES Boost::boost Boost::program_options GSL::gsl GSL::gslcblas
@@ -336,7 +360,7 @@ add_hpx_executable(cosmictiger
 option(COSMICTIGER_BUILD_STF_BENCHMARKS "Build the opt-in STF comparison harness" OFF)
 if(COSMICTIGER_BUILD_STF_BENCHMARKS)
     target_sources(cosmictiger PRIVATE benchmarks/stf_walk.cpp)
-    set_source_files_properties(src/problems/test.cpp PROPERTIES COMPILE_DEFINITIONS COSMICTIGER_STF_BENCHMARKS)
+    set_source_files_properties(tests/test.cpp PROPERTIES COMPILE_DEFINITIONS COSMICTIGER_STF_BENCHMARKS)
 endif()
 target_link_libraries(cosmictiger PRIVATE primordial_chemistry cosmictiger_fp16)
 target_include_directories(cosmictiger PRIVATE ${PROJECT_SOURCE_DIR})
@@ -536,6 +560,25 @@ if(BUILD_TESTING)
         --workdir ${PROJECT_BINARY_DIR}/tests/recfast_history)
     set_tests_properties(recfast_history PROPERTIES FIXTURES_SETUP recfast_history TIMEOUT 90)
 
+    add_executable(linear_power_test tests/linear_power.cpp)
+    target_include_directories(linear_power_test PRIVATE ${PROJECT_SOURCE_DIR})
+    target_compile_options(linear_power_test PRIVATE -ffast-math)
+    add_test(NAME linear_power COMMAND linear_power_test)
+    set_tests_properties(linear_power PROPERTIES TIMEOUT 30)
+    foreach(boltzmann_target IN ITEMS boltzmann_test boltzmann_reference)
+        if(boltzmann_target STREQUAL "boltzmann_test")
+            set(boltzmann_test_source tests/boltzmann.cpp)
+        else()
+            set(boltzmann_test_source tests/boltzmann_reference.cpp)
+        endif()
+        add_executable(${boltzmann_target} ${boltzmann_test_source}
+            src/cosmology/boltzmann.cpp src/cosmology/zero_order.cpp src/cosmology/recfast.cpp)
+        target_include_directories(${boltzmann_target} PRIVATE ${PROJECT_SOURCE_DIR})
+    endforeach()
+    add_test(NAME boltzmann COMMAND boltzmann_test
+        ${PROJECT_BINARY_DIR}/tests/recfast_history/fiducial/history.dat)
+    set_tests_properties(boltzmann PROPERTIES FIXTURES_REQUIRED recfast_history TIMEOUT 120)
+
     foreach(fp16_variant IN ITEMS standard fast_math)
         add_executable(fp16_${fp16_variant}_test tests/fp16.cpp)
         target_include_directories(fp16_${fp16_variant}_test PRIVATE ${PROJECT_SOURCE_DIR})
@@ -597,6 +640,11 @@ if(BUILD_TESTING)
         set_tests_properties(groupsCatalogue_mpi PROPERTIES
             WORKING_DIRECTORY "${halo_mpi_workdir}" TIMEOUT 240 PROCESSORS 4 RUN_SERIAL TRUE)
     endif()
+    add_test(NAME scenarios COMMAND ${Python3_EXECUTABLE}
+        ${PROJECT_SOURCE_DIR}/tests/run_scenarios.py $<TARGET_FILE:cosmictiger>
+        ${PROJECT_SOURCE_DIR}/power.init ${PROJECT_BINARY_DIR}/tests/scenarios)
+    set_tests_properties(scenarios PROPERTIES RUN_SERIAL TRUE TIMEOUT 1200 PROCESSORS 2)
+
     add_test(NAME grouped_options COMMAND ${Python3_EXECUTABLE}
         ${PROJECT_SOURCE_DIR}/tests/run_options.py $<TARGET_FILE:cosmictiger>
         ${PROJECT_BINARY_DIR}/tests/grouped_options)
@@ -787,10 +835,10 @@ if(BUILD_TESTING)
     add_test(NAME drift_dispatch COMMAND drift_dispatch_test --hpx:threads=2 --hpx:bind=none)
     set_tests_properties(drift_dispatch PROPERTIES TIMEOUT 30 PROCESSORS 2
         ENVIRONMENT "CUDA_VISIBLE_DEVICES=")
-    # Relax sphere-surface shells on the CPU path that run.test=star uses
+    # Relax sphere-surface shells on the CPU path that run.scenario=polytropicStar uses
     # without CUDA.
     add_hpx_executable(sphere_surface_test
-        SOURCES tests/sphere_surface.cpp src/problems/sphere.cpp)
+        SOURCES tests/sphere_surface.cpp src/sph/sphere.cpp)
     target_include_directories(sphere_surface_test PRIVATE ${PROJECT_SOURCE_DIR})
     target_compile_options(sphere_surface_test PRIVATE -ffast-math)
     if(COMPILER_SUPPORTS_MARCH_NATIVE)

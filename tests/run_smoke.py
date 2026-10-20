@@ -86,7 +86,7 @@ def main():
         output_config = args.workdir / "silo.ini"
         output_config.write_text("[output]\nsilo = true\nxMax = 0.5\n"
                                  "siloInterval = 7\ndirectory = silo snapshots\n")
-        command += ["--run.test=sod", "--hydro.enabled=true", "--compute.cuda=true",
+        command += ["--run.scenario=sod", "--hydro.enabled=true", "--compute.cuda=true",
                     f"--configuration={output_config.resolve()}"]
     elif args.mode == "sph":
         command += ["--hydro.enabled=true", "--compute.cuda=true",
@@ -98,6 +98,9 @@ def main():
     else:
         command += ["--hydro.enabled=false", "--run.maxIterations=1",
                     "--compute.cuda=" + str(args.mode == "dm_cuda").lower()]
+    if args.mode != "sod":
+        # Keep the established checkpoint/restart fixture layout explicit.
+        command += ["--output.directory=."]
     if args.cpu:
         command = ["--compute.cuda=false" if value == "--compute.cuda=true" else value
                    for value in command]
@@ -115,7 +118,7 @@ def main():
             raise RuntimeError(f"Sod Silo cadence/final snapshot mismatch: {sorted(cycles)}")
         print("Silo: cycles 0, 7, 14, 20 in the configured directory (including final snapshot)")
         rows = [[float(value) for value in line.split()]
-                for line in (args.workdir / "sod.txt").read_text().splitlines()]
+                for line in (output_directory / "sod.txt").read_text().splitlines()]
         if len(rows) != 1000 or any(len(row) != 5 for row in rows):
             raise RuntimeError("Sod output did not contain 1000 complete samples")
         if any(not math.isfinite(value) for row in rows for value in row):

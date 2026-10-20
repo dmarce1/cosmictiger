@@ -17,8 +17,6 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-constexpr bool kVerbose = true;
-
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -30,6 +28,7 @@ constexpr bool kVerbose = true;
 #include <cosmictiger/core/timer.hpp>
 #include <cosmictiger/cosmology/fft.hpp>
 #include <cosmictiger/cosmology/initialize.hpp>
+#include <cosmictiger/gravity/analytic.hpp>
 #include <cosmictiger/gravity/bh.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/kick.hpp>
@@ -40,10 +39,10 @@ constexpr bool kVerbose = true;
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/drift.hpp>
 #include <cosmictiger/particles/particles.hpp>
-#include <cosmictiger/problems/analytic.hpp>
-#include <cosmictiger/problems/hydro.hpp>
-#include <cosmictiger/problems/plummer.hpp>
-#include <cosmictiger/problems/test.hpp>
+#include <cosmictiger/scenarios/plummer.hpp>
+#include <tests/test.hpp>
+
+constexpr bool kVerbose = true;
 
 // 0.7, 0.8
 // 0.55, 0.65
@@ -198,7 +197,7 @@ static void kickTest() {
     double totalFlops = 0.0;
     tm.start();
     if (getOptions().initial.plummer) {
-        plummerInit(1e-3);
+        scenarios::initializePlummerParticles();
     } else {
         initialize(getOptions().cosmology.startRedshift);
     }
@@ -341,7 +340,7 @@ static void forceTest() {
         readCheckpoint();
     } else if (getOptions().initial.plummer) {
         // The driver's clustered model, for walks whose cost depends on radius contrast.
-        plummerInit(1e-3);
+        scenarios::initializePlummerParticles();
     } else {
         initialize(getOptions().cosmology.startRedshift);
     }
@@ -707,22 +706,8 @@ void test(std::string test) {
         kickTest();
     } else if (test == "tree") {
         treeTest();
-    } else if (test == "rt") {
-        hydroRtTest();
-    } else if (test == "sod") {
-        hydroSodTest();
-    } else if (test == "blast") {
-        hydroBlastTest();
-    } else if (test == "helmholtz") {
-        hydroHelmholtzTest();
     } else if (test == "bh") {
         bhTest();
-    } else if (test == "star") {
-        hydroStarTest();
-    } else if (test == "disc") {
-        hydroDiscTest();
-    } else if (test == "plummer") {
-        hydroPlummer();
     } else {
         THROW_ERROR("test %s is not known\n", test.c_str());
     }

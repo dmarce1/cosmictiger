@@ -1,9 +1,10 @@
-#include "stdio.h"
-#include "stdlib.h"
-#include "string.h"
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/timer.hpp>
+#include <cosmictiger/io/output.hpp>
 
 size_t maxCpuMemUse();
 HPX_PLAIN_ACTION(maxCpuMemUse, MaxCpuMemUseAction);
@@ -54,7 +55,7 @@ size_t maxCpuMemUse() {
     return maxUse;
 }
 
-static void memuseDaemon() {
+static void memuseDaemon(std::string filename) {
     static size_t maxMemused = 0;
     Timer tm;
     tm.start();
@@ -65,7 +66,7 @@ static void memuseDaemon() {
             if (thismemused > maxMemused) {
                 maxMemused = thismemused;
                 PRINT("MAX MEMUSED = %f GB\n", thismemused / 1024. / 1024. / 1024.);
-                FILE* fp = fopen("maxmem.txt", "wt");
+                FILE* fp = fopen(filename.c_str(), "wt");
                 if (fp == NULL) {
                     THROW_ERROR("Unable to open maxmem.txt\n");
                 }
@@ -81,7 +82,7 @@ static void memuseDaemon() {
 }
 
 void startMemuseDaemon() {
-    hpx::apply(memuseDaemon);
+    hpx::apply(memuseDaemon, outputPath("maxmem.txt"));
 }
 
 void stopMemuseDaemon() {

@@ -36,11 +36,11 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/fmm/fmm_order.hpp>
 #include <cosmictiger/fmm/fmm_types.hpp>
+#include <cosmictiger/gravity/analytic.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/kick_workspace.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #include <cosmictiger/particles/particles.hpp>
-#include <cosmictiger/problems/analytic.hpp>
 
 namespace detail {
 

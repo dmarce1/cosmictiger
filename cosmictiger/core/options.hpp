@@ -25,6 +25,8 @@
 // Public data groups mirror the CLI/INI category names. Radius aliases are
 // resolved during parsing; canonical radii and unit conversions are stored below.
 struct Run {
+    std::string scenario{"cosmology"};
+    double endTime{};
     std::string test{};
     int maxIterations{};
     int numberOfSteps{};
@@ -44,12 +46,12 @@ struct Compute {
     int treeAllocLineSize{};
     int particleCacheLineSize{};
     // CUDA kick shared-memory policy; zero selects the automatic choice.
-    int cudaKickResidency{};           // resident kick blocks per multiprocessor
-    int cudaKickSinkTile{};            // shared sink-force tile; -1 keeps forces in global memory
-    int cudaKickParticleTile{};        // staged particle sources
-    int cudaKickMultipoleTile{};       // staged positioned multipoles
-    bool cudaKickSharedExpansion{};    // keep the active local expansion in shared memory
-    int cudaKickHandoffBlocks{};       // pins the CPU/GPU handoff divisor; zero derives it
+    int cudaKickResidency{};            // resident kick blocks per multiprocessor
+    int cudaKickSinkTile{};             // shared sink-force tile; -1 keeps forces in global memory
+    int cudaKickParticleTile{};         // staged particle sources
+    int cudaKickMultipoleTile{};        // staged positioned multipoles
+    bool cudaKickSharedExpansion{};     // keep the active local expansion in shared memory
+    int cudaKickHandoffBlocks{};        // pins the CPU/GPU handoff divisor; zero derives it
     int cudaKickFineHandoffBlocks{};    // handoff divisor once a node carries no Ewald checks;
                                         // zero (or below the divisor above) keeps that one
     int cudaKickListReserve{};    // pool entries reserved per kick list at block start; zero grows
@@ -318,6 +320,8 @@ struct Options {
         arc & cosmology.nEff;
         arc & configuration;
         arc & run.test;
+        arc & run.scenario;
+        arc & run.endTime;
         arc & gravity.kernelFamily;
         arc & gravity.kernelDegree;
         arc & hydro.kernelFamily;

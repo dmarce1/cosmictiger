@@ -20,9 +20,9 @@
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/timer.hpp>
+#include <cosmictiger/gravity/analytic.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/particles/particles.hpp>
-#include <cosmictiger/problems/analytic.hpp>
 
 using ReturnType = std::pair<Vector<double>, Array<Vector<double>, NDIM>>;
 

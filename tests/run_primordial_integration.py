@@ -46,7 +46,7 @@ def checkOutput(directory):
     silo.DBInqVarExists.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
     silo.DBInqVarExists.restype = ctypes.c_int
     silo.DBClose.argtypes = [ctypes.c_void_p]
-    files = list((directory / "output").glob("*.silo"))
+    files = list(directory.glob("*.silo"))
     if not files:
         raise RuntimeError("Chemistry run produced no requested Silo output")
     for filename in files:
@@ -81,7 +81,8 @@ def main():
                f"--compute.cuda={'true' if args.cuda else 'false'}",
                "--analysis.views=false", "--lightcone.enabled=false", "--analysis.power=false",
                "--analysis.groups=false", "--chemistry.enabled=true",
-               "--chemistry.synchronizedRung=8", "--checkpoint.intervalSeconds=0"]
+               "--chemistry.synchronizedRung=8", "--checkpoint.intervalSeconds=0",
+               "--output.directory=."]
     for network in ("atomic6", "molecular9"):
         baseline = prepareCase(base, f"{network}_baseline", args.power_file.resolve(), recfast)
         table = "COSMICTIGER_PRIMORDIAL_RADIATION 1\n" + "\n".join(

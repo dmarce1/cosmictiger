@@ -25,7 +25,7 @@
 
 #include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/cuda/cuda.hpp>
-#include <cosmictiger/problems/sphere.hpp>
+#include <cosmictiger/sph/sphere.hpp>
 
 namespace detail {
 

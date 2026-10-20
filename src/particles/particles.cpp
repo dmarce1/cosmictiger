@@ -31,6 +31,7 @@ constexpr bool kVerbose = true;
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/safe_io.hpp>
+#include <cosmictiger/io/output.hpp>
 #include <cosmictiger/particles/particle_selection.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
@@ -1338,7 +1339,7 @@ void particlesSave(FILE* fp) {
 }
 
 void particlesSaveGlass(char const* filename) {
-    FILE* fp = fopen(filename, "wb");
+    FILE* fp = fopen(outputPath(filename).c_str(), "wb");
     ParticleInteger size = getOptions().initial.particlesPerDimension;
     fwrite(&size, sizeof(ParticleInteger), 1, fp);
     for (ParticleInteger i = 0; i < particlesSize(); i++) {

@@ -19,12 +19,10 @@
 
 #pragma once
 
-void hydroSodTest();
+#include <cosmictiger/scenarios/scenario.hpp>
 
-void hydroHelmholtzTest();
+namespace scenarios {
 
-void hydroRtTest();
-void hydroDiscTest();
-void hydroBlastTest();
-void hydroStarTest();
-void hydroPlummer();
+ScenarioPlan initializeBlast();
+
+}    // namespace scenarios

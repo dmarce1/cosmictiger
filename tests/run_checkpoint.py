@@ -71,12 +71,12 @@ def prepareCase(baseWorkdir, name, powerFile, recfast, sourceCheckpoint=None):
     return workdir
 
 
-def checkManifest(checkpointDir, iteration):
+def checkManifest(checkpointDir, iteration, scenario="cosmology", endTime=0.0, gravity=True):
     manifest = checkpointDir / "checkpoint.meta"
     if not manifest.is_file():
         raise RuntimeError("completed checkpoint has no manifest")
     lines = manifest.read_text().splitlines()
-    if len(lines) != 2 or lines[0].split() != ["COSMICTIGER_CHECKPOINT", "1", "3",
+    if len(lines) != 3 or lines[0].split() != ["COSMICTIGER_CHECKPOINT", "2", "3",
                                              str(iteration), "1"]:
         raise RuntimeError(f"unexpected checkpoint manifest: {lines}")
     rank, byteCount, checksumText = lines[1].split()
@@ -85,6 +85,17 @@ def checkManifest(checkpointDir, iteration):
     payload = (checkpointDir / "checkpoint.0.dat").read_bytes()
     if int(byteCount) != len(payload) or int(checksumText, 16) != fnv1a64(payload):
         raise RuntimeError("checkpoint manifest size or checksum differs from rank file")
+    scenarioLabel, scenarioBytes, scenarioChecksum = lines[2].split()
+    if scenarioLabel != "SCENARIO" or not re.fullmatch(r"[0-9a-fA-F]{1,16}", scenarioChecksum):
+        raise RuntimeError(f"invalid scenario record in checkpoint manifest: {lines[2]}")
+    scenarioPayload = (checkpointDir / "scenario.meta").read_bytes()
+    if int(scenarioBytes) != len(scenarioPayload) or int(scenarioChecksum, 16) != fnv1a64(scenarioPayload):
+        raise RuntimeError("checkpoint manifest size or checksum differs from scenario metadata")
+    scenarioLines = scenarioPayload.decode().splitlines()
+    if (len(scenarioLines) != 4 or scenarioLines[0] != "COSMICTIGER_SCENARIO 1" or
+            scenarioLines[1] != scenario or float(scenarioLines[2]) != endTime or
+            scenarioLines[3] != str(int(gravity))):
+        raise RuntimeError(f"unexpected checkpoint scenario metadata: {scenarioLines}")
     magic = int.from_bytes(payload[:8], byteorder=sys.byteorder)
     version = int.from_bytes(payload[8:12], byteorder=sys.byteorder)
     if magic != 0x4354535048303031 or version != 3:
@@ -107,7 +118,7 @@ def main():
                "--initial.particlesPerDimension=8", "--hydro.enabled=false",
                "--compute.cuda=false", "--analysis.views=false",
                "--lightcone.enabled=false", "--analysis.power=false",
-               "--analysis.groups=false", "--gravity.kernelDegree=8"]
+               "--analysis.groups=false", "--gravity.kernelDegree=8", "--output.directory=."]
     baseline = prepareCase(baseWorkdir, "baseline", powerFile, recfast)
     # The first step crosses this redshift. Its checkpoint must keep a numbered
     # restart path, while the second step must produce a final checkpoint.
@@ -159,6 +170,18 @@ def main():
 
     restart("missing_manifest", removeManifest, expectSuccess=False)
 
+    def removeScenarioMetadata(checkpointDir):
+        (checkpointDir / "scenario.meta").unlink()
+
+    restart("missing_scenario", removeScenarioMetadata, expectSuccess=False)
+
+    def corruptScenarioMetadata(checkpointDir):
+        # Whitespace is semantically acceptable, but must invalidate the hash.
+        path = checkpointDir / "scenario.meta"
+        path.write_bytes(path.read_bytes() + b"\n")
+
+    restart("corrupt_scenario", corruptScenarioMetadata, expectSuccess=False)
+
     def changeRankCount(checkpointDir):
         manifest = checkpointDir / "checkpoint.meta"
         lines = manifest.read_text().splitlines()
@@ -203,9 +226,11 @@ def main():
             stream.seek(8)
             stream.write((1).to_bytes(4, byteorder=sys.byteorder))
 
+    # Retain the current scenario sidecar while checking legacy payload decoding.
+    # Unlabelled old checkpoints are explicitly rejected by missing_scenario.
     restart("version_one", downgradeToVersionOne)
-    print(f"checkpoint {iteration}: redshift and final publication, version 3 manifest, "
-          "restart, corruption rejection, and version 1 compatibility passed")
+    print(f"checkpoint {iteration}: redshift and final publication, payload version 3, "
+          "scenario manifest v2, restart, corruption rejection, and labelled version 1 decoding passed")
     return 0
 
 

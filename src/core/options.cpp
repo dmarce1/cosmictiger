@@ -29,6 +29,7 @@
 #include <hpx/modules/program_options.hpp>
 
 #include <cosmictiger/core/defs.hpp>
+#include <cosmictiger/core/diagnostic_output.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/options_metadata.hpp>
@@ -36,10 +37,12 @@
 #include <cosmictiger/fmm/fmm_order.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/tree.hpp>
+#include <cosmictiger/io/output.hpp>
 #include <cosmictiger/io/view.hpp>
 #include <cosmictiger/math/constants.hpp>
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/math/math.hpp>
+#include <cosmictiger/scenarios/scenario.hpp>
 
 #define SHOW(label, opt) show(label, opts.opt)
 
@@ -129,6 +132,7 @@ void setOptions(Options const& opts) {
     setKernelSelections(gravitySpec, hydroSpec, opts.compute.cuda);
     setFmmOrder(opts.gravity.fmmOrder);
     globalOpts = opts;
+    setStackTraceOutputPath(outputPath("stack_trace.txt"));
     hpx::wait_all(futs.begin(), futs.end());
 }
 
@@ -157,6 +161,8 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
     return {
         {"configuration", options.configuration},
         {"run.test", options.run.test},
+        {"run.scenario", options.run.scenario},
+        {"run.endTime", options.run.endTime},
         {"run.maxIterations", options.run.maxIterations},
         {"run.numberOfSteps", options.run.numberOfSteps},
         {"run.minRung", options.run.minRung},
@@ -283,8 +289,14 @@ bool processOptions(int argc, char* argv[]) {
     runOpts.add_options()("help", "produce help message")("configuration",
         po::value<std::string>(&opts.configuration)->default_value(""),
         "INI configuration file; explicit command-line values take precedence")("run.test",
-        po::value<std::string>(&opts.run.test)->default_value(""), "name of test to run")(
-        "run.maxIterations", po::value<int>(&opts.run.maxIterations)->default_value(1000000),
+        po::value<std::string>(&opts.run.test)->default_value(""),
+        "name of developer regression to run")("run.scenario",
+        po::value<std::string>(&opts.run.scenario)->default_value("cosmology"),
+        "physical scenario: plummer, sod, blast, rayleighTaylor, kelvinHelmholtz, disc, "
+        "polytropicStar, hydroWave, cosmology, glass")("run.endTime",
+        po::value<double>(&opts.run.endTime)->default_value(0.0),
+        "total evolution time; 0 uses the scenario duration")("run.maxIterations",
+        po::value<int>(&opts.run.maxIterations)->default_value(1000000),
         "maximum number of time steps")("run.numberOfSteps",
         po::value<int>(&opts.run.numberOfSteps)->default_value(64),
         "number of super time steps")("run.minRung",
@@ -319,14 +331,15 @@ bool processOptions(int argc, char* argv[]) {
                 "keep the active CUDA kick local expansion in shared memory")(
                 "compute.cudaKickHandoffBlocks",
                 po::value<int>(&opts.compute.cudaKickHandoffBlocks)->default_value(0),
-                "CUDA block count dividing the particles for the CPU/GPU handoff threshold; 0 derives it from the particle count (two blocks per multiprocessor at 32768 particles, growing as the cube root to six at 884736 and above)")(
+                "CUDA block count dividing the particles for the CPU/GPU handoff threshold; 0 "
+                "derives it from the particle count (two blocks per multiprocessor at 32768 "
+                "particles, growing as the cube root to six at 884736 and above)")(
                 "compute.cudaKickFineHandoffBlocks",
                 po::value<int>(&opts.compute.cudaKickFineHandoffBlocks)->default_value(0),
                 "CUDA block count dividing the particles for the handoff of a node that carries "
                 "no Ewald checks (nodes that still carry them keep the threshold of "
                 "compute.cudaKickHandoffBlocks); 0, or a count below that divisor, applies that "
-                "divisor to every node")(
-                "compute.cudaKickListReserve",
+                "divisor to every node")("compute.cudaKickListReserve",
                 po::value<int>(&opts.compute.cudaKickListReserve)->default_value(4096),
                 "entries per CUDA kick interaction list in the per-launch slab handed to each "
                 "block (pool growth only on overflow); 0 grows every list from the pool");
@@ -364,7 +377,7 @@ bool processOptions(int argc, char* argv[]) {
         po::value<int>(&opts.output.siloInterval)->default_value(1),
         "number of synchronized coarse steps between particle Silo snapshots")("output.directory",
         po::value<std::string>(&opts.output.directory)->default_value("./output"),
-        "directory for particle Silo files; relative paths start at the working directory")(
+        "directory for all scenario outputs; relative paths start at the working directory")(
         "output.units", po::value<std::string>(&opts.output.units)->default_value("code"),
         "particle Silo units: code, cgs, cosmological, or both (cgs and cosmological)")(
         "output.frame", po::value<std::string>(&opts.output.frame)->default_value("comoving"),
@@ -580,6 +593,50 @@ bool processOptions(int argc, char* argv[]) {
     if (!rc) {
         return false;
     }
+    auto const isExplicit = [&](char const* key) { return vm.count(key) && !vm[key].defaulted(); };
+    if (opts.initial.plummer && opts.initial.createGlass) {
+        THROW_ERROR("initial.plummer and initial.createGlass cannot both be enabled\n");
+    }
+    if (opts.initial.plummer || opts.initial.createGlass) {
+        std::string const legacy = opts.initial.plummer ? "plummer" : "glass";
+        if (isExplicit("run.scenario") && opts.run.scenario != legacy) {
+            THROW_ERROR("initial.plummer/createGlass conflicts with run.scenario\n");
+        }
+        opts.run.scenario = legacy;
+    }
+    auto const& scenario = scenarios::definition(opts.run.scenario);
+    opts.initial.plummer = opts.run.scenario == "plummer";
+    opts.initial.createGlass = opts.run.scenario == "glass";
+    if (opts.run.test.empty()) {
+        if (!isExplicit("gravity.enabled")) {
+            opts.gravity.enabled = scenario.gravity;
+        }
+        if (!isExplicit("hydro.enabled")) {
+            opts.hydro.enabled = scenario.hydro;
+        }
+        if (scenario.fixedTime && !opts.hydro.enabled) {
+            THROW_ERROR("run.scenario=%s requires hydro.enabled=true\n", scenario.name);
+        }
+        if (!opts.gravity.enabled && !opts.hydro.enabled) {
+            THROW_ERROR("A scenario requires gravity.enabled and/or hydro.enabled\n");
+        }
+        if (!isExplicit("run.numberOfSteps")) {
+            opts.run.numberOfSteps = scenario.numberOfSteps;
+        }
+        if (!isExplicit("output.directory")) {
+            opts.output.directory = "./output/" + opts.run.scenario;
+        }
+    }
+    if (!isExplicit("lightcone.directory")) {
+        opts.lightcone.directory = opts.output.directory + "/lightcone";
+    }
+    if (!detail::isFiniteOption(opts.run.endTime) || opts.run.endTime < 0.0 ||
+        opts.run.maxIterations < 0) {
+        THROW_ERROR("run.endTime and run.maxIterations must be finite and nonnegative\n");
+    }
+    if (scenario.fixedTime && !opts.run.test.empty() && opts.run.test != "checkpointState") {
+        THROW_ERROR("run.scenario and run.test select separate execution modes\n");
+    }
     auto const gravityTable = radial_kernel::makeKernelTable(
         detail::kernelSpec(opts.gravity.kernelFamily, opts.gravity.kernelDegree));
     auto const hydroTable = radial_kernel::makeKernelTable(
@@ -759,15 +816,12 @@ bool processOptions(int argc, char* argv[]) {
         THROW_ERROR("hydro.minSupportRadius cannot exceed half the periodic box after "
                     "normalization by initial.particlesPerDimension\n");
     }
-    bool const hydroTest = opts.run.test == "sphGravity" || opts.run.test == "sod" ||
-        opts.run.test == "blast" || opts.run.test == "helmholtz" || opts.run.test == "rt" ||
-        opts.run.test == "disc" || opts.run.test == "star" || opts.run.test == "plummer";
-    if (hydroTest) {
+    if (opts.run.test == "sphGravity") {
         opts.hydro.enabled = true;
-        opts.gravity.enabled = opts.run.test == "star" || opts.run.test == "plummer";
     }
     if (opts.chemistry.enabled) {
-        if (!opts.hydro.enabled || (hydroTest && opts.run.test != "sphGravity") ||
+        if (!opts.hydro.enabled ||
+            (opts.run.scenario != "cosmology" && opts.run.test != "sphGravity") ||
             opts.initial.createGlass || opts.initial.plummer) {
             THROW_ERROR("chemistry.enabled requires cosmological SPH initial conditions\n");
         }
@@ -928,6 +982,7 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("chemistry.energyAbsoluteTolerance", chemistry.energyAbsoluteTolerance);
     SHOW("chemistry.maxSubsteps", chemistry.maxSubsteps);
     SHOW("hydro.enabled", hydro.enabled);
+    SHOW("gravity.enabled", gravity.enabled);
     SHOW("run.hierarchicalGravity", run.hierarchicalGravity);
     SHOW("hydro.viscosityAlpha", hydro.viscosityAlpha);
     SHOW("hydro.viscosityBeta", hydro.viscosityBeta);
@@ -1043,12 +1098,17 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("cosmology.nEff", cosmology.nEff);
     SHOW("configuration", configuration);
     SHOW("run.test", run.test);
+    SHOW("run.scenario", run.scenario);
+    SHOW("run.endTime", run.endTime);
 #ifndef USE_CUDA
     if (opts.compute.cuda) {
         THROW_ERROR("This executable was compiled without CUDA support\n");
     }
 #endif
     setOptions(opts);
+    if (opts.run.test.empty()) {
+        outputPath(".");
+    }
     viewConfigure();
     return rc;
 }

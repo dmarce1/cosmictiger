@@ -1,0 +1,183 @@
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <numeric>
+#include <stdexcept>
+
+#include <cosmictiger/core/driver.hpp>
+#include <cosmictiger/core/options.hpp>
+#include <cosmictiger/core/timer.hpp>
+#include <cosmictiger/gravity/kick_workspace.hpp>
+#include <cosmictiger/io/checkpoint.hpp>
+#include <cosmictiger/io/output.hpp>
+#include <cosmictiger/io/view.hpp>
+#include <cosmictiger/particles/domain.hpp>
+#include <cosmictiger/particles/drift.hpp>
+#include <cosmictiger/particles/particles.hpp>
+#include <cosmictiger/scenarios/scenario.hpp>
+#include <cosmictiger/sph/sph_particles.hpp>
+
+namespace detail {
+
+void writeScenarioDiagnostics(DriverParameters const& state) {
+    auto const& energy = state.energies;
+    double const total = energy.kin + energy.therm + energy.pot;
+    FILE* file = fopen(outputPath("energy.dat").c_str(), "at");
+    if (file == nullptr) {
+        THROW_ERROR("Unable to write scenario energy diagnostics\n");
+    }
+    double const normalization =
+        std::max(std::abs(energy.kin) + std::abs(energy.therm) + std::abs(energy.pot), 1.0e-30);
+    fprintf(file, "%e %e %e %e %e %e %e %e %e\n", state.tau, energy.xmom, energy.ymom, energy.zmom,
+        energy.kin, energy.therm, total, energy.pot, (total - state.energy0) / normalization);
+    fclose(file);
+    double maximumDensity = 0.0;
+    for (ParticleInteger i = 0; i < sphParticlesSize(); i++) {
+        maximumDensity = std::max(maximumDensity, double(sphParticlesDensity(i)));
+    }
+    file = fopen(outputPath("rho.dat").c_str(), "at");
+    if (file == nullptr) {
+        THROW_ERROR("Unable to write scenario density diagnostics\n");
+    }
+    fprintf(file, "%e %e\n", state.tau, maximumDensity);
+    fclose(file);
+}
+
+}    // namespace detail
+
+void runFixedScenario() {
+    auto const& definition = scenarios::definition(getOptions().run.scenario);
+    auto plan = definition.initialize();
+    auto const baseOptions = getOptions();
+    double const defaultDuration = std::accumulate(plan.stages.begin(), plan.stages.end(), 0.0,
+        [](double sum, auto const& stage) { return sum + stage.duration; });
+    int const defaultSteps = std::accumulate(plan.stages.begin(), plan.stages.end(), 0,
+        [](int sum, auto const& stage) { return sum + stage.numberOfSteps; });
+    double const duration =
+        baseOptions.run.endTime > 0.0 ? baseOptions.run.endTime : defaultDuration;
+    if (baseOptions.run.numberOfSteps < int(plan.stages.size())) {
+        THROW_ERROR("run.numberOfSteps must allow at least one coarse step per scenario stage\n");
+    }
+    int assignedSteps = 0;
+    int cumulativeDefaultSteps = 0;
+    for (size_t i = 0; i < plan.stages.size(); i++) {
+        auto& stage = plan.stages[i];
+        cumulativeDefaultSteps += stage.numberOfSteps;
+        int const cumulativeSteps = std::clamp(int(std::lround(double(cumulativeDefaultSteps) *
+                                                   baseOptions.run.numberOfSteps / defaultSteps)),
+            assignedSteps + 1, baseOptions.run.numberOfSteps - int(plan.stages.size() - i - 1));
+        stage.numberOfSteps = cumulativeSteps - assignedSteps;
+        assignedSteps += stage.numberOfSteps;
+        // Stage transitions fall on the shared coarse clock. This keeps the
+        // pending SPH half-step valid when entering/leaving stellar relaxation.
+        stage.duration = duration * stage.numberOfSteps / baseOptions.run.numberOfSteps;
+    }
+    DriverParameters state{};
+    state.a = 1.0;
+    state.tauMax = duration;
+    state.bucketSize = baseOptions.compute.bucketSize;
+    bool const restarting = baseOptions.checkpoint.readIndex >= 0;
+    if (restarting) {
+        state = readCheckpoint();
+        if (state.tauMax != duration) {
+            THROW_ERROR("Checkpoint duration differs from the selected scenario\n");
+        }
+    } else {
+        particlesSetMinrung(baseOptions.run.minRung);
+    }
+    domainsRebound();
+    Timer checkpointTimer;
+    checkpointTimer.start();
+    Timer runtime;
+    runtime.start();
+    double const restoredRuntime = state.runtime;
+    int iterations = 0;
+    int lastCheckpoint = restarting ? state.iter : -1;
+    auto const checkpoint = [&]() {
+        auto const stageOptions = getOptions();
+        setOptions(baseOptions);
+        writeCheckpoint(state);
+        setOptions(stageOptions);
+        lastCheckpoint = state.iter;
+        checkpointTimer.reset();
+        checkpointTimer.start();
+    };
+    double stageStart = 0.0;
+    for (auto const& stage : plan.stages) {
+        double const stageEnd = stageStart + stage.duration;
+        double const tolerance = 1.0e-12 * duration;
+        if (state.tau >= stageEnd - tolerance) {
+            stageStart = stageEnd;
+            continue;
+        }
+        auto stageOptions = baseOptions;
+        stageOptions.hydro.damping = stage.damping;
+        if (stage.viscosityAlpha >= 0.0) {
+            stageOptions.hydro.viscosityAlpha = stage.viscosityAlpha;
+        }
+        setOptions(stageOptions);
+        double const baseTimestep = duration / baseOptions.run.numberOfSteps;
+        while (state.tau < stageEnd - tolerance && iterations < baseOptions.run.maxIterations) {
+            int const minimumRung = minRung(state.itime);
+            bool const fullEvaluation = minimumRung == 0;
+            if (fullEvaluation) {
+                viewOutputViews(state.step, 1.0);
+            }
+            auto const result = advanceForces(minimumRung, 1.0, 0.0, state.tau, baseTimestep,
+                baseOptions.gravity.openingAngle, state.iter == 0, fullEvaluation, state.energies);
+            state.maxRung = std::max(int(result.first.maxRung), baseOptions.run.minRung);
+            if (state.iter == 0) {
+                state.energy0 = state.energies.kin + state.energies.therm + state.energies.pot;
+            }
+            if (fullEvaluation) {
+                detail::writeScenarioDiagnostics(state);
+            }
+            double const timestep = std::ldexp(baseTimestep, -state.maxRung);
+            if (!(timestep > 0.0) || state.tau + timestep == state.tau) {
+                THROW_ERROR("Scenario timestep cannot advance time\n");
+            }
+            drift(1.0, timestep, state.tau, state.tau + timestep, duration);
+            state.tau += timestep;
+            state.itime = inc(state.itime, state.maxRung);
+            state.iter++;
+            iterations++;
+            if (state.itime == 0) {
+                state.step++;
+            }
+            runtime.stop();
+            state.runtime = restoredRuntime + runtime.read();
+            runtime.start();
+            FILE* progress = fopen(outputPath("progress.txt").c_str(), "at");
+            if (progress == nullptr) {
+                THROW_ERROR("Unable to write scenario progress\n");
+            }
+            fprintf(progress, "%i %e %e %i %i\n", state.iter, state.tau, timestep, minimumRung,
+                state.maxRung);
+            fclose(progress);
+            PRINT("Scenario %s: step=%i time=%e dt=%e rung=%i\n", definition.name, state.iter,
+                state.tau, timestep, state.maxRung);
+            checkpointTimer.stop();
+            if (checkpointTimer.read() > baseOptions.checkpoint.intervalSeconds) {
+                checkpoint();
+            } else {
+                checkpointTimer.start();
+            }
+        }
+        if (iterations >= baseOptions.run.maxIterations) {
+            break;
+        }
+        state.tau = stageEnd;
+        state.itime = 0;
+        stageStart = stageEnd;
+    }
+    // Use the next cycle for a final partial coarse step, preserving earlier snapshots.
+    viewOutputViews(state.step + (state.itime != 0), 1.0, true);
+    setOptions(baseOptions);
+    if (state.iter > 0 && state.iter != lastCheckpoint) {
+        writeCheckpoint(state);
+    }
+    if (state.tau >= duration * (1.0 - 1.0e-12) && plan.finish != nullptr) {
+        plan.finish(state.tau);
+    }
+    KickWorkspace::clearBuffers();
+}

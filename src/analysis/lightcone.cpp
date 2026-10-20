@@ -18,6 +18,7 @@
  */
 
 #include <atomic>
+#include <filesystem>
 #include <memory>
 #include <shared_mutex>
 #include <unordered_map>
@@ -39,6 +40,7 @@
 #include <cosmictiger/cosmology/cosmology.hpp>
 #include <cosmictiger/cuda/device_vector.hpp>
 #include <cosmictiger/gravity/bh.hpp>
+#include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/constants.hpp>
 #include <cosmictiger/math/fixed.hpp>
 #include <cosmictiger/math/math.hpp>
@@ -874,6 +876,7 @@ static int computeNside(double tau) {
 }
 
 void lcInit(double tau, double requestedTauMax) {
+    std::filesystem::create_directories(getOptions().lightcone.directory);
     Vector<hpx::future<void>> futs;
     for (auto const& c : hpxChildren()) {
         futs.push_back(hpx::async<LcInitAction>(c, tau, requestedTauMax));
@@ -1022,7 +1025,8 @@ void lcSiloOut(char const* filename, Vector<Subgroup> const& subgroups) {
         }
     }
     if (x.size()) {
-        DBfile* db = DBCreateReal(filename, DB_CLOBBER, DB_LOCAL, "Meshless", DB_PDB);
+        auto const outputFilename = outputPath(filename);
+        DBfile* db = DBCreateReal(outputFilename.c_str(), DB_CLOBBER, DB_LOCAL, "Meshless", DB_PDB);
         float* coords[] = {x.data(), y.data(), z.data()};
         DBPutPointmesh(db, "points", NDIM, coords, x.size(), DB_FLOAT, NULL);
         DBPutPointvar1(db, "vx", "points", x.data(), vx.size(), DB_FLOAT, NULL);

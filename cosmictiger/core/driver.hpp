@@ -72,4 +72,9 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
 std::pair<KickReturn, TreeCreateReturn> kickStep(
     int minrung, double scale, double, double t0, double theta, bool firstCall, bool fullEval);
 
+std::pair<KickReturn, TreeCreateReturn> advanceForces(int minRung, double scale,
+    double scaleDerivative, double time, double baseTimestep, double theta, bool firstCall,
+    bool fullEvaluation, EnergiesT& energies);
+
+void runFixedScenario();
 void driver();

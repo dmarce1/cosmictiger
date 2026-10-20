@@ -23,7 +23,7 @@
 #include <cosmictiger/cuda/cuda_reduce.hpp>
 #include <cosmictiger/cuda/device_vector.hpp>
 #include <cosmictiger/math/math.hpp>
-#include <cosmictiger/problems/sphere.hpp>
+#include <cosmictiger/sph/sphere.hpp>
 
 #define BLOCK_SIZE detail::kSphereSurfaceStreams
 

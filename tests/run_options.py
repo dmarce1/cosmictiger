@@ -53,7 +53,8 @@ def main():
 
     help_text = run("help", ["--help"])
     option_names = set(re.findall(r"^\s+--([A-Za-z][A-Za-z0-9_.]*)", help_text, re.MULTILINE))
-    required = {"help", "configuration", "initial.particlesPerDimension", "compute.cuda",
+    required = {"help", "configuration", "run.scenario", "run.endTime",
+                "initial.particlesPerDimension", "compute.cuda",
                 "hydro.enabled", "hydro.viscosityAlpha", "hydro.viscosityBeta",
                 "hydro.viscosityEpsilon", "hydro.neighborNumber", "gravity.enabled",
                 "gravity.kernelFamily", "gravity.kernelDegree",
@@ -360,7 +361,8 @@ mapSize = 8
                                f"{sorted(optional_keys - documented_alternatives)}")
         if ini["output"]["units"] != "code" or ini["output"]["frame"] != "comoving":
             raise RuntimeError(f"{path.name} must preserve native output defaults")
-        output = run(f"complete_{path.stem}", metadata_options + [f"--configuration={path}"])
+        output = run(f"complete_{path.stem}", metadata_options + [f"--configuration={path}",
+                     "--chemistry.enabled=false"])
         if "Checkpoint state and mode validation passed" not in output:
             raise RuntimeError(f"{path.name} did not finish metadata validation")
         assertNoRadiusWarning(output)
@@ -392,6 +394,10 @@ mapSize = 8
         ("cfl_nan", "--hydro.cfl=nan", "hydro.cfl"),
         ("neighbors_inf", "--hydro.neighborNumber=inf", "hydro.neighborNumber"),
         ("steps_zero", "--run.numberOfSteps=0", "run.numberOfSteps"),
+        ("end_time_negative", "--run.endTime=-1", "run.endTime"),
+        ("end_time_nan", "--run.endTime=nan", "run.endTime"),
+        ("end_time_inf", "--run.endTime=inf", "run.endTime"),
+        ("scenario_unknown", "--run.scenario=unknown", "scenario"),
         ("bucket_zero", "--compute.bucketSize=0", "compute.bucketSize"),
         ("eta_zero", "--gravity.timestepEta=0", "gravity.timestepEta"),
         ("eta_negative", "--gravity.timestepEta=-0.1", "gravity.timestepEta"),

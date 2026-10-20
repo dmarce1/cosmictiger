@@ -37,6 +37,7 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/options_metadata.hpp>
 #include <cosmictiger/cosmology/cosmology.hpp>
+#include <cosmictiger/io/output.hpp>
 #include <cosmictiger/io/silo_spheres.hpp>
 #include <cosmictiger/io/view.hpp>
 #include <cosmictiger/math/constants.hpp>
@@ -608,6 +609,10 @@ void viewOutputViews(int cycle, double a, bool force) {
 void viewConfigure() {
     viewBoxes.clear();
     auto const& opts = getOptions();
+    if (opts.run.test.empty()) {
+        // Diagnostics and checkpoints also need the directory when Silo is disabled.
+        outputPath(".");
+    }
     if (!opts.output.silo) {
         PRINT("Silo particle output: disabled (output.silo=false)\n");
         return;
@@ -685,7 +690,7 @@ Vector<float> outputView(int number, double time) {
         }
     }
     if (hpxRank() == 0) {
-        std::string filename = "view." + std::to_string(number) + ".dat";
+        std::string const filename = outputPath("view." + std::to_string(number) + ".dat");
         FILE* fp = fopen(filename.c_str(), "wb");
         if (fp == NULL) {
             THROW_ERROR("unable to open %s for writing\n", filename.c_str());

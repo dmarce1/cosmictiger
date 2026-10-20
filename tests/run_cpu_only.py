@@ -19,7 +19,7 @@ def main():
     command = [str(args.executable.resolve()), '--compute.cuda=false', '--hydro.enabled=true',
                '--initial.particlesPerDimension=8', '--analysis.views=false',
                '--analysis.power=false', '--analysis.groups=false', '--lightcone.enabled=false',
-               '--hpx:threads=2', '--hpx:bind=none']
+               '--hpx:threads=2', '--hpx:bind=none', '--output.directory=.']
     cases = [('checkpointState', 'Checkpoint state and mode validation passed', []),
              ('sphGravity', 'SPH gravity regression passed', []),
              ('sphGravity', 'SPH gravity regression passed', ['--chemistry.enabled=true'])]

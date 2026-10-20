@@ -19,11 +19,10 @@
 
 #pragma once
 
-#include <functional>
+#include <cosmictiger/scenarios/scenario.hpp>
 
-// Spherical test initial conditions: an NFW density profile, inverse-transform
-// sampling of a radial density, and the Plummer sphere used by the kick, force
-// and bucket tests and by the driver's plummer start.
-double nfwDensity(double r);
-double sampleDensityDistribution(std::function<double(double)> const& f);
-void plummerInit(double r0);
+namespace scenarios {
+
+ScenarioPlan initializeHydroWave();
+
+}    // namespace scenarios

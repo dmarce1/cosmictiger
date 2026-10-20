@@ -12,7 +12,7 @@
 #include <cstdio>
 #include <cstdlib>
 
-#include <cosmictiger/problems/exact_sod.hpp>
+#include <cosmictiger/sph/exact_sod.hpp>
 
 static double pl, pr, rhol, rhor, cl, cr, gammaValue;
 static double func(double pm);

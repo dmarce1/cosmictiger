@@ -19,19 +19,38 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #include <fstream>
 #include <iostream>
+#include <memory>
 
 #include <boost/stacktrace.hpp>
 
 #include <cosmictiger/core/assert.hpp>
+#include <cosmictiger/core/diagnostic_output.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/safe_io.hpp>
+
+namespace detail {
+
+std::shared_ptr<std::string const> stackTracePath =
+    std::make_shared<std::string const>("stack_trace.txt");
+
+}    // namespace detail
+
+void setStackTraceOutputPath(std::string const& filename) {
+    if (*std::atomic_load(&detail::stackTracePath) != filename) {
+        std::atomic_store(&detail::stackTracePath, std::make_shared<std::string const>(filename));
+    }
+}
+
+std::string stackTraceOutputPath() {
+    return *std::atomic_load(&detail::stackTracePath);
+}
 
 void cosmictigerAssert(char const* condStr, bool cond, char const* filename, int line) {
     if (!cond) {
         std::cout << "\nCondition \"" << condStr << "\" failed in " << filename << " on line "
                   << std::to_string(line) << " on rank " << hpxRank() << "\n";
         std::cout << "\nStack trace:\n" << boost::stacktrace::stacktrace() << "\n";
-        std::ofstream fp("stack_trace.txt", std::ios::app);
+        std::ofstream fp(stackTraceOutputPath(), std::ios::app);
         fp << "\nCondition \"" << condStr << "\" failed in " << filename << " on line "
            << std::to_string(line) << " on rank " << hpxRank() << "\n";
         fp << "\nStack trace:\n %s\n" << boost::stacktrace::stacktrace() << "\n";

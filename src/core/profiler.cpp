@@ -24,6 +24,7 @@
 
 #include <cosmictiger/core/containers.hpp>
 #include <cosmictiger/core/timer.hpp>
+#include <cosmictiger/io/output.hpp>
 
 static std::unordered_map<std::string, Timer> timers;
 static std::stack<std::string> stack;
@@ -56,7 +57,7 @@ void profilerOutput() {
             return a.second.read() > b.second.read();
         });
 
-    FILE* fp = fopen("profile.txt", "wt");
+    FILE* fp = fopen(outputPath("profile.txt").c_str(), "wt");
     double total = 0.0;
     for (int i = 0; i < results.size(); i++) {
         total += results[i].second.read();

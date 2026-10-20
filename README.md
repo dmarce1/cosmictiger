@@ -97,13 +97,13 @@ a support radius in an example INI, remove or comment out its active effective
 radius or softening alias. See [kernel definitions and migration](docs/kernels.md)
 for conversions and timestep conventions.
 
-For the existing Kelvin–Helmholtz test, run from a build directory:
+For the Kelvin–Helmholtz scenario, run from a build directory:
 
 ```sh
-./cosmictiger --configuration=../../configurations/kelvinHelmholz.ini --hpx:threads=12 --hpx:bind=none
+./cosmictiger --configuration=../../configurations/kelvin_helmholtz.ini --hpx:threads=12 --hpx:bind=none
 ```
 
-This file selects `run.test=helmholtz`, CUDA, nominal resolution 32, and full-box
+This file selects `run.scenario=kelvinHelmholtz`, CUDA, nominal resolution 32, and full-box
 particle Silo output. The initializer creates 32,600 gas particles and runs to
 time 10. Output is configured directly in the INI:
 
@@ -111,7 +111,7 @@ time 10. Output is configured directly in the INI:
 [output]
 silo = true
 siloInterval = 1
-directory = ./output
+directory = ./output/kelvinHelmholtz
 xMin = 0
 xMax = 1
 yMin = 0
@@ -124,13 +124,16 @@ Output is controlled only by CLI/INI options; CLI values override the INI.
 `output.siloInterval` is a positive number of synchronized coarse steps between
 snapshots, defaulting to 1. For KH this means every `10/1024 = 0.009765625`
 simulation-time units; setting it to 10 writes every 0.09765625 time units.
-Standalone hydro tests retain their initial and final snapshots. Snapshot names
+Finite-duration scenarios retain their initial and final snapshots. Snapshot names
 retain their coarse cycle number, so skipped cycles leave gaps in the names.
 
-`output.directory` defaults to `./output`, relative to the working directory,
-and is created automatically when Silo output is enabled. Snapshots are named
-`output/view.0.<cycle>.silo` with the default directory. Absolute directory paths
-are also supported. `output.silo=false` disables particle output.
+`output.directory` defaults to `./output/<scenarioName>`, relative to the working
+directory, and is created automatically for all scenario products. Snapshots are
+named `output/<scenarioName>/view.0.<cycle>.silo` with the default directory.
+Absolute directory paths are also supported. `output.silo=false` disables
+particle snapshots while retaining other selected outputs. See
+[scenario configurations](configurations/README.md) for all ten initializations,
+their solver choices, and durations.
 `analysis.views` independently controls HEALPix maps.
 
 Gas particles are written as Silo CSG spheres in the `gas` mesh. Each sphere's
@@ -171,7 +174,7 @@ with `--hydro.enabled=true`; gas runs use the ordinary block-timestep gravity/SP
 Select SIMD CPU SPH with `--compute.cuda=false` or CUDA SPH with `--compute.cuda=true`.
 Particle drift also follows `compute.cuda`: the CPU path uses SIMD position updates
 and HPX workers, including rung filtering, glass damping, and lightcone crossings.
-The full application still requires CUDA for other initialization and analysis paths.
+CPU runs can also use a build configured with `COSMICTIGER_WITH_CUDA=OFF`.
 
 Cosmological gas runs initialize a displaced gas lattice alongside the dark
 matter lattice. `initial.particlesPerDimension` specifies the lattice size for each species. With
@@ -186,8 +189,10 @@ For a small cosmological run from a build directory containing `power.init`:
 ```
 
 The gas controls appear under `hydro.*` in `--help` and can also be
-specified in the INI configuration file. Stellar particles, star formation,
-chemistry, diffusion, and conduction have been removed. Their former options,
+specified in the INI configuration file. Primordial chemistry is configured under
+`chemistry.*` and enabled by the cosmology scenario INI. Stellar particles, star
+formation, diffusion, and conduction are unsupported. Their former options,
+the obsolete `hydro.chemistry` switch,
 `hydro.yReflect`, and `gravity.sphSmoothing` are no longer accepted, including
 false entries in older INI files. Gas smoothing lengths remain adaptive;
 gravity uses one fixed comoving radius for gas and dark matter. The legacy
@@ -196,9 +201,9 @@ loaders, reject SPH runs.
 
 Gas state, including fields used by staggered timesteps, follows particles during
 domain redistribution and is retained in versioned checkpoints. Restart using
-the same physics and particle-layout options. Existing main-branch dark-matter
-checkpoints remain readable in the original mode. Earlier SPH checkpoints are
-rejected because the reduced gas state has a different particle layout. New SPH
+the same scenario, physics, and particle-layout options. Checkpoints predating
+first-class scenarios lack scenario metadata and require their original executable
+to resume. New SPH
 checkpoints store and validate the layout, kernel selection, viscosity, smoothing,
 timestep, and external-force parameters.
 
@@ -211,22 +216,23 @@ boundary when the interval expires, and writes one more at normal exit. A
 `checkpoint.txt` file containing one redshift per line requests checkpoints
 when those redshifts are crossed.
 
-Each checkpoint remains in a numbered `checkpoint.N` directory, where `N` is
-the iteration. It contains one `checkpoint.R.dat` file per HPX locality and a
+Each checkpoint resides under `output.directory` in a numbered `checkpoint.N`
+directory, where `N` is the iteration. It contains one `checkpoint.R.dat` file per HPX locality and a
 versioned `checkpoint.meta` manifest with the locality count, file sizes, and
-checksums. Files are written in `checkpoint.N.incomplete` and the directory is
+checksums. A checksummed `scenario.meta` records the scenario, requested duration,
+and gravity selection. Files are written in `checkpoint.N.incomplete` and the directory is
 renamed to `checkpoint.N` only after all localities finish and the manifest is
 durable. An interrupted write leaves the incomplete directory for inspection;
 it is not a restart candidate. Existing numbered checkpoints are never
 overwritten. Redshift requests may also create a `checkpoint.z.Z` symlink for
 convenience; the numbered directory is the restart source.
 
-Restart in the same working directory with `--checkpoint.readIndex=N`, using
-the same number of HPX localities and compatible physics, particle-layout,
+Restart with `--checkpoint.readIndex=N` and the same `output.directory`, using
+the same scenario, duration, number of HPX localities, and compatible physics, particle-layout,
 units, and timestep settings. A new checkpoint is validated against its
-manifest before any locality loads state. Older dark-matter and SPH checkpoint
-formats remain readable without a manifest, but their file integrity and
-locality count cannot be verified in advance. Rank payloads still use native
+manifest before any locality loads state. Older payload decoding remains
+available to developer regressions; physical scenarios require the new metadata.
+Rank payloads still use native
 binary structures, so moving checkpoints between different architectures or
 compiler ABIs is not guaranteed.
 

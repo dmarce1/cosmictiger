@@ -308,7 +308,7 @@ checks still apply when migrating an old configuration to the new length and
 timestep conventions; old SPH checkpoints are not automatically converted.
 Remove `hydro.chemistry`, `hydro.conduction`, `hydro.diffusion`, `hydro.yReflect`,
 and `gravity.sphSmoothing` from older INI files, including entries set to false.
-The retained `run.test=star` fixture is a self-gravitating gas sphere; it does
+The `run.scenario=polytropicStar` scenario is a self-gravitating gas sphere; it does
 not use stellar particles or star formation.
 
 ## Validation scope
