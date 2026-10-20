@@ -254,8 +254,8 @@ public:
                         for (m[1] = 0; m[1] <= n[1] / 2; m[1]++) {
                             for (m[2] = 0; m[2] <= n[2] / 2; m[2]++) {
                                 int const m0 = m[0] + m[1] + m[2];
-                                T num =
-                                    T(n1pow(m0) * dfactorial(2 * n0 - 2 * m0 - 1) * vfactorial(n));
+                                T num = T(n1pow(m0)) * T(dfactorial(2 * n0 - 2 * m0 - 1)) *
+                                    T(vfactorial(n));
                                 T den = T((1 << m0) * vfactorial(m) * vfactorial(n - (m) * 2));
                                 T const fnm = num / den;
                                 if ((n0 == 2 && (n[0] == 2 || n[1] == 2 || n[2] == 2)) && m0 == 1) {

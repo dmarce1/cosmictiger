@@ -210,6 +210,48 @@ void checkPeriodicField() {
     }
 }
 
+template <int order>
+void checkCubicSymmetry() {
+    constexpr std::array<Position, 3> kPositions{
+        {{0., 0., 0.}, {.23, -.17, .31}, {.499, -.497, .11}}};
+    for (auto const& position : kPositions) {
+        Array<double, NDIM> separation;
+        Array<double, NDIM> exchangedSeparation;
+        for (int d = 0; d < 3; ++d) {
+            separation[d] = position[d];
+            exchangedSeparation[d] = position[2 - d];
+        }
+        SymmetricTracelessTensor<double, order> derivatives;
+        SymmetricTracelessTensor<double, order> exchangedDerivatives;
+        ewaldCorrectionDerivatives(derivatives, separation);
+        ewaldCorrectionDerivatives(exchangedDerivatives, exchangedSeparation);
+        auto const& original = derivatives;
+        auto const& exchanged = exchangedDerivatives;
+        // A cubic periodic lattice is invariant under exchanging x and z.
+        // Include reconstructed z components, so this checks the STF projection
+        // independently of its coefficient formula, including rank eight.
+        for (int rank = 0; rank < order; ++rank) {
+            double const physicalScale = std::pow(SCALE_FACTOR, rank + 1);
+            double magnitude = 1;
+            for (int x = 0; x <= rank; ++x) {
+                for (int y = 0; y <= rank - x; ++y) {
+                    int const z = rank - x - y;
+                    magnitude = std::max(magnitude, physicalScale * std::abs(original(x, y, z)));
+                    magnitude = std::max(magnitude, physicalScale * std::abs(exchanged(z, y, x)));
+                }
+            }
+            for (int x = 0; x <= rank; ++x) {
+                for (int y = 0; y <= rank - x; ++y) {
+                    int const z = rank - x - y;
+                    requireNear(original(x, y, z) * physicalScale,
+                        exchanged(z, y, x) * physicalScale, 2e-5 * magnitude,
+                        "CPU Ewald cubic axis permutation");
+                }
+            }
+        }
+    }
+}
+
 // Select the order, fill the tables for it, and check every table and the
 // generated derivative of that order. Re-filling for a new order is part of
 // the contract: EwaldConstants::order must report the order just built.
@@ -226,24 +268,28 @@ void checkOrder() {
     checkSelfDerivatives<order>();
     checkFourierScaling<order>();
     checkPeriodicField<order>();
-    std::printf(
-        "CPU Ewald tables and periodic potential/gradient passed at FMM order %d.\n", order);
+    checkCubicSymmetry<order>();
+    std::printf("CPU Ewald tables, periodic potential/gradient, and cubic symmetry passed at FMM "
+                "order %d.\n",
+        order);
 }
 
 }    // namespace detail
 
 int main() {
     try {
-        // The build's default order first, then the smallest and largest
-        // supported orders through re-filled tables.
+        // The build's default order first, then every other supported order
+        // through re-filled tables.
         detail::checkOrder<kFmmDefaultOrder>();
-        if constexpr (kFmmDefaultOrder != kFmmMinOrder) {
-            detail::checkOrder<kFmmMinOrder>();
+        for (int order = kFmmMinOrder; order <= kFmmMaxOrder; ++order) {
+            if (order != kFmmDefaultOrder) {
+                fmmDispatch(order, [](auto selectedOrder) {
+                    detail::checkOrder<decltype(selectedOrder)::value>();
+                });
+            }
         }
-        if constexpr (kFmmDefaultOrder != kFmmMaxOrder) {
-            detail::checkOrder<kFmmMaxOrder>();
-        }
-        std::puts("CPU Ewald initialization and independent periodic potential/gradient passed.");
+        std::puts("CPU Ewald initialization, independent periodic potential/gradient, and cubic "
+                  "symmetry passed.");
         return 0;
     } catch (std::exception const& error) {
         std::fprintf(stderr, "CPU Ewald test failed: %s\n", error.what());

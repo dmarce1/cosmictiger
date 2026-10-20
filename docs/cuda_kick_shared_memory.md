@@ -49,9 +49,10 @@ order-dependent code is instantiated per order from templates:
 - `cosmictiger/fmm/fmm_kernels.hpp`: operator wrappers that deduce the degrees from
   their tensor arguments over the generated STF kernels.
 - Generated code: `tools/generate_stf_m2l.py` emits one fully specialized
-  kernel class per degree for local degrees 2 through 8 into a single header set
-  in the build tree (`ninja cosmictiger_generated_kernels`), and
-  `src/fmm/fmm_kernel_codegen.cpp` emits one Ewald derivative overload per order.
+  kernel class per degree for local degrees 2 through 8 and one Ewald derivative
+  overload per order into a single header set in the build tree
+  (`ninja cosmictiger_generated_kernels`). The same entry point uses
+  `tools/stf/stf_ewald.py` to generate the Ewald derivatives.
   Parsing the whole set costs about two seconds with g++ and three with nvcc.
 - Per-order translation units: CMake configures
   `instances/fmm_instance_cpu_<order>.cpp` and `fmm_instance_cuda_<order>.cu`

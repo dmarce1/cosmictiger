@@ -19,8 +19,6 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #pragma once
 
-#ifndef CODE_GEN_CPP
-
 #ifdef NDEBUG
 #define ASSERT(a)
 #else
@@ -41,13 +39,4 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 __device__ void cosmictigerCudaAssert(char const*, bool, char const*, int);
 #else
 void cosmictigerAssert(char const*, bool, char const*, int);
-#endif
-
-#else
-
-#include <cassert>
-
-#define ASSERT assert
-#define ALWAYS_ASSERT assert
-
 #endif

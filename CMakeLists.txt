@@ -367,53 +367,40 @@ add_executable(recfast recfast/recfast.f)
 if(CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
     target_compile_options(recfast PRIVATE -Werror=line-truncation)
 endif()
-add_executable(fmm_kernel_codegen src/fmm/fmm_kernel_codegen.cpp cosmictiger/math/tensor.hpp)
-target_link_libraries(fmm_kernel_codegen PRIVATE dl)
-target_include_directories(fmm_kernel_codegen PRIVATE ${PROJECT_SOURCE_DIR})
-if(COSMICTIGER_WITH_CUDA)
-    target_compile_definitions(fmm_kernel_codegen PRIVATE USE_CUDA)
-    target_link_libraries(fmm_kernel_codegen PRIVATE CUDA::cudart)
-endif()
 configure_file(power.init power.init COPYONLY)
-# Generated kernels for every FMM order, produced in the build tree. The STF
-# generator emits one specialized kernel class per degree into one header set and
-# the Ewald codegen one derivative overload per order, so a single build serves
-# all orders and selects one at run time.
+# Generated kernels for every FMM order, produced together in the build tree.
+# The Python generator emits specialized STF kernel classes and one Ewald
+# derivative overload per order, so a single build serves all orders and selects
+# one at run time.
 set(COSMICTIGER_GENERATED_INCLUDE_DIR ${PROJECT_BINARY_DIR}/generated)
-set(COSMICTIGER_GENERATED_STF_DIR
+set(COSMICTIGER_GENERATED_FMM_DIR
     ${COSMICTIGER_GENERATED_INCLUDE_DIR}/cosmictiger/fmm)
-set(COSMICTIGER_GENERATED_EWALD_HEADER
-    ${COSMICTIGER_GENERATED_INCLUDE_DIR}/cosmictiger/fmm/ewald_kernels.hpp)
-set(COSMICTIGER_GENERATED_STF_FILES
-    ${COSMICTIGER_GENERATED_STF_DIR}/generated_config.hpp
-    ${COSMICTIGER_GENERATED_STF_DIR}/generated_m2l.hpp
-    ${COSMICTIGER_GENERATED_STF_DIR}/generated_operators.hpp
-    ${COSMICTIGER_GENERATED_STF_DIR}/operation_counts.json)
-add_custom_command(
-    OUTPUT ${COSMICTIGER_GENERATED_EWALD_HEADER}
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${COSMICTIGER_GENERATED_INCLUDE_DIR}/cosmictiger/fmm
-    COMMAND fmm_kernel_codegen > ${COSMICTIGER_GENERATED_EWALD_HEADER}
-    DEPENDS fmm_kernel_codegen
-    COMMENT "Generating Ewald derivatives for FMM orders 3 to 9")
-add_custom_target(generate_fmm_kernels DEPENDS ${COSMICTIGER_GENERATED_EWALD_HEADER})
+set(COSMICTIGER_GENERATED_FMM_FILES
+    ${COSMICTIGER_GENERATED_FMM_DIR}/generated_config.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/generated_m2l.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/generated_operators.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/ewald_kernels.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/operation_counts.json)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
-set(COSMICTIGER_STF_GENERATOR_SOURCES
+set(COSMICTIGER_FMM_GENERATOR_SOURCES
     ${PROJECT_SOURCE_DIR}/tools/generate_stf_m2l.py
     ${PROJECT_SOURCE_DIR}/tools/stf/stf_cuda.py
+    ${PROJECT_SOURCE_DIR}/tools/stf/stf_ewald.py
     ${PROJECT_SOURCE_DIR}/tools/stf/stf_particles.py
     ${PROJECT_SOURCE_DIR}/tools/stf/stf_translations.py
     ${PROJECT_SOURCE_DIR}/tools/stf/generated_notice.txt
     ${PROJECT_SOURCE_DIR}/cosmictiger/core/defs.hpp)
 add_custom_command(
-    OUTPUT ${COSMICTIGER_GENERATED_STF_FILES}
+    OUTPUT ${COSMICTIGER_GENERATED_FMM_FILES}
     COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/generate_stf_m2l.py
-        --output-dir ${COSMICTIGER_GENERATED_STF_DIR} --no-format
-    DEPENDS ${COSMICTIGER_STF_GENERATOR_SOURCES}
+        --output-dir ${COSMICTIGER_GENERATED_FMM_DIR} --no-format
+    DEPENDS ${COSMICTIGER_FMM_GENERATOR_SOURCES}
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-    COMMENT "Generating STF kernels for FMM orders 3 to 9")
-add_custom_target(generate_stf_kernels DEPENDS ${COSMICTIGER_GENERATED_STF_FILES})
+    COMMENT "Generating STF kernels and Ewald derivatives for FMM orders 3 to 9")
+add_custom_target(generate_fmm_kernels DEPENDS ${COSMICTIGER_GENERATED_FMM_FILES})
+add_custom_target(generate_stf_kernels DEPENDS ${COSMICTIGER_GENERATED_FMM_FILES})
 add_custom_target(cosmictiger_generated_kernels
-    DEPENDS ${COSMICTIGER_GENERATED_STF_FILES} ${COSMICTIGER_GENERATED_EWALD_HEADER})
+    DEPENDS ${COSMICTIGER_GENERATED_FMM_FILES})
 # Compile a target against the generated kernels and the order/bucket defaults.
 function(cosmictiger_use_generated_kernels target)
     target_include_directories(${target} BEFORE PRIVATE ${COSMICTIGER_GENERATED_INCLUDE_DIR})
@@ -448,7 +435,7 @@ add_hpx_executable(groups2halofunc
 target_link_libraries(groups2halofunc PUBLIC Boost::program_options)
 target_include_directories(groups2halofunc PRIVATE ${PROJECT_SOURCE_DIR})
 
-foreach(tool_target IN ITEMS fmm_kernel_codegen healpix2silo groups2halofunc)
+foreach(tool_target IN ITEMS healpix2silo groups2halofunc)
     target_compile_options(${tool_target} PRIVATE -Wno-attributes -ffast-math)
     if(COMPILER_SUPPORTS_MARCH_NATIVE)
         target_compile_options(${tool_target} PRIVATE -march=native)

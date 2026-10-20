@@ -91,14 +91,16 @@ ninja -C build cosmictiger_generated_kernels
 ```
 
 That target runs `python3 tools/generate_stf_m2l.py --output-dir
-build/generated/cosmictiger/fmm`, which emits one specialized
+build/generated/cosmictiger/fmm --no-format`, which emits one specialized
 kernel class per degree for local degrees 2 through 8 (`generated_config.hpp`
-records the range as `kMinLocalDegree`/`kMaxLocalDegree`), and
-`fmm_kernel_codegen`, which writes one `ewaldCorrectionDerivatives` overload per
-order into `build/generated/cosmictiger/fmm/ewald_kernels.hpp`. The former checked-in
+records the range as `kMinLocalDegree`/`kMaxLocalDegree`) and one
+`ewaldCorrectionDerivatives` overload per order in `ewald_kernels.hpp`.
+The same Python entry point uses `tools/stf/stf_ewald.py` for the Ewald
+derivatives, so generation does not require compiling a separate C++ tool.
+The compatibility targets `generate_fmm_kernels` and `generate_stf_kernels`
+produce the same complete output set. The former checked-in
 `cosmictiger/gravity/stf/generated/` directory and the generator's `--check`
-comparison against it are gone; regenerate by rebuilding. The former Cartesian
-translation generator has been removed from `src/fmm/fmm_kernel_codegen.cpp`.
+comparison against it are gone; regenerate by rebuilding.
 
 `stf_kernels` checks independent Cartesian polynomial references, translations,
 nonzero dipoles, constant Laplacians, the truncated direct-particle remainder
@@ -119,9 +121,15 @@ The old CUDA generator omitted the last of 616 nonpotential terms,
 in the unchanged legacy baseline, which exists only at local degree six.
 
 `stf_ewald_cpu` also compiles the CUDA-disabled Ewald initializer and checks its
-image list, self terms, normalization, and periodic potential/gradient values at
-the default order and, after re-filling the tables through `setFmmOrder` and
-`EwaldConst::init`, at orders 3 and 9. CPU runtime validation uses
+image list, self terms, normalization, periodic potential/gradient values, and
+cubic axis-permutation symmetry at every order from 3 through 9, re-filling the
+tables through `setFmmOrder` and `EwaldConst::init`. The symmetry check includes
+every derivative rank through eight. Moving the Ewald emitter to Python removed
+signed-integer overflow in ten rank-eight projection coefficients; Fourier table
+generation also converts factors before multiplying to avoid the same overflow.
+Equal-destination terms now accumulate in a deterministic stable order, so
+floating-point results need not be bitwise identical to the former C++ emitter.
+CPU runtime validation uses
 `--compute.cuda=false` in the CUDA-enabled application. A complete
 `COSMICTIGER_WITH_CUDA=OFF` application build still has pre-existing
 unconditional CUDA calls elsewhere in the application.
