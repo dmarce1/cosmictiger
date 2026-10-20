@@ -24,9 +24,13 @@ Set its radius with `gravity.effectiveRadius`, `gravity.supportRadius`,
 or the legacy effective-radius alias `gravity.softening`. SPH uses a separate
 variable smoothing radius and defaults to the cubic spline with 42 weighted
 neighbors. All gas evolution requires CUDA. HPX thread/locality settings remain
-on the command line and are not application INI options. Removed chemistry,
-conduction, diffusion, reflecting-boundary, and SPH-gravity-smoothing options
-are absent from these files and are rejected in older configurations.
+on the command line and are not application INI options. The removed
+`hydro.chemistry`, conduction, diffusion, reflecting-boundary, and
+SPH-gravity-smoothing options are absent from these files and are rejected in
+older configurations. Primordial thermochemistry is the separate `[chemistry]`
+group, present in every file with its source defaults and `enabled = false`; it
+requires cosmological SPH initial conditions, see
+[primordial chemistry](../docs/primordial_chemistry.md).
 
 | Configuration | Selection | Problem-specific settings |
 | --- | --- | --- |
