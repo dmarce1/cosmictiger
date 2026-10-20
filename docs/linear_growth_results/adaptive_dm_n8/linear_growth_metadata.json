@@ -1,0 +1,22 @@
+{
+  "side": 8,
+  "species": 1,
+  "mass_dm": 1,
+  "mass_gas": 0,
+  "gm": 0.001953125,
+  "kernel_family": "ferrers",
+  "kernel_degree": 4,
+  "softening_mode": "adaptive",
+  "neighbor_number": 24,
+  "theta": 0.10000000000000001,
+  "backend": "cpu",
+  "omega_m": 0.314419,
+  "omega_r": 9.3423060904353246e-05,
+  "omega_k": 0,
+  "omega_lambda": 0.68548757693909568,
+  "baseline_force_rms": 8.8253301369550153e-07,
+  "baseline_support_dm": 0.22275924682617188,
+  "baseline_support_gas": 0,
+  "pressure_enabled": false,
+  "response_normalization": "acceleration / (4*pi*G*rho_comoving)"
+}

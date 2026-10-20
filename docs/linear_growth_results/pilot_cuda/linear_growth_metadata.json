@@ -1,0 +1,22 @@
+{
+  "side": 8,
+  "species": 2,
+  "mass_dm": 0.84291979810380413,
+  "mass_gas": 0.15708020189619584,
+  "gm": 0.0019531249417923408,
+  "kernel_family": "ferrers",
+  "kernel_degree": 4,
+  "softening_mode": "adaptive",
+  "neighbor_number": 24,
+  "theta": 0.20000000000000001,
+  "backend": "cuda",
+  "omega_m": 0.314419,
+  "omega_r": 9.3423060904353246e-05,
+  "omega_k": 0,
+  "omega_lambda": 0.68548757693909568,
+  "baseline_force_rms": 4.2549486751503569e-07,
+  "baseline_support_dm": 0.17496612668037415,
+  "baseline_support_gas": 0.17496612668037415,
+  "pressure_enabled": false,
+  "response_normalization": "acceleration / (4*pi*G*rho_comoving)"
+}

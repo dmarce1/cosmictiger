@@ -1,0 +1,13 @@
+Response reproduced exactly: glass
+Response reproduced exactly: lattice
+Growth reproduced exactly: adaptive_glass
+Growth reproduced exactly: adaptive_lattice
+Growth reproduced exactly: control_16_glass
+Growth reproduced exactly: control_16_lattice
+Growth reproduced exactly: control_half_glass
+Growth reproduced exactly: control_half_lattice
+Growth reproduced exactly: oblique_glass
+Growth reproduced exactly: oblique_lattice
+Glass/lattice comparison reproduced exactly.
+Reanalysis directory: /tmp/cosmictiger_f4_12_reanalysis_61cv6pgb
+Kernel comparison, controls, and oblique tables reproduced byte for byte in a separate archive copy.

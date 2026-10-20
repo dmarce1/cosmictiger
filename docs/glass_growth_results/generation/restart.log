@@ -1,0 +1,421 @@
+STARTING MAIN
+128
+std::atomic<int> is lock free!
+tree_node size = 96
+Detected 1 processes per node
+Hyperthreading detected
+Starting mem use daemon
+Processing options
+box_size = 2.679408e+00 Mpc
+lc map size = 1.157762e-01
+hydro.enabled                     : F
+run.hierarchicalGravity           : T
+hydro.chemistry                   : F
+hydro.stars                       : F
+hydro.viscosityAlpha              : 1.000000e+00
+hydro.viscosityBeta               : 2.000000e+00
+hydro.viscosityEpsilon            : 1.000000e-02
+hydro.gamma                       : 1.666667e+00
+hydro.neighborNumber              : 4.200000e+01
+hydro.minSupportRadius            : 1.000000e-06
+hydro.maxSupportRadius            : 4.000000e+00
+hydro.minEffectiveRadius          : 5.477226e-07
+hydro.maxEffectiveRadius          : 2.190890e+00
+hydro.cfl                         : 2.282177e-01
+Simulation Options
+code_to_M_solar = 1.492195e+09
+Box size = 1.000000e+00 cm/h
+checkpoint.intervalSeconds        : 1000000000
+units.lengthCm                    : 3.085678e+24
+units.massG                       : 2.954545e+42
+units.timeSeconds                 : 2.757838e+14
+compute.cuda                      : T
+lightcone.enabled                 : F
+analysis.groups                   : F
+analysis.power                    : F
+analysis.slice                    : F
+analysis.tracers                  : F
+analysis.views                    : F
+output.silo                       : F
+output.siloInterval               : 1
+output.directory                  : ./output
+output.units                      : code
+output.frame                      : comoving
+output.xMin                       : 0.000000e+00
+output.xMax                       : 1.000000e+00
+output.yMin                       : 0.000000e+00
+output.yMax                       : 1.000000e+00
+output.zMin                       : 0.000000e+00
+output.zMax                       : 1.000000e+00
+gravity.timestepEta               : 2.040160e-01
+gravity.gm                        : 1.953125e-03
+gravity.softeningMode             : fixed
+gravity.neighborNumber            : 2.400000e+01
+gravity.minSupportRadius          : 1.000000e-06
+gravity.maxSupportRadius          : 4.000000e+00
+gravity.softening                 : 1.876988e-02
+gravity.effectiveRadius           : 1.876988e-02
+gravity.supportRadius             : 2.815483e-02
+hydro.centralEffectiveRadius      : 5.477226e-03
+hydro.centralSupportRadius        : 8.215838e-03
+gravity.kernelFamily              : ferrers
+gravity.kernelDegree              : 4
+hydro.kernelFamily                : spline
+hydro.kernelDegree                : 3
+gravity.sphSmoothing              : F
+cosmology.hubble                  : 1.000000e+00
+lightcone.linkingLength           : 2.800000e-01
+lightcone.minGroupSize            : 20
+lightcone.mapSize                 : 1
+analysis.linkingLength            : 3.500000e-02
+run.maxIterations                 : 3000
+analysis.minGroupSize             : 20
+cosmology.omegaB                  : 4.938900e-02
+cosmology.omegaC                  : 2.650300e-01
+cosmology.omegaGamma              : 5.522212e-05
+cosmology.omegaM                  : 3.144190e-01
+cosmology.omegaNu                 : 3.820094e-05
+cosmology.omegaR                  : 9.342306e-05
+compute.particleCacheLineSize     : 10922
+initial.particlesPerDimension     : 8
+checkpoint.readIndex              : 501
+analysis.saveForce                : F
+cosmology.sigma8                  : 8.607000e-01
+analysis.sliceResolution          : 4096
+analysis.sliceSize                : 1.000000e+00
+cosmology.thetaCmb                : 9.983516e-01
+gravity.openingAngle              : 8.000000e-01
+analysis.tracerCount              : 1000000
+compute.treeCacheLineSize         : 682
+initial.twoLpt                    : F
+initial.usePowerFile              : T
+analysis.viewSize                 : 1024
+cosmology.startRedshift           : 4.900000e+01
+cosmology.endRedshift             : 0.000000e+00
+cosmology.spectralIndex           : 9.660500e-01
+cosmology.heliumFraction          : 2.454006e-01
+cosmology.nEff                    : 3.046000e+00
+configuration                     : /home/dmarce1/workspace/cosmictiger/configurations/createGlass.ini
+run.test                          : 
+Silo particle output: disabled (output.silo=false)
+count = 178 178
+Reading checkpoint
+Reading 512 total particles.
+particles_size  = 512
+Done reading checkpoint
+tau_max = 1.000000e+00
+Detected a hardware concurrency of 12
+Occupancy is 4 shmem size = 22608 numregs = 255
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 8.719e+01        501  0.000e+00  1.000e+00  0.000e+00  4.360e+02  9.180e+07          0          0        184  8.211e-03  2.302e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 8.737e+01        502  0.000e+00  1.000e+00  0.000e+00  4.370e+02  9.194e+07          0          0        184  1.066e-02  1.773e-01  1.000e+00  1.000e+00 
+MAX MEMUSED = 0.400536 GB
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 8.755e+01        503  0.000e+00  1.000e+00  0.000e+00  4.380e+02  9.207e+07          0          0        184  1.079e-02  1.751e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 8.772e+01        504  0.000e+00  1.000e+00  0.000e+00  4.390e+02  9.221e+07          0          0        184  1.077e-02  1.754e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 8.790e+01        505  0.000e+00  1.000e+00  0.000e+00  4.400e+02  9.235e+07          0          0        184  1.059e-02  1.787e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 8.807e+01        506  0.000e+00  1.000e+00  0.000e+00  4.410e+02  9.248e+07          0          0        184  1.088e-02  1.739e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 8.825e+01        507  0.000e+00  1.000e+00  0.000e+00  4.420e+02  9.262e+07          0          0        184  1.090e-02  1.736e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 8.842e+01        508  0.000e+00  1.000e+00  0.000e+00  4.430e+02  9.276e+07          0          0        184  1.082e-02  1.749e-01  1.000e+00  1.000e+00 
+MAX MEMUSED = 0.402065 GB
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 8.860e+01        509  0.000e+00  1.000e+00  0.000e+00  4.440e+02  9.289e+07          0          0        184  1.087e-02  1.742e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 8.878e+01        510  0.000e+00  1.000e+00  0.000e+00  4.450e+02  9.303e+07          0          0        184  1.057e-02  1.791e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 8.895e+01        511  0.000e+00  1.000e+00  0.000e+00  4.460e+02  9.317e+07          0          0        184  1.091e-02  1.736e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 8.913e+01        512  0.000e+00  1.000e+00  0.000e+00  4.470e+02  9.330e+07          0          0        184  1.070e-02  1.770e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 8.930e+01        513  0.000e+00  1.000e+00  0.000e+00  4.480e+02  9.344e+07          0          0        184  1.091e-02  1.735e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 8.948e+01        514  0.000e+00  1.000e+00  0.000e+00  4.490e+02  9.358e+07          0          0        184  1.081e-02  1.758e-01  1.000e+00  1.000e+00 
+MAX MEMUSED = 0.403385 GB
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 8.966e+01        515  0.000e+00  1.000e+00  0.000e+00  4.500e+02  9.371e+07          0          0        184  1.057e-02  1.801e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 8.983e+01        516  0.000e+00  1.000e+00  0.000e+00  4.510e+02  9.385e+07          0          0        184  1.095e-02  1.741e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.001e+01        517  0.000e+00  1.000e+00  0.000e+00  4.520e+02  9.398e+07          0          0        184  1.088e-02  1.751e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.018e+01        518  0.000e+00  1.000e+00  0.000e+00  4.530e+02  9.412e+07          0          0        184  1.092e-02  1.745e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.036e+01        519  0.000e+00  1.000e+00  0.000e+00  4.540e+02  9.426e+07          0          0        184  1.063e-02  1.792e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.053e+01        520  0.000e+00  1.000e+00  0.000e+00  4.550e+02  9.439e+07          0          0        184  1.094e-02  1.741e-01  1.000e+00  1.000e+00 
+MAX MEMUSED = 0.404118 GB
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.073e+01        521  0.000e+00  1.000e+00  0.000e+00  4.560e+02  9.453e+07          0          0        184  9.779e-03  1.942e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.093e+01        522  0.000e+00  1.000e+00  0.000e+00  4.570e+02  9.467e+07          0          0        184  9.572e-03  1.984e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.112e+01        523  0.000e+00  1.000e+00  0.000e+00  4.580e+02  9.480e+07          0          0        184  9.910e-03  1.916e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.129e+01        524  0.000e+00  1.000e+00  0.000e+00  4.590e+02  9.494e+07          0          0        184  1.083e-02  1.753e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.147e+01        525  0.000e+00  1.000e+00  0.000e+00  4.600e+02  9.508e+07          0          0        184  1.063e-02  1.786e-01  1.000e+00  1.000e+00 
+MAX MEMUSED = 0.404148 GB
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.165e+01        526  0.000e+00  1.000e+00  0.000e+00  4.610e+02  9.521e+07          0          0        184  1.059e-02  1.793e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.183e+01        527  0.000e+00  1.000e+00  0.000e+00  4.620e+02  9.535e+07          0          0        184  1.082e-02  1.757e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.200e+01        528  0.000e+00  1.000e+00  0.000e+00  4.630e+02  9.549e+07          0          0        184  1.093e-02  1.739e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.218e+01        529  0.000e+00  1.000e+00  0.000e+00  4.640e+02  9.562e+07          0          0        184  1.070e-02  1.776e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.235e+01        530  0.000e+00  1.000e+00  0.000e+00  4.650e+02  9.576e+07          0          0        184  1.096e-02  1.735e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.253e+01        531  0.000e+00  1.000e+00  0.000e+00  4.660e+02  9.590e+07          0          0        184  1.082e-02  1.756e-01  1.000e+00  1.000e+00 
+MAX MEMUSED = 0.404327 GB
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.271e+01        532  0.000e+00  1.000e+00  0.000e+00  4.670e+02  9.603e+07          0          0        184  1.065e-02  1.784e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.288e+01        533  0.000e+00  1.000e+00  0.000e+00  4.680e+02  9.617e+07          0          0        184  1.089e-02  1.746e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.306e+01        534  0.000e+00  1.000e+00  0.000e+00  4.690e+02  9.631e+07          0          0        184  1.086e-02  1.751e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.324e+01        535  0.000e+00  1.000e+00  0.000e+00  4.700e+02  9.644e+07          0          0        184  1.066e-02  1.781e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.341e+01        536  0.000e+00  1.000e+00  0.000e+00  4.710e+02  9.658e+07          0          0        184  1.091e-02  1.740e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.358e+01        537  0.000e+00  1.000e+00  0.000e+00  4.720e+02  9.672e+07          0          0        184  1.089e-02  1.743e-01  1.000e+00  1.000e+00 
+MAX MEMUSED = 0.404446 GB
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.376e+01        538  0.000e+00  1.000e+00  0.000e+00  4.730e+02  9.685e+07          0          0        184  1.079e-02  1.760e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.394e+01        539  0.000e+00  1.000e+00  0.000e+00  4.740e+02  9.699e+07          0          0        184  1.072e-02  1.772e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.411e+01        540  0.000e+00  1.000e+00  0.000e+00  4.750e+02  9.713e+07          0          0        184  1.093e-02  1.740e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.429e+01        541  0.000e+00  1.000e+00  0.000e+00  4.760e+02  9.726e+07          0          0        184  1.096e-02  1.733e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.446e+01        542  0.000e+00  1.000e+00  0.000e+00  4.770e+02  9.740e+07          0          0        184  1.065e-02  1.783e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.465e+01        543  0.000e+00  1.000e+00  0.000e+00  4.780e+02  9.754e+07          0          0        184  1.022e-02  1.857e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.485e+01        544  0.000e+00  1.000e+00  0.000e+00  4.790e+02  9.767e+07          0          0        184  9.762e-03  1.954e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.504e+01        545  0.000e+00  1.000e+00  0.000e+00  4.800e+02  9.781e+07          0          0        184  9.598e-03  1.975e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.522e+01        546  0.000e+00  1.000e+00  0.000e+00  4.810e+02  9.794e+07          0          0        184  1.058e-02  1.794e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.540e+01        547  0.000e+00  1.000e+00  0.000e+00  4.820e+02  9.808e+07          0          0        184  1.076e-02  1.762e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.558e+01        548  0.000e+00  1.000e+00  0.000e+00  4.830e+02  9.822e+07          0          0        184  1.073e-02  1.773e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.576e+01        549  0.000e+00  1.000e+00  0.000e+00  4.840e+02  9.835e+07          0          0        184  1.053e-02  1.808e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.593e+01        550  0.000e+00  1.000e+00  0.000e+00  4.850e+02  9.849e+07          0          0        184  1.090e-02  1.746e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.611e+01        551  0.000e+00  1.000e+00  0.000e+00  4.860e+02  9.863e+07          0          0        184  1.068e-02  1.781e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.629e+01        552  0.000e+00  1.000e+00  0.000e+00  4.870e+02  9.876e+07          0          0        184  1.071e-02  1.777e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.646e+01        553  0.000e+00  1.000e+00  0.000e+00  4.880e+02  9.890e+07          0          0        184  1.082e-02  1.759e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.664e+01        554  0.000e+00  1.000e+00  0.000e+00  4.890e+02  9.904e+07          0          0        184  1.091e-02  1.743e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.682e+01        555  0.000e+00  1.000e+00  0.000e+00  4.900e+02  9.917e+07          0          0        184  1.063e-02  1.789e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.700e+01        556  0.000e+00  1.000e+00  0.000e+00  4.910e+02  9.931e+07          0          0        184  1.067e-02  1.783e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.717e+01        557  0.000e+00  1.000e+00  0.000e+00  4.920e+02  9.945e+07          0          0        184  1.079e-02  1.764e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.735e+01        558  0.000e+00  1.000e+00  0.000e+00  4.930e+02  9.958e+07          0          0        184  1.071e-02  1.778e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.753e+01        559  0.000e+00  1.000e+00  0.000e+00  4.940e+02  9.972e+07          0          0        184  1.061e-02  1.796e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.771e+01        560  0.000e+00  1.000e+00  0.000e+00  4.950e+02  9.986e+07          0          0        184  1.067e-02  1.785e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.789e+01        561  0.000e+00  1.000e+00  0.000e+00  4.960e+02  9.999e+07          0          0        184  1.058e-02  1.797e-01  1.000e+00  1.000e+00 
+MAX MEMUSED = 0.404518 GB
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.807e+01        562  0.000e+00  1.000e+00  0.000e+00  4.970e+02  1.001e+08          0          0        184  1.048e-02  1.816e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.825e+01        563  0.000e+00  1.000e+00  0.000e+00  4.980e+02  1.003e+08          0          0        184  1.059e-02  1.795e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.843e+01        564  0.000e+00  1.000e+00  0.000e+00  4.990e+02  1.004e+08          0          0        184  1.067e-02  1.782e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.861e+01        565  0.000e+00  1.000e+00  0.000e+00  5.000e+02  1.005e+08          0          0        184  1.024e-02  1.857e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.881e+01        566  0.000e+00  1.000e+00  0.000e+00  5.010e+02  1.007e+08          0          0        184  9.689e-03  1.964e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.901e+01        567  0.000e+00  1.000e+00  0.000e+00  5.020e+02  1.008e+08          0          0        184  9.583e-03  1.988e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.920e+01        568  0.000e+00  1.000e+00  0.000e+00  5.030e+02  1.009e+08          0          0        184  1.019e-02  1.870e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.938e+01        569  0.000e+00  1.000e+00  0.000e+00  5.040e+02  1.011e+08          0          0        184  1.032e-02  1.845e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.956e+01        570  0.000e+00  1.000e+00  0.000e+00  5.050e+02  1.012e+08          0          0        184  1.063e-02  1.795e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.974e+01        571  0.000e+00  1.000e+00  0.000e+00  5.060e+02  1.014e+08          0          0        184  1.042e-02  1.830e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 9.993e+01        572  0.000e+00  1.000e+00  0.000e+00  5.070e+02  1.015e+08          0          0        184  1.054e-02  1.809e-01  1.000e+00  1.000e+00 
+MAX MEMUSED = 0.404606 GB
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 1.001e+02        573  0.000e+00  1.000e+00  0.000e+00  5.080e+02  1.016e+08          0          0        184  1.063e-02  1.793e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 1.003e+02        574  0.000e+00  1.000e+00  0.000e+00  5.090e+02  1.018e+08          0          0        184  1.067e-02  1.788e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 1.005e+02        575  0.000e+00  1.000e+00  0.000e+00  5.100e+02  1.019e+08          0          0        184  1.038e-02  1.836e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 1.006e+02        576  0.000e+00  1.000e+00  0.000e+00  5.110e+02  1.020e+08          0          0        184  1.071e-02  1.778e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 1.008e+02        577  0.000e+00  1.000e+00  0.000e+00  5.120e+02  1.022e+08          0          0        184  1.040e-02  1.832e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 1.010e+02        578  0.000e+00  1.000e+00  0.000e+00  5.130e+02  1.023e+08          0          0        184  1.048e-02  1.820e-01  1.000e+00  1.000e+00 
+MAX MEMUSED = 0.404652 GB
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 1.013e+02        579  0.000e+00  1.000e+00  0.000e+00  5.140e+02  1.025e+08          0          0        184  1.065e-02  1.794e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 1.016e+02        580  0.000e+00  1.000e+00  0.000e+00  5.150e+02  1.026e+08          0          0        184  1.068e-02  1.783e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 1.017e+02        581  0.000e+00  1.000e+00  0.000e+00  5.160e+02  1.027e+08          0          0        184  1.057e-02  1.801e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 1.019e+02        582  0.000e+00  1.000e+00  0.000e+00  5.170e+02  1.029e+08          0          0        184  1.057e-02  1.801e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 1.021e+02        583  0.000e+00  1.000e+00  0.000e+00  5.180e+02  1.030e+08          0          0        184  1.068e-02  1.781e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 1.023e+02        584  0.000e+00  1.000e+00  0.000e+00  5.190e+02  1.031e+08          0          0        184  1.052e-02  1.809e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 1.024e+02        585  0.000e+00  1.000e+00  0.000e+00  5.200e+02  1.033e+08          0          0        184  1.072e-02  1.775e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 1.026e+02        586  0.000e+00  1.000e+00  0.000e+00  5.210e+02  1.034e+08          0          0        184  1.022e-02  1.857e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 1.028e+02        587  0.000e+00  1.000e+00  0.000e+00  5.220e+02  1.035e+08          0          0        184  9.554e-03  1.981e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 1.030e+02        588  0.000e+00  1.000e+00  0.000e+00  5.230e+02  1.037e+08          0          0        184  9.758e-03  1.946e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 1.032e+02        589  0.000e+00  1.000e+00  0.000e+00  5.240e+02  1.038e+08          0          0        184  1.028e-02  1.843e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 1.034e+02        590  0.000e+00  1.000e+00  0.000e+00  5.250e+02  1.040e+08          0          0        184  1.073e-02  1.764e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 1.036e+02        591  0.000e+00  1.000e+00  0.000e+00  5.260e+02  1.041e+08          0          0        184  1.042e-02  1.818e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 1.037e+02        592  0.000e+00  1.000e+00  0.000e+00  5.270e+02  1.042e+08          0          0        184  1.063e-02  1.782e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 1.039e+02        593  0.000e+00  1.000e+00  0.000e+00  5.280e+02  1.044e+08          0          0        184  1.070e-02  1.771e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 1.041e+02        594  0.000e+00  1.000e+00  0.000e+00  5.290e+02  1.045e+08          0          0        184  1.053e-02  1.799e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 1.043e+02        595  0.000e+00  1.000e+00  0.000e+00  5.300e+02  1.046e+08          0          0        184  1.072e-02  1.767e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 1.045e+02        596  0.000e+00  1.000e+00  0.000e+00  5.310e+02  1.048e+08          0          0        184  1.063e-02  1.781e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 1.046e+02        597  0.000e+00  1.000e+00  0.000e+00  5.320e+02  1.049e+08          0          0        184  1.053e-02  1.799e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 1.048e+02        598  0.000e+00  1.000e+00  0.000e+00  5.330e+02  1.050e+08          0          0        184  1.071e-02  1.768e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 1.050e+02        599  0.000e+00  1.000e+00  0.000e+00  5.340e+02  1.052e+08          0          0        184  1.063e-02  1.782e-01  1.000e+00  1.000e+00 
+
+   runtime          i          z          a       adot   timestep      years        mnr        mxr         bs     Tflops       time      close     direct
+ 1.052e+02        600  0.000e+00  1.000e+00  0.000e+00  5.350e+02  1.053e+08          0          0        184  1.075e-02  1.762e-01  1.000e+00  1.000e+00 
+Writing final checkpoint for iteration 601
+Writing checkpoint checkpoint.601
+Done writing checkpoint checkpoint.601

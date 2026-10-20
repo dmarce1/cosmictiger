@@ -1,0 +1,27 @@
+{
+  "particles": 512,
+  "side": 8,
+  "poisson_seed": 48619,
+  "coordinate_sha256": "f7a588d45eba4dceaca6ec799ce967cf05502854fc8d6ee01777568cbff09e13",
+  "poisson_structure_factor_expectation": 1.0,
+  "low_mode_cutoff": 2,
+  "low_mode_independent_modes": 16,
+  "glass": {
+    "nearest_spacing_minimum": 0.8924802315409643,
+    "nearest_spacing_mean": 0.9757046984371666,
+    "nearest_spacing_median": 0.9762433541248381,
+    "low_mode_mean_structure_factor": 5.6768727742326256e-05
+  },
+  "poisson": {
+    "nearest_spacing_minimum": 0.12053713321807052,
+    "nearest_spacing_mean": 0.57289578638991,
+    "nearest_spacing_median": 0.5696021718363489,
+    "low_mode_mean_structure_factor": 1.2438046176066013
+  },
+  "lattice": {
+    "nearest_spacing_minimum": 1.0,
+    "nearest_spacing_mean": 1.0,
+    "nearest_spacing_median": 1.0,
+    "low_mode_mean_structure_factor": 1.1289525104846316e-30
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "directory": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_growth/adaptive_glass",
+  "command": [
+    "/home/dmarce1/workspace/cosmictiger/build/release/cosmictiger",
+    "--run.test=linearGrowth",
+    "--initial.particlesPerDimension=8",
+    "--hydro.enabled=false",
+    "--compute.cuda=true",
+    "--gravity.openingAngle=0.1",
+    "--hpx:threads=4",
+    "--hpx:bind=none"
+  ],
+  "environment": {
+    "COSMICTIGER_LINEAR_GROWTH_MODES": "1,0,0;2,0,0;3,0,0;0,1,0;0,2,0;0,3,0;0,0,1;0,0,2;0,0,3;1,1,0;1,1,1",
+    "COSMICTIGER_LINEAR_GROWTH_LOAD_FILE": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_growth/glass.txt"
+  },
+  "result": "exit0"
+}

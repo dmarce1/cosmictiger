@@ -1,0 +1,188 @@
+{
+  "production_particle_input": {
+    "path": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_fixed_softening/response_glass/linear_growth_response_particles.csv",
+    "sha256": "cd162ef6d12823c99dc041ebbc44083da6c4d52dac27811cb32ce929df1e7886"
+  },
+  "production_projection_input": {
+    "path": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_fixed_softening/response_glass/linear_growth_response.csv",
+    "sha256": "d17f71bc619f1c11bf2ec1520302feec4261d997cd4fb1c627c02457ba63b6c6"
+  },
+  "particles": 512,
+  "perturbations": 48,
+  "method": "Analytic initial J times actual realized half-difference displacement for all perturbations; exact Ewald central forces at actual +/- positions for the largest production-versus-linear relative error at each amplitude",
+  "maximum_production_projection_reconstruction_difference": 2.4424906541753444e-15,
+  "by_amplitude": {
+    "0.002": {
+      "production_minus_linear_relative_norm": 0.0017092844496224937
+    },
+    "0.001": {
+      "production_minus_linear_relative_norm": 0.003095093289551195
+    }
+  },
+  "exact_selected": [
+    {
+      "mode_x": 1,
+      "mode_y": 0,
+      "mode_z": 0,
+      "amplitude_spacing": 0.002,
+      "input_axis": 2,
+      "realized_amplitude": 0.00024999999575012666,
+      "linear_response_rms": 7.902944162337038e-05,
+      "production_minus_linear_relative_norm": 0.0017092844496224937,
+      "production_minus_linear_rms": 1.3508379562917561e-07,
+      "selection": "Largest production-minus-J*displacement relative norm at this amplitude",
+      "production_minus_exact_ewald_relative_norm": 0.0017094951702891971,
+      "exact_finite_amplitude_minus_linear_relative_norm": 4.0437652646992345e-06,
+      "production_minus_exact_ewald_rms": 1.3510029312170346e-07
+    },
+    {
+      "mode_x": 1,
+      "mode_y": 0,
+      "mode_z": 0,
+      "amplitude_spacing": 0.001,
+      "input_axis": 1,
+      "realized_amplitude": 0.00012499999979972965,
+      "linear_response_rms": 3.906540397637601e-05,
+      "production_minus_linear_relative_norm": 0.003095093289551195,
+      "production_minus_linear_rms": 1.209110697008879e-07,
+      "selection": "Largest production-minus-J*displacement relative norm at this amplitude",
+      "production_minus_exact_ewald_relative_norm": 0.00309507198943241,
+      "exact_finite_amplitude_minus_linear_relative_norm": 9.84538091405907e-07,
+      "production_minus_exact_ewald_rms": 1.2091020928431302e-07
+    }
+  ],
+  "longitudinal": [
+    {
+      "mode_x": 1,
+      "mode_y": 0,
+      "mode_z": 0,
+      "amplitude_spacing": 0.002,
+      "production_longitudinal_response": 0.9811398550059195,
+      "linear_longitudinal_response": 0.9811379898541345
+    },
+    {
+      "mode_x": 1,
+      "mode_y": 0,
+      "mode_z": 0,
+      "amplitude_spacing": 0.001,
+      "production_longitudinal_response": 0.9811383981071293,
+      "linear_longitudinal_response": 0.9811379891752493
+    },
+    {
+      "mode_x": 2,
+      "mode_y": 0,
+      "mode_z": 0,
+      "amplitude_spacing": 0.002,
+      "production_longitudinal_response": 0.9271505154626818,
+      "linear_longitudinal_response": 0.9271483954978803
+    },
+    {
+      "mode_x": 2,
+      "mode_y": 0,
+      "mode_z": 0,
+      "amplitude_spacing": 0.001,
+      "production_longitudinal_response": 0.9271464467666855,
+      "linear_longitudinal_response": 0.9271483956334605
+    },
+    {
+      "mode_x": 3,
+      "mode_y": 0,
+      "mode_z": 0,
+      "amplitude_spacing": 0.002,
+      "production_longitudinal_response": 0.830758133673446,
+      "linear_longitudinal_response": 0.8307568360590736
+    },
+    {
+      "mode_x": 3,
+      "mode_y": 0,
+      "mode_z": 0,
+      "amplitude_spacing": 0.001,
+      "production_longitudinal_response": 0.8307595356623035,
+      "linear_longitudinal_response": 0.8307568391086373
+    },
+    {
+      "mode_x": 0,
+      "mode_y": 3,
+      "mode_z": 0,
+      "amplitude_spacing": 0.002,
+      "production_longitudinal_response": 0.8410236258888748,
+      "linear_longitudinal_response": 0.8410230510258414
+    },
+    {
+      "mode_x": 0,
+      "mode_y": 3,
+      "mode_z": 0,
+      "amplitude_spacing": 0.001,
+      "production_longitudinal_response": 0.8410249976772632,
+      "linear_longitudinal_response": 0.8410230505824456
+    },
+    {
+      "mode_x": 0,
+      "mode_y": 0,
+      "mode_z": 3,
+      "amplitude_spacing": 0.002,
+      "production_longitudinal_response": 0.8398947939590311,
+      "linear_longitudinal_response": 0.8398948954054223
+    },
+    {
+      "mode_x": 0,
+      "mode_y": 0,
+      "mode_z": 3,
+      "amplitude_spacing": 0.001,
+      "production_longitudinal_response": 0.8398969142992809,
+      "linear_longitudinal_response": 0.839894899199581
+    },
+    {
+      "mode_x": 1,
+      "mode_y": 2,
+      "mode_z": 2,
+      "amplitude_spacing": 0.002,
+      "production_longitudinal_response": 0.8354884308978701,
+      "linear_longitudinal_response": 0.8354879802035695
+    },
+    {
+      "mode_x": 1,
+      "mode_y": 2,
+      "mode_z": 2,
+      "amplitude_spacing": 0.001,
+      "production_longitudinal_response": 0.8354892705804354,
+      "linear_longitudinal_response": 0.8354879790864562
+    },
+    {
+      "mode_x": 2,
+      "mode_y": 1,
+      "mode_z": 2,
+      "amplitude_spacing": 0.002,
+      "production_longitudinal_response": 0.844055008915704,
+      "linear_longitudinal_response": 0.8440545483328735
+    },
+    {
+      "mode_x": 2,
+      "mode_y": 1,
+      "mode_z": 2,
+      "amplitude_spacing": 0.001,
+      "production_longitudinal_response": 0.8440514458481465,
+      "linear_longitudinal_response": 0.8440545481560816
+    },
+    {
+      "mode_x": 2,
+      "mode_y": 2,
+      "mode_z": 1,
+      "amplitude_spacing": 0.002,
+      "production_longitudinal_response": 0.8406446288401311,
+      "linear_longitudinal_response": 0.8406417154637448
+    },
+    {
+      "mode_x": 2,
+      "mode_y": 2,
+      "mode_z": 1,
+      "amplitude_spacing": 0.001,
+      "production_longitudinal_response": 0.8406439857951526,
+      "linear_longitudinal_response": 0.8406417165674488
+    }
+  ],
+  "independent_ewald_calculation_script_sha256": "118a2b18af433254a13008d3d7bc2d3aa704633f7677103056c771fb99cebb22",
+  "independent_ewald_script_sha256": "d3cc51a9d5c8d946a39f1f2afe06f99b2be9a5a7aa8c365def6b2c7dd570605e",
+  "comparison_calculation_script_sha256": "a555637a98795c05da3e7e1e392f33470f4a3734ac64838e46f1c6f51d31473f",
+  "comparison_script_sha256": "66ceff3e37bde703a8fabc1df5e8e171fe99d32bc2be83d364eca42d3dc89ca2"
+}

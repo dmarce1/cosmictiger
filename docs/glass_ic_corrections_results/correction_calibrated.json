@@ -1,0 +1,63 @@
+{
+  "interpretation": "Empirical in-phase density match at a_final; approximate initial growing velocity retained",
+  "model_validation_sha256": "1e78db9d6c6b805638ca917a011ebafaec16b4284713e294d322fe39ee519502",
+  "corrections": [
+    {
+      "mode_x": 1,
+      "mode_y": 0,
+      "mode_z": 0,
+      "k_over_axis_nyquist": 0.25,
+      "effective_longitudinal_response": 0.9553684754963758,
+      "displacement_multiplier": 1.04436835316191,
+      "velocity_per_displacement_multiplier": 0.9728361830823063,
+      "total_initial_velocity_multiplier": 1.0159993224219865,
+      "initial_growth_rate": 0.9632863754220886,
+      "continuum_initial_growth_rate": 0.9901835398124683,
+      "model_final_velocity_ratio_at_matched_density": 0.9729088545406557,
+      "a_initial": 0.02,
+      "a_final": 0.1,
+      "continuum_growth": 4.958836228859155,
+      "initial_amplitude_spacing": 0.001,
+      "model_displacement_multiplier": 1.0443762671250636,
+      "model_measured_final_density_ratio": 1.0000075777508288
+    },
+    {
+      "mode_x": 2,
+      "mode_y": 0,
+      "mode_z": 0,
+      "k_over_axis_nyquist": 0.5,
+      "effective_longitudinal_response": 0.8095560627918823,
+      "displacement_multiplier": 1.2112861602297909,
+      "velocity_per_displacement_multiplier": 0.8795472971227869,
+      "total_initial_velocity_multiplier": 1.0653834682723515,
+      "initial_growth_rate": 0.87091325609753,
+      "continuum_initial_growth_rate": 0.9901835398124683,
+      "model_final_velocity_ratio_at_matched_density": 0.8798834039604881,
+      "a_initial": 0.02,
+      "a_final": 0.1,
+      "continuum_growth": 4.958836228859155,
+      "initial_amplitude_spacing": 0.001,
+      "model_displacement_multiplier": 1.2123043185248963,
+      "model_measured_final_density_ratio": 1.0008405596699894
+    },
+    {
+      "mode_x": 3,
+      "mode_y": 0,
+      "mode_z": 0,
+      "k_over_axis_nyquist": 0.75,
+      "effective_longitudinal_response": 0.526002652549417,
+      "displacement_multiplier": 1.6896214590609198,
+      "velocity_per_displacement_multiplier": 0.671446815323616,
+      "total_initial_velocity_multiplier": 1.134490947788896,
+      "initial_growth_rate": 0.6648555843929468,
+      "continuum_initial_growth_rate": 0.9901835398124683,
+      "model_final_velocity_ratio_at_matched_density": 0.6725003436455863,
+      "a_initial": 0.02,
+      "a_final": 0.1,
+      "continuum_growth": 4.958836228859155,
+      "initial_amplitude_spacing": 0.001,
+      "model_displacement_multiplier": 1.6904576227102737,
+      "model_measured_final_density_ratio": 1.00049488223819
+    }
+  ]
+}

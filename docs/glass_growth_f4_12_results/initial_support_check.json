@@ -1,0 +1,201 @@
+{
+  "description": "Independent analytic periodic all-pairs number-constraint solve",
+  "kernel": "w(q) proportional to (1-q^2)^p for q<1; q=r/H",
+  "constraint": "C=(4*pi/3)*sum_j w(r_ij/H), including self",
+  "effective_width": "2sigma=2H/sqrt(2p+5)",
+  "particle_count": 512,
+  "side": 8,
+  "spacing": 0.125,
+  "glass_sha256": "f7a588d45eba4dceaca6ec799ce967cf05502854fc8d6ee01777568cbff09e13",
+  "numpy_version": "1.26.4",
+  "measurements": {
+    "f2_24_lattice": {
+      "ferrers_exponent": 2,
+      "density_polynomial_degree": 4,
+      "weighted_target": 24,
+      "self_weight": 4.375,
+      "self_fraction_of_target": 0.18229166666666666,
+      "support_over_spacing": {
+        "minimum": 1.7820739846835567,
+        "mean": 1.7820739846835567,
+        "maximum": 1.782073984683557,
+        "standard_deviation": 2.0770370905276122e-16
+      },
+      "effective_width_2sigma_over_spacing": {
+        "minimum": 1.1880493231223712,
+        "mean": 1.1880493231223712,
+        "maximum": 1.1880493231223712,
+        "standard_deviation": 0.0
+      },
+      "actual_other_neighbors_inside_support": {
+        "minimum": 26.0,
+        "mean": 26.0,
+        "maximum": 26.0,
+        "standard_deviation": 0.0
+      },
+      "constraint_derivative_dC_dlnH": {
+        "minimum": 78.9360274768167,
+        "mean": 78.93602747681672,
+        "maximum": 78.93602747681675,
+        "standard_deviation": 2.1316282072803006e-14
+      },
+      "maximum_absolute_constraint_residual": 9.059419880941277e-13,
+      "metadata_support_over_spacing": {
+        "mean": 1.782073974609375,
+        "minimum": 1.782073974609375,
+        "maximum": 1.782073974609375
+      },
+      "independent_minus_metadata_support_over_spacing": {
+        "mean": 1.007418171106167e-08,
+        "minimum": 1.007418171106167e-08,
+        "maximum": 1.0074181933106274e-08
+      },
+      "metadata_absolute_agreement_tolerance": 5e-07,
+      "metadata_agreement_passed": true,
+      "metadata_source": "../glass_growth_results/adaptive_lattice/linear_growth_metadata.json",
+      "metadata_source_sha256": "88fdd6cf6876310199e96a97e5242c40e29ef93c90accd7383dc302b8c2baec9"
+    },
+    "f2_24_glass": {
+      "ferrers_exponent": 2,
+      "density_polynomial_degree": 4,
+      "weighted_target": 24,
+      "self_weight": 4.375,
+      "self_fraction_of_target": 0.18229166666666666,
+      "support_over_spacing": {
+        "minimum": 1.7564656766043778,
+        "mean": 1.7778659767447595,
+        "maximum": 1.8067981675196458,
+        "standard_deviation": 0.007521286521204004
+      },
+      "effective_width_2sigma_over_spacing": {
+        "minimum": 1.1709771177362518,
+        "mean": 1.1852439844965064,
+        "maximum": 1.2045321116797638,
+        "standard_deviation": 0.005014191014135997
+      },
+      "actual_other_neighbors_inside_support": {
+        "minimum": 17.0,
+        "mean": 20.8828125,
+        "maximum": 27.0,
+        "standard_deviation": 1.7269513136865642
+      },
+      "constraint_derivative_dC_dlnH": {
+        "minimum": 58.529661915984974,
+        "mean": 69.4306822044577,
+        "maximum": 78.50532083600415,
+        "standard_deviation": 3.541601874554147
+      },
+      "maximum_absolute_constraint_residual": 1.0054179711005418e-12,
+      "metadata_support_over_spacing": {
+        "mean": 1.777865977725014,
+        "minimum": 1.7564656734466553,
+        "maximum": 1.8067982196807861
+      },
+      "independent_minus_metadata_support_over_spacing": {
+        "mean": -9.802545442028077e-10,
+        "minimum": 3.1577225279022514e-09,
+        "maximum": -5.216114029593655e-08
+      },
+      "metadata_absolute_agreement_tolerance": 5e-07,
+      "metadata_agreement_passed": true,
+      "metadata_source": "../glass_growth_results/adaptive_glass/linear_growth_metadata.json",
+      "metadata_source_sha256": "f8b8caf3ca714aa26690f7453c491aaf4fd9242174bd6e1c808bce2528044386"
+    },
+    "f4_12_lattice": {
+      "ferrers_exponent": 4,
+      "density_polynomial_degree": 8,
+      "weighted_target": 12,
+      "self_weight": 9.0234375,
+      "self_fraction_of_target": 0.751953125,
+      "support_over_spacing": {
+        "minimum": 1.392419823552398,
+        "mean": 1.3924198235523981,
+        "maximum": 1.3924198235523981,
+        "standard_deviation": 1.5700924586837752e-16
+      },
+      "effective_width_2sigma_over_spacing": {
+        "minimum": 0.772375549352414,
+        "mean": 0.7723755493524144,
+        "maximum": 0.7723755493524141,
+        "standard_deviation": 2.830524433501838e-16
+      },
+      "actual_other_neighbors_inside_support": {
+        "minimum": 6.0,
+        "mean": 6.0,
+        "maximum": 6.0,
+        "standard_deviation": 0.0
+      },
+      "constraint_derivative_dC_dlnH": {
+        "minimum": 25.363936810047836,
+        "mean": 25.363936810047857,
+        "maximum": 25.363936810047868,
+        "standard_deviation": 1.6852000649168165e-14
+      },
+      "maximum_absolute_constraint_residual": 8.881784197001252e-15,
+      "metadata_support_over_spacing": {
+        "mean": 1.3924198150634766,
+        "minimum": 1.3924198150634766,
+        "maximum": 1.3924198150634766
+      },
+      "independent_minus_metadata_support_over_spacing": {
+        "mean": 8.488921565685814e-09,
+        "minimum": 8.48892134364121e-09,
+        "maximum": 8.488921565685814e-09
+      },
+      "metadata_absolute_agreement_tolerance": 5e-07,
+      "metadata_agreement_passed": true,
+      "metadata_source": "adaptive_lattice/linear_growth_metadata.json",
+      "metadata_source_sha256": "3215f5ea5979e71343845f8a28361330f532e1fe3a9620b9528842747121e00a"
+    },
+    "f4_12_glass": {
+      "ferrers_exponent": 4,
+      "density_polynomial_degree": 8,
+      "weighted_target": 12,
+      "self_weight": 9.0234375,
+      "self_fraction_of_target": 0.751953125,
+      "support_over_spacing": {
+        "minimum": 1.347955272478359,
+        "mean": 1.4237966592846796,
+        "maximum": 1.5202307940067497,
+        "standard_deviation": 0.02367600477517817
+      },
+      "effective_width_2sigma_over_spacing": {
+        "minimum": 0.747711054146578,
+        "mean": 0.7897802862900374,
+        "maximum": 0.84327231974318,
+        "standard_deviation": 0.013133084494620792
+      },
+      "actual_other_neighbors_inside_support": {
+        "minimum": 8.0,
+        "mean": 12.37109375,
+        "maximum": 17.0,
+        "standard_deviation": 1.4110973314094735
+      },
+      "constraint_derivative_dC_dlnH": {
+        "minimum": 23.356579209086533,
+        "mean": 28.7201877930804,
+        "maximum": 34.89347506619076,
+        "standard_deviation": 1.7795168093327827
+      },
+      "maximum_absolute_constraint_residual": 5.275779813018744e-13,
+      "metadata_support_over_spacing": {
+        "mean": 1.4237966595683247,
+        "minimum": 1.3479552268981934,
+        "maximum": 1.520230770111084
+      },
+      "independent_minus_metadata_support_over_spacing": {
+        "mean": -2.836451074017532e-10,
+        "minimum": 4.55801656418231e-08,
+        "maximum": 2.3895665668405286e-08
+      },
+      "metadata_absolute_agreement_tolerance": 5e-07,
+      "metadata_agreement_passed": true,
+      "metadata_source": "adaptive_glass/linear_growth_metadata.json",
+      "metadata_source_sha256": "4bf16847aa1c5b485161db5080165e0d3c1ab523d603efb2e785102be96bb550"
+    }
+  },
+  "width_ratios_f4_12_over_f2_24": {
+    "lattice": 0.6501207772439077,
+    "glass": 0.6663440579498384
+  }
+}

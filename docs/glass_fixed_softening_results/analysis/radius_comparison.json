@@ -1,0 +1,6 @@
+{
+  "baseline_support_over_spacing": 0.025,
+  "doubled_support_over_spacing": 0.05,
+  "particle_force_csv_byte_identical": true,
+  "scope": "Initial fixed32 positions and all acceleration components; no pair lies within either compact support"
+}

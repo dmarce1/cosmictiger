@@ -1,0 +1,795 @@
+{
+  "completed_utc": "2026-10-18T01:34:26.928191+00:00",
+  "git_branch": "main",
+  "git_head": "cebcb9eaed38a064fa6c14b6c5fb2f7c321bfc4d",
+  "dirty_worktree": true,
+  "scope": "One saved 512-particle equal-mass glass, fixed comoving Ferrers F2 compact support Delta/40; full instantaneous particle Jacobian spectra and short paired production-force evolution.",
+  "support_over_mean_spacing": 0.025,
+  "support_box_units": 0.003125,
+  "effective_radius_over_mean_spacing": 0.016666666666666666,
+  "a_initial": 0.02,
+  "a_final": 0.1,
+  "initial_perturbation_over_spacing": 0.001,
+  "production_defaults_changed": false,
+  "production_force_sources_unchanged": true,
+  "existing_source_changes": [
+    "tests/linear_growth.cpp"
+  ],
+  "diagnostic_change": "Optional particle output and explicit configured support metadata; force calculations and evolution unchanged.",
+  "executable_sha256": "2b35f44305a63448418b124e11bcbf2bc4b907184040d5ec0055f9d5e2093ed5",
+  "source_sha256": {
+    "CMakeLists.txt": "47deab061e7440863bf08ad2f39512d81655550e57e3d7a33c9c9523284884bf",
+    "configurations/createGlass.ini": "4a38278ef90252796413b0987531cc39840606cf6e91cc0b58411933280d4914",
+    "cosmictiger/adaptive_softening.hpp": "59b5615087ddf1f328e19140948d66d38883ddf8f89e45629c052d9bf7e21274",
+    "cosmictiger/gravity_softening.hpp": "3e0776274a58bcc34ddfb70bf6cc5f29ec849502ac31bb4a32c1af1ffc967729",
+    "cosmictiger/kernel.hpp": "7b67c5617d302928b41b587ad901d0102a443f71a09cc404048d10f16350d6ea",
+    "cosmictiger/kick.hpp": "9f9fb3467019dc939066763b42d05d9a7e0b0602da58243af3d7af1d39c49619",
+    "cosmictiger/options.hpp": "9e8a0425e32c0b4957fda004a9472696794c72791a28d04a8086fd85ae4ad180",
+    "cosmictiger/particles.hpp": "bc0f63d201aa68263e679c3d2c0b6c63db4853ae2b08839f7d49cd96bf327744",
+    "cosmictiger/sph_cuda.hpp": "60c292ee06022f6025641fcdc582b35652c4e5d46c243852215c678d07d6671e",
+    "src/domain.cpp": "80f056edd63d49dcfbab78c0b2a98fbc5d2cd2451de83089c40631e5d03a1eed",
+    "src/drift.cpp": "ca598f31679bdb5aadfab9d006cf7fe5c4e6059d9da844950e10ec2e3a989321",
+    "src/drift.cu": "dd5b5edb49f369e438d85b14182083321e5d8f62cb42f26afd0fb628d59fd876",
+    "src/driver.cpp": "72f430fc53ab010c8e456e0c9632704b3e0680e8452073c104734ccc764f2770",
+    "src/gravity.cpp": "2d6338a26ae0dbafd49fce0952aea3888f7ec8ffe1d45c7902ea4afa3540251d",
+    "src/gravity.cu": "b0eb9e63e7bdbd63d193268b30009004ea34014160cdf879c62275a1eac9cc90",
+    "src/gravity_softening.cpp": "dd9eaa502edd579513819f2758a5ea7bf3587df20a5c9881f4c1412083e9090e",
+    "src/initialize.cpp": "7fad8949f5779f95fd5b8b359193941f29fe14049e47670f970a4a2fca3ce522",
+    "src/kick.cpp": "de1ea4e8f16cad7d1bf37eab337d18f810c7dfb3ad77a6d126ca8a1949596495",
+    "src/kick.cu": "f0de26d0a9930a50921f585e9a49cc1517e2099f7f3eff15c0c541cba68c0072",
+    "src/kick_workspace.cpp": "0475eac19f0107ac4f3e06a8f62954d8975aa02b72333a5080634c51141d7dc3",
+    "src/options.cpp": "faffbdb8a5cb6b664c276b4ad07d5c0ca6aa392d8d9d9f9d2b9ed70ea679932a",
+    "src/particles.cpp": "4434f4c029c5a182189ed7d9bab19259b16ec2e59938001aafe0de71a3ec6337",
+    "src/sph.cpp": "9a01f12cf669182f4fdb9db4904879588caf51155ec7a75116954c1b71b4b18e",
+    "src/sph_cond_init.cu": "c355c809ea06c685b650e5e43d42c74025d16e66235820ba625259b95d907a24",
+    "src/sph_conduction.cu": "7c28e383c7224d4ec258ec9e714aa65bdacbfae8b9ecca0eed6189f541e00d61",
+    "src/sph_hydro.cu": "baa958d3f8b0c4b8392fedb75e2f9aad0cabae1c9df7769edf4f107082e9471e",
+    "src/sph_prehydro.cu": "00068f75adffe49f8c7c156d7251e1e481230aca94f33cdd46ccdd172bd56834",
+    "src/test.cpp": "1744cdc53a7106f7d0b267803b88d58aeae309e7896a11ebfe82bf90cd272431",
+    "src/tree.cpp": "080f7c294a5c3e85f7eb2e3bdb93be15bd18508d1a3b885cbf5ae4b82c05f3c3",
+    "tests/analyze_glass_growth.py": "86d3eb32d94c8d060ded279b90feab8976a806da49a9bcbd703f880e73db6652",
+    "tests/analyze_linear_growth.py": "379ccb50d5a648c734cb42d713dfd2bc18bdf134d3091588ca2423565a037b81",
+    "tests/linear_growth.cpp": "04be384a33b7fdba49ea73b3e5b08bf4f42956ce9beed5ca9776ec5ec0196e8b",
+    "tests/monaghan_sph_cuda.cu": "d21c57e3bf0e907e04aa60c5fd8a92cd6246a3c07a4e307bea886e6777e52833",
+    "tests/run_checkpoint.py": "07d3f8983d59f42db7d07fe6ca0afae04bc475f1b77052fbcd53682621586c6e",
+    "tests/run_kernel_selection.py": "7b0e014c2ef4ac5bc7a361f03ccfde3dc212a56c1a1f1c21abbcf2095372ce13",
+    "tests/run_linear_growth.py": "82e0940fa1f3a1d0a30487e29748fc6abd12bf3cee223a55727ece0a69d5b812",
+    "tests/run_options.py": "397a42867e4d29500367af355468fb415d3311c88b697a17446bf2b048fcf1ef",
+    "tests/run_smoke.py": "450f42463fabbdc482af2ba77a50c5c95db8a52525fd29f61b0723af7fcfcd80",
+    "tests/sph_gravity.cpp": "4eaa7f3b29394156abe257bafd48e3c8f8deaff253b74c7f001b102a04184696",
+    "tests/analyze_glass_ic_corrections.py": "0cbfdabf12376d636a43b1d6c5f733164a9b42f004ec0eeffce01fe287558483",
+    "tests/analyze_glass_fixed_evolution.py": "adcee6155b1f72d4c06a74af9f167bb0a6f47945c78093c073822d6ef2ace42f",
+    "tests/analyze_glass_stability.py": "d3cc51a9d5c8d946a39f1f2afe06f99b2be9a5a7aa8c365def6b2c7dd570605e"
+  },
+  "report_sha256": "a8d5f7f28209bd87846232620f1071e998c666264a0b42a9844fc32b958c8546",
+  "previous_archive_manifests_sha256": {
+    "glass_growth_results": "844101b877c8f9654cf74592c68b0270072537a2f0d6f1ef6be26762bc8ba99f",
+    "glass_growth_f4_12_results": "cb103acb91384d108aaf32a7be7975a2fd850724677e7b88e349c34de51e90b1",
+    "glass_ic_corrections_results": "5cd3403ddaf5ffad344359998eb1c020c99aefd4c866f97854a238f8afd6376c"
+  },
+  "commands": "commands.json",
+  "environment": {
+    "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+    "numpy": "1.26.4",
+    "scipy": "1.11.4",
+    "matplotlib": "3.6.3"
+  },
+  "validation": {
+    "build": "Passed",
+    "self_checks": "Six particle-analysis checks passed",
+    "production": "Five invocations exited zero. The nominal three-wave run produced complete validated data and its completion marker, but the wrapper was terminated before recording child exit status. Altogether five complete paired wave cases, each with positive, negative and zero trajectories.",
+    "interrupted_control": "The first doubled-step control was interrupted before its endpoint. Its records are preserved separately; a fresh complete run supplies validation.",
+    "regression": "Focused linear_growth_response CTest passed in 139.54 seconds.",
+    "independent_reanalysis": "All 32 analysis CSV/JSON files independently regenerated and byte-identical, including response analysis. The renamed current Ewald source reproduces every archived initial glass force component exactly.",
+    "convergence": "Doubling steps changes final shortest-mode density by 0.00104243 percent; halving amplitude changes it by 0.000776865 percent. Doubled support has byte-identical initial production particle and force output.",
+    "independent_spectrum": "Ewald partition convergence, finite-difference force derivatives, symmetry, translations and finite-N trace verified.",
+    "production_comparison": "Full production force and central response fields compared against independent Ewald calculations.",
+    "initial_startup_failure": "Sandbox device access blocked mandatory CUDA table upload despite CPU gravity; host-access retry passed.",
+    "prior_archives": "Every artifact hash verified unchanged in all three previous glass archives.",
+    "full_suite": "Not rerun; focused diagnostic regression and numerical experiment only."
+  },
+  "limitations": [
+    "One equal-mass glass realization",
+    "No SPH pressure or gas Jeans-stability test",
+    "No production block-timestep or late nonlinear collisionless validation",
+    "Pair separations recorded at saved output times"
+  ],
+  "artifacts": [
+    {
+      "path": "analysis/comparison.json",
+      "bytes": 51271,
+      "sha256": "ba078a59fb2b524c3e096e850fc7cd41b08d644f1682a760621486e532104d78"
+    },
+    {
+      "path": "analysis/control_16/baseline_noise.png",
+      "bytes": 38246,
+      "sha256": "05694ddad716df04dc3f62a2a85e6acbcf88730e8ea00dfc116994f7710db00c"
+    },
+    {
+      "path": "analysis/control_16/field_tracks.csv",
+      "bytes": 4597,
+      "sha256": "b1698a86924498fd2b61953482127fc85805e854bab43ec3d582bf0967e2fa69"
+    },
+    {
+      "path": "analysis/control_16/growth/glass_growth.png",
+      "bytes": 129792,
+      "sha256": "84b6bb4606624826d3c3604ac0f7d41cc082ec43760eb6891a48383f30e86e4a"
+    },
+    {
+      "path": "analysis/control_16/growth/growth_summary.csv",
+      "bytes": 830,
+      "sha256": "571940b0444abaf3d5172a386b2d2a6f5679b4fbfe437e27bce1ddfa57696e9a"
+    },
+    {
+      "path": "analysis/control_16/growth/growth_summary.json",
+      "bytes": 2283,
+      "sha256": "2a797f7be8f957606b7c36ada92ba2ee0168be96b16fca6094d854f3d3acf7c7"
+    },
+    {
+      "path": "analysis/control_16/growth/growth_tracks.csv",
+      "bytes": 4817,
+      "sha256": "1ef3df021cb13d47ab63522313a5edee48136ec57291e717ab44dbf511321385"
+    },
+    {
+      "path": "analysis/control_16/noise_tracks.csv",
+      "bytes": 208968,
+      "sha256": "319d1d7a8efeeea7e69e19ae64a2bd305223972acc096ba03fe2d96a3c1fa675"
+    },
+    {
+      "path": "analysis/control_16/pair_tracks.csv",
+      "bytes": 7732,
+      "sha256": "c7e86a2e63ffb778c23ff8f5fafdc22f4e96599a36b2a4505eec131a8a4f7af5"
+    },
+    {
+      "path": "analysis/control_16/particle_diagnostics.png",
+      "bytes": 128716,
+      "sha256": "28ecaa42aba833137c73f06bab3478ce01f4c4e8adba2ed7de78e41bf1fc1668"
+    },
+    {
+      "path": "analysis/control_16/particle_summary.csv",
+      "bytes": 1041,
+      "sha256": "ca7d108035f7fd3a5b189fa437596128b628edf4ab0a5c5f91368d2e569a84c4"
+    },
+    {
+      "path": "analysis/control_16/particle_summary.json",
+      "bytes": 7926,
+      "sha256": "62081088b0f6301b47a5e30171b17fb666676893300364fce3aeb509d30dfc26"
+    },
+    {
+      "path": "analysis/control_half/baseline_noise.png",
+      "bytes": 37499,
+      "sha256": "571c5894516f14c4fcd98da4de7857d817a370156ef145e5c60607c333c50f29"
+    },
+    {
+      "path": "analysis/control_half/field_tracks.csv",
+      "bytes": 2557,
+      "sha256": "7e30385fe861ba7677f9957f79b64b40dc4766f449c16ed112145465df3cc601"
+    },
+    {
+      "path": "analysis/control_half/growth/glass_growth.png",
+      "bytes": 130665,
+      "sha256": "d912542fc8d0d1a12fe4b99d3866e5c4cac73dd6d9a44e187085b16c981deb87"
+    },
+    {
+      "path": "analysis/control_half/growth/growth_summary.csv",
+      "bytes": 828,
+      "sha256": "8fc388abae2c2253a723fab506aae514f43dec72f487eb6b3b4f5d2d2a99b300"
+    },
+    {
+      "path": "analysis/control_half/growth/growth_summary.json",
+      "bytes": 2281,
+      "sha256": "ff7061361445d78e642c00293d1c57fba9529234e91425989530fe31082c3bdc"
+    },
+    {
+      "path": "analysis/control_half/growth/growth_tracks.csv",
+      "bytes": 2656,
+      "sha256": "455a4074de00be072c6f3acf2703404155258dd812c501037ca6494836480167"
+    },
+    {
+      "path": "analysis/control_half/noise_tracks.csv",
+      "bytes": 108471,
+      "sha256": "0a51703f74db58beca806d76a8a859b0a765bf79983d8b1fddd043947d10497c"
+    },
+    {
+      "path": "analysis/control_half/pair_tracks.csv",
+      "bytes": 4191,
+      "sha256": "6c8689ebe651b91aa6ca1668b72eac60cd8854ec2c482fa4754a1c5b523f730a"
+    },
+    {
+      "path": "analysis/control_half/particle_diagnostics.png",
+      "bytes": 124811,
+      "sha256": "5dd251f5402899dae45900982ddfe8b94d7138cc2be7169f2ea7004c3f8c8b7f"
+    },
+    {
+      "path": "analysis/control_half/particle_summary.csv",
+      "bytes": 1042,
+      "sha256": "9573828ca71fb91dddc4c4d45e6c13eddc5c487fcfc3b5e5b0f33ac0eb277cce"
+    },
+    {
+      "path": "analysis/control_half/particle_summary.json",
+      "bytes": 7927,
+      "sha256": "32e63bf3d574d09bbb586a9728013a5f5e9e58cd3fd26e7a794019665abcdbb8"
+    },
+    {
+      "path": "analysis/evolution_glass/baseline_noise.png",
+      "bytes": 37499,
+      "sha256": "571c5894516f14c4fcd98da4de7857d817a370156ef145e5c60607c333c50f29"
+    },
+    {
+      "path": "analysis/evolution_glass/field_tracks.csv",
+      "bytes": 6877,
+      "sha256": "79b4d962412700891435e4ef1d844f2b425be0b111f46699cecf38a4e48f2336"
+    },
+    {
+      "path": "analysis/evolution_glass/growth/glass_growth.png",
+      "bytes": 162025,
+      "sha256": "f3f99400cb734d88e230ac3d92017fbb8d5b52350dcd81230297743f71ab50c0"
+    },
+    {
+      "path": "analysis/evolution_glass/growth/growth_summary.csv",
+      "bytes": 1524,
+      "sha256": "ce0e96a5778045746a68030561fa17611594f304fbe384b77559d746562550bb"
+    },
+    {
+      "path": "analysis/evolution_glass/growth/growth_summary.json",
+      "bytes": 4449,
+      "sha256": "e464014a7ea06c1b0cd480c76625609cebe27002c15fbb2921bf5ed9b3ee2ab2"
+    },
+    {
+      "path": "analysis/evolution_glass/growth/growth_tracks.csv",
+      "bytes": 7313,
+      "sha256": "f089084a03ec4bc9b33967fba7d00304ce7e3be95cd8532940159327b0b3b2ba"
+    },
+    {
+      "path": "analysis/evolution_glass/noise_tracks.csv",
+      "bytes": 325169,
+      "sha256": "d068a051a86472269c4d414e36a4d7f4b47b696a9551968e4cb6b175cfc83a6e"
+    },
+    {
+      "path": "analysis/evolution_glass/pair_tracks.csv",
+      "bytes": 12001,
+      "sha256": "3094245b2a3f895a7f052b4e626e6fa364344781d4efb981c736f5f299fdd239"
+    },
+    {
+      "path": "analysis/evolution_glass/particle_diagnostics.png",
+      "bytes": 154700,
+      "sha256": "fc914772a86289893ddecabd26bec1511b1113cc390d349f0bf5f7807241fc9a"
+    },
+    {
+      "path": "analysis/evolution_glass/particle_summary.csv",
+      "bytes": 1793,
+      "sha256": "db9756a1cf858593e3f430dcc2ca1b9119dd0f1e10effaa075a10f2dba1f88bc"
+    },
+    {
+      "path": "analysis/evolution_glass/particle_summary.json",
+      "bytes": 10546,
+      "sha256": "a3c06be83d5b22a7decc2fd785833874a177e169919eeb68cb90ba027e868727"
+    },
+    {
+      "path": "analysis/initial_glass/initial_structure_factor.csv",
+      "bytes": 4181,
+      "sha256": "75f9bb202af9d7d662d23bd044d293eb29beefa6813ace3c0c3e78eabf5884dd"
+    },
+    {
+      "path": "analysis/initial_glass/initial_summary.json",
+      "bytes": 1861,
+      "sha256": "19de2b618cb7c56e87bba6e7a23bc7d7bce5ad0139d6da165bd75b2949cd52bf"
+    },
+    {
+      "path": "analysis/radius_comparison.json",
+      "bytes": 246,
+      "sha256": "686a8edbb2efd57122d592d1eeef6f58af77515a7fb5d24ccf8da6f142098d3d"
+    },
+    {
+      "path": "analysis/radius_control/initial_structure_factor.csv",
+      "bytes": 4181,
+      "sha256": "75f9bb202af9d7d662d23bd044d293eb29beefa6813ace3c0c3e78eabf5884dd"
+    },
+    {
+      "path": "analysis/radius_control/initial_summary.json",
+      "bytes": 1858,
+      "sha256": "4ce29e34690b1566c09e67d227ddc6ce2427fcbdbd674ef79361da3a897d5d4d"
+    },
+    {
+      "path": "analysis/response_glass/response_summary.csv",
+      "bytes": 2264,
+      "sha256": "b025b6e1b39f0b7705dd48ca66d32e724e0af0af42dd2dd14c07f6c3812972ff"
+    },
+    {
+      "path": "analysis/response_glass/response_summary.json",
+      "bytes": 8552,
+      "sha256": "dc4a993cc5200b204c1b3327927986786ef6be5bd5f39b8e770ba772febce42f"
+    },
+    {
+      "path": "analysis_self_checks.log",
+      "bytes": 179,
+      "sha256": "d53ff788a94ca349950eb5b6215554254e32cc812358f8e6ff1c8e5ec63a1c73"
+    },
+    {
+      "path": "build.log",
+      "bytes": 196,
+      "sha256": "c63872999624177b1858e435486b95381854397048e1dd1e4de52ff54d56d62d"
+    },
+    {
+      "path": "commands.json",
+      "bytes": 7690,
+      "sha256": "9865bc37dd7a780edae72b459b561d8d24dae7330a723c625602469b43e2621f"
+    },
+    {
+      "path": "control_16/command.json",
+      "bytes": 1242,
+      "sha256": "ff0b123009d4bf5c1fa8c07034c0828090c4be3220226cf15b58aeb67204b2a4"
+    },
+    {
+      "path": "control_16/linear_growth_baseline_evolution.csv",
+      "bytes": 11995,
+      "sha256": "60475029613bb00e672b17a9b3e12338a53c0e63d365084dee78d01a7a97d692"
+    },
+    {
+      "path": "control_16/linear_growth_density.csv",
+      "bytes": 3137,
+      "sha256": "2913a633e7b453ce06f38f19795682a4da207e9418f400dc04bbf741b58e7521"
+    },
+    {
+      "path": "control_16/linear_growth_evolution.csv",
+      "bytes": 7690,
+      "sha256": "f612fa6bbbad8149c676baa0931067527fa88dfc35d81bac19191bc1c79faaac"
+    },
+    {
+      "path": "control_16/linear_growth_metadata.json",
+      "bytes": 1074,
+      "sha256": "2b99005195e868074003072a9722355956f37e455f4a38ea2710a7d22db1698a"
+    },
+    {
+      "path": "control_16/linear_growth_particles.csv",
+      "bytes": 8078995,
+      "sha256": "960c720edd0fb6c0a2cbd6362f37ab933dbe05b73cebc5c6f39a2c6d694878b7"
+    },
+    {
+      "path": "control_16/linear_growth_particles_initial.csv",
+      "bytes": 102239,
+      "sha256": "ead0400852f6ca341d4809d488a4691945e047433318b0f36064c5729b1316c7"
+    },
+    {
+      "path": "control_16/requests.csv",
+      "bytes": 239,
+      "sha256": "d926da7cb7d9e754f4e5d324a33e16b863793f0d8a4a6a924b1b49a64c10700d"
+    },
+    {
+      "path": "control_16/run.log",
+      "bytes": 5369,
+      "sha256": "0d44b3fc307e0d6b63818a468132191ae5bce899ec250065d28e3e655766337f"
+    },
+    {
+      "path": "control_16_interrupted/command.json",
+      "bytes": 1357,
+      "sha256": "b5bcd7d561069a140586353ffae09ed129977b789824b93b61002c3214c7a645"
+    },
+    {
+      "path": "control_16_interrupted/linear_growth_baseline_evolution.csv",
+      "bytes": 11995,
+      "sha256": "60475029613bb00e672b17a9b3e12338a53c0e63d365084dee78d01a7a97d692"
+    },
+    {
+      "path": "control_16_interrupted/linear_growth_density.csv",
+      "bytes": 3137,
+      "sha256": "2913a633e7b453ce06f38f19795682a4da207e9418f400dc04bbf741b58e7521"
+    },
+    {
+      "path": "control_16_interrupted/linear_growth_evolution.csv",
+      "bytes": 7690,
+      "sha256": "f612fa6bbbad8149c676baa0931067527fa88dfc35d81bac19191bc1c79faaac"
+    },
+    {
+      "path": "control_16_interrupted/linear_growth_metadata.json",
+      "bytes": 1074,
+      "sha256": "2b99005195e868074003072a9722355956f37e455f4a38ea2710a7d22db1698a"
+    },
+    {
+      "path": "control_16_interrupted/linear_growth_particles.csv",
+      "bytes": 8078995,
+      "sha256": "960c720edd0fb6c0a2cbd6362f37ab933dbe05b73cebc5c6f39a2c6d694878b7"
+    },
+    {
+      "path": "control_16_interrupted/linear_growth_particles_initial.csv",
+      "bytes": 102239,
+      "sha256": "ead0400852f6ca341d4809d488a4691945e047433318b0f36064c5729b1316c7"
+    },
+    {
+      "path": "control_16_interrupted/requests.csv",
+      "bytes": 239,
+      "sha256": "d926da7cb7d9e754f4e5d324a33e16b863793f0d8a4a6a924b1b49a64c10700d"
+    },
+    {
+      "path": "control_16_interrupted/run.log",
+      "bytes": 5447,
+      "sha256": "06d2e02d2083f8111b4332b013648f06c3ef1646985cb736ecd4e6b5677955dd"
+    },
+    {
+      "path": "control_half/command.json",
+      "bytes": 1246,
+      "sha256": "334e4516ecc30fb0518cdce440881d9a35b887a926a2f91c40ce8799375a8080"
+    },
+    {
+      "path": "control_half/linear_growth_baseline_evolution.csv",
+      "bytes": 6109,
+      "sha256": "da87b3a1778c6f82dacf80b1a01a1c7c7a0b873fb16d5f49d4c264e48a6d50b1"
+    },
+    {
+      "path": "control_half/linear_growth_density.csv",
+      "bytes": 1709,
+      "sha256": "5b03a7ef55664738fd58f22ba4c3e9ee8ced30fa94d6217cd8d52ccdecfdbcb6"
+    },
+    {
+      "path": "control_half/linear_growth_evolution.csv",
+      "bytes": 3980,
+      "sha256": "3a75fb867c00e04746937c59f08a909b28c505ff5effa65f26c323744d8db118"
+    },
+    {
+      "path": "control_half/linear_growth_metadata.json",
+      "bytes": 1074,
+      "sha256": "2b99005195e868074003072a9722355956f37e455f4a38ea2710a7d22db1698a"
+    },
+    {
+      "path": "control_half/linear_growth_particles.csv",
+      "bytes": 4154028,
+      "sha256": "41e3f80c59c5b1d6c075a473aebe8b1537d768f154c9b4ac992f0164b134619b"
+    },
+    {
+      "path": "control_half/linear_growth_particles_initial.csv",
+      "bytes": 102239,
+      "sha256": "ead0400852f6ca341d4809d488a4691945e047433318b0f36064c5729b1316c7"
+    },
+    {
+      "path": "control_half/requests.csv",
+      "bytes": 239,
+      "sha256": "57b0eea46f595d21794d21411d0d467c9c01f10e7a4cecf766012087e28e7a42"
+    },
+    {
+      "path": "control_half/run.log",
+      "bytes": 4952,
+      "sha256": "9b587e5694ffa4c42f5749e95194ad1ee19203b0bee6a4b5585997e3f07a5bde"
+    },
+    {
+      "path": "ctest.log",
+      "bytes": 339,
+      "sha256": "9971f4f92d629b3b6c2b5aef0cea391b19c2d6814b3244862814abde626930b6"
+    },
+    {
+      "path": "evolution_glass/command.json",
+      "bytes": 1366,
+      "sha256": "02f4b5fc49a521c13c5170e74c80d370f15e738902f6adf772b83418ed936821"
+    },
+    {
+      "path": "evolution_glass/linear_growth_baseline_evolution.csv",
+      "bytes": 18156,
+      "sha256": "a71b53b87d6edacc1b2a1f21c22ef40454fb0ee6619a61444ffa298a330c09de"
+    },
+    {
+      "path": "evolution_glass/linear_growth_density.csv",
+      "bytes": 4887,
+      "sha256": "3c154bd0f9e4e0417b187b85eb1333802f6ac46161017981c9584c5b8cdd1417"
+    },
+    {
+      "path": "evolution_glass/linear_growth_evolution.csv",
+      "bytes": 11750,
+      "sha256": "f845564289ede6dc4b8129b3cae4fb38ce862dda77640681a2527f3351e91bb4"
+    },
+    {
+      "path": "evolution_glass/linear_growth_metadata.json",
+      "bytes": 1074,
+      "sha256": "2b99005195e868074003072a9722355956f37e455f4a38ea2710a7d22db1698a"
+    },
+    {
+      "path": "evolution_glass/linear_growth_particles.csv",
+      "bytes": 12461801,
+      "sha256": "169f86f7b2860dafeaaa48ca5fc76d9ce4587b1cb49813195279ac74a6b69dab"
+    },
+    {
+      "path": "evolution_glass/linear_growth_particles_initial.csv",
+      "bytes": 102239,
+      "sha256": "ead0400852f6ca341d4809d488a4691945e047433318b0f36064c5729b1316c7"
+    },
+    {
+      "path": "evolution_glass/requests.csv",
+      "bytes": 430,
+      "sha256": "4e805272c0c2b5b5208037081424e06e886d456cae1b5c6e26ac72b80bf2676b"
+    },
+    {
+      "path": "evolution_glass/run.log",
+      "bytes": 5922,
+      "sha256": "9945cde186945aef396c9075f37037d7834715b05b32f3d81ac1cd6bbc25555d"
+    },
+    {
+      "path": "glass.txt",
+      "bytes": 30718,
+      "sha256": "f7a588d45eba4dceaca6ec799ce967cf05502854fc8d6ee01777568cbff09e13"
+    },
+    {
+      "path": "independent_reanalysis.log",
+      "bytes": 12882,
+      "sha256": "bbf7957f3616ff82914ddd78b20d91b050783fa9c8225afa9174357c8900eaa9"
+    },
+    {
+      "path": "initial_glass/command.json",
+      "bytes": 1049,
+      "sha256": "b892271ace0825d91e928cc278d80e05dee5f53f8daaae76cc08def129b9d96b"
+    },
+    {
+      "path": "initial_glass/linear_growth_metadata.json",
+      "bytes": 1075,
+      "sha256": "33aa4fa12464ed4d981c089db2ed5ad214229becff8a046517ed699c67b091e8"
+    },
+    {
+      "path": "initial_glass/linear_growth_particles_initial.csv",
+      "bytes": 102239,
+      "sha256": "ead0400852f6ca341d4809d488a4691945e047433318b0f36064c5729b1316c7"
+    },
+    {
+      "path": "initial_glass/run.log",
+      "bytes": 4350,
+      "sha256": "de29c3ea370c6f7271516bb4214b3c67fda7d7946c237d72057ca455fd8a091c"
+    },
+    {
+      "path": "prior_source_sha256.json",
+      "bytes": 3783,
+      "sha256": "009602e49c04e032659b3b757d6bb675a59104cf2a300b9ad1026af687d209aa"
+    },
+    {
+      "path": "radius_control/command.json",
+      "bytes": 1050,
+      "sha256": "bde11cb6ba824e7213c925ef2f9ee14ffdff43401fbd19a66deb44b9af58c7b5"
+    },
+    {
+      "path": "radius_control/linear_growth_metadata.json",
+      "bytes": 1075,
+      "sha256": "2fe6742480c106a6266ab1041c3a87acc7b25d2da10a18a6e68c495cefb91537"
+    },
+    {
+      "path": "radius_control/linear_growth_particles_initial.csv",
+      "bytes": 102239,
+      "sha256": "ead0400852f6ca341d4809d488a4691945e047433318b0f36064c5729b1316c7"
+    },
+    {
+      "path": "radius_control/run.log",
+      "bytes": 4428,
+      "sha256": "19993b0b51f593efff75101843f398a71ab620961f38b63f08e6e609be06441a"
+    },
+    {
+      "path": "requests_16.csv",
+      "bytes": 239,
+      "sha256": "d926da7cb7d9e754f4e5d324a33e16b863793f0d8a4a6a924b1b49a64c10700d"
+    },
+    {
+      "path": "requests_8.csv",
+      "bytes": 430,
+      "sha256": "4e805272c0c2b5b5208037081424e06e886d456cae1b5c6e26ac72b80bf2676b"
+    },
+    {
+      "path": "requests_half.csv",
+      "bytes": 239,
+      "sha256": "57b0eea46f595d21794d21411d0d467c9c01f10e7a4cecf766012087e28e7a42"
+    },
+    {
+      "path": "response_analysis.log",
+      "bytes": 6134,
+      "sha256": "6169f836375cbe8ffacdaf072c5e8de1c82bec8b8c113490e881fd10ff7a92e6"
+    },
+    {
+      "path": "response_glass/command.json",
+      "bytes": 1200,
+      "sha256": "47facf52a07d3f34e50a3ad2d2c94cd23401ee1eb542d5d706a71063e6c81694"
+    },
+    {
+      "path": "response_glass/linear_growth_metadata.json",
+      "bytes": 1075,
+      "sha256": "33aa4fa12464ed4d981c089db2ed5ad214229becff8a046517ed699c67b091e8"
+    },
+    {
+      "path": "response_glass/linear_growth_particles_initial.csv",
+      "bytes": 102239,
+      "sha256": "ead0400852f6ca341d4809d488a4691945e047433318b0f36064c5729b1316c7"
+    },
+    {
+      "path": "response_glass/linear_growth_response.csv",
+      "bytes": 32400,
+      "sha256": "d17f71bc619f1c11bf2ec1520302feec4261d997cd4fb1c627c02457ba63b6c6"
+    },
+    {
+      "path": "response_glass/linear_growth_response_particles.csv",
+      "bytes": 6425683,
+      "sha256": "cd162ef6d12823c99dc041ebbc44083da6c4d52dac27811cb32ce929df1e7886"
+    },
+    {
+      "path": "response_glass/run.log",
+      "bytes": 5946,
+      "sha256": "baa14925d1ea8f806fe39ae4ea8c669abe494f0600deb94ac57003f9c2dad9e4"
+    },
+    {
+      "path": "run_experiment.py",
+      "bytes": 4147,
+      "sha256": "2eaa0f44b82fb0858f6e8ff48dab394c498964794de107a3d93eb7ab19ba2437"
+    },
+    {
+      "path": "spectrum/command.json",
+      "bytes": 410,
+      "sha256": "e5471806a0e6f96ee12f1b75e515dedfb786ba051884fadbd19beeaa6f0077aa"
+    },
+    {
+      "path": "spectrum/compare_production.py",
+      "bytes": 12903,
+      "sha256": "66ceff3e37bde703a8fabc1df5e8e171fe99d32bc2be83d364eca42d3dc89ca2"
+    },
+    {
+      "path": "spectrum/final_glass_spectrum.py",
+      "bytes": 9204,
+      "sha256": "09c59f15c4541bec7426f49c49c44920404375c00da3ab0e95bf848ca44225ee"
+    },
+    {
+      "path": "spectrum/final_spectrum.log",
+      "bytes": 6040,
+      "sha256": "123b8738f3f91f605e373e91efa35ed19e6f1754bc187e43cc3bdca4e2b04877"
+    },
+    {
+      "path": "spectrum/final_spectrum_command.json",
+      "bytes": 350,
+      "sha256": "c38cacf2658c2f5122df35fb9c5e478e8e39f9759ba475e43fab15dd7fc0c265"
+    },
+    {
+      "path": "spectrum/glass_eigenvalues.csv",
+      "bytes": 164159,
+      "sha256": "099496ec210188e5a937e228555c811ab3f01e20468fcd288cf64632e957b80b"
+    },
+    {
+      "path": "spectrum/glass_fastest_mode.csv",
+      "bytes": 75806,
+      "sha256": "2205aa17b3cff0c633b2f1f13f9682dee823b79fc79ec45085aa36c431f12d1e"
+    },
+    {
+      "path": "spectrum/glass_final_coordinates.txt",
+      "bytes": 30721,
+      "sha256": "04212d19cae4f7b0513f67965dfb4dba331d59bb0a1adcfdf190b911e27ec14c"
+    },
+    {
+      "path": "spectrum/glass_final_eigenvalues.csv",
+      "bytes": 164104,
+      "sha256": "d7b6bbe7d7840e7fe8b0144f547fc92846f661603fbbf395195f9123208f7507"
+    },
+    {
+      "path": "spectrum/glass_final_fastest_mode.csv",
+      "bytes": 75819,
+      "sha256": "d94380cca9c9e4d15dbb9d1e988d05f76a98e575d81387a23689d64ad8e914be"
+    },
+    {
+      "path": "spectrum/glass_final_forces.csv",
+      "bytes": 65884,
+      "sha256": "a3713af77953601b74fbbb159e6c029badb38eb633a017c35bf534627156951f"
+    },
+    {
+      "path": "spectrum/glass_final_summary.json",
+      "bytes": 1578,
+      "sha256": "064875aec048d0b6a6d4d4366cd89cb945aa11e3b4aca4f1ec697c0b12ef56f9"
+    },
+    {
+      "path": "spectrum/glass_forces.csv",
+      "bytes": 65953,
+      "sha256": "8522f6914ef013abee70ee6944bec6ec0ffd511c6dabb68bf24bd2ae5b385078"
+    },
+    {
+      "path": "spectrum/glass_initial_final_comparison.json",
+      "bytes": 6287,
+      "sha256": "7ba3b157df3ec15fb28c5671c9b622a1cceaf7295ec441cc1f0ed1cc6aa9ac0b"
+    },
+    {
+      "path": "spectrum/glass_initial_final_spectrum.png",
+      "bytes": 92235,
+      "sha256": "2123aff18d92b555bc22f85b75de3b2bfe026f470cc843a63bc7ecf6a7391295"
+    },
+    {
+      "path": "spectrum/glass_summary.json",
+      "bytes": 2782,
+      "sha256": "afa8199a2dbc9eb6aa2ebd227bc364c8249f95416c002bfe524cc7d287afb6fc"
+    },
+    {
+      "path": "spectrum/identifier_rename_validation.json",
+      "bytes": 1462,
+      "sha256": "9cf62ba3b867f03746ca95455d4b171f9fae024e6b664b5f2d1bec97e478d513"
+    },
+    {
+      "path": "spectrum/lattice_eigenvalues.csv",
+      "bytes": 164578,
+      "sha256": "83988fa00373a64f07bfa49588ab531b47aae94ff1ed56b87362fe812907a82a"
+    },
+    {
+      "path": "spectrum/lattice_fastest_mode.csv",
+      "bytes": 54763,
+      "sha256": "4da392d1cd757d7519539da8c94efd42baca03e44af80f7b967cdcfa78e37a59"
+    },
+    {
+      "path": "spectrum/lattice_forces.csv",
+      "bytes": 45806,
+      "sha256": "0973e39399b77247e011e8b57a3f3aefce1db525f6006f587cb8b8253cfac5b9"
+    },
+    {
+      "path": "spectrum/lattice_summary.json",
+      "bytes": 2769,
+      "sha256": "6a5bcd5ea3640b0259d4b3d7e78b0d974c9ef05b7ff9103eed0d211f07a6d04b"
+    },
+    {
+      "path": "spectrum/plot_command.json",
+      "bytes": 312,
+      "sha256": "372959245cb652b4e19b149b9df639043916ae74c541ce623f3dd9bc033ef006"
+    },
+    {
+      "path": "spectrum/production_comparison.log",
+      "bytes": 4690,
+      "sha256": "6256bfdfdbadd94bff1329e511673aa2fab392d5a44ca704cfd0b24cc6149ee3"
+    },
+    {
+      "path": "spectrum/production_comparison_command.json",
+      "bytes": 410,
+      "sha256": "f2b82fb82b4f168b88ad16b7de7364e20b5cdd2bfc3a8b0e4219588daeb5ae55"
+    },
+    {
+      "path": "spectrum/production_initial_comparison.csv",
+      "bytes": 105294,
+      "sha256": "66743a3e0a7c6e2c26f991c3ebbbe03fc07494ae9cf4842338da52d987b80e36"
+    },
+    {
+      "path": "spectrum/production_initial_comparison.json",
+      "bytes": 732,
+      "sha256": "eb4583b29f8701dad30dfac9e98fbd3c11e7b9325c56ed098a951c9356135bca"
+    },
+    {
+      "path": "spectrum/production_response_comparison.json",
+      "bytes": 6486,
+      "sha256": "66d6c34fb0d6706757c61ad4fae36b68b618e50a5ae57829990ed82dffcabb77"
+    },
+    {
+      "path": "spectrum/production_response_exact_selected.csv",
+      "bytes": 776,
+      "sha256": "3fc1c6f7050ecdcdd428a1bf77d3369768a4107fcd4a3ba551c088e0e2c9281e"
+    },
+    {
+      "path": "spectrum/production_response_field_comparison.csv",
+      "bytes": 5197,
+      "sha256": "391654c3c0307848ce5e9c2023e1b2148a3cdd9b54f2a70bdf85ff709673a873"
+    },
+    {
+      "path": "spectrum/production_response_longitudinal_comparison.csv",
+      "bytes": 915,
+      "sha256": "029ff7b96592877b0f5ba8f0170b868288dec1047bc744b07f0caf42a4c98335"
+    },
+    {
+      "path": "spectrum/production_response_projection_comparison.csv",
+      "bytes": 15069,
+      "sha256": "385f3a8cabcdcb55a34c727842f95a041dbb7ff2c2102d481153615680468e5c"
+    },
+    {
+      "path": "spectrum/run.log",
+      "bytes": 4971,
+      "sha256": "ad7df9e07dfbb9d953f9ae0a2045cf9bb259c6dab3d818f7eadfeb992f68df77"
+    },
+    {
+      "path": "spectrum/stability_spectrum.png",
+      "bytes": 231793,
+      "sha256": "968564601e6d3912846fef2eada1e14421d5cf8519bab0130267c34a4c3eee35"
+    },
+    {
+      "path": "spectrum/summary.json",
+      "bytes": 7229,
+      "sha256": "af5747eeeacf4216a196c9a88c27855d89fcf37a24ff95adf19aa84487789a1f"
+    },
+    {
+      "path": "startup_sandbox_failure/command.json",
+      "bytes": 1051,
+      "sha256": "d07d1bcd0697532623fc5329536b20152cb406209418dea828f6498ce5172703"
+    },
+    {
+      "path": "startup_sandbox_failure/run.log",
+      "bytes": 4635,
+      "sha256": "28230f4351a065c8147adb1c32b0652507d23d611ebff37b1eb3a6617c4414c1"
+    }
+  ],
+  "previous_executable_sha256": "58426eb3f09fe9b858dbdebf3486f83e9cce91a2ccd88f7259212cc98abb1299"
+}

@@ -1,0 +1,28 @@
+{
+  "command": [
+    "/home/dmarce1/workspace/cosmictiger/build/release/cosmictiger",
+    "--run.test=linearGrowth",
+    "--initial.particlesPerDimension=8",
+    "--initial.closePack=false",
+    "--initial.useGlass=false",
+    "--hydro.enabled=false",
+    "--compute.cuda=false",
+    "--gravity.softeningMode=fixed",
+    "--gravity.kernelFamily=ferrers",
+    "--gravity.kernelDegree=4",
+    "--gravity.supportRadius=0.025",
+    "--gravity.openingAngle=0.1",
+    "--hpx:threads=4",
+    "--hpx:bind=none"
+  ],
+  "environment": {
+    "COSMICTIGER_LINEAR_GROWTH_LOAD_FILE": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_fixed_softening/glass.txt",
+    "COSMICTIGER_LINEAR_GROWTH_PARTICLE_OUTPUT": "1",
+    "COSMICTIGER_LINEAR_GROWTH_SKIP_RESPONSE": "1"
+  },
+  "directory": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_fixed_softening/initial_glass",
+  "started_utc": "2026-10-18T01:10:29.985679+00:00",
+  "return_code": 0,
+  "elapsed_seconds": 2.217527158005396,
+  "finished_utc": "2026-10-18T01:10:32.203340+00:00"
+}

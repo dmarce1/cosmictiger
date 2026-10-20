@@ -1,0 +1,5 @@
+{"analyzed": 1, "output": "/tmp/cosmictiger_glass_ic_check_gb2etv96/analysis", "final_density": [1.7000000000000002]}
+{"analyzed": 1, "output": "/tmp/cosmictiger_glass_ic_check_gb2etv96/analysis", "final_density": [3.4000000000000004]}
+{"analyzed": 1, "output": "/tmp/cosmictiger_glass_ic_check_gb2etv96/analysis", "final_density": [1.7000000000000002]}
+{"calibrated": 1, "output": "/tmp/cosmictiger_glass_ic_check_gb2etv96"}
+{"passed": 7, "checks": ["original-target density, displacement and velocity retain a 1.7 boost", "halving the original target doubles its measured correction ratio", "empirical rescaling recovers the analytically correct unit seed", "rejects missing density row", "rejects mismatched request label", "rejects wrong initial velocity", "rejects mismatched gravity metadata"]}

@@ -1,0 +1,54 @@
+[
+  {
+    "load": "lattice",
+    "direction": "axis",
+    "mode_x": 3,
+    "mode_y": 0,
+    "mode_z": 0,
+    "longitudinal_force_response": 0.989883825442147,
+    "transverse_force_response": 1.3479433012758398e-06,
+    "density_parallel_ratio": 0.9926252049437133,
+    "density_phase_ratio": 2.614182351810224e-07,
+    "transverse_sine_displacement_relative": 1.7859065413949325e-07,
+    "nonmode_displacement_relative_rms": 1.63266463071218e-05
+  },
+  {
+    "load": "lattice",
+    "direction": "oblique",
+    "mode_x": 2,
+    "mode_y": 2,
+    "mode_z": 1,
+    "longitudinal_force_response": 0.7003149377755451,
+    "transverse_force_response": 0.04031584943146052,
+    "density_parallel_ratio": 0.7969854405814767,
+    "density_phase_ratio": 5.235649161650327e-07,
+    "transverse_sine_displacement_relative": 0.021595585741481876,
+    "nonmode_displacement_relative_rms": 1.1517351643045276e-05
+  },
+  {
+    "load": "glass",
+    "direction": "axis",
+    "mode_x": 3,
+    "mode_y": 0,
+    "mode_z": 0,
+    "longitudinal_force_response": 0.7861504588091026,
+    "transverse_force_response": 0.002929888798669525,
+    "density_parallel_ratio": 0.8524123780112649,
+    "density_phase_ratio": -2.0273836775980755e-05,
+    "transverse_sine_displacement_relative": 0.0015042027044714391,
+    "nonmode_displacement_relative_rms": 0.03894192388979474
+  },
+  {
+    "load": "glass",
+    "direction": "oblique",
+    "mode_x": 2,
+    "mode_y": 2,
+    "mode_z": 1,
+    "longitudinal_force_response": 0.7975715658032627,
+    "transverse_force_response": 0.0017385505573625749,
+    "density_parallel_ratio": 0.8609930549666535,
+    "density_phase_ratio": -0.0029624887777688473,
+    "transverse_sine_displacement_relative": 0.0004313066688070987,
+    "nonmode_displacement_relative_rms": 0.03950258583644377
+  }
+]

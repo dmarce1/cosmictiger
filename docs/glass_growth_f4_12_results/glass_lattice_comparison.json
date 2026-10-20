@@ -1,0 +1,221 @@
+{
+  "amplitude_spacing": 0.005,
+  "axis_response": {
+    "lattice": [
+      {
+        "k_over_nyquist": 0.25,
+        "mean": 1.0024534840639632,
+        "minimum": 1.0024473138942265,
+        "maximum": 1.002463536446956
+      },
+      {
+        "k_over_nyquist": 0.5,
+        "mean": 1.0012648238725828,
+        "minimum": 1.0012645992196814,
+        "maximum": 1.0012649563483143
+      },
+      {
+        "k_over_nyquist": 0.75,
+        "mean": 0.9898830901452245,
+        "minimum": 0.9898818361686303,
+        "maximum": 0.989883825442147
+      }
+    ],
+    "glass": [
+      {
+        "k_over_nyquist": 0.25,
+        "mean": 0.9775218090533707,
+        "minimum": 0.9769889282554254,
+        "maximum": 0.9779676909354489
+      },
+      {
+        "k_over_nyquist": 0.5,
+        "mean": 0.9087238780075597,
+        "minimum": 0.9067229350182916,
+        "maximum": 0.9115231439191249
+      },
+      {
+        "k_over_nyquist": 0.75,
+        "mean": 0.7935215764599182,
+        "minimum": 0.7861504588091026,
+        "maximum": 0.7974357505966878
+      }
+    ]
+  },
+  "equal_norm_orientation": {
+    "lattice": {
+      "minimum": 0.7003117808495845,
+      "maximum": 0.989883825442147,
+      "mean": 0.845097989537464,
+      "relative_span": 0.3426490752286018
+    },
+    "glass": {
+      "minimum": 0.7861504588091026,
+      "maximum": 0.7986425284787281,
+      "mean": 0.7950010311150627,
+      "relative_span": 0.01571327480180016
+    }
+  },
+  "growth": {
+    "lattice": [
+      {
+        "run_index": 0,
+        "label": "continuum",
+        "mode_x": 1,
+        "mode_y": 0,
+        "mode_z": 0,
+        "step": 8,
+        "a": 0.09999999999999998,
+        "continuum_growth": 4.958836228859153,
+        "density_parallel_ratio": 1.0017586425900762,
+        "density_phase_ratio": 2.09667597533921e-06,
+        "density_amplitude_ratio": 1.0017586425922704,
+        "baseline_density_amplitude": 9.155168500745294e-08,
+        "even_density_relative_to_signal": 5.397038440649334e-06,
+        "displacement_parallel_ratio": 1.0017606582035996,
+        "displacement_cosine_relative": 3.0546673679914856e-06,
+        "nonmode_displacement_relative_rms": 1.3552126812290832e-05,
+        "baseline_displacement_rms_spacing": 2.2924441285836688e-07,
+        "even_displacement_relative_rms": 2.145136478312229e-05,
+        "initial_density_amplitude": 0.00039269912702407034,
+        "initial_amplitude_spacing": 0.001,
+        "steps": 8,
+        "a_initial": 0.02,
+        "maximum_even_density_relative": 5.397038440649334e-06,
+        "maximum_nonmode_displacement_relative_rms": 1.3552126812290832e-05
+      },
+      {
+        "run_index": 1,
+        "label": "continuum",
+        "mode_x": 2,
+        "mode_y": 0,
+        "mode_z": 0,
+        "step": 8,
+        "a": 0.09999999999999998,
+        "continuum_growth": 4.958836228859153,
+        "density_parallel_ratio": 1.000871097910226,
+        "density_phase_ratio": -3.549649857658206e-06,
+        "density_amplitude_ratio": 1.0008710979165205,
+        "baseline_density_amplitude": 2.1640980353605873e-08,
+        "even_density_relative_to_signal": 4.019202122490085e-06,
+        "displacement_parallel_ratio": 1.00088006392861,
+        "displacement_cosine_relative": 3.6103691376032267e-06,
+        "nonmode_displacement_relative_rms": 1.1941015640014603e-05,
+        "baseline_displacement_rms_spacing": 2.2924441285836688e-07,
+        "even_displacement_relative_rms": 2.2653837918511945e-05,
+        "initial_density_amplitude": 0.0007853972376939099,
+        "initial_amplitude_spacing": 0.001,
+        "steps": 8,
+        "a_initial": 0.02,
+        "maximum_even_density_relative": 4.019202122490085e-06,
+        "maximum_nonmode_displacement_relative_rms": 1.1941015640014603e-05
+      },
+      {
+        "run_index": 2,
+        "label": "continuum",
+        "mode_x": 3,
+        "mode_y": 0,
+        "mode_z": 0,
+        "step": 8,
+        "a": 0.09999999999999998,
+        "continuum_growth": 4.958836228859153,
+        "density_parallel_ratio": 0.9926252049437133,
+        "density_phase_ratio": 2.614182351810224e-07,
+        "density_amplitude_ratio": 0.9926252049437477,
+        "baseline_density_amplitude": 2.4649624187648984e-08,
+        "even_density_relative_to_signal": 4.846427186046333e-06,
+        "displacement_parallel_ratio": 0.9926394650063555,
+        "displacement_cosine_relative": 2.1469687788098774e-06,
+        "nonmode_displacement_relative_rms": 1.63266463071218e-05,
+        "baseline_displacement_rms_spacing": 2.2924441285836688e-07,
+        "even_displacement_relative_rms": 0.00023411272862474588,
+        "initial_density_amplitude": 0.001178096654362301,
+        "initial_amplitude_spacing": 0.001,
+        "steps": 8,
+        "a_initial": 0.02,
+        "maximum_even_density_relative": 4.846427186046333e-06,
+        "maximum_nonmode_displacement_relative_rms": 1.63266463071218e-05
+      }
+    ],
+    "glass": [
+      {
+        "run_index": 0,
+        "label": "continuum",
+        "mode_x": 1,
+        "mode_y": 0,
+        "mode_z": 0,
+        "step": 8,
+        "a": 0.09999999999999998,
+        "continuum_growth": 4.958836228859153,
+        "density_parallel_ratio": 0.9834949427176374,
+        "density_phase_ratio": 0.00010137756402298968,
+        "density_amplitude_ratio": 0.9834949479425806,
+        "baseline_density_amplitude": 4.486092019052829e-05,
+        "even_density_relative_to_signal": 1.1803701219647052e-06,
+        "displacement_parallel_ratio": 0.9834631495038816,
+        "displacement_cosine_relative": 6.200167016415363e-05,
+        "nonmode_displacement_relative_rms": 0.011820292041404485,
+        "baseline_displacement_rms_spacing": 0.007902715729469028,
+        "even_displacement_relative_rms": 3.5237764412758144e-05,
+        "initial_density_amplitude": 0.00039271006923295514,
+        "initial_amplitude_spacing": 0.001,
+        "steps": 8,
+        "a_initial": 0.02,
+        "maximum_even_density_relative": 1.1803701219647052e-06,
+        "maximum_nonmode_displacement_relative_rms": 0.011820292041404485
+      },
+      {
+        "run_index": 1,
+        "label": "continuum",
+        "mode_x": 2,
+        "mode_y": 0,
+        "mode_z": 0,
+        "step": 8,
+        "a": 0.09999999999999998,
+        "continuum_growth": 4.958836228859153,
+        "density_parallel_ratio": 0.9353534157273156,
+        "density_phase_ratio": 0.0021365902890073535,
+        "density_amplitude_ratio": 0.9353558559878798,
+        "baseline_density_amplitude": 0.00033928130352897467,
+        "even_density_relative_to_signal": 2.9464256506168537e-05,
+        "displacement_parallel_ratio": 0.9349920150129628,
+        "displacement_cosine_relative": 0.0020947788261102625,
+        "nonmode_displacement_relative_rms": 0.024770115718270654,
+        "baseline_displacement_rms_spacing": 0.007902715729469028,
+        "even_displacement_relative_rms": 0.0001926923994831415,
+        "initial_density_amplitude": 0.0007883773533295326,
+        "initial_amplitude_spacing": 0.001,
+        "steps": 8,
+        "a_initial": 0.02,
+        "maximum_even_density_relative": 2.9464256506168537e-05,
+        "maximum_nonmode_displacement_relative_rms": 0.024770115718270654
+      },
+      {
+        "run_index": 2,
+        "label": "continuum",
+        "mode_x": 3,
+        "mode_y": 0,
+        "mode_z": 0,
+        "step": 8,
+        "a": 0.09999999999999998,
+        "continuum_growth": 4.958836228859153,
+        "density_parallel_ratio": 0.8524123780112649,
+        "density_phase_ratio": -2.0273836775980755e-05,
+        "density_amplitude_ratio": 0.852412378252362,
+        "baseline_density_amplitude": 0.0020389190823557075,
+        "even_density_relative_to_signal": 0.00014377527761354414,
+        "displacement_parallel_ratio": 0.8532204611193754,
+        "displacement_cosine_relative": 0.0006040079461305904,
+        "nonmode_displacement_relative_rms": 0.03894192388979474,
+        "baseline_displacement_rms_spacing": 0.007902715729469028,
+        "even_displacement_relative_rms": 0.00039708243394361524,
+        "initial_density_amplitude": 0.0011660288165632699,
+        "initial_amplitude_spacing": 0.001,
+        "steps": 8,
+        "a_initial": 0.02,
+        "maximum_even_density_relative": 0.00014377527761354414,
+        "maximum_nonmode_displacement_relative_rms": 0.03894192388979474
+      }
+    ]
+  }
+}

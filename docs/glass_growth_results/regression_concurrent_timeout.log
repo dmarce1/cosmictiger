@@ -1,0 +1,34 @@
+Internal ctest changing into directory: /home/dmarce1/workspace/cosmictiger/build/release
+Test project /home/dmarce1/workspace/cosmictiger/build/release
+    Start 2: linear_growth_response
+1/1 Test #2: linear_growth_response ...........***Failed  180.46 sec
+Traceback (most recent call last):
+  File "/home/dmarce1/workspace/cosmictiger/tests/run_linear_growth.py", line 46, in runDiagnostic
+    returnCode = process.wait(timeout=180)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/subprocess.py", line 1264, in wait
+    return self._wait(timeout=timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/subprocess.py", line 2045, in _wait
+    raise TimeoutExpired(self.args, timeout)
+subprocess.TimeoutExpired: Command '['/home/dmarce1/workspace/cosmictiger/build/release/cosmictiger', '--hpx:threads=2', '--hpx:bind=none', '--run.test=linearGrowth', '--initial.particlesPerDimension=8', '--initial.closePack=false', '--initial.useGlass=false', '--hydro.enabled=true', '--compute.cuda=false', '--gravity.softeningMode=adaptive', '--gravity.kernelFamily=ferrers', '--gravity.kernelDegree=4', '--gravity.neighborNumber=24', '--gravity.openingAngle=0.1', '--cosmology.omegaB=0.049389', '--cosmology.omegaC=0.26503', '--analysis.views=false', '--lightcone.enabled=false', '--analysis.power=false', '--analysis.groups=false']' timed out after 180 seconds
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/dmarce1/workspace/cosmictiger/tests/run_linear_growth.py", line 171, in <module>
+    main()
+  File "/home/dmarce1/workspace/cosmictiger/tests/run_linear_growth.py", line 164, in main
+    runDiagnostic(executable, workdir)
+  File "/home/dmarce1/workspace/cosmictiger/tests/run_linear_growth.py", line 54, in runDiagnostic
+    raise RuntimeError(f"linear-growth diagnostic timed out; see {logPath}")
+RuntimeError: linear-growth diagnostic timed out; see /home/dmarce1/workspace/cosmictiger/build/release/tests/linear_growth_response/run.log
+
+
+0% tests passed, 1 tests failed out of 1
+
+Total Test time (real) = 180.51 sec
+
+The following tests FAILED:
+	  2 - linear_growth_response (Failed)
+Errors while running CTest

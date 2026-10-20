@@ -1,0 +1,310 @@
+{
+  "study_date": "2026-10-17",
+  "base_commit": "cebcb9eaed38a064fa6c14b6c5fb2f7c321bfc4d",
+  "working_tree": "Uncommitted prior adaptive-softening implementation and new linear-growth diagnostic; not the clean base commit.",
+  "scope": "Pressure-free particle gravity, periodic lattice response and independent RK4 evolution; not production timestepping, SPH pressure, 2LPT, or nonlinear cosmological validation.",
+  "source_hashes_at_archive": {
+    "CMakeLists.txt": "47deab061e7440863bf08ad2f39512d81655550e57e3d7a33c9c9523284884bf",
+    "cosmictiger/adaptive_softening.hpp": "59b5615087ddf1f328e19140948d66d38883ddf8f89e45629c052d9bf7e21274",
+    "cosmictiger/gravity_softening.hpp": "3e0776274a58bcc34ddfb70bf6cc5f29ec849502ac31bb4a32c1af1ffc967729",
+    "cosmictiger/kernel.hpp": "7b67c5617d302928b41b587ad901d0102a443f71a09cc404048d10f16350d6ea",
+    "cosmictiger/kick.hpp": "9f9fb3467019dc939066763b42d05d9a7e0b0602da58243af3d7af1d39c49619",
+    "cosmictiger/options.hpp": "9e8a0425e32c0b4957fda004a9472696794c72791a28d04a8086fd85ae4ad180",
+    "cosmictiger/particles.hpp": "bc0f63d201aa68263e679c3d2c0b6c63db4853ae2b08839f7d49cd96bf327744",
+    "cosmictiger/sph_cuda.hpp": "60c292ee06022f6025641fcdc582b35652c4e5d46c243852215c678d07d6671e",
+    "src/domain.cpp": "80f056edd63d49dcfbab78c0b2a98fbc5d2cd2451de83089c40631e5d03a1eed",
+    "src/drift.cpp": "ca598f31679bdb5aadfab9d006cf7fe5c4e6059d9da844950e10ec2e3a989321",
+    "src/driver.cpp": "72f430fc53ab010c8e456e0c9632704b3e0680e8452073c104734ccc764f2770",
+    "src/gravity.cpp": "2d6338a26ae0dbafd49fce0952aea3888f7ec8ffe1d45c7902ea4afa3540251d",
+    "src/gravity.cu": "b0eb9e63e7bdbd63d193268b30009004ea34014160cdf879c62275a1eac9cc90",
+    "src/gravity_softening.cpp": "dd9eaa502edd579513819f2758a5ea7bf3587df20a5c9881f4c1412083e9090e",
+    "src/kick.cpp": "de1ea4e8f16cad7d1bf37eab337d18f810c7dfb3ad77a6d126ca8a1949596495",
+    "src/kick.cu": "f0de26d0a9930a50921f585e9a49cc1517e2099f7f3eff15c0c541cba68c0072",
+    "src/kick_workspace.cpp": "0475eac19f0107ac4f3e06a8f62954d8975aa02b72333a5080634c51141d7dc3",
+    "src/options.cpp": "faffbdb8a5cb6b664c276b4ad07d5c0ca6aa392d8d9d9f9d2b9ed70ea679932a",
+    "src/particles.cpp": "4434f4c029c5a182189ed7d9bab19259b16ec2e59938001aafe0de71a3ec6337",
+    "src/sph.cpp": "9a01f12cf669182f4fdb9db4904879588caf51155ec7a75116954c1b71b4b18e",
+    "src/sph_cond_init.cu": "c355c809ea06c685b650e5e43d42c74025d16e66235820ba625259b95d907a24",
+    "src/sph_conduction.cu": "7c28e383c7224d4ec258ec9e714aa65bdacbfae8b9ecca0eed6189f541e00d61",
+    "src/sph_hydro.cu": "baa958d3f8b0c4b8392fedb75e2f9aad0cabae1c9df7769edf4f107082e9471e",
+    "src/sph_prehydro.cu": "00068f75adffe49f8c7c156d7251e1e481230aca94f33cdd46ccdd172bd56834",
+    "src/test.cpp": "1744cdc53a7106f7d0b267803b88d58aeae309e7896a11ebfe82bf90cd272431",
+    "src/tree.cpp": "080f7c294a5c3e85f7eb2e3bdb93be15bd18508d1a3b885cbf5ae4b82c05f3c3",
+    "tests/adaptive_softening.cpp": "f9c44abd905f9f295fe6e03a4ad590240d9116342211096d1e4bb25ff0c45b88",
+    "tests/adaptive_softening_cuda.cu": "5125f1e5d1aac3e1eae6a0a397f17f3a55d82eba438ee2cfdbc5034ee7c04417",
+    "tests/analyze_linear_growth.py": "379ccb50d5a648c734cb42d713dfd2bc18bdf134d3091588ca2423565a037b81",
+    "tests/linear_growth.cpp": "470f1de7d09f8a552afca3da380f0f7e5748d967535d4e6f70588287b2d897c9",
+    "tests/monaghan_sph_cuda.cu": "d21c57e3bf0e907e04aa60c5fd8a92cd6246a3c07a4e307bea886e6777e52833",
+    "tests/run_checkpoint.py": "07d3f8983d59f42db7d07fe6ca0afae04bc475f1b77052fbcd53682621586c6e",
+    "tests/run_kernel_selection.py": "7b0e014c2ef4ac5bc7a361f03ccfde3dc212a56c1a1f1c21abbcf2095372ce13",
+    "tests/run_linear_growth.py": "82e0940fa1f3a1d0a30487e29748fc6abd12bf3cee223a55727ece0a69d5b812",
+    "tests/run_options.py": "397a42867e4d29500367af355468fb415d3311c88b697a17446bf2b048fcf1ef",
+    "tests/run_smoke.py": "450f42463fabbdc482af2ba77a50c5c95db8a52525fd29f61b0723af7fcfcd80",
+    "tests/sph_gravity.cpp": "4eaa7f3b29394156abe257bafd48e3c8f8deaff253b74c7f001b102a04184696"
+  },
+  "tracked_changed_paths_at_archive": [
+    "CMakeLists.txt",
+    "configurations/README.md",
+    "configurations/cosmologyDarkMatter.ini",
+    "configurations/cosmologySph.ini",
+    "configurations/createGlass.ini",
+    "configurations/kelvinHelmholz.ini",
+    "configurations/legacyPlummer.ini",
+    "configurations/orbitingDisc.ini",
+    "configurations/plummer.ini",
+    "configurations/polytropicStar.ini",
+    "configurations/rayleighTaylor.ini",
+    "configurations/sedovBlast.ini",
+    "configurations/sod.ini",
+    "cosmictiger/kernel.hpp",
+    "cosmictiger/kick.hpp",
+    "cosmictiger/options.hpp",
+    "cosmictiger/particles.hpp",
+    "cosmictiger/sph_cuda.hpp",
+    "default.ini",
+    "docs/kernels.md",
+    "docs/monaghan_sph.md",
+    "src/domain.cpp",
+    "src/drift.cpp",
+    "src/driver.cpp",
+    "src/gravity.cpp",
+    "src/gravity.cu",
+    "src/kick.cpp",
+    "src/kick.cu",
+    "src/kick_workspace.cpp",
+    "src/options.cpp",
+    "src/particles.cpp",
+    "src/sph.cpp",
+    "src/sph_cond_init.cu",
+    "src/sph_conduction.cu",
+    "src/sph_hydro.cu",
+    "src/sph_prehydro.cu",
+    "src/test.cpp",
+    "src/tree.cpp",
+    "tests/monaghan_sph_cuda.cu",
+    "tests/run_checkpoint.py",
+    "tests/run_kernel_selection.py",
+    "tests/run_options.py",
+    "tests/run_smoke.py",
+    "tests/sph_gravity.cpp"
+  ],
+  "executable_sha256_at_archive": "606195fcf0e51b128ac10726e4fff847c807b6d564f269db447c7af343891d9b",
+  "files": {
+    "README.md": {
+      "bytes": 5387,
+      "sha256": "1bfd7f88c48753956fddbacc280a259f68509e80c1ff91c85b091810a610dfeb"
+    },
+    "adaptive_dm_n8/analysis_parameters.json": {
+      "bytes": 595,
+      "sha256": "3717fc7d05e4fc36b6e8a58b8a446a29a58865e54d028db3fa1e84b06b9776f3"
+    },
+    "adaptive_dm_n8/linear_growth_corrections.csv": {
+      "bytes": 4394,
+      "sha256": "0ad6810587571ca94525ef0245e289f9766e6a23845355819a87ecccd2934e20"
+    },
+    "adaptive_dm_n8/linear_growth_corrections.pdf": {
+      "bytes": 26651,
+      "sha256": "8e27bdd0635360235595ff92ce4815f0b94bb22fa7c00b6273ffd95c0db6cc76"
+    },
+    "adaptive_dm_n8/linear_growth_corrections.png": {
+      "bytes": 143304,
+      "sha256": "6e6f618729ccd1bb0d8654421e9d65ad2c6417c56ebee18389b36dfec0c0acc0"
+    },
+    "adaptive_dm_n8/linear_growth_metadata.json": {
+      "bytes": 582,
+      "sha256": "685bc5cd8381d35c23d6ec745d7251cf26676a4580e79538744e1353689dd755"
+    },
+    "adaptive_dm_n8/linear_growth_response.csv": {
+      "bytes": 18519,
+      "sha256": "d71356e566bcc5d3a04e5cb9c7bc455308713dd9e7051d434b6b2bea1a05dbdf"
+    },
+    "adaptive_mixed_n16/analysis_parameters.json": {
+      "bytes": 603,
+      "sha256": "471a7337d048daaec022596364aa83bd6cf6b9db781955cb506605b2a092ef2c"
+    },
+    "adaptive_mixed_n16/linear_growth_corrections.csv": {
+      "bytes": 2765,
+      "sha256": "50982829cd47787fd1da02413b5768ac7322e770656f9bee2e637addd0c1a472"
+    },
+    "adaptive_mixed_n16/linear_growth_corrections.pdf": {
+      "bytes": 25424,
+      "sha256": "61c4bd1eaa474caea101b8a2e6669a1f16d73120d5138090409a7be968d5551c"
+    },
+    "adaptive_mixed_n16/linear_growth_corrections.png": {
+      "bytes": 152763,
+      "sha256": "1b16c8bf33dad96a057812a5da4a709d172ff2fef14b6750e5c9ccf6c786b273"
+    },
+    "adaptive_mixed_n16/linear_growth_metadata.json": {
+      "bytes": 650,
+      "sha256": "b93c0ba6d88952dac6b537f780901d574132366910fed967229b79b03524ed88"
+    },
+    "adaptive_mixed_n16/linear_growth_response.csv": {
+      "bytes": 17165,
+      "sha256": "6a4955dc37d37fa624b55ab7627d2ceb7ae8ff73340d739d83c2b93183f15a7a"
+    },
+    "adaptive_mixed_n8/analysis_parameters.json": {
+      "bytes": 601,
+      "sha256": "8f4299819b42f4885da28c536642d285cd354364eb84000b243a27c952b7fe7e"
+    },
+    "adaptive_mixed_n8/evolution_comparison.csv": {
+      "bytes": 10591,
+      "sha256": "ae3c9f202cff1ce7e08dd9c71dcca11269d7a37dff4a25f773dccb5f8b15b389"
+    },
+    "adaptive_mixed_n8/evolution_metadata.json": {
+      "bytes": 647,
+      "sha256": "64590d7fcdb48e4c53d184a99c4aa4ae4096a6e75386ef87814a55e5a33fa4dc"
+    },
+    "adaptive_mixed_n8/evolution_summary.csv": {
+      "bytes": 1236,
+      "sha256": "ed9c3393ff07c91dcde041d2981d9d2ec44e5e0ebebb2d7cdde75817111861e4"
+    },
+    "adaptive_mixed_n8/linear_growth_corrections.csv": {
+      "bytes": 7863,
+      "sha256": "2510138128dde16d931b14f17181e2692010018dace9c1c8fef4b7820c170738"
+    },
+    "adaptive_mixed_n8/linear_growth_corrections.pdf": {
+      "bytes": 28619,
+      "sha256": "f6d9fe4c385aa405dcb84bebee1b15adbe15ae4674257ab201c7b996ba133005"
+    },
+    "adaptive_mixed_n8/linear_growth_corrections.png": {
+      "bytes": 180747,
+      "sha256": "ad7c352307147a6d563788605671514dcd9a7e9f0151a3ee0fdb10d5b7412a20"
+    },
+    "adaptive_mixed_n8/linear_growth_evolution.csv": {
+      "bytes": 49663,
+      "sha256": "615d0d35b48353f57eb1b81e44e6d2081ec49de295b9d4359614950a2872f8d8"
+    },
+    "adaptive_mixed_n8/linear_growth_evolution.pdf": {
+      "bytes": 21164,
+      "sha256": "395236fca8ab4a4aa3930f98b12a197f49ff8581d6d7550e90dbcbbfc9f54e5f"
+    },
+    "adaptive_mixed_n8/linear_growth_evolution.png": {
+      "bytes": 169585,
+      "sha256": "50598dcf77691e58573576695f2521b48c98c655965f67ac0b9d3cedf1401819"
+    },
+    "adaptive_mixed_n8/linear_growth_evolution_requests.csv": {
+      "bytes": 1589,
+      "sha256": "91041d6a5dd43e3ebde3467a5635f193ef00ab477c5c45047e94cf48352d5ec9"
+    },
+    "adaptive_mixed_n8/linear_growth_metadata.json": {
+      "bytes": 647,
+      "sha256": "64590d7fcdb48e4c53d184a99c4aa4ae4096a6e75386ef87814a55e5a33fa4dc"
+    },
+    "adaptive_mixed_n8/linear_growth_response.csv": {
+      "bytes": 127693,
+      "sha256": "961ede7ece3bf253e4faacf5e7fdfaa66c81e448117e402c02422606aad1a45d"
+    },
+    "adaptive_mixed_n8/measured_evolution_requests.csv": {
+      "bytes": 1589,
+      "sha256": "91041d6a5dd43e3ebde3467a5635f193ef00ab477c5c45047e94cf48352d5ec9"
+    },
+    "all_corrections.csv": {
+      "bytes": 15663,
+      "sha256": "bb58273bab6176de93995c077830a992980fcd485b4432a49b7aea303f638dfc"
+    },
+    "backend_comparison.json": {
+      "bytes": 1086,
+      "sha256": "78329b8ca576881cf34945602a0ff4f941888c1d17bbe497b33b5838bd086a02"
+    },
+    "evolution_controls_n8/analysis_parameters.json": {
+      "bytes": 886,
+      "sha256": "942a392748a8244749c5a3279e08cfa1d3a97a73331857906556bc2d5288a27d"
+    },
+    "evolution_controls_n8/evolution_comparison.csv": {
+      "bytes": 5653,
+      "sha256": "517b246528830ebea9b500391bac0fcf601b02e52fc3f259bbda9212e203034f"
+    },
+    "evolution_controls_n8/evolution_summary.csv": {
+      "bytes": 636,
+      "sha256": "72015ef49b6dc8fe1dadfb59d82d9fa4009f002c11c4681cea22cb5e3e39dfaf"
+    },
+    "evolution_controls_n8/linear_growth_evolution.csv": {
+      "bytes": 26639,
+      "sha256": "bc2190d99063e2a22606e36a0caca6719ebaf171c8d60f4350446be80650b44c"
+    },
+    "evolution_controls_n8/linear_growth_evolution.pdf": {
+      "bytes": 19434,
+      "sha256": "0bd9b9d6ca7dbf27e11a614224be4bf799cb7e563cca9d53fed0c6b42fa249b9"
+    },
+    "evolution_controls_n8/linear_growth_evolution.png": {
+      "bytes": 114997,
+      "sha256": "7e8cd64ef41f3cb4666ad9b01c7677de2cdfe8d65afc7a31cd98a01605926f90"
+    },
+    "evolution_controls_n8/linear_growth_metadata.json": {
+      "bytes": 647,
+      "sha256": "64590d7fcdb48e4c53d184a99c4aa4ae4096a6e75386ef87814a55e5a33fa4dc"
+    },
+    "evolution_controls_n8/measured_evolution_requests.csv": {
+      "bytes": 789,
+      "sha256": "7f315f187f2a7243d1e7d1b7ea233766b22eb1c040f2a7a028140f07bab17140"
+    },
+    "fixed_mixed_n8/analysis_parameters.json": {
+      "bytes": 595,
+      "sha256": "1eed663db607a55cff84a51886bd6874f6d0a7457b163c5d3f82a3d30e4f2ceb"
+    },
+    "fixed_mixed_n8/linear_growth_corrections.csv": {
+      "bytes": 3666,
+      "sha256": "1f4f9c62432635d9dc6413b95e4a3b4fe62873c56f20acdb10603b6cbfd50034"
+    },
+    "fixed_mixed_n8/linear_growth_corrections.pdf": {
+      "bytes": 25381,
+      "sha256": "367c4fcc7c623b220b7ed71471eb363afd18e066470d49d90b02d307d7c919f3"
+    },
+    "fixed_mixed_n8/linear_growth_corrections.png": {
+      "bytes": 142963,
+      "sha256": "9fa86f41e2e8cde6fbdfee8bbe436f2c6da8b900bca54a283ca1ff961b6302b9"
+    },
+    "fixed_mixed_n8/linear_growth_metadata.json": {
+      "bytes": 643,
+      "sha256": "5a1ff8405bf50d28af127757df935e0a4c2fc9aa6837c480b9ad0b7b8029ba5c"
+    },
+    "fixed_mixed_n8/linear_growth_response.csv": {
+      "bytes": 48280,
+      "sha256": "eb975085efd04ff38422137f81e381607df616df0742263efa1759daa6d63872"
+    },
+    "grid_comparison.json": {
+      "bytes": 191,
+      "sha256": "ae137bd687c3bf43f95dcd215926601f1e38b66e3fdd609a85d9dcad9fe43f94"
+    },
+    "linear_growth_comparison.pdf": {
+      "bytes": 30830,
+      "sha256": "0ada4e2b60e7685d57ffa251d9eee2a52aeb2a929c434fa0a55306ef2d8d80ba"
+    },
+    "linear_growth_comparison.png": {
+      "bytes": 280585,
+      "sha256": "46e6f67bdd988f896c32dfcc87938d6176d166e575d1fad562a34707aa23f3c7"
+    },
+    "pilot_cuda/linear_growth_metadata.json": {
+      "bytes": 647,
+      "sha256": "6297ae5d4080d0ed491631be23d89ef2470c8619f0fa7fc654007fd173d35453"
+    },
+    "pilot_cuda/linear_growth_response.csv": {
+      "bytes": 7869,
+      "sha256": "7f026dd90996db8d7deb8f13e67452550e61e3d0edc3dcfc31767b505c8ca5d9"
+    },
+    "pilot_mixed/linear_growth_metadata.json": {
+      "bytes": 646,
+      "sha256": "d6b20ab1d68c4d57864a23a08d428458646bb25c86d1ac8786a19fcf3d21a3a4"
+    },
+    "pilot_mixed/linear_growth_response.csv": {
+      "bytes": 7871,
+      "sha256": "ee9343beddc65aab71f218fc3bf8a8d76e5272b248dce154c28bd147ffad8842"
+    },
+    "regression_cpu_n8/linear_growth_metadata.json": {
+      "bytes": 646,
+      "sha256": "4cd39e8c15efec81cc4647de39bcea35ee59789d83af5766822659559a69efb2"
+    },
+    "regression_cpu_n8/linear_growth_response.csv": {
+      "bytes": 16173,
+      "sha256": "450d7dc959cd507f4d096ba9cc104b6ef9a5737efc0c821b62524133a9c6a4d6"
+    },
+    "reproduce_comparison.py": {
+      "bytes": 4887,
+      "sha256": "3dca6b50ca6d9799887f1e1a38b901a9dc6e5e433ab5017a02eade077d8d521b"
+    },
+    "response_quality.csv": {
+      "bytes": 749,
+      "sha256": "da24ddaaaf1eca1d1db2ba47c44503e5aaa274c3a7ed989de9c27b9dbbe7762e"
+    }
+  }
+}

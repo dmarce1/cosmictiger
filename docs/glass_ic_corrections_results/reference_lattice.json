@@ -1,0 +1,83 @@
+{
+  "source": "Earlier pure-DM adaptive lattice calibration; not the mixed gas/DM table",
+  "particles": 512,
+  "a_initial": 0.02,
+  "a_final": 0.1,
+  "kernel": "(1-q^2)^2",
+  "weighted_neighbors": 24,
+  "adaptive_conservation_terms": true,
+  "force_backend": "cpu",
+  "target": "particle-center density amplitude at a_final",
+  "reference": "same-background continuum growing IC",
+  "velocity_definition": "p=a^2 H d(Psi)/dln(a); multiplier also applies to peculiar velocity at fixed a",
+  "correction_equations": {
+    "displacement": "R = G_continuum / G_lattice",
+    "velocity_per_displacement": "f_lattice(a_initial) / f_continuum(a_initial)",
+    "total_initial_velocity": "R * f_lattice(a_initial) / f_continuum(a_initial)"
+  },
+  "continuum_growth": {
+    "growth": 4.9588362288276375,
+    "initial_rate": 0.9901835398118617,
+    "final_rate": 0.9968415564189682
+  },
+  "independent_check": "DOP853 integration of f'=1.5 Omega_m lambda-f^2-(2+dlnH/dlna)f and lnD'=f",
+  "maximum_independent_relative_difference": 4.7516435230932075e-12,
+  "input_sha256": {
+    "docs/linear_growth_results/adaptive_dm_n8/linear_growth_metadata.json": "685bc5cd8381d35c23d6ec745d7251cf26676a4580e79538744e1353689dd755",
+    "docs/linear_growth_results/adaptive_dm_n8/linear_growth_corrections.csv": "0ad6810587571ca94525ef0245e289f9766e6a23845355819a87ecccd2934e20",
+    "docs/linear_growth_results/adaptive_dm_n8/analysis_parameters.json": "3717fc7d05e4fc36b6e8a58b8a446a29a58865e54d028db3fa1e84b06b9776f3"
+  },
+  "rows": [
+    {
+      "mode_x": 1,
+      "mode_y": 0,
+      "mode_z": 0,
+      "k_over_axis_nyquist": 0.25,
+      "force_eigenvalue": 0.9334988490080761,
+      "displacement_multiplier": 1.0672135067865112,
+      "velocity_per_displacement_multiplier": 0.9593031289600299,
+      "total_initial_velocity_multiplier": 1.0237812563287063,
+      "initial_growth_rate": 0.9498861679868192,
+      "continuum_initial_growth_rate": 0.9901835398124683,
+      "final_velocity_ratio_at_matched_density": 0.9594126097137124,
+      "independent_displacement_multiplier": 1.0672135067814401,
+      "independent_velocity_per_displacement_multiplier": 0.9593031289603853,
+      "independent_displacement_relative_difference": -4.7516435230932075e-12,
+      "independent_rate_ratio_relative_difference": 3.703704010149522e-13
+    },
+    {
+      "mode_x": 2,
+      "mode_y": 0,
+      "mode_z": 0,
+      "k_over_axis_nyquist": 0.5,
+      "force_eigenvalue": 0.7529793094429887,
+      "displacement_multiplier": 1.2889128542893555,
+      "velocity_per_displacement_multiplier": 0.8412039088123737,
+      "total_initial_velocity_multiplier": 1.0842385311467193,
+      "initial_growth_rate": 0.8329462641319211,
+      "continuum_initial_growth_rate": 0.9901835398124683,
+      "final_velocity_ratio_at_matched_density": 0.8416561156936877,
+      "independent_displacement_multiplier": 1.288912854285466,
+      "independent_velocity_per_displacement_multiplier": 0.8412039088126917,
+      "independent_displacement_relative_difference": -3.017697203233638e-12,
+      "independent_rate_ratio_relative_difference": 3.779199175824033e-13
+    },
+    {
+      "mode_x": 3,
+      "mode_y": 0,
+      "mode_z": 0,
+      "k_over_axis_nyquist": 0.75,
+      "force_eigenvalue": 0.5438800790833929,
+      "displacement_multiplier": 1.6517836920199938,
+      "velocity_per_displacement_multiplier": 0.6859380389799705,
+      "total_initial_velocity_multiplier": 1.1330212665232902,
+      "initial_growth_rate": 0.6792045555292101,
+      "continuum_initial_growth_rate": 0.9901835398124683,
+      "final_velocity_ratio_at_matched_density": 0.6869328202543235,
+      "independent_displacement_multiplier": 1.6517836920164526,
+      "independent_velocity_per_displacement_multiplier": 0.6859380389802803,
+      "independent_displacement_relative_difference": -2.1438406605511773e-12,
+      "independent_rate_ratio_relative_difference": 4.516387264175137e-13
+    }
+  ]
+}

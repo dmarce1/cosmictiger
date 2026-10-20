@@ -1,0 +1,471 @@
+{
+  "scope": "Linear-superposition prediction from two paired measured state families; no independent endpoint-fit simulation",
+  "recommendation": "Diagnostic only; this endpoint fit mixes growing and decaying responses and is not the recommended glass IC",
+  "initial_coordinates": "A = u_initial/u_continuum_initial; B = (du/dln a)_initial/(f1_initial*u_continuum_initial)",
+  "endpoint_coordinates": "In-phase actual paired Eulerian density/original continuum target; longitudinal sine-projected du/dln a/original continuum projected velocity target",
+  "velocity_caveat": "The projected velocity observable is not the Eulerian density derivative; the fit also does not remove density phase or mode leakage",
+  "approximation_caveat": "Linear superposition is inferred at finite perturbation amplitude; exact algebraic target recovery is not an independent dynamics validation",
+  "rows": [
+    {
+      "load": "glass",
+      "mode_x": 1,
+      "mode_y": 0,
+      "mode_z": 0,
+      "k_over_axis_nyquist": 0.25,
+      "a_initial": 0.02,
+      "a_final": 0.1,
+      "predicted_initial_displacement_multiplier": 0.46430632004104117,
+      "predicted_initial_total_velocity_multiplier": 1.9023029476513327,
+      "predicted_velocity_per_displacement_multiplier": 4.097086051904664,
+      "reverses_initial_displacement": false,
+      "predicted_final_density_inphase": 1.0,
+      "predicted_final_projected_velocity": 1.0,
+      "predicted_final_density_phase": 0.00022338373148633565,
+      "predicted_final_velocity_quadrature": -0.0004184750682366921,
+      "initial_family_condition": 145.32627641341347,
+      "initial_family_determinant": -0.02836924571336952,
+      "endpoint_map_condition": 52.17813924279752,
+      "endpoint_map_determinant": 0.01810665951218048,
+      "original_family_weight": 53.402250643823734,
+      "model_family_weight": -50.68857459726572,
+      "baseline_final_density": 0.9679172334402721,
+      "model_final_density": 1.0000075777508284,
+      "baseline_final_projected_velocity": 0.9418799181244687,
+      "model_final_projected_velocity": 0.972576322292684
+    },
+    {
+      "load": "glass",
+      "mode_x": 2,
+      "mode_y": 0,
+      "mode_z": 0,
+      "k_over_axis_nyquist": 0.5,
+      "a_initial": 0.02,
+      "a_final": 0.1,
+      "predicted_initial_displacement_multiplier": -1.1795693273660277,
+      "predicted_initial_total_velocity_multiplier": 4.5249747713576385,
+      "predicted_velocity_per_displacement_multiplier": -3.836124478975631,
+      "reverses_initial_displacement": true,
+      "predicted_final_density_inphase": 0.9999999999999929,
+      "predicted_final_projected_velocity": 1.0,
+      "predicted_final_density_phase": 0.0017576924351539736,
+      "predicted_final_velocity_quadrature": 0.0019441115859143432,
+      "initial_family_condition": 31.515073935773632,
+      "initial_family_determinant": -0.1460253318760416,
+      "endpoint_map_condition": 38.10121505904727,
+      "endpoint_map_determinant": 0.018028094278923868,
+      "original_family_weight": 46.17963443030105,
+      "model_family_weight": -39.065441765721545,
+      "baseline_final_density": 0.8683108711282775,
+      "model_final_density": 1.0008405596699887,
+      "baseline_final_projected_velocity": 0.7654688122982084,
+      "model_final_projected_velocity": 0.8792699728246262
+    },
+    {
+      "load": "glass",
+      "mode_x": 3,
+      "mode_y": 0,
+      "mode_z": 0,
+      "k_over_axis_nyquist": 0.75,
+      "a_initial": 0.02,
+      "a_final": 0.1,
+      "predicted_initial_displacement_multiplier": -3.8760048380369447,
+      "predicted_initial_total_velocity_multiplier": 8.259975632870635,
+      "predicted_velocity_per_displacement_multiplier": -2.1310540048381394,
+      "reverses_initial_displacement": true,
+      "predicted_final_density_inphase": 0.9999999999999964,
+      "predicted_final_projected_velocity": 0.9999999999999964,
+      "predicted_final_density_phase": -0.0008721223771786211,
+      "predicted_final_velocity_quadrature": 0.0006861366121697294,
+      "initial_family_condition": 10.974658741150515,
+      "initial_family_determinant": -0.5554052355019297,
+      "endpoint_map_condition": 19.791998008208054,
+      "endpoint_map_determinant": 0.017899203579805723,
+      "original_family_weight": 33.06163885840505,
+      "model_family_weight": -21.850677118554845,
+      "baseline_final_density": 0.6914808648313966,
+      "model_final_density": 1.0004948822381896,
+      "baseline_final_projected_velocity": 0.4742564797420753,
+      "model_final_projected_velocity": 0.6718188356289193
+    },
+    {
+      "load": "lattice",
+      "mode_x": 1,
+      "mode_y": 0,
+      "mode_z": 0,
+      "k_over_axis_nyquist": 0.25,
+      "a_initial": 0.02,
+      "a_final": 0.1,
+      "predicted_initial_displacement_multiplier": 0.22099245020681543,
+      "predicted_initial_total_velocity_multiplier": 2.3062328919669417,
+      "predicted_velocity_per_displacement_multiplier": 10.435799457441453,
+      "reverses_initial_displacement": false,
+      "predicted_final_density_inphase": 1.0,
+      "predicted_final_projected_velocity": 1.0,
+      "predicted_final_density_phase": -2.4249338944444984e-05,
+      "predicted_final_velocity_quadrature": -3.383909738487931e-05,
+      "initial_family_condition": 96.39431798198598,
+      "initial_family_determinant": -0.04343225045780485,
+      "endpoint_map_condition": 49.68798982869484,
+      "endpoint_map_determinant": 0.018146275643262967,
+      "original_family_weight": 51.45934047239571,
+      "model_family_weight": -48.01133765301827,
+      "baseline_final_density": 0.9524389604571076,
+      "model_final_density": 1.0000113117514573,
+      "baseline_final_projected_velocity": 0.9145996126184488,
+      "model_final_projected_velocity": 0.9594544770772094
+    },
+    {
+      "load": "lattice",
+      "mode_x": 2,
+      "mode_y": 0,
+      "mode_z": 0,
+      "k_over_axis_nyquist": 0.5,
+      "a_initial": 0.02,
+      "a_final": 0.1,
+      "predicted_initial_displacement_multiplier": -1.7126303984222846,
+      "predicted_initial_total_velocity_multiplier": 5.33060318830012,
+      "predicted_velocity_per_displacement_multiplier": -3.1125239825304964,
+      "reverses_initial_displacement": true,
+      "predicted_final_density_inphase": 1.0,
+      "predicted_final_projected_velocity": 0.9999999999999964,
+      "predicted_final_density_phase": 3.431889771848857e-05,
+      "predicted_final_velocity_quadrature": 3.9809121178484616e-05,
+      "initial_family_condition": 23.589637496759288,
+      "initial_family_determinant": -0.20467432314263626,
+      "endpoint_map_condition": 33.30633723953737,
+      "endpoint_map_determinant": 0.018142675814297723,
+      "original_family_weight": 42.64131769971091,
+      "model_family_weight": -34.4119060885523,
+      "baseline_final_density": 0.8304392875529228,
+      "model_final_density": 0.9999744100868966,
+      "baseline_final_projected_velocity": 0.7026561839046449,
+      "model_final_projected_velocity": 0.8416327040128481
+    },
+    {
+      "load": "lattice",
+      "mode_x": 3,
+      "mode_y": 0,
+      "mode_z": 0,
+      "k_over_axis_nyquist": 0.75,
+      "a_initial": 0.02,
+      "a_final": 0.1,
+      "predicted_initial_displacement_multiplier": -3.639849086334795,
+      "predicted_initial_total_velocity_multiplier": 7.9585685171717735,
+      "predicted_velocity_per_displacement_multiplier": -2.1865105745869764,
+      "reverses_initial_displacement": true,
+      "predicted_final_density_inphase": 1.0000000000000036,
+      "predicted_final_projected_velocity": 1.0000000000000018,
+      "predicted_final_density_phase": -2.1951959034711868e-05,
+      "predicted_final_velocity_quadrature": -1.3341013750413334e-05,
+      "initial_family_condition": 11.502425772405942,
+      "initial_family_determinant": -0.5187624254967036,
+      "endpoint_map_condition": 20.408637754289366,
+      "endpoint_map_determinant": 0.018127469716934495,
+      "original_family_weight": 33.29049919855946,
+      "model_family_weight": -22.357859847696833,
+      "baseline_final_density": 0.7016104623740008,
+      "model_final_density": 0.9999598659111228,
+      "baseline_final_projected_velocity": 0.4913604985020756,
+      "model_final_projected_velocity": 0.6869009997470383
+    }
+  ],
+  "matrices": [
+    {
+      "load": "glass",
+      "mode": [
+        1,
+        0,
+        0
+      ],
+      "initial_states": [
+        [
+          1.0,
+          1.0443762671250636
+        ],
+        [
+          1.0,
+          1.016007021411694
+        ]
+      ],
+      "measured_endpoints": [
+        [
+          0.9679172334402721,
+          1.0000075777508284
+        ],
+        [
+          0.9418799181244687,
+          0.972576322292684
+        ]
+      ],
+      "inferred_transition": [
+        [
+          0.5850304445108505,
+          0.38288678892942163
+        ],
+        [
+          0.5505860927487105,
+          0.39129382537575824
+        ]
+      ],
+      "measured_density_phases": [
+        0.000183290037677106,
+        0.00018869571450877456
+      ],
+      "measured_velocity_quadratures": [
+        -0.0004263231925465945,
+        -0.0004408911296672603
+      ]
+    },
+    {
+      "load": "glass",
+      "mode": [
+        2,
+        0,
+        0
+      ],
+      "initial_states": [
+        [
+          1.0,
+          1.2123043185248963
+        ],
+        [
+          1.0,
+          1.0662789866488547
+        ]
+      ],
+      "measured_endpoints": [
+        [
+          0.8683108711282775,
+          1.0008405596699887
+        ],
+        [
+          0.7654688122982084,
+          0.8792699728246262
+        ]
+      ],
+      "inferred_transition": [
+        [
+          0.5134651840462382,
+          0.3548456870820393
+        ],
+        [
+          0.4318885122584507,
+          0.33358030003975775
+        ]
+      ],
+      "measured_density_phases": [
+        0.0029582990232706378,
+        0.0034520401894784494
+      ],
+      "measured_velocity_quadratures": [
+        0.0038374163487942094,
+        0.004486481264165622
+      ]
+    },
+    {
+      "load": "glass",
+      "mode": [
+        3,
+        0,
+        0
+      ],
+      "initial_states": [
+        [
+          1.0,
+          1.6904576227102737
+        ],
+        [
+          1.0,
+          1.135052387208344
+        ]
+      ],
+      "measured_endpoints": [
+        [
+          0.6914808648313966,
+          1.0004948822381896
+        ],
+        [
+          0.4742564797420753,
+          0.6718188356289193
+        ]
+      ],
+      "inferred_transition": [
+        [
+          0.3882352237957495,
+          0.30324564103564716
+        ],
+        [
+          0.24038823837876336,
+          0.23386824136331197
+        ]
+      ],
+      "measured_density_phases": [
+        -0.000516562956039145,
+        -0.0007416839045805095
+      ],
+      "measured_velocity_quadratures": [
+        0.00017454252366397841,
+        0.00023269417432953315
+      ]
+    },
+    {
+      "load": "lattice",
+      "mode": [
+        1,
+        0,
+        0
+      ],
+      "initial_states": [
+        [
+          1.0,
+          1.0672135067865112
+        ],
+        [
+          1.0,
+          1.0237812563287063
+        ]
+      ],
+      "measured_endpoints": [
+        [
+          0.9524389604571076,
+          1.0000113117514573
+        ],
+        [
+          0.9145996126184488,
+          0.9594544770772094
+        ]
+      ],
+      "inferred_transition": [
+        [
+          0.573816829097652,
+          0.37862213135945555
+        ],
+        [
+          0.5319672913424603,
+          0.3826323212759885
+        ]
+      ],
+      "measured_density_phases": [
+        1.6538918902772576e-06,
+        2.2777437617150343e-06
+      ],
+      "measured_velocity_quadratures": [
+        1.7300740131595861e-06,
+        2.5591364681083464e-06
+      ]
+    },
+    {
+      "load": "lattice",
+      "mode": [
+        2,
+        0,
+        0
+      ],
+      "initial_states": [
+        [
+          1.0,
+          1.2889128542893555
+        ],
+        [
+          1.0,
+          1.0842385311467193
+        ]
+      ],
+      "measured_endpoints": [
+        [
+          0.8304392875529228,
+          0.9999744100868966
+        ],
+        [
+          0.7026561839046449,
+          0.8416327040128481
+        ]
+      ],
+      "inferred_transition": [
+        [
+          0.48652969857186557,
+          0.34390958898105733
+        ],
+        [
+          0.38981829303187465,
+          0.3128378908727703
+        ]
+      ],
+      "measured_density_phases": [
+        -2.767321064587025e-06,
+        -4.426407360832544e-06
+      ],
+      "measured_velocity_quadratures": [
+        -2.2259197628319706e-06,
+        -3.915077316925681e-06
+      ]
+    },
+    {
+      "load": "lattice",
+      "mode": [
+        3,
+        0,
+        0
+      ],
+      "initial_states": [
+        [
+          1.0,
+          1.6517836920199938
+        ],
+        [
+          1.0,
+          1.1330212665232902
+        ]
+      ],
+      "measured_endpoints": [
+        [
+          0.7016104623740008,
+          0.9999598659111228
+        ],
+        [
+          0.4913604985020756,
+          0.6869009997470383
+        ]
+      ],
+      "inferred_transition": [
+        [
+          0.3952103721271617,
+          0.3064000902468391
+        ],
+        [
+          0.2509416623419821,
+          0.24041883616009344
+        ]
+      ],
+      "measured_density_phases": [
+        -4.577047117208698e-07,
+        3.003302078880808e-07
+      ],
+      "measured_velocity_quadratures": [
+        5.002268586321422e-08,
+        6.711865105281225e-07
+      ]
+    }
+  ],
+  "source_sha256": {
+    "/home/dmarce1/workspace/cosmictiger/docs/glass_growth_results/adaptive_lattice/linear_growth_baseline_evolution.csv": "6430587d7a17a6afe1cec400212ee362cf00e5558acac0907c064492c2174d92",
+    "/home/dmarce1/workspace/cosmictiger/docs/glass_growth_results/adaptive_lattice/linear_growth_density.csv": "6c308b3996d954379d91eb8f51857336a5776f25306776a9391056cb64bce680",
+    "/home/dmarce1/workspace/cosmictiger/docs/glass_growth_results/adaptive_lattice/linear_growth_evolution.csv": "888c7ded48a5bd7da16f9ef02fa327eedcd4f23c9e9d4671d8b9f6bf3f9723c9",
+    "/home/dmarce1/workspace/cosmictiger/docs/glass_growth_results/adaptive_lattice/linear_growth_metadata.json": "88fdd6cf6876310199e96a97e5242c40e29ef93c90accd7383dc302b8c2baec9",
+    "/home/dmarce1/workspace/cosmictiger/docs/glass_growth_results/evolution_glass/linear_growth_baseline_evolution.csv": "79b1ffcd439a681057b074e086d2092f6e00e65aad3c80513f2d020821875326",
+    "/home/dmarce1/workspace/cosmictiger/docs/glass_growth_results/evolution_glass/linear_growth_density.csv": "735036b68a0034a6dfd40ff732470c91daa0683f21a08faf8addc78d4ad5f5e7",
+    "/home/dmarce1/workspace/cosmictiger/docs/glass_growth_results/evolution_glass/linear_growth_evolution.csv": "a506d340f6ac42ea6347014ce6ef9064728d52c3e804e2965a6433ff8d699c24",
+    "/home/dmarce1/workspace/cosmictiger/docs/glass_growth_results/evolution_glass/linear_growth_metadata.json": "95b187a52f300a722d61f8c8dcc5f7c2d8a2a05242f0f2d4f799cf10cf63ec73",
+    "/home/dmarce1/workspace/cosmictiger/docs/glass_growth_results/requests_8.csv": "4e805272c0c2b5b5208037081424e06e886d456cae1b5c6e26ac72b80bf2676b",
+    "/home/dmarce1/workspace/cosmictiger/docs/glass_ic_corrections_results/corrected_lattice/linear_growth_baseline_evolution.csv": "d971980577b9cf3173df131d2ff0d2cd2d69beca12a3b7fa9a8c0092297b6086",
+    "/home/dmarce1/workspace/cosmictiger/docs/glass_ic_corrections_results/corrected_lattice/linear_growth_density.csv": "6fc8d5873ef963a333830616ac2b1094b8a7f4402aa4f8dc7bc79c758187d13b",
+    "/home/dmarce1/workspace/cosmictiger/docs/glass_ic_corrections_results/corrected_lattice/linear_growth_evolution.csv": "ba0565c20a777442874e3391d3d3d5e0c4d307050c58cb570584230142ffaa41",
+    "/home/dmarce1/workspace/cosmictiger/docs/glass_ic_corrections_results/corrected_lattice/linear_growth_metadata.json": "88fdd6cf6876310199e96a97e5242c40e29ef93c90accd7383dc302b8c2baec9",
+    "/home/dmarce1/workspace/cosmictiger/docs/glass_ic_corrections_results/model_glass/linear_growth_baseline_evolution.csv": "d82db4773995072bd8c91a19dde98a76adb56e7ffc97459b8d0afffc7a0340b1",
+    "/home/dmarce1/workspace/cosmictiger/docs/glass_ic_corrections_results/model_glass/linear_growth_density.csv": "ba0ae11fd2166e5af896387a9451f7ad887de319baef4f9762b2689ded0035be",
+    "/home/dmarce1/workspace/cosmictiger/docs/glass_ic_corrections_results/model_glass/linear_growth_evolution.csv": "175b4c03e0944a574d42a8d659c00c42f26b4b7b650080d73025396b47cb6bc8",
+    "/home/dmarce1/workspace/cosmictiger/docs/glass_ic_corrections_results/model_glass/linear_growth_metadata.json": "b22f0b3ce22e1fe9bf04ebe594c900ec16724a01c2f004964432d679262cb15e",
+    "/home/dmarce1/workspace/cosmictiger/docs/glass_ic_corrections_results/requests_lattice.csv": "0ec7616e9784ec852b54429d4d846d03de8761a0d80888265b8e80868216dcab",
+    "/home/dmarce1/workspace/cosmictiger/docs/glass_ic_corrections_results/requests_model.csv": "edd6a947359970e322dc95ad625fdd7967fff9029a1de41a14822370ce62c844"
+  }
+}

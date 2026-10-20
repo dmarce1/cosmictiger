@@ -1,0 +1,669 @@
+{
+  "completed_utc": "2026-10-18T00:07:55.741025+00:00",
+  "git_branch": "main",
+  "git_head": "cebcb9eaed38a064fa6c14b6c5fb2f7c321bfc4d",
+  "dirty_worktree": true,
+  "scope": "Same 512-particle one-class glass and cubic lattice; adaptive Ferrers F4 (1-q^2)^4, 12 weighted neighbors, conservation terms; production forces in diagnostic RK4, not production timestepper.",
+  "production_defaults_changed": false,
+  "executable_sha256": "58426eb3f09fe9b858dbdebf3486f83e9cce91a2ccd88f7259212cc98abb1299",
+  "previous_manifest_sha256": "844101b877c8f9654cf74592c68b0270072537a2f0d6f1ef6be26762bc8ba99f",
+  "same_executable_and_physics_sources_as_previous": true,
+  "analysis_change": "Plot titles now use measured kernel, neighbor count, particle count, softening mode, and growth interval; numerical analysis unchanged.",
+  "source_sha256": {
+    "CMakeLists.txt": "47deab061e7440863bf08ad2f39512d81655550e57e3d7a33c9c9523284884bf",
+    "configurations/createGlass.ini": "4a38278ef90252796413b0987531cc39840606cf6e91cc0b58411933280d4914",
+    "cosmictiger/adaptive_softening.hpp": "59b5615087ddf1f328e19140948d66d38883ddf8f89e45629c052d9bf7e21274",
+    "cosmictiger/gravity_softening.hpp": "3e0776274a58bcc34ddfb70bf6cc5f29ec849502ac31bb4a32c1af1ffc967729",
+    "cosmictiger/kernel.hpp": "7b67c5617d302928b41b587ad901d0102a443f71a09cc404048d10f16350d6ea",
+    "cosmictiger/kick.hpp": "9f9fb3467019dc939066763b42d05d9a7e0b0602da58243af3d7af1d39c49619",
+    "cosmictiger/options.hpp": "9e8a0425e32c0b4957fda004a9472696794c72791a28d04a8086fd85ae4ad180",
+    "cosmictiger/particles.hpp": "bc0f63d201aa68263e679c3d2c0b6c63db4853ae2b08839f7d49cd96bf327744",
+    "cosmictiger/sph_cuda.hpp": "60c292ee06022f6025641fcdc582b35652c4e5d46c243852215c678d07d6671e",
+    "src/domain.cpp": "80f056edd63d49dcfbab78c0b2a98fbc5d2cd2451de83089c40631e5d03a1eed",
+    "src/drift.cpp": "ca598f31679bdb5aadfab9d006cf7fe5c4e6059d9da844950e10ec2e3a989321",
+    "src/drift.cu": "dd5b5edb49f369e438d85b14182083321e5d8f62cb42f26afd0fb628d59fd876",
+    "src/driver.cpp": "72f430fc53ab010c8e456e0c9632704b3e0680e8452073c104734ccc764f2770",
+    "src/gravity.cpp": "2d6338a26ae0dbafd49fce0952aea3888f7ec8ffe1d45c7902ea4afa3540251d",
+    "src/gravity.cu": "b0eb9e63e7bdbd63d193268b30009004ea34014160cdf879c62275a1eac9cc90",
+    "src/gravity_softening.cpp": "dd9eaa502edd579513819f2758a5ea7bf3587df20a5c9881f4c1412083e9090e",
+    "src/initialize.cpp": "7fad8949f5779f95fd5b8b359193941f29fe14049e47670f970a4a2fca3ce522",
+    "src/kick.cpp": "de1ea4e8f16cad7d1bf37eab337d18f810c7dfb3ad77a6d126ca8a1949596495",
+    "src/kick.cu": "f0de26d0a9930a50921f585e9a49cc1517e2099f7f3eff15c0c541cba68c0072",
+    "src/kick_workspace.cpp": "0475eac19f0107ac4f3e06a8f62954d8975aa02b72333a5080634c51141d7dc3",
+    "src/options.cpp": "faffbdb8a5cb6b664c276b4ad07d5c0ca6aa392d8d9d9f9d2b9ed70ea679932a",
+    "src/particles.cpp": "4434f4c029c5a182189ed7d9bab19259b16ec2e59938001aafe0de71a3ec6337",
+    "src/sph.cpp": "9a01f12cf669182f4fdb9db4904879588caf51155ec7a75116954c1b71b4b18e",
+    "src/sph_cond_init.cu": "c355c809ea06c685b650e5e43d42c74025d16e66235820ba625259b95d907a24",
+    "src/sph_conduction.cu": "7c28e383c7224d4ec258ec9e714aa65bdacbfae8b9ecca0eed6189f541e00d61",
+    "src/sph_hydro.cu": "baa958d3f8b0c4b8392fedb75e2f9aad0cabae1c9df7769edf4f107082e9471e",
+    "src/sph_prehydro.cu": "00068f75adffe49f8c7c156d7251e1e481230aca94f33cdd46ccdd172bd56834",
+    "src/test.cpp": "1744cdc53a7106f7d0b267803b88d58aeae309e7896a11ebfe82bf90cd272431",
+    "src/tree.cpp": "080f7c294a5c3e85f7eb2e3bdb93be15bd18508d1a3b885cbf5ae4b82c05f3c3",
+    "tests/analyze_glass_growth.py": "86d3eb32d94c8d060ded279b90feab8976a806da49a9bcbd703f880e73db6652",
+    "tests/analyze_linear_growth.py": "379ccb50d5a648c734cb42d713dfd2bc18bdf134d3091588ca2423565a037b81",
+    "tests/linear_growth.cpp": "0ef73add6572bf49b81d060959b67209d645e54be551f479fdbe1b5877ab0e26",
+    "tests/monaghan_sph_cuda.cu": "d21c57e3bf0e907e04aa60c5fd8a92cd6246a3c07a4e307bea886e6777e52833",
+    "tests/run_checkpoint.py": "07d3f8983d59f42db7d07fe6ca0afae04bc475f1b77052fbcd53682621586c6e",
+    "tests/run_kernel_selection.py": "7b0e014c2ef4ac5bc7a361f03ccfde3dc212a56c1a1f1c21abbcf2095372ce13",
+    "tests/run_linear_growth.py": "82e0940fa1f3a1d0a30487e29748fc6abd12bf3cee223a55727ece0a69d5b812",
+    "tests/run_options.py": "397a42867e4d29500367af355468fb415d3311c88b697a17446bf2b048fcf1ef",
+    "tests/run_smoke.py": "450f42463fabbdc482af2ba77a50c5c95db8a52525fd29f61b0723af7fcfcd80",
+    "tests/sph_gravity.cpp": "4eaa7f3b29394156abe257bafd48e3c8f8deaff253b74c7f001b102a04184696"
+  },
+  "commands": "commands.json",
+  "reproduction": "run_experiment.py --output-dir NEW_DIRECTORY; the two *_executed.py files preserve the exact original orchestration, including the later oblique extension.",
+  "analysis_layout": "orientation_*/analysis copies the validated 14-mode response summaries from adaptive_*/analysis; evolution_glass/analysis derives from adaptive_glass raw trajectories. These directories are not additional production runs.",
+  "validation": {
+    "release_build": "Passed; ninja reported no work to do.",
+    "adaptive_softening_cuda": "Passed, 0.40 seconds; CPU/CUDA consistency across all configured kernels.",
+    "exact_f4_12_conservation": "Passed equal/unequal class-mass energy gradients with unconstrained and mixed bounded radii; isolated variant source and output in conservation_check/.",
+    "production_runs": "All eight cases exited zero; each growth case includes positive, negative, and zero trajectories.",
+    "support_check": "Independent analytic number-constraint solves agree with all four production metadata sets within 5e-7 particle spacings.",
+    "original_archive": "All artifact hashes verified unchanged.",
+    "archived_data_reanalysis": "Two response summaries, eight growth summaries and tracks, and the glass/lattice comparison reproduced byte for byte from archived raw data.",
+    "convergence": "Shortest-axis density ratios changed by less than 0.002 percent relatively on doubling steps or halving amplitude, for both loads.",
+    "full_suite": "Not rerun; physics source and executable are unchanged."
+  },
+  "artifacts": [
+    {
+      "path": "adaptive_glass/analysis/response_summary.csv",
+      "bytes": 3873,
+      "sha256": "01e30662dcdbf01d4085d8d2ab59ce36b8c5bfdce7d653789daf52b722b25a1b"
+    },
+    {
+      "path": "adaptive_glass/analysis/response_summary.json",
+      "bytes": 14106,
+      "sha256": "eb36e8595fe5b8cea4cd8ec151c9a734c35642a06a73f31268b49750f234959d"
+    },
+    {
+      "path": "adaptive_glass/command.json",
+      "bytes": 1265,
+      "sha256": "b0583c1548a6fc6054dcff80a77a7191739cbed8b9dd1f472273249beed274d6"
+    },
+    {
+      "path": "adaptive_glass/linear_growth_baseline_evolution.csv",
+      "bytes": 18118,
+      "sha256": "57a2abea145c26377391905dec153caa845112054ca4c7162dc93e77d5ed8f99"
+    },
+    {
+      "path": "adaptive_glass/linear_growth_density.csv",
+      "bytes": 4877,
+      "sha256": "3f1e18f0e5cb27b91e013de7d05d8515381324fd6908af447dd0410201393761"
+    },
+    {
+      "path": "adaptive_glass/linear_growth_evolution.csv",
+      "bytes": 11742,
+      "sha256": "4520ab1317dad4251205b2897cea9fdb82277a477d248ec69f9467d50618dcc8"
+    },
+    {
+      "path": "adaptive_glass/linear_growth_metadata.json",
+      "bytes": 1010,
+      "sha256": "4bf16847aa1c5b485161db5080165e0d3c1ab523d603efb2e785102be96bb550"
+    },
+    {
+      "path": "adaptive_glass/linear_growth_response.csv",
+      "bytes": 56725,
+      "sha256": "35aec35befc082669cf3c4b74e7a78b5ff7cf650343d94bb9a19645dfddb2c1d"
+    },
+    {
+      "path": "adaptive_glass/run.log",
+      "bytes": 6374,
+      "sha256": "e1db76e3253ce994e23393d83017e335f900b0f98e3a50e984f03609113ddff8"
+    },
+    {
+      "path": "adaptive_lattice/analysis/glass_growth.png",
+      "bytes": 161245,
+      "sha256": "d6ee20e02af2191e544d38076d383d44e48c21cb4a3bba23c7182cead7c96ffd"
+    },
+    {
+      "path": "adaptive_lattice/analysis/growth_summary.csv",
+      "bytes": 1540,
+      "sha256": "e8762c0ed98e9237be4b718b394e49dded62ba7c39c468af75c26a311138c623"
+    },
+    {
+      "path": "adaptive_lattice/analysis/growth_summary.json",
+      "bytes": 4364,
+      "sha256": "81780e3daa0a021f4731b7c396f19b6ccf0194f901cd5fee610c9fc6867dd10f"
+    },
+    {
+      "path": "adaptive_lattice/analysis/growth_tracks.csv",
+      "bytes": 7357,
+      "sha256": "1224d95985121c80fe22ee8945b78dd7ca3ce89150e33da5c5dc397d3b6cac2f"
+    },
+    {
+      "path": "adaptive_lattice/analysis/response_summary.csv",
+      "bytes": 3931,
+      "sha256": "9134550e923613559626c03f176960b5e28eb3d77ba99ff74daa0091d2e8099b"
+    },
+    {
+      "path": "adaptive_lattice/analysis/response_summary.json",
+      "bytes": 14089,
+      "sha256": "5e507ef68195a48afc250e306367b0a4b7520bf6dcabaccdfabbf665df07ed06"
+    },
+    {
+      "path": "adaptive_lattice/command.json",
+      "bytes": 1136,
+      "sha256": "0f888323f715b8af8c5d5620c4940cf2d0eb68fb54f9cd3cdac3aa4ac8593f89"
+    },
+    {
+      "path": "adaptive_lattice/linear_growth_baseline_evolution.csv",
+      "bytes": 18240,
+      "sha256": "9c5d0d8b7b272bd7dfda7016ac0a308c117387e326c8980d042589e0f51a7e03"
+    },
+    {
+      "path": "adaptive_lattice/linear_growth_density.csv",
+      "bytes": 4852,
+      "sha256": "11a44ccebf424afc98cf8ef67730cac0eaae01dae27d9a45393a8618d8e876dc"
+    },
+    {
+      "path": "adaptive_lattice/linear_growth_evolution.csv",
+      "bytes": 11781,
+      "sha256": "ee92fcc3dc88300418f59463607a4206073d09bf5619c71fb96754f55a743a01"
+    },
+    {
+      "path": "adaptive_lattice/linear_growth_metadata.json",
+      "bytes": 934,
+      "sha256": "3215f5ea5979e71343845f8a28361330f532e1fe3a9620b9528842747121e00a"
+    },
+    {
+      "path": "adaptive_lattice/linear_growth_response.csv",
+      "bytes": 57237,
+      "sha256": "cd7ad59e93a531102c2650364e3412bd4bcbbd5eb05d55f5509f52d1b90415c3"
+    },
+    {
+      "path": "adaptive_lattice/run.log",
+      "bytes": 6296,
+      "sha256": "2d3d196581801b8fc5ce3ae762a249c97374bf56bc041d187ed9cfe2fec325cf"
+    },
+    {
+      "path": "adaptive_softening_cuda.log",
+      "bytes": 342,
+      "sha256": "a7244e42fab50f9f4b70a0238e073386bffa72a26b54f2237590d706dc52b219"
+    },
+    {
+      "path": "archive_reanalysis.log",
+      "bytes": 637,
+      "sha256": "8e159904ecb1c05bbd67802e6554fbcd9943735f68f8f0e9f848719da241a814"
+    },
+    {
+      "path": "build.log",
+      "bytes": 22,
+      "sha256": "8c35b1682f73592d30612d7b0fabdb384fcfff35cb5a076cb48b85b1368aa794"
+    },
+    {
+      "path": "campaign.log",
+      "bytes": 150,
+      "sha256": "61ef3821da8175643bb2fea418989ad4b9436f2fb7a3d29298fdd20969b8f8a7"
+    },
+    {
+      "path": "commands.json",
+      "bytes": 10683,
+      "sha256": "a38d86f87c28f9a2ae1337684a286da9228f0db33b560bac53542901a7e33ddf"
+    },
+    {
+      "path": "compare_settings.py",
+      "bytes": 10818,
+      "sha256": "3a4e53675d015f60a74ec2b485c013702189274b877c9b497e09b57b484c4542"
+    },
+    {
+      "path": "conservation_check/adaptive_softening_f4.cpp",
+      "bytes": 18060,
+      "sha256": "6292927b7e4083aa4ff9f83e6cc8858de87bec1630813bf14f1b9848d3a081d4"
+    },
+    {
+      "path": "conservation_check/command.sh",
+      "bytes": 342,
+      "sha256": "2e45de7c71955fc22a9b3e6cc32dd496bed91363fc3635f086a5dc9fa995ab13"
+    },
+    {
+      "path": "conservation_check/output.log",
+      "bytes": 311,
+      "sha256": "65ab500cc2ca72d8626c149ff614b9c1d165ee894358678ab35ff1f3f04bae12"
+    },
+    {
+      "path": "conservation_check/source_sha256.txt",
+      "bytes": 92,
+      "sha256": "a83d31ae718a314c69e532883046489d1b92596016a35b21792f586928e46ba6"
+    },
+    {
+      "path": "control_16_glass/analysis/glass_growth.png",
+      "bytes": 142771,
+      "sha256": "93f670830911b843fee67f6b5a527cb5cc94427000668a9848668e70c557adb0"
+    },
+    {
+      "path": "control_16_glass/analysis/growth_summary.csv",
+      "bytes": 837,
+      "sha256": "58dcfa53ca8c8098d9123cdd128a95f57c420b753d0333b9ea521b74664e48d4"
+    },
+    {
+      "path": "control_16_glass/analysis/growth_summary.json",
+      "bytes": 2264,
+      "sha256": "694b76a6aaf8ca0b29a8747cee704304075fe6b895c389a92228d25ed1289c61"
+    },
+    {
+      "path": "control_16_glass/analysis/growth_tracks.csv",
+      "bytes": 4816,
+      "sha256": "856acde089f0fea24e704f694cd89172155040d66ffe4050cd7d2c482b33a2ca"
+    },
+    {
+      "path": "control_16_glass/command.json",
+      "bytes": 1320,
+      "sha256": "0734aba67a15aa451358aaeccb19ab5b0805313061e9290d7d515925702560b5"
+    },
+    {
+      "path": "control_16_glass/linear_growth_baseline_evolution.csv",
+      "bytes": 12012,
+      "sha256": "b6a36edfc52f0d4420f61bf337cae7305015dc7eb1479dae412e4527cbfec5fe"
+    },
+    {
+      "path": "control_16_glass/linear_growth_density.csv",
+      "bytes": 3117,
+      "sha256": "b82cbb57c857ef9bc3a678ae5d4d86c3e76de3e192674c163945b4a9ace75bf5"
+    },
+    {
+      "path": "control_16_glass/linear_growth_evolution.csv",
+      "bytes": 7684,
+      "sha256": "a6ce229a06babff73a2a8180c764868c6c24a173191f28923720af5844b267e1"
+    },
+    {
+      "path": "control_16_glass/linear_growth_metadata.json",
+      "bytes": 1010,
+      "sha256": "4bf16847aa1c5b485161db5080165e0d3c1ab523d603efb2e785102be96bb550"
+    },
+    {
+      "path": "control_16_glass/run.log",
+      "bytes": 4667,
+      "sha256": "ff815fac3ea637e294c4d8e9e88c49cd3338057cb98b95b6d182b3afbcd822c2"
+    },
+    {
+      "path": "control_16_lattice/analysis/glass_growth.png",
+      "bytes": 137612,
+      "sha256": "47d0c1c858961fc3be7f21b6bea5cd66fbabb693c1d9f207a55486eeda8a1d2c"
+    },
+    {
+      "path": "control_16_lattice/analysis/growth_summary.csv",
+      "bytes": 838,
+      "sha256": "606ec8a697eb2afc6e6684a616e3a0c6b627db3ee85486007039c0c946c916f8"
+    },
+    {
+      "path": "control_16_lattice/analysis/growth_summary.json",
+      "bytes": 2190,
+      "sha256": "e8f48b872b8eb0dba5ce80e99c82626b04e8ee211ed1a0788565177bdca50d7b"
+    },
+    {
+      "path": "control_16_lattice/analysis/growth_tracks.csv",
+      "bytes": 4876,
+      "sha256": "6c29a4e3f4029bcc0ffeb36f154f7580b7a3d243895976e61f1a1fa6531e7518"
+    },
+    {
+      "path": "control_16_lattice/command.json",
+      "bytes": 1191,
+      "sha256": "575d79deac0aa7563c2502f55f0318c81386e8286f04691486baa28a812ca7a1"
+    },
+    {
+      "path": "control_16_lattice/linear_growth_baseline_evolution.csv",
+      "bytes": 12108,
+      "sha256": "4dfb69b4faffef56e0a4c8f1434017443e81f488a2a6a776424258f2b50f6cbf"
+    },
+    {
+      "path": "control_16_lattice/linear_growth_density.csv",
+      "bytes": 3119,
+      "sha256": "6cd9051e9ed7df13727b719b6aaf96791918fde121d93a3b95c94d3c17141fed"
+    },
+    {
+      "path": "control_16_lattice/linear_growth_evolution.csv",
+      "bytes": 7744,
+      "sha256": "a4bbebfc23e2528556dc362c804631c812cba0a3f7e1b8b654c364701ee9068a"
+    },
+    {
+      "path": "control_16_lattice/linear_growth_metadata.json",
+      "bytes": 934,
+      "sha256": "3215f5ea5979e71343845f8a28361330f532e1fe3a9620b9528842747121e00a"
+    },
+    {
+      "path": "control_16_lattice/run.log",
+      "bytes": 5083,
+      "sha256": "62386d9edcbb8f3b38dff75c4c24a493b843e2185911ccc0e38d556cbb3ef02f"
+    },
+    {
+      "path": "control_half_glass/analysis/glass_growth.png",
+      "bytes": 142915,
+      "sha256": "7de1ca949709bfba24b129e2c185e9941577314c02aad6987058d796c0de82bd"
+    },
+    {
+      "path": "control_half_glass/analysis/growth_summary.csv",
+      "bytes": 830,
+      "sha256": "69014b94c802a117338b47f49606f4b4141e9445bae07d207846854918d4a955"
+    },
+    {
+      "path": "control_half_glass/analysis/growth_summary.json",
+      "bytes": 2257,
+      "sha256": "74207d22bab257abe814fb0e8a4659ec10918768b659d0250542319175468f36"
+    },
+    {
+      "path": "control_half_glass/analysis/growth_tracks.csv",
+      "bytes": 2654,
+      "sha256": "3a770ff96b433c05d2948e341bdff7e81f9f1b6a22626b8763d06bd28b249332"
+    },
+    {
+      "path": "control_half_glass/command.json",
+      "bytes": 1324,
+      "sha256": "bc3adb077376050545e403c5a09d1222cea3773dd947e9f46b8686f7abc8e6fc"
+    },
+    {
+      "path": "control_half_glass/linear_growth_baseline_evolution.csv",
+      "bytes": 6108,
+      "sha256": "c17a1634ca2be5c1fd54aa7b69eec59581720b48df32069e61c6578374cf3b52"
+    },
+    {
+      "path": "control_half_glass/linear_growth_density.csv",
+      "bytes": 1688,
+      "sha256": "a94114bce54c5a43d913db55450677fff6416f18f271f2df1dc54427a6f66c83"
+    },
+    {
+      "path": "control_half_glass/linear_growth_evolution.csv",
+      "bytes": 3980,
+      "sha256": "dda06d2e2255d955661a9aabe83cdccd66a038f33187d446ac2c02971ad48fbb"
+    },
+    {
+      "path": "control_half_glass/linear_growth_metadata.json",
+      "bytes": 1010,
+      "sha256": "4bf16847aa1c5b485161db5080165e0d3c1ab523d603efb2e785102be96bb550"
+    },
+    {
+      "path": "control_half_glass/run.log",
+      "bytes": 4874,
+      "sha256": "00749d5c676ec948b1c144cac2deee6a4bda3181073dc81826887e495bd9209d"
+    },
+    {
+      "path": "control_half_lattice/analysis/glass_growth.png",
+      "bytes": 140503,
+      "sha256": "6379b6ec18ac9703c04bdee060cf3930ee2fe46417862d023a72e6f3dd5cb7bf"
+    },
+    {
+      "path": "control_half_lattice/analysis/growth_summary.csv",
+      "bytes": 835,
+      "sha256": "81d938cad4594cdba749be17a8ebdb397915f288dcfa03e524de759aeb95a493"
+    },
+    {
+      "path": "control_half_lattice/analysis/growth_summary.json",
+      "bytes": 2187,
+      "sha256": "9b1e22e73094c7332b1bf59f8b43e03b52be80373cc65530cd2831ffcd54372a"
+    },
+    {
+      "path": "control_half_lattice/analysis/growth_tracks.csv",
+      "bytes": 2679,
+      "sha256": "6883c1a84d13d9d6001df9798522428baa587ff3d1233c732c560f65434f37b1"
+    },
+    {
+      "path": "control_half_lattice/command.json",
+      "bytes": 1195,
+      "sha256": "5e98324b80922d6b5f934e1f196b004343e9dcbda12936a95d917f954246ed8b"
+    },
+    {
+      "path": "control_half_lattice/linear_growth_baseline_evolution.csv",
+      "bytes": 6165,
+      "sha256": "1b79c30276da78280fe88395163b538a367ed131274c70eef51fef0e8775c533"
+    },
+    {
+      "path": "control_half_lattice/linear_growth_density.csv",
+      "bytes": 1698,
+      "sha256": "7b20305719abf3a040ccbed095f10bff3934c0e8fd575d57eb0ce80268ee499f"
+    },
+    {
+      "path": "control_half_lattice/linear_growth_evolution.csv",
+      "bytes": 4010,
+      "sha256": "c7a8d2be662feadcb953f7f0abcb46479bef4098655893a3cca41330b6996b6f"
+    },
+    {
+      "path": "control_half_lattice/linear_growth_metadata.json",
+      "bytes": 934,
+      "sha256": "3215f5ea5979e71343845f8a28361330f532e1fe3a9620b9528842747121e00a"
+    },
+    {
+      "path": "control_half_lattice/run.log",
+      "bytes": 4692,
+      "sha256": "fb75129206675ca3f92a0eb3711106b7e0d17fd5dd9f2a538c4b7fe5462bdcc2"
+    },
+    {
+      "path": "evolution_glass/analysis/glass_growth.png",
+      "bytes": 173681,
+      "sha256": "031ba21f7b79b543660dee96d22809ed59dfa54d0b83cb0938ceb6f89c7a781d"
+    },
+    {
+      "path": "evolution_glass/analysis/growth_summary.csv",
+      "bytes": 1532,
+      "sha256": "dfe1818e5a88002e4ddae4853990791d6185506040ea89447e8dd5ffa87b0164"
+    },
+    {
+      "path": "evolution_glass/analysis/growth_summary.json",
+      "bytes": 4431,
+      "sha256": "458f0f57c4696ef13001b59affbb809002973c13711292f8c6d79e5050c0d0a2"
+    },
+    {
+      "path": "evolution_glass/analysis/growth_tracks.csv",
+      "bytes": 7320,
+      "sha256": "b1bcb8d7e0a79dbd507e089f30a0962f16819e1a8f24d590897059f7fdcba4be"
+    },
+    {
+      "path": "glass.txt",
+      "bytes": 30718,
+      "sha256": "f7a588d45eba4dceaca6ec799ce967cf05502854fc8d6ee01777568cbff09e13"
+    },
+    {
+      "path": "glass_lattice_comparison.json",
+      "bytes": 8343,
+      "sha256": "4da4e62ecf7af8c782e73ee6cefe461353b46a4057d46138cde246be4f140d72"
+    },
+    {
+      "path": "glass_lattice_comparison.png",
+      "bytes": 177455,
+      "sha256": "bb69aba5bb07290acb72c54c1b86af034b4bedece9b051dfdbdb284dcba6907b"
+    },
+    {
+      "path": "growth_controls.csv",
+      "bytes": 1085,
+      "sha256": "a05857cb62d004c47526bac655f8b45422da1d714e8561ebfcfef955eb21d5d6"
+    },
+    {
+      "path": "growth_controls.json",
+      "bytes": 2633,
+      "sha256": "b44c2ea14b0f49483fa4bc3be6cd1e29bdbdf61c294eab2d1d9442c66a361f4e"
+    },
+    {
+      "path": "initial_support_check.json",
+      "bytes": 7413,
+      "sha256": "b7b7e89ba44b97326e40f5a029ba209971782121f9b1dabdf2c8d71ad1c90ede"
+    },
+    {
+      "path": "initial_support_check.py",
+      "bytes": 6117,
+      "sha256": "586c5d3f29b7317c53aadcb68b1cb9dcade12e1ae712f03d80857035a8e28b94"
+    },
+    {
+      "path": "kernel_comparison.csv",
+      "bytes": 1335,
+      "sha256": "3158d0cedf6c089a0a5edb28bac8eb8d15edc9d0b38700c6d8dff6575bf7ffbe"
+    },
+    {
+      "path": "kernel_comparison.json",
+      "bytes": 3275,
+      "sha256": "06a621631a6b695582c2578d781cb1c113a4937fb235d8419f5734c89b1b738a"
+    },
+    {
+      "path": "kernel_comparison.png",
+      "bytes": 225832,
+      "sha256": "66e83e4e74dc1134180de13f29457c3c16ae20353a5811054d04e53275f92c7f"
+    },
+    {
+      "path": "oblique_campaign.log",
+      "bytes": 44,
+      "sha256": "42433411a75a5c19f7b83a197481732697f3e76040cc945d8caf7da024c17d3a"
+    },
+    {
+      "path": "oblique_comparison.csv",
+      "bytes": 788,
+      "sha256": "1baee1a6e9d9ad8140baa164acd543dceca13722824cc1877c79ff1615cb1496"
+    },
+    {
+      "path": "oblique_comparison.json",
+      "bytes": 1801,
+      "sha256": "7dbbceda4960467bca05ab6ebd7f9305356893cd4e83deda90029e977f9197c7"
+    },
+    {
+      "path": "oblique_glass/analysis/glass_growth.png",
+      "bytes": 144540,
+      "sha256": "b7052c3ae9b5f1fc2289d6622fd411a5bc372e8aec19d1f2083b91bd1536a5a2"
+    },
+    {
+      "path": "oblique_glass/analysis/growth_summary.csv",
+      "bytes": 828,
+      "sha256": "9b0e4b08cabd978a1c82724621287045a880545e5aab6078b1cc4ef782938c37"
+    },
+    {
+      "path": "oblique_glass/analysis/growth_summary.json",
+      "bytes": 2255,
+      "sha256": "bd68998c7aa90061b0d05184cef6345b7671b04a2504447f2ee8c88ff8d7758e"
+    },
+    {
+      "path": "oblique_glass/analysis/growth_tracks.csv",
+      "bytes": 2660,
+      "sha256": "f3396dd5e987872985531c95a5b5a792b52c5e161a3d69a9d8f779360ee1bd12"
+    },
+    {
+      "path": "oblique_glass/command.json",
+      "bytes": 1322,
+      "sha256": "b49486f39a09aeb714da2510f807edec632ac3e7543eaa5d45e33ecb5f88be7d"
+    },
+    {
+      "path": "oblique_glass/linear_growth_baseline_evolution.csv",
+      "bytes": 6098,
+      "sha256": "8a7139e96430907e9078d5ffdd5e1c534d84dc980af4960acdef46edb353b442"
+    },
+    {
+      "path": "oblique_glass/linear_growth_density.csv",
+      "bytes": 1673,
+      "sha256": "5595038aecff5f011f447e5876907e80daf88cbf05be77c20a065db7e4b90dd8"
+    },
+    {
+      "path": "oblique_glass/linear_growth_evolution.csv",
+      "bytes": 4198,
+      "sha256": "37104da7ed16e98f6a0eaab7a0ff221343b989f138c85ef5f74ec38cf301966f"
+    },
+    {
+      "path": "oblique_glass/linear_growth_metadata.json",
+      "bytes": 1010,
+      "sha256": "4bf16847aa1c5b485161db5080165e0d3c1ab523d603efb2e785102be96bb550"
+    },
+    {
+      "path": "oblique_glass/run.log",
+      "bytes": 4874,
+      "sha256": "fdcf1c370d9d2da4e06b0064afeeef349a24a6421ea13efe6e2fd2862fa4b7f6"
+    },
+    {
+      "path": "oblique_lattice/analysis/glass_growth.png",
+      "bytes": 133348,
+      "sha256": "76e02226b76276e668b7d858be8b08ad923d92104edb6d30ee2b92272b21d9d9"
+    },
+    {
+      "path": "oblique_lattice/analysis/growth_summary.csv",
+      "bytes": 838,
+      "sha256": "60d302e61f2df919c8f88c8379c888ea41337f3674ccdf85de556a799071e077"
+    },
+    {
+      "path": "oblique_lattice/analysis/growth_summary.json",
+      "bytes": 2190,
+      "sha256": "56afa821b5bc432b850226049e96d1f2a7d9a1a4f01c625757ff5e9785166b67"
+    },
+    {
+      "path": "oblique_lattice/analysis/growth_tracks.csv",
+      "bytes": 2685,
+      "sha256": "0f83a8c9208d05ff5641c31560fab757eba279bde5d60ecfab38d6da5e675bbc"
+    },
+    {
+      "path": "oblique_lattice/command.json",
+      "bytes": 1193,
+      "sha256": "779cd758fa2c9e7d274f92de7453f25d80a4887a2e6b4127df3a9922d4d78897"
+    },
+    {
+      "path": "oblique_lattice/linear_growth_baseline_evolution.csv",
+      "bytes": 6144,
+      "sha256": "bde2b6cac9a43555caceab5c3203a356646157eb8bc0a5437289022ca6bf5141"
+    },
+    {
+      "path": "oblique_lattice/linear_growth_density.csv",
+      "bytes": 1696,
+      "sha256": "cb7eee0311080de898d26c82f7d65baa952fa7f2320bc2538244e5d55a424023"
+    },
+    {
+      "path": "oblique_lattice/linear_growth_evolution.csv",
+      "bytes": 4167,
+      "sha256": "592f5333cedd3d3ee793a235289d8681f9a03fb22a4abc0ef12bd05014b1be9a"
+    },
+    {
+      "path": "oblique_lattice/linear_growth_metadata.json",
+      "bytes": 934,
+      "sha256": "3215f5ea5979e71343845f8a28361330f532e1fe3a9620b9528842747121e00a"
+    },
+    {
+      "path": "oblique_lattice/run.log",
+      "bytes": 4744,
+      "sha256": "70b5fbbe2d748812e362e51e8c76f182b35d2e363a34c7a4de4d7a7aae5cb0c3"
+    },
+    {
+      "path": "orientation_glass/analysis/response_summary.csv",
+      "bytes": 3873,
+      "sha256": "01e30662dcdbf01d4085d8d2ab59ce36b8c5bfdce7d653789daf52b722b25a1b"
+    },
+    {
+      "path": "orientation_glass/analysis/response_summary.json",
+      "bytes": 14106,
+      "sha256": "eb36e8595fe5b8cea4cd8ec151c9a734c35642a06a73f31268b49750f234959d"
+    },
+    {
+      "path": "orientation_lattice/analysis/response_summary.csv",
+      "bytes": 3931,
+      "sha256": "9134550e923613559626c03f176960b5e28eb3d77ba99ff74daa0091d2e8099b"
+    },
+    {
+      "path": "orientation_lattice/analysis/response_summary.json",
+      "bytes": 14089,
+      "sha256": "5e507ef68195a48afc250e306367b0a4b7520bf6dcabaccdfabbf665df07ed06"
+    },
+    {
+      "path": "requests_16.csv",
+      "bytes": 239,
+      "sha256": "d926da7cb7d9e754f4e5d324a33e16b863793f0d8a4a6a924b1b49a64c10700d"
+    },
+    {
+      "path": "requests_8.csv",
+      "bytes": 430,
+      "sha256": "4e805272c0c2b5b5208037081424e06e886d456cae1b5c6e26ac72b80bf2676b"
+    },
+    {
+      "path": "requests_half.csv",
+      "bytes": 239,
+      "sha256": "57b0eea46f595d21794d21411d0d467c9c01f10e7a4cecf766012087e28e7a42"
+    },
+    {
+      "path": "requests_oblique.csv",
+      "bytes": 326,
+      "sha256": "ff304b3671126ad91439fa8128c8ffc621a3f38ea98d3663a535cf56f10d3f6b"
+    },
+    {
+      "path": "run_experiment.py",
+      "bytes": 4058,
+      "sha256": "88f82454e98dcdf99df0434df2b8114ac4b4a3ac4e0553deb3e3af58aaca5aa4"
+    },
+    {
+      "path": "run_experiment_executed.py",
+      "bytes": 3402,
+      "sha256": "35055fd9d08f159b522cb420b7bd1cd7435bc3465cf5b5a7d4e3dc15acf687d6"
+    },
+    {
+      "path": "run_oblique_executed.py",
+      "bytes": 4027,
+      "sha256": "636908be3fbce2bb9ccfdaab1b364cd371d5c77051ae562caaa9cfa68ee81cee"
+    }
+  ]
+}

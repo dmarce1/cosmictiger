@@ -1,0 +1,244 @@
+[
+  {
+    "name": "adaptive_glass",
+    "command": [
+      "/home/dmarce1/workspace/cosmictiger/build/release/cosmictiger",
+      "--run.test=linearGrowth",
+      "--initial.particlesPerDimension=8",
+      "--initial.closePack=false",
+      "--initial.useGlass=false",
+      "--hydro.enabled=false",
+      "--compute.cuda=true",
+      "--gravity.softeningMode=adaptive",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=8",
+      "--gravity.neighborNumber=12",
+      "--gravity.openingAngle=0.1",
+      "--hpx:threads=4",
+      "--hpx:bind=none"
+    ],
+    "environment": {
+      "COSMICTIGER_LINEAR_GROWTH_PAIRED": "1",
+      "COSMICTIGER_LINEAR_GROWTH_EVOLVE_FILE": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_growth_f4_12/requests_8.csv",
+      "COSMICTIGER_LINEAR_GROWTH_MODES": "1,0,0;2,0,0;3,0,0;0,1,0;0,2,0;0,3,0;0,0,1;0,0,2;0,0,3;1,1,0;1,1,1;2,2,1;2,1,2;1,2,2",
+      "COSMICTIGER_LINEAR_GROWTH_AMPLITUDES": "0.01,0.005",
+      "COSMICTIGER_LINEAR_GROWTH_LOAD_FILE": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_growth_f4_12/glass.txt"
+    },
+    "directory": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_growth_f4_12/adaptive_glass",
+    "started_utc": "2026-10-17T23:46:45.564909+00:00",
+    "return_code": 0,
+    "finished_utc": "2026-10-17T23:57:44.705864+00:00"
+  },
+  {
+    "name": "adaptive_lattice",
+    "command": [
+      "/home/dmarce1/workspace/cosmictiger/build/release/cosmictiger",
+      "--run.test=linearGrowth",
+      "--initial.particlesPerDimension=8",
+      "--initial.closePack=false",
+      "--initial.useGlass=false",
+      "--hydro.enabled=false",
+      "--compute.cuda=true",
+      "--gravity.softeningMode=adaptive",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=8",
+      "--gravity.neighborNumber=12",
+      "--gravity.openingAngle=0.1",
+      "--hpx:threads=4",
+      "--hpx:bind=none"
+    ],
+    "environment": {
+      "COSMICTIGER_LINEAR_GROWTH_PAIRED": "1",
+      "COSMICTIGER_LINEAR_GROWTH_EVOLVE_FILE": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_growth_f4_12/requests_8.csv",
+      "COSMICTIGER_LINEAR_GROWTH_MODES": "1,0,0;2,0,0;3,0,0;0,1,0;0,2,0;0,3,0;0,0,1;0,0,2;0,0,3;1,1,0;1,1,1;2,2,1;2,1,2;1,2,2",
+      "COSMICTIGER_LINEAR_GROWTH_AMPLITUDES": "0.01,0.005"
+    },
+    "directory": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_growth_f4_12/adaptive_lattice",
+    "started_utc": "2026-10-17T23:46:45.565433+00:00",
+    "return_code": 0,
+    "finished_utc": "2026-10-17T23:56:19.659343+00:00"
+  },
+  {
+    "name": "control_16_glass",
+    "command": [
+      "/home/dmarce1/workspace/cosmictiger/build/release/cosmictiger",
+      "--run.test=linearGrowth",
+      "--initial.particlesPerDimension=8",
+      "--initial.closePack=false",
+      "--initial.useGlass=false",
+      "--hydro.enabled=false",
+      "--compute.cuda=true",
+      "--gravity.softeningMode=adaptive",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=8",
+      "--gravity.neighborNumber=12",
+      "--gravity.openingAngle=0.1",
+      "--hpx:threads=4",
+      "--hpx:bind=none"
+    ],
+    "environment": {
+      "COSMICTIGER_LINEAR_GROWTH_PAIRED": "1",
+      "COSMICTIGER_LINEAR_GROWTH_EVOLVE_FILE": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_growth_f4_12/requests_16.csv",
+      "COSMICTIGER_LINEAR_GROWTH_MODES": "1,0,0;2,0,0;3,0,0;0,1,0;0,2,0;0,3,0;0,0,1;0,0,2;0,0,3;1,1,0;1,1,1;2,2,1;2,1,2;1,2,2",
+      "COSMICTIGER_LINEAR_GROWTH_AMPLITUDES": "0.01,0.005",
+      "COSMICTIGER_LINEAR_GROWTH_SKIP_RESPONSE": "1",
+      "COSMICTIGER_LINEAR_GROWTH_LOAD_FILE": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_growth_f4_12/glass.txt"
+    },
+    "directory": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_growth_f4_12/control_16_glass",
+    "started_utc": "2026-10-17T23:57:44.706367+00:00",
+    "return_code": 0,
+    "finished_utc": "2026-10-18T00:02:15.372699+00:00"
+  },
+  {
+    "name": "control_16_lattice",
+    "command": [
+      "/home/dmarce1/workspace/cosmictiger/build/release/cosmictiger",
+      "--run.test=linearGrowth",
+      "--initial.particlesPerDimension=8",
+      "--initial.closePack=false",
+      "--initial.useGlass=false",
+      "--hydro.enabled=false",
+      "--compute.cuda=true",
+      "--gravity.softeningMode=adaptive",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=8",
+      "--gravity.neighborNumber=12",
+      "--gravity.openingAngle=0.1",
+      "--hpx:threads=4",
+      "--hpx:bind=none"
+    ],
+    "environment": {
+      "COSMICTIGER_LINEAR_GROWTH_PAIRED": "1",
+      "COSMICTIGER_LINEAR_GROWTH_EVOLVE_FILE": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_growth_f4_12/requests_16.csv",
+      "COSMICTIGER_LINEAR_GROWTH_MODES": "1,0,0;2,0,0;3,0,0;0,1,0;0,2,0;0,3,0;0,0,1;0,0,2;0,0,3;1,1,0;1,1,1;2,2,1;2,1,2;1,2,2",
+      "COSMICTIGER_LINEAR_GROWTH_AMPLITUDES": "0.01,0.005",
+      "COSMICTIGER_LINEAR_GROWTH_SKIP_RESPONSE": "1"
+    },
+    "directory": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_growth_f4_12/control_16_lattice",
+    "started_utc": "2026-10-17T23:56:19.659806+00:00",
+    "return_code": 0,
+    "finished_utc": "2026-10-18T00:00:06.797274+00:00"
+  },
+  {
+    "name": "control_half_glass",
+    "command": [
+      "/home/dmarce1/workspace/cosmictiger/build/release/cosmictiger",
+      "--run.test=linearGrowth",
+      "--initial.particlesPerDimension=8",
+      "--initial.closePack=false",
+      "--initial.useGlass=false",
+      "--hydro.enabled=false",
+      "--compute.cuda=true",
+      "--gravity.softeningMode=adaptive",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=8",
+      "--gravity.neighborNumber=12",
+      "--gravity.openingAngle=0.1",
+      "--hpx:threads=4",
+      "--hpx:bind=none"
+    ],
+    "environment": {
+      "COSMICTIGER_LINEAR_GROWTH_PAIRED": "1",
+      "COSMICTIGER_LINEAR_GROWTH_EVOLVE_FILE": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_growth_f4_12/requests_half.csv",
+      "COSMICTIGER_LINEAR_GROWTH_MODES": "1,0,0;2,0,0;3,0,0;0,1,0;0,2,0;0,3,0;0,0,1;0,0,2;0,0,3;1,1,0;1,1,1;2,2,1;2,1,2;1,2,2",
+      "COSMICTIGER_LINEAR_GROWTH_AMPLITUDES": "0.01,0.005",
+      "COSMICTIGER_LINEAR_GROWTH_SKIP_RESPONSE": "1",
+      "COSMICTIGER_LINEAR_GROWTH_LOAD_FILE": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_growth_f4_12/glass.txt"
+    },
+    "directory": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_growth_f4_12/control_half_glass",
+    "started_utc": "2026-10-18T00:02:15.373142+00:00",
+    "return_code": 0,
+    "finished_utc": "2026-10-18T00:04:35.317566+00:00"
+  },
+  {
+    "name": "control_half_lattice",
+    "command": [
+      "/home/dmarce1/workspace/cosmictiger/build/release/cosmictiger",
+      "--run.test=linearGrowth",
+      "--initial.particlesPerDimension=8",
+      "--initial.closePack=false",
+      "--initial.useGlass=false",
+      "--hydro.enabled=false",
+      "--compute.cuda=true",
+      "--gravity.softeningMode=adaptive",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=8",
+      "--gravity.neighborNumber=12",
+      "--gravity.openingAngle=0.1",
+      "--hpx:threads=4",
+      "--hpx:bind=none"
+    ],
+    "environment": {
+      "COSMICTIGER_LINEAR_GROWTH_PAIRED": "1",
+      "COSMICTIGER_LINEAR_GROWTH_EVOLVE_FILE": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_growth_f4_12/requests_half.csv",
+      "COSMICTIGER_LINEAR_GROWTH_MODES": "1,0,0;2,0,0;3,0,0;0,1,0;0,2,0;0,3,0;0,0,1;0,0,2;0,0,3;1,1,0;1,1,1;2,2,1;2,1,2;1,2,2",
+      "COSMICTIGER_LINEAR_GROWTH_AMPLITUDES": "0.01,0.005",
+      "COSMICTIGER_LINEAR_GROWTH_SKIP_RESPONSE": "1"
+    },
+    "directory": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_growth_f4_12/control_half_lattice",
+    "started_utc": "2026-10-18T00:00:06.797746+00:00",
+    "return_code": 0,
+    "finished_utc": "2026-10-18T00:02:13.220892+00:00"
+  },
+  {
+    "name": "oblique_glass",
+    "command": [
+      "/home/dmarce1/workspace/cosmictiger/build/release/cosmictiger",
+      "--run.test=linearGrowth",
+      "--initial.particlesPerDimension=8",
+      "--initial.closePack=false",
+      "--initial.useGlass=false",
+      "--hydro.enabled=false",
+      "--compute.cuda=true",
+      "--gravity.softeningMode=adaptive",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=8",
+      "--gravity.neighborNumber=12",
+      "--gravity.openingAngle=0.1",
+      "--hpx:threads=4",
+      "--hpx:bind=none"
+    ],
+    "environment": {
+      "COSMICTIGER_LINEAR_GROWTH_PAIRED": "1",
+      "COSMICTIGER_LINEAR_GROWTH_EVOLVE_FILE": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_growth_f4_12/requests_oblique.csv",
+      "COSMICTIGER_LINEAR_GROWTH_MODES": "1,0,0;2,0,0;3,0,0;0,1,0;0,2,0;0,3,0;0,0,1;0,0,2;0,0,3;1,1,0;1,1,1;2,2,1;2,1,2;1,2,2",
+      "COSMICTIGER_LINEAR_GROWTH_AMPLITUDES": "0.01,0.005",
+      "COSMICTIGER_LINEAR_GROWTH_SKIP_RESPONSE": "1",
+      "COSMICTIGER_LINEAR_GROWTH_LOAD_FILE": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_growth_f4_12/glass.txt"
+    },
+    "directory": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_growth_f4_12/oblique_glass",
+    "started_utc": "2026-10-18T00:04:38.665030+00:00",
+    "return_code": 0,
+    "finished_utc": "2026-10-18T00:06:13.351417+00:00"
+  },
+  {
+    "name": "oblique_lattice",
+    "command": [
+      "/home/dmarce1/workspace/cosmictiger/build/release/cosmictiger",
+      "--run.test=linearGrowth",
+      "--initial.particlesPerDimension=8",
+      "--initial.closePack=false",
+      "--initial.useGlass=false",
+      "--hydro.enabled=false",
+      "--compute.cuda=true",
+      "--gravity.softeningMode=adaptive",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=8",
+      "--gravity.neighborNumber=12",
+      "--gravity.openingAngle=0.1",
+      "--hpx:threads=4",
+      "--hpx:bind=none"
+    ],
+    "environment": {
+      "COSMICTIGER_LINEAR_GROWTH_PAIRED": "1",
+      "COSMICTIGER_LINEAR_GROWTH_EVOLVE_FILE": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_growth_f4_12/requests_oblique.csv",
+      "COSMICTIGER_LINEAR_GROWTH_MODES": "1,0,0;2,0,0;3,0,0;0,1,0;0,2,0;0,3,0;0,0,1;0,0,2;0,0,3;1,1,0;1,1,1;2,2,1;2,1,2;1,2,2",
+      "COSMICTIGER_LINEAR_GROWTH_AMPLITUDES": "0.01,0.005",
+      "COSMICTIGER_LINEAR_GROWTH_SKIP_RESPONSE": "1"
+    },
+    "directory": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_growth_f4_12/oblique_lattice",
+    "started_utc": "2026-10-18T00:02:13.661489+00:00",
+    "return_code": 0,
+    "finished_utc": "2026-10-18T00:04:26.649179+00:00"
+  }
+]

@@ -1,0 +1,18 @@
+{
+  "argv": [
+    "python3",
+    "-B",
+    "tests/analyze_glass_stability.py",
+    "docs/glass_growth_results/glass.txt",
+    "docs/glass_fixed_softening_results/spectrum"
+  ],
+  "cwd": "/home/dmarce1/workspace/cosmictiger",
+  "env": {
+    "OPENBLAS_NUM_THREADS": "1",
+    "OMP_NUM_THREADS": "1",
+    "MKL_NUM_THREADS": "1",
+    "BLIS_NUM_THREADS": "1",
+    "NUMEXPR_NUM_THREADS": "1"
+  },
+  "returncode": 0
+}

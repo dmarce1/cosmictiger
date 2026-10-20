@@ -1,0 +1,11 @@
+Reproduced prepare
+{"prepared": 3, "output": "/tmp/cosmictiger_glass_ic_coefficients_j8xfkfeg/results"}
+
+Reproduced calibrate
+{"calibrated": 3, "output": "/tmp/cosmictiger_glass_ic_coefficients_j8xfkfeg/results"}
+
+Reproduced compare
+{"compared": 3, "controls": {"control_16_glass": {"density_parallel_ratio": 2.150395691069562e-06, "velocity_parallel_ratio": 6.7495354980628974e-06, "phase_absolute_difference": 1.2983799296819535e-06}, "control_half_glass": {"density_parallel_ratio": -5.998823865516201e-05, "velocity_parallel_ratio": -0.00017397458672452348, "phase_absolute_difference": -1.8432925926409847e-05}}}
+
+All 11 coefficient, request and comparison files reproduced byte for byte.
+Output /tmp/cosmictiger_glass_ic_coefficients_j8xfkfeg/results

@@ -1,0 +1,27 @@
+{
+  "command": [
+    "/home/dmarce1/workspace/cosmictiger/build/release/cosmictiger",
+    "--run.test=linearGrowth",
+    "--initial.particlesPerDimension=8",
+    "--initial.closePack=false",
+    "--initial.useGlass=false",
+    "--hydro.enabled=false",
+    "--compute.cuda=true",
+    "--gravity.softeningMode=adaptive",
+    "--gravity.kernelFamily=ferrers",
+    "--gravity.kernelDegree=4",
+    "--gravity.neighborNumber=24",
+    "--gravity.openingAngle=0.1",
+    "--hpx:threads=4",
+    "--hpx:bind=none"
+  ],
+  "environment": {
+    "COSMICTIGER_LINEAR_GROWTH_PAIRED": "1",
+    "COSMICTIGER_LINEAR_GROWTH_SKIP_RESPONSE": "1",
+    "COSMICTIGER_LINEAR_GROWTH_EVOLVE_FILE": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_ic_corrections/corrected_lattice/requests.csv"
+  },
+  "directory": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_ic_corrections/corrected_lattice",
+  "started_utc": "2026-10-18T00:20:05.740119+00:00",
+  "return_code": 0,
+  "finished_utc": "2026-10-18T00:26:07.543242+00:00"
+}

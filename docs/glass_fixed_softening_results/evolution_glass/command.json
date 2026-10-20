@@ -1,0 +1,31 @@
+{
+  "command": [
+    "/home/dmarce1/workspace/cosmictiger/build/release/cosmictiger",
+    "--run.test=linearGrowth",
+    "--initial.particlesPerDimension=8",
+    "--initial.closePack=false",
+    "--initial.useGlass=false",
+    "--hydro.enabled=false",
+    "--compute.cuda=false",
+    "--gravity.softeningMode=fixed",
+    "--gravity.kernelFamily=ferrers",
+    "--gravity.kernelDegree=4",
+    "--gravity.supportRadius=0.025",
+    "--gravity.openingAngle=0.1",
+    "--hpx:threads=4",
+    "--hpx:bind=none"
+  ],
+  "environment": {
+    "COSMICTIGER_LINEAR_GROWTH_LOAD_FILE": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_fixed_softening/glass.txt",
+    "COSMICTIGER_LINEAR_GROWTH_PARTICLE_OUTPUT": "1",
+    "COSMICTIGER_LINEAR_GROWTH_SKIP_RESPONSE": "1",
+    "COSMICTIGER_LINEAR_GROWTH_PAIRED": "1",
+    "COSMICTIGER_LINEAR_GROWTH_EVOLVE_FILE": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_fixed_softening/evolution_glass/requests.csv"
+  },
+  "directory": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_fixed_softening/evolution_glass",
+  "started_utc": "2026-10-18T01:13:09.050437+00:00",
+  "runner_session_exit_code": 143,
+  "child_return_code": null,
+  "completion_marker_present": true,
+  "status": "Command session ended with SIGTERM before wrapper recorded child exit status; no child process remained on host."
+}

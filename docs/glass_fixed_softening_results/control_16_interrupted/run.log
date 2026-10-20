@@ -1,0 +1,145 @@
+STARTING MAIN
+128
+std::atomic<int> is lock free!
+tree_node size = 96
+Detected 1 processes per node
+Hyperthreading detected
+Starting mem use daemon
+Processing options
+box_size = 2.679408e+00 Mpc
+lc map size = 1.157762e-01
+hydro.enabled                     : F
+run.hierarchicalGravity           : T
+hydro.chemistry                   : F
+hydro.stars                       : F
+hydro.viscosityAlpha              : 1.000000e+00
+hydro.viscosityBeta               : 2.000000e+00
+hydro.viscosityEpsilon            : 1.000000e-02
+hydro.gamma                       : 1.666667e+00
+hydro.neighborNumber              : 4.200000e+01
+hydro.minSupportRadius            : 1.000000e-06
+hydro.maxSupportRadius            : 4.000000e+00
+hydro.minEffectiveRadius          : 5.477226e-07
+hydro.maxEffectiveRadius          : 2.190890e+00
+hydro.cfl                         : 2.282177e-01
+Simulation Options
+code_to_M_solar = 1.492195e+09
+Box size = 1.803778e+00 cm/h
+checkpoint.intervalSeconds        : 1000000000
+units.lengthCm                    : 8.267791e+24
+units.massG                       : 2.954545e+42
+units.timeSeconds                 : 2.757838e+14
+compute.cuda                      : F
+lightcone.enabled                 : F
+analysis.groups                   : F
+analysis.power                    : F
+analysis.slice                    : F
+analysis.tracers                  : F
+analysis.views                    : F
+output.silo                       : F
+output.siloInterval               : 1
+output.directory                  : ./output
+output.units                      : code
+output.frame                      : comoving
+output.xMin                       : 0.000000e+00
+output.xMax                       : 1.000000e+00
+output.yMin                       : 0.000000e+00
+output.yMax                       : 1.000000e+00
+output.zMin                       : 0.000000e+00
+output.zMax                       : 1.000000e+00
+gravity.timestepEta               : 2.040160e-01
+gravity.gm                        : 2.653104e-11
+gravity.softeningMode             : fixed
+gravity.neighborNumber            : 2.400000e+01
+gravity.minSupportRadius          : 1.000000e-06
+gravity.maxSupportRadius          : 4.000000e+00
+gravity.softening                 : 1.666667e-02
+gravity.effectiveRadius           : 1.666667e-02
+gravity.supportRadius             : 2.500000e-02
+hydro.centralEffectiveRadius      : 5.477226e-03
+hydro.centralSupportRadius        : 8.215838e-03
+gravity.kernelFamily              : ferrers
+gravity.kernelDegree              : 4
+hydro.kernelFamily                : spline
+hydro.kernelDegree                : 3
+gravity.sphSmoothing              : F
+cosmology.hubble                  : 6.732000e-01
+lightcone.linkingLength           : 2.800000e-01
+lightcone.minGroupSize            : 20
+lightcone.mapSize                 : 1
+analysis.linkingLength            : 3.500000e-02
+run.maxIterations                 : 1000000
+analysis.minGroupSize             : 20
+cosmology.omegaB                  : 4.938900e-02
+cosmology.omegaC                  : 2.650300e-01
+cosmology.omegaGamma              : 5.522212e-05
+cosmology.omegaM                  : 3.144190e-01
+cosmology.omegaNu                 : 3.820094e-05
+cosmology.omegaR                  : 9.342306e-05
+compute.particleCacheLineSize     : 10922
+initial.particlesPerDimension     : 8
+checkpoint.readIndex              : -1
+analysis.saveForce                : F
+cosmology.sigma8                  : 8.607000e-01
+analysis.sliceResolution          : 4096
+analysis.sliceSize                : 1.000000e+00
+cosmology.thetaCmb                : 9.983516e-01
+gravity.openingAngle              : 1.000000e-01
+analysis.tracerCount              : 1000000
+compute.treeCacheLineSize         : 682
+initial.twoLpt                    : F
+initial.usePowerFile              : T
+analysis.viewSize                 : 1024
+cosmology.startRedshift           : 4.900000e+01
+cosmology.endRedshift             : 0.000000e+00
+cosmology.spectralIndex           : 9.660500e-01
+cosmology.heliumFraction          : 2.454006e-01
+cosmology.nEff                    : 3.046000e+00
+configuration                     : 
+run.test                          : linearGrowth
+Silo particle output: disabled (output.silo=false)
+MAX MEMUSED = 0.237408 GB
+count = 178 178
+Detected a hardware concurrency of 12
+MAX MEMUSED = 0.395405 GB
+MAX MEMUSED = 0.395592 GB
+Linear growth evolution continuum mode=(3,0,0), 16 steps
+MAX MEMUSED = 0.395866 GB
+MAX MEMUSED = 0.395870 GB
+MAX MEMUSED = 0.396111 GB
+MAX MEMUSED = 0.396214 GB
+MAX MEMUSED = 0.396229 GB
+MAX MEMUSED = 0.396744 GB
+MAX MEMUSED = 0.397472 GB
+MAX MEMUSED = 0.397511 GB
+MAX MEMUSED = 0.397564 GB
+MAX MEMUSED = 0.397640 GB
+MAX MEMUSED = 0.397644 GB
+MAX MEMUSED = 0.397655 GB
+MAX MEMUSED = 0.397686 GB
+MAX MEMUSED = 0.397717 GB
+MAX MEMUSED = 0.397720 GB
+MAX MEMUSED = 0.398193 GB
+MAX MEMUSED = 0.398212 GB
+MAX MEMUSED = 0.398216 GB
+MAX MEMUSED = 0.398270 GB
+MAX MEMUSED = 0.398289 GB
+MAX MEMUSED = 0.398300 GB
+MAX MEMUSED = 0.398308 GB
+MAX MEMUSED = 0.398319 GB
+MAX MEMUSED = 0.398327 GB
+MAX MEMUSED = 0.398361 GB
+MAX MEMUSED = 0.398365 GB
+MAX MEMUSED = 0.398373 GB
+MAX MEMUSED = 0.398376 GB
+MAX MEMUSED = 0.398380 GB
+MAX MEMUSED = 0.398426 GB
+MAX MEMUSED = 0.398449 GB
+MAX MEMUSED = 0.398457 GB
+MAX MEMUSED = 0.398483 GB
+MAX MEMUSED = 0.398521 GB
+MAX MEMUSED = 0.398548 GB
+MAX MEMUSED = 0.398556 GB
+MAX MEMUSED = 0.398582 GB
+MAX MEMUSED = 0.398621 GB
+Linear growth diagnostic complete (CPU, 1 species, N=8)

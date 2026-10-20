@@ -1,0 +1,8 @@
+Internal ctest changing into directory: /home/dmarce1/workspace/cosmictiger/build/release
+Test project /home/dmarce1/workspace/cosmictiger/build/release
+    Start 2: linear_growth_response
+1/1 Test #2: linear_growth_response ...........   Passed  139.54 sec
+
+100% tests passed, 0 tests failed out of 1
+
+Total Test time (real) = 139.56 sec

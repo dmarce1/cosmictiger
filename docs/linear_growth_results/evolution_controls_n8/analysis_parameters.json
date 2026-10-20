@@ -1,0 +1,12 @@
+{
+  "a_initial": 0.02,
+  "a_final": 0.1,
+  "response_file": "/home/dmarce1/workspace/cosmictiger/docs/linear_growth_results/adaptive_mixed_n8/linear_growth_response.csv",
+  "metadata_file": "/home/dmarce1/workspace/cosmictiger/docs/linear_growth_results/adaptive_mixed_n8/linear_growth_metadata.json",
+  "evolution_file": "/home/dmarce1/workspace/cosmictiger/docs/linear_growth_results/evolution_controls_n8/linear_growth_evolution.csv",
+  "evolution_requests_file": "/home/dmarce1/workspace/cosmictiger/docs/linear_growth_results/evolution_controls_n8/measured_evolution_requests.csv",
+  "correction_target": "mass-weighted particle-center density at a_final",
+  "growth_scope": "pressure-free matter with smooth radiation background; linear only",
+  "matrix_symmetrization": "real mass-weighted Hermitian part; residuals in CSV",
+  "velocity_definition": "stored p=a^2 H du/dln(a)"
+}

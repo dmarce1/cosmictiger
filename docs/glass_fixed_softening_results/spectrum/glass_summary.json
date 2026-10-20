@@ -1,0 +1,79 @@
+{
+  "particles": 512,
+  "spacing": 0.12500000000000003,
+  "softening_support": 0.003125,
+  "minimum_separation": 0.11156002894262054,
+  "minimum_separation_over_spacing": 0.8924802315409641,
+  "minimum_separation_over_support": 35.69920926163857,
+  "force_rms": 0.0072904282410339565,
+  "force_max": 0.0174808206136845,
+  "net_force_norm": 3.59381727769003e-15,
+  "normalized_jacobian_symmetry_relative_error": 1.5553530563473858e-16,
+  "translation_residual_norm": 6.461982120724436e-16,
+  "trace": 511.0000000000001,
+  "expected_trace": 511.0,
+  "trace_absolute_error": 1.1368683772161603e-13,
+  "eigenvalue_sum": 511.0,
+  "eigenvalue_minimum": -0.06133069632213031,
+  "eigenvalue_maximum": 0.9889199197442353,
+  "negative_eigenvalues_below_minus_1e_8": 145,
+  "translation_or_near_zero_eigenvalues": 3,
+  "positive_eigenvalues_above_1e_8": 1388,
+  "eigenvalues_above_continuum_1": 0,
+  "eigenvalue_quantiles": {
+    "0.0": -0.06133069632213031,
+    "0.01": -0.03874015411159233,
+    "0.1": 0.001130463646127823,
+    "0.25": 0.05206066259299914,
+    "0.5": 0.20534253789232512,
+    "0.75": 0.6214195350753091,
+    "0.9": 0.8620249526438178,
+    "0.99": 0.9721947842857065,
+    "1.0": 0.9889199197442353
+  },
+  "fastest_mode_eds_growth_exponent": 0.9933341785764409,
+  "fastest_mode_participation": {
+    "participating_particles": 380.1852716353488,
+    "participation_fraction": 0.7425493586627906,
+    "maximum_particle_weight": 0.006001600156248326,
+    "top_ten_particle_weight": 0.05272114815746917,
+    "largest_particle_index": 76
+  },
+  "ewald_convergence": [
+    {
+      "alpha": 4.0,
+      "real_cutoff": 2,
+      "reciprocal_cutoff": 9,
+      "force_difference_rms": 3.918314978047296e-16,
+      "force_difference_max": 1.8093165854438098e-15,
+      "normalized_jacobian_difference_frobenius": 1.3371194290442338e-14,
+      "normalized_jacobian_difference_max": 1.3429008655068181e-15
+    },
+    {
+      "alpha": 6.0,
+      "real_cutoff": 1,
+      "reciprocal_cutoff": 12,
+      "force_difference_rms": 2.812987311501647e-16,
+      "force_difference_max": 1.0668549377257364e-15,
+      "normalized_jacobian_difference_frobenius": 1.8040795899971415e-14,
+      "normalized_jacobian_difference_max": 1.2015428796639952e-15
+    }
+  ],
+  "force_finite_difference": [
+    {
+      "step_over_spacing": 0.0001,
+      "derivative_relative_error": 4.3324786719981046e-08,
+      "derivative_max_absolute_error": 8.473110998941102e-08
+    },
+    {
+      "step_over_spacing": 1e-05,
+      "derivative_relative_error": 4.3644382904751207e-10,
+      "derivative_max_absolute_error": 8.302268317272876e-10
+    },
+    {
+      "step_over_spacing": 1e-06,
+      "derivative_relative_error": 8.554073788897614e-10,
+      "derivative_max_absolute_error": 9.471129436278147e-10
+    }
+  ]
+}

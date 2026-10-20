@@ -1,0 +1,33 @@
+{
+  "mapping": {
+    "pair_force": "pairForce",
+    "force_difference": "forceDifference",
+    "other_jacobian": "otherJacobian",
+    "other_forces": "otherForces",
+    "reciprocal_tensor": "reciprocalTensor",
+    "csv_write": "csvWrite",
+    "tensor_weight": "tensorWeight",
+    "reciprocal_cutoff": "reciprocalCutoff",
+    "real_cutoff": "realCutoff",
+    "with_jacobian": "withJacobian",
+    "source_sine": "sourceSine",
+    "finite_differences": "finiteDifferences",
+    "translation_error": "translationError",
+    "source_hash": "sourceHash",
+    "relative_step": "relativeStep",
+    "pair_tensor": "pairTensor",
+    "reciprocal_modes": "reciprocalModes",
+    "source_cosine": "sourceCosine",
+    "expected_trace": "expectedTrace",
+    "jacobian_difference": "jacobianDifference",
+    "calculation_hash": "calculationHash"
+  },
+  "ast_rename_equivalence": true,
+  "numerical_recomputation": false,
+  "original_source_sha256": "118a2b18af433254a13008d3d7bc2d3aa704633f7677103056c771fb99cebb22",
+  "current_source_sha256": "d3cc51a9d5c8d946a39f1f2afe06f99b2be9a5a7aa8c365def6b2c7dd570605e",
+  "helper_original_sha256": "a555637a98795c05da3e7e1e392f33470f4a3734ac64838e46f1c6f51d31473f",
+  "helper_current_sha256": "66ceff3e37bde703a8fabc1df5e8e171fe99d32bc2be83d364eca42d3dc89ca2",
+  "preserved": "Dictionary keys, CSV columns, argparse-generated attributes, command-line keys and imported APIs",
+  "helper_keyword_change": "with_jacobian -> withJacobian"
+}

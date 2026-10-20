@@ -1,0 +1,8 @@
+Internal ctest changing into directory: /home/dmarce1/workspace/cosmictiger/build/release
+Test project /home/dmarce1/workspace/cosmictiger/build/release
+    Start 13: adaptive_softening_cuda
+1/1 Test #13: adaptive_softening_cuda ..........   Passed    0.40 sec
+
+100% tests passed, 0 tests failed out of 1
+
+Total Test time (real) =   0.40 sec

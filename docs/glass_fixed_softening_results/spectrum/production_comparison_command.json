@@ -1,0 +1,15 @@
+{
+  "argv": [
+    "python3",
+    "-B",
+    "docs/glass_fixed_softening_results/spectrum/compare_production.py",
+    "build/release/tests/glass_fixed_softening/initial_glass",
+    "build/release/tests/glass_fixed_softening/response_glass",
+    "docs/glass_fixed_softening_results/spectrum"
+  ],
+  "cwd": "/home/dmarce1/workspace/cosmictiger",
+  "env": {
+    "OPENBLAS_NUM_THREADS": "1"
+  },
+  "returncode": 0
+}

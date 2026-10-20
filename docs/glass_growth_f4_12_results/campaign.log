@@ -1,0 +1,6 @@
+adaptive_lattice exit 0
+adaptive_glass exit 0
+control_16_lattice exit 0
+control_half_lattice exit 0
+control_16_glass exit 0
+control_half_glass exit 0

@@ -1,0 +1,185 @@
+[
+  {
+    "name": "initial_glass",
+    "command": [
+      "/home/dmarce1/workspace/cosmictiger/build/release/cosmictiger",
+      "--run.test=linearGrowth",
+      "--initial.particlesPerDimension=8",
+      "--initial.closePack=false",
+      "--initial.useGlass=false",
+      "--hydro.enabled=false",
+      "--compute.cuda=false",
+      "--gravity.softeningMode=fixed",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--gravity.supportRadius=0.025",
+      "--gravity.openingAngle=0.1",
+      "--hpx:threads=4",
+      "--hpx:bind=none"
+    ],
+    "environment": {
+      "COSMICTIGER_LINEAR_GROWTH_LOAD_FILE": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_fixed_softening/glass.txt",
+      "COSMICTIGER_LINEAR_GROWTH_PARTICLE_OUTPUT": "1",
+      "COSMICTIGER_LINEAR_GROWTH_SKIP_RESPONSE": "1"
+    },
+    "directory": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_fixed_softening/initial_glass",
+    "started_utc": "2026-10-18T01:10:29.985679+00:00",
+    "return_code": 0,
+    "elapsed_seconds": 2.217527158005396,
+    "finished_utc": "2026-10-18T01:10:32.203340+00:00"
+  },
+  {
+    "name": "response_glass",
+    "command": [
+      "/home/dmarce1/workspace/cosmictiger/build/release/cosmictiger",
+      "--run.test=linearGrowth",
+      "--initial.particlesPerDimension=8",
+      "--initial.closePack=false",
+      "--initial.useGlass=false",
+      "--hydro.enabled=false",
+      "--compute.cuda=false",
+      "--gravity.softeningMode=fixed",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--gravity.supportRadius=0.025",
+      "--gravity.openingAngle=0.1",
+      "--hpx:threads=4",
+      "--hpx:bind=none"
+    ],
+    "environment": {
+      "COSMICTIGER_LINEAR_GROWTH_LOAD_FILE": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_fixed_softening/glass.txt",
+      "COSMICTIGER_LINEAR_GROWTH_PARTICLE_OUTPUT": "1",
+      "COSMICTIGER_LINEAR_GROWTH_SKIP_RESPONSE": "0",
+      "COSMICTIGER_LINEAR_GROWTH_MODES": "1,0,0;2,0,0;3,0,0;0,3,0;0,0,3;1,2,2;2,1,2;2,2,1",
+      "COSMICTIGER_LINEAR_GROWTH_AMPLITUDES": "0.002,0.001"
+    },
+    "directory": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_fixed_softening/response_glass",
+    "started_utc": "2026-10-18T01:10:49.355284+00:00",
+    "return_code": 0,
+    "elapsed_seconds": 133.54090925102355,
+    "finished_utc": "2026-10-18T01:13:02.896295+00:00"
+  },
+  {
+    "name": "evolution_glass",
+    "command": [
+      "/home/dmarce1/workspace/cosmictiger/build/release/cosmictiger",
+      "--run.test=linearGrowth",
+      "--initial.particlesPerDimension=8",
+      "--initial.closePack=false",
+      "--initial.useGlass=false",
+      "--hydro.enabled=false",
+      "--compute.cuda=false",
+      "--gravity.softeningMode=fixed",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--gravity.supportRadius=0.025",
+      "--gravity.openingAngle=0.1",
+      "--hpx:threads=4",
+      "--hpx:bind=none"
+    ],
+    "environment": {
+      "COSMICTIGER_LINEAR_GROWTH_LOAD_FILE": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_fixed_softening/glass.txt",
+      "COSMICTIGER_LINEAR_GROWTH_PARTICLE_OUTPUT": "1",
+      "COSMICTIGER_LINEAR_GROWTH_SKIP_RESPONSE": "1",
+      "COSMICTIGER_LINEAR_GROWTH_PAIRED": "1",
+      "COSMICTIGER_LINEAR_GROWTH_EVOLVE_FILE": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_fixed_softening/evolution_glass/requests.csv"
+    },
+    "directory": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_fixed_softening/evolution_glass",
+    "started_utc": "2026-10-18T01:13:09.050437+00:00",
+    "runner_session_exit_code": 143,
+    "child_return_code": null,
+    "completion_marker_present": true,
+    "status": "Command session ended with SIGTERM before wrapper recorded child exit status; no child process remained on host."
+  },
+  {
+    "name": "control_16",
+    "command": [
+      "/home/dmarce1/workspace/cosmictiger/build/release/cosmictiger",
+      "--run.test=linearGrowth",
+      "--initial.particlesPerDimension=8",
+      "--initial.closePack=false",
+      "--initial.useGlass=false",
+      "--hydro.enabled=false",
+      "--compute.cuda=false",
+      "--gravity.softeningMode=fixed",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--gravity.supportRadius=0.025",
+      "--gravity.openingAngle=0.1",
+      "--hpx:threads=4",
+      "--hpx:bind=none"
+    ],
+    "environment": {
+      "COSMICTIGER_LINEAR_GROWTH_LOAD_FILE": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_fixed_softening/glass.txt",
+      "COSMICTIGER_LINEAR_GROWTH_PARTICLE_OUTPUT": "1",
+      "COSMICTIGER_LINEAR_GROWTH_SKIP_RESPONSE": "1",
+      "COSMICTIGER_LINEAR_GROWTH_PAIRED": "1",
+      "COSMICTIGER_LINEAR_GROWTH_EVOLVE_FILE": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_fixed_softening/control_16/requests.csv"
+    },
+    "directory": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_fixed_softening/control_16",
+    "started_utc": "2026-10-18T01:23:05.391478+00:00",
+    "return_code": 0,
+    "elapsed_seconds": 343.73679173900746,
+    "finished_utc": "2026-10-18T01:28:49.128386+00:00"
+  },
+  {
+    "name": "control_half",
+    "command": [
+      "/home/dmarce1/workspace/cosmictiger/build/release/cosmictiger",
+      "--run.test=linearGrowth",
+      "--initial.particlesPerDimension=8",
+      "--initial.closePack=false",
+      "--initial.useGlass=false",
+      "--hydro.enabled=false",
+      "--compute.cuda=false",
+      "--gravity.softeningMode=fixed",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--gravity.supportRadius=0.025",
+      "--gravity.openingAngle=0.1",
+      "--hpx:threads=2",
+      "--hpx:bind=none"
+    ],
+    "environment": {
+      "COSMICTIGER_LINEAR_GROWTH_LOAD_FILE": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_fixed_softening/glass.txt",
+      "COSMICTIGER_LINEAR_GROWTH_PARTICLE_OUTPUT": "1",
+      "COSMICTIGER_LINEAR_GROWTH_SKIP_RESPONSE": "1",
+      "COSMICTIGER_LINEAR_GROWTH_PAIRED": "1",
+      "COSMICTIGER_LINEAR_GROWTH_EVOLVE_FILE": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_fixed_softening/control_half/requests.csv"
+    },
+    "directory": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_fixed_softening/control_half",
+    "started_utc": "2026-10-18T01:25:30.520534+00:00",
+    "return_code": 0,
+    "elapsed_seconds": 274.82022469799267,
+    "finished_utc": "2026-10-18T01:30:05.340893+00:00"
+  },
+  {
+    "name": "radius_control",
+    "command": [
+      "/home/dmarce1/workspace/cosmictiger/build/release/cosmictiger",
+      "--run.test=linearGrowth",
+      "--initial.particlesPerDimension=8",
+      "--initial.closePack=false",
+      "--initial.useGlass=false",
+      "--hydro.enabled=false",
+      "--compute.cuda=false",
+      "--gravity.softeningMode=fixed",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--gravity.supportRadius=0.05",
+      "--gravity.openingAngle=0.1",
+      "--hpx:threads=2",
+      "--hpx:bind=none"
+    ],
+    "environment": {
+      "COSMICTIGER_LINEAR_GROWTH_LOAD_FILE": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_fixed_softening/glass.txt",
+      "COSMICTIGER_LINEAR_GROWTH_PARTICLE_OUTPUT": "1",
+      "COSMICTIGER_LINEAR_GROWTH_SKIP_RESPONSE": "1"
+    },
+    "directory": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_fixed_softening/radius_control",
+    "started_utc": "2026-10-18T01:29:18.396948+00:00",
+    "return_code": 0,
+    "elapsed_seconds": 4.7221507509821095,
+    "finished_utc": "2026-10-18T01:29:23.119210+00:00"
+  }
+]

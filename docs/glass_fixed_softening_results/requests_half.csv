@@ -1,0 +1,2 @@
+label,mode_x,mode_y,mode_z,a_initial,a_final,steps,u_dm_x,u_dm_y,u_dm_z,v_dm_x,v_dm_y,v_dm_z,u_gas_x,u_gas_y,u_gas_z,v_gas_x,v_gas_y,v_gas_z
+continuum,3,0,0,0.02,0.1,8,0.0005,0.0,0.0,0.0004950917699062342,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0

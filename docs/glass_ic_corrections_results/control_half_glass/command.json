@@ -1,0 +1,28 @@
+{
+  "command": [
+    "/home/dmarce1/workspace/cosmictiger/build/release/cosmictiger",
+    "--run.test=linearGrowth",
+    "--initial.particlesPerDimension=8",
+    "--initial.closePack=false",
+    "--initial.useGlass=false",
+    "--hydro.enabled=false",
+    "--compute.cuda=true",
+    "--gravity.softeningMode=adaptive",
+    "--gravity.kernelFamily=ferrers",
+    "--gravity.kernelDegree=4",
+    "--gravity.neighborNumber=24",
+    "--gravity.openingAngle=0.1",
+    "--hpx:threads=4",
+    "--hpx:bind=none"
+  ],
+  "environment": {
+    "COSMICTIGER_LINEAR_GROWTH_PAIRED": "1",
+    "COSMICTIGER_LINEAR_GROWTH_SKIP_RESPONSE": "1",
+    "COSMICTIGER_LINEAR_GROWTH_EVOLVE_FILE": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_ic_corrections/control_half_glass/requests.csv",
+    "COSMICTIGER_LINEAR_GROWTH_LOAD_FILE": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_ic_corrections/glass.txt"
+  },
+  "directory": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_ic_corrections/control_half_glass",
+  "started_utc": "2026-10-18T00:32:31.644678+00:00",
+  "return_code": 0,
+  "finished_utc": "2026-10-18T00:34:52.087143+00:00"
+}

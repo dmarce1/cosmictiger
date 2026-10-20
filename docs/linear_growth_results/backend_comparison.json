@@ -1,0 +1,34 @@
+[
+  {
+    "comparison": "cpu_vs_cuda_theta_0.2",
+    "left": "pilot_mixed",
+    "right": "pilot_cuda",
+    "amplitude": 0.01,
+    "relative_complex_matrix_difference": 2.167332498919929e-05,
+    "maximum_absolute_entry_difference": 1.855040849895884e-05
+  },
+  {
+    "comparison": "cpu_vs_cuda_theta_0.1_amp_0.01",
+    "left": "regression_cpu_n8",
+    "right": "adaptive_mixed_n8",
+    "amplitude": 0.01,
+    "relative_complex_matrix_difference": 4.800001653474782e-05,
+    "maximum_absolute_entry_difference": 4.7510002785591816e-05
+  },
+  {
+    "comparison": "cpu_vs_cuda_theta_0.1_amp_0.005",
+    "left": "regression_cpu_n8",
+    "right": "adaptive_mixed_n8",
+    "amplitude": 0.005,
+    "relative_complex_matrix_difference": 9.797351051506497e-05,
+    "maximum_absolute_entry_difference": 8.882211643766422e-05
+  },
+  {
+    "comparison": "cuda_theta_0.2_vs_0.1",
+    "left": "pilot_cuda",
+    "right": "adaptive_mixed_n8",
+    "amplitude": 0.01,
+    "relative_complex_matrix_difference": 0.00040151988486056967,
+    "maximum_absolute_entry_difference": 0.00024638598470257204
+  }
+]

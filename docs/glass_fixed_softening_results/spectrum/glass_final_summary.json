@@ -1,0 +1,42 @@
+{
+  "particles": 512,
+  "spacing": 0.12500000000000003,
+  "softening_support": 0.003125000000000028,
+  "minimum_separation": 0.11131920135835502,
+  "minimum_separation_over_spacing": 0.8905536108668399,
+  "minimum_separation_over_support": 35.62214443467329,
+  "force_rms": 0.007713784102674059,
+  "force_max": 0.018129933779113958,
+  "net_force_norm": 6.1228616684348715e-15,
+  "normalized_jacobian_symmetry_relative_error": 1.5587741947221634e-16,
+  "translation_residual_norm": 6.527336575955637e-16,
+  "trace": 511.0000000000001,
+  "expected_trace": 511.0,
+  "trace_absolute_error": 1.1368683772161603e-13,
+  "eigenvalue_sum": 511.0000000000001,
+  "eigenvalue_minimum": -0.062410593653276475,
+  "eigenvalue_maximum": 0.989128151063083,
+  "negative_eigenvalues_below_minus_1e_8": 150,
+  "translation_or_near_zero_eigenvalues": 3,
+  "positive_eigenvalues_above_1e_8": 1383,
+  "eigenvalues_above_continuum_1": 0,
+  "eigenvalue_quantiles": {
+    "0.0": -0.062410593653276475,
+    "0.01": -0.04031166024222243,
+    "0.1": 0.00030476426318640226,
+    "0.25": 0.051386184904962384,
+    "0.5": 0.20556541574582018,
+    "0.75": 0.6211758298672596,
+    "0.9": 0.8628052728449884,
+    "0.99": 0.9726068167914808,
+    "1.0": 0.989128151063083
+  },
+  "fastest_mode_eds_growth_exponent": 0.9934597808512444,
+  "fastest_mode_participation": {
+    "participating_particles": 379.50046189458834,
+    "participation_fraction": 0.7412118396378679,
+    "maximum_particle_weight": 0.006693641406954167,
+    "top_ten_particle_weight": 0.054220903894446684,
+    "largest_particle_index": 76
+  }
+}

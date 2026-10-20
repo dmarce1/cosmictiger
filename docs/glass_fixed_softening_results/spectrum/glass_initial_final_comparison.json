@@ -1,0 +1,148 @@
+{
+  "production_particles_path": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_fixed_softening/evolution_glass/linear_growth_particles.csv",
+  "production_particles_sha256": "169f86f7b2860dafeaaa48ca5fc76d9ce4587b1cb49813195279ac74a6b69dab",
+  "final_coordinates_sha256": "04212d19cae4f7b0513f67965dfb4dba331d59bb0a1adcfdf190b911e27ec14c",
+  "script_sha256": "09c59f15c4541bec7426f49c49c44920404375c00da3ab0e95bf848ca44225ee",
+  "independent_ewald_script_sha256": "d3cc51a9d5c8d946a39f1f2afe06f99b2be9a5a7aa8c365def6b2c7dd570605e",
+  "chosen_run": 0,
+  "a_final": 0.1,
+  "baseline_repeats": 3,
+  "maximum_repeat_position_difference": 0.0,
+  "raw_validation": {
+    "rows": 41472,
+    "expected_rows": 41472,
+    "maximum_coordinate_displacement_residual": 2.3282657388417477e-10
+  },
+  "production_exit_status": {
+    "captured_success": false,
+    "completion_with_uncaptured_child_exit": true,
+    "runner_session_exit_code": 143,
+    "child_return_code": null
+  },
+  "interpretation": "Frozen full Jacobians at initial and final unperturbed loads, not the full time-dependent propagator",
+  "ewald_convergence": "Uses the partition already verified on initial glass and lattice; final translation, symmetry, trace and inactive-support checks repeated",
+  "initial": {
+    "particles": 512,
+    "spacing": 0.12500000000000003,
+    "softening_support": 0.003125,
+    "minimum_separation": 0.11156002894262054,
+    "minimum_separation_over_spacing": 0.8924802315409641,
+    "minimum_separation_over_support": 35.69920926163857,
+    "force_rms": 0.0072904282410339565,
+    "force_max": 0.0174808206136845,
+    "net_force_norm": 3.59381727769003e-15,
+    "normalized_jacobian_symmetry_relative_error": 1.5553530563473858e-16,
+    "translation_residual_norm": 6.461982120724436e-16,
+    "trace": 511.0000000000001,
+    "expected_trace": 511.0,
+    "trace_absolute_error": 1.1368683772161603e-13,
+    "eigenvalue_sum": 511.0,
+    "eigenvalue_minimum": -0.06133069632213031,
+    "eigenvalue_maximum": 0.9889199197442353,
+    "negative_eigenvalues_below_minus_1e_8": 145,
+    "translation_or_near_zero_eigenvalues": 3,
+    "positive_eigenvalues_above_1e_8": 1388,
+    "eigenvalues_above_continuum_1": 0,
+    "eigenvalue_quantiles": {
+      "0.0": -0.06133069632213031,
+      "0.01": -0.03874015411159233,
+      "0.1": 0.001130463646127823,
+      "0.25": 0.05206066259299914,
+      "0.5": 0.20534253789232512,
+      "0.75": 0.6214195350753091,
+      "0.9": 0.8620249526438178,
+      "0.99": 0.9721947842857065,
+      "1.0": 0.9889199197442353
+    },
+    "fastest_mode_eds_growth_exponent": 0.9933341785764409,
+    "fastest_mode_participation": {
+      "participating_particles": 380.1852716353488,
+      "participation_fraction": 0.7425493586627906,
+      "maximum_particle_weight": 0.006001600156248326,
+      "top_ten_particle_weight": 0.05272114815746917,
+      "largest_particle_index": 76
+    },
+    "ewald_convergence": [
+      {
+        "alpha": 4.0,
+        "real_cutoff": 2,
+        "reciprocal_cutoff": 9,
+        "force_difference_rms": 3.918314978047296e-16,
+        "force_difference_max": 1.8093165854438098e-15,
+        "normalized_jacobian_difference_frobenius": 1.3371194290442338e-14,
+        "normalized_jacobian_difference_max": 1.3429008655068181e-15
+      },
+      {
+        "alpha": 6.0,
+        "real_cutoff": 1,
+        "reciprocal_cutoff": 12,
+        "force_difference_rms": 2.812987311501647e-16,
+        "force_difference_max": 1.0668549377257364e-15,
+        "normalized_jacobian_difference_frobenius": 1.8040795899971415e-14,
+        "normalized_jacobian_difference_max": 1.2015428796639952e-15
+      }
+    ],
+    "force_finite_difference": [
+      {
+        "step_over_spacing": 0.0001,
+        "derivative_relative_error": 4.3324786719981046e-08,
+        "derivative_max_absolute_error": 8.473110998941102e-08
+      },
+      {
+        "step_over_spacing": 1e-05,
+        "derivative_relative_error": 4.3644382904751207e-10,
+        "derivative_max_absolute_error": 8.302268317272876e-10
+      },
+      {
+        "step_over_spacing": 1e-06,
+        "derivative_relative_error": 8.554073788897614e-10,
+        "derivative_max_absolute_error": 9.471129436278147e-10
+      }
+    ]
+  },
+  "final": {
+    "particles": 512,
+    "spacing": 0.12500000000000003,
+    "softening_support": 0.003125000000000028,
+    "minimum_separation": 0.11131920135835502,
+    "minimum_separation_over_spacing": 0.8905536108668399,
+    "minimum_separation_over_support": 35.62214443467329,
+    "force_rms": 0.007713784102674059,
+    "force_max": 0.018129933779113958,
+    "net_force_norm": 6.1228616684348715e-15,
+    "normalized_jacobian_symmetry_relative_error": 1.5587741947221634e-16,
+    "translation_residual_norm": 6.527336575955637e-16,
+    "trace": 511.0000000000001,
+    "expected_trace": 511.0,
+    "trace_absolute_error": 1.1368683772161603e-13,
+    "eigenvalue_sum": 511.0000000000001,
+    "eigenvalue_minimum": -0.062410593653276475,
+    "eigenvalue_maximum": 0.989128151063083,
+    "negative_eigenvalues_below_minus_1e_8": 150,
+    "translation_or_near_zero_eigenvalues": 3,
+    "positive_eigenvalues_above_1e_8": 1383,
+    "eigenvalues_above_continuum_1": 0,
+    "eigenvalue_quantiles": {
+      "0.0": -0.062410593653276475,
+      "0.01": -0.04031166024222243,
+      "0.1": 0.00030476426318640226,
+      "0.25": 0.051386184904962384,
+      "0.5": 0.20556541574582018,
+      "0.75": 0.6211758298672596,
+      "0.9": 0.8628052728449884,
+      "0.99": 0.9726068167914808,
+      "1.0": 0.989128151063083
+    },
+    "fastest_mode_eds_growth_exponent": 0.9934597808512444,
+    "fastest_mode_participation": {
+      "participating_particles": 379.50046189458834,
+      "participation_fraction": 0.7412118396378679,
+      "maximum_particle_weight": 0.006693641406954167,
+      "top_ten_particle_weight": 0.054220903894446684,
+      "largest_particle_index": 76
+    }
+  },
+  "spectrum_calculation_script_sha256": "2dc3914b9805b6b07c029aa9f3547623b146b6234ef293c8998baa0dbf673c8d",
+  "metadata_correction": "Reported row count corrected from a shadowed loop variable to the 41472 unique records already validated; numerical spectrum unchanged.",
+  "independent_ewald_calculation_script_sha256": "118a2b18af433254a13008d3d7bc2d3aa704633f7677103056c771fb99cebb22"
+}

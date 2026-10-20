@@ -1,0 +1,3 @@
+mode_x,mode_y,mode_z,amplitude_spacing,input_axis,realized_amplitude,linear_response_rms,production_minus_linear_relative_norm,production_minus_linear_rms,selection,production_minus_exact_ewald_relative_norm,exact_finite_amplitude_minus_linear_relative_norm,production_minus_exact_ewald_rms
+1,0,0,0.002,2,0.00024999999575012666,7.902944162337038e-05,0.0017092844496224937,1.3508379562917561e-07,Largest production-minus-J*displacement relative norm at this amplitude,0.0017094951702891971,4.0437652646992345e-06,1.3510029312170346e-07
+1,0,0,0.001,1,0.00012499999979972965,3.906540397637601e-05,0.003095093289551195,1.209110697008879e-07,Largest production-minus-J*displacement relative norm at this amplitude,0.00309507198943241,9.84538091405907e-07,1.2091020928431302e-07

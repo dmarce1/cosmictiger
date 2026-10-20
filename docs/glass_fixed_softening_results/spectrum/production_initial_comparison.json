@@ -1,0 +1,16 @@
+{
+  "production": {
+    "path": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_fixed_softening/initial_glass/linear_growth_particles_initial.csv",
+    "sha256": "ead0400852f6ca341d4809d488a4691945e047433318b0f36064c5729b1316c7"
+  },
+  "reference": {
+    "path": "/home/dmarce1/workspace/cosmictiger/docs/glass_fixed_softening_results/spectrum/glass_forces.csv",
+    "sha256": "8522f6914ef013abee70ee6944bec6ec0ffd511c6dabb68bf24bd2ae5b385078"
+  },
+  "particles": 512,
+  "production_force_rms": 0.007290426638974824,
+  "ewald_force_rms": 0.0072904282410339565,
+  "difference_rms": 1.0898964749473547e-06,
+  "relative_difference_rms": 0.00014949690730277059,
+  "maximum_component_difference": 2.6635757103155456e-06
+}

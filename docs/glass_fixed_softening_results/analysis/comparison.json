@@ -1,0 +1,2481 @@
+{
+  "cases": {
+    "evolution_glass": {
+      "particles": {
+        "metadata": {
+          "side": 8,
+          "species": 1,
+          "load_kind": "file",
+          "load_file": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_fixed_softening/glass.txt",
+          "projection": "least squares mean + sine + cosine",
+          "paired_evolution": true,
+          "mass_dm": 1,
+          "mass_gas": 0,
+          "gm": 0.001953125,
+          "kernel_family": "ferrers",
+          "kernel_degree": 4,
+          "softening_mode": "fixed",
+          "configured_support_radius_box": 0.003125,
+          "neighbor_number": 24,
+          "theta": 0.1,
+          "backend": "cpu",
+          "omega_m": 0.314419,
+          "omega_r": 9.342306090435325e-05,
+          "omega_k": 0,
+          "omega_lambda": 0.6854875769390957,
+          "baseline_force_rms": 0.007290426638974822,
+          "baseline_force_max": 0.017479872558888807,
+          "baseline_force_rms_dm": 0.007290426638974822,
+          "baseline_force_rms_gas": 0,
+          "baseline_support_dm": 0.003125000000000028,
+          "baseline_support_gas": 0,
+          "baseline_min_support": 0.003125,
+          "baseline_max_support": 0.003125,
+          "pressure_enabled": false,
+          "response_normalization": "acceleration / (4*pi*G*rho_comoving)",
+          "species_count": 1,
+          "n_per_dimension": 8,
+          "mass_fractions": [
+            1.0
+          ]
+        },
+        "glass_sha256": "f7a588d45eba4dceaca6ec799ce967cf05502854fc8d6ee01777568cbff09e13",
+        "requests_sha256": "4e805272c0c2b5b5208037081424e06e886d456cae1b5c6e26ac72b80bf2676b",
+        "noise_modes": [
+          [
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            0,
+            2
+          ],
+          [
+            0,
+            0,
+            3
+          ],
+          [
+            0,
+            0,
+            4
+          ],
+          [
+            0,
+            1,
+            -3
+          ],
+          [
+            0,
+            1,
+            -2
+          ],
+          [
+            0,
+            1,
+            -1
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            1
+          ],
+          [
+            0,
+            1,
+            2
+          ],
+          [
+            0,
+            1,
+            3
+          ],
+          [
+            0,
+            2,
+            -3
+          ],
+          [
+            0,
+            2,
+            -2
+          ],
+          [
+            0,
+            2,
+            -1
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            2,
+            1
+          ],
+          [
+            0,
+            2,
+            2
+          ],
+          [
+            0,
+            2,
+            3
+          ],
+          [
+            0,
+            3,
+            -2
+          ],
+          [
+            0,
+            3,
+            -1
+          ],
+          [
+            0,
+            3,
+            0
+          ],
+          [
+            0,
+            3,
+            1
+          ],
+          [
+            0,
+            3,
+            2
+          ],
+          [
+            0,
+            4,
+            0
+          ],
+          [
+            1,
+            -3,
+            -2
+          ],
+          [
+            1,
+            -3,
+            -1
+          ],
+          [
+            1,
+            -3,
+            0
+          ],
+          [
+            1,
+            -3,
+            1
+          ],
+          [
+            1,
+            -3,
+            2
+          ],
+          [
+            1,
+            -2,
+            -3
+          ],
+          [
+            1,
+            -2,
+            -2
+          ],
+          [
+            1,
+            -2,
+            -1
+          ],
+          [
+            1,
+            -2,
+            0
+          ],
+          [
+            1,
+            -2,
+            1
+          ],
+          [
+            1,
+            -2,
+            2
+          ],
+          [
+            1,
+            -2,
+            3
+          ],
+          [
+            1,
+            -1,
+            -3
+          ],
+          [
+            1,
+            -1,
+            -2
+          ],
+          [
+            1,
+            -1,
+            -1
+          ],
+          [
+            1,
+            -1,
+            0
+          ],
+          [
+            1,
+            -1,
+            1
+          ],
+          [
+            1,
+            -1,
+            2
+          ],
+          [
+            1,
+            -1,
+            3
+          ],
+          [
+            1,
+            0,
+            -3
+          ],
+          [
+            1,
+            0,
+            -2
+          ],
+          [
+            1,
+            0,
+            -1
+          ],
+          [
+            1,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            1
+          ],
+          [
+            1,
+            0,
+            2
+          ],
+          [
+            1,
+            0,
+            3
+          ],
+          [
+            1,
+            1,
+            -3
+          ],
+          [
+            1,
+            1,
+            -2
+          ],
+          [
+            1,
+            1,
+            -1
+          ],
+          [
+            1,
+            1,
+            0
+          ],
+          [
+            1,
+            1,
+            1
+          ],
+          [
+            1,
+            1,
+            2
+          ],
+          [
+            1,
+            1,
+            3
+          ],
+          [
+            1,
+            2,
+            -3
+          ],
+          [
+            1,
+            2,
+            -2
+          ],
+          [
+            1,
+            2,
+            -1
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            2,
+            1
+          ],
+          [
+            1,
+            2,
+            2
+          ],
+          [
+            1,
+            2,
+            3
+          ],
+          [
+            1,
+            3,
+            -2
+          ],
+          [
+            1,
+            3,
+            -1
+          ],
+          [
+            1,
+            3,
+            0
+          ],
+          [
+            1,
+            3,
+            1
+          ],
+          [
+            1,
+            3,
+            2
+          ],
+          [
+            2,
+            -3,
+            -1
+          ],
+          [
+            2,
+            -3,
+            0
+          ],
+          [
+            2,
+            -3,
+            1
+          ],
+          [
+            2,
+            -2,
+            -2
+          ],
+          [
+            2,
+            -2,
+            -1
+          ],
+          [
+            2,
+            -2,
+            0
+          ],
+          [
+            2,
+            -2,
+            1
+          ],
+          [
+            2,
+            -2,
+            2
+          ],
+          [
+            2,
+            -1,
+            -3
+          ],
+          [
+            2,
+            -1,
+            -2
+          ],
+          [
+            2,
+            -1,
+            -1
+          ],
+          [
+            2,
+            -1,
+            0
+          ],
+          [
+            2,
+            -1,
+            1
+          ],
+          [
+            2,
+            -1,
+            2
+          ],
+          [
+            2,
+            -1,
+            3
+          ],
+          [
+            2,
+            0,
+            -3
+          ],
+          [
+            2,
+            0,
+            -2
+          ],
+          [
+            2,
+            0,
+            -1
+          ],
+          [
+            2,
+            0,
+            0
+          ],
+          [
+            2,
+            0,
+            1
+          ],
+          [
+            2,
+            0,
+            2
+          ],
+          [
+            2,
+            0,
+            3
+          ],
+          [
+            2,
+            1,
+            -3
+          ],
+          [
+            2,
+            1,
+            -2
+          ],
+          [
+            2,
+            1,
+            -1
+          ],
+          [
+            2,
+            1,
+            0
+          ],
+          [
+            2,
+            1,
+            1
+          ],
+          [
+            2,
+            1,
+            2
+          ],
+          [
+            2,
+            1,
+            3
+          ],
+          [
+            2,
+            2,
+            -2
+          ],
+          [
+            2,
+            2,
+            -1
+          ],
+          [
+            2,
+            2,
+            0
+          ],
+          [
+            2,
+            2,
+            1
+          ],
+          [
+            2,
+            2,
+            2
+          ],
+          [
+            2,
+            3,
+            -1
+          ],
+          [
+            2,
+            3,
+            0
+          ],
+          [
+            2,
+            3,
+            1
+          ],
+          [
+            3,
+            -2,
+            -1
+          ],
+          [
+            3,
+            -2,
+            0
+          ],
+          [
+            3,
+            -2,
+            1
+          ],
+          [
+            3,
+            -1,
+            -2
+          ],
+          [
+            3,
+            -1,
+            -1
+          ],
+          [
+            3,
+            -1,
+            0
+          ],
+          [
+            3,
+            -1,
+            1
+          ],
+          [
+            3,
+            -1,
+            2
+          ],
+          [
+            3,
+            0,
+            -2
+          ],
+          [
+            3,
+            0,
+            -1
+          ],
+          [
+            3,
+            0,
+            0
+          ],
+          [
+            3,
+            0,
+            1
+          ],
+          [
+            3,
+            0,
+            2
+          ],
+          [
+            3,
+            1,
+            -2
+          ],
+          [
+            3,
+            1,
+            -1
+          ],
+          [
+            3,
+            1,
+            0
+          ],
+          [
+            3,
+            1,
+            1
+          ],
+          [
+            3,
+            1,
+            2
+          ],
+          [
+            3,
+            2,
+            -1
+          ],
+          [
+            3,
+            2,
+            0
+          ],
+          [
+            3,
+            2,
+            1
+          ],
+          [
+            4,
+            0,
+            0
+          ]
+        ],
+        "runs": [
+          {
+            "run_index": 0,
+            "mode_x": 1,
+            "mode_y": 0,
+            "mode_z": 0,
+            "step": 8,
+            "a": 0.09999999999999998,
+            "differential_displacement_rms_ratio": 0.9868743274721256,
+            "differential_velocity_rms_ratio": 0.9768206601756195,
+            "full_displacement_error_relative_rms": 0.02784109833601928,
+            "full_velocity_error_relative_rms": 0.047371811328905764,
+            "projected_displacement_ratio": 0.9865728822231022,
+            "projected_velocity_ratio": 0.9759672144741091,
+            "nonmode_displacement_relative_rms": 0.01724341396505583,
+            "baseline_displacement_rms_spacing": 0.007028911563733737,
+            "baseline_displacement_max_spacing": 0.01680515835133651,
+            "baseline_velocity_rms_spacing": 0.007813426327916064,
+            "even_displacement_relative_rms": 5.3223896069322944e-05,
+            "minimum_separation_spacing": 0.8903178037024169,
+            "minimum_separation_support": 35.61271214809636,
+            "max_pairs_below_support": 0,
+            "max_pairs_below_0p1_spacing": 0,
+            "max_pairs_below_0p5_spacing": 0,
+            "noise_mean_structure_norm_le_2": 5.945767897214182e-05,
+            "noise_mean_structure_ratio_norm_le_2": 1.0473667692892596,
+            "noise_mean_structure_norm_le_4": 0.0011178985673908042,
+            "noise_mean_structure_ratio_norm_le_4": 1.0135387659723347
+          },
+          {
+            "run_index": 1,
+            "mode_x": 2,
+            "mode_y": 0,
+            "mode_z": 0,
+            "step": 8,
+            "a": 0.09999999999999998,
+            "differential_displacement_rms_ratio": 0.9503067920571145,
+            "differential_velocity_rms_ratio": 0.9132745063136816,
+            "full_displacement_error_relative_rms": 0.07185406199495514,
+            "full_velocity_error_relative_rms": 0.12376743977211045,
+            "projected_displacement_ratio": 0.9489497212500572,
+            "projected_velocity_ratio": 0.9093579163292448,
+            "nonmode_displacement_relative_rms": 0.03577192812209448,
+            "baseline_displacement_rms_spacing": 0.007028911563733737,
+            "baseline_displacement_max_spacing": 0.01680515835133651,
+            "baseline_velocity_rms_spacing": 0.007813426327916064,
+            "even_displacement_relative_rms": 0.00019473701880814336,
+            "minimum_separation_spacing": 0.8854175805683646,
+            "minimum_separation_support": 35.41670322273427,
+            "max_pairs_below_support": 0,
+            "max_pairs_below_0p1_spacing": 0,
+            "max_pairs_below_0p5_spacing": 0,
+            "noise_mean_structure_norm_le_2": 5.945767897214182e-05,
+            "noise_mean_structure_ratio_norm_le_2": 1.0473667692892596,
+            "noise_mean_structure_norm_le_4": 0.0011178985673908042,
+            "noise_mean_structure_ratio_norm_le_4": 1.0135387659723347
+          },
+          {
+            "run_index": 2,
+            "mode_x": 3,
+            "mode_y": 0,
+            "mode_z": 0,
+            "step": 8,
+            "a": 0.09999999999999998,
+            "differential_displacement_rms_ratio": 0.887160058641025,
+            "differential_velocity_rms_ratio": 0.8059677504507045,
+            "full_displacement_error_relative_rms": 0.13809568048437285,
+            "full_velocity_error_relative_rms": 0.2375188876902346,
+            "projected_displacement_ratio": 0.883991797741885,
+            "projected_velocity_ratio": 0.7965852060753984,
+            "nonmode_displacement_relative_rms": 0.0526693657759661,
+            "baseline_displacement_rms_spacing": 0.007028911563733737,
+            "baseline_displacement_max_spacing": 0.01680515835133651,
+            "baseline_velocity_rms_spacing": 0.007813426327916064,
+            "even_displacement_relative_rms": 0.00037400177964026863,
+            "minimum_separation_spacing": 0.8885864489653532,
+            "minimum_separation_support": 35.543457958613814,
+            "max_pairs_below_support": 0,
+            "max_pairs_below_0p1_spacing": 0,
+            "max_pairs_below_0p5_spacing": 0,
+            "noise_mean_structure_norm_le_2": 5.945767897214182e-05,
+            "noise_mean_structure_ratio_norm_le_2": 1.0473667692892596,
+            "noise_mean_structure_norm_le_4": 0.0011178985673908042,
+            "noise_mean_structure_ratio_norm_le_4": 1.0135387659723347
+          }
+        ],
+        "scope": "Actual full particle positions and paired fields; pressure-free short evolution; not production block timestep driver"
+      },
+      "growth": {
+        "metadata": {
+          "side": 8,
+          "species": 1,
+          "load_kind": "file",
+          "load_file": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_fixed_softening/glass.txt",
+          "projection": "least squares mean + sine + cosine",
+          "paired_evolution": true,
+          "mass_dm": 1,
+          "mass_gas": 0,
+          "gm": 0.001953125,
+          "kernel_family": "ferrers",
+          "kernel_degree": 4,
+          "softening_mode": "fixed",
+          "configured_support_radius_box": 0.003125,
+          "neighbor_number": 24,
+          "theta": 0.1,
+          "backend": "cpu",
+          "omega_m": 0.314419,
+          "omega_r": 9.342306090435325e-05,
+          "omega_k": 0,
+          "omega_lambda": 0.6854875769390957,
+          "baseline_force_rms": 0.007290426638974822,
+          "baseline_force_max": 0.017479872558888807,
+          "baseline_force_rms_dm": 0.007290426638974822,
+          "baseline_force_rms_gas": 0,
+          "baseline_support_dm": 0.003125000000000028,
+          "baseline_support_gas": 0,
+          "baseline_min_support": 0.003125,
+          "baseline_max_support": 0.003125,
+          "pressure_enabled": false,
+          "response_normalization": "acceleration / (4*pi*G*rho_comoving)",
+          "species_count": 1,
+          "n_per_dimension": 8,
+          "mass_fractions": [
+            1.0
+          ]
+        },
+        "runs": [
+          {
+            "run_index": 0,
+            "label": "continuum",
+            "mode_x": 1,
+            "mode_y": 0,
+            "mode_z": 0,
+            "step": 8,
+            "a": 0.09999999999999998,
+            "continuum_growth": 4.958836228859153,
+            "density_parallel_ratio": 0.9865601466870475,
+            "density_phase_ratio": 0.00010320288107425185,
+            "density_amplitude_ratio": 0.9865601520850127,
+            "baseline_density_amplitude": 8.819162057486982e-06,
+            "even_density_relative_to_signal": 1.1676348217462172e-06,
+            "displacement_parallel_ratio": 0.9865728822231026,
+            "displacement_cosine_relative": 0.0001238219975659726,
+            "nonmode_displacement_relative_rms": 0.01724341396505583,
+            "baseline_displacement_rms_spacing": 0.007028911563733738,
+            "even_displacement_relative_rms": 5.322389606932294e-05,
+            "initial_density_amplitude": 0.00039271006923295514,
+            "initial_amplitude_spacing": 0.001,
+            "steps": 8,
+            "a_initial": 0.02,
+            "maximum_even_density_relative": 1.1676348217462172e-06,
+            "maximum_nonmode_displacement_relative_rms": 0.01724341396505583
+          },
+          {
+            "run_index": 1,
+            "label": "continuum",
+            "mode_x": 2,
+            "mode_y": 0,
+            "mode_z": 0,
+            "step": 8,
+            "a": 0.09999999999999998,
+            "continuum_growth": 4.958836228859153,
+            "density_parallel_ratio": 0.9489455259225353,
+            "density_phase_ratio": 0.0026572356968525804,
+            "density_amplitude_ratio": 0.9489492463087505,
+            "baseline_density_amplitude": 0.00022453131176876633,
+            "even_density_relative_to_signal": 3.164023113537089e-05,
+            "displacement_parallel_ratio": 0.9489497212500586,
+            "displacement_cosine_relative": 0.0028783477851169175,
+            "nonmode_displacement_relative_rms": 0.035771928122094475,
+            "baseline_displacement_rms_spacing": 0.007028911563733738,
+            "even_displacement_relative_rms": 0.0001947370188081434,
+            "initial_density_amplitude": 0.0007883773533295326,
+            "initial_amplitude_spacing": 0.001,
+            "steps": 8,
+            "a_initial": 0.02,
+            "maximum_even_density_relative": 3.164023113537089e-05,
+            "maximum_nonmode_displacement_relative_rms": 0.035771928122094475
+          },
+          {
+            "run_index": 2,
+            "label": "continuum",
+            "mode_x": 3,
+            "mode_y": 0,
+            "mode_z": 0,
+            "step": 8,
+            "a": 0.09999999999999998,
+            "continuum_growth": 4.958836228859153,
+            "density_parallel_ratio": 0.8837696735160682,
+            "density_phase_ratio": 7.839627089352475e-05,
+            "density_amplitude_ratio": 0.8837696769932045,
+            "baseline_density_amplitude": 0.001404451710408334,
+            "even_density_relative_to_signal": 0.00013964745545797533,
+            "displacement_parallel_ratio": 0.8839917977418861,
+            "displacement_cosine_relative": 0.000599675306569431,
+            "nonmode_displacement_relative_rms": 0.05266936577596612,
+            "baseline_displacement_rms_spacing": 0.007028911563733738,
+            "even_displacement_relative_rms": 0.00037400177964026847,
+            "initial_density_amplitude": 0.0011660288165632699,
+            "initial_amplitude_spacing": 0.001,
+            "steps": 8,
+            "a_initial": 0.02,
+            "maximum_even_density_relative": 0.00013964745545797533,
+            "maximum_nonmode_displacement_relative_rms": 0.05266936577596612
+          }
+        ]
+      }
+    },
+    "control_16": {
+      "particles": {
+        "metadata": {
+          "side": 8,
+          "species": 1,
+          "load_kind": "file",
+          "load_file": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_fixed_softening/glass.txt",
+          "projection": "least squares mean + sine + cosine",
+          "paired_evolution": true,
+          "mass_dm": 1,
+          "mass_gas": 0,
+          "gm": 0.001953125,
+          "kernel_family": "ferrers",
+          "kernel_degree": 4,
+          "softening_mode": "fixed",
+          "configured_support_radius_box": 0.003125,
+          "neighbor_number": 24,
+          "theta": 0.1,
+          "backend": "cpu",
+          "omega_m": 0.314419,
+          "omega_r": 9.342306090435325e-05,
+          "omega_k": 0,
+          "omega_lambda": 0.6854875769390957,
+          "baseline_force_rms": 0.007290426638974822,
+          "baseline_force_max": 0.017479872558888807,
+          "baseline_force_rms_dm": 0.007290426638974822,
+          "baseline_force_rms_gas": 0,
+          "baseline_support_dm": 0.003125000000000028,
+          "baseline_support_gas": 0,
+          "baseline_min_support": 0.003125,
+          "baseline_max_support": 0.003125,
+          "pressure_enabled": false,
+          "response_normalization": "acceleration / (4*pi*G*rho_comoving)",
+          "species_count": 1,
+          "n_per_dimension": 8,
+          "mass_fractions": [
+            1.0
+          ]
+        },
+        "glass_sha256": "f7a588d45eba4dceaca6ec799ce967cf05502854fc8d6ee01777568cbff09e13",
+        "requests_sha256": "d926da7cb7d9e754f4e5d324a33e16b863793f0d8a4a6a924b1b49a64c10700d",
+        "noise_modes": [
+          [
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            0,
+            2
+          ],
+          [
+            0,
+            0,
+            3
+          ],
+          [
+            0,
+            0,
+            4
+          ],
+          [
+            0,
+            1,
+            -3
+          ],
+          [
+            0,
+            1,
+            -2
+          ],
+          [
+            0,
+            1,
+            -1
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            1
+          ],
+          [
+            0,
+            1,
+            2
+          ],
+          [
+            0,
+            1,
+            3
+          ],
+          [
+            0,
+            2,
+            -3
+          ],
+          [
+            0,
+            2,
+            -2
+          ],
+          [
+            0,
+            2,
+            -1
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            2,
+            1
+          ],
+          [
+            0,
+            2,
+            2
+          ],
+          [
+            0,
+            2,
+            3
+          ],
+          [
+            0,
+            3,
+            -2
+          ],
+          [
+            0,
+            3,
+            -1
+          ],
+          [
+            0,
+            3,
+            0
+          ],
+          [
+            0,
+            3,
+            1
+          ],
+          [
+            0,
+            3,
+            2
+          ],
+          [
+            0,
+            4,
+            0
+          ],
+          [
+            1,
+            -3,
+            -2
+          ],
+          [
+            1,
+            -3,
+            -1
+          ],
+          [
+            1,
+            -3,
+            0
+          ],
+          [
+            1,
+            -3,
+            1
+          ],
+          [
+            1,
+            -3,
+            2
+          ],
+          [
+            1,
+            -2,
+            -3
+          ],
+          [
+            1,
+            -2,
+            -2
+          ],
+          [
+            1,
+            -2,
+            -1
+          ],
+          [
+            1,
+            -2,
+            0
+          ],
+          [
+            1,
+            -2,
+            1
+          ],
+          [
+            1,
+            -2,
+            2
+          ],
+          [
+            1,
+            -2,
+            3
+          ],
+          [
+            1,
+            -1,
+            -3
+          ],
+          [
+            1,
+            -1,
+            -2
+          ],
+          [
+            1,
+            -1,
+            -1
+          ],
+          [
+            1,
+            -1,
+            0
+          ],
+          [
+            1,
+            -1,
+            1
+          ],
+          [
+            1,
+            -1,
+            2
+          ],
+          [
+            1,
+            -1,
+            3
+          ],
+          [
+            1,
+            0,
+            -3
+          ],
+          [
+            1,
+            0,
+            -2
+          ],
+          [
+            1,
+            0,
+            -1
+          ],
+          [
+            1,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            1
+          ],
+          [
+            1,
+            0,
+            2
+          ],
+          [
+            1,
+            0,
+            3
+          ],
+          [
+            1,
+            1,
+            -3
+          ],
+          [
+            1,
+            1,
+            -2
+          ],
+          [
+            1,
+            1,
+            -1
+          ],
+          [
+            1,
+            1,
+            0
+          ],
+          [
+            1,
+            1,
+            1
+          ],
+          [
+            1,
+            1,
+            2
+          ],
+          [
+            1,
+            1,
+            3
+          ],
+          [
+            1,
+            2,
+            -3
+          ],
+          [
+            1,
+            2,
+            -2
+          ],
+          [
+            1,
+            2,
+            -1
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            2,
+            1
+          ],
+          [
+            1,
+            2,
+            2
+          ],
+          [
+            1,
+            2,
+            3
+          ],
+          [
+            1,
+            3,
+            -2
+          ],
+          [
+            1,
+            3,
+            -1
+          ],
+          [
+            1,
+            3,
+            0
+          ],
+          [
+            1,
+            3,
+            1
+          ],
+          [
+            1,
+            3,
+            2
+          ],
+          [
+            2,
+            -3,
+            -1
+          ],
+          [
+            2,
+            -3,
+            0
+          ],
+          [
+            2,
+            -3,
+            1
+          ],
+          [
+            2,
+            -2,
+            -2
+          ],
+          [
+            2,
+            -2,
+            -1
+          ],
+          [
+            2,
+            -2,
+            0
+          ],
+          [
+            2,
+            -2,
+            1
+          ],
+          [
+            2,
+            -2,
+            2
+          ],
+          [
+            2,
+            -1,
+            -3
+          ],
+          [
+            2,
+            -1,
+            -2
+          ],
+          [
+            2,
+            -1,
+            -1
+          ],
+          [
+            2,
+            -1,
+            0
+          ],
+          [
+            2,
+            -1,
+            1
+          ],
+          [
+            2,
+            -1,
+            2
+          ],
+          [
+            2,
+            -1,
+            3
+          ],
+          [
+            2,
+            0,
+            -3
+          ],
+          [
+            2,
+            0,
+            -2
+          ],
+          [
+            2,
+            0,
+            -1
+          ],
+          [
+            2,
+            0,
+            0
+          ],
+          [
+            2,
+            0,
+            1
+          ],
+          [
+            2,
+            0,
+            2
+          ],
+          [
+            2,
+            0,
+            3
+          ],
+          [
+            2,
+            1,
+            -3
+          ],
+          [
+            2,
+            1,
+            -2
+          ],
+          [
+            2,
+            1,
+            -1
+          ],
+          [
+            2,
+            1,
+            0
+          ],
+          [
+            2,
+            1,
+            1
+          ],
+          [
+            2,
+            1,
+            2
+          ],
+          [
+            2,
+            1,
+            3
+          ],
+          [
+            2,
+            2,
+            -2
+          ],
+          [
+            2,
+            2,
+            -1
+          ],
+          [
+            2,
+            2,
+            0
+          ],
+          [
+            2,
+            2,
+            1
+          ],
+          [
+            2,
+            2,
+            2
+          ],
+          [
+            2,
+            3,
+            -1
+          ],
+          [
+            2,
+            3,
+            0
+          ],
+          [
+            2,
+            3,
+            1
+          ],
+          [
+            3,
+            -2,
+            -1
+          ],
+          [
+            3,
+            -2,
+            0
+          ],
+          [
+            3,
+            -2,
+            1
+          ],
+          [
+            3,
+            -1,
+            -2
+          ],
+          [
+            3,
+            -1,
+            -1
+          ],
+          [
+            3,
+            -1,
+            0
+          ],
+          [
+            3,
+            -1,
+            1
+          ],
+          [
+            3,
+            -1,
+            2
+          ],
+          [
+            3,
+            0,
+            -2
+          ],
+          [
+            3,
+            0,
+            -1
+          ],
+          [
+            3,
+            0,
+            0
+          ],
+          [
+            3,
+            0,
+            1
+          ],
+          [
+            3,
+            0,
+            2
+          ],
+          [
+            3,
+            1,
+            -2
+          ],
+          [
+            3,
+            1,
+            -1
+          ],
+          [
+            3,
+            1,
+            0
+          ],
+          [
+            3,
+            1,
+            1
+          ],
+          [
+            3,
+            1,
+            2
+          ],
+          [
+            3,
+            2,
+            -1
+          ],
+          [
+            3,
+            2,
+            0
+          ],
+          [
+            3,
+            2,
+            1
+          ],
+          [
+            4,
+            0,
+            0
+          ]
+        ],
+        "runs": [
+          {
+            "run_index": 0,
+            "mode_x": 3,
+            "mode_y": 0,
+            "mode_z": 0,
+            "step": 16,
+            "a": 0.09999999999999998,
+            "differential_displacement_rms_ratio": 0.8871694488877581,
+            "differential_velocity_rms_ratio": 0.8059767333259207,
+            "full_displacement_error_relative_rms": 0.13808927261518664,
+            "full_velocity_error_relative_rms": 0.23751288279691807,
+            "projected_displacement_ratio": 0.8840010132217732,
+            "projected_velocity_ratio": 0.7965938722817453,
+            "nonmode_displacement_relative_rms": 0.05267109681656068,
+            "baseline_displacement_rms_spacing": 0.007028902857771317,
+            "baseline_displacement_max_spacing": 0.016805119400977835,
+            "baseline_velocity_rms_spacing": 0.007813435422410144,
+            "even_displacement_relative_rms": 0.0003740004378303075,
+            "minimum_separation_spacing": 0.888586419199267,
+            "minimum_separation_support": 35.54345676797036,
+            "max_pairs_below_support": 0,
+            "max_pairs_below_0p1_spacing": 0,
+            "max_pairs_below_0p5_spacing": 0,
+            "noise_mean_structure_norm_le_2": 5.945765452054335e-05,
+            "noise_mean_structure_ratio_norm_le_2": 1.0473663385662288,
+            "noise_mean_structure_norm_le_4": 0.0011178986820445749,
+            "noise_mean_structure_ratio_norm_le_4": 1.0135388699227685
+          }
+        ],
+        "scope": "Actual full particle positions and paired fields; pressure-free short evolution; not production block timestep driver"
+      },
+      "growth": {
+        "metadata": {
+          "side": 8,
+          "species": 1,
+          "load_kind": "file",
+          "load_file": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_fixed_softening/glass.txt",
+          "projection": "least squares mean + sine + cosine",
+          "paired_evolution": true,
+          "mass_dm": 1,
+          "mass_gas": 0,
+          "gm": 0.001953125,
+          "kernel_family": "ferrers",
+          "kernel_degree": 4,
+          "softening_mode": "fixed",
+          "configured_support_radius_box": 0.003125,
+          "neighbor_number": 24,
+          "theta": 0.1,
+          "backend": "cpu",
+          "omega_m": 0.314419,
+          "omega_r": 9.342306090435325e-05,
+          "omega_k": 0,
+          "omega_lambda": 0.6854875769390957,
+          "baseline_force_rms": 0.007290426638974822,
+          "baseline_force_max": 0.017479872558888807,
+          "baseline_force_rms_dm": 0.007290426638974822,
+          "baseline_force_rms_gas": 0,
+          "baseline_support_dm": 0.003125000000000028,
+          "baseline_support_gas": 0,
+          "baseline_min_support": 0.003125,
+          "baseline_max_support": 0.003125,
+          "pressure_enabled": false,
+          "response_normalization": "acceleration / (4*pi*G*rho_comoving)",
+          "species_count": 1,
+          "n_per_dimension": 8,
+          "mass_fractions": [
+            1.0
+          ]
+        },
+        "runs": [
+          {
+            "run_index": 0,
+            "label": "continuum",
+            "mode_x": 3,
+            "mode_y": 0,
+            "mode_z": 0,
+            "step": 16,
+            "a": 0.09999999999999998,
+            "continuum_growth": 4.958836228859153,
+            "density_parallel_ratio": 0.8837788862065368,
+            "density_phase_ratio": 7.835854923406654e-05,
+            "density_amplitude_ratio": 0.8837788896802915,
+            "baseline_density_amplitude": 0.0014044555800433452,
+            "even_density_relative_to_signal": 0.0001404745096624511,
+            "displacement_parallel_ratio": 0.8840010132217743,
+            "displacement_cosine_relative": 0.0005994646318763104,
+            "nonmode_displacement_relative_rms": 0.05267109681656071,
+            "baseline_displacement_rms_spacing": 0.007028902857771315,
+            "even_displacement_relative_rms": 0.0003740004378303075,
+            "initial_density_amplitude": 0.0011660288165632699,
+            "initial_amplitude_spacing": 0.001,
+            "steps": 16,
+            "a_initial": 0.02,
+            "maximum_even_density_relative": 0.0001404745096624511,
+            "maximum_nonmode_displacement_relative_rms": 0.05267109681656071
+          }
+        ]
+      }
+    },
+    "control_half": {
+      "particles": {
+        "metadata": {
+          "side": 8,
+          "species": 1,
+          "load_kind": "file",
+          "load_file": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_fixed_softening/glass.txt",
+          "projection": "least squares mean + sine + cosine",
+          "paired_evolution": true,
+          "mass_dm": 1,
+          "mass_gas": 0,
+          "gm": 0.001953125,
+          "kernel_family": "ferrers",
+          "kernel_degree": 4,
+          "softening_mode": "fixed",
+          "configured_support_radius_box": 0.003125,
+          "neighbor_number": 24,
+          "theta": 0.1,
+          "backend": "cpu",
+          "omega_m": 0.314419,
+          "omega_r": 9.342306090435325e-05,
+          "omega_k": 0,
+          "omega_lambda": 0.6854875769390957,
+          "baseline_force_rms": 0.007290426638974822,
+          "baseline_force_max": 0.017479872558888807,
+          "baseline_force_rms_dm": 0.007290426638974822,
+          "baseline_force_rms_gas": 0,
+          "baseline_support_dm": 0.003125000000000028,
+          "baseline_support_gas": 0,
+          "baseline_min_support": 0.003125,
+          "baseline_max_support": 0.003125,
+          "pressure_enabled": false,
+          "response_normalization": "acceleration / (4*pi*G*rho_comoving)",
+          "species_count": 1,
+          "n_per_dimension": 8,
+          "mass_fractions": [
+            1.0
+          ]
+        },
+        "glass_sha256": "f7a588d45eba4dceaca6ec799ce967cf05502854fc8d6ee01777568cbff09e13",
+        "requests_sha256": "57b0eea46f595d21794d21411d0d467c9c01f10e7a4cecf766012087e28e7a42",
+        "noise_modes": [
+          [
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            0,
+            2
+          ],
+          [
+            0,
+            0,
+            3
+          ],
+          [
+            0,
+            0,
+            4
+          ],
+          [
+            0,
+            1,
+            -3
+          ],
+          [
+            0,
+            1,
+            -2
+          ],
+          [
+            0,
+            1,
+            -1
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            1
+          ],
+          [
+            0,
+            1,
+            2
+          ],
+          [
+            0,
+            1,
+            3
+          ],
+          [
+            0,
+            2,
+            -3
+          ],
+          [
+            0,
+            2,
+            -2
+          ],
+          [
+            0,
+            2,
+            -1
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            2,
+            1
+          ],
+          [
+            0,
+            2,
+            2
+          ],
+          [
+            0,
+            2,
+            3
+          ],
+          [
+            0,
+            3,
+            -2
+          ],
+          [
+            0,
+            3,
+            -1
+          ],
+          [
+            0,
+            3,
+            0
+          ],
+          [
+            0,
+            3,
+            1
+          ],
+          [
+            0,
+            3,
+            2
+          ],
+          [
+            0,
+            4,
+            0
+          ],
+          [
+            1,
+            -3,
+            -2
+          ],
+          [
+            1,
+            -3,
+            -1
+          ],
+          [
+            1,
+            -3,
+            0
+          ],
+          [
+            1,
+            -3,
+            1
+          ],
+          [
+            1,
+            -3,
+            2
+          ],
+          [
+            1,
+            -2,
+            -3
+          ],
+          [
+            1,
+            -2,
+            -2
+          ],
+          [
+            1,
+            -2,
+            -1
+          ],
+          [
+            1,
+            -2,
+            0
+          ],
+          [
+            1,
+            -2,
+            1
+          ],
+          [
+            1,
+            -2,
+            2
+          ],
+          [
+            1,
+            -2,
+            3
+          ],
+          [
+            1,
+            -1,
+            -3
+          ],
+          [
+            1,
+            -1,
+            -2
+          ],
+          [
+            1,
+            -1,
+            -1
+          ],
+          [
+            1,
+            -1,
+            0
+          ],
+          [
+            1,
+            -1,
+            1
+          ],
+          [
+            1,
+            -1,
+            2
+          ],
+          [
+            1,
+            -1,
+            3
+          ],
+          [
+            1,
+            0,
+            -3
+          ],
+          [
+            1,
+            0,
+            -2
+          ],
+          [
+            1,
+            0,
+            -1
+          ],
+          [
+            1,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            1
+          ],
+          [
+            1,
+            0,
+            2
+          ],
+          [
+            1,
+            0,
+            3
+          ],
+          [
+            1,
+            1,
+            -3
+          ],
+          [
+            1,
+            1,
+            -2
+          ],
+          [
+            1,
+            1,
+            -1
+          ],
+          [
+            1,
+            1,
+            0
+          ],
+          [
+            1,
+            1,
+            1
+          ],
+          [
+            1,
+            1,
+            2
+          ],
+          [
+            1,
+            1,
+            3
+          ],
+          [
+            1,
+            2,
+            -3
+          ],
+          [
+            1,
+            2,
+            -2
+          ],
+          [
+            1,
+            2,
+            -1
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            2,
+            1
+          ],
+          [
+            1,
+            2,
+            2
+          ],
+          [
+            1,
+            2,
+            3
+          ],
+          [
+            1,
+            3,
+            -2
+          ],
+          [
+            1,
+            3,
+            -1
+          ],
+          [
+            1,
+            3,
+            0
+          ],
+          [
+            1,
+            3,
+            1
+          ],
+          [
+            1,
+            3,
+            2
+          ],
+          [
+            2,
+            -3,
+            -1
+          ],
+          [
+            2,
+            -3,
+            0
+          ],
+          [
+            2,
+            -3,
+            1
+          ],
+          [
+            2,
+            -2,
+            -2
+          ],
+          [
+            2,
+            -2,
+            -1
+          ],
+          [
+            2,
+            -2,
+            0
+          ],
+          [
+            2,
+            -2,
+            1
+          ],
+          [
+            2,
+            -2,
+            2
+          ],
+          [
+            2,
+            -1,
+            -3
+          ],
+          [
+            2,
+            -1,
+            -2
+          ],
+          [
+            2,
+            -1,
+            -1
+          ],
+          [
+            2,
+            -1,
+            0
+          ],
+          [
+            2,
+            -1,
+            1
+          ],
+          [
+            2,
+            -1,
+            2
+          ],
+          [
+            2,
+            -1,
+            3
+          ],
+          [
+            2,
+            0,
+            -3
+          ],
+          [
+            2,
+            0,
+            -2
+          ],
+          [
+            2,
+            0,
+            -1
+          ],
+          [
+            2,
+            0,
+            0
+          ],
+          [
+            2,
+            0,
+            1
+          ],
+          [
+            2,
+            0,
+            2
+          ],
+          [
+            2,
+            0,
+            3
+          ],
+          [
+            2,
+            1,
+            -3
+          ],
+          [
+            2,
+            1,
+            -2
+          ],
+          [
+            2,
+            1,
+            -1
+          ],
+          [
+            2,
+            1,
+            0
+          ],
+          [
+            2,
+            1,
+            1
+          ],
+          [
+            2,
+            1,
+            2
+          ],
+          [
+            2,
+            1,
+            3
+          ],
+          [
+            2,
+            2,
+            -2
+          ],
+          [
+            2,
+            2,
+            -1
+          ],
+          [
+            2,
+            2,
+            0
+          ],
+          [
+            2,
+            2,
+            1
+          ],
+          [
+            2,
+            2,
+            2
+          ],
+          [
+            2,
+            3,
+            -1
+          ],
+          [
+            2,
+            3,
+            0
+          ],
+          [
+            2,
+            3,
+            1
+          ],
+          [
+            3,
+            -2,
+            -1
+          ],
+          [
+            3,
+            -2,
+            0
+          ],
+          [
+            3,
+            -2,
+            1
+          ],
+          [
+            3,
+            -1,
+            -2
+          ],
+          [
+            3,
+            -1,
+            -1
+          ],
+          [
+            3,
+            -1,
+            0
+          ],
+          [
+            3,
+            -1,
+            1
+          ],
+          [
+            3,
+            -1,
+            2
+          ],
+          [
+            3,
+            0,
+            -2
+          ],
+          [
+            3,
+            0,
+            -1
+          ],
+          [
+            3,
+            0,
+            0
+          ],
+          [
+            3,
+            0,
+            1
+          ],
+          [
+            3,
+            0,
+            2
+          ],
+          [
+            3,
+            1,
+            -2
+          ],
+          [
+            3,
+            1,
+            -1
+          ],
+          [
+            3,
+            1,
+            0
+          ],
+          [
+            3,
+            1,
+            1
+          ],
+          [
+            3,
+            1,
+            2
+          ],
+          [
+            3,
+            2,
+            -1
+          ],
+          [
+            3,
+            2,
+            0
+          ],
+          [
+            3,
+            2,
+            1
+          ],
+          [
+            4,
+            0,
+            0
+          ]
+        ],
+        "runs": [
+          {
+            "run_index": 0,
+            "mode_x": 3,
+            "mode_y": 0,
+            "mode_z": 0,
+            "step": 8,
+            "a": 0.09999999999999998,
+            "differential_displacement_rms_ratio": 0.8871595444822842,
+            "differential_velocity_rms_ratio": 0.8059675414430532,
+            "full_displacement_error_relative_rms": 0.13809581289420284,
+            "full_velocity_error_relative_rms": 0.23751808334637386,
+            "projected_displacement_ratio": 0.8839913254060922,
+            "projected_velocity_ratio": 0.7965852313633947,
+            "nonmode_displacement_relative_rms": 0.052669033967589415,
+            "baseline_displacement_rms_spacing": 0.007028911563733737,
+            "baseline_displacement_max_spacing": 0.01680515835133651,
+            "baseline_velocity_rms_spacing": 0.007813426327916064,
+            "even_displacement_relative_rms": 0.00018745996690085298,
+            "minimum_separation_spacing": 0.8895696744075221,
+            "minimum_separation_support": 35.58278697630057,
+            "max_pairs_below_support": 0,
+            "max_pairs_below_0p1_spacing": 0,
+            "max_pairs_below_0p5_spacing": 0,
+            "noise_mean_structure_norm_le_2": 5.945767897214182e-05,
+            "noise_mean_structure_ratio_norm_le_2": 1.0473667692892596,
+            "noise_mean_structure_norm_le_4": 0.0011178985673908042,
+            "noise_mean_structure_ratio_norm_le_4": 1.0135387659723347
+          }
+        ],
+        "scope": "Actual full particle positions and paired fields; pressure-free short evolution; not production block timestep driver"
+      },
+      "growth": {
+        "metadata": {
+          "side": 8,
+          "species": 1,
+          "load_kind": "file",
+          "load_file": "/home/dmarce1/workspace/cosmictiger/build/release/tests/glass_fixed_softening/glass.txt",
+          "projection": "least squares mean + sine + cosine",
+          "paired_evolution": true,
+          "mass_dm": 1,
+          "mass_gas": 0,
+          "gm": 0.001953125,
+          "kernel_family": "ferrers",
+          "kernel_degree": 4,
+          "softening_mode": "fixed",
+          "configured_support_radius_box": 0.003125,
+          "neighbor_number": 24,
+          "theta": 0.1,
+          "backend": "cpu",
+          "omega_m": 0.314419,
+          "omega_r": 9.342306090435325e-05,
+          "omega_k": 0,
+          "omega_lambda": 0.6854875769390957,
+          "baseline_force_rms": 0.007290426638974822,
+          "baseline_force_max": 0.017479872558888807,
+          "baseline_force_rms_dm": 0.007290426638974822,
+          "baseline_force_rms_gas": 0,
+          "baseline_support_dm": 0.003125000000000028,
+          "baseline_support_gas": 0,
+          "baseline_min_support": 0.003125,
+          "baseline_max_support": 0.003125,
+          "pressure_enabled": false,
+          "response_normalization": "acceleration / (4*pi*G*rho_comoving)",
+          "species_count": 1,
+          "n_per_dimension": 8,
+          "mass_fractions": [
+            1.0
+          ]
+        },
+        "runs": [
+          {
+            "run_index": 0,
+            "label": "continuum",
+            "mode_x": 3,
+            "mode_y": 0,
+            "mode_z": 0,
+            "step": 8,
+            "a": 0.09999999999999998,
+            "continuum_growth": 4.958836228859153,
+            "density_parallel_ratio": 0.8837765392131103,
+            "density_phase_ratio": 7.668300678900783e-05,
+            "density_amplitude_ratio": 0.8837765425399035,
+            "baseline_density_amplitude": 0.001404451710408334,
+            "even_density_relative_to_signal": 6.944796729665959e-05,
+            "displacement_parallel_ratio": 0.8839913254060937,
+            "displacement_cosine_relative": 0.0005990732798650327,
+            "nonmode_displacement_relative_rms": 0.052669033967589415,
+            "baseline_displacement_rms_spacing": 0.007028911563733738,
+            "even_displacement_relative_rms": 0.000187459966900853,
+            "initial_density_amplitude": 0.000583014685471905,
+            "initial_amplitude_spacing": 0.0005,
+            "steps": 8,
+            "a_initial": 0.02,
+            "maximum_even_density_relative": 6.944796729665959e-05,
+            "maximum_nonmode_displacement_relative_rms": 0.052669033967589415
+          }
+        ]
+      }
+    }
+  },
+  "controls": {
+    "control_16": {
+      "density_relative_change": 1.0424311610357506e-05,
+      "phase_absolute_change": -3.7721659458211346e-08,
+      "projected_velocity_relative_change": 1.0879195697865995e-05,
+      "nonmode_displacement_absolute_change": 1.7310405945811236e-06,
+      "baseline_drift_absolute_change_spacing": -8.70596242059235e-09,
+      "minimum_separation_absolute_change_spacing": -2.9766086262483782e-08,
+      "noise_power_relative_change_norm_le_4": 1.025618727723554e-07
+    },
+    "control_half": {
+      "density_relative_change": 7.768649737505129e-06,
+      "phase_absolute_change": -1.7132641045169175e-06,
+      "projected_velocity_relative_change": 3.1745500672641924e-08,
+      "nonmode_displacement_absolute_change": -3.3180837668428387e-07,
+      "baseline_drift_absolute_change_spacing": 0.0,
+      "minimum_separation_absolute_change_spacing": 0.000983225442168889,
+      "noise_power_relative_change_norm_le_4": 0.0
+    }
+  }
+}

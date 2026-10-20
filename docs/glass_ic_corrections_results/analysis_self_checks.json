@@ -1,0 +1,12 @@
+{
+  "passed": 7,
+  "checks": [
+    "original-target density, displacement and velocity retain a 1.7 boost",
+    "halving the original target doubles its measured correction ratio",
+    "empirical rescaling recovers the analytically correct unit seed",
+    "rejects missing density row",
+    "rejects mismatched request label",
+    "rejects wrong initial velocity",
+    "rejects mismatched gravity metadata"
+  ]
+}

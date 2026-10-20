@@ -1,0 +1,3 @@
+run_index,label,mode_x,mode_y,mode_z,steps,initial_total_displacement,max_displacement_relative_error,max_derivative_relative_error,max_cosine_relative_norm,max_nonmode_displacement_relative_rms,final_density_ratio_to_continuum,final_momentum_ratio_to_continuum
+0,target_matched_16_steps,3,0,0,16,0.0014427056874625431,1.4932700527986846e-05,2.713523081943692e-05,4.526895359776553e-06,0.0009542523400955205,1.0000116668013597,0.771360664060387
+1,target_matched_half_amplitude,3,0,0,8,0.0007213528437312716,2.1983543692397855e-05,3.754123651559149e-05,6.347761134365489e-06,0.0005035588734134662,1.000002185203915,0.7713528116699073
