@@ -1,0 +1,8 @@
+    Start 77: fmm_tree
+1/2 Test #77: fmm_tree .........................   Passed    0.06 sec
+    Start 78: fmm_walk_cpu
+2/2 Test #78: fmm_walk_cpu .....................   Passed    0.17 sec
+
+100% tests passed, 0 tests failed out of 2
+
+Total Test time (real) =   0.23 sec

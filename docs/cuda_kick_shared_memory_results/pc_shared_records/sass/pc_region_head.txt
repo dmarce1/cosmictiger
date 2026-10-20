@@ -1,0 +1,119 @@
+ 6ee80              gravity_cuda.hpp:366   @!P0 BRA `(.L_x_1435)
+ 6eea0              gravity_cuda.hpp:354   LDS R29, [UR46+0x264]
+ 6eeb0              gravity_cuda.hpp:348   LD.E R34, [R26.64+0x28]
+ 6eec0              gravity_cuda.hpp:355   LDS R32, [UR46+0x268]
+ 6eed0              gravity_cuda.hpp:356   LDS.64 R30, [UR46+0x1f8]
+ 6eee0              sm_30_intrinsics.hpp:110   BRA.CONV ~URZ, `(.L_x_307)
+ 6ef20              sm_30_intrinsics.hpp:110   CALL.ABS.NOINC `(__cuda_sm70_warpsync)
+ 6ef40              device_vector.hpp:320   LDS R33, [UR46+0x100]
+ 6ef70              gravity_cuda.hpp:370   @!P0 BRA `(.L_x_1436)
+ 6f000              gravity_cuda.hpp:349   YIELD
+ 6f040              gravity_cuda.hpp:372   @!P0 BRA `(.L_x_1438)
+ 6f060 .L_x_1448:   device_vector.hpp:340   LDS.64 R4, [UR46+0xf0]
+ 6f070              device_vector.hpp:340   YIELD
+ 6f0c0              gravity_cuda.hpp:374   LD.E R5, [R6.64]
+ 6f0e0              gravity_cuda.hpp:374   LD.E.64 R4, [R4.64+0x48]
+ 6f220              gravity_cuda.hpp:374   LDG.E.64 R6, [R6.64]
+ 6f250              barrier.h:1148  @P1 BRA `(.L_x_1440)
+ 72000              barrier.h:1001  @P1 BRA `(.L_x_1446)
+ 72060              barrier.h:973   @!PT LDS RZ, [RZ]
+ 72070              barrier.h:973   @!PT LDS RZ, [RZ]
+ 72080              barrier.h:973   @!PT LDS RZ, [RZ]
+ 72090              barrier.h:973   LDGSTS.E.BYPASS.128 [R15], [R12.64]
+ 720b0              barrier.h:1001  @!P1 BRA `(.L_x_1447)
+ 720e0              barrier.h:769   VOTE.ALL R4, PT, PT
+ 72140              barrier.h:769   @P1 ATOMS.ADD.S32 RZ, [UR46+0x1d4], R7
+ 72150              barrier.h:769   @!PT LDS RZ, [RZ]
+ 72160              barrier.h:769   @!PT LDS RZ, [RZ]
+ 72170              barrier.h:769   @!PT LDS RZ, [RZ]
+ 72180              barrier.h:769   @!PT LDS RZ, [RZ]
+ 72190              barrier.h:769   ARRIVES.LDGSTSBAR.64 [UR46+0x1d0]
+ 721c0 .L_x_1439:   gravity_cuda.hpp:372   @P0 CALL.REL.NOINC `(.L_x_1438)
+ 721d0              gravity_cuda.hpp:372   BRA `(.L_x_1448)
+ 721f0 .L_x_1437:   mbarrier_arrive.h:46    @!PT LDS RZ, [RZ]
+ 72200              mbarrier_arrive.h:46    @!PT LDS RZ, [RZ]
+ 72210              mbarrier_arrive.h:46    @!PT LDS RZ, [RZ]
+ 72220              mbarrier_arrive.h:46    @!PT LDS RZ, [RZ]
+ 72230              mbarrier_arrive.h:46    MEMBAR.ALL.CTA
+ 72240              mbarrier_arrive.h:46    ATOMS.ARRIVE.64 R6, [UR46+0x1d0]
+ 72280              barrier.h:249   LDS R0, [UR46+0x1d4]
+ 722c0              __threading_support:637   @P0 BRA `(.L_x_1450)
+ 722f0              __threading_support:641   YIELD
+ 72310              __threading_support:641   @!P0 BRA `(.L_x_1452)
+ 723d0              __threading_support:656   LDG.E.64 R6, [R10.64]
+ 72450              __threading_support:656   @!P0 BRA `(.L_x_1453)
+ 72460              __threading_support:287   NANOSLEEP 0xf4240
+ 72470              __threading_support:287   BRA `(.L_x_1454)
+ 724d0              __threading_support:660   LDG.E.64 R6, [R10.64]
+ 72530              __threading_support:660   @!P0 BRA `(.L_x_1454)
+ 72540              __threading_support:287   NANOSLEEP R3
+ 72550              __threading_support:662   BRA `(.L_x_1454)
+ 72580 .L_x_1451:   barrier.h:249   LDS R0, [UR46+0x1d4]
+ 725b0              __threading_support:637   @!P0 BRA `(.L_x_1455)
+ 725f0              gravity_cuda.hpp:380   @P0 BRA `(.L_x_1457)
+ 72610 .L_x_1461:   gravity_cuda.hpp:392   LDS.64 R8, [UR46+0x218]
+ 72680              gravity_cuda.hpp:392   @!P0 BRA `(.L_x_1459)
+ 72710              gravity_cuda.hpp:392   LD.E R13, [R40.64]
+ 72750              gravity_cuda.hpp:392   LD.E R14, [R42.64]
+ 72760              gravity_cuda.hpp:392   LD.E R21, [R44.64]
+ 727f0              gravity_cuda.hpp:389   LD.E R58, [R54.64+0x8]
+ 72800              gravity_cuda.hpp:388   LD.E R3, [R54.64+0x4]
+ 72810              gravity_cuda.hpp:387   LD.E R0, [R54.64]
+ 72820              generated_operators.hpp:12357 LD.E R74, [R54.64+0x70]
+ 72830              generated_operators.hpp:12352 LD.E R72, [R54.64+0x74]
+ 72840              generated_operators.hpp:12387 LD.E R91, [R54.64+0x8c]
+ 72850              generated_operators.hpp:12346 LD.E R69, [R54.64+0x78]
+ 72860              generated_operators.hpp:12384 LD.E R80, [R54.64+0x88]
+ 72870              generated_operators.hpp:12340 LD.E R65, [R54.64+0x7c]
+ 72880              generated_operators.hpp:12379 LD.E R83, [R54.64+0x90]
+ 72890              generated_operators.hpp:12346 LD.E R68, [R54.64+0x80]
+ 728a0              generated_operators.hpp:12371 LD.E R79, [R54.64+0x94]
+ 728b0              generated_operators.hpp:12366 LD.E R75, [R54.64+0x98]
+ 728c0              generated_operators.hpp:12340 LD.E R64, [R54.64+0x84]
+ 728d0              generated_operators.hpp:12443 LD.E R99, [R54.64+0x50]
+ 728e0              generated_operators.hpp:12446 LD.E R98, [R54.64+0x4c]
+ 728f0              generated_operators.hpp:12457 LD.E R111, [R54.64+0x64]
+ 72900              generated_operators.hpp:12440 LD.E R97, [R54.64+0x54]
+ 72910              generated_operators.hpp:12454 LD.E R107, [R54.64+0x60]
+ 72920              generated_operators.hpp:12443 LD.E R96, [R54.64+0x58]
+ 72930              generated_operators.hpp:12452 LD.E R105, [R54.64+0x68]
+ 72940              generated_operators.hpp:12440 LD.E R90, [R54.64+0x5c]
+ 72950              generated_operators.hpp:12449 LD.E R56, [R54.64+0x6c]
+ 72960              generated_operators.hpp:12501 LD.E R40, [R54.64+0x30]
+ 72970              generated_operators.hpp:12501 LD.E R53, [R54.64+0x38]
+ 72980              generated_operators.hpp:12499 LD.E R4, [R54.64+0x34]
+ 72990              generated_operators.hpp:12505 LD.E R49, [R54.64+0x44]
+ 729a0              generated_operators.hpp:12504 LD.E R50, [R54.64+0x40]
+ 729b0              generated_operators.hpp:12503 LD.E R48, [R54.64+0x48]
+ 729c0              generated_operators.hpp:12499 LD.E R51, [R54.64+0x3c]
+ 729d0              generated_operators.hpp:12546 LD.E R6, [R54.64+0x20]
+ 729e0              generated_operators.hpp:12537 LD.E R42, [R54.64+0x1c]
+ 729f0              generated_operators.hpp:12540 LD.E R44, [R54.64+0x2c]
+ 72a00              generated_operators.hpp:12537 LD.E R47, [R54.64+0x24]
+ 72a10              generated_operators.hpp:12539 LD.E R46, [R54.64+0x28]
+ 72a20              generated_operators.hpp:12566 LD.E R41, [R54.64+0x10]
+ 72a30              generated_operators.hpp:12564 LD.E R45, [R54.64+0x14]
+ 72a40              generated_operators.hpp:12562 LD.E R43, [R54.64+0x18]
+ 72a50              generated_operators.hpp:12570 LD.E R52, [R54.64+0xc]
+ 73830              gravity_cuda.hpp:384   @P0 CALL.REL.NOINC `(.L_x_1459)
+ 73840              gravity_cuda.hpp:384   BRA `(.L_x_1460)
+ 73870              gravity_cuda.hpp:392   LD.E R0, [R8.64]
+ 73890              gravity_cuda.hpp:392   ST.E [R8.64], R3
+ 738a0              gravity_cuda.hpp:393   LDS.64 R14, [UR46+0x220]
+ 738c0              gravity_cuda.hpp:393   LD.E R13, [R14.64]
+ 738e0              gravity_cuda.hpp:393   ST.E [R14.64], R21
+ 738f0              gravity_cuda.hpp:394   LDS.64 R12, [UR46+0x228]
+ 73910              gravity_cuda.hpp:394   LD.E R0, [R12.64]
+ 73930              gravity_cuda.hpp:394   ST.E [R12.64], R11
+ 73940              gravity_cuda.hpp:395   LDS.64 R8, [UR46+0x230]
+ 73960              gravity_cuda.hpp:395   LD.E R3, [R8.64]
+ 739b0              gravity_cuda.hpp:395   ST.E [R8.64], R3
+ 739c0              gravity_cuda.hpp:380   @P0 CALL.REL.NOINC `(.L_x_1457)
+ 739d0              gravity_cuda.hpp:380   BRA `(.L_x_1461)
+ 739f0 .L_x_1456:   sm_30_intrinsics.hpp:110   BRA.CONV ~URZ, `(.L_x_308)
+ 73a30              sm_30_intrinsics.hpp:110   CALL.ABS.NOINC `(__cuda_sm70_warpsync)
+ 73a70              gravity_cuda.hpp:370   @!P0 CALL.REL.NOINC `(.L_x_1436)
+ 73a80              gravity_cuda.hpp:370   BRA `(.L_x_1462)
+ 73aa0 .L_x_1435:   sm_30_intrinsics.hpp:110   BRA.CONV ~URZ, `(.L_x_309)
+ 73ae0              sm_30_intrinsics.hpp:110   CALL.ABS.NOINC `(__cuda_sm70_warpsync)
+ 73b30              gravity_cuda.hpp:403   CALL.ABS.NOINC `(_Z11addGpuFlopsi)

@@ -1,0 +1,10 @@
+Internal ctest changing into directory: /home/dmarce1/workspace/cosmictiger/.claude/worktrees/mystifying-carson-b3856a/build/release
+Test project /home/dmarce1/workspace/cosmictiger/.claude/worktrees/mystifying-carson-b3856a/build/release
+    Start 74: sph_gravity_cuda
+1/2 Test #74: sph_gravity_cuda .................   Passed    1.01 sec
+    Start 79: fmm_walk_cuda
+2/2 Test #79: fmm_walk_cuda ....................   Passed    1.06 sec
+
+100% tests passed, 0 tests failed out of 2
+
+Total Test time (real) =   2.11 sec

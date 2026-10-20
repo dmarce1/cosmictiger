@@ -1,0 +1,8 @@
+m2P loop body of the order-7 kick kernel, from the loop label to the back-edge branch (one sink-multipole pair per iteration).
+head = da3c1f4e; registers = record copied to registers with LDS.128 (rejected); shared = record viewed in place through the shared pointer (landed).
+== head [0x727b0,0x73840]: 266 instructions (214 floating point, 39 memory, 13 integer and control)
+    FFMA.FTZ 102, FMUL.FTZ 77, LD.E 39, FADD.FTZ 28, IADD3 6, I2FP.F32.S32 3, IMAD 1, ULDC.64 1, LEA.HI.X.SX32 1, ISETP.NE.AND 1, ISETP.GE.AND 1, MUFU.SQRT 1, FMNMX.FTZ 1, FSET.BF.GT.FTZ.AND 1, MUFU.RCP 1, CALL.REL.NOINC 1, BRA 1
+== registers [0x72360,0x731f0]: 234 instructions (214 floating point, 10 memory, 10 integer and control)
+    FFMA.FTZ 102, FMUL.FTZ 77, FADD.FTZ 28, LDS.128 10, IADD3 6, I2FP.F32.S32 3, IMAD 1, ISETP.NE.AND 1, MUFU.SQRT 1, FMNMX.FTZ 1, FSET.BF.GT.FTZ.AND 1, MUFU.RCP 1, ISETP.GE.AND 1, BRA 1
+== shared [0x72370,0x733e0]: 264 instructions (214 floating point, 39 memory, 11 integer and control)
+    FFMA.FTZ 102, FMUL.FTZ 77, LDS 39, FADD.FTZ 28, IADD3 6, I2FP.F32.S32 3, IMAD 1, ISETP.NE.AND 1, MUFU.SQRT 1, FMNMX.FTZ 1, FSET.BF.GT.FTZ.AND 1, MUFU.RCP 1, ISETP.GE.AND 1, CALL.REL.NOINC 1, BRA 1

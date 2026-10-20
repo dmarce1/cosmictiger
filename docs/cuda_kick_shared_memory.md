@@ -100,7 +100,9 @@ Reusable phase arena, sized for the largest simultaneously live set
   through pointers derived from the dynamic shared-memory symbol (so the
   compiler emits shared-memory loads), four sources per 16-byte load, and
   gives each lane two sinks on complete 64-sink chunks; see "PP loop schedule
-  at low occupancy" below.
+  at low occupancy" below. PC reads its staged records and the force planes
+  the same way, ten 16-byte loads per record ("PC loop reads from the
+  shared-memory symbol").
 
 Lifetimes: staged tiles are refilled only after every lane has finished reading
 them (`__syncwarp()` after each use); the checklist copy and CP share one
@@ -2462,6 +2464,113 @@ every cell (`b*/speedup_vs_head.md`). `stf_ewald_cpu`, `stf_kernels_cuda`,
 `stf_l2l_cuda`, `fmm_tree`, `fmm_walk_cpu`, `fmm_walk_cuda` and
 `sph_gravity_cuda` pass on the new binary.
 
+### PC loop reads from the shared-memory symbol (`pc_shared_records/`)
+
+The PC loop (`cudaGravityPcDirect`) was the last of the arena's inner loops to
+address its staged data through the pointers resolved in the control block.
+Reloaded from shared memory those are generic pointers, the pattern "PP loop
+schedule at low occupancy" describes for the PP loop, so in the order-7 kernel
+of `da3c1f4e` (`sass/pc_region_head.txt`, condensed with the racecheck
+survey's `condense2.py` by `sass/survey_sass.sh`) the loop body over one
+sink-multipole pair was 266 instructions, 39 of them generic `LD.E` reading
+the record at immediate offsets from a 64-bit address: the three position
+words and the 36 coefficients of the order-7 multipole (degree 5). Each sink's
+force update then reloaded the four plane pointers (`LDS.64`) and read and
+wrote every plane through them (`LD.E`, `ST.E`).
+
+The loop now derives both regions from the `extern __shared__` symbol and the
+layout offsets, as `detail::cudaStagedSources` does for the PP loop:
+
+- `detail::cudaStagedMultipoles` is the staged tile (arena offset plus source
+  offset); the staging copies' destination and the reads use it, and the
+  record stride is the compile-time constant the launch puts in the layout.
+- `detail::cudaStagedMultipole` views one staged record in place through that
+  pointer, so its words load as `LDS` at immediate offsets from one 32-bit
+  shared address.
+- `detail::cudaArenaForces` is the sink-force planes (arena offset plus force
+  offset) when the layout keeps them in shared memory; with whole-bucket
+  global backing (`forceOffset == -1`) the control block's pointers stay. The
+  update is one helper, `detail::cudaApplyPcField`, called in a uniform
+  branch with either tile, because a pointer selected between the two at run
+  time would be generic again; each call site keeps its address space.
+
+The M2P call, its arguments and the accumulation order are unchanged, and so
+is its code: the loop body is 264 instructions per pair with the head's 214
+floating-point instructions exactly (102 `FFMA`, 77 `FMUL`, 28 `FADD`, one
+`MUFU.SQRT`, one `MUFU.RCP`, three `I2FP`, one `FMNMX`, one `FSET`, the same
+operands and immediates in the same order), the 39 `LD.E` became 39 `LDS`,
+and the two 64-bit address instructions went (`sass/loop_body_counts.txt`,
+`sass/pc_region_shared.txt`). The force update is `LDS`/`STS` per plane in
+the shared-forces branch and the pointer reload with `LD.E`/`ST.E` in the
+backing branch. No local-memory traffic was added (851 `LDL`/`STL` in both
+kernels, the PC routine's being its prologue reloads of the sink pointers),
+and the staging is the same one `LDGSTS.E.BYPASS.128` with its arrive-on
+(libcu++'s dead generic copy stays, as before: it tests the address spaces at
+run time).
+
+A first form of the change went further and copied each record to registers
+with ten 16-byte shared loads (`LDS.128` at offsets 0x0 to 0x90, the padding
+word included) before calling the operator (`registers_variant/`,
+`sass/pc_region_registers.txt`). That loop body is 234 instructions per pair
+with the same floating-point instruction multiset, but the compiler pairs the
+operator's fused multiply-adds differently when the coefficients arrive as
+register values instead of loads, and the forces differ from the head's at
+roundoff level: relative L2 1e-9 to 4e-7 and largest pointwise differences
+2e-7 to 2e-5, the lattice fixture highest because its forces nearly cancel
+(`variants/head_vs_registers.md`). The in-place view, and the same view
+declared with the slot's 16-byte alignment (which the compiler did not
+vectorize), are bit-identical to the head on all six fixture-bucket cells
+(`variants/head_vs_scalar.md`, `variants/head_vs_aligned.md`, one run of each
+binary per bucket), so the in-place view is what landed; the register copy is
+the form to return to if roundoff-level differences are ever acceptable, with
+the 12% shorter loop body as its gain.
+
+Validation, 1024-bucket Release build of this worktree (`build/release`,
+`da3c1f4e` plus the change): `fmm_tree` and `fmm_walk_cpu` (`ctest_cpu.log`),
+`fmm_walk_cuda` and `sph_gravity_cuda` (`ctest_cuda.log`) pass. The force
+exports of the timing run are bit-identical to the head's on every fixture at
+buckets 64 and 512 (`head_vs_shared.md`).
+
+Whole-kick timing (`stage.sh`, `run.sh`): the landed binary against the head
+(`da3c1f4e`, built in the same tree before the change), both 1024-bucket
+Release builds, automatic policy, buckets 64 and 512, order 7, five pairs of
+15 samples, direct reference over 1,024 particles, under the shared GPU lock
+after 60 s of quiet (one-minute load 0.79 at the start, no other GPU client,
+every process 2.7 to 3.1 s of wall time, worst pair spread 1.13 in the
+adaptive bucket-64 force cell, whose first pair ran 12.3 ms for both binaries
+against 11.2 to 11.4 in the later pairs). Speedup is the head time over the
+landed time, paired range in parentheses (`paired_speedup.md`):
+
+| bucket | fixture | potential | head da3c1f4e | shared reads | speedup |
+|---:|---|---:|---:|---:|---:|
+| 64 | lattice | no | 14.34 ms | 14.42 ms | 0.995x (0.972-1.017) |
+| 64 | lattice | yes | 14.41 ms | 14.54 ms | 0.993x (0.981-1.030) |
+| 64 | clustered | no | 5.40 ms | 5.40 ms | 1.000x (0.985-1.053) |
+| 64 | clustered | yes | 5.71 ms | 5.64 ms | 0.999x (0.990-1.029) |
+| 64 | adaptive | no | 11.38 ms | 11.41 ms | 0.998x (0.905-1.009) |
+| 64 | adaptive | yes | 11.60 ms | 11.55 ms | 1.001x (0.934-1.009) |
+| 512 | lattice | no | 8.80 ms | 8.87 ms | 0.996x (0.948-1.007) |
+| 512 | lattice | yes | 9.38 ms | 9.33 ms | 1.008x (0.947-1.018) |
+| 512 | clustered | no | 5.20 ms | 5.13 ms | 1.005x (0.951-1.043) |
+| 512 | clustered | yes | 5.83 ms | 5.86 ms | 0.992x (0.949-1.012) |
+| 512 | adaptive | no | 24.07 ms | 23.98 ms | 1.000x (0.995-1.011) |
+| 512 | adaptive | yes | 24.62 ms | 24.64 ms | 1.000x (0.984-1.003) |
+
+Every cell is level with the head and every paired range includes one. The
+register-copy form, timed by the same protocol (`registers_variant/`, worst
+pair spread 1.10), is level too: 0.990x to 1.022x, every range including one.
+That is the expected outcome rather than a disappointment: the loop body is
+81% floating-point instructions and the loads were already issued together at
+its top, so trading 39 generic loads for 39 shared loads, or for ten 16-byte
+ones, removes address arithmetic and address-space resolution but not issue
+slots that the kick waits on; at bucket 64 the lattice and clustered kicks
+are host-bound, and at bucket 512 the kernel's time is in the PP loop and the
+Ewald cell interactions ("Kernel attribution at bucket 512"), of which the PC
+loop is a small part. The change's value is that the PC loop now addresses
+the arena the way the PP loop does, with its loads attributed to the shared
+tile they read, and that the generic reload of the control block's pointers
+is gone from the arena's last inner loop.
+
 ### What remains
 
 - The per-launch list slab removed the pool allocator from the kernel (above);
@@ -2471,13 +2580,18 @@ every cell (`b*/speedup_vs_head.md`). `stf_ewald_cpu`, `stf_kernels_cuda`,
   PP loop schedule landed, the merged head's kernel at that division is level
   with the baseline's at bucket 64 (5.10 against 5.11 ms,
   `landing_nsys_adaptive_b64/`); bucket 128 is not re-measured.
-- The PC loop still reads the staged records and accumulates its forces
-  through generic pointers reloaded from the control block (`LDS.64` of the
-  pointer, then `LD.E` per coefficient of every sink-multipole pair and
-  `LD.E`/`ST.E` per sink force, `sass/pc_region_aligned.txt` of
-  `pc_staging_cp_async/`), the pattern the PP loop schedule replaced with
-  pointers derived from the shared-memory symbol. The multipole staging itself
-  is now an aligned `cp.async` copy (Aligned PC multipole staging).
+- The CP loop (`cudaGravityCpDirect`) still reads the staged particle planes
+  through `control.sourceX` and its siblings, and the PP loop still updates
+  the sink forces through `control.forces`: generic pointers reloaded from the
+  control block (`LDS.64` of the pointer, then `LD.E`/`ST.E`), the pattern the
+  PP and PC loops' record reads no longer use (`sass/pc_region_shared.txt` of
+  `pc_shared_records/` shows the CP reads). The CP reads are one source per
+  lane per iteration and the PP force update four words per sink per tile;
+  `detail::cudaStagedSources` and `detail::cudaArenaForces` would give both
+  shared-memory accesses. The PC loop's record reads could shrink further by
+  copying each record to registers with 16-byte loads (234 instead of 264
+  instructions per pair) if roundoff-level force differences were acceptable
+  ("PC loop reads from the shared-memory symbol", `registers_variant/`).
 - At small problems where the launch holds fewer warps than the GPU can keep
   resident (64 leaves at bucket 512), the PP loop is no longer the bound: with
   the restructured loop it holds about a fifth of the kernel's stall samples.

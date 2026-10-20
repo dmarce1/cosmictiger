@@ -1,0 +1,65 @@
+{
+  "utc": "2026-10-20T08:25:32.897341+00:00",
+  "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+  "command": "benchmarks/run_cuda_kick_arena.py --binary head=build/release/frozen/cosmictiger_b1024_head_da3c1f4e:arena --binary registers=build/release/frozen/cosmictiger_b1024_pc_shared:arena --binary scalar=build/release/frozen/cosmictiger_b1024_pc_shared_a:arena --binary aligned=build/release/frozen/cosmictiger_b1024_pc_shared_c:arena --policy auto= --output docs/cuda_kick_shared_memory_results/pc_shared_records/variants --fixtures lattice,clustered,adaptive --buckets 64,512 --orders 7 --pairs 1 --samples 1 --reference 0 --timeout 1800 --idle-wait 'ninja|ncu|nsys|cc1plus|cicc|ptxas' --wait-gpu-idle",
+  "binaries": [
+    {
+      "label": "head",
+      "path": "/home/dmarce1/workspace/cosmictiger/.claude/worktrees/mystifying-carson-b3856a/build/release/frozen/cosmictiger_b1024_head_da3c1f4e",
+      "arena": true,
+      "sha256": "12bdb0c6d834605eb5bd6520af4409aceecdc14e67f839053f688d2c6a513c0a"
+    },
+    {
+      "label": "registers",
+      "path": "/home/dmarce1/workspace/cosmictiger/.claude/worktrees/mystifying-carson-b3856a/build/release/frozen/cosmictiger_b1024_pc_shared",
+      "arena": true,
+      "sha256": "77a5f25c8315938e371cc293293fcf128adb23b582d584964579d40d3553e3cd"
+    },
+    {
+      "label": "scalar",
+      "path": "/home/dmarce1/workspace/cosmictiger/.claude/worktrees/mystifying-carson-b3856a/build/release/frozen/cosmictiger_b1024_pc_shared_a",
+      "arena": true,
+      "sha256": "85dc3d767c65e3c29f844d62ae81ef87b1e733a74f5bf2e9b1b8b93a3c0a7c0e"
+    },
+    {
+      "label": "aligned",
+      "path": "/home/dmarce1/workspace/cosmictiger/.claude/worktrees/mystifying-carson-b3856a/build/release/frozen/cosmictiger_b1024_pc_shared_c",
+      "arena": true,
+      "sha256": "1598e70e6fd03fd95a3a375a8c36277c87e3bc5bebb76b603ed176d20d8466ae"
+    }
+  ],
+  "policies": [
+    {
+      "label": "auto",
+      "options": []
+    }
+  ],
+  "fixtures": [
+    "lattice",
+    "clustered",
+    "adaptive"
+  ],
+  "buckets": [
+    64,
+    512
+  ],
+  "orders": [
+    7
+  ],
+  "backends": [
+    "cuda"
+  ],
+  "samples": 1,
+  "pairs": 1,
+  "reference": 0,
+  "threads": 2,
+  "cpus": "1-2",
+  "particles_per_dimension": 32,
+  "git_head": "da3c1f4e9a3362d15b41e6e2cc7674cebb19c424",
+  "nvidia_smi": "name, driver_version, clocks.current.sm [MHz], clocks.current.memory [MHz], utilization.gpu [%], memory.used [MiB]\nNVIDIA GeForce RTX 3090, 595.99.02, 300 MHz, 5001 MHz, 41 %, 4287 MiB\n",
+  "load_average": [
+    0.98095703125,
+    2.02099609375,
+    4.93798828125
+  ]
+}

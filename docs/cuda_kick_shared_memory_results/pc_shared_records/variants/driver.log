@@ -1,0 +1,39 @@
+03:25:32 quiet for 60 s (load 0.98); running: bash docs/cuda_kick_shared_memory_results/pc_shared_records/check_variants.sh docs/cuda_kick_shared_memory_results/pc_shared_records/variants
+2026-10-20T03:25:32-05:00 GPU lock acquired, load 0.98
+head_auto_cuda_b64_o7_pair0: lattice/phi=0 15.115 ms, lattice/phi=1 15.859 ms, clustered/phi=0 6.110 ms, clustered/phi=1 6.132 ms, adaptive/phi=0 12.498 ms, adaptive/phi=1 12.834 ms
+head_auto_cuda_b512_o7_pair0: lattice/phi=0 11.385 ms, lattice/phi=1 10.782 ms, clustered/phi=0 6.191 ms, clustered/phi=1 7.357 ms, adaptive/phi=0 31.317 ms, adaptive/phi=1 31.671 ms
+registers_auto_cuda_b64_o7_pair0: lattice/phi=0 14.671 ms, lattice/phi=1 14.840 ms, clustered/phi=0 5.436 ms, clustered/phi=1 5.858 ms, adaptive/phi=0 12.152 ms, adaptive/phi=1 12.082 ms
+registers_auto_cuda_b512_o7_pair0: lattice/phi=0 10.332 ms, lattice/phi=1 12.297 ms, clustered/phi=0 5.887 ms, clustered/phi=1 7.649 ms, adaptive/phi=0 30.692 ms, adaptive/phi=1 29.373 ms
+scalar_auto_cuda_b64_o7_pair0: lattice/phi=0 14.698 ms, lattice/phi=1 14.979 ms, clustered/phi=0 5.729 ms, clustered/phi=1 5.895 ms, adaptive/phi=0 12.332 ms, adaptive/phi=1 12.377 ms
+scalar_auto_cuda_b512_o7_pair0: lattice/phi=0 10.380 ms, lattice/phi=1 12.251 ms, clustered/phi=0 5.805 ms, clustered/phi=1 7.241 ms, adaptive/phi=0 29.507 ms, adaptive/phi=1 31.564 ms
+aligned_auto_cuda_b64_o7_pair0: lattice/phi=0 15.430 ms, lattice/phi=1 14.939 ms, clustered/phi=0 5.995 ms, clustered/phi=1 5.991 ms, adaptive/phi=0 12.399 ms, adaptive/phi=1 12.042 ms
+aligned_auto_cuda_b512_o7_pair0: lattice/phi=0 10.457 ms, lattice/phi=1 11.392 ms, clustered/phi=0 5.890 ms, clustered/phi=1 7.068 ms, adaptive/phi=0 31.411 ms, adaptive/phi=1 29.247 ms
+Completed; see docs/cuda_kick_shared_memory_results/pc_shared_records/variants/summary.md
+| reference | candidate | backend | bucket | order | fixture | acceleration rel L2 | acceleration max pointwise | potential rel L2 | potential max pointwise |
+|---|---|---|---:|---:|---|---:|---:|---:|---:|
+| head | registers | cuda | 64 | 7 | adaptive | 5.183e-09 | 2.591e-07 | 1.287e-09 | 8.868e-07 |
+| head | registers | cuda | 64 | 7 | clustered | 5.646e-09 | 1.820e-07 | 2.845e-09 | 2.072e-07 |
+| head | registers | cuda | 64 | 7 | lattice | 2.541e-07 | 1.151e-05 | 3.761e-07 | 2.291e-05 |
+| head | registers | cuda | 512 | 7 | adaptive | 3.994e-09 | 2.544e-07 | 1.169e-09 | 8.868e-07 |
+| head | registers | cuda | 512 | 7 | clustered | 1.228e-09 | 7.704e-07 | 0.000e+00 | 0.000e+00 |
+| head | registers | cuda | 512 | 7 | lattice | 2.700e-07 | 2.301e-05 | 3.858e-07 | 2.490e-05 |
+
+| reference | candidate | backend | bucket | order | fixture | acceleration rel L2 | acceleration max pointwise | potential rel L2 | potential max pointwise |
+|---|---|---|---:|---:|---|---:|---:|---:|---:|
+| head | scalar | cuda | 64 | 7 | adaptive | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| head | scalar | cuda | 64 | 7 | clustered | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| head | scalar | cuda | 64 | 7 | lattice | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| head | scalar | cuda | 512 | 7 | adaptive | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| head | scalar | cuda | 512 | 7 | clustered | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| head | scalar | cuda | 512 | 7 | lattice | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+
+| reference | candidate | backend | bucket | order | fixture | acceleration rel L2 | acceleration max pointwise | potential rel L2 | potential max pointwise |
+|---|---|---|---:|---:|---|---:|---:|---:|---:|
+| head | aligned | cuda | 64 | 7 | adaptive | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| head | aligned | cuda | 64 | 7 | clustered | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| head | aligned | cuda | 64 | 7 | lattice | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| head | aligned | cuda | 512 | 7 | adaptive | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| head | aligned | cuda | 512 | 7 | clustered | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| head | aligned | cuda | 512 | 7 | lattice | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+
+2026-10-20T03:25:59-05:00 variant check done

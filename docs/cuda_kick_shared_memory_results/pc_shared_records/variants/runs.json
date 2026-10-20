@@ -1,0 +1,5842 @@
+[
+  {
+    "medians": [
+      {
+        "fixture": "lattice",
+        "backend": "cuda",
+        "potential": false,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000402516,
+        "tree_seconds": 0.002195742,
+        "kick_seconds": 0.015114627,
+        "total_seconds": 0.017310369,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cuda",
+        "potential": true,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000182593,
+        "tree_seconds": 0.002004142,
+        "kick_seconds": 0.015858514,
+        "total_seconds": 0.017862656,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cuda",
+        "potential": false,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000401994,
+        "tree_seconds": 0.0027807,
+        "kick_seconds": 0.006110232,
+        "total_seconds": 0.008890932,
+        "position_hash": "9330035828812934027"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cuda",
+        "potential": true,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000177233,
+        "tree_seconds": 0.0027323,
+        "kick_seconds": 0.006132083,
+        "total_seconds": 0.008864383,
+        "position_hash": "9330035828812934027"
+      },
+      {
+        "fixture": "adaptive",
+        "backend": "cuda",
+        "potential": false,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000413005,
+        "tree_seconds": 0.002830414,
+        "kick_seconds": 0.012498455,
+        "total_seconds": 0.015328869,
+        "position_hash": "10382969522388005973"
+      },
+      {
+        "fixture": "adaptive",
+        "backend": "cuda",
+        "potential": true,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000179397,
+        "tree_seconds": 0.002816227,
+        "kick_seconds": 0.012833665,
+        "total_seconds": 0.015649892,
+        "position_hash": "10382969522388005973"
+      }
+    ],
+    "samples": [
+      {
+        "fixture": "lattice",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.002195742,
+        "kick_seconds": 0.015114627,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "lattice",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.002004142,
+        "kick_seconds": 0.015858514,
+        "total_potential": 1452162.2075195312
+      },
+      {
+        "fixture": "clustered",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.0027807,
+        "kick_seconds": 0.006110232,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "clustered",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.0027323,
+        "kick_seconds": 0.006132083,
+        "total_potential": -174641336.25
+      },
+      {
+        "fixture": "adaptive",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.002830414,
+        "kick_seconds": 0.012498455,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "adaptive",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.002816227,
+        "kick_seconds": 0.012833665,
+        "total_potential": -2308725466.107361
+      }
+    ],
+    "references": [],
+    "leaf_histogram": [
+      {
+        "fixture": "lattice",
+        "depth": 9,
+        "particles": 64,
+        "leaves": 512
+      },
+      {
+        "fixture": "clustered",
+        "depth": 12,
+        "particles": 64,
+        "leaves": 512
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 7,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 8,
+        "leaves": 23
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 9,
+        "leaves": 28
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 10,
+        "leaves": 47
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 11,
+        "leaves": 47
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 12,
+        "leaves": 28
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 13,
+        "leaves": 6
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 14,
+        "leaves": 40
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 15,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 16,
+        "leaves": 42
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 17,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 18,
+        "leaves": 10
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 19,
+        "leaves": 38
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 20,
+        "leaves": 50
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 21,
+        "leaves": 16
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 22,
+        "leaves": 25
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 23,
+        "leaves": 63
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 24,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 4,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 5,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 9,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 1,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 3,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 5,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 7,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 8,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 1,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 2,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 3,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 4,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 17,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 21,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 22,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 23,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 24,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 25,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 26,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 27,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 28,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 29,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 30,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 32,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 33,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 36,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 37,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 38,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 39,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 40,
+        "leaves": 5
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 41,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 42,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 43,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 44,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 45,
+        "leaves": 6
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 46,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 47,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 48,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 49,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 50,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 51,
+        "leaves": 18
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 52,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 53,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 54,
+        "leaves": 25
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 55,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 56,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 57,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 58,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 59,
+        "leaves": 13
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 60,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 61,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 62,
+        "leaves": 18
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 63,
+        "leaves": 18
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 64,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 19,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 21,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 22,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 23,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 24,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 25,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 26,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 27,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 28,
+        "leaves": 20
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 29,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 30,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 31,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 32,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 33,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 34,
+        "leaves": 15
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 35,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 36,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 37,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 38,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 39,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 40,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 41,
+        "leaves": 13
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 42,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 43,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 44,
+        "leaves": 10
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 45,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 46,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 47,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 48,
+        "leaves": 10
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 49,
+        "leaves": 8
+      }
+    ],
+    "arena": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 8048 bytes: control 648, expansion shared, forces shared tile 64, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes; list slab 145792 bytes per block (4096 entries per list)",
+    "occupancy": null,
+    "binary": "head",
+    "policy": "auto",
+    "backend": "cuda",
+    "bucket": 64,
+    "order": 7,
+    "pair": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "1-2",
+      "/home/dmarce1/workspace/cosmictiger/.claude/worktrees/mystifying-carson-b3856a/build/release/frozen/cosmictiger_b1024_head_da3c1f4e",
+      "--run.test=stfBenchmark",
+      "--initial.particlesPerDimension=32",
+      "--hydro.enabled=false",
+      "--gravity.openingAngle=0.8",
+      "--gravity.effectiveRadius=0.01876988456953534",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--hpx:threads=2",
+      "--hpx:bind=none",
+      "--analysis.views=false",
+      "--analysis.power=false",
+      "--analysis.groups=false",
+      "--lightcone.enabled=false",
+      "--compute.cuda=true",
+      "--compute.bucketSize=64",
+      "--gravity.fmmOrder=7"
+    ],
+    "cwd": "docs/cuda_kick_shared_memory_results/pc_shared_records/variants/runs/head_auto_cuda_b64_o7_pair0",
+    "wall_seconds": 1.3657775139872683,
+    "force_csv": "docs/cuda_kick_shared_memory_results/pc_shared_records/variants/runs/head_auto_cuda_b64_o7_pair0/stf_walk_forces.csv",
+    "force_csv_sha256": "6c00b674dcbb2238c90c4fa1a2c0fbc360e132b8e2b91d728687c3e6d76be453"
+  },
+  {
+    "medians": [
+      {
+        "fixture": "lattice",
+        "backend": "cuda",
+        "potential": false,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000400422,
+        "tree_seconds": 0.001999274,
+        "kick_seconds": 0.011385376,
+        "total_seconds": 0.01338465,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cuda",
+        "potential": true,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000181861,
+        "tree_seconds": 0.001943198,
+        "kick_seconds": 0.010782073,
+        "total_seconds": 0.012725271,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cuda",
+        "potential": false,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000404409,
+        "tree_seconds": 0.002123777,
+        "kick_seconds": 0.006191003,
+        "total_seconds": 0.00831478,
+        "position_hash": "9330035828812934027"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cuda",
+        "potential": true,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000174367,
+        "tree_seconds": 0.001940954,
+        "kick_seconds": 0.007356511,
+        "total_seconds": 0.009297465,
+        "position_hash": "9330035828812934027"
+      },
+      {
+        "fixture": "adaptive",
+        "backend": "cuda",
+        "potential": false,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000409919,
+        "tree_seconds": 0.002113908,
+        "kick_seconds": 0.031316967,
+        "total_seconds": 0.033430875,
+        "position_hash": "10382969522388005973"
+      },
+      {
+        "fixture": "adaptive",
+        "backend": "cuda",
+        "potential": true,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.00017558,
+        "tree_seconds": 0.002085395,
+        "kick_seconds": 0.031671282,
+        "total_seconds": 0.033756677,
+        "position_hash": "10382969522388005973"
+      }
+    ],
+    "samples": [
+      {
+        "fixture": "lattice",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.001999274,
+        "kick_seconds": 0.011385376,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "lattice",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.001943198,
+        "kick_seconds": 0.010782073,
+        "total_potential": 1452147.4973144531
+      },
+      {
+        "fixture": "clustered",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.002123777,
+        "kick_seconds": 0.006191003,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "clustered",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.001940954,
+        "kick_seconds": 0.007356511,
+        "total_potential": -174643612.75
+      },
+      {
+        "fixture": "adaptive",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.002113908,
+        "kick_seconds": 0.031316967,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "adaptive",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.002085395,
+        "kick_seconds": 0.031671282,
+        "total_potential": -2308739099.486328
+      }
+    ],
+    "references": [],
+    "leaf_histogram": [
+      {
+        "fixture": "lattice",
+        "depth": 9,
+        "particles": 64,
+        "leaves": 512
+      },
+      {
+        "fixture": "clustered",
+        "depth": 9,
+        "particles": 512,
+        "leaves": 64
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 7,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 8,
+        "leaves": 23
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 9,
+        "leaves": 28
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 10,
+        "leaves": 47
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 11,
+        "leaves": 47
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 12,
+        "leaves": 28
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 13,
+        "leaves": 6
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 14,
+        "leaves": 40
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 15,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 16,
+        "leaves": 42
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 17,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 18,
+        "leaves": 10
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 19,
+        "leaves": 38
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 20,
+        "leaves": 50
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 21,
+        "leaves": 16
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 22,
+        "leaves": 25
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 23,
+        "leaves": 63
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 24,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 4,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 5,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 9,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 1,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 3,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 5,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 7,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 8,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 1,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 2,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 3,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 4,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 310,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 322,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 324,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 329,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 332,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 358,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 367,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 369,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 371,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 385,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 407,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 408,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 409,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 411,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 412,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 421,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 427,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 429,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 430,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 442,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 447,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 456,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 462,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 467,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 475,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 478,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 480,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 482,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 485,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 495,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 498,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 500,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 503,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 504,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 506,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 234,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 236,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 238,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 241,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 243,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 245,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 246,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 249,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 253,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 284,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 286,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 287,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 289,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 294,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 295,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 296,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 298,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 301,
+        "leaves": 1
+      }
+    ],
+    "arena": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 11760 bytes: control 648, expansion shared, forces shared tile 512, particle tile 224 (without mass plane), multipole tile 16 x 160 bytes; list slab 145792 bytes per block (4096 entries per list)",
+    "occupancy": null,
+    "binary": "head",
+    "policy": "auto",
+    "backend": "cuda",
+    "bucket": 512,
+    "order": 7,
+    "pair": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "1-2",
+      "/home/dmarce1/workspace/cosmictiger/.claude/worktrees/mystifying-carson-b3856a/build/release/frozen/cosmictiger_b1024_head_da3c1f4e",
+      "--run.test=stfBenchmark",
+      "--initial.particlesPerDimension=32",
+      "--hydro.enabled=false",
+      "--gravity.openingAngle=0.8",
+      "--gravity.effectiveRadius=0.01876988456953534",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--hpx:threads=2",
+      "--hpx:bind=none",
+      "--analysis.views=false",
+      "--analysis.power=false",
+      "--analysis.groups=false",
+      "--lightcone.enabled=false",
+      "--compute.cuda=true",
+      "--compute.bucketSize=512",
+      "--gravity.fmmOrder=7"
+    ],
+    "cwd": "docs/cuda_kick_shared_memory_results/pc_shared_records/variants/runs/head_auto_cuda_b512_o7_pair0",
+    "wall_seconds": 1.4158046270022169,
+    "force_csv": "docs/cuda_kick_shared_memory_results/pc_shared_records/variants/runs/head_auto_cuda_b512_o7_pair0/stf_walk_forces.csv",
+    "force_csv_sha256": "8bd8171c7cdf9754197ef23beee4654737c24d033da867bea011c1e65bedc225"
+  },
+  {
+    "medians": [
+      {
+        "fixture": "lattice",
+        "backend": "cuda",
+        "potential": false,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000176542,
+        "tree_seconds": 0.002394736,
+        "kick_seconds": 0.014670824,
+        "total_seconds": 0.01706556,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cuda",
+        "potential": true,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000174828,
+        "tree_seconds": 0.001908944,
+        "kick_seconds": 0.014839791,
+        "total_seconds": 0.016748735,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cuda",
+        "potential": false,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000173976,
+        "tree_seconds": 0.002725628,
+        "kick_seconds": 0.005436477,
+        "total_seconds": 0.008162105,
+        "position_hash": "9330035828812934027"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cuda",
+        "potential": true,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000174217,
+        "tree_seconds": 0.002729574,
+        "kick_seconds": 0.005857768,
+        "total_seconds": 0.008587342,
+        "position_hash": "9330035828812934027"
+      },
+      {
+        "fixture": "adaptive",
+        "backend": "cuda",
+        "potential": false,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000415399,
+        "tree_seconds": 0.002949287,
+        "kick_seconds": 0.012152476,
+        "total_seconds": 0.015101763,
+        "position_hash": "10382969522388005973"
+      },
+      {
+        "fixture": "adaptive",
+        "backend": "cuda",
+        "potential": true,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000174087,
+        "tree_seconds": 0.002903371,
+        "kick_seconds": 0.012081563,
+        "total_seconds": 0.014984934,
+        "position_hash": "10382969522388005973"
+      }
+    ],
+    "samples": [
+      {
+        "fixture": "lattice",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.002394736,
+        "kick_seconds": 0.014670824,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "lattice",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.001908944,
+        "kick_seconds": 0.014839791,
+        "total_potential": 1452162.20703125
+      },
+      {
+        "fixture": "clustered",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.002725628,
+        "kick_seconds": 0.005436477,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "clustered",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.002729574,
+        "kick_seconds": 0.005857768,
+        "total_potential": -174641336.25
+      },
+      {
+        "fixture": "adaptive",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.002949287,
+        "kick_seconds": 0.012152476,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "adaptive",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.002903371,
+        "kick_seconds": 0.012081563,
+        "total_potential": -2308725466.093689
+      }
+    ],
+    "references": [],
+    "leaf_histogram": [
+      {
+        "fixture": "lattice",
+        "depth": 9,
+        "particles": 64,
+        "leaves": 512
+      },
+      {
+        "fixture": "clustered",
+        "depth": 12,
+        "particles": 64,
+        "leaves": 512
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 7,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 8,
+        "leaves": 23
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 9,
+        "leaves": 28
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 10,
+        "leaves": 47
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 11,
+        "leaves": 47
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 12,
+        "leaves": 28
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 13,
+        "leaves": 6
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 14,
+        "leaves": 40
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 15,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 16,
+        "leaves": 42
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 17,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 18,
+        "leaves": 10
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 19,
+        "leaves": 38
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 20,
+        "leaves": 50
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 21,
+        "leaves": 16
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 22,
+        "leaves": 25
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 23,
+        "leaves": 63
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 24,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 4,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 5,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 9,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 1,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 3,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 5,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 7,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 8,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 1,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 2,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 3,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 4,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 17,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 21,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 22,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 23,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 24,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 25,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 26,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 27,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 28,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 29,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 30,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 32,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 33,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 36,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 37,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 38,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 39,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 40,
+        "leaves": 5
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 41,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 42,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 43,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 44,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 45,
+        "leaves": 6
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 46,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 47,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 48,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 49,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 50,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 51,
+        "leaves": 18
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 52,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 53,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 54,
+        "leaves": 25
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 55,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 56,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 57,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 58,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 59,
+        "leaves": 13
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 60,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 61,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 62,
+        "leaves": 18
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 63,
+        "leaves": 18
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 64,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 19,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 21,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 22,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 23,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 24,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 25,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 26,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 27,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 28,
+        "leaves": 20
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 29,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 30,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 31,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 32,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 33,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 34,
+        "leaves": 15
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 35,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 36,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 37,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 38,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 39,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 40,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 41,
+        "leaves": 13
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 42,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 43,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 44,
+        "leaves": 10
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 45,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 46,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 47,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 48,
+        "leaves": 10
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 49,
+        "leaves": 8
+      }
+    ],
+    "arena": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 8048 bytes: control 648, expansion shared, forces shared tile 64, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes; list slab 145792 bytes per block (4096 entries per list)",
+    "occupancy": null,
+    "binary": "registers",
+    "policy": "auto",
+    "backend": "cuda",
+    "bucket": 64,
+    "order": 7,
+    "pair": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "1-2",
+      "/home/dmarce1/workspace/cosmictiger/.claude/worktrees/mystifying-carson-b3856a/build/release/frozen/cosmictiger_b1024_pc_shared",
+      "--run.test=stfBenchmark",
+      "--initial.particlesPerDimension=32",
+      "--hydro.enabled=false",
+      "--gravity.openingAngle=0.8",
+      "--gravity.effectiveRadius=0.01876988456953534",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--hpx:threads=2",
+      "--hpx:bind=none",
+      "--analysis.views=false",
+      "--analysis.power=false",
+      "--analysis.groups=false",
+      "--lightcone.enabled=false",
+      "--compute.cuda=true",
+      "--compute.bucketSize=64",
+      "--gravity.fmmOrder=7"
+    ],
+    "cwd": "docs/cuda_kick_shared_memory_results/pc_shared_records/variants/runs/registers_auto_cuda_b64_o7_pair0",
+    "wall_seconds": 1.3156553370063193,
+    "force_csv": "docs/cuda_kick_shared_memory_results/pc_shared_records/variants/runs/registers_auto_cuda_b64_o7_pair0/stf_walk_forces.csv",
+    "force_csv_sha256": "dd5bd14c2efc09a88a606e4ab9d6b9d9af7f975adaf3d5b9e811ffb5b69d7e80"
+  },
+  {
+    "medians": [
+      {
+        "fixture": "lattice",
+        "backend": "cuda",
+        "potential": false,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.00042083,
+        "tree_seconds": 0.001980929,
+        "kick_seconds": 0.010331658,
+        "total_seconds": 0.012312587,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cuda",
+        "potential": true,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000174638,
+        "tree_seconds": 0.002050419,
+        "kick_seconds": 0.012297258,
+        "total_seconds": 0.014347677,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cuda",
+        "potential": false,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000406984,
+        "tree_seconds": 0.002101134,
+        "kick_seconds": 0.005887474,
+        "total_seconds": 0.007988608,
+        "position_hash": "9330035828812934027"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cuda",
+        "potential": true,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000173365,
+        "tree_seconds": 0.001878376,
+        "kick_seconds": 0.007649302,
+        "total_seconds": 0.009527678,
+        "position_hash": "9330035828812934027"
+      },
+      {
+        "fixture": "adaptive",
+        "backend": "cuda",
+        "potential": false,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000411563,
+        "tree_seconds": 0.00216771,
+        "kick_seconds": 0.030692365,
+        "total_seconds": 0.032860075,
+        "position_hash": "10382969522388005973"
+      },
+      {
+        "fixture": "adaptive",
+        "backend": "cuda",
+        "potential": true,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000173266,
+        "tree_seconds": 0.002168612,
+        "kick_seconds": 0.029372526,
+        "total_seconds": 0.031541138,
+        "position_hash": "10382969522388005973"
+      }
+    ],
+    "samples": [
+      {
+        "fixture": "lattice",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.001980929,
+        "kick_seconds": 0.010331658,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "lattice",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.002050419,
+        "kick_seconds": 0.012297258,
+        "total_potential": 1452147.4982910156
+      },
+      {
+        "fixture": "clustered",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.002101134,
+        "kick_seconds": 0.005887474,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "clustered",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.001878376,
+        "kick_seconds": 0.007649302,
+        "total_potential": -174643612.75
+      },
+      {
+        "fixture": "adaptive",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.00216771,
+        "kick_seconds": 0.030692365,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "adaptive",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.002168612,
+        "kick_seconds": 0.029372526,
+        "total_potential": -2308739099.470215
+      }
+    ],
+    "references": [],
+    "leaf_histogram": [
+      {
+        "fixture": "lattice",
+        "depth": 9,
+        "particles": 64,
+        "leaves": 512
+      },
+      {
+        "fixture": "clustered",
+        "depth": 9,
+        "particles": 512,
+        "leaves": 64
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 7,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 8,
+        "leaves": 23
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 9,
+        "leaves": 28
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 10,
+        "leaves": 47
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 11,
+        "leaves": 47
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 12,
+        "leaves": 28
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 13,
+        "leaves": 6
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 14,
+        "leaves": 40
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 15,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 16,
+        "leaves": 42
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 17,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 18,
+        "leaves": 10
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 19,
+        "leaves": 38
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 20,
+        "leaves": 50
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 21,
+        "leaves": 16
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 22,
+        "leaves": 25
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 23,
+        "leaves": 63
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 24,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 4,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 5,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 9,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 1,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 3,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 5,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 7,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 8,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 1,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 2,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 3,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 4,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 310,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 322,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 324,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 329,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 332,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 358,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 367,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 369,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 371,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 385,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 407,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 408,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 409,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 411,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 412,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 421,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 427,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 429,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 430,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 442,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 447,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 456,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 462,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 467,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 475,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 478,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 480,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 482,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 485,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 495,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 498,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 500,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 503,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 504,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 506,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 234,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 236,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 238,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 241,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 243,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 245,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 246,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 249,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 253,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 284,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 286,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 287,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 289,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 294,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 295,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 296,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 298,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 301,
+        "leaves": 1
+      }
+    ],
+    "arena": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 11760 bytes: control 648, expansion shared, forces shared tile 512, particle tile 224 (without mass plane), multipole tile 16 x 160 bytes; list slab 145792 bytes per block (4096 entries per list)",
+    "occupancy": null,
+    "binary": "registers",
+    "policy": "auto",
+    "backend": "cuda",
+    "bucket": 512,
+    "order": 7,
+    "pair": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "1-2",
+      "/home/dmarce1/workspace/cosmictiger/.claude/worktrees/mystifying-carson-b3856a/build/release/frozen/cosmictiger_b1024_pc_shared",
+      "--run.test=stfBenchmark",
+      "--initial.particlesPerDimension=32",
+      "--hydro.enabled=false",
+      "--gravity.openingAngle=0.8",
+      "--gravity.effectiveRadius=0.01876988456953534",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--hpx:threads=2",
+      "--hpx:bind=none",
+      "--analysis.views=false",
+      "--analysis.power=false",
+      "--analysis.groups=false",
+      "--lightcone.enabled=false",
+      "--compute.cuda=true",
+      "--compute.bucketSize=512",
+      "--gravity.fmmOrder=7"
+    ],
+    "cwd": "docs/cuda_kick_shared_memory_results/pc_shared_records/variants/runs/registers_auto_cuda_b512_o7_pair0",
+    "wall_seconds": 1.4157688980048988,
+    "force_csv": "docs/cuda_kick_shared_memory_results/pc_shared_records/variants/runs/registers_auto_cuda_b512_o7_pair0/stf_walk_forces.csv",
+    "force_csv_sha256": "cfccbffcb0ece6aab40c01dd5462e60574f66d5ce0ffd0d056e4282bca8d6a9b"
+  },
+  {
+    "medians": [
+      {
+        "fixture": "lattice",
+        "backend": "cuda",
+        "potential": false,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000403798,
+        "tree_seconds": 0.002280191,
+        "kick_seconds": 0.014697965,
+        "total_seconds": 0.016978156,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cuda",
+        "potential": true,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000182924,
+        "tree_seconds": 0.001956313,
+        "kick_seconds": 0.014978653,
+        "total_seconds": 0.016934966,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cuda",
+        "potential": false,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000408487,
+        "tree_seconds": 0.002814734,
+        "kick_seconds": 0.005728755,
+        "total_seconds": 0.008543489,
+        "position_hash": "9330035828812934027"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cuda",
+        "potential": true,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000174187,
+        "tree_seconds": 0.002650216,
+        "kick_seconds": 0.005894677,
+        "total_seconds": 0.008544893,
+        "position_hash": "9330035828812934027"
+      },
+      {
+        "fixture": "adaptive",
+        "backend": "cuda",
+        "potential": false,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000413867,
+        "tree_seconds": 0.002959276,
+        "kick_seconds": 0.012331562,
+        "total_seconds": 0.015290838,
+        "position_hash": "10382969522388005973"
+      },
+      {
+        "fixture": "adaptive",
+        "backend": "cuda",
+        "potential": true,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000184075,
+        "tree_seconds": 0.00291863,
+        "kick_seconds": 0.012377228,
+        "total_seconds": 0.015295858,
+        "position_hash": "10382969522388005973"
+      }
+    ],
+    "samples": [
+      {
+        "fixture": "lattice",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.002280191,
+        "kick_seconds": 0.014697965,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "lattice",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.001956313,
+        "kick_seconds": 0.014978653,
+        "total_potential": 1452162.2075195312
+      },
+      {
+        "fixture": "clustered",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.002814734,
+        "kick_seconds": 0.005728755,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "clustered",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.002650216,
+        "kick_seconds": 0.005894677,
+        "total_potential": -174641336.25
+      },
+      {
+        "fixture": "adaptive",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.002959276,
+        "kick_seconds": 0.012331562,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "adaptive",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.00291863,
+        "kick_seconds": 0.012377228,
+        "total_potential": -2308725466.107361
+      }
+    ],
+    "references": [],
+    "leaf_histogram": [
+      {
+        "fixture": "lattice",
+        "depth": 9,
+        "particles": 64,
+        "leaves": 512
+      },
+      {
+        "fixture": "clustered",
+        "depth": 12,
+        "particles": 64,
+        "leaves": 512
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 7,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 8,
+        "leaves": 23
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 9,
+        "leaves": 28
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 10,
+        "leaves": 47
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 11,
+        "leaves": 47
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 12,
+        "leaves": 28
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 13,
+        "leaves": 6
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 14,
+        "leaves": 40
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 15,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 16,
+        "leaves": 42
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 17,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 18,
+        "leaves": 10
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 19,
+        "leaves": 38
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 20,
+        "leaves": 50
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 21,
+        "leaves": 16
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 22,
+        "leaves": 25
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 23,
+        "leaves": 63
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 24,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 4,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 5,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 9,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 1,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 3,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 5,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 7,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 8,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 1,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 2,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 3,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 4,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 17,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 21,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 22,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 23,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 24,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 25,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 26,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 27,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 28,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 29,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 30,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 32,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 33,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 36,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 37,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 38,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 39,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 40,
+        "leaves": 5
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 41,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 42,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 43,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 44,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 45,
+        "leaves": 6
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 46,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 47,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 48,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 49,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 50,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 51,
+        "leaves": 18
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 52,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 53,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 54,
+        "leaves": 25
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 55,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 56,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 57,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 58,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 59,
+        "leaves": 13
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 60,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 61,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 62,
+        "leaves": 18
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 63,
+        "leaves": 18
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 64,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 19,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 21,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 22,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 23,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 24,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 25,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 26,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 27,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 28,
+        "leaves": 20
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 29,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 30,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 31,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 32,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 33,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 34,
+        "leaves": 15
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 35,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 36,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 37,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 38,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 39,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 40,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 41,
+        "leaves": 13
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 42,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 43,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 44,
+        "leaves": 10
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 45,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 46,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 47,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 48,
+        "leaves": 10
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 49,
+        "leaves": 8
+      }
+    ],
+    "arena": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 8048 bytes: control 648, expansion shared, forces shared tile 64, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes; list slab 145792 bytes per block (4096 entries per list)",
+    "occupancy": null,
+    "binary": "scalar",
+    "policy": "auto",
+    "backend": "cuda",
+    "bucket": 64,
+    "order": 7,
+    "pair": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "1-2",
+      "/home/dmarce1/workspace/cosmictiger/.claude/worktrees/mystifying-carson-b3856a/build/release/frozen/cosmictiger_b1024_pc_shared_a",
+      "--run.test=stfBenchmark",
+      "--initial.particlesPerDimension=32",
+      "--hydro.enabled=false",
+      "--gravity.openingAngle=0.8",
+      "--gravity.effectiveRadius=0.01876988456953534",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--hpx:threads=2",
+      "--hpx:bind=none",
+      "--analysis.views=false",
+      "--analysis.power=false",
+      "--analysis.groups=false",
+      "--lightcone.enabled=false",
+      "--compute.cuda=true",
+      "--compute.bucketSize=64",
+      "--gravity.fmmOrder=7"
+    ],
+    "cwd": "docs/cuda_kick_shared_memory_results/pc_shared_records/variants/runs/scalar_auto_cuda_b64_o7_pair0",
+    "wall_seconds": 1.3156458559969906,
+    "force_csv": "docs/cuda_kick_shared_memory_results/pc_shared_records/variants/runs/scalar_auto_cuda_b64_o7_pair0/stf_walk_forces.csv",
+    "force_csv_sha256": "6c00b674dcbb2238c90c4fa1a2c0fbc360e132b8e2b91d728687c3e6d76be453"
+  },
+  {
+    "medians": [
+      {
+        "fixture": "lattice",
+        "backend": "cuda",
+        "potential": false,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000406764,
+        "tree_seconds": 0.002001639,
+        "kick_seconds": 0.010380139,
+        "total_seconds": 0.012381778,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cuda",
+        "potential": true,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000173936,
+        "tree_seconds": 0.00202385,
+        "kick_seconds": 0.012251111,
+        "total_seconds": 0.014274961,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cuda",
+        "potential": false,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000415049,
+        "tree_seconds": 0.002013059,
+        "kick_seconds": 0.005804568,
+        "total_seconds": 0.007817627,
+        "position_hash": "9330035828812934027"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cuda",
+        "potential": true,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000172995,
+        "tree_seconds": 0.002008191,
+        "kick_seconds": 0.007240654,
+        "total_seconds": 0.009248845,
+        "position_hash": "9330035828812934027"
+      },
+      {
+        "fixture": "adaptive",
+        "backend": "cuda",
+        "potential": false,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000409278,
+        "tree_seconds": 0.002118467,
+        "kick_seconds": 0.02950715,
+        "total_seconds": 0.031625617,
+        "position_hash": "10382969522388005973"
+      },
+      {
+        "fixture": "adaptive",
+        "backend": "cuda",
+        "potential": true,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000173185,
+        "tree_seconds": 0.002104552,
+        "kick_seconds": 0.031563851,
+        "total_seconds": 0.033668403,
+        "position_hash": "10382969522388005973"
+      }
+    ],
+    "samples": [
+      {
+        "fixture": "lattice",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.002001639,
+        "kick_seconds": 0.010380139,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "lattice",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.00202385,
+        "kick_seconds": 0.012251111,
+        "total_potential": 1452147.4973144531
+      },
+      {
+        "fixture": "clustered",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.002013059,
+        "kick_seconds": 0.005804568,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "clustered",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.002008191,
+        "kick_seconds": 0.007240654,
+        "total_potential": -174643612.75
+      },
+      {
+        "fixture": "adaptive",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.002118467,
+        "kick_seconds": 0.02950715,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "adaptive",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.002104552,
+        "kick_seconds": 0.031563851,
+        "total_potential": -2308739099.486328
+      }
+    ],
+    "references": [],
+    "leaf_histogram": [
+      {
+        "fixture": "lattice",
+        "depth": 9,
+        "particles": 64,
+        "leaves": 512
+      },
+      {
+        "fixture": "clustered",
+        "depth": 9,
+        "particles": 512,
+        "leaves": 64
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 7,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 8,
+        "leaves": 23
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 9,
+        "leaves": 28
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 10,
+        "leaves": 47
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 11,
+        "leaves": 47
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 12,
+        "leaves": 28
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 13,
+        "leaves": 6
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 14,
+        "leaves": 40
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 15,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 16,
+        "leaves": 42
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 17,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 18,
+        "leaves": 10
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 19,
+        "leaves": 38
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 20,
+        "leaves": 50
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 21,
+        "leaves": 16
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 22,
+        "leaves": 25
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 23,
+        "leaves": 63
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 24,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 4,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 5,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 9,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 1,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 3,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 5,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 7,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 8,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 1,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 2,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 3,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 4,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 310,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 322,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 324,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 329,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 332,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 358,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 367,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 369,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 371,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 385,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 407,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 408,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 409,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 411,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 412,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 421,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 427,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 429,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 430,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 442,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 447,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 456,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 462,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 467,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 475,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 478,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 480,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 482,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 485,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 495,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 498,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 500,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 503,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 504,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 506,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 234,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 236,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 238,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 241,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 243,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 245,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 246,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 249,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 253,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 284,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 286,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 287,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 289,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 294,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 295,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 296,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 298,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 301,
+        "leaves": 1
+      }
+    ],
+    "arena": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 11760 bytes: control 648, expansion shared, forces shared tile 512, particle tile 224 (without mass plane), multipole tile 16 x 160 bytes; list slab 145792 bytes per block (4096 entries per list)",
+    "occupancy": null,
+    "binary": "scalar",
+    "policy": "auto",
+    "backend": "cuda",
+    "bucket": 512,
+    "order": 7,
+    "pair": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "1-2",
+      "/home/dmarce1/workspace/cosmictiger/.claude/worktrees/mystifying-carson-b3856a/build/release/frozen/cosmictiger_b1024_pc_shared_a",
+      "--run.test=stfBenchmark",
+      "--initial.particlesPerDimension=32",
+      "--hydro.enabled=false",
+      "--gravity.openingAngle=0.8",
+      "--gravity.effectiveRadius=0.01876988456953534",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--hpx:threads=2",
+      "--hpx:bind=none",
+      "--analysis.views=false",
+      "--analysis.power=false",
+      "--analysis.groups=false",
+      "--lightcone.enabled=false",
+      "--compute.cuda=true",
+      "--compute.bucketSize=512",
+      "--gravity.fmmOrder=7"
+    ],
+    "cwd": "docs/cuda_kick_shared_memory_results/pc_shared_records/variants/runs/scalar_auto_cuda_b512_o7_pair0",
+    "wall_seconds": 1.4660519909957657,
+    "force_csv": "docs/cuda_kick_shared_memory_results/pc_shared_records/variants/runs/scalar_auto_cuda_b512_o7_pair0/stf_walk_forces.csv",
+    "force_csv_sha256": "8bd8171c7cdf9754197ef23beee4654737c24d033da867bea011c1e65bedc225"
+  },
+  {
+    "medians": [
+      {
+        "fixture": "lattice",
+        "backend": "cuda",
+        "potential": false,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000409679,
+        "tree_seconds": 0.00195997,
+        "kick_seconds": 0.01543037,
+        "total_seconds": 0.01739034,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cuda",
+        "potential": true,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000174628,
+        "tree_seconds": 0.001920956,
+        "kick_seconds": 0.014938998,
+        "total_seconds": 0.016859954,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cuda",
+        "potential": false,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000407796,
+        "tree_seconds": 0.002907128,
+        "kick_seconds": 0.005995347,
+        "total_seconds": 0.008902475,
+        "position_hash": "9330035828812934027"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cuda",
+        "potential": true,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000180258,
+        "tree_seconds": 0.002690101,
+        "kick_seconds": 0.005990558,
+        "total_seconds": 0.008680659,
+        "position_hash": "9330035828812934027"
+      },
+      {
+        "fixture": "adaptive",
+        "backend": "cuda",
+        "potential": false,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000412494,
+        "tree_seconds": 0.002890085,
+        "kick_seconds": 0.012398709,
+        "total_seconds": 0.015288794,
+        "position_hash": "10382969522388005973"
+      },
+      {
+        "fixture": "adaptive",
+        "backend": "cuda",
+        "potential": true,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000176512,
+        "tree_seconds": 0.002931443,
+        "kick_seconds": 0.0120424,
+        "total_seconds": 0.014973843,
+        "position_hash": "10382969522388005973"
+      }
+    ],
+    "samples": [
+      {
+        "fixture": "lattice",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.00195997,
+        "kick_seconds": 0.01543037,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "lattice",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.001920956,
+        "kick_seconds": 0.014938998,
+        "total_potential": 1452162.2075195312
+      },
+      {
+        "fixture": "clustered",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.002907128,
+        "kick_seconds": 0.005995347,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "clustered",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.002690101,
+        "kick_seconds": 0.005990558,
+        "total_potential": -174641336.25
+      },
+      {
+        "fixture": "adaptive",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.002890085,
+        "kick_seconds": 0.012398709,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "adaptive",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.002931443,
+        "kick_seconds": 0.0120424,
+        "total_potential": -2308725466.107361
+      }
+    ],
+    "references": [],
+    "leaf_histogram": [
+      {
+        "fixture": "lattice",
+        "depth": 9,
+        "particles": 64,
+        "leaves": 512
+      },
+      {
+        "fixture": "clustered",
+        "depth": 12,
+        "particles": 64,
+        "leaves": 512
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 7,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 8,
+        "leaves": 23
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 9,
+        "leaves": 28
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 10,
+        "leaves": 47
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 11,
+        "leaves": 47
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 12,
+        "leaves": 28
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 13,
+        "leaves": 6
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 14,
+        "leaves": 40
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 15,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 16,
+        "leaves": 42
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 17,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 18,
+        "leaves": 10
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 19,
+        "leaves": 38
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 20,
+        "leaves": 50
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 21,
+        "leaves": 16
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 22,
+        "leaves": 25
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 23,
+        "leaves": 63
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 24,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 4,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 5,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 9,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 1,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 3,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 5,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 7,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 8,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 1,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 2,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 3,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 4,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 17,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 21,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 22,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 23,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 24,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 25,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 26,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 27,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 28,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 29,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 30,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 32,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 33,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 36,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 37,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 38,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 39,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 40,
+        "leaves": 5
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 41,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 42,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 43,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 44,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 45,
+        "leaves": 6
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 46,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 47,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 48,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 49,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 50,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 51,
+        "leaves": 18
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 52,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 53,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 54,
+        "leaves": 25
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 55,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 56,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 57,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 58,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 59,
+        "leaves": 13
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 60,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 61,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 62,
+        "leaves": 18
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 63,
+        "leaves": 18
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 16,
+        "particles": 64,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 19,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 21,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 22,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 23,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 24,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 25,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 26,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 27,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 28,
+        "leaves": 20
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 29,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 30,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 31,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 32,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 33,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 34,
+        "leaves": 15
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 35,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 36,
+        "leaves": 14
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 37,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 38,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 39,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 40,
+        "leaves": 12
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 41,
+        "leaves": 13
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 42,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 43,
+        "leaves": 7
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 44,
+        "leaves": 10
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 45,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 46,
+        "leaves": 8
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 47,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 48,
+        "leaves": 10
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 17,
+        "particles": 49,
+        "leaves": 8
+      }
+    ],
+    "arena": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 8048 bytes: control 648, expansion shared, forces shared tile 64, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes; list slab 145792 bytes per block (4096 entries per list)",
+    "occupancy": null,
+    "binary": "aligned",
+    "policy": "auto",
+    "backend": "cuda",
+    "bucket": 64,
+    "order": 7,
+    "pair": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "1-2",
+      "/home/dmarce1/workspace/cosmictiger/.claude/worktrees/mystifying-carson-b3856a/build/release/frozen/cosmictiger_b1024_pc_shared_c",
+      "--run.test=stfBenchmark",
+      "--initial.particlesPerDimension=32",
+      "--hydro.enabled=false",
+      "--gravity.openingAngle=0.8",
+      "--gravity.effectiveRadius=0.01876988456953534",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--hpx:threads=2",
+      "--hpx:bind=none",
+      "--analysis.views=false",
+      "--analysis.power=false",
+      "--analysis.groups=false",
+      "--lightcone.enabled=false",
+      "--compute.cuda=true",
+      "--compute.bucketSize=64",
+      "--gravity.fmmOrder=7"
+    ],
+    "cwd": "docs/cuda_kick_shared_memory_results/pc_shared_records/variants/runs/aligned_auto_cuda_b64_o7_pair0",
+    "wall_seconds": 1.315909886994632,
+    "force_csv": "docs/cuda_kick_shared_memory_results/pc_shared_records/variants/runs/aligned_auto_cuda_b64_o7_pair0/stf_walk_forces.csv",
+    "force_csv_sha256": "6c00b674dcbb2238c90c4fa1a2c0fbc360e132b8e2b91d728687c3e6d76be453"
+  },
+  {
+    "medians": [
+      {
+        "fixture": "lattice",
+        "backend": "cuda",
+        "potential": false,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.00040463,
+        "tree_seconds": 0.002006947,
+        "kick_seconds": 0.010457023,
+        "total_seconds": 0.01246397,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "lattice",
+        "backend": "cuda",
+        "potential": true,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000173916,
+        "tree_seconds": 0.002048866,
+        "kick_seconds": 0.011392179,
+        "total_seconds": 0.013441045,
+        "position_hash": "11269758616088069014"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cuda",
+        "potential": false,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000414208,
+        "tree_seconds": 0.002222102,
+        "kick_seconds": 0.00589035,
+        "total_seconds": 0.008112452,
+        "position_hash": "9330035828812934027"
+      },
+      {
+        "fixture": "clustered",
+        "backend": "cuda",
+        "potential": true,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000180419,
+        "tree_seconds": 0.002036634,
+        "kick_seconds": 0.00706754,
+        "total_seconds": 0.009104174,
+        "position_hash": "9330035828812934027"
+      },
+      {
+        "fixture": "adaptive",
+        "backend": "cuda",
+        "potential": false,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000422053,
+        "tree_seconds": 0.0022258,
+        "kick_seconds": 0.031411105,
+        "total_seconds": 0.033636905,
+        "position_hash": "10382969522388005973"
+      },
+      {
+        "fixture": "adaptive",
+        "backend": "cuda",
+        "potential": true,
+        "samples": 1,
+        "particles": 32768,
+        "reset_seconds": 0.000172924,
+        "tree_seconds": 0.00219958,
+        "kick_seconds": 0.029247312,
+        "total_seconds": 0.031446892,
+        "position_hash": "10382969522388005973"
+      }
+    ],
+    "samples": [
+      {
+        "fixture": "lattice",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.002006947,
+        "kick_seconds": 0.010457023,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "lattice",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.002048866,
+        "kick_seconds": 0.011392179,
+        "total_potential": 1452147.4973144531
+      },
+      {
+        "fixture": "clustered",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.002222102,
+        "kick_seconds": 0.00589035,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "clustered",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.002036634,
+        "kick_seconds": 0.00706754,
+        "total_potential": -174643612.75
+      },
+      {
+        "fixture": "adaptive",
+        "potential": false,
+        "sample": 0,
+        "tree_seconds": 0.0022258,
+        "kick_seconds": 0.031411105,
+        "total_potential": 0.0
+      },
+      {
+        "fixture": "adaptive",
+        "potential": true,
+        "sample": 0,
+        "tree_seconds": 0.00219958,
+        "kick_seconds": 0.029247312,
+        "total_potential": -2308739099.486328
+      }
+    ],
+    "references": [],
+    "leaf_histogram": [
+      {
+        "fixture": "lattice",
+        "depth": 9,
+        "particles": 64,
+        "leaves": 512
+      },
+      {
+        "fixture": "clustered",
+        "depth": 9,
+        "particles": 512,
+        "leaves": 64
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 7,
+        "leaves": 4
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 8,
+        "leaves": 23
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 9,
+        "leaves": 28
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 10,
+        "leaves": 47
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 11,
+        "leaves": 47
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 12,
+        "leaves": 28
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 13,
+        "leaves": 6
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 14,
+        "leaves": 40
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 15,
+        "leaves": 11
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 16,
+        "leaves": 42
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 17,
+        "leaves": 9
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 18,
+        "leaves": 10
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 19,
+        "leaves": 38
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 20,
+        "leaves": 50
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 21,
+        "leaves": 16
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 22,
+        "leaves": 25
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 23,
+        "leaves": 63
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 9,
+        "particles": 24,
+        "leaves": 17
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 4,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 5,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 10,
+        "particles": 9,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 1,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 3,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 5,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 7,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 11,
+        "particles": 8,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 1,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 2,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 3,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 12,
+        "particles": 4,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 310,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 322,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 324,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 329,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 332,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 358,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 367,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 369,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 371,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 385,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 407,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 408,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 409,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 411,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 412,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 421,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 427,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 429,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 430,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 442,
+        "leaves": 3
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 447,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 456,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 462,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 467,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 475,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 478,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 480,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 482,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 485,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 495,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 498,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 500,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 503,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 504,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 13,
+        "particles": 506,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 234,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 236,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 238,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 241,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 243,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 245,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 246,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 249,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 253,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 284,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 286,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 287,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 289,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 294,
+        "leaves": 1
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 295,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 296,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 298,
+        "leaves": 2
+      },
+      {
+        "fixture": "adaptive",
+        "depth": 14,
+        "particles": 301,
+        "leaves": 1
+      }
+    ],
+    "arena": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 11760 bytes: control 648, expansion shared, forces shared tile 512, particle tile 224 (without mass plane), multipole tile 16 x 160 bytes; list slab 145792 bytes per block (4096 entries per list)",
+    "occupancy": null,
+    "binary": "aligned",
+    "policy": "auto",
+    "backend": "cuda",
+    "bucket": 512,
+    "order": 7,
+    "pair": 0,
+    "command": [
+      "taskset",
+      "-c",
+      "1-2",
+      "/home/dmarce1/workspace/cosmictiger/.claude/worktrees/mystifying-carson-b3856a/build/release/frozen/cosmictiger_b1024_pc_shared_c",
+      "--run.test=stfBenchmark",
+      "--initial.particlesPerDimension=32",
+      "--hydro.enabled=false",
+      "--gravity.openingAngle=0.8",
+      "--gravity.effectiveRadius=0.01876988456953534",
+      "--gravity.kernelFamily=ferrers",
+      "--gravity.kernelDegree=4",
+      "--hpx:threads=2",
+      "--hpx:bind=none",
+      "--analysis.views=false",
+      "--analysis.power=false",
+      "--analysis.groups=false",
+      "--lightcone.enabled=false",
+      "--compute.cuda=true",
+      "--compute.bucketSize=512",
+      "--gravity.fmmOrder=7"
+    ],
+    "cwd": "docs/cuda_kick_shared_memory_results/pc_shared_records/variants/runs/aligned_auto_cuda_b512_o7_pair0",
+    "wall_seconds": 1.3662485870008823,
+    "force_csv": "docs/cuda_kick_shared_memory_results/pc_shared_records/variants/runs/aligned_auto_cuda_b512_o7_pair0/stf_walk_forces.csv",
+    "force_csv_sha256": "8bd8171c7cdf9754197ef23beee4654737c24d033da867bea011c1e65bedc225"
+  }
+]

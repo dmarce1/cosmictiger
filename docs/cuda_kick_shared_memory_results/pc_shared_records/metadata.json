@@ -1,0 +1,53 @@
+{
+  "utc": "2026-10-20T08:31:04.954417+00:00",
+  "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+  "command": "benchmarks/run_cuda_kick_arena.py --binary head=build/release/frozen/cosmictiger_b1024_head_da3c1f4e:arena --binary shared=build/release/frozen/cosmictiger_b1024_pc_shared:arena --policy auto= --output docs/cuda_kick_shared_memory_results/pc_shared_records --fixtures lattice,clustered,adaptive --buckets 64,512 --orders 7 --pairs 5 --samples 15 --reference 1024 --timeout 1800 --idle-wait 'ninja|ncu|nsys|cc1plus|cicc|ptxas' --wait-gpu-idle",
+  "binaries": [
+    {
+      "label": "head",
+      "path": "/home/dmarce1/workspace/cosmictiger/.claude/worktrees/mystifying-carson-b3856a/build/release/frozen/cosmictiger_b1024_head_da3c1f4e",
+      "arena": true,
+      "sha256": "12bdb0c6d834605eb5bd6520af4409aceecdc14e67f839053f688d2c6a513c0a"
+    },
+    {
+      "label": "shared",
+      "path": "/home/dmarce1/workspace/cosmictiger/.claude/worktrees/mystifying-carson-b3856a/build/release/frozen/cosmictiger_b1024_pc_shared",
+      "arena": true,
+      "sha256": "3c5887b702a4694d3d32c0fc0eefbb86c533239e9595f55ec01295428e660385"
+    }
+  ],
+  "policies": [
+    {
+      "label": "auto",
+      "options": []
+    }
+  ],
+  "fixtures": [
+    "lattice",
+    "clustered",
+    "adaptive"
+  ],
+  "buckets": [
+    64,
+    512
+  ],
+  "orders": [
+    7
+  ],
+  "backends": [
+    "cuda"
+  ],
+  "samples": 15,
+  "pairs": 5,
+  "reference": 1024,
+  "threads": 2,
+  "cpus": "1-2",
+  "particles_per_dimension": 32,
+  "git_head": "da3c1f4e9a3362d15b41e6e2cc7674cebb19c424",
+  "nvidia_smi": "name, driver_version, clocks.current.sm [MHz], clocks.current.memory [MHz], utilization.gpu [%], memory.used [MiB]\nNVIDIA GeForce RTX 3090, 595.99.02, 1695 MHz, 9501 MHz, 19 %, 4299 MiB\n",
+  "load_average": [
+    0.79443359375,
+    1.5615234375,
+    3.876953125
+  ]
+}

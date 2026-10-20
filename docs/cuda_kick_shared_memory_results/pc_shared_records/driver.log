@@ -1,0 +1,63 @@
+03:31:03 quiet for 60 s (load 0.79); taking the GPU lock
+2026-10-20T03:31:03-05:00 GPU lock acquired for ctest, load 0.79
+2026-10-20T03:31:04-05:00 ctest exit 0 (100% tests passed, 0 tests failed out of 2)
+2026-10-20T03:31:04-05:00 GPU lock acquired, load 0.79
+head_auto_cuda_b64_o7_pair0: lattice/phi=0 14.886 ms, lattice/phi=1 15.114 ms, clustered/phi=0 5.773 ms, clustered/phi=1 5.763 ms, adaptive/phi=0 12.314 ms, adaptive/phi=1 12.324 ms
+head_auto_cuda_b512_o7_pair0: lattice/phi=0 9.126 ms, lattice/phi=1 9.533 ms, clustered/phi=0 5.494 ms, clustered/phi=1 6.096 ms, adaptive/phi=0 25.743 ms, adaptive/phi=1 26.227 ms
+shared_auto_cuda_b64_o7_pair0: lattice/phi=0 14.632 ms, lattice/phi=1 14.676 ms, clustered/phi=0 5.482 ms, clustered/phi=1 5.756 ms, adaptive/phi=0 12.325 ms, adaptive/phi=1 12.413 ms
+shared_auto_cuda_b512_o7_pair0: lattice/phi=0 9.161 ms, lattice/phi=1 9.755 ms, clustered/phi=0 5.741 ms, clustered/phi=1 6.275 ms, adaptive/phi=0 25.732 ms, adaptive/phi=1 26.657 ms
+shared_auto_cuda_b64_o7_pair1: lattice/phi=0 14.753 ms, lattice/phi=1 14.752 ms, clustered/phi=0 5.637 ms, clustered/phi=1 5.968 ms, adaptive/phi=0 12.631 ms, adaptive/phi=1 12.435 ms
+shared_auto_cuda_b512_o7_pair1: lattice/phi=0 9.281 ms, lattice/phi=1 9.823 ms, clustered/phi=0 5.377 ms, clustered/phi=1 6.143 ms, adaptive/phi=0 23.976 ms, adaptive/phi=1 24.637 ms
+head_auto_cuda_b64_o7_pair1: lattice/phi=0 14.342 ms, lattice/phi=1 14.473 ms, clustered/phi=0 5.609 ms, clustered/phi=1 5.911 ms, adaptive/phi=0 11.430 ms, adaptive/phi=1 11.613 ms
+head_auto_cuda_b512_o7_pair1: lattice/phi=0 8.795 ms, lattice/phi=1 9.298 ms, clustered/phi=0 5.116 ms, clustered/phi=1 5.831 ms, adaptive/phi=0 23.859 ms, adaptive/phi=1 24.525 ms
+head_auto_cuda_b64_o7_pair2: lattice/phi=0 14.300 ms, lattice/phi=1 14.407 ms, clustered/phi=0 5.315 ms, clustered/phi=1 5.631 ms, adaptive/phi=0 11.182 ms, adaptive/phi=1 11.479 ms
+head_auto_cuda_b512_o7_pair2: lattice/phi=0 8.727 ms, lattice/phi=1 9.381 ms, clustered/phi=0 5.203 ms, clustered/phi=1 5.808 ms, adaptive/phi=0 24.075 ms, adaptive/phi=1 24.762 ms
+shared_auto_cuda_b64_o7_pair2: lattice/phi=0 14.368 ms, lattice/phi=1 14.502 ms, clustered/phi=0 5.398 ms, clustered/phi=1 5.636 ms, adaptive/phi=0 11.281 ms, adaptive/phi=1 11.464 ms
+shared_auto_cuda_b512_o7_pair2: lattice/phi=0 8.872 ms, lattice/phi=1 9.211 ms, clustered/phi=0 5.112 ms, clustered/phi=1 5.856 ms, adaptive/phi=0 23.936 ms, adaptive/phi=1 24.685 ms
+shared_auto_cuda_b64_o7_pair3: lattice/phi=0 14.424 ms, lattice/phi=1 14.436 ms, clustered/phi=0 5.283 ms, clustered/phi=1 5.610 ms, adaptive/phi=0 11.219 ms, adaptive/phi=1 11.549 ms
+shared_auto_cuda_b512_o7_pair3: lattice/phi=0 8.774 ms, lattice/phi=1 9.328 ms, clustered/phi=0 5.124 ms, clustered/phi=1 5.840 ms, adaptive/phi=0 23.874 ms, adaptive/phi=1 24.552 ms
+head_auto_cuda_b64_o7_pair3: lattice/phi=0 14.319 ms, lattice/phi=1 14.397 ms, clustered/phi=0 5.284 ms, clustered/phi=1 5.591 ms, adaptive/phi=0 11.324 ms, adaptive/phi=1 11.574 ms
+head_auto_cuda_b512_o7_pair3: lattice/phi=0 8.838 ms, lattice/phi=1 9.401 ms, clustered/phi=0 5.345 ms, clustered/phi=1 5.815 ms, adaptive/phi=0 24.133 ms, adaptive/phi=1 24.607 ms
+head_auto_cuda_b64_o7_pair4: lattice/phi=0 14.365 ms, lattice/phi=1 14.415 ms, clustered/phi=0 5.401 ms, clustered/phi=1 5.709 ms, adaptive/phi=0 11.381 ms, adaptive/phi=1 11.601 ms
+head_auto_cuda_b512_o7_pair4: lattice/phi=0 8.802 ms, lattice/phi=1 9.331 ms, clustered/phi=0 5.156 ms, clustered/phi=1 5.848 ms, adaptive/phi=0 23.954 ms, adaptive/phi=1 24.624 ms
+shared_auto_cuda_b64_o7_pair4: lattice/phi=0 14.309 ms, lattice/phi=1 14.536 ms, clustered/phi=0 5.345 ms, clustered/phi=1 5.547 ms, adaptive/phi=0 11.408 ms, adaptive/phi=1 11.498 ms
+shared_auto_cuda_b512_o7_pair4: lattice/phi=0 8.753 ms, lattice/phi=1 9.243 ms, clustered/phi=0 5.129 ms, clustered/phi=1 5.779 ms, adaptive/phi=0 24.047 ms, adaptive/phi=1 24.615 ms
+Completed; see docs/cuda_kick_shared_memory_results/pc_shared_records/summary.md
+docs/cuda_kick_shared_memory_results/pc_shared_records: worst pair spread 1.126 ('shared', 'auto', 'cuda', 64, 7, 'adaptive', False), load at start 0.79, process wall 2.7-3.1 s
+| reference | candidate | backend | bucket | order | fixture | acceleration rel L2 | acceleration max pointwise | potential rel L2 | potential max pointwise |
+|---|---|---|---:|---:|---|---:|---:|---:|---:|
+| head | shared | cuda | 64 | 7 | adaptive | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| head | shared | cuda | 64 | 7 | clustered | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| head | shared | cuda | 64 | 7 | lattice | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| head | shared | cuda | 512 | 7 | adaptive | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| head | shared | cuda | 512 | 7 | clustered | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| head | shared | cuda | 512 | 7 | lattice | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+
+| backend | bucket | fixture | potential | binary | policy | order | kick ms | speedup vs reference | paired range | force rel L2 | potential rel L2 |
+|---|---:|---|---:|---|---|---:|---:|---:|---|---:|---:|
+| cuda | 64 | adaptive | 0 | head | auto | 7 | 11.381 |  |  | 2.262e-03 | 1.163e-04 |
+| cuda | 64 | adaptive | 0 | shared | auto | 7 | 11.408 | 0.998 | 0.905-1.009 | 2.262e-03 | 1.163e-04 |
+| cuda | 64 | adaptive | 1 | head | auto | 7 | 11.601 |  |  | 2.262e-03 | 1.163e-04 |
+| cuda | 64 | adaptive | 1 | shared | auto | 7 | 11.549 | 1.001 | 0.934-1.009 | 2.262e-03 | 1.163e-04 |
+| cuda | 64 | clustered | 0 | head | auto | 7 | 5.401 |  |  | 5.305e-03 | 1.096e-03 |
+| cuda | 64 | clustered | 0 | shared | auto | 7 | 5.398 | 1.000 | 0.985-1.053 | 5.305e-03 | 1.096e-03 |
+| cuda | 64 | clustered | 1 | head | auto | 7 | 5.709 |  |  | 5.305e-03 | 1.096e-03 |
+| cuda | 64 | clustered | 1 | shared | auto | 7 | 5.636 | 0.999 | 0.990-1.029 | 5.305e-03 | 1.096e-03 |
+| cuda | 64 | lattice | 0 | head | auto | 7 | 14.342 |  |  | 3.644e-01 | 4.476e-02 |
+| cuda | 64 | lattice | 0 | shared | auto | 7 | 14.424 | 0.995 | 0.972-1.017 | 3.644e-01 | 4.476e-02 |
+| cuda | 64 | lattice | 1 | head | auto | 7 | 14.415 |  |  | 3.644e-01 | 4.476e-02 |
+| cuda | 64 | lattice | 1 | shared | auto | 7 | 14.536 | 0.993 | 0.981-1.030 | 3.644e-01 | 4.476e-02 |
+| cuda | 512 | adaptive | 0 | head | auto | 7 | 24.075 |  |  | 1.015e-03 | 1.108e-04 |
+| cuda | 512 | adaptive | 0 | shared | auto | 7 | 23.976 | 1.000 | 0.995-1.011 | 1.015e-03 | 1.108e-04 |
+| cuda | 512 | adaptive | 1 | head | auto | 7 | 24.624 |  |  | 1.015e-03 | 1.108e-04 |
+| cuda | 512 | adaptive | 1 | shared | auto | 7 | 24.637 | 1.000 | 0.984-1.003 | 1.015e-03 | 1.108e-04 |
+| cuda | 512 | clustered | 0 | head | auto | 7 | 5.203 |  |  | 2.146e-03 | 1.120e-03 |
+| cuda | 512 | clustered | 0 | shared | auto | 7 | 5.129 | 1.005 | 0.951-1.043 | 2.146e-03 | 1.120e-03 |
+| cuda | 512 | clustered | 1 | head | auto | 7 | 5.831 |  |  | 2.146e-03 | 1.120e-03 |
+| cuda | 512 | clustered | 1 | shared | auto | 7 | 5.856 | 0.992 | 0.949-1.012 | 2.146e-03 | 1.120e-03 |
+| cuda | 512 | lattice | 0 | head | auto | 7 | 8.802 |  |  | 3.644e-01 | 4.476e-02 |
+| cuda | 512 | lattice | 0 | shared | auto | 7 | 8.872 | 0.996 | 0.948-1.007 | 3.644e-01 | 4.476e-02 |
+| cuda | 512 | lattice | 1 | head | auto | 7 | 9.381 |  |  | 3.644e-01 | 4.476e-02 |
+| cuda | 512 | lattice | 1 | shared | auto | 7 | 9.328 | 1.008 | 0.947-1.018 | 3.644e-01 | 4.476e-02 |
+
+2026-10-20T03:32:09-05:00 stage done

@@ -1,0 +1,1039 @@
+{
+  "timing": [
+    {
+      "binary": "aligned",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 12.398709,
+      "kick_ms_min": 12.398709,
+      "kick_ms_max": 12.398709,
+      "pairs": 1
+    },
+    {
+      "binary": "aligned",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 12.0424,
+      "kick_ms_min": 12.0424,
+      "kick_ms_max": 12.0424,
+      "pairs": 1
+    },
+    {
+      "binary": "aligned",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 5.995347,
+      "kick_ms_min": 5.995347,
+      "kick_ms_max": 5.995347,
+      "pairs": 1
+    },
+    {
+      "binary": "aligned",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 5.990558,
+      "kick_ms_min": 5.990558,
+      "kick_ms_max": 5.990558,
+      "pairs": 1
+    },
+    {
+      "binary": "aligned",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 15.43037,
+      "kick_ms_min": 15.43037,
+      "kick_ms_max": 15.43037,
+      "pairs": 1
+    },
+    {
+      "binary": "aligned",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 14.938998,
+      "kick_ms_min": 14.938998,
+      "kick_ms_max": 14.938998,
+      "pairs": 1
+    },
+    {
+      "binary": "aligned",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 31.411105000000003,
+      "kick_ms_min": 31.411105000000003,
+      "kick_ms_max": 31.411105000000003,
+      "pairs": 1
+    },
+    {
+      "binary": "aligned",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 29.247312,
+      "kick_ms_min": 29.247312,
+      "kick_ms_max": 29.247312,
+      "pairs": 1
+    },
+    {
+      "binary": "aligned",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 5.89035,
+      "kick_ms_min": 5.89035,
+      "kick_ms_max": 5.89035,
+      "pairs": 1
+    },
+    {
+      "binary": "aligned",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 7.06754,
+      "kick_ms_min": 7.06754,
+      "kick_ms_max": 7.06754,
+      "pairs": 1
+    },
+    {
+      "binary": "aligned",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 10.457023,
+      "kick_ms_min": 10.457023,
+      "kick_ms_max": 10.457023,
+      "pairs": 1
+    },
+    {
+      "binary": "aligned",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 11.392179,
+      "kick_ms_min": 11.392179,
+      "kick_ms_max": 11.392179,
+      "pairs": 1
+    },
+    {
+      "binary": "head",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 12.498455,
+      "kick_ms_min": 12.498455,
+      "kick_ms_max": 12.498455,
+      "pairs": 1
+    },
+    {
+      "binary": "head",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 12.833665,
+      "kick_ms_min": 12.833665,
+      "kick_ms_max": 12.833665,
+      "pairs": 1
+    },
+    {
+      "binary": "head",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 6.110232,
+      "kick_ms_min": 6.110232,
+      "kick_ms_max": 6.110232,
+      "pairs": 1
+    },
+    {
+      "binary": "head",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 6.132083,
+      "kick_ms_min": 6.132083,
+      "kick_ms_max": 6.132083,
+      "pairs": 1
+    },
+    {
+      "binary": "head",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 15.114627,
+      "kick_ms_min": 15.114627,
+      "kick_ms_max": 15.114627,
+      "pairs": 1
+    },
+    {
+      "binary": "head",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 15.858514000000001,
+      "kick_ms_min": 15.858514000000001,
+      "kick_ms_max": 15.858514000000001,
+      "pairs": 1
+    },
+    {
+      "binary": "head",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 31.316967,
+      "kick_ms_min": 31.316967,
+      "kick_ms_max": 31.316967,
+      "pairs": 1
+    },
+    {
+      "binary": "head",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 31.671282,
+      "kick_ms_min": 31.671282,
+      "kick_ms_max": 31.671282,
+      "pairs": 1
+    },
+    {
+      "binary": "head",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 6.191002999999999,
+      "kick_ms_min": 6.191002999999999,
+      "kick_ms_max": 6.191002999999999,
+      "pairs": 1
+    },
+    {
+      "binary": "head",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 7.356510999999999,
+      "kick_ms_min": 7.356510999999999,
+      "kick_ms_max": 7.356510999999999,
+      "pairs": 1
+    },
+    {
+      "binary": "head",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 11.385375999999999,
+      "kick_ms_min": 11.385375999999999,
+      "kick_ms_max": 11.385375999999999,
+      "pairs": 1
+    },
+    {
+      "binary": "head",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 10.782073,
+      "kick_ms_min": 10.782073,
+      "kick_ms_max": 10.782073,
+      "pairs": 1
+    },
+    {
+      "binary": "registers",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 12.152476,
+      "kick_ms_min": 12.152476,
+      "kick_ms_max": 12.152476,
+      "pairs": 1
+    },
+    {
+      "binary": "registers",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 12.081563,
+      "kick_ms_min": 12.081563,
+      "kick_ms_max": 12.081563,
+      "pairs": 1
+    },
+    {
+      "binary": "registers",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 5.436477,
+      "kick_ms_min": 5.436477,
+      "kick_ms_max": 5.436477,
+      "pairs": 1
+    },
+    {
+      "binary": "registers",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 5.857768,
+      "kick_ms_min": 5.857768,
+      "kick_ms_max": 5.857768,
+      "pairs": 1
+    },
+    {
+      "binary": "registers",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 14.670824000000001,
+      "kick_ms_min": 14.670824000000001,
+      "kick_ms_max": 14.670824000000001,
+      "pairs": 1
+    },
+    {
+      "binary": "registers",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 14.839791,
+      "kick_ms_min": 14.839791,
+      "kick_ms_max": 14.839791,
+      "pairs": 1
+    },
+    {
+      "binary": "registers",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 30.692365,
+      "kick_ms_min": 30.692365,
+      "kick_ms_max": 30.692365,
+      "pairs": 1
+    },
+    {
+      "binary": "registers",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 29.372526,
+      "kick_ms_min": 29.372526,
+      "kick_ms_max": 29.372526,
+      "pairs": 1
+    },
+    {
+      "binary": "registers",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 5.887474,
+      "kick_ms_min": 5.887474,
+      "kick_ms_max": 5.887474,
+      "pairs": 1
+    },
+    {
+      "binary": "registers",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 7.6493020000000005,
+      "kick_ms_min": 7.6493020000000005,
+      "kick_ms_max": 7.6493020000000005,
+      "pairs": 1
+    },
+    {
+      "binary": "registers",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 10.331658000000001,
+      "kick_ms_min": 10.331658000000001,
+      "kick_ms_max": 10.331658000000001,
+      "pairs": 1
+    },
+    {
+      "binary": "registers",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 12.297258,
+      "kick_ms_min": 12.297258,
+      "kick_ms_max": 12.297258,
+      "pairs": 1
+    },
+    {
+      "binary": "scalar",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 12.331562,
+      "kick_ms_min": 12.331562,
+      "kick_ms_max": 12.331562,
+      "pairs": 1
+    },
+    {
+      "binary": "scalar",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 12.377228,
+      "kick_ms_min": 12.377228,
+      "kick_ms_max": 12.377228,
+      "pairs": 1
+    },
+    {
+      "binary": "scalar",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 5.7287550000000005,
+      "kick_ms_min": 5.7287550000000005,
+      "kick_ms_max": 5.7287550000000005,
+      "pairs": 1
+    },
+    {
+      "binary": "scalar",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 5.894677,
+      "kick_ms_min": 5.894677,
+      "kick_ms_max": 5.894677,
+      "pairs": 1
+    },
+    {
+      "binary": "scalar",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 14.697965,
+      "kick_ms_min": 14.697965,
+      "kick_ms_max": 14.697965,
+      "pairs": 1
+    },
+    {
+      "binary": "scalar",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 14.978653,
+      "kick_ms_min": 14.978653,
+      "kick_ms_max": 14.978653,
+      "pairs": 1
+    },
+    {
+      "binary": "scalar",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 29.50715,
+      "kick_ms_min": 29.50715,
+      "kick_ms_max": 29.50715,
+      "pairs": 1
+    },
+    {
+      "binary": "scalar",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 31.563850999999996,
+      "kick_ms_min": 31.563850999999996,
+      "kick_ms_max": 31.563850999999996,
+      "pairs": 1
+    },
+    {
+      "binary": "scalar",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 5.804568000000001,
+      "kick_ms_min": 5.804568000000001,
+      "kick_ms_max": 5.804568000000001,
+      "pairs": 1
+    },
+    {
+      "binary": "scalar",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 7.240654,
+      "kick_ms_min": 7.240654,
+      "kick_ms_max": 7.240654,
+      "pairs": 1
+    },
+    {
+      "binary": "scalar",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 10.380139,
+      "kick_ms_min": 10.380139,
+      "kick_ms_max": 10.380139,
+      "pairs": 1
+    },
+    {
+      "binary": "scalar",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 12.251111,
+      "kick_ms_min": 12.251111,
+      "kick_ms_max": 12.251111,
+      "pairs": 1
+    }
+  ],
+  "references": [],
+  "arena_lines": [
+    {
+      "binary": "aligned",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 8048 bytes: control 648, expansion shared, forces shared tile 64, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes; list slab 145792 bytes per block (4096 entries per list)"
+    },
+    {
+      "binary": "aligned",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 11760 bytes: control 648, expansion shared, forces shared tile 512, particle tile 224 (without mass plane), multipole tile 16 x 160 bytes; list slab 145792 bytes per block (4096 entries per list)"
+    },
+    {
+      "binary": "head",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 8048 bytes: control 648, expansion shared, forces shared tile 64, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes; list slab 145792 bytes per block (4096 entries per list)"
+    },
+    {
+      "binary": "head",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 11760 bytes: control 648, expansion shared, forces shared tile 512, particle tile 224 (without mass plane), multipole tile 16 x 160 bytes; list slab 145792 bytes per block (4096 entries per list)"
+    },
+    {
+      "binary": "registers",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 8048 bytes: control 648, expansion shared, forces shared tile 64, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes; list slab 145792 bytes per block (4096 entries per list)"
+    },
+    {
+      "binary": "registers",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 11760 bytes: control 648, expansion shared, forces shared tile 512, particle tile 224 (without mass plane), multipole tile 16 x 160 bytes; list slab 145792 bytes per block (4096 entries per list)"
+    },
+    {
+      "binary": "scalar",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 8048 bytes: control 648, expansion shared, forces shared tile 64, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes; list slab 145792 bytes per block (4096 entries per list)"
+    },
+    {
+      "binary": "scalar",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 11760 bytes: control 648, expansion shared, forces shared tile 512, particle tile 224 (without mass plane), multipole tile 16 x 160 bytes; list slab 145792 bytes per block (4096 entries per list)"
+    }
+  ],
+  "comparisons": [
+    {
+      "kind": "vs_head",
+      "binary": "aligned",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "result": {
+        "adaptive": {
+          "acceleration": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "clustered": {
+          "acceleration": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "lattice": {
+          "acceleration": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          }
+        }
+      }
+    },
+    {
+      "kind": "vs_head",
+      "binary": "aligned",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "result": {
+        "adaptive": {
+          "acceleration": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "clustered": {
+          "acceleration": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "lattice": {
+          "acceleration": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          }
+        }
+      }
+    },
+    {
+      "kind": "vs_head",
+      "binary": "registers",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "result": {
+        "adaptive": {
+          "acceleration": {
+            "relative_l2": 5.182974628848929e-09,
+            "max_pointwise_relative": 2.590587320583753e-07,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 1.2865989582627514e-09,
+            "max_pointwise_relative": 8.867724586209801e-07,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "clustered": {
+          "acceleration": {
+            "relative_l2": 5.645797858197377e-09,
+            "max_pointwise_relative": 1.819559323038654e-07,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 2.8447703832768503e-09,
+            "max_pointwise_relative": 2.0719333831978636e-07,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "lattice": {
+          "acceleration": {
+            "relative_l2": 2.5407703832641686e-07,
+            "max_pointwise_relative": 1.1506443357123265e-05,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 3.761154462265173e-07,
+            "max_pointwise_relative": 2.290688351849731e-05,
+            "median_pointwise_relative": 0.0
+          }
+        }
+      }
+    },
+    {
+      "kind": "vs_head",
+      "binary": "registers",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "result": {
+        "adaptive": {
+          "acceleration": {
+            "relative_l2": 3.994260161056865e-09,
+            "max_pointwise_relative": 2.544366774109664e-07,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 1.169296131519137e-09,
+            "max_pointwise_relative": 8.867606632969762e-07,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "clustered": {
+          "acceleration": {
+            "relative_l2": 1.2280732534332533e-09,
+            "max_pointwise_relative": 7.704112958541507e-07,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "lattice": {
+          "acceleration": {
+            "relative_l2": 2.700320344411876e-07,
+            "max_pointwise_relative": 2.301406169795089e-05,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 3.8576481593076504e-07,
+            "max_pointwise_relative": 2.4897298643097223e-05,
+            "median_pointwise_relative": 0.0
+          }
+        }
+      }
+    },
+    {
+      "kind": "vs_head",
+      "binary": "scalar",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "result": {
+        "adaptive": {
+          "acceleration": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "clustered": {
+          "acceleration": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "lattice": {
+          "acceleration": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          }
+        }
+      }
+    },
+    {
+      "kind": "vs_head",
+      "binary": "scalar",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "result": {
+        "adaptive": {
+          "acceleration": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "clustered": {
+          "acceleration": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "lattice": {
+          "acceleration": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          }
+        }
+      }
+    }
+  ],
+  "repeat_export_hashes": [
+    {
+      "binary": "aligned",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "distinct_exports": 1
+    },
+    {
+      "binary": "aligned",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "distinct_exports": 1
+    },
+    {
+      "binary": "head",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "distinct_exports": 1
+    },
+    {
+      "binary": "head",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "distinct_exports": 1
+    },
+    {
+      "binary": "registers",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "distinct_exports": 1
+    },
+    {
+      "binary": "registers",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "distinct_exports": 1
+    },
+    {
+      "binary": "scalar",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 64,
+      "order": 7,
+      "distinct_exports": 1
+    },
+    {
+      "binary": "scalar",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 512,
+      "order": 7,
+      "distinct_exports": 1
+    }
+  ]
+}

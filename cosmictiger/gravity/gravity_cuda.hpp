@@ -129,6 +129,57 @@ __device__ inline Fixed32 cudaFixedFromRaw(uint32_t bits) {
     return value;
 }
 
+// The staged multipole tile derived from the dynamic shared-memory symbol, for
+// the same reason as the particle planes above: addressed through the pointer
+// reloaded from the control block the staged records are generic loads, one
+// per coefficient of every sink-multipole pair; derived from the symbol they
+// are shared-space loads. The tile shares the particle planes' region.
+template <int order>
+__device__ inline char* cudaStagedMultipoles(CudaKickControl<order> const& control) {
+    extern __shared__ __align__(16) char shmemPtr[];
+    CudaKickArenaLayout const& layout = control.layout;
+    return shmemPtr + layout.arenaOffset + layout.sourceOffset;
+}
+
+// The sink-force planes of the arena derived from the symbol. Valid only when
+// the layout keeps the forces in shared memory (forceOffset >= 0); with
+// whole-bucket global backing the control block's pointers are the forces.
+template <int order>
+__device__ inline CudaKickForceTile cudaArenaForces(CudaKickControl<order> const& control) {
+    extern __shared__ __align__(16) char shmemPtr[];
+    CudaKickArenaLayout const& layout = control.layout;
+    CudaKickForceTile forces;
+    forces.gx = reinterpret_cast<float*>(shmemPtr + layout.arenaOffset + layout.forceOffset);
+    forces.gy = forces.gx + layout.sinkCapacity;
+    forces.gz = forces.gy + layout.sinkCapacity;
+    forces.phi = forces.gz + layout.sinkCapacity;
+    return forces;
+}
+
+// One staged record viewed in place. The pointer derives from the shared
+// symbol, so the record's words load as LDS at immediate offsets from one
+// 32-bit address, with the M2P operator's arithmetic exactly as it compiles
+// from the control block's generic pointer. Copying the record to registers
+// with 16-byte loads instead (ten LDS.128 at order 7) shortens the loop body
+// further but lets the compiler pair the operator's fused multiply-adds
+// differently, and the forces then differ from the head's at roundoff level
+// ("PC loop reads from the shared-memory symbol" in
+// docs/cuda_kick_shared_memory.md).
+template <int order>
+__device__ inline FmmMultiPos<order> const& cudaStagedMultipole(char const* record) {
+    return *reinterpret_cast<FmmMultiPos<order> const*>(record);
+}
+
+// One sink's accumulated PC field applied to its force planes. Called with the
+// arena planes or the global backing, so each call site keeps its address space.
+__device__ inline void cudaApplyPcField(
+    CudaKickForceTile const& force, int k, Expansion2<float> const& l) {
+    force.gx[k] -= SCALE_FACTOR2 * l(1, 0, 0);
+    force.gy[k] -= SCALE_FACTOR2 * l(0, 1, 0);
+    force.gz[k] -= SCALE_FACTOR2 * l(0, 0, 1);
+    force.phi[k] += SCALE_FACTOR1 * l(0, 0, 0);
+}
+
 // The inverse radius powers of kPairs sink-source pairs. The plain powers of
 // every pair are computed in one straight-line block, so the scheduler overlaps
 // their reciprocal square roots, and the softened powers replace them afterwards
@@ -344,7 +395,11 @@ __device__ void cudaGravityPcDirect(CudaKickData const& data, CudaKickControl<or
     TreeNode const& self, int sinkBegin, int sinkCount, DeviceVector<int> const& multlist,
     bool doPhi) {
     int const& tid = threadIdx.x;
-    auto const& force = control.forces;
+    // The forces: the arena planes derived from the shared-memory symbol, or
+    // the control block's global backing when the layout keeps none.
+    bool const sharedForces = control.layout.forceOffset >= 0;
+    CudaKickForceTile const arenaForce = detail::cudaArenaForces<order>(control);
+    CudaKickForceTile const& backingForce = control.forces;
     int const sinkFirst = self.particleRange.first + sinkBegin;
     auto const* sinkX = data.x + sinkFirst;
     auto const* sinkY = data.y + sinkFirst;
@@ -352,8 +407,10 @@ __device__ void cudaGravityPcDirect(CudaKickData const& data, CudaKickControl<or
     auto& barrier = control.barrier;
     auto const* treeNodes = data.treeNodes;
     int const capacity = control.layout.multipoleCapacity;
-    int const stride = control.layout.multipoleStride;
-    char* multipoles = control.multipoles;
+    // The tile's record stride is the tree arena's (kick_cuda_launch.hpp sets
+    // layout.multipoleStride from the same constant).
+    constexpr int kStride = FmmOrder<order>::kPositionedMultipoleStride_;
+    char* const multipoles = detail::cudaStagedMultipoles<order>(control);
     FlopCounter<int> flops = 0;
     auto group = cooperative_groups::this_thread_block();
     // Each record is copied whole at the stride the tree arena and the staged
@@ -361,8 +418,7 @@ __device__ void cudaGravityPcDirect(CudaKickData const& data, CudaKickControl<or
     // chunks that the barrier wait below completes; an untyped count would
     // deduce 1-byte alignment and copy synchronously through registers, and
     // the wait would then order nothing.
-    constexpr cuda::aligned_size_t<kFmmPositionedMultipoleAlignment> kRecordBytes(
-        FmmOrder<order>::kPositionedMultipoleStride_);
+    constexpr cuda::aligned_size_t<kFmmPositionedMultipoleAlignment> kRecordBytes(kStride);
     if (multlist.size()) {
         __syncwarp();
         int mi = 0;
@@ -370,7 +426,7 @@ __device__ void cudaGravityPcDirect(CudaKickData const& data, CudaKickControl<or
         while (mi < cnt) {
             int mend = min(cnt, mi + capacity);
             for (int thisMi = mi; thisMi < mend; thisMi++) {
-                cuda::memcpy_async(group, multipoles + (thisMi - mi) * stride,
+                cuda::memcpy_async(group, multipoles + (thisMi - mi) * kStride,
                     treeNodes[multlist[thisMi]].mpos, kRecordBytes, barrier);
             }
             mend -= mi;
@@ -383,16 +439,17 @@ __device__ void cudaGravityPcDirect(CudaKickData const& data, CudaKickControl<or
                 Array<float, NDIM> dx;
                 for (int j = 0; j < mend; j++) {
                     FmmMultiPos<order> const& mp =
-                        *reinterpret_cast<FmmMultiPos<order> const*>(multipoles + j * stride);
+                        detail::cudaStagedMultipole<order>(multipoles + j * kStride);
                     dx[XDIM] = distance(sinkX[k], mp.pos[XDIM]);
                     dx[YDIM] = distance(sinkY[k], mp.pos[YDIM]);
                     dx[ZDIM] = distance(sinkZ[k], mp.pos[ZDIM]);
                     flops += 6 + m2P(l, mp.multi, dx, doPhi);
                 }
-                force.gx[k] -= SCALE_FACTOR2 * l(1, 0, 0);
-                force.gy[k] -= SCALE_FACTOR2 * l(0, 1, 0);
-                force.gz[k] -= SCALE_FACTOR2 * l(0, 0, 1);
-                force.phi[k] += SCALE_FACTOR1 * l(0, 0, 0);
+                if (sharedForces) {
+                    detail::cudaApplyPcField(arenaForce, k, l);
+                } else {
+                    detail::cudaApplyPcField(backingForce, k, l);
+                }
                 flops += 4;
             }
             // Every lane finishes reading the staged multipoles before refilling.

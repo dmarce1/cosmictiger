@@ -1,0 +1,324 @@
+01:46:05 not quiet: build
+01:46:25 not quiet: build
+01:46:45 not quiet: build
+01:47:05 not quiet: build
+01:47:25 not quiet: build
+01:47:45 not quiet: build
+01:48:05 not quiet: build
+01:48:25 not quiet: build
+01:48:46 not quiet: build
+01:49:06 not quiet: build
+01:49:26 not quiet: build
+01:49:46 not quiet: build
+01:50:06 not quiet: build
+01:50:26 not quiet: build
+01:50:46 not quiet: build
+01:51:06 not quiet: build
+01:51:26 not quiet: build
+01:51:46 not quiet: build
+01:52:06 not quiet: build
+01:52:26 not quiet: build
+01:52:46 not quiet: build
+01:53:06 not quiet: build
+01:53:26 not quiet: build
+01:53:46 not quiet: build
+01:54:06 not quiet: load 10.60
+01:54:26 not quiet: load 10.41
+01:54:46 not quiet: gpu
+01:55:06 not quiet: gpu
+01:55:27 not quiet: gpu
+01:55:47 not quiet: gpu
+01:56:07 not quiet: gpu
+01:56:27 not quiet: gpu
+01:56:47 not quiet: gpu
+01:57:07 not quiet: load 12.35
+01:57:27 not quiet: load 12.18
+01:57:47 not quiet: load 12.26
+01:58:07 not quiet: load 12.18
+01:58:27 not quiet: load 11.91
+01:58:47 not quiet: load 11.80
+01:59:07 not quiet: load 11.64
+01:59:27 not quiet: load 11.70
+01:59:47 not quiet: load 11.58
+02:00:07 not quiet: load 11.41
+02:00:28 not quiet: load 11.22
+02:00:48 not quiet: load 10.95
+02:01:08 not quiet: load 11.04
+02:01:28 not quiet: load 10.96
+02:01:48 not quiet: load 11.19
+02:02:08 not quiet: load 11.71
+02:02:28 not quiet: load 11.94
+02:02:48 not quiet: load 12.04
+02:03:08 not quiet: load 12.10
+02:03:28 not quiet: load 12.21
+02:03:48 not quiet: load 12.32
+02:04:08 not quiet: load 12.02
+02:04:28 not quiet: load 11.95
+02:04:48 not quiet: load 11.66
+02:05:09 not quiet: build
+02:05:29 not quiet: build
+02:05:49 not quiet: build
+02:06:09 not quiet: load 12.37
+02:06:29 not quiet: load 12.89
+02:06:49 not quiet: gpu
+02:07:09 not quiet: gpu
+02:07:29 not quiet: gpu
+02:07:49 not quiet: gpu
+02:08:09 not quiet: gpu
+02:08:29 not quiet: gpu
+02:08:49 not quiet: gpu
+02:09:09 not quiet: load 12.58
+02:09:29 not quiet: gpu
+02:09:49 not quiet: gpu
+02:10:10 not quiet: gpu
+02:10:30 not quiet: build
+02:10:50 not quiet: build
+02:11:10 not quiet: build
+02:11:30 not quiet: build
+02:11:50 not quiet: build
+02:12:10 not quiet: build
+02:12:30 not quiet: load 12.06
+02:12:50 not quiet: load 11.75
+02:13:10 not quiet: load 11.45
+02:13:30 not quiet: gpu
+02:13:50 not quiet: gpu
+02:14:10 not quiet: load 11.89
+02:14:30 not quiet: gpu
+02:14:50 not quiet: gpu
+02:15:10 not quiet: gpu
+02:15:30 not quiet: gpu
+02:15:51 not quiet: gpu
+02:16:11 not quiet: build
+02:16:31 not quiet: build
+02:16:51 not quiet: gpu
+02:17:11 not quiet: gpu
+02:17:31 not quiet: gpu
+02:17:51 not quiet: gpu
+02:18:11 not quiet: gpu
+02:18:31 not quiet: gpu
+02:18:51 not quiet: load 9.40
+02:19:11 not quiet: load 8.13
+02:19:31 not quiet: load 7.03
+02:19:51 not quiet: gpu
+02:20:11 not quiet: load 6.82
+02:20:31 not quiet: gpu
+02:20:52 not quiet: gpu
+02:21:12 not quiet: gpu
+02:21:32 not quiet: build
+02:21:52 not quiet: load 10.76
+02:22:12 not quiet: load 10.73
+02:22:32 not quiet: load 10.94
+02:22:52 not quiet: load 10.58
+02:23:12 not quiet: load 10.68
+02:23:32 not quiet: gpu
+02:23:52 not quiet: gpu
+02:24:12 not quiet: gpu
+02:24:32 not quiet: gpu
+02:24:52 not quiet: gpu
+02:25:12 not quiet: build
+02:25:32 not quiet: gpu
+02:25:53 not quiet: gpu
+02:26:13 not quiet: gpu
+02:26:33 not quiet: gpu
+02:26:53 not quiet: gpu
+02:27:13 not quiet: gpu
+02:27:33 not quiet: gpu
+02:27:53 not quiet: gpu
+02:28:13 not quiet: gpu
+02:28:33 not quiet: gpu
+02:28:53 not quiet: gpu
+02:29:13 not quiet: gpu
+02:29:33 not quiet: gpu
+02:29:53 not quiet: gpu
+02:30:13 not quiet: load 14.69
+02:30:34 not quiet: load 13.91
+02:30:54 not quiet: load 13.36
+02:31:14 not quiet: load 12.85
+02:31:34 not quiet: load 12.18
+02:31:54 not quiet: load 11.64
+02:32:14 not quiet: load 11.46
+02:32:34 not quiet: load 11.11
+02:32:54 not quiet: load 10.87
+02:33:14 not quiet: load 10.70
+02:33:34 not quiet: load 10.72
+02:33:54 not quiet: load 10.81
+02:34:14 not quiet: load 10.71
+02:34:34 not quiet: load 10.65
+02:34:55 not quiet: load 10.53
+02:35:15 not quiet: load 10.37
+02:35:35 not quiet: load 10.20
+02:35:55 not quiet: load 10.30
+02:36:15 not quiet: load 10.93
+02:36:35 not quiet: load 10.72
+02:36:55 not quiet: load 10.72
+02:37:15 not quiet: load 10.58
+02:37:35 not quiet: load 10.26
+02:37:55 not quiet: load 10.11
+02:38:15 not quiet: load 10.15
+02:38:35 not quiet: load 10.24
+02:38:55 not quiet: load 9.88
+02:39:16 not quiet: load 9.75
+02:39:36 not quiet: load 9.68
+02:39:56 not quiet: load 9.49
+02:40:16 not quiet: gpu
+02:40:36 not quiet: gpu
+02:40:56 not quiet: gpu
+02:41:16 not quiet: gpu
+02:41:36 not quiet: gpu
+02:41:56 not quiet: gpu
+02:42:16 not quiet: gpu
+02:42:36 not quiet: gpu
+02:42:56 not quiet: gpu
+02:43:16 not quiet: gpu
+02:43:36 not quiet: gpu
+02:43:56 not quiet: gpu
+02:44:17 not quiet: gpu
+02:44:37 not quiet: gpu
+02:44:57 not quiet: gpu
+02:45:17 not quiet: gpu
+02:45:37 not quiet: gpu
+02:45:57 not quiet: gpu
+02:46:17 not quiet: gpu
+02:46:37 not quiet: gpu
+02:46:57 not quiet: load 13.29
+02:47:17 not quiet: load 12.23
+02:47:37 not quiet: load 12.09
+02:47:57 not quiet: load 11.87
+02:48:17 not quiet: load 11.34
+02:48:37 not quiet: load 10.68
+02:48:58 not quiet: load 10.50
+02:49:18 not quiet: load 10.61
+02:49:38 not quiet: load 10.87
+02:49:58 not quiet: load 10.98
+02:50:18 not quiet: load 10.54
+02:50:38 not quiet: load 10.41
+02:50:58 not quiet: load 10.27
+02:51:18 not quiet: load 10.63
+02:51:38 not quiet: load 10.32
+02:51:58 not quiet: load 9.94
+02:52:18 not quiet: load 10.03
+02:52:38 not quiet: load 10.25
+02:52:59 not quiet: load 10.53
+02:53:19 not quiet: load 10.59
+02:53:39 not quiet: load 10.62
+02:53:59 not quiet: load 10.44
+02:54:19 not quiet: load 10.09
+02:54:39 not quiet: load 9.94
+02:54:59 not quiet: load 9.59
+02:55:19 not quiet: load 9.22
+02:55:39 not quiet: load 9.17
+02:55:59 not quiet: load 8.78
+02:56:19 not quiet: load 8.49
+02:56:39 not quiet: load 8.55
+02:56:59 not quiet: build
+02:57:19 not quiet: load 9.13
+02:57:39 not quiet: build
+02:58:00 not quiet: build
+02:58:20 not quiet: load 9.68
+02:58:40 not quiet: load 9.77
+02:59:00 not quiet: build
+02:59:20 not quiet: build
+02:59:40 not quiet: load 7.42
+03:00:00 not quiet: build
+03:00:20 not quiet: build
+03:00:40 not quiet: load 9.34
+03:01:00 not quiet: build
+03:01:20 not quiet: build
+03:01:40 not quiet: load 9.35
+03:02:00 not quiet: load 9.61
+03:02:20 not quiet: build
+03:02:40 not quiet: load 9.28
+03:03:00 not quiet: load 8.89
+03:03:20 not quiet: load 7.18
+03:03:41 not quiet: load 6.49
+03:04:01 not quiet: load 6.92
+03:04:21 not quiet: load 7.45
+03:04:41 not quiet: load 8.03
+03:05:01 not quiet: load 8.14
+03:05:21 not quiet: load 8.19
+03:05:41 not quiet: load 8.68
+03:06:01 not quiet: load 8.35
+03:06:21 not quiet: load 8.12
+03:06:41 not quiet: load 8.29
+03:07:01 not quiet: load 8.06
+03:07:21 not quiet: load 8.06
+03:07:41 not quiet: load 8.11
+03:08:01 not quiet: load 8.37
+03:08:21 not quiet: load 8.55
+03:08:42 not quiet: load 8.69
+03:09:02 not quiet: load 8.21
+03:09:22 not quiet: load 8.18
+03:09:42 not quiet: load 7.84
+03:10:02 not quiet: load 7.91
+03:10:22 not quiet: load 9.33
+03:10:42 not quiet: load 9.93
+03:11:02 not quiet: load 9.42
+03:11:22 not quiet: load 9.42
+03:11:42 not quiet: load 8.98
+03:12:02 not quiet: load 8.58
+03:12:22 not quiet: load 8.66
+03:12:43 not quiet: load 8.26
+03:13:03 not quiet: load 6.11
+03:14:23 quiet for 60 s (load 1.97); taking the GPU lock
+2026-10-20T03:14:23-05:00 GPU lock acquired for ctest, load 1.97
+2026-10-20T03:14:25-05:00 ctest exit 0 (100% tests passed, 0 tests failed out of 2)
+2026-10-20T03:14:25-05:00 GPU lock acquired, load 1.97
+head_auto_cuda_b64_o7_pair0: lattice/phi=0 14.803 ms, lattice/phi=1 15.437 ms, clustered/phi=0 5.713 ms, clustered/phi=1 5.665 ms, adaptive/phi=0 11.298 ms, adaptive/phi=1 11.648 ms
+head_auto_cuda_b512_o7_pair0: lattice/phi=0 8.873 ms, lattice/phi=1 9.241 ms, clustered/phi=0 5.247 ms, clustered/phi=1 5.883 ms, adaptive/phi=0 24.194 ms, adaptive/phi=1 25.053 ms
+shared_auto_cuda_b64_o7_pair0: lattice/phi=0 14.415 ms, lattice/phi=1 14.491 ms, clustered/phi=0 5.475 ms, clustered/phi=1 5.848 ms, adaptive/phi=0 11.411 ms, adaptive/phi=1 12.297 ms
+shared_auto_cuda_b512_o7_pair0: lattice/phi=0 9.208 ms, lattice/phi=1 9.769 ms, clustered/phi=0 5.395 ms, clustered/phi=1 6.054 ms, adaptive/phi=0 25.921 ms, adaptive/phi=1 26.537 ms
+shared_auto_cuda_b64_o7_pair1: lattice/phi=0 14.639 ms, lattice/phi=1 14.694 ms, clustered/phi=0 5.650 ms, clustered/phi=1 5.788 ms, adaptive/phi=0 12.296 ms, adaptive/phi=1 12.455 ms
+shared_auto_cuda_b512_o7_pair1: lattice/phi=0 9.340 ms, lattice/phi=1 9.681 ms, clustered/phi=0 5.373 ms, clustered/phi=1 5.973 ms, adaptive/phi=0 25.785 ms, adaptive/phi=1 27.120 ms
+head_auto_cuda_b64_o7_pair1: lattice/phi=0 14.663 ms, lattice/phi=1 14.748 ms, clustered/phi=0 5.698 ms, clustered/phi=1 5.895 ms, adaptive/phi=0 12.147 ms, adaptive/phi=1 12.342 ms
+head_auto_cuda_b512_o7_pair1: lattice/phi=0 9.223 ms, lattice/phi=1 9.769 ms, clustered/phi=0 5.396 ms, clustered/phi=1 6.120 ms, adaptive/phi=0 26.477 ms, adaptive/phi=1 27.071 ms
+head_auto_cuda_b64_o7_pair2: lattice/phi=0 14.594 ms, lattice/phi=1 14.703 ms, clustered/phi=0 5.518 ms, clustered/phi=1 5.896 ms, adaptive/phi=0 12.323 ms, adaptive/phi=1 12.415 ms
+head_auto_cuda_b512_o7_pair2: lattice/phi=0 9.189 ms, lattice/phi=1 9.910 ms, clustered/phi=0 5.392 ms, clustered/phi=1 6.364 ms, adaptive/phi=0 26.578 ms, adaptive/phi=1 27.367 ms
+shared_auto_cuda_b64_o7_pair2: lattice/phi=0 14.616 ms, lattice/phi=1 14.713 ms, clustered/phi=0 5.618 ms, clustered/phi=1 5.849 ms, adaptive/phi=0 12.041 ms, adaptive/phi=1 12.348 ms
+shared_auto_cuda_b512_o7_pair2: lattice/phi=0 8.804 ms, lattice/phi=1 9.349 ms, clustered/phi=0 5.191 ms, clustered/phi=1 5.824 ms, adaptive/phi=0 24.341 ms, adaptive/phi=1 24.934 ms
+shared_auto_cuda_b64_o7_pair3: lattice/phi=0 14.306 ms, lattice/phi=1 14.411 ms, clustered/phi=0 5.290 ms, clustered/phi=1 5.605 ms, adaptive/phi=0 11.378 ms, adaptive/phi=1 11.605 ms
+shared_auto_cuda_b512_o7_pair3: lattice/phi=0 8.873 ms, lattice/phi=1 9.250 ms, clustered/phi=0 5.364 ms, clustered/phi=1 5.880 ms, adaptive/phi=0 24.160 ms, adaptive/phi=1 24.847 ms
+head_auto_cuda_b64_o7_pair3: lattice/phi=0 14.443 ms, lattice/phi=1 14.549 ms, clustered/phi=0 5.352 ms, clustered/phi=1 5.654 ms, adaptive/phi=0 11.335 ms, adaptive/phi=1 11.604 ms
+head_auto_cuda_b512_o7_pair3: lattice/phi=0 8.862 ms, lattice/phi=1 9.559 ms, clustered/phi=0 5.279 ms, clustered/phi=1 5.968 ms, adaptive/phi=0 24.347 ms, adaptive/phi=1 25.047 ms
+head_auto_cuda_b64_o7_pair4: lattice/phi=0 14.420 ms, lattice/phi=1 14.427 ms, clustered/phi=0 5.551 ms, clustered/phi=1 5.662 ms, adaptive/phi=0 11.324 ms, adaptive/phi=1 11.776 ms
+head_auto_cuda_b512_o7_pair4: lattice/phi=0 8.886 ms, lattice/phi=1 9.443 ms, clustered/phi=0 5.333 ms, clustered/phi=1 5.935 ms, adaptive/phi=0 24.328 ms, adaptive/phi=1 24.882 ms
+shared_auto_cuda_b64_o7_pair4: lattice/phi=0 14.391 ms, lattice/phi=1 14.447 ms, clustered/phi=0 5.491 ms, clustered/phi=1 5.856 ms, adaptive/phi=0 11.459 ms, adaptive/phi=1 11.606 ms
+shared_auto_cuda_b512_o7_pair4: lattice/phi=0 8.752 ms, lattice/phi=1 9.243 ms, clustered/phi=0 5.140 ms, clustered/phi=1 5.838 ms, adaptive/phi=0 24.095 ms, adaptive/phi=1 24.741 ms
+Completed; see docs/cuda_kick_shared_memory_results/pc_shared_records/summary.md
+docs/cuda_kick_shared_memory_results/pc_shared_records: worst pair spread 1.100 ('head', 'auto', 'cuda', 512, 7, 'adaptive', True), load at start 2.05, process wall 2.8-3.2 s
+| reference | candidate | backend | bucket | order | fixture | acceleration rel L2 | acceleration max pointwise | potential rel L2 | potential max pointwise |
+|---|---|---|---:|---:|---|---:|---:|---:|---:|
+| head | shared | cuda | 64 | 7 | adaptive | 5.183e-09 | 2.591e-07 | 1.287e-09 | 8.868e-07 |
+| head | shared | cuda | 64 | 7 | clustered | 5.646e-09 | 1.820e-07 | 2.845e-09 | 2.072e-07 |
+| head | shared | cuda | 64 | 7 | lattice | 2.541e-07 | 1.151e-05 | 3.761e-07 | 2.291e-05 |
+| head | shared | cuda | 512 | 7 | adaptive | 3.994e-09 | 2.544e-07 | 1.169e-09 | 8.868e-07 |
+| head | shared | cuda | 512 | 7 | clustered | 1.228e-09 | 7.704e-07 | 0.000e+00 | 0.000e+00 |
+| head | shared | cuda | 512 | 7 | lattice | 2.700e-07 | 2.301e-05 | 3.858e-07 | 2.490e-05 |
+
+| backend | bucket | fixture | potential | binary | policy | order | kick ms | speedup vs reference | paired range | force rel L2 | potential rel L2 |
+|---|---:|---|---:|---|---|---:|---:|---:|---|---:|---:|
+| cuda | 64 | adaptive | 0 | head | auto | 7 | 11.335 |  |  | 2.262e-03 | 1.163e-04 |
+| cuda | 64 | adaptive | 0 | shared | auto | 7 | 11.459 | 0.990 | 0.988-1.023 | 2.262e-03 | 1.163e-04 |
+| cuda | 64 | adaptive | 1 | head | auto | 7 | 11.776 |  |  | 2.262e-03 | 1.163e-04 |
+| cuda | 64 | adaptive | 1 | shared | auto | 7 | 12.297 | 1.000 | 0.947-1.015 | 2.262e-03 | 1.163e-04 |
+| cuda | 64 | clustered | 0 | head | auto | 7 | 5.551 |  |  | 5.305e-03 | 1.096e-03 |
+| cuda | 64 | clustered | 0 | shared | auto | 7 | 5.491 | 1.011 | 0.982-1.043 | 5.305e-03 | 1.096e-03 |
+| cuda | 64 | clustered | 1 | head | auto | 7 | 5.665 |  |  | 5.305e-03 | 1.096e-03 |
+| cuda | 64 | clustered | 1 | shared | auto | 7 | 5.848 | 1.008 | 0.967-1.019 | 5.305e-03 | 1.096e-03 |
+| cuda | 64 | lattice | 0 | head | auto | 7 | 14.594 |  |  | 3.644e-01 | 4.476e-02 |
+| cuda | 64 | lattice | 0 | shared | auto | 7 | 14.415 | 1.002 | 0.999-1.027 | 3.644e-01 | 4.476e-02 |
+| cuda | 64 | lattice | 1 | head | auto | 7 | 14.703 |  |  | 3.644e-01 | 4.476e-02 |
+| cuda | 64 | lattice | 1 | shared | auto | 7 | 14.491 | 1.004 | 0.999-1.065 | 3.644e-01 | 4.476e-02 |
+| cuda | 512 | adaptive | 0 | head | auto | 7 | 24.347 |  |  | 1.015e-03 | 1.108e-04 |
+| cuda | 512 | adaptive | 0 | shared | auto | 7 | 24.341 | 1.010 | 0.933-1.092 | 1.015e-03 | 1.108e-04 |
+| cuda | 512 | adaptive | 1 | head | auto | 7 | 25.053 |  |  | 1.015e-03 | 1.108e-04 |
+| cuda | 512 | adaptive | 1 | shared | auto | 7 | 24.934 | 1.006 | 0.944-1.098 | 1.015e-03 | 1.108e-04 |
+| cuda | 512 | clustered | 0 | head | auto | 7 | 5.333 |  |  | 2.146e-03 | 1.120e-03 |
+| cuda | 512 | clustered | 0 | shared | auto | 7 | 5.364 | 1.004 | 0.973-1.039 | 2.146e-03 | 1.120e-03 |
+| cuda | 512 | clustered | 1 | head | auto | 7 | 5.968 |  |  | 2.146e-03 | 1.120e-03 |
+| cuda | 512 | clustered | 1 | shared | auto | 7 | 5.880 | 1.017 | 0.972-1.093 | 2.146e-03 | 1.120e-03 |
+| cuda | 512 | lattice | 0 | head | auto | 7 | 8.886 |  |  | 3.644e-01 | 4.476e-02 |
+| cuda | 512 | lattice | 0 | shared | auto | 7 | 8.873 | 0.999 | 0.964-1.044 | 3.644e-01 | 4.476e-02 |
+| cuda | 512 | lattice | 1 | head | auto | 7 | 9.559 |  |  | 3.644e-01 | 4.476e-02 |
+| cuda | 512 | lattice | 1 | shared | auto | 7 | 9.349 | 1.022 | 0.946-1.060 | 3.644e-01 | 4.476e-02 |
+
+2026-10-20T03:15:31-05:00 stage done
