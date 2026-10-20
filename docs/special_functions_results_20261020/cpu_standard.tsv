@@ -1,0 +1,71 @@
+# CPU independent arrays, 131072 values, 15 samples, median ns/value
+# phase [-4.5pi,4.5pi]; exp [-75,0]; erf signed; erfc/erfcexp [0,sqrt(75)]
+# scalar_source loops may auto-vectorize, especially with fast-math
+# custom = new candidate; legacy = original project SIMD implementation
+# simd8 library path uses std::experimental SIMD math; sincos uses sin+cos
+# erfcexp library is naive expf(-x*x); library_fma corrects square rounding; library_double uses double exp
+backend	operation	path	ns_per_value	max_ulps_sample	failures_8ulp_sample	checksum
+scalar	sin	custom	13.195	1	0	-40.5197836
+scalar	sin	library	7.699	1	0	-40.5197837
+simd8	sin	custom	1.974	1	0	-40.5197836
+simd8	sin	legacy	0.676	884718895	207	-40.5197248
+simd8	sin	library	1.143	1	0	-40.5197904
+scalar	cos	custom	10.126	1	0	9317.06129
+scalar	cos	library	7.650	1	0	9317.06153
+simd8	cos	custom	1.928	1	0	9317.06129
+simd8	cos	legacy	0.706	859553071	209	9317.06482
+simd8	cos	library	1.167	2	0	9317.06136
+scalar	sincos	custom	13.247	1	0	9757.67365
+scalar	sincos	library	9.040	1	0	9757.6739
+simd8	sincos	custom	2.792	1	0	9757.67365
+simd8	sincos	legacy	2.293	884718895	430	9757.67728
+simd8	sincos	library	3.118	2	0	9757.67374
+scalar	exp	custom	3.129	1	0	1736.18786
+scalar	exp	library	2.289	0	0	1736.18786
+simd8	exp	custom	0.800	1	0	1736.18786
+simd8	exp	legacy	1.920	53	441	1736.18788
+simd8	exp	library	2.504	0	0	1736.18786
+scalar	exp2	custom	2.372	1	0	3.45530923e+40
+scalar	exp2	library	2.515	1	0	3.45530924e+40
+simd8	exp2	custom	0.731	1	0	3.45530923e+40
+simd8	exp2	legacy	1.253	1	0	3.45530924e+40
+simd8	exp2	library	2.250	1	0	3.45530924e+40
+scalar	log	custom	3.157	3	0	-70679.0721
+scalar	log	library	2.477	0	0	-70679.0722
+simd8	log	custom	1.076	3	0	-70679.0721
+simd8	log	legacy	1.500	651	2	-70679.0732
+simd8	log	library	2.896	0	0	-70679.0722
+scalar	log2	custom	2.567	1	0	-54881.3735
+scalar	log2	library	2.424	0	0	-54881.3737
+simd8	log2	custom	0.995	1	0	-54881.3735
+simd8	log2	legacy	1.489	38	2	-54881.3738
+simd8	log2	library	2.849	0	0	-54881.3737
+scalar	erf	custom	13.096	2	0	151.155035
+scalar	erf	library	15.050	1	0	151.155042
+simd8	erf	custom	3.488	2	0	151.155035
+simd8	erf	legacy	2.301	2256669901	539	-9.48405857e+18
+simd8	erf	library	14.627	1	0	151.155042
+scalar	erfc	custom	8.415	4	0	8605.74254
+scalar	erfc	library	15.608	2	0	8605.74253
+simd8	erfc	custom	2.664	4	0	8605.74254
+simd8	erfc	legacy	2.220	521571	907	8605.7438
+simd8	erfc	library	16.003	2	0	8605.74253
+scalar	erfcexp	custom	8.377	4	0	21926.1306
+scalar	erfcexp	library	20.006	52	285	21926.1306
+scalar	erfcexp	library_fma	20.475	2	0	21926.1306
+scalar	erfcexp	library_double	22.442	2	0	21926.1306
+simd8	erfcexp	custom	3.522	4	0	21926.1306
+simd8	erfcexp	legacy	4.574	506291	1291	21926.1319
+simd8	erfcexp	library	20.272	52	285	21926.1306
+simd8	erfcexp	library_fma	20.582	2	0	21926.1306
+simd8	erfcexp	library_double	22.393	2	0	21926.1306
+scalar	sqrt	custom	1.378	0	0	1.83383291e+21
+scalar	sqrt	library	1.414	0	0	1.83383291e+21
+simd8	sqrt	custom	0.176	0	0	1.83383291e+21
+simd8	sqrt	legacy	0.176	0	0	1.83383291e+21
+simd8	sqrt	library	0.178	0	0	1.83383291e+21
+scalar	rsqrt	custom	0.866	1	0	2.49786494e+21
+scalar	rsqrt	library	2.365	1	0	2.49786496e+21
+simd8	rsqrt	custom	0.550	1	0	2.49786494e+21
+simd8	rsqrt	legacy	0.297	1	0	2.49786496e+21
+simd8	rsqrt	library	0.298	1	0	2.49786496e+21

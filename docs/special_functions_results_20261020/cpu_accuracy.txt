@@ -1,0 +1,45 @@
+Internal ctest changing into directory: /home/dmarce1/workspace/cosmictiger/build/special_functions_validation
+UpdateCTestConfiguration  from :/home/dmarce1/workspace/cosmictiger/build/special_functions_validation/DartConfiguration.tcl
+Parse Config file:/home/dmarce1/workspace/cosmictiger/build/special_functions_validation/DartConfiguration.tcl
+UpdateCTestConfiguration  from :/home/dmarce1/workspace/cosmictiger/build/special_functions_validation/DartConfiguration.tcl
+Parse Config file:/home/dmarce1/workspace/cosmictiger/build/special_functions_validation/DartConfiguration.tcl
+Test project /home/dmarce1/workspace/cosmictiger/build/special_functions_validation
+Constructing a list of tests
+Done constructing a list of tests
+Updating test list for fixtures
+Added 0 tests to meet fixture requirements
+Checking test dependency graph...
+Checking test dependency graph end
+test 48
+    Start 48: special_functions_baseline
+
+48: Test command: /home/dmarce1/workspace/cosmictiger/build/special_functions_validation/special_functions_baseline_test
+48: Working Directory: /home/dmarce1/workspace/cosmictiger/build/special_functions_validation
+48: Test timeout computed to be: 60
+test 49
+    Start 49: special_functions_native
+
+49: Test command: /home/dmarce1/workspace/cosmictiger/build/special_functions_validation/special_functions_native_test
+49: Working Directory: /home/dmarce1/workspace/cosmictiger/build/special_functions_validation
+49: Test timeout computed to be: 60
+test 50
+    Start 50: special_functions_fast_math
+
+50: Test command: /home/dmarce1/workspace/cosmictiger/build/special_functions_validation/special_functions_fast_math_test
+50: Working Directory: /home/dmarce1/workspace/cosmictiger/build/special_functions_validation
+50: Test timeout computed to be: 60
+50: special function scalar and SIMD reference checks passed: 2099944 values
+1/3 Test #50: special_functions_fast_math ......   Passed    0.22 sec
+49: special function scalar and SIMD reference checks passed: 2099944 values
+2/3 Test #49: special_functions_native .........   Passed    0.23 sec
+48: special function scalar and SIMD reference checks passed: 2099944 values
+3/3 Test #48: special_functions_baseline .......   Passed    0.25 sec
+
+The following tests passed:
+	special_functions_fast_math
+	special_functions_native
+	special_functions_baseline
+
+100% tests passed, 0 tests failed out of 3
+
+Total Test time (real) =   0.25 sec

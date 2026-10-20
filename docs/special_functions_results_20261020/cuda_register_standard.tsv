@@ -1,0 +1,43 @@
+# CUDA register probe on NVIDIA GeForce RTX 3090, 16 blocks of 128 threads, 8192 iterations/thread, 15 trials
+# min/median/max across trials of each trial's minimum warp maximum clock64 delta; cycles per dependent evaluation
+# first 32 seeds include domain boundaries; positive roots/log seeds stay normal; no whole-kernel throughput claim
+backend	operation	path	min_cycles_per_eval	median_cycles_per_eval	max_cycles_per_eval	checksum
+cuda_register_cycles	sin	custom	141.034	141.034	141.065	-33.1790877
+cuda_register_cycles	sin	library	122.034	122.035	122.070	-33.0923282
+cuda_register_cycles	sin	libdevice_accurate	122.034	122.035	122.070	-33.0923282
+cuda_register_cycles	cos	custom	137.034	137.034	137.065	118.550141
+cuda_register_cycles	cos	library	126.034	126.035	126.069	118.581451
+cuda_register_cycles	cos	libdevice_accurate	126.034	126.035	126.069	118.581451
+cuda_register_cycles	sincos	custom	146.035	146.036	146.073	157.751209
+cuda_register_cycles	sincos	library	118.035	118.037	118.070	157.862955
+cuda_register_cycles	sincos	libdevice_accurate	118.035	118.036	118.077	157.862955
+cuda_register_cycles	exp	custom	123.034	123.034	123.066	31.2685226
+cuda_register_cycles	exp	library	66.034	66.034	66.063	31.2686089
+cuda_register_cycles	exp	libdevice_accurate	66.034	66.034	66.065	31.2686089
+cuda_register_cycles	exp2	custom	115.034	115.034	115.066	5.18938595e+38
+cuda_register_cycles	exp2	library	73.034	73.034	73.065	5.16654724e+38
+cuda_register_cycles	exp2	libdevice_accurate	73.034	73.034	73.065	5.16654724e+38
+cuda_register_cycles	log	custom	180.034	180.035	180.067	-1509.7531
+cuda_register_cycles	log	library	120.034	120.034	120.065	-1509.7579
+cuda_register_cycles	log	libdevice_accurate	120.034	120.034	120.065	-1509.7579
+cuda_register_cycles	log2	custom	172.034	172.035	172.068	765.68473
+cuda_register_cycles	log2	library	130.034	130.034	130.063	765.677201
+cuda_register_cycles	log2	libdevice_accurate	130.034	130.034	130.067	765.677201
+cuda_register_cycles	erf	custom	275.040	275.042	275.130	72.2621656
+cuda_register_cycles	erf	library	100.035	100.035	100.067	72.2634277
+cuda_register_cycles	erf	libdevice_accurate	100.035	100.035	100.067	72.2634277
+cuda_register_cycles	erfc	custom	224.034	224.035	224.075	123.202991
+cuda_register_cycles	erfc	library	146.034	146.034	146.072	123.20171
+cuda_register_cycles	erfc	libdevice_accurate	146.034	146.034	146.066	123.20171
+cuda_register_cycles	erfcexp	custom	226.037	226.070	226.075	316.585014
+cuda_register_cycles	erfcexp	library	156.036	156.036	156.067	316.595227
+cuda_register_cycles	erfcexp	libdevice_accurate	158.035	158.035	158.070	316.58993
+cuda_register_cycles	erfcexp	legacy	157.035	157.035	157.067	316.584557
+cuda_register_cycles	erfcexp	library_fma	158.035	158.035	158.065	316.58993
+cuda_register_cycles	erfcexp	library_double	1447.100	1570.882	1862.638	316.578751
+cuda_register_cycles	sqrt	custom	76.060	76.060	76.093	4.05458621e+19
+cuda_register_cycles	sqrt	library	76.060	76.062	76.109	4.05458621e+19
+cuda_register_cycles	sqrt	libdevice_accurate	76.060	76.061	76.099	4.05458621e+19
+cuda_register_cycles	rsqrt	custom	147.034	147.034	147.065	4.67712083e+19
+cuda_register_cycles	rsqrt	library	73.034	73.034	73.065	4.67688408e+19
+cuda_register_cycles	rsqrt	libdevice_accurate	147.034	147.034	147.067	4.67712083e+19

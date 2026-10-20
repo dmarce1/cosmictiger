@@ -1,0 +1,44 @@
+# CUDA device NVIDIA GeForce RTX 3090, 82 SMs, 16 blocks of 128 threads (cap SM/4)
+# 262144 values, 15 samples, 32 launches/sample, event ns/value; limited occupancy with few blocks
+# phase [-4.5pi,4.5pi]; exp [-75,0]; erf signed; erfc/erfcexp [0,sqrt(75)]
+# erfcexp library is naive expf(-x*x); library_fma corrects square rounding; library_double uses double exp
+backend	operation	path	min_ns_per_value	median_ns_per_value	max_ns_per_value	max_ulps_sample	failures_8ulp_sample	checksum
+cuda	sin	custom	0.135	0.212	0.344	1	0	-290.140487
+cuda	sin	library	0.142	0.206	0.322	1775405743	376	-290.140497
+cuda	sin	libdevice_accurate	0.131	0.236	0.367	1	0	-290.140497
+cuda	cos	custom	0.137	0.209	0.309	1	0	19013.117
+cuda	cos	library	0.102	0.200	0.305	1721102383	350	19013.1255
+cuda	cos	libdevice_accurate	0.134	0.183	0.374	1	0	19013.1172
+cuda	sincos	custom	0.139	0.214	0.412	1	0	18705.3073
+cuda	sincos	library	0.122	0.184	0.340	1775405743	766	18705.3148
+cuda	sincos	libdevice_accurate	0.161	0.222	0.427	1	0	18705.3074
+cuda	exp	custom	0.123	0.232	0.380	1	0	3476.23696
+cuda	exp	library	0.109	0.162	0.307	53	476	3476.23688
+cuda	exp	libdevice_accurate	0.103	0.239	0.365	2	0	3476.23699
+cuda	exp2	custom	0.121	0.185	0.374	1	0	7.01266019e+40
+cuda	exp2	library	0.097	0.171	0.397	2	0	7.01266046e+40
+cuda	exp2	libdevice_accurate	0.108	0.183	0.283	2	0	7.01266046e+40
+cuda	log	custom	0.131	0.219	0.393	1	0	-120405.48
+cuda	log	library	0.097	0.178	0.337	6	0	-120405.465
+cuda	log	libdevice_accurate	0.137	0.210	0.323	1	0	-120405.481
+cuda	log2	custom	0.141	0.215	0.380	1	0	-91412.5473
+cuda	log2	library	0.109	0.186	0.361	7	0	-91412.5273
+cuda	log2	libdevice_accurate	0.120	0.167	0.373	1	0	-91412.547
+cuda	erf	custom	0.170	0.256	0.421	2	0	414.760801
+cuda	erf	library	0.170	0.213	0.347	1	0	414.760798
+cuda	erf	libdevice_accurate	0.130	0.196	0.347	1	0	414.760798
+cuda	erfc	custom	0.134	0.244	0.330	5	0	17038.7612
+cuda	erfc	library	0.135	0.194	0.247	3	0	17038.7611
+cuda	erfc	libdevice_accurate	0.169	0.221	0.342	3	0	17038.7611
+cuda	erfcexp	custom	0.142	0.246	0.425	4	0	43772.6052
+cuda	erfcexp	library	0.134	0.266	0.360	87	363	43772.6045
+cuda	erfcexp	libdevice_accurate	0.136	0.205	0.317	3	0	43772.6053
+cuda	erfcexp	legacy	0.137	0.188	0.360	509362	1274	43772.6067
+cuda	erfcexp	library_fma	0.135	0.193	0.429	49	293	43772.6045
+cuda	erfcexp	library_double	0.702	0.800	1.027	3	0	43772.6051
+cuda	sqrt	custom	0.180	0.230	0.403	0	0	3.70766747e+21
+cuda	sqrt	library	0.102	0.172	0.368	1	0	3.70766743e+21
+cuda	sqrt	libdevice_accurate	0.176	0.201	0.423	0	0	3.70766747e+21
+cuda	rsqrt	custom	0.127	0.183	0.366	0	0	4.98555137e+21
+cuda	rsqrt	library	0.115	0.181	0.379	1	0	4.98555134e+21
+cuda	rsqrt	libdevice_accurate	0.125	0.213	0.360	0	0	4.98555137e+21

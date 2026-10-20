@@ -1,0 +1,32 @@
+# CUDA device NVIDIA GeForce RTX 3090, 82 SMs, 16 blocks of 128 threads (cap SM/4)
+# 262144 values, 9 samples, 32 launches/sample, event ns/value; limited occupancy with few blocks
+# phase [-4.5pi,4.5pi]; exp [-75,0]; erf signed; erfc/erfcexp [0,sqrt(75)]
+# erfcexp library is naive expf(-x*x); library_fma corrects square rounding; library_double uses double exp
+backend	operation	path	min_ns_per_value	median_ns_per_value	max_ns_per_value	max_ulps_sample	failures_8ulp_sample	checksum
+cuda	sin	custom	0.139	0.205	0.324	1	0	-290.140487
+cuda	sin	library	0.117	0.157	0.255	1775405743	376	-290.140497
+cuda	cos	custom	0.144	0.200	0.446	1	0	19013.117
+cuda	cos	library	0.138	0.191	0.324	1721102383	350	19013.1255
+cuda	sincos	custom	0.151	0.170	0.295	1	0	18705.3073
+cuda	sincos	library	0.136	0.183	0.291	1775405743	766	18705.3148
+cuda	exp	custom	0.139	0.208	0.424	1	0	3476.23696
+cuda	exp	library	0.124	0.169	0.244	53	476	3476.23688
+cuda	exp2	custom	0.155	0.252	0.324	1	0	7.01266019e+40
+cuda	exp2	library	0.102	0.224	0.307	2	0	7.01266046e+40
+cuda	log	custom	0.128	0.177	0.302	1	0	-120405.48
+cuda	log	library	0.102	0.149	0.245	6	0	-120405.465
+cuda	log2	custom	0.141	0.202	0.293	1	0	-91412.5473
+cuda	log2	library	0.140	0.173	0.336	7	0	-91412.5273
+cuda	erf	custom	0.172	0.239	0.303	2	0	414.760801
+cuda	erf	library	0.130	0.215	0.320	1	0	414.760798
+cuda	erfc	custom	0.157	0.234	0.357	5	0	17038.7612
+cuda	erfc	library	0.149	0.248	0.281	3	0	17038.7611
+cuda	erfcexp	custom	0.133	0.202	0.297	4	0	43772.6052
+cuda	erfcexp	library	0.180	0.214	0.328	87	363	43772.6045
+cuda	erfcexp	legacy	0.185	0.229	0.409	509362	1274	43772.6067
+cuda	erfcexp	library_fma	0.166	0.223	0.296	49	293	43772.6045
+cuda	erfcexp	library_double	0.686	0.817	0.944	3	0	43772.6051
+cuda	sqrt	custom	0.171	0.238	0.347	0	0	3.70766747e+21
+cuda	sqrt	library	0.099	0.163	0.263	1	0	3.70766743e+21
+cuda	rsqrt	custom	0.147	0.217	0.332	0	0	4.98555137e+21
+cuda	rsqrt	library	0.101	0.243	0.308	1	0	4.98555134e+21

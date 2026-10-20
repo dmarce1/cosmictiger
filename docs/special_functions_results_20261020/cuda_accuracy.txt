@@ -1,0 +1,36 @@
+Internal ctest changing into directory: /home/dmarce1/workspace/cosmictiger/build/special_functions_validation
+UpdateCTestConfiguration  from :/home/dmarce1/workspace/cosmictiger/build/special_functions_validation/DartConfiguration.tcl
+Parse Config file:/home/dmarce1/workspace/cosmictiger/build/special_functions_validation/DartConfiguration.tcl
+UpdateCTestConfiguration  from :/home/dmarce1/workspace/cosmictiger/build/special_functions_validation/DartConfiguration.tcl
+Parse Config file:/home/dmarce1/workspace/cosmictiger/build/special_functions_validation/DartConfiguration.tcl
+Test project /home/dmarce1/workspace/cosmictiger/build/special_functions_validation
+Constructing a list of tests
+Done constructing a list of tests
+Updating test list for fixtures
+Added 0 tests to meet fixture requirements
+Checking test dependency graph...
+Checking test dependency graph end
+test 69
+    Start 69: special_functions_cuda_standard
+
+69: Test command: /home/dmarce1/workspace/cosmictiger/build/special_functions_validation/special_functions_cuda_standard_test
+69: Working Directory: /home/dmarce1/workspace/cosmictiger/build/special_functions_validation
+69: Test timeout computed to be: 60
+69: CUDA special function reference checks passed: 1049972 values
+1/2 Test #69: special_functions_cuda_standard ....   Passed    0.43 sec
+test 70
+    Start 70: special_functions_cuda_fast_math
+
+70: Test command: /home/dmarce1/workspace/cosmictiger/build/special_functions_validation/special_functions_cuda_fast_math_test
+70: Working Directory: /home/dmarce1/workspace/cosmictiger/build/special_functions_validation
+70: Test timeout computed to be: 60
+70: CUDA special function reference checks passed: 1049972 values
+2/2 Test #70: special_functions_cuda_fast_math ...   Passed    0.43 sec
+
+The following tests passed:
+	special_functions_cuda_standard
+	special_functions_cuda_fast_math
+
+100% tests passed, 0 tests failed out of 2
+
+Total Test time (real) =   0.87 sec

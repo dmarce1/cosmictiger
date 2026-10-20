@@ -1,0 +1,30 @@
+Date: 2026-10-20
+Repository base: d8e957281698a6773626429a5ba76a8353ff3ad6
+Reference simd repository: dc85446d2a7de89c366c54abb6a024aed13eafc5
+CPU: AMD Ryzen 9 3900X 12-Core Processor
+GPU: NVIDIA GeForce RTX 3090, 82 SMs
+C++: GCC 13.3.0 (Ubuntu 13.3.0-6ubuntu2~24.04.1)
+CUDA: 12.8.93
+glibc: 2.39 (Ubuntu 2.39-0ubuntu8.9)
+CMake: 3.28
+
+CPU standard benchmark flags: -O3 -DNDEBUG -std=gnu++20 -march=native
+CPU fast benchmark adds: -ffast-math
+CUDA standard benchmark flags: -O3 -DNDEBUG -std=c++20 --generate-code=arch=compute_86,code=[compute_86,sm_86]
+CUDA fast benchmark adds: --use_fast_math -Xcompiler=-ffast-math
+Reference C++ translation unit: -fno-fast-math -ffp-contract=off
+
+CPU benchmark arguments: 131072 15
+CUDA event benchmark arguments: 262144 15 16 32
+CUDA register benchmark arguments: 262144 15 16 32 8192
+CUDA accuracy tests: one block of 128 threads
+CUDA benchmarks: 16 blocks of 128 threads (at most 16/82 SMs)
+
+Final CPU tests: 2099944 comparisons in each of baseline, native, fast_math.
+Final CUDA tests: 1049972 comparisons in each of standard, fast_math.
+
+The *_initial.tsv CUDA files preserve the first 9-sample batched runs,
+before the direct accurate-libdevice comparison was added.
+The named standard/fast_math TSV files contain the final 15-sample runs.
+Cycle measurements use a dependent register loop and are not arithmetic
+operation counts or estimates of full-GPU saturated throughput.
