@@ -76,6 +76,21 @@ int kickBlockCount(ParticleInteger particles) {
     return int(std::lround(referenceBlocks * scale));
 }
 
+// Handoff divisor for a node whose Ewald checklist is empty. A finer cut
+// gains where uneven workitems set the kernel's tail, but a CPU node that
+// still carries Ewald checks evaluates them as cell-cell interactions at
+// about 4 us each, while the kernel absorbs them at the workitem roots at no
+// measurable cost: on the uniform lattice at 2,097,152 particles the Ewald
+// lists resolve at the box/8 cells, and a cut below them made the kick
+// 0.82x of the coarse one (docs/cuda_kick_shared_memory.md, "Where the finer
+// division loses on the lattice"). The CPU walk therefore applies this
+// divisor only to nodes without Ewald checks and kickBlockCount to the rest.
+// compute.cudaKickFineHandoffBlocks sets it; zero, or a count below
+// kickBlockCount, leaves every node at kickBlockCount.
+int kickFineBlockCount(ParticleInteger particles) {
+    return std::max(kickBlockCount(particles), getOptions().compute.cudaKickFineHandoffBlocks);
+}
+
 // The CUDA operators are order templates in gravity_cuda.hpp; this unit owns
 // the interaction counters they share.
 

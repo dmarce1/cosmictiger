@@ -211,9 +211,13 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
         size_t maximumGpuParticles = CUDA_KICK_PARTS_MAX;
         auto const rng = particlesCurrentRange();
         ParticleInteger const rangeParticles = rng.second - rng.first;
+        // A node that still carries Ewald checks goes over at the coarse
+        // threshold, so that the kernel rather than this walk evaluates them.
+        int const blockCount = echecklist.empty() ? kickFineBlockCount(rangeParticles) :
+                                                    kickBlockCount(rangeParticles);
         maximumGpuParticles = std::min((size_t) maximumGpuParticles,
-            (size_t) std::max(rangeParticles / kickBlockCount(rangeParticles),
-                (ParticleInteger) getOptions().compute.bucketSize));
+            (size_t) std::max(
+                rangeParticles / blockCount, (ParticleInteger) getOptions().compute.bucketSize));
         if (params.gpu && selfPtr->numberOfParticles() <= maximumGpuParticles &&
             selfPtr->isLocal() && detail::kickSourcesAreSingleRank(dchecklist) &&
             detail::kickSourcesAreSingleRank(echecklist)) {

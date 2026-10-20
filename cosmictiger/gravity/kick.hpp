@@ -256,6 +256,9 @@ constexpr int kKickHandoffBlocksPerMultiprocessor = 2;
 constexpr double kKickHandoffReferenceParticles = 32768.0;
 constexpr double kKickHandoffMaxScale = 3.0;
 int kickBlockCount(ParticleInteger particles);
+// Divisor for nodes that carry no Ewald checks (see kickFineBlockCount in
+// kick.cu); never below kickBlockCount.
+int kickFineBlockCount(ParticleInteger particles);
 size_t kickEstimateCudaMemoryUsage(double theta, int numberOfParticles, int checkCount);
 
 #endif /* KICK_HPP_ */

@@ -50,6 +50,8 @@ struct Compute {
     int cudaKickMultipoleTile{};       // staged positioned multipoles
     bool cudaKickSharedExpansion{};    // keep the active local expansion in shared memory
     int cudaKickHandoffBlocks{};       // pins the CPU/GPU handoff divisor; zero derives it
+    int cudaKickFineHandoffBlocks{};    // handoff divisor once a node carries no Ewald checks;
+                                        // zero (or below the divisor above) keeps that one
     int cudaKickListReserve{};    // pool entries reserved per kick list at block start; zero grows
                                   // on demand
 };
@@ -278,6 +280,7 @@ struct Options {
         arc & compute.cudaKickMultipoleTile;
         arc & compute.cudaKickSharedExpansion;
         arc & compute.cudaKickHandoffBlocks;
+        arc & compute.cudaKickFineHandoffBlocks;
         arc & compute.cudaKickListReserve;
         arc & gravity.fmmOrder;
         arc & checkpoint.readIndex;
