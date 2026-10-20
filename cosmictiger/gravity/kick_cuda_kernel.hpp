@@ -96,9 +96,9 @@ __device__ void doKick(KickReturn& result, KickParameters params, CudaKickData c
             continue;
         }
         ASSERT(sinkIndex >= 0);
-        dx[XDIM] = sinkX[i].toDouble() - self.pos[XDIM].toDouble();
-        dx[YDIM] = sinkY[i].toDouble() - self.pos[YDIM].toDouble();
-        dx[ZDIM] = sinkZ[i].toDouble() - self.pos[ZDIM].toDouble();
+        dx[XDIM] = unwrappedDistance(sinkX[i], self.pos[XDIM]);
+        dx[YDIM] = unwrappedDistance(sinkY[i], self.pos[YDIM]);
+        dx[ZDIM] = unwrappedDistance(sinkZ[i], self.pos[ZDIM]);
         l2 = l2P(lValue2, dx, params.doPhi);
         float gx = force.gx[i];
         float gy = force.gy[i];
@@ -395,7 +395,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
             case 0: {
                 Array<float, NDIM> dx;
                 for (int dim = 0; dim < NDIM; dim++) {
-                    dx[dim] = self.pos[dim].toDouble() - expansionPos[dim].toDouble();
+                    dx[dim] = unwrappedDistance(self.pos[dim], expansionPos[dim]);
                 }
                 flops += 3;
                 {

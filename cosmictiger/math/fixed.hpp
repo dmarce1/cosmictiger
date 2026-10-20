@@ -293,6 +293,21 @@ CUDA_EXPORT inline float distance(Fixed32 a, Fixed32 b) {
     return (Fixed<int32_t>(a) - Fixed<int32_t>(b)).toFloat();
 }
 
+// Subtract Q0.32 positions before narrowing, without periodic minimum-image wrapping.
+// The magnitude fits uint32_t, so the one integer-to-float rounding matches
+// float(a.toDouble() - b.toDouble()) without device FP64 arithmetic.
+CUDA_EXPORT inline float unwrappedDistance(Fixed32 a, Fixed32 b) {
+    uint32_t const aRaw = a.raw();
+    uint32_t const bRaw = b.raw();
+    uint32_t const magnitude = aRaw >= bRaw ? aRaw - bRaw : bRaw - aRaw;
+#ifdef __CUDA_ARCH__
+    float const separation = __uint2float_rn(magnitude) * kFixed2float;
+#else
+    float const separation = static_cast<float>(magnitude) * kFixed2float;
+#endif
+    return aRaw >= bRaw ? separation : -separation;
+}
+
 template <int n>
 CUDA_EXPORT inline float distance(Fixed<int, n> a, Fixed<int, n> b) {
     return (a - b).toFloat();

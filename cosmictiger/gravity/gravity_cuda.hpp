@@ -497,7 +497,7 @@ __device__ void cudaGravityCcEwald(CudaKickData const& data, FmmExpansion<float,
             for (int dim = 0; dim < NDIM; dim++) {
                 dx[dim] = distance(self.mpos->pos[dim], other.mpos->pos[dim]);
                 unwrappedPosition[dim] =
-                    self.mpos->pos[dim].toDouble() - other.mpos->pos[dim].toDouble();
+                    unwrappedDistance(self.mpos->pos[dim], other.mpos->pos[dim]);
             }
             flops += 3 + ewaldGreensFunction(d, dx, unwrappedPosition);
             flops += m2L(l, m, d, doPhi);
