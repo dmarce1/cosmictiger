@@ -2571,6 +2571,111 @@ the arena the way the PP loop does, with its loads attributed to the shared
 tile they read, and that the generic reload of the control block's pointers
 is gone from the arena's last inner loop.
 
+### CP reads and PP force updates from the shared-memory symbol (`cp_pp_shared_planes/`)
+
+After the PC loop's change two inner loops of the arena still addressed
+shared-memory regions through the pointers resolved in the control block: the
+CP loop (`cudaGravityCpDirect`) read the staged particle planes as
+`control.sourceX[j]` and its siblings, one source per lane per iteration, and
+the PP loop (`cudaGravityPpDirect`) updated the sink forces through
+`control.forces`, four words per sink per tile at three store sites. In the
+order-7 kernel of `1bb812d0` (`sass/survey_sass.sh` with `sass/sass_regions.py`,
+condensed with the racecheck survey's `condense2.py`) the CP loop is inlined
+into the kernel at two call sites for each mass instantiation, four loop
+bodies over one staged source of 232 (mixed mass) or 229 (equal mass)
+instructions, each reading its four or three plane words with generic `LD.E`
+from 64-bit addresses formed by `IMAD.WIDE` from plane pointers hoisted out of
+the loop with `LDS.64` (`sass/head_cp_loop.txt`). The PP routine is not
+inlined at order 7: `cudaGravityPpDirect<7, true>` and `<7, false>` are
+separate device functions of 287,488 and 289,920 bytes whose `control`
+reference is a generic address, so each of the 16 force updates per function
+(two sinks times four words at the paired site, four words at each of the
+other two) was a generic reload of the plane pointer from the control block
+(`LD.E.64`), a generic load and a generic store (`LD.E`, `ST.E`): 48 memory
+instructions per function (`sass/head_pp_stores_equal.txt`,
+`sass/head_pp_stores_mixed.txt`).
+
+Both now derive their regions from the `extern __shared__` symbol and the
+layout offsets, as the PP loop's reads and the PC loop already do:
+
+- `cudaGravityCpDirect` reads the planes through `detail::cudaStagedSources`
+  (`sources.x[j]`, `sources.y[j]`, `sources.z[j]`, and `sources.mass[j]` with
+  mixed masses), resolved once before the staging loop. The staging copies'
+  destination stays the control block's pointers (libcu++ tests the address
+  space at run time either way, and the copy is the same `LDGSTS`).
+- `cudaGravityPpDirect` applies each sink's accumulated force through one
+  helper, `detail::cudaApplyPpForce`, called at all three store sites in a
+  uniform branch with `detail::cudaArenaForces` when the layout keeps the
+  forces in shared memory and with `control.forces` under whole-bucket global
+  backing (`forceOffset == -1`), so each call site keeps its address space as
+  the PC loop's `cudaApplyPcField` does.
+
+The arithmetic expressions are textually what they were (the `distance` calls
+with the loaded source word as their argument, the `-=` and `+=` of the
+accumulated force), the register-copy lesson of the PC change: the operators
+are fed from the loads, not from copies.
+
+SASS of the landed binary (`sass/shared_cp_loop.txt`,
+`sass/shared_pp_stores_equal.txt`, `sass/shared_pp_stores_mixed.txt`,
+`sass/loop_body_counts.txt`): the four CP loop bodies are 233 and 230
+instructions with the head's floating-point instructions exactly (mixed mass
+211: 149 `FFMA`, 52 `FMUL`, three `FADD`, three `I2FP`, one each of
+`MUFU.SQRT`, `MUFU.RCP`, `FMNMX` and `FSET`; equal mass 210: 99 `FFMA`, 52
+`FMUL`, 52 `FADD` and the same eight others), the same multiset of operands
+and immediates with the registers renamed (`sass/cp_loop_fp_multiset.txt`;
+the scheduler interleaves them differently around the shorter loads). The
+four or three `LD.E` became `LDS` from 32-bit addresses formed by `IADD3` and
+`LEA`, one integer instruction more per body than the `IMAD.WIDE` form, and
+the kernel's `LDS.64` count fell by the 14 hoisted plane-pointer loads (419 to
+405) as its `LD.E` fell by 14 (1,702 to 1,688) and its `LDS` rose by 14 (931
+to 945). No local-memory traffic was added to the kernel (933 `LDL`/`STL` in
+both), which grew by 896 bytes (604,288 to 605,184). In the PP functions the
+shared-forces branch is `LDS`/`STS` per word at immediate offsets from a
+32-bit address with no pointer reload (the second sink of a pair at `+0x80`,
+32 floats on), 32 shared instructions beside the backing branch's 48 generic
+ones; each function grew by 1,920 bytes and its local traffic moved by two
+instructions (1,936 to 1,938 and 1,940 to 1,936 `LDL`/`STL`). The staging is
+the same 28 `LDGSTS` in the kernel and six in each PP function.
+
+Validation, 1024-bucket Release build of this worktree (`build/release`,
+`1bb812d0` plus the change): `fmm_tree` and `fmm_walk_cpu` (`ctest_cpu.log`),
+`fmm_walk_cuda` and `sph_gravity_cuda` (`ctest_cuda.log`) pass. The force
+exports of the timing run are bit-identical to the head's on every fixture at
+buckets 64 and 512 (`head_vs_shared.md`).
+
+Whole-kick timing (`stage.sh`, `run.sh`): the landed binary against the head
+(`1bb812d0`, built in the same tree before the change), both 1024-bucket
+Release builds, automatic policy, buckets 64 and 512, order 7, five pairs of
+15 samples, direct reference over 1,024 particles, under the shared GPU lock
+after 60 s of quiet (one-minute load 2.37 at the start, no other GPU client, every process 2.8 to 3.0 s of wall time, worst pair spread 1.08 in the clustered bucket-512 force cell). Speedup is the head time over the
+landed time, paired range in parentheses (`paired_speedup.md`):
+
+| bucket | fixture | potential | head 1bb812d0 | shared planes | speedup |
+|---:|---|---:|---:|---:|---:|
+| 64 | lattice | no | 14.60 ms | 14.34 ms | 1.008x (0.993-1.064) |
+| 64 | lattice | yes | 14.68 ms | 14.57 ms | 1.012x (0.996-1.014) |
+| 64 | clustered | no | 5.75 ms | 5.73 ms | 0.996x (0.978-1.031) |
+| 64 | clustered | yes | 5.87 ms | 5.97 ms | 0.979x (0.967-1.016) |
+| 64 | adaptive | no | 10.43 ms | 10.33 ms | 1.012x (0.950-1.028) |
+| 64 | adaptive | yes | 10.71 ms | 10.47 ms | 1.020x (0.996-1.038) |
+| 512 | lattice | no | 7.62 ms | 7.74 ms | 0.981x (0.967-1.001) |
+| 512 | lattice | yes | 8.32 ms | 8.31 ms | 1.029x (0.966-1.038) |
+| 512 | clustered | no | 5.28 ms | 5.28 ms | 0.992x (0.976-1.081) |
+| 512 | clustered | yes | 6.04 ms | 5.99 ms | 0.984x (0.978-1.057) |
+| 512 | adaptive | no | 19.48 ms | 19.73 ms | 1.003x (0.966-1.021) |
+| 512 | adaptive | yes | 20.57 ms | 20.45 ms | 0.996x (0.975-1.035) |
+
+Every cell is level with the head, 0.979x to 1.029x, and every paired range
+includes one. The expected outcome, as for the PC loop: the CP loop body is 91%
+floating-point instructions and reads one word per plane per iteration, and the
+PP force update is four words per sink per tile against the hundreds of pairs
+the tile's inner loop evaluates per sink, so neither trades issue slots the
+kick waits on. The change's value is structural: every inner loop of the arena
+now addresses the staged planes, the staged records and the shared force planes
+through the symbol, with the loads and stores attributed to the shared region
+they touch, and the generic reload of the control block's pointers is gone from
+all of them.
+
 ### What remains
 
 - The per-launch list slab removed the pool allocator from the kernel (above);
@@ -2580,18 +2685,18 @@ is gone from the arena's last inner loop.
   PP loop schedule landed, the merged head's kernel at that division is level
   with the baseline's at bucket 64 (5.10 against 5.11 ms,
   `landing_nsys_adaptive_b64/`); bucket 128 is not re-measured.
-- The CP loop (`cudaGravityCpDirect`) still reads the staged particle planes
-  through `control.sourceX` and its siblings, and the PP loop still updates
-  the sink forces through `control.forces`: generic pointers reloaded from the
-  control block (`LDS.64` of the pointer, then `LD.E`/`ST.E`), the pattern the
-  PP and PC loops' record reads no longer use (`sass/pc_region_shared.txt` of
-  `pc_shared_records/` shows the CP reads). The CP reads are one source per
-  lane per iteration and the PP force update four words per sink per tile;
-  `detail::cudaStagedSources` and `detail::cudaArenaForces` would give both
-  shared-memory accesses. The PC loop's record reads could shrink further by
-  copying each record to registers with 16-byte loads (234 instead of 264
-  instructions per pair) if roundoff-level force differences were acceptable
-  ("PC loop reads from the shared-memory symbol", `registers_variant/`).
+- Every inner loop of the arena now addresses the staged planes, the staged
+  records and the shared force planes through the `extern __shared__` symbol
+  ("CP reads and PP force updates from the shared-memory symbol"). What is
+  left of the generic pattern: the staging copies name the control block's
+  destination pointers (libcu++ resolves the address space at run time, the
+  same `LDGSTS` either way), and at order 7 `cudaGravityPpDirect` is a
+  separate device function whose `control` reference is a generic address, so
+  its reads of the control block, the backing branch's pointer reloads among
+  them, are `LD.E`. The PC loop's record reads could shrink further by copying
+  each record to registers with 16-byte loads (234 instead of 264 instructions
+  per pair) if roundoff-level force differences were acceptable ("PC loop
+  reads from the shared-memory symbol", `registers_variant/`).
 - At small problems where the launch holds fewer warps than the GPU can keep
   resident (64 leaves at bucket 512), the PP loop is no longer the bound: with
   the restructured loop it holds about a fifth of the kernel's stall samples.

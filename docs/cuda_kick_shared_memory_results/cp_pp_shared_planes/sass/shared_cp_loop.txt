@@ -1,0 +1,53 @@
+32 instructions attributed to gravity_cuda.hpp:381-383; 4 innermost loops enclose them
+-- 8 of them in this loop
+== loop [0x42680,0x43500] (.L_x_1220): 233 instructions (211 floating point, 4 memory, 18 integer and control)
+    FFMA.FTZ 149, FMUL.FTZ 52, IADD3 7, MOV 5, LEA 4, LDS 4, I2FP.F32.S32 3, FADD.FTZ 3, MUFU.SQRT 1, FMNMX.FTZ 1, FSET.BF.GT.FTZ.AND 1, MUFU.RCP 1, ISETP.GE.AND 1, BRA 1
+    memory instructions by source line: gravity_cuda.hpp:383: LDS 1; gravity_cuda.hpp:382: LDS 1; gravity_cuda.hpp:381: LDS 1; gravity_cuda.hpp:391: LDS 1
+    instructions attributed to the given lines (8):
+       42680 gravity_cuda.hpp:382   IADD3 R0, R116, R88, RZ
+       426a0 gravity_cuda.hpp:383   IADD3 R4, R116, R0, RZ
+       426c0 gravity_cuda.hpp:383   LEA R6, R4, R117.reuse, 0x2
+       426d0 gravity_cuda.hpp:382   LEA R4, R0, R117.reuse, 0x2
+       426e0 gravity_cuda.hpp:381   LEA R0, R88, R117, 0x2
+       426f0 gravity_cuda.hpp:383   LDS R7, [R6]
+       42720 gravity_cuda.hpp:382   LDS R5, [R4]
+       42740 gravity_cuda.hpp:381   LDS R3, [R0]
+-- 8 of them in this loop
+== loop [0x4ec00,0x4fa50] (.L_x_1278): 230 instructions (210 floating point, 3 memory, 17 integer and control)
+    FFMA.FTZ 99, FMUL.FTZ 52, FADD.FTZ 52, IADD3 7, MOV 5, LEA 3, LDS 3, I2FP.F32.S32 3, ISETP.GE.AND 1, MUFU.SQRT 1, FMNMX.FTZ 1, FSET.BF.GT.FTZ.AND 1, MUFU.RCP 1, BRA 1
+    memory instructions by source line: gravity_cuda.hpp:382: LDS 1; gravity_cuda.hpp:383: LDS 1; gravity_cuda.hpp:381: LDS 1
+    instructions attributed to the given lines (8):
+       4ec00 gravity_cuda.hpp:382   IADD3 R0, R107, R88, RZ
+       4ec20 gravity_cuda.hpp:383   IADD3 R3, R107, R0, RZ
+       4ec30 gravity_cuda.hpp:382   LEA R4, R0, R106.reuse, 0x2
+       4ec40 gravity_cuda.hpp:383   LEA R6, R3, R106.reuse, 0x2
+       4ec50 gravity_cuda.hpp:381   LEA R0, R88, R106, 0x2
+       4ec60 gravity_cuda.hpp:382   LDS R5, [R4]
+       4ec90 gravity_cuda.hpp:383   LDS R6, [R6]
+       4ecc0 gravity_cuda.hpp:381   LDS R3, [R0]
+-- 8 of them in this loop
+== loop [0x5fe50,0x60cd0] (.L_x_1356): 233 instructions (211 floating point, 4 memory, 18 integer and control)
+    FFMA.FTZ 149, FMUL.FTZ 52, IADD3 7, MOV 5, LEA 4, LDS 4, I2FP.F32.S32 3, FADD.FTZ 3, MUFU.SQRT 1, FMNMX.FTZ 1, FSET.BF.GT.FTZ.AND 1, MUFU.RCP 1, ISETP.GE.AND 1, BRA 1
+    memory instructions by source line: gravity_cuda.hpp:383: LDS 1; gravity_cuda.hpp:382: LDS 1; gravity_cuda.hpp:381: LDS 1; gravity_cuda.hpp:391: LDS 1
+    instructions attributed to the given lines (8):
+       5fe50 gravity_cuda.hpp:382   IADD3 R0, R136, R89, RZ
+       5fe70 gravity_cuda.hpp:383   IADD3 R4, R136, R0, RZ
+       5fe90 gravity_cuda.hpp:383   LEA R6, R4, R137.reuse, 0x2
+       5fea0 gravity_cuda.hpp:382   LEA R4, R0, R137.reuse, 0x2
+       5feb0 gravity_cuda.hpp:381   LEA R0, R89, R137, 0x2
+       5fec0 gravity_cuda.hpp:383   LDS R7, [R6]
+       5fef0 gravity_cuda.hpp:382   LDS R5, [R4]
+       5ff10 gravity_cuda.hpp:381   LDS R3, [R0]
+-- 8 of them in this loop
+== loop [0x6c4e0,0x6d330] (.L_x_1414): 230 instructions (210 floating point, 3 memory, 17 integer and control)
+    FFMA.FTZ 99, FMUL.FTZ 52, FADD.FTZ 52, IADD3 7, MOV 5, LEA 3, LDS 3, I2FP.F32.S32 3, ISETP.GE.AND 1, MUFU.SQRT 1, FMNMX.FTZ 1, FSET.BF.GT.FTZ.AND 1, MUFU.RCP 1, BRA 1
+    memory instructions by source line: gravity_cuda.hpp:382: LDS 1; gravity_cuda.hpp:383: LDS 1; gravity_cuda.hpp:381: LDS 1
+    instructions attributed to the given lines (8):
+       6c4e0 gravity_cuda.hpp:382   IADD3 R0, R105, R83, RZ
+       6c500 gravity_cuda.hpp:383   IADD3 R3, R105, R0, RZ
+       6c510 gravity_cuda.hpp:382   LEA R4, R0, R106.reuse, 0x2
+       6c520 gravity_cuda.hpp:383   LEA R6, R3, R106.reuse, 0x2
+       6c530 gravity_cuda.hpp:381   LEA R0, R83, R106, 0x2
+       6c540 gravity_cuda.hpp:382   LDS R5, [R4]
+       6c570 gravity_cuda.hpp:383   LDS R7, [R6]
+       6c5a0 gravity_cuda.hpp:381   LDS R3, [R0]

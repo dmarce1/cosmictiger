@@ -180,6 +180,19 @@ __device__ inline void cudaApplyPcField(
     force.phi[k] += SCALE_FACTOR1 * l(0, 0, 0);
 }
 
+// One sink's accumulated PP force applied to its force planes, the potential
+// only when it is computed. Called with the arena planes or the global
+// backing, so each call site keeps its address space.
+__device__ inline void cudaApplyPpForce(
+    CudaKickForceTile const& force, int k, float fx, float fy, float fz, float pot, bool doPhi) {
+    force.gx[k] -= fx;
+    force.gy[k] -= fy;
+    force.gz[k] -= fz;
+    if (doPhi) {
+        force.phi[k] += pot;
+    }
+}
+
 // The inverse radius powers of kPairs sink-source pairs. The plain powers of
 // every pair are computed in one straight-line block, so the scheduler overlaps
 // their reciprocal square roots, and the softened powers replace them afterwards
@@ -347,6 +360,10 @@ __device__ void cudaGravityCpDirect(CudaKickData const& data, CudaKickControl<or
     bool doPhi) {
     int const& tid = threadIdx.x;
     auto const* treeNodes = data.treeNodes;
+    // The staged planes derived from the shared-memory symbol, as the PP loop
+    // reads them: LDS per staged source instead of a generic load through the
+    // control block's reloaded pointer.
+    detail::CudaStagedSources const sources = detail::cudaStagedSources<order>(control);
     FlopCounter<int> flops = 0;
     if (partlist.size()) {
         FmmExpansion<float, order> l;
@@ -361,9 +378,9 @@ __device__ void cudaGravityCpDirect(CudaKickData const& data, CudaKickControl<or
                 data, control, partlist, i, particleRange);
             for (int j = tid; j < count; j += WARP_SIZE) {
                 Array<float, NDIM> dx;
-                dx[XDIM] = distance(self.mpos->pos[XDIM], control.sourceX[j]);
-                dx[YDIM] = distance(self.mpos->pos[YDIM], control.sourceY[j]);
-                dx[ZDIM] = distance(self.mpos->pos[ZDIM], control.sourceZ[j]);
+                dx[XDIM] = distance(self.mpos->pos[XDIM], sources.x[j]);
+                dx[YDIM] = distance(self.mpos->pos[YDIM], sources.y[j]);
+                dx[ZDIM] = distance(self.mpos->pos[ZDIM], sources.z[j]);
                 FmmExpansion<float, order> d;
                 flops += FmmOrder<order>::kLocalCoefficients_ + 6 + greensFunction(d, dx);
                 if constexpr (equalMass) {
@@ -371,7 +388,7 @@ __device__ void cudaGravityCpDirect(CudaKickData const& data, CudaKickControl<or
                         l[k] += d[k];
                     }
                 } else {
-                    float const mass = control.sourceMass[j];
+                    float const mass = sources.mass[j];
                     for (int k = 0; k < FmmOrder<order>::kLocalCoefficients_; k++) {
                         l[k] += mass * d[k];
                     }
@@ -500,7 +517,11 @@ __device__ void cudaGravityPpDirect(CudaKickData const& data, CudaKickControl<or
     TreeNode const& self, int sinkBegin, int sinkCount, DeviceVector<int> const& partlist, float h,
     bool doPhi) {
     int const& tid = threadIdx.x;
-    auto const& force = control.forces;
+    // The forces: the arena planes derived from the shared-memory symbol, or
+    // the control block's global backing when the layout keeps none.
+    bool const sharedForces = control.layout.forceOffset >= 0;
+    CudaKickForceTile const arenaForce = detail::cudaArenaForces<order>(control);
+    CudaKickForceTile const& backingForce = control.forces;
     int const sinkFirst = self.particleRange.first + sinkBegin;
     auto const* sinkX = data.x + sinkFirst;
     auto const* sinkY = data.y + sinkFirst;
@@ -543,11 +564,12 @@ __device__ void cudaGravityPpDirect(CudaKickData const& data, CudaKickControl<or
 #pragma unroll
                 for (int s = 0; s < kPair; s++) {
                     int const sink = k + s * WARP_SIZE;
-                    force.gx[sink] -= fx[s];
-                    force.gy[sink] -= fy[s];
-                    force.gz[sink] -= fz[s];
-                    if (doPhi) {
-                        force.phi[sink] += pot[s];
+                    if (sharedForces) {
+                        detail::cudaApplyPpForce(
+                            arenaForce, sink, fx[s], fy[s], fz[s], pot[s], doPhi);
+                    } else {
+                        detail::cudaApplyPpForce(
+                            backingForce, sink, fx[s], fy[s], fz[s], pot[s], doPhi);
                     }
                 }
                 pairs += kPair * particleIndex;
@@ -563,11 +585,10 @@ __device__ void cudaGravityPpDirect(CudaKickData const& data, CudaKickControl<or
                 float pot[1] = {0.f};
                 detail::cudaPpSinkGroup<1, equalMass>(sources, particleIndex, sx, sy, sz, h2, hinv,
                     h2inv, h3inv, doPhi, fx, fy, fz, pot, close);
-                force.gx[k] -= fx[0];
-                force.gy[k] -= fy[0];
-                force.gz[k] -= fz[0];
-                if (doPhi) {
-                    force.phi[k] += pot[0];
+                if (sharedForces) {
+                    detail::cudaApplyPpForce(arenaForce, k, fx[0], fy[0], fz[0], pot[0], doPhi);
+                } else {
+                    detail::cudaApplyPpForce(backingForce, k, fx[0], fy[0], fz[0], pot[0], doPhi);
                 }
                 pairs += particleIndex;
                 flops += 21 * particleIndex + 4;
@@ -609,11 +630,10 @@ __device__ void cudaGravityPpDirect(CudaKickData const& data, CudaKickControl<or
                     sharedReduceAdd(pot);
                 }
                 if (tid == 0) {
-                    force.gx[sink] -= fx;
-                    force.gy[sink] -= fy;
-                    force.gz[sink] -= fz;
-                    if (doPhi) {
-                        force.phi[sink] += pot;
+                    if (sharedForces) {
+                        detail::cudaApplyPpForce(arenaForce, sink, fx, fy, fz, pot, doPhi);
+                    } else {
+                        detail::cudaApplyPpForce(backingForce, sink, fx, fy, fz, pot, doPhi);
                     }
                     flops += 4;
                 }

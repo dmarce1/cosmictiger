@@ -1,0 +1,10 @@
+Internal ctest changing into directory: /home/dmarce1/workspace/cosmictiger/.claude/worktrees/amazing-wiles-9d8695/build/release
+Test project /home/dmarce1/workspace/cosmictiger/.claude/worktrees/amazing-wiles-9d8695/build/release
+    Start 77: fmm_tree
+1/2 Test #77: fmm_tree .........................   Passed    0.06 sec
+    Start 78: fmm_walk_cpu
+2/2 Test #78: fmm_walk_cpu .....................   Passed    0.16 sec
+
+100% tests passed, 0 tests failed out of 2
+
+Total Test time (real) =   0.22 sec

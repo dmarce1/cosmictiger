@@ -1,0 +1,9 @@
+CP loop bodies of the order-7 kernel: floating-point instructions with registers renamed (R, UR, P) and immediates kept, compared as sorted multisets, head 1bb812d0 against the shared-reads build.
+loop 0: 211 floating-point instructions in both: sorted multiset identical: True; order identical: False; first differing position: 4
+        non-floating-point: head 21 -> shared 22: head-only ['IMAD.WIDE R, R, 0x4, R', 'LD.E R, [R.64]', 'ULDC.64 R, c[0x0][0x118]'], shared-only ['IADD3 R, R, R, RZ', 'LDS R, [R]', 'LEA R, R, R, 0x2']
+loop 1: 210 floating-point instructions in both: sorted multiset identical: True; order identical: False; first differing position: 3
+        non-floating-point: head 19 -> shared 20: head-only ['IMAD.WIDE R, R, 0x4, R', 'LD.E R, [R.64]', 'ULDC.64 R, c[0x0][0x118]'], shared-only ['IADD3 R, R, R, RZ', 'LDS R, [R]', 'LEA R, R, R, 0x2']
+loop 2: 211 floating-point instructions in both: sorted multiset identical: True; order identical: False; first differing position: 4
+        non-floating-point: head 21 -> shared 22: head-only ['IMAD.WIDE R, R, 0x4, R', 'LD.E R, [R.64]', 'ULDC.64 R, c[0x0][0x118]'], shared-only ['IADD3 R, R, R, RZ', 'LDS R, [R]', 'LEA R, R, R, 0x2']
+loop 3: 210 floating-point instructions in both: sorted multiset identical: True; order identical: False; first differing position: 3
+        non-floating-point: head 19 -> shared 20: head-only ['IMAD.WIDE R, R, 0x4, R', 'LD.E R, [R.64]', 'ULDC.64 R, c[0x0][0x118]'], shared-only ['IADD3 R, R, R, RZ', 'LDS R, [R]', 'LEA R, R, R, 0x2']

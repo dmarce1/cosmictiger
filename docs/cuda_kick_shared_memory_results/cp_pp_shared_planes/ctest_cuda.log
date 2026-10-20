@@ -1,0 +1,10 @@
+Internal ctest changing into directory: /home/dmarce1/workspace/cosmictiger/.claude/worktrees/amazing-wiles-9d8695/build/release
+Test project /home/dmarce1/workspace/cosmictiger/.claude/worktrees/amazing-wiles-9d8695/build/release
+    Start 74: sph_gravity_cuda
+1/2 Test #74: sph_gravity_cuda .................   Passed    0.88 sec
+    Start 79: fmm_walk_cuda
+2/2 Test #79: fmm_walk_cuda ....................   Passed    1.03 sec
+
+100% tests passed, 0 tests failed out of 2
+
+Total Test time (real) =   1.92 sec

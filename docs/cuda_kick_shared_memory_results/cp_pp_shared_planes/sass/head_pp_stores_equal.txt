@@ -1,0 +1,61 @@
+101 instructions attributed to gravity_cuda.hpp:546-551,566-571,612-617, 48 memory
+    gravity_cuda.hpp:546: LD.E.64 2, LD.E 2, ST.E 2
+    gravity_cuda.hpp:547: LD.E.64 2, LD.E 2, ST.E 2
+    gravity_cuda.hpp:548: LD.E.64 2, LD.E 2, ST.E 2
+    gravity_cuda.hpp:550: LD.E.64 2, LD.E 2, ST.E 2
+    gravity_cuda.hpp:566: LD.E.64 1, LD.E 1, ST.E 1
+    gravity_cuda.hpp:567: LD.E.64 1, LD.E 1, ST.E 1
+    gravity_cuda.hpp:568: LD.E.64 1, LD.E 1, ST.E 1
+    gravity_cuda.hpp:570: LD.E.64 1, LD.E 1, ST.E 1
+    gravity_cuda.hpp:612: LD.E.64 1, LD.E 1, ST.E 1
+    gravity_cuda.hpp:613: LD.E.64 1, LD.E 1, ST.E 1
+    gravity_cuda.hpp:614: LD.E.64 1, LD.E 1, ST.E 1
+    gravity_cuda.hpp:616: LD.E.64 1, LD.E 1, ST.E 1
+       2efa0 gravity_cuda.hpp:546   LD.E.64 R8, [R34.64+0x218]
+       2efc0 gravity_cuda.hpp:546   LD.E R11, [R8.64]
+       2efe0 gravity_cuda.hpp:546   ST.E [R8.64], R15
+       2eff0 gravity_cuda.hpp:547   LD.E.64 R10, [R34.64+0x220]
+       2f010 gravity_cuda.hpp:547   LD.E R13, [R10.64]
+       2f030 gravity_cuda.hpp:547   ST.E [R10.64], R105
+       2f040 gravity_cuda.hpp:548   LD.E.64 R12, [R34.64+0x228]
+       2f070 gravity_cuda.hpp:548   LD.E R107, [R12.64]
+       2f090 gravity_cuda.hpp:548   ST.E [R12.64], R107
+       2f0a0 gravity_cuda.hpp:550   @P0 LD.E.64 R8, [R34.64+0x230]
+       2f0c0 gravity_cuda.hpp:550   @P0 LD.E R4, [R8.64]
+       2f0e0 gravity_cuda.hpp:550   @P0 ST.E [R8.64], R3
+       2f0f0 gravity_cuda.hpp:546   LD.E.64 R10, [R34.64+0x218]
+       2f120 gravity_cuda.hpp:546   LD.E R4, [R10.64]
+       2f140 gravity_cuda.hpp:546   ST.E [R10.64], R139
+       2f150 gravity_cuda.hpp:547   LD.E.64 R12, [R34.64+0x220]
+       2f170 gravity_cuda.hpp:547   LD.E R4, [R12.64]
+       2f190 gravity_cuda.hpp:547   ST.E [R12.64], R137
+       2f1a0 gravity_cuda.hpp:548   LD.E.64 R8, [R34.64+0x228]
+       2f1c0 gravity_cuda.hpp:548   LD.E R4, [R8.64]
+       2f1e0 gravity_cuda.hpp:548   ST.E [R8.64], R3
+       2f1f0 gravity_cuda.hpp:550   @P0 LD.E.64 R6, [R34.64+0x230]
+       2f220 gravity_cuda.hpp:550   @P0 LD.E R4, [R6.64]
+       2f2d0 gravity_cuda.hpp:550   @P0 ST.E [R6.64], R5
+       41590 gravity_cuda.hpp:566   LD.E.64 R4, [R34.64+0x218]
+       415e0 gravity_cuda.hpp:566   LD.E R3, [R4.64]
+       41600 gravity_cuda.hpp:566   ST.E [R4.64], R3
+       41610 gravity_cuda.hpp:567   LD.E.64 R6, [R34.64+0x220]
+       41640 gravity_cuda.hpp:567   LD.E R8, [R6.64]
+       41660 gravity_cuda.hpp:567   ST.E [R6.64], R147
+       41670 gravity_cuda.hpp:568   LD.E.64 R8, [R34.64+0x228]
+       416a0 gravity_cuda.hpp:568   LD.E R11, [R8.64]
+       416d0 gravity_cuda.hpp:568   ST.E [R8.64], R11
+       416e0 gravity_cuda.hpp:570   @P1 LD.E.64 R4, [R34.64+0x230]
+       41720 gravity_cuda.hpp:570   @P1 LD.E R6, [R4.64]
+       41770 gravity_cuda.hpp:570   @P1 ST.E [R4.64], R153
+       456e0 gravity_cuda.hpp:612   LD.E.64 R4, [R34.64+0x218]
+       45740 gravity_cuda.hpp:612   LD.E R3, [R4.64]
+       45760 gravity_cuda.hpp:612   ST.E [R4.64], R3
+       45770 gravity_cuda.hpp:613   LD.E.64 R6, [R34.64+0x220]
+       457a0 gravity_cuda.hpp:613   LD.E R0, [R6.64]
+       457c0 gravity_cuda.hpp:613   ST.E [R6.64], R105
+       457d0 gravity_cuda.hpp:614   LD.E.64 R8, [R34.64+0x228]
+       45800 gravity_cuda.hpp:614   LD.E R11, [R8.64]
+       45840 gravity_cuda.hpp:614   ST.E [R8.64], R11
+       45870 gravity_cuda.hpp:616   LD.E.64 R4, [R34.64+0x230]
+       458a0 gravity_cuda.hpp:616   LD.E R0, [R4.64]
+       458c0 gravity_cuda.hpp:616   ST.E [R4.64], R107

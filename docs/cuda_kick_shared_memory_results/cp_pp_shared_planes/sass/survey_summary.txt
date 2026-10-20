@@ -1,0 +1,16 @@
+== head (/home/dmarce1/workspace/cosmictiger/.claude/worktrees/amazing-wiles-9d8695/build/release/frozen/cosmictiger_b1024_head_1bb812d0) sha 99de18c718d7
+   kernel: symbol 415, 0x93880 bytes; LDL/STL 933, LD.E 1702, ST.E 1229, LDS 931, LDS.64 419, STS 473, LDGSTS 28
+   pp_equal: symbol 411, 0x46300 bytes; LDL/STL 1936, LD.E 268, ST.E 210, LDS 47, LDS.64 2, STS 0, LDGSTS 6
+   pp_mixed: symbol 413, 0x46c80 bytes; LDL/STL 1940, LD.E 304, ST.E 217, LDS 52, LDS.64 2, STS 0, LDGSTS 6
+   CP loops in the kernel: [0x42600,0x43470] (.L_x_1220): 232 instructions (211 floating point, 4 memory, 17 integer and control);[0x4eb60,0x4f9a0] (.L_x_1278): 229 instructions (210 floating point, 3 memory, 16 integer and control);[0x5fc80,0x60af0] (.L_x_1356): 232 instructions (211 floating point, 4 memory, 17 integer and control);[0x6c230,0x6d070] (.L_x_1414): 229 instructions (210 floating point, 3 memory, 16 integer and control);
+   CP plane reads by form:      14 1 LD.E;
+   PP force-update memory instructions (equal mass): 48 memory; forms:      13 LD.E;     13 LD.E.64;      6 @P0;      3 @P1;     13 ST.E;
+   PP force-update memory instructions (mixed mass): 48 memory; forms:      13 LD.E;     13 LD.E.64;      6 @P0;      3 @P1;     13 ST.E;
+== shared (/home/dmarce1/workspace/cosmictiger/.claude/worktrees/amazing-wiles-9d8695/build/release/frozen/cosmictiger_b1024_cp_pp_shared) sha 412afdadf7db
+   kernel: symbol 415, 0x93c00 bytes; LDL/STL 933, LD.E 1688, ST.E 1229, LDS 945, LDS.64 405, STS 473, LDGSTS 28
+   pp_equal: symbol 411, 0x46a80 bytes; LDL/STL 1938, LD.E 270, ST.E 210, LDS 63, LDS.64 2, STS 16, LDGSTS 6
+   pp_mixed: symbol 413, 0x47380 bytes; LDL/STL 1936, LD.E 306, ST.E 217, LDS 68, LDS.64 2, STS 16, LDGSTS 6
+   CP loops in the kernel: [0x42680,0x43500] (.L_x_1220): 233 instructions (211 floating point, 4 memory, 18 integer and control);[0x4ec00,0x4fa50] (.L_x_1278): 230 instructions (210 floating point, 3 memory, 17 integer and control);[0x5fe50,0x60cd0] (.L_x_1356): 233 instructions (211 floating point, 4 memory, 18 integer and control);[0x6c4e0,0x6d330] (.L_x_1414): 230 instructions (210 floating point, 3 memory, 17 integer and control);
+   CP plane reads by form:      14 1 LDS;
+   PP force-update memory instructions (equal mass): 80 memory; forms:      16 LD.E;     16 LD.E.64;     16 LDS;     16 ST.E;     16 STS;
+   PP force-update memory instructions (mixed mass): 80 memory; forms:      16 LD.E;     16 LD.E.64;     16 LDS;     16 ST.E;     16 STS;

@@ -1,0 +1,78 @@
+Order-7 kick kernel of the 1024-bucket Release build: the CP direct source loop (cudaGravityCpDirect, inlined into cudaKickKernel<7> at two call sites for each of the equal- and mixed-mass instantiations, so four loop copies) from its label to the back-edge branch, one staged source per lane per iteration; and the PP direct force updates (cudaGravityPpDirect<7, true> and <7, false>, separate device functions) at their three store sites.
+head = 1bb812d0; shared = the CP reads through detail::cudaStagedSources and the PP updates through detail::cudaApplyPpForce with detail::cudaArenaForces or the control block's backing.
+
+== CP loop bodies (kernel)
+-- head
+== loop [0x42600,0x43470] (.L_x_1220): 232 instructions (211 floating point, 4 memory, 17 integer and control)
+    FFMA.FTZ 149, FMUL.FTZ 52, MOV 5, IADD3 5, IMAD.WIDE 4, LD.E 4, I2FP.F32.S32 3, FADD.FTZ 3, ULDC.64 1, ISETP.GE.AND 1, MUFU.SQRT 1, FMNMX.FTZ 1, FSET.BF.GT.FTZ.AND 1, MUFU.RCP 1, BRA 1
+== loop [0x4eb60,0x4f9a0] (.L_x_1278): 229 instructions (210 floating point, 3 memory, 16 integer and control)
+    FFMA.FTZ 99, FMUL.FTZ 52, FADD.FTZ 52, MOV 5, IADD3 5, IMAD.WIDE 3, LD.E 3, I2FP.F32.S32 3, ULDC.64 1, ISETP.GE.AND 1, MUFU.SQRT 1, FMNMX.FTZ 1, FSET.BF.GT.FTZ.AND 1, MUFU.RCP 1, BRA 1
+== loop [0x5fc80,0x60af0] (.L_x_1356): 232 instructions (211 floating point, 4 memory, 17 integer and control)
+    FFMA.FTZ 149, FMUL.FTZ 52, MOV 5, IADD3 5, IMAD.WIDE 4, LD.E 4, I2FP.F32.S32 3, FADD.FTZ 3, ULDC.64 1, ISETP.GE.AND 1, MUFU.SQRT 1, FMNMX.FTZ 1, FSET.BF.GT.FTZ.AND 1, MUFU.RCP 1, BRA 1
+== loop [0x6c230,0x6d070] (.L_x_1414): 229 instructions (210 floating point, 3 memory, 16 integer and control)
+    FFMA.FTZ 99, FMUL.FTZ 52, FADD.FTZ 52, MOV 5, IADD3 5, IMAD.WIDE 3, LD.E 3, I2FP.F32.S32 3, ULDC.64 1, ISETP.GE.AND 1, MUFU.SQRT 1, FMNMX.FTZ 1, FSET.BF.GT.FTZ.AND 1, MUFU.RCP 1, BRA 1
+-- shared
+== loop [0x42680,0x43500] (.L_x_1220): 233 instructions (211 floating point, 4 memory, 18 integer and control)
+    FFMA.FTZ 149, FMUL.FTZ 52, IADD3 7, MOV 5, LEA 4, LDS 4, I2FP.F32.S32 3, FADD.FTZ 3, MUFU.SQRT 1, FMNMX.FTZ 1, FSET.BF.GT.FTZ.AND 1, MUFU.RCP 1, ISETP.GE.AND 1, BRA 1
+== loop [0x4ec00,0x4fa50] (.L_x_1278): 230 instructions (210 floating point, 3 memory, 17 integer and control)
+    FFMA.FTZ 99, FMUL.FTZ 52, FADD.FTZ 52, IADD3 7, MOV 5, LEA 3, LDS 3, I2FP.F32.S32 3, ISETP.GE.AND 1, MUFU.SQRT 1, FMNMX.FTZ 1, FSET.BF.GT.FTZ.AND 1, MUFU.RCP 1, BRA 1
+== loop [0x5fe50,0x60cd0] (.L_x_1356): 233 instructions (211 floating point, 4 memory, 18 integer and control)
+    FFMA.FTZ 149, FMUL.FTZ 52, IADD3 7, MOV 5, LEA 4, LDS 4, I2FP.F32.S32 3, FADD.FTZ 3, MUFU.SQRT 1, FMNMX.FTZ 1, FSET.BF.GT.FTZ.AND 1, MUFU.RCP 1, ISETP.GE.AND 1, BRA 1
+== loop [0x6c4e0,0x6d330] (.L_x_1414): 230 instructions (210 floating point, 3 memory, 17 integer and control)
+    FFMA.FTZ 99, FMUL.FTZ 52, FADD.FTZ 52, IADD3 7, MOV 5, LEA 3, LDS 3, I2FP.F32.S32 3, ISETP.GE.AND 1, MUFU.SQRT 1, FMNMX.FTZ 1, FSET.BF.GT.FTZ.AND 1, MUFU.RCP 1, BRA 1
+
+== PP force updates, memory instructions attributed to the store sites, per function
+-- head, equal mass: 101 instructions attributed to gravity_cuda.hpp:546-551,566-571,612-617, 48 memory
+    gravity_cuda.hpp:546: LD.E.64 2, LD.E 2, ST.E 2
+    gravity_cuda.hpp:547: LD.E.64 2, LD.E 2, ST.E 2
+    gravity_cuda.hpp:548: LD.E.64 2, LD.E 2, ST.E 2
+    gravity_cuda.hpp:550: LD.E.64 2, LD.E 2, ST.E 2
+    gravity_cuda.hpp:566: LD.E.64 1, LD.E 1, ST.E 1
+    gravity_cuda.hpp:567: LD.E.64 1, LD.E 1, ST.E 1
+    gravity_cuda.hpp:568: LD.E.64 1, LD.E 1, ST.E 1
+    gravity_cuda.hpp:570: LD.E.64 1, LD.E 1, ST.E 1
+    gravity_cuda.hpp:612: LD.E.64 1, LD.E 1, ST.E 1
+    gravity_cuda.hpp:613: LD.E.64 1, LD.E 1, ST.E 1
+    gravity_cuda.hpp:614: LD.E.64 1, LD.E 1, ST.E 1
+    gravity_cuda.hpp:616: LD.E.64 1, LD.E 1, ST.E 1
+-- head, mixed mass: 101 instructions attributed to gravity_cuda.hpp:546-551,566-571,612-617, 48 memory
+    gravity_cuda.hpp:546: LD.E.64 2, LD.E 2, ST.E 2
+    gravity_cuda.hpp:547: LD.E.64 2, LD.E 2, ST.E 2
+    gravity_cuda.hpp:548: LD.E.64 2, LD.E 2, ST.E 2
+    gravity_cuda.hpp:550: LD.E.64 2, LD.E 2, ST.E 2
+    gravity_cuda.hpp:566: LD.E.64 1, LD.E 1, ST.E 1
+    gravity_cuda.hpp:567: LD.E.64 1, LD.E 1, ST.E 1
+    gravity_cuda.hpp:568: LD.E.64 1, LD.E 1, ST.E 1
+    gravity_cuda.hpp:570: LD.E.64 1, LD.E 1, ST.E 1
+    gravity_cuda.hpp:612: LD.E.64 1, LD.E 1, ST.E 1
+    gravity_cuda.hpp:613: LD.E.64 1, LD.E 1, ST.E 1
+    gravity_cuda.hpp:614: LD.E.64 1, LD.E 1, ST.E 1
+    gravity_cuda.hpp:616: LD.E.64 1, LD.E 1, ST.E 1
+-- shared, equal mass: 204 instructions attributed to gravity_cuda.hpp:186-194,567-573,588-592,633-637, 80 memory
+    gravity_cuda.hpp:188: LDS 4, STS 4, LD.E.64 4, LD.E 4, ST.E 4
+    gravity_cuda.hpp:189: LDS 4, STS 4, LD.E.64 4, LD.E 4, ST.E 4
+    gravity_cuda.hpp:190: LDS 4, STS 4, LD.E.64 4, LD.E 4, ST.E 4
+    gravity_cuda.hpp:192: LDS 4, STS 4, LD.E.64 4, LD.E 4, ST.E 4
+-- shared, mixed mass: 204 instructions attributed to gravity_cuda.hpp:186-194,567-573,588-592,633-637, 80 memory
+    gravity_cuda.hpp:188: LDS 4, STS 4, LD.E.64 4, LD.E 4, ST.E 4
+    gravity_cuda.hpp:189: LDS 4, STS 4, LD.E.64 4, LD.E 4, ST.E 4
+    gravity_cuda.hpp:190: LDS 4, STS 4, LD.E.64 4, LD.E 4, ST.E 4
+    gravity_cuda.hpp:192: LDS 4, STS 4, LD.E.64 4, LD.E 4, ST.E 4
+
+== whole-symbol counts
+== head (/home/dmarce1/workspace/cosmictiger/.claude/worktrees/amazing-wiles-9d8695/build/release/frozen/cosmictiger_b1024_head_1bb812d0) sha 99de18c718d7
+   kernel: symbol 415, 0x93880 bytes; LDL/STL 933, LD.E 1702, ST.E 1229, LDS 931, LDS.64 419, STS 473, LDGSTS 28
+   pp_equal: symbol 411, 0x46300 bytes; LDL/STL 1936, LD.E 268, ST.E 210, LDS 47, LDS.64 2, STS 0, LDGSTS 6
+   pp_mixed: symbol 413, 0x46c80 bytes; LDL/STL 1940, LD.E 304, ST.E 217, LDS 52, LDS.64 2, STS 0, LDGSTS 6
+   CP loops in the kernel: [0x42600,0x43470] (.L_x_1220): 232 instructions (211 floating point, 4 memory, 17 integer and control);[0x4eb60,0x4f9a0] (.L_x_1278): 229 instructions (210 floating point, 3 memory, 16 integer and control);[0x5fc80,0x60af0] (.L_x_1356): 232 instructions (211 floating point, 4 memory, 17 integer and control);[0x6c230,0x6d070] (.L_x_1414): 229 instructions (210 floating point, 3 memory, 16 integer and control);
+   CP plane reads by form:      14 1 LD.E;
+   PP force-update memory instructions (equal mass): 48 memory; forms:      13 LD.E;     13 LD.E.64;      6 @P0;      3 @P1;     13 ST.E;
+   PP force-update memory instructions (mixed mass): 48 memory; forms:      13 LD.E;     13 LD.E.64;      6 @P0;      3 @P1;     13 ST.E;
+== shared (/home/dmarce1/workspace/cosmictiger/.claude/worktrees/amazing-wiles-9d8695/build/release/frozen/cosmictiger_b1024_cp_pp_shared) sha 412afdadf7db
+   kernel: symbol 415, 0x93c00 bytes; LDL/STL 933, LD.E 1688, ST.E 1229, LDS 945, LDS.64 405, STS 473, LDGSTS 28
+   pp_equal: symbol 411, 0x46a80 bytes; LDL/STL 1938, LD.E 270, ST.E 210, LDS 63, LDS.64 2, STS 16, LDGSTS 6
+   pp_mixed: symbol 413, 0x47380 bytes; LDL/STL 1936, LD.E 306, ST.E 217, LDS 68, LDS.64 2, STS 16, LDGSTS 6
+   CP loops in the kernel: [0x42680,0x43500] (.L_x_1220): 233 instructions (211 floating point, 4 memory, 18 integer and control);[0x4ec00,0x4fa50] (.L_x_1278): 230 instructions (210 floating point, 3 memory, 17 integer and control);[0x5fe50,0x60cd0] (.L_x_1356): 233 instructions (211 floating point, 4 memory, 18 integer and control);[0x6c4e0,0x6d330] (.L_x_1414): 230 instructions (210 floating point, 3 memory, 17 integer and control);
+   CP plane reads by form:      14 1 LDS;
+   PP force-update memory instructions (equal mass): 80 memory; forms:      16 LD.E;     16 LD.E.64;     16 LDS;     16 ST.E;     16 STS;
+   PP force-update memory instructions (mixed mass): 80 memory; forms:      16 LD.E;     16 LD.E.64;     16 LDS;     16 ST.E;     16 STS;
