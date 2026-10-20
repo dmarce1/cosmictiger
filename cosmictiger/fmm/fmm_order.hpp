@@ -91,6 +91,20 @@ CUDA_EXPORT constexpr int fmmPositionedMultipoleBytes(int order) {
     return int(sizeof(float)) * (fmmMultipoleCoefficientCount(order) + NDIM);
 }
 
+// The tree's multipole arena and the CUDA kick's staged multipole tile store
+// the records at this stride: the record size rounded up to a multiple of
+// kFmmPositionedMultipoleAlignment, so that every record starts on a 16-byte
+// boundary and the kick stages a whole record with 16-byte asynchronous
+// copies. Odd orders pad by one float (an odd degree p gives (p + 1)^2
+// coefficients, a multiple of four, and with the three position words the
+// record is one word short of a multiple of four); even orders need none.
+inline constexpr int kFmmPositionedMultipoleAlignment = 16;
+
+CUDA_EXPORT constexpr int fmmPositionedMultipoleStride(int order) {
+    return (fmmPositionedMultipoleBytes(order) + kFmmPositionedMultipoleAlignment - 1) /
+        kFmmPositionedMultipoleAlignment * kFmmPositionedMultipoleAlignment;
+}
+
 CUDA_EXPORT constexpr int fmmLocalExpansionBytes(int order) {
     return int(sizeof(float)) * fmmLocalCoefficientCount(order);
 }
@@ -112,6 +126,10 @@ inline constexpr int kFmmMaxSymmetricTensorCount = fmmSymmetricTensorCount(kFmmM
 static_assert(fmmPositionedMultipoleBytes(3) == 28 && fmmPositionedMultipoleBytes(7) == 156 &&
         fmmPositionedMultipoleBytes(9) == 268,
     "Positioned multipole byte sizes");
+static_assert(fmmPositionedMultipoleStride(3) == 32 && fmmPositionedMultipoleStride(4) == 48 &&
+        fmmPositionedMultipoleStride(7) == 160 && fmmPositionedMultipoleStride(8) == 208 &&
+        fmmPositionedMultipoleStride(9) == 272,
+    "Positioned multipole record strides");
 static_assert(fmmLocalExpansionBytes(3) == 40 && fmmLocalExpansionBytes(7) == 200 &&
         fmmLocalExpansionBytes(9) == 328,
     "Local expansion byte sizes");
@@ -128,6 +146,7 @@ struct FmmOrder {
     static constexpr int kLocalTraceIndex_ = fmmLocalTraceIndex(order);
     static constexpr int kLocalCoefficients_ = fmmLocalCoefficientCount(order);
     static constexpr int kPositionedMultipoleBytes_ = fmmPositionedMultipoleBytes(order);
+    static constexpr int kPositionedMultipoleStride_ = fmmPositionedMultipoleStride(order);
     static constexpr int kLocalExpansionBytes_ = fmmLocalExpansionBytes(order);
     static constexpr int kEwaldTensorOrder_ = order;
 };

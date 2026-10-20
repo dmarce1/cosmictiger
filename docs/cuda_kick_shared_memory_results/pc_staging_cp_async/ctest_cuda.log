@@ -1,0 +1,10 @@
+Internal ctest changing into directory: /home/dmarce1/workspace/cosmictiger/.claude/worktrees/festive-easley-59df3c/build/release
+Test project /home/dmarce1/workspace/cosmictiger/.claude/worktrees/festive-easley-59df3c/build/release
+    Start 73: sph_gravity_cuda
+1/2 Test #73: sph_gravity_cuda .................   Passed    0.83 sec
+    Start 78: fmm_walk_cuda
+2/2 Test #78: fmm_walk_cuda ....................   Passed    1.02 sec
+
+100% tests passed, 0 tests failed out of 2
+
+Total Test time (real) =   1.85 sec

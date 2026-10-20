@@ -1,0 +1,53 @@
+{
+  "utc": "2026-10-20T03:56:43.736127+00:00",
+  "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+  "command": "benchmarks/run_cuda_kick_arena.py --binary head=build/release/frozen/cosmictiger_b1024_head_819d0013:arena --binary aligned=build/release/frozen/cosmictiger_b1024_pc_aligned:arena --policy auto= --output docs/cuda_kick_shared_memory_results/pc_staging_cp_async --fixtures lattice,clustered,adaptive --buckets 64,512 --orders 7 --pairs 5 --samples 15 --reference 1024 --timeout 1800 --idle-wait 'ninja|ncu|nsys|cc1plus|cicc|ptxas' --wait-gpu-idle",
+  "binaries": [
+    {
+      "label": "head",
+      "path": "/home/dmarce1/workspace/cosmictiger/.claude/worktrees/festive-easley-59df3c/build/release/frozen/cosmictiger_b1024_head_819d0013",
+      "arena": true,
+      "sha256": "67f8fca116d9f3eb66a46fa343407ec1dedca5c686466e920c71dc10c054518a"
+    },
+    {
+      "label": "aligned",
+      "path": "/home/dmarce1/workspace/cosmictiger/.claude/worktrees/festive-easley-59df3c/build/release/frozen/cosmictiger_b1024_pc_aligned",
+      "arena": true,
+      "sha256": "8e503c074a0491dadf818f868132bf40bb350c0f75b48749e51a829ace75fd6f"
+    }
+  ],
+  "policies": [
+    {
+      "label": "auto",
+      "options": []
+    }
+  ],
+  "fixtures": [
+    "lattice",
+    "clustered",
+    "adaptive"
+  ],
+  "buckets": [
+    64,
+    512
+  ],
+  "orders": [
+    7
+  ],
+  "backends": [
+    "cuda"
+  ],
+  "samples": 15,
+  "pairs": 5,
+  "reference": 1024,
+  "threads": 2,
+  "cpus": "1-2",
+  "particles_per_dimension": 32,
+  "git_head": "c4cc57d5ea64d9fdaa2601e0f0cca20d03363ad2",
+  "nvidia_smi": "name, driver_version, clocks.current.sm [MHz], clocks.current.memory [MHz], utilization.gpu [%], memory.used [MiB]\nNVIDIA GeForce RTX 3090, 595.99.02, 1695 MHz, 9501 MHz, 28 %, 4093 MiB\n",
+  "load_average": [
+    5.369140625,
+    6.2529296875,
+    7.1328125
+  ]
+}

@@ -144,7 +144,11 @@ bool kickBuildLayout(Compute const& compute, bool massPlane, int residency, int 
     }
     int const particleBytesPerSource =
         int(sizeof(Fixed32)) * NDIM + (massPlane ? int(sizeof(float)) : 0);
-    layout.multipoleStride = kickRoundUp(int(sizeof(FmmMultiPos<order>)), kKickArenaAlignment);
+    // Staged records keep the tree arena's stride, so cudaGravityPcDirect
+    // stages each record with one aligned asynchronous copy.
+    static_assert(FmmOrder<order>::kPositionedMultipoleStride_ % kKickArenaAlignment == 0,
+        "Staged multipole records must keep the arena alignment");
+    layout.multipoleStride = FmmOrder<order>::kPositionedMultipoleStride_;
     int const multipoleTarget = kKickDefaultMultipoleTile;
     bool const particleAuto = compute.cudaKickParticleTile <= 0;
     bool const multipoleAuto = compute.cudaKickMultipoleTile <= 0;

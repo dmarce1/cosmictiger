@@ -1,0 +1,47 @@
+22:49:11 not quiet: build
+22:49:31 not quiet: build
+22:49:51 not quiet: build
+22:50:12 not quiet: build
+22:50:32 not quiet: build
+22:50:52 not quiet: build
+22:51:12 not quiet: build
+22:51:32 not quiet: build
+22:51:52 not quiet: build
+22:52:12 not quiet: build
+22:52:32 not quiet: build
+22:53:52 quiet for 60 s (load 4.50); taking the GPU lock
+2026-10-19T22:56:41-05:00 GPU lock acquired for ctest, load 5.40
+2026-10-19T22:56:43-05:00 ctest exit 0 (100% tests passed, 0 tests failed out of 2)
+2026-10-19T22:56:43-05:00 GPU lock acquired, load 5.37
+head_auto_cuda_b64_o7_pair0: lattice/phi=0 15.011 ms, lattice/phi=1 15.113 ms, clustered/phi=0 5.597 ms, clustered/phi=1 5.679 ms, adaptive/phi=0 12.057 ms, adaptive/phi=1 12.428 ms
+head_auto_cuda_b512_o7_pair0: lattice/phi=0 9.567 ms, lattice/phi=1 10.129 ms, clustered/phi=0 5.454 ms, clustered/phi=1 6.111 ms, adaptive/phi=0 26.790 ms, adaptive/phi=1 27.589 ms
+aligned_auto_cuda_b64_o7_pair0: lattice/phi=0 14.677 ms, lattice/phi=1 14.728 ms, clustered/phi=0 5.551 ms, clustered/phi=1 5.880 ms, adaptive/phi=0 11.830 ms, adaptive/phi=1 12.430 ms
+aligned_auto_cuda_b512_o7_pair0: lattice/phi=0 9.494 ms, lattice/phi=1 9.814 ms, clustered/phi=0 5.880 ms, clustered/phi=1 6.350 ms, adaptive/phi=0 26.069 ms, adaptive/phi=1 27.151 ms
+aligned_auto_cuda_b64_o7_pair1: lattice/phi=0 14.486 ms, lattice/phi=1 14.559 ms, clustered/phi=0 5.506 ms, clustered/phi=1 5.760 ms, adaptive/phi=0 12.319 ms, adaptive/phi=1 12.317 ms
+aligned_auto_cuda_b512_o7_pair1: lattice/phi=0 9.172 ms, lattice/phi=1 9.732 ms, clustered/phi=0 5.332 ms, clustered/phi=1 6.058 ms, adaptive/phi=0 26.144 ms, adaptive/phi=1 26.738 ms
+head_auto_cuda_b64_o7_pair1: lattice/phi=0 14.543 ms, lattice/phi=1 14.601 ms, clustered/phi=0 5.484 ms, clustered/phi=1 5.736 ms, adaptive/phi=0 12.174 ms, adaptive/phi=1 12.346 ms
+head_auto_cuda_b512_o7_pair1: lattice/phi=0 9.217 ms, lattice/phi=1 9.748 ms, clustered/phi=0 5.312 ms, clustered/phi=1 5.959 ms, adaptive/phi=0 26.429 ms, adaptive/phi=1 26.884 ms
+head_auto_cuda_b64_o7_pair2: lattice/phi=0 14.534 ms, lattice/phi=1 14.566 ms, clustered/phi=0 5.486 ms, clustered/phi=1 5.695 ms, adaptive/phi=0 12.312 ms, adaptive/phi=1 12.531 ms
+head_auto_cuda_b512_o7_pair2: lattice/phi=0 9.591 ms, lattice/phi=1 10.057 ms, clustered/phi=0 5.309 ms, clustered/phi=1 6.111 ms, adaptive/phi=0 26.187 ms, adaptive/phi=1 27.039 ms
+aligned_auto_cuda_b64_o7_pair2: lattice/phi=0 14.532 ms, lattice/phi=1 14.739 ms, clustered/phi=0 5.506 ms, clustered/phi=1 5.931 ms, adaptive/phi=0 12.077 ms, adaptive/phi=1 12.323 ms
+aligned_auto_cuda_b512_o7_pair2: lattice/phi=0 9.458 ms, lattice/phi=1 10.103 ms, clustered/phi=0 5.375 ms, clustered/phi=1 6.133 ms, adaptive/phi=0 25.871 ms, adaptive/phi=1 26.941 ms
+aligned_auto_cuda_b64_o7_pair3: lattice/phi=0 14.733 ms, lattice/phi=1 14.690 ms, clustered/phi=0 5.694 ms, clustered/phi=1 5.981 ms, adaptive/phi=0 12.310 ms, adaptive/phi=1 12.214 ms
+aligned_auto_cuda_b512_o7_pair3: lattice/phi=0 9.572 ms, lattice/phi=1 10.286 ms, clustered/phi=0 5.376 ms, clustered/phi=1 6.110 ms, adaptive/phi=0 26.139 ms, adaptive/phi=1 27.495 ms
+head_auto_cuda_b64_o7_pair3: lattice/phi=0 14.705 ms, lattice/phi=1 14.810 ms, clustered/phi=0 5.598 ms, clustered/phi=1 5.910 ms, adaptive/phi=0 11.771 ms, adaptive/phi=1 12.332 ms
+head_auto_cuda_b512_o7_pair3: lattice/phi=0 9.545 ms, lattice/phi=1 10.089 ms, clustered/phi=0 5.459 ms, clustered/phi=1 6.248 ms, adaptive/phi=0 26.774 ms, adaptive/phi=1 27.516 ms
+head_auto_cuda_b64_o7_pair4: lattice/phi=0 14.735 ms, lattice/phi=1 14.862 ms, clustered/phi=0 5.573 ms, clustered/phi=1 5.889 ms, adaptive/phi=0 12.127 ms, adaptive/phi=1 12.403 ms
+head_auto_cuda_b512_o7_pair4: lattice/phi=0 9.857 ms, lattice/phi=1 10.337 ms, clustered/phi=0 5.500 ms, clustered/phi=1 6.137 ms, adaptive/phi=0 27.332 ms, adaptive/phi=1 27.475 ms
+aligned_auto_cuda_b64_o7_pair4: lattice/phi=0 14.959 ms, lattice/phi=1 14.937 ms, clustered/phi=0 5.610 ms, clustered/phi=1 5.869 ms, adaptive/phi=0 11.419 ms, adaptive/phi=1 12.282 ms
+aligned_auto_cuda_b512_o7_pair4: lattice/phi=0 9.526 ms, lattice/phi=1 10.129 ms, clustered/phi=0 5.427 ms, clustered/phi=1 6.084 ms, adaptive/phi=0 26.434 ms, adaptive/phi=1 29.691 ms
+Completed; see docs/cuda_kick_shared_memory_results/pc_staging_cp_async/summary.md
+docs/cuda_kick_shared_memory_results/pc_staging_cp_async: worst pair spread 1.110 ('aligned', 'auto', 'cuda', 512, 7, 'adaptive', True), load at start 5.37, process wall 2.9-3.4 s
+| reference | candidate | backend | bucket | order | fixture | acceleration rel L2 | acceleration max pointwise | potential rel L2 | potential max pointwise |
+|---|---|---|---:|---:|---|---:|---:|---:|---:|
+| head | aligned | cuda | 64 | 7 | adaptive | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| head | aligned | cuda | 64 | 7 | clustered | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| head | aligned | cuda | 64 | 7 | lattice | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| head | aligned | cuda | 512 | 7 | adaptive | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| head | aligned | cuda | 512 | 7 | clustered | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| head | aligned | cuda | 512 | 7 | lattice | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+
+22:57:52 command exit 0

@@ -1,0 +1,226 @@
+ 6eee0              sm_30_intrinsics.hpp:110   BRA.CONV ~URZ, `(.L_x_307)
+ 6ef20              sm_30_intrinsics.hpp:110   CALL.ABS.NOINC `(__cuda_sm70_warpsync)
+ 6ef40              device_vector.hpp:320   LDS R33, [UR46+0x100]
+ 6ef70              gravity_cuda.hpp:370   @!P0 BRA `(.L_x_1436)
+ 6f000              gravity_cuda.hpp:349   YIELD
+ 6f040              gravity_cuda.hpp:372   @!P0 BRA `(.L_x_1438)
+ 6f060 .L_x_1448:   device_vector.hpp:340   LDS.64 R4, [UR46+0xf0]
+ 6f070              device_vector.hpp:340   YIELD
+ 6f0c0              gravity_cuda.hpp:374   LD.E R5, [R6.64]
+ 6f0e0              gravity_cuda.hpp:374   LD.E.64 R4, [R4.64+0x48]
+ 6f220              gravity_cuda.hpp:374   LDG.E.64 R6, [R6.64]
+ 6f250              barrier.h:1148  @P1 BRA `(.L_x_1440)
+ 6f2e0              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 6f370              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 6f380              barrier.h:1037  ST.E.128 [R20.64], R12
+ 6f3e0              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 6f440              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 6f480              barrier.h:1037  ST.E.128 [R20.64], R12
+ 6f490              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 6f4f0              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 6f530              barrier.h:1037  ST.E.128 [R20.64], R12
+ 6f540              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 6f5a0              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 6f5e0              barrier.h:1037  ST.E.128 [R20.64], R12
+ 6f5f0              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 6f650              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 6f690              barrier.h:1037  ST.E.128 [R20.64], R12
+ 6f6a0              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 6f700              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 6f740              barrier.h:1037  ST.E.128 [R20.64], R12
+ 6f750              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 6f7b0              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 6f7f0              barrier.h:1037  ST.E.128 [R20.64], R12
+ 6f800              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 6f860              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 6f8a0              barrier.h:1037  ST.E.128 [R20.64], R12
+ 6f8b0              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 6f910              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 6f950              barrier.h:1037  ST.E.128 [R20.64], R12
+ 6f960              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 6f9c0              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 6fa00              barrier.h:1037  ST.E.128 [R20.64], R12
+ 6fa10              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 6fa70              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 6fab0              barrier.h:1037  ST.E.128 [R20.64], R12
+ 6fac0              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 6fb20              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 6fb60              barrier.h:1037  ST.E.128 [R20.64], R12
+ 6fb70              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 6fbd0              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 6fc10              barrier.h:1037  ST.E.128 [R20.64], R12
+ 6fc20              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 6fc80              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 6fcc0              barrier.h:1037  ST.E.128 [R20.64], R12
+ 6fcd0              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 6fd30              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 6fd70              barrier.h:1037  ST.E.128 [R20.64], R12
+ 6fd80              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 6fde0              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 6fe20              barrier.h:1037  ST.E.128 [R20.64], R12
+ 6fe30              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 6fe90              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 6fed0              barrier.h:1037  ST.E.128 [R20.64], R12
+ 6fee0              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 6ff40              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 6ff80              barrier.h:1037  ST.E.128 [R20.64], R12
+ 6ff90              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 6fff0              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 70030              barrier.h:1037  ST.E.128 [R20.64], R12
+ 70040              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 700a0              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 700e0              barrier.h:1037  ST.E.128 [R20.64], R12
+ 700f0              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 70150              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 70190              barrier.h:1037  ST.E.128 [R20.64], R12
+ 701a0              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 70200              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 70240              barrier.h:1037  ST.E.128 [R20.64], R12
+ 70250              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 702b0              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 702f0              barrier.h:1037  ST.E.128 [R20.64], R12
+ 70300              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 70360              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 703a0              barrier.h:1037  ST.E.128 [R20.64], R12
+ 703b0              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 70410              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 70450              barrier.h:1037  ST.E.128 [R20.64], R12
+ 70460              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 704c0              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 70500              barrier.h:1037  ST.E.128 [R20.64], R12
+ 70510              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 70570              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 705b0              barrier.h:1037  ST.E.128 [R20.64], R12
+ 705c0              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 70620              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 70660              barrier.h:1037  ST.E.128 [R20.64], R12
+ 70670              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 706d0              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 70710              barrier.h:1037  ST.E.128 [R20.64], R12
+ 70720              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 70780              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 707c0              barrier.h:1037  ST.E.128 [R20.64], R12
+ 707d0              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 70830              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 70870              barrier.h:1037  ST.E.128 [R20.64], R12
+ 70880              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 708e0              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 70920              barrier.h:1037  ST.E.128 [R20.64], R12
+ 70930              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 70990              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 709d0              barrier.h:1037  ST.E.128 [R20.64], R12
+ 709e0              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 70a40              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 70a80              barrier.h:1037  ST.E.128 [R20.64], R12
+ 70a90              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 70af0              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 70b30              barrier.h:1037  ST.E.128 [R20.64], R12
+ 70b40              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 70ba0              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 70be0              barrier.h:1037  ST.E.128 [R20.64], R12
+ 70bf0              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 70c50              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 70c90              barrier.h:1037  ST.E.128 [R20.64], R12
+ 70ca0              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 70d00              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 70d40              barrier.h:1037  ST.E.128 [R20.64], R12
+ 70d50              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 70db0              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 70df0              barrier.h:1037  ST.E.128 [R20.64], R12
+ 70e00              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 70e60              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 70ea0              barrier.h:1037  ST.E.128 [R20.64], R12
+ 70eb0              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 70f10              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 70f50              barrier.h:1037  ST.E.128 [R20.64], R12
+ 70f60              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 70fc0              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 71000              barrier.h:1037  ST.E.128 [R20.64], R12
+ 71010              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 71070              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 710b0              barrier.h:1037  ST.E.128 [R20.64], R12
+ 710c0              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 71120              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 71160              barrier.h:1037  ST.E.128 [R20.64], R12
+ 71170              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 711d0              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 71210              barrier.h:1037  ST.E.128 [R20.64], R12
+ 71220              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 71280              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 712c0              barrier.h:1037  ST.E.128 [R20.64], R12
+ 712d0              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 71330              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 71370              barrier.h:1037  ST.E.128 [R20.64], R12
+ 71380              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 713e0              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 71420              barrier.h:1037  ST.E.128 [R20.64], R12
+ 71430              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 71490              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 714d0              barrier.h:1037  ST.E.128 [R20.64], R12
+ 714e0              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 71540              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 71580              barrier.h:1037  ST.E.128 [R20.64], R12
+ 71590              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 715f0              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 71630              barrier.h:1037  ST.E.128 [R20.64], R12
+ 71640              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 716a0              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 716e0              barrier.h:1037  ST.E.128 [R20.64], R12
+ 716f0              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 71750              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 71790              barrier.h:1037  ST.E.128 [R20.64], R12
+ 717a0              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 71800              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 71840              barrier.h:1037  ST.E.128 [R20.64], R12
+ 71850              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 718b0              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 718f0              barrier.h:1037  ST.E.128 [R20.64], R12
+ 71900              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 71960              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 719a0              barrier.h:1037  ST.E.128 [R20.64], R12
+ 719b0              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 71a10              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 71a50              barrier.h:1037  ST.E.128 [R20.64], R12
+ 71a60              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 71ac0              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 71b00              barrier.h:1037  ST.E.128 [R20.64], R12
+ 71b10              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 71b70              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 71bb0              barrier.h:1037  ST.E.128 [R20.64], R12
+ 71bc0              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 71c20              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 71c60              barrier.h:1037  ST.E.128 [R20.64], R12
+ 71c70              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 71cd0              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 71d10              barrier.h:1037  ST.E.128 [R20.64], R12
+ 71d20              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 71d80              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 71dc0              barrier.h:1037  ST.E.128 [R20.64], R12
+ 71dd0              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 71e30              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 71e70              barrier.h:1037  ST.E.128 [R20.64], R12
+ 71e80              barrier.h:1034  @P1 BRA `(.L_x_1442)
+ 71ee0              barrier.h:1036  LD.E.128 R12, [R12.64]
+ 71f40              barrier.h:1037  ST.E.128 [R40.64], R12
+ 71f50              barrier.h:1034  @P1 CALL.REL.NOINC `(.L_x_1442)
+ 71f60              barrier.h:1034  BRA `(.L_x_1443)
+ 71f80 .L_x_1441:   barrier.h:1034  BRA `(.L_x_1444)
+ 72000              barrier.h:1001  @P1 BRA `(.L_x_1446)
+ 72060              barrier.h:973   @!PT LDS RZ, [RZ]
+ 72070              barrier.h:973   @!PT LDS RZ, [RZ]
+ 72080              barrier.h:973   @!PT LDS RZ, [RZ]
+ 72090              barrier.h:973   LDGSTS.E.BYPASS.128 [R15], [R12.64]
+ 720b0              barrier.h:1001  @!P1 BRA `(.L_x_1447)
+ 720e0              barrier.h:769   VOTE.ALL R4, PT, PT
+ 72140              barrier.h:769   @P1 ATOMS.ADD.S32 RZ, [UR46+0x1d4], R7
+ 72150              barrier.h:769   @!PT LDS RZ, [RZ]
+ 72160              barrier.h:769   @!PT LDS RZ, [RZ]
+ 72170              barrier.h:769   @!PT LDS RZ, [RZ]
+ 72180              barrier.h:769   @!PT LDS RZ, [RZ]
+ 72190              barrier.h:769   ARRIVES.LDGSTSBAR.64 [UR46+0x1d0]
+ 721c0 .L_x_1439:   gravity_cuda.hpp:372   @P0 CALL.REL.NOINC `(.L_x_1438)
+ 721d0              gravity_cuda.hpp:372   BRA `(.L_x_1448)
+ 721f0 .L_x_1437:   mbarrier_arrive.h:46    @!PT LDS RZ, [RZ]
+ 72200              mbarrier_arrive.h:46    @!PT LDS RZ, [RZ]
+ 72210              mbarrier_arrive.h:46    @!PT LDS RZ, [RZ]
+ 72220              mbarrier_arrive.h:46    @!PT LDS RZ, [RZ]

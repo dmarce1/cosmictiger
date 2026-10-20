@@ -84,7 +84,7 @@ struct CudaKickArenaLayout {
     int sinkCapacity;         // sink-force tile; 0 with global force backing
     int particleCapacity;     // staged particle sources, a multiple of WARP_SIZE
     int multipoleCapacity;    // staged positioned multipoles
-    int multipoleStride;      // bytes per staged multipole, a multiple of 16
+    int multipoleStride;      // bytes per staged multipole: the tree arena's record stride
     bool massPlane;           // mixed-mass sources stage a mass plane
     int residency;            // resident blocks per multiprocessor the budget targets
     int budgetBytes;          // dynamic shared bytes allowed per block at that residency

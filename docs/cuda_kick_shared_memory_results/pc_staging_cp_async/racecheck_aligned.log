@@ -1,0 +1,559 @@
+========= COMPUTE-SANITIZER
+STARTING MAIN
+128
+std::atomic<int> is lock free!
+tree_node size = 96
+Detected 1 processes per node
+Hyperthreading detected
+Starting mem use daemon
+Processing options
+box_size = 2.679408e+00 Mpc
+lc map size = 1.157762e-01
+chemistry.enabled                 : F
+chemistry.network                 : atomic6
+chemistry.radiationFile           : 
+chemistry.synchronizedRung        : 4
+chemistry.initialTemperature      : 1.000000e+03
+chemistry.hydrogenIonFraction     : 2.000000e-04
+chemistry.heliumIonFraction       : 0.000000e+00
+chemistry.heliumDoubleIonFraction : 0.000000e+00
+chemistry.hydrogenMinusFraction   : 0.000000e+00
+chemistry.molecularFraction       : 0.000000e+00
+chemistry.molecularIonFraction    : 0.000000e+00
+chemistry.relativeTolerance       : 1.000000e-04
+chemistry.abundanceAbsoluteTolerance: 1.000000e-12
+chemistry.energyAbsoluteTolerance : 1.000000e-08
+chemistry.maxSubsteps             : 4096
+hydro.enabled                     : F
+run.hierarchicalGravity           : T
+hydro.viscosityAlpha              : 1.000000e+00
+hydro.viscosityBeta               : 2.000000e+00
+hydro.viscosityEpsilon            : 1.000000e-02
+hydro.gamma                       : 1.666667e+00
+hydro.neighborNumber              : 4.200000e+01
+hydro.minSupportRadius            : 1.000000e-06
+hydro.maxSupportRadius            : 4.000000e+00
+hydro.minEffectiveRadius          : 5.477226e-07
+hydro.maxEffectiveRadius          : 2.190890e+00
+hydro.cfl                         : 2.282177e-01
+Simulation Options
+code_to_M_solar = 1.492195e+09
+Box size = 1.803778e+00 cm/h
+checkpoint.intervalSeconds        : 1000000000
+units.lengthCm                    : 8.267791e+24
+units.massG                       : 2.954545e+42
+units.timeSeconds                 : 2.757838e+14
+compute.cuda                      : T
+gravity.fmmOrder                  : 7
+compute.cudaKickResidency         : 0
+compute.cudaKickSinkTile          : 0
+compute.cudaKickParticleTile      : 0
+compute.cudaKickMultipoleTile     : 0
+compute.cudaKickSharedExpansion   : T
+compute.cudaKickHandoffBlocks     : 0
+compute.cudaKickListReserve       : 4096
+lightcone.enabled                 : F
+analysis.groups                   : F
+analysis.power                    : F
+analysis.slice                    : F
+analysis.tracers                  : F
+analysis.views                    : F
+output.silo                       : F
+output.siloInterval               : 1
+output.directory                  : ./output
+output.units                      : code
+output.frame                      : comoving
+output.xMin                       : 0.000000e+00
+output.xMax                       : 1.000000e+00
+output.yMin                       : 0.000000e+00
+output.yMax                       : 1.000000e+00
+output.zMin                       : 0.000000e+00
+output.zMax                       : 1.000000e+00
+gravity.timestepEta               : 2.040160e-01
+gravity.gm                        : 2.653104e-11
+gravity.softening                 : 1.876988e-02
+gravity.effectiveRadius           : 1.876988e-02
+gravity.supportRadius             : 2.815483e-02
+hydro.centralEffectiveRadius      : 5.477226e-03
+hydro.centralSupportRadius        : 8.215838e-03
+gravity.kernelFamily              : ferrers
+gravity.kernelDegree              : 4
+hydro.kernelFamily                : spline
+hydro.kernelDegree                : 3
+cosmology.hubble                  : 6.732000e-01
+lightcone.linkingLength           : 2.800000e-01
+lightcone.mapSize                 : 1
+analysis.linkingLength            : 3.500000e-02
+run.maxIterations                 : 1000000
+run.treeOpeningAngle              : 0.000000e+00
+analysis.minGroupSize             : 20
+cosmology.omegaB                  : 4.938900e-02
+cosmology.omegaC                  : 2.650300e-01
+cosmology.omegaGamma              : 5.522212e-05
+cosmology.omegaM                  : 3.144190e-01
+cosmology.omegaNu                 : 3.820094e-05
+cosmology.omegaR                  : 9.342306e-05
+compute.particleCacheLineSize     : 10922
+initial.particlesPerDimension     : 8
+checkpoint.readIndex              : -1
+analysis.saveForce                : F
+cosmology.sigma8                  : 8.607000e-01
+analysis.sliceResolution          : 4096
+analysis.sliceSize                : 1.000000e+00
+cosmology.thetaCmb                : 9.983516e-01
+gravity.openingAngle              : 8.000000e-01
+analysis.tracerCount              : 1000000
+compute.treeCacheLineSize         : 682
+initial.twoLpt                    : F
+initial.usePowerFile              : T
+analysis.viewSize                 : 1024
+cosmology.startRedshift           : 4.900000e+01
+cosmology.endRedshift             : 0.000000e+00
+cosmology.spectralIndex           : 9.660500e-01
+cosmology.heliumFraction          : 2.454006e-01
+cosmology.nEff                    : 3.046000e+00
+configuration                     : 
+run.test                          : fmmWalk
+Silo particle output: disabled (output.silo=false)
+MAX MEMUSED = 0.366875 GB
+count = 178 178
+Detected a hardware concurrency of 12
+CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 8048 bytes: control 648, expansion shared, forces shared tile 64, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes; list slab 145792 bytes per block (4096 entries per list)
+FMM unequal counts PC/CP CPU: normalized total-force residual = 1.658382379e-09
+MAX MEMUSED = 0.815136 GB
+MAX MEMUSED = 0.864353 GB
+MAX MEMUSED = 0.928761 GB
+========= Warning: Race reported between Write access at 174cuda3ptx3__415mbarrier_arriveIvEEmPm+0x72090 in barrier.h:973
+=========     and Read access at da_3_cu_f9b7a12b_185531718cooperative_groups4__v17details3cta11thread_rankEv+0x727f0 in gravity_cuda.hpp:389 [4 hazards]
+=========     and Read access at da_3_cu_f9b7a12b_185531718cooperative_groups4__v17details3cta11thread_rankEv+0x72800 in gravity_cuda.hpp:388 [4 hazards]
+=========     and Read access at da_3_cu_f9b7a12b_185531718cooperative_groups4__v17details3cta11thread_rankEv+0x72810 in gravity_cuda.hpp:387 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72820 in generated_operators.hpp:12357 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72830 in generated_operators.hpp:12352 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72840 in generated_operators.hpp:12387 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72850 in generated_operators.hpp:12346 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72860 in generated_operators.hpp:12384 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72870 in generated_operators.hpp:12340 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72880 in generated_operators.hpp:12379 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72890 in generated_operators.hpp:12346 [4 hazards]
+=========     and Read access at memory_orderET1_+0x728a0 in generated_operators.hpp:12371 [4 hazards]
+=========     and Read access at memory_orderET1_+0x728b0 in generated_operators.hpp:12366 [4 hazards]
+=========     and Read access at memory_orderET1_+0x728c0 in generated_operators.hpp:12340 [4 hazards]
+=========     and Read access at memory_orderET1_+0x728d0 in generated_operators.hpp:12443 [4 hazards]
+=========     and Read access at memory_orderET1_+0x728e0 in generated_operators.hpp:12446 [4 hazards]
+=========     and Read access at memory_orderET1_+0x728f0 in generated_operators.hpp:12457 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72900 in generated_operators.hpp:12440 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72910 in generated_operators.hpp:12454 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72920 in generated_operators.hpp:12443 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72930 in generated_operators.hpp:12452 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72940 in generated_operators.hpp:12440 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72950 in generated_operators.hpp:12449 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72960 in generated_operators.hpp:12501 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72970 in generated_operators.hpp:12501 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72980 in generated_operators.hpp:12499 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72990 in generated_operators.hpp:12505 [4 hazards]
+=========     and Read access at memory_orderET1_+0x729a0 in generated_operators.hpp:12504 [4 hazards]
+=========     and Read access at memory_orderET1_+0x729b0 in generated_operators.hpp:12503 [4 hazards]
+=========     and Read access at memory_orderET1_+0x729c0 in generated_operators.hpp:12499 [4 hazards]
+=========     and Read access at memory_orderET1_+0x729d0 in generated_operators.hpp:12546 [4 hazards]
+=========     and Read access at memory_orderET1_+0x729e0 in generated_operators.hpp:12537 [4 hazards]
+=========     and Read access at memory_orderET1_+0x729f0 in generated_operators.hpp:12540 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72a00 in generated_operators.hpp:12537 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72a10 in generated_operators.hpp:12539 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72a20 in generated_operators.hpp:12566 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72a30 in generated_operators.hpp:12564 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72a40 in generated_operators.hpp:12562 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72a50 in generated_operators.hpp:12570 [4 hazards]
+========= 
+========= Warning: Race reported between Write access at oyEv+0x657d0 in barrier.h:957
+=========     and Read access at ompletion_mechanismERKT0_PcPKcmjPm+0x6c020 in gravity_cuda.hpp:313 [160 hazards]
+========= 
+========= Warning: Race reported between Write access at oyEv+0x68820 in barrier.h:957
+=========     and Read access at ompletion_mechanismERKT0_PcPKcmjPm+0x6c010 in gravity_cuda.hpp:314 [160 hazards]
+========= 
+========= Warning: Race reported between Write access at oyEv+0x6b820 in barrier.h:957
+=========     and Read access at ompletion_mechanismERKT0_PcPKcmjPm+0x6bff0 in gravity_cuda.hpp:315 [160 hazards]
+========= 
+FMM unequal counts PC/CP CUDA: normalized total-force residual = 9.950294598e-09
+FMM unequal counts PC/CP mixed CPU/CUDA: normalized total-force residual = 9.950294400e-09
+FMM softened PP fallback CPU: normalized total-force residual = 8.542230477e-09
+FMM softened PP fallback CUDA: normalized total-force residual = 3.873221482e-09
+FMM softened PP fallback mixed CPU/CUDA: normalized total-force residual = 3.799794711e-08
+FMM equal counts, unequal radii CP/PC CPU: normalized total-force residual = 2.328940155e-08
+========= Warning: Race reported between Write access at oyEv+0x657d0 in barrier.h:957
+=========     and Read access at ompletion_mechanismERKT0_PcPKcmjPm+0x6c020 in gravity_cuda.hpp:313 [160 hazards]
+========= 
+========= Warning: Race reported between Write access at oyEv+0x68820 in barrier.h:957
+=========     and Read access at ompletion_mechanismERKT0_PcPKcmjPm+0x6c010 in gravity_cuda.hpp:314 [160 hazards]
+========= 
+========= Warning: Race reported between Write access at oyEv+0x6b820 in barrier.h:957
+=========     and Read access at ompletion_mechanismERKT0_PcPKcmjPm+0x6bff0 in gravity_cuda.hpp:315 [160 hazards]
+========= 
+========= Warning: Race reported between Write access at 174cuda3ptx3__415mbarrier_arriveIvEEmPm+0x72090 in barrier.h:973
+=========     and Read access at da_3_cu_f9b7a12b_185531718cooperative_groups4__v17details3cta11thread_rankEv+0x727f0 in gravity_cuda.hpp:389 [4 hazards]
+=========     and Read access at da_3_cu_f9b7a12b_185531718cooperative_groups4__v17details3cta11thread_rankEv+0x72800 in gravity_cuda.hpp:388 [4 hazards]
+=========     and Read access at da_3_cu_f9b7a12b_185531718cooperative_groups4__v17details3cta11thread_rankEv+0x72810 in gravity_cuda.hpp:387 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72820 in generated_operators.hpp:12357 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72830 in generated_operators.hpp:12352 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72840 in generated_operators.hpp:12387 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72850 in generated_operators.hpp:12346 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72860 in generated_operators.hpp:12384 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72870 in generated_operators.hpp:12340 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72880 in generated_operators.hpp:12379 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72890 in generated_operators.hpp:12346 [4 hazards]
+=========     and Read access at memory_orderET1_+0x728a0 in generated_operators.hpp:12371 [4 hazards]
+=========     and Read access at memory_orderET1_+0x728b0 in generated_operators.hpp:12366 [4 hazards]
+=========     and Read access at memory_orderET1_+0x728c0 in generated_operators.hpp:12340 [4 hazards]
+=========     and Read access at memory_orderET1_+0x728d0 in generated_operators.hpp:12443 [4 hazards]
+=========     and Read access at memory_orderET1_+0x728e0 in generated_operators.hpp:12446 [4 hazards]
+=========     and Read access at memory_orderET1_+0x728f0 in generated_operators.hpp:12457 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72900 in generated_operators.hpp:12440 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72910 in generated_operators.hpp:12454 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72920 in generated_operators.hpp:12443 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72930 in generated_operators.hpp:12452 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72940 in generated_operators.hpp:12440 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72950 in generated_operators.hpp:12449 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72960 in generated_operators.hpp:12501 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72970 in generated_operators.hpp:12501 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72980 in generated_operators.hpp:12499 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72990 in generated_operators.hpp:12505 [4 hazards]
+=========     and Read access at memory_orderET1_+0x729a0 in generated_operators.hpp:12504 [4 hazards]
+=========     and Read access at memory_orderET1_+0x729b0 in generated_operators.hpp:12503 [4 hazards]
+=========     and Read access at memory_orderET1_+0x729c0 in generated_operators.hpp:12499 [4 hazards]
+=========     and Read access at memory_orderET1_+0x729d0 in generated_operators.hpp:12546 [4 hazards]
+=========     and Read access at memory_orderET1_+0x729e0 in generated_operators.hpp:12537 [4 hazards]
+=========     and Read access at memory_orderET1_+0x729f0 in generated_operators.hpp:12540 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72a00 in generated_operators.hpp:12537 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72a10 in generated_operators.hpp:12539 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72a20 in generated_operators.hpp:12566 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72a30 in generated_operators.hpp:12564 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72a40 in generated_operators.hpp:12562 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72a50 in generated_operators.hpp:12570 [4 hazards]
+========= 
+FMM equal counts, unequal radii CP/PC CUDA: normalized total-force residual = 5.175297656e-09
+FMM equal counts, unequal radii CP/PC mixed CPU/CUDA: normalized total-force residual = 2.070182290e-08
+FMM unequal counts, equal radii PC/CP CPU: normalized total-force residual = 1.658382379e-09
+========= Warning: Race reported between Write access at 174cuda3ptx3__415mbarrier_arriveIvEEmPm+0x72090 in barrier.h:973
+=========     and Read access at da_3_cu_f9b7a12b_185531718cooperative_groups4__v17details3cta11thread_rankEv+0x727f0 in gravity_cuda.hpp:389 [4 hazards]
+=========     and Read access at da_3_cu_f9b7a12b_185531718cooperative_groups4__v17details3cta11thread_rankEv+0x72800 in gravity_cuda.hpp:388 [4 hazards]
+=========     and Read access at da_3_cu_f9b7a12b_185531718cooperative_groups4__v17details3cta11thread_rankEv+0x72810 in gravity_cuda.hpp:387 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72820 in generated_operators.hpp:12357 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72830 in generated_operators.hpp:12352 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72840 in generated_operators.hpp:12387 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72850 in generated_operators.hpp:12346 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72860 in generated_operators.hpp:12384 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72870 in generated_operators.hpp:12340 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72880 in generated_operators.hpp:12379 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72890 in generated_operators.hpp:12346 [4 hazards]
+=========     and Read access at memory_orderET1_+0x728a0 in generated_operators.hpp:12371 [4 hazards]
+=========     and Read access at memory_orderET1_+0x728b0 in generated_operators.hpp:12366 [4 hazards]
+=========     and Read access at memory_orderET1_+0x728c0 in generated_operators.hpp:12340 [4 hazards]
+=========     and Read access at memory_orderET1_+0x728d0 in generated_operators.hpp:12443 [4 hazards]
+=========     and Read access at memory_orderET1_+0x728e0 in generated_operators.hpp:12446 [4 hazards]
+=========     and Read access at memory_orderET1_+0x728f0 in generated_operators.hpp:12457 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72900 in generated_operators.hpp:12440 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72910 in generated_operators.hpp:12454 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72920 in generated_operators.hpp:12443 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72930 in generated_operators.hpp:12452 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72940 in generated_operators.hpp:12440 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72950 in generated_operators.hpp:12449 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72960 in generated_operators.hpp:12501 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72970 in generated_operators.hpp:12501 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72980 in generated_operators.hpp:12499 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72990 in generated_operators.hpp:12505 [4 hazards]
+=========     and Read access at memory_orderET1_+0x729a0 in generated_operators.hpp:12504 [4 hazards]
+=========     and Read access at memory_orderET1_+0x729b0 in generated_operators.hpp:12503 [4 hazards]
+=========     and Read access at memory_orderET1_+0x729c0 in generated_operators.hpp:12499 [4 hazards]
+=========     and Read access at memory_orderET1_+0x729d0 in generated_operators.hpp:12546 [4 hazards]
+=========     and Read access at memory_orderET1_+0x729e0 in generated_operators.hpp:12537 [4 hazards]
+=========     and Read access at memory_orderET1_+0x729f0 in generated_operators.hpp:12540 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72a00 in generated_operators.hpp:12537 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72a10 in generated_operators.hpp:12539 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72a20 in generated_operators.hpp:12566 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72a30 in generated_operators.hpp:12564 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72a40 in generated_operators.hpp:12562 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72a50 in generated_operators.hpp:12570 [4 hazards]
+========= 
+========= Warning: Race reported between Write access at oyEv+0x657d0 in barrier.h:957
+=========     and Read access at ompletion_mechanismERKT0_PcPKcmjPm+0x6c020 in gravity_cuda.hpp:313 [160 hazards]
+========= 
+========= Warning: Race reported between Write access at oyEv+0x68820 in barrier.h:957
+=========     and Read access at ompletion_mechanismERKT0_PcPKcmjPm+0x6c010 in gravity_cuda.hpp:314 [160 hazards]
+========= 
+========= Warning: Race reported between Write access at oyEv+0x6b820 in barrier.h:957
+=========     and Read access at ompletion_mechanismERKT0_PcPKcmjPm+0x6bff0 in gravity_cuda.hpp:315 [160 hazards]
+========= 
+FMM unequal counts, equal radii PC/CP CUDA: normalized total-force residual = 9.950294598e-09
+FMM unequal counts, equal radii PC/CP mixed CPU/CUDA: normalized total-force residual = 9.950294400e-09
+FMM softened PP fallback CPU: normalized total-force residual = 8.542230477e-09
+FMM softened PP fallback CUDA: normalized total-force residual = 3.873221482e-09
+FMM softened PP fallback mixed CPU/CUDA: normalized total-force residual = 3.799794711e-08
+FMM equal counts and radii PP CPU: normalized total-force residual = 3.711167810e-10
+FMM equal counts and radii PP CUDA: normalized total-force residual = 3.920552917e-09
+FMM equal counts and radii PP mixed CPU/CUDA: normalized total-force residual = 1.488711851e-08
+FMM internal cloud radial PC/CP CPU: normalized total-force residual = 2.048388942e-08
+========= Warning: Race reported between Write access at oyEv+0x47fe0 in barrier.h:957
+=========     and Read access at ompletion_mechanismERKT0_PcPKcmjPm+0x4e820 in gravity_cuda.hpp:313 [12 hazards]
+========= 
+========= Warning: Race reported between Write access at oyEv+0x4b030 in barrier.h:957
+=========     and Read access at ompletion_mechanismERKT0_PcPKcmjPm+0x4e810 in gravity_cuda.hpp:314 [12 hazards]
+========= 
+========= Warning: Race reported between Write access at oyEv+0x4e030 in barrier.h:957
+=========     and Read access at ompletion_mechanismERKT0_PcPKcmjPm+0x4e7f0 in gravity_cuda.hpp:315 [12 hazards]
+========= 
+========= Warning: Race reported between Write access at 174cuda3ptx3__415mbarrier_arriveIvEEmPm+0x72090 in barrier.h:973
+=========     and Read access at da_3_cu_f9b7a12b_185531718cooperative_groups4__v17details3cta11thread_rankEv+0x727f0 in gravity_cuda.hpp:389 [4 hazards]
+=========     and Read access at da_3_cu_f9b7a12b_185531718cooperative_groups4__v17details3cta11thread_rankEv+0x72800 in gravity_cuda.hpp:388 [4 hazards]
+=========     and Read access at da_3_cu_f9b7a12b_185531718cooperative_groups4__v17details3cta11thread_rankEv+0x72810 in gravity_cuda.hpp:387 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72820 in generated_operators.hpp:12357 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72830 in generated_operators.hpp:12352 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72840 in generated_operators.hpp:12387 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72850 in generated_operators.hpp:12346 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72860 in generated_operators.hpp:12384 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72870 in generated_operators.hpp:12340 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72880 in generated_operators.hpp:12379 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72890 in generated_operators.hpp:12346 [4 hazards]
+=========     and Read access at memory_orderET1_+0x728a0 in generated_operators.hpp:12371 [4 hazards]
+=========     and Read access at memory_orderET1_+0x728b0 in generated_operators.hpp:12366 [4 hazards]
+=========     and Read access at memory_orderET1_+0x728c0 in generated_operators.hpp:12340 [4 hazards]
+=========     and Read access at memory_orderET1_+0x728d0 in generated_operators.hpp:12443 [4 hazards]
+=========     and Read access at memory_orderET1_+0x728e0 in generated_operators.hpp:12446 [4 hazards]
+=========     and Read access at memory_orderET1_+0x728f0 in generated_operators.hpp:12457 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72900 in generated_operators.hpp:12440 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72910 in generated_operators.hpp:12454 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72920 in generated_operators.hpp:12443 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72930 in generated_operators.hpp:12452 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72940 in generated_operators.hpp:12440 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72950 in generated_operators.hpp:12449 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72960 in generated_operators.hpp:12501 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72970 in generated_operators.hpp:12501 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72980 in generated_operators.hpp:12499 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72990 in generated_operators.hpp:12505 [4 hazards]
+=========     and Read access at memory_orderET1_+0x729a0 in generated_operators.hpp:12504 [4 hazards]
+=========     and Read access at memory_orderET1_+0x729b0 in generated_operators.hpp:12503 [4 hazards]
+=========     and Read access at memory_orderET1_+0x729c0 in generated_operators.hpp:12499 [4 hazards]
+=========     and Read access at memory_orderET1_+0x729d0 in generated_operators.hpp:12546 [4 hazards]
+=========     and Read access at memory_orderET1_+0x729e0 in generated_operators.hpp:12537 [4 hazards]
+=========     and Read access at memory_orderET1_+0x729f0 in generated_operators.hpp:12540 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72a00 in generated_operators.hpp:12537 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72a10 in generated_operators.hpp:12539 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72a20 in generated_operators.hpp:12566 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72a30 in generated_operators.hpp:12564 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72a40 in generated_operators.hpp:12562 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72a50 in generated_operators.hpp:12570 [4 hazards]
+========= 
+FMM internal cloud radial PC/CP CUDA: normalized total-force residual = 0.000000000e+00
+FMM internal cloud radial PC/CP mixed CPU/CUDA: normalized total-force residual = 2.048388942e-08
+FMM internal cloud radial PC/CP cloud support fallback CPU: normalized total-force residual = 2.099902214e-09
+FMM internal cloud radial PC/CP cloud support fallback CUDA: normalized total-force residual = 4.199804560e-09
+FMM internal cloud radial PC/CP cloud support fallback mixed CPU/CUDA: normalized total-force residual = 1.259941347e-08
+FMM internal cloud radial PC/CP leaf support fallback CPU: normalized total-force residual = 2.099902214e-09
+FMM internal cloud radial PC/CP leaf support fallback CUDA: normalized total-force residual = 4.199804560e-09
+FMM internal cloud radial PC/CP leaf support fallback mixed CPU/CUDA: normalized total-force residual = 1.259941347e-08
+FMM internal cloud box-only PC/CP CPU: normalized total-force residual = 2.048388942e-08
+========= Warning: Race reported between Write access at oyEv+0x47fe0 in barrier.h:957
+=========     and Read access at ompletion_mechanismERKT0_PcPKcmjPm+0x4e820 in gravity_cuda.hpp:313 [12 hazards]
+========= 
+========= Warning: Race reported between Write access at oyEv+0x4b030 in barrier.h:957
+=========     and Read access at ompletion_mechanismERKT0_PcPKcmjPm+0x4e810 in gravity_cuda.hpp:314 [12 hazards]
+========= 
+========= Warning: Race reported between Write access at oyEv+0x4e030 in barrier.h:957
+=========     and Read access at ompletion_mechanismERKT0_PcPKcmjPm+0x4e7f0 in gravity_cuda.hpp:315 [12 hazards]
+========= 
+========= Warning: Race reported between Write access at 174cuda3ptx3__415mbarrier_arriveIvEEmPm+0x72090 in barrier.h:973
+=========     and Read access at da_3_cu_f9b7a12b_185531718cooperative_groups4__v17details3cta11thread_rankEv+0x727f0 in gravity_cuda.hpp:389 [4 hazards]
+=========     and Read access at da_3_cu_f9b7a12b_185531718cooperative_groups4__v17details3cta11thread_rankEv+0x72800 in gravity_cuda.hpp:388 [4 hazards]
+=========     and Read access at da_3_cu_f9b7a12b_185531718cooperative_groups4__v17details3cta11thread_rankEv+0x72810 in gravity_cuda.hpp:387 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72820 in generated_operators.hpp:12357 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72830 in generated_operators.hpp:12352 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72840 in generated_operators.hpp:12387 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72850 in generated_operators.hpp:12346 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72860 in generated_operators.hpp:12384 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72870 in generated_operators.hpp:12340 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72880 in generated_operators.hpp:12379 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72890 in generated_operators.hpp:12346 [4 hazards]
+=========     and Read access at memory_orderET1_+0x728a0 in generated_operators.hpp:12371 [4 hazards]
+=========     and Read access at memory_orderET1_+0x728b0 in generated_operators.hpp:12366 [4 hazards]
+=========     and Read access at memory_orderET1_+0x728c0 in generated_operators.hpp:12340 [4 hazards]
+=========     and Read access at memory_orderET1_+0x728d0 in generated_operators.hpp:12443 [4 hazards]
+=========     and Read access at memory_orderET1_+0x728e0 in generated_operators.hpp:12446 [4 hazards]
+=========     and Read access at memory_orderET1_+0x728f0 in generated_operators.hpp:12457 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72900 in generated_operators.hpp:12440 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72910 in generated_operators.hpp:12454 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72920 in generated_operators.hpp:12443 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72930 in generated_operators.hpp:12452 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72940 in generated_operators.hpp:12440 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72950 in generated_operators.hpp:12449 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72960 in generated_operators.hpp:12501 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72970 in generated_operators.hpp:12501 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72980 in generated_operators.hpp:12499 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72990 in generated_operators.hpp:12505 [4 hazards]
+=========     and Read access at memory_orderET1_+0x729a0 in generated_operators.hpp:12504 [4 hazards]
+=========     and Read access at memory_orderET1_+0x729b0 in generated_operators.hpp:12503 [4 hazards]
+=========     and Read access at memory_orderET1_+0x729c0 in generated_operators.hpp:12499 [4 hazards]
+=========     and Read access at memory_orderET1_+0x729d0 in generated_operators.hpp:12546 [4 hazards]
+=========     and Read access at memory_orderET1_+0x729e0 in generated_operators.hpp:12537 [4 hazards]
+=========     and Read access at memory_orderET1_+0x729f0 in generated_operators.hpp:12540 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72a00 in generated_operators.hpp:12537 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72a10 in generated_operators.hpp:12539 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72a20 in generated_operators.hpp:12566 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72a30 in generated_operators.hpp:12564 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72a40 in generated_operators.hpp:12562 [4 hazards]
+=========     and Read access at memory_orderET1_+0x72a50 in generated_operators.hpp:12570 [4 hazards]
+========= 
+FMM internal cloud box-only PC/CP CUDA: normalized total-force residual = 0.000000000e+00
+FMM internal cloud box-only PC/CP mixed CPU/CUDA: normalized total-force residual = 2.048388942e-08
+FMM internal cloud box-only PC/CP cloud support fallback CPU: normalized total-force residual = 2.099902214e-09
+FMM internal cloud box-only PC/CP cloud support fallback CUDA: normalized total-force residual = 4.199804560e-09
+FMM internal cloud box-only PC/CP cloud support fallback mixed CPU/CUDA: normalized total-force residual = 1.259941347e-08
+FMM internal cloud box-only PC/CP leaf support fallback CPU: normalized total-force residual = 2.099902214e-09
+FMM internal cloud box-only PC/CP leaf support fallback CUDA: normalized total-force residual = 4.199804560e-09
+FMM internal cloud box-only PC/CP leaf support fallback mixed CPU/CUDA: normalized total-force residual = 1.259941347e-08
+FMM cell support CC fallback first large CPU: normalized total-force residual = 4.023313061e-08
+FMM cell support CC fallback first large CUDA: normalized total-force residual = 4.023313169e-08
+FMM cell support CC fallback first large mixed CPU/CUDA: normalized total-force residual = 1.341104426e-08
+FMM cell support CC fallback second large CPU: normalized total-force residual = 4.023313061e-08
+FMM cell support CC fallback second large CUDA: normalized total-force residual = 4.023313169e-08
+FMM cell support CC fallback second large mixed CPU/CUDA: normalized total-force residual = 1.341104426e-08
+FMM cell support radial hybrid fallback first large CPU: normalized total-force residual = 4.023313061e-08
+MAX MEMUSED = 0.939640 GB
+FMM cell support radial hybrid fallback first large CUDA: normalized total-force residual = 4.023313169e-08
+FMM cell support radial hybrid fallback first large mixed CPU/CUDA: normalized total-force residual = 1.341104426e-08
+FMM cell support radial hybrid fallback second large CPU: normalized total-force residual = 4.023313061e-08
+FMM cell support radial hybrid fallback second large CUDA: normalized total-force residual = 4.023313169e-08
+FMM cell support radial hybrid fallback second large mixed CPU/CUDA: normalized total-force residual = 1.341104426e-08
+FMM cell support box-only hybrid fallback first large CPU: normalized total-force residual = 4.023313061e-08
+FMM cell support box-only hybrid fallback first large CUDA: normalized total-force residual = 4.023313169e-08
+FMM cell support box-only hybrid fallback first large mixed CPU/CUDA: normalized total-force residual = 1.341104426e-08
+FMM cell support box-only hybrid fallback second large CPU: normalized total-force residual = 4.023313061e-08
+FMM cell support box-only hybrid fallback second large CUDA: normalized total-force residual = 4.023313169e-08
+FMM cell support box-only hybrid fallback second large mixed CPU/CUDA: normalized total-force residual = 1.341104426e-08
+FMM cell support CC refinement first large CPU: normalized total-force residual = 4.023313061e-08
+FMM cell support CC refinement first large CUDA: normalized total-force residual = 8.046626014e-08
+FMM cell support CC refinement first large mixed CPU/CUDA: normalized total-force residual = 1.341104426e-08
+FMM cell support CC refinement second large CPU: normalized total-force residual = 4.023313061e-08
+FMM cell support CC refinement second large CUDA: normalized total-force residual = 8.046626014e-08
+FMM cell support CC refinement second large mixed CPU/CUDA: normalized total-force residual = 1.341104426e-08
+FMM lockstep walk: tests 31345 ccDirect 11664 ccEwald 9310 cp 237 pc 237 ppLeafPairs 1195 ppPairs 1003896 opened 8257 deferred 0, net-force residual 3.923e-09
+MAX MEMUSED = 0.971085 GB
+MAX MEMUSED = 1.029053 GB
+MAX MEMUSED = 1.033859 GB
+========= Warning: Race reported between Write access at 174cuda3ptx3__415mbarrier_arriveIvEEmPm+0x72090 in barrier.h:973
+=========     and Read access at da_3_cu_f9b7a12b_185531718cooperative_groups4__v17details3cta11thread_rankEv+0x727f0 in gravity_cuda.hpp:389 [948 hazards]
+=========     and Read access at da_3_cu_f9b7a12b_185531718cooperative_groups4__v17details3cta11thread_rankEv+0x72800 in gravity_cuda.hpp:388 [948 hazards]
+=========     and Read access at da_3_cu_f9b7a12b_185531718cooperative_groups4__v17details3cta11thread_rankEv+0x72810 in gravity_cuda.hpp:387 [948 hazards]
+=========     and Read access at memory_orderET1_+0x72820 in generated_operators.hpp:12357 [948 hazards]
+=========     and Read access at memory_orderET1_+0x72830 in generated_operators.hpp:12352 [948 hazards]
+=========     and Read access at memory_orderET1_+0x72840 in generated_operators.hpp:12387 [948 hazards]
+=========     and Read access at memory_orderET1_+0x72850 in generated_operators.hpp:12346 [948 hazards]
+=========     and Read access at memory_orderET1_+0x72860 in generated_operators.hpp:12384 [948 hazards]
+=========     and Read access at memory_orderET1_+0x72870 in generated_operators.hpp:12340 [948 hazards]
+=========     and Read access at memory_orderET1_+0x72880 in generated_operators.hpp:12379 [948 hazards]
+=========     and Read access at memory_orderET1_+0x72890 in generated_operators.hpp:12346 [948 hazards]
+=========     and Read access at memory_orderET1_+0x728a0 in generated_operators.hpp:12371 [948 hazards]
+=========     and Read access at memory_orderET1_+0x728b0 in generated_operators.hpp:12366 [948 hazards]
+=========     and Read access at memory_orderET1_+0x728c0 in generated_operators.hpp:12340 [948 hazards]
+=========     and Read access at memory_orderET1_+0x728d0 in generated_operators.hpp:12443 [948 hazards]
+=========     and Read access at memory_orderET1_+0x728e0 in generated_operators.hpp:12446 [948 hazards]
+=========     and Read access at memory_orderET1_+0x728f0 in generated_operators.hpp:12457 [948 hazards]
+=========     and Read access at memory_orderET1_+0x72900 in generated_operators.hpp:12440 [948 hazards]
+=========     and Read access at memory_orderET1_+0x72910 in generated_operators.hpp:12454 [948 hazards]
+=========     and Read access at memory_orderET1_+0x72920 in generated_operators.hpp:12443 [948 hazards]
+=========     and Read access at memory_orderET1_+0x72930 in generated_operators.hpp:12452 [948 hazards]
+=========     and Read access at memory_orderET1_+0x72940 in generated_operators.hpp:12440 [948 hazards]
+=========     and Read access at memory_orderET1_+0x72950 in generated_operators.hpp:12449 [948 hazards]
+=========     and Read access at memory_orderET1_+0x72960 in generated_operators.hpp:12501 [948 hazards]
+=========     and Read access at memory_orderET1_+0x72970 in generated_operators.hpp:12501 [948 hazards]
+=========     and Read access at memory_orderET1_+0x72980 in generated_operators.hpp:12499 [948 hazards]
+=========     and Read access at memory_orderET1_+0x72990 in generated_operators.hpp:12505 [948 hazards]
+=========     and Read access at memory_orderET1_+0x729a0 in generated_operators.hpp:12504 [948 hazards]
+=========     and Read access at memory_orderET1_+0x729b0 in generated_operators.hpp:12503 [948 hazards]
+=========     and Read access at memory_orderET1_+0x729c0 in generated_operators.hpp:12499 [948 hazards]
+=========     and Read access at memory_orderET1_+0x729d0 in generated_operators.hpp:12546 [948 hazards]
+=========     and Read access at memory_orderET1_+0x729e0 in generated_operators.hpp:12537 [948 hazards]
+=========     and Read access at memory_orderET1_+0x729f0 in generated_operators.hpp:12540 [948 hazards]
+=========     and Read access at memory_orderET1_+0x72a00 in generated_operators.hpp:12537 [948 hazards]
+=========     and Read access at memory_orderET1_+0x72a10 in generated_operators.hpp:12539 [948 hazards]
+=========     and Read access at memory_orderET1_+0x72a20 in generated_operators.hpp:12566 [948 hazards]
+=========     and Read access at memory_orderET1_+0x72a30 in generated_operators.hpp:12564 [948 hazards]
+=========     and Read access at memory_orderET1_+0x72a40 in generated_operators.hpp:12562 [948 hazards]
+=========     and Read access at memory_orderET1_+0x72a50 in generated_operators.hpp:12570 [948 hazards]
+=========     and Write access at oyEv+0x38d0 in barrier.h:957 [72 hazards]
+========= 
+========= Warning: Race reported between Write access at oyEv+0x657d0 in barrier.h:957
+=========     and Read access at ompletion_mechanismERKT0_PcPKcmjPm+0x6c020 in gravity_cuda.hpp:313 [10628 hazards]
+========= 
+========= Warning: Race reported between Write access at oyEv+0x68820 in barrier.h:957
+=========     and Read access at ompletion_mechanismERKT0_PcPKcmjPm+0x6c010 in gravity_cuda.hpp:314 [10628 hazards]
+========= 
+========= Warning: Race reported between Write access at oyEv+0x6b820 in barrier.h:957
+=========     and Read access at ompletion_mechanismERKT0_PcPKcmjPm+0x6bff0 in gravity_cuda.hpp:315 [10628 hazards]
+========= 
+FMM lockstep CUDA versus CPU: rms difference / rms force 2.944e-07, maximum normalized difference 1.172e-06, net-force residual 2.414e-09
+FMM open-larger walk: tests 31207 ccDirect 7892 ccEwald 6324 cp 327 pc 327 ppLeafPairs 1129 ppPairs 997806 opened 7967 deferred 6667, net-force residual 1.764e-09
+FMM open-larger versus lockstep: rms difference / rms force 7.665e-04, maximum normalized difference 4.288e-03
+MAX MEMUSED = 1.037201 GB
+MAX MEMUSED = 1.051517 GB
+MAX MEMUSED = 1.063171 GB
+========= Warning: Race reported between Write access at 174cuda3ptx3__415mbarrier_arriveIvEEmPm+0x72090 in barrier.h:973
+=========     and Read access at da_3_cu_f9b7a12b_185531718cooperative_groups4__v17details3cta11thread_rankEv+0x727f0 in gravity_cuda.hpp:389 [1308 hazards]
+=========     and Read access at da_3_cu_f9b7a12b_185531718cooperative_groups4__v17details3cta11thread_rankEv+0x72800 in gravity_cuda.hpp:388 [1308 hazards]
+=========     and Read access at da_3_cu_f9b7a12b_185531718cooperative_groups4__v17details3cta11thread_rankEv+0x72810 in gravity_cuda.hpp:387 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x72820 in generated_operators.hpp:12357 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x72830 in generated_operators.hpp:12352 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x72840 in generated_operators.hpp:12387 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x72850 in generated_operators.hpp:12346 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x72860 in generated_operators.hpp:12384 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x72870 in generated_operators.hpp:12340 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x72880 in generated_operators.hpp:12379 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x72890 in generated_operators.hpp:12346 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x728a0 in generated_operators.hpp:12371 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x728b0 in generated_operators.hpp:12366 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x728c0 in generated_operators.hpp:12340 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x728d0 in generated_operators.hpp:12443 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x728e0 in generated_operators.hpp:12446 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x728f0 in generated_operators.hpp:12457 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x72900 in generated_operators.hpp:12440 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x72910 in generated_operators.hpp:12454 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x72920 in generated_operators.hpp:12443 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x72930 in generated_operators.hpp:12452 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x72940 in generated_operators.hpp:12440 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x72950 in generated_operators.hpp:12449 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x72960 in generated_operators.hpp:12501 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x72970 in generated_operators.hpp:12501 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x72980 in generated_operators.hpp:12499 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x72990 in generated_operators.hpp:12505 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x729a0 in generated_operators.hpp:12504 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x729b0 in generated_operators.hpp:12503 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x729c0 in generated_operators.hpp:12499 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x729d0 in generated_operators.hpp:12546 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x729e0 in generated_operators.hpp:12537 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x729f0 in generated_operators.hpp:12540 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x72a00 in generated_operators.hpp:12537 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x72a10 in generated_operators.hpp:12539 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x72a20 in generated_operators.hpp:12566 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x72a30 in generated_operators.hpp:12564 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x72a40 in generated_operators.hpp:12562 [1308 hazards]
+=========     and Read access at memory_orderET1_+0x72a50 in generated_operators.hpp:12570 [1308 hazards]
+=========     and Write access at oyEv+0x38d0 in barrier.h:957 [152 hazards]
+========= 
+========= Warning: Race reported between Write access at oyEv+0x657d0 in barrier.h:957
+=========     and Read access at ompletion_mechanismERKT0_PcPKcmjPm+0x6c020 in gravity_cuda.hpp:313 [9612 hazards]
+========= 
+========= Warning: Race reported between Write access at oyEv+0x68820 in barrier.h:957
+=========     and Read access at ompletion_mechanismERKT0_PcPKcmjPm+0x6c010 in gravity_cuda.hpp:314 [9612 hazards]
+========= 
+========= Warning: Race reported between Write access at oyEv+0x6b820 in barrier.h:957
+=========     and Read access at ompletion_mechanismERKT0_PcPKcmjPm+0x6bff0 in gravity_cuda.hpp:315 [9612 hazards]
+========= 
+========= Warning: Race reported between Write access at oyEv+0x47fe0 in barrier.h:957
+=========     and Read access at ompletion_mechanismERKT0_PcPKcmjPm+0x4e820 in gravity_cuda.hpp:313 [2068 hazards]
+========= 
+========= Warning: Race reported between Write access at oyEv+0x4b030 in barrier.h:957
+=========     and Read access at ompletion_mechanismERKT0_PcPKcmjPm+0x4e810 in gravity_cuda.hpp:314 [2068 hazards]
+========= 
+========= Warning: Race reported between Write access at oyEv+0x4e030 in barrier.h:957
+=========     and Read access at ompletion_mechanismERKT0_PcPKcmjPm+0x4e7f0 in gravity_cuda.hpp:315 [2068 hazards]
+========= 
+FMM open-larger CUDA versus CPU: rms difference / rms force 2.485e-07, maximum normalized difference 1.185e-06, net-force residual 3.466e-09
+FMM walk regression passed (CPU and CUDA, 1 rank(s))
+========= RACECHECK SUMMARY: 31 hazards displayed (0 errors, 31 warnings)
