@@ -1,0 +1,154 @@
+22:38:53 not quiet: compilers/profilers=2 gpu_clients=1 load=5.51
+22:39:53 not quiet: compilers/profilers=2 gpu_clients=0 load=6.01
+22:40:33 not quiet: compilers/profilers=2 gpu_clients=1 load=6.57
+22:40:53 not quiet: compilers/profilers=0 gpu_clients=0 load=6.69
+22:41:13 not quiet: compilers/profilers=0 gpu_clients=0 load=6.07
+22:41:33 not quiet: compilers/profilers=0 gpu_clients=0 load=6.64
+22:41:54 not quiet: compilers/profilers=0 gpu_clients=0 load=6.19
+22:42:14 not quiet: compilers/profilers=2 gpu_clients=1 load=6.64
+22:42:54 not quiet: compilers/profilers=2 gpu_clients=1 load=6.11
+22:43:54 not quiet: compilers/profilers=4 gpu_clients=0 load=5.68
+22:44:14 not quiet: compilers/profilers=7 gpu_clients=1 load=7.49
+22:44:34 not quiet: compilers/profilers=6 gpu_clients=0 load=8.85
+22:44:54 not quiet: compilers/profilers=6 gpu_clients=0 load=9.19
+22:45:14 not quiet: compilers/profilers=6 gpu_clients=0 load=9.51
+22:45:34 not quiet: compilers/profilers=7 gpu_clients=0 load=9.47
+22:45:54 not quiet: compilers/profilers=6 gpu_clients=0 load=9.40
+22:46:14 not quiet: compilers/profilers=6 gpu_clients=0 load=9.30
+22:46:34 not quiet: compilers/profilers=10 gpu_clients=0 load=9.72
+22:46:55 not quiet: compilers/profilers=12 gpu_clients=0 load=10.90
+22:47:15 not quiet: compilers/profilers=11 gpu_clients=0 load=11.70
+22:47:35 not quiet: compilers/profilers=10 gpu_clients=0 load=12.51
+22:47:55 not quiet: compilers/profilers=7 gpu_clients=0 load=11.98
+22:48:15 not quiet: compilers/profilers=7 gpu_clients=0 load=10.92
+22:48:35 not quiet: compilers/profilers=7 gpu_clients=0 load=10.31
+22:48:55 not quiet: compilers/profilers=5 gpu_clients=0 load=10.10
+22:49:15 not quiet: compilers/profilers=4 gpu_clients=0 load=9.90
+22:49:35 not quiet: compilers/profilers=5 gpu_clients=0 load=9.40
+22:49:55 not quiet: compilers/profilers=5 gpu_clients=0 load=8.63
+22:50:15 not quiet: compilers/profilers=5 gpu_clients=0 load=8.18
+22:50:35 not quiet: compilers/profilers=4 gpu_clients=0 load=7.71
+22:50:55 not quiet: compilers/profilers=4 gpu_clients=0 load=7.72
+22:51:16 not quiet: compilers/profilers=5 gpu_clients=0 load=7.79
+22:51:36 not quiet: compilers/profilers=4 gpu_clients=0 load=7.89
+22:51:56 not quiet: compilers/profilers=2 gpu_clients=0 load=7.61
+22:52:16 not quiet: compilers/profilers=2 gpu_clients=0 load=6.79
+22:52:36 not quiet: compilers/profilers=2 gpu_clients=0 load=6.13
+22:53:16 not quiet: compilers/profilers=2 gpu_clients=1 load=4.89
+22:54:16 not quiet: compilers/profilers=2 gpu_clients=1 load=5.13
+22:54:56 not quiet: compilers/profilers=2 gpu_clients=1 load=5.54
+22:56:17 quiet for 60 s (load 4.69); taking the GPU lock
+2026-10-19T22:57:52-05:00 GPU lock acquired, load 6.41
+premerge_auto_cuda_b128_o7_pair0: lattice/phi=0 15.652 ms, lattice/phi=1 15.887 ms, clustered/phi=0 6.823 ms, clustered/phi=1 7.145 ms, adaptive/phi=0 12.761 ms, adaptive/phi=1 12.792 ms
+merged_auto_cuda_b128_o7_pair0: lattice/phi=0 15.445 ms, lattice/phi=1 15.206 ms, clustered/phi=0 6.138 ms, clustered/phi=1 6.565 ms, adaptive/phi=0 12.593 ms, adaptive/phi=1 12.669 ms
+merged_auto_cuda_b128_o7_pair1: lattice/phi=0 15.156 ms, lattice/phi=1 15.224 ms, clustered/phi=0 6.262 ms, clustered/phi=1 6.464 ms, adaptive/phi=0 12.120 ms, adaptive/phi=1 12.670 ms
+premerge_auto_cuda_b128_o7_pair1: lattice/phi=0 15.085 ms, lattice/phi=1 15.066 ms, clustered/phi=0 6.774 ms, clustered/phi=1 7.070 ms, adaptive/phi=0 12.561 ms, adaptive/phi=1 12.725 ms
+premerge_auto_cuda_b128_o7_pair2: lattice/phi=0 15.444 ms, lattice/phi=1 15.312 ms, clustered/phi=0 6.947 ms, clustered/phi=1 7.264 ms, adaptive/phi=0 12.668 ms, adaptive/phi=1 12.806 ms
+merged_auto_cuda_b128_o7_pair2: lattice/phi=0 15.253 ms, lattice/phi=1 15.510 ms, clustered/phi=0 6.457 ms, clustered/phi=1 6.495 ms, adaptive/phi=0 12.646 ms, adaptive/phi=1 13.041 ms
+merged_auto_cuda_b128_o7_pair3: lattice/phi=0 15.208 ms, lattice/phi=1 15.324 ms, clustered/phi=0 6.164 ms, clustered/phi=1 6.540 ms, adaptive/phi=0 12.477 ms, adaptive/phi=1 12.744 ms
+premerge_auto_cuda_b128_o7_pair3: lattice/phi=0 15.337 ms, lattice/phi=1 15.253 ms, clustered/phi=0 6.846 ms, clustered/phi=1 7.070 ms, adaptive/phi=0 12.699 ms, adaptive/phi=1 12.708 ms
+premerge_auto_cuda_b128_o7_pair4: lattice/phi=0 15.020 ms, lattice/phi=1 14.969 ms, clustered/phi=0 6.837 ms, clustered/phi=1 7.075 ms, adaptive/phi=0 12.641 ms, adaptive/phi=1 12.683 ms
+merged_auto_cuda_b128_o7_pair4: lattice/phi=0 15.126 ms, lattice/phi=1 15.308 ms, clustered/phi=0 6.662 ms, clustered/phi=1 6.529 ms, adaptive/phi=0 11.833 ms, adaptive/phi=1 12.725 ms
+Completed; see docs/cuda_kick_shared_memory_results/landing_timing_buckets/b128/summary.md
+docs/cuda_kick_shared_memory_results/landing_timing_buckets/b128: worst pair spread 1.085 ('merged', 'auto', 'cuda', 128, 7, 'clustered', False), load at start 6.41, process wall 2.9-3.1 s
+| reference | candidate | backend | bucket | order | fixture | acceleration rel L2 | acceleration max pointwise | potential rel L2 | potential max pointwise |
+|---|---|---|---:|---:|---|---:|---:|---:|---:|
+| premerge | merged | cuda | 128 | 7 | adaptive | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| premerge | merged | cuda | 128 | 7 | clustered | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| premerge | merged | cuda | 128 | 7 | lattice | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+
+| backend | bucket | fixture | potential | binary | policy | order | kick ms | speedup vs reference | paired range | force rel L2 | potential rel L2 |
+|---|---:|---|---:|---|---|---:|---:|---:|---|---:|---:|
+| cuda | 128 | adaptive | 0 | merged | auto | 7 | 12.477 | 1.018 | 1.002-1.068 | 1.869e-03 | 1.191e-04 |
+| cuda | 128 | adaptive | 0 | premerge | auto | 7 | 12.668 |  |  | 1.869e-03 | 1.191e-04 |
+| cuda | 128 | adaptive | 1 | merged | auto | 7 | 12.725 | 0.997 | 0.982-1.010 | 1.869e-03 | 1.191e-04 |
+| cuda | 128 | adaptive | 1 | premerge | auto | 7 | 12.725 |  |  | 1.869e-03 | 1.191e-04 |
+| cuda | 128 | clustered | 0 | merged | auto | 7 | 6.262 | 1.082 | 1.026-1.112 | 2.962e-03 | 1.017e-03 |
+| cuda | 128 | clustered | 0 | premerge | auto | 7 | 6.837 |  |  | 2.962e-03 | 1.017e-03 |
+| cuda | 128 | clustered | 1 | merged | auto | 7 | 6.529 | 1.088 | 1.081-1.118 | 2.962e-03 | 1.017e-03 |
+| cuda | 128 | clustered | 1 | premerge | auto | 7 | 7.075 |  |  | 2.962e-03 | 1.017e-03 |
+| cuda | 128 | lattice | 0 | merged | auto | 7 | 15.208 | 1.008 | 0.993-1.013 | 3.644e-01 | 4.476e-02 |
+| cuda | 128 | lattice | 0 | premerge | auto | 7 | 15.337 |  |  | 3.644e-01 | 4.476e-02 |
+| cuda | 128 | lattice | 1 | merged | auto | 7 | 15.308 | 0.990 | 0.978-1.045 | 3.644e-01 | 4.476e-02 |
+| cuda | 128 | lattice | 1 | premerge | auto | 7 | 15.253 |  |  | 3.644e-01 | 4.476e-02 |
+
+premerge_auto_cuda_b256_o7_pair0: lattice/phi=0 11.406 ms, lattice/phi=1 11.485 ms, clustered/phi=0 7.085 ms, clustered/phi=1 7.450 ms, adaptive/phi=0 17.761 ms, adaptive/phi=1 18.497 ms
+merged_auto_cuda_b256_o7_pair0: lattice/phi=0 10.612 ms, lattice/phi=1 10.892 ms, clustered/phi=0 5.824 ms, clustered/phi=1 6.227 ms, adaptive/phi=0 17.911 ms, adaptive/phi=1 18.872 ms
+merged_auto_cuda_b256_o7_pair1: lattice/phi=0 10.785 ms, lattice/phi=1 11.407 ms, clustered/phi=0 5.715 ms, clustered/phi=1 6.081 ms, adaptive/phi=0 17.917 ms, adaptive/phi=1 17.541 ms
+premerge_auto_cuda_b256_o7_pair1: lattice/phi=0 10.634 ms, lattice/phi=1 10.911 ms, clustered/phi=0 7.083 ms, clustered/phi=1 8.184 ms, adaptive/phi=0 17.285 ms, adaptive/phi=1 17.798 ms
+premerge_auto_cuda_b256_o7_pair2: lattice/phi=0 10.675 ms, lattice/phi=1 11.155 ms, clustered/phi=0 7.013 ms, clustered/phi=1 7.460 ms, adaptive/phi=0 17.132 ms, adaptive/phi=1 18.217 ms
+merged_auto_cuda_b256_o7_pair2: lattice/phi=0 10.671 ms, lattice/phi=1 11.195 ms, clustered/phi=0 5.645 ms, clustered/phi=1 6.062 ms, adaptive/phi=0 17.340 ms, adaptive/phi=1 18.403 ms
+merged_auto_cuda_b256_o7_pair3: lattice/phi=0 10.592 ms, lattice/phi=1 10.764 ms, clustered/phi=0 5.708 ms, clustered/phi=1 6.091 ms, adaptive/phi=0 17.298 ms, adaptive/phi=1 18.737 ms
+premerge_auto_cuda_b256_o7_pair3: lattice/phi=0 10.645 ms, lattice/phi=1 10.863 ms, clustered/phi=0 7.007 ms, clustered/phi=1 7.467 ms, adaptive/phi=0 17.338 ms, adaptive/phi=1 17.915 ms
+premerge_auto_cuda_b256_o7_pair4: lattice/phi=0 10.566 ms, lattice/phi=1 10.777 ms, clustered/phi=0 6.992 ms, clustered/phi=1 7.373 ms, adaptive/phi=0 17.133 ms, adaptive/phi=1 17.916 ms
+merged_auto_cuda_b256_o7_pair4: lattice/phi=0 10.607 ms, lattice/phi=1 11.104 ms, clustered/phi=0 5.796 ms, clustered/phi=1 6.102 ms, adaptive/phi=0 17.411 ms, adaptive/phi=1 17.951 ms
+Completed; see docs/cuda_kick_shared_memory_results/landing_timing_buckets/b256/summary.md
+docs/cuda_kick_shared_memory_results/landing_timing_buckets/b256: worst pair spread 1.110 ('premerge', 'auto', 'cuda', 256, 7, 'clustered', True), load at start 6.27, process wall 2.9-3.1 s
+| reference | candidate | backend | bucket | order | fixture | acceleration rel L2 | acceleration max pointwise | potential rel L2 | potential max pointwise |
+|---|---|---|---:|---:|---|---:|---:|---:|---:|
+| premerge | merged | cuda | 256 | 7 | adaptive | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| premerge | merged | cuda | 256 | 7 | clustered | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| premerge | merged | cuda | 256 | 7 | lattice | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+
+| backend | bucket | fixture | potential | binary | policy | order | kick ms | speedup vs reference | paired range | force rel L2 | potential rel L2 |
+|---|---:|---|---:|---|---|---:|---:|---:|---|---:|---:|
+| cuda | 256 | adaptive | 0 | merged | auto | 7 | 17.411 | 0.988 | 0.965-1.002 | 1.295e-03 | 1.114e-04 |
+| cuda | 256 | adaptive | 0 | premerge | auto | 7 | 17.285 |  |  | 1.295e-03 | 1.114e-04 |
+| cuda | 256 | adaptive | 1 | merged | auto | 7 | 18.403 | 0.990 | 0.956-1.015 | 1.295e-03 | 1.114e-04 |
+| cuda | 256 | adaptive | 1 | premerge | auto | 7 | 17.916 |  |  | 1.295e-03 | 1.114e-04 |
+| cuda | 256 | clustered | 0 | merged | auto | 7 | 5.715 | 1.228 | 1.206-1.242 | 2.677e-03 | 1.153e-03 |
+| cuda | 256 | clustered | 0 | premerge | auto | 7 | 7.013 |  |  | 2.677e-03 | 1.153e-03 |
+| cuda | 256 | clustered | 1 | merged | auto | 7 | 6.091 | 1.226 | 1.196-1.346 | 2.677e-03 | 1.153e-03 |
+| cuda | 256 | clustered | 1 | premerge | auto | 7 | 7.460 |  |  | 2.677e-03 | 1.153e-03 |
+| cuda | 256 | lattice | 0 | merged | auto | 7 | 10.612 | 1.000 | 0.986-1.075 | 3.644e-01 | 4.476e-02 |
+| cuda | 256 | lattice | 0 | premerge | auto | 7 | 10.645 |  |  | 3.644e-01 | 4.476e-02 |
+| cuda | 256 | lattice | 1 | merged | auto | 7 | 11.104 | 0.996 | 0.956-1.054 | 3.644e-01 | 4.476e-02 |
+| cuda | 256 | lattice | 1 | premerge | auto | 7 | 10.911 |  |  | 3.644e-01 | 4.476e-02 |
+
+premerge_auto_cuda_b512_o7_pair0: lattice/phi=0 11.425 ms, lattice/phi=1 11.373 ms, clustered/phi=0 10.017 ms, clustered/phi=1 10.739 ms, adaptive/phi=0 26.360 ms, adaptive/phi=1 27.108 ms
+merged_auto_cuda_b512_o7_pair0: lattice/phi=0 9.700 ms, lattice/phi=1 10.305 ms, clustered/phi=0 5.352 ms, clustered/phi=1 6.217 ms, adaptive/phi=0 26.160 ms, adaptive/phi=1 27.004 ms
+merged_auto_cuda_b512_o7_pair1: lattice/phi=0 9.367 ms, lattice/phi=1 10.204 ms, clustered/phi=0 5.571 ms, clustered/phi=1 6.312 ms, adaptive/phi=0 26.701 ms, adaptive/phi=1 27.044 ms
+premerge_auto_cuda_b512_o7_pair1: lattice/phi=0 10.078 ms, lattice/phi=1 10.821 ms, clustered/phi=0 10.165 ms, clustered/phi=1 11.014 ms, adaptive/phi=0 26.581 ms, adaptive/phi=1 29.704 ms
+premerge_auto_cuda_b512_o7_pair2: lattice/phi=0 9.807 ms, lattice/phi=1 10.670 ms, clustered/phi=0 9.994 ms, clustered/phi=1 11.045 ms, adaptive/phi=0 26.072 ms, adaptive/phi=1 26.951 ms
+merged_auto_cuda_b512_o7_pair2: lattice/phi=0 9.324 ms, lattice/phi=1 10.172 ms, clustered/phi=0 5.496 ms, clustered/phi=1 6.158 ms, adaptive/phi=0 26.603 ms, adaptive/phi=1 27.335 ms
+merged_auto_cuda_b512_o7_pair3: lattice/phi=0 9.985 ms, lattice/phi=1 10.370 ms, clustered/phi=0 5.385 ms, clustered/phi=1 6.185 ms, adaptive/phi=0 26.706 ms, adaptive/phi=1 28.605 ms
+premerge_auto_cuda_b512_o7_pair3: lattice/phi=0 10.940 ms, lattice/phi=1 10.774 ms, clustered/phi=0 10.849 ms, clustered/phi=1 10.774 ms, adaptive/phi=0 26.630 ms, adaptive/phi=1 26.917 ms
+premerge_auto_cuda_b512_o7_pair4: lattice/phi=0 9.905 ms, lattice/phi=1 10.797 ms, clustered/phi=0 10.054 ms, clustered/phi=1 11.376 ms, adaptive/phi=0 26.705 ms, adaptive/phi=1 27.037 ms
+merged_auto_cuda_b512_o7_pair4: lattice/phi=0 9.751 ms, lattice/phi=1 10.298 ms, clustered/phi=0 5.361 ms, clustered/phi=1 6.009 ms, adaptive/phi=0 26.727 ms, adaptive/phi=1 26.638 ms
+Completed; see docs/cuda_kick_shared_memory_results/landing_timing_buckets/b512/summary.md
+docs/cuda_kick_shared_memory_results/landing_timing_buckets/b512: worst pair spread 1.165 ('premerge', 'auto', 'cuda', 512, 7, 'lattice', False), load at start 6.52, process wall 3.2-3.5 s
+2026-10-19T22:59:34-05:00 bucket 512 attempt 1 exceeded the 1.15 pair spread; repeating
+premerge_auto_cuda_b512_o7_pair0: lattice/phi=0 11.197 ms, lattice/phi=1 10.714 ms, clustered/phi=0 10.080 ms, clustered/phi=1 10.818 ms, adaptive/phi=0 28.535 ms, adaptive/phi=1 29.240 ms
+merged_auto_cuda_b512_o7_pair0: lattice/phi=0 9.265 ms, lattice/phi=1 10.158 ms, clustered/phi=0 5.358 ms, clustered/phi=1 6.095 ms, adaptive/phi=0 26.430 ms, adaptive/phi=1 27.288 ms
+merged_auto_cuda_b512_o7_pair1: lattice/phi=0 9.708 ms, lattice/phi=1 10.320 ms, clustered/phi=0 5.400 ms, clustered/phi=1 5.987 ms, adaptive/phi=0 26.744 ms, adaptive/phi=1 27.406 ms
+premerge_auto_cuda_b512_o7_pair1: lattice/phi=0 10.114 ms, lattice/phi=1 10.767 ms, clustered/phi=0 10.949 ms, clustered/phi=1 10.927 ms, adaptive/phi=0 27.103 ms, adaptive/phi=1 27.466 ms
+premerge_auto_cuda_b512_o7_pair2: lattice/phi=0 10.230 ms, lattice/phi=1 10.712 ms, clustered/phi=0 9.969 ms, clustered/phi=1 11.112 ms, adaptive/phi=0 26.363 ms, adaptive/phi=1 27.444 ms
+merged_auto_cuda_b512_o7_pair2: lattice/phi=0 9.706 ms, lattice/phi=1 10.184 ms, clustered/phi=0 5.514 ms, clustered/phi=1 6.137 ms, adaptive/phi=0 26.653 ms, adaptive/phi=1 28.024 ms
+merged_auto_cuda_b512_o7_pair3: lattice/phi=0 9.249 ms, lattice/phi=1 10.375 ms, clustered/phi=0 5.440 ms, clustered/phi=1 6.208 ms, adaptive/phi=0 27.035 ms, adaptive/phi=1 27.479 ms
+premerge_auto_cuda_b512_o7_pair3: lattice/phi=0 10.029 ms, lattice/phi=1 10.899 ms, clustered/phi=0 10.107 ms, clustered/phi=1 10.772 ms, adaptive/phi=0 26.383 ms, adaptive/phi=1 27.205 ms
+premerge_auto_cuda_b512_o7_pair4: lattice/phi=0 10.025 ms, lattice/phi=1 10.593 ms, clustered/phi=0 10.129 ms, clustered/phi=1 10.797 ms, adaptive/phi=0 28.732 ms, adaptive/phi=1 27.431 ms
+merged_auto_cuda_b512_o7_pair4: lattice/phi=0 9.574 ms, lattice/phi=1 10.402 ms, clustered/phi=0 5.334 ms, clustered/phi=1 5.982 ms, adaptive/phi=0 29.196 ms, adaptive/phi=1 27.992 ms
+Completed; see docs/cuda_kick_shared_memory_results/landing_timing_buckets/b512/summary.md
+docs/cuda_kick_shared_memory_results/landing_timing_buckets/b512: worst pair spread 1.117 ('premerge', 'auto', 'cuda', 512, 7, 'lattice', False), load at start 6.00, process wall 3.2-3.6 s
+| reference | candidate | backend | bucket | order | fixture | acceleration rel L2 | acceleration max pointwise | potential rel L2 | potential max pointwise |
+|---|---|---|---:|---:|---|---:|---:|---:|---:|
+| premerge | merged | cuda | 512 | 7 | adaptive | 1.381e-09 | 1.128e-07 | 1.805e-09 | 2.456e-07 |
+| premerge | merged | cuda | 512 | 7 | clustered | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| premerge | merged | cuda | 512 | 7 | lattice | 2.383e-07 | 1.148e-05 | 1.760e-06 | 2.688e-05 |
+
+| backend | bucket | fixture | potential | binary | policy | order | kick ms | speedup vs reference | paired range | force rel L2 | potential rel L2 |
+|---|---:|---|---:|---|---|---:|---:|---:|---|---:|---:|
+| cuda | 512 | adaptive | 0 | merged | auto | 7 | 26.744 | 0.989 | 0.976-1.080 | 1.015e-03 | 1.108e-04 |
+| cuda | 512 | adaptive | 0 | premerge | auto | 7 | 27.103 |  |  | 1.015e-03 | 1.108e-04 |
+| cuda | 512 | adaptive | 1 | merged | auto | 7 | 27.479 | 0.990 | 0.979-1.072 | 1.015e-03 | 1.108e-04 |
+| cuda | 512 | adaptive | 1 | premerge | auto | 7 | 27.444 |  |  | 1.015e-03 | 1.108e-04 |
+| cuda | 512 | clustered | 0 | merged | auto | 7 | 5.400 | 1.881 | 1.808-2.028 | 2.146e-03 | 1.120e-03 |
+| cuda | 512 | clustered | 0 | premerge | auto | 7 | 10.107 |  |  | 2.146e-03 | 1.120e-03 |
+| cuda | 512 | clustered | 1 | merged | auto | 7 | 6.095 | 1.805 | 1.735-1.825 | 2.146e-03 | 1.120e-03 |
+| cuda | 512 | clustered | 1 | premerge | auto | 7 | 10.818 |  |  | 2.146e-03 | 1.120e-03 |
+| cuda | 512 | lattice | 0 | merged | auto | 7 | 9.574 | 1.054 | 1.042-1.209 | 3.644e-01 | 4.476e-02 |
+| cuda | 512 | lattice | 0 | premerge | auto | 7 | 10.114 |  |  | 3.644e-01 | 4.476e-02 |
+| cuda | 512 | lattice | 1 | merged | auto | 7 | 10.320 | 1.051 | 1.018-1.055 | 3.644e-01 | 4.476e-02 |
+| cuda | 512 | lattice | 1 | premerge | auto | 7 | 10.714 |  |  | 3.644e-01 | 4.476e-02 |
+
+2026-10-19T23:00:11-05:00 bucket stages done

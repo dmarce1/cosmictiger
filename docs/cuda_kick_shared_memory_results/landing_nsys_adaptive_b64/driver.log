@@ -1,0 +1,9 @@
+23:01:12 not quiet: compilers/profilers=2 gpu_clients=1 load=4.54
+23:01:52 not quiet: compilers/profilers=2 gpu_clients=1 load=5.48
+23:02:12 not quiet: compilers/profilers=0 gpu_clients=0 load=6.11
+23:02:52 not quiet: compilers/profilers=2 gpu_clients=1 load=5.89
+23:03:32 not quiet: compilers/profilers=2 gpu_clients=1 load=5.16
+23:04:32 not quiet: compilers/profilers=2 gpu_clients=0 load=5.11
+23:05:12 not quiet: compilers/profilers=2 gpu_clients=1 load=5.17
+23:06:33 quiet for 60 s (load 4.56); taking the GPU lock
+2026-10-19T23:15:25-05:00 GPU lock acquired, load 5.69

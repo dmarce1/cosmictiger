@@ -1640,7 +1640,7 @@ instructions with a different operand form) or copy synchronously as
 adopted here, the first because it steers a compiler choice to suit the tool
 and the second because its cost was not measured.
 
-### Landing on the reorganized layout (`validation/merge_reorganized/`, `landing_timing_order7_b64/`)
+### Landing on the reorganized layout (`validation/merge_reorganized/`, `landing_timing_order7_b64/`, `landing_timing_buckets/`, `landing_nsys_adaptive_b64/`)
 
 The three follow-up branches above were cut before the source reorganization
 (2ce9c788 moved the sources into subdirectories, 565759b6 split
@@ -1721,13 +1721,103 @@ real: the slab's own adaptive pair range was 0.960-1.070 and this stage's is
 slab and PP hunks unchanged (above), so a kernel-side cause is unlikely; a
 matched-division Nsight Systems split of the two binaries would settle it.
 
+The same comparison at buckets 128, 256 and 512 (`landing_timing_buckets/run.sh`,
+one driver run per bucket under the same conditions; a stage whose worst pair
+spread exceeded 1.15 was repeated). Buckets 128 and 256 were clean at the first
+attempt (worst spreads 1.085 and 1.110). The first bucket-512 attempt reached
+1.165 on the pre-merge lattice cell, whose pair 0, the stage's first process,
+took 11.4 ms against 9.8 to 10.9 ms in the later pairs; it is kept under
+`contaminated/` and gives the same medians to within 2%, and the repeat's worst
+spread was 1.117. Every process took 2.9 to 3.6 s of wall time with tree builds
+of 1.9 to 2.7 ms and no other GPU client. Speedup is the pre-merge time over
+the merged time, paired range in parentheses (`b*/speedup.md`):
+
+| bucket | fixture | potential | pre-merge 00909d26 | merged 819d0013 | speedup |
+|---:|---|---:|---:|---:|---:|
+| 128 | lattice | no | 15.34 ms | 15.21 ms | 1.008x (0.993-1.013) |
+| 128 | lattice | yes | 15.25 ms | 15.31 ms | 0.990x (0.978-1.045) |
+| 128 | clustered | no | 6.84 ms | 6.26 ms | 1.082x (1.026-1.112) |
+| 128 | clustered | yes | 7.08 ms | 6.53 ms | 1.088x (1.081-1.118) |
+| 128 | adaptive | no | 12.67 ms | 12.48 ms | 1.018x (1.002-1.068) |
+| 128 | adaptive | yes | 12.72 ms | 12.73 ms | 0.997x (0.982-1.010) |
+| 256 | lattice | no | 10.64 ms | 10.61 ms | 1.000x (0.986-1.075) |
+| 256 | lattice | yes | 10.91 ms | 11.10 ms | 0.996x (0.956-1.054) |
+| 256 | clustered | no | 7.01 ms | 5.72 ms | 1.228x (1.206-1.242) |
+| 256 | clustered | yes | 7.46 ms | 6.09 ms | 1.226x (1.196-1.346) |
+| 256 | adaptive | no | 17.28 ms | 17.41 ms | 0.988x (0.965-1.002) |
+| 256 | adaptive | yes | 17.92 ms | 18.40 ms | 0.990x (0.956-1.015) |
+| 512 | lattice | no | 10.11 ms | 9.57 ms | 1.054x (1.042-1.209) |
+| 512 | lattice | yes | 10.71 ms | 10.32 ms | 1.051x (1.018-1.055) |
+| 512 | clustered | no | 10.11 ms | 5.40 ms | 1.881x (1.808-2.028) |
+| 512 | clustered | yes | 10.82 ms | 6.09 ms | 1.805x (1.735-1.825) |
+| 512 | adaptive | no | 27.10 ms | 26.74 ms | 0.989x (0.976-1.080) |
+| 512 | adaptive | yes | 27.44 ms | 27.48 ms | 0.990x (0.979-1.072) |
+
+This is the PP loop schedule section's picture, now against the pre-merge
+`main` with the slab included: the clustered fixture gains 8 to 9% at bucket
+128, 23% at 256 and 1.81 to 1.88x at 512, where only its 64 leaves of 512
+particles have work and the loop's schedule decides (the branch measured 1.24x
+and 1.74x against its head); the lattice is level at 128 and 256 and 5% faster
+at 512; the adaptive fixture is level at every bucket, 0.99 to 1.02x with every
+paired range including one, the medians 1% below one at 256 and 512 (the
+branch found it level within the pair spread there too). No cell regresses
+beyond its pair spread. The force exports are bit-identical at buckets 128 and
+256 on all fixtures and on the clustered fixture at 512
+(`b*/premerge_vs_merged.md`). At bucket 512 the adaptive and lattice exports
+differ at roundoff level (relative L2 1.4e-9 and 2.4e-7 for the accelerations,
+1.8e-9 and 1.8e-6 for the potentials; largest pointwise relative difference
+1.1e-5, on the lattice, whose forces nearly cancel), and the policy lines say
+why: the merged binary's 648-byte control block leaves room for 16 multipoles
+per source tile instead of the pre-merge binary's 17 within the 11,776-byte
+budget (dynamic shared 11,760 against 11,664 bytes), so leaves with more than
+16 multipoles in their lists sum the multipole interactions in a different
+order; the multipole tiles are equal at the other buckets (38 at 128 and 256).
+The direct-reference errors agree to every printed digit at every bucket.
+
+Host and kernel split of the adaptive cell at bucket 64
+(`landing_nsys_adaptive_b64/nsys_run.sh`: the two binaries under Nsight Systems
+as in the list slab sections, with the automatic policy and, as "matched", both
+pinned to the baseline's work division and opening rule with
+`compute.cudaKickHandoffBlocks=492` and `gravity.openLargerCell=false`; three
+rounds with alternating order, 15 samples; every round clean: no other GPU
+client, no process delayed by the idle wait, one-minute load 5.2 to 5.8;
+medians over the rounds, `medians_over_rounds.md`):
+
+| fixture, bucket | variant | whole kick (ms) | kick kernel (ms) | host (ms) | with potential: whole kick | kernel | host |
+|---|---|---:|---:|---:|---:|---:|---:|
+| adaptive, bucket 64 | pre-merge 00909d26 | 13.54 | 7.11 | 6.76 | 12.74 | 6.14 | 6.36 |
+| adaptive, bucket 64 | merged 819d0013 | 13.25 | 6.46 | 6.76 | 12.45 | 5.79 | 6.54 |
+| adaptive, bucket 64 | pre-merge, matched | 20.34 | 5.90 | 14.33 | 20.51 | 5.87 | 14.25 |
+| adaptive, bucket 64 | merged, matched | 19.99 | 5.10 | 14.57 | 19.94 | 5.18 | 14.66 |
+
+The merged kernel is 0.65 ms (9%) faster than the pre-merge kernel with the
+automatic policy and 0.80 ms (14%) faster at the matched division (0.35 and
+0.69 ms with the potential): most of the 0.8 and 1.2 ms the slab measured
+against its own head, whose matched kernel (6.64 ms) was slower than the
+pre-merge `main`'s here (5.90 ms). At the matched division the merged kernel,
+5.10 ms, is level with the baseline's 5.11 ms of the slab's matched stage (not
+rerun here; 5.18 against 5.05 ms with the potential), closing the 7% gap that
+stage left. The host share is unchanged to within 0.0 to 0.4 ms (the merged
+binary's is the higher one in three of the four columns, in every round), and
+the whole kick gains 0.29 ms (2%) with the automatic policy and 0.35 to 0.57
+ms (2 to 3%) at the matched division. The adaptive cell's level result in the
+paired timing is therefore not a kernel-side loss from the merge: at bucket 64
+the kick is host-bound, the kernel is half of it with the automatic policy and
+a quarter at the matched division, and 0.2 to 0.4 ms of the kernel's gain does
+not reach the kick's wall time, as in the slab's own matched split, where a
+1.19 ms kernel gain shortened the kick by 0.95 ms. The slab branch's 4 to 6%
+whole-kick gain at this cell came with a 0.96-1.07 pair range; the merged
+head's 1 to 2% lies within the ranges of both stages.
+
 ### What remains
 
 - The per-launch list slab removed the pool allocator from the kernel (above);
-  at the baseline's work division the kernel is now within 7% of the
-  baseline's at bucket 64 (equal with the potential) and 10% at 128, and the
-  remaining difference is in the PP and PC loops themselves, not in list
-  handling.
+  at the baseline's work division the kernel was within 7% of the baseline's
+  at bucket 64 (equal with the potential) and 10% at 128, with the remaining
+  difference in the PP and PC loops themselves, not in list handling. With the
+  PP loop schedule landed, the merged head's kernel at that division is level
+  with the baseline's at bucket 64 (5.10 against 5.11 ms,
+  `landing_nsys_adaptive_b64/`); bucket 128 is not re-measured.
 - The PC multipole staging passes an untyped byte count to
   `cuda::memcpy_async`, so libcu++ deduces 1-byte alignment and copies
   synchronously through registers; the barrier wait after it then orders
@@ -1749,12 +1839,19 @@ matched-division Nsight Systems split of the two binaries would settle it.
   that reads the tree's clustering could beat the fixed rule; the lattice
   penalty of the finer divisions is thread-independent there and was not
   profiled (`handoff_large_sizes/`).
-- The landing is timed at bucket 64 only (Landing on the reorganized layout):
-  lattice 1.05x, clustered 1.05-1.10x and adaptive level (1.00-1.01x, below
-  the slab branch's 1.04-1.06x against its head, within the pair spreads of
-  both). Buckets 128 to 512, where the PP loop schedule's gains were measured
-  on the branch, and a host/kernel split of the adaptive cell on the merged
-  head are unmeasured.
+- The landing is timed at buckets 64 to 512 against the pre-merge `main`
+  (Landing on the reorganized layout): lattice 1.00-1.05x, clustered 1.05x at
+  64 and 128, 1.23x at 256 and 1.81-1.88x at 512, adaptive level everywhere
+  (0.99-1.02x, every paired range including one). The adaptive split at
+  bucket 64 shows the merged kernel 9-14% faster than the pre-merge kernel
+  with the host share unchanged, so the adaptive cell gains little there
+  because the kick is host-bound, not because the merge lost anything in the
+  kernel. At buckets 256 and 512 the adaptive kick is kernel-bound (the
+  bucket-512 split above) and level with the pre-merge `main`; the walk's
+  Ewald cell interactions, the next target above, are what remains for it.
+  The merged binary's larger control block costs one multipole per source
+  tile at bucket 512 (16 instead of 17), which changes the summation order
+  there; the forces differ at roundoff level, not in accuracy.
 - The theta sweep shows order 7 at theta 0.8 is not the cheapest route to its
   own force error; a lower order with a smaller opening angle is, down to
   about 2e-4. The production order and opening angle should be chosen from
