@@ -168,6 +168,7 @@ static T const* readSphCacheLine(LineIdType lineId,
 
 HPX_PLAIN_ACTION(sphParticlesApplyUpdates, SphParticlesApplyUpdatesAction);
 void sphParticlesApplyUpdates(int minimumRung, int phase, float timeStepScale, float time) {
+    // At time zero no step has opened yet, so there is no half-kick to close or correct.
     if (!(phase == 2 || time > 0.0)) {
         return;
     }
@@ -189,8 +190,15 @@ void sphParticlesApplyUpdates(int minimumRung, int phase, float timeStepScale, f
                     ParticleInteger const gravityIndex = sphParticlesParticleIndex(gasIndex);
                     auto const rung = sphParticlesRung(gasIndex);
                     float const halfTimeStep = 0.5f * timeStepScale / (1 << rung);
-                    // Save the rates used by the predictor so the next phase can replace them.
+                    // Each active particle gets two half-kicks per step: one closes the step
+                    // that just drifted, one opens the next. Hydro rates depend on the
+                    // velocities and energies they update, so the closing half-kick is first
+                    // predicted from the previous rates and then corrected with the new ones.
                     if (phase == 0) {
+                        // Predictor (start of sphStep2, before the hydro force run): close
+                        // the previous step's half-kick with the rates computed last step,
+                        // so the hydro run sees velocities and energies at the end of the
+                        // drift. Save those rates so phase 1 can take this kick back out.
                         if (rung >= minimumRung) {
                             for (int dimension = 0; dimension < NDIM; dimension++) {
                                 sphParticlesPredictedAcceleration(dimension, gasIndex) =
@@ -208,6 +216,12 @@ void sphParticlesApplyUpdates(int minimumRung, int phase, float timeStepScale, f
                             ALWAYS_ASSERT(sphParticlesInternalEnergy(gasIndex) > 0.0);
                         }
                     } else if (phase == 1) {
+                        // Corrector (after the hydro force run): replace the predicted
+                        // half-kick with one from the freshly computed rates. Velocity is
+                        // corrected by the rate difference; energy removes the predicted
+                        // increment and adds the new one in two steps so a non-positive
+                        // energy after either step is reported before the assertion fires.
+                        // Particles are now synchronized for the energy diagnostics.
                         if (rung >= minimumRung) {
                             for (int dimension = 0; dimension < NDIM; dimension++) {
                                 particlesVel(dimension, gravityIndex) +=
@@ -232,6 +246,9 @@ void sphParticlesApplyUpdates(int minimumRung, int phase, float timeStepScale, f
                             ALWAYS_ASSERT(sphParticlesInternalEnergy(gasIndex) > 0.0);
                         }
                     } else if (phase == 2) {
+                        // Opening half-kick (after SPH_RUN_RUNGS assigns new rungs): start
+                        // the next step with the synchronized rates and the new rung's
+                        // half-step, ahead of the drift. The next step's phase 0 closes it.
                         if (rung >= minimumRung) {
                             for (int dimension = 0; dimension < NDIM; dimension++) {
                                 particlesVel(dimension, gravityIndex) +=
