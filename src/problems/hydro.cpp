@@ -358,7 +358,10 @@ void hydroStarTest() {
     PRINT("tdyn = %e\n", 1.0 / sqrt(opts.gravity.gm * rho0));
     PRINT("************************************\n");
     opts = getOptions();
-    opts.hydro.damping = 1.0;
+    // The SPH kernels subtract hydro.damping * v from the acceleration, so the rate is
+    // per code time unit. Damp on the dynamical time; a rate of 1 per code time with
+    // tdyn ~ 3e5 code times gives rate * dt ~ 3e3 and the explicit kick diverges.
+    opts.hydro.damping = 1.0 / tdyn;
     opts.hydro.viscosityAlpha = 0.0;
     setOptions(opts);
     hydroDriver(10.0 * tdyn, 25);
