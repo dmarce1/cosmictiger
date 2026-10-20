@@ -72,6 +72,8 @@ find_path(SILO_INCLUDE_DIR silo.h REQUIRED)
 find_library(SILO_LIBRARY NAMES siloh5 silo REQUIRED)
 find_path(CHEALPIX_INCLUDE_DIR chealpix.h REQUIRED)
 find_library(CHEALPIX_LIBRARY NAMES chealpix REQUIRED)
+find_path(HEALPIX_CXX_INCLUDE_DIR healpix_base.h PATH_SUFFIXES healpix_cxx REQUIRED)
+find_library(HEALPIX_CXX_LIBRARY NAMES healpix_cxx REQUIRED)
 
 message(STATUS "cosmictiger default FMM order = ${COSMICTIGER_WITH_ORDER} (orders 3 to 9 compiled)")
 message(STATUS "cosmictiger maximum bucket size = ${COSMICTIGER_WITH_MAX_BUCKET}")
@@ -80,12 +82,6 @@ include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
 
 set(cosmictiger_source_files
-    healpix/error_handling.cc
-    healpix/geom_utils.cc
-    healpix/healpix_base.cc
-    healpix/healpix_tables.cc
-    healpix/pointing.cc
-    healpix/string_utils.cc
     src/analysis/compress.cpp
     src/analysis/group_entry.cpp
     src/analysis/group_tree.cpp
@@ -355,7 +351,7 @@ set_source_files_properties(src/cosmology/boltzmann.cpp PROPERTIES
 
 add_hpx_executable(cosmictiger
     DEPENDENCIES Boost::boost Boost::program_options GSL::gsl GSL::gslcblas
-        ${FFTW3F_LIBRARY} ${SILO_LIBRARY} ${CHEALPIX_LIBRARY} dl quadmath
+        ${FFTW3F_LIBRARY} ${SILO_LIBRARY} ${CHEALPIX_LIBRARY} ${HEALPIX_CXX_LIBRARY} dl quadmath
     SOURCES ${cosmictiger_source_files}
     HEADERS ${cosmictiger_header_files})
 option(COSMICTIGER_BUILD_STF_BENCHMARKS "Build the opt-in STF comparison harness" OFF)
@@ -366,7 +362,7 @@ endif()
 target_link_libraries(cosmictiger PRIVATE primordial_chemistry cosmictiger_fp16)
 target_include_directories(cosmictiger PRIVATE ${PROJECT_SOURCE_DIR})
 target_include_directories(cosmictiger SYSTEM PRIVATE
-    ${FFTW3F_INCLUDE_DIR} ${SILO_INCLUDE_DIR} ${CHEALPIX_INCLUDE_DIR})
+    ${FFTW3F_INCLUDE_DIR} ${SILO_INCLUDE_DIR} ${CHEALPIX_INCLUDE_DIR} ${HEALPIX_CXX_INCLUDE_DIR})
 target_compile_definitions(cosmictiger PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
 target_compile_options(cosmictiger PRIVATE
     $<$<COMPILE_LANGUAGE:CXX>:-Wno-attributes;-ffast-math>)

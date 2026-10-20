@@ -9,7 +9,7 @@
 #include <stdexcept>
 #include <string>
 
-#include <healpix/healpix_base.h>
+#include <healpix_base.h>
 
 #include <cosmictiger/analysis/lightcone.hpp>
 #include <cosmictiger/analysis/power.hpp>

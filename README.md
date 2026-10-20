@@ -239,24 +239,31 @@ compiler ABIs is not guaranteed.
 ## Build
 
 Use CMake 3.24 or newer, C++20, HPX with CUDA and networking enabled, CUDA,
-serial FFTW3 (single precision), GSL, Silo, HEALPix C, Boost program options and
-Boost.Units headers.
+serial FFTW3 (single precision), GSL, Silo, HEALPix C and C++, Boost program options
+and Boost.Units headers. Install the development packages for these dependencies;
+on Debian/Ubuntu, GSL and HEALPix are provided by `libgsl-dev`, `libchealpix-dev`,
+and `libhealpix-cxx-dev`. CMake finds system installations automatically. The
+build links the installed HEALPix C++ library instead of compiling the bundled
+`healpix/` sources.
 
 Run `./build.sh` in a terminal for the interactive builder. It uses a full-screen
 menu when `whiptail` is available, with a text menu as a fallback. Choose Release,
 RelWithDebInfo, Debug, or Profile (host gprof instrumentation), CUDA, job counts,
 HPX prefix, CUDA architectures, and additional dependency prefixes. Builds go in
 `build/<mode>` with live output and a `builder.*.log`. The default builds
-`cosmictiger`; building and running the test suite is opt-in. Build
-jobs are capped at half the available CPUs, and test concurrency accounts for
+`cosmictiger`; building and running the test suite is opt-in. Build jobs accept
+any positive count. Use `./build.sh -j 24` to select a count, or `./build.sh -j`
+(also `-j max`) to use all detected CPUs. Default test concurrency accounts for
 two MPI localities with two HPX threads each.
 
 The builder uses `~/local/hpx/<build type>` when installed (Release for Profile),
-or normal CMake package discovery. It reuses existing dependency prefixes and
-CUDA architectures from this checkout's CMake build caches, so `./build.sh`
-needs no environment setup after a configured build. Override these defaults in
-the menu or through `CMAKE_PREFIX_PATH` and `CUDAARCHS`. Without a cached or
-explicit CUDA architecture, it uses `native`. For a manual build:
+or normal CMake package discovery. Additional dependency prefixes default to the
+system search paths; use the menu or `CMAKE_PREFIX_PATH` only for installations
+outside those paths. The builder refreshes cached GSL and HEALPix locations when
+configuring, so old temporary installations do not override newly installed
+system packages. It reuses CUDA architectures from this checkout's CMake build
+caches, with a menu override or `CUDAARCHS` for explicit selection. Without a
+cached or explicit CUDA architecture, it uses `native`. For a manual build:
 
 ```sh
 cmake -S . -B build/release -DCMAKE_BUILD_TYPE=Release \

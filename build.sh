@@ -19,26 +19,34 @@
 set -u
 
 showUsage() {
-    printf 'Usage: %s\n' "${0##*/}"
+    printf 'Usage: %s [-j [jobs|max]]\n' "${0##*/}"
     printf 'Run the interactive CosmicTiger configure and build menu in a terminal.\n'
+    printf 'Use -j with no argument or -j max to use all available CPUs.\n'
 }
 
-case "${1:-}" in
-    --help|-h)
-        showUsage
-        exit 0
-        ;;
-    '')
-        if (( $# != 0 )); then
-            showUsage >&2
-            exit 2
-        fi
-        ;;
-    *)
-        showUsage >&2
-        exit 2
-        ;;
-esac
+requestedBuildJobs=
+if (( $# > 0 )); then
+    case "$1" in
+        --help|-h)
+            showUsage
+            exit 0
+            ;;
+        -j)
+            shift
+            if (( $# > 0 )) && [[ $1 =~ ^[0-9]+$ || $1 == max ]]; then
+                requestedBuildJobs=$1
+                shift
+            else
+                requestedBuildJobs=max
+            fi
+            ;;
+        *) showUsage >&2; exit 2 ;;
+    esac
+fi
+if (( $# != 0 )); then
+    showUsage >&2
+    exit 2
+fi
 
 if [[ ! -t 0 || ! -t 1 ]]; then
     printf 'An interactive terminal is required. Run ./build.sh in a terminal.\n' >&2
@@ -48,34 +56,20 @@ fi
 rootDir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || exit 1
 cd -- "$rootDir" || exit 1
 
-defaultDependencyPrefixes=
 defaultCudaArchitectures=
 readBuildDefaults() {
     local cacheFile=$1
-    local cacheKey cacheValue prefix
-    local cachedSourceDir= cachedPrefixPath= cachedArchitectures=
-    local -a cachedPrefixes
+    local cacheKey cacheValue
+    local cachedSourceDir= cachedArchitectures=
     [[ -f $cacheFile ]] || return 0
     # Read cache data without evaluating it as shell code.
     while IFS='=' read -r cacheKey cacheValue; do
         case "$cacheKey" in
             CMAKE_HOME_DIRECTORY:*) cachedSourceDir=$cacheValue ;;
-            CMAKE_PREFIX_PATH:*) cachedPrefixPath=$cacheValue ;;
             CMAKE_CUDA_ARCHITECTURES:*) cachedArchitectures=$cacheValue ;;
         esac
     done < "$cacheFile"
     [[ $cachedSourceDir == "$rootDir" ]] || return 0
-    if [[ -z $defaultDependencyPrefixes && -n $cachedPrefixPath ]]; then
-        IFS=';' read -r -a cachedPrefixes <<< "$cachedPrefixPath"
-        for prefix in "${cachedPrefixes[@]}"; do
-            [[ -d $prefix ]] || continue
-            # The HPX prefix is selected separately for the chosen build mode.
-            if [[ -n ${HOME:-} && $prefix == "$HOME/local/hpx/"* ]]; then
-                continue
-            fi
-            defaultDependencyPrefixes+="${defaultDependencyPrefixes:+;}$prefix"
-        done
-    fi
     if [[ -z $defaultCudaArchitectures && -n $cachedArchitectures &&
         $cachedArchitectures != native ]]; then
         defaultCudaArchitectures=$cachedArchitectures
@@ -85,7 +79,7 @@ readBuildDefaults() {
 # Prefer the default build, then reuse another build belonging to this checkout.
 for cacheFile in "$rootDir/build/release/CMakeCache.txt" "$rootDir"/build/*/CMakeCache.txt; do
     readBuildDefaults "$cacheFile"
-    if [[ -n $defaultDependencyPrefixes && -n $defaultCudaArchitectures ]]; then
+    if [[ -n $defaultCudaArchitectures ]]; then
         break
     fi
 done
@@ -103,13 +97,10 @@ if [[ ! $coreCount =~ ^[1-9][0-9]*$ ]]; then
     coreCount=1
 fi
 
-# Build and test stages run sequentially and share half of the available CPUs.
-maxJobs=$((coreCount / 2))
-if (( maxJobs < 1 )); then
-    maxJobs=1
-fi
+# `-j` may explicitly select any positive job count; max means all CPUs.
+maxJobs=$coreCount
 # MPI integration tests use two localities with two HPX threads each.
-maxTestJobs=$((maxJobs / 4))
+maxTestJobs=$((coreCount / 8))
 if (( maxTestJobs < 1 )); then
     maxTestJobs=1
 fi
@@ -125,9 +116,19 @@ fi
 if (( testJobs > maxTestJobs )); then
     testJobs=$maxTestJobs
 fi
+if [[ -n $requestedBuildJobs ]]; then
+    if [[ $requestedBuildJobs == max ]]; then
+        buildJobs=$coreCount
+    elif [[ $requestedBuildJobs =~ ^[0-9]+$ ]] && [[ $requestedBuildJobs =~ [1-9] ]]; then
+        buildJobs=$requestedBuildJobs
+    else
+        printf 'Build job count must be a positive integer or max.\n' >&2
+        exit 2
+    fi
+fi
 hpxPrefix=
 # CMake uses colon-separated environment paths and semicolon-separated cache paths.
-dependencyPrefixes=${CMAKE_PREFIX_PATH-$defaultDependencyPrefixes}
+dependencyPrefixes=${CMAKE_PREFIX_PATH-}
 dependencyPrefixes=${dependencyPrefixes//:/;}
 cudaArchitectures=
 logFile=
@@ -176,23 +177,16 @@ chooseToggle() {
 chooseNumber() {
     local label=$1
     local currentValue=$2
-    local minimum=$3
-    local maximum=$4
-    local numericValue
     while true; do
-        readInput "$label [${currentValue}] (${minimum}-${maximum}, Enter keeps): "
+        readInput "$label [${currentValue}] (positive whole number, Enter keeps): "
         if [[ -z $promptValue ]]; then
             promptValue=$currentValue
             return
         fi
-        if [[ $promptValue =~ ^[0-9]+$ && ${#promptValue} -le 6 ]]; then
-            numericValue=$((10#$promptValue))
-            if (( numericValue >= minimum && numericValue <= maximum )); then
-                promptValue=$numericValue
-                return
-            fi
+        if [[ $promptValue =~ ^[0-9]+$ && $promptValue =~ [1-9] ]]; then
+            return
         fi
-        printf 'Enter a whole number from %s to %s.\n' "$minimum" "$maximum"
+        printf 'Enter a positive whole number.\n'
     done
 }
 
@@ -218,7 +212,7 @@ showMainMenu() {
     printf '  7) CUDA architectures: %s\n' "${cudaArchitectures:-$defaultCudaArchitectures}"
     printf '  8) Additional dependency prefixes: %s\n' "${dependencyPrefixes:-system default}"
     printf '  Enter or b) Configure and build    q) Quit\n'
-    printf 'Build jobs use at most half the available CPUs; MPI tests allow four CPUs each.\n'
+    printf 'Build jobs accept any positive count; MPI tests use four CPUs each.\n'
 }
 
 dialogChoice() {
@@ -228,11 +222,9 @@ dialogChoice() {
 chooseDialogNumber() {
     local label=$1
     local currentValue=$2
-    local maximum=$3
-    local numericValue
     while true; do
         if ! promptValue=$(dialogChoice --title "$label" \
-            --inputbox "Enter a whole number of jobs from 1 to $maximum." \
+            --inputbox 'Enter a positive whole number of jobs.' \
             10 68 "$currentValue"); then
             promptValue=$currentValue
             return
@@ -241,16 +233,12 @@ chooseDialogNumber() {
             promptValue=$currentValue
             return
         fi
-        if [[ $promptValue =~ ^[0-9]+$ && ${#promptValue} -le 6 ]]; then
-            numericValue=$((10#$promptValue))
-            if (( numericValue >= 1 && numericValue <= maximum )); then
-                promptValue=$numericValue
-                return
-            fi
+        if [[ $promptValue =~ ^[0-9]+$ && $promptValue =~ [1-9] ]]; then
+            return
         fi
         whiptail --clear --backtitle 'CosmicTiger builder' \
             --title 'Invalid job count' \
-            --msgbox "Enter a whole number from 1 to $maximum." 8 58
+            --msgbox 'Enter a positive whole number.' 8 58
     done
 }
 
@@ -272,7 +260,7 @@ if command -v whiptail >/dev/null 2>&1 && [[ ${TERM:-dumb} != dumb ]]; then
     while true; do
         if ! menuChoice=$(dialogChoice --title 'Build configuration' \
             --cancel-button 'Quit' --default-item 1 --notags \
-            --menu 'Use arrow keys to choose a setting. Builds use up to half the available CPUs.' \
+            --menu 'Use arrow keys to choose a setting. Build jobs accept any positive count.' \
             21 78 10 \
             1 "Build mode: $buildMode" \
             2 "CUDA: $enableCuda" \
@@ -321,11 +309,11 @@ if command -v whiptail >/dev/null 2>&1 && [[ ${TERM:-dumb} != dumb ]]; then
                 fi
                 ;;
             4)
-                chooseDialogNumber 'Parallel build jobs' "$buildJobs" "$maxJobs"
+                chooseDialogNumber 'Parallel build jobs' "$buildJobs"
                 buildJobs=$promptValue
                 ;;
             5)
-                chooseDialogNumber 'Parallel test jobs' "$testJobs" "$maxTestJobs"
+                chooseDialogNumber 'Parallel test jobs' "$testJobs"
                 testJobs=$promptValue
                 ;;
             6)
@@ -355,8 +343,8 @@ else
             1) chooseMode ;;
             2) chooseToggle 'Enable CUDA' "$enableCuda"; enableCuda=$promptValue ;;
             3) chooseToggle 'Build and run test suite' "$testSuite"; testSuite=$promptValue ;;
-            4) chooseNumber 'Parallel build jobs' "$buildJobs" 1 "$maxJobs"; buildJobs=$promptValue ;;
-            5) chooseNumber 'Parallel test jobs' "$testJobs" 1 "$maxTestJobs"; testJobs=$promptValue ;;
+            4) chooseNumber 'Parallel build jobs' "$buildJobs"; buildJobs=$promptValue ;;
+            5) chooseNumber 'Parallel test jobs' "$testJobs"; testJobs=$promptValue ;;
             6) chooseText 'HPX installation prefix' "$hpxPrefix"; hpxPrefix=$promptValue ;;
             7) chooseText 'CUDA architectures' "$cudaArchitectures"; cudaArchitectures=$promptValue ;;
             8) chooseText 'Additional dependency prefixes' "$dependencyPrefixes"; dependencyPrefixes=$promptValue ;;
@@ -401,8 +389,10 @@ if [[ -n $hpxPrefix ]]; then
     prefixPath="$hpxPrefix${prefixPath:+;$prefixPath}"
 fi
 
+# Rediscover dependency paths so old cached /tmp installs do not hide system packages.
 configureCommand=(cmake -S "$rootDir" -B "$buildDir" -G Ninja
     -UHPX_DIR '-UMPI_*'
+    '-U*GSL*' '-UCHEALPIX_*' '-UHEALPIX_CXX_*'
     "-DCMAKE_BUILD_TYPE=$buildType"
     "-DCOSMICTIGER_WITH_CUDA=$enableCuda"
     "-DBUILD_TESTING=$testSuite"

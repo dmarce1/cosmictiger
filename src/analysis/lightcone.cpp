@@ -25,7 +25,7 @@
 #include <unordered_set>
 
 #include <chealpix.h>
-#include <healpix/healpix_base.h>
+#include <healpix_base.h>
 #include <silo.h>
 
 #include <cosmictiger/analysis/compress.hpp>
