@@ -169,6 +169,7 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"compute.cudaKickMultipoleTile", options.compute.cudaKickMultipoleTile},
         {"compute.cudaKickSharedExpansion", options.compute.cudaKickSharedExpansion},
         {"compute.cudaKickHandoffBlocks", options.compute.cudaKickHandoffBlocks},
+        {"compute.cudaKickFineHandoffBlocks", options.compute.cudaKickFineHandoffBlocks},
         {"compute.cudaKickListReserve", options.compute.cudaKickListReserve},
         {"checkpoint.readIndex", options.checkpoint.readIndex},
         {"checkpoint.intervalSeconds", options.checkpoint.intervalSeconds},
@@ -319,6 +320,12 @@ bool processOptions(int argc, char* argv[]) {
                 "compute.cudaKickHandoffBlocks",
                 po::value<int>(&opts.compute.cudaKickHandoffBlocks)->default_value(0),
                 "CUDA block count dividing the particles for the CPU/GPU handoff threshold; 0 derives it from the particle count (two blocks per multiprocessor at 32768 particles, growing as the cube root to six at 884736 and above)")(
+                "compute.cudaKickFineHandoffBlocks",
+                po::value<int>(&opts.compute.cudaKickFineHandoffBlocks)->default_value(0),
+                "CUDA block count dividing the particles for the handoff of a node that carries "
+                "no Ewald checks (nodes that still carry them keep the threshold of "
+                "compute.cudaKickHandoffBlocks); 0, or a count below that divisor, applies that "
+                "divisor to every node")(
                 "compute.cudaKickListReserve",
                 po::value<int>(&opts.compute.cudaKickListReserve)->default_value(4096),
                 "entries per CUDA kick interaction list in the per-launch slab handed to each "
@@ -674,7 +681,8 @@ bool processOptions(int argc, char* argv[]) {
     }
     if (opts.compute.cudaKickResidency < 0 || opts.compute.cudaKickSinkTile < -1 ||
         opts.compute.cudaKickParticleTile < 0 || opts.compute.cudaKickMultipoleTile < 0 ||
-        opts.compute.cudaKickHandoffBlocks < 0 || opts.compute.cudaKickListReserve < 0) {
+        opts.compute.cudaKickHandoffBlocks < 0 || opts.compute.cudaKickFineHandoffBlocks < 0 ||
+        opts.compute.cudaKickListReserve < 0) {
         THROW_ERROR("compute.cudaKick* tile and residency options must be nonnegative "
                     "(cudaKickSinkTile may be -1 for global force storage)\n");
     }
@@ -964,6 +972,7 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("compute.cudaKickMultipoleTile", compute.cudaKickMultipoleTile);
     SHOW("compute.cudaKickSharedExpansion", compute.cudaKickSharedExpansion);
     SHOW("compute.cudaKickHandoffBlocks", compute.cudaKickHandoffBlocks);
+    SHOW("compute.cudaKickFineHandoffBlocks", compute.cudaKickFineHandoffBlocks);
     SHOW("compute.cudaKickListReserve", compute.cudaKickListReserve);
     SHOW("lightcone.enabled", lightcone.enabled);
     SHOW("analysis.groups", analysis.groups);

@@ -1147,7 +1147,9 @@ below one is faster:
   so at this size it is not the CPU walk's thread budget. A per-workitem
   cost that does not shrink with the workitem (the uniform lattice carries
   the full far-field and Ewald lists for every node) doubles with the
-  workitem count; that is the likely cause but was not profiled.
+  workitem count; that is the likely cause but was not profiled. (The
+  profile below rules it out: the kernel is unchanged, and the loss is CPU
+  walk time.)
 - Among 656, 984 and 1312 there is no monotonic trend: their geometric means
   lie within 2% of each other at each thread count and the clustered
   optimum moves between them from pair to pair.
@@ -1210,6 +1212,146 @@ level in this check, and 8% faster at 12 threads. The adaptive fixture is
 the closest of the three to a clustered production volume, so the cap of 3
 stands; a run that is uniform throughout (the lattice case) can pin
 `compute.cudaKickHandoffBlocks=328` at this size.
+
+### Where the finer division loses on the lattice (`nsys_handoff_large/`)
+
+The sweep above put the lattice's 10-22% loss at 656 or more blocks down to
+a per-workitem GPU cost, unprofiled. The profile says otherwise: the kernel
+is unchanged and the whole loss is CPU walk time, nearly all of it Ewald
+cell-cell interactions that the finer cut moves from the GPU to the CPU.
+
+Nsight Systems (`--trace=cuda,nvtx`, no CPU sampling or context-switch
+tracing) ran around the faaf984a binary of the check above
+(`cosmictiger_b1024_handoff_large_rule`, divisor pinned with
+`compute.cudaKickHandoffBlocks`) at 2,097,152 particles, bucket 128, order
+7, 8 worker threads on CPUs 1-8, 11 samples per phase. It covered the
+lattice and the adaptive fixture at 328 and 656 blocks, three rounds with
+the order alternating, under the GPU lock and quiet gate (`nsys_run.sh`,
+`summary.md`). The kick launches its kernel once. `KickWorkspace::toGpu`
+runs when the last workitem is added, after the whole CPU walk, and the walk
+waits for the result, so the host part and the kernel add up and never
+overlap. `benchmarks/summarize_kick_handoff_profile.py` finds the GPU phase
+in the CUDA API trace: the burst of calls around the launch (stream
+creation, parameter upload, launch, blocking result copy, stream teardown).
+It splits each kick into host (kick minus GPU phase), launch (GPU phase
+minus kernel) and kernel. The table gives medians over the samples, then
+over the rounds; the rounds agree within 0.7 ms on the host part and within
+6 ms on the kernel. Workitem counts come from the instrumented runs below.
+
+| fixture | divisor | workitems | kick (ms) | host | launch | kernel | with potential: kick | host | kernel |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| lattice | 328 | 512 | 76.82 | 17.66 | 1.67 | 57.52 | 90.37 | 26.58 | 62.29 |
+| lattice | 656 | 1,024 | 93.87 | 33.22 | 1.63 | 58.53 | 105.30 | 42.17 | 61.12 |
+| adaptive | 328 | 547 | 81.15 | 14.18 | 1.73 | 65.94 | 97.48 | 22.82 | 73.11 |
+| adaptive | 656 | 1,076 | 75.45 | 17.42 | 1.72 | 55.96 | 89.33 | 26.50 | 61.67 |
+
+- On the lattice the 656 kick is 0.82x of 328, as in the sweep (0.81x).
+  The kernel is the same (57.5 against 58.5 ms, 62.3 against 61.1 with the
+  potential). The host part grows by 15.6 ms in both phases, and that growth
+  is the whole loss. The launch keeps 8 blocks per multiprocessor resident
+  (656 blocks). At 328 the 512 equal workitems all run at once. At 656 the
+  1,024 half-size items take 1.56 rounds of the 656 blocks, which comes to
+  the same time. Cutting equal workitems that already fit in one round
+  finer gains nothing on the GPU.
+- On the adaptive fixture the finer cut shortens the kernel by 10.0 ms
+  (11.4 with the potential), because at 328 the largest workitems of the
+  dense cube set its length. The host part grows by 3.2-3.7 ms, so the kick
+  is 1.08-1.09x faster.
+- The launch overhead (1.6-1.7 ms) does not depend on the division. 1.4 ms
+  of it is a `cudaGetDeviceProperties` call made when `CudaStream`
+  constructs an HPX CUDA target, on every kick.
+- Nsight Compute was not run: the kernel does not carry the loss.
+
+To place the host time, NVTX start/end ranges went into a copy of faaf984a
+(`nvtx/instrumentation.patch`): around the kick in the walk benchmark,
+`KickWorkspace::addWork` and the part of it that holds the workspace mutex,
+the stages of `toGpu`, and the packing and stream round trip of
+`cudaExecuteKicks`, plus a mark with the workitem and list counts. A second
+copy (`nvtx_walk/instrumentation.patch`) adds ranges in the CPU walk around
+each node's list processing and interactions ("cpu node") and around its
+Ewald cell-cell, direct cell-cell and cell-particle calls. The ranges are
+start/end, not push/pop, because an HPX thread that waits on the mutex or
+on a future may resume on another worker. Both were built in the frozen
+binary's configuration. They ran the stage above, the first also with the
+lattice at 4 threads on CPUs 1-4 (`nvtx/`, three rounds) and the second
+with two rounds (`nvtx_walk/`). Their host parts match the frozen binary's
+within 1.2 ms. Their kernels match it in `nvtx_walk/` (lattice 56.6 and
+57.1 ms) but ran 12-23% longer in `nvtx/` for both divisions alike; during
+that stage `nvidia-smi pmon` showed the desktop's graphics clients drawing
+8-38% of the multiprocessors.
+
+Forces only, medians over the rounds, milliseconds of wall time (thread
+time summed over the CPU nodes for the `cpu` columns) and counts per kick.
+Walk runs from the kick's start to `toGpu`, that is, the CPU walk down to the
+handoff until the last workitem is added. Prepare is `toGpu`'s
+single-threaded bookkeeping (depth sort, tree map, remote nodes and list
+remapping, workitem sort). Other is `toGpu`'s memory advice around the
+launch (`tree2Gpu`, `particlesMemadviseGpu`, `tree2Cpu`). Held is the total
+time the workspace mutex was held. Packing takes 0.04-0.09 ms and the tail
+after `toGpu` 0.6-0.9 ms; both are left out. Walk to held and the handed
+counts come from `nvtx/`, the `cpu` columns from `nvtx_walk/`:
+
+| fixture, threads | divisor | walk | prepare | other | held | cpu nodes | cpu node time | of it Ewald CC | direct CC | CP | Ewald checks handed over | direct checks handed over |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| lattice, 8 | 328 | 10.26 | 3.88 | 3.26 | 1.77 | 511 | 73.6 | 67.0 | 1.7 | 0.2 | 28,824 | 28,824 |
+| lattice, 8 | 656 | 25.72 | 3.97 | 3.30 | 2.28 | 1,023 | 194.1 | 181.9 | 3.8 | 0.3 | 0 | 45,588 |
+| lattice, 4 | 328 | 19.30 | 3.15 | 3.40 | 1.61 | | | | | | 28,824 | 28,824 |
+| lattice, 4 | 656 | 50.16 | 3.38 | 3.43 | 1.84 | | | | | | 0 | 45,588 |
+| adaptive, 8 | 328 | 4.84 | 5.48 | 3.49 | 1.66 | 546 | 21.8 | 13.5 | 1.9 | 2.5 | 6,180 | 21,035 |
+| adaptive, 8 | 656 | 8.63 | 5.56 | 3.55 | 3.67 | 1,075 | 38.0 | 23.2 | 3.3 | 4.3 | 16,326 | 55,082 |
+
+- The lattice loss is the CPU walk. It grows from 10.26 to 25.72 ms at 8
+  threads (+15.5) and from 19.30 to 50.16 ms at 4 (+30.9): the same 124
+  thread-ms per kick at both thread counts. It is parallel work and scales
+  with the threads; prepare, memory advice and tail do not move, and the
+  mutex hold grows by 0.5 ms. The sweep called the penalty
+  thread-independent because its ratio barely changed. In absolute terms it
+  fell from 19 ms at 8 threads to 11 ms at 12, about what 124 thread-ms on
+  11-12 cores gives.
+- The extra walk is one tree level (511 to 1,023 CPU nodes, one fewer than
+  the workitems) and, within it, the Ewald interactions. On the lattice the
+  Ewald lists resolve at depth 9: the 512 box/8 cells of 4,096 particles,
+  each with about 56 Ewald checks. The 328 and 492 divisions hand exactly
+  those cells to the GPU, which evaluates their 28,824 Ewald cell-cell
+  interactions at the workitem roots without a measurable kernel cost. At
+  656 they are CPU nodes, and the workitems arrive with no Ewald checks.
+  The CPU node time grows by 120 thread-ms, 115 of them Ewald cell-cell
+  (about 4 µs per order-7 interaction). Ewald cell-cell is 91-94% of the
+  lattice walk's node time at either division, and 61-62% on the adaptive
+  fixture.
+- On the adaptive fixture the extra 529 CPU nodes cost 16 thread-ms of node
+  time, 10 of them Ewald: 0.03 ms per node against 0.24 on the lattice. The
+  dense cube's cells are small, so much of their Ewald work has resolved
+  higher up. Its walk is less parallel: it takes 8.6 ms of wall time for
+  38 thread-ms of node work, and the mutex hold doubles to 3.7 ms.
+- Host work that does not depend on the division costs 8-11 ms per kick,
+  10-15% of these kicks. The parts are `toGpu`'s preparation (3-6 ms, most
+  of it the tree map, one thread walking every referenced subtree), the
+  memory advice (3.3-3.6 ms), the HPX CUDA target (1.4 ms) and the tail.
+
+Verdict on a tree-aware division. A division that cuts finer where the tree
+is clustered is not worth implementing in that form. What a finer cut costs
+is not set by how uniform the tree is. It is set by whether the extra CPU
+level still carries Ewald checks: a CPU node evaluates them at about 4 µs
+each, while the kernel absorbed the same 28,824 interactions without a
+measurable cost. What a finer cut gains comes from the kernel's tail, which
+only uneven workitems have. A clustering statistic would need a pass over
+the tree before the walk, and it would still pay the CPU's Ewald cost
+wherever the cut crosses the level where the Ewald lists resolve (the box/8
+cells of a uniform region at theta 0.8). Two local changes address that cost
+directly. One is to hand a node to the GPU at the coarse threshold while its
+Ewald checklist is non-empty and at a finer one otherwise. This needs no
+tree statistic and would keep the lattice at the 328/492 cut. How much of
+the adaptive gain it keeps is open: that fixture's 656 workitems still
+arrive with 16,326 Ewald checks. The other is to move the walk's Ewald
+cell-cell evaluations to the GPU, which would also remove the 67 thread-ms
+(about 8 ms at 8 threads) that the 328 walk already spends on them. With
+Ewald work off the CPU, the lattice's extra level would cost about 9
+thread-ms instead of 124. The finer divisions' gains against 328 in the
+sweep (1.11-1.22x on the adaptive fixture, up to 1.20x on the clustered one)
+would then come without the lattice penalty, and the divisor rule should be
+re-swept. These are estimates from the CPU-side thread times; neither change
+is implemented or measured, and the clustered fixture was not profiled.
 
 ### Per-launch list slab (`list_slab/`, `nsys_list_slab/`, `nsys_list_slab_matched/`, `ncu_list_slab/`)
 
@@ -1943,10 +2085,20 @@ a synchronous byte loop that the barrier wait then re-ordered for nothing.
   particles; beyond 2.1 million particles per rank it is unmeasured, and the
   16,384-particle `CUDA_KICK_PARTS_MAX` cap takes over at about 8 million.
   At 2.1 million particles the clustered fixture gains up to 1.20x from 12-16
-  blocks per multiprocessor while the lattice loses 10-22%, so a division
-  that reads the tree's clustering could beat the fixed rule; the lattice
-  penalty of the finer divisions is thread-independent there and was not
-  profiled (`handoff_large_sizes/`).
+  blocks per multiprocessor while the lattice loses 10-22%
+  (`handoff_large_sizes/`). The lattice penalty is CPU walk time, 115 of its
+  124 thread-ms per kick in Ewald cell-cell interactions of the box/8 cells,
+  which the finer cut takes from the GPU (`nsys_handoff_large/`). The
+  candidates in place of a clustering-aware division are a rule that hands a
+  node over while it still carries Ewald checks, or Ewald cell-cell
+  evaluation moved from the CPU walk to the GPU. Neither is implemented or
+  measured.
+- The host part of the kick does not overlap the kernel: the kernel starts
+  after the whole CPU walk. Besides the walk, 8-11 ms per kick at 2.1 million
+  particles does not depend on the division: `toGpu`'s single-threaded tree
+  map, the managed-memory advice around the launch, and an HPX CUDA target
+  that `CudaStream` constructs on every kick (1.4 ms, a
+  `cudaGetDeviceProperties` call).
 - The landing is timed at buckets 64 to 512 against the pre-merge `main`
   (Landing on the reorganized layout): lattice 1.00-1.05x, clustered 1.05x at
   64 and 128, 1.23x at 256 and 1.81-1.88x at 512, adaptive level everywhere
