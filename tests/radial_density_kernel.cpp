@@ -147,6 +147,19 @@ void test(KernelSpec spec) {
                 "D-dimensional derivative");
         }
     }
+    // Near the cutoff, the quadratic derivative vanishes only linearly.
+    // Computing both span weights directly preserves these small values even
+    // when high-dimensional normalization makes absolute errors visible.
+    if (spec.family == Family::Spline && spec.degree == 2) {
+        float const q = std::nextafter(1.0f, 0.0f);
+        double const centralDensity = density(0);
+        double const expectedDensity = 1.5 * centralDensity * (1 - double(q)) * (1 - double(q));
+        double const expectedDerivative = -3 * centralDensity * (1 - double(q));
+        close(radial_kernel::value(table, q) / expectedDensity, 1, 8e-6,
+            "quadratic float cutoff density");
+        close(radial_kernel::derivative(table, q) / expectedDerivative, 1, 8e-6,
+            "quadratic float cutoff derivative");
+    }
     close(density(1.5), 0, 0, "compact support");
 #if defined(RADIAL_KERNEL_TEST_SIMD)
     SimdFloat radii{};
@@ -154,6 +167,7 @@ void test(KernelSpec spec) {
         simdSetLane(radii, lane, 2.0f * lane / SIMD_FLOAT_SIZE);
     }
     simdSetLane(radii, 1, 1e-30f);
+    simdSetLane(radii, 2, std::nextafter(1.0f, 0.0f));
     auto const values = radial_kernel::value(table, radii);
     auto const derivatives = radial_kernel::derivative(table, radii);
     for (int lane = 0; lane < SIMD_FLOAT_SIZE; ++lane) {
@@ -166,7 +180,7 @@ void test(KernelSpec spec) {
 
 template <size_t dimension>
 void testDimension() {
-    for (int degree = 3; degree <= 9; ++degree) {
+    for (int degree = 2; degree <= 9; ++degree) {
         test<dimension>({Family::Spline, degree});
     }
     for (int degree = 2; degree <= 8; degree += 2) {

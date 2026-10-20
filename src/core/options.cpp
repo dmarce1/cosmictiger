@@ -65,7 +65,7 @@ radial_kernel::KernelSpec kernelSpec(std::string const& family, int degree) {
     }
     radial_kernel::KernelSpec const spec{kind, degree};
     if (!radial_kernel::isValid(spec)) {
-        throw std::invalid_argument("kernelDegree must be 3..9 for spline, 2/5/8 for "
+        throw std::invalid_argument("kernelDegree must be 2..9 for spline, 2/5/8 for "
                                     "wendland, or 2/4/6/8 for ferrers (density polynomial degree)");
     }
     return spec;
@@ -442,7 +442,7 @@ bool processOptions(int argc, char* argv[]) {
         po::value<std::string>(&opts.gravity.kernelFamily)->default_value("ferrers"),
         "density kernel family: spline, wendland, or ferrers")("gravity.kernelDegree",
         po::value<int>(&opts.gravity.kernelDegree)->default_value(4),
-        "density degree: spline 3..9; wendland 2,5,8; ferrers 2,4,6,8")("gravity.timestepEta",
+        "density degree: spline 2..9; wendland 2,5,8; ferrers 2,4,6,8")("gravity.timestepEta",
         po::value<double>(&opts.gravity.timestepEta)->default_value(0.20401599335954483),
         "prefactor C in dt = C sqrt(effectiveRadius/acceleration), effectiveRadius = 2 sigma");
 
@@ -482,7 +482,7 @@ bool processOptions(int argc, char* argv[]) {
         po::value<std::string>(&opts.hydro.kernelFamily)->default_value("spline"),
         "density kernel family: spline, wendland, or ferrers")("hydro.kernelDegree",
         po::value<int>(&opts.hydro.kernelDegree)->default_value(3),
-        "density degree: spline 3..9; wendland 2,5,8; ferrers 2,4,6,8")("hydro.yAcceleration",
+        "density degree: spline 2..9; wendland 2,5,8; ferrers 2,4,6,8")("hydro.yAcceleration",
         po::value<double>(&opts.hydro.yAcceleration)->default_value(0.0),
         "uniform gravitational acceleration in the y direction")("hydro.viscosityAlpha",
         po::value<double>(&opts.hydro.viscosityAlpha)->default_value(1.0),

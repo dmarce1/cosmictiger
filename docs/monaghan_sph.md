@@ -76,7 +76,7 @@ factor-of-two conversion. For the cubic, \(H=\sqrt{10/3}\,h\); thus the common
 The default `hydro.neighborNumber` is 42. The name cubic B-spline refers to this
 radial M4 kernel; it is not a tensor-product bicubic interpolation.
 `hydro.kernelFamily` and `hydro.kernelDegree` can instead select cardinal splines
-of degrees 3–9, Wendland C0/C2/C4, or Ferrers F1–F4. Gravity has an independent
+of degrees 2–9, Wendland C0/C2/C4, or Ferrers F1–F4. Gravity has an independent
 selection. See [kernel choices and length conventions](kernels.md) for the valid
 degrees, conversion factors, and migration of explicit old settings. Production
 gravity and SPH use three-dimensional tables; a separate arbitrary-dimensional
@@ -327,7 +327,7 @@ hydrodynamics kernels. It checks lower, upper, and fixed support bounds; the
 weighted-neighbor residual; periodic support intersection; a uniform lattice;
 nonzero perturbations; timestep selection; unequal-support pair conservation;
 and homogeneous expansion with a nonmonatomic gamma. Selected-kernel checks
-exercise all 14 family/degree choices through the production SPH path.
+exercise all 15 family/degree choices through the production SPH path.
 The same target compares all four SIMD CPU passes directly with CUDA, including
 both hydro phases, permuted source/sink mappings, periodic positions, inactive and
 semiactive particles, support-search retries, and immutable source snapshots.

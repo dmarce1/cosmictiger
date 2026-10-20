@@ -16,12 +16,14 @@ using radial_kernel::Family;
 using radial_kernel::KernelSpec;
 using radial_kernel::KernelTable;
 
-constexpr std::array<KernelSpec, 14> kSpecifications = {{{Family::Spline, 3}, {Family::Spline, 4},
-    {Family::Spline, 5}, {Family::Spline, 6}, {Family::Spline, 7}, {Family::Spline, 8},
-    {Family::Spline, 9}, {Family::Wendland, 2}, {Family::Wendland, 5}, {Family::Wendland, 8},
-    {Family::Ferrers, 2}, {Family::Ferrers, 4}, {Family::Ferrers, 6}, {Family::Ferrers, 8}}};
+constexpr std::array<KernelSpec, 15> kSpecifications = {
+    {{Family::Spline, 2}, {Family::Spline, 3}, {Family::Spline, 4}, {Family::Spline, 5},
+        {Family::Spline, 6}, {Family::Spline, 7}, {Family::Spline, 8}, {Family::Spline, 9},
+        {Family::Wendland, 2}, {Family::Wendland, 5}, {Family::Wendland, 8}, {Family::Ferrers, 2},
+        {Family::Ferrers, 4}, {Family::Ferrers, 6}, {Family::Ferrers, 8}}};
 constexpr int kSamplesPerKernel = 128;
-constexpr int kSampleCount = 14 * kSamplesPerKernel;
+constexpr int kKernelCount = static_cast<int>(kSpecifications.size());
+constexpr int kSampleCount = kKernelCount * kSamplesPerKernel;
 
 struct Result {
     float value;
@@ -68,10 +70,10 @@ __global__ void evaluate(KernelTable const* tables, float const* radii, Result* 
 }
 
 void run() {
-    std::array<KernelTable, 14> tables{};
+    std::array<KernelTable, kKernelCount> tables{};
     std::array<float, kSampleCount> radii{};
     std::array<Result, kSampleCount> results{};
-    for (int kernel = 0; kernel < 14; ++kernel) {
+    for (int kernel = 0; kernel < kKernelCount; ++kernel) {
         tables[kernel] = radial_kernel::makeKernelTable(kSpecifications[kernel]);
         int const base = kernel * kSamplesPerKernel;
         for (int sample = 0; sample < kSamplesPerKernel; ++sample) {
@@ -220,7 +222,7 @@ int main() {
         detail::runDensityDimension<4>();
         detail::runDensityDimension<7>();
         detail::runDensityDimension<20>();
-        std::puts("All 14 radial kernels and arbitrary-dimensional densities passed CUDA "
+        std::puts("All 15 radial kernels and arbitrary-dimensional densities passed CUDA "
                   "float/double parity checks.");
     } catch (std::exception const& error) {
         std::fprintf(stderr, "CUDA radial kernel test failed: %s\n", error.what());

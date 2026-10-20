@@ -77,7 +77,7 @@ kernelDegree = 8
 neighborNumber = 120
 ```
 
-The supported density polynomial degrees are spline 3–9, Wendland 2/5/8,
+The supported density polynomial degrees are spline 2–9, Wendland 2/5/8,
 and Ferrers 2/4/6/8. Specify `gravity.effectiveRadius` or `gravity.supportRadius`,
 in mean particle spacings. The imposed central force similarly accepts
 `hydro.centralEffectiveRadius` or `hydro.centralSupportRadius`, in box units,

@@ -14,7 +14,7 @@ import subprocess
 
 
 KERNEL_SPECS = (
-    *(('spline', degree) for degree in range(3, 10)),
+    *(('spline', degree) for degree in range(2, 10)),
     ('wendland', 2), ('wendland', 5), ('wendland', 8),
     ('ferrers', 2), ('ferrers', 4), ('ferrers', 6), ('ferrers', 8),
 )

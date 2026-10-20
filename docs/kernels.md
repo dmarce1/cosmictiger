@@ -4,11 +4,11 @@ Gravity and SPH select independent spherical density kernels and radii. The
 defaults are the radial cubic B-spline (M4) with 42 weighted neighbors for SPH,
 and fixed comoving Ferrers F2 gravity for all particle classes, whose density
 is proportional to `(1-q*q)^2`. The production three-dimensional table and
-evaluators support the following 14 choices:
+evaluators support the following 15 choices:
 
 | `kernelFamily` | Allowed `kernelDegree` | Shape or interpretation |
 | --- | --- | --- |
-| `spline` | `3`, `4`, `5`, `6`, `7`, `8`, `9` | Centered cardinal B-spline of order `kernelDegree + 1`, radialized and normalized in 3D |
+| `spline` | `2`, `3`, `4`, `5`, `6`, `7`, `8`, `9` | Centered cardinal B-spline of order `kernelDegree + 1`, radialized and normalized in 3D |
 | `wendland` | `2`, `5`, `8` | The 3D Wendland C0, C2, and C4 kernels, respectively |
 | `ferrers` | `2`, `4`, `6`, `8` | Ferrers F1 through F4: density proportional to `(1-q*q)^(kernelDegree/2)` |
 
@@ -16,6 +16,21 @@ The degree describes the density polynomial, not the gravitational potential or
 force. It is the polynomial degree on each span for a spline. There is no
 degree-nine Wendland or Ferrers member in these families: their next members
 have degrees eleven and ten. Unsupported family/degree combinations are rejected.
+
+The degree-2 member is the quadratic spline (M3). With `q = r/supportRadius`,
+its normalized three-dimensional density is `W(r,H) = H^-3 w(q)`, where
+
+\[
+w(q)=\frac{81}{16\pi}\begin{cases}
+1-3q^2, & 0\le q<1/3,\\
+\tfrac32(1-q)^2, & 1/3\le q<1,\\
+0, & q\ge1.
+\end{cases}
+\]
+
+Its density and first derivative are continuous at the interior join and cutoff.
+Select it with `kernelFamily = spline` and `kernelDegree = 2` in either the
+`[hydro]` or `[gravity]` section.
 
 For example, these INI sections choose a quintic spline for gravity and Wendland
 C4 for SPH:
@@ -66,6 +81,7 @@ moments. Some 3D conversions are:
 
 | Kernel | `supportRadius/effectiveRadius` |
 | --- | ---: |
+| Quadratic spline (M3) | `sqrt(135/52) = 1.6112584666` |
 | Cubic spline | `sqrt(10/3) = 1.8257418584` |
 | Wendland C2 | `sqrt(15)/2 = 1.9364916731` |
 | Wendland C4 | `sqrt(39/8) = 2.2079402166` |
@@ -126,6 +142,8 @@ change points and Bernstein coefficients. `makeKernelTable` is `constexpr` and
 can construct tables at compile time. The same generated density determines its
 derivative, enclosed mass, gravitational potential, radius conversion, and central
 potential. CPU scalar, CPU SIMD, and CUDA evaluators share this implementation.
+Density and derivative evaluation compute both Bernstein weights from distances
+to the span endpoints, preserving small quadratic derivatives near the cutoff.
 The SPH solver itself continues to require CUDA; adding CPU evaluators is not a
 CPU port of the complete density, neighbor, and hydrodynamics solver.
 
@@ -263,7 +281,7 @@ The `run.test=force` direct reference supports fixed-softening, dark-matter-only
 runs. It requires `hydro.enabled=false`; `run.test=sphGravity` exercises mixed
 particle-class gravity with the common fixed radius.
 
-The `radial_kernel` test covers all 14 kernels: unit mass and second moments,
+The `radial_kernel` test covers all 15 kernels: unit mass and second moments,
 independent polynomial references, derivatives, support joins, gravity against
 radial quadrature and Poisson's equation, float behavior near the origin and
 cutoff, and agreement with the former cubic density and Ferrers F4 force and

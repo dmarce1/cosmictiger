@@ -49,7 +49,7 @@ struct KernelTable {
 constexpr bool isValid(KernelSpec spec) {
     switch (spec.family) {
     case Family::Spline:
-        return spec.degree >= 3 && spec.degree <= kMaximumDegree;
+        return spec.degree >= 2 && spec.degree <= kMaximumDegree;
     case Family::Wendland:
         return spec.degree == 2 || spec.degree == 5 || spec.degree == 8;
     case Family::Ferrers:
@@ -127,17 +127,34 @@ namespace detail {
     }
 
     template <typename Real>
-    COSMICTIGER_RADIAL_HD inline Real evaluate(double const* coefficients, int degree, Real t) {
+    COSMICTIGER_RADIAL_HD inline Real evaluate(
+        double const* coefficients, int degree, Real leftWeight, Real rightWeight) {
         Real work[kMaximumDegree + 4];
         for (int i = 0; i <= degree; ++i) {
             work[i] = simdBroadcast<Real>(coefficients[i]);
         }
         for (int remaining = degree; remaining > 0; --remaining) {
             for (int i = 0; i < remaining; ++i) {
-                work[i] = (simdBroadcast<Real>(1) - t) * work[i] + t * work[i + 1];
+                work[i] = leftWeight * work[i] + rightWeight * work[i + 1];
             }
         }
         return work[0];
+    }
+
+    template <typename Real>
+    COSMICTIGER_RADIAL_HD inline Real evaluate(double const* coefficients, int degree, Real t) {
+        return evaluate(coefficients, degree, simdBroadcast<Real>(1) - t, t);
+    }
+
+    // Compute both Bernstein weights directly: forming 1-t loses relative
+    // accuracy near a span's right endpoint, notably for the M3 derivative.
+    template <typename Real>
+    COSMICTIGER_RADIAL_HD inline Real evaluateDensitySpan(
+        double const* coefficients, int degree, Real q, double a, double b) {
+        Real const radius = clamp(q, a, b);
+        Real const width = simdBroadcast<Real>(b - a);
+        return evaluate(coefficients, degree, (simdBroadcast<Real>(b) - radius) / width,
+            (radius - simdBroadcast<Real>(a)) / width);
     }
 
     template <typename Real>
@@ -306,13 +323,13 @@ COSMICTIGER_RADIAL_HD inline Real value(KernelTable const& table, Real q) {
     for (int piece = 0; piece < table.pieceCount; ++piece) {
         if constexpr (std::is_arithmetic_v<Real>) {
             if (q < simdBroadcast<Real>(table.changePoints[piece + 1])) {
-                return detail::evaluate(table.coefficients[piece], table.degree,
-                    detail::localCoordinate(table, piece, q));
+                return detail::evaluateDensitySpan(table.coefficients[piece], table.degree, q,
+                    table.changePoints[piece], table.changePoints[piece + 1]);
             }
         } else {
             result = simdSelect(detail::pieceMask(table, piece, q),
-                detail::evaluate(table.coefficients[piece], table.degree,
-                    detail::localCoordinate(table, piece, q)),
+                detail::evaluateDensitySpan(table.coefficients[piece], table.degree, q,
+                    table.changePoints[piece], table.changePoints[piece + 1]),
                 result);
         }
     }
@@ -325,13 +342,13 @@ COSMICTIGER_RADIAL_HD inline Real derivative(KernelTable const& table, Real q) {
     for (int piece = 0; piece < table.pieceCount; ++piece) {
         if constexpr (std::is_arithmetic_v<Real>) {
             if (q < simdBroadcast<Real>(table.changePoints[piece + 1])) {
-                return detail::evaluate(table.derivativeCoefficients[piece], table.degree - 1,
-                    detail::localCoordinate(table, piece, q));
+                return detail::evaluateDensitySpan(table.derivativeCoefficients[piece],
+                    table.degree - 1, q, table.changePoints[piece], table.changePoints[piece + 1]);
             }
         } else {
             result = simdSelect(detail::pieceMask(table, piece, q),
-                detail::evaluate(table.derivativeCoefficients[piece], table.degree - 1,
-                    detail::localCoordinate(table, piece, q)),
+                detail::evaluateDensitySpan(table.derivativeCoefficients[piece], table.degree - 1,
+                    q, table.changePoints[piece], table.changePoints[piece + 1]),
                 result);
         }
     }

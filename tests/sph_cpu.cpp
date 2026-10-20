@@ -974,6 +974,7 @@ int main() {
         detail::testDefaultThermalTimestep();
         detail::testCompositionEos();
         radial_kernel::KernelSpec const specifications[] = {
+            {radial_kernel::Family::Spline, 2},
             {radial_kernel::Family::Spline, 3},
             {radial_kernel::Family::Spline, 4},
             {radial_kernel::Family::Spline, 5},

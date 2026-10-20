@@ -121,8 +121,10 @@ mapSize = 8
     # Selections survive option setup and checkpoints independently.
     for gravity_family, gravity_degree, hydro_family, hydro_degree in (
             ("spline", 9, "wendland", 8), ("wendland", 5, "ferrers", 6),
-            ("ferrers", 2, "spline", 4)):
-        output = run(f"kernels_{gravity_family}_{hydro_family}", metadata_options + [
+            ("ferrers", 2, "spline", 4), ("spline", 2, "ferrers", 8),
+            ("ferrers", 8, "spline", 2)):
+        name = f"kernels_{gravity_family}_{gravity_degree}_{hydro_family}_{hydro_degree}"
+        output = run(name, metadata_options + [
             f"--gravity.kernelFamily={gravity_family}", f"--gravity.kernelDegree={gravity_degree}",
             f"--hydro.kernelFamily={hydro_family}", f"--hydro.kernelDegree={hydro_degree}",
             "--hydro.neighborNumber=200", "--gravity.softening=0.02", "--gravity.timestepEta=0.15"])
@@ -140,6 +142,8 @@ mapSize = 8
             ["--gravity.kernelFamily=gaussian"], ["--hydro.kernelFamily=wendland", "--hydro.kernelDegree=9"],
             ["--gravity.kernelFamily=ferrers", "--gravity.kernelDegree=9"],
             ["--hydro.kernelDegree=10"], ["--gravity.kernelDegree=-1"],
+            ["--gravity.kernelFamily=spline", "--gravity.kernelDegree=1"],
+            ["--hydro.kernelFamily=spline", "--hydro.kernelDegree=1"],
             ["--hydro.kernelFamily=wendland", "--hydro.kernelDegree=8", "--hydro.neighborNumber=12"])):
         run(f"invalid_kernel_{index}", metadata_options + invalid, success=False)
 
@@ -250,11 +254,12 @@ mapSize = 8
     # whose support-to-effective-radius ratios differ.
     for family, degree, ratio in (("ferrers", 8, math.sqrt(13) / 2),
                                    ("spline", 3, math.sqrt(10 / 3)),
+                                   ("spline", 2, math.sqrt(135 / 52)),
                                    ("wendland", 5, math.sqrt(15) / 2)):
         common = metadata_options + [f"--gravity.kernelFamily={family}",
                                       f"--gravity.kernelDegree={degree}"]
         for representation, value in (("effectiveRadius", 0.02), ("supportRadius", 0.02 * ratio)):
-            output = run(f"radius_{family}_{representation}", common + [
+            output = run(f"radius_{family}_{degree}_{representation}", common + [
                 f"--gravity.{representation}={value}"])
             assertNumericSetting(output, "gravity.effectiveRadius", 0.02)
             assertNumericSetting(output, "gravity.supportRadius", 0.02 * ratio)

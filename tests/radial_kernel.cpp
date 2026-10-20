@@ -18,18 +18,23 @@ using radial_kernel::Family;
 using radial_kernel::KernelSpec;
 using radial_kernel::KernelTable;
 
-constexpr std::array<KernelSpec, 14> kSpecifications = {{{Family::Spline, 3}, {Family::Spline, 4},
-    {Family::Spline, 5}, {Family::Spline, 6}, {Family::Spline, 7}, {Family::Spline, 8},
-    {Family::Spline, 9}, {Family::Wendland, 2}, {Family::Wendland, 5}, {Family::Wendland, 8},
-    {Family::Ferrers, 2}, {Family::Ferrers, 4}, {Family::Ferrers, 6}, {Family::Ferrers, 8}}};
+constexpr std::array<KernelSpec, 15> kSpecifications = {
+    {{Family::Spline, 2}, {Family::Spline, 3}, {Family::Spline, 4}, {Family::Spline, 5},
+        {Family::Spline, 6}, {Family::Spline, 7}, {Family::Spline, 8}, {Family::Spline, 9},
+        {Family::Wendland, 2}, {Family::Wendland, 5}, {Family::Wendland, 8}, {Family::Ferrers, 2},
+        {Family::Ferrers, 4}, {Family::Ferrers, 6}, {Family::Ferrers, 8}}};
 
+constexpr auto kQuadratic = radial_kernel::makeKernelTable({Family::Spline, 2});
 constexpr auto kCubic = radial_kernel::makeKernelTable({Family::Spline, 3});
 constexpr auto kFerrers = radial_kernel::makeKernelTable({Family::Ferrers, 8});
+static_assert(kQuadratic.degree == 2 && kQuadratic.pieceCount == 2);
+static_assert(kQuadratic.changePoints[1] == 1.0 / 3 && kQuadratic.changePoints[2] == 1);
+static_assert(kQuadratic.centralPotential == 39.0 / 16);
 static_assert(kCubic.pieceCount == 2 && kCubic.changePoints[1] == 0.5);
 static_assert(kFerrers.centralPotential == 693.0 / 256);
 static_assert(std::is_trivially_copyable_v<KernelTable>);
 static_assert(std::is_standard_layout_v<KernelTable>);
-static_assert(!radial_kernel::isValid({Family::Spline, 2}));
+static_assert(!radial_kernel::isValid({Family::Spline, 1}));
 static_assert(!radial_kernel::isValid({Family::Wendland, 9}));
 static_assert(!radial_kernel::isValid({Family::Ferrers, 3}));
 static_assert(radial_kernel::makeKernelTable({Family::Ferrers, 9}).pieceCount == 0);
@@ -220,6 +225,41 @@ void testTable(KernelSpec spec) {
 #endif
 }
 
+// Closed forms for the normalized quadratic (M3) spline and its spherical
+// gravity integrals, independent of the Bernstein table construction.
+void testQuadraticSpline() {
+    close(kQuadratic.supportRadiusPerEffectiveRadius, std::sqrt(135.0 / 52), 4e-15,
+        "quadratic width conversion");
+    double const normalization = 81.0 / (16 * std::numbers::pi);
+    for (double const q : {0.0, 1e-30, 0.1, std::nextafter(1.0 / 3, 0.0), 1.0 / 3,
+             std::nextafter(1.0 / 3, 1.0), 0.5, 0.9, std::nextafter(1.0, 0.0), 1.0, 2.0}) {
+        double const x = q * q;
+        double density = 0;
+        double derivative = 0;
+        double force;
+        double potential;
+        if (q < 1.0 / 3) {
+            density = normalization * (1 - 3 * x);
+            derivative = -6 * normalization * q;
+            force = 27.0 / 4 - 243.0 / 20 * x;
+            potential = 39.0 / 16 - 27.0 / 8 * x + 243.0 / 80 * x * x;
+        } else if (q < 1) {
+            density = 1.5 * normalization * (1 - q) * (1 - q);
+            derivative = -3 * normalization * (1 - q);
+            force = 81.0 / 8 - 243.0 / 16 * q + 243.0 / 40 * x - 1 / (80 * q * x);
+            potential =
+                81.0 / 32 - 81.0 / 16 * x + 81.0 / 16 * x * q - 243.0 / 160 * x * x - 1 / (80 * q);
+        } else {
+            force = 1 / (q * x);
+            potential = 1 / q;
+        }
+        close(radial_kernel::value(kQuadratic, q), density, 2e-14, "quadratic density");
+        close(radial_kernel::derivative(kQuadratic, q), derivative, 2e-14, "quadratic derivative");
+        close(radial_kernel::forceFactor(kQuadratic, q), force, 2e-14, "quadratic force");
+        close(radial_kernel::potential(kQuadratic, q), potential, 2e-14, "quadratic potential");
+    }
+}
+
 void testLegacyKernels() {
     close(kCubic.supportRadiusPerEffectiveRadius, std::sqrt(10.0 / 3), 4e-15,
         "cubic width conversion");
@@ -247,11 +287,12 @@ void testLegacyKernels() {
 
 int main() {
     try {
+        detail::testQuadraticSpline();
         detail::testLegacyKernels();
         for (auto const spec : detail::kSpecifications) {
             detail::testTable(spec);
         }
-        std::puts("All 14 radial kernels passed normalization, width, shape, derivative, gravity, "
+        std::puts("All 15 radial kernels passed normalization, width, shape, derivative, gravity, "
                   "and float checks.");
     } catch (std::exception const& error) {
         std::fprintf(stderr, "radial kernel test failed: %s\n", error.what());
