@@ -70,9 +70,10 @@ host-computed `CudaKickArenaLayout` (`cosmictiger/gravity/kick.hpp`):
 Persistent region
 
 - `CudaKickControl<order>`: the control objects of the interaction lists, the
-  checklist stacks and the ancestor-expansion stack (their elements stay in the
-  growable `cudaAllocate` pool), the staging barrier, and the resolved region
-  pointers. 496 bytes at order 7.
+  checklist stacks and the ancestor-expansion stack (their elements live in the
+  block's region of the per-launch list slab, below), the staging barrier, and
+  the resolved region pointers. 648 bytes at order 7 (528 before the slab: each
+  vector carries an ownership flag and the layout two more fields).
 - The active local expansion with its position (`compute.cudaKickSharedExpansion`,
   default on). Each node's L2L translates cooperatively into the arena scratch
   with `translateInto` (group leaders store their coefficients; no replicated
@@ -94,11 +95,15 @@ Lifetimes: staged tiles are refilled only after every lane has finished reading
 them (`__syncwarp()` after each use); the checklist copy and CP share one
 barrier, so the copy completes before CP starts; the control block is
 constructed by every lane and lane zero writes the resolved pointers only after
-a warp barrier. compute-sanitizer racecheck reports no hazards and no warnings
-for the fmmWalk regression; memcheck is clean. synccheck reports 32 "missing
-init/wait" diagnostics on the `cuda::barrier` objects in dynamic shared memory;
-the unchanged baseline kernel reports the same 32, so these are a pre-existing
-tool interaction, not a new hazard.
+a warp barrier. compute-sanitizer memcheck is clean for the fmmWalk regression
+and racecheck reports no errors; its warnings (126 in the committed order-7
+log, `sanitizer/racecheck_order_7.log`) all pair the `cuda::memcpy_async`
+staging writes with the later reads of the staged tile, accesses that the
+`cuda::barrier` wait orders but the tool does not relate (see the list slab
+section for the counts with and without the slab). synccheck reports 32
+"missing init/wait" diagnostics on the `cuda::barrier` objects in dynamic
+shared memory; the unchanged baseline kernel reports the same 32, so these are
+a pre-existing tool interaction, not a new hazard.
 
 Forces for buckets larger than the sink tile are processed as consecutive
 sink tiles: forces are zeroed, PC and PP run over the full interaction lists,
@@ -130,6 +135,40 @@ Options (all default to automatic): `compute.cudaKickResidency`,
 `kickBlockCount()` uses two resident blocks per multiprocessor, a measured
 choice that is independent of the launch size, see the handoff sections
 below).
+
+## Per-launch list slab
+
+A block's six interaction lists, its two checklist stacks with their level
+bounds, the ancestor-expansion and search-parameter stacks and, when the
+corresponding region is not in shared memory, the active expansion and the
+whole-bucket force backing live in global memory. With
+`compute.cudaKickListReserve` above zero (default 4096 entries per list) that
+storage is one region per block of a slab the host allocates once per order
+with `cudaMalloc`, sized for `residency` blocks per multiprocessor.
+`kickCarveListStorage<order>()` (`cosmictiger/gravity/kick_cuda.hpp`) lays the regions
+out in a fixed order on 16-byte boundaries; the host calls it with a null base
+to measure the per-block stride (`CudaKickArenaLayout::listSlabBytes`, a
+multiple of 128 bytes) and each block calls it on its own region to resolve
+its pointers. The block then constructs its control object on those regions
+(`DeviceVector::attach`: the vector uses the storage without owning it), so
+constructing and destroying the lists costs no pool traffic. A list that
+outgrows its region moves into a pool block as before (doubling growth), and
+that pool block is released at the end of the launch. At order 7 with the
+default reservation a block's region is 145,792 bytes (eight 16 KB lists, the
+64-level ancestor stack of 212-byte expansions, the bounds and parameters),
+95.6 MB for 656 blocks, about what the twelve pool blocks of the earlier
+reservation occupied inside the managed-memory heap (`HEAP_SIZE`), which no
+longer has to hold them. `compute.cudaKickListReserve=0` keeps every list in
+the pool, grown on demand, as before.
+
+Before the slab, every block reserved its lists at launch with one
+`cudaAllocate` per list and released them at the end, twelve allocations and
+twelve releases per block per launch, each a scan of the pool's lock-free
+queues with system-scope atomics; Nsight Compute attributed 42 to 64 million
+warp instructions per launch to `cudaAllocate` and 9 to 15 million to
+`cudaRelease` on the adaptive fixture at bucket 64 (more with eight resident
+blocks per multiprocessor than with six). The measured effect is in the
+per-launch list slab section below.
 
 ## Compiled kernel resources (measured)
 
@@ -167,6 +206,10 @@ runtime-order binary:
   order 3 through 9.
 - `fmmTree` and the mixed-mass `sphGravity` regression (which exercises the
   mass-plane instantiation) pass at orders 3, 7 and 9.
+- With the per-launch list slab, the CUDA and CPU `fmmWalk`, `fmmTree` and the
+  CUDA `sphGravity` regressions pass in the 1024-bucket build
+  (`validation/ctest_cap1024_list_slab.log`); the compute-sanitizer results of
+  that build are in the list slab section below.
 
 ## CPU and CUDA agreement (measured)
 
@@ -723,7 +766,9 @@ and at 262,144 particles.
   once the handoff is separated from it, and the option now really launches
   that many blocks.
 - List reservation: 4096 entries stays; removing it costs 2-4% on the adaptive
-  fixture at buckets 32 and 64.
+  fixture at buckets 32 and 64. It now sizes the per-launch list slab (one
+  region per block, pool growth only on overflow) instead of twelve pool
+  allocations per block per launch; see the list slab section below.
 - Shared expansion and shared sink forces stay; the automatic sink tile falls
   back to 128 particles with full-size source tiles when the whole bucket does
   not fit (bucket 1024 at the order-7 budget).
@@ -1149,13 +1194,186 @@ the closest of the three to a clustered production volume, so the cap of 3
 stands; a run that is uniform throughout (the lattice case) can pin
 `compute.cudaKickHandoffBlocks=328` at this size.
 
+### Per-launch list slab (`list_slab/`, `nsys_list_slab/`, `nsys_list_slab_matched/`, `ncu_list_slab/`)
+
+Three binaries: "head" is the pre-slab branch head eebab5b1 (the arena with
+the fixes above merged with main's open-larger-cell walk, 92d735c6), "slab"
+is the same commit with the per-launch list slab, both from one 1024-bucket
+configuration, and "baseline" is 585ee6c0 as above. Because of the merged
+walk change the absolute head and slab times are not comparable with the
+tables above (the handoff and opening rule moved work from the CPU to the
+GPU: at bucket 64 the adaptive kick fell from 13.8 to 12.4 ms while its
+kernel grew from 5.6 to 7.2 ms), so the slab is judged against its own head
+and, for the kernel criterion, with both arena binaries pinned to the
+baseline's work division and opening rule (`compute.cudaKickHandoffBlocks=492`,
+`gravity.openLargerCell=false`, the "matched" policy). The policy lines are
+unchanged apart from the control block (528 to 648 bytes, dynamic shared
+7,920 to 8,048 bytes at bucket 64, same tiles) and the new slab size:
+`list slab 145792 bytes per block (4096 entries per list)`.
+
+All GPU stages ran one at a time under a lock shared with the other sessions
+of this workstation after their overlapping runs had contaminated a first
+attempt (kept out of the tables; `nsys_list_slab/` round 3 is such a case
+and its summary says so).
+
+Whole-kick times (`list_slab/run.sh`: three pairs of 15 samples, direct
+reference over 1,024 particles, the sampler saw no other GPU process during
+the run, pair spreads at most 8%). The slab's force exports are bit-identical
+to the head's on every fixture, bucket and policy (acceleration and potential
+relative L2 of 0 in `list_slab/summary.md`), and both agree with the direct
+reference as before (adaptive force error 2.3e-3 at bucket 64).
+
+Whole-kick times, current handoff and opening rule (automatic policy); speedup is head over slab (paired range in parentheses):
+
+| bucket | fixture | potential | baseline | head | slab | speedup slab vs head |
+|---:|---|---:|---:|---:|---:|---:|
+| 64 | lattice | no | 32.48 ms | 15.32 ms | 14.98 ms | 1.022x (1.020-1.032) |
+| 64 | clustered | no | 8.44 ms | 6.42 ms | 6.08 ms | 1.054x (1.046-1.076) |
+| 64 | adaptive | no | 18.61 ms | 12.35 ms | 11.90 ms | 1.038x (0.960-1.070) |
+| 64 | adaptive | yes | 18.82 ms | 12.59 ms | 11.93 ms | 1.055x (1.027-1.112) |
+| 128 | lattice | no | 14.83 ms | 15.18 ms | 14.91 ms | 1.018x (1.004-1.041) |
+| 128 | clustered | no | 6.31 ms | 7.30 ms | 6.94 ms | 1.052x (1.043-1.055) |
+| 128 | adaptive | no | 15.88 ms | 12.55 ms | 12.62 ms | 0.994x (0.969-1.040) |
+| 128 | adaptive | yes | 16.86 ms | 12.54 ms | 12.49 ms | 1.004x (0.995-1.018) |
+
+Whole-kick times, baseline's work division and opening rule (matched policy); speedup is head over slab (paired range in parentheses):
+
+| bucket | fixture | potential | baseline | head | slab | speedup slab vs head |
+|---:|---|---:|---:|---:|---:|---:|
+| 64 | lattice | no | 32.48 ms | 31.58 ms | 30.71 ms | 1.028x (1.022-1.038) |
+| 64 | clustered | no | 8.44 ms | 8.37 ms | 6.83 ms | 1.225x (1.216-1.242) |
+| 64 | adaptive | no | 18.61 ms | 19.61 ms | 18.98 ms | 1.033x (1.021-1.040) |
+| 64 | adaptive | yes | 18.82 ms | 20.43 ms | 19.30 ms | 1.059x (1.030-1.059) |
+| 128 | lattice | no | 14.83 ms | 14.68 ms | 14.40 ms | 1.020x (1.010-1.034) |
+| 128 | clustered | no | 6.31 ms | 6.19 ms | 6.27 ms | 0.987x (0.974-0.987) |
+| 128 | adaptive | no | 15.88 ms | 17.70 ms | 17.01 ms | 1.041x (0.998-1.041) |
+| 128 | adaptive | yes | 16.86 ms | 18.35 ms | 17.69 ms | 1.037x (1.025-1.068) |
+
+Largest pair spread (max/min of the three pair medians) over all variants: 1.083.
+
+Host and kernel split (`nsys_list_slab/nsys_run.sh`, as in the earlier Nsight
+Systems section: kernel launches paired with the kicks, medians over the two
+clean rounds; round 3 overlapped another session's GPU run and is excluded),
+automatic policy, 15 samples:
+
+| fixture, bucket | variant | whole kick (ms) | kick kernel (ms) | host (ms) | with potential: whole kick | kernel | host |
+|---|---|---:|---:|---:|---:|---:|---:|
+| adaptive, bucket 64 | baseline | 19.58 | 5.08 | 14.39 | 19.65 | 4.99 | 14.37 |
+| adaptive, bucket 64 | head | 13.87 | 7.14 | 6.79 | 12.81 | 6.25 | 6.47 |
+| adaptive, bucket 64 | slab | 13.22 | 6.33 | 6.58 | 12.36 | 5.84 | 6.45 |
+| adaptive, bucket 128 | baseline | 17.53 | 7.79 | 9.47 | 16.31 | 6.91 | 9.33 |
+| adaptive, bucket 128 | head | 13.80 | 6.61 | 6.93 | 12.87 | 6.00 | 6.69 |
+| adaptive, bucket 128 | slab | 13.15 | 6.23 | 6.90 | 12.33 | 5.69 | 6.71 |
+
+- At bucket 64 the slab kernel is 0.8 ms (11%) faster than the head's (6.33
+  against 7.14 ms, forces; 5.84 against 6.25 ms with the potential) and the
+  host share is nearly unchanged, so the whole kick gains the kernel
+  difference. At bucket 128 the kernel gains 0.3 to 0.4 ms (5 to 6%): with
+  200-particle subtrees the launch holds about 164 workitems for 656 blocks,
+  so fewer blocks compete for the allocator at any one time.
+- The head kernel is slower than the baseline's at bucket 64 (7.1 against 5.1
+  ms) not because of the arena but because the two-blocks-per-SM handoff gives
+  the GPU more of the walk (host 6.8 against 14.4 ms): the whole kick is 13.9
+  against 19.7 ms. The kernel comparison that the earlier criterion (5.6
+  against 5.1 ms) meant needs the same work division, measured next.
+
+Host and kernel split at the baseline's work division
+(`nsys_list_slab_matched/nsys_run.sh`: the arena binaries with
+`compute.cudaKickHandoffBlocks=492` and `gravity.openLargerCell=false`, plus
+the three automatic-policy variants again; three rounds, medians over the
+rounds; one build of another session ran during the first 15 s and two
+round-2 host shares at bucket 128 show CPU contention, see the summary, so
+the kernel columns are the reliable ones):
+
+| fixture, bucket | variant | whole kick (ms) | kick kernel (ms) | host (ms) | with potential: whole kick | kernel | host |
+|---|---|---:|---:|---:|---:|---:|---:|
+| adaptive, bucket 64 | baseline | 19.95 | 5.11 | 14.90 | 19.79 | 5.05 | 14.64 |
+| adaptive, bucket 64 | head, matched | 21.34 | 6.64 | 14.87 | 21.05 | 6.29 | 14.87 |
+| adaptive, bucket 64 | slab, matched | 20.39 | 5.45 | 14.61 | 20.03 | 5.07 | 14.58 |
+| adaptive, bucket 64 | head | 13.60 | 7.11 | 6.97 | 13.38 | 6.64 | 6.59 |
+| adaptive, bucket 64 | slab | 13.80 | 6.75 | 6.98 | 12.74 | 6.10 | 6.72 |
+| adaptive, bucket 128 | baseline | 18.20 | 8.27 | 9.63 | 16.92 | 7.23 | 9.50 |
+| adaptive, bucket 128 | head, matched | 19.83 | 9.53 | 9.90 | 18.30 | 8.65 | 9.89 |
+| adaptive, bucket 128 | slab, matched | 19.01 | 9.12 | 9.76 | 18.18 | 8.63 | 9.52 |
+| adaptive, bucket 128 | head | 14.18 | 6.84 | 7.04 | 13.52 | 6.46 | 6.89 |
+| adaptive, bucket 128 | slab | 13.74 | 6.49 | 7.23 | 12.79 | 5.85 | 6.89 |
+
+- At the baseline's division the host shares agree to 0.3 ms, as they must,
+  and the kernels compare like for like. At bucket 64 the head kernel is 1.5
+  ms (30%) above the baseline's and the slab kernel 0.34 ms (7%) above it,
+  5.45 against 5.11 ms; with the potential the two are equal (5.07 against
+  5.05 ms). The slab therefore removes about 80% of the arena kernel's gap to
+  the baseline at the division the earlier criterion was stated for; the rest
+  is in the PP and PC loops (the bucket-512 attribution above), not in list
+  handling. At bucket 128 the arena kernel is further from the baseline (head
+  9.5 against 8.3 ms) and the slab recovers a third of it (9.1 ms).
+- The automatic-policy rows repeat the first split within noise (slab kernel
+  6.75 against 6.33 ms there; the clean rounds of the two stages differ by
+  that much for the head as well).
+
+
+Nsight Compute replay of the second force-only kick kernel on the adaptive
+fixture at bucket 64 (`--set full`, 656 single-warp blocks, automatic policy
+with the current handoff), executed warp instructions per device function:
+
+| device function | head | slab | difference |
+|---|---:|---:|---:|
+| `cudaKickKernel<7>` (everything inlined into it) | 128,944,938 | 128,912,577 | -32,361 |
+| `cudaAllocate` | 17,144,740 | 0 | -17,144,740 |
+| `cudaRelease` | 1,075,614 | 0 | -1,075,614 |
+| `addGpuFlops` | 641,480 | 641,480 | 0 |
+| total | 147,841,842 | 129,589,127 | -18,252,715 |
+
+| metric | head | slab | ratio |
+|---|---:|---:|---:|
+| kernel duration (replay) | 7.57 ms | 6.90 ms | 0.912 |
+| warp instructions issued | 147.7 M | 129.8 M | 0.879 |
+| stall, long scoreboard (per issue) | 1.54 | 0.48 | 0.31 |
+| stall, branch resolving (per issue) | 0.50 | 0.18 | 0.37 |
+| stall, membar (per issue) | 0.0024 | 0 | 0 |
+| stall, short scoreboard (per issue) | 1.91 | 2.23 | 1.17 |
+| local-memory load requests (spills) | 726,843 | 568,582 | 0.78 |
+
+The kernel no longer executes a single allocator instruction: the 18.2 M
+warp instructions of `cudaAllocate` and `cudaRelease` (12% of the launch)
+are gone, the kernel body itself is unchanged, and with them go most of the
+long-scoreboard stalls (the pool's queue scans are dependent global atomics),
+the branch-resolving stalls of the scan loops and the only memory-barrier
+stalls. The replay runs 8.8% faster; the per-issue short-scoreboard stall
+rises because the remaining instructions are the shared-memory PP and PC
+loops.
+
+`benchmarks/attribute_ncu_functions.py` produces the per-function table from
+the `--page source` export of the reports (`ncu_list_slab/ncu_run.sh`).
+
+compute-sanitizer on the CUDA `fmmWalk` regression at order 7
+(`validation/*_list_slab.log`, `validation/racecheck_trials/`): memcheck is
+clean for the slab build. racecheck reports 0 errors for every binary, and
+its warning count is a property of the binary, not of the slab: the head
+binary reports none in three runs, the slab binary reports 138 in four runs
+whether its lists use the slab or, with `compute.cudaKickListReserve=0`, the
+pool, and the committed log of the pre-slab arena build e2c00fdb
+(`sanitizer/racecheck_order_7.log`) reports 126. Every warning pairs a
+`cuda::memcpy_async` staging write with a later read of the staged tile (CP,
+the PP main loop and its tail loop), accesses that are ordered by the
+`cuda::barrier` wait and the `__syncwarp()` after it; the tool evidently does
+not relate them through the barrier in some builds. The force exports of the
+slab and head binaries are bit-identical on every fixture and bucket
+(`list_slab/summary.md`, acceleration and potential relative L2 of 0), so the
+staging is not racing in fact.
+
 ### What remains
 
-- The arena kernel itself is 0.6 ms (10%) slower than the baseline's on the
-  adaptive fixture at bucket 64, the pool-allocator cost of eight resident
-  blocks (`cudaAllocate`/`cudaRelease` scan lock-free queues with atomics). A
-  per-launch slab for the per-block list storage would remove those calls from
-  the kernel; it is the next kernel-side step.
+- The per-launch list slab removed the pool allocator from the kernel (above);
+  at the baseline's work division the kernel is now within 7% of the
+  baseline's at bucket 64 (equal with the potential) and 10% at 128, and the
+  remaining difference is in the PP and PC loops themselves, not in list
+  handling.
+- compute-sanitizer racecheck reports the `memcpy_async` staging warnings for
+  some builds of the same staging code and not for others (none for the head
+  build, 126 and 138 for two other builds); understanding what the tool keys
+  on, or restructuring the staging so that it reports none in every build,
+  is open.
 - At small problems where the launch holds fewer warps than the GPU can keep
   resident (64 leaves at bucket 512), the arena's PP loop hides less
   shared-memory and `rsqrt` latency than the baseline's and runs 25% slower;

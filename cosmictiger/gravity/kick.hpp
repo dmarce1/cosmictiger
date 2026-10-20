@@ -65,7 +65,10 @@ struct CudaKickData {
 // planes or the staged positioned multipoles, which overlap each other. Forces
 // are initialized only after the cell interactions, so the scratch expansion
 // aliases them. Interaction lists, ancestor expansions and checklist stacks
-// stay in growable global backing owned by the control block.
+// live in global memory owned by the control block: with a list reservation,
+// in the block's region of a per-launch slab (listSlabBytes per block, carved
+// by kickCarveListStorage in kick_cuda.hpp, pool growth only on overflow),
+// otherwise in pool blocks grown on demand.
 // Plain aggregate: the device control block is constructed by every lane, and a
 // value-initialized member would race with lane zero's later assignment.
 struct CudaKickArenaLayout {
@@ -86,6 +89,8 @@ struct CudaKickArenaLayout {
     int residency;            // resident blocks per multiprocessor the budget targets
     int budgetBytes;          // dynamic shared bytes allowed per block at that residency
     int listReserve;          // entries reserved per interaction list and checklist stack; 0: none
+    int forceBackingCapacity;    // floats of whole-bucket force backing; 0 with shared forces
+    int listSlabBytes;           // per-block bytes of the per-launch list slab; 0: pool growth
 };
 
 struct KickReturn;

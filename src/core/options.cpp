@@ -321,8 +321,8 @@ bool processOptions(int argc, char* argv[]) {
                 "CUDA block count dividing the particles for the CPU/GPU handoff threshold; 0 derives it from the particle count (two blocks per multiprocessor at 32768 particles, growing as the cube root to six at 884736 and above)")(
                 "compute.cudaKickListReserve",
                 po::value<int>(&opts.compute.cudaKickListReserve)->default_value(4096),
-                "entries reserved per CUDA kick interaction list at block start; 0 grows on "
-                "demand");
+                "entries per CUDA kick interaction list in the per-launch slab handed to each "
+                "block (pool growth only on overflow); 0 grows every list from the pool");
 
     po::options_description checkpointOpts("Checkpoints");
     checkpointOpts.add_options()("checkpoint.readIndex",

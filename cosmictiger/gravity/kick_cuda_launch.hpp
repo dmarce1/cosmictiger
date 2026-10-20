@@ -172,6 +172,14 @@ bool kickBuildLayout(Compute const& compute, bool massPlane, int residency, int 
             layout.scratchOffset = 0;
             layout.arenaBytes = kickRoundUp(arenaBytes, kKickArenaAlignment);
             layout.totalBytes = layout.arenaOffset + layout.arenaBytes;
+            // Global list storage: one slab region per block at the reserved
+            // capacities (whole-bucket force backing only without shared forces).
+            layout.forceBackingCapacity = sinkCapacity > 0 ? 0 : 4 * bucket;
+            layout.listSlabBytes = 0;
+            if (layout.listReserve > 0) {
+                CudaKickListStorage<order> storage;
+                layout.listSlabBytes = kickCarveListStorage<order>(layout, nullptr, storage);
+            }
             return layout.totalBytes <= budget;
         }
         // Trim: particles first, then multipoles, then an automatic sink tile.
@@ -231,7 +239,7 @@ CudaKickArenaLayout kickSelectLayout() {
                       "blocks/SM "
                       "(register limit %i), budget %i, dynamic shared %i bytes: control %i, "
                       "expansion %s, forces %s, particle tile %i (%s mass plane), multipole tile "
-                      "%i x %i bytes\n",
+                      "%i x %i bytes; list slab %i bytes per block (%i entries per list)\n",
                     order, resources.numberOfRegisters, resources.staticSharedBytes,
                     layout.residency, registerLimit, layout.budgetBytes, layout.totalBytes,
                     int(sizeof(CudaKickControl<order>)),
@@ -241,7 +249,8 @@ CudaKickArenaLayout kickSelectLayout() {
                             .c_str() :
                         "global whole bucket",
                     layout.particleCapacity, layout.massPlane ? "with" : "without",
-                    layout.multipoleCapacity, layout.multipoleStride);
+                    layout.multipoleCapacity, layout.multipoleStride, layout.listSlabBytes,
+                    layout.listReserve);
                 return layout;
             }
             // The occupancy calculator disagrees with the arithmetic budget; shrink.
@@ -277,6 +286,10 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Fixed32* devX, Fixed32* 
     static char* dataPtr = nullptr;
     static char* devDataPtr = nullptr;
     static int dataSize = 0;
+    // Per-launch list slab: one region per launched block, kept across launches
+    // (the layout is fixed per order and the launch never exceeds the residency).
+    static char* devListSlab = nullptr;
+    static size_t listSlabSize = 0;
     int dcount = 0;
     int ecount = 0;
     for (int i = 0; i < workitems.size(); i++) {
@@ -293,6 +306,15 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Fixed32* devX, Fixed32* 
         dataSize = allocSize;
         dataPtr = (char*) malloc(allocSize);
         CUDA_CHECK(cudaMalloc(&devDataPtr, allocSize));
+    }
+    size_t const slabSize =
+        size_t(layout.listSlabBytes) * size_t(layout.residency) * size_t(cudaSmpCount());
+    if (listSlabSize < slabSize) {
+        if (devListSlab) {
+            CUDA_CHECK(cudaFree(devListSlab));
+        }
+        CUDA_CHECK(cudaMalloc(&devListSlab, slabSize));
+        listSlabSize = slabSize;
     }
     int offset = 0;
     KickReturn* result = (KickReturn*) (dataPtr + offset);
@@ -377,7 +399,8 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Fixed32* devX, Fixed32* 
     CudaStream stream(cudaGetDevice());
     stream.copyAsync(devDataPtr, dataPtr, sizeof(char) * allocSize, cudaMemcpyHostToDevice);
     cudaKickKernel<order><<<numberOfBlocks, WARP_SIZE, layout.totalBytes, stream.nativeHandle()>>>(
-        devReturnArg, kparams, data, devIkickParams, workitems.size(), devCurrentIndex, layout);
+        devReturnArg, kparams, data, devIkickParams, workitems.size(), devCurrentIndex, layout,
+        devListSlab);
     stream.checkLaunch();
     stream.copyAsync(result, devReturnArg, sizeof(KickReturn), cudaMemcpyDeviceToHost);
     stream.wait();

@@ -280,31 +280,28 @@ __device__ inline void cudaOpenOrDefer(bool openLargerCell, TreeNode const& sink
 // computed CudaKickArenaLayout; see kick.hpp for the region lifetimes.
 template <int order>
 __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, CudaKickData data,
-    CudaKickParameters<order>* params, int itemCount, int* nextItem, CudaKickArenaLayout layout) {
+    CudaKickParameters<order>* params, int itemCount, int* nextItem, CudaKickArenaLayout layout,
+    char* listSlab) {
     int const& tid = threadIdx.x;
     extern __shared__ __align__(16) char shmemPtr[];
     using Control = CudaKickControl<order>;
     using Expansion = FmmExpansion<float, order>;
     constexpr int kLocalExpansionBytes = FmmOrder<order>::kLocalExpansionBytes_;
     Control& control = *reinterpret_cast<Control*>(shmemPtr + layout.controlOffset);
-    new (&control) Control;
+    if (layout.listSlabBytes > 0) {
+        // The lists live in this block's region of the per-launch slab; the
+        // pool is touched only if a list outgrows its reservation.
+        CudaKickListStorage<order> storage;
+        kickCarveListStorage<order>(
+            layout, listSlab + size_t(blockIdx.x) * size_t(layout.listSlabBytes), storage);
+        new (&control) Control(storage);
+    } else {
+        new (&control) Control;
+    }
     char* arena = shmemPtr + layout.arenaOffset;
     bool const sharedExpansion = layout.expansionOffset >= 0;
     if (!sharedExpansion) {
         control.current.resize(1);
-    }
-    if (layout.listReserve > 0) {
-        // One pool allocation per list now instead of doubling growth later.
-        control.dchecks.reserve(layout.listReserve, CUDA_MAX_DEPTH);
-        control.echecks.reserve(layout.listReserve, CUDA_MAX_DEPTH);
-        control.leaflist.reserve(layout.listReserve);
-        control.cplist.reserve(layout.listReserve);
-        control.cclist.reserve(layout.listReserve);
-        control.pclist.reserve(layout.listReserve);
-        control.nextlist.reserve(layout.listReserve);
-        control.bothlist.reserve(layout.listReserve);
-        control.ancestors.reserve(CUDA_MAX_DEPTH);
-        control.params.reserve(CUDA_MAX_DEPTH);
     }
     // Every lane ran the constructor; only lane zero fills the resolved layout.
     __syncwarp();
