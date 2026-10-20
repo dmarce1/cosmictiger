@@ -19,6 +19,7 @@
 #include <cosmictiger/fmm/ewald_indices.hpp>
 #include <cosmictiger/fmm/ewald_kernels.hpp>
 #include <cosmictiger/fmm/fmm_order.hpp>
+#include <cosmictiger/math/simd.hpp>
 
 // This standalone test exercises the actual CUDA-disabled initializer without
 // starting a distributed runtime. No child locality needs initialization.
@@ -210,6 +211,51 @@ void checkPeriodicField() {
     }
 }
 
+// The walks evaluate derivatives in float: SIMD lanes on the CPU and scalar
+// values on the GPU. Small separations expose cancellation in the nearest
+// image's radial recurrence; the corner also checks the series at alpha^2 r^2 = 3.
+template <int order>
+void checkFloatDerivatives() {
+    constexpr std::array<Position, 10> kPositions{{{0., 0., 0.}, {.125, 0., 0.}, {.0625, .0625, 0.},
+        {.125, -.125, .125}, {.0625, .03, -.02}, {.01, .005, -.002}, {.25, .125, 0.},
+        {.4, -.3, .45}, {-.499, .497, -.11}, {.5, .5, .5}}};
+    for (auto const& position : kPositions) {
+        Array<double, NDIM> separation;
+        Array<SimdFloat, NDIM> floatSeparation;
+        for (int d = 0; d < NDIM; ++d) {
+            float const coordinate = float(position[d]);
+            separation[d] = coordinate;
+            floatSeparation[d] = simdBroadcast<SimdFloat>(coordinate);
+        }
+        SymmetricTracelessTensor<double, order> expected;
+        SymmetricTracelessTensor<SimdFloat, order> actual;
+        ewaldCorrectionDerivatives(expected, separation);
+        ewaldCorrectionDerivatives(actual, floatSeparation);
+        for (int rank = 0; rank < order; ++rank) {
+            auto const components = [&](auto&& visit) {
+                for (int nz = 0; nz <= 1 && nz <= rank; ++nz) {
+                    for (int nx = 0; nx <= rank - nz; ++nx) {
+                        visit(nx, rank - nx - nz, nz);
+                    }
+                }
+                if (rank == 2) {
+                    visit(0, 0, 2);
+                }
+            };
+            // Cubic symmetry makes some ranks small near the origin. Use the
+            // nearest image's natural derivative scale as an absolute floor.
+            double scale = std::pow(kAlpha / SCALE_FACTOR, rank + 1);
+            components([&](int nx, int ny, int nz) {
+                scale = std::max(scale, std::abs(expected(nx, ny, nz)));
+            });
+            components([&](int nx, int ny, int nz) {
+                requireNear(actual(nx, ny, nz)[0], expected(nx, ny, nz), 5e-5 * scale,
+                    "CPU Ewald SIMD float derivatives against double");
+            });
+        }
+    }
+}
+
 template <int order>
 void checkCubicSymmetry() {
     constexpr std::array<Position, 3> kPositions{
@@ -269,8 +315,9 @@ void checkOrder() {
     checkFourierScaling<order>();
     checkPeriodicField<order>();
     checkCubicSymmetry<order>();
-    std::printf("CPU Ewald tables, periodic potential/gradient, and cubic symmetry passed at FMM "
-                "order %d.\n",
+    checkFloatDerivatives<order>();
+    std::printf("CPU Ewald tables, periodic potential/gradient, cubic symmetry, and float "
+                "derivatives passed at FMM order %d.\n",
         order);
 }
 
@@ -288,8 +335,8 @@ int main() {
                 });
             }
         }
-        std::puts("CPU Ewald initialization, independent periodic potential/gradient, and cubic "
-                  "symmetry passed.");
+        std::puts("CPU Ewald initialization, independent periodic potential/gradient, cubic "
+                  "symmetry, and float derivatives passed.");
         return 0;
     } catch (std::exception const& error) {
         std::fprintf(stderr, "CPU Ewald test failed: %s\n", error.what());

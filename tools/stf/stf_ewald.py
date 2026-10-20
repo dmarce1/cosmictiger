@@ -228,21 +228,15 @@ def radialDerivatives(code, order, origin):
         'T const rinv = simdSelect(r > simdBroadcast<T>(0), simdBroadcast<T>(1), '
         'simdBroadcast<T>(0)) / simdMax(r, simdBroadcast<T>(1.0e-20));',
     ])
-    if origin:
-        code.extend([
-            'T exp0 = expnearzero(-simdBroadcast<T>(4*SCALE_FACTOR_INV2) * r2);',
-            'T erf0 = erfnearzero(simdBroadcast<T>(2*SCALE_FACTOR_INV1) * r);',
-            'T const expfactor = simdBroadcast<T>(2.256758334191025*SCALE_FACTOR_INV1) * exp0;',
-        ])
-    else:
+    if not origin:
         code.extend([
             'T exp0;',
             'T erfc0;',
             'erfcexp(simdBroadcast<T>(2.*SCALE_FACTOR_INV1) * r, &erfc0, &exp0);',
             'T const expfactor = fouroversqrtpi * simdBroadcast<T>(SCALE_FACTOR_INV1) * exp0;',
+            'T e0 = expfactor * rinv;',
         ])
     code.extend([
-        'T e0 = expfactor * rinv;',
         'T const rinv0 = simdBroadcast<T>(1);',
         'T const rinv1 = rinv;',
     ])
@@ -252,12 +246,44 @@ def radialDerivatives(code, order, origin):
         right = power - left
         code.append(f'T const rinv{power} = rinv{left} * rinv{right};')
         flops += 1
-    code.append('T const d0 = ' + ('erf0' if origin else '-erfc0') + ' * rinv;')
-    for degree in range(1, order):
-        code.append(f'T const d{degree} = simdFma(simdBroadcast<T>({-2 * degree + 1}) '
-                    f'* d{degree - 1}, rinv, e0);')
-        if degree != order - 1:
-            code.append('e0 *= n8r;')
+    if origin:
+        # For the nearest image, d_l = (2 alpha / sqrt(pi)) (-2 alpha^2 r)^l S_l(y),
+        # where y = alpha^2 r^2 and S_l(y) = integral_0^1 t^(2l) exp(-y t^2) dt.
+        # The upward recurrence subtracts nearly equal terms at small r. Instead,
+        # sum S_(order-1) and recur downward using positive terms:
+        # S_(l-1) = (exp(-y) + 2 y S_l) / (2l - 1).
+        # Wrapped separations give y <= 3; twenty series terms put truncation
+        # below float rounding throughout that interval.
+        seriesTerms = 20
+        code.extend([
+            '// Stable nearest-image radial terms: series followed by downward recurrence.',
+            'T const ar2 = simdBroadcast<T>(4*SCALE_FACTOR_INV2) * r2;',
+            'T const twoAr2 = ar2 + ar2;',
+            'T const expAr2 = exp(-ar2);',
+        ])
+        for term in range(seriesTerms - 1, -1, -1):
+            coefficient = (-1.0 if term % 2 else 1.0) / (
+                factorial(term) * (2 * term + 2 * (order - 1) + 1))
+            if term == seriesTerms - 1:
+                code.append(f'T s{order - 1} = simdBroadcast<T>({coefficient:.17e});')
+            else:
+                code.append(f's{order - 1} = simdFma(s{order - 1}, ar2, '
+                            f'simdBroadcast<T>({coefficient:.17e}));')
+        for degree in range(order - 1, 0, -1):
+            code.append(f'T const s{degree - 1} = simdFma(twoAr2, s{degree}, expAr2) '
+                        f'* simdBroadcast<T>({1.0 / (2 * degree - 1):.17e});')
+        code.append('T radialFactor = simdBroadcast<T>(2.256758334191025*SCALE_FACTOR_INV1);')
+        for degree in range(order):
+            code.append(f'T const d{degree} = radialFactor * s{degree};')
+            if degree != order - 1:
+                code.append('radialFactor *= n8r;')
+    else:
+        code.append('T const d0 = -erfc0 * rinv;')
+        for degree in range(1, order):
+            code.append(f'T const d{degree} = simdFma(simdBroadcast<T>({-2 * degree + 1}) '
+                        f'* d{degree - 1}, rinv, e0);')
+            if degree != order - 1:
+                code.append('e0 *= n8r;')
     for degree in range(order):
         for traceCount in range(degree + 1):
             if degree + traceCount < order:

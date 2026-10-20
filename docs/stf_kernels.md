@@ -129,6 +129,16 @@ signed-integer overflow in ten rank-eight projection coefficients; Fourier table
 generation also converts factors before multiplying to avoid the same overflow.
 Equal-destination terms now accumulate in a deterministic stable order, so
 floating-point results need not be bitwise identical to the former C++ emitter.
+
+The nearest-image radial terms use a 20-term series for
+`S_l(y) = integral_0^1 t^(2l) exp(-y t^2) dt` at the highest rank, followed by
+the downward recurrence `S_(l-1) = (exp(-y) + 2 y S_l) / (2l - 1)`.
+Here `y = alpha^2 r^2 <= 3` for wrapped separations. This avoids the
+catastrophic cancellation of the former upward recurrence at small separation.
+The float derivative regression compares every stored rank against double
+precision at ten separations, including the origin and box corner, for orders
+3 through 9. The other periodic images retain their existing `erfc` recurrence.
+
 CPU runtime validation uses
 `--compute.cuda=false` in the CUDA-enabled application. A complete
 `COSMICTIGER_WITH_CUDA=OFF` application build still has pre-existing
