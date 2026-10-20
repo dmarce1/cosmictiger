@@ -1,0 +1,9 @@
+stf_kernels_cuda_test exit 0
+stf_l2l_cuda_test exit 0
+stf_ewald_cpu_test exit 0
+fmm_walk_order_3 exit 0 : 1 passed lines; FMM walk regression passed (CPU and CUDA, 1 rank(s)) 
+fmm_walk_order_7 exit 0 : 1 passed lines; FMM walk regression passed (CPU and CUDA, 1 rank(s)) 
+fmm_walk_order_9 exit 0 : 1 passed lines; FMM walk regression passed (CPU and CUDA, 1 rank(s)) 
+fmm_tree_order_7 exit 0 : 1 passed lines; regression passed (1 localities) 
+sph_gravity_order_7 exit 0 : 3 passed lines; regression passed (CPU and CUDA, 1 localities) 
+DONE 2026-10-19T21:32:30-05:00

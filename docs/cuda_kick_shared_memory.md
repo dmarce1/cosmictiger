@@ -215,6 +215,11 @@ runtime-order binary:
   CUDA `sphGravity` regressions pass in the 1024-bucket build
   (`validation/ctest_cap1024_list_slab.log`); the compute-sanitizer results of
   that build are in the list slab section below.
+- The slab, PP loop schedule and racecheck explanation branches merged onto the
+  reorganized `main` pass the STF unit tests, the CUDA `fmmWalk` regression at
+  orders 3, 7 and 9 and `fmmTree` and `sphGravity` at order 7 on each merge
+  head, with memcheck clean and racecheck at 0 errors on the final head
+  (`validation/merge_reorganized/`, see Landing on the reorganized layout).
 
 ## CPU and CUDA agreement (measured)
 
@@ -1635,6 +1640,55 @@ instructions with a different operand form) or copy synchronously as
 adopted here, the first because it steers a compiler choice to suit the tool
 and the second because its cost was not measured.
 
+### Landing on the reorganized layout (`validation/merge_reorganized/`)
+
+The three follow-up branches above were cut before the source reorganization
+(2ce9c788 moved the sources into subdirectories, 565759b6 split
+`kick_cuda_impl.hpp` into `kick_cuda_kernel.hpp` and `kick_cuda_launch.hpp`)
+and were merged onto `main` at 00909d26 in order: the list slab (eb4277f0,
+from eedcc53a and a07fafd7), the PP loop schedule (a285653a, from ada60c24)
+and the racecheck explanation (2db2deb4, from 9184eb68). Git's rename
+detection carried the slab's `device_vector.hpp`, `stack_vector.hpp`,
+`kick.hpp`, `kick_cuda_instances.hpp` and `options.cpp` hunks and the
+kernel-side slab hunks of `kick_cuda_impl.hpp` to their moved files, and the
+PP commit's `gravity_cuda.hpp` hunks to `cosmictiger/gravity/gravity_cuda.hpp`.
+The host-side slab hunks were placed by hand in `kick_cuda_launch.hpp`:
+`forceBackingCapacity` and `listSlabBytes` in `kickBuildLayout`, the slab
+fields of the policy line in `kickSelectLayout`, and the per-launch slab
+allocation and kernel argument in `cudaExecuteKicksImpl`; `kick_cuda.hpp` took
+the moved include paths. The merged kernel and launch headers equal the
+branch's `kick_cuda_impl.hpp` apart from the file split and license header,
+and the merged `gravity_cuda.hpp` equals the branch's apart from the include
+paths.
+
+Validation of each merge head in a 1024-bucket Release build of the worktree
+(`validation_slab.txt`, `validation_pp.txt`, `validation_final.txt`):
+`stf_kernels_cuda_test`, `stf_l2l_cuda_test` and `stf_ewald_cpu_test` pass;
+the CUDA `fmmWalk` regression passes at orders 3, 7 and 9, and `fmmTree` and
+the mixed-mass `sphGravity` regression pass at order 7. The order-7 policy
+line of the merged binary is the slab branch's (`policy_lines_final.txt`:
+control 648 bytes, dynamic shared 8,048 bytes at bucket 64, `list slab 145792
+bytes per block (4096 entries per list)`), and `compute.cudaKickListReserve=0`
+still takes the pool path (`list slab 0 bytes per block`, `fmmWalk` passes).
+compute-sanitizer on `fmmWalk` at order 7 on the final head
+(`racecheck_order_7_merged.log`, `memcheck_order_7_merged.log`): memcheck 0
+errors; racecheck 0 errors and 24 warnings, every one a `cuda::memcpy_async`
+staging write (barrier.h:957) paired with a CP read of the staged particle
+planes (`gravity_cuda.hpp` lines 313 to 315, 160 hazard records each), the
+arrive-on operand-form artefact of the previous section; the PP loop, which
+now reads the planes through the shared-memory symbol, is not reported. No
+hazard kind appears that the slab and head logs did not already show (0, 126
+and 138 warnings there, 0 errors throughout).
+
+Not measured: the paired whole-kick timing of the merged binary against the
+pre-merge `main` (order 7, bucket 64, adaptive fixture) was not run, because
+the workstation's gaming cap (six CPU threads, a quarter of the GPU, no kick
+arena driver runs) was in force while the merges landed. The branch
+measurements in the list slab and PP loop schedule sections stand as the
+record of the two changes' effect; the merged code reproduces them
+unchanged, so no change beyond run noise is expected, but it is unverified
+on the merged head.
+
 ### What remains
 
 - The per-launch list slab removed the pool allocator from the kernel (above);
@@ -1663,6 +1717,10 @@ and the second because its cost was not measured.
   that reads the tree's clustering could beat the fixed rule; the lattice
   penalty of the finer divisions is thread-independent there and was not
   profiled (`handoff_large_sizes/`).
+- The whole-kick time of the merged binary against the pre-merge `main`
+  (order 7, bucket 64, adaptive fixture) is unmeasured; the list slab and PP
+  loop schedule measurements predate the merge (Landing on the reorganized
+  layout).
 - The theta sweep shows order 7 at theta 0.8 is not the cheapest route to its
   own force error; a lower order with a smaller opening angle is, down to
   about 2e-4. The production order and opening angle should be chosen from

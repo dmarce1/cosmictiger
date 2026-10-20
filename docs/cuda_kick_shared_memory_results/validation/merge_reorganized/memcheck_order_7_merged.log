@@ -1,0 +1,189 @@
+========= COMPUTE-SANITIZER
+STARTING MAIN
+128
+std::atomic<int> is lock free!
+tree_node size = 96
+Detected 1 processes per node
+Hyperthreading detected
+Starting mem use daemon
+Processing options
+box_size = 2.679408e+00 Mpc
+lc map size = 1.157762e-01
+chemistry.enabled                 : F
+chemistry.network                 : atomic6
+chemistry.radiationFile           : 
+chemistry.synchronizedRung        : 4
+chemistry.initialTemperature      : 1.000000e+03
+chemistry.hydrogenIonFraction     : 2.000000e-04
+chemistry.heliumIonFraction       : 0.000000e+00
+chemistry.heliumDoubleIonFraction : 0.000000e+00
+chemistry.hydrogenMinusFraction   : 0.000000e+00
+chemistry.molecularFraction       : 0.000000e+00
+chemistry.molecularIonFraction    : 0.000000e+00
+chemistry.relativeTolerance       : 1.000000e-04
+chemistry.abundanceAbsoluteTolerance: 1.000000e-12
+chemistry.energyAbsoluteTolerance : 1.000000e-08
+chemistry.maxSubsteps             : 4096
+hydro.enabled                     : F
+run.hierarchicalGravity           : T
+hydro.viscosityAlpha              : 1.000000e+00
+hydro.viscosityBeta               : 2.000000e+00
+hydro.viscosityEpsilon            : 1.000000e-02
+hydro.gamma                       : 1.666667e+00
+hydro.neighborNumber              : 4.200000e+01
+hydro.minSupportRadius            : 1.000000e-06
+hydro.maxSupportRadius            : 4.000000e+00
+hydro.minEffectiveRadius          : 5.477226e-07
+hydro.maxEffectiveRadius          : 2.190890e+00
+hydro.cfl                         : 2.282177e-01
+Simulation Options
+code_to_M_solar = 1.492195e+09
+Box size = 1.803778e+00 cm/h
+checkpoint.intervalSeconds        : 1000000000
+units.lengthCm                    : 8.267791e+24
+units.massG                       : 2.954545e+42
+units.timeSeconds                 : 2.757838e+14
+compute.cuda                      : T
+gravity.fmmOrder                  : 7
+compute.cudaKickResidency         : 0
+compute.cudaKickSinkTile          : 0
+compute.cudaKickParticleTile      : 0
+compute.cudaKickMultipoleTile     : 0
+compute.cudaKickSharedExpansion   : T
+compute.cudaKickHandoffBlocks     : 0
+compute.cudaKickListReserve       : 4096
+lightcone.enabled                 : F
+analysis.groups                   : F
+analysis.power                    : F
+analysis.slice                    : F
+analysis.tracers                  : F
+analysis.views                    : F
+output.silo                       : F
+output.siloInterval               : 1
+output.directory                  : ./output
+output.units                      : code
+output.frame                      : comoving
+output.xMin                       : 0.000000e+00
+output.xMax                       : 1.000000e+00
+output.yMin                       : 0.000000e+00
+output.yMax                       : 1.000000e+00
+output.zMin                       : 0.000000e+00
+output.zMax                       : 1.000000e+00
+gravity.timestepEta               : 2.040160e-01
+gravity.gm                        : 2.653104e-11
+gravity.softening                 : 1.876988e-02
+gravity.effectiveRadius           : 1.876988e-02
+gravity.supportRadius             : 2.815483e-02
+hydro.centralEffectiveRadius      : 5.477226e-03
+hydro.centralSupportRadius        : 8.215838e-03
+gravity.kernelFamily              : ferrers
+gravity.kernelDegree              : 4
+hydro.kernelFamily                : spline
+hydro.kernelDegree                : 3
+cosmology.hubble                  : 6.732000e-01
+lightcone.linkingLength           : 2.800000e-01
+lightcone.mapSize                 : 1
+analysis.linkingLength            : 3.500000e-02
+run.maxIterations                 : 1000000
+run.treeOpeningAngle              : 0.000000e+00
+analysis.minGroupSize             : 20
+cosmology.omegaB                  : 4.938900e-02
+cosmology.omegaC                  : 2.650300e-01
+cosmology.omegaGamma              : 5.522212e-05
+cosmology.omegaM                  : 3.144190e-01
+cosmology.omegaNu                 : 3.820094e-05
+cosmology.omegaR                  : 9.342306e-05
+compute.particleCacheLineSize     : 10922
+initial.particlesPerDimension     : 8
+checkpoint.readIndex              : -1
+analysis.saveForce                : F
+cosmology.sigma8                  : 8.607000e-01
+analysis.sliceResolution          : 4096
+analysis.sliceSize                : 1.000000e+00
+cosmology.thetaCmb                : 9.983516e-01
+gravity.openingAngle              : 8.000000e-01
+analysis.tracerCount              : 1000000
+compute.treeCacheLineSize         : 682
+initial.twoLpt                    : F
+initial.usePowerFile              : T
+analysis.viewSize                 : 1024
+cosmology.startRedshift           : 4.900000e+01
+cosmology.endRedshift             : 0.000000e+00
+cosmology.spectralIndex           : 9.660500e-01
+cosmology.heliumFraction          : 2.454006e-01
+cosmology.nEff                    : 3.046000e+00
+configuration                     : 
+run.test                          : fmmWalk
+Silo particle output: disabled (output.silo=false)
+count = 178 178
+Detected a hardware concurrency of 12
+CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 8048 bytes: control 648, expansion shared, forces shared tile 64, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes; list slab 145792 bytes per block (4096 entries per list)
+FMM unequal counts PC/CP CPU: normalized total-force residual = 1.658382379e-09
+FMM unequal counts PC/CP CUDA: normalized total-force residual = 9.950294598e-09
+FMM unequal counts PC/CP mixed CPU/CUDA: normalized total-force residual = 9.950294400e-09
+FMM softened PP fallback CPU: normalized total-force residual = 8.542230477e-09
+MAX MEMUSED = 0.560154 GB
+FMM softened PP fallback CUDA: normalized total-force residual = 3.873221482e-09
+FMM softened PP fallback mixed CPU/CUDA: normalized total-force residual = 3.799794711e-08
+FMM equal counts, unequal radii CP/PC CPU: normalized total-force residual = 2.328940155e-08
+FMM equal counts, unequal radii CP/PC CUDA: normalized total-force residual = 5.175297656e-09
+FMM equal counts, unequal radii CP/PC mixed CPU/CUDA: normalized total-force residual = 2.070182290e-08
+FMM unequal counts, equal radii PC/CP CPU: normalized total-force residual = 1.658382379e-09
+FMM unequal counts, equal radii PC/CP CUDA: normalized total-force residual = 9.950294598e-09
+FMM unequal counts, equal radii PC/CP mixed CPU/CUDA: normalized total-force residual = 9.950294400e-09
+FMM softened PP fallback CPU: normalized total-force residual = 8.542230477e-09
+FMM softened PP fallback CUDA: normalized total-force residual = 3.873221482e-09
+FMM softened PP fallback mixed CPU/CUDA: normalized total-force residual = 3.799794711e-08
+FMM equal counts and radii PP CPU: normalized total-force residual = 3.711167810e-10
+FMM equal counts and radii PP CUDA: normalized total-force residual = 3.920552917e-09
+FMM equal counts and radii PP mixed CPU/CUDA: normalized total-force residual = 1.488711851e-08
+FMM internal cloud radial PC/CP CPU: normalized total-force residual = 2.048388942e-08
+FMM internal cloud radial PC/CP CUDA: normalized total-force residual = 0.000000000e+00
+FMM internal cloud radial PC/CP mixed CPU/CUDA: normalized total-force residual = 2.048388942e-08
+FMM internal cloud radial PC/CP cloud support fallback CPU: normalized total-force residual = 2.099902214e-09
+FMM internal cloud radial PC/CP cloud support fallback CUDA: normalized total-force residual = 4.199804560e-09
+FMM internal cloud radial PC/CP cloud support fallback mixed CPU/CUDA: normalized total-force residual = 1.259941347e-08
+FMM internal cloud radial PC/CP leaf support fallback CPU: normalized total-force residual = 2.099902214e-09
+FMM internal cloud radial PC/CP leaf support fallback CUDA: normalized total-force residual = 4.199804560e-09
+FMM internal cloud radial PC/CP leaf support fallback mixed CPU/CUDA: normalized total-force residual = 1.259941347e-08
+FMM internal cloud box-only PC/CP CPU: normalized total-force residual = 2.048388942e-08
+FMM internal cloud box-only PC/CP CUDA: normalized total-force residual = 0.000000000e+00
+FMM internal cloud box-only PC/CP mixed CPU/CUDA: normalized total-force residual = 2.048388942e-08
+FMM internal cloud box-only PC/CP cloud support fallback CPU: normalized total-force residual = 2.099902214e-09
+FMM internal cloud box-only PC/CP cloud support fallback CUDA: normalized total-force residual = 4.199804560e-09
+FMM internal cloud box-only PC/CP cloud support fallback mixed CPU/CUDA: normalized total-force residual = 1.259941347e-08
+FMM internal cloud box-only PC/CP leaf support fallback CPU: normalized total-force residual = 2.099902214e-09
+FMM internal cloud box-only PC/CP leaf support fallback CUDA: normalized total-force residual = 4.199804560e-09
+FMM internal cloud box-only PC/CP leaf support fallback mixed CPU/CUDA: normalized total-force residual = 1.259941347e-08
+FMM cell support CC fallback first large CPU: normalized total-force residual = 4.023313061e-08
+FMM cell support CC fallback first large CUDA: normalized total-force residual = 4.023313169e-08
+FMM cell support CC fallback first large mixed CPU/CUDA: normalized total-force residual = 1.341104426e-08
+FMM cell support CC fallback second large CPU: normalized total-force residual = 4.023313061e-08
+FMM cell support CC fallback second large CUDA: normalized total-force residual = 4.023313169e-08
+FMM cell support CC fallback second large mixed CPU/CUDA: normalized total-force residual = 1.341104426e-08
+FMM cell support radial hybrid fallback first large CPU: normalized total-force residual = 4.023313061e-08
+FMM cell support radial hybrid fallback first large CUDA: normalized total-force residual = 4.023313169e-08
+FMM cell support radial hybrid fallback first large mixed CPU/CUDA: normalized total-force residual = 1.341104426e-08
+FMM cell support radial hybrid fallback second large CPU: normalized total-force residual = 4.023313061e-08
+FMM cell support radial hybrid fallback second large CUDA: normalized total-force residual = 4.023313169e-08
+FMM cell support radial hybrid fallback second large mixed CPU/CUDA: normalized total-force residual = 1.341104426e-08
+FMM cell support box-only hybrid fallback first large CPU: normalized total-force residual = 4.023313061e-08
+FMM cell support box-only hybrid fallback first large CUDA: normalized total-force residual = 4.023313169e-08
+FMM cell support box-only hybrid fallback first large mixed CPU/CUDA: normalized total-force residual = 1.341104426e-08
+FMM cell support box-only hybrid fallback second large CPU: normalized total-force residual = 4.023313061e-08
+FMM cell support box-only hybrid fallback second large CUDA: normalized total-force residual = 4.023313169e-08
+FMM cell support box-only hybrid fallback second large mixed CPU/CUDA: normalized total-force residual = 1.341104426e-08
+FMM cell support CC refinement first large CPU: normalized total-force residual = 4.023313061e-08
+FMM cell support CC refinement first large CUDA: normalized total-force residual = 8.046626014e-08
+FMM cell support CC refinement first large mixed CPU/CUDA: normalized total-force residual = 1.341104426e-08
+FMM cell support CC refinement second large CPU: normalized total-force residual = 4.023313061e-08
+FMM cell support CC refinement second large CUDA: normalized total-force residual = 8.046626014e-08
+FMM cell support CC refinement second large mixed CPU/CUDA: normalized total-force residual = 1.341104426e-08
+MAX MEMUSED = 0.560780 GB
+FMM lockstep walk: tests 31345 ccDirect 11664 ccEwald 9310 cp 237 pc 237 ppLeafPairs 1195 ppPairs 1003896 opened 8257 deferred 0, net-force residual 3.923e-09
+FMM lockstep CUDA versus CPU: rms difference / rms force 2.944e-07, maximum normalized difference 1.172e-06, net-force residual 2.414e-09
+FMM open-larger walk: tests 31207 ccDirect 7892 ccEwald 6324 cp 327 pc 327 ppLeafPairs 1129 ppPairs 997806 opened 7967 deferred 6667, net-force residual 1.764e-09
+FMM open-larger versus lockstep: rms difference / rms force 7.665e-04, maximum normalized difference 4.288e-03
+FMM open-larger CUDA versus CPU: rms difference / rms force 2.485e-07, maximum normalized difference 1.185e-06, net-force residual 3.466e-09
+FMM walk regression passed (CPU and CUDA, 1 rank(s))
+========= ERROR SUMMARY: 0 errors
