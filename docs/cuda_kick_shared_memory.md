@@ -17,15 +17,21 @@ z-squared Laplacian slot of that term, so order 2 is not offered. Order 9
 precision parity test showed order 10's host/device roundoff gap (6.9e-6)
 approaching the 2e-5 budget, so single precision stops gaining there.
 
-| order | multipole coefficients | positioned multipole bytes | local coefficients | local expansion bytes |
-|---:|---:|---:|---:|---:|
-| 3 | 4 | 28 | 10 | 40 |
-| 4 | 9 | 48 | 17 | 68 |
-| 5 | 16 | 76 | 26 | 104 |
-| 6 | 25 | 112 | 37 | 148 |
-| 7 | 36 | 156 | 50 | 200 |
-| 8 | 49 | 208 | 65 | 260 |
-| 9 | 64 | 268 | 82 | 328 |
+| order | multipole coefficients | positioned multipole bytes | record stride | local coefficients | local expansion bytes |
+|---:|---:|---:|---:|---:|---:|
+| 3 | 4 | 28 | 32 | 10 | 40 |
+| 4 | 9 | 48 | 48 | 17 | 68 |
+| 5 | 16 | 76 | 80 | 26 | 104 |
+| 6 | 25 | 112 | 112 | 37 | 148 |
+| 7 | 36 | 156 | 160 | 50 | 200 |
+| 8 | 49 | 208 | 208 | 65 | 260 |
+| 9 | 64 | 268 | 272 | 82 | 328 |
+
+The tree's multipole arena and the kick's staged multipole tile store the
+positioned records at the record stride, the record size rounded up to 16
+bytes (`fmmPositionedMultipoleStride`; odd orders pad by one float), so that
+every record starts on a 16-byte boundary and the CUDA kick stages whole
+records with 16-byte asynchronous copies (see "Aligned PC multipole staging").
 
 Every order is compiled into the binary and the run selects one with
 `gravity.fmmOrder` (default: the build's `COSMICTIGER_WITH_ORDER`, 7). The
@@ -87,7 +93,8 @@ Reusable phase arena, sized for the largest simultaneously live set
   initialized only after the cell interactions, so they alias the scratch.
 - Source tiles following the force planes: particle planes x, y, z (and a mass
   plane only for mixed-mass runs; equal-mass runs instantiate PP/CP without it)
-  or staged positioned multipoles with a 16-byte stride. The two tiles overlap,
+  or staged positioned multipoles at the tree arena's record stride, each
+  record copied whole with 16-byte `cp.async` chunks. The two tiles overlap,
   because PC and PP never run concurrently. PC accumulates all staged
   multipoles in registers and writes each sink once. PP reads the planes
   through pointers derived from the dynamic shared-memory symbol (so the
@@ -1600,10 +1607,12 @@ regression at order 7 with compute-sanitizer 2025.1.0 (CUDA 12.8, driver
   `cudaGravityCpDirect<7, …>` and `cudaGravityPpDirect<7, …>` functions), the
   control block arrives in a register and the staging there takes the clean
   shape (`outofline_forms.txt`); that is why this branch's build reports only
-  its kernel-inlined CP copies. The PC multipole copy and the checklist copy
-  are never in the reports because neither issues a `cp.async`: the PC call
-  passes an untyped byte count, so libcu++ deduces 1-byte alignment and takes
-  its synchronous per-thread copy, and the checklist copy is global to global.
+  its kernel-inlined CP copies. The checklist copy is never in the reports
+  because it is global to global, and at the time of this survey the PC
+  multipole copy was not either, because its call passed an untyped byte
+  count, so libcu++ deduced 1-byte alignment and took its synchronous
+  per-thread copy; it has since become a 16-byte `cp.async` copy (see "Aligned
+  PC multipole staging").
 
 - Variants of the staging in the scratch build of this branch
   (`scripts/apply_variant.py`, diffs in `variants/`, each rebuilt from the
@@ -1809,6 +1818,104 @@ not reach the kick's wall time, as in the slab's own matched split, where a
 whole-kick gain at this cell came with a 0.96-1.07 pair range; the merged
 head's 1 to 2% lies within the ranges of both stages.
 
+### Aligned PC multipole staging (`pc_staging_cp_async/`)
+
+The racecheck survey above found that `cudaGravityPcDirect` never issued a
+`cp.async` for the multipole records it stages. Its `cuda::memcpy_async` call
+passed the staged tile as `char*` and the record as `MultipolePosition*`, so
+it resolved to the untyped `void*` overload, whose plain byte count carries no
+alignment; libcu++ then deduces 1-byte alignment and takes its synchronous
+per-thread copy (`barrier.h:1034-1037`). In the order-7 kernel of 819d0013 the
+PC staging is 388 instructions of a byte loop unrolled 64 times (`LDG.E.U8`
+and `STS.U8` on the global-to-shared path, `LD.E.U8` and `ST.E.U8` on the
+generic one) with no `LDGSTS`, and the `barrier.arrive_and_wait()` after it
+completed no outstanding copy (`sass/pc_region_head.txt`, condensed with the
+survey's `condense2.py` by `sass/survey_sass.sh`).
+
+Whether a 16-byte copy is possible depends on the record size and on the
+alignment of the records at both ends. The staged tile already placed records
+at a 16-byte stride (`kickRoundUp(sizeof(FmmMultiPos<order>), 16)`, 160 bytes
+at order 7), and the dynamic shared arena is 16-byte aligned. The global
+records were not aligned: the tree's arena packed them at the record size, 156
+bytes at order 7, and since 156 is 12 modulo 16, consecutive records alternate
+between 4- and 8-byte alignment at every odd order (an odd degree p gives
+(p + 1)^2 coefficients, a multiple of four, and with the three position words
+the record is one word short of a multiple of four); even orders are
+multiples of 16 by themselves (table in "FMM order"). With the packed arena
+the largest `cuda::aligned_size_t` the order-7 records admit is therefore 4
+bytes, the chunk size the particle planes use.
+
+The change makes the tree arena's stride the one the staged tile already used.
+`fmmPositionedMultipoleStride(order)` (`fmm_order.hpp`) rounds the record up
+to 16 bytes (160 at order 7, 2.5% more arena memory; even orders unchanged),
+`treeAllocateNodes` allocates and `treeMultipoleRecord` addresses the records
+at that stride, `treeWriteMultipole` zeroes the padding so that the bytes
+copied to the GPU are defined, `kickBuildLayout` takes the same constant for
+the tile, and the PC staging copies whole records with
+`cuda::aligned_size_t<16>(stride)`. The aligned count selects the
+`cp.async.cg` path of libcu++: ten 16-byte chunks per record at order 7, one
+on each of lanes 0 to 9, followed by the call's `cp.async.mbarrier.arrive`, and
+the existing `barrier.arrive_and_wait()` now completes real copies. In the
+order-7 kernel (`sass/pc_region_aligned.txt`) the PC staging holds one
+`LDGSTS.E.BYPASS.128` (`barrier.h:973`) and its arrive-on (14
+`ARRIVES.LDGSTSBAR.64` in the kernel, 13 before) where the head had the 388
+fallback instructions and none; the kernel shrinks from 616,064 to 604,800
+bytes. A dead 16-byte generic copy (64 unrolled `LD.E.128`/`ST.E.128`) stays
+beside the `cp.async`, as the particle-plane copies keep theirs: libcu++ tests
+the address spaces at run time, and the compiler cannot prove them. The new
+arrive-on takes the same uniform-register operand form as the CP sites
+(`[UR46+0x1d4]`), so racecheck's artefact extends to the PC tile reads:
+racecheck of the CUDA `fmmWalk` regression at order 7 (`racecheck_*.log`,
+print limit 50) reports 0 errors and 31 warnings for the aligned binary
+against 0 and 24 for the head, the 24 being the CP staging reports of the
+head's build (`barrier.h:957`) and the 7 new ones pairing the PC `cp.async`
+(`barrier.h:973`) with the reads of the staged record in the PC loop
+(`gravity_cuda.hpp:387-389` and the generated M2P operators), accesses that
+the barrier wait orders.
+
+Validation, 1024-bucket Release build: `fmm_walk_cuda`, `sph_gravity_cuda`
+(`ctest_cuda.log`), `fmm_tree`, `fmm_tree_mpi`, `fmm_walk_cpu` and
+`sph_gravity_cpu` pass. The force exports of the aligned binary are
+bit-identical to the head's on every fixture at buckets 64 and 512
+(`head_vs_aligned.md`).
+
+Whole-kick timing (`run.sh`): the aligned binary against the frozen head
+(819d0013, the code of c4cc57d5), both 1024-bucket Release builds, automatic
+policy, buckets 64 and 512, order 7, five pairs of 15 samples, direct
+reference over 1,024 particles, under the shared GPU lock after 60 s of quiet
+(one-minute load 5.4 at the start, no other GPU client, every process 2.9 to
+3.4 s of wall time, worst pair spread 1.11 in the adaptive bucket-512
+potential cell, whose last aligned pair ran 29.7 ms against 26.7 to 27.5 in
+the other four). Speedup is the head time over the aligned time, paired range
+in parentheses (`paired_speedup.md`):
+
+| bucket | fixture | potential | head 819d0013 | aligned staging | speedup |
+|---:|---|---:|---:|---:|---:|
+| 64 | lattice | no | 14.71 ms | 14.68 ms | 1.000x (0.985-1.023) |
+| 64 | lattice | yes | 14.81 ms | 14.73 ms | 1.003x (0.988-1.026) |
+| 64 | clustered | no | 5.57 ms | 5.55 ms | 0.996x (0.983-1.008) |
+| 64 | clustered | yes | 5.74 ms | 5.88 ms | 0.988x (0.960-1.003) |
+| 64 | adaptive | no | 12.13 ms | 12.08 ms | 1.019x (0.956-1.062) |
+| 64 | adaptive | yes | 12.40 ms | 12.32 ms | 1.010x (1.000-1.017) |
+| 512 | lattice | no | 9.57 ms | 9.49 ms | 1.008x (0.997-1.035) |
+| 512 | lattice | yes | 10.09 ms | 10.10 ms | 1.002x (0.981-1.032) |
+| 512 | clustered | no | 5.45 ms | 5.38 ms | 0.996x (0.927-1.015) |
+| 512 | clustered | yes | 6.11 ms | 6.11 ms | 0.996x (0.962-1.023) |
+| 512 | adaptive | no | 26.77 ms | 26.14 ms | 1.024x (1.011-1.034) |
+| 512 | adaptive | yes | 27.48 ms | 27.15 ms | 1.004x (0.925-1.016) |
+
+The one cell whose paired range excludes one is the adaptive forces at bucket
+512, 1.024x with every pair between 1.011 and 1.034: the kernel-bound regime
+with the deepest tree, where the PC lists are longest. Its potential cell
+carries the stage's disturbed pair and is level within its range. Every other
+cell is level within its pair spread, as expected: at bucket 64 the lattice
+and clustered kicks are host-bound, and where the kernel dominates the
+staging is a small part of its work next to the PP loop and the Ewald cell
+interactions ("Kernel attribution at bucket 512"). The change's main value is
+that the staging now is what the code says: an asynchronous copy, one
+`LDGSTS` per lane and record, completed by the barrier it names, in place of
+a synchronous byte loop that the barrier wait then re-ordered for nothing.
+
 ### What remains
 
 - The per-launch list slab removed the pool allocator from the kernel (above);
@@ -1818,12 +1925,13 @@ head's 1 to 2% lies within the ranges of both stages.
   PP loop schedule landed, the merged head's kernel at that division is level
   with the baseline's at bucket 64 (5.10 against 5.11 ms,
   `landing_nsys_adaptive_b64/`); bucket 128 is not re-measured.
-- The PC multipole staging passes an untyped byte count to
-  `cuda::memcpy_async`, so libcu++ deduces 1-byte alignment and copies
-  synchronously through registers; the barrier wait after it then orders
-  nothing. A `cuda::aligned_size_t<16>` count, if the multipole records are
-  16-byte aligned in global memory, would make it a `cp.async` copy like the
-  particle planes. Not measured.
+- The PC loop still reads the staged records and accumulates its forces
+  through generic pointers reloaded from the control block (`LDS.64` of the
+  pointer, then `LD.E` per coefficient of every sink-multipole pair and
+  `LD.E`/`ST.E` per sink force, `sass/pc_region_aligned.txt` of
+  `pc_staging_cp_async/`), the pattern the PP loop schedule replaced with
+  pointers derived from the shared-memory symbol. The multipole staging itself
+  is now an aligned `cp.async` copy (Aligned PC multipole staging).
 - At small problems where the launch holds fewer warps than the GPU can keep
   resident (64 leaves at bucket 512), the PP loop is no longer the bound: with
   the restructured loop it holds about a third of the kernel's stall samples

@@ -356,6 +356,13 @@ __device__ void cudaGravityPcDirect(CudaKickData const& data, CudaKickControl<or
     char* multipoles = control.multipoles;
     FlopCounter<int> flops = 0;
     auto group = cooperative_groups::this_thread_block();
+    // Each record is copied whole at the stride the tree arena and the staged
+    // tile share. The aligned byte count makes libcu++ issue 16-byte cp.async
+    // chunks that the barrier wait below completes; an untyped count would
+    // deduce 1-byte alignment and copy synchronously through registers, and
+    // the wait would then order nothing.
+    constexpr cuda::aligned_size_t<kFmmPositionedMultipoleAlignment> kRecordBytes(
+        FmmOrder<order>::kPositionedMultipoleStride_);
     if (multlist.size()) {
         __syncwarp();
         int mi = 0;
@@ -364,7 +371,7 @@ __device__ void cudaGravityPcDirect(CudaKickData const& data, CudaKickControl<or
             int mend = min(cnt, mi + capacity);
             for (int thisMi = mi; thisMi < mend; thisMi++) {
                 cuda::memcpy_async(group, multipoles + (thisMi - mi) * stride,
-                    treeNodes[multlist[thisMi]].mpos, sizeof(FmmMultiPos<order>), barrier);
+                    treeNodes[multlist[thisMi]].mpos, kRecordBytes, barrier);
             }
             mend -= mi;
             mi += mend;

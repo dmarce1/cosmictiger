@@ -79,7 +79,8 @@ struct TreeIdHashHi {
 };
 
 // Tree multipoles live in an arena of runtime-order positioned records
-// (fmmPositionedMultipoleBytes(fmmOrder()) bytes each). Nodes point at the
+// (fmmPositionedMultipoleBytes(fmmOrder()) bytes each, stored
+// fmmPositionedMultipoleStride(fmmOrder()) bytes apart). Nodes point at the
 // order-agnostic position header; per-order code views the moments through
 // fmmMultiPos<order>(node.mpos).
 MultipolePosition* treeAddMultipole(

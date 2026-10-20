@@ -69,7 +69,9 @@ static Vector<TreeAllocator*> allocatorList;
 static thread_local TreeAllocator allocator;
 static TreeNode* nodes = nullptr;
 // Positioned multipole arena: one record of multipoleStride bytes per node slot,
-// sized for the runtime FMM order when the arena is (re)allocated.
+// sized for the runtime FMM order when the arena is (re)allocated. The stride
+// is the record size rounded up to 16 bytes (fmmPositionedMultipoleStride), so
+// the CUDA kick stages whole records with 16-byte asynchronous copies.
 static char* multis = nullptr;
 static size_t multipoleStride = 0;
 // Cache lines span reserved allocator slots, including holes between threads.
@@ -153,9 +155,15 @@ static float const* treeMultipoleCoefficients(MultipolePosition const* record) {
 
 static void treeWriteMultipole(MultipolePosition* record, MultipoleBuffer const& multipole) {
     int const count = fmmMultipoleCoefficientCount(fmmOrder());
+    int const slots = int((multipoleStride - sizeof(MultipolePosition)) / sizeof(float));
     float* coefficients = treeMultipoleCoefficients(record);
     for (int i = 0; i < count; i++) {
         coefficients[i] = multipole[i];
+    }
+    // The padding up to the record stride travels to the GPU with the record;
+    // keep it defined.
+    for (int i = count; i < slots; i++) {
+        coefficients[i] = 0.0f;
     }
 }
 
@@ -314,7 +322,7 @@ static void treeAllocateNodes() {
     size_t const sz =
         std::max(size_t(size_t(TREE_NODE_ALLOCATION_SIZE) * particlesSize() / bucketSize),
             (size_t) NTREES_MIN);
-    size_t const stride = fmmPositionedMultipoleBytes(fmmOrder());
+    size_t const stride = fmmPositionedMultipoleStride(fmmOrder());
     if (nodesSize < sz || multipoleStride != stride) {
         if (nodes != nullptr) {
             freeManagedMemory(nodes);

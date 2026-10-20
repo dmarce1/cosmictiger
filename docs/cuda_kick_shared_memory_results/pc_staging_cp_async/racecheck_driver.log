@@ -1,0 +1,12 @@
+22:58:21 not quiet: gpu
+22:58:41 not quiet: driver
+22:59:01 not quiet: gpu
+22:59:21 not quiet: gpu
+22:59:41 not quiet: gpu
+23:00:01 not quiet: gpu
+23:01:22 quiet for 60 s (load 4.62); taking the GPU lock
+2026-10-19T23:15:05-05:00 racecheck aligned start
+2026-10-19T23:15:25-05:00 racecheck aligned exit 0 ========= RACECHECK SUMMARY: 31 hazards displayed (0 errors, 31 warnings)
+2026-10-19T23:16:21-05:00 racecheck head start
+2026-10-19T23:16:42-05:00 racecheck head exit 0 ========= RACECHECK SUMMARY: 24 hazards displayed (0 errors, 24 warnings)
+23:16:42 command exit 0
