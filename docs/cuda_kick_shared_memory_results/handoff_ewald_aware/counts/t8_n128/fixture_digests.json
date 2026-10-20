@@ -1,0 +1,80 @@
+[
+  {
+    "binary": "counts",
+    "policy": "auto",
+    "pair": 0,
+    "bucket": 128,
+    "order": 7,
+    "export_sha256": "73b87f5855926191731aa19dde34e0e07d9c2b3e7395dd69b0da8829e930115d",
+    "fixtures": {
+      "lattice": "2a10e9af35c8cb8aa5712f8c512cb3d22b6f640ca32b51b43c025eca3979253f",
+      "clustered": "ab57fc457560978a59380783761db9b4ab12fadfdc435e7bd280fbad9ae66bbb",
+      "adaptive": "5c927dfe27cda0fed72040148aaf2847c503ae1caf29bfacac9ce9e6a3ba5e63"
+    }
+  },
+  {
+    "binary": "counts",
+    "policy": "handoff492",
+    "pair": 0,
+    "bucket": 128,
+    "order": 7,
+    "export_sha256": "73b87f5855926191731aa19dde34e0e07d9c2b3e7395dd69b0da8829e930115d",
+    "fixtures": {
+      "lattice": "2a10e9af35c8cb8aa5712f8c512cb3d22b6f640ca32b51b43c025eca3979253f",
+      "clustered": "ab57fc457560978a59380783761db9b4ab12fadfdc435e7bd280fbad9ae66bbb",
+      "adaptive": "5c927dfe27cda0fed72040148aaf2847c503ae1caf29bfacac9ce9e6a3ba5e63"
+    }
+  },
+  {
+    "binary": "counts",
+    "policy": "handoff656",
+    "pair": 0,
+    "bucket": 128,
+    "order": 7,
+    "export_sha256": "1183b0026fe854c1be49632e520e319a49cfe53f47ef5f8302008e6349b5a1b4",
+    "fixtures": {
+      "lattice": "a2a46760a51c6599a3b7019fdae59578dc3443a3d45c73e779ab140bed6569f4",
+      "clustered": "c3b7a48ba4208492f6f4edb9b6eb9428a8b283f11949b42b8c8a0a3a73898ee3",
+      "adaptive": "f2c2203d5b6491620ad7ea495670bc25aa146f23c7ac98260753b35ab126662d"
+    }
+  },
+  {
+    "binary": "counts",
+    "policy": "fine656",
+    "pair": 0,
+    "bucket": 128,
+    "order": 7,
+    "export_sha256": "5828992301497a0e15a960392581fca88d0fab2ff973e98894133d3f430d82bc",
+    "fixtures": {
+      "lattice": "2a10e9af35c8cb8aa5712f8c512cb3d22b6f640ca32b51b43c025eca3979253f",
+      "clustered": "c3b7a48ba4208492f6f4edb9b6eb9428a8b283f11949b42b8c8a0a3a73898ee3",
+      "adaptive": "ea78f5b02cac7f5eac75a326e527b152e1e553f35b13f1cca6c9f029f6137848"
+    }
+  },
+  {
+    "binary": "counts",
+    "policy": "fine984",
+    "pair": 0,
+    "bucket": 128,
+    "order": 7,
+    "export_sha256": "9d0547db768cfa78c0a16db053ab9634cf9226ad2cedd5cbe7097ae8971adb99",
+    "fixtures": {
+      "lattice": "2a10e9af35c8cb8aa5712f8c512cb3d22b6f640ca32b51b43c025eca3979253f",
+      "clustered": "5ea0864a1a993b0b49ce00b2c852cbb18a216358524bc490a35485390e128684",
+      "adaptive": "811373b1ab985e8b663429edbbb7f24db9be1e71d63cb7b4f6ab3b93e74e8281"
+    }
+  },
+  {
+    "binary": "counts",
+    "policy": "fine1312",
+    "pair": 0,
+    "bucket": 128,
+    "order": 7,
+    "export_sha256": "34648471d4b1470e47b2b0ae029c7d98ed491a26f949b4436ff131fdcc7b7f92",
+    "fixtures": {
+      "lattice": "2a10e9af35c8cb8aa5712f8c512cb3d22b6f640ca32b51b43c025eca3979253f",
+      "clustered": "4b58b42a646511cc558af61623a3c2c4bf233d353651ff9c8c3c454a41bb5be8",
+      "adaptive": "330026f780950f05da22b9bbfefc8a01bb2a2eb5173ead979e36f21b7373a03b"
+    }
+  }
+]

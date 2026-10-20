@@ -1,0 +1,805 @@
+{
+  "timing": [
+    {
+      "binary": "counts",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 72.024069,
+      "kick_ms_min": 72.024069,
+      "kick_ms_max": 72.024069,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 91.53775,
+      "kick_ms_min": 91.53775,
+      "kick_ms_max": 91.53775,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 79.864554,
+      "kick_ms_min": 79.864554,
+      "kick_ms_max": 79.864554,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 86.65274500000001,
+      "kick_ms_min": 86.65274500000001,
+      "kick_ms_max": 86.65274500000001,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 69.84470800000001,
+      "kick_ms_min": 69.84470800000001,
+      "kick_ms_max": 69.84470800000001,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 92.087926,
+      "kick_ms_min": 92.087926,
+      "kick_ms_max": 92.087926,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "fine1312",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 83.38110999999999,
+      "kick_ms_min": 83.38110999999999,
+      "kick_ms_max": 83.38110999999999,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "fine1312",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 94.88251,
+      "kick_ms_min": 94.88251,
+      "kick_ms_max": 94.88251,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "fine1312",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 60.285855999999995,
+      "kick_ms_min": 60.285855999999995,
+      "kick_ms_max": 60.285855999999995,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "fine1312",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 75.62405,
+      "kick_ms_min": 75.62405,
+      "kick_ms_max": 75.62405,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "fine1312",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 65.060092,
+      "kick_ms_min": 65.060092,
+      "kick_ms_max": 65.060092,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "fine1312",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 75.41225299999999,
+      "kick_ms_min": 75.41225299999999,
+      "kick_ms_max": 75.41225299999999,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "fine656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 78.159138,
+      "kick_ms_min": 78.159138,
+      "kick_ms_max": 78.159138,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "fine656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 93.732138,
+      "kick_ms_min": 93.732138,
+      "kick_ms_max": 93.732138,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "fine656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 62.477598,
+      "kick_ms_min": 62.477598,
+      "kick_ms_max": 62.477598,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "fine656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 75.896725,
+      "kick_ms_min": 75.896725,
+      "kick_ms_max": 75.896725,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "fine656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 65.982609,
+      "kick_ms_min": 65.982609,
+      "kick_ms_max": 65.982609,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "fine656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 72.99027,
+      "kick_ms_min": 72.99027,
+      "kick_ms_max": 72.99027,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "fine984",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 82.226459,
+      "kick_ms_min": 82.226459,
+      "kick_ms_max": 82.226459,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "fine984",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 88.53238099999999,
+      "kick_ms_min": 88.53238099999999,
+      "kick_ms_max": 88.53238099999999,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "fine984",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 56.283963,
+      "kick_ms_min": 56.283963,
+      "kick_ms_max": 56.283963,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "fine984",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 74.672592,
+      "kick_ms_min": 74.672592,
+      "kick_ms_max": 74.672592,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "fine984",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 69.461695,
+      "kick_ms_min": 69.461695,
+      "kick_ms_max": 69.461695,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "fine984",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 78.594468,
+      "kick_ms_min": 78.594468,
+      "kick_ms_max": 78.594468,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 71.143885,
+      "kick_ms_min": 71.143885,
+      "kick_ms_max": 71.143885,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 88.031398,
+      "kick_ms_min": 88.031398,
+      "kick_ms_max": 88.031398,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 63.990280999999996,
+      "kick_ms_min": 63.990280999999996,
+      "kick_ms_max": 63.990280999999996,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 83.509739,
+      "kick_ms_min": 83.509739,
+      "kick_ms_max": 83.509739,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 65.627841,
+      "kick_ms_min": 65.627841,
+      "kick_ms_max": 65.627841,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 78.936413,
+      "kick_ms_min": 78.936413,
+      "kick_ms_max": 78.936413,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "handoff656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 70.407352,
+      "kick_ms_min": 70.407352,
+      "kick_ms_max": 70.407352,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "handoff656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 90.58195500000001,
+      "kick_ms_min": 90.58195500000001,
+      "kick_ms_max": 90.58195500000001,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "handoff656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 62.076719000000004,
+      "kick_ms_min": 62.076719000000004,
+      "kick_ms_max": 62.076719000000004,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "handoff656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 75.23027,
+      "kick_ms_min": 75.23027,
+      "kick_ms_max": 75.23027,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "handoff656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 89.10639400000001,
+      "kick_ms_min": 89.10639400000001,
+      "kick_ms_max": 89.10639400000001,
+      "pairs": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "handoff656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 97.863635,
+      "kick_ms_min": 97.863635,
+      "kick_ms_max": 97.863635,
+      "pairs": 1
+    }
+  ],
+  "references": [],
+  "arena_lines": [
+    {
+      "binary": "counts",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 9072 bytes: control 648, expansion shared, forces shared tile 128, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes; list slab 145792 bytes per block (4096 entries per list)"
+    },
+    {
+      "binary": "counts",
+      "policy": "fine1312",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 9072 bytes: control 648, expansion shared, forces shared tile 128, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes; list slab 145792 bytes per block (4096 entries per list)"
+    },
+    {
+      "binary": "counts",
+      "policy": "fine656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 9072 bytes: control 648, expansion shared, forces shared tile 128, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes; list slab 145792 bytes per block (4096 entries per list)"
+    },
+    {
+      "binary": "counts",
+      "policy": "fine984",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 9072 bytes: control 648, expansion shared, forces shared tile 128, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes; list slab 145792 bytes per block (4096 entries per list)"
+    },
+    {
+      "binary": "counts",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 9072 bytes: control 648, expansion shared, forces shared tile 128, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes; list slab 145792 bytes per block (4096 entries per list)"
+    },
+    {
+      "binary": "counts",
+      "policy": "handoff656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 9072 bytes: control 648, expansion shared, forces shared tile 128, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes; list slab 145792 bytes per block (4096 entries per list)"
+    }
+  ],
+  "comparisons": [
+    {
+      "kind": "vs_counts",
+      "binary": "counts",
+      "policy": "fine1312",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "result": {
+        "adaptive": {
+          "acceleration": {
+            "relative_l2": 9.714830304368625e-08,
+            "max_pointwise_relative": 1.279898823546159e-06,
+            "median_pointwise_relative": 6.10505222497396e-08
+          },
+          "potential": {
+            "relative_l2": 8.773585014400735e-08,
+            "max_pointwise_relative": 5.739675696843777e-07,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "clustered": {
+          "acceleration": {
+            "relative_l2": 8.664135790473368e-08,
+            "max_pointwise_relative": 3.652539823069313e-06,
+            "median_pointwise_relative": 6.87543397621934e-08
+          },
+          "potential": {
+            "relative_l2": 8.512246318953732e-08,
+            "max_pointwise_relative": 2.4513354206825856e-06,
+            "median_pointwise_relative": 5.968957422210349e-08
+          }
+        },
+        "lattice": {
+          "acceleration": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          }
+        }
+      }
+    },
+    {
+      "kind": "vs_counts",
+      "binary": "counts",
+      "policy": "fine656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "result": {
+        "adaptive": {
+          "acceleration": {
+            "relative_l2": 7.08918399877653e-08,
+            "max_pointwise_relative": 3.052705848488923e-06,
+            "median_pointwise_relative": 2.244459703730666e-08
+          },
+          "potential": {
+            "relative_l2": 6.045753452993482e-08,
+            "max_pointwise_relative": 4.23457782635309e-07,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "clustered": {
+          "acceleration": {
+            "relative_l2": 5.693206117174528e-08,
+            "max_pointwise_relative": 4.800331258742405e-07,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 5.7795299272765575e-08,
+            "max_pointwise_relative": 2.4513354206825856e-06,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "lattice": {
+          "acceleration": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          }
+        }
+      }
+    },
+    {
+      "kind": "vs_counts",
+      "binary": "counts",
+      "policy": "fine984",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "result": {
+        "adaptive": {
+          "acceleration": {
+            "relative_l2": 7.581226750892378e-08,
+            "max_pointwise_relative": 3.052705848488923e-06,
+            "median_pointwise_relative": 3.838496747728306e-08
+          },
+          "potential": {
+            "relative_l2": 6.666426750449688e-08,
+            "max_pointwise_relative": 4.23457782635309e-07,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "clustered": {
+          "acceleration": {
+            "relative_l2": 6.954307829769817e-08,
+            "max_pointwise_relative": 3.652539823069313e-06,
+            "median_pointwise_relative": 5.483602211076761e-08
+          },
+          "potential": {
+            "relative_l2": 7.843567327650911e-08,
+            "max_pointwise_relative": 2.4513354206825856e-06,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "lattice": {
+          "acceleration": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          }
+        }
+      }
+    },
+    {
+      "kind": "vs_counts",
+      "binary": "counts",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "result": {
+        "adaptive": {
+          "acceleration": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "clustered": {
+          "acceleration": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "lattice": {
+          "acceleration": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          }
+        }
+      }
+    },
+    {
+      "kind": "vs_counts",
+      "binary": "counts",
+      "policy": "handoff656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "result": {
+        "adaptive": {
+          "acceleration": {
+            "relative_l2": 7.100019588491601e-08,
+            "max_pointwise_relative": 6.62392084276023e-06,
+            "median_pointwise_relative": 6.12126327464199e-08
+          },
+          "potential": {
+            "relative_l2": 6.097829037703191e-08,
+            "max_pointwise_relative": 0.2855297157622739,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "clustered": {
+          "acceleration": {
+            "relative_l2": 5.693206117174528e-08,
+            "max_pointwise_relative": 4.800331258742405e-07,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 5.7795299272765575e-08,
+            "max_pointwise_relative": 2.4513354206825856e-06,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "lattice": {
+          "acceleration": {
+            "relative_l2": 1.792025810013027e-05,
+            "max_pointwise_relative": 0.0025559099165772124,
+            "median_pointwise_relative": 1.6498440513255488e-05
+          },
+          "potential": {
+            "relative_l2": 0.00043879619434928344,
+            "max_pointwise_relative": 6.833333333333333,
+            "median_pointwise_relative": 0.000329086308026431
+          }
+        }
+      }
+    }
+  ],
+  "repeat_export_hashes": [
+    {
+      "binary": "counts",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "distinct_exports": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "fine1312",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "distinct_exports": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "fine656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "distinct_exports": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "fine984",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "distinct_exports": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "distinct_exports": 1
+    },
+    {
+      "binary": "counts",
+      "policy": "handoff656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "distinct_exports": 1
+    }
+  ]
+}

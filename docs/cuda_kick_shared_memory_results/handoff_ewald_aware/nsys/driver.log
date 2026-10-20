@@ -1,0 +1,15 @@
+binary /home/dmarce1/workspace/cosmictiger/.claude/worktrees/sharp-hypatia-a3ac58/build/arena_b1024/frozen/cosmictiger_b1024_ewald_handoff sha256 91b6982c6164ae8d4d07bde0d36ef29227975f1317e5a38875ccaf16e488787d
+waiting for a quiet machine 02:55:32
+2026-10-20T02:56:46-05:00 GPU lock acquired
+== docs/cuda_kick_shared_memory_results/handoff_ewald_aware/nsys/adaptive128_auto_1 02:56:58 load 8.27 9.89 11.20
+== docs/cuda_kick_shared_memory_results/handoff_ewald_aware/nsys/adaptive128_fine656_1 02:57:27 load 9.11 9.96 11.18
+== docs/cuda_kick_shared_memory_results/handoff_ewald_aware/nsys/adaptive128_fine1312_1 02:57:55 load 9.49 10.01 11.17
+== docs/cuda_kick_shared_memory_results/handoff_ewald_aware/nsys/adaptive128_h656_1 02:58:23 load 9.63 10.00 11.13
+== docs/cuda_kick_shared_memory_results/handoff_ewald_aware/nsys/adaptive128_h656_2 02:58:51 load 8.52 9.75 11.01
+== docs/cuda_kick_shared_memory_results/handoff_ewald_aware/nsys/adaptive128_fine1312_2 02:59:19 load 6.60 9.22 10.80
+== docs/cuda_kick_shared_memory_results/handoff_ewald_aware/nsys/adaptive128_fine656_2 02:59:48 load 7.51 9.19 10.74
+== docs/cuda_kick_shared_memory_results/handoff_ewald_aware/nsys/adaptive128_auto_2 03:00:16 load 8.88 9.39 10.76
+== docs/cuda_kick_shared_memory_results/handoff_ewald_aware/nsys/adaptive128_auto_3 03:00:44 load 9.15 9.43 10.74
+== docs/cuda_kick_shared_memory_results/handoff_ewald_aware/nsys/adaptive128_fine656_3 03:01:13 load 9.00 9.39 10.68
+== docs/cuda_kick_shared_memory_results/handoff_ewald_aware/nsys/adaptive128_fine1312_3 03:01:41 load 9.35 9.46 10.67
+== docs/cuda_kick_shared_memory_results/handoff_ewald_aware/nsys/adaptive128_h656_3 03:02:09 load 9.40 9.48 10.64

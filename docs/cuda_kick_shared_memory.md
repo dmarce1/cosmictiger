@@ -1351,7 +1351,190 @@ thread-ms instead of 124. The finer divisions' gains against 328 in the
 sweep (1.11-1.22x on the adaptive fixture, up to 1.20x on the clustered one)
 would then come without the lattice penalty, and the divisor rule should be
 re-swept. These are estimates from the CPU-side thread times; neither change
-is implemented or measured, and the clustered fixture was not profiled.
+is implemented or measured, and the clustered fixture was not profiled. (The
+next section implements and times the first.)
+
+### Ewald-aware handoff (`handoff_ewald_aware/`)
+
+The verdict above proposed handing a node to the GPU at the coarse threshold
+while it still carries Ewald checks and at a finer one once it carries none.
+`compute.cudaKickFineHandoffBlocks` implements that and is off by default.
+At the GPU branch of `kickWalk` the CPU walk compares the node's particle
+count with `N / kickBlockCount(N)` (the automatic rule: 492 blocks, 4,262
+particles at 2,097,152) while the node's Ewald checklist is non-empty, and
+with `N / kickFineBlockCount(N)` once it is empty. `kickFineBlockCount` is
+the larger of the rule's divisor and the option, so zero or a smaller count
+leaves every node at the rule. A node arrives with an empty Ewald list once
+the walk above it has accepted every Ewald check as a cell-cell interaction.
+
+The binary is `main` at da3c1f4e (frozen as `cosmictiger_b1024_ewald_handoff`;
+build settings as in the sections above). It predates the Ewald cell-cell
+schedule (018cbcda, below), which shortens the kernel's Ewald work and so
+the large Ewald-carrying workitems discussed here; these tables are not
+re-measured with it. `run.sh` timed six policies at
+2,097,152 particles (side 128), 8 and 12 worker threads, all three fixtures,
+bucket 128, order 7, two pairs of 11 samples, forces and potential: `auto`
+(the rule, 492), `handoff492` and `handoff656` (pinned, every node), and
+`fine656`, `fine984` and `fine1312` (492 for nodes with Ewald checks; 3,197,
+2,131 or 1,598 particles for the rest). The stages ran under the GPU lock
+with a throwaway warm-up process before pair 0, and both were clean at the
+first attempt (worst pair spreads 1.108 and 1.105, `sweep_summary.md`). The
+quiet gate of the earlier stages waits for a one-minute load below 6. That
+gate never opened here: a backup `rsync` of the home directory and a `bfs`
+scan of the whole file system kept eight processes in IO wait, a load of
+10-12 with the CPUs 64% idle. `run.sh` therefore waits for less than four
+cores of user and system time instead. `auto` and the pinned 492 hand over
+the same division, with identical forces; their times differ by up to 4% in
+either direction, which is the noise floor of the tables below.
+
+An instrumented copy of the binary (`counts/instrumentation.patch`, not
+timed) printed what each policy hands over: the workitems, how many arrive
+with Ewald checks and how many checks they carry, the largest workitem, and
+the Ewald cell-cell interactions the CPU walk evaluates (`counts/counts.md`,
+forces-only kick; the counts do not change between samples):
+
+| fixture | policy | workitems | with Ewald checks | Ewald checks handed over | largest workitem (particles) | CPU Ewald cell-cell |
+|---|---|---:|---:|---:|---:|---:|
+| lattice | auto, handoff492 | 512 | 512 | 28,824 | 4,096 | 17,958 |
+| lattice | handoff656 | 1,024 | 0 | 0 | 2,048 | 54,282 |
+| lattice | fine656, fine984, fine1312 | 512 | 512 | 28,824 | 4,096 | 17,958 |
+| clustered | auto, handoff492 | 768 | 0 | 0 | 3,825 | 660 |
+| clustered | handoff656, fine656 | 1,024 | 0 | 0 | 2,601 | 660 |
+| clustered | fine984 | 1,344 | 0 | 0 | 2,040 | 660 |
+| clustered | fine1312 | 1,984 | 0 | 0 | 1,575 | 660 |
+| adaptive | auto, handoff492 | 604 | 136 | 6,180 | 4,233 | 2,939 |
+| adaptive | handoff656 | 1,076 | 256 | 16,326 | 3,190 | 5,183 |
+| adaptive | fine656 | 956 | 136 | 6,180 | 4,106 | 2,939 |
+| adaptive | fine984 | 1,041 | 136 | 6,180 | 4,106 | 2,939 |
+| adaptive | fine1312 | 1,723 | 136 | 6,180 | 4,106 | 2,939 |
+
+- On the lattice every fine divisor hands over exactly the 492 division. The
+  512 box/8 cells reach the GPU branch still carrying their Ewald checks, so
+  they go over at the coarse threshold, and no node below them is ever a
+  CPU node.
+- On the clustered fixture no workitem carries Ewald checks at any division:
+  the Ewald lists resolve above the cut, and the CPU walk evaluates the same
+  660 Ewald interactions at every division. There the rule is simply the
+  finer division: `fine656` is the pinned 656 cut, and `fine984` and
+  `fine1312` are finer still.
+- On the adaptive fixture the same 136 workitems carry the same 6,180 Ewald
+  checks at every fine divisor as at 492, and only the Ewald-free part of the
+  tree is cut finer (956 to 1,723 workitems against 604). The CPU walk
+  evaluates no more Ewald interactions than at 492, where the pinned 656
+  evaluates 2,244 more. But 67 of the Ewald-carrying workitems hold 4,096 or
+  more particles, so the largest workitem stays at 4,106 particles. The
+  pinned 656 cut brings it down to 3,190.
+
+Forces. The driver records one digest per process over all three fixtures,
+so `benchmarks/kick_arena_fixture_digests.py` hashed each fixture's rows of
+every export before the exports were deleted (`fixture_digests.md` in each
+stage). The lattice rows of `fine656`, `fine984` and `fine1312` are identical
+to those of `auto` and the pinned 492, and the clustered rows of `fine656` to
+those of the pinned 656, in every pair at both thread counts. The other fine
+rows differ from `auto` at roundoff: acceleration relative L2 5.7e-8 to
+9.7e-8, largest pointwise 3.7e-6, potential 5.8e-8 to 8.8e-8 (`summary.md`).
+The pinned 656 differs more on the lattice: acceleration relative L2 1.8e-5,
+potential 4.4e-4. That is the cut at which the CPU instead of the kernel
+evaluates the box/8 cells' Ewald interactions. The lattice's accelerations
+nearly cancel, which inflates relative force differences, but the potential
+difference is well above the 1e-7 CPU/CUDA agreement measured at small
+sizes. It was not investigated here.
+
+Speedup is the pinned 492 time over the variant's time, pairwise (above
+one: the variant is faster). Forces only:
+
+lattice (2,097,152 particles):
+
+| threads | auto | handoff492 | handoff656 | fine656 | fine984 | fine1312 |
+|---:|---:|---:|---:|---:|---:|---:|
+| 8 | 66.06 ms, 0.979x (0.905-1.052) | 64.42 ms | 79.64 ms, 0.809x (0.807-0.811) | 62.25 ms, 1.035x (1.020-1.049) | 62.11 ms, 1.038x (1.002-1.073) | 62.76 ms, 1.026x (1.011-1.041) |
+| 12 | 56.84 ms, 1.031x (1.001-1.060) | 58.54 ms | 69.30 ms, 0.845x (0.825-0.865) | 58.14 ms, 1.007x (0.986-1.029) | 58.24 ms, 1.005x (0.996-1.015) | 58.00 ms, 1.010x (0.985-1.034) |
+
+clustered (2,097,152 particles):
+
+| threads | auto | handoff492 | handoff656 | fine656 | fine984 | fine1312 |
+|---:|---:|---:|---:|---:|---:|---:|
+| 8 | 63.15 ms, 0.994x (0.953-1.035) | 62.78 ms | 59.26 ms, 1.059x (1.037-1.081) | 58.26 ms, 1.077x (1.052-1.102) | 54.67 ms, 1.149x (1.095-1.202) | 56.65 ms, 1.108x (1.063-1.154) |
+| 12 | 59.16 ms, 1.016x (0.992-1.041) | 60.16 ms | 55.01 ms, 1.095x (1.024-1.165) | 56.26 ms, 1.072x (0.985-1.160) | 54.64 ms, 1.101x (1.044-1.158) | 56.76 ms, 1.060x (1.007-1.113) |
+
+adaptive (2,097,152 particles):
+
+| threads | auto | handoff492 | handoff656 | fine656 | fine984 | fine1312 |
+|---:|---:|---:|---:|---:|---:|---:|
+| 8 | 67.69 ms, 1.044x (1.022-1.066) | 70.71 ms | 72.71 ms, 0.972x (0.949-0.996) | 74.08 ms, 0.954x (0.919-0.989) | 77.20 ms, 0.916x (0.886-0.945) | 78.12 ms, 0.905x (0.891-0.919) |
+| 12 | 63.66 ms, 1.023x (1.000-1.047) | 65.13 ms | 66.86 ms, 0.974x (0.958-0.990) | 73.52 ms, 0.886x (0.883-0.889) | 74.11 ms, 0.879x (0.862-0.895) | 75.65 ms, 0.861x (0.836-0.886) |
+
+With the potential the picture is the same (`sweep_summary.md`): lattice
+fine 0.98-1.02x and pinned 656 0.80-0.83x; clustered fine 1.07-1.13x and
+pinned 656 1.06-1.11x; adaptive fine 0.88-0.91x and pinned 656 0.94-0.95x.
+Time relative to the pinned 492, geometric mean over the six cases and, in
+parentheses, the worst case (below one: faster):
+
+| threads | auto | handoff492 | handoff656 | fine656 | fine984 | fine1312 |
+|---:|---:|---:|---:|---:|---:|---:|
+| 8 | 0.999 (1.025) | 1.000 (1.000) | 1.070 (1.243) | 0.995 (1.119) | 0.980 (1.099) | 0.992 (1.118) |
+| 12 | 0.974 (0.983) | 1.000 (1.000) | 1.039 (1.199) | 1.008 (1.129) | 1.009 (1.141) | 1.019 (1.162) |
+
+- The rule removes the lattice penalty. The fine divisors hand the lattice
+  the 492 division and time within 4% of it, while the pinned 656 is
+  0.81-0.85x as before (0.81-0.88x in the sweep above).
+- On the clustered fixture they gain what the finer cuts gain: 1.06-1.15x,
+  with 984 the best or within 0.3% of the best in every case.
+- On the adaptive fixture every finer cut now loses: the pinned 656 by
+  3-6%, the fine divisors by 5-14% (forces only, more as the divisor grows)
+  and 9-12% with the potential. In the sweep above (faaf984a) the pinned 656
+  gained 1.07x over 492 there (75.32 against 80.77 ms at 8 threads).
+  Between that binary and this one the per-launch list slab, the PP loop
+  schedule and the aligned PC staging were merged, and the 492 adaptive kick
+  went from 80.8 ms (74.5 in the check of the raised cap) to 70.7 ms.
+
+To see where the adaptive fixture loses, `nsys/nsys_run.sh` split its kick
+as in the section above (Nsight Systems, CUDA trace only, 8 threads, 11
+samples, three rounds with the order alternating, under the GPU lock; split
+by `benchmarks/summarize_kick_handoff_profile.py`, `nsys/summary.md`).
+Medians over the rounds; the rounds agree within 0.6 ms on the host part and
+within 3.4 ms on the kernel:
+
+| policy | workitems | kick (ms) | host | launch | kernel | with potential: kick | host | kernel |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| auto | 604 | 64.74 | 14.12 | 1.91 | 48.67 | 82.79 | 22.92 | 58.18 |
+| handoff656 | 1,076 | 66.31 | 17.68 | 1.79 | 47.01 | 86.32 | 26.30 | 58.20 |
+| fine656 | 956 | 73.88 | 15.99 | 1.76 | 55.78 | 94.66 | 24.62 | 68.13 |
+| fine1312 | 1,723 | 76.86 | 19.36 | 1.79 | 55.38 | 96.51 | 28.14 | 66.53 |
+
+- The pinned 656 no longer shortens the adaptive kernel (47.0 against 48.7
+  ms, level with the potential) and adds 3.6 ms of host time, so it loses.
+  With the merged kernel, 492 already leaves no dense-cube tail worth
+  cutting at this size.
+- The fine divisors lose in the kernel: 7.1 ms longer with `fine656`
+  (10 with the potential), while their host part grows by only 1.9 ms
+  (`fine656`) to 5.2 ms (`fine1312`). They hand over more workitems
+  than the launch has resident blocks (656, one warp each) and keep the 67
+  Ewald-carrying workitems of 4,096 particles or more. The blocks take
+  workitems from an atomic counter in the order `toGpu` sorts them,
+  `particleRange.first`, that is, tree order. With 604 workitems at 492,
+  every workitem starts at once, and the kernel lasts about as long as the
+  largest one. With 956 or more, a workitem behind the first 656 starts only
+  when a block finishes its first one. A large Ewald-carrying cell there
+  ends about one small workitem later than it would have, which matches the
+  7 ms. That is the likely mechanism. The trace does not time workitems
+  individually, so it is not verified.
+
+Verdict. The Ewald-aware handoff does what the profile predicted on the
+lattice: the box/8 cells keep their Ewald checks on the GPU, and the finer
+divisors cost nothing there. Where the Ewald lists resolve above the cut
+(the clustered fixture), it is the finer division and gains 1.06-1.15x. But
+on the adaptive fixture, the closest of the three to a production volume,
+it is 5-14% slower than the rule, and its geometric mean over the fixtures
+is within 2% of the pinned 492 at both thread counts (0.980-1.019). The
+default therefore stays as it was: `compute.cudaKickFineHandoffBlocks` is 0
+and the rule hands over 492 blocks' worth at this size. The option remains
+for experiments. Two changes could make it pay. One is to dispatch the
+workitems largest first rather than in tree order, so that the coarse
+Ewald-carrying cells start in the first wave; the fine divisors should be
+re-timed after that. The other is the Ewald cell-cell work moved off the
+CPU walk (the other remedy of the verdict above), after which the plain
+finer division no longer pays the lattice penalty either.
 
 ### Per-launch list slab (`list_slab/`, `nsys_list_slab/`, `nsys_list_slab_matched/`, `ncu_list_slab/`)
 
@@ -2323,10 +2506,15 @@ every cell (`b*/speedup_vs_head.md`). `stf_ewald_cpu`, `stf_kernels_cuda`,
   (`handoff_large_sizes/`). The lattice penalty is CPU walk time, 115 of its
   124 thread-ms per kick in Ewald cell-cell interactions of the box/8 cells,
   which the finer cut takes from the GPU (`nsys_handoff_large/`). The
-  candidates in place of a clustering-aware division are a rule that hands a
-  node over while it still carries Ewald checks, or Ewald cell-cell
-  evaluation moved from the CPU walk to the GPU. Neither is implemented or
-  measured.
+  Ewald-aware handoff (`compute.cudaKickFineHandoffBlocks`, off by default)
+  removes that penalty and gains 1.06-1.15x on the clustered fixture, but
+  loses 5-14% on the adaptive one: it keeps the large Ewald-carrying cells
+  as workitems while the finer cut makes more workitems than resident
+  blocks, and the kernel takes them in tree order (`handoff_ewald_aware/`).
+  Dispatching workitems largest first, then re-timing the fine divisors, is
+  the open step; Ewald cell-cell evaluation moved from the CPU walk to the
+  GPU is the other remedy and is not implemented. With the merged kernel the
+  plain 656 division no longer gains on the adaptive fixture either.
 - The host part of the kick does not overlap the kernel: the kernel starts
   after the whole CPU walk. Besides the walk, 8-11 ms per kick at 2.1 million
   particles does not depend on the division: `toGpu`'s single-threaded tree

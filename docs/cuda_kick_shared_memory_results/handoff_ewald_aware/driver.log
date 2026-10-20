@@ -1,0 +1,44 @@
+waiting for a quiet machine 02:15:17
+== docs/cuda_kick_shared_memory_results/handoff_ewald_aware/t8_n128 attempt 1 02:23:12 load 10.68 10.42 11.47
+ewald_auto_cuda_b128_o7_pair0: lattice/phi=0 62.682 ms, lattice/phi=1 75.126 ms, clustered/phi=0 63.021 ms, clustered/phi=1 81.463 ms, adaptive/phi=0 69.324 ms, adaptive/phi=1 85.474 ms
+ewald_handoff492_cuda_b128_o7_pair0: lattice/phi=0 65.965 ms, lattice/phi=1 77.098 ms, clustered/phi=0 65.232 ms, clustered/phi=1 83.900 ms, adaptive/phi=0 73.912 ms, adaptive/phi=1 85.664 ms
+ewald_handoff656_cuda_b128_o7_pair0: lattice/phi=0 81.757 ms, lattice/phi=1 92.877 ms, clustered/phi=0 60.345 ms, clustered/phi=1 76.755 ms, adaptive/phi=0 74.234 ms, adaptive/phi=1 88.794 ms
+ewald_fine656_cuda_b128_o7_pair0: lattice/phi=0 62.855 ms, lattice/phi=1 73.313 ms, clustered/phi=0 59.182 ms, clustered/phi=1 75.144 ms, adaptive/phi=0 74.706 ms, adaptive/phi=1 94.150 ms
+ewald_fine984_cuda_b128_o7_pair0: lattice/phi=0 61.482 ms, lattice/phi=1 72.993 ms, clustered/phi=0 54.268 ms, clustered/phi=1 70.641 ms, adaptive/phi=0 78.184 ms, adaptive/phi=1 93.516 ms
+ewald_fine1312_cuda_b128_o7_pair0: lattice/phi=0 63.338 ms, lattice/phi=1 73.088 ms, clustered/phi=0 56.515 ms, clustered/phi=1 71.744 ms, adaptive/phi=0 80.430 ms, adaptive/phi=1 95.072 ms
+ewald_fine1312_cuda_b128_o7_pair1: lattice/phi=0 62.173 ms, lattice/phi=1 71.968 ms, clustered/phi=0 56.784 ms, clustered/phi=1 70.485 ms, adaptive/phi=0 75.801 ms, adaptive/phi=1 94.552 ms
+ewald_fine984_cuda_b128_o7_pair1: lattice/phi=0 62.744 ms, lattice/phi=1 71.883 ms, clustered/phi=0 55.077 ms, clustered/phi=1 72.093 ms, adaptive/phi=0 76.223 ms, adaptive/phi=1 92.929 ms
+ewald_fine656_cuda_b128_o7_pair1: lattice/phi=0 61.639 ms, lattice/phi=1 72.007 ms, clustered/phi=0 57.346 ms, clustered/phi=1 74.127 ms, adaptive/phi=0 73.458 ms, adaptive/phi=1 95.720 ms
+ewald_handoff656_cuda_b128_o7_pair1: lattice/phi=0 77.516 ms, lattice/phi=1 90.225 ms, clustered/phi=0 58.181 ms, clustered/phi=1 74.821 ms, adaptive/phi=0 71.181 ms, adaptive/phi=1 90.880 ms
+ewald_handoff492_cuda_b128_o7_pair1: lattice/phi=0 62.879 ms, lattice/phi=1 70.161 ms, clustered/phi=0 60.333 ms, clustered/phi=1 76.133 ms, adaptive/phi=0 67.516 ms, adaptive/phi=1 83.939 ms
+ewald_auto_cuda_b128_o7_pair1: lattice/phi=0 69.447 ms, lattice/phi=1 74.721 ms, clustered/phi=0 63.277 ms, clustered/phi=1 79.771 ms, adaptive/phi=0 66.050 ms, adaptive/phi=1 81.544 ms
+Completed; see docs/cuda_kick_shared_memory_results/handoff_ewald_aware/t8_n128/summary.md
+docs/cuda_kick_shared_memory_results/handoff_ewald_aware/t8_n128: worst pair spread 1.108 ('ewald', 'auto', 'cuda', 128, 7, 'lattice', False), load at start 10.68, process wall 32.8-34.2 s
+| fixture | auto | handoff492 | handoff656 | fine656 | fine984 | fine1312 |
+|---|---:|---:|---:|---:|---:|---:|
+| adaptive | A (5c927dfe) | A (5c927dfe) | B (f2c2203d) | C (ea78f5b0) | D (811373b1) | E (330026f7) |
+| clustered | A (ab57fc45) | A (ab57fc45) | B (c3b7a48b) | B (c3b7a48b) | C (5ea0864a) | D (4b58b42a) |
+| lattice | A (2a10e9af) | A (2a10e9af) | B (a2a46760) | A (2a10e9af) | A (2a10e9af) | A (2a10e9af) |
+skip docs/cuda_kick_shared_memory_results/handoff_ewald_aware/t8_n128 (exists)
+waiting for a quiet machine 02:38:49
+== docs/cuda_kick_shared_memory_results/handoff_ewald_aware/t12_n128 attempt 1 02:40:04 load 9.45 10.60 11.56
+ewald_auto_cuda_b128_o7_pair0: lattice/phi=0 55.239 ms, lattice/phi=1 66.033 ms, clustered/phi=0 60.674 ms, clustered/phi=1 75.376 ms, adaptive/phi=0 63.529 ms, adaptive/phi=1 79.642 ms
+ewald_handoff492_cuda_b128_o7_pair0: lattice/phi=0 58.574 ms, lattice/phi=1 69.941 ms, clustered/phi=0 63.167 ms, clustered/phi=1 81.058 ms, adaptive/phi=0 66.487 ms, adaptive/phi=1 84.433 ms
+ewald_handoff656_cuda_b128_o7_pair0: lattice/phi=0 70.963 ms, lattice/phi=1 82.190 ms, clustered/phi=0 54.214 ms, clustered/phi=1 70.324 ms, adaptive/phi=0 67.147 ms, adaptive/phi=1 86.788 ms
+ewald_fine656_cuda_b128_o7_pair0: lattice/phi=0 56.923 ms, lattice/phi=1 69.489 ms, clustered/phi=0 54.472 ms, clustered/phi=1 70.405 ms, adaptive/phi=0 74.781 ms, adaptive/phi=1 90.697 ms
+ewald_fine984_cuda_b128_o7_pair0: lattice/phi=0 57.726 ms, lattice/phi=1 68.735 ms, clustered/phi=0 54.551 ms, clustered/phi=1 67.538 ms, adaptive/phi=0 74.247 ms, adaptive/phi=1 93.365 ms
+ewald_fine1312_cuda_b128_o7_pair0: lattice/phi=0 56.631 ms, lattice/phi=1 70.104 ms, clustered/phi=0 56.756 ms, clustered/phi=1 72.022 ms, adaptive/phi=0 75.018 ms, adaptive/phi=1 91.267 ms
+ewald_fine1312_cuda_b128_o7_pair1: lattice/phi=0 59.370 ms, lattice/phi=1 69.465 ms, clustered/phi=0 56.767 ms, clustered/phi=1 70.669 ms, adaptive/phi=0 76.292 ms, adaptive/phi=1 91.196 ms
+ewald_fine984_cuda_b128_o7_pair1: lattice/phi=0 58.748 ms, lattice/phi=1 68.182 ms, clustered/phi=0 54.728 ms, clustered/phi=1 72.325 ms, adaptive/phi=0 73.970 ms, adaptive/phi=1 94.695 ms
+ewald_fine656_cuda_b128_o7_pair1: lattice/phi=0 59.359 ms, lattice/phi=1 69.445 ms, clustered/phi=0 58.045 ms, clustered/phi=1 70.076 ms, adaptive/phi=0 72.260 ms, adaptive/phi=1 90.008 ms
+ewald_handoff656_cuda_b128_o7_pair1: lattice/phi=0 67.634 ms, lattice/phi=1 81.587 ms, clustered/phi=0 55.806 ms, clustered/phi=1 69.932 ms, adaptive/phi=0 66.581 ms, adaptive/phi=1 86.298 ms
+ewald_handoff492_cuda_b128_o7_pair1: lattice/phi=0 58.501 ms, lattice/phi=1 66.624 ms, clustered/phi=0 57.158 ms, clustered/phi=1 75.175 ms, adaptive/phi=0 63.779 ms, adaptive/phi=1 80.355 ms
+ewald_auto_cuda_b128_o7_pair1: lattice/phi=0 58.446 ms, lattice/phi=1 66.596 ms, clustered/phi=0 57.639 ms, clustered/phi=1 75.495 ms, adaptive/phi=0 63.794 ms, adaptive/phi=1 81.293 ms
+Completed; see docs/cuda_kick_shared_memory_results/handoff_ewald_aware/t12_n128/summary.md
+docs/cuda_kick_shared_memory_results/handoff_ewald_aware/t12_n128: worst pair spread 1.105 ('ewald', 'handoff492', 'cuda', 128, 7, 'clustered', False), load at start 9.81, process wall 31.9-33.0 s
+| fixture | auto | handoff492 | handoff656 | fine656 | fine984 | fine1312 |
+|---|---:|---:|---:|---:|---:|---:|
+| adaptive | A (5c927dfe) | A (5c927dfe) | B (f2c2203d) | C (ea78f5b0) | D (811373b1) | E (330026f7) |
+| clustered | A (ab57fc45) | A (ab57fc45) | B (c3b7a48b) | B (c3b7a48b) | C (5ea0864a) | D (4b58b42a) |
+| lattice | A (2a10e9af) | A (2a10e9af) | B (a2a46760) | A (2a10e9af) | A (2a10e9af) | A (2a10e9af) |
+skip docs/cuda_kick_shared_memory_results/handoff_ewald_aware/t12_n128 (exists)

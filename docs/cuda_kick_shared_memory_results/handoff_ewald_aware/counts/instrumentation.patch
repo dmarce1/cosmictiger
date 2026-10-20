@@ -1,0 +1,81 @@
+diff --git a/benchmarks/stf_walk.cpp b/benchmarks/stf_walk.cpp
+index b8ecaa9e..46ab982a 100644
+--- a/benchmarks/stf_walk.cpp
++++ b/benchmarks/stf_walk.cpp
+@@ -36,6 +36,7 @@
+ #include <cosmictiger/fmm/fmm_order.hpp>
+ #include <cosmictiger/fmm/fmm_types.hpp>
+ #include <cosmictiger/gravity/kick.hpp>
++#include <cosmictiger/gravity/kick_interaction_counts.hpp>
+ #include <cosmictiger/gravity/kick_workspace.hpp>
+ #include <cosmictiger/gravity/tree.hpp>
+ #include <cosmictiger/particles/particles.hpp>
+@@ -365,6 +366,7 @@ void stfWalkFixture(char const* fixture, bool doPhi, int samples, std::ofstream&
+             ExpansionBuffer local;
+             local.zero();
+             auto const params = stfWalkParameters(doPhi, treeParams.minLevel);
++            kickResetInteractionCounts();
+             auto const kickBegin = std::chrono::steady_clock::now();
+             auto const result = kick(params, local, built.pos, built.id, Vector<TreeId>{built.id},
+                 Vector<TreeId>{built.id}, nullptr);
+@@ -372,6 +374,12 @@ void stfWalkFixture(char const* fixture, bool doPhi, int samples, std::ofstream&
+             // for the pool before timing ends and before a later tree reuses nodes.
+             hpx::this_thread::get_pool()->wait();
+             auto const kickEnd = std::chrono::steady_clock::now();
++            {
++                auto const counts = kickInteractionCounts();
++                PRINT("KICK_CPU_COUNTS,%s,%i,%i,%lli,%lli,%lli,%lli\n", fixture, int(doPhi), sample,
++                    counts.cellCellEwald, counts.cellCellDirect, counts.cellParticle,
++                    counts.particleCell);
++            }
+             auto const checksums = stfWalkChecksums(doPhi);
+             if (sample == -1) {
+                 expectedPositionHash = checksums.positions;
+diff --git a/src/gravity/kick_workspace.cpp b/src/gravity/kick_workspace.cpp
+index 61ad4c3b..4f8c3c69 100644
+--- a/src/gravity/kick_workspace.cpp
++++ b/src/gravity/kick_workspace.cpp
+@@ -17,7 +17,10 @@
+  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+  */
+ 
++#include <cmath>
++#include <map>
+ #include <set>
++#include <string>
+ 
+ #include <cosmictiger/core/timer.hpp>
+ #include <cosmictiger/gravity/kick_workspace.hpp>
+@@ -77,6 +80,32 @@ void KickWorkspace::toGpu() {
+         kickSetRc(KickReturn());
+         return;
+     }
++    {
++        // Handoff counts (measurement only): workitems, those that arrive with
++        // Ewald checks, the checks they carry, and the workitem sizes as a
++        // log2 histogram.
++        size_t ewaldItems = 0;
++        size_t ewaldChecks = 0;
++        size_t directChecks = 0;
++        long long particles = 0;
++        long long maxParticles = 0;
++        std::map<int, int> sizes;
++        for (auto const& item : workitems_) {
++            ewaldItems += !item.echecklist.empty();
++            ewaldChecks += item.echecklist.size();
++            directChecks += item.dchecklist.size();
++            long long const count = treeGetNode(item.self)->numberOfParticles();
++            particles += count;
++            maxParticles = std::max(maxParticles, count);
++            sizes[count > 0 ? int(std::log2(double(count))) : -1]++;
++        }
++        std::string histogram;
++        for (auto const& [bin, items] : sizes) {
++            histogram += ";" + std::to_string(bin) + ":" + std::to_string(items);
++        }
++        PRINT("KICK_HANDOFF_COUNTS,%zu,%zu,%zu,%zu,%lli,%lli,%s\n", workitems_.size(), ewaldItems,
++            ewaldChecks, directChecks, particles, maxParticles, histogram.c_str());
++    }
+ 
+     struct GlobalParticleRange {
+         int rank;

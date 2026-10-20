@@ -1,0 +1,76 @@
+{
+  "utc": "2026-10-20T07:23:15.013442+00:00",
+  "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+  "command": "benchmarks/run_cuda_kick_arena.py --binary ewald=build/arena_b1024/frozen/cosmictiger_b1024_ewald_handoff:arena --policy auto= --policy handoff492=--compute.cudaKickHandoffBlocks=492 --policy handoff656=--compute.cudaKickHandoffBlocks=656 --policy fine656=--compute.cudaKickFineHandoffBlocks=656 --policy fine984=--compute.cudaKickFineHandoffBlocks=984 --policy fine1312=--compute.cudaKickFineHandoffBlocks=1312 --output docs/cuda_kick_shared_memory_results/handoff_ewald_aware/t8_n128 --fixtures lattice,clustered,adaptive --buckets 128 --orders 7 --threads 8 --particles-per-dimension 128 --pairs 2 --samples 11 --reference 0 --timeout 7200 --idle-wait 'ninja|ncu|nsys|cc1plus|cicc|ptxas|nvcc' --wait-gpu-idle",
+  "binaries": [
+    {
+      "label": "ewald",
+      "path": "/home/dmarce1/workspace/cosmictiger/.claude/worktrees/sharp-hypatia-a3ac58/build/arena_b1024/frozen/cosmictiger_b1024_ewald_handoff",
+      "arena": true,
+      "sha256": "91b6982c6164ae8d4d07bde0d36ef29227975f1317e5a38875ccaf16e488787d"
+    }
+  ],
+  "policies": [
+    {
+      "label": "auto",
+      "options": []
+    },
+    {
+      "label": "handoff492",
+      "options": [
+        "--compute.cudaKickHandoffBlocks=492"
+      ]
+    },
+    {
+      "label": "handoff656",
+      "options": [
+        "--compute.cudaKickHandoffBlocks=656"
+      ]
+    },
+    {
+      "label": "fine656",
+      "options": [
+        "--compute.cudaKickFineHandoffBlocks=656"
+      ]
+    },
+    {
+      "label": "fine984",
+      "options": [
+        "--compute.cudaKickFineHandoffBlocks=984"
+      ]
+    },
+    {
+      "label": "fine1312",
+      "options": [
+        "--compute.cudaKickFineHandoffBlocks=1312"
+      ]
+    }
+  ],
+  "fixtures": [
+    "lattice",
+    "clustered",
+    "adaptive"
+  ],
+  "buckets": [
+    128
+  ],
+  "orders": [
+    7
+  ],
+  "backends": [
+    "cuda"
+  ],
+  "samples": 11,
+  "pairs": 2,
+  "reference": 0,
+  "threads": 8,
+  "cpus": "1-8",
+  "particles_per_dimension": 128,
+  "git_head": "da3c1f4e9a3362d15b41e6e2cc7674cebb19c424",
+  "nvidia_smi": "name, driver_version, clocks.current.sm [MHz], clocks.current.memory [MHz], utilization.gpu [%], memory.used [MiB]\nNVIDIA GeForce RTX 3090, 595.99.02, 1695 MHz, 9501 MHz, 10 %, 4533 MiB\n",
+  "load_average": [
+    10.677734375,
+    10.4248046875,
+    11.47509765625
+  ]
+}

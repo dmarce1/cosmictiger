@@ -1,0 +1,32 @@
+counts_auto_cuda_b128_o7_pair0: lattice/phi=0 69.845 ms, lattice/phi=1 92.088 ms, clustered/phi=0 79.865 ms, clustered/phi=1 86.653 ms, adaptive/phi=0 72.024 ms, adaptive/phi=1 91.538 ms
+counts_handoff492_cuda_b128_o7_pair0: lattice/phi=0 65.628 ms, lattice/phi=1 78.936 ms, clustered/phi=0 63.990 ms, clustered/phi=1 83.510 ms, adaptive/phi=0 71.144 ms, adaptive/phi=1 88.031 ms
+counts_handoff656_cuda_b128_o7_pair0: lattice/phi=0 89.106 ms, lattice/phi=1 97.864 ms, clustered/phi=0 62.077 ms, clustered/phi=1 75.230 ms, adaptive/phi=0 70.407 ms, adaptive/phi=1 90.582 ms
+counts_fine656_cuda_b128_o7_pair0: lattice/phi=0 65.983 ms, lattice/phi=1 72.990 ms, clustered/phi=0 62.478 ms, clustered/phi=1 75.897 ms, adaptive/phi=0 78.159 ms, adaptive/phi=1 93.732 ms
+counts_fine984_cuda_b128_o7_pair0: lattice/phi=0 69.462 ms, lattice/phi=1 78.594 ms, clustered/phi=0 56.284 ms, clustered/phi=1 74.673 ms, adaptive/phi=0 82.226 ms, adaptive/phi=1 88.532 ms
+counts_fine1312_cuda_b128_o7_pair0: lattice/phi=0 65.060 ms, lattice/phi=1 75.412 ms, clustered/phi=0 60.286 ms, clustered/phi=1 75.624 ms, adaptive/phi=0 83.381 ms, adaptive/phi=1 94.883 ms
+Completed; see docs/cuda_kick_shared_memory_results/handoff_ewald_aware/counts/t8_n128/summary.md
+| fixture | auto | handoff492 | handoff656 | fine656 | fine984 | fine1312 |
+|---|---:|---:|---:|---:|---:|---:|
+| adaptive | A (5c927dfe) | A (5c927dfe) | B (f2c2203d) | C (ea78f5b0) | D (811373b1) | E (330026f7) |
+| clustered | A (ab57fc45) | A (ab57fc45) | B (c3b7a48b) | B (c3b7a48b) | C (5ea0864a) | D (4b58b42a) |
+| lattice | A (2a10e9af) | A (2a10e9af) | B (a2a46760) | A (2a10e9af) | A (2a10e9af) | A (2a10e9af) |
+| fixture | policy | workitems | with Ewald checks | Ewald checks handed over | direct checks handed over | largest workitem | CPU nodes (workitems - 1) | CPU Ewald CC | CPU direct CC | workitem sizes (log2 bin: count) |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| lattice | auto | 512 | 512 | 28,824 | 28,824 | 4,096 | 511 | 17,958 | 17,958 | 12:512 |
+| lattice | handoff492 | 512 | 512 | 28,824 | 28,824 | 4,096 | 511 | 17,958 | 17,958 | 12:512 |
+| lattice | handoff656 | 1,024 | 0 | 0 | 45,588 | 2,048 | 1,023 | 54,282 | 39,946 | 11:1024 |
+| lattice | fine656 | 512 | 512 | 28,824 | 28,824 | 4,096 | 511 | 17,958 | 17,958 | 12:512 |
+| lattice | fine984 | 512 | 512 | 28,824 | 28,824 | 4,096 | 511 | 17,958 | 17,958 | 12:512 |
+| lattice | fine1312 | 512 | 512 | 28,824 | 28,824 | 4,096 | 511 | 17,958 | 17,958 | 12:512 |
+| clustered | auto | 768 | 0 | 0 | 20,380 | 3,825 | 767 | 660 | 8,588 | 10:192;11:576 |
+| clustered | handoff492 | 768 | 0 | 0 | 20,380 | 3,825 | 767 | 660 | 8,588 | 10:192;11:576 |
+| clustered | handoff656 | 1,024 | 0 | 0 | 24,216 | 2,601 | 1,023 | 660 | 12,464 | 10:704;11:320 |
+| clustered | fine656 | 1,024 | 0 | 0 | 24,216 | 2,601 | 1,023 | 660 | 12,464 | 10:704;11:320 |
+| clustered | fine984 | 1,344 | 0 | 0 | 42,638 | 2,040 | 1,343 | 660 | 15,885 | 10:1344 |
+| clustered | fine1312 | 1,984 | 0 | 0 | 68,644 | 1,575 | 1,983 | 660 | 22,300 | 9:896;10:1088 |
+| adaptive | auto | 604 | 136 | 6,180 | 23,119 | 4,233 | 603 | 2,939 | 14,315 | 6:3;7:9;8:5;9:4;10:28;11:419;12:136 |
+| adaptive | handoff492 | 604 | 136 | 6,180 | 23,119 | 4,233 | 603 | 2,939 | 14,315 | 6:3;7:9;8:5;9:4;10:28;11:419;12:136 |
+| adaptive | handoff656 | 1,076 | 256 | 16,326 | 55,082 | 3,190 | 1,075 | 5,183 | 21,308 | 6:3;7:9;8:5;9:4;10:674;11:381 |
+| adaptive | fine656 | 956 | 136 | 6,180 | 44,936 | 4,106 | 955 | 2,939 | 19,064 | 6:3;7:9;8:5;9:4;10:567;11:301;12:67 |
+| adaptive | fine984 | 1,041 | 136 | 6,180 | 49,227 | 4,106 | 1,040 | 2,939 | 20,982 | 6:3;7:9;8:5;9:4;10:737;11:216;12:67 |
+| adaptive | fine1312 | 1,723 | 136 | 6,180 | 79,066 | 4,106 | 1,722 | 2,939 | 45,107 | 6:3;7:9;8:5;9:904;10:678;11:57;12:67 |

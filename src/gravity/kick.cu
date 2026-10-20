@@ -86,7 +86,12 @@ int kickBlockCount(ParticleInteger particles) {
 // division loses on the lattice"). The CPU walk therefore applies this
 // divisor only to nodes without Ewald checks and kickBlockCount to the rest.
 // compute.cudaKickFineHandoffBlocks sets it; zero, or a count below
-// kickBlockCount, leaves every node at kickBlockCount.
+// kickBlockCount, leaves every node at kickBlockCount. It is off by default:
+// at 2,097,152 particles fine divisors of 656-1312 keep the lattice at the
+// coarse cut and gain 1.06-1.15x on the clustered fixture, but lose 5-14% on
+// the adaptive one, whose large Ewald-carrying cells stay whole while the
+// finer cut makes more workitems than resident blocks, and the kernel takes
+// workitems in tree order ("Ewald-aware handoff" in the same document).
 int kickFineBlockCount(ParticleInteger particles) {
     return std::max(kickBlockCount(particles), getOptions().compute.cudaKickFineHandoffBlocks);
 }

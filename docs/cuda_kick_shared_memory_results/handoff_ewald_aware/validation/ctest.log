@@ -1,0 +1,14 @@
+Internal ctest changing into directory: /home/dmarce1/workspace/cosmictiger/.claude/worktrees/sharp-hypatia-a3ac58/build/arena_b1024
+Test project /home/dmarce1/workspace/cosmictiger/.claude/worktrees/sharp-hypatia-a3ac58/build/arena_b1024
+    Start 74: sph_gravity_cuda
+1/4 Test #74: sph_gravity_cuda .................   Passed    0.93 sec
+    Start 77: fmm_tree
+2/4 Test #77: fmm_tree .........................   Passed    0.06 sec
+    Start 78: fmm_walk_cpu
+3/4 Test #78: fmm_walk_cpu .....................   Passed    0.17 sec
+    Start 79: fmm_walk_cuda
+4/4 Test #79: fmm_walk_cuda ....................   Passed    1.18 sec
+
+100% tests passed, 0 tests failed out of 4
+
+Total Test time (real) =   2.36 sec

@@ -1,0 +1,805 @@
+{
+  "timing": [
+    {
+      "binary": "ewald",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 67.6869635,
+      "kick_ms_min": 66.04997999999999,
+      "kick_ms_max": 69.323947,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 83.509378,
+      "kick_ms_min": 81.544289,
+      "kick_ms_max": 85.474467,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 63.149082500000006,
+      "kick_ms_min": 63.021060000000006,
+      "kick_ms_max": 63.277105,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 80.617013,
+      "kick_ms_min": 79.770967,
+      "kick_ms_max": 81.463059,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 66.0645735,
+      "kick_ms_min": 62.68217800000001,
+      "kick_ms_max": 69.446969,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 74.923873,
+      "kick_ms_min": 74.721309,
+      "kick_ms_max": 75.12643700000001,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "fine1312",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 78.11556850000001,
+      "kick_ms_min": 75.801461,
+      "kick_ms_max": 80.429676,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "fine1312",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 94.812259,
+      "kick_ms_min": 94.552208,
+      "kick_ms_max": 95.07230999999999,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "fine1312",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 56.6497775,
+      "kick_ms_min": 56.515405,
+      "kick_ms_max": 56.78415,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "fine1312",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 71.1141795,
+      "kick_ms_min": 70.484644,
+      "kick_ms_max": 71.743715,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "fine1312",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 62.755184500000006,
+      "kick_ms_min": 62.172608,
+      "kick_ms_max": 63.33776100000001,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "fine1312",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 72.5279875,
+      "kick_ms_min": 71.968034,
+      "kick_ms_max": 73.087941,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "fine656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 74.081997,
+      "kick_ms_min": 73.45773899999999,
+      "kick_ms_max": 74.706255,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "fine656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 94.9351135,
+      "kick_ms_min": 94.150494,
+      "kick_ms_max": 95.719733,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "fine656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 58.2636295,
+      "kick_ms_min": 57.345582,
+      "kick_ms_max": 59.181677,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "fine656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 74.63526949999999,
+      "kick_ms_min": 74.126841,
+      "kick_ms_max": 75.143698,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "fine656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 62.24690299999999,
+      "kick_ms_min": 61.639173,
+      "kick_ms_max": 62.85463299999999,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "fine656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 72.66017,
+      "kick_ms_min": 72.00726300000001,
+      "kick_ms_max": 73.313077,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "fine984",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 77.20379050000001,
+      "kick_ms_min": 76.223497,
+      "kick_ms_max": 78.184084,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "fine984",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 93.2226595,
+      "kick_ms_min": 92.929211,
+      "kick_ms_max": 93.516108,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "fine984",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 54.6727425,
+      "kick_ms_min": 54.268394,
+      "kick_ms_max": 55.077091,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "fine984",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 71.366851,
+      "kick_ms_min": 70.640632,
+      "kick_ms_max": 72.09307,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "fine984",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 62.113122,
+      "kick_ms_min": 61.482380000000006,
+      "kick_ms_max": 62.743863999999995,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "fine984",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 72.43783200000001,
+      "kick_ms_min": 71.88315200000001,
+      "kick_ms_max": 72.99251199999999,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 70.71401399999999,
+      "kick_ms_min": 67.516296,
+      "kick_ms_max": 73.911732,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 84.80168400000001,
+      "kick_ms_min": 83.938918,
+      "kick_ms_max": 85.66445,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 62.782498999999994,
+      "kick_ms_min": 60.333472,
+      "kick_ms_max": 65.231526,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 80.01647700000001,
+      "kick_ms_min": 76.133402,
+      "kick_ms_max": 83.899552,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 64.42203099999999,
+      "kick_ms_min": 62.879144999999994,
+      "kick_ms_max": 65.964917,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 73.62945549999999,
+      "kick_ms_min": 70.161209,
+      "kick_ms_max": 77.097702,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "handoff656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": false,
+      "kick_ms_median": 72.70738300000001,
+      "kick_ms_min": 71.180803,
+      "kick_ms_max": 74.233963,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "handoff656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "adaptive",
+      "potential": true,
+      "kick_ms_median": 89.836775,
+      "kick_ms_min": 88.79384399999999,
+      "kick_ms_max": 90.879706,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "handoff656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": false,
+      "kick_ms_median": 59.2632875,
+      "kick_ms_min": 58.181378,
+      "kick_ms_max": 60.345197000000006,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "handoff656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "clustered",
+      "potential": true,
+      "kick_ms_median": 75.7879105,
+      "kick_ms_min": 74.82122,
+      "kick_ms_max": 76.75460100000001,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "handoff656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": false,
+      "kick_ms_median": 79.6365715,
+      "kick_ms_min": 77.515839,
+      "kick_ms_max": 81.757304,
+      "pairs": 2
+    },
+    {
+      "binary": "ewald",
+      "policy": "handoff656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "fixture": "lattice",
+      "potential": true,
+      "kick_ms_median": 91.55069,
+      "kick_ms_min": 90.224733,
+      "kick_ms_max": 92.876647,
+      "pairs": 2
+    }
+  ],
+  "references": [],
+  "arena_lines": [
+    {
+      "binary": "ewald",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 9072 bytes: control 648, expansion shared, forces shared tile 128, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes; list slab 145792 bytes per block (4096 entries per list)"
+    },
+    {
+      "binary": "ewald",
+      "policy": "fine1312",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 9072 bytes: control 648, expansion shared, forces shared tile 128, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes; list slab 145792 bytes per block (4096 entries per list)"
+    },
+    {
+      "binary": "ewald",
+      "policy": "fine656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 9072 bytes: control 648, expansion shared, forces shared tile 128, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes; list slab 145792 bytes per block (4096 entries per list)"
+    },
+    {
+      "binary": "ewald",
+      "policy": "fine984",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 9072 bytes: control 648, expansion shared, forces shared tile 128, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes; list slab 145792 bytes per block (4096 entries per list)"
+    },
+    {
+      "binary": "ewald",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 9072 bytes: control 648, expansion shared, forces shared tile 128, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes; list slab 145792 bytes per block (4096 entries per list)"
+    },
+    {
+      "binary": "ewald",
+      "policy": "handoff656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "line": "CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 9072 bytes: control 648, expansion shared, forces shared tile 128, particle tile 512 (without mass plane), multipole tile 38 x 160 bytes; list slab 145792 bytes per block (4096 entries per list)"
+    }
+  ],
+  "comparisons": [
+    {
+      "kind": "vs_ewald",
+      "binary": "ewald",
+      "policy": "fine1312",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "result": {
+        "adaptive": {
+          "acceleration": {
+            "relative_l2": 9.714830304368625e-08,
+            "max_pointwise_relative": 1.279898823546159e-06,
+            "median_pointwise_relative": 6.10505222497396e-08
+          },
+          "potential": {
+            "relative_l2": 8.773585014400735e-08,
+            "max_pointwise_relative": 5.739675696843777e-07,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "clustered": {
+          "acceleration": {
+            "relative_l2": 8.664135790473368e-08,
+            "max_pointwise_relative": 3.652539823069313e-06,
+            "median_pointwise_relative": 6.87543397621934e-08
+          },
+          "potential": {
+            "relative_l2": 8.512246318953732e-08,
+            "max_pointwise_relative": 2.4513354206825856e-06,
+            "median_pointwise_relative": 5.968957422210349e-08
+          }
+        },
+        "lattice": {
+          "acceleration": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          }
+        }
+      }
+    },
+    {
+      "kind": "vs_ewald",
+      "binary": "ewald",
+      "policy": "fine656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "result": {
+        "adaptive": {
+          "acceleration": {
+            "relative_l2": 7.08918399877653e-08,
+            "max_pointwise_relative": 3.052705848488923e-06,
+            "median_pointwise_relative": 2.244459703730666e-08
+          },
+          "potential": {
+            "relative_l2": 6.045753452993482e-08,
+            "max_pointwise_relative": 4.23457782635309e-07,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "clustered": {
+          "acceleration": {
+            "relative_l2": 5.693206117174528e-08,
+            "max_pointwise_relative": 4.800331258742405e-07,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 5.7795299272765575e-08,
+            "max_pointwise_relative": 2.4513354206825856e-06,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "lattice": {
+          "acceleration": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          }
+        }
+      }
+    },
+    {
+      "kind": "vs_ewald",
+      "binary": "ewald",
+      "policy": "fine984",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "result": {
+        "adaptive": {
+          "acceleration": {
+            "relative_l2": 7.581226750892378e-08,
+            "max_pointwise_relative": 3.052705848488923e-06,
+            "median_pointwise_relative": 3.838496747728306e-08
+          },
+          "potential": {
+            "relative_l2": 6.666426750449688e-08,
+            "max_pointwise_relative": 4.23457782635309e-07,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "clustered": {
+          "acceleration": {
+            "relative_l2": 6.954307829769817e-08,
+            "max_pointwise_relative": 3.652539823069313e-06,
+            "median_pointwise_relative": 5.483602211076761e-08
+          },
+          "potential": {
+            "relative_l2": 7.843567327650911e-08,
+            "max_pointwise_relative": 2.4513354206825856e-06,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "lattice": {
+          "acceleration": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          }
+        }
+      }
+    },
+    {
+      "kind": "vs_ewald",
+      "binary": "ewald",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "result": {
+        "adaptive": {
+          "acceleration": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "clustered": {
+          "acceleration": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "lattice": {
+          "acceleration": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 0.0,
+            "max_pointwise_relative": 0.0,
+            "median_pointwise_relative": 0.0
+          }
+        }
+      }
+    },
+    {
+      "kind": "vs_ewald",
+      "binary": "ewald",
+      "policy": "handoff656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "result": {
+        "adaptive": {
+          "acceleration": {
+            "relative_l2": 7.100019588491601e-08,
+            "max_pointwise_relative": 6.62392084276023e-06,
+            "median_pointwise_relative": 6.12126327464199e-08
+          },
+          "potential": {
+            "relative_l2": 6.097829037703191e-08,
+            "max_pointwise_relative": 0.2855297157622739,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "clustered": {
+          "acceleration": {
+            "relative_l2": 5.693206117174528e-08,
+            "max_pointwise_relative": 4.800331258742405e-07,
+            "median_pointwise_relative": 0.0
+          },
+          "potential": {
+            "relative_l2": 5.7795299272765575e-08,
+            "max_pointwise_relative": 2.4513354206825856e-06,
+            "median_pointwise_relative": 0.0
+          }
+        },
+        "lattice": {
+          "acceleration": {
+            "relative_l2": 1.792025810013027e-05,
+            "max_pointwise_relative": 0.0025559099165772124,
+            "median_pointwise_relative": 1.6498440513255488e-05
+          },
+          "potential": {
+            "relative_l2": 0.00043879619434928344,
+            "max_pointwise_relative": 6.833333333333333,
+            "median_pointwise_relative": 0.000329086308026431
+          }
+        }
+      }
+    }
+  ],
+  "repeat_export_hashes": [
+    {
+      "binary": "ewald",
+      "policy": "auto",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "distinct_exports": 1
+    },
+    {
+      "binary": "ewald",
+      "policy": "fine1312",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "distinct_exports": 1
+    },
+    {
+      "binary": "ewald",
+      "policy": "fine656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "distinct_exports": 1
+    },
+    {
+      "binary": "ewald",
+      "policy": "fine984",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "distinct_exports": 1
+    },
+    {
+      "binary": "ewald",
+      "policy": "handoff492",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "distinct_exports": 1
+    },
+    {
+      "binary": "ewald",
+      "policy": "handoff656",
+      "backend": "cuda",
+      "bucket": 128,
+      "order": 7,
+      "distinct_exports": 1
+    }
+  ]
+}

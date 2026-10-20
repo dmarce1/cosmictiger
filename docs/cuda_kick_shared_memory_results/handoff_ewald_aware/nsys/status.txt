@@ -1,0 +1,13 @@
+docs/cuda_kick_shared_memory_results/handoff_ewald_aware/nsys/adaptive128_auto_1 exit 0 02:57:13
+docs/cuda_kick_shared_memory_results/handoff_ewald_aware/nsys/adaptive128_fine656_1 exit 0 02:57:42
+docs/cuda_kick_shared_memory_results/handoff_ewald_aware/nsys/adaptive128_fine1312_1 exit 0 02:58:10
+docs/cuda_kick_shared_memory_results/handoff_ewald_aware/nsys/adaptive128_h656_1 exit 0 02:58:38
+docs/cuda_kick_shared_memory_results/handoff_ewald_aware/nsys/adaptive128_h656_2 exit 0 02:59:06
+docs/cuda_kick_shared_memory_results/handoff_ewald_aware/nsys/adaptive128_fine1312_2 exit 0 02:59:35
+docs/cuda_kick_shared_memory_results/handoff_ewald_aware/nsys/adaptive128_fine656_2 exit 0 03:00:03
+docs/cuda_kick_shared_memory_results/handoff_ewald_aware/nsys/adaptive128_auto_2 exit 0 03:00:31
+docs/cuda_kick_shared_memory_results/handoff_ewald_aware/nsys/adaptive128_auto_3 exit 0 03:00:59
+docs/cuda_kick_shared_memory_results/handoff_ewald_aware/nsys/adaptive128_fine656_3 exit 0 03:01:28
+docs/cuda_kick_shared_memory_results/handoff_ewald_aware/nsys/adaptive128_fine1312_3 exit 0 03:01:56
+docs/cuda_kick_shared_memory_results/handoff_ewald_aware/nsys/adaptive128_h656_3 exit 0 03:02:24
+DONE
