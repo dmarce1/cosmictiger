@@ -1,0 +1,13 @@
+lattice128_h328_1 exit 0 22:39:07
+lattice128_h656_1 exit 0 22:39:55
+adaptive128_h328_1 exit 0 22:40:42
+adaptive128_h656_1 exit 0 22:41:29
+lattice128_h656_2 exit 0 22:42:16
+lattice128_h328_2 exit 0 22:43:04
+adaptive128_h656_2 exit 0 22:43:51
+adaptive128_h328_2 exit 0 22:53:31
+lattice128_h328_3 exit 0 22:54:18
+lattice128_h656_3 exit 0 22:55:05
+adaptive128_h328_3 exit 0 22:55:53
+adaptive128_h656_3 exit 0 22:56:40
+DONE

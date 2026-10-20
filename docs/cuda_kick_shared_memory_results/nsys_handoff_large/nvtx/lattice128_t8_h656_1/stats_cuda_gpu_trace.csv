@@ -1,0 +1,82 @@
+Start (ns),Duration (ns),CorrId,GrdX,GrdY,GrdZ,BlkX,BlkY,BlkZ,Reg/Trd,StcSMem (MB),DymSMem (MB),Bytes (MB),Throughput (MB/s),SrcMemKd,DstMemKd,Device,Ctx,GreenCtx,Strm,Name
+630637675,1376,122,,,,,,,,,,0.002,1453.488,Pageable,Device,NVIDIA GeForce RTX 3090 (0),1,,13,[CUDA memcpy Host-to-Device]
+630645739,1056,123,,,,,,,,,,0.002,1893.938,Pageable,Device,NVIDIA GeForce RTX 3090 (0),1,,13,[CUDA memcpy Host-to-Device]
+892976878,1376,127,,,,,,,,,,0.002,1453.488,Pageable,Device,NVIDIA GeForce RTX 3090 (0),2,,21,[CUDA memcpy Host-to-Device]
+892984654,1056,128,,,,,,,,,,0.002,1893.938,Pageable,Device,NVIDIA GeForce RTX 3090 (0),2,,21,[CUDA memcpy Host-to-Device]
+991643546,4096,394,,,,,,,,,,0.034,8320.291,Pageable,Device,NVIDIA GeForce RTX 3090 (0),2,,21,[CUDA memcpy Host-to-Device]
+1012936896,1056,398,,,,,,,,,,0.002,1893.938,Pageable,Device,NVIDIA GeForce RTX 3090 (0),2,,22,[CUDA memcpy Host-to-Device]
+1012944064,1088,399,,,,,,,,,,0.002,1838.234,Pageable,Device,NVIDIA GeForce RTX 3090 (0),2,,22,[CUDA memcpy Host-to-Device]
+1188092150,25056,443,,,,,,,,,,0.428,17090.260,Pageable,Device,NVIDIA GeForce RTX 3090 (0),2,,23,[CUDA memcpy Host-to-Device]
+1191679842,93113387,445,656,1,1,32,1,1,255,0.000,0.009,,,,,NVIDIA GeForce RTX 3090 (0),2,,23,"void cudaKickKernel<(int)7>(KickReturn *, KickParameters, CudaKickData, CudaKickParameters<T1> *, int, int *, CudaKickArenaLayout)"
+1284798925,1728,448,,,,,,,,,,0.000,60.185,Device,Pageable,NVIDIA GeForce RTX 3090 (0),2,,23,[CUDA memcpy Device-to-Host]
+1421922877,24704,487,,,,,,,,,,0.428,17333.917,Pageable,Device,NVIDIA GeForce RTX 3090 (0),2,,24,[CUDA memcpy Host-to-Device]
+1422046652,68866966,489,656,1,1,32,1,1,255,0.000,0.009,,,,,NVIDIA GeForce RTX 3090 (0),2,,24,"void cudaKickKernel<(int)7>(KickReturn *, KickParameters, CudaKickData, CudaKickParameters<T1> *, int, int *, CudaKickArenaLayout)"
+1490918930,1888,492,,,,,,,,,,0.000,55.085,Device,Pageable,NVIDIA GeForce RTX 3090 (0),2,,24,[CUDA memcpy Device-to-Host]
+1627108743,24384,531,,,,,,,,,,0.428,17561.302,Pageable,Device,NVIDIA GeForce RTX 3090 (0),2,,25,[CUDA memcpy Host-to-Device]
+1627217991,70084335,533,656,1,1,32,1,1,255,0.000,0.009,,,,,NVIDIA GeForce RTX 3090 (0),2,,25,"void cudaKickKernel<(int)7>(KickReturn *, KickParameters, CudaKickData, CudaKickParameters<T1> *, int, int *, CudaKickArenaLayout)"
+1697305974,1600,536,,,,,,,,,,0.000,65.000,Device,Pageable,NVIDIA GeForce RTX 3090 (0),2,,25,[CUDA memcpy Device-to-Host]
+1843458226,24544,575,,,,,,,,,,0.428,17446.967,Pageable,Device,NVIDIA GeForce RTX 3090 (0),2,,26,[CUDA memcpy Host-to-Device]
+1843582161,59888362,577,656,1,1,32,1,1,255,0.000,0.009,,,,,NVIDIA GeForce RTX 3090 (0),2,,26,"void cudaKickKernel<(int)7>(KickReturn *, KickParameters, CudaKickData, CudaKickParameters<T1> *, int, int *, CudaKickArenaLayout)"
+1903475643,1343,580,,,,,,,,,,0.000,77.439,Device,Pageable,NVIDIA GeForce RTX 3090 (0),2,,26,[CUDA memcpy Device-to-Host]
+2039617584,24256,619,,,,,,,,,,0.428,17653.798,Pageable,Device,NVIDIA GeForce RTX 3090 (0),2,,27,[CUDA memcpy Host-to-Device]
+2039725743,70212008,621,656,1,1,32,1,1,255,0.000,0.009,,,,,NVIDIA GeForce RTX 3090 (0),2,,27,"void cudaKickKernel<(int)7>(KickReturn *, KickParameters, CudaKickData, CudaKickParameters<T1> *, int, int *, CudaKickArenaLayout)"
+2109940471,1344,624,,,,,,,,,,0.000,77.381,Device,Pageable,NVIDIA GeForce RTX 3090 (0),2,,27,[CUDA memcpy Device-to-Host]
+2233712353,24736,663,,,,,,,,,,0.428,17311.222,Pageable,Device,NVIDIA GeForce RTX 3090 (0),2,,28,[CUDA memcpy Host-to-Device]
+2233822208,61972021,665,656,1,1,32,1,1,255,0.000,0.009,,,,,NVIDIA GeForce RTX 3090 (0),2,,28,"void cudaKickKernel<(int)7>(KickReturn *, KickParameters, CudaKickData, CudaKickParameters<T1> *, int, int *, CudaKickArenaLayout)"
+2295798773,1600,668,,,,,,,,,,0.000,65.000,Device,Pageable,NVIDIA GeForce RTX 3090 (0),2,,28,[CUDA memcpy Device-to-Host]
+2424566849,24736,707,,,,,,,,,,0.428,17311.222,Pageable,Device,NVIDIA GeForce RTX 3090 (0),2,,29,[CUDA memcpy Host-to-Device]
+2424675777,63050382,709,656,1,1,32,1,1,255,0.000,0.009,,,,,NVIDIA GeForce RTX 3090 (0),2,,29,"void cudaKickKernel<(int)7>(KickReturn *, KickParameters, CudaKickData, CudaKickParameters<T1> *, int, int *, CudaKickArenaLayout)"
+2487728047,1888,712,,,,,,,,,,0.000,55.085,Device,Pageable,NVIDIA GeForce RTX 3090 (0),2,,29,[CUDA memcpy Device-to-Host]
+2616716570,28480,751,,,,,,,,,,0.428,15035.661,Pageable,Device,NVIDIA GeForce RTX 3090 (0),2,,30,[CUDA memcpy Host-to-Device]
+2616824505,62478289,753,656,1,1,32,1,1,255,0.000,0.009,,,,,NVIDIA GeForce RTX 3090 (0),2,,30,"void cudaKickKernel<(int)7>(KickReturn *, KickParameters, CudaKickData, CudaKickParameters<T1> *, int, int *, CudaKickArenaLayout)"
+2679305034,1600,756,,,,,,,,,,0.000,65.000,Device,Pageable,NVIDIA GeForce RTX 3090 (0),2,,30,[CUDA memcpy Device-to-Host]
+2802579767,24352,795,,,,,,,,,,0.428,17584.426,Pageable,Device,NVIDIA GeForce RTX 3090 (0),2,,31,[CUDA memcpy Host-to-Device]
+2802694614,65543264,797,656,1,1,32,1,1,255,0.000,0.009,,,,,NVIDIA GeForce RTX 3090 (0),2,,31,"void cudaKickKernel<(int)7>(KickReturn *, KickParameters, CudaKickData, CudaKickParameters<T1> *, int, int *, CudaKickArenaLayout)"
+2868239062,1888,800,,,,,,,,,,0.000,55.085,Device,Pageable,NVIDIA GeForce RTX 3090 (0),2,,31,[CUDA memcpy Device-to-Host]
+2990338345,27712,839,,,,,,,,,,0.428,15452.319,Pageable,Device,NVIDIA GeForce RTX 3090 (0),2,,32,[CUDA memcpy Host-to-Device]
+2990452329,67587731,841,656,1,1,32,1,1,255,0.000,0.009,,,,,NVIDIA GeForce RTX 3090 (0),2,,32,"void cudaKickKernel<(int)7>(KickReturn *, KickParameters, CudaKickData, CudaKickParameters<T1> *, int, int *, CudaKickArenaLayout)"
+3058046588,1632,844,,,,,,,,,,0.000,63.725,Device,Pageable,NVIDIA GeForce RTX 3090 (0),2,,32,[CUDA memcpy Device-to-Host]
+3188289952,24928,883,,,,,,,,,,0.428,17178.045,Pageable,Device,NVIDIA GeForce RTX 3090 (0),2,,33,[CUDA memcpy Host-to-Device]
+3188401375,68058193,885,656,1,1,32,1,1,255,0.000,0.009,,,,,NVIDIA GeForce RTX 3090 (0),2,,33,"void cudaKickKernel<(int)7>(KickReturn *, KickParameters, CudaKickData, CudaKickParameters<T1> *, int, int *, CudaKickArenaLayout)"
+3256467120,1664,888,,,,,,,,,,0.000,62.500,Device,Pageable,NVIDIA GeForce RTX 3090 (0),2,,33,[CUDA memcpy Device-to-Host]
+3378795490,27232,927,,,,,,,,,,0.428,15724.667,Pageable,Device,NVIDIA GeForce RTX 3090 (0),2,,34,[CUDA memcpy Host-to-Device]
+3378904385,65244514,929,656,1,1,32,1,1,255,0.000,0.009,,,,,NVIDIA GeForce RTX 3090 (0),2,,34,"void cudaKickKernel<(int)7>(KickReturn *, KickParameters, CudaKickData, CudaKickParameters<T1> *, int, int *, CudaKickArenaLayout)"
+3444150019,1600,932,,,,,,,,,,0.000,65.000,Device,Pageable,NVIDIA GeForce RTX 3090 (0),2,,34,[CUDA memcpy Device-to-Host]
+3617165323,24832,971,,,,,,,,,,0.428,17244.419,Pageable,Device,NVIDIA GeForce RTX 3090 (0),2,,35,[CUDA memcpy Host-to-Device]
+3617274315,71598268,973,656,1,1,32,1,1,255,0.000,0.009,,,,,NVIDIA GeForce RTX 3090 (0),2,,35,"void cudaKickKernel<(int)7>(KickReturn *, KickParameters, CudaKickData, CudaKickParameters<T1> *, int, int *, CudaKickArenaLayout)"
+3688878791,1376,976,,,,,,,,,,0.000,75.581,Device,Pageable,NVIDIA GeForce RTX 3090 (0),2,,35,[CUDA memcpy Device-to-Host]
+3833852852,24512,1015,,,,,,,,,,0.428,17469.663,Pageable,Device,NVIDIA GeForce RTX 3090 (0),2,,36,[CUDA memcpy Host-to-Device]
+3834753455,64745476,1017,656,1,1,32,1,1,255,0.000,0.009,,,,,NVIDIA GeForce RTX 3090 (0),2,,36,"void cudaKickKernel<(int)7>(KickReturn *, KickParameters, CudaKickData, CudaKickParameters<T1> *, int, int *, CudaKickArenaLayout)"
+3899503411,1696,1020,,,,,,,,,,0.000,61.321,Device,Pageable,NVIDIA GeForce RTX 3090 (0),2,,36,[CUDA memcpy Device-to-Host]
+4048656584,24863,1059,,,,,,,,,,0.428,17223.008,Pageable,Device,NVIDIA GeForce RTX 3090 (0),2,,37,[CUDA memcpy Host-to-Device]
+4048764007,78210666,1061,656,1,1,32,1,1,255,0.000,0.009,,,,,NVIDIA GeForce RTX 3090 (0),2,,37,"void cudaKickKernel<(int)7>(KickReturn *, KickParameters, CudaKickData, CudaKickParameters<T1> *, int, int *, CudaKickArenaLayout)"
+4126975825,1344,1064,,,,,,,,,,0.000,77.381,Device,Pageable,NVIDIA GeForce RTX 3090 (0),2,,37,[CUDA memcpy Device-to-Host]
+4263941972,27904,1103,,,,,,,,,,0.428,15346.120,Pageable,Device,NVIDIA GeForce RTX 3090 (0),2,,38,[CUDA memcpy Host-to-Device]
+4264049715,76194035,1105,656,1,1,32,1,1,255,0.000,0.009,,,,,NVIDIA GeForce RTX 3090 (0),2,,38,"void cudaKickKernel<(int)7>(KickReturn *, KickParameters, CudaKickData, CudaKickParameters<T1> *, int, int *, CudaKickArenaLayout)"
+4340251910,1632,1108,,,,,,,,,,0.000,63.725,Device,Pageable,NVIDIA GeForce RTX 3090 (0),2,,38,[CUDA memcpy Device-to-Host]
+4481685454,24960,1147,,,,,,,,,,0.428,17156.206,Pageable,Device,NVIDIA GeForce RTX 3090 (0),2,,39,[CUDA memcpy Host-to-Device]
+4481793869,80099451,1149,656,1,1,32,1,1,255,0.000,0.009,,,,,NVIDIA GeForce RTX 3090 (0),2,,39,"void cudaKickKernel<(int)7>(KickReturn *, KickParameters, CudaKickData, CudaKickParameters<T1> *, int, int *, CudaKickArenaLayout)"
+4561901448,1632,1152,,,,,,,,,,0.000,63.725,Device,Pageable,NVIDIA GeForce RTX 3090 (0),2,,39,[CUDA memcpy Device-to-Host]
+4707690806,24960,1191,,,,,,,,,,0.428,17156.206,Pageable,Device,NVIDIA GeForce RTX 3090 (0),2,,40,[CUDA memcpy Host-to-Device]
+4707800501,78070759,1193,656,1,1,32,1,1,255,0.000,0.009,,,,,NVIDIA GeForce RTX 3090 (0),2,,40,"void cudaKickKernel<(int)7>(KickReturn *, KickParameters, CudaKickData, CudaKickParameters<T1> *, int, int *, CudaKickArenaLayout)"
+4785873340,1856,1196,,,,,,,,,,0.000,56.034,Device,Pageable,NVIDIA GeForce RTX 3090 (0),2,,40,[CUDA memcpy Device-to-Host]
+4932680164,25024,1235,,,,,,,,,,0.428,17112.099,Pageable,Device,NVIDIA GeForce RTX 3090 (0),2,,41,[CUDA memcpy Host-to-Device]
+4932789859,79546655,1237,656,1,1,32,1,1,255,0.000,0.009,,,,,NVIDIA GeForce RTX 3090 (0),2,,41,"void cudaKickKernel<(int)7>(KickReturn *, KickParameters, CudaKickData, CudaKickParameters<T1> *, int, int *, CudaKickArenaLayout)"
+5012340002,1600,1240,,,,,,,,,,0.000,65.000,Device,Pageable,NVIDIA GeForce RTX 3090 (0),2,,41,[CUDA memcpy Device-to-Host]
+5149547875,25440,1279,,,,,,,,,,0.428,16832.472,Pageable,Device,NVIDIA GeForce RTX 3090 (0),2,,42,[CUDA memcpy Host-to-Device]
+5149656226,73850977,1281,656,1,1,32,1,1,255,0.000,0.009,,,,,NVIDIA GeForce RTX 3090 (0),2,,42,"void cudaKickKernel<(int)7>(KickReturn *, KickParameters, CudaKickData, CudaKickParameters<T1> *, int, int *, CudaKickArenaLayout)"
+5223513827,1376,1284,,,,,,,,,,0.000,75.581,Device,Pageable,NVIDIA GeForce RTX 3090 (0),2,,42,[CUDA memcpy Device-to-Host]
+5362734713,24927,1323,,,,,,,,,,0.428,17178.902,Pageable,Device,NVIDIA GeForce RTX 3090 (0),2,,43,[CUDA memcpy Host-to-Device]
+5362842872,75402487,1325,656,1,1,32,1,1,255,0.000,0.009,,,,,NVIDIA GeForce RTX 3090 (0),2,,43,"void cudaKickKernel<(int)7>(KickReturn *, KickParameters, CudaKickData, CudaKickParameters<T1> *, int, int *, CudaKickArenaLayout)"
+5438249391,1600,1328,,,,,,,,,,0.000,65.000,Device,Pageable,NVIDIA GeForce RTX 3090 (0),2,,43,[CUDA memcpy Device-to-Host]
+5584125084,25088,1367,,,,,,,,,,0.428,17068.421,Pageable,Device,NVIDIA GeForce RTX 3090 (0),2,,44,[CUDA memcpy Host-to-Device]
+5584723641,80493432,1369,656,1,1,32,1,1,255,0.000,0.009,,,,,NVIDIA GeForce RTX 3090 (0),2,,44,"void cudaKickKernel<(int)7>(KickReturn *, KickParameters, CudaKickData, CudaKickParameters<T1> *, int, int *, CudaKickArenaLayout)"
+5665222033,1632,1372,,,,,,,,,,0.000,63.725,Device,Pageable,NVIDIA GeForce RTX 3090 (0),2,,44,[CUDA memcpy Device-to-Host]
+5798337516,24864,1411,,,,,,,,,,0.428,17222.152,Pageable,Device,NVIDIA GeForce RTX 3090 (0),2,,45,[CUDA memcpy Host-to-Device]
+5798446795,74032608,1413,656,1,1,32,1,1,255,0.000,0.009,,,,,NVIDIA GeForce RTX 3090 (0),2,,45,"void cudaKickKernel<(int)7>(KickReturn *, KickParameters, CudaKickData, CudaKickParameters<T1> *, int, int *, CudaKickArenaLayout)"
+5872480491,1376,1416,,,,,,,,,,0.000,75.581,Device,Pageable,NVIDIA GeForce RTX 3090 (0),2,,45,[CUDA memcpy Device-to-Host]
+6017093087,24576,1455,,,,,,,,,,0.428,17424.272,Pageable,Device,NVIDIA GeForce RTX 3090 (0),2,,46,[CUDA memcpy Host-to-Device]
+6017199615,78197058,1457,656,1,1,32,1,1,255,0.000,0.009,,,,,NVIDIA GeForce RTX 3090 (0),2,,46,"void cudaKickKernel<(int)7>(KickReturn *, KickParameters, CudaKickData, CudaKickParameters<T1> *, int, int *, CudaKickArenaLayout)"
+6095404609,1952,1460,,,,,,,,,,0.000,53.279,Device,Pageable,NVIDIA GeForce RTX 3090 (0),2,,46,[CUDA memcpy Device-to-Host]
+13848544592,1376,1478,,,,,,,,,,0.002,1453.488,Pageable,Device,NVIDIA GeForce RTX 3090 (0),2,,22,[CUDA memcpy Host-to-Device]
+13848552623,1056,1479,,,,,,,,,,0.002,1893.938,Pageable,Device,NVIDIA GeForce RTX 3090 (0),2,,22,[CUDA memcpy Host-to-Device]

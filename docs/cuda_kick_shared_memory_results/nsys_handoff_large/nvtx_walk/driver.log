@@ -1,0 +1,10 @@
+2026-10-19T23:18:24-05:00 GPU lock acquired
+binary /home/dmarce1/workspace/cosmictiger/.claude/worktrees/inspiring-booth-ae1206/build/arena_b1024/frozen/cosmictiger_b1024_handoff_large_rule_nvtx_walk sha256 1222dca145c389a89fb156d4d1cfdc52a16cb645df7ca309a628accf456812c8
+== lattice128_t8_h328_1 23:18:54 load 4.02 4.96 5.53
+== lattice128_t8_h656_1 23:19:42 load 4.11 4.92 5.49
+== adaptive128_t8_h328_1 23:20:32 load 3.56 4.68 5.38
+== adaptive128_t8_h656_1 23:21:20 load 3.91 4.66 5.34
+== lattice128_t8_h656_2 23:22:10 load 3.79 4.54 5.26
+== lattice128_t8_h328_2 23:23:00 load 4.74 4.72 5.29
+== adaptive128_t8_h656_2 23:23:48 load 4.74 4.77 5.28
+== adaptive128_t8_h328_2 23:24:37 load 4.64 4.78 5.26

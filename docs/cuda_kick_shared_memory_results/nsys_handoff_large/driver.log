@@ -1,0 +1,66 @@
+2026-10-19T22:38:21-05:00 GPU lock acquired
+binary /home/dmarce1/workspace/cosmictiger/.claude/worktrees/inspiring-booth-ae1206/build/arena_b1024/frozen/cosmictiger_b1024_handoff_large_rule sha256 eef7e2f1e71c3be1a6b614de50e232d287ad092f61533901b3680eab68e9e160
+== lattice128_h328_1 22:38:52 load 5.56 7.87 7.44
+== lattice128_h656_1 22:39:39 load 5.49 7.53 7.34
+== adaptive128_h328_1 22:40:26 load 5.39 7.26 7.26
+== adaptive128_h656_1 22:41:14 load 6.07 7.23 7.25
+== lattice128_h656_2 22:42:01 load 6.01 7.10 7.21
+== lattice128_h328_2 22:42:48 load 5.51 6.84 7.12
+== adaptive128_h656_2 22:43:35 load 4.86 6.54 7.01
+waiting for a running build or benchmark 22:44:02
+waiting for a running build or benchmark 22:44:12
+waiting for a running build or benchmark 22:44:22
+waiting for a running build or benchmark 22:44:32
+waiting for a running build or benchmark 22:44:42
+waiting for a running build or benchmark 22:44:52
+waiting for a running build or benchmark 22:45:02
+waiting for a running build or benchmark 22:45:12
+waiting for a running build or benchmark 22:45:22
+waiting for a running build or benchmark 22:45:33
+waiting for a running build or benchmark 22:45:43
+waiting for a running build or benchmark 22:45:53
+waiting for a running build or benchmark 22:46:03
+waiting for a running build or benchmark 22:46:13
+waiting for a running build or benchmark 22:46:23
+waiting for a running build or benchmark 22:46:33
+waiting for a running build or benchmark 22:46:43
+waiting for a running build or benchmark 22:46:53
+waiting for a running build or benchmark 22:47:03
+waiting for a running build or benchmark 22:47:13
+waiting for a running build or benchmark 22:47:23
+waiting for a running build or benchmark 22:47:33
+waiting for a running build or benchmark 22:47:43
+waiting for a running build or benchmark 22:47:53
+waiting for a running build or benchmark 22:48:03
+waiting for a running build or benchmark 22:48:13
+waiting for a running build or benchmark 22:48:23
+waiting for a running build or benchmark 22:48:33
+waiting for a running build or benchmark 22:48:43
+waiting for a running build or benchmark 22:48:53
+waiting for a running build or benchmark 22:49:03
+waiting for a running build or benchmark 22:49:13
+waiting for a running build or benchmark 22:49:24
+waiting for a running build or benchmark 22:49:34
+waiting for a running build or benchmark 22:49:44
+waiting for a running build or benchmark 22:49:54
+waiting for a running build or benchmark 22:50:04
+waiting for a running build or benchmark 22:50:14
+waiting for a running build or benchmark 22:50:24
+waiting for a running build or benchmark 22:50:34
+waiting for a running build or benchmark 22:50:44
+waiting for a running build or benchmark 22:50:54
+waiting for a running build or benchmark 22:51:04
+waiting for a running build or benchmark 22:51:14
+waiting for a running build or benchmark 22:51:24
+waiting for a running build or benchmark 22:51:34
+waiting for a running build or benchmark 22:51:44
+waiting for a running build or benchmark 22:51:54
+waiting for a running build or benchmark 22:52:04
+waiting for a running build or benchmark 22:52:14
+waiting for a running build or benchmark 22:52:24
+waiting for a running build or benchmark 22:52:34
+== adaptive128_h328_2 22:53:15 load 4.89 7.44 7.67
+== lattice128_h328_3 22:54:02 load 4.28 6.92 7.48
+== lattice128_h656_3 22:54:50 load 5.07 6.79 7.41
+== adaptive128_h328_3 22:55:37 load 4.28 6.38 7.24
+== adaptive128_h656_3 22:56:24 load 4.44 6.14 7.11
