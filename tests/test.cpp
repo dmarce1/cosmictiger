@@ -634,6 +634,7 @@ void bhTest() {
 void sphGravityTest();
 void linearGrowthTest();
 void unitsOutputTest();
+void voronoiOutputTest();
 void fmmTreeTest();
 void fmmWalkTest();
 
@@ -692,6 +693,10 @@ void test(std::string test) {
     }
     if (test == "unitsOutput") {
         unitsOutputTest();
+        return;
+    }
+    if (test == "voronoiOutput") {
+        voronoiOutputTest();
         return;
     }
     if (test == "checkpointState") {

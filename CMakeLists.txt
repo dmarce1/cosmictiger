@@ -64,6 +64,17 @@ find_library(CHEALPIX_LIBRARY NAMES chealpix REQUIRED)
 find_path(HEALPIX_CXX_INCLUDE_DIR healpix_base.h PATH_SUFFIXES healpix_cxx REQUIRED)
 find_library(HEALPIX_CXX_LIBRARY NAMES healpix_cxx REQUIRED)
 
+include(cmake/voronoi.cmake)
+target_sources(cosmictiger_voronoi PRIVATE src/geometry/distributed_voronoi.cpp)
+add_library(cosmictiger_silo_voronoi STATIC src/io/silo_voronoi.cpp)
+target_include_directories(cosmictiger_silo_voronoi SYSTEM PUBLIC ${SILO_INCLUDE_DIR})
+target_link_libraries(cosmictiger_silo_voronoi PUBLIC cosmictiger_voronoi ${SILO_LIBRARY})
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(cosmictiger_silo_voronoi PRIVATE -fno-fast-math -ffp-contract=off)
+elseif(MSVC)
+    target_compile_options(cosmictiger_silo_voronoi PRIVATE /fp:strict)
+endif()
+
 message(STATUS "cosmictiger default FMM order = ${COSMICTIGER_WITH_ORDER} (orders 3 to 9 compiled)")
 message(STATUS "cosmictiger maximum bucket size = ${COSMICTIGER_WITH_MAX_BUCKET}")
 
@@ -168,6 +179,7 @@ set(cosmictiger_source_files
     tests/sph_gravity.cpp
     tests/test.cpp
     tests/units_output.cpp
+    tests/voronoi_output.cpp
 )
 
 set(cosmictiger_header_files
@@ -348,7 +360,7 @@ if(COSMICTIGER_BUILD_STF_BENCHMARKS)
     target_sources(cosmictiger PRIVATE benchmarks/stf_walk.cpp)
     set_source_files_properties(tests/test.cpp PROPERTIES COMPILE_DEFINITIONS COSMICTIGER_STF_BENCHMARKS)
 endif()
-target_link_libraries(cosmictiger PRIVATE primordial_chemistry cosmictiger_fp16)
+target_link_libraries(cosmictiger PRIVATE primordial_chemistry cosmictiger_fp16 cosmictiger_silo_voronoi)
 target_include_directories(cosmictiger PRIVATE ${PROJECT_SOURCE_DIR})
 target_include_directories(cosmictiger SYSTEM PRIVATE
     ${FFTW3F_INCLUDE_DIR} ${SILO_INCLUDE_DIR} ${CHEALPIX_INCLUDE_DIR} ${HEALPIX_CXX_INCLUDE_DIR})
@@ -448,6 +460,17 @@ endforeach()
 
 include(CTest)
 if(BUILD_TESTING)
+    foreach(voronoi_test IN ITEMS voronoi distributed_voronoi silo_voronoi)
+        add_executable(${voronoi_test}_test tests/${voronoi_test}.cpp)
+        target_link_libraries(${voronoi_test}_test PRIVATE cosmictiger_silo_voronoi)
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+            target_compile_options(${voronoi_test}_test PRIVATE -fno-fast-math -ffp-contract=off)
+        endif()
+        file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/tests/${voronoi_test}")
+        add_test(NAME ${voronoi_test} COMMAND ${voronoi_test}_test)
+        set_tests_properties(${voronoi_test} PROPERTIES TIMEOUT 120
+            WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/tests/${voronoi_test}")
+    endforeach()
     add_executable(halo_catalog_fixture tests/halo_catalog_fixture.cpp)
     target_link_libraries(halo_catalog_fixture PRIVATE cosmictiger_fp16)
     target_compile_options(halo_catalog_fixture PRIVATE -fno-fast-math)
@@ -740,10 +763,18 @@ if(BUILD_TESTING)
     set(units_output_workdir "${PROJECT_BINARY_DIR}/tests/units_output")
     file(MAKE_DIRECTORY "${units_output_workdir}")
     add_test(NAME units_output COMMAND cosmictiger --run.test=unitsOutput
-        --initial.particlesPerDimension=8 --hydro.enabled=true --compute.cuda=true
+        --initial.particlesPerDimension=8 --hydro.enabled=true --compute.cuda=false
         --hpx:threads=2 --hpx:bind=none)
     set_tests_properties(units_output PROPERTIES
         WORKING_DIRECTORY "${units_output_workdir}" RUN_SERIAL TRUE TIMEOUT 120)
+
+    set(voronoi_output_workdir "${PROJECT_BINARY_DIR}/tests/voronoi_output")
+    file(MAKE_DIRECTORY "${voronoi_output_workdir}")
+    add_test(NAME voronoi_output COMMAND cosmictiger --run.test=voronoiOutput
+        --initial.particlesPerDimension=8 --hydro.enabled=true --compute.cuda=false
+        --hpx:threads=2 --hpx:bind=none)
+    set_tests_properties(voronoi_output PROPERTIES WORKING_DIRECTORY "${voronoi_output_workdir}"
+        RUN_SERIAL TRUE TIMEOUT 120 PROCESSORS 2)
 
     add_executable(radial_kernel_test tests/radial_kernel.cpp)
     target_include_directories(radial_kernel_test PRIVATE ${PROJECT_SOURCE_DIR})
@@ -1126,6 +1157,14 @@ if(BUILD_TESTING)
         RUN_SERIAL TRUE TIMEOUT 20 WILL_FAIL TRUE)
     if(HPX_WITH_PARCELPORT_MPI AND MPIEXEC_EXECUTABLE)
         set(fmm_tree_mpi_workdir "${PROJECT_BINARY_DIR}/tests/fmm_tree_mpi")
+        set(voronoi_output_mpi_workdir "${PROJECT_BINARY_DIR}/tests/voronoi_output_mpi")
+        file(MAKE_DIRECTORY "${voronoi_output_mpi_workdir}")
+        add_test(NAME voronoi_output_mpi COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2
+            ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS}
+            --run.test=voronoiOutput --initial.particlesPerDimension=8 --hydro.enabled=true
+            --compute.cuda=false --hpx:threads=2 --hpx:bind=none --hpx:localities=2)
+        set_tests_properties(voronoi_output_mpi PROPERTIES
+            WORKING_DIRECTORY "${voronoi_output_mpi_workdir}" RUN_SERIAL TRUE TIMEOUT 180 PROCESSORS 4)
         file(MAKE_DIRECTORY "${fmm_tree_mpi_workdir}")
         add_test(NAME fmm_tree_mpi COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 3
             ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS}
@@ -1148,7 +1187,7 @@ if(BUILD_TESTING)
         add_test(NAME units_output_mpi COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2
             ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS}
             --run.test=unitsOutput --initial.particlesPerDimension=8 --hydro.enabled=true
-            --compute.cuda=true --hpx:threads=2 --hpx:bind=none --hpx:localities=2)
+            --compute.cuda=false --hpx:threads=2 --hpx:bind=none --hpx:localities=2)
         set_tests_properties(units_output_mpi PROPERTIES
             WORKING_DIRECTORY "${units_mpi_workdir}" RUN_SERIAL TRUE TIMEOUT 120)
         set(migration_workdir "${PROJECT_BINARY_DIR}/tests/sph_migration_mpi")

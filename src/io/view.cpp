@@ -6,19 +6,29 @@
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
+#include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <exception>
 #include <filesystem>
+#include <limits>
+#include <memory>
+#include <mutex>
 #include <set>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <system_error>
 #include <type_traits>
 #include <variant>
+#include <vector>
 
 #include <chealpix.h>
+#include <hpx/serialization/vector.hpp>
 #include <hpx/threading_base/annotated_function.hpp>
 #include <silo.h>
 
@@ -27,8 +37,10 @@
 #include <cosmictiger/core/options_metadata.hpp>
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/cosmology/cosmology.hpp>
+#include <cosmictiger/geometry/distributed_voronoi.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/io/silo_spheres.hpp>
+#include <cosmictiger/io/silo_voronoi.hpp>
 #include <cosmictiger/io/view.hpp>
 #include <cosmictiger/math/constants.hpp>
 #include <cosmictiger/math/math.hpp>
@@ -234,7 +246,8 @@ void writeCodeGasField(
 
 template <typename Particle, typename Value>
 void writeViewField(DBfile* db, char const* name, char const* mesh,
-    Vector<Particle> const& particles, char const* unitName, Value value) {
+    Vector<Particle> const& particles, char const* unitName, Value value,
+    voronoi::PreparedVoronoiOutput const* geometry = nullptr, bool extensive = false) {
     Vector<double> values;
     values.reserve(particles.size());
     for (auto const& particle : particles) {
@@ -243,8 +256,20 @@ void writeViewField(DBfile* db, char const* name, char const* mesh,
     auto* options = DBMakeOptlist(1);
     DBAddOption(options, DBOPT_UNITS, const_cast<char*>(unitName));
     if constexpr (std::is_same_v<Particle, SphParticleInfo>) {
-        writeSiloSphereVariable(
-            db, name, mesh, std::span<double const>(values.data(), values.size()), options);
+        if (geometry != nullptr) {
+            std::vector<double> fragments;
+            fragments.reserve(geometry->parentIndices.size());
+            for (size_t i = 0; i < geometry->parentIndices.size(); ++i) {
+                double const fraction =
+                    extensive ? geometry->fragmentVolumes[i] / geometry->fullCellVolumes[i] : 1.0;
+                fragments.push_back(values.at(geometry->parentIndices[i]) * fraction);
+            }
+            voronoi::writeSiloVoronoiVariable(
+                db, name, mesh, std::span<double const>(fragments), options);
+        } else {
+            writeSiloSphereVariable(
+                db, name, mesh, std::span<double const>(values.data(), values.size()), options);
+        }
     } else {
         checkViewWrite(
             DBPutPointvar1(db, name, mesh, values.data(), values.size(), DB_DOUBLE, options), name);
@@ -255,17 +280,23 @@ void writeViewField(DBfile* db, char const* name, char const* mesh,
 template <typename Particle>
 void writeViewSpecies(DBfile* db, char const* mesh, char const* prefix,
     Vector<Particle> const& particles, ViewUnitConversion const& conversion, char const* lengthUnit,
-    char const* velocityUnit, char const* massUnit, double mass, double time) {
-    auto* options = DBMakeOptlist(4);
+    char const* velocityUnit, char const* massUnit, double mass, double time,
+    voronoi::PreparedVoronoiOutput const* geometry = nullptr, int cycle = 0) {
+    auto* options = DBMakeOptlist(5);
     DBAddOption(options, DBOPT_XUNITS, const_cast<char*>(lengthUnit));
     DBAddOption(options, DBOPT_YUNITS, const_cast<char*>(lengthUnit));
     DBAddOption(options, DBOPT_ZUNITS, const_cast<char*>(lengthUnit));
     DBAddOption(options, DBOPT_DTIME, &time);
+    DBAddOption(options, DBOPT_CYCLE, &cycle);
     if constexpr (std::is_same_v<Particle, SphParticleInfo>) {
-        writeGasSpheres(
-            db, particles,
-            [&conversion](Fixed32 const& value) { return conversion.position(value); },
-            [&conversion](float value) { return conversion.length(value); }, options);
+        if (geometry != nullptr) {
+            voronoi::writeSiloVoronoi(db, mesh, "gas_zones", *geometry, options);
+        } else {
+            writeGasSpheres(
+                db, particles,
+                [&conversion](Fixed32 const& value) { return conversion.position(value); },
+                [&conversion](float value) { return conversion.length(value); }, options);
+        }
     } else {
         Vector<double> x, y, z;
         x.reserve(particles.size());
@@ -282,19 +313,28 @@ void writeViewSpecies(DBfile* db, char const* mesh, char const* prefix,
     }
     DBFreeOptlist(options);
     std::string const fieldPrefix(prefix);
-    writeViewField(db, (fieldPrefix + "vx").c_str(), mesh, particles, velocityUnit,
-        [&conversion](Particle const& particle) { return conversion.velocity(particle.vx); });
-    writeViewField(db, (fieldPrefix + "vy").c_str(), mesh, particles, velocityUnit,
-        [&conversion](Particle const& particle) { return conversion.velocity(particle.vy); });
-    writeViewField(db, (fieldPrefix + "vz").c_str(), mesh, particles, velocityUnit,
-        [&conversion](Particle const& particle) { return conversion.velocity(particle.vz); });
-    writeViewField(db, (fieldPrefix + "rung").c_str(), mesh, particles, "1",
-        [](Particle const& particle) { return double(particle.rung); });
-    writeViewField(db, (fieldPrefix + "mass").c_str(), mesh, particles, massUnit,
-        [&conversion, mass](Particle const&) { return conversion.mass(mass); });
+    writeViewField(
+        db, (fieldPrefix + "vx").c_str(), mesh, particles, velocityUnit,
+        [&conversion](Particle const& particle) { return conversion.velocity(particle.vx); },
+        geometry);
+    writeViewField(
+        db, (fieldPrefix + "vy").c_str(), mesh, particles, velocityUnit,
+        [&conversion](Particle const& particle) { return conversion.velocity(particle.vy); },
+        geometry);
+    writeViewField(
+        db, (fieldPrefix + "vz").c_str(), mesh, particles, velocityUnit,
+        [&conversion](Particle const& particle) { return conversion.velocity(particle.vz); },
+        geometry);
+    writeViewField(
+        db, (fieldPrefix + "rung").c_str(), mesh, particles, "1",
+        [](Particle const& particle) { return double(particle.rung); }, geometry);
+    writeViewField(
+        db, (fieldPrefix + "mass").c_str(), mesh, particles, massUnit,
+        [&conversion, mass](Particle const&) { return conversion.mass(mass); }, geometry, true);
 }
 
-void writeChemistryFields(DBfile* db, Vector<SphParticleInfo> const& gas, double a) {
+void writeChemistryFields(DBfile* db, Vector<SphParticleInfo> const& gas, double a,
+    voronoi::PreparedVoronoiOutput const* geometry = nullptr) {
     if (!getOptions().chemistry.enabled) {
         return;
     }
@@ -308,17 +348,20 @@ void writeChemistryFields(DBfile* db, Vector<SphParticleInfo> const& gas, double
     }
     for (size_t field = 0; field < 12; ++field) {
         size_t index = 0;
-        writeViewField(db, names[field], "gas", gas, field == 9 ? "K" : "1",
-            [&](SphParticleInfo const&) { return double(fields[index++][field]); });
+        writeViewField(
+            db, names[field], "gas", gas, field == 9 ? "K" : "1",
+            [&](SphParticleInfo const&) { return double(fields[index++][field]); }, geometry);
     }
     // Preserve the minority and branch bit even when displaying the dominant
     // abundance as an ordinary floating value would round it to one.
     for (int species = 0; species < primordial::kAbundanceCount; ++species) {
         std::string const name = "chem_signed_fraction_" + std::to_string(species);
         writeViewField(
-            db, name.c_str(), "gas", gas, "1", [species](SphParticleInfo const& particle) {
+            db, name.c_str(), "gas", gas, "1",
+            [species](SphParticleInfo const& particle) {
                 return double(particle.chemistry.abundances[species].raw());
-            });
+            },
+            geometry);
     }
     writeViewText(db, "chemistry_fraction_convention",
         "species counts per H nucleus; signed fractions preserve minority branches");
@@ -326,7 +369,8 @@ void writeChemistryFields(DBfile* db, Vector<SphParticleInfo> const& gas, double
 }
 
 void writeConvertedView(DBfile* db, ViewReturn const& particles, int box, double a, double time,
-    bool cosmological, bool lab) {
+    bool cosmological, bool lab, voronoi::PreparedVoronoiOutput const* geometry = nullptr,
+    int cycle = 0) {
     char const* lengthUnit = cosmological ? "Mpc/h" : "cm";
     char const* velocityUnit = cosmological ? "km/s" : "cm/s";
     char const* massUnit = cosmological ? "Msun/h" : "g";
@@ -362,24 +406,33 @@ void writeConvertedView(DBfile* db, ViewReturn const& particles, int box, double
     if (!particles.darkMatter[box].empty()) {
         double const mass = getOptions().hydro.enabled ? getOptions().initial.darkMatterMass : 1.0;
         writeViewSpecies(db, "dark_matter", "", particles.darkMatter[box], conversion, lengthUnit,
-            velocityUnit, massUnit, mass, time);
+            velocityUnit, massUnit, mass, time, nullptr, cycle);
     }
     auto const& gas = particles.hydro[box];
-    if (!gas.empty()) {
+    if (!gas.empty() && (geometry == nullptr || !geometry->parentIndices.empty())) {
         writeViewSpecies(db, "gas", "hydro_", gas, conversion, lengthUnit, velocityUnit, massUnit,
-            getOptions().initial.gasMass, time);
-        writeChemistryFields(db, gas, a);
+            getOptions().initial.gasMass, time, geometry, cycle);
+        writeChemistryFields(db, gas, a, geometry);
         writeViewField(
-            db, "rho", "gas", gas, densityUnit, [&conversion](SphParticleInfo const& particle) {
-                return conversion.density(particle.rho);
-            });
-        writeViewField(
-            db, "eint", "gas", gas, energyUnit, [&conversion](SphParticleInfo const& particle) {
-                return conversion.specificEnergy(particle.eint);
-            });
-        writeViewField(db, "kernel_support_radius", "gas", gas, lengthUnit,
+            db, "rho", "gas", gas, densityUnit,
             [&conversion](
-                SphParticleInfo const& particle) { return conversion.length(particle.h); });
+                SphParticleInfo const& particle) { return conversion.density(particle.rho); },
+            geometry);
+        writeViewField(
+            db, "eint", "gas", gas, energyUnit,
+            [&conversion](SphParticleInfo const& particle) {
+                return conversion.specificEnergy(particle.eint);
+            },
+            geometry);
+        writeViewField(
+            db, "kernel_support_radius", "gas", gas, lengthUnit,
+            [&conversion](
+                SphParticleInfo const& particle) { return conversion.length(particle.h); },
+            geometry);
+        if (geometry != nullptr) {
+            voronoi::writeSiloVoronoiDiagnostics(
+                db, "gas", *geometry, cosmological ? "(Mpc/h)^3" : "cm^3");
+        }
     }
 }
 
@@ -404,6 +457,541 @@ void writeConvertedViews(DBfile* db, ViewReturn const& particles, int box, doubl
             checkViewWrite(DBSetDir(db, ".."), "..");
         }
         checkViewWrite(DBSetDir(db, ".."), "..");
+    }
+}
+
+}    // namespace detail
+
+namespace detail {
+
+struct VoronoiSnapshot {
+    Vector<SphParticleInfo> gas;
+    Vector<DarkMatterParticleInfo> darkMatter;
+    std::vector<voronoi::Site> sites;
+    std::shared_ptr<voronoi::SiteIndex const> index;
+};
+
+std::mutex snapshotMutex;
+std::shared_ptr<VoronoiSnapshot const> activeSnapshot;
+std::mutex siloViewMutex;
+
+std::shared_ptr<VoronoiSnapshot const> getVoronoiSnapshot() {
+    std::lock_guard lock(snapshotMutex);
+    if (!activeSnapshot) {
+        throw std::runtime_error("Voronoi output snapshot is not prepared");
+    }
+    return activeSnapshot;
+}
+
+voronoi::SitePartition prepareVoronoiSnapshot() {
+    auto snapshot = std::make_shared<VoronoiSnapshot>();
+    int const owner = hpxRank();
+    if (owner < 0) {
+        throw std::runtime_error("Invalid Voronoi output locality");
+    }
+    for (ParticleInteger i = 0; i < particlesSize(); ++i) {
+        DarkMatterParticleInfo info{};
+        info.x = particlesPos(XDIM, i);
+        info.y = particlesPos(YDIM, i);
+        info.z = particlesPos(ZDIM, i);
+        info.vx = particlesVel(XDIM, i);
+        info.vy = particlesVel(YDIM, i);
+        info.vz = particlesVel(ZDIM, i);
+        info.rung = particlesRung(i);
+        if (particlesType(i) == DARK_MATTER_TYPE) {
+            snapshot->darkMatter.push_back(info);
+        } else if (particlesType(i) == SPH_TYPE) {
+            if (snapshot->gas.size() > std::numeric_limits<uint32_t>::max()) {
+                throw std::runtime_error("Too many local gas generators for snapshot IDs");
+            }
+            SphParticleInfo gas{};
+            static_cast<DarkMatterParticleInfo&>(gas) = info;
+            int const index = particlesCatIndex(i);
+            gas.eint = sphParticlesInternalEnergy(index);
+            gas.rho = sphParticlesDensity(index);
+            gas.h = sphParticlesSupportRadius(index);
+            if (getOptions().chemistry.enabled) {
+                gas.chemistry = sphParticlesChemistryStates[index];
+            }
+            voronoi::Site site;
+            site.id = (uint64_t(owner) << 32) | uint64_t(snapshot->gas.size());
+            site.owner = owner;
+            site.position = {info.x.toDouble(), info.y.toDouble(), info.z.toDouble()};
+            snapshot->gas.push_back(gas);
+            snapshot->sites.push_back(site);
+        }
+    }
+    snapshot->index = std::make_shared<voronoi::SiteIndex>(snapshot->sites);
+    auto const partition = snapshot->index->partition(owner);
+    std::lock_guard lock(snapshotMutex);
+    if (activeSnapshot) {
+        throw std::runtime_error("Overlapping Voronoi output snapshots");
+    }
+    activeSnapshot = std::move(snapshot);
+    return partition;
+}
+
+std::vector<voronoi::Site> queryVoronoiSnapshot(std::vector<voronoi::SiteQuery> const& queries) {
+    auto const snapshot = getVoronoiSnapshot();
+    return snapshot->index->query(queries);
+}
+
+void releaseVoronoiSnapshot() {
+    std::lock_guard lock(snapshotMutex);
+    activeSnapshot.reset();
+}
+
+// A failed locality must not let outstanding queries outlive their snapshots.
+// Consume every future before propagating the first transport or worker error.
+template <typename Result>
+std::vector<Result> consumeViewFutures(
+    std::vector<hpx::future<Result>>& futures, std::exception_ptr error = {}) {
+    std::vector<Result> results(futures.size());
+    hpx::wait_all(futures);
+    for (size_t i = 0; i < futures.size(); ++i) {
+        try {
+            results[i] = futures[i].get();
+        } catch (...) {
+            if (!error) {
+                error = std::current_exception();
+            }
+        }
+    }
+    if (error) {
+        std::rethrow_exception(error);
+    }
+    return results;
+}
+
+template <typename Action, typename Result, typename... Arguments>
+auto onViewLocalities(Arguments const&... arguments) {
+    std::vector<hpx::future<Result>> futures;
+    std::exception_ptr error;
+    try {
+        for (auto const& locality : hpxLocalities()) {
+            futures.push_back(hpx::async<Action>(locality, arguments...));
+        }
+    } catch (...) {
+        error = std::current_exception();
+    }
+    if constexpr (std::is_void_v<Result>) {
+        hpx::wait_all(futures);
+        for (auto& future : futures) {
+            try {
+                future.get();
+            } catch (...) {
+                if (!error) {
+                    error = std::current_exception();
+                }
+            }
+        }
+        if (error) {
+            std::rethrow_exception(error);
+        }
+    } else {
+        return consumeViewFutures(futures, error);
+    }
+}
+
+struct ViewDirectoryMetadata {
+    std::string path;
+    bool gas = false;
+    bool darkMatter = false;
+    std::vector<std::string> gasVariables;
+    std::vector<std::string> darkMatterVariables;
+    template <typename Archive>
+    void serialize(Archive& archive, unsigned) {
+        archive & path & gas & darkMatter & gasVariables & darkMatterVariables;
+    }
+};
+
+struct ViewLeafMetadata {
+    std::vector<std::vector<ViewDirectoryMetadata>> boxes;
+    template <typename Archive>
+    void serialize(Archive& archive, unsigned) {
+        archive & boxes;
+    }
+};
+
+struct ViewFrame {
+    std::string path;
+    bool cosmological = false;
+    bool lab = false;
+};
+
+std::vector<ViewFrame> voronoiViewFrames() {
+    if (getOptions().output.units == "code") {
+        return {{"", false, false}};
+    }
+    std::vector<ViewFrame> frames;
+    for (bool cosmological : {false, true}) {
+        std::string const system = cosmological ? "cosmological" : "cgs";
+        if (getOptions().output.units != "both" && getOptions().output.units != system) {
+            continue;
+        }
+        for (bool lab : {false, true}) {
+            std::string const frame = lab ? "lab" : "comoving";
+            if (getOptions().output.frame == "both" || getOptions().output.frame == frame) {
+                frames.push_back({system + "/" + frame, cosmological, lab});
+            }
+        }
+    }
+    return frames;
+}
+
+void enterViewDirectory(DBfile* db, std::string const& path) {
+    checkViewWrite(DBSetDir(db, "/"), "/");
+    size_t begin = 0;
+    while (begin < path.size()) {
+        auto const end = path.find('/', begin);
+        auto const part = path.substr(begin, end - begin);
+        if (!part.empty()) {
+            auto const* contents = DBGetToc(db);
+            if (!contents) {
+                throw std::runtime_error("Cannot inspect Silo directory");
+            }
+            bool exists = false;
+            for (int i = 0; i < contents->ndir; ++i) {
+                exists = exists || part == contents->dir_names[i];
+            }
+            if (!exists) {
+                checkViewWrite(DBMkDir(db, part.c_str()), part.c_str());
+            }
+            checkViewWrite(DBSetDir(db, part.c_str()), part.c_str());
+        }
+        if (end == std::string::npos) {
+            break;
+        }
+        begin = end + 1;
+    }
+}
+
+std::filesystem::path voronoiMasterPath(size_t box, int cycle) {
+    return std::filesystem::path(getOptions().output.directory) /
+        ("view." + std::to_string(box) + "." + std::to_string(cycle) + ".silo");
+}
+
+using ViewFile = std::unique_ptr<DBfile, decltype(&DBClose)>;
+
+ViewFile createVoronoiViewFile(std::filesystem::path const& path) {
+    ViewFile file(DBCreateReal(path.c_str(), DB_NOCLOBBER, DB_LOCAL,
+                      "Distributed particle Voronoi output", DB_PDB),
+        &DBClose);
+    if (!file) {
+        throw std::runtime_error("Cannot create Voronoi Silo file " + path.string());
+    }
+    writeViewCommandLine(file.get());
+    return file;
+}
+
+void writeVoronoiMetadata(DBfile* db) {
+    writeViewText(db, "gas_geometry", "periodic Voronoi cells from gas generating points");
+    writeViewText(db, "gas_field_convention",
+        "Zone-centered parent SPH particle values; rho is the stored SPH density, not "
+        "mass/cell_volume.");
+    writeViewText(db, "gas_mass_convention",
+        "hydro_mass is parent particle mass times fragment_volume/cell_volume.");
+    writeViewText(db, "generator_id_convention",
+        "Snapshot-local ID: locality in upper 32 bits and local gas index in lower 32 bits; not "
+        "persistent across snapshots.");
+    writeViewText(db, "image_offset_convention",
+        "Integer periodic translation of the unwrapped parent cell before clipping to the view.");
+    writeViewText(db, "cell_volume_convention",
+        "Full periodic parent-cell volume in displayed length units cubed; repeated on each "
+        "fragment.");
+    writeViewText(db, "fragment_volume_convention",
+        "Volume of the displayed clipped fragment in displayed length units cubed.");
+    writeViewText(
+        db, "topology_convention", "Rebuilt each snapshot; connectivity may change with time.");
+    writeViewInteger(db, "topological_dimension", 3);
+    writeViewInteger(db, "time_varying_connectivity", 1);
+}
+
+void writeCodeVoronoiView(DBfile* db, ViewReturn const& particles,
+    voronoi::PreparedVoronoiOutput const& geometry, double a, double time, int cycle) {
+    auto* options = DBMakeOptlist(2);
+    DBAddOption(options, DBOPT_DTIME, &time);
+    DBAddOption(options, DBOPT_CYCLE, &cycle);
+    auto const& darkMatter = particles.darkMatter[0];
+    if (!darkMatter.empty()) {
+        std::array<std::vector<double>, 3> coordinates;
+        for (auto const& particle : darkMatter) {
+            coordinates[0].push_back(particle.x.toDouble());
+            coordinates[1].push_back(particle.y.toDouble());
+            coordinates[2].push_back(particle.z.toDouble());
+        }
+        double* coordinatePointers[] = {
+            coordinates[0].data(), coordinates[1].data(), coordinates[2].data()};
+        checkViewWrite(DBPutPointmesh(db, "dark_matter", 3, coordinatePointers, darkMatter.size(),
+                           DB_DOUBLE, options),
+            "dark_matter");
+        writeViewField(
+            db, "vx", "dark_matter", darkMatter, "code", [](auto const& p) { return p.vx; });
+        writeViewField(
+            db, "vy", "dark_matter", darkMatter, "code", [](auto const& p) { return p.vy; });
+        writeViewField(
+            db, "vz", "dark_matter", darkMatter, "code", [](auto const& p) { return p.vz; });
+        writeViewField(
+            db, "rung", "dark_matter", darkMatter, "1", [](auto const& p) { return p.rung; });
+    }
+    if (!geometry.parentIndices.empty()) {
+        voronoi::writeSiloVoronoi(db, "gas", "gas_zones", geometry, options);
+        auto const& gas = particles.hydro[0];
+        writeViewField(
+            db, "hydro_vx", "gas", gas, "code", [](auto const& p) { return p.vx; }, &geometry);
+        writeViewField(
+            db, "hydro_vy", "gas", gas, "code", [](auto const& p) { return p.vy; }, &geometry);
+        writeViewField(
+            db, "hydro_vz", "gas", gas, "code", [](auto const& p) { return p.vz; }, &geometry);
+        writeViewField(
+            db, "hydro_rung", "gas", gas, "1", [](auto const& p) { return p.rung; }, &geometry);
+        writeViewField(
+            db, "hydro_mass", "gas", gas, "code",
+            [](auto const&) { return getOptions().initial.gasMass; }, &geometry, true);
+        writeViewField(
+            db, "rho", "gas", gas, "code", [](auto const& p) { return p.rho; }, &geometry);
+        writeViewField(
+            db, "eint", "gas", gas, "code", [](auto const& p) { return p.eint; }, &geometry);
+        writeViewField(
+            db, "kernel_support_radius", "gas", gas, "code", [](auto const& p) { return p.h; },
+            &geometry);
+        writeChemistryFields(db, gas, a, &geometry);
+        voronoi::writeSiloVoronoiDiagnostics(db, "gas", geometry, "code_length^3");
+    }
+    DBFreeOptlist(options);
+}
+
+ViewDirectoryMetadata describeViewDirectory(DBfile* db, std::string const& path) {
+    auto const* contents = DBGetToc(db);
+    if (!contents) {
+        throw std::runtime_error("Cannot read Voronoi Silo leaf metadata");
+    }
+    ViewDirectoryMetadata metadata;
+    metadata.path = path;
+    metadata.gas = contents->nucdmesh != 0;
+    metadata.darkMatter = contents->nptmesh != 0;
+    for (int i = 0; i < contents->nucdvar; ++i) {
+        metadata.gasVariables.emplace_back(contents->ucdvar_names[i]);
+    }
+    for (int i = 0; i < contents->nptvar; ++i) {
+        metadata.darkMatterVariables.emplace_back(contents->ptvar_names[i]);
+    }
+    return metadata;
+}
+
+}    // namespace detail
+
+HPX_PLAIN_ACTION(detail::prepareVoronoiSnapshot, PrepareVoronoiSnapshotAction);
+HPX_PLAIN_ACTION(detail::queryVoronoiSnapshot, QueryVoronoiSnapshotAction);
+HPX_PLAIN_ACTION(detail::releaseVoronoiSnapshot, ReleaseVoronoiSnapshotAction);
+
+namespace detail {
+
+ViewLeafMetadata writeVoronoiLeaf(std::vector<voronoi::SitePartition> const& partitions,
+    Vector<Range<double>> const& boxes, int cycle, double a, std::string const& generation) {
+    auto const snapshot = getVoronoiSnapshot();
+    auto const cells = voronoi::buildDistributedCells(
+        snapshot->sites, partitions, [](std::vector<voronoi::SiteQueryBatch> const& batches) {
+            std::vector<hpx::future<std::vector<voronoi::Site>>> futures;
+            std::exception_ptr error;
+            try {
+                for (auto const& batch : batches) {
+                    if (batch.owner < 0 || size_t(batch.owner) >= hpxLocalities().size()) {
+                        throw std::runtime_error("Invalid Voronoi query owner");
+                    }
+                    futures.push_back(hpx::async<QueryVoronoiSnapshotAction>(
+                        hpxLocalities()[batch.owner], batch.queries));
+                }
+            } catch (...) {
+                error = std::current_exception();
+            }
+            auto replies = consumeViewFutures(futures, error);
+            std::vector<voronoi::Site> sites;
+            for (auto& reply : replies) {
+                sites.insert(sites.end(), reply.begin(), reply.end());
+            }
+            return sites;
+        });
+    ViewLeafMetadata metadata;
+    metadata.boxes.resize(boxes.size());
+    auto const frames = voronoiViewFrames();
+    double const time =
+        cosmosTime(1e-6, a) * getOptions().units.timeSeconds * constants::kSecondsToYears / 1e9;
+    std::string const locality = "locality_" + std::to_string(hpxRank());
+    // Silo is never called by query actions; each locality serializes all its files.
+    std::lock_guard fileLock(siloViewMutex);
+    for (size_t box = 0; box < boxes.size(); ++box) {
+        auto const directory =
+            std::filesystem::path(voronoiMasterPath(box, cycle).string() + ".data");
+        auto const filename = directory / generation / (locality + ".silo");
+        auto file = createVoronoiViewFile(filename);
+        ViewReturn particles;
+        particles.hydro.resize(1);
+        particles.darkMatter.resize(1);
+        particles.hydro[0] = snapshot->gas;
+        for (auto const& particle : snapshot->darkMatter) {
+            Array<double, NDIM> position;
+            position[0] = particle.x.toDouble();
+            position[1] = particle.y.toDouble();
+            position[2] = particle.z.toDouble();
+            if (boxes[box].contains(position)) {
+                particles.darkMatter[0].push_back(particle);
+            }
+        }
+        voronoi::OutputBounds bounds;
+        for (int dimension = 0; dimension < NDIM; ++dimension) {
+            bounds.lower[dimension] = boxes[box].begin[dimension];
+            bounds.upper[dimension] = boxes[box].end[dimension];
+        }
+        auto const codeGeometry = voronoi::prepareVoronoiOutput(cells, bounds);
+        for (auto const& frame : frames) {
+            enterViewDirectory(file.get(), locality + (frame.path.empty() ? "" : "/" + frame.path));
+            double const scale = frame.path.empty() ?
+                1.0 :
+                ViewUnitConversion(a, frame.cosmological, frame.lab).length(1.0);
+            auto const geometry = voronoi::rescaleVoronoiOutput(codeGeometry, scale);
+            if (frame.path.empty()) {
+                writeCodeVoronoiView(file.get(), particles, geometry, a, time, cycle);
+            } else {
+                writeConvertedView(file.get(), particles, 0, a, time, frame.cosmological, frame.lab,
+                    &geometry, cycle);
+            }
+            writeVoronoiMetadata(file.get());
+            metadata.boxes[box].push_back(describeViewDirectory(file.get(), frame.path));
+        }
+        checkViewWrite(DBClose(file.release()), filename.c_str());
+    }
+    return metadata;
+}
+
+}    // namespace detail
+
+HPX_PLAIN_ACTION(detail::writeVoronoiLeaf, WriteVoronoiLeafAction);
+
+namespace detail {
+
+void writeVoronoiMaster(size_t box, int cycle, double a,
+    std::vector<ViewLeafMetadata> const& leaves, std::string const& generation) {
+    auto const filename = voronoiMasterPath(box, cycle);
+    auto const temporary = std::filesystem::path(filename.string() + ".tmp." + generation);
+    auto file = createVoronoiViewFile(temporary);
+    writeViewText(file.get(), "leaf_generation", generation.c_str());
+    auto const frames = voronoiViewFrames();
+    double time =
+        cosmosTime(1e-6, a) * getOptions().units.timeSeconds * constants::kSecondsToYears / 1e9;
+    ViewReturn empty;
+    empty.hydro.resize(1);
+    empty.darkMatter.resize(1);
+    for (size_t frameIndex = 0; frameIndex < frames.size(); ++frameIndex) {
+        auto const& frame = frames[frameIndex];
+        enterViewDirectory(file.get(), frame.path);
+        if (!frame.path.empty()) {
+            writeConvertedView(file.get(), empty, 0, a, time, frame.cosmological, frame.lab);
+        }
+        writeVoronoiMetadata(file.get());
+        for (bool gas : {false, true}) {
+            char const* mesh = gas ? "gas" : "dark_matter";
+            std::vector<std::string> prefixes(leaves.size());
+            std::set<std::string> variables;
+            for (size_t rank = 0; rank < leaves.size(); ++rank) {
+                auto const& directory = leaves[rank].boxes.at(box).at(frameIndex);
+                if (directory.path != frame.path) {
+                    throw std::runtime_error("Inconsistent Voronoi leaf directory metadata");
+                }
+                if (gas ? directory.gas : directory.darkMatter) {
+                    std::string const locality = "locality_" + std::to_string(rank);
+                    prefixes[rank] = filename.filename().string() + ".data/" + generation + "/" +
+                        locality + ".silo:/" + locality +
+                        (frame.path.empty() ? "" : "/" + frame.path) + "/";
+                    auto const& names =
+                        gas ? directory.gasVariables : directory.darkMatterVariables;
+                    variables.insert(names.begin(), names.end());
+                }
+            }
+            if (std::all_of(prefixes.begin(), prefixes.end(),
+                    [](std::string const& prefix) { return prefix.empty(); })) {
+                continue;
+            }
+            if (prefixes.size() > size_t(std::numeric_limits<int>::max())) {
+                throw std::runtime_error("Too many Voronoi Silo blocks");
+            }
+            auto putMulti = [&](char const* name, bool variable) {
+                std::vector<std::string> objects;
+                std::vector<char const*> names;
+                std::vector<int> types(prefixes.size(),
+                    variable ? (gas ? DB_UCDVAR : DB_POINTVAR) : (gas ? DB_UCDMESH : DB_POINTMESH));
+                for (auto const& prefix : prefixes) {
+                    objects.push_back(prefix.empty() ? "EMPTY" : prefix + name);
+                }
+                for (auto const& object : objects) {
+                    names.push_back(object.c_str());
+                }
+                auto* options = DBMakeOptlist(5);
+                DBAddOption(options, DBOPT_DTIME, &time);
+                DBAddOption(options, DBOPT_CYCLE, &cycle);
+                int topology = 3;
+                int changing = 1;
+                if (variable) {
+                    DBAddOption(options, DBOPT_MMESH_NAME, const_cast<char*>(mesh));
+                    checkViewWrite(DBPutMultivar(file.get(), name, names.size(), names.data(),
+                                       types.data(), options),
+                        name);
+                } else {
+                    if (gas) {
+                        DBAddOption(options, DBOPT_TOPO_DIM, &topology);
+                        DBAddOption(options, DBOPT_TV_CONNECTIVITY, &changing);
+                    }
+                    checkViewWrite(DBPutMultimesh(file.get(), name, names.size(), names.data(),
+                                       types.data(), options),
+                        name);
+                }
+                DBFreeOptlist(options);
+            };
+            putMulti(mesh, false);
+            for (auto const& variable : variables) {
+                putMulti(variable.c_str(), true);
+            }
+        }
+    }
+    checkViewWrite(DBClose(file.release()), temporary.c_str());
+    // Only a fully closed master referencing fully closed, immutable leaves is published.
+    std::filesystem::rename(temporary, filename);
+}
+
+void writeDistributedVoronoiViews(int cycle, double a) {
+    std::exception_ptr error;
+    try {
+        auto const partitions =
+            onViewLocalities<PrepareVoronoiSnapshotAction, voronoi::SitePartition>();
+        static std::atomic<uint64_t> sequence{0};
+        auto const ticks = std::chrono::system_clock::now().time_since_epoch().count();
+        std::string const generation =
+            "generation_" + std::to_string(ticks) + "_" + std::to_string(sequence.fetch_add(1));
+        for (size_t box = 0; box < viewBoxes.size(); ++box) {
+            auto const directory =
+                std::filesystem::path(voronoiMasterPath(box, cycle).string() + ".data");
+            std::filesystem::create_directories(directory);
+            if (!std::filesystem::create_directory(directory / generation)) {
+                throw std::runtime_error("Voronoi output generation already exists");
+            }
+        }
+        auto const leaves = onViewLocalities<WriteVoronoiLeafAction, ViewLeafMetadata>(
+            partitions, viewBoxes, cycle, a, generation);
+        for (size_t box = 0; box < viewBoxes.size(); ++box) {
+            writeVoronoiMaster(box, cycle, a, leaves, generation);
+        }
+    } catch (...) {
+        error = std::current_exception();
+    }
+    try {
+        onViewLocalities<ReleaseVoronoiSnapshotAction, void>();
+    } catch (...) {
+        if (!error) {
+            error = std::current_exception();
+        }
+    }
+    if (error) {
+        std::rethrow_exception(error);
     }
 }
 
@@ -499,6 +1087,11 @@ void viewOutputViews(int cycle, double a, bool force) {
         return;
     }
     profilerEnter("view_output_views");
+    if (getOptions().output.gasMesh == "voronoi") {
+        detail::writeDistributedVoronoiViews(cycle, a);
+        profilerExit();
+        return;
+    }
     double const codeToVelocity = 1.;
     double const codeToEnergy = 1.;
     double const codeToDensity = 1.;

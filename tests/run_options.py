@@ -52,7 +52,8 @@ def main():
                 "hydro.minEffectiveRadius", "hydro.maxEffectiveRadius",
                 "hydro.minSupportRadius", "hydro.maxSupportRadius",
                 "hydro.centralEffectiveRadius", "hydro.centralSupportRadius",
-                "output.silo", "output.siloInterval", "output.directory", "output.units", "output.frame",
+                "output.silo", "output.siloInterval", "output.gasMesh", "output.directory",
+                "output.units", "output.frame",
                 "output.xMin", "output.xMax", "output.yMin", "output.yMax",
                 "output.zMin", "output.zMax", "chemistry.initialization"}
     if not required <= option_names:
@@ -351,8 +352,9 @@ mapSize = 8
             for value in ("0", "-1", "nan", "inf"):
                 run(f"invalid_{key}_{value}", metadata_options + [f"--{key}={value}"], success=False)
 
-    def assertOutputSettings(output, outputUnits, outputFrame):
-        for key, expectedValue in (("output.units", outputUnits), ("output.frame", outputFrame)):
+    def assertOutputSettings(output, outputUnits, outputFrame, gasMesh="voronoi"):
+        for key, expectedValue in (("output.units", outputUnits), ("output.frame", outputFrame),
+                                   ("output.gasMesh", gasMesh)):
             match = re.search(r"^" + re.escape(key) + r"\s*:\s*(\S+)", output, re.MULTILINE)
             if match is None or match.group(1) != expectedValue:
                 raise RuntimeError(f"configured {key} did not equal {expectedValue}")
@@ -366,10 +368,11 @@ mapSize = 8
 
     output_config = args.workdir / "output.ini"
     output_config.write_text("[output]\nsilo = true\nsiloInterval = 7\n"
+                             "gasMesh = spheres\n"
                              "units = cosmological\nframe = lab\n"
                              "directory = configured snapshots\nxMin = 0.25\nxMax = 0.75\n")
     configured = run("silo_ini", metadata_options + [f"--configuration={output_config.resolve()}"])
-    assertOutputSettings(configured, "cosmological", "lab")
+    assertOutputSettings(configured, "cosmological", "lab", "spheres")
     if "Silo particle output: x [0.25, 0.75], y [0, 1], z [0, 1]" not in configured:
         raise RuntimeError("INI Silo bounds were not applied")
     if "every 7 synchronized coarse steps" not in configured:
@@ -381,6 +384,7 @@ mapSize = 8
     overridden = run("silo_cli", metadata_options + [f"--configuration={output_config.resolve()}",
                                                     "--output.xMin=0.5", "--output.siloInterval=3",
                                                     "--output.units=both", "--output.frame=both",
+                                                    "--output.gasMesh=voronoi",
                                                     f"--output.directory={cli_directory}"])
     assertOutputSettings(overridden, "both", "both")
     if "Silo particle output: x [0.5, 0.75], y [0, 1], z [0, 1]" not in overridden:
@@ -449,6 +453,8 @@ mapSize = 8
                                f"{sorted(optional_keys - documented_alternatives)}")
         if ini["output"]["units"] != "code" or ini["output"]["frame"] != "comoving":
             raise RuntimeError(f"{path.name} must preserve native output defaults")
+        if ini["output"]["gasMesh"] != "voronoi":
+            raise RuntimeError(f"{path.name} must default to the Voronoi gas mesh")
         output = run(f"complete_{path.stem}", metadata_options + [f"--configuration={path}",
                      "--chemistry.enabled=false"])
         if "Checkpoint state and mode validation passed" not in output:
@@ -462,6 +468,8 @@ mapSize = 8
         ("missing_config", "--configuration=missing_grouped_options.ini", "Cannot open configuration file"),
         ("silo_interval_zero", "--output.siloInterval=0", "output.siloInterval"),
         ("silo_interval_negative", "--output.siloInterval=-1", "output.siloInterval"),
+        ("silo_gas_mesh_unknown", "--output.gasMesh=unknown", "output.gasMesh"),
+        ("silo_gas_mesh_empty", "--output.gasMesh=", "output.gasMesh"),
         ("silo_directory_empty", "--output.directory=", "output.directory"),
         ("silo_units_unknown", "--output.units=si", "output.units"),
         ("silo_units_empty", "--output.units=", "output.units"),

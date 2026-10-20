@@ -327,6 +327,8 @@ void unitsOutputTest() {
     options.hydro.enabled = true;
 
     options.output.silo = true;
+    // This regression deliberately exercises the legacy analytic-sphere layout.
+    options.output.gasMesh = "spheres";
     options.output.siloInterval = 1;
     options.output.directory = "units_output_fixture";
     options.output.xMin = options.output.yMin = options.output.zMin = 0.0;
