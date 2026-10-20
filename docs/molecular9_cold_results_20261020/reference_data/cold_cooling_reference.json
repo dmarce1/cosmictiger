@@ -1,0 +1,46 @@
+{
+  "10": {
+    "cold_H2_erg_cm3_s": 3.688189361284833e-48,
+    "H_erg_cm3_s": 1.4744023010489369e-49,
+    "molecule_vs_H_coefficient": 25.01481012787987
+  },
+  "20": {
+    "cold_H2_erg_cm3_s": 3.970184751032379e-37,
+    "H_erg_cm3_s": 2.4525787759544416e-38,
+    "molecule_vs_H_coefficient": 16.18779706469305
+  },
+  "30": {
+    "cold_H2_erg_cm3_s": 1.9117596655535704e-33,
+    "H_erg_cm3_s": 1.4686813668517465e-34,
+    "molecule_vs_H_coefficient": 13.01684428428205
+  },
+  "50": {
+    "cold_H2_erg_cm3_s": 1.9035160042630376e-30,
+    "H_erg_cm3_s": 1.7020609895848498e-31,
+    "molecule_vs_H_coefficient": 11.183594570999038
+  },
+  "80": {
+    "cold_H2_erg_cm3_s": 1.1365696063631393e-28,
+    "H_erg_cm3_s": 9.865210129904505e-30,
+    "molecule_vs_H_coefficient": 11.52098730180967
+  },
+  "99": {
+    "cold_H2_erg_cm3_s": 4.547651051339482e-28,
+    "H_erg_cm3_s": 3.7502600074038056e-29,
+    "molecule_vs_H_coefficient": 12.126228694441075
+  },
+  "100": {
+    "cold_H2_erg_cm3_s": 4.82790710172393e-28,
+    "H_erg_cm3_s": 3.6341638163185487e-29,
+    "molecule_vs_H_coefficient": 13.284781164913632
+  },
+  "old100": 4.164941214545215e-28,
+  "new100": 4.82790710172393e-28,
+  "ratio100": 1.1591777297752583,
+  "hashes": {
+    "ReadMe": "9adbcbbb48de93d9aa4f9197544f0041e36fe6615e9e0d05712f8e8436adf3d8",
+    "table1.dat": "b4cdea4200aa3fded873cf3a3c96a4bfd0df8e7b6a05b8e567d939b4c3281372",
+    "table2.dat": "729e0244fb14e045b652b281a33c37be46f2ccaaeb159c0d65dca8f8cad59b85",
+    "table3.dat": "650427b7a44b5c8ed81e61251b614090087dfd4de478a462e246eacc9995d0d7"
+  }
+}

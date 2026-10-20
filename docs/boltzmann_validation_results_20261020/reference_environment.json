@@ -1,0 +1,12 @@
+{
+  "camb": "1.6.5",
+  "global_packages_modified": false,
+  "isolated_environment": "/tmp/eb_camb_reference",
+  "native_camb_linked_to_cosmictiger": false,
+  "numpy": "1.26.4",
+  "python": "3.12.3",
+  "scipy": "1.11.4",
+  "shared_libraries": {
+    "camblib.so": "6a54f98bcc65601fd1ad5e760a99a0072cdc45fe49197ba5c3a1282889c2ee0d"
+  }
+}

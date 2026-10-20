@@ -1,0 +1,35 @@
+ recfast version 1.5
+ Using Hummer's case B recombination rates for H
+  with H fudge factor = 1.14
+  (or 1.125 plus high z fit),
+  b_He fudge factor = 0.86,
+  and a fit to tabulated HeII 
+ singlet recombination rates
+
+ Enter output file name
+ Enter Omega_B, Omega_DM, 
+  Omega_vac (e.g. 0.04 0.20 0.76)
+ Enter H_0 (in km/s/Mpc), T_0, Y_p (e.g. 70 2.725 0.25)
+ Optional fourth and fifth values: N_eff, Omega_r
+ Omega_K =  -5.0794871781E-17
+ N_eff =    3.04600
+ Omega_r =   9.2312913302E-05
+ Modification for H recombination:
+ 0) no change from old Recfast
+ 1) include correction
+ Enter the choice of modification for H (0-1):
+ Modification for HeI recombination:
+ 0) no change from old Recfast
+ 1) full expression for escape probability for singlet
+    1P-1S transition
+ 2) also including effect of 
+  contiuum opacity of H on HeI
+    singlet (based in fitting formula suggested by
+    Kholupenko, Ivanchik & Varshalovich, 2007)
+ 3) only including recombination through the triplets
+ 4) including 3 and the effect of the contiuum 
+    (although this is probably negligible)
+ 5) including only 1, 2 and 3
+ 6) including all of 1 to 4
+ Enter the choice of modification for HeI (0-6):
+Note: The following floating-point exceptions are signalling: IEEE_UNDERFLOW_FLAG IEEE_DENORMAL

@@ -42,10 +42,10 @@ namespace detail {
     }
 }    // namespace detail
 
-// The finite molecular domain is the intersection of the selected cooling fits.
-// Atomic fits cover a broader domain; neither branch extrapolates silently.
-PRIMORDIAL_HD inline float minimumTemperature(Network network) {
-    return network == Network::Molecular9 ? 100.0f : 10.0f;
+// The cold molecular cooling branches use published 10 K data; see
+// primordial_rates.hpp. This is a supported-domain boundary, not a thermal floor.
+PRIMORDIAL_HD inline float minimumTemperature(Network) {
+    return 10.0f;
 }
 PRIMORDIAL_HD inline float maximumTemperature(Network network) {
     return network == Network::Molecular9 ? 6000.0f : 1.0e8f;
@@ -115,11 +115,24 @@ PRIMORDIAL_HD inline Status evaluateEos(
     float upper = maximumTemperature(environment.network);
     FloatFloat lowerEnergy, upperEnergy;
     float capacity;
-    thermalEnergyAtTemperature(state, environment, lower, lowerEnergy, capacity);
+    FloatFloat const roundoff = FloatFloat(4.0f * 1.1920928955078125e-7f) * state.thermalEnergy;
+    if (environment.network == Network::Molecular9) {
+        FloatFloat warmEnergy;
+        thermalEnergyAtTemperature(state, environment, 100.0f, warmEnergy, capacity);
+        // Keep the established inversion bracket and endpoint rounding for every
+        // previously supported state; only colder states need the new bracket.
+        if (state.thermalEnergy >= warmEnergy - roundoff) {
+            lower = 100.0f;
+            lowerEnergy = warmEnergy;
+        } else {
+            thermalEnergyAtTemperature(state, environment, lower, lowerEnergy, capacity);
+        }
+    } else {
+        thermalEnergyAtTemperature(state, environment, lower, lowerEnergy, capacity);
+    }
     thermalEnergyAtTemperature(state, environment, upper, upperEnergy, capacity);
     // Allow only the storage-rounding uncertainty at domain endpoints; this is
     // not a thermal floor and does not modify the state or accepted energy.
-    FloatFloat const roundoff = FloatFloat(4.0f * 1.1920928955078125e-7f) * state.thermalEnergy;
     if (state.thermalEnergy < lowerEnergy - roundoff ||
         state.thermalEnergy > upperEnergy + roundoff) {
         return Status::UnsupportedState;

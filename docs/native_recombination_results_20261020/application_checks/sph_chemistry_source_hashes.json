@@ -1,0 +1,46 @@
+{
+  "cosmictiger/chemistry/primordial_chemistry.hpp": {
+    "before": "6e37ec7768a9e26ab6fca9d27f2d92765e9af006e18b641b79c49f58938ee9e1",
+    "after": "6e37ec7768a9e26ab6fca9d27f2d92765e9af006e18b641b79c49f58938ee9e1"
+  },
+  "cosmictiger/chemistry/primordial_eos.hpp": {
+    "before": "eb116fa366d6caf7c34a0526b4b0f7616d42e8268de91ba7c196dc37fd908986",
+    "after": "eb116fa366d6caf7c34a0526b4b0f7616d42e8268de91ba7c196dc37fd908986"
+  },
+  "cosmictiger/chemistry/primordial_float_environment.hpp": {
+    "before": "06ce16d48340d6519d6975cff3cea7f18722948c9f44991c75ce6593d48a160a",
+    "after": "06ce16d48340d6519d6975cff3cea7f18722948c9f44991c75ce6593d48a160a"
+  },
+  "cosmictiger/chemistry/primordial_rates.hpp": {
+    "before": "38596a8377cf7f614c7475cb97a2237643b39c0c599100a326d8078e978b9518",
+    "after": "38596a8377cf7f614c7475cb97a2237643b39c0c599100a326d8078e978b9518"
+  },
+  "cosmictiger/chemistry/primordial_solver.hpp": {
+    "before": "cb2552415226bc696ade63628b3e7419040f4b8f8bb468a56326ebfa388cc51c",
+    "after": "cb2552415226bc696ade63628b3e7419040f4b8f8bb468a56326ebfa388cc51c"
+  },
+  "cosmictiger/chemistry/primordial_types.hpp": {
+    "before": "915790d23ffc4766a828294e7a73fb158bcfaec53a6c8b18a356f6d12510ee14",
+    "after": "915790d23ffc4766a828294e7a73fb158bcfaec53a6c8b18a356f6d12510ee14"
+  },
+  "cosmictiger/chemistry/primordial_units.hpp": {
+    "before": "36ba3266797f2e7821e856be1029486966f63a7d84edbf8870244f3c558b029e",
+    "after": "36ba3266797f2e7821e856be1029486966f63a7d84edbf8870244f3c558b029e"
+  },
+  "cosmictiger/sph/sph_chemistry.hpp": {
+    "before": "f0b96d64f9a3547f5f15c779864b39fab87faa0737b17bcb2a4848a6041fb3f7",
+    "after": "f0b96d64f9a3547f5f15c779864b39fab87faa0737b17bcb2a4848a6041fb3f7"
+  },
+  "src/chemistry/primordial_chemistry.cpp": {
+    "before": "75d05e8c38639abe5d9ec0a12e41c8d563cfd7b54b7a9a3e9d7c9a27604ea74e",
+    "after": "75d05e8c38639abe5d9ec0a12e41c8d563cfd7b54b7a9a3e9d7c9a27604ea74e"
+  },
+  "src/chemistry/primordial_chemistry.cu": {
+    "before": "53e63d7c32223cb1c4ba1cb7817f0dbadb767af59ee9e6d5f31d4183998eab93",
+    "after": "53e63d7c32223cb1c4ba1cb7817f0dbadb767af59ee9e6d5f31d4183998eab93"
+  },
+  "src/sph/sph_chemistry.cpp": {
+    "before": "585f0db8c01f7bc5a9871fef3a20bb2dbf17320526f1c1058efa15dac4adfbfc",
+    "after": "585f0db8c01f7bc5a9871fef3a20bb2dbf17320526f1c1058efa15dac4adfbfc"
+  }
+}

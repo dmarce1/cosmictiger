@@ -17,28 +17,39 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <bit>
 #include <cmath>
+#include <cstdint>
+#include <stdexcept>
 #include <vector>
 
 #include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/cosmology/recombination_thermal.hpp>
 #include <cosmictiger/cosmology/zero_order.hpp>
 
+namespace detail {
+
+bool isFiniteBackground(double value) {
+    constexpr std::uint64_t kExponentMask = UINT64_C(0x7ff0000000000000);
+    return (std::bit_cast<std::uint64_t>(value) & kExponentMask) != kExponentMask;
+}
+
+}    // namespace detail
+
 void ZeroOrderUniverse::computeMatterFractions(double& oc, double& ob, double a) const {
     double omegaM = params.omegaB + params.omegaC;
     double omegaR = params.omegaGam + params.omegaNu;
-    double om = omegaM / (omegaR / a + omegaM + (a * a * a) * ((double) 1.0 - omegaM - omegaR));
-    ob = params.omegaB * om / omegaM;
-    oc = params.omegaC * om / omegaM;
+    double denominator = omegaR / a + omegaM + a * a * a * (1.0 - omegaM - omegaR);
+    ob = params.omegaB / denominator;
+    oc = params.omegaC / denominator;
 }
 
 void ZeroOrderUniverse::computeRadiationFractions(double& ogam, double& onu, double a) const {
     double omegaM = params.omegaB + params.omegaC;
     double omegaR = params.omegaGam + params.omegaNu;
-    double omegaRadiation =
-        omegaR / (omegaR + a * omegaM + (a * a * a * a) * ((double) 1.0 - omegaM - omegaR));
-    ogam = params.omegaGam * omegaRadiation / omegaR;
-    onu = params.omegaNu * omegaRadiation / omegaR;
+    double denominator = omegaR + a * omegaM + a * a * a * a * (1.0 - omegaM - omegaR);
+    ogam = params.omegaGam / denominator;
+    onu = params.omegaNu / denominator;
 }
 
 double ZeroOrderUniverse::conformalTimeToScaleFactor(double taumax) {
@@ -69,14 +80,13 @@ double ZeroOrderUniverse::conformalTimeToScaleFactor(double taumax) {
 }
 
 double ZeroOrderUniverse::redshiftToDensity(double z) const {
+    if (!detail::isFiniteBackground(z) || !(z > -1.0)) {
+        throw std::invalid_argument("Matter density requires finite redshift greater than -1");
+    }
     double const a = 1.0 / (1.0 + z);
-    double omegaM = params.omegaB + params.omegaC;
-    double omegaR = params.omegaGam + params.omegaNu;
-    double const omegaL = 1.0 - omegaM - omegaR;
+    double const omegaM = params.omegaB + params.omegaC;
     double const hubbleToday = params.hubble * constants::kH0;
-    double const h2 =
-        hubbleToday * hubbleToday * (omegaR / (a * a * a * a) + omegaM / (a * a * a) + omegaL);
-    return omegaM * 3.0 * h2 / (8.0 * M_PI * constants::kG);
+    return omegaM * 3.0 * hubbleToday * hubbleToday / (8.0 * M_PI * constants::kG * a * a * a);
 }
 
 double ZeroOrderUniverse::scaleFactorToConformalTime(double a) {
@@ -136,7 +146,22 @@ double ZeroOrderUniverse::redshiftToTime(double z) const {
 }
 
 void createZeroOrderUniverse(ZeroOrderUniverse* uniPtr, std::function<double(double)> fxe,
-    double amax, CosmicParameters cpars) {
+    double amax, CosmicParameters cpars, BackgroundThermalHistory thermalHistory) {
+    if (uniPtr == nullptr || !fxe || !detail::isFiniteBackground(amax) ||
+        !detail::isFiniteBackground(cpars.omegaB) || !(cpars.omegaB > 0.0) ||
+        !detail::isFiniteBackground(cpars.omegaC) || cpars.omegaC < 0.0 ||
+        !detail::isFiniteBackground(cpars.omegaGam) || !(cpars.omegaGam > 0.0) ||
+        !detail::isFiniteBackground(cpars.omegaNu) || cpars.omegaNu < 0.0 ||
+        !detail::isFiniteBackground(cpars.neff) || cpars.neff < 0.0 ||
+        !detail::isFiniteBackground(cpars.y) || cpars.y < 0.0 || !(cpars.y < 1.0) ||
+        !detail::isFiniteBackground(cpars.theta) || !(cpars.theta > 0.0) ||
+        !detail::isFiniteBackground(cpars.hubble) || !(cpars.hubble > 0.0)) {
+        throw std::invalid_argument("Invalid homogeneous cosmology parameters");
+    }
+    if (bool(thermalHistory.hydrogenNumberDensity) != bool(thermalHistory.pressurePerHydrogen) ||
+        (thermalHistory.hydrogenNumberDensity && !thermalHistory.temperature)) {
+        throw std::invalid_argument("Incomplete homogeneous chemistry thermodynamics");
+    }
     ZeroOrderUniverse& uni = *uniPtr;
     uni.xe = fxe;
     using namespace constants;
@@ -152,6 +177,10 @@ void createZeroOrderUniverse(ZeroOrderUniverse* uniPtr, std::function<double(dou
     double neff = cpars.neff;
     double y = cpars.y;
     double amin = theta * kTcmb / (0.07 * 1e6 * kEvtoK);
+    if (!(amax > amin) ||
+        !(omegaR + omegaM * amax + std::pow(amax, 4) * (1.0 - omegaM - omegaR) > 0.0)) {
+        throw std::invalid_argument("Invalid homogeneous cosmology scale-factor interval");
+    }
     double logamin = log(amin);
     double logamax = log(amax);
     int nValue = 4 * 1024;
@@ -203,11 +232,22 @@ void createZeroOrderUniverse(ZeroOrderUniverse* uniPtr, std::function<double(dou
     double nnuc = rhoB / kMh;
     nHe = y * nnuc / 4;
     nH = (1 - y) * nnuc;
+    auto const checkedPositive = [](double value) {
+        if (!detail::isFiniteBackground(value) || !(value > 0.0)) {
+            throw std::invalid_argument("Invalid homogeneous chemistry thermodynamics");
+        }
+        return value;
+    };
+    if (thermalHistory.hydrogenNumberDensity) {
+        nH = checkedPositive(thermalHistory.hydrogenNumberDensity(amin));
+    }
     ne = fxe(amin) * nH;
     trad = tRadiation(amin);
-    tgas = trad;
+    tgas = thermalHistory.temperature ? checkedPositive(thermalHistory.temperature(amin)) : trad;
     double n = nH + nHe;
-    double p = kB * (n + ne) * tgas;
+    double p = thermalHistory.pressurePerHydrogen ?
+        nH * checkedPositive(thermalHistory.pressurePerHydrogen(amin)) :
+        kB * (n + ne) * tgas;
     double t = 0.0;
     double dt;
     for (int i = -10 / dloga; i <= 0; i++) {
@@ -251,15 +291,45 @@ void createZeroOrderUniverse(ZeroOrderUniverse* uniPtr, std::function<double(dou
         nH *= rhoB;
         nHe *= rhoB;
         ne *= rhoB;
+        if (thermalHistory.hydrogenNumberDensity) {
+            nH = checkedPositive(thermalHistory.hydrogenNumberDensity(a));
+        }
         trad = tRadiation(a);
         double dt = dloga / hubble;
         ne = fxe(a) * nH;
         sigmaC =
             recombination::comptonTemperatureCoupling(a, omegaGam, omegaB, nH, nHe, ne, hubble);
-        tgas = recombination::advanceGasTemperature(tgas, trad, dloga, sigmaC);
+        // Evaluate both the radiation source and the Compton rate at the
+        // implicit stage times. Freezing them at the endpoint is only first
+        // order through thermal decoupling.
+        double const gamma = 1.0 - 1.0 / std::sqrt(2.0);
+        auto const thermalDerivative = [&](double stageScale, double stageTemperature) {
+            double const stageDensity = rhoBaryon(stageScale);
+            double const stageHydrogen = (1.0 - y) * stageDensity / kMh;
+            double const stageHelium = y * stageDensity / (4.0 * kMh);
+            double const stageElectrons = fxe(stageScale) * stageHydrogen;
+            double const coupling = recombination::comptonTemperatureCoupling(stageScale, omegaGam,
+                omegaB, stageHydrogen, stageHelium, stageElectrons, cgsHubble(stageScale));
+            return (coupling * (tRadiation(stageScale) - stageTemperature) -
+                       2.0 * stageTemperature) /
+                (1.0 + gamma * dloga * (2.0 + coupling));
+        };
+        if (thermalHistory.temperature) {
+            // A coupled chemistry history already contains the matter
+            // temperature. Use it consistently with its electron fraction.
+            tgas = checkedPositive(thermalHistory.temperature(a));
+        } else {
+            double const firstDerivative =
+                thermalDerivative(std::exp(loga - (1.0 - gamma) * dloga), tgas);
+            double const secondDerivative = thermalDerivative(std::exp(loga - gamma * dloga),
+                tgas + (1.0 - 2.0 * gamma) * dloga * firstDerivative);
+            tgas += 0.5 * dloga * (firstDerivative + secondDerivative);
+        }
         ne = fxe(a) * nH;
         n = nH + nHe;
-        p = kB * (n + ne) * tgas;
+        p = thermalHistory.pressurePerHydrogen ?
+            nH * checkedPositive(thermalHistory.pressurePerHydrogen(a)) :
+            kB * (n + ne) * tgas;
         sigmaT = kC * kSigmaT * ne / hubble;
         t += dt;
         if (i == 1) {

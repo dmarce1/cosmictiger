@@ -1,0 +1,19 @@
+cold scenario0 tolerance0.001 T70.1421356 reference70.5265306 steps31
+cold scenario0 tolerance0.0001 T70.4010849 reference70.5265306 steps96
+cold scenario0 tolerance1e-05 T70.4864502 reference70.5265306 steps302
+cold scenario1 tolerance0.001 T28.46134 reference28.1201166286 steps25
+cold scenario1 tolerance0.0001 T28.2248421 reference28.1201166286 steps79
+cold scenario1 tolerance1e-05 T28.1530724 reference28.1201166286 steps251
+cold scenario2 tolerance0.001 T77.6342316 reference77.5668606247 steps2
+cold scenario2 tolerance0.0001 T77.5939865 reference77.5668606247 steps5
+cold scenario2 tolerance1e-05 T77.5752258 reference77.5668606247 steps16
+tol 0.001 status0 x0.799999952316 e2.12858843803 error0.00855856119 accepted64 rejected4 newton408
+tol 9.9999997e-05 status0 x0.79999999702 e2.13431334496 error0.00283365427 accepted201 rejected4 newton1230
+tol 9.9999997e-06 status0 x0.79999999702 e2.13622307777 error0.000923921453 accepted633 rejected4 newton3822
+quadratic minority9.9999998e-14 upper0 status0 relativeerror0.00638193507 steps545
+quadratic minority9.9999998e-14 upper1 status0 relativeerror0.00637087289 steps545
+quadratic minority9.9999997e-21 upper0 status0 relativeerror0.00638199847 steps545
+quadratic minority9.9999997e-21 upper1 status0 relativeerror0.00637094337 steps545
+trace status0 minority9.99999996004197e-13 raw-9.99999996004197e-13 accepted1 rejected0
+photo x0.877191133797 expected0.878198248135 thermal3.75343346596 steps129
+Primordial solver analytic, precision, domain, and CPU batch tests passed

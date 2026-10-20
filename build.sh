@@ -365,7 +365,7 @@ else
     done
 fi
 
-for requiredCommand in cmake ninja gfortran tee mktemp; do
+for requiredCommand in cmake ninja tee mktemp; do
     if ! command -v "$requiredCommand" >/dev/null 2>&1; then
         printf 'Missing required command: %s\n' "$requiredCommand" >&2
         exit 1
@@ -422,15 +422,13 @@ if [[ $buildMode == profile ]]; then
     configureCommand+=(
         "-DCMAKE_C_FLAGS_PROFILE=-O2 -g -pg -DNDEBUG"
         "-DCMAKE_CXX_FLAGS_PROFILE=-O2 -g -pg -DNDEBUG"
-        "-DCMAKE_Fortran_FLAGS_PROFILE=-O2 -g -pg -DNDEBUG"
         "-DCMAKE_CUDA_FLAGS_PROFILE=-O2 -g -DNDEBUG -Xcompiler=-pg"
         "-DCMAKE_EXE_LINKER_FLAGS_PROFILE=-pg")
 fi
 if [[ $enableCuda == ON ]]; then
     configureCommand+=("-DCMAKE_CUDA_ARCHITECTURES=${cudaArchitectures:-$defaultCudaArchitectures}")
 fi
-# Initialization calls ./recfast, so build it alongside the main executable.
-buildCommand=(cmake --build "$buildDir" --target cosmictiger recfast --parallel "$buildJobs")
+buildCommand=(cmake --build "$buildDir" --target cosmictiger --parallel "$buildJobs")
 testBuildCommand=(cmake --build "$buildDir" --target all --parallel "$buildJobs")
 testCommand=(ctest --test-dir "$buildDir" --output-on-failure --parallel "$testJobs")
 
@@ -457,7 +455,7 @@ runStage() {
 
 printf '\nBuild directory: %s\nLog: %s\n' "$buildDir" "$logFile"
 runStage Configure "${configureCommand[@]}" || exit $?
-runStage 'Build cosmictiger and recfast' "${buildCommand[@]}" || exit $?
+runStage 'Build cosmictiger' "${buildCommand[@]}" || exit $?
 if [[ $testSuite == ON ]]; then
     runStage 'Build test suite' "${testBuildCommand[@]}" || exit $?
     runStage 'Run test suite' "${testCommand[@]}" || exit $?

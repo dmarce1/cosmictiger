@@ -1,0 +1,14 @@
+Internal ctest changing into directory: /home/dmarce1/workspace/cosmictiger/build/sph_cpu_validation
+Test project /home/dmarce1/workspace/cosmictiger/build/sph_cpu_validation
+    Start 6: primordial_integration_cpu
+1/1 Test #6: primordial_integration_cpu .......***Failed   22.61 sec
+unexpected checkpoint manifest: ['COSMICTIGER_CHECKPOINT 1 3 0 1', '0 81680 dc78d2cb87739096']
+
+
+0% tests passed, 1 tests failed out of 1
+
+Total Test time (real) =  22.61 sec
+
+The following tests FAILED:
+	  6 - primordial_integration_cpu (Failed)
+Errors while running CTest

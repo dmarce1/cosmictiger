@@ -1,0 +1,6 @@
+{
+  "verification": "Saved native metric and growth probes agree with final production-binary campaign rows",
+  "executable_sha256": "6bb7ae63c601ac645dfec25c2c97a89a1962aa7370698e81f482d46875b3d590",
+  "metric_rows": 12,
+  "growth_rows": 16
+}

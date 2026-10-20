@@ -1,0 +1,121 @@
+{
+  "candidate": "/home/dmarce1/workspace/cosmictiger/docs/native_recombination_results_20261020/recfast/neff_3_046/reference.csv",
+  "candidate_rows": 1000,
+  "epoch_maxima": {
+    "all": {
+      "T_m": {
+        "T_m_native": 0.02174569586442612,
+        "T_m_reference": 0.021746738737251133,
+        "T_m_relative_error": -4.795536643975584e-05,
+        "n_eff": 3.046,
+        "x_e_native": 0.00017380360036628104,
+        "x_e_reference": 0.0001738052375020754,
+        "x_e_relative_error": -9.419369737639904e-06,
+        "z": 0.0
+      },
+      "x_e": {
+        "T_m_native": 5808.039501426833,
+        "T_m_reference": 5808.039497221947,
+        "T_m_relative_error": 7.239768784472744e-10,
+        "n_eff": 3.046,
+        "x_e_native": 1.054417578281385,
+        "x_e_reference": 1.053042457631063,
+        "x_e_relative_error": 0.001305854897261538,
+        "z": 2130.0
+      }
+    },
+    "early_ionized": {
+      "T_m": {
+        "T_m_native": 26494.585499999997,
+        "T_m_reference": 26494.585499999877,
+        "T_m_relative_error": 4.440892098500626e-15,
+        "n_eff": 3.046,
+        "x_e_native": 1.1637700921770213,
+        "x_e_reference": 1.1637731485261236,
+        "x_e_relative_error": -2.6262412963218296e-06,
+        "z": 9720.0
+      },
+      "x_e": {
+        "T_m_native": 21833.980499999998,
+        "T_m_reference": 21833.980499999965,
+        "T_m_relative_error": 1.5543122344752192e-15,
+        "n_eff": 3.046,
+        "x_e_native": 1.1637700921770213,
+        "x_e_reference": 1.1637731572711014,
+        "x_e_relative_error": -2.633755608605348e-06,
+        "z": 8010.0
+      }
+    },
+    "helium": {
+      "T_m": {
+        "T_m_native": 5099.4088291984835,
+        "T_m_reference": 5099.408825499315,
+        "T_m_relative_error": 7.254112865950901e-10,
+        "n_eff": 3.046,
+        "x_e_native": 1.0178403461468992,
+        "x_e_reference": 1.0170251095492555,
+        "x_e_relative_error": 0.0008015894494532994,
+        "z": 1870.0
+      },
+      "x_e": {
+        "T_m_native": 5808.039501426833,
+        "T_m_reference": 5808.039497221947,
+        "T_m_relative_error": 7.239768784472744e-10,
+        "n_eff": 3.046,
+        "x_e_native": 1.054417578281385,
+        "x_e_reference": 1.053042457631063,
+        "x_e_relative_error": 0.001305854897261538,
+        "z": 2130.0
+      }
+    },
+    "hydrogen": {
+      "T_m": {
+        "T_m_native": 1376.2156250445416,
+        "T_m_reference": 1376.215254559126,
+        "T_m_relative_error": 2.6920600859625665e-07,
+        "n_eff": 3.046,
+        "x_e_native": 0.0007054173876865264,
+        "x_e_reference": 0.000705419586014319,
+        "x_e_relative_error": -3.116340737019385e-06,
+        "z": 510.0
+      },
+      "x_e": {
+        "T_m_native": 4908.6235988589015,
+        "T_m_reference": 4908.623595748787,
+        "T_m_relative_error": 6.336020597075276e-10,
+        "n_eff": 3.046,
+        "x_e_native": 1.004354788043162,
+        "x_e_reference": 1.0038790419703068,
+        "x_e_relative_error": 0.00047390776474576235,
+        "z": 1800.0
+      }
+    },
+    "residual": {
+      "T_m": {
+        "T_m_native": 0.02174569586442612,
+        "T_m_reference": 0.021746738737251133,
+        "T_m_relative_error": -4.795536643975584e-05,
+        "n_eff": 3.046,
+        "x_e_native": 0.00017380360036628104,
+        "x_e_reference": 0.0001738052375020754,
+        "x_e_relative_error": -9.419369737639904e-06,
+        "z": 0.0
+      },
+      "x_e": {
+        "T_m_native": 2.6029051572796944,
+        "T_m_reference": 2.6028904532177886,
+        "T_m_relative_error": 5.649128217211086e-06,
+        "n_eff": 3.046,
+        "x_e_native": 0.00019879427894404174,
+        "x_e_reference": 0.00019879643934371153,
+        "x_e_relative_error": -1.0867396201486024e-05,
+        "z": 10.0
+      }
+    }
+  },
+  "matched_rows": 1000,
+  "passed": true,
+  "reference": "/home/dmarce1/workspace/cosmictiger/docs/native_recombination_results_20261020/camb/neff_3_046.csv",
+  "reference_rows": 2532,
+  "tolerance": 0.01
+}

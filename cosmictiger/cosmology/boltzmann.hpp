@@ -17,54 +17,46 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-#ifndef GPUTIGER_BOLTZMANN_HPP_
-#define GPUTIGER_BOLTZMANN_HPP_
-#include <cosmictiger/cosmology/zero_order.hpp>
-#include <cosmictiger/math/interpolation.hpp>
+#pragma once
 
-#define LMAX 1024
-
-#define hdoti 0
-#define etai 1
-#define taui 2
-#define deltaci 3
-#define deltabi 4
-#define thetabi 5
-#define FLi 6
-#define GLi (6 + LMAX)
-#define NLi (6 + 2 * LMAX)
-
-#define deltagami (FLi + 0)
-#define thetagami (FLi + 1)
-#define F2i (FLi + 2)
-#define deltanui (NLi + 0)
-#define thetanui (NLi + 1)
-#define N2i (NLi + 2)
-#define G0i (GLi + 0)
-#define G1i (GLi + 1)
-#define G2i (GLi + 2)
-
-#define NFIELD (6 + (3 * LMAX))
-
-#include <array>
+#include <cstddef>
+#include <vector>
 
 #include <cosmictiger/cosmology/zero_order.hpp>
 
-using CosState = std::array<double, NFIELD>;
+struct BoltzmannSolverOptions {
+    // Local error control for matter/metric transfers; tiny radiation tails
+    // use an amplitude floor. CMB spectra require separate hierarchy studies.
+    double relativeTolerance = 1.e-6;
+    double absoluteTolerance = 1.e-10;
+    double maxLogStep = 0.1;
+    int maxMultipole = 64;
+    size_t maxSteps = 2000000;
+};
 
-void setZeroverse(ZeroOrderUniverse* z);
-void freeZeroverse();
+// Signed synchronous-gauge transfers for initial eta=+1 (MB C=1/2).
+// k is in Mpc^-1; thetaBaryonOverK is theta_b/k; primes denote d/dln(a).
+// CAMB's unit-curvature convention has initial eta=-1, hence opposite signs.
+struct BoltzmannTransfer {
+    double scaleFactor;
+    double deltaCdm;
+    double deltaBaryon;
+    double deltaNeutrino;
+    double thetaBaryonOverK;
+    double hPrime;
+    double eta;
+    double etaPrime;
+    double photonShear;
+    double neutrinoShear;
+    double conformalTime;
+    // Hamiltonian constraint compared with an independently integrated
+    // Einstein trace equation, divided by the sum of absolute terms.
+    double constraintResidual;
+    size_t acceptedSteps;
+    size_t rejectedSteps;
+};
 
-void einsteinBoltzmannInit(CosState* uptr, ZeroOrderUniverse const* uniPtr, double k,
-    double normalization, double a, double ns);
-void einsteinBoltzmann(
-    CosState* uptr, ZeroOrderUniverse const* uniPtr, double k, double amin, double amax);
-
-void einsteinBoltzmannInitSet(CosState* u, ZeroOrderUniverse* uni, double kmin, double kmax, int n,
-    double amin, double normalization);
-
-void einsteinBoltzmannInterpolationFunction(InterpolationFunctor<double>* cdmKFunc,
-    InterpolationFunctor<double>* velKFunc, CosState* u, ZeroOrderUniverse* uni, double kmin,
-    double kmax, double norm, int n, double astart, double astop, bool cont, double ns);
-
-#endif /* GPUTIGER_BOLTZMANN_HPP_ */
+// Flat CDM+baryon+photon+massless-neutrino cosmologies only. Scale factors
+// must be nondecreasing and inside the supplied background's domain.
+std::vector<BoltzmannTransfer> solveBoltzmannTransfers(ZeroOrderUniverse const& universe, double k,
+    std::vector<double> const& scaleFactors, BoltzmannSolverOptions const& options = {});

@@ -1,0 +1,28 @@
+{
+  "working_directory": "/home/dmarce1/workspace/cosmictiger",
+  "execution": "Builds and runs were sequential; at most one compiler/test process was active for these final checks.",
+  "rerun_for_metadata": false,
+  "runs": [
+    {
+      "variant": "fast_math",
+      "compile_command": "g++ -std=c++20 -O2 -ffast-math -I. tests/native_recombination.cpp src/chemistry/recombination.cpp src/cosmology/zero_order.cpp -o /tmp/native_recombination_final_fast",
+      "run_command": "/tmp/native_recombination_final_fast > /tmp/native_recombination_final_fast.log 2>&1",
+      "binary": "/tmp/native_recombination_final_fast",
+      "original_log": "/tmp/native_recombination_final_fast.log",
+      "exit_code": 0,
+      "binary_sha256": "3da8f457bc3a606ffff5d303f91e50d3b68ebc01151c49f25a3e820e04186f1e",
+      "log_sha256": "bdcf2915fa00759afb76d0b8dc404491c8ca7293b408dfebbf894f50581dbe50"
+    },
+    {
+      "variant": "address_undefined_sanitizers",
+      "compile_command": "g++ -std=c++20 -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -I. tests/native_recombination.cpp src/chemistry/recombination.cpp src/cosmology/zero_order.cpp -o /tmp/native_recombination_final_asan",
+      "run_command": "ASAN_OPTIONS=detect_leaks=0 /tmp/native_recombination_final_asan > /tmp/native_recombination_final_asan.log 2>&1",
+      "binary": "/tmp/native_recombination_final_asan",
+      "original_log": "/tmp/native_recombination_final_asan.log",
+      "exit_code": 0,
+      "limitation": "LeakSanitizer disabled because of sandbox limitations; AddressSanitizer and UndefinedBehaviorSanitizer were enabled.",
+      "binary_sha256": "faaac540804d9d30c3a634d6986e8464131583f2f35d7de8a15deec0bd69ede2",
+      "log_sha256": "330ff6a23837b93a4b79e82fe14466642549ba373c79c239b4575703a2ef1ee2"
+    }
+  ]
+}

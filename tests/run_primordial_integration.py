@@ -1,36 +1,87 @@
 """Production primordial/SPH startup, restart, metadata and backend regression."""
 import argparse
+import csv
 import ctypes
 from ctypes.util import find_library
+import io
+import math
 from pathlib import Path
-import shutil
 import struct
+import subprocess
 import sys
 
 from run_checkpoint import prepareCase, runSimulation, checkManifest
 
 
-def gasPayload(path):
+def gasState(path, requireEos=True):
     payload = (path / "checkpoint.0.dat").read_bytes()
     prefix = struct.pack("=2I", 0x43545350, 3)
     offset = payload.rfind(prefix)
     if offset < 0:
         raise RuntimeError("No versioned chemistry gas payload in checkpoint")
     fields = struct.unpack_from("=7I", payload, offset)
+    if fields[2] not in (4, 8) or fields[5:] != (3, 4):
+        raise RuntimeError(f"Unsupported chemistry checkpoint layout {fields}")
     count = int.from_bytes(payload[offset + 28:offset + 28 + fields[2]], sys.byteorder, signed=True)
     if count != 512:
         raise RuntimeError(f"Unexpected gas count {count}")
     # The tail is explicitly serialized: six signed fractions, eV/H energy,
     # pressure/energy ratio and frozen gamma for each gas particle.
-    chemistryStart = offset + 28 + fields[2] + count * (58 + fields[2])
+    chemistryStart = offset + 28 + fields[2] + count * (fields[3] + fields[4] + 38 + fields[2])
     chemistryEnd = chemistryStart + count * 9 * 4
+    if chemistryEnd > len(payload):
+        raise RuntimeError("Truncated chemistry checkpoint state")
     chemistry = payload[chemistryStart:chemistryEnd]
     values = struct.unpack(f"={count * 9}f", chemistry)
     for i in range(count):
         words = values[9 * i:9 * i + 9]
-        if not (all(abs(x) <= .5 for x in words[:6]) and words[6] > 0 and words[7] > 0 and words[8] > 1):
+        if not (all(math.isfinite(x) for x in words) and
+                all(abs(x) <= .5 for x in words[:6]) and words[6] > 0):
             raise RuntimeError(f"Invalid chemistry checkpoint state {words}")
-    return payload[offset:chemistryEnd]
+        if requireEos and not (words[7] > 0 and words[8] > 1):
+            raise RuntimeError(f"Invalid evolved chemistry EOS state {words}")
+    return [values[9 * i:9 * i + 9] for i in range(count)], payload[offset:chemistryEnd]
+
+
+def gasPayload(path):
+    return gasState(path)[1]
+
+
+def nativeInitialReference(executable, directory, redshift):
+    redshifts = directory / "initial_redshift.txt"
+    redshifts.write_text(f"{redshift:.17g}\n")
+    result = subprocess.run([str(executable.resolve()), "3.046", "0.005",
+                             str(redshifts), "1e-9"], text=True, capture_output=True,
+                            timeout=30, check=True)
+    (directory / "native_initial_reference.csv").write_text(result.stdout)
+    rows = list(csv.DictReader(io.StringIO(result.stdout)))
+    if len(rows) != 1 or float(rows[0]["z"]) != redshift:
+        raise RuntimeError("Native initialization reference did not return the requested epoch")
+    return {key: float(value) for key, value in rows[0].items()}
+
+
+def checkInitialChemistry(checkpoint, reference):
+    # SPH retains its existing mass convention and monatomic ideal-gas EOS.
+    # Decode signed minority abundances and infer temperature from the saved
+    # eV/H energy, independently of option printing and Silo derived fields.
+    helium = 0.2454006 / (4.0 * (1.0 - 0.2454006))
+    boltzmann = struct.unpack("=f", struct.pack("=f", 8.617333262145e-5))[0]
+    states, _ = gasState(checkpoint, requireEos=False)
+    for words in states:
+        fractions = [1.0 + value if math.copysign(1.0, value) < 0 else value
+                     for value in words[:6]]
+        expected = [reference["x_H"], reference["x_He"], reference["x_He_double"], 0, 0, 0]
+        if any(not math.isclose(actual, target, rel_tol=2e-6, abs_tol=2e-12)
+               for actual, target in zip(fractions, expected)):
+            raise RuntimeError(f"Initial checkpoint fractions {fractions} differ from native {expected}")
+        electrons = (fractions[0] - fractions[3] + 0.5 * fractions[5] +
+                     helium * (fractions[1] + 2.0 * fractions[2]))
+        particles = 1.0 + helium - 0.5 * (fractions[4] + fractions[5]) + electrons
+        temperature = words[6] / (1.5 * boltzmann * particles)
+        if not math.isclose(temperature, reference["T_m"], rel_tol=3e-6):
+            raise RuntimeError(f"Initial checkpoint T={temperature} K differs from native {reference['T_m']} K")
+    print(f"Native initial checkpoint: {len(states)} gas particles, "
+          f"T={reference['T_m']:.9g} K, HII/H={reference['x_H']:.9g}")
 
 
 
@@ -68,12 +119,11 @@ def checkOutput(directory):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("executable", type=Path)
-    parser.add_argument("power_file", type=Path)
     parser.add_argument("workdir", type=Path)
+    parser.add_argument("--recombination-reference", type=Path, required=True)
     parser.add_argument("--cuda", action="store_true")
     args = parser.parse_args()
     executable = args.executable.resolve()
-    recfast = executable.parent / "recfast"
     base = args.workdir.resolve()
     base.mkdir(parents=True, exist_ok=True)
     options = [str(executable), "--hpx:threads=2", "--hpx:bind=none",
@@ -82,16 +132,29 @@ def main():
                "--analysis.views=false", "--lightcone.enabled=false", "--analysis.power=false",
                "--analysis.groups=false", "--chemistry.enabled=true",
                "--chemistry.synchronizedRung=8", "--checkpoint.intervalSeconds=0",
+               "--cosmology.startRedshift=49", f"--cosmology.thetaCmb={2.7255 / 2.73:.17g}",
                "--output.directory=."]
-    for network in ("atomic6", "molecular9"):
-        baseline = prepareCase(base, f"{network}_baseline", args.power_file.resolve(), recfast)
+    for name, network in (("native_initial", "atomic6"), ("molecular9_native_initial", "molecular9")):
+        initial = prepareCase(base, name)
+        reference = nativeInitialReference(args.recombination_reference, initial, 49.0)
+        runSimulation(options + [f"--chemistry.network={network}",
+                                  "--run.test=nativeChemistryInitialization"],
+                      initial, "initial.log")
+        checkManifest(initial / "checkpoint.0", 0, testFixture=True)
+        checkInitialChemistry(initial / "checkpoint.0", reference)
+        print(f"{network}: pristine native initialization passed")
+    cases = (("atomic6", "atomic6", []),
+             ("molecular9_cold", "molecular9", []),
+             ("molecular9", "molecular9",
+              ["--chemistry.initialization=manual", "--chemistry.molecularFraction=0.2"]))
+    for name, network, initialization in cases:
+        baseline = prepareCase(base, f"{name}_baseline")
         table = "COSMICTIGER_PRIMORDIAL_RADIATION 1\n" + "\n".join(
             str(z) + " " + " ".join(["0"] * 14) for z in (0, 100)) + "\n"
         (baseline / "radiation.txt").write_text(table)
         command = options + [f"--chemistry.network={network}", "--chemistry.radiationFile=radiation.txt",
                              "--output.silo=true", "--output.units=both", "--output.frame=both"]
-        if network == "molecular9":
-            command += ["--chemistry.molecularFraction=0.2"]
+        command += initialization
         runSimulation(command + ["--run.maxIterations=1"], baseline, "run.log")
         checkpoint1 = baseline / "checkpoint.1"
         checkpoint2 = baseline / "checkpoint.2"
@@ -99,26 +162,27 @@ def main():
         checkManifest(checkpoint2, 2)
         uninterrupted = gasPayload(checkpoint2)
         checkOutput(baseline)
-        restarted = prepareCase(base, f"{network}_restart", args.power_file.resolve(), recfast, checkpoint1)
+        restarted = prepareCase(base, f"{name}_restart", checkpoint1)
         (restarted / "radiation.txt").write_text(table)
         runSimulation(command + ["--checkpoint.readIndex=1", "--run.maxIterations=0"], restarted, "restart.log")
         restored = gasPayload(restarted / "checkpoint.2")
         if uninterrupted != restored:
-            raise RuntimeError(f"{network}: restart changed the gas payload (source phase or state mismatch)")
-        altered = prepareCase(base, f"{network}_radiation_changed", args.power_file.resolve(), recfast, checkpoint1)
+            raise RuntimeError(f"{name}: restart changed the gas payload (source phase or state mismatch)")
+        altered = prepareCase(base, f"{name}_radiation_changed", checkpoint1)
         (altered / "radiation.txt").write_text(table + "# changed radiation provenance\n")
         output = runSimulation(command + ["--checkpoint.readIndex=1", "--run.maxIterations=0"],
                                altered, "rejected.log", expectSuccess=False)
         if "radiation" not in output.lower():
             raise RuntimeError("Changed radiation table lacked compatibility diagnostic")
-        incompatible = prepareCase(base, f"{network}_incompatible", args.power_file.resolve(), recfast, checkpoint1)
+        incompatible = prepareCase(base, f"{name}_incompatible", checkpoint1)
         output = runSimulation(options + [f"--chemistry.network={'molecular9' if network == 'atomic6' else 'atomic6'}",
+            "--chemistry.initialization=manual",
             "--checkpoint.readIndex=1", "--run.maxIterations=0"], incompatible, "rejected.log", expectSuccess=False)
         if "chemistry" not in output.lower():
             raise RuntimeError("Incompatible restart lacked chemistry diagnostic")
-        print(f"{network}: production {'CUDA' if args.cuda else 'CPU'} stepping, exact gas restart, incompatible-network rejection passed")
+        print(f"{name}: production {'CUDA' if args.cuda else 'CPU'} stepping, exact gas restart, incompatible-network rejection passed")
     # No silent extrapolation of the selected molecular cooling fits.
-    invalid = prepareCase(base, "invalid_domain", args.power_file.resolve(), recfast)
+    invalid = prepareCase(base, "invalid_domain")
     output = runSimulation(options + ["--chemistry.network=molecular9", "--chemistry.initialTemperature=10000",
         "--run.maxIterations=0"], invalid, "rejected.log", expectSuccess=False)
     if "chemistry" not in output.lower():
@@ -129,6 +193,6 @@ def main():
 if __name__ == "__main__":
     try:
         sys.exit(main())
-    except (OSError, RuntimeError, ValueError) as error:
+    except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as error:
         print(error, file=sys.stderr)
         sys.exit(1)

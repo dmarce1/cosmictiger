@@ -1,0 +1,8 @@
+Internal ctest changing into directory: /home/dmarce1/workspace/cosmictiger/build/sph_cpu_validation
+Test project /home/dmarce1/workspace/cosmictiger/build/sph_cpu_validation
+    Start 6: primordial_integration_cpu
+1/1 Test #6: primordial_integration_cpu .......   Passed  132.79 sec
+
+100% tests passed, 0 tests failed out of 1
+
+Total Test time (real) = 132.79 sec

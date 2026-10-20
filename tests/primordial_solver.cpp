@@ -54,8 +54,96 @@ struct QuadraticTraceLoss {
         return primordial::Status::Success;
     }
 };
+void checkColdEvolution() {
+    using namespace primordial;
+    for (int scenario = 0; scenario != 3; ++scenario) {
+        Environment environment;
+        environment.network = Network::Molecular9;
+        environment.heliumToHydrogenNumberRatio = 0.0f;
+        environment.nHydrogen = scenario == 2 ? 1.0e4f : 0.0f;
+        environment.cmbTemperature = scenario == 0 ? 80.0f : (scenario == 1 ? 20.0f : 0.0f);
+        State initial;
+        initial.abundances[scenario == 2 ? 4 : 0] = SignedAbundance::fromFraction(1.0f);
+        float const initialTemperature = scenario == 0 ? 10.0f : 80.0f;
+        require(thermalEnergyAtTemperature(initial, environment, initialTemperature,
+                    initial.thermalEnergy) == Status::Success,
+            "cold evolution initial state");
+        // Fully ionized zero-density gas has constant composition and cv=3kB.
+        // Compton exchange then gives the exact exponential T(t). The fully
+        // molecular case uses an independent binary64 RK4 integration of the
+        // CDS Table 2 cooling, LTE bridge, and J<=201 heat capacity; 1000/2000
+        // RK4 steps agree within 2e-13 K at the binary32 interval below.
+        double const comptonRate = 6.35264354e-26 *
+            std::pow(static_cast<double>(environment.cmbTemperature), 4) /
+            (3.0 * 8.617333262145e-5);
+        float const interval = scenario == 2 ? 1.0e11f : static_cast<float>(2.0 / comptonRate);
+        double const referenceTemperature = scenario == 2 ? 77.56686062469178 :
+                                                            environment.cmbTemperature +
+                (initialTemperature - environment.cmbTemperature) *
+                    std::exp(-comptonRate * interval);
+        double previousError = 1.0e99;
+        unsigned previousSteps = 0;
+        for (float tolerance : {1.0e-3f, 1.0e-4f, 1.0e-5f}) {
+            SolverOptions options;
+            options.relativeTolerance = tolerance;
+            // At 10 K the default 1e-6 eV absolute budget dominates the
+            // relative budget. Tighten it to measure timestep convergence.
+            options.energyAbsoluteTolerance = 1.0e-10f;
+            auto const result = advance(initial, environment, interval, options);
+            Eos eos;
+            require(result.status == Status::Success && result.acceptedTime == interval &&
+                    evaluateEos(result.state, environment, eos) == Status::Success,
+                "cold physical evolution completes");
+            require(eos.temperature >= 10.0f && eos.temperature < 100.0f,
+                "cold evolution stays in the supported domain");
+            require(scenario == 0 ? eos.temperature > initialTemperature :
+                                    eos.temperature < initialTemperature,
+                "cold source has the correct heating or cooling sign");
+            double const error = std::abs(eos.temperature - referenceTemperature);
+            require(error < previousError * 0.45 && result.acceptedSubsteps > previousSteps,
+                "cold physical solution converges with timestep tolerance");
+            previousError = error;
+            previousSteps = result.acceptedSubsteps;
+            std::printf("cold scenario%d tolerance%.3g T%.9g reference%.12g steps%u\n", scenario,
+                tolerance, eos.temperature, referenceTemperature, result.acceptedSubsteps);
+        }
+        require(previousError / referenceTemperature < 0.0015,
+            "refined cold solution agrees with independent reference");
+    }
+    Environment environment;
+    environment.network = Network::Molecular9;
+    environment.cmbTemperature = 136.275f;
+    auto const model = [](WorkingState const& state, Environment const& ambient,
+                           Derivative& derivative) {
+        return evaluateRhs(state, ambient, derivative);
+    };
+    for (float temperature : {10.0f, 30.0f, 35.0f, 36.0f, 40.0f, 49.0f, 80.0f}) {
+        for (float density : {1.0f, 1.0e4f}) {
+            environment.nHydrogen = density;
+            for (float molecularIonFraction : {0.0f, 0.1f}) {
+                WorkingState state;
+                state.abundances[0] = FloatFloat(0.2f);
+                state.abundances[4] = FloatFloat(0.1f);
+                state.abundances[5] = FloatFloat(molecularIonFraction);
+                float capacity;
+                require(thermalEnergyAtTemperature(state, environment, temperature,
+                            state.thermalEnergy, capacity) == Status::Success,
+                    "cold Jacobian initial state");
+                Derivative derivative;
+                FloatFloat jacobian[primordial::detail::kSolverVariables]
+                                   [primordial::detail::kSolverVariables];
+                SolverOptions options;
+                require(model(state, environment, derivative) == Status::Success &&
+                        primordial::detail::solverJacobian(
+                            state, environment, derivative, options, model, jacobian),
+                    "cold endpoint and H2+ subnormal Jacobian probes remain finite");
+            }
+        }
+    }
+}
 }    // namespace
 int main() {
+    checkColdEvolution();
     using namespace primordial;
     Environment environment;
     environment.heliumToHydrogenNumberRatio = 0.0f;

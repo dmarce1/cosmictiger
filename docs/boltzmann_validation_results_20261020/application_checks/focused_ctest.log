@@ -1,0 +1,32 @@
+Internal ctest changing into directory: /home/dmarce1/workspace/cosmictiger/build/sph_cpu_validation
+Test project /home/dmarce1/workspace/cosmictiger/build/sph_cpu_validation
+      Start 16: recfast_history
+      Start 10: recfast_standard
+ 1/13 Test #10: recfast_standard .....................   Passed    0.01 sec
+      Start 13: recfast_fast_math
+ 2/13 Test #13: recfast_fast_math ....................   Passed    0.01 sec
+      Start 17: linear_power
+ 3/13 Test #17: linear_power .........................   Passed    0.00 sec
+      Start 11: recombination_thermal_standard
+ 4/13 Test #11: recombination_thermal_standard .......   Passed    0.00 sec
+      Start 14: recombination_thermal_fast_math
+ 5/13 Test #14: recombination_thermal_fast_math ......   Passed    0.00 sec
+ 6/13 Test #16: recfast_history ......................   Passed    0.66 sec
+      Start 33: grouped_options
+ 7/13 Test #33: grouped_options ......................   Passed   18.52 sec
+      Start 18: boltzmann
+      Start 12: recombination_background_standard
+ 8/13 Test #12: recombination_background_standard ....   Passed    0.00 sec
+      Start 15: recombination_background_fast_math
+ 9/13 Test #15: recombination_background_fast_math ...   Passed    0.00 sec
+10/13 Test #18: boltzmann ............................   Passed    6.60 sec
+      Start 73: smoke_dm_cpu
+11/13 Test #73: smoke_dm_cpu .........................   Passed    1.80 sec
+      Start 19: boltzmann_initialization_false_cpu
+12/13 Test #19: boltzmann_initialization_false_cpu ...   Passed   23.88 sec
+      Start 20: boltzmann_initialization_true_cpu
+13/13 Test #20: boltzmann_initialization_true_cpu ....   Passed   23.23 sec
+
+100% tests passed, 0 tests failed out of 13
+
+Total Test time (real) =  74.69 sec

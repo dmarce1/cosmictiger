@@ -1,5 +1,9 @@
 # Primordial chemistry implementation plan
 
+This records the original implementation plan and 2026-10-18 baseline.
+Subsequent changes add [native recombination and particle initialization](native_recombination.md),
+remove bundled RECFAST, and [extend molecular9 to 10 K](molecular9_cold.md).
+
 Build a new local thermochemistry module with the same reaction network, equation
 of state, and stiff integration algorithm on CPU and CUDA. Start with atomic H/He,
 then add a complete molecular hydrogen network. Treat deuterium and HD as an

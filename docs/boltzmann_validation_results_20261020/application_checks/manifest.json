@@ -1,0 +1,33 @@
+{
+  "asan_ubsan": "pass; ASAN_OPTIONS=detect_leaks=0",
+  "binary_sha256": {
+    "build/sph_cpu_validation/boltzmann_reference": "6bb7ae63c601ac645dfec25c2c97a89a1962aa7370698e81f482d46875b3d590",
+    "build/sph_cpu_validation/boltzmann_test": "d7fade5a99f2bc4bc84b0877cbcf1f2228a70e92ba34dcb5a66de90ced00f87b",
+    "build/sph_cpu_validation/cosmictiger": "b19e64ff0a9f7401cede30794fad29efa32b56663e6ebe7fc642c35a236956c1",
+    "build/sph_cpu_validation/recfast": "d40829067a3242a8489bf74db0576f721342520151ce8ee4bd5fa17b8dd0e722"
+  },
+  "cpu_only": true,
+  "focused_ctest_passed": 13,
+  "git_head_at_audit_start": "1efb52fb",
+  "git_head_at_validation": "d8e957281698a6773626429a5ba76a8353ff3ad6",
+  "qb_logins": 0,
+  "scope": "No massive-neutrino implementation; no GPU or MPI validation. Unrelated changes and independently advanced Git history preserved.",
+  "source_sha256": {
+    "CMakeLists.txt": "bb00ea220fecbedaef08f88aff298eaf7f9a0a0affdb7bc2020bc4bb773a1f54",
+    "cosmictiger/cosmology/boltzmann.hpp": "7bc2f2f3f0953c5144a95074bcc695c8d37fba0dbf2c6e1f416175727dd6ef88",
+    "cosmictiger/cosmology/linear_power.hpp": "8a0d18d7132d300c52be80b0f0e2c1b643749f8719d35ecb1df6d1474d600e2e",
+    "recfast/recfast.f": "d1bace4ff7b4323098fbb41bcd7bfda990027ec67178f71c6cb236f6dccdcc7a",
+    "src/core/options.cpp": "6bb3b3c0a7d6fc537f9c337990c2af58eece0816d1018ac22bdcc4b65718af98",
+    "src/cosmology/boltzmann.cpp": "1ba0b8cb2557842a34c0ffd4ee8a73e7f200dceaf3b04b6cefad8202bc3d1c86",
+    "src/cosmology/initialize.cpp": "26dfed0e4a5b596ac3dcfe5207a39a413c3a50a414d6a39e59623ac2e1eca51b",
+    "src/cosmology/zero_order.cpp": "1a7b7ccf81633669b4802b24c803425935bb03df49eec29dd96a51f28afd831a",
+    "tests/boltzmann.cpp": "7e9223b11affd6b8b174ddc0338b9408296dd85b73729ce574149dc6b5d73da2",
+    "tests/boltzmann_reference.cpp": "df799668a4ebc9d33ba066e7765114b978cf0d2feac706216d2a3ff541f2f618",
+    "tests/camb_reference.py": "a38515c6a458bb84343b8190bcdeb44b2dbfedca1ff07ea65365b8bedd185c81",
+    "tests/linear_power.cpp": "1e95d2b12d0799bf5337181fe92fa8362c3e2a23deacceb1e3ca897ab6b7440f",
+    "tests/plot_boltzmann_validation.py": "3dc141f69b9297eac52cc2dac9dd306c3c43ef9013654d5f1c3f9158b5b35d4f",
+    "tests/recombination_background.cpp": "ef622d54b96af247e5f6fbc8dd7237eb163e9a49db2b7f452391b0e18074d5dd",
+    "tests/run_options.py": "8910601ef769ae871505d4716453587345b22e2ab79c8167a8bcbaa798efcad2",
+    "tests/run_recfast.py": "21f429a3f4b0713fb492543043e50927bbe2afae83e6f558ecab0aea58a9b67a"
+  }
+}

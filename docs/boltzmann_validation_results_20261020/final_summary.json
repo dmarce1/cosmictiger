@@ -1,0 +1,82 @@
+{
+  "final_neff_0_default": {
+    "complete": true,
+    "executable_sha256": "6bb7ae63c601ac645dfec25c2c97a89a1962aa7370698e81f482d46875b3d590",
+    "max_constraint": 8.966315384825464e-07,
+    "max_rejections": 22.0,
+    "max_relative_error": {
+      "delta_baryon": 0.00011398832942910442,
+      "delta_cb": 0.00011399573607551172,
+      "delta_cdm": 0.00011404418585914122,
+      "p_cb_mpc3": 0.00022790845703668516
+    },
+    "max_steps": 2750.0,
+    "seconds": 0.7411770690014237
+  },
+  "final_neff_0_refined": {
+    "complete": true,
+    "executable_sha256": "6bb7ae63c601ac645dfec25c2c97a89a1962aa7370698e81f482d46875b3d590",
+    "max_constraint": 1.5763945511115747e-07,
+    "max_rejections": 27.0,
+    "max_relative_error": {
+      "delta_baryon": 1.9920473649182036e-05,
+      "delta_cb": 1.992834194464166e-05,
+      "delta_cdm": 1.997688218602356e-05,
+      "p_cb_mpc3": 8.40295623570908e-05
+    },
+    "max_steps": 4948.0,
+    "seconds": 2.000965019000432
+  },
+  "final_neff_3_046_default": {
+    "complete": true,
+    "executable_sha256": "6bb7ae63c601ac645dfec25c2c97a89a1962aa7370698e81f482d46875b3d590",
+    "max_constraint": 8.834034014424077e-07,
+    "max_rejections": 89.0,
+    "max_relative_error": {
+      "delta_baryon": 0.00017849572867789654,
+      "delta_cb": 0.00019316994275997423,
+      "delta_cdm": 0.00019600023424648505,
+      "p_cb_mpc3": 0.0003958133962596033
+    },
+    "max_steps": 5451.0,
+    "seconds": 1.323263753001811
+  },
+  "final_neff_3_046_refined": {
+    "complete": true,
+    "executable_sha256": "6bb7ae63c601ac645dfec25c2c97a89a1962aa7370698e81f482d46875b3d590",
+    "max_constraint": 1.5751847604313796e-07,
+    "max_rejections": 160.0,
+    "max_relative_error": {
+      "delta_baryon": 4.6331520912934465e-05,
+      "delta_cb": 4.9542871405794386e-05,
+      "delta_cdm": 5.035943017595024e-05,
+      "p_cb_mpc3": 0.00010852168355213188
+    },
+    "max_steps": 13355.0,
+    "seconds": 4.754105756001081
+  },
+  "neff_0_refinement": {
+    "delta_baryon": 9.406972969361327e-05,
+    "delta_cb": 9.406926877530974e-05,
+    "delta_cdm": 9.406918288212829e-05,
+    "p_cb_mpc3": 0.00018812968852321976
+  },
+  "neff_3_046_hierarchy_change_at_rtol_1e_7": {
+    "delta_baryon": 0.0001827835194967431,
+    "delta_cb": 0.00018274410935492647,
+    "delta_cdm": 0.0001827434465260236,
+    "p_cb_mpc3": 0.00036552161411940176
+  },
+  "neff_3_046_refinement": {
+    "delta_baryon": 0.00013215808467981205,
+    "delta_cb": 0.00014361995600919997,
+    "delta_cdm": 0.0001456334700520312,
+    "p_cb_mpc3": 0.00028726053871008794
+  },
+  "neff_3_046_tolerance_change_at_lmax_64": {
+    "delta_baryon": 9.519352815201554e-05,
+    "delta_cb": 9.519306931315974e-05,
+    "delta_cdm": 9.51929838073351e-05,
+    "p_cb_mpc3": 0.0001903770769059454
+  }
+}

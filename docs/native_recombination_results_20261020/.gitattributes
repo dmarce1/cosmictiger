@@ -1,0 +1,5 @@
+# Preserve verbatim numerical reference output and the source instrumentation patch.
+**/*.dat whitespace=-blank-at-eol
+**/*.log whitespace=-blank-at-eol
+**/raw/*.txt whitespace=-blank-at-eol
+recfast/output_instrumentation.patch -whitespace

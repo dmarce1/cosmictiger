@@ -1,0 +1,7 @@
+{
+  "samples": 1024,
+  "minimum_k_h_mpc": 1e-05,
+  "maximum_k_h_mpc": 25.3400094989,
+  "sigma8_from_saved_spectrum": 0.8607000115577018,
+  "requested_sigma8": 0.8607
+}

@@ -1,0 +1,12 @@
+Internal ctest changing into directory: /home/dmarce1/workspace/cosmictiger/build/sph_cpu_validation
+Test project /home/dmarce1/workspace/cosmictiger/build/sph_cpu_validation
+    Start  6: primordial_integration_cpu
+1/3 Test  #6: primordial_integration_cpu ...........   Passed   67.51 sec
+    Start 22: boltzmann_initialization_false_cpu
+2/3 Test #22: boltzmann_initialization_false_cpu ...   Passed   23.99 sec
+    Start 23: boltzmann_initialization_true_cpu
+3/3 Test #23: boltzmann_initialization_true_cpu ....   Passed   23.74 sec
+
+100% tests passed, 0 tests failed out of 3
+
+Total Test time (real) = 115.25 sec

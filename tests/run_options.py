@@ -65,11 +65,12 @@ def main():
                 "hydro.centralEffectiveRadius", "hydro.centralSupportRadius",
                 "output.silo", "output.siloInterval", "output.directory", "output.units", "output.frame",
                 "output.xMin", "output.xMax", "output.yMin", "output.yMax",
-                "output.zMin", "output.zMax"}
+                "output.zMin", "output.zMax", "chemistry.initialization"}
     if not required <= option_names:
         raise RuntimeError(f"grouped help is missing {sorted(required - option_names)}")
     removed_options = {"hydro.chemistry", "hydro.conduction", "hydro.diffusion",
-                       "hydro.yReflect", "gravity.sphSmoothing", "cosmology.omegaK"}
+                       "hydro.yReflect", "gravity.sphSmoothing", "cosmology.omegaK",
+                       "initial.usePowerFile"}
     if removed_options & option_names:
         raise RuntimeError(f"removed options remain in help: {sorted(removed_options & option_names)}")
     for name in option_names - {"help", "configuration"}:
@@ -146,6 +147,87 @@ mapSize = 8
         match = re.search(r"^" + re.escape(key) + r"\s*:\s*(\S+)", output, re.MULTILINE)
         if match is None or not math.isclose(float(match.group(1)), expected, rel_tol=1e-5):
             raise RuntimeError(f"incorrect {key}: expected {expected}")
+
+    chemistry_options = [option for option in metadata_options
+                         if not option.startswith("--hydro.enabled=")] + [
+                             "--hydro.enabled=true", "--chemistry.enabled=true",
+                             "--cosmology.startRedshift=49"]
+    chemistry_fields = ("initialTemperature", "hydrogenIonFraction",
+                        "heliumIonFraction", "heliumDoubleIonFraction")
+
+    def chemistrySettings(output):
+        result = {}
+        for field in chemistry_fields:
+            match = re.search(r"^chemistry\." + field + r"\s*:\s*(\S+)", output, re.MULTILINE)
+            if match is None or not math.isfinite(float(match.group(1))):
+                raise RuntimeError(f"missing finite resolved chemistry.{field}")
+            result[field] = float(match.group(1))
+        return result
+
+    native = chemistrySettings(run("chemistry_native_defaults", chemistry_options))
+    if not (10 < native["initialTemperature"] < 100 and
+            1e-5 < native["hydrogenIonFraction"] < 1e-3):
+        raise RuntimeError(f"Native chemistry defaults are not a cold residual plasma: {native}")
+    earlier = chemistrySettings(run("chemistry_native_earlier_epoch", [
+        option for option in chemistry_options if not option.startswith("--cosmology.startRedshift=")
+    ] + ["--cosmology.startRedshift=99"]))
+    if earlier["initialTemperature"] <= native["initialTemperature"]:
+        raise RuntimeError("Native chemistry initialization ignored the requested starting epoch")
+    restarted = chemistrySettings(run("chemistry_restart_resolution",
+                                      chemistry_options + ["--checkpoint.readIndex=1"]))
+    if restarted != native:
+        raise RuntimeError("Restart option resolution changed native initialization metadata")
+    manual = run("chemistry_manual_defaults",
+                 chemistry_options + ["--chemistry.initialization=manual"])
+    for field, value in zip(chemistry_fields, (1000.0, 2e-4, 0.0, 0.0)):
+        assertNumericSetting(manual, f"chemistry.{field}", value)
+    for field, value in zip(chemistry_fields, (777.0, 0.01, 0.1, 0.02)):
+        output = run(f"chemistry_override_{field}", chemistry_options + [f"--chemistry.{field}={value}"])
+        for checked in chemistry_fields:
+            assertNumericSetting(output, f"chemistry.{checked}",
+                                 value if checked == field else native[checked])
+    chemistry_config = args.workdir / "chemistry_initialization.ini"
+    chemistry_config.write_text("[chemistry]\ninitialTemperature = 500\nhydrogenIonFraction = 0.01\n")
+    output = run("chemistry_override_precedence", chemistry_options + [
+        f"--configuration={chemistry_config.resolve()}", "--chemistry.initialTemperature=750"])
+    for field, value in (("initialTemperature", 750), ("hydrogenIonFraction", 0.01),
+                         ("heliumIonFraction", native["heliumIonFraction"]),
+                         ("heliumDoubleIonFraction", native["heliumDoubleIonFraction"])):
+        assertNumericSetting(output, f"chemistry.{field}", value)
+    molecular_native = chemistrySettings(run(
+        "chemistry_molecular_native", chemistry_options + ["--chemistry.network=molecular9"]))
+    if molecular_native != native:
+        raise RuntimeError("Cold molecular initialization differs from the native atomic history")
+    for label, extra in (("unknown_mode", ["--chemistry.initialization=unknown"]),
+                         ("molecular_hot", ["--chemistry.network=molecular9",
+                                            "--chemistry.initialTemperature=6001"])):
+        output = run(f"chemistry_{label}", chemistry_options + extra, success=False)
+        if "chemistry" not in output.lower():
+            raise RuntimeError(f"Invalid chemistry initialization {label} lacked a diagnostic")
+    output = run("chemistry_molecular_below_floor", [
+        option for option in chemistry_options if not option.startswith("--cosmology.startRedshift=")
+    ] + ["--cosmology.startRedshift=10", "--chemistry.network=molecular9"], success=False)
+    if "chemistry" not in output.lower():
+        raise RuntimeError("Native molecular initialization below 10 K lacked a diagnostic")
+
+    # Photon density is fixed by the requested blackbody temperature and H0;
+    # neutrinos add radiation without changing that photon density.
+    for neff, temperature in ((0.0, 2.7255), (3.046, 2.7255), (6.0, 3.0)):
+        output = run(f"radiation_{neff}_{temperature}", metadata_options + [
+            f"--cosmology.nEff={neff}", f"--cosmology.thetaCmb={temperature / 2.73:.17g}"])
+        hubble = 0.6732 * 1.e7 / 3.086e24
+        criticalDensity = 3.0 * hubble**2 / (8.0 * math.pi * 6.67259e-8)
+        photons = (4.0 * 5.67051e-5 / 2.99792458e10) * temperature**4 / (
+            criticalDensity * 2.99792458e10**2)
+        neutrinos = photons * neff * (7.0 / 8.0) * (4.0 / 11.0)**(4.0 / 3.0)
+        for key, expected in (("omegaGamma", photons), ("omegaNu", neutrinos),
+                              ("omegaR", photons + neutrinos)):
+            assertNumericSetting(output, f"cosmology.{key}", expected)
+
+    for index, invalid in enumerate((
+            "--cosmology.nEff=-1", "--cosmology.thetaCmb=0", "--cosmology.hubble=0",
+            "--cosmology.heliumFraction=1", "--cosmology.sigma8=nan")):
+        run(f"invalid_cosmology_{index}", metadata_options + [invalid], success=False)
 
     def assertIgnoredOption(output, ignoredKey):
         if not any(ignoredKey in line and "warning" in line.lower() and "ignored" in line.lower()
@@ -335,7 +417,8 @@ mapSize = 8
     root = Path(__file__).resolve().parents[1]
     optional_keys = {"gravity.effectiveRadius", "gravity.supportRadius",
                      "hydro.centralEffectiveRadius", "hydro.centralSupportRadius",
-                     "hydro.minEffectiveRadius", "hydro.maxEffectiveRadius"}
+                     "hydro.minEffectiveRadius", "hydro.maxEffectiveRadius",
+                     *(f"chemistry.{field}" for field in chemistry_fields)}
     expected_keys = option_names - {"help", "configuration"} - optional_keys
     for path in [root / "default.ini", *sorted((root / "configurations").glob("*.ini"))]:
         ini = configparser.ConfigParser(interpolation=None, inline_comment_prefixes=("#",))
@@ -345,8 +428,8 @@ mapSize = 8
         actual_keys = {f"{section}.{key}" for section in ini.sections() for key in ini[section]}
         if actual_keys != expected_keys:
             raise RuntimeError(f"{path.name} option coverage differs: {sorted(actual_keys ^ expected_keys)}")
-        # Alternatives stay commented so loading a complete example does not
-        # accidentally select two representations and trigger a warning.
+        # Radius alternatives and manual chemistry overrides remain commented,
+        # preserving one radius representation and native initialization.
         documented_alternatives = set()
         section = None
         for line in path.read_text().splitlines():
@@ -357,7 +440,7 @@ mapSize = 8
             if section and alternative_match:
                 documented_alternatives.add(f"{section}.{alternative_match.group(1)}")
         if not optional_keys <= documented_alternatives:
-            raise RuntimeError(f"{path.name} is missing commented radius alternatives: "
+            raise RuntimeError(f"{path.name} is missing commented optional settings: "
                                f"{sorted(optional_keys - documented_alternatives)}")
         if ini["output"]["units"] != "code" or ini["output"]["frame"] != "comoving":
             raise RuntimeError(f"{path.name} must preserve native output defaults")
@@ -453,8 +536,11 @@ mapSize = 8
                 "--run.test=sphGravity", "--compute.cuda=false", "--hydro.enabled=true",
                 "--initial.particlesPerDimension=8", f"--cosmology.{parameter}={value}"],
                 success=False)
-            if "class masses" not in output:
-                raise RuntimeError(f"invalid {parameter} did not produce a class-mass diagnostic")
+            # Negative and nonfinite densities fail the common cosmology guard;
+            # zero is allowed there but cannot supply an SPH particle class.
+            diagnostic = "class masses" if value == "0" else "Invalid cosmology"
+            if diagnostic not in output:
+                raise RuntimeError(f"invalid {parameter} did not produce {diagnostic!r}")
     output = run("support_half_box", ["--initial.particlesPerDimension=8",
                                       "--hydro.minSupportRadius=5"], success=False)
     if "half the periodic box" not in output:

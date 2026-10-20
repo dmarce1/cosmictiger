@@ -174,6 +174,206 @@ void checkEos() {
     require(validateState(molecule, environment) == Status::UnsupportedState,
         "explicit high density rejection");
 }
+void checkColdMolecularPhysics() {
+    using namespace primordial;
+    // Independent anchors from the published upward rates in CDS Table 1,
+    // J/A+A/647/A155, not the downward polynomial coefficients used at runtime:
+    // https://cdsarc.cds.unistra.fr/ftp/J/A+A/647/A155/table1.dat
+    // Rows 0020, 0121, 1030, 1131; multiply m^3/s by 1e6, excitation
+    // energy kB*DeltaT, and fixed 3:1 pair weights 1/16,3/16,3/16,9/16.
+    // The 3.5% allowance covers the independent printed rates versus Table 2 fits.
+    double const tableCooling[] = {2.3330194081667853e-36, 2.4019446499887801e-25,
+        1.1854452296577507e-21, 8.7509890777940519e-20, 1.2028808870639384e-18,
+        7.1258981523484905e-18, 2.6077273613845835e-17, 7.0590055823064442e-17};
+    for (int i = 0; i != 8; ++i) {
+        float cooling[5], lte;
+        float const temperature = static_cast<float>(10 * (i + 1));
+        require(molecularCoolingCoefficients(temperature, cooling, lte) == Status::Success,
+            "cold molecular cooling domain");
+        close(cooling[1], tableCooling[i], 0.035, "independent CDS upward-rate cooling anchor");
+    }
+    double const polynomialTemperature[] = {10.0, 20.0, 30.0, 50.0, 80.0};
+    double const polynomialCooling[] = {2.3019867366788452e-36, 2.4779944150853826e-25,
+        1.1932265300740437e-21, 1.1880812413988798e-18, 7.093909511871683e-17};
+    // Separate binary64 evaluation of the published Table 2 polynomials and
+    // detailed balance checks implementation precision independently of the
+    // several-percent fitting error against Table 1 above.
+    for (int i = 0; i != 5; ++i) {
+        float cooling[5], lte;
+        require(molecularCoolingCoefficients(
+                    static_cast<float>(polynomialTemperature[i]), cooling, lte) == Status::Success,
+            "cold polynomial reference domain");
+        close(cooling[1], polynomialCooling[i], 5.0e-6,
+            "CDS polynomial and detailed balance binary64 reference");
+    }
+    // Independent binary64 GA08 Table 8 evaluation. H has its published
+    // 10..100 K branch; He,H+,e fits already include this temperature range.
+    // https://arxiv.org/abs/0803.1768
+    double const coefficients[][6] = {
+        {-16.818342, 37.383713, 58.145166, 48.656103, 20.159831, 3.8479610},
+        {-23.689237, 2.1892372, -0.81520438, 0.29036281, -0.16596184, 0.19191375},
+        {-21.716699, 1.3865783, -0.37915285, 0.11453688, -0.23214154, 0.058538864},
+        {-34.286155, -48.537163, -77.121176, -51.352459, -15.169160, -0.98120322}};
+    int const partners[] = {0, 2, 3, 4};
+    for (float temperature : {10.0f, 20.0f, 49.0f, 80.0f}) {
+        float cooling[5], lte;
+        require(molecularCoolingCoefficients(temperature, cooling, lte) == Status::Success,
+            "cold GA08 coefficients");
+        double const x = std::log10(static_cast<double>(temperature) / 1000.0);
+        for (int partner = 0; partner != 4; ++partner) {
+            double value = 0.0;
+            for (int power = 0; power != 6; ++power) {
+                value += coefficients[partner][power] * std::pow(x, power);
+            }
+            double const expected = std::pow(10.0, value) / 1.602176634e-12;
+            close(cooling[partners[partner]], expected, 1.0e-3,
+                "cold GA08 independent binary64 reference");
+            require(cooling[partners[partner]] > 0.0f,
+                "cold cooling avoids premature erg-unit underflow");
+        }
+    }
+    for (float boundary : {80.0f, 100.0f}) {
+        float center[5], left[5], right[5], lte;
+        require(molecularCoolingCoefficients(boundary, center, lte) == Status::Success &&
+                molecularCoolingCoefficients(boundary - 0.05f, left, lte) == Status::Success &&
+                molecularCoolingCoefficients(boundary + 0.05f, right, lte) == Status::Success,
+            "cold compatibility join samples");
+        for (int partner = 0; partner != 2; ++partner) {
+            double const leftSlope = std::log(static_cast<double>(center[partner]) / left[partner]);
+            double const rightSlope =
+                std::log(static_cast<double>(right[partner]) / center[partner]);
+            close(leftSlope, rightSlope, 0.025, "cold compatibility join first derivative");
+            require(std::abs(leftSlope) < 0.005 && std::abs(rightSlope) < 0.005,
+                "cold compatibility join continuous value");
+        }
+    }
+    Environment environment;
+    environment.network = Network::Molecular9;
+    // Every kelvin resolves the H2+ LTE transition from zero through subnormal
+    // values around 35..45 K. Exact-zero H2+ must not create a 0/0 source.
+    for (int temperature = 10; temperature <= 100; ++temperature) {
+        RateCoefficients rates;
+        require(evaluateRateCoefficients(
+                    static_cast<float>(temperature), Network::Molecular9, rates) == Status::Success,
+            "cold reaction coefficient grid");
+        for (float rate : rates.collision) {
+            require(std::isfinite(rate) && rate >= 0.0f, "nonnegative finite cold reaction rate");
+        }
+        for (float density : {0.0f, 1.0e-8f, 1.0f, 1.0e4f}) {
+            environment.nHydrogen = density;
+            for (float cmb : {0.0f, 20.0f, 136.275f}) {
+                environment.cmbTemperature = cmb;
+                for (int mixture = 0; mixture != 6; ++mixture) {
+                    State state;
+                    if (mixture == 1) {
+                        state.abundances[4] = SignedAbundance::fromFraction(1.0f);
+                    } else if (mixture == 2) {
+                        state.abundances[0] = SignedAbundance::fromFraction(1.0f);
+                        state.abundances[2] = SignedAbundance::fromFraction(1.0f);
+                    } else if (mixture >= 3) {
+                        state.abundances[0] = SignedAbundance::fromFraction(0.2f);
+                        state.abundances[1] = SignedAbundance::fromFraction(0.1f);
+                        state.abundances[4] = SignedAbundance::fromFraction(0.1f);
+                        state.abundances[5] = SignedAbundance::fromFraction(
+                            mixture == 3 ? 0.0f : (mixture == 4 ? 1.0e-20f : 0.1f));
+                    }
+                    state = atTemperature(state, environment, static_cast<float>(temperature));
+                    Eos eos;
+                    Derivative derivative;
+                    require(evaluateEos(state, environment, eos) == Status::Success,
+                        "cold mixture EOS inversion");
+                    close(
+                        eos.temperature, temperature, 1.5e-6, "cold mixture temperature roundtrip");
+                    require(evaluateRhs(state, environment, derivative) == Status::Success &&
+                            derivative.thermalEnergy.isFinite(),
+                        "finite cold mixture thermal RHS");
+                    for (auto const& abundance : derivative.abundances) {
+                        require(abundance.isFinite(), "finite cold mixture species RHS");
+                    }
+                }
+            }
+        }
+    }
+    // Binary64 evaluation of GA08 eqs. (44)-(50) isolates the H2+ LTE
+    // bridge through its binary32 subnormal interval. Absolute error of a
+    // few subnormal ulps is allowed when the physical result is unresolvable.
+    environment.nHydrogen = 1.0e4f;
+    environment.cmbTemperature = 0.0f;
+    State ionMixture;
+    ionMixture.abundances[0] = SignedAbundance::fromFraction(0.2f);
+    ionMixture.abundances[4] = SignedAbundance::fromFraction(0.1f);
+    ionMixture.abundances[5] = SignedAbundance::fromFraction(0.1f);
+    auto const ionComposition = composition(ionMixture, environment);
+    for (int temperature = 30; temperature <= 70; ++temperature) {
+        RateCoefficients rates;
+        require(evaluateRateCoefficients(
+                    static_cast<float>(temperature), Network::Molecular9, rates) == Status::Success,
+            "H2+ bridge coefficient setup");
+        FloatFloat flux[kReactionCount]{};
+        ThermalRates thermal;
+        require(evaluateThermalRates(ionComposition, environment, static_cast<float>(temperature),
+                    rates, flux, thermal) == Status::Success,
+            "H2+ subnormal bridge finite");
+        double const electron = (1.1e-19 / 1.602176634e-12) *
+            std::pow(static_cast<double>(temperature), -0.34) * std::exp(-3025.0 / temperature);
+        double const atom = (1.36e-22 / 1.602176634e-12) * std::exp(-3152.0 / temperature);
+        double const lte = (2.0e-19 / 1.602176634e-12) *
+            std::pow(static_cast<double>(temperature), 0.1) * std::exp(-3125.0 / temperature);
+        double const low = environment.nHydrogen *
+            (ionComposition.hydrogen.toDouble() * atom +
+                ionComposition.electrons.toDouble() * electron);
+        double const expected =
+            ionComposition.molecularHydrogenPlus.toDouble() * low / (1.0 + low / lte);
+        require(std::abs(thermal.molecularIonLineCooling.toDouble() - expected) <=
+                5.0 * std::numeric_limits<float>::denorm_min() + 3.0e-5 * expected,
+            "H2+ bridge binary64 reference across subnormal LTE");
+    }
+    State molecule;
+    molecule.abundances[4] = SignedAbundance::fromFraction(1.0f);
+    environment.heliumToHydrogenNumberRatio = 0.0f;
+    for (float temperature : {10.0f, 20.0f, 49.0f, 80.0f, 100.0f}) {
+        // Independent double partition sums through J=201 for fixed ortho:para
+        // 3:1. This checks the thermal energy and derivative, not an E=cv*T model.
+        double rotationEnergy = 0.0, rotationCapacity = 0.0;
+        for (int parity = 0; parity != 2; ++parity) {
+            double partition = 0.0, first = 0.0, second = 0.0;
+            for (int j = parity; j <= 201; j += 2) {
+                double const level = 85.4 * (j * (j + 1) - 2 * parity);
+                double const weight = (2 * j + 1) * std::exp(-level / temperature);
+                partition += weight;
+                first += weight * level;
+                second += weight * level * level;
+            }
+            double const fraction = parity == 0 ? 0.25 : 0.75;
+            rotationEnergy += fraction * first / partition;
+            rotationCapacity += fraction * (second / partition - std::pow(first / partition, 2)) /
+                (static_cast<double>(temperature) * temperature);
+        }
+        double const occupation = std::exp(-5987.0 / temperature);
+        double const vibrationEnergy = 5987.0 * occupation / (1.0 - occupation);
+        double const vibrationCapacity =
+            std::pow(5987.0 / temperature, 2) * occupation / std::pow(1.0 - occupation, 2);
+        double const expectedEnergy =
+            0.5 * 8.617333262145e-5 * (1.5 * temperature + rotationEnergy + vibrationEnergy);
+        double const expectedCapacity =
+            0.5 * 8.617333262145e-5 * (1.5 + rotationCapacity + vibrationCapacity);
+        molecule = atTemperature(molecule, environment, temperature);
+        Eos eos;
+        require(evaluateEos(molecule, environment, eos) == Status::Success,
+            "cold molecular partition EOS");
+        close(molecule.thermalEnergy, expectedEnergy, 8.0e-7, "cold independent partition energy");
+        close(eos.heatCapacity, expectedCapacity, 8.0e-7, "cold independent partition derivative");
+    }
+    FloatFloat energy;
+    float capacity, cooling[5], lte;
+    RateCoefficients rates;
+    require(thermalEnergyAtTemperature(workingState(molecule), environment, 9.99f, energy,
+                capacity) == Status::UnsupportedState &&
+            molecularCoolingCoefficients(9.99f, cooling, lte) == Status::UnsupportedState &&
+            evaluateRateCoefficients(9.99f, Network::Molecular9, rates) == Status::UnsupportedState,
+        "no silent extrapolation below 10 K");
+}
+
 void checkSources() {
     using namespace primordial;
     Environment environment;
@@ -294,6 +494,7 @@ int main() {
     checkAbundances();
     checkRates();
     checkEos();
+    checkColdMolecularPhysics();
     checkSources();
     checkThermalLedger();
     std::puts("primordial rates, conservation, EOS, and thermal source tests passed");

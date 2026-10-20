@@ -1,0 +1,8 @@
+{
+  "build/sph_cpu_validation/cosmictiger": "6685b18d493a2009db532cd33a14aff0f434d997ebbf6879c14615950aaf135d",
+  "build/sph_cpu_validation/boltzmann_reference": "dc406002d689ffaf05d9173853a56e54c27e03908ec5b7ecf5e9c07d060a1bdd",
+  "src/core/options.cpp": "7e3b611f8705c321bb6e21f1ce5b941ce29dd87adc857fbd673409be46a6433b",
+  "src/cosmology/initialize.cpp": "d916338e3689d9df86a0146edd4a3d1efe8cf21d20d85c7bb9c11a13d0898878",
+  "cosmictiger/core/options.hpp": "470fe05b971b56abc06e7869d25fb4aa7590004c2ab4b2e9f2b798573be9ac19",
+  "src/chemistry/recombination.cpp": "fead73abeefdd027fd179ec66573397db92cd490f119de2ea8e19e8eeea0526e"
+}

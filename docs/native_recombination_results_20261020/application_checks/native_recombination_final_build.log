@@ -1,0 +1,23 @@
+[0/1] Re-running CMake...
+-- Using jemalloc allocator.
+-- MPI version:  3.1
+-- cosmictiger default FMM order = 7 (orders 3 to 9 compiled)
+-- cosmictiger maximum bucket size = 128
+-- Configuring done (1.4s)
+-- Generating done (0.1s)
+-- Build files have been written to: /home/dmarce1/workspace/cosmictiger/build/sph_cpu_validation
+[1/15] Building CXX object CMakeFiles/recombination_reference.dir/tests/recombination_reference.cpp.o
+[2/15] Building CXX object CMakeFiles/native_recombination_standard_test.dir/tests/native_recombination.cpp.o
+[3/15] Building CXX object CMakeFiles/native_recombination_fast_math_test.dir/tests/native_recombination.cpp.o
+[4/15] Building CXX object CMakeFiles/primordial_chemistry.dir/src/chemistry/recombination.cpp.o
+[5/15] Linking CXX static library libprimordial_chemistry.a
+[6/15] Linking CXX executable primordial_rates_test
+[7/15] Linking CXX executable primordial_solver_test
+[8/15] Linking CXX executable primordial_units_test
+[9/15] Linking CXX executable recombination_reference
+[10/15] Linking CXX executable native_recombination_standard_test
+[11/15] Linking CXX executable native_recombination_fast_math_test
+[12/15] Building CXX object CMakeFiles/boltzmann_reference.dir/tests/boltzmann_reference.cpp.o
+[13/15] Linking CXX executable boltzmann_test
+[14/15] Linking CXX executable boltzmann_reference
+[15/15] Linking CXX executable cosmictiger

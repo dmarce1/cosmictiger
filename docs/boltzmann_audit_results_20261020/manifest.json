@@ -1,0 +1,22 @@
+{
+  "date": "2026-10-20",
+  "head": "1efb52fb7026bfa74e9dadeaaf8c9f911187de57",
+  "production_edits": false,
+  "source_sha256": {
+    "src/cosmology/boltzmann.cpp": "f79cfd5ec3dd9fa3fd8db26e6c0f7d59e1af2d639f998f51e86b2bbdc9632a9b",
+    "cosmictiger/cosmology/boltzmann.hpp": "4f78814820d4636c2202e77fd1be3f6a643de2f5329df54e0b11d7ff5aa92100",
+    "src/cosmology/zero_order.cpp": "b6a65b54d14363967c04a43eee302be348b1a5b0014a61a82d243d46c3404eb9",
+    "cosmictiger/cosmology/zero_order.hpp": "32fdce0cc235dc706779aa84330c1ef53eb18bc0ca5d9270e18175d227f92224",
+    "src/cosmology/initialize.cpp": "d6581848cba87fef41f977919cdc920d89d235fbbbf69546a6c121049727f83c",
+    "src/core/options.cpp": "778f19759e711d754b7dbfa4a3b83c17feeb53731b47193f6ceb9241b31cccf8",
+    "recfast/recfast.f": "56c423778d66c82ba8cc4762c3d8a915662130f4ba96c173c7013928531b4351",
+    "src/cosmology/recfast.cpp": "e01f469df9635dbedecd530405ee9b666807e8f2216cdf1bed49031a7e87c8d9",
+    "cosmictiger/math/interpolation.hpp": "6901f2b76b066469f592c02d8048b5f7b01b43a757ebd5993aea0c352fcd22bc",
+    "tests/recombination_background.cpp": "6550c2ef1de3510b8ce7a50377ca7298add2020e05f6b53852206421428092e9",
+    "build/sph_cpu_validation/tests/recfast_history/fiducial/history.dat": "b0e50cf8e0de6d2f17eb6a124628976d3684cb18a16f98dce91d7aa7e4b73936",
+    "build/release/tests/recfast_history/fiducial/history.dat": "b0e50cf8e0de6d2f17eb6a124628976d3684cb18a16f98dce91d7aa7e4b73936",
+    "cosmictiger/core/containers.hpp": "935330f09728afc7e15c03e23457a5cc88262c7c2d94e409b6d07145323d1af4",
+    "cosmictiger/core/defs.hpp": "78af3c10e0f8b8921c40634d26db122ea24acd2dc210017b7f733508304273cb"
+  },
+  "limits": "Standalone CPU fixtures; no HPX, MPI, CUDA, independent EB reference, or QB execution."
+}

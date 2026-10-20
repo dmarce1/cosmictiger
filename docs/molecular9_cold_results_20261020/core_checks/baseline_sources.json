@@ -1,0 +1,10 @@
+{
+  "cosmictiger/chemistry/recombination.hpp": "5b5b9b54d7ecf71e70ecdcc07f14b0cd307f290c1e477348382836801dc399f1",
+  "cosmictiger/chemistry/primordial_chemistry.hpp": "6e37ec7768a9e26ab6fca9d27f2d92765e9af006e18b641b79c49f58938ee9e1",
+  "cosmictiger/chemistry/primordial_rates.hpp": "38596a8377cf7f614c7475cb97a2237643b39c0c599100a326d8078e978b9518",
+  "cosmictiger/chemistry/primordial_solver.hpp": "cb2552415226bc696ade63628b3e7419040f4b8f8bb468a56326ebfa388cc51c",
+  "cosmictiger/chemistry/primordial_eos.hpp": "eb116fa366d6caf7c34a0526b4b0f7616d42e8268de91ba7c196dc37fd908986",
+  "cosmictiger/chemistry/primordial_types.hpp": "915790d23ffc4766a828294e7a73fb158bcfaec53a6c8b18a356f6d12510ee14",
+  "cosmictiger/chemistry/primordial_float_environment.hpp": "06ce16d48340d6519d6975cff3cea7f18722948c9f44991c75ce6593d48a160a",
+  "cosmictiger/chemistry/primordial_units.hpp": "36ba3266797f2e7821e856be1029486966f63a7d84edbf8870244f3c558b029e"
+}

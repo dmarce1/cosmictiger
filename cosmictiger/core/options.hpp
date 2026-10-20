@@ -70,7 +70,6 @@ struct Initial {
     bool plummer{};
     double plummerRadius{};
     bool closePack{};
-    bool usePowerFile{};
     bool twoLpt{};
     int particlesPerDimension{};
     size_t numberOfParticles{};
@@ -183,6 +182,7 @@ struct Chemistry {
     // Source integration is initially restricted to globally synchronized steps.
     bool enabled{false};
     std::string network{"atomic6"};
+    std::string initialization{"recombination"};
     std::string radiationFile{""};
     int synchronizedRung{4};
     double initialTemperature{1000.0};
@@ -269,7 +269,6 @@ struct Options {
         arc & output.zMin;
         arc & output.zMax;
         arc & initial.twoLpt;
-        arc & initial.usePowerFile;
         arc & lightcone.directory;
         arc & analysis.tracerCount;
         arc & initial.particlesPerDimension;
@@ -328,6 +327,7 @@ struct Options {
         arc & hydro.kernelDegree;
         arc & chemistry.enabled;
         arc & chemistry.network;
+        arc & chemistry.initialization;
         arc & chemistry.radiationFile;
         arc & chemistry.synchronizedRung;
         arc & chemistry.initialTemperature;

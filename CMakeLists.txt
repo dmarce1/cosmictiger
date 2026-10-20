@@ -16,7 +16,7 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 cmake_minimum_required(VERSION 3.24)
-project(cosmictiger LANGUAGES CXX C Fortran)
+project(cosmictiger LANGUAGES CXX C)
 
 # C++20 uses experimental SIMD; C++26 selects standard SIMD when available.
 if(NOT DEFINED CMAKE_CXX_STANDARD)
@@ -117,7 +117,6 @@ set(cosmictiger_source_files
     src/cosmology/cosmology.cpp
     src/cosmology/fft.cpp
     src/cosmology/initialize.cpp
-    src/cosmology/recfast.cpp
     src/cosmology/zero_order.cpp
     src/cuda/cuda.cpp
     src/cuda/cuda_memory.cu
@@ -209,6 +208,7 @@ set(cosmictiger_header_files
     cosmictiger/chemistry/primordial_solver.hpp
     cosmictiger/chemistry/primordial_types.hpp
     cosmictiger/chemistry/primordial_units.hpp
+    cosmictiger/chemistry/recombination.hpp
     cosmictiger/core/assert.hpp
     cosmictiger/core/containers.hpp
     cosmictiger/core/defs.hpp
@@ -232,8 +232,8 @@ set(cosmictiger_header_files
     cosmictiger/cosmology/cosmology.hpp
     cosmictiger/cosmology/fft.hpp
     cosmictiger/cosmology/initialize.hpp
-    cosmictiger/cosmology/recfast.hpp
     cosmictiger/cosmology/recombination_thermal.hpp
+    cosmictiger/cosmology/native_recombination.hpp
     cosmictiger/cosmology/zero_order.hpp
     cosmictiger/cuda/cuda.hpp
     cosmictiger/cuda/cuda_memory.hpp
@@ -334,7 +334,8 @@ target_compile_options(halo_catalog_export PRIVATE -fno-fast-math)
 # Chemistry must not inherit the application's fast-math/FTZ settings: the
 # signed-complement and FloatFloat contracts require IEEE rounding and -0.
 find_package(Threads REQUIRED)
-add_library(primordial_chemistry STATIC src/chemistry/primordial_chemistry.cpp)
+add_library(primordial_chemistry STATIC src/chemistry/primordial_chemistry.cpp
+    src/chemistry/recombination.cpp)
 target_include_directories(primordial_chemistry PUBLIC ${PROJECT_SOURCE_DIR})
 target_link_libraries(primordial_chemistry PUBLIC Threads::Threads Boost::boost)
 target_compile_options(primordial_chemistry PRIVATE
@@ -386,12 +387,6 @@ if(COSMICTIGER_WITH_CUDA)
         PROPERTIES COMPILE_OPTIONS -maxrregcount=128)
 endif()
 
-add_executable(recfast recfast/recfast.f)
-# Do not silently change fixed-form equations by truncating long statements.
-if(CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
-    target_compile_options(recfast PRIVATE -Werror=line-truncation)
-endif()
-configure_file(power.init power.init COPYONLY)
 # Generated kernels for every FMM order, produced together in the build tree.
 # The Python generator emits specialized STF kernel classes and one Ewald
 # derivative overload per order, so a single build serves all orders and selects
@@ -485,6 +480,7 @@ if(BUILD_TESTING)
         add_test(NAME ${chemistry_test} COMMAND ${chemistry_test}_test)
         set_tests_properties(${chemistry_test} PROPERTIES TIMEOUT 180)
     endforeach()
+    set_tests_properties(primordial_solver PROPERTIES PROCESSORS 2)
     execute_process(COMMAND ${Python3_EXECUTABLE} -c "import numpy, scipy"
         RESULT_VARIABLE PRIMORDIAL_SCIPY_STATUS OUTPUT_QUIET ERROR_QUIET)
     if(PRIMORDIAL_SCIPY_STATUS EQUAL 0)
@@ -499,7 +495,8 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME primordial_integration_cpu COMMAND ${Python3_EXECUTABLE}
         ${PROJECT_SOURCE_DIR}/tests/run_primordial_integration.py $<TARGET_FILE:cosmictiger>
-        ${PROJECT_SOURCE_DIR}/power.init ${PROJECT_BINARY_DIR}/tests/primordial_integration_cpu)
+        ${PROJECT_BINARY_DIR}/tests/primordial_integration_cpu
+        --recombination-reference $<TARGET_FILE:recombination_reference>)
     set_tests_properties(primordial_integration_cpu PROPERTIES TIMEOUT 1200 RUN_SERIAL TRUE)
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         add_library(no_cuda_runtime SHARED tests/no_cuda_runtime.cpp)
@@ -529,36 +526,44 @@ if(BUILD_TESTING)
         add_test(NAME primordial_cuda COMMAND primordial_cuda_test)
         set_tests_properties(primordial_cuda PROPERTIES TIMEOUT 240 SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
     endif()
-    foreach(recfast_variant IN ITEMS standard fast_math)
-        set(recfast_target recfast_${recfast_variant}_test)
-        add_executable(${recfast_target} tests/recfast.cpp src/cosmology/recfast.cpp)
-        target_include_directories(${recfast_target} PRIVATE ${PROJECT_SOURCE_DIR})
-        set(thermal_target recombination_thermal_${recfast_variant}_test)
+    foreach(recombination_variant IN ITEMS standard fast_math)
+        set(thermal_target recombination_thermal_${recombination_variant}_test)
         add_executable(${thermal_target} tests/recombination_thermal.cpp)
         target_include_directories(${thermal_target} PRIVATE ${PROJECT_SOURCE_DIR})
-        set(background_target recombination_background_${recfast_variant}_test)
+        set(background_target recombination_background_${recombination_variant}_test)
         add_executable(${background_target} tests/recombination_background.cpp
-            src/cosmology/zero_order.cpp src/cosmology/recfast.cpp)
+            src/cosmology/zero_order.cpp)
         target_include_directories(${background_target} PRIVATE ${PROJECT_SOURCE_DIR})
-        if(recfast_variant STREQUAL "fast_math")
-            target_compile_options(${recfast_target} PRIVATE -ffast-math)
+        target_link_libraries(${background_target} PRIVATE primordial_chemistry)
+        if(recombination_variant STREQUAL "fast_math")
             target_compile_options(${thermal_target} PRIVATE -ffast-math)
             target_compile_options(${background_target} PRIVATE -ffast-math)
         endif()
-        add_test(NAME recfast_${recfast_variant} COMMAND ${recfast_target})
-        add_test(NAME recombination_thermal_${recfast_variant} COMMAND ${thermal_target})
-        add_test(NAME recombination_background_${recfast_variant} COMMAND ${background_target}
-            ${PROJECT_BINARY_DIR}/tests/recfast_history/fiducial/history.dat)
-        set_tests_properties(recombination_background_${recfast_variant}
-            PROPERTIES FIXTURES_REQUIRED recfast_history TIMEOUT 30)
-        set_tests_properties(recfast_${recfast_variant} recombination_thermal_${recfast_variant}
-            PROPERTIES TIMEOUT 30)
+        add_test(NAME recombination_thermal_${recombination_variant} COMMAND ${thermal_target})
+        add_test(NAME recombination_background_${recombination_variant} COMMAND ${background_target})
+        set_tests_properties(recombination_background_${recombination_variant}
+            recombination_thermal_${recombination_variant} PROPERTIES TIMEOUT 30)
     endforeach()
-    add_test(NAME recfast_history COMMAND ${Python3_EXECUTABLE}
-        ${PROJECT_SOURCE_DIR}/tests/run_recfast.py --executable $<TARGET_FILE:recfast>
-        --reader $<TARGET_FILE:recfast_standard_test> $<TARGET_FILE:recfast_fast_math_test>
-        --workdir ${PROJECT_BINARY_DIR}/tests/recfast_history)
-    set_tests_properties(recfast_history PROPERTIES FIXTURES_SETUP recfast_history TIMEOUT 90)
+
+    add_executable(recombination_reference tests/recombination_reference.cpp)
+    target_link_libraries(recombination_reference PRIVATE primordial_chemistry)
+    target_compile_options(recombination_reference PRIVATE -fno-fast-math -ffp-contract=off)
+    add_test(NAME native_recombination_reference COMMAND ${Python3_EXECUTABLE}
+        ${PROJECT_SOURCE_DIR}/tests/compare_native_recombination.py check-reference
+        --native-executable $<TARGET_FILE:recombination_reference>
+        --reference-root ${PROJECT_SOURCE_DIR}/docs/native_recombination_results_20261020/recfast
+        --workdir ${PROJECT_BINARY_DIR}/tests/native_recfast_regression)
+    set_tests_properties(native_recombination_reference PROPERTIES TIMEOUT 60)
+    foreach(native_variant IN ITEMS standard fast_math)
+        set(native_target native_recombination_${native_variant}_test)
+        add_executable(${native_target} tests/native_recombination.cpp src/cosmology/zero_order.cpp)
+        target_link_libraries(${native_target} PRIVATE primordial_chemistry)
+        if(native_variant STREQUAL "fast_math")
+            target_compile_options(${native_target} PRIVATE -ffast-math)
+        endif()
+        add_test(NAME native_recombination_${native_variant} COMMAND ${native_target})
+        set_tests_properties(native_recombination_${native_variant} PROPERTIES TIMEOUT 180)
+    endforeach()
 
     add_executable(linear_power_test tests/linear_power.cpp)
     target_include_directories(linear_power_test PRIVATE ${PROJECT_SOURCE_DIR})
@@ -572,12 +577,21 @@ if(BUILD_TESTING)
             set(boltzmann_test_source tests/boltzmann_reference.cpp)
         endif()
         add_executable(${boltzmann_target} ${boltzmann_test_source}
-            src/cosmology/boltzmann.cpp src/cosmology/zero_order.cpp src/cosmology/recfast.cpp)
+            src/cosmology/boltzmann.cpp src/cosmology/zero_order.cpp)
         target_include_directories(${boltzmann_target} PRIVATE ${PROJECT_SOURCE_DIR})
+        target_link_libraries(${boltzmann_target} PRIVATE primordial_chemistry)
     endforeach()
-    add_test(NAME boltzmann COMMAND boltzmann_test
-        ${PROJECT_BINARY_DIR}/tests/recfast_history/fiducial/history.dat)
-    set_tests_properties(boltzmann PROPERTIES FIXTURES_REQUIRED recfast_history TIMEOUT 120)
+    add_test(NAME boltzmann COMMAND boltzmann_test)
+    set_tests_properties(boltzmann PROPERTIES TIMEOUT 120)
+    foreach(boltzmann_two_lpt IN ITEMS false true)
+        set(boltzmann_smoke boltzmann_initialization_${boltzmann_two_lpt}_cpu)
+        add_test(NAME ${boltzmann_smoke} COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/run_smoke.py dm_cpu $<TARGET_FILE:cosmictiger>
+            ${PROJECT_BINARY_DIR}/tests/${boltzmann_smoke}
+            --extra-option=--initial.twoLpt=${boltzmann_two_lpt})
+        set_tests_properties(${boltzmann_smoke}
+            PROPERTIES RUN_SERIAL TRUE TIMEOUT 240 PROCESSORS 2)
+    endforeach()
 
     foreach(fp16_variant IN ITEMS standard fast_math)
         add_executable(fp16_${fp16_variant}_test tests/fp16.cpp)
@@ -642,7 +656,7 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME scenarios COMMAND ${Python3_EXECUTABLE}
         ${PROJECT_SOURCE_DIR}/tests/run_scenarios.py $<TARGET_FILE:cosmictiger>
-        ${PROJECT_SOURCE_DIR}/power.init ${PROJECT_BINARY_DIR}/tests/scenarios)
+        ${PROJECT_BINARY_DIR}/tests/scenarios)
     set_tests_properties(scenarios PROPERTIES RUN_SERIAL TRUE TIMEOUT 1200 PROCESSORS 2)
 
     add_test(NAME grouped_options COMMAND ${Python3_EXECUTABLE}
@@ -1115,7 +1129,7 @@ if(BUILD_TESTING)
         endif()
         add_test(NAME smoke_kernels_${kernel_case} COMMAND ${Python3_EXECUTABLE}
             ${PROJECT_SOURCE_DIR}/tests/run_smoke.py sph $<TARGET_FILE:cosmictiger>
-            ${PROJECT_SOURCE_DIR}/power.init ${PROJECT_BINARY_DIR}/tests/smoke_kernels_${kernel_case}
+            ${PROJECT_BINARY_DIR}/tests/smoke_kernels_${kernel_case}
             --extra-option=--hydro.neighborNumber=120 ${kernel_options})
         set_tests_properties(smoke_kernels_${kernel_case} PROPERTIES RUN_SERIAL TRUE TIMEOUT 600)
     endforeach()
@@ -1162,37 +1176,37 @@ if(BUILD_TESTING)
             RUN_SERIAL TRUE TIMEOUT 120)
         add_test(NAME smoke_sph_mpi COMMAND ${Python3_EXECUTABLE}
             ${PROJECT_SOURCE_DIR}/tests/run_smoke.py sph_mpi
-            $<TARGET_FILE:cosmictiger> ${PROJECT_SOURCE_DIR}/power.init
+            $<TARGET_FILE:cosmictiger>
             ${PROJECT_BINARY_DIR}/tests/smoke_sph_mpi --mpi-exec=${MPIEXEC_EXECUTABLE})
         set_tests_properties(smoke_sph_mpi PROPERTIES RUN_SERIAL TRUE TIMEOUT 260)
         add_test(NAME smoke_sph_cpu_mpi COMMAND ${Python3_EXECUTABLE}
             ${PROJECT_SOURCE_DIR}/tests/run_smoke.py sph_mpi
-            $<TARGET_FILE:cosmictiger> ${PROJECT_SOURCE_DIR}/power.init
+            $<TARGET_FILE:cosmictiger>
             ${PROJECT_BINARY_DIR}/tests/smoke_sph_cpu_mpi --mpi-exec=${MPIEXEC_EXECUTABLE} --cpu)
         set_tests_properties(smoke_sph_cpu_mpi PROPERTIES RUN_SERIAL TRUE TIMEOUT 260)
     endif()
     foreach(smoke_mode IN ITEMS sod sph)
         add_test(NAME smoke_${smoke_mode}_cpu COMMAND ${Python3_EXECUTABLE}
             ${PROJECT_SOURCE_DIR}/tests/run_smoke.py ${smoke_mode}
-            $<TARGET_FILE:cosmictiger> ${PROJECT_SOURCE_DIR}/power.init
+            $<TARGET_FILE:cosmictiger>
             ${PROJECT_BINARY_DIR}/tests/smoke_${smoke_mode}_cpu --cpu)
         set_tests_properties(smoke_${smoke_mode}_cpu PROPERTIES RUN_SERIAL TRUE TIMEOUT 500)
     endforeach()
     foreach(smoke_mode IN ITEMS sod dm_cpu dm_cuda sph)
         add_test(NAME smoke_${smoke_mode} COMMAND ${Python3_EXECUTABLE}
             ${PROJECT_SOURCE_DIR}/tests/run_smoke.py ${smoke_mode}
-            $<TARGET_FILE:cosmictiger> ${PROJECT_SOURCE_DIR}/power.init
+            $<TARGET_FILE:cosmictiger>
             ${PROJECT_BINARY_DIR}/tests/smoke_${smoke_mode})
         set_tests_properties(smoke_${smoke_mode} PROPERTIES RUN_SERIAL TRUE TIMEOUT 500)
     endforeach()
     add_test(NAME smoke_dm_min_rung COMMAND ${Python3_EXECUTABLE}
         ${PROJECT_SOURCE_DIR}/tests/run_smoke.py dm_cpu
-        $<TARGET_FILE:cosmictiger> ${PROJECT_SOURCE_DIR}/power.init
+        $<TARGET_FILE:cosmictiger>
         ${PROJECT_BINARY_DIR}/tests/smoke_dm_min_rung --minimum-rung=10)
     set_tests_properties(smoke_dm_min_rung PROPERTIES RUN_SERIAL TRUE TIMEOUT 500)
     add_test(NAME checkpoint_integrity COMMAND ${Python3_EXECUTABLE}
         ${PROJECT_SOURCE_DIR}/tests/run_checkpoint.py
-        $<TARGET_FILE:cosmictiger> ${PROJECT_SOURCE_DIR}/power.init
+        $<TARGET_FILE:cosmictiger>
         ${PROJECT_BINARY_DIR}/tests/checkpoint_integrity)
     set_tests_properties(checkpoint_integrity PROPERTIES RUN_SERIAL TRUE TIMEOUT 600)
 endif()

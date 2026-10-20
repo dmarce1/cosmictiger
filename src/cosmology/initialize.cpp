@@ -17,14 +17,15 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include <cerrno>
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
-#include <filesystem>
 #include <fstream>
 #include <iomanip>
-#include <limits>
+#include <stdexcept>
+#include <utility>
+#include <vector>
 
 #include <gsl/gsl_rng.h>
 
@@ -34,7 +35,8 @@
 #include <cosmictiger/cosmology/cosmology.hpp>
 #include <cosmictiger/cosmology/fft.hpp>
 #include <cosmictiger/cosmology/initialize.hpp>
-#include <cosmictiger/cosmology/recfast.hpp>
+#include <cosmictiger/cosmology/linear_power.hpp>
+#include <cosmictiger/cosmology/native_recombination.hpp>
 #include <cosmictiger/cosmology/zero_order.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/constants.hpp>
@@ -44,123 +46,28 @@
 #include <cosmictiger/sph/sph_chemistry.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
 
-// Homogeneous H/He recombination for the internal linear power spectrum;
-// this does not evolve the composition of SPH particles. RECFAST returns
-// xe = n_e / n_H (hydrogen nuclei), rather than electrons per baryon.
-// Seager, Sasselov & Scott (1999, 2000):
-// https://arxiv.org/abs/astro-ph/9909275
-// https://arxiv.org/abs/astro-ph/9912182
-// Bundled v1.5.2 input/output conventions and correction switches:
-// https://www.astro.ubc.ca/people/scott/recfast.readme
-std::function<double(double)> runRecfast(CosmicParameters params) {
-    std::string const rank = std::to_string(hpxRank());
-    std::string const inputFilename = outputPath("recfast.in." + rank);
-    std::string const outputFilename = outputPath("recfast.out." + rank);
-    if (std::remove(outputFilename.c_str()) != 0 && errno != ENOENT) {
-        THROW_ERROR("Unable to remove old RECFAST output %s\n", outputFilename.c_str());
-    }
-    std::ofstream input(inputFilename);
-    if (!input) {
-        THROW_ERROR("Unable to write to %s\n", inputFilename.c_str());
-    }
-    input << std::setprecision(std::numeric_limits<double>::max_digits10)
-          << std::filesystem::path(outputFilename).filename().string() << '\n'
-          << params.omegaB << ' ' << params.omegaC << ' ' << 1.0 - params.omegaB - params.omegaC
-          << '\n'
-          << 100 * params.hubble << ' ' << params.theta * 2.73 << ' ' << params.y << "\n1\n6\n";
-    input.close();
-    if (!input) {
-        THROW_ERROR("Unable to finish writing %s\n", inputFilename.c_str());
-    }
-    auto const shellQuote = [](std::string const& value) {
-        std::string quoted = "'";
-        for (char character : value) {
-            quoted += character == '\'' ? "'\\''" : std::string(1, character);
-        }
-        return quoted + "'";
-    };
-    auto const childDirectory =
-        std::filesystem::absolute(std::filesystem::path(outputFilename)).parent_path();
-    auto const executable = std::filesystem::absolute("recfast");
-    std::string const command = "cd " + shellQuote(childDirectory.string()) + " && " +
-        shellQuote(executable.string()) + " < " +
-        shellQuote(std::filesystem::path(inputFilename).filename().string()) +
-        " > /dev/null 2> /dev/null";
-    if (std::system(command.c_str()) != 0) {
-        THROW_ERROR("Unable to run %s\n", command.c_str());
-    }
-    return recfast::loadIonizationHistory(outputFilename);
-}
-
 struct PowerSpectrumFunction {
-    Vector<float> pValue2;
-    float logkmin;
-    float logkmax;
-    float dlogk;
-    float operator()(float k) const {
-        float logk = std::log(k);
-        float const k0 = (logk - logkmin) / dlogk;
-        int i0 = int(k0) - 1;
-        if (i0 < 0) {
-            PRINT("power.init does not have sufficient range min %e max %e tried %e\n",
-                exp(logkmin), exp(logkmax), k);
-        }
-        if (i0 > pValue2.size() - 4) {
-            PRINT("power.init does not have sufficient range min %e max %e tried %e\n",
-                exp(logkmin), exp(logkmax), k);
-        }
-        int i1 = i0 + 1;
-        int i2 = i0 + 2;
-        int i3 = i0 + 3;
-        float x = k0 - i1;
-        float y0 = std::log(pValue2[i0]);
-        float y1 = std::log(pValue2[i1]);
-        float y2 = std::log(pValue2[i2]);
-        float y3 = std::log(pValue2[i3]);
-        float k1 = (y2 - y0) * 0.5;
-        float k2 = (y3 - y1) * 0.5;
-        float a = y1;
-        float b = k1;
-        float c = -2 * k1 - k2 - 3 * y1 + 3 * y2;
-        float d = k1 + k2 + 2 * y1 - 2 * y2;
-        return std::exp(a + b * x + c * x * x + d * x * x * x);
-    }
-    float sigma8Integrand(float x) const {
-        float r = 8 / getOptions().cosmology.hubble;
-        float const c0 = float(9) / (2. * float(M_PI) * float(M_PI)) / powf(r, 6);
-        float k = std::exp(x);
-        float pValue = (*this)(k);
-        float tmp = (std::sin(k * r) - k * r * std::cos(k * r));
-        return c0 * pValue * tmp * tmp * std::pow(k, -3);
-    }
-    float normalize() {
-        int const n = 8 * 1024;
-        float sum = 0.0;
-        float logkmax = this->logkmax - 2.5 * dlogk;
-        float logkmin = this->logkmin + 1.5 * dlogk;
-        float dlogk = (logkmax - logkmin) / n;
-        sum = (1.0 / 3.0) * (sigma8Integrand(logkmax) + sigma8Integrand(logkmin)) * dlogk;
-        for (int i = 1; i < n; i += 2) {
-            float logk = logkmin + i * dlogk;
-            sum += (4.0 / 3.0) * sigma8Integrand(logk) * dlogk;
-        }
-        for (int i = 2; i < n; i += 2) {
-            float logk = logkmin + i * dlogk;
-            sum += (2.0 / 3.0) * sigma8Integrand(logk) * dlogk;
-        }
-        sum = sqr(getOptions().cosmology.sigma8) / sum;
-        for (int i = 0; i < pValue2.size(); i++) {
-            pValue2[i] *= sum;
-        }
-        if (hpxRank() == 0) {
-            PRINT("Normalization = %e\n", sum);
-        }
-        return sum;
+    linear_power::LogarithmicTable densityAmplitude;
+    linear_power::LogarithmicTable derivativeAmplitude;
+    double normalizationFactor = 1.0;
+
+    double amplitude(double wavenumber, bool velocity) const {
+        return std::sqrt(normalizationFactor) *
+            (velocity ? derivativeAmplitude(wavenumber) : densityAmplitude(wavenumber));
     }
 };
 
-static void zeldovichBegin(int dim1, int dim2);
-static float zeldovichEnd(int dim, bool, float, float);
+static std::pair<double, double> initialWavenumberRange() {
+    double const boxSize =
+        (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
+    double const fundamental = 2.0 * std::acos(-1.0) / boxSize;
+    double const maximumMode = (getOptions().initial.fourierSize + 1) / 2;
+    double const corner = std::sqrt(3.0) * maximumMode * fundamental;
+    return {fundamental, corner};
+}
+
+static void zeldovichBegin(int dim1, int dim2, bool velocity = false);
+static float zeldovichEnd(int dim, bool, float, float, bool velocityOnly = false);
 static void twolptInit();
 static void twolptDestroy();
 static void twolpt(int, int);
@@ -168,7 +75,6 @@ static void twolptPhase(int phase);
 static void twolptCorrection1();
 static void twolptF2delta2Inv();
 static void twolptCorrection2(int dim);
-static PowerSpectrumFunction readPowerSpectrum();
 
 HPX_PLAIN_ACTION(zeldovichBegin, ZeldovichBeginAction);
 HPX_PLAIN_ACTION(zeldovichEnd, ZeldovichEndAction);
@@ -191,89 +97,143 @@ HPX_PLAIN_ACTION(initX0, InitX0Action);
 HPX_PLAIN_ACTION(clearX0, ClearX0Action);
 
 PowerSpectrumFunction computePowerSpectrum() {
-    PowerSpectrumFunction func;
-    ZeroOrderUniverse zeroverse;
-    double* resultPtr;
+    auto const& options = getOptions();
+    if (std::abs(options.cosmology.omegaK) > 1.0e-12) {
+        throw std::invalid_argument(
+            "The internal Einstein-Boltzmann solver requires a flat universe");
+    }
+    double const initialScale = 1.0 / (1.0 + options.cosmology.startRedshift);
+    if (!linear_power::detail::isFinite(initialScale) || !(initialScale > 0.0)) {
+        throw std::invalid_argument("Invalid initial scale factor for the internal power spectrum");
+    }
     CosmicParameters params;
-    InterpolationFunctor<double> mK;
-    InterpolationFunctor<double> velK;
-    int nk = 1024;
-    Vector<CosState> states(nk);
-
-    auto& uni = zeroverse;
-    params.omegaB = getOptions().cosmology.omegaB;
-    params.omegaC = getOptions().cosmology.omegaC;
-    params.omegaGam = getOptions().cosmology.omegaGamma;
-    params.omegaNu = getOptions().cosmology.omegaNu;
-    params.y = getOptions().cosmology.heliumFraction;
-    params.neff = getOptions().cosmology.nEff;
-    params.theta = getOptions().cosmology.thetaCmb;
-    params.hubble = getOptions().cosmology.hubble;
+    params.omegaB = options.cosmology.omegaB;
+    params.omegaC = options.cosmology.omegaC;
+    params.omegaGam = options.cosmology.omegaGamma;
+    params.omegaNu = options.cosmology.omegaNu;
+    params.y = options.cosmology.heliumFraction;
+    params.neff = options.cosmology.nEff;
+    params.theta = options.cosmology.thetaCmb;
+    params.hubble = options.cosmology.hubble;
     PRINT("Computing zero order universe...");
     fflush(stdout);
-    auto fxe = runRecfast(params);
-    createZeroOrderUniverse(&uni, fxe, 1.1, params);
+    ZeroOrderUniverse universe;
+    createNativeZeroOrderUniverse(&universe, std::max(1.1, 1.1 * initialScale), params);
     PRINT("Done.\n");
-    auto const ns = getOptions().cosmology.spectralIndex;
-    fflush(stdout);
-    double kmin;
-    double kmax;
-    kmin = 1e-5 * params.hubble;
-    kmax = 25.271 * params.hubble;
-    einsteinBoltzmannInterpolationFunction(
-        &mK, &velK, states.data(), &zeroverse, kmin, kmax, 1.0, nk, zeroverse.amin, 1.0, false, ns);
 
-    func.logkmin = log(kmin);
-    func.logkmax = log(kmax);
-    func.dlogk = (func.logkmax - func.logkmin) / nk;
-    for (int i = 0; i < nk; i++) {
-        double k = exp(func.logkmin + (double) i * func.dlogk);
-        func.pValue2.push_back(mK(k));
+    auto const [fundamental, corner] = initialWavenumberRange();
+    double const minimum = std::min(1.0e-5 * params.hubble, 0.95 * fundamental);
+    double const maximum = std::max(25.271 * params.hubble, 1.05 * corner);
+    double const lower = std::log(minimum);
+    double const span = std::log(maximum) - lower;
+    size_t const count = std::max(size_t(1024), size_t(std::ceil(span / 0.015)) + 1);
+    std::vector<double> wavenumbers(count);
+    std::vector<std::vector<BoltzmannTransfer>> transfers(count);
+    std::vector<double> scales = {std::min(initialScale, 1.0)};
+    if (initialScale != 1.0) {
+        scales.push_back(std::max(initialScale, 1.0));
     }
-    auto const norm = func.normalize();
-    if (hpxRank() == 0) {
-        int const m = 2 * nk;
-        double const logkmin = log(kmin);
-        double const logkmax = log(kmax);
-        double const dlogk = (logkmax - logkmin) / m;
-        FILE* fp = fopen(outputPath("power.dat").c_str(), "wt");
-        double const lh = params.hubble;
-        double const lh3 = lh * lh * lh;
-        for (int i = 1; i < m - 2; i++) {
-            double k = exp(logkmin + (double) i * dlogk);
-            fprintf(fp, "%e %e %e\n", k / lh, norm * mK(k) * lh3, norm * velK(k) * lh3);
+    size_t const initialIndex = initialScale <= 1.0 ? 0 : 1;
+    size_t const todayIndex = initialScale < 1.0 ? 1 : 0;
+    Vector<hpx::future<void>> futures;
+    futures.reserve(count);
+    try {
+        for (size_t i = 0; i < count; ++i) {
+            wavenumbers[i] = std::exp(lower + span * i / (count - 1));
+            futures.push_back(hpx::async([&, i]() {
+                transfers[i] = solveBoltzmannTransfers(universe, wavenumbers[i], scales);
+            }));
         }
-        fclose(fp);
+    } catch (...) {
+        hpx::wait_all(futures.begin(), futures.end());
+        throw;
     }
-    return func;
+    // Every task captures the background and output arrays by reference. Join
+    // all tasks before propagating any exception and destroying those locals.
+    hpx::wait_all(futures.begin(), futures.end());
+    for (auto& future : futures) {
+        future.get();
+    }
+
+    double const baryonFraction = params.omegaB / (params.omegaB + params.omegaC);
+    double const conformalHubble = initialScale *
+        hubbleFunction(initialScale, params.hubble, params.omegaB + params.omegaC,
+            params.omegaGam + params.omegaNu);
+    std::vector<double> powerToday(count), baryonPowerToday(count);
+    std::vector<double> densityAmplitude(count), derivativeAmplitude(count);
+    for (size_t i = 0; i < count; ++i) {
+        auto const& today = transfers[i][todayIndex];
+        auto const& initial = transfers[i][initialIndex];
+        // The overall primordial amplitude is fixed below by sigma8 at z=0.
+        double const primordial =
+            std::pow(wavenumbers[i], 0.5 * (options.cosmology.spectralIndex - 4.0));
+        double const matterToday = primordial *
+            linear_power::matterTransfer(today.deltaCdm, today.deltaBaryon, baryonFraction);
+        powerToday[i] = matterToday * matterToday;
+        baryonPowerToday[i] = sqr(primordial * today.deltaBaryon);
+        densityAmplitude[i] = primordial *
+            linear_power::matterTransfer(initial.deltaCdm, initial.deltaBaryon, baryonFraction);
+        derivativeAmplitude[i] = primordial *
+            linear_power::matterDerivative(initial.hPrime, initial.thetaBaryonOverK,
+                wavenumbers[i] / conformalHubble, baryonFraction);
+    }
+    PowerSpectrumFunction spectrum;
+    linear_power::LogarithmicTable const todaySpectrum(wavenumbers, powerToday, true);
+    spectrum.densityAmplitude = linear_power::LogarithmicTable(wavenumbers, densityAmplitude);
+    spectrum.derivativeAmplitude = linear_power::LogarithmicTable(wavenumbers, derivativeAmplitude);
+    spectrum.normalizationFactor =
+        linear_power::normalization(todaySpectrum, options.cosmology.sigma8, params.hubble);
+    if (hpxRank() == 0) {
+        PRINT("Internal P_cb: sigma8(z=0) = %.8g, initial z = %.8g, normalization = %.8e\n",
+            options.cosmology.sigma8, options.cosmology.startRedshift,
+            spectrum.normalizationFactor);
+        std::ofstream output(outputPath("power.dat"));
+        output << std::setprecision(12);
+        for (size_t i = 0; i < count; ++i) {
+            double const factor = spectrum.normalizationFactor * std::pow(params.hubble, 3);
+            // Columns retain k, matter power, baryon power in h/Mpc and (Mpc/h)^3.
+            output << wavenumbers[i] / params.hubble << ' ' << factor * powerToday[i] << ' '
+                   << factor * baryonPowerToday[i] << '\n';
+        }
+        if (!output) {
+            throw std::runtime_error("Unable to write the internal power spectrum");
+        }
+    }
+    return spectrum;
 }
 
 void initialize(double z0) {
+    if (std::abs(getOptions().cosmology.omegaK) > 1.0e-12) {
+        throw std::invalid_argument(
+            "The internal Einstein-Boltzmann solver requires a flat universe");
+    }
     initX0();
     int64_t const n = getOptions().initial.fourierSize;
     float const omegaM = getOptions().cosmology.omegaM;
     float const a0 = 1.0 / (z0 + 1.0);
-    float const d1Value2 = cosmosGrowthFactor(omegaM, a0) / cosmosGrowthFactor(omegaM, 1.0);
     float const om = omegaM / (omegaM + (a0 * a0 * a0) * (1.0 - omegaM));
-    float const f1 = std::pow(om, 5.f / 9.f);
-    float const h0 =
-        constants::kH0 * getOptions().units.timeSeconds * getOptions().cosmology.hubble;
-    float const hValue = h0 * std::sqrt(omegaM / (a0 * a0 * a0) + 1.0 - omegaM);
-    float prefac1 = f1 * hValue * a0 * a0;
-    float const d2Value = -3.f * sqr(d1Value2) / 7.f;
+    float const hValue = cosmosDadt(a0) / a0;
+    float const linearVelocityFactor = hValue * a0 * a0;
+    // Native amplitudes already include their linear evolution to a0. The
+    // retained EdS 2LPT kernel acts on that field without another growth factor.
+    float const d2Value = -3.f / 7.f;
     float const f2 = 2.f * std::pow(om, 6.f / 11.f);
-    float prefac2 = f2 * hValue * a0 * a0;
-    PRINT("D1 = %e\n", d1Value2);
+    float const prefac2 = f2 * hValue * a0 * a0;
     PRINT("D2 = %e\n", d2Value);
-    PRINT("prefac1 = %e\n", prefac1 / a0);
+    PRINT("Linear velocity factor = %e\n", linearVelocityFactor / a0);
     PRINT("prefac2 = %e\n", prefac2 / a0);
     for (int dim = 0; dim < NDIM; dim++) {
         fft3dInit(n);
         zeldovichBegin(dim, NDIM);
         //		fft3d_force_real();
         fft3dInvExecute();
-        float dxmax = zeldovichEnd(dim, dim == 0, d1Value2, prefac1);
+        float const dxmax = zeldovichEnd(dim, dim == 0, 1.0f, 0.0f);
         PRINT("dxmax = %e\n", dxmax);
+        fft3dDestroy();
+        fft3dInit(n);
+        zeldovichBegin(dim, NDIM, true);
+        fft3dInvExecute();
+        zeldovichEnd(dim, false, 1.0f, linearVelocityFactor, true);
         fft3dDestroy();
     }
     if (getOptions().initial.twoLpt) {
@@ -425,14 +385,13 @@ void twolptCorrection2(int dim) {
     }
 }
 
-void twolptGenerate(int dim1, int dim2) {
+void twolptGenerate(int dim1, int dim2, bool velocity = false) {
     int64_t const n = getOptions().initial.fourierSize;
     float const boxSize =
         (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
     float const factor = std::pow(boxSize, -1.5) * n * n * n;
     Vector<ComplexFloat> yValue;
-    static auto power =
-        getOptions().initial.usePowerFile ? readPowerSpectrum() : computePowerSpectrum();
+    static auto const power = computePowerSpectrum();
     auto const box = fft3dComplexRange();
     yValue.resize(box.volume());
     Array<int64_t, NDIM> iValue;
@@ -442,7 +401,8 @@ void twolptGenerate(int dim1, int dim2) {
     bool const filter = (dim1 != NDIM || dim2 != NDIM);
     for (iValue[0] = box.begin[0]; iValue[0] != box.end[0]; iValue[0]++) {
         futs2.push_back(hpx::async(
-            [n, box, boxSize, &yValue, dim1, dim2, factor, filter](Array<int64_t, NDIM> iValue2) {
+            [n, box, boxSize, &yValue, dim1, dim2, factor, filter, velocity](
+                Array<int64_t, NDIM> iValue2) {
                 int const i = (iValue2[0] < n / 2 ? iValue2[0] : iValue2[0] - n);
                 float const kx = 2.f * (float) M_PI / boxSize * float(i);
                 for (iValue2[1] = box.begin[1]; iValue2[1] != box.end[1]; iValue2[1]++) {
@@ -471,8 +431,8 @@ void twolptGenerate(int dim1, int dim2) {
                                 auto const randNormal =
                                     expc(ComplexFloat(0, 1) * 2.f * float(M_PI) * y) *
                                     sqrtf(-logf(fabsf(x)));
-                                float const pValue = power(k0Value);
-                                yValue[index] = randNormal * sqrtf(pValue) * factor * kValue[dim1] *
+                                float const amplitude = power.amplitude(k0Value, velocity);
+                                yValue[index] = randNormal * amplitude * factor * kValue[dim1] *
                                     kValue[dim2] / k2;
                             } else {
                                 yValue[index] = ComplexFloat(0.f, 0.f);
@@ -514,9 +474,9 @@ void twolptGenerate(int dim1, int dim2) {
                             {0, -kx}, {0, -ky}, {0, -kz}, {1, 0}};
                         auto const randNormal = expc(ComplexFloat(0, 1) * 2.f * float(M_PI) * y) *
                             sqrtf(-logf(fabsf(x)));
-                        float const pValue = power(k0Value);
+                        float const amplitude = power.amplitude(k0Value, velocity);
                         yValue[index] =
-                            randNormal * sqrtf(pValue) * factor * kValue[dim1] * kValue[dim2] / k2;
+                            randNormal * amplitude * factor * kValue[dim1] * kValue[dim2] / k2;
                         if (iValue2[0] > n / 2) {
                             yValue[index] = yValue[index].conj() * sgn;
                         } else if (iValue2[0] == 0) {
@@ -611,12 +571,12 @@ void twolptDestroy() {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
-static void zeldovichBegin(int dim1, int dim2) {
+static void zeldovichBegin(int dim1, int dim2, bool velocity) {
     Vector<hpx::future<void>> futs;
     for (auto c : hpxChildren()) {
-        futs.push_back(hpx::async<ZeldovichBeginAction>(c, dim1, dim2));
+        futs.push_back(hpx::async<ZeldovichBeginAction>(c, dim1, dim2, velocity));
     }
-    twolptGenerate(dim1, dim2);
+    twolptGenerate(dim1, dim2, velocity);
     hpx::wait_all(futs.begin(), futs.end());
 }
 
@@ -870,7 +830,8 @@ static void initX0() {
     }
 }
 
-static float zeldovichEnd(int dim, bool initializeParticles, float d1Value, float prefac1) {
+static float zeldovichEnd(
+    int dim, bool initializeParticles, float d1Value, float prefac1, bool velocityOnly) {
     // PRINT( "enter zeldovich_end\n");
     float dxmax = 0.0;
     SpinlockType mutex;
@@ -885,8 +846,8 @@ static float zeldovichEnd(int dim, bool initializeParticles, float d1Value, floa
     }
     Vector<hpx::future<float>> futs;
     for (auto c : hpxChildren()) {
-        futs.push_back(
-            hpx::async<ZeldovichEndAction>(c, dim, initializeParticles, d1Value, prefac1));
+        futs.push_back(hpx::async<ZeldovichEndAction>(
+            c, dim, initializeParticles, d1Value, prefac1, velocityOnly));
     }
     static Vector<float> yValue;
     yValue = fft3dReadReal(box);
@@ -895,8 +856,8 @@ static float zeldovichEnd(int dim, bool initializeParticles, float d1Value, floa
     int const numberOfThreads = hpxHardwareConcurrency();
     double const boxSizeInv = 1.0 / boxSize;
     for (ParticleInteger proc = 0; proc < numberOfThreads; proc++) {
-        futs.push_back(
-            hpx::async([proc, numberOfThreads, n, box, boxSizeInv, dim, d1Value, prefac1]() {
+        futs.push_back(hpx::async(
+            [proc, numberOfThreads, n, box, boxSizeInv, dim, d1Value, prefac1, velocityOnly]() {
                 size_t const b = (size_t) proc * particlesSize() / numberOfThreads;
                 size_t const e = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
                 double dxmax = 0.0;
@@ -933,17 +894,14 @@ static float zeldovichEnd(int dim, bool initializeParticles, float d1Value, floa
                         }
                     }
                     dx *= -d1Value * boxSizeInv;
-                    double x = particlesPos(dim, i).toDouble();
-                    x += dx;
-                    if (x >= 1.0) {
-                        x -= 1.0;
-                    } else if (x < 0.0) {
-                        x += 1.0;
+                    if (!velocityOnly) {
+                        double x = particlesPos(dim, i).toDouble() + dx;
+                        x -= std::floor(x);
+                        particlesPos(dim, i) = x;
                     }
-                    particlesPos(dim, i) = x;
                     particlesVel(dim, i) += prefac1 * dx;
                     double const ndim = pow(getOptions().initial.numberOfParticles, 1.0 / NDIM);
-                    dxmax = std::max(std::abs(dxmax), dx * ndim);
+                    dxmax = std::max(dxmax, std::abs(dx) * ndim);
                 }
                 return (float) dxmax;
             }));
@@ -953,34 +911,4 @@ static float zeldovichEnd(int dim, bool initializeParticles, float d1Value, floa
         dxmax = std::max(dxmax, tmp);
     }
     return dxmax;
-}
-
-static PowerSpectrumFunction readPowerSpectrum() {
-    PowerSpectrumFunction func;
-    float const h = getOptions().cosmology.hubble;
-    FILE* fp = fopen("power.init", "rt");
-    Vector<std::pair<float, float>> data;
-    if (!fp) {
-        PRINT("Fatal - unable to open power.init\n");
-        abort();
-    }
-    float kmax = 0.0;
-    float kmin = std::numeric_limits<float>::max();
-    while (!feof(fp)) {
-        float k;
-        float p;
-        if (fscanf(fp, "%f %f\n", &k, &p) != 0) {
-            k *= h;
-            p /= (h * h * h);
-            func.pValue2.push_back(p);
-            kmax = std::max(kmax, (float) k);
-            kmin = std::min(kmin, (float) k);
-        }
-    }
-    func.logkmin = std::log(kmin);
-    func.logkmax = std::log(kmax);
-    func.dlogk = (func.logkmax - func.logkmin) / (func.pValue2.size() - 1);
-    fclose(fp);
-    func.normalize();
-    return func;
 }

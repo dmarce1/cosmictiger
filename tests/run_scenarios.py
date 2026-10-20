@@ -111,11 +111,9 @@ def hydro_particle_payload(checkpoint, expected_count=None):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("executable", type=Path)
-    parser.add_argument("power_file", type=Path)
     parser.add_argument("workdir", type=Path)
     args = parser.parse_args()
     executable = args.executable.resolve()
-    recfast = executable.parent / "recfast"
     root = Path(__file__).resolve().parents[1]
     base = args.workdir.resolve()
     base.mkdir(parents=True, exist_ok=True)
@@ -136,16 +134,8 @@ def main():
     def exercise(stem, scenario, gravity, hydro, chemistry, name=None, overrides=None,
                  relative_output=None, silo=True):
         directory = prepare(name or scenario)
-        # Runtime inputs remain in the launch directory while all products go
-        # into output.directory. This catches accidental chdir-based routing.
-        inputs = set()
-        if scenario == "cosmology":
-            shutil.copyfile(args.power_file, directory / "power.init")
-            inputs.add("power.init")
-            if not recfast.is_file():
-                raise RuntimeError(f"cosmology runtime dependency is missing: {recfast}")
-            shutil.copy2(recfast, directory / "recfast")
-            inputs.add("recfast")
+        # Cosmology derives its initial power and thermal history internally.
+        # Every generated product must remain under output.directory.
         options = {
             "configuration": str(root / "configurations" / (stem + ".ini")),
             "compute.cuda": "false",
@@ -187,7 +177,7 @@ def main():
         for checkpoint in checkpoints:
             checkManifest(checkpoint, int(checkpoint.name.split(".")[1]),
                           scenario=scenario, endTime=float(options["run.endTime"]), gravity=gravity)
-        allowed = inputs | {"run.log", Path(relative_output or "output").parts[0]}
+        allowed = {"run.log", Path(relative_output or "output").parts[0]}
         unexpected = {path.name for path in directory.iterdir()} - allowed
         if unexpected:
             raise RuntimeError(f"outputs escaped {destination}: {sorted(unexpected)}")

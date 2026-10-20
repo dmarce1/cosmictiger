@@ -1,0 +1,71 @@
+{
+  "complete": true,
+  "cosmology": {
+    "h": 0.6732,
+    "helium_mass_fraction": 0.2454006,
+    "omega_b": 0.049389,
+    "omega_c": 0.26503,
+    "pivot_mpc": 0.05,
+    "scalar_amplitude": 2.1e-09,
+    "scalar_index": 0.966,
+    "tcmb_kelvin": 2.7255
+  },
+  "executable": "/home/dmarce1/workspace/cosmictiger/build/sph_cpu_validation/boltzmann_reference",
+  "executable_sha256": "9ae10f4fb5194c6814fcd896f9d1349dac2ae0a84d30a85a46473b0659e98181",
+  "executions": [
+    {
+      "k_mpc": 0.01,
+      "log": "raw/k_1.0000000000e-02.txt",
+      "returncode": 0,
+      "seconds": 0.1129098499986867
+    },
+    {
+      "k_mpc": 0.1,
+      "log": "raw/k_1.0000000000e-01.txt",
+      "returncode": 0,
+      "seconds": 0.17394994200003566
+    },
+    {
+      "k_mpc": 1.0,
+      "log": "raw/k_1.0000000000e+00.txt",
+      "returncode": 0,
+      "seconds": 0.2965828020023764
+    },
+    {
+      "k_mpc": 10.0,
+      "log": "raw/k_1.0000000000e+01.txt",
+      "returncode": 0,
+      "seconds": 0.6276613569971232
+    }
+  ],
+  "history": null,
+  "history_sha256": null,
+  "maximum_multipole": 128,
+  "n_eff": 3.046,
+  "native_recombination": true,
+  "normalization": "eta_MB -> +1; no fitted amplitude",
+  "recombination_max_log_step": 0.005,
+  "recombination_relative_tolerance": 1e-08,
+  "relative_tolerance": 1e-07,
+  "requested_wavenumbers": [
+    0.01,
+    0.1,
+    1.0,
+    10.0
+  ],
+  "rows": 8,
+  "seconds": 1.2141088759999548,
+  "source_sha256_at_run": {
+    "cosmictiger/chemistry/recombination.hpp": "5b5b9b54d7ecf71e70ecdcc07f14b0cd307f290c1e477348382836801dc399f1",
+    "cosmictiger/cosmology/boltzmann.hpp": "7bc2f2f3f0953c5144a95074bcc695c8d37fba0dbf2c6e1f416175727dd6ef88",
+    "cosmictiger/cosmology/native_recombination.hpp": "c476a724608cdd5d472a927b12b2da80afe26cc19342e268c79df2aee6606f79",
+    "cosmictiger/cosmology/zero_order.hpp": "e11985c376f412870cb968372d542bf0b5396979c44d6f06b903830d91aadeb5",
+    "cosmictiger/math/constants.hpp": "3fa0909053a5da0396e93b0914792cf2bf541759406759526350c48232369b5b",
+    "cosmictiger/math/interpolation.hpp": "6901f2b76b066469f592c02d8048b5f7b01b43a757ebd5993aea0c352fcd22bc",
+    "src/chemistry/recombination.cpp": "fead73abeefdd027fd179ec66573397db92cd490f119de2ea8e19e8eeea0526e",
+    "src/cosmology/boltzmann.cpp": "1ba0b8cb2557842a34c0ffd4ee8a73e7f200dceaf3b04b6cefad8202bc3d1c86",
+    "src/cosmology/zero_order.cpp": "803c3a0fc83a0e4b020ca2ad1c6abef5cbf01d9a9bd4169423e55b0b226d7406",
+    "tests/boltzmann_reference.cpp": "ca1de916542aefcfc5ed53b1363ebd12e7cd9e56764d8ff96cd6675a777aabc5"
+  },
+  "thread_limit": 1
+}

@@ -1,0 +1,18 @@
+{
+  "accuracy_boost": 3,
+  "camb_metric": "-6*camb.symbolic.hdot/camb.symbolic.H (eta_MB -> +1)",
+  "camb_version": "1.6.5",
+  "formula": "d(delta_cb)/dln(a) = -h_prime/2 - f_b (k/Hc) theta_b_over_k",
+  "hierarchy_boost": 5,
+  "native_parameters_sha256": "371fa3f68f83d13ab29db12ee7b155fa81a125a1422a7976b9bd1a584376d46c",
+  "summary": {
+    "docs/native_recombination_results_20261020/final_transfers/neff_3_046_default/transfers.csv": {
+      "delta_cb_prime_relative_error": 0.00019356535844305967,
+      "growth_cb_relative_error": 4.085907485240625e-06
+    },
+    "docs/native_recombination_results_20261020/final_transfers/neff_3_046_refined/transfers.csv": {
+      "delta_cb_prime_relative_error": 5.076465889897186e-05,
+      "growth_cb_relative_error": 6.599487052394437e-07
+    }
+  }
+}

@@ -1,0 +1,175 @@
+{
+  "cosmology": {
+    "h": 0.6732,
+    "helium_mass_fraction": 0.2454006,
+    "omega_b": 0.049389,
+    "omega_c": 0.26503,
+    "pivot_mpc": 0.05,
+    "scalar_amplitude": 2.1e-09,
+    "scalar_index": 0.966,
+    "tcmb_kelvin": 2.7255
+  },
+  "executable": "/tmp/eb_fixed/boltzmann_reference",
+  "executable_sha256": "3a40fac06d48e8681dc09d6712af5587ae9ff147df06857b738bd4c4cc821c74",
+  "executions": [
+    {
+      "k_mpc": 0.0001,
+      "log": "raw/k_1.0000000000e-04.txt",
+      "returncode": 0,
+      "seconds": 0.07684258200060867
+    },
+    {
+      "k_mpc": 0.0001467799267622069,
+      "log": "raw/k_1.4677992676e-04.txt",
+      "returncode": 0,
+      "seconds": 0.07645837800009758
+    },
+    {
+      "k_mpc": 0.00021544346900318845,
+      "log": "raw/k_2.1544346900e-04.txt",
+      "returncode": 0,
+      "seconds": 0.07645571799912432
+    },
+    {
+      "k_mpc": 0.00031622776601683794,
+      "log": "raw/k_3.1622776602e-04.txt",
+      "returncode": 0,
+      "seconds": 0.07654963900131406
+    },
+    {
+      "k_mpc": 0.00046415888336127773,
+      "log": "raw/k_4.6415888336e-04.txt",
+      "returncode": 0,
+      "seconds": 0.07881154400092782
+    },
+    {
+      "k_mpc": 0.0006812920690579609,
+      "log": "raw/k_6.8129206906e-04.txt",
+      "returncode": 0,
+      "seconds": 0.08389736800018
+    },
+    {
+      "k_mpc": 0.001,
+      "log": "raw/k_1.0000000000e-03.txt",
+      "returncode": 0,
+      "seconds": 0.08589716899950872
+    },
+    {
+      "k_mpc": 0.0014677992676220691,
+      "log": "raw/k_1.4677992676e-03.txt",
+      "returncode": 0,
+      "seconds": 0.09050214899980347
+    },
+    {
+      "k_mpc": 0.002154434690031882,
+      "log": "raw/k_2.1544346900e-03.txt",
+      "returncode": 0,
+      "seconds": 0.09497026699864364
+    },
+    {
+      "k_mpc": 0.0031622776601683794,
+      "log": "raw/k_3.1622776602e-03.txt",
+      "returncode": 0,
+      "seconds": 0.10063158699995256
+    },
+    {
+      "k_mpc": 0.004641588833612777,
+      "log": "raw/k_4.6415888336e-03.txt",
+      "returncode": 0,
+      "seconds": 0.10811180699965917
+    },
+    {
+      "k_mpc": 0.006812920690579608,
+      "log": "raw/k_6.8129206906e-03.txt",
+      "returncode": 0,
+      "seconds": 0.11728349599979992
+    },
+    {
+      "k_mpc": 0.01,
+      "log": "raw/k_1.0000000000e-02.txt",
+      "returncode": 0,
+      "seconds": 0.12725455300096655
+    },
+    {
+      "k_mpc": 0.01467799267622069,
+      "log": "raw/k_1.4677992676e-02.txt",
+      "returncode": 0,
+      "seconds": 0.13622380900051212
+    },
+    {
+      "k_mpc": 0.021544346900318822,
+      "log": "raw/k_2.1544346900e-02.txt",
+      "returncode": 0,
+      "seconds": 0.14062379599999986
+    },
+    {
+      "k_mpc": 0.03162277660168379,
+      "log": "raw/k_3.1622776602e-02.txt",
+      "returncode": 0,
+      "seconds": 0.15094017599949439
+    },
+    {
+      "k_mpc": 0.046415888336127774,
+      "log": "raw/k_4.6415888336e-02.txt",
+      "returncode": 0,
+      "seconds": 0.1650377269997989
+    },
+    {
+      "k_mpc": 0.06812920690579609,
+      "log": "raw/k_6.8129206906e-02.txt",
+      "returncode": 0,
+      "seconds": 0.1842454630004795
+    },
+    {
+      "k_mpc": 0.1,
+      "log": "raw/k_1.0000000000e-01.txt",
+      "returncode": 0,
+      "seconds": 0.2088322870004049
+    },
+    {
+      "k_mpc": 0.1467799267622069,
+      "log": "raw/k_1.4677992676e-01.txt",
+      "returncode": 0,
+      "seconds": 0.2310367749996658
+    },
+    {
+      "k_mpc": 0.21544346900318823,
+      "log": "raw/k_2.1544346900e-01.txt",
+      "returncode": 0,
+      "seconds": 0.2624905310003669
+    },
+    {
+      "k_mpc": 0.31622776601683794,
+      "log": "raw/k_3.1622776602e-01.txt",
+      "returncode": 0,
+      "seconds": 0.3045036519997666
+    },
+    {
+      "k_mpc": 0.46415888336127775,
+      "log": "raw/k_4.6415888336e-01.txt",
+      "returncode": 0,
+      "seconds": 0.35855058299966913
+    },
+    {
+      "k_mpc": 0.6812920690579608,
+      "log": "raw/k_6.8129206906e-01.txt",
+      "returncode": 0,
+      "seconds": 0.4210512919999019
+    },
+    {
+      "k_mpc": 1.0,
+      "log": "raw/k_1.0000000000e+00.txt",
+      "returncode": 0,
+      "seconds": 0.49655258399980085
+    }
+  ],
+  "history": "/home/dmarce1/workspace/cosmictiger/build/release/tests/recfast_history/fiducial/history.dat",
+  "history_sha256": "b0e50cf8e0de6d2f17eb6a124628976d3684cb18a16f98dce91d7aa7e4b73936",
+  "maximum_multipole": 128,
+  "n_eff": 3.046,
+  "normalization": "eta_MB -> +1; no fitted amplitude",
+  "relative_tolerance": 1e-07,
+  "rows": 50,
+  "seconds": 4.2577517769987026,
+  "thread_limit": 1
+}

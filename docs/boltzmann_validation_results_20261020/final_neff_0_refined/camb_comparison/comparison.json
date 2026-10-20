@@ -1,0 +1,59 @@
+{
+  "candidate": "/home/dmarce1/workspace/cosmictiger/docs/boltzmann_validation_results_20261020/final_neff_0_refined/transfers.csv",
+  "metrics": {
+    "delta_baryon": {
+      "maximum_absolute_relative_error": 1.9920473649182036e-05,
+      "worst_mode": {
+        "delta_baryon_relative_error": -1.9920473649182036e-05,
+        "delta_cb_relative_error": -1.992834194464166e-05,
+        "delta_cdm_relative_error": -1.997688218602356e-05,
+        "k_mpc": 0.0001,
+        "n_eff": 0.0,
+        "p_cb_mpc3_relative_error": -3.978625348888265e-05,
+        "z": 0.0
+      }
+    },
+    "delta_cb": {
+      "maximum_absolute_relative_error": 1.992834194464166e-05,
+      "worst_mode": {
+        "delta_baryon_relative_error": -1.9920473649182036e-05,
+        "delta_cb_relative_error": -1.992834194464166e-05,
+        "delta_cdm_relative_error": -1.997688218602356e-05,
+        "k_mpc": 0.0001,
+        "n_eff": 0.0,
+        "p_cb_mpc3_relative_error": -3.978625348888265e-05,
+        "z": 0.0
+      }
+    },
+    "delta_cdm": {
+      "maximum_absolute_relative_error": 1.997688218602356e-05,
+      "worst_mode": {
+        "delta_baryon_relative_error": -1.9920473649182036e-05,
+        "delta_cb_relative_error": -1.992834194464166e-05,
+        "delta_cdm_relative_error": -1.997688218602356e-05,
+        "k_mpc": 0.0001,
+        "n_eff": 0.0,
+        "p_cb_mpc3_relative_error": -3.978625348888265e-05,
+        "z": 0.0
+      }
+    },
+    "p_cb_mpc3": {
+      "maximum_absolute_relative_error": 8.40295623570908e-05,
+      "worst_mode": {
+        "delta_baryon_relative_error": 6.853511442805882e-07,
+        "delta_cb_relative_error": 8.733323841880747e-07,
+        "delta_cdm_relative_error": 9.191125858176719e-07,
+        "k_mpc": 0.1,
+        "n_eff": 0.0,
+        "p_cb_mpc3_relative_error": -8.40295623570908e-05,
+        "z": 0.0
+      }
+    }
+  },
+  "normalization_fit": false,
+  "passed": true,
+  "reference": "/home/dmarce1/workspace/cosmictiger/docs/boltzmann_validation_results_20261020/camb_high_accuracy/camb_reference.csv",
+  "reference_rows": 124,
+  "rows": 62,
+  "tolerance": 0.005
+}

@@ -1,0 +1,7 @@
+{
+  "camb_version": "1.6.5",
+  "recombination": "RECFAST Hswitch=1, Heswitch=6",
+  "redshift_count": 2550,
+  "reionization": false,
+  "thread_limit": 1
+}

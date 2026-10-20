@@ -182,7 +182,7 @@ SPH enabled, the total particle count doubles, while the gas and dark-matter
 masses are weighted by `omega_b / omega_m` and `omega_c / omega_m` respectively.
 The power-spectrum deposition uses these masses too.
 
-For a small cosmological run from a build directory containing `power.init`:
+For a small cosmological run using the native Einstein–Boltzmann power spectrum:
 
 ```sh
 ./cosmictiger --hydro.enabled=true --compute.cuda=true --initial.particlesPerDimension=16 --run.maxIterations=2 --hpx:threads=4
@@ -240,15 +240,14 @@ compiler ABIs is not guaranteed.
 
 Use CMake 3.24 or newer, C++20, HPX with CUDA and networking enabled, CUDA,
 serial FFTW3 (single precision), GSL, Silo, HEALPix C, Boost program options and
-Boost.Units headers,
-and a Fortran compiler.
+Boost.Units headers.
 
 Run `./build.sh` in a terminal for the interactive builder. It uses a full-screen
 menu when `whiptail` is available, with a text menu as a fallback. Choose Release,
 RelWithDebInfo, Debug, or Profile (host gprof instrumentation), CUDA, job counts,
 HPX prefix, CUDA architectures, and additional dependency prefixes. Builds go in
 `build/<mode>` with live output and a `builder.*.log`. The default builds
-`cosmictiger` and `recfast`; building and running the test suite is opt-in. Build
+`cosmictiger`; building and running the test suite is opt-in. Build
 jobs are capped at half the available CPUs, and test concurrency accounts for
 two MPI localities with two HPX threads each.
 
@@ -265,8 +264,8 @@ cmake -S . -B build/release -DCMAKE_BUILD_TYPE=Release \
 cmake --build build/release --parallel 4
 ```
 
-The build copies the initial power spectrum and builds `recfast`. Run from the
-build directory so these inputs are available. Particle Silo output writes
+Initial power and recombination histories are computed internally. No external
+CAMB power table or RECFAST executable is required. Particle Silo output writes
 separate gas and dark-matter point meshes, with gas thermodynamic fields.
 
 ## Regression checks

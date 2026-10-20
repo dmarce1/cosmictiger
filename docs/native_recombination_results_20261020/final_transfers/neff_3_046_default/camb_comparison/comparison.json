@@ -1,0 +1,59 @@
+{
+  "candidate": "/home/dmarce1/workspace/cosmictiger/docs/native_recombination_results_20261020/final_transfers/neff_3_046_default/transfers.csv",
+  "metrics": {
+    "delta_baryon": {
+      "maximum_absolute_relative_error": 0.00017993446205788466,
+      "worst_mode": {
+        "delta_baryon_relative_error": 0.00017993446205788466,
+        "delta_cb_relative_error": 0.00018124481174730533,
+        "delta_cdm_relative_error": 0.00018157704761900817,
+        "k_mpc": 10.0,
+        "n_eff": 3.046,
+        "p_cb_mpc3_relative_error": 0.0003720765250596614,
+        "z": 0.0
+      }
+    },
+    "delta_cb": {
+      "maximum_absolute_relative_error": 0.0001945685355155824,
+      "worst_mode": {
+        "delta_baryon_relative_error": 0.00017857873233295685,
+        "delta_cb_relative_error": 0.0001945685355155824,
+        "delta_cdm_relative_error": 0.00019707928870293934,
+        "k_mpc": 10.0,
+        "n_eff": 3.046,
+        "p_cb_mpc3_relative_error": 0.00039861115044881323,
+        "z": 49.0
+      }
+    },
+    "delta_cdm": {
+      "maximum_absolute_relative_error": 0.00019707928870293934,
+      "worst_mode": {
+        "delta_baryon_relative_error": 0.00017857873233295685,
+        "delta_cb_relative_error": 0.0001945685355155824,
+        "delta_cdm_relative_error": 0.00019707928870293934,
+        "k_mpc": 10.0,
+        "n_eff": 3.046,
+        "p_cb_mpc3_relative_error": 0.00039861115044881323,
+        "z": 49.0
+      }
+    },
+    "p_cb_mpc3": {
+      "maximum_absolute_relative_error": 0.00039861115044881323,
+      "worst_mode": {
+        "delta_baryon_relative_error": 0.00017857873233295685,
+        "delta_cb_relative_error": 0.0001945685355155824,
+        "delta_cdm_relative_error": 0.00019707928870293934,
+        "k_mpc": 10.0,
+        "n_eff": 3.046,
+        "p_cb_mpc3_relative_error": 0.00039861115044881323,
+        "z": 49.0
+      }
+    }
+  },
+  "normalization_fit": false,
+  "passed": true,
+  "reference": "/home/dmarce1/workspace/cosmictiger/docs/boltzmann_validation_results_20261020/camb_high_accuracy/camb_reference.csv",
+  "reference_rows": 124,
+  "rows": 62,
+  "tolerance": 0.005
+}

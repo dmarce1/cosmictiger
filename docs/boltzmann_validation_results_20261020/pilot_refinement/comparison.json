@@ -1,0 +1,59 @@
+{
+  "candidate": "/home/dmarce1/workspace/cosmictiger/docs/boltzmann_validation_results_20261020/pilot_default/transfers.csv",
+  "metrics": {
+    "delta_baryon": {
+      "maximum_absolute_relative_error": 0.0003207542316010503,
+      "worst_mode": {
+        "delta_baryon_relative_error": 0.0003207542316010503,
+        "delta_cb_relative_error": 0.0003207472257515942,
+        "delta_cdm_relative_error": 0.0003207459201943763,
+        "k_mpc": 0.0001467799267622069,
+        "n_eff": 3.046,
+        "p_cb_mpc3_relative_error": 0.0006415973302862366,
+        "z": 0.0
+      }
+    },
+    "delta_cb": {
+      "maximum_absolute_relative_error": 0.0003207472257515942,
+      "worst_mode": {
+        "delta_baryon_relative_error": 0.0003207542316010503,
+        "delta_cb_relative_error": 0.0003207472257515942,
+        "delta_cdm_relative_error": 0.0003207459201943763,
+        "k_mpc": 0.0001467799267622069,
+        "n_eff": 3.046,
+        "p_cb_mpc3_relative_error": 0.0006415973302862366,
+        "z": 0.0
+      }
+    },
+    "delta_cdm": {
+      "maximum_absolute_relative_error": 0.0003207459201943763,
+      "worst_mode": {
+        "delta_baryon_relative_error": 0.0003207542316010503,
+        "delta_cb_relative_error": 0.0003207472257515942,
+        "delta_cdm_relative_error": 0.0003207459201943763,
+        "k_mpc": 0.0001467799267622069,
+        "n_eff": 3.046,
+        "p_cb_mpc3_relative_error": 0.0006415973302862366,
+        "z": 0.0
+      }
+    },
+    "p_cb_mpc3": {
+      "maximum_absolute_relative_error": 0.0006415973302862366,
+      "worst_mode": {
+        "delta_baryon_relative_error": 0.0003207542316010503,
+        "delta_cb_relative_error": 0.0003207472257515942,
+        "delta_cdm_relative_error": 0.0003207459201943763,
+        "k_mpc": 0.0001467799267622069,
+        "n_eff": 3.046,
+        "p_cb_mpc3_relative_error": 0.0006415973302862366,
+        "z": 0.0
+      }
+    }
+  },
+  "normalization_fit": false,
+  "passed": true,
+  "reference": "/home/dmarce1/workspace/cosmictiger/docs/boltzmann_validation_results_20261020/pilot_refined/transfers.csv",
+  "reference_rows": 50,
+  "rows": 50,
+  "tolerance": 0.001
+}

@@ -1,0 +1,32 @@
+Internal ctest changing into directory: /home/dmarce1/workspace/cosmictiger/build/sph_cpu_validation
+Test project /home/dmarce1/workspace/cosmictiger/build/sph_cpu_validation
+      Start  5: primordial_radau_reference
+      Start 18: boltzmann
+ 1/13 Test #18: boltzmann ............................   Passed    6.74 sec
+      Start  3: primordial_solver
+ 2/13 Test  #3: primordial_solver ....................   Passed    1.78 sec
+      Start 15: native_recombination_standard
+ 3/13 Test #15: native_recombination_standard ........   Passed    0.15 sec
+      Start 16: native_recombination_fast_math
+ 4/13 Test #16: native_recombination_fast_math .......   Passed    0.15 sec
+      Start 17: linear_power
+ 5/13 Test #17: linear_power .........................   Passed    0.00 sec
+      Start  2: primordial_rates
+ 6/13 Test  #2: primordial_rates .....................   Passed    0.01 sec
+      Start 11: recombination_background_standard
+ 7/13 Test #11: recombination_background_standard ....   Passed    0.09 sec
+      Start 13: recombination_background_fast_math
+ 8/13 Test #13: recombination_background_fast_math ...   Passed    0.09 sec
+      Start 10: recombination_thermal_standard
+ 9/13 Test #10: recombination_thermal_standard .......   Passed    0.00 sec
+      Start  4: primordial_units
+10/13 Test  #4: primordial_units .....................   Passed    0.00 sec
+      Start 12: recombination_thermal_fast_math
+11/13 Test #12: recombination_thermal_fast_math ......   Passed    0.00 sec
+      Start 14: native_recombination_reference
+12/13 Test #14: native_recombination_reference .......   Passed    0.14 sec
+13/13 Test  #5: primordial_radau_reference ...........   Passed   40.83 sec
+
+100% tests passed, 0 tests failed out of 13
+
+Total Test time (real) =  40.83 sec

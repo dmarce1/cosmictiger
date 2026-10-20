@@ -1,0 +1,2 @@
+# Preserve verbatim validation logs and their recorded checksums.
+**/*.log whitespace=-blank-at-eol

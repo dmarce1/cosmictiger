@@ -1,0 +1,9 @@
+{
+  "executable": "/tmp/eb_fixed/boltzmann_reference_v5",
+  "executable_sha256": "01c499c3d4b900eb3f27647c7d6bdf4c128c2c31c391c6669750b41a848f3983",
+  "n_eff": 3.046,
+  "max_l": 64,
+  "relative_tolerance": 1e-06,
+  "failure": "Boltzmann solver exceeded its step limit",
+  "complete": false
+}

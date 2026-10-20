@@ -1,0 +1,46 @@
+{
+  "scope": "Phase 1 native atomic initialization and preserved manual warm molecular runtime, before cold molecular extension",
+  "tests": {
+    "grouped_options": "passed in aggregate_initial.log",
+    "cpu_only_runtime": "passed in aggregate_initial.log",
+    "primordial_integration_cpu": {
+      "result": "passed",
+      "seconds": 132.79,
+      "log": "primordial_final.log"
+    }
+  },
+  "commands": [
+    "ctest --test-dir build/sph_cpu_validation -R '^(grouped_options|primordial_integration_cpu|cpu_only_runtime)$' --output-on-failure -j1",
+    "cmake --build build/sph_cpu_validation --target cosmictiger -j2",
+    "ctest --test-dir build/sph_cpu_validation -R '^primordial_integration_cpu$' --output-on-failure -j1"
+  ],
+  "runtime_threads": 2,
+  "initial_failures_fixed": [
+    "Fresh fixture lacked domain-decomposition setup required by checkpoint serialization; added test-only domainsRebound/domainsBegin/domainsEnd lifecycle.",
+    "Test-mode checkpoint intentionally uses manifest v1 without scenario sidecar; helper now explicitly checks that format for pristine fixture only. Production manifest checks unchanged."
+  ],
+  "evidence": [
+    "512 pristine gas states match separate tight-tolerance native history at z=49; T=48.8550491 K and HII/H=0.000237880083.",
+    "Atomic native and manual warm molecular production runs each pass exact gas-payload restart comparison and Silo field checks.",
+    "Manual defaults, individual overrides, config/CLI precedence, restart option resolution, and domain rejection pass."
+  ],
+  "source_sha256": {
+    "tests/test.cpp": "05f77a5f721049581efce748db5e2c2363be931b5362fe0259e31125aabf0ae4",
+    "tests/run_checkpoint.py": "67adebcd787b3465b4eacdcb9680fea75a96f5b0608fffae48418f89f48525d5",
+    "tests/run_primordial_integration.py": "d3285d19d45a2bd47e5a9f49b7dc1b8bf5434e9e08369d8a172c9ac59d5bfc2e",
+    "tests/run_options.py": "d54d23da5a12cd8ca91ee21b36849bd2ff6e6089fe32bf91f81a6e24e9754f71",
+    "tests/run_cpu_only.py": "311e4a77ace9050ba1d321c7038d7733a4d6632556a1cb6ba5c53d41cddbe4f9"
+  },
+  "artifact_sha256": {
+    "aggregate_initial.log": "28125990cf4c72b47956164dca1df47f6a1561b9b4798bad8ef2b417537a88a7",
+    "fixture_build.log": "394eb17490de4e63d8c11c45fb3bef0044959b5daef3c036b35daeb16b6e5f23",
+    "manifest_failure.log": "4955631cc7727396f367100224df5c6b928f9a5ed8e81bfc405cdbbbb83a2f45",
+    "primordial_final.log": "67877da2bb50fa674c31baa4358b04ad536ae4741de4cd2f881717f01d950329",
+    "native_initial_initial.log": "392672d09ad8254b49f1acfca251ba44a902fc0a485d353492ad143ed1226f53",
+    "atomic6_baseline_run.log": "ad61c319e52409ee7a751a0dc38510cf1432cf30e53e3d92fc99a77d385f524f",
+    "atomic6_restart_restart.log": "b3ab88fbbafe323f209f2fbbf7eef126dd53c6b6b6e29ae9609cebc9c3f0c906",
+    "molecular9_baseline_run.log": "7069250ace5d6e30c71aa15a6abad6a3516271068e119bc7a0a8275786f054a4",
+    "molecular9_restart_restart.log": "cc6d5a904194d90c8ef24be07b0d31cf2fb435b74fa6f06797e059947ee881d9",
+    "native_initial_reference.csv": "05a7e35512899bcd3518518cdade1ee8c97e8ae7be5830be0b8e6677eb67d978"
+  }
+}

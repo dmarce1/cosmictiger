@@ -1,0 +1,14 @@
+Internal ctest changing into directory: /home/dmarce1/workspace/cosmictiger/build/sph_cpu_validation
+Test project /home/dmarce1/workspace/cosmictiger/build/sph_cpu_validation
+    Start  3: primordial_solver
+1/4 Test  #3: primordial_solver ................   Passed    5.17 sec
+    Start  2: primordial_rates
+    Start 15: native_recombination_standard
+2/4 Test #15: native_recombination_standard ....   Passed    0.15 sec
+    Start 16: native_recombination_fast_math
+3/4 Test #16: native_recombination_fast_math ...   Passed    0.16 sec
+4/4 Test  #2: primordial_rates .................   Passed    2.02 sec
+
+100% tests passed, 0 tests failed out of 4
+
+Total Test time (real) =   7.19 sec

@@ -6,8 +6,9 @@
 #include <cstdlib>
 #include <exception>
 #include <limits>
+#include <stdexcept>
 
-#include <cosmictiger/cosmology/recfast.hpp>
+#include <cosmictiger/cosmology/native_recombination.hpp>
 #include <cosmictiger/cosmology/zero_order.hpp>
 
 namespace detail {
@@ -33,9 +34,8 @@ void requireClose(double actual, double expected, double tolerance, char const* 
     }
 }
 
-void testBackground(char const* historyPath) {
+void testBackground() {
     using namespace constants;
-    auto const history = recfast::loadIonizationHistory(historyPath);
     CosmicParameters parameters{};
     parameters.omegaB = 0.049389;
     parameters.omegaC = 0.26503;
@@ -51,24 +51,66 @@ void testBackground(char const* historyPath) {
     parameters.omegaNu =
         parameters.omegaGam * parameters.neff * (7.0 / 8.0) * std::pow(4.0 / 11.0, 4.0 / 3.0);
     ZeroOrderUniverse universe;
-    createZeroOrderUniverse(&universe, history, 1.1, parameters);
+    createNativeZeroOrderUniverse(&universe, 1.1, parameters);
+    primordial::RecombinationHistory const history(recombinationParameters(parameters));
+
+    for (double const redshift : {0.0, 1.0, 50.0, 10000.0}) {
+        requireClose(universe.redshiftToDensity(redshift),
+            criticalDensity * (parameters.omegaB + parameters.omegaC) * std::pow(1.0 + redshift, 3),
+            2.e-14, "Matter density scales as a^-3");
+    }
+    auto const requireInvalid = [&](CosmicParameters const& invalid, double endScale) {
+        try {
+            ZeroOrderUniverse rejected;
+            createNativeZeroOrderUniverse(&rejected, endScale, invalid);
+        } catch (std::invalid_argument const&) {
+            return;
+        }
+        require(false, "Invalid homogeneous cosmology accepted");
+    };
+    auto invalid = parameters;
+    invalid.omegaB = 0.0;
+    requireInvalid(invalid, 1.1);
+    invalid = parameters;
+    invalid.neff = -1.0;
+    requireInvalid(invalid, 1.1);
+    invalid = parameters;
+    invalid.hubble = std::numeric_limits<double>::quiet_NaN();
+    requireInvalid(invalid, 1.1);
+    requireInvalid(parameters, universe.amin);
+
+    // Fraction routines also have well-defined pure matter/radiation limits.
+    ZeroOrderUniverse limitingUniverse;
+    limitingUniverse.params = parameters;
+    limitingUniverse.params.omegaGam = limitingUniverse.params.omegaNu = 0.0;
+    double photonFraction, neutrinoFraction;
+    limitingUniverse.computeRadiationFractions(photonFraction, neutrinoFraction, 0.01);
+    require(photonFraction == 0.0 && neutrinoFraction == 0.0,
+        "Zero radiation produces finite zero radiation fractions");
+    limitingUniverse.params = parameters;
+    limitingUniverse.params.omegaB = limitingUniverse.params.omegaC = 0.0;
+    double coldFraction, baryonFraction;
+    limitingUniverse.computeMatterFractions(coldFraction, baryonFraction, 0.01);
+    require(coldFraction == 0.0 && baryonFraction == 0.0,
+        "Zero matter produces finite zero matter fractions");
 
     auto const baryonDensity = [=](double scaleFactor) {
         return criticalDensity * parameters.omegaB / std::pow(scaleFactor, 3);
     };
     double const sampleScale = 1.0 / 51.0;
     double const sampleDensity = baryonDensity(sampleScale);
-    double const hydrogenNumberDensity = (1.0 - parameters.y) * sampleDensity / kMh;
-    double const heliumNumberDensity = parameters.y * sampleDensity / (4.0 * kMh);
+    double const hydrogenNumberDensity = history.hydrogenNumberDensity(sampleScale);
+    double const particleNumberDensity = hydrogenNumberDensity *
+        (1.0 + history.heliumToHydrogenNumberRatio() + history.electronFraction(sampleScale));
     double const pressure = universe.k(sampleScale) * std::pow(sampleDensity, 5.0 / 3.0);
-    double const temperature = pressure /
-        (kB * (hydrogenNumberDensity * (1.0 + history(sampleScale)) + heliumNumberDensity));
-    // Independent thermal solver reference: bundled RECFAST 1.5.2, fiducial
-    // parameters above, with untruncated fixed-form source and its matter
-    // temperature output enabled. A 2% allowance covers the separate background
-    // integrator, approximate atomic masses/constants, and finite xe table.
+    constexpr double kElectronVoltErg = 1.602176634e-12;
+    double const temperature =
+        pressure / (primordial::kBoltzmannEv * kElectronVoltErg * particleNumberDensity);
+    // Archived independent RECFAST 1.5.2 thermal reference, fiducial parameters
+    // above: docs/native_recombination_results_20261020/recfast. A 0.1% allowance
+    // covers the native effective-atom integrator and background interpolation.
     // https://www.astro.ubc.ca/people/scott/recfast.readme
-    requireClose(temperature, 50.669107, 0.02, "Background temperature against RECFAST at z=50");
+    requireClose(temperature, 50.669107, 0.001, "Background temperature against RECFAST at z=50");
 
     auto const& thermalTable = universe.k;
     auto const& soundTable = universe.cs2;
@@ -102,13 +144,9 @@ void testBackground(char const* historyPath) {
 
 }    // namespace detail
 
-int main(int argc, char** argv) {
-    if (argc != 2) {
-        std::fputs("Usage: recombination_background_test FIDUCIAL_RECFAST_HISTORY\n", stderr);
-        return EXIT_FAILURE;
-    }
+int main() {
     try {
-        detail::testBackground(argv[1]);
+        detail::testBackground();
     } catch (std::exception const& error) {
         std::fprintf(stderr, "Background regression failed: %s\n", error.what());
         return EXIT_FAILURE;

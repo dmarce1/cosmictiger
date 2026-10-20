@@ -1,0 +1,254 @@
+{
+  "complete": true,
+  "cosmology": {
+    "h": 0.6732,
+    "helium_mass_fraction": 0.2454006,
+    "omega_b": 0.049389,
+    "omega_c": 0.26503,
+    "pivot_mpc": 0.05,
+    "scalar_amplitude": 2.1e-09,
+    "scalar_index": 0.966,
+    "tcmb_kelvin": 2.7255
+  },
+  "executable": "/home/dmarce1/workspace/cosmictiger/build/sph_cpu_validation/boltzmann_reference",
+  "executable_sha256": "6bb7ae63c601ac645dfec25c2c97a89a1962aa7370698e81f482d46875b3d590",
+  "executions": [
+    {
+      "k_mpc": 0.0001,
+      "log": "raw/k_1.0000000000e-04.txt",
+      "returncode": 0,
+      "seconds": 0.01089393099755398
+    },
+    {
+      "k_mpc": 0.0001467799267622069,
+      "log": "raw/k_1.4677992676e-04.txt",
+      "returncode": 0,
+      "seconds": 0.010396107001724886
+    },
+    {
+      "k_mpc": 0.00021544346900318845,
+      "log": "raw/k_2.1544346900e-04.txt",
+      "returncode": 0,
+      "seconds": 0.010675729001377476
+    },
+    {
+      "k_mpc": 0.00031622776601683794,
+      "log": "raw/k_3.1622776602e-04.txt",
+      "returncode": 0,
+      "seconds": 0.01034901599996374
+    },
+    {
+      "k_mpc": 0.00046415888336127773,
+      "log": "raw/k_4.6415888336e-04.txt",
+      "returncode": 0,
+      "seconds": 0.011253835997194983
+    },
+    {
+      "k_mpc": 0.0006812920690579609,
+      "log": "raw/k_6.8129206906e-04.txt",
+      "returncode": 0,
+      "seconds": 0.011107852998975432
+    },
+    {
+      "k_mpc": 0.001,
+      "log": "raw/k_1.0000000000e-03.txt",
+      "returncode": 0,
+      "seconds": 0.01442818800205714
+    },
+    {
+      "k_mpc": 0.0014677992676220691,
+      "log": "raw/k_1.4677992676e-03.txt",
+      "returncode": 0,
+      "seconds": 0.011937002000195207
+    },
+    {
+      "k_mpc": 0.002154434690031882,
+      "log": "raw/k_2.1544346900e-03.txt",
+      "returncode": 0,
+      "seconds": 0.012455616997613106
+    },
+    {
+      "k_mpc": 0.0031622776601683794,
+      "log": "raw/k_3.1622776602e-03.txt",
+      "returncode": 0,
+      "seconds": 0.013556458998209564
+    },
+    {
+      "k_mpc": 0.004641588833612777,
+      "log": "raw/k_4.6415888336e-03.txt",
+      "returncode": 0,
+      "seconds": 0.014443927000684198
+    },
+    {
+      "k_mpc": 0.006812920690579608,
+      "log": "raw/k_6.8129206906e-03.txt",
+      "returncode": 0,
+      "seconds": 0.015593478998198407
+    },
+    {
+      "k_mpc": 0.01,
+      "log": "raw/k_1.0000000000e-02.txt",
+      "returncode": 0,
+      "seconds": 0.018334907999815186
+    },
+    {
+      "k_mpc": 0.01467799267622069,
+      "log": "raw/k_1.4677992676e-02.txt",
+      "returncode": 0,
+      "seconds": 0.018570360000012442
+    },
+    {
+      "k_mpc": 0.021544346900318822,
+      "log": "raw/k_2.1544346900e-02.txt",
+      "returncode": 0,
+      "seconds": 0.019466928999463562
+    },
+    {
+      "k_mpc": 0.03162277660168379,
+      "log": "raw/k_3.1622776602e-02.txt",
+      "returncode": 0,
+      "seconds": 0.021049975002824795
+    },
+    {
+      "k_mpc": 0.046415888336127774,
+      "log": "raw/k_4.6415888336e-02.txt",
+      "returncode": 0,
+      "seconds": 0.024343629000213696
+    },
+    {
+      "k_mpc": 0.06812920690579609,
+      "log": "raw/k_6.8129206906e-02.txt",
+      "returncode": 0,
+      "seconds": 0.025077286998566706
+    },
+    {
+      "k_mpc": 0.1,
+      "log": "raw/k_1.0000000000e-01.txt",
+      "returncode": 0,
+      "seconds": 0.026301238998712506
+    },
+    {
+      "k_mpc": 0.1467799267622069,
+      "log": "raw/k_1.4677992676e-01.txt",
+      "returncode": 0,
+      "seconds": 0.02644030100054806
+    },
+    {
+      "k_mpc": 0.21544346900318823,
+      "log": "raw/k_2.1544346900e-01.txt",
+      "returncode": 0,
+      "seconds": 0.025078946997382445
+    },
+    {
+      "k_mpc": 0.31622776601683794,
+      "log": "raw/k_3.1622776602e-01.txt",
+      "returncode": 0,
+      "seconds": 0.02277621300163446
+    },
+    {
+      "k_mpc": 0.46415888336127775,
+      "log": "raw/k_4.6415888336e-01.txt",
+      "returncode": 0,
+      "seconds": 0.02106878499762388
+    },
+    {
+      "k_mpc": 0.6812920690579608,
+      "log": "raw/k_6.8129206906e-01.txt",
+      "returncode": 0,
+      "seconds": 0.02495437600009609
+    },
+    {
+      "k_mpc": 1.0,
+      "log": "raw/k_1.0000000000e+00.txt",
+      "returncode": 0,
+      "seconds": 0.026197017999948002
+    },
+    {
+      "k_mpc": 1.4677992676220675,
+      "log": "raw/k_1.4677992676e+00.txt",
+      "returncode": 0,
+      "seconds": 0.02957597199929296
+    },
+    {
+      "k_mpc": 2.154434690031882,
+      "log": "raw/k_2.1544346900e+00.txt",
+      "returncode": 0,
+      "seconds": 0.03345533199899364
+    },
+    {
+      "k_mpc": 3.1622776601683795,
+      "log": "raw/k_3.1622776602e+00.txt",
+      "returncode": 0,
+      "seconds": 0.03822059099911712
+    },
+    {
+      "k_mpc": 4.641588833612772,
+      "log": "raw/k_4.6415888336e+00.txt",
+      "returncode": 0,
+      "seconds": 0.04373755800043
+    },
+    {
+      "k_mpc": 6.812920690579608,
+      "log": "raw/k_6.8129206906e+00.txt",
+      "returncode": 0,
+      "seconds": 0.05016107299888972
+    },
+    {
+      "k_mpc": 10.0,
+      "log": "raw/k_1.0000000000e+01.txt",
+      "returncode": 0,
+      "seconds": 0.05743561799681629
+    }
+  ],
+  "history": "/home/dmarce1/workspace/cosmictiger/docs/boltzmann_validation_results_20261020/recfast_histories/neff_0.0/history.dat",
+  "history_sha256": "2ba336b739d97c1e4301f6c8746637802705bf3a09bd8d6beeadfb58d75214e5",
+  "maximum_multipole": 64,
+  "n_eff": 0.0,
+  "normalization": "eta_MB -> +1; no fitted amplitude",
+  "relative_tolerance": 1e-06,
+  "requested_wavenumbers": [
+    0.0001,
+    0.0001467799267622069,
+    0.00021544346900318845,
+    0.00031622776601683794,
+    0.00046415888336127773,
+    0.0006812920690579609,
+    0.001,
+    0.0014677992676220691,
+    0.002154434690031882,
+    0.0031622776601683794,
+    0.004641588833612777,
+    0.006812920690579608,
+    0.01,
+    0.01467799267622069,
+    0.021544346900318822,
+    0.03162277660168379,
+    0.046415888336127774,
+    0.06812920690579609,
+    0.1,
+    0.1467799267622069,
+    0.21544346900318823,
+    0.31622776601683794,
+    0.46415888336127775,
+    0.6812920690579608,
+    1.0,
+    1.4677992676220675,
+    2.154434690031882,
+    3.1622776601683795,
+    4.641588833612772,
+    6.812920690579608,
+    10.0
+  ],
+  "rows": 62,
+  "seconds": 0.7411770690014237,
+  "source_sha256_at_run": {
+    "cosmictiger/cosmology/boltzmann.hpp": "7bc2f2f3f0953c5144a95074bcc695c8d37fba0dbf2c6e1f416175727dd6ef88",
+    "cosmictiger/cosmology/zero_order.hpp": "32fdce0cc235dc706779aa84330c1ef53eb18bc0ca5d9270e18175d227f92224",
+    "cosmictiger/math/constants.hpp": "3fa0909053a5da0396e93b0914792cf2bf541759406759526350c48232369b5b",
+    "cosmictiger/math/interpolation.hpp": "6901f2b76b066469f592c02d8048b5f7b01b43a757ebd5993aea0c352fcd22bc",
+    "src/cosmology/boltzmann.cpp": "1ba0b8cb2557842a34c0ffd4ee8a73e7f200dceaf3b04b6cefad8202bc3d1c86",
+    "src/cosmology/zero_order.cpp": "1a7b7ccf81633669b4802b24c803425935bb03df49eec29dd96a51f28afd831a",
+    "tests/boltzmann_reference.cpp": "df799668a4ebc9d33ba066e7765114b978cf0d2feac706216d2a3ff541f2f618"
+  },
+  "thread_limit": 1
+}

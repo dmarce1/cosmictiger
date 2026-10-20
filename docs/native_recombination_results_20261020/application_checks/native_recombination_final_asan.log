@@ -1,0 +1,15 @@
+Native recombination convergence: max relative xe error 3.55177717e-06, T error 6.38869557e-08
+		Parameters:
+			 h                 = 0.673200
+			 omega_m           = 0.314419
+			 omega_r           = 0.000092
+			 omega_lambda      = 0.685489
+			 omega_b           = 0.049389
+			 omega_c           = 0.265030
+			 omega_gam         = 0.000055
+			 omega_nu          = 0.000038
+			 Neff              = 3.046000
+			 temperature today = 2.725500
+
+1.264038e+12 
+Native recombination checks passed: xe(z=1100)=0.144932554, Tgas(z=50)=50.6729502 K

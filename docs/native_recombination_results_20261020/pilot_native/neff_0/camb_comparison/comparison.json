@@ -1,0 +1,121 @@
+{
+  "candidate": "/home/dmarce1/workspace/cosmictiger/docs/native_recombination_results_20261020/pilot_native/neff_0/history.csv",
+  "candidate_rows": 2532,
+  "epoch_maxima": {
+    "all": {
+      "T_m": {
+        "T_m_native": 0.034238547684933576,
+        "T_m_reference": 0.03617899897506063,
+        "T_m_relative_error": -0.053634742394743196,
+        "n_eff": 0.0,
+        "x_e_native": 0.00017190580824556355,
+        "x_e_reference": 0.0001719351279278318,
+        "x_e_relative_error": -0.00017052758573321558,
+        "z": 0.25892541195153296
+      },
+      "x_e": {
+        "T_m_native": 5821.665045687212,
+        "T_m_reference": 5821.667055025989,
+        "T_m_relative_error": -3.451483496785812e-07,
+        "n_eff": 0.0,
+        "x_e_native": 1.0542706294503805,
+        "x_e_reference": 1.0529047620177736,
+        "x_e_relative_error": 0.0012972373968462847,
+        "z": 2135.0
+      }
+    },
+    "early_ionized": {
+      "T_m": {
+        "T_m_native": 272550002.7255,
+        "T_m_reference": 272550002.7253448,
+        "T_m_relative_error": 5.695444116327053e-13,
+        "n_eff": 0.0,
+        "x_e_native": 1.1637700921770213,
+        "x_e_reference": 1.1637731485261236,
+        "x_e_relative_error": -2.6262412963218296e-06,
+        "z": 100000000.0
+      },
+      "x_e": {
+        "T_m_native": 21833.9805,
+        "T_m_reference": 21833.980499999983,
+        "T_m_relative_error": 8.881784197001252e-16,
+        "n_eff": 0.0,
+        "x_e_native": 1.1637700921770213,
+        "x_e_reference": 1.1637731520226815,
+        "x_e_relative_error": -2.6292457897536536e-06,
+        "z": 8010.0
+      }
+    },
+    "helium": {
+      "T_m": {
+        "T_m_native": 4922.249185841117,
+        "T_m_reference": 4922.2511972879865,
+        "T_m_relative_error": -4.086436854455755e-07,
+        "n_eff": 0.0,
+        "x_e_native": 1.0039517175082637,
+        "x_e_reference": 1.0039511841510256,
+        "x_e_relative_error": 5.312581394800731e-07,
+        "z": 1805.0
+      },
+      "x_e": {
+        "T_m_native": 5821.665045687212,
+        "T_m_reference": 5821.667055025989,
+        "T_m_relative_error": -3.451483496785812e-07,
+        "n_eff": 0.0,
+        "x_e_native": 1.0542706294503805,
+        "x_e_reference": 1.0529047620177736,
+        "x_e_relative_error": 0.0012972373968462847,
+        "z": 2135.0
+      }
+    },
+    "hydrogen": {
+      "T_m": {
+        "T_m_native": 2318.4785051472522,
+        "T_m_reference": 2318.4751670485866,
+        "T_m_relative_error": 1.439781936340978e-06,
+        "n_eff": 0.0,
+        "x_e_native": 0.006225536541383475,
+        "x_e_reference": 0.006225215583760488,
+        "x_e_relative_error": 5.155767196618477e-05,
+        "z": 850.0
+      },
+      "x_e": {
+        "T_m_native": 2580.8328455478704,
+        "T_m_reference": 2580.8345709909945,
+        "T_m_relative_error": -6.685601408040753e-07,
+        "n_eff": 0.0,
+        "x_e_native": 0.023297653731391376,
+        "x_e_reference": 0.02329631105260459,
+        "x_e_relative_error": 5.763482397513897e-05,
+        "z": 946.0
+      }
+    },
+    "residual": {
+      "T_m": {
+        "T_m_native": 0.034238547684933576,
+        "T_m_reference": 0.03617899897506063,
+        "T_m_relative_error": -0.053634742394743196,
+        "n_eff": 0.0,
+        "x_e_native": 0.00017190580824556355,
+        "x_e_reference": 0.0001719351279278318,
+        "x_e_relative_error": -0.00017052758573321558,
+        "z": 0.25892541195153296
+      },
+      "x_e": {
+        "T_m_native": 0.03754103848532101,
+        "T_m_reference": 0.03961732712057019,
+        "T_m_relative_error": -0.05240859962435784,
+        "n_eff": 0.0,
+        "x_e_native": 0.00017214558829325085,
+        "x_e_reference": 0.00017217501456702524,
+        "x_e_relative_error": -0.00017090908253081238,
+        "z": 0.31825673875414573
+      }
+    }
+  },
+  "matched_rows": 2532,
+  "passed": false,
+  "reference": "/home/dmarce1/workspace/cosmictiger/docs/native_recombination_results_20261020/camb/neff_0.csv",
+  "reference_rows": 2532,
+  "tolerance": 0.01
+}

@@ -1,0 +1,42 @@
+{
+  "accuracy_boost": 3.0,
+  "baryon_thermal_perturbations": false,
+  "camb_version": "1.6.5",
+  "config_sha256": "8763401e5f8a3d1f8b69b4d5cf6e4d66e3804c5ab91bb684bce675d216bde4af",
+  "cosmology": {
+    "h": 0.6732,
+    "helium_mass_fraction": 0.2454006,
+    "n_eff": 0,
+    "omega_b": 0.049389,
+    "omega_c": 0.26503,
+    "pivot_mpc": 0.05,
+    "scalar_amplitude": 2.1e-09,
+    "scalar_index": 0.966,
+    "sum_mnu_ev": 0,
+    "tcmb_kelvin": 2.7255
+  },
+  "evolution_hierarchy_boost": 5.0,
+  "late_radiation_truncation": false,
+  "maximum_direct_transfer_vs_camb_power_relative_difference": 8.577607806603549e-05,
+  "native_camb_superhorizon_probe": {
+    "delta_cdm": 9.038592452270677e-08,
+    "eta": -0.9999999896931927,
+    "k_mpc": 0.001,
+    "z": 1000000.0
+  },
+  "normalization": "eta_MB -> +1; density transfers are minus native CAMB unit-curvature output",
+  "num_massive_neutrinos": 0,
+  "omega_gamma": 5.456718737138199e-05,
+  "omega_massless_neutrinos": 0.0,
+  "python_version": "3.12.3",
+  "recombination": "RECFAST; Hswitch=True, Heswitch=6, fudge=1.125, fudge_He=.86",
+  "reionization": false,
+  "seconds": 25.63707235000038,
+  "sources": {
+    "evolution_output": "https://camb.readthedocs.io/en/latest/results.html",
+    "parameters": "https://camb.readthedocs.io/en/latest/model.html",
+    "reference_source": "https://github.com/cmbant/CAMB/tree/1.6.5",
+    "transfer_conventions": "https://camb.readthedocs.io/en/latest/transfer_variables.html"
+  },
+  "thread_limit": 1
+}

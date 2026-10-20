@@ -1,0 +1,18 @@
+{
+  "timestamp_utc": "2026-10-20T19:23:34.625090+00:00",
+  "command": "ctest --test-dir build/sph_cpu_validation -R '^(grouped_options|primordial_integration_cpu|cpu_only_runtime)$' --output-on-failure -j1",
+  "sha256": {
+    "build/sph_cpu_validation/cosmictiger": "8085b2ff1a06014f1ce4082decb5ffd23606289680fd9115b3de0e6fa874073d",
+    "build/sph_cpu_validation/recombination_reference": "578c925a01d705a56bad756bb93677d8313a2671eaa2dd3cf8520075b526183c",
+    "tests/run_primordial_integration.py": "27855dad7439f40204346a83b44683e4b20dad2a1dc27eae2343afe07687c883",
+    "tests/run_options.py": "bd32ec8080644aa36b38e2f096ad840aa2ec3067fe2ce59e61e2332a36e0ea8e",
+    "tests/run_checkpoint.py": "67adebcd787b3465b4eacdcb9680fea75a96f5b0608fffae48418f89f48525d5",
+    "tests/run_cpu_only.py": "311e4a77ace9050ba1d321c7038d7733a4d6632556a1cb6ba5c53d41cddbe4f9",
+    "tests/test.cpp": "05f77a5f721049581efce748db5e2c2363be931b5362fe0259e31125aabf0ae4",
+    "cosmictiger/chemistry/primordial_eos.hpp": "256f384076d13d8143f9d9c0ec9c93118e201b0405ff35c3be4f318ac95faf22",
+    "cosmictiger/chemistry/primordial_rates.hpp": "7da2a8196192d0ad22f560ea99c4073d681fe37a114a0512d965bc5e65028efb",
+    "src/core/options.cpp": "7e3b611f8705c321bb6e21f1ce5b941ce29dd87adc857fbd673409be46a6433b",
+    "src/cosmology/initialize.cpp": "d916338e3689d9df86a0146edd4a3d1efe8cf21d20d85c7bb9c11a13d0898878",
+    "src/chemistry/recombination.cpp": "fead73abeefdd027fd179ec66573397db92cd490f119de2ea8e19e8eeea0526e"
+  }
+}

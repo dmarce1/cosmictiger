@@ -1,0 +1,13 @@
+{
+  "baseline": {
+    "bytes": 12908160,
+    "sha256": "8f3b19e7be19c7c1616bb0fe343a985197f1786e3d619906139686f3b57cff58",
+    "grid": "temperatures=415 mixtures=6 densities=4 cmbs=2"
+  },
+  "current": {
+    "bytes": 12908160,
+    "sha256": "8f3b19e7be19c7c1616bb0fe343a985197f1786e3d619906139686f3b57cff58",
+    "grid": "temperatures=415 mixtures=6 densities=4 cmbs=2"
+  },
+  "identical": true
+}

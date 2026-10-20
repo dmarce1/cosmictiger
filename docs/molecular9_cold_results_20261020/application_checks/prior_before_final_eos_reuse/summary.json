@@ -1,0 +1,97 @@
+{
+  "timestamp_utc": "2026-10-20T19:22:33.299993+00:00",
+  "scope": "Native chemistry initialization and 10 K molecular-domain CPU application validation",
+  "command": "ctest --test-dir build/sph_cpu_validation -R '^(grouped_options|primordial_integration_cpu|cpu_only_runtime)$' --output-on-failure -j1",
+  "tests": {
+    "primordial_integration_cpu": {
+      "result": "pass",
+      "seconds": 200.82
+    },
+    "cpu_only_runtime": {
+      "result": "pass",
+      "seconds": 0.22
+    },
+    "grouped_options": {
+      "result": "pass",
+      "seconds": 20.59
+    }
+  },
+  "total_seconds": 221.64,
+  "runtime_threads": 2,
+  "gpu_used": false,
+  "initial_native": {
+    "redshift": 49,
+    "temperature_kelvin": 48.8550491,
+    "hydrogen_ion_fraction": 0.000237880083,
+    "gas_particles_per_network": 512,
+    "networks": [
+      "atomic6",
+      "molecular9"
+    ],
+    "validation": "All pristine checkpoint species and energy-inferred temperatures match a separately integrated, tighter-tolerance native history."
+  },
+  "exact_gas_payload_restarts": [
+    "atomic6 native",
+    "molecular9 cold native, initial H2=0",
+    "molecular9 manual warm1000K, initial H2=0.2"
+  ],
+  "additional_checks": [
+    "Silo chemistry fields in both units and frames",
+    "radiation provenance rejection",
+    "incompatible network rejection",
+    "manual defaults and individual overrides",
+    "INI/CLI precedence",
+    "restart configuration resolution",
+    "native molecular z49 accepted",
+    "native molecular z10 below10K rejected",
+    "molecular6001K rejected"
+  ],
+  "cold_checkpoint2_fraction_ranges": {
+    "HII": {
+      "min": 0.00023782896460033953,
+      "max": 0.0002378441276960075
+    },
+    "Hminus": {
+      "min": 8.98957210754281e-12,
+      "max": 8.990507990858099e-12
+    },
+    "H2": {
+      "min": 1.1037815106362814e-09,
+      "max": 1.5773404804519942e-09
+    },
+    "H2plus": {
+      "min": 4.29977640948806e-14,
+      "max": 4.3002358401586505e-14
+    }
+  },
+  "cold_formation_note": "All initial molecular fractions are zero; positive evolved Hminus/H2/H2plus demonstrate that the molecular source path advances.",
+  "artifact_sha256": {
+    "ctest.log": "f93c495d0124702e80ab46a4be4608555623ebfaa6c7686488f7c9a2d4baf2a3",
+    "native_initial_initial.log": "62301ce9b167788d7554cc801c5e72a0e7f5dcfb7ab2a03f58eb1ed4b39339fd",
+    "molecular9_native_initial_initial.log": "b5ab9ee52bfee63f18098140148f55f66db081ceb8e87bad475b785186065095",
+    "atomic6_baseline_run.log": "5f6beb5a87f17b5b519c11e8baa8523ed7518d1b43f66b751f63daccdf7a7004",
+    "atomic6_restart_restart.log": "71a69f3a7ca08f467c7743a643fb8a3a2fb1fda3bcf11a397a6891c40d4ca39f",
+    "molecular9_cold_baseline_run.log": "96af118f2eba54c29283bf495785342a2f810700e4af466df29b910cfa21b59f",
+    "molecular9_cold_restart_restart.log": "73676d03deef5bb542feaddb7750295dd97a13fbfebbfb89cfcb3980601dcfd9",
+    "molecular9_baseline_run.log": "28c5259912f341d7a07c601a6e63bc2e3cbf53748b91deac05142eb21e3b41fa",
+    "molecular9_restart_restart.log": "d9e74ea53b56c7e27da2f6c8564082d4a7893d33b423c2c76bc6979b75ad0e8f",
+    "native_initial_reference.csv": "05a7e35512899bcd3518518cdade1ee8c97e8ae7be5830be0b8e6677eb67d978",
+    "molecular9_native_initial_reference.csv": "05a7e35512899bcd3518518cdade1ee8c97e8ae7be5830be0b8e6677eb67d978"
+  },
+  "limitations": [
+    "Local CPU application evidence only; this manifest does not claim CUDA or MPI validation.",
+    "This startup/history comparison validates the interface against a tighter native integration, not an independent recombination theory."
+  ],
+  "source_sha256_at_archive": {
+    "tests/run_primordial_integration.py": "27855dad7439f40204346a83b44683e4b20dad2a1dc27eae2343afe07687c883",
+    "tests/run_options.py": "bd32ec8080644aa36b38e2f096ad840aa2ec3067fe2ce59e61e2332a36e0ea8e",
+    "tests/run_checkpoint.py": "67adebcd787b3465b4eacdcb9680fea75a96f5b0608fffae48418f89f48525d5",
+    "tests/test.cpp": "05f77a5f721049581efce748db5e2c2363be931b5362fe0259e31125aabf0ae4",
+    "cosmictiger/chemistry/primordial_eos.hpp": "256f384076d13d8143f9d9c0ec9c93118e201b0405ff35c3be4f318ac95faf22",
+    "cosmictiger/chemistry/primordial_rates.hpp": "7da2a8196192d0ad22f560ea99c4073d681fe37a114a0512d965bc5e65028efb",
+    "src/core/options.cpp": "7e3b611f8705c321bb6e21f1ce5b941ce29dd87adc857fbd673409be46a6433b"
+  },
+  "binary_sha256_at_archive": "8085b2ff1a06014f1ce4082decb5ffd23606289680fd9115b3de0e6fa874073d",
+  "tested_binary_sha256": null,
+  "build_provenance_note": "Application integration ran before the final EOS optimization reusing the previously computed 100 K warm energy. Root independently verified that optimization is bitwise identical across 19,920 states. The final binary was relinked at 19:22:27 UTC, after these tests ended at19:21:49 UTC and before archive creation at19:22:33 UTC. Source and binary hashes here describe the archive-time files, not the exact tested source/binary. Final focused validation and build provenance are recorded by the root agent separately."
+}

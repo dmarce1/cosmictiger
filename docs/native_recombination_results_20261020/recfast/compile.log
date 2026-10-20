@@ -1,0 +1,43 @@
+/tmp/native_recombination_recfast_5nz0ctqs/recfast_thermal_reference.f:915:23:
+
+  914 |                   do 25 k = 1, n
+      |                                2
+  915 |                      c(k+30) = dabs(c(k+30))
+      |                       1
+Warning: Array reference at (1) out of bounds (31 > 24) in loop beginning at (2)
+/tmp/native_recombination_recfast_5nz0ctqs/recfast_thermal_reference.f:915:38:
+
+  914 |                   do 25 k = 1, n
+      |                                2      
+  915 |                      c(k+30) = dabs(c(k+30))
+      |                                      1
+Warning: Array reference at (1) out of bounds (31 > 24) in loop beginning at (2)
+/tmp/native_recombination_recfast_5nz0ctqs/recfast_thermal_reference.f:1003:53:
+
+ 1002 |                   do 135 k = 1, n
+      |                                 2                    
+ 1003 |                      temp = dmax1(temp, dabs(y(k))/c(k+30))
+      |                                                     1
+Warning: Array reference at (1) out of bounds (31 > 24) in loop beginning at (2)
+/tmp/native_recombination_recfast_5nz0ctqs/recfast_thermal_reference.f:1010:53:
+
+ 1009 |                   do 145 k = 1, n
+      |                                 2                    
+ 1010 |                      temp = dmax1(temp, dabs(y(k))/c(k+30))
+      |                                                     1
+Warning: Array reference at (1) out of bounds (31 > 24) in loop beginning at (2)
+/tmp/native_recombination_recfast_5nz0ctqs/recfast_thermal_reference.f:1222:45:
+
+ 1220 |                do 335 k = 1, n
+      |                              2               
+ 1221 |                   temp = dmax1(temp, dabs(w(k,2))
+ 1222 |      +                             / dmax1(c(k+30), dabs(y(k))) )
+      |                                             1
+Warning: Array reference at (1) out of bounds (31 > 24) in loop beginning at (2)
+/tmp/native_recombination_recfast_5nz0ctqs/recfast_thermal_reference.f:1228:51:
+
+ 1227 |                do 345 k = 1, n
+      |                              2                     
+ 1228 |                   temp = dmax1(temp, dabs(w(k,2)/c(k+30)))
+      |                                                   1
+Warning: Array reference at (1) out of bounds (31 > 24) in loop beginning at (2)

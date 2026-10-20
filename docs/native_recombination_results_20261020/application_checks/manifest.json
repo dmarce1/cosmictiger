@@ -1,0 +1,42 @@
+{
+  "time_utc": "2026-10-20T18:44:24.296544+00:00",
+  "git_head": "d8e957281698a6773626429a5ba76a8353ff3ad6",
+  "scope": "CPU build and validation; existing SPH chemistry unchanged; no massive neutrinos",
+  "source_sha256": {
+    "CMakeLists.txt": "9368fe95aada437751adb5dcbc3d20b4f0da7851105dd048bf49360ac86f5a19",
+    "cosmictiger/chemistry/recombination.hpp": "5b5b9b54d7ecf71e70ecdcc07f14b0cd307f290c1e477348382836801dc399f1",
+    "src/chemistry/recombination.cpp": "fead73abeefdd027fd179ec66573397db92cd490f119de2ea8e19e8eeea0526e",
+    "cosmictiger/cosmology/native_recombination.hpp": "c476a724608cdd5d472a927b12b2da80afe26cc19342e268c79df2aee6606f79",
+    "cosmictiger/cosmology/zero_order.hpp": "e11985c376f412870cb968372d542bf0b5396979c44d6f06b903830d91aadeb5",
+    "src/cosmology/zero_order.cpp": "803c3a0fc83a0e4b020ca2ad1c6abef5cbf01d9a9bd4169423e55b0b226d7406",
+    "src/cosmology/initialize.cpp": "a4c079b40e45eb4a655d81e2c227a61f6509c8e69a68640514b9c4935211fa3b",
+    "tests/native_recombination.cpp": "deed187654ed79baf5b644ee8788060e773b648b5022db3e5c4692f4d5918e94",
+    "tests/recombination_reference.cpp": "b877d083e3cb66c41cdd78980010146c055c25753874e1d62767b089654a71ce",
+    "tests/boltzmann_reference.cpp": "ca1de916542aefcfc5ed53b1363ebd12e7cd9e56764d8ff96cd6675a777aabc5",
+    "tests/compare_native_recombination.py": "ea6827ec87a9632fa0f09b427e88fbf306a2f80e992eff4d8f2fe0f71455b8ae",
+    "tests/camb_reference.py": "67a35fdc773183e7f9f67e774a636b4e495fdacb557eeedc6c3eaaefd0e19639",
+    "tests/run_smoke.py": "c0e7a84301dd068c81586713900d04ee57f8f29b20b519864abbeababa90e6d4"
+  },
+  "binary_sha256": {
+    "/home/dmarce1/workspace/cosmictiger/build/sph_cpu_validation/cosmictiger": "5dd1bc68bded1feaa80a44328266ba7d6dac75b9ffd37aa6e564e953f3542b64",
+    "/home/dmarce1/workspace/cosmictiger/build/sph_cpu_validation/recombination_reference": "578c925a01d705a56bad756bb93677d8313a2671eaa2dd3cf8520075b526183c",
+    "/home/dmarce1/workspace/cosmictiger/build/sph_cpu_validation/boltzmann_reference": "9ae10f4fb5194c6814fcd896f9d1349dac2ae0a84d30a85a46473b0659e98181",
+    "/home/dmarce1/workspace/cosmictiger/build/sph_cpu_validation/native_recombination_standard_test": "a1368d9ee9c687bb92a47966fcee891c0cdbe5b9a9391eb9e3586b3e634911dd",
+    "/home/dmarce1/workspace/cosmictiger/build/sph_cpu_validation/native_recombination_fast_math_test": "dbed5e92cc4ad0a05e25e45d326a14093000ca121ab5512e68503608e070eb0a"
+  },
+  "focused_ctest_passed": 16,
+  "application_ctest_passed": 3,
+  "sph_chemistry_sources_unchanged": true,
+  "application_checks": [
+    {
+      "two_lpt": false,
+      "recfast_executable_absent": true,
+      "log_sha256": "0aed71aee1d28456bc42ab1ec9921e0b7ac9143dfc48173ba204b03b2cc91e9f"
+    },
+    {
+      "two_lpt": true,
+      "recfast_executable_absent": true,
+      "log_sha256": "970fbcc51cb16fb00c85db0e8181bb2f53df92f832360f1d677b2768ee8a9614"
+    }
+  ]
+}

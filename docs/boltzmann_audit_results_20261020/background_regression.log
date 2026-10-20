@@ -1,0 +1,14 @@
+		Parameters:
+			 h                 = 0.673200
+			 omega_m           = 0.314419
+			 omega_r           = 0.000092
+			 omega_lambda      = 0.685489
+			 omega_b           = 0.049389
+			 omega_c           = 0.265030
+			 omega_gam         = 0.000055
+			 omega_nu          = 0.000038
+			 Neff              = 3.046000
+			 temperature today = 2.725500
+
+1.263967e+12 
+Production background: Tgas(z=50)=50.4544324 K, final cs2/c2=2.24391167e-15

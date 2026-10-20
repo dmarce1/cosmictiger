@@ -1,0 +1,83 @@
+[1/2] Building CXX object CMakeFiles/cosmictiger.dir/tests/test.cpp.o
+/home/dmarce1/workspace/cosmictiger/tests/test.cpp: In function ‘void bucketTest()’:
+/home/dmarce1/workspace/cosmictiger/tests/test.cpp:458:35: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  458 |     static char* checkpoints[] = {"checkpoint.z.48.9", "checkpoint.z.20.0", "checkpoint.z.10.5",
+      |                                   ^~~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/tests/test.cpp:458:56: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  458 |     static char* checkpoints[] = {"checkpoint.z.48.9", "checkpoint.z.20.0", "checkpoint.z.10.5",
+      |                                                        ^~~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/tests/test.cpp:458:77: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  458 |     static char* checkpoints[] = {"checkpoint.z.48.9", "checkpoint.z.20.0", "checkpoint.z.10.5",
+      |                                                                             ^~~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/tests/test.cpp:459:9: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  459 |         "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6", "checkpoint.z.1.7",
+      |         ^~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/tests/test.cpp:459:29: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  459 |         "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6", "checkpoint.z.1.7",
+      |                             ^~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/tests/test.cpp:459:49: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  459 |         "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6", "checkpoint.z.1.7",
+      |                                                 ^~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/tests/test.cpp:459:69: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  459 |         "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6", "checkpoint.z.1.7",
+      |                                                                     ^~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/tests/test.cpp:460:9: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  460 |         "checkpoint.z.1.1", "checkpoint.z.0.6", "checkpoint.z.0.3", "checkpoint.z.0.1"};
+      |         ^~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/tests/test.cpp:460:29: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  460 |         "checkpoint.z.1.1", "checkpoint.z.0.6", "checkpoint.z.0.3", "checkpoint.z.0.1"};
+      |                             ^~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/tests/test.cpp:460:49: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  460 |         "checkpoint.z.1.1", "checkpoint.z.0.6", "checkpoint.z.0.3", "checkpoint.z.0.1"};
+      |                                                 ^~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/tests/test.cpp:460:69: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  460 |         "checkpoint.z.1.1", "checkpoint.z.0.6", "checkpoint.z.0.3", "checkpoint.z.0.1"};
+      |                                                                     ^~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/tests/test.cpp: In function ‘void speedTest()’:
+/home/dmarce1/workspace/cosmictiger/tests/test.cpp:534:35: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  534 |     static char* checkpoints[] = {"checkpoint.z.48.9", "checkpoint.z.20.0", "checkpoint.z.10.5",
+      |                                   ^~~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/tests/test.cpp:534:56: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  534 |     static char* checkpoints[] = {"checkpoint.z.48.9", "checkpoint.z.20.0", "checkpoint.z.10.5",
+      |                                                        ^~~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/tests/test.cpp:534:77: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  534 |     static char* checkpoints[] = {"checkpoint.z.48.9", "checkpoint.z.20.0", "checkpoint.z.10.5",
+      |                                                                             ^~~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/tests/test.cpp:535:9: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  535 |         "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6", "checkpoint.z.1.7",
+      |         ^~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/tests/test.cpp:535:29: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  535 |         "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6", "checkpoint.z.1.7",
+      |                             ^~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/tests/test.cpp:535:49: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  535 |         "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6", "checkpoint.z.1.7",
+      |                                                 ^~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/tests/test.cpp:535:69: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  535 |         "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6", "checkpoint.z.1.7",
+      |                                                                     ^~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/tests/test.cpp:536:9: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  536 |         "checkpoint.z.1.1", "checkpoint.z.0.6", "checkpoint.z.0.3", "checkpoint.z.0.1"};
+      |         ^~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/tests/test.cpp:536:29: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  536 |         "checkpoint.z.1.1", "checkpoint.z.0.6", "checkpoint.z.0.3", "checkpoint.z.0.1"};
+      |                             ^~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/tests/test.cpp:536:49: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  536 |         "checkpoint.z.1.1", "checkpoint.z.0.6", "checkpoint.z.0.3", "checkpoint.z.0.1"};
+      |                                                 ^~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/tests/test.cpp:536:69: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+  536 |         "checkpoint.z.1.1", "checkpoint.z.0.6", "checkpoint.z.0.3", "checkpoint.z.0.1"};
+      |                                                                     ^~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/tests/test.cpp:557:15: warning: ignoring return value of ‘int system(const char*)’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+  557 |         system("rm -r checkpoint.999999\n");
+      |         ~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/tests/test.cpp:558:17: warning: ignoring return value of ‘int asprintf(char**, const char*, ...)’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+  558 |         asprintf(&buffer, "cp -r %s checkpoint.999999\n", checkpoints[ci]);
+      |         ~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/dmarce1/workspace/cosmictiger/tests/test.cpp:559:15: warning: ignoring return value of ‘int system(const char*)’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+  559 |         system(buffer);
+      |         ~~~~~~^~~~~~~~
+/home/dmarce1/workspace/cosmictiger/tests/test.cpp: In function ‘void bucketTest()’:
+/home/dmarce1/workspace/cosmictiger/tests/test.cpp:520:17: warning: ignoring return value of ‘int asprintf(char**, const char*, ...)’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+  520 |         asprintf(&buffer, "buckets.txt");
+      |         ~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+[2/2] Linking CXX executable cosmictiger

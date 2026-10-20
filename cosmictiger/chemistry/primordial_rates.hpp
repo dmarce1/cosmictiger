@@ -63,6 +63,53 @@ namespace detail {
         }
         return result.toFloat();
     }
+    PRIMORDIAL_HD inline float coldMolecularHydrogenCollisionCooling(float temperature) {
+        // Hernandez et al. 2021, A&A 647 A155, Table 2 and eqs. (5)-(7):
+        // https://doi.org/10.1051/0004-6361/202039790
+        // Published CDS table2.dat, J/A+A/647/A155 (retrieved 2026-10-20):
+        // https://cdsarc.cds.unistra.fr/ftp/J/A+A/647/A155/table2.dat
+        // Polynomial downward rates are in 1e-20 m^3/s = 1e-14 cm^3/s;
+        // the fits cover 10..200 K and are used here only below 100 K.
+        // Rows: (2,0)->(0,0), (2,1)->(0,1), (3,0)->(1,0), (3,1)->(1,1).
+        // Eq. (6)'s identical-particle factors are already in the published
+        // rates. No additional factor of two belongs in this cooling sum.
+        float const downward[][6] = {
+            {52.2644f, -1.30816f, 0.0325606f, -3.01884e-4f, 1.33791e-6f, -2.24735e-9f},
+            {74.5105f, -1.44478f, 0.0389100f, -3.50088e-4f, 1.53233e-6f, -2.55815e-9f},
+            {26.4090f, -0.530468f, 0.0141524f, -1.23414e-4f, 5.39467e-7f, -9.00632e-10f},
+            {25.5303f, -0.481591f, 0.0137928f, -1.17786e-4f, 5.17233e-7f, -8.66778e-10f}};
+        FloatFloat cooling(0.0f);
+        for (int transition = 0; transition != 4; ++transition) {
+            bool const paraTarget = transition < 2;
+            float const gap = paraTarget ? 509.86f : 844.60f;
+            float const degeneracy = paraTarget ? 5.0f : 7.0f / 3.0f;
+            float const targetFraction = paraTarget ? 0.25f : 0.75f;
+            float const colliderFraction = transition % 2 == 0 ? 0.25f : 0.75f;
+            float const excitation = 1.e-14f * polynomial(temperature, downward[transition]) *
+                degeneracy * ::expf(-gap / temperature);
+            // Low-density ground-ladder approximation, fixed ortho:para=3:1,
+            // as in Lee et al. 2008 eq. (5), https://arxiv.org/abs/0805.1623 .
+            // Excitation energy subsequently escapes as line radiation.
+            cooling += FloatFloat(targetFraction * colliderFraction) * FloatFloat(excitation) *
+                FloatFloat(kBoltzmannEv * gap);
+        }
+        return cooling.toFloat();    // eV cm^3/s per H2--H2 pair density.
+    }
+    PRIMORDIAL_HD inline float matchColdCooling(
+        float temperature, float cooling, float logRatio, float logSlopeDelta) {
+        if (temperature <= 80.0f) {
+            return cooling;
+        }
+        // Explicit compatibility interpolation, not a published rate fit:
+        // add a cubic Hermite correction to ln(cooling) on 80..100 K.
+        // Its value/slope vanish at 80 K and match the established warm fit
+        // at 100 K. The input cold fits stay within their published domains.
+        float const s = (temperature - 80.0f) / 20.0f;
+        float const sSquared = s * s;
+        float const correction =
+            logRatio * sSquared * (3.0f - 2.0f * s) + 20.0f * logSlopeDelta * sSquared * (s - 1.0f);
+        return cooling * ::expf(correction);
+    }
     PRIMORDIAL_HD inline float hydrogenRecombination(float lambda) {
         // Hui & Gnedin 1997 Appendix A, case A (all recombination photons escape).
         // https://arxiv.org/abs/astro-ph/9612232
@@ -274,11 +321,15 @@ PRIMORDIAL_HD inline void reactionFluxes(Composition const& c, Environment const
 }
 
 // Low-density H2 cooling coefficients (eV cm^3/s), fixed ortho:para=3:1.
-// Glover & Abel 2008 Table 8, original fits (not Grackle's later updates).
+// Glover & Abel 2008 Table 8, https://arxiv.org/abs/0803.1768 .
+// Original warm fits are retained. Below 100 K, H2 collisions use the
+// Hernandez et al. data above; all other partners use GA08's cold fits.
 // Order of collision partners: H, H2, He, H+, e. All five are retained.
+// This remains spontaneous line cooling with no molecular CMB absorption or
+// evolved spin populations. Compton exchange is a separate thermal process.
 PRIMORDIAL_HD inline Status molecularCoolingCoefficients(
     float temperature, float (&cooling)[5], float& lte) {
-    if (!finite(temperature) || temperature < 100.0f || temperature > 6000.0f) {
+    if (!finite(temperature) || temperature < 10.0f || temperature > 6000.0f) {
         return Status::UnsupportedState;
     }
     float const x = ::log10f(temperature / 1000.0f);
@@ -296,17 +347,40 @@ PRIMORDIAL_HD inline Status molecularCoolingCoefficients(
         -34.286155f, -48.537163f, -77.121176f, -51.352459f, -15.169160f, -0.98120322f};
     float const electronHigh[] = {
         -22.190316f, 1.5728955f, -0.213351f, 0.96149759f, -0.91023195f, 0.13749749f};
-    cooling[0] = ::powf(10.0f,
-                     temperature < 1000.0f ? detail::polynomial(x, atomLow) :
-                                             detail::polynomial(x, atomHigh)) /
-        kElectronVolt;
-    cooling[1] = ::powf(10.0f, detail::polynomial(x, molecule)) / kElectronVolt;
-    cooling[2] = ::powf(10.0f, detail::polynomial(x, helium)) / kElectronVolt;
-    cooling[3] = ::powf(10.0f, detail::polynomial(x, proton)) / kElectronVolt;
-    cooling[4] = ::powf(10.0f,
-                     temperature < 200.0f ? detail::polynomial(x, electronLow) :
-                                            detail::polynomial(x, electronHigh)) /
-        kElectronVolt;
+    if (temperature < 100.0f) {
+        // GA08 Table 8 / eq. (40), 10..100 K H branch. GA08 explicitly
+        // describes its underlying low-T H-collision continuation in eqs.
+        // (28)-(29); the He, proton and electron fits also extend to 10 K.
+        float const atomCold[] = {
+            -16.818342f, 37.383713f, 58.145166f, 48.656103f, 20.159831f, 3.8479610f};
+        // Convert erg to eV before exponentiating: at 10 K the H and electron
+        // coefficients are representable in eV but underflow in FP32 ergs.
+        float const logElectronVolt = ::log10f(kElectronVolt);
+        cooling[0] = ::powf(10.0f, detail::polynomial(x, atomCold) - logElectronVolt);
+        cooling[1] = detail::coldMolecularHydrogenCollisionCooling(temperature);
+        cooling[2] = ::powf(10.0f, detail::polynomial(x, helium) - logElectronVolt);
+        cooling[3] = ::powf(10.0f, detail::polynomial(x, proton) - logElectronVolt);
+        cooling[4] = ::powf(10.0f, detail::polynomial(x, electronLow) - logElectronVolt);
+        // ln(warm/cold) and d ln(warm/cold)/dT at 100 K, independently
+        // evaluated from the cited decimal coefficients. Raw discrepancies
+        // are 9.26% (H) and 15.92% (H2); only 80..100 K is adjusted.
+        cooling[0] = detail::matchColdCooling(
+            temperature, cooling[0], -0.08858850757531106f, 0.01076094300000003f);
+        cooling[1] = detail::matchColdCooling(
+            temperature, cooling[1], -0.14771090012072186f, -0.0055088563359083076f);
+    } else {
+        cooling[0] = ::powf(10.0f,
+                         temperature < 1000.0f ? detail::polynomial(x, atomLow) :
+                                                 detail::polynomial(x, atomHigh)) /
+            kElectronVolt;
+        cooling[1] = ::powf(10.0f, detail::polynomial(x, molecule)) / kElectronVolt;
+        cooling[2] = ::powf(10.0f, detail::polynomial(x, helium)) / kElectronVolt;
+        cooling[3] = ::powf(10.0f, detail::polynomial(x, proton)) / kElectronVolt;
+        cooling[4] = ::powf(10.0f,
+                         temperature < 200.0f ? detail::polynomial(x, electronLow) :
+                                                detail::polynomial(x, electronHigh)) /
+            kElectronVolt;
+    }
     // Hollenbach & McKee LTE asymptote, reproduced by Yoshida et al. 2006
     // eqs. (18)-(20), https://arxiv.org/abs/astro-ph/0606106 . Units eV/s/H2.
     float const t = temperature / 1000.0f;
@@ -374,7 +448,10 @@ PRIMORDIAL_HD inline Status evaluateThermalRates(Composition const& c,
                 c.electrons * FloatFloat(cooling[4]));
         // Stable low-density/LTE bridge; neither product nor ratio of two tiny
         // cooling functions is needed. LTE is an asymptote, not a density gate.
-        FloatFloat const emission = low / (FloatFloat(1.0f) + low / FloatFloat(lte));
+        // Preserve the zero-emission limit if an exponentially small LTE rate
+        // underflows. This also avoids 0/0 when the collider density is zero.
+        FloatFloat const emission =
+            lte > 0.0f ? low / (FloatFloat(1.0f) + low / FloatFloat(lte)) : FloatFloat(0.0f);
         result.molecularLineCooling = c.molecularHydrogen * emission;
         // GA08 eqs. (44)-(50), vibrational H2+ cooling by H and e, with LTE
         // saturation. The published low-T H fit is itself an extrapolation.
@@ -391,8 +468,10 @@ PRIMORDIAL_HD inline Status evaluateThermalRates(Composition const& c,
             (2.0e-19f / kElectronVolt) * ::powf(temperature, 0.1f) * ::expf(-3125.0f / temperature);
         FloatFloat const ionLow = FloatFloat(environment.nHydrogen) *
             (c.hydrogen * FloatFloat(ionAtom) + c.electrons * FloatFloat(ionElectron));
-        result.molecularIonLineCooling =
-            c.molecularHydrogenPlus * ionLow / (FloatFloat(1.0f) + ionLow / FloatFloat(ionLte));
+        if (ionLte > 0.0f) {
+            result.molecularIonLineCooling =
+                c.molecularHydrogenPlus * ionLow / (FloatFloat(1.0f) + ionLow / FloatFloat(ionLte));
+        }
         // Yoshida et al. 2006 eqs. (24)-(26): only the collisionally quenched
         // part of formation excitation heats the gas; the rest escapes.
         // https://arxiv.org/abs/astro-ph/0606106 . H2 is a molecule count here.

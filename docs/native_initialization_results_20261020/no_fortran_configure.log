@@ -1,0 +1,14 @@
+-- Using jemalloc allocator.
+-- MPI version:  3.1
+-- Found Boost: /usr/lib/x86_64-linux-gnu/cmake/Boost-1.83.0/BoostConfig.cmake (found version "1.83.0") found components: program_options 
+-- Found GSL: /tmp/cosmictiger_ewald_deps/root/usr/include (found version "2.8") 
+-- cosmictiger default FMM order = 7 (orders 3 to 9 compiled)
+-- cosmictiger maximum bucket size = 128
+-- Performing Test COMPILER_SUPPORTS_MARCH_NATIVE
+-- Performing Test COMPILER_SUPPORTS_MARCH_NATIVE - Success
+-- Found Python3: /usr/bin/python3 (found version "3.12.3") found components: Interpreter 
+-- Looking for C++ include experimental/simd
+-- Looking for C++ include experimental/simd - found
+-- Configuring done (2.7s)
+-- Generating done (0.1s)
+-- Build files have been written to: /tmp/native_only_no_fortran_configure

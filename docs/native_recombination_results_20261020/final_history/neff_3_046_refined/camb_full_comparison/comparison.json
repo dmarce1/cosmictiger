@@ -1,0 +1,122 @@
+{
+  "candidate": "/home/dmarce1/workspace/cosmictiger/docs/native_recombination_results_20261020/final_history/neff_3_046_refined/history.csv",
+  "candidate_rows": 2550,
+  "epoch_maxima": {
+    "all": {
+      "T_m": {
+        "T_m_native": 0.034459670517287,
+        "T_m_reference": 0.03641264780510644,
+        "T_m_relative_error": -0.05363458593487824,
+        "n_eff": 3.046,
+        "x_e_native": 0.00017485842136014535,
+        "x_e_reference": 0.00017488878405861146,
+        "x_e_relative_error": -0.00017361146759375945,
+        "z": 0.25892541195153296
+      },
+      "x_e": {
+        "T_m_native": 5821.66478187504,
+        "T_m_reference": 5821.667007712557,
+        "T_m_relative_error": -3.823367971111935e-07,
+        "n_eff": 3.046,
+        "x_e_native": 1.0547175744200348,
+        "x_e_reference": 1.0534341466284276,
+        "x_e_relative_error": 0.0012183275012631611,
+        "z": 2135.0
+      }
+    },
+    "early_ionized": {
+      "T_m": {
+        "T_m_native": 272550002.7255,
+        "T_m_reference": 272550002.7253299,
+        "T_m_relative_error": 6.24167384444263e-13,
+        "n_eff": 3.046,
+        "x_e_native": 1.1637700921770213,
+        "x_e_reference": 1.1637731485261236,
+        "x_e_relative_error": -2.6262412963218296e-06,
+        "z": 100000000.0
+      },
+      "x_e": {
+        "T_m_native": 21833.9805,
+        "T_m_reference": 21833.980499999965,
+        "T_m_relative_error": 1.7763568394002505e-15,
+        "n_eff": 3.046,
+        "x_e_native": 1.1637700921770213,
+        "x_e_reference": 1.1637731572711014,
+        "x_e_relative_error": -2.633755608605348e-06,
+        "z": 8010.0
+      }
+    },
+    "helium": {
+      "T_m": {
+        "T_m_native": 4922.248884386292,
+        "T_m_reference": 4922.2511123959885,
+        "T_m_relative_error": -4.526403967197723e-07,
+        "n_eff": 3.046,
+        "x_e_native": 1.0045825224214147,
+        "x_e_reference": 1.004582015760535,
+        "x_e_relative_error": 5.043499402557217e-07,
+        "z": 1805.0
+      },
+      "x_e": {
+        "T_m_native": 5821.66478187504,
+        "T_m_reference": 5821.667007712557,
+        "T_m_relative_error": -3.823367971111935e-07,
+        "n_eff": 3.046,
+        "x_e_native": 1.0547175744200348,
+        "x_e_reference": 1.0534341466284276,
+        "x_e_relative_error": 0.0012183275012631611,
+        "z": 2135.0
+      }
+    },
+    "hydrogen": {
+      "T_m": {
+        "T_m_native": 2312.9934385903734,
+        "T_m_reference": 2312.989962381275,
+        "T_m_relative_error": 1.5029071267491645e-06,
+        "n_eff": 3.046,
+        "x_e_native": 0.006285241457310242,
+        "x_e_reference": 0.006284922726933038,
+        "x_e_relative_error": 5.071349180441054e-05,
+        "z": 848.0
+      },
+      "x_e": {
+        "T_m_native": 2558.998529506055,
+        "T_m_reference": 2559.0003819695503,
+        "T_m_relative_error": -7.239012187465477e-07,
+        "n_eff": 3.046,
+        "x_e_native": 0.021617224301201457,
+        "x_e_reference": 0.021616015934575294,
+        "x_e_relative_error": 5.5901449639073064e-05,
+        "z": 938.0
+      }
+    },
+    "residual": {
+      "T_m": {
+        "T_m_native": 0.034459670517287,
+        "T_m_reference": 0.03641264780510644,
+        "T_m_relative_error": -0.05363458593487824,
+        "n_eff": 3.046,
+        "x_e_native": 0.00017485842136014535,
+        "x_e_reference": 0.00017488878405861146,
+        "x_e_relative_error": -0.00017361146759375945,
+        "z": 0.25892541195153296
+      },
+      "x_e": {
+        "T_m_native": 0.03778348097310697,
+        "T_m_reference": 0.039873173214289674,
+        "T_m_relative_error": -0.05240847599342313,
+        "n_eff": 3.046,
+        "x_e_native": 0.00017510552386758372,
+        "x_e_reference": 0.00017513600555928228,
+        "x_e_relative_error": -0.0001740458314166693,
+        "z": 0.31825673875414573
+      }
+    }
+  },
+  "integer_redshifts_only": false,
+  "matched_rows": 2550,
+  "passed": false,
+  "reference": "/home/dmarce1/workspace/cosmictiger/docs/native_recombination_results_20261020/camb/neff_3_046.csv",
+  "reference_rows": 2550,
+  "tolerance": 0.01
+}

@@ -28,6 +28,8 @@
 
 #include <hpx/modules/program_options.hpp>
 
+#include <cosmictiger/chemistry/primordial_eos.hpp>
+#include <cosmictiger/chemistry/recombination.hpp>
 #include <cosmictiger/core/defs.hpp>
 #include <cosmictiger/core/diagnostic_output.hpp>
 #include <cosmictiger/core/hpx.hpp>
@@ -185,7 +187,6 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"initial.plummer", options.initial.plummer},
         {"initial.plummerRadius", options.initial.plummerRadius},
         {"initial.closePack", options.initial.closePack},
-        {"initial.usePowerFile", options.initial.usePowerFile},
         {"initial.twoLpt", options.initial.twoLpt},
         {"initial.particlesPerDimension", options.initial.particlesPerDimension},
         {"output.silo", options.output.silo},
@@ -237,6 +238,7 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"units.massSolar", options.units.massG / constants::kM0},
         {"chemistry.enabled", options.chemistry.enabled},
         {"chemistry.network", options.chemistry.network},
+        {"chemistry.initialization", options.chemistry.initialization},
         {"chemistry.radiationFile", options.chemistry.radiationFile},
         {"chemistry.synchronizedRung", options.chemistry.synchronizedRung},
         {"chemistry.initialTemperature", options.chemistry.initialTemperature},
@@ -362,9 +364,7 @@ bool processOptions(int argc, char* argv[]) {
         "initialize the dark-matter Plummer model")("initial.plummerRadius",
         po::value<double>(&opts.initial.plummerRadius)->default_value(1.0e-2), "Plummer radius")(
         "initial.closePack", po::value<bool>(&opts.initial.closePack)->default_value(false),
-        "use a close-packed particle lattice")("initial.usePowerFile",
-        po::value<bool>(&opts.initial.usePowerFile)->default_value(true),
-        "read power.init, evenly spaced in log wave number")("initial.twoLpt",
+        "use a close-packed particle lattice")("initial.twoLpt",
         po::value<bool>(&opts.initial.twoLpt)->default_value(false),
         "use second-order Lagrangian initial conditions")("initial.particlesPerDimension",
         po::value<int>(&opts.initial.particlesPerDimension)->default_value(128),
@@ -522,7 +522,10 @@ bool processOptions(int argc, char* argv[]) {
         po::value<bool>(&opts.chemistry.enabled)->default_value(false),
         "evolve primordial thermochemistry (requires hydro.enabled)")("chemistry.network",
         po::value<std::string>(&opts.chemistry.network)->default_value("atomic6"),
-        "atomic6 or molecular9; optically thin low-density gas")("chemistry.radiationFile",
+        "atomic6 or molecular9; optically thin low-density gas")("chemistry.initialization",
+        po::value<std::string>(&opts.chemistry.initialization)->default_value("recombination"),
+        "recombination fills unspecified initial T/H+/He+/He++; manual uses fixed defaults")(
+        "chemistry.radiationFile",
         po::value<std::string>(&opts.chemistry.radiationFile)->default_value(""),
         "optional versioned redshift/photo-rate table; empty means no imposed UV")(
         "chemistry.synchronizedRung",
@@ -831,28 +834,12 @@ bool processOptions(int argc, char* argv[]) {
         if (opts.chemistry.synchronizedRung < 1 || opts.chemistry.synchronizedRung >= MAX_RUNG) {
             THROW_ERROR("chemistry.synchronizedRung must be in [1, MAX_RUNG)\n");
         }
-        if (!detail::isPositiveFloatOption(opts.chemistry.initialTemperature) ||
-            !detail::isPositiveFloatOption(opts.chemistry.relativeTolerance) ||
+        if (!detail::isPositiveFloatOption(opts.chemistry.relativeTolerance) ||
             opts.chemistry.relativeTolerance < 1.0e-5 || opts.chemistry.relativeTolerance > 0.1 ||
             !detail::isPositiveFloatOption(opts.chemistry.abundanceAbsoluteTolerance) ||
             !detail::isPositiveFloatOption(opts.chemistry.energyAbsoluteTolerance) ||
             opts.chemistry.maxSubsteps < 1) {
             THROW_ERROR("Invalid chemistry temperature, tolerances or work bound\n");
-        }
-        double const fractions[] = {opts.chemistry.hydrogenIonFraction,
-            opts.chemistry.heliumIonFraction, opts.chemistry.heliumDoubleIonFraction,
-            opts.chemistry.hydrogenMinusFraction, opts.chemistry.molecularFraction,
-            opts.chemistry.molecularIonFraction};
-        for (double const fraction : fractions) {
-            if (!detail::isFiniteOption(fraction) || fraction < 0.0 || fraction > 1.0) {
-                THROW_ERROR("Initial chemistry fractions must be finite and in [0,1]\n");
-            }
-        }
-        if (fractions[0] + fractions[3] + fractions[4] + fractions[5] > 1.0 ||
-            fractions[1] + fractions[2] > 1.0 ||
-            (opts.chemistry.network == "atomic6" &&
-                fractions[3] + fractions[4] + fractions[5] != 0.0)) {
-            THROW_ERROR("Initial chemistry fractions violate nuclear closure/network\n");
         }
         if (!detail::isFiniteOption(opts.cosmology.heliumFraction) ||
             opts.cosmology.heliumFraction < 0.0 || opts.cosmology.heliumFraction >= 1.0) {
@@ -889,6 +876,20 @@ bool processOptions(int argc, char* argv[]) {
     opts.compute.treeAllocLineSize = 16 * opts.compute.treeCacheLineSize;
     opts.compute.particleCacheLineSize = 131072 / (sizeof(Fixed32) * NDIM);
     opts.analysis.saveForce = opts.run.test == "force";
+    if (!detail::isFiniteOption(opts.cosmology.omegaB) || opts.cosmology.omegaB < 0.0 ||
+        !detail::isFiniteOption(opts.cosmology.omegaC) || opts.cosmology.omegaC < 0.0 ||
+        !(opts.cosmology.omegaB + opts.cosmology.omegaC > 0.0) ||
+        !detail::isFiniteOption(opts.cosmology.nEff) || opts.cosmology.nEff < 0.0 ||
+        !detail::isFiniteOption(opts.cosmology.thetaCmb) || !(opts.cosmology.thetaCmb > 0.0) ||
+        !detail::isFiniteOption(opts.cosmology.hubble) || !(opts.cosmology.hubble > 0.0) ||
+        !detail::isFiniteOption(opts.cosmology.heliumFraction) ||
+        opts.cosmology.heliumFraction < 0.0 || !(opts.cosmology.heliumFraction < 1.0) ||
+        !detail::isFiniteOption(opts.cosmology.omegaLambda) ||
+        !detail::isFiniteOption(opts.cosmology.spectralIndex) ||
+        !detail::isFiniteOption(opts.cosmology.sigma8) || !(opts.cosmology.sigma8 > 0.0)) {
+        THROW_ERROR("Invalid cosmology: densities and nEff must be nonnegative, total matter, "
+                    "temperature, Hubble rate and sigma8 positive, and heliumFraction in [0,1)\n");
+    }
     opts.cosmology.omegaM = opts.cosmology.omegaB + opts.cosmology.omegaC;
     opts.initial.darkMatterMass =
         opts.hydro.enabled ? opts.cosmology.omegaC / opts.cosmology.omegaM : 1.0;
@@ -914,8 +915,6 @@ bool processOptions(int argc, char* argv[]) {
     PRINT("box_size = %e Mpc\n", opts.units.lengthCm / constants::kMpcToCm);
     opts.analysis.sliceSize =
         std::min((20.0 / opts.cosmology.hubble) / (opts.units.lengthCm / constants::kMpcToCm), 1.0);
-    double const neff = 3.086;
-    double const thetaValue = 1.0;
     auto const nside1 = pow(M_PI * opts.initial.numberOfParticles / 10000.0 / 12.0, 0.5);
     int nside = 1;
     while (nside < nside1 / 2.0) {
@@ -926,20 +925,88 @@ bool processOptions(int argc, char* argv[]) {
     }
     PRINT("lc map size = %e\n", nside1);
 
-    double omegaR = 32.0 * M_PI / 3.0 * constants::kG * constants::kSigma *
-        (1 + neff * (7. / 8.0) * std::pow(4. / 11., 4. / 3.)) * std::pow(constants::kH0, -2) *
-        std::pow(constants::kC, -3) * std::pow(2.73 * thetaValue, 4) *
+    // The photon density depends only on T_CMB and H_0. Adding massless species
+    // changes the neutrino density without changing the photons.
+    opts.cosmology.omegaGamma = 32.0 * M_PI / 3.0 * constants::kG * constants::kSigma *
+        std::pow(constants::kH0, -2) * std::pow(constants::kC, -3) *
+        std::pow(constants::kTcmb * opts.cosmology.thetaCmb, 4) *
         std::pow(opts.cosmology.hubble, -2);
-    opts.cosmology.omegaNu = omegaR * opts.cosmology.nEff /
-        (8.0 / 7.0 * std::pow(11.0 / 4.0, 4.0 / 3.0) + opts.cosmology.nEff);
-    opts.cosmology.omegaGamma = omegaR - opts.cosmology.omegaNu;
-    opts.cosmology.omegaR = omegaR;
+    opts.cosmology.omegaNu = opts.cosmology.omegaGamma * opts.cosmology.nEff * (7.0 / 8.0) *
+        std::pow(4.0 / 11.0, 4.0 / 3.0);
+    opts.cosmology.omegaR = opts.cosmology.omegaGamma + opts.cosmology.omegaNu;
     if (opts.cosmology.omegaLambda < 0.0) {
         opts.cosmology.omegaLambda = 1.0 - opts.cosmology.omegaM - opts.cosmology.omegaR;
         opts.cosmology.omegaK = 0.0;
     } else {
         opts.cosmology.omegaK =
             1.0 - opts.cosmology.omegaM - opts.cosmology.omegaR - opts.cosmology.omegaLambda;
+    }
+    if (opts.chemistry.enabled) {
+        if (opts.chemistry.initialization != "recombination" &&
+            opts.chemistry.initialization != "manual") {
+            THROW_ERROR("chemistry.initialization must be recombination or manual\n");
+        }
+        if (opts.chemistry.initialization == "recombination") {
+            if (!detail::isFiniteOption(opts.cosmology.startRedshift) ||
+                opts.cosmology.startRedshift <= -1.0 || std::abs(opts.cosmology.omegaK) > 1.0e-12) {
+                THROW_ERROR("Native chemistry initialization requires finite startRedshift > -1 "
+                            "and a spatially flat cosmology\n");
+            }
+            primordial::RecombinationParameters parameters;
+            parameters.hubble = opts.cosmology.hubble;
+            parameters.omegaB = opts.cosmology.omegaB;
+            parameters.omegaC = opts.cosmology.omegaC;
+            parameters.omegaRadiation = opts.cosmology.omegaR;
+            parameters.heliumMassFraction = opts.cosmology.heliumFraction;
+            parameters.cmbTemperature = constants::kTcmb * opts.cosmology.thetaCmb;
+            double const scaleFactor = 1.0 / (1.0 + opts.cosmology.startRedshift);
+            primordial::RecombinationOptions historyOptions;
+            historyOptions.maxScaleFactor = std::max(historyOptions.maxScaleFactor, scaleFactor);
+            primordial::RecombinationHistory const history(parameters, historyOptions);
+            if (!isExplicit("chemistry.initialTemperature")) {
+                opts.chemistry.initialTemperature = history.gasTemperature(scaleFactor);
+            }
+            if (!isExplicit("chemistry.hydrogenIonFraction")) {
+                opts.chemistry.hydrogenIonFraction = history.hydrogenIonizedFraction(scaleFactor);
+            }
+            if (!isExplicit("chemistry.heliumIonFraction")) {
+                opts.chemistry.heliumIonFraction = history.heliumSinglyIonizedFraction(scaleFactor);
+            }
+            if (!isExplicit("chemistry.heliumDoubleIonFraction")) {
+                opts.chemistry.heliumDoubleIonFraction =
+                    history.heliumDoublyIonizedFraction(scaleFactor);
+            }
+            // Resolve options on restart as well for checkpoint compatibility.
+            // Restarts restore particle state and never call particle initialization.
+        }
+        primordial::Network const network = opts.chemistry.network == "molecular9" ?
+            primordial::Network::Molecular9 :
+            primordial::Network::Atomic6;
+        if (!detail::isPositiveFloatOption(opts.chemistry.initialTemperature) ||
+            opts.chemistry.initialTemperature < primordial::minimumTemperature(network) ||
+            opts.chemistry.initialTemperature > primordial::maximumTemperature(network)) {
+            THROW_ERROR("Initial chemistry temperature %g K is outside %s domain [%g, %g] K; "
+                        "set chemistry.initialTemperature explicitly or select "
+                        "chemistry.initialization=manual\n",
+                opts.chemistry.initialTemperature, opts.chemistry.network.c_str(),
+                double(primordial::minimumTemperature(network)),
+                double(primordial::maximumTemperature(network)));
+        }
+        double const fractions[] = {opts.chemistry.hydrogenIonFraction,
+            opts.chemistry.heliumIonFraction, opts.chemistry.heliumDoubleIonFraction,
+            opts.chemistry.hydrogenMinusFraction, opts.chemistry.molecularFraction,
+            opts.chemistry.molecularIonFraction};
+        for (double const fraction : fractions) {
+            if (!detail::isFiniteOption(fraction) || fraction < 0.0 || fraction > 1.0) {
+                THROW_ERROR("Initial chemistry fractions must be finite and in [0,1]\n");
+            }
+        }
+        if (fractions[0] + fractions[3] + fractions[4] + fractions[5] > 1.0 ||
+            fractions[1] + fractions[2] > 1.0 ||
+            (opts.chemistry.network == "atomic6" &&
+                fractions[3] + fractions[4] + fractions[5] != 0.0)) {
+            THROW_ERROR("Initial chemistry fractions violate nuclear closure/network\n");
+        }
     }
     // ROCKSTAR Sec. III.1 and Table 2: outer FOF linking length b=0.28.
     // Behroozi, Wechsler & Wu (2013), https://arxiv.org/html/1110.4372v3
@@ -968,6 +1035,7 @@ bool processOptions(int argc, char* argv[]) {
     }
     SHOW("chemistry.enabled", chemistry.enabled);
     SHOW("chemistry.network", chemistry.network);
+    SHOW("chemistry.initialization", chemistry.initialization);
     SHOW("chemistry.radiationFile", chemistry.radiationFile);
     SHOW("chemistry.synchronizedRung", chemistry.synchronizedRung);
     SHOW("chemistry.initialTemperature", chemistry.initialTemperature);
@@ -1088,7 +1156,6 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("analysis.tracerCount", analysis.tracerCount);
     SHOW("compute.treeCacheLineSize", compute.treeCacheLineSize);
     SHOW("initial.twoLpt", initial.twoLpt);
-    SHOW("initial.usePowerFile", initial.usePowerFile);
     SHOW("analysis.viewSize", analysis.viewSize);
     SHOW("cosmology.startRedshift", cosmology.startRedshift);
     SHOW("cosmology.endRedshift", cosmology.endRedshift);

@@ -92,7 +92,8 @@ accepted state/time and work counters. The SPH bridge prepares all ranks before
 committing source results, and does not commit a partially failed batch.
 
 The current density ceiling is 10^4 H nuclei/cm³. Atomic6 accepts 10–10^8 K;
-molecular9 accepts 100–6000 K, the conservative common fit domain. Unsupported
+molecular9 accepts 10–6000 K, with the [cold extension](molecular9_cold.md)
+providing the previously missing low-temperature cooling branches. Unsupported
 states are errors, not floors or silent extrapolations. This excludes a complete
 high-density collapse calculation and parts of hot or very cold molecular gas
 physics. There are no metals, dust, deuterium/HD, self-consistent radiative transfer,

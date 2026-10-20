@@ -1,0 +1,59 @@
+{
+  "candidate": "/home/dmarce1/workspace/cosmictiger/docs/boltzmann_validation_results_20261020/final_neff_3_046_hierarchy_check/transfers.csv",
+  "metrics": {
+    "delta_baryon": {
+      "maximum_absolute_relative_error": 0.0001827835194967431,
+      "worst_mode": {
+        "delta_baryon_relative_error": 0.0001827835194967431,
+        "delta_cb_relative_error": 0.00018274011515861943,
+        "delta_cdm_relative_error": 0.00018273331616946997,
+        "k_mpc": 10.0,
+        "n_eff": 3.046,
+        "p_cb_mpc3_relative_error": 0.00036551362426662237,
+        "z": 49.0
+      }
+    },
+    "delta_cb": {
+      "maximum_absolute_relative_error": 0.00018274410935492647,
+      "worst_mode": {
+        "delta_baryon_relative_error": 0.00018274768370418748,
+        "delta_cb_relative_error": 0.00018274410935492647,
+        "delta_cdm_relative_error": 0.0001827434465260236,
+        "k_mpc": 10.0,
+        "n_eff": 3.046,
+        "p_cb_mpc3_relative_error": 0.00036552161411940176,
+        "z": 0.0
+      }
+    },
+    "delta_cdm": {
+      "maximum_absolute_relative_error": 0.0001827434465260236,
+      "worst_mode": {
+        "delta_baryon_relative_error": 0.00018274768370418748,
+        "delta_cb_relative_error": 0.00018274410935492647,
+        "delta_cdm_relative_error": 0.0001827434465260236,
+        "k_mpc": 10.0,
+        "n_eff": 3.046,
+        "p_cb_mpc3_relative_error": 0.00036552161411940176,
+        "z": 0.0
+      }
+    },
+    "p_cb_mpc3": {
+      "maximum_absolute_relative_error": 0.00036552161411940176,
+      "worst_mode": {
+        "delta_baryon_relative_error": 0.00018274768370418748,
+        "delta_cb_relative_error": 0.00018274410935492647,
+        "delta_cdm_relative_error": 0.0001827434465260236,
+        "k_mpc": 10.0,
+        "n_eff": 3.046,
+        "p_cb_mpc3_relative_error": 0.00036552161411940176,
+        "z": 0.0
+      }
+    }
+  },
+  "normalization_fit": false,
+  "passed": true,
+  "reference": "/home/dmarce1/workspace/cosmictiger/docs/boltzmann_validation_results_20261020/final_neff_3_046_refined/transfers.csv",
+  "reference_rows": 62,
+  "rows": 62,
+  "tolerance": 0.005
+}

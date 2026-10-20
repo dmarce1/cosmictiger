@@ -37,11 +37,12 @@ between these scalars and stored hydrodynamic specific energy.
 | Network | Temperature | Proper H-nucleus density | Collision channels |
 | --- | --- | --- | --- |
 | `atomic6` | 10–10⁸ K | 0–10⁴ cm⁻³ | C01–C06 |
-| `molecular9` | 100–6000 K | 0–10⁴ cm⁻³ | C01–C29 |
+| `molecular9` | 10–6000 K | 0–10⁴ cm⁻³ | C01–C29 |
 
 These are implementation/model bounds, not claims that every individual
 laboratory measurement covers every point. The molecular temperature interval
-is the intersection of the adopted H₂ cooling fits. Published approximations
+combines the original warm fits with the [10 K cold extension](molecular9_cold.md).
+Published approximations
 and extrapolations retained below are identified. Outside these bounds the
 kernel returns `UnsupportedState`; it does not clamp temperature, density, or
 negative abundances. Density zero is the well-defined radiation-only limit of
@@ -146,7 +147,13 @@ The metastable-He contribution is not included. Free-free emission weights
 `xe * Tcmb^4 * (Tcmb - T)` and can heat as well as cool; it is not a CMB floor.
 
 H₂ line cooling includes H, H₂, He, H⁺, and electron collision partners from
-GA08 Table 8, fixed ortho:para 3:1. The Hollenbach–McKee LTE expression is reproduced in Yoshida06 equations
+GA08 Table 8, fixed ortho:para 3:1. Below 100 K the H₂ collider uses Hernández21
+Table 2 and detailed balance, and the H collider uses the GA08 10–100 K branch.
+An explicitly numerical correction over 80–100 K matches the existing warm
+values and slopes. Cold logarithmic coefficients are converted to eV before
+exponentiation, and zero LTE coefficients have a finite zero-cooling limit.
+The [cold extension](molecular9_cold.md) records these assumptions. The
+Hollenbach–McKee LTE expression is reproduced in Yoshida06 equations
 (18)–(20), and the low-density/LTE bridge follows GP98 Appendix A. Proton-driven ortho/para
 conversion is omitted because the spin mixture is frozen. H₂⁺ vibrational
 cooling follows GA08 equations (44)–(50), including its H/e partners and LTE
@@ -202,6 +209,7 @@ spin mixture, energy convention, and temperature/domain handling.
 - **GP98:** [Galli & Palla, 1998, Appendix A](https://arxiv.org/pdf/astro-ph/9803315), molecular LTE interpolation and Hollenbach–McKee cooling.
 - **Yoshida06:** [Yoshida et al., 2006, equations (23)–(26)](https://arxiv.org/pdf/astro-ph/0606106), molecular formation/dissociation heating and quenching.
 - **Boley07:** [Boley et al., 2007](https://arxiv.org/pdf/astro-ph/0701146), molecular partition-function thermodynamics.
+- **Hernández21:** [Hernández et al. (2021)](https://doi.org/10.1051/0004-6361/202039790), equations (5)–(7), Table 2; [CDS numerical tables](https://cdsarc.cds.unistra.fr/viz-bin/cat/J/A+A/647/A155).
 - **NIST:** [CCCBDB experimental diatomic constants](https://cccbdb.nist.gov/expdiatomicsx.asp), H₂⁺ row, accessed 2026-10-18; numeric constants are recorded in the EOS source.
 
 `tests/primordial_rates.cpp` checks all reaction rows, each photon source,

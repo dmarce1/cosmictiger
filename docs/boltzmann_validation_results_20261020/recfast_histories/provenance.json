@@ -1,0 +1,15 @@
+{
+  "files": {
+    "neff_0.0/history.dat": "2ba336b739d97c1e4301f6c8746637802705bf3a09bd8d6beeadfb58d75214e5",
+    "neff_0.0/input.txt": "590ab08e851d2cda7f4aa259c5e93dbb3a4655eaa9cf5dd7bab611f879a624df",
+    "neff_0.0/parameters.json": "fca3bd3e497a0705047bc6adcf7b3833bf33e3f206e2662b43517afb42576711",
+    "neff_0.0/recfast.log": "5de461a71c5db1a714df223118eec6301501f46db1bb1c6d98d284749a2723b8",
+    "neff_3.046/history.dat": "718d70e9fd84345adfe4d3364f200cc459af07a596a3ae03a43562c803e9a8ea",
+    "neff_3.046/input.txt": "996f85692992002d6b3107c710e1c7f92ccc1cbfd19c3af376662274e7dc9e56",
+    "neff_3.046/parameters.json": "371fa3f68f83d13ab29db12ee7b155fa81a125a1422a7976b9bd1a584376d46c",
+    "neff_3.046/recfast.log": "48b68f4ebf9b18def4568dbba1c975a65d11673ca6f694fc864d9f5465229ceb"
+  },
+  "recfast_executable_sha256": "5d1e341e33c28af8ea751f071fe523c64717d7dc6b7c8b42a9a0f2a950a9a273",
+  "recfast_source_sha256": "d1bace4ff7b4323098fbb41bcd7bfda990027ec67178f71c6cb236f6dccdcc7a",
+  "source_directory": "/tmp/eb_background_fix/production"
+}

@@ -52,7 +52,6 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", choices=("sod", "dm_cpu", "dm_cuda", "sph", "sph_mpi"))
     parser.add_argument("executable", type=Path)
-    parser.add_argument("power_file", type=Path)
     parser.add_argument("workdir", type=Path)
     parser.add_argument("--mpi-exec", default="mpiexec")
     parser.add_argument("--cpu", action="store_true", help="run hydrodynamics on the SIMD CPU backend")
@@ -73,10 +72,6 @@ def main():
     for checkpoint_dir in args.workdir.glob("checkpoint.*"):
         if checkpoint_dir.is_dir() and re.fullmatch(r"checkpoint\.[0-9]+", checkpoint_dir.name):
             shutil.rmtree(checkpoint_dir)
-    shutil.copyfile(args.power_file, args.workdir / "power.init")
-    recfast = args.executable.parent / "recfast"
-    if recfast.exists():
-        shutil.copy2(recfast, args.workdir / "recfast")
     command = [str(args.executable), "--hpx:threads=2", "--hpx:bind=none",
                "--initial.particlesPerDimension=8", "--analysis.views=false",
                "--lightcone.enabled=false", "--analysis.power=false", "--analysis.groups=false"]
@@ -171,9 +166,6 @@ def main():
             restart_directory.mkdir()
             shutil.copytree(args.workdir / f"checkpoint.{checkpoint}",
                             restart_directory / f"checkpoint.{checkpoint}")
-            shutil.copyfile(args.power_file, restart_directory / "power.init")
-            if recfast.exists():
-                shutil.copy2(recfast, restart_directory / "recfast")
             restart_command = [arg for arg in command
                                if not arg.startswith(("--run.maxIterations=", "--checkpoint.intervalSeconds="))]
             restart_command += [f"--checkpoint.readIndex={checkpoint}", "--run.maxIterations=0"]

@@ -1,0 +1,7 @@
+# Preserve verbatim solver/Fortran output, including its trailing blanks.
+**/raw/*.txt whitespace=-blank-at-eol
+recfast_histories/**/*.dat whitespace=-blank-at-eol
+recfast_histories/**/*.log whitespace=-blank-at-eol
+# Application and sanitizer evidence is also retained verbatim.
+**/*.log whitespace=-blank-at-eol
+**/progress.txt whitespace=-blank-at-eol

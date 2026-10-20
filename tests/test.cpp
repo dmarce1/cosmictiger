@@ -24,6 +24,7 @@
 
 #include <cosmictiger/analysis/rockstar.hpp>
 #include <cosmictiger/core/driver.hpp>
+#include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/core/timer.hpp>
 #include <cosmictiger/cosmology/fft.hpp>
@@ -39,10 +40,28 @@
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/drift.hpp>
 #include <cosmictiger/particles/particles.hpp>
+#include <cosmictiger/scenarios/cosmology.hpp>
 #include <cosmictiger/scenarios/plummer.hpp>
 #include <tests/test.hpp>
 
 constexpr bool kVerbose = true;
+
+static void nativeChemistryInitializationTest() {
+    auto const& options = getOptions();
+    if (!options.hydro.enabled || !options.chemistry.enabled ||
+        options.run.scenario != "cosmology" || options.checkpoint.readIndex >= 0) {
+        THROW_ERROR("Native chemistry initialization fixture requires fresh cosmological gas\n");
+    }
+    DriverParameters state{};
+    scenarios::initializeCosmology(state);
+    domainsRebound();
+    domainsBegin(0);
+    domainsEnd();
+    // Serialize the production initial conditions before any source or gravity
+    // step. The runtime checkpoint schedule remains unchanged.
+    writeCheckpoint(state);
+    PRINT("Native chemistry initialization checkpoint written at iteration zero\n");
+}
 
 // 0.7, 0.8
 // 0.55, 0.65
@@ -640,6 +659,10 @@ void groupsCatalogueDistributedTest();
 void analysisBackendsTest();
 
 void test(std::string test) {
+    if (test == "nativeChemistryInitialization") {
+        nativeChemistryInitializationTest();
+        return;
+    }
     if (test == "analysisBackends") {
         analysisBackendsTest();
         return;

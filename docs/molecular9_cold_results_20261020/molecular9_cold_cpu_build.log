@@ -1,0 +1,6 @@
+[1/6] Building CXX object CMakeFiles/primordial_chemistry.dir/src/chemistry/recombination.cpp.o
+[2/6] Building CXX object CMakeFiles/primordial_chemistry.dir/src/chemistry/primordial_chemistry.cpp.o
+[3/6] Linking CXX static library libprimordial_chemistry.a
+[4/6] Building CXX object CMakeFiles/cosmictiger.dir/src/core/options.cpp.o
+[5/6] Building CXX object CMakeFiles/cosmictiger.dir/src/sph/sph_chemistry.cpp.o
+[6/6] Linking CXX executable cosmictiger

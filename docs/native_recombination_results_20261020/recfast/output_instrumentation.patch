@@ -1,0 +1,22 @@
+--- recfast/recfast.f
++++ recfast_thermal_reference.f
+@@ -490,7 +490,7 @@
+ c	OK that's the initial conditions, now start writing output file
+ 
+ 	open(unit=7,status='new',form='formatted',file=fileout)
+-	write(7,'(1x,''  z    '',1x,''     x_e   '')')
++      write(7,'(a)') 'z x_e T_m x_H x_He'
+ 
+ 	w0=1.d0/ dsqrt(1.d0 + zinitial)	!like a conformal time
+ 	w1=1.d0/ dsqrt(1.d0 + zfinal)
+@@ -589,8 +589,8 @@
+ 	  x_He = y(2)
+ 	  x = x0
+ 
+-	  write(7,'(1x,f8.2,2x,g15.8)')
+-	1	zend,x
++          write(7,'(5(es25.17,1x))')
++     1    zend,x,Tmat,x_H,x_He
+ 
+ 	end do
+ 

@@ -17,285 +17,478 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
+#include <algorithm>
+#include <array>
 #include <cmath>
+#include <limits>
+#include <stdexcept>
 #include <vector>
 
-#include <cosmictiger/core/hpx.hpp>
-#include <cosmictiger/core/options.hpp>
 #include <cosmictiger/cosmology/boltzmann.hpp>
-#include <cosmictiger/math/math.hpp>
 
-void einsteinBoltzmannInit(CosState* uptr, ZeroOrderUniverse const* uniPtr, double k,
-    double normalization, double a, double ns) {
-    CosState& u = *uptr;
-    ZeroOrderUniverse const& uni = *uniPtr;
-    double ocValue, obValue, ogam, onu, omegaRadiation;
-    uni.computeRadiationFractions(ogam, onu, a);
-    uni.computeMatterFractions(ocValue, obValue, a);
-    omegaRadiation = ogam + onu;
-    double hubble = hubbleFunction(a, uni.params.hubble, uni.params.omegaB + uni.params.omegaC,
-        uni.params.omegaGam + uni.params.omegaNu);
-    double eps = k / (a * hubble);
-    double c = normalization * pow(eps, -1.5f) * pow(eps, (ns - 1.f) * 0.5f);
-    double rnu = onu / omegaRadiation;
-    u[taui] = (double) 1.0 / (a * hubble);
-    u[deltanui] = u[deltagami] = -(double) 2.0 / (double) 3.0 * c * eps * eps;
-    u[deltabi] = u[deltaci] = (double) 3.0 / (double) 4.0 * u[deltagami];
-    u[thetabi] = u[thetagami] = -c / (double) 18.0 * eps * eps * eps;
-    u[thetanui] =
-        ((double) 23 + (double) 4 * rnu) / ((double) 15 + (double) 4 * rnu) * u[thetagami];
-    u[N2i] = (double) 0.5 * ((double) 4.0 * c) / ((double) 3.0 * ((double) 15 + (double) 4 * rnu)) *
-        eps * eps;
-    u[hdoti] = (double) (double) 2.0 * c * eps * eps;
-    u[G0i] = u[G1i] = u[G2i] = u[F2i] = (double) 0.0;
-    for (int l = 3; l < LMAX; l++) {
-        u[FLi + l] = (double) 0.0;
-        u[NLi + l] = (double) 0.0;
-        u[GLi + l] = (double) 0.0;
+namespace detail {
+
+// MB (1995), synchronous gauge, x=ln(a). The photon/baryon velocities are
+// represented by their combined momentum and slip, avoiding subtraction of
+// enormous Thomson drag coefficients in the tight-coupling limit.
+enum Field {
+    HPrime,
+    DeltaCdm,
+    DeltaBaryon,
+    Velocity,
+    DeltaPhoton,
+    Slip,
+    PhotonQuadrupole,
+    Polarization0,
+    Polarization1,
+    Polarization2,
+    DeltaNeutrino,
+    VelocityNeutrino,
+    NeutrinoQuadrupole,
+    ScaledCurvature,
+    CoreSize
+};
+
+using CoreMatrix = std::array<std::array<double, CoreSize>, CoreSize>;
+constexpr std::array<int, 3> kQuadrupoles = {PhotonQuadrupole, Polarization2, NeutrinoQuadrupole};
+
+struct LinearState {
+    std::vector<double> values;
+    double tau;
+};
+
+struct Background {
+    double expansion;
+    double eps;
+    double cdm;
+    double baryon;
+    double photon;
+    double neutrino;
+    double soundSpeed2;
+    double opacity;
+    double baryonWeight;
+    double photonWeight;
+    double drag;
+    double metricFriction;
+};
+
+class BoltzmannIntegrator {
+    ZeroOrderUniverse const& universe_;
+    double k_;
+    BoltzmannSolverOptions options_;
+    int tailSize_;
+    int species_;
+    size_t accepted_ = 0;
+    size_t rejected_ = 0;
+
+    size_t tailIndex(int species, int ell) const {
+        return CoreSize + species * tailSize_ + ell - 3;
     }
-    u[etai] = ((double) 0.5 * u[hdoti] -
-                  ((double) 1.5 * (ocValue * u[deltaci] + obValue * u[deltabi]) +
-                      (double) 1.5 * (ogam * u[deltagami] + onu * u[deltanui]))) /
-        (eps * eps);
-}
 
-void einsteinBoltzmanKernel(int myindex, CosState* states, ZeroOrderUniverse const* uniPtr,
-    double* ks, double amin, double amax, double norm, int nmax, bool cont, double ns) {
-    if (!cont) {
-        einsteinBoltzmannInit(states + myindex, uniPtr, ks[myindex], norm, amin, ns);
-    }
-    einsteinBoltzmann(states + myindex, uniPtr, ks[myindex], amin, amax);
-}
-
-void einsteinBoltzmann(
-    CosState* uptr, ZeroOrderUniverse const* uniPtr, double k, double amin, double amax) {
-    auto const& uni = *uniPtr;
-    if (amin < uni.amin && amax > uni.amax) {
-        THROW_ERROR("out of range error in einstein_boltzmann\n");
-    }
-    CosState& u = *uptr;
-    CosState u0;
-    double loga = log(amin);
-    double logamax = log(amax);
-    double omegaM = uni.params.omegaB + uni.params.omegaC;
-    double omegaR = uni.params.omegaGam + uni.params.omegaNu;
-    while (loga < logamax) {
-        double ocValue, obValue, ogam, onu, omegaRadiation;
-        double a = exp(loga);
-        double hubble = hubbleFunction(a, uni.params.hubble, omegaM, omegaR);
-        double eps = k / (a * hubble);
-        uni.computeRadiationFractions(ogam, onu, a);
-        uni.computeMatterFractions(ocValue, obValue, a);
-        omegaRadiation = ogam + onu;
-        double cs2 = uni.cs2(a);
-        double lambdaI = 0.0;
-        lambdaI = std::max((double) lambdaI,
-            sqrt(((double) LMAX + (double) 1.0) / ((double) LMAX + (double) 3.0)) * eps);
-        lambdaI = std::max((double) lambdaI,
-            sqrt((double) 3.0 * pow(eps, 4) + (double) 8.0 * eps * eps * omegaRadiation) /
-                sqrt((double) 5) / eps);
-        double lambdaR = (eps + sqrt(eps * eps + (double) 4.0 * cs2 * pow(eps, (double) 4))) /
-            ((double) 2.0 * eps);
-        double dlogaI = (double) 2.0 * (double) 1.73 / lambdaI;
-        double dlogaR = (double) 2.0 * (double) 2.51 / lambdaR;
-        double dloga = std::min(
-            std::min((double) 5e-2, std::min((double) 0.9 * dlogaI, (double) 0.1 * dlogaR)),
-            logamax - loga);
-        double loga0 = loga;
-        auto const computeExplicit = [&](int step) {
-            u0 = u;
-            CosState dudt;
-            constexpr double kBeta[3] = {1, 0.25, (2.0 / 3.0)};
-            constexpr double kTm[3] = {0, 1, 0.5};
-            for (int i = 0; i < 3; i++) {
-                loga = loga0 + (double) 0.5 * (kTm[i] + step) * dloga;
-                a = exp(loga);
-                hubble = hubbleFunction(a, uni.params.hubble, omegaM, omegaR);
-                eps = k / (a * hubble);
-                uni.computeRadiationFractions(ogam, onu, a);
-                uni.computeMatterFractions(ocValue, obValue, a);
-                omegaRadiation = ogam + onu;
-                cs2 = uni.cs2(a);
-                dudt[taui] = (double) 1.0 / (a * hubble);
-                dudt[etai] = ((double) 1.5 *
-                    ((obValue * u[thetabi]) +
-                        ((double) 4.0 / (double) 3.0) * (ogam * u[thetagami] + onu * u[thetanui])) /
-                    eps);
-                double factor =
-                    ((a * omegaM) + (double) 4 * a * a * a * a * ((double) 1 - omegaM - omegaR)) /
-                    ((double) 2 * a * omegaM + (double) 2 * omegaR +
-                        (double) 2 * a * a * a * a * ((double) 1 - omegaM - omegaR));
-                dudt[hdoti] = (-factor * u[hdoti] -
-                    ((double) 3.0 * (ocValue * u[deltaci] + obValue * u[deltabi]) +
-                        (double) 6.0 * (ogam * u[deltagami] + onu * u[deltanui])));
-                dudt[deltaci] = -(double) 0.5 * u[hdoti];
-                dudt[deltabi] = -eps * u[thetabi] - (double) 0.5 * u[hdoti];
-                dudt[deltagami] = -(double) 4.0 / (double) 3.0 * eps * u[thetagami] -
-                    ((double) 2.0 / (double) 3.0) * u[hdoti];
-                dudt[deltanui] = -(double) 4.0 / (double) 3.0 * eps * u[thetanui] -
-                    ((double) 2.0 / (double) 3.0) * u[hdoti];
-                dudt[thetabi] = -u[thetabi] + cs2 * eps * u[deltabi];
-                dudt[thetagami] = eps * ((double) 0.25 * u[deltagami] - (double) 0.5 * u[F2i]);
-                dudt[thetanui] = eps * ((double) 0.25 * u[deltanui] - (double) 0.5 * u[N2i]);
-                dudt[F2i] = ((double) 8.0 / (double) 15.0) * eps * u[thetagami] +
-                    ((double) 4.0 / (double) 15.0) * u[hdoti] +
-                    ((double) 8.0 / (double) 5.0) * dudt[etai] -
-                    ((double) 3.0 / (double) 5.0) * eps * u[FLi + 3];
-                dudt[N2i] = ((double) 8.0 / (double) 15.0) * eps * u[thetanui] +
-                    ((double) 4.0 / (double) 15.0) * u[hdoti] +
-                    ((double) 8.0 / (double) 5.0) * dudt[etai] -
-                    ((double) 3.0 / (double) 5.0) * eps * u[NLi + 3];
-                dudt[GLi + 0] = -eps * u[GLi + 1];
-                dudt[GLi + 1] = eps / (double) (3) * (u[GLi + 0] - (double) 2 * u[GLi + 2]);
-                dudt[GLi + 2] =
-                    eps / (double) (5) * ((double) 2 * u[GLi + 1] - (double) 3 * u[GLi + 3]);
-                for (int l = 3; l < LMAX - 1; l++) {
-                    dudt[FLi + l] = eps / (double) (2 * l + 1) *
-                        ((double) l * u[FLi - 1 + l] - (double) (l + 1) * u[FLi + 1 + l]);
-                    dudt[NLi + l] = eps / (double) (2 * l + 1) *
-                        ((double) l * u[NLi - 1 + l] - (double) (l + 1) * u[NLi + 1 + l]);
-                    dudt[GLi + l] = eps / (double) (2 * l + 1) *
-                        ((double) l * u[GLi - 1 + l] - (double) (l + 1) * u[GLi + 1 + l]);
-                }
-                dudt[FLi + LMAX - 1] = (eps * u[FLi + LMAX - 2]) / (double) (2 * LMAX - 1);
-                dudt[NLi + LMAX - 1] = (eps * u[NLi + LMAX - 2]) / (double) (2 * LMAX - 1);
-                dudt[GLi + LMAX - 1] = (eps * u[GLi + LMAX - 2]) / (double) (2 * LMAX - 1);
-                for (int f = 0; f < NFIELD; f++) {
-                    u[f] = ((double) 1 - kBeta[i]) * u0[f] +
-                        kBeta[i] * (u[f] + dudt[f] * dloga * (double) 0.5);
-                }
-            }
-        };
-
-        auto computeImplicitDudt = [&](double loga, double dloga) {
-            a = exp(loga);
-            double thetab = u[thetabi];
-            double thetagam = u[thetagami];
-            double f2 = u[F2i];
-            double g0 = u[G0i];
-            double g1 = u[G1i];
-            double g2 = u[G2i];
-            double thetab0 = thetab;
-            double thetagam0 = thetagam;
-            double f20 = f2;
-            double g00 = g0;
-            double g10 = g1;
-            double g20 = g2;
-            double sigma = uni.sigmaT(a);
-
-            thetab = -(
-                (-(double) 3 * obValue * thetab0 - (double) 3 * dloga * obValue * sigma * thetab0 -
-                    (double) 4 * dloga * ogam * sigma * thetagam0) /
-                ((double) 3 * obValue + (double) 3 * dloga * obValue * sigma +
-                    (double) 4 * dloga * ogam * sigma));
-            thetagam = -((-(double) 3 * dloga * obValue * sigma * thetab0 -
-                             (double) 3 * obValue * thetagam0 -
-                             (double) 4 * dloga * ogam * sigma * thetagam0) /
-                ((double) 3 * obValue + (double) 3 * dloga * (double) obValue * sigma +
-                    (double) 4 * dloga * ogam * sigma));
-            f2 = -((-(double) 10 * f20 - (double) 4 * dloga * f20 * sigma - dloga * g00 * sigma -
-                       dloga * g20 * sigma) /
-                (((double) 1 + dloga * sigma) * ((double) 10 + (double) 3 * dloga * sigma)));
-            g0 = -((-(double) 10 * g00 - (double) 5 * dloga * f20 * sigma -
-                       (double) 8 * dloga * g00 * sigma - (double) 5 * dloga * g20 * sigma) /
-                (((double) 1 + dloga * sigma) * ((double) 10 + (double) 3 * dloga * sigma)));
-            g1 = g10 / ((double) 1 + dloga * sigma);
-            g2 = -((-(double) 10 * g20 - dloga * f20 * sigma - dloga * g00 * sigma -
-                       (double) 4 * dloga * g20 * sigma) /
-                (((double) 1 + dloga * sigma) * ((double) 10 + (double) 3 * dloga * sigma)));
-            std::array<double, NFIELD> dudt;
-            for (int f = 0; f < NFIELD; f++) {
-                dudt[f] = (double) 0.0;
-            }
-            dudt[thetabi] = (thetab - thetab0) / dloga;
-            dudt[thetagami] = (thetagam - thetagam0) / dloga;
-            dudt[F2i] = (f2 - f20) / dloga;
-            dudt[G0i] = (g0 - g00) / dloga;
-            dudt[G1i] = (g1 - g10) / dloga;
-            dudt[G2i] = (g2 - g20) / dloga;
-            for (int l = 3; l < LMAX - 1; l++) {
-                dudt[GLi + l] =
-                    u[GLi + l] * ((double) 1 / ((double) 1 + dloga * sigma) - (double) 1) / dloga;
-                dudt[FLi + l] =
-                    u[FLi + l] * ((double) 1 / ((double) 1 + dloga * sigma) - (double) 1) / dloga;
-            }
-            dudt[GLi + LMAX - 1] = u[GLi + LMAX - 1] *
-                ((double) 1 /
-                        ((double) 1 +
-                            (sigma +
-                                (double) LMAX / (u[taui] * a * hubble) /
-                                    ((double) 2 * (double) LMAX - (double) 1))) -
-                    (double) 1) /
-                dloga;
-            dudt[FLi + LMAX - 1] = u[FLi + LMAX - 1] *
-                ((double) 1 /
-                        ((double) 1 +
-                            (sigma +
-                                (double) LMAX / (u[taui] * a * hubble) /
-                                    ((double) 2 * (double) LMAX - (double) 1))) -
-                    (double) 1) /
-                dloga;
-            return dudt;
-        };
-
-        computeExplicit(0);
-        double gamma = (double) 1.0 - (double) 1.0 / sqrt((double) 2);
-
-        auto dudt1 = computeImplicitDudt(loga + gamma * dloga, gamma * dloga);
-        for (int f = 0; f < NFIELD; f++) {
-            u[f] += dudt1[f] * ((double) 1.0 - (double) 2.0 * gamma) * dloga;
+    Background background(double logScale) const {
+        double const a = std::exp(logScale);
+        double const matter = universe_.params.omegaC + universe_.params.omegaB;
+        double const radiation = universe_.params.omegaGam + universe_.params.omegaNu;
+        Background bg{};
+        bg.expansion = a * hubbleFunction(a, universe_.params.hubble, matter, radiation);
+        bg.eps = k_ / bg.expansion;
+        universe_.computeMatterFractions(bg.cdm, bg.baryon, a);
+        universe_.computeRadiationFractions(bg.photon, bg.neutrino, a);
+        bg.soundSpeed2 = universe_.cs2(a);
+        bg.opacity = universe_.sigmaT(a);
+        double const ratio = 4.0 * universe_.params.omegaGam / (3.0 * universe_.params.omegaB * a);
+        bg.baryonWeight = 1.0 / (1.0 + ratio);
+        bg.photonWeight = ratio / (1.0 + ratio);
+        bg.drag = (1.0 + ratio) * bg.opacity;
+        bg.metricFriction =
+            0.5 * (bg.cdm + bg.baryon) + 2.0 * (1.0 - bg.cdm - bg.baryon - bg.photon - bg.neutrino);
+        if (!(bg.opacity >= 0.0) || !(bg.soundSpeed2 >= 0.0) || !std::isfinite(bg.opacity) ||
+            !std::isfinite(bg.soundSpeed2) || !std::isfinite(bg.expansion) ||
+            !(bg.expansion > 0.0) || !std::isfinite(bg.eps) || !std::isfinite(bg.drag)) {
+            throw std::runtime_error("Invalid Boltzmann background coefficient");
         }
-        auto dudt2 = computeImplicitDudt(loga + ((double) 1.0 - gamma) * dloga, gamma * dloga);
-        for (int f = 0; f < NFIELD; f++) {
-            u[f] += (dudt1[f] * ((double) -0.5 + (double) 2.0 * gamma) + dudt2[f] * (double) 0.5) *
-                dloga;
+        return bg;
+    }
+
+    double etaPrime(LinearState const& state, Background const& bg) const {
+        return (1.5 * (bg.baryon + 4.0 * bg.photon / 3.0) * state.values[Velocity] +
+                   2.0 * bg.neutrino * state.values[VelocityNeutrino]) /
+            bg.eps;
+    }
+
+    CoreMatrix coreOperator(Background const& bg) const {
+        CoreMatrix matrix{};
+        matrix[HPrime][HPrime] = -bg.metricFriction;
+        matrix[HPrime][DeltaCdm] = -3.0 * bg.cdm;
+        matrix[HPrime][DeltaBaryon] = -3.0 * bg.baryon;
+        matrix[HPrime][DeltaPhoton] = -6.0 * bg.photon;
+        matrix[HPrime][DeltaNeutrino] = -6.0 * bg.neutrino;
+        matrix[DeltaCdm][HPrime] = -0.5;
+        matrix[DeltaBaryon][HPrime] = -0.5;
+        matrix[DeltaBaryon][Velocity] = -bg.eps;
+        matrix[DeltaBaryon][Slip] = -bg.eps * bg.photonWeight;
+        matrix[DeltaPhoton][HPrime] = -2.0 / 3.0;
+        matrix[DeltaPhoton][Velocity] = -4.0 * bg.eps / 3.0;
+        matrix[DeltaPhoton][Slip] = 4.0 * bg.eps * bg.baryonWeight / 3.0;
+
+        // v=(v_b+R v_gamma)/(1+R), s=v_b-v_gamma, R'= -R.
+        // The R' contribution cancels the slip term in v', exactly.
+        matrix[Velocity][Velocity] = -bg.baryonWeight;
+        matrix[Velocity][DeltaBaryon] = bg.baryonWeight * bg.soundSpeed2 * bg.eps;
+        matrix[Velocity][DeltaPhoton] = bg.photonWeight * bg.eps / 4.0;
+        matrix[Velocity][PhotonQuadrupole] = -bg.photonWeight * bg.eps / 2.0;
+        matrix[Slip][Velocity] = -1.0;
+        matrix[Slip][DeltaBaryon] = bg.soundSpeed2 * bg.eps;
+        matrix[Slip][DeltaPhoton] = -bg.eps / 4.0;
+        matrix[Slip][PhotonQuadrupole] = bg.eps / 2.0;
+        matrix[Slip][Slip] = -bg.photonWeight - bg.drag;
+
+        double const etaVelocity = 1.5 * (bg.baryon + 4.0 * bg.photon / 3.0) / bg.eps;
+        double const etaNeutrino = 2.0 * bg.neutrino / bg.eps;
+        matrix[PhotonQuadrupole][HPrime] = 4.0 / 15.0;
+        matrix[PhotonQuadrupole][Velocity] = 8.0 * bg.eps / 15.0 + 8.0 * etaVelocity / 5.0;
+        matrix[PhotonQuadrupole][Slip] = -8.0 * bg.eps * bg.baryonWeight / 15.0;
+        matrix[PhotonQuadrupole][VelocityNeutrino] = 8.0 * etaNeutrino / 5.0;
+        matrix[PhotonQuadrupole][PhotonQuadrupole] = -0.9 * bg.opacity;
+        matrix[PhotonQuadrupole][Polarization0] = bg.opacity / 10.0;
+        matrix[PhotonQuadrupole][Polarization2] = bg.opacity / 10.0;
+        matrix[Polarization0][Polarization1] = -bg.eps;
+        matrix[Polarization0][PhotonQuadrupole] = bg.opacity / 2.0;
+        matrix[Polarization0][Polarization0] = -bg.opacity / 2.0;
+        matrix[Polarization0][Polarization2] = bg.opacity / 2.0;
+        matrix[Polarization1][Polarization0] = bg.eps / 3.0;
+        matrix[Polarization1][Polarization1] = -bg.opacity;
+        matrix[Polarization1][Polarization2] = -2.0 * bg.eps / 3.0;
+        matrix[Polarization2][Polarization1] = 2.0 * bg.eps / 5.0;
+        matrix[Polarization2][PhotonQuadrupole] = bg.opacity / 10.0;
+        matrix[Polarization2][Polarization0] = bg.opacity / 10.0;
+        matrix[Polarization2][Polarization2] = -0.9 * bg.opacity;
+        if (species_ == 3) {
+            matrix[DeltaNeutrino][HPrime] = -2.0 / 3.0;
+            matrix[DeltaNeutrino][VelocityNeutrino] = -4.0 * bg.eps / 3.0;
+            matrix[VelocityNeutrino][DeltaNeutrino] = bg.eps / 4.0;
+            matrix[VelocityNeutrino][NeutrinoQuadrupole] = -bg.eps / 2.0;
+            matrix[NeutrinoQuadrupole][HPrime] = 4.0 / 15.0;
+            matrix[NeutrinoQuadrupole][Velocity] = 8.0 * etaVelocity / 5.0;
+            matrix[NeutrinoQuadrupole][VelocityNeutrino] =
+                8.0 * bg.eps / 15.0 + 8.0 * etaNeutrino / 5.0;
+        }
+        // E=(k/Hc)^2 eta keeps curvature comparable to the fluid amplitudes
+        // even far outside the horizon. Hc'/Hc=metricFriction-1.
+        matrix[ScaledCurvature][ScaledCurvature] = 2.0 * (1.0 - bg.metricFriction);
+        matrix[ScaledCurvature][Velocity] = bg.eps * bg.eps * etaVelocity;
+        matrix[ScaledCurvature][VelocityNeutrino] = bg.eps * bg.eps * etaNeutrino;
+        // Use the Hamiltonian constraint (MB 21a) for h' in the fluid
+        // equations. Evolving eta with (21b) then feeds the metric back
+        // into the fluid solution without subtracting an accumulated
+        // O(1) curvature error from a tiny late-time eta at large k.
+        // HPrime remains an independently evolved (21c+21a) trace check.
+        for (int row = 1; row < CoreSize; ++row) {
+            double const metric = matrix[row][HPrime];
+            matrix[row][HPrime] = 0.0;
+            matrix[row][ScaledCurvature] += metric * 2.0;
+            matrix[row][DeltaCdm] += metric * 3.0 * bg.cdm;
+            matrix[row][DeltaBaryon] += metric * 3.0 * bg.baryon;
+            matrix[row][DeltaPhoton] += metric * 3.0 * bg.photon;
+            matrix[row][DeltaNeutrino] += metric * 3.0 * bg.neutrino;
+        }
+        return matrix;
+    }
+
+    LinearState implicitStage(LinearState const& rhs, Background const& bg, double weight) const {
+        LinearState result = rhs;
+        result.tau += weight / bg.expansion;
+        CoreMatrix matrix = coreOperator(bg);
+        std::array<double, CoreSize> coreRhs{};
+        for (int row = 0; row < CoreSize; ++row) {
+            coreRhs[row] = rhs.values[row];
+            for (int col = 0; col < CoreSize; ++col) {
+                matrix[row][col] *= -weight;
+            }
+            matrix[row][row] += 1.0;
+        }
+        std::vector<double> recurrence(rhs.values.size(), 0.0);
+        // Eliminate each tridiagonal tail back to its quadrupole. MB (51),(65)
+        // give F_L'=eps F_(L-1)-(L+1)/(tau Hc)F_L, plus photon opacity.
+        for (int species = 0; species < species_; ++species) {
+            double const opacity = species < 2 ? bg.opacity : 0.0;
+            for (int ell = options_.maxMultipole; ell >= 3; --ell) {
+                size_t const index = tailIndex(species, ell);
+                bool const last = ell == options_.maxMultipole;
+                double const lower = -weight * bg.eps * (last ? 1.0 : double(ell) / (2 * ell + 1));
+                double const upper = weight * bg.eps * (ell + 1) / (2 * ell + 1);
+                double diagonal = 1.0 + weight * opacity;
+                double value = rhs.values[index];
+                if (last) {
+                    diagonal += weight * (ell + 1) / (result.tau * bg.expansion);
+                } else {
+                    diagonal += upper * recurrence[index + 1];
+                    value -= upper * result.values[index + 1];
+                }
+                recurrence[index] = -lower / diagonal;
+                result.values[index] = value / diagonal;
+            }
+            int const quadrupole = kQuadrupoles[species];
+            size_t const first = tailIndex(species, 3);
+            double const upper = weight * 3.0 * bg.eps / 5.0;
+            matrix[quadrupole][quadrupole] += upper * recurrence[first];
+            coreRhs[quadrupole] -= upper * result.values[first];
         }
 
-        computeExplicit(1);
-
-        loga = loga0 + dloga;
+        // Partial-pivot elimination of the small coupled metric/fluid block.
+        for (int col = 0; col < CoreSize; ++col) {
+            int pivot = col;
+            for (int row = col + 1; row < CoreSize; ++row) {
+                if (std::abs(matrix[row][col]) > std::abs(matrix[pivot][col])) {
+                    pivot = row;
+                }
+            }
+            if (pivot != col) {
+                std::swap(matrix[col], matrix[pivot]);
+                std::swap(coreRhs[col], coreRhs[pivot]);
+            }
+            if (matrix[col][col] == 0.0) {
+                throw std::runtime_error("Singular Boltzmann stage");
+            }
+            for (int row = col + 1; row < CoreSize; ++row) {
+                double const factor = matrix[row][col] / matrix[col][col];
+                for (int j = col + 1; j < CoreSize; ++j) {
+                    matrix[row][j] -= factor * matrix[col][j];
+                }
+                coreRhs[row] -= factor * coreRhs[col];
+            }
+        }
+        for (int row = CoreSize - 1; row >= 0; --row) {
+            double value = coreRhs[row];
+            for (int col = row + 1; col < CoreSize; ++col) {
+                value -= matrix[row][col] * result.values[col];
+            }
+            result.values[row] = value / matrix[row][row];
+        }
+        for (int species = 0; species < species_; ++species) {
+            double previous = result.values[kQuadrupoles[species]];
+            for (int ell = 3; ell <= options_.maxMultipole; ++ell) {
+                size_t const index = tailIndex(species, ell);
+                result.values[index] += recurrence[index] * previous;
+                previous = result.values[index];
+            }
+        }
+        return result;
     }
-}
 
-void einsteinBoltzmannInterpolationFunction(InterpolationFunctor<double>* darkMatterPowerFunction,
-    InterpolationFunctor<double>* baryKFunc, CosState* u, ZeroOrderUniverse* uni, double kmin,
-    double kmax, double norm, int n, double astart, double astop, bool cont, double ns) {
-    double dlogk = 1.0e-2;
-    double logkmin = log(kmin) - dlogk;
-    double logkmax = log(kmax) + dlogk;
-    dlogk = (logkmax - logkmin) / (double) (n - 1);
-    Vector<double> ks(n);
-    for (int i = 0; i < n; i++) {
-        ks[i] = exp(logkmin + (double) i * dlogk);
+    LinearState step(LinearState const& start, double logScale, double stepSize) const {
+        // Alexander's three-stage, third-order, stiffly accurate SDIRK.
+        // Its L-stability damps unresolved collision and hierarchy modes;
+        // transport, metric and Thomson terms all share the same stages.
+        double const gamma = 0.43586652150845899942;
+        double const a21 = 0.5 * (1.0 - gamma);
+        double const a31 = -1.5 * gamma * gamma + 4.0 * gamma - 0.25;
+        double const a32 = 1.5 * gamma * gamma - 5.0 * gamma + 1.25;
+        Background const firstBg = background(logScale + gamma * stepSize);
+        Background const secondBg = background(logScale + (a21 + gamma) * stepSize);
+        Background const thirdBg = background(logScale + stepSize);
+        LinearState const first = implicitStage(start, firstBg, gamma * stepSize);
+        LinearState secondRhs = start;
+        for (size_t field = 0; field < start.values.size(); ++field) {
+            secondRhs.values[field] += a21 / gamma * (first.values[field] - start.values[field]);
+        }
+        secondRhs.tau += a21 * stepSize / firstBg.expansion;
+        LinearState const second = implicitStage(secondRhs, secondBg, gamma * stepSize);
+        LinearState thirdRhs = start;
+        for (size_t field = 0; field < start.values.size(); ++field) {
+            thirdRhs.values[field] += a31 / gamma * (first.values[field] - start.values[field]) +
+                a32 / gamma * (second.values[field] - secondRhs.values[field]);
+        }
+        thirdRhs.tau += stepSize * (a31 / firstBg.expansion + a32 / secondBg.expansion);
+        LinearState result = implicitStage(thirdRhs, thirdBg, gamma * stepSize);
+        return result;
     }
-    Vector<hpx::future<void>> futs;
-    for (int block = 0; block < n; block++) {
-        futs.push_back(hpx::async([block, &u, &uni, &ks, astart, astop, norm, n, cont, ns]() {
-            einsteinBoltzmanKernel(block, u, uni, ks.data(), astart, astop, norm, n, cont, ns);
-        }));
-    }
-    hpx::wait_all(futs.begin(), futs.end());
 
-    std::vector<double> darkMatterPower(n), baryK(n);
-    double oc = uni->params.omegaC;
-    double ob = uni->params.omegaB;
-    double om = oc + ob;
-    oc /= om;
-    ob /= om;
-    auto const hubble = [uni](double a) {
-        return hubbleFunction(a, uni->params.hubble, uni->params.omegaC + uni->params.omegaB,
-            uni->params.omegaGam + uni->params.omegaNu);
+    double error(LinearState const& start, LinearState const& full, LinearState const& half) const {
+        if (!std::isfinite(full.tau) || !std::isfinite(half.tau) || !(full.tau > 0.0) ||
+            !(half.tau > 0.0)) {
+            throw std::runtime_error("Invalid Boltzmann conformal time");
+        }
+        double norm = 0.0;
+        // A common amplitude floor avoids resolving meaningless relative errors
+        // at acoustic zeros, while resolving the growing mode from the start.
+        double amplitude = 0.0;
+        for (int field : {HPrime, DeltaCdm, DeltaBaryon, DeltaPhoton, DeltaNeutrino}) {
+            amplitude = std::max(
+                amplitude, std::max(std::abs(start.values[field]), std::abs(half.values[field])));
+        }
+        for (size_t field = 0; field < start.values.size(); ++field) {
+            if (!std::isfinite(half.values[field]) || !std::isfinite(full.values[field])) {
+                throw std::runtime_error("Nonfinite Boltzmann stage");
+            }
+            double const scale = options_.absoluteTolerance +
+                options_.relativeTolerance *
+                    std::max({std::abs(start.values[field]), std::abs(half.values[field]),
+                        0.01 * amplitude});
+            norm =
+                std::max(norm, std::abs(half.values[field] - full.values[field]) / (7.0 * scale));
+        }
+        norm = std::max(
+            norm, std::abs(half.tau - full.tau) / (7.0 * options_.relativeTolerance * half.tau));
+        return norm;
+    }
+
+public:
+    BoltzmannIntegrator(ZeroOrderUniverse const& universe, double k, BoltzmannSolverOptions options)
+      : universe_(universe)
+      , k_(k)
+      , options_(options)
+      , tailSize_(options.maxMultipole - 2)
+      , species_(universe.params.omegaNu > 0.0 ? 3 : 2) {}
+
+    std::vector<BoltzmannTransfer> solve(std::vector<double> const& scales) {
+        double const radiation = universe_.params.omegaGam + universe_.params.omegaNu;
+        double const matter = universe_.params.omegaB + universe_.params.omegaC;
+        double const aInitial = universe_.amin;
+        double logScale = std::log(aInitial);
+        // Radiation+matter conformal age; Lambda is negligible at this start.
+        double const tau = 2.0 * aInitial /
+            (universe_.params.hubble * cosmic_constants::kH0 *
+                (std::sqrt(radiation + matter * aInitial) + std::sqrt(radiation)));
+        double const kt = k_ * tau;
+        if (kt > 0.05 || matter * aInitial / radiation > 1.e-3) {
+            throw std::invalid_argument(
+                "Boltzmann background must start in the superhorizon radiation era");
+        }
+        double const rnu = universe_.params.omegaNu / radiation;
+        // Rescale by (k tau_initial)^2 to keep initial fluid amplitudes O(1).
+        // The returned transfers restore this factor and have MB C=1/2.
+        double const normalization = kt * kt;
+        if (!(normalization > std::numeric_limits<double>::min()) ||
+            !std::isfinite(normalization)) {
+            throw std::invalid_argument("Boltzmann wavenumber is outside the representable range");
+        }
+        double const initialEta =
+            1.0 / normalization - (5.0 + 4.0 * rnu) / (12.0 * (15.0 + 4.0 * rnu));
+        LinearState state{std::vector<double>(CoreSize + species_ * tailSize_, 0.0), tau};
+        Background const initialBg = background(logScale);
+        state.values[HPrime] = 1.0 / (tau * initialBg.expansion);
+        state.values[DeltaCdm] = state.values[DeltaBaryon] = -0.25;
+        state.values[DeltaPhoton] = -1.0 / 3.0;
+        state.values[Velocity] = -kt / 36.0;
+        if (species_ == 3) {
+            state.values[DeltaNeutrino] = -1.0 / 3.0;
+            state.values[VelocityNeutrino] =
+                (23.0 + 4.0 * rnu) / (15.0 + 4.0 * rnu) * state.values[Velocity];
+            state.values[NeutrinoQuadrupole] = 4.0 / (3.0 * (15.0 + 4.0 * rnu));
+        }
+        // MB (96) is a radiation-era series. At a finite start there is a
+        // small matter fraction: enforce (21a) once, then normalize the
+        // initial curvature back to the series value. Eta is subsequently
+        // evolved independently using (21b), never projected onto (21a).
+        double const initialDensity = initialBg.cdm * state.values[DeltaCdm] +
+            initialBg.baryon * state.values[DeltaBaryon] +
+            initialBg.photon * state.values[DeltaPhoton] +
+            initialBg.neutrino * state.values[DeltaNeutrino];
+        double const constrainedEta =
+            (0.5 * state.values[HPrime] - 1.5 * initialDensity) / (initialBg.eps * initialBg.eps);
+        double const initialAmplitude = initialEta / constrainedEta;
+        for (double& value : state.values) {
+            value *= initialAmplitude;
+        }
+        state.values[ScaledCurvature] = initialBg.eps * initialBg.eps * initialEta;
+        std::vector<BoltzmannTransfer> transfers;
+        double stepSize = std::min(0.01, options_.maxLogStep);
+        for (double scaleFactor : scales) {
+            double const target = std::log(scaleFactor);
+            while (logScale < target) {
+                if (accepted_ + rejected_ >= options_.maxSteps) {
+                    throw std::runtime_error("Boltzmann solver exceeded its step limit");
+                }
+                double const stepValue = std::min(stepSize, target - logScale);
+                if (logScale + stepValue == logScale) {
+                    throw std::runtime_error("Boltzmann timestep underflow");
+                }
+                LinearState const full = step(state, logScale, stepValue);
+                LinearState const firstHalf = step(state, logScale, 0.5 * stepValue);
+                LinearState const half =
+                    step(firstHalf, logScale + 0.5 * stepValue, 0.5 * stepValue);
+                double const estimate = error(state, full, half);
+                if (!std::isfinite(estimate)) {
+                    throw std::runtime_error("Nonfinite Boltzmann integration error");
+                }
+                if (estimate <= 1.0) {
+                    state = half;
+                    logScale = std::min(logScale + stepValue, target);
+                    ++accepted_;
+                } else {
+                    ++rejected_;
+                }
+                double const factor =
+                    estimate == 0.0 ? 3.0 : std::clamp(0.85 * std::pow(estimate, -0.25), 0.2, 3.0);
+                stepSize = std::min(options_.maxLogStep, stepValue * factor);
+            }
+            Background const bg = background(target);
+            double const density = bg.cdm * state.values[DeltaCdm] +
+                bg.baryon * state.values[DeltaBaryon] + bg.photon * state.values[DeltaPhoton] +
+                bg.neutrino * state.values[DeltaNeutrino];
+            double const constraint =
+                state.values[ScaledCurvature] - 0.5 * state.values[HPrime] + 1.5 * density;
+            double const denominator = std::abs(state.values[ScaledCurvature]) +
+                0.5 * std::abs(state.values[HPrime]) + 1.5 * std::abs(density);
+            transfers.push_back({scaleFactor, normalization * state.values[DeltaCdm],
+                normalization * state.values[DeltaBaryon],
+                normalization * state.values[DeltaNeutrino],
+                normalization * (state.values[Velocity] + bg.photonWeight * state.values[Slip]),
+                normalization * (2.0 * state.values[ScaledCurvature] + 3.0 * density),
+                normalization * state.values[ScaledCurvature] / (bg.eps * bg.eps),
+                normalization * etaPrime(state, bg),
+                0.5 * normalization * state.values[PhotonQuadrupole],
+                0.5 * normalization * state.values[NeutrinoQuadrupole], state.tau,
+                constraint / std::max(denominator, std::numeric_limits<double>::min()), accepted_,
+                rejected_});
+        }
+        return transfers;
+    }
+};
+
+}    // namespace detail
+
+std::vector<BoltzmannTransfer> solveBoltzmannTransfers(ZeroOrderUniverse const& universe, double k,
+    std::vector<double> const& scaleFactors, BoltzmannSolverOptions const& options) {
+    auto const& params = universe.params;
+    if (!(k > 0.0) || !std::isfinite(k) || !(params.omegaB > 0.0) || !(params.omegaC >= 0.0) ||
+        !(params.omegaGam > 0.0) || !(params.omegaNu >= 0.0) || !(params.hubble > 0.0) ||
+        !(universe.amin > 0.0) || !(universe.amax >= universe.amin) ||
+        !std::isfinite(params.omegaB) || !std::isfinite(params.omegaC) ||
+        !std::isfinite(params.omegaGam) || !std::isfinite(params.omegaNu) ||
+        !std::isfinite(params.hubble) || !std::isfinite(universe.amin) ||
+        !std::isfinite(universe.amax)) {
+        throw std::invalid_argument("Invalid Boltzmann cosmology or wavenumber");
+    }
+    auto const validTable = [&](InterpolationFunctor<double> const& table) {
+        if (table.values.size() < 4 || table.values.size() != size_t(table.n) ||
+            !std::isfinite(table.amin) || !std::isfinite(table.amax) ||
+            !std::isfinite(table.minloga) || !std::isfinite(table.maxloga) ||
+            !std::isfinite(table.dloga) || !(table.dloga > 0.0) || table.amin > universe.amin ||
+            table.amax < universe.amax || table.minloga > std::log(universe.amin) ||
+            table.maxloga < std::log(universe.amax)) {
+            return false;
+        }
+        return std::all_of(table.values.begin(), table.values.end(),
+            [](double value) { return std::isfinite(value) && value >= 0.0; });
     };
-    double h = hubble(astop);
-    for (int i = 0; i < n; i++) {
-        double k = ks[i];
-        double eps = k / (astop * h);
-        darkMatterPower[i] = sqr(u[i][deltaci]);
-        baryK[i] = sqr(u[i][deltabi]);
-        //		vel_k[i] = sqr((ob * (eps * U[i][thetabi] + (double) 0.5 * U[i][hdoti]) + oc *
-        //((double) 0.5 * U[i][hdoti]))); 	printf("%e %e\n", k, vel_k[i]);
+    if (!validTable(universe.sigmaT) || !validTable(universe.cs2)) {
+        throw std::invalid_argument("Invalid Boltzmann background interpolation table");
     }
-    buildInterpolationFunction(
-        darkMatterPowerFunction, darkMatterPower, (double) exp(logkmin), (double) exp(logkmax));
-    buildInterpolationFunction(baryKFunc, baryK, (double) exp(logkmin), (double) exp(logkmax));
+    if (!(options.relativeTolerance > 0.0) || !(options.absoluteTolerance > 0.0) ||
+        !(options.maxLogStep > 0.0) || !std::isfinite(options.relativeTolerance) ||
+        !std::isfinite(options.absoluteTolerance) || !std::isfinite(options.maxLogStep) ||
+        options.maxMultipole < 3 || options.maxMultipole > 4096 || options.maxSteps == 0) {
+        throw std::invalid_argument("Invalid Boltzmann integration options");
+    }
+    double previous = universe.amin;
+    for (double scale : scaleFactors) {
+        if (!std::isfinite(scale) || scale < previous || scale > universe.amax) {
+            throw std::invalid_argument(
+                "Boltzmann output scales must be ordered and inside the background");
+        }
+        previous = scale;
+    }
+    return detail::BoltzmannIntegrator(universe, k, options).solve(scaleFactors);
 }

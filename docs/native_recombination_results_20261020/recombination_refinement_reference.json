@@ -1,0 +1,19 @@
+{
+  "k_mpc": [
+    0.01,
+    0.1,
+    1,
+    10
+  ],
+  "n_eff": [
+    0,
+    3.046
+  ],
+  "redshifts": [
+    49,
+    0
+  ],
+  "rows": 16,
+  "source": "docs/boltzmann_validation_results_20261020/camb_high_accuracy/camb_reference.csv",
+  "source_sha256": "cd7c04c9b5ecf53845eeba46d5b0fdf56f9e08ef1fc8713c1ac7e4ec381d44e5"
+}

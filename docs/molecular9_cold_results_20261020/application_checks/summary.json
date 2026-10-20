@@ -1,0 +1,92 @@
+{
+  "timestamp_utc": "2026-10-20T19:27:36.160501+00:00",
+  "scope": "Final native chemistry initialization and 10 K molecular-domain CPU application validation",
+  "command": "ctest --test-dir build/sph_cpu_validation -R '^(grouped_options|primordial_integration_cpu|cpu_only_runtime)$' --output-on-failure -j1",
+  "tests": {
+    "primordial_integration_cpu": {
+      "result": "pass",
+      "seconds": 193.51
+    },
+    "cpu_only_runtime": {
+      "result": "pass",
+      "seconds": 0.22
+    },
+    "grouped_options": {
+      "result": "pass",
+      "seconds": 20.43
+    }
+  },
+  "total_seconds": 214.16,
+  "runtime_threads": 2,
+  "gpu_used": false,
+  "initial_native": {
+    "redshift": 49,
+    "temperature_kelvin": 48.855049081244566,
+    "hydrogen_ion_fraction": 0.0002378800829183072,
+    "gas_particles_per_network": 512,
+    "networks": [
+      "atomic6",
+      "molecular9"
+    ],
+    "validation": "All pristine checkpoint species and energy-inferred temperatures match a separately integrated, tighter-tolerance native history."
+  },
+  "exact_gas_payload_restarts": [
+    "atomic6 native",
+    "molecular9 cold native, initial H2=0",
+    "molecular9 manual warm1000K, initial H2=0.2"
+  ],
+  "additional_checks": [
+    "Silo chemistry fields in both units and frames",
+    "radiation provenance rejection",
+    "incompatible network rejection",
+    "manual defaults and individual overrides",
+    "INI/CLI precedence",
+    "restart configuration resolution",
+    "native molecular z49 accepted",
+    "native molecular z10 below10K rejected",
+    "molecular6001K rejected"
+  ],
+  "cold_checkpoint2_fraction_ranges": {
+    "HII": {
+      "min": 0.00023782896460033953,
+      "max": 0.0002378441276960075
+    },
+    "Hminus": {
+      "min": 8.98957210754281e-12,
+      "max": 8.990507990858099e-12
+    },
+    "H2": {
+      "min": 1.1037815106362814e-09,
+      "max": 1.5773404804519942e-09
+    },
+    "H2plus": {
+      "min": 4.29977640948806e-14,
+      "max": 4.3002358401586505e-14
+    }
+  },
+  "cold_formation_note": "All initial molecular fractions are zero; positive evolved Hminus/H2/H2plus demonstrate that the molecular source path advances.",
+  "tested_binary_sha256": "8085b2ff1a06014f1ce4082decb5ffd23606289680fd9115b3de0e6fa874073d",
+  "source_and_binary_sha256_unchanged": true,
+  "before_hashes": "before.json",
+  "after_hashes": "after.json",
+  "artifact_sha256": {
+    "ctest.log": "4e17129cfe5e36510c3c5d04b3ecb2bd124ec5903229dae190e23f877cb4c1b4",
+    "native_initial_initial.log": "dfed73c7afbb6e6d23b81a190061a74a945abec66a2d7961f647b36387f49708",
+    "molecular9_native_initial_initial.log": "b933bfa7db2632fa861a71fdebfdcff022897464be7719b600f93eae18eb3931",
+    "atomic6_baseline_run.log": "34ed1dd18b4dac67874b9b04097155cf69574f345c6164e38cae85f141a5ca93",
+    "atomic6_restart_restart.log": "69900acb8ce9a87d1415dab04ec23066be4eb14e4792e9cffe15ac86f4e9fb5b",
+    "molecular9_cold_baseline_run.log": "75d4c5aa5a5eaf90bdbca8cc845008454ca35a1ab87231a942b54a0d2b7e2e64",
+    "molecular9_cold_restart_restart.log": "9c9799a2950cd946c20a5d16bc5ee92956ed9350fcfc9c9f0c26ceac0adbb0c8",
+    "molecular9_baseline_run.log": "55d3bf70db05dc0eea9f635cd198682faa9f57dc398f0283a6583a2512301e8f",
+    "molecular9_restart_restart.log": "c18ff543bcf13674cb2d9688bf5dab2ca42fd1faea7afc297ba1fb40fdf79088",
+    "native_initial_reference.csv": "05a7e35512899bcd3518518cdade1ee8c97e8ae7be5830be0b8e6677eb67d978",
+    "molecular9_native_initial_reference.csv": "05a7e35512899bcd3518518cdade1ee8c97e8ae7be5830be0b8e6677eb67d978",
+    "before.json": "7191eeb18f6f80c3aeab7859a9e88d853afad6dc1fa1e6284855cf3062972a58",
+    "after.json": "13fe9b2d138ff718fab6d8eb0cae359371250240ecf625190fb56b375d5f80ad"
+  },
+  "build_provenance_note": "These final application tests were run after the algebraically identical EOS warm-energy reuse optimization. All captured relevant source, test harness, reference driver and application binary hashes were equal before and after the run. Previous runs remain under prior_before_final_eos_reuse/.",
+  "limitations": [
+    "This application manifest is local CPU evidence; separate root validation records cover CUDA.",
+    "The startup/history comparison validates the interface against a tighter native integration, not an independent recombination theory."
+  ]
+}

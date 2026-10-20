@@ -1,0 +1,57 @@
+{
+  "date": "2026-10-20",
+  "stage": "Final build after EOS lower-bound-energy reuse optimization",
+  "source_and_executable_sha256": {
+    "CMakeLists.txt": "c7b04c556a674e221b81f35b2c44faed897b705defd12f4d16edd6831d40574a",
+    "src/core/options.cpp": "7e3b611f8705c321bb6e21f1ce5b941ce29dd87adc857fbd673409be46a6433b",
+    "cosmictiger/core/options.hpp": "470fe05b971b56abc06e7869d25fb4aa7590004c2ab4b2e9f2b798573be9ac19",
+    "src/cosmology/initialize.cpp": "d916338e3689d9df86a0146edd4a3d1efe8cf21d20d85c7bb9c11a13d0898878",
+    "src/chemistry/recombination.cpp": "fead73abeefdd027fd179ec66573397db92cd490f119de2ea8e19e8eeea0526e",
+    "cosmictiger/chemistry/primordial_rates.hpp": "7da2a8196192d0ad22f560ea99c4073d681fe37a114a0512d965bc5e65028efb",
+    "cosmictiger/chemistry/primordial_eos.hpp": "256f384076d13d8143f9d9c0ec9c93118e201b0405ff35c3be4f318ac95faf22",
+    "cosmictiger/chemistry/primordial_solver.hpp": "cb2552415226bc696ade63628b3e7419040f4b8f8bb468a56326ebfa388cc51c",
+    "src/sph/sph_chemistry.cpp": "585f0db8c01f7bc5a9871fef3a20bb2dbf17320526f1c1058efa15dac4adfbfc",
+    "tests/primordial_rates.cpp": "2ab4a1120a0a72a11403aec123bdc16069a66c6d0bbbd2767172422058f664df",
+    "tests/primordial_solver.cpp": "218f27141f847a345b4bfb51dadfd3dca4afd9e9dc53f5bb989e13961da837e2",
+    "tests/primordial_cuda.cu": "76ec0bdfd5413cdaecaef45e5c13fa6b1f89938a14b7b638cd49d437235903bb",
+    "tests/run_options.py": "bd32ec8080644aa36b38e2f096ad840aa2ec3067fe2ce59e61e2332a36e0ea8e",
+    "tests/run_primordial_integration.py": "27855dad7439f40204346a83b44683e4b20dad2a1dc27eae2343afe07687c883",
+    "tests/test.cpp": "05f77a5f721049581efce748db5e2c2363be931b5362fe0259e31125aabf0ae4",
+    "build/sph_cpu_validation/cosmictiger": "8085b2ff1a06014f1ce4082decb5ffd23606289680fd9115b3de0e6fa874073d",
+    "build/sph_cpu_validation/primordial_rates_test": "26b50e8e0fce60624b604e10317fbe691f0b60a228071e7497548a0a1f193c19",
+    "build/sph_cpu_validation/primordial_solver_test": "728394a502136ef11eba62183c52f5baecd2bbed994840edaed7d4b9a70c343b",
+    "build/sph_cpu_validation/native_recombination_standard_test": "f5c10a8cdab89f8a8c94b3912c805586cba22ad10c018bff6c7fdc09f923c402",
+    "build/sph_cpu_validation/native_recombination_fast_math_test": "a1aa39ca89d651a5a6b1b7ed7a7ee26fb3638e2f3666b6ca2e9114b7ca37dde9",
+    "build/release/primordial_cuda_test": "3110acac80b8789259d6aaf0bd3b6e891a0276861334192afb3b5b5c0e88246c"
+  },
+  "cpu": {
+    "build": "cmake --build build/sph_cpu_validation --target cosmictiger primordial_rates_test primordial_solver_test native_recombination_standard_test native_recombination_fast_math_test --parallel 3",
+    "test": "ctest --test-dir build/sph_cpu_validation -R '^(primordial_(rates|solver)|native_recombination_(standard|fast_math))$' --parallel 2 --output-on-failure",
+    "exit_code": 0,
+    "passed": 4,
+    "seconds": 7.19,
+    "earlier_broader_campaign": "core_checks/manifest.json"
+  },
+  "cuda": {
+    "build": "cmake --build build/release --target primordial_cuda_test --parallel 2",
+    "test": "build/release/primordial_cuda_test",
+    "execution": "Actual host CUDA execution after sandbox device access was unavailable; not a skipped test",
+    "exit_code": 0,
+    "scope": "Shared chemistry CPU/CUDA rates, EOS, RHS, source integration, heating across 100 K, existing stiff/tail/trace/failure cases; not a full CUDA cosmology simulation",
+    "maximum_grid": {
+      "blocks": 5,
+      "threads_per_block": 64
+    }
+  },
+  "application": {
+    "evidence": "application_checks/summary.json",
+    "before_hashes": "application_checks/before.json",
+    "note": "Dedicated application CTest output and before/after hashes identify the final tested binary; historical reruns are labeled separately."
+  },
+  "physics_scope": [
+    "molecular9 10..6000 K and proper hydrogen-nucleus density <= 1e4 cm^-3",
+    "Frozen ortho:para=3:1 and existing LTE saturation closure",
+    "No molecular CMB absorption, deuterium/HD, dust/metals, shielding, or massive neutrinos added",
+    "Warm 100..6000 K sampled results bitwise identical; see core_checks/manifest.json"
+  ]
+}

@@ -1,0 +1,136 @@
+J/A+A/647/A155  H2:H2 inelastic collisions rate coefficients (Hernandez+, 2021)
+================================================================================
+Rate coefficients for H_2_:H_2_ inelastic collisions in the ground vibrational
+state from 10 to 1000 K.
+    Hernandez M.I., Tejeda G., Fernandez J.M., Montero S.
+    <Astron. Astrophys. 647, A155 (2021)>
+    =2021A&A...647A.155H        (SIMBAD/NED BibCode)
+================================================================================
+ADC_Keywords: Atomic physics
+Keywords: molecular processes
+
+Abstract:
+    In this work, we present a pruned set of state-to-state rate
+    coefficients (STS rates) for inelastic H_2_:H_2_ collisions in the
+    thermal range from 10 to 1000K. The set includes all relevant rates
+    needed for diagnostics based on the simulation of quadrupole infrared
+    spectra of H_2_.
+
+    The reported set was obtained from a quantum scattering close-coupling
+    calculation employing a recent version of the MOLSCAT code, a
+    high-level potential energy surface, and rotational energies of the
+    H_2_ molecules with spectroscopic accuracy. These improvements have
+    led to a significant increase in the accuracy with respect to previous
+    computational results. The accuracy of the present STS rates is tested
+    against recently reported experimental rates. Most dominant rates
+    agree with the experiment within a 2{sigma} uncertainty (2 to 6%).
+
+    In addition to the tables given in the main text, three
+    machine-readable tables are available at the CDS. These tables include
+    all the relevant numerical results of the paper, namely, the
+    excitation and de-excitation STS rates for H_2_:H_2_ inelastic collisions
+    at selected temperatures between 10 and 1000 K, and their functional
+    description for interpolation at any intermediate temperature.
+
+Description:
+    In this work the relevant STS rates for H_2_:H_2_ inelastic collisions
+    between 10 and 1000K were calculated employing a recent version of
+    the H_2_-H_2_ PES and of the MOLSCAT code.
+
+File Summary:
+--------------------------------------------------------------------------------
+ FileName      Lrecl  Records   Explanations
+--------------------------------------------------------------------------------
+ReadMe            80        .   This file
+table1.dat       280       60   Calculated STS-rates for deexcitation and
+                                 excitation H_2_:H_2_ inelastic collisions
+table2.dat       103       30   Parametric description of calculated
+                                 deexcitation STS rates for H_2_:H_2_ inelastic
+                                 collisions between 10 and 200K
+table3.dat        56       30   Parametric description of calculated
+                                 deexcitation STS rates for H_2_:H_2_ inelastic
+                                 collisions between 100 and 1000K
+--------------------------------------------------------------------------------
+
+Byte-by-byte Description of file: table1.dat
+--------------------------------------------------------------------------------
+   Bytes Format Units   Label     Explanations
+--------------------------------------------------------------------------------
+       1  I1    ---     I1        Initial rotational state J=I1 (1)
+       3  I1    ---     I2        Initial rotational state J=I2 (1)
+       5  I1    ---     F1        Final rotational state J=F1 (1)
+       7  I1    ---     F2        Final rotational state J=F2 (1)
+   9- 15  F7.2  K       Gap       Energy gap of the collision
+  19- 28  E10.4 m3/s    STS-10    STS-rate at T=10K (1)
+  31- 40  E10.4 m3/s    STS-20    STS-rate at T=20K (1)
+  43- 52  E10.4 m3/s    STS-30    STS-rate at T=30K (1)
+  55- 64  E10.4 m3/s    STS-40    STS-rate at T=40K (1)
+  67- 76  E10.4 m3/s    STS-50    STS-rate at T=50K (1)
+  79- 88  E10.4 m3/s    STS-60    STS-rate at T=60K (1)
+  91-100  E10.4 m3/s    STS-70    STS-rate at T=70K (1)
+ 103-112  E10.4 m3/s    STS-80    STS-rate at T=80K (1)
+ 115-124  E10.4 m3/s    STS-90    STS-rate at T=90K  (1)
+ 127-136  E10.4 m3/s    STS-100   STS-rate at T=100K (1)
+ 139-148  E10.4 m3/s    STS-120   STS-rate at T=120K (1)
+ 151-160  E10.4 m3/s    STS-140   STS-rate at T=140K (1)
+ 163-172  E10.4 m3/s    STS-160   STS-rate at T=160K (1)
+ 175-184  E10.4 m3/s    STS-180   STS-rate at T=180K (1)
+ 187-196  E10.4 m3/s    STS-200   STS-rate at T=200K (1)
+ 199-208  E10.4 m3/s    STS-225   STS-rate at T=225K (1)
+ 211-220  E10.4 m3/s    STS-250   STS-rate at T=250K (1)
+ 223-232  E10.4 m3/s    STS-275   STS-rate at T=275K (1)
+ 235-244  E10.4 m3/s    STS-300   STS-rate at T=300K (1)
+ 247-256  E10.4 m3/s    STS-500   STS-rate at T=500K (1)
+ 259-268  E10.4 m3/s    STS-750   STS-rate at T=750K (1)
+ 271-280  E10.4 m3/s    STS-1000  STS-rate at T=1000K (1)
+--------------------------------------------------------------------------------
+Note (1): The first 30 data lines are the "down" rates (deexcitation) while the
+   last 30 data lines are the "up" rates (excitation).
+--------------------------------------------------------------------------------
+
+Byte-by-byte Description of file: table2.dat
+--------------------------------------------------------------------------------
+   Bytes Format Units     Label   Explanations
+--------------------------------------------------------------------------------
+       2  I1    ---       I1      Initial rotational state J=I1 (1)
+       4  I1    ---       I2      Initial rotational state J=I2 (1)
+       6  I1    ---       F1      Final rotational state J=F1 (1)
+       8  I1    ---       F2      Final rotational state J=F2 (1)
+  11- 17  F7.2  K         Gap     Energy gap of the collision
+  21- 29  F9.5  ---       a0      Polinomial coefficient (1)
+  32- 41  F10.7 ---       a1      Polinomial coefficient (1)
+  45- 54  F10.8 ---       a2      Polinomial coefficient (1)
+  57- 67  E11.5 ---       a3      Polinomial coefficient (1)
+  72- 81  E10.5 ---       a4      Polinomial coefficient (1)
+  85- 96  E12.5 ---       a5      Polinomial coefficient (1)
+ 100-103  F4.2 10-20m3/s  Spol    Standard error estimate of polynomial fit
+                                   (10-200K)
+-------------------------------------------------------------------------------
+Note (1): Polynomial fit:
+     k_i1i2f1f2_= Sum_(m=0)_^(m=5)^ a_m_*T^m^, with T=temperature in kelvin.
+--------------------------------------------------------------------------------
+
+Byte-by-byte Description of file: table3.dat
+--------------------------------------------------------------------------------
+   Bytes Format Units    Label     Explanations
+--------------------------------------------------------------------------------
+       2  I1    ---      I1        Initial rotational state J=I1
+       4  I1    ---      I2        Initial rotational state J=I2
+       6  I1    ---      F1        Final rotational state J=F1
+       8  I1    ---      F2        Final rotational state J=F2
+  12- 18  F7.2  K        Gap       Energy gap of the collision
+  22- 29  F8.4 10-20m3/s A         Arrhenius-Kooij coefficient (1)
+  32- 38  F7.5  ---      B         Arrhenius-Kooij exponent (1)
+  42- 49  F8.4  K        C         Arrhenius-Kooij temperature (1)
+  53- 56  F4.2 10-20m3/s SAK       Standard error estimate of
+                                    Arrhenius-Kooij fit; 100-1000K (1)
+--------------------------------------------------------------------------------
+Note (1): Arrhenius-Kooij fit:
+    k_i1i2f1f2_ = A*((300/T)**-B)*exp(-C/T), with T = temperature in kelvin.
+--------------------------------------------------------------------------------
+
+Acknowledgements:
+    Salvador Montero, emsalvador(at)iem.cfmac.csic.es
+
+================================================================================
+(End)                                        Patricia Vannier [CDS]  08-Feb-2021

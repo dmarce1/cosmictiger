@@ -1,0 +1,14 @@
+Internal ctest changing into directory: /home/dmarce1/workspace/cosmictiger/build/sph_cpu_validation
+Test project /home/dmarce1/workspace/cosmictiger/build/sph_cpu_validation
+    Start 19: boltzmann_initialization_false_cpu
+1/4 Test #19: boltzmann_initialization_false_cpu ...   Passed   45.72 sec
+    Start 20: boltzmann_initialization_true_cpu
+2/4 Test #20: boltzmann_initialization_true_cpu ....   Passed   25.44 sec
+    Start 57: sph_cpu
+3/4 Test #57: sph_cpu ..............................   Passed    0.01 sec
+    Start 80: checkpoint_integrity
+4/4 Test #80: checkpoint_integrity .................   Passed   28.39 sec
+
+100% tests passed, 0 tests failed out of 4
+
+Total Test time (real) =  99.56 sec

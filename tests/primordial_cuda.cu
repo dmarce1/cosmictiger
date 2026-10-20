@@ -50,6 +50,50 @@ __global__ void quadraticTraceKernel(primordial::StepResult* results) {
         results[threadIdx.x] = quadraticCase(threadIdx.x);
     }
 }
+struct ColdSample {
+    primordial::Status status{};
+    float cooling[5]{}, lte{}, heating{}, eosTemperature{};
+};
+PRIMORDIAL_HD ColdSample coldSample(unsigned index) {
+    using namespace primordial;
+    float const temperatures[] = {10.0f, 20.0f, 30.0f, 32.0f, 35.0f, 40.0f, 49.0f, 65.0f, 79.99f,
+        80.0f, 90.0f, 99.99f, 100.0f};
+    float const temperature = temperatures[index];
+    ColdSample result;
+    result.status = molecularCoolingCoefficients(temperature, result.cooling, result.lte);
+    if (result.status != Status::Success) {
+        return result;
+    }
+    Environment environment;
+    environment.network = Network::Molecular9;
+    environment.nHydrogen = index % 2 == 0 ? 1.e4f : 0.0f;
+    environment.cmbTemperature = 136.275f;
+    State state;
+    state.abundances[0] = SignedAbundance::fromFraction(2.e-4f);
+    state.abundances[4] = SignedAbundance::fromFraction(0.2f);
+    state.abundances[5] = SignedAbundance::fromFraction(1.e-6f);
+    result.status =
+        thermalEnergyAtTemperature(state, environment, temperature, state.thermalEnergy);
+    if (result.status != Status::Success) {
+        return result;
+    }
+    Eos eos;
+    result.status = evaluateEos(state, environment, eos);
+    if (result.status != Status::Success) {
+        return result;
+    }
+    result.eosTemperature = eos.temperature;
+    Derivative derivative;
+    result.status =
+        evaluateRhsAtTemperature(workingState(state), environment, temperature, derivative);
+    result.heating = derivative.thermalEnergy.toFloat();
+    return result;
+}
+__global__ void coldSampleKernel(ColdSample* results) {
+    if (threadIdx.x < 13) {
+        results[threadIdx.x] = coldSample(threadIdx.x);
+    }
+}
 }    // namespace
 int main() {
     int devices = 0;
@@ -58,6 +102,42 @@ int main() {
         return 77;
     }
     using namespace primordial;
+    // Include subnormal H2+ cooling, zero collider density, and both matching
+    // endpoints. This one-block check exercises the production device formulas.
+    ColdSample* coldDevice = nullptr;
+    ColdSample coldResults[13];
+    cudaError_t coldStatus = cudaMalloc(reinterpret_cast<void**>(&coldDevice), sizeof(coldResults));
+    if (coldStatus == cudaSuccess) {
+        coldSampleKernel<<<1, 13>>>(coldDevice);
+        coldStatus = cudaGetLastError();
+    }
+    if (coldStatus == cudaSuccess) {
+        coldStatus =
+            cudaMemcpy(coldResults, coldDevice, sizeof(coldResults), cudaMemcpyDeviceToHost);
+    }
+    cudaError_t const coldRelease = cudaFree(coldDevice);
+    if (coldStatus != cudaSuccess || coldRelease != cudaSuccess) {
+        std::fprintf(stderr, "Cold molecular CUDA kernel failed\n");
+        return 1;
+    }
+    for (unsigned i = 0; i != 13; ++i) {
+        ColdSample const cpu = coldSample(i);
+        ColdSample const& gpu = coldResults[i];
+        if (cpu.status != Status::Success || gpu.status != Status::Success ||
+            !close(cpu.heating, gpu.heating, ::fabsf(cpu.heating), 1.e-40f) ||
+            !close(cpu.lte, gpu.lte, cpu.lte, 1.e-44f) ||
+            !close(cpu.eosTemperature, gpu.eosTemperature, cpu.eosTemperature)) {
+            std::fprintf(stderr, "Cold molecular CUDA RHS/EOS mismatch at case%u\n", i);
+            return 1;
+        }
+        for (int partner = 0; partner != 5; ++partner) {
+            if (!close(cpu.cooling[partner], gpu.cooling[partner], cpu.cooling[partner], 1.e-44f)) {
+                std::fprintf(
+                    stderr, "Cold molecular CUDA coefficient mismatch at case%u/%d\n", i, partner);
+                return 1;
+            }
+        }
+    }
     // Device regression for the former false-convergence failure. The exact
     // solution is independent of both CPU and device implementations.
     StepResult* quadraticDevice = nullptr;
@@ -236,6 +316,33 @@ int main() {
             std::fprintf(stderr, "Molecular cooling CUDA species mismatch at%d\n", j);
             return 1;
         }
+    }
+
+    // Radiation-only heating has an independent exact energy increment. It
+    // crosses both the cold matching interval and the established 100 K domain.
+    BatchInput coldHeating;
+    coldHeating.environment.network = Network::Molecular9;
+    coldHeating.environment.nHydrogen = 0.0f;
+    coldHeating.environment.radiation.heatingPerHydrogen = 2.e-14f;
+    coldHeating.state.abundances[4] = SignedAbundance::fromFraction(0.2f);
+    coldHeating.interval = 1.e12f;
+    thermalEnergyAtTemperature(
+        coldHeating.state, coldHeating.environment, 20.0f, coldHeating.state.thermalEnergy);
+    StepResult coldCpu, coldGpu;
+    Eos heatedEos;
+    float const expectedEnergy = coldHeating.state.thermalEnergy +
+        0.8f * coldHeating.environment.radiation.heatingPerHydrogen * coldHeating.interval;
+    if (!integrateBatchCpu(&coldHeating, &coldCpu, 1, coolingOptions, 1) ||
+        !integrateBatchCuda(&coldHeating, &coldGpu, 1, coolingOptions, &error) ||
+        coldCpu.status != Status::Success || coldGpu.status != Status::Success ||
+        coldCpu.acceptedTime != coldHeating.interval ||
+        coldGpu.acceptedTime != coldHeating.interval ||
+        !close(coldCpu.state.thermalEnergy, coldGpu.state.thermalEnergy, expectedEnergy, 1.e-9f) ||
+        !close(expectedEnergy, coldGpu.state.thermalEnergy, expectedEnergy, 1.e-9f) ||
+        evaluateEos(coldGpu.state, coldHeating.environment, heatedEos) != Status::Success ||
+        heatedEos.temperature <= 100.0f) {
+        std::fprintf(stderr, "Cold molecular CUDA heating trajectory failed: %s\n", error.c_str());
+        return 1;
     }
 
     // Work bounds must preserve the same accepted partial interval and state.

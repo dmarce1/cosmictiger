@@ -1,0 +1,2 @@
+# Preserve verbatim diagnostics, including whitespace in sanitizer output.
+**/*.log whitespace=-blank-at-eol

@@ -1,0 +1,22 @@
+{
+  "command": [
+    "/home/dmarce1/workspace/cosmictiger/build/sph_cpu_validation/recombination_reference",
+    "3.046",
+    "0.005",
+    "/home/dmarce1/workspace/cosmictiger/docs/native_recombination_results_20261020/camb/redshifts.txt",
+    "1e-08"
+  ],
+  "executable": "/home/dmarce1/workspace/cosmictiger/build/sph_cpu_validation/recombination_reference",
+  "executable_sha256": "578c925a01d705a56bad756bb93677d8313a2671eaa2dd3cf8520075b526183c",
+  "max_log_step": 0.005,
+  "n_eff": 3.046,
+  "relative_tolerance": 1e-08,
+  "rows": 2550,
+  "source_sha256_at_run": {
+    "cosmictiger/chemistry/recombination.hpp": "5b5b9b54d7ecf71e70ecdcc07f14b0cd307f290c1e477348382836801dc399f1",
+    "cosmictiger/cosmology/native_recombination.hpp": "c476a724608cdd5d472a927b12b2da80afe26cc19342e268c79df2aee6606f79",
+    "src/chemistry/recombination.cpp": "fead73abeefdd027fd179ec66573397db92cd490f119de2ea8e19e8eeea0526e",
+    "tests/recombination_reference.cpp": "b877d083e3cb66c41cdd78980010146c055c25753874e1d62767b089654a71ce"
+  },
+  "thread_limit": 1
+}

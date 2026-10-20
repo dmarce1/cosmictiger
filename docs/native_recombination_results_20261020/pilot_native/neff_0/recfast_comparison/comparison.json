@@ -1,0 +1,122 @@
+{
+  "candidate": "/home/dmarce1/workspace/cosmictiger/docs/native_recombination_results_20261020/pilot_native/neff_0/history.csv",
+  "candidate_rows": 2532,
+  "epoch_maxima": {
+    "all": {
+      "T_m": {
+        "T_m_native": 0.02160470771797153,
+        "T_m_reference": 0.021606138302281367,
+        "T_m_relative_error": -6.62119389324145e-05,
+        "n_eff": 0.0,
+        "x_e_native": 0.00017088285486747148,
+        "x_e_reference": 0.00017088216938908557,
+        "x_e_relative_error": 4.011409665327648e-06,
+        "z": 0.0
+      },
+      "x_e": {
+        "T_m_native": 5072.151859237661,
+        "T_m_reference": 5072.153873798537,
+        "T_m_relative_error": -3.9718055211412917e-07,
+        "n_eff": 0.0,
+        "x_e_native": 1.013990802395218,
+        "x_e_reference": 1.0146709237750053,
+        "x_e_relative_error": -0.00067028764090038,
+        "z": 1860.0
+      }
+    },
+    "early_ionized": {
+      "T_m": {
+        "T_m_native": 27148.7055,
+        "T_m_reference": 27148.705499999996,
+        "T_m_relative_error": 2.220446049250313e-16,
+        "n_eff": 0.0,
+        "x_e_native": 1.1637700921770213,
+        "x_e_reference": 1.1637700921770213,
+        "x_e_relative_error": 0.0,
+        "z": 9960.0
+      },
+      "x_e": {
+        "T_m_native": 27230.4705,
+        "T_m_reference": 27230.4705,
+        "T_m_relative_error": 0.0,
+        "n_eff": 0.0,
+        "x_e_native": 1.1637700921770213,
+        "x_e_reference": 1.1637700921770213,
+        "x_e_relative_error": 0.0,
+        "z": 9990.0
+      }
+    },
+    "helium": {
+      "T_m": {
+        "T_m_native": 4935.876701759928,
+        "T_m_reference": 4935.878716182301,
+        "T_m_relative_error": -4.081182882753609e-07,
+        "n_eff": 0.0,
+        "x_e_native": 1.0046594368391097,
+        "x_e_reference": 1.0051758306937137,
+        "x_e_relative_error": -0.000513734849998948,
+        "z": 1810.0
+      },
+      "x_e": {
+        "T_m_native": 5072.151859237661,
+        "T_m_reference": 5072.153873798537,
+        "T_m_relative_error": -3.9718055211412917e-07,
+        "n_eff": 0.0,
+        "x_e_native": 1.013990802395218,
+        "x_e_reference": 1.0146709237750053,
+        "x_e_relative_error": -0.00067028764090038,
+        "z": 1860.0
+      }
+    },
+    "hydrogen": {
+      "T_m": {
+        "T_m_native": 2318.4785051472522,
+        "T_m_reference": 2318.4752415309067,
+        "T_m_relative_error": 1.407656328167306e-06,
+        "n_eff": 0.0,
+        "x_e_native": 0.006225536541383475,
+        "x_e_reference": 0.006225560214704744,
+        "x_e_relative_error": -3.802600963331848e-06,
+        "z": 850.0
+      },
+      "x_e": {
+        "T_m_native": 4908.6216699239285,
+        "T_m_reference": 4908.623684248407,
+        "T_m_relative_error": -4.103644133390816e-07,
+        "n_eff": 0.0,
+        "x_e_native": 1.0033011633285005,
+        "x_e_reference": 1.003743566964188,
+        "x_e_relative_error": -0.00044075364490314684,
+        "z": 1800.0
+      }
+    },
+    "residual": {
+      "T_m": {
+        "T_m_native": 0.02160470771797153,
+        "T_m_reference": 0.021606138302281367,
+        "T_m_relative_error": -6.62119389324145e-05,
+        "n_eff": 0.0,
+        "x_e_native": 0.00017088285486747148,
+        "x_e_reference": 0.00017088216938908557,
+        "x_e_relative_error": 4.011409665327648e-06,
+        "z": 0.0
+      },
+      "x_e": {
+        "T_m_native": 0.02160470771797153,
+        "T_m_reference": 0.021606138302281367,
+        "T_m_relative_error": -6.62119389324145e-05,
+        "n_eff": 0.0,
+        "x_e_native": 0.00017088285486747148,
+        "x_e_reference": 0.00017088216938908557,
+        "x_e_relative_error": 4.011409665327648e-06,
+        "z": 0.0
+      }
+    }
+  },
+  "integer_redshifts_only": false,
+  "matched_rows": 1000,
+  "passed": true,
+  "reference": "/home/dmarce1/workspace/cosmictiger/docs/native_recombination_results_20261020/recfast/neff_0/reference.csv",
+  "reference_rows": 1000,
+  "tolerance": 0.01
+}

@@ -1,0 +1,9 @@
+{
+  "changes": "Output header/columns/precision only; no equations or integration changes",
+  "compiler": "GNU Fortran (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+  "executable_sha256": "382940a7e50f65471ae0caaa70bb95e32e361dead66cc96eff63ba8f50bd6c60",
+  "instrumented_source_sha256": "d44aa7a969751ce8116bcdbe8f87fd9203c5624c84bd60921a0f99ca2f1ce617",
+  "source": "/home/dmarce1/workspace/cosmictiger/recfast/recfast.f",
+  "source_sha256": "d1bace4ff7b4323098fbb41bcd7bfda990027ec67178f71c6cb236f6dccdcc7a",
+  "thread_limit": 1
+}

@@ -118,7 +118,9 @@ reaction model.
 The current solver is adaptive backward Euler with step doubling, a first-order
 baseline. Local tolerance is not a bound on global trajectory error. The reaction
 catalogue documents unresolved minor-channel product-state thermal partition.
-Atomic6 supports 10–1e8 K; molecular9 supports 100–6000 K; both stop above
+This original validation covered atomic6 at 10–1e8 K and molecular9 at
+100–6000 K. The later [10 K extension](molecular9_cold.md) has separate evidence.
+Both stop above
 1e4 H nuclei/cm³. HD/deuterium, shielding/transport, metals/dust, molecular CMB
 line pumping and high-density collapse physics are outside the implementation.
 Broad cooling-shock, collapse, matched-library and cosmological convergence

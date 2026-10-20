@@ -43,7 +43,7 @@ Every scenario configuration writes generated simulation products beneath its
 `output.directory`, including particle Silo snapshots, text diagnostics,
 checkpoints, and analysis products. Its lightcone directory is a subdirectory
 of that location. Relative paths begin at the launch working directory; input
-files such as `power.init`, existing glass loads, and chemistry radiation tables
+files such as existing glass loads and chemistry radiation tables
 retain their input-path meanings.
 
 Restart with the same scenario configuration and `--checkpoint.readIndex=N`.

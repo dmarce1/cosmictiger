@@ -1,0 +1,31 @@
+{
+  "cosmology": {
+    "h": 0.6732,
+    "helium_mass_fraction": 0.2454006,
+    "omega_b": 0.049389,
+    "omega_c": 0.26503,
+    "pivot_mpc": 0.05,
+    "scalar_amplitude": 2.1e-09,
+    "scalar_index": 0.966,
+    "tcmb_kelvin": 2.7255
+  },
+  "executable": "/tmp/eb_fixed/boltzmann_reference_v3",
+  "executable_sha256": "34cf6f9d8fb243c631cff753801622dba4c8a31fd2b77df99ec05c75b75e19b2",
+  "executions": [
+    {
+      "k_mpc": 10.0,
+      "log": "raw/k_1.0000000000e+01.txt",
+      "returncode": 0,
+      "seconds": 10.368593494000379
+    }
+  ],
+  "history": "/home/dmarce1/workspace/cosmictiger/docs/boltzmann_validation_results_20261020/recfast_histories/neff_3.046/history.dat",
+  "history_sha256": "718d70e9fd84345adfe4d3364f200cc459af07a596a3ae03a43562c803e9a8ea",
+  "maximum_multipole": 128,
+  "n_eff": 3.046,
+  "normalization": "eta_MB -> +1; no fitted amplitude",
+  "relative_tolerance": 1e-07,
+  "rows": 2,
+  "seconds": 10.369463163999171,
+  "thread_limit": 1
+}

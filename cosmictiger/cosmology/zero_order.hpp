@@ -56,8 +56,16 @@ struct ZeroOrderUniverse {
     double redshiftToDensity(double z) const;
 };
 
-void createZeroOrderUniverse(
-    ZeroOrderUniverse* uniPtr, std::function<double(double)> fxe, double amax, CosmicParameters);
+struct BackgroundThermalHistory {
+    std::function<double(double)> temperature;
+    // Optional paired callbacks preserve the chemistry model's atomic masses
+    // and EOS. Units are proper hydrogen nuclei/cm^3 and erg/H nucleus.
+    std::function<double(double)> hydrogenNumberDensity;
+    std::function<double(double)> pressurePerHydrogen;
+};
+
+void createZeroOrderUniverse(ZeroOrderUniverse* uniPtr, std::function<double(double)> fxe,
+    double amax, CosmicParameters, BackgroundThermalHistory thermalHistory = {});
 
 class Cosmos {
     double a_;

@@ -1,0 +1,122 @@
+{
+  "candidate": "/home/dmarce1/workspace/cosmictiger/docs/native_recombination_results_20261020/final_history/neff_0_default/history.csv",
+  "candidate_rows": 2550,
+  "epoch_maxima": {
+    "all": {
+      "T_m": {
+        "T_m_native": 313.2784926482599,
+        "T_m_reference": 313.27851452142284,
+        "T_m_relative_error": -6.982018219137132e-08,
+        "n_eff": 0.0,
+        "x_e_native": 0.00029707548318449453,
+        "x_e_reference": 0.0002970756034737318,
+        "x_e_relative_error": -4.0491119390750896e-07,
+        "z": 150.35612525606632
+      },
+      "x_e": {
+        "T_m_native": 4259.95179798243,
+        "T_m_reference": 4259.9517981570325,
+        "T_m_relative_error": -4.098688055620414e-11,
+        "n_eff": 0.0,
+        "x_e_native": 0.9871075199550935,
+        "x_e_reference": 0.9871452584132743,
+        "x_e_relative_error": -3.8229893583707764e-05,
+        "z": 1562.0
+      }
+    },
+    "early_ionized": {
+      "T_m": {
+        "T_m_native": 21833.9805,
+        "T_m_reference": 21833.9805,
+        "T_m_relative_error": 0.0,
+        "n_eff": 0.0,
+        "x_e_native": 1.1637700921770213,
+        "x_e_reference": 1.1637700921770213,
+        "x_e_relative_error": 0.0,
+        "z": 8010.0
+      },
+      "x_e": {
+        "T_m_native": 21833.9805,
+        "T_m_reference": 21833.9805,
+        "T_m_relative_error": 0.0,
+        "n_eff": 0.0,
+        "x_e_native": 1.1637700921770213,
+        "x_e_reference": 1.1637700921770213,
+        "x_e_relative_error": 0.0,
+        "z": 8010.0
+      }
+    },
+    "helium": {
+      "T_m": {
+        "T_m_native": 5808.037535624255,
+        "T_m_reference": 5808.037535587806,
+        "T_m_relative_error": 6.27564666899616e-12,
+        "n_eff": 0.0,
+        "x_e_native": 1.0538459821614428,
+        "x_e_reference": 1.0538210409301756,
+        "x_e_relative_error": 2.3667425775864004e-05,
+        "z": 2130.0
+      },
+      "x_e": {
+        "T_m_native": 5808.037535624255,
+        "T_m_reference": 5808.037535587806,
+        "T_m_relative_error": 6.27564666899616e-12,
+        "n_eff": 0.0,
+        "x_e_native": 1.0538459821614428,
+        "x_e_reference": 1.0538210409301756,
+        "x_e_relative_error": 2.3667425775864004e-05,
+        "z": 2130.0
+      }
+    },
+    "hydrogen": {
+      "T_m": {
+        "T_m_native": 1783.8404005152527,
+        "T_m_reference": 1783.8403419162744,
+        "T_m_relative_error": 3.284990079954753e-08,
+        "n_eff": 0.0,
+        "x_e_native": 0.0011941628165992152,
+        "x_e_reference": 0.0011941639708971305,
+        "x_e_relative_error": -9.666159282994968e-07,
+        "z": 656.0
+      },
+      "x_e": {
+        "T_m_native": 4259.95179798243,
+        "T_m_reference": 4259.9517981570325,
+        "T_m_relative_error": -4.098688055620414e-11,
+        "n_eff": 0.0,
+        "x_e_native": 0.9871075199550935,
+        "x_e_reference": 0.9871452584132743,
+        "x_e_relative_error": -3.8229893583707764e-05,
+        "z": 1562.0
+      }
+    },
+    "residual": {
+      "T_m": {
+        "T_m_native": 313.2784926482599,
+        "T_m_reference": 313.27851452142284,
+        "T_m_relative_error": -6.982018219137132e-08,
+        "n_eff": 0.0,
+        "x_e_native": 0.00029707548318449453,
+        "x_e_reference": 0.0002970756034737318,
+        "x_e_relative_error": -4.0491119390750896e-07,
+        "z": 150.35612525606632
+      },
+      "x_e": {
+        "T_m_native": 1347.916471555444,
+        "T_m_reference": 1347.9164477745724,
+        "T_m_relative_error": 1.7642689753571972e-08,
+        "n_eff": 0.0,
+        "x_e_native": 0.0006615719491946258,
+        "x_e_reference": 0.000661572505003992,
+        "x_e_relative_error": -8.401337147079246e-07,
+        "z": 500.0
+      }
+    }
+  },
+  "integer_redshifts_only": false,
+  "matched_rows": 2550,
+  "passed": true,
+  "reference": "/home/dmarce1/workspace/cosmictiger/docs/native_recombination_results_20261020/final_history/neff_0_refined/history.csv",
+  "reference_rows": 2550,
+  "tolerance": 0.01
+}

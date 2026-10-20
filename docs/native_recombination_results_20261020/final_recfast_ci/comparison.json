@@ -1,0 +1,22 @@
+{
+  "cases": [
+    {
+      "n_eff": 0,
+      "samples": 1000,
+      "worst": {
+        "relative_error": -0.0006702642572137263,
+        "z": 1860.0
+      }
+    },
+    {
+      "n_eff": 3.046,
+      "samples": 1000,
+      "worst": {
+        "relative_error": -0.0006772370828849184,
+        "z": 1850.0
+      }
+    }
+  ],
+  "scope": "Electron fraction only; separate full validation includes gas temperature",
+  "tolerance": 0.002
+}

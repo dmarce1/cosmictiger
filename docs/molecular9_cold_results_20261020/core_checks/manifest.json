@@ -1,0 +1,32 @@
+{
+  "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+  "warm_grid": {
+    "temperatures": 415,
+    "range_kelvin": [
+      100,
+      6000
+    ],
+    "mixtures": 6,
+    "densities": 4,
+    "cmb_temperatures": 2,
+    "states": 19920,
+    "bytes": 12908160,
+    "before_sha256": "8f3b19e7be19c7c1616bb0fe343a985197f1786e3d619906139686f3b57cff58",
+    "after_sha256": "8f3b19e7be19c7c1616bb0fe343a985197f1786e3d619906139686f3b57cff58",
+    "identical": true,
+    "after_eos_reuse_optimization_identical": true
+  },
+  "cold_rhs_states": 6552,
+  "cds_table1_max_relative_difference": 0.03166169165308319,
+  "source_sha256": {
+    "cosmictiger/chemistry/primordial_rates.hpp": "7da2a8196192d0ad22f560ea99c4073d681fe37a114a0512d965bc5e65028efb",
+    "cosmictiger/chemistry/primordial_eos.hpp": "256f384076d13d8143f9d9c0ec9c93118e201b0405ff35c3be4f318ac95faf22",
+    "cosmictiger/chemistry/primordial_solver.hpp": "cb2552415226bc696ade63628b3e7419040f4b8f8bb468a56326ebfa388cc51c",
+    "cosmictiger/math/float_float.hpp": "df09a021bcbf4d823f8d390bad8fb97692897fb3cd859e0ebcf61ce63dda79e2",
+    "tests/primordial_rates.cpp": "2ab4a1120a0a72a11403aec123bdc16069a66c6d0bbbd2767172422058f664df",
+    "tests/primordial_solver.cpp": "218f27141f847a345b4bfb51dadfd3dca4afd9e9dc53f5bb989e13961da837e2"
+  },
+  "focused_tests_passed": 12,
+  "focused_seconds": 45.17,
+  "focused_test_stage": "Before final EOS lowerEnergy reuse optimization; final warm output comparison remains bitwise identical. Parent directory records final rebuilt focused checks."
+}

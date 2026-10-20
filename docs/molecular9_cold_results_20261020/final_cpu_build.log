@@ -1,0 +1,14 @@
+[1/14] Building CXX object CMakeFiles/primordial_chemistry.dir/src/chemistry/recombination.cpp.o
+[2/14] Building CXX object CMakeFiles/primordial_chemistry.dir/src/chemistry/primordial_chemistry.cpp.o
+[3/14] Linking CXX static library libprimordial_chemistry.a
+[4/14] Building CXX object CMakeFiles/primordial_rates_test.dir/tests/primordial_rates.cpp.o
+[5/14] Linking CXX executable primordial_rates_test
+[6/14] Building CXX object CMakeFiles/primordial_solver_test.dir/tests/primordial_solver.cpp.o
+[7/14] Linking CXX executable primordial_solver_test
+[8/14] Building CXX object CMakeFiles/native_recombination_standard_test.dir/tests/native_recombination.cpp.o
+[9/14] Linking CXX executable native_recombination_standard_test
+[10/14] Building CXX object CMakeFiles/native_recombination_fast_math_test.dir/tests/native_recombination.cpp.o
+[11/14] Linking CXX executable native_recombination_fast_math_test
+[12/14] Building CXX object CMakeFiles/cosmictiger.dir/src/core/options.cpp.o
+[13/14] Building CXX object CMakeFiles/cosmictiger.dir/src/sph/sph_chemistry.cpp.o
+[14/14] Linking CXX executable cosmictiger

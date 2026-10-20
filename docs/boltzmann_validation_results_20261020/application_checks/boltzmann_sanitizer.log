@@ -1,0 +1,28 @@
+		Parameters:
+			 h                 = 0.673200
+			 omega_m           = 0.314419
+			 omega_r           = 0.000092
+			 omega_lambda      = 0.685489
+			 omega_b           = 0.049389
+			 omega_c           = 0.265030
+			 omega_gam         = 0.000055
+			 omega_nu          = 0.000038
+			 Neff              = 3.046000
+			 temperature today = 2.725500
+
+1.263967e+12 
+Initial scale factor doubled: maximum matter transfer change 2.11558506e-07
+		Parameters:
+			 h                 = 0.673200
+			 omega_m           = 0.314419
+			 omega_r           = 0.000055
+			 omega_lambda      = 0.685526
+			 omega_b           = 0.049389
+			 omega_c           = 0.265030
+			 omega_gam         = 0.000055
+			 omega_nu          = 0.000000
+			 Neff              = 0.000000
+			 temperature today = 2.725500
+
+1.263967e+12 
+Boltzmann initial conditions, convergence, constraints, and input checks passed
