@@ -1,0 +1,23 @@
+diff --git a/cosmictiger/gravity_cuda.hpp b/cosmictiger/gravity_cuda.hpp
+index 0e228992..25426475 100644
+--- a/cosmictiger/gravity_cuda.hpp
++++ b/cosmictiger/gravity_cuda.hpp
+@@ -52,6 +52,9 @@ __device__ int cudaStageParticleSources(CudaKickData const& data, CudaKickContro
+     auto const* treeNodes = data.treeNodes;
+     int const capacity = control.layout.particleCapacity;
+     int const partsz = partlist.size();
++    // Diagnostic variant: hide the barrier address from the compiler.
++    auto* waitBarrier = &control.barrier;
++    asm volatile("" : "+l"(waitBarrier));
+     int particleIndex = 0;
+     while (particleIndex < capacity && i < partsz) {
+         while (i + 1 < partsz) {
+@@ -89,7 +92,7 @@ __device__ int cudaStageParticleSources(CudaKickData const& data, CudaKickContro
+             }
+         }
+     }
+-    control.barrier.arrive_and_wait();
++    waitBarrier->arrive_and_wait();
+     __syncwarp();
+     return particleIndex;
+ }

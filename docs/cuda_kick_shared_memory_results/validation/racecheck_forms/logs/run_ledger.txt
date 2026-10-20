@@ -1,0 +1,17 @@
+2026-10-19T15:08:22-05:00 quiet after 200s; waiting for lock
+2026-10-19T15:14:26-05:00 lock taken
+2026-10-19T15:18:19-05:00 lock released
+2026-10-19T15:18:19-05:00 ALL DONE
+2026-10-19T15:26:14-05:00 mb_handoff_all: exit 0 ========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings) 0 analysis reports printed (quiet wait 30s)
+2026-10-19T15:26:46-05:00 queue_all: quiet 30 s after 40s; waiting for lock
+2026-10-19T15:27:54-05:00 queue_all: lock taken
+2026-10-19T15:28:25-05:00 mb_handoff_all: exit 0 ========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings) 0 reports
+2026-10-19T15:28:43-05:00 ur_head_all: exit 0 ========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings) 0 reports
+2026-10-19T15:29:19-05:00 scratch_base_all: exit 0 ========= RACECHECK SUMMARY: 6285 hazards displayed (0 errors, 6285 warnings) 9 reports
+2026-10-19T15:29:39-05:00 scratch_launder_copy: exit 0 ========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings) 0 reports
+2026-10-19T15:30:02-05:00 scratch_launder_wait: exit 0 ========= RACECHECK SUMMARY: 9 hazards displayed (0 errors, 9 warnings) 9 reports
+2026-10-19T15:30:24-05:00 scratch_launder_both: exit 0 ========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings) 0 reports
+2026-10-19T15:30:46-05:00 scratch_block_sync: exit 0 ========= RACECHECK SUMMARY: 9 hazards displayed (0 errors, 9 warnings) 9 reports
+2026-10-19T15:31:07-05:00 scratch_sync_copy: exit 0 ========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings) 0 reports
+2026-10-19T15:31:07-05:00 queue_all: lock released
+2026-10-19T15:31:07-05:00 QUEUE_ALL DONE

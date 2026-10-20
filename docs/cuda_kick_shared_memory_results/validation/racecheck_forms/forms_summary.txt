@@ -1,0 +1,81 @@
+== ge_231325d5 (/home/dmarce1/workspace/cosmictiger/.claude/worktrees/gifted-euler-74225b/build/arena_b1024/frozen/cosmictiger_b1024_231325d5) sha 38eadd28c654 kernel symbol 399
+   ARRIVES forms:      19 [URN+NxN];
+   ATOMS.ARRIVE forms:      10 [UR+imm];
+   test_wait LDS forms:      20 [UR+imm];
+   LDGSTS count 19, WARPSYNC 234, BAR.SYNC 644, kernel bytes 0xb4400
+== ge_fix (/home/dmarce1/workspace/cosmictiger/.claude/worktrees/gifted-euler-74225b/build/arena_b1024/frozen/cosmictiger_b1024_fix) sha 5fe2190e5776 kernel symbol 399
+   ARRIVES forms:      19 [URN+NxN];
+   ATOMS.ARRIVE forms:      10 [UR+imm];
+   test_wait LDS forms:      20 [UR+imm];
+   LDGSTS count 19, WARPSYNC 234, BAR.SYNC 644, kernel bytes 0xb4400
+== ge_fix2 (/home/dmarce1/workspace/cosmictiger/.claude/worktrees/gifted-euler-74225b/build/arena_b1024/frozen/cosmictiger_b1024_fix2) sha ea78e2bf2882 kernel symbol 399
+   ARRIVES forms:      19 [URN+NxN];
+   ATOMS.ARRIVE forms:      10 [UR+imm];
+   test_wait LDS forms:      20 [UR+imm];
+   LDGSTS count 19, WARPSYNC 234, BAR.SYNC 644, kernel bytes 0xb4400
+== ge_final_e2c00fdb (/home/dmarce1/workspace/cosmictiger/.claude/worktrees/gifted-euler-74225b/build/arena_b1024/frozen/cosmictiger_b1024_final) sha a4d52c70e25c kernel symbol 399
+   ARRIVES forms:      19 [URN+NxN];
+   ATOMS.ARRIVE forms:      10 [UR+imm];
+   test_wait LDS forms:      20 [UR+imm];
+   LDGSTS count 19, WARPSYNC 234, BAR.SYNC 644, kernel bytes 0xb4400
+== wl_head_eebab5b1 (/home/dmarce1/workspace/cosmictiger/.claude/worktrees/wizardly-leakey-12daaf/build/arena_b1024/frozen/cosmictiger_b1024_eebab5b1) sha c06cd1c2bb72 kernel symbol 397
+   ARRIVES forms:      19 [URN];
+   ATOMS.ARRIVE forms:       8 [R+URZ];      2 [R+URZ+imm];
+   test_wait LDS forms:      20 [R+imm];
+   LDGSTS count 19, WARPSYNC 254, BAR.SYNC 702, kernel bytes 0xbab00
+== wl_slab_eedcc53a (/home/dmarce1/workspace/cosmictiger/.claude/worktrees/wizardly-leakey-12daaf/build/arena_b1024/frozen/cosmictiger_b1024_slab) sha f26f72392330 kernel symbol 401
+   ARRIVES forms:      19 [URN+NxNdN];
+   ATOMS.ARRIVE forms:      10 [UR+imm];
+   test_wait LDS forms:      20 [UR+imm];
+   LDGSTS count 19, WARPSYNC 252, BAR.SYNC 754, kernel bytes 0xbab80
+== ur_head_cf66eacc (/home/dmarce1/workspace/cosmictiger/.claude/worktrees/unruffled-robinson-73f6f1/build/arena_b1024/frozen/cosmictiger_b1024_head_cf66eacc) sha d92385ff1013 kernel symbol 397
+   ARRIVES forms:      19 [URN];
+   ATOMS.ARRIVE forms:       8 [R+URZ];      2 [R+URZ+imm];
+   test_wait LDS forms:      20 [R+imm];
+   LDGSTS count 19, WARPSYNC 254, BAR.SYNC 702, kernel bytes 0xbab00
+== ur_v1 (/home/dmarce1/workspace/cosmictiger/.claude/worktrees/unruffled-robinson-73f6f1/build/arena_b1024/frozen/cosmictiger_b1024_v1) sha 243051d2f317 kernel symbol 409
+   ARRIVES forms:      13 [URN];
+   ATOMS.ARRIVE forms:       6 [R+URZ];      2 [R+URZ+imm];
+   test_wait LDS forms:      16 [R+imm];
+   LDGSTS count 13, WARPSYNC 254, BAR.SYNC 702, kernel bytes 0x96700
+== ur_v2 (/home/dmarce1/workspace/cosmictiger/.claude/worktrees/unruffled-robinson-73f6f1/build/arena_b1024/frozen/cosmictiger_b1024_v2) sha 3570c87653c0 kernel symbol 409
+   ARRIVES forms:      13 [URN];
+   ATOMS.ARRIVE forms:       6 [R+URZ];      2 [R+URZ+imm];
+   test_wait LDS forms:      16 [R+imm];
+   LDGSTS count 13, WARPSYNC 254, BAR.SYNC 702, kernel bytes 0x96700
+== mb_handoff (/home/dmarce1/workspace/cosmictiger/.claude/worktrees/modest-borg-b7dbb2/build/arena_b1024/frozen/cosmictiger_b1024_handoff) sha 119f4d643ae7 kernel symbol 528
+   ARRIVES forms:      10 [URN];      2 [URN+NxN];
+   ATOMS.ARRIVE forms:       4 [R+UR];      2 [UR+imm];
+   test_wait LDS forms:       8 [R+UR+imm];      4 [UR+imm];
+   LDGSTS count 12, WARPSYNC 274, BAR.SYNC 702, kernel bytes 0x9e280
+SURVEY DONE
+== scratch_base (/home/dmarce1/workspace/cosmictiger/.claude/worktrees/nifty-lederberg-7f7b6e/build/racecheck/frozen/cosmictiger_base) sha 07a539257fa1 kernel symbol 534
+   ARRIVES forms:      12 [UR+imm];
+   ATOMS.ARRIVE forms:       6 [UR+imm];
+   test_wait LDS forms:      12 [UR+imm];
+   LDGSTS count 12, WARPSYNC 274, BAR.SYNC 754, kernel bytes 0x9da80
+== scratch_launder_copy (/home/dmarce1/workspace/cosmictiger/.claude/worktrees/nifty-lederberg-7f7b6e/build/racecheck/frozen/cosmictiger_launder_copy) sha df065396653d kernel symbol 544
+   ARRIVES forms:       9 [UR];      3 [UR+imm];
+   ATOMS.ARRIVE forms:       6 [UR+imm];
+   test_wait LDS forms:      12 [UR+imm];
+   LDGSTS count 12, WARPSYNC 274, BAR.SYNC 754, kernel bytes 0x9dd00
+== scratch_launder_wait (/home/dmarce1/workspace/cosmictiger/.claude/worktrees/nifty-lederberg-7f7b6e/build/racecheck/frozen/cosmictiger_launder_wait) sha 6c84181ed2da kernel symbol 544
+   ARRIVES forms:      12 [UR+imm];
+   ATOMS.ARRIVE forms:       3 [R+URZ];      3 [UR+imm];
+   test_wait LDS forms:       3 [R+imm];      6 [UR+imm];
+   LDGSTS count 12, WARPSYNC 274, BAR.SYNC 754, kernel bytes 0x9eb00
+== scratch_launder_both (/home/dmarce1/workspace/cosmictiger/.claude/worktrees/nifty-lederberg-7f7b6e/build/racecheck/frozen/cosmictiger_launder_both) sha 0b20d88e9373 kernel symbol 544
+   ARRIVES forms:      10 [UR];      2 [UR+imm];
+   ATOMS.ARRIVE forms:       1 [R+UR];      3 [R+URZ];      2 [UR+imm];
+   test_wait LDS forms:       3 [R+imm];      2 [R+UR+imm];      4 [UR+imm];
+   LDGSTS count 12, WARPSYNC 274, BAR.SYNC 754, kernel bytes 0x9f280
+== scratch_block_sync (/home/dmarce1/workspace/cosmictiger/.claude/worktrees/nifty-lederberg-7f7b6e/build/racecheck/frozen/cosmictiger_block_sync) sha 520c40b9584a kernel symbol 534
+   ARRIVES forms:      12 [UR+imm];
+   ATOMS.ARRIVE forms:       6 [UR+imm];
+   test_wait LDS forms:      12 [UR+imm];
+   LDGSTS count 12, WARPSYNC 274, BAR.SYNC 757, kernel bytes 0x9db80
+== scratch_sync_copy (/home/dmarce1/workspace/cosmictiger/.claude/worktrees/nifty-lederberg-7f7b6e/build/racecheck/frozen/cosmictiger_sync_copy) sha 531d6f6a4dd2 kernel symbol 524
+   ARRIVES forms:       1 [UR];      2 [UR+imm];
+   ATOMS.ARRIVE forms:       1 [R+URZ];      2 [UR+imm];
+   test_wait LDS forms:       2 [R+imm];      4 [UR+imm];
+   LDGSTS count 3, WARPSYNC 274, BAR.SYNC 754, kernel bytes 0x9d080

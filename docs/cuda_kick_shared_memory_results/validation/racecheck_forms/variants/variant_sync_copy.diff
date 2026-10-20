@@ -1,0 +1,30 @@
+diff --git a/cosmictiger/gravity_cuda.hpp b/cosmictiger/gravity_cuda.hpp
+index 0e228992..4a4d9ef0 100644
+--- a/cosmictiger/gravity_cuda.hpp
++++ b/cosmictiger/gravity_cuda.hpp
+@@ -67,12 +67,11 @@ __device__ int cudaStageParticleSources(CudaKickData const& data, CudaKickContro
+         ParticleInteger const imax =
+             min(particleRange.first + (capacity - particleIndex), particleRange.second);
+         int const sz = imax - imin;
+-        cuda::memcpy_async(group, control.sourceX + particleIndex, data.x + imin,
+-            sizeof(Fixed32) * sz, control.barrier);
+-        cuda::memcpy_async(group, control.sourceY + particleIndex, data.y + imin,
+-            sizeof(Fixed32) * sz, control.barrier);
+-        cuda::memcpy_async(group, control.sourceZ + particleIndex, data.z + imin,
+-            sizeof(Fixed32) * sz, control.barrier);
++        for (int j = tid; j < sz; j += WARP_SIZE) {
++            control.sourceX[particleIndex + j] = data.x[imin + j];
++            control.sourceY[particleIndex + j] = data.y[imin + j];
++            control.sourceZ[particleIndex + j] = data.z[imin + j];
++        }
+         if constexpr (!equalMass) {
+             for (int j = tid; j < sz; j += WARP_SIZE) {
+                 control.sourceMass[particleIndex + j] =
+@@ -89,7 +88,6 @@ __device__ int cudaStageParticleSources(CudaKickData const& data, CudaKickContro
+             }
+         }
+     }
+-    control.barrier.arrive_and_wait();
+     __syncwarp();
+     return particleIndex;
+ }

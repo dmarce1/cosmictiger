@@ -1,0 +1,33 @@
+== scratch_base
+   524 _Z19cudaGravityPpDirectILi7ELb1E (82048 bytes)
+      ARRIVES:       3 [UR]; ATOMS.ARRIVE:       1 [R+URZ]; test_wait:       1 [R+imm]; LDGSTS.E 3 reads149/318/353: 0/1/1
+   528 _Z19cudaGravityCpDirectILi7ELb1E (62848 bytes)
+      ARRIVES:       3 [UR]; ATOMS.ARRIVE:       1 [R+URZ]; test_wait:       1 [R+imm]; LDGSTS.E 3 reads149/318/353: 1/0/0
+   530 _Z19cudaGravityCpDirectILi7ELb0E (66816 bytes)
+      ARRIVES:       3 [UR]; ATOMS.ARRIVE:       1 [R+URZ]; test_wait:       1 [R+imm]; LDGSTS.E 3 reads149/318/353: 1/0/0
+== scratch_launder_copy
+   534 _Z19cudaGravityPpDirectILi7ELb1E (82176 bytes)
+      ARRIVES:       3 [UR]; ATOMS.ARRIVE:       1 [R+URZ]; test_wait:       1 [R+imm]; LDGSTS.E 3 reads149/318/353: 0/0/0
+   538 _Z19cudaGravityCpDirectILi7ELb1E (62592 bytes)
+      ARRIVES:       3 [UR]; ATOMS.ARRIVE:       1 [R+URZ]; test_wait:       1 [R+imm]; LDGSTS.E 3 reads149/318/353: 0/0/0
+   540 _Z19cudaGravityCpDirectILi7ELb0E (66688 bytes)
+      ARRIVES:       3 [UR]; ATOMS.ARRIVE:       1 [R+URZ]; test_wait:       1 [R+imm]; LDGSTS.E 3 reads149/318/353: 0/0/0
+== scratch_launder_wait
+   534 _Z19cudaGravityPpDirectILi7ELb1E (82176 bytes)
+      ARRIVES:       3 [UR]; ATOMS.ARRIVE:       1 [R+URZ]; test_wait:       1 [R+imm]; LDGSTS.E 3 reads149/318/353: 0/0/0
+   538 _Z19cudaGravityCpDirectILi7ELb1E (62592 bytes)
+      ARRIVES:       3 [UR]; ATOMS.ARRIVE:       1 [R+URZ]; test_wait:       1 [R+imm]; LDGSTS.E 3 reads149/318/353: 0/0/0
+   540 _Z19cudaGravityCpDirectILi7ELb0E (66688 bytes)
+      ARRIVES:       3 [UR]; ATOMS.ARRIVE:       1 [R+URZ]; test_wait:       1 [R+imm]; LDGSTS.E 3 reads149/318/353: 0/0/0
+== mb_handoff
+   520 _Z19cudaGravityPpDirectILi7ELb1E (82048 bytes)
+      ARRIVES:       3 [UR]; ATOMS.ARRIVE:       1 [R+URZ]; test_wait:       1 [R+imm]; LDGSTS.E 3 reads149/318/353: 0/1/1
+   522 _Z19cudaGravityPpDirectILi7ELb0E (84352 bytes)
+      ARRIVES:       3 [UR]; ATOMS.ARRIVE:       1 [R+URZ]; test_wait:       1 [R+imm]; LDGSTS.E 3 reads149/318/353: 0/1/1
+   526 _Z19cudaGravityCpDirectILi7ELb0E (66816 bytes)
+      ARRIVES:       3 [UR]; ATOMS.ARRIVE:       1 [R+URZ]; test_wait:       1 [R+imm]; LDGSTS.E 3 reads149/318/353: 1/0/0
+== ur_v2
+   405 _Z19cudaGravityPpDirectILi7ELb1E (0x46300 bytes)
+      ARRIVES:       3 [UR]; ATOMS.ARRIVE:       1 [R+URZ]; test_wait:       1 [R+imm]; LDGSTS.E 3 reads149/318/353: 0/0/0
+   407 _Z19cudaGravityPpDirectILi7ELb0E (0x46c80 bytes)
+      ARRIVES:       3 [UR]; ATOMS.ARRIVE:       1 [R+URZ]; test_wait:       1 [R+imm]; LDGSTS.E 3 reads149/318/353: 0/0/0
