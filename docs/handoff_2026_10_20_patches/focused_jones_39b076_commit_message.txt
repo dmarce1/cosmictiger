@@ -1,0 +1,34 @@
+Read the Ewald Fourier rows with two-word constant loads, two modes per iteration
+
+The Fourier loop of the generated ewaldCorrectionDerivatives still held 15%
+of the bucket-512 adaptive kick kernel's stall samples: 52 scalar LDC per
+mode, each FFMA waiting on its own load, and the sine/cosine latency
+exposed once per mode.
+
+- EwaldConstants::fourExpanse rows are padded to a 16-byte stride (84
+  floats, kEwaldFourierRowStride) and the table is 16-byte aligned; the
+  device path of the generated derivative reads each mode's row through
+  float4 (EwaldConst::fourExpansion4, under __CUDA_ARCH__), the host SIMD
+  path keeps its scalar broadcasts. ptxas emits LDC.64 pairs for the
+  float4 reads (there is no 16-byte constant load on sm_86): 25 two-word
+  loads per mode instead of 50 scalar ones.
+- The generator emits two modes per loop iteration, both phases first
+  (kFourierModesPerIteration), so one mode's sine/cosine latency overlaps
+  the other's accumulations; ptxas had unrolled the float4 loop by two on
+  its own, the explicit form makes the two-mode body independent of that
+  heuristic. Every coefficient accumulates the modes in index order, so
+  the products and sums are unchanged on both paths.
+- A warp-uniform lane loop in cudaGravityCcEwald (two forms, patches under
+  the results) did not make ptxas address the rows from uniform registers
+  and is not kept.
+
+Bucket-512 adaptive kernel (ncu --set full): 17.18 to 15.63 ms, warp
+instructions 211.2 M to 208.1 M, the Fourier region 14.6% to 10.8% of the
+stall samples. Whole kick: adaptive 1.04-1.08x at buckets 64-512, lattice
+1.04-1.05x at 512, clustered and bucket 32 level within the pair spread.
+Forces bit-identical to the head on CPU and CUDA in every cell; the seven
+Ewald/FMM regressions pass. Results under
+docs/cuda_kick_shared_memory_results/ewald_fourier_loads/, section "Ewald
+Fourier loads at low occupancy" in docs/cuda_kick_shared_memory.md.
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>

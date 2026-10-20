@@ -1,0 +1,434 @@
+# worktree: .claude/worktrees/focused-jones-39b076
+# branch: claude/focused-jones-39b076 at 1bb812d0 (tracked-file diff only; untracked result dirs listed below)
+# re-snapshotted 05:25 CDT after the session's hand-over edit (gravity_cuda.hpp restored to head, doc section added)
+# status:  M cosmictiger/fmm/ewald_indices.hpp
+# status:  M cosmictiger/fmm/ewald_tables.hpp
+# status:  M docs/cuda_kick_shared_memory.md
+# status:  M src/fmm/fmm_kernel_codegen.cpp
+# status: ?? docs/cuda_kick_shared_memory_results/ewald_fourier_loads/
+
+diff --git a/cosmictiger/fmm/ewald_indices.hpp b/cosmictiger/fmm/ewald_indices.hpp
+index 1caafcc0..e8152fa7 100644
+--- a/cosmictiger/fmm/ewald_indices.hpp
++++ b/cosmictiger/fmm/ewald_indices.hpp
+@@ -34,13 +34,21 @@
+ // both stored in buffers sized for kFmmMaxOrder. The order-templated accessors
+ // view the leading entries; they are only valid for the order the tables were
+ // built for, which the generated Ewald derivative of that order guarantees.
++//
++// The Fourier rows are padded to a 16-byte stride and the table is 16-byte
++// aligned, so the CUDA kernel reads four coefficients per constant load
++// (fourExpansion4, LDC.128); the padding entries are zero.
++inline constexpr int kEwaldFourierRowStride = (kFmmMaxTracelessTensorCount + 3) / 4 * 4;
++
+ struct EwaldConstants {
+     Array<Array<float, NDIM>, NREAL> realIndices;
+     Array<Array<float, NDIM>, NFOUR> fourIndices;
+-    Array<Array<float, kFmmMaxTracelessTensorCount>, NFOUR> fourExpanse;
++    alignas(16) Array<Array<float, kEwaldFourierRowStride>, NFOUR> fourExpanse;
+     Array<float, kFmmMaxSymmetricTensorCount> d0;
+     int order;
+ };
++static_assert(sizeof(Array<float, kEwaldFourierRowStride>) % 16 == 0,
++    "Fourier rows keep the 16-byte alignment of the table");
+ 
+ extern EwaldConstants ec;
+ #ifdef __CUDACC__
+@@ -76,6 +84,16 @@ struct EwaldConst {
+         return *reinterpret_cast<SymmetricTracelessTensor<float, order> const*>(
+             constants().fourExpanse[i].data());
+     }
++#ifdef __CUDACC__
++    // Coefficients 4 * j to 4 * j + 3 of mode i's row as one 16-byte constant
++    // load; the padded row holds every vector the order's tensor touches.
++    template <int order>
++    __device__ static float4 fourExpansion4(int i, int j) {
++        static_assert(
++            (SymmetricTracelessTensor<float, order>::kN_ + 3) / 4 * 4 <= kEwaldFourierRowStride);
++        return *reinterpret_cast<float4 const*>(constants().fourExpanse[i].data() + 4 * j);
++    }
++#endif
+     template <int order>
+     CUDA_EXPORT static SymmetricTensor<float, order> const& d0() {
+         static_assert(SymmetricTensor<float, order>::kN_ <= kFmmMaxSymmetricTensorCount);
+diff --git a/cosmictiger/fmm/ewald_tables.hpp b/cosmictiger/fmm/ewald_tables.hpp
+index 10d16216..8ff4b590 100644
+--- a/cosmictiger/fmm/ewald_tables.hpp
++++ b/cosmictiger/fmm/ewald_tables.hpp
+@@ -31,8 +31,9 @@
+ // Fills the order-dependent Ewald tables: one traceless Fourier derivative tensor
+ // per reciprocal image and the real-space self derivatives d0. The image lists
+ // (realIndices, fourIndices) must already be filled; they do not depend on the
+-// order. Rows are written into the kFmmMaxOrder-sized buffers with a zero tail,
+-// and the order is recorded so the accessors can be checked against it.
++// order. Rows are written into the kFmmMaxOrder-sized, 16-byte padded buffers
++// with a zero tail, and the order is recorded so the accessors can be checked
++// against it.
+ //
+ // The fill needs only tensor.hpp, so it stays visible to every includer: the
+ // standalone Ewald test links ewald_indices.cpp without the per-order instance
+@@ -65,7 +66,7 @@ void ewaldFillTables(EwaldConstants& constants) {
+         for (int j = 0; j < Traceless::kN_; j++) {
+             row[j] = traceless[j];
+         }
+-        for (int j = Traceless::kN_; j < kFmmMaxTracelessTensorCount; j++) {
++        for (int j = Traceless::kN_; j < row.size(); j++) {
+             row[j] = 0.0f;
+         }
+     }
+diff --git a/docs/cuda_kick_shared_memory.md b/docs/cuda_kick_shared_memory.md
+index 250a836b..cdc51eb9 100644
+--- a/docs/cuda_kick_shared_memory.md
++++ b/docs/cuda_kick_shared_memory.md
+@@ -2571,6 +2571,198 @@ the arena the way the PP loop does, with its loads attributed to the shared
+ tile they read, and that the generic reload of the control block's pointers
+ is gone from the arena's last inner loop.
+ 
++### Ewald Fourier loads at low occupancy (`ewald_fourier_loads/`)
++
++With the Fourier sum scheduled ahead of the real-space sum, its loop still
++held 14.8% of the bucket-512 adaptive kernel's stall samples with 6.9% of its
++warp instructions: 114 SASS instructions per mode, 52 of them scalar `LDC`
++(three words of the wave vector, 50 coefficients of the mode's `fourExpanse`
++row, with the row index in a vector register) and 51 `FFMA`, and the first
++accumulation after `MUFU.SIN`/`MUFU.COS` waiting for them once per mode.
++This stage takes the three follow-ups listed there in order, each measured
++against the head it was built from (`origin/main` 1bb812d0, the PC loop's
++shared-memory reads, in the same `build/arena_b1024` configuration):
++
++1. **16-byte table rows (`ldc128`).** `EwaldConstants::fourExpanse` rows are
++   padded from 82 to 84 floats (`kEwaldFourierRowStride`, a 336-byte stride)
++   and the table is declared 16-byte aligned; the generated
++   `ewaldCorrectionDerivatives` reads each mode's row through `float4` on the
++   device (`EwaldConst::fourExpansion4`, under `__CUDA_ARCH__`) and keeps
++   the scalar broadcasts on the host SIMD path. The products and their
++   summation order are unchanged on both paths.
++2. **Two modes per iteration (`unroll2`).** The generator emits the mode loop
++   two modes per iteration, both phases (`sincos`) first, so the sine and
++   cosine latency of one mode is covered by the other's accumulations; every
++   coefficient still accumulates the modes in index order (NFOUR is 92, and
++   a tail loop covers an odd count).
++3. **Warp-uniform lane loop (`uniform`).** `cudaGravityCcEwald` iterates
++   every lane to the list length rounded up to whole warps; a lane past the
++   end evaluates the last multipole's position with a zero multipole, so its
++   M2L adds exact zeros and its flops are not counted. The aim is a mode loop
++   that ptxas can prove warp-uniform, so the row addresses go to uniform
++   registers and the table reads to the uniform datapath (`ULDC`, with the
++   coefficients as uniform-register operands of the `FFMA`s).
++
++What ptxas makes of them (`sass_fourier.sh`, `loop_body.py`:
++`nvdisasm` of the order-7 kernel, the innermost loop around the first
++`MUFU.SIN`):
++
++| binary | loop body | modes per iteration | per mode: constant loads | `FFMA` | whole kernel `LDL`/`STL` |
++|---|---:|---:|---|---:|---:|
++| head | 114 | 1 | 52 `LDC` | 51 | 933 |
++| ldc128 | 177 | 2 | 25 `LDC.64` + 2 `LDC` | 51 | 934 |
++| unroll2 | 177 | 2 | 25 `LDC.64` + 2 `LDC` | 51 | 934 |
++| uniform | 177 | 2 | 25 `LDC.64` + 2 `LDC` | 51 | 923 |
++| uniform2 | 177 | 2 | 25 `LDC.64` + 2 `LDC` | 51 | 923 |
++
++Two things differ from the plan. There is no 16-byte constant load: for the
++`ld.const.v4.f32` that NVVM emits, ptxas issues two `LDC.64` (a test kernel
++reading a `__constant__` `float4` array the same way, CUDA 12.8, sm_86, gets
++the same split, as `ULDC.64` pairs even where the loop is provably uniform),
++so the 50 scalar loads of a mode become 25 two-word loads, 13 fewer
++instructions per mode than a 16-byte load would have given but half the
++load count all the same. And ptxas unrolls the `float4` loop by two on its
++own: the `ldc128` body already holds two modes, with the second mode's
++`MUFU.SIN`/`MUFU.COS` issued in the middle of the first mode's
++accumulations, and the explicit unroll of step 2 produces the same 177
++instructions in the same mix (the loop control differs by two
++instructions). The per-mode cost falls from 114 to 88.5 instructions.
++
++The warp-uniform lane loop does not reach its aim in either form, the
++rounded-up lane count (`uniform`) or the warp-wide base index whose loop
++control does not involve the lane index at all (`uniform2`): the mode loop's
++row addresses stay in vector registers (`IMAD R, R<mode>, 0x150, R<base>`),
++no `FFMA` takes a constant-bank or uniform-register operand, and the kernel's
++1,208 `ULDC`s are elsewhere (the kernel's parameters and layout). In this
++kernel ptxas promotes to uniform registers only values derived from those;
++a loop counter that starts at an immediate inside the inlined Ewald
++derivative, deep in the workitem loop, is not promoted whether or not the
++enclosing lane loop is provably uniform. The variant costs 36 selects for
++the zero multipole and 0.1% more instructions.
++
++Nsight Compute replay of the second force-only kick kernel, adaptive fixture,
++bucket 512, `--set full` (`ncu_bucket512/`, `ncu_run.sh`, `metrics.md`;
++"head" is `origin/main` 1bb812d0 in the same `build/arena_b1024`
++configuration):
++
++| metric | head | ldc128 | unroll2 | uniform | uniform2 |
++|---|---:|---:|---:|---:|---:|
++| kernel duration | 17.18 ms | 15.82 ms | 15.63 ms | 15.72 ms | 15.70 ms |
++| elapsed cycles per SM | 24.0 M | 22.1 M | 21.7 M | 21.7 M | 22.1 M |
++| warp instructions executed | 211.2 M | 208.1 M | 208.1 M | 208.4 M | 208.4 M |
++| issue-active cycles (% of active) | 33.3 | 34.2 | 34.5 | 34.6 | 34.6 |
++| cycles per issued instruction | 3.00 | 2.91 | 2.89 | 2.90 | 2.90 |
++| stall, short scoreboard (per issue) | 0.53 | 0.53 | 0.52 | 0.52 | 0.52 |
++| stall, wait (per issue) | 0.84 | 0.75 | 0.74 | 0.73 | 0.73 |
++| stall, long scoreboard (per issue) | 0.19 | 0.19 | 0.19 | 0.19 | 0.19 |
++| stall, no instruction (per issue) | 0.17 | 0.18 | 0.18 | 0.18 | 0.18 |
++| local-memory load sectors | 1.25 M | 1.25 M | 1.25 M | 1.32 M | 1.32 M |
++| local-memory store sectors | 2.47 M | 2.46 M | 2.46 M | 2.47 M | 2.47 M |
++| shared-memory load wavefronts | 5.09 M | 5.09 M | 5.09 M | 5.02 M | 5.09 M |
++| registers per thread | 255 | 255 | 255 | 255 | 255 |
++
++The kernel is 8-9% shorter: 3.1 M fewer warp instructions (1.5%, the
++Fourier loop's 92 x 25 saved loads per evaluation) and a lower cost per
++instruction, with the "wait" stall, the fixed-latency dependency on the
++loads, down from 0.84 to 0.74 per issue. By region (`regions.sh`, the
++address-deduplicated attribution of `benchmarks/summarize_ncu_regions.py`
++with the line ranges of each binary's own generated header; the sampling
++period differs between replays, so only the shares compare):
++
++| region | head samples | share | ldc128 | share | unroll2 | share | uniform2 | share |
++|---|---:|---:|---:|---:|---:|---:|---:|---:|
++| Ewald Fourier sum | 34,485 | 14.6% | 27,460 | 11.4% | 25,501 | 10.8% | 24,716 | 10.8% |
++| Ewald real-space images | 44,594 | 18.8% | 48,496 | 20.2% | 48,165 | 20.5% | 46,149 | 20.1% |
++| Ewald self term, detrace, wrapper | 2,555 | 1.1% | 2,218 | 0.9% | 2,116 | 0.9% | 2,804 | 1.2% |
++| PP sink groups (`cudaPpSinkGroup`) | 27,492 | 11.6% | 27,802 | 11.6% | 27,632 | 11.7% | 27,252 | 11.9% |
++| everything else | 127,455 | 53.9% | 133,972 | 55.8% | 131,858 | 56.0% | 128,445 | 56.0% |
++
++The Fourier loop executes 11.4 M warp instructions instead of 14.7 M and
++its stall mix turns around: in the head it was "wait" 43% and short
++scoreboard 42% (every `FFMA` waiting on its own `LDC`), with the two-word
++loads it is short scoreboard 53-56% and "wait" 26-28%, the loads' latency
++being what the loop still pays (`ncu_bucket512/*/regions.txt`). The
++real-space loop is unchanged and holds a fifth of the samples, the largest
++Ewald share; the unroll and the uniform lane loops do not move any region
++beyond the replay-to-replay spread (the kernel-only replays of
++`kernel_quick_b512/`, two alternating repeats, had `ldc128` at 15.67 and
++15.71 ms and `unroll2` at 15.86 and 15.92 ms, the opposite order to the
++full-set replay: the two are the same code and the 1% is noise).
++
++KERNEL_SMALL_TBD
++
++Whole-kick times (`run.sh`: baseline, head and the four variants, order 7,
++three pairs of 15 samples, direct reference over 1,024 particles, buckets 32
++to 512; `driver.log`, `whole_kick_tables.md`). Every stage passed the 1.15
++pair-spread gate at the first attempt except bucket 512, whose first attempt
++spread 1.24 on a baseline lattice cell and was repeated (`contaminated/`;
++the second attempt's worst spread is 1.134, again on the baseline). The
++`ldc128` and `unroll2` columns are the binaries of steps 1 and 2; `uniform`
++and `uniform2` the two lane-loop forms of step 3 on top of step 2.
++
++lattice (forces only):
++
++| bucket | baseline | head | ldc128 | unroll2 | uniform | uniform2 | ldc128 vs head (paired range) | unroll2 vs head (paired range) |
++|---:|---:|---:|---:|---:|---:|---:|---:|---:|
++| 32 | 32.70 ms | 14.57 ms | 14.58 ms | 14.58 ms | 14.62 ms | 14.67 ms | 0.995x (0.988-1.023) | 0.999x (0.985-1.025) |
++| 64 | 32.49 ms | 14.48 ms | 14.11 ms | 14.23 ms | 14.21 ms | 14.21 ms | 1.015x (1.014-1.037) | 1.004x (0.996-1.024) |
++| 128 | 14.93 ms | 14.33 ms | 14.37 ms | 14.27 ms | 14.23 ms | 14.32 ms | 0.997x (0.995-1.015) | 1.004x (1.000-1.020) |
++| 256 | 11.38 ms | 9.81 ms | 9.59 ms | 9.58 ms | 9.64 ms | 9.56 ms | 1.023x (1.004-1.034) | 1.024x (1.007-1.046) |
++| 512 | 10.68 ms | 7.63 ms | 7.22 ms | 7.26 ms | 7.32 ms | 7.22 ms | 1.043x (1.043-1.058) | 1.051x (1.030-1.063) |
++
++clustered (forces only):
++
++| bucket | baseline | head | ldc128 | unroll2 | uniform | uniform2 | ldc128 vs head (paired range) | unroll2 vs head (paired range) |
++|---:|---:|---:|---:|---:|---:|---:|---:|---:|
++| 32 | 8.76 ms | 5.70 ms | 5.79 ms | 5.75 ms | 5.80 ms | 5.75 ms | 0.986x (0.982-0.988) | 0.989x (0.987-1.005) |
++| 64 | 8.43 ms | 5.59 ms | 5.56 ms | 5.59 ms | 5.58 ms | 5.55 ms | 1.007x (1.001-1.010) | 0.994x (0.990-1.002) |
++| 128 | 6.23 ms | 6.23 ms | 6.22 ms | 6.41 ms | 6.24 ms | 6.29 ms | 1.005x (1.002-1.062) | 0.977x (0.972-1.029) |
++| 256 | 6.90 ms | 5.77 ms | 5.69 ms | 5.73 ms | 5.76 ms | 5.73 ms | 1.007x (1.007-1.022) | 1.006x (1.001-1.007) |
++| 512 | 9.57 ms | 5.25 ms | 5.30 ms | 5.23 ms | 5.23 ms | 5.14 ms | 1.015x (0.984-1.063) | 1.013x (0.988-1.079) |
++
++adaptive (forces only):
++
++| bucket | baseline | head | ldc128 | unroll2 | uniform | uniform2 | ldc128 vs head (paired range) | unroll2 vs head (paired range) |
++|---:|---:|---:|---:|---:|---:|---:|---:|---:|
++| 32 | 17.73 ms | 10.28 ms | 10.30 ms | 10.26 ms | 10.05 ms | 10.12 ms | 0.994x (0.989-1.008) | 1.003x (0.986-1.022) |
++| 64 | 18.04 ms | 10.28 ms | 9.92 ms | 9.92 ms | 9.88 ms | 9.95 ms | 1.036x (1.020-1.042) | 1.043x (1.015-1.053) |
++| 128 | 15.74 ms | 10.47 ms | 10.21 ms | 10.03 ms | 10.18 ms | 10.14 ms | 1.025x (1.025-1.041) | 1.047x (1.020-1.056) |
++| 256 | 17.94 ms | 13.40 ms | 12.99 ms | 12.87 ms | 12.93 ms | 13.36 ms | 1.035x (1.032-1.050) | 1.041x (1.039-1.043) |
++| 512 | 28.75 ms | 19.24 ms | 18.20 ms | 17.89 ms | 18.17 ms | 17.96 ms | 1.056x (1.040-1.109) | 1.078x (1.067-1.118) |
++
++adaptive (forces + potential):
++
++| bucket | baseline | head | ldc128 | unroll2 | uniform | uniform2 | ldc128 vs head (paired range) | unroll2 vs head (paired range) |
++|---:|---:|---:|---:|---:|---:|---:|---:|---:|
++| 32 | 17.91 ms | 10.85 ms | 10.51 ms | 10.49 ms | 10.44 ms | 10.62 ms | 1.042x (0.933-1.050) | 1.030x (1.025-1.043) |
++| 64 | 18.41 ms | 10.60 ms | 10.17 ms | 10.12 ms | 10.12 ms | 10.16 ms | 1.026x (1.019-1.059) | 1.039x (1.032-1.049) |
++| 128 | 16.14 ms | 10.77 ms | 10.42 ms | 10.42 ms | 10.39 ms | 10.31 ms | 1.034x (1.020-1.081) | 1.033x (1.019-1.065) |
++| 256 | 18.59 ms | 13.79 ms | 13.09 ms | 13.30 ms | 13.25 ms | 13.33 ms | 1.038x (1.037-1.066) | 1.030x (1.026-1.037) |
++| 512 | 29.76 ms | 19.97 ms | 18.90 ms | 18.61 ms | 18.81 ms | 18.83 ms | 1.084x (1.041-1.098) | 1.058x (1.053-1.121) |
++
++The four variants are within each other's pair spread in every cell: the
++whole-kick gain is that of the halved load count, 1.06-1.08x on the adaptive
++fixture at bucket 512 (19.2 to 17.9-18.2 ms, the kernel itself 17.2 to 15.6-15.8 ms),
++1.04-1.05x on the lattice there, 1.03-1.05x on the adaptive fixture at
++buckets 64 to 256, and level within the spread at bucket 32 and on the
++clustered fixture (0.98-1.03x; the clustered kernel has few Ewald
++interactions). The lattice and clustered cells with the potential behave like
++their force-only rows.
++
++Forces (`b*/head_vs_*.md` from `benchmarks/compare_kick_arena_binaries.py`):
++the exports of all four variants are bit-identical to the head's in every
++cell, all three fixtures at every bucket, with and without the potential. The
++coefficients arrive through two-word loads instead of scalar ones and the
++`FFMA`s are the same products in the same order, so ptxas's fusing decisions
++did not change either. `stf_ewald_cpu`, `stf_kernels_cuda`, `stf_l2l_cuda`,
++`fmm_tree`, `fmm_walk_cpu`, `fmm_walk_cuda` and `sph_gravity_cuda` pass on
++every variant.
++
++What is kept: the padded rows with the `float4` reads and the generator's
++explicit two modes per iteration (`kFourierModesPerIteration`), which make
++the two-mode body independent of ptxas's unrolling heuristics at no cost;
++the lane loop stays as it was (the variant patches are under `variants/`).
++
+ ### What remains
+ 
+ - The per-launch list slab removed the pool allocator from the kernel (above);
+@@ -2597,19 +2789,20 @@ is gone from the arena's last inner loop.
+   the restructured loop it holds about a fifth of the kernel's stall samples.
+   The Ewald cell interactions' Fourier sum, which held a third, is scheduled
+   (Ewald cell-cell schedule at low occupancy; the bucket-512 adaptive kernel
+-  went from 25.4 to 17.4 ms). What remains of the Ewald path: the real-space
+-  image loop (19% of the samples, issue-bound at 453 instructions per image,
+-  about 100 of them products of a coefficient with an inverse-power factor
+-  that the generator could fold into the factors at roundoff cost), the
+-  Fourier loop's 50 scalar constant loads per mode (15%; 16-byte `LDC.128`
+-  would need the `fourExpanse` rows padded to a 16-byte stride and loaded
+-  through `float4`, and a constant-bank `FFMA` operand would need the lane
+-  loop made warp-uniform so ptxas can keep the row address in a uniform
+-  register), the exposed `MUFU.SIN`/`MUFU.COS` latency once per mode (an
+-  unroll by two modes), the ±h symmetry of the modes (46 instead of 92, at
+-  roundoff cost on CPU and GPU alike), and the lane utilization of 20.6 of
+-  32 (splitting the images and modes of one multipole across the idle lanes
+-  of a short list, with a shuffle reduction of the 50 derivative
++  went from 25.4 to 17.4 ms), and its table reads are two-word loads with
++  two modes per iteration (Ewald Fourier loads at low occupancy; 17.2 to
++  15.6 ms). What remains of the Ewald path: the real-space image loop (20%
++  of the samples, issue-bound at 453 instructions per image, about 100 of
++  them products of a coefficient with an inverse-power factor that the
++  generator could fold into the factors at roundoff cost), the Fourier
++  loop's 25 `LDC.64` per mode (11%; there is no 16-byte constant load on
++  sm_86, and ptxas does not address the rows from uniform registers even
++  with a provably uniform lane loop, so the remaining options are the ±h
++  symmetry of the modes, 46 instead of 92 at roundoff cost on CPU and GPU
++  alike, or holding the 92 x 50 coefficients in shared memory, where
++  `LDS.128` exists, at 18 KB of the arena), and the lane utilization of
++  20.6 of 32 (splitting the images and modes of one multipole across the
++  idle lanes of a short list, with a shuffle reduction of the 50 derivative
+   coefficients).
+ - The handoff rule is measured at 32,768, 262,144 and 2,097,152 particles
+   and 2-12 threads and holds six blocks per multiprocessor above 884,736
+diff --git a/src/fmm/fmm_kernel_codegen.cpp b/src/fmm/fmm_kernel_codegen.cpp
+index 9a00c20f..e0a2c962 100644
+--- a/src/fmm/fmm_kernel_codegen.cpp
++++ b/src/fmm/fmm_kernel_codegen.cpp
+@@ -504,6 +504,9 @@ int printConstRef(std::string name, std::string& cmd,
+     return flops;
+ }
+ 
++// Modes of the Fourier sum per loop iteration of the generated derivative (1 or 2).
++constexpr int kFourierModesPerIteration = 2;
++
+ // Emit the Ewald correction derivatives for one FMM order P (tensor ranks 0..P-1).
+ template <int P>
+ void ewald() {
+@@ -539,19 +542,15 @@ void ewald() {
+     // register, one load latency per coefficient per mode. The two sums use
+     // separate accumulators, so the order of the sums does not change the
+     // result.
++    //
++    // Device code reads a mode's row of the table four coefficients per 16-byte
++    // constant load (EwaldConst::fourExpansion4, LDC.128); the host SIMD path
++    // broadcasts the scalars. The products and their order are the same on
++    // both paths. The loop takes kFourierModesPerIteration modes per
++    // iteration, their phases first, so the sine and cosine latency of one
++    // mode is covered by the other's accumulations; every coefficient still
++    // accumulates the modes in index order.
+     Array<int, NDIM> k;
+-    tprint("auto const foursz = EwaldConst::nfour();\n");
+-    tprint("for (int i = 0; i < foursz; i++) {\n");
+-    indent();
+-    tprint("auto const &h = EwaldConst::fourIndex(i);\n");
+-    tprint("auto const& d0Value = EwaldConst::fourExpansion<%i>(i);\n", P);
+-    tprint("T const hdotx = simdFma(simdBroadcast<T>(h[0]), position[0], "
+-           "simdFma(simdBroadcast<T>(h[1]), position[1], simdBroadcast<T>(h[2]) * "
+-           "position[2]));\n");    // 5
+-    tprint("T cn, sn;\n");
+-    tprint(
+-        "sincos(simdBroadcast<T>(2.0 * M_PI * SCALE_FACTOR_INV1) * hdotx, &sn, &cn);\n");    // 35
+-    int fourierFlops = 40;
+     bool iscos[P * P + 1];
+     for (k[0] = 0; k[0] < P; k[0]++) {
+         for (k[1] = 0; k[1] < P - k[0]; k[1]++) {
+@@ -562,14 +561,69 @@ void ewald() {
+             }
+         }
+     }
+-    int maxi = (P * P + 1);
+-    for (int i = 0; i < maxi; i++) {
+-        int j = i + maxi;
+-        tprint("dfour[%i] = simdFma(%cn, simdBroadcast<T>(d0Value[%i]), dfour[%i]);\n", i,
+-            iscos[i] ? 'c' : 's', i, i);
+-        fourierFlops += 2;
++    int const maxi = (P * P + 1);
++    int const vectors = (maxi + 3) / 4;
++    int const fourierFlops = 40 + 2 * maxi;
++    auto const emitPhase = [&](char const* suffix, char const* mode) {
++        tprint("auto const& h%s = EwaldConst::fourIndex(%s);\n", suffix, mode);
++        tprint("T const hdotx%s = simdFma(simdBroadcast<T>(h%s[0]), position[0], "
++               "simdFma(simdBroadcast<T>(h%s[1]), position[1], simdBroadcast<T>(h%s[2]) * "
++               "position[2]));\n",
++            suffix, suffix, suffix, suffix);    // 5
++        tprint("T cn%s, sn%s;\n", suffix, suffix);
++        tprint("sincos(simdBroadcast<T>(2.0 * M_PI * SCALE_FACTOR_INV1) * hdotx%s, &sn%s, "
++               "&cn%s);\n",
++            suffix, suffix, suffix);    // 35
++    };
++    auto const emitDeviceSum = [&](char const* suffix, char const* mode) {
++        for (int v = 0; v < vectors; v++) {
++            tprint("float4 const q%s%i = EwaldConst::fourExpansion4<%i>(%s, %i);\n", suffix, v, P,
++                mode, v);
++        }
++        for (int i = 0; i < maxi; i++) {
++            tprint("dfour[%i] = simdFma(%cn%s, simdBroadcast<T>(q%s%i.%c), dfour[%i]);\n", i,
++                iscos[i] ? 'c' : 's', suffix, suffix, i / 4, "xyzw"[i % 4], i);
++        }
++    };
++    auto const emitHostSum = [&](char const* suffix, char const* mode) {
++        tprint("auto const& d0Value%s = EwaldConst::fourExpansion<%i>(%s);\n", suffix, P, mode);
++        for (int i = 0; i < maxi; i++) {
++            tprint("dfour[%i] = simdFma(%cn%s, simdBroadcast<T>(d0Value%s[%i]), dfour[%i]);\n", i,
++                iscos[i] ? 'c' : 's', suffix, suffix, i, i);
++        }
++    };
++    auto const emitModes = [&](int count) {
++        static char const* const suffixes[] = {"0", "1"};
++        static char const* const modes[] = {"i", "i + 1"};
++        for (int m = 0; m < count; m++) {
++            emitPhase(suffixes[m], modes[m]);
++        }
++        tprint("#ifdef __CUDA_ARCH__\n");
++        for (int m = 0; m < count; m++) {
++            emitDeviceSum(suffixes[m], modes[m]);
++        }
++        tprint("#else\n");
++        for (int m = 0; m < count; m++) {
++            emitHostSum(suffixes[m], modes[m]);
++        }
++        tprint("#endif\n");
++    };
++    tprint("auto const foursz = EwaldConst::nfour();\n");
++    tprint("{\n");
++    indent();
++    tprint("int i = 0;\n");
++    if (kFourierModesPerIteration == 2) {
++        tprint("for (; i + 1 < foursz; i += 2) {\n");
++        indent();
++        emitModes(2);
++        deindent();
++        tprint("}\n");
+     }
+-
++    tprint("for (; i < foursz; i++) {\n");
++    indent();
++    emitModes(1);
++    deindent();
++    tprint("}\n");
+     deindent();
+     tprint("}\n");
+ 

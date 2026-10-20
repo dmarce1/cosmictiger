@@ -1,0 +1,184 @@
+# worktree: .claude/worktrees/warp_ballot_lists
+# branch: warp_ballot_lists at 1bb812d0 (tracked-file diff only; untracked result dirs listed below)
+# status:  M cosmictiger/cuda/device_vector.hpp
+# status:  M cosmictiger/gravity/kick_cuda_kernel.hpp
+# status: ?? docs/cuda_kick_shared_memory_results/warp_ballot_lists/
+
+diff --git a/cosmictiger/cuda/device_vector.hpp b/cosmictiger/cuda/device_vector.hpp
+index 72e3a214..c4b4f894 100644
+--- a/cosmictiger/cuda/device_vector.hpp
++++ b/cosmictiger/cuda/device_vector.hpp
+@@ -20,6 +20,8 @@
+ #ifndef DEVICE_VECTOR_HPP_
+ #define DEVICE_VECTOR_HPP_
+ 
++#include <type_traits>
++
+ #include <cosmictiger/cuda/cuda_memory.hpp>
+ 
+ struct ThreadIndex {
+@@ -266,6 +268,22 @@ public:
+             grow(newCapacity);
+         }
+     }
++    // Collective: publish newSize elements, of which the caller has already
++    // written [size_, newSize) into the storage within capacity(). No element
++    // is constructed or destroyed, so T must be trivial.
++    CUDA_EXPORT
++    inline void setSize(int newSize) {
++        static_assert(std::is_trivially_default_constructible<T>::value &&
++                std::is_trivially_destructible<T>::value,
++            "setSize publishes raw storage");
++        ThreadIndex tid;
++        ASSERT(newSize <= capacity_);
++        syncthreads();
++        if (tid == 0) {
++            size_ = newSize;
++        }
++        syncthreads();
++    }
+     CUDA_EXPORT
+     inline void resize(int newSize) {
+         ThreadIndex tid;
+diff --git a/cosmictiger/gravity/kick_cuda_kernel.hpp b/cosmictiger/gravity/kick_cuda_kernel.hpp
+index a33f4c38..34a39a41 100644
+--- a/cosmictiger/gravity/kick_cuda_kernel.hpp
++++ b/cosmictiger/gravity/kick_cuda_kernel.hpp
+@@ -47,6 +47,53 @@ __device__ inline void cudaCopyExpansion(float* destination, float const* source
+     }
+ }
+ 
++// Lane-ordered appends of one checklist pass to its interaction lists. A lane
++// picks at most one list per check; one ballot per list gives every picking lane
++// its slot and the warp the count, so the sizes stay in warp-uniform registers.
++// The entries are written into the vectors' storage ahead of their size, which
++// is published (setSize) only when a list outgrows its storage and, for the
++// lists that grew, once in flush().
++template <int nLists>
++class CudaKickListAppender {
++    DeviceVector<int>* lists_[nLists];
++    int sizes_[nLists];
++
++public:
++    __device__ explicit CudaKickListAppender(DeviceVector<int>* const (&lists)[nLists]) {
++        for (int n = 0; n < nLists; n++) {
++            lists_[n] = lists[n];
++            sizes_[n] = lists[n]->size();
++        }
++    }
++    // Collective over the warp: appends check to list n for each lane with take[n].
++    __device__ void append(Array<bool, nLists> const& take, int check) {
++        unsigned const lowerLanes = (1u << threadIdx.x) - 1u;
++        for (int n = 0; n < nLists; n++) {
++            unsigned const lanes = __ballot_sync(0xFFFFFFFF, take[n]);
++            if (lanes) {
++                int const count = __popc(lanes);
++                if (sizes_[n] + count > lists_[n]->capacity()) {
++                    // Publish the entries written so far, so the move keeps them.
++                    lists_[n]->setSize(sizes_[n]);
++                    lists_[n]->reserve(sizes_[n] + count);
++                }
++                if (take[n]) {
++                    lists_[n]->data()[sizes_[n] + __popc(lanes & lowerLanes)] = check;
++                }
++                sizes_[n] += count;
++            }
++        }
++    }
++    // Collective: publish the appended sizes to the vectors.
++    __device__ void flush() {
++        for (int n = 0; n < nLists; n++) {
++            if (sizes_[n] != lists_[n]->size()) {
++                lists_[n]->setSize(sizes_[n]);
++            }
++        }
++    }
++};
++
+ }    // namespace detail
+ 
+ template <int order>
+@@ -434,12 +481,14 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
+                     float const thetainv = fmmInverseOpeningAngle(globalParams.theta);
+                     do {
+                         int const maxi = roundUp(checks.size(), WARP_SIZE);
++                        detail::CudaKickListAppender<kNlists> appender(lists);
+                         for (int i = tid; i < maxi; i += WARP_SIZE) {
+                             for (int n = 0; n < kNlists; n++) {
+                                 sw[n] = false;
+                             }
+-                            if (i < checks.size()) {
+-                                TreeNode const& other = treeNodes[checks[i]];
++                            int const check = i < checks.size() ? checks[i] : -1;
++                            if (check >= 0) {
++                                TreeNode const& other = treeNodes[check];
+                                 if (other.numberOfParticles()) {
+                                     for (int dim = 0; dim < NDIM; dim++) {
+                                         dx[dim] = distance(self.pos[dim], other.pos[dim]);    // 3
+@@ -457,22 +506,9 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
+                                     }
+                                 }
+                             }
+-                            {
+-                                Array<int, kNlists> l, total;
+-                                for (int n = 0; n < kNlists; n++) {
+-                                    l[n] = sw[n];
+-                                }
+-                                computeIndicesArray(l, total);
+-                                for (int n = 0; n < kNlists; n++) {
+-                                    int const start = lists[n]->size();
+-                                    __syncwarp();
+-                                    lists[n]->resize(start + total[n]);
+-                                    if (sw[n]) {
+-                                        (*lists[n])[l[n] + start] = checks[i];
+-                                    }
+-                                }
+-                            }
++                            appender.append(sw, check);
+                         }
++                        appender.flush();
+                         __syncwarp();
+                         checks.resize(NCHILD * nextlist.size());
+                         for (int i = tid; i < nextlist.size(); i += WARP_SIZE) {
+@@ -521,12 +557,14 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
+                     float const thetainv = fmmInverseOpeningAngle(globalParams.theta);
+                     do {
+                         int const maxi = roundUp(checks.size(), WARP_SIZE);
++                        detail::CudaKickListAppender<kNlists> appender(lists);
+                         for (int i = tid; i < maxi; i += WARP_SIZE) {
+                             for (int n = 0; n < kNlists; n++) {
+                                 sw[n] = false;
+                             }
+-                            if (i < checks.size()) {
+-                                TreeNode const& other = treeNodes[checks[i]];
++                            int const check = i < checks.size() ? checks[i] : -1;
++                            if (check >= 0) {
++                                TreeNode const& other = treeNodes[check];
+                                 if (other.numberOfParticles()) {
+                                     for (int dim = 0; dim < NDIM; dim++) {
+                                         dx[dim] = distance(self.pos[dim], other.pos[dim]);    // 3
+@@ -562,22 +600,9 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
+                                     }
+                                 }
+                             }
+-                            {
+-                                Array<int, kNlists> l, total;
+-                                for (int n = 0; n < kNlists; n++) {
+-                                    l[n] = sw[n];
+-                                }
+-                                computeIndicesArray(l, total);
+-                                for (int n = 0; n < kNlists; n++) {
+-                                    int const start = lists[n]->size();
+-                                    __syncwarp();
+-                                    lists[n]->resize(start + total[n]);
+-                                    if (sw[n]) {
+-                                        (*lists[n])[l[n] + start] = checks[i];
+-                                    }
+-                                }
+-                            }
++                            appender.append(sw, check);
+                         }
++                        appender.flush();
+                         __syncwarp();
+                         checks.resize(NCHILD * nextlist.size());
+                         for (int i = tid; i < nextlist.size(); i += WARP_SIZE) {

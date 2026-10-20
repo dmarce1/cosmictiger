@@ -1,0 +1,369 @@
+# worktree: .claude/worktrees/quizzical-wilson-9408a4
+# branch: claude/quizzical-wilson-9408a4 at 1bb812d0 (tracked-file diff only; untracked result dirs listed below)
+# status:  M benchmarks/stf_walk.cpp
+# status:  M docs/cuda_kick_shared_memory.md
+# status:  M src/fmm/fmm_kernel_codegen.cpp
+# status:  M tests/stf_ewald_cpu.cpp
+# status: ?? docs/cuda_kick_shared_memory_results/lattice_ewald_agreement/
+
+diff --git a/benchmarks/stf_walk.cpp b/benchmarks/stf_walk.cpp
+index b8ecaa9e..31c700fb 100644
+--- a/benchmarks/stf_walk.cpp
++++ b/benchmarks/stf_walk.cpp
+@@ -287,7 +287,11 @@ void stfWalkLeafHistogram(TreeId root, char const* fixture) {
+ 
+ // Compare the saved forces and potentials of a deterministic particle sample
+ // with the direct periodic (Ewald) sum. The kick used gm = 1, as does the sum.
+-void stfWalkReferenceErrors(char const* fixture, char const* backend, int count) {
++// The reference values are also written to stf_walk_reference.csv, keyed by
++// the raw positions of stf_walk_forces.csv, so that other runs of the same
++// fixture (CPU-only ones included) can be compared particle by particle.
++void stfWalkReferenceErrors(
++    char const* fixture, char const* backend, int count, std::ofstream& referenceOutput) {
+     int const stride = std::max<int>(1, int(particlesSize()) / count);
+     Vector<Fixed32> sinkx;
+     Vector<Fixed32> sinky;
+@@ -318,6 +322,14 @@ void stfWalkReferenceErrors(char const* fixture, char const* backend, int count)
+         }
+         double const expectedPotential = reference.first[i];
+         double const actualPotential = particlesPot(indices[i]);
++        referenceOutput << fixture;
++        for (int dim = 0; dim < NDIM; ++dim) {
++            referenceOutput << ',' << uint32_t(particlesPos(dim, indices[i]).raw());
++        }
++        for (int dim = 0; dim < NDIM; ++dim) {
++            referenceOutput << ',' << reference.second[dim][i];
++        }
++        referenceOutput << ',' << expectedPotential << '\n';
+         forceErrors.push_back(std::sqrt(difference / std::max(norm, 1e-300)));
+         potentialErrors.push_back(
+             std::abs(actualPotential - expectedPotential) / std::abs(expectedPotential));
+@@ -327,6 +339,10 @@ void stfWalkReferenceErrors(char const* fixture, char const* backend, int count)
+             (actualPotential - expectedPotential) * (actualPotential - expectedPotential);
+         potentialNorm += expectedPotential * expectedPotential;
+     }
++    referenceOutput.flush();
++    if (!referenceOutput) {
++        throw std::runtime_error("Failed to write stf_walk_reference.csv");
++    }
+     std::sort(forceErrors.begin(), forceErrors.end());
+     std::sort(potentialErrors.begin(), potentialErrors.end());
+     size_t const p99 = std::min(forceErrors.size() - 1, 99 * forceErrors.size() / 100);
+@@ -337,7 +353,8 @@ void stfWalkReferenceErrors(char const* fixture, char const* backend, int count)
+         potentialErrors[p99], potentialErrors.back());
+ }
+ 
+-void stfWalkFixture(char const* fixture, bool doPhi, int samples, std::ofstream& forceOutput) {
++void stfWalkFixture(char const* fixture, bool doPhi, int samples, std::ofstream& forceOutput,
++    std::ofstream& referenceOutput) {
+     auto const positions = stfWalkPositions(fixture, stfWalkSide());
+     char const* backend = getOptions().compute.cuda ? "cuda" : "cpu";
+     std::vector<double> setupTimes, treeTimes, kickTimes, totalTimes;
+@@ -400,7 +417,7 @@ void stfWalkFixture(char const* fixture, bool doPhi, int samples, std::ofstream&
+                 // The direct Ewald sum runs on the device and reads the device
+                 // kernel table, which only a CUDA-enabled run uploads.
+                 if (referenceSamples > 0 && getOptions().compute.cuda) {
+-                    stfWalkReferenceErrors(fixture, backend, referenceSamples);
++                    stfWalkReferenceErrors(fixture, backend, referenceSamples, referenceOutput);
+                 } else if (referenceSamples > 0) {
+                     PRINT("STF_WALK_REFERENCE_SKIPPED,%s,%s,cpu_only_run\n", fixture, backend);
+                 }
+@@ -452,6 +469,14 @@ void stfWalkBenchmark() {
+             throw std::runtime_error("Cannot open stf_walk_forces.csv");
+         }
+         forces << "fixture,x_raw,y_raw,z_raw,x,y,z,gx,gy,gz,phi\n" << std::setprecision(17);
++        std::ofstream references;
++        if (detail::stfWalkReferenceSamples() > 0 && options.compute.cuda) {
++            references.open("stf_walk_reference.csv");
++            if (!references) {
++                throw std::runtime_error("Cannot open stf_walk_reference.csv");
++            }
++            references << "fixture,x_raw,y_raw,z_raw,gx,gy,gz,phi\n" << std::setprecision(17);
++        }
+         particlesResize(options.initial.numberOfParticles);
+         PRINT("STF_WALK_CONFIG,particles=%zu,threads=%i,cuda=%i,order=%i,theta=%.17g,support=%."
+               "17g,bucket=%i,samples=%i,warmup=1,gm=1\n",
+@@ -470,7 +495,7 @@ void stfWalkBenchmark() {
+         for (char const* fixture : {"lattice", "clustered", "adaptive"}) {
+             if (detail::stfWalkFixtureSelected(fixture)) {
+                 for (bool doPhi : {false, true}) {
+-                    detail::stfWalkFixture(fixture, doPhi, samples, forces);
++                    detail::stfWalkFixture(fixture, doPhi, samples, forces, references);
+                 }
+             }
+         }
+diff --git a/docs/cuda_kick_shared_memory.md b/docs/cuda_kick_shared_memory.md
+index 250a836b..2708dbb9 100644
+--- a/docs/cuda_kick_shared_memory.md
++++ b/docs/cuda_kick_shared_memory.md
+@@ -241,6 +241,113 @@ device and reads the device kernel table (self potential and softening), which
+ that reference reported a spurious 1.5% potential offset; the harness now skips
+ the reference there and prints `STF_WALK_REFERENCE_SKIPPED`.
+ 
++## Lattice agreement between handoff divisions (measured)
++
++At 2,097,152 particles the lattice fixture's forces with 656 handoff blocks
++differ from those with 492 by 1.8e-5 in acceleration relative L2 (2.6e-3
++largest pointwise) and 4.4e-4 in potential relative L2, while the clustered
++and adaptive fixtures differ at about 6e-8 (Ewald-aware handoff, below). At
++492 the kernel evaluates the Ewald cell-cell interactions of the 512 box/8
++cells at the workitem roots; at 656 the CPU walk evaluates them. The
++difference is float rounding, not an error on either side: the lattice
++potential and forces are small residuals of sums of order N, and both
++evaluations carry the same rounding of those sums
++(`docs/cuda_kick_shared_memory_results/lattice_ewald_agreement/`).
++
++Reproduction. Pinning 512 or 1,024 handoff blocks moves the same work at
++32,768 particles (bucket 32) and 262,144 (bucket 128), where the box/8 cells
++hold 64 and 512 particles. An instrumented binary
++(`handoff_ewald_aware/counts/instrumentation.patch`) shows that 512 blocks
++hand the kernel the 512 box/8 cells carrying 10,752 and 27,212 Ewald checks.
++With 1,024 blocks no workitem carries Ewald checks, and the CPU walk
++evaluates 10,752 and 34,636 more Ewald cell-cell interactions
++(`counts_da3c1f4e/`). One process per case, lattice only, order 7, theta
++0.8, two threads, direct Ewald reference on 4,096 sinks (`run.sh`,
++`compare.py`). The 2,097,152-particle row is from the Ewald-aware handoff
++sweep:
++
++| particles | potential rel L2 | potential difference, mean / std | acceleration rel L2 (largest pointwise) |
++|---:|---:|---:|---:|
++| 32,768 | 2.4e-5 | 2.5e-4 / 2.1e-3 | 7.0e-6 (6.1e-4) |
++| 262,144 | 9.0e-5 | -1.5e-3 / 1.5e-2 | 1.5e-5 (1.2e-3) |
++| 2,097,152 | 4.4e-4 | | 1.8e-5 (2.6e-3) |
++
++The difference is position-dependent (its mean is a tenth of its spread),
++not a constant offset. It grows about fourfold per doubling of the side, as
++an absolute difference that is the same at every size would against the
++lattice's potential, which falls as the side grows. The export's units have
++particle mass 1, so the lattice potential is about 2.8 times the side (88.7
++at side 32).
++
++Cause. Reversing the order in which the CPU walk sums its Ewald cell-cell
++list (`diagnostics.patch`, `COSMICTIGER_DIAG_REVERSE_EWALD`, CPU-only runs)
++changes nothing but the rounding, and it moves the lattice by as much as the
++change of division does (`diagnostics.sh`):
++
++| fixture, particles | potential rel L2 | acceleration rel L2 | rms acceleration difference (rms acceleration) |
++|---|---:|---:|---:|
++| lattice, 32,768 | 4.7e-5 | 6.3e-6 | 4.0e-3 (632) |
++| lattice, 262,144 | 1.9e-4 | 1.2e-5 | 2.9e-2 (2,559) |
++| clustered, 32,768 | 2.8e-7 | 2.9e-8 | 3.5e-3 (120,500) |
++| adaptive, 32,768 | 4.4e-8 | 2.9e-9 | 3.6e-3 (1,257,000) |
++
++The absolute rounding is the same on every fixture. It looks large on the
++lattice only because the lattice's net field is small: its accelerations are
++200 to 2,000 times smaller than on the clustered and adaptive fixtures. The
++lattice potential is what remains of sums of order N, mostly the
++nearest-image sum of m/r, about 2.4 N m/L for a uniform box, less the Ewald
++corrections and the uniform background. One float rounding of 2.4 N against
++2.84 times the side (the Madelung constant of the simple cubic lattice) is
++5.1e-5, 2.1e-4 and 8.2e-4 at sides 32, 64 and 128. The
++measured differences between divisions are about half of that at every
++size. The clustered and adaptive fixtures differ at 6e-8 across the same
++handoffs because their potentials are close to their gross sums.
++
++Which side is right. Neither. Against the direct Ewald sum both divisions
++have the same errors to four digits: potential 3.769e-2 at 32,768 particles
++and 1.589e-1 at 262,144, acceleration 0.301 and 0.370. A CPU-only run has
++the same errors when it borrows the CUDA run's reference (the harness now
++saves it to `stf_walk_reference.csv`). The potential error is
++position-dependent too: mean -0.76 and spread 3.3 at side 32, -11.5 and 26 at
++side 64. That is about 4e-5 of the gross sum of m/r at both sizes, an
++ordinary truncation error that, like the rounding, looks large only against
++the lattice's small net potential. The spread of the difference between the
++divisions is under a thousandth of it.
++
++Source trace. The Ewald cell-cell interactions carry the quadratic of the
++uniform background, (2 pi / 3) m |x - y|^2, through traceless source
++moments, and the root expansion removes the background with the particles'
++own second moment. If each source's internal trace
++sum_i m_i |y_i - Y|^2 were lost, the potential would be off by
++(2 pi / 3) times a sum of traces that depends on how each sink's Ewald
++sources are cut, and not by a constant. Adding that trace back from the
++particles (`COSMICTIGER_DIAG_EWALD_TRACE`) moves the error mean from -0.76
++to +1,118 at side 32 and from -11.5 to +8,333 at side 64, so the expansion
++already accounts for it and nothing is lost.
++
++Ewald radial terms. Comparing the two operators found one defect, shared by
++both. `ewaldCorrectionDerivatives` evaluates the nearest image's
++erf(alpha r) / r radial terms d_l = r^l (d/(r dr))^l [erf(alpha r) / r]
++by an upward recurrence that cancels catastrophically for alpha r < 1. A
++float32 emulation of the generated code (`emulation/radial_terms.py`)
++puts d_4, d_5 and d_6 at the box/8 separation r = 1/8 wrong by 0.97, 85
++and 8,900 times their size. The generator now sums the power series of
++S_6(y) = int_0^1 t^12 exp(-y t^2) dt, y = alpha^2 r^2 <= 3, in twenty terms,
++recurs downward, S_(l-1) = (exp(-y) + 2 y S_l) / (2l - 1), which adds only
++positive terms, and forms d_l = (2 alpha / sqrt(pi)) (-2 alpha^2 r)^l S_l.
++The worst relative error of any d_l over 0.01 <= r <= 0.866 drops from
++6e28 to 1.4e-6 at order 7. `stf_ewald_cpu` now compares every rank of the
++float derivatives with the double ones at eight separations from 0.011 to
++0.71. The worst error against the rank's scale is 1.8e-6 at order 7 (1.2e-5
++at order 9) after the change, against 6.3e3 before (`unit_ratios/`). The
++change does not move the lattice difference between divisions: 2.37e-5 and
++8.81e-5 instead of 2.37e-5 and 8.99e-5. Nor does it move any fixture's
++error against the direct sum at orders 7 and 9 by more than 2e-4 of itself
++(`fixtures_reference.sh`, `fixtures/`), so on these fixtures the
++high-rank terms it corrects contributed below the rounding. The kick
++kernel keeps 255 registers, its 792-byte stack and its 202 local loads and
++731 local stores, and has 56 fewer instructions (37,760). TIMING_PLACEHOLDER
++
+ ## Measurements
+ 
+ All timings: RTX 3090 shared with the desktop, two HPX workers pinned to cores
+@@ -1440,7 +1547,9 @@ potential 4.4e-4. That is the cut at which the CPU instead of the kernel
+ evaluates the box/8 cells' Ewald interactions. The lattice's accelerations
+ nearly cancel, which inflates relative force differences, but the potential
+ difference is well above the 1e-7 CPU/CUDA agreement measured at small
+-sizes. It was not investigated here.
++sizes. It is float rounding of the sums of order N whose small residual is
++the lattice potential; neither division is the more accurate one (Lattice
++agreement between handoff divisions, above).
+ 
+ Speedup is the pinned 492 time over the variant's time, pairwise (above
+ one: the variant is faster). Forces only:
+diff --git a/src/fmm/fmm_kernel_codegen.cpp b/src/fmm/fmm_kernel_codegen.cpp
+index 9a00c20f..8e5b389d 100644
+--- a/src/fmm/fmm_kernel_codegen.cpp
++++ b/src/fmm/fmm_kernel_codegen.cpp
+@@ -583,11 +583,6 @@ void ewald() {
+     tprint("T const n8r = simdBroadcast<T>(-8*SCALE_FACTOR_INV2) * r;\n");    // 1
+     tprint("T const rinv = simdSelect(r > simdBroadcast<T>(0), simdBroadcast<T>(1), "
+            "simdBroadcast<T>(0)) / simdMax(r, simdBroadcast<T>(1.0e-20));\n");    // 2
+-    tprint("T exp0 = expnearzero( -simdBroadcast<T>(4*SCALE_FACTOR_INV2) * r2 );\n");
+-    tprint("T erf0 = erfnearzero(simdBroadcast<T>(2*SCALE_FACTOR_INV1) * r);\n");
+-    tprint(
+-        "T const expfactor = simdBroadcast<T>(2.256758334191025*SCALE_FACTOR_INV1) * exp0;\n");    // 1
+-    tprint("T e0 = expfactor * rinv;\n");                // 1
+     tprint("T const rinv0 = simdBroadcast<T>(1);\n");    // 2
+     tprint("T const rinv1 = rinv;\n");                   // 2
+     for (int l = 2; l < (P + 1) / 2; l++) {
+@@ -596,12 +591,44 @@ void ewald() {
+         theseFlops++;
+         tprint("T const rinv%i = rinv%i * rinv%i;\n", l, i, j);    // (P-2)
+     }
+-    tprint("T const d0 = erf0 * rinv;\n");    // 2
+-    for (int l = 1; l < P; l++) {
+-        tprint("T const d%i = simdFma(simdBroadcast<T>(%i) * d%i, rinv, e0);\n", l, -2 * l + 1,
+-            l - 1);    // (P-1)*4
++    // The nearest image contributes erf(alpha r) / r, alpha = 2 in box units.
++    // Its radial terms are d_l = r^l (d/(r dr))^l [erf(alpha r) / r]
++    // = (2 alpha / sqrt(pi)) (-2 alpha^2 r)^l S_l(ar2), with ar2 = alpha^2 r^2
++    // and S_l(y) = int_0^1 t^(2l) exp(-y t^2) dt. The upward recurrence in d_l
++    // cancels catastrophically for alpha r < 1: in float, d_4 to d_6 are wrong
++    // by 1 to 10^4 times their size at the box/8 separation r = 1/8, so the CPU
++    // walk and the kernel produced different high-rank coefficients for the
++    // same cell pair. Sum the series of S_(P-1) and recur downward,
++    // S_(l-1) = (exp(-y) + 2 y S_l) / (2l - 1), which adds only positive
++    // terms. The wrapped separation keeps y <= 3, where twenty terms leave a
++    // truncation below float rounding.
++    constexpr int kSeriesTerms = 20;
++    tprint("T const ar2 = simdBroadcast<T>(4*SCALE_FACTOR_INV2) * r2;\n");    // 1
++    tprint("T const twoAr2 = ar2 + ar2;\n");                                   // 1
++    tprint("T const expAr2 = exp(-ar2);\n");
++    {
++        auto const coefficient = [](int j) {
++            double factorial = 1;
++            for (int i = 2; i <= j; i++) {
++                factorial *= i;
++            }
++            return (j % 2 ? -1.0 : 1.0) / (factorial * (2 * j + 2 * (P - 1) + 1));
++        };
++        tprint("T s%i = simdBroadcast<T>(%.17e);\n", P - 1, coefficient(kSeriesTerms - 1));
++        for (int j = kSeriesTerms - 2; j >= 0; j--) {
++            tprint("s%i = simdFma(s%i, ar2, simdBroadcast<T>(%.17e));\n", P - 1, P - 1,
++                coefficient(j));
++        }
++    }
++    for (int l = P - 1; l > 0; l--) {
++        tprint("T const s%i = simdFma(twoAr2, s%i, expAr2) * simdBroadcast<T>(%.17e);\n", l - 1,
++            l, 1.0 / (2 * l - 1));
++    }
++    tprint("T radialFactor = simdBroadcast<T>(2.256758334191025*SCALE_FACTOR_INV1);\n");
++    for (int l = 0; l < P; l++) {
++        tprint("T const d%i = radialFactor * s%i;\n", l, l);
+         if (l != P - 1) {
+-            tprint("e0 *= n8r;\n");    // (P-1)
++            tprint("radialFactor *= n8r;\n");
+         }
+     }
+     for (int l = 0; l < P; l++) {
+diff --git a/tests/stf_ewald_cpu.cpp b/tests/stf_ewald_cpu.cpp
+index 54fc8b38..18d2a63b 100644
+--- a/tests/stf_ewald_cpu.cpp
++++ b/tests/stf_ewald_cpu.cpp
+@@ -19,6 +19,7 @@
+ #include <cosmictiger/fmm/ewald_indices.hpp>
+ #include <cosmictiger/fmm/ewald_kernels.hpp>
+ #include <cosmictiger/fmm/fmm_order.hpp>
++#include <cosmictiger/math/simd.hpp>
+ 
+ // This standalone test exercises the actual CUDA-disabled initializer without
+ // starting a distributed runtime. No child locality needs initialization.
+@@ -210,6 +211,55 @@ void checkPeriodicField() {
+     }
+ }
+ 
++// The kick walks evaluate the derivatives in float (SIMD lanes on the CPU,
++// scalars in the kernel). Every rank must match the double evaluation to near
++// float rounding, also at the small separations of neighbouring cells, where
++// an upward recurrence for the nearest image's erf(alpha r) / r lost all of
++// its high ranks (box/8 cells sit 1/8 apart, box/16 cells 1/16).
++template <int order>
++void checkFloatDerivatives() {
++    constexpr std::array<Position, 8> kPositions{{{.125, 0., 0.}, {.0625, .0625, 0.},
++        {.125, -.125, .125}, {.0625, .03, -.02}, {.01, .005, -.002}, {.25, .125, 0.},
++        {.4, -.3, .45}, {-.499, .497, -.11}}};
++    for (auto const& position : kPositions) {
++        Array<double, NDIM> separation;
++        Array<SimdFloat, NDIM> floatSeparation;
++        for (int d = 0; d < 3; ++d) {
++            separation[d] = position[d];
++            floatSeparation[d] = simdBroadcast<SimdFloat>(float(position[d]));
++        }
++        SymmetricTracelessTensor<double, order> expected;
++        SymmetricTracelessTensor<SimdFloat, order> actual;
++        ewaldCorrectionDerivatives(expected, separation);
++        ewaldCorrectionDerivatives(actual, floatSeparation);
++        for (int rank = 0; rank < order; ++rank) {
++            // The trace entry (0, 0, 2) belongs to rank two.
++            auto const components = [&](auto&& visit) {
++                for (int nz = 0; nz <= 1 && nz <= rank; ++nz) {
++                    for (int nx = 0; nx <= rank - nz; ++nx) {
++                        visit(nx, rank - nx - nz, nz);
++                    }
++                }
++                if (rank == 2) {
++                    visit(0, 0, 2);
++                }
++            };
++            // Near the origin the cubic symmetry leaves the low ranks small, so
++            // measure them against the alpha^(rank + 1) scale of the nearest
++            // image's derivatives.
++            double scale = std::pow(kAlpha / SCALE_FACTOR, rank + 1);
++            components([&](int nx, int ny, int nz) {
++                scale = std::max(scale, std::abs(expected(nx, ny, nz)));
++            });
++            components([&](int nx, int ny, int nz) {
++                double const value = actual(nx, ny, nz)[0];
++                requireNear(value, expected(nx, ny, nz), 5e-5 * scale,
++                    "CPU Ewald float derivatives against double");
++            });
++        }
++    }
++}
++
+ // Select the order, fill the tables for it, and check every table and the
+ // generated derivative of that order. Re-filling for a new order is part of
+ // the contract: EwaldConstants::order must report the order just built.
+@@ -226,8 +276,10 @@ void checkOrder() {
+     checkSelfDerivatives<order>();
+     checkFourierScaling<order>();
+     checkPeriodicField<order>();
++    checkFloatDerivatives<order>();
+     std::printf(
+-        "CPU Ewald tables and periodic potential/gradient passed at FMM order %d.\n", order);
++        "CPU Ewald tables, periodic potential/gradient and float derivatives passed at FMM "
++        "order %d.\n", order);
+ }
+ 
+ }    // namespace detail
