@@ -1,4 +1,4 @@
-/* CosmicTiger - typed primordial boundary regression; GPL-2.0-or-later. */
+/* CosmicTiger - typed primordial boundary regression; BSL-1.0. */
 #include <cmath>
 #include <iostream>
 #include <limits>

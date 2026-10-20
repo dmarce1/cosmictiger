@@ -1,0 +1,80 @@
+COSMICTIGER OUTPUT INVENTORY (source audit, 2026-10-20)
+
+Scope: every named output writer found in the current CosmicTiger simulation,
+its built-in run.test diagnostics, and its shipped C++ conversion/export tools.
+Silo products and checkpoint contents/directories/aliases are excluded. Python
+analysis/campaign scripts and build/test infrastructure are outside this scope.
+This inventories possible outputs, not files produced by every run or deleted
+historical implementations. Source references use function names so changes to
+copyright headers and terminal formatting do not invalidate them.
+
+Location rules:
+- Ordinary runtime names below are relative to output.directory. Default is ./output/<run.scenario>. outputPath creates parent directories. src/io/output.cpp (outputPath); src/core/options.cpp (processOptions).
+- Built-in run.test mode bypasses output.directory for outputPath names, so they use the process working directory. Absolute paths stay absolute. src/io/output.cpp (outputPath).
+- Lightcone names are relative to lightcone.directory, default output.directory + /lightcone. src/core/options.cpp (processOptions).
+- stack_trace.txt defaults to the working directory before options are installed and in standalone utilities; setOptions changes it to outputPath("stack_trace.txt"). src/core/assert.cpp (stackTraceOutputPath / setStackTraceOutputPath); src/core/options.cpp (setOptions).
+- N = output/coarse-step number; R = HPX rank; E = lightcone epoch.
+
+ORDINARY RUNTIME FILES
+Pattern | Trigger | Purpose / mode | Writer source
+soft.txt | successful startup, before scenario/test dispatch | gravity softening-kernel samples r,potential,force; overwrite | src/main.cpp (hpx_main)
+ewald.txt | successful startup after Ewald initialization; checkpointState shortcut can bypass | Ewald Green-function expansion along x; overwrite | src/main.cpp (hpx_main)
+maxmem.txt | memory monitor once running >=1 second, when peak RSS increases | maximum resident memory across ranks in GiB; overwrite | src/core/memused.cpp (memuseDaemon / startMemuseDaemon)
+progress.txt | every integration iteration | fixed scenarios: iteration,time,dt,min rung,max rung; cosmology/glass/plummer: tabular runtime/scale/redshift/timestep/performance; append | src/core/scenario_driver.cpp (runFixedScenario); src/core/driver.cpp (driver)
+energy.dat | fixed-time scenarios, synchronized/full evaluations | time,momentum,kinetic/thermal/potential/total energy,relative energy error; append | src/core/scenario_driver.cpp (detail::writeScenarioDiagnostics)
+rho.dat | fixed-time scenarios, synchronized/full evaluations | time and maximum gas density; append | src/core/scenario_driver.cpp (detail::writeScenarioDiagnostics)
+timestep.txt | SPH step when hydro.enabled | time,rung,inverse sound/viscosity/acceleration timestep,limiting criterion; append | src/core/driver.cpp (sphStep2)
+time.txt | fresh cosmology/glass/plummer driver initialization, not checkpoint restart | planned coarse-step/cosmic-time/conformal-time/scale/redshift table; overwrite | src/core/driver.cpp (outputTimeFile)
+energy.txt | cosmology/glass/plummer driver, minimum rung <= 0 | time,scale,momentum,energies,error,glass-convergence diagnostic; append | src/core/driver.cpp (driver)
+profile.txt | non-final cosmology/glass/plummer iterations reaching profilerOutput | aggregate named phase timings and percentages; overwrite | src/core/profiler.cpp (profilerOutput); src/core/driver.cpp (driver)
+buckets.txt | completion of cosmology/glass/plummer driver | bucket size and timing accumulators; append | src/core/driver.cpp (driver)
+power.dat | cosmological initial-condition power calculation | native Einstein-Boltzmann P_cb table: k,matter power,baryon power; overwrite | src/cosmology/initialize.cpp (computePowerSpectrum)
+power.N.txt | analysis.power=true, synchronized cosmology/glass/plummer steps | measured power spectrum with lower/central/upper estimates and shot noise; overwrite | src/core/driver.cpp (doPowerSpectrum)
+glass.bin | glass scenario/createGlass convergence and end of driver | particle-side count and particle coordinates for reusable glass load; binary overwrite | src/scenarios/glass.cpp (scenarios::saveGlass); src/core/driver.cpp (driver)
+sod.txt | completed full-duration Sod scenario (not early iteration cutoff), gas particles present | sampled density/pressure against exact Sod solution; overwrite | src/scenarios/sod.cpp (scenarios::detail::finishSod); src/core/scenario_driver.cpp (runFixedScenario)
+blast.txt | completed full-duration blast scenario (not early iteration cutoff), gas particles present | sampled density against Sedov solution; overwrite | src/scenarios/blast.cpp (scenarios::detail::finishBlast); src/core/scenario_driver.cpp (runFixedScenario)
+view.N.dat | analysis.views=true, synchronized cosmology/glass/plummer steps | binary all-sky HEALPix projection with nside,npix,values,cycle,time; overwrite | src/io/view.cpp (outputView); src/core/driver.cpp (driver)
+stack_trace.txt | assertion failure or registered fatal signal | condition/rank/stack trace; append | src/core/assert.cpp (cosmictigerAssert); src/core/stack_trace.cpp (handler)
+
+HALO CATALOGUES (analysis.groups=true; synchronized cosmology/glass/plummer steps)
+groups.N/groups.dat | snapshot header | box length,time,number,scale; binary overwrite | src/analysis/groups.cpp (groupsSave)
+groups.N/groups.N.R.dat | per-rank FOF catalogue | group records and particle overlap/parent data; binary overwrite | src/analysis/groups.cpp (groupsSave)
+groups.N/rockstar.R.dat | per-rank ROCKSTAR catalogue | native-layout halo records; binary overwrite | src/analysis/groups.cpp (groupsSave); src/analysis/rockstar_catalogue.cpp (rockstarWriteCatalogue)
+groups.N/rockstar.R.dat.format | successful ROCKSTAR write | encoding version,half-float representation,record size/count,byte order; atomic rename | src/analysis/rockstar_catalogue.cpp (rockstarWriteCatalogue)
+groups.N/rockstar_hosts.R.dat | per-rank ROCKSTAR host history | halo-to-host IDs; text overwrite | src/analysis/groups.cpp (groupsSave)
+groups.N/rockstar_descendants.dat | all ranks finish | previous halo ID,descendant ID,overlap count; text overwrite | src/analysis/groups.cpp (groupsSave)
+groups.N/rockstar_hosts.complete | complete distributed catalogue publication | version,rank count,group count; atomic rename | src/analysis/groups.cpp (groupsSave)
+groups.N/rockstar.R.dat.format.tmp | temporary during format publication | renamed to .format on success; can remain after interruption | src/analysis/rockstar_catalogue.cpp (rockstarWriteCatalogue)
+groups.N/rockstar_hosts.complete.tmp | temporary during completion publication | renamed to .complete on success; can remain after interruption | src/analysis/groups.cpp (groupsSave)
+
+LIGHTCONE PRODUCTS (under lightcone.directory, lightcone.enabled=true)
+lc.healpix.E.R | nonempty particle-crossing batch | binary HEALPix nside,pixel interval,weights; overwritten for that epoch/rank | src/analysis/lightcone.cpp (detail::lcAddParticleEntries)
+lc.groups.E.R | flushed lightcone groups | native-layout ROCKSTAR halo catalogue; binary overwrite | src/analysis/lightcone.cpp (lcParts2groups)
+lc.groups.E.R.format | successful catalogue write | same format sidecar as snapshot ROCKSTAR | src/analysis/rockstar_catalogue.cpp (rockstarWriteCatalogue)
+lc.groups.E.R.format.tmp | temporary during sidecar publication | renamed to .format; can remain after interruption | src/analysis/rockstar_catalogue.cpp (rockstarWriteCatalogue)
+
+BUILT-IN TEST/DIAGNOSTIC OUTPUTS (working directory unless stated)
+results.txt | run.test=kick | locality count,total test time,FLOPS/locality; append | tests/test.cpp (kickTest)
+force_accuracy.txt | run.test=force | opening angle and analytic force error; append | tests/test.cpp (forceTest)
+buckets.txt | run.test=buckets | bucket-size timing scan; append (different columns from production buckets.txt) | tests/test.cpp (bucketTest)
+linear_growth_metadata.json | run.test=linearGrowth | configuration/baseline metadata; overwrite | tests/linear_growth.cpp (detail::writeLinearMetadata)
+linear_growth_particles_initial.csv | run.test=linearGrowth and COSMICTIGER_LINEAR_GROWTH_PARTICLE_OUTPUT=1 | initial particle positions/forces; overwrite | tests/linear_growth.cpp (detail::writeLinearInitialParticles)
+linear_growth_response.csv | run.test=linearGrowth unless COSMICTIGER_LINEAR_GROWTH_SKIP_RESPONSE=1 | mode response matrix; overwrite | tests/linear_growth.cpp (detail::measureLinearResponse)
+linear_growth_response_particles.csv | response calculation plus COSMICTIGER_LINEAR_GROWTH_PARTICLE_OUTPUT=1 | per-particle paired response; overwrite | tests/linear_growth.cpp (detail::measureLinearResponse)
+linear_growth_evolution.csv | nonempty COSMICTIGER_LINEAR_GROWTH_EVOLVE_FILE with run.test=linearGrowth | evolved mode projections; overwrite | tests/linear_growth.cpp (detail::evolveLinearModes)
+linear_growth_particles.csv | evolution plus COSMICTIGER_LINEAR_GROWTH_PARTICLE_OUTPUT=1 | per-particle trajectory; overwrite | tests/linear_growth.cpp (detail::evolveLinearModes)
+linear_growth_baseline_evolution.csv | evolution plus COSMICTIGER_LINEAR_GROWTH_PAIRED=1 | baseline/even trajectory diagnostics; overwrite | tests/linear_growth.cpp (detail::evolveLinearModes)
+linear_growth_density.csv | evolution plus COSMICTIGER_LINEAR_GROWTH_PAIRED=1 | paired density Fourier coefficients; overwrite | tests/linear_growth.cpp (detail::evolveLinearModes)
+<system temporary dir>/cosmictiger_rockstar_roundtrip_<random>_<random>/catalogue.dat{,.format,.format.tmp} | run.test=rockstar | temporary catalogue tests; directory normally removed by destructor | tests/rockstar.cpp (detail::RockstarCatalogueDirectory / detail::checkRockstarCatalogueRoundtrip)
+Catalogue and lightcone tests also exercise ordinary groups.N/* and lc.* writers above, under their test directories; groupsCatalogue cleans its temporary directory after success. The compiled halo_catalog_fixture test executable writes the same groups.dat/rockstar.R.dat/.format/rockstar_hosts.R.dat/rockstar_descendants.dat/rockstar_hosts.complete families into its caller-specified directory. Source: tests/groups_catalogue.cpp (groupsCatalogueTest); tests/analysis_backends.cpp (detail::analysisWriteLightconeCatalogue); tests/halo_catalog_fixture.cpp (detail::writeFixture).
+
+DORMANT WRITERS (present in source, no current call sites)
+buckets.<openingAngle formatted %.2f>.txt | flushTimings helper; no caller found | particle throughput by bucket size; overwrite | src/core/driver.cpp (flushTimings)
+Caller-supplied glass filename | particlesSaveGlass helper; no caller found | legacy per-species glass binary; overwrite | src/particles/particles.cpp (particlesSaveGlass)
+
+SHIPPED TOOLS / EXCLUSIONS
+- halo_catalog_export writes JSONL to stdout only (src/tools/halo_catalog_export.cpp (detail::exportSnapshot)); no fixed output filename. Shell redirection is caller-controlled.
+- groups2halofunc writes mass-function columns to stdout only (src/tools/groups2halofunc.cpp (main)); no fixed output filename.
+- healpix2silo writes only Silo (excluded).
+- Anonymous tmpfile scratch storage is used in serialization/regression helpers (src/sph/sph_particles.cpp (sphCheckpointTest) src/io/checkpoint.cpp (checkpointStateTest) tests/compression.cpp). These are not named retained outputs.
+- Build outputs, generated headers, compiler logs, CTest files, Python analysis/campaign reports, browser viewer exports, external HPX/CUDA/MPI profiling requested by environment, core dumps, and shell-redirection filenames are outside simulation-owned runtime output. They depend on the invoked tool and user-specified paths; not implicitly created by a normal cosmictiger run.

@@ -2,19 +2,8 @@
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
 
- This program is free software; you can redistribute it and/or
- modify it under the terms of the GNU General Public License
- as published by the Free Software Foundation; either version 2
- of the License, or (at your option) any later version.
-
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
-
- You should have received a copy of the GNU General Public License
- along with this program; if not, write to the Free Software
- Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ Distributed under the Boost Software License, Version 1.0.
+ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
 #include <cmath>
@@ -24,6 +13,7 @@
 #include <utility>
 
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/scenarios/polytropic_star.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
@@ -166,7 +156,7 @@ ScenarioPlan initializePolytropicStar() {
     double const r0 = detail::kRadiusScale;
     int const nValue = totalNumberOfParticles;
     auto opts = getOptions();
-    PRINT("Making star\n");
+    PRINT("  Initializing: polytropic star and particle shells\n");
     opts.initial.gasMass = 203. / nValue / (r0 * r0 * r0) / 5.99071;
     double const m = opts.initial.gasMass;
     setOptions(opts);
@@ -199,7 +189,8 @@ ScenarioPlan initializePolytropicStar() {
                     x[dim].resize(nValue);
                 }
                 xValue.push_back(std::move(x));
-                printf("%i %e %i %e\n", nr, r, nValue, dr1);
+                terminal::detailPrint(
+                    "Star shell %i: radius=%e particles=%i thickness=%e\n", nr, r, nValue, dr1);
                 ntot += nValue;
                 radius.push_back(r);
                 r += 0.5 * dr1;
@@ -207,7 +198,7 @@ ScenarioPlan initializePolytropicStar() {
             }
         }
     } while (r < rmax);
-    printf("Ntot = %i\n", ntot);
+    terminal::detailPrint("Star particles: %i\n", ntot);
     solveSphereSurfaceProblem(xValue);
     for (int i = 0; i < xValue.size(); i++) {
         double const d = rho(radius[i] * r0);
@@ -231,9 +222,7 @@ ScenarioPlan initializePolytropicStar() {
         }
     }
     double const tdyn = sqrt(1.0 / (opts.gravity.gm * rho0));
-    PRINT("************************************\n");
-    PRINT("tdyn = %e\n", 1.0 / sqrt(opts.gravity.gm * rho0));
-    PRINT("************************************\n");
+    terminal::detailPrint("Star dynamical time: %e (code units)\n", tdyn);
 
     if (sphParticlesSize() == 0) {
         throw std::runtime_error("The polytropic star scenario produced no gas particles; "

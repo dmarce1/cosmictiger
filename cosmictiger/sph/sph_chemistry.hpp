@@ -1,4 +1,4 @@
-/* CosmicTiger - primordial chemistry/SPH boundary; GPL-2.0-or-later. */
+/* CosmicTiger - primordial chemistry/SPH boundary; BSL-1.0. */
 #pragma once
 
 #include <array>

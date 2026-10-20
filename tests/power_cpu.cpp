@@ -1,7 +1,7 @@
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026 Dominic C. Marcello
- SPDX-License-Identifier: GPL-2.0-or-later
+ SPDX-License-Identifier: BSL-1.0
  */
 
 #include <cstdio>

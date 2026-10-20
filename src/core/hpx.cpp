@@ -2,19 +2,8 @@
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2021  Dominic C. Marcello
 
- This program is free software; you can redistribute it and/or
- modify it under the terms of the GNU General Public License
- as published by the Free Software Foundation; either version 2
- of the License, or (at your option) any later version.
-
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
-
- You should have received a copy of the GNU General Public License
- along with this program; if not, write to the Free Software
- Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ Distributed under the Boost Software License, Version 1.0.
+ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
 #include <set>
@@ -22,6 +11,7 @@
 
 #include <cosmictiger/core/containers.hpp>
 #include <cosmictiger/core/hpx.hpp>
+#include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/cuda/cuda.hpp>
 
 static int rank;
@@ -53,7 +43,7 @@ int hpxHardwareConcurrency() {
         threads = 1;
     }
     if (firstCall) {
-        PRINT("Detected a hardware concurrency of %i\n", threads);
+        terminal::detailPrint("Detected a hardware concurrency of %i\n", threads);
         firstCall = false;
     }
     return threads;
@@ -120,9 +110,9 @@ static bool detectHyperthreading() {
         fread(&c, sizeof(char), 1, fp);
         auto rc = c == '1';
         if (rc) {
-            PRINT("Hyperthreading detected\n");
+            terminal::detailPrint("Hyperthreading detected\n");
         } else {
-            PRINT("Hyperthreading NOT detected\n");
+            terminal::detailPrint("Hyperthreading NOT detected\n");
         }
         return rc;
     } else {
@@ -153,5 +143,5 @@ static void detectProcessesPerNode() {
         }
     }
     ppnode = localities.size() / names.size();
-    PRINT("Detected %i processes per node\n", ppnode);
+    terminal::detailPrint("Detected %i processes per node\n", ppnode);
 }

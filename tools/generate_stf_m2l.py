@@ -2,19 +2,8 @@
 # CosmicTiger - A cosmological N-Body code
 # Copyright (C) 2026  Dominic C. Marcello
 #
-# This program is free software; you can redistribute it and/or
-# modify it under the terms of the GNU General Public License
-# as published by the Free Software Foundation; either version 2
-# of the License, or (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+# Distributed under the Boost Software License, Version 1.0.
+# See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
 
 # Imported from OctotigerII; distributed under the Boost Software License, Version 1.0.
 """Generate symmetric trace-free Cartesian gravity operators and Ewald derivatives.
@@ -34,7 +23,7 @@ Imported from dmarce1/experimental commit
 CPU SIMD and CUDA emission, point-to-moment/local-to-point operators, and
 harmonic Ewald derivative contractions. See tools/stf/LICENSE. The periodic
 Ewald derivative emitter in stf/stf_ewald.py comes from CosmicTiger's former
-C++ generator and retains its GPL license.
+C++ generator and is distributed under the Boost Software License, Version 1.0.
 """
 from __future__ import annotations
 import argparse

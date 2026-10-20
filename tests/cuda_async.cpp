@@ -1,4 +1,4 @@
-/* CosmicTiger - HPX CUDA completion regressions; GPL-2.0-or-later. */
+/* CosmicTiger - HPX CUDA completion regressions; BSL-1.0. */
 
 #include <atomic>
 #include <chrono>

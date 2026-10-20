@@ -1,23 +1,12 @@
 # CosmicTiger - A cosmological N-Body code
 # Copyright (C) 2026  Dominic C. Marcello
 #
-# This program is free software; you can redistribute it and/or
-# modify it under the terms of the GNU General Public License
-# as published by the Free Software Foundation; either version 2
-# of the License, or (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+# Distributed under the Boost Software License, Version 1.0.
+# See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
 
 """Emit the periodic Ewald derivatives alongside the STF gravity operators.
 
-This module is a port of CosmicTiger's GPL-licensed fmm_kernel_codegen.cpp;
+This module is a port of CosmicTiger's former fmm_kernel_codegen.cpp;
 it does not derive from the Boost-licensed STF algebra. Ewald uses the legacy
 rank-packed symmetric/traceless tensor layout, including its quadratic trace
 component, rather than the STF generator's degree-packed harmonic layout.

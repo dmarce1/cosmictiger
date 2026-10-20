@@ -2,19 +2,8 @@
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
 
- This program is free software; you can redistribute it and/or
- modify it under the terms of the GNU General Public License
- as published by the Free Software Foundation; either version 2
- of the License, or (at your option) any later version.
-
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
-
- You should have received a copy of the GNU General Public License
- along with this program; if not, write to the Free Software
- Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ Distributed under the Boost Software License, Version 1.0.
+ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
 #include <array>
@@ -36,6 +25,7 @@
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/profiler.hpp>
+#include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/io/checkpoint.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/kernel.hpp>
@@ -764,7 +754,7 @@ void writeCheckpoint(DriverParameters params) {
     auto const directory = detail::checkpointDirectory(params.iter);
     auto const stagingDirectory = detail::checkpointStagingDirectory(params.iter);
     if (hpxRank() == 0) {
-        PRINT("Writing checkpoint %s\n", directory.c_str());
+        terminal::detailPrint("Writing checkpoint %s\n", directory.c_str());
         if (detail::fs::exists(directory)) {
             THROW_ERROR("Refusing to replace existing checkpoint %s\n", directory.c_str());
         }
@@ -802,7 +792,7 @@ void writeCheckpoint(DriverParameters params) {
         }
         detail::fs::rename(stagingDirectory, directory);
         detail::syncDirectory(directory.has_parent_path() ? directory.parent_path() : ".");
-        PRINT("Done writing checkpoint %s\n", directory.c_str());
+        PRINT("  Checkpoint saved: %s\n", directory.c_str());
     }
     profilerExit();
 }

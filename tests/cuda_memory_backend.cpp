@@ -1,4 +1,4 @@
-/* CosmicTiger - standalone CUDA regression support; GPL-2.0-or-later. */
+/* CosmicTiger - standalone CUDA regression support; BSL-1.0. */
 #include <new>
 
 #include <cuda_runtime.h>

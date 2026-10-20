@@ -1,4 +1,4 @@
-/* CosmicTiger - primordial CPU batching; GPL-2.0-or-later. */
+/* CosmicTiger - primordial CPU batching; BSL-1.0. */
 #include <algorithm>
 #include <atomic>
 #include <exception>

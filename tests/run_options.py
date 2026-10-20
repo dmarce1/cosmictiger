@@ -1,19 +1,8 @@
 # CosmicTiger - A cosmological N-Body code
 # Copyright (C) 2026  Dominic C. Marcello
 #
-# This program is free software; you can redistribute it and/or
-# modify it under the terms of the GNU General Public License
-# as published by the Free Software Foundation; either version 2
-# of the License, or (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+# Distributed under the Boost Software License, Version 1.0.
+# See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
 
 """Check the grouped CLI, INI precedence, and SPH parameter rejection."""
 
@@ -53,7 +42,7 @@ def main():
 
     help_text = run("help", ["--help"])
     option_names = set(re.findall(r"^\s+--([A-Za-z][A-Za-z0-9_.]*)", help_text, re.MULTILINE))
-    required = {"help", "configuration", "run.scenario", "run.endTime",
+    required = {"help", "configuration", "run.scenario", "run.endTime", "run.verbose",
                 "initial.particlesPerDimension", "compute.cuda",
                 "hydro.enabled", "hydro.viscosityAlpha", "hydro.viscosityBeta",
                 "hydro.viscosityEpsilon", "hydro.neighborNumber", "gravity.enabled",
@@ -117,6 +106,17 @@ mapSize = 8
 
     metadata_options = ["--run.test=checkpointState", "--compute.cuda=false",
                         "--hydro.enabled=false", "--initial.particlesPerDimension=8"]
+
+    verbose_config = args.workdir / "verbose.ini"
+    verbose_config.write_text("[run]\nverbose = true\n")
+    verbose_output = run("verbose_ini", metadata_options + [
+        f"--configuration={verbose_config.resolve()}"])
+    if not re.search(r"^run\.verbose\s*:\s*T\s*$", verbose_output, re.MULTILINE):
+        raise RuntimeError("INI run.verbose was not applied")
+    quiet_output = run("verbose_cli_override", metadata_options + [
+        f"--configuration={verbose_config.resolve()}", "--run.verbose=false"])
+    if not re.search(r"^run\.verbose\s*:\s*F\s*$", quiet_output, re.MULTILINE):
+        raise RuntimeError("CLI run.verbose did not override INI")
 
     # Selections survive option setup and checkpoints independently.
     for gravity_family, gravity_degree, hydro_family, hydro_degree in (

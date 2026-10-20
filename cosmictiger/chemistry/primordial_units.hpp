@@ -1,4 +1,4 @@
-/* CosmicTiger - primordial chemistry host units; GPL-2.0-or-later. */
+/* CosmicTiger - primordial chemistry host units; BSL-1.0. */
 #pragma once
 
 #include <cmath>

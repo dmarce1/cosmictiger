@@ -1,4 +1,4 @@
-/* CosmicTiger - CPU execution regression; GPL-2.0-or-later. */
+/* CosmicTiger - CPU execution regression; BSL-1.0. */
 #include <cstdio>
 #include <cstdlib>
 

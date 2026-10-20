@@ -1,4 +1,4 @@
-/* CosmicTiger - bounded CPU/CUDA lightcone parity; GPL-2.0-or-later. */
+/* CosmicTiger - bounded CPU/CUDA lightcone parity; BSL-1.0. */
 
 #include <algorithm>
 #include <array>

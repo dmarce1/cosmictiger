@@ -1,4 +1,4 @@
-/* CosmicTiger - primordial thermochemistry; GPL-2.0-or-later. */
+/* CosmicTiger - primordial thermochemistry; BSL-1.0. */
 #pragma once
 
 #include <cmath>

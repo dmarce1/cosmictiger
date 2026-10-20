@@ -2,19 +2,8 @@
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
 
- This program is free software; you can redistribute it and/or
- modify it under the terms of the GNU General Public License
- as published by the Free Software Foundation; either version 2
- of the License, or (at your option) any later version.
-
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
-
- You should have received a copy of the GNU General Public License
- along with this program; if not, write to the Free Software
- Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ Distributed under the Boost Software License, Version 1.0.
+ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
 #include <algorithm>
@@ -31,6 +20,7 @@
 
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/cosmology/boltzmann.hpp>
 #include <cosmictiger/cosmology/cosmology.hpp>
 #include <cosmictiger/cosmology/fft.hpp>
@@ -115,11 +105,12 @@ PowerSpectrumFunction computePowerSpectrum() {
     params.neff = options.cosmology.nEff;
     params.theta = options.cosmology.thetaCmb;
     params.hubble = options.cosmology.hubble;
-    PRINT("Computing zero order universe...");
-    fflush(stdout);
+    if (hpxRank() == 0) {
+        PRINT("  Initializing: cosmological background and linear power spectrum\n");
+    }
     ZeroOrderUniverse universe;
     createNativeZeroOrderUniverse(&universe, std::max(1.1, 1.1 * initialScale), params);
-    PRINT("Done.\n");
+    terminal::detailPrint("Cosmological background ready\n");
 
     auto const [fundamental, corner] = initialWavenumberRange();
     double const minimum = std::min(1.0e-5 * params.hubble, 0.95 * fundamental);
@@ -184,7 +175,8 @@ PowerSpectrumFunction computePowerSpectrum() {
     spectrum.normalizationFactor =
         linear_power::normalization(todaySpectrum, options.cosmology.sigma8, params.hubble);
     if (hpxRank() == 0) {
-        PRINT("Internal P_cb: sigma8(z=0) = %.8g, initial z = %.8g, normalization = %.8e\n",
+        terminal::detailPrint(
+            "Internal P_cb: sigma8(z=0) = %.8g, initial z = %.8g, normalization = %.8e\n",
             options.cosmology.sigma8, options.cosmology.startRedshift,
             spectrum.normalizationFactor);
         std::ofstream output(outputPath("power.dat"));
@@ -219,16 +211,16 @@ void initialize(double z0) {
     float const d2Value = -3.f / 7.f;
     float const f2 = 2.f * std::pow(om, 6.f / 11.f);
     float const prefac2 = f2 * hValue * a0 * a0;
-    PRINT("D2 = %e\n", d2Value);
-    PRINT("Linear velocity factor = %e\n", linearVelocityFactor / a0);
-    PRINT("prefac2 = %e\n", prefac2 / a0);
+    terminal::detailPrint("D2 = %e\n", d2Value);
+    terminal::detailPrint("Linear velocity factor = %e\n", linearVelocityFactor / a0);
+    terminal::detailPrint("prefac2 = %e\n", prefac2 / a0);
     for (int dim = 0; dim < NDIM; dim++) {
         fft3dInit(n);
         zeldovichBegin(dim, NDIM);
         //		fft3d_force_real();
         fft3dInvExecute();
         float const dxmax = zeldovichEnd(dim, dim == 0, 1.0f, 0.0f);
-        PRINT("dxmax = %e\n", dxmax);
+        terminal::detailPrint("Initial %c displacement maximum: %e\n", 'x' + dim, dxmax);
         fft3dDestroy();
         fft3dInit(n);
         zeldovichBegin(dim, NDIM, true);
@@ -239,47 +231,47 @@ void initialize(double z0) {
     if (getOptions().initial.twoLpt) {
         twolptInit();
 
-        PRINT("2LPT phase 1\n");
+        terminal::detailPrint("2LPT phase 1\n");
         twolpt(1, 1);
         twolptPhase(0);
         fft3dDestroy();
 
-        PRINT("2LPT phase 2\n");
+        terminal::detailPrint("2LPT phase 2\n");
         twolpt(2, 2);
         twolptPhase(1);
         fft3dDestroy();
 
-        PRINT("2LPT phase 3\n");
+        terminal::detailPrint("2LPT phase 3\n");
         twolpt(0, 0);
         twolptPhase(2);
         fft3dDestroy();
 
-        PRINT("2LPT phase 4\n");
+        terminal::detailPrint("2LPT phase 4\n");
         twolpt(2, 2);
         twolptPhase(3);
         fft3dDestroy();
 
-        PRINT("2LPT phase 5\n");
+        terminal::detailPrint("2LPT phase 5\n");
         twolpt(0, 0);
         twolptPhase(4);
         fft3dDestroy();
 
-        PRINT("2LPT phase 6\n");
+        terminal::detailPrint("2LPT phase 6\n");
         twolpt(1, 1);
         twolptPhase(5);
         fft3dDestroy();
 
-        PRINT("2LPT phase 7\n");
+        terminal::detailPrint("2LPT phase 7\n");
         twolpt(0, 1);
         twolptPhase(6);
         fft3dDestroy();
 
-        PRINT("2LPT phase 8\n");
+        terminal::detailPrint("2LPT phase 8\n");
         twolpt(0, 2);
         twolptPhase(7);
         fft3dDestroy();
 
-        PRINT("2LPT phase 9\n");
+        terminal::detailPrint("2LPT phase 9\n");
         twolpt(1, 2);
         twolptPhase(8);
         fft3dDestroy();
@@ -291,11 +283,12 @@ void initialize(double z0) {
         fft3dDestroy();
 
         for (int dim = 0; dim < NDIM; dim++) {
-            PRINT("Computing 2LPT correction to %c positions and velocities\n", 'x' + dim);
+            terminal::detailPrint(
+                "Computing 2LPT correction to %c positions and velocities\n", 'x' + dim);
             twolptCorrection2(dim);
             float dxmax = zeldovichEnd(dim, false, -d2Value, prefac2);
             fft3dDestroy();
-            PRINT("%e\n", dxmax);
+            terminal::detailPrint("2LPT %c displacement maximum: %e\n", 'x' + dim, dxmax);
         }
         twolptDestroy();
     }
@@ -685,7 +678,7 @@ static void initX0() {
                 particlesPerDimension, glassParticlesPerDimension);
         }
         int nf = particlesPerDimension / glassParticlesPerDimension;
-        PRINT("glass factor = %i\n", nf);
+        terminal::detailPrint("glass factor = %i\n", nf);
         size_t numberOfGlassParticles =
             sqr(glassParticlesPerDimension) * glassParticlesPerDimension;
         static Vector<Fixed32> x(numberOfGlassParticles);

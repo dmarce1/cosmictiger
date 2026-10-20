@@ -1,5 +1,14 @@
 # CosmicTiger - A Cosmological N-Body Code
 
+## License
+
+CosmicTiger's original code is distributed under the
+[Boost Software License 1.0](LICENSE), the license used by HPX.
+Bundled and adapted third-party code retains its own terms and attribution;
+see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The current application
+includes and links GPL-licensed components, so this change does not make the
+complete executable a Boost-only distribution.
+
 ## Command-line options
 
 Application options use `groupName.optionName` with camelCase names, except for
@@ -8,7 +17,7 @@ for all options and defaults. HPX's own options retain their `--hpx:*` syntax.
 
 | Group | Controls |
 | --- | --- |
-| `run` | Test selection, iteration limit, time-step hierarchy |
+| `run` | Test selection, iteration limit, time-step hierarchy, verbose diagnostics |
 | `compute` | CUDA and tree bucket size |
 | `checkpoint` | Checkpoint interval and restart index |
 | `initial` | Particle lattice, glass/Plummer/Gadget input, initial power spectrum |
@@ -235,6 +244,32 @@ available to developer regressions; physical scenarios require the new metadata.
 Rank payloads still use native
 binary structures, so moving checkpoints between different architectures or
 compiler ABIs is not guaranteed.
+
+## Terminal output
+
+Normal runs show the CosmicTiger banner, a short configuration summary, and an
+aligned progress table. The table repeats its column labels every 25 rows and
+starts with a fresh header after restart. Fixed-duration scenarios report code
+time, timestep, completion percentage, minimum/maximum rung, total wall time,
+and time spent on the current step. Cosmological runs show redshift and scale
+factor alongside timestep and timing information. Warnings and errors remain
+visible. Plain-text output also stays readable when redirected to a log.
+
+Set `--run.verbose=true` to print the complete resolved options and detailed
+runtime diagnostics, including tree, gravity, SPH, and CUDA setup information.
+The default is `false`. The equivalent INI setting is:
+
+```ini
+[run]
+verbose = true
+```
+
+The tiger and sky artwork is copied exactly from
+[`dmarce1/experimental` at `7ba8f1829fdede7348a1418b7cb36c0e7a955302`](https://github.com/dmarce1/experimental/blob/7ba8f1829fdede7348a1418b7cb36c0e7a955302/cosmictiger/startup.hpp).
+Its progress display also supplies the aligned-column and repeating-header
+pattern used here. See the [output-file inventory](docs/output_files.txt) for
+runtime diagnostics, analysis products, and tool outputs other than Silo and
+checkpoints, including their names and the conditions that create them.
 
 ## Build
 

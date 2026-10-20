@@ -5,7 +5,9 @@
 #include <stdexcept>
 
 #include <cosmictiger/core/driver.hpp>
+#include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/core/timer.hpp>
 #include <cosmictiger/gravity/kick_workspace.hpp>
 #include <cosmictiger/io/checkpoint.hpp>
@@ -92,6 +94,11 @@ void runFixedScenario() {
     runtime.start();
     double const restoredRuntime = state.runtime;
     int iterations = 0;
+    size_t progressRows = 0;
+    if (hpxRank() == 0) {
+        terminal::section(definition.name);
+        PRINT("  Time and dt are in code units; wall time includes previous runs on restart.\n");
+    }
     int lastCheckpoint = restarting ? state.iter : -1;
     auto const checkpoint = [&]() {
         auto const stageOptions = getOptions();
@@ -118,6 +125,8 @@ void runFixedScenario() {
         setOptions(stageOptions);
         double const baseTimestep = duration / baseOptions.run.numberOfSteps;
         while (state.tau < stageEnd - tolerance && iterations < baseOptions.run.maxIterations) {
+            Timer stepTimer;
+            stepTimer.start();
             int const minimumRung = minRung(state.itime);
             bool const fullEvaluation = minimumRung == 0;
             if (fullEvaluation) {
@@ -154,13 +163,25 @@ void runFixedScenario() {
             fprintf(progress, "%i %e %e %i %i\n", state.iter, state.tau, timestep, minimumRung,
                 state.maxRung);
             fclose(progress);
-            PRINT("Scenario %s: step=%i time=%e dt=%e rung=%i\n", definition.name, state.iter,
-                state.tau, timestep, state.maxRung);
             checkpointTimer.stop();
             if (checkpointTimer.read() > baseOptions.checkpoint.intervalSeconds) {
                 checkpoint();
             } else {
                 checkpointTimer.start();
+            }
+            stepTimer.stop();
+            if (hpxRank() == 0) {
+                runtime.stop();
+                double const displayedRuntime = restoredRuntime + runtime.read();
+                runtime.start();
+                if (progressRows % 25 == 0) {
+                    PRINT("\n%8s %13s %13s %7s %13s %10s %10s\n", "Step", "Time", "dt", "Done %",
+                        "Rung(min/max)", "Wall[s]", "Step[s]");
+                }
+                PRINT("%8i %13.6e %13.6e %7.2f %6i/%-6i %10.2f %10.3f\n", state.iter, state.tau,
+                    timestep, std::clamp(100.0 * state.tau / duration, 0.0, 100.0), minimumRung,
+                    state.maxRung, displayedRuntime, stepTimer.read());
+                progressRows++;
             }
         }
         if (iterations >= baseOptions.run.maxIterations) {
@@ -180,4 +201,11 @@ void runFixedScenario() {
         plan.finish(state.tau);
     }
     KickWorkspace::clearBuffers();
+    runtime.stop();
+    if (hpxRank() == 0) {
+        bool const finished = state.tau >= duration * (1.0 - 1.0e-12);
+        PRINT("\n  %s: %s at t=%.6e after %i steps (%.2f s total wall time).\n", definition.name,
+            finished ? "finished" : "paused at the iteration limit", state.tau, state.iter,
+            restoredRuntime + runtime.read());
+    }
 }

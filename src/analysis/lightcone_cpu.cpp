@@ -1,4 +1,4 @@
-/* CosmicTiger - CPU lightcone friends-of-friends; GPL-2.0-or-later. */
+/* CosmicTiger - CPU lightcone friends-of-friends; BSL-1.0. */
 
 #include <algorithm>
 #include <numeric>

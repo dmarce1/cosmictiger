@@ -1,4 +1,4 @@
-/* CosmicTiger - CPU analysis integration regression; GPL-2.0-or-later. */
+/* CosmicTiger - CPU analysis integration regression; BSL-1.0. */
 #include <algorithm>
 #include <bit>
 #include <cmath>

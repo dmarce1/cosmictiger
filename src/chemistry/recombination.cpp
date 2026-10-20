@@ -1,4 +1,5 @@
-/* CosmicTiger - homogeneous primordial recombination; GPL-2.0-or-later.
+/* CosmicTiger - homogeneous primordial recombination; BSL-1.0.
+ * See LICENSE_1_0.txt. The RECFAST attribution and terms below also apply.
  *
  * Effective-atom physics adapted from RECFAST 1.5.2, developed by Douglas Scott,
  * based on Seager, Sasselov & Scott (1999, 2000), Wong, Moss & Scott (2008),

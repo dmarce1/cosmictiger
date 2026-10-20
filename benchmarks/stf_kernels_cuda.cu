@@ -2,7 +2,7 @@
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026 Dominic C. Marcello
 
- Distributed under the GNU General Public License, version 2 or later.
+ Distributed under the Boost Software License, Version 1.0.
  */
 
 #include <cuda_runtime.h>

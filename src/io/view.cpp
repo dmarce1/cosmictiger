@@ -2,19 +2,8 @@
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
 
- This program is free software; you can redistribute it and/or
- modify it under the terms of the GNU General Public License
- as published by the Free Software Foundation; either version 2
- of the License, or (at your option) any later version.
-
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
-
- You should have received a copy of the GNU General Public License
- along with this program; if not, write to the Free Software
- Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ Distributed under the Boost Software License, Version 1.0.
+ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
 #include <atomic>
@@ -36,6 +25,7 @@
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/options_metadata.hpp>
+#include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/cosmology/cosmology.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/io/silo_spheres.hpp>
@@ -513,9 +503,9 @@ void viewOutputViews(int cycle, double a, bool force) {
     double const codeToEnergy = 1.;
     double const codeToDensity = 1.;
     for (int bi = 0; bi < viewBoxes.size(); bi++) {
-        PRINT("Outputing view for box (%e %e) (%e %e) (%e %e)\n", viewBoxes[bi].begin[XDIM],
-            viewBoxes[bi].end[XDIM], viewBoxes[bi].begin[YDIM], viewBoxes[bi].end[YDIM],
-            viewBoxes[bi].begin[ZDIM], viewBoxes[bi].end[ZDIM]);
+        terminal::detailPrint("Writing view for box (%e %e) (%e %e) (%e %e)\n",
+            viewBoxes[bi].begin[XDIM], viewBoxes[bi].end[XDIM], viewBoxes[bi].begin[YDIM],
+            viewBoxes[bi].end[YDIM], viewBoxes[bi].begin[ZDIM], viewBoxes[bi].end[ZDIM]);
         auto const filename = std::filesystem::path(getOptions().output.directory) /
             ("view." + std::to_string(bi) + "." + std::to_string(cycle) + ".silo");
         DBfile* db = DBCreateReal(filename.c_str(), DB_CLOBBER, DB_LOCAL, "Meshless", DB_PDB);
@@ -614,7 +604,9 @@ void viewConfigure() {
         outputPath(".");
     }
     if (!opts.output.silo) {
-        PRINT("Silo particle output: disabled (output.silo=false)\n");
+        if (terminal::verbose() || !opts.run.test.empty()) {
+            PRINT("Silo particle output: disabled (output.silo=false)\n");
+        }
         return;
     }
     std::error_code directoryError;
@@ -631,11 +623,16 @@ void viewConfigure() {
     viewBox.begin[ZDIM] = opts.output.zMin;
     viewBox.end[ZDIM] = opts.output.zMax;
     viewBoxes.push_back(viewBox);
-    PRINT("Silo particle output: x [%g, %g], y [%g, %g], z [%g, %g], every %d synchronized coarse "
-          "steps\n",
-        opts.output.xMin, opts.output.xMax, opts.output.yMin, opts.output.yMax, opts.output.zMin,
-        opts.output.zMax, opts.output.siloInterval);
-    PRINT("Silo particle output directory: %s\n", opts.output.directory.c_str());
+    if (terminal::verbose() || !opts.run.test.empty()) {
+        PRINT("Silo particle output: x [%g, %g], y [%g, %g], z [%g, %g], every %d synchronized "
+              "coarse "
+              "steps\n",
+            opts.output.xMin, opts.output.xMax, opts.output.yMin, opts.output.yMax,
+            opts.output.zMin, opts.output.zMax, opts.output.siloInterval);
+    }
+    if (terminal::verbose() || !opts.run.test.empty()) {
+        PRINT("Silo particle output directory: %s\n", opts.output.directory.c_str());
+    }
 }
 
 Vector<float> outputView(int number, double time) {

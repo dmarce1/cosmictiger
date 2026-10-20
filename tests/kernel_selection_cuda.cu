@@ -2,9 +2,8 @@
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026 Dominic C. Marcello
 
- This program is free software; you can redistribute it and/or modify it under
- the terms of the GNU General Public License, version 2 or any later version.
- This program is distributed without any warranty. See COPYING for details.
+ Distributed under the Boost Software License, Version 1.0.
+ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
 #include <algorithm>

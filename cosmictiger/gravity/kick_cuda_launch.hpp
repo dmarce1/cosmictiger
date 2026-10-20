@@ -2,19 +2,8 @@
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
 
- This program is free software; you can redistribute it and/or
- modify it under the terms of the GNU General Public License
- as published by the Free Software Foundation; either version 2
- of the License, or (at your option) any later version.
-
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
-
- You should have received a copy of the GNU General Public License
- along with this program; if not, write to the Free Software
- Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ Distributed under the Boost Software License, Version 1.0.
+ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
 #pragma once
@@ -27,6 +16,7 @@
 #include <stdexcept>
 #include <string>
 
+#include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/gravity/kick_cuda_kernel.hpp>
 
 namespace detail {
@@ -239,11 +229,12 @@ CudaKickArenaLayout kickSelectLayout() {
                 // residency below the achievable occupancy must be kept, not
                 // replaced by what the calculator says would fit.
                 layout.residency = std::min(residency, registerLimit);
-                PRINT("CUDA kick arena (FMM order %i): %i registers, %i static shared bytes, %i "
-                      "blocks/SM "
-                      "(register limit %i), budget %i, dynamic shared %i bytes: control %i, "
-                      "expansion %s, forces %s, particle tile %i (%s mass plane), multipole tile "
-                      "%i x %i bytes; list slab %i bytes per block (%i entries per list)\n",
+                terminal::detailPrint(
+                    "CUDA kick arena (FMM order %i): %i registers, %i static shared bytes, %i "
+                    "blocks/SM "
+                    "(register limit %i), budget %i, dynamic shared %i bytes: control %i, "
+                    "expansion %s, forces %s, particle tile %i (%s mass plane), multipole tile "
+                    "%i x %i bytes; list slab %i bytes per block (%i entries per list)\n",
                     order, resources.numberOfRegisters, resources.staticSharedBytes,
                     layout.residency, registerLimit, layout.budgetBytes, layout.totalBytes,
                     int(sizeof(CudaKickControl<order>)),
@@ -402,9 +393,9 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Fixed32* devX, Fixed32* 
     cudaSetDevice();
     CudaStream stream(cudaGetDevice());
     stream.copyAsync(devDataPtr, dataPtr, sizeof(char) * allocSize, cudaMemcpyHostToDevice);
-    cudaKickKernel<order><<<numberOfBlocks, WARP_SIZE, layout.totalBytes, stream.nativeHandle()>>>(
-        devReturnArg, kparams, data, devIkickParams, workitems.size(), devCurrentIndex, layout,
-        devListSlab);
+    cudaKickKernel<order>
+        <<<numberOfBlocks, WARP_SIZE, layout.totalBytes, stream.nativeHandle()>>>(devReturnArg,
+            kparams, data, devIkickParams, workitems.size(), devCurrentIndex, layout, devListSlab);
     stream.checkLaunch();
     stream.copyAsync(result, devReturnArg, sizeof(KickReturn), cudaMemcpyDeviceToHost);
     stream.wait();

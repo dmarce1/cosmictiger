@@ -3,13 +3,15 @@
 #include <cstring>
 
 #include <cosmictiger/core/hpx.hpp>
+#include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/core/timer.hpp>
 #include <cosmictiger/io/output.hpp>
 
 size_t maxCpuMemUse();
 HPX_PLAIN_ACTION(maxCpuMemUse, MaxCpuMemUseAction);
 
-// some of this code adapted from
+// parseLine/cpuMemUse adapted from Lanzelot (Stack Overflow, September 15, 2008).
+// The adapted snippet retains its CC BY-SA terms; see THIRD_PARTY_NOTICES.md.
 // https://stackoverflow.com/questions/63166/how-to-determine-cpu-and-memory-consumption-from-inside-a-process
 
 static int parseLine(char* line) {
@@ -65,7 +67,7 @@ static void memuseDaemon(std::string filename) {
             auto const thismemused = maxCpuMemUse();
             if (thismemused > maxMemused) {
                 maxMemused = thismemused;
-                PRINT("MAX MEMUSED = %f GB\n", thismemused / 1024. / 1024. / 1024.);
+                terminal::detailPrint("MAX MEMUSED = %f GB\n", thismemused / 1024. / 1024. / 1024.);
                 FILE* fp = fopen(filename.c_str(), "wt");
                 if (fp == NULL) {
                     THROW_ERROR("Unable to open maxmem.txt\n");

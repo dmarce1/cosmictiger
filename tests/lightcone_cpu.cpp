@@ -1,4 +1,4 @@
-/* CosmicTiger - lightcone CPU connectivity regressions; GPL-2.0-or-later. */
+/* CosmicTiger - lightcone CPU connectivity regressions; BSL-1.0. */
 
 #include <algorithm>
 #include <array>

@@ -11,6 +11,9 @@ drifts affect every variant alike. Whole-kick times come from the harness; the
 CUDA kick arena line and force exports are collected for every run, and the
 harness compares a particle sample with the direct Ewald sum when
 --reference is positive. Nothing here regenerates or rebuilds binaries.
+Each binary receives a bounded, CPU-only --help probe so newer builds enable
+--run.verbose=true for arena details while historical baselines keep their
+original command line.
 """
 import argparse
 import csv
@@ -21,6 +24,7 @@ import math
 import os
 from pathlib import Path
 import platform
+import re
 import shlex
 import statistics
 import subprocess
@@ -41,6 +45,24 @@ def parse_policy(text):
     if not label:
         raise argparse.ArgumentTypeError('expected LABEL=--option=value,...')
     return {'label': label, 'options': [item for item in options.split(',') if item]}
+
+
+def supports_run_verbose(binary):
+    if 'supports_run_verbose' not in binary:
+        command = [binary['path'], '--help', '--compute.cuda=false',
+                   '--hpx:threads=1', '--hpx:bind=none']
+        env = dict(os.environ, CUDA_VISIBLE_DEVICES='', OMP_NUM_THREADS='1', OMP_THREAD_LIMIT='1')
+        try:
+            result = subprocess.run(command, env=env, stdout=subprocess.PIPE,
+                                    stderr=subprocess.STDOUT, text=True, timeout=30)
+        except (OSError, subprocess.TimeoutExpired) as error:
+            raise RuntimeError(f'Cannot probe options for {binary["label"]}: {error}') from error
+        if result.returncode:
+            raise RuntimeError(f'Option probe for {binary["label"]} exited {result.returncode}:\n'
+                               + result.stdout)
+        binary['supports_run_verbose'] = bool(
+            re.search(r'^\s*--run\.verbose(?:\s|=|$)', result.stdout, re.MULTILINE))
+    return binary['supports_run_verbose']
 
 
 def digest(path):
@@ -177,6 +199,12 @@ def main():
     args.output.mkdir(parents=True, exist_ok=True)
     if (args.output / 'runs.json').exists():
         sys.exit('Output directory already holds runs.json; choose a fresh directory')
+    capabilities = {}
+    for binary in args.binary:
+        if binary['path'] in capabilities:
+            binary['supports_run_verbose'] = capabilities[binary['path']]
+        else:
+            capabilities[binary['path']] = supports_run_verbose(binary)
     metadata = {
         'utc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
         'platform': platform.platform(),
@@ -223,6 +251,8 @@ def main():
                         command = ['taskset', '-c', args.cpus, binary['path'], *common,
                                    '--compute.cuda=' + ('true' if backend == 'cuda' else 'false'),
                                    f'--compute.bucketSize={bucket}']
+                        if binary['supports_run_verbose']:
+                            command += ['--run.verbose=true']
                         if binary['arena']:
                             command += [f'--gravity.fmmOrder={order}'] + policy['options']
                         env = dict(os.environ, COSMICTIGER_STF_WALK_SAMPLES=str(args.samples),

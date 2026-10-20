@@ -1,4 +1,4 @@
-/* CosmicTiger - host floating-point contract; GPL-2.0-or-later. */
+/* CosmicTiger - host floating-point contract; BSL-1.0. */
 #pragma once
 
 #include <bit>

@@ -2,25 +2,15 @@
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2021  Dominic C. Marcello
 
- This program is free software; you can redistribute it and/or
- modify it under the terms of the GNU General Public License
- as published by the Free Software Foundation; either version 2
- of the License, or (at your option) any later version.
-
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
-
- You should have received a copy of the GNU General Public License
- along with this program; if not, write to the Free Software
- Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ Distributed under the Boost Software License, Version 1.0.
+ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
 #include <algorithm>
 #include <cmath>
 
 #include <cosmictiger/core/safe_io.hpp>
+#include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/fmm/ewald_indices.hpp>
 #include <cosmictiger/fmm/ewald_tables.hpp>
 #include <cosmictiger/fmm/fmm_order.hpp>
@@ -51,7 +41,7 @@ void EwaldConst::initGpu() {
             }
         }
     }
-    PRINT("count = %i %i\n", count, NREAL);
+    terminal::detailPrint("count = %i %i\n", count, NREAL);
     auto const sortFunc = [](Array<float, NDIM> const& a, Array<float, NDIM> const& b) {
         auto const a2 = sqr(a[0], a[1], a[2]);
         auto const b2 = sqr(b[0], b[1], b[2]);

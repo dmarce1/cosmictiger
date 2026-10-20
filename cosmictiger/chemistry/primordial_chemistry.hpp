@@ -1,4 +1,4 @@
-/* CosmicTiger - host batching boundary for primordial chemistry; GPL-2.0-or-later. */
+/* CosmicTiger - host batching boundary for primordial chemistry; BSL-1.0. */
 #pragma once
 
 #include <cstddef>

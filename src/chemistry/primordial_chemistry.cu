@@ -1,4 +1,4 @@
-/* CosmicTiger - primordial CUDA batching; GPL-2.0-or-later. */
+/* CosmicTiger - primordial CUDA batching; BSL-1.0. */
 #include <algorithm>
 #include <limits>
 #include <string>

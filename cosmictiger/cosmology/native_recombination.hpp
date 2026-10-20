@@ -1,4 +1,4 @@
-/* CosmicTiger - homogeneous primordial recombination; GPL-2.0-or-later. */
+/* CosmicTiger - homogeneous primordial recombination; BSL-1.0. */
 #pragma once
 
 #include <memory>

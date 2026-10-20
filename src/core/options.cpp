@@ -2,19 +2,8 @@
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2026  Dominic C. Marcello
 
- This program is free software; you can redistribute it and/or
- modify it under the terms of the GNU General Public License
- as published by the Free Software Foundation; either version 2
- of the License, or (at your option) any later version.
-
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
-
- You should have received a copy of the GNU General Public License
- along with this program; if not, write to the Free Software
- Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ Distributed under the Boost Software License, Version 1.0.
+ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
 #include <algorithm>
@@ -36,6 +25,8 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/options_metadata.hpp>
 #include <cosmictiger/core/safe_io.hpp>
+#include <cosmictiger/core/startup.hpp>
+#include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/fmm/fmm_order.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/tree.hpp>
@@ -51,6 +42,7 @@
 namespace detail {
 
 static std::vector<std::string> commandLineArguments;
+static bool displayOptions = false;
 
 radial_kernel::KernelSpec kernelSpec(std::string const& family, int degree) {
     radial_kernel::Family kind;
@@ -90,19 +82,31 @@ bool isPositiveFloatOption(double value) {
 }    // namespace detail
 
 void show(char const* name, bool opt) {
-    PRINT("%-34s: %c\n", name, opt ? 'T' : 'F');
+    if (!detail::displayOptions) {
+        return;
+    }
+    PRINT("%-38s: %c\n", name, opt ? 'T' : 'F');
 }
 
 void show(char const* name, int opt) {
-    PRINT("%-34s: %i\n", name, opt);
+    if (!detail::displayOptions) {
+        return;
+    }
+    PRINT("%-38s: %i\n", name, opt);
 }
 
 void show(char const* name, double opt) {
-    PRINT("%-34s: %e\n", name, opt);
+    if (!detail::displayOptions) {
+        return;
+    }
+    PRINT("%-38s: %e\n", name, opt);
 }
 
 void show(char const* name, std::string opt) {
-    PRINT("%-34s: %s\n", name, opt.c_str());
+    if (!detail::displayOptions) {
+        return;
+    }
+    PRINT("%-38s: %s\n", name, opt.c_str());
 }
 
 Options globalOpts;
@@ -114,6 +118,7 @@ Options const& getOptions() {
 }
 
 void setOptions(Options const& opts) {
+    terminal::setVerbose(opts.run.verbose);
     std::vector<hpx::future<void>> futs;
     for (auto c : hpxChildren()) {
         futs.push_back(hpx::async<SetOptionsAction>(c, opts));
@@ -163,6 +168,7 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
     return {
         {"configuration", options.configuration},
         {"run.test", options.run.test},
+        {"run.verbose", options.run.verbose},
         {"run.scenario", options.run.scenario},
         {"run.endTime", options.run.endTime},
         {"run.maxIterations", options.run.maxIterations},
@@ -292,7 +298,9 @@ bool processOptions(int argc, char* argv[]) {
         po::value<std::string>(&opts.configuration)->default_value(""),
         "INI configuration file; explicit command-line values take precedence")("run.test",
         po::value<std::string>(&opts.run.test)->default_value(""),
-        "name of developer regression to run")("run.scenario",
+        "name of developer regression to run")("run.verbose",
+        po::value<bool>(&opts.run.verbose)->default_value(false),
+        "print all resolved options and detailed internal diagnostics")("run.scenario",
         po::value<std::string>(&opts.run.scenario)->default_value("cosmology"),
         "physical scenario: plummer, sod, blast, rayleighTaylor, kelvinHelmholtz, disc, "
         "polytropicStar, hydroWave, cosmology, glass")("run.endTime",
@@ -569,7 +577,7 @@ bool processOptions(int argc, char* argv[]) {
         .add(unitsOpts)
         .add(hydroOpts)
         .add(chemistryOpts);
-    PRINT("Processing options\n");
+    terminal::detailPrint("Processing options\n");
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, commandOpts), vm);
     po::notify(vm);
@@ -596,6 +604,7 @@ bool processOptions(int argc, char* argv[]) {
     if (!rc) {
         return false;
     }
+    terminal::setVerbose(opts.run.verbose);
     auto const isExplicit = [&](char const* key) { return vm.count(key) && !vm[key].defaulted(); };
     if (opts.initial.plummer && opts.initial.createGlass) {
         THROW_ERROR("initial.plummer and initial.createGlass cannot both be enabled\n");
@@ -912,7 +921,7 @@ bool processOptions(int argc, char* argv[]) {
     double h = constants::kH0 * opts.units.timeSeconds;
     opts.gravity.gm = opts.cosmology.omegaM * 3.0 * sqr(h * opts.cosmology.hubble) / (8.0 * M_PI) /
         opts.initial.numberOfParticles;
-    PRINT("box_size = %e Mpc\n", opts.units.lengthCm / constants::kMpcToCm);
+    terminal::detailPrint("box_size = %e Mpc\n", opts.units.lengthCm / constants::kMpcToCm);
     opts.analysis.sliceSize =
         std::min((20.0 / opts.cosmology.hubble) / (opts.units.lengthCm / constants::kMpcToCm), 1.0);
     auto const nside1 = pow(M_PI * opts.initial.numberOfParticles / 10000.0 / 12.0, 0.5);
@@ -923,7 +932,7 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.lightcone.mapSize < 0) {
         opts.lightcone.mapSize = nside;
     }
-    PRINT("lc map size = %e\n", nside1);
+    terminal::detailPrint("lc map size = %e\n", nside1);
 
     // The photon density depends only on T_CMB and H_0. Adding massless species
     // changes the neutrino density without changing the photons.
@@ -1033,6 +1042,14 @@ bool processOptions(int argc, char* argv[]) {
                     "remain finite and positive in single precision "
                     "after normalization when gravity.enabled is true\n");
     }
+    detail::displayOptions = terminal::verbose() || !opts.run.test.empty();
+    if (hpxRank() == 0 && opts.run.test.empty()) {
+        PRINT(
+            "%.*s\n", int(cosmictiger::kStartupScreen.size()), cosmictiger::kStartupScreen.data());
+    }
+    if (detail::displayOptions) {
+        terminal::section("Resolved options");
+    }
     SHOW("chemistry.enabled", chemistry.enabled);
     SHOW("chemistry.network", chemistry.network);
     SHOW("chemistry.initialization", chemistry.initialization);
@@ -1068,9 +1085,9 @@ bool processOptions(int argc, char* argv[]) {
         opts.hydro.maxSupportRadius * opts.initial.particlesPerDimension /
             hydroTable.supportRadiusPerEffectiveRadius);
     SHOW("hydro.cfl", hydro.cfl);
-    PRINT("Simulation Options\n");
-    PRINT("code_to_M_solar = %e\n", opts.units.massG / 1.98e33);
-    PRINT(
+    terminal::detailPrint("Simulation Options\n");
+    terminal::detailPrint("code_to_M_solar = %e\n", opts.units.massG / 1.98e33);
+    terminal::detailPrint(
         "Box size = %e cm/h\n", opts.units.lengthCm / constants::kMpcToCm * opts.cosmology.hubble);
     if (opts.initial.plummer) {
         opts.gravity.gm = 1.0 / opts.initial.numberOfParticles;
@@ -1165,6 +1182,7 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("cosmology.nEff", cosmology.nEff);
     SHOW("configuration", configuration);
     SHOW("run.test", run.test);
+    SHOW("run.verbose", run.verbose);
     SHOW("run.scenario", run.scenario);
     SHOW("run.endTime", run.endTime);
 #ifndef USE_CUDA
@@ -1175,6 +1193,44 @@ bool processOptions(int argc, char* argv[]) {
     setOptions(opts);
     if (opts.run.test.empty()) {
         outputPath(".");
+    }
+    if (hpxRank() == 0 && opts.run.test.empty()) {
+        detail::displayOptions = true;
+        terminal::section("Run configuration");
+        SHOW("run.scenario", run.scenario);
+        if (!opts.configuration.empty()) {
+            SHOW("configuration", configuration);
+        }
+        PRINT("%-38s: %zu\n", "initial.numberOfParticles", size_t(opts.initial.numberOfParticles));
+        PRINT("%-38s: %i localities, %zu worker threads here\n", "Runtime", hpxSize(),
+            size_t(hpx::get_num_worker_threads()));
+        SHOW("compute.cuda", compute.cuda);
+        SHOW("gravity.enabled", gravity.enabled);
+        if (opts.gravity.enabled) {
+            SHOW("gravity.fmmOrder", gravity.fmmOrder);
+            SHOW("gravity.kernelFamily", gravity.kernelFamily);
+            SHOW("gravity.kernelDegree", gravity.kernelDegree);
+        }
+        SHOW("hydro.enabled", hydro.enabled);
+        if (opts.hydro.enabled) {
+            SHOW("hydro.kernelFamily", hydro.kernelFamily);
+            SHOW("hydro.kernelDegree", hydro.kernelDegree);
+        }
+        SHOW("chemistry.enabled", chemistry.enabled);
+        if (opts.chemistry.enabled) {
+            SHOW("chemistry.network", chemistry.network);
+        }
+        SHOW("run.maxIterations", run.maxIterations);
+        terminal::section("Output");
+        SHOW("output.directory", output.directory);
+        SHOW("output.silo", output.silo);
+        if (opts.output.silo) {
+            SHOW("output.siloInterval", output.siloInterval);
+            PRINT("%-38s: %s, %s\n", "Silo coordinates", opts.output.units.c_str(),
+                opts.output.frame.c_str());
+        }
+        PRINT("\n  Internal diagnostics: --run.verbose=true\n");
+        detail::displayOptions = terminal::verbose();
     }
     viewConfigure();
     return rc;

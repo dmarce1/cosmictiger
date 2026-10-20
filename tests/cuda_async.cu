@@ -1,4 +1,4 @@
-/* CosmicTiger - bounded CUDA completion test kernel; GPL-2.0-or-later. */
+/* CosmicTiger - bounded CUDA completion test kernel; BSL-1.0. */
 
 #include <cuda_runtime.h>
 

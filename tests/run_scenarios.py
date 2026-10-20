@@ -1,6 +1,6 @@
 # CosmicTiger - A cosmological N-Body code
 # Copyright (C) 2026 Dominic C. Marcello
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: BSL-1.0
 
 """Exercise first-class scenario dispatch, solver selection, and output isolation."""
 
@@ -138,6 +138,8 @@ def main():
         # Every generated product must remain under output.directory.
         options = {
             "configuration": str(root / "configurations" / (stem + ".ini")),
+            # Solver-dispatch assertions below inspect detailed phase messages.
+            "run.verbose": "true",
             "compute.cuda": "false",
             "initial.particlesPerDimension": "16" if scenario == "disc" else "8",
             "run.maxIterations": "1",

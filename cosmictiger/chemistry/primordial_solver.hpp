@@ -1,4 +1,4 @@
-/* CosmicTiger - shared primordial source solver; GPL-2.0-or-later. */
+/* CosmicTiger - shared primordial source solver; BSL-1.0. */
 #pragma once
 
 #include <cmath>
