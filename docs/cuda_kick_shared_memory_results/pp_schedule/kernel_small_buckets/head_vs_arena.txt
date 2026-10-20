@@ -1,0 +1,66 @@
+== head_b32_clustered ncu exit 0
+    gpu__time_duration.sum                                                             ms         1.85
+    l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum                                  sector      891,342
+    l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum                                  sector    2,040,502
+    launch__grid_size                                                                              256
+    sm__warps_active.avg.pct_of_peak_sustained_active                                   %         6.39
+    smsp__average_warp_latency_per_inst_issued.ratio                                cycle         9.87
+    smsp__average_warps_issue_stalled_branch_resolving_per_issue_active.ratio        inst         1.21
+    smsp__average_warps_issue_stalled_no_instruction_per_issue_active.ratio          inst         0.51
+    smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio        inst         0.94
+    smsp__inst_executed.sum                                                          inst   49,026,530
+== v2_b32_clustered ncu exit 0
+    gpu__time_duration.sum                                                             ms         1.84
+    l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum                                  sector    1,359,270
+    l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum                                  sector    2,122,074
+    launch__grid_size                                                                              256
+    sm__warps_active.avg.pct_of_peak_sustained_active                                   %         6.33
+    smsp__average_warp_latency_per_inst_issued.ratio                                cycle        10.24
+    smsp__average_warps_issue_stalled_branch_resolving_per_issue_active.ratio        inst         1.26
+    smsp__average_warps_issue_stalled_no_instruction_per_issue_active.ratio          inst         0.69
+    smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio        inst         0.90
+    smsp__inst_executed.sum                                                          inst   46,665,369
+== head_b64_clustered ncu exit 0
+    gpu__time_duration.sum                                                             ms         1.82
+    l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum                                  sector      775,938
+    l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum                                  sector    1,492,342
+    launch__grid_size                                                                              256
+    sm__warps_active.avg.pct_of_peak_sustained_active                                   %         6.33
+    smsp__average_warp_latency_per_inst_issued.ratio                                cycle         9.41
+    smsp__average_warps_issue_stalled_branch_resolving_per_issue_active.ratio        inst         1.26
+    smsp__average_warps_issue_stalled_no_instruction_per_issue_active.ratio          inst         0.35
+    smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio        inst         0.72
+    smsp__inst_executed.sum                                                          inst   49,180,261
+== v2_b64_clustered ncu exit 0
+    gpu__time_duration.sum                                                             ms         1.74
+    l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum                                  sector    1,019,032
+    l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum                                  sector    1,545,420
+    launch__grid_size                                                                              256
+    sm__warps_active.avg.pct_of_peak_sustained_active                                   %         6.35
+    smsp__average_warp_latency_per_inst_issued.ratio                                cycle         9.83
+    smsp__average_warps_issue_stalled_branch_resolving_per_issue_active.ratio        inst         1.36
+    smsp__average_warps_issue_stalled_no_instruction_per_issue_active.ratio          inst         0.47
+    smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio        inst         0.66
+    smsp__inst_executed.sum                                                          inst   45,170,648
+== head_b64_adaptive ncu exit 0
+    gpu__time_duration.sum                                                             ms         7.63
+    l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum                                  sector    1,032,664
+    l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum                                  sector    3,192,049
+    launch__grid_size                                                                              287
+    sm__warps_active.avg.pct_of_peak_sustained_active                                   %         5.06
+    smsp__average_warp_latency_per_inst_issued.ratio                                cycle         6.87
+    smsp__average_warps_issue_stalled_branch_resolving_per_issue_active.ratio        inst         0.50
+    smsp__average_warps_issue_stalled_no_instruction_per_issue_active.ratio          inst         0.31
+    smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio        inst         1.92
+    smsp__inst_executed.sum                                                          inst  145,004,949
+== v2_b64_adaptive ncu exit 0
+    gpu__time_duration.sum                                                             ms         7.22
+    l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum                                  sector    1,667,966
+    l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum                                  sector    3,279,369
+    launch__grid_size                                                                              287
+    sm__warps_active.avg.pct_of_peak_sustained_active                                   %         5.04
+    smsp__average_warp_latency_per_inst_issued.ratio                                cycle         6.81
+    smsp__average_warps_issue_stalled_branch_resolving_per_issue_active.ratio        inst         0.51
+    smsp__average_warps_issue_stalled_no_instruction_per_issue_active.ratio          inst         0.37
+    smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio        inst         1.83
+    smsp__inst_executed.sum                                                          inst  140,974,482

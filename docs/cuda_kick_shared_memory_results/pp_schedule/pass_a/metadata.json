@@ -1,0 +1,61 @@
+{
+  "utc": "2026-10-19T19:10:17.574910+00:00",
+  "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+  "command": "benchmarks/run_cuda_kick_arena.py --binary baseline=/home/dmarce1/workspace/cosmictiger/build/baseline_main/cosmictiger --binary head=build/arena_b1024/frozen/cosmictiger_b1024_head_cf66eacc:arena --binary arena=build/arena_b1024/frozen/cosmictiger_b1024_v2:arena --policy auto= --output docs/cuda_kick_shared_memory_results/pp_schedule --fixtures lattice,clustered,adaptive --buckets 32,64,128,256,512 --orders 7 --pairs 3 --samples 15 --reference 1024 --timeout 1800",
+  "binaries": [
+    {
+      "label": "baseline",
+      "path": "/home/dmarce1/workspace/cosmictiger/build/baseline_main/cosmictiger",
+      "arena": false,
+      "sha256": "136f06e4dd84e54aeb35f39e4ab39735e77c7cdafd62d4702ffebf76aa30410c"
+    },
+    {
+      "label": "head",
+      "path": "/home/dmarce1/workspace/cosmictiger/.claude/worktrees/unruffled-robinson-73f6f1/build/arena_b1024/frozen/cosmictiger_b1024_head_cf66eacc",
+      "arena": true,
+      "sha256": "d92385ff10135c318dcb0ea8de2d9ab8fd6688bcec3498c80818e12683311ba0"
+    },
+    {
+      "label": "arena",
+      "path": "/home/dmarce1/workspace/cosmictiger/.claude/worktrees/unruffled-robinson-73f6f1/build/arena_b1024/frozen/cosmictiger_b1024_v2",
+      "arena": true,
+      "sha256": "3570c87653c0208fe99a1f795f26f6bed06c1d182a74370ed994aff59585f20b"
+    }
+  ],
+  "policies": [
+    {
+      "label": "auto",
+      "options": []
+    }
+  ],
+  "fixtures": [
+    "lattice",
+    "clustered",
+    "adaptive"
+  ],
+  "buckets": [
+    32,
+    64,
+    128,
+    256,
+    512
+  ],
+  "orders": [
+    7
+  ],
+  "backends": [
+    "cuda"
+  ],
+  "samples": 15,
+  "pairs": 3,
+  "reference": 1024,
+  "threads": 2,
+  "cpus": "1,2",
+  "git_head": "cf66eacc34fadbaa5ae6deb1054f8a32ce3b1c08",
+  "nvidia_smi": "name, driver_version, clocks.current.sm [MHz], clocks.current.memory [MHz], utilization.gpu [%], memory.used [MiB]\nNVIDIA GeForce RTX 3090, 595.99.02, 1695 MHz, 9751 MHz, 17 %, 4446 MiB\n",
+  "load_average": [
+    1.55712890625,
+    3.98046875,
+    5.517578125
+  ]
+}

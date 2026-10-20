@@ -1,0 +1,15 @@
+ncu exit 0
+    gpu__time_duration.sum                                                                 ms        28.25
+    l1tex__data_pipe_lsu_wavefronts_mem_shared_op_ld.sum                                        19,822,440
+    l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum                                      sector   14,173,076
+    l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum                                      sector   14,806,239
+    launch__registers_per_thread                                              register/thread          255
+    smsp__average_warp_latency_per_inst_issued.ratio                                    cycle         4.24
+    smsp__average_warps_issue_stalled_long_scoreboard_per_issue_active.ratio             inst         0.66
+    smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio            inst         0.72
+    smsp__average_warps_issue_stalled_wait_per_issue_active.ratio                        inst         1.29
+    smsp__inst_executed.sum                                                              inst  344,590,877
+harness exit 0
+STF_WALK_MEDIAN_HEADER,fixture,backend,do_phi,samples,particles,setup_seconds,tree_seconds,kick_seconds,tree_plus_kick_seconds,position_hash
+STF_WALK_MEDIAN,adaptive,cuda,0,5,32768,0.000430934,0.005411287,0.034772498,0.039766247,10382969522388005973
+STF_WALK_MEDIAN,adaptive,cuda,1,5,32768,0.000184208,0.00529673,0.035005859,0.040378814,10382969522388005973

@@ -1,0 +1,16 @@
+ncu exit 0
+    gpu__time_duration.sum                                                                 ms        26.33
+    l1tex__data_pipe_lsu_wavefronts_mem_shared_op_ld.sum                                        15,033,492
+    l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum                                      sector      802,148
+    l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum                                      sector    2,247,319
+    launch__registers_per_thread                                              register/thread          255
+    smsp__average_warp_latency_per_inst_issued.ratio                                    cycle         4.79
+    smsp__average_warps_issue_stalled_long_scoreboard_per_issue_active.ratio             inst         0.51
+    smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio            inst         1.16
+    smsp__average_warps_issue_stalled_wait_per_issue_active.ratio                        inst         1.54
+    smsp__inst_executed.sum                                                              inst  285,344,704
+harness exit 0
+STF_WALK_MEDIAN_HEADER,fixture,backend,do_phi,samples,particles,setup_seconds,tree_seconds,kick_seconds,tree_plus_kick_seconds,position_hash
+CUDA kick arena (FMM order 7): 255 registers, 0 static shared bytes, 8 blocks/SM (register limit 8), budget 11776, dynamic shared 11664 bytes: control 528, expansion shared, forces shared tile 512, particle tile 224 (without mass plane), multipole tile 17 x 160 bytes
+STF_WALK_MEDIAN,adaptive,cuda,0,5,32768,0.000442686,0.00881523,0.03537136,0.045342305,10382969522388005973
+STF_WALK_MEDIAN,adaptive,cuda,1,5,32768,0.000188697,0.007406278,0.038491156,0.045374736,10382969522388005973

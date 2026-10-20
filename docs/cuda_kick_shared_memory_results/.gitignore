@@ -4,3 +4,4 @@
 *.ncu-rep
 **/ewald.txt
 **/soft.txt
+**/source.csv
