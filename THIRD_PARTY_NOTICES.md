@@ -15,7 +15,6 @@ make the combined executable distributable under Boost terms alone.
 
 | Material | Location | Attribution and retained terms |
 | --- | --- | --- |
-| HEALPix C++ source | `healpix/` | Max-Planck-Society; Martin Reinecke and other authors named in the files. GPL version 2 or later. These retained sources are distinct from the installed HEALPix libraries used by the build. |
 | HEALPix CUDA adaptation | `src/analysis/healpix.cu` | Copyright 1997–2010 Krzysztof M. Gorski, Eric Hivon, Benjamin D. Wandelt, Anthony J. Banday, Matthias Bartelmann, Reza Ansari and Kenneth M. Ganga. GPL version 2 or later; original notice preserved. Compiled in CUDA builds. |
 | GADGET-4 snapshot header declaration | `GadgetIoHeader` in `cosmictiger/particles/particles.hpp` | The declaration is explicitly marked as copied from GADGET-4. Upstream `src/io/snap_io.h` credits Volker Springel and contributing authors (2014–2020). GADGET-4 is GPL-licensed; the original imported revision and precise license version were not recorded here. The copied declaration is excluded from the project's Boost grant. |
 | RECFAST effective-atom recombination physics | `src/chemistry/recombination.cpp` | RECFAST 1.5.2, Douglas Scott; University of British Columbia, copyright 1999–2010. The file retains UBC's permissive use/copy/modify/distribute grant and warranty disclaimer verbatim. CosmicTiger's integration and interpolation are original. |

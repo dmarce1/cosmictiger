@@ -25,8 +25,8 @@ generated declarations and their generators.
 
 Follow `.clang-format` for changed project source. Keep trailing `const` and
 group includes as standard headers, dependencies, then project headers, with
-blank lines between groups. Do not apply project naming changes to bundled
-`healpix/` or `recfast/`.
+blank lines between groups. Do not apply project naming changes to third-party
+code.
 
 # Paper-notation exception
 

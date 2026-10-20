@@ -278,8 +278,7 @@ serial FFTW3 (single precision), GSL, Silo, HEALPix C and C++, Boost program opt
 and Boost.Units headers. Install the development packages for these dependencies;
 on Debian/Ubuntu, GSL and HEALPix are provided by `libgsl-dev`, `libchealpix-dev`,
 and `libhealpix-cxx-dev`. CMake finds system installations automatically. The
-build links the installed HEALPix C++ library instead of compiling the bundled
-`healpix/` sources.
+build links the installed HEALPix C++ library.
 
 Run `./build.sh` in a terminal for the interactive builder. It uses a full-screen
 menu when `whiptail` is available, with a text menu as a fallback. Choose Release,
