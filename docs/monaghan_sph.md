@@ -221,6 +221,16 @@ The gravity acceleration criterion uses its own effective radius, independently 
 the selected hydro family. These reference conversions do not establish equal
 timestep accuracy for every kernel shape.
 
+The `star` test relaxes its initial polytrope with a velocity damping term outside
+the paper, \(d\mathbf w/d\tau \mathrel{-}= \lambda_{\rm d}\mathbf w\), where
+\(\lambda_{\rm d}\) is the internal `hydro.damping` rate per code time unit. The
+timestep criteria above do not include it, so the explicit kick is stable only while
+\(\lambda_{\rm d}\Delta t\) stays below order one. The test therefore sets
+\(\lambda_{\rm d}=1/t_{\rm dyn}\) with \(t_{\rm dyn}=(G\rho_0)^{-1/2}\); with the
+cosmological code units \(t_{\rm dyn}\approx2.7\times10^5\) code times, so the former
+\(\lambda_{\rm d}=1\) gave \(\lambda_{\rm d}\Delta t\approx3\times10^3\) and the rungs
+diverged on the second step.
+
 CosmicTiger evolves comoving positions \(\mathbf x\), conformal time
 \(d\tau=dt/a\), stored velocity \(\mathbf w=a\mathbf v_{\rm pec}\), and stored
 specific internal energy \(E=a^2u\). Density is comoving. The driver passes
