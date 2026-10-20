@@ -331,14 +331,7 @@ void hydroStarTest() {
         }
     } while (r < rmax);
     printf("Ntot = %i\n", ntot);
-#ifdef USE_CUDA
-    if (!cudaEnabled()) {
-        THROW_ERROR("Stellar surface initialization requires compute.cuda=true\n");
-    }
     solveSphereSurfaceProblem(xValue);
-#else
-    THROW_ERROR("Stellar surface initialization requires CUDA support\n");
-#endif
     for (int i = 0; i < xValue.size(); i++) {
         double const d = rho(radius[i] * r0);
         double h = pow(m * getOptions().hydro.neighborNumber / (4.0 * M_PI / 3.0 * d), 1.0 / 3.0);

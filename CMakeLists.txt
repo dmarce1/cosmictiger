@@ -149,6 +149,7 @@ set(cosmictiger_source_files
     src/problems/hydro.cpp
     src/problems/plummer.cpp
     src/problems/sedov.cpp
+    src/problems/sphere.cpp
     src/problems/sphere.cu
     src/problems/test.cpp
     src/sph/sph.cpp
@@ -798,6 +799,18 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME drift_dispatch COMMAND drift_dispatch_test --hpx:threads=2 --hpx:bind=none)
     set_tests_properties(drift_dispatch PROPERTIES TIMEOUT 30 PROCESSORS 2
+        ENVIRONMENT "CUDA_VISIBLE_DEVICES=")
+    # Relax sphere-surface shells on the CPU path that run.test=star uses
+    # without CUDA.
+    add_hpx_executable(sphere_surface_test
+        SOURCES tests/sphere_surface.cpp src/problems/sphere.cpp)
+    target_include_directories(sphere_surface_test PRIVATE ${PROJECT_SOURCE_DIR})
+    target_compile_options(sphere_surface_test PRIVATE -ffast-math)
+    if(COMPILER_SUPPORTS_MARCH_NATIVE)
+        target_compile_options(sphere_surface_test PRIVATE -march=native)
+    endif()
+    add_test(NAME sphere_surface COMMAND sphere_surface_test --hpx:threads=2 --hpx:bind=none)
+    set_tests_properties(sphere_surface PROPERTIES TIMEOUT 120 PROCESSORS 2
         ENVIRONMENT "CUDA_VISIBLE_DEVICES=")
 
     # Compile the production SIMD path without USE_CUDA or device kernels.

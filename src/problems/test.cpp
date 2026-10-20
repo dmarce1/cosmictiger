@@ -43,7 +43,6 @@ constexpr bool kVerbose = true;
 #include <cosmictiger/problems/analytic.hpp>
 #include <cosmictiger/problems/hydro.hpp>
 #include <cosmictiger/problems/plummer.hpp>
-#include <cosmictiger/problems/sphere.hpp>
 #include <cosmictiger/problems/test.hpp>
 
 // 0.7, 0.8
@@ -722,15 +721,6 @@ void test(std::string test) {
         hydroStarTest();
     } else if (test == "disc") {
         hydroDiscTest();
-    } else if (test == "sphere") {
-#ifdef USE_CUDA
-        if (!cudaEnabled()) {
-            THROW_ERROR("Sphere surface test requires compute.cuda=true\n");
-        }
-        sphereSurfaceTest();
-#else
-        THROW_ERROR("Sphere surface test requires CUDA support\n");
-#endif
     } else if (test == "plummer") {
         hydroPlummer();
     } else {

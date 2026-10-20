@@ -23,11 +23,9 @@
 #include <cosmictiger/cuda/cuda_reduce.hpp>
 #include <cosmictiger/cuda/device_vector.hpp>
 #include <cosmictiger/math/math.hpp>
+#include <cosmictiger/problems/sphere.hpp>
 
-#define alpha 2.0f
-#define eta 0.25f
-
-#define BLOCK_SIZE 512
+#define BLOCK_SIZE detail::kSphereSurfaceStreams
 
 __global__ void sphereSurfaceKernel(float** xMain, float** yMain, float** zMain, int* nMain) {
     int const tid = threadIdx.x;
@@ -36,9 +34,6 @@ __global__ void sphereSurfaceKernel(float** xMain, float** yMain, float** zMain,
     float* y = yMain[bid];
     float* z = zMain[bid];
     int const nValue = nMain[bid];
-    constexpr unsigned kA0 = 1103515245;
-    constexpr unsigned kC0 = 12345;
-    constexpr unsigned kM0 = 1UL << 31;
     unsigned rndNum = tid;
     __shared__ DeviceVector<float> vx;
     __shared__ DeviceVector<float> vy;
@@ -53,27 +48,19 @@ __global__ void sphereSurfaceKernel(float** xMain, float** yMain, float** zMain,
     new (&gy) DeviceVector<float>(nValue);
     new (&gz) DeviceVector<float>(nValue);
     float gmax;
-    float const h = 0.9f * sqrt(4.f * float(M_PI) / nValue);
+    float const h = detail::kSphereSurfaceSoftening * sqrt(4.f * float(M_PI) / nValue);
     float const h2 = h * h;
     float const hinv = 1.f / h;
     float const h3inv = hinv * hinv * hinv;
     float const m = 1.0f / nValue;
     __syncthreads();
-    float const m0inv = 1.f / kM0;
     for (int i = tid; i < nValue; i += BLOCK_SIZE) {
         vx[i] = 0.f;
         vy[i] = 0.f;
         vz[i] = 0.f;
-        float n;
-        rndNum = (kA0 * rndNum + kC0) % kM0;
-        n = (rndNum + 0.5f) * m0inv;
-        x[i] = 2.f * n - 1.f;
-        rndNum = (kA0 * rndNum + kC0) % kM0;
-        n = (rndNum + 0.5f) * m0inv;
-        y[i] = 2.f * n - 1.f;
-        rndNum = (kA0 * rndNum + kC0) % kM0;
-        n = (rndNum + 0.5f) * m0inv;
-        z[i] = 2.f * n - 1.f;
+        x[i] = detail::sphereSurfaceRandom(rndNum);
+        y[i] = detail::sphereSurfaceRandom(rndNum);
+        z[i] = detail::sphereSurfaceRandom(rndNum);
     }
     __syncthreads();
     int iter = 0;
@@ -117,9 +104,10 @@ __global__ void sphereSurfaceKernel(float** xMain, float** yMain, float** zMain,
         sharedReduceMax<BLOCK_SIZE>(gmax);
         sharedReduceAdd<float, BLOCK_SIZE>(phi);
         __syncthreads();
-        float const dt = eta * fminf(sqrtf(h / gmax), 1.f / alpha);
+        float const dt =
+            detail::kSphereSurfaceEta * fminf(sqrtf(h / gmax), 1.f / detail::kSphereSurfaceDamping);
         float const halfdt = 0.5f * dt;
-        float const deninv = 1.f / (1.f + halfdt * alpha);
+        float const deninv = 1.f / (1.f + halfdt * detail::kSphereSurfaceDamping);
         __syncthreads();
         for (int i = tid; i < nValue; i += BLOCK_SIZE) {
             vx[i] = (fmaf(halfdt, gx[i], vx[i])) * deninv;
@@ -154,7 +142,7 @@ __global__ void sphereSurfaceKernel(float** xMain, float** yMain, float** zMain,
         sharedReduceAdd<float, BLOCK_SIZE>(kin);
         error = kin / phi;
         iter++;
-    } while (error > 1e-10f || iter < 100);
+    } while (error > detail::kSphereSurfaceTolerance || iter < detail::kSphereSurfaceMinIterations);
     if (tid == 0) {
         PRINT("Solved for %i\n", nValue);
     }
@@ -167,7 +155,7 @@ __global__ void sphereSurfaceKernel(float** xMain, float** yMain, float** zMain,
     (&gz)->~DeviceVector<float>();
 }
 
-void solveSphereSurfaceProblem(Vector<Array<Vector<float>, NDIM>>& xValue) {
+void solveSphereSurfaceProblemCuda(Vector<Array<Vector<float>, NDIM>>& xValue) {
     float** devX;
     float** devY;
     float** devZ;
@@ -210,12 +198,4 @@ void solveSphereSurfaceProblem(Vector<Array<Vector<float>, NDIM>>& xValue) {
         memcpy(xValue[i][ZDIM].data(), devZ[i], sizeof(float) * devN[i]);
     }
     releaseBuffers();
-}
-
-void sphereSurfaceTest() {
-    /*	const int N = 10000;
-     vector<float> x(N);
-     vector<float> y(N);
-     vector<float> z(N);
-     solve_sphere_surface_problem(x.data(), y.data(), z.data(), N);*/
 }
