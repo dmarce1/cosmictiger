@@ -1835,9 +1835,10 @@ a synchronous byte loop that the barrier wait then re-ordered for nothing.
   baseline's at bucket 64 (equal with the potential) and 10% at 128, and the
   remaining difference is in the PP and PC loops themselves, not in list
   handling.
-- The PC loop still reads its sink coordinates and accumulates its forces
+- The PC loop still reads the staged records and accumulates its forces
   through generic pointers reloaded from the control block (`LDS.64` of the
-  pointer, then `LD.E` and `ST.E` per sink, `sass/pc_region_aligned.txt` of
+  pointer, then `LD.E` per coefficient of every sink-multipole pair and
+  `LD.E`/`ST.E` per sink force, `sass/pc_region_aligned.txt` of
   `pc_staging_cp_async/`), the pattern the PP loop schedule replaced with
   pointers derived from the shared-memory symbol. The multipole staging itself
   is now an aligned `cp.async` copy (Aligned PC multipole staging).
