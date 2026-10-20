@@ -1,0 +1,58 @@
+{
+  "utc": "2026-10-20T07:20:13.533261+00:00",
+  "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+  "command": "benchmarks/run_cuda_kick_arena.py --binary baseline=/home/dmarce1/workspace/cosmictiger/build/baseline_main/cosmictiger --binary head=build/arena_b1024/frozen/cosmictiger_b1024_head_da3c1f4e:arena --binary ewald=build/arena_b1024/frozen/cosmictiger_b1024_ewald:arena --policy auto= --output docs/cuda_kick_shared_memory_results/ewald_schedule/b64 --fixtures lattice,clustered,adaptive --buckets 64 --orders 7 --pairs 3 --samples 15 --reference 1024 --timeout 1800 --idle-wait 'ninja|ncu|nsys|cc1plus|cicc|ptxas' --wait-gpu-idle",
+  "binaries": [
+    {
+      "label": "baseline",
+      "path": "/home/dmarce1/workspace/cosmictiger/build/baseline_main/cosmictiger",
+      "arena": false,
+      "sha256": "136f06e4dd84e54aeb35f39e4ab39735e77c7cdafd62d4702ffebf76aa30410c"
+    },
+    {
+      "label": "head",
+      "path": "/home/dmarce1/workspace/cosmictiger/.claude/worktrees/intelligent-pasteur-28d2e2/build/arena_b1024/frozen/cosmictiger_b1024_head_da3c1f4e",
+      "arena": true,
+      "sha256": "cc8278cb895414be28c7b57d4ed62f6306452464cce4a7c7d009d98a4048e283"
+    },
+    {
+      "label": "ewald",
+      "path": "/home/dmarce1/workspace/cosmictiger/.claude/worktrees/intelligent-pasteur-28d2e2/build/arena_b1024/frozen/cosmictiger_b1024_ewald",
+      "arena": true,
+      "sha256": "def5f85249778aa8829b76ae4049857c59b91ace2979e3c4b64adcbbeb290c7a"
+    }
+  ],
+  "policies": [
+    {
+      "label": "auto",
+      "options": []
+    }
+  ],
+  "fixtures": [
+    "lattice",
+    "clustered",
+    "adaptive"
+  ],
+  "buckets": [
+    64
+  ],
+  "orders": [
+    7
+  ],
+  "backends": [
+    "cuda"
+  ],
+  "samples": 15,
+  "pairs": 3,
+  "reference": 1024,
+  "threads": 2,
+  "cpus": "1-2",
+  "particles_per_dimension": 32,
+  "git_head": "da3c1f4e9a3362d15b41e6e2cc7674cebb19c424",
+  "nvidia_smi": "name, driver_version, clocks.current.sm [MHz], clocks.current.memory [MHz], utilization.gpu [%], memory.used [MiB]\nNVIDIA GeForce RTX 3090, 595.99.02, 915 MHz, 5001 MHz, 32 %, 4522 MiB\n",
+  "load_average": [
+    6.8173828125,
+    10.04638671875,
+    11.61181640625
+  ]
+}

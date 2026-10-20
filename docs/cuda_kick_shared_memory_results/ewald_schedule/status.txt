@@ -1,0 +1,3 @@
+head exit 0
+ewald exit 0
+DONE

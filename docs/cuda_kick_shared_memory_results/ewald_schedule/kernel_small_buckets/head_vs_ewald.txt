@@ -1,0 +1,111 @@
+== kernel_small_buckets/head_clustered_b32 ncu exit 0
+    gpu__time_duration.sum                                                                 us       692.86
+    l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum                                      sector    1,206,798
+    l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum                                      sector    1,995,750
+    launch__grid_size                                                                                  256
+    launch__registers_per_thread                                              register/thread          255
+    smsp__average_warp_latency_per_inst_issued.ratio                                    cycle         6.80
+    smsp__average_warps_issue_stalled_no_instruction_per_issue_active.ratio              inst         0.71
+    smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio            inst         1.49
+    smsp__average_warps_issue_stalled_wait_per_issue_active.ratio                        inst         1.69
+    smsp__inst_executed.sum                                                              inst   30,930,237
+== kernel_small_buckets/ewald_clustered_b32 ncu exit 0
+    gpu__time_duration.sum                                                                 us       873.57
+    l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum                                      sector    1,194,510
+    l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum                                      sector    1,988,582
+    launch__grid_size                                                                                  256
+    launch__registers_per_thread                                              register/thread          255
+    smsp__average_warp_latency_per_inst_issued.ratio                                    cycle         7.82
+    smsp__average_warps_issue_stalled_no_instruction_per_issue_active.ratio              inst         0.72
+    smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio            inst         1.49
+    smsp__average_warps_issue_stalled_wait_per_issue_active.ratio                        inst         1.70
+    smsp__inst_executed.sum                                                              inst   30,790,742
+== kernel_small_buckets/head_clustered_b64 ncu exit 0
+    gpu__time_duration.sum                                                                 us       511.97
+    l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum                                      sector      879,510
+    l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum                                      sector    1,420,338
+    launch__grid_size                                                                                  256
+    launch__registers_per_thread                                              register/thread          255
+    smsp__average_warp_latency_per_inst_issued.ratio                                    cycle         5.55
+    smsp__average_warps_issue_stalled_no_instruction_per_issue_active.ratio              inst         0.41
+    smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio            inst         1.20
+    smsp__average_warps_issue_stalled_wait_per_issue_active.ratio                        inst         1.51
+    smsp__inst_executed.sum                                                              inst   27,663,742
+== kernel_small_buckets/ewald_clustered_b64 ncu exit 0
+    gpu__time_duration.sum                                                                 us       493.66
+    l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum                                      sector      873,366
+    l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum                                      sector    1,417,266
+    launch__grid_size                                                                                  256
+    launch__registers_per_thread                                              register/thread          255
+    smsp__average_warp_latency_per_inst_issued.ratio                                    cycle         5.73
+    smsp__average_warps_issue_stalled_no_instruction_per_issue_active.ratio              inst         0.38
+    smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio            inst         1.22
+    smsp__average_warps_issue_stalled_wait_per_issue_active.ratio                        inst         1.51
+    smsp__inst_executed.sum                                                              inst   27,564,061
+== kernel_small_buckets/head_adaptive_b64 ncu exit 0
+    gpu__time_duration.sum                                                                 ms         6.67
+    l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum                                      sector    1,501,996
+    l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum                                      sector    3,138,081
+    launch__grid_size                                                                                  287
+    launch__registers_per_thread                                              register/thread          255
+    smsp__average_warp_latency_per_inst_issued.ratio                                    cycle         5.55
+    smsp__average_warps_issue_stalled_no_instruction_per_issue_active.ratio              inst         0.35
+    smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio            inst         2.27
+    smsp__average_warps_issue_stalled_wait_per_issue_active.ratio                        inst         1.10
+    smsp__inst_executed.sum                                                              inst  124,244,471
+== kernel_small_buckets/ewald_adaptive_b64 ncu exit 0
+    gpu__time_duration.sum                                                                 ms         4.43
+    l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum                                      sector    1,636,848
+    l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum                                      sector    3,367,482
+    launch__grid_size                                                                                  287
+    launch__registers_per_thread                                              register/thread          255
+    smsp__average_warp_latency_per_inst_issued.ratio                                    cycle         4.32
+    smsp__average_warps_issue_stalled_no_instruction_per_issue_active.ratio              inst         0.35
+    smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio            inst         0.91
+    smsp__average_warps_issue_stalled_wait_per_issue_active.ratio                        inst         1.13
+    smsp__inst_executed.sum                                                              inst  124,247,422
+== kernel_small_buckets/head_adaptive_b128 ncu exit 0
+    gpu__time_duration.sum                                                                 ms         6.81
+    l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum                                      sector    1,248,846
+    l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum                                      sector    2,572,004
+    launch__grid_size                                                                                  287
+    launch__registers_per_thread                                              register/thread          255
+    smsp__average_warp_latency_per_inst_issued.ratio                                    cycle         5.13
+    smsp__average_warps_issue_stalled_no_instruction_per_issue_active.ratio              inst         0.28
+    smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio            inst         2.10
+    smsp__average_warps_issue_stalled_wait_per_issue_active.ratio                        inst         1.03
+    smsp__inst_executed.sum                                                              inst  129,899,577
+== kernel_small_buckets/ewald_adaptive_b128 ncu exit 0
+    gpu__time_duration.sum                                                                 ms         4.49
+    l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum                                      sector    1,387,130
+    l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum                                      sector    2,803,693
+    launch__grid_size                                                                                  287
+    launch__registers_per_thread                                              register/thread          255
+    smsp__average_warp_latency_per_inst_issued.ratio                                    cycle         3.85
+    smsp__average_warps_issue_stalled_no_instruction_per_issue_active.ratio              inst         0.28
+    smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio            inst         0.82
+    smsp__average_warps_issue_stalled_wait_per_issue_active.ratio                        inst         1.06
+    smsp__inst_executed.sum                                                              inst  129,976,018
+== kernel_small_buckets/head_adaptive_b256 ncu exit 0
+    gpu__time_duration.sum                                                                 ms        12.97
+    l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum                                      sector    1,122,365
+    l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum                                      sector    2,288,134
+    launch__grid_size                                                                                  206
+    launch__registers_per_thread                                              register/thread          255
+    smsp__average_warp_latency_per_inst_issued.ratio                                    cycle         4.43
+    smsp__average_warps_issue_stalled_no_instruction_per_issue_active.ratio              inst         0.22
+    smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio            inst         1.73
+    smsp__average_warps_issue_stalled_wait_per_issue_active.ratio                        inst         0.92
+    smsp__inst_executed.sum                                                              inst  158,914,093
+== kernel_small_buckets/ewald_adaptive_b256 ncu exit 0
+    gpu__time_duration.sum                                                                 ms         8.62
+    l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum                                      sector    1,263,185
+    l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum                                      sector    2,522,071
+    launch__grid_size                                                                                  206
+    launch__registers_per_thread                                              register/thread          255
+    smsp__average_warp_latency_per_inst_issued.ratio                                    cycle         3.36
+    smsp__average_warps_issue_stalled_no_instruction_per_issue_active.ratio              inst         0.21
+    smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio            inst         0.66
+    smsp__average_warps_issue_stalled_wait_per_issue_active.ratio                        inst         0.94
+    smsp__inst_executed.sum                                                              inst  159,028,790
+DONE

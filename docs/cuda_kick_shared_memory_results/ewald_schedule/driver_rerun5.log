@@ -1,0 +1,114 @@
+2026-10-20T02:13:24-05:00 GPU lock acquired, load 11.39
+baseline_auto_cuda_b256_o7_pair0: lattice/phi=0 13.071 ms, lattice/phi=1 12.843 ms, clustered/phi=0 7.147 ms, clustered/phi=1 7.471 ms, adaptive/phi=0 18.260 ms, adaptive/phi=1 18.746 ms
+head_auto_cuda_b256_o7_pair0: lattice/phi=0 10.536 ms, lattice/phi=1 10.927 ms, clustered/phi=0 5.776 ms, clustered/phi=1 6.171 ms, adaptive/phi=0 17.365 ms, adaptive/phi=1 17.851 ms
+ewald_auto_cuda_b256_o7_pair0: lattice/phi=0 9.683 ms, lattice/phi=1 9.869 ms, clustered/phi=0 5.704 ms, clustered/phi=1 6.134 ms, adaptive/phi=0 13.236 ms, adaptive/phi=1 13.778 ms
+ewald_auto_cuda_b256_o7_pair1: lattice/phi=0 9.679 ms, lattice/phi=1 10.005 ms, clustered/phi=0 5.845 ms, clustered/phi=1 6.157 ms, adaptive/phi=0 13.608 ms, adaptive/phi=1 13.857 ms
+head_auto_cuda_b256_o7_pair1: lattice/phi=0 10.460 ms, lattice/phi=1 10.778 ms, clustered/phi=0 5.731 ms, clustered/phi=1 6.075 ms, adaptive/phi=0 16.693 ms, adaptive/phi=1 17.213 ms
+baseline_auto_cuda_b256_o7_pair1: lattice/phi=0 11.226 ms, lattice/phi=1 11.531 ms, clustered/phi=0 6.908 ms, clustered/phi=1 7.256 ms, adaptive/phi=0 17.986 ms, adaptive/phi=1 18.535 ms
+baseline_auto_cuda_b256_o7_pair2: lattice/phi=0 11.522 ms, lattice/phi=1 11.468 ms, clustered/phi=0 6.976 ms, clustered/phi=1 7.374 ms, adaptive/phi=0 18.508 ms, adaptive/phi=1 18.741 ms
+head_auto_cuda_b256_o7_pair2: lattice/phi=0 10.357 ms, lattice/phi=1 10.635 ms, clustered/phi=0 5.650 ms, clustered/phi=1 6.094 ms, adaptive/phi=0 16.772 ms, adaptive/phi=1 17.602 ms
+ewald_auto_cuda_b256_o7_pair2: lattice/phi=0 9.638 ms, lattice/phi=1 9.894 ms, clustered/phi=0 5.660 ms, clustered/phi=1 6.089 ms, adaptive/phi=0 13.142 ms, adaptive/phi=1 13.671 ms
+ewald_auto_cuda_b256_o7_pair3: lattice/phi=0 9.628 ms, lattice/phi=1 9.910 ms, clustered/phi=0 5.690 ms, clustered/phi=1 6.204 ms, adaptive/phi=0 13.555 ms, adaptive/phi=1 13.847 ms
+head_auto_cuda_b256_o7_pair3: lattice/phi=0 10.450 ms, lattice/phi=1 10.662 ms, clustered/phi=0 5.647 ms, clustered/phi=1 6.061 ms, adaptive/phi=0 16.841 ms, adaptive/phi=1 17.917 ms
+baseline_auto_cuda_b256_o7_pair3: lattice/phi=0 11.241 ms, lattice/phi=1 11.853 ms, clustered/phi=0 6.811 ms, clustered/phi=1 7.246 ms, adaptive/phi=0 17.998 ms, adaptive/phi=1 18.655 ms
+baseline_auto_cuda_b256_o7_pair4: lattice/phi=0 11.173 ms, lattice/phi=1 11.652 ms, clustered/phi=0 6.754 ms, clustered/phi=1 7.226 ms, adaptive/phi=0 17.756 ms, adaptive/phi=1 18.716 ms
+head_auto_cuda_b256_o7_pair4: lattice/phi=0 10.402 ms, lattice/phi=1 10.463 ms, clustered/phi=0 5.624 ms, clustered/phi=1 6.029 ms, adaptive/phi=0 16.808 ms, adaptive/phi=1 17.359 ms
+ewald_auto_cuda_b256_o7_pair4: lattice/phi=0 9.679 ms, lattice/phi=1 9.857 ms, clustered/phi=0 5.702 ms, clustered/phi=1 6.122 ms, adaptive/phi=0 13.355 ms, adaptive/phi=1 13.712 ms
+Completed; see docs/cuda_kick_shared_memory_results/ewald_schedule/b256/summary.md
+docs/cuda_kick_shared_memory_results/ewald_schedule/b256: worst pair spread 1.170 ('baseline', 'auto', 'cuda', 256, 7, 'lattice', False), load at start 11.39, process wall 2.7-3.1 s
+2026-10-20T02:14:12-05:00 bucket 256 attempt 1 exceeded the 1.15 pair spread; repeating
+baseline_auto_cuda_b256_o7_pair0: lattice/phi=0 12.174 ms, lattice/phi=1 13.213 ms, clustered/phi=0 6.839 ms, clustered/phi=1 7.240 ms, adaptive/phi=0 18.132 ms, adaptive/phi=1 19.064 ms
+head_auto_cuda_b256_o7_pair0: lattice/phi=0 10.537 ms, lattice/phi=1 10.631 ms, clustered/phi=0 5.646 ms, clustered/phi=1 6.081 ms, adaptive/phi=0 16.664 ms, adaptive/phi=1 17.815 ms
+ewald_auto_cuda_b256_o7_pair0: lattice/phi=0 9.666 ms, lattice/phi=1 9.868 ms, clustered/phi=0 5.688 ms, clustered/phi=1 6.098 ms, adaptive/phi=0 13.354 ms, adaptive/phi=1 13.810 ms
+ewald_auto_cuda_b256_o7_pair1: lattice/phi=0 9.805 ms, lattice/phi=1 10.086 ms, clustered/phi=0 5.749 ms, clustered/phi=1 6.164 ms, adaptive/phi=0 13.805 ms, adaptive/phi=1 14.354 ms
+head_auto_cuda_b256_o7_pair1: lattice/phi=0 10.541 ms, lattice/phi=1 11.021 ms, clustered/phi=0 5.717 ms, clustered/phi=1 6.091 ms, adaptive/phi=0 17.010 ms, adaptive/phi=1 17.908 ms
+baseline_auto_cuda_b256_o7_pair1: lattice/phi=0 11.375 ms, lattice/phi=1 11.653 ms, clustered/phi=0 6.998 ms, clustered/phi=1 7.343 ms, adaptive/phi=0 18.537 ms, adaptive/phi=1 18.566 ms
+baseline_auto_cuda_b256_o7_pair2: lattice/phi=0 11.369 ms, lattice/phi=1 11.706 ms, clustered/phi=0 6.974 ms, clustered/phi=1 7.566 ms, adaptive/phi=0 18.324 ms, adaptive/phi=1 18.467 ms
+head_auto_cuda_b256_o7_pair2: lattice/phi=0 10.404 ms, lattice/phi=1 10.722 ms, clustered/phi=0 5.672 ms, clustered/phi=1 6.004 ms, adaptive/phi=0 17.192 ms, adaptive/phi=1 17.743 ms
+ewald_auto_cuda_b256_o7_pair2: lattice/phi=0 9.735 ms, lattice/phi=1 9.853 ms, clustered/phi=0 5.674 ms, clustered/phi=1 6.106 ms, adaptive/phi=0 13.338 ms, adaptive/phi=1 13.845 ms
+ewald_auto_cuda_b256_o7_pair3: lattice/phi=0 9.689 ms, lattice/phi=1 9.998 ms, clustered/phi=0 5.737 ms, clustered/phi=1 5.987 ms, adaptive/phi=0 13.131 ms, adaptive/phi=1 13.718 ms
+head_auto_cuda_b256_o7_pair3: lattice/phi=0 10.340 ms, lattice/phi=1 10.604 ms, clustered/phi=0 5.627 ms, clustered/phi=1 6.005 ms, adaptive/phi=0 16.510 ms, adaptive/phi=1 17.648 ms
+baseline_auto_cuda_b256_o7_pair3: lattice/phi=0 11.352 ms, lattice/phi=1 11.532 ms, clustered/phi=0 6.842 ms, clustered/phi=1 7.408 ms, adaptive/phi=0 18.012 ms, adaptive/phi=1 18.117 ms
+baseline_auto_cuda_b256_o7_pair4: lattice/phi=0 11.284 ms, lattice/phi=1 11.485 ms, clustered/phi=0 6.791 ms, clustered/phi=1 7.247 ms, adaptive/phi=0 18.402 ms, adaptive/phi=1 18.600 ms
+head_auto_cuda_b256_o7_pair4: lattice/phi=0 10.413 ms, lattice/phi=1 10.777 ms, clustered/phi=0 5.674 ms, clustered/phi=1 6.032 ms, adaptive/phi=0 17.704 ms, adaptive/phi=1 18.047 ms
+ewald_auto_cuda_b256_o7_pair4: lattice/phi=0 9.745 ms, lattice/phi=1 10.133 ms, clustered/phi=0 5.659 ms, clustered/phi=1 6.024 ms, adaptive/phi=0 13.673 ms, adaptive/phi=1 13.838 ms
+Completed; see docs/cuda_kick_shared_memory_results/ewald_schedule/b256/summary.md
+docs/cuda_kick_shared_memory_results/ewald_schedule/b256: worst pair spread 1.150 ('baseline', 'auto', 'cuda', 256, 7, 'lattice', True), load at start 11.89, process wall 2.8-3.3 s
+2026-10-20T02:14:59-05:00 bucket 256 attempt 2 exceeded the 1.15 pair spread; repeating
+baseline_auto_cuda_b256_o7_pair0: lattice/phi=0 13.722 ms, lattice/phi=1 13.142 ms, clustered/phi=0 6.963 ms, clustered/phi=1 7.173 ms, adaptive/phi=0 18.482 ms, adaptive/phi=1 18.737 ms
+head_auto_cuda_b256_o7_pair0: lattice/phi=0 10.515 ms, lattice/phi=1 10.595 ms, clustered/phi=0 5.719 ms, clustered/phi=1 6.173 ms, adaptive/phi=0 17.944 ms, adaptive/phi=1 18.299 ms
+ewald_auto_cuda_b256_o7_pair0: lattice/phi=0 9.704 ms, lattice/phi=1 10.037 ms, clustered/phi=0 5.822 ms, clustered/phi=1 6.228 ms, adaptive/phi=0 13.912 ms, adaptive/phi=1 14.409 ms
+ewald_auto_cuda_b256_o7_pair1: lattice/phi=0 9.699 ms, lattice/phi=1 10.018 ms, clustered/phi=0 5.640 ms, clustered/phi=1 6.047 ms, adaptive/phi=0 13.097 ms, adaptive/phi=1 13.877 ms
+head_auto_cuda_b256_o7_pair1: lattice/phi=0 10.314 ms, lattice/phi=1 10.725 ms, clustered/phi=0 5.646 ms, clustered/phi=1 6.096 ms, adaptive/phi=0 16.915 ms, adaptive/phi=1 17.636 ms
+baseline_auto_cuda_b256_o7_pair1: lattice/phi=0 11.354 ms, lattice/phi=1 11.634 ms, clustered/phi=0 6.904 ms, clustered/phi=1 7.354 ms, adaptive/phi=0 17.447 ms, adaptive/phi=1 18.271 ms
+baseline_auto_cuda_b256_o7_pair2: lattice/phi=0 11.279 ms, lattice/phi=1 11.769 ms, clustered/phi=0 6.868 ms, clustered/phi=1 7.341 ms, adaptive/phi=0 18.326 ms, adaptive/phi=1 18.922 ms
+head_auto_cuda_b256_o7_pair2: lattice/phi=0 10.247 ms, lattice/phi=1 10.418 ms, clustered/phi=0 5.697 ms, clustered/phi=1 6.014 ms, adaptive/phi=0 17.131 ms, adaptive/phi=1 17.353 ms
+ewald_auto_cuda_b256_o7_pair2: lattice/phi=0 9.599 ms, lattice/phi=1 9.825 ms, clustered/phi=0 5.658 ms, clustered/phi=1 6.059 ms, adaptive/phi=0 13.516 ms, adaptive/phi=1 13.893 ms
+ewald_auto_cuda_b256_o7_pair3: lattice/phi=0 9.562 ms, lattice/phi=1 9.819 ms, clustered/phi=0 5.727 ms, clustered/phi=1 6.097 ms, adaptive/phi=0 13.403 ms, adaptive/phi=1 14.469 ms
+head_auto_cuda_b256_o7_pair3: lattice/phi=0 10.385 ms, lattice/phi=1 10.686 ms, clustered/phi=0 5.708 ms, clustered/phi=1 6.011 ms, adaptive/phi=0 17.852 ms, adaptive/phi=1 18.009 ms
+baseline_auto_cuda_b256_o7_pair3: lattice/phi=0 11.339 ms, lattice/phi=1 12.352 ms, clustered/phi=0 6.985 ms, clustered/phi=1 7.368 ms, adaptive/phi=0 18.109 ms, adaptive/phi=1 18.124 ms
+baseline_auto_cuda_b256_o7_pair4: lattice/phi=0 11.396 ms, lattice/phi=1 11.745 ms, clustered/phi=0 6.859 ms, clustered/phi=1 7.252 ms, adaptive/phi=0 18.084 ms, adaptive/phi=1 18.735 ms
+head_auto_cuda_b256_o7_pair4: lattice/phi=0 10.520 ms, lattice/phi=1 10.726 ms, clustered/phi=0 5.661 ms, clustered/phi=1 6.077 ms, adaptive/phi=0 17.353 ms, adaptive/phi=1 17.929 ms
+ewald_auto_cuda_b256_o7_pair4: lattice/phi=0 9.794 ms, lattice/phi=1 9.926 ms, clustered/phi=0 5.735 ms, clustered/phi=1 6.108 ms, adaptive/phi=0 13.250 ms, adaptive/phi=1 13.840 ms
+Completed; see docs/cuda_kick_shared_memory_results/ewald_schedule/b256/summary.md
+docs/cuda_kick_shared_memory_results/ewald_schedule/b256: worst pair spread 1.217 ('baseline', 'auto', 'cuda', 256, 7, 'lattice', False), load at start 11.84, process wall 2.8-3.1 s
+2026-10-20T02:15:47-05:00 bucket 256 attempt 3 exceeded the 1.15 pair spread; repeating
+2026-10-20T02:15:47-05:00 bucket 256: three contaminated attempts, no clean stage
+baseline_auto_cuda_b512_o7_pair0: lattice/phi=0 12.381 ms, lattice/phi=1 11.341 ms, clustered/phi=0 9.534 ms, clustered/phi=1 10.950 ms, adaptive/phi=0 28.950 ms, adaptive/phi=1 29.292 ms
+head_auto_cuda_b512_o7_pair0: lattice/phi=0 9.311 ms, lattice/phi=1 10.039 ms, clustered/phi=0 5.371 ms, clustered/phi=1 6.086 ms, adaptive/phi=0 26.126 ms, adaptive/phi=1 26.907 ms
+ewald_auto_cuda_b512_o7_pair0: lattice/phi=0 7.613 ms, lattice/phi=1 8.109 ms, clustered/phi=0 5.315 ms, clustered/phi=1 6.015 ms, adaptive/phi=0 19.395 ms, adaptive/phi=1 20.266 ms
+ewald_auto_cuda_b512_o7_pair1: lattice/phi=0 7.625 ms, lattice/phi=1 8.072 ms, clustered/phi=0 5.276 ms, clustered/phi=1 5.952 ms, adaptive/phi=0 19.589 ms, adaptive/phi=1 20.325 ms
+head_auto_cuda_b512_o7_pair1: lattice/phi=0 9.363 ms, lattice/phi=1 9.779 ms, clustered/phi=0 5.405 ms, clustered/phi=1 6.129 ms, adaptive/phi=0 26.262 ms, adaptive/phi=1 27.048 ms
+baseline_auto_cuda_b512_o7_pair1: lattice/phi=0 10.008 ms, lattice/phi=1 10.862 ms, clustered/phi=0 10.075 ms, clustered/phi=1 10.771 ms, adaptive/phi=0 29.166 ms, adaptive/phi=1 28.862 ms
+baseline_auto_cuda_b512_o7_pair2: lattice/phi=0 10.343 ms, lattice/phi=1 11.284 ms, clustered/phi=0 9.937 ms, clustered/phi=1 10.876 ms, adaptive/phi=0 29.585 ms, adaptive/phi=1 29.624 ms
+waiting for other work to finish before head_auto_cuda_b512_o7_pair2
+waiting for other work to finish before head_auto_cuda_b512_o7_pair2
+head_auto_cuda_b512_o7_pair2: lattice/phi=0 10.556 ms, lattice/phi=1 9.927 ms, clustered/phi=0 5.504 ms, clustered/phi=1 6.184 ms, adaptive/phi=0 27.184 ms, adaptive/phi=1 29.134 ms
+ewald_auto_cuda_b512_o7_pair2: lattice/phi=0 7.814 ms, lattice/phi=1 8.224 ms, clustered/phi=0 5.488 ms, clustered/phi=1 6.237 ms, adaptive/phi=0 19.691 ms, adaptive/phi=1 20.209 ms
+ewald_auto_cuda_b512_o7_pair3: lattice/phi=0 7.534 ms, lattice/phi=1 7.905 ms, clustered/phi=0 5.510 ms, clustered/phi=1 6.031 ms, adaptive/phi=0 19.620 ms, adaptive/phi=1 20.609 ms
+head_auto_cuda_b512_o7_pair3: lattice/phi=0 9.434 ms, lattice/phi=1 10.337 ms, clustered/phi=0 5.355 ms, clustered/phi=1 6.225 ms, adaptive/phi=0 29.357 ms, adaptive/phi=1 30.191 ms
+baseline_auto_cuda_b512_o7_pair3: lattice/phi=0 11.077 ms, lattice/phi=1 11.468 ms, clustered/phi=0 10.543 ms, clustered/phi=1 11.058 ms, adaptive/phi=0 30.440 ms, adaptive/phi=1 31.344 ms
+baseline_auto_cuda_b512_o7_pair4: lattice/phi=0 10.316 ms, lattice/phi=1 11.540 ms, clustered/phi=0 9.914 ms, clustered/phi=1 11.010 ms, adaptive/phi=0 30.140 ms, adaptive/phi=1 31.294 ms
+head_auto_cuda_b512_o7_pair4: lattice/phi=0 9.411 ms, lattice/phi=1 10.488 ms, clustered/phi=0 5.633 ms, clustered/phi=1 6.402 ms, adaptive/phi=0 26.707 ms, adaptive/phi=1 27.626 ms
+ewald_auto_cuda_b512_o7_pair4: lattice/phi=0 7.616 ms, lattice/phi=1 8.265 ms, clustered/phi=0 5.679 ms, clustered/phi=1 5.987 ms, adaptive/phi=0 19.870 ms, adaptive/phi=1 20.591 ms
+Completed; see docs/cuda_kick_shared_memory_results/ewald_schedule/b512/summary.md
+docs/cuda_kick_shared_memory_results/ewald_schedule/b512: worst pair spread 1.237 ('baseline', 'auto', 'cuda', 512, 7, 'lattice', False), load at start 11.66, process wall 2.9-3.7 s
+2026-10-20T02:17:09-05:00 bucket 512 attempt 1 exceeded the 1.15 pair spread; repeating
+baseline_auto_cuda_b512_o7_pair0: lattice/phi=0 12.408 ms, lattice/phi=1 11.494 ms, clustered/phi=0 10.760 ms, clustered/phi=1 10.459 ms, adaptive/phi=0 30.135 ms, adaptive/phi=1 28.790 ms
+head_auto_cuda_b512_o7_pair0: lattice/phi=0 9.406 ms, lattice/phi=1 10.021 ms, clustered/phi=0 5.500 ms, clustered/phi=1 6.090 ms, adaptive/phi=0 26.963 ms, adaptive/phi=1 27.814 ms
+ewald_auto_cuda_b512_o7_pair0: lattice/phi=0 7.464 ms, lattice/phi=1 8.214 ms, clustered/phi=0 5.381 ms, clustered/phi=1 6.112 ms, adaptive/phi=0 19.820 ms, adaptive/phi=1 20.100 ms
+ewald_auto_cuda_b512_o7_pair1: lattice/phi=0 7.496 ms, lattice/phi=1 8.140 ms, clustered/phi=0 5.415 ms, clustered/phi=1 6.155 ms, adaptive/phi=0 19.794 ms, adaptive/phi=1 20.499 ms
+head_auto_cuda_b512_o7_pair1: lattice/phi=0 9.502 ms, lattice/phi=1 10.119 ms, clustered/phi=0 5.515 ms, clustered/phi=1 6.299 ms, adaptive/phi=0 26.290 ms, adaptive/phi=1 29.162 ms
+baseline_auto_cuda_b512_o7_pair1: lattice/phi=0 10.525 ms, lattice/phi=1 11.428 ms, clustered/phi=0 10.232 ms, clustered/phi=1 10.884 ms, adaptive/phi=0 29.208 ms, adaptive/phi=1 30.708 ms
+baseline_auto_cuda_b512_o7_pair2: lattice/phi=0 10.182 ms, lattice/phi=1 10.879 ms, clustered/phi=0 9.504 ms, clustered/phi=1 10.261 ms, adaptive/phi=0 28.906 ms, adaptive/phi=1 29.353 ms
+head_auto_cuda_b512_o7_pair2: lattice/phi=0 9.221 ms, lattice/phi=1 9.872 ms, clustered/phi=0 5.474 ms, clustered/phi=1 6.137 ms, adaptive/phi=0 26.217 ms, adaptive/phi=1 26.921 ms
+ewald_auto_cuda_b512_o7_pair2: lattice/phi=0 7.505 ms, lattice/phi=1 8.126 ms, clustered/phi=0 5.338 ms, clustered/phi=1 5.928 ms, adaptive/phi=0 19.145 ms, adaptive/phi=1 20.238 ms
+ewald_auto_cuda_b512_o7_pair3: lattice/phi=0 7.669 ms, lattice/phi=1 8.076 ms, clustered/phi=0 5.182 ms, clustered/phi=1 5.935 ms, adaptive/phi=0 19.619 ms, adaptive/phi=1 20.266 ms
+head_auto_cuda_b512_o7_pair3: lattice/phi=0 9.380 ms, lattice/phi=1 9.868 ms, clustered/phi=0 5.375 ms, clustered/phi=1 6.123 ms, adaptive/phi=0 25.989 ms, adaptive/phi=1 26.597 ms
+baseline_auto_cuda_b512_o7_pair3: lattice/phi=0 10.918 ms, lattice/phi=1 10.866 ms, clustered/phi=0 9.728 ms, clustered/phi=1 10.206 ms, adaptive/phi=0 28.115 ms, adaptive/phi=1 29.687 ms
+baseline_auto_cuda_b512_o7_pair4: lattice/phi=0 10.522 ms, lattice/phi=1 11.497 ms, clustered/phi=0 9.407 ms, clustered/phi=1 10.437 ms, adaptive/phi=0 28.682 ms, adaptive/phi=1 29.734 ms
+head_auto_cuda_b512_o7_pair4: lattice/phi=0 9.048 ms, lattice/phi=1 9.930 ms, clustered/phi=0 5.367 ms, clustered/phi=1 6.069 ms, adaptive/phi=0 25.844 ms, adaptive/phi=1 26.624 ms
+ewald_auto_cuda_b512_o7_pair4: lattice/phi=0 7.531 ms, lattice/phi=1 8.027 ms, clustered/phi=0 5.231 ms, clustered/phi=1 6.008 ms, adaptive/phi=0 19.282 ms, adaptive/phi=1 20.401 ms
+Completed; see docs/cuda_kick_shared_memory_results/ewald_schedule/b512/summary.md
+docs/cuda_kick_shared_memory_results/ewald_schedule/b512: worst pair spread 1.219 ('baseline', 'auto', 'cuda', 512, 7, 'lattice', False), load at start 12.15, process wall 2.9-3.5 s
+2026-10-20T02:18:00-05:00 bucket 512 attempt 2 exceeded the 1.15 pair spread; repeating
+baseline_auto_cuda_b512_o7_pair0: lattice/phi=0 11.784 ms, lattice/phi=1 11.188 ms, clustered/phi=0 9.901 ms, clustered/phi=1 10.597 ms, adaptive/phi=0 29.049 ms, adaptive/phi=1 29.734 ms
+head_auto_cuda_b512_o7_pair0: lattice/phi=0 9.701 ms, lattice/phi=1 10.068 ms, clustered/phi=0 5.610 ms, clustered/phi=1 6.167 ms, adaptive/phi=0 26.385 ms, adaptive/phi=1 27.187 ms
+ewald_auto_cuda_b512_o7_pair0: lattice/phi=0 7.630 ms, lattice/phi=1 8.356 ms, clustered/phi=0 5.210 ms, clustered/phi=1 6.191 ms, adaptive/phi=0 19.759 ms, adaptive/phi=1 20.687 ms
+ewald_auto_cuda_b512_o7_pair1: lattice/phi=0 7.516 ms, lattice/phi=1 8.106 ms, clustered/phi=0 5.321 ms, clustered/phi=1 5.997 ms, adaptive/phi=0 19.582 ms, adaptive/phi=1 20.575 ms
+head_auto_cuda_b512_o7_pair1: lattice/phi=0 9.244 ms, lattice/phi=1 9.653 ms, clustered/phi=0 5.333 ms, clustered/phi=1 6.062 ms, adaptive/phi=0 26.110 ms, adaptive/phi=1 26.804 ms
+baseline_auto_cuda_b512_o7_pair1: lattice/phi=0 10.340 ms, lattice/phi=1 10.888 ms, clustered/phi=0 9.573 ms, clustered/phi=1 10.759 ms, adaptive/phi=0 28.385 ms, adaptive/phi=1 29.554 ms
+baseline_auto_cuda_b512_o7_pair2: lattice/phi=0 10.188 ms, lattice/phi=1 10.523 ms, clustered/phi=0 9.637 ms, clustered/phi=1 9.949 ms, adaptive/phi=0 28.078 ms, adaptive/phi=1 29.706 ms
+head_auto_cuda_b512_o7_pair2: lattice/phi=0 8.974 ms, lattice/phi=1 9.655 ms, clustered/phi=0 5.381 ms, clustered/phi=1 6.086 ms, adaptive/phi=0 26.599 ms, adaptive/phi=1 27.325 ms
+ewald_auto_cuda_b512_o7_pair2: lattice/phi=0 7.519 ms, lattice/phi=1 8.081 ms, clustered/phi=0 5.223 ms, clustered/phi=1 6.011 ms, adaptive/phi=0 19.651 ms, adaptive/phi=1 20.211 ms
+ewald_auto_cuda_b512_o7_pair3: lattice/phi=0 7.677 ms, lattice/phi=1 8.060 ms, clustered/phi=0 5.161 ms, clustered/phi=1 6.118 ms, adaptive/phi=0 19.543 ms, adaptive/phi=1 20.281 ms
+head_auto_cuda_b512_o7_pair3: lattice/phi=0 9.225 ms, lattice/phi=1 10.062 ms, clustered/phi=0 5.469 ms, clustered/phi=1 6.032 ms, adaptive/phi=0 26.039 ms, adaptive/phi=1 26.725 ms
+baseline_auto_cuda_b512_o7_pair3: lattice/phi=0 10.332 ms, lattice/phi=1 10.820 ms, clustered/phi=0 9.651 ms, clustered/phi=1 10.242 ms, adaptive/phi=0 28.442 ms, adaptive/phi=1 29.490 ms
+baseline_auto_cuda_b512_o7_pair4: lattice/phi=0 10.553 ms, lattice/phi=1 11.309 ms, clustered/phi=0 9.920 ms, clustered/phi=1 10.432 ms, adaptive/phi=0 28.560 ms, adaptive/phi=1 29.607 ms
+head_auto_cuda_b512_o7_pair4: lattice/phi=0 9.565 ms, lattice/phi=1 10.041 ms, clustered/phi=0 5.558 ms, clustered/phi=1 6.321 ms, adaptive/phi=0 27.000 ms, adaptive/phi=1 27.406 ms
+ewald_auto_cuda_b512_o7_pair4: lattice/phi=0 7.757 ms, lattice/phi=1 8.433 ms, clustered/phi=0 5.327 ms, clustered/phi=1 6.042 ms, adaptive/phi=0 19.649 ms, adaptive/phi=1 20.678 ms
+Completed; see docs/cuda_kick_shared_memory_results/ewald_schedule/b512/summary.md
+docs/cuda_kick_shared_memory_results/ewald_schedule/b512: worst pair spread 1.157 ('baseline', 'auto', 'cuda', 512, 7, 'lattice', False), load at start 12.56, process wall 2.9-3.4 s
+2026-10-20T02:18:52-05:00 bucket 512 attempt 3 exceeded the 1.15 pair spread; repeating
+2026-10-20T02:18:52-05:00 bucket 512: three contaminated attempts, no clean stage
+2026-10-20T02:18:52-05:00 bucket stages done

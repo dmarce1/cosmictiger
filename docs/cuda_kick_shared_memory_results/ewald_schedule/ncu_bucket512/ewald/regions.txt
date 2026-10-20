@@ -1,0 +1,36 @@
+55888 instructions, 230688 stall samples, 211194691 warp instructions executed
+| region | samples | share | warp instructions | share | avg. threads | static instructions |
+|---|---:|---:|---:|---:|---:|---:|
+| ewald_four | 34232 | 14.8% | 14663622 | 6.9% | 20.8 | 115 |
+| ewald_self | 1322 | 0.6% | 978600 | 0.5% | 20.8 | 523 |
+| ewald_real | 44443 | 19.3% | 60004580 | 28.4% | 17.4 | 456 |
+| ewald_detrace | 280 | 0.1% | 299172 | 0.1% | 20.8 | 214 |
+| ewald_m2l | 2270 | 1.0% | 1816559 | 0.9% | 20.8 | 1309 |
+| cc_ewald_wrapper | 927 | 0.4% | 279006 | 0.1% | 24.4 | 490 |
+| pp_direct | 6400 | 2.8% | 2978096 | 1.4% | 28.8 | 477 |
+| pp_helpers | 48030 | 20.8% | 52624286 | 24.9% | 31.3 | 334 |
+| other | 92784 | 40.2% | 77550770 | 36.7% | 26.9 | 51970 |
+
+ewald_four: stalls wait 43%, short_sb 41%, selected 15%, branch_resolving 0%, no_inst 0%, barrier 0%
+ewald_four: opcodes (executed / samples) LDC 6.69M / 16106, FFMA.FTZ 6.56M / 15694, IMAD 0.26M / 330, FMUL.FTZ 0.26M / 909, MOV 0.13M / 237, IADD3 0.13M / 50, ISETP.NE.AND 0.13M / 141, FMUL.RZ 0.13M / 42, MUFU.SIN 0.13M / 169, MUFU.COS 0.13M / 243
+
+ewald_self: stalls no_inst 57%, selected 21%, branch_resolving 17%, dispatch 2%, wait 2%, short_sb 1%
+ewald_self: opcodes (executed / samples) FFMA.FTZ 0.39M / 569, MOV 0.25M / 381, FMUL.FTZ 0.23M / 273, FADD.FTZ 0.10M / 90, FMNMX.FTZ 0.00M / 5, MUFU.RCP 0.00M / 3, FSET.BF.GT.FTZ.AND 0.00M / 0, BSSY 0.00M / 1, MUFU.SQRT 0.00M / 0
+
+ewald_real: stalls selected 49%, wait 22%, short_sb 13%, dispatch 12%, branch_resolving 2%, no_inst 1%
+ewald_real: opcodes (executed / samples) FFMA.FTZ 35.34M / 20574, FMUL.FTZ 20.73M / 11382, LDC 0.75M / 5124, BRA 0.50M / 1239, BSYNC 0.30M / 897, MUFU.RCP 0.25M / 356, BSSY 0.25M / 104, IMAD 0.25M / 379, FSETP.GEU.FTZ.AND 0.25M / 481, IADD3 0.25M / 1373
+
+ewald_detrace: stalls no_inst 59%, selected 35%, dispatch 5%, wait 1%, barrier 0%, branch_resolving 0%
+ewald_detrace: opcodes (executed / samples) FFMA.FTZ 0.16M / 135, FADD.FTZ 0.14M / 121, LDL.LU.64 0.00M / 24
+
+ewald_m2l: stalls no_inst 61%, selected 29%, wait 7%, dispatch 3%, long_sb 0%, lg 0%
+ewald_m2l: opcodes (executed / samples) FFMA.FTZ 0.88M / 1117, FMUL.FTZ 0.63M / 720, FADD.FTZ 0.19M / 226, STL 0.04M / 74, FMUL.FTZ.D2 0.03M / 43, STL.64 0.02M / 18, LDL.LU.64 0.02M / 39, IMAD.MOV.U32 0.00M / 27, MOV 0.00M / 4, LDL 0.00M / 2
+
+cc_ewald_wrapper: stalls long_sb 37%, wait 19%, short_sb 12%, selected 11%, no_inst 11%, lg 5%
+cc_ewald_wrapper: opcodes (executed / samples) LD.E 0.06M / 285, STL 0.03M / 85, CS2R 0.03M / 24, STL.64 0.03M / 54, FADD.FTZ 0.02M / 76, FFMA.FTZ 0.02M / 27, MOV 0.01M / 6, I2F.F64.U32 0.01M / 35, BRA 0.01M / 19, LDL 0.01M / 11
+
+pp_direct: stalls long_sb 36%, wait 28%, selected 17%, branch_resolving 7%, short_sb 6%, no_inst 4%
+pp_direct: opcodes (executed / samples) IADD3 0.55M / 1220, LD.E 0.21M / 350, LEA 0.20M / 128, LDS 0.19M / 205, FFMA.FTZ 0.19M / 73, FADD.FTZ 0.18M / 1076, IMAD.IADD 0.13M / 468, IMAD.X 0.13M / 136, BRA 0.12M / 195, LD.E.64 0.12M / 170
+
+pp_helpers: stalls selected 41%, wait 33%, short_sb 13%, branch_resolving 6%, dispatch 3%, no_inst 1%
+pp_helpers: opcodes (executed / samples) FFMA.FTZ 15.04M / 6997, FMUL.FTZ 10.03M / 10985, IADD3 5.51M / 12338, MUFU.RSQ 4.66M / 4275, FADD.FTZ 4.59M / 1754, FMNMX.FTZ 3.96M / 2460, LEA 1.91M / 1210, LDS.128 1.90M / 1914, BRA 1.40M / 937, BSSY 0.77M / 305

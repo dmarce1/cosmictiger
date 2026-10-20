@@ -1,0 +1,132 @@
+2026-10-20T02:19:38-05:00 GPU lock acquired, load 6.71
+baseline_auto_cuda_b32_o7_pair0: lattice/phi=0 33.460 ms, lattice/phi=1 33.549 ms, clustered/phi=0 8.973 ms, clustered/phi=1 8.521 ms, adaptive/phi=0 17.934 ms, adaptive/phi=1 18.107 ms
+head_auto_cuda_b32_o7_pair0: lattice/phi=0 15.125 ms, lattice/phi=1 15.083 ms, clustered/phi=0 5.700 ms, clustered/phi=1 5.965 ms, adaptive/phi=0 12.128 ms, adaptive/phi=1 12.021 ms
+ewald_auto_cuda_b32_o7_pair0: lattice/phi=0 14.743 ms, lattice/phi=1 14.758 ms, clustered/phi=0 5.849 ms, clustered/phi=1 6.026 ms, adaptive/phi=0 10.595 ms, adaptive/phi=1 10.730 ms
+ewald_auto_cuda_b32_o7_pair1: lattice/phi=0 14.576 ms, lattice/phi=1 15.169 ms, clustered/phi=0 5.905 ms, clustered/phi=1 6.050 ms, adaptive/phi=0 10.576 ms, adaptive/phi=1 11.765 ms
+head_auto_cuda_b32_o7_pair1: lattice/phi=0 15.054 ms, lattice/phi=1 15.091 ms, clustered/phi=0 5.958 ms, clustered/phi=1 6.088 ms, adaptive/phi=0 11.891 ms, adaptive/phi=1 11.863 ms
+baseline_auto_cuda_b32_o7_pair1: lattice/phi=0 32.808 ms, lattice/phi=1 32.735 ms, clustered/phi=0 8.560 ms, clustered/phi=1 8.770 ms, adaptive/phi=0 17.770 ms, adaptive/phi=1 17.846 ms
+baseline_auto_cuda_b32_o7_pair2: lattice/phi=0 32.946 ms, lattice/phi=1 33.071 ms, clustered/phi=0 8.597 ms, clustered/phi=1 8.757 ms, adaptive/phi=0 17.684 ms, adaptive/phi=1 18.061 ms
+head_auto_cuda_b32_o7_pair2: lattice/phi=0 15.002 ms, lattice/phi=1 14.989 ms, clustered/phi=0 5.735 ms, clustered/phi=1 5.999 ms, adaptive/phi=0 12.012 ms, adaptive/phi=1 11.783 ms
+ewald_auto_cuda_b32_o7_pair2: lattice/phi=0 14.714 ms, lattice/phi=1 14.842 ms, clustered/phi=0 5.888 ms, clustered/phi=1 6.223 ms, adaptive/phi=0 10.743 ms, adaptive/phi=1 10.765 ms
+Completed; see docs/cuda_kick_shared_memory_results/ewald_schedule/b32/summary.md
+docs/cuda_kick_shared_memory_results/ewald_schedule/b32: worst pair spread 1.096 ('ewald', 'auto', 'cuda', 32, 7, 'adaptive', True), load at start 6.71, process wall 2.9-4.0 s
+| reference | candidate | backend | bucket | order | fixture | acceleration rel L2 | acceleration max pointwise | potential rel L2 | potential max pointwise |
+|---|---|---|---:|---:|---|---:|---:|---:|---:|
+| head | ewald | cuda | 32 | 7 | adaptive | 3.253e-10 | 4.263e-07 | 2.211e-10 | 6.525e-06 |
+| head | ewald | cuda | 32 | 7 | clustered | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| head | ewald | cuda | 32 | 7 | lattice | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+
+| backend | bucket | fixture | potential | binary | policy | order | kick ms | speedup vs reference | paired range | force rel L2 | potential rel L2 |
+|---|---:|---|---:|---|---|---:|---:|---:|---|---:|---:|
+| cuda | 32 | adaptive | 0 | baseline | auto | 7 | 17.770 | 0.676 | 0.669-0.679 | 2.669e-03 | 1.058e-04 |
+| cuda | 32 | adaptive | 0 | ewald | auto | 7 | 10.595 | 1.124 | 1.118-1.145 | 2.927e-03 | 1.253e-04 |
+| cuda | 32 | adaptive | 0 | head | auto | 7 | 12.012 |  |  | 2.927e-03 | 1.253e-04 |
+| cuda | 32 | adaptive | 1 | baseline | auto | 7 | 18.061 | 0.664 | 0.652-0.665 | 2.669e-03 | 1.058e-04 |
+| cuda | 32 | adaptive | 1 | ewald | auto | 7 | 10.765 | 1.095 | 1.008-1.120 | 2.927e-03 | 1.253e-04 |
+| cuda | 32 | adaptive | 1 | head | auto | 7 | 11.863 |  |  | 2.927e-03 | 1.253e-04 |
+| cuda | 32 | clustered | 0 | baseline | auto | 7 | 8.597 | 0.667 | 0.635-0.696 | 3.901e-03 | 5.182e-04 |
+| cuda | 32 | clustered | 0 | ewald | auto | 7 | 5.888 | 0.975 | 0.974-1.009 | 4.526e-03 | 1.022e-03 |
+| cuda | 32 | clustered | 0 | head | auto | 7 | 5.735 |  |  | 4.526e-03 | 1.022e-03 |
+| cuda | 32 | clustered | 1 | baseline | auto | 7 | 8.757 | 0.694 | 0.685-0.700 | 3.901e-03 | 5.182e-04 |
+| cuda | 32 | clustered | 1 | ewald | auto | 7 | 6.050 | 0.990 | 0.964-1.006 | 4.526e-03 | 1.022e-03 |
+| cuda | 32 | clustered | 1 | head | auto | 7 | 5.999 |  |  | 4.526e-03 | 1.022e-03 |
+| cuda | 32 | lattice | 0 | baseline | auto | 7 | 32.946 | 0.455 | 0.452-0.459 | 2.462e-01 | 2.842e-02 |
+| cuda | 32 | lattice | 0 | ewald | auto | 7 | 14.714 | 1.026 | 1.020-1.033 | 2.991e-01 | 3.739e-02 |
+| cuda | 32 | lattice | 0 | head | auto | 7 | 15.054 |  |  | 2.991e-01 | 3.739e-02 |
+| cuda | 32 | lattice | 1 | baseline | auto | 7 | 33.071 | 0.453 | 0.450-0.461 | 2.462e-01 | 2.842e-02 |
+| cuda | 32 | lattice | 1 | ewald | auto | 7 | 14.842 | 1.010 | 0.995-1.022 | 2.991e-01 | 3.739e-02 |
+| cuda | 32 | lattice | 1 | head | auto | 7 | 15.083 |  |  | 2.991e-01 | 3.739e-02 |
+
+| backend | bucket | fixture | potential | binary | policy | order | kick ms | speedup vs reference | paired range | force rel L2 | potential rel L2 |
+|---|---:|---|---:|---|---|---:|---:|---:|---|---:|---:|
+| cuda | 32 | adaptive | 0 | baseline | auto | 7 | 17.770 |  |  | 2.669e-03 | 1.058e-04 |
+| cuda | 32 | adaptive | 0 | ewald | auto | 7 | 10.595 | 1.680 | 1.646-1.693 | 2.927e-03 | 1.253e-04 |
+| cuda | 32 | adaptive | 0 | head | auto | 7 | 12.012 | 1.479 | 1.472-1.494 | 2.927e-03 | 1.253e-04 |
+| cuda | 32 | adaptive | 1 | baseline | auto | 7 | 18.061 |  |  | 2.669e-03 | 1.058e-04 |
+| cuda | 32 | adaptive | 1 | ewald | auto | 7 | 10.765 | 1.678 | 1.517-1.688 | 2.927e-03 | 1.253e-04 |
+| cuda | 32 | adaptive | 1 | head | auto | 7 | 11.863 | 1.506 | 1.504-1.533 | 2.927e-03 | 1.253e-04 |
+| cuda | 32 | clustered | 0 | baseline | auto | 7 | 8.597 |  |  | 3.901e-03 | 5.182e-04 |
+| cuda | 32 | clustered | 0 | ewald | auto | 7 | 5.888 | 1.460 | 1.450-1.534 | 4.526e-03 | 1.022e-03 |
+| cuda | 32 | clustered | 0 | head | auto | 7 | 5.735 | 1.499 | 1.437-1.574 | 4.526e-03 | 1.022e-03 |
+| cuda | 32 | clustered | 1 | baseline | auto | 7 | 8.757 |  |  | 3.901e-03 | 5.182e-04 |
+| cuda | 32 | clustered | 1 | ewald | auto | 7 | 6.050 | 1.414 | 1.407-1.449 | 4.526e-03 | 1.022e-03 |
+| cuda | 32 | clustered | 1 | head | auto | 7 | 5.999 | 1.440 | 1.429-1.460 | 4.526e-03 | 1.022e-03 |
+| cuda | 32 | lattice | 0 | baseline | auto | 7 | 32.946 |  |  | 2.462e-01 | 2.842e-02 |
+| cuda | 32 | lattice | 0 | ewald | auto | 7 | 14.714 | 2.251 | 2.239-2.269 | 2.991e-01 | 3.739e-02 |
+| cuda | 32 | lattice | 0 | head | auto | 7 | 15.054 | 2.196 | 2.179-2.212 | 2.991e-01 | 3.739e-02 |
+| cuda | 32 | lattice | 1 | baseline | auto | 7 | 33.071 |  |  | 2.462e-01 | 2.842e-02 |
+| cuda | 32 | lattice | 1 | ewald | auto | 7 | 14.842 | 2.228 | 2.158-2.273 | 2.991e-01 | 3.739e-02 |
+| cuda | 32 | lattice | 1 | head | auto | 7 | 15.083 | 2.206 | 2.169-2.224 | 2.991e-01 | 3.739e-02 |
+
+baseline_auto_cuda_b64_o7_pair0: lattice/phi=0 32.952 ms, lattice/phi=1 32.950 ms, clustered/phi=0 8.619 ms, clustered/phi=1 8.441 ms, adaptive/phi=0 18.505 ms, adaptive/phi=1 18.539 ms
+head_auto_cuda_b64_o7_pair0: lattice/phi=0 14.632 ms, lattice/phi=1 14.686 ms, clustered/phi=0 5.574 ms, clustered/phi=1 5.849 ms, adaptive/phi=0 12.696 ms, adaptive/phi=1 12.212 ms
+ewald_auto_cuda_b64_o7_pair0: lattice/phi=0 14.261 ms, lattice/phi=1 14.434 ms, clustered/phi=0 5.741 ms, clustered/phi=1 5.851 ms, adaptive/phi=0 10.850 ms, adaptive/phi=1 10.557 ms
+ewald_auto_cuda_b64_o7_pair1: lattice/phi=0 14.197 ms, lattice/phi=1 14.496 ms, clustered/phi=0 5.562 ms, clustered/phi=1 5.850 ms, adaptive/phi=0 10.120 ms, adaptive/phi=1 10.168 ms
+head_auto_cuda_b64_o7_pair1: lattice/phi=0 14.519 ms, lattice/phi=1 14.650 ms, clustered/phi=0 5.498 ms, clustered/phi=1 5.854 ms, adaptive/phi=0 12.258 ms, adaptive/phi=1 12.315 ms
+baseline_auto_cuda_b64_o7_pair1: lattice/phi=0 32.341 ms, lattice/phi=1 32.469 ms, clustered/phi=0 8.481 ms, clustered/phi=1 8.488 ms, adaptive/phi=0 18.225 ms, adaptive/phi=1 18.525 ms
+baseline_auto_cuda_b64_o7_pair2: lattice/phi=0 32.236 ms, lattice/phi=1 32.322 ms, clustered/phi=0 8.261 ms, clustered/phi=1 8.611 ms, adaptive/phi=0 18.367 ms, adaptive/phi=1 18.463 ms
+head_auto_cuda_b64_o7_pair2: lattice/phi=0 14.691 ms, lattice/phi=1 14.703 ms, clustered/phi=0 5.602 ms, clustered/phi=1 5.824 ms, adaptive/phi=0 12.150 ms, adaptive/phi=1 12.261 ms
+ewald_auto_cuda_b64_o7_pair2: lattice/phi=0 14.132 ms, lattice/phi=1 14.356 ms, clustered/phi=0 5.517 ms, clustered/phi=1 5.767 ms, adaptive/phi=0 12.253 ms, adaptive/phi=1 11.195 ms
+Completed; see docs/cuda_kick_shared_memory_results/ewald_schedule/b64/summary.md
+docs/cuda_kick_shared_memory_results/ewald_schedule/b64: worst pair spread 1.211 ('ewald', 'auto', 'cuda', 64, 7, 'adaptive', False), load at start 6.82, process wall 2.9-4.0 s
+2026-10-20T02:20:46-05:00 bucket 64 attempt 1 exceeded the 1.15 pair spread; repeating
+baseline_auto_cuda_b64_o7_pair0: lattice/phi=0 33.070 ms, lattice/phi=1 32.907 ms, clustered/phi=0 8.550 ms, clustered/phi=1 8.677 ms, adaptive/phi=0 18.269 ms, adaptive/phi=1 18.395 ms
+head_auto_cuda_b64_o7_pair0: lattice/phi=0 14.795 ms, lattice/phi=1 14.875 ms, clustered/phi=0 5.768 ms, clustered/phi=1 5.943 ms, adaptive/phi=0 12.129 ms, adaptive/phi=1 11.938 ms
+ewald_auto_cuda_b64_o7_pair0: lattice/phi=0 14.416 ms, lattice/phi=1 14.757 ms, clustered/phi=0 5.502 ms, clustered/phi=1 5.792 ms, adaptive/phi=0 11.108 ms, adaptive/phi=1 10.562 ms
+ewald_auto_cuda_b64_o7_pair1: lattice/phi=0 14.359 ms, lattice/phi=1 14.479 ms, clustered/phi=0 5.524 ms, clustered/phi=1 5.827 ms, adaptive/phi=0 10.284 ms, adaptive/phi=1 10.496 ms
+head_auto_cuda_b64_o7_pair1: lattice/phi=0 14.586 ms, lattice/phi=1 14.648 ms, clustered/phi=0 5.505 ms, clustered/phi=1 5.882 ms, adaptive/phi=0 12.082 ms, adaptive/phi=1 12.182 ms
+baseline_auto_cuda_b64_o7_pair1: lattice/phi=0 32.591 ms, lattice/phi=1 32.707 ms, clustered/phi=0 8.514 ms, clustered/phi=1 8.250 ms, adaptive/phi=0 18.059 ms, adaptive/phi=1 18.194 ms
+baseline_auto_cuda_b64_o7_pair2: lattice/phi=0 32.348 ms, lattice/phi=1 32.569 ms, clustered/phi=0 8.125 ms, clustered/phi=1 8.386 ms, adaptive/phi=0 17.965 ms, adaptive/phi=1 18.549 ms
+head_auto_cuda_b64_o7_pair2: lattice/phi=0 14.770 ms, lattice/phi=1 14.688 ms, clustered/phi=0 5.590 ms, clustered/phi=1 5.887 ms, adaptive/phi=0 12.287 ms, adaptive/phi=1 12.320 ms
+ewald_auto_cuda_b64_o7_pair2: lattice/phi=0 14.364 ms, lattice/phi=1 14.383 ms, clustered/phi=0 5.618 ms, clustered/phi=1 6.013 ms, adaptive/phi=0 10.359 ms, adaptive/phi=1 10.596 ms
+Completed; see docs/cuda_kick_shared_memory_results/ewald_schedule/b64/summary.md
+docs/cuda_kick_shared_memory_results/ewald_schedule/b64: worst pair spread 1.080 ('ewald', 'auto', 'cuda', 64, 7, 'adaptive', False), load at start 7.17, process wall 2.8-4.0 s
+| reference | candidate | backend | bucket | order | fixture | acceleration rel L2 | acceleration max pointwise | potential rel L2 | potential max pointwise |
+|---|---|---|---:|---:|---|---:|---:|---:|---:|
+| head | ewald | cuda | 64 | 7 | adaptive | 3.253e-10 | 4.263e-07 | 2.515e-10 | 6.525e-06 |
+| head | ewald | cuda | 64 | 7 | clustered | 0.000e+00 | 0.000e+00 | 0.000e+00 | 0.000e+00 |
+| head | ewald | cuda | 64 | 7 | lattice | 1.980e-08 | 2.267e-06 | 0.000e+00 | 0.000e+00 |
+
+| backend | bucket | fixture | potential | binary | policy | order | kick ms | speedup vs reference | paired range | force rel L2 | potential rel L2 |
+|---|---:|---|---:|---|---|---:|---:|---:|---|---:|---:|
+| cuda | 64 | adaptive | 0 | baseline | auto | 7 | 18.059 | 0.669 | 0.664-0.684 | 2.111e-03 | 1.025e-04 |
+| cuda | 64 | adaptive | 0 | ewald | auto | 7 | 10.359 | 1.175 | 1.092-1.186 | 2.262e-03 | 1.163e-04 |
+| cuda | 64 | adaptive | 0 | head | auto | 7 | 12.129 |  |  | 2.262e-03 | 1.163e-04 |
+| cuda | 64 | adaptive | 1 | baseline | auto | 7 | 18.395 | 0.664 | 0.649-0.670 | 2.111e-03 | 1.025e-04 |
+| cuda | 64 | adaptive | 1 | ewald | auto | 7 | 10.562 | 1.161 | 1.130-1.163 | 2.262e-03 | 1.163e-04 |
+| cuda | 64 | adaptive | 1 | head | auto | 7 | 12.182 |  |  | 2.262e-03 | 1.163e-04 |
+| cuda | 64 | clustered | 0 | baseline | auto | 7 | 8.514 | 0.675 | 0.647-0.688 | 4.815e-03 | 5.752e-04 |
+| cuda | 64 | clustered | 0 | ewald | auto | 7 | 5.524 | 0.997 | 0.995-1.048 | 5.305e-03 | 1.096e-03 |
+| cuda | 64 | clustered | 0 | head | auto | 7 | 5.590 |  |  | 5.305e-03 | 1.096e-03 |
+| cuda | 64 | clustered | 1 | baseline | auto | 7 | 8.386 | 0.702 | 0.685-0.713 | 4.815e-03 | 5.752e-04 |
+| cuda | 64 | clustered | 1 | ewald | auto | 7 | 5.827 | 1.009 | 0.979-1.026 | 5.305e-03 | 1.096e-03 |
+| cuda | 64 | clustered | 1 | head | auto | 7 | 5.887 |  |  | 5.305e-03 | 1.096e-03 |
+| cuda | 64 | lattice | 0 | baseline | auto | 7 | 32.591 | 0.448 | 0.447-0.457 | 3.418e-01 | 3.613e-02 |
+| cuda | 64 | lattice | 0 | ewald | auto | 7 | 14.364 | 1.026 | 1.016-1.028 | 3.644e-01 | 4.476e-02 |
+| cuda | 64 | lattice | 0 | head | auto | 7 | 14.770 |  |  | 3.644e-01 | 4.476e-02 |
+| cuda | 64 | lattice | 1 | baseline | auto | 7 | 32.707 | 0.451 | 0.448-0.452 | 3.418e-01 | 3.613e-02 |
+| cuda | 64 | lattice | 1 | ewald | auto | 7 | 14.479 | 1.012 | 1.008-1.021 | 3.644e-01 | 4.476e-02 |
+| cuda | 64 | lattice | 1 | head | auto | 7 | 14.688 |  |  | 3.644e-01 | 4.476e-02 |
+
+| backend | bucket | fixture | potential | binary | policy | order | kick ms | speedup vs reference | paired range | force rel L2 | potential rel L2 |
+|---|---:|---|---:|---|---|---:|---:|---:|---|---:|---:|
+| cuda | 64 | adaptive | 0 | baseline | auto | 7 | 18.059 |  |  | 2.111e-03 | 1.025e-04 |
+| cuda | 64 | adaptive | 0 | ewald | auto | 7 | 10.359 | 1.734 | 1.645-1.756 | 2.262e-03 | 1.163e-04 |
+| cuda | 64 | adaptive | 0 | head | auto | 7 | 12.129 | 1.495 | 1.462-1.506 | 2.262e-03 | 1.163e-04 |
+| cuda | 64 | adaptive | 1 | baseline | auto | 7 | 18.395 |  |  | 2.111e-03 | 1.025e-04 |
+| cuda | 64 | adaptive | 1 | ewald | auto | 7 | 10.562 | 1.742 | 1.733-1.751 | 2.262e-03 | 1.163e-04 |
+| cuda | 64 | adaptive | 1 | head | auto | 7 | 12.182 | 1.506 | 1.494-1.541 | 2.262e-03 | 1.163e-04 |
+| cuda | 64 | clustered | 0 | baseline | auto | 7 | 8.514 |  |  | 4.815e-03 | 5.752e-04 |
+| cuda | 64 | clustered | 0 | ewald | auto | 7 | 5.524 | 1.541 | 1.446-1.554 | 5.305e-03 | 1.096e-03 |
+| cuda | 64 | clustered | 0 | head | auto | 7 | 5.590 | 1.482 | 1.453-1.547 | 5.305e-03 | 1.096e-03 |
+| cuda | 64 | clustered | 1 | baseline | auto | 7 | 8.386 |  |  | 4.815e-03 | 5.752e-04 |
+| cuda | 64 | clustered | 1 | ewald | auto | 7 | 5.827 | 1.416 | 1.395-1.498 | 5.305e-03 | 1.096e-03 |
+| cuda | 64 | clustered | 1 | head | auto | 7 | 5.887 | 1.424 | 1.403-1.460 | 5.305e-03 | 1.096e-03 |
+| cuda | 64 | lattice | 0 | baseline | auto | 7 | 32.591 |  |  | 3.418e-01 | 3.613e-02 |
+| cuda | 64 | lattice | 0 | ewald | auto | 7 | 14.364 | 2.270 | 2.252-2.294 | 3.644e-01 | 4.476e-02 |
+| cuda | 64 | lattice | 0 | head | auto | 7 | 14.770 | 2.234 | 2.190-2.235 | 3.644e-01 | 4.476e-02 |
+| cuda | 64 | lattice | 1 | baseline | auto | 7 | 32.707 |  |  | 3.418e-01 | 3.613e-02 |
+| cuda | 64 | lattice | 1 | ewald | auto | 7 | 14.479 | 2.259 | 2.230-2.264 | 3.644e-01 | 4.476e-02 |
+| cuda | 64 | lattice | 1 | head | auto | 7 | 14.688 | 2.217 | 2.212-2.233 | 3.644e-01 | 4.476e-02 |
+
+2026-10-20T02:21:20-05:00 bucket stages done

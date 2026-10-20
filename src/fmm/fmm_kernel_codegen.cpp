@@ -533,6 +533,46 @@ void ewald() {
 
     tprint("int icnt = 0;\n");
 
+    // The Fourier sum runs first, while only its own accumulators are live: the
+    // CUDA kick kernel is at the register limit, and with the real-space
+    // accumulators live as well ptxas serialized the table loads through one
+    // register, one load latency per coefficient per mode. The two sums use
+    // separate accumulators, so the order of the sums does not change the
+    // result.
+    Array<int, NDIM> k;
+    tprint("auto const foursz = EwaldConst::nfour();\n");
+    tprint("for (int i = 0; i < foursz; i++) {\n");
+    indent();
+    tprint("auto const &h = EwaldConst::fourIndex(i);\n");
+    tprint("auto const& d0Value = EwaldConst::fourExpansion<%i>(i);\n", P);
+    tprint("T const hdotx = simdFma(simdBroadcast<T>(h[0]), position[0], "
+           "simdFma(simdBroadcast<T>(h[1]), position[1], simdBroadcast<T>(h[2]) * "
+           "position[2]));\n");    // 5
+    tprint("T cn, sn;\n");
+    tprint(
+        "sincos(simdBroadcast<T>(2.0 * M_PI * SCALE_FACTOR_INV1) * hdotx, &sn, &cn);\n");    // 35
+    int fourierFlops = 40;
+    bool iscos[P * P + 1];
+    for (k[0] = 0; k[0] < P; k[0]++) {
+        for (k[1] = 0; k[1] < P - k[0]; k[1]++) {
+            int const zmax = (k[0] == 0 && k[1] == 0) ? intmin(3, P) : intmin(P - k[0] - k[1], 2);
+            for (k[2] = 0; k[2] < zmax; k[2]++) {
+                int const k0 = k[0] + k[1] + k[2];
+                iscos[trlessIndex(k[0], k[1], k[2], P)] = (k0 % 2 == 0);
+            }
+        }
+    }
+    int maxi = (P * P + 1);
+    for (int i = 0; i < maxi; i++) {
+        int j = i + maxi;
+        tprint("dfour[%i] = simdFma(%cn, simdBroadcast<T>(d0Value[%i]), dfour[%i]);\n", i,
+            iscos[i] ? 'c' : 's', i, i);
+        fourierFlops += 2;
+    }
+
+    deindent();
+    tprint("}\n");
+
     tprint("Array<T, NDIM> dx;\n");
     tprint("dx = position;\n");
     tprint("{\n");                                                                   // 1
@@ -642,9 +682,6 @@ void ewald() {
     tprint("dxrinv[1] = dx[1] * rinv;\n");
     tprint("dxrinv[2] = dx[2] * rinv;\n");
     theseFlops += computeDx(P, "dxrinv");
-    Array<int, NDIM> m;
-    Array<int, NDIM> k;
-    Array<int, NDIM> n;
     theseFlops += 37 + 7 * (P - 1) + P * (P + 1) / 2;
 
     theseFlops += computeDetraceEwald<P>("x", "dreal");
@@ -654,43 +691,11 @@ void ewald() {
     deindent();
     tprint("}\n");
 
-    tprint("auto const foursz = EwaldConst::nfour();\n");
-    tprint("for (int i = 0; i < foursz; i++) {\n");
-    indent();
-    tprint("auto const &h = EwaldConst::fourIndex(i);\n");
-    tprint("auto const& d0Value = EwaldConst::fourExpansion<%i>(i);\n", P);
-    tprint("T const hdotx = simdFma(simdBroadcast<T>(h[0]), position[0], "
-           "simdFma(simdBroadcast<T>(h[1]), position[1], simdBroadcast<T>(h[2]) * "
-           "position[2]));\n");    // 5
-    tprint("T cn, sn;\n");
-    tprint(
-        "sincos(simdBroadcast<T>(2.0 * M_PI * SCALE_FACTOR_INV1) * hdotx, &sn, &cn);\n");    // 35
-    theseFlops = 40;
-    bool iscos[P * P + 1];
-    for (k[0] = 0; k[0] < P; k[0]++) {
-        for (k[1] = 0; k[1] < P - k[0]; k[1]++) {
-            int const zmax = (k[0] == 0 && k[1] == 0) ? intmin(3, P) : intmin(P - k[0] - k[1], 2);
-            for (k[2] = 0; k[2] < zmax; k[2]++) {
-                int const k0 = k[0] + k[1] + k[2];
-                iscos[trlessIndex(k[0], k[1], k[2], P)] = (k0 % 2 == 0);
-            }
-        }
-    }
-    int maxi = (P * P + 1);
-    for (int i = 0; i < maxi; i++) {
-        int j = i + maxi;
-        tprint("dfour[%i] = simdFma(%cn, simdBroadcast<T>(d0Value[%i]), dfour[%i]);\n", i,
-            iscos[i] ? 'c' : 's', i, i);
-        theseFlops += 2;
-    }
-
-    deindent();
-    tprint("}\n");
     //	reference_sym("Dreal", P);
     //	reference_trless("D", P);
     int thoseFlops = computeDetrace<P>("dreal", "d", 'd');
     thoseFlops += 16 + 3 * (P * P + 1);
-    tprint("flops += %i * foursz + %i;\n", theseFlops, thoseFlops + P * P + 1);
+    tprint("flops += %i * foursz + %i;\n", fourierFlops, thoseFlops + P * P + 1);
     tprint("d = d + dfour;\n");                                                            // P*P+1
     tprint("d[0] = simdBroadcast<T>(%.9e * SCALE_FACTOR_INV1) + d[0]; \n", M_PI / 4.0);    // 1
     tprint("return flops;\n");

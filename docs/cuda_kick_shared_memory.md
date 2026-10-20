@@ -2058,6 +2058,227 @@ that the staging now is what the code says: an asynchronous copy, one
 `LDGSTS` per lane and record, completed by the barrier it names, in place of
 a synchronous byte loop that the barrier wait then re-ordered for nothing.
 
+### Ewald cell-cell schedule at low occupancy (`ewald_schedule/`)
+
+With the PP loop scheduled, the bucket-512 adaptive kernel's remaining stall
+samples sit in the walk's Ewald cell-cell interactions (`cudaGravityCcEwald`:
+one multipole per lane, `ewaldGreensFunction` from the generated
+`ewald_kernels.hpp`, then the generated Ewald M2L). Reading the
+SASS-with-source export of the PP schedule's replay
+(`pp_schedule/ncu_bucket512/arena`, `ncu --page source --csv --print-source
+sass,cuda`) needs one precaution: the export lists every instruction once per
+inlining level, so the same address appears under the generated line, under
+`simd_math.hpp`'s `simdFma` and under `cmath`'s `fma`, and per-line sums
+triple-count the arithmetic. `benchmarks/summarize_ncu_regions.py` keeps one
+row per address, assigns it to a region by file and line range (library frames
+inherit the region of the preceding project instruction, where their inlined
+code sits) and sums the samples, the executed warp instructions and the stall
+reasons. For the PP schedule binary at bucket 512
+(`ewald_schedule/regions_pp_schedule.txt`, 331,901 samples, 214.9 M warp
+instructions):
+
+| region | stall samples | share | warp instructions | share | active lanes | static instructions |
+|---|---:|---:|---:|---:|---:|---:|
+| Ewald Fourier sum (92 modes) | 105,308 | 31.7% | 15.0 M | 7.0% | 20.6 | 118 |
+| Ewald real-space images (178 tests, 91 bodies per evaluation) | 45,324 | 13.7% | 59.6 M | 27.7% | 17.4 | 453 |
+| Ewald self term, detrace, M2L and the lane loop | 4,951 | 1.5% | 3.2 M | 1.5% | 20.8 | 2,567 |
+| PP sink groups (`cudaPpSinkGroup` and the inverse powers) | 42,996 | 13.0% | 49.1 M | 22.8% | 31.3 | 317 |
+| everything else (walk, lists, PC, CP, the PP loop's fixed-point differences and softening kernel) | 133,322 | 40.2% | 88.0 M | 41.0% | | |
+
+The Ewald path holds 47% of the samples with 37% of the instructions, and the
+split inside it is lopsided: the Fourier sum stalls twelve times more per
+executed instruction than the real-space loop. Its body is 118 SASS
+instructions per mode: three table reads of the wave vector, the phase and its
+`sincos` (`FMUL.RZ`, `MUFU.SIN`, `MUFU.COS` under `--use_fast_math`), then 50
+pairs of an `LDC` from the mode's `fourExpanse` row and the `FFMA` that
+accumulates it. Every `FFMA` waits for its own `LDC` (short scoreboard, 78% of
+the region's samples, `sass/fourier_loop_head.txt`): the kernel is at the
+255-register limit, and at this point of the generated function the 84
+real-space accumulators, the 50 Fourier accumulators and the local expansion
+are all live, so ptxas funnels the 50 loads of a mode through a single
+register (`R251` for the sine terms, `R249` for the cosine terms) and pays one
+constant-load latency per coefficient instead of once per mode. The
+real-space loop, by contrast, is issue-bound: 53% of its samples are
+"selected" (the warp issuing) and 15% dispatch stalls, with 453 instructions
+per image body (80 products for the direction tensor, about 250 fused
+accumulations into the 84 symmetric components, the `erfc` and exponential of
+the front). About 20.6 of 32 lanes hold a multipole per warp iteration
+(1,398 warp evaluations in the replay), and 17.4 of them are inside the
+real-space cutoff when any lane is.
+
+The change is in the generator (`src/fmm/fmm_kernel_codegen.cpp`): the
+generated `ewaldCorrectionDerivatives` evaluates the Fourier sum first, before
+the self term and the real-space image loop, so that only its own 50
+accumulators are live while the table loads issue. The two sums use separate
+accumulators (`dfour` and `dreal`) that meet only in the final
+`d = detrace(dreal) + dfour`, so no coefficient's summation order changes;
+the regenerated header holds the same lines in a different order, and the
+CPU walk uses the same function. In the new SASS the 50 loads of a mode go
+to distinct registers about ten instructions ahead of the `FFMA`s that
+consume them (`sass/fourier_loop_ewald.txt`); the whole kernel's static spill
+instructions grow from 851 to 933.
+
+Nsight Compute replay of the second force-only kick kernel, adaptive fixture,
+bucket 512, `--set full` (`ncu_bucket512/`, `ncu_run.sh`; "head" is
+`origin/main` da3c1f4e, the binary the change was built from, same
+`build/arena_b1024` configuration):
+
+| metric | head | Ewald schedule |
+|---|---:|---:|
+| kernel duration | 25.44 ms | 17.39 ms |
+| elapsed cycles per SM | 36.0 M | 24.2 M |
+| warp instructions executed | 211.1 M | 211.2 M |
+| issue-active cycles (% of active) | 26.2 | 33.3 |
+| cycles per issued instruction | 3.82 | 3.00 |
+| stall, short scoreboard (per issue) | 1.36 | 0.53 |
+| stall, wait (per issue) | 0.83 | 0.84 |
+| stall, long scoreboard (per issue) | 0.19 | 0.19 |
+| stall, no instruction (per issue) | 0.18 | 0.17 |
+| local-memory load sectors | 1.11 M | 1.25 M |
+| local-memory store sectors | 2.23 M | 2.47 M |
+| shared-memory load wavefronts | 5.09 M | 5.09 M |
+| registers per thread | 255 | 255 |
+
+The instruction count is unchanged (the same arithmetic in a different order)
+and the kernel is 32% shorter: the short-scoreboard stalls, which were the
+largest component, fall by 61%. By region (`ncu_bucket512/head/regions.txt`,
+`ncu_bucket512/ewald/regions.txt`; the sampling period differs between the
+two replays, so only the shares compare):
+
+| region | head samples | share | Ewald schedule samples | share | stall mix after |
+|---|---:|---:|---:|---:|---|
+| Ewald Fourier sum | 92,123 | 32.6% | 34,232 | 14.8% | wait 43%, short scoreboard 41%, selected 15% |
+| Ewald real-space images | 38,553 | 13.6% | 44,443 | 19.3% | selected 49%, wait 22%, short scoreboard 13%, dispatch 12% |
+| Ewald self term, detrace, M2L, lane loop | 4,184 | 1.5% | 4,799 | 2.1% | mostly instruction fetch |
+| PP sink groups | 49,981 | 17.7% | 48,030 | 20.8% | selected 46%, wait 36% |
+| everything else (including the rest of the PP function) | 97,748 | 34.6% | 99,184 | 43.0% | |
+
+What the Fourier loop still costs (`regions.txt` with `--sass ewald_four`):
+each of the 50 constant loads now carries a few hundred samples of
+fixed-latency stall, 44% of the loop's samples in all, so the loads' issue
+rate is the new limit of the loop; the first accumulation after `MUFU.SIN`
+and `MUFU.COS` waits for them once per mode (13% of the loop); the loads are
+scalar `LDC` because the `fourExpanse` rows are 328 bytes apart (82 floats,
+the order-9 size) and the row index is a register, so neither 16-byte loads
+nor a constant-bank operand of the `FFMA` itself (which needs a uniform
+register, and the whole evaluation runs inside the divergent lane loop) is
+available to ptxas. The real-space loop is unchanged and now holds the
+largest share of the Ewald path; it is issue-bound, so it only gets cheaper
+with fewer instructions or more warps per multiprocessor.
+
+Kernel-only replays at the other buckets (`kernel_small.sh`,
+`kernel_small_buckets/head_vs_ewald.txt`; one replay per cell, the second
+force-only launch, and for the clustered cells three alternating repeats in
+`kernel_small_repeat/summary.txt`):
+
+| fixture, bucket | head | Ewald schedule | warp instructions |
+|---|---:|---:|---:|
+| adaptive, 64 | 6.67 ms | 4.43 ms | 124.2 M to 124.2 M |
+| adaptive, 128 | 6.81 ms | 4.49 ms | 129.9 M to 130.0 M |
+| adaptive, 256 | 12.97 ms | 8.62 ms | 158.9 M to 159.0 M |
+| clustered, 32 (three repeats) | 1.52-1.59 ms | 1.60-1.66 ms | 30.93 M to 30.79 M |
+| clustered, 64 (three repeats) | 1.44-1.50 ms | 1.34-1.49 ms | 27.66 M to 27.56 M |
+
+The adaptive kernel is 1.5x faster at every bucket, not only in the
+single-warp regime: its tree is deep, so its upper nodes carry Ewald lists
+on the GPU at every bucket, and the constant-load serialization cost the
+same at full occupancy. The clustered kernel, which has few Ewald
+interactions, is level within its repeat spread at bucket 64 and 3% slower
+at bucket 32 in all three repeats (2.5% more cycles per instruction on 0.5%
+fewer instructions), consistent with the additional spills.
+
+Whole-kick times (`run.sh`: baseline, head and the Ewald schedule, order 7,
+15 samples, direct reference over 1,024 particles; three pairs at buckets 32
+to 128 and five pairs at 256 and 512; `driver*.log`). The stage script
+repeats a bucket whose worst pair spread exceeds 1.15, at most three times.
+Buckets 32, 64 and 128 passed (worst spreads 1.10, 1.08 and 1.09, one discarded
+attempt at 64). At buckets 256 and 512 every attempt exceeded the threshold,
+each time on a cell of the baseline binary (lattice or clustered, 1.15 to
+1.32) while the head and Ewald cells of the same stage spread by at most 1.07
+(256) and 1.13 (512): a home-directory `rsync` and another session's
+file-system search were running during these stages (load average 11 to 13
+with 15% I/O wait). All attempts are kept under `contaminated/`; the tables
+use the five-pair attempt of each bucket with the smallest worst spread
+(1.150 at 256, 1.157 at 512), and the Ewald-over-head ratios of every
+attempt agree with them within the pair spread.
+
+lattice (forces only):
+
+| bucket | baseline | head | Ewald schedule | speedup vs baseline (paired range) | speedup vs head (paired range) |
+|---:|---:|---:|---:|---:|---:|
+| 32 | 32.95 ms | 15.05 ms | 14.71 ms | 2.251x (2.239-2.269) | 1.026x (1.020-1.033) |
+| 64 | 32.59 ms | 14.77 ms | 14.36 ms | 2.270x (2.252-2.294) | 1.026x (1.016-1.028) |
+| 128 | 14.75 ms | 14.74 ms | 14.34 ms | 1.030x (1.018-1.051) | 1.029x (1.028-1.030) |
+| 256 | 11.37 ms | 10.41 ms | 9.74 ms | 1.168x (1.158-1.259) | 1.069x (1.067-1.090) |
+| 512 | 10.34 ms | 9.24 ms | 7.63 ms | 1.360x (1.346-1.544) | 1.230x (1.193-1.271) |
+
+clustered (forces only):
+
+| bucket | baseline | head | Ewald schedule | speedup vs baseline (paired range) | speedup vs head (paired range) |
+|---:|---:|---:|---:|---:|---:|
+| 32 | 8.60 ms | 5.74 ms | 5.89 ms | 1.460x (1.450-1.534) | 0.975x (0.974-1.009) |
+| 64 | 8.51 ms | 5.59 ms | 5.52 ms | 1.541x (1.446-1.554) | 0.997x (0.995-1.048) |
+| 128 | 6.31 ms | 6.30 ms | 6.28 ms | 1.012x (0.969-1.054) | 1.003x (0.990-1.010) |
+| 256 | 6.84 ms | 5.67 ms | 5.69 ms | 1.202x (1.192-1.229) | 0.994x (0.981-1.003) |
+| 512 | 9.65 ms | 5.47 ms | 5.22 ms | 1.862x (1.799-1.900) | 1.043x (1.002-1.077) |
+
+adaptive (forces only):
+
+| bucket | baseline | head | Ewald schedule | speedup vs baseline (paired range) | speedup vs head (paired range) |
+|---:|---:|---:|---:|---:|---:|
+| 32 | 17.77 ms | 12.01 ms | 10.59 ms | 1.680x (1.646-1.693) | 1.124x (1.118-1.145) |
+| 64 | 18.06 ms | 12.13 ms | 10.36 ms | 1.734x (1.645-1.756) | 1.175x (1.092-1.186) |
+| 128 | 16.12 ms | 12.39 ms | 10.51 ms | 1.532x (1.500-1.568) | 1.204x (1.139-1.226) |
+| 256 | 18.32 ms | 17.01 ms | 13.35 ms | 1.358x (1.343-1.374) | 1.257x (1.232-1.295) |
+| 512 | 28.44 ms | 26.38 ms | 19.65 ms | 1.453x (1.429-1.470) | 1.335x (1.332-1.374) |
+
+adaptive (forces + potential):
+
+| bucket | baseline | head | Ewald schedule | speedup vs baseline (paired range) | speedup vs head (paired range) |
+|---:|---:|---:|---:|---:|---:|
+| 32 | 18.06 ms | 11.86 ms | 10.77 ms | 1.678x (1.517-1.688) | 1.095x (1.008-1.120) |
+| 64 | 18.39 ms | 12.18 ms | 10.56 ms | 1.742x (1.733-1.751) | 1.161x (1.130-1.163) |
+| 128 | 16.26 ms | 12.72 ms | 10.80 ms | 1.506x (1.504-1.509) | 1.180x (1.154-1.180) |
+| 256 | 18.57 ms | 17.81 ms | 13.84 ms | 1.334x (1.293-1.380) | 1.286x (1.248-1.304) |
+| 512 | 29.61 ms | 27.19 ms | 20.57 ms | 1.437x (1.432-1.470) | 1.318x (1.303-1.352) |
+
+Speedups are the baseline's or head's median over the Ewald schedule's; the
+paired range is the min-max of the per-pair ratio. The lattice and clustered
+cells with the potential behave like their force-only rows (lattice 1.01 to
+1.02x against the head at buckets 32 to 128, 1.08x at 256 and 1.20x at 512;
+clustered 0.99 to 1.01x everywhere). The adaptive kick gains at every
+bucket, 1.10 to 1.20x at 32 to 128 where the kernel is 1.5x faster but the
+kick shares its time with the host walk, and 1.26x and 1.33x at 256 and 512
+where it is kernel-bound (19.65 ms against 26.38 at bucket 512, with the
+17.4 ms replay plus about 2 ms of host time). The lattice, whose Ewald lists
+resolve at the box/8 level and reach the GPU with the larger workitems, gains
+2 to 3% at the small buckets and 1.07x and 1.23x at 256 and 512. The
+clustered kick, with few Ewald interactions, is level within its pair spread
+at buckets 64 to 512 and 2.5% slower at bucket 32 (0.975x, range 0.974-1.009),
+in line with the kernel replays above. Against the baseline the adaptive kick
+is now 1.45x faster at bucket 512 and 1.5 to 1.7x at the smaller buckets.
+
+Forces (`b*/head_vs_ewald.md` from `benchmarks/compare_kick_arena_binaries.py`):
+the exports of the head and the Ewald schedule are bit-identical on the
+clustered fixture at every bucket and on the lattice at buckets 32 and 512;
+the other cells differ at roundoff level, with relative L2 differences of
+2e-10 to 7e-10 (adaptive) and 2e-8 to 5e-8 (lattice) for the accelerations
+and maximum pointwise relative differences of 4e-7 to 8e-6 for the
+accelerations and up to 1e-5 for the potentials (at a near-zero potential).
+The differences are deterministic (each binary's exports repeat bit for bit
+across pairs), the CPU-only kick's exports of the two binaries are identical
+on all three fixtures, and the PTX of the order-7 CUDA instance compiled with
+the old and the new header holds the same multiset of instructions (3,390
+`fma.rn.ftz.f32`, 4,373 `mul.ftz.f32`, 960 `add.ftz.f32`, 1,459
+`sub.ftz.f32`, 64,822 in all), so the change of the generated code is a pure
+reordering down to the PTX and the roundoff comes from ptxas, which may fuse
+`mul.ftz.f32` and `add.ftz.f32` pairs (unrounded under `--use_fast_math`)
+into `FFMA` and decides differently under the new schedule. The
+direct-reference errors of the two binaries agree to every printed digit in
+every cell (`b*/speedup_vs_head.md`). `stf_ewald_cpu`, `stf_kernels_cuda`,
+`stf_l2l_cuda`, `fmm_tree`, `fmm_walk_cpu`, `fmm_walk_cuda` and
+`sph_gravity_cuda` pass on the new binary.
+
 ### What remains
 
 - The per-launch list slab removed the pool allocator from the kernel (above);
@@ -2076,10 +2297,23 @@ a synchronous byte loop that the barrier wait then re-ordered for nothing.
   is now an aligned `cp.async` copy (Aligned PC multipole staging).
 - At small problems where the launch holds fewer warps than the GPU can keep
   resident (64 leaves at bucket 512), the PP loop is no longer the bound: with
-  the restructured loop it holds about a third of the kernel's stall samples
-  and the walk with its Ewald cell interactions (`cudaGravityCcEwald`, one
-  multipole per lane, a few multipoles per leaf) holds most of the rest. That
-  loop is the next candidate for the same treatment.
+  the restructured loop it holds about a fifth of the kernel's stall samples.
+  The Ewald cell interactions' Fourier sum, which held a third, is scheduled
+  (Ewald cell-cell schedule at low occupancy; the bucket-512 adaptive kernel
+  went from 25.4 to 17.4 ms). What remains of the Ewald path: the real-space
+  image loop (19% of the samples, issue-bound at 453 instructions per image,
+  about 100 of them products of a coefficient with an inverse-power factor
+  that the generator could fold into the factors at roundoff cost), the
+  Fourier loop's 50 scalar constant loads per mode (15%; 16-byte `LDC.128`
+  would need the `fourExpanse` rows padded to a 16-byte stride and loaded
+  through `float4`, and a constant-bank `FFMA` operand would need the lane
+  loop made warp-uniform so ptxas can keep the row address in a uniform
+  register), the exposed `MUFU.SIN`/`MUFU.COS` latency once per mode (an
+  unroll by two modes), the ±h symmetry of the modes (46 instead of 92, at
+  roundoff cost on CPU and GPU alike), and the lane utilization of 20.6 of
+  32 (splitting the images and modes of one multipole across the idle lanes
+  of a short list, with a shuffle reduction of the 50 derivative
+  coefficients).
 - The handoff rule is measured at 32,768, 262,144 and 2,097,152 particles
   and 2-12 threads and holds six blocks per multiprocessor above 884,736
   particles; beyond 2.1 million particles per rank it is unmeasured, and the
@@ -2106,9 +2340,9 @@ a synchronous byte loop that the barrier wait then re-ordered for nothing.
   bucket 64 shows the merged kernel 9-14% faster than the pre-merge kernel
   with the host share unchanged, so the adaptive cell gains little there
   because the kick is host-bound, not because the merge lost anything in the
-  kernel. At buckets 256 and 512 the adaptive kick is kernel-bound (the
-  bucket-512 split above) and level with the pre-merge `main`; the walk's
-  Ewald cell interactions, the next target above, are what remains for it.
+  kernel. At buckets 256 and 512 the adaptive kick was kernel-bound (the
+  bucket-512 split above) and level with the pre-merge `main`; the Ewald
+  schedule since made it 1.26x and 1.33x faster than the landed head there.
   The merged binary's larger control block costs one multipole per source
   tile at bucket 512 (16 instead of 17), which changes the summation order
   there; the forces differ at roundoff level, not in accuracy.
