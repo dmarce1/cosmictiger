@@ -160,8 +160,10 @@ struct Hydro {
     // Canonical support bounds in box units, normalized from input particle spacings.
     double minSupportRadius{};
     double maxSupportRadius{};
-    // Uniform external acceleration for the Rayleigh-Taylor gas test.
+    // Optional uniform external acceleration in the y direction.
     double yAcceleration{};
+    // Magnitude of the external acceleration toward the plane z = 0.5.
+    double zPlaneAcceleration{};
     // Fixed central potential for the orbiting-disc gas test.
     double centralAcceleration{};
     double centralSupportRadius{};
@@ -334,6 +336,7 @@ struct Options {
         arc & chemistry.energyAbsoluteTolerance;
         arc & chemistry.maxSubsteps;
         arc & run.verbose;
+        arc & hydro.zPlaneAcceleration;
     }
 };
 

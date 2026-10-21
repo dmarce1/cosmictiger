@@ -263,6 +263,7 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"hydro.kernelFamily", options.hydro.kernelFamily},
         {"hydro.kernelDegree", options.hydro.kernelDegree},
         {"hydro.yAcceleration", options.hydro.yAcceleration},
+        {"hydro.zPlaneAcceleration", options.hydro.zPlaneAcceleration},
         {"hydro.viscosityAlpha", options.hydro.viscosityAlpha},
         {"hydro.viscosityBeta", options.hydro.viscosityBeta},
         {"hydro.viscosityEpsilon", options.hydro.viscosityEpsilon},
@@ -496,7 +497,9 @@ bool processOptions(int argc, char* argv[]) {
         po::value<int>(&opts.hydro.kernelDegree)->default_value(3),
         "density degree: spline 2..9; wendland 2,5,8; ferrers 2,4,6,8")("hydro.yAcceleration",
         po::value<double>(&opts.hydro.yAcceleration)->default_value(0.0),
-        "uniform gravitational acceleration in the y direction")("hydro.viscosityAlpha",
+        "uniform gravitational acceleration in the y direction")("hydro.zPlaneAcceleration",
+        po::value<double>(&opts.hydro.zPlaneAcceleration)->default_value(0.0),
+        "nonnegative acceleration magnitude toward the plane z=0.5")("hydro.viscosityAlpha",
         po::value<double>(&opts.hydro.viscosityAlpha)->default_value(1.0),
         "constant linear artificial-viscosity coefficient alpha")("hydro.viscosityBeta",
         po::value<double>(&opts.hydro.viscosityBeta)->default_value(2.0),
@@ -769,6 +772,10 @@ bool processOptions(int argc, char* argv[]) {
         THROW_ERROR("hydro.yAcceleration and hydro.centralAcceleration must be finite; "
                     "hydro.centralSoftening must be finite and positive\n");
     }
+    if (!detail::isFiniteOption(opts.hydro.zPlaneAcceleration) ||
+        opts.hydro.zPlaneAcceleration < 0.0) {
+        THROW_ERROR("hydro.zPlaneAcceleration must be finite and nonnegative\n");
+    }
     if (!detail::isFiniteOption(opts.hydro.viscosityAlpha) || opts.hydro.viscosityAlpha < 0.0 ||
         !detail::isFiniteOption(opts.hydro.viscosityBeta) || opts.hydro.viscosityBeta < 0.0 ||
         !detail::isFiniteOption(opts.hydro.viscosityEpsilon) ||
@@ -817,6 +824,11 @@ bool processOptions(int argc, char* argv[]) {
         !detail::isPositiveFloatOption(opts.hydro.centralSupportRadius)) {
         THROW_ERROR("hydro.yAcceleration, hydro.centralAcceleration and hydro.centralSoftening "
                     "must be representable in single precision, with positive centralSoftening\n");
+    }
+    if (opts.hydro.zPlaneAcceleration != 0.0 &&
+        !detail::isPositiveFloatOption(opts.hydro.zPlaneAcceleration)) {
+        THROW_ERROR("nonzero hydro.zPlaneAcceleration must remain finite and positive in "
+                    "single precision\n");
     }
     if (!detail::isPositiveFloatOption(
             opts.hydro.minSupportRadius / opts.initial.particlesPerDimension) ||
@@ -1080,6 +1092,8 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("hydro.viscosityBeta", hydro.viscosityBeta);
     SHOW("hydro.viscosityEpsilon", hydro.viscosityEpsilon);
     SHOW("hydro.gamma", hydro.gamma);
+    SHOW("hydro.yAcceleration", hydro.yAcceleration);
+    SHOW("hydro.zPlaneAcceleration", hydro.zPlaneAcceleration);
     SHOW("hydro.neighborNumber", hydro.neighborNumber);
     show(
         "hydro.minSupportRadius", opts.hydro.minSupportRadius * opts.initial.particlesPerDimension);

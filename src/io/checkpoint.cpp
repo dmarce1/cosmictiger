@@ -87,6 +87,7 @@ constexpr uint32_t kCheckpointManifestVersion = 1;
 constexpr uint32_t kScenarioManifestVersion = 2;
 constexpr uint32_t kMonaghanSph = 1;
 constexpr uint32_t kCompactSphLayout = 1U << 24;
+constexpr uint32_t kZPlaneAcceleration = 1U << 12;
 constexpr uint64_t kFnvOffsetBasis = 14695981039346656037ULL;
 constexpr uint64_t kFnvPrime = 1099511628211ULL;
 
@@ -392,7 +393,8 @@ uint32_t checkpointFlags(Options const& opts) {
     // Leave retired option bits unused so old incompatible headers remain rejected.
     return (opts.hydro.enabled ? kSph : 0U) | (opts.run.hierarchicalGravity ? kHierarchical : 0U) |
         (opts.lightcone.enabled ? kLightcone : 0U) | (opts.analysis.groups ? kGroups : 0U) |
-        (opts.analysis.tracers ? kTracers : 0U) | (opts.chemistry.enabled ? kChemistry : 0U);
+        (opts.analysis.tracers ? kTracers : 0U) | (opts.chemistry.enabled ? kChemistry : 0U) |
+        (opts.hydro.enabled && opts.hydro.zPlaneAcceleration != 0.0 ? kZPlaneAcceleration : 0U);
 }
 
 uint32_t checkpointKernelCode(std::string const& family, int degree) {
@@ -465,6 +467,14 @@ std::array<double, 13> sphCheckpointParameters(Options const& opts) {
         opts.gravity.enabled ? 1.0 : 0.0};
 }
 
+bool zPlaneCheckpointCompatible(double acceleration, Options const& opts) {
+    // Inspect the exponent bits because this translation unit permits fast-math.
+    uint64_t bits;
+    std::memcpy(&bits, &acceleration, sizeof(bits));
+    return (bits & 0x7ff0000000000000ULL) != 0x7ff0000000000000ULL &&
+        acceleration == opts.hydro.zPlaneAcceleration;
+}
+
 void writeDriverState(FILE* fp, DriverParameters const& params) {
     auto const header = checkpointHeader(getOptions());
     if (fwrite(&header, sizeof(header), 1, fp) != 1) {
@@ -475,6 +485,11 @@ void writeDriverState(FILE* fp, DriverParameters const& params) {
         if (fwrite(sphParameters.data(), sizeof(double), sphParameters.size(), fp) !=
             sphParameters.size()) {
             THROW_ERROR("Unable to write SPH checkpoint parameters\n");
+        }
+        // Optional extension: preserve the historical block and zero-force layout.
+        if ((header.flags & kZPlaneAcceleration) != 0U &&
+            fwrite(&getOptions().hydro.zPlaneAcceleration, sizeof(double), 1, fp) != 1) {
+            THROW_ERROR("Unable to write SPH z-plane acceleration\n");
         }
     }
     if (getOptions().chemistry.enabled) {
@@ -521,6 +536,14 @@ DriverParameters readDriverState(FILE* fp) {
             FREAD(sphParameters.data(), sizeof(double), sphParameters.size(), fp);
             if (sphParameters != sphCheckpointParameters(getOptions())) {
                 THROW_ERROR("SPH checkpoint parameters differ from the requested run\n");
+            }
+            if ((header.flags & kZPlaneAcceleration) != 0U) {
+                double acceleration;
+                FREAD(&acceleration, sizeof(acceleration), 1, fp);
+                if (!zPlaneCheckpointCompatible(acceleration, getOptions())) {
+                    THROW_ERROR("SPH checkpoint hydro.zPlaneAcceleration differs from the "
+                                "requested run\n");
+                }
             }
         }
         std::array<double, 3> sourcePhase{};
@@ -718,6 +741,23 @@ void checkpointStateTest() {
     legacyDarkMatterHeader.version = detail::kLegacyDarkMatterCheckpointVersion;
     ALWAYS_ASSERT(detail::checkpointCompatible(legacyDarkMatterHeader, legacyDarkMatterOptions));
     auto const sphParameters = detail::sphCheckpointParameters(getOptions());
+    auto planeOptions = getOptions();
+    planeOptions.hydro.enabled = true;
+    planeOptions.hydro.zPlaneAcceleration = 0.0;
+    auto const noPlaneHeader = detail::checkpointHeader(planeOptions);
+    ALWAYS_ASSERT((noPlaneHeader.flags & detail::kZPlaneAcceleration) == 0U);
+    auto const noPlaneParameters = detail::sphCheckpointParameters(planeOptions);
+    planeOptions.hydro.zPlaneAcceleration = 0.5;
+    auto const planeHeader = detail::checkpointHeader(planeOptions);
+    ALWAYS_ASSERT((planeHeader.flags & detail::kZPlaneAcceleration) != 0U);
+    ALWAYS_ASSERT(!detail::checkpointCompatible(noPlaneHeader, planeOptions));
+    ALWAYS_ASSERT(detail::checkpointCompatible(planeHeader, planeOptions));
+    ALWAYS_ASSERT(noPlaneParameters == detail::sphCheckpointParameters(planeOptions));
+    ALWAYS_ASSERT(detail::zPlaneCheckpointCompatible(0.5, planeOptions));
+    ALWAYS_ASSERT(!detail::zPlaneCheckpointCompatible(0.25, planeOptions));
+    planeOptions.hydro.zPlaneAcceleration = 0.0;
+    ALWAYS_ASSERT(!detail::checkpointCompatible(planeHeader, planeOptions));
+    ALWAYS_ASSERT(!detail::zPlaneCheckpointCompatible(0.5, planeOptions));
     changed = getOptions();
     changed.hydro.viscosityAlpha += 0.25;
     ALWAYS_ASSERT(sphParameters != detail::sphCheckpointParameters(changed));

@@ -126,7 +126,8 @@ struct SphRunParameters {
     float courantFactor;
     float minimumSupportRadius;
     float maximumSupportRadius;
-    float uniformAccelerationY;    // Optional uniform force for the Rayleigh-Taylor problem.
+    float uniformAccelerationY;    // Optional uniform force along y.
+    float zPlaneAcceleration;      // Magnitude of the force toward z = 0.5.
     float maximumTimestep = 1e30f;
     float viscosityAlpha;
     float viscosityBeta;
@@ -138,6 +139,7 @@ struct SphRunParameters {
         maximumSupportRadius = opts.hydro.maxSupportRadius;
         velocityDampingRate = opts.hydro.damping;
         uniformAccelerationY = opts.hydro.yAcceleration;
+        zPlaneAcceleration = opts.hydro.zPlaneAcceleration;
         viscosityAlpha = opts.hydro.viscosityAlpha;
         viscosityBeta = opts.hydro.viscosityBeta;
         viscosityEpsilon = opts.hydro.viscosityEpsilon;
@@ -159,6 +161,12 @@ struct SphRunParameters {
         arc & minimumRung;
         arc & scaleFactor;
         arc & courantFactor;
+        arc & zPlaneAcceleration;
+    }
+    CUDA_EXPORT
+    float midplaneAccelerationZ(Fixed32 const z) const {
+        Fixed32 const middle(0.5);
+        return z < middle ? zPlaneAcceleration : (z > middle ? -zPlaneAcceleration : 0.0f);
     }
 };
 

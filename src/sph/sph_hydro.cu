@@ -213,8 +213,8 @@ __global__ void sphCudaHydro(
             sharedReduceAdd<float, HYDRO_BLOCK_SIZE>(du_a_dt);
             sharedReduceMax<HYDRO_BLOCK_SIZE>(μ_max);
             if (threadIndex == 0) {
-                // Accelerations outside the paper: self-gravity, the optional uniform and
-                // central forces of the test problems, and velocity damping while relaxing
+                // Accelerations outside the paper: self-gravity, the optional uniform, midplane
+                // and central forces of the test problems, and velocity damping while relaxing
                 // the gas sphere.
                 Vector3<float> const gravityAcceleration = data.selfGravityEnabled ?
                     Vector3<float>(data.sinkGravityAccelerationX[sinkIndex],
@@ -223,6 +223,7 @@ __global__ void sphCudaHydro(
                     Vector3<float>(0.0f);
                 dv_a_dt += gravityAcceleration;
                 dv_a_dt[YDIM] += parameters.uniformAccelerationY;
+                dv_a_dt[ZDIM] += parameters.midplaneAccelerationZ(z_a);
                 if (data.centralAcceleration != 0.0f) {
                     Vector3<float> const separation(distance(x_a, Fixed32(0.5)),
                         distance(y_a, Fixed32(0.5)), distance(z_a, Fixed32(0.5)));

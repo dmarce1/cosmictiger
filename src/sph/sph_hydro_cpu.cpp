@@ -157,8 +157,8 @@ SphRunReturn sphCpuHydro(
             simdSum(dv_a_dt_pack[XDIM]), simdSum(dv_a_dt_pack[YDIM]), simdSum(dv_a_dt_pack[ZDIM]));
         float du_a_dt = simdSum(du_a_dt_pack);
         float const μ_max = simdMaximum(μ_max_pack);    // max_b(−μ_ab) over approaching pairs
-        // Accelerations outside the paper: self-gravity, the optional uniform and central
-        // forces of the test problems, and velocity damping while relaxing the gas sphere.
+        // Accelerations outside the paper: self-gravity, the optional uniform, midplane and
+        // central forces of the test problems, and velocity damping while relaxing the gas sphere.
         Vector3<float> const gravityAcceleration = data.selfGravityEnabled ?
             Vector3<float>(data.sinkGravityAccelerationX[sinkIndex],
                 data.sinkGravityAccelerationY[sinkIndex],
@@ -166,6 +166,7 @@ SphRunReturn sphCpuHydro(
             Vector3<float>(0.0f);
         dv_a_dt += gravityAcceleration;
         dv_a_dt[YDIM] += parameters.uniformAccelerationY;
+        dv_a_dt[ZDIM] += parameters.midplaneAccelerationZ(data.sourcePositionZ[particleIndex]);
         if (data.centralAcceleration != 0.0f) {
             Vector3<float> const separation(
                 distance(data.sourcePositionX[particleIndex], Fixed32(0.5)),

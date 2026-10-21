@@ -52,6 +52,7 @@ def main():
                 "hydro.minEffectiveRadius", "hydro.maxEffectiveRadius",
                 "hydro.minSupportRadius", "hydro.maxSupportRadius",
                 "hydro.centralEffectiveRadius", "hydro.centralSupportRadius",
+                "hydro.zPlaneAcceleration",
                 "output.silo", "output.siloInterval", "output.gasMesh", "output.directory",
                 "output.units", "output.frame",
                 "output.xMin", "output.xMax", "output.yMin", "output.yMax",
@@ -83,6 +84,7 @@ enabled = false
 viscosityAlpha = 0.75
 viscosityBeta = 1.5
 viscosityEpsilon = 0.02
+zPlaneAcceleration = 0.25
 gamma = 1.4
 neighborNumber = 48
 cfl = 0.3
@@ -95,7 +97,7 @@ mapSize = 8
                 "analysis.tracerCount": 41.0, "hydro.viscosityAlpha": 1.25,
                 "hydro.viscosityBeta": 1.5, "hydro.viscosityEpsilon": 0.02,
                 "hydro.gamma": 1.4, "hydro.neighborNumber": 48.0,
-                "hydro.cfl": 0.3, "lightcone.mapSize": 8.0,
+                "hydro.cfl": 0.3, "hydro.zPlaneAcceleration": 0.25, "lightcone.mapSize": 8.0,
                 "hydro.minSupportRadius": 1.0e-6, "hydro.maxSupportRadius": 4.0,
                 "gravity.kernelDegree": 4.0}
     for name, value in expected.items():
@@ -152,6 +154,19 @@ mapSize = 8
         match = re.search(r"^" + re.escape(key) + r"\s*:\s*(\S+)", output, re.MULTILINE)
         if match is None or not math.isclose(float(match.group(1)), expected, rel_tol=1e-5):
             raise RuntimeError(f"incorrect {key}: expected {expected}")
+
+    # Both checkpoint layouts round-trip: zero retains the existing SPH block,
+    # while nonzero acceleration appends the flagged z-plane force parameter.
+    hydro_metadata_options = [option for option in metadata_options
+                              if not option.startswith("--hydro.enabled=")] + [
+                                  "--hydro.enabled=true"]
+    for acceleration in (0.0, 0.5):
+        output = run(f"z_plane_checkpoint_{acceleration}", hydro_metadata_options + [
+            f"--configuration={config.resolve()}",
+            f"--hydro.zPlaneAcceleration={acceleration}"])
+        assertNumericSetting(output, "hydro.zPlaneAcceleration", acceleration)
+        if "Checkpoint state and mode validation passed" not in output:
+            raise RuntimeError("z-plane acceleration checkpoint state did not round-trip")
 
     chemistry_options = [option for option in metadata_options
                          if not option.startswith("--hydro.enabled=")] + [
@@ -489,6 +504,11 @@ mapSize = 8
         ("epsilon_inf", "--hydro.viscosityEpsilon=inf", "hydro.viscosityEpsilon"),
         ("cfl_nan", "--hydro.cfl=nan", "hydro.cfl"),
         ("neighbors_inf", "--hydro.neighborNumber=inf", "hydro.neighborNumber"),
+        ("z_plane_negative", "--hydro.zPlaneAcceleration=-0.5", "hydro.zPlaneAcceleration"),
+        ("z_plane_nan", "--hydro.zPlaneAcceleration=nan", "hydro.zPlaneAcceleration"),
+        ("z_plane_inf", "--hydro.zPlaneAcceleration=inf", "hydro.zPlaneAcceleration"),
+        ("z_plane_overflow", "--hydro.zPlaneAcceleration=1e100", "single precision"),
+        ("z_plane_underflow", "--hydro.zPlaneAcceleration=1e-100", "single precision"),
         ("steps_zero", "--run.numberOfSteps=0", "run.numberOfSteps"),
         ("end_time_negative", "--run.endTime=-1", "run.endTime"),
         ("end_time_nan", "--run.endTime=nan", "run.endTime"),

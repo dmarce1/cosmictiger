@@ -373,6 +373,7 @@ void testCpuCudaParity() {
     fixture.params_.baseTimestep = 1.11f;
     fixture.params_.maximumTimestep = 0.7f;
     fixture.params_.uniformAccelerationY = 0.03f;
+    fixture.params_.zPlaneAcceleration = 0.02f;
     fixture.params_.velocityDampingRate = 0.04f;
     data.adiabaticIndex = 1.4f;
     data.selfGravityEnabled = true;
@@ -763,6 +764,77 @@ void testFixedGravityTimestep() {
         "changing gas smoothing must not change the gravity timestep");
 }
 
+void testZPlaneAcceleration() {
+    Fixture fixture(1);
+    int const source = 0;
+    int const sink = 0;
+    auto& data = fixture.data_;
+    data.sourcePositionX[source] = 0.25;
+    data.sourcePositionY[source] = 0.75;
+    data.sourcePositionZ[source] = 0.5;
+    data.sourceInternalEnergy[source] = 1.0e-6f;
+    data.sinkSmoothingConverged[sink] = true;
+    fixture.density();
+
+    // A force with the same magnitude must select the same acceleration timestep
+    // regardless of direction. The cold isolated particle has no pressure force.
+    fixture.params_.uniformAccelerationY = 0.5f;
+    fixture.hydro(1);
+    float const referenceInverseTimestep = fixture.reduction_->inverseAccelerationTimestep;
+    int const referenceRung = fixture.reduction_->maximumHydroRung;
+    require(referenceInverseTimestep > fixture.reduction_->inverseSoundTimestep +
+                    fixture.reduction_->inverseViscosityTimestep &&
+            referenceRung > 1,
+        "external-force fixture must activate acceleration timestep restriction");
+    fixture.params_.uniformAccelerationY = 0.0f;
+    fixture.params_.zPlaneAcceleration = 0.5f;
+
+    double const tick = std::ldexp(1.0, -32);
+    double const positions[] = {0.0, tick, 0.125, 0.5 - tick, 0.5, 0.5 + tick, 0.875, 1.0 - tick};
+    double const expectedAccelerations[] = {0.5, 0.5, 0.5, 0.5, 0.0, -0.5, -0.5, -0.5};
+    for (size_t i = 0; i < sizeof(positions) / sizeof(positions[0]); i++) {
+        data.sourcePositionZ[source] = positions[i];
+        fixture.hydro(1);
+        auto const& acceleration = data.sinkAccelerations[sink].acceleration;
+        requireClose("midplane force has no x component", acceleration[XDIM], 0.0, 1.0e-7);
+        requireClose("midplane force has no y component", acceleration[YDIM], 0.0, 1.0e-7);
+        requireClose("midplane force points inward including adjacent fixed coordinates",
+            acceleration[ZDIM], expectedAccelerations[i], 1.0e-7);
+        if (expectedAccelerations[i] != 0.0) {
+            requireClose("midplane force contributes to acceleration timestep",
+                fixture.reduction_->inverseAccelerationTimestep, referenceInverseTimestep, 2.0e-7);
+            require(fixture.reduction_->maximumHydroRung == referenceRung,
+                "midplane force selects the same rung as equal uniform acceleration");
+        } else {
+            requireClose("midplane itself has no imposed acceleration timestep restriction",
+                fixture.reduction_->inverseAccelerationTimestep, 0.0, 1.0e-7);
+        }
+    }
+
+    data.sourcePositionZ[source] = 0.75;
+    fixture.params_.zPlaneAcceleration = 0.0f;
+    fixture.hydro();
+    requireClose("zero magnitude disables midplane force",
+        data.sinkAccelerations[sink].acceleration[ZDIM], 0.0, 1.0e-7);
+
+    fixture.params_.zPlaneAcceleration = 0.5f;
+    fixture.params_.uniformAccelerationY = 0.25f;
+    data.sinkGravityAccelerationX[sink] = 0.125f;
+    data.sinkGravityAccelerationY[sink] = -0.0625f;
+    data.sinkGravityAccelerationZ[sink] = 0.25f;
+    for (bool const selfGravity : {false, true}) {
+        data.selfGravityEnabled = selfGravity;
+        fixture.hydro();
+        auto const& acceleration = data.sinkAccelerations[sink].acceleration;
+        requireClose("midplane force preserves enabled self gravity in x", acceleration[XDIM],
+            selfGravity ? 0.125 : 0.0, 1.0e-7);
+        requireClose("uniform y force remains independent of midplane force", acceleration[YDIM],
+            selfGravity ? 0.1875 : 0.25, 1.0e-7);
+        requireClose("midplane force adds to enabled self gravity in z", acceleration[ZDIM],
+            selfGravity ? -0.25 : -0.5, 1.0e-7);
+    }
+}
+
 void testDefaultTimestepCalibration() {
     Fixture fixture(1);
     auto& data = fixture.data_;
@@ -846,6 +918,7 @@ int main() {
         detail::testPeriodicSupport();
         detail::testLattice();
         detail::testUnequalSupports();
+        detail::testZPlaneAcceleration();
         detail::testDefaultTimestepCalibration();
         detail::testDefaultThermalTimestep();
         detail::testCompositionEos();
