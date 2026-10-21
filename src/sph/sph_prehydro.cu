@@ -229,8 +229,8 @@ __global__ void sphCudaPrehydro2(
             float const m_b_over_H_a3 = data.gasMass * one_over_H_a * one_over_H_a * one_over_H_a;
             flops += 4;    // Reciprocal support and the mass/support-cubed scale.
             float ρ_a = 0.0f;
-            float divergence = 0.0f;
-            Vector3<float> curl(0.0f);
+            float ρ_a_div_v_a = 0.0f;
+            Vector3<float> ρ_a_curl_v_a(0.0f);
             for (int neighborIndex = threadIndex; neighborIndex < workspace.positions.size();
                 neighborIndex += blockSize) {
                 auto const& neighbor = workspace.positions[neighborIndex];
@@ -242,24 +242,23 @@ __global__ void sphCudaPrehydro2(
                 ρ_a += m_b_over_H_a3 * kernelW(q_ab);
                 flops += 12 + sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab);
                 if (parameters.balsaraSwitch && radius > 0.0f && q_ab < 1.0f) {
-                    // Density-normalized SPH divergence and curl share rho_a, which
-                    // cancels from f_a. Use the same physical velocity as the viscosity.
-                    float const gradientScale =
-                        m_b_over_H_a3 * one_over_H_a * dkernelWDq(q_ab) / radius;
-                    Vector3<float> const gradient = gradientScale * r_ab;
+                    // GADGET-4 equation (72): ρ_a div(v)_a and ρ_a curl(v)_a
+                    // are −Σ_b m_b v_ab·gradW_ab and Σ_b m_b v_ab×gradW_ab.
+                    float const m_b_F_a = m_b_over_H_a3 * one_over_H_a * dkernelWDq(q_ab) / radius;
+                    Vector3<float> const m_b_gradW_ab = m_b_F_a * r_ab;
                     auto const& particle = workspace.particles[neighborIndex];
-                    Vector3<float> const velocity =
+                    Vector3<float> const v_ab_physical =
                         Vector3<float>(data.sourceVelocityX[particleIndex],
                             data.sourceVelocityY[particleIndex],
                             data.sourceVelocityZ[particleIndex]) -
                         Vector3<float>(particle.velocityX, particle.velocityY, particle.velocityZ) +
                         parameters.expansionRate * r_ab;
-                    divergence -= velocity.dot(gradient);
+                    ρ_a_div_v_a -= v_ab_physical.dot(m_b_gradW_ab);
                     for (int dim = 0; dim < NDIM; ++dim) {
                         int const next = (dim + 1) % NDIM;
                         int const last = (dim + 2) % NDIM;
-                        curl[dim] +=
-                            velocity[next] * gradient[last] - velocity[last] * gradient[next];
+                        ρ_a_curl_v_a[dim] += v_ab_physical[next] * m_b_gradW_ab[last] -
+                            v_ab_physical[last] * m_b_gradW_ab[next];
                     }
                     flops += 33 + sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab, true);
                 }
@@ -267,9 +266,9 @@ __global__ void sphCudaPrehydro2(
             sharedReduceAdd<float, PREHYDRO2_BLOCK_SIZE>(ρ_a);
             flops += detail::sphReductionFlops<PREHYDRO2_BLOCK_SIZE>();
             if (parameters.balsaraSwitch) {
-                sharedReduceAdd<float, PREHYDRO2_BLOCK_SIZE>(divergence);
+                sharedReduceAdd<float, PREHYDRO2_BLOCK_SIZE>(ρ_a_div_v_a);
                 for (int dim = 0; dim < NDIM; ++dim) {
-                    sharedReduceAdd<float, PREHYDRO2_BLOCK_SIZE>(curl[dim]);
+                    sharedReduceAdd<float, PREHYDRO2_BLOCK_SIZE>(ρ_a_curl_v_a[dim]);
                 }
                 flops += 4 * detail::sphReductionFlops<PREHYDRO2_BLOCK_SIZE>();
             }
@@ -278,7 +277,7 @@ __global__ void sphCudaPrehydro2(
                 ALWAYS_ASSERT(H_a > 0.0f && ρ_a > 0.0f);
                 data.sinkDensity[sinkIndex] = ρ_a;
                 data.sinkBalsaraFactor[sinkIndex] = parameters.balsaraSwitch ?
-                    monaghan_sph::balsaraFactor(divergence, curl.norm()) :
+                    monaghan_sph::balsaraFactor(ρ_a_div_v_a, ρ_a_curl_v_a.norm()) :
                     1.0f;
                 flops += parameters.balsaraSwitch ? 8 : 0;
                 data.sinkSmoothingConverged[sinkIndex] = true;

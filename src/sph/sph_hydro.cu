@@ -204,8 +204,10 @@ __global__ void sphCudaHydro(
                     H_b, ε, supportRadiusPerEffectiveRadius, kViscosityWidthScale);
                 float Π_ab = monaghan_sph::artificialViscosity(ρ_a, ρ_b, c_a, c_b, μ_ab, α, β);
                 if (parameters.balsaraSwitch) {
-                    Π_ab *=
+                    // GADGET-4 equation (72): Π_ab <- ½(f_a^AV + f_b^AV) Π_ab.
+                    float const f_ab_AV =
                         0.5f * (data.sourceBalsaraFactor[particleIndex] + neighbor.balsaraFactor);
+                    Π_ab *= f_ab_AV;
                     flops += 3;
                 }
                 float const P_over_ρ2_ab =

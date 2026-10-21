@@ -135,15 +135,24 @@ COSMICTIGER_MONAGHAN_EXPORT inline Real artificialViscosity(
     return simdSelect(μ_ab < Real(0), Π_ab, Real(0));
 }
 
-// Balsara (1995) shear correction, as in the supplied equation (72):
-// f_a = |div v_a| / (|div v_a| + |curl v_a|). The density normalization common
-// to both SPH derivative sums cancels. Define the indeterminate static case as zero;
-// select a safe denominator before division so SIMD lanes never evaluate 0/0.
+// Balsara (1995) shear correction in Springel et al., GADGET-4 (2021),
+// MNRAS 506, 2871-2949, doi:10.1093/mnras/stab1855, equation (72):
+// https://wwwmpa.mpa-garching.mpg.de/gadget4/gadget4-code-paper.pdf
+//
+//   f_a^AV = |div v_a| / (|div v_a| + |curl v_a|),
+//   Π_ab <- ½(f_a^AV + f_b^AV) Π_ab.
+//
+// The common density normalization cancels from the derivative sums. Set f_a^AV
+// to zero when both vanish; a safe denominator prevents SIMD lanes evaluating 0/0.
+// Use div_v_a and curl_v_a because ∇ is not a valid C++ identifier character.
 template <typename Real>
 COSMICTIGER_MONAGHAN_EXPORT inline Real balsaraFactor(Real divergence, Real curlMagnitude) {
-    Real const compression = simdMax(divergence, -divergence);
-    Real const denominator = compression + curlMagnitude;
-    return compression / simdSelect(denominator > Real(0), denominator, Real(1));
+    Real const div_v_a = divergence;
+    Real const abs_div_v_a = simdMax(div_v_a, -div_v_a);
+    Real const abs_curl_v_a = curlMagnitude;
+    Real const D_a = abs_div_v_a + abs_curl_v_a;
+    Real const f_a_AV = abs_div_v_a / simdSelect(D_a > Real(0), D_a, Real(1));
+    return f_a_AV;
 }
 
 // The symmetric pressure term P_b/ρ_b² + P_a/ρ_a² shared by the momentum equation 3.3,

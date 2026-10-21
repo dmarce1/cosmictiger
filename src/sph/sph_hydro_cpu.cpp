@@ -51,7 +51,7 @@ SphRunReturn sphCpuHydro(
     float const ε = parameters.viscosityEpsilon;       // η²/h² of p. 551
     float const a_da_dt = parameters.expansionRate;    // a·da/dt, the Hubble flow of a pair
     for (int particleIndex = targetNode.particleRange.first;
-         particleIndex < targetNode.particleRange.second; particleIndex++) {
+        particleIndex < targetNode.particleRange.second; particleIndex++) {
         int const sinkIndex =
             targetNode.sinkParticleRange.first - targetNode.particleRange.first + particleIndex;
         int const previousRung = data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]];
@@ -149,10 +149,11 @@ SphRunReturn sphCpuHydro(
             SimdFloat Π_ab = monaghan_sph::artificialViscosity(
                 SimdFloat(ρ_a), ρ_b, SimdFloat(c_a), c_b, μ_ab, SimdFloat(α), SimdFloat(β));
             if (parameters.balsaraSwitch) {
-                SimdFloat const pairFactor = half *
+                // GADGET-4 equation (72): Π_ab <- ½(f_a^AV + f_b^AV) Π_ab.
+                SimdFloat const f_ab_AV = half *
                     (SimdFloat(data.sourceBalsaraFactor[particleIndex]) +
                         detail::sphCpuLoad(data.sourceBalsaraFactor, neighbors, first, 0.0f));
-                Π_ab *= pairFactor;
+                Π_ab *= f_ab_AV;
                 flops += 3 * SimdFloat::size();
             }
             SimdFloat const P_over_ρ2_ab = monaghan_sph::pressureCoefficient(

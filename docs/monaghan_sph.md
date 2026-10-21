@@ -44,6 +44,8 @@ types.
 | \(P_b/\rho_b^2+P_a/\rho_a^2\) | `P_over_ρ2_ab` | symmetric pressure term |
 | \(\max_b\mu_{ab}\) | `μ_max` | compression magnitude \(\max_b(-\mu_{ab})\) |
 | \(\delta t_{\rm cv}, \delta t_{\rm f}\) | `one_over_δt_cv`, `one_over_δt_f` | reciprocals of the section 10.3 limits |
+| \(f_a^{\rm AV}, (f_a^{\rm AV}+f_b^{\rm AV})/2\) | `f_a_AV`, `f_ab_AV` | GADGET-4 equation (72) shear factors |
+| \(\rho_a\nabla\cdot\mathbf v_a, \rho_a\nabla\times\mathbf v_a\) | `ρ_a_div_v_a`, `ρ_a_curl_v_a` | unnormalized derivative sums; `∇` cannot appear in identifiers |
 | \(\sum_b W_{ab}\) | `ΣW`, `dΣW_dH_a` | support-radius constraint sum and its derivative |
 
 Quantities summed over SIMD lanes carry a `_pack` suffix until they are reduced.
@@ -177,7 +179,13 @@ interpretation of the viscosity parameters. The same factor applies to every
 selected family. Defaults remain the paper's \(\alpha=1\), \(\beta=2\), and
 \(\epsilon=0.01\).
 
-The Balsara (1995) shear limiter is enabled by default. During the density pass,
+The Balsara (1995) shear limiter is enabled by default, using equation (72) of
+Springel, Pakmor, Zier & Reinecke (2021), *Simulating cosmic structure formation
+with the GADGET-4 code*, MNRAS 506, 2871–2949,
+[doi:10.1093/mnras/stab1855](https://doi.org/10.1093/mnras/stab1855)
+([author PDF, section 5.3](https://wwwmpa.mpa-garching.mpg.de/gadget4/gadget4-code-paper.pdf)).
+Equation (72) belongs to GADGET-4, not to the original Balsara paper.
+During the density pass,
 the code accumulates the gather estimates
 \(\rho_i\,\nabla\!\cdot\mathbf v_i=-\sum_j m_j\mathbf v_{ij}\cdot\nabla_i W_{ij}(H_i)\)
 and

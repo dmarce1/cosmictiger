@@ -147,7 +147,7 @@ SphRunReturn sphCpuPrehydro1(
     auto const& targetNode = data.treeNodes[data.targetNodeIndices[targetNodeIndex]];
     auto const neighbors = detail::sphCpuNeighbors(data, targetNode, false, flops);
     for (int particleIndex = targetNode.particleRange.first;
-         particleIndex < targetNode.particleRange.second; ++particleIndex) {
+        particleIndex < targetNode.particleRange.second; ++particleIndex) {
         int const sinkIndex =
             targetNode.sinkParticleRange.first - targetNode.particleRange.first + particleIndex;
         bool const active =
@@ -177,7 +177,7 @@ SphRunReturn sphCpuPrehydro2(
     auto const& targetNode = data.treeNodes[data.targetNodeIndices[targetNodeIndex]];
     auto const neighbors = detail::sphCpuNeighbors(data, targetNode, true, flops);
     for (int particleIndex = targetNode.particleRange.first;
-         particleIndex < targetNode.particleRange.second; ++particleIndex) {
+        particleIndex < targetNode.particleRange.second; ++particleIndex) {
         int const sinkIndex =
             targetNode.sinkParticleRange.first - targetNode.particleRange.first + particleIndex;
         bool const active =
@@ -205,8 +205,8 @@ SphRunReturn sphCpuPrehydro2(
         SimdFloat const m_b_over_H_a3(data.gasMass * one_over_H_a * one_over_H_a * one_over_H_a);
         flops += 4;    // Reciprocal and three mass/support products.
         SimdFloat ρ_a_pack(0.0f);
-        SimdFloat divergencePack(0.0f);
-        Vector3<SimdFloat> curlPack(SimdFloat(0.0f));
+        SimdFloat ρ_a_div_v_a_pack(0.0f);
+        Vector3<SimdFloat> ρ_a_curl_v_a_pack(SimdFloat(0.0f));
         for (size_t first = 0; first < neighbors.size(); first += SimdFloat::size()) {
             Vector3<SimdFloat> const r_ab =
                 detail::sphCpuSeparations(data, particleIndex, neighbors, first);
@@ -217,29 +217,29 @@ SphRunReturn sphCpuPrehydro2(
             flops +=
                 12 * SimdFloat::size() + sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab);
             if (parameters.balsaraSwitch) {
-                // rho_a div(v)_a = -sum_b m_b v_ab dot grad_a W_ab,
-                // rho_a curl(v)_a = sum_b m_b v_ab cross grad_a W_ab.
-                // Their common density normalization cancels from the Balsara ratio.
+                // GADGET-4 equation (72): accumulate ρ_a div(v)_a and ρ_a curl(v)_a
+                // as −Σ_b m_b v_ab·gradW_ab and Σ_b m_b v_ab×gradW_ab.
+                // Their common ρ_a cancels from f_a^AV.
                 auto const contributes = detail::sphCpuValidLanes(neighbors, first) &&
                     radius > SimdFloat(0.0f) && q_ab < SimdFloat(1.0f);
-                SimdFloat const gradientScale = simdSelect(contributes,
+                SimdFloat const m_b_F_a = simdSelect(contributes,
                     m_b_over_H_a3 * SimdFloat(one_over_H_a) * dkernelWDq(q_ab) /
                         simdSelect(contributes, radius, SimdFloat(1.0f)),
                     SimdFloat(0.0f));
-                Vector3<SimdFloat> const gradient = gradientScale * r_ab;
-                Vector3<SimdFloat> const velocity =
+                Vector3<SimdFloat> const m_b_gradW_ab = m_b_F_a * r_ab;
+                Vector3<SimdFloat> const v_ab_physical =
                     Vector3<SimdFloat>(SimdFloat(data.sourceVelocityX[particleIndex]),
                         SimdFloat(data.sourceVelocityY[particleIndex]),
                         SimdFloat(data.sourceVelocityZ[particleIndex])) -
                     detail::sphCpuLoad3(data.sourceVelocityX, data.sourceVelocityY,
                         data.sourceVelocityZ, neighbors, first, 0.0f) +
                     SimdFloat(parameters.expansionRate) * r_ab;
-                divergencePack -= velocity.dot(gradient);
+                ρ_a_div_v_a_pack -= v_ab_physical.dot(m_b_gradW_ab);
                 for (int dim = 0; dim < NDIM; ++dim) {
                     int const next = (dim + 1) % NDIM;
                     int const last = (dim + 2) % NDIM;
-                    curlPack[dim] +=
-                        velocity[next] * gradient[last] - velocity[last] * gradient[next];
+                    ρ_a_curl_v_a_pack[dim] += v_ab_physical[next] * m_b_gradW_ab[last] -
+                        v_ab_physical[last] * m_b_gradW_ab[next];
                 }
                 flops += 33 * SimdFloat::size() +
                     sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab, true);
@@ -250,10 +250,10 @@ SphRunReturn sphCpuPrehydro2(
         ALWAYS_ASSERT(H_a > 0.0f && ρ_a > 0.0f);
         data.sinkDensity[sinkIndex] = ρ_a;
         if (parameters.balsaraSwitch) {
-            Vector3<float> const curl(
-                simdSum(curlPack[XDIM]), simdSum(curlPack[YDIM]), simdSum(curlPack[ZDIM]));
+            Vector3<float> const ρ_a_curl_v_a(simdSum(ρ_a_curl_v_a_pack[XDIM]),
+                simdSum(ρ_a_curl_v_a_pack[YDIM]), simdSum(ρ_a_curl_v_a_pack[ZDIM]));
             data.sinkBalsaraFactor[sinkIndex] =
-                monaghan_sph::balsaraFactor(simdSum(divergencePack), curl.norm());
+                monaghan_sph::balsaraFactor(simdSum(ρ_a_div_v_a_pack), ρ_a_curl_v_a.norm());
             flops += 4 * (SimdFloat::size() - 1) + 8;
         } else {
             data.sinkBalsaraFactor[sinkIndex] = 1.0f;
