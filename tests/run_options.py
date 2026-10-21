@@ -43,7 +43,8 @@ def main():
     help_text = run("help", ["--help"])
     option_names = set(re.findall(r"^\s+--([A-Za-z][A-Za-z0-9_.]*)", help_text, re.MULTILINE))
     required = {"help", "configuration", "run.scenario", "run.endTime", "run.verbose",
-                "initial.particlesPerDimension", "compute.cuda",
+                "initial.particlesPerDimension", "compute.cuda", "compute.bucketSize",
+                "compute.sphBucketSize",
                 "hydro.enabled", "hydro.viscosityAlpha", "hydro.viscosityBeta",
                 "hydro.viscosityEpsilon", "hydro.balsaraSwitch", "hydro.neighborNumber", "gravity.enabled",
                 "gravity.kernelFamily", "gravity.kernelDegree",
@@ -79,6 +80,8 @@ maxIterations = 7
 particlesPerDimension = 8
 [compute]
 cuda = false
+bucketSize = 64
+sphBucketSize = 73
 [hydro]
 enabled = false
 viscosityAlpha = 0.75
@@ -100,7 +103,8 @@ mapSize = 8
                 "hydro.gamma": 1.4, "hydro.neighborNumber": 48.0,
                 "hydro.cfl": 0.3, "hydro.zPlaneAcceleration": 0.25, "lightcone.mapSize": 8.0,
                 "hydro.minSupportRadius": 1.0e-6, "hydro.maxSupportRadius": 4.0,
-                "gravity.kernelDegree": 4.0}
+                "gravity.kernelDegree": 4.0,
+                "compute.bucketSize": 64.0, "compute.sphBucketSize": 73.0}
     for name, value in expected.items():
         match = re.search(r"^" + re.escape(name) + r"\s*:\s*(\S+)", configured, re.MULTILINE)
         if match is None or abs(float(match.group(1)) - value) > 1.0e-6:
@@ -274,8 +278,24 @@ mapSize = 8
 
     defaults = run("independent_defaults", metadata_options)
     for key, value in (("gravity.kernelDegree", 4),
-                       ("hydro.neighborNumber", 42), ("hydro.kernelDegree", 3)):
+                       ("hydro.neighborNumber", 42), ("hydro.kernelDegree", 3),
+                       ("compute.bucketSize", 128), ("compute.sphBucketSize", 106)):
         assertNumericSetting(defaults, key, value)
+
+    # SPH leaf capacity follows its own explicit setting or neighbor-derived
+    # automatic value, independently of the gravity bucket and its compile-time cap.
+    output = run("sph_bucket_gravity_independent", metadata_options + [
+        "--compute.bucketSize=32"])
+    assertNumericSetting(output, "compute.bucketSize", 32)
+    assertNumericSetting(output, "compute.sphBucketSize", 106)
+    output = run("sph_bucket_neighbor_override", metadata_options + [
+        "--compute.sphBucketSize=0", "--hydro.neighborNumber=84"])
+    assertNumericSetting(output, "hydro.neighborNumber", 84)
+    assertNumericSetting(output, "compute.sphBucketSize", 213)
+    output = run("sph_bucket_cli_override", metadata_options + [
+        f"--configuration={config.resolve()}", "--compute.sphBucketSize=2048"])
+    assertNumericSetting(output, "compute.bucketSize", 64)
+    assertNumericSetting(output, "compute.sphBucketSize", 2048)
 
     # Both radius representations describe the same kernel, including kernels
     # whose support-to-effective-radius ratios differ.
@@ -519,6 +539,8 @@ mapSize = 8
         ("end_time_inf", "--run.endTime=inf", "run.endTime"),
         ("scenario_unknown", "--run.scenario=unknown", "scenario"),
         ("bucket_zero", "--compute.bucketSize=0", "compute.bucketSize"),
+        ("sph_bucket_negative", "--compute.sphBucketSize=-1", "compute.sphBucketSize"),
+        ("sph_bucket_auto_overflow", "--hydro.neighborNumber=1e9", "compute.sphBucketSize"),
         ("eta_zero", "--gravity.timestepEta=0", "gravity.timestepEta"),
         ("eta_negative", "--gravity.timestepEta=-0.1", "gravity.timestepEta"),
         ("eta_nan", "--gravity.timestepEta=nan", "gravity.timestepEta"),

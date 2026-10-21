@@ -206,6 +206,7 @@ void sphTreeTest() {
     options.chemistry.enabled = false;
     options.analysis.groups = false;
     options.analysis.tracers = false;
+    options.compute.bucketSize = 8;
     options.compute.sphBucketSize = 2;
     options.initial.numberOfParticles = 8;
     setOptions(options);
@@ -221,26 +222,37 @@ void sphTreeTest() {
     auto const* firstRoot = sphTreeGetNode(first.id);
     detail::requireSphTree(
         arenaSize > 0 && first.id.index == 0, "initial tree did not begin at the arena origin");
+    detail::requireSphTree(
+        !firstRoot->leaf, "SPH tree used the larger gravity bucket instead of its own bucket");
     detail::seedOldSphTreeState(first.id);
 
     sphTreeDestroy();
     detail::requireSphTree(sphTreeNodesSize() == arenaSize && sphTreeGetNode(first.id) == firstRoot,
         "normal teardown released the constructed arena");
+    options.compute.bucketSize = 1;
+    options.compute.sphBucketSize = 4;
+    setOptions(options);
     detail::initializeSphTreeParticles(3, 1);
     auto const second = sphTreeCreate(params);
     detail::requireSphTree(sphTreeNodesSize() == arenaSize && second.id == first.id &&
             sphTreeGetNode(second.id) == firstRoot,
         "rebuild moved the retained arena or failed to reset its allocation cursor");
     detail::verifySphTreeBuild(second, 3);
+    detail::requireSphTree(sphTreeGetNode(second.id)->leaf,
+        "rebuilt SPH tree ignored its increased bucket or used the gravity bucket");
 
     detail::seedOldSphTreeState(second.id);
     sphTreeDestroy();
+    options.compute.bucketSize = 8;
+    options.compute.sphBucketSize = 1;
+    setOptions(options);
     detail::initializeSphTreeParticles(8, 2);
     auto const regrown = sphTreeCreate(params);
     detail::requireSphTree(sphTreeNodesSize() == arenaSize && regrown.id == first.id &&
             sphTreeGetNode(regrown.id) == firstRoot,
         "population regrowth moved the retained arena or failed to reset its allocation cursor");
     detail::verifySphTreeBuild(regrown, 8);
+    detail::requireSphTree(regrown.leafNodes >= 8, "rebuilt SPH tree ignored its decreased bucket");
 
     sphTreeDestroy(true);
     detail::requireSphTree(sphTreeNodesSize() == 0, "explicit teardown did not release the arena");

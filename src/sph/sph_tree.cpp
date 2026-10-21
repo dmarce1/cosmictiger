@@ -253,7 +253,7 @@ hpx::future<SphTreeCreateReturn> sphTreeCreateFork(SphTreeCreateParameters param
 
 static void sphTreeAllocateNodes() {
     int const treeCacheLineSize = getOptions().compute.treeCacheLineSize;
-    static int const bucketSize = getOptions().compute.sphBucketSize;
+    int const bucketSize = getOptions().compute.sphBucketSize;
     Vector<hpx::future<void>> futs;
     for (auto const& c : hpxChildren()) {
         futs.push_back(hpx::async<SphTreeAllocateNodesAction>(c));
@@ -284,7 +284,7 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
     bool localRoot) {
     // PRINT( "%i\n", depth);
     stackTraceActivate();
-    static int const bucketSize = getOptions().compute.sphBucketSize;
+    int const bucketSize = getOptions().compute.sphBucketSize;
     SphTreeCreateReturn rc;
     if (depth >= MAX_DEPTH) {
         THROW_ERROR("%s\n", "Maximum depth exceeded\n");
@@ -470,7 +470,7 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
     node.sinkParticleRange = particleRange;
     ParticleInteger const numberOfParticles = particleRange.second - particleRange.first;
     bool const global = processRange.second - processRange.first > 1;
-    node.leaf = !global && (numberOfParticles <= getOptions().compute.sphBucketSize);
+    node.leaf = !global && (numberOfParticles <= bucketSize);
     /*	if ( BUCKET_SIZE <= get_options().sph_bucket_size) {
      if (node.leaf) {
      std::lock_guard<mutex_type> lock(leaf_part_range_mutex);

@@ -49,7 +49,7 @@ add_compile_definitions(FMM_MIN_ORDER=${COSMICTIGER_FMM_MIN_ORDER}
 # runtime value up to this power of two; leaves then hold between half the
 # runtime bucket plus one and the runtime bucket particles. The CUDA kick
 # shared-memory policy is tuned for a runtime bucket equal to this cap.
-set(COSMICTIGER_WITH_MAX_BUCKET "128" CACHE STRING "Maximum tree leaf bucket size (power of two)")
+set(COSMICTIGER_WITH_MAX_BUCKET "128" CACHE STRING "Maximum gravity tree leaf bucket size (power of two)")
 if(NOT COSMICTIGER_WITH_MAX_BUCKET MATCHES "^(32|64|128|256|512|1024)$")
     message(FATAL_ERROR
         "COSMICTIGER_WITH_MAX_BUCKET must be a power of two from 32 to 1024; got '${COSMICTIGER_WITH_MAX_BUCKET}'")

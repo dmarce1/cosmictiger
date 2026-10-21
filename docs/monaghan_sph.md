@@ -287,6 +287,7 @@ hydrodynamic controls are:
 | `hydro.viscosityEpsilon` | `0.01` | Denominator coefficient multiplying \(\bar\ell^2\) |
 | `hydro.balsaraSwitch` | `true` | Apply the Balsara shear limiter to artificial viscosity |
 | `hydro.neighborNumber` | `42` | Kernel-weighted support-sphere count |
+| `compute.sphBucketSize` | `0` (automatic) | SPH tree leaf limit; automatic sizing uses `floor(8/pi * hydro.neighborNumber)`, giving `106` at the default neighbor target |
 | `hydro.minEffectiveRadius` | unset | Alternative minimum effective radius \(h=2\sigma\), in initial interparticle spacings |
 | `hydro.minSupportRadius` | `1e-6` | Minimum \(H\), in initial interparticle spacings |
 | `hydro.maxEffectiveRadius` | unset | Alternative maximum effective radius \(h=2\sigma\), in initial interparticle spacings |
@@ -302,6 +303,13 @@ the ignored key. For the central force, precedence is `centralEffectiveRadius`,
 then the `centralSoftening` alias, then `centralSupportRadius`. The command line
 still overrides INI values for the same key. See [kernel radii](kernels.md) for
 the equivalent gravity options and conversion factors.
+
+SPH and gravity use independent tree bucket sizes. `compute.bucketSize` controls
+the gravity tree, while a positive `compute.sphBucketSize` fixes the SPH leaf
+limit. Zero selects the historical SPH sizing heuristic above after CLI and INI
+neighbor options have been resolved. Startup output and snapshot metadata report
+the resolved positive size. The gravity compile-time bucket cap does not apply
+to SPH, whose kernels iterate over each leaf's particle range.
 
 Gas and dark matter share one fixed comoving gravity kernel radius.
 SPH density, pressure, viscosity, and thermal work retain the gas-only hydro

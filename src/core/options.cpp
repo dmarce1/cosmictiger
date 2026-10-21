@@ -177,6 +177,7 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"run.treeOpeningAngle", options.run.treeOpeningAngle},
         {"compute.cuda", options.compute.cuda},
         {"compute.bucketSize", options.compute.bucketSize},
+        {"compute.sphBucketSize", options.compute.sphBucketSize},
         {"compute.cudaKickResidency", options.compute.cudaKickResidency},
         {"compute.cudaKickSinkTile", options.compute.cudaKickSinkTile},
         {"compute.cudaKickParticleTile", options.compute.cudaKickParticleTile},
@@ -326,7 +327,10 @@ bool processOptions(int argc, char* argv[]) {
             "use CUDA (not enabled for this build)")
 #endif
             ("compute.bucketSize", po::value<int>(&opts.compute.bucketSize)->default_value(128),
-                "tree leaf bucket size")("compute.cudaKickResidency",
+                "gravity tree leaf bucket size")("compute.sphBucketSize",
+                po::value<int>(&opts.compute.sphBucketSize)->default_value(0),
+                "SPH tree leaf bucket size; 0 uses floor(8/pi * hydro.neighborNumber)")(
+                "compute.cudaKickResidency",
                 po::value<int>(&opts.compute.cudaKickResidency)->default_value(0),
                 "resident CUDA kick blocks per multiprocessor; 0 uses the register limit")(
                 "compute.cudaKickSinkTile",
@@ -746,6 +750,9 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.compute.bucketSize <= 0) {
         THROW_ERROR("compute.bucketSize must be positive\n");
     }
+    if (opts.compute.sphBucketSize < 0) {
+        THROW_ERROR("compute.sphBucketSize must be nonnegative (0 selects automatic sizing)\n");
+    }
     if (opts.gravity.fmmOrder < kFmmMinOrder || opts.gravity.fmmOrder > kFmmMaxOrder) {
         THROW_ERROR("gravity.fmmOrder must be between %i and %i\n", kFmmMinOrder, kFmmMaxOrder);
     }
@@ -835,7 +842,16 @@ bool processOptions(int argc, char* argv[]) {
     }
     opts.run.hierarchicalGravity = true;
     opts.hydro.damping = 0.0;
-    opts.compute.sphBucketSize = opts.compute.bucketSize;
+    if (opts.compute.sphBucketSize == 0) {
+        // Retain the historical SPH bucket heuristic, using the final parsed
+        // neighbor target rather than the independently tuned gravity bucket.
+        double const bucketSize = 8.0 / M_PI * opts.hydro.neighborNumber;
+        if (bucketSize > std::numeric_limits<int>::max()) {
+            THROW_ERROR("compute.sphBucketSize automatic value exceeds the integer range; "
+                        "set a positive compute.sphBucketSize\n");
+        }
+        opts.compute.sphBucketSize = std::max(1, static_cast<int>(bucketSize));
+    }
     opts.hydro.minSupportRadius /= opts.initial.particlesPerDimension;
     opts.hydro.maxSupportRadius =
         std::min(opts.hydro.maxSupportRadius / opts.initial.particlesPerDimension, 0.5);
@@ -1203,6 +1219,8 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("run.verbose", run.verbose);
     SHOW("run.scenario", run.scenario);
     SHOW("run.endTime", run.endTime);
+    SHOW("compute.bucketSize", compute.bucketSize);
+    SHOW("compute.sphBucketSize", compute.sphBucketSize);
 #ifndef USE_CUDA
     if (opts.compute.cuda) {
         THROW_ERROR("This executable was compiled without CUDA support\n");
@@ -1231,6 +1249,7 @@ bool processOptions(int argc, char* argv[]) {
         }
         SHOW("hydro.enabled", hydro.enabled);
         if (opts.hydro.enabled) {
+            SHOW("compute.sphBucketSize", compute.sphBucketSize);
             SHOW("hydro.kernelFamily", hydro.kernelFamily);
             SHOW("hydro.kernelDegree", hydro.kernelDegree);
             SHOW("hydro.balsaraSwitch", hydro.balsaraSwitch);

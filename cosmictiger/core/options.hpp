@@ -31,6 +31,8 @@ struct Run {
 struct Compute {
     bool cuda{};
     int bucketSize{};
+    // Zero input derives the SPH leaf size from hydro.neighborNumber; startup
+    // stores the resolved positive size independently of the gravity bucket.
     int sphBucketSize{};
     int treeCacheLineSize{};
     int treeAllocLineSize{};
