@@ -35,8 +35,13 @@ selects CGS and cosmological output together. `output.frame` accepts `comoving`,
 | `both` | `both` | All four directories above |
 
 Either selector can use `both` while the other selects one value. Each view
-contains materialized point meshes and fields, so its mesh geometry has the
-selected units and frame. Converted floating-point arrays use double precision.
+contains gas and dark-matter point meshes with node-centered point variables,
+including the gas `kernel_support_radius` scalar. Positions and support radii
+use the selected units and frame. Converted floating-point arrays use double
+precision. The directories above are in the master Silo file, whose
+multimeshes and multivariables reference locality files under the sibling
+`.silo.data` directory. Each locality stores its views below `/locality_<rank>`;
+keep the master and its `.silo.data` directory together when moving a snapshot.
 Metadata records the selected units, frame, scale factor, Hubble parameter,
 and the peculiar-velocity convention. Mesh time and `time` metadata retain the
 existing cosmological-age convention in Gyr (`time_unit=Gyr`,

@@ -637,7 +637,7 @@ void sphGravityTest();
 void sphTreeTest();
 void linearGrowthTest();
 void unitsOutputTest();
-void voronoiOutputTest();
+void distributedOutputTest();
 void fmmTreeTest();
 void fmmWalkTest();
 
@@ -672,7 +672,7 @@ ApplicationTest const applicationTests[] = {
     {"fmmWalk", fmmWalkTest},
     {"fmmTree", fmmTreeTest},
     {"unitsOutput", unitsOutputTest},
-    {"voronoiOutput", voronoiOutputTest},
+    {"distributedOutput", distributedOutputTest},
     {"checkpointState", checkpointStateTest},
     {"sphGravity", sphGravityTest},
     {"sphTree", sphTreeTest},

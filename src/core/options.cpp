@@ -197,7 +197,6 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"initial.particlesPerDimension", options.initial.particlesPerDimension},
         {"output.silo", options.output.silo},
         {"output.siloInterval", options.output.siloInterval},
-        {"output.gasMesh", options.output.gasMesh},
         {"output.directory", options.output.directory},
         {"output.units", options.output.units},
         {"output.frame", options.output.frame},
@@ -385,10 +384,7 @@ bool processOptions(int argc, char* argv[]) {
         po::value<bool>(&opts.output.silo)->default_value(false),
         "write particle Silo files for the configured box")("output.siloInterval",
         po::value<int>(&opts.output.siloInterval)->default_value(1),
-        "number of synchronized coarse steps between particle Silo snapshots")("output.gasMesh",
-        po::value<std::string>(&opts.output.gasMesh)->default_value("voronoi"),
-        "gas Silo geometry: voronoi polyhedra or spheres at the SPH support radius")(
-        "output.directory",
+        "number of synchronized coarse steps between particle Silo snapshots")("output.directory",
         po::value<std::string>(&opts.output.directory)->default_value("./output"),
         "directory for all scenario outputs; relative paths start at the working directory")(
         "output.units", po::value<std::string>(&opts.output.units)->default_value("code"),
@@ -707,9 +703,6 @@ bool processOptions(int argc, char* argv[]) {
     double const selfNeighborFloor = 4.0 * M_PI / 3.0 * radial_kernel::value(hydroTable, 0.0);
     if (opts.output.siloInterval <= 0) {
         THROW_ERROR("output.siloInterval must be positive\n");
-    }
-    if (opts.output.gasMesh != "voronoi" && opts.output.gasMesh != "spheres") {
-        THROW_ERROR("output.gasMesh must be voronoi or spheres\n");
     }
     if (opts.output.directory.empty()) {
         THROW_ERROR("output.directory must not be empty\n");
@@ -1143,7 +1136,6 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("analysis.views", analysis.views);
     SHOW("output.silo", output.silo);
     SHOW("output.siloInterval", output.siloInterval);
-    SHOW("output.gasMesh", output.gasMesh);
     SHOW("output.directory", output.directory);
     SHOW("output.units", output.units);
     SHOW("output.frame", output.frame);
@@ -1248,7 +1240,6 @@ bool processOptions(int argc, char* argv[]) {
         SHOW("output.silo", output.silo);
         if (opts.output.silo) {
             SHOW("output.siloInterval", output.siloInterval);
-            SHOW("output.gasMesh", output.gasMesh);
             PRINT("%-38s: %s, %s\n", "Silo coordinates", opts.output.units.c_str(),
                 opts.output.frame.c_str());
         }

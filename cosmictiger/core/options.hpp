@@ -72,7 +72,6 @@ struct Initial {
 struct Output {
     bool silo{};
     int siloInterval{};
-    std::string gasMesh{"voronoi"};
     std::string directory{};
     std::string units{"code"};
     std::string frame{"comoving"};
@@ -252,7 +251,6 @@ struct Options {
         arc & analysis.views;
         arc & output.silo;
         arc & output.siloInterval;
-        arc & output.gasMesh;
         arc & output.directory;
         arc & output.units;
         arc & output.frame;

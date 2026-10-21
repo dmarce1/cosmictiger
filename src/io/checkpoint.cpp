@@ -657,7 +657,6 @@ void checkpointStateTest() {
     auto const header = detail::checkpointHeader(changed);
     changed.output.units = "both";
     changed.output.frame = "lab";
-    changed.output.gasMesh = changed.output.gasMesh == "voronoi" ? "spheres" : "voronoi";
     ALWAYS_ASSERT(detail::checkpointCompatible(header, changed));
     changed = getOptions();
     if (changed.hydro.enabled) {

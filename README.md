@@ -145,12 +145,16 @@ particle snapshots while retaining other selected outputs. See
 their solver choices, and durations.
 `analysis.views` independently controls HEALPix maps.
 
-Gas particles are written as Silo CSG spheres in the `gas` mesh. Each sphere's
-radius is the stored SPH kernel support radius, also available as the
-zone-centered `kernel_support_radius` field. Sphere centers and radii follow the
-selected output units and frame. Dark matter uses a point mesh.
-VisIt discretizes overlapping CSG zones for display, which can show seams where
-spheres overlap.
+Each snapshot is a master Silo file referencing one particle file per locality
+under its sibling `view.0.<cycle>.silo.data` directory. Localities write their
+owned particles independently; the master is published after all particle files
+are closed. Open the master in VisIt, and keep its `.silo.data` directory beside
+it when copying or moving a snapshot.
+
+Gas and dark-matter particles are written as Silo point meshes named `gas` and
+`dark_matter`. Their fields are node-centered point variables, with one value per
+particle. The gas `kernel_support_radius` scalar retains the SPH support radius;
+positions and support radii follow the selected output units and frame.
 
 Particle positions retain the fixed-point representation used by the solver and
 checkpoints. Set `output.units=cgs` for CGS quantities or
@@ -162,7 +166,7 @@ in either frame and never include Hubble flow. `output.units=both` and
 coordinate conversion uses double precision directly from fixed point.
 
 The defaults, `output.units=code` and `output.frame=comoving`, preserve the native
-output layout and evolution normalization. Code units require the comoving
+mesh names and evolution normalization. Code units require the comoving
 selection. Bounds remain normalized comoving coordinates in every output mode.
 See [units and frames](docs/units.md) for conversion formulas, view paths, and
 the distinction between stored and physical velocity and internal energy.
