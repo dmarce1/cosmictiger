@@ -587,7 +587,7 @@ static SphTreeNode const* treeCacheRead(TreeId id) {
             }
             if (inserted) {
                 try {
-                    hpx::apply([promise, lineId]() {
+                    hpx::post([promise, lineId]() {
                         try {
                             auto remote = hpx::async<SphTreeFetchCacheLineAction>(
                                 hpxLocalities()[lineId.proc], lineId.index);

@@ -139,7 +139,8 @@ void analysisAddLightconeParticles(Vector<LightconeParticle> particles) {
 HPX_PLAIN_ACTION(analysisAddLightconeParticles, AnalysisAddLightconeParticlesAction);
 
 Vector<LightconeParticle> analysisReadLightconeBuffer() {
-    std::unique_ptr<FILE, decltype(&std::fclose)> file(std::tmpfile(), &std::fclose);
+    auto const closeFile = [](FILE* stream) { std::fclose(stream); };
+    std::unique_ptr<FILE, decltype(closeFile)> file(std::tmpfile(), closeFile);
     detail::requireAnalysis(file != nullptr, "Cannot open temporary lightcone checkpoint");
     lcSave(file.get());
     std::rewind(file.get());

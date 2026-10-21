@@ -139,7 +139,7 @@ static T const* readSphCacheLine(LineIdType lineId,
         }
         if (inserted) {
             try {
-                hpx::apply([promise, lineId]() {
+                hpx::post([promise, lineId]() {
                     try {
                         auto remote =
                             hpx::async<Action>(hpxLocalities()[lineId.proc], lineId.index);

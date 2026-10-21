@@ -84,7 +84,7 @@ static void memuseDaemon(std::string filename) {
 }
 
 void startMemuseDaemon() {
-    hpx::apply(memuseDaemon, outputPath("maxmem.txt"));
+    hpx::post(memuseDaemon, outputPath("maxmem.txt"));
 }
 
 void stopMemuseDaemon() {

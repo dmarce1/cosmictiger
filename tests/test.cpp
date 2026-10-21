@@ -10,6 +10,7 @@
 #include <array>
 #include <cmath>
 #include <fenv.h>
+#include <filesystem>
 
 #include <cosmictiger/analysis/rockstar.hpp>
 #include <cosmictiger/core/driver.hpp>
@@ -445,12 +446,12 @@ static void forceTest() {
 
 static void bucketTest() {
     int nchecks = 11;
-    static char* checkpoints[] = {"checkpoint.z.48.9", "checkpoint.z.20.0", "checkpoint.z.10.5",
-        "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6", "checkpoint.z.1.7",
-        "checkpoint.z.1.1", "checkpoint.z.0.6", "checkpoint.z.0.3", "checkpoint.z.0.1"};
+    static char const* checkpoints[] = {"checkpoint.z.48.9", "checkpoint.z.20.0",
+        "checkpoint.z.10.5", "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6",
+        "checkpoint.z.1.7", "checkpoint.z.1.1", "checkpoint.z.0.6", "checkpoint.z.0.3",
+        "checkpoint.z.0.1"};
     double const thetas[] = {0.5, 0.65, 0.65, 0.65, 0.65, 0.65, 0.8, 0.8, 0.8, 0.8, 0.8};
     //	for (int ci = 0; ci < nchecks; ci++) {
-    char* buffer;
     //		system("rm -r checkpoint.999999\n");
     //		asprintf(&buffer, "mv %s checkpoint.999999\n", checkpoints[ci]);
     //		system(buffer);
@@ -507,9 +508,10 @@ static void bucketTest() {
             treeDestroy(false);
         }
         tm.stop();
-        asprintf(&buffer, "buckets.txt");
-        FILE* fp = fopen(buffer, "at");
-        free(buffer);
+        FILE* fp = fopen("buckets.txt", "at");
+        if (fp == nullptr) {
+            THROW_ERROR("Unable to open buckets.txt\n");
+        }
         fprintf(fp, "%i %e\n", bucketSize, tm.read());
         fclose(fp);
         /*	}
@@ -521,9 +523,10 @@ static void bucketTest() {
 
 static void speedTest() {
     constexpr int kNchecks = 11;
-    static char* checkpoints[] = {"checkpoint.z.48.9", "checkpoint.z.20.0", "checkpoint.z.10.5",
-        "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6", "checkpoint.z.1.7",
-        "checkpoint.z.1.1", "checkpoint.z.0.6", "checkpoint.z.0.3", "checkpoint.z.0.1"};
+    static char const* checkpoints[] = {"checkpoint.z.48.9", "checkpoint.z.20.0",
+        "checkpoint.z.10.5", "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6",
+        "checkpoint.z.1.7", "checkpoint.z.1.1", "checkpoint.z.0.6", "checkpoint.z.0.3",
+        "checkpoint.z.0.1"};
     double const thetas[] = {0.4, 0.55, 0.55, 0.55, 0.55, 0.55, 0.7, 0.7, 0.7, 0.7, 0.7};
     double const counts[] = {1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4};
     int buckets[kNchecks];
@@ -543,11 +546,9 @@ static void speedTest() {
         PRINT("Test %i with bucket = %i\n", ci, buckets[ci]);
         PRINT("------------------------------------------------------------------------------------"
               "-\n");
-        char* buffer;
-        system("rm -r checkpoint.999999\n");
-        asprintf(&buffer, "cp -r %s checkpoint.999999\n", checkpoints[ci]);
-        system(buffer);
-        free(buffer);
+        std::filesystem::remove_all("checkpoint.999999");
+        std::filesystem::copy(
+            checkpoints[ci], "checkpoint.999999", std::filesystem::copy_options::recursive);
         for (int iter = 0; iter < counts[ci]; iter++) {
             auto opts = getOptions();
             opts.compute.bucketSize = buckets[ci];

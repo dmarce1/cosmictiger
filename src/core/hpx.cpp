@@ -6,6 +6,7 @@
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
+#include <cstdio>
 #include <set>
 #include <string>
 
@@ -107,8 +108,12 @@ static bool detectHyperthreading() {
     FILE* fp = fopen("/sys/devices/system/cpu/smt/active", "rt");
     if (fp != nullptr) {
         char c;
-        fread(&c, sizeof(char), 1, fp);
-        auto rc = c == '1';
+        size_t const charsRead = fread(&c, sizeof(c), 1, fp);
+        fclose(fp);
+        if (charsRead != 1) {
+            return false;
+        }
+        bool const rc = c == '1';
         if (rc) {
             terminal::detailPrint("Hyperthreading detected\n");
         } else {
