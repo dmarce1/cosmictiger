@@ -51,6 +51,7 @@ struct SphRunWorkspace {
     Vector<float, PinnedAllocator<float>> hostPressureEnergyRatio;
     Vector<float, PinnedAllocator<float>> hostAdiabaticIndex;
     Vector<float, PinnedAllocator<float>> hostDensity;
+    Vector<float, PinnedAllocator<float>> hostBalsaraFactor;
     Vector<float, PinnedAllocator<float>> hostSupportRadius;
     Vector<char, PinnedAllocator<char>> hostRungs;
     Vector<SphTreeNode, PinnedAllocator<SphTreeNode>> hostTrees;
@@ -424,16 +425,23 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
     }
     if (params.runType == SPH_RUN_PREHYDRO2 || params.runType == SPH_RUN_RUNGS) {
         hostRungs.resize(particleStorageSize);
-    } else if (params.runType == SPH_RUN_HYDRO) {
+    }
+    if (params.runType == SPH_RUN_HYDRO && params.balsaraSwitch) {
+        hostBalsaraFactor.resize(particleStorageSize);
+    }
+    if (params.runType == SPH_RUN_HYDRO ||
+        (params.runType == SPH_RUN_PREHYDRO2 && params.balsaraSwitch)) {
+        hostVelocityX.resize(particleStorageSize);
+        hostVelocityY.resize(particleStorageSize);
+        hostVelocityZ.resize(particleStorageSize);
+    }
+    if (params.runType == SPH_RUN_HYDRO) {
         hostDensity.resize(particleStorageSize);
         hostInternalEnergy.resize(particleStorageSize);
         if (getOptions().chemistry.enabled) {
             hostPressureEnergyRatio.resize(particleStorageSize);
             hostAdiabaticIndex.resize(particleStorageSize);
         }
-        hostVelocityX.resize(particleStorageSize);
-        hostVelocityY.resize(particleStorageSize);
-        hostVelocityZ.resize(particleStorageSize);
     }
     Vector<hpx::future<void>> futs;
     int const numberOfThreads = 8 * hpxHardwareConcurrency();
@@ -463,10 +471,12 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
                         sphParticlesGlobalReadChemistryEos(node.globalParticleRange(),
                             hostPressureEnergyRatio.data(), hostAdiabaticIndex.data(), offset);
                     }
+                    sphParticlesGlobalReadDensity(node.globalParticleRange(), hostDensity.data(),
+                        offset, params.balsaraSwitch ? hostBalsaraFactor.data() : nullptr);
+                }
+                if (!hostVelocityX.empty()) {
                     sphParticlesGlobalReadVelocities(node.globalParticleRange(),
                         hostVelocityX.data(), hostVelocityY.data(), hostVelocityZ.data(), offset);
-                    sphParticlesGlobalReadDensity(
-                        node.globalParticleRange(), hostDensity.data(), offset);
                 }
                 node.particleRange.first = offset;
                 node.particleRange.second = offset + size;
@@ -488,6 +498,7 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
         copy(runData.sourcePressureEnergyRatio, hostPressureEnergyRatio);
         copy(runData.sourceAdiabaticIndex, hostAdiabaticIndex);
         copy(runData.sourceDensity, hostDensity);
+        copy(runData.sourceBalsaraFactor, hostBalsaraFactor);
         copy(runData.sourceVelocityX, hostVelocityX);
         copy(runData.sourceVelocityY, hostVelocityY);
         copy(runData.sourceVelocityZ, hostVelocityZ);
@@ -502,6 +513,7 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
     runData.sinkSemiactive = &sphParticlesSemiactive(0);
     runData.sinkParticleRungs = &particlesRung(0);
     runData.sinkDensity = &sphParticlesDensity(0);
+    runData.sinkBalsaraFactor = sphParticlesBalsaraFactors;
     runData.sinkThermodynamicStates = &sphParticlesThermodynamicState(0);
     runData.sinkInternalEnergyRate = &sphParticlesInternalEnergyRate(0);
     runData.sinkGravityAccelerationX = &sphParticlesGravityAcceleration(XDIM, 0);

@@ -24,6 +24,7 @@ struct HydroNeighbor {
     float density;
     float pressureEnergyRatio;
     float adiabaticIndex;
+    float balsaraFactor;
 };
 
 struct HydroWorkspace {
@@ -118,7 +119,9 @@ __global__ void sphCudaHydro(
                             data.sourcePressureEnergyRatio[sourceParticleIndex] :
                             adiabaticIndex - 1.0f,
                         data.sourceAdiabaticIndex ? data.sourceAdiabaticIndex[sourceParticleIndex] :
-                                                    adiabaticIndex};
+                                                    adiabaticIndex,
+                        parameters.balsaraSwitch ? data.sourceBalsaraFactor[sourceParticleIndex] :
+                                                   1.0f};
                 }
             }
         }
@@ -199,8 +202,12 @@ __global__ void sphCudaHydro(
                 // Equation 4.2 and the Π_ab of p. 550.
                 float const μ_ab = monaghan_sph::viscosityMu(r_ab2, v_ab_dot_r_ab_physical, H_a,
                     H_b, ε, supportRadiusPerEffectiveRadius, kViscosityWidthScale);
-                float const Π_ab =
-                    monaghan_sph::artificialViscosity(ρ_a, ρ_b, c_a, c_b, μ_ab, α, β);
+                float Π_ab = monaghan_sph::artificialViscosity(ρ_a, ρ_b, c_a, c_b, μ_ab, α, β);
+                if (parameters.balsaraSwitch) {
+                    Π_ab *=
+                        0.5f * (data.sourceBalsaraFactor[particleIndex] + neighbor.balsaraFactor);
+                    flops += 3;
+                }
                 float const P_over_ρ2_ab =
                     monaghan_sph::pressureCoefficient(ρ_a, ρ_b, P_a, P_b);    // P_b/ρ_b² + P_a/ρ_a²
                 // Equation 6.4: dv_a/dt = −Σ_b m_b (P_b/ρ_b² + P_a/ρ_a² + Π_ab) ∇_a W̃_ab.

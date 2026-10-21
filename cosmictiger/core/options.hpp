@@ -153,6 +153,7 @@ struct Hydro {
     double viscosityAlpha{};
     double viscosityBeta{};
     double viscosityEpsilon{};
+    bool balsaraSwitch{true};
     double gamma{};
     double cfl{};
     double neighborNumber{42.0};
@@ -216,6 +217,7 @@ struct Options {
         arc & hydro.viscosityAlpha;
         arc & hydro.viscosityBeta;
         arc & hydro.viscosityEpsilon;
+        arc & hydro.balsaraSwitch;
         arc & hydro.neighborNumber;
         arc & hydro.minSupportRadius;
         arc & hydro.maxSupportRadius;

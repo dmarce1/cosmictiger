@@ -135,6 +135,17 @@ COSMICTIGER_MONAGHAN_EXPORT inline Real artificialViscosity(
     return simdSelect(μ_ab < Real(0), Π_ab, Real(0));
 }
 
+// Balsara (1995) shear correction, as in the supplied equation (72):
+// f_a = |div v_a| / (|div v_a| + |curl v_a|). The density normalization common
+// to both SPH derivative sums cancels. Define the indeterminate static case as zero;
+// select a safe denominator before division so SIMD lanes never evaluate 0/0.
+template <typename Real>
+COSMICTIGER_MONAGHAN_EXPORT inline Real balsaraFactor(Real divergence, Real curlMagnitude) {
+    Real const compression = simdMax(divergence, -divergence);
+    Real const denominator = compression + curlMagnitude;
+    return compression / simdSelect(denominator > Real(0), denominator, Real(1));
+}
+
 // The symmetric pressure term P_b/ρ_b² + P_a/ρ_a² shared by the momentum equation 3.3,
 // its viscous form 4.1, and the variable-resolution pair equations 6.4-6.5. The same
 // factor in the force and the thermal work conserves momentum and energy (p. 549).

@@ -50,6 +50,8 @@ SPH_PARTICLES_EXTERN Array<float*, NDIM> sphParticlesGravityAccelerations;
 SPH_PARTICLES_EXTERN float* sphParticlesPredictedInternalEnergyRates;
 SPH_PARTICLES_EXTERN float* sphParticlesInternalEnergyRates;
 SPH_PARTICLES_EXTERN float* sphParticlesDensities;
+// Derived during every density pass; rebuilt after restart and migration.
+SPH_PARTICLES_EXTERN float* sphParticlesBalsaraFactors;
 SPH_PARTICLES_EXTERN char* sphParticlesConvergenceFlags;
 SPH_PARTICLES_EXTERN char* sphParticlesSemiactiveFlags;
 
@@ -69,7 +71,8 @@ void sphParticlesGlobalReadInternalEnergyAndSupportRadius(
 void sphParticlesGlobalReadRungs(ParticleGlobalRange range, char*, ParticleInteger offset);
 void sphParticlesGlobalReadVelocities(
     ParticleGlobalRange range, float*, float*, float*, ParticleInteger offset);
-void sphParticlesGlobalReadDensity(ParticleGlobalRange range, float*, ParticleInteger offset);
+void sphParticlesGlobalReadDensity(
+    ParticleGlobalRange range, float*, ParticleInteger offset, float* balsaraFactor = nullptr);
 void sphParticlesGlobalReadChemistryEos(ParticleGlobalRange range, float* pressureEnergyRatio,
     float* adiabaticIndex, ParticleInteger offset);
 void sphParticlesRefreshChemistryEos(double scaleFactor);

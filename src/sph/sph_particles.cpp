@@ -58,14 +58,14 @@ static Array<Fixed32, NDIM> const* sphParticlesCacheReadLine(LineIdType lineId);
 static Pair<float> const* sphParticlesReadThermodynamicCacheLine(LineIdType lineId);
 static char const* sphParticlesRungCacheReadLine(LineIdType lineId);
 static Array<float, NDIM> const* sphParticlesReadVelocityCacheLine(LineIdType lineId);
-static float const* sphParticlesReadDensityCacheLine(LineIdType lineId);
+static Pair<float> const* sphParticlesReadDensityCacheLine(LineIdType lineId);
 static Pair<float> const* sphParticlesReadChemistryEosCacheLine(LineIdType lineId);
 static Vector<Pair<float>> sphParticlesFetchChemistryEosCacheLine(ParticleInteger index);
 
 static Vector<Array<Fixed32, NDIM>> sphParticlesFetchCacheLine(ParticleInteger index);
 static Vector<char> sphParticlesFetchRungCacheLine(ParticleInteger index);
 static Vector<Array<float, NDIM>> sphParticlesFetchVelocityCacheLine(ParticleInteger index);
-static Vector<float> sphParticlesFetchDensityCacheLine(ParticleInteger index);
+static Vector<Pair<float>> sphParticlesFetchDensityCacheLine(ParticleInteger index);
 static Vector<Pair<float>> sphParticlesFetchThermodynamicCacheLine(ParticleInteger index);
 
 HPX_PLAIN_ACTION(sphParticlesFetchCacheLine, SphParticlesFetchCacheLineAction);
@@ -96,8 +96,8 @@ static Array<std::unordered_map<LineIdType,
                  std::shared_ptr<hpx::shared_future<Vector<Array<float, NDIM>>>>, LineIdHashHi>,
     PART_CACHE_SIZE>
     particleVelocityCache;
-static Array<std::unordered_map<LineIdType, std::shared_ptr<hpx::shared_future<Vector<float>>>,
-                 LineIdHashHi>,
+static Array<std::unordered_map<LineIdType,
+                 std::shared_ptr<hpx::shared_future<Vector<Pair<float>>>>, LineIdHashHi>,
     PART_CACHE_SIZE>
     densityParticleCache;
 static Array<std::unordered_map<LineIdType,
@@ -292,6 +292,7 @@ void visitSphCheckpointArrays(Visitor&& visit, bool includeChemistry = true) {
 }    // namespace detail
 
 void sphParticlesSwap(ParticleInteger i, ParticleInteger j) {
+    std::swap(sphParticlesBalsaraFactors[i], sphParticlesBalsaraFactors[j]);
     detail::visitSphCheckpointArrays(
         [i, j](auto* values, size_t) { std::swap(values[i], values[j]); });
 }
@@ -338,6 +339,7 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
             newCapacity = size_t(101) * newCapacity / size_t(100);
         }
         sphParticlesArrayResize(sphParticlesDensities, newCapacity);
+        sphParticlesArrayResize(sphParticlesBalsaraFactors, newCapacity);
         sphParticlesArrayResize(sphParticlesThermodynamicStates, newCapacity);
         sphParticlesArrayResize(sphParticlesAccelerationStates, newCapacity);
         sphParticlesArrayResize(sphParticlesConvergenceFlags, newCapacity);
@@ -374,6 +376,7 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
         sphParticlesPredictedInternalEnergyRates[slot] = 0.0f;
         sphParticlesInternalEnergyRates[slot] = 0.0f;
         sphParticlesDensities[slot] = 0.0f;
+        sphParticlesBalsaraFactors[slot] = 0.0f;
         sphParticlesConvergenceFlags[slot] = 0;
         sphParticlesSemiactiveFlags[slot] = 0;
         for (int dim = 0; dim < NDIM; dim++) {
@@ -389,6 +392,8 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
 }
 
 void sphParticlesFree() {
+    freeManagedMemory(sphParticlesBalsaraFactors);
+    sphParticlesBalsaraFactors = nullptr;
     detail::visitSphCheckpointArrays([](auto*& values, size_t) {
         freeManagedMemory(values);
         values = nullptr;
@@ -629,7 +634,8 @@ static Vector<Array<float, NDIM>> sphParticlesFetchVelocityCacheLine(ParticleInt
     return line;
 }
 
-void sphParticlesGlobalReadDensity(ParticleGlobalRange range, float* rho, ParticleInteger offset) {
+void sphParticlesGlobalReadDensity(
+    ParticleGlobalRange range, float* rho, ParticleInteger offset, float* balsaraFactor) {
     ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
     if (range.range.first != range.range.second) {
         if (range.proc == hpxRank()) {
@@ -638,6 +644,9 @@ void sphParticlesGlobalReadDensity(ParticleGlobalRange range, float* rho, Partic
             for (ParticleInteger i = range.range.first; i < range.range.second; i++) {
                 int const j = offset + i - range.range.first;
                 rho[j] = sphParticlesDensity(i);
+                if (balsaraFactor) {
+                    balsaraFactor[j] = sphParticlesBalsaraFactors[i];
+                }
             }
         } else {
             LineIdType lineId;
@@ -652,7 +661,10 @@ void sphParticlesGlobalReadDensity(ParticleGlobalRange range, float* rho, Partic
                 auto const end = std::min(lineId.index + lineSize, range.range.second);
                 for (ParticleInteger i = begin; i < end; i++) {
                     ParticleInteger const srcIndex = i - lineId.index;
-                    rho[destIndex] = ptr[srcIndex];
+                    rho[destIndex] = ptr[srcIndex].first;
+                    if (balsaraFactor) {
+                        balsaraFactor[destIndex] = ptr[srcIndex].second;
+                    }
                     destIndex++;
                 }
             }
@@ -660,18 +672,18 @@ void sphParticlesGlobalReadDensity(ParticleGlobalRange range, float* rho, Partic
     }
 }
 
-static float const* sphParticlesReadDensityCacheLine(LineIdType lineId) {
+static Pair<float> const* sphParticlesReadDensityCacheLine(LineIdType lineId) {
     return readSphCacheLine<SphParticlesFetchDensityCacheLineAction>(
         lineId, densityParticleCache, densityMutexes);
 }
 
-static Vector<float> sphParticlesFetchDensityCacheLine(ParticleInteger index) {
+static Vector<Pair<float>> sphParticlesFetchDensityCacheLine(ParticleInteger index) {
     ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
-    Vector<float> line(lineSize);
+    Vector<Pair<float>> line(lineSize);
     ParticleInteger const begin = (index / lineSize) * lineSize;
     ParticleInteger const end = std::min(sphParticlesSize(), begin + lineSize);
     for (ParticleInteger i = begin; i < end; i++) {
-        line[i - begin] = sphParticlesDensity(i);
+        line[i - begin] = {sphParticlesDensity(i), sphParticlesBalsaraFactors[i]};
     }
     return line;
 }

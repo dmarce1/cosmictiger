@@ -366,6 +366,14 @@ TEST(MonaghanSph, ViscosityFloat) {
     detail::testViscosity<float>();
 }
 
+TEST(MonaghanSph, BalsaraFactor) {
+    EXPECT_EQ(monaghan_sph::balsaraFactor(0.0, 0.0), 0.0);
+    EXPECT_EQ(monaghan_sph::balsaraFactor(0.0f, 2.0f), 0.0f);
+    EXPECT_EQ(monaghan_sph::balsaraFactor(-3.0, 0.0), 1.0);
+    EXPECT_NEAR(monaghan_sph::balsaraFactor(-3.0, 2.0), 0.6, 1.0e-15);
+    EXPECT_NEAR(monaghan_sph::balsaraFactor(3.0f, 2.0f), 0.6f, 1.0e-7f);
+}
+
 TEST(MonaghanSph, PairConservation) {
     detail::testPairConservation();
 }

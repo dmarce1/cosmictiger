@@ -7,6 +7,7 @@
  */
 
 #include <cosmictiger/math/vector3.hpp>
+#include <cosmictiger/sph/monaghan_sph.hpp>
 #include <cosmictiger/sph/sph_cuda.hpp>
 
 namespace detail {
@@ -18,6 +19,9 @@ struct SmoothingWorkspace {
 struct NeighborActivity {
     float supportRadius;
     char rung;
+    float velocityX;
+    float velocityY;
+    float velocityZ;
 };
 
 struct DensityWorkspace {
@@ -156,7 +160,11 @@ __global__ void sphCudaPrehydro2(
                         position[XDIM], position[YDIM], position[ZDIM]};
                     workspace.particles[offset + slot] = {
                         data.sourceSupportRadius[sourceParticleIndex],
-                        data.sourceRungs[sourceParticleIndex]};
+                        data.sourceRungs[sourceParticleIndex],
+                        parameters.balsaraSwitch ? data.sourceVelocityX[sourceParticleIndex] : 0.0f,
+                        parameters.balsaraSwitch ? data.sourceVelocityY[sourceParticleIndex] : 0.0f,
+                        parameters.balsaraSwitch ? data.sourceVelocityZ[sourceParticleIndex] :
+                                                   0.0f};
                 }
             }
         }
@@ -221,22 +229,58 @@ __global__ void sphCudaPrehydro2(
             float const m_b_over_H_a3 = data.gasMass * one_over_H_a * one_over_H_a * one_over_H_a;
             flops += 4;    // Reciprocal support and the mass/support-cubed scale.
             float ρ_a = 0.0f;
+            float divergence = 0.0f;
+            Vector3<float> curl(0.0f);
             for (int neighborIndex = threadIndex; neighborIndex < workspace.positions.size();
                 neighborIndex += blockSize) {
                 auto const& neighbor = workspace.positions[neighborIndex];
                 Vector3<float> const r_ab(distance(position[XDIM], neighbor.positionX),
                     distance(position[YDIM], neighbor.positionY),
                     distance(position[ZDIM], neighbor.positionZ));
-                float const q_ab = sqrtf(r_ab.dot(r_ab)) * one_over_H_a;    // r_ab/H_a
+                float const radius = sqrtf(r_ab.dot(r_ab));
+                float const q_ab = radius * one_over_H_a;    // r_ab/H_a
                 ρ_a += m_b_over_H_a3 * kernelW(q_ab);
                 flops += 12 + sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab);
+                if (parameters.balsaraSwitch && radius > 0.0f && q_ab < 1.0f) {
+                    // Density-normalized SPH divergence and curl share rho_a, which
+                    // cancels from f_a. Use the same physical velocity as the viscosity.
+                    float const gradientScale =
+                        m_b_over_H_a3 * one_over_H_a * dkernelWDq(q_ab) / radius;
+                    Vector3<float> const gradient = gradientScale * r_ab;
+                    auto const& particle = workspace.particles[neighborIndex];
+                    Vector3<float> const velocity =
+                        Vector3<float>(data.sourceVelocityX[particleIndex],
+                            data.sourceVelocityY[particleIndex],
+                            data.sourceVelocityZ[particleIndex]) -
+                        Vector3<float>(particle.velocityX, particle.velocityY, particle.velocityZ) +
+                        parameters.expansionRate * r_ab;
+                    divergence -= velocity.dot(gradient);
+                    for (int dim = 0; dim < NDIM; ++dim) {
+                        int const next = (dim + 1) % NDIM;
+                        int const last = (dim + 2) % NDIM;
+                        curl[dim] +=
+                            velocity[next] * gradient[last] - velocity[last] * gradient[next];
+                    }
+                    flops += 33 + sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab, true);
+                }
             }
             sharedReduceAdd<float, PREHYDRO2_BLOCK_SIZE>(ρ_a);
             flops += detail::sphReductionFlops<PREHYDRO2_BLOCK_SIZE>();
+            if (parameters.balsaraSwitch) {
+                sharedReduceAdd<float, PREHYDRO2_BLOCK_SIZE>(divergence);
+                for (int dim = 0; dim < NDIM; ++dim) {
+                    sharedReduceAdd<float, PREHYDRO2_BLOCK_SIZE>(curl[dim]);
+                }
+                flops += 4 * detail::sphReductionFlops<PREHYDRO2_BLOCK_SIZE>();
+            }
             // NOLINTEND(readability-identifier-naming)
             if (threadIndex == 0) {
                 ALWAYS_ASSERT(H_a > 0.0f && ρ_a > 0.0f);
                 data.sinkDensity[sinkIndex] = ρ_a;
+                data.sinkBalsaraFactor[sinkIndex] = parameters.balsaraSwitch ?
+                    monaghan_sph::balsaraFactor(divergence, curl.norm()) :
+                    1.0f;
+                flops += parameters.balsaraSwitch ? 8 : 0;
                 data.sinkSmoothingConverged[sinkIndex] = true;
                 atomicMin(&reduction->minimumSupportRadius, supportRadius);
                 atomicMax(&reduction->maximumSupportRadius, supportRadius);

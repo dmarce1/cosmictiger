@@ -113,8 +113,10 @@ public:
         data_.sourceInternalEnergy = allocate<float>(sourceSize);
         data_.sourceSupportRadius = allocate<float>(sourceSize);
         data_.sourceDensity = allocate<float>(sourceSize);
+        data_.sourceBalsaraFactor = allocate<float>(sourceSize);
         data_.sourceRungs = allocate<char>(sourceSize);
         data_.sinkDensity = allocate<float>(sinkSize);
+        data_.sinkBalsaraFactor = allocate<float>(sinkSize);
         data_.sinkGravityAccelerationX = allocate<float>(sinkSize);
         data_.sinkGravityAccelerationY = allocate<float>(sinkSize);
         data_.sinkGravityAccelerationZ = allocate<float>(sinkSize);
@@ -144,6 +146,8 @@ public:
         params_.viscosityAlpha = 1.0f;
         params_.viscosityBeta = 2.0f;
         params_.viscosityEpsilon = 0.01f;
+        // Existing analytic references exercise the original Monaghan viscosity.
+        params_.balsaraSwitch = false;
         params_.minimumSupportRadius = 0.1f;
         params_.maximumSupportRadius = 0.49f;
         params_.uniformAccelerationY = 0.0f;
@@ -214,6 +218,7 @@ public:
     void publishDensity() {
         for (int i = 0; i < count_; i++) {
             data_.sourceDensity[sourceIndex(i)] = data_.sinkDensity[sinkIndex(i)];
+            data_.sourceBalsaraFactor[sourceIndex(i)] = data_.sinkBalsaraFactor[sinkIndex(i)];
         }
     }
 
@@ -1053,6 +1058,104 @@ private:
 }    // namespace detail
 
 using detail::SphCpuTest;
+
+TEST_F(SphCpuTest, BalsaraVelocityGradients) {
+    detail::Fixture fixture(27, 3, 5, 3, 7);
+    fixture.params_.balsaraSwitch = true;
+    auto& data = fixture.data_;
+    struct Flow {
+        float compression;
+        float rotation;
+        float shear;
+        float expansion;
+        float expected;
+    };
+    Flow const flows[] = {
+        {0, 0, 0, 0, 0},       // Uniform translation, including the zero-gradient case.
+        {0, 0, 1, 0, 0},       // Pure shear.
+        {0, 1, 0, 0, 0},       // Solid-body rotation.
+        {1, 0, 0, 0, 1},       // Compression retains full viscosity.
+        {1, 1, 0, 0, 0.6f},    // |div| = 3, |curl| = 2.
+        {0, 0, 0, -1, 1},      // Homogeneous physical contraction.
+        {1, 1, 0, 0.5f, 3.0f / 7.0f},
+    };
+    for (auto const& flow : flows) {
+        fixture.params_.expansionRate = flow.expansion;
+        for (int i = 0; i < fixture.count_; ++i) {
+            int const source = fixture.sourceIndex(i);
+            int const sink = fixture.sinkIndex(i);
+            float const x = float(i / 9 - 1) * 0.0625f;
+            float const y = float(i / 3 % 3 - 1) * 0.0625f;
+            float const z = float(i % 3 - 1) * 0.0625f;
+            data.sourcePositionX[source] = 0.5 + x;
+            data.sourcePositionY[source] = 0.5 + y;
+            data.sourcePositionZ[source] = 0.5 + z;
+            data.sourceVelocityX[source] =
+                0.25f - flow.compression * x - flow.rotation * y + flow.shear * y;
+            data.sourceVelocityY[source] = -0.5f - flow.compression * y + flow.rotation * x;
+            data.sourceVelocityZ[source] = 0.125f - flow.compression * z;
+            data.sourceSupportRadius[source] = data.sinkThermodynamicStates[sink].supportRadius =
+                0.25f;
+            data.sinkSmoothingConverged[sink] = true;
+            data.sourceBalsaraFactor[source] = -7.0f;
+        }
+        fixture.run(SPH_RUN_PREHYDRO2);
+        for (int i = 0; i < fixture.count_; ++i) {
+            float const factor = data.sinkBalsaraFactor[fixture.sinkIndex(i)];
+            EXPECT_GE(factor, 0.0f);
+            EXPECT_LE(factor, 1.0f);
+            EXPECT_EQ(data.sourceBalsaraFactor[fixture.sourceIndex(i)], -7.0f);
+        }
+        EXPECT_NEAR(data.sinkBalsaraFactor[fixture.sinkIndex(13)], flow.expected, 2.0e-6f);
+        EXPECT_EQ(data.sinkBalsaraFactor[fixture.sinkOffset_ - 1], 0.0f);
+        EXPECT_EQ(data.sinkBalsaraFactor[fixture.sinkIndex(fixture.count_)], 0.0f);
+    }
+    fixture.params_.balsaraSwitch = false;
+    fixture.run(SPH_RUN_PREHYDRO2);
+    for (int i = 0; i < fixture.count_; ++i) {
+        EXPECT_EQ(data.sinkBalsaraFactor[fixture.sinkIndex(i)], 1.0f);
+    }
+}
+
+TEST_F(SphCpuTest, BalsaraSymmetricForceAndHeating) {
+    detail::Fixture fixture(2, 2);
+    auto& data = fixture.data_;
+    for (int i = 0; i < 2; ++i) {
+        data.sourcePositionX[i] = i == 0 ? 0.35 : 0.65;
+        data.sourcePositionY[i] = data.sourcePositionZ[i] = 0.5;
+        data.sourceVelocityX[i] = i == 0 ? 0.1f : -0.1f;
+        data.sourceDensity[i] = 1.0f + i;
+        data.sourceSupportRadius[i] = i == 0 ? 0.2f : 0.45f;
+        data.sourceBalsaraFactor[i] = i == 0 ? 0.2f : 0.8f;
+    }
+    fixture.hydro();
+    std::array<float, 2> const fullHeating = {
+        data.sinkInternalEnergyRate[0], data.sinkInternalEnergyRate[1]};
+    std::array<SphAcceleration, 2> const fullForce = {
+        data.sinkAccelerations[0], data.sinkAccelerations[1]};
+    fixture.params_.viscosityAlpha = fixture.params_.viscosityBeta = 0.0f;
+    fixture.hydro();
+    std::array<float, 2> const pressureHeating = {
+        data.sinkInternalEnergyRate[0], data.sinkInternalEnergyRate[1]};
+    std::array<SphAcceleration, 2> const pressureForce = {
+        data.sinkAccelerations[0], data.sinkAccelerations[1]};
+    fixture.params_.viscosityAlpha = 1.0f;
+    fixture.params_.viscosityBeta = 2.0f;
+    fixture.params_.balsaraSwitch = true;
+    fixture.hydro();
+    fixture.checkConservation();
+    for (int i = 0; i < 2; ++i) {
+        EXPECT_GT(fullHeating[i], pressureHeating[i]);
+        EXPECT_NEAR(data.sinkInternalEnergyRate[i],
+            pressureHeating[i] + 0.5f * (fullHeating[i] - pressureHeating[i]), 2.0e-6f);
+        for (int dim = 0; dim < NDIM; ++dim) {
+            EXPECT_NEAR(data.sinkAccelerations[i].acceleration[dim],
+                pressureForce[i].acceleration[dim] +
+                    0.5f * (fullForce[i].acceleration[dim] - pressureForce[i].acceleration[dim]),
+                2.0e-6f);
+        }
+    }
+}
 
 TEST_F(SphCpuTest, EveryPhaseSubmitsItsArithmeticCount) {
     // The partial final packet verifies that actual SIMD work is counted, even

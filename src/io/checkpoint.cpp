@@ -88,6 +88,7 @@ constexpr uint32_t kScenarioManifestVersion = 2;
 constexpr uint32_t kMonaghanSph = 1;
 constexpr uint32_t kCompactSphLayout = 1U << 24;
 constexpr uint32_t kZPlaneAcceleration = 1U << 12;
+constexpr uint32_t kBalsaraSwitch = 1U << 13;
 constexpr uint64_t kFnvOffsetBasis = 14695981039346656037ULL;
 constexpr uint64_t kFnvPrime = 1099511628211ULL;
 
@@ -394,7 +395,8 @@ uint32_t checkpointFlags(Options const& opts) {
     return (opts.hydro.enabled ? kSph : 0U) | (opts.run.hierarchicalGravity ? kHierarchical : 0U) |
         (opts.lightcone.enabled ? kLightcone : 0U) | (opts.analysis.groups ? kGroups : 0U) |
         (opts.analysis.tracers ? kTracers : 0U) | (opts.chemistry.enabled ? kChemistry : 0U) |
-        (opts.hydro.enabled && opts.hydro.zPlaneAcceleration != 0.0 ? kZPlaneAcceleration : 0U);
+        (opts.hydro.enabled && opts.hydro.zPlaneAcceleration != 0.0 ? kZPlaneAcceleration : 0U) |
+        (opts.hydro.enabled && opts.hydro.balsaraSwitch ? kBalsaraSwitch : 0U);
 }
 
 uint32_t checkpointKernelCode(std::string const& family, int degree) {
@@ -740,6 +742,17 @@ void checkpointStateTest() {
     legacyDarkMatterHeader.version = detail::kLegacyDarkMatterCheckpointVersion;
     ALWAYS_ASSERT(detail::checkpointCompatible(legacyDarkMatterHeader, legacyDarkMatterOptions));
     auto const sphParameters = detail::sphCheckpointParameters(getOptions());
+    auto balsaraOptions = getOptions();
+    balsaraOptions.hydro.enabled = true;
+    balsaraOptions.hydro.balsaraSwitch = true;
+    auto const balsaraHeader = detail::checkpointHeader(balsaraOptions);
+    ALWAYS_ASSERT(detail::checkpointCompatible(balsaraHeader, balsaraOptions));
+    balsaraOptions.hydro.balsaraSwitch = false;
+    ALWAYS_ASSERT(!detail::checkpointCompatible(balsaraHeader, balsaraOptions));
+    auto const unlimitedHeader = detail::checkpointHeader(balsaraOptions);
+    ALWAYS_ASSERT(detail::checkpointCompatible(unlimitedHeader, balsaraOptions));
+    balsaraOptions.hydro.balsaraSwitch = true;
+    ALWAYS_ASSERT(!detail::checkpointCompatible(unlimitedHeader, balsaraOptions));
     auto planeOptions = getOptions();
     planeOptions.hydro.enabled = true;
     planeOptions.hydro.zPlaneAcceleration = 0.0;

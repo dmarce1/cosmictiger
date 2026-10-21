@@ -126,6 +126,9 @@ public:
         data_.sourceSupportRadius = allocate<float>(count);
         data_.sourceDensity = allocate<float>(count);
         data_.sinkDensity = separateSources ? allocate<float>(count) : data_.sourceDensity;
+        data_.sourceBalsaraFactor = allocate<float>(count);
+        data_.sinkBalsaraFactor =
+            separateSources ? allocate<float>(count) : data_.sourceBalsaraFactor;
         data_.sinkGravityAccelerationX = allocate<float>(count);
         data_.sinkGravityAccelerationY = allocate<float>(count);
         data_.sinkGravityAccelerationZ = allocate<float>(count);
@@ -157,6 +160,7 @@ public:
         params_.viscosityAlpha = 1.0f;
         params_.viscosityBeta = 2.0f;
         params_.viscosityEpsilon = 0.01f;
+        params_.balsaraSwitch = false;
         params_.minimumSupportRadius = 0.1f;
         params_.maximumSupportRadius = 0.49f;
         for (int i = 0; i < count; i++) {
@@ -292,6 +296,8 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
     fixture.params_.phase = phase;
     SphRunData cpuData = data;
     std::vector<float> density(data.sinkDensity, data.sinkDensity + fixture.count_);
+    std::vector<float> balsaraFactor(
+        data.sinkBalsaraFactor, data.sinkBalsaraFactor + fixture.count_);
     std::vector<float> energyRate(
         data.sinkInternalEnergyRate, data.sinkInternalEnergyRate + fixture.count_);
     std::vector<SphAcceleration> acceleration(
@@ -303,10 +309,13 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
     std::vector<char> converged(
         data.sinkSmoothingConverged, data.sinkSmoothingConverged + fixture.count_);
     std::vector<float> const sourceDensity(data.sourceDensity, data.sourceDensity + fixture.count_);
+    std::vector<float> const sourceBalsaraFactor(
+        data.sourceBalsaraFactor, data.sourceBalsaraFactor + fixture.count_);
     std::vector<float> const sourceSupport(
         data.sourceSupportRadius, data.sourceSupportRadius + fixture.count_);
     std::vector<char> const sourceRungs(data.sourceRungs, data.sourceRungs + fixture.count_);
     cpuData.sinkDensity = density.data();
+    cpuData.sinkBalsaraFactor = balsaraFactor.data();
     cpuData.sinkInternalEnergyRate = energyRate.data();
     cpuData.sinkAccelerations = acceleration.data();
     cpuData.sinkThermodynamicStates = thermodynamicStates.data();
@@ -365,6 +374,10 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
         cudaResult.inverseAccelerationTimestep, 5.0e-5);
     for (int i = 0; i < fixture.count_; i++) {
         requireClose("CPU/CUDA density", density[i], data.sinkDensity[i], 5.0e-5);
+        requireClose(
+            "CPU/CUDA Balsara factor", balsaraFactor[i], data.sinkBalsaraFactor[i], 5.0e-5);
+        require(data.sourceBalsaraFactor[i] == sourceBalsaraFactor[i],
+            "CPU/CUDA phases must preserve Balsara source snapshots");
         requireClose("CPU/CUDA support", thermodynamicStates[i].supportRadius,
             data.sinkThermodynamicStates[i].supportRadius, 3.0e-5);
         require(
@@ -389,6 +402,7 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
 void testCpuCudaParity() {
     // Three unequal leaves and 19 neighbors exercise indirection and SIMD tails.
     Fixture fixture(19, 3, true);
+    fixture.params_.balsaraSwitch = true;
     auto& data = fixture.data_;
     std::vector<int> sinkIndices(fixture.count_);
     int const sinkBegins[] = {7, 13, 0};
@@ -454,6 +468,7 @@ void testCpuCudaParity() {
     publishSupport();
     for (int source = 0; source < fixture.count_; source++) {
         data.sourceDensity[source] = data.sinkDensity[sinkIndices[source]];
+        data.sourceBalsaraFactor[source] = data.sinkBalsaraFactor[sinkIndices[source]];
     }
     compareCpuCudaPhase(fixture, SPH_RUN_HYDRO, 0);
     compareCpuCudaPhase(fixture, SPH_RUN_HYDRO, 1);
@@ -481,6 +496,7 @@ void testCpuCudaParity() {
         "distant inactive particle must leave density untouched");
     for (int source = 0; source < excluded; source++) {
         data.sourceDensity[source] = data.sinkDensity[sinkIndices[source]];
+        data.sourceBalsaraFactor[source] = data.sinkBalsaraFactor[sinkIndices[source]];
     }
     compareCpuCudaPhase(fixture, SPH_RUN_HYDRO, 0);
     compareCpuCudaPhase(fixture, SPH_RUN_HYDRO, 1);
@@ -961,6 +977,89 @@ protected:
             {radial_kernel::Family::Ferrers, 8}, {radial_kernel::Family::Spline, 3}, true);
     }
 };
+
+TEST_F(MonaghanSphCuda, BalsaraVelocityGradients) {
+    detail::Fixture fixture(27, 3);
+    fixture.params_.balsaraSwitch = true;
+    auto& data = fixture.data_;
+    struct Flow {
+        float compression;
+        float rotation;
+        float shear;
+        float expansion;
+        float expected;
+    };
+    Flow const flows[] = {{0, 0, 0, 0, 0}, {0, 0, 1, 0, 0}, {0, 1, 0, 0, 0}, {1, 0, 0, 0, 1},
+        {1, 1, 0, 0, 0.6f}, {0, 0, 0, -1, 1}, {1, 1, 0, 0.5f, 3.0f / 7.0f}};
+    for (auto const& flow : flows) {
+        fixture.params_.expansionRate = flow.expansion;
+        for (int i = 0; i < fixture.count_; ++i) {
+            float const x = float(i / 9 - 1) * 0.0625f;
+            float const y = float(i / 3 % 3 - 1) * 0.0625f;
+            float const z = float(i % 3 - 1) * 0.0625f;
+            data.sourcePositionX[i] = 0.5 + x;
+            data.sourcePositionY[i] = 0.5 + y;
+            data.sourcePositionZ[i] = 0.5 + z;
+            data.sourceVelocityX[i] =
+                0.25f - flow.compression * x - flow.rotation * y + flow.shear * y;
+            data.sourceVelocityY[i] = -0.5f - flow.compression * y + flow.rotation * x;
+            data.sourceVelocityZ[i] = 0.125f - flow.compression * z;
+            data.sourceSupportRadius[i] = data.sinkThermodynamicStates[i].supportRadius = 0.25f;
+            data.sinkSmoothingConverged[i] = true;
+        }
+        fixture.density();
+        EXPECT_NEAR(data.sourceBalsaraFactor[13], flow.expected, 2.0e-6f);
+        for (int i = 0; i < fixture.count_; ++i) {
+            EXPECT_GE(data.sourceBalsaraFactor[i], 0.0f);
+            EXPECT_LE(data.sourceBalsaraFactor[i], 1.0f);
+        }
+    }
+    fixture.params_.balsaraSwitch = false;
+    fixture.density();
+    for (int i = 0; i < fixture.count_; ++i) {
+        EXPECT_EQ(data.sourceBalsaraFactor[i], 1.0f);
+    }
+}
+
+TEST_F(MonaghanSphCuda, BalsaraSymmetricForceAndHeating) {
+    detail::Fixture fixture(2, 2);
+    auto& data = fixture.data_;
+    for (int i = 0; i < 2; ++i) {
+        data.sourcePositionX[i] = i == 0 ? 0.35 : 0.65;
+        data.sourcePositionY[i] = data.sourcePositionZ[i] = 0.5;
+        data.sourceVelocityX[i] = i == 0 ? 0.1f : -0.1f;
+        data.sourceDensity[i] = 1.0f + i;
+        data.sourceSupportRadius[i] = i == 0 ? 0.2f : 0.45f;
+        data.sourceBalsaraFactor[i] = i == 0 ? 0.2f : 0.8f;
+    }
+    fixture.hydro();
+    std::array<float, 2> const fullHeating = {
+        data.sinkInternalEnergyRate[0], data.sinkInternalEnergyRate[1]};
+    std::array<SphAcceleration, 2> const fullForce = {
+        data.sinkAccelerations[0], data.sinkAccelerations[1]};
+    fixture.params_.viscosityAlpha = fixture.params_.viscosityBeta = 0.0f;
+    fixture.hydro();
+    std::array<float, 2> const pressureHeating = {
+        data.sinkInternalEnergyRate[0], data.sinkInternalEnergyRate[1]};
+    std::array<SphAcceleration, 2> const pressureForce = {
+        data.sinkAccelerations[0], data.sinkAccelerations[1]};
+    fixture.params_.viscosityAlpha = 1.0f;
+    fixture.params_.viscosityBeta = 2.0f;
+    fixture.params_.balsaraSwitch = true;
+    fixture.hydro();
+    fixture.checkConservation();
+    for (int i = 0; i < 2; ++i) {
+        EXPECT_GT(fullHeating[i], pressureHeating[i]);
+        detail::requireClose("Balsara pair heating", data.sinkInternalEnergyRate[i],
+            pressureHeating[i] + 0.5f * (fullHeating[i] - pressureHeating[i]), 5.0e-6);
+        for (int dim = 0; dim < NDIM; ++dim) {
+            detail::requireClose("Balsara pair force", data.sinkAccelerations[i].acceleration[dim],
+                pressureForce[i].acceleration[dim] +
+                    0.5f * (fullForce[i].acceleration[dim] - pressureForce[i].acceleration[dim]),
+                5.0e-6);
+        }
+    }
+}
 
 TEST_F(MonaghanSphCuda, BlockReductionFlops) {
     FlopCount* counts = nullptr;

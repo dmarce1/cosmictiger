@@ -26,12 +26,14 @@ struct SphRunData {
     float* sourcePressureEnergyRatio;
     float* sourceAdiabaticIndex;
     float* sourceDensity;
+    float* sourceBalsaraFactor;
     float* sourceSupportRadius;
     char* sourceRungs;
 
     // Local sink arrays indexed by the SPH particle index.
     float* sinkInternalEnergyRate;
     float* sinkDensity;
+    float* sinkBalsaraFactor;
     char* sinkSemiactive;
     char* sinkSmoothingConverged;
     SphThermodynamicState* sinkThermodynamicStates;

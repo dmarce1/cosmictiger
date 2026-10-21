@@ -45,7 +45,7 @@ def main():
     required = {"help", "configuration", "run.scenario", "run.endTime", "run.verbose",
                 "initial.particlesPerDimension", "compute.cuda",
                 "hydro.enabled", "hydro.viscosityAlpha", "hydro.viscosityBeta",
-                "hydro.viscosityEpsilon", "hydro.neighborNumber", "gravity.enabled",
+                "hydro.viscosityEpsilon", "hydro.balsaraSwitch", "hydro.neighborNumber", "gravity.enabled",
                 "gravity.kernelFamily", "gravity.kernelDegree",
                 "hydro.kernelFamily", "hydro.kernelDegree",
                 "gravity.effectiveRadius", "gravity.supportRadius",
@@ -84,6 +84,7 @@ enabled = false
 viscosityAlpha = 0.75
 viscosityBeta = 1.5
 viscosityEpsilon = 0.02
+balsaraSwitch = false
 zPlaneAcceleration = 0.25
 gamma = 1.4
 neighborNumber = 48
@@ -109,6 +110,16 @@ mapSize = 8
 
     metadata_options = ["--run.test=checkpointState", "--compute.cuda=false",
                         "--hydro.enabled=false", "--initial.particlesPerDimension=8"]
+
+    if not re.search(r"^hydro\.balsaraSwitch\s*:\s*F\s*$", configured, re.MULTILINE):
+        raise RuntimeError("INI hydro.balsaraSwitch=false was not applied")
+    balsara_default = run("balsara_default", metadata_options)
+    if not re.search(r"^hydro\.balsaraSwitch\s*:\s*T\s*$", balsara_default, re.MULTILINE):
+        raise RuntimeError("Balsara switch must default to enabled")
+    balsara_override = run("balsara_cli_override", [f"--configuration={config.resolve()}",
+                                                 "--hydro.balsaraSwitch=true"])
+    if not re.search(r"^hydro\.balsaraSwitch\s*:\s*T\s*$", balsara_override, re.MULTILINE):
+        raise RuntimeError("CLI hydro.balsaraSwitch did not override INI")
 
     verbose_config = args.workdir / "verbose.ini"
     verbose_config.write_text("[run]\nverbose = true\n")

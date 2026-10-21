@@ -146,8 +146,15 @@ SphRunReturn sphCpuHydro(
             SimdFloat const μ_ab = monaghan_sph::viscosityMu(r_ab2, v_ab_dot_r_ab_physical,
                 SimdFloat(H_a), H_b, SimdFloat(ε), SimdFloat(supportRadiusPerEffectiveRadius),
                 SimdFloat(kViscosityWidthScale));
-            SimdFloat const Π_ab = monaghan_sph::artificialViscosity(
+            SimdFloat Π_ab = monaghan_sph::artificialViscosity(
                 SimdFloat(ρ_a), ρ_b, SimdFloat(c_a), c_b, μ_ab, SimdFloat(α), SimdFloat(β));
+            if (parameters.balsaraSwitch) {
+                SimdFloat const pairFactor = half *
+                    (SimdFloat(data.sourceBalsaraFactor[particleIndex]) +
+                        detail::sphCpuLoad(data.sourceBalsaraFactor, neighbors, first, 0.0f));
+                Π_ab *= pairFactor;
+                flops += 3 * SimdFloat::size();
+            }
             SimdFloat const P_over_ρ2_ab = monaghan_sph::pressureCoefficient(
                 SimdFloat(ρ_a), ρ_b, SimdFloat(P_a), P_b);    // P_b/ρ_b² + P_a/ρ_a²
             // Equation 6.4: dv_a/dt = −Σ_b m_b (P_b/ρ_b² + P_a/ρ_a² + Π_ab) ∇_a W̃_ab.

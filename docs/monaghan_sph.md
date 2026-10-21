@@ -177,8 +177,24 @@ interpretation of the viscosity parameters. The same factor applies to every
 selected family. Defaults remain the paper's \(\alpha=1\), \(\beta=2\), and
 \(\epsilon=0.01\).
 
-The active formulation has no pressure-entropy weighting, grad-h factors, evolving
-viscosity coefficient, or shear limiter. The same symmetric pressure and viscosity
+The Balsara (1995) shear limiter is enabled by default. During the density pass,
+the code accumulates the gather estimates
+\(\rho_i\,\nabla\!\cdot\mathbf v_i=-\sum_j m_j\mathbf v_{ij}\cdot\nabla_i W_{ij}(H_i)\)
+and
+\(\rho_i\,\nabla\!\times\mathbf v_i=\sum_j m_j\mathbf v_{ij}\times\nabla_i W_{ij}(H_i)\).
+It computes \(f_i=|\nabla\!\cdot\mathbf v_i|/(|\nabla\!\cdot\mathbf v_i|+
+|\nabla\!\times\mathbf v_i|)\), with \(f_i=0\) when both derivatives vanish,
+and multiplies \(\Pi_{ij}\) by \((f_i+f_j)/2\) in both force and heating.
+The density normalization cancels in the ratio. The derivatives use the physical
+relative velocity, including Hubble flow, consistently with the viscosity.
+Only \(f_i\), one float per gas particle, is retained between density and force
+passes; the divergence and curl are discarded. This derived factor is recomputed
+after restart and migration and is not stored in checkpoints. Checkpoint metadata
+records whether the limiter is enabled and rejects a restart with a different setting.
+Use `--hydro.balsaraSwitch=false` to recover the unmodified Monaghan viscosity.
+
+The active formulation has no pressure-entropy weighting, grad-h factors, or evolving
+viscosity coefficient. The same symmetric pressure and viscosity
 factors enter force and thermal work. Their simultaneous pair rates conserve linear
 and angular momentum and balance kinetic with internal energy. This algebraic
 identity does not imply exact conservation by a finite-step asynchronous integrator.
@@ -269,6 +285,7 @@ hydrodynamic controls are:
 | `hydro.viscosityAlpha` | `1` | Linear viscosity coefficient |
 | `hydro.viscosityBeta` | `2` | Quadratic viscosity coefficient |
 | `hydro.viscosityEpsilon` | `0.01` | Denominator coefficient multiplying \(\bar\ell^2\) |
+| `hydro.balsaraSwitch` | `true` | Apply the Balsara shear limiter to artificial viscosity |
 | `hydro.neighborNumber` | `42` | Kernel-weighted support-sphere count |
 | `hydro.minEffectiveRadius` | unset | Alternative minimum effective radius \(h=2\sigma\), in initial interparticle spacings |
 | `hydro.minSupportRadius` | `1e-6` | Minimum \(H\), in initial interparticle spacings |

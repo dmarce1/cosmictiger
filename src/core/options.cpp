@@ -266,6 +266,7 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"hydro.viscosityAlpha", options.hydro.viscosityAlpha},
         {"hydro.viscosityBeta", options.hydro.viscosityBeta},
         {"hydro.viscosityEpsilon", options.hydro.viscosityEpsilon},
+        {"hydro.balsaraSwitch", options.hydro.balsaraSwitch},
         {"hydro.gamma", options.hydro.gamma},
         {"hydro.centralAcceleration", options.hydro.centralAcceleration},
         {"hydro.centralSoftening",
@@ -502,7 +503,9 @@ bool processOptions(int argc, char* argv[]) {
         "constant quadratic artificial-viscosity coefficient beta")("hydro.viscosityEpsilon",
         po::value<double>(&opts.hydro.viscosityEpsilon)->default_value(0.01),
         "viscosity regularization relative to the calibrated radius sqrt(5/6) effectiveRadius")(
-        "hydro.gamma", po::value<double>(&opts.hydro.gamma)->default_value(5.0 / 3.0),
+        "hydro.balsaraSwitch", po::value<bool>(&opts.hydro.balsaraSwitch)->default_value(true),
+        "suppress artificial viscosity in shear flows with the Balsara switch")("hydro.gamma",
+        po::value<double>(&opts.hydro.gamma)->default_value(5.0 / 3.0),
         "ideal-gas adiabatic index")("hydro.centralAcceleration",
         po::value<double>(&opts.hydro.centralAcceleration)->default_value(0.0),
         "magnitude of the central force")("hydro.centralSoftening",
@@ -1084,6 +1087,7 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("hydro.viscosityAlpha", hydro.viscosityAlpha);
     SHOW("hydro.viscosityBeta", hydro.viscosityBeta);
     SHOW("hydro.viscosityEpsilon", hydro.viscosityEpsilon);
+    SHOW("hydro.balsaraSwitch", hydro.balsaraSwitch);
     SHOW("hydro.gamma", hydro.gamma);
     SHOW("hydro.yAcceleration", hydro.yAcceleration);
     SHOW("hydro.zPlaneAcceleration", hydro.zPlaneAcceleration);
@@ -1229,6 +1233,7 @@ bool processOptions(int argc, char* argv[]) {
         if (opts.hydro.enabled) {
             SHOW("hydro.kernelFamily", hydro.kernelFamily);
             SHOW("hydro.kernelDegree", hydro.kernelDegree);
+            SHOW("hydro.balsaraSwitch", hydro.balsaraSwitch);
         }
         SHOW("chemistry.enabled", chemistry.enabled);
         if (opts.chemistry.enabled) {

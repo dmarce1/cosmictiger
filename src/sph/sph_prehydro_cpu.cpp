@@ -12,6 +12,7 @@
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/vector3.hpp>
+#include <cosmictiger/sph/monaghan_sph.hpp>
 #include <cosmictiger/sph/sph_cpu.hpp>
 
 // Monaghan (1992), ARA&A 30, 543; cosmictiger/monaghan_sph.hpp gives the full citation
@@ -204,19 +205,59 @@ SphRunReturn sphCpuPrehydro2(
         SimdFloat const m_b_over_H_a3(data.gasMass * one_over_H_a * one_over_H_a * one_over_H_a);
         flops += 4;    // Reciprocal and three mass/support products.
         SimdFloat ρ_a_pack(0.0f);
+        SimdFloat divergencePack(0.0f);
+        Vector3<SimdFloat> curlPack(SimdFloat(0.0f));
         for (size_t first = 0; first < neighbors.size(); first += SimdFloat::size()) {
             Vector3<SimdFloat> const r_ab =
                 detail::sphCpuSeparations(data, particleIndex, neighbors, first);
-            SimdFloat const q_ab = simdSqrt(r_ab.dot(r_ab)) * SimdFloat(one_over_H_a);
+            SimdFloat const radius = simdSqrt(r_ab.dot(r_ab));
+            SimdFloat const q_ab = radius * SimdFloat(one_over_H_a);
             ρ_a_pack += simdSelect(detail::sphCpuValidLanes(neighbors, first),
                 m_b_over_H_a3 * kernelW(q_ab), SimdFloat(0.0f));
             flops +=
                 12 * SimdFloat::size() + sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab);
+            if (parameters.balsaraSwitch) {
+                // rho_a div(v)_a = -sum_b m_b v_ab dot grad_a W_ab,
+                // rho_a curl(v)_a = sum_b m_b v_ab cross grad_a W_ab.
+                // Their common density normalization cancels from the Balsara ratio.
+                auto const contributes = detail::sphCpuValidLanes(neighbors, first) &&
+                    radius > SimdFloat(0.0f) && q_ab < SimdFloat(1.0f);
+                SimdFloat const gradientScale = simdSelect(contributes,
+                    m_b_over_H_a3 * SimdFloat(one_over_H_a) * dkernelWDq(q_ab) /
+                        simdSelect(contributes, radius, SimdFloat(1.0f)),
+                    SimdFloat(0.0f));
+                Vector3<SimdFloat> const gradient = gradientScale * r_ab;
+                Vector3<SimdFloat> const velocity =
+                    Vector3<SimdFloat>(SimdFloat(data.sourceVelocityX[particleIndex]),
+                        SimdFloat(data.sourceVelocityY[particleIndex]),
+                        SimdFloat(data.sourceVelocityZ[particleIndex])) -
+                    detail::sphCpuLoad3(data.sourceVelocityX, data.sourceVelocityY,
+                        data.sourceVelocityZ, neighbors, first, 0.0f) +
+                    SimdFloat(parameters.expansionRate) * r_ab;
+                divergencePack -= velocity.dot(gradient);
+                for (int dim = 0; dim < NDIM; ++dim) {
+                    int const next = (dim + 1) % NDIM;
+                    int const last = (dim + 2) % NDIM;
+                    curlPack[dim] +=
+                        velocity[next] * gradient[last] - velocity[last] * gradient[next];
+                }
+                flops += 33 * SimdFloat::size() +
+                    sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab, true);
+            }
         }
         float const ρ_a = simdSum(ρ_a_pack);
         flops += SimdFloat::size() - 1;
         ALWAYS_ASSERT(H_a > 0.0f && ρ_a > 0.0f);
         data.sinkDensity[sinkIndex] = ρ_a;
+        if (parameters.balsaraSwitch) {
+            Vector3<float> const curl(
+                simdSum(curlPack[XDIM]), simdSum(curlPack[YDIM]), simdSum(curlPack[ZDIM]));
+            data.sinkBalsaraFactor[sinkIndex] =
+                monaghan_sph::balsaraFactor(simdSum(divergencePack), curl.norm());
+            flops += 4 * (SimdFloat::size() - 1) + 8;
+        } else {
+            data.sinkBalsaraFactor[sinkIndex] = 1.0f;
+        }
         data.sinkSmoothingConverged[sinkIndex] = true;
         result.minimumSupportRadius = std::min(result.minimumSupportRadius, H_a);
         result.maximumSupportRadius = std::max(result.maximumSupportRadius, H_a);
