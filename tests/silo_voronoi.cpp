@@ -20,6 +20,7 @@
 
 #include <silo.h>
 
+#include <cosmictiger/geometry/distributed_voronoi.hpp>
 #include <cosmictiger/io/silo_voronoi.hpp>
 
 namespace detail {
@@ -112,7 +113,13 @@ double checkTopology(voronoi::PreparedVoronoiOutput const& output) {
         }
         double const volume = double(sixVolume / 6.0L);
         require(volume > 0.0, "positive stored zone volume");
-        requireNear(volume, output.fragmentVolumes[zone], "stored winding matches fragment volume");
+        // Rotating a polygon changes the fan triangulation of faces that are
+        // planar only to coordinate precision. Compare thin clipping remainders
+        // at the parent-cell scale, while still checking every zone is positive.
+        long double const tolerance = 2e-13L * output.fullCellVolumes[zone];
+        require(
+            std::abs(static_cast<long double>(volume) - output.fragmentVolumes[zone]) <= tolerance,
+            "stored winding matches fragment volume");
         total += volume;
     }
     return total;
@@ -135,6 +142,7 @@ void checkReadback(char const* filename, voronoi::PreparedVoronoiOutput const& e
     require(mesh->dtime == 2.75, "preserve mesh time");
     voronoi::PreparedVoronoiOutput stored;
     stored.fragmentVolumes = expected.fragmentVolumes;
+    stored.fullCellVolumes = expected.fullCellVolumes;
     for (int dim = 0; dim < 3; dim++) {
         auto const* coordinates = static_cast<double const*>(mesh->coords[dim]);
         stored.coordinates[dim].assign(coordinates, coordinates + mesh->nnodes);
@@ -310,6 +318,131 @@ void testComputedCells() {
     }
 }
 
+void testPerturbedLatticeClipping() {
+    // Small, exactly representable displacements create nearly collinear
+    // intersections at periodic boundaries. Sorting cap vertices by angle
+    // disconnected these caps from the retained face edges.
+    std::mt19937_64 random(0);
+    std::vector<voronoi::Site> sites;
+    for (int x = 0; x < 4; x++) {
+        for (int y = 0; y < 4; y++) {
+            for (int z = 0; z < 4; z++) {
+                double const displacement = std::ldexp(double(int(random() % 4096) - 2048), -38);
+                sites.push_back({sites.size(),
+                    {(x + 0.5) / 4, (y + 0.5) / 4, (z + 0.5) / 4 + displacement}, 0, {}});
+            }
+        }
+    }
+    voronoi::SiteIndex const index(sites);
+    std::array<voronoi::SitePartition, 1> const partitions = {index.partition(0)};
+    auto const cells = voronoi::buildDistributedCells(
+        sites, partitions, [&](std::vector<voronoi::SiteQueryBatch> const& batches) {
+            std::vector<voronoi::Site> received;
+            for (auto const& batch : batches) {
+                auto const found = index.query(batch.queries);
+                received.insert(received.end(), found.begin(), found.end());
+            }
+            return received;
+        });
+    auto const output = voronoi::prepareVoronoiOutput(cells, {});
+    requireNear(checkTopology(output), 1.0, "perturbed lattice fills the periodic box");
+    for (int const driver : {DB_PDB, DB_HDF5}) {
+        testDriver(driver,
+            driver == DB_PDB ? "silo_voronoi_perturbed_pdb.silo" :
+                               "silo_voronoi_perturbed_hdf5.silo",
+            output);
+    }
+}
+
+void testEvolvedCell() {
+    // Reduced from the first evolved Rayleigh-Taylor snapshot. A dual triangle
+    // rounds to a line, leaving a T-junction unless its incident edges are split.
+    std::array<std::array<uint64_t, 3>, 8> const fixedPositions = {
+        {{1879216214, 1521134260, 4203236783}, {1879216214, 1879048202, 4203236779},
+            {2236711265, 1879050426, 3841522152}, {1521079876, 1163220321, 4386684977},
+            {1521079880, 1521134266, 4386684977}, {1879216214, 1521134258, 4386697803},
+            {1879216214, 1879048204, 4386697807}, {2236839595, 1521134260, 4387622859}}};
+    std::array<uint64_t, 8> const ids = {628, 644, 1753, 245, 251, 270, 286, 1385};
+    std::vector<voronoi::Site> sites;
+    for (size_t i = 0; i < ids.size(); i++) {
+        voronoi::Point position;
+        for (int dim = 0; dim < 3; dim++) {
+            position[dim] = std::ldexp(double(fixedPositions[i][dim]), -32);
+        }
+        sites.push_back({ids[i], position, 0, {0, 0, i >= 3 ? 1 : 0}});
+    }
+    std::array<size_t, 1> const owned = {0};
+    auto const cells = voronoi::buildCells(sites, owned);
+    auto const output = voronoi::prepareVoronoiOutput(cells, {});
+    requireNear(checkTopology(output), cells.front().volume, "evolved cell retains its volume");
+}
+
+void testRoundedPeriodicFaces() {
+    // Fixed32 displacements exercise exact ring winding and very thin periodic
+    // fragments whose external wall polygons round to identical coordinates.
+    for (unsigned const seed : {4, 12}) {
+        std::mt19937_64 random(seed);
+        std::uniform_real_distribution<double> noise(-1e-9, 1e-9);
+        std::vector<voronoi::Site> sites;
+        for (int x = 0; x < 4; x++) {
+            for (int y = 0; y < 4; y++) {
+                for (int z = 0; z < 4; z++) {
+                    voronoi::Point position{(x + 0.5) / 4, (y + 0.5) / 4, (z + 0.5) / 4};
+                    for (auto& component : position) {
+                        component =
+                            std::ldexp(std::round(std::ldexp(component + noise(random), 32)), -32);
+                    }
+                    sites.push_back({sites.size(), position, 0, {}});
+                }
+            }
+        }
+        voronoi::SiteIndex const index(sites);
+        std::array<voronoi::SitePartition, 1> const partitions = {index.partition(0)};
+        auto const cells = voronoi::buildDistributedCells(
+            sites, partitions, [&](std::vector<voronoi::SiteQueryBatch> const& batches) {
+                std::vector<voronoi::Site> received;
+                for (auto const& batch : batches) {
+                    auto const found = index.query(batch.queries);
+                    received.insert(received.end(), found.begin(), found.end());
+                }
+                return received;
+            });
+        auto const output = voronoi::prepareVoronoiOutput(cells, {});
+        requireNear(checkTopology(output), 1.0, "rounded periodic fragments fill the unit box");
+        if (seed == 12) {
+            for (int const driver : {DB_PDB, DB_HDF5}) {
+                testDriver(driver,
+                    driver == DB_PDB ? "silo_voronoi_rounded_pdb.silo" :
+                                       "silo_voronoi_rounded_hdf5.silo",
+                    output);
+            }
+        }
+    }
+}
+
+void testCancellingFaceArea() {
+    // This noncollinear rounded quad has zero projected signed area. It must
+    // retain its connectivity instead of being discarded as a collapsed line.
+    std::array<std::array<uint64_t, 3>, 7> const fixedPositions = {
+        {{3355443198, 2550136830, 939524096}, {3623878660, 2013265921, 939524096},
+            {3623878655, 2281701375, 939524096}, {3892314109, 2013265922, 939524097},
+            {3892314112, 2281701379, 671088644}, {3892314116, 2281701372, 939524097},
+            {3892314113, 2281701374, 1207959548}}};
+    std::array<uint64_t, 7> const ids = {3219, 3443, 3459, 3699, 3714, 3715, 3716};
+    std::vector<voronoi::Site> sites;
+    for (size_t i = 0; i < ids.size(); i++) {
+        voronoi::Point position;
+        for (int dim = 0; dim < 3; dim++) {
+            position[dim] = std::ldexp(double(fixedPositions[i][dim]), -32);
+        }
+        sites.push_back({ids[i], position, 0, {}});
+    }
+    std::array<size_t, 1> const owned = {2};
+    auto const cells = voronoi::buildCells(sites, owned);
+    auto const output = voronoi::prepareVoronoiOutput(cells, {}, false);
+    requireNear(checkTopology(output), cells.front().volume, "zero-area face retains closed cell");
+}
+
 void testRescaling() {
     voronoi::PreparedVoronoiOutput source;
     source.coordinates = {{{1.0}, {0.0}, {-1.0}}};
@@ -361,6 +494,10 @@ int main() {
         detail::testClipping();
         detail::testComputedCells();
         detail::testRescaling();
+        detail::testPerturbedLatticeClipping();
+        detail::testEvolvedCell();
+        detail::testRoundedPeriodicFaces();
+        detail::testCancellingFaceArea();
     } catch (std::exception const& error) {
         std::fprintf(stderr, "Silo Voronoi test: %s\n", error.what());
         return 1;

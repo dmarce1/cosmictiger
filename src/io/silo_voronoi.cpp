@@ -9,7 +9,6 @@
 #include <limits>
 #include <map>
 #include <memory>
-#include <set>
 #include <utility>
 
 #include <cosmictiger/io/silo_voronoi.hpp>
@@ -64,7 +63,7 @@ namespace detail {
 
     Polyhedron clip(Polyhedron const& input, int axis, double bound, int sign) {
         Polyhedron output;
-        std::set<Point> capVertices;
+        std::multimap<Point, Point> capEdges;
         bool removed = false;
         for (auto const& polygon : input) {
             Polygon clipped;
@@ -83,36 +82,44 @@ namespace detail {
             }
             closePolygon(clipped);
             if (clipped.size() >= 3) {
-                for (auto const& point : clipped) {
-                    if (point[axis] == bound) {
-                        capVertices.insert(point);
+                for (size_t i = 0; i < clipped.size(); i++) {
+                    auto const& first = clipped[i];
+                    auto const& second = clipped[(i + 1) % clipped.size()];
+                    if (first[axis] == bound && second[axis] == bound) {
+                        // An edge shared by two retained faces needs no cap.
+                        // Reverse the remaining edges to close the oriented shell.
+                        auto const [begin, end] = capEdges.equal_range(first);
+                        auto const opposite = std::find_if(
+                            begin, end, [&](auto const& edge) { return edge.second == second; });
+                        if (opposite != end) {
+                            capEdges.erase(opposite);
+                        } else {
+                            capEdges.emplace(second, first);
+                        }
                     }
                 }
                 output.push_back(std::move(clipped));
             }
         }
-        if (removed && capVertices.size() >= 3) {
-            int const u = (axis + 1) % 3;
-            int const v = (axis + 2) % 3;
-            long double centerU = 0.0L;
-            long double centerV = 0.0L;
-            for (auto const& point : capVertices) {
-                centerU += point[u];
-                centerV += point[v];
+        // Follow connectivity, rather than sorting angles. Rounded intersections
+        // can be collinear or lie on an existing face; angular sorting would
+        // introduce edges that disagree with those retained on the shell.
+        while (removed && !capEdges.empty()) {
+            Polygon cap;
+            Point const start = capEdges.begin()->first;
+            Point point = start;
+            do {
+                cap.push_back(point);
+                auto const edge = capEdges.find(point);
+                if (edge == capEdges.end()) {
+                    throw std::runtime_error("Open Voronoi clipping boundary");
+                }
+                point = edge->second;
+                capEdges.erase(edge);
+            } while (point != start);
+            if (cap.size() >= 3) {
+                output.push_back(std::move(cap));
             }
-            centerU /= capVertices.size();
-            centerV /= capVertices.size();
-            Polygon cap(capVertices.begin(), capVertices.end());
-            std::sort(cap.begin(), cap.end(), [&](Point const& first, Point const& second) {
-                long double const angleFirst = std::atan2(first[v] - centerV, first[u] - centerU);
-                long double const angleSecond =
-                    std::atan2(second[v] - centerV, second[u] - centerU);
-                return angleFirst == angleSecond ? first < second : angleFirst < angleSecond;
-            });
-            if (sign < 0) {
-                std::reverse(cap.begin(), cap.end());
-            }
-            output.push_back(std::move(cap));
         }
         return output;
     }
@@ -165,7 +172,7 @@ PreparedVoronoiOutput prepareVoronoiOutput(
     }
     PreparedVoronoiOutput output;
     std::map<Point, int> vertexIds;
-    std::map<std::vector<int>, int> faceIds;
+    std::map<std::pair<std::vector<int>, size_t>, int> faceIds;
     std::vector<int> faceUses;
     std::vector<int> faceOrientations;
     for (size_t parent = 0; parent < cells.size(); parent++) {
@@ -250,6 +257,14 @@ PreparedVoronoiOutput prepareVoronoiOutput(
                     output.fragmentVolumes.push_back(storedVolume);
                     std::map<std::pair<int, int>, int> edges;
                     for (auto const& polygon : polyhedron) {
+                        bool boundary = false;
+                        for (int dim = 0; dim < 3; dim++) {
+                            for (double const bound : {bounds.lower[dim], bounds.upper[dim]}) {
+                                boundary = boundary ||
+                                    std::all_of(polygon.begin(), polygon.end(),
+                                        [&](Point const& point) { return point[dim] == bound; });
+                            }
+                        }
                         std::vector<int> nodes;
                         for (auto const& point : polygon) {
                             auto const [entry, inserted] =
@@ -270,8 +285,13 @@ PreparedVoronoiOutput prepareVoronoiOutput(
                             edges[{firstNode, secondNode}]++;
                         }
                         auto [key, reversed] = detail::canonicalFace(std::move(nodes));
-                        auto const [entry, inserted] =
-                            faceIds.emplace(key, detail::siloCount(faceIds.size()));
+                        // View-wall faces are external to each fragment. Very
+                        // thin periodic fragments can round to coincident wall
+                        // polygons; coordinate equality does not make them an
+                        // interior face shared by the two zones.
+                        auto const [entry, inserted] = faceIds.emplace(
+                            std::make_pair(key, boundary ? output.faceCounts.size() : size_t(0)),
+                            detail::siloCount(faceIds.size()));
                         int const face = entry->second;
                         if (inserted) {
                             output.nodeCounts.push_back(detail::siloCount(key.size()));

@@ -30,6 +30,12 @@ namespace detail {
 
     using WidePoint = std::array<long double, 3>;
     using Edge = std::array<size_t, 2>;
+    using GeometricEdge = std::array<Point, 2>;
+
+    struct CollapsedFaces {
+        std::map<GeometricEdge, std::vector<Point>> splits;
+        std::vector<Point> vertices;
+    };
 
     // Exact expansion predicates need nearest rounding and gradual underflow,
     // including when a calling simulation worker uses a different FP mode.
@@ -179,7 +185,101 @@ namespace detail {
         return false;
     }
 
-    Face makeFace(Site const& inside, Site const& outside, std::vector<Point> vertices) {
+    bool onSegment(Point const& point, Point const& first, Point const& second) {
+        for (size_t dim = 0; dim < 3; dim++) {
+            if (point[dim] < std::min(first[dim], second[dim]) ||
+                point[dim] > std::max(first[dim], second[dim])) {
+                return false;
+            }
+        }
+        for (size_t dim = 0; dim < 3; dim++) {
+            size_t const next = (dim + 1) % 3;
+            double const a[2] = {first[dim], first[next]};
+            double const b[2] = {second[dim], second[next]};
+            double const c[2] = {point[dim], point[next]};
+            if (GEO::PCK::orient_2d(a, b, c) != GEO::ZERO) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    void recordCollapsedFace(std::vector<Point> const& vertices, CollapsedFaces& collapsed) {
+        collapsed.vertices.insert(collapsed.vertices.end(), vertices.begin(), vertices.end());
+        for (size_t i = 0; i < vertices.size(); i++) {
+            GeometricEdge edge{vertices[i], vertices[(i + 1) % vertices.size()]};
+            if (edge[1] < edge[0]) {
+                std::swap(edge[0], edge[1]);
+            }
+            collapsed.splits.try_emplace(edge);
+        }
+    }
+
+    void removeSpurs(std::vector<Point>& vertices) {
+        bool changed = true;
+        while (changed && vertices.size() >= 3) {
+            changed = false;
+            for (size_t i = 0; i < vertices.size(); i++) {
+                size_t const next = (i + 1) % vertices.size();
+                size_t const previous = (i + vertices.size() - 1) % vertices.size();
+                if (vertices[i] == vertices[next] || vertices[previous] == vertices[next]) {
+                    vertices.erase(vertices.begin() + i);
+                    changed = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    void splitCollapsedEdges(std::vector<Cell>& cells, CollapsedFaces& collapsed) {
+        if (collapsed.splits.empty()) {
+            return;
+        }
+        auto& vertices = collapsed.vertices;
+        std::sort(vertices.begin(), vertices.end());
+        vertices.erase(std::unique(vertices.begin(), vertices.end()), vertices.end());
+        for (auto& [edge, splits] : collapsed.splits) {
+            auto const end = std::lower_bound(vertices.begin(), vertices.end(), edge[1]);
+            for (auto point = std::upper_bound(vertices.begin(), vertices.end(), edge[0]);
+                point != end; ++point) {
+                if (onSegment(*point, edge[0], edge[1])) {
+                    splits.push_back(*point);
+                }
+            }
+        }
+        // A dual polygon may collapse to a line when its circumcenters are
+        // rounded to doubles. Its remaining incident faces must subdivide that
+        // line identically. Use exact collinearity, never a distance tolerance,
+        // so genuinely small faces and edges remain part of the mesh.
+        for (auto& cell : cells) {
+            for (auto& face : cell.faces) {
+                std::vector<Point> split;
+                for (size_t i = 0; i < face.vertices.size(); i++) {
+                    Point const& first = face.vertices[i];
+                    Point const& second = face.vertices[(i + 1) % face.vertices.size()];
+                    split.push_back(first);
+                    bool const reversed = second < first;
+                    GeometricEdge const edge =
+                        reversed ? GeometricEdge{second, first} : GeometricEdge{first, second};
+                    auto const entry = collapsed.splits.find(edge);
+                    if (entry != collapsed.splits.end()) {
+                        auto const& points = entry->second;
+                        if (reversed) {
+                            split.insert(split.end(), points.rbegin(), points.rend());
+                        } else {
+                            split.insert(split.end(), points.begin(), points.end());
+                        }
+                    }
+                }
+                removeSpurs(split);
+                face.vertices = std::move(split);
+            }
+            std::erase_if(cell.faces, [](Face const& face) { return face.vertices.size() < 3; });
+        }
+    }
+
+    Face makeFace(Site const& inside, Site const& outside, std::vector<Point> vertices,
+        bool reverse, CollapsedFaces& collapsed) {
         Face face;
         face.neighbor = outside;
         if (vertices.size() < 3) {
@@ -200,6 +300,12 @@ namespace detail {
             }
         }
         if (distinct.size() < 3) {
+            return face;
+        }
+        auto const [first, last] = std::minmax_element(distinct.begin(), distinct.end());
+        if (std::all_of(distinct.begin(), distinct.end(),
+                [&](Point const& point) { return onSegment(point, *first, *last); })) {
+            recordCollapsedFace(distinct, collapsed);
             return face;
         }
         WidePoint center = {};
@@ -227,15 +333,16 @@ namespace detail {
                 moment[dim] += triangleArea * (center[dim] + (a[dim] + b[dim]) / 3);
             }
         }
-        if (area == 0) {
-            return face;
-        }
         for (size_t dim = 0; dim < 3; dim++) {
             face.areaVector[dim] = double(areaVector[dim]);
-            face.centroid[dim] =
-                double(static_cast<long double>(inside.position[dim]) + moment[dim] / area);
+            // Rounded, nearly collapsed polygons can have cancelling signed
+            // areas without being collinear. Keep their exact ring connectivity;
+            // deleting them would open the shell. Their vertex mean remains a
+            // finite reference point when the area-weighted centroid is undefined.
+            face.centroid[dim] = double(static_cast<long double>(inside.position[dim]) +
+                (area == 0 ? center[dim] : moment[dim] / area));
         }
-        if (area < 0) {
+        if (reverse) {
             std::reverse(distinct.begin(), distinct.end());
             for (double& component : face.areaVector) {
                 component = -component;
@@ -501,6 +608,7 @@ std::vector<Cell> buildCells(std::span<Site const> sites, std::span<size_t const
             }
         }
     }
+    detail::CollapsedFaces collapsed;
     for (auto const& [edge, incident] : edgeTetrahedra) {
         size_t const a = chosen[edge[0]];
         size_t const b = chosen[edge[1]];
@@ -510,6 +618,7 @@ std::vector<Cell> buildCells(std::span<Site const> sites, std::span<size_t const
             continue;
         }
         std::vector<Point> vertices;
+        bool reverse = false;
         auto current = incident[0];
         auto previous = GEO::NO_INDEX;
         do {
@@ -520,6 +629,24 @@ std::vector<Cell> buildCells(std::span<Site const> sites, std::span<size_t const
                 if (vertex != edge[0] && vertex != edge[1]) {
                     auto const adjacent = triangulation->cell_adjacent(current, local);
                     if (adjacent != previous) {
+                        if (previous == GEO::NO_INDEX) {
+                            for (auto const other : tetrahedra[current]) {
+                                if (other != edge[0] && other != edge[1] && other != vertex) {
+                                    // Circumcenters can round a very small dual face
+                                    // through zero area. Its winding comes from the
+                                    // exact primal tetrahedron, not that rounded area.
+                                    auto const orientation = GEO::PCK::orient_3d(
+                                        positions[edge[0]].data(), positions[edge[1]].data(),
+                                        positions[vertex].data(), positions[other].data());
+                                    if (orientation == GEO::ZERO) {
+                                        throw std::runtime_error(
+                                            "Zero-volume Delaunay tetrahedron in Voronoi ring");
+                                    }
+                                    reverse = orientation == GEO::NEGATIVE;
+                                    break;
+                                }
+                            }
+                        }
                         next = adjacent;
                         break;
                     }
@@ -535,8 +662,8 @@ std::vector<Cell> buildCells(std::span<Site const> sites, std::span<size_t const
         if (vertices.size() != incident.size()) {
             throw std::runtime_error("Disconnected Delaunay edge ring in Voronoi geometry");
         }
-        Face face =
-            detail::makeFace(sites[order[edge[0]]], sites[order[edge[1]]], std::move(vertices));
+        Face face = detail::makeFace(
+            sites[order[edge[0]]], sites[order[edge[1]]], std::move(vertices), reverse, collapsed);
         if (face.vertices.empty()) {
             continue;
         }
@@ -552,6 +679,7 @@ std::vector<Cell> buildCells(std::span<Site const> sites, std::span<size_t const
             cells[b].faces.push_back(std::move(face));
         }
     }
+    detail::splitCollapsedEdges(cells, collapsed);
     for (auto& cell : cells) {
         if (cell.complete) {
             detail::finishCell(cell);

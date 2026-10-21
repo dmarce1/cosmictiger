@@ -11,6 +11,7 @@
 #include <random>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <cosmictiger/geometry/distributed_voronoi.hpp>
@@ -93,10 +94,32 @@ void compare(std::vector<voronoi::Cell> const& a, std::vector<voronoi::Cell> con
     }
 }
 
+void compareConnectivity(std::vector<voronoi::Cell> const& a, std::vector<voronoi::Cell> const& b) {
+    require(a.size() == b.size(), "Partition invariant connectivity count");
+    for (size_t i = 0; i < a.size(); ++i) {
+        std::map<std::pair<uint64_t, std::array<int, 3>>, std::vector<voronoi::Point>> faces;
+        for (auto const& face : a[i].faces) {
+            auto vertices = face.vertices;
+            std::rotate(vertices.begin(), std::min_element(vertices.begin(), vertices.end()),
+                vertices.end());
+            faces[{face.neighbor.id, face.neighbor.image}] = std::move(vertices);
+        }
+        for (auto const& face : b[i].faces) {
+            auto vertices = face.vertices;
+            std::rotate(vertices.begin(), std::min_element(vertices.begin(), vertices.end()),
+                vertices.end());
+            auto const match = faces.find({face.neighbor.id, face.neighbor.image});
+            require(match != faces.end() && match->second == vertices,
+                "Partition invariant exact face coordinates and oriented connectivity");
+        }
+    }
+}
+
 void checkOutput(std::vector<voronoi::Cell> const& cells) {
     auto const output = voronoi::prepareVoronoiOutput(cells, {});
     double total = 0;
     for (auto const volume : output.fragmentVolumes) {
+        require(std::isfinite(volume) && volume > 0, "Positive finite full-view fragment volume");
         total += volume;
     }
     require(std::abs(total - 1.0) < 1e-10, "Actual Delaunay dual output fills unit box");
@@ -104,12 +127,44 @@ void checkOutput(std::vector<voronoi::Cell> const& cells) {
     auto const cropped = voronoi::prepareVoronoiOutput(cells, crop);
     total = 0;
     for (auto const volume : cropped.fragmentVolumes) {
+        require(std::isfinite(volume) && volume > 0, "Positive finite cropped fragment volume");
         total += volume;
     }
     require(std::abs(total - 0.58 * 0.56 * 0.38) < 1e-10, "Actual Delaunay dual output fills crop");
 }
 
 }    // namespace detail
+
+void testRoundedPerturbedLatticeConnectivity() {
+    // Fixed-point particle positions can produce much smaller dual features.
+    // These seeds exercise a tiny face whose rounded area changes sign, and
+    // periodic fragments with coincident external faces on the view boundary.
+    for (unsigned const seed : {4U, 12U}) {
+        std::mt19937_64 random(seed);
+        std::uniform_real_distribution<double> noise(-1e-9, 1e-9);
+        std::vector<voronoi::Site> sites;
+        for (int x = 0; x < 4; ++x) {
+            for (int y = 0; y < 4; ++y) {
+                for (int z = 0; z < 4; ++z) {
+                    voronoi::Point position{(x + 0.5) / 4, (y + 0.5) / 4, (z + 0.5) / 4};
+                    for (auto& coordinate : position) {
+                        coordinate =
+                            std::ldexp(std::round(std::ldexp(coordinate + noise(random), 32)), -32);
+                    }
+                    sites.push_back({sites.size(), position, 0, {}});
+                }
+            }
+        }
+        auto const reference = detail::partitioned(sites, 1);
+        detail::checkOutput(reference);
+        for (int const ranks : {2, 4}) {
+            auto const cells = detail::partitioned(sites, ranks);
+            detail::compare(reference, cells);
+            detail::compareConnectivity(reference, cells);
+            detail::checkOutput(cells);
+        }
+    }
+}
 
 int main() {
     try {
@@ -158,6 +213,7 @@ int main() {
             }
             detail::checkOutput(detail::partitioned(small, 4));
         }
+        testRoundedPerturbedLatticeConnectivity();
         std::puts("Distributed Voronoi partition, halo, periodic and crop checks passed");
         return 0;
     } catch (std::exception const& error) {
