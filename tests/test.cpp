@@ -634,6 +634,7 @@ void bhTest() {
 }
 
 void sphGravityTest();
+void sphTreeTest();
 void linearGrowthTest();
 void unitsOutputTest();
 void voronoiOutputTest();
@@ -674,6 +675,7 @@ ApplicationTest const applicationTests[] = {
     {"voronoiOutput", voronoiOutputTest},
     {"checkpointState", checkpointStateTest},
     {"sphGravity", sphGravityTest},
+    {"sphTree", sphTreeTest},
     {"domain", domainTest},
     {"fft1", fft1Test},
     {"fft2", fft2Test},

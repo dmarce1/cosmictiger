@@ -79,6 +79,20 @@ Diagnostic energy/momentum arithmetic and return-value reductions were removed
 from the gravity counts. Potential evaluation remains included. Automatic CUDA
 handoff sizing includes its four arithmetic/math operations.
 
+## Cosmological evolution
+
+The Friedmann derivative costs 17 operations, including unit normalization;
+its conformal-time derivative costs 18. Each integration stage costs 76, so
+`cosmosUpdate` submits 9,729 operations and `cosmosAinv` submits 10,369 for
+their 128-stage calls. Counts are batched outside the integration loops.
+`cosmosAinv` supplies the scale factor used during hierarchical force advancement.
+
+Physical-age output and halo lightcone scale reconstruction submit no operations.
+Time-table and lightcone-output callers explicitly disable accounting in helpers
+also used by the solver. `cosmology_flops_test` checks analytic Einstein-de Sitter
+evolution, exact counter submissions, and zero diagnostic submissions while
+preserving numerical results.
+
 ## Regression coverage
 
 `sph_flops_test`, `softening_flops_test` and `fmm_flops_test` use an independent
@@ -112,3 +126,26 @@ not a performance comparison. CPU energy and timestep output were unchanged
 from the baseline. Run logs and full test output are in
 `/tmp/cosmictiger_sph_flops_{before,after,cuda_after}/run.log` and
 `/tmp/cosmictiger_flops_final_ctest.log`.
+
+## SPH arena follow-up
+
+The low Rayleigh-Taylor rate also exposed wall time unrelated to arithmetic:
+the SPH driver freed its 2,097,152-node arena after every step. At 160 bytes per
+node, the next step initialized 320 MiB even though this run used only 383 nodes.
+Normal teardown now retains the arena, invalidates cached references, and
+rebuilds only live nodes from fresh state. Storage grows when needed; explicit
+`sphTreeDestroy(true)` still releases it.
+
+In a matched four-step CPU run with two HPX workers, the steady-step allocation
+phase fell from 0.188-0.196 seconds to 0.8-1.4 microseconds. Full SPH tree creation
+fell from 0.189-0.196 seconds to 0.56-0.59 milliseconds. The first allocation is
+still paid once. FLOP totals, energy, density and timestep output were identical;
+the complete checkpoint differed only in saved wall time. These timings were
+taken while War Thunder was on, with six-CPU affinity and no GPU kernels; they
+are not a CUDA throughput benchmark.
+
+The CUDA-enabled Release build and seven focused CPU tests passed, including
+the new arena shrink/regrowth/release fixture and four cosmology accounting
+cases. Distributed arena rebuilding and CUDA runtime behavior were not retested
+in this follow-up. Logs and the before/after comparison are under
+`/tmp/cosmictiger_flops_throughput/`.

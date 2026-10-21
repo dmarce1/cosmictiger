@@ -191,6 +191,7 @@ set(cosmictiger_source_files
     tests/linear_growth.cpp
     tests/rockstar.cpp
     tests/sph_gravity.cpp
+    tests/sph_tree.cpp
     tests/test.cpp
     tests/units_output.cpp
     tests/voronoi_output.cpp
@@ -536,6 +537,12 @@ if(BUILD_TESTING)
             WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/tests/${voronoi_test}"
             PROPERTIES TIMEOUT 120)
     endforeach()
+    add_executable(cosmology_flops_test tests/cosmology_flops.cpp src/cosmology/cosmology.cpp)
+    target_include_directories(cosmology_flops_test PRIVATE ${PROJECT_SOURCE_DIR})
+    target_link_libraries(cosmology_flops_test PRIVATE HPX::hpx Boost::boost)
+    cosmictiger_add_gtest(NAME cosmology_flops TARGET cosmology_flops_test
+        PROPERTIES TIMEOUT 30)
+
     add_hpx_executable(flops_test SOURCES tests/flops.cpp src/core/flops.cpp)
     target_include_directories(flops_test PRIVATE ${PROJECT_SOURCE_DIR})
     cosmictiger_add_gtest(NAME flops TARGET flops_test HPX_MAIN
@@ -1234,6 +1241,14 @@ if(BUILD_TESTING)
         set_tests_properties(${test_name} PROPERTIES
             WORKING_DIRECTORY "${test_workdir}" RUN_SERIAL TRUE TIMEOUT 120)
     endforeach()
+    set(sph_tree_workdir "${PROJECT_BINARY_DIR}/tests/sph_tree")
+    file(MAKE_DIRECTORY "${sph_tree_workdir}")
+    add_test(NAME sph_tree COMMAND cosmictiger --run.test=sphTree
+        --initial.particlesPerDimension=8 --hydro.enabled=true --compute.cuda=false
+        --hpx:threads=2 --hpx:bind=none)
+    set_tests_properties(sph_tree PROPERTIES
+        WORKING_DIRECTORY "${sph_tree_workdir}" RUN_SERIAL TRUE TIMEOUT 120 PROCESSORS 6)
+
     set(fmm_tree_workdir "${PROJECT_BINARY_DIR}/tests/fmm_tree")
     file(MAKE_DIRECTORY "${fmm_tree_workdir}")
     add_test(NAME fmm_tree COMMAND cosmictiger --run.test=fmmTree

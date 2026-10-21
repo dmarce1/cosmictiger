@@ -135,6 +135,8 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key = 1
     Pair<ParticleInteger> particleRange = Pair<ParticleInteger>(-1, -1),
     Range<double> box = unitBox<double>(), int depth = 0, bool localRoot = (hpxSize() == 1));
 void sphTreeCacheClear();
+// Call after all tree consumers finish. Normal teardown invalidates caches but
+// retains the constructed arena for rebuilding; true explicitly releases it.
 void sphTreeDestroy(bool freeSphTree = false);
 SphTreeNode const* sphTreeGetNode(TreeId);
 void sphTreeSortSphParticlesByParticles();

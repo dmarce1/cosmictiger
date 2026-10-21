@@ -425,7 +425,7 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
 
     sphParticlesClearHydroCaches();
 
-    sphTreeDestroy(true);
+    sphTreeDestroy();
     sphParticlesClearCaches();
     sphParticlesResetSemiactive();
     //	PRINT( "%i\n", max_rung);
@@ -836,12 +836,12 @@ double doPowerSpectrum(int num, double a) {
 void outputTimeFile() {
     profilerEnter(__FUNCTION__);
     double const a0 = 1.0 / (1.0 + getOptions().cosmology.startRedshift);
-    double const tauMax = cosmosConformalTime(a0, 1.0);
+    double const tauMax = cosmosConformalTime(a0, 1.0, false);
     double a = a0;
     int m = getOptions().run.numberOfSteps;
     int n = 64;
     double const dtau = tauMax / (m * n);
-    double tau = cosmosConformalTime(a0 * 1.0e-6, a0);
+    double tau = cosmosConformalTime(a0 * 1.0e-6, a0, false);
     double t = cosmosTime(a0 * 1.0e-6, a0);
     double z;
     FILE* fp = fopen(outputPath("time.txt").c_str(), "wt");
@@ -855,8 +855,8 @@ void outputTimeFile() {
         double const c0 = getOptions().units.timeSeconds / constants::kSpyr;
         fprintf(fp, "%4i %13.4e %13.4e %13.4e %13.4e\n", i, t * c0, tau * c0, a, z);
         for (int j = 0; j < n; j++) {
-            double const dadt1 = cosmosDadtau(a);
-            double const dadt2 = cosmosDadtau(a + dadt1 * dtau);
+            double const dadt1 = cosmosDadtau(a, false);
+            double const dadt2 = cosmosDadtau(a + dadt1 * dtau, false);
             t += 0.5 * (2.0 * a + dadt1 * dtau) * dtau;
             a += 0.5 * (dadt1 + dadt2) * dtau;
             tau += dtau;

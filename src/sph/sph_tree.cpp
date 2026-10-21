@@ -258,10 +258,17 @@ static void sphTreeAllocateNodes() {
     for (auto const& c : hpxChildren()) {
         futs.push_back(hpx::async<SphTreeAllocateNodesAction>(c));
     }
-    nextId = -treeCacheLineSize;
-    nodes.resize(
+    size_t const requiredNodes =
         std::max(size_t(size_t(SPH_TREE_NODE_ALLOCATION_SIZE) * sphParticlesSize() / bucketSize),
-            (size_t) NSPH_TREES_MIN));
+            (size_t) NSPH_TREES_MIN);
+    // Rebuilds reuse the constructed arena. Grow only at this completed-work
+    // boundary, before any tree tasks can retain pointers into the vector.
+    if (requiredNodes > nodes.size()) {
+        nodes.resize(requiredNodes);
+    }
+    // Each OS worker must acquire a fresh allocation chunk for this tree,
+    // even when the underlying storage did not move or change size.
+    nextId = -treeCacheLineSize;
     while (allocatorMtx++ != 0) {
         allocatorMtx--;
     }
@@ -444,8 +451,9 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
         std::lock_guard<MutexType> lock(leaflistMutex);
         leaflist.push_back(index);
     }
+    // Initialize only nodes used by this build. Retained slots can contain the
+    // previous tree's convergence flags, particle ranges and neighbor indices.
     SphTreeNode node;
-    node = nodes[index];
     node.nodeCount = nodeCount;
     node.innerBox = innerBox;
     node.outerBox = outerBox;
@@ -511,19 +519,10 @@ void sphTreeDestroy(bool freeSphTree) {
     }
     if (freeSphTree) {
         nodes = decltype(nodes)();
-    } else {
-        int const numberOfThreads = hpxHardwareConcurrency();
-        for (int proc = 0; proc < numberOfThreads; proc++) {
-            futs.push_back(hpx::async([proc, numberOfThreads]() {
-                int const b = (size_t) proc * nodes.size() / numberOfThreads;
-                int const e = (size_t) (proc + 1) * nodes.size() / numberOfThreads;
-                for (int i = b; i < e; i++) {
-                    nodes[i].innerBox = Fixed32Range();
-                    nodes[i].outerBox = Fixed32Range();
-                }
-            }));
-        }
     }
+    // Normal teardown retains the arena without traversing its unused slots.
+    // Cached remote lines and thread-local pointers still belong to the old
+    // tree and must be invalidated on every locality before the next rebuild.
     treeCache = decltype(treeCache)();
     resetLastCacheEntries();
     hpx::wait_all(futs.begin(), futs.end());

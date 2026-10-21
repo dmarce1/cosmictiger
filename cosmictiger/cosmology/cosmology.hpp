@@ -13,10 +13,11 @@ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
 
 void cosmosUpdate(double& adotdot, double& adot, double& a, double dt);
 double cosmosGrowthFactor(double omegaM, float a);
-double cosmosDadtau(double a);
+// Diagnostic/output callers disable accounting; evolution callers keep it enabled.
+double cosmosDadtau(double a, bool countFlops = true);
 double cosmosDadt(double a);
 double cosmosTime(double a0, double a1);
-double cosmosConformalTime(double a0, double a1);
+double cosmosConformalTime(double a0, double a1, bool countFlops = true);
 double cosmosTauToScale(double a0, double t1);
 void cosmosNfwFit(Vector<double> n, double& rs, double& rho0);
 double cosmosKlypinFit(double vmax, double rvir, double mvir);
