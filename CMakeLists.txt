@@ -20,17 +20,31 @@ option(COSMICTIGER_WITH_CUDA "Enable CUDA" ON)
 option(COSMICTIGER_WITH_LONG_LONG_PART_INT "Use long long to index local particles" OFF)
 # FMM order: multipole degree p plus two. Source multipoles carry degree p,
 # local expansions degree p + 1, and Ewald derivatives ranks through p + 1.
-# Every order from 3 to 9 is compiled in (per-order instantiations) and the
-# run selects one with gravity.fmmOrder; this value is only that option's
-# default. Order 3 (dipoles, quadratic expansions) is the smallest order whose
-# local expansion holds the periodic background quadratic; order 9 (degree-7
-# multipoles, degree-8 expansions) is where single precision stops gaining.
+# The supported FMM orders span 3 to 9. Builds compile a configurable subset
+# and the run selects one of those orders with gravity.fmmOrder.
+set(COSMICTIGER_FMM_MIN_ORDER "4" CACHE STRING "Smallest FMM order to compile (3 to 9)")
+set(COSMICTIGER_FMM_MAX_ORDER "8" CACHE STRING "Largest FMM order to compile (3 to 9)")
+if(NOT COSMICTIGER_FMM_MIN_ORDER MATCHES "^[3-9]$" OR
+   NOT COSMICTIGER_FMM_MAX_ORDER MATCHES "^[3-9]$")
+    message(FATAL_ERROR "COSMICTIGER_FMM_MIN_ORDER and COSMICTIGER_FMM_MAX_ORDER must be from 3 to 9")
+endif()
+if(COSMICTIGER_FMM_MIN_ORDER GREATER COSMICTIGER_FMM_MAX_ORDER)
+    message(FATAL_ERROR "COSMICTIGER_FMM_MIN_ORDER must not exceed COSMICTIGER_FMM_MAX_ORDER")
+endif()
 set(COSMICTIGER_WITH_ORDER "7" CACHE STRING "Default FMM order (gravity.fmmOrder), 3 to 9")
-if(NOT COSMICTIGER_WITH_ORDER MATCHES "^(3|4|5|6|7|8|9)$")
+if(NOT COSMICTIGER_WITH_ORDER MATCHES "^[3-9]$")
     message(FATAL_ERROR
         "COSMICTIGER_WITH_ORDER must be an integer from 3 to 9; got '${COSMICTIGER_WITH_ORDER}'")
 endif()
-set(COSMICTIGER_FMM_ORDERS 3 4 5 6 7 8 9)
+if(COSMICTIGER_WITH_ORDER LESS COSMICTIGER_FMM_MIN_ORDER OR
+   COSMICTIGER_WITH_ORDER GREATER COSMICTIGER_FMM_MAX_ORDER)
+    message(FATAL_ERROR "COSMICTIGER_WITH_ORDER must be inside the configured FMM order range")
+endif()
+foreach(fmm_order RANGE ${COSMICTIGER_FMM_MIN_ORDER} ${COSMICTIGER_FMM_MAX_ORDER})
+    list(APPEND COSMICTIGER_FMM_ORDERS ${fmm_order})
+endforeach()
+add_compile_definitions(FMM_MIN_ORDER=${COSMICTIGER_FMM_MIN_ORDER}
+    FMM_MAX_ORDER=${COSMICTIGER_FMM_MAX_ORDER})
 # Compile-time cap on the tree leaf bucket. compute.bucketSize may be any
 # runtime value up to this power of two; leaves then hold between half the
 # runtime bucket plus one and the runtime bucket particles. The CUDA kick
@@ -75,7 +89,7 @@ elseif(MSVC)
     target_compile_options(cosmictiger_silo_voronoi PRIVATE /fp:strict)
 endif()
 
-message(STATUS "cosmictiger default FMM order = ${COSMICTIGER_WITH_ORDER} (orders 3 to 9 compiled)")
+message(STATUS "cosmictiger FMM orders = ${COSMICTIGER_FMM_MIN_ORDER} to ${COSMICTIGER_FMM_MAX_ORDER} (default ${COSMICTIGER_WITH_ORDER})")
 message(STATUS "cosmictiger maximum bucket size = ${COSMICTIGER_WITH_MAX_BUCKET}")
 
 include(CheckCXXCompilerFlag)

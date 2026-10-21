@@ -555,7 +555,7 @@ def main():
             path.parent.mkdir(parents=True,exist_ok=True); path.write_text(text)
     if failed: ap.exit(1,'Stale generated files: '+', '.join(failed)+'\n')
     print('Generated files are current.' if args.check else
-          f'Generated STF operators and Ewald derivatives for local degrees {args.minLocalDegree}..{args.maxLocalDegree} (FMM orders {args.minLocalDegree + 1}..{args.maxLocalDegree + 1}).')
+          f'Generated STF operators and Ewald derivatives for local degrees {args.minLocalDegree}..{args.maxLocalDegree} (available FMM orders {args.minLocalDegree + 1}..{args.maxLocalDegree + 1}; compiled range is set by CMake).')
 
 
 if __name__=='__main__': main()

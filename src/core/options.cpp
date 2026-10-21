@@ -440,7 +440,7 @@ bool processOptions(int argc, char* argv[]) {
     gravityOpts.add_options()("gravity.enabled",
         po::value<bool>(&opts.gravity.enabled)->default_value(true), "enable gravity")(
         "gravity.fmmOrder", po::value<int>(&opts.gravity.fmmOrder)->default_value(kFmmDefaultOrder),
-        "FMM order (multipole degree plus two), 3 to 9; every order is compiled in")(
+        "FMM order (multipole degree plus two), within the build's compiled range")(
         "gravity.openingAngle", po::value<double>(&opts.gravity.openingAngle)->default_value(0.8),
         "opening angle for test problems")("gravity.openLargerCell",
         po::value<bool>(&opts.gravity.openLargerCell)->default_value(true),

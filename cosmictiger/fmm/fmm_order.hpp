@@ -35,8 +35,14 @@
 // tensor stores (d + 1)^2 coefficients, and local expansions append one
 // constant Laplacian (the periodic background trace).
 
-inline constexpr int kFmmMinOrder = 3;
-inline constexpr int kFmmMaxOrder = 9;
+#ifndef FMM_MIN_ORDER
+#error "FMM_MIN_ORDER must be defined by the build configuration"
+#endif
+#ifndef FMM_MAX_ORDER
+#error "FMM_MAX_ORDER must be defined by the build configuration"
+#endif
+inline constexpr int kFmmMinOrder = FMM_MIN_ORDER;
+inline constexpr int kFmmMaxOrder = FMM_MAX_ORDER;
 
 #ifndef ORDER
 #error "ORDER (the default FMM order, COSMICTIGER_WITH_ORDER) must be defined"
@@ -149,20 +155,34 @@ void setFmmOrder(int order);
 template <class F>
 decltype(auto) fmmDispatch(int order, F&& f) {
     switch (order) {
+#if FMM_MIN_ORDER <= 3 && FMM_MAX_ORDER >= 3
     case 3:
         return f(std::integral_constant<int, 3>{});
+#endif
+#if FMM_MIN_ORDER <= 4 && FMM_MAX_ORDER >= 4
     case 4:
         return f(std::integral_constant<int, 4>{});
+#endif
+#if FMM_MIN_ORDER <= 5 && FMM_MAX_ORDER >= 5
     case 5:
         return f(std::integral_constant<int, 5>{});
+#endif
+#if FMM_MIN_ORDER <= 6 && FMM_MAX_ORDER >= 6
     case 6:
         return f(std::integral_constant<int, 6>{});
+#endif
+#if FMM_MIN_ORDER <= 7 && FMM_MAX_ORDER >= 7
     case 7:
         return f(std::integral_constant<int, 7>{});
+#endif
+#if FMM_MIN_ORDER <= 8 && FMM_MAX_ORDER >= 8
     case 8:
         return f(std::integral_constant<int, 8>{});
+#endif
+#if FMM_MIN_ORDER <= 9 && FMM_MAX_ORDER >= 9
     case 9:
         return f(std::integral_constant<int, 9>{});
+#endif
     default:
         break;
     }
