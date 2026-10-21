@@ -14,6 +14,8 @@
 #include <utility>
 #include <vector>
 
+#include <gtest/gtest.h>
+
 #include <cosmictiger/geometry/distributed_voronoi.hpp>
 #include <cosmictiger/io/silo_voronoi.hpp>
 
@@ -135,11 +137,60 @@ void checkOutput(std::vector<voronoi::Cell> const& cells) {
 
 }    // namespace detail
 
-void testRoundedPerturbedLatticeConnectivity() {
+TEST(DistributedVoronoi, PartitionsAndHalos) {
+    std::vector<voronoi::Site> lattice;
+    for (int x = 0; x < 4; ++x) {
+        for (int y = 0; y < 4; ++y) {
+            for (int z = 0; z < 4; ++z) {
+                lattice.push_back({lattice.size(), {x / 4.0, y / 4.0, z / 4.0}, 0, {}});
+            }
+        }
+    }
+    auto const regular = detail::partitioned(lattice, 1);
+    detail::compare(regular, detail::partitioned(lattice, 2));
+    detail::compare(regular, detail::partitioned(lattice, 4));
+    detail::checkOutput(regular);
+    std::mt19937_64 random(195);
+    std::uniform_real_distribution<double> uniform(0, 1);
+    std::vector<voronoi::Site> irregular;
+    for (size_t i = 0; i < 90; ++i) {
+        irregular.push_back({i, {uniform(random), uniform(random), uniform(random)}, 0, {}});
+    }
+    auto const reference = detail::partitioned(irregular, 1);
+    size_t maximumImported = 0;
+    detail::compare(reference, detail::partitioned(irregular, 4, false, &maximumImported));
+    detail::compare(reference, detail::partitioned(irregular, 4, true));
+    detail::require(maximumImported < irregular.size() * 27,
+        "Spatial halo avoids gathering every periodic image");
+    detail::checkOutput(reference);
+    // Thin/clustered data need adaptive halo expansion, including ranks
+    // whose initial neighborhood is lower-dimensional.
+    std::vector<voronoi::Site> clustered;
+    for (size_t i = 0; i < 24; ++i) {
+        clustered.push_back({i,
+            {0.01 + 0.03 * uniform(random), 0.02 + 0.02 * uniform(random),
+                0.03 + 0.01 * uniform(random)},
+            0, {}});
+    }
+    clustered.push_back({24, {0.8, 0.7, 0.6}, 0, {}});
+    auto const sparse = detail::partitioned(clustered, 1);
+    detail::compare(sparse, detail::partitioned(clustered, 4));
+    detail::checkOutput(sparse);
+    for (size_t count = 1; count <= 3; ++count) {
+        std::vector<voronoi::Site> small;
+        for (size_t i = 0; i < count; ++i) {
+            small.push_back({i, {0.1 + 0.2 * i, 0.2, 0.3}, 0, {}});
+        }
+        detail::checkOutput(detail::partitioned(small, 4));
+    }
+}
+
+TEST(DistributedVoronoi, RoundedPerturbedLatticeConnectivity) {
     // Fixed-point particle positions can produce much smaller dual features.
     // These seeds exercise a tiny face whose rounded area changes sign, and
     // periodic fragments with coincident external faces on the view boundary.
     for (unsigned const seed : {4U, 12U}) {
+        SCOPED_TRACE(seed);
         std::mt19937_64 random(seed);
         std::uniform_real_distribution<double> noise(-1e-9, 1e-9);
         std::vector<voronoi::Site> sites;
@@ -158,66 +209,11 @@ void testRoundedPerturbedLatticeConnectivity() {
         auto const reference = detail::partitioned(sites, 1);
         detail::checkOutput(reference);
         for (int const ranks : {2, 4}) {
+            SCOPED_TRACE(ranks);
             auto const cells = detail::partitioned(sites, ranks);
             detail::compare(reference, cells);
             detail::compareConnectivity(reference, cells);
             detail::checkOutput(cells);
         }
-    }
-}
-
-int main() {
-    try {
-        std::vector<voronoi::Site> lattice;
-        for (int x = 0; x < 4; ++x) {
-            for (int y = 0; y < 4; ++y) {
-                for (int z = 0; z < 4; ++z) {
-                    lattice.push_back({lattice.size(), {x / 4.0, y / 4.0, z / 4.0}, 0, {}});
-                }
-            }
-        }
-        auto const regular = detail::partitioned(lattice, 1);
-        detail::compare(regular, detail::partitioned(lattice, 2));
-        detail::compare(regular, detail::partitioned(lattice, 4));
-        detail::checkOutput(regular);
-        std::mt19937_64 random(195);
-        std::uniform_real_distribution<double> uniform(0, 1);
-        std::vector<voronoi::Site> irregular;
-        for (size_t i = 0; i < 90; ++i) {
-            irregular.push_back({i, {uniform(random), uniform(random), uniform(random)}, 0, {}});
-        }
-        auto const reference = detail::partitioned(irregular, 1);
-        size_t maximumImported = 0;
-        detail::compare(reference, detail::partitioned(irregular, 4, false, &maximumImported));
-        detail::compare(reference, detail::partitioned(irregular, 4, true));
-        detail::require(maximumImported < irregular.size() * 27,
-            "Spatial halo avoids gathering every periodic image");
-        detail::checkOutput(reference);
-        // Thin/clustered data need adaptive halo expansion, including ranks
-        // whose initial neighborhood is lower-dimensional.
-        std::vector<voronoi::Site> clustered;
-        for (size_t i = 0; i < 24; ++i) {
-            clustered.push_back({i,
-                {0.01 + 0.03 * uniform(random), 0.02 + 0.02 * uniform(random),
-                    0.03 + 0.01 * uniform(random)},
-                0, {}});
-        }
-        clustered.push_back({24, {0.8, 0.7, 0.6}, 0, {}});
-        auto const sparse = detail::partitioned(clustered, 1);
-        detail::compare(sparse, detail::partitioned(clustered, 4));
-        detail::checkOutput(sparse);
-        for (size_t count = 1; count <= 3; ++count) {
-            std::vector<voronoi::Site> small;
-            for (size_t i = 0; i < count; ++i) {
-                small.push_back({i, {0.1 + 0.2 * i, 0.2, 0.3}, 0, {}});
-            }
-            detail::checkOutput(detail::partitioned(small, 4));
-        }
-        testRoundedPerturbedLatticeConnectivity();
-        std::puts("Distributed Voronoi partition, halo, periodic and crop checks passed");
-        return 0;
-    } catch (std::exception const& error) {
-        std::fprintf(stderr, "%s\n", error.what());
-        return 1;
     }
 }

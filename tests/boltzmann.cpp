@@ -7,6 +7,8 @@
 #include <string>
 #include <vector>
 
+#include <gtest/gtest.h>
+
 #include <cosmictiger/cosmology/boltzmann.hpp>
 #include <cosmictiger/cosmology/native_recombination.hpp>
 
@@ -156,25 +158,35 @@ void testInitialTime(ZeroOrderUniverse const& universe) {
 
 }    // namespace detail
 
-int main() {
-    try {
-        ZeroOrderUniverse universe;
-        createNativeZeroOrderUniverse(&universe, 1.1, detail::parameters(3.046));
-        detail::testInitialConditions(universe);
-        detail::testConvergence(universe);
-        detail::testInitialTime(universe);
-        detail::testInvalidInput(universe);
-        createNativeZeroOrderUniverse(&universe, 1.1, detail::parameters(0.0));
-        auto const photonOnly = solveBoltzmannTransfers(universe, 0.1, {1.0}).front();
-        detail::require(photonOnly.deltaNeutrino == 0.0 && photonOnly.neutrinoShear == 0.0,
-            "Zero Neff removes the neutrino hierarchy");
-        detail::require(
-            std::abs(photonOnly.constraintResidual) < 2.e-5, "Photon-only Einstein constraint");
-        std::puts(
-            "Boltzmann initial conditions, convergence, constraints, and input checks passed");
-        return EXIT_SUCCESS;
-    } catch (std::exception const& error) {
-        std::fprintf(stderr, "%s\n", error.what());
-        return EXIT_FAILURE;
-    }
+TEST(Boltzmann, InitialConditions) {
+    ZeroOrderUniverse universe;
+    createNativeZeroOrderUniverse(&universe, 1.1, detail::parameters(3.046));
+    detail::testInitialConditions(universe);
+}
+
+TEST(Boltzmann, Convergence) {
+    ZeroOrderUniverse universe;
+    createNativeZeroOrderUniverse(&universe, 1.1, detail::parameters(3.046));
+    detail::testConvergence(universe);
+}
+
+TEST(Boltzmann, InitialTime) {
+    ZeroOrderUniverse universe;
+    createNativeZeroOrderUniverse(&universe, 1.1, detail::parameters(3.046));
+    detail::testInitialTime(universe);
+}
+
+TEST(Boltzmann, InvalidInput) {
+    ZeroOrderUniverse universe;
+    createNativeZeroOrderUniverse(&universe, 1.1, detail::parameters(3.046));
+    detail::testInvalidInput(universe);
+}
+
+TEST(Boltzmann, PhotonOnly) {
+    ZeroOrderUniverse universe;
+    createNativeZeroOrderUniverse(&universe, 1.1, detail::parameters(0.0));
+    auto const photonOnly = solveBoltzmannTransfers(universe, 0.1, {1.0}).front();
+    EXPECT_EQ(photonOnly.deltaNeutrino, 0.0);
+    EXPECT_EQ(photonOnly.neutrinoShear, 0.0);
+    EXPECT_LT(std::abs(photonOnly.constraintResidual), 2.e-5);
 }

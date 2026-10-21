@@ -11,6 +11,7 @@
 #include <cuda_runtime.h>
 
 #include <cosmictiger/math/special_functions.hpp>
+#include "cuda_test.hpp"
 #include "special_functions_reference.hpp"
 
 namespace detail {
@@ -228,12 +229,9 @@ size_t checkResults(std::vector<TestCase> const& cases, std::vector<TestResult> 
 
 }    // namespace detail
 
-int main() {
-    int deviceCount = 0;
-    if (cudaGetDeviceCount(&deviceCount) != cudaSuccess || deviceCount == 0) {
-        std::puts("CUDA device unavailable; skipping special functions reference test");
-        return 77;
-    }
+using SpecialFunctionsCuda = detail::CudaTest;
+
+TEST_F(SpecialFunctionsCuda, MatchesIndependentReference) {
     detail::TestCase* deviceCases = nullptr;
     detail::TestResult* deviceResults = nullptr;
     try {
@@ -254,7 +252,6 @@ int main() {
         deviceCases = nullptr;
         size_t const checks = detail::checkResults(cases, results);
         std::printf("CUDA special function reference checks passed: %zu values\n", checks);
-        return 0;
     } catch (std::exception const& error) {
         if (deviceResults) {
             cudaFree(deviceResults);
@@ -263,6 +260,6 @@ int main() {
             cudaFree(deviceCases);
         }
         std::fprintf(stderr, "CUDA special function reference test failed: %s\n", error.what());
-        return 1;
+        FAIL() << error.what();
     }
 }

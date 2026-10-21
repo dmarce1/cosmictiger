@@ -12,6 +12,7 @@
 #include <cuda_runtime.h>
 
 #include <cosmictiger/analysis/power_cuda.hpp>
+#include "cuda_test.hpp"
 
 #include "power_test_helpers.hpp"
 
@@ -100,22 +101,16 @@ void testDensity(size_t count) {
 
 }    // namespace detail
 
-int main() {
-    int deviceCount = 0;
-    cudaError_t const status = cudaGetDeviceCount(&deviceCount);
-    if (status != cudaSuccess || deviceCount == 0) {
-        std::printf("SKIP: no usable CUDA device for power density parity (%s)\n",
-            cudaGetErrorString(status));
-        return 77;
-    }
-    try {
-        for (size_t count : {size_t(0), size_t(79), size_t(1031)}) {
-            detail::testDensity(count);
-        }
-        std::printf("Power density CUDA/CPU parity and reference regressions passed\n");
-    } catch (std::exception const& error) {
-        std::fprintf(stderr, "Power density CUDA regression failed: %s\n", error.what());
-        return 1;
-    }
-    return 0;
+using PowerCuda = detail::CudaTest;
+
+TEST_F(PowerCuda, EmptyDensity) {
+    detail::testDensity(0);
+}
+
+TEST_F(PowerCuda, PartialBlockDensity) {
+    detail::testDensity(79);
+}
+
+TEST_F(PowerCuda, MultipleBlockDensity) {
+    detail::testDensity(1031);
 }

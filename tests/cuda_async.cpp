@@ -11,11 +11,13 @@
 #include <vector>
 
 #include <cuda_runtime.h>
+#include <gtest/gtest.h>
 #include <hpx/hpx_init.hpp>
 #include <hpx/include/async.hpp>
 #include <hpx/runtime_local/runtime_local_fwd.hpp>
 
 #include <cosmictiger/cuda/cuda_stream.hpp>
+#include <tests/cuda_test.hpp>
 
 void cudaAsyncTestLaunch(int* values, int count, cudaStream_t stream, bool invalid);
 
@@ -189,46 +191,59 @@ void cudaAsyncWarmup(CudaAsyncBuffers& buffers) {
     buffers.verify();
 }
 
-void cudaAsyncStage(char const* label) {
-    std::printf("CUDA_ASYNC_CASE %s\n", label);
-    std::fflush(stdout);
+}    // namespace detail
+
+namespace detail {
+
+class CudaAsyncTest : public CudaTest {
+protected:
+    std::unique_ptr<CudaAsyncBuffers> buffers_;
+
+    void SetUp() override {
+        CudaTest::SetUp();
+        if (HasFatalFailure() || IsSkipped()) {
+            return;
+        }
+        ASSERT_EQ(hpx::get_num_worker_threads(), 1)
+            << "CUDA completion regression requires exactly one HPX worker";
+        ASSERT_EQ(cudaSetDevice(0), cudaSuccess);
+        buffers_ = std::make_unique<CudaAsyncBuffers>();
+        cudaAsyncWarmup(*buffers_);
+    }
+};
+
+TEST_F(CudaAsyncTest, WaitProgress) {
+    cudaAsyncCheckProgress(*buffers_, false);
+}
+
+TEST_F(CudaAsyncTest, IndependentStreamLifetimes) {
+    cudaAsyncCheckProgress(*buffers_, true);
+}
+
+TEST_F(CudaAsyncTest, LaunchErrorRecovery) {
+    cudaAsyncCheckLaunchRecovery(*buffers_);
+}
+
+TEST_F(CudaAsyncTest, DestructorProgress) {
+    cudaAsyncCheckDestructor(*buffers_, false);
+}
+
+TEST_F(CudaAsyncTest, ExceptionUnwindProgress) {
+    cudaAsyncCheckDestructor(*buffers_, true);
 }
 
 }    // namespace detail
 
 int hpx_main(int, char*[]) {
-    int status = 0;
-    try {
-        detail::cudaAsyncRequire(hpx::get_num_worker_threads() == 1,
-            "CUDA completion regression requires exactly one HPX worker");
-        detail::cudaAsyncCheck(cudaSetDevice(0), "selecting the CUDA test device");
-        detail::CudaAsyncBuffers buffers;
-        detail::cudaAsyncStage("warmup");
-        detail::cudaAsyncWarmup(buffers);
-        detail::cudaAsyncStage("wait_progress");
-        detail::cudaAsyncCheckProgress(buffers, false);
-        detail::cudaAsyncStage("independent_stream_lifetimes");
-        detail::cudaAsyncCheckProgress(buffers, true);
-        detail::cudaAsyncStage("launch_error_recovery");
-        detail::cudaAsyncCheckLaunchRecovery(buffers);
-        detail::cudaAsyncStage("destructor_progress");
-        detail::cudaAsyncCheckDestructor(buffers, false);
-        detail::cudaAsyncStage("exception_unwind_progress");
-        detail::cudaAsyncCheckDestructor(buffers, true);
-        std::puts("HPX CUDA completion regressions passed (one HPX worker, one CUDA block)");
-    } catch (std::exception const& error) {
-        std::fprintf(stderr, "HPX CUDA completion regression failed: %s\n", error.what());
-        status = 1;
-    }
+    int const status = RUN_ALL_TESTS();
     hpx::finalize();
     return status;
 }
 
 int main(int argc, char* argv[]) {
-    int devices = 0;
-    if (cudaGetDeviceCount(&devices) != cudaSuccess || devices == 0) {
-        std::puts("No CUDA device available");
-        return 77;
+    ::testing::InitGoogleTest(&argc, argv);
+    if (GTEST_FLAG_GET(list_tests)) {
+        return RUN_ALL_TESTS();
     }
     std::vector<std::string> configuration{"hpx.os_threads=1", "hpx.stacks.small_size=524288"};
 #ifdef HPX_EARLY

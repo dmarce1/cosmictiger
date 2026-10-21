@@ -3,6 +3,9 @@
 #include <cstdlib>
 #include <initializer_list>
 #include <limits>
+#include <stdexcept>
+
+#include <gtest/gtest.h>
 
 #include <cosmictiger/chemistry/primordial_rates.hpp>
 
@@ -10,14 +13,14 @@ namespace {
 void require(bool condition, char const* message) {
     if (!condition) {
         std::fprintf(stderr, "primordial rates: %s\n", message);
-        std::exit(EXIT_FAILURE);
+        throw std::runtime_error(message);
     }
 }
 void close(double actual, double expected, double tolerance, char const* message) {
     if (!std::isfinite(actual) || std::abs(actual - expected) > tolerance * std::abs(expected)) {
         std::fprintf(stderr, "%s: actual %.17g expected %.17g tolerance %.3g\n", message, actual,
             expected, tolerance);
-        std::exit(EXIT_FAILURE);
+        throw std::runtime_error(message);
     }
 }
 primordial::State atTemperature(
@@ -489,13 +492,30 @@ void checkThermalLedger() {
     }
 }
 }    // namespace
-int main() {
+TEST(PrimordialRates, Stoichiometry) {
     checkStoichiometry();
+}
+
+TEST(PrimordialRates, Abundances) {
     checkAbundances();
+}
+
+TEST(PrimordialRates, Rates) {
     checkRates();
+}
+
+TEST(PrimordialRates, Eos) {
     checkEos();
+}
+
+TEST(PrimordialRates, ColdMolecularPhysics) {
     checkColdMolecularPhysics();
+}
+
+TEST(PrimordialRates, Sources) {
     checkSources();
+}
+
+TEST(PrimordialRates, ThermalLedger) {
     checkThermalLedger();
-    std::puts("primordial rates, conservation, EOS, and thermal source tests passed");
 }

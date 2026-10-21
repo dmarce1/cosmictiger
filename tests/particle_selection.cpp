@@ -12,6 +12,8 @@
 #include <stdexcept>
 #include <vector>
 
+#include <gtest/gtest.h>
+
 #include <cosmictiger/particles/particle_selection.hpp>
 
 namespace detail {
@@ -59,14 +61,22 @@ void checkLargeCounts() {
 
 }    // namespace detail
 
-int main() {
+TEST(ParticleSelection, SmallSelections) {
     for (size_t totalCount = 1; totalCount <= 64; totalCount++) {
         for (int requestedCount = 1; requestedCount <= 80; requestedCount++) {
             detail::checkSelection(totalCount, requestedCount);
         }
     }
+}
+
+TEST(ParticleSelection, OversubscribedSelection) {
     detail::checkSelection(262144, 1000000);
+}
+
+TEST(ParticleSelection, EmptySelection) {
     detail::setTracerFlags(nullptr, 0, 0, 0, 1);
+}
+
+TEST(ParticleSelection, LargeCounts) {
     detail::checkLargeCounts();
-    std::puts("Tracer selection regression checks passed");
 }

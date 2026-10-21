@@ -18,6 +18,8 @@
 #include <string>
 #include <vector>
 
+#include <gtest/gtest.h>
+
 #include <cosmictiger/math/simd_backend.hpp>
 #include <cosmictiger/particles/drift_cpu.hpp>
 
@@ -288,18 +290,22 @@ void testMovingLightcone() {
 
 }    // namespace detail
 
-int main() {
-    try {
-        detail::testEmpty();
-        detail::testPositionsAndActivity();
-        detail::testLightconeImages();
-        detail::testLightconeGates();
-        detail::testMovingLightcone();
-        std::printf("Drift SIMD CPU regressions passed (%zu native double lanes)\n",
-            size_t(NativeSimdVector<double>::size()));
-    } catch (std::exception const& error) {
-        std::fprintf(stderr, "Drift SIMD CPU regression failed: %s\n", error.what());
-        return 1;
-    }
-    return 0;
+TEST(DriftCpu, Empty) {
+    detail::testEmpty();
+}
+
+TEST(DriftCpu, PositionsAndActivity) {
+    detail::testPositionsAndActivity();
+}
+
+TEST(DriftCpu, LightconeImages) {
+    detail::testLightconeImages();
+}
+
+TEST(DriftCpu, LightconeGates) {
+    detail::testLightconeGates();
+}
+
+TEST(DriftCpu, MovingLightcone) {
+    detail::testMovingLightcone();
 }

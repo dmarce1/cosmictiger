@@ -9,6 +9,7 @@
 
 #include <cosmictiger/math/radial_density_kernel.hpp>
 #include <cosmictiger/math/radial_kernel.hpp>
+#include "cuda_test.hpp"
 
 namespace detail {
 
@@ -205,28 +206,32 @@ void runDensityDimension() {
 
 }    // namespace detail
 
-int main() {
-    int deviceCount = 0;
-    cudaError_t const status = cudaGetDeviceCount(&deviceCount);
-    if (status == cudaErrorNoDevice || status == cudaErrorInsufficientDriver ||
-        (status == cudaSuccess && deviceCount == 0)) {
-        std::puts("No CUDA device is available; radial kernel device checks skipped.");
-        return 77;
-    }
-    try {
-        detail::check(status);
-        detail::run();
-        detail::runDensityDimension<1>();
-        detail::runDensityDimension<2>();
-        detail::runDensityDimension<3>();
-        detail::runDensityDimension<4>();
-        detail::runDensityDimension<7>();
-        detail::runDensityDimension<20>();
-        std::puts("All 15 radial kernels and arbitrary-dimensional densities passed CUDA "
-                  "float/double parity checks.");
-    } catch (std::exception const& error) {
-        std::fprintf(stderr, "CUDA radial kernel test failed: %s\n", error.what());
-        return 1;
-    }
-    return 0;
+using RadialKernelCuda = detail::CudaTest;
+
+TEST_F(RadialKernelCuda, FloatAndDoubleMatchHost) {
+    detail::run();
+}
+
+TEST_F(RadialKernelCuda, DensityDimension1) {
+    detail::runDensityDimension<1>();
+}
+
+TEST_F(RadialKernelCuda, DensityDimension2) {
+    detail::runDensityDimension<2>();
+}
+
+TEST_F(RadialKernelCuda, DensityDimension3) {
+    detail::runDensityDimension<3>();
+}
+
+TEST_F(RadialKernelCuda, DensityDimension4) {
+    detail::runDensityDimension<4>();
+}
+
+TEST_F(RadialKernelCuda, DensityDimension7) {
+    detail::runDensityDimension<7>();
+}
+
+TEST_F(RadialKernelCuda, DensityDimension20) {
+    detail::runDensityDimension<20>();
 }

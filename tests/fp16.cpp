@@ -14,6 +14,8 @@
 #include <stdexcept>
 #include <type_traits>
 
+#include <gtest/gtest.h>
+
 #include <cosmictiger/math/fp16.hpp>
 
 static_assert(sizeof(Float16) == sizeof(std::uint16_t), "Binary16 must occupy exactly two bytes");
@@ -194,19 +196,26 @@ void testNumericLimits() {
 
 }    // namespace detail
 
-int main() {
-    try {
-        detail::testKnownEncodings();
-        detail::testAllRepresentations();
-        detail::testAllRoundingBoundaries();
-        detail::testSpecialValues();
-        detail::testOverflow();
-        detail::testNumericLimits();
-    } catch (std::exception const& error) {
-        std::fprintf(stderr, "Binary16 conversion tests failed: %s\n", error.what());
-        return 1;
-    }
-    std::puts("Binary16 conversions: all representations, rounding boundaries, and overflow checks "
-              "passed");
-    return 0;
+TEST(Fp16, KnownEncodings) {
+    detail::testKnownEncodings();
+}
+
+TEST(Fp16, AllRepresentations) {
+    detail::testAllRepresentations();
+}
+
+TEST(Fp16, AllRoundingBoundaries) {
+    detail::testAllRoundingBoundaries();
+}
+
+TEST(Fp16, SpecialValues) {
+    detail::testSpecialValues();
+}
+
+TEST(Fp16, Overflow) {
+    detail::testOverflow();
+}
+
+TEST(Fp16, NumericLimits) {
+    detail::testNumericLimits();
 }

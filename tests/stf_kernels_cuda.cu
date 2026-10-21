@@ -10,9 +10,11 @@
 #include <cmath>
 #include <cstdio>
 #include <stdexcept>
+#include <string>
 
 #include <cuda_runtime.h>
 
+#include "cuda_test.hpp"
 #include "stf_kernel_test_helpers.hpp"
 
 namespace detail {
@@ -99,22 +101,16 @@ void testOrder() {
 
 }    // namespace detail
 
-int main() {
-    int deviceCount = 0;
-    auto const status = cudaGetDeviceCount(&deviceCount);
-    if (status == cudaErrorNoDevice || status == cudaErrorInsufficientDriver ||
-        (status == cudaSuccess && deviceCount == 0)) {
-        std::puts("No CUDA device is available; STF device checks skipped.");
-        return 77;
-    }
-    try {
-        detail::check(status);
-        detail::forEachFmmOrder([](auto order) { detail::testOrder<order.value>(); });
-        std::printf("STF CUDA float/double kernel parity checks passed for FMM orders %d to %d.\n",
-            kFmmMinOrder, kFmmMaxOrder);
-        return 0;
-    } catch (std::exception const& error) {
-        std::fprintf(stderr, "STF CUDA test failed: %s\n", error.what());
-        return 1;
-    }
+class StfKernelsCuda : public detail::CudaTest, public ::testing::WithParamInterface<int> {};
+
+TEST_P(StfKernelsCuda, FloatAndDoubleMatchHost) {
+    detail::forEachFmmOrder([&](auto order) {
+        if (order.value == GetParam()) {
+            detail::testOrder<order.value>();
+        }
+    });
 }
+
+INSTANTIATE_TEST_SUITE_P(AllOrders, StfKernelsCuda,
+    ::testing::Range(kFmmMinOrder, kFmmMaxOrder + 1),
+    [](::testing::TestParamInfo<int> const& info) { return "Order" + std::to_string(info.param); });

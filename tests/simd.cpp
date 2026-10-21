@@ -14,6 +14,8 @@
 #include <limits>
 #include <stdexcept>
 
+#include <gtest/gtest.h>
+
 #include <cosmictiger/math/simd.hpp>
 
 namespace detail {
@@ -246,24 +248,26 @@ void testMathApproximations() {
 
 }    // namespace detail
 
-int main() {
 #if defined(COSMICTIGER_SIMD_EXPECT_STANDARD)
-    static_assert(COSMICTIGER_SIMD_STANDARD == COSMICTIGER_SIMD_EXPECT_STANDARD);
+static_assert(COSMICTIGER_SIMD_STANDARD == COSMICTIGER_SIMD_EXPECT_STANDARD);
 #endif
-    try {
-        detail::testWidth<2>();
-        detail::testWidth<4>();
-        detail::testWidth<8>();
-        detail::testWidth<16>();
-        detail::testMathApproximations();
-#if COSMICTIGER_SIMD_STANDARD
-        std::puts("Standard SIMD semantic tests passed.");
-#else
-        std::puts("Experimental SIMD semantic tests passed.");
-#endif
-        return 0;
-    } catch (std::exception const& error) {
-        std::fprintf(stderr, "SIMD test failed: %s\n", error.what());
-        return 1;
-    }
+
+TEST(Simd, Width2) {
+    detail::testWidth<2>();
+}
+
+TEST(Simd, Width4) {
+    detail::testWidth<4>();
+}
+
+TEST(Simd, Width8) {
+    detail::testWidth<8>();
+}
+
+TEST(Simd, Width16) {
+    detail::testWidth<16>();
+}
+
+TEST(Simd, MathApproximations) {
+    detail::testMathApproximations();
 }

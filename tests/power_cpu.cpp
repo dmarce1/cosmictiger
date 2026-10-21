@@ -6,6 +6,8 @@
 
 #include <cstdio>
 
+#include <gtest/gtest.h>
+
 #include "power_test_helpers.hpp"
 
 void cosmictigerAssert(char const* condition, bool value, char const* file, int line) {
@@ -72,15 +74,14 @@ void testUniformLattice() {
 
 }    // namespace detail
 
-int main() {
-    try {
-        detail::testEmpty();
-        detail::testFoldedDensity();
-        detail::testUniformLattice();
-        std::printf("Power density CPU regressions passed\n");
-    } catch (std::exception const& error) {
-        std::fprintf(stderr, "Power density CPU regression failed: %s\n", error.what());
-        return 1;
-    }
-    return 0;
+TEST(PowerCpu, Empty) {
+    detail::testEmpty();
+}
+
+TEST(PowerCpu, FoldedDensity) {
+    detail::testFoldedDensity();
+}
+
+TEST(PowerCpu, UniformLattice) {
+    detail::testUniformLattice();
 }

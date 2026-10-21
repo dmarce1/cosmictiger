@@ -5,6 +5,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <limits>
+#include <stdexcept>
+
+#include <gtest/gtest.h>
 
 #include <cosmictiger/cosmology/recombination_thermal.hpp>
 
@@ -22,7 +25,7 @@ void requireClose(double actual, double expected, double relativeTolerance, char
     if (!isFinite(actual) || !isFinite(expected) ||
         std::abs(actual - expected) > relativeTolerance * scale) {
         std::fprintf(stderr, "%s: actual %.17g, expected %.17g\n", label, actual, expected);
-        std::exit(EXIT_FAILURE);
+        throw std::runtime_error(label);
     }
 }
 
@@ -122,13 +125,16 @@ void testTemperatureEvolution() {
 
 }    // namespace detail
 
-int main() {
-    if (detail::isFinite(std::numeric_limits<double>::infinity()) ||
-        detail::isFinite(std::numeric_limits<double>::quiet_NaN()) || !detail::isFinite(1.0)) {
-        std::fputs("Finite-value validation failed\n", stderr);
-        return EXIT_FAILURE;
-    }
+TEST(RecombinationThermal, FiniteValueValidation) {
+    EXPECT_FALSE(detail::isFinite(std::numeric_limits<double>::infinity()));
+    EXPECT_FALSE(detail::isFinite(std::numeric_limits<double>::quiet_NaN()));
+    EXPECT_TRUE(detail::isFinite(1.0));
+}
+
+TEST(RecombinationThermal, ComptonCoefficient) {
     detail::testComptonCoefficient();
+}
+
+TEST(RecombinationThermal, TemperatureEvolution) {
     detail::testTemperatureEvolution();
-    std::puts("Recombination thermal regressions passed");
 }

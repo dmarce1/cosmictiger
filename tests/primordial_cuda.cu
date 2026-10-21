@@ -8,6 +8,7 @@
 #include <cuda_runtime.h>
 
 #include <cosmictiger/chemistry/primordial_chemistry.hpp>
+#include "cuda_test.hpp"
 
 namespace {
 bool close(float left, float right, float scale, float absolute = 1.e-30f) {
@@ -95,12 +96,9 @@ __global__ void coldSampleKernel(ColdSample* results) {
     }
 }
 }    // namespace
-int main() {
-    int devices = 0;
-    if (cudaGetDeviceCount(&devices) != cudaSuccess || devices == 0) {
-        std::puts("SKIP: CUDA device unavailable");
-        return 77;
-    }
+using PrimordialCuda = detail::CudaTest;
+
+TEST_F(PrimordialCuda, ColdMolecularRhsAndEosMatchCpu) {
     using namespace primordial;
     // Include subnormal H2+ cooling, zero collider density, and both matching
     // endpoints. This one-block check exercises the production device formulas.
@@ -118,7 +116,7 @@ int main() {
     cudaError_t const coldRelease = cudaFree(coldDevice);
     if (coldStatus != cudaSuccess || coldRelease != cudaSuccess) {
         std::fprintf(stderr, "Cold molecular CUDA kernel failed\n");
-        return 1;
+        FAIL() << "Primordial CUDA regression failed; see diagnostic above";
     }
     for (unsigned i = 0; i != 13; ++i) {
         ColdSample const cpu = coldSample(i);
@@ -128,16 +126,20 @@ int main() {
             !close(cpu.lte, gpu.lte, cpu.lte, 1.e-44f) ||
             !close(cpu.eosTemperature, gpu.eosTemperature, cpu.eosTemperature)) {
             std::fprintf(stderr, "Cold molecular CUDA RHS/EOS mismatch at case%u\n", i);
-            return 1;
+            FAIL() << "Primordial CUDA regression failed; see diagnostic above";
         }
         for (int partner = 0; partner != 5; ++partner) {
             if (!close(cpu.cooling[partner], gpu.cooling[partner], cpu.cooling[partner], 1.e-44f)) {
                 std::fprintf(
                     stderr, "Cold molecular CUDA coefficient mismatch at case%u/%d\n", i, partner);
-                return 1;
+                FAIL() << "Primordial CUDA regression failed; see diagnostic above";
             }
         }
     }
+}
+
+TEST_F(PrimordialCuda, QuadraticTraceMatchesExactSolution) {
+    using namespace primordial;
     // Device regression for the former false-convergence failure. The exact
     // solution is independent of both CPU and device implementations.
     StepResult* quadraticDevice = nullptr;
@@ -155,7 +157,7 @@ int main() {
     cudaError_t const quadraticRelease = cudaFree(quadraticDevice);
     if (quadraticStatus != cudaSuccess || quadraticRelease != cudaSuccess) {
         std::fprintf(stderr, "Quadratic trace CUDA kernel failed\n");
-        return 1;
+        FAIL() << "Primordial CUDA regression failed; see diagnostic above";
     }
     for (unsigned i = 0; i != 4; ++i) {
         auto const cpu = quadraticCase(i);
@@ -173,16 +175,20 @@ int main() {
             std::fabs(static_cast<double>(gpuMinority) / exact - 1.0) >= 0.015 ||
             !close(cpuMinority, gpuMinority, cpuMinority)) {
             std::fprintf(stderr, "Quadratic trace CUDA regression failed in case%u\n", i);
-            return 1;
+            FAIL() << "Primordial CUDA regression failed; see diagnostic above";
         }
     }
+}
+
+TEST_F(PrimordialCuda, StiffNetworksTailsTracesAndFailureLanesMatchCpu) {
+    using namespace primordial;
     SolverOptions options;
     options.maxAttempts = 512;
     options.maxSubsteps = 256;
     std::string error;
     if (!integrateBatchCuda(nullptr, nullptr, 0, options, &error)) {
         std::fprintf(stderr, "Empty CUDA batch failed: %s\n", error.c_str());
-        return 1;
+        FAIL() << "Primordial CUDA regression failed; see diagnostic above";
     }
     unsigned randomState = 1234567U;
     for (size_t count : {size_t(1), size_t(31), size_t(33), size_t(65), size_t(257)}) {
@@ -204,7 +210,7 @@ int main() {
             if (thermalEnergyAtTemperature(input.state, input.environment,
                     molecular ? 500.0f + 2000.0f * uniform : 1.e4f + 4.e4f * uniform,
                     input.state.thermalEnergy) != Status::Success) {
-                return 1;
+                FAIL() << "Primordial CUDA regression failed; see diagnostic above";
             }
             input.interval = 1.e6f;
             if (i == 0 || i == 4) {
@@ -251,7 +257,7 @@ int main() {
         if (!integrateBatchCpu(inputs.data(), cpu.data(), count, options, 1) ||
             !integrateBatchCuda(inputs.data(), gpu.data(), count, options, &error)) {
             std::fprintf(stderr, "CUDA dispatch failed: %s\n", error.c_str());
-            return 1;
+            FAIL() << "Primordial CUDA regression failed; see diagnostic above";
         }
         if (cpu[0].status != Status::Success || gpu[0].status != Status::Success ||
             cpu[0].newtonIterations <= 3 || gpu[0].newtonIterations <= 3 ||
@@ -259,12 +265,12 @@ int main() {
                 (cpu[4].status != Status::Success || gpu[4].status != Status::Success ||
                     cpu[4].newtonIterations <= 3 || gpu[4].newtonIterations <= 3))) {
             std::fprintf(stderr, "Long atomic/molecular CUDA trajectories did not solve\n");
-            return 1;
+            FAIL() << "Primordial CUDA regression failed; see diagnostic above";
         }
         for (size_t i = 0; i < count; ++i) {
             if (cpu[i].status != gpu[i].status || cpu[i].acceptedTime != gpu[i].acceptedTime) {
                 std::fprintf(stderr, "CUDA status/time mismatch at %zu/%zu\n", i, count);
-                return 1;
+                FAIL() << "Primordial CUDA regression failed; see diagnostic above";
             }
             if (cpu[i].status != Status::Success) {
                 continue;
@@ -272,7 +278,7 @@ int main() {
             if (!close(cpu[i].state.thermalEnergy, gpu[i].state.thermalEnergy,
                     cpu[i].state.thermalEnergy, 1.e-7f)) {
                 std::fprintf(stderr, "CUDA thermal mismatch at %zu/%zu\n", i, count);
-                return 1;
+                FAIL() << "Primordial CUDA regression failed; see diagnostic above";
             }
             for (int j = 0; j < kAbundanceCount; ++j) {
                 if (cpu[i].state.abundances[j].upper() != gpu[i].state.abundances[j].upper() ||
@@ -280,11 +286,16 @@ int main() {
                         ::fabsf(cpu[i].state.abundances[j].raw()))) {
                     std::fprintf(
                         stderr, "CUDA species mismatch at %zu/%zu species%d\n", i, count, j);
-                    return 1;
+                    FAIL() << "Primordial CUDA regression failed; see diagnostic above";
                 }
             }
         }
     }
+}
+
+TEST_F(PrimordialCuda, CoupledMolecularCoolingMatchesCpu) {
+    using namespace primordial;
+    std::string error;
     // Significant molecular cooling couples species and energy across a large
     // temperature change; use the full production work budget for this case.
     BatchInput coolingInput;
@@ -307,17 +318,22 @@ int main() {
         !close(coolingCpu.state.thermalEnergy, coolingGpu.state.thermalEnergy,
             coolingCpu.state.thermalEnergy, 1.e-7f)) {
         std::fprintf(stderr, "Coupled molecular cooling CUDA parity failed: %s\n", error.c_str());
-        return 1;
+        FAIL() << "Primordial CUDA regression failed; see diagnostic above";
     }
     for (int j = 0; j < kAbundanceCount; ++j) {
         if (coolingCpu.state.abundances[j].upper() != coolingGpu.state.abundances[j].upper() ||
             !close(coolingCpu.state.abundances[j].raw(), coolingGpu.state.abundances[j].raw(),
                 ::fabsf(coolingCpu.state.abundances[j].raw()))) {
             std::fprintf(stderr, "Molecular cooling CUDA species mismatch at%d\n", j);
-            return 1;
+            FAIL() << "Primordial CUDA regression failed; see diagnostic above";
         }
     }
+}
 
+TEST_F(PrimordialCuda, RadiationHeatingMatchesExactEnergyIncrement) {
+    using namespace primordial;
+    SolverOptions const coolingOptions;
+    std::string error;
     // Radiation-only heating has an independent exact energy increment. It
     // crosses both the cold matching interval and the established 100 K domain.
     BatchInput coldHeating;
@@ -342,9 +358,16 @@ int main() {
         evaluateEos(coldGpu.state, coldHeating.environment, heatedEos) != Status::Success ||
         heatedEos.temperature <= 100.0f) {
         std::fprintf(stderr, "Cold molecular CUDA heating trajectory failed: %s\n", error.c_str());
-        return 1;
+        FAIL() << "Primordial CUDA regression failed; see diagnostic above";
     }
+}
 
+TEST_F(PrimordialCuda, WorkBoundsPreservePartialStateAndAcceptedTime) {
+    using namespace primordial;
+    SolverOptions options;
+    options.maxAttempts = 512;
+    options.maxSubsteps = 256;
+    std::string error;
     // Work bounds must preserve the same accepted partial interval and state.
     BatchInput limitedInput;
     limitedInput.environment.nHydrogen = 1.0f;
@@ -364,7 +387,7 @@ int main() {
         !close(limitedCpu.state.thermalEnergy, limitedGpu.state.thermalEnergy,
             limitedCpu.state.thermalEnergy, 1.e-7f)) {
         std::fprintf(stderr, "CUDA bounded-work parity failed: %s\n", error.c_str());
-        return 1;
+        FAIL() << "Primordial CUDA regression failed; see diagnostic above";
     }
     limitedOptions.maxAttempts = 1;
     limitedOptions.maxNewtonIterations = 1;
@@ -374,9 +397,6 @@ int main() {
         limitedCpu.status != Status::StepLimit || limitedGpu.status != Status::StepLimit ||
         limitedCpu.acceptedTime != 0.0f || limitedGpu.acceptedTime != 0.0f) {
         std::fprintf(stderr, "CUDA rejected-attempt bound parity failed\n");
-        return 1;
+        FAIL() << "Primordial CUDA regression failed; see diagnostic above";
     }
-    std::puts("Primordial CPU/CUDA parity passed, including stiff networks, tails, traces and "
-              "failure lanes");
-    return 0;
 }

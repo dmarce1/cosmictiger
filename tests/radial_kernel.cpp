@@ -7,6 +7,8 @@
 #include <string>
 #include <type_traits>
 
+#include <gtest/gtest.h>
+
 #include <cosmictiger/math/radial_kernel.hpp>
 #if defined(RADIAL_KERNEL_TEST_SIMD)
 #include <cosmictiger/math/simd.hpp>
@@ -285,18 +287,16 @@ void testLegacyKernels() {
 
 }    // namespace detail
 
-int main() {
-    try {
-        detail::testQuadraticSpline();
-        detail::testLegacyKernels();
-        for (auto const spec : detail::kSpecifications) {
-            detail::testTable(spec);
-        }
-        std::puts("All 15 radial kernels passed normalization, width, shape, derivative, gravity, "
-                  "and float checks.");
-    } catch (std::exception const& error) {
-        std::fprintf(stderr, "radial kernel test failed: %s\n", error.what());
-        return 1;
+TEST(RadialKernel, QuadraticSpline) {
+    detail::testQuadraticSpline();
+}
+
+TEST(RadialKernel, LegacyKernels) {
+    detail::testLegacyKernels();
+}
+
+TEST(RadialKernel, AllTables) {
+    for (auto const spec : detail::kSpecifications) {
+        detail::testTable(spec);
     }
-    return 0;
 }

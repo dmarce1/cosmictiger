@@ -15,6 +15,8 @@
 
 #include <silo.h>
 
+#include <gtest/gtest.h>
+
 #include <cosmictiger/io/silo_spheres.hpp>
 
 namespace detail {
@@ -120,13 +122,10 @@ void testSiloSpheres(char const* filename, int driver) {
 
 }    // namespace detail
 
-int main() {
-    try {
-        detail::testSiloSpheres("silo_spheres_pdb.silo", DB_PDB);
-        detail::testSiloSpheres("silo_spheres_hdf5.silo", DB_HDF5);
-    } catch (std::exception const& error) {
-        std::fprintf(stderr, "Silo sphere test: %s\n", error.what());
-        return 1;
-    }
-    return 0;
+TEST(SiloSpheres, Pdb) {
+    detail::testSiloSpheres("silo_spheres_pdb.silo", DB_PDB);
+}
+
+TEST(SiloSpheres, Hdf5) {
+    detail::testSiloSpheres("silo_spheres_hdf5.silo", DB_HDF5);
 }

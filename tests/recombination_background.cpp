@@ -8,6 +8,8 @@
 #include <limits>
 #include <stdexcept>
 
+#include <gtest/gtest.h>
+
 #include <cosmictiger/cosmology/native_recombination.hpp>
 #include <cosmictiger/cosmology/zero_order.hpp>
 
@@ -22,7 +24,7 @@ bool isFinite(double value) {
 void require(bool condition, char const* label) {
     if (!condition) {
         std::fprintf(stderr, "%s\n", label);
-        std::exit(EXIT_FAILURE);
+        throw std::runtime_error(label);
     }
 }
 
@@ -30,7 +32,7 @@ void requireClose(double actual, double expected, double tolerance, char const* 
     require(isFinite(actual) && isFinite(expected), "Nonfinite background result");
     if (std::abs(actual - expected) > tolerance * std::max(std::abs(actual), std::abs(expected))) {
         std::fprintf(stderr, "%s: actual %.17g, expected %.17g\n", label, actual, expected);
-        std::exit(EXIT_FAILURE);
+        throw std::runtime_error(label);
     }
 }
 
@@ -144,11 +146,6 @@ void testBackground() {
 
 }    // namespace detail
 
-int main() {
-    try {
-        detail::testBackground();
-    } catch (std::exception const& error) {
-        std::fprintf(stderr, "Background regression failed: %s\n", error.what());
-        return EXIT_FAILURE;
-    }
+TEST(RecombinationBackground, Background) {
+    detail::testBackground();
 }

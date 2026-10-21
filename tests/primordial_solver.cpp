@@ -5,8 +5,11 @@
 #include <cstdlib>
 #include <initializer_list>
 #include <limits>
+#include <stdexcept>
 #include <string>
 #include <vector>
+
+#include <gtest/gtest.h>
 
 #include <cosmictiger/chemistry/primordial_chemistry.hpp>
 #include <cosmictiger/chemistry/primordial_float_environment.hpp>
@@ -15,7 +18,7 @@ namespace {
 void require(bool condition, char const* message) {
     if (!condition) {
         std::fprintf(stderr, "FAIL: %s\n", message);
-        std::exit(1);
+        throw std::runtime_error(message);
     }
 }
 struct CoupledReaction {
@@ -142,8 +145,12 @@ void checkColdEvolution() {
     }
 }
 }    // namespace
-int main() {
+
+TEST(PrimordialSolver, ColdEvolution) {
     checkColdEvolution();
+}
+
+TEST(PrimordialSolver, CoupledConvergence) {
     using namespace primordial;
     Environment environment;
     environment.heliumToHydrogenNumberRatio = 0.0f;
@@ -181,6 +188,15 @@ int main() {
             error < previousError * 0.5L, "first order refinement improves global thermal error");
         previousError = error;
     }
+}
+
+TEST(PrimordialSolver, QuadraticTraceLoss) {
+    using namespace primordial;
+    Environment environment;
+    environment.heliumToHydrogenNumberRatio = 0.0f;
+    State initial;
+    initial.abundances[0] = SignedAbundance::fromFraction(0.1f);
+    initial.thermalEnergy = 1.0f;
     // An oversized finite-difference probe used to report Success with the
     // initial abundance unchanged, although x'=-k*x^2 depleted it by 1000x.
     // Test both signed branches and trace scales against x=x0/(1+k*x0*t).
@@ -208,7 +224,16 @@ int main() {
                 "trace nonlinear evolution cannot falsely converge unchanged");
         }
     }
+}
 
+TEST(PrimordialSolver, TraceEquilibriumAndDomains) {
+    using namespace primordial;
+    Environment environment;
+    environment.heliumToHydrogenNumberRatio = 0.0f;
+    State initial;
+    initial.abundances[0] = SignedAbundance::fromFraction(0.1f);
+    initial.thermalEnergy = 1.0f;
+    CoupledReaction model;
     State trace = initial;
     trace.abundances[0] = SignedAbundance::fromMinority(1.e-12f, true);
     CoupledReaction traceModel;
@@ -257,7 +282,16 @@ int main() {
     require(advanceWithModel(trace, environment, 1.0f, options, traceModel).status ==
             Status::InvalidInput,
         "unvalidated precision request rejected");
+}
 
+TEST(PrimordialSolver, PhotoionizationAndHeating) {
+    using namespace primordial;
+    Environment environment;
+    environment.heliumToHydrogenNumberRatio = 0.0f;
+    State initial;
+    initial.abundances[0] = SignedAbundance::fromFraction(0.1f);
+    initial.thermalEnergy = 1.0f;
+    SolverOptions options;
     // Independent full-physics reference: zero density and TCMB remove collisions
     // and Compton exchange. Photoionization gives dx/dt=Gamma(1-x), while
     // de/dt=Q(1-x), so e-e0=(Q/Gamma)(x-x0) exactly.
@@ -291,7 +325,11 @@ int main() {
         "species and photo heating remain coupled");
     std::printf("photo x%.12Lg expected%.12Lg thermal%.12g steps%u\n", photoX, photoExact,
         photo.state.thermalEnergy, photo.acceptedSubsteps);
+}
 
+TEST(PrimordialSolver, MolecularReference) {
+    using namespace primordial;
+    SolverOptions options;
     // Low-density molecular fixture independently integrated by SciPy Radau
     // through primordial_reference.py, using the production RHS (no copied
     // network). It exercises fast H-/H2+ relaxation from exact zero.
@@ -318,7 +356,11 @@ int main() {
         "molecular thermal reference");
     require(validateComposition(molecular.state, molecularEnvironment) == Status::Success,
         "molecular accepted state satisfies elemental and charge bounds");
+}
 
+TEST(PrimordialSolver, ThermalEndpoints) {
+    using namespace primordial;
+    SolverOptions options;
     // At exact thermal endpoints the Newton Jacobian must find feasible
     // derivative probes while the physical trajectory points into the domain.
     for (int endpoint = 0; endpoint != 2; ++endpoint) {
@@ -362,7 +404,31 @@ int main() {
                 "endpoint feasibility does not alter physical heating");
         }
     }
+}
 
+TEST(PrimordialSolver, CpuBatchAndFloatingEnvironment) {
+    // Restore the caller on failure as well as on the successful path below.
+    primordial::StrictFloatEnvironment const savedEnvironment;
+    ASSERT_TRUE(savedEnvironment.valid());
+    using namespace primordial;
+    Environment environment;
+    environment.heliumToHydrogenNumberRatio = 0.0f;
+    State initial;
+    initial.abundances[0] = SignedAbundance::fromFraction(0.1f);
+    initial.thermalEnergy = 1.0f;
+    SolverOptions options;
+    Environment photoEnvironment;
+    photoEnvironment.nHydrogen = 0.0f;
+    photoEnvironment.cmbTemperature = 0.0f;
+    photoEnvironment.heliumToHydrogenNumberRatio = 0.0f;
+    photoEnvironment.radiation.hydrogenIonization = 2.e-7f;
+    photoEnvironment.radiation.heatingPerHydrogen = 6.e-7f;
+    State photoInitial = initial;
+    require(thermalEnergyAtTemperature(photoInitial, photoEnvironment, 1.e4f,
+                photoInitial.thermalEnergy) == Status::Success,
+        "photo reference initial EOS");
+    options = SolverOptions{};
+    float const photoInterval = 1.e7f;
     std::vector<BatchInput> batch(7);
     for (auto& input : batch) {
         input.state = photoInitial;
@@ -426,5 +492,4 @@ int main() {
             one[0].state.thermalEnergy == batch[0].state.thermalEnergy,
         "unavailable CUDA fails explicitly without changing state");
 #endif
-    std::puts("Primordial solver analytic, precision, domain, and CPU batch tests passed");
 }

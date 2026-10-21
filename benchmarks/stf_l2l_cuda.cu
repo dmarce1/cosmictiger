@@ -694,6 +694,7 @@ void runOrder(bool checkOnly, int samples, int rounds, int repetitions) {
 
 }    // namespace detail
 
+#ifndef COSMICTIGER_STF_L2L_VALIDATE_ONLY
 int main(int argc, char** argv) {
     int deviceCount = 0;
     auto const deviceStatus = cudaGetDeviceCount(&deviceCount);
@@ -758,3 +759,4 @@ int main(int argc, char** argv) {
         return 1;
     }
 }
+#endif

@@ -16,12 +16,14 @@
 #include <string>
 #include <vector>
 
+#include <gtest/gtest.h>
+
 #include <cosmictiger/analysis/compress.hpp>
 
 void cosmictigerAssert(char const* expression, bool condition, char const* file, int line) {
     if (!condition) {
         std::fprintf(stderr, "Assertion failed: %s at %s:%d\n", expression, file, line);
-        std::abort();
+        throw std::runtime_error("Regression check failed; see diagnostic above");
     }
 }
 
@@ -162,20 +164,30 @@ void testCase(std::string const& name) {
 
 }    // namespace detail
 
-int main(int argc, char** argv) {
-    try {
-        if (argc == 2) {
-            detail::testCase(argv[1]);
-        } else {
-            for (char const* name : {"empty", "single", "repeated", "repeated_clusters",
-                     "zero_position_spread", "zero_velocity_spread", "normal"}) {
-                detail::testCase(name);
-            }
-        }
-    } catch (std::exception const& error) {
-        std::fprintf(stderr, "%s\n", error.what());
-        return EXIT_FAILURE;
-    }
-    std::puts("Compression regressions passed");
-    return EXIT_SUCCESS;
+TEST(Compression, Empty) {
+    detail::testCase("empty");
+}
+
+TEST(Compression, Single) {
+    detail::testCase("single");
+}
+
+TEST(Compression, Repeated) {
+    detail::testCase("repeated");
+}
+
+TEST(Compression, RepeatedClusters) {
+    detail::testCase("repeated_clusters");
+}
+
+TEST(Compression, ZeroPositionSpread) {
+    detail::testCase("zero_position_spread");
+}
+
+TEST(Compression, ZeroVelocitySpread) {
+    detail::testCase("zero_velocity_spread");
+}
+
+TEST(Compression, Normal) {
+    detail::testCase("normal");
 }

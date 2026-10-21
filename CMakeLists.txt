@@ -473,7 +473,58 @@ foreach(tool_target IN ITEMS healpix2silo groups2halofunc)
 endforeach()
 
 include(CTest)
+# Keep the application compilation independent of the selected test reporter.
+add_library(cosmictiger_application_tests STATIC)
+target_include_directories(cosmictiger_application_tests PRIVATE ${PROJECT_SOURCE_DIR})
+target_link_libraries(cosmictiger PRIVATE cosmictiger_application_tests)
 if(BUILD_TESTING)
+    find_package(GTest CONFIG QUIET)
+    if(NOT GTest_FOUND)
+        include(FetchContent)
+        set(BUILD_GMOCK OFF CACHE BOOL "Build GoogleMock" FORCE)
+        set(INSTALL_GTEST OFF CACHE BOOL "Install GoogleTest" FORCE)
+        FetchContent_Declare(googletest
+            URL https://github.com/google/googletest/archive/f8d7d77c06936315286eb55f8de22cd23c188571.tar.gz
+            DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+        FetchContent_MakeAvailable(googletest)
+    endif()
+    include(GoogleTest)
+
+    # Keep each assertion group visible to CTest, with the same resource limits
+    # and compiler variants as the standalone regression executables.
+    function(cosmictiger_add_gtest)
+        cmake_parse_arguments(PARSE_ARGV 0 test "HPX_MAIN" "NAME;TARGET;WORKING_DIRECTORY;ENVIRONMENT"
+            "ARGS;PROPERTIES")
+        if(test_HPX_MAIN)
+            target_link_libraries(${test_TARGET} PRIVATE GTest::gtest)
+        else()
+            target_link_libraries(${test_TARGET} PRIVATE GTest::gtest_main)
+        endif()
+        if(NOT test_WORKING_DIRECTORY)
+            set(test_WORKING_DIRECTORY "${PROJECT_BINARY_DIR}")
+        endif()
+        gtest_discover_tests(${test_TARGET}
+            NO_PRETTY_VALUES
+            DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 30
+            TEST_PREFIX "${test_NAME}." EXTRA_ARGS ${test_ARGS}
+            WORKING_DIRECTORY "${test_WORKING_DIRECTORY}"
+            PROPERTIES LABELS "${test_NAME}" ${test_PROPERTIES})
+        # GoogleTest's discovery helper expands list-valued properties. Apply
+        # environment lists after discovery so semicolons remain part of the value.
+        if(DEFINED test_ENVIRONMENT)
+            set(environment_file "${PROJECT_BINARY_DIR}/${test_TARGET}_environment.cmake")
+            file(WRITE "${environment_file}"
+                "if(DEFINED ${test_TARGET}_TESTS)\n"
+                "    set_tests_properties(\${${test_TARGET}_TESTS} PROPERTIES\n"
+                "        ENVIRONMENT [==[${test_ENVIRONMENT}]==])\n"
+                "endif()\n")
+            set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES "${environment_file}")
+        endif()
+    endfunction()
+
+    # The selected run.test application check executes inside the HPX runtime.
+    target_sources(cosmictiger_application_tests PRIVATE tests/application_test.cpp)
+    target_link_libraries(cosmictiger_application_tests PRIVATE GTest::gtest)
     foreach(voronoi_test IN ITEMS voronoi distributed_voronoi silo_voronoi)
         add_executable(${voronoi_test}_test tests/${voronoi_test}.cpp)
         target_link_libraries(${voronoi_test}_test PRIVATE cosmictiger_silo_voronoi)
@@ -481,9 +532,9 @@ if(BUILD_TESTING)
             target_compile_options(${voronoi_test}_test PRIVATE -fno-fast-math -ffp-contract=off)
         endif()
         file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/tests/${voronoi_test}")
-        add_test(NAME ${voronoi_test} COMMAND ${voronoi_test}_test)
-        set_tests_properties(${voronoi_test} PROPERTIES TIMEOUT 120
-            WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/tests/${voronoi_test}")
+        cosmictiger_add_gtest(NAME ${voronoi_test} TARGET ${voronoi_test}_test
+            WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/tests/${voronoi_test}"
+            PROPERTIES TIMEOUT 120)
     endforeach()
     add_executable(halo_catalog_fixture tests/halo_catalog_fixture.cpp)
     target_link_libraries(halo_catalog_fixture PRIVATE cosmictiger_fp16)
@@ -499,10 +550,14 @@ if(BUILD_TESTING)
         add_executable(${chemistry_test}_test tests/${chemistry_test}.cpp)
         target_link_libraries(${chemistry_test}_test PRIVATE primordial_chemistry)
         target_compile_options(${chemistry_test}_test PRIVATE -fno-fast-math -ffp-contract=off)
-        add_test(NAME ${chemistry_test} COMMAND ${chemistry_test}_test)
-        set_tests_properties(${chemistry_test} PROPERTIES TIMEOUT 180)
+        if(chemistry_test STREQUAL "primordial_solver")
+            set(chemistry_processors 2)
+        else()
+            set(chemistry_processors 1)
+        endif()
+        cosmictiger_add_gtest(NAME ${chemistry_test} TARGET ${chemistry_test}_test
+            PROPERTIES TIMEOUT 180 PROCESSORS ${chemistry_processors})
     endforeach()
-    set_tests_properties(primordial_solver PROPERTIES PROCESSORS 2)
     execute_process(COMMAND ${Python3_EXECUTABLE} -c "import numpy, scipy"
         RESULT_VARIABLE PRIMORDIAL_SCIPY_STATUS OUTPUT_QUIET ERROR_QUIET)
     if(PRIMORDIAL_SCIPY_STATUS EQUAL 0)
@@ -514,6 +569,27 @@ if(BUILD_TESTING)
             ${PROJECT_SOURCE_DIR}/tests/primordial_reference.py $<TARGET_FILE:primordial_reference>)
         set_tests_properties(primordial_radau_reference PROPERTIES TIMEOUT 240
             ENVIRONMENT "OPENBLAS_NUM_THREADS=1;OMP_NUM_THREADS=1;MKL_NUM_THREADS=1")
+    endif()
+    # These analysis utilities also contain independent numerical regressions.
+    execute_process(COMMAND ${Python3_EXECUTABLE} -c "import numpy, scipy, matplotlib"
+        RESULT_VARIABLE ANALYSIS_PYTHON_STATUS OUTPUT_QUIET ERROR_QUIET)
+    if(ANALYSIS_PYTHON_STATUS EQUAL 0)
+        foreach(analysis_check IN ITEMS linear_growth glass_fixed_evolution glass_ic_corrections)
+            if(analysis_check STREQUAL "linear_growth")
+                set(analysis_check_argument --self-check)
+            else()
+                set(analysis_check_argument self-check)
+            endif()
+            set(analysis_check_name "${analysis_check}_analysis_self_check")
+            set(analysis_check_workdir "${PROJECT_BINARY_DIR}/tests/${analysis_check_name}")
+            file(MAKE_DIRECTORY "${analysis_check_workdir}")
+            add_test(NAME ${analysis_check_name} COMMAND ${Python3_EXECUTABLE}
+                ${PROJECT_SOURCE_DIR}/tests/analyze_${analysis_check}.py ${analysis_check_argument})
+            set_tests_properties(${analysis_check_name} PROPERTIES TIMEOUT 120 PROCESSORS 1
+                WORKING_DIRECTORY "${analysis_check_workdir}"
+                ENVIRONMENT "OPENBLAS_NUM_THREADS=1;OMP_NUM_THREADS=1;MKL_NUM_THREADS=1;MPLCONFIGDIR=${analysis_check_workdir}/matplotlib"
+                LABELS "analysis;python")
+        endforeach()
     endif()
     add_test(NAME primordial_integration_cpu COMMAND ${Python3_EXECUTABLE}
         ${PROJECT_SOURCE_DIR}/tests/run_primordial_integration.py $<TARGET_FILE:cosmictiger>
@@ -545,8 +621,8 @@ if(BUILD_TESTING)
         target_link_libraries(primordial_cuda_test PRIVATE primordial_chemistry CUDA::cudart)
         target_compile_options(primordial_cuda_test PRIVATE
             $<$<COMPILE_LANGUAGE:CUDA>:--ftz=false;--prec-div=true;--prec-sqrt=true;--fmad=false>)
-        add_test(NAME primordial_cuda COMMAND primordial_cuda_test)
-        set_tests_properties(primordial_cuda PROPERTIES TIMEOUT 240 SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
+        cosmictiger_add_gtest(NAME primordial_cuda TARGET primordial_cuda_test
+            PROPERTIES TIMEOUT 240 SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
     endif()
     foreach(recombination_variant IN ITEMS standard fast_math)
         set(thermal_target recombination_thermal_${recombination_variant}_test)
@@ -561,10 +637,10 @@ if(BUILD_TESTING)
             target_compile_options(${thermal_target} PRIVATE -ffast-math)
             target_compile_options(${background_target} PRIVATE -ffast-math)
         endif()
-        add_test(NAME recombination_thermal_${recombination_variant} COMMAND ${thermal_target})
-        add_test(NAME recombination_background_${recombination_variant} COMMAND ${background_target})
-        set_tests_properties(recombination_background_${recombination_variant}
-            recombination_thermal_${recombination_variant} PROPERTIES TIMEOUT 30)
+        cosmictiger_add_gtest(NAME recombination_thermal_${recombination_variant}
+            TARGET ${thermal_target} PROPERTIES TIMEOUT 30)
+        cosmictiger_add_gtest(NAME recombination_background_${recombination_variant}
+            TARGET ${background_target} PROPERTIES TIMEOUT 30)
     endforeach()
 
     add_executable(recombination_reference tests/recombination_reference.cpp)
@@ -583,15 +659,15 @@ if(BUILD_TESTING)
         if(native_variant STREQUAL "fast_math")
             target_compile_options(${native_target} PRIVATE -ffast-math)
         endif()
-        add_test(NAME native_recombination_${native_variant} COMMAND ${native_target})
-        set_tests_properties(native_recombination_${native_variant} PROPERTIES TIMEOUT 180)
+        cosmictiger_add_gtest(NAME native_recombination_${native_variant} TARGET ${native_target}
+            PROPERTIES TIMEOUT 180)
     endforeach()
 
     add_executable(linear_power_test tests/linear_power.cpp)
     target_include_directories(linear_power_test PRIVATE ${PROJECT_SOURCE_DIR})
     target_compile_options(linear_power_test PRIVATE -ffast-math)
-    add_test(NAME linear_power COMMAND linear_power_test)
-    set_tests_properties(linear_power PROPERTIES TIMEOUT 30)
+    cosmictiger_add_gtest(NAME linear_power TARGET linear_power_test
+        PROPERTIES TIMEOUT 30)
     foreach(boltzmann_target IN ITEMS boltzmann_test boltzmann_reference)
         if(boltzmann_target STREQUAL "boltzmann_test")
             set(boltzmann_test_source tests/boltzmann.cpp)
@@ -603,8 +679,8 @@ if(BUILD_TESTING)
         target_include_directories(${boltzmann_target} PRIVATE ${PROJECT_SOURCE_DIR})
         target_link_libraries(${boltzmann_target} PRIVATE primordial_chemistry)
     endforeach()
-    add_test(NAME boltzmann COMMAND boltzmann_test)
-    set_tests_properties(boltzmann PROPERTIES TIMEOUT 120)
+    cosmictiger_add_gtest(NAME boltzmann TARGET boltzmann_test
+        PROPERTIES TIMEOUT 120)
     foreach(boltzmann_two_lpt IN ITEMS false true)
         set(boltzmann_smoke boltzmann_initialization_${boltzmann_two_lpt}_cpu)
         add_test(NAME ${boltzmann_smoke} COMMAND ${Python3_EXECUTABLE}
@@ -622,29 +698,29 @@ if(BUILD_TESTING)
         if(fp16_variant STREQUAL "fast_math")
             target_compile_options(fp16_${fp16_variant}_test PRIVATE -ffast-math)
         endif()
-        add_test(NAME fp16_${fp16_variant} COMMAND fp16_${fp16_variant}_test)
-        set_tests_properties(fp16_${fp16_variant} PROPERTIES TIMEOUT 30)
+        cosmictiger_add_gtest(NAME fp16_${fp16_variant} TARGET fp16_${fp16_variant}_test
+            PROPERTIES TIMEOUT 30)
     endforeach()
 
     add_executable(rockstar_eigenpair_test tests/rockstar_eigenpair.cpp src/math/math.cpp)
     target_include_directories(rockstar_eigenpair_test PRIVATE ${PROJECT_SOURCE_DIR})
     target_compile_definitions(rockstar_eigenpair_test PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
     cosmictiger_use_generated_kernels(rockstar_eigenpair_test)
-    add_test(NAME rockstar_eigenpair COMMAND rockstar_eigenpair_test)
-    set_tests_properties(rockstar_eigenpair PROPERTIES TIMEOUT 30)
+    cosmictiger_add_gtest(NAME rockstar_eigenpair TARGET rockstar_eigenpair_test
+        PROPERTIES TIMEOUT 30)
     foreach(halo_unit IN ITEMS rockstar_core rockstar_properties lightcone_epoch)
         add_executable(${halo_unit}_test tests/${halo_unit}.cpp)
         target_include_directories(${halo_unit}_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_compile_definitions(${halo_unit}_test PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
         cosmictiger_use_generated_kernels(${halo_unit}_test)
-        add_test(NAME ${halo_unit} COMMAND ${halo_unit}_test)
-        set_tests_properties(${halo_unit} PROPERTIES TIMEOUT 30)
+        cosmictiger_add_gtest(NAME ${halo_unit} TARGET ${halo_unit}_test
+            PROPERTIES TIMEOUT 30)
     endforeach()
     add_executable(rockstar_properties_fast_math_test tests/rockstar_properties.cpp)
     target_include_directories(rockstar_properties_fast_math_test PRIVATE ${PROJECT_SOURCE_DIR})
     target_compile_options(rockstar_properties_fast_math_test PRIVATE -ffast-math)
-    add_test(NAME rockstar_properties_fast_math COMMAND rockstar_properties_fast_math_test)
-    set_tests_properties(rockstar_properties_fast_math PROPERTIES TIMEOUT 30)
+    cosmictiger_add_gtest(NAME rockstar_properties_fast_math TARGET rockstar_properties_fast_math_test
+        PROPERTIES TIMEOUT 30)
     foreach(halo_mode IN ITEMS rockstar bhPotential groupsCatalogue)
         foreach(halo_backend IN ITEMS cpu cuda)
             if(halo_backend STREQUAL "cuda" AND (NOT COSMICTIGER_WITH_CUDA OR halo_mode STREQUAL "groupsCatalogue"))
@@ -694,15 +770,15 @@ if(BUILD_TESTING)
     add_executable(units_test tests/units.cpp)
     target_include_directories(units_test PRIVATE ${PROJECT_SOURCE_DIR})
     target_link_libraries(units_test PRIVATE Boost::boost)
-    add_test(NAME units COMMAND units_test)
-    set_tests_properties(units PROPERTIES TIMEOUT 20)
+    cosmictiger_add_gtest(NAME units TARGET units_test
+        PROPERTIES TIMEOUT 20)
 
     add_executable(units_fast_math_test tests/units.cpp)
     target_include_directories(units_fast_math_test PRIVATE ${PROJECT_SOURCE_DIR})
     target_link_libraries(units_fast_math_test PRIVATE Boost::boost)
     target_compile_options(units_fast_math_test PRIVATE -ffast-math)
-    add_test(NAME units_fast_math COMMAND units_fast_math_test)
-    set_tests_properties(units_fast_math PROPERTIES TIMEOUT 20)
+    cosmictiger_add_gtest(NAME units_fast_math TARGET units_fast_math_test
+        PROPERTIES TIMEOUT 20)
 
     include(CheckIncludeFileCXX)
     foreach(float_float_variant IN ITEMS standard fast_math)
@@ -713,8 +789,8 @@ if(BUILD_TESTING)
         if(float_float_variant STREQUAL "fast_math")
             target_compile_options(${float_float_target} PRIVATE -ffast-math)
         endif()
-        add_test(NAME float_float_${float_float_variant} COMMAND ${float_float_target})
-        set_tests_properties(float_float_${float_float_variant} PROPERTIES TIMEOUT 30)
+        cosmictiger_add_gtest(NAME float_float_${float_float_variant} TARGET ${float_float_target}
+            PROPERTIES TIMEOUT 30)
     endforeach()
 
     check_include_file_cxx("experimental/simd" COSMICTIGER_HAS_EXPERIMENTAL_SIMD)
@@ -734,8 +810,8 @@ if(BUILD_TESTING)
             target_compile_options(${simd_target} PRIVATE
                 -msse2 -mno-avx -mno-avx2 -mno-avx512f -mno-fma)
         endif()
-        add_test(NAME simd_${simd_variant} COMMAND ${simd_target})
-        set_tests_properties(simd_${simd_variant} PROPERTIES TIMEOUT 20)
+        cosmictiger_add_gtest(NAME simd_${simd_variant} TARGET ${simd_target}
+            PROPERTIES TIMEOUT 20)
     endforeach()
 
     # Keep the long-double oracle in a separate translation unit so the
@@ -758,8 +834,8 @@ if(BUILD_TESTING)
         if(special_variant STREQUAL "fast_math")
             target_compile_options(${special_target} PRIVATE -ffast-math)
         endif()
-        add_test(NAME special_functions_${special_variant} COMMAND ${special_target})
-        set_tests_properties(special_functions_${special_variant} PROPERTIES TIMEOUT 60)
+        cosmictiger_add_gtest(NAME special_functions_${special_variant} TARGET ${special_target}
+            PROPERTIES TIMEOUT 60)
     endforeach()
     foreach(special_variant IN ITEMS standard fast_math)
         set(special_benchmark special_functions_${special_variant}_benchmark)
@@ -796,8 +872,8 @@ if(BUILD_TESTING)
     if(COMPILER_SUPPORTS_MARCH_NATIVE)
         target_compile_options(radial_kernel_test PRIVATE -march=native)
     endif()
-    add_test(NAME radial_kernel COMMAND radial_kernel_test)
-    set_tests_properties(radial_kernel PROPERTIES TIMEOUT 30)
+    cosmictiger_add_gtest(NAME radial_kernel TARGET radial_kernel_test
+        PROPERTIES TIMEOUT 30)
 
     add_executable(stf_kernels_test tests/stf_kernels.cpp)
     target_include_directories(stf_kernels_test PRIVATE ${PROJECT_SOURCE_DIR})
@@ -805,8 +881,8 @@ if(BUILD_TESTING)
     if(COMPILER_SUPPORTS_MARCH_NATIVE)
         target_compile_options(stf_kernels_test PRIVATE -march=native)
     endif()
-    add_test(NAME stf_kernels COMMAND stf_kernels_test)
-    set_tests_properties(stf_kernels PROPERTIES TIMEOUT 60)
+    cosmictiger_add_gtest(NAME stf_kernels TARGET stf_kernels_test
+        PROPERTIES TIMEOUT 60)
     # Exercise the CUDA-disabled Ewald initializer even in a CUDA-enabled build.
     add_executable(stf_ewald_cpu_test tests/stf_ewald_cpu.cpp src/fmm/ewald_indices.cpp src/fmm/fmm_order.cpp)
     target_include_directories(stf_ewald_cpu_test PRIVATE ${PROJECT_SOURCE_DIR})
@@ -814,8 +890,8 @@ if(BUILD_TESTING)
     target_compile_definitions(stf_ewald_cpu_test PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
     cosmictiger_use_generated_kernels(stf_ewald_cpu_test)
     target_link_libraries(stf_ewald_cpu_test PRIVATE HPX::hpx Boost::boost)
-    add_test(NAME stf_ewald_cpu COMMAND stf_ewald_cpu_test)
-    set_tests_properties(stf_ewald_cpu PROPERTIES TIMEOUT 30)
+    cosmictiger_add_gtest(NAME stf_ewald_cpu TARGET stf_ewald_cpu_test
+        PROPERTIES TIMEOUT 30)
 
     add_executable(fmm_acceptance_test tests/fmm_acceptance.cpp)
     target_include_directories(fmm_acceptance_test PRIVATE ${PROJECT_SOURCE_DIR})
@@ -824,8 +900,8 @@ if(BUILD_TESTING)
     if(COMPILER_SUPPORTS_MARCH_NATIVE)
         target_compile_options(fmm_acceptance_test PRIVATE -march=native)
     endif()
-    add_test(NAME fmm_acceptance COMMAND fmm_acceptance_test)
-    set_tests_properties(fmm_acceptance PROPERTIES TIMEOUT 30)
+    cosmictiger_add_gtest(NAME fmm_acceptance TARGET fmm_acceptance_test
+        PROPERTIES TIMEOUT 30)
 
     add_executable(radial_density_kernel_test tests/radial_density_kernel.cpp)
     target_include_directories(radial_density_kernel_test PRIVATE ${PROJECT_SOURCE_DIR})
@@ -833,13 +909,13 @@ if(BUILD_TESTING)
     if(COMPILER_SUPPORTS_MARCH_NATIVE)
         target_compile_options(radial_density_kernel_test PRIVATE -march=native)
     endif()
-    add_test(NAME radial_density_kernel COMMAND radial_density_kernel_test)
-    set_tests_properties(radial_density_kernel PROPERTIES TIMEOUT 30)
+    cosmictiger_add_gtest(NAME radial_density_kernel TARGET radial_density_kernel_test
+        PROPERTIES TIMEOUT 30)
 
     add_executable(monaghan_sph_test tests/monaghan_sph.cpp)
     target_include_directories(monaghan_sph_test PRIVATE ${PROJECT_SOURCE_DIR})
-    add_test(NAME monaghan_sph COMMAND monaghan_sph_test)
-    set_tests_properties(monaghan_sph PROPERTIES TIMEOUT 20)
+    cosmictiger_add_gtest(NAME monaghan_sph TARGET monaghan_sph_test
+        PROPERTIES TIMEOUT 20)
 
     foreach(analysis_kernel IN ITEMS power lightcone)
         add_executable(${analysis_kernel}_cpu_test
@@ -847,8 +923,8 @@ if(BUILD_TESTING)
         target_include_directories(${analysis_kernel}_cpu_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_link_libraries(${analysis_kernel}_cpu_test PRIVATE HPX::hpx)
         target_compile_options(${analysis_kernel}_cpu_test PRIVATE -ffast-math)
-        add_test(NAME ${analysis_kernel}_cpu COMMAND ${analysis_kernel}_cpu_test)
-        set_tests_properties(${analysis_kernel}_cpu PROPERTIES TIMEOUT 60)
+        cosmictiger_add_gtest(NAME ${analysis_kernel}_cpu TARGET ${analysis_kernel}_cpu_test
+            PROPERTIES TIMEOUT 60)
     endforeach()
 
     if(COSMICTIGER_WITH_CUDA)
@@ -860,8 +936,8 @@ if(BUILD_TESTING)
         target_compile_options(power_cuda_test PRIVATE
             $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math>)
         set_target_properties(power_cuda_test PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
-        add_test(NAME power_cuda COMMAND power_cuda_test)
-        set_tests_properties(power_cuda PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+        cosmictiger_add_gtest(NAME power_cuda TARGET power_cuda_test
+            PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
 
         add_executable(lightcone_cuda_test tests/lightcone_cuda.cu src/analysis/lightcone.cu
             src/analysis/lightcone_cpu.cpp src/core/assert.cu src/cuda/cuda_stream.cpp)
@@ -872,17 +948,18 @@ if(BUILD_TESTING)
         target_compile_options(lightcone_cuda_test PRIVATE
             $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math>)
         set_target_properties(lightcone_cuda_test PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
-        add_test(NAME lightcone_cuda COMMAND lightcone_cuda_test)
-        set_tests_properties(lightcone_cuda PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+        cosmictiger_add_gtest(NAME lightcone_cuda TARGET lightcone_cuda_test
+            PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
 
         add_hpx_executable(cuda_async_test
             SOURCES tests/cuda_async.cpp tests/cuda_async.cu src/cuda/cuda_stream.cpp)
         target_include_directories(cuda_async_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_compile_definitions(cuda_async_test PRIVATE USE_CUDA)
         target_link_libraries(cuda_async_test PRIVATE CUDA::cudart)
-        add_test(NAME cuda_async COMMAND cuda_async_test --hpx:threads=1 --hpx:bind=none)
-        set_tests_properties(cuda_async PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE
-            SKIP_RETURN_CODE 77 PROCESSORS 1 ENVIRONMENT "OMP_NUM_THREADS=1;OMP_THREAD_LIMIT=1")
+        cosmictiger_add_gtest(NAME cuda_async TARGET cuda_async_test HPX_MAIN
+            ARGS --hpx:threads=1 --hpx:bind=none
+            ENVIRONMENT "OMP_NUM_THREADS=1;OMP_THREAD_LIMIT=1"
+            PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE SKIP_RETURN_CODE 77 PROCESSORS 1)
     endif()
 
     # Compile CPU drift with ordinary host arrays and no CUDA device kernels.
@@ -894,8 +971,8 @@ if(BUILD_TESTING)
     if(COMPILER_SUPPORTS_MARCH_NATIVE)
         target_compile_options(drift_cpu_test PRIVATE -march=native)
     endif()
-    add_test(NAME drift_cpu COMMAND drift_cpu_test)
-    set_tests_properties(drift_cpu PROPERTIES TIMEOUT 30)
+    cosmictiger_add_gtest(NAME drift_cpu TARGET drift_cpu_test
+        PROPERTIES TIMEOUT 30)
 
     add_hpx_executable(drift_dispatch_test
         SOURCES tests/drift_dispatch.cpp src/particles/drift.cpp src/particles/drift_cpu.cpp)
@@ -912,9 +989,10 @@ if(BUILD_TESTING)
         target_compile_definitions(drift_dispatch_test PRIVATE USE_CUDA)
         target_link_libraries(drift_dispatch_test PRIVATE CUDA::cudart)
     endif()
-    add_test(NAME drift_dispatch COMMAND drift_dispatch_test --hpx:threads=2 --hpx:bind=none)
-    set_tests_properties(drift_dispatch PROPERTIES TIMEOUT 30 PROCESSORS 2
-        ENVIRONMENT "CUDA_VISIBLE_DEVICES=")
+    cosmictiger_add_gtest(NAME drift_dispatch TARGET drift_dispatch_test HPX_MAIN
+        ARGS --hpx:threads=2 --hpx:bind=none
+        ENVIRONMENT "CUDA_VISIBLE_DEVICES="
+        PROPERTIES TIMEOUT 30 PROCESSORS 2)
     # Relax sphere-surface shells on the CPU path that run.scenario=polytropicStar uses
     # without CUDA.
     add_hpx_executable(sphere_surface_test
@@ -924,9 +1002,10 @@ if(BUILD_TESTING)
     if(COMPILER_SUPPORTS_MARCH_NATIVE)
         target_compile_options(sphere_surface_test PRIVATE -march=native)
     endif()
-    add_test(NAME sphere_surface COMMAND sphere_surface_test --hpx:threads=2 --hpx:bind=none)
-    set_tests_properties(sphere_surface PROPERTIES TIMEOUT 120 PROCESSORS 2
-        ENVIRONMENT "CUDA_VISIBLE_DEVICES=")
+    cosmictiger_add_gtest(NAME sphere_surface TARGET sphere_surface_test HPX_MAIN
+        ARGS --hpx:threads=2 --hpx:bind=none
+        ENVIRONMENT "CUDA_VISIBLE_DEVICES="
+        PROPERTIES TIMEOUT 120 PROCESSORS 2)
 
     # Compile the production SIMD path without USE_CUDA or device kernels.
     add_executable(sph_cpu_test tests/sph_cpu.cpp src/sph/sph_cpu.cpp
@@ -939,30 +1018,30 @@ if(BUILD_TESTING)
     if(COMPILER_SUPPORTS_MARCH_NATIVE)
         target_compile_options(sph_cpu_test PRIVATE -march=native)
     endif()
-    add_test(NAME sph_cpu COMMAND sph_cpu_test)
-    set_tests_properties(sph_cpu PROPERTIES TIMEOUT 120)
+    cosmictiger_add_gtest(NAME sph_cpu TARGET sph_cpu_test
+        PROPERTIES TIMEOUT 120)
 
     add_executable(rayleigh_taylor_test tests/rayleigh_taylor.cpp src/scenarios/rayleigh_taylor.cpp)
     target_include_directories(rayleigh_taylor_test PRIVATE ${PROJECT_SOURCE_DIR})
     target_compile_definitions(rayleigh_taylor_test PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
     cosmictiger_use_generated_kernels(rayleigh_taylor_test)
     target_link_libraries(rayleigh_taylor_test PRIVATE HPX::hpx)
-    add_test(NAME rayleigh_taylor COMMAND rayleigh_taylor_test)
-    set_tests_properties(rayleigh_taylor PROPERTIES TIMEOUT 120)
+    cosmictiger_add_gtest(NAME rayleigh_taylor TARGET rayleigh_taylor_test
+        PROPERTIES TIMEOUT 120)
 
     add_executable(silo_spheres_test tests/silo_spheres.cpp)
     target_include_directories(silo_spheres_test PRIVATE ${PROJECT_SOURCE_DIR} ${SILO_INCLUDE_DIR})
     target_link_libraries(silo_spheres_test PRIVATE ${SILO_LIBRARY})
     set(silo_spheres_workdir "${PROJECT_BINARY_DIR}/tests/silo_spheres")
     file(MAKE_DIRECTORY "${silo_spheres_workdir}")
-    add_test(NAME silo_spheres COMMAND silo_spheres_test)
-    set_tests_properties(silo_spheres PROPERTIES
-        WORKING_DIRECTORY "${silo_spheres_workdir}" TIMEOUT 20)
+    cosmictiger_add_gtest(NAME silo_spheres TARGET silo_spheres_test
+        WORKING_DIRECTORY "${silo_spheres_workdir}"
+        PROPERTIES TIMEOUT 20)
 
     add_executable(particle_selection_test tests/particle_selection.cpp)
     target_include_directories(particle_selection_test PRIVATE ${PROJECT_SOURCE_DIR})
-    add_test(NAME particle_selection COMMAND particle_selection_test)
-    set_tests_properties(particle_selection PROPERTIES TIMEOUT 10)
+    cosmictiger_add_gtest(NAME particle_selection TARGET particle_selection_test
+        PROPERTIES TIMEOUT 10)
 
     if(COSMICTIGER_WITH_CUDA)
         foreach(special_variant IN ITEMS standard fast_math)
@@ -981,8 +1060,7 @@ if(BUILD_TESTING)
                         $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math;-Xcompiler=-ffast-math>)
                 endforeach()
             endif()
-            add_test(NAME special_functions_cuda_${special_variant} COMMAND ${special_target})
-            set_tests_properties(special_functions_cuda_${special_variant}
+            cosmictiger_add_gtest(NAME special_functions_cuda_${special_variant} TARGET ${special_target}
                 PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
         endforeach()
 
@@ -995,8 +1073,7 @@ if(BUILD_TESTING)
                 target_compile_options(${float_float_target} PRIVATE
                     $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math;-Xcompiler=-ffast-math>)
             endif()
-            add_test(NAME float_float_cuda_${float_float_variant} COMMAND ${float_float_target})
-            set_tests_properties(float_float_cuda_${float_float_variant}
+            cosmictiger_add_gtest(NAME float_float_cuda_${float_float_variant} TARGET ${float_float_target}
                 PROPERTIES TIMEOUT 30 SKIP_RETURN_CODE 77)
         endforeach()
 
@@ -1004,8 +1081,8 @@ if(BUILD_TESTING)
         target_include_directories(stf_kernels_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
         cosmictiger_use_generated_kernels(stf_kernels_cuda_test)
         target_link_libraries(stf_kernels_cuda_test PRIVATE CUDA::cudart)
-        add_test(NAME stf_kernels_cuda COMMAND stf_kernels_cuda_test)
-        set_tests_properties(stf_kernels_cuda PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+        cosmictiger_add_gtest(NAME stf_kernels_cuda TARGET stf_kernels_cuda_test
+            PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
 
         add_executable(stf_l2l_cuda_test tests/stf_l2l_cuda.cu)
         target_include_directories(stf_l2l_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
@@ -1014,8 +1091,8 @@ if(BUILD_TESTING)
         target_link_libraries(stf_l2l_cuda_test PRIVATE CUDA::cudart)
         target_compile_options(stf_l2l_cuda_test PRIVATE
             $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr;--use_fast_math>)
-        add_test(NAME stf_l2l_cuda COMMAND stf_l2l_cuda_test)
-        set_tests_properties(stf_l2l_cuda PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+        cosmictiger_add_gtest(NAME stf_l2l_cuda TARGET stf_l2l_cuda_test
+            PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
 
         add_executable(fmm_acceptance_cuda_test tests/fmm_acceptance_cuda.cu)
         target_include_directories(fmm_acceptance_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
@@ -1023,17 +1100,16 @@ if(BUILD_TESTING)
         target_link_libraries(fmm_acceptance_cuda_test PRIVATE CUDA::cudart)
         target_compile_options(fmm_acceptance_cuda_test PRIVATE
             $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr;--use_fast_math;-Xcompiler=-ffast-math>)
-        add_test(NAME fmm_acceptance_cuda COMMAND fmm_acceptance_cuda_test)
-        set_tests_properties(fmm_acceptance_cuda PROPERTIES
-            RUN_SERIAL TRUE TIMEOUT 120 SKIP_RETURN_CODE 77)
+        cosmictiger_add_gtest(NAME fmm_acceptance_cuda TARGET fmm_acceptance_cuda_test
+            PROPERTIES RUN_SERIAL TRUE TIMEOUT 120 SKIP_RETURN_CODE 77)
 
         add_executable(radial_kernel_cuda_test tests/radial_kernel_cuda.cu)
         target_include_directories(radial_kernel_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_link_libraries(radial_kernel_cuda_test PRIVATE CUDA::cudart)
         target_compile_options(radial_kernel_cuda_test PRIVATE
             $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math>)
-        add_test(NAME radial_kernel_cuda COMMAND radial_kernel_cuda_test)
-        set_tests_properties(radial_kernel_cuda PROPERTIES RUN_SERIAL TRUE TIMEOUT 120 SKIP_RETURN_CODE 77)
+        cosmictiger_add_gtest(NAME radial_kernel_cuda TARGET radial_kernel_cuda_test
+            PROPERTIES RUN_SERIAL TRUE TIMEOUT 120 SKIP_RETURN_CODE 77)
 
         add_executable(monaghan_sph_cuda_test tests/monaghan_sph_cuda.cu
             tests/cuda_memory_backend.cpp
@@ -1053,8 +1129,8 @@ if(BUILD_TESTING)
                 $<$<COMPILE_LANGUAGE:CXX>:-march=native>)
         endif()
         set_target_properties(monaghan_sph_cuda_test PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
-        add_test(NAME monaghan_sph_cuda COMMAND monaghan_sph_cuda_test)
-        set_tests_properties(monaghan_sph_cuda PROPERTIES RUN_SERIAL TRUE TIMEOUT 120)
+        cosmictiger_add_gtest(NAME monaghan_sph_cuda TARGET monaghan_sph_cuda_test
+            PROPERTIES RUN_SERIAL TRUE TIMEOUT 120)
 
         # These host regressions need CUDA headers, but do not initialize or run a GPU.
         add_executable(numerical_utilities_test tests/numerical_utilities.cpp)
@@ -1067,14 +1143,9 @@ if(BUILD_TESTING)
                 target_compile_options(${test_target} PRIVATE -march=native)
             endif()
         endforeach()
-        add_test(NAME numerical_utilities COMMAND numerical_utilities_test)
-        set_tests_properties(numerical_utilities PROPERTIES TIMEOUT 10)
-        foreach(compression_case IN ITEMS empty single repeated repeated_clusters zero_position_spread
-                zero_velocity_spread normal)
-            add_test(NAME compression_${compression_case}
-                COMMAND compression_test ${compression_case})
-            set_tests_properties(compression_${compression_case} PROPERTIES TIMEOUT 10)
-        endforeach()
+        cosmictiger_add_gtest(NAME numerical_utilities TARGET numerical_utilities_test
+            PROPERTIES TIMEOUT 10)
+        cosmictiger_add_gtest(NAME compression TARGET compression_test PROPERTIES TIMEOUT 10)
 
         # Instantiate device-only template branches without requiring GPU execution.
         add_library(range_cuda_compile OBJECT tests/range_cuda_compile.cu)
@@ -1255,4 +1326,6 @@ if(BUILD_TESTING)
         $<TARGET_FILE:cosmictiger>
         ${PROJECT_BINARY_DIR}/tests/checkpoint_integrity)
     set_tests_properties(checkpoint_integrity PROPERTIES RUN_SERIAL TRUE TIMEOUT 600)
+else()
+    target_sources(cosmictiger_application_tests PRIVATE tests/application_test_direct.cpp)
 endif()

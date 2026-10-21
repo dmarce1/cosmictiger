@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include <gtest/gtest.h>
 #include <hpx/hpx_init.hpp>
 
 #include <cosmictiger/sph/sphere.hpp>
@@ -138,20 +139,21 @@ static void checkSphereSurface() {
 
 }    // namespace detail
 
+TEST(SphereSurface, RelaxationAndDeterminism) {
+    detail::checkSphereSurface();
+}
+
 int hpx_main(int, char*[]) {
-    int status = 0;
-    try {
-        detail::checkSphereSurface();
-        std::puts("CPU sphere surface tests passed");
-    } catch (std::exception const& error) {
-        std::fprintf(stderr, "CPU sphere surface test failed: %s\n", error.what());
-        status = 1;
-    }
+    int const status = RUN_ALL_TESTS();
     hpx::finalize();
     return status;
 }
 
 int main(int argc, char* argv[]) {
+    ::testing::InitGoogleTest(&argc, argv);
+    if (GTEST_FLAG_GET(list_tests)) {
+        return RUN_ALL_TESTS();
+    }
     std::vector<std::string> configuration = {"hpx.os_threads=2"};
 #ifdef HPX_EARLY
     return hpx::init(argc, argv, configuration);

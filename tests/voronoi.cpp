@@ -18,6 +18,8 @@
 #include <xmmintrin.h>
 #endif
 
+#include <gtest/gtest.h>
+
 #include <cosmictiger/geometry/voronoi.hpp>
 
 namespace detail {
@@ -240,7 +242,32 @@ void incompleteAndInvalid() {
     require(voronoi::buildCells({}, {}).empty(), "empty ownership is valid");
 }
 
+class FloatingEnvironmentGuard {
+public:
+    FloatingEnvironmentGuard() {
+        require(std::fegetenv(&savedEnvironment_) == 0, "capture floating-point environment");
+#if defined(__SSE__)
+        savedControl_ = _mm_getcsr();
+#endif
+    }
+
+    ~FloatingEnvironmentGuard() {
+        std::fesetenv(&savedEnvironment_);
+#if defined(__SSE__)
+        _mm_setcsr(savedControl_);
+#endif
+    }
+
+private:
+    std::fenv_t savedEnvironment_{};
+#if defined(__SSE__)
+    unsigned savedControl_{};
+#endif
+};
+
 void floatingPointEnvironment() {
+    // GoogleTest may execute another case after an exception from buildCells.
+    FloatingEnvironmentGuard const restoreOnFailure;
     auto const sites = images({{0.5, 0.5, 0.5}});
     auto const indices = centralIndices(sites);
     std::fenv_t savedEnvironment;
@@ -269,18 +296,26 @@ void floatingPointEnvironment() {
 
 }    // namespace detail
 
-int main() {
-    try {
-        detail::periodicCube();
-        detail::periodicLattice();
-        detail::periodicRandom();
-        detail::tinyFaceAndThinCell();
-        detail::incompleteAndInvalid();
-        detail::floatingPointEnvironment();
-    } catch (std::exception const& exception) {
-        std::fprintf(stderr, "Voronoi geometry test failed: %s\n", exception.what());
-        return 1;
-    }
-    std::puts("Voronoi geometry tests passed");
-    return 0;
+TEST(Voronoi, PeriodicCube) {
+    detail::periodicCube();
+}
+
+TEST(Voronoi, PeriodicLattice) {
+    detail::periodicLattice();
+}
+
+TEST(Voronoi, PeriodicRandom) {
+    detail::periodicRandom();
+}
+
+TEST(Voronoi, TinyFaceAndThinCell) {
+    detail::tinyFaceAndThinCell();
+}
+
+TEST(Voronoi, IncompleteAndInvalid) {
+    detail::incompleteAndInvalid();
+}
+
+TEST(Voronoi, FloatingPointEnvironment) {
+    detail::floatingPointEnvironment();
 }

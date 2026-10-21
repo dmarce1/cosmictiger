@@ -21,6 +21,7 @@
 
 #include <cosmictiger/sph/sph_cpu.hpp>
 #include <cosmictiger/sph/sph_cuda.hpp>
+#include "cuda_test.hpp"
 
 // Only the options-constructor and host assertion services are replaced here.
 // Density, smoothing, forces, heating, device assertions, and allocation use the
@@ -905,54 +906,80 @@ void testDefaultThermalTimestep() {
 
 }    // namespace detail
 
-int main() {
-    try {
-        int deviceCount = 0;
-        detail::checkCuda(cudaGetDeviceCount(&deviceCount), "CUDA device discovery");
-        detail::require(deviceCount > 0, "CUDA regression requires a device");
+class MonaghanSphCuda : public detail::CudaTest {
+protected:
+    void SetUp() override {
+        detail::CudaTest::SetUp();
+        if (HasFatalFailure() || IsSkipped()) {
+            return;
+        }
         detail::checkCuda(cudaSetDevice(0), "select CUDA device");
-        cudaMemoryInitialize(4 * 1024 * 1024);
-        detail::checkCuda(cudaGetLastError(), "production workspace allocator initialization");
+        // The production allocator has process lifetime and no shutdown API.
+        static bool allocatorInitialized = false;
+        if (!allocatorInitialized) {
+            cudaMemoryInitialize(4 * 1024 * 1024);
+            detail::checkCuda(cudaGetLastError(), "production workspace allocator initialization");
+            allocatorInitialized = true;
+        }
         setKernelSelections(
             {radial_kernel::Family::Ferrers, 8}, {radial_kernel::Family::Spline, 3}, true);
-        detail::testPeriodicSupport();
-        detail::testLattice();
-        detail::testUnequalSupports();
-        detail::testZPlaneAcceleration();
-        detail::testDefaultTimestepCalibration();
-        detail::testDefaultThermalTimestep();
-        detail::testCompositionEos();
-        radial_kernel::KernelSpec const specifications[] = {
-            {radial_kernel::Family::Spline, 2},
-            {radial_kernel::Family::Spline, 3},
-            {radial_kernel::Family::Spline, 4},
-            {radial_kernel::Family::Spline, 5},
-            {radial_kernel::Family::Spline, 6},
-            {radial_kernel::Family::Spline, 7},
-            {radial_kernel::Family::Spline, 8},
-            {radial_kernel::Family::Spline, 9},
-            {radial_kernel::Family::Wendland, 2},
-            {radial_kernel::Family::Wendland, 5},
-            {radial_kernel::Family::Wendland, 8},
-            {radial_kernel::Family::Ferrers, 2},
-            {radial_kernel::Family::Ferrers, 4},
-            {radial_kernel::Family::Ferrers, 6},
-            {radial_kernel::Family::Ferrers, 8},
-        };
-        size_t const count = sizeof(specifications) / sizeof(specifications[0]);
-        for (size_t i = 0; i < count; i++) {
-            auto const hydro = specifications[i];
-            auto const gravity = specifications[count - i - 1];
-            setKernelSelections(gravity, hydro, true);
-            detail::testSelectedKernel();
-            detail::testSelectedCentralGravity();
-            detail::testFixedGravityTimestep();
-            detail::testCpuCudaParity();
-        }
-        std::puts("Monaghan SPH CUDA kernels and SIMD CPU parity passed (one block per launch)");
-    } catch (std::exception const& error) {
-        std::fprintf(stderr, "Monaghan SPH CUDA regression failed: %s\n", error.what());
-        return 1;
     }
-    return 0;
+};
+
+TEST_F(MonaghanSphCuda, PeriodicSupport) {
+    detail::testPeriodicSupport();
+}
+
+TEST_F(MonaghanSphCuda, Lattice) {
+    detail::testLattice();
+}
+
+TEST_F(MonaghanSphCuda, UnequalSupports) {
+    detail::testUnequalSupports();
+}
+
+TEST_F(MonaghanSphCuda, ZPlaneAcceleration) {
+    detail::testZPlaneAcceleration();
+}
+
+TEST_F(MonaghanSphCuda, DefaultTimestepCalibration) {
+    detail::testDefaultTimestepCalibration();
+}
+
+TEST_F(MonaghanSphCuda, DefaultThermalTimestep) {
+    detail::testDefaultThermalTimestep();
+}
+
+TEST_F(MonaghanSphCuda, CompositionEos) {
+    detail::testCompositionEos();
+}
+
+TEST_F(MonaghanSphCuda, SelectedKernelsGravityTimestepsAndCpuParity) {
+    radial_kernel::KernelSpec const specifications[] = {
+        {radial_kernel::Family::Spline, 2},
+        {radial_kernel::Family::Spline, 3},
+        {radial_kernel::Family::Spline, 4},
+        {radial_kernel::Family::Spline, 5},
+        {radial_kernel::Family::Spline, 6},
+        {radial_kernel::Family::Spline, 7},
+        {radial_kernel::Family::Spline, 8},
+        {radial_kernel::Family::Spline, 9},
+        {radial_kernel::Family::Wendland, 2},
+        {radial_kernel::Family::Wendland, 5},
+        {radial_kernel::Family::Wendland, 8},
+        {radial_kernel::Family::Ferrers, 2},
+        {radial_kernel::Family::Ferrers, 4},
+        {radial_kernel::Family::Ferrers, 6},
+        {radial_kernel::Family::Ferrers, 8},
+    };
+    size_t const count = sizeof(specifications) / sizeof(specifications[0]);
+    for (size_t i = 0; i < count; i++) {
+        auto const hydro = specifications[i];
+        auto const gravity = specifications[count - i - 1];
+        setKernelSelections(gravity, hydro, true);
+        detail::testSelectedKernel();
+        detail::testSelectedCentralGravity();
+        detail::testFixedGravityTimestep();
+        detail::testCpuCudaParity();
+    }
 }

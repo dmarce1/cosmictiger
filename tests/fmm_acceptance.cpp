@@ -13,6 +13,8 @@
 #include <utility>
 #include <vector>
 
+#include <gtest/gtest.h>
+
 #include <cosmictiger/fmm/fmm_acceptance.hpp>
 #if defined(FMM_ACCEPTANCE_TEST_SIMD)
 #include <cosmictiger/math/simd.hpp>
@@ -273,20 +275,24 @@ void testHybridCosts() {
 
 }    // namespace detail
 
-int main() {
-    try {
-        auto const cases = detail::acceptanceCases();
-        detail::testScalarCases<float>(cases);
-        detail::testScalarCases<double>(cases);
+TEST(FmmAcceptance, ScalarFloat) {
+    detail::testScalarCases<float>(detail::acceptanceCases());
+}
+
+TEST(FmmAcceptance, ScalarDouble) {
+    detail::testScalarCases<double>(detail::acceptanceCases());
+}
+
 #if defined(FMM_ACCEPTANCE_TEST_SIMD)
-        detail::testSimdCases(cases);
+TEST(FmmAcceptance, Simd) {
+    detail::testSimdCases(detail::acceptanceCases());
+}
 #endif
-        detail::require(fmmInverseOpeningAngle(0.5f) == 2.0f, "inverse opening angle");
-        detail::testHybridCosts();
-    } catch (std::exception const& error) {
-        std::fprintf(stderr, "FMM acceptance test failed: %s\n", error.what());
-        return 1;
-    }
-    std::puts("FMM acceptance tests passed");
-    return 0;
+
+TEST(FmmAcceptance, InverseOpeningAngle) {
+    EXPECT_EQ(fmmInverseOpeningAngle(0.5f), 2.0f);
+}
+
+TEST(FmmAcceptance, HybridCosts) {
+    detail::testHybridCosts();
 }

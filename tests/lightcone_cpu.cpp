@@ -11,6 +11,8 @@
 #include <string>
 #include <vector>
 
+#include <gtest/gtest.h>
+
 #include <cosmictiger/analysis/lightcone.hpp>
 
 void cosmictigerAssert(char const* expression, bool condition, char const* file, int line) {
@@ -323,18 +325,26 @@ void testDeterministicCloud() {
 
 }    // namespace detail
 
-int main() {
-    try {
-        detail::testComponents();
-        detail::testExistingLabels();
-        detail::testThresholdAndDuplicates();
-        detail::testRemoteActivity();
-        detail::testDistributedChain();
-        detail::testDeterministicCloud();
-        std::puts("CPU lightcone grouping regressions passed");
-    } catch (std::exception const& error) {
-        std::fprintf(stderr, "%s\n", error.what());
-        return 1;
-    }
-    return 0;
+TEST(LightconeCpu, Components) {
+    detail::testComponents();
+}
+
+TEST(LightconeCpu, ExistingLabels) {
+    detail::testExistingLabels();
+}
+
+TEST(LightconeCpu, ThresholdAndDuplicates) {
+    detail::testThresholdAndDuplicates();
+}
+
+TEST(LightconeCpu, RemoteActivity) {
+    detail::testRemoteActivity();
+}
+
+TEST(LightconeCpu, DistributedChain) {
+    detail::testDistributedChain();
+}
+
+TEST(LightconeCpu, DeterministicCloud) {
+    detail::testDeterministicCloud();
 }

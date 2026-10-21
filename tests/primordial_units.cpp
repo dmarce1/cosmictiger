@@ -4,9 +4,11 @@
 #include <limits>
 #include <stdexcept>
 
+#include <gtest/gtest.h>
+
 #include <cosmictiger/chemistry/primordial_units.hpp>
 
-int main() {
+TEST(PrimordialUnits, TypedBoundariesAndRanges) {
     auto require = [](bool condition) {
         if (!condition) {
             throw std::runtime_error("primordial unit boundary regression");
@@ -48,5 +50,4 @@ int main() {
         }
         require(rejected);
     }
-    std::cout << "Primordial typed boundary round trips and range rejection passed\n";
 }

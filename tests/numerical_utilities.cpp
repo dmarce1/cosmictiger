@@ -12,13 +12,15 @@
 #include <limits>
 #include <stdexcept>
 
+#include <gtest/gtest.h>
+
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/range.hpp>
 
 void cosmictigerAssert(char const* expression, bool condition, char const* file, int line) {
     if (!condition) {
         std::fprintf(stderr, "Assertion failed: %s at %s:%d\n", expression, file, line);
-        std::abort();
+        throw std::runtime_error("Regression check failed; see diagnostic above");
     }
 }
 
@@ -191,18 +193,26 @@ void testRanges() {
 
 }    // namespace detail
 
-int main() {
-    try {
-        detail::testErfcexp();
-        detail::testPeriodicBoxSphere();
-        detail::testRanges<6>();
-        detail::testRanges<3>();
-        detail::testRanges<2>();
-        detail::testRanges<1>();
-    } catch (std::exception const& error) {
-        std::fprintf(stderr, "%s\n", error.what());
-        return EXIT_FAILURE;
-    }
-    std::puts("Numerical utility regressions passed");
-    return EXIT_SUCCESS;
+TEST(NumericalUtilities, Erfcexp) {
+    detail::testErfcexp();
+}
+
+TEST(NumericalUtilities, PeriodicBoxSphere) {
+    detail::testPeriodicBoxSphere();
+}
+
+TEST(NumericalUtilities, Ranges6) {
+    detail::testRanges<6>();
+}
+
+TEST(NumericalUtilities, Ranges3) {
+    detail::testRanges<3>();
+}
+
+TEST(NumericalUtilities, Ranges2) {
+    detail::testRanges<2>();
+}
+
+TEST(NumericalUtilities, Ranges1) {
+    detail::testRanges<1>();
 }

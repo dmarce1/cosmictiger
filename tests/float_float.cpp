@@ -16,6 +16,7 @@
 #include <type_traits>
 
 #include <boost/multiprecision/cpp_bin_float.hpp>
+#include <gtest/gtest.h>
 #if defined(__SSE__)
 #include <xmmintrin.h>
 #endif
@@ -303,26 +304,38 @@ void testUnderflow() {
 
 }    // namespace detail
 
-int main() {
-    try {
-        detail::require(std::fegetround() == FE_TONEAREST, "Tests require round to nearest");
-        detail::testConstructionAndComparison();
-        detail::testArithmetic();
-        detail::testRandomArithmetic();
-        detail::testMultiplyAdd();
-        detail::testSquareRoot();
+TEST(FloatFloat, ConstructionAndComparison) {
+    ASSERT_EQ(std::fegetround(), FE_TONEAREST);
+    detail::testConstructionAndComparison();
+}
+
+TEST(FloatFloat, Arithmetic) {
+    ASSERT_EQ(std::fegetround(), FE_TONEAREST);
+    detail::testArithmetic();
+}
+
+TEST(FloatFloat, RandomArithmetic) {
+    ASSERT_EQ(std::fegetround(), FE_TONEAREST);
+    detail::testRandomArithmetic();
+}
+
+TEST(FloatFloat, MultiplyAdd) {
+    ASSERT_EQ(std::fegetround(), FE_TONEAREST);
+    detail::testMultiplyAdd();
+}
+
+TEST(FloatFloat, SquareRoot) {
+    ASSERT_EQ(std::fegetround(), FE_TONEAREST);
+    detail::testSquareRoot();
+}
+
 #ifndef __FAST_MATH__
-        detail::testSpecialValues();
+TEST(FloatFloat, SpecialValues) {
+    detail::testSpecialValues();
+}
 #endif
-        std::puts("FloatFloat: normal-range arithmetic and sqrt passed in startup FP environment");
-        {
-            detail::FloatingEnvironment const environment;
-            detail::testUnderflow();
-        }
-        std::puts("FloatFloat: subnormal cases passed with gradual underflow enabled");
-        return 0;
-    } catch (std::exception const& error) {
-        std::fprintf(stderr, "FloatFloat test failed: %s\n", error.what());
-        return 1;
-    }
+
+TEST(FloatFloat, Underflow) {
+    detail::FloatingEnvironment const environment;
+    detail::testUnderflow();
 }

@@ -18,6 +18,7 @@
 #include <string>
 #include <vector>
 
+#include <gtest/gtest.h>
 #include <silo.h>
 
 #include <cosmictiger/geometry/distributed_voronoi.hpp>
@@ -489,18 +490,30 @@ void testRescaling() {
 
 }    // namespace detail
 
-int main() {
-    try {
-        detail::testClipping();
-        detail::testComputedCells();
-        detail::testRescaling();
-        detail::testPerturbedLatticeClipping();
-        detail::testEvolvedCell();
-        detail::testRoundedPeriodicFaces();
-        detail::testCancellingFaceArea();
-    } catch (std::exception const& error) {
-        std::fprintf(stderr, "Silo Voronoi test: %s\n", error.what());
-        return 1;
-    }
-    return 0;
+TEST(SiloVoronoi, Clipping) {
+    detail::testClipping();
+}
+
+TEST(SiloVoronoi, ComputedCells) {
+    detail::testComputedCells();
+}
+
+TEST(SiloVoronoi, Rescaling) {
+    detail::testRescaling();
+}
+
+TEST(SiloVoronoi, PerturbedLatticeClipping) {
+    detail::testPerturbedLatticeClipping();
+}
+
+TEST(SiloVoronoi, EvolvedCell) {
+    detail::testEvolvedCell();
+}
+
+TEST(SiloVoronoi, RoundedPeriodicFaces) {
+    detail::testRoundedPeriodicFaces();
+}
+
+TEST(SiloVoronoi, CancellingFaceArea) {
+    detail::testCancellingFaceArea();
 }

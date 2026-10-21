@@ -18,6 +18,8 @@
 #include <string>
 #include <vector>
 
+#include <gtest/gtest.h>
+
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/scenarios/rayleigh_taylor.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
@@ -212,19 +214,24 @@ void testUnresolvedLattice() {
 
 }    // namespace detail
 
-int main() {
-    try {
-        for (double acceleration : {0.0, 0.5, 1000.0}) {
-            detail::testInitialization(8, 96, acceleration);
-            detail::testInitialization(16, 2592, acceleration);
-            detail::testInitialization(32, 20736, acceleration);
-        }
-        detail::testUnresolvedLattice();
-        std::puts("Rayleigh-Taylor initialization regressions passed");
-    } catch (std::exception const& error) {
-        std::fprintf(
-            stderr, "Rayleigh-Taylor initialization regression failed: %s\n", error.what());
-        return 1;
+TEST(RayleighTaylor, Resolution8) {
+    for (double acceleration : {0.0, 0.5, 1000.0}) {
+        detail::testInitialization(8, 96, acceleration);
     }
-    return 0;
+}
+
+TEST(RayleighTaylor, Resolution16) {
+    for (double acceleration : {0.0, 0.5, 1000.0}) {
+        detail::testInitialization(16, 2592, acceleration);
+    }
+}
+
+TEST(RayleighTaylor, Resolution32) {
+    for (double acceleration : {0.0, 0.5, 1000.0}) {
+        detail::testInitialization(32, 20736, acceleration);
+    }
+}
+
+TEST(RayleighTaylor, UnresolvedLattice) {
+    detail::testUnresolvedLattice();
 }

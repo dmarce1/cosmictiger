@@ -312,15 +312,29 @@ separate gas and dark-matter point meshes, with gas thermodynamic fields.
 ## Regression checks
 
 ```sh
-ctest --test-dir build/release --output-on-failure
+ctest --test-dir build/release --output-on-failure --parallel 4
 ```
+
+C++ and CUDA correctness checks use GoogleTest, with each named case registered
+with CTest. CMake uses an installed GoogleTest package or fetches a pinned source
+revision when `BUILD_TESTING=ON`. For an offline build, pass
+`-DFETCHCONTENT_SOURCE_DIR_GOOGLETEST=/path/to/googletest` at configure time.
+Application checks selected by `--run.test` also report through GoogleTest in a
+testing build. Python integration runners stay registered directly with CTest;
+reference generators, plotting scripts, and benchmarks remain support tools.
+
+List cases with `ctest --test-dir build/release -N`, or select a family using its
+label, for example `ctest --test-dir build/release -L '^monaghan_sph$'`.
+Standalone executables also accept GoogleTest options such as
+`--gtest_filter=MonaghanSph.*` and `--gtest_list_tests`. GPU checks report a skip
+when no CUDA device or driver is available.
 
 The scalar SPH formulas, grouped options, checkpoint metadata, tracer selection,
 numerical utility, and compression regressions run on the CPU without initializing
 a GPU:
 
 ```sh
-ctest --test-dir build/release --output-on-failure -R '^(monaghan_sph$|grouped_options$|checkpoint_state_dm$|particle_selection|numerical_utilities|compression_)'
+ctest --test-dir build/release --output-on-failure -R '^(monaghan_sph\.|grouped_options$|checkpoint_state_dm$|particle_selection\.|numerical_utilities\.|compression\.)'
 ```
 
 The numerical utility and compression targets still require CUDA headers. The

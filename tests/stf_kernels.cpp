@@ -14,8 +14,9 @@
 #include <string>
 #include <vector>
 
-#include <cosmictiger/math/simd_math.hpp>
+#include <gtest/gtest.h>
 
+#include <cosmictiger/math/simd_math.hpp>
 #include "stf_kernel_test_helpers.hpp"
 
 namespace detail {
@@ -537,14 +538,15 @@ void testOrder() {
 
 }    // namespace detail
 
-int main() {
-    try {
-        detail::forEachFmmOrder([](auto order) { detail::testOrder<order.value>(); });
-        std::printf(
-            "STF kernel checks passed for FMM orders %d to %d.\n", kFmmMinOrder, kFmmMaxOrder);
-        return 0;
-    } catch (std::exception const& error) {
-        std::fprintf(stderr, "STF kernel test failed: %s\n", error.what());
-        return 1;
-    }
+class StfKernels : public ::testing::TestWithParam<int> {};
+
+TEST_P(StfKernels, SupportedOrder) {
+    detail::forEachFmmOrder([&](auto order) {
+        if (order.value == GetParam()) {
+            detail::testOrder<order.value>();
+        }
+    });
 }
+
+INSTANTIATE_TEST_SUITE_P(AllOrders, StfKernels, ::testing::Range(kFmmMinOrder, kFmmMaxOrder + 1),
+    [](::testing::TestParamInfo<int> const& info) { return "Order" + std::to_string(info.param); });

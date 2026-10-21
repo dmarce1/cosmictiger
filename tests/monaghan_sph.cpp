@@ -16,6 +16,8 @@
 #include <stdexcept>
 #include <string>
 
+#include <gtest/gtest.h>
+
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/sph/monaghan_sph.hpp>
 
@@ -348,19 +350,30 @@ void testVector3() {
 
 }    // namespace detail
 
-int main() {
-    try {
-        detail::testKernel<double>();
-        detail::testKernel<float>();
-        detail::testViscosity<double>();
-        detail::testViscosity<float>();
-        detail::testPairConservation();
-        detail::testPhysicalVelocitySplit();
-        detail::testVector3();
-        std::puts("Monaghan SPH formula regressions passed");
-    } catch (std::exception const& error) {
-        std::fprintf(stderr, "Monaghan SPH regression failed: %s\n", error.what());
-        return 1;
-    }
-    return 0;
+TEST(MonaghanSph, KernelDouble) {
+    detail::testKernel<double>();
+}
+
+TEST(MonaghanSph, KernelFloat) {
+    detail::testKernel<float>();
+}
+
+TEST(MonaghanSph, ViscosityDouble) {
+    detail::testViscosity<double>();
+}
+
+TEST(MonaghanSph, ViscosityFloat) {
+    detail::testViscosity<float>();
+}
+
+TEST(MonaghanSph, PairConservation) {
+    detail::testPairConservation();
+}
+
+TEST(MonaghanSph, PhysicalVelocitySplit) {
+    detail::testPhysicalVelocitySplit();
+}
+
+TEST(MonaghanSph, Vector3) {
+    detail::testVector3();
 }

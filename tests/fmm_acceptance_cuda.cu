@@ -17,6 +17,7 @@
 
 #include <cosmictiger/fmm/fmm_acceptance.hpp>
 #include <cosmictiger/math/range.hpp>
+#include "cuda_test.hpp"
 
 void cosmictigerAssert(char const* condition, bool value, char const* file, int line) {
     if (!value) {
@@ -382,23 +383,16 @@ void runBoxes() {
 
 }    // namespace detail
 
-int main() {
-    int deviceCount = 0;
-    cudaError_t const status = cudaGetDeviceCount(&deviceCount);
-    if (status == cudaErrorNoDevice || status == cudaErrorInsufficientDriver ||
-        (status == cudaSuccess && deviceCount == 0)) {
-        std::puts("No CUDA device is available; FMM acceptance device checks skipped.");
-        return 77;
-    }
-    try {
-        detail::checkCuda(status, "Find CUDA device");
-        detail::runAcceptance();
-        detail::runSelections();
-        detail::runBoxes();
-        std::puts("FMM acceptance CUDA parity passed.");
-    } catch (std::exception const& error) {
-        std::fprintf(stderr, "%s\n", error.what());
-        return 1;
-    }
-    return 0;
+using FmmAcceptanceCuda = detail::CudaTest;
+
+TEST_F(FmmAcceptanceCuda, AcceptanceMatchesHost) {
+    detail::runAcceptance();
+}
+
+TEST_F(FmmAcceptanceCuda, SelectionsMatchHost) {
+    detail::runSelections();
+}
+
+TEST_F(FmmAcceptanceCuda, PeriodicBoxDistancesMatchHost) {
+    detail::runBoxes();
 }

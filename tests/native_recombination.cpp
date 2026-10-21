@@ -8,6 +8,8 @@
 #include <limits>
 #include <stdexcept>
 
+#include <gtest/gtest.h>
+
 #include <cosmictiger/chemistry/primordial_eos.hpp>
 #include <cosmictiger/chemistry/recombination.hpp>
 #include <cosmictiger/cosmology/native_recombination.hpp>
@@ -22,7 +24,7 @@ bool isFinite(double value) {
 void require(bool condition, char const* label) {
     if (!condition) {
         std::fprintf(stderr, "%s\n", label);
-        std::exit(EXIT_FAILURE);
+        throw std::runtime_error(label);
     }
 }
 
@@ -32,7 +34,7 @@ void requireClose(double actual, double expected, double relativeTolerance,
     if (std::abs(actual - expected) >
         absoluteTolerance + relativeTolerance * std::max(std::abs(actual), std::abs(expected))) {
         std::fprintf(stderr, "%s: actual %.17g, expected %.17g\n", label, actual, expected);
-        std::exit(EXIT_FAILURE);
+        throw std::runtime_error(label);
     }
 }
 
@@ -323,22 +325,43 @@ void testBackgroundAdapter(
 
 }    // namespace detail
 
-int main() {
-    try {
-        CosmicParameters const cosmology = detail::fiducialCosmology();
-        auto const parameters = recombinationParameters(cosmology);
-        primordial::RecombinationHistory const history(parameters);
-        detail::testPhysicalLimits(history, parameters);
-        detail::testConvergence(history, parameters);
-        detail::testDomains(history, parameters);
-        detail::testNoHelium(parameters);
-        detail::testChemistryComposition(history);
-        detail::testBackgroundAdapter(history, cosmology);
-        std::printf("Native recombination checks passed: xe(z=1100)=%.9g, Tgas(z=50)=%.9g K\n",
-            history.electronFraction(1.0 / 1101.0), history.gasTemperature(1.0 / 51.0));
-    } catch (std::exception const& error) {
-        std::fprintf(stderr, "Native recombination test failed: %s\n", error.what());
-        return EXIT_FAILURE;
-    }
-    return EXIT_SUCCESS;
+TEST(NativeRecombination, PhysicalLimits) {
+    CosmicParameters const cosmology = detail::fiducialCosmology();
+    auto const parameters = recombinationParameters(cosmology);
+    primordial::RecombinationHistory const history(parameters);
+    detail::testPhysicalLimits(history, parameters);
+}
+
+TEST(NativeRecombination, Convergence) {
+    CosmicParameters const cosmology = detail::fiducialCosmology();
+    auto const parameters = recombinationParameters(cosmology);
+    primordial::RecombinationHistory const history(parameters);
+    detail::testConvergence(history, parameters);
+}
+
+TEST(NativeRecombination, Domains) {
+    CosmicParameters const cosmology = detail::fiducialCosmology();
+    auto const parameters = recombinationParameters(cosmology);
+    primordial::RecombinationHistory const history(parameters);
+    detail::testDomains(history, parameters);
+}
+
+TEST(NativeRecombination, NoHelium) {
+    CosmicParameters const cosmology = detail::fiducialCosmology();
+    auto const parameters = recombinationParameters(cosmology);
+    detail::testNoHelium(parameters);
+}
+
+TEST(NativeRecombination, ChemistryComposition) {
+    CosmicParameters const cosmology = detail::fiducialCosmology();
+    auto const parameters = recombinationParameters(cosmology);
+    primordial::RecombinationHistory const history(parameters);
+    detail::testChemistryComposition(history);
+}
+
+TEST(NativeRecombination, BackgroundAdapter) {
+    CosmicParameters const cosmology = detail::fiducialCosmology();
+    auto const parameters = recombinationParameters(cosmology);
+    primordial::RecombinationHistory const history(parameters);
+    detail::testBackgroundAdapter(history, cosmology);
 }

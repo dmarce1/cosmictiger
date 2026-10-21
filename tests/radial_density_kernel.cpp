@@ -4,6 +4,8 @@
 #include <numbers>
 #include <stdexcept>
 
+#include <gtest/gtest.h>
+
 #include <cosmictiger/math/radial_density_kernel.hpp>
 #if defined(RADIAL_KERNEL_TEST_SIMD)
 #include <cosmictiger/math/simd.hpp>
@@ -195,21 +197,34 @@ void testDimension() {
 
 }    // namespace detail
 
-int main() {
-    try {
-        detail::testDimension<1>();
-        detail::testDimension<2>();
-        detail::testDimension<3>();
-        detail::testDimension<4>();
-        detail::testDimension<5>();
-        detail::testDimension<6>();
-        detail::testDimension<7>();
-        detail::testDimension<20>();
-        std::puts("Arbitrary-dimensional density kernels passed shape, moment, derivative, float, "
-                  "and 3D parity checks.");
-    } catch (std::exception const& error) {
-        std::fprintf(stderr, "radial density kernel test failed: %s\n", error.what());
-        return 1;
-    }
-    return 0;
+TEST(RadialDensityKernel, Dimension1) {
+    detail::testDimension<1>();
+}
+
+TEST(RadialDensityKernel, Dimension2) {
+    detail::testDimension<2>();
+}
+
+TEST(RadialDensityKernel, Dimension3) {
+    detail::testDimension<3>();
+}
+
+TEST(RadialDensityKernel, Dimension4) {
+    detail::testDimension<4>();
+}
+
+TEST(RadialDensityKernel, Dimension5) {
+    detail::testDimension<5>();
+}
+
+TEST(RadialDensityKernel, Dimension6) {
+    detail::testDimension<6>();
+}
+
+TEST(RadialDensityKernel, Dimension7) {
+    detail::testDimension<7>();
+}
+
+TEST(RadialDensityKernel, Dimension20) {
+    detail::testDimension<20>();
 }

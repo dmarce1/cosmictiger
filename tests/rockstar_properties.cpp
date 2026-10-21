@@ -15,6 +15,8 @@
 #include <stdexcept>
 #include <vector>
 
+#include <gtest/gtest.h>
+
 #include <cosmictiger/analysis/rockstar_properties.hpp>
 
 namespace detail {
@@ -253,17 +255,22 @@ void testKlypinFit() {
 
 }    // namespace detail
 
-int main() {
-    try {
-        detail::testSphericalOverdensity();
-        detail::testVirialOverdensity();
-        detail::testEigenpairs();
-        detail::testNfwFits();
-        detail::testKlypinFit();
-        std::puts("ROCKSTAR property regressions passed");
-    } catch (std::exception const& exception) {
-        std::fprintf(stderr, "%s\n", exception.what());
-        return 1;
-    }
-    return 0;
+TEST(RockstarProperties, SphericalOverdensity) {
+    detail::testSphericalOverdensity();
+}
+
+TEST(RockstarProperties, VirialOverdensity) {
+    detail::testVirialOverdensity();
+}
+
+TEST(RockstarProperties, Eigenpairs) {
+    detail::testEigenpairs();
+}
+
+TEST(RockstarProperties, NfwFits) {
+    detail::testNfwFits();
+}
+
+TEST(RockstarProperties, KlypinFit) {
+    detail::testKlypinFit();
 }

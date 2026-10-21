@@ -20,6 +20,8 @@
 #include <string>
 #include <vector>
 
+#include <gtest/gtest.h>
+
 #include <cosmictiger/sph/sph_cpu.hpp>
 
 // The fixture owns ordinary host arrays and calls the production SIMD kernels.
@@ -1016,56 +1018,103 @@ void testRungPropagation() {
 
 }    // namespace detail
 
-int main() {
-    try {
-#if defined(__linux__) && defined(__GLIBC__)
+namespace detail {
+class SphCpuTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        captured_ = std::fegetenv(&savedEnvironment_) == 0;
+        ASSERT_TRUE(captured_);
         std::feclearexcept(FE_ALL_EXCEPT);
-        detail::require(feenableexcept(FE_DIVBYZERO | FE_INVALID | FE_OVERFLOW) != -1,
-            "enable floating-point traps for masked SIMD arithmetic");
+#if defined(__linux__) && defined(__GLIBC__)
+        ASSERT_NE(feenableexcept(FE_DIVBYZERO | FE_INVALID | FE_OVERFLOW), -1);
 #endif
         setKernelSelections(
             {radial_kernel::Family::Ferrers, 8}, {radial_kernel::Family::Spline, 3}, false);
-        detail::testPeriodicSupport();
-        detail::testPeriodicTailsAndOffsets();
-        detail::testActivity();
-        detail::testSupportRefresh();
-        detail::testRungPropagation();
-        detail::testLattice();
-        detail::testUnequalSupports();
-        detail::testZPlaneAcceleration();
-        detail::testDefaultTimestepCalibration();
-        detail::testDefaultThermalTimestep();
-        detail::testCompositionEos();
-        radial_kernel::KernelSpec const specifications[] = {
-            {radial_kernel::Family::Spline, 2},
-            {radial_kernel::Family::Spline, 3},
-            {radial_kernel::Family::Spline, 4},
-            {radial_kernel::Family::Spline, 5},
-            {radial_kernel::Family::Spline, 6},
-            {radial_kernel::Family::Spline, 7},
-            {radial_kernel::Family::Spline, 8},
-            {radial_kernel::Family::Spline, 9},
-            {radial_kernel::Family::Wendland, 2},
-            {radial_kernel::Family::Wendland, 5},
-            {radial_kernel::Family::Wendland, 8},
-            {radial_kernel::Family::Ferrers, 2},
-            {radial_kernel::Family::Ferrers, 4},
-            {radial_kernel::Family::Ferrers, 6},
-            {radial_kernel::Family::Ferrers, 8},
-        };
-        size_t const count = sizeof(specifications) / sizeof(specifications[0]);
-        for (size_t i = 0; i < count; i++) {
-            auto const hydro = specifications[i];
-            auto const gravity = specifications[count - i - 1];
-            setKernelSelections(gravity, hydro, false);
-            detail::testSelectedKernel();
-            detail::testSelectedCentralGravity();
-            detail::testFixedGravityTimestep();
-        }
-        std::puts("SPH SIMD CPU regressions passed");
-    } catch (std::exception const& error) {
-        std::fprintf(stderr, "SPH SIMD CPU regression failed: %s\n", error.what());
-        return 1;
     }
-    return 0;
+
+    void TearDown() override {
+        if (captured_) {
+            std::fesetenv(&savedEnvironment_);
+        }
+    }
+
+private:
+    std::fenv_t savedEnvironment_{};
+    bool captured_{};
+};
+}    // namespace detail
+
+using detail::SphCpuTest;
+
+TEST_F(SphCpuTest, PeriodicSupport) {
+    detail::testPeriodicSupport();
+}
+
+TEST_F(SphCpuTest, PeriodicTailsAndOffsets) {
+    detail::testPeriodicTailsAndOffsets();
+}
+
+TEST_F(SphCpuTest, Activity) {
+    detail::testActivity();
+}
+
+TEST_F(SphCpuTest, SupportRefresh) {
+    detail::testSupportRefresh();
+}
+
+TEST_F(SphCpuTest, RungPropagation) {
+    detail::testRungPropagation();
+}
+
+TEST_F(SphCpuTest, Lattice) {
+    detail::testLattice();
+}
+
+TEST_F(SphCpuTest, UnequalSupports) {
+    detail::testUnequalSupports();
+}
+
+TEST_F(SphCpuTest, ZPlaneAcceleration) {
+    detail::testZPlaneAcceleration();
+}
+
+TEST_F(SphCpuTest, DefaultTimestepCalibration) {
+    detail::testDefaultTimestepCalibration();
+}
+
+TEST_F(SphCpuTest, DefaultThermalTimestep) {
+    detail::testDefaultThermalTimestep();
+}
+
+TEST_F(SphCpuTest, CompositionEos) {
+    detail::testCompositionEos();
+}
+
+TEST_F(SphCpuTest, SelectedKernels) {
+    radial_kernel::KernelSpec const specifications[] = {
+        {radial_kernel::Family::Spline, 2},
+        {radial_kernel::Family::Spline, 3},
+        {radial_kernel::Family::Spline, 4},
+        {radial_kernel::Family::Spline, 5},
+        {radial_kernel::Family::Spline, 6},
+        {radial_kernel::Family::Spline, 7},
+        {radial_kernel::Family::Spline, 8},
+        {radial_kernel::Family::Spline, 9},
+        {radial_kernel::Family::Wendland, 2},
+        {radial_kernel::Family::Wendland, 5},
+        {radial_kernel::Family::Wendland, 8},
+        {radial_kernel::Family::Ferrers, 2},
+        {radial_kernel::Family::Ferrers, 4},
+        {radial_kernel::Family::Ferrers, 6},
+        {radial_kernel::Family::Ferrers, 8},
+    };
+    size_t const count = sizeof(specifications) / sizeof(specifications[0]);
+    for (size_t i = 0; i < count; i++) {
+        auto const hydro = specifications[i];
+        auto const gravity = specifications[count - i - 1];
+        setKernelSelections(gravity, hydro, false);
+        detail::testSelectedKernel();
+        detail::testSelectedCentralGravity();
+        detail::testFixedGravityTimestep();
+    }
 }

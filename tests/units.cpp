@@ -17,6 +17,8 @@
 #include <type_traits>
 #include <utility>
 
+#include <gtest/gtest.h>
+
 #include <cosmictiger/math/units.hpp>
 
 namespace detail {
@@ -279,18 +281,26 @@ void testValidationAndConstants() {
 
 }    // namespace detail
 
-int main() {
-    try {
-        detail::testFixedStorage();
-        detail::testInversePositionBounds();
-        detail::testAnalyticConversions();
-        detail::testCosmologicalConversions();
-        detail::testNeutralGasEnergy();
-        detail::testValidationAndConstants();
-    } catch (std::exception const& error) {
-        std::fprintf(stderr, "unit conversion test failed: %s\n", error.what());
-        return 1;
-    }
-    std::puts("unit conversion tests passed");
-    return 0;
+TEST(Units, FixedStorage) {
+    detail::testFixedStorage();
+}
+
+TEST(Units, InversePositionBounds) {
+    detail::testInversePositionBounds();
+}
+
+TEST(Units, AnalyticConversions) {
+    detail::testAnalyticConversions();
+}
+
+TEST(Units, CosmologicalConversions) {
+    detail::testCosmologicalConversions();
+}
+
+TEST(Units, NeutralGasEnergy) {
+    detail::testNeutralGasEnergy();
+}
+
+TEST(Units, ValidationAndConstants) {
+    detail::testValidationAndConstants();
 }

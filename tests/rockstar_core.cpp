@@ -7,6 +7,8 @@
 #include <stdexcept>
 #include <vector>
 
+#include <gtest/gtest.h>
+
 #include <cosmictiger/analysis/rockstar_core.hpp>
 
 namespace {
@@ -79,57 +81,51 @@ void checkConnectivity(std::vector<Particle> particles, float linkingLength) {
 }
 }    // namespace
 
-int main() {
-    try {
-        Box planar{{0, 0, 0, 0, 0, 0}, {1, 1, 0, 1, 1, 1}};
-        require(rockstar::detail::boxesOverlap(planar, planar, 6), "zero-width box rejected");
-        require(rockstar::detail::boxContains(planar, planar.end, 6), "closed upper face rejected");
-        require(rockstar::detail::initialLinkingLength(planar, 20, 6) > 0.0f,
-            "planar search radius did not advance");
-        Box point;
-        require(rockstar::detail::boxesOverlap(point, point, 6), "coincident points rejected");
-        require(rockstar::detail::initialLinkingLength(point, 20, 6) == 0.0f,
-            "coincident search should begin at zero distance");
-        Box separatedVelocity = planar;
-        separatedVelocity.begin[3] = 100.0f;
-        separatedVelocity.end[3] = 101.0f;
-        require(rockstar::detail::boxesOverlap(planar, separatedVelocity, 3),
-            "spatial boxes incorrectly culled by velocity");
-        require(!rockstar::detail::boxesOverlap(planar, separatedVelocity, 6),
-            "phase-space boxes ignored velocity separation");
-        require(rockstar::detail::boxContains(planar, separatedVelocity.begin, 3),
-            "spatial point incorrectly culled by velocity");
-        require(rockstar::detail::normalizationScale(0.0f) == 1.0f,
-            "zero dispersion creates singular normalization");
-        require(rockstar::detail::normalizationScale(4.0f) == 2.0f,
-            "nonzero dispersion normalization changed");
+TEST(RockstarCore, GeometryAndConnectivity) {
+    Box planar{{0, 0, 0, 0, 0, 0}, {1, 1, 0, 1, 1, 1}};
+    require(rockstar::detail::boxesOverlap(planar, planar, 6), "zero-width box rejected");
+    require(rockstar::detail::boxContains(planar, planar.end, 6), "closed upper face rejected");
+    require(rockstar::detail::initialLinkingLength(planar, 20, 6) > 0.0f,
+        "planar search radius did not advance");
+    Box point;
+    require(rockstar::detail::boxesOverlap(point, point, 6), "coincident points rejected");
+    require(rockstar::detail::initialLinkingLength(point, 20, 6) == 0.0f,
+        "coincident search should begin at zero distance");
+    Box separatedVelocity = planar;
+    separatedVelocity.begin[3] = 100.0f;
+    separatedVelocity.end[3] = 101.0f;
+    require(rockstar::detail::boxesOverlap(planar, separatedVelocity, 3),
+        "spatial boxes incorrectly culled by velocity");
+    require(!rockstar::detail::boxesOverlap(planar, separatedVelocity, 6),
+        "phase-space boxes ignored velocity separation");
+    require(rockstar::detail::boxContains(planar, separatedVelocity.begin, 3),
+        "spatial point incorrectly culled by velocity");
+    require(rockstar::detail::normalizationScale(0.0f) == 1.0f,
+        "zero dispersion creates singular normalization");
+    require(rockstar::detail::normalizationScale(4.0f) == 2.0f,
+        "nonzero dispersion normalization changed");
 
-        std::vector<Particle> laneRegression(16);
-        laneRegression[0].xValue[0] = 10.0f;
-        for (int i = 1; i < 16; i++) {
-            laneRegression[i].xValue[0] = 0.01f * i;
-        }
-        checkConnectivity(laneRegression, 1.0f);
-
-        std::vector<Particle> chain(67);
-        for (int i = 0; i < int(chain.size()); i++) {
-            chain[i].xValue[0] = i;
-        }
-        checkConnectivity(chain, 1.0f);
-        checkConnectivity(std::vector<Particle>(65), 0.0f);
-
-        std::mt19937 random(42);
-        std::uniform_real_distribution<float> coordinate(-1.0f, 1.0f);
-        std::vector<Particle> cloud(95);
-        for (auto& particle : cloud) {
-            for (auto& value : particle.xValue) {
-                value = coordinate(random);
-            }
-        }
-        checkConnectivity(cloud, 1.2f);
-        std::puts("ROCKSTAR core geometry and connectivity checks passed");
-    } catch (std::exception const& error) {
-        std::fprintf(stderr, "%s\n", error.what());
-        return 1;
+    std::vector<Particle> laneRegression(16);
+    laneRegression[0].xValue[0] = 10.0f;
+    for (int i = 1; i < 16; i++) {
+        laneRegression[i].xValue[0] = 0.01f * i;
     }
+    checkConnectivity(laneRegression, 1.0f);
+
+    std::vector<Particle> chain(67);
+    for (int i = 0; i < int(chain.size()); i++) {
+        chain[i].xValue[0] = i;
+    }
+    checkConnectivity(chain, 1.0f);
+    checkConnectivity(std::vector<Particle>(65), 0.0f);
+
+    std::mt19937 random(42);
+    std::uniform_real_distribution<float> coordinate(-1.0f, 1.0f);
+    std::vector<Particle> cloud(95);
+    for (auto& particle : cloud) {
+        for (auto& value : particle.xValue) {
+            value = coordinate(random);
+        }
+    }
+    checkConnectivity(cloud, 1.2f);
 }

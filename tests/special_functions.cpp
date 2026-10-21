@@ -8,6 +8,8 @@
 #include <limits>
 #include <vector>
 
+#include <gtest/gtest.h>
+
 #include <cosmictiger/math/simd_backend.hpp>
 #include <cosmictiger/math/special_functions.hpp>
 #include "special_functions_reference.hpp"
@@ -166,48 +168,88 @@ size_t checkFma(std::vector<FmaInput> const& inputs) {
 
 }    // namespace detail
 
-int main() {
-    try {
-        auto const phaseInputs = special_functions_test::phaseInputs();
-        auto const exponentialInputs = special_functions_test::exponentialInputs(false);
-        auto const exponentialBaseTwoInputs = special_functions_test::exponentialInputs(true);
-        auto const logarithmInputs = special_functions_test::logarithmInputs();
-        auto const errorInputs = special_functions_test::errorInputs();
-        auto const squareRootInputs = special_functions_test::squareRootInputs();
-        auto const powerInputs = special_functions_test::powerInputs();
-        auto const fusedMultiplyAddInputs = special_functions_test::fusedMultiplyAddInputs();
+TEST(SpecialFunctions, Sin) {
+    auto const inputs = special_functions_test::phaseInputs();
+    EXPECT_GT(detail::checkUnary("sin", special_functions_test::UnaryFunction::Sin, inputs,
+                  [](auto input) { return special_functions::sin(input); }),
+        0U);
+}
 
-        size_t checks = 0;
-        checks += detail::checkUnary("sin", special_functions_test::UnaryFunction::Sin, phaseInputs,
-            [](auto input) { return special_functions::sin(input); });
-        checks += detail::checkUnary("cos", special_functions_test::UnaryFunction::Cos, phaseInputs,
-            [](auto input) { return special_functions::cos(input); });
-        checks += detail::checkSincos(phaseInputs);
-        checks += detail::checkUnary("exp", special_functions_test::UnaryFunction::Exp,
-            exponentialInputs, [](auto input) { return special_functions::exp(input); });
-        checks += detail::checkUnary("exp2", special_functions_test::UnaryFunction::Exp2,
-            exponentialBaseTwoInputs, [](auto input) { return special_functions::exp2(input); });
-        checks += detail::checkUnary("log", special_functions_test::UnaryFunction::Log,
-            logarithmInputs, [](auto input) { return special_functions::log(input); });
-        checks += detail::checkUnary("log2", special_functions_test::UnaryFunction::Log2,
-            logarithmInputs, [](auto input) { return special_functions::log2(input); });
-        checks += detail::checkUnary("erf", special_functions_test::UnaryFunction::Erf, errorInputs,
-            [](auto input) { return special_functions::erf(input); });
-        checks += detail::checkUnary("erfc", special_functions_test::UnaryFunction::Erfc,
-            errorInputs, [](auto input) { return special_functions::erfc(input); });
-        checks += detail::checkErfcexp(errorInputs);
-        checks += detail::checkPow(powerInputs);
-        checks += detail::checkUnary("sqrt", special_functions_test::UnaryFunction::Sqrt,
-            squareRootInputs, [](auto input) { return special_functions::sqrt(input); });
-        checks += detail::checkUnary("rsqrt", special_functions_test::UnaryFunction::Rsqrt,
-            squareRootInputs, [](auto input) { return special_functions::rsqrt(input); });
-        checks += detail::checkFma(fusedMultiplyAddInputs);
+TEST(SpecialFunctions, Cos) {
+    auto const inputs = special_functions_test::phaseInputs();
+    EXPECT_GT(detail::checkUnary("cos", special_functions_test::UnaryFunction::Cos, inputs,
+                  [](auto input) { return special_functions::cos(input); }),
+        0U);
+}
 
-        std::printf(
-            "special function scalar and SIMD reference checks passed: %zu values\n", checks);
-        return 0;
-    } catch (std::exception const& error) {
-        std::fprintf(stderr, "special function reference test failed: %s\n", error.what());
-        return 1;
-    }
+TEST(SpecialFunctions, Exp) {
+    auto const inputs = special_functions_test::exponentialInputs(false);
+    EXPECT_GT(detail::checkUnary("exp", special_functions_test::UnaryFunction::Exp, inputs,
+                  [](auto input) { return special_functions::exp(input); }),
+        0U);
+}
+
+TEST(SpecialFunctions, Exp2) {
+    auto const inputs = special_functions_test::exponentialInputs(true);
+    EXPECT_GT(detail::checkUnary("exp2", special_functions_test::UnaryFunction::Exp2, inputs,
+                  [](auto input) { return special_functions::exp2(input); }),
+        0U);
+}
+
+TEST(SpecialFunctions, Log) {
+    auto const inputs = special_functions_test::logarithmInputs();
+    EXPECT_GT(detail::checkUnary("log", special_functions_test::UnaryFunction::Log, inputs,
+                  [](auto input) { return special_functions::log(input); }),
+        0U);
+}
+
+TEST(SpecialFunctions, Log2) {
+    auto const inputs = special_functions_test::logarithmInputs();
+    EXPECT_GT(detail::checkUnary("log2", special_functions_test::UnaryFunction::Log2, inputs,
+                  [](auto input) { return special_functions::log2(input); }),
+        0U);
+}
+
+TEST(SpecialFunctions, Erf) {
+    auto const inputs = special_functions_test::errorInputs();
+    EXPECT_GT(detail::checkUnary("erf", special_functions_test::UnaryFunction::Erf, inputs,
+                  [](auto input) { return special_functions::erf(input); }),
+        0U);
+}
+
+TEST(SpecialFunctions, Erfc) {
+    auto const inputs = special_functions_test::errorInputs();
+    EXPECT_GT(detail::checkUnary("erfc", special_functions_test::UnaryFunction::Erfc, inputs,
+                  [](auto input) { return special_functions::erfc(input); }),
+        0U);
+}
+
+TEST(SpecialFunctions, Sqrt) {
+    auto const inputs = special_functions_test::squareRootInputs();
+    EXPECT_GT(detail::checkUnary("sqrt", special_functions_test::UnaryFunction::Sqrt, inputs,
+                  [](auto input) { return special_functions::sqrt(input); }),
+        0U);
+}
+
+TEST(SpecialFunctions, Rsqrt) {
+    auto const inputs = special_functions_test::squareRootInputs();
+    EXPECT_GT(detail::checkUnary("rsqrt", special_functions_test::UnaryFunction::Rsqrt, inputs,
+                  [](auto input) { return special_functions::rsqrt(input); }),
+        0U);
+}
+
+TEST(SpecialFunctions, Sincos) {
+    EXPECT_GT(detail::checkSincos(special_functions_test::phaseInputs()), 0U);
+}
+
+TEST(SpecialFunctions, Erfcexp) {
+    EXPECT_GT(detail::checkErfcexp(special_functions_test::errorInputs()), 0U);
+}
+
+TEST(SpecialFunctions, Pow) {
+    EXPECT_GT(detail::checkPow(special_functions_test::powerInputs()), 0U);
+}
+
+TEST(SpecialFunctions, Fma) {
+    EXPECT_GT(detail::checkFma(special_functions_test::fusedMultiplyAddInputs()), 0U);
 }

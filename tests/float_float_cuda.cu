@@ -18,6 +18,7 @@
 #endif
 
 #include <cosmictiger/math/float_float.hpp>
+#include "cuda_test.hpp"
 
 namespace detail {
 
@@ -204,26 +205,19 @@ void run() {
 
 }    // namespace detail
 
-int main() {
+using FloatFloatCuda = detail::CudaTest;
+
+TEST_F(FloatFloatCuda, ArithmeticMatchesMultiprecisionReference) {
 #if defined(__SSE__)
     // Permit the independent host reference to read device subnormal results.
     // This does not change the CUDA kernel's arithmetic mode.
+    struct RestoreFloatingPointMode {
+        unsigned original = _mm_getcsr();
+        ~RestoreFloatingPointMode() {
+            _mm_setcsr(original);
+        }
+    } restoreMode;
     _mm_setcsr(_mm_getcsr() & ~unsigned(0x8040));
 #endif
-    int deviceCount = 0;
-    cudaError_t const status = cudaGetDeviceCount(&deviceCount);
-    if (status == cudaErrorNoDevice || status == cudaErrorInsufficientDriver ||
-        (status == cudaSuccess && deviceCount == 0)) {
-        std::puts("Skipping FloatFloat CUDA regression: no usable CUDA device");
-        return 77;
-    }
-    try {
-        detail::check(status);
-        detail::run();
-        std::puts("FloatFloat CUDA arithmetic matches the independent multiprecision reference");
-        return 0;
-    } catch (std::exception const& error) {
-        std::fprintf(stderr, "FloatFloat CUDA test failed: %s\n", error.what());
-        return 1;
-    }
+    detail::run();
 }

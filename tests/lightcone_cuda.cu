@@ -13,6 +13,7 @@
 #include <cuda_runtime.h>
 
 #include <cosmictiger/analysis/lightcone.hpp>
+#include "cuda_test.hpp"
 
 void cosmictigerAssert(char const* expression, bool condition, char const* file, int line) {
     if (!condition) {
@@ -141,12 +142,9 @@ struct Fixture {
 
 }    // namespace detail
 
-int main() {
-    int devices = 0;
-    if (cudaGetDeviceCount(&devices) != cudaSuccess || devices == 0) {
-        std::puts("No CUDA device available");
-        return 77;
-    }
+using LightconeCuda = detail::CudaTest;
+
+TEST_F(LightconeCuda, ConnectedComponentsMatchCpu) {
     try {
         auto* cpu = new (cudaAllocate(sizeof(detail::Fixture))) detail::Fixture;
         auto* gpu = new (cudaAllocate(sizeof(detail::Fixture))) detail::Fixture;
@@ -175,7 +173,6 @@ int main() {
         std::puts("CPU/CUDA lightcone parity passed (four blocks of 32 threads)");
     } catch (std::exception const& error) {
         std::fprintf(stderr, "%s\n", error.what());
-        return 1;
+        FAIL() << error.what();
     }
-    return 0;
 }

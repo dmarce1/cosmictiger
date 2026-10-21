@@ -31,6 +31,7 @@
 #include <cosmictiger/particles/particles.hpp>
 #include <cosmictiger/scenarios/cosmology.hpp>
 #include <cosmictiger/scenarios/plummer.hpp>
+#include <tests/application_test.hpp>
 #include <tests/test.hpp>
 
 constexpr bool kVerbose = true;
@@ -648,84 +649,50 @@ void groupsCatalogueTest();
 void groupsCatalogueDistributedTest();
 void analysisBackendsTest();
 
-void test(std::string test) {
-    if (test == "nativeChemistryInitialization") {
-        nativeChemistryInitializationTest();
-        return;
-    }
-    if (test == "analysisBackends") {
-        analysisBackendsTest();
-        return;
-    }
-    if (test == "rockstar") {
-        rockstarTest();
-        return;
-    }
-    if (test == "bhPotential") {
-        bhPotentialTest();
-        return;
-    }
-    if (test == "groupsCatalogueDistributed") {
-        groupsCatalogueDistributedTest();
-        return;
-    }
-    if (test == "groupsCatalogue") {
-        groupsCatalogueTest();
-        return;
-    }
+namespace detail {
+
+struct ApplicationTest {
+    char const* name;
+    void (*run)();
+};
+
+ApplicationTest const applicationTests[] = {
+    {"nativeChemistryInitialization", nativeChemistryInitializationTest},
+    {"analysisBackends", analysisBackendsTest},
+    {"rockstar", rockstarTest},
+    {"bhPotential", bhPotentialTest},
+    {"groupsCatalogueDistributed", groupsCatalogueDistributedTest},
+    {"groupsCatalogue", groupsCatalogueTest},
 #ifdef COSMICTIGER_STF_BENCHMARKS
-    if (test == "stfBenchmark") {
-        stfWalkBenchmark();
-        return;
-    }
+    {"stfBenchmark", stfWalkBenchmark},
 #endif
-    if (test == "linearGrowth") {
-        linearGrowthTest();
+    {"linearGrowth", linearGrowthTest},
+    {"fmmWalk", fmmWalkTest},
+    {"fmmTree", fmmTreeTest},
+    {"unitsOutput", unitsOutputTest},
+    {"voronoiOutput", voronoiOutputTest},
+    {"checkpointState", checkpointStateTest},
+    {"sphGravity", sphGravityTest},
+    {"domain", domainTest},
+    {"fft1", fft1Test},
+    {"fft2", fft2Test},
+    {"speed", speedTest},
+    {"buckets", bucketTest},
+    {"force", forceTest},
+    {"kick", kickTest},
+    {"tree", treeTest},
+    {"bh", bhTest},
+};
+
+}    // namespace detail
+
+void test(std::string name) {
+    for (auto const& entry : detail::applicationTests) {
+        if (name != entry.name) {
+            continue;
+        }
+        runApplicationTest(entry.name, entry.run);
         return;
     }
-    if (test == "fmmWalk") {
-        fmmWalkTest();
-        return;
-    }
-    if (test == "fmmTree") {
-        fmmTreeTest();
-        return;
-    }
-    if (test == "unitsOutput") {
-        unitsOutputTest();
-        return;
-    }
-    if (test == "voronoiOutput") {
-        voronoiOutputTest();
-        return;
-    }
-    if (test == "checkpointState") {
-        checkpointStateTest();
-        return;
-    }
-    if (test == "sphGravity") {
-        sphGravityTest();
-        return;
-    }
-    if (test == "domain") {
-        domainTest();
-    } else if (test == "fft1") {
-        fft1Test();
-    } else if (test == "fft2") {
-        fft2Test();
-    } else if (test == "speed") {
-        speedTest();
-    } else if (test == "buckets") {
-        bucketTest();
-    } else if (test == "force") {
-        forceTest();
-    } else if (test == "kick") {
-        kickTest();
-    } else if (test == "tree") {
-        treeTest();
-    } else if (test == "bh") {
-        bhTest();
-    } else {
-        THROW_ERROR("test %s is not known\n", test.c_str());
-    }
+    THROW_ERROR("test %s is not known\n", name.c_str());
 }

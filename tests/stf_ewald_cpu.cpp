@@ -14,6 +14,8 @@
 #include <stdexcept>
 #include <string>
 
+#include <gtest/gtest.h>
+
 #include <cosmictiger/core/assert.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/fmm/ewald_indices.hpp>
@@ -33,7 +35,7 @@ Vector<hpx::id_type> const& hpxChildren() {
 void cosmictigerAssert(char const* condition, bool satisfied, char const* file, int line) {
     if (!satisfied) {
         std::fprintf(stderr, "%s:%d: assertion \"%s\" failed\n", file, line, condition);
-        std::abort();
+        throw std::runtime_error("Regression check failed; see diagnostic above");
     }
 }
 
@@ -323,23 +325,13 @@ void checkOrder() {
 
 }    // namespace detail
 
-int main() {
-    try {
-        // The build's default order first, then every other supported order
-        // through re-filled tables.
-        detail::checkOrder<kFmmDefaultOrder>();
-        for (int order = kFmmMinOrder; order <= kFmmMaxOrder; ++order) {
-            if (order != kFmmDefaultOrder) {
-                fmmDispatch(order, [](auto selectedOrder) {
-                    detail::checkOrder<decltype(selectedOrder)::value>();
-                });
-            }
+TEST(StfEwaldCpu, DefaultAndAllOrders) {
+    // Start with the default order and then re-fill tables for every other order.
+    detail::checkOrder<kFmmDefaultOrder>();
+    for (int order = kFmmMinOrder; order <= kFmmMaxOrder; ++order) {
+        if (order != kFmmDefaultOrder) {
+            fmmDispatch(order,
+                [](auto selectedOrder) { detail::checkOrder<decltype(selectedOrder)::value>(); });
         }
-        std::puts("CPU Ewald initialization, independent periodic potential/gradient, cubic "
-                  "symmetry, and float derivatives passed.");
-        return 0;
-    } catch (std::exception const& error) {
-        std::fprintf(stderr, "CPU Ewald test failed: %s\n", error.what());
-        return 1;
     }
 }

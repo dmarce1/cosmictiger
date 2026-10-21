@@ -65,7 +65,7 @@ int hpx_main(int argc, char* argv[]) {
 
             // Help, invalid options and the metadata-only checkpoint test need no GPU.
             if (getOptions().run.test == "checkpointState" && !getOptions().hydro.enabled) {
-                checkpointStateTest();
+                test(getOptions().run.test);
                 stopMemuseDaemon();
                 daemonStarted = false;
                 return hpx::finalize();

@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+#include <gtest/gtest.h>
+
 #include <cosmictiger/cosmology/linear_power.hpp>
 
 namespace detail {
@@ -109,15 +111,14 @@ void testMatterTransfer() {
 
 }    // namespace detail
 
-int main() {
-    try {
-        detail::testInterpolation();
-        detail::testNormalization();
-        detail::testMatterTransfer();
-        std::puts("Linear power interpolation, normalization, and displacement tests passed");
-        return EXIT_SUCCESS;
-    } catch (std::exception const& error) {
-        std::fprintf(stderr, "%s\n", error.what());
-        return EXIT_FAILURE;
-    }
+TEST(LinearPower, Interpolation) {
+    detail::testInterpolation();
+}
+
+TEST(LinearPower, Normalization) {
+    detail::testNormalization();
+}
+
+TEST(LinearPower, MatterTransfer) {
+    detail::testMatterTransfer();
 }

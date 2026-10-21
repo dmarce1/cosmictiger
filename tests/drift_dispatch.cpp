@@ -15,6 +15,7 @@
 #include <utility>
 #include <vector>
 
+#include <gtest/gtest.h>
 #include <hpx/hpx_init.hpp>
 
 #include <cosmictiger/analysis/lightcone_entry.hpp>
@@ -233,26 +234,39 @@ void particlesMemadviseCpu() {
     throw std::runtime_error("CPU dispatch requested CUDA managed-memory advice");
 }
 
+TEST(DriftDispatch, SmallRange) {
+    detail::checkDispatch(37, -1, false);
+}
+
+TEST(DriftDispatch, WorkerChunks) {
+    detail::checkDispatch(9007, -1, false);
+    detail::checkDispatch(9007, 1, false);
+}
+
+TEST(DriftDispatch, Drag) {
+    detail::checkDispatch(9007, -1, true);
+    detail::checkDispatch(9007, 1, true);
+}
+
+TEST(DriftDispatch, EmptyRanges) {
+    detail::checkEmptyRanges();
+}
+
+TEST(DriftDispatch, Lightcone) {
+    detail::checkLightcone();
+}
+
 int hpx_main(int, char*[]) {
-    int status = 0;
-    try {
-        detail::checkDispatch(37, -1, false);
-        detail::checkDispatch(9007, -1, false);
-        detail::checkDispatch(9007, 1, false);
-        detail::checkDispatch(9007, -1, true);
-        detail::checkDispatch(9007, 1, true);
-        detail::checkEmptyRanges();
-        detail::checkLightcone();
-        std::puts("CPU drift dispatch tests passed");
-    } catch (std::exception const& error) {
-        std::fprintf(stderr, "CPU drift dispatch test failed: %s\n", error.what());
-        status = 1;
-    }
+    int const status = RUN_ALL_TESTS();
     hpx::finalize();
     return status;
 }
 
 int main(int argc, char* argv[]) {
+    ::testing::InitGoogleTest(&argc, argv);
+    if (GTEST_FLAG_GET(list_tests)) {
+        return RUN_ALL_TESTS();
+    }
     std::vector<std::string> configuration = {"hpx.os_threads=2", "hpx.stacks.small_size=524288"};
 #ifdef HPX_EARLY
     return hpx::init(argc, argv, configuration);
