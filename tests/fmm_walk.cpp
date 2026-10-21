@@ -13,6 +13,7 @@
 #include <stdexcept>
 #include <string>
 
+#include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/fmm/fmm_acceptance.hpp>
@@ -403,6 +404,7 @@ ForceVectors fmmWalkInteractionReference(
         reference.phi[j] = particlesMass(i) * selfPhi() / support;
     }
     Vector<TreeId> const sources{source};
+    FlopCount const beforeFlops = readFlops();
     if (interaction == FmmInteraction::ParticleCell) {
         fmmDispatch([&](auto order) { cpuGravityPc<order.value>(reference, true, sink, sources); });
     } else if (interaction == FmmInteraction::CellParticle ||
@@ -432,6 +434,11 @@ ForceVectors fmmWalkInteractionReference(
     } else if (interaction == FmmInteraction::ParticleParticle) {
         cpuGravityPp(reference, true, sink, sources, support);
     }
+    if constexpr (kCountFlops) {
+        if (readFlops() <= beforeFlops) {
+            throw std::runtime_error("CPU gravity interaction did not submit its FLOP count");
+        }
+    }
     return reference;
 }
 
@@ -443,7 +450,15 @@ ForceVectors fmmWalkApplyInteraction(TreeId sink, TreeId source, float support, 
     local.zero();
     auto params = fmmWalkParameters(useCuda);
     params.gravitySupportRadius = support;
+    FlopCount const beforeFlops = useCuda ? getGpuFlops() : readFlops();
     kick(params, local, position, sink, Vector<TreeId>{source}, Vector<TreeId>{}, nullptr);
+    if constexpr (kCountFlops) {
+        FlopCount const afterFlops = useCuda ? getGpuFlops() : readFlops();
+        if (afterFlops <= beforeFlops) {
+            throw std::runtime_error(useCuda ? "CUDA gravity walk did not submit its FLOP count" :
+                                               "CPU gravity walk did not submit its FLOP count");
+        }
+    }
     ForceVectors result(range.second - range.first);
     for (ParticleInteger i = range.first; i < range.second; i++) {
         auto const j = i - range.first;

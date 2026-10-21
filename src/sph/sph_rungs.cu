@@ -31,7 +31,7 @@ __global__ void sphCudaRungs(
     }
     __syncthreads();
     new (&workspace) detail::RungsWorkspace();
-    int floatingPointOperations = 0;
+    FlopCounter<> flops = 0;
     Array<Fixed32, NDIM> position;
     int changes = 0;
     while (targetNodeIndex < data.numberOfTargetNodes) {
@@ -62,11 +62,11 @@ __global__ void sphCudaRungs(
                         position[XDIM] = data.sourcePositionX[sourceParticleIndex];
                         position[YDIM] = data.sourcePositionY[sourceParticleIndex];
                         position[ZDIM] = data.sourcePositionZ[sourceParticleIndex];
-                        if (targetNode.outerBox.contains(position)) {
+                        if (targetNode.outerBox.contains(position, &flops)) {
                             contains = true;
                         } else {
                             contains = sphSupportIntersects(targetNode.innerBox, position,
-                                data.sourceSupportRadius[sourceParticleIndex]);
+                                data.sourceSupportRadius[sourceParticleIndex], &flops);
                         }
                     }
                 }
@@ -104,6 +104,7 @@ __global__ void sphCudaRungs(
                     data.sinkThermodynamicStates[sinkIndex].supportRadius;
                 int const sinkRung = data.sourceRungs[particleIndex];
                 auto const squaredSinkSupportRadius = sqr(sinkSupportRadius);
+                flops += 1;
                 int const roundedNeighborEnd = roundUp(workspace.positionX.size(), blockSize);
                 int maximumNeighborRung = 0;
                 for (int neighborIndex = threadIndex; neighborIndex < roundedNeighborEnd;
@@ -125,7 +126,7 @@ __global__ void sphCudaRungs(
                                                     sqr(workspace.supportRadius[neighborIndex]))) {
                             maximumNeighborRung = max(maximumNeighborRung, neighborRung);
                         }
-                        floatingPointOperations += 9;
+                        flops += 9;
                     }
                 }
                 sharedReduceMax<RUNGS_BLOCK_SIZE>(maximumNeighborRung);
@@ -138,16 +139,14 @@ __global__ void sphCudaRungs(
                 }
             }
         }
-        sharedReduceAdd<int, RUNGS_BLOCK_SIZE>(floatingPointOperations);
         if (threadIndex == 0) {
             targetNodeIndex = atomicAdd(&reduction->nextNodeIndex, 1);
-            atomicAdd(&reduction->floatingPointOperations, floatingPointOperations);
         }
-        floatingPointOperations = 0;
         __syncthreads();
     }
     if (threadIndex == 0) {
         atomicAdd(&reduction->pendingChanges, changes);
     }
+    detail::recordSphGpuFlops(flops, reduction);
     (&workspace)->~RungsWorkspace();
 }

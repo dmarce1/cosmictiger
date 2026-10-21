@@ -15,6 +15,7 @@
 #include <unordered_map>
 
 #define SPH_PARTICLES_CPP
+#include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/sph/sph.hpp>
 #include <cosmictiger/sph/sph_chemistry.hpp>
@@ -175,10 +176,12 @@ void sphParticlesApplyUpdates(int minimumRung, int phase, float timeStepScale, f
                     (size_t) threadIndex * sphParticlesSize() / numberOfThreads;
                 ParticleInteger const rangeEnd =
                     (size_t) (threadIndex + 1) * sphParticlesSize() / numberOfThreads;
+                FlopCounter<> flops;
                 for (int gasIndex = rangeBegin; gasIndex < rangeEnd; gasIndex++) {
                     ParticleInteger const gravityIndex = sphParticlesParticleIndex(gasIndex);
                     auto const rung = sphParticlesRung(gasIndex);
                     float const halfTimeStep = 0.5f * timeStepScale / (1 << rung);
+                    flops += 2;
                     // Each active particle gets two half-kicks per step: one closes the step
                     // that just drifted, one opens the next. Hydro rates depend on the
                     // velocities and energies they update, so the closing half-kick is first
@@ -189,6 +192,7 @@ void sphParticlesApplyUpdates(int minimumRung, int phase, float timeStepScale, f
                         // so the hydro run sees velocities and energies at the end of the
                         // drift. Save those rates so phase 1 can take this kick back out.
                         if (rung >= minimumRung) {
+                            flops += 2 * NDIM + 2;
                             for (int dimension = 0; dimension < NDIM; dimension++) {
                                 sphParticlesPredictedAcceleration(dimension, gasIndex) =
                                     sphParticlesAcceleration(dimension, gasIndex);
@@ -212,6 +216,7 @@ void sphParticlesApplyUpdates(int minimumRung, int phase, float timeStepScale, f
                         // energy after either step is reported before the assertion fires.
                         // Particles are now synchronized for the energy diagnostics.
                         if (rung >= minimumRung) {
+                            flops += 3 * NDIM + 4;
                             for (int dimension = 0; dimension < NDIM; dimension++) {
                                 particlesVel(dimension, gravityIndex) +=
                                     (sphParticlesAcceleration(dimension, gasIndex) -
@@ -239,6 +244,7 @@ void sphParticlesApplyUpdates(int minimumRung, int phase, float timeStepScale, f
                         // the next step with the synchronized rates and the new rung's
                         // half-step, ahead of the drift. The next step's phase 0 closes it.
                         if (rung >= minimumRung) {
+                            flops += 2 * NDIM + 2;
                             for (int dimension = 0; dimension < NDIM; dimension++) {
                                 particlesVel(dimension, gravityIndex) +=
                                     sphParticlesAcceleration(dimension, gasIndex) * halfTimeStep;
@@ -250,6 +256,7 @@ void sphParticlesApplyUpdates(int minimumRung, int phase, float timeStepScale, f
                         }
                     }
                 }
+                addCpuFlops(flops);
             }));
     }
     for (auto& future : futures) {

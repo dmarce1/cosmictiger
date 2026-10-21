@@ -5,6 +5,7 @@
 #include <stdexcept>
 
 #include <cosmictiger/core/driver.hpp>
+#include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/terminal.hpp>
@@ -132,8 +133,10 @@ void runFixedScenario() {
             if (fullEvaluation) {
                 viewOutputViews(state.step, 1.0);
             }
+            resetFlops();
             auto const result = advanceForces(minimumRung, 1.0, 0.0, state.tau, baseTimestep,
                 baseOptions.gravity.openingAngle, state.iter == 0, fullEvaluation, state.energies);
+            double const flops = flopsPerSecond();
             state.maxRung = std::max(int(result.first.maxRung), baseOptions.run.minRung);
             if (state.iter == 0) {
                 state.energy0 = state.energies.kin + state.energies.therm + state.energies.pot;
@@ -174,13 +177,17 @@ void runFixedScenario() {
                 runtime.stop();
                 double const displayedRuntime = restoredRuntime + runtime.read();
                 runtime.start();
-                if (progressRows % 25 == 0) {
-                    PRINT("\n%8s %13s %13s %7s %13s %10s %10s\n", "Step", "Time", "dt", "Done %",
-                        "Rung(min/max)", "Wall[s]", "Step[s]");
+                if (progressRows == 0) {
+                    PRINT("  TFLOP/s estimates counted gravity and SPH work during force advancement; "
+                          "chemistry is excluded.\n");
                 }
-                PRINT("%8i %13.6e %13.6e %7.2f %6i/%-6i %10.2f %10.3f\n", state.iter, state.tau,
-                    timestep, std::clamp(100.0 * state.tau / duration, 0.0, 100.0), minimumRung,
-                    state.maxRung, displayedRuntime, stepTimer.read());
+                if (progressRows % 25 == 0) {
+                    PRINT("\n%8s %13s %13s %7s %13s %10s %10s %10s\n", "Step", "Time", "dt",
+                        "Done %", "Rung(min/max)", "Wall[s]", "Step[s]", "TFLOP/s");
+                }
+                PRINT("%8i %13.6e %13.6e %7.2f %6i/%-6i %10.2f %10.3f %10.3e\n", state.iter,
+                    state.tau, timestep, std::clamp(100.0 * state.tau / duration, 0.0, 100.0),
+                    minimumRung, state.maxRung, displayedRuntime, stepTimer.read(), flops * 1e-12);
                 progressRows++;
             }
         }

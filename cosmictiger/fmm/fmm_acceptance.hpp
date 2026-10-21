@@ -8,7 +8,9 @@
 #pragma once
 
 #include <cmath>
+#include <type_traits>
 
+#include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/cuda/cuda.hpp>
 #include <cosmictiger/math/simd_math.hpp>
 
@@ -64,7 +66,8 @@ CUDA_EXPORT inline T fmmPairSupportRadius(
 template <class T>
 CUDA_EXPORT inline FmmAcceptance<T> computeFmmAcceptance(T const& centerDistanceSquared,
     T const& sinkRadius, T const& sourceRadius, T const& sinkBoxToSourceCenterSquared,
-    T const& sourceBoxToSinkCenterSquared, T const& pairSupportRadius, T const& inverseTheta) {
+    T const& sourceBoxToSinkCenterSquared, T const& pairSupportRadius, T const& inverseTheta,
+    FlopCount* operationCount = nullptr) {
     T const radiusSum = sinkRadius + sourceRadius;
     T const supportDistance = radiusSum + pairSupportRadius;
     auto const centerSupportSeparated = centerDistanceSquared > supportDistance * supportDistance;
@@ -82,12 +85,21 @@ CUDA_EXPORT inline FmmAcceptance<T> computeFmmAcceptance(T const& centerDistance
     T const cellParticleDistance = simdFma(inverseTheta, sinkRadius, sourceRadius);
     T const sourceOpeningRadius = sourceRadius * inverseTheta;
     T const sinkOpeningRadius = sinkRadius * inverseTheta;
-    auto const particleCellGeometry =
-        (centerDistanceSquared > particleCellDistance * particleCellDistance) ||
+    auto const particleCellNear =
+        centerDistanceSquared > particleCellDistance * particleCellDistance;
+    auto const cellParticleNear =
+        centerDistanceSquared > cellParticleDistance * cellParticleDistance;
+    auto const particleCellGeometry = particleCellNear ||
         (sinkBoxToSourceCenterSquared > sourceOpeningRadius * sourceOpeningRadius);
     auto const cellParticleGeometry =
-        (centerDistanceSquared > cellParticleDistance * cellParticleDistance) ||
-        (sourceBoxToSinkCenterSquared > sinkOpeningRadius * sinkOpeningRadius);
+        cellParticleNear || (sourceBoxToSinkCenterSquared > sinkOpeningRadius * sinkOpeningRadius);
+    if (operationCount != nullptr) {
+        if constexpr (std::is_arithmetic_v<T>) {
+            *operationCount = 17 + int(!particleCellNear) + int(!cellParticleNear);
+        } else {
+            *operationCount = 19 * T::size();
+        }
+    }
 
     return {(centerDistanceSquared > cellCellDistance * cellCellDistance) && centerSupportSeparated,
         particleCellGeometry && supportSeparated, cellParticleGeometry && supportSeparated,

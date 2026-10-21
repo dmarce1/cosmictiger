@@ -11,6 +11,7 @@
 
 #include <cosmictiger/math/simd_math.hpp>
 #include <cosmictiger/math/vector3.hpp>
+#include <cosmictiger/sph/sph_flops.hpp>
 #include <cosmictiger/sph/sph_kernel.hpp>
 
 // Each invocation owns one target leaf. Sources remain immutable for the entire
@@ -30,13 +31,13 @@ SphRunReturn sphCpuRungs(
 namespace detail {
 
 inline std::vector<int> sphCpuNeighbors(SphRunData const& data, SphTreeNode const& targetNode,
-    bool symmetric, bool activeOnly = false, int minimumRung = 0) {
+    bool symmetric, FlopCounter<>& flops, bool activeOnly = false, int minimumRung = 0) {
     std::vector<int> neighbors;
     for (int nodeIndex = targetNode.neighborRange.first;
-        nodeIndex < targetNode.neighborRange.second; nodeIndex++) {
+         nodeIndex < targetNode.neighborRange.second; nodeIndex++) {
         auto const& neighborNode = data.treeNodes[data.neighborNodeIndices[nodeIndex]];
         for (int sourceIndex = neighborNode.particleRange.first;
-            sourceIndex < neighborNode.particleRange.second; sourceIndex++) {
+             sourceIndex < neighborNode.particleRange.second; sourceIndex++) {
             if (activeOnly && data.sourceRungs[sourceIndex] < minimumRung) {
                 continue;
             }
@@ -44,10 +45,10 @@ inline std::vector<int> sphCpuNeighbors(SphRunData const& data, SphTreeNode cons
             position[XDIM] = data.sourcePositionX[sourceIndex];
             position[YDIM] = data.sourcePositionY[sourceIndex];
             position[ZDIM] = data.sourcePositionZ[sourceIndex];
-            if (targetNode.outerBox.contains(position) ||
+            if (targetNode.outerBox.contains(position, &flops) ||
                 (symmetric &&
-                    sphSupportIntersects(
-                        targetNode.innerBox, position, data.sourceSupportRadius[sourceIndex]))) {
+                    sphSupportIntersects(targetNode.innerBox, position,
+                        data.sourceSupportRadius[sourceIndex], &flops))) {
                 neighbors.push_back(sourceIndex);
             }
         }

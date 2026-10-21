@@ -1073,13 +1073,10 @@ ParticleInteger particlesSort(Pair<ParticleInteger> rng, double xm, int xdim) {
     auto& x = particlesX[XDIM];
     auto& y = particlesX[YDIM];
     auto& z = particlesX[ZDIM];
-    int flops = 0;
     while (lo < hi) {
-        flops++;
         if (xptrDim[lo] >= xmid) {
             while (lo != hi) {
                 hi--;
-                flops++;
                 if (xptrDim[hi] < xmid) {
                     std::swap(x[hi], x[lo]);
                     std::swap(y[hi], y[lo]);
@@ -1103,8 +1100,10 @@ ParticleInteger particlesSort(Pair<ParticleInteger> rng, double xm, int xdim) {
         }
         lo++;
     }
+    // The partition itself uses integer coordinates; only constructing xmid
+    // performs floating-point arithmetic.
+    addCpuFlops(1);
     return hi;
-    addCpuFlops(flops);
 }
 
 Pair<ParticleInteger, ParticleInteger> particlesCurrentRange() {

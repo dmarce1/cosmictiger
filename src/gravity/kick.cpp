@@ -12,6 +12,7 @@
 #include <stack>
 #include <utility>
 
+#include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/fmm/fmm_order.hpp>
@@ -49,6 +50,7 @@ double kickBackgroundSecondMoment(Array<Fixed32, NDIM> center) {
     for (auto& child : children) {
         secondMoment += child.get();
     }
+    addCpuFlops(FlopCount(range.second - range.first) * 17 + children.size());
     return secondMoment;
 }
 }    // namespace detail

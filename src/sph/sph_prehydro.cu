@@ -29,6 +29,7 @@ struct DensityWorkspace {
 
 __global__ void sphCudaPrehydro1(
     SphRunParameters parameters, SphRunCudaData data, SphReduction* reduction) {
+    FlopCounter<> flops = 0;
     int const threadIndex = threadIdx.x;
     int const blockSize = blockDim.x;
     __shared__ int targetNodeIndex;
@@ -55,7 +56,7 @@ __global__ void sphCudaPrehydro1(
                     position[XDIM] = data.sourcePositionX[sourceParticleIndex];
                     position[YDIM] = data.sourcePositionY[sourceParticleIndex];
                     position[ZDIM] = data.sourcePositionZ[sourceParticleIndex];
-                    contains = targetNode.outerBox.contains(position);
+                    contains = targetNode.outerBox.contains(position, &flops);
                 }
                 int slot = contains;
                 int total;
@@ -84,7 +85,8 @@ __global__ void sphCudaPrehydro1(
                 float& supportRadius = data.sinkThermodynamicStates[sinkIndex].supportRadius;
                 bool const converged = solveSphSupportRadius<PREHYDRO1_BLOCK_SIZE>(supportRadius,
                     parameters.minimumSupportRadius, parameters.maximumSupportRadius,
-                    data.targetNeighborCount, workspace.positions, position, targetNode.outerBox);
+                    data.targetNeighborCount, workspace.positions, position, targetNode.outerBox,
+                    flops);
                 if (threadIndex == 0) {
                     data.sinkSmoothingConverged[sinkIndex] = converged;
                     if (converged) {
@@ -102,11 +104,13 @@ __global__ void sphCudaPrehydro1(
         }
         __syncthreads();
     }
+    detail::recordSphGpuFlops(flops, reduction);
     (&workspace)->~SmoothingWorkspace();
 }
 
 __global__ void sphCudaPrehydro2(
     SphRunParameters parameters, SphRunCudaData data, SphReduction* reduction) {
+    FlopCounter<> flops = 0;
     int const threadIndex = threadIdx.x;
     int const blockSize = blockDim.x;
     __shared__ int targetNodeIndex;
@@ -134,10 +138,10 @@ __global__ void sphCudaPrehydro2(
                     position[XDIM] = data.sourcePositionX[sourceParticleIndex];
                     position[YDIM] = data.sourcePositionY[sourceParticleIndex];
                     position[ZDIM] = data.sourcePositionZ[sourceParticleIndex];
-                    contains = targetNode.outerBox.contains(position);
+                    contains = targetNode.outerBox.contains(position, &flops);
                     if (!contains) {
                         contains = sphSupportIntersects(targetNode.innerBox, position,
-                            data.sourceSupportRadius[sourceParticleIndex]);
+                            data.sourceSupportRadius[sourceParticleIndex], &flops);
                     }
                 }
                 int slot = contains;
@@ -178,6 +182,7 @@ __global__ void sphCudaPrehydro2(
                         float const separationX = distance(position[XDIM], neighbor.positionX);
                         float const separationY = distance(position[YDIM], neighbor.positionY);
                         float const separationZ = distance(position[ZDIM], neighbor.positionZ);
+                        flops += 10;    // Three fixed distances, squared norm, two supports.
                         if (sqr(separationX, separationY, separationZ) <
                             fmaxf(sqr(supportRadius), sqr(particle.supportRadius))) {
                             semiactive++;
@@ -196,7 +201,8 @@ __global__ void sphCudaPrehydro2(
             if (!active && !data.sinkSmoothingConverged[sinkIndex]) {
                 converged = solveSphSupportRadius<PREHYDRO2_BLOCK_SIZE>(supportRadius,
                     parameters.minimumSupportRadius, parameters.maximumSupportRadius,
-                    data.targetNeighborCount, workspace.positions, position, targetNode.outerBox);
+                    data.targetNeighborCount, workspace.positions, position, targetNode.outerBox,
+                    flops);
             }
             if (!converged) {
                 if (threadIndex == 0) {
@@ -213,6 +219,7 @@ __global__ void sphCudaPrehydro2(
             float const H_a = supportRadius;
             float const one_over_H_a = 1.0f / H_a;
             float const m_b_over_H_a3 = data.gasMass * one_over_H_a * one_over_H_a * one_over_H_a;
+            flops += 4;    // Reciprocal support and the mass/support-cubed scale.
             float ρ_a = 0.0f;
             for (int neighborIndex = threadIndex; neighborIndex < workspace.positions.size();
                 neighborIndex += blockSize) {
@@ -222,8 +229,10 @@ __global__ void sphCudaPrehydro2(
                     distance(position[ZDIM], neighbor.positionZ));
                 float const q_ab = sqrtf(r_ab.dot(r_ab)) * one_over_H_a;    // r_ab/H_a
                 ρ_a += m_b_over_H_a3 * kernelW(q_ab);
+                flops += 12 + sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab);
             }
             sharedReduceAdd<float, PREHYDRO2_BLOCK_SIZE>(ρ_a);
+            flops += detail::sphReductionFlops<PREHYDRO2_BLOCK_SIZE>();
             // NOLINTEND(readability-identifier-naming)
             if (threadIndex == 0) {
                 ALWAYS_ASSERT(H_a > 0.0f && ρ_a > 0.0f);
@@ -239,5 +248,6 @@ __global__ void sphCudaPrehydro2(
         }
         __syncthreads();
     }
+    detail::recordSphGpuFlops(flops, reduction);
     (&workspace)->~DensityWorkspace();
 }

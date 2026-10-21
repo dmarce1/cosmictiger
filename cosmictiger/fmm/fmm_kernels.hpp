@@ -69,7 +69,7 @@ CUDA_EXPORT int greensFunction(
     local = simdBroadcast<Real>(0);
     detail::stf::P2lKernel<degree>::add(local, simdBroadcast<Real>(1), position[0] * inverseRadius,
         position[1] * inverseRadius, position[2] * inverseRadius, inverseRadius, inverseRadius);
-    return detail::stf::P2lKernel<degree>::kFlops_ + 14;
+    return detail::stf::P2lKernel<degree>::kFlops_ + 10 + 3 * int(scale);
 }
 
 // Direct M2L uses the imported partial-contraction kernel, avoiding the
@@ -90,7 +90,7 @@ CUDA_EXPORT int m2LDirect(StfTensor<Real, localDegree, true>& local,
     if (!doPhi) {
         local[0] = oldPotential;
     }
-    return detail::stf::M2lKernel<localDegree, centered>::kFlops_ + 14;
+    return detail::stf::M2lKernel<localDegree, centered>::kFlops_ + 13;
 }
 
 template <class Real, int sourceDegree, bool centered = false>
@@ -109,7 +109,7 @@ CUDA_EXPORT int m2P(Expansion2<Real>& local, StfTensor<Real, sourceDegree> const
     local(1, 0, 0) -= field[1];
     local(0, 1, 0) -= field[2];
     local(0, 0, 1) -= field[3];
-    return detail::stf::M2pKernel<sourceDegree, centered>::kFlops_ + 18;
+    return detail::stf::M2pKernel<sourceDegree, centered>::kFlops_ + 16 + int(doPhi);
 }
 
 // Ewald is evaluated on the nearest-image branch. Harmonicize it using the
@@ -142,7 +142,7 @@ CUDA_EXPORT int ewaldGreensFunction(StfTensor<Real, degree, true>& local,
     local(2, 0, 0) += coefficient * simdBroadcast<Real>(SCALE_FACTOR_INV3);
     local(0, 2, 0) += coefficient * simdBroadcast<Real>(SCALE_FACTOR_INV3);
     local[StfTensor<Real, degree, true>::kCount_] = simdBroadcast<Real>(0);
-    return flops + 25;
+    return flops + 22;
 }
 
 template <class Real, int degree>

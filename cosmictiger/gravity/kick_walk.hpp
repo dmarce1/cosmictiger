@@ -150,7 +150,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
     constexpr int kLocalDegree = FmmOrder<order>::kLocalDegree_;
     // The buffer travels with the work item; the view aliases its leading coefficients.
     Expansion& expansion = l.template expansion<order>();
-    FlopCounter<int> flops = 0;
+    FlopCounter<FlopCount> flops = 0;
     if (self.proc == 0 && self.index == 0) {
         profilerEnter(__FUNCTION__);
     }
@@ -190,6 +190,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
         for (int i = 0; i < kLocalCoefficients; i++) {
             expansion[i] += background[i];
         }
+        flops += detail::stf::L2lKernel<kLocalDegree, true>::kFlops_ + 26 + kLocalCoefficients;
     }
     bool threadLeft = true;
 #ifdef USE_CUDA
@@ -215,6 +216,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
                 cudaWorkspace->addWork(
                     cudaWorkspace, l, pos, self, std::move(dchecklist), std::move(echecklist));
             }
+            addCpuFlops(flops);
             if (selfPtr->localRoot) {
                 return detail::kickWaitLocalReturn();
             } else {
@@ -264,12 +266,13 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
         ldx[dim] = selfPtr->pos[dim].toDouble() - pos[dim].toDouble();
     }
     expansion = l2L(expansion, ldx, params.doPhi);
-    flops += detail::stf::L2lKernel<kLocalDegree, true>::kFlops_ + 3;
+    flops += detail::stf::L2lKernel<kLocalDegree, true>::kFlops_ + 14 + 6 * SIMD_FLOAT_SIZE;
     float const inverseSupportRadius = 1.0f / params.gravitySupportRadius;
     ForceVectors forces;
     ParticleInteger const numberOfSelfParticles = selfPtr->numberOfParticles();
     if (selfPtr->leaf) {
         forces = ForceVectors(numberOfSelfParticles);
+        flops += FlopCount(numberOfSelfParticles) * 2;
         for (ParticleInteger i = 0; i < numberOfSelfParticles; i++) {
             forces.gx[i] = forces.gy[i] = forces.gz[i] = 0.0f;
             ParticleInteger const particleIndex = selfPtr->particleRange.first + i;
@@ -309,15 +312,15 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
                 for (int dim = 0; dim < NDIM; dim++) {
                     dx[dim] =
                         simdCast<SimdFloat>(simdPositionDifference(selfPos[dim], otherPos[dim])) *
-                        kFixed2float;    // 3
+                        kFixed2float;
                 }
-                SimdFloat r2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);    // 5
+                SimdFloat r2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
                 r2 = simdMax(r2,
                     simdMax(sqr(simdBroadcast<SimdFloat>(0.5) - (selfRadius + otherRadius)),
                         simdBroadcast<SimdFloat>(0)));
                 SimdFloat const dcc = (selfRadius + otherRadius) * thetainv;
                 auto const cc = r2 > sqr(dcc);
-                flops += maxi * 15;
+                flops += SIMD_FLOAT_SIZE * 14;
                 for (int i = 0; i < maxi; i++) {
                     if (cc[i]) {
                         cclist.push_back(checklist[ci + i]);
@@ -376,7 +379,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
                 for (int dim = 0; dim < NDIM; dim++) {
                     dx[dim] =
                         simdCast<SimdFloat>(simdPositionDifference(selfPos[dim], otherPos[dim])) *
-                        kFixed2float;    // 3
+                        kFixed2float;
                 }
                 SimdFloat const r2 =
                     simdFma(dx[XDIM], dx[XDIM], simdFma(dx[YDIM], dx[YDIM], dx[ZDIM] * dx[ZDIM]));
@@ -386,7 +389,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
                 auto acceptance =
                     computeFmmAcceptance(r2, selfRadius, otherRadius, simdBroadcast<SimdFloat>(0),
                         simdBroadcast<SimdFloat>(0), pairSupportRadius, thetainv);
-                flops += maxi * 20;
+                flops += SIMD_FLOAT_SIZE * 27;
                 if (selfPtr->leaf || simdAnyOf(otherLeaf != simdBroadcast<SimdFloat>(0.0f))) {
                     for (int i = 0; i < maxi; i++) {
                         for (int dim = 0; dim < NDIM; dim++) {
@@ -407,7 +410,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
                     acceptance = computeFmmAcceptance(r2, selfRadius, otherRadius,
                         boxDistanceSquared(selfBox, otherPos),
                         boxDistanceSquared(otherBox, selfPos), pairSupportRadius, thetainv);
-                    flops += maxi * 34;
+                    flops += SIMD_FLOAT_SIZE * 85;
                 }
                 for (int i = 0; i < maxi; i++) {
                     auto const interaction = selectFmmInteraction(bool(acceptance.cellCell[i]),
@@ -416,6 +419,10 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
                         int(numberOfSelfParticles), int(otherPtrs[i]->numberOfParticles()),
                         FmmHybridCost<order>::kHybridPerParticle_,
                         FmmHybridCost<order>::kParticlePair_);
+                    if (!acceptance.cellCell[i] && selfPtr->leaf && otherLeaf[i]) {
+                        flops += 2 + int(bool(acceptance.particleCell[i])) +
+                            int(bool(acceptance.cellParticle[i]));
+                    }
                     if (interaction == FmmInteraction::CellCell) {
                         cclist.push_back(checklist[ci + i]);
                     } else if (interaction == FmmInteraction::CellParticle) {
@@ -498,6 +505,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
                     float kin0 = 0.5 * sqr(vx, vy, vz);
                     float const sgn = params.top ? 1 : -1;
                     if (params.ascending) {
+                        flops += 2;
                         float const dt = 0.5f * rungDt[params.minRung] * params.t0;
                         if (!params.firstCall) {
                             vx = fmaf(sgn * forces.gx[j], dt, vx);
@@ -512,22 +520,22 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
                     kr.zmom += vz;
                     kr.nmom += sqrt(sqr(vx, vy, vz));
                     if (params.descending) {
-                        g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]) + 1e-35f;    // 6
-                        float const factor = eta * sqrtf(params.a);                     // 5
-                        float dt = std::min(factor * sqrtf(gravityEffectiveRadius / sqrtf(g2)),
-                            (float) params.t0);    // 14
+                        g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]) + 1e-35f;
+                        float const factor = eta * sqrtf(params.a);
+                        float dt = std::min(
+                            factor * sqrtf(gravityEffectiveRadius / sqrtf(g2)), (float) params.t0);
                         dt = std::min(params.maxDt, dt);
                         rung = std::max(params.minRung +
                                 int((int) ceilf(log2f(params.t0 / dt)) > params.minRung),
-                            (int) (rung - 1));    // 13
+                            (int) (rung - 1));
                         kr.maxRung = std::max((int) rung, kr.maxRung);
                         ALWAYS_ASSERT(rung >= 0);
                         ALWAYS_ASSERT(rung < MAX_RUNG);
-                        dt = 0.5f * rungDt[params.minRung] * params.t0;    // 2
-                        vx = fmaf(sgn * forces.gx[j], dt, vx);             // 3
-                        vy = fmaf(sgn * forces.gy[j], dt, vy);             // 3
-                        vz = fmaf(sgn * forces.gz[j], dt, vz);             // 3
-                        flops += 49;
+                        dt = 0.5f * rungDt[params.minRung] * params.t0;
+                        vx = fmaf(sgn * forces.gx[j], dt, vx);
+                        vy = fmaf(sgn * forces.gy[j], dt, vy);
+                        vz = fmaf(sgn * forces.gz[j], dt, vz);
+                        flops += 26;
                     }
                     float kin1 = 0.5 * sqr(vx, vy, vz);
                     kr.pot += 0.5 * forces.phi[j];
@@ -542,6 +550,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
                         sphParticlesGravityAcceleration(YDIM, k) = forces.gy[j];
                         sphParticlesGravityAcceleration(ZDIM, k) = forces.gz[j];
                     } else if (!params.firstCall) {
+                        flops += 8;
                         float const dt = 0.5f * rungDt[rung] * params.t0;
                         vx = fmaf(forces.gx[j], dt, vx);
                         vy = fmaf(forces.gy[j], dt, vy);
@@ -553,6 +562,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
                     kr.zmom += mass * vz;
                     kr.nmom += mass * sqrt(sqr(vx, vy, vz));
                     if (!gas) {
+                        flops += 23;    // Timestep/rung selection and velocity kick only.
                         float const syncVx = vx, syncVy = vy, syncVz = vz;
                         float const g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]) + 1e-35f;
                         float dt = std::min(
@@ -585,7 +595,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
                     kr.pot += 0.5f * mass * forces.phi[j];
                     kr.dkin += 0.5f * mass * sqr(vx, vy, vz) - kin0;
                 }
-                flops += detail::stf::L2pKernel<kLocalDegree, true>::kFlops_ + 16;
+                flops += detail::stf::L2pKernel<kLocalDegree, true>::kFlops_ + 25;
             }
         }
         detail::kickAccumulateLeafReturn(
@@ -626,7 +636,6 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
         if (selfPtr->processRange.second - selfPtr->processRange.first > 1) {
             kr += rcl;
             kr += rcr;
-            flops += 12;
         } else {
             if (selfPtr->localRoot) {
                 kr = detail::kickWaitLocalReturn();
@@ -635,7 +644,6 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
         if (self.proc == 0 && self.index == 0) {
             profilerExit();
         }
-        flops += 12;
 
         kickAddInteractionCounts(counts);
         addCpuFlops(flops);

@@ -13,6 +13,7 @@
 
 #include <unistd.h>
 
+#include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/math/constants.hpp>
@@ -36,8 +37,9 @@ struct SphTreeIdHash {
     }
 };
 
-inline bool rangeIntersect(Fixed32Range const& a, Fixed32Range const& b) {
-    return a.periodicIntersects(b);
+inline bool rangeIntersect(
+    Fixed32Range const& a, Fixed32Range const& b, FlopCounter<>* flops = nullptr) {
+    return a.periodicIntersects(b, flops);
 }
 
 struct SphRunWorkspace {
@@ -147,6 +149,7 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
     }
     ALWAYS_ASSERT(params.innerSelection);
     SphTreeNeighborReturn kr;
+    FlopCounter<> flops = 4 * NDIM;    // Sentinel bound conversions in the return constructor.
     stackTraceActivate();
     SphTreeNode const* selfPtr = sphTreeGetNode(self);
     if (params.runType == SPH_TREE_NEIGHBOR_NEIGHBORS && selfPtr->localRoot) {
@@ -154,6 +157,7 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
         sphTreeClearNeighborRanges();
     }
     if (params.runType == SPH_TREE_NEIGHBOR_NEIGHBORS && checklist.size() == 0) {
+        addCpuFlops(flops);
         return hpx::make_ready_future(kr);
     }
     ASSERT(self.proc == hpxRank());
@@ -182,10 +186,10 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
                 bool test2 = false;
                 bool test1 = false;
                 if (params.innerSelection | SPH_INTERACTIONS_I) {
-                    test1 = rangeIntersect(selfPtr->outerBox, other->innerBox);
+                    test1 = rangeIntersect(selfPtr->outerBox, other->innerBox, &flops);
                 }
                 if (params.innerSelection | SPH_INTERACTIONS_J) {
-                    test2 = rangeIntersect(selfPtr->innerBox, other->outerBox);
+                    test2 = rangeIntersect(selfPtr->innerBox, other->outerBox, &flops);
                 }
                 if (test1 || test2) {
                     if (other->leaf) {
@@ -213,6 +217,7 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
                 ibox.begin[dim] = obox.begin[dim] = 1.9;
                 ibox.end[dim] = obox.end[dim] = -.9;
             }
+            flops += 2 * NDIM;    // Chained assignment converts each sentinel once.
             bool factive = false;
             for (ParticleInteger i = selfPtr->particleRange.first;
                 i < selfPtr->particleRange.second; i++) {
@@ -226,6 +231,7 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
                 xValue[YDIM] = myy;
                 xValue[ZDIM] = myz;
                 auto const tiny = 10.0 * RangeFixed::min().toDouble();
+                flops += 3;    // Support multiplier and the two tiny-offset operations.
                 if (active) {
                     factive = true;
                 }
@@ -235,6 +241,7 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
                         double const x = xValue[dim].toDouble();
                         obox.begin[dim] = std::min(obox.begin[dim].toDouble(), x - h - tiny);
                         obox.end[dim] = std::max(obox.end[dim].toDouble(), x + h + tiny);
+                        flops += 9;
                     }
                 }
                 if ((params.innerSelection & SPH_SET_ALL) ||
@@ -243,6 +250,7 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
                         double const x = xValue[dim].toDouble();
                         ibox.begin[dim] = std::min(ibox.begin[dim].toDouble(), x - tiny);
                         ibox.end[dim] = std::max(ibox.end[dim].toDouble(), x + tiny);
+                        flops += 7;
                     }
                 }
             }
@@ -254,8 +262,10 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
             sphTreeSetBoxes(self, kr.innerBox, kr.outerBox);
         } break;
         }
+        addCpuFlops(flops);
         return hpx::make_ready_future(kr);
     } else {
+        addCpuFlops(flops);
         checklist.insert(checklist.end(), leaflist.begin(), leaflist.end());
         std::array<hpx::future<SphTreeNeighborReturn>, NCHILD> futs;
         futs[RIGHT] = sphTreeNeighborFork(params, selfPtr->children[RIGHT], checklist, level, true);
@@ -265,6 +275,7 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
         auto const finish = [self, params](hpx::future<SphTreeNeighborReturn>& fl,
                                 hpx::future<SphTreeNeighborReturn>& fr) {
             SphTreeNeighborReturn kr;
+            addCpuFlops(4 * NDIM);
             auto const rcl = fl.get();
             auto const rcr = fr.get();
             kr += rcl;
@@ -499,6 +510,7 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
     runData.adiabaticIndex = getOptions().hydro.gamma;
     runData.gravityEffectiveRadius = getOptions().gravity.supportRadius /
         selectedGravityKernel().supportRadiusPerEffectiveRadius;
+    addCpuFlops(1);
     runData.numberOfTargetNodes = hostTargetNodeIndices.size();
     runData.sinkSmoothingConverged = &sphParticlesConverged(0);
     runData.selfGravityEnabled = getOptions().gravity.enabled;

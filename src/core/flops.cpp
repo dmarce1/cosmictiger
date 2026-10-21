@@ -6,58 +6,104 @@
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
-#include <cosmictiger/core/defs.hpp>
+#include <atomic>
+#include <chrono>
+#include <memory>
+#include <mutex>
+#include <vector>
+
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/hpx.hpp>
-#include <cosmictiger/core/timer.hpp>
 
-static double cpuFlops = 0.0;
-static SpinlockType mutex;
-static Timer tm;
+namespace detail {
 
-HPX_PLAIN_ACTION(resetFlops, ResetFlopsAction);
-HPX_PLAIN_ACTION(flopsPerSecond, FlopsPerSecondAction);
+// Each OS worker owns one cache line. Registration is paid once; ordinary
+// submissions never contend on the old process-wide spinlock. Atomics also
+// make diagnostic reads/reset data-race-free (interval boundaries must still
+// wait for all producers).
+struct alignas(64) CpuFlopShard {
+    std::atomic<FlopCount> count{0};
+};
 
-void resetFlops() {
-    Vector<hpx::future<void>> futs;
-    for (auto& c : hpxChildren()) {
-        futs.push_back(hpx::async<ResetFlopsAction>(c));
-    }
-    resetGpuFlops();
-    cpuFlops = 0.0;
-    tm.stop();
-    tm.reset();
-    tm.start();
-    hpx::wait_all(futs.begin(), futs.end());
+std::mutex flopShardsMutex;
+std::vector<std::unique_ptr<CpuFlopShard>> flopShards;
+std::chrono::steady_clock::time_point flopStart = std::chrono::steady_clock::now();
+
+CpuFlopShard& cpuFlopShard() {
+    thread_local CpuFlopShard* shard = []() {
+        auto entry = std::make_unique<CpuFlopShard>();
+        auto* pointer = entry.get();
+        std::lock_guard<std::mutex> lock(flopShardsMutex);
+        flopShards.push_back(std::move(entry));
+        return pointer;
+    }();
+    return *shard;
 }
 
-double flopsPerSecond() {
-    Vector<hpx::future<double>> futs;
-    for (auto& c : hpxChildren()) {
-        futs.push_back(hpx::async<FlopsPerSecondAction>(c));
+}    // namespace detail
+
+HPX_PLAIN_ACTION(resetFlops, ResetFlopsAction);
+HPX_PLAIN_ACTION(readFlops, ReadFlopsAction);
+
+void resetFlops() {
+    Vector<hpx::future<void>> futures;
+    for (auto const& child : hpxChildren()) {
+        futures.push_back(hpx::async<ResetFlopsAction>(child));
     }
-    tm.stop();
-    double result = (getGpuFlops() + cpuFlops);
-    tm.start();
-    for (auto& f : futs) {
-        result += f.get();
+    resetGpuFlops();
+    {
+        std::lock_guard<std::mutex> lock(detail::flopShardsMutex);
+        for (auto const& shard : detail::flopShards) {
+            shard->count.store(0, std::memory_order_relaxed);
+        }
     }
-    if (hpxRank() == 0) {
-        result /= tm.read();
+    for (auto& future : futures) {
+        future.get();
+    }
+    detail::flopStart = std::chrono::steady_clock::now();
+}
+
+FlopCount readFlops() {
+    Vector<hpx::future<FlopCount>> futures;
+    for (auto const& child : hpxChildren()) {
+        futures.push_back(hpx::async<ReadFlopsAction>(child));
+    }
+    FlopCount result = getGpuFlops();
+    {
+        std::lock_guard<std::mutex> lock(detail::flopShardsMutex);
+        for (auto const& shard : detail::flopShards) {
+            result += shard->count.load(std::memory_order_relaxed);
+        }
+    }
+    for (auto& future : futures) {
+        result += future.get();
     }
     return result;
 }
 
-void addCpuFlops(int count) {
+double flopsPerSecond() {
+    // Freeze the elapsed time before collecting remote counters so reporting
+    // latency does not lower the rate. A read does not restart the clock.
+    double const elapsed =
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - detail::flopStart).count();
+    auto const count = readFlops();
+    return elapsed > 0.0 ? double(count) / elapsed : 0.0;
+}
+
+void addCpuFlops(FlopCount count) {
 #ifdef COUNT_FLOPS
-    std::lock_guard<SpinlockType> lock(mutex);
-    cpuFlops += count;
+    if (count != 0) {
+        auto& total = detail::cpuFlopShard().count;
+        // Only this OS thread writes its shard between quiescent resets.
+        // Relaxed load/store avoids even an uncontended locked RMW operation.
+        total.store(total.load(std::memory_order_relaxed) + count, std::memory_order_relaxed);
+    }
 #endif
 }
 
 #ifndef USE_CUDA
 void resetGpuFlops() {}
-double getGpuFlops() {
-    return 0.0;
+FlopCount getGpuFlops() {
+    return 0;
 }
 #endif

@@ -10,8 +10,10 @@
 #define GRAVITY_HPP_
 
 #include <cmath>
+#include <type_traits>
 
 #include <cosmictiger/core/fixed_capacity_vector.hpp>
+#include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/cuda/cuda.hpp>
 #include <cosmictiger/cuda/cuda_memory.hpp>
 #include <cosmictiger/gravity/kick.hpp>
@@ -56,9 +58,46 @@ void resetGravityCounters();
 void getGravityCounters(double& close, double& direct);
 void setGravityCounterUse(bool code);
 
+namespace detail {
+
+CUDA_EXPORT inline FlopCount bernsteinFlops(int degree) {
+    return FlopCount(3) * degree * (degree + 1) / 2;
+}
+
+// Cost of the radial table evaluation, including q and the final support
+// scaling. Scalar evaluation stops at its selected span; SIMD evaluates every
+// span and the outside expression. Width subtractions are scalar in both cases.
 template <class T>
-CUDA_EXPORT inline void gravitySofteningKernel(T& force, T& phi, T radiusSquared, T inverseSupport,
-    T inverseSupportSquared, T inverseSupportCubed, bool doPhi) {
+CUDA_EXPORT inline FlopCount gravitySofteningFlops(
+    radial_kernel::KernelTable const& kernel, T const& q, bool doPhi) {
+    FlopCount const central = bernsteinFlops(kernel.degree);
+    FlopCount const mass = bernsteinFlops(kernel.degree + 3);
+    FlopCount const shell = bernsteinFlops(kernel.degree + 2);
+    if constexpr (std::is_arithmetic_v<T>) {
+        for (int piece = 0; piece < kernel.pieceCount; ++piece) {
+            if (q < T(kernel.changePoints[piece + 1])) {
+                return piece == 0 ? 7 + central + (doPhi ? 8 + central : 0) :
+                                    11 + mass + (doPhi ? 9 + mass + shell : 0);
+            }
+        }
+        return 6 + (doPhi ? 2 : 0);
+    } else {
+        FlopCount const width = T::size();
+        FlopCount const outerPieces = kernel.pieceCount - 1;
+        FlopCount count = width * (6 + 3 + central + outerPieces * (7 + mass)) + kernel.pieceCount;
+        if (doPhi) {
+            count +=
+                width * (2 + 6 + central + outerPieces * (7 + mass + shell)) + kernel.pieceCount;
+        }
+        return count;
+    }
+}
+
+}    // namespace detail
+
+template <class T>
+CUDA_EXPORT inline FlopCount gravitySofteningKernel(T& force, T& phi, T radiusSquared,
+    T inverseSupport, T inverseSupportSquared, T inverseSupportCubed, bool doPhi) {
     T const q = simdSqrt(radiusSquared * inverseSupportSquared);
     auto const& kernel = selectedGravityKernel();
     force = radial_kernel::forceFactor(kernel, q) * inverseSupportCubed;
@@ -67,6 +106,7 @@ CUDA_EXPORT inline void gravitySofteningKernel(T& force, T& phi, T radiusSquared
     } else {
         phi = simdBroadcast<T>(0);
     }
+    return detail::gravitySofteningFlops(kernel, q, doPhi);
 }
 
 CUDA_EXPORT inline float selfPhi() {

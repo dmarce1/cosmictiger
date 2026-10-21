@@ -344,7 +344,7 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
     if (key == 1) {
         profilerEnter(__FUNCTION__);
     }
-    int flops = 0;
+    FlopCounter<FlopCount> flops = 0;
     stackTraceActivate();
     double const h = getOptions().gravity.supportRadius;
     int bucketSize = getOptions().compute.bucketSize;
@@ -381,18 +381,19 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
     auto const numberOfParticles = particleRange.second - particleRange.first;
     float boxR = 0.0f;
     for (int dim = 0; dim < NDIM; dim++) {
-        boxR += sqr(0.5 * (box.end[dim] - box.begin[dim]));    // 12
+        boxR += sqr(0.5 * (box.end[dim] - box.begin[dim]));
     }
-    boxR = sqrt(boxR);    // 4
-    bool ewaldSatisfied =
-        (boxR < 0.25 * (params.theta / (1.0 + params.theta)) && boxR < 0.125 - 0.25 * h);    // 10
+    boxR = sqrt(boxR);
+    bool const ewaldDistanceSatisfied = boxR < 0.25 * (params.theta / (1.0 + params.theta));
+    bool const ewaldSatisfied = ewaldDistanceSatisfied && boxR < 0.125 - 0.25 * h;
     double maxRatio = 1.0;
-    flops += 26;
+    flops += 16 + (ewaldDistanceSatisfied ? 2 : 0);
     static SimdFloat const toFloatFactor = kFixed2float;
     if (processRange.second - processRange.first > 1 || numberOfParticles > bucketSize ||
         (!ewaldSatisfied && numberOfParticles > 0)) {
         isleaf = false;
         int const xdim = box.longestDim();
+        flops += NDIM;
         auto leftBox = box;
         auto rightBox = box;
         auto leftRange = processRange;
@@ -441,31 +442,34 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
                 rbox = boxr;
             } else {
                 rbox.begin[dim] = rbox.end[dim] = 0.5 * (box.begin[dim] + box.end[dim]);
+                flops += 2;
             }
         }
         Array<double, NDIM> xlValue;
         Array<double, NDIM> xrValue;
         for (int dim = 0; dim < NDIM; dim++) {
-            xlValue[dim] = xl[dim].toDouble();    // 3
-            xrValue[dim] = xr[dim].toDouble();    // 3
+            xlValue[dim] = xl[dim].toDouble();
+            xrValue[dim] = xr[dim].toDouble();
         }
+        flops += 2 * NDIM;
         Array<double, NDIM> xc1, xc2;
         double radius1 = 0.0, radius2;
         bool tried1 = false;
         // Global nodes have no rank-local particle range to rescan.
-        if (processRange.second - processRange.first == 1 && processRange.first == hpxRank() &&
-            particleRange.first >= 0 && numberOfParticles > 0 &&
-            numberOfParticles <= 64 * getOptions().compute.bucketSize &&
-            (rbox.end[xdim] - rbox.begin[xdim] <= 0.5)) {
+        bool const canRescan = processRange.second - processRange.first == 1 &&
+            processRange.first == hpxRank() && particleRange.first >= 0 && numberOfParticles > 0 &&
+            numberOfParticles <= 64 * getOptions().compute.bucketSize;
+        flops += canRescan ? 1 : 0;
+        if (canRescan && (rbox.end[xdim] - rbox.begin[xdim] <= 0.5)) {
             tried1 = true;
             for (int dim = 0; dim < NDIM; dim++) {
-                xc1[dim] = 0.5 * (rbox.begin[dim] + rbox.end[dim]);    // 6
+                xc1[dim] = 0.5 * (rbox.begin[dim] + rbox.end[dim]);
             }
             Array<SimdInt, NDIM> xc{};
             for (int dim = 0; dim < NDIM; dim++) {
                 xc[dim] = simdBroadcast<SimdInt>(Fixed32(xc1[dim]).raw());
             }
-            flops += 6;
+            flops += 9;
             SimdFloat r2Max = simdBroadcast<SimdFloat>(0.0);
             for (ParticleInteger i = particleRange.first; i < particleRange.second;
                 i += SIMD_FLOAT_SIZE) {
@@ -479,10 +483,9 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
                     for (int j = maxj; j < SIMD_FLOAT_SIZE; j++) {
                         simdSetLane(x, j, xc[dim][0]);
                     }
-                    dx[dim] = simdCast<SimdFloat>(simdPositionDifference(x, xc[dim])) *
-                        toFloatFactor;    // 6
+                    dx[dim] =
+                        simdCast<SimdFloat>(simdPositionDifference(x, xc[dim])) * toFloatFactor;
                 }
-                flops += 18 + maxj * 6;
                 auto const r2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
                 r2Max = simdMax(r2Max, r2);
             }
@@ -490,7 +493,8 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
             for (int i = 0; i < SIMD_FLOAT_SIZE; i++) {
                 r2 = std::max(r2, static_cast<float>(r2Max[i]));
             }
-            flops += 4 + SIMD_FLOAT_SIZE;
+            flops +=
+                FlopCount(roundUp(numberOfParticles, ParticleInteger(SIMD_FLOAT_SIZE))) * 8 + 1;
             radius1 = sqrt(r2);
             //	PRINT("%e\n", radius);
         }
@@ -500,15 +504,15 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
         float rValue;
         double norminv = 0.0;
         for (int dim = 0; dim < NDIM; dim++) {
-            n[dim] = xlValue[dim] - xrValue[dim];    // 3
-            norminv += sqr(n[dim]);                  // 6
+            n[dim] = xlValue[dim] - xrValue[dim];
+            norminv += sqr(n[dim]);
         }
-        norminv = norminv > 0.0 ? 1.0 / std::sqrt(norminv) : 0.0;    // 8
+        flops += 12 + (norminv > 0.0 ? 2 : 0);
+        norminv = norminv > 0.0 ? 1.0 / std::sqrt(norminv) : 0.0;
         for (int dim = 0; dim < NDIM; dim++) {
-            n[dim] *= norminv;            // 3
-            n[dim] = std::abs(n[dim]);    // 3
+            n[dim] *= norminv;
+            n[dim] = std::abs(n[dim]);
         }
-        flops += 29;
         r = 0.0;
         if (mr[0] != 0.0) {
             if (ml[0] != 0.0) {
@@ -521,27 +525,28 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
                         xc2[dim] = (xmax + xmin) * 0.5;
                         r += sqr((xmax - xmin) * 0.5);
                     }
+                    flops += 42;
                 } else {
                     xc2 = xlValue;
                     r = std::max(sqr(rlValue), sqr(rrValue));
+                    flops += 2;
                 }
-                flops += 45;
             } else {
                 xc2 = xrValue;
                 r = rrValue * rrValue;
-                flops++;
+                flops += 1;
             }
         } else {
             if (ml[0] != 0.0) {
                 xc2 = xlValue;
                 r = rlValue * rlValue;
-                flops++;
+                flops += 1;
             } else {
                 xc2 = rbox.begin;
-                flops += 6;
             }
         }
-        radius2 = std::sqrt(r);    // 4
+        radius2 = std::sqrt(r);
+        flops += 1;
         if (tried1 && radius1 < radius2) {
             xcValue = xc1;
             radius = radius1;
@@ -553,18 +558,21 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
         for (int dim = 0; dim < NDIM; dim++) {
             double const span = (rbox.end[dim] - rbox.begin[dim]);
             ALWAYS_ASSERT(span >= 0.0);
-            r += sqr(span * 0.5);    // 12
+            r += sqr(span * 0.5);
         }
-        r = std::sqrt(r);    // 4
-        if (r < radius) {    // 1
+        r = std::sqrt(r);
+        flops += 13;
+        if (r < radius) {
             radius = r;
             for (int dim = 0; dim < NDIM; dim++) {
-                xcValue[dim] = (rbox.begin[dim] + rbox.end[dim]) * 0.5;    // 6
+                xcValue[dim] = (rbox.begin[dim] + rbox.end[dim]) * 0.5;
             }
+            flops += 6;
         }
 
+        flops += 3;
         for (int dim = 0; dim < NDIM; dim++) {
-            x[dim] = xcValue[dim];    // 3
+            x[dim] = xcValue[dim];
         }
         flops += fmmDispatch([&](auto orderTag) {
             return treeComputeMultipole<decltype(orderTag)::value>(
@@ -583,30 +591,31 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
             xmaxValue[dim] = box.begin[dim];
             if (numberOfParticles == 0) {
                 xminValue[dim] = xmaxValue[dim] = 0.5 * (box.begin[dim] + box.end[dim]);
+                flops += 2;
             }
         }
         for (ParticleInteger i = particleRange.first; i < particleRange.second; i++) {
             for (int dim = 0; dim < NDIM; dim++) {
-                double const x = particlesPos(dim, i).toDouble();    // 3
-                xmaxValue[dim] = std::max(xmaxValue[dim], x);        // 3
-                xminValue[dim] = std::min(xminValue[dim], x);        // 3
+                double const x = particlesPos(dim, i).toDouble();
+                xmaxValue[dim] = std::max(xmaxValue[dim], x);
+                xminValue[dim] = std::min(xminValue[dim], x);
             }
         }
         for (int dim = 0; dim < NDIM; dim++) {
-            xcValue[dim] = (xmaxValue[dim] + xminValue[dim]) * 0.5;    // 6
+            xcValue[dim] = (xmaxValue[dim] + xminValue[dim]) * 0.5;
         }
         r = 0.0;
-        flops += 15;
+        flops += 6 + FlopCount(numberOfParticles) * 15;
         for (ParticleInteger i = particleRange.first; i < particleRange.second; i++) {
             double thisRadius = 0.0;
             for (int dim = 0; dim < NDIM; dim++) {
-                double const x = particlesPos(dim, i).toDouble();    // 3
-                thisRadius += sqr(x - xcValue[dim]);                 // 9
+                double const x = particlesPos(dim, i).toDouble();
+                thisRadius += sqr(x - xcValue[dim]);
             }
-            r = std::max(r, thisRadius);    // 2
-            flops += 14;
+            r = std::max(r, thisRadius);
         }
         radius = std::sqrt(r);
+        flops += 4;    // Square root and three center-to-fixed conversions below.
         children[LEFT].index = children[RIGHT].index = -1;
         flops += fmmDispatch([&](auto orderTag) {
             return treeComputeMultipole<decltype(orderTag)::value>(multi, particleRange, xcValue);
@@ -639,6 +648,7 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
             node.box.end[dim].raw()++;
         }
     }
+    flops += 4 * NDIM;    // Bounds to/from fixed-point for outward rounding.
     bool const global = processRange.second - processRange.first > 1;
     node.leaf = isleaf;
     if (index >= nodesSize) {

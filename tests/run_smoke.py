@@ -89,7 +89,8 @@ def main():
         command = ["--compute.cuda=false" if value == "--compute.cuda=true" else value
                    for value in command]
     # This regression inspects detailed Silo configuration messages.
-    command += ["--run.verbose=true"]
+    if not any(option.startswith("--run.verbose=") for option in args.extra_option):
+        command += ["--run.verbose=true"]
     command += args.extra_option
     if args.minimum_rung is not None:
         command += [f"--run.minRung={args.minimum_rung}"]
@@ -124,6 +125,18 @@ def main():
             fields = line.split()
             if fields and re.fullmatch(r"[+\-]?[0-9].*", fields[0]):
                 rows.append([float(value) for value in fields])
+        output_log = (args.workdir / "run.log").read_text()
+        if not re.search(r"^\s*Step\s+z.*TFLOP/s$", output_log, re.MULTILINE):
+            raise RuntimeError("terminal progress is missing the TFLOP/s column")
+        terminal_rows = re.findall(
+            r"^\s*\d+(?:\s+[+\-]?[\d.]+e[+\-]\d+){4}"
+            r"\s+\d+\s+\d+\s+[\d.]+\s+[\d.]+\s+([+\-]?[\d.]+e[+\-]\d+)\s*$",
+            output_log, re.MULTILINE)
+        if len(terminal_rows) != len(rows) or any(
+                not math.isfinite(float(rate)) or float(rate) <= 0 for rate in terminal_rows):
+            raise RuntimeError("terminal FLOP rates are missing, nonfinite or nonpositive")
+        if any(float(rate) != row[10] for rate, row in zip(terminal_rows, rows)):
+            raise RuntimeError("terminal FLOP rates disagree with progress.txt")
         expected_steps = 2
         if len(rows) != expected_steps:
             raise RuntimeError(f"{args.mode} smoke test completed {len(rows)} steps, expected {expected_steps}")

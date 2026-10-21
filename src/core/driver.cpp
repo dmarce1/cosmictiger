@@ -1156,7 +1156,6 @@ void driver() {
             int om = thisMinrung;
             //				PRINT("MINRUNG0 = %i\n", minrung0);
             //			PRINT( "Doing kick\n");
-            resetFlops();
             if (fullEval) {
                 //				kick_workspace::clear_buffers();
                 //				tree_destroy(true);
@@ -1172,6 +1171,7 @@ void driver() {
             if (getOptions().initial.useGlass && minrung == minrung0) {
                 //			particles_displace(rand1(), rand1(), rand1());
             }
+            resetFlops();
             if (getOptions().hydro.enabled) {
                 tmp = advanceForces(
                     minrung, a, a * adot, tau, t0, theta, tau == 0.0, fullEval, energies);
@@ -1183,7 +1183,6 @@ void driver() {
                 energies0 = energies;
             }
             double const flops = flopsPerSecond();
-            resetFlops();
             if (om != thisMinrung) {
                 minrung0++;
             }
@@ -1281,12 +1280,16 @@ void driver() {
                 "%10.3e %10.3e \n",
                 runtime, iter - 1, z, a, adot, tau / t0, years, minrung, maxRung, bucketSize,
                 flops * 1e-12, stepTm.read(), close, direct);
-            if (progressRows % 25 == 0) {
-                PRINT("\n%8s %10s %10s %10s %10s %7s %7s %10s %10s\n", "Step", "z", "a", "tau",
-                    "dt", "MinRung", "MaxRung", "Wall[s]", "Step[s]");
+            if (progressRows == 0) {
+                PRINT("  TFLOP/s estimates counted gravity and SPH work during force advancement; "
+                      "chemistry is excluded.\n");
             }
-            PRINT("%8i %10.3e %10.3e %10.3e %10.3e %7i %7i %10.2f %10.3f\n", iter, z, a, tau / t0,
-                dt, minrung, maxRung, runtime, stepTm.read());
+            if (progressRows % 25 == 0) {
+                PRINT("\n%8s %10s %10s %10s %10s %7s %7s %10s %10s %10s\n", "Step", "z", "a", "tau",
+                    "dt", "MinRung", "MaxRung", "Wall[s]", "Step[s]", "TFLOP/s");
+            }
+            PRINT("%8i %10.3e %10.3e %10.3e %10.3e %7i %7i %10.2f %10.3f %10.3e\n", iter, z, a,
+                tau / t0, dt, minrung, maxRung, runtime, stepTm.read(), flops * 1e-12);
             progressRows++;
             fclose(textfp);
             totalTime.reset();

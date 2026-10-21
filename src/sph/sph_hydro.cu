@@ -43,6 +43,7 @@ struct HydroWorkspace {
 // NOLINTBEGIN(readability-identifier-naming)
 __global__ void sphCudaHydro(
     SphRunParameters parameters, SphRunCudaData data, SphReduction* reduction) {
+    FlopCounter<> flops = 2;    // Inverse scale factor and gas mass scaling.
     int const threadIndex = threadIdx.x;
     int const blockSize = blockDim.x;
     __shared__ int targetNodeIndex;
@@ -92,10 +93,10 @@ __global__ void sphCudaHydro(
                     position[XDIM] = data.sourcePositionX[sourceParticleIndex];
                     position[YDIM] = data.sourcePositionY[sourceParticleIndex];
                     position[ZDIM] = data.sourcePositionZ[sourceParticleIndex];
-                    contains = targetNode.outerBox.contains(position);
+                    contains = targetNode.outerBox.contains(position, &flops);
                     if (!contains) {
                         contains = sphSupportIntersects(targetNode.innerBox, position,
-                            data.sourceSupportRadius[sourceParticleIndex]);
+                            data.sourceSupportRadius[sourceParticleIndex], &flops);
                     }
                 }
                 int slot = contains;
@@ -105,6 +106,7 @@ __global__ void sphCudaHydro(
                 __syncthreads();
                 workspace.neighbors.resize(offset + total);
                 if (contains) {
+                    flops += data.sourcePressureEnergyRatio ? 0 : 1;
                     workspace.neighbors[offset + slot] = {position[XDIM], position[YDIM],
                         position[ZDIM], data.sourceSupportRadius[sourceParticleIndex],
                         data.sourceVelocityX[sourceParticleIndex],
@@ -156,6 +158,7 @@ __global__ void sphCudaHydro(
                 data.sourceVelocityY[particleIndex], data.sourceVelocityZ[particleIndex]);
             float const one_over_H_a = 1.0f / H_a;
             float const one_over_H_a4 = sqr(sqr(one_over_H_a));    // 1/H_a⁴
+            flops += 8 + (data.sourcePressureEnergyRatio ? 0 : 1);
             Vector3<float> dv_a_dt(0.0f);    // this thread's part of equation 6.4
             float du_a_dt = 0.0f;            // this thread's part of equation 6.5
             float μ_max = 0.0f;              // max_b(−μ_ab) for δt_cv
@@ -167,6 +170,7 @@ __global__ void sphCudaHydro(
                     distance(y_a, neighbor.positionY), distance(z_a, neighbor.positionZ));
                 float const r_ab2 = r_ab.dot(r_ab);    // |r_ab|²
                 float const H_b = neighbor.supportRadius;
+                flops += 8 + (r_ab2 == 0.0f ? 0 : 2);    // Distances, dot, support squares.
                 if (r_ab2 == 0.0f || r_ab2 >= fmaxf(H_a * H_a, H_b * H_b)) {
                     continue;
                 }
@@ -180,8 +184,10 @@ __global__ void sphCudaHydro(
                 // The selected kernel is W(r, H) = w(r/H)/H³, so each gradient equals
                 // w'(r/H) r_ab/(H⁴ r) and ∇_a W̃_ab = F_ab r_ab with the scalar F_ab.
                 float const one_over_H_b = 1.0f / H_b;
-                float const F_a = dkernelWDq(r * one_over_H_a) * one_over_H_a4 / r;
-                float const F_b = dkernelWDq(r * one_over_H_b) * sqr(sqr(one_over_H_b)) / r;
+                float const q_a = r * one_over_H_a;
+                float const q_b = r * one_over_H_b;
+                float const F_a = dkernelWDq(q_a) * one_over_H_a4 / r;
+                float const F_b = dkernelWDq(q_b) * sqr(sqr(one_over_H_b)) / r;
                 float const F_ab = 0.5f * (F_a + F_b);
                 Vector3<float> const gradW̃_ab = F_ab * r_ab;    // ∇_a W̃_ab
                 // v_ab = v_a − v_b from the stored peculiar velocities. The physical relative
@@ -206,12 +212,19 @@ __global__ void sphCudaHydro(
                     monaghan_sph::pairEnergyRate(
                         P_over_ρ2_ab, Π_ab, v_ab_dot_r_ab * F_ab, v_ab_dot_r_ab_physical * F_ab);
                 μ_max = fmaxf(μ_max, -μ_ab);
+                // EOS/root 6; inverse support 1; gradients 13; relative velocity
+                // and dot products 10; force accumulation 8; energy factors 4.
+                flops += 42 + sph_flops::kViscosityMu + sph_flops::kArtificialViscosity +
+                    sph_flops::kPressureCoefficient + sph_flops::kPairEnergyRate +
+                    sph_flops::densityKernelFlops(selectedHydroKernel(), q_a, true) +
+                    sph_flops::densityKernelFlops(selectedHydroKernel(), q_b, true);
             }
             sharedReduceAdd<float, HYDRO_BLOCK_SIZE>(dv_a_dt[XDIM]);
             sharedReduceAdd<float, HYDRO_BLOCK_SIZE>(dv_a_dt[YDIM]);
             sharedReduceAdd<float, HYDRO_BLOCK_SIZE>(dv_a_dt[ZDIM]);
             sharedReduceAdd<float, HYDRO_BLOCK_SIZE>(du_a_dt);
             sharedReduceMax<HYDRO_BLOCK_SIZE>(μ_max);
+            flops += 4 * detail::sphReductionFlops<HYDRO_BLOCK_SIZE>();
             if (threadIndex == 0) {
                 // Accelerations outside the paper: self-gravity, the optional uniform, midplane
                 // and central forces of the test problems, and velocity damping while relaxing
@@ -224,16 +237,19 @@ __global__ void sphCudaHydro(
                 dv_a_dt += gravityAcceleration;
                 dv_a_dt[YDIM] += parameters.uniformAccelerationY;
                 dv_a_dt[ZDIM] += parameters.midplaneAccelerationZ(z_a);
+                flops += 6;    // Force sums and the midplane fixed-point conversion.
                 if (data.centralAcceleration != 0.0f) {
                     Vector3<float> const separation(distance(x_a, Fixed32(0.5)),
                         distance(y_a, Fixed32(0.5)), distance(z_a, Fixed32(0.5)));
                     float const radius = sqrtf(separation.dot(separation));
                     float const inverseSupportRadius = 1.0f / data.centralSupportRadius;
+                    float const normalizedRadius = radius * inverseSupportRadius;
                     float const force = data.centralAcceleration *
-                        radial_kernel::forceFactor(
-                            selectedGravityKernel(), radius * inverseSupportRadius) *
+                        radial_kernel::forceFactor(selectedGravityKernel(), normalizedRadius) *
                         inverseSupportRadius * inverseSupportRadius * inverseSupportRadius;
                     dv_a_dt -= force * separation;
+                    flops +=
+                        24 + sph_flops::forceKernelFlops(selectedGravityKernel(), normalizedRadius);
                 }
                 dv_a_dt -= parameters.velocityDampingRate * v_a;
                 for (int dim = 0; dim < NDIM; dim++) {
@@ -245,6 +261,7 @@ __global__ void sphCudaHydro(
                     2.0f - 3.0f * sinkPressureEnergyRatio :
                     5.0f - 3.0f * adiabaticIndex;
                 du_a_dt += expansionCoefficient * a_da_dt * inverseScaleFactor * u_a;
+                flops += 12;    // Damping and homogeneous thermal expansion.
                 data.sinkInternalEnergyRate[sinkIndex] = du_a_dt;
                 if (parameters.phase == 1) {
                     // Section 10.3, p. 563:
@@ -269,6 +286,7 @@ __global__ void sphCudaHydro(
                             fmaxf(fmaxf(one_over_δt_cv, one_over_δt_f), 1.0e-30f));
                     // Bound fractional thermal change in the existing explicit integrator.
                     if (du_a_dt != 0.0f) {
+                        flops += 3;
                         δt = fminf(δt,
                             parameters.courantFactor / kViscosityWidthScale * u_a / fabsf(du_a_dt));
                     }
@@ -289,6 +307,9 @@ __global__ void sphCudaHydro(
                     maximumGravityRung = max(maximumGravityRung, gravityRung);
                     maximumRung = max(maximumRung, nextRung);
                     maximumSignalSpeed = fmaxf(maximumSignalSpeed, one_over_δt_cv * h_a);
+                    // Exclude the signal-speed report and the gravity timestep/rung
+                    // computed only for diagnostics when self-gravity is disabled.
+                    flops += 25 + (data.selfGravityEnabled ? 13 : 0);
                     atomicMax(&reduction->inverseSoundTimestep, one_over_δt_c);
                     atomicMax(&reduction->inverseViscosityTimestep, one_over_δt_visc);
                     atomicMax(&reduction->inverseAccelerationTimestep, one_over_δt_f);
@@ -307,6 +328,7 @@ __global__ void sphCudaHydro(
         atomicMax(&reduction->maximumHydroRung, maximumHydroRung);
         atomicMax(&reduction->maximumGravityRung, maximumGravityRung);
     }
+    detail::recordSphGpuFlops(flops, reduction);
     (&workspace)->~HydroWorkspace();
 }
 // NOLINTEND(readability-identifier-naming)

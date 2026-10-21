@@ -12,6 +12,7 @@
 
 #include <cosmictiger/core/containers.hpp>
 #include <cosmictiger/core/defs.hpp>
+#include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/fmm/fmm_order.hpp>
 #include <cosmictiger/fmm/fmm_types.hpp>
 #include <cosmictiger/particles/particles.hpp>
@@ -23,13 +24,13 @@
 
 // Internal node: translate the children's multipoles to `center` and sum them.
 template <int order>
-int treeComputeMultipole(MultipoleBuffer& multi, MultipoleBuffer const& left,
+FlopCount treeComputeMultipole(MultipoleBuffer& multi, MultipoleBuffer const& left,
     MultipoleBuffer const& right, Array<double, NDIM> const& leftCenter,
     Array<double, NDIM> const& rightCenter, Array<double, NDIM> const& center);
 
 // Leaf: accumulate P2M over the local particles of `particleRange` about `center`.
 template <int order>
-int treeComputeMultipole(
+FlopCount treeComputeMultipole(
     MultipoleBuffer& multi, Pair<ParticleInteger> particleRange, Array<double, NDIM> const& center);
 
 #ifdef COSMICTIGER_FMM_INSTANCE_ORDER
@@ -40,11 +41,10 @@ int treeComputeMultipole(
 #include <cosmictiger/math/simd.hpp>
 
 template <int order>
-int treeComputeMultipole(MultipoleBuffer& multi, MultipoleBuffer const& left,
+FlopCount treeComputeMultipole(MultipoleBuffer& multi, MultipoleBuffer const& left,
     MultipoleBuffer const& right, Array<double, NDIM> const& leftCenter,
     Array<double, NDIM> const& rightCenter, Array<double, NDIM> const& center) {
     constexpr int kMultipoleCoefficients = FmmOrder<order>::kMultipoleCoefficients_;
-    int flops = 0;
     Array<SimdDouble, NDIM> mdx{};
     FmmMultipole<SimdDouble, order> simdM{};
     for (int i = 0; i < kMultipoleCoefficients; i++) {
@@ -52,24 +52,22 @@ int treeComputeMultipole(MultipoleBuffer& multi, MultipoleBuffer const& left,
         simdSetLane(simdM[i], RIGHT, right[i]);
     }
     for (int dim = 0; dim < NDIM; dim++) {
-        simdSetLane(mdx[dim], LEFT, leftCenter[dim] - center[dim]);      // 3
-        simdSetLane(mdx[dim], RIGHT, rightCenter[dim] - center[dim]);    // 3
+        simdSetLane(mdx[dim], LEFT, leftCenter[dim] - center[dim]);
+        simdSetLane(mdx[dim], RIGHT, rightCenter[dim] - center[dim]);
     }
     simdM = m2M(simdM, mdx);
     for (int i = 0; i < kMultipoleCoefficients; i++) {
         multi[i] = simdM[i][LEFT] + simdM[i][RIGHT];
     }
-    flops += 2 * detail::stf::M2mKernel<FmmOrder<order>::kMultipoleDegree_>::kFlops_ + 6 +
-        kMultipoleCoefficients * 2;
-    return flops;
+    return 2 * detail::stf::M2mKernel<FmmOrder<order>::kMultipoleDegree_>::kFlops_ + 12 +
+        kMultipoleCoefficients;
 }
 
 template <int order>
-int treeComputeMultipole(MultipoleBuffer& multi, Pair<ParticleInteger> particleRange,
+FlopCount treeComputeMultipole(MultipoleBuffer& multi, Pair<ParticleInteger> particleRange,
     Array<double, NDIM> const& center) {
     constexpr int kMultipoleCoefficients = FmmOrder<order>::kMultipoleCoefficients_;
     static SimdFloat const toFloatFactor = kFixed2float;
-    int flops = 0;
     FmmMultipole<double, order> mValue;
     for (int i = 0; i < kMultipoleCoefficients; i++) {
         mValue[i] = 0.0;
@@ -99,21 +97,24 @@ int treeComputeMultipole(MultipoleBuffer& multi, Pair<ParticleInteger> particleR
         }
         Array<SimdFloat, NDIM> dx{};
         for (int dim = 0; dim < NDIM; dim++) {
-            dx[dim] = simdCast<SimdFloat>(simdPositionDifference(xValue[dim], y[dim])) *
-                toFloatFactor;    // 3
+            dx[dim] =
+                simdCast<SimdFloat>(simdPositionDifference(xValue[dim], y[dim])) * toFloatFactor;
         }
         auto m = p2M<order>(dx);
         for (int j = 0; j < kMultipoleCoefficients; j++) {
-            m[j] *= mask;                  // kMultipoleCoefficients
-            mValue[j] += simdSum(m[j]);    // kMultipoleCoefficients * 6
+            m[j] *= mask;
+            mValue[j] += simdSum(m[j]);
         }
-        flops += detail::stf::P2mKernel<FmmOrder<order>::kMultipoleDegree_>::kFlops_ + 6 +
-            kMultipoleCoefficients * 7;
     }
     for (int i = 0; i < kMultipoleCoefficients; i++) {
         multi[i] = mValue[i];
     }
-    return flops;
+    // Every SIMD lane executes P2M, including the zero-mass padding. Each
+    // coefficient has a lane multiply and a reduction plus scalar accumulation.
+    return 3 +
+        FlopCount(maxi - particleRange.first) *
+        (detail::stf::P2mKernel<FmmOrder<order>::kMultipoleDegree_>::kFlops_ + 6 +
+            2 * kMultipoleCoefficients);
 }
 
 #endif

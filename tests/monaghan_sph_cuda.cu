@@ -23,9 +23,11 @@
 #include <cosmictiger/sph/sph_cuda.hpp>
 #include "cuda_test.hpp"
 
-// Only the options-constructor and host assertion services are replaced here.
+// Only the options-constructor, CPU counter, and host assertion services are replaced here.
 // Density, smoothing, forces, heating, device assertions, and allocation use the
 // production translation units. The test does not start an HPX runtime.
+void addCpuFlops(FlopCount) {}
+
 Options const& getOptions() {
     static Options const options{};
     return options;
@@ -40,6 +42,25 @@ void cosmictigerAssert(char const* condition, bool value, char const* file, int 
 namespace detail {
 
 constexpr double kPi = 3.141592653589793238462643383279502884;
+
+// Count additions inside the production block reduction independently of its
+// analytic cost. This catches the extra work in 96- and 160-thread SPH blocks.
+struct CountedReductionValue {
+    float value;
+    FlopCount* operations;
+
+    __device__ CountedReductionValue operator+(CountedReductionValue const& other) const {
+        atomicAdd(operations, FlopCount(1));
+        return {value + other.value, operations};
+    }
+};
+
+template <int blockSize>
+__global__ void countReductionOperations(FlopCount* executed, FlopCount* reported) {
+    CountedReductionValue number{1.0f, executed};
+    sharedReduceAdd<CountedReductionValue, blockSize>(number);
+    atomicAdd(reported, sphReductionFlops<blockSize>());
+}
 
 void checkCuda(cudaError_t status, char const* operation) {
     if (status != cudaSuccess) {
@@ -75,7 +96,14 @@ class Fixture {
         return pointer;
     }
 
+    void checkFlops() const {
+        require(reduction_->floatingPointOperations > 0, "SPH kernel did not count floating work");
+        require(getGpuFlops() == reduction_->floatingPointOperations,
+            "SPH launch count did not reach the global GPU counter exactly once");
+    }
+
     void resetReduction() {
+        resetGpuFlops();
         *reduction_ = {};
         reduction_->minimumSupportRadius = std::numeric_limits<float>::max();
     }
@@ -174,6 +202,7 @@ public:
         sphCudaPrehydro1<<<1, PREHYDRO1_BLOCK_SIZE>>>(params_, data_, reduction_);
         checkCuda(cudaGetLastError(), "prehydro1 launch");
         checkCuda(cudaDeviceSynchronize(), "prehydro1 execution");
+        checkFlops();
         require(reduction_->pendingChanges == 0,
             "complete neighbor fixture must converge without refresh");
         for (int i = 0; i < count_; i++) {
@@ -195,6 +224,7 @@ public:
         sphCudaPrehydro2<<<1, PREHYDRO2_BLOCK_SIZE>>>(params_, data_, reduction_);
         checkCuda(cudaGetLastError(), "prehydro2 launch");
         checkCuda(cudaDeviceSynchronize(), "prehydro2 execution");
+        checkFlops();
         require(
             reduction_->pendingChanges == 0, "density fixture unexpectedly needs neighbor refresh");
         for (int i = 0; i < count_; i++) {
@@ -209,6 +239,7 @@ public:
         sphCudaHydro<<<1, HYDRO_BLOCK_SIZE>>>(params_, data_, reduction_);
         checkCuda(cudaGetLastError(), "hydro launch");
         checkCuda(cudaDeviceSynchronize(), "hydro execution");
+        checkFlops();
         for (int i = 0; i < count_; i++) {
             require(std::isfinite(data_.sinkInternalEnergyRate[i]),
                 "finite active-kernel thermal rate");
@@ -286,6 +317,7 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
     for (int node = 0; node < data.numberOfTargetNodes; node++) {
         cpuResult += sphRunCpuNode(fixture.params_, cpuData, node);
     }
+    resetGpuFlops();
     *fixture.reduction_ = {};
     fixture.reduction_->minimumSupportRadius = std::numeric_limits<float>::max();
     switch (runType) {
@@ -313,8 +345,12 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
             cpuResult.maximumGravityRung == cudaResult.maximumGravityRung &&
             cpuResult.maximumRung == cudaResult.maximumRung,
         "CPU/CUDA rung-reduction parity");
-    requireClose("CPU/CUDA operation count", cpuResult.floatingPointOperations,
-        cudaResult.floatingPointOperations, 0.0);
+    // SIMD executes padded lanes/all polynomial spans; CUDA takes scalar
+    // branches and performs block reductions. Their work counts should differ.
+    require(cpuResult.floatingPointOperations > 0.0 && cudaResult.floatingPointOperations > 0,
+        "CPU/CUDA SPH must both count their floating work");
+    require(getGpuFlops() == cudaResult.floatingPointOperations,
+        "SPH phase did not reach the global GPU counter exactly once");
     requireClose("CPU/CUDA minimum support", cpuResult.minimumSupportRadius,
         cudaResult.minimumSupportRadius, 3.0e-5);
     requireClose("CPU/CUDA maximum support", cpuResult.maximumSupportRadius,
@@ -925,6 +961,32 @@ protected:
             {radial_kernel::Family::Ferrers, 8}, {radial_kernel::Family::Spline, 3}, true);
     }
 };
+
+TEST_F(MonaghanSphCuda, BlockReductionFlops) {
+    FlopCount* counts = nullptr;
+    ASSERT_EQ(cudaMallocManaged(&counts, 2 * sizeof(FlopCount)), cudaSuccess);
+    for (int blockSize : {64, 96, 160, 256}) {
+        counts[0] = counts[1] = 0;
+        switch (blockSize) {
+        case 64:
+            detail::countReductionOperations<64><<<1, 64>>>(counts, counts + 1);
+            break;
+        case 96:
+            detail::countReductionOperations<96><<<1, 96>>>(counts, counts + 1);
+            break;
+        case 160:
+            detail::countReductionOperations<160><<<1, 160>>>(counts, counts + 1);
+            break;
+        case 256:
+            detail::countReductionOperations<256><<<1, 256>>>(counts, counts + 1);
+            break;
+        }
+        EXPECT_EQ(cudaGetLastError(), cudaSuccess);
+        EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+        EXPECT_EQ(counts[0], counts[1]) << "block size " << blockSize;
+    }
+    EXPECT_EQ(cudaFree(counts), cudaSuccess);
+}
 
 TEST_F(MonaghanSphCuda, PeriodicSupport) {
     detail::testPeriodicSupport();

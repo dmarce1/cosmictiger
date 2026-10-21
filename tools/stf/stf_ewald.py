@@ -10,6 +10,12 @@ This module is a port of CosmicTiger's former fmm_kernel_codegen.cpp;
 it does not derive from the Boost-licensed STF algebra. Ewald uses the legacy
 rank-packed symmetric/traceless tensor layout, including its quadratic trace
 component, rather than the STF generator's degree-packed harmonic layout.
+
+Counts describe emitted source arithmetic: add/subtract/multiply/divide and
+each elementary-function result count once, FMA twice, and unary signs,
+comparisons and conversions do not count. Math-library internals are excluded;
+erfcexp and sincos each produce two elementary-function results. SIMD callers
+multiply these per-lane counts by the width, including masked/padded lanes.
 """
 
 from math import factorial, pi, prod, sqrt
@@ -107,7 +113,7 @@ def weightedAssignment(target, source, factor, first):
     if closeToOne(factor):
         return f'{target} {"=" if first else "+="} {source};', int(not first)
     if closeToOne(-factor):
-        return (f'{target} = -{source};' if first else f'{target} -= {source};'), 1
+        return (f'{target} = -{source};' if first else f'{target} -= {source};'), int(not first)
     if first:
         return f'{target} = simdBroadcast<T>({factor:.9e}) * {source};', 1
     return f'{target} = simdFma(simdBroadcast<T>({factor:.9e}), {source}, {target});', 2
@@ -211,7 +217,6 @@ def computeDetraceEwald(code, order):
 
 def radialDerivatives(code, order, origin):
     code.extend([
-        'icnt++;',
         'T const r = simdSqrt(r2);',
         'T const n8r = simdBroadcast<T>(-8*SCALE_FACTOR_INV2) * r;',
         'T const rinv = simdSelect(r > simdBroadcast<T>(0), simdBroadcast<T>(1), '
@@ -229,7 +234,11 @@ def radialDerivatives(code, order, origin):
         'T const rinv0 = simdBroadcast<T>(1);',
         'T const rinv1 = rinv;',
     ])
-    flops = 0
+    # sqrt, multiplication by -8, and reciprocal. Masks and min/max are free.
+    flops = 3
+    if not origin:
+        # erfcexp argument/result pair, expfactor, and e0.
+        flops += 6
     for power in range(2, (order + 1) // 2):
         left = power // 2
         right = power - left
@@ -250,6 +259,8 @@ def radialDerivatives(code, order, origin):
             'T const twoAr2 = ar2 + ar2;',
             'T const expAr2 = exp(-ar2);',
         ])
+        # ar2, twoAr2, exp, Horner FMAs, downward recurrence, and radial powers.
+        flops += 3 + 2 * (seriesTerms - 1) + 3 * (order - 1) + order + (order - 1)
         for term in range(seriesTerms - 1, -1, -1):
             coefficient = (-1.0 if term % 2 else 1.0) / (
                 factorial(term) * (2 * term + 2 * (order - 1) + 1))
@@ -267,6 +278,7 @@ def radialDerivatives(code, order, origin):
             if degree != order - 1:
                 code.append('radialFactor *= n8r;')
     else:
+        flops += 1 + 3 * (order - 1) + (order - 2)
         code.append('T const d0 = -erfc0 * rinv;')
         for degree in range(1, order):
             code.append(f'T const d{degree} = simdFma(simdBroadcast<T>({-2 * degree + 1}) '
@@ -283,7 +295,7 @@ def radialDerivatives(code, order, origin):
     for axis in range(3):
         code.append(f'dxrinv[{axis}] = dx[{axis}] * rinv;')
     flops += computeDx(code, order)
-    flops += 37 + 7 * (order - 1) + order * (order + 1) // 2
+    flops += 3  # dxrinv
     flops += computeDetraceEwald(code, order)
     return flops
 
@@ -297,7 +309,7 @@ def ewald(code, order):
         'position[0] *= simdBroadcast<T>(SCALE_FACTOR);',
         'position[1] *= simdBroadcast<T>(SCALE_FACTOR);',
         'position[2] *= simdBroadcast<T>(SCALE_FACTOR);',
-        'FlopCounter<int> flops = 7;',
+        '// Per-lane source-operation estimate; FMA=2, elementary results=1.',
         'T r = simdSqrt(simdFma(position[0], position[0], simdFma(position[1], position[1], '
         'sqr(position[2]))));',
         f'T const fouroversqrtpi = simdBroadcast<T>({4.0 / sqrt(pi):.9e});',
@@ -308,7 +320,7 @@ def ewald(code, order):
         'd = 0.0f;',
         'auto const realsz = EwaldConst::nreal();',
         'auto const zeroMask = r > simdBroadcast<T>(0.0);',
-        'int icnt = 0;',
+        'int acceptedRealImages = 0;',
         'auto const foursz = EwaldConst::nfour();',
         'for (int i = 0; i < foursz; i++) {',
         'auto const &h = EwaldConst::fourIndex(i);',
@@ -333,14 +345,13 @@ def ewald(code, order):
         '{',
         'T r2 = simdFma(dx[0], dx[0], simdFma(dx[1], dx[1], sqr(dx[2])));',
     ])
-    realFlops = radialDerivatives(code, order, True)
+    originFlops = radialDerivatives(code, order, True)
     code.extend([
         f'auto const drz = EwaldConst::d0<{order}>();',
         f'for (int i = 0; i < {(order + 2) * (order + 1) * order // 6}; i++) {{',
         'dreal[i] = simdSelect(zeroMask, dreal[i], -simdBroadcast<T>(drz[i]));',
         '}',
         '}',
-        f'flops += icnt * {realFlops};',
         'for (int i = 0; i < realsz; i++) {',
         'auto const n = EwaldConst::realIndex(i);',
         'Array<T, NDIM> dx;',
@@ -349,16 +360,19 @@ def ewald(code, order):
         '}',
         'T r2 = simdFma(dx[0], dx[0], simdFma(dx[1], dx[1], sqr(dx[2])));',
         'if (simdAnyOf(r2 < simdBroadcast<T>(SCALE_FACTOR2*EWALD_REAL_CUTOFF2))) {',
+        '++acceptedRealImages;',
     ])
-    radialDerivatives(code, order, False)
+    realFlops = radialDerivatives(code, order, False)
     code.extend(['}', '}'])
-    detraceFlops = computeDetrace(code, order) + 16 + 3 * (order * order + 1)
-    fourierFlops = 40 + 2 * (order * order + 1)
+    detraceFlops = computeDetrace(code, order)
+    fourierFlops = 8 + 2 * (order * order + 1)
     code.extend([
-        f'flops += {fourierFlops} * foursz + {detraceFlops + order * order + 1};',
         'd = d + dfour;',
         f'd[0] = simdBroadcast<T>({pi / 4.0:.9e} * SCALE_FACTOR_INV1) + d[0];',
-        'return flops;',
+        # Scale/radius (9), repeated origin radius squared (5), tensor sum (N),
+        # potential shift (1), and each image displacement/radius squared (11).
+        f'return {14 + originFlops + detraceFlops + order * order + 2} '
+        f'+ {fourierFlops} * foursz + 11 * realsz + {realFlops} * acceptedRealImages;',
         '}',
     ])
 

@@ -39,10 +39,10 @@ template KickReturn kickWalk<COSMICTIGER_FMM_INSTANCE_ORDER>(KickParameters, Exp
     Array<Fixed32, NDIM>, TreeId, Vector<TreeId>, Vector<TreeId>, std::shared_ptr<KickWorkspace>);
 
 // Tree multipole construction (tree_multipole.hpp).
-template int treeComputeMultipole<COSMICTIGER_FMM_INSTANCE_ORDER>(MultipoleBuffer&,
+template FlopCount treeComputeMultipole<COSMICTIGER_FMM_INSTANCE_ORDER>(MultipoleBuffer&,
     MultipoleBuffer const&, MultipoleBuffer const&, Array<double, NDIM> const&,
     Array<double, NDIM> const&, Array<double, NDIM> const&);
-template int treeComputeMultipole<COSMICTIGER_FMM_INSTANCE_ORDER>(
+template FlopCount treeComputeMultipole<COSMICTIGER_FMM_INSTANCE_ORDER>(
     MultipoleBuffer&, Pair<ParticleInteger>, Array<double, NDIM> const&);
 
 // Ewald tables (ewald_tables.hpp).

@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/cuda/cuda.hpp>
 #include <cosmictiger/fmm/fmm_order.hpp>
@@ -62,6 +63,7 @@ int kickBlockCount(ParticleInteger particles) {
     static int const referenceBlocks = kKickHandoffBlocksPerMultiprocessor * cudaSmpCount();
     double const scale = std::clamp(
         std::cbrt(double(particles) / kKickHandoffReferenceParticles), 1.0, kKickHandoffMaxScale);
+    addCpuFlops(4);    // Division, cube root, scaling, and rounding in automatic handoff sizing.
     return int(std::lround(referenceBlocks * scale));
 }
 

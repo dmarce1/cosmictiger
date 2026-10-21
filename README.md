@@ -255,6 +255,31 @@ and time spent on the current step. Cosmological runs show redshift and scale
 factor alongside timestep and timing information. Warnings and errors remain
 visible. Plain-text output also stays readable when redirected to a log.
 
+Both progress tables include `TFLOP/s` without enabling verbose output. This is
+an estimate of instrumented gravity, SPH and tree arithmetic divided by the wall time
+of force advancement, summed across CPU workers, CUDA kernels and localities.
+SPH includes neighbor geometry, each density/support-radius iteration, pressure
+and viscosity pairs, timestep/rung calculations, and predictor/corrector kicks.
+Chemistry, FFTs and other uninstrumented work are not counted;
+when they run inside force advancement their elapsed time is included. The
+cosmological `progress.txt` retains its existing `Tflops` field and layout.
+
+Counts use 64-bit integers until the final rate conversion. Arithmetic and
+math-function results count as one operation, FMA as two; integer operations,
+comparisons, selections and sign changes (including absolute values) are excluded.
+Force and potential kernels count; diagnostic energy/momentum bookkeeping,
+diagnostic reductions and diagnostic-only signal speeds do not. SIMD padding
+and numerical CUDA reductions count when executed. These are source-operation estimates, not
+hardware instruction counts: compiler folding/fusion and math-library
+implementations can produce different instruction totals. Fixed kernel costs
+are batched, CPU totals are sharded by worker, and each CUDA tree walk submits
+its accumulated count once per warp. Reset and reporting happen after work
+completion; reporting uses a monotonic clock and excludes counter collection
+latency from the measured interval.
+
+See [the function-by-function FLOP audit](docs/flop_accounting.md) for the counted
+paths, diagnostic exclusions and regression coverage.
+
 Set `--run.verbose=true` to print the complete resolved options and detailed
 runtime diagnostics, including tree, gravity, SPH, and CUDA setup information.
 The default is `false`. The equivalent INI setting is:

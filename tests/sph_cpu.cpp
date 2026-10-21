@@ -24,6 +24,14 @@
 
 #include <cosmictiger/sph/sph_cpu.hpp>
 
+namespace detail {
+FlopCount submittedSphFlops = 0;
+}
+
+void addCpuFlops(FlopCount count) {
+    detail::submittedSphFlops += count;
+}
+
 // The fixture owns ordinary host arrays and calls the production SIMD kernels.
 // It does not start an HPX runtime or alias staged source snapshots with sinks.
 Options const& getOptions() {
@@ -1045,6 +1053,64 @@ private:
 }    // namespace detail
 
 using detail::SphCpuTest;
+
+TEST_F(SphCpuTest, EveryPhaseSubmitsItsArithmeticCount) {
+    // The partial final packet verifies that actual SIMD work is counted, even
+    // when only one lane in that packet contains a particle.
+    detail::Fixture fixture(SimdFloat::size() + 1);
+    fixture.params_.minimumSupportRadius = 0.2f;
+    fixture.params_.maximumSupportRadius = 0.2f;
+    fixture.params_.phase = 1;
+    for (int i = 0; i < fixture.count_; ++i) {
+        auto const source = fixture.sourceIndex(i);
+        fixture.data_.sourcePositionX[source] = 0.4f + 0.01f * i;
+        fixture.data_.sourcePositionY[source] = 0.5f;
+        fixture.data_.sourcePositionZ[source] = 0.5f;
+        fixture.data_.sourceDensity[source] = 1.0f;
+    }
+    for (int runType : {SPH_RUN_PREHYDRO1, SPH_RUN_PREHYDRO2, SPH_RUN_HYDRO, SPH_RUN_RUNGS}) {
+        detail::submittedSphFlops = 0;
+        auto const result = fixture.run(runType);
+        EXPECT_GT(detail::submittedSphFlops, 0) << "phase " << runType;
+        EXPECT_EQ(result.floatingPointOperations, double(detail::submittedSphFlops))
+            << "phase " << runType;
+        fixture.publishSupport();
+        fixture.publishDensity();
+        fixture.publishRungs();
+    }
+}
+
+TEST_F(SphCpuTest, DensityAndRungsCountPaddedPackets) {
+    int const width = SimdFloat::size();
+    detail::Fixture fixture(width + 1);
+    // Every neighbor passes all three dimensions of the first periodic image:
+    // six fixed-point image conversions per source. Two SIMD packets execute
+    // per sink, including the unused lanes of the final packet.
+    auto const rungs = fixture.run(SPH_RUN_RUNGS);
+    EXPECT_EQ(rungs.floatingPointOperations, double(fixture.count_) * (7 + 18 * width));
+    // Cubic density evaluates both Bernstein spans in every lane: each span
+    // has six interpolation steps (18 operations), four weights, one scalar
+    // width subtraction. Include distance/normalization, density accumulation,
+    // four scalar setup operations and a width-1 additive reduction per sink.
+    auto const density = fixture.run(SPH_RUN_PREHYDRO2);
+    EXPECT_EQ(density.floatingPointOperations, double(fixture.count_) * (13 + 113 * width));
+}
+
+TEST_F(SphCpuTest, DisabledGravityTimestepDiagnosticsAreExcluded) {
+    detail::Fixture fixture(2);
+    fixture.params_.phase = 1;
+    for (int i = 0; i < fixture.count_; ++i) {
+        fixture.data_.sourceDensity[fixture.sourceIndex(i)] = 1.0f;
+    }
+    auto const withoutGravity = fixture.run(SPH_RUN_HYDRO);
+    fixture.data_.selfGravityEnabled = true;
+    auto const withGravity = fixture.run(SPH_RUN_HYDRO);
+    // The same gravity limit and rung expressions execute in both cases, but
+    // constrain the evolution only when self-gravity is enabled. Otherwise
+    // their 13 operations produce diagnostics and must not enter the count.
+    EXPECT_EQ(withGravity.floatingPointOperations - withoutGravity.floatingPointOperations,
+        13.0 * fixture.count_);
+}
 
 TEST_F(SphCpuTest, PeriodicSupport) {
     detail::testPeriodicSupport();

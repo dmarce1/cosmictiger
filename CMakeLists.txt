@@ -536,6 +536,27 @@ if(BUILD_TESTING)
             WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/tests/${voronoi_test}"
             PROPERTIES TIMEOUT 120)
     endforeach()
+    add_hpx_executable(flops_test SOURCES tests/flops.cpp src/core/flops.cpp)
+    target_include_directories(flops_test PRIVATE ${PROJECT_SOURCE_DIR})
+    cosmictiger_add_gtest(NAME flops TARGET flops_test HPX_MAIN
+        ARGS --hpx:threads=2 --hpx:bind=none
+        PROPERTIES TIMEOUT 30 PROCESSORS 6)
+    if(HPX_WITH_PARCELPORT_MPI AND MPIEXEC_EXECUTABLE)
+        add_test(NAME flops_mpi COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 3
+            ${MPIEXEC_PREFLAGS} $<TARGET_FILE:flops_test> ${MPIEXEC_POSTFLAGS}
+            --hpx:threads=2 --hpx:bind=none --hpx:localities=3)
+        set_tests_properties(flops_mpi PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE PROCESSORS 10)
+    endif()
+    if(COSMICTIGER_WITH_CUDA)
+        add_executable(flops_cuda_test tests/flops_cuda.cu src/core/flops.cu)
+        target_include_directories(flops_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_compile_definitions(flops_cuda_test PRIVATE USE_CUDA)
+        target_link_libraries(flops_cuda_test PRIVATE CUDA::cudart)
+        set_target_properties(flops_cuda_test PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+        cosmictiger_add_gtest(NAME flops_cuda TARGET flops_cuda_test
+            PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+    endif()
+
     add_executable(halo_catalog_fixture tests/halo_catalog_fixture.cpp)
     target_link_libraries(halo_catalog_fixture PRIVATE cosmictiger_fp16)
     target_compile_options(halo_catalog_fixture PRIVATE -fno-fast-math)
@@ -893,6 +914,32 @@ if(BUILD_TESTING)
     cosmictiger_add_gtest(NAME stf_ewald_cpu TARGET stf_ewald_cpu_test
         PROPERTIES TIMEOUT 30)
 
+    add_executable(fmm_flops_test tests/fmm_flops.cpp src/fmm/ewald_indices.cpp src/fmm/fmm_order.cpp)
+    target_include_directories(fmm_flops_test PRIVATE ${PROJECT_SOURCE_DIR})
+    target_include_directories(fmm_flops_test SYSTEM PRIVATE ${CHEALPIX_INCLUDE_DIR})
+    target_compile_definitions(fmm_flops_test PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
+    cosmictiger_use_generated_kernels(fmm_flops_test)
+    target_link_libraries(fmm_flops_test PRIVATE HPX::hpx Boost::boost)
+    cosmictiger_add_gtest(NAME fmm_flops TARGET fmm_flops_test
+        PROPERTIES TIMEOUT 30)
+
+    add_executable(softening_flops_test tests/softening_flops.cpp)
+    target_include_directories(softening_flops_test PRIVATE ${PROJECT_SOURCE_DIR})
+    target_include_directories(softening_flops_test SYSTEM PRIVATE ${CHEALPIX_INCLUDE_DIR})
+    target_compile_definitions(softening_flops_test PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
+    cosmictiger_use_generated_kernels(softening_flops_test)
+    target_link_libraries(softening_flops_test PRIVATE HPX::hpx Boost::boost)
+    cosmictiger_add_gtest(NAME softening_flops TARGET softening_flops_test
+        PROPERTIES TIMEOUT 30)
+
+    add_executable(sph_flops_test tests/sph_flops.cpp)
+    target_include_directories(sph_flops_test PRIVATE ${PROJECT_SOURCE_DIR})
+    target_compile_definitions(sph_flops_test PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
+    cosmictiger_use_generated_kernels(sph_flops_test)
+    target_link_libraries(sph_flops_test PRIVATE HPX::hpx Boost::boost)
+    cosmictiger_add_gtest(NAME sph_flops TARGET sph_flops_test
+        PROPERTIES TIMEOUT 30)
+
     add_executable(fmm_acceptance_test tests/fmm_acceptance.cpp)
     target_include_directories(fmm_acceptance_test PRIVATE ${PROJECT_SOURCE_DIR})
     target_compile_options(fmm_acceptance_test PRIVATE -ffast-math)
@@ -1113,6 +1160,7 @@ if(BUILD_TESTING)
 
         add_executable(monaghan_sph_cuda_test tests/monaghan_sph_cuda.cu
             tests/cuda_memory_backend.cpp
+            src/core/flops.cu
             src/sph/sph_prehydro.cu src/sph/sph_hydro.cu src/sph/sph_rungs.cu
             src/sph/sph_cpu.cpp src/sph/sph_prehydro_cpu.cpp src/sph/sph_hydro_cpu.cpp src/sph/sph_rungs_cpu.cpp
             src/math/kernel.cpp src/math/kernel.cu src/cuda/cuda_memory.cu src/core/assert.cu)

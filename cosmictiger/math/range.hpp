@@ -9,8 +9,11 @@
 #ifndef RANGE_HPP_
 #define RANGE_HPP_
 
+#include <type_traits>
+
 #include <cosmictiger/core/containers.hpp>
 #include <cosmictiger/core/defs.hpp>
+#include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/cuda/cuda.hpp>
 #include <cosmictiger/math/math.hpp>
@@ -86,7 +89,7 @@ struct Range {
         return iValue;
     }
     CUDA_EXPORT
-    inline bool periodicIntersects(Range const& other) const {
+    inline bool periodicIntersects(Range const& other, FlopCounter<>* flops = nullptr) const {
         Range iValue;
 #ifdef __CUDA_ARCH__
         for (int dim = 0; dim < n; dim++) {
@@ -95,9 +98,21 @@ struct Range {
             if (iValue.end[dim] <= iValue.begin[dim]) {
                 iValue.begin[dim] = max(begin[dim] + T(1), other.begin[dim]);
                 iValue.end[dim] = min(end[dim] + T(1), other.end[dim]);
+                if constexpr (!std::is_integral_v<T>) {
+                    // Floating shifts or the two integer-to-fixed scaling products.
+                    if (flops) {
+                        *flops += 2;
+                    }
+                }
                 if (iValue.end[dim] <= iValue.begin[dim]) {
                     iValue.begin[dim] = max(begin[dim] - T(1), other.begin[dim]);
                     iValue.end[dim] = min(end[dim] - T(1), other.end[dim]);
+                    if constexpr (!std::is_integral_v<T>) {
+                        // Floating shifts or the two integer-to-fixed scaling products.
+                        if (flops) {
+                            *flops += 2;
+                        }
+                    }
                 }
             }
         }
@@ -108,9 +123,21 @@ struct Range {
             if (iValue.end[dim] <= iValue.begin[dim]) {
                 iValue.begin[dim] = std::max(begin[dim] + T(1), other.begin[dim]);
                 iValue.end[dim] = std::min(end[dim] + T(1), other.end[dim]);
+                if constexpr (!std::is_integral_v<T>) {
+                    // Floating shifts or the two integer-to-fixed scaling products.
+                    if (flops) {
+                        *flops += 2;
+                    }
+                }
                 if (iValue.end[dim] <= iValue.begin[dim]) {
                     iValue.begin[dim] = std::max(begin[dim] - T(1), other.begin[dim]);
                     iValue.end[dim] = std::min(end[dim] - T(1), other.end[dim]);
+                    if constexpr (!std::is_integral_v<T>) {
+                        // Floating shifts or the two integer-to-fixed scaling products.
+                        if (flops) {
+                            *flops += 2;
+                        }
+                    }
                 }
             }
         }
@@ -370,7 +397,7 @@ struct Fixed32Range : public Range<RangeFixed> {
         end = other.end;
     }
     CUDA_EXPORT
-    bool contains(Array<Fixed32, NDIM> const& pt) const {
+    bool contains(Array<Fixed32, NDIM> const& pt, FlopCounter<>* flops = nullptr) const {
         for (int i = -1; i <= 1; i++) {
             for (int j = -1; j <= 1; j++) {
                 for (int k = -1; k <= 1; k++) {
@@ -380,10 +407,16 @@ struct Fixed32Range : public Range<RangeFixed> {
                     iValue[1] = j;
                     iValue[2] = k;
                     for (int dim = 0; dim < NDIM; dim++) {
+                        if (flops) {
+                            *flops += 1;    // Image offset conversion to fixed-point.
+                        }
                         if (RangeFixed(pt[dim]) + RangeFixed::min() <
                             begin[dim] + RangeFixed(iValue[dim])) {
                             contains = false;
                             break;
+                        }
+                        if (flops) {
+                            *flops += 1;
                         }
                         if (RangeFixed(pt[dim]) >
                             end[dim] + RangeFixed(iValue[dim]) + RangeFixed::min()) {

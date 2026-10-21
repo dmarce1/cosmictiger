@@ -27,8 +27,9 @@
 SphRunReturn sphCpuHydro(
     SphRunParameters const& parameters, SphRunData const& data, int targetNodeIndex) {
     SphRunReturn result;
+    FlopCounter<> flops = 2;    // Scale-factor reciprocal and gas mass scaling.
     auto const& targetNode = data.treeNodes[data.targetNodeIndices[targetNodeIndex]];
-    auto const neighbors = detail::sphCpuNeighbors(data, targetNode, true);
+    auto const neighbors = detail::sphCpuNeighbors(data, targetNode, true, flops);
     float const inverseScaleFactor = 1.0f / parameters.scaleFactor;
     float const adiabaticIndex = data.adiabaticIndex;
     // Keep the historical cubic viscosity scale while measuring every kernel with the
@@ -50,7 +51,7 @@ SphRunReturn sphCpuHydro(
     float const ε = parameters.viscosityEpsilon;       // η²/h² of p. 551
     float const a_da_dt = parameters.expansionRate;    // a·da/dt, the Hubble flow of a pair
     for (int particleIndex = targetNode.particleRange.first;
-        particleIndex < targetNode.particleRange.second; particleIndex++) {
+         particleIndex < targetNode.particleRange.second; particleIndex++) {
         int const sinkIndex =
             targetNode.sinkParticleRange.first - targetNode.particleRange.first + particleIndex;
         int const previousRung = data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]];
@@ -79,6 +80,7 @@ SphRunReturn sphCpuHydro(
             data.sourceVelocityY[particleIndex], data.sourceVelocityZ[particleIndex]);
         Vector3<SimdFloat> const v_a_pack(v_a);
         float const one_over_H_a = 1.0f / H_a;
+        flops += 8 + int(data.sourcePressureEnergyRatio == nullptr);
         float const one_over_H_a4 = sqr(sqr(one_over_H_a));    // 1/H_a⁴
         Vector3<SimdFloat> dv_a_dt_pack(zero);                 // lane partial sums of equation 6.4
         SimdFloat du_a_dt_pack(zero);                          // lane partial sums of equation 6.5
@@ -95,6 +97,8 @@ SphRunReturn sphCpuHydro(
             auto const interacts = detail::sphCpuValidLanes(neighbors, first) &
                 (r_ab2_staged > zero) &
                 (r_ab2_staged < simdMax(SimdFloat(H_a * H_a), sqr(H_b_staged)));
+            // Three fixed scales, five dot operations and H_b² per lane; H_a² is scalar.
+            flops += 9 * SimdFloat::size() + 1;
             if (!simdAnyOf(interacts)) {
                 continue;
             }
@@ -120,9 +124,12 @@ SphRunReturn sphCpuHydro(
             // The selected kernel is W(r, H) = w(r/H)/H³, so each gradient equals
             // w'(r/H) r_ab/(H⁴ r) and ∇_a W̃_ab = F_ab r_ab with the scalar F_ab.
             SimdFloat const one_over_H_b = one / H_b;
-            SimdFloat const F_a =
-                dkernelWDq(r * SimdFloat(one_over_H_a)) * SimdFloat(one_over_H_a4) / r;
-            SimdFloat const F_b = dkernelWDq(r * one_over_H_b) * sqr(sqr(one_over_H_b)) / r;
+            SimdFloat const q_a = r * SimdFloat(one_over_H_a);
+            SimdFloat const q_b = r * one_over_H_b;
+            SimdFloat const F_a = dkernelWDq(q_a) * SimdFloat(one_over_H_a4) / r;
+            SimdFloat const F_b = dkernelWDq(q_b) * sqr(sqr(one_over_H_b)) / r;
+            flops += sph_flops::densityKernelFlops(selectedHydroKernel(), q_a, true) +
+                sph_flops::densityKernelFlops(selectedHydroKernel(), q_b, true);
             SimdFloat const F_ab = simdSelect(interacts, half * (F_a + F_b), zero);
             Vector3<SimdFloat> const gradW̃_ab = F_ab * r_ab;    // ∇_a W̃_ab
             // v_ab = v_a − v_b from the stored peculiar velocities. The physical relative
@@ -152,10 +159,18 @@ SphRunReturn sphCpuHydro(
                 monaghan_sph::pairEnergyRate(
                     P_over_ρ2_ab, Π_ab, v_ab_dot_r_ab * F_ab, v_ab_dot_r_ab_physical * F_ab);
             μ_max_pack = simdMax(μ_max_pack, -μ_ab);
+            // EOS/radius (6), inverse H (1), gradients (13), velocity products (10),
+            // Monaghan helpers (28), and momentum/thermal accumulation (12).
+            flops += SimdFloat::size() *
+                    (42 + sph_flops::kViscosityMu + sph_flops::kArtificialViscosity +
+                        sph_flops::kPressureCoefficient + sph_flops::kPairEnergyRate) +
+                int(data.sourcePressureEnergyRatio == nullptr);
         }
         Vector3<float> dv_a_dt(
             simdSum(dv_a_dt_pack[XDIM]), simdSum(dv_a_dt_pack[YDIM]), simdSum(dv_a_dt_pack[ZDIM]));
         float du_a_dt = simdSum(du_a_dt_pack);
+        flops +=
+            4 * (SimdFloat::size() - 1);    // Four additive reductions; maxima are comparisons.
         float const μ_max = simdMaximum(μ_max_pack);    // max_b(−μ_ab) over approaching pairs
         // Accelerations outside the paper: self-gravity, the optional uniform, midplane and
         // central forces of the test problems, and velocity damping while relaxing the gas sphere.
@@ -167,6 +182,7 @@ SphRunReturn sphCpuHydro(
         dv_a_dt += gravityAcceleration;
         dv_a_dt[YDIM] += parameters.uniformAccelerationY;
         dv_a_dt[ZDIM] += parameters.midplaneAccelerationZ(data.sourcePositionZ[particleIndex]);
+        flops += 6;    // Five acceleration additions and fixed-point midpoint conversion.
         if (data.centralAcceleration != 0.0f) {
             Vector3<float> const separation(
                 distance(data.sourcePositionX[particleIndex], Fixed32(0.5)),
@@ -174,10 +190,12 @@ SphRunReturn sphCpuHydro(
                 distance(data.sourcePositionZ[particleIndex], Fixed32(0.5)));
             float const radius = separation.norm();
             float const inverseSupportRadius = 1.0f / data.centralSupportRadius;
+            float const q = radius * inverseSupportRadius;
             float const force = data.centralAcceleration *
-                radial_kernel::forceFactor(selectedGravityKernel(), radius * inverseSupportRadius) *
-                inverseSupportRadius * inverseSupportRadius * inverseSupportRadius;
+                radial_kernel::forceFactor(selectedGravityKernel(), q) * inverseSupportRadius *
+                inverseSupportRadius * inverseSupportRadius;
             dv_a_dt -= force * separation;
+            flops += 24 + sph_flops::forceKernelFlops(selectedGravityKernel(), q);
         }
         dv_a_dt -= parameters.velocityDampingRate * v_a;
         for (int dim = 0; dim < NDIM; dim++) {
@@ -189,6 +207,7 @@ SphRunReturn sphCpuHydro(
             2.0f - 3.0f * sinkPressureEnergyRatio :
             5.0f - 3.0f * adiabaticIndex;
         du_a_dt += expansionCoefficient * a_da_dt * inverseScaleFactor * u_a;
+        flops += 12;    // Six damping operations and six cosmological energy operations.
         data.sinkInternalEnergyRate[sinkIndex] = du_a_dt;
         if (parameters.phase == 1) {
             // Section 10.3, p. 563:
@@ -214,6 +233,7 @@ SphRunReturn sphCpuHydro(
             if (du_a_dt != 0.0f) {
                 δt = std::fmin(
                     δt, parameters.courantFactor / kViscosityWidthScale * u_a / std::fabs(du_a_dt));
+                flops += 3;    // Two divisions and a product; abs is a sign operation.
             }
             float const gravityTimestep = std::fmin(parameters.maximumTimestep,
                 data.accelerationTimestepFactor *
@@ -237,8 +257,14 @@ SphRunReturn sphCpuHydro(
                 std::fmax(result.inverseViscosityTimestep, one_over_δt_visc);
             result.inverseAccelerationTimestep =
                 std::fmax(result.inverseAccelerationTimestep, one_over_δt_f);
+            // h/c/visc (8), acceleration norm/limit (12), timestep (2), hydro
+            // rung (3); gravity limit/rung (13) only when it constrains evolution.
+            // Exclude the signal-speed diagnostic and disabled-gravity diagnostics.
+            flops += 25 + (data.selfGravityEnabled ? 13 : 0);
         }
     }
+    result.floatingPointOperations = FlopCount(flops);
+    addCpuFlops(flops);
     return result;
 }
 // NOLINTEND(readability-identifier-naming)

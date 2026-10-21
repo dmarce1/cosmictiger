@@ -10,6 +10,7 @@
 #define SPH_CUDA_HPP_
 
 #include <cosmictiger/core/defs.hpp>
+#include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/timer.hpp>
 #include <cosmictiger/cuda/cuda.hpp>
 #include <cosmictiger/cuda/cuda_memory.hpp>
@@ -20,6 +21,7 @@
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/sph/sph.hpp>
+#include <cosmictiger/sph/sph_flops.hpp>
 #include <cosmictiger/sph/sph_kernel.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
 #include <cosmictiger/sph/sph_tree.hpp>
@@ -37,7 +39,7 @@ struct SphReduction {
     float minimumSupportRadius;
     float maximumSupportRadius;
     float maximumSignalSpeed;
-    double floatingPointOperations;
+    FlopCount floatingPointOperations;
     int maximumHydroRung;
     int maximumGravityRung;
     int maximumRung;
@@ -69,6 +71,38 @@ struct SphNeighborPosition {
 };
 
 #ifdef __CUDACC__
+namespace detail {
+
+// sharedReduceAdd executes a sum in each lane whose partner exists, including
+// the redundant sums that broadcast a block result. Non-power-of-two blocks
+// therefore have lane-dependent costs; integer reductions do not contribute.
+template <int blockSize>
+__device__ inline FlopCount sphReductionFlops() {
+    int powerOfTwo = WARP_SIZE;
+    while (powerOfTwo < blockSize) {
+        powerOfTwo *= 2;
+    }
+    FlopCount count = 0;
+    for (int bit = powerOfTwo / 2; bit > 0; bit /= 2) {
+        count += (threadIdx.x + bit) % powerOfTwo < blockSize;
+    }
+    return count;
+}
+
+__device__ inline void recordSphGpuFlops(FlopCount count, SphReduction* reduction) {
+    if constexpr (kCountFlops) {
+        addGpuFlops(count);
+        // Every SPH block is a multiple of a full warp. Keep the per-launch
+        // diagnostic exact independently of the global reporting interval.
+        sharedReduceAdd(count);
+        if (threadIdx.x % WARP_SIZE == 0) {
+            atomicAdd(&reduction->floatingPointOperations, count);
+        }
+    }
+}
+
+}    // namespace detail
+
 // Section 6 of Monaghan (1992): the resolution length follows the local density,
 // h_a ∝ ρ_a^(−1/ν) with ν = 3 (equations 6.1-6.2). Instead of integrating equation 6.2 or
 // 6.7, the solve holds (4π/3) ρ_a H_a³/m = N_target, i.e. ΣW = Σ_b w(r_ab/H_a) = 3 N_target/(4π)
@@ -80,7 +114,7 @@ template <int blockSize>
 inline __device__ bool solveSphSupportRadius(float& supportRadius, float minimumSupportRadius,
     float maximumSupportRadius, float targetNeighborCount,
     DeviceVector<SphNeighborPosition> const& neighbors, Array<Fixed32, NDIM> const& position,
-    Fixed32Range const& neighborSearchBox) {
+    Fixed32Range const& neighborSearchBox, FlopCounter<>& flops) {
     int const threadIndex = threadIdx.x;
     int const runtimeBlockSize = blockDim.x;
     ALWAYS_ASSERT(minimumSupportRadius > 0.0f && maximumSupportRadius >= minimumSupportRadius &&
@@ -92,20 +126,28 @@ inline __device__ bool solveSphSupportRadius(float& supportRadius, float minimum
     float lower = minimumSupportRadius;
     float upper = maximumSupportRadius;
     float const ΣW_target = targetNeighborCount * float(3.0 / (4.0 * M_PI));
+    flops += 1;
     for (int iteration = 0; iteration < 128; iteration++) {
         int boxExceeded = false;
         for (int dim = 0; dim < NDIM; dim++) {
-            if (neighborSearchBox.end[dim] <
-                    RangeFixed(position[dim]) + RangeFixed(supportRadius) + RangeFixed::min() ||
-                RangeFixed(position[dim]) <
-                    neighborSearchBox.begin[dim] + RangeFixed(supportRadius) + RangeFixed::min()) {
+            bool const upperExceeded = neighborSearchBox.end[dim] <
+                RangeFixed(position[dim]) + RangeFixed(supportRadius) + RangeFixed::min();
+            flops += 1;    // Floating support-to-fixed scaling, preserving short circuiting.
+            if (upperExceeded) {
                 boxExceeded = true;
+            } else {
+                flops += 1;
+                if (RangeFixed(position[dim]) <
+                    neighborSearchBox.begin[dim] + RangeFixed(supportRadius) + RangeFixed::min()) {
+                    boxExceeded = true;
+                }
             }
         }
         if (boxExceeded) {
             return false;
         }
         float const one_over_H_a = 1.0f / supportRadius;
+        flops += 1;
         float ΣW = 0.0f;
         float dΣW_dH_a = 0.0f;
         for (int neighborIndex = threadIndex; neighborIndex < neighbors.size();
@@ -115,14 +157,19 @@ inline __device__ bool solveSphSupportRadius(float& supportRadius, float minimum
                 distance(position[YDIM], neighbor.positionY),
                 distance(position[ZDIM], neighbor.positionZ));
             float const q_ab = sqrtf(r_ab.dot(r_ab)) * one_over_H_a;
+            flops += 10;    // Three fixed distances, dot, root, normalized radius.
             if (q_ab < 1.0f) {
                 ΣW += kernelW(q_ab);
                 dΣW_dH_a -= q_ab * dkernelWDq(q_ab) * one_over_H_a;
+                flops += 4 + sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab) +
+                    sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab, true);
             }
         }
         sharedReduceAdd<float, blockSize>(ΣW);
         sharedReduceAdd<float, blockSize>(dΣW_dH_a);
+        flops += 2 * detail::sphReductionFlops<blockSize>();
         float const residual = ΣW - ΣW_target;
+        flops += 2;    // Residual and relative tolerance product (absolute value is free).
         if (fabsf(residual) <= SPH_SUPPORT_RADIUS_TOLERANCE * ΣW_target ||
             (supportRadius <= minimumSupportRadius && residual >= 0.0f) ||
             (supportRadius >= maximumSupportRadius && residual <= 0.0f)) {
@@ -137,8 +184,10 @@ inline __device__ bool solveSphSupportRadius(float& supportRadius, float minimum
         change = fminf(fmaxf(change, -0.2f * supportRadius), 0.2f * supportRadius);
         float next =
             fminf(fmaxf(supportRadius + change, minimumSupportRadius), maximumSupportRadius);
+        flops += 4;    // Newton/fallback change, two clamp products, radius update.
         if (next < lower || next > upper) {
             next = 0.5f * (lower + upper);
+            flops += 2;
         }
         if (next == supportRadius) {
             return true;

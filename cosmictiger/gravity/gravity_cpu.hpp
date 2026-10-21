@@ -71,7 +71,7 @@ template <int order>
 void cpuGravityCc(GravityCcType type, FmmExpansion<float, order>& lValue,
     Vector<TreeId> const& list, TreeId self, bool doPhi) {
     constexpr int kLocalCoefficients = FmmOrder<order>::kLocalCoefficients_;
-    FlopCounter<int> flops = 0;
+    FlopCounter<FlopCount> flops = 0;
     if (list.size()) {
         static SimdFloat const toFloatFactor = simdBroadcast<SimdFloat>(kFixed2float);
         Vector<TreeNode const*> treePtrs(list.size());
@@ -89,17 +89,15 @@ void cpuGravityCc(GravityCcType type, FmmExpansion<float, order>& lValue,
         }
         FmmExpansion<SimdFloat, order> l0;
         l0 = simdBroadcast<SimdFloat>(0.0f);
+        int directFlops = 0;
         for (int j = 0; j < numberOfSources; j++) {
-            int const count =
-                std::min(SIMD_FLOAT_SIZE, (int) (treePtrs.size() - j * SIMD_FLOAT_SIZE));
             Array<SimdFloat, NDIM> dx{};
             for (int dim = 0; dim < NDIM; dim++) {
                 dx[dim] = simdCast<SimdFloat>(simdPositionDifference(x[dim], yValue[j][dim])) *
                     toFloatFactor;
             }
-            flops += 3 * count;
             if (type == kGravityDirect) {
-                flops += count * m2LDirect(l0, mValue[j], dx, doPhi);
+                directFlops = m2LDirect(l0, mValue[j], dx, doPhi);
             } else {
                 Array<SimdFloat, NDIM> unwrappedPosition{};
                 for (int lane = 0; lane < SIMD_FLOAT_SIZE; lane++) {
@@ -112,14 +110,17 @@ void cpuGravityCc(GravityCcType type, FmmExpansion<float, order>& lValue,
                     }
                 }
                 FmmExpansion<SimdFloat, order> d;
-                flops += count * ewaldGreensFunction(d, dx, unwrappedPosition);
-                flops += count * m2L(l0, mValue[j], d, doPhi);
+                flops += FlopCount(SIMD_FLOAT_SIZE) * ewaldGreensFunction(d, dx, unwrappedPosition);
+                flops += FlopCount(SIMD_FLOAT_SIZE) * m2L(l0, mValue[j], d, doPhi);
             }
         }
+        // Fixed displacement and kernel work is batched outside the source loop.
+        flops += FlopCount(numberOfSources) * SIMD_FLOAT_SIZE *
+            (3 + (type == kGravityDirect ? directFlops : 9));
         for (int i = 0; i < kLocalCoefficients; i++) {
             lValue[i] += simdSum(l0[i]);
         }
-        flops += 7 * kLocalCoefficients;
+        flops += SIMD_FLOAT_SIZE * kLocalCoefficients;
     }
     addCpuFlops(flops);
 }
@@ -129,7 +130,7 @@ void cpuGravityCp(
     FmmExpansion<float, order>& lValue, Vector<TreeId> const& list, TreeId self, bool doPhi) {
     constexpr int kChunkSize = 32;
     constexpr int kLocalCoefficients = FmmOrder<order>::kLocalCoefficients_;
-    FlopCounter<int> flops = 0;
+    FlopCounter<FlopCount> flops = 0;
     if (list.size()) {
         static SimdFloat const toFloatFactor = simdBroadcast<SimdFloat>(kFixed2float);
         TreeNode const* selfPtr = treeGetNode(self);
@@ -177,8 +178,8 @@ void cpuGravityCp(
             }
             FmmExpansion<SimdFloat, order> l0;
             l0 = simdBroadcast<SimdFloat>(0.0f);
+            int greenFlops = 0;
             for (int j = 0; j < numberOfSources; j += SIMD_FLOAT_SIZE) {
-                int const cnt = std::min(count - j, SIMD_FLOAT_SIZE);
                 SimdFloat mass{};
                 for (int l = 0; l < SIMD_FLOAT_SIZE; l++) {
                     simdSetLane(yValue[XDIM], l, srcx[j + l].raw());
@@ -191,18 +192,18 @@ void cpuGravityCp(
                     dx[dim] = simdCast<SimdFloat>(simdPositionDifference(x[dim], yValue[dim])) *
                         toFloatFactor;
                 }
-                flops += cnt * 3;
                 FmmExpansion<SimdFloat, order> d;
-                flops += count * greensFunction(d, dx);
+                greenFlops = greensFunction(d, dx);
                 for (int l = 0; l < kLocalCoefficients; l++) {
                     l0[l] += mass * d[l];
                 }
-                flops += cnt * kLocalCoefficients;
             }
+            // Include padded SIMD lanes; each mass-weighted accumulation is two FLOPs.
+            flops += FlopCount(numberOfSources) * (greenFlops + 3 + 2 * kLocalCoefficients);
             for (int i = 0; i < kLocalCoefficients; i++) {
                 lValue[i] += simdSum(l0[i]);
             }
-            flops += 7 * kLocalCoefficients;
+            flops += SIMD_FLOAT_SIZE * kLocalCoefficients;
         }
     }
     addCpuFlops(flops);
@@ -210,7 +211,7 @@ void cpuGravityCp(
 
 template <int order>
 void cpuGravityPc(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const& list) {
-    FlopCounter<int> flops = 0;
+    FlopCounter<FlopCount> flops = 0;
     if (list.size()) {
         static SimdFloat const toFloatFactor = simdBroadcast<SimdFloat>(kFixed2float);
         Vector<TreeNode const*> treePtrs(list.size());
@@ -224,6 +225,7 @@ void cpuGravityPc(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
         detail::gatherSourceMultipoles<order>(treePtrs, mValue, yValue);
         auto const range = selfPtr->particleRange;
         Array<SimdInt, NDIM> x{};
+        int kernelFlops = 0;
         for (ParticleInteger i = range.first; i < range.second; i++) {
             Expansion2<SimdFloat> lValue2;
             lValue2(0, 0, 0) = simdBroadcast<SimdFloat>(0.0f);
@@ -234,23 +236,22 @@ void cpuGravityPc(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
                 x[dim] = simdBroadcast<SimdInt>(particlesPos(dim, i).raw());
             }
             for (int j = 0; j < numberOfSources; j++) {
-                int const count =
-                    std::min(SIMD_FLOAT_SIZE, (int) (treePtrs.size() - j * SIMD_FLOAT_SIZE));
                 Array<SimdFloat, NDIM> dx{};
                 for (int dim = 0; dim < NDIM; dim++) {
                     dx[dim] = simdCast<SimdFloat>(simdPositionDifference(x[dim], yValue[j][dim])) *
                         toFloatFactor;
                 }
-                flops += 3 * count;
-                flops += count * m2P(lValue2, mValue[j], dx, doPhi);
+                kernelFlops = m2P(lValue2, mValue[j], dx, doPhi);
             }
             int const j = i - range.first;
             f.gx[j] -= SCALE_FACTOR2 * simdSum(lValue2(1, 0, 0));
             f.gy[j] -= SCALE_FACTOR2 * simdSum(lValue2(0, 1, 0));
             f.gz[j] -= SCALE_FACTOR2 * simdSum(lValue2(0, 0, 1));
             f.phi[j] += SCALE_FACTOR1 * simdSum(lValue2(0, 0, 0));
-            flops += 28;
         }
+        flops += FlopCount(range.second - range.first) *
+            (FlopCount(numberOfSources) * SIMD_FLOAT_SIZE * (kernelFlops + 3) +
+                4 * (SIMD_FLOAT_SIZE + 1));
     }
     addCpuFlops(flops);
 }
