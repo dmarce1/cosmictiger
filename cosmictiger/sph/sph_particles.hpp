@@ -63,9 +63,9 @@ void sphParticlesClearCaches();
 void sphParticlesResolveWithParticles();
 void sphParticlesSwap(ParticleInteger i, ParticleInteger j);
 ParticleInteger sphParticlesSort(
-    Pair<ParticleInteger> particleRange, Fixed32 splitPosition, int splitDimension);
+    Pair<ParticleInteger> particleRange, Position splitPosition, int splitDimension);
 void sphParticlesGlobalReadPositions(
-    ParticleGlobalRange range, Fixed32* x, Fixed32* y, Fixed32* z, ParticleInteger offset);
+    ParticleGlobalRange range, Position* x, Position* y, Position* z, ParticleInteger offset);
 void sphParticlesGlobalReadInternalEnergyAndSupportRadius(
     ParticleGlobalRange range, float* internalEnergy, float* supportRadius, ParticleInteger offset);
 void sphParticlesGlobalReadRungs(ParticleGlobalRange range, char*, ParticleInteger offset);
@@ -108,7 +108,7 @@ inline ParticleInteger& sphParticlesParticleIndex(ParticleInteger index) {
     return sphParticlesParticleIndices[index];
 }
 
-inline Fixed32& sphParticlesPosition(int dim, int index) {
+inline Position& sphParticlesPosition(int dim, int index) {
     return particlesPos(dim, sphParticlesParticleIndex(index));
 }
 

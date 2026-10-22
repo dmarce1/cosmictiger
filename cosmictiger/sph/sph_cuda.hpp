@@ -65,9 +65,9 @@ __global__ void sphCudaRungs(
 #endif
 
 struct SphNeighborPosition {
-    Fixed32 positionX;
-    Fixed32 positionY;
-    Fixed32 positionZ;
+    Position positionX;
+    Position positionY;
+    Position positionZ;
 };
 
 #ifdef __CUDACC__
@@ -113,7 +113,7 @@ __device__ inline void recordSphGpuFlops(FlopCount count, SphReduction* reductio
 template <int blockSize>
 inline __device__ bool solveSphSupportRadius(float& supportRadius, float minimumSupportRadius,
     float maximumSupportRadius, float targetNeighborCount,
-    DeviceVector<SphNeighborPosition> const& neighbors, Array<Fixed32, NDIM> const& position,
+    DeviceVector<SphNeighborPosition> const& neighbors, Array<Position, NDIM> const& position,
     Fixed32Range const& neighborSearchBox, FlopCounter<>& flops) {
     int const threadIndex = threadIdx.x;
     int const runtimeBlockSize = blockDim.x;

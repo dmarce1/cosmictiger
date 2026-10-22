@@ -298,7 +298,7 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
         particleRange.second = sphParticlesSize();
     }
     Array<TreeId, NCHILD> children;
-    Array<Fixed32, NDIM> x;
+    Array<Position, NDIM> x;
     Array<double, NDIM> xc;
     size_t numberOfActiveParticles;
     FlopCounter<> flops;
@@ -405,7 +405,7 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
         for (ParticleInteger i = particleRange.first; i < particleRange.second; i++) {
             float const h = params.supportRadiusMultiplier * sphParticlesSupportRadius(i);
             flops += 1;
-            Array<Fixed32, NDIM> xValue;
+            Array<Position, NDIM> xValue;
             for (int dim = 0; dim < NDIM; dim++) {
                 xValue[dim] = sphParticlesPosition(dim, i);
             }
@@ -497,8 +497,8 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
     rc.activeLeafNodes = activeLeafNodes;
     rc.nodeCount = node.nodeCount;
     rc.numberOfActiveParticles = numberOfActiveParticles;
-    flops += 2 * NDIM;    // Store the double spatial box as fixed-point bounds.
-    addCpuFlops(flops);   // Children submit their own work; do not submit their totals twice.
+    flops += 2 * NDIM;     // Store the double spatial box as fixed-point bounds.
+    addCpuFlops(flops);    // Children submit their own work; do not submit their totals twice.
     totalFlops += FlopCount(flops);
     rc.floatingPointOperations = totalFlops;
     rc.minDepth = minDepth;

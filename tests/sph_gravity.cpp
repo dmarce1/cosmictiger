@@ -319,7 +319,7 @@ void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f) {
     }
     ExpansionBuffer local;
     local.zero();
-    Array<Fixed32, NDIM> origin;
+    Array<Position, NDIM> origin;
     for (int dim = 0; dim < NDIM; dim++) {
         origin[dim] = 0.0;
     }
@@ -403,6 +403,7 @@ void initializeSphDomainRegression() {
     int const target = (hpxRank() + 1) % hpxSize();
     for (ParticleInteger i = 0; i < 2; i++) {
         particlesPos(XDIM, i) = (target + (i == 0 ? 0.25 : 0.75)) / hpxSize();
+        particlesPos(XDIM, i).raw() += 17;
     }
     sphParticlesPredictedInternalEnergyRate(0) = 10.0 + target;
     sphParticlesInternalEnergyRate(0) = 20.0 + target;
@@ -415,12 +416,47 @@ void initializeSphDomainRegression() {
     }
 }
 HPX_PLAIN_ACTION(initializeSphDomainRegression, InitializeSphDomainRegressionAction);
+
+void validateSphPositionGather() {
+    int const remoteRank = (hpxRank() + 1) % hpxSize();
+    int const target = (remoteRank + 1) % hpxSize();
+    // Reordered, overlapping, and empty ranges exercise both gather tasks and
+    // the full native-width stride between the three coordinate planes.
+    Vector<Pair<ParticleInteger>> const ranges{{1, 2}, {0, 2}, {0, 1}, {1, 1}};
+    ParticleInteger const expectedParticles[] = {1, 0, 1, 0};
+    constexpr size_t kGatherCount = 4;
+    auto const positions = particlesGet(remoteRank, ranges).get();
+    if (positions.size() != NDIM * kGatherCount) {
+        throw std::runtime_error("Remote position gather returned the wrong coordinate count");
+    }
+    for (int dim = 0; dim < NDIM; ++dim) {
+        for (size_t i = 0; i < kGatherCount; ++i) {
+            Position expected(0.375);
+            if (dim == XDIM) {
+                expected = (target + (expectedParticles[i] == 0 ? 0.25 : 0.75)) / hpxSize();
+                expected.raw() += 17;
+            }
+            if (positions[dim * kGatherCount + i].raw() != expected.raw()) {
+                throw std::runtime_error(
+                    "Remote position gather changed native bits or coordinate-plane ordering");
+            }
+        }
+    }
+}
+HPX_PLAIN_ACTION(validateSphPositionGather, ValidateSphPositionGatherAction);
 void validateSphDomainRegression() {
     using namespace detail;
     verifyMappings();
     requireClose("migrated gas count", sphParticlesSize(), 1);
     auto const gas = sphParticlesParticleIndex(0);
-    int const target = int(particlesPos(XDIM, gas).toDouble() * hpxSize());
+    int const target = int(positionDomainCoordinate(particlesPos(XDIM, gas)) * hpxSize());
+    for (ParticleInteger particle = 0; particle < particlesSize(); ++particle) {
+        double const offset = particlesType(particle) == DARK_MATTER_TYPE ? 0.25 : 0.75;
+        Position const expected((target + offset) / hpxSize());
+        if (particlesPos(XDIM, particle).raw() != expected.raw() + 17) {
+            throw std::runtime_error("Migration changed native position bits");
+        }
+    }
     requireClose("migration predicted internal-energy rate",
         sphParticlesPredictedInternalEnergyRate(0), 10.0 + target);
     requireClose("migration thermal stage", sphParticlesInternalEnergyRate(0), 20.0 + target);
@@ -453,7 +489,7 @@ void validateSphDomainRegression() {
         requireClose("remote velocity cache", velocity[dimension][1], 0.125 * (dimension + 1));
     }
     if (getOptions().chemistry.enabled) {
-        Fixed32 positionX[3]{}, positionY[3]{}, positionZ[3]{};
+        Position positionX[3]{}, positionY[3]{}, positionZ[3]{};
         sphParticlesGlobalReadPositions(remote, positionX, positionY, positionZ, 1);
         int const remoteTarget = int(positionX[1].toDouble() * hpxSize());
         float pressureRatio[3]{}, adiabaticIndex[3]{};
@@ -544,6 +580,15 @@ void sphGravityTest() {
     for (auto& future : pending) {
         future.get();
     }
+    pending.clear();
+    for (auto const& locality : hpxLocalities()) {
+        pending.push_back(hpx::async<ValidateSphPositionGatherAction>(locality));
+    }
+    for (auto& future : pending) {
+        future.get();
+    }
+    PRINT("Native position gather regression passed (%i bits, %i localities)\n", kPositionBits,
+        hpxSize());
     domainsRebound();
     domainsBegin(0);
     domainsEnd();

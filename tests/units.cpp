@@ -70,7 +70,7 @@ void requireInvalid(Function function, char const* label) {
 }
 
 // A storage probe deliberately forbids floating conversion except toDouble().
-// Production Fixed32 instantiation is exercised by the particle output integration.
+// Production Position instantiation is exercised by the particle output integration.
 class FixedStorageProbe {
     uint32_t raw_;
 

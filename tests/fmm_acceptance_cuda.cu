@@ -56,7 +56,7 @@ struct AcceptanceResult {
 
 struct BoxInput {
     Fixed32Range box;
-    Array<Fixed32, NDIM> point;
+    Array<Position, NDIM> point;
 };
 
 struct SelectionInput {
@@ -349,18 +349,24 @@ BoxInput makeBox(double low, double high, double x, double y, double z) {
 }
 
 void runBoxes() {
-    constexpr double kTick = Fixed32::kToFloatFactor_;
     std::vector<BoxInput> inputs;
     inputs.push_back(makeBox(.25, .375, .3125, .3125, .3125));
     inputs.push_back(makeBox(.25, .375, .375, .3125, .3125));
-    inputs.push_back(makeBox(.25, .375, .375 + kTick, .3125, .3125));
-    inputs.push_back(makeBox(.25, .375, .25 - kTick, .3125, .3125));
-    inputs.push_back(makeBox(.25, .375, .375 + kTick, .375 + 3 * kTick, .25 - 5 * kTick));
-    inputs.push_back(makeBox(.75, .875, .875 + kTick, .8125, .8125));
+    inputs.push_back(makeBox(.25, .375, .375, .3125, .3125));
+    inputs.back().point[XDIM].raw() += 8;
+    inputs.push_back(makeBox(.25, .375, .25, .3125, .3125));
+    inputs.back().point[XDIM].raw() -= 8;
+    inputs.push_back(makeBox(.25, .375, .375, .375, .25));
+    inputs.back().point[XDIM].raw() += 8;
+    inputs.back().point[YDIM].raw() += 24;
+    inputs.back().point[ZDIM].raw() -= 40;
+    inputs.push_back(makeBox(.75, .875, .875, .8125, .8125));
+    inputs.back().point[XDIM].raw() += 8;
     inputs.push_back(makeBox(.125, .25, .75, .5, .375));
     inputs.push_back(makeBox(0.0, .125, .9375, .0625, .0625));
     inputs.push_back(makeBox(.875, 1.0, .0625, .9375, .9375));
-    inputs.push_back(makeBox(0.0, .125, 1.0 - kTick, .0625, .0625));
+    inputs.push_back(makeBox(0.0, .125, 0.0, .0625, .0625));
+    inputs.back().point[XDIM].raw() -= 8;
     inputs.push_back(makeBox(-.0625, .125, .9375, .0625, .0625));
     inputs.push_back(makeBox(.875, 1.0625, .0625, .9375, .9375));
     auto const results = runDevice<BoxInput, float>(
@@ -372,6 +378,7 @@ void runBoxes() {
         require(std::isfinite(results[i]) && results[i] == expected,
             "Box distance case " + std::to_string(i) + " host/device mismatch");
     }
+    constexpr double kTick = 8 * Position::kToFloatFactor_;
     float const tickSquared = static_cast<float>(kTick * kTick);
     require(results[0] == 0.0f && results[1] == 0.0f, "Box interior and boundary distances");
     require(results[2] == tickSquared && results[3] == tickSquared && results[5] == tickSquared,

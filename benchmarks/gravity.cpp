@@ -140,14 +140,14 @@ double benchmarkWrap(double value) {
     return value - std::floor(value);
 }
 
-Array<Fixed32, NDIM> benchmarkCenter(int cell, bool near) {
+Array<Position, NDIM> benchmarkCenter(int cell, bool near) {
     // Source x coordinates wrap through zero while sinks remain near one. This
     // exercises the signed interpretation of periodic fixed-point subtraction.
     std::array<double, NDIM> const origin{1023.0 / 1024, 371.0 / 1024, 433.0 / 1024};
     std::array<double, NDIM> const separation = near ?
         std::array<double, NDIM>{1.0 / 64, 1.0 / 128, -1.0 / 256} :
         std::array<double, NDIM>{3.0 / 16, 1.0 / 32, -1.0 / 64};
-    Array<Fixed32, NDIM> position;
+    Array<Position, NDIM> position;
     for (int dimension = 0; dimension < NDIM; ++dimension) {
         position[dimension] = benchmarkWrap(origin[dimension] +
             (cell < 0 ? 0 :
@@ -156,8 +156,8 @@ Array<Fixed32, NDIM> benchmarkCenter(int cell, bool near) {
     return position;
 }
 
-Array<Fixed32, NDIM> benchmarkParticle(Array<Fixed32, NDIM> const& center, int index) {
-    Array<Fixed32, NDIM> position;
+Array<Position, NDIM> benchmarkParticle(Array<Position, NDIM> const& center, int index) {
+    Array<Position, NDIM> position;
     for (int dimension = 0; dimension < NDIM; ++dimension) {
         position[dimension] = benchmarkWrap(
             center[dimension].toDouble() + benchmarkOffset(index, dimension) / 32768.0);
@@ -165,7 +165,7 @@ Array<Fixed32, NDIM> benchmarkParticle(Array<Fixed32, NDIM> const& center, int i
     return position;
 }
 
-void benchmarkSetPositions(std::vector<Array<Fixed32, NDIM>> const& positions) {
+void benchmarkSetPositions(std::vector<Array<Position, NDIM>> const& positions) {
     for (size_t index = 0; index < positions.size(); ++index) {
         for (int dimension = 0; dimension < NDIM; ++dimension) {
             particlesPos(dimension, index) = positions[index][dimension];
@@ -176,7 +176,7 @@ void benchmarkSetPositions(std::vector<Array<Fixed32, NDIM>> const& positions) {
 }
 
 TreeId benchmarkAddNode(
-    Array<Fixed32, NDIM> const& center, Pair<ParticleInteger> range, bool sink) {
+    Array<Position, NDIM> const& center, Pair<ParticleInteger> range, bool sink) {
     TreeNode node{};
     node.pos = center;
     node.particleRange = range;
@@ -225,7 +225,7 @@ public:
 
     explicit BenchmarkArena(BenchmarkCase const& testCase) {
         int const sourceParticles = testCase.shape.sourceCells * testCase.shape.particlesPerCell;
-        std::vector<Array<Fixed32, NDIM>> positions(kBenchmarkSinkParticles + sourceParticles);
+        std::vector<Array<Position, NDIM>> positions(kBenchmarkSinkParticles + sourceParticles);
         auto const sinkCenter = benchmarkCenter(-1, false);
         for (int index = 0; index < kBenchmarkSinkParticles; ++index) {
             positions[index] = benchmarkParticle(sinkCenter, index);

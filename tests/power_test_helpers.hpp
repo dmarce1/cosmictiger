@@ -40,7 +40,7 @@ inline void requireClose(double actual, double expected, double tolerance, char 
 }
 
 struct PowerFixture {
-    std::array<std::vector<Fixed32>, NDIM> positions;
+    std::array<std::vector<Position>, NDIM> positions;
     std::vector<float> masses;
 
     explicit PowerFixture(size_t count)
@@ -58,7 +58,8 @@ struct PowerFixture {
                 uint32_t const raw = index < std::size(boundaryPositions) ?
                     boundaryPositions[(index + dimension * 3) % std::size(boundaryPositions)] :
                     random;
-                positions[dimension][index].setInteger(raw);
+                positions[dimension][index].setInteger(
+                    PositionInteger(raw) << (kPositionBits - 32));
             }
             masses[index] = index % 3 == 0 ? 0.375f : (index % 3 == 1 ? 1.625f : 0.0f);
         }
@@ -88,7 +89,7 @@ inline std::vector<double> referenceDensity(
         for (int dimension = 0; dimension < NDIM; dimension++) {
             weights[dimension].resize(gridSize, 0.0L);
             // Match the specified single-precision folding, including raw
-            // Fixed32 values just below one that round to 1.0f before folding.
+            // Position values just below one that round to 1.0f before folding.
             float const coordinate = float(fixture.positions[dimension][index].raw()) * 0x1p-32f;
             float const unfolded = float(fold) * coordinate;
             long double const folded = unfolded - std::floor(static_cast<long double>(unfolded));

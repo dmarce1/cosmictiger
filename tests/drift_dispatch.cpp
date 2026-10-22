@@ -21,7 +21,7 @@
 #include <cosmictiger/analysis/lightcone_entry.hpp>
 #include <cosmictiger/particles/drift.hpp>
 
-Array<Fixed32*, NDIM> particlesX;
+Array<Position*, NDIM> particlesX;
 Array<float, NDIM>* particlesV = nullptr;
 char* particlesR = nullptr;
 
@@ -50,7 +50,7 @@ void resetCapture() {
 }
 
 struct Fixture {
-    std::array<std::vector<Fixed32>, NDIM> positions;
+    std::array<std::vector<Position>, NDIM> positions;
     std::vector<Array<float, NDIM>> velocities;
     std::vector<char> rungs;
 
@@ -72,7 +72,8 @@ struct Fixture {
             rungs[index] = index % 3;
             for (int dim = 0; dim < NDIM; ++dim) {
                 positions[dim][index].setInteger(
-                    uint32_t(index * 2654435761ULL + (dim + 1) * 2246822519ULL));
+                    PositionInteger(uint32_t(index * 2654435761ULL + (dim + 1) * 2246822519ULL))
+                    << (kPositionBits - 32));
                 velocities[index][dim] = float(int((index * 11 + dim * 19) % 97) - 48) * 0.25f;
             }
         }
@@ -89,12 +90,13 @@ struct Fixture {
     }
 };
 
-uint32_t referencePosition(uint32_t raw, float velocity) {
+PositionInteger referencePosition(PositionInteger raw, float velocity) {
     // All operands are binary fractions, so this independent calculation is exact.
-    constexpr long double kPeriod = 4294967296.0L;
-    long double position = raw / kPeriod + static_cast<long double>(velocity) * 0.25L;
-    position -= std::floor(position);
-    return static_cast<uint32_t>(position * kPeriod);
+    constexpr long double kPeriod = kPositionBits == 64 ? 0x1p64L : 0x1p32L;
+    long double const displacement = static_cast<long double>(velocity) * 0.25L;
+    PositionInteger const increment =
+        static_cast<PositionInteger>(std::fmod(std::abs(displacement), 1.0L) * kPeriod);
+    return displacement < 0.0L ? raw - increment : raw + increment;
 }
 
 void checkDispatch(size_t count, int rung, bool glass) {
@@ -111,7 +113,7 @@ void checkDispatch(size_t count, int rung, bool glass) {
             (index >= size_t(currentRange.first) && index < size_t(currentRange.second) &&
                 fixture.rungs[index] == rung);
         for (int dim = 0; dim < NDIM; ++dim) {
-            uint32_t const expectedPosition = selected ?
+            PositionInteger const expectedPosition = selected ?
                 referencePosition(
                     initialPositions[dim][index].raw(), initialVelocities[index][dim]) :
                 initialPositions[dim][index].raw();

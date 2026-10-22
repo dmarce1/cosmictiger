@@ -10,10 +10,10 @@ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
 #define ANALYTIC_HPP_
 
 #include <cosmictiger/core/containers.hpp>
-#include <cosmictiger/math/fixed.hpp>
+#include <cosmictiger/math/position.hpp>
 
 std::pair<Vector<double>, Array<Vector<double>, NDIM>> gravityAnalyticCallKernel(
-    Vector<Fixed32> const& sinkx, Vector<Fixed32> const& sinky, Vector<Fixed32> const& sinkz);
+    Vector<Position> const& sinkx, Vector<Position> const& sinky, Vector<Position> const& sinkz);
 Pair<double> analyticCompare(int numberOfSamples);
 
 #endif /* ANALYTIC_HPP_ */

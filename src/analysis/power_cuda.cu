@@ -9,8 +9,8 @@
 #include <cosmictiger/analysis/power_cuda.hpp>
 #include <cosmictiger/cosmology/fft.hpp>
 
-__global__ void accumulateDensityKernel(Fixed32 const* xValue, Fixed32 const* yValue,
-    Fixed32 const* zValue, float* rho, float const* masses, int mfold, size_t numberOfParticles,
+__global__ void accumulateDensityKernel(Position const* xValue, Position const* yValue,
+    Position const* zValue, float* rho, float const* masses, int mfold, size_t numberOfParticles,
     int ndim, Range<int64_t> intbox) {
     int const tid = threadIdx.x;
     int const bid = blockIdx.x;

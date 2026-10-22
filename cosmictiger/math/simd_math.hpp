@@ -204,9 +204,10 @@ inline Pack simdRound(Pack const& value) {
 
 template <class Pack>
 inline Pack simdPositionDifference(Pack const& left, Pack const& right) {
-    static_assert(std::is_same_v<typename Pack::value_type, int> && sizeof(int) == 4);
-    using UnsignedPack = SimdVector<uint32_t, Pack::size()>;
-    // Fixed-point periodic positions subtract modulo 2^32 before signed interpretation.
+    static_assert(std::is_integral_v<typename Pack::value_type> &&
+        std::is_signed_v<typename Pack::value_type>);
+    using UnsignedPack = SimdVector<std::make_unsigned_t<typename Pack::value_type>, Pack::size()>;
+    // Subtract modulo the storage width before signed interpretation.
     return simdCast<Pack>(simdCast<UnsignedPack>(left) - simdCast<UnsignedPack>(right));
 }
 

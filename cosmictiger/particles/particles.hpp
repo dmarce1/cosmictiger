@@ -19,7 +19,7 @@
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/cuda/cuda.hpp>
-#include <cosmictiger/math/fixed.hpp>
+#include <cosmictiger/math/position.hpp>
 #include <cosmictiger/math/range.hpp>
 
 static
@@ -51,7 +51,7 @@ using ParticleInteger = int;
 #endif
 
 struct GroupParticle {
-    Array<Fixed32, NDIM> x;
+    Array<Position, NDIM> x;
     GroupInteger g;
     template <class A>
     void serialize(A&& arc, unsigned) {
@@ -61,7 +61,7 @@ struct GroupParticle {
 };
 
 struct OutputParticle {
-    Array<Fixed32, NDIM> x;
+    Array<Position, NDIM> x;
     Array<float, NDIM> v;
     char r;
     template <class A>
@@ -106,7 +106,7 @@ struct GadgetIoHeader {
 /*****************************/
 
 struct Particle {
-    Array<Fixed32, NDIM> x;
+    Array<Position, NDIM> x;
     Array<float, NDIM> v;
     GroupInteger lg;
     ParticleInteger catIndex;
@@ -136,7 +136,7 @@ struct Particle {
 };
 
 struct ParticleSample {
-    Array<Fixed32, NDIM> x;
+    Array<Position, NDIM> x;
     Array<float, NDIM> g;
     float p;
     template <class A>
@@ -160,7 +160,7 @@ struct ParticleSample {
 #define CHECK_PART_BOUNDS(i)
 #endif
 
-PARTICLES_EXTERN Array<Fixed32*, NDIM> particlesX;
+PARTICLES_EXTERN Array<Position*, NDIM> particlesX;
 PARTICLES_EXTERN Array<float, NDIM>* particlesV;
 PARTICLES_EXTERN char* particlesR;
 PARTICLES_EXTERN Array<float*, NDIM> particlesGravityAccelerations;
@@ -193,17 +193,17 @@ void particlesDisplace(double dx, double dy, double dz);
 void particlesDestroy();
 void particlesSortBySph(Pair<ParticleInteger> rng);
 void particlesGlobalReadPos(
-    ParticleGlobalRange, Fixed32* x, Fixed32* y, Fixed32* z, char* type, ParticleInteger offset);
+    ParticleGlobalRange, Position* x, Position* y, Position* z, char* type, ParticleInteger offset);
 inline void particlesGlobalReadPos(
-    ParticleGlobalRange range, Fixed32* x, Fixed32* y, Fixed32* z, ParticleInteger offset) {
+    ParticleGlobalRange range, Position* x, Position* y, Position* z, ParticleInteger offset) {
     particlesGlobalReadPos(range, x, y, z, nullptr, offset);
 }
-void particlesGlobalReadPosAndGroup(ParticleGlobalRange range, Fixed32* x, Fixed32* y, Fixed32* z,
-    GroupInteger* g, ParticleInteger offset);
+void particlesGlobalReadPosAndGroup(ParticleGlobalRange range, Position* x, Position* y,
+    Position* z, GroupInteger* g, ParticleInteger offset);
 ParticleInteger particlesSort(Pair<ParticleInteger> rng, double xm, int xdim);
 GadgetIoHeader particlesReadGadget4(std::string);
 #ifndef __CUDACC__
-hpx::future<Vector<int>> particlesGet(int rank, Vector<Pair<ParticleInteger>> const& ranges);
+hpx::future<Vector<Position>> particlesGet(int rank, Vector<Pair<ParticleInteger>> const& ranges);
 #endif
 void particlesCacheFree();
 void particlesGroupCacheFree();
@@ -261,7 +261,7 @@ inline float& particlesPot(ParticleInteger index) {
     return particlesP[index];
 }
 
-inline Fixed32& particlesPos(int dim, ParticleInteger index) {
+inline Position& particlesPos(int dim, ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     return particlesX[dim][index];
 }

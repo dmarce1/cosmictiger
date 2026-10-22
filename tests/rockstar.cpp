@@ -55,7 +55,7 @@ void requireRockstarClose(double actual, double expected, double relative,
 
 struct RockstarHalfField {
     char const* name;
-    Float16 RockstarRecord::*member;
+    Float16 RockstarRecord::* member;
 };
 
 constexpr std::array<RockstarHalfField, 31> kRockstarHalfFields{{
@@ -717,12 +717,12 @@ Vector<ParticleData> makeRockstarSnapshot(int count, bool planar) {
     for (int i = 0; i < count; ++i) {
         auto& particle = particles[i];
         for (int dim = 0; dim < NDIM; ++dim) {
-            particle.x[dim] = Fixed32(0.25);
+            particle.x[dim] = Position(0.25);
             particle.v[dim] = 0.0f;
         }
         if (planar) {
-            particle.x[0] = Fixed32(0.25 + 0.0002 * std::sin(double(i)));
-            particle.x[1] = Fixed32(0.25 + 0.0002 * std::cos(double(i)));
+            particle.x[0] = Position(0.25 + 0.0002 * std::sin(double(i)));
+            particle.x[1] = Position(0.25 + 0.0002 * std::cos(double(i)));
             particle.v[0] = 1.e-6f * std::sin(1.3f * i);
             particle.v[1] = 1.e-6f * std::cos(1.7f * i);
             particle.v[2] = 1.e-6f * std::sin(1.9f * i);

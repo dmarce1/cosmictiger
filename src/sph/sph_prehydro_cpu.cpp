@@ -35,7 +35,7 @@ bool solveSphCpuSupportRadius(SphRunParameters const& parameters, SphRunData con
         data.targetNeighborCount > 0.0f);
     float& H_a = supportRadius;
     H_a = std::min(std::max(H_a, minimumSupportRadius), maximumSupportRadius);
-    Array<Fixed32, NDIM> position;
+    Array<Position, NDIM> position;
     position[XDIM] = data.sourcePositionX[particleIndex];
     position[YDIM] = data.sourcePositionY[particleIndex];
     position[ZDIM] = data.sourcePositionZ[particleIndex];

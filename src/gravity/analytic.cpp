@@ -16,14 +16,14 @@
 using ReturnType = std::pair<Vector<double>, Array<Vector<double>, NDIM>>;
 
 static ReturnType doAnalytic(
-    Vector<Fixed32> const& sinkx, Vector<Fixed32> const& sinky, Vector<Fixed32> const& sinkz);
+    Vector<Position> const& sinkx, Vector<Position> const& sinky, Vector<Position> const& sinkz);
 
 HPX_PLAIN_ACTION(doAnalytic, DoAnalyticAction);
 
 using ReturnType = std::pair<Vector<double>, Array<Vector<double>, NDIM>>;
 
 static ReturnType doAnalytic(
-    Vector<Fixed32> const& sinkx, Vector<Fixed32> const& sinky, Vector<Fixed32> const& sinkz) {
+    Vector<Position> const& sinkx, Vector<Position> const& sinky, Vector<Position> const& sinkz) {
 #ifdef USE_CUDA
     Vector<hpx::future<ReturnType>> futs;
     for (auto c : hpxChildren()) {
@@ -54,9 +54,9 @@ Pair<double> analyticCompare(int numberOfSamples) {
     auto samples = particlesSample(numberOfSamples);
     tm.stop();
     PRINT("particles_sample: %e\n", tm.read());
-    Vector<Fixed32> sinkx(numberOfSamples);
-    Vector<Fixed32> sinky(numberOfSamples);
-    Vector<Fixed32> sinkz(numberOfSamples);
+    Vector<Position> sinkx(numberOfSamples);
+    Vector<Position> sinky(numberOfSamples);
+    Vector<Position> sinkz(numberOfSamples);
     for (int i = 0; i < numberOfSamples; i++) {
         sinkx[i] = samples[i].x[XDIM];
         sinky[i] = samples[i].x[YDIM];

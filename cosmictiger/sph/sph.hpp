@@ -167,8 +167,8 @@ struct SphRunParameters {
         arc & zPlaneAcceleration;
     }
     CUDA_EXPORT
-    float midplaneAccelerationZ(Fixed32 const z) const {
-        Fixed32 const middle(0.5);
+    float midplaneAccelerationZ(Position const z) const {
+        Position const middle(0.5);
         return z < middle ? zPlaneAcceleration : (z > middle ? -zPlaneAcceleration : 0.0f);
     }
 };

@@ -55,9 +55,9 @@ public:
 void testDensity(size_t count) {
     constexpr int kGridSize = 8;
     PowerFixture const fixture(count);
-    CudaBuffer<Fixed32> positionX(count);
-    CudaBuffer<Fixed32> positionY(count);
-    CudaBuffer<Fixed32> positionZ(count);
+    CudaBuffer<Position> positionX(count);
+    CudaBuffer<Position> positionY(count);
+    CudaBuffer<Position> positionZ(count);
     CudaBuffer<float> masses(count);
     std::copy(fixture.positions[XDIM].begin(), fixture.positions[XDIM].end(), positionX.data());
     std::copy(fixture.positions[YDIM].begin(), fixture.positions[YDIM].end(), positionY.data());

@@ -10,14 +10,14 @@
 #include <cstddef>
 #include <cstdint>
 
-#include <cosmictiger/math/fixed.hpp>
+#include <cosmictiger/math/position.hpp>
 #include <cosmictiger/math/range.hpp>
 
 // Add the particles owned by the tile interior to its padded density buffer.
 // The caller initializes density; nullptr masses assigns unit mass to each particle.
 // Periodic wrapping of the padded cells is performed by fft3dAccumulateReal.
-void accumulateDensityCpuKernel(Fixed32 const* positionX, Fixed32 const* positionY,
-    Fixed32 const* positionZ, float const* masses, size_t particleCount, int fold, int gridSize,
+void accumulateDensityCpuKernel(Position const* positionX, Position const* positionY,
+    Position const* positionZ, float const* masses, size_t particleCount, int fold, int gridSize,
     Range<int64_t> const& box, float* density);
 
 #endif

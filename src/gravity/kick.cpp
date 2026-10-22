@@ -26,13 +26,13 @@
 HPX_PLAIN_ACTION(kick, KickAction);
 
 namespace detail {
-double kickBackgroundSecondMoment(Array<Fixed32, NDIM> center);
+double kickBackgroundSecondMoment(Array<Position, NDIM> center);
 }
 
 HPX_PLAIN_ACTION(detail::kickBackgroundSecondMoment, KickBackgroundSecondMomentAction);
 
 namespace detail {
-double kickBackgroundSecondMoment(Array<Fixed32, NDIM> center) {
+double kickBackgroundSecondMoment(Array<Position, NDIM> center) {
     Vector<hpx::future<double>> children;
     for (auto const& locality : hpxChildren()) {
         children.push_back(hpx::async<KickBackgroundSecondMomentAction>(locality, center));
@@ -42,7 +42,7 @@ double kickBackgroundSecondMoment(Array<Fixed32, NDIM> center) {
     for (ParticleInteger i = range.first; i < range.second; i++) {
         double radiusSquared = 0.0;
         for (int dim = 0; dim < NDIM; dim++) {
-            double const displacement = particlesPos(dim, i).toDouble() - center[dim].toDouble();
+            double const displacement = unwrappedDoubleDistance(particlesPos(dim, i), center[dim]);
             radiusSquared += displacement * displacement;
         }
         secondMoment += double(particlesMass(i)) * radiusSquared;
@@ -136,7 +136,7 @@ KickReturn kickWaitLocalReturn() {
 }    // namespace detail
 
 hpx::future<KickReturn> kickFork(KickParameters params, ExpansionBuffer const& l,
-    Array<Fixed32, NDIM> pos, TreeId self, Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
+    Array<Position, NDIM> pos, TreeId self, Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
     std::shared_ptr<KickWorkspace> cudaWorkspace, bool threadme) {
     static std::atomic<int> numberOfThreads(1);
     hpx::future<KickReturn> rc;
@@ -200,7 +200,7 @@ hpx::future<KickReturn> kickFork(KickParameters params, ExpansionBuffer const& l
 
 // The walk itself is order-templated (kick_walk.hpp) and instantiated once per
 // order by the instance translation units; select the runtime order's walk.
-KickReturn kick(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDIM> pos, TreeId self,
+KickReturn kick(KickParameters params, ExpansionBuffer l, Array<Position, NDIM> pos, TreeId self,
     Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
     std::shared_ptr<KickWorkspace> cudaWorkspace) {
     params.openLargerCell = getOptions().gravity.openLargerCell;

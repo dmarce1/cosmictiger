@@ -32,8 +32,8 @@ void requireFmmTree(bool condition, char const* message) {
     }
 }
 
-Array<Fixed32, NDIM> fmmTreePosition(int rank, int particle) {
-    Array<Fixed32, NDIM> position;
+Array<Position, NDIM> fmmTreePosition(int rank, int particle) {
+    Array<Position, NDIM> position;
     position[XDIM] = 0.25 + 0.125 * (rank + (particle & 1)) / hpxSize();
     position[YDIM] = 0.25 + 0.0625 * ((particle >> 1) & 1);
     position[ZDIM] = 0.25 + 0.0625 * ((particle >> 2) & 1);
@@ -235,7 +235,7 @@ void fmmTreeTest() {
     detail::requireFmmTree(built.radius > 0.0f, "clustered global node has zero radius");
     auto const* root = treeGetNode(built.id);
     for (int dim = 0; dim < NDIM; dim++) {
-        double const offset = dim == YDIM ? 0.0 : (dim + 1) * Fixed32::kToFloatFactor_;
+        double const offset = dim == YDIM ? 0.0 : (dim + 1) * Position::kToFloatFactor_;
         double const lower = 0.25 + offset;
         double const upper = (dim == XDIM ? 0.375 : 0.3125) + offset;
         detail::requireFmmTree(built.box.begin[dim] == lower && built.box.end[dim] == upper,

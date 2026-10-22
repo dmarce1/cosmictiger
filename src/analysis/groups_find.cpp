@@ -62,9 +62,9 @@ hpx::future<size_t> groupsFindFork(
 }
 
 struct LeafWorkspace {
-    Vector<Fixed32> xValue;
-    Vector<Fixed32> yValue;
-    Vector<Fixed32> zValue;
+    Vector<Position> xValue;
+    Vector<Position> yValue;
+    Vector<Position> zValue;
     Vector<GroupInteger> g;
 };
 
@@ -125,9 +125,9 @@ hpx::future<size_t> groupsFind(TreeId self, Vector<TreeId> checklist, double lin
     } while (iamleaf && checklist.size());
     if (selfPtr->children[LEFT].index == -1) {
         LeafWorkspace ws = getLeafWorkspace();
-        Vector<Fixed32>& xValue2 = ws.xValue;
-        Vector<Fixed32>& yValue2 = ws.yValue;
-        Vector<Fixed32>& zValue2 = ws.zValue;
+        Vector<Position>& xValue2 = ws.xValue;
+        Vector<Position>& yValue2 = ws.yValue;
+        Vector<Position>& zValue2 = ws.zValue;
         Vector<GroupInteger>& g = ws.g;
         if (leaflist.size()) {
             auto const myRng = selfPtr->particleRange;
@@ -173,15 +173,16 @@ hpx::future<size_t> groupsFind(TreeId self, Vector<TreeId> checklist, double lin
                 }
             }
             for (ParticleInteger k = myRng.first; k < myRng.second; k++) {
-                SimdInt sinkX = simdBroadcast<SimdInt>(particlesPos(XDIM, k).raw());
-                SimdInt sinkY = simdBroadcast<SimdInt>(particlesPos(YDIM, k).raw());
-                SimdInt sinkZ = simdBroadcast<SimdInt>(particlesPos(ZDIM, k).raw());
+                SimdPosition sinkX = simdBroadcast<SimdPosition>(particlesPos(XDIM, k).raw());
+                SimdPosition sinkY = simdBroadcast<SimdPosition>(particlesPos(YDIM, k).raw());
+                SimdPosition sinkZ = simdBroadcast<SimdPosition>(particlesPos(ZDIM, k).raw());
                 for (int j = 0; j < totalSize; j += SIMD_FLOAT_SIZE) {
-                    static SimdFloat const toFloatFactor = simdBroadcast<SimdFloat>(kFixed2float);
+                    static SimdFloat const toFloatFactor =
+                        simdBroadcast<SimdFloat>(kPositionToFloat);
                     int const lmax = std::min(totalSize, j + SIMD_FLOAT_SIZE);
-                    SimdInt sourceX = sinkX;
-                    SimdInt sourceY = sinkY;
-                    SimdInt sourceZ = sinkZ;
+                    SimdPosition sourceX = sinkX;
+                    SimdPosition sourceY = sinkY;
+                    SimdPosition sourceZ = sinkZ;
                     for (int l = j; l < lmax; l++) {
                         int const l0 = l - j;
                         simdSetLane(sourceX, l0, xValue2[l].raw());
@@ -217,16 +218,16 @@ hpx::future<size_t> groupsFind(TreeId self, Vector<TreeId> checklist, double lin
             do {
                 foundLink = false;
                 for (ParticleInteger j = myRng.first; j < myRng.second; j++) {
-                    SimdInt sinkX = simdBroadcast<SimdInt>(particlesPos(XDIM, j).raw());
-                    SimdInt sinkY = simdBroadcast<SimdInt>(particlesPos(YDIM, j).raw());
-                    SimdInt sinkZ = simdBroadcast<SimdInt>(particlesPos(ZDIM, j).raw());
+                    SimdPosition sinkX = simdBroadcast<SimdPosition>(particlesPos(XDIM, j).raw());
+                    SimdPosition sinkY = simdBroadcast<SimdPosition>(particlesPos(YDIM, j).raw());
+                    SimdPosition sinkZ = simdBroadcast<SimdPosition>(particlesPos(ZDIM, j).raw());
                     for (ParticleInteger k = j + 1; k < myRng.second; k += SIMD_FLOAT_SIZE) {
                         static SimdFloat const toFloatFactor =
-                            simdBroadcast<SimdFloat>(kFixed2float);
+                            simdBroadcast<SimdFloat>(kPositionToFloat);
                         int const lmax = std::min(myRng.second, k + SIMD_FLOAT_SIZE);
-                        SimdInt sourceX = sinkX;
-                        SimdInt sourceY = sinkY;
-                        SimdInt sourceZ = sinkZ;
+                        SimdPosition sourceX = sinkX;
+                        SimdPosition sourceY = sinkY;
+                        SimdPosition sourceZ = sinkZ;
                         for (int l = k; l < lmax; l++) {
                             int const l0 = l - k;
                             simdSetLane(sourceX, l0, particlesPos(XDIM, l).raw());

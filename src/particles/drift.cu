@@ -11,7 +11,7 @@
 #include <cosmictiger/core/timer.hpp>
 #include <cosmictiger/cuda/cuda_reduce.hpp>
 #include <cosmictiger/cuda/device_vector.hpp>
-#include <cosmictiger/math/fixed.hpp>
+#include <cosmictiger/math/position.hpp>
 #include <cosmictiger/particles/drift.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
@@ -21,8 +21,8 @@ using ListType = DeviceVector<DeviceVector<LightconeEntry>>;
 
 __managed__ ListType* listPtr;
 
-__global__ void cudaDriftKernel(Fixed32* __restrict__ const x, Fixed32* __restrict__ const y,
-    Fixed32* __restrict__ const z, Array<float, NDIM>* const vels, char const* const rungs,
+__global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __restrict__ const y,
+    Position* __restrict__ const z, Array<float, NDIM>* const vels, char const* const rungs,
     ParticleInteger count, int rung, double a, double dt, double tau0, double tau1, double tauMax,
     bool doLc, int nside, double drag) {
     doLc = doLc && (tauMax - tau1 < 1.0f);
@@ -43,6 +43,7 @@ __global__ void cudaDriftKernel(Fixed32* __restrict__ const x, Fixed32* __restri
     for (ParticleInteger i = begin + tid; i < end0; i += BLOCK_SIZE) {
         int thisRung = -1;
         double x0 = 0.0, y0 = 0.0, z0 = 0.0, x1 = 0.0, y1 = 0.0, z1 = 0.0;
+        double displacementX = 0.0, displacementY = 0.0, displacementZ = 0.0;
         Array<double, NDIM> x0Value;
         Array<double, NDIM> x1Value;
         float vx, vy, vz;
@@ -54,9 +55,12 @@ __global__ void cudaDriftKernel(Fixed32* __restrict__ const x, Fixed32* __restri
                 x0 = x[i].toDouble();
                 y0 = y[i].toDouble();
                 z0 = z[i].toDouble();
-                x1 = x0 + double(vel[XDIM] * c1);
-                y1 = y0 + double(vel[YDIM] * c1);
-                z1 = z0 + double(vel[ZDIM] * c1);
+                displacementX = double(vel[XDIM]) * c1;
+                displacementY = double(vel[YDIM]) * c1;
+                displacementZ = double(vel[ZDIM]) * c1;
+                x1 = x0 + displacementX;
+                y1 = y0 + displacementY;
+                z1 = z0 + displacementZ;
                 if (drag != 0.0) {
                     double const c0 = 1.0 / (1.0 + drag * dt);
                     for (int dim = 0; dim < NDIM; dim++) {
@@ -134,15 +138,22 @@ __global__ void cudaDriftKernel(Fixed32* __restrict__ const x, Fixed32* __restri
             }
         }
         if (i < end && (rung < 0 || thisRung == rung)) {
-            x1 -= double(x1 >= 1.0);
-            y1 -= double(y1 >= 1.0);
-            z1 -= double(z1 >= 1.0);
-            x1 += double(x1 < 0.0);
-            y1 += double(y1 < 0.0);
-            z1 += double(z1 < 0.0);
-            x[i] = x1;
-            y[i] = y1;
-            z[i] = z1;
+            if constexpr (kPositionBits == 64) {
+                // Preserve sub-double motion and the original low position bits.
+                x[i] += Position(displacementX);
+                y[i] += Position(displacementY);
+                z[i] += Position(displacementZ);
+            } else {
+                x1 -= double(x1 >= 1.0);
+                y1 -= double(y1 >= 1.0);
+                z1 -= double(z1 >= 1.0);
+                x1 += double(x1 < 0.0);
+                y1 += double(y1 < 0.0);
+                z1 += double(z1 < 0.0);
+                x[i] = x1;
+                y[i] = y1;
+                z[i] = z1;
+            }
         }
     }
 }
@@ -172,9 +183,9 @@ void cudaDrift(int rung, float a, float dt, float tau0, float tau1, float tauMax
         }
         listPtr->resize(numberOfBlocks);
     }
-    Fixed32* x = &particlesPos(XDIM, rng.first);
-    Fixed32* y = &particlesPos(YDIM, rng.first);
-    Fixed32* z = &particlesPos(ZDIM, rng.first);
+    Position* x = &particlesPos(XDIM, rng.first);
+    Position* y = &particlesPos(YDIM, rng.first);
+    Position* z = &particlesPos(ZDIM, rng.first);
     auto* vels = particlesVelData() + rng.first;
     auto const* rungs = &particlesRung(rng.first);
     drag = getOptions().initial.createGlass ? M_PI : 0.0;

@@ -79,7 +79,7 @@ HPX_PLAIN_ACTION(twolptDestroy, TwolptDestroyAction);
 static Vector<float> delta2;
 static Vector<ComplexFloat> delta2Inv;
 static Vector<float> delta2Part;
-static Vector<Fixed32> x0Value[NDIM];
+static Vector<Position> x0Value[NDIM];
 
 static void initX0();
 static void clearX0();
@@ -609,7 +609,7 @@ static void clearX0() {
         }
     }
     for (int dim = 0; dim < NDIM; dim++) {
-        x0Value[dim] = Vector<Fixed32>();
+        x0Value[dim] = Vector<Position>();
     }
     for (auto& future : futures) {
         future.get();
@@ -684,9 +684,9 @@ static void initX0() {
         static Vector<Fixed32> x(numberOfGlassParticles);
         static Vector<Fixed32> y(numberOfGlassParticles);
         static Vector<Fixed32> z(numberOfGlassParticles);
-        FREAD(x.data(), sizeof(float), numberOfGlassParticles, fp);
-        FREAD(y.data(), sizeof(float), numberOfGlassParticles, fp);
-        FREAD(z.data(), sizeof(float), numberOfGlassParticles, fp);
+        FREAD(x.data(), sizeof(Fixed32), numberOfGlassParticles, fp);
+        FREAD(y.data(), sizeof(Fixed32), numberOfGlassParticles, fp);
+        FREAD(z.data(), sizeof(Fixed32), numberOfGlassParticles, fp);
         fclose(fp);
 
         int const jb = box.begin[XDIM] * nf;

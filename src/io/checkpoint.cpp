@@ -89,6 +89,7 @@ constexpr uint32_t kMonaghanSph = 1;
 constexpr uint32_t kCompactSphLayout = 1U << 24;
 constexpr uint32_t kZPlaneAcceleration = 1U << 12;
 constexpr uint32_t kBalsaraSwitch = 1U << 13;
+constexpr uint32_t kFixed64Positions = 1U << 15;
 constexpr uint64_t kFnvOffsetBasis = 14695981039346656037ULL;
 constexpr uint64_t kFnvPrime = 1099511628211ULL;
 
@@ -396,7 +397,8 @@ uint32_t checkpointFlags(Options const& opts) {
         (opts.lightcone.enabled ? kLightcone : 0U) | (opts.analysis.groups ? kGroups : 0U) |
         (opts.analysis.tracers ? kTracers : 0U) | (opts.chemistry.enabled ? kChemistry : 0U) |
         (opts.hydro.enabled && opts.hydro.zPlaneAcceleration != 0.0 ? kZPlaneAcceleration : 0U) |
-        (opts.hydro.enabled && opts.hydro.balsaraSwitch ? kBalsaraSwitch : 0U);
+        (opts.hydro.enabled && opts.hydro.balsaraSwitch ? kBalsaraSwitch : 0U) |
+        (opts.compute.positionType == "fixed64" ? kFixed64Positions : 0U);
 }
 
 uint32_t checkpointKernelCode(std::string const& family, int degree) {
@@ -430,8 +432,9 @@ uint32_t checkpointPhysicsCode(Options const& opts) {
 }
 
 bool legacyCheckpointCompatible(Options const& opts) {
-    return !opts.hydro.enabled && opts.run.hierarchicalGravity &&
-        opts.gravity.kernelFamily == "ferrers" && opts.gravity.kernelDegree == 8;
+    return opts.compute.positionType == "fixed32" && !opts.hydro.enabled &&
+        opts.run.hierarchicalGravity && opts.gravity.kernelFamily == "ferrers" &&
+        opts.gravity.kernelDegree == 8;
 }
 
 CheckpointHeader checkpointHeader(Options const& opts) {
@@ -444,7 +447,8 @@ CheckpointHeader checkpointHeader(Options const& opts) {
 
 bool checkpointCompatible(CheckpointHeader const& header, Options const& opts) {
     bool const supportedVersion = header.version == kCheckpointVersion ||
-        (!opts.hydro.enabled && header.version == kLegacyDarkMatterCheckpointVersion);
+        (!opts.hydro.enabled && opts.compute.positionType == "fixed32" &&
+            header.version == kLegacyDarkMatterCheckpointVersion);
     return supportedVersion && header.flags == checkpointFlags(opts) &&
         header.reserved == checkpointPhysicsCode(opts) &&
         header.darkMatterMass == opts.initial.darkMatterMass &&
@@ -657,6 +661,10 @@ void checkpointStateTest() {
     ALWAYS_ASSERT(restored.energies.therm == kThermal && restored.energies.heating == kHeating);
     auto changed = getOptions();
     auto const header = detail::checkpointHeader(changed);
+    changed.compute.positionType =
+        changed.compute.positionType == "fixed32" ? "fixed64" : "fixed32";
+    ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
+    changed = getOptions();
     changed.output.units = "both";
     changed.output.frame = "lab";
     ALWAYS_ASSERT(detail::checkpointCompatible(header, changed));
@@ -721,7 +729,8 @@ void checkpointStateTest() {
     auto legacyKernelOptions = defaultKernelOptions;
     legacyKernelOptions.hydro.enabled = false;
     legacyKernelOptions.run.hierarchicalGravity = true;
-    ALWAYS_ASSERT(detail::legacyCheckpointCompatible(legacyKernelOptions));
+    ALWAYS_ASSERT(detail::legacyCheckpointCompatible(legacyKernelOptions) ==
+        (legacyKernelOptions.compute.positionType == "fixed32"));
     legacyKernelOptions.gravity.kernelFamily = "spline";
     ALWAYS_ASSERT(!detail::legacyCheckpointCompatible(legacyKernelOptions));
     legacyKernelOptions.gravity.kernelFamily = "ferrers";
@@ -740,7 +749,8 @@ void checkpointStateTest() {
     legacyDarkMatterOptions.hydro.enabled = false;
     auto legacyDarkMatterHeader = detail::checkpointHeader(legacyDarkMatterOptions);
     legacyDarkMatterHeader.version = detail::kLegacyDarkMatterCheckpointVersion;
-    ALWAYS_ASSERT(detail::checkpointCompatible(legacyDarkMatterHeader, legacyDarkMatterOptions));
+    ALWAYS_ASSERT(detail::checkpointCompatible(legacyDarkMatterHeader, legacyDarkMatterOptions) ==
+        (legacyDarkMatterOptions.compute.positionType == "fixed32"));
     auto const sphParameters = detail::sphCheckpointParameters(getOptions());
     auto balsaraOptions = getOptions();
     balsaraOptions.hydro.enabled = true;
@@ -799,6 +809,51 @@ void checkpointStateTest() {
         ALWAYS_ASSERT(previous.energies.pot == -1.0 && previous.energies.therm == 0.0);
     }
     fclose(fp);
+    if (!getOptions().hydro.enabled && !getOptions().compute.cuda) {
+        // Exercise the actual particle payload with low coordinate bits that a
+        // double round trip cannot preserve in the fixed64 backend.
+        fp = tmpfile();
+        ALWAYS_ASSERT(fp != nullptr);
+        constexpr ParticleInteger kCount = 4;
+        particlesResize(kCount);
+        for (ParticleInteger particle = 0; particle < kCount; ++particle) {
+            for (int dim = 0; dim < NDIM; ++dim) {
+                PositionInteger const raw = (PositionInteger(1) << (kPositionBits - 1)) +
+                    PositionInteger(17 * particle + dim + 1);
+                particlesPos(dim, particle).raw() = raw;
+                particlesVel(dim, particle) = float(particle + dim);
+            }
+            particlesRung(particle) = char(particle);
+            if (getOptions().analysis.groups) {
+                particlesLastgroup(particle) = particle;
+            }
+            if (getOptions().analysis.tracers) {
+                particlesTracer(particle) = char(particle);
+            }
+        }
+        particlesSave(fp);
+        for (ParticleInteger particle = 0; particle < kCount; ++particle) {
+            for (int dim = 0; dim < NDIM; ++dim) {
+                particlesPos(dim, particle).raw() = 0;
+            }
+        }
+        rewind(fp);
+        particlesLoad(fp);
+        ALWAYS_ASSERT(particlesSize() == kCount);
+        for (ParticleInteger particle = 0; particle < kCount; ++particle) {
+            for (int dim = 0; dim < NDIM; ++dim) {
+                PositionInteger const expected = (PositionInteger(1) << (kPositionBits - 1)) +
+                    PositionInteger(17 * particle + dim + 1);
+                ALWAYS_ASSERT(particlesPos(dim, particle).raw() == expected);
+                ALWAYS_ASSERT(particlesVel(dim, particle) == float(particle + dim));
+            }
+            ALWAYS_ASSERT(particlesRung(particle) == char(particle));
+        }
+        fclose(fp);
+        particlesFree();
+        particlesDestroy();
+        PRINT("Checkpoint position payload round trip passed (%i bits)\n", kPositionBits);
+    }
     PRINT("Checkpoint state and mode validation passed\n");
 }
 

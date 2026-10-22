@@ -55,7 +55,7 @@ __global__ void sphCudaPrehydro1(
             for (int sourceParticleIndex = neighborNode.particleRange.first + threadIndex;
                 sourceParticleIndex < end; sourceParticleIndex += blockSize) {
                 bool contains = false;
-                Array<Fixed32, NDIM> position;
+                Array<Position, NDIM> position;
                 if (sourceParticleIndex < neighborNode.particleRange.second) {
                     position[XDIM] = data.sourcePositionX[sourceParticleIndex];
                     position[YDIM] = data.sourcePositionY[sourceParticleIndex];
@@ -82,7 +82,7 @@ __global__ void sphCudaPrehydro1(
             bool const active = data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]] >=
                 parameters.minimumRung;
             if (active && !data.sinkSmoothingConverged[sinkIndex]) {
-                Array<Fixed32, NDIM> position;
+                Array<Position, NDIM> position;
                 position[XDIM] = data.sourcePositionX[particleIndex];
                 position[YDIM] = data.sourcePositionY[particleIndex];
                 position[ZDIM] = data.sourcePositionZ[particleIndex];
@@ -137,7 +137,7 @@ __global__ void sphCudaPrehydro2(
             for (int sourceParticleIndex = neighborNode.particleRange.first + threadIndex;
                 sourceParticleIndex < end; sourceParticleIndex += blockSize) {
                 bool contains = false;
-                Array<Fixed32, NDIM> position;
+                Array<Position, NDIM> position;
                 if (sourceParticleIndex < neighborNode.particleRange.second) {
                     position[XDIM] = data.sourcePositionX[sourceParticleIndex];
                     position[YDIM] = data.sourcePositionY[sourceParticleIndex];
@@ -175,7 +175,7 @@ __global__ void sphCudaPrehydro2(
                 targetNode.sinkParticleRange.first - targetNode.particleRange.first + particleIndex;
             bool const active = data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]] >=
                 parameters.minimumRung;
-            Array<Fixed32, NDIM> position;
+            Array<Position, NDIM> position;
             position[XDIM] = data.sourcePositionX[particleIndex];
             position[YDIM] = data.sourcePositionY[particleIndex];
             position[ZDIM] = data.sourcePositionZ[particleIndex];

@@ -50,9 +50,9 @@ ScenarioPlan initializeRayleighTaylor() {
                     std::cbrt(mass * opts.hydro.neighborNumber / (4.0 * M_PI / 3.0 * density));
                 for (int sample = 0; sample < samples; sample++) {
                     double const offset = heavy ? 0.25 + 0.5 * sample : 0.5;
-                    Fixed32 const x((ix + offset) * dx);
-                    Fixed32 const y((iy + offset) * dx);
-                    Fixed32 const z((iz + offset) * dx);
+                    Position const x((ix + offset) * dx);
+                    Position const y((iy + offset) * dx);
+                    Position const z((iz + offset) * dx);
                     double const height = z.toDouble();
                     double const distanceFromMiddle = 0.5 - height;
                     // Integrate dP/dz = rho * a_z from the outer boundary.
@@ -73,7 +73,7 @@ ScenarioPlan initializeRayleighTaylor() {
                     for (int side = 0; side < 2; side++) {
                         sphParticlesPosition(XDIM, index) = x;
                         sphParticlesPosition(YDIM, index) = y;
-                        sphParticlesPosition(ZDIM, index) = side == 0 ? z : Fixed32(0.0) - z;
+                        sphParticlesPosition(ZDIM, index) = side == 0 ? z : Position(0.0) - z;
                         sphParticlesVelocity(XDIM, index) = 0.0f;
                         sphParticlesVelocity(YDIM, index) = 0.0f;
                         sphParticlesVelocity(ZDIM, index) = side == 0 ? velocity : -velocity;

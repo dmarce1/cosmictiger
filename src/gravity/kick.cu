@@ -19,7 +19,7 @@
 
 // Runtime-order dispatch to the per-order CUDA kick instantiations.
 
-KickReturn cudaExecuteKicks(KickParameters params, Fixed32* devX, Fixed32* devY, Fixed32* devZ,
+KickReturn cudaExecuteKicks(KickParameters params, Position* devX, Position* devY, Position* devZ,
     TreeNode* devTreeNodes, Vector<KickWorkitem> workitems) {
     return fmmDispatch([&](auto order) {
         return cudaExecuteKicksImpl<order.value>(

@@ -31,17 +31,17 @@ static void addTreeNode(std::vector<TreeId>& trees, TreeId id) {
     }
 }
 
-bool mortonCompare(Array<Fixed32, NDIM> a, Array<Fixed32, NDIM> b) {
-    Array<unsigned, NDIM> abits;
-    Array<unsigned, NDIM> bbits;
+bool mortonCompare(Array<Position, NDIM> a, Array<Position, NDIM> b) {
+    Array<PositionInteger, NDIM> abits;
+    Array<PositionInteger, NDIM> bbits;
     for (int dim = 0; dim < NDIM; dim++) {
         abits[dim] = a[dim].raw();
         bbits[dim] = b[dim].raw();
     }
-    for (int i = 0; i < 64; i++) {
+    for (int i = 0; i < kPositionBits; i++) {
         for (int dim = 0; dim < NDIM; dim++) {
-            int const abit = abits[dim] & (unsigned) 0x80000000;
-            int const bbit = bbits[dim] & (unsigned) 0x80000000;
+            bool const abit = (abits[dim] >> (kPositionBits - 1)) != 0;
+            bool const bbit = (bbits[dim] >> (kPositionBits - 1)) != 0;
             if (bbit && !abit) {
                 return true;
             } else if (!bbit && abit) {
@@ -223,10 +223,10 @@ void KickWorkspace::toGpu() {
                         auto const numberOfParticles = localRange.second - localRange.first;
                         for (int dim = 0; dim < NDIM; dim++) {
                             memcpy(&particlesPos(dim, localRange.first), &data[sz * dim + index],
-                                numberOfParticles * sizeof(Fixed32));
+                                numberOfParticles * sizeof(Position));
                         }
                         if (getOptions().hydro.enabled) {
-                            Vector<Fixed32> x(numberOfParticles), y(numberOfParticles),
+                            Vector<Position> x(numberOfParticles), y(numberOfParticles),
                                 z(numberOfParticles);
                             Vector<char> types(numberOfParticles);
                             ParticleGlobalRange source;
@@ -364,7 +364,7 @@ void KickWorkspace::clearBuffers() {
 }
 
 void KickWorkspace::addWork(std::shared_ptr<KickWorkspace> ptr, ExpansionBuffer const& l,
-    Array<Fixed32, NDIM> pos, TreeId self, Vector<TreeId>&& dchecks, Vector<TreeId>&& echecks) {
+    Array<Position, NDIM> pos, TreeId self, Vector<TreeId>&& dchecks, Vector<TreeId>&& echecks) {
     KickWorkitem item;
     item.l = l;
     item.pos = pos;

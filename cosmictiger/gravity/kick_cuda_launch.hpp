@@ -109,7 +109,9 @@ bool kickBuildLayout(Compute const& compute, bool massPlane, int residency, int 
     int offset = controlBytes;
     if (compute.cudaKickSharedExpansion) {
         layout.expansionOffset = offset;
-        offset += kickRoundUp(FmmOrder<order>::kLocalExpansionBytes_ + NDIM * int(sizeof(Fixed32)),
+        offset += kickRoundUp(
+            kickRoundUp(FmmOrder<order>::kLocalExpansionBytes_, int(alignof(Position))) +
+                NDIM * int(sizeof(Position)),
             kKickArenaAlignment);
     } else {
         layout.expansionOffset = -1;
@@ -133,7 +135,7 @@ bool kickBuildLayout(Compute const& compute, bool massPlane, int residency, int 
         sinkCapacity = kickRoundUp(bucket, WARP_SIZE);
     }
     int const particleBytesPerSource =
-        int(sizeof(Fixed32)) * NDIM + (massPlane ? int(sizeof(float)) : 0);
+        int(sizeof(Position)) * NDIM + (massPlane ? int(sizeof(float)) : 0);
     // Staged records keep the tree arena's stride, so cudaGravityPcDirect
     // stages each record with one aligned asynchronous copy.
     static_assert(FmmOrder<order>::kPositionedMultipoleStride_ % kKickArenaAlignment == 0,
@@ -269,8 +271,8 @@ CudaKickArenaLayout const& kickArenaLayoutImpl() {
 }
 
 template <int order>
-KickReturn cudaExecuteKicksImpl(KickParameters kparams, Fixed32* devX, Fixed32* devY, Fixed32* devZ,
-    TreeNode* devTreeNodes, Vector<KickWorkitem> workitems) {
+KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position* devY,
+    Position* devZ, TreeNode* devTreeNodes, Vector<KickWorkitem> workitems) {
     using Parameters = CudaKickParameters<order>;
     Timer tm;
     tm.start();

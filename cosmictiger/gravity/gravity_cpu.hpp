@@ -28,15 +28,17 @@
 
 namespace detail {
 template <class T>
-using SimdAlignedVector =
-    Vector<T, boost::alignment::aligned_allocator<T, SIMD_FLOAT_SIZE * sizeof(float)>>;
+using SimdAlignedVector = Vector<T,
+    boost::alignment::aligned_allocator<T,
+        (alignof(T) > SIMD_FLOAT_SIZE * sizeof(float) ? alignof(T) :
+                                                        SIMD_FLOAT_SIZE * sizeof(float))>>;
 
 // Gathers the source multipoles and centers of `treePtrs` into SIMD lanes, padding
 // the last vector with zero mass at the last source's center.
 template <int order>
 void gatherSourceMultipoles(Vector<TreeNode const*> const& treePtrs,
     SimdAlignedVector<FmmMultipole<SimdFloat, order>>& mValue,
-    SimdAlignedVector<Array<SimdInt, NDIM>>& yValue) {
+    SimdAlignedVector<Array<SimdPosition, NDIM>>& yValue) {
     constexpr int kMultipoleCoefficients = FmmOrder<order>::kMultipoleCoefficients_;
     int const numberOfSources = roundUp((int) treePtrs.size(), SIMD_FLOAT_SIZE) / SIMD_FLOAT_SIZE;
     mValue.resize(numberOfSources);
@@ -73,7 +75,7 @@ void cpuGravityCc(GravityCcType type, FmmExpansion<float, order>& lValue,
     constexpr int kLocalCoefficients = FmmOrder<order>::kLocalCoefficients_;
     FlopCounter<FlopCount> flops = 0;
     if (list.size()) {
-        static SimdFloat const toFloatFactor = simdBroadcast<SimdFloat>(kFixed2float);
+        static SimdFloat const toFloatFactor = simdBroadcast<SimdFloat>(kPositionToFloat);
         Vector<TreeNode const*> treePtrs(list.size());
         TreeNode const* selfPtr = treeGetNode(self);
         int const numberOfSources = roundUp((int) list.size(), SIMD_FLOAT_SIZE) / SIMD_FLOAT_SIZE;
@@ -81,11 +83,11 @@ void cpuGravityCc(GravityCcType type, FmmExpansion<float, order>& lValue,
             treePtrs[i] = treeGetNode(list[i]);
         }
         static thread_local detail::SimdAlignedVector<FmmMultipole<SimdFloat, order>> mValue;
-        static thread_local detail::SimdAlignedVector<Array<SimdInt, NDIM>> yValue;
+        static thread_local detail::SimdAlignedVector<Array<SimdPosition, NDIM>> yValue;
         detail::gatherSourceMultipoles<order>(treePtrs, mValue, yValue);
-        Array<SimdInt, NDIM> x{};
+        Array<SimdPosition, NDIM> x{};
         for (int dim = 0; dim < NDIM; dim++) {
-            x[dim] = simdBroadcast<SimdInt>(selfPtr->mpos->pos[dim].raw());
+            x[dim] = simdBroadcast<SimdPosition>(selfPtr->mpos->pos[dim].raw());
         }
         FmmExpansion<SimdFloat, order> l0;
         l0 = simdBroadcast<SimdFloat>(0.0f);
@@ -132,7 +134,7 @@ void cpuGravityCp(
     constexpr int kLocalCoefficients = FmmOrder<order>::kLocalCoefficients_;
     FlopCounter<FlopCount> flops = 0;
     if (list.size()) {
-        static SimdFloat const toFloatFactor = simdBroadcast<SimdFloat>(kFixed2float);
+        static SimdFloat const toFloatFactor = simdBroadcast<SimdFloat>(kPositionToFloat);
         TreeNode const* selfPtr = treeGetNode(self);
         for (int li = 0; li < list.size(); li += kChunkSize) {
             Array<TreeNode const*, kChunkSize> treePtrs;
@@ -143,9 +145,9 @@ void cpuGravityCp(
                 numberOfSources += treePtrs[i]->numberOfParticles();
             }
             numberOfSources = roundUp(numberOfSources, SIMD_FLOAT_SIZE);
-            Vector<Fixed32> srcx;
-            Vector<Fixed32> srcy;
-            Vector<Fixed32> srcz;
+            Vector<Position> srcx;
+            Vector<Position> srcy;
+            Vector<Position> srcz;
             Vector<float> masses;
             Vector<char> types;
             srcx.resize(numberOfSources);
@@ -171,10 +173,10 @@ void cpuGravityCp(
                 srcz[i] = 0.0;
                 masses[i] = 0.0;
             }
-            Array<SimdInt, NDIM> x{};
-            Array<SimdInt, NDIM> yValue{};
+            Array<SimdPosition, NDIM> x{};
+            Array<SimdPosition, NDIM> yValue{};
             for (int dim = 0; dim < NDIM; dim++) {
-                x[dim] = simdBroadcast<SimdInt>(selfPtr->mpos->pos[dim].raw());
+                x[dim] = simdBroadcast<SimdPosition>(selfPtr->mpos->pos[dim].raw());
             }
             FmmExpansion<SimdFloat, order> l0;
             l0 = simdBroadcast<SimdFloat>(0.0f);
@@ -213,7 +215,7 @@ template <int order>
 void cpuGravityPc(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const& list) {
     FlopCounter<FlopCount> flops = 0;
     if (list.size()) {
-        static SimdFloat const toFloatFactor = simdBroadcast<SimdFloat>(kFixed2float);
+        static SimdFloat const toFloatFactor = simdBroadcast<SimdFloat>(kPositionToFloat);
         Vector<TreeNode const*> treePtrs(list.size());
         TreeNode const* selfPtr = treeGetNode(self);
         int const numberOfSources = roundUp((int) list.size(), SIMD_FLOAT_SIZE) / SIMD_FLOAT_SIZE;
@@ -221,10 +223,10 @@ void cpuGravityPc(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
             treePtrs[i] = treeGetNode(list[i]);
         }
         static thread_local detail::SimdAlignedVector<FmmMultipole<SimdFloat, order>> mValue;
-        static thread_local detail::SimdAlignedVector<Array<SimdInt, NDIM>> yValue;
+        static thread_local detail::SimdAlignedVector<Array<SimdPosition, NDIM>> yValue;
         detail::gatherSourceMultipoles<order>(treePtrs, mValue, yValue);
         auto const range = selfPtr->particleRange;
-        Array<SimdInt, NDIM> x{};
+        Array<SimdPosition, NDIM> x{};
         int kernelFlops = 0;
         for (ParticleInteger i = range.first; i < range.second; i++) {
             Expansion2<SimdFloat> lValue2;
@@ -233,7 +235,7 @@ void cpuGravityPc(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
             lValue2(0, 1, 0) = simdBroadcast<SimdFloat>(0.0f);
             lValue2(0, 0, 1) = simdBroadcast<SimdFloat>(0.0f);
             for (int dim = 0; dim < NDIM; dim++) {
-                x[dim] = simdBroadcast<SimdInt>(particlesPos(dim, i).raw());
+                x[dim] = simdBroadcast<SimdPosition>(particlesPos(dim, i).raw());
             }
             for (int j = 0; j < numberOfSources; j++) {
                 Array<SimdFloat, NDIM> dx{};

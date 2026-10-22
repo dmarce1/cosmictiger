@@ -67,7 +67,7 @@ template <int order>
 FlopCount treeComputeMultipole(MultipoleBuffer& multi, Pair<ParticleInteger> particleRange,
     Array<double, NDIM> const& center) {
     constexpr int kMultipoleCoefficients = FmmOrder<order>::kMultipoleCoefficients_;
-    static SimdFloat const toFloatFactor = kFixed2float;
+    static SimdFloat const toFloatFactor = kPositionToFloat;
     FmmMultipole<double, order> mValue;
     for (int i = 0; i < kMultipoleCoefficients; i++) {
         mValue[i] = 0.0;
@@ -75,12 +75,12 @@ FlopCount treeComputeMultipole(MultipoleBuffer& multi, Pair<ParticleInteger> par
     ParticleInteger const maxi =
         roundUp(particleRange.second - particleRange.first, (ParticleInteger) SIMD_FLOAT_SIZE) +
         particleRange.first;
-    Array<SimdInt, NDIM> y{};
+    Array<SimdPosition, NDIM> y{};
     for (int dim = 0; dim < NDIM; dim++) {
-        y[dim] = simdBroadcast<SimdInt>(Fixed32(center[dim]).raw());
+        y[dim] = simdBroadcast<SimdPosition>(Position(center[dim]).raw());
     }
     for (ParticleInteger i = particleRange.first; i < maxi; i += SIMD_FLOAT_SIZE) {
-        Array<SimdInt, NDIM> xValue{};
+        Array<SimdPosition, NDIM> xValue{};
         SimdFloat mask{};
         ParticleInteger const maxj = std::min(i + SIMD_FLOAT_SIZE, particleRange.second);
         for (ParticleInteger j = i; j < maxj; j++) {

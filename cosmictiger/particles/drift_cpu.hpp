@@ -12,6 +12,7 @@
 
 #include <cosmictiger/analysis/lightcone_entry.hpp>
 #include <cosmictiger/core/containers.hpp>
+#include <cosmictiger/math/position.hpp>
 
 struct DriftParameters {
     int rung = -1;
@@ -27,6 +28,6 @@ struct DriftParameters {
 
 // Arrays describe one disjoint particle range. Lightcone entries are appended
 // before wrapping positions, using the same periodic images as CUDA drift.
-void cpuDriftKernel(Fixed32* x, Fixed32* y, Fixed32* z, Array<float, NDIM>* velocities,
+void cpuDriftKernel(Position* x, Position* y, Position* z, Array<float, NDIM>* velocities,
     char const* rungs, size_t count, DriftParameters const& parameters,
     std::vector<LightconeEntry>* entries = nullptr);

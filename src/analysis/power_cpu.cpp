@@ -9,10 +9,10 @@
 #include <cosmictiger/analysis/power_cpu.hpp>
 #include <cosmictiger/cosmology/fft.hpp>
 
-void accumulateDensityCpuKernel(Fixed32 const* positionX, Fixed32 const* positionY,
-    Fixed32 const* positionZ, float const* masses, size_t particleCount, int fold, int gridSize,
+void accumulateDensityCpuKernel(Position const* positionX, Position const* positionY,
+    Position const* positionZ, float const* masses, size_t particleCount, int fold, int gridSize,
     Range<int64_t> const& box, float* density) {
-    Fixed32 const* const positions[NDIM] = {positionX, positionY, positionZ};
+    Position const* const positions[NDIM] = {positionX, positionY, positionZ};
     for (size_t index = 0; index < particleCount; index++) {
         int cell[NDIM];
         float offsets[NDIM];

@@ -279,7 +279,9 @@ void unitsOutputParticleFixture(bool initialize) {
         sphParticlesResize(1, false);
         for (ParticleInteger i = 0; i < 3; i++) {
             for (int dim = 0; dim < NDIM; dim++) {
-                particlesPos(dim, i).setInteger(0x80000000U + (i != 0 && dim == XDIM ? 1U : 0U));
+                particlesPos(dim, i).setInteger(
+                    (PositionInteger(0x80000000U) + (i != 0 && dim == XDIM ? 1U : 0U))
+                    << (kPositionBits - 32));
                 particlesVel(dim, i) = i == 2 ? (dim == XDIM        ? 0.125 :
                                                         dim == YDIM ? 0.25 :
                                                                       -0.5) :
@@ -294,8 +296,10 @@ void unitsOutputParticleFixture(bool initialize) {
         sphParticlesDensity(0) = 8.0;
         sphParticlesThermodynamicStates[0].internalEnergy = 4.0;
     } else {
-        detail::requireUnitsOutput(particlesPos(XDIM, 0).raw() == 0x80000000U &&
-                particlesPos(XDIM, 1).raw() == 0x80000001U,
+        detail::requireUnitsOutput(
+            particlesPos(XDIM, 0).raw() == (PositionInteger(0x80000000U) << (kPositionBits - 32)) &&
+                particlesPos(XDIM, 1).raw() ==
+                    (PositionInteger(0x80000001U) << (kPositionBits - 32)),
             "particle fixed-point storage unchanged on every locality");
     }
     for (auto& future : pending) {

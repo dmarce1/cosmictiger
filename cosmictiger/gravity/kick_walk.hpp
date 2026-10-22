@@ -15,7 +15,7 @@
 #include <cosmictiger/fmm/fmm_types.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/tree.hpp>
-#include <cosmictiger/math/fixed.hpp>
+#include <cosmictiger/math/position.hpp>
 
 // The CPU tree walk for one FMM order. kick() in kick.cpp is the order-agnostic
 // dispatcher: it selects kickWalk<fmmOrder()>, which views the expansion buffer
@@ -29,7 +29,7 @@ struct KickWorkspace;
 // Spawns the walk of a child: synchronously, on a new HPX thread, or remotely
 // through the kick action when the child lives on another rank.
 hpx::future<KickReturn> kickFork(KickParameters params, ExpansionBuffer const& l,
-    Array<Fixed32, NDIM> pos, TreeId self, Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
+    Array<Position, NDIM> pos, TreeId self, Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
     std::shared_ptr<KickWorkspace> cudaWorkspace, bool threadme);
 
 namespace detail {
@@ -54,7 +54,7 @@ void kickReleaseLists(KickLists&& lists);
 bool kickSourcesAreSingleRank(Vector<TreeId> const& checklist);
 
 // Sum of mass times squared distance from `center` over every particle, all ranks.
-double kickBackgroundSecondMoment(Array<Fixed32, NDIM> center);
+double kickBackgroundSecondMoment(Array<Position, NDIM> center);
 
 // Local-return bookkeeping: the local root resets the counters, leaves add their
 // returns and the covered particle counts, and the result is published once every
@@ -67,8 +67,8 @@ KickReturn kickWaitLocalReturn();
 }    // namespace detail
 
 template <int order>
-KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDIM> pos, TreeId self,
-    Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
+KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, NDIM> pos,
+    TreeId self, Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
     std::shared_ptr<KickWorkspace> cudaWorkspace);
 
 #ifdef COSMICTIGER_FMM_INSTANCE_ORDER
@@ -142,8 +142,8 @@ inline void kickOpenOrDefer(bool openLargerCell, TreeNode const* sink, TreeNode 
 }    // namespace detail
 
 template <int order>
-KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDIM> pos, TreeId self,
-    Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
+KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, NDIM> pos,
+    TreeId self, Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
     std::shared_ptr<KickWorkspace> cudaWorkspace) {
     using Expansion = FmmExpansion<float, order>;
     constexpr int kLocalCoefficients = FmmOrder<order>::kLocalCoefficients_;
@@ -178,7 +178,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
         // source multipole.
         Array<float, NDIM> displacement;
         for (int dim = 0; dim < NDIM; dim++) {
-            displacement[dim] = selfPtr->pos[dim].toDouble() - pos[dim].toDouble();
+            displacement[dim] = unwrappedDoubleDistance(selfPtr->pos[dim], pos[dim]);
         }
         expansion = l2L(expansion, displacement, params.doPhi);
         pos = selfPtr->pos;
@@ -245,16 +245,16 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
     Array<TreeNode const*, SIMD_FLOAT_SIZE> otherPtrs;
     Array<float, NDIM> ldx;
     SimdFloat selfRadius = selfPtr->radius;
-    Array<SimdInt, NDIM> selfPos{};
+    Array<SimdPosition, NDIM> selfPos{};
     Range<SimdDouble8> selfBox{};
-    Array<SimdInt, NDIM> otherPos{};
+    Array<SimdPosition, NDIM> otherPos{};
     Array<SimdFloat, NDIM> dx{};
     SimdFloat otherRadius{};
     SimdFloat otherLeaf{};
     SimdFloat otherSupportRadius{};
     Range<SimdDouble8> otherBox{};
     for (int dim = 0; dim < NDIM; dim++) {
-        selfPos[dim] = simdBroadcast<SimdInt>(selfPtr->pos[dim].raw());
+        selfPos[dim] = simdBroadcast<SimdPosition>(selfPtr->pos[dim].raw());
         selfBox.begin[dim] = (double) selfPtr->box.begin[dim].raw();
         selfBox.end[dim] = (double) selfPtr->box.end[dim].raw();
     }
@@ -263,7 +263,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
         selfBox.end[dim] *= RangeFixed::kToFloatFactor_;
     }
     for (int dim = 0; dim < NDIM; dim++) {
-        ldx[dim] = selfPtr->pos[dim].toDouble() - pos[dim].toDouble();
+        ldx[dim] = unwrappedDoubleDistance(selfPtr->pos[dim], pos[dim]);
     }
     expansion = l2L(expansion, ldx, params.doPhi);
     flops += detail::stf::L2lKernel<kLocalDegree, true>::kFlops_ + 14 + 6 * SIMD_FLOAT_SIZE;
@@ -312,7 +312,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
                 for (int dim = 0; dim < NDIM; dim++) {
                     dx[dim] =
                         simdCast<SimdFloat>(simdPositionDifference(selfPos[dim], otherPos[dim])) *
-                        kFixed2float;
+                        kPositionToFloat;
                 }
                 SimdFloat r2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
                 r2 = simdMax(r2,
@@ -379,7 +379,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
                 for (int dim = 0; dim < NDIM; dim++) {
                     dx[dim] =
                         simdCast<SimdFloat>(simdPositionDifference(selfPos[dim], otherPos[dim])) *
-                        kFixed2float;
+                        kPositionToFloat;
                 }
                 SimdFloat const r2 =
                     simdFma(dx[XDIM], dx[XDIM], simdFma(dx[YDIM], dx[YDIM], dx[ZDIM] * dx[ZDIM]));
@@ -477,7 +477,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Fixed32, NDI
                 ParticleInteger const j = i - rng.first;
                 Array<float, NDIM> dx;
                 for (ParticleInteger dim = 0; dim < NDIM; dim++) {
-                    dx[dim] = particlesPos(dim, i).toDouble() - selfPtr->pos[dim].toDouble();
+                    dx[dim] = unwrappedDoubleDistance(particlesPos(dim, i), selfPtr->pos[dim]);
                 }
                 auto const l2 = l2P(expansion, dx, params.doPhi);
                 float const gravityEffectiveRadius = params.gravitySupportRadius /

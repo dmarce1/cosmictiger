@@ -220,7 +220,7 @@ struct LinearExperiment {
         if (species == 2) {
             sphParticlesResize(perSpecies, false);
         }
-        using PositionKey = std::array<uint32_t, NDIM + 1>;
+        using PositionKey = std::array<PositionInteger, NDIM + 1>;
         std::map<PositionKey, size_t> labels;
         for (size_t index = 0; index < reference.size(); ++index) {
             int const kind = index / perSpecies;
@@ -284,7 +284,7 @@ struct LinearExperiment {
         parameters.doPhi = true;
         ExpansionBuffer local;
         local.zero();
-        Array<Fixed32, NDIM> origin{};
+        Array<Position, NDIM> origin{};
         kick(parameters, local, origin, built.id, Vector<TreeId>{built.id},
             Vector<TreeId>{built.id}, nullptr);
         LinearSample result;
@@ -568,7 +568,7 @@ void writeLinearParticleStates(std::ostream& output, LinearExperiment const& exp
             for (int dim = 0; dim < NDIM; ++dim) {
                 double position = experiment.reference[index][dim] + state.displacement[index][dim];
                 position -= std::floor(position);
-                Fixed32 const realizedPosition(position);
+                Position const realizedPosition(position);
                 output << ',' << realizedPosition.toDouble();
                 double difference = realizedPosition.toDouble() - experiment.reference[index][dim];
                 realizedDisplacement[dim] = difference - std::round(difference);
@@ -667,7 +667,7 @@ std::array<std::complex<double>, 2> linearDensity(
         for (int dim = 0; dim < NDIM; ++dim) {
             double position = experiment.reference[index][dim] + state.displacement[index][dim];
             position -= std::floor(position);
-            Fixed32 const realizedPosition(position);
+            Position const realizedPosition(position);
             phase += wave[dim] * realizedPosition.toDouble();
         }
         result[index / experiment.perSpecies] +=

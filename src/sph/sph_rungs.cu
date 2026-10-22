@@ -11,9 +11,9 @@
 namespace detail {
 
 struct RungsWorkspace {
-    DeviceVector<Fixed32> positionX;
-    DeviceVector<Fixed32> positionY;
-    DeviceVector<Fixed32> positionZ;
+    DeviceVector<Position> positionX;
+    DeviceVector<Position> positionY;
+    DeviceVector<Position> positionZ;
     DeviceVector<float> supportRadius;
     DeviceVector<char> rungs;
 };
@@ -32,7 +32,7 @@ __global__ void sphCudaRungs(
     __syncthreads();
     new (&workspace) detail::RungsWorkspace();
     FlopCounter<> flops = 0;
-    Array<Fixed32, NDIM> position;
+    Array<Position, NDIM> position;
     int changes = 0;
     while (targetNodeIndex < data.numberOfTargetNodes) {
         __syncthreads();

@@ -26,7 +26,7 @@
 
 // Ordinary host storage lets this test call the production initializer without
 // starting HPX, allocating managed memory, or running the evolution driver.
-Array<Fixed32*, NDIM> particlesX;
+Array<Position*, NDIM> particlesX;
 Array<float, NDIM>* particlesV;
 char* particlesR;
 ParticleInteger* sphParticlesParticleIndices;
@@ -36,7 +36,7 @@ namespace detail {
 
 constexpr double kPi = 3.141592653589793238462643383279502884;
 Options options;
-std::array<std::vector<Fixed32>, NDIM> positions;
+std::array<std::vector<Position>, NDIM> positions;
 std::vector<Array<float, NDIM>> velocities;
 std::vector<char> rungs;
 std::vector<ParticleInteger> indices;
@@ -118,7 +118,7 @@ void testInitialization(int resolution, ParticleInteger expectedCount, double ac
     double const mass = getOptions().initial.gasMass;
     ParticleInteger lightCount = 0;
     ParticleInteger heavyCount = 0;
-    std::set<std::array<uint32_t, NDIM>> occupied;
+    std::set<std::array<PositionInteger, NDIM>> occupied;
     std::map<double, double> pressureByHeight;
     for (ParticleInteger i = 0; i < sphParticlesSize(); i++) {
         double const x = sphParticlesPosition(XDIM, i).toDouble();
@@ -132,7 +132,7 @@ void testInitialization(int resolution, ParticleInteger expectedCount, double ac
         } else {
             lightCount++;
         }
-        std::array<uint32_t, NDIM> key{};
+        std::array<PositionInteger, NDIM> key{};
         for (int dim = 0; dim < NDIM; dim++) {
             key[dim] = sphParticlesPosition(dim, i).raw();
         }
@@ -169,11 +169,12 @@ void testInitialization(int resolution, ParticleInteger expectedCount, double ac
     requireClose("heavy layer mass", mass * heavyCount, 1.0);
     requireClose("total mass", mass * sphParticlesSize(), 1.5);
     for (ParticleInteger i = 0; i < sphParticlesSize(); i += 2) {
-        require(sphParticlesPosition(ZDIM, i) < Fixed32(0.5), "lower particle precedes its mirror");
+        require(
+            sphParticlesPosition(ZDIM, i) < Position(0.5), "lower particle precedes its mirror");
         require(sphParticlesPosition(XDIM, i).raw() == sphParticlesPosition(XDIM, i + 1).raw() &&
                 sphParticlesPosition(YDIM, i).raw() == sphParticlesPosition(YDIM, i + 1).raw(),
             "mirrored pairs share transverse positions");
-        require(uint32_t(sphParticlesPosition(ZDIM, i).raw() +
+        require(PositionInteger(sphParticlesPosition(ZDIM, i).raw() +
                     sphParticlesPosition(ZDIM, i + 1).raw()) == 0U,
             "mirrored z coordinates are exact in fixed point");
         require(sphParticlesVelocity(ZDIM, i) == -sphParticlesVelocity(ZDIM, i + 1),

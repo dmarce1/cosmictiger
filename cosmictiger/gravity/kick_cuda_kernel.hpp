@@ -246,7 +246,6 @@ __device__ FlopCount doKick(KickReturn& result, KickParameters params, CudaKickD
         result.darkMatterYMomentumCorrection += darkMatterYMomentumCorrection;
         result.darkMatterZMomentumCorrection += darkMatterZMomentumCorrection;
         result.darkMatterMomentumNormCorrection += darkMatterMomentumNormCorrection;
-
     }
     return flops;
 }
@@ -299,7 +298,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
     __syncwarp();
     if (tid == 0) {
         control.layout = layout;
-        control.sourceX = reinterpret_cast<Fixed32*>(arena + layout.sourceOffset);
+        control.sourceX = reinterpret_cast<Position*>(arena + layout.sourceOffset);
         control.sourceY = control.sourceX + layout.particleCapacity;
         control.sourceZ = control.sourceY + layout.particleCapacity;
         control.sourceMass = layout.massPlane ?
@@ -310,8 +309,9 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
         if (sharedExpansion) {
             char* expansionBytes = shmemPtr + layout.expansionOffset;
             control.expansion = reinterpret_cast<Expansion*>(expansionBytes);
-            control.expansionPos =
-                reinterpret_cast<Array<Fixed32, NDIM>*>(expansionBytes + kLocalExpansionBytes);
+            control.expansionPos = reinterpret_cast<Array<Position, NDIM>*>(expansionBytes +
+                (kLocalExpansionBytes + alignof(Position) - 1) / alignof(Position) *
+                    alignof(Position));
         } else {
             control.expansion = &control.current[0].expansion;
             control.expansionPos = &control.current[0].pos;
@@ -336,7 +336,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
     auto& leaflist = control.leaflist;
     auto& barrier = control.barrier;
     Expansion& expansion = *control.expansion;
-    Array<Fixed32, NDIM>& expansionPos = *control.expansionPos;
+    Array<Position, NDIM>& expansionPos = *control.expansionPos;
     float* scratch = control.scratchExpansion;
     auto& treeNodes = data.treeNodes;
     bool const equalMass = !data.sph;

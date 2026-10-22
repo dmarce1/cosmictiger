@@ -39,15 +39,15 @@ void fmmWalkRequireClose(
     }
 }
 
-Array<Fixed32, NDIM> fmmWalkPosition(double x, double y, double z) {
-    Array<Fixed32, NDIM> position;
+Array<Position, NDIM> fmmWalkPosition(double x, double y, double z) {
+    Array<Position, NDIM> position;
     position[XDIM] = x;
     position[YDIM] = y;
     position[ZDIM] = z;
     return position;
 }
 
-Array<Fixed32, NDIM> fmmWalkDistributedPosition(size_t rank) {
+Array<Position, NDIM> fmmWalkDistributedPosition(size_t rank) {
     // Dyadic coordinates avoid fixed-point rounding, and unequal spacing keeps
     // the middle particle's force away from cancellation at float precision.
     double const offset = static_cast<double>(rank);
@@ -90,7 +90,7 @@ void fmmWalkResetKickState() {
     }
 }
 
-void fmmWalkSetParticlePosition(ParticleInteger index, Array<Fixed32, NDIM> const& position) {
+void fmmWalkSetParticlePosition(ParticleInteger index, Array<Position, NDIM> const& position) {
     for (int dim = 0; dim < NDIM; dim++) {
         particlesPos(dim, index) = position[dim];
     }
@@ -107,7 +107,7 @@ void fmmWalkPrepareArena() {
     treeCreate(TreeCreateParameters(0, kFmmWalkTheta, getOptions().gravity.supportRadius));
 }
 
-TreeId fmmWalkAddNode(Array<Fixed32, NDIM> const& position, float radius,
+TreeId fmmWalkAddNode(Array<Position, NDIM> const& position, float radius,
     Pair<ParticleInteger> particleRange, int depth, bool localRoot = false,
     TreeId left = TreeId{-1, -1}, TreeId right = TreeId{-1, -1}, bool spansTwoRanks = false,
     float maxSupportRadius = 0.0f, bool tightParticleBox = false) {
@@ -768,9 +768,9 @@ void fmmWalkCellSupportBounds(bool useCuda) {
     }};
     float const fixedSupport = 0.015625f;
     float const largeCellSupport = 0.375f;
-    std::array<Array<Fixed32, NDIM>, 2> const centers{
+    std::array<Array<Position, NDIM>, 2> const centers{
         fmmWalkPosition(0.25, 0.375, 0.4375), fmmWalkPosition(0.4375, 0.375, 0.4375)};
-    std::array<Array<Fixed32, NDIM>, 2> const particlePositions{
+    std::array<Array<Position, NDIM>, 2> const particlePositions{
         fmmWalkPosition(0.3125, 0.375, 0.4375), fmmWalkPosition(0.359375, 0.375, 0.4375)};
     std::array<Pair<ParticleInteger>, 2> const ranges{
         Pair<ParticleInteger>(0, 40), Pair<ParticleInteger>(40, 104)};
@@ -893,7 +893,7 @@ struct FmmWalkPeriodicField {
 };
 
 FmmWalkPeriodicField fmmWalkDirectPeriodicReference(
-    size_t sink, Vector<Array<Fixed32, NDIM>> const& positions, Vector<double> const& masses) {
+    size_t sink, Vector<Array<Position, NDIM>> const& positions, Vector<double> const& masses) {
     // Independently sum the zero-mean periodic Newtonian Green function.
     // These larger real/reciprocal cubes converge beyond the production
     // alpha=2 truncations without using any generated FMM coefficient.
@@ -963,7 +963,7 @@ FmmWalkPeriodicField fmmWalkDirectPeriodicReference(
 
 FmmWalkPeriodicField fmmWalkDirectPeriodicReference(ParticleInteger sink) {
     auto const range = particlesCurrentRange();
-    Vector<Array<Fixed32, NDIM>> positions(range.second - range.first);
+    Vector<Array<Position, NDIM>> positions(range.second - range.first);
     Vector<double> masses(positions.size());
     for (ParticleInteger source = range.first; source < range.second; source++) {
         for (int dim = 0; dim < NDIM; dim++) {
@@ -987,7 +987,7 @@ void fmmWalkPeriodicBackground(bool useCuda) {
         bool const selectedSubset = scenario == 2;
         particlesResize(kPositions.size() + (selectedSubset ? 2 : 0));
         for (size_t i = 0; i < kPositions.size(); i++) {
-            Array<Fixed32, NDIM> position;
+            Array<Position, NDIM> position;
             for (int dim = 0; dim < NDIM; dim++) {
                 double const coordinate = kPositions[i][dim] + translated * translation[dim];
                 position[dim] = coordinate - std::floor(coordinate);
@@ -1124,7 +1124,7 @@ void fmmWalkOpenLargerCell(bool useCuda) {
         } else {
             coordinate = {uniform(generator), uniform(generator), uniform(generator)};
         }
-        Array<Fixed32, NDIM> position;
+        Array<Position, NDIM> position;
         for (int dim = 0; dim < NDIM; dim++) {
             double wrapped = coordinate[dim] - std::floor(coordinate[dim]);
             if (wrapped >= 1.0) {
@@ -1308,7 +1308,7 @@ double fmmWalkVerifyDistributedPeriodicForces() {
     if (particlesSize() != 1) {
         throw std::runtime_error("Periodic FMM regression requires one particle per rank");
     }
-    Vector<Array<Fixed32, NDIM>> positions(hpxSize());
+    Vector<Array<Position, NDIM>> positions(hpxSize());
     Vector<double> masses(hpxSize(), 1.0);
     size_t sink = positions.size();
     for (size_t rank = 0; rank < positions.size(); rank++) {

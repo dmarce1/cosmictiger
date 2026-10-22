@@ -34,14 +34,14 @@ inline std::vector<int> sphCpuNeighbors(SphRunData const& data, SphTreeNode cons
     bool symmetric, FlopCounter<>& flops, bool activeOnly = false, int minimumRung = 0) {
     std::vector<int> neighbors;
     for (int nodeIndex = targetNode.neighborRange.first;
-         nodeIndex < targetNode.neighborRange.second; nodeIndex++) {
+        nodeIndex < targetNode.neighborRange.second; nodeIndex++) {
         auto const& neighborNode = data.treeNodes[data.neighborNodeIndices[nodeIndex]];
         for (int sourceIndex = neighborNode.particleRange.first;
-             sourceIndex < neighborNode.particleRange.second; sourceIndex++) {
+            sourceIndex < neighborNode.particleRange.second; sourceIndex++) {
             if (activeOnly && data.sourceRungs[sourceIndex] < minimumRung) {
                 continue;
             }
-            Array<Fixed32, NDIM> position;
+            Array<Position, NDIM> position;
             position[XDIM] = data.sourcePositionX[sourceIndex];
             position[YDIM] = data.sourcePositionY[sourceIndex];
             position[ZDIM] = data.sourcePositionZ[sourceIndex];
@@ -79,20 +79,21 @@ inline Vector3<SimdFloat> sphCpuLoad3(float const* x, float const* y, float cons
 // Sink minus source positions, r_a - r_b, for one pack of neighbors.
 inline Vector3<SimdFloat> sphCpuSeparations(
     SphRunData const& data, int particleIndex, std::vector<int> const& neighbors, size_t first) {
-    Fixed32 const* positions[NDIM] = {
+    Position const* positions[NDIM] = {
         data.sourcePositionX, data.sourcePositionY, data.sourcePositionZ};
     Vector3<SimdFloat> separation;
     for (int dim = 0; dim < NDIM; dim++) {
-        int const sinkPosition = static_cast<int32_t>(positions[dim][particleIndex].raw());
-        SimdInt const sourcePosition([&](auto lane) {
+        SignedPositionInteger const sinkPosition =
+            static_cast<SignedPositionInteger>(positions[dim][particleIndex].raw());
+        SimdPosition const sourcePosition([&](auto lane) {
             size_t const index = first + size_t(lane);
             return index < neighbors.size() ?
-                static_cast<int32_t>(positions[dim][neighbors[index]].raw()) :
+                static_cast<SignedPositionInteger>(positions[dim][neighbors[index]].raw()) :
                 sinkPosition;
         });
-        separation[dim] =
-            simdCast<SimdFloat>(simdPositionDifference(SimdInt(sinkPosition), sourcePosition)) *
-            SimdFloat(kFixed2float);
+        separation[dim] = simdCast<SimdFloat>(
+                              simdPositionDifference(SimdPosition(sinkPosition), sourcePosition)) *
+            SimdFloat(kPositionToFloat);
     }
     return separation;
 }

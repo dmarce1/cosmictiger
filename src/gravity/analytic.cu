@@ -14,22 +14,22 @@
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
-__global__ void analyticGravityKernel(Fixed32* sinkx, Fixed32* sinky, Fixed32* sinkz,
-    Fixed32* sourcex, Fixed32* sourcey, Fixed32* sourcez, int numberOfSources, double* rphi,
+__global__ void analyticGravityKernel(Position* sinkx, Position* sinky, Position* sinkz,
+    Position* sourcex, Position* sourcey, Position* sourcez, int numberOfSources, double* rphi,
     double* rgx, double* rgy, double* rgz, float hsoft);
 
 #define ANALYTIC_BLOCK_SIZE 256
 
 std::pair<Vector<double>, Array<Vector<double>, NDIM>> gravityAnalyticCallKernel(
-    Vector<Fixed32> const& sinkx, Vector<Fixed32> const& sinky, Vector<Fixed32> const& sinkz) {
+    Vector<Position> const& sinkx, Vector<Position> const& sinky, Vector<Position> const& sinkz) {
     cudaSetDevice();
     std::pair<Vector<double>, Array<Vector<double>, NDIM>> rc;
-    Fixed32* devSinkx;
-    Fixed32* devSinky;
-    Fixed32* devSinkz;
-    Fixed32* devSrcx;
-    Fixed32* devSrcy;
-    Fixed32* devSrcz;
+    Position* devSinkx;
+    Position* devSinky;
+    Position* devSinkz;
+    Position* devSrcx;
+    Position* devSrcy;
+    Position* devSrcz;
     double* devPhi;
     double* devGx;
     double* devGy;
@@ -39,9 +39,9 @@ std::pair<Vector<double>, Array<Vector<double>, NDIM>> gravityAnalyticCallKernel
         CUDA_MALLOC(&pointer, bytes);
         return std::unique_ptr<T, decltype(&cudaFree)>(pointer, cudaFree);
     };
-    auto sinkXOwner = allocate(devSinkx, numberOfSinks * sizeof(Fixed32));
-    auto sinkYOwner = allocate(devSinky, numberOfSinks * sizeof(Fixed32));
-    auto sinkZOwner = allocate(devSinkz, numberOfSinks * sizeof(Fixed32));
+    auto sinkXOwner = allocate(devSinkx, numberOfSinks * sizeof(Position));
+    auto sinkYOwner = allocate(devSinky, numberOfSinks * sizeof(Position));
+    auto sinkZOwner = allocate(devSinkz, numberOfSinks * sizeof(Position));
     auto potentialOwner = allocate(devPhi, numberOfSinks * sizeof(double));
     auto forceXOwner = allocate(devGx, numberOfSinks * sizeof(double));
     auto forceYOwner = allocate(devGy, numberOfSinks * sizeof(double));
@@ -60,17 +60,18 @@ std::pair<Vector<double>, Array<Vector<double>, NDIM>> gravityAnalyticCallKernel
         copies.copyAsync(
             devGz, zero.data(), numberOfSinks * sizeof(double), cudaMemcpyHostToDevice);
         copies.copyAsync(
-            devSinkx, sinkx.data(), numberOfSinks * sizeof(Fixed32), cudaMemcpyHostToDevice);
+            devSinkx, sinkx.data(), numberOfSinks * sizeof(Position), cudaMemcpyHostToDevice);
         copies.copyAsync(
-            devSinky, sinky.data(), numberOfSinks * sizeof(Fixed32), cudaMemcpyHostToDevice);
+            devSinky, sinky.data(), numberOfSinks * sizeof(Position), cudaMemcpyHostToDevice);
         copies.copyAsync(
-            devSinkz, sinkz.data(), numberOfSinks * sizeof(Fixed32), cudaMemcpyHostToDevice);
+            devSinkz, sinkz.data(), numberOfSinks * sizeof(Position), cudaMemcpyHostToDevice);
         // Independent nonblocking kernel streams cannot inherit default-stream
         // ordering, so all shared inputs must be ready before their launches.
         copies.wait();
     }
     PRINT("%li free\n", cudaFreeMemory());
-    size_t const particlesPerLoop = (size_t) cudaFreeMemory() / (NDIM * sizeof(Fixed32)) * 85 / 100;
+    size_t const particlesPerLoop =
+        (size_t) cudaFreeMemory() / (NDIM * sizeof(Position)) * 85 / 100;
     int occupancy;
     CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&occupancy, analyticGravityKernel,
         ANALYTIC_BLOCK_SIZE, sizeof(double) * (NDIM + 1) * ANALYTIC_BLOCK_SIZE));
@@ -84,17 +85,17 @@ std::pair<Vector<double>, Array<Vector<double>, NDIM>> gravityAnalyticCallKernel
     for (size_t i = 0; i < particlesSize(); i += particlesPerLoop) {
         int const totalSize =
             std::min(size_t(particlesSize()), size_t(i) + size_t(particlesPerLoop)) - size_t(i);
-        auto sourceXOwner = allocate(devSrcx, totalSize * sizeof(Fixed32));
-        auto sourceYOwner = allocate(devSrcy, totalSize * sizeof(Fixed32));
-        auto sourceZOwner = allocate(devSrcz, totalSize * sizeof(Fixed32));
+        auto sourceXOwner = allocate(devSrcx, totalSize * sizeof(Position));
+        auto sourceYOwner = allocate(devSrcy, totalSize * sizeof(Position));
+        auto sourceZOwner = allocate(devSrcz, totalSize * sizeof(Position));
         try {
             CudaStream copies(cudaGetDevice());
             copies.copyAsync(
-                devSrcx, &particlesPos(0, i), totalSize * sizeof(Fixed32), cudaMemcpyHostToDevice);
+                devSrcx, &particlesPos(0, i), totalSize * sizeof(Position), cudaMemcpyHostToDevice);
             copies.copyAsync(
-                devSrcy, &particlesPos(1, i), totalSize * sizeof(Fixed32), cudaMemcpyHostToDevice);
+                devSrcy, &particlesPos(1, i), totalSize * sizeof(Position), cudaMemcpyHostToDevice);
             copies.copyAsync(
-                devSrcz, &particlesPos(2, i), totalSize * sizeof(Fixed32), cudaMemcpyHostToDevice);
+                devSrcz, &particlesPos(2, i), totalSize * sizeof(Position), cudaMemcpyHostToDevice);
             copies.wait();
             for (int j = 0; j < numberOfKernels; j++) {
                 int const begin = size_t(j) * size_t(totalSize) / size_t(numberOfKernels);
@@ -131,8 +132,8 @@ std::pair<Vector<double>, Array<Vector<double>, NDIM>> gravityAnalyticCallKernel
     return rc;
 }
 
-__global__ void analyticGravityKernel(Fixed32* sinkx, Fixed32* sinky, Fixed32* sinkz,
-    Fixed32* sourcex, Fixed32* sourcey, Fixed32* sourcez, int numberOfSources, double* rphi,
+__global__ void analyticGravityKernel(Position* sinkx, Position* sinky, Position* sinkz,
+    Position* sourcex, Position* sourcey, Position* sourcez, int numberOfSources, double* rphi,
     double* rgx, double* rgy, double* rgz, float h) {
     __shared__ double phi[ANALYTIC_BLOCK_SIZE];
     __shared__ double gx[ANALYTIC_BLOCK_SIZE];
@@ -142,9 +143,9 @@ __global__ void analyticGravityKernel(Fixed32* sinkx, Fixed32* sinky, Fixed32* s
     int const& tid = threadIdx.x;
     int const& bid = blockIdx.x;
 
-    Fixed32 const x = sinkx[bid];
-    Fixed32 const y = sinky[bid];
-    Fixed32 const z = sinkz[bid];
+    Position const x = sinkx[bid];
+    Position const y = sinky[bid];
+    Position const z = sinkz[bid];
     float const cons1 = float(4.0f / sqrtf(M_PI));
     float const h2 = h * h;
     float const hinv = 1.0f / h;

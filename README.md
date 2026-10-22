@@ -70,6 +70,20 @@ The complete, independently editable problem files in [configurations/](configur
 option set, with problem-specific values and inline help comments. Files are
 loaded explicitly; there is no implicit loading of `default.ini`.
 
+Positions use 32-bit fixed point by default. Select 64-bit fixed point with
+`--compute.positionType=fixed64`, or `positionType = fixed64` in the INI `[compute]`
+section. Both choices store normalized positions in `[0, 1)`; their coordinate
+increments are `2^-32` and `2^-64`, respectively. The 64-bit choice doubles position
+storage and preserves smaller separations and accumulated displacements. Force
+and velocity arithmetic retain their existing precision.
+
+The build produces `cosmictiger` and its `cosmictiger_fixed64` companion. Keep both
+executables in the same directory when copying a build: selection happens before
+HPX/MPI starts, so each locality uses the same position representation. Checkpoints
+record the representation and must be restarted with the same `compute.positionType`.
+The legacy `glass.bin` exchange format remains Q0.32 in both modes; checkpoints
+retain the selected position precision.
+
 Gravity and SPH can select kernels independently. Both use an effective radius
 `effectiveRadius = 2 sigma`, where sigma is the standard deviation along one
 coordinate axis. This preserves the existing numerical length scale: adopting

@@ -10,14 +10,14 @@
 #include <cstddef>
 #include <cstdint>
 
-#include <cosmictiger/math/fixed.hpp>
+#include <cosmictiger/math/position.hpp>
 #include <cosmictiger/math/range.hpp>
 
 #ifdef __CUDACC__
 // Separate from the particle-storage adapter so tests can run the production
 // kernel with a bounded launch and ordinary test fixtures.
-__global__ void accumulateDensityKernel(Fixed32 const* xValue, Fixed32 const* yValue,
-    Fixed32 const* zValue, float* rho, float const* masses, int mfold, size_t numberOfParticles,
+__global__ void accumulateDensityKernel(Position const* xValue, Position const* yValue,
+    Position const* zValue, float* rho, float const* masses, int mfold, size_t numberOfParticles,
     int ndim, Range<int64_t> intbox);
 #endif
 

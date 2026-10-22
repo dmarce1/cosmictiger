@@ -14,7 +14,7 @@
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/fmm/fmm_types.hpp>
-#include <cosmictiger/math/fixed.hpp>
+#include <cosmictiger/math/position.hpp>
 #include <cosmictiger/math/range.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
@@ -73,7 +73,7 @@ struct TreeIdHashHi {
 // order-agnostic position header; per-order code views the moments through
 // fmmMultiPos<order>(node.mpos).
 MultipolePosition* treeAddMultipole(
-    Array<Fixed32, NDIM> const& pos, MultipoleBuffer const& multipole);
+    Array<Position, NDIM> const& pos, MultipoleBuffer const& multipole);
 void treeReadMultipole(MultipolePosition const* record, MultipoleBuffer& multipole);
 
 struct TreeNode {
@@ -81,7 +81,7 @@ struct TreeNode {
     Array<TreeId, NCHILD> children;
     Pair<ParticleInteger> particleRange;
     Pair<int, int> processRange;
-    Array<Fixed32, NDIM> pos;
+    Array<Position, NDIM> pos;
     MultipolePosition* mpos;
     float radius;
     // Maximum actual compact gravity support among represented particles, not an
@@ -113,7 +113,7 @@ struct TreeNode {
     HPX_SERIALIZATION_SPLIT_MEMBER();
     template <class A>
     void load(A&& arc, unsigned) {
-        Array<Fixed32, NDIM> multipolePosition;
+        Array<Position, NDIM> multipolePosition;
         MultipoleBuffer multipole;
         arc & multipolePosition;
         arc & multipole;
@@ -162,7 +162,7 @@ struct TreeNode {
 
 struct TreeCreateReturn {
     MultipoleBuffer multi;
-    Array<Fixed32, NDIM> pos;
+    Array<Position, NDIM> pos;
     TreeId id;
     float radius;
     float maxGravitySupportRadius = 0.0f;

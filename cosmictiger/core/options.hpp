@@ -29,6 +29,7 @@ struct Run {
 };
 
 struct Compute {
+    std::string positionType{"fixed32"};
     bool cuda{};
     int bucketSize{};
     // Zero input derives the SPH leaf size from hydro.neighborNumber; startup
@@ -246,6 +247,7 @@ struct Options {
         arc & run.numberOfSteps;
         arc & initial.fourierSize;
         arc & compute.cuda;
+        arc & compute.positionType;
         arc & lightcone.enabled;
         arc & analysis.saveForce;
         arc & analysis.power;

@@ -25,5 +25,5 @@ template __global__ void cudaKickKernel<COSMICTIGER_FMM_INSTANCE_ORDER>(KickRetu
     CudaKickData, CudaKickParameters<COSMICTIGER_FMM_INSTANCE_ORDER>*, int, int*,
     CudaKickArenaLayout, char*);
 template KickReturn cudaExecuteKicksImpl<COSMICTIGER_FMM_INSTANCE_ORDER>(
-    KickParameters, Fixed32*, Fixed32*, Fixed32*, TreeNode*, Vector<KickWorkitem>);
+    KickParameters, Position*, Position*, Position*, TreeNode*, Vector<KickWorkitem>);
 template CudaKickArenaLayout const& kickArenaLayoutImpl<COSMICTIGER_FMM_INSTANCE_ORDER>();

@@ -15,9 +15,9 @@
 
 struct SphRunData {
     // Staged source arrays, including the sources that are also local sinks.
-    Fixed32* sourcePositionX;
-    Fixed32* sourcePositionY;
-    Fixed32* sourcePositionZ;
+    Position* sourcePositionX;
+    Position* sourcePositionY;
+    Position* sourcePositionZ;
     float* sourceVelocityX;
     float* sourceVelocityY;
     float* sourceVelocityZ;
@@ -65,7 +65,7 @@ struct SphRunData {
 // A source can reach any sink in this box through a periodic image. Expanding
 // the unwrapped interval before testing avoids inconsistent endpoint wrapping.
 CUDA_EXPORT inline bool sphSupportIntersects(Fixed32Range const& sinkBox,
-    Array<Fixed32, NDIM> const& sourcePosition, float sourceSupport,
+    Array<Position, NDIM> const& sourcePosition, float sourceSupport,
     FlopCounter<>* flops = nullptr) {
     Fixed32Range expanded = sinkBox;
     for (int dim = 0; dim < NDIM; dim++) {

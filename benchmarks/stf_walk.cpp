@@ -123,13 +123,13 @@ double stfWalkJitter(size_t particle, int dimension) {
     return (double(value & 0xffffu) / 65535. - 0.5) * 0.2;
 }
 
-std::vector<Array<Fixed32, NDIM>> stfWalkPositions(std::string const& fixture, int side) {
+std::vector<Array<Position, NDIM>> stfWalkPositions(std::string const& fixture, int side) {
     bool const clustered = fixture == "clustered";
     bool const adaptive = fixture == "adaptive";
     std::array<double, NDIM> const clusterCenter{0.41, 0.47, 0.53};
     size_t const count = size_t(side) * side * side;
     double const halfSide = 0.5 * side;
-    std::vector<Array<Fixed32, NDIM>> positions(count);
+    std::vector<Array<Position, NDIM>> positions(count);
     for (int z = 0; z < side; ++z) {
         for (int y = 0; y < side; ++y) {
             for (int x = 0; x < side; ++x) {
@@ -160,7 +160,7 @@ std::vector<Array<Fixed32, NDIM>> stfWalkPositions(std::string const& fixture, i
     return positions;
 }
 
-void stfWalkReset(std::vector<Array<Fixed32, NDIM>> const& positions) {
+void stfWalkReset(std::vector<Array<Position, NDIM>> const& positions) {
     for (size_t index = 0; index < positions.size(); ++index) {
         for (int dim = 0; dim < NDIM; ++dim) {
             particlesPos(dim, index) = positions[index][dim];
@@ -289,7 +289,7 @@ void stfWalkLeafHistogram(TreeId root, char const* fixture) {
 // Compare the saved forces and potentials of a deterministic particle sample
 // with the direct periodic (Ewald) sum. The kick used gm = 1, as does the sum.
 void stfWalkReferenceErrors(char const* fixture, char const* backend, int count,
-    std::vector<Array<Fixed32, NDIM>> const& positions, std::ofstream& stream) {
+    std::vector<Array<Position, NDIM>> const& positions, std::ofstream& stream) {
     size_t const sampleCount = std::min(size_t(count), positions.size());
     // Select physical particles before tree ordering. A coprime permutation
     // avoids the coordinate planes selected by a simple lattice-index stride.
@@ -297,9 +297,9 @@ void stfWalkReferenceErrors(char const* fixture, char const* backend, int count,
     while (std::gcd(step, positions.size()) != 1) {
         ++step;
     }
-    Vector<Fixed32> sinkx;
-    Vector<Fixed32> sinky;
-    Vector<Fixed32> sinkz;
+    Vector<Position> sinkx;
+    Vector<Position> sinky;
+    Vector<Position> sinkz;
     std::map<std::array<uint32_t, NDIM>, size_t> selected;
     for (size_t i = 0; i < sampleCount; ++i) {
         auto const& position = positions[(i * step) % positions.size()];

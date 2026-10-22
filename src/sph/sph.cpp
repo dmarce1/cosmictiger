@@ -55,9 +55,9 @@ struct SphRunWorkspace {
     Vector<float, PinnedAllocator<float>> hostSupportRadius;
     Vector<char, PinnedAllocator<char>> hostRungs;
     Vector<SphTreeNode, PinnedAllocator<SphTreeNode>> hostTrees;
-    Vector<Fixed32, PinnedAllocator<Fixed32>> hostPositionX;
-    Vector<Fixed32, PinnedAllocator<Fixed32>> hostPositionY;
-    Vector<Fixed32, PinnedAllocator<Fixed32>> hostPositionZ;
+    Vector<Position, PinnedAllocator<Position>> hostPositionX;
+    Vector<Position, PinnedAllocator<Position>> hostPositionY;
+    Vector<Position, PinnedAllocator<Position>> hostPositionZ;
     Vector<int, PinnedAllocator<int>> hostNeighborNodeIndices;
     Vector<int> hostTargetNodeIndices;
     std::unordered_map<TreeId, int, SphTreeIdHash> treeMap;
@@ -227,7 +227,7 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
                 auto const myx = sphParticlesPosition(XDIM, i);
                 auto const myy = sphParticlesPosition(YDIM, i);
                 auto const myz = sphParticlesPosition(ZDIM, i);
-                Array<Fixed32, NDIM> xValue;
+                Array<Position, NDIM> xValue;
                 xValue[XDIM] = myx;
                 xValue[YDIM] = myy;
                 xValue[ZDIM] = myz;

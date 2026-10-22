@@ -193,9 +193,9 @@ SphRunReturn sphCpuHydro(
         flops += 6;    // Five acceleration additions and fixed-point midpoint conversion.
         if (data.centralAcceleration != 0.0f) {
             Vector3<float> const separation(
-                distance(data.sourcePositionX[particleIndex], Fixed32(0.5)),
-                distance(data.sourcePositionY[particleIndex], Fixed32(0.5)),
-                distance(data.sourcePositionZ[particleIndex], Fixed32(0.5)));
+                distance(data.sourcePositionX[particleIndex], Position(0.5)),
+                distance(data.sourcePositionY[particleIndex], Position(0.5)),
+                distance(data.sourcePositionZ[particleIndex], Position(0.5)));
             float const radius = separation.norm();
             float const inverseSupportRadius = 1.0f / data.centralSupportRadius;
             float const q = radius * inverseSupportRadius;

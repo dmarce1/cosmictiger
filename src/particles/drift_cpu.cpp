@@ -70,7 +70,7 @@ void appendDriftLightconeEntries(Array<double, NDIM> const& before,
 
 }    // namespace detail
 
-void cpuDriftKernel(Fixed32* x, Fixed32* y, Fixed32* z, Array<float, NDIM>* velocities,
+void cpuDriftKernel(Position* x, Position* y, Position* z, Array<float, NDIM>* velocities,
     char const* rungs, size_t count, DriftParameters const& parameters,
     std::vector<LightconeEntry>* entries) {
     if (count == 0) {
@@ -83,7 +83,7 @@ void cpuDriftKernel(Fixed32* x, Fixed32* y, Fixed32* z, Array<float, NDIM>* velo
     }
     double const driftFactor = parameters.timestep / parameters.scale;
     double const damping = 1.0 / (1.0 + parameters.drag * parameters.timestep);
-    Fixed32* positions[NDIM] = {x, y, z};
+    Position* positions[NDIM] = {x, y, z};
     size_t index = 0;
     if (!lightcone) {
         using DriftPack = NativeSimdVector<double>;
@@ -108,7 +108,13 @@ void cpuDriftKernel(Fixed32* x, Fixed32* y, Fixed32* z, Array<float, NDIM>* velo
                 for (size_t lane = 0; lane < kWidth; ++lane) {
                     size_t const particle = index + lane;
                     if (parameters.rung < 0 || rungs[particle] == parameters.rung) {
-                        positions[dim][particle] = wrapped[lane];
+                        if constexpr (kPositionBits == 64) {
+                            // Add in fixed point so conversion of the absolute
+                            // position to double cannot discard its low bits.
+                            positions[dim][particle] += Position(velocity[lane] * driftFactor);
+                        } else {
+                            positions[dim][particle] = wrapped[lane];
+                        }
                         if (parameters.drag != 0.0) {
                             velocities[particle][dim] = velocity[lane] * damping;
                         }
@@ -123,9 +129,11 @@ void cpuDriftKernel(Fixed32* x, Fixed32* y, Fixed32* z, Array<float, NDIM>* velo
         }
         Array<double, NDIM> before;
         Array<double, NDIM> after;
+        Array<double, NDIM> displacement;
         for (int dim = 0; dim < NDIM; ++dim) {
             before[dim] = positions[dim][index].toDouble();
             after[dim] = std::fma(double(velocities[index][dim]), driftFactor, before[dim]);
+            displacement[dim] = double(velocities[index][dim]) * driftFactor;
             if (parameters.drag != 0.0) {
                 velocities[index][dim] *= damping;
             }
@@ -135,8 +143,12 @@ void cpuDriftKernel(Fixed32* x, Fixed32* y, Fixed32* z, Array<float, NDIM>* velo
                 before, after, velocities[index], parameters, *entries);
         }
         for (int dim = 0; dim < NDIM; ++dim) {
-            double const fraction = after[dim] - std::floor(after[dim]);
-            positions[dim][index] = fraction >= 1.0 ? 0.0 : fraction;
+            if constexpr (kPositionBits == 64) {
+                positions[dim][index] += Position(displacement[dim]);
+            } else {
+                double const fraction = after[dim] - std::floor(after[dim]);
+                positions[dim][index] = fraction >= 1.0 ? 0.0 : fraction;
+            }
         }
     }
 }

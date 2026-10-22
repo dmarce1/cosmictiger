@@ -14,6 +14,7 @@
 #include <cosmictiger/core/assert.hpp>
 #include <cosmictiger/core/defs.hpp>
 #include <cosmictiger/cuda/cuda.hpp>
+#include <cosmictiger/math/position.hpp>
 
 // FMM order conventions.
 //
@@ -81,18 +82,19 @@ CUDA_EXPORT constexpr int fmmLocalCoefficientCount(int order) {
     return fmmLocalHarmonicCoefficientCount(order) + 1;
 }
 
-// A positioned multipole stores NDIM Fixed32 positions followed by the coefficients.
+// A positioned multipole stores NDIM Position positions followed by the coefficients.
 CUDA_EXPORT constexpr int fmmPositionedMultipoleBytes(int order) {
-    return int(sizeof(float)) * (fmmMultipoleCoefficientCount(order) + NDIM);
+    int const bytes =
+        int(sizeof(float)) * fmmMultipoleCoefficientCount(order) + NDIM * int(sizeof(Position));
+    // Include the C++ record's tail padding for its position alignment.
+    return (bytes + int(alignof(Position)) - 1) / int(alignof(Position)) * int(alignof(Position));
 }
 
 // The tree's multipole arena and the CUDA kick's staged multipole tile store
 // the records at this stride: the record size rounded up to a multiple of
 // kFmmPositionedMultipoleAlignment, so that every record starts on a 16-byte
 // boundary and the kick stages a whole record with 16-byte asynchronous
-// copies. Odd orders pad by one float (an odd degree p gives (p + 1)^2
-// coefficients, a multiple of four, and with the three position words the
-// record is one word short of a multiple of four); even orders need none.
+// copies. The required padding depends on the order and position width.
 inline constexpr int kFmmPositionedMultipoleAlignment = 16;
 
 CUDA_EXPORT constexpr int fmmPositionedMultipoleStride(int order) {
@@ -118,13 +120,20 @@ inline constexpr int kFmmMaxLocalCoefficients = fmmLocalCoefficientCount(kFmmMax
 inline constexpr int kFmmMaxTracelessTensorCount = fmmTracelessTensorCount(kFmmMaxOrder);
 inline constexpr int kFmmMaxSymmetricTensorCount = fmmSymmetricTensorCount(kFmmMaxOrder);
 
-static_assert(fmmPositionedMultipoleBytes(3) == 28 && fmmPositionedMultipoleBytes(7) == 156 &&
-        fmmPositionedMultipoleBytes(9) == 268,
-    "Positioned multipole byte sizes");
-static_assert(fmmPositionedMultipoleStride(3) == 32 && fmmPositionedMultipoleStride(4) == 48 &&
+static_assert(kPositionBits != 32 ||
+    (fmmPositionedMultipoleBytes(3) == 28 && fmmPositionedMultipoleBytes(7) == 156 &&
+        fmmPositionedMultipoleBytes(9) == 268));
+static_assert(kPositionBits != 64 ||
+    (fmmPositionedMultipoleBytes(3) == 40 && fmmPositionedMultipoleBytes(7) == 168 &&
+        fmmPositionedMultipoleBytes(9) == 280));
+static_assert(kPositionBits != 32 ||
+    (fmmPositionedMultipoleStride(3) == 32 && fmmPositionedMultipoleStride(4) == 48 &&
         fmmPositionedMultipoleStride(7) == 160 && fmmPositionedMultipoleStride(8) == 208 &&
-        fmmPositionedMultipoleStride(9) == 272,
-    "Positioned multipole record strides");
+        fmmPositionedMultipoleStride(9) == 272));
+static_assert(kPositionBits != 64 ||
+    (fmmPositionedMultipoleStride(3) == 48 && fmmPositionedMultipoleStride(4) == 64 &&
+        fmmPositionedMultipoleStride(7) == 176 && fmmPositionedMultipoleStride(8) == 224 &&
+        fmmPositionedMultipoleStride(9) == 288));
 static_assert(fmmLocalExpansionBytes(3) == 40 && fmmLocalExpansionBytes(7) == 200 &&
         fmmLocalExpansionBytes(9) == 328,
     "Local expansion byte sizes");

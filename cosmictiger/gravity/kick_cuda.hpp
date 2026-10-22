@@ -25,7 +25,7 @@
 
 template <int order>
 struct CudaExpansionType {
-    Array<Fixed32, NDIM> pos;
+    Array<Position, NDIM> pos;
     FmmExpansion<float, order> expansion;
 };
 
@@ -138,14 +138,14 @@ struct CudaKickControl {
     DeviceVector<SearchParameters> params;
     BarrierType barrier;
     // Resolved arena pointers.
-    Fixed32* sourceX;
-    Fixed32* sourceY;
-    Fixed32* sourceZ;
+    Position* sourceX;
+    Position* sourceY;
+    Position* sourceZ;
     float* sourceMass;
     char* multipoles;
     float* scratchExpansion;
     FmmExpansion<float, order>* expansion;
-    Array<Fixed32, NDIM>* expansionPos;
+    Array<Position, NDIM>* expansionPos;
     CudaKickForceTile forces;
     CudaKickArenaLayout layout;
 
@@ -169,7 +169,7 @@ struct CudaKickControl {
 
 template <int order>
 struct CudaKickParameters {
-    Array<Fixed32, NDIM> lpos;
+    Array<Position, NDIM> lpos;
     FmmExpansion<float, order> lValue;
     int self;
     int* dchecks;
@@ -187,7 +187,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
 
 // Per-order host entry points, defined in kick_cuda_launch.hpp.
 template <int order>
-KickReturn cudaExecuteKicksImpl(KickParameters params, Fixed32* devX, Fixed32* devY, Fixed32* devZ,
-    TreeNode* devTreeNodes, Vector<KickWorkitem> workitems);
+KickReturn cudaExecuteKicksImpl(KickParameters params, Position* devX, Position* devY,
+    Position* devZ, TreeNode* devTreeNodes, Vector<KickWorkitem> workitems);
 template <int order>
 CudaKickArenaLayout const& kickArenaLayoutImpl();

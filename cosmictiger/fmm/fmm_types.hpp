@@ -12,7 +12,7 @@
 
 #include <cosmictiger/core/containers.hpp>
 #include <cosmictiger/fmm/fmm_order.hpp>
-#include <cosmictiger/math/fixed.hpp>
+#include <cosmictiger/math/position.hpp>
 
 // Order-dependent FMM value types. This header is light: it carries no
 // generated kernels, so order-agnostic code (tree nodes, work items, options)
@@ -69,12 +69,12 @@ static_assert(sizeof(FmmExpansion<float, 7>) == fmmLocalExpansionBytes(7));
 // Positioned multipole record. The center comes first so order-agnostic tree
 // code reads it through MultipolePosition; the per-order view adds the moments.
 struct MultipolePosition {
-    Array<Fixed32, NDIM> pos;
+    Array<Position, NDIM> pos;
 };
 
 template <int order>
 struct FmmMultiPos {
-    Array<Fixed32, NDIM> pos;
+    Array<Position, NDIM> pos;
     FmmMultipole<float, order> multi;
 };
 
@@ -127,7 +127,7 @@ struct ExpansionBuffer {
     void serialize(A&& arc, unsigned) {
         int const count = fmmLocalCoefficientCount(fmmOrder());
         for (int i = 0; i < count; i++) {
-            arc & coefficients[i];
+            arc& coefficients[i];
         }
     }
 };
@@ -164,7 +164,7 @@ struct MultipoleBuffer {
     void serialize(A&& arc, unsigned) {
         int const count = fmmMultipoleCoefficientCount(fmmOrder());
         for (int i = 0; i < count; i++) {
-            arc & coefficients[i];
+            arc& coefficients[i];
         }
     }
 };

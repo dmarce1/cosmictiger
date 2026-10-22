@@ -104,9 +104,9 @@ public:
         size_t const sourceSize = count + sourceOffset + 3;
         size_t const sinkSize = count + sinkOffset + 3;
         size_t const particleSize = count + particleOffset + 3;
-        data_.sourcePositionX = allocate<Fixed32>(sourceSize);
-        data_.sourcePositionY = allocate<Fixed32>(sourceSize);
-        data_.sourcePositionZ = allocate<Fixed32>(sourceSize);
+        data_.sourcePositionX = allocate<Position>(sourceSize);
+        data_.sourcePositionY = allocate<Position>(sourceSize);
+        data_.sourcePositionZ = allocate<Position>(sourceSize);
         data_.sourceVelocityX = allocate<float>(sourceSize);
         data_.sourceVelocityY = allocate<float>(sourceSize);
         data_.sourceVelocityZ = allocate<float>(sourceSize);
@@ -338,7 +338,7 @@ void initializeLattice(Fixture& fixture, int side) {
 
 void testPeriodicSupport() {
     Fixed32Range box;
-    Array<Fixed32, NDIM> source;
+    Array<Position, NDIM> source;
     for (int dim = 0; dim < NDIM; dim++) {
         box.begin[dim] = 0.49;
         box.end[dim] = 0.51;
@@ -589,7 +589,7 @@ void testSelectedCentralGravity() {
     data.centralSupportRadius = 0.3f;
     fixture.density();
     fixture.hydro();
-    double const radius = distance(data.sourcePositionX[0], Fixed32(0.5));
+    double const radius = distance(data.sourcePositionX[0], Position(0.5));
     double const expected = -data.centralAcceleration * radius /
         std::pow(double(data.centralSupportRadius), 3) *
         radial_kernel::forceFactor(selectedGravityKernel(), radius / data.centralSupportRadius);

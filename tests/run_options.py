@@ -44,7 +44,7 @@ def main():
     option_names = set(re.findall(r"^\s+--([A-Za-z][A-Za-z0-9_.]*)", help_text, re.MULTILINE))
     required = {"help", "configuration", "run.scenario", "run.endTime", "run.verbose",
                 "initial.particlesPerDimension", "compute.cuda", "compute.bucketSize",
-                "compute.sphBucketSize",
+                "compute.sphBucketSize", "compute.positionType",
                 "hydro.enabled", "hydro.viscosityAlpha", "hydro.viscosityBeta",
                 "hydro.viscosityEpsilon", "hydro.balsaraSwitch", "hydro.neighborNumber", "gravity.enabled",
                 "gravity.kernelFamily", "gravity.kernelDegree",
@@ -538,6 +538,7 @@ mapSize = 8
         ("end_time_nan", "--run.endTime=nan", "run.endTime"),
         ("end_time_inf", "--run.endTime=inf", "run.endTime"),
         ("scenario_unknown", "--run.scenario=unknown", "scenario"),
+        ("position_type", "--compute.positionType=float64", "compute.positionType"),
         ("bucket_zero", "--compute.bucketSize=0", "compute.bucketSize"),
         ("sph_bucket_negative", "--compute.sphBucketSize=-1", "compute.sphBucketSize"),
         ("sph_bucket_auto_overflow", "--hydro.neighborNumber=1e9", "compute.sphBucketSize"),

@@ -19,7 +19,7 @@ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
 #include <cosmictiger/particles/particles.hpp>
 
 struct ParticleData {
-    Array<Fixed32, NDIM> x;
+    Array<Position, NDIM> x;
     Array<float, NDIM> v;
     GroupInteger lastGroup;
     GroupInteger identity = NO_GROUP;

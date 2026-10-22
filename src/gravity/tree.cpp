@@ -157,7 +157,7 @@ static void treeWriteMultipole(MultipolePosition* record, MultipoleBuffer const&
 }
 
 MultipolePosition* treeAddMultipole(
-    Array<Fixed32, NDIM> const& pos, MultipoleBuffer const& multipole) {
+    Array<Position, NDIM> const& pos, MultipoleBuffer const& multipole) {
     int const treeAllocLineSize = getOptions().compute.treeAllocLineSize;
     MultipolePosition* ptr = treeMultipoleRecord(nextMultId++ + treeAllocLineSize);
     ptr->pos = pos;
@@ -366,7 +366,7 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
         params.parallelParticleThreshold = cnt;
     }
     Array<TreeId, NCHILD> children;
-    Array<Fixed32, NDIM>& x = rc.pos;
+    Array<Position, NDIM>& x = rc.pos;
     MultipoleBuffer& multi = rc.multi;
     auto& rbox = rc.box;
     float& radius = rc.radius;
@@ -388,7 +388,7 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
     bool const ewaldSatisfied = ewaldDistanceSatisfied && boxR < 0.125 - 0.25 * h;
     double maxRatio = 1.0;
     flops += 16 + (ewaldDistanceSatisfied ? 2 : 0);
-    static SimdFloat const toFloatFactor = kFixed2float;
+    static SimdFloat const toFloatFactor = kPositionToFloat;
     if (processRange.second - processRange.first > 1 || numberOfParticles > bucketSize ||
         (!ewaldSatisfied && numberOfParticles > 0)) {
         isleaf = false;
@@ -465,15 +465,15 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
             for (int dim = 0; dim < NDIM; dim++) {
                 xc1[dim] = 0.5 * (rbox.begin[dim] + rbox.end[dim]);
             }
-            Array<SimdInt, NDIM> xc{};
+            Array<SimdPosition, NDIM> xc{};
             for (int dim = 0; dim < NDIM; dim++) {
-                xc[dim] = simdBroadcast<SimdInt>(Fixed32(xc1[dim]).raw());
+                xc[dim] = simdBroadcast<SimdPosition>(Position(xc1[dim]).raw());
             }
             flops += 9;
             SimdFloat r2Max = simdBroadcast<SimdFloat>(0.0);
             for (ParticleInteger i = particleRange.first; i < particleRange.second;
                 i += SIMD_FLOAT_SIZE) {
-                SimdInt x{};
+                SimdPosition x{};
                 Array<SimdFloat, NDIM> dx{};
                 int const maxj = std::min(particleRange.second - i, SIMD_FLOAT_SIZE);
                 for (int dim = 0; dim < NDIM; dim++) {

@@ -35,6 +35,7 @@
 #include <cosmictiger/math/constants.hpp>
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/math/math.hpp>
+#include <cosmictiger/math/position.hpp>
 #include <cosmictiger/scenarios/scenario.hpp>
 
 #define SHOW(label, opt) show(label, opts.opt)
@@ -118,6 +119,10 @@ Options const& getOptions() {
 }
 
 void setOptions(Options const& opts) {
+    if (opts.compute.positionType != (kPositionBits == 64 ? "fixed64" : "fixed32")) {
+        throw std::invalid_argument(
+            "compute.positionType differs from this locality's application backend");
+    }
     terminal::setVerbose(opts.run.verbose);
     std::vector<hpx::future<void>> futs;
     for (auto c : hpxChildren()) {
@@ -140,7 +145,9 @@ void setOptions(Options const& opts) {
     setFmmOrder(opts.gravity.fmmOrder);
     globalOpts = opts;
     setStackTraceOutputPath(outputPath("stack_trace.txt"));
-    hpx::wait_all(futs.begin(), futs.end());
+    for (auto& future : futs) {
+        future.get();
+    }
 }
 
 void recordCommandLineArguments(int argc, char* argv[]) {
@@ -176,6 +183,7 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"run.minRung", options.run.minRung},
         {"run.treeOpeningAngle", options.run.treeOpeningAngle},
         {"compute.cuda", options.compute.cuda},
+        {"compute.positionType", options.compute.positionType},
         {"compute.bucketSize", options.compute.bucketSize},
         {"compute.sphBucketSize", options.compute.sphBucketSize},
         {"compute.cudaKickResidency", options.compute.cudaKickResidency},
@@ -319,7 +327,10 @@ bool processOptions(int argc, char* argv[]) {
         "angle upward from it; 0 rebuilds the tree at every angle");
 
     po::options_description computeOpts("Compute");
-    computeOpts.add_options()
+    computeOpts.add_options()("compute.positionType",
+        po::value<std::string>(&opts.compute.positionType)
+            ->default_value(kPositionBits == 64 ? "fixed64" : "fixed32"),
+        "position storage: fixed32 (Q0.32) or fixed64 (Q0.64)")
 #ifdef USE_CUDA
         ("compute.cuda", po::value<bool>(&opts.compute.cuda)->default_value(true), "use CUDA")
 #else
@@ -747,6 +758,12 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.run.numberOfSteps <= 0) {
         THROW_ERROR("run.numberOfSteps must be positive\n");
     }
+    if (opts.compute.positionType != "fixed32" && opts.compute.positionType != "fixed64") {
+        THROW_ERROR("compute.positionType must be fixed32 or fixed64\n");
+    }
+    if (opts.compute.positionType != (kPositionBits == 64 ? "fixed64" : "fixed32")) {
+        THROW_ERROR("compute.positionType differs from the selected application backend\n");
+    }
     if (opts.compute.bucketSize <= 0) {
         THROW_ERROR("compute.bucketSize must be positive\n");
     }
@@ -914,7 +931,7 @@ bool processOptions(int argc, char* argv[]) {
     }
     opts.compute.treeCacheLineSize = 65536 / sizeof(TreeNode);
     opts.compute.treeAllocLineSize = 16 * opts.compute.treeCacheLineSize;
-    opts.compute.particleCacheLineSize = 131072 / (sizeof(Fixed32) * NDIM);
+    opts.compute.particleCacheLineSize = 131072 / (sizeof(Position) * NDIM);
     opts.analysis.saveForce = opts.run.test == "force";
     if (!detail::isFiniteOption(opts.cosmology.omegaB) || opts.cosmology.omegaB < 0.0 ||
         !detail::isFiniteOption(opts.cosmology.omegaC) || opts.cosmology.omegaC < 0.0 ||
@@ -1139,6 +1156,7 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("units.massG", units.massG);
     SHOW("units.timeSeconds", units.timeSeconds);
     SHOW("compute.cuda", compute.cuda);
+    SHOW("compute.positionType", compute.positionType);
     SHOW("gravity.fmmOrder", gravity.fmmOrder);
     SHOW("compute.cudaKickResidency", compute.cudaKickResidency);
     SHOW("compute.cudaKickSinkTile", compute.cudaKickSinkTile);
@@ -1241,6 +1259,7 @@ bool processOptions(int argc, char* argv[]) {
         PRINT("%-38s: %i localities, %zu worker threads here\n", "Runtime", hpxSize(),
             size_t(hpx::get_num_worker_threads()));
         SHOW("compute.cuda", compute.cuda);
+        SHOW("compute.positionType", compute.positionType);
         SHOW("gravity.enabled", gravity.enabled);
         if (opts.gravity.enabled) {
             SHOW("gravity.fmmOrder", gravity.fmmOrder);

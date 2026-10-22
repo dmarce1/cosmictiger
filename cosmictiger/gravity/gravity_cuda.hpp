@@ -57,11 +57,11 @@ __device__ int cudaStageParticleSources(CudaKickData const& data, CudaKickContro
             min(particleRange.first + (capacity - particleIndex), particleRange.second);
         int const sz = imax - imin;
         cuda::memcpy_async(group, control.sourceX + particleIndex, data.x + imin,
-            sizeof(Fixed32) * sz, control.barrier);
+            sizeof(Position) * sz, control.barrier);
         cuda::memcpy_async(group, control.sourceY + particleIndex, data.y + imin,
-            sizeof(Fixed32) * sz, control.barrier);
+            sizeof(Position) * sz, control.barrier);
         cuda::memcpy_async(group, control.sourceZ + particleIndex, data.z + imin,
-            sizeof(Fixed32) * sz, control.barrier);
+            sizeof(Position) * sz, control.barrier);
         if constexpr (!equalMass) {
             for (int j = tid; j < sz; j += WARP_SIZE) {
                 control.sourceMass[particleIndex + j] =
@@ -91,9 +91,9 @@ __device__ int cudaStageParticleSources(CudaKickData const& data, CudaKickContro
 // 16-byte aligned: the arena offset and the force region are multiples of
 // kKickArenaAlignment and the plane stride is a multiple of WARP_SIZE entries.
 struct CudaStagedSources {
-    Fixed32 const* x;
-    Fixed32 const* y;
-    Fixed32 const* z;
+    Position const* x;
+    Position const* y;
+    Position const* z;
     float const* mass;    // nullptr without a mass plane
 };
 
@@ -103,7 +103,7 @@ __device__ inline CudaStagedSources cudaStagedSources(CudaKickControl<order> con
     CudaKickArenaLayout const& layout = control.layout;
     CudaStagedSources sources;
     sources.x =
-        reinterpret_cast<Fixed32 const*>(shmemPtr + layout.arenaOffset + layout.sourceOffset);
+        reinterpret_cast<Position const*>(shmemPtr + layout.arenaOffset + layout.sourceOffset);
     sources.y = sources.x + layout.particleCapacity;
     sources.z = sources.y + layout.particleCapacity;
     sources.mass = layout.massPlane ?
@@ -112,8 +112,8 @@ __device__ inline CudaStagedSources cudaStagedSources(CudaKickControl<order> con
     return sources;
 }
 
-__device__ inline Fixed32 cudaFixedFromRaw(uint32_t bits) {
-    Fixed32 value;
+__device__ inline Position cudaFixedFromRaw(PositionInteger bits) {
+    Position value;
     value.raw() = bits;
     return value;
 }
@@ -221,24 +221,43 @@ __device__ inline void cudaPpInversePowers(float const (&r2)[kPairs], float h2, 
 // it only with doPhi.
 template <int nSinks, bool equalMass>
 __device__ inline void cudaPpSinkGroup(CudaStagedSources const& sources, int count,
-    Fixed32 const (&sinkX)[nSinks], Fixed32 const (&sinkY)[nSinks], Fixed32 const (&sinkZ)[nSinks],
-    float h2, float hinv, float h2inv, float h3inv, bool doPhi, float (&fx)[nSinks],
-    float (&fy)[nSinks], float (&fz)[nSinks], float (&pot)[nSinks], FlopCount& close,
-    FlopCounter<FlopCount>& flops) {
+    Position const (&sinkX)[nSinks], Position const (&sinkY)[nSinks],
+    Position const (&sinkZ)[nSinks], float h2, float hinv, float h2inv, float h3inv, bool doPhi,
+    float (&fx)[nSinks], float (&fy)[nSinks], float (&fz)[nSinks], float (&pot)[nSinks],
+    FlopCount& close, FlopCounter<FlopCount>& flops) {
     constexpr int kVector = 4;
     constexpr int kPairs = kVector * nSinks;
     int j = 0;
     for (; j + kVector <= count; j += kVector) {
-        uint4 const x4 = *reinterpret_cast<uint4 const*>(sources.x + j);
-        uint4 const y4 = *reinterpret_cast<uint4 const*>(sources.y + j);
-        uint4 const z4 = *reinterpret_cast<uint4 const*>(sources.z + j);
+        PositionInteger xs[kVector], ys[kVector], zs[kVector];
+        if constexpr (kPositionBits == 32) {
+            uint4 const x4 = *reinterpret_cast<uint4 const*>(sources.x + j);
+            uint4 const y4 = *reinterpret_cast<uint4 const*>(sources.y + j);
+            uint4 const z4 = *reinterpret_cast<uint4 const*>(sources.z + j);
+            xs[0] = x4.x;
+            xs[1] = x4.y;
+            xs[2] = x4.z;
+            xs[3] = x4.w;
+            ys[0] = y4.x;
+            ys[1] = y4.y;
+            ys[2] = y4.z;
+            ys[3] = y4.w;
+            zs[0] = z4.x;
+            zs[1] = z4.y;
+            zs[2] = z4.z;
+            zs[3] = z4.w;
+        } else {
+#pragma unroll
+            for (int u = 0; u < kVector; ++u) {
+                xs[u] = sources.x[j + u].raw();
+                ys[u] = sources.y[j + u].raw();
+                zs[u] = sources.z[j + u].raw();
+            }
+        }
         float4 m4 = make_float4(1.f, 1.f, 1.f, 1.f);
         if constexpr (!equalMass) {
             m4 = *reinterpret_cast<float4 const*>(sources.mass + j);
         }
-        uint32_t const xs[kVector] = {x4.x, x4.y, x4.z, x4.w};
-        uint32_t const ys[kVector] = {y4.x, y4.y, y4.z, y4.w};
-        uint32_t const zs[kVector] = {z4.x, z4.y, z4.z, z4.w};
         float const ms[kVector] = {m4.x, m4.y, m4.z, m4.w};
         float dx0[kPairs];
         float dx1[kPairs];
@@ -248,9 +267,9 @@ __device__ inline void cudaPpSinkGroup(CudaStagedSources const& sources, int cou
         float r1inv[kPairs];
 #pragma unroll
         for (int u = 0; u < kVector; u++) {
-            Fixed32 const sourceX = cudaFixedFromRaw(xs[u]);
-            Fixed32 const sourceY = cudaFixedFromRaw(ys[u]);
-            Fixed32 const sourceZ = cudaFixedFromRaw(zs[u]);
+            Position const sourceX = cudaFixedFromRaw(xs[u]);
+            Position const sourceY = cudaFixedFromRaw(ys[u]);
+            Position const sourceZ = cudaFixedFromRaw(zs[u]);
 #pragma unroll
             for (int s = 0; s < nSinks; s++) {
                 int const p = u * nSinks + s;
@@ -278,9 +297,9 @@ __device__ inline void cudaPpSinkGroup(CudaStagedSources const& sources, int cou
         }
     }
     for (; j < count; j++) {
-        Fixed32 const sourceX = sources.x[j];
-        Fixed32 const sourceY = sources.y[j];
-        Fixed32 const sourceZ = sources.z[j];
+        Position const sourceX = sources.x[j];
+        Position const sourceY = sources.y[j];
+        Position const sourceZ = sources.z[j];
         float mass = 1.f;
         if constexpr (!equalMass) {
             mass = sources.mass[j];
@@ -561,9 +580,9 @@ __device__ FlopCount cudaGravityPpDirect(CudaKickData const& data, CudaKickContr
             constexpr int kPair = 2;
             int k = tid;
             for (; k - tid + kPair * WARP_SIZE <= kmid; k += kPair * WARP_SIZE) {
-                Fixed32 const sx[kPair] = {sinkX[k], sinkX[k + WARP_SIZE]};
-                Fixed32 const sy[kPair] = {sinkY[k], sinkY[k + WARP_SIZE]};
-                Fixed32 const sz[kPair] = {sinkZ[k], sinkZ[k + WARP_SIZE]};
+                Position const sx[kPair] = {sinkX[k], sinkX[k + WARP_SIZE]};
+                Position const sy[kPair] = {sinkY[k], sinkY[k + WARP_SIZE]};
+                Position const sz[kPair] = {sinkZ[k], sinkZ[k + WARP_SIZE]};
                 float fx[kPair] = {0.f, 0.f};
                 float fy[kPair] = {0.f, 0.f};
                 float fz[kPair] = {0.f, 0.f};
@@ -585,9 +604,9 @@ __device__ FlopCount cudaGravityPpDirect(CudaKickData const& data, CudaKickContr
                 flops += kPair * forceAddFlops;
             }
             for (; k < kmid; k += WARP_SIZE) {
-                Fixed32 const sx[1] = {sinkX[k]};
-                Fixed32 const sy[1] = {sinkY[k]};
-                Fixed32 const sz[1] = {sinkZ[k]};
+                Position const sx[1] = {sinkX[k]};
+                Position const sy[1] = {sinkY[k]};
+                Position const sz[1] = {sinkZ[k]};
                 float fx[1] = {0.f};
                 float fy[1] = {0.f};
                 float fz[1] = {0.f};
@@ -609,9 +628,9 @@ __device__ FlopCount cudaGravityPpDirect(CudaKickData const& data, CudaKickContr
                 float fy = 0.f;
                 float fz = 0.f;
                 float pot = 0.f;
-                Fixed32 const sx = sinkX[sink];
-                Fixed32 const sy = sinkY[sink];
-                Fixed32 const sz = sinkZ[sink];
+                Position const sx = sinkX[sink];
+                Position const sy = sinkY[sink];
+                Position const sz = sinkZ[sink];
                 for (int j = tid; j < particleIndex; j += WARP_SIZE) {
                     float const dx0 = distance(sx, sources.x[j]);    // 1
                     float const dx1 = distance(sy, sources.y[j]);    // 1

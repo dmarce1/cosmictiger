@@ -509,7 +509,7 @@ std::pair<KickReturn, TreeCreateReturn> kickStep(int minrung, double scale, doub
     kparams.theta = theta;
     ExpansionBuffer l;
     l.zero();
-    Array<Fixed32, NDIM> pos;
+    Array<Position, NDIM> pos;
     for (int dim = 0; dim < NDIM; dim++) {
         pos[dim] = 0.f;
     }
@@ -697,7 +697,7 @@ std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int m
         kparams.theta = theta;
         ExpansionBuffer l;
         l.zero();
-        Array<Fixed32, NDIM> pos;
+        Array<Position, NDIM> pos;
         for (int dim = 0; dim < NDIM; dim++) {
             pos[dim] = 0.f;
         }

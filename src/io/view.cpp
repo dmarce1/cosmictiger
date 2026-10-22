@@ -52,9 +52,9 @@ HPX_PLAIN_ACTION(outputView, OutputViewAction);
 static Vector<Range<double>> viewBoxes;
 
 struct DarkMatterParticleInfo {
-    Fixed32 x;
-    Fixed32 y;
-    Fixed32 z;
+    Position x;
+    Position y;
+    Position z;
     float vx;
     float vy;
     float vz;
@@ -156,9 +156,9 @@ public:
       , cosmological_(cosmological)
       , lab_(lab) {}
 
-    double position(Fixed32 const& value) const {
+    double position(Position const& value) const {
         // Keep every fixed-point bit until the explicit physical-output boundary.
-        units::ComovingPosition<Fixed32> const position(value);
+        units::ComovingPosition<Position> const position(value);
         return lab_ ? displayValue(units::toProperLength(position, scales_, context_)) :
                       displayValue(units::toComovingLength(position, scales_));
     }
@@ -264,7 +264,7 @@ void writeViewSpecies(DBfile* db, ViewDirectoryMetadata& metadata, char const* m
     DBAddOption(options, DBOPT_CYCLE, &cycle);
     writeParticlePointmesh(
         db, metadata, mesh, particles,
-        [&conversion](Fixed32 const& value) { return conversion.position(value); }, options);
+        [&conversion](Position const& value) { return conversion.position(value); }, options);
     DBFreeOptlist(options);
     std::string const fieldPrefix(prefix);
     writeViewField(db, metadata, (fieldPrefix + "vx").c_str(), mesh, particles, velocityUnit,
@@ -528,7 +528,7 @@ void writeCodeParticleView(DBfile* db, ViewDirectoryMetadata& metadata,
     if (!darkMatter.empty()) {
         writeParticlePointmesh(
             db, metadata, "dark_matter", darkMatter,
-            [](Fixed32 const& value) { return value.toDouble(); }, options);
+            [](Position const& value) { return value.toDouble(); }, options);
         writeViewField(db, metadata, "vx", "dark_matter", darkMatter, "code",
             [](auto const& p) { return p.vx; });
         writeViewField(db, metadata, "vy", "dark_matter", darkMatter, "code",
@@ -541,7 +541,7 @@ void writeCodeParticleView(DBfile* db, ViewDirectoryMetadata& metadata,
     auto const& gas = particles.gas;
     if (!gas.empty()) {
         writeParticlePointmesh(
-            db, metadata, "gas", gas, [](Fixed32 const& value) { return value.toDouble(); },
+            db, metadata, "gas", gas, [](Position const& value) { return value.toDouble(); },
             options);
         writeViewField(
             db, metadata, "hydro_vx", "gas", gas, "code", [](auto const& p) { return p.vx; });

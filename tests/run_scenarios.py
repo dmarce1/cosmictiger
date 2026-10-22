@@ -15,7 +15,7 @@ import subprocess
 import struct
 import sys
 
-from run_checkpoint import checkManifest
+from run_checkpoint import checkManifest, checkpoint_position_bytes
 
 
 SCENARIOS = (
@@ -82,8 +82,10 @@ def check_finite_rows(path):
 def hydro_particle_payload(checkpoint, expected_count=None):
     """Read the all-gas physical payload, excluding native driver timing/padding."""
     data = (checkpoint / "checkpoint.0.dat").read_bytes()
-    prefix = struct.pack("=2I", 0x43545350, 2)
-    offset = data.rfind(prefix)
+    position_bytes = checkpoint_position_bytes(data)
+    candidates = [data.find(struct.pack("=7I", 0x43545350, 2, integer_bytes, 8, 12, 3, 4))
+                  for integer_bytes in (4, 8)]
+    offset = max(candidates)
     if offset < 0:
         raise RuntimeError(f"missing versioned SPH payload in {checkpoint}")
     header = struct.unpack_from("=7I", data, offset)
@@ -97,7 +99,7 @@ def hydro_particle_payload(checkpoint, expected_count=None):
     # Particle positions, velocities, rungs, species, and gas index precede
     # the gas header. The 38 bytes below are rates, density, flags, and six
     # predictor/gravity acceleration floats in visitSphCheckpointArrays().
-    start = offset - 2 * integer_bytes - count * (26 + integer_bytes)
+    start = offset - 2 * integer_bytes - count * (3 * position_bytes + 14 + integer_bytes)
     end = offset + 28 + integer_bytes + count * (header[3] + header[4] + integer_bytes + 38)
     if start < 0 or end > len(data):
         raise RuntimeError(f"truncated physical particle payload in {checkpoint}")

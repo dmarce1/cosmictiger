@@ -267,7 +267,7 @@ static void kickTest() {
     kparams.theta = getOptions().gravity.openingAngle;
     ExpansionBuffer l;
     l.zero();
-    Array<Fixed32, NDIM> pos;
+    Array<Position, NDIM> pos;
     for (int dim = 0; dim < NDIM; dim++) {
         pos[dim] = 0.f;
     }
@@ -406,7 +406,7 @@ static void forceTest() {
         kparams.theta = thetas[iter];
         ExpansionBuffer l;
         l.zero();
-        Array<Fixed32, NDIM> pos;
+        Array<Position, NDIM> pos;
         for (int dim = 0; dim < NDIM; dim++) {
             pos[dim] = 0.f;
         }
@@ -494,7 +494,7 @@ static void bucketTest() {
             kparams.ascending = kparams.descending = false;
             ExpansionBuffer l;
             l.zero();
-            Array<Fixed32, NDIM> pos;
+            Array<Position, NDIM> pos;
             for (int dim = 0; dim < NDIM; dim++) {
                 pos[dim] = 0.f;
             }
@@ -578,7 +578,7 @@ static void speedTest() {
             kparams.theta = thetas[ci];
             ExpansionBuffer l;
             l.zero();
-            Array<Fixed32, NDIM> pos;
+            Array<Position, NDIM> pos;
             for (int dim = 0; dim < NDIM; dim++) {
                 pos[dim] = 0.f;
             }

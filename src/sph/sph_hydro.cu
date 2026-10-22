@@ -13,9 +13,9 @@
 namespace detail {
 
 struct HydroNeighbor {
-    Fixed32 positionX;
-    Fixed32 positionY;
-    Fixed32 positionZ;
+    Position positionX;
+    Position positionY;
+    Position positionZ;
     float supportRadius;
     float velocityX;
     float velocityY;
@@ -89,7 +89,7 @@ __global__ void sphCudaHydro(
             for (int sourceParticleIndex = neighborNode.particleRange.first + threadIndex;
                 sourceParticleIndex < end; sourceParticleIndex += blockSize) {
                 bool contains = false;
-                Array<Fixed32, NDIM> position;
+                Array<Position, NDIM> position;
                 if (sourceParticleIndex < neighborNode.particleRange.second) {
                     position[XDIM] = data.sourcePositionX[sourceParticleIndex];
                     position[YDIM] = data.sourcePositionY[sourceParticleIndex];
@@ -154,9 +154,9 @@ __global__ void sphCudaHydro(
             float const γ_a = sinkAdiabaticIndex;
             float const P_a = sinkPressureEnergyRatio * ρ_a * u_a;
             float const c_a = sqrtf(γ_a * sinkPressureEnergyRatio * u_a);
-            Fixed32 const x_a = data.sourcePositionX[particleIndex];
-            Fixed32 const y_a = data.sourcePositionY[particleIndex];
-            Fixed32 const z_a = data.sourcePositionZ[particleIndex];
+            Position const x_a = data.sourcePositionX[particleIndex];
+            Position const y_a = data.sourcePositionY[particleIndex];
+            Position const z_a = data.sourcePositionZ[particleIndex];
             Vector3<float> const v_a(data.sourceVelocityX[particleIndex],
                 data.sourceVelocityY[particleIndex], data.sourceVelocityZ[particleIndex]);
             float const one_over_H_a = 1.0f / H_a;
@@ -248,8 +248,8 @@ __global__ void sphCudaHydro(
                 dv_a_dt[ZDIM] += parameters.midplaneAccelerationZ(z_a);
                 flops += 6;    // Force sums and the midplane fixed-point conversion.
                 if (data.centralAcceleration != 0.0f) {
-                    Vector3<float> const separation(distance(x_a, Fixed32(0.5)),
-                        distance(y_a, Fixed32(0.5)), distance(z_a, Fixed32(0.5)));
+                    Vector3<float> const separation(distance(x_a, Position(0.5)),
+                        distance(y_a, Position(0.5)), distance(z_a, Position(0.5)));
                     float const radius = sqrtf(separation.dot(separation));
                     float const inverseSupportRadius = 1.0f / data.centralSupportRadius;
                     float const normalizedRadius = radius * inverseSupportRadius;

@@ -31,7 +31,7 @@ void cosmictigerAssert(char const* condition, bool value, char const* file, int 
 
 namespace detail {
 
-constexpr uint64_t kPositionPeriod = uint64_t{1} << 32;
+constexpr long double kPositionPeriod = kPositionBits == 64 ? 0x1p64L : 0x1p32L;
 
 void require(bool condition, char const* label) {
     if (!condition) {
@@ -50,7 +50,7 @@ void requireClose(double actual, double expected, double tolerance, char const* 
 }
 
 struct Fixture {
-    std::array<std::vector<Fixed32>, NDIM> positions;
+    std::array<std::vector<Position>, NDIM> positions;
     std::vector<Array<float, NDIM>> velocities;
     std::vector<char> rungs;
 
@@ -63,9 +63,15 @@ struct Fixture {
         for (size_t i = 0; i < size; i++) {
             rungs[i] = i % 5;
             for (int dim = 0; dim < NDIM; dim++) {
-                uint32_t raw = uint32_t(i * 2654435761ULL + (dim + 1) * 2246822519ULL);
+                PositionInteger raw = PositionInteger(i * 2654435761ULL + (dim + 1) * 2246822519ULL)
+                    << (kPositionBits - 32);
+                if constexpr (kPositionBits == 64) {
+                    raw |= uint32_t(i * 3266489917ULL + (dim + 1) * 668265263ULL);
+                }
                 if (i % 7 == 0) {
-                    raw = dim == XDIM ? 0 : (dim == YDIM ? UINT32_MAX : 1);
+                    raw = dim == XDIM ?
+                        0 :
+                        (dim == YDIM ? std::numeric_limits<PositionInteger>::max() : 1);
                 }
                 positions[dim][i].setInteger(raw);
                 velocities[i][dim] = float(int((i * 11 + dim * 19) % 97) - 48) * 0.375f;
@@ -81,11 +87,12 @@ struct Fixture {
     }
 };
 
-uint32_t referencePosition(uint32_t raw, float velocity, DriftParameters const& parameters) {
+PositionInteger referencePosition(
+    PositionInteger raw, float velocity, DriftParameters const& parameters) {
     long double position = static_cast<long double>(raw) / kPositionPeriod;
     position += static_cast<long double>(velocity) * parameters.timestep / parameters.scale;
     position -= std::floor(position);
-    return static_cast<uint32_t>(position * kPositionPeriod);
+    return static_cast<PositionInteger>(position * kPositionPeriod);
 }
 
 void checkDrift(size_t count, size_t offset, DriftParameters const& parameters) {
@@ -97,8 +104,8 @@ void checkDrift(size_t count, size_t offset, DriftParameters const& parameters) 
             (parameters.rung < 0 || original.rungs[i] == parameters.rung);
         require(fixture.rungs[i] == original.rungs[i], "drift preserves rungs");
         for (int dim = 0; dim < NDIM; dim++) {
-            uint32_t const actualRaw = fixture.positions[dim][i].raw();
-            uint32_t const originalRaw = original.positions[dim][i].raw();
+            PositionInteger const actualRaw = fixture.positions[dim][i].raw();
+            PositionInteger const originalRaw = original.positions[dim][i].raw();
             float const originalVelocity = original.velocities[i][dim];
             if (!active || parameters.timestep == 0.0) {
                 require(actualRaw == originalRaw, "inactive and zero-step positions are exact");
@@ -107,12 +114,21 @@ void checkDrift(size_t count, size_t offset, DriftParameters const& parameters) 
                     "inactive and zero-step velocities are exact");
                 continue;
             }
-            uint32_t const expectedRaw =
+            PositionInteger const expectedRaw =
                 referencePosition(originalRaw, originalVelocity, parameters);
-            uint64_t const forward = uint32_t(actualRaw - expectedRaw);
-            uint64_t const backward = uint32_t(expectedRaw - actualRaw);
-            require(
-                std::min(forward, backward) <= 2, "drift agrees with scalar position reference");
+            uint64_t const forward = PositionInteger(actualRaw - expectedRaw);
+            uint64_t const backward = PositionInteger(expectedRaw - actualRaw);
+            // Q0.64 resolves the rounding of the double timestep arithmetic;
+            // compare that arithmetic with the long-double reference separately
+            // from the exact tick-preservation regression below.
+            uint64_t const tolerance = kPositionBits == 64 ?
+                uint64_t(8.0L * std::numeric_limits<double>::epsilon() * kPositionPeriod *
+                    std::max(1.0,
+                        std::abs(
+                            double(originalVelocity) * parameters.timestep / parameters.scale))) :
+                2;
+            require(std::min(forward, backward) <= tolerance,
+                "drift agrees with scalar position reference");
             if (parameters.drag == 0.0) {
                 require(std::bit_cast<uint32_t>(fixture.velocities[i][dim]) ==
                         std::bit_cast<uint32_t>(originalVelocity),
@@ -169,6 +185,57 @@ void testEmpty() {
     std::vector<LightconeEntry> entries;
     cpuDriftKernel(nullptr, nullptr, nullptr, nullptr, nullptr, 0, parameters, &entries);
     require(entries.empty(), "empty drift produces no lightcone entries");
+}
+
+void testFixed64Ticks() {
+    if constexpr (kPositionBits != 64) {
+        return;
+    }
+    // Cover SIMD packs, scalar tails, rung selection, the lightcone scalar
+    // path, negative motion and wrapping in both directions.
+    constexpr size_t kCount = 2 * NativeSimdVector<double>::size() + 1;
+    for (bool lightcone : {false, true}) {
+        Fixture fixture(kCount);
+        for (size_t i = 0; i < kCount; ++i) {
+            fixture.rungs[i] = i % 2;
+            fixture.positions[XDIM][i].setInteger(PositionInteger((uint64_t{1} << 63) | 13));
+            fixture.positions[YDIM][i].setInteger(2);
+            fixture.positions[ZDIM][i].setInteger(PositionInteger(UINT64_MAX - 2));
+            for (int dim = 0; dim < NDIM; ++dim) {
+                fixture.velocities[i][dim] = dim == YDIM ? -0x1p-60f : 0x1p-60f;
+            }
+        }
+        Fixture const original = fixture;
+        DriftParameters parameters;
+        parameters.rung = 0;
+        parameters.timestep = 0.25;
+        parameters.lightcone = lightcone;
+        parameters.tauMax = 1.0;
+        parameters.tau1 = 0.25;
+        std::vector<LightconeEntry> entries;
+        for (int step = 0; step < 8; ++step) {
+            fixture.run(0, kCount, parameters, &entries);
+        }
+        for (size_t i = 0; i < kCount; ++i) {
+            uint64_t const increment = fixture.rungs[i] == 0 ? 32 : 0;
+            for (int dim = 0; dim < NDIM; ++dim) {
+                uint64_t const expected = dim == YDIM ?
+                    original.positions[dim][i].raw() - increment :
+                    original.positions[dim][i].raw() + increment;
+                require(fixture.positions[dim][i].raw() == expected,
+                    "Q0.64 drift preserves low bits and accumulates tiny signed motion");
+            }
+        }
+        for (auto& velocity : fixture.velocities) {
+            for (int dim = 0; dim < NDIM; ++dim) {
+                velocity[dim] = 0.0f;
+            }
+        }
+        auto const stationaryPositions = fixture.positions;
+        fixture.run(0, kCount, parameters, &entries);
+        require(fixture.positions == stationaryPositions,
+            "Q0.64 stationary drift preserves every raw position bit");
+    }
 }
 
 Fixture stationaryParticle(double coordinate) {
@@ -283,7 +350,8 @@ void testMovingLightcone() {
         }
         require(entry.pix == 0, "radial motion preserves HEALPix direction");
         requireClose(fixture.positions[XDIM][0].toDouble(),
-            0.25 + 0.125 * parameters.timestep / parameters.scale, 2.0 / kPositionPeriod,
+            0.25 + 0.125 * parameters.timestep / parameters.scale,
+            std::max(double(2.0L / kPositionPeriod), std::numeric_limits<double>::epsilon()),
             "particle displacement uses the velocity before drag");
     }
 }
@@ -296,6 +364,10 @@ TEST(DriftCpu, Empty) {
 
 TEST(DriftCpu, PositionsAndActivity) {
     detail::testPositionsAndActivity();
+}
+
+TEST(DriftCpu, Fixed64Ticks) {
+    detail::testFixed64Ticks();
 }
 
 TEST(DriftCpu, LightconeImages) {

@@ -8,19 +8,19 @@
 
 #include <type_traits>
 
-#include <cosmictiger/math/fixed.hpp>
+#include <cosmictiger/math/position.hpp>
 #include <cosmictiger/math/units.hpp>
 
-// Only the host boundary is typed; the kernel payload retains the original Fixed32.
+// Only the host boundary is typed; the kernel payload retains the original Position.
 double unitsFixedPositionHostCompileRegression(
-    Fixed32 position, units::UnitScales const& scales, units::CosmologicalContext const& context) {
-    units::ComovingPosition<Fixed32> const wrapped(position);
-    static_assert(std::is_same_v<decltype(wrapped.storage()), Fixed32 const&>);
+    Position position, units::UnitScales const& scales, units::CosmologicalContext const& context) {
+    units::ComovingPosition<Position> const wrapped(position);
+    static_assert(std::is_same_v<decltype(wrapped.storage()), Position const&>);
     return units::toProperLength(wrapped, scales, context).quantity().value();
 }
 
-__global__ void unitsFixedPositionCudaCompileRegression(
-    Fixed32 const* positions, double lengthScale, double* coordinates, uint32_t* rawValues) {
+__global__ void unitsFixedPositionCudaCompileRegression(Position const* positions,
+    double lengthScale, double* coordinates, PositionInteger* rawValues) {
     coordinates[0] = positions[0].toDouble() * lengthScale;
     rawValues[0] = positions[0].raw();
 }

@@ -36,16 +36,16 @@ void cpuGravityPp(
         FlopCount softenedPackets = 0;
         FlopCount const softeningFlops =
             detail::gravitySofteningFlops(selectedGravityKernel(), SimdFloat{}, doPhi);
-        static SimdFloat const toFloatFactor = simdBroadcast<SimdFloat>(kFixed2float);
+        static SimdFloat const toFloatFactor = simdBroadcast<SimdFloat>(kPositionToFloat);
         SimdFloat const one = simdBroadcast<SimdFloat>(1.0);
         SimdFloat const tiny = simdBroadcast<SimdFloat>(1.0e-20);
         TreeNode const* selfPtr = treeGetNode(self);
         int const numberOfSinks = selfPtr->numberOfParticles();
         auto const range = selfPtr->particleRange;
         for (int li = 0; li < list.size(); li += kChunkSize) {
-            Array<SimdInt, NDIM> x{};
-            Array<SimdInt, NDIM> yValue{};
-            SimdInt srcType{};
+            Array<SimdPosition, NDIM> x{};
+            Array<SimdPosition, NDIM> yValue{};
+            SimdPosition srcType{};
             Array<TreeNode const*, kChunkSize> treePtrs;
             int numberOfSources = 0;
             int const maxi = std::min((int) list.size(), li + kChunkSize) - li;
@@ -54,9 +54,9 @@ void cpuGravityPp(
                 numberOfSources += treePtrs[i - li]->numberOfParticles();
             }
             numberOfSources = roundUp(numberOfSources, SIMD_FLOAT_SIZE);
-            Vector<Fixed32> srcx;
-            Vector<Fixed32> srcy;
-            Vector<Fixed32> srcz;
+            Vector<Position> srcx;
+            Vector<Position> srcy;
+            Vector<Position> srcz;
             Vector<float> sourceWeights;
             Vector<char> types(numberOfSources);
             srcx.resize(numberOfSources);
@@ -90,7 +90,7 @@ void cpuGravityPp(
                 SimdFloat gz = simdBroadcast<SimdFloat>(0.0);
                 SimdFloat phi = simdBroadcast<SimdFloat>(0.0);
                 for (int dim = 0; dim < NDIM; dim++) {
-                    x[dim] = simdBroadcast<SimdInt>(particlesPos(dim, i).raw());
+                    x[dim] = simdBroadcast<SimdPosition>(particlesPos(dim, i).raw());
                 }
                 //					simd_float self_flags(0);
                 for (int j = 0; j < numberOfSources; j += SIMD_FLOAT_SIZE) {

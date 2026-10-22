@@ -140,7 +140,7 @@ Vector<size_t> domainsCountBelow(Vector<double> bounds, int depth) {
                     (size_t) 1);
                 Vector<hpx::future<void>> futs;
                 int const xdim = depth % NDIM;
-                Fixed32 const xmid = bounds[i];
+                Position const xmid = bounds[i];
                 std::atomic<size_t> count(0);
                 auto const func = [numberOfThreads, rng, xdim, xmid, &count, &counts](int proc) {
                     size_t const begin =
@@ -463,7 +463,7 @@ static void beginSphMigration(int rung) {
     for (ParticleInteger i = 0; i < particlesSize(); i++) {
         Array<double, NDIM> x;
         for (int dim = 0; dim < NDIM; dim++) {
-            x[dim] = particlesPos(dim, i).toDouble();
+            x[dim] = positionDomainCoordinate(particlesPos(dim, i));
         }
         auto record = packSphParticle(i);
         if (box.contains(x)) {
@@ -550,7 +550,7 @@ void domainsBegin(int rung) {
                     if (!getOptions().run.hierarchicalGravity || particlesRung(i) == rung) {
                         Array<double, NDIM> x;
                         for (ParticleInteger dim = 0; dim < NDIM; dim++) {
-                            x[dim] = particlesPos(dim, i).toDouble();
+                            x[dim] = positionDomainCoordinate(particlesPos(dim, i));
                         }
                         if (!myDomain.contains(x)) {
                             ParticleInteger const rank = findParticleDomain(x);
@@ -699,7 +699,7 @@ static void domainsCheck() {
             for (ParticleInteger i = begin; i < end; i++) {
                 Array<double, NDIM> x;
                 for (int dim = 0; dim < NDIM; dim++) {
-                    x[dim] = particlesPos(dim, i).toDouble();
+                    x[dim] = positionDomainCoordinate(particlesPos(dim, i));
                 }
                 if (!myDomain.contains(x)) {
                     PRINT("particle out of range %li of %li %e %e %e rung %i\n", (long long) i,

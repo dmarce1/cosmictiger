@@ -16,6 +16,18 @@ import subprocess
 import sys
 
 
+def checkpoint_position_bytes(payload):
+    """Read the position width from a current versioned checkpoint header."""
+    if len(payload) < 16:
+        raise RuntimeError("truncated checkpoint header")
+    magic = int.from_bytes(payload[:8], byteorder=sys.byteorder)
+    version = int.from_bytes(payload[8:12], byteorder=sys.byteorder)
+    if magic != 0x4354535048303031 or version != 3:
+        raise RuntimeError(f"unexpected checkpoint header: magic={magic:x}, version={version}")
+    flags = int.from_bytes(payload[12:16], byteorder=sys.byteorder)
+    return 8 if flags & (1 << 15) else 4
+
+
 def fnv1a64(payload):
     checksum = 0xCBF29CE484222325
     for byte in payload:
@@ -85,10 +97,7 @@ def checkManifest(checkpointDir, iteration, scenario="cosmology", endTime=0.0, g
                 scenarioLines[1] != scenario or float(scenarioLines[2]) != endTime or
                 scenarioLines[3] != str(int(gravity))):
             raise RuntimeError(f"unexpected checkpoint scenario metadata: {scenarioLines}")
-    magic = int.from_bytes(payload[:8], byteorder=sys.byteorder)
-    version = int.from_bytes(payload[8:12], byteorder=sys.byteorder)
-    if magic != 0x4354535048303031 or version != 3:
-        raise RuntimeError(f"unexpected checkpoint header: magic={magic:x}, version={version}")
+    checkpoint_position_bytes(payload)
 
 
 def main():

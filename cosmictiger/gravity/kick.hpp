@@ -26,9 +26,9 @@ static_assert(
 
 struct CudaKickData {
     TreeNode* treeNodes;
-    Fixed32* x;
-    Fixed32* y;
-    Fixed32* z;
+    Position* x;
+    Position* y;
+    Position* z;
     Array<float, NDIM>* vel;
     float* sphGravityAccelerationX;
     float* sphGravityAccelerationY;
@@ -212,7 +212,7 @@ struct KickParameters {
 
 struct KickWorkitem {
     ExpansionBuffer l;
-    Array<Fixed32, NDIM> pos;
+    Array<Position, NDIM> pos;
     TreeId self;
     Vector<TreeId> dchecklist;
     Vector<TreeId> echecklist;
@@ -223,15 +223,15 @@ struct KickWorkspace;
 #ifndef __CUDACC__
 // The expansion buffer carries the local expansion of the runtime FMM order;
 // kick() dispatches to the per-order walk instantiation.
-KickReturn kick(KickParameters, ExpansionBuffer l, Array<Fixed32, NDIM> pos, TreeId self,
+KickReturn kick(KickParameters, ExpansionBuffer l, Array<Position, NDIM> pos, TreeId self,
     Vector<TreeId> dchecklist, Vector<TreeId> echecklist, std::shared_ptr<KickWorkspace>);
 #endif
 void kickShowTimings();
 void kickSetRc(KickReturn kr);
 #ifdef USE_CUDA
 // Dispatches to the per-order CUDA kick instantiation for fmmOrder().
-KickReturn cudaExecuteKicks(
-    KickParameters params, Fixed32*, Fixed32*, Fixed32*, TreeNode*, Vector<KickWorkitem> workitems);
+KickReturn cudaExecuteKicks(KickParameters params, Position*, Position*, Position*, TreeNode*,
+    Vector<KickWorkitem> workitems);
 // Shared-memory policy of the runtime order's kick kernel (selected once per order).
 CudaKickArenaLayout const& kickArenaLayout();
 #endif

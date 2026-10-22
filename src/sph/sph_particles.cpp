@@ -54,7 +54,7 @@ struct LineIdHashHi {
     }
 };
 
-static Array<Fixed32, NDIM> const* sphParticlesCacheReadLine(LineIdType lineId);
+static Array<Position, NDIM> const* sphParticlesCacheReadLine(LineIdType lineId);
 static Pair<float> const* sphParticlesReadThermodynamicCacheLine(LineIdType lineId);
 static char const* sphParticlesRungCacheReadLine(LineIdType lineId);
 static Array<float, NDIM> const* sphParticlesReadVelocityCacheLine(LineIdType lineId);
@@ -62,7 +62,7 @@ static Pair<float> const* sphParticlesReadDensityCacheLine(LineIdType lineId);
 static Pair<float> const* sphParticlesReadChemistryEosCacheLine(LineIdType lineId);
 static Vector<Pair<float>> sphParticlesFetchChemistryEosCacheLine(ParticleInteger index);
 
-static Vector<Array<Fixed32, NDIM>> sphParticlesFetchCacheLine(ParticleInteger index);
+static Vector<Array<Position, NDIM>> sphParticlesFetchCacheLine(ParticleInteger index);
 static Vector<char> sphParticlesFetchRungCacheLine(ParticleInteger index);
 static Vector<Array<float, NDIM>> sphParticlesFetchVelocityCacheLine(ParticleInteger index);
 static Vector<Pair<float>> sphParticlesFetchDensityCacheLine(ParticleInteger index);
@@ -81,7 +81,7 @@ HPX_PLAIN_ACTION(
     sphParticlesFetchChemistryEosCacheLine, SphParticlesFetchChemistryEosCacheLineAction);
 
 static Array<std::unordered_map<LineIdType,
-                 std::shared_ptr<hpx::shared_future<Vector<Array<Fixed32, NDIM>>>>, LineIdHashHi>,
+                 std::shared_ptr<hpx::shared_future<Vector<Array<Position, NDIM>>>>, LineIdHashHi>,
     PART_CACHE_SIZE>
     particleCache;
 static Array<std::unordered_map<LineIdType,
@@ -298,7 +298,7 @@ void sphParticlesSwap(ParticleInteger i, ParticleInteger j) {
 }
 
 ParticleInteger sphParticlesSort(
-    Pair<ParticleInteger> particleRange, Fixed32 splitPosition, int splitDimension) {
+    Pair<ParticleInteger> particleRange, Position splitPosition, int splitDimension) {
     ParticleInteger begin = particleRange.first;
     ParticleInteger end = particleRange.second;
     ParticleInteger lower = begin;
@@ -419,7 +419,7 @@ void sphParticlesResolveWithParticles() {
 }
 
 void sphParticlesGlobalReadPositions(
-    ParticleGlobalRange range, Fixed32* x, Fixed32* y, Fixed32* z, ParticleInteger offset) {
+    ParticleGlobalRange range, Position* x, Position* y, Position* z, ParticleInteger offset) {
     ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
     if (range.range.first != range.range.second) {
         if (range.proc == hpxRank()) {
@@ -454,13 +454,13 @@ void sphParticlesGlobalReadPositions(
     }
 }
 
-static Array<Fixed32, NDIM> const* sphParticlesCacheReadLine(LineIdType lineId) {
+static Array<Position, NDIM> const* sphParticlesCacheReadLine(LineIdType lineId) {
     return readSphCacheLine<SphParticlesFetchCacheLineAction>(lineId, particleCache, mutexes);
 }
 
-static Vector<Array<Fixed32, NDIM>> sphParticlesFetchCacheLine(ParticleInteger index) {
+static Vector<Array<Position, NDIM>> sphParticlesFetchCacheLine(ParticleInteger index) {
     ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
-    Vector<Array<Fixed32, NDIM>> line(lineSize);
+    Vector<Array<Position, NDIM>> line(lineSize);
     ParticleInteger const begin = (index / lineSize) * lineSize;
     ParticleInteger const end = std::min(sphParticlesSize(), begin + lineSize);
     for (ParticleInteger i = begin; i < end; i++) {

@@ -7,14 +7,21 @@
  */
 
 #include <atomic>
+#include <cerrno>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
+#include <filesystem>
+#include <fstream>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
+
+#include <hpx/modules/program_options.hpp>
+#include <unistd.h>
 
 #include <cosmictiger/analysis/lightcone.hpp>
 #include <cosmictiger/analysis/rockstar.hpp>
@@ -33,6 +40,7 @@
 #include <cosmictiger/io/checkpoint.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/fp16.hpp>
+#include <cosmictiger/math/position.hpp>
 #include <cosmictiger/math/simd.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #include <cosmictiger/sph/sph.hpp>
@@ -136,7 +144,61 @@ int hpx_main(int argc, char* argv[]) {
     return hpx::finalize();
 }
 
+namespace detail {
+
+// Every locality chooses the same position ABI before HPX/MPI initializes. Keep
+// unknown application/HPX options for their normal parsers after this dispatch.
+void selectPositionBackend(int argc, char* argv[]) {
+    namespace po = hpx::program_options;
+    po::options_description selection;
+    selection.add_options()("help", "help")("configuration", po::value<std::string>(), "INI file")(
+        "compute.positionType", po::value<std::string>(), "position storage");
+    po::variables_map values;
+    po::store(
+        po::command_line_parser(argc, argv).options(selection).allow_unregistered().run(), values);
+    if (!values.count("help") && values.count("configuration")) {
+        auto const filename = values["configuration"].as<std::string>();
+        if (!filename.empty()) {
+            std::ifstream stream(filename);
+            if (!stream) {
+                throw std::runtime_error("Cannot open configuration file " + filename);
+            }
+            // As in processOptions, CLI values are stored first and take precedence.
+            po::store(po::parse_config_file(stream, selection, true), values);
+        }
+    }
+    std::string const requested = values.count("compute.positionType") ?
+        values["compute.positionType"].as<std::string>() :
+        (kPositionBits == 64 ? "fixed64" : "fixed32");
+    if (requested != "fixed32" && requested != "fixed64") {
+        if (values.count("help")) {
+            return;
+        }
+        throw std::invalid_argument("compute.positionType must be fixed32 or fixed64");
+    }
+    if ((requested == "fixed64") == (kPositionBits == 64)) {
+        return;
+    }
+    // Resolve the actual running file, including invocation through PATH or a
+    // symlink. exec preserves MPI environment, signals, and the original argv.
+    auto const executable = std::filesystem::read_symlink("/proc/self/exe");
+    auto const backend =
+        executable.parent_path() / (requested == "fixed64" ? "cosmictiger_fixed64" : "cosmictiger");
+    ::execv(backend.c_str(), argv);
+    throw std::system_error(errno, std::generic_category(),
+        "Cannot launch " + requested + " position backend " + backend.string() +
+            "; keep cosmictiger and cosmictiger_fixed64 together");
+}
+
+}    // namespace detail
+
 int main(int argc, char* argv[]) {
+    try {
+        detail::selectPositionBackend(argc, argv);
+    } catch (std::exception const& error) {
+        std::fprintf(stderr, "CosmicTiger failed: %s\n", error.what());
+        return EXIT_FAILURE;
+    }
     recordCommandLineArguments(argc, argv);
     std::vector<std::string> cfg = {"hpx.commandline.allow_unknown=1"};
     cfg.push_back("hpx.stacks.small_size=524288");
