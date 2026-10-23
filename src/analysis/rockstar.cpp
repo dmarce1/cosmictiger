@@ -4,7 +4,7 @@
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/timer.hpp>
-#include <cosmictiger/cosmology/cosmology.hpp>
+#include <cosmictiger/cosmology/background.hpp>
 #include <cosmictiger/cuda/device_vector.hpp>
 #include <cosmictiger/gravity/bh.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
@@ -768,8 +768,8 @@ Vector<RockstarRecord> rockstarFindSubgroups(Vector<LightconeEntry> const& input
         origin[2] += particle.z.toDouble() / input.size();
     }
     double const distanceToGroup = sqrt(sqr(origin[0], origin[1], origin[2]));
-    double const initialScale = 1.0 / (1.0 + getOptions().cosmology.startRedshift);
-    double const scale = cosmosTauToScale(initialScale, std::max(0.0, tauMax - distanceToGroup));
+    auto const background = cosmology::simulationBackground(tauMax);
+    double const scale = lightconeEmissionScale(*background, tauMax, distanceToGroup);
     DeviceVector<RockstarParticle> particles;
     for (size_t i = 0; i < input.size(); ++i) {
         RockstarParticle particle{};
@@ -791,7 +791,7 @@ Vector<RockstarRecord> rockstarFindSubgroups(Vector<LightconeEntry> const& input
             auto record = rockstarMakeRecord(groups, i, scale, origin);
             double const radius = sqrt(
                 sqr(origin[0] + groups[i].x, origin[1] + groups[i].y, origin[2] + groups[i].z));
-            double const haloScale = cosmosTauToScale(initialScale, std::max(0.0, tauMax - radius));
+            double const haloScale = lightconeEmissionScale(*background, tauMax, radius);
             record.zValue = rockstarEncodeHalf(1.0 / haloScale - 1.0, "zValue");
             records.push_back(record);
         }

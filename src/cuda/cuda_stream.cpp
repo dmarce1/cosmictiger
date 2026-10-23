@@ -12,6 +12,7 @@
 #include <hpx/threading_base/threading_base_fwd.hpp>
 #endif
 
+#include <cosmictiger/cuda/cuda_memory_advice.hpp>
 #include <cosmictiger/cuda/cuda_stream.hpp>
 
 #ifdef USE_CUDA
@@ -171,7 +172,7 @@ void CudaStream::checkLaunch() {
 
 void CudaStream::prefetchAsync(void const* pointer, size_t bytes, int destinationDevice) {
     hpx::cuda::experimental::check_cuda_error(
-        cudaMemPrefetchAsync(pointer, bytes, destinationDevice, implementation_->handle()));
+        cudaPrefetchMemoryAsync(pointer, bytes, destinationDevice, implementation_->handle()));
 }
 
 void CudaStream::wait() {

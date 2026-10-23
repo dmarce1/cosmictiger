@@ -7,12 +7,14 @@
  */
 
 #include <bit>
+#include <cfenv>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <numbers>
 #include <stdexcept>
 #include <string>
+#include <thread>
 
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
@@ -24,7 +26,9 @@
 #include <cosmictiger/gravity/tree.hpp>
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/particles.hpp>
+#include <cosmictiger/sph/sph.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
+#include <cosmictiger/sph/sph_tree.hpp>
 
 #ifdef USE_CUDA
 void verifySelectedKernelsCuda();
@@ -61,6 +65,56 @@ void verifyKernelSelections() {
     verify("Gravity", selectedGravityKernel(), options.gravity.kernelFamily,
         options.gravity.kernelDegree);
     verify("Hydro", selectedHydroKernel(), options.hydro.kernelFamily, options.hydro.kernelDegree);
+}
+
+void verifySphExceptionMask() {
+#if defined(__GLIBC__)
+    if (sphTreeLeaflistSize() != 0) {
+        throw std::runtime_error("Exception-mask regression requires an empty SPH tree");
+    }
+    // Exception masks belong to the native worker. Keep this coroutine bound
+    // across sphRun's future waits, and restore its environment before returning.
+    auto executor = hpx::execution::parallel_executor(hpx::threads::thread_priority::bound);
+    hpx::async(executor, []() {
+        struct FloatingEnvironmentGuard {
+            std::fenv_t saved;
+            FloatingEnvironmentGuard() {
+                if (std::feholdexcept(&saved) != 0) {
+                    throw std::runtime_error("Could not save floating-point environment");
+                }
+            }
+            ~FloatingEnvironmentGuard() {
+                std::fesetenv(&saved);
+            }
+        };
+        int exceptionMask;
+        {
+            FloatingEnvironmentGuard guard;
+            auto const worker = std::this_thread::get_id();
+            if (fegetexcept() != 0) {
+                throw std::runtime_error("Could not mask floating-point exceptions");
+            }
+            SphRunParameters params;
+            params.runType = SPH_RUN_RUNGS;
+            params.phase = 0;
+            params.minimumRung = 0;
+            params.baseTimestep = 1.0f;
+            params.scaleFactor = 1.0f;
+            params.expansionRate = 0.0f;
+            params.courantFactor = getOptions().hydro.cfl;
+            // An empty phase exercises orchestration without executing arithmetic
+            // that could trap if sphRun incorrectly changes the caller's mask.
+            sphRun(params, false);
+            exceptionMask = fegetexcept();
+            if (std::this_thread::get_id() != worker) {
+                throw std::runtime_error("Exception-mask regression migrated between workers");
+            }
+        }
+        if (exceptionMask != 0) {
+            throw std::runtime_error("sphRun changed the caller's floating-point exception mask");
+        }
+    }).get();
+#endif
 }
 
 primordial::State migrationChemistryState(int target) {
@@ -553,6 +607,7 @@ void sphGravityTest() {
     setOptions(opts);
     verifyKernelSelections();
     if (hpxSize() == 1) {
+        verifySphExceptionMask();
         verifyBhPotentials(false);
 #ifdef USE_CUDA
         if (useCuda) {

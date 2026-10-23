@@ -20,6 +20,7 @@ constexpr bool kVerbose = true;
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/safe_io.hpp>
+#include <cosmictiger/cuda/cuda_memory_advice.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/particles/particle_selection.hpp>
 #include <cosmictiger/particles/particles.hpp>
@@ -521,14 +522,14 @@ void particlesMemadviseGpu() {
     auto const rng = particlesCurrentRange();
     auto const begin = rng.first;
     auto const count = rng.second - begin;
-    CUDA_CHECK(cudaMemAdvise(particlesVelData() + begin, count * sizeof(Array<float, NDIM>),
+    CUDA_CHECK(cudaAdviseMemory(particlesVelData() + begin, count * sizeof(Array<float, NDIM>),
         cudaMemAdviseSetAccessedBy, deviceid));
-    CUDA_CHECK(cudaMemAdvise(
+    CUDA_CHECK(cudaAdviseMemory(
         &particlesRung(0) + begin, count * sizeof(char), cudaMemAdviseSetAccessedBy, deviceid));
     undoLastMemadvise = [begin, count, deviceid]() {
-        CUDA_CHECK(cudaMemAdvise(particlesVelData() + begin, count * sizeof(Array<float, NDIM>),
+        CUDA_CHECK(cudaAdviseMemory(particlesVelData() + begin, count * sizeof(Array<float, NDIM>),
             cudaMemAdviseUnsetAccessedBy, deviceid));
-        CUDA_CHECK(cudaMemAdvise(&particlesRung(0) + begin, count * sizeof(char),
+        CUDA_CHECK(cudaAdviseMemory(&particlesRung(0) + begin, count * sizeof(char),
             cudaMemAdviseUnsetAccessedBy, deviceid));
     };
 #endif
@@ -547,14 +548,14 @@ void particlesMemadviseCpu() {
     auto const rng = particlesCurrentRange();
     auto const begin = rng.first;
     auto const count = rng.second - begin;
-    CUDA_CHECK(cudaMemAdvise(particlesVelData() + begin, count * sizeof(Array<float, NDIM>),
+    CUDA_CHECK(cudaAdviseMemory(particlesVelData() + begin, count * sizeof(Array<float, NDIM>),
         cudaMemAdviseSetPreferredLocation, cudaCpuDeviceId));
-    CUDA_CHECK(cudaMemAdvise(&particlesRung(0) + begin, count * sizeof(char),
+    CUDA_CHECK(cudaAdviseMemory(&particlesRung(0) + begin, count * sizeof(char),
         cudaMemAdviseSetPreferredLocation, cudaCpuDeviceId));
     undoLastMemadvise = [begin, count]() {
-        CUDA_CHECK(cudaMemAdvise(particlesVelData() + begin, count * sizeof(Array<float, NDIM>),
+        CUDA_CHECK(cudaAdviseMemory(particlesVelData() + begin, count * sizeof(Array<float, NDIM>),
             cudaMemAdviseUnsetPreferredLocation, cudaCpuDeviceId));
-        CUDA_CHECK(cudaMemAdvise(&particlesRung(0) + begin, count * sizeof(char),
+        CUDA_CHECK(cudaAdviseMemory(&particlesRung(0) + begin, count * sizeof(char),
             cudaMemAdviseUnsetPreferredLocation, cudaCpuDeviceId));
     };
     CudaStream stream(deviceid);

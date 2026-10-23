@@ -348,6 +348,29 @@ cmake -S . -B build/release -DCMAKE_BUILD_TYPE=Release \
 cmake --build build/release --parallel 4
 ```
 
+Select the CUDA toolkit explicitly when several versions are installed. HPX and
+CosmicTiger should use the same toolkit major version and host compiler, and HPX
+should be rebuilt after changing the system MPI installation. A CUDA-enabled HPX
+also checks its CUDA compiler when configuring CosmicTiger with CUDA disabled;
+a separate CPU-only HPX installation is optional.
+
+On Ubuntu 26.04 with GCC 15 and glibc 2.43, CUDA 12.8 fails its compiler check or
+conflicts with the C library's math declarations. Ubuntu's CUDA 13.1 packages,
+including `cuda-crt-13-1` version `13.1.115-0ubuntu1.1` or newer, contain the
+matching declarations. Rebuild HPX with that toolkit, then use a fresh build:
+
+```sh
+cmake -S . -B build/cuda13 -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON \
+  -DCMAKE_CXX_COMPILER=/usr/bin/g++-15 \
+  -DCMAKE_CUDA_HOST_COMPILER=/usr/bin/g++-15 \
+  -DCMAKE_CUDA_COMPILER=/path/to/cuda-13.1/bin/nvcc \
+  -DCUDAToolkit_ROOT=/path/to/cuda-13.1 \
+  -DHPX_DIR=/path/to/matching/hpx/lib/cmake/HPX \
+  -DCMAKE_CUDA_ARCHITECTURES=86
+cmake --build build/cuda13 --parallel 12
+ctest --test-dir build/cuda13 --output-on-failure --parallel 2
+```
+
 Initial power and recombination histories are computed internally. No external
 CAMB power table or RECFAST executable is required. Particle Silo output writes
 separate gas and dark-matter point meshes, with gas thermodynamic fields.

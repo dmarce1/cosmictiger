@@ -244,6 +244,7 @@ set(cosmictiger_header_files
     cosmictiger/cosmology/zero_order.hpp
     cosmictiger/cuda/cuda.hpp
     cosmictiger/cuda/cuda_memory.hpp
+    cosmictiger/cuda/cuda_memory_advice.hpp
     cosmictiger/cuda/cuda_reduce.hpp
     cosmictiger/cuda/cuda_stream.hpp
     cosmictiger/cuda/cuda_unordered_map.hpp
@@ -560,10 +561,27 @@ if(BUILD_TESTING)
     target_compile_options(cosmology_evolution_test PRIVATE -fno-fast-math -ffp-contract=off)
     cosmictiger_add_gtest(NAME cosmology_evolution TARGET cosmology_evolution_test
         PROPERTIES TIMEOUT 30)
-    add_test(NAME cosmology_integration COMMAND ${Python3_EXECUTABLE}
-        ${PROJECT_SOURCE_DIR}/tests/run_cosmology.py $<TARGET_FILE:cosmictiger>
-        ${PROJECT_BINARY_DIR}/tests/cosmology_integration)
-    set_tests_properties(cosmology_integration PROPERTIES RUN_SERIAL TRUE TIMEOUT 1200 PROCESSORS 2)
+    foreach(cosmology_position IN ITEMS fixed32 fixed64)
+        foreach(cosmology_backend IN ITEMS cpu cuda)
+            if(cosmology_backend STREQUAL "cuda" AND NOT COSMICTIGER_WITH_CUDA)
+                continue()
+            endif()
+            set(cosmology_integration_name "cosmology_integration_${cosmology_position}_${cosmology_backend}")
+            if(cosmology_position STREQUAL "fixed32" AND cosmology_backend STREQUAL "cpu")
+                set(cosmology_integration_name cosmology_integration)
+            endif()
+            set(cosmology_backend_args)
+            if(cosmology_backend STREQUAL "cuda")
+                list(APPEND cosmology_backend_args --cuda)
+            endif()
+            add_test(NAME ${cosmology_integration_name} COMMAND ${Python3_EXECUTABLE}
+                ${PROJECT_SOURCE_DIR}/tests/run_cosmology.py $<TARGET_FILE:cosmictiger>
+                ${PROJECT_BINARY_DIR}/tests/${cosmology_integration_name}
+                --position-type ${cosmology_position} ${cosmology_backend_args})
+            set_tests_properties(${cosmology_integration_name}
+                PROPERTIES RUN_SERIAL TRUE TIMEOUT 1200 PROCESSORS 2 LABELS "cosmology;${cosmology_backend}")
+        endforeach()
+    endforeach()
 
     add_hpx_executable(flops_test SOURCES tests/flops.cpp src/core/flops.cpp)
     target_include_directories(flops_test PRIVATE ${PROJECT_SOURCE_DIR})
@@ -831,7 +849,8 @@ if(BUILD_TESTING)
     add_test(NAME grouped_options COMMAND ${Python3_EXECUTABLE}
         ${PROJECT_SOURCE_DIR}/tests/run_options.py $<TARGET_FILE:cosmictiger>
         ${PROJECT_BINARY_DIR}/tests/grouped_options)
-    set_tests_properties(grouped_options PROPERTIES RUN_SERIAL TRUE TIMEOUT 240)
+    # Hundreds of expected rejections each produce a symbolized stack trace.
+    set_tests_properties(grouped_options PROPERTIES RUN_SERIAL TRUE TIMEOUT 600 PROCESSORS 2)
 
     add_test(NAME linear_growth_response COMMAND ${Python3_EXECUTABLE}
         ${PROJECT_SOURCE_DIR}/tests/run_linear_growth.py $<TARGET_FILE:cosmictiger>

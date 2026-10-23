@@ -19,9 +19,11 @@
 
 #include <cosmictiger/analysis/rockstar.hpp>
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/cosmology/background.hpp>
 #include <cosmictiger/cosmology/cosmology.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/math/constants.hpp>
+#include <cosmictiger/math/simulation_units.hpp>
 
 // These production stages are also exercised before catalogue finalization so
 // that later unbinding or seed merging cannot hide a connectivity regression.
@@ -186,10 +188,18 @@ void checkRockstarCatalogueRoundtrip(
             context + ": duplicate format metadata key " + key);
     }
     requireRockstar(format.eof() && !format.bad(), context + ": unreadable format metadata");
-    requireRockstar(metadata.size() == 5 && metadata["format_version"] == "2" &&
+    auto const& cosmology = getOptions().cosmology;
+    bool const flatFit = cosmology.omegaK == 0.0 && cosmology.omegaLambda >= 0.0;
+    bool const openFit = cosmology.omegaK > 0.0 && cosmology.omegaLambda == 0.0;
+    std::string const virialDefinition = flatFit ? "bryan_norman_flat" :
+        openFit                                  ? "bryan_norman_open" :
+                                                   "200_mean_matter";
+    requireRockstar(metadata.size() == 7 && metadata["format_version"] == "2" &&
             metadata["float16"] == "ieee754_binary16" &&
             metadata["record_size"] == std::to_string(sizeof(RockstarRecord)) &&
             metadata["record_count"] == std::to_string(count) &&
+            metadata["virial_density"] == virialDefinition &&
+            metadata["so_density_reference"] == (flatFit || openFit ? "critical" : "mean_matter") &&
             metadata["byte_order"] ==
                 (std::endian::native == std::endian::little ? "little" : "big"),
         context + ": incorrect IEEE catalogue format metadata");
@@ -235,22 +245,24 @@ void checkRockstarCataloguePublication() {
 void checkRockstarCatalogueHalfBoundaries() {
     struct HalfCase {
         uint16_t bits;
-        double value;
+        uint64_t doubleBits;
     };
+    // Preserve the exact input representation when the caller uses fast-math.
+    // In particular, a floating-point -0.0 initializer may be folded into +0.0.
     std::array<HalfCase, 13> const cases{{
-        {0x0000, 0.0},
-        {0x8000, -0.0},
-        {0x0001, 0x1p-24},
-        {0x8001, -0x1p-24},
-        {0x03ff, 1023.0 * 0x1p-24},
-        {0x0400, 0x1p-14},
-        {0x3c00, 1.0},
-        {0x3c01, 1.0 + 0x1p-10},
-        {0xc000, -2.0},
-        {0x7bff, 65504.0},
-        {0xfbff, -65504.0},
-        {0x7c00, std::numeric_limits<double>::infinity()},
-        {0xfc00, -std::numeric_limits<double>::infinity()},
+        {0x0000, UINT64_C(0x0000000000000000)},
+        {0x8000, UINT64_C(0x8000000000000000)},
+        {0x0001, UINT64_C(0x3e70000000000000)},
+        {0x8001, UINT64_C(0xbe70000000000000)},
+        {0x03ff, UINT64_C(0x3f0ff80000000000)},
+        {0x0400, UINT64_C(0x3f10000000000000)},
+        {0x3c00, UINT64_C(0x3ff0000000000000)},
+        {0x3c01, UINT64_C(0x3ff0040000000000)},
+        {0xc000, UINT64_C(0xc000000000000000)},
+        {0x7bff, UINT64_C(0x40effc0000000000)},
+        {0xfbff, UINT64_C(0xc0effc0000000000)},
+        {0x7c00, UINT64_C(0x7ff0000000000000)},
+        {0xfc00, UINT64_C(0xfff0000000000000)},
     }};
     std::array<RockstarRecord, 14> records{};
     for (size_t i = 0; i < records.size(); ++i) {
@@ -275,11 +287,11 @@ void checkRockstarCatalogueHalfBoundaries() {
             size_t const caseIndex = (i + fieldIndex) % records.size();
             auto& half = record.*field.member;
             if (caseIndex < cases.size()) {
-                half = double2float16(cases[caseIndex].value);
+                uint64_t const inputBits = cases[caseIndex].doubleBits;
+                half = double2float16(std::bit_cast<double>(inputBits));
                 requireRockstar(half.bits == cases[caseIndex].bits,
                     std::string("catalogue known IEEE encoding for ") + field.name);
-                requireRockstar(std::bit_cast<uint64_t>(float162double(half)) ==
-                        std::bit_cast<uint64_t>(cases[caseIndex].value),
+                requireRockstar(std::bit_cast<uint64_t>(float162double(half)) == inputBits,
                     std::string("catalogue known IEEE decoding for ") + field.name);
             } else {
                 // Raw I/O preserves even a NaN payload; production packing rejects nonfinite
@@ -341,10 +353,18 @@ Subgroup rockstarTestGroup(int count, float center, int id, float width = 1.e-4f
 
 double rockstarTestVirialDensity(double scale) {
     auto const& options = getOptions();
+    bool const flatFit = options.cosmology.omegaK == 0.0 && options.cosmology.omegaLambda >= 0.0;
+    bool const openFit = options.cosmology.omegaK > 0.0 && options.cosmology.omegaLambda == 0.0;
+    if (!flatFit && !openFit) {
+        return 200.0 * options.initial.numberOfParticles;
+    }
     double const omega = options.cosmology.omegaM /
-        (options.cosmology.omegaM + options.cosmology.omegaLambda * scale * scale * scale);
+        (options.cosmology.omegaM + options.cosmology.omegaR / scale +
+            options.cosmology.omegaK * scale +
+            options.cosmology.omegaLambda * scale * scale * scale);
     double const x = omega - 1.0;
-    return options.initial.numberOfParticles * (18.0 * M_PI * M_PI + 82.0 * x - 39.0 * x * x) /
+    return options.initial.numberOfParticles *
+        (18.0 * M_PI * M_PI + (openFit ? 60.0 : 82.0) * x - (openFit ? 32.0 : 39.0) * x * x) /
         omega;
 }
 
@@ -815,7 +835,9 @@ void checkRockstarRecordInvariance() {
 void checkRockstarLightconeEpoch() {
     Vector<LightconeEntry> particles(30);
     for (auto& particle : particles) {
-        particle.x = LightconeReal(0.02);
+        // These test units have H0 approximately 100. A radius of 0.02
+        // would put the observer beyond the Lambda model's conformal horizon.
+        particle.x = LightconeReal(0.002);
         particle.y = particle.z = LightconeReal(0.0);
         particle.vx = particle.vy = particle.vz = 0.0f;
         particle.pix = 0;
@@ -830,6 +852,49 @@ void checkRockstarLightconeEpoch() {
         1000.0 * rockstarTestRadius(30, rockstarTestVirialDensity(0.5)), 2.e-3,
         "lightcone halo properties must use its emission epoch");
     checkRockstarCatalogueRoundtrip(records.data(), records.size(), "lightcone catalogue");
+
+    auto const original = getOptions();
+    auto contracting = original;
+    contracting.cosmology.omegaM = 2.0;
+    contracting.cosmology.omegaR = contracting.cosmology.omegaLambda = 0.0;
+    contracting.cosmology.omegaK = -1.0;
+    contracting.cosmology.startRedshift = 0.0;
+    setOptions(contracting);
+    try {
+        // Starting from expanding a=1, closed dust has a=1+sin(H0*tau).
+        // H0*tau=3 lies strictly on the contracting branch.
+        double const hubble =
+            units::normalizedHubble100(contracting) * contracting.cosmology.hubble;
+        for (double const phase : {1.0, 0.5 * M_PI, 3.0}) {
+            double const emissionTime = phase / hubble;
+            double const observationTime = emissionTime + particles[0].x.toDouble();
+            double const scale = 1.0 + std::sin(phase);
+            auto const background = cosmology::simulationBackground(observationTime);
+            auto const state = background->sample(emissionTime).state;
+            requireRockstarClose(state.physicalDerivative / hubble, std::cos(phase) / scale, 2.e-9,
+                "recollapsing lightcone fixture must preserve the signed derivative", 2.e-10);
+            auto const collapsedRecords = rockstarFindSubgroups(particles, observationTime);
+            requireRockstar(
+                collapsedRecords.size() == 1, "recollapsing lightcone halo disappeared");
+            auto const& record = collapsedRecords[0];
+            requireRockstarClose(float162double(record.zValue), 1.0 / scale - 1.0, 2.e-3,
+                "recollapsing lightcone halo must use its emission redshift");
+            requireRockstarClose(float162double(record.rvir),
+                1000.0 * rockstarTestRadius(30, 200.0 * contracting.initial.numberOfParticles),
+                2.e-3, "recollapsing halo must retain its mean-matter aperture at turnaround");
+            for (double const mass : {double(record.mvir), double(record.m200), double(record.m500),
+                     double(record.m2500)}) {
+                requireRockstarClose(mass, 30.0, 2.e-6,
+                    "coincident halo SO masses must remain finite across turnaround");
+            }
+            checkRockstarCatalogueRoundtrip(collapsedRecords.data(), collapsedRecords.size(),
+                "recollapsing lightcone catalogue");
+        }
+    } catch (...) {
+        setOptions(original);
+        throw;
+    }
+    setOptions(original);
 }
 
 }    // namespace detail

@@ -16,6 +16,7 @@
 #include <hpx/include/async.hpp>
 #include <hpx/runtime_local/runtime_local_fwd.hpp>
 
+#include <cosmictiger/cuda/cuda_memory_advice.hpp>
 #include <cosmictiger/cuda/cuda_stream.hpp>
 #include <tests/cuda_test.hpp>
 
@@ -191,6 +192,14 @@ void cudaAsyncWarmup(CudaAsyncBuffers& buffers) {
     buffers.verify();
 }
 
+int cudaAsyncMemoryAttribute(void const* pointer, cudaMemRangeAttribute attribute) {
+    int value = cudaInvalidDeviceId;
+    cudaAsyncCheck(
+        cudaMemRangeGetAttribute(&value, sizeof(value), attribute, pointer, kCudaAsyncBytes),
+        "querying managed-memory advice or prefetch destination");
+    return value;
+}
+
 }    // namespace detail
 
 namespace detail {
@@ -230,6 +239,57 @@ TEST_F(CudaAsyncTest, DestructorProgress) {
 
 TEST_F(CudaAsyncTest, ExceptionUnwindProgress) {
     cudaAsyncCheckDestructor(*buffers_, true);
+}
+
+TEST_F(CudaAsyncTest, ManagedMemoryAdviceAndPrefetch) {
+    int concurrentManagedAccess = 0;
+    ASSERT_EQ(
+        cudaDeviceGetAttribute(&concurrentManagedAccess, cudaDevAttrConcurrentManagedAccess, 0),
+        cudaSuccess);
+    if (!concurrentManagedAccess) {
+        GTEST_SKIP() << "Device does not support managed-memory prefetch";
+    }
+
+    void* allocation = nullptr;
+    ASSERT_EQ(cudaMallocManaged(&allocation, kCudaAsyncBytes), cudaSuccess);
+    std::unique_ptr<int, CudaAsyncDeviceDeleter> values(static_cast<int*>(allocation));
+    for (int index = 0; index < kCudaAsyncCount; ++index) {
+        values.get()[index] = 3 * index + 5;
+    }
+
+    ASSERT_EQ(cudaAdviseMemory(values.get(), kCudaAsyncBytes, cudaMemAdviseSetPreferredLocation, 0),
+        cudaSuccess);
+    EXPECT_EQ(cudaAsyncMemoryAttribute(values.get(), cudaMemRangeAttributePreferredLocation), 0);
+    ASSERT_EQ(cudaAdviseMemory(values.get(), kCudaAsyncBytes, cudaMemAdviseSetAccessedBy, 0),
+        cudaSuccess);
+    ASSERT_EQ(cudaAdviseMemory(values.get(), kCudaAsyncBytes, cudaMemAdviseUnsetAccessedBy, 0),
+        cudaSuccess);
+
+    CudaStream stream(0);
+    stream.prefetchAsync(values.get(), kCudaAsyncBytes, 0);
+    cudaAsyncTestLaunch(values.get(), kCudaAsyncCount, stream.nativeHandle(), false);
+    stream.checkLaunch();
+    stream.wait();
+    EXPECT_EQ(cudaAsyncMemoryAttribute(values.get(), cudaMemRangeAttributeLastPrefetchLocation), 0);
+
+    ASSERT_EQ(cudaAdviseMemory(values.get(), kCudaAsyncBytes, cudaMemAdviseSetPreferredLocation,
+                  cudaCpuDeviceId),
+        cudaSuccess);
+    EXPECT_EQ(cudaAsyncMemoryAttribute(values.get(), cudaMemRangeAttributePreferredLocation),
+        cudaCpuDeviceId);
+    stream.prefetchAsync(values.get(), kCudaAsyncBytes, cudaCpuDeviceId);
+    stream.wait();
+    EXPECT_EQ(cudaAsyncMemoryAttribute(values.get(), cudaMemRangeAttributeLastPrefetchLocation),
+        cudaCpuDeviceId);
+    for (int index = 0; index < kCudaAsyncCount; ++index) {
+        EXPECT_EQ(values.get()[index], 6 * index + 17);
+    }
+
+    ASSERT_EQ(cudaAdviseMemory(values.get(), kCudaAsyncBytes, cudaMemAdviseUnsetPreferredLocation,
+                  cudaCpuDeviceId),
+        cudaSuccess);
+    EXPECT_EQ(cudaAsyncMemoryAttribute(values.get(), cudaMemRangeAttributePreferredLocation),
+        cudaInvalidDeviceId);
 }
 
 }    // namespace detail

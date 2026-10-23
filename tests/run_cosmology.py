@@ -15,7 +15,7 @@ import struct
 import subprocess
 import sys
 
-from run_checkpoint import checkManifest
+from run_checkpoint import checkManifest, checkpoint_position_bytes
 
 
 def require(condition, message):
@@ -23,10 +23,12 @@ def require(condition, message):
         raise RuntimeError(message)
 
 
-def run_simulation(command, directory, success=True):
+def run_simulation(command, directory, success=True, cuda=False):
     log_path = directory / "run.log"
-    environment = dict(os.environ, CUDA_VISIBLE_DEVICES="", OMP_NUM_THREADS="1",
-                       OPENBLAS_NUM_THREADS="1")
+    environment = dict(os.environ, OMP_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1",
+                       MKL_NUM_THREADS="1")
+    if not cuda:
+        environment["CUDA_VISIBLE_DEVICES"] = ""
     with log_path.open("w") as log:
         with subprocess.Popen(command, cwd=directory, stdout=log, stderr=subprocess.STDOUT,
                               text=True, env=environment, start_new_session=True) as process:
@@ -171,6 +173,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("executable", type=Path)
     parser.add_argument("workdir", type=Path)
+    parser.add_argument("--cuda", action="store_true", help="exercise the CUDA backend")
+    parser.add_argument("--position-type", choices=("fixed32", "fixed64"), default="fixed32")
     args = parser.parse_args()
     executable = args.executable.resolve()
     base = args.workdir.resolve()
@@ -184,7 +188,8 @@ def main():
         "initial.particlesPerDimension": "8",
         "initial.closePack": "false",
         "initial.twoLpt": "false",
-        "compute.cuda": "false",
+        "compute.cuda": "true" if args.cuda else "false",
+        "compute.positionType": args.position_type,
         "gravity.enabled": "true",
         "hydro.enabled": "false",
         "chemistry.enabled": "false",
@@ -223,13 +228,16 @@ def main():
             shutil.copytree(checkpoint, directory / checkpoint.name)
         resolved = dict(options, **overrides)
         output = run_simulation(command + [f"--{key}={value}" for key, value in resolved.items()],
-                                directory, success=success)
+                                directory, success=success, cuda=args.cuda)
         return directory, output
 
     # The saved physical mass and particle count determine H0 in code units.
     # Calibrate from a tiny actual run instead of duplicating unit constants.
     calibration, _ = exercise("calibration", {"run.endTime": "1", "run.maxIterations": "0"})
     initial = checkpoint_states(calibration, 1.0)[-1]
+    position_bytes = 8 if args.position_type == "fixed64" else 4
+    require(checkpoint_position_bytes((initial["path"] / "checkpoint.0.dat").read_bytes()) ==
+            position_bytes, f"calibration did not use {args.position_type} positions")
     require(initial["omega_m"] == 2.0 and initial["omega_r"] < 1.e-16,
             "analytic fixture has unexpected matter or radiation density")
     hubble = initial["hubble"]
@@ -248,7 +256,15 @@ def main():
         require_close(state["a"], scale, "closed cycloid scale factor")
         require_close(state["adot"] / hubble, rate, "closed cycloid signed rate")
     check_completion(states[-1], duration)
-    check_finite_progress(closed)
+    closed_rows = check_finite_progress(closed)
+    if args.cuda:
+        # gravity_cuda.hpp is the only writer of the interaction counters;
+        # kick.cu reports their per-sink averages, and CPU dispatch returns zero.
+        # The final progress column combines direct and softened interactions.
+        require(any(row[4] > 0.0 and row[13] > 0.0 for row in closed_rows),
+                "expanding closed model did not execute CUDA gravity interactions")
+        require(any(row[4] < 0.0 and row[13] > 0.0 for row in closed_rows),
+                "contracting closed model did not execute CUDA gravity interactions")
     check_closed_time_table(closed, 32)
     print("closed matter: expansion, turnaround, contraction, both time coordinates, and endpoint passed")
 
@@ -386,6 +402,7 @@ def main():
     require(re.search(r"turnaround|Friedmann|scale.factor|expanding|endpoint", rejected,
                       re.IGNORECASE), "unreachable endpoint failed without a cosmology diagnostic")
     print("unreachable expanding endpoint: rejected before evolution")
+    print(f"cosmology integration passed: {'CUDA' if args.cuda else 'CPU'}, {args.position_type}")
     return 0
 
 

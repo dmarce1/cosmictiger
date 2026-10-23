@@ -455,8 +455,19 @@ void distributedOutputTest() {
     viewOutputViews(4, 0.25);
     detail::requireDistributedOutput(
         !std::filesystem::exists(skipped), "cadence skips nonoutput cycle");
-    viewOutputViews(4, 0.25, true);
+    // The same scale can occur on either side of a cosmological turnaround.
+    // Preserve the caller's actual age through both master and remote leaves.
+    viewOutputViews(4, 0.25, true, 4.2e9);
     detail::checkDistributedOutput(4, "", hpxSize(), false);
+    {
+        auto const masterPath = detail::distributedMasterPath(4);
+        detail::DistributedOutputFile master(
+            DBOpen(masterPath.c_str(), DB_UNKNOWN, DB_READ), DBClose);
+        std::unique_ptr<double, decltype(&std::free)> time(
+            static_cast<double*>(DBGetComponent(master.get(), "gas", "dtime")), &std::free);
+        detail::requireDistributedOutput(bool(time), "explicit cosmological age is present");
+        detail::nearDistributedOutput(*time, 4.2, "explicit cosmological age survives contraction");
+    }
 
     int const activeRanks = std::max(1, hpxSize() - 1);
     distributedOutputParticleFixture(activeRanks, false, false);

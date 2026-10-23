@@ -20,6 +20,7 @@ constexpr bool kVerbose = true;
 #include <cosmictiger/core/stack_trace.hpp>
 #include <cosmictiger/core/timer.hpp>
 #include <cosmictiger/cuda/cuda_memory.hpp>
+#include <cosmictiger/cuda/cuda_memory_advice.hpp>
 #include <cosmictiger/fmm/fmm_order.hpp>
 #include <cosmictiger/fmm/fmm_types.hpp>
 #include <cosmictiger/gravity/tree.hpp>
@@ -273,7 +274,7 @@ void tree2Cpu() {
 #ifdef USE_CUDA
         if (setGpu && cudaEnabled()) {
             cudaSetDevice();
-            CUDA_CHECK(cudaMemAdvise(nodes, nodesSize * sizeof(TreeNode),
+            CUDA_CHECK(cudaAdviseMemory(nodes, nodesSize * sizeof(TreeNode),
                 cudaMemAdviseUnsetReadMostly, cudaGetDevice()));
         }
 #endif
@@ -289,7 +290,7 @@ void tree2Gpu() {
     }
     if (!setGpu) {
         cudaSetDevice();
-        CUDA_CHECK(cudaMemAdvise(
+        CUDA_CHECK(cudaAdviseMemory(
             nodes, nodesSize * sizeof(TreeNode), cudaMemAdviseSetReadMostly, cudaGetDevice()));
         setGpu = true;
         setCpu = false;

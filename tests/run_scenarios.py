@@ -31,6 +31,18 @@ SCENARIOS = (
     ("glass", "glass", True, False, False),
 )
 
+# These presets share cosmology dispatch; keep their inventory explicit without
+# duplicating the first-class scenario cases.
+COSMOLOGY_PRESETS = (
+    "closed_no_dark_energy",
+    "critical",
+    "lcdm_present",
+    "lcdm_ten_ages",
+    "omega_k_negative",
+    "omega_k_positive",
+    "subcritical_no_dark_energy",
+)
+
 
 def run_process(command, directory, success=True):
     log_path = directory / "run.log"
@@ -121,6 +133,7 @@ def main():
     base.mkdir(parents=True, exist_ok=True)
     command = [str(executable), "--hpx:threads=2", "--hpx:bind=none"]
     expected_files = {stem + ".ini" for stem, *_ in SCENARIOS}
+    expected_files.update(stem + ".ini" for stem in COSMOLOGY_PRESETS)
     actual_files = {path.name for path in (root / "configurations").glob("*.ini")}
     if actual_files != expected_files:
         raise RuntimeError(f"scenario configuration inventory differs: "

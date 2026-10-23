@@ -1236,6 +1236,7 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("cosmology.omegaB", cosmology.omegaB);
     SHOW("cosmology.omegaC", cosmology.omegaC);
     SHOW("cosmology.omegaGamma", cosmology.omegaGamma);
+    SHOW("cosmology.omegaLambda", cosmology.omegaLambda);
     SHOW("cosmology.omegaM", cosmology.omegaM);
     SHOW("cosmology.omegaNu", cosmology.omegaNu);
     SHOW("cosmology.omegaR", cosmology.omegaR);

@@ -6,7 +6,6 @@
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
-#include <fenv.h>
 #include <memory>
 #include <stack>
 #include <vector>
@@ -307,9 +306,6 @@ SphRunReturn sphRun(SphRunParameters params, bool cuda) {
     std::string profileName = "sph_run:" + std::to_string(params.runType);
     profilerEnter(profileName.c_str());
 
-    feenableexcept(FE_DIVBYZERO);
-    feenableexcept(FE_INVALID);
-    feenableexcept(FE_OVERFLOW);
     params.courantFactor = getOptions().hydro.cfl;
     if (getOptions().compute.cuda == false) {
         cuda = false;
