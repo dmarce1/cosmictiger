@@ -98,6 +98,11 @@ void runFixedScenario() {
     size_t progressRows = 0;
     if (hpxRank() == 0) {
         terminal::section(definition.name);
+        PRINT("%-38s: %e code time units\n", "Scenario duration", duration);
+        if (hpxSize() == 1) {
+            PRINT(
+                "%-38s: %lld\n", "Initialized particles", static_cast<long long>(particlesSize()));
+        }
         PRINT("  Time and dt are in code units; wall time includes previous runs on restart.\n");
     }
     int lastCheckpoint = restarting ? state.iter : -1;

@@ -9,7 +9,10 @@
 #define SMOOTHLEN_BUFFER 0.21
 #define SCALE_DT 0.01
 
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
+#include <limits>
 #include <memory>
 #include <string>
 
@@ -25,7 +28,9 @@
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/core/time.hpp>
 #include <cosmictiger/core/timer.hpp>
+#include <cosmictiger/cosmology/background.hpp>
 #include <cosmictiger/cosmology/cosmology.hpp>
+#include <cosmictiger/cosmology/evolution.hpp>
 #include <cosmictiger/cosmology/fft.hpp>
 #include <cosmictiger/cosmology/initialize.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
@@ -88,7 +93,7 @@ static void flushTimings(bool reset) {
     fclose(fp);
 }
 
-void doGroups(int number, double scale) {
+void doGroups(int number, double scale, double years) {
     profilerEnter(__FUNCTION__);
     groupsPrepareHistory(number);
 
@@ -149,8 +154,7 @@ void doGroups(int number, double scale) {
     terminal::detailPrint("groups_cull %e\n", tm.read());
     tm.reset();
     tm.start();
-    auto ngroups = groupsSave(number, scale,
-        cosmosTime(1.0e-6 * scale, scale) * getOptions().units.timeSeconds / constants::kSpyr);
+    auto ngroups = groupsSave(number, scale, years);
     tm.stop();
     terminal::detailPrint("groups_save %e\n", tm.read());
     total.stop();
@@ -202,10 +206,10 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     double const chemistryHalfStep =
         chemistry ? std::ldexp(t0, -1 - getOptions().chemistry.synchronizedRung) : 0.0;
     sphParticlesApplyUpdates(minrung, 0, t0, tau);
-
     SphRunParameters runParameters;
-    if (adot != 0.0) {
-        runParameters.maximumTimestep = SCALE_DT * scale / fabs(adot);
+    if (getOptions().run.scenario == "cosmology") {
+        runParameters.maximumTimestep =
+            cosmology::expansionTimestep(scale, adot / scale, cosmosD2adt2(scale), SCALE_DT);
     }
     runParameters.maximumTimestep = std::min(runParameters.maximumTimestep,
         std::ldexp(static_cast<float>(t0), -getOptions().run.minRung));
@@ -317,7 +321,6 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
         result = SphRunReturn();
     } while (needsNeighborRefresh);
     Timer timer;
-
     if (chemistry) {
         sphParticlesRefreshChemistryEos(scale);
     }
@@ -481,8 +484,9 @@ std::pair<KickReturn, TreeCreateReturn> kickStep(int minrung, double scale, doub
     tm.start();
     //	PRINT("numberOfActiveParticles = %li\n", sr.numberOfActiveParticles);
     KickParameters kparams;
-    if (dadt != 0.0) {
-        kparams.maxDt = SCALE_DT * scale / fabs(dadt);
+    if (getOptions().run.scenario == "cosmology") {
+        kparams.maxDt =
+            cosmology::expansionTimestep(scale, dadt / scale, cosmosD2adt2(scale), SCALE_DT);
     }
     // The ordinary path visits every starting particle, including rung zero,
     // while the chosen step must still honor the configured starting-rung floor.
@@ -693,7 +697,10 @@ std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int m
         kparams.minRung = levels[li];
         kparams.doPhi = doPhi && top;
         kparams.t0 = t0;
-        kparams.maxDt = SCALE_DT / adot;
+        if (getOptions().run.scenario == "cosmology") {
+            kparams.maxDt =
+                cosmology::expansionTimestep(scale, adot, cosmosD2adt2(scale), SCALE_DT);
+        }
         kparams.theta = theta;
         ExpansionBuffer l;
         l.zero();
@@ -749,9 +756,9 @@ std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int m
                 lcFut->get();
                 *lcFut = hpx::make_ready_future();
             }
-            double a = 1.0 / cosmosAinv(adot, scale, dt);
-            if (getOptions().initial.plummer) {
-                a = 1.0;
+            double a = scale;
+            if (getOptions().run.scenario == "cosmology") {
+                a = 1.0 / cosmosAinv(adot, scale, dt);
             }
             //			PRINT( "%e %e %e\n", a, a0, a1);
             drift(a, dt, tau, tau + dt, getOptions().run.numberOfSteps * t0, levels[li], drag);
@@ -778,7 +785,7 @@ std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int m
     return std::make_pair(kr, sr);
 }
 
-double doPowerSpectrum(int num, double a) {
+double doPowerSpectrum(int num, double a, double adot) {
     auto const softFilter = [](double kh) {
         if (kh > 0.01) {
             return -15.0 * (3.0 * kh * cos(kh) + ((sqr(kh) - 3.0) * sin(kh))) * pow(kh, -5.0);
@@ -795,8 +802,20 @@ double doPowerSpectrum(int num, double a) {
     double const boxSize =
         (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
     double const n3 = pow((double) getOptions().initial.fourierSize, 3);
-    double const d1 = cosmosGrowthFactor(omegaM, a) / cosmosGrowthFactor(omegaM, 1.0);
-    double factor = pow(boxSize, 3) / n3 / (glass ? 1.0 : (n3 * sqr(d1)));
+    // The historical growth approximation is restricted to an expanding,
+    // flat matter/Lambda background. Other models retain measured epoch power.
+    auto const& cosmology = getOptions().cosmology;
+    bool rescaleGrowth = !glass && adot > 0.0 && omegaM > 0.0 && omegaM <= 1.0 &&
+        std::abs(cosmology.omegaK) <= 1.0e-12 && cosmology.omegaLambda >= 0.0;
+    double growthRatio = 1.0;
+    if (rescaleGrowth) {
+        growthRatio = cosmosGrowthFactor(omegaM, a) / cosmosGrowthFactor(omegaM, 1.0);
+        if (!std::isfinite(growthRatio) || growthRatio <= 0.0) {
+            rescaleGrowth = false;
+            growthRatio = 1.0;
+        }
+    }
+    double factor = pow(boxSize, 3) / n3 / (glass ? 1.0 : (n3 * sqr(growthRatio)));
     if (getOptions().initial.closePack) {
         factor *= 0.25;
     }
@@ -806,6 +825,12 @@ double doPowerSpectrum(int num, double a) {
     if (fp == NULL) {
         THROW_ERROR("Unable to open %s for writing\n", filename.c_str());
     }
+    fprintf(fp, "# a=%.17g physical_adot=%.17g growth_rescaling=%s growth_ratio=%.17g\n", a, adot,
+        rescaleGrowth ? "flat_lambda_approximation" : "none", growthRatio);
+    fprintf(fp,
+        "# configured_sigma8=%.17g omega_m=%.17g omega_r=%.17g omega_k=%.17g "
+        "omega_lambda=%.17g\n",
+        cosmology.sigma8, omegaM, cosmology.omegaR, cosmology.omegaK, cosmology.omegaLambda);
     double kmin = 0.0;
     for (int mfactor = 1; mfactor <= 1; mfactor *= m) {
         auto power0 = powerSpectrumCompute(mfactor);
@@ -833,34 +858,29 @@ double doPowerSpectrum(int num, double a) {
     return maxpow;
 }
 
-void outputTimeFile() {
+void outputTimeFile(DriverParameters const& parameters) {
     profilerEnter(__FUNCTION__);
     double const a0 = 1.0 / (1.0 + getOptions().cosmology.startRedshift);
-    double const tauMax = cosmosConformalTime(a0, 1.0, false);
-    double a = a0;
-    int m = getOptions().run.numberOfSteps;
-    int n = 64;
-    double const dtau = tauMax / (m * n);
-    double tau = cosmosConformalTime(a0 * 1.0e-6, a0, false);
-    double t = cosmosTime(a0 * 1.0e-6, a0);
-    double z;
+    auto const background = cosmology::simulationBackground(parameters.tauMax);
+    bool const expandingBackground = getOptions().run.scenario == "cosmology";
+    double const initialTau =
+        expandingBackground ? cosmosConformalTime(a0 * 1.0e-6, a0, false) : 0.0;
+    double const initialTime = expandingBackground ? cosmosTime(a0 * 1.0e-6, a0) : 0.0;
+    int const m = getOptions().run.numberOfSteps;
     FILE* fp = fopen(outputPath("time.txt").c_str(), "wt");
     if (fp == NULL) {
-        THROW_ERROR("Unable to open time.txt for reading\n");
+        THROW_ERROR("Unable to open time.txt for writing\n");
     }
     fprintf(
         fp, "%4s %13s %13s %13s %13s\n", "step", "real yrs", "conformal yrs", "scale", "redshift");
     for (int i = 0; i <= m; i++) {
-        z = 1.0 / a - 1.0;
+        double const elapsed = parameters.tauMax * (double(i) / m);
+        auto const sample = background->sample(elapsed);
+        double const a = sample.state.scaleFactor;
+        double const z = 1.0 / a - 1.0;
         double const c0 = getOptions().units.timeSeconds / constants::kSpyr;
-        fprintf(fp, "%4i %13.4e %13.4e %13.4e %13.4e\n", i, t * c0, tau * c0, a, z);
-        for (int j = 0; j < n; j++) {
-            double const dadt1 = cosmosDadtau(a, false);
-            double const dadt2 = cosmosDadtau(a + dadt1 * dtau, false);
-            t += 0.5 * (2.0 * a + dadt1 * dtau) * dtau;
-            a += 0.5 * (dadt1 + dadt2) * dtau;
-            tau += dtau;
-        }
+        fprintf(fp, "%4i %21.14e %21.14e %21.14e %21.14e\n", i,
+            (initialTime + sample.physicalTime) * c0, (initialTau + elapsed) * c0, a, z);
     }
     fclose(fp);
     profilerExit();
@@ -884,8 +904,57 @@ void driver() {
     double a0 = 1.0 / (1.0 + getOptions().cosmology.startRedshift);
     if (getOptions().checkpoint.readIndex != -1) {
         params = readCheckpoint();
+        double const coarseInterval = params.tauMax / getOptions().run.numberOfSteps;
+        double const endpointTolerance =
+            32.0 * std::numeric_limits<double>::epsilon() * params.tauMax;
+        if (!std::isfinite(coarseInterval) || !(coarseInterval > 0.0) ||
+            !std::isfinite(params.tau) || params.tau < 0.0 ||
+            params.tau > params.tauMax + endpointTolerance || params.step < 0) {
+            THROW_ERROR("Checkpoint contains an invalid evolution clock\n");
+        }
+        long double const phase = std::ldexp(static_cast<long double>(params.itime), -64);
+        long double const coarsePosition =
+            static_cast<long double>(params.tau) / coarseInterval - phase;
+        long double const coarseIndex = std::round(coarsePosition);
+        long double const clockTolerance = std::max(1.0e-10L,
+            256.0L * std::numeric_limits<double>::epsilon() *
+                std::max(1.0L, std::abs(coarsePosition)));
+        if (std::abs(coarsePosition - coarseIndex) > clockTolerance || coarseIndex < 0.0L ||
+            coarseIndex >= std::numeric_limits<int>::max()) {
+            THROW_ERROR("Checkpoint conformal time and integer timestep phase are inconsistent; "
+                        "retain the original timestep settings\n");
+        }
+        int const resumedStep = static_cast<int>(coarseIndex);
+        if (params.step != resumedStep && !(params.itime == 0 && params.step == resumedStep - 1)) {
+            THROW_ERROR("Checkpoint coarse step and conformal time are inconsistent; "
+                        "retain the original timestep settings\n");
+        }
+        // Stopping at a coarse boundary bypasses the outer for-loop increment.
+        // Periodic checkpoints taken on the next loop already contain this index.
+        // Current headers enforce nominalSteps; the checks above also reject
+        // inconsistent timestep settings in older headerless checkpoints.
+        if (!cosmology::endTimeReached(params.tau, params.tauMax)) {
+            params.step = resumedStep;
+        }
+        if (getOptions().run.scenario == "cosmology") {
+            auto const expected =
+                cosmology::simulationBackground(params.tauMax)->sample(params.tau).state;
+            double const hubble =
+                units::normalizedHubble100(getOptions()) * getOptions().cosmology.hubble;
+            double const savedRate = params.a * params.adot / hubble;
+            double const expectedRate = expected.conformalDerivative / hubble;
+            double const scaleTolerance =
+                1.0e-8 * std::max(std::abs(params.a), std::abs(expected.scaleFactor));
+            double const rateTolerance =
+                1.0e-8 * std::max({1.0, std::abs(savedRate), std::abs(expectedRate)});
+            if (!std::isfinite(params.a) || !std::isfinite(savedRate) ||
+                std::abs(params.a - expected.scaleFactor) > scaleTolerance ||
+                std::abs(savedRate - expectedRate) > rateTolerance) {
+                THROW_ERROR("Checkpoint cosmology/background does not match the requested "
+                            "initial redshift and cosmological parameters\n");
+            }
+        }
     } else {
-        outputTimeFile();
         if (getOptions().run.scenario == "glass") {
             scenarios::initializeGlass(params);
         } else if (getOptions().run.scenario == "plummer") {
@@ -910,8 +979,9 @@ void driver() {
         params.minrung0 = 0;
         params.runtime = 0.0;
         params.totalProcessed = 0;
-        params.years =
-            cosmosTime(1e-6 * a0, a0) * getOptions().units.timeSeconds / constants::kSpyr;
+        params.years = getOptions().run.scenario == "cosmology" ?
+            cosmosTime(1e-6 * a0, a0) * getOptions().units.timeSeconds / constants::kSpyr :
+            0.0;
         auto tmp1 = particlesSumEnergies();
         params.energies.tckin = tmp1.kin;
         //		write_checkpoint(params);
@@ -931,16 +1001,20 @@ void driver() {
         double hValue = constants::kH0 * opts.units.timeSeconds;
         opts.gravity.gm = opts.cosmology.omegaM * 3.0 * sqr(hValue * opts.cosmology.hubble) /
             (8.0 * M_PI) / numberOfParticles;
+        opts.cosmology.startRedshift = header.redshift;
         setOptions(opts);
         params.a = 1.0 / (header.redshift + 1.0);
-        params.adot = cosmosDadt(a0);
-        params.tauMax = cosmosConformalTime(params.a, 1.0);
-        params.years =
-            cosmosTime(1e-6 * a0, params.a) * getOptions().units.timeSeconds / constants::kSpyr;
+        params.adot = cosmosDadt(params.a);
+        params.tauMax = cosmology::configuredDuration(params.a);
+        params.years = cosmosTime(1e-6 * params.a, params.a) * getOptions().units.timeSeconds /
+            constants::kSpyr;
         terminal::detailPrint("box_size = %e Mpc\n", opts.units.lengthCm / constants::kMpcToCm);
         terminal::detailPrint("code_to_g = %e\n", opts.units.massG);
         terminal::detailPrint("code_to_cm = %e\n", opts.units.lengthCm);
         terminal::detailPrint("code_to_s = %e\n", opts.units.timeSeconds);
+    }
+    if (getOptions().checkpoint.readIndex == -1) {
+        outputTimeFile(params);
     }
     terminal::detailPrint("tau_max = %e\n", params.tauMax);
     auto& years = params.years;
@@ -1049,6 +1123,9 @@ void driver() {
     EnergiesT energies0;
     double glassError = 1.0;
     for (;; step++) {
+        if (cosmology::endTimeReached(tau, tauMax)) {
+            break;
+        }
         //		PRINT("STEP  = %i\n", step);
         double t0 = tauMax / getOptions().run.numberOfSteps;
         do {
@@ -1085,7 +1162,7 @@ void driver() {
                     outputSlice(number, years);
                 }
                 if (fullEval) {
-                    viewOutputViews((tau + 1e-6 * t0) / t0, a);
+                    viewOutputViews((tau + 1e-6 * t0) / t0, a, false, years);
                 }
                 if (getOptions().analysis.views) {
                     Timer tm;
@@ -1160,11 +1237,11 @@ void driver() {
                 //				kick_workspace::clear_buffers();
                 //				tree_destroy(true);
                 if (getOptions().analysis.power) {
-                    doPowerSpectrum(step, a);
+                    doPowerSpectrum(step, a, adot);
                 }
 #ifndef CHECK_MUTUAL_SORT
                 if (getOptions().analysis.groups) {
-                    doGroups(step, a);
+                    doGroups(step, a, years);
                 }
 #endif
             }
@@ -1188,7 +1265,10 @@ void driver() {
             }
             KickReturn kr = tmp.first;
             int maxRung0 = maxRung;
-            maxRung = kr.maxRung;
+            // A force pass can be empty after particles move to coarser rungs.
+            // Finish the current integer-clock subdivision before taking a
+            // coarser step, even when that pass reports no active particle rung.
+            maxRung = std::max(kr.maxRung, static_cast<int>(minRung(itime)));
 
             //			PRINT("GRAVITY max_rung = %i\n", kr.max_rung);
             if (minrung <= 0) {
@@ -1217,13 +1297,16 @@ void driver() {
                 energies0 = energies;
                 energies0.pot *= a;
             }
-            dt = t0 / (1 << maxRung);
+            dt = std::ldexp(t0, -maxRung);
             TreeCreateReturn sr = tmp.second;
             //			PRINT("Done kicking\n");
-            double adotdot;
             double a0 = a;
+            double physicalInterval = a * dt;
+            double driftScale = a;
             if (!getOptions().initial.createGlass && !getOptions().initial.plummer) {
-                cosmosUpdate(adotdot, adot, a, dt);
+                auto const interval = cosmosAdvance(adot, a, dt);
+                physicalInterval = interval.physicalTime;
+                driftScale = dt / interval.driftIntegral;
             }
             // d[a(K+W+U)]/da = -K+U-3 integral(P dV) + source.
             // For monatomic gamma=5/3 this reduces to the historical -(K+U).
@@ -1235,7 +1318,7 @@ void driver() {
                             -energies.therm + 3.0 * synchronizedChemistryPressure :
                             energies.therm));
             double const dyears =
-                0.5 * (a0 + a) * dt * getOptions().units.timeSeconds / constants::kSpyr;
+                physicalInterval * getOptions().units.timeSeconds / constants::kSpyr;
             auto const z0 = 1.0 / a0 - 1.0;
             auto const z1 = 1.0 / a - 1.0;
             for (auto& z : checkpointlist) {
@@ -1249,7 +1332,7 @@ void driver() {
             Timer dtm;
             dtm.start();
             if (getOptions().hydro.enabled) {
-                drift(2.0 / (1.0 / a0 + 1.0 / a), dt, tau, tau + dt, tauMax);
+                drift(driftScale, dt, tau, tau + dt, tauMax);
             }
             dtm.stop();
             driftTime += dtm.read();
@@ -1275,11 +1358,17 @@ void driver() {
                     "Tflops", "time", "close", "direct");
             }
             stepTm.stop();
+            TimeType const nextIntegerTime = inc(itime, maxRung);
+            double const nextTau = t0 *
+                (double(step) +
+                    (nextIntegerTime == 0 ? 1.0 : std::ldexp(double(nextIntegerTime), -64)));
+            double const nextYears = years + dyears;
+            double const outputRedshift = 1.0 / a - 1.0;
             fprintf(textfp,
                 "%10.3e %10i %10.3e %10.3e %10.3e %10.3e %10.3e %10i %10i %10i %10.3e %10.3e "
                 "%10.3e %10.3e \n",
-                runtime, iter - 1, z, a, adot, tau / t0, years, minrung, maxRung, bucketSize,
-                flops * 1e-12, stepTm.read(), close, direct);
+                runtime, iter - 1, outputRedshift, a, adot, nextTau / t0, nextYears, minrung,
+                maxRung, bucketSize, flops * 1e-12, stepTm.read(), close, direct);
             if (progressRows == 0) {
                 PRINT("  TFLOP/s estimates counted gravity and SPH work during force advancement; "
                       "chemistry is excluded.\n");
@@ -1288,25 +1377,24 @@ void driver() {
                 PRINT("\n%8s %10s %10s %10s %10s %7s %7s %10s %10s %10s\n", "Step", "z", "a", "tau",
                     "dt", "MinRung", "MaxRung", "Wall[s]", "Step[s]", "TFLOP/s");
             }
-            PRINT("%8i %10.3e %10.3e %10.3e %10.3e %7i %7i %10.2f %10.3f %10.3e\n", iter, z, a,
-                tau / t0, dt, minrung, maxRung, runtime, stepTm.read(), flops * 1e-12);
+            PRINT("%8i %10.3e %10.3e %10.3e %10.3e %7i %7i %10.2f %10.3f %10.3e\n", iter,
+                outputRedshift, a, nextTau / t0, dt, minrung, maxRung, runtime, stepTm.read(),
+                flops * 1e-12);
             progressRows++;
             fclose(textfp);
             totalTime.reset();
             remainingTime.stop();
             runtime += remainingTime.read();
             totalTime.start();
-            itime = inc(itime, maxRung);
+            itime = nextIntegerTime;
             domainTime = 0.0;
             sortTime = 0.0;
             kickTime = 0.0;
             driftTime = 0.0;
-            tau += dt;
+            tau = nextTau;
             thisIter++;
-            years += dyears;
-            if (tau >= tauMax ||
-                (getOptions().run.scenario == "cosmology" &&
-                    1.0 / a < getOptions().cosmology.endRedshift + 1.0)) {
+            years = nextYears;
+            if (cosmology::endTimeReached(tau, tauMax)) {
                 PRINT("\n  Finished: reached the requested end time or redshift.\n");
                 break;
             } else if (thisIter > getOptions().run.maxIterations) {
@@ -1326,16 +1414,14 @@ void driver() {
             lcFut = hpx::make_ready_future();
 
         } while (itime != 0);
-        if (tau >= tauMax || thisIter > getOptions().run.maxIterations ||
-            (getOptions().run.scenario == "cosmology" &&
-                1.0 / a < getOptions().cosmology.endRedshift + 1.0)) {
+        if (cosmology::endTimeReached(tau, tauMax) || thisIter > getOptions().run.maxIterations) {
             break;
         } else if (getOptions().initial.createGlass && std::abs(glassError) < 1.0e-5) {
             scenarios::saveGlass();
             break;
         }
     }
-    viewOutputViews(params.step + 1, a, true);
+    viewOutputViews(params.step + 1, a, true, years);
     if (getOptions().initial.createGlass) {
         scenarios::saveGlass();
     }

@@ -261,8 +261,58 @@ mapSize = 8
 
     for index, invalid in enumerate((
             "--cosmology.nEff=-1", "--cosmology.thetaCmb=0", "--cosmology.hubble=0",
-            "--cosmology.heliumFraction=1", "--cosmology.sigma8=nan")):
+            "--cosmology.heliumFraction=1", "--cosmology.sigma8=nan",
+            "--cosmology.sigma8=-0.1")):
         run(f"invalid_cosmology_{index}", metadata_options + [invalid], success=False)
+
+    lambda_baseline = run("lambda_baseline", metadata_options)
+    def cosmologySetting(output, key):
+        match = re.search(r"^cosmology\." + key + r"\s*:\s*(\S+)", output, re.MULTILINE)
+        if match is None or not math.isfinite(float(match.group(1))):
+            raise RuntimeError(f"missing finite resolved cosmology.{key}")
+        return float(match.group(1))
+
+    # Only the word auto requests density closure. Every numeric value,
+    # including the former -1 sentinel, is a literal signed Lambda density.
+    lambda_auto = run("lambda_auto", metadata_options + ["--cosmology.omegaLambda=auto"])
+    lambda_dense = run("lambda_auto_dense", metadata_options + [
+        "--cosmology.omegaLambda=auto", "--cosmology.omegaB=0.05", "--cosmology.omegaC=1.95"])
+    for output in (lambda_baseline, lambda_auto, lambda_dense):
+        total = sum(cosmologySetting(output, key) for key in ("omegaM", "omegaR", "omegaLambda"))
+        if not math.isclose(total, 1.0, rel_tol=2.e-6):
+            raise RuntimeError("automatic Lambda did not preserve a flat density budget")
+    if cosmologySetting(lambda_dense, "omegaLambda") >= 0.0:
+        raise RuntimeError("automatic Lambda could not derive a negative flat-universe value")
+    assertNumericSetting(lambda_auto, "cosmology.omegaLambda",
+                         cosmologySetting(lambda_baseline, "omegaLambda"))
+    for value in (-1.0, -0.25, 0.0):
+        output = run(f"lambda_literal_{value}", metadata_options + [
+            f"--cosmology.omegaLambda={value}"])
+        assertNumericSetting(output, "cosmology.omegaLambda", value)
+    lambda_config = args.workdir / "signed_lambda.ini"
+    lambda_config.write_text("[cosmology]\nomegaLambda = -0.25\n")
+    output = run("lambda_ini", metadata_options + [f"--configuration={lambda_config.resolve()}"])
+    assertNumericSetting(output, "cosmology.omegaLambda", -0.25)
+    output = run("lambda_cli_override", metadata_options + [
+        f"--configuration={lambda_config.resolve()}", "--cosmology.omegaLambda=auto"])
+    assertNumericSetting(output, "cosmology.omegaLambda",
+                         cosmologySetting(lambda_baseline, "omegaLambda"))
+    for index, value in enumerate(("automatic", "AUTO", "-1junk", "1.2.3", "nan", "inf",
+                                   "-inf", "1e1000")):
+        output = run(f"invalid_lambda_{index}", metadata_options + [
+            f"--cosmology.omegaLambda={value}"], success=False)
+        if "cosmology" not in output.lower():
+            raise RuntimeError(f"invalid Lambda {value} lacked a cosmology diagnostic")
+    for key in ("startRedshift", "endRedshift"):
+        for index, value in enumerate(("-1", "-1.01", "nan", "inf")):
+            output = run(f"invalid_{key}_{index}", metadata_options + [
+                f"--cosmology.{key}={value}"], success=False)
+            if "cosmology" not in output.lower():
+                raise RuntimeError(f"invalid {key}={value} lacked a cosmology diagnostic")
+    homogeneous = run("homogeneous_cosmology", metadata_options + ["--cosmology.sigma8=0"])
+    assertNumericSetting(homogeneous, "cosmology.sigma8", 0.0)
+    if "Checkpoint state and mode validation passed" not in homogeneous:
+        raise RuntimeError("homogeneous cosmology options did not complete checkpoint validation")
 
     def assertIgnoredOption(output, ignoredKey):
         if not any(ignoredKey in line and "warning" in line.lower() and "ignored" in line.lower()
@@ -472,6 +522,12 @@ mapSize = 8
                      "hydro.minEffectiveRadius", "hydro.maxEffectiveRadius",
                      *(f"chemistry.{field}" for field in chemistry_fields)}
     expected_keys = option_names - {"help", "configuration"} - optional_keys
+    preset_curvatures = {"lcdm_present.ini": 0.0,
+                         "closed_no_dark_energy.ini": -1.000092093902909,
+                         "omega_k_negative.ini": -0.1, "omega_k_positive.ini": 0.1,
+                         "critical.ini": 0.0,
+                         "subcritical_no_dark_energy.ini": 0.6864420835574896}
+    checked_presets = set()
     for path in [root / "default.ini", *sorted((root / "configurations").glob("*.ini"))]:
         ini = configparser.ConfigParser(interpolation=None, inline_comment_prefixes=("#",))
         ini.optionxform = str
@@ -500,7 +556,16 @@ mapSize = 8
                      "--chemistry.enabled=false"])
         if "Checkpoint state and mode validation passed" not in output:
             raise RuntimeError(f"{path.name} did not finish metadata validation")
+        if path.name in preset_curvatures:
+            assertNumericSetting(output, "cosmology.omegaK", preset_curvatures[path.name])
+            if path.name in {"closed_no_dark_energy.ini", "critical.ini",
+                             "subcritical_no_dark_energy.ini"}:
+                assertNumericSetting(output, "cosmology.omegaLambda", 0.0)
+            checked_presets.add(path.name)
         assertNoRadiusWarning(output)
+
+    if checked_presets != set(preset_curvatures):
+        raise RuntimeError(f"missing cosmology presets: {sorted(set(preset_curvatures) - checked_presets)}")
 
     invalid = [
         ("legacy_key", "--parts_dim=8", "parts_dim"),

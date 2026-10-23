@@ -7,75 +7,46 @@
  */
 
 #include <cmath>
+#include <stdexcept>
 
 #include <cosmictiger/analysis/rockstar_properties.hpp>
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/cosmology/cosmology.hpp>
+#include <cosmictiger/cosmology/friedmann.hpp>
 #include <cosmictiger/math/constants.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/simulation_units.hpp>
 
 namespace detail {
 
-// Include the multiplication inside normalizedHubble100, as well as the
-// explicit Friedmann expressions. Batch the repeated integration stages.
-constexpr FlopCount kDadtFlops = 17;
-constexpr FlopCount kUpdateStageFlops = 76;
+cosmology::FriedmannCosmology backgroundCosmology() {
+    auto const& opts = getOptions();
+    return cosmology::FriedmannCosmology(
+        {units::normalizedHubble100(opts) * opts.cosmology.hubble, opts.cosmology.omegaR,
+            opts.cosmology.omegaM, opts.cosmology.omegaLambda, opts.cosmology.omegaK});
+}
 
 }    // namespace detail
 
-void cosmosUpdate0(double& adotdot, double& adot, double& a, double dt) {
-    double const omegaM = getOptions().cosmology.omegaM;
-    double const omegaR = getOptions().cosmology.omegaR;
-    double const omegaLam = getOptions().cosmology.omegaLambda;
-    double const omegaK = getOptions().cosmology.omegaK;
-    auto const h = units::normalizedHubble100(getOptions()) * getOptions().cosmology.hubble;
-    double const adot0 = adot;
-
-    adotdot = a * sqr(h) * (-omegaR / (sqr(sqr(a))) - 0.5 * omegaM / (sqr(a) * a) + omegaLam);
-    double const da1 = adot * a * dt;
-    double const dadot1 = adotdot * a * dt;
-    a += da1;
-    adot += dadot1;
-
-    adotdot = a * sqr(h) * (-omegaR / (sqr(sqr(a))) - 0.5 * omegaM / (sqr(a) * a) + omegaLam);
-    double const da2 = adot * a * dt;
-    double const dadot2 = adotdot * a * dt;
-    a += -da1 + 0.25 * (da1 + da2);
-    adot += -dadot1 + 0.25 * (dadot1 + dadot2);
-
-    adotdot = a * sqr(h) * (-omegaR / (sqr(sqr(a))) - 0.5 * omegaM / (sqr(a) * a) + omegaLam);
-    double const da3 = adot * a * dt;
-    double const dadot3 = adotdot * a * dt;
-    a += -0.25 * (da1 + da2) + (1.0 / 6.0) * (da1 + da2 + 4.0 * da3);
-    adot += -0.25 * (dadot1 + dadot2) + (1.0 / 6.0) * (dadot1 + dadot2 + 4.0 * dadot3);
+CosmosAdvance cosmosAdvance(double& adot, double& a, double dt) {
+    auto const result = detail::backgroundCosmology().advanceWithIntegrals(
+        {a, adot, a * adot}, dt, cosmology::CosmologicalTime::conformal);
+    a = result.state.scaleFactor;
+    adot = result.state.physicalDerivative;
+    addCpuFlops(result.flops + 3);
+    return {result.physicalTime, result.driftIntegral};
 }
 
-void cosmosUpdate(double& adotdot, double& adot, double& a, double dt0) {
-    constexpr int kN = 128;
-    double const dt = dt0 / kN;
-    for (int i = 0; i < kN; i++) {
-        cosmosUpdate0(adotdot, adot, a, dt);
-    }
-    addCpuFlops(1 + FlopCount(kN) * detail::kUpdateStageFlops);
+void cosmosUpdate(double& adotdot, double& adot, double& a, double dt) {
+    cosmosAdvance(adot, a, dt);
+    adotdot = cosmosD2adt2(a);
 }
 
-double cosmosAinv(double& adot, double& a, double dt0) {
-    double ainv = 0.0;
-    ;
-    constexpr int kN = 128;
-    double const dt = dt0 / kN;
-    double adotdot;
-    for (int i = 0; i < kN; i++) {
-        double a0 = a;
-        cosmosUpdate0(adotdot, adot, a, dt);
-        double a1 = a;
-        double thisAinv = 0.5 / a0 + 0.5 / a1;
-        ainv += thisAinv / kN;
-    }
-    addCpuFlops(1 + FlopCount(kN) * (detail::kUpdateStageFlops + 5));
-    return ainv;
+double cosmosAinv(double& adot, double& a, double dt) {
+    auto const result = cosmosAdvance(adot, a, dt);
+    addCpuFlops(1);
+    return dt == 0.0 ? 1.0 / a : result.driftIntegral / dt;
 }
 
 double cosmosGrowthFactor(double omegaM, float a) {
@@ -87,96 +58,54 @@ double cosmosGrowthFactor(double omegaM, float a) {
     return a * 2.5 * om / (pow(om, 4.f / 7.f) - ol + (1.f + 0.5f * om) * (1.f + 0.014285714f * ol));
 }
 
-namespace detail {
-
-double cosmosDadtUncounted(double a) {
-    auto const h = units::normalizedHubble100(getOptions()) * getOptions().cosmology.hubble;
-    auto const omegaM = getOptions().cosmology.omegaM;
-    auto const omegaR = getOptions().cosmology.omegaR;
-    auto const omegaK = getOptions().cosmology.omegaK;
-    auto const omegaLam = getOptions().cosmology.omegaLambda;
-    return h * a *
-        std::sqrt(omegaR / (a * a * a * a) + omegaM / (a * a * a) + omegaK / (a * a) + omegaLam);
+double cosmosDadt(double a) {
+    auto const result = detail::backgroundCosmology().state(a).physicalDerivative;
+    addCpuFlops(22);
+    return result;
 }
 
-}    // namespace detail
-
-double cosmosDadt(double a) {
-    addCpuFlops(detail::kDadtFlops);
-    return detail::cosmosDadtUncounted(a);
+double cosmosD2adt2(double a) {
+    if (!(a > 0.0) || !std::isfinite(a)) {
+        throw std::domain_error("Friedmann scale factor must be positive and finite");
+    }
+    auto const& opts = getOptions();
+    double const h = units::normalizedHubble100(opts) * opts.cosmology.hubble;
+    double const result = a * h * h *
+        (-opts.cosmology.omegaR / (a * a * a * a) - 0.5 * opts.cosmology.omegaM / (a * a * a) +
+            opts.cosmology.omegaLambda);
+    if (!std::isfinite(result)) {
+        throw std::overflow_error("Friedmann acceleration is outside the double-precision range");
+    }
+    addCpuFlops(14);
+    return result;
 }
 
 double cosmosDadtau(double a, bool countFlops) {
+    double const result = detail::backgroundCosmology().state(a).conformalDerivative;
     if (countFlops) {
-        addCpuFlops(detail::kDadtFlops + 1);
+        addCpuFlops(22);
     }
-    return a * detail::cosmosDadtUncounted(a);
+    return result;
 }
 
-double cosmosTauToScale(double a0, double t1) {
-    constexpr int kN = 1024;
-    double a = a0;
-    double dt = t1 / kN;
-    a += a * detail::cosmosDadtUncounted(a) * 0.5 * dt;
-    for (int i = 1; i < kN; i++) {
-        a += a * detail::cosmosDadtUncounted(a) * dt;
-    }
-    a += a * detail::cosmosDadtUncounted(a) * 0.5 * dt;
-    // Used only to reconstruct halo lightcone metadata, not to advance forces.
-    return a;
+double cosmosTauToScale(double a0, double elapsed) {
+    // Initial state is on the expanding branch. Evolution retains its sign
+    // through a turnaround; callers needing repeated samples use a trajectory.
+    return detail::backgroundCosmology()
+        .evolve(a0, elapsed, cosmology::CosmologicalTime::conformal)
+        .scaleFactor;
 }
 
 double cosmosTime(double a0, double a1) {
-    double a = a0;
-    double t = 0.0;
-    int const nValue = 1024 * 1024;
-    double const loga0 = log(a0);
-    double const loga1 = log(a1);
-    double const dloga = (loga1 - loga0) / nValue;
-    double loga = loga0;
-    a = exp(loga);
-    double dadt = detail::cosmosDadtUncounted(a);
-    for (int i = 0; i < nValue; i++) {
-        t += 0.5 * a / dadt * dloga;
-        loga = loga0 + dloga * (i + 1);
-        a = exp(loga);
-        dadt = detail::cosmosDadtUncounted(a);
-        t += 0.5 * a / dadt * dloga;
-    }
-    // Physical ages are output metadata; exclude these diagnostic integrals.
-    return t;
+    return detail::backgroundCosmology().intervalsBetweenScales(a0, a1).physicalTime;
 }
 
 double cosmosConformalTime(double a0, double a1, bool countFlops) {
-    int nValue = 2;
-    double t = 0.0;
-    double tlast;
-    do {
-        tlast = t;
-        t = 0.0;
-        double a = a0;
-        double const loga0 = log(a0);
-        double const loga1 = log(a1);
-        double const dloga = (loga1 - loga0) / nValue;
-        double loga = loga0;
-        a = exp(loga);
-        double dadt = a * detail::cosmosDadtUncounted(a);
-        for (int i = 0; i < nValue; i++) {
-            t += 0.5 * a / dadt * dloga;
-            loga = loga0 + dloga * (i + 1);
-            a = exp(loga);
-            dadt = a * detail::cosmosDadtUncounted(a);
-            t += 0.5 * a / dadt * dloga;
-        }
-        // Five setup operations and two termination-test operations per
-        // refinement; each trapezoid has eleven plus its scale derivative.
-        if (countFlops) {
-            addCpuFlops(
-                7 + detail::kDadtFlops + 1 + FlopCount(nValue) * (11 + detail::kDadtFlops + 1));
-        }
-        nValue *= 2;
-    } while (fabs(tlast - t) > 1e-9 * t);
-    return t;
+    auto const result = detail::backgroundCosmology().intervalsBetweenScales(a0, a1);
+    if (countFlops) {
+        addCpuFlops(result.flops + 2);
+    }
+    return result.conformalTime;
 }
 
 double cosmosKlypinFit(double vmax, double rvir, double mvir) {

@@ -7,6 +7,7 @@
  */
 
 #include <atomic>
+#include <cmath>
 #include <filesystem>
 #include <memory>
 #include <shared_mutex>
@@ -26,7 +27,7 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/core/timer.hpp>
-#include <cosmictiger/cosmology/cosmology.hpp>
+#include <cosmictiger/cosmology/background.hpp>
 #include <cosmictiger/cuda/device_vector.hpp>
 #include <cosmictiger/gravity/bh.hpp>
 #include <cosmictiger/io/output.hpp>
@@ -104,7 +105,7 @@ static int lcNextFileNumber() {
 namespace detail {
 
 template <class EntryLists>
-size_t lcAddParticleEntries(EntryLists const& entries, double scale, double tau) {
+size_t lcAddParticleEntries(EntryLists const& entries) {
     int const start = particleBuffer.size();
     Vector<size_t> counts(entries.size() + 1);
     size_t count = 0;
@@ -122,10 +123,11 @@ size_t lcAddParticleEntries(EntryLists const& entries, double scale, double tau)
     int minPix = npix;
     int maxPix = 0;
     if (counts.back()) {
+        auto const background = cosmology::simulationBackground(tauMax);
         futs.reserve(numberOfThreads);
         try {
             for (int proc = 0; proc < numberOfThreads; proc++) {
-                futs.push_back(hpx::async([scale, tau, &index, start, &entries, &counts]() {
+                futs.push_back(hpx::async([background, &index, start, &entries, &counts]() {
                     int k = index++;
                     while (k < entries.size()) {
                         auto const& entry = entries[k];
@@ -139,9 +141,9 @@ size_t lcAddParticleEntries(EntryLists const& entries, double scale, double tau)
                             pi.pos[YDIM] = pj.y;
                             pi.pos[ZDIM] = pj.z;
                             double const tau1 =
-                                sqrtf(sqr(pj.x.toDouble(), pj.y.toDouble(), pj.z.toDouble()));
+                                std::sqrt(sqr(pj.x.toDouble(), pj.y.toDouble(), pj.z.toDouble()));
                             auto const a = lightconeEmissionScale(
-                                scale, cosmosDadtau(scale, false), tau, tauMax, tau1);
+                                *background, background->finalConformalTime(), tau1);
                             ALWAYS_ASSERT(a > 0.0);
                             pi.vel[XDIM] = pj.vx / a;
                             pi.vel[YDIM] = pj.vy / a;
@@ -191,13 +193,13 @@ size_t lcAddParticleEntries(EntryLists const& entries, double scale, double tau)
 }    // namespace detail
 
 size_t lcAddParticles(
-    DeviceVector<DeviceVector<LightconeEntry>> const& entries, double scale, double tau) {
-    return detail::lcAddParticleEntries(entries, scale, tau);
+    DeviceVector<DeviceVector<LightconeEntry>> const& entries, double, double) {
+    return detail::lcAddParticleEntries(entries);
 }
 
 size_t lcAddParticles(
-    std::vector<std::vector<LightconeEntry>> const& entries, double scale, double tau) {
-    return detail::lcAddParticleEntries(entries, scale, tau);
+    std::vector<std::vector<LightconeEntry>> const& entries, double, double) {
+    return detail::lcAddParticleEntries(entries);
 }
 
 int lcNside() {
@@ -865,6 +867,9 @@ static int computeNside(double tau) {
 }
 
 void lcInit(double tau, double requestedTauMax) {
+    // Construct once on every locality, including after restart; repeated flushes
+    // retain the same immutable dense trajectory.
+    cosmology::simulationBackground(requestedTauMax);
     std::filesystem::create_directories(getOptions().lightcone.directory);
     Vector<hpx::future<void>> futs;
     for (auto const& c : hpxChildren()) {

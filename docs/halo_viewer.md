@@ -41,7 +41,7 @@ Stop it with Ctrl-C. An empty database opens with import instructions.
 
 - Choose the imported catalog. The overview reports its epoch and exact halo,
   distinct-halo, and subhalo counts.
-- Apply ranges for virial mass/radius, maximum circular velocity, or spin; search
+- Apply ranges for the catalogue's main mass/radius, maximum circular velocity, or spin; search
   by exact halo ID; select distinct halos or subhalos. Expand **Spatial region**
   to bound a volume or slice using inclusive X/Y/Z coordinate ranges.
 - Switch between XY, XZ, and YZ projections. Both axes use the same comoving
@@ -64,8 +64,15 @@ double-precision coordinates, including exact boundaries.
 
 Halo positions are comoving Mpc/h; radii are comoving kpc/h; masses are solar
 masses/h; velocities are km/s. The separate box length in `groups.dat` is Mpc,
-without `h`. `m200`, `m500`, and `m2500` mean M200c, M500c, and M2500c. Records
-have inclusive halo masses, and `sys` describes internal substructure; distinct
+without `h`. Density conventions are recorded per catalogue. For supported
+Bryan-Norman backgrounds, `mvir` and `rvir` retain their virial meanings and
+`m200`, `m500`, and `m2500` mean M200c, M500c, and M2500c, relative to critical
+density. When the catalogue uses the 200-times-mean-matter fallback, those same
+stored fields are displayed as `M200m_main`, `r200m`, M200m, M500m, and M2500m.
+The 500-overdensity shape labels also use the matching reference. Filters,
+table headings, inspector values, plot tooltips, and downloaded selection
+metadata use these catalogue-specific definitions; CSV field names stay stable.
+Records have inclusive halo masses, and `sys` describes internal substructure; distinct
 versus subhalo classification uses the actual host link.
 
 ## Import validation and provenance
@@ -78,6 +85,13 @@ native record size, byte order, and record count. Files from the earlier custom
 half encoding are rejected. The surrounding raw records remain native ABI
 dependent; use the producing toolchain rather than assuming cross-platform
 compatibility from record size alone.
+
+New sidecars also record `virial_density` (`bryan_norman_flat`,
+`bryan_norman_open`, or `200_mean_matter`) and `so_density_reference` (`critical`
+or `mean_matter`). Both fields must agree across ranks. Legacy sidecars without
+them retain Bryan-Norman/critical-density labels; their flat/open distinction
+is unknown. The viewer upgrades existing version-1 SQLite databases in place
+to store these conventions, preserving their catalogs and halo records.
 
 Record row `i` corresponds to host-sidecar row `i` within the same rank, as
 guaranteed by the current writer. The reader checks this correspondence against
@@ -110,4 +124,5 @@ The integration test uses a native 64-halo/two-rank fixture, including nested
 hosts, IDs larger than JavaScript's exact integer range, and IEEE half
 subnormals. It independently decodes every half field with Python's standard
 binary16 reader and exercises SQLite import, filters, exact spatial boundaries,
-pagination, host navigation, complete CSV export, and rejected/corrupted imports.
+pagination, host navigation, complete CSV export, density-reference metadata,
+legacy database migration, and rejected/corrupted imports.

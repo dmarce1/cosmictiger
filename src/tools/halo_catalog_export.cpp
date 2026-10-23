@@ -32,6 +32,12 @@ struct Halo {
     size_t ordinal;
 };
 
+struct CatalogueFormat {
+    size_t recordCount = 0;
+    std::string virialDensity = "bryan_norman";
+    std::string soDensityReference = "critical";
+};
+
 constexpr std::array<std::pair<char const*, Float16 RockstarRecord::*>, 31> kHalfFields{
     {{"zValue", &RockstarRecord::zValue}, {"rmax", &RockstarRecord::rmax},
         {"rvir", &RockstarRecord::rvir}, {"rvmax", &RockstarRecord::rvmax},
@@ -101,7 +107,7 @@ std::vector<std::string> oneLine(fs::path const& path, size_t count) {
     return values;
 }
 
-size_t recordCount(fs::path const& path) {
+CatalogueFormat readFormat(fs::path const& path) {
     auto const formatPath = fs::path(path.string() + ".format");
     auto input = openText(formatPath);
     std::map<std::string, std::string> metadata;
@@ -118,7 +124,9 @@ size_t recordCount(fs::path const& path) {
     static_assert(
         std::endian::native == std::endian::little || std::endian::native == std::endian::big);
     std::string const byteOrder = std::endian::native == std::endian::little ? "little" : "big";
-    if (metadata.size() != 5 || metadata["format_version"] != "2" ||
+    bool const hasConvention =
+        metadata.count("virial_density") == 1 && metadata.count("so_density_reference") == 1;
+    if (metadata.size() != (hasConvention ? 7 : 5) || metadata["format_version"] != "2" ||
         metadata["float16"] != "ieee754_binary16" || metadata["byte_order"] != byteOrder ||
         metadata["record_size"] != std::to_string(sizeof(RockstarRecord)) ||
         metadata.count("record_count") != 1) {
@@ -131,7 +139,20 @@ size_t recordCount(fs::path const& path) {
         fs::file_size(path) != count * sizeof(RockstarRecord)) {
         fail(path, "record count or binary file size mismatch");
     }
-    return static_cast<size_t>(count);
+    CatalogueFormat result;
+    result.recordCount = static_cast<size_t>(count);
+    if (hasConvention) {
+        result.virialDensity = metadata.at("virial_density");
+        result.soDensityReference = metadata.at("so_density_reference");
+        bool const fitted = result.virialDensity == "bryan_norman_flat" ||
+            result.virialDensity == "bryan_norman_open";
+        bool const meanMatter = result.virialDensity == "200_mean_matter";
+        if (!((fitted && result.soDensityReference == "critical") ||
+                (meanMatter && result.soDensityReference == "mean_matter"))) {
+            fail(formatPath, "unknown or inconsistent halo density convention");
+        }
+    }
+    return result;
 }
 
 GroupHeader readHeader(fs::path const& directory) {
@@ -172,13 +193,21 @@ void validateProperties(Halo const& halo, fs::path const& path) {
     }
 }
 
-std::vector<Halo> readHalos(fs::path const& directory, int rankCount, size_t expectedCount) {
+std::vector<Halo> readHalos(fs::path const& directory, int rankCount, size_t expectedCount,
+    CatalogueFormat& catalogueFormat) {
     std::vector<Halo> halos;
     std::map<std::uint64_t, size_t> byId;
     std::map<LocalKey, size_t> byLocal;
     for (int rank = 0; rank < rankCount; ++rank) {
         auto const path = directory / ("rockstar." + std::to_string(rank) + ".dat");
-        size_t const count = recordCount(path);
+        auto const format = readFormat(path);
+        if (rank == 0) {
+            catalogueFormat = format;
+        } else if (format.virialDensity != catalogueFormat.virialDensity ||
+            format.soDensityReference != catalogueFormat.soDensityReference) {
+            fail(path, "halo density convention differs between ranks");
+        }
+        size_t const count = format.recordCount;
         if (count > expectedCount - halos.size()) {
             fail(path, "rank record count exceeds completion manifest");
         }
@@ -281,12 +310,16 @@ void exportSnapshot(fs::path const& directory) {
     // viewer milestone does not ingest temporal relationships.
     auto descendants = openText(directory / "rockstar_descendants.dat");
     GroupHeader const header = readHeader(directory);
-    auto const halos = readHalos(directory, static_cast<int>(ranks), static_cast<size_t>(count));
+    CatalogueFormat format;
+    auto const halos =
+        readHalos(directory, static_cast<int>(ranks), static_cast<size_t>(count), format);
     std::cout << std::showpoint << std::setprecision(std::numeric_limits<double>::max_digits10)
               << "{\"type\":\"catalog\",\"schema_version\":1,\"snapshot\":" << header.number
               << ",\"scale_factor\":" << header.scale << ",\"time\":" << header.time
               << ",\"box_length_mpc\":" << header.boxLength << ",\"rank_count\":" << ranks
-              << ",\"halo_count\":" << halos.size() << "}\n";
+              << ",\"halo_count\":" << halos.size() << ",\"virial_density\":\""
+              << format.virialDensity << "\",\"so_density_reference\":\""
+              << format.soDensityReference << "\"}\n";
     for (auto const& halo : halos) {
         auto const& record = halo.record;
         std::cout << "{\"type\":\"halo\",\"rank\":" << halo.rank << ",\"ordinal\":" << halo.ordinal

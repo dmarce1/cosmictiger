@@ -195,6 +195,14 @@ PowerSpectrumFunction computePowerSpectrum() {
 }
 
 void initialize(double z0) {
+    if (getOptions().cosmology.sigma8 == 0.0) {
+        // A homogeneous lattice needs no transfer functions. This also permits
+        // curved-background evolution without applying the flat-only native
+        // Einstein-Boltzmann solver to an unsupported cosmology.
+        initX0();
+        clearX0();
+        return;
+    }
     if (std::abs(getOptions().cosmology.omegaK) > 1.0e-12) {
         throw std::invalid_argument(
             "The internal Einstein-Boltzmann solver requires a flat universe");
@@ -603,7 +611,7 @@ static Range<int64_t> findMyBox() {
 
 static void clearX0() {
     Vector<hpx::future<void>> futures;
-    if (getOptions().hydro.enabled) {
+    if (getOptions().hydro.enabled || getOptions().cosmology.sigma8 == 0.0) {
         for (auto const& child : hpxChildren()) {
             futures.push_back(hpx::async<ClearX0Action>(child));
         }
@@ -618,7 +626,7 @@ static void clearX0() {
 
 static void initX0() {
     Vector<hpx::future<void>> remoteFutures;
-    if (getOptions().hydro.enabled) {
+    if (getOptions().hydro.enabled || getOptions().cosmology.sigma8 == 0.0) {
         for (auto const& child : hpxChildren()) {
             remoteFutures.push_back(hpx::async<InitX0Action>(child));
         }

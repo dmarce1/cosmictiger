@@ -302,6 +302,7 @@ bool processOptions(int argc, char* argv[]) {
     Options opts{};
     double gravityEffectiveRadius;
     double centralEffectiveRadius;
+    std::string omegaLambdaInput;
     namespace po = hpx::program_options;
     bool rc;
     po::options_description runOpts("Run control");
@@ -316,7 +317,8 @@ bool processOptions(int argc, char* argv[]) {
         "physical scenario: plummer, sod, blast, rayleighTaylor, kelvinHelmholtz, disc, "
         "polytropicStar, hydroWave, cosmology, glass")("run.endTime",
         po::value<double>(&opts.run.endTime)->default_value(0.0),
-        "total evolution time; 0 uses the scenario duration")("run.maxIterations",
+        "total evolution time (conformal code time for cosmology); positive values override "
+        "endRedshift, 0 uses the scenario duration")("run.maxIterations",
         po::value<int>(&opts.run.maxIterations)->default_value(1000000),
         "maximum number of time steps")("run.numberOfSteps",
         po::value<int>(&opts.run.numberOfSteps)->default_value(64),
@@ -475,10 +477,10 @@ bool processOptions(int argc, char* argv[]) {
     cosmologyOpts.add_options()("cosmology.startRedshift",
         po::value<double>(&opts.cosmology.startRedshift)->default_value(49.0), "starting redshift")(
         "cosmology.endRedshift", po::value<double>(&opts.cosmology.endRedshift)->default_value(0.0),
-        "ending redshift")("cosmology.omegaLambda",
-        po::value<double>(&opts.cosmology.omegaLambda)->default_value(-1.0),
-        "dark-energy density parameter; negative chooses a flat universe")("cosmology.omegaB",
-        po::value<double>(&opts.cosmology.omegaB)->default_value(0.049389),
+        "ending redshift on the expanding branch; ignored when run.endTime is positive")(
+        "cosmology.omegaLambda", po::value<std::string>(&omegaLambdaInput)->default_value("auto"),
+        "signed dark-energy density parameter; auto derives a spatially flat universe")(
+        "cosmology.omegaB", po::value<double>(&opts.cosmology.omegaB)->default_value(0.049389),
         "baryon density parameter")("cosmology.omegaC",
         po::value<double>(&opts.cosmology.omegaC)->default_value(0.26503),
         "cold-dark-matter density parameter")("cosmology.nEff",
@@ -489,7 +491,7 @@ bool processOptions(int argc, char* argv[]) {
         po::value<double>(&opts.cosmology.heliumFraction)->default_value(0.2454006),
         "primordial helium mass fraction")("cosmology.sigma8",
         po::value<double>(&opts.cosmology.sigma8)->default_value(0.8607),
-        "power-spectrum normalization")("cosmology.hubble",
+        "power-spectrum normalization; 0 initializes a homogeneous lattice")("cosmology.hubble",
         po::value<double>(&opts.cosmology.hubble)->default_value(0.6732),
         "dimensionless Hubble parameter")("cosmology.spectralIndex",
         po::value<double>(&opts.cosmology.spectralIndex)->default_value(0.96605),
@@ -658,6 +660,18 @@ bool processOptions(int argc, char* argv[]) {
         }
         if (!isExplicit("output.directory")) {
             opts.output.directory = "./output/" + opts.run.scenario;
+        }
+    }
+    bool const automaticLambda = omegaLambdaInput == "auto";
+    if (!automaticLambda) {
+        try {
+            size_t consumed = 0;
+            opts.cosmology.omegaLambda = std::stod(omegaLambdaInput, &consumed);
+            if (consumed != omegaLambdaInput.size()) {
+                throw std::invalid_argument("trailing input");
+            }
+        } catch (std::exception const&) {
+            THROW_ERROR("cosmology.omegaLambda must be a finite signed number or auto\n");
         }
     }
     if (!isExplicit("lightcone.directory")) {
@@ -943,9 +957,13 @@ bool processOptions(int argc, char* argv[]) {
         opts.cosmology.heliumFraction < 0.0 || !(opts.cosmology.heliumFraction < 1.0) ||
         !detail::isFiniteOption(opts.cosmology.omegaLambda) ||
         !detail::isFiniteOption(opts.cosmology.spectralIndex) ||
-        !detail::isFiniteOption(opts.cosmology.sigma8) || !(opts.cosmology.sigma8 > 0.0)) {
+        !detail::isFiniteOption(opts.cosmology.sigma8) || opts.cosmology.sigma8 < 0.0 ||
+        !detail::isFiniteOption(opts.cosmology.startRedshift) ||
+        opts.cosmology.startRedshift <= -1.0 ||
+        !detail::isFiniteOption(opts.cosmology.endRedshift) || opts.cosmology.endRedshift <= -1.0) {
         THROW_ERROR("Invalid cosmology: densities and nEff must be nonnegative, total matter, "
-                    "temperature, Hubble rate and sigma8 positive, and heliumFraction in [0,1)\n");
+                    "temperature and Hubble rate positive, sigma8 nonnegative, redshifts "
+                    "finite and greater than -1, and heliumFraction in [0,1)\n");
     }
     opts.cosmology.omegaM = opts.cosmology.omegaB + opts.cosmology.omegaC;
     opts.initial.darkMatterMass =
@@ -991,12 +1009,20 @@ bool processOptions(int argc, char* argv[]) {
     opts.cosmology.omegaNu = opts.cosmology.omegaGamma * opts.cosmology.nEff * (7.0 / 8.0) *
         std::pow(4.0 / 11.0, 4.0 / 3.0);
     opts.cosmology.omegaR = opts.cosmology.omegaGamma + opts.cosmology.omegaNu;
-    if (opts.cosmology.omegaLambda < 0.0) {
+    if (automaticLambda) {
         opts.cosmology.omegaLambda = 1.0 - opts.cosmology.omegaM - opts.cosmology.omegaR;
         opts.cosmology.omegaK = 0.0;
     } else {
         opts.cosmology.omegaK =
             1.0 - opts.cosmology.omegaM - opts.cosmology.omegaR - opts.cosmology.omegaLambda;
+        // Density closure at floating-point roundoff denotes a flat model.
+        // A residual curvature would change a critical Lambda=0 model's fate.
+        double const closureScale = std::max({1.0, std::abs(opts.cosmology.omegaM),
+            std::abs(opts.cosmology.omegaR), std::abs(opts.cosmology.omegaLambda)});
+        if (std::abs(opts.cosmology.omegaK) <=
+            8.0 * std::numeric_limits<double>::epsilon() * closureScale) {
+            opts.cosmology.omegaK = 0.0;
+        }
     }
     if (opts.chemistry.enabled) {
         if (opts.chemistry.initialization != "recombination" &&
@@ -1213,6 +1239,7 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("cosmology.omegaM", cosmology.omegaM);
     SHOW("cosmology.omegaNu", cosmology.omegaNu);
     SHOW("cosmology.omegaR", cosmology.omegaR);
+    SHOW("cosmology.omegaK", cosmology.omegaK);
     SHOW("compute.particleCacheLineSize", compute.particleCacheLineSize);
     SHOW("initial.particlesPerDimension", initial.particlesPerDimension);
     SHOW("checkpoint.readIndex", checkpoint.readIndex);
@@ -1237,6 +1264,8 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("run.verbose", run.verbose);
     SHOW("run.scenario", run.scenario);
     SHOW("run.endTime", run.endTime);
+    SHOW("run.numberOfSteps", run.numberOfSteps);
+    SHOW("run.minRung", run.minRung);
     SHOW("compute.bucketSize", compute.bucketSize);
     SHOW("compute.sphBucketSize", compute.sphBucketSize);
 #ifndef USE_CUDA
@@ -1278,6 +1307,9 @@ bool processOptions(int argc, char* argv[]) {
             SHOW("chemistry.network", chemistry.network);
         }
         SHOW("run.maxIterations", run.maxIterations);
+        SHOW("run.numberOfSteps", run.numberOfSteps);
+        SHOW("run.minRung", run.minRung);
+        SHOW("run.endTime", run.endTime);
         terminal::section("Output");
         SHOW("output.directory", output.directory);
         SHOW("output.silo", output.silo);

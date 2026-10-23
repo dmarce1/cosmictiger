@@ -87,6 +87,8 @@ float16 ieee754_binary16
 record_size 128
 record_count <number of records>
 byte_order little
+virial_density bryan_norman_flat
+so_density_reference critical
 ```
 
 The writer records the actual native record size and byte order (`little` or
@@ -100,9 +102,30 @@ The former encoding used exponent zero and exponent 31 differently; any older
 catalogue that needs preservation must be decoded with its original codec before
 conversion, with the new finite-range checks applied.
 
-`mvir` uses the Bryan–Norman virial threshold. The public fields `m200`, `m500`, and
-`m2500` mean **M200c, M500c, and M2500c**, respectively; their reference is the
-critical density at the measurement epoch, not the mean matter density.
+Flat backgrounds with nonnegative Λ retain the Bryan–Norman flat fit, and open
+backgrounds with zero Λ retain its open fit. Their `so_density_reference` is
+`critical`: `m200`, `m500`, and `m2500` mean **M200c, M500c, and M2500c**.
+The fit's published calibration covers matter fractions between 0.1 and 1;
+using it at smaller fractions or with significant radiation remains an
+extrapolation. See [Bryan & Norman, equation 6](https://arxiv.org/html/astro-ph/9710107v1).
+
+For closed models, negative Λ, and other curved backgrounds with Λ, the complete
+catalogue instead uses `virial_density 200_mean_matter` and
+`so_density_reference mean_matter`. The legacy `mvir`/`rvir` slots then contain
+the mass and radius at **200 times mean matter density**, and the other mass
+fields mean **M200m, M500m, and M2500m**. The 500-density shape fields use the
+same mean-matter reference. This is an explicit measurement convention, not a
+prediction of virialization in a collapsing universe. It stays finite when
+critical density vanishes at turnaround. Background-relative mass definitions
+are described in [ROCKSTAR section III.5.2](https://arxiv.org/html/1110.4372v3#S3.SS5.SSS2).
+The convention is chosen for the entire cosmology, so it does not change while
+a halo crosses turnaround.
+
+The exporter accepts older five-field sidecars as the historical
+Bryan–Norman/critical-density convention. New catalogues carry both density
+fields, and the viewer labels masses and radii from them; the binary record
+layout and raw field names remain unchanged. Readers that require exactly the
+old five metadata fields must be updated before reading new catalogues.
 
 | Fields | Convention |
 | --- | --- |

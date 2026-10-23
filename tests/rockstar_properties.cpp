@@ -274,3 +274,99 @@ TEST(RockstarProperties, NfwFits) {
 TEST(RockstarProperties, KlypinFit) {
     detail::testKlypinFit();
 }
+
+TEST(RockstarProperties, HaloDensityConventionPreservesSupportedFamilies) {
+    using rockstar::HaloDensityConvention;
+    EXPECT_EQ(rockstar::haloDensityConvention(0.7, 0.0), HaloDensityConvention::bryanNormanFlat);
+    EXPECT_EQ(rockstar::haloDensityConvention(0.0, 0.0), HaloDensityConvention::bryanNormanFlat);
+    EXPECT_EQ(rockstar::haloDensityConvention(0.0, 0.7), HaloDensityConvention::bryanNormanOpen);
+    EXPECT_EQ(rockstar::haloDensityConvention(0.0, -1.0), HaloDensityConvention::meanMatter);
+    EXPECT_EQ(rockstar::haloDensityConvention(-1.0, 0.0), HaloDensityConvention::meanMatter);
+    EXPECT_EQ(rockstar::haloDensityConvention(0.6, 0.1), HaloDensityConvention::meanMatter);
+    EXPECT_EQ(rockstar::haloDensityConvention(0.8, -0.1), HaloDensityConvention::meanMatter);
+}
+
+TEST(RockstarProperties, SupportedHaloThresholdsRetainCriticalReferenceAndVirialFit) {
+    constexpr double kMatter = 0.3;
+    for (double const radiation : {0.0, 9.2e-5}) {
+        for (bool const open : {false, true}) {
+            double const lambda = open ? 0.0 : 1.0 - kMatter - radiation;
+            double const curvature = open ? 1.0 - kMatter - radiation : 0.0;
+            for (double const scale : {0.02, 0.5, 1.0, 10.0}) {
+                double const criticalToMean = 1.0 + radiation / (kMatter * scale) +
+                    curvature * scale / kMatter + lambda * scale * scale * scale / kMatter;
+                double const offset = 1.0 / criticalToMean - 1.0;
+                double const virialCritical = 18.0 * std::numbers::pi * std::numbers::pi +
+                    (open ? 60.0 : 82.0) * offset - (open ? 32.0 : 39.0) * offset * offset;
+                auto const thresholds =
+                    rockstar::haloDensityThresholds(scale, kMatter, radiation, lambda, curvature);
+                EXPECT_NEAR(thresholds.soReferenceMeanMatter / criticalToMean, 1.0, 2.e-14);
+                EXPECT_NEAR(
+                    thresholds.virialMeanMatter / (virialCritical * criticalToMean), 1.0, 2.e-14);
+            }
+        }
+    }
+}
+
+TEST(RockstarProperties, MeanReferenceRemainsFiniteAtClosedAndNegativeLambdaTurnaround) {
+    std::vector<double> const radii{0.0, 0.0001, 0.0002};
+    constexpr double kMeanParticleDensity = 1.e6;
+    for (double const lambda : {0.0, -1.0}) {
+        double const curvature = lambda == 0.0 ? -1.0 : 0.0;
+        double const turnaround = lambda == 0.0 ? 2.0 : std::cbrt(2.0);
+        for (double const scale : {0.02, 0.99 * turnaround, turnaround,
+                 std::nextafter(turnaround, std::numeric_limits<double>::infinity())}) {
+            // The same scale occurs on expansion and contraction. This policy
+            // uses a fixed catalogue definition, with no division by H(a)^2.
+            auto const thresholds =
+                rockstar::haloDensityThresholds(scale, 2.0, 0.0, lambda, curvature);
+            EXPECT_DOUBLE_EQ(thresholds.virialMeanMatter, 200.0);
+            EXPECT_DOUBLE_EQ(thresholds.soReferenceMeanMatter, 1.0);
+            auto const primary = rockstar::sphericalOverdensity(
+                radii, kMeanParticleDensity * thresholds.virialMeanMatter);
+            EXPECT_EQ(primary.count, size_t(3));
+            EXPECT_GT(primary.radius, 0.0);
+            double previousRadius = primary.radius;
+            for (double const multiplier : {200.0, 500.0, 2500.0}) {
+                auto const secondary = rockstar::sphericalOverdensity(
+                    radii, kMeanParticleDensity * multiplier * thresholds.soReferenceMeanMatter);
+                double const expectedRadius = std::cbrt(
+                    3.0 / (4.0 * std::numbers::pi / 3.0 * kMeanParticleDensity * multiplier));
+                EXPECT_EQ(secondary.count, size_t(3));
+                EXPECT_NEAR(secondary.radius / expectedRadius, 1.0, 2.e-14);
+                EXPECT_LE(secondary.radius, previousRadius);
+                previousRadius = secondary.radius;
+            }
+        }
+    }
+}
+
+TEST(RockstarProperties, CurvedLambdaCataloguesKeepOneMeanDensityConventionAtEveryEpoch) {
+    constexpr double kRadiation = 9.2e-5;
+    constexpr double kMatter = 0.3;
+    for (double const curvature : {-0.1, 0.1}) {
+        double const lambda = 1.0 - kMatter - kRadiation - curvature;
+        for (double const scale : {0.02, 1.0, 10.0}) {
+            auto const thresholds =
+                rockstar::haloDensityThresholds(scale, kMatter, kRadiation, lambda, curvature);
+            EXPECT_DOUBLE_EQ(thresholds.virialMeanMatter, 200.0);
+            EXPECT_DOUBLE_EQ(thresholds.soReferenceMeanMatter, 1.0);
+        }
+    }
+}
+
+TEST(RockstarProperties, InvalidHaloThresholdInputsAreRejectedBeforeFallback) {
+    double const infinity = std::numeric_limits<double>::infinity();
+    double const nan = std::numeric_limits<double>::quiet_NaN();
+    EXPECT_THROW(rockstar::haloDensityThresholds(0.0, 2.0, 0.0, 0.0, -1.0), std::invalid_argument);
+    EXPECT_THROW(rockstar::haloDensityThresholds(1.0, 0.0, 0.0, 0.0, -1.0), std::invalid_argument);
+    EXPECT_THROW(rockstar::haloDensityThresholds(1.0, 2.0, -0.1, 0.0, -1.0), std::invalid_argument);
+    EXPECT_THROW(rockstar::haloDensityThresholds(nan, 2.0, 0.0, 0.0, -1.0), std::invalid_argument);
+    EXPECT_THROW(
+        rockstar::haloDensityThresholds(1.0, infinity, 0.0, 0.0, -1.0), std::invalid_argument);
+    EXPECT_THROW(
+        rockstar::haloDensityThresholds(1.0, 2.0, infinity, 0.0, -1.0), std::invalid_argument);
+    EXPECT_THROW(rockstar::haloDensityThresholds(1.0, 2.0, 0.0, nan, -1.0), std::invalid_argument);
+    EXPECT_THROW(
+        rockstar::haloDensityThresholds(1.0, 2.0, 0.0, -1.0, infinity), std::invalid_argument);
+}

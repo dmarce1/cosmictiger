@@ -43,11 +43,8 @@ UNITS.update({name: "km/s" for name in (
 UNITS.update({name: "(solar masses/h)(Mpc/h)(km/s), physical" for name in ("jx", "jy", "jz")})
 UNITS["e"] = "(solar masses/h)(km/s)^2"
 UNITS["box_length_mpc"] = "Mpc"
-UNITS["m200"] += " (M200c)"
-UNITS["m500"] += " (M500c)"
-UNITS["m2500"] += " (M2500c)"
 STATIC_DIRECTORY = Path(__file__).resolve().parent / "static"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 class ApiError(Exception):
@@ -70,13 +67,24 @@ def open_database(path, readonly=False):
 
 def initialize_database(connection):
     version = connection.execute("PRAGMA user_version").fetchone()[0]
-    if version not in (0, SCHEMA_VERSION):
+    if version not in (0, 1, SCHEMA_VERSION):
         raise ValueError(f"Unsupported viewer database version {version}")
     if version == 0 and connection.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
     ).fetchone():
         raise ValueError("Database contains unrelated tables; choose a new database file")
     if version == SCHEMA_VERSION:
+        return
+    if version == 1:
+        # Existing catalogs predate explicit density conventions. Their main
+        # mass used Bryan-Norman and their SO masses used critical density.
+        connection.executescript(f"""
+            BEGIN IMMEDIATE;
+            ALTER TABLE catalogs ADD COLUMN virial_density TEXT NOT NULL DEFAULT 'bryan_norman';
+            ALTER TABLE catalogs ADD COLUMN so_density_reference TEXT NOT NULL DEFAULT 'critical';
+            PRAGMA user_version={SCHEMA_VERSION};
+            COMMIT;
+        """)
         return
     scalar_columns = ",\n".join(f'"{name}" REAL NOT NULL' for name in FLOAT_FIELDS)
     connection.executescript(f"""
@@ -85,7 +93,8 @@ def initialize_database(connection):
             scale_factor REAL NOT NULL, time REAL NOT NULL, box_length_mpc REAL NOT NULL,
             hubble REAL, source_path TEXT NOT NULL, source_fingerprint TEXT NOT NULL UNIQUE,
             source_files TEXT NOT NULL, imported_at TEXT NOT NULL,
-            halo_count INTEGER NOT NULL, rank_count INTEGER NOT NULL
+            halo_count INTEGER NOT NULL, rank_count INTEGER NOT NULL,
+            virial_density TEXT NOT NULL, so_density_reference TEXT NOT NULL
         );
         CREATE TABLE halos (
             row_id INTEGER PRIMARY KEY, catalog_id INTEGER NOT NULL REFERENCES catalogs(id),
@@ -163,6 +172,20 @@ def validate_halo(row):
     return [int(row[key]) if key == "sys" else row[key] for key in HALO_FIELDS]
 
 
+def density_conventions(metadata):
+    fields = ("virial_density", "so_density_reference")
+    if any(key in metadata for key in fields) and not all(key in metadata for key in fields):
+        raise ValueError("Catalog density conventions must specify both reference fields")
+    virial = metadata.get("virial_density", "bryan_norman")
+    reference = metadata.get("so_density_reference", "critical")
+    valid = ((virial in ("bryan_norman", "bryan_norman_flat", "bryan_norman_open") and
+              reference == "critical") or
+             (virial == "200_mean_matter" and reference == "mean_matter"))
+    if not valid:
+        raise ValueError("Unsupported or inconsistent catalog density conventions")
+    return virial, reference
+
+
 def import_snapshot(snapshot, database, exporter, name=None, hubble=None):
     snapshot = Path(snapshot).resolve()
     if not snapshot.is_dir():
@@ -194,18 +217,21 @@ def import_snapshot(snapshot, database, exporter, name=None, hubble=None):
                 metadata = json.loads(metadata_line)
                 if metadata.get("type") != "catalog" or metadata.get("schema_version") != 1:
                     raise ValueError("Unsupported native exporter schema")
+                virial_density, so_density_reference = density_conventions(metadata)
                 existing = connection.execute("SELECT id FROM catalogs WHERE source_fingerprint=?",
                                               (fingerprint,)).fetchone()
                 catalog_id = existing["id"] if existing else None
                 if catalog_id is None:
                     cursor = connection.execute("""INSERT INTO catalogs
                         (name,snapshot,scale_factor,time,box_length_mpc,hubble,source_path,
-                         source_fingerprint,source_files,imported_at,halo_count,rank_count)
-                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""", (
+                         source_fingerprint,source_files,imported_at,halo_count,rank_count,
+                         virial_density,so_density_reference)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (
                             name or snapshot.name, metadata["snapshot"], metadata["scale_factor"],
                             metadata["time"], metadata["box_length_mpc"], hubble, str(snapshot),
                             fingerprint, json.dumps(files), datetime.now(timezone.utc).isoformat(),
-                            metadata["halo_count"], metadata["rank_count"]))
+                            metadata["halo_count"], metadata["rank_count"],
+                            virial_density, so_density_reference))
                     catalog_id = cursor.lastrowid
                 columns = ",".join(f'"{key}"' for key in ("catalog_id", "sample_key", *HALO_FIELDS))
                 placeholders = ",".join("?" for _ in range(len(HALO_FIELDS) + 2))
@@ -257,9 +283,27 @@ def import_snapshot(snapshot, database, exporter, name=None, hubble=None):
 def catalog_dict(row):
     result = dict(row)
     result["redshift"] = 1.0 / result["scale_factor"] - 1.0
-    result["units"] = UNITS
-    result["mass_definitions"] = {"mvir": "Bryan-Norman virial", "m200": "M200c",
-                                  "m500": "M500c", "m2500": "M2500c"}
+    virial, reference = density_conventions(result)
+    result["virial_density"] = virial
+    result["so_density_reference"] = reference
+    suffix = "m" if reference == "mean_matter" else "c"
+    fallback = virial == "200_mean_matter"
+    masses = {field: f"M{overdensity}{suffix}" for field, overdensity in
+              (("m200", 200), ("m500", 500), ("m2500", 2500))}
+    masses["mvir"] = "M200m_main" if fallback else "Bryan-Norman virial"
+    result["mass_definitions"] = masses
+    result["radius_definitions"] = {"rvir": "r200m" if fallback else "Bryan-Norman virial"}
+    labels = dict(masses, mvir="M200m_main" if fallback else "Virial mass",
+                  rvir="r200m" if fallback else "Virial radius")
+    for field, description in (("boa500", "Axis ratio b/a"), ("coa500", "Axis ratio c/a"),
+                               ("ax500", "Shape axis X"), ("ay500", "Shape axis Y"),
+                               ("az500", "Shape axis Z")):
+        labels[field] = f"{description} (500{suffix})"
+    result["field_labels"] = labels
+    result["units"] = dict(UNITS)
+    for field, definition in masses.items():
+        result["units"][field] += f" ({definition})"
+    result["units"]["rvir"] += f" ({result['radius_definitions']['rvir']})"
     result["source_files"] = json.loads(result["source_files"])
     return result
 
@@ -465,7 +509,8 @@ class ViewerHandler(BaseHTTPRequestHandler):
         limit = query_integer(query, "limit", 20000 if path == "/api/points" else 50,
                               minimum=1, maximum=50000 if path == "/api/points" else 1000)
         if path == "/api/export_metadata":
-            send_json(self, {"catalog": catalog_dict(catalog), "filters": query, "units": UNITS},
+            metadata = catalog_dict(catalog)
+            send_json(self, {"catalog": metadata, "filters": query, "units": metadata["units"]},
                       attachment=f'halo_selection_{catalog["id"]}.json')
             return
         if path == "/api/export":

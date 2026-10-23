@@ -42,6 +42,9 @@ void rockstarWriteCatalogue(
     std::string const& filename, RockstarRecord const* records, size_t count) {
     static_assert(
         std::endian::native == std::endian::little || std::endian::native == std::endian::big);
+    auto const& cosmology = getOptions().cosmology;
+    auto const convention =
+        rockstar::haloDensityConvention(cosmology.omegaLambda, cosmology.omegaK);
     // Preserve the raw record offsets, but never leave an old encoding marker
     // attached to a partial rewrite. Readers require this sidecar for new files.
     std::string const formatPath = filename + ".format";
@@ -63,7 +66,9 @@ void rockstarWriteCatalogue(
            << "record_size " << sizeof(RockstarRecord) << '\n'
            << "record_count " << count << '\n'
            << "byte_order " << (std::endian::native == std::endian::little ? "little" : "big")
-           << '\n';
+           << '\n'
+           << "virial_density " << rockstar::virialDensityLabel(convention) << '\n'
+           << "so_density_reference " << rockstar::soDensityReferenceLabel(convention) << '\n';
     format.close();
     if (!format) {
         throw std::runtime_error("Cannot write ROCKSTAR format metadata: " + temporaryPath);
@@ -75,13 +80,10 @@ namespace detail {
 
 constexpr double kFourPiOverThree = 4.0 * M_PI / 3.0;
 
-rockstar::VirialOverdensity haloOverdensity(double scale) {
+rockstar::HaloDensityThresholds haloOverdensity(double scale) {
     auto const& cosmology = getOptions().cosmology;
-    double const matter = cosmology.omegaM / (scale * scale * scale);
-    double const expansion = matter + cosmology.omegaR / std::pow(scale, 4) +
-        cosmology.omegaK / (scale * scale) + cosmology.omegaLambda;
-    return rockstar::virialOverdensityFromMatterFraction(
-        matter / expansion, cosmology.omegaLambda == 0.0 && cosmology.omegaK > 0.0);
+    return rockstar::haloDensityThresholds(
+        scale, cosmology.omegaM, cosmology.omegaR, cosmology.omegaLambda, cosmology.omegaK);
 }
 
 double radiusSquared(RockstarParticle const& particle, Subgroup const& group) {
@@ -298,15 +300,16 @@ void measureMasses(Vector<Subgroup>& groups, double scale) {
     for (size_t i = 0; i < groups.size(); ++i) {
         auto particles = rockstarGatherParticles(groups, i);
         auto const radii = sortedRadii(particles, groups[i]);
-        auto const virial = rockstar::sphericalOverdensity(radii, mean * density.meanMatter);
+        auto const virial = rockstar::sphericalOverdensity(radii, mean * density.virialMeanMatter);
         // Sec. III.5.2 permits critical- or background-density SO thresholds.
-        // Our public m200/m500/m2500 fields consistently use critical density.
+        // The catalogue metadata records whether these thresholds reference
+        // critical density or the mean-matter convention for other cosmologies.
         auto const mass200 =
-            rockstar::sphericalOverdensity(radii, mean * 200.0 / density.matterFraction);
+            rockstar::sphericalOverdensity(radii, mean * 200.0 * density.soReferenceMeanMatter);
         auto const mass500 =
-            rockstar::sphericalOverdensity(radii, mean * 500.0 / density.matterFraction);
+            rockstar::sphericalOverdensity(radii, mean * 500.0 * density.soReferenceMeanMatter);
         auto const mass2500 =
-            rockstar::sphericalOverdensity(radii, mean * 2500.0 / density.matterFraction);
+            rockstar::sphericalOverdensity(radii, mean * 2500.0 * density.soReferenceMeanMatter);
         auto& group = groups[i];
         group.massVir = virial.count;
         group.rVir = virial.radius;
@@ -408,7 +411,7 @@ void rockstarUpdateStatistics(
     group.vzb = velocity[2];
     auto const density = detail::haloOverdensity(scale);
     auto const radii = detail::sortedRadii(group.parts, group, positionFactor);
-    double const numberDensity = getOptions().initial.numberOfParticles * density.meanMatter;
+    double const numberDensity = getOptions().initial.numberOfParticles * density.virialMeanMatter;
     auto const virial = rockstar::sphericalOverdensity(radii, numberDensity);
     double const radius = virial.count ?
         virial.radius :
@@ -636,13 +639,13 @@ RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, flo
     auto const density = detail::haloOverdensity(scale);
     double const mean = getOptions().initial.numberOfParticles;
     auto const allRadii = detail::sortedRadii(candidates, group);
-    auto const virial = rockstar::sphericalOverdensity(allRadii, mean * density.meanMatter);
+    auto const virial = rockstar::sphericalOverdensity(allRadii, mean * density.virialMeanMatter);
     auto const so200 =
-        rockstar::sphericalOverdensity(allRadii, mean * 200.0 / density.matterFraction);
+        rockstar::sphericalOverdensity(allRadii, mean * 200.0 * density.soReferenceMeanMatter);
     auto const so500 =
-        rockstar::sphericalOverdensity(allRadii, mean * 500.0 / density.matterFraction);
+        rockstar::sphericalOverdensity(allRadii, mean * 500.0 * density.soReferenceMeanMatter);
     auto const so2500 =
-        rockstar::sphericalOverdensity(allRadii, mean * 2500.0 / density.matterFraction);
+        rockstar::sphericalOverdensity(allRadii, mean * 2500.0 * density.soReferenceMeanMatter);
     auto const particles = detail::withinRadius(candidates, group, virial.radius);
     auto const radii = detail::sortedRadii(particles, group);
     Subgroup measured;
@@ -796,7 +799,7 @@ GroupEntry rockstarMakeGroupEntry(
     auto const candidates = detail::sortedRadii(allParticles, group);
     auto const density = detail::haloOverdensity(scale);
     auto const virial = rockstar::sphericalOverdensity(
-        candidates, getOptions().initial.numberOfParticles * density.meanMatter);
+        candidates, getOptions().initial.numberOfParticles * density.virialMeanMatter);
     auto const particles = detail::withinRadius(allParticles, group, virial.radius);
     auto const radii = detail::sortedRadii(particles, group);
     auto const bulk = detail::bulkVelocity(particles);

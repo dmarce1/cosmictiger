@@ -42,6 +42,10 @@
     return new Intl.NumberFormat("en-US", {maximumSignificantDigits: digits}).format(number);
   }
   function count(value) { return formatter.format(value || 0); }
+  function propertyLabel(name) { return state.catalog?.field_labels?.[name] || labels[name] || name; }
+  function mainPropertyLabel(name) {
+    return state.catalog?.virial_density === "200_mean_matter" ? propertyLabel(name) : (name === "mvir" ? "Mvir" : "Rvir");
+  }
   function typeBadge(halo) { return node("span", "type-label" + (halo.host_id !== null && halo.host_id !== undefined ? " subhalo" : ""), halo.host_id !== null && halo.host_id !== undefined ? "Subhalo" : "Distinct"); }
   function matchesFilters(halo) {
     if (state.filters.halo_id && String(halo.halo_id) !== state.filters.halo_id) return false;
@@ -106,6 +110,14 @@
     $("catalog-hosts").textContent = count(catalog.host_count);
     $("catalog-subhalos").textContent = count(catalog.subhalo_count);
     $("catalog-title").title = catalog.source_path || "";
+    for (const name of ["mvir", "rvir"]) {
+      const minimum = $("filter-form").elements[`${name}_min`];
+      const maximum = $("filter-form").elements[`${name}_max`];
+      minimum.closest("fieldset").querySelector("legend").firstChild.nodeValue = `${propertyLabel(name)} `;
+      minimum.setAttribute("aria-label", `Minimum ${propertyLabel(name)}`);
+      maximum.setAttribute("aria-label", `Maximum ${propertyLabel(name)}`);
+      document.querySelector(`[data-sort="${name}"]`).firstChild.nodeValue = `${mainPropertyLabel(name)} `;
+    }
   }
   function showError(message) { $("app-error").textContent = message; $("app-error").hidden = !message; }
   async function fetchJson(url, signal) {
@@ -177,7 +189,7 @@
     for (const halo of state.tableItems) {
       const row = node("tr", String(halo.halo_id) === state.selected ? "selected" : "");
       row.tabIndex = 0; row.dataset.haloId = String(halo.halo_id);
-      row.setAttribute("aria-label", `Halo ${halo.halo_id}, ${halo.host_id == null ? "distinct halo" : "subhalo"}, virial mass ${displayNumber(halo.mvir)} solar masses per h. Press Enter to inspect.`);
+      row.setAttribute("aria-label", `Halo ${halo.halo_id}, ${halo.host_id == null ? "distinct halo" : "subhalo"}, ${propertyLabel("mvir")} ${displayNumber(halo.mvir)} solar masses per h. Press Enter to inspect.`);
       row.setAttribute("aria-selected", String(String(halo.halo_id) === state.selected));
       row.append(node("td", "", String(halo.halo_id)));
       const type = node("td"); type.append(typeBadge(halo)); row.append(type);
@@ -254,7 +266,7 @@
     summary.append(node("p", "eyebrow", "SELECTED HALO"), node("h3", "", String(halo.halo_id)), typeBadge(halo));
     if (!matchesFilters(halo)) summary.append(node("p", "outside-selection", "Outside active filters. Host and subhalo links remain available."));
     const properties = node("dl", "summary-properties");
-    for (const [label, key, unit] of [["Virial mass", "mvir", "M☉/h"], ["Virial radius", "rvir", "comoving kpc/h"], ["Vmax", "vcircMax", "km/s"], ["Spin λ", "lambda", "dimensionless"]]) {
+    for (const [label, key, unit] of [[propertyLabel("mvir"), "mvir", "M☉/h"], [propertyLabel("rvir"), "rvir", "comoving kpc/h"], ["Vmax", "vcircMax", "km/s"], ["Spin λ", "lambda", "dimensionless"]]) {
       const block = node("div"); const value = node("dd", "", displayNumber(halo[key], 4)); value.append(node("small", "", unit)); block.append(node("dt", "", label), value); properties.append(block);
     }
     summary.append(properties); container.append(summary);
@@ -282,7 +294,7 @@
       const list = node("dl", "property-list");
       for (const name of names) {
         if (!(name in halo)) continue;
-        const row = node("div", "property-row"); const label = node("dt", "", labels[name] || name);
+        const row = node("div", "property-row"); const label = node("dt", "", propertyLabel(name));
         label.title = name; if (units[name]) label.append(node("small", "", units[name]));
         const identifier = ["halo_id", "host_id", "fof_id", "local_halo_id", "rank", "ordinal", "sys", "pid"].includes(name);
         const value = halo[name] === null ? "—" : identifier ? String(halo[name]) : displayNumber(halo[name], 8);
@@ -381,7 +393,7 @@
     const point = nearestPoint(event); const tooltip = $("plot-tooltip");
     tooltip.hidden = !point; canvas.style.cursor = point ? "pointer" : "crosshair";
     if (!point) return;
-    tooltip.textContent = `Halo ${point.halo.halo_id}\nMvir  ${displayNumber(point.halo.mvir, 4)} M☉/h`;
+    tooltip.textContent = `Halo ${point.halo.halo_id}\n${mainPropertyLabel("mvir")}  ${displayNumber(point.halo.mvir, 4)} M☉/h`;
     tooltip.style.left = `${Math.max(4, Math.min(point.x + 14, plotSize.width - 235))}px`;
     tooltip.style.top = `${Math.max(4, point.y - 62)}px`;
   });

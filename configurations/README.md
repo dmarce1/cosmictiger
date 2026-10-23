@@ -110,6 +110,45 @@ It enables the `atomic6` primordial chemistry network; see
 [primordial chemistry](../docs/primordial_chemistry.md). A collisionless
 cosmological run can disable both `hydro.enabled` and `chemistry.enabled`.
 
+Six collisionless cosmology presets use 32³ particles in a 100 Mpc/h box,
+CPU execution, and 100 particle snapshots at equal conformal intervals:
+
+| Preset | Background and endpoint |
+| --- | --- |
+| [lcdm_present.ini](lcdm_present.ini) | Standard flat ΛCDM, expanding to `a=1`. |
+| [closed_no_dark_energy.ini](closed_no_dark_energy.ini) | Collapsing: `Ωm=2`, `ΩΛ=0`, through turnaround to contracting `a≈1e-6`. |
+| [omega_k_negative.ini](omega_k_negative.ini) | `Ωk=-0.1`, positive spatial curvature, positive Λ; expanding to `a=10`. |
+| [omega_k_positive.ini](omega_k_positive.ini) | `Ωk=+0.1`, negative spatial curvature, positive Λ; expanding to `a=10`. |
+| [critical.ini](critical.ini) | Critical: `Ωm=1−Ωr`, `ΩΛ=Ωk=0`, expanding to `a=100`; physical `da/dt → 0`. |
+| [subcritical_no_dark_energy.ini](subcritical_no_dark_energy.ini) | Subcritical: `Ωm≈0.313466`, `ΩΛ=0`, `Ωk≈0.686442`, expanding to `a=100`; physical `da/dt → H0 sqrt(Ωk) > 0`. |
+
+`Ωk` has the opposite sign to spatial curvature: negative `Ωk` means a closed
+geometry. The two mildly curved ΛCDM examples both keep expanding; positive
+spatial curvature alone does not guarantee recollapse. In the critical and
+subcritical no-dark-energy models, `H=adot/a` approaches zero in both cases,
+but only the critical model's physical expansion speed `adot` approaches zero.
+
+The standard, curved ΛCDM, and subcritical examples use `h=0.674`,
+`Ωb=0.0224/h²`, and `Ωc=0.12/h²`. All include photons and massless neutrinos
+with `Ωr≈9.20939e-5`; the historical massive-neutrino density is not added to
+cold matter. The curved and collapsing presets use `sigma8=0` homogeneous
+lattices because the native perturbed initial-condition solver requires
+flatness. The flat standard and critical presets use `sigma8=0.8607`.
+
+The optional [lcdm_ten_ages.ini](lcdm_ten_ages.ini) continues the standard model
+to ten times its present age, recalculated with the current radiation model.
+Its present age is about 13.81146 Gyr and its final scale factor is about
+1291.70. This preserves the historical future-evolution example separately
+from the six cosmology choices above.
+
+These files contain complete options and describe their assumptions in their
+headers. Their positive `run.endTime` values are **conformal code durations**,
+not years. For a fixed box and cosmology, changing the lattice from 32 to `N`
+requires multiplying `units.massSolar` by `(32/N)^3`; changing the box or the
+cosmology also requires recalculating the duration. See
+[background evolution](../docs/cosmology.md) for stopping, signed Λ input,
+accuracy controls, and restart behavior.
+
 Gravity uses a fixed comoving support radius, with a Ferrers degree-4 density
 kernel in these configurations. SPH has independently selected kernels and
 variable smoothing radii; the examples use cubic splines and 42 weighted

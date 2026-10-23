@@ -44,6 +44,44 @@ def runCommand(arguments, expectedSuccess=True):
     return result
 
 
+def loadBackend():
+    specification = importlib.util.spec_from_file_location("halo_viewer_test_backend", arguments.viewer)
+    backend = importlib.util.module_from_spec(specification)
+    specification.loader.exec_module(backend)
+    return backend
+
+
+class DensityConventionTests(unittest.TestCase):
+    def test_legacy_metadata_defaults_and_invalid_pairs(self):
+        backend = loadBackend()
+        self.assertEqual(backend.density_conventions({}), ("bryan_norman", "critical"))
+        for metadata in (
+            {"virial_density": "200_mean_matter"},
+            {"so_density_reference": "mean_matter"},
+            {"virial_density": "200_mean_matter", "so_density_reference": "critical"},
+            {"virial_density": "bryan_norman_flat", "so_density_reference": "mean_matter"},
+            {"virial_density": "unknown", "so_density_reference": "critical"},
+        ):
+            with self.subTest(metadata=metadata), self.assertRaises(ValueError):
+                backend.density_conventions(metadata)
+
+    def test_catalog_definitions_are_independent(self):
+        backend = loadBackend()
+        legacy = {"scale_factor": 0.5, "source_files": "[]"}
+        mean = backend.catalog_dict(dict(legacy, virial_density="200_mean_matter",
+                                         so_density_reference="mean_matter"))
+        critical = backend.catalog_dict(legacy)
+        self.assertEqual(mean["mass_definitions"], {
+            "mvir": "M200m_main", "m200": "M200m", "m500": "M500m", "m2500": "M2500m"})
+        self.assertEqual(mean["field_labels"]["rvir"], "r200m")
+        self.assertEqual(mean["field_labels"]["ax500"], "Shape axis X (500m)")
+        self.assertEqual(critical["mass_definitions"]["mvir"], "Bryan-Norman virial")
+        self.assertEqual(critical["mass_definitions"]["m200"], "M200c")
+        self.assertEqual(critical["field_labels"]["rvir"], "Virial radius")
+        self.assertIn("M500m", mean["units"]["m500"])
+        self.assertIn("M500c", critical["units"]["m500"])
+
+
 class HaloViewerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -180,6 +218,9 @@ class HaloViewerTests(unittest.TestCase):
         self.assertEqual(catalog["snapshot"], 7)
         self.assertEqual(catalog["scale_factor"], 0.5)
         self.assertIn("units", catalog)
+        self.assertEqual(catalog["virial_density"], "bryan_norman")
+        self.assertEqual(catalog["so_density_reference"], "critical")
+        self.assertEqual(catalog["mass_definitions"]["m200"], "M200c")
         page = self.halos(limit=50)
         self.assertEqual(page["total"], 64)
         self.assertEqual(len(page["items"]), 50)
@@ -192,6 +233,28 @@ class HaloViewerTests(unittest.TestCase):
             self.assertEqual(row["halo_id"], expected["halo_id"])
             for field in ("x", "y", "z", "mvir", "e", "jx", "jy", "jz", "m200", "m500", "m2500", *kHalfFields):
                 self.assertEqual(row[field], expected[field], field)
+
+    def test_02b_legacy_database_migration_preserves_catalog_and_halos(self):
+        backend = loadBackend()
+        destination = self.directory / "legacy.sqlite"
+        with sqlite3.connect(self.database) as source, sqlite3.connect(destination) as connection:
+            source.backup(connection)
+            connection.execute("ALTER TABLE catalogs DROP COLUMN virial_density")
+            connection.execute("ALTER TABLE catalogs DROP COLUMN so_density_reference")
+            connection.execute("PRAGMA user_version=1")
+            connection.commit()
+            connection.row_factory = sqlite3.Row
+            backend.initialize_database(connection)
+            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 2)
+            catalog = backend.catalog_dict(connection.execute("SELECT * FROM catalogs").fetchone())
+            self.assertEqual(catalog["id"], self.catalogId)
+            self.assertEqual(catalog["virial_density"], "bryan_norman")
+            self.assertEqual(catalog["so_density_reference"], "critical")
+            self.assertEqual(catalog["mass_definitions"]["mvir"], "Bryan-Norman virial")
+            identifiers = {row[0] for row in connection.execute("SELECT halo_id FROM halos")}
+            self.assertEqual(identifiers, set(self.byId))
+            backend.initialize_database(connection)
+            self.assertEqual(connection.execute("SELECT count(*) FROM halos").fetchone()[0], 64)
 
     def test_03_import_is_idempotent(self):
         before = self.requestJson("/api/catalogs")
@@ -227,9 +290,7 @@ class HaloViewerTests(unittest.TestCase):
         self.assertEqual(self.halos(halo_id=exact["halo_id"])["items"][0]["halo_id"], exact["halo_id"])
 
     def test_04b_mixed_width_ids_sort_numerically(self):
-        specification = importlib.util.spec_from_file_location("halo_viewer_test_backend", arguments.viewer)
-        backend = importlib.util.module_from_spec(specification)
-        specification.loader.exec_module(backend)
+        backend = loadBackend()
         identifiers = ["2", "10", "1", "100", "9007199254740993", "9007199254740992"]
         with sqlite3.connect(":memory:") as connection:
             connection.execute("CREATE TABLE halos (catalog_id INTEGER, halo_id TEXT, mvir REAL)")
@@ -367,10 +428,23 @@ class HaloViewerTests(unittest.TestCase):
             lines[1] = " ".join(fields)
             path.write_text("\n".join(lines) + "\n")
 
+        def densityMetadata(directory, text, ranks=(0, 1)):
+            for rank in ranks:
+                path = directory / f"rockstar.{rank}.dat.format"
+                path.write_text(path.read_text() + text)
+
         for label, mutation in (
             ("truncated", truncate), ("missing_sidecar", removeSidecar),
             ("count_mismatch", manifestCount), ("duplicate_id", duplicateId),
             ("inconsistent_host", inconsistentHost),
+            ("missing_density_reference", lambda path: densityMetadata(
+                path, "virial_density 200_mean_matter\n")),
+            ("unknown_density", lambda path: densityMetadata(
+                path, "virial_density unknown\nso_density_reference critical\n")),
+            ("inconsistent_density_pair", lambda path: densityMetadata(
+                path, "virial_density 200_mean_matter\nso_density_reference critical\n")),
+            ("inconsistent_rank_density", lambda path: densityMetadata(
+                path, "virial_density 200_mean_matter\nso_density_reference mean_matter\n", (0,))),
         ):
             with self.subTest(mutation=label):
                 destination = self.directory / label
@@ -405,6 +479,48 @@ class HaloViewerTests(unittest.TestCase):
             self.assertEqual({row["halo_id"] for row in self.allRows()}, set(self.byId))
         finally:
             path.write_bytes(original)
+
+    def test_12_density_conventions_survive_import_and_selection_export(self):
+        for convention, reference in (("200_mean_matter", "mean_matter"),
+                                      ("bryan_norman_flat", "critical"),
+                                      ("bryan_norman_open", "critical")):
+            with self.subTest(convention=convention):
+                destination = self.directory / convention
+                shutil.copytree(self.snapshot, destination)
+                for rank in (0, 1):
+                    path = destination / f"rockstar.{rank}.dat.format"
+                    path.write_text(path.read_text() + f"virial_density {convention}\n"
+                                    f"so_density_reference {reference}\n")
+                native = json.loads(runCommand(
+                    [str(arguments.exporter), str(destination)]).stdout.splitlines()[0])
+                self.assertEqual(native["virial_density"], convention)
+                self.assertEqual(native["so_density_reference"], reference)
+                imported = json.loads(self.importSnapshot(destination).stdout)
+                selection = {"catalog": imported["catalog_id"]}
+                catalog = next(row for row in self.requestJson("/api/catalogs")["catalogs"]
+                               if row["id"] == imported["catalog_id"])
+                suffix = "m" if reference == "mean_matter" else "c"
+                self.assertEqual(catalog["virial_density"], convention)
+                self.assertEqual(catalog["so_density_reference"], reference)
+                for field, overdensity in (("m200", 200), ("m500", 500), ("m2500", 2500)):
+                    expected = f"M{overdensity}{suffix}"
+                    self.assertEqual(catalog["field_labels"][field], expected)
+                    self.assertIn(expected, catalog["units"][field])
+                if suffix == "m":
+                    self.assertEqual(catalog["field_labels"]["mvir"], "M200m_main")
+                    self.assertEqual(catalog["field_labels"]["rvir"], "r200m")
+                metadata = self.requestJson("/api/export_metadata", selection)
+                for key, value in metadata["catalog"].items():
+                    self.assertEqual(value, catalog[key], key)
+                self.assertEqual(metadata["units"], catalog["units"])
+                with self.request("/api/export", selection) as response:
+                    records = list(csv.DictReader(io.StringIO(response.read().decode("utf-8"))))
+                self.assertEqual(len(records), 64)
+                for record in records:
+                    self.assertEqual(float(record["mvir"]), self.byId[record["halo_id"]]["mvir"])
+                repeated = json.loads(self.importSnapshot(destination).stdout)
+                self.assertTrue(repeated["existing"])
+                self.assertEqual(repeated["catalog_id"], imported["catalog_id"])
 
 
 if __name__ == "__main__":

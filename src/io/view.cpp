@@ -564,14 +564,12 @@ void writeCodeParticleView(DBfile* db, ViewDirectoryMetadata& metadata,
     DBFreeOptlist(options);
 }
 
-ViewLeafMetadata writeParticleLeaf(
-    Vector<Range<double>> const& boxes, int cycle, double a, std::string const& generation) {
+ViewLeafMetadata writeParticleLeaf(Vector<Range<double>> const& boxes, int cycle, double a,
+    double time, std::string const& generation) {
     auto const snapshot = collectViewParticles();
     ViewLeafMetadata metadata;
     metadata.boxes.resize(boxes.size());
     auto const frames = particleViewFrames();
-    double const time =
-        cosmosTime(1e-6, a) * getOptions().units.timeSeconds * constants::kSecondsToYears / 1e9;
     std::string const locality = "locality_" + std::to_string(hpxRank());
     // Each locality writes only its owned particles and serializes its Silo calls.
     std::lock_guard fileLock(siloViewMutex);
@@ -618,15 +616,13 @@ HPX_PLAIN_ACTION(detail::writeParticleLeaf, WriteParticleLeafAction);
 
 namespace detail {
 
-void writeParticleMaster(size_t box, int cycle, double a,
+void writeParticleMaster(size_t box, int cycle, double a, double time,
     std::vector<ViewLeafMetadata> const& leaves, std::string const& generation) {
     auto const filename = particleMasterPath(box, cycle);
     auto const temporary = std::filesystem::path(filename.string() + ".tmp." + generation);
     auto file = createParticleViewFile(temporary);
     writeViewText(file.get(), "leaf_generation", generation.c_str());
     auto const frames = particleViewFrames();
-    double time =
-        cosmosTime(1e-6, a) * getOptions().units.timeSeconds * constants::kSecondsToYears / 1e9;
     ViewParticles empty;
     for (size_t frameIndex = 0; frameIndex < frames.size(); ++frameIndex) {
         auto const& frame = frames[frameIndex];
@@ -699,7 +695,7 @@ void writeParticleMaster(size_t box, int cycle, double a,
     std::filesystem::rename(temporary, filename);
 }
 
-void writeDistributedParticleViews(int cycle, double a) {
+void writeDistributedParticleViews(int cycle, double a, double time) {
     static std::atomic<uint64_t> sequence{0};
     auto const ticks = std::chrono::system_clock::now().time_since_epoch().count();
     std::string const generation =
@@ -713,21 +709,24 @@ void writeDistributedParticleViews(int cycle, double a) {
         }
     }
     auto const leaves = onViewLocalities<WriteParticleLeafAction, ViewLeafMetadata>(
-        viewBoxes, cycle, a, generation);
+        viewBoxes, cycle, a, time, generation);
     for (size_t box = 0; box < viewBoxes.size(); ++box) {
-        writeParticleMaster(box, cycle, a, leaves, generation);
+        writeParticleMaster(box, cycle, a, time, leaves, generation);
     }
 }
 
 }    // namespace detail
 
-void viewOutputViews(int cycle, double a, bool force) {
+void viewOutputViews(int cycle, double a, bool force, double physicalYears) {
     if (!getOptions().output.silo || viewBoxes.empty() ||
         (!force && cycle % getOptions().output.siloInterval != 0)) {
         return;
     }
     profilerEnter("view_output_views");
-    detail::writeDistributedParticleViews(cycle, a);
+    double const time = physicalYears >= 0.0 ?
+        physicalYears / 1.0e9 :
+        cosmosTime(1e-6, a) * getOptions().units.timeSeconds * constants::kSecondsToYears / 1e9;
+    detail::writeDistributedParticleViews(cycle, a, time);
     profilerExit();
 }
 

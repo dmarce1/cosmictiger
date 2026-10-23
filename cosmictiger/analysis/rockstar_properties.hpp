@@ -114,6 +114,67 @@ inline VirialOverdensity virialOverdensity(
     return virialOverdensityFromMatterFraction(omegaMatter / denominator);
 }
 
+enum class HaloDensityConvention { bryanNormanFlat, bryanNormanOpen, meanMatter };
+
+inline HaloDensityConvention haloDensityConvention(double omegaLambda, double omegaCurvature) {
+    if (!detail::isFinite(omegaLambda) || !detail::isFinite(omegaCurvature)) {
+        throw std::invalid_argument("Halo density cosmology must be finite");
+    }
+    if (omegaCurvature == 0.0 && omegaLambda >= 0.0) {
+        return HaloDensityConvention::bryanNormanFlat;
+    }
+    if (omegaCurvature > 0.0 && omegaLambda == 0.0) {
+        return HaloDensityConvention::bryanNormanOpen;
+    }
+    return HaloDensityConvention::meanMatter;
+}
+
+inline char const* virialDensityLabel(HaloDensityConvention convention) {
+    switch (convention) {
+    case HaloDensityConvention::bryanNormanFlat:
+        return "bryan_norman_flat";
+    case HaloDensityConvention::bryanNormanOpen:
+        return "bryan_norman_open";
+    case HaloDensityConvention::meanMatter:
+        return "200_mean_matter";
+    }
+    throw std::invalid_argument("Unknown halo density convention");
+}
+
+inline char const* soDensityReferenceLabel(HaloDensityConvention convention) {
+    return convention == HaloDensityConvention::meanMatter ? "mean_matter" : "critical";
+}
+
+struct HaloDensityThresholds {
+    double virialMeanMatter;
+    double soReferenceMeanMatter;
+};
+
+// Keep the existing Bryan-Norman convention in its flat nonnegative-Lambda
+// and open Lambda=0 model families. Radiation and Omega_m(a)<0.1 retain the
+// historical extrapolation beyond the fit's calibration range. Other models
+// use 200 times mean matter density for mvir/rvir and mean matter density for
+// the 200/500/2500 thresholds. This explicit catalogue convention remains
+// finite at a cosmological turnaround, where critical density vanishes; it
+// is not a spherical-collapse prediction for a contracting universe.
+inline HaloDensityThresholds haloDensityThresholds(double scaleFactor, double omegaMatter,
+    double omegaRadiation, double omegaLambda, double omegaCurvature) {
+    if (!(scaleFactor > 0.0) || !detail::isFinite(scaleFactor) || !(omegaMatter > 0.0) ||
+        !detail::isFinite(omegaMatter) || !(omegaRadiation >= 0.0) ||
+        !detail::isFinite(omegaRadiation)) {
+        throw std::invalid_argument("Invalid cosmology for halo density thresholds");
+    }
+    auto const convention = haloDensityConvention(omegaLambda, omegaCurvature);
+    if (convention == HaloDensityConvention::meanMatter) {
+        return {200.0, 1.0};
+    }
+    double const denominator = omegaMatter + omegaRadiation / scaleFactor +
+        omegaCurvature * scaleFactor + omegaLambda * scaleFactor * scaleFactor * scaleFactor;
+    auto const virial = virialOverdensityFromMatterFraction(
+        omegaMatter / denominator, convention == HaloDensityConvention::bryanNormanOpen);
+    return {virial.meanMatter, denominator / omegaMatter};
+}
+
 namespace detail {
 
     // ROCKSTAR Sec. III.5.4, Eq. (8): dimensionless NFW enclosed-mass function.

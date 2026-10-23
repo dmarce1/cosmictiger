@@ -7,9 +7,13 @@
 
 #pragma once
 
+#include <algorithm>
+#include <cmath>
 #include <cstddef>
+#include <stdexcept>
 #include <vector>
 
+#include <cosmictiger/cosmology/background.hpp>
 #include <cosmictiger/math/fixed.hpp>
 
 using LightconeReal = Fixed<int, 31>;
@@ -25,6 +29,9 @@ size_t lcAddParticles(
 
 // Positions encode the remaining light-travel conformal time, not emission time.
 inline double lightconeEmissionScale(
-    double scale, double derivative, double tau, double tauMax, double radius) {
-    return scale + derivative * (tauMax - radius - tau);
+    cosmology::SimulationBackgroundTable const& background, double tauMax, double radius) {
+    if (!std::isfinite(radius) || radius < 0.0 || !std::isfinite(tauMax)) {
+        throw std::invalid_argument("Lightcone radius and observation time must be finite");
+    }
+    return background.sample(std::max(0.0, tauMax - radius)).state.scaleFactor;
 }

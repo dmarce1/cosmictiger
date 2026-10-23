@@ -113,6 +113,9 @@ set(cosmictiger_source_files
     src/core/profiler.cpp
     src/core/stack_trace.cpp
     src/cosmology/boltzmann.cpp
+    src/cosmology/background.cpp
+    src/cosmology/evolution.cpp
+    src/cosmology/friedmann.cpp
     src/cosmology/cosmology.cpp
     src/cosmology/fft.cpp
     src/cosmology/initialize.cpp
@@ -230,6 +233,9 @@ set(cosmictiger_header_files
     cosmictiger/core/timer.hpp
     cosmictiger/core/unordered_set_ts.hpp
     cosmictiger/cosmology/boltzmann.hpp
+    cosmictiger/cosmology/background.hpp
+    cosmictiger/cosmology/evolution.hpp
+    cosmictiger/cosmology/friedmann.hpp
     cosmictiger/cosmology/cosmology.hpp
     cosmictiger/cosmology/fft.hpp
     cosmictiger/cosmology/initialize.hpp
@@ -352,6 +358,10 @@ set_source_files_properties(src/sph/sph_chemistry.cpp PROPERTIES COMPILE_OPTIONS
 # The adaptive Boltzmann solve needs finite-value checks and accurate
 # cancellation in the synchronous Einstein constraints.
 set_source_files_properties(src/cosmology/boltzmann.cpp PROPERTIES
+    COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
+# Background and clock guards must remain effective in release builds.
+set_source_files_properties(src/core/driver.cpp src/cosmology/friedmann.cpp src/cosmology/cosmology.cpp
+    src/cosmology/background.cpp src/cosmology/evolution.cpp PROPERTIES
     COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
 
 option(COSMICTIGER_BUILD_STF_BENCHMARKS "Build the opt-in STF comparison harness" OFF)
@@ -533,11 +543,27 @@ if(BUILD_TESTING)
     # The selected run.test application check executes inside the HPX runtime.
     target_sources(cosmictiger_application_tests PRIVATE tests/application_test.cpp)
     target_link_libraries(cosmictiger_application_tests PRIVATE GTest::gtest)
-    add_executable(cosmology_flops_test tests/cosmology_flops.cpp src/cosmology/cosmology.cpp)
+    add_executable(cosmology_flops_test tests/cosmology_flops.cpp src/cosmology/cosmology.cpp
+        src/cosmology/friedmann.cpp)
     target_include_directories(cosmology_flops_test PRIVATE ${PROJECT_SOURCE_DIR})
     target_link_libraries(cosmology_flops_test PRIVATE HPX::hpx Boost::boost)
     cosmictiger_add_gtest(NAME cosmology_flops TARGET cosmology_flops_test
         PROPERTIES TIMEOUT 30)
+    target_compile_options(cosmology_flops_test PRIVATE -fno-fast-math -ffp-contract=off)
+    add_executable(friedmann_test tests/friedmann.cpp src/cosmology/friedmann.cpp)
+    target_include_directories(friedmann_test PRIVATE ${PROJECT_SOURCE_DIR})
+    target_compile_options(friedmann_test PRIVATE -fno-fast-math -ffp-contract=off)
+    cosmictiger_add_gtest(NAME friedmann TARGET friedmann_test PROPERTIES TIMEOUT 60)
+
+    add_executable(cosmology_evolution_test tests/cosmology_evolution.cpp)
+    target_include_directories(cosmology_evolution_test PRIVATE ${PROJECT_SOURCE_DIR})
+    target_compile_options(cosmology_evolution_test PRIVATE -fno-fast-math -ffp-contract=off)
+    cosmictiger_add_gtest(NAME cosmology_evolution TARGET cosmology_evolution_test
+        PROPERTIES TIMEOUT 30)
+    add_test(NAME cosmology_integration COMMAND ${Python3_EXECUTABLE}
+        ${PROJECT_SOURCE_DIR}/tests/run_cosmology.py $<TARGET_FILE:cosmictiger>
+        ${PROJECT_BINARY_DIR}/tests/cosmology_integration)
+    set_tests_properties(cosmology_integration PROPERTIES RUN_SERIAL TRUE TIMEOUT 1200 PROCESSORS 2)
 
     add_hpx_executable(flops_test SOURCES tests/flops.cpp src/core/flops.cpp)
     target_include_directories(flops_test PRIVATE ${PROJECT_SOURCE_DIR})
@@ -757,6 +783,10 @@ if(BUILD_TESTING)
         cosmictiger_add_gtest(NAME ${halo_unit} TARGET ${halo_unit}_test
             PROPERTIES TIMEOUT 30)
     endforeach()
+    target_sources(lightcone_epoch_test PRIVATE src/cosmology/background.cpp
+        src/cosmology/friedmann.cpp)
+    target_link_libraries(lightcone_epoch_test PRIVATE HPX::hpx Boost::boost)
+    target_compile_options(lightcone_epoch_test PRIVATE -fno-fast-math -ffp-contract=off)
     add_executable(rockstar_properties_fast_math_test tests/rockstar_properties.cpp)
     target_include_directories(rockstar_properties_fast_math_test PRIVATE ${PROJECT_SOURCE_DIR})
     target_compile_options(rockstar_properties_fast_math_test PRIVATE -ffast-math)
