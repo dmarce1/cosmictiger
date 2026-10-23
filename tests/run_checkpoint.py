@@ -121,7 +121,7 @@ def main():
     baselineOutput = runSimulation(options + ["--run.maxIterations=1",
                                               "--checkpoint.intervalSeconds=1000000000"],
                                    baseline, "run.log")
-    if "Done writing checkpoint" not in baselineOutput:
+    if "Checkpoint saved:" not in baselineOutput:
         raise RuntimeError("normal exit did not finish a checkpoint")
     checkpoints = [path for path in baseline.glob("checkpoint.*")
                    if path.is_dir() and re.fullmatch(r"checkpoint\.[0-9]+", path.name)]
