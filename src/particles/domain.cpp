@@ -135,6 +135,13 @@ Vector<size_t> domainsCountBelow(Vector<double> bounds, int depth) {
                 //							PRINT("???? %i %i %i %i \n", hpx_rank(), i,
                 // local_domains[i].part_range.first, local_domains[i].part_range.second);
                 auto const rng = localDomains[i].particleRange;
+                // Root-created initial conditions leave other localities empty
+                // until this rebalance migrates their particles. Empty ranges
+                // contribute zero without dividing by the local population.
+                if (rng.first == rng.second) {
+                    counts[i] = 0;
+                    return;
+                }
                 int const numberOfThreads = std::max(2 * (size_t) (rng.second - rng.first) *
                         hpxHardwareConcurrency() / (size_t) particlesSize(),
                     (size_t) 1);

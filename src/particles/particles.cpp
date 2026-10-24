@@ -492,17 +492,22 @@ void particlesGroupsDestroy() {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
-void particlesCacheFree() {
+void particlesCacheFreeLocal() {
     for (size_t i = 0; i < PART_CACHE_SIZE; i++) {
         particleRungCache[i].clear();
         particleVelocityCache[i].clear();
     }
+    particleCache = decltype(particleCache)();
+    groupParticleCache = decltype(groupParticleCache)();
+}
+
+void particlesCacheFree() {
+    particlesCacheFreeLocal();
     profilerEnter(__FUNCTION__);
     Vector<hpx::future<void>> futs;
     for (auto const& c : hpxChildren()) {
         futs.push_back(hpx::async<ParticlesCacheFreeAction>(c));
     }
-    particleCache = decltype(particleCache)();
     hpx::wait_all(futs.begin(), futs.end());
     profilerExit();
 }

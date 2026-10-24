@@ -201,11 +201,15 @@ inline void particlesGlobalReadPos(
 void particlesGlobalReadPosAndGroup(ParticleGlobalRange range, Position* x, Position* y,
     Position* z, GroupInteger* g, ParticleInteger offset);
 ParticleInteger particlesSort(Pair<ParticleInteger> rng, double xm, int xdim);
+// Swap all attached fields without reading uninitialized saved-force values.
+void particlesSwap(ParticleInteger first, ParticleInteger second);
 GadgetIoHeader particlesReadGadget4(std::string);
 #ifndef __CUDACC__
 hpx::future<Vector<Position>> particlesGet(int rank, Vector<Pair<ParticleInteger>> const& ranges);
 #endif
 void particlesCacheFree();
+// Local half of particlesCacheFree; requires a synchronized reorder boundary.
+void particlesCacheFreeLocal();
 void particlesGroupCacheFree();
 Pair<Array<double, NDIM>, double> particlesEnclosingSphere(Pair<ParticleInteger> rng);
 Vector<OutputParticle> particlesGetSample(Range<double> const& box);

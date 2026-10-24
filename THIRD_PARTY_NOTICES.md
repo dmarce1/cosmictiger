@@ -49,7 +49,8 @@ dependency list, including libraries used by HPX and Silo.
 | HPX | Parallel runtime | [Boost Software License 1.0](https://github.com/TheHPXProject/hpx/blob/master/LICENSE_1_0.txt). |
 | Boost | Program options, units and support headers | [Boost Software License 1.0](https://www.boost.org/LICENSE_1_0.txt); retain any package-specific notices. |
 | GSL and GSL CBLAS | Random generation in initialization and particle operations | [GNU GPL](https://www.gnu.org/software/gsl/); this is an active dependency. |
-| FFTW3 single precision | FFTs in `src/cosmology/fft.cpp` | [GNU GPL](https://www.fftw.org/faq/section1.html#isfftwfree), unless separately licensed; this is an active dependency. |
+| FFTW3 single precision, serial and MPI | FFTs in `src/cosmology/fft.cpp` and MPI FFT support | [GNU GPL](https://www.fftw.org/faq/section1.html#isfftwfree), unless separately licensed; this is an active dependency. |
+| MPI implementation | HPX communication and FFTW3-MPI support | Supplied by the selected MPI implementation; retain its package-specific license and notices. |
 | HEALPix C and C++ libraries | Sphere pixelization and analysis | [GNU GPL](https://healpix.sourceforge.io/downloads.php). |
 | Silo | Scientific visualization output | [Silo's BSD-style copyright and license](https://github.com/LLNL/Silo/blob/main/COPYRIGHT); underlying storage libraries have their own terms. |
 | CUDA toolkit/runtime, when enabled | GPU execution | NVIDIA's toolkit/component licenses; CUDA's presence does not change third-party source grants. |

@@ -69,8 +69,36 @@ if(COSMICTIGER_WITH_CUDA AND NOT HPX_WITH_CUDA)
 endif()
 find_package(Boost REQUIRED COMPONENTS program_options)
 find_package(GSL REQUIRED)
+find_package(MPI REQUIRED COMPONENTS CXX)
 find_path(FFTW3F_INCLUDE_DIR fftw3.h REQUIRED)
 find_library(FFTW3F_LIBRARY NAMES fftw3f REQUIRED)
+find_path(FFTW3F_MPI_INCLUDE_DIR fftw3-mpi.h HINTS ${FFTW3F_INCLUDE_DIR} REQUIRED)
+find_library(FFTW3F_MPI_LIBRARY NAMES fftw3f_mpi REQUIRED)
+
+# Check the single-precision MPI API without initializing or running MPI during
+# configuration. Keep the MPI FFTW library before its serial FFTW dependency.
+include(CheckCXXSourceCompiles)
+include(CMakePushCheckState)
+cmake_push_check_state(RESET)
+set(CMAKE_REQUIRED_INCLUDES ${FFTW3F_INCLUDE_DIR} ${FFTW3F_MPI_INCLUDE_DIR})
+set(CMAKE_REQUIRED_LIBRARIES ${FFTW3F_MPI_LIBRARY} ${FFTW3F_LIBRARY} MPI::MPI_CXX)
+check_cxx_source_compiles([=[
+#include <fftw3-mpi.h>
+
+int main() {
+    int provided = MPI_THREAD_SINGLE;
+    MPI_Query_thread(&provided);
+    fftwf_mpi_init();
+    fftwf_mpi_cleanup();
+    return provided;
+}
+]=] COSMICTIGER_FFTW3F_MPI_LINKS)
+cmake_pop_check_state()
+if(NOT COSMICTIGER_FFTW3F_MPI_LINKS)
+    message(FATAL_ERROR
+        "FFTW3 single-precision MPI support must compile and link with the selected MPI installation")
+endif()
+
 find_path(SILO_INCLUDE_DIR silo.h REQUIRED)
 find_library(SILO_LIBRARY NAMES siloh5 silo REQUIRED)
 find_path(CHEALPIX_INCLUDE_DIR chealpix.h REQUIRED)
@@ -134,6 +162,8 @@ set(cosmictiger_source_files
     src/gravity/kick.cpp
     src/gravity/kick.cu
     src/gravity/kick_workspace.cpp
+    src/gravity/particle_mesh.cpp
+    src/gravity/particle_mesh_kick.cpp
     src/gravity/tree.cpp
     src/io/checkpoint.cpp
     src/io/output.cpp
@@ -147,6 +177,7 @@ set(cosmictiger_source_files
     src/particles/drift.cu
     src/particles/drift_cpu.cpp
     src/particles/particles.cpp
+    src/particles/particle_mesh_sort.cpp
     src/scenarios/scenario.cpp
     src/scenarios/plummer.cpp
     src/scenarios/sod.cpp
@@ -181,6 +212,11 @@ set(cosmictiger_source_files
     tests/groups_catalogue.cpp
     tests/kernel_selection_cuda.cu
     tests/linear_growth.cpp
+    tests/particle_mesh.cpp
+    tests/particle_mesh_dispatch.cpp
+    tests/particle_mesh_exchange.cpp
+    tests/particle_mesh_sort.cpp
+    tests/particle_mesh_timestep.cpp
     tests/rockstar.cpp
     tests/sph_gravity.cpp
     tests/sph_tree.cpp
@@ -361,7 +397,8 @@ set_source_files_properties(src/sph/sph_chemistry.cpp PROPERTIES COMPILE_OPTIONS
 set_source_files_properties(src/cosmology/boltzmann.cpp PROPERTIES
     COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
 # Background and clock guards must remain effective in release builds.
-set_source_files_properties(src/core/driver.cpp src/cosmology/friedmann.cpp src/cosmology/cosmology.cpp
+set_source_files_properties(src/core/driver.cpp src/gravity/particle_mesh.cpp
+    src/gravity/particle_mesh_kick.cpp src/cosmology/friedmann.cpp src/cosmology/cosmology.cpp
     src/cosmology/background.cpp src/cosmology/evolution.cpp PROPERTIES
     COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
 
@@ -370,7 +407,8 @@ set(cosmictiger_application_targets cosmictiger cosmictiger_fixed64)
 foreach(application_target IN LISTS cosmictiger_application_targets)
     add_hpx_executable(${application_target}
         DEPENDENCIES Boost::boost Boost::program_options GSL::gsl GSL::gslcblas
-            ${FFTW3F_LIBRARY} ${SILO_LIBRARY} ${CHEALPIX_LIBRARY} ${HEALPIX_CXX_LIBRARY} dl quadmath
+            ${FFTW3F_MPI_LIBRARY} ${FFTW3F_LIBRARY} MPI::MPI_CXX
+            ${SILO_LIBRARY} ${CHEALPIX_LIBRARY} ${HEALPIX_CXX_LIBRARY} dl quadmath
         SOURCES ${cosmictiger_source_files}
         HEADERS ${cosmictiger_header_files})
     if(COSMICTIGER_BUILD_STF_BENCHMARKS)
@@ -380,7 +418,8 @@ foreach(application_target IN LISTS cosmictiger_application_targets)
     target_link_libraries(${application_target} PRIVATE primordial_chemistry cosmictiger_fp16)
     target_include_directories(${application_target} PRIVATE ${PROJECT_SOURCE_DIR})
     target_include_directories(${application_target} SYSTEM PRIVATE
-        ${FFTW3F_INCLUDE_DIR} ${SILO_INCLUDE_DIR} ${CHEALPIX_INCLUDE_DIR} ${HEALPIX_CXX_INCLUDE_DIR})
+        ${FFTW3F_INCLUDE_DIR} ${FFTW3F_MPI_INCLUDE_DIR}
+        ${SILO_INCLUDE_DIR} ${CHEALPIX_INCLUDE_DIR} ${HEALPIX_CXX_INCLUDE_DIR})
     target_compile_definitions(${application_target} PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
     target_compile_options(${application_target} PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:-Wno-attributes;-ffast-math>)
@@ -665,6 +704,29 @@ if(BUILD_TESTING)
         --recombination-reference $<TARGET_FILE:recombination_reference>)
     set_tests_properties(primordial_integration_cpu PROPERTIES TIMEOUT 1200 RUN_SERIAL TRUE)
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        add_library(mpi_thread_override SHARED tests/mpi_thread_override.cpp)
+        target_link_libraries(mpi_thread_override PRIVATE MPI::MPI_CXX)
+        add_test(NAME mpi_thread_support COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/run_mpi_startup.py $<TARGET_FILE:cosmictiger>
+            $<TARGET_FILE:mpi_thread_override> ${PROJECT_BINARY_DIR}/tests/mpi_thread_support)
+        set_tests_properties(mpi_thread_support PROPERTIES TIMEOUT 240 PROCESSORS 2
+            LABELS "mpi;startup")
+        if(HPX_WITH_PARCELPORT_MPI AND MPIEXEC_EXECUTABLE)
+            set(mpi_startup_launcher_args --mpi-exec=${MPIEXEC_EXECUTABLE}
+                --mpi-numproc-flag=${MPIEXEC_NUMPROC_FLAG})
+            foreach(flag IN LISTS MPIEXEC_PREFLAGS)
+                list(APPEND mpi_startup_launcher_args "--mpi-preflag=${flag}")
+            endforeach()
+            foreach(flag IN LISTS MPIEXEC_POSTFLAGS)
+                list(APPEND mpi_startup_launcher_args "--mpi-postflag=${flag}")
+            endforeach()
+            add_test(NAME mpi_thread_support_mpi COMMAND ${Python3_EXECUTABLE}
+                ${PROJECT_SOURCE_DIR}/tests/run_mpi_startup.py $<TARGET_FILE:cosmictiger>
+                $<TARGET_FILE:mpi_thread_override> ${PROJECT_BINARY_DIR}/tests/mpi_thread_support_mpi
+                ${mpi_startup_launcher_args})
+            set_tests_properties(mpi_thread_support_mpi PROPERTIES TIMEOUT 120 PROCESSORS 4
+                LABELS "mpi;startup")
+        endif()
         add_library(no_cuda_runtime SHARED tests/no_cuda_runtime.cpp)
         add_test(NAME cpu_only_runtime COMMAND ${Python3_EXECUTABLE}
             ${PROJECT_SOURCE_DIR}/tests/run_cpu_only.py $<TARGET_FILE:cosmictiger>
@@ -1026,6 +1088,86 @@ if(BUILD_TESTING)
     cosmictiger_add_gtest(NAME fmm_acceptance TARGET fmm_acceptance_test
         PROPERTIES TIMEOUT 30)
 
+    add_executable(particle_mesh_cloud_test tests/particle_mesh_cloud.cpp)
+    target_include_directories(particle_mesh_cloud_test PRIVATE ${PROJECT_SOURCE_DIR})
+    cosmictiger_add_gtest(NAME particle_mesh_cloud TARGET particle_mesh_cloud_test
+        PROPERTIES TIMEOUT 30)
+    foreach(position_type IN ITEMS fixed32 fixed64)
+        foreach(pm_check IN ITEMS particleMesh particleMeshSort particleMeshTimestep particleMeshExchange)
+            set(pm_test_name "${pm_check}_${position_type}")
+            set(pm_test_workdir "${PROJECT_BINARY_DIR}/tests/${pm_test_name}")
+            file(MAKE_DIRECTORY "${pm_test_workdir}")
+            add_test(NAME ${pm_test_name} COMMAND $<TARGET_FILE:cosmictiger>
+                --run.test=${pm_check} --initial.particlesPerDimension=8
+                --gravity.method=pm --gravity.meshSize=8 --hydro.enabled=true
+                --compute.cuda=false --compute.positionType=${position_type}
+                --hpx:threads=2 --hpx:bind=none)
+            set_tests_properties(${pm_test_name} PROPERTIES TIMEOUT 180 PROCESSORS 2
+                WORKING_DIRECTORY "${pm_test_workdir}" LABELS "particle_mesh;cpu")
+        endforeach()
+    endforeach()
+    foreach(pm_backend IN ITEMS cpu cuda)
+        if(pm_backend STREQUAL "cuda" AND NOT COSMICTIGER_WITH_CUDA)
+            continue()
+        endif()
+        add_test(NAME particle_mesh_evolution_${pm_backend} COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/run_particle_mesh_evolution.py $<TARGET_FILE:cosmictiger>
+            ${PROJECT_BINARY_DIR}/tests/particle_mesh_evolution_${pm_backend} --${pm_backend})
+        set_tests_properties(particle_mesh_evolution_${pm_backend} PROPERTIES TIMEOUT 600
+            PROCESSORS 2 RUN_SERIAL TRUE LABELS "particle_mesh;${pm_backend}")
+    endforeach()
+    if(HPX_WITH_PARCELPORT_MPI AND MPIEXEC_EXECUTABLE)
+        set(pm_launcher_args --mpi-exec=${MPIEXEC_EXECUTABLE}
+            --mpi-numproc-flag=${MPIEXEC_NUMPROC_FLAG})
+        foreach(flag IN LISTS MPIEXEC_PREFLAGS)
+            list(APPEND pm_launcher_args "--mpi-preflag=${flag}")
+        endforeach()
+        foreach(flag IN LISTS MPIEXEC_POSTFLAGS)
+            list(APPEND pm_launcher_args "--mpi-postflag=${flag}")
+        endforeach()
+        add_test(NAME particle_mesh_dispatch_failures_mpi COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/run_particle_mesh_failures.py $<TARGET_FILE:cosmictiger>
+            ${PROJECT_BINARY_DIR}/tests/particle_mesh_dispatch_failures_mpi ${pm_launcher_args})
+        set_tests_properties(particle_mesh_dispatch_failures_mpi PROPERTIES TIMEOUT 100 PROCESSORS 4
+            RUN_SERIAL TRUE LABELS "particle_mesh;mpi")
+        set(pm_mpi_workdir "${PROJECT_BINARY_DIR}/tests/particle_mesh_mpi")
+        file(MAKE_DIRECTORY "${pm_mpi_workdir}")
+        add_test(NAME particle_mesh_mpi COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 3
+            ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS}
+            --run.test=particleMesh --initial.particlesPerDimension=8
+            --gravity.method=pm --gravity.meshSize=8 --hydro.enabled=true
+            --compute.cuda=false --hpx:threads=2 --hpx:bind=none --hpx:localities=3
+            --hpx:ini=hpx.parcel.mpi.enable=1
+            --hpx:ini=hpx.parcel.tcp.enable=0)
+        set_tests_properties(particle_mesh_mpi PROPERTIES TIMEOUT 240 PROCESSORS 6
+            WORKING_DIRECTORY "${pm_mpi_workdir}" LABELS "particle_mesh;mpi")
+        set(pm_empty_workdir "${PROJECT_BINARY_DIR}/tests/particle_mesh_empty_slabs_mpi")
+        file(MAKE_DIRECTORY "${pm_empty_workdir}")
+        add_test(NAME particle_mesh_empty_slabs_mpi COMMAND ${MPIEXEC_EXECUTABLE}
+            ${MPIEXEC_NUMPROC_FLAG} 6 ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger>
+            ${MPIEXEC_POSTFLAGS} --run.test=particleMesh --initial.particlesPerDimension=8
+            --gravity.method=pm --gravity.meshSize=8 --hydro.enabled=true
+            --compute.cuda=false --hpx:threads=1 --hpx:bind=none --hpx:localities=6
+            --hpx:ini=hpx.parcel.mpi.enable=1 --hpx:ini=hpx.parcel.tcp.enable=0)
+        set_tests_properties(particle_mesh_empty_slabs_mpi PROPERTIES TIMEOUT 240 PROCESSORS 6
+            WORKING_DIRECTORY "${pm_empty_workdir}" LABELS "particle_mesh;mpi")
+        set(pm_timestep_workdir "${PROJECT_BINARY_DIR}/tests/particle_mesh_timestep_mpi")
+        file(MAKE_DIRECTORY "${pm_timestep_workdir}")
+        add_test(NAME particle_mesh_timestep_mpi COMMAND ${MPIEXEC_EXECUTABLE}
+            ${MPIEXEC_NUMPROC_FLAG} 3 ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger>
+            ${MPIEXEC_POSTFLAGS} --run.test=particleMeshTimestep --initial.particlesPerDimension=8
+            --gravity.method=pm --gravity.meshSize=8 --hydro.enabled=false
+            --compute.cuda=false --hpx:threads=2 --hpx:bind=none --hpx:localities=3
+            --hpx:ini=hpx.parcel.mpi.enable=1 --hpx:ini=hpx.parcel.tcp.enable=0)
+        set_tests_properties(particle_mesh_timestep_mpi PROPERTIES TIMEOUT 180 PROCESSORS 6
+            WORKING_DIRECTORY "${pm_timestep_workdir}" LABELS "particle_mesh;mpi")
+        add_test(NAME particle_mesh_evolution_mpi COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/run_particle_mesh_evolution.py $<TARGET_FILE:cosmictiger>
+            ${PROJECT_BINARY_DIR}/tests/particle_mesh_evolution_mpi --cpu
+            ${pm_launcher_args} --ranks 2)
+        set_tests_properties(particle_mesh_evolution_mpi PROPERTIES TIMEOUT 600 PROCESSORS 4
+            RUN_SERIAL TRUE LABELS "particle_mesh;mpi")
+    endif()
     add_executable(radial_density_kernel_test tests/radial_density_kernel.cpp)
     target_include_directories(radial_density_kernel_test PRIVATE ${PROJECT_SOURCE_DIR})
     target_compile_definitions(radial_density_kernel_test PRIVATE RADIAL_KERNEL_TEST_SIMD)

@@ -24,7 +24,7 @@ for all options and defaults. HPX's own options retain their `--hpx:*` syntax.
 | `output` | Particle Silo output, cadence, directory, unit system, frame, and selected box |
 | `analysis` | Power spectrum, halos, tracers, slices, and views |
 | `lightcone` | Lightcone output and group finding |
-| `gravity` | Gravity, softening, opening angle, and time-step parameter |
+| `gravity` | FMM or particle-mesh gravity, mesh/cloud selection, softening, opening angle, and timestep |
 | `cosmology` | Redshifts, density parameters, and primordial spectrum |
 | `units` | Particle mass unit in solar masses |
 | `hydro` | SPH, equation of state, smoothing radii, and artificial viscosity |
@@ -84,7 +84,16 @@ record the representation and must be restarted with the same `compute.positionT
 The legacy `glass.bin` exchange format remains Q0.32 in both modes; checkpoints
 retain the selected position precision.
 
-Gravity and SPH can select kernels independently. Both use an effective radius
+The default gravity solver is `gravity.method=fmm`. Select periodic CPU
+particle-mesh gravity with `--gravity.method=pm --gravity.meshSize=128` for a
+`128 × 128 × 128` mesh. `gravity.cloud=ngp|cic|tsc|pcs` selects the Cartesian
+assignment, defaulting to PCS. The same cloud deposits source mass and
+interpolates sink forces, with both assignment windows deconvolved. PM uses one
+adaptive dyadic timestep shared by all particles; `compute.cuda` still selects
+CPU or CUDA SPH and drift. See [particle-mesh gravity](docs/particle_mesh.md) for
+the force convention, resolution limits, distributed sorting, and restarts.
+
+FMM gravity and SPH can select radial kernels independently. Both use an effective radius
 `effectiveRadius = 2 sigma`, where sigma is the standard deviation along one
 coordinate axis. This preserves the existing numerical length scale: adopting
 radius terminology does not introduce a factor-of-two conversion.
@@ -193,11 +202,12 @@ The conversion utilities use the same grouping style:
 
 The gas solver uses Monaghan's 1992 density/internal-energy SPH: the cubic spline,
 symmetric pressure forces and thermal work, and constant alpha/beta artificial
-viscosity. It is integrated with the Cartesian FMM and particle storage. See
+viscosity. It is integrated with both gravity backends and particle storage. See
 [the formulation and paper references](docs/monaghan_sph.md) for the equations,
 cosmological conversions, and deliberate implementation choices. The normal
-dark-matter-only mode keeps its hierarchical gravity integrator. Enable gas explicitly
-with `--hydro.enabled=true`; gas runs use the ordinary block-timestep gravity/SPH path.
+dark-matter-only FMM mode keeps its hierarchical gravity integrator. Enable gas explicitly
+with `--hydro.enabled=true`; FMM gas runs use the ordinary block-timestep gravity/SPH path,
+and PM gas runs use the common timestep described above.
 Select SIMD CPU SPH with `--compute.cuda=false` or CUDA SPH with `--compute.cuda=true`.
 Particle drift also follows `compute.cuda`: the CPU path uses SIMD position updates
 and HPX workers, including rung filtering, glass damping, and lightcone crossings.
@@ -222,7 +232,8 @@ formation, diffusion, and conduction are unsupported. Their former options,
 the obsolete `hydro.chemistry` switch,
 `hydro.yReflect`, and `gravity.sphSmoothing` are no longer accepted, including
 false entries in older INI files. Gas smoothing lengths remain adaptive;
-gravity uses one fixed comoving radius for gas and dark matter. The legacy
+FMM gravity uses one fixed comoving radius for gas and dark matter; PM resolution
+is set by its mesh and cloud assignment. The legacy
 equal-mass lightcone and halo finders, and dark-matter-only Gadget/Plummer/glass
 loaders, reject SPH runs.
 
@@ -317,11 +328,15 @@ checkpoints, including their names and the conditions that create them.
 ## Build
 
 Use CMake 3.24 or newer, C++20, HPX with CUDA and networking enabled, CUDA,
-serial FFTW3 (single precision), GSL, Silo, HEALPix C and C++, Boost program options
-and Boost.Units headers. Install the development packages for these dependencies;
-on Debian/Ubuntu, GSL and HEALPix are provided by `libgsl-dev`, `libchealpix-dev`,
-and `libhealpix-cxx-dev`. CMake finds system installations automatically. The
-build links the installed HEALPix C++ library.
+MPI, FFTW3 with single-precision serial and MPI libraries (`fftw3f` and
+`fftw3f_mpi`), GSL, Silo, HEALPix C and C++, Boost program options and Boost.Units
+headers. Install the development packages for these dependencies; on
+Debian/Ubuntu, FFTW3, GSL and HEALPix are provided by `libfftw3-dev`,
+`libfftw3-mpi-dev`, `libgsl-dev`, `libchealpix-dev`, and `libhealpix-cxx-dev`,
+alongside the development package for the selected MPI implementation. CMake
+finds system installations automatically and verifies that the single-precision
+FFTW MPI API links with the selected MPI library. The build links the installed
+HEALPix C++ library.
 
 Run `./build.sh` in a terminal for the interactive builder. It uses a full-screen
 menu when `whiptail` is available, with a text menu as a fallback. Choose Release,
@@ -349,10 +364,14 @@ cmake --build build/release --parallel 4
 ```
 
 Select the CUDA toolkit explicitly when several versions are installed. HPX and
-CosmicTiger should use the same toolkit major version and host compiler, and HPX
-should be rebuilt after changing the system MPI installation. A CUDA-enabled HPX
-also checks its CUDA compiler when configuring CosmicTiger with CUDA disabled;
-a separate CPU-only HPX installation is optional.
+CosmicTiger should use the same toolkit major version and host compiler. HPX,
+FFTW3-MPI and CosmicTiger must use the same MPI installation; rebuild HPX and
+FFTW3-MPI after changing it. The MPI implementation must provide
+`MPI_THREAD_MULTIPLE` so application MPI calls can overlap HPX parcelport
+communication. CosmicTiger requests this level before starting HPX, including
+single-process launches, and exits with an error if any rank supplies less.
+A CUDA-enabled HPX also checks its CUDA compiler when configuring
+CosmicTiger with CUDA disabled; a separate CPU-only HPX installation is optional.
 
 On Ubuntu 26.04 with GCC 15 and glibc 2.43, CUDA 12.8 fails its compiler check or
 conflicts with the C library's math declarations. Ubuntu's CUDA 13.1 packages,

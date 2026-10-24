@@ -21,6 +21,7 @@
 #include <vector>
 
 #include <hpx/modules/program_options.hpp>
+#include <mpi.h>
 #include <unistd.h>
 
 #include <cosmictiger/analysis/lightcone.hpp>
@@ -36,6 +37,7 @@
 #include <cosmictiger/fmm/fmm_order.hpp>
 #include <cosmictiger/fmm/fmm_types.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
+#include <cosmictiger/gravity/particle_mesh.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #include <cosmictiger/io/checkpoint.hpp>
 #include <cosmictiger/io/output.hpp>
@@ -122,9 +124,15 @@ int hpx_main(int argc, char* argv[]) {
                 driver();
             }
         }
+        particleMeshDestroy();
         particlesDestroy();
     } catch (std::exception const& error) {
         PRINT("CosmicTiger failed: %s\n", error.what());
+        try {
+            particleMeshDestroy();
+        } catch (std::exception const& cleanupError) {
+            PRINT("PM cleanup failed: %s\n", cleanupError.what());
+        }
         if (daemonStarted) {
             stopMemuseDaemon();
         }
@@ -132,6 +140,11 @@ int hpx_main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     } catch (...) {
         PRINT("CosmicTiger failed with an unknown exception\n");
+        try {
+            particleMeshDestroy();
+        } catch (...) {
+            PRINT("PM cleanup failed during exception handling\n");
+        }
         if (daemonStarted) {
             stopMemuseDaemon();
         }
@@ -145,6 +158,55 @@ int hpx_main(int argc, char* argv[]) {
 }
 
 namespace detail {
+
+char const* mpiThreadSupportName(int threadSupport) {
+    switch (threadSupport) {
+    case MPI_THREAD_SINGLE:
+        return "MPI_THREAD_SINGLE";
+    case MPI_THREAD_FUNNELED:
+        return "MPI_THREAD_FUNNELED";
+    case MPI_THREAD_SERIALIZED:
+        return "MPI_THREAD_SERIALIZED";
+    case MPI_THREAD_MULTIPLE:
+        return "MPI_THREAD_MULTIPLE";
+    default:
+        return "an unknown MPI thread support level";
+    }
+}
+
+void initializeMpi(int& argc, char**& argv, bool& ownsMpi) {
+    int finalized = 0;
+    if (MPI_Finalized(&finalized) != MPI_SUCCESS || finalized) {
+        throw std::runtime_error("Cannot start CosmicTiger after MPI finalization");
+    }
+    int initialized = 0;
+    if (MPI_Initialized(&initialized) != MPI_SUCCESS) {
+        throw std::runtime_error("MPI_Initialized failed");
+    }
+    if (!initialized) {
+        int provided = MPI_THREAD_SINGLE;
+        if (MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided) != MPI_SUCCESS) {
+            throw std::runtime_error("MPI_Init_thread failed while requesting MPI_THREAD_MULTIPLE");
+        }
+        ownsMpi = true;
+    }
+    int provided = MPI_THREAD_SINGLE;
+    if (MPI_Query_thread(&provided) != MPI_SUCCESS) {
+        throw std::runtime_error("MPI_Query_thread failed");
+    }
+    // Before HPX starts, all MPI calls are on the initializing OS thread.
+    // Make every rank reject together if any process has weaker thread support.
+    int minimumProvided = MPI_THREAD_SINGLE;
+    if (MPI_Allreduce(&provided, &minimumProvided, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD) !=
+        MPI_SUCCESS) {
+        throw std::runtime_error("MPI_Allreduce failed while checking MPI thread support");
+    }
+    if (minimumProvided != MPI_THREAD_MULTIPLE) {
+        throw std::runtime_error(std::string("CosmicTiger requires MPI_THREAD_MULTIPLE; ") +
+            "the lowest thread support across MPI ranks is " +
+            mpiThreadSupportName(minimumProvided));
+    }
+}
 
 // Every locality chooses the same position ABI before HPX/MPI initializes. Keep
 // unknown application/HPX options for their normal parsers after this dispatch.
@@ -193,20 +255,31 @@ void selectPositionBackend(int argc, char* argv[]) {
 }    // namespace detail
 
 int main(int argc, char* argv[]) {
+    bool ownsMpi = false;
+    int result = EXIT_FAILURE;
     try {
         detail::selectPositionBackend(argc, argv);
+        recordCommandLineArguments(argc, argv);
+        detail::initializeMpi(argc, argv, ownsMpi);
+        std::vector<std::string> cfg = {"hpx.commandline.allow_unknown=1"};
+        cfg.push_back("hpx.stacks.small_size=524288");
+#ifdef HPX_EARLY
+        result = hpx::init(argc, argv, cfg);
+#else
+        hpx::init_params initParams;
+        initParams.cfg = std::move(cfg);
+        result = hpx::init(argc, argv, initParams);
+#endif
     } catch (std::exception const& error) {
         std::fprintf(stderr, "CosmicTiger failed: %s\n", error.what());
-        return EXIT_FAILURE;
+    } catch (...) {
+        std::fprintf(stderr, "CosmicTiger failed with an unknown startup exception\n");
     }
-    recordCommandLineArguments(argc, argv);
-    std::vector<std::string> cfg = {"hpx.commandline.allow_unknown=1"};
-    cfg.push_back("hpx.stacks.small_size=524288");
-#ifdef HPX_EARLY
-    return hpx::init(argc, argv, cfg);
-#else
-    hpx::init_params initParams;
-    initParams.cfg = std::move(cfg);
-    return hpx::init(argc, argv, initParams);
-#endif
+    // HPX leaves externally initialized MPI to its owner. Finalize on this
+    // same OS thread only after HPX has stopped, including startup failures.
+    if (ownsMpi && MPI_Finalize() != MPI_SUCCESS) {
+        std::fprintf(stderr, "CosmicTiger failed: MPI_Finalize failed\n");
+        result = EXIT_FAILURE;
+    }
+    return result;
 }

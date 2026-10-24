@@ -640,6 +640,12 @@ void unitsOutputTest();
 void distributedOutputTest();
 void fmmTreeTest();
 void fmmWalkTest();
+void particleMeshTest();
+void particleMeshSortTest();
+void particleMeshTimestepTest();
+void particleMeshExchangeTest();
+void particleMeshDispatchLaunchFailureTest();
+void particleMeshDispatchAsyncFailureTest();
 
 #ifdef COSMICTIGER_STF_BENCHMARKS
 void stfWalkBenchmark();
@@ -671,6 +677,12 @@ ApplicationTest const applicationTests[] = {
     {"linearGrowth", linearGrowthTest},
     {"fmmWalk", fmmWalkTest},
     {"fmmTree", fmmTreeTest},
+    {"particleMesh", particleMeshTest},
+    {"particleMeshSort", particleMeshSortTest},
+    {"particleMeshTimestep", particleMeshTimestepTest},
+    {"particleMeshExchange", particleMeshExchangeTest},
+    {"particleMeshDispatchLaunchFailure", particleMeshDispatchLaunchFailureTest},
+    {"particleMeshDispatchAsyncFailure", particleMeshDispatchAsyncFailureTest},
     {"unitsOutput", unitsOutputTest},
     {"distributedOutput", distributedOutputTest},
     {"checkpointState", checkpointStateTest},

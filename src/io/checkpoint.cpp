@@ -90,6 +90,7 @@ constexpr uint32_t kCompactSphLayout = 1U << 24;
 constexpr uint32_t kZPlaneAcceleration = 1U << 12;
 constexpr uint32_t kBalsaraSwitch = 1U << 13;
 constexpr uint32_t kFixed64Positions = 1U << 15;
+constexpr uint32_t kParticleMesh = 1U << 16;
 constexpr uint64_t kFnvOffsetBasis = 14695981039346656037ULL;
 constexpr uint64_t kFnvPrime = 1099511628211ULL;
 
@@ -398,7 +399,8 @@ uint32_t checkpointFlags(Options const& opts) {
         (opts.analysis.tracers ? kTracers : 0U) | (opts.chemistry.enabled ? kChemistry : 0U) |
         (opts.hydro.enabled && opts.hydro.zPlaneAcceleration != 0.0 ? kZPlaneAcceleration : 0U) |
         (opts.hydro.enabled && opts.hydro.balsaraSwitch ? kBalsaraSwitch : 0U) |
-        (opts.compute.positionType == "fixed64" ? kFixed64Positions : 0U);
+        (opts.compute.positionType == "fixed64" ? kFixed64Positions : 0U) |
+        (opts.gravity.method == "pm" ? kParticleMesh : 0U);
 }
 
 uint32_t checkpointKernelCode(std::string const& family, int degree) {
@@ -432,9 +434,9 @@ uint32_t checkpointPhysicsCode(Options const& opts) {
 }
 
 bool legacyCheckpointCompatible(Options const& opts) {
-    return opts.compute.positionType == "fixed32" && !opts.hydro.enabled &&
-        opts.run.hierarchicalGravity && opts.gravity.kernelFamily == "ferrers" &&
-        opts.gravity.kernelDegree == 8;
+    return opts.gravity.method == "fmm" && opts.compute.positionType == "fixed32" &&
+        !opts.hydro.enabled && opts.run.hierarchicalGravity &&
+        opts.gravity.kernelFamily == "ferrers" && opts.gravity.kernelDegree == 8;
 }
 
 CheckpointHeader checkpointHeader(Options const& opts) {
@@ -447,7 +449,8 @@ CheckpointHeader checkpointHeader(Options const& opts) {
 
 bool checkpointCompatible(CheckpointHeader const& header, Options const& opts) {
     bool const supportedVersion = header.version == kCheckpointVersion ||
-        (!opts.hydro.enabled && opts.compute.positionType == "fixed32" &&
+        (opts.gravity.method == "fmm" && !opts.hydro.enabled &&
+            opts.compute.positionType == "fixed32" &&
             header.version == kLegacyDarkMatterCheckpointVersion);
     return supportedVersion && header.flags == checkpointFlags(opts) &&
         header.reserved == checkpointPhysicsCode(opts) &&
@@ -481,10 +484,31 @@ bool zPlaneCheckpointCompatible(double acceleration, Options const& opts) {
         acceleration == opts.hydro.zPlaneAcceleration;
 }
 
+std::array<uint64_t, 6> particleMeshCheckpointParameters(Options const& opts) {
+    uint64_t timestepEtaBits;
+    std::memcpy(&timestepEtaBits, &opts.gravity.timestepEta, sizeof(timestepEtaBits));
+    uint64_t const cloudOrder = opts.gravity.cloud == "ngp" ? 1 :
+        opts.gravity.cloud == "cic"                         ? 2 :
+        opts.gravity.cloud == "tsc"                         ? 3 :
+                                                              4;
+    // Versioned optional extension; FMM files retain their existing layout.
+    // Force convention 1: two-sided assignment compensation, spectral force,
+    // zero-mean potential with the discrete particle self potential removed.
+    return {1, static_cast<uint64_t>(opts.gravity.meshSize), cloudOrder,
+        static_cast<uint64_t>(opts.run.minRung), timestepEtaBits, 1};
+}
+
 void writeDriverState(FILE* fp, DriverParameters const& params) {
     auto const header = checkpointHeader(getOptions());
     if (fwrite(&header, sizeof(header), 1, fp) != 1) {
         THROW_ERROR("Unable to write checkpoint header\n");
+    }
+    if ((header.flags & kParticleMesh) != 0U) {
+        auto const meshParameters = particleMeshCheckpointParameters(getOptions());
+        if (fwrite(meshParameters.data(), sizeof(uint64_t), meshParameters.size(), fp) !=
+            meshParameters.size()) {
+            THROW_ERROR("Unable to write particle mesh checkpoint parameters\n");
+        }
     }
     if (getOptions().hydro.enabled) {
         auto const sphParameters = sphCheckpointParameters(getOptions());
@@ -536,6 +560,14 @@ DriverParameters readDriverState(FILE* fp) {
         if (!checkpointCompatible(header, getOptions())) {
             THROW_ERROR("Checkpoint physics, particle layout or integrator differs from the "
                         "requested run\n");
+        }
+        if ((header.flags & kParticleMesh) != 0U) {
+            auto meshParameters = particleMeshCheckpointParameters(getOptions());
+            FREAD(meshParameters.data(), sizeof(uint64_t), meshParameters.size(), fp);
+            if (meshParameters != particleMeshCheckpointParameters(getOptions())) {
+                THROW_ERROR("Particle mesh checkpoint version, mesh size, cloud, timestep "
+                            "parameters or force convention differs from the requested run\n");
+            }
         }
         if (getOptions().hydro.enabled) {
             auto sphParameters = sphCheckpointParameters(getOptions());
@@ -661,6 +693,22 @@ void checkpointStateTest() {
     ALWAYS_ASSERT(restored.energies.therm == kThermal && restored.energies.heating == kHeating);
     auto changed = getOptions();
     auto const header = detail::checkpointHeader(changed);
+    changed.gravity.method = changed.gravity.method == "pm" ? "fmm" : "pm";
+    ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
+    changed = getOptions();
+    auto const meshParameters = detail::particleMeshCheckpointParameters(changed);
+    changed.gravity.meshSize += 1;
+    ALWAYS_ASSERT(meshParameters != detail::particleMeshCheckpointParameters(changed));
+    changed = getOptions();
+    changed.gravity.cloud = changed.gravity.cloud == "cic" ? "pcs" : "cic";
+    ALWAYS_ASSERT(meshParameters != detail::particleMeshCheckpointParameters(changed));
+    changed = getOptions();
+    changed.run.minRung += 1;
+    ALWAYS_ASSERT(meshParameters != detail::particleMeshCheckpointParameters(changed));
+    changed = getOptions();
+    changed.gravity.timestepEta *= 0.5;
+    ALWAYS_ASSERT(meshParameters != detail::particleMeshCheckpointParameters(changed));
+    changed = getOptions();
     changed.compute.positionType =
         changed.compute.positionType == "fixed32" ? "fixed64" : "fixed32";
     ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
@@ -730,7 +778,8 @@ void checkpointStateTest() {
     legacyKernelOptions.hydro.enabled = false;
     legacyKernelOptions.run.hierarchicalGravity = true;
     ALWAYS_ASSERT(detail::legacyCheckpointCompatible(legacyKernelOptions) ==
-        (legacyKernelOptions.compute.positionType == "fixed32"));
+        (legacyKernelOptions.compute.positionType == "fixed32" &&
+            legacyKernelOptions.gravity.method == "fmm"));
     legacyKernelOptions.gravity.kernelFamily = "spline";
     ALWAYS_ASSERT(!detail::legacyCheckpointCompatible(legacyKernelOptions));
     legacyKernelOptions.gravity.kernelFamily = "ferrers";
@@ -750,7 +799,8 @@ void checkpointStateTest() {
     auto legacyDarkMatterHeader = detail::checkpointHeader(legacyDarkMatterOptions);
     legacyDarkMatterHeader.version = detail::kLegacyDarkMatterCheckpointVersion;
     ALWAYS_ASSERT(detail::checkpointCompatible(legacyDarkMatterHeader, legacyDarkMatterOptions) ==
-        (legacyDarkMatterOptions.compute.positionType == "fixed32"));
+        (legacyDarkMatterOptions.compute.positionType == "fixed32" &&
+            legacyDarkMatterOptions.gravity.method == "fmm"));
     auto const sphParameters = detail::sphCheckpointParameters(getOptions());
     auto balsaraOptions = getOptions();
     balsaraOptions.hydro.enabled = true;

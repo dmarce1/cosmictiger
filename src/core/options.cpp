@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <bit>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <fstream>
 #include <iostream>
@@ -228,6 +229,9 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"lightcone.linkingLength", options.lightcone.linkingLength},
         {"lightcone.mapSize", options.lightcone.mapSize},
         {"gravity.enabled", options.gravity.enabled},
+        {"gravity.method", options.gravity.method},
+        {"gravity.meshSize", options.gravity.meshSize},
+        {"gravity.cloud", options.gravity.cloud},
         {"gravity.fmmOrder", options.gravity.fmmOrder},
         {"gravity.kernelFamily", options.gravity.kernelFamily},
         {"gravity.kernelDegree", options.gravity.kernelDegree},
@@ -453,6 +457,12 @@ bool processOptions(int argc, char* argv[]) {
     po::options_description gravityOpts("Gravity");
     gravityOpts.add_options()("gravity.enabled",
         po::value<bool>(&opts.gravity.enabled)->default_value(true), "enable gravity")(
+        "gravity.method", po::value<std::string>(&opts.gravity.method)->default_value("fmm"),
+        "gravity solver: fmm or periodic CPU particle mesh (pm)")("gravity.meshSize",
+        po::value<int>(&opts.gravity.meshSize)->default_value(0),
+        "PM mesh cells per axis; required with gravity.method=pm")("gravity.cloud",
+        po::value<std::string>(&opts.gravity.cloud)->default_value("pcs"),
+        "PM source/sink assignment: ngp, cic, tsc, or pcs; both windows are deconvolved")(
         "gravity.fmmOrder", po::value<int>(&opts.gravity.fmmOrder)->default_value(kFmmDefaultOrder),
         "FMM order (multipole degree plus two), within the build's compiled range")(
         "gravity.openingAngle", po::value<double>(&opts.gravity.openingAngle)->default_value(0.8),
@@ -629,6 +639,33 @@ bool processOptions(int argc, char* argv[]) {
     }
     terminal::setVerbose(opts.run.verbose);
     auto const isExplicit = [&](char const* key) { return vm.count(key) && !vm[key].defaulted(); };
+    if (opts.gravity.method != "fmm" && opts.gravity.method != "pm") {
+        THROW_ERROR("gravity.method must be fmm or pm\n");
+    }
+    int const cloudWidth = opts.gravity.cloud == "ngp" ? 1 :
+        opts.gravity.cloud == "cic"                    ? 2 :
+        opts.gravity.cloud == "tsc"                    ? 3 :
+        opts.gravity.cloud == "pcs"                    ? 4 :
+                                                         0;
+    if (cloudWidth == 0) {
+        THROW_ERROR("gravity.cloud must be ngp, cic, tsc, or pcs\n");
+    }
+    if (opts.gravity.meshSize < 0) {
+        THROW_ERROR("gravity.meshSize must be nonnegative\n");
+    }
+    if (opts.gravity.method == "pm") {
+        if (opts.gravity.meshSize < std::max(2, cloudWidth)) {
+            THROW_ERROR("gravity.meshSize must be at least %i with gravity.method=pm and "
+                        "gravity.cloud=%s\n",
+                std::max(2, cloudWidth), opts.gravity.cloud.c_str());
+        }
+        size_t const meshSize = static_cast<size_t>(opts.gravity.meshSize);
+        size_t const maximumCells = std::min(size_t(std::numeric_limits<ptrdiff_t>::max()),
+            std::numeric_limits<size_t>::max() / (8 * sizeof(float)));
+        if (meshSize > maximumCells / meshSize / meshSize) {
+            THROW_ERROR("gravity.meshSize cubed exceeds mesh indexing/allocation limits\n");
+        }
+    }
     if (opts.initial.plummer && opts.initial.createGlass) {
         THROW_ERROR("initial.plummer and initial.createGlass cannot both be enabled\n");
     }
@@ -871,7 +908,7 @@ bool processOptions(int argc, char* argv[]) {
         THROW_ERROR("hydro support radii must remain finite and positive in single precision "
                     "after normalization by initial.particlesPerDimension\n");
     }
-    opts.run.hierarchicalGravity = true;
+    opts.run.hierarchicalGravity = opts.gravity.method != "pm";
     opts.hydro.damping = 0.0;
     if (opts.compute.sphBucketSize == 0) {
         // Retain the historical SPH bucket heuristic, using the final parsed
@@ -1142,6 +1179,9 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("chemistry.maxSubsteps", chemistry.maxSubsteps);
     SHOW("hydro.enabled", hydro.enabled);
     SHOW("gravity.enabled", gravity.enabled);
+    SHOW("gravity.method", gravity.method);
+    SHOW("gravity.meshSize", gravity.meshSize);
+    SHOW("gravity.cloud", gravity.cloud);
     SHOW("run.hierarchicalGravity", run.hierarchicalGravity);
     SHOW("hydro.viscosityAlpha", hydro.viscosityAlpha);
     SHOW("hydro.viscosityBeta", hydro.viscosityBeta);
@@ -1292,9 +1332,16 @@ bool processOptions(int argc, char* argv[]) {
         SHOW("compute.positionType", compute.positionType);
         SHOW("gravity.enabled", gravity.enabled);
         if (opts.gravity.enabled) {
-            SHOW("gravity.fmmOrder", gravity.fmmOrder);
-            SHOW("gravity.kernelFamily", gravity.kernelFamily);
-            SHOW("gravity.kernelDegree", gravity.kernelDegree);
+            SHOW("gravity.method", gravity.method);
+            if (opts.gravity.method == "pm") {
+                SHOW("gravity.meshSize", gravity.meshSize);
+                SHOW("gravity.cloud", gravity.cloud);
+                PRINT("%-38s: CPU mesh, common adaptive power-of-two timestep\n", "PM gravity");
+            } else {
+                SHOW("gravity.fmmOrder", gravity.fmmOrder);
+                SHOW("gravity.kernelFamily", gravity.kernelFamily);
+                SHOW("gravity.kernelDegree", gravity.kernelDegree);
+            }
         }
         SHOW("hydro.enabled", hydro.enabled);
         if (opts.hydro.enabled) {

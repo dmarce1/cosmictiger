@@ -6,12 +6,15 @@
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
+#include <mutex>
+
 #include <fftw3.h>
 #include <silo.h>
 
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/cosmology/fft.hpp>
+#include <cosmictiger/cosmology/fftw_lock.hpp>
 #include <cosmictiger/cuda/cuda.hpp>
 #include <cosmictiger/io/output.hpp>
 
@@ -512,7 +515,6 @@ static void update() {
 }
 
 static void fft3dPhase1() {
-    static MutexType mtx;
     Vector<hpx::future<void>> futs;
     for (auto c : hpxChildren()) {
         futs.push_back(hpx::async<Fft3dPhase1Action>(c));
@@ -525,7 +527,7 @@ static void fft3dPhase1() {
                 fftwf_plan p;
                 fftwf_complex out[n / 2 + 1];
                 float in[n];
-                std::unique_lock<MutexType> lock(mtx);
+                std::unique_lock<std::mutex> lock(fftwPlannerMutex());
                 p = fftwf_plan_dft_r2c_1d(n, in, out, FFTW_ESTIMATE);
                 lock.unlock();
                 auto i = j;
@@ -551,7 +553,6 @@ static void fft3dPhase1() {
 }
 
 static void fft3dPhase2(int dim, bool inv) {
-    static MutexType mtx;
     Vector<hpx::future<void>> futs;
     for (auto c : hpxChildren()) {
         futs.push_back(hpx::async<Fft3dPhase2Action>(c, dim, inv));
@@ -565,7 +566,7 @@ static void fft3dPhase2(int dim, bool inv) {
                 fftwf_complex out[n];
                 fftwf_complex in[n];
                 fftwf_plan p;
-                std::unique_lock<MutexType> lock(mtx);
+                std::unique_lock<std::mutex> lock(fftwPlannerMutex());
                 p = fftwf_plan_dft_1d(
                     n, in, out, inv ? FFTW_BACKWARD : FFTW_FORWARD, FFTW_ESTIMATE);
                 lock.unlock();
@@ -597,7 +598,6 @@ static void fft3dPhase2(int dim, bool inv) {
 }
 
 static void fft3dPhase3() {
-    static MutexType mtx;
     Vector<hpx::future<void>> futs;
     for (auto c : hpxChildren()) {
         futs.push_back(hpx::async<Fft3dPhase3Action>(c));
@@ -612,7 +612,7 @@ static void fft3dPhase3() {
                 fftwf_plan p;
                 fftwf_complex in[n / 2 + 1];
                 float out[n];
-                std::unique_lock<MutexType> lock(mtx);
+                std::unique_lock<std::mutex> lock(fftwPlannerMutex());
                 p = fftwf_plan_dft_c2r_1d(n, in, out, FFTW_ESTIMATE);
                 lock.unlock();
                 auto i = j;
