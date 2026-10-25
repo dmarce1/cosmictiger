@@ -24,7 +24,7 @@ for all options and defaults. HPX's own options retain their `--hpx:*` syntax.
 | `output` | Particle Silo output, cadence, directory, unit system, frame, and selected box |
 | `analysis` | Power spectrum, halos, tracers, slices, and views |
 | `lightcone` | Lightcone output and group finding |
-| `gravity` | FMM or particle-mesh gravity, mesh/cloud selection, softening, opening angle, and timestep |
+| `gravity` | FMM gravity, softening, opening angle, and timestep |
 | `cosmology` | Redshifts, density parameters, and primordial spectrum |
 | `units` | Particle mass unit in solar masses |
 | `hydro` | SPH, equation of state, smoothing radii, and artificial viscosity |
@@ -84,14 +84,9 @@ record the representation and must be restarted with the same `compute.positionT
 The legacy `glass.bin` exchange format remains Q0.32 in both modes; checkpoints
 retain the selected position precision.
 
-The default gravity solver is `gravity.method=fmm`. Select periodic CPU
-particle-mesh gravity with `--gravity.method=pm --gravity.meshSize=128` for a
-`128 × 128 × 128` mesh. `gravity.cloud=ngp|cic|tsc|pcs` selects the Cartesian
-assignment, defaulting to PCS. The same cloud deposits source mass and
-interpolates sink forces, with both assignment windows deconvolved. PM uses one
-adaptive dyadic timestep shared by all particles; `compute.cuda` still selects
-CPU or CUDA SPH and drift. See [particle-mesh gravity](docs/particle_mesh.md) for
-the force convention, resolution limits, distributed sorting, and restarts.
+Gravity uses `gravity.method=fmm`. The ordinary PM solver and its
+`gravity.meshSize` and `gravity.cloud` options are no longer supported.
+Historical PM checkpoints cannot be restarted with this executable.
 
 FMM gravity and SPH can select radial kernels independently. Both use an effective radius
 `effectiveRadius = 2 sigma`, where sigma is the standard deviation along one
@@ -202,12 +197,11 @@ The conversion utilities use the same grouping style:
 
 The gas solver uses Monaghan's 1992 density/internal-energy SPH: the cubic spline,
 symmetric pressure forces and thermal work, and constant alpha/beta artificial
-viscosity. It is integrated with both gravity backends and particle storage. See
+viscosity. It is integrated with FMM gravity and particle storage. See
 [the formulation and paper references](docs/monaghan_sph.md) for the equations,
 cosmological conversions, and deliberate implementation choices. The normal
 dark-matter-only FMM mode keeps its hierarchical gravity integrator. Enable gas explicitly
-with `--hydro.enabled=true`; FMM gas runs use the ordinary block-timestep gravity/SPH path,
-and PM gas runs use the common timestep described above.
+with `--hydro.enabled=true`; gas runs use the ordinary block-timestep gravity/SPH path.
 Select SIMD CPU SPH with `--compute.cuda=false` or CUDA SPH with `--compute.cuda=true`.
 Particle drift also follows `compute.cuda`: the CPU path uses SIMD position updates
 and HPX workers, including rung filtering, glass damping, and lightcone crossings.
@@ -232,8 +226,7 @@ formation, diffusion, and conduction are unsupported. Their former options,
 the obsolete `hydro.chemistry` switch,
 `hydro.yReflect`, and `gravity.sphSmoothing` are no longer accepted, including
 false entries in older INI files. Gas smoothing lengths remain adaptive;
-FMM gravity uses one fixed comoving radius for gas and dark matter; PM resolution
-is set by its mesh and cloud assignment. The legacy
+FMM gravity uses one fixed comoving radius for gas and dark matter. The legacy
 equal-mass lightcone and halo finders, and dark-matter-only Gadget/Plummer/glass
 loaders, reject SPH runs.
 

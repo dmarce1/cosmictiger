@@ -143,8 +143,6 @@ void runFixedScenario() {
                 baseOptions.gravity.openingAngle, state.iter == 0, fullEvaluation, state.energies);
             double const flops = flopsPerSecond();
             state.maxRung = std::max(int(result.first.maxRung), baseOptions.run.minRung);
-            int const displayedMinimumRung =
-                baseOptions.gravity.method == "pm" ? state.maxRung : minimumRung;
             if (state.iter == 0) {
                 state.energy0 = state.energies.kin + state.energies.therm + state.energies.pot;
             }
@@ -170,8 +168,8 @@ void runFixedScenario() {
             if (progress == nullptr) {
                 THROW_ERROR("Unable to write scenario progress\n");
             }
-            fprintf(progress, "%i %e %e %i %i\n", state.iter, state.tau, timestep,
-                displayedMinimumRung, state.maxRung);
+            fprintf(progress, "%i %e %e %i %i\n", state.iter, state.tau, timestep, minimumRung,
+                state.maxRung);
             fclose(progress);
             checkpointTimer.stop();
             if (checkpointTimer.read() > baseOptions.checkpoint.intervalSeconds) {
@@ -194,8 +192,7 @@ void runFixedScenario() {
                 }
                 PRINT("%8i %13.6e %13.6e %7.2f %6i/%-6i %10.2f %10.3f %10.3e\n", state.iter,
                     state.tau, timestep, std::clamp(100.0 * state.tau / duration, 0.0, 100.0),
-                    displayedMinimumRung, state.maxRung, displayedRuntime, stepTimer.read(),
-                    flops * 1e-12);
+                    minimumRung, state.maxRung, displayedRuntime, stepTimer.read(), flops * 1e-12);
                 progressRows++;
             }
         }

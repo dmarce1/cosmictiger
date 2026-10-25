@@ -37,7 +37,6 @@
 #include <cosmictiger/fmm/fmm_order.hpp>
 #include <cosmictiger/fmm/fmm_types.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
-#include <cosmictiger/gravity/particle_mesh.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #include <cosmictiger/io/checkpoint.hpp>
 #include <cosmictiger/io/output.hpp>
@@ -124,15 +123,9 @@ int hpx_main(int argc, char* argv[]) {
                 driver();
             }
         }
-        particleMeshDestroy();
         particlesDestroy();
     } catch (std::exception const& error) {
         PRINT("CosmicTiger failed: %s\n", error.what());
-        try {
-            particleMeshDestroy();
-        } catch (std::exception const& cleanupError) {
-            PRINT("PM cleanup failed: %s\n", cleanupError.what());
-        }
         if (daemonStarted) {
             stopMemuseDaemon();
         }
@@ -140,11 +133,6 @@ int hpx_main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     } catch (...) {
         PRINT("CosmicTiger failed with an unknown exception\n");
-        try {
-            particleMeshDestroy();
-        } catch (...) {
-            PRINT("PM cleanup failed during exception handling\n");
-        }
         if (daemonStarted) {
             stopMemuseDaemon();
         }

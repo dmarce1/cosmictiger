@@ -111,9 +111,7 @@ struct Lightcone {
 struct Gravity {
     bool enabled{};
     std::string method{"fmm"};
-    int meshSize{};    // PM mesh cells per axis; independent of the initial-condition mesh.
-    std::string cloud{"pcs"};    // PM assignment: ngp, cic, tsc, or pcs, on both sides.
-    int fmmOrder{};              // FMM order (multipole degree + 2) selected at run time, 3..9
+    int fmmOrder{};    // FMM order (multipole degree + 2) selected at run time, 3..9
     std::string kernelFamily{"ferrers"};
     int kernelDegree{4};
     double openingAngle{};
@@ -345,8 +343,6 @@ struct Options {
         arc & run.verbose;
         arc & hydro.zPlaneAcceleration;
         arc & gravity.method;
-        arc & gravity.meshSize;
-        arc & gravity.cloud;
     }
 };
 

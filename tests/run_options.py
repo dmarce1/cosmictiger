@@ -48,7 +48,7 @@ def main():
                 "hydro.enabled", "hydro.viscosityAlpha", "hydro.viscosityBeta",
                 "hydro.viscosityEpsilon", "hydro.balsaraSwitch", "hydro.neighborNumber", "gravity.enabled",
                 "gravity.kernelFamily", "gravity.kernelDegree",
-                "gravity.method", "gravity.meshSize", "gravity.cloud",
+                "gravity.method",
                 "hydro.kernelFamily", "hydro.kernelDegree",
                 "gravity.effectiveRadius", "gravity.supportRadius",
                 "hydro.minEffectiveRadius", "hydro.maxEffectiveRadius",
@@ -63,7 +63,7 @@ def main():
         raise RuntimeError(f"grouped help is missing {sorted(required - option_names)}")
     removed_options = {"hydro.chemistry", "hydro.conduction", "hydro.diffusion",
                        "hydro.yReflect", "gravity.sphSmoothing", "cosmology.omegaK",
-                       "initial.usePowerFile"}
+                       "initial.usePowerFile", "gravity.meshSize", "gravity.cloud"}
     if removed_options & option_names:
         raise RuntimeError(f"removed options remain in help: {sorted(removed_options & option_names)}")
     for name in option_names - {"help", "configuration"}:
@@ -119,27 +119,17 @@ mapSize = 8
     if not re.search(r"^hydro\.balsaraSwitch\s*:\s*F\s*$", configured, re.MULTILINE):
         raise RuntimeError("INI hydro.balsaraSwitch=false was not applied")
     balsara_default = run("balsara_default", metadata_options)
-    for cloud in ("ngp", "cic", "tsc", "pcs"):
-        mesh_output = run(f"pm_metadata_{cloud}", metadata_options + [
-            "--gravity.method=pm", "--gravity.meshSize=7", f"--gravity.cloud={cloud}"])
-        for key, expected in (("gravity.method", "pm"), ("gravity.meshSize", "7"),
-                              ("gravity.cloud", cloud), ("run.hierarchicalGravity", "F")):
-            if not re.search(r"^" + re.escape(key) + r"\s*:\s*" + expected + r"\s*$",
-                             mesh_output, re.MULTILINE):
-                raise RuntimeError(f"PM metadata did not retain {key}={expected}")
-    for index, invalid in enumerate((
-            ["--gravity.method=unknown"], ["--gravity.method=pm"],
-            ["--gravity.method=pm", "--gravity.meshSize=0"],
-            ["--gravity.method=pm", "--gravity.meshSize=3", "--gravity.cloud=pcs"],
-            ["--gravity.meshSize=-1"], ["--gravity.cloud=quintic"],
-            ["--gravity.method=pm", "--gravity.meshSize=2147483647"])):
-        run(f"pm_invalid_{index}", metadata_options + invalid, success=False)
-    mesh_config = args.workdir / "pm.ini"
-    mesh_config.write_text("[gravity]\nmethod = pm\nmeshSize = 9\ncloud = cic\n")
-    mesh_output = run("pm_ini_cli", metadata_options + [
-        f"--configuration={mesh_config.resolve()}", "--gravity.cloud=tsc"])
-    if not re.search(r"^gravity\.cloud\s*:\s*tsc\s*$", mesh_output, re.MULTILINE):
-        raise RuntimeError("PM CLI selection did not override INI")
+    if not re.search(r"^gravity\.method\s*:\s*fmm\s*$", balsara_default, re.MULTILINE):
+        raise RuntimeError("FMM must remain the default gravity solver")
+    removed_pm_config = args.workdir / "removed_pm.ini"
+    removed_pm_config.write_text("[gravity]\nmethod = pm\n")
+    for source, options in (
+            ("cli", ["--gravity.method=pm"]),
+            ("ini", [f"--configuration={removed_pm_config.resolve()}"])):
+        rejected = run(f"removed_pm_{source}", metadata_options + options, success=False)
+        if "gravity.method must be fmm; ordinary PM gravity is no longer supported" not in rejected:
+            raise RuntimeError(f"removed PM solver was not rejected explicitly through {source}")
+    run("gravity_unknown", metadata_options + ["--gravity.method=unknown"], success=False)
     if not re.search(r"^hydro\.balsaraSwitch\s*:\s*T\s*$", balsara_default, re.MULTILINE):
         raise RuntimeError("Balsara switch must default to enabled")
     balsara_override = run("balsara_cli_override", [f"--configuration={config.resolve()}",
@@ -668,7 +658,8 @@ mapSize = 8
             raise RuntimeError(f"{name} failed without its expected diagnostic: {diagnostic}")
     removed_config = args.workdir / "removed_option.ini"
     for option in sorted(removed_options):
-        value = "0.1" if option == "cosmology.omegaK" else "false"
+        value = {"cosmology.omegaK": "0.1", "gravity.meshSize": "8",
+                 "gravity.cloud": "pcs"}.get(option, "false")
         group, name = option.split(".")
         removed_config.write_text(f"[{group}]\n{name} = {value}\n")
         for source, arguments in (

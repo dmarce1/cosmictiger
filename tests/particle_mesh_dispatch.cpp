@@ -32,14 +32,14 @@ void meshDispatchAwaitCollective() {
     while (!meshCollectiveEntered.load(std::memory_order_acquire)) {
         hpx::this_thread::yield();
     }
-    std::fprintf(stderr, "PM dispatch test entered collective on locality %d\n", hpxRank());
+    std::fprintf(stderr, "Mesh dispatch test entered collective on locality %d\n", hpxRank());
     std::fflush(stderr);
 }
 
 void meshDispatchAsyncException() {
-    std::fputs("PM dispatch test injected asynchronous failure\n", stderr);
+    std::fputs("Mesh dispatch test injected asynchronous failure\n", stderr);
     std::fflush(stderr);
-    throw std::runtime_error("Injected PM collective action failure");
+    throw std::runtime_error("Injected Mesh collective action failure");
 }
 
 }    // namespace detail
@@ -52,7 +52,7 @@ namespace detail {
 
 void meshDispatchFailure(bool asynchronous) {
     if (hpxSize() != 2) {
-        throw std::runtime_error("PM dispatch failure test requires exactly two localities");
+        throw std::runtime_error("Mesh dispatch failure test requires exactly two localities");
     }
     // The launch-failure case occupies the coordinator's only I/O worker:
     // scheduling MPI_Abort on that pool would deadlock too. The asynchronous
@@ -66,13 +66,13 @@ void meshDispatchFailure(bool asynchronous) {
         if (asynchronous) {
             return hpx::async<MeshDispatchAsyncExceptionAction>(hpxLocalities()[1]);
         }
-        std::fputs("PM dispatch test injected launch failure\n", stderr);
+        std::fputs("Mesh dispatch test injected launch failure\n", stderr);
         std::fflush(stderr);
-        throw std::runtime_error("Injected PM collective launch failure");
+        throw std::runtime_error("Injected Mesh collective launch failure");
     });
-    std::fputs("PM dispatch test unexpectedly returned\n", stderr);
+    std::fputs("Mesh dispatch test unexpectedly returned\n", stderr);
     std::fflush(stderr);
-    throw std::runtime_error("PM collective dispatch failed to terminate");
+    throw std::runtime_error("Mesh collective dispatch failed to terminate");
 }
 
 }    // namespace detail

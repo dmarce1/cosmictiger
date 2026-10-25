@@ -152,6 +152,7 @@ def main():
             raise RuntimeError(f"{name} did not load the checkpoint")
         if not expectSuccess and not re.search(r"checkpoint|manifest", output, re.IGNORECASE):
             raise RuntimeError(f"{name} failed without a checkpoint diagnostic")
+        return output
 
     restart("current")
 
@@ -213,6 +214,23 @@ def main():
         manifest.write_text("\n".join(lines) + "\n")
 
     restart("unsupported_version", unsupportedVersion, expectSuccess=False)
+
+    def retiredParticleMesh(checkpointDir):
+        rankFile = checkpointDir / "checkpoint.0.dat"
+        payload = bytearray(rankFile.read_bytes())
+        flags = int.from_bytes(payload[12:16], byteorder=sys.byteorder)
+        payload[12:16] = (flags | (1 << 16)).to_bytes(4, byteorder=sys.byteorder)
+        rankFile.write_bytes(payload)
+        # Keep the manifest valid so this exercises solver compatibility,
+        # rather than stopping at the earlier corruption check.
+        manifest = checkpointDir / "checkpoint.meta"
+        lines = manifest.read_text().splitlines()
+        lines[1] = f"0 {len(payload)} {fnv1a64(payload):016x}"
+        manifest.write_text("\n".join(lines) + "\n")
+
+    output = restart("retired_pm", retiredParticleMesh, expectSuccess=False)
+    if "Ordinary PM gravity checkpoints are no longer supported" not in output:
+        raise RuntimeError("retired PM checkpoint was not rejected before reading its payload")
 
     def downgradeToVersionOne(checkpointDir):
         removeManifest(checkpointDir)

@@ -1,5 +1,5 @@
 # CosmicTiger - particle-mesh failure integration regression; BSL-1.0.
-"""Require prompt MPI termination after partial PM collective dispatch fails."""
+"""Require prompt MPI termination after partial Mesh collective dispatch fails."""
 
 import argparse
 import os
@@ -33,7 +33,7 @@ def run_case(args, name, marker, blocker):
     command = ([args.mpi_exec, args.mpi_numproc_flag, "2"]
                + args.mpi_preflag + [str(args.executable.resolve())]
                + args.mpi_postflag
-               + [f"--run.test={name}", "--gravity.method=pm", "--gravity.meshSize=8",
+               + [f"--run.test={name}", "--gravity.method=fmm",
                   "--initial.particlesPerDimension=8", "--hydro.enabled=false",
                   "--compute.cuda=false", "--hpx:threads=2", "--hpx:bind=none",
                   "--hpx:localities=2", "--hpx:ini=hpx.parcel.mpi.enable=1",
@@ -49,12 +49,12 @@ def run_case(args, name, marker, blocker):
                 stop_process_group(process)
                 raise RuntimeError(f"{name}: collective dispatch hung; see {log_path}") from error
     output = log_path.read_text()
-    required = [f"PM dispatch test entered collective on locality {blocker}\n",
-                f"PM dispatch test injected {marker} failure\n",
+    required = [f"Mesh dispatch test entered collective on locality {blocker}\n",
+                f"Mesh dispatch test injected {marker} failure\n",
                 "Particle-mesh collective dispatch failed; aborting MPI job"]
     if returncode == 0 or any(item not in output for item in required):
         raise RuntimeError(f"{name}: expected fatal dispatch failure ({returncode}); see {log_path}")
-    if "PM dispatch test unexpectedly returned" in output:
+    if "Mesh dispatch test unexpectedly returned" in output:
         raise RuntimeError(f"{name}: dispatch returned after failure; see {log_path}")
     # MPI launchers may translate exit codes, so the application's diagnostic
     # and a failed launcher status are required instead of a launcher-specific
@@ -72,7 +72,7 @@ def main():
     args = parser.parse_args()
     run_case(args, "particleMeshDispatchLaunchFailure", "launch", 0)
     run_case(args, "particleMeshDispatchAsyncFailure", "asynchronous", 1)
-    print("PM collective failures passed: partial launch and asynchronous failure terminate MPI")
+    print("Mesh collective failures passed: partial launch and asynchronous failure terminate MPI")
 
 
 if __name__ == "__main__":
