@@ -9,11 +9,14 @@
 #ifndef KICK_HPP_
 #define KICK_HPP_
 
-#include <atomic>
+#include <functional>
+#include <memory>
 
-#include <cosmictiger/fmm/fmm_types.hpp>
+#include <cosmictiger/gravity/fmm_geometry.hpp>
+#include <cosmictiger/gravity/fmm_types.hpp>
+#include <cosmictiger/gravity/kick_interaction_counts.hpp>
+#include <cosmictiger/gravity/sources.hpp>
 #include <cosmictiger/gravity/tree.hpp>
-#include <cosmictiger/sph/sph_particles.hpp>
 
 // Runtime compute.bucketSize is validated against this power-of-two cap. Tree
 // leaves hold between half the runtime bucket plus one and the runtime bucket
@@ -29,6 +32,7 @@ struct CudaKickData {
     Position* x;
     Position* y;
     Position* z;
+    FmmSourceView ghostSources;
     Array<float, NDIM>* vel;
     float* sphGravityAccelerationX;
     float* sphGravityAccelerationY;
@@ -151,6 +155,9 @@ struct KickReturn {
 };
 
 struct KickParameters {
+    FmmGeometry geometry{};
+    ParticleInteger outputOffset = 0;
+    bool forceOnly = false;
     bool htime;
     float sign;
     int minLevel;
@@ -207,10 +214,15 @@ struct KickParameters {
         arc & doPhi;
         arc & velInit;
         arc & openLargerCell;
+        arc & geometry;
+        arc & forceOnly;
+        arc & outputOffset;
     }
 };
 
 struct KickWorkitem {
+    FmmGeometry geometry{};
+    ParticleInteger outputOffset = 0;
     ExpansionBuffer l;
     Array<Position, NDIM> pos;
     TreeId self;
@@ -220,18 +232,31 @@ struct KickWorkitem {
 
 struct KickWorkspace;
 
-#ifndef __CUDACC__
-// The expansion buffer carries the local expansion of the runtime FMM order;
-// kick() dispatches to the per-order walk instantiation.
-KickReturn kick(KickParameters, ExpansionBuffer l, Array<Position, NDIM> pos, TreeId self,
-    Vector<TreeId> dchecklist, Vector<TreeId> echecklist, std::shared_ptr<KickWorkspace>);
-#endif
-void kickShowTimings();
-void kickSetRc(KickReturn kr);
+struct FmmForceResult {
+    // Compact fields use the same index as particleIndices, whose entries are
+    // owned particle indices. A complete forest has the identity mapping.
+    Vector<ParticleInteger> particleIndices;
+    Vector<float> potential;
+    Array<Vector<float>, NDIM> acceleration;
+    KickInteractionCounts interactionCounts{};
+};
+
+namespace detail {
+
+// The batch owns this scratch until its CPU walks and CUDA launch both finish.
+struct FmmForceOutput {
+    float* potential = nullptr;
+    Array<float*, NDIM> acceleration{};
+};
+
+}    // namespace detail
+
 #ifdef USE_CUDA
+// Host-side FIFO executor; its HPX state is kept out of CUDA translation units.
+KickReturn kickRunCudaLaunch(std::function<KickReturn()> const& launch);
 // Dispatches to the per-order CUDA kick instantiation for fmmOrder().
 KickReturn cudaExecuteKicks(KickParameters params, Position*, Position*, Position*, TreeNode*,
-    Vector<KickWorkitem> workitems);
+    Vector<KickWorkitem> workitems, detail::FmmForceOutput output = {});
 // Shared-memory policy of the runtime order's kick kernel (selected once per order).
 CudaKickArenaLayout const& kickArenaLayout();
 #endif

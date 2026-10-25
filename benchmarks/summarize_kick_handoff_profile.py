@@ -68,7 +68,7 @@ GAP_NS = 1_000_000
 def samples(log):
     out = []
     for line in log.read_text().splitlines():
-        if line.startswith('STF_WALK_SAMPLE,'):
+        if line.startswith('CARTESIAN_WALK_SAMPLE,'):
             fields = line.split(',')
             out.append((int(fields[3]), int(fields[4]), 1e3 * float(fields[7])))
     return out

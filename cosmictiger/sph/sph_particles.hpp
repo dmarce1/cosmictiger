@@ -10,6 +10,8 @@
 #include <cosmictiger/chemistry/primordial_types.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/particles/particles.hpp>
+#include <cosmictiger/sph/cullen_and_dehnen/state.hpp>
+#include <cosmictiger/sph/viscosity_state.hpp>
 
 #ifdef SPH_PARTICLES_CPP
 #define SPH_PARTICLES_EXTERN
@@ -52,6 +54,8 @@ SPH_PARTICLES_EXTERN float* sphParticlesInternalEnergyRates;
 SPH_PARTICLES_EXTERN float* sphParticlesDensities;
 // Derived during every density pass; rebuilt after restart and migration.
 SPH_PARTICLES_EXTERN float* sphParticlesBalsaraFactors;
+SPH_PARTICLES_EXTERN SphViscosityState* sphParticlesViscosityStates;
+SPH_PARTICLES_EXTERN SphCullenDehnenState* sphParticlesCullenDehnenStates;
 SPH_PARTICLES_EXTERN char* sphParticlesConvergenceFlags;
 SPH_PARTICLES_EXTERN char* sphParticlesSemiactiveFlags;
 
@@ -71,8 +75,8 @@ void sphParticlesGlobalReadInternalEnergyAndSupportRadius(
 void sphParticlesGlobalReadRungs(ParticleGlobalRange range, char*, ParticleInteger offset);
 void sphParticlesGlobalReadVelocities(
     ParticleGlobalRange range, float*, float*, float*, ParticleInteger offset);
-void sphParticlesGlobalReadDensity(
-    ParticleGlobalRange range, float*, ParticleInteger offset, float* balsaraFactor = nullptr);
+void sphParticlesGlobalReadDensity(ParticleGlobalRange range, float*, ParticleInteger offset,
+    float* balsaraFactor = nullptr, float* viscosityAlpha = nullptr);
 void sphParticlesGlobalReadChemistryEos(ParticleGlobalRange range, float* pressureEnergyRatio,
     float* adiabaticIndex, ParticleInteger offset);
 void sphParticlesRefreshChemistryEos(double scaleFactor);

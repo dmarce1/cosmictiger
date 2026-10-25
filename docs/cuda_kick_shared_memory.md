@@ -37,16 +37,16 @@ Every order is compiled into the binary and the run selects one with
 `gravity.fmmOrder` (default: the build's `COSMICTIGER_WITH_ORDER`, 7). The
 order-dependent code is instantiated per order from templates:
 
-- `cosmictiger/fmm/fmm_order.hpp`: constexpr coefficient counts, byte sizes, the
+- `cosmictiger/gravity/fmm_order.hpp`: constexpr coefficient counts, byte sizes, the
   `FmmOrder<order>` traits, the runtime `fmmOrder()` and `fmmDispatch()`, which
   switches to the matching instantiation at coarse boundaries (tree build, a
   CPU walk, a CUDA launch). Inner loops never test the order.
-- `cosmictiger/fmm/fmm_types.hpp`: `FmmMultipole<Real, order>`,
+- `cosmictiger/gravity/fmm_types.hpp`: `FmmMultipole<Real, order>`,
   `FmmExpansion<Real, order>`, the position-first multipole record
   `FmmMultiPos<order>` (tree nodes point at its order-agnostic
   `MultipolePosition` header), and the max-size transport buffers
   `ExpansionBuffer` / `MultipoleBuffer` used by order-agnostic interfaces.
-- `cosmictiger/fmm/fmm_kernels.hpp`: operator wrappers that deduce the degrees from
+- `cosmictiger/gravity/fmm_kernels.hpp`: operator wrappers that deduce the degrees from
   their tensor arguments over the generated STF kernels.
 - Generated code: `tools/generate_stf_m2l.py` emits one fully specialized
   kernel class per degree for local degrees 2 through 8 and one Ewald derivative

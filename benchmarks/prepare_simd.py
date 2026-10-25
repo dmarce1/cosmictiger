@@ -16,7 +16,7 @@ import tempfile
 
 DEFAULT_BASELINE = "b50b0404f9dcbc074e8e1b55f7f4e30b8e0c44ea"
 NEW_HEADERS = ("cosmictiger/math/simd_backend.hpp", "cosmictiger/math/simd_math.hpp")
-HARNESS = "benchmarks/gravity.cpp"
+HARNESS = "benchmarks/gravity/dehnen/gravity.cpp"
 CACHE_PATHS = (
     "HPX_DIR",
     "FFTW3F_INCLUDE_DIR",
@@ -144,7 +144,7 @@ def instrument_source(directory, harness_bytes):
     with cmake.open("a") as stream:
         stream.write(
             "\n# Local benchmark instrumentation, identical in both snapshots.\n"
-            'target_sources(cosmictiger PRIVATE "${PROJECT_SOURCE_DIR}/benchmarks/gravity.cpp")\n'
+            'target_sources(cosmictiger PRIVATE "${PROJECT_SOURCE_DIR}/benchmarks/gravity/dehnen/gravity.cpp")\n'
             "set_property(TARGET cosmictiger PROPERTY CXX_STANDARD 20)\n"
         )
 

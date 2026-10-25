@@ -11,8 +11,7 @@
 
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
-#include <cosmictiger/fmm/fmm_kernels.hpp>
-#include <cosmictiger/gravity/tree.hpp>
+#include <cosmictiger/core/tree_id.hpp>
 #include <cosmictiger/math/fixed.hpp>
 #include <cosmictiger/math/range.hpp>
 #include <cosmictiger/particles/particles.hpp>

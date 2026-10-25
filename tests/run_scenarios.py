@@ -12,10 +12,9 @@ import re
 import shutil
 import signal
 import subprocess
-import struct
 import sys
 
-from run_checkpoint import checkManifest, checkpoint_position_bytes
+from run_checkpoint import checkManifest, hydro_particle_payload
 
 
 SCENARIOS = (
@@ -90,36 +89,6 @@ def check_finite_rows(path):
         raise RuntimeError(f"nonfinite evolution diagnostic {path}")
 
 
-
-def hydro_particle_payload(checkpoint, expected_count=None):
-    """Read the all-gas physical payload, excluding native driver timing/padding."""
-    data = (checkpoint / "checkpoint.0.dat").read_bytes()
-    position_bytes = checkpoint_position_bytes(data)
-    candidates = [data.find(struct.pack("=7I", 0x43545350, 2, integer_bytes, 8, 12, 3, 4))
-                  for integer_bytes in (4, 8)]
-    offset = max(candidates)
-    if offset < 0:
-        raise RuntimeError(f"missing versioned SPH payload in {checkpoint}")
-    header = struct.unpack_from("=7I", data, offset)
-    integer_bytes = header[2]
-    if integer_bytes not in (4, 8) or header[5:] != (3, 4):
-        raise RuntimeError(f"unsupported particle layout in {checkpoint}: {header}")
-    count = int.from_bytes(data[offset + 28:offset + 28 + integer_bytes],
-                           sys.byteorder, signed=True)
-    if count <= 0 or (expected_count is not None and count != expected_count):
-        raise RuntimeError(f"unexpected gas count in {checkpoint}: {count}")
-    # Particle positions, velocities, rungs, species, and gas index precede
-    # the gas header. The 38 bytes below are rates, density, flags, and six
-    # predictor/gravity acceleration floats in visitSphCheckpointArrays().
-    start = offset - 2 * integer_bytes - count * (3 * position_bytes + 14 + integer_bytes)
-    end = offset + 28 + integer_bytes + count * (header[3] + header[4] + integer_bytes + 38)
-    if start < 0 or end > len(data):
-        raise RuntimeError(f"truncated physical particle payload in {checkpoint}")
-    counts = [int.from_bytes(data[start + i * integer_bytes:start + (i + 1) * integer_bytes],
-                             sys.byteorder, signed=True) for i in range(2)]
-    if counts != [count, count]:
-        raise RuntimeError(f"restart fixture is not all gas: {counts}")
-    return data[start:end]
 
 
 def main():

@@ -7,7 +7,9 @@
  */
 
 // Configured by CMake for one FMM order. Explicit instantiations of the
-// order-templated CUDA kick live in kick_cuda_instances.hpp.
+// order-templated CUDA kick live in kick_cuda_instances.hpp. Supply the inline
+// periodic node policy before instantiating the shared kernel and launch.
 #define COSMICTIGER_FMM_INSTANCE_ORDER @FMM_INSTANCE_ORDER@
 
+#include <cosmictiger/gravity/dehnen/periodic_cuda.hpp>
 #include <cosmictiger/gravity/kick_cuda_instances.hpp>

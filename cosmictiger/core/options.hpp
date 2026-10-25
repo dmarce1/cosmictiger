@@ -98,8 +98,20 @@ struct Analysis {
     double sliceSize{};
     double linkingLength{};
     int minGroupSize{};
+    // Legacy request for both diagnostic fields; independent requests below
+    // permit retaining either field without allocating the other.
     bool saveForce{};
+    bool saveAcceleration{};
+    bool savePotential{};
 };
+
+inline bool saveParticleAcceleration(Analysis const& analysis) {
+    return analysis.saveForce || analysis.saveAcceleration;
+}
+
+inline bool saveParticlePotential(Analysis const& analysis) {
+    return analysis.saveForce || analysis.savePotential;
+}
 
 struct Lightcone {
     bool enabled{};
@@ -111,6 +123,10 @@ struct Lightcone {
 struct Gravity {
     bool enabled{};
     std::string method{"fmm"};
+    int meshSize{};          // PMMM cells per axis; independent of the initial-condition mesh.
+    int pmmmNearWidth{2};    // Direct neighbor cube radius for periodic PMMM, one or two cells.
+    std::string pmmmNearMethod{"pp"};    // Primary near cells: direct pairs (pp) or adaptive FMM.
+    int pmmmBatchParticles{4096};        // Target owned sink count per ready near-field batch.
     int fmmOrder{};    // FMM order (multipole degree + 2) selected at run time, 3..9
     std::string kernelFamily{"ferrers"};
     int kernelDegree{4};
@@ -122,6 +138,10 @@ struct Gravity {
     double timestepEta{};
     double gm{};
 };
+
+inline bool usesMeshGravity(Gravity const& gravity) {
+    return gravity.method == "pmmm";
+}
 
 struct Cosmology {
     double startRedshift{};
@@ -158,6 +178,13 @@ struct Hydro {
     double viscosityBeta{};
     double viscosityEpsilon{};
     bool balsaraSwitch{true};
+    std::string viscosityEvolution{"morrisAndMonaghan"};
+    double viscosityAlphaMin{0.1};
+    double viscosityDecay{0.2};
+    double viscosityAlphaMax{2.0};
+    double viscosityDecayCD{0.05};
+    std::string viscosityBetaMode{"ratio"};
+    double viscosityBetaOverAlpha{2.0};
     double gamma{};
     double cfl{};
     double neighborNumber{42.0};
@@ -222,6 +249,13 @@ struct Options {
         arc & hydro.viscosityBeta;
         arc & hydro.viscosityEpsilon;
         arc & hydro.balsaraSwitch;
+        arc & hydro.viscosityEvolution;
+        arc & hydro.viscosityAlphaMin;
+        arc & hydro.viscosityDecay;
+        arc & hydro.viscosityAlphaMax;
+        arc & hydro.viscosityDecayCD;
+        arc & hydro.viscosityBetaMode;
+        arc & hydro.viscosityBetaOverAlpha;
         arc & hydro.neighborNumber;
         arc & hydro.minSupportRadius;
         arc & hydro.maxSupportRadius;
@@ -343,6 +377,12 @@ struct Options {
         arc & run.verbose;
         arc & hydro.zPlaneAcceleration;
         arc & gravity.method;
+        arc & gravity.meshSize;
+        arc & gravity.pmmmNearWidth;
+        arc & gravity.pmmmNearMethod;
+        arc & analysis.saveAcceleration;
+        arc & analysis.savePotential;
+        arc & gravity.pmmmBatchParticles;
     }
 };
 

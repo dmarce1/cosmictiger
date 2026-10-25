@@ -24,7 +24,7 @@ for all options and defaults. HPX's own options retain their `--hpx:*` syntax.
 | `output` | Particle Silo output, cadence, directory, unit system, frame, and selected box |
 | `analysis` | Power spectrum, halos, tracers, slices, and views |
 | `lightcone` | Lightcone output and group finding |
-| `gravity` | FMM gravity, softening, opening angle, and timestep |
+| `gravity` | FMM or PMMM gravity, mesh selection, softening, opening angle, and timestep |
 | `cosmology` | Redshifts, density parameters, and primordial spectrum |
 | `units` | Particle mass unit in solar masses |
 | `hydro` | SPH, equation of state, smoothing radii, and artificial viscosity |
@@ -84,9 +84,21 @@ record the representation and must be restarted with the same `compute.positionT
 The legacy `glass.bin` exchange format remains Q0.32 in both modes; checkpoints
 retain the selected position precision.
 
-Gravity uses `gravity.method=fmm`. The ordinary PM solver and its
-`gravity.meshSize` and `gravity.cloud` options are no longer supported.
-Historical PM checkpoints cannot be restarted with this executable.
+The default gravity solver is `gravity.method=fmm`. SPH currently requires FMM
+when gravity is enabled; PMMM rejects `hydro.enabled=true`.
+
+Select periodic particle mesh multipoles with `--gravity.method=pmmm
+--gravity.meshSize=32 --gravity.fmmOrder=7 --gravity.pmmmNearWidth=2
+--hydro.enabled=false`. PMMM uses
+the spherical FMM's total-degree M2L truncation, one FFTW3-MPI group containing
+all localities, cached FFT plans and Green spectra, and direct softened near
+interactions by default. Add `--gravity.pmmmNearMethod=fmm` to evaluate the same
+near-cell region with the existing adaptive Cartesian FMM operators;
+`gravity.openingAngle` then controls this additional approximation. The global
+default solver remains FMM. PMMM uses the hierarchical particle timestep ladder;
+`compute.cuda` selects CPU or CUDA near-field execution and drift. See [PMMM](docs/pmmm.md)
+for order conventions, mesh-aligned particle ownership, memory costs, CPU/CUDA
+near fields, and restarts.
 
 FMM gravity and SPH can select radial kernels independently. Both use an effective radius
 `effectiveRadius = 2 sigma`, where sigma is the standard deviation along one
@@ -201,7 +213,9 @@ viscosity. It is integrated with FMM gravity and particle storage. See
 [the formulation and paper references](docs/monaghan_sph.md) for the equations,
 cosmological conversions, and deliberate implementation choices. The normal
 dark-matter-only FMM mode keeps its hierarchical gravity integrator. Enable gas explicitly
-with `--hydro.enabled=true`; gas runs use the ordinary block-timestep gravity/SPH path.
+with `--hydro.enabled=true`; gas runs with gravity require `gravity.method=fmm`
+and use the ordinary block-timestep gravity/SPH path. Hydrodynamics without
+gravity remains supported.
 Select SIMD CPU SPH with `--compute.cuda=false` or CUDA SPH with `--compute.cuda=true`.
 Particle drift also follows `compute.cuda`: the CPU path uses SIMD position updates
 and HPX workers, including rung filtering, glass damping, and lightcone crossings.
@@ -317,6 +331,19 @@ Its progress display also supplies the aligned-column and repeating-header
 pattern used here. See the [output-file inventory](docs/output_files.txt) for
 runtime diagnostics, analysis products, and tool outputs other than Silo and
 checkpoints, including their names and the conditions that create them.
+
+## Source layout
+
+Common gravity and SPH machinery lives directly in each subsystem directory.
+The same layout is used beneath `cosmictiger/` for headers and `src/` for
+implementations. Gravity solver code is in `gravity/dehnen/` for global adaptive
+FMM and `gravity/nitadori/` for PMMM. SPH numerical modules are in
+`sph/monaghan/`, `sph/morris_and_monaghan/`, `sph/cullen_and_dehnen/`, and
+`sph/balsara/`. Owned particle storage stays in `particles/`; PMMM owns its
+separate ghost arena in `gravity/nitadori/`.
+
+See [the source organization guide](docs/source_layout.md) for file responsibilities,
+dependency boundaries, and generated-code placement.
 
 ## Build
 

@@ -23,7 +23,7 @@ for the force sweeps.
 Each sink node walks its own checklist of source nodes. The acceptance test
 is symmetric in the two cells: it compares the centre distance with the sum of
 the two radii divided by theta, plus the support-separation terms in
-`cosmictiger/fmm/fmm_acceptance.hpp`. An internal sink makes one pass over its
+`cosmictiger/gravity/fmm_acceptance.hpp`. An internal sink makes one pass over its
 list, opens every rejected internal source, and hands the opened children plus
 every rejected source leaf down to both of its children. Only a leaf sink keeps
 iterating. Cell-cell pairs therefore always meet at equal depth, except that a
@@ -70,10 +70,10 @@ loop iterating for internal sinks when the rule is on.
 
 A cell-particle or particle-cell interaction stands in for direct summation
 of a leaf pair, and whichever side is evaluated explicitly, both walks have to
-pick the same pairing. The selection in `cosmictiger/fmm/fmm_acceptance.hpp` now
+pick the same pairing. The selection in `cosmictiger/gravity/fmm_acceptance.hpp` now
 compares flop counts whose only runtime inputs are the two particle counts;
 the per-order costs come from the generated kernels through
-`FmmHybridCost<order>` in `cosmictiger/fmm/fmm_kernels.hpp`:
+`FmmHybridCost<order>` in `cosmictiger/gravity/fmm_kernels.hpp`:
 
 - direct summation: sinkCount times sourceCount times 38 flops, the Newtonian
   pair of the direct kernel. Hybrids are only considered for support-separated
@@ -87,7 +87,7 @@ Equal counts keep the smaller-radius cell as the cloud and equal radii fall
 back to direct summation, as before. A leaf against an internal cell is not
 costed: its alternative is opening the cell, not direct summation. The CUDA
 walk uses the same constants, so the decision is identical on both backends.
-The reciprocity test in `tests/fmm_acceptance.cpp` covers the cost rule, and
+The reciprocity test in `tests/gravity/fmm_acceptance.cpp` covers the cost rule, and
 the walk fixtures whose expected hybrid changed under it were updated.
 
 Effect of the cost rule on the open-larger walk, from the count sweep
@@ -277,7 +277,7 @@ exclude empty source cells; CP and PC are equal at every angle for both rules.
 
 `run.treeOpeningAngle` makes `run.test=force` build the tree once at that
 angle and sweep only the kick's opening angle, from the tree's angle to 0.95
-in steps of 0.025. The tree's Ewald leaf criterion in `src/gravity/tree.cpp` bounds a
+in steps of 0.025. The tree's Ewald leaf criterion in `src/gravity/tree_build.cpp` bounds a
 leaf's enclosing radius by 0.25 theta_tree / (1 + theta_tree), which is
 exactly the bound the Ewald pass needs for a leaf pair at the nearest image
 distance to be accepted at any kick angle of at least theta_tree, so larger

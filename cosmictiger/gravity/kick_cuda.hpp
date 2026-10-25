@@ -20,7 +20,7 @@
 #include <cosmictiger/core/defs.hpp>
 #include <cosmictiger/core/stack_vector.hpp>
 #include <cosmictiger/cuda/device_vector.hpp>
-#include <cosmictiger/fmm/fmm_types.hpp>
+#include <cosmictiger/gravity/fmm_types.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 
 template <int order>
@@ -169,6 +169,8 @@ struct CudaKickControl {
 
 template <int order>
 struct CudaKickParameters {
+    FmmGeometry geometry;
+    ParticleInteger outputOffset;
     Array<Position, NDIM> lpos;
     FmmExpansion<float, order> lValue;
     int self;
@@ -188,6 +190,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
 // Per-order host entry points, defined in kick_cuda_launch.hpp.
 template <int order>
 KickReturn cudaExecuteKicksImpl(KickParameters params, Position* devX, Position* devY,
-    Position* devZ, TreeNode* devTreeNodes, Vector<KickWorkitem> workitems);
+    Position* devZ, TreeNode* devTreeNodes, Vector<KickWorkitem> workitems,
+    detail::FmmForceOutput output);
 template <int order>
 CudaKickArenaLayout const& kickArenaLayoutImpl();

@@ -14,7 +14,7 @@
 #include <cosmictiger/core/defs.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/stack_vector.hpp>
-#include <cosmictiger/gravity/tree.hpp>
+#include <cosmictiger/core/tree_id.hpp>
 #include <cosmictiger/math/range.hpp>
 
 #ifndef __CUDACC__
@@ -133,6 +133,15 @@ struct SphRunParameters {
     float viscosityBeta;
     float viscosityEpsilon;
     bool balsaraSwitch;
+    bool variableViscosity;
+    bool cullenDehnen;
+    float viscosityAlphaMax;
+    float viscosityDecayCD;
+    float expansionAcceleration = 0.0f;    // a³ d²a/dt² for the physical CD acceleration gradient.
+    bool viscosityBetaIsRatio;
+    float viscosityAlphaMin;
+    float viscosityDecay;
+    float viscosityBetaOverAlpha;
     float velocityDampingRate;    // Velocity damping used while relaxing the gas sphere.
     SphRunParameters() {
         auto const opts = getOptions();
@@ -145,6 +154,14 @@ struct SphRunParameters {
         viscosityBeta = opts.hydro.viscosityBeta;
         viscosityEpsilon = opts.hydro.viscosityEpsilon;
         balsaraSwitch = opts.hydro.balsaraSwitch;
+        variableViscosity = opts.hydro.viscosityEvolution != "none";
+        cullenDehnen = opts.hydro.viscosityEvolution == "cullenAndDehnen";
+        viscosityBetaIsRatio = opts.hydro.viscosityBetaMode == "ratio";
+        viscosityAlphaMax = opts.hydro.viscosityAlphaMax;
+        viscosityDecayCD = opts.hydro.viscosityDecayCD;
+        viscosityAlphaMin = opts.hydro.viscosityAlphaMin;
+        viscosityDecay = opts.hydro.viscosityDecay;
+        viscosityBetaOverAlpha = opts.hydro.viscosityBetaOverAlpha;
     }
     template <typename Archive>
     void serialize(Archive&& arc, unsigned) {
@@ -152,6 +169,15 @@ struct SphRunParameters {
         arc & viscosityBeta;
         arc & viscosityEpsilon;
         arc & balsaraSwitch;
+        arc & variableViscosity;
+        arc & cullenDehnen;
+        arc & viscosityAlphaMax;
+        arc & viscosityDecayCD;
+        arc & expansionAcceleration;
+        arc & viscosityBetaIsRatio;
+        arc & viscosityAlphaMin;
+        arc & viscosityDecay;
+        arc & viscosityBetaOverAlpha;
         arc & velocityDampingRate;
         arc & minimumSupportRadius;
         arc & maximumSupportRadius;

@@ -108,9 +108,11 @@ def main():
     if checkpoint_position_bytes((hydro_checkpoint / "checkpoint.0.dat").read_bytes()) != 8:
         raise RuntimeError("fixed64 hydro checkpoint omitted its representation flag")
     payload = hydro_particle_payload(hydro_checkpoint)
-    candidates = [(payload.find(struct.pack("=7I", 0x43545350, 2, size, 8, 12, 3, 4)), size)
-                  for size in (4, 8)]
-    _, integer_bytes = max(candidates)
+    candidates = [(payload.find(struct.pack("=7I", 0x43545350, version, size, 8, 12, 3, 4)), size)
+                  for size in (4, 8) for version in (2, 4, 6)]
+    sph_offset, integer_bytes = max(candidates)
+    if sph_offset < 0:
+        raise RuntimeError("fixed64 hydro checkpoint reader could not locate the SPH header")
     count = int.from_bytes(payload[:integer_bytes], sys.byteorder, signed=True)
     raw_positions = struct.unpack_from(f"={3 * count}Q", payload, 2 * integer_bytes)
     if not any(word & 0xFFFFFFFF for word in raw_positions):

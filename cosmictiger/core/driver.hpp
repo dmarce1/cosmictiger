@@ -57,9 +57,13 @@ struct DriverParameters {
 
 SphTreeCreateReturn sphStep1(int minrung, bool verbose = true);
 SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phase, double adot,
-    EnergiesT* energies, bool verbose = true);
+    EnergiesT* energies, bool verbose = true, int uniformMinimumRung = -1);
 std::pair<KickReturn, TreeCreateReturn> kickStep(
     int minrung, double scale, double, double t0, double theta, bool firstCall, bool fullEval);
+std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minimumRung, int maximumRung,
+    double scale, double scaleDerivative, double time, double baseTimestep, double theta,
+    EnergiesT* energies, int minimumRungFloor, bool doPotential, hpx::future<void>* lightcone,
+    bool keepTop, double drag);
 
 std::pair<KickReturn, TreeCreateReturn> advanceForces(int minRung, double scale,
     double scaleDerivative, double time, double baseTimestep, double theta, bool firstCall,

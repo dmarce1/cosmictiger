@@ -9,7 +9,7 @@
 #include <vector>
 
 #include <cosmictiger/core/options.hpp>
-#include <cosmictiger/gravity/bh.hpp>
+#include <cosmictiger/analysis/bh.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 
 namespace detail {

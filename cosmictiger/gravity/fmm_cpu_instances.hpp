@@ -17,8 +17,7 @@
 #error "COSMICTIGER_FMM_INSTANCE_ORDER must name the instantiated FMM order"
 #endif
 
-#include <cosmictiger/fmm/ewald_tables.hpp>
-#include <cosmictiger/fmm/fmm_order.hpp>
+#include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/gravity_cpu.hpp>
 #include <cosmictiger/gravity/kick_walk.hpp>
 #include <cosmictiger/gravity/tree_multipole.hpp>
@@ -27,23 +26,23 @@ static_assert(COSMICTIGER_FMM_INSTANCE_ORDER >= kFmmMinOrder &&
     COSMICTIGER_FMM_INSTANCE_ORDER <= kFmmMaxOrder);
 
 // CPU gravity operators (gravity_cpu.hpp).
-template void cpuGravityCc<COSMICTIGER_FMM_INSTANCE_ORDER>(GravityCcType,
-    FmmExpansion<float, COSMICTIGER_FMM_INSTANCE_ORDER>&, Vector<TreeId> const&, TreeId, bool);
+template void cpuGravityCc<COSMICTIGER_FMM_INSTANCE_ORDER>(
+    FmmExpansion<float, COSMICTIGER_FMM_INSTANCE_ORDER>&, Vector<TreeId> const&, TreeId, bool,
+    FmmGeometry const&);
 template void cpuGravityCp<COSMICTIGER_FMM_INSTANCE_ORDER>(
-    FmmExpansion<float, COSMICTIGER_FMM_INSTANCE_ORDER>&, Vector<TreeId> const&, TreeId, bool);
+    FmmExpansion<float, COSMICTIGER_FMM_INSTANCE_ORDER>&, Vector<TreeId> const&, TreeId, bool,
+    FmmGeometry const&);
 template void cpuGravityPc<COSMICTIGER_FMM_INSTANCE_ORDER>(
-    ForceVectors&, int, TreeId, Vector<TreeId> const&);
+    ForceVectors&, int, TreeId, Vector<TreeId> const&, FmmGeometry const&);
 
 // CPU tree walk (kick_walk.hpp).
 template KickReturn kickWalk<COSMICTIGER_FMM_INSTANCE_ORDER>(KickParameters, ExpansionBuffer,
-    Array<Position, NDIM>, TreeId, Vector<TreeId>, Vector<TreeId>, std::shared_ptr<KickWorkspace>);
+    Array<Position, NDIM>, TreeId, Vector<TreeId>, Vector<TreeId>, std::shared_ptr<KickWorkspace>,
+    KickContext const&);
 
 // Tree multipole construction (tree_multipole.hpp).
 template FlopCount treeComputeMultipole<COSMICTIGER_FMM_INSTANCE_ORDER>(MultipoleBuffer&,
     MultipoleBuffer const&, MultipoleBuffer const&, Array<double, NDIM> const&,
     Array<double, NDIM> const&, Array<double, NDIM> const&);
 template FlopCount treeComputeMultipole<COSMICTIGER_FMM_INSTANCE_ORDER>(
-    MultipoleBuffer&, Pair<ParticleInteger>, Array<double, NDIM> const&);
-
-// Ewald tables (ewald_tables.hpp).
-template void ewaldFillTables<COSMICTIGER_FMM_INSTANCE_ORDER>(EwaldConstants&);
+    MultipoleBuffer&, Pair<ParticleInteger>, Array<double, NDIM> const&, FmmSourceView const&);

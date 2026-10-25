@@ -18,12 +18,15 @@ struct ParticleMeshCell {
     uint64_t key;
     ParticleInteger begin;
     ParticleInteger end;
+    bool ghost = false;
 };
 
-// Local operation on every particle, independent of rung. The caller must finish
-// migration and all particle readers before sorting, then synchronize localities
-// before permitting remote particle reads again. No HPX actions are broadcast.
+// Local owned-particle sort. The range overload preserves every entry outside
+// [first, second), including the inactive prefix and saved rung boundaries.
+// The caller must finish migration and all particle readers before sorting,
+// then synchronize localities before remote reads. No actions are broadcast.
 Vector<ParticleMeshCell> particleMeshSort(int meshSize);
+Vector<ParticleMeshCell> particleMeshSort(int meshSize, Pair<ParticleInteger> range);
 
 namespace detail {
 

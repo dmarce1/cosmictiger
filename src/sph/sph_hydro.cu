@@ -7,7 +7,8 @@
  */
 
 #include <cosmictiger/math/vector3.hpp>
-#include <cosmictiger/sph/monaghan_sph.hpp>
+#include <cosmictiger/sph/monaghan/equations.hpp>
+#include <cosmictiger/sph/monaghan/viscosity.hpp>
 #include <cosmictiger/sph/sph_cuda.hpp>
 
 namespace detail {
@@ -25,6 +26,7 @@ struct HydroNeighbor {
     float pressureEnergyRatio;
     float adiabaticIndex;
     float balsaraFactor;
+    float viscosityAlpha;
 };
 
 struct HydroWorkspace {
@@ -33,7 +35,7 @@ struct HydroWorkspace {
 
 }    // namespace detail
 
-// Monaghan (1992), ARA&A 30, 543; cosmictiger/monaghan_sph.hpp gives the full citation
+// Monaghan (1992), ARA&A 30, 543; cosmictiger/sph/monaghan/equations.hpp gives the full citation
 // and the notation. The pair loop implements equations 6.4-6.5 with the artificial
 // viscosity of equations 4.1-4.2 and the symmetric kernel of p. 554; the time step
 // follows section 10.3, p. 563. Particle a is the sink and particle b a staged neighbor,
@@ -67,8 +69,6 @@ __global__ void sphCudaHydro(
         float(selectedHydroKernel().supportRadiusPerEffectiveRadius);
     float const m_b = data.gasMass;    // every gas particle has the same mass
     float const m_b_over_a = m_b * inverseScaleFactor;
-    float const α = parameters.viscosityAlpha;
-    float const β = parameters.viscosityBeta;
     float const ε = parameters.viscosityEpsilon;       // η²/h² of p. 551
     float const a_da_dt = parameters.expansionRate;    // a·da/dt, the Hubble flow of a pair
     int maximumHydroRung = 0;
@@ -121,7 +121,10 @@ __global__ void sphCudaHydro(
                         data.sourceAdiabaticIndex ? data.sourceAdiabaticIndex[sourceParticleIndex] :
                                                     adiabaticIndex,
                         parameters.balsaraSwitch ? data.sourceBalsaraFactor[sourceParticleIndex] :
-                                                   1.0f};
+                                                   1.0f,
+                        parameters.variableViscosity ?
+                            data.sourceViscosityAlpha[sourceParticleIndex] :
+                            parameters.viscosityAlpha};
                 }
             }
         }
@@ -164,7 +167,11 @@ __global__ void sphCudaHydro(
             flops += 8 + (data.sourcePressureEnergyRatio ? 0 : 1);
             Vector3<float> dv_a_dt(0.0f);    // this thread's part of equation 6.4
             float du_a_dt = 0.0f;            // this thread's part of equation 6.5
-            float μ_max = 0.0f;              // max_b(−μ_ab) for δt_cv
+            float const α_a = parameters.variableViscosity ?
+                data.sourceViscosityAlpha[particleIndex] :
+                parameters.viscosityAlpha;
+            float α_max = α_a;
+            float μ_max = 0.0f;    // max_b(−μ_ab) for δt_cv
             for (int neighborIndex = threadIndex; neighborIndex < workspace.neighbors.size();
                 neighborIndex += blockSize) {
                 auto const& neighbor = workspace.neighbors[neighborIndex];
@@ -200,9 +207,19 @@ __global__ void sphCudaHydro(
                 float const v_ab_dot_r_ab = v_ab.dot(r_ab);
                 float const v_ab_dot_r_ab_physical = v_ab_dot_r_ab + a_da_dt * r_ab2;
                 // Equation 4.2 and the Π_ab of p. 550.
-                float const μ_ab = monaghan_sph::viscosityMu(r_ab2, v_ab_dot_r_ab_physical, H_a,
-                    H_b, ε, supportRadiusPerEffectiveRadius, kViscosityWidthScale);
-                float Π_ab = monaghan_sph::artificialViscosity(ρ_a, ρ_b, c_a, c_b, μ_ab, α, β);
+                float const μ_ab = monaghan::viscosityMu(r_ab2, v_ab_dot_r_ab_physical, H_a, H_b, ε,
+                    supportRadiusPerEffectiveRadius, kViscosityWidthScale);
+                // Morris & Monaghan (1997), equation (3) and p. 44: symmetric α_ab.
+                float const α_ab = parameters.variableViscosity ?
+                    0.5f * α_a + 0.5f * neighbor.viscosityAlpha :
+                    α_a;
+                float const β_ab = parameters.viscosityBetaIsRatio ?
+                    parameters.viscosityBetaOverAlpha * α_ab :
+                    parameters.viscosityBeta;
+                α_max = fmaxf(α_max, α_ab);
+                float Π_ab = monaghan::artificialViscosity(ρ_a, ρ_b, c_a, c_b, μ_ab, α_ab, β_ab);
+                flops +=
+                    3 * int(parameters.variableViscosity) + int(parameters.viscosityBetaIsRatio);
                 if (parameters.balsaraSwitch) {
                     // GADGET-4 equation (72): Π_ab <- ½(f_a^AV + f_b^AV) Π_ab.
                     float const f_ab_AV =
@@ -211,14 +228,14 @@ __global__ void sphCudaHydro(
                     flops += 3;
                 }
                 float const P_over_ρ2_ab =
-                    monaghan_sph::pressureCoefficient(ρ_a, ρ_b, P_a, P_b);    // P_b/ρ_b² + P_a/ρ_a²
+                    monaghan::pressureCoefficient(ρ_a, ρ_b, P_a, P_b);    // P_b/ρ_b² + P_a/ρ_a²
                 // Equation 6.4: dv_a/dt = −Σ_b m_b (P_b/ρ_b² + P_a/ρ_a² + Π_ab) ∇_a W̃_ab.
                 dv_a_dt -= (m_b_over_a * (P_over_ρ2_ab + Π_ab)) * gradW̃_ab;
                 // Equation 6.5: du_a/dt = ½ Σ_b m_b (P_b/ρ_b² + P_a/ρ_a² + Π_ab) v_ab·∇_a W̃_ab,
                 // with v_ab·∇_a W̃_ab = F_ab v_ab·r_ab. The pressure work takes the peculiar
                 // velocity and the viscous heating the physical one.
                 du_a_dt += m_b_over_a *
-                    monaghan_sph::pairEnergyRate(
+                    monaghan::pairEnergyRate(
                         P_over_ρ2_ab, Π_ab, v_ab_dot_r_ab * F_ab, v_ab_dot_r_ab_physical * F_ab);
                 μ_max = fmaxf(μ_max, -μ_ab);
                 // EOS/root 6; inverse support 1; gradients 13; relative velocity
@@ -233,6 +250,7 @@ __global__ void sphCudaHydro(
             sharedReduceAdd<float, HYDRO_BLOCK_SIZE>(dv_a_dt[ZDIM]);
             sharedReduceAdd<float, HYDRO_BLOCK_SIZE>(du_a_dt);
             sharedReduceMax<HYDRO_BLOCK_SIZE>(μ_max);
+            sharedReduceMax<HYDRO_BLOCK_SIZE>(α_max);
             flops += 4 * detail::sphReductionFlops<HYDRO_BLOCK_SIZE>();
             if (threadIndex == 0) {
                 // Accelerations outside the paper: self-gravity, the optional uniform, midplane
@@ -284,7 +302,10 @@ __global__ void sphCudaHydro(
                     // the fixed 0.25. The reciprocals are kept apart for the diagnostics.
                     float const h_a = H_a / supportRadiusPerEffectiveRadius;
                     float const one_over_δt_c = c_a / h_a;
-                    float const one_over_δt_visc = 0.6f * (α * c_a + β * μ_max) / h_a;
+                    float const β_max = parameters.viscosityBetaIsRatio ?
+                        parameters.viscosityBetaOverAlpha * α_max :
+                        parameters.viscosityBeta;
+                    float const one_over_δt_visc = 0.6f * (α_max * c_a + β_max * μ_max) / h_a;
                     float const one_over_δt_cv = one_over_δt_c + one_over_δt_visc;
                     float const f_a = sqrtf(dv_a_dt.dot(dv_a_dt));
                     float const one_over_δt_f = parameters.courantFactor *

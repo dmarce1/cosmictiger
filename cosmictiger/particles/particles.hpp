@@ -10,6 +10,7 @@
 #define PARTICLES_HPP_
 
 #include <atomic>
+#include <cstdint>
 #include <fstream>
 #include <unordered_map>
 
@@ -182,6 +183,10 @@ struct ParticleGlobalRange {
 };
 
 ParticleInteger particlesSize();
+// Source ghosts use a separate arena and never change the owned population.
+ParticleInteger particlesOwnedSize();
+// Cumulative position/type cache misses requiring a remote particle action.
+uint64_t particlesRemoteFetchCount();
 std::unordered_map<int, ParticleInteger> particlesGroupsInit();
 void particlesGroupsDestroy();
 void particlesResize(ParticleInteger, bool lock = true);
@@ -231,6 +236,8 @@ void particlesMemadviseGpu();
 Vector<size_t> particlesRungCounts();
 void particlesSetMinrung(int minrung);
 void particlesFree();
+// Hooks run before owned storage is released; register each hook once.
+void particlesRegisterReleaseHook(void (*hook)());
 void particlesSaveGlass(char const* filename);
 void particlesSortByRung(int minrung);
 double particlesActivePct();

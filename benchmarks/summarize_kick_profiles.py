@@ -4,7 +4,7 @@
 nsys mode:   summarize_kick_profiles.py nsys DIR
   DIR holds <variant>_<round>/ subdirectories, each with run.log (the benchmark
   output) and stats_cuda_gpu_kern_sum.csv from `nsys stats`. Reports, per
-  variant, the median whole-kick time from the STF_WALK_MEDIAN rows, the mean
+  variant, the median whole-kick time from the CARTESIAN_WALK_MEDIAN rows, the mean
   kick kernel duration from the kernel summary, and the difference (host side).
   When stats_cuda_gpu_trace.csv is present too, the kick kernel launches are
   paired in order with the benchmark's kicks (one launch per kick: a warmup
@@ -35,10 +35,10 @@ def nsys(directory):
         kicks = []
         samples = []
         for line in (sub / 'run.log').read_text().splitlines():
-            if line.startswith('STF_WALK_MEDIAN,'):
+            if line.startswith('CARTESIAN_WALK_MEDIAN,'):
                 fields = line.split(',')
                 kicks.append((int(fields[3]), float(fields[8])))
-            elif line.startswith('STF_WALK_SAMPLE,'):
+            elif line.startswith('CARTESIAN_WALK_SAMPLE,'):
                 fields = line.split(',')
                 samples.append((int(fields[3]), int(fields[4]), float(fields[7])))
         kernel = None

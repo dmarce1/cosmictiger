@@ -29,7 +29,7 @@
 #include <cosmictiger/core/timer.hpp>
 #include <cosmictiger/cosmology/background.hpp>
 #include <cosmictiger/cuda/device_vector.hpp>
-#include <cosmictiger/gravity/bh.hpp>
+#include <cosmictiger/analysis/bh.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/constants.hpp>
 #include <cosmictiger/math/fixed.hpp>

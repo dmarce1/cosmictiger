@@ -16,7 +16,7 @@ advection is used; the optional XSPH variant in equation 3.19 is not enabled.
 
 ## Notation in the code
 
-The computation code transcribes the paper. `cosmictiger/sph/monaghan_sph.hpp` holds the
+The computation code transcribes the paper. `cosmictiger/sph/monaghan/equations.hpp` and `viscosity.hpp` hold the
 per-pair formulae, and the pair, density, and support-radius loops in
 `src/sph/sph_hydro_cpu.cpp`, `src/sph/sph_hydro.cu`, `src/sph/sph_prehydro_cpu.cpp`,
 `src/sph/sph_prehydro.cu`, and `cosmictiger/sph/sph_cuda.hpp` apply them to the staged particle
@@ -176,8 +176,9 @@ speed. The viscosity length scale is
 \(h_i=H_i/\texttt{supportRadiusPerEffectiveRadius}\). The fixed factor makes
 \(\bar\ell_{ij}=(H_i+H_j)/4\) for the cubic and preserves the previous
 interpretation of the viscosity parameters. The same factor applies to every
-selected family. Defaults remain the paper's \(\alpha=1\), \(\beta=2\), and
-\(\epsilon=0.01\).
+selected family. The regularization remains \(\epsilon=0.01\). With variable
+viscosity disabled the default \(\alpha=1\) and \(\beta=2\) recover the constant
+coefficients of the paper. The default evolving coefficients are described below.
 
 The Balsara (1995) shear limiter is enabled by default, using equation (72) of
 Springel, Pakmor, Zier & Reinecke (2021), *Simulating cosmic structure formation
@@ -195,17 +196,127 @@ It computes \(f_i=|\nabla\!\cdot\mathbf v_i|/(|\nabla\!\cdot\mathbf v_i|+
 and multiplies \(\Pi_{ij}\) by \((f_i+f_j)/2\) in both force and heating.
 The density normalization cancels in the ratio. The derivatives use the physical
 relative velocity, including Hubble flow, consistently with the viscosity.
-Only \(f_i\), one float per gas particle, is retained between density and force
+For this shear correction, only \(f_i\), one float per gas particle, is retained between density and force
 passes; the divergence and curl are discarded. This derived factor is recomputed
 after restart and migration and is not stored in checkpoints. Checkpoint metadata
 records whether the limiter is enabled and rejects a restart with a different setting.
-Use `--hydro.balsaraSwitch=false` to recover the unmodified Monaghan viscosity.
+Use `--hydro.balsaraSwitch=false` to disable this shear correction.
 
-The active formulation has no pressure-entropy weighting, grad-h factors, or evolving
-viscosity coefficient. The same symmetric pressure and viscosity
-factors enter force and thermal work. Their simultaneous pair rates conserve linear
+The active formulation has no pressure-entropy weighting or grad-h factors.
+The same symmetric pressure and viscosity factors enter force and thermal work.
+Their simultaneous pair rates conserve linear
 and angular momentum and balance kinetic with internal energy. This algebraic
 identity does not imply exact conservation by a finite-step asynchronous integrator.
+
+## Morris–Monaghan variable viscosity
+
+`hydro.viscosityEvolution=morrisAndMonaghan` (the default) enables the original additive switch of
+Morris & Monaghan (1997), *A Switch to Reduce SPH Viscosity*, JCP 136, 41–50,
+[doi:10.1006/jcph.1997.5690](https://doi.org/10.1006/jcph.1997.5690):
+
+\[
+ \frac{d\alpha_i}{dt}=-\frac{\alpha_i-\alpha^\ast}{\tau_i}+S_i
+ \quad\text{(5)},\qquad
+ \tau_i=\frac{h_{M,i}}{\mathcal C_1c_i}\quad\text{(6)},\qquad
+ S_i=\max(-\nabla\!\cdot\mathbf v_i,0)\quad\text{(13)}.
+\]
+
+The defaults are \(\alpha^\ast=0.1\) and \(\mathcal C_1=0.2\), as used in their
+calculations. There is no hard upper cap or \((\alpha_{\max}-\alpha)\) source
+multiplier. The source uses equation (13) directly, without an additional
+adiabatic-index scaling. The decay length is the same calibrated viscosity length
+\(h_{M,i}=\sqrt{5/6}\,H_i/\texttt{supportRadiusPerEffectiveRadius}\), equal to
+\(H_i/2\) for the cubic spline. New particles start at \(\alpha^\ast\); this
+smooth-flow initialization is an implementation choice, since the paper uses
+problem-dependent initial values, including elevated α near the initial Sod interface.
+
+Pair forces and heating use \(\bar\alpha_{ij}=(\alpha_i+\alpha_j)/2\), preserving
+pair symmetry. The quadratic coefficient has two selectable meanings:
+
+- `--hydro.viscosityBetaMode=ratio --hydro.viscosityBetaOverAlpha=2` gives
+  \(\beta_{ij}=2\bar\alpha_{ij}\), the default and the convention of their equation (3).
+- `--hydro.viscosityBetaMode=constant --hydro.viscosityBeta=2` keeps
+  \(\beta_{ij}=2\) even as α decays.
+
+The same choice applies with `--hydro.viscosityEvolution=none`, when every pair
+uses the constant `hydro.viscosityAlpha` instead. The disabled mode allocates no
+per-particle variable-viscosity state. For independently fixed α and β, disable
+variable viscosity and select `viscosityBetaMode=constant`.
+
+The density pass computes the instantaneous velocity divergence and the new α
+rate for active particles. Divergence and curl are then discarded; neither their
+history nor \(\nabla\cdot(\rho\mathbf v)\) is needed. Momentum divergence contains
+an advected-density term and is not a Galilean-invariant compression indicator.
+The derivative-of-divergence indicator described after equation (72) in GADGET-4
+belongs to a later switch, not to Morris–Monaghan equation (13).
+
+α and its previous rate survive sorting, domain migration, and checkpoints. The
+existing kick predictor/corrector also retains a predicted base while closing a
+step. Density retries do not advance α, and semiactive neighbors keep the old
+rate needed when their own staggered step closes. Silo writes a dimensionless
+`alpha` gas field when viscosity evolution is enabled. Morris–Monaghan retains
+and writes no divergence field; Cullen–Dehnen has additional state described below.
+
+In the cosmological variables below, the normalized density derivative sum is
+\(D_i=a^2\nabla_{\rm physical}\cdot\mathbf v_{\rm physical}\). Thus
+
+\[
+ \frac{d\alpha_i}{d\tau}
+ =-(\alpha_i-\alpha^\ast)\frac{\mathcal C_1c_{\rm stored,i}}{a h_{M,i}}
+ +\frac{\max(-D_i,0)}{a}.
+\]
+
+This includes homogeneous expansion in the same physical relative velocity used
+by artificial viscosity. It yields no compression source in expanding flow.
+
+## Cullen–Dehnen variable viscosity
+
+`--hydro.viscosityEvolution=cullenAndDehnen` selects Cullen & Dehnen (2010),
+*Inviscid smoothed particle hydrodynamics*, MNRAS 408, 669–683,
+[doi:10.1111/j.1365-2966.2010.17158.x](https://doi.org/10.1111/j.1365-2966.2010.17158.x)
+([author paper](https://arxiv.org/pdf/1006.1524)). Their equations (13)–(16) define
+
+\[
+ A_i=\xi_i\max\!\left[-\frac{D(\nabla\cdot\mathbf v)_i}{Dt},0\right],\qquad
+ \alpha_{{\rm loc},i}=\alpha_{\max}
+ \frac{H_i^2 A_i}{(v_i^{\rm sig})^2+H_i^2 A_i},
+\]
+\[
+ v_i^{\rm sig}=\max_{j:r_{ij}\le H_i}
+ \left[\frac{c_i+c_j}{2}-\min(0,\mathbf v_{ij}\cdot\widehat{\mathbf r}_{ij})\right],
+ \qquad \tau_i=\frac{H_i}{2\ell v_i^{\rm sig}}.
+\]
+
+Here the paper's smoothing length is the **full support radius** \(H_i\), unlike
+the Morris–Monaghan cubic length \(H_i/2\). The CD floor and initial α are zero;
+\(\ell=0.05\) follows the paper. `hydro.viscosityAlphaMax=2` is an implementation
+choice. Equation (A15) raises α immediately to the target when needed and otherwise
+decays it exponentially toward that target.
+
+The limiter is equation (18), with the neighbor compression-sign measure from
+(17):
+\[
+ R_i=\frac{\sum_jm_j\operatorname{sign}[(\nabla\cdot\mathbf v)_j]W_{ij}}{\rho_i},
+ \qquad
+ \xi_i=\frac{|2(1-R_i)^4\nabla\cdot\mathbf v_i|^2}
+ {|2(1-R_i)^4\nabla\cdot\mathbf v_i|^2+\operatorname{tr}(\mathbf S_i\mathbf S_i^T)},
+\]
+where \(\mathbf S_i=\tfrac12(\mathbf V_i+\mathbf V_i^T)
+-\tfrac13\operatorname{tr}(\mathbf V_i)\mathbf I\) and
+\(\mathbf V_i=\nabla\mathbf v_i\). The matrix-corrected gradient estimates follow
+(B2), (B4), and (B7), using mass/kernel-gradient weights so they do not read
+densities being updated concurrently on other ranks. A symmetric pseudoinverse
+handles planar or collinear neighborhoods on their resolved subspace.
+Equation (B12) computes the material divergence derivative as
+\(\operatorname{tr}(\nabla\mathbf a-\mathbf V^2)\), using the previous accelerations;
+it does not finite-difference stored divergence values.
+
+CD nevertheless retains the previous divergence for the immutable neighbor-sign
+snapshot in equation (17), following the sweep order in Appendix A4. Only CD
+allocates this extra state and writes the physical velocity divergence as `divv`
+in Silo, with inverse-time units. Both evolution schemes write dimensionless
+`alpha`; selecting `none` allocates neither α evolution state nor divergence state.
+The β mode described above applies to both schemes.
 
 ## Time integration and cosmological variables
 
@@ -245,7 +356,9 @@ The gravity acceleration criterion uses its own effective radius, independently 
 the selected hydro family. These reference conversions do not establish equal
 timestep accuracy for every kernel shape.
 
-The `star` test relaxes its initial polytrope with a velocity damping term outside
+The `star` test's constant-α schedule (zero during relaxation, 0.05 afterward)
+applies only with `hydro.viscosityEvolution=none`; evolving viscosity follows the
+selected switch. It relaxes its initial polytrope with a velocity damping term outside
 the paper, \(d\mathbf w/d\tau \mathrel{-}= \lambda_{\rm d}\mathbf w\), where
 \(\lambda_{\rm d}\) is the internal `hydro.damping` rate per code time unit. The
 timestep criteria above do not include it, so the explicit kick is stable only while
@@ -290,8 +403,15 @@ hydrodynamic controls are:
 | `hydro.kernelFamily` | `spline` | Density family: `spline`, `wendland`, or `ferrers` |
 | `hydro.kernelDegree` | `3` | Density polynomial degree; valid values depend on family |
 | `hydro.gamma` | `5/3` | Ideal-gas adiabatic index |
-| `hydro.viscosityAlpha` | `1` | Linear viscosity coefficient |
-| `hydro.viscosityBeta` | `2` | Quadratic viscosity coefficient |
+| `hydro.viscosityAlpha` | `1` | Constant linear coefficient when variable viscosity is disabled |
+| `hydro.viscosityBeta` | `2` | Fixed quadratic coefficient in `constant` mode |
+| `hydro.viscosityEvolution` | `morrisAndMonaghan` | α evolution: `none`, `morrisAndMonaghan`, or `cullenAndDehnen` |
+| `hydro.viscosityAlphaMin` | `0.1` | Morris–Monaghan positive α floor and initial value |
+| `hydro.viscosityDecay` | `0.2` | Morris–Monaghan decay coefficient \(\mathcal C_1\) |
+| `hydro.viscosityAlphaMax` | `2` | Cullen–Dehnen maximum α; the MM scheme has no upper cap |
+| `hydro.viscosityDecayCD` | `0.05` | Cullen–Dehnen decay coefficient \(\ell\) |
+| `hydro.viscosityBetaMode` | `ratio` | `ratio` follows α; `constant` uses the fixed β |
+| `hydro.viscosityBetaOverAlpha` | `2` | Nonnegative β/α ratio in `ratio` mode |
 | `hydro.viscosityEpsilon` | `0.01` | Denominator coefficient multiplying \(\bar\ell^2\) |
 | `hydro.balsaraSwitch` | `true` | Apply the Balsara shear limiter to artificial viscosity |
 | `hydro.neighborNumber` | `42` | Kernel-weighted support-sphere count |
@@ -346,7 +466,7 @@ not use stellar particles or star formation.
 
 ## Validation scope
 
-The independent `monaghan_sph` CTest target retains the reference cubic checks:
+The independent `sph_kernels` and `monaghan_sph` CTest targets retain the reference cubic checks:
 float and double kernel normalization, spline joins, analytic versus
 finite-difference derivatives, the paper's \(H=2h_M\) convention, viscosity signs
 and coefficients, regularization, and invariance under length-unit changes and
@@ -386,3 +506,20 @@ cosmological SPH evolution with restart. At the smoke test's coarse resolution,
 Sod density relative L1 error was 0.11484; the largest sampled relative total-energy
 drift was 8.24e-8. These are regression results, not a resolution-convergence study
 or evidence of long-time accuracy. No performance claim follows from them.
+
+## Source layout
+
+Common particle storage, source staging, neighbor traversal, CPU/CUDA execution,
+and timestep scheduling stay directly in `cosmictiger/sph/` and `src/sph/`.
+The numerical components live in author-named directories:
+
+- `monaghan/`: pair pressure work and the baseline artificial-viscosity formula.
+- `morris_and_monaghan/`: compression/decay rate and predictor/corrector updates of alpha.
+- `cullen_and_dehnen/`: gradient reconstruction, shock detection, alpha updates, and model diagnostics.
+- `balsara/`: the shear limiter, composable with either evolving-alpha model.
+
+The common `viscosity_state.hpp` defines alpha storage used by both evolution
+models; the Cullen–Dehnen diagnostic state belongs to its own module. Allocation,
+reordering, migration, and checkpoint traversal remain in common particle code.
+The shared density and hydro passes call these policies without duplicating
+neighbor walks. Standalone policy tests use the same author-directory organization.

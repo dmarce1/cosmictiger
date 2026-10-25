@@ -17,7 +17,7 @@
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/scenarios/polytropic_star.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
-#include <cosmictiger/sph/sphere.hpp>
+#include <cosmictiger/scenarios/sphere.hpp>
 
 namespace scenarios {
 

@@ -203,7 +203,7 @@ def run_case(output, info, config, fixture, samples, reference, name):
     settings = info["settings"]
     command = [
         "taskset", "-c", settings["cpus"], info["binary"],
-        "--run.test=stfBenchmark", "--compute.cuda=true",
+        "--run.test=cartesianBenchmark", "--compute.cuda=true",
         f"--initial.particlesPerDimension={settings['side']}",
         f"--compute.bucketSize={settings['bucket']}",
         f"--gravity.fmmOrder={config['order']}",
@@ -217,11 +217,11 @@ def run_case(output, info, config, fixture, samples, reference, name):
     ]
     environment = dict(
         os.environ,
-        COSMICTIGER_STF_WALK_SAMPLES=str(samples),
-        COSMICTIGER_STF_WALK_BUCKET=str(settings["bucket"]),
-        COSMICTIGER_STF_WALK_FIXTURE=fixture,
-        COSMICTIGER_STF_WALK_REFERENCE=str(reference),
-        COSMICTIGER_STF_WALK_EXPORT_FORCES="0",
+        COSMICTIGER_CARTESIAN_WALK_SAMPLES=str(samples),
+        COSMICTIGER_CARTESIAN_WALK_BUCKET=str(settings["bucket"]),
+        COSMICTIGER_CARTESIAN_WALK_FIXTURE=fixture,
+        COSMICTIGER_CARTESIAN_WALK_REFERENCE=str(reference),
+        COSMICTIGER_CARTESIAN_WALK_EXPORT_FORCES="0",
         OMP_NUM_THREADS="1", OMP_THREAD_LIMIT="1",
     )
     logfile = directory / "stdout.log"
@@ -236,7 +236,7 @@ def run_case(output, info, config, fixture, samples, reference, name):
     parsed.update(config=config, fixture=fixture, command=command, log=str(logfile),
                   wall_seconds=time.monotonic() - started)
     if reference:
-        reference_csv = directory / "stf_walk_reference.csv"
+        reference_csv = directory / "cartesian_walk_reference.csv"
         read_reference(reference_csv, fixture)
         parsed.update(reference_csv=str(reference_csv),
                       reference_csv_sha256=digest(reference_csv))

@@ -13,6 +13,7 @@ import re
 import shutil
 import signal
 import subprocess
+import struct
 import sys
 
 
@@ -100,14 +101,105 @@ def checkManifest(checkpointDir, iteration, scenario="cosmology", endTime=0.0, g
     checkpoint_position_bytes(payload)
 
 
+def hydro_particle_payload(checkpoint, expected_count=None):
+    """Read the all-gas physical payload, excluding native driver timing/padding."""
+    data = (checkpoint / "checkpoint.0.dat").read_bytes()
+    position_bytes = checkpoint_position_bytes(data)
+    candidates = [data.find(struct.pack("=7I", 0x43545350, version, integer_bytes, 8, 12, 3, 4))
+                  for integer_bytes in (4, 8) for version in (2, 4, 6)]
+    offset = max(candidates)
+    if offset < 0:
+        raise RuntimeError(f"missing versioned SPH payload in {checkpoint}")
+    header = struct.unpack_from("=7I", data, offset)
+    integer_bytes = header[2]
+    if integer_bytes not in (4, 8) or header[5:] != (3, 4):
+        raise RuntimeError(f"unsupported particle layout in {checkpoint}: {header}")
+    count = int.from_bytes(data[offset + 28:offset + 28 + integer_bytes],
+                           sys.byteorder, signed=True)
+    if count <= 0 or (expected_count is not None and count != expected_count):
+        raise RuntimeError(f"unexpected gas count in {checkpoint}: {count}")
+    # Particle positions, velocities, rungs, species, and gas index precede
+    # the gas header. The 38 bytes below are rates, density, flags, and six
+    # predictor/gravity acceleration floats in visitSphCheckpointArrays().
+    start = offset - 2 * integer_bytes - count * (3 * position_bytes + 14 + integer_bytes)
+    viscosity_bytes = {2: 0, 4: 8, 6: 12}[header[1]]
+    end = offset + 28 + integer_bytes + count * (
+        header[3] + header[4] + integer_bytes + 38 + viscosity_bytes)
+    if start < 0 or end > len(data):
+        raise RuntimeError(f"truncated physical particle payload in {checkpoint}")
+    counts = [int.from_bytes(data[start + i * integer_bytes:start + (i + 1) * integer_bytes],
+                             sys.byteorder, signed=True) for i in range(2)]
+    if counts != [count, count]:
+        raise RuntimeError(f"restart fixture is not all gas: {counts}")
+    return data[start:end]
+
+
+def checkViscosityRestarts(executable, baseWorkdir):
+    """Check both viscosity switches with and without the independent shear limiter."""
+    configuration = Path(__file__).resolve().parents[1] / "configurations/hydro_wave.ini"
+    common = [str(executable), f"--configuration={configuration}", "--hpx:threads=2",
+              "--hpx:bind=none", "--initial.particlesPerDimension=8", "--compute.cuda=false",
+              "--run.endTime=0.00001", "--checkpoint.intervalSeconds=0",
+              "--output.directory=.", "--output.silo=false", "--analysis.views=false",
+              "--analysis.power=false", "--analysis.groups=false", "--lightcone.enabled=false"]
+    for model in ("none", "morrisAndMonaghan", "cullenAndDehnen"):
+        for limiter in (False, True):
+            name = f"viscosity_{model}_{int(limiter)}"
+            options = common + [f"--hydro.viscosityEvolution={model}",
+                                f"--hydro.balsaraSwitch={str(limiter).lower()}"]
+            reference = prepareCase(baseWorkdir, name)
+            runSimulation(options + ["--run.maxIterations=2"], reference, "run.log")
+            checkpoint = reference / "checkpoint.1"
+            if not checkpoint.is_dir():
+                raise RuntimeError(f"{name} did not save a completed first step")
+            resumed = prepareCase(baseWorkdir, name + "_restart", checkpoint)
+            output = runSimulation(options + ["--run.maxIterations=1", "--checkpoint.readIndex=1"],
+                                   resumed, "restart.log")
+            if "Done reading checkpoint" not in output:
+                raise RuntimeError(f"{name} did not load the checkpoint")
+            if hydro_particle_payload(reference / "checkpoint.2", 512) != hydro_particle_payload(
+                    resumed / "checkpoint.2", 512):
+                raise RuntimeError(f"{name} restart changed particles, stage fields, or viscosity")
+            checkManifest(resumed / "checkpoint.2", 2, scenario="hydroWave", endTime=1.e-5,
+                          gravity=False)
+            if not limiter:
+                mutations = {"model": "--hydro.viscosityEvolution=" + (
+                    "morrisAndMonaghan" if model == "none" else "none")}
+                if model != "none":
+                    mutations.update({"beta_mode": "--hydro.viscosityBetaMode=constant",
+                                      "beta_ratio": "--hydro.viscosityBetaOverAlpha=3"})
+                if model == "morrisAndMonaghan":
+                    mutations.update({"floor": "--hydro.viscosityAlphaMin=0.2",
+                                      "decay": "--hydro.viscosityDecay=0.3"})
+                if model == "cullenAndDehnen":
+                    mutations.update({"maximum": "--hydro.viscosityAlphaMax=3",
+                                      "decay": "--hydro.viscosityDecayCD=0.1"})
+                for label, changed in mutations.items():
+                    directory = prepareCase(baseWorkdir, name + "_reject_" + label, checkpoint)
+                    changed_key = changed.split("=", 1)[0] + "="
+                    changed_options = [option for option in options
+                                       if not option.startswith(changed_key)]
+                    output = runSimulation(changed_options + ["--run.maxIterations=0",
+                                           "--checkpoint.readIndex=1", changed],
+                                           directory, "restart.log", expectSuccess=False)
+                    if "checkpoint" not in output.lower():
+                        raise RuntimeError(f"{name}/{label} lacked a checkpoint diagnostic")
+            print(f"{name}: exact restart and viscosity compatibility passed")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("executable", type=Path)
     parser.add_argument("workdir", type=Path)
+    parser.add_argument("--viscosity-only", action="store_true")
     args = parser.parse_args()
     executable = args.executable.resolve()
     baseWorkdir = args.workdir.resolve()
     baseWorkdir.mkdir(parents=True, exist_ok=True)
+
+    if args.viscosity_only:
+        checkViscosityRestarts(executable, baseWorkdir)
+        return 0
 
     options = [str(executable), "--hpx:threads=2", "--hpx:bind=none",
                "--initial.particlesPerDimension=8", "--hydro.enabled=false",
@@ -244,6 +336,7 @@ def main():
     restart("version_one", downgradeToVersionOne)
     print(f"checkpoint {iteration}: redshift and final publication, payload version 3, "
           "scenario manifest v2, restart, corruption rejection, and labelled version 1 decoding passed")
+    checkViscosityRestarts(executable, baseWorkdir)
     return 0
 
 

@@ -14,7 +14,7 @@
 
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/safe_io.hpp>
-#include <cosmictiger/gravity/gravity.hpp>
+#include <cosmictiger/gravity/nitadori/solver.hpp>
 #include <cosmictiger/math/constants.hpp>
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/math/math.hpp>
@@ -25,6 +25,7 @@
 #endif
 #include <cosmictiger/core/stack_trace.hpp>
 #include <cosmictiger/core/timer.hpp>
+#include <cosmictiger/sph/cullen_and_dehnen/particle_exchange.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
 
 HPX_PLAIN_ACTION(sphTreeNeighbor, SphTreeNeighborAction);
@@ -51,6 +52,11 @@ struct SphRunWorkspace {
     Vector<float, PinnedAllocator<float>> hostAdiabaticIndex;
     Vector<float, PinnedAllocator<float>> hostDensity;
     Vector<float, PinnedAllocator<float>> hostBalsaraFactor;
+    Vector<float, PinnedAllocator<float>> hostViscosityAlpha;
+    Vector<float, PinnedAllocator<float>> hostAccelerationX;
+    Vector<float, PinnedAllocator<float>> hostAccelerationY;
+    Vector<float, PinnedAllocator<float>> hostAccelerationZ;
+    Vector<float, PinnedAllocator<float>> hostVelocityDivergence;
     Vector<float, PinnedAllocator<float>> hostSupportRadius;
     Vector<char, PinnedAllocator<char>> hostRungs;
     Vector<SphTreeNode, PinnedAllocator<SphTreeNode>> hostTrees;
@@ -425,14 +431,27 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
     if (params.runType == SPH_RUN_HYDRO && params.balsaraSwitch) {
         hostBalsaraFactor.resize(particleStorageSize);
     }
+    if (params.runType == SPH_RUN_PREHYDRO2 && params.cullenDehnen) {
+        hostAccelerationX.resize(particleStorageSize);
+        hostAccelerationY.resize(particleStorageSize);
+        hostAccelerationZ.resize(particleStorageSize);
+        hostVelocityDivergence.resize(particleStorageSize);
+    }
+    if (params.runType == SPH_RUN_HYDRO && params.variableViscosity) {
+        hostViscosityAlpha.resize(particleStorageSize);
+    }
     if (params.runType == SPH_RUN_HYDRO ||
-        (params.runType == SPH_RUN_PREHYDRO2 && params.balsaraSwitch)) {
+        (params.runType == SPH_RUN_PREHYDRO2 &&
+            (params.balsaraSwitch || params.variableViscosity))) {
         hostVelocityX.resize(particleStorageSize);
         hostVelocityY.resize(particleStorageSize);
         hostVelocityZ.resize(particleStorageSize);
     }
     if (params.runType == SPH_RUN_HYDRO) {
         hostDensity.resize(particleStorageSize);
+    }
+    if (params.runType == SPH_RUN_HYDRO ||
+        (params.runType == SPH_RUN_PREHYDRO2 && params.variableViscosity)) {
         hostInternalEnergy.resize(particleStorageSize);
         if (getOptions().chemistry.enabled) {
             hostPressureEnergyRatio.resize(particleStorageSize);
@@ -456,8 +475,13 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
                 sphParticlesGlobalReadPositions(node.globalParticleRange(), hostPositionX.data(),
                     hostPositionY.data(), hostPositionZ.data(), offset);
                 if (params.runType == SPH_RUN_PREHYDRO2 || params.runType == SPH_RUN_RUNGS) {
-                    sphParticlesGlobalReadInternalEnergyAndSupportRadius(
-                        node.globalParticleRange(), nullptr, hostSupportRadius.data(), offset);
+                    sphParticlesGlobalReadInternalEnergyAndSupportRadius(node.globalParticleRange(),
+                        hostInternalEnergy.empty() ? nullptr : hostInternalEnergy.data(),
+                        hostSupportRadius.data(), offset);
+                    if (!hostPressureEnergyRatio.empty()) {
+                        sphParticlesGlobalReadChemistryEos(node.globalParticleRange(),
+                            hostPressureEnergyRatio.data(), hostAdiabaticIndex.data(), offset);
+                    }
                     sphParticlesGlobalReadRungs(
                         node.globalParticleRange(), hostRungs.data(), offset);
                 } else if (params.runType == SPH_RUN_HYDRO) {
@@ -468,7 +492,13 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
                             hostPressureEnergyRatio.data(), hostAdiabaticIndex.data(), offset);
                     }
                     sphParticlesGlobalReadDensity(node.globalParticleRange(), hostDensity.data(),
-                        offset, params.balsaraSwitch ? hostBalsaraFactor.data() : nullptr);
+                        offset, params.balsaraSwitch ? hostBalsaraFactor.data() : nullptr,
+                        params.variableViscosity ? hostViscosityAlpha.data() : nullptr);
+                }
+                if (params.runType == SPH_RUN_PREHYDRO2 && params.cullenDehnen) {
+                    sphParticlesGlobalReadViscosityDiagnostics(node.globalParticleRange(),
+                        hostAccelerationX.data(), hostAccelerationY.data(),
+                        hostAccelerationZ.data(), hostVelocityDivergence.data(), offset);
                 }
                 if (!hostVelocityX.empty()) {
                     sphParticlesGlobalReadVelocities(node.globalParticleRange(),
@@ -495,6 +525,11 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
         copy(runData.sourceAdiabaticIndex, hostAdiabaticIndex);
         copy(runData.sourceDensity, hostDensity);
         copy(runData.sourceBalsaraFactor, hostBalsaraFactor);
+        copy(runData.sourceViscosityAlpha, hostViscosityAlpha);
+        copy(runData.sourceAccelerationX, hostAccelerationX);
+        copy(runData.sourceAccelerationY, hostAccelerationY);
+        copy(runData.sourceAccelerationZ, hostAccelerationZ);
+        copy(runData.sourceVelocityDivergence, hostVelocityDivergence);
         copy(runData.sourceVelocityX, hostVelocityX);
         copy(runData.sourceVelocityY, hostVelocityY);
         copy(runData.sourceVelocityZ, hostVelocityZ);
@@ -510,14 +545,18 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
     runData.sinkParticleRungs = &particlesRung(0);
     runData.sinkDensity = &sphParticlesDensity(0);
     runData.sinkBalsaraFactor = sphParticlesBalsaraFactors;
+    runData.sinkViscosityStates = sphParticlesViscosityStates;
+    runData.sinkCullenDehnenStates = sphParticlesCullenDehnenStates;
     runData.sinkThermodynamicStates = &sphParticlesThermodynamicState(0);
     runData.sinkInternalEnergyRate = &sphParticlesInternalEnergyRate(0);
     runData.sinkGravityAccelerationX = &sphParticlesGravityAcceleration(XDIM, 0);
     runData.sinkGravityAccelerationY = &sphParticlesGravityAcceleration(YDIM, 0);
     runData.sinkGravityAccelerationZ = &sphParticlesGravityAcceleration(ZDIM, 0);
     runData.adiabaticIndex = getOptions().hydro.gamma;
-    runData.gravityEffectiveRadius = getOptions().gravity.supportRadius /
-        selectedGravityKernel().supportRadiusPerEffectiveRadius;
+    runData.gravityEffectiveRadius = getOptions().gravity.method == "pmmm" ?
+        pmmmEffectiveRadius() :
+        getOptions().gravity.supportRadius /
+            selectedGravityKernel().supportRadiusPerEffectiveRadius;
     addCpuFlops(1);
     runData.numberOfTargetNodes = hostTargetNodeIndices.size();
     runData.sinkSmoothingConverged = &sphParticlesConverged(0);

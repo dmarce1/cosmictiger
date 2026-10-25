@@ -27,6 +27,11 @@ struct SphRunData {
     float* sourceAdiabaticIndex;
     float* sourceDensity;
     float* sourceBalsaraFactor;
+    float* sourceViscosityAlpha;
+    float* sourceAccelerationX;
+    float* sourceAccelerationY;
+    float* sourceAccelerationZ;
+    float* sourceVelocityDivergence;
     float* sourceSupportRadius;
     char* sourceRungs;
 
@@ -34,6 +39,8 @@ struct SphRunData {
     float* sinkInternalEnergyRate;
     float* sinkDensity;
     float* sinkBalsaraFactor;
+    SphViscosityState* sinkViscosityStates;
+    SphCullenDehnenState* sinkCullenDehnenStates;
     char* sinkSemiactive;
     char* sinkSmoothingConverged;
     SphThermodynamicState* sinkThermodynamicStates;

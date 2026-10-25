@@ -11,6 +11,7 @@
 
 #include <set>
 #include <unordered_map>
+#include <unordered_set>
 
 #include <cosmictiger/core/defs.hpp>
 #include <cosmictiger/core/semaphore.hpp>
@@ -25,6 +26,9 @@ struct KickWorkspaceTreeIdHash {
     }
 };
 
+using KickGpuExecutor = KickReturn (*)(KickParameters, Vector<KickWorkitem>,
+    std::unordered_set<TreeId, KickWorkspaceTreeIdHash> const&, detail::FmmForceOutput);
+
 #ifndef __CUDACC__
 
 class KickWorkspace {
@@ -34,11 +38,16 @@ class KickWorkspace {
     ParticleInteger numberOfProcessedParticles_;
     KickParameters params_;
     std::unordered_set<TreeId, KickWorkspaceTreeIdHash> treeIds_;
+    bool batch_ = false;
+    KickGpuExecutor gpuExecutor_ = nullptr;
+    detail::FmmForceOutput output_{};
+    KickReturn batchReturn_{};
+    KickInteractionCounts interactionCounts_{};
 
 public:
-    static void clearBuffers();
     KickWorkspace() = default;
-    KickWorkspace(KickParameters, ParticleInteger);
+    KickWorkspace(KickParameters, ParticleInteger, KickGpuExecutor);
+    KickWorkspace(KickParameters, ParticleInteger, detail::FmmForceOutput, KickGpuExecutor);
     KickWorkspace(KickWorkspace const&) = delete;
     KickWorkspace(KickWorkspace&&) = delete;
     KickWorkspace& operator=(KickWorkspace const&) = delete;
@@ -48,9 +57,19 @@ public:
     void serialize(A&&, unsigned) {}
     void addWork(std::shared_ptr<KickWorkspace> ptr, ExpansionBuffer const& l,
         Array<Position, NDIM> pos, TreeId self, Vector<TreeId>&& dchecklist,
-        Vector<TreeId>&& echecklist);
+        Vector<TreeId>&& echecklist, FmmGeometry const& geometry, ParticleInteger outputOffset = 0);
     void recordProcessedParticles(std::shared_ptr<KickWorkspace> ptr, ParticleInteger n);
-    void toGpu();
+    KickReturn toGpu();
+    bool isBatch() const {
+        return batch_;
+    }
+    detail::FmmForceOutput output() const {
+        return output_;
+    }
+    void accumulateBatchReturn(KickReturn const& result);
+    void addInteractionCounts(KickInteractionCounts const& counts);
+    KickInteractionCounts interactionCounts();
+    KickReturn finishBatch();
 };
 
 #endif

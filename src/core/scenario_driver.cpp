@@ -10,6 +10,7 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/core/timer.hpp>
+#include <cosmictiger/gravity/dehnen/execution.hpp>
 #include <cosmictiger/gravity/kick_workspace.hpp>
 #include <cosmictiger/io/checkpoint.hpp>
 #include <cosmictiger/io/output.hpp>
@@ -88,6 +89,9 @@ void runFixedScenario() {
     } else {
         particlesSetMinrung(baseOptions.run.minRung);
     }
+    state.minrung0 = std::max(state.minrung0, baseOptions.run.minRung);
+    bool const hierarchicalMesh =
+        baseOptions.run.hierarchicalGravity && usesMeshGravity(baseOptions.gravity);
     domainsRebound();
     Timer checkpointTimer;
     checkpointTimer.start();
@@ -139,10 +143,30 @@ void runFixedScenario() {
                 viewOutputViews(state.step, 1.0);
             }
             resetFlops();
-            auto const result = advanceForces(minimumRung, 1.0, 0.0, state.tau, baseTimestep,
-                baseOptions.gravity.openingAngle, state.iter == 0, fullEvaluation, state.energies);
+            std::pair<KickReturn, TreeCreateReturn> result;
+            if (hierarchicalMesh) {
+                if (minimumRung == 0) {
+                    state.minrung0 = std::max(state.minrung0 - 1, baseOptions.run.minRung);
+                }
+                int activeRung = std::max(minimumRung, state.minrung0);
+                int const previousActiveRung = activeRung;
+                result = kickStepHierarchical(activeRung, state.maxRung, 1.0, 0.0, state.tau,
+                    baseTimestep, baseOptions.gravity.openingAngle, &state.energies, state.minrung0,
+                    fullEvaluation, nullptr, true, 0.0);
+                if (activeRung != previousActiveRung) {
+                    ++state.minrung0;
+                }
+            } else {
+                result = advanceForces(minimumRung, 1.0, 0.0, state.tau, baseTimestep,
+                    baseOptions.gravity.openingAngle, state.iter == 0, fullEvaluation,
+                    state.energies);
+            }
             double const flops = flopsPerSecond();
-            state.maxRung = std::max(int(result.first.maxRung), baseOptions.run.minRung);
+            state.maxRung =
+                std::max({int(result.first.maxRung), baseOptions.run.minRung, minimumRung});
+            int const displayedMinimumRung =
+                usesMeshGravity(baseOptions.gravity) && !hierarchicalMesh ? state.maxRung :
+                                                                            minimumRung;
             if (state.iter == 0) {
                 state.energy0 = state.energies.kin + state.energies.therm + state.energies.pot;
             }
@@ -153,7 +177,9 @@ void runFixedScenario() {
             if (!(timestep > 0.0) || state.tau + timestep == state.tau) {
                 THROW_ERROR("Scenario timestep cannot advance time\n");
             }
-            drift(1.0, timestep, state.tau, state.tau + timestep, duration);
+            if (!hierarchicalMesh) {
+                drift(1.0, timestep, state.tau, state.tau + timestep, duration);
+            }
             state.tau += timestep;
             state.itime = inc(state.itime, state.maxRung);
             state.iter++;
@@ -168,8 +194,8 @@ void runFixedScenario() {
             if (progress == nullptr) {
                 THROW_ERROR("Unable to write scenario progress\n");
             }
-            fprintf(progress, "%i %e %e %i %i\n", state.iter, state.tau, timestep, minimumRung,
-                state.maxRung);
+            fprintf(progress, "%i %e %e %i %i\n", state.iter, state.tau, timestep,
+                displayedMinimumRung, state.maxRung);
             fclose(progress);
             checkpointTimer.stop();
             if (checkpointTimer.read() > baseOptions.checkpoint.intervalSeconds) {
@@ -183,7 +209,8 @@ void runFixedScenario() {
                 double const displayedRuntime = restoredRuntime + runtime.read();
                 runtime.start();
                 if (progressRows == 0) {
-                    PRINT("  TFLOP/s estimates counted gravity and SPH work during force advancement; "
+                    PRINT("  TFLOP/s estimates counted gravity and SPH work during force "
+                          "advancement; "
                           "chemistry is excluded.\n");
                 }
                 if (progressRows % 25 == 0) {
@@ -192,7 +219,8 @@ void runFixedScenario() {
                 }
                 PRINT("%8i %13.6e %13.6e %7.2f %6i/%-6i %10.2f %10.3f %10.3e\n", state.iter,
                     state.tau, timestep, std::clamp(100.0 * state.tau / duration, 0.0, 100.0),
-                    minimumRung, state.maxRung, displayedRuntime, stepTimer.read(), flops * 1e-12);
+                    displayedMinimumRung, state.maxRung, displayedRuntime, stepTimer.read(),
+                    flops * 1e-12);
                 progressRows++;
             }
         }
@@ -212,7 +240,7 @@ void runFixedScenario() {
     if (state.tau >= duration * (1.0 - 1.0e-12) && plan.finish != nullptr) {
         plan.finish(state.tau);
     }
-    KickWorkspace::clearBuffers();
+    kickClearBuffers();
     runtime.stop();
     if (hpxRank() == 0) {
         bool const finished = state.tau >= duration * (1.0 - 1.0e-12);

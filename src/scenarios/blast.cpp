@@ -16,7 +16,7 @@
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/scenarios/blast.hpp>
-#include <cosmictiger/sph/sedov.hpp>
+#include <cosmictiger/scenarios/sedov.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
 
 namespace scenarios {

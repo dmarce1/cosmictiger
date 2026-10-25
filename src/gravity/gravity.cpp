@@ -20,8 +20,8 @@
 // definitions live in gravity_cpu.hpp and the per-order instance translation
 // units instantiate them.
 
-void cpuGravityPp(
-    ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const& list, float hfloat) {
+void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const& list, float hfloat,
+    FmmGeometry const& geometry) {
     FlopCounter<FlopCount> flops = 0;
     Timer tm;
     tm.start();
@@ -36,7 +36,6 @@ void cpuGravityPp(
         FlopCount softenedPackets = 0;
         FlopCount const softeningFlops =
             detail::gravitySofteningFlops(selectedGravityKernel(), SimdFloat{}, doPhi);
-        static SimdFloat const toFloatFactor = simdBroadcast<SimdFloat>(kPositionToFloat);
         SimdFloat const one = simdBroadcast<SimdFloat>(1.0);
         SimdFloat const tiny = simdBroadcast<SimdFloat>(1.0e-20);
         TreeNode const* selfPtr = treeGetNode(self);
@@ -65,8 +64,8 @@ void cpuGravityPp(
             sourceWeights.resize(numberOfSources);
             int count = 0;
             for (int i = 0; i < maxi; i++) {
-                particlesGlobalReadPos(treePtrs[i]->globalParticleRange(), srcx.data(), srcy.data(),
-                    srcz.data(), types.data(), count);
+                gravityReadSourcePositions(
+                    *treePtrs[i], srcx.data(), srcy.data(), srcz.data(), types.data(), count);
                 count += treePtrs[i]->numberOfParticles();
             }
             for (int i = 0; i < count; i++) {
@@ -103,8 +102,7 @@ void cpuGravityPp(
                     }
                     Array<SimdFloat, NDIM> dx{};
                     for (int dim = 0; dim < NDIM; dim++) {
-                        dx[dim] = simdCast<SimdFloat>(simdPositionDifference(x[dim], yValue[dim])) *
-                            toFloatFactor;
+                        dx[dim] = fmmPositionDifference(x[dim], yValue[dim], dim, geometry);
                     }
                     SimdFloat const r2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
                     SimdFloat const rinv1Far =

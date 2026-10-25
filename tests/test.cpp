@@ -12,6 +12,7 @@
 #include <fenv.h>
 #include <filesystem>
 
+#include <cosmictiger/analysis/bh.hpp>
 #include <cosmictiger/analysis/rockstar.hpp>
 #include <cosmictiger/core/driver.hpp>
 #include <cosmictiger/core/options.hpp>
@@ -19,8 +20,8 @@
 #include <cosmictiger/core/timer.hpp>
 #include <cosmictiger/cosmology/fft.hpp>
 #include <cosmictiger/cosmology/initialize.hpp>
-#include <cosmictiger/gravity/analytic.hpp>
-#include <cosmictiger/gravity/bh.hpp>
+#include <cosmictiger/gravity/dehnen/distributed_tree.hpp>
+#include <cosmictiger/gravity/dehnen/execution.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/kick_interaction_counts.hpp>
@@ -33,6 +34,7 @@
 #include <cosmictiger/scenarios/cosmology.hpp>
 #include <cosmictiger/scenarios/plummer.hpp>
 #include <tests/application_test.hpp>
+#include <tests/gravity/analytic.hpp>
 #include <tests/test.hpp>
 
 constexpr bool kVerbose = true;
@@ -298,7 +300,7 @@ static void kickTest() {
     FILE* fp = fopen("results.txt", "at");
     fprintf(fp, "%i %e %e\n", hpxSize(), totalTime.read(), flopsMeasure);
     fclose(fp);
-    KickWorkspace::clearBuffers();
+    kickClearBuffers();
 }
 
 // Rank-local CPU walk counters and the net force from the saved accelerations.
@@ -440,7 +442,7 @@ static void forceTest() {
         treeDestroy(false);
     }
 
-    KickWorkspace::clearBuffers();
+    kickClearBuffers();
     PRINT("AVERAGE TIME = %e\n", tmMain.read() / kNiter);
 }
 
@@ -640,12 +642,15 @@ void unitsOutputTest();
 void distributedOutputTest();
 void fmmTreeTest();
 void fmmWalkTest();
+void meshDomainsTest();
+void pmmmTest();
 void particleMeshSortTest();
+void particleMeshTimestepTest();
 void particleMeshDispatchLaunchFailureTest();
 void particleMeshDispatchAsyncFailureTest();
 
-#ifdef COSMICTIGER_STF_BENCHMARKS
-void stfWalkBenchmark();
+#ifdef COSMICTIGER_CARTESIAN_BENCHMARKS
+void cartesianWalkBenchmark();
 #endif
 
 void rockstarTest();
@@ -668,13 +673,16 @@ ApplicationTest const applicationTests[] = {
     {"bhPotential", bhPotentialTest},
     {"groupsCatalogueDistributed", groupsCatalogueDistributedTest},
     {"groupsCatalogue", groupsCatalogueTest},
-#ifdef COSMICTIGER_STF_BENCHMARKS
-    {"stfBenchmark", stfWalkBenchmark},
+#ifdef COSMICTIGER_CARTESIAN_BENCHMARKS
+    {"cartesianBenchmark", cartesianWalkBenchmark},
 #endif
     {"linearGrowth", linearGrowthTest},
     {"fmmWalk", fmmWalkTest},
     {"fmmTree", fmmTreeTest},
+    {"meshDomains", meshDomainsTest},
+    {"pmmm", pmmmTest},
     {"particleMeshSort", particleMeshSortTest},
+    {"particleMeshTimestep", particleMeshTimestepTest},
     {"particleMeshDispatchLaunchFailure", particleMeshDispatchLaunchFailureTest},
     {"particleMeshDispatchAsyncFailure", particleMeshDispatchAsyncFailureTest},
     {"unitsOutput", unitsOutputTest},

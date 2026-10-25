@@ -7,7 +7,10 @@
  */
 
 #include <cosmictiger/math/vector3.hpp>
-#include <cosmictiger/sph/monaghan_sph.hpp>
+#include <cosmictiger/sph/balsara/shear_limiter.hpp>
+#include <cosmictiger/sph/cullen_and_dehnen/viscosity.hpp>
+#include <cosmictiger/sph/monaghan/viscosity.hpp>
+#include <cosmictiger/sph/morris_and_monaghan/viscosity.hpp>
 #include <cosmictiger/sph/sph_cuda.hpp>
 
 namespace detail {
@@ -22,6 +25,13 @@ struct NeighborActivity {
     float velocityX;
     float velocityY;
     float velocityZ;
+    float accelerationX;
+    float accelerationY;
+    float accelerationZ;
+    float divergence;
+    float internalEnergy;
+    float pressureEnergyRatio;
+    float adiabaticIndex;
 };
 
 struct DensityWorkspace {
@@ -161,10 +171,32 @@ __global__ void sphCudaPrehydro2(
                     workspace.particles[offset + slot] = {
                         data.sourceSupportRadius[sourceParticleIndex],
                         data.sourceRungs[sourceParticleIndex],
-                        parameters.balsaraSwitch ? data.sourceVelocityX[sourceParticleIndex] : 0.0f,
-                        parameters.balsaraSwitch ? data.sourceVelocityY[sourceParticleIndex] : 0.0f,
-                        parameters.balsaraSwitch ? data.sourceVelocityZ[sourceParticleIndex] :
-                                                   0.0f};
+                        (parameters.balsaraSwitch || parameters.variableViscosity) ?
+                            data.sourceVelocityX[sourceParticleIndex] :
+                            0.0f,
+                        (parameters.balsaraSwitch || parameters.variableViscosity) ?
+                            data.sourceVelocityY[sourceParticleIndex] :
+                            0.0f,
+                        (parameters.balsaraSwitch || parameters.variableViscosity) ?
+                            data.sourceVelocityZ[sourceParticleIndex] :
+                            0.0f,
+                        parameters.cullenDehnen ? data.sourceAccelerationX[sourceParticleIndex] :
+                                                  0.0f,
+                        parameters.cullenDehnen ? data.sourceAccelerationY[sourceParticleIndex] :
+                                                  0.0f,
+                        parameters.cullenDehnen ? data.sourceAccelerationZ[sourceParticleIndex] :
+                                                  0.0f,
+                        parameters.cullenDehnen ?
+                            data.sourceVelocityDivergence[sourceParticleIndex] :
+                            0.0f,
+                        parameters.cullenDehnen ? data.sourceInternalEnergy[sourceParticleIndex] :
+                                                  0.0f,
+                        parameters.cullenDehnen && data.sourcePressureEnergyRatio ?
+                            data.sourcePressureEnergyRatio[sourceParticleIndex] :
+                            data.adiabaticIndex - 1.0f,
+                        parameters.cullenDehnen && data.sourceAdiabaticIndex ?
+                            data.sourceAdiabaticIndex[sourceParticleIndex] :
+                            data.adiabaticIndex};
                 }
             }
         }
@@ -231,6 +263,19 @@ __global__ void sphCudaPrehydro2(
             float ρ_a = 0.0f;
             float ρ_a_div_v_a = 0.0f;
             Vector3<float> ρ_a_curl_v_a(0.0f);
+            cullen_and_dehnen::GradientSums<float> gradientSums{};
+            float ρ_a_R_a = 0.0f;
+            float v_sig_a = 0.0f;
+            float c_a_CD = 0.0f;
+            if (parameters.cullenDehnen) {
+                float const γ_a = data.sourceAdiabaticIndex ?
+                    data.sourceAdiabaticIndex[particleIndex] :
+                    data.adiabaticIndex;
+                float const P_over_ρu_a = data.sourcePressureEnergyRatio ?
+                    data.sourcePressureEnergyRatio[particleIndex] :
+                    γ_a - 1.0f;
+                c_a_CD = sqrtf(γ_a * P_over_ρu_a * data.sourceInternalEnergy[particleIndex]);
+            }
             for (int neighborIndex = threadIndex; neighborIndex < workspace.positions.size();
                 neighborIndex += blockSize) {
                 auto const& neighbor = workspace.positions[neighborIndex];
@@ -241,7 +286,16 @@ __global__ void sphCudaPrehydro2(
                 float const q_ab = radius * one_over_H_a;    // r_ab/H_a
                 ρ_a += m_b_over_H_a3 * kernelW(q_ab);
                 flops += 12 + sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab);
-                if (parameters.balsaraSwitch && radius > 0.0f && q_ab < 1.0f) {
+                if (parameters.cullenDehnen) {
+                    // Cullen & Dehnen (2010), equation (17), including the self term.
+                    float const div_v_b = workspace.particles[neighborIndex].divergence;
+                    float const sign_div_v_b =
+                        div_v_b > 0.0f ? 1.0f : (div_v_b < 0.0f ? -1.0f : 0.0f);
+                    ρ_a_R_a += m_b_over_H_a3 * kernelW(q_ab) * sign_div_v_b;
+                    flops += 3 + sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab);
+                }
+                if ((parameters.balsaraSwitch || parameters.variableViscosity) && radius > 0.0f &&
+                    q_ab < 1.0f) {
                     // GADGET-4 equation (72): ρ_a div(v)_a and ρ_a curl(v)_a
                     // are −Σ_b m_b v_ab·gradW_ab and Σ_b m_b v_ab×gradW_ab.
                     float const m_b_F_a = m_b_over_H_a3 * one_over_H_a * dkernelWDq(q_ab) / radius;
@@ -260,26 +314,100 @@ __global__ void sphCudaPrehydro2(
                         ρ_a_curl_v_a[dim] += v_ab_physical[next] * m_b_gradW_ab[last] -
                             v_ab_physical[last] * m_b_gradW_ab[next];
                     }
+                    if (parameters.cullenDehnen) {
+                        // Cullen & Dehnen (2010), equations (B2), (B4), (B7), (B12).
+                        // Equation (B7) permits mass/kernel-gradient weights, independent
+                        // of densities being updated by other MPI ranks in this pass.
+                        float const w_ab = -m_b_F_a;
+                        Vector3<float> const a_ab =
+                            Vector3<float>(data.sourceAccelerationX[particleIndex],
+                                data.sourceAccelerationY[particleIndex],
+                                data.sourceAccelerationZ[particleIndex]) -
+                            Vector3<float>(particle.accelerationX, particle.accelerationY,
+                                particle.accelerationZ);
+                        for (int i = 0; i < NDIM; ++i) {
+                            for (int j = 0; j < NDIM; ++j) {
+                                gradientSums.moment[i][j] += w_ab * r_ab[i] * r_ab[j];
+                                gradientSums.velocity[i][j] += w_ab * v_ab_physical[i] * r_ab[j];
+                                gradientSums.acceleration[i][j] += w_ab * a_ab[i] * r_ab[j];
+                            }
+                        }
+                        // Equation (15): maximum approaching-pair signal speed.
+                        float const v_ab_dot_r̂_ab = v_ab_physical.dot(r_ab) / radius;
+                        float const c_b = sqrtf(particle.adiabaticIndex *
+                            particle.pressureEnergyRatio * particle.internalEnergy);
+                        v_sig_a =
+                            fmaxf(v_sig_a, 0.5f * (c_a_CD + c_b) - fminf(v_ab_dot_r̂_ab, 0.0f));
+                        flops += 97;
+                    }
                     flops += 33 + sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab, true);
                 }
             }
             sharedReduceAdd<float, PREHYDRO2_BLOCK_SIZE>(ρ_a);
             flops += detail::sphReductionFlops<PREHYDRO2_BLOCK_SIZE>();
-            if (parameters.balsaraSwitch) {
+            if (parameters.balsaraSwitch || parameters.variableViscosity) {
                 sharedReduceAdd<float, PREHYDRO2_BLOCK_SIZE>(ρ_a_div_v_a);
                 for (int dim = 0; dim < NDIM; ++dim) {
                     sharedReduceAdd<float, PREHYDRO2_BLOCK_SIZE>(ρ_a_curl_v_a[dim]);
                 }
                 flops += 4 * detail::sphReductionFlops<PREHYDRO2_BLOCK_SIZE>();
             }
+            if (parameters.cullenDehnen) {
+                sharedReduceAdd<float, PREHYDRO2_BLOCK_SIZE>(ρ_a_R_a);
+                sharedReduceMax<PREHYDRO2_BLOCK_SIZE>(v_sig_a);
+                for (int i = 0; i < NDIM; ++i) {
+                    for (int j = 0; j < NDIM; ++j) {
+                        sharedReduceAdd<float, PREHYDRO2_BLOCK_SIZE>(gradientSums.moment[i][j]);
+                        sharedReduceAdd<float, PREHYDRO2_BLOCK_SIZE>(gradientSums.velocity[i][j]);
+                        sharedReduceAdd<float, PREHYDRO2_BLOCK_SIZE>(
+                            gradientSums.acceleration[i][j]);
+                    }
+                }
+                flops += 28 * detail::sphReductionFlops<PREHYDRO2_BLOCK_SIZE>();
+            }
             // NOLINTEND(readability-identifier-naming)
             if (threadIndex == 0) {
                 ALWAYS_ASSERT(H_a > 0.0f && ρ_a > 0.0f);
                 data.sinkDensity[sinkIndex] = ρ_a;
-                data.sinkBalsaraFactor[sinkIndex] = parameters.balsaraSwitch ?
-                    monaghan_sph::balsaraFactor(ρ_a_div_v_a, ρ_a_curl_v_a.norm()) :
-                    1.0f;
+                if (data.sinkBalsaraFactor) {
+                    data.sinkBalsaraFactor[sinkIndex] = parameters.balsaraSwitch ?
+                        balsara::balsaraFactor(ρ_a_div_v_a, ρ_a_curl_v_a.norm()) :
+                        1.0f;
+                }
                 flops += parameters.balsaraSwitch ? 8 : 0;
+                if (parameters.variableViscosity && !parameters.cullenDehnen && active) {
+                    // Morris & Monaghan (1997), equations (5), (6), (13), in conformal time.
+                    // NOLINTBEGIN(readability-identifier-naming)
+                    float const div_v_a = ρ_a_div_v_a / (ρ_a * parameters.scaleFactor);
+                    float const γ_a = data.sourceAdiabaticIndex ?
+                        data.sourceAdiabaticIndex[particleIndex] :
+                        data.adiabaticIndex;
+                    float const P_over_ρu_a = data.sourcePressureEnergyRatio ?
+                        data.sourcePressureEnergyRatio[particleIndex] :
+                        γ_a - 1.0f;
+                    float const c_a =
+                        sqrtf(γ_a * P_over_ρu_a * data.sourceInternalEnergy[particleIndex]);
+                    float const h_a = H_a /
+                        float(selectedHydroKernel().supportRadiusPerEffectiveRadius) *
+                        0.9128709291752769f;
+                    float const one_over_τ_a =
+                        parameters.viscosityDecay * c_a / (parameters.scaleFactor * h_a);
+                    auto& viscosity = data.sinkViscosityStates[sinkIndex];
+                    viscosity.rate = morris_and_monaghan::viscosityAlphaRate(
+                        viscosity.alpha, parameters.viscosityAlphaMin, one_over_τ_a, div_v_a);
+                    // NOLINTEND(readability-identifier-naming)
+                    flops += 15;
+                }
+                if (parameters.cullenDehnen) {
+                    auto const diagnostics = cullen_and_dehnen::diagnostics(gradientSums,
+                        parameters.scaleFactor, parameters.expansionAcceleration, ρ_a_R_a / ρ_a,
+                        H_a, fmaxf(c_a_CD, v_sig_a), parameters.viscosityAlphaMax,
+                        parameters.viscosityDecayCD, flops);
+                    auto& state = data.sinkCullenDehnenStates[sinkIndex];
+                    state.pendingDivergence = diagnostics.divergence;
+                    state.targetAlpha = diagnostics.targetAlpha;
+                    state.inverseDecayTime = diagnostics.inverseDecayTime;
+                }
                 data.sinkSmoothingConverged[sinkIndex] = true;
                 atomicMin(&reduction->minimumSupportRadius, supportRadius);
                 atomicMax(&reduction->maximumSupportRadius, supportRadius);

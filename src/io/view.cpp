@@ -65,6 +65,8 @@ struct SphParticleInfo : public DarkMatterParticleInfo {
     float eint;
     float rho;
     float h;
+    float alpha;
+    float divergence;
     primordial::State chemistry;
 };
 
@@ -185,6 +187,11 @@ public:
             units::toPhysicalSpecificEnergy(units::StoredSpecificEnergy(value), scales_, context_));
     }
 
+    double frequency(double value) const {
+        auto const frequency = value * scales_.frequencyScale();
+        return cosmological_ ? units::toCosmologicalValue(frequency, context_) : frequency.value();
+    }
+
     double mass(double value) const {
         auto const mass = units::toMass(units::StoredMass(value), scales_);
         return cosmological_ ? units::toCosmologicalValue(mass, context_) : mass.value();
@@ -279,6 +286,14 @@ void writeViewSpecies(DBfile* db, ViewDirectoryMetadata& metadata, char const* m
         [&conversion, mass](Particle const&) { return conversion.mass(mass); });
 }
 
+void writeViscosityField(
+    DBfile* db, ViewDirectoryMetadata& metadata, Vector<SphParticleInfo> const& gas) {
+    if (getOptions().hydro.viscosityEvolution != "none") {
+        writeViewField(db, metadata, "alpha", "gas", gas, "1",
+            [](SphParticleInfo const& particle) { return double(particle.alpha); });
+    }
+}
+
 void writeChemistryFields(
     DBfile* db, ViewDirectoryMetadata& metadata, Vector<SphParticleInfo> const& gas, double a) {
     if (!getOptions().chemistry.enabled) {
@@ -355,6 +370,16 @@ void writeConvertedView(DBfile* db, ViewDirectoryMetadata& metadata, ViewParticl
         writeViewSpecies(db, metadata, "gas", "hydro_", gas, conversion, lengthUnit, velocityUnit,
             massUnit, getOptions().initial.gasMass, time, cycle);
         writeChemistryFields(db, metadata, gas, a);
+        writeViscosityField(db, metadata, gas);
+        if (getOptions().hydro.viscosityEvolution == "cullenAndDehnen") {
+            writeViewField(db, metadata, "divv", "gas", gas,
+                cosmological ? "(km/s)/(Mpc/h)" : "1/s",
+                [&conversion](SphParticleInfo const& particle) {
+                    return conversion.frequency(particle.divergence);
+                });
+            writeViewText(db, "divv_convention",
+                "Physical velocity divergence including Hubble flow; last SPH evaluation.");
+        }
         writeViewField(db, metadata, "rho", "gas", gas, densityUnit,
             [&conversion](
                 SphParticleInfo const& particle) { return conversion.density(particle.rho); });
@@ -390,6 +415,12 @@ ViewParticles collectViewParticles() {
             gas.eint = sphParticlesInternalEnergy(index);
             gas.rho = sphParticlesDensity(index);
             gas.h = sphParticlesSupportRadius(index);
+            if (getOptions().hydro.viscosityEvolution != "none") {
+                gas.alpha = sphParticlesViscosityStates[index].alpha;
+            }
+            if (getOptions().hydro.viscosityEvolution == "cullenAndDehnen") {
+                gas.divergence = sphParticlesCullenDehnenStates[index].divergence;
+            }
             if (getOptions().chemistry.enabled) {
                 gas.chemistry = sphParticlesChemistryStates[index];
             }
@@ -560,6 +591,13 @@ void writeCodeParticleView(DBfile* db, ViewDirectoryMetadata& metadata,
         writeViewField(db, metadata, "kernel_support_radius", "gas", gas, "code",
             [](auto const& p) { return p.h; });
         writeChemistryFields(db, metadata, gas, a);
+        writeViscosityField(db, metadata, gas);
+        if (getOptions().hydro.viscosityEvolution == "cullenAndDehnen") {
+            writeViewField(db, metadata, "divv", "gas", gas, "1/code_time",
+                [](SphParticleInfo const& particle) { return double(particle.divergence); });
+            writeViewText(db, "divv_convention",
+                "Physical velocity divergence including Hubble flow; last SPH evaluation.");
+        }
     }
     DBFreeOptlist(options);
 }

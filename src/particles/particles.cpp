@@ -9,11 +9,15 @@
 constexpr bool kVerbose = true;
 #define PARTICLES_CPP
 
+#include <algorithm>
 #include <cstring>
 #include <exception>
+#include <limits>
 #include <memory>
+#include <stdexcept>
 #include <type_traits>
 #include <unordered_map>
+#include <vector>
 
 #include <gsl/gsl_rng.h>
 
@@ -22,6 +26,7 @@ constexpr bool kVerbose = true;
 #include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/cuda/cuda_memory_advice.hpp>
 #include <cosmictiger/io/output.hpp>
+#include <cosmictiger/particles/particle_partition.hpp>
 #include <cosmictiger/particles/particle_selection.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
@@ -60,6 +65,8 @@ static SharedMutexType sharedMutex;
 
 static ParticleInteger size = 0;
 static ParticleInteger capacity = 0;
+static std::vector<void (*)()> particleReleaseHooks;
+static std::atomic<uint64_t> remoteParticleFetches{0};
 static Vector<size_t> globalOffsets;
 static ParticleInteger rungBegin;
 static std::vector<ParticleInteger> rungBegins;
@@ -318,6 +325,9 @@ static T const* readParticleCacheLine(LineIdType lineId,
             try {
                 hpx::post([promise, lineId]() {
                     try {
+                        if constexpr (std::is_same_v<Action, ParticlesFetchCacheLineAction>) {
+                            remoteParticleFetches.fetch_add(1, std::memory_order_relaxed);
+                        }
                         auto remote =
                             hpx::async<Action>(hpxLocalities()[lineId.proc], lineId.index);
                         promise->set_value(remote.get());
@@ -872,6 +882,14 @@ ParticleInteger particlesSize() {
     return size;
 }
 
+ParticleInteger particlesOwnedSize() {
+    return size;
+}
+
+uint64_t particlesRemoteFetchCount() {
+    return remoteParticleFetches.load(std::memory_order_relaxed);
+}
+
 template <class T>
 void particlesArrayResize(T*& ptr, ParticleInteger newCapacity, bool reg) {
     T* newPtr = static_cast<T*>(reg ? allocateManagedMemory(sizeof(T) * newCapacity) :
@@ -879,7 +897,7 @@ void particlesArrayResize(T*& ptr, ParticleInteger newCapacity, bool reg) {
     if (newPtr == nullptr) {
         throw std::bad_alloc();
     }
-    if (capacity > 0) {
+    if (ptr != nullptr) {
         static_assert(std::is_trivially_copyable_v<T>);
         std::memcpy(newPtr, ptr, sizeof(T) * size);
         if (reg) {
@@ -891,7 +909,7 @@ void particlesArrayResize(T*& ptr, ParticleInteger newCapacity, bool reg) {
     ptr = newPtr;
 }
 
-void particlesResize(ParticleInteger sz, bool lock) {
+static void particlesResizeStorage(ParticleInteger sz, bool lock) {
     //	PRINT( "Resizing particles to %i\n", sz);
     if (sz > capacity) {
         if (lock) {
@@ -914,10 +932,12 @@ void particlesResize(ParticleInteger sz, bool lock) {
                 particlesLgrp[i] = NO_GROUP;
             }
         }
-        if (getOptions().analysis.saveForce) {
+        if (saveParticleAcceleration(getOptions().analysis)) {
             for (int dim = 0; dim < NDIM; dim++) {
                 particlesArrayResize(particlesGravityAccelerations[dim], newCapacity, true);
             }
+        }
+        if (saveParticlePotential(getOptions().analysis)) {
             particlesArrayResize(particlesP, newCapacity, true);
         }
         if (getOptions().analysis.tracers) {
@@ -942,7 +962,20 @@ void particlesResize(ParticleInteger sz, bool lock) {
     }
 }
 
+void particlesResize(ParticleInteger sz, bool lock) {
+    if (sz != size) {
+        particlesResizeStorage(sz, lock);
+    }
+}
+
+void particlesRegisterReleaseHook(void (*hook)()) {
+    particleReleaseHooks.push_back(hook);
+}
+
 void particlesFree() {
+    for (auto hook : particleReleaseHooks) {
+        hook();
+    }
     for (int dim = 0; dim < NDIM; dim++) {
         freeManagedMemory(particlesX[dim]);
     }
@@ -951,10 +984,12 @@ void particlesFree() {
     if (getOptions().analysis.groups) {
         free(particlesLgrp);
     }
-    if (getOptions().analysis.saveForce) {
+    if (saveParticleAcceleration(getOptions().analysis)) {
         for (int dim = 0; dim < NDIM; dim++) {
             freeManagedMemory(particlesGravityAccelerations[dim]);
         }
+    }
+    if (saveParticlePotential(getOptions().analysis)) {
         freeManagedMemory(particlesP);
     }
     if (getOptions().analysis.tracers) {
@@ -1068,47 +1103,28 @@ Pair<Array<double, NDIM>, double> particlesEnclosingSphere(Pair<ParticleInteger>
 }
 
 ParticleInteger particlesSort(Pair<ParticleInteger> rng, double xm, int xdim) {
+    addCpuFlops(1);
+    return particlesPartition(rng, Position(xm), xdim);
+}
+
+ParticleInteger particlesPartition(Pair<ParticleInteger> rng, Position xmid, int xdim) {
     ParticleInteger begin = rng.first;
     ParticleInteger end = rng.second;
     ParticleInteger lo = begin;
     ParticleInteger hi = end;
-    Position xmid(xm);
-    bool const doGroups = getOptions().analysis.groups;
-    bool const doTracers = getOptions().analysis.tracers;
     auto& xptrDim = particlesX[xdim];
-    auto& x = particlesX[XDIM];
-    auto& y = particlesX[YDIM];
-    auto& z = particlesX[ZDIM];
     while (lo < hi) {
         if (xptrDim[lo] >= xmid) {
             while (lo != hi) {
                 hi--;
                 if (xptrDim[hi] < xmid) {
-                    std::swap(x[hi], x[lo]);
-                    std::swap(y[hi], y[lo]);
-                    std::swap(z[hi], z[lo]);
-                    std::swap(particlesV[hi], particlesV[lo]);
-                    std::swap(particlesR[hi], particlesR[lo]);
-                    if (doGroups) {
-                        std::swap(particlesLgrp[hi], particlesLgrp[lo]);
-                    }
-                    if (doTracers) {
-                        std::swap(particlesTr[hi], particlesTr[lo]);
-                    }
-                    if (getOptions().hydro.enabled) {
-                        std::swap(particlesSph[hi], particlesSph[lo]);
-                        std::swap(particlesTy[hi], particlesTy[lo]);
-                    }
-
+                    particlesSwap(hi, lo);
                     break;
                 }
             }
         }
         lo++;
     }
-    // The partition itself uses integer coordinates; only constructing xmid
-    // performs floating-point arithmetic.
-    addCpuFlops(1);
     return hi;
 }
 
@@ -1133,35 +1149,15 @@ void particlesSortByRung(int minrung) {
         ParticleInteger begin;
         ParticleInteger end;
         begin = rungBegin;
-        end = particlesSize();
+        end = particlesOwnedSize();
         ParticleInteger lo = begin;
         ParticleInteger hi = end;
-        bool const doGroups = getOptions().analysis.groups;
-        bool const doTracers = getOptions().analysis.tracers;
-        auto& x = particlesX[XDIM];
-        auto& y = particlesX[YDIM];
-        auto& z = particlesX[ZDIM];
         while (lo < hi) {
             if (particlesRung(lo) >= minrung) {
                 while (lo != hi) {
                     hi--;
                     if (particlesRung(hi) < minrung) {
-                        std::swap(x[hi], x[lo]);
-                        std::swap(y[hi], y[lo]);
-                        std::swap(z[hi], z[lo]);
-                        std::swap(particlesV[hi], particlesV[lo]);
-                        std::swap(particlesR[hi], particlesR[lo]);
-                        if (doGroups) {
-                            std::swap(particlesLgrp[hi], particlesLgrp[lo]);
-                        }
-                        if (doTracers) {
-                            std::swap(particlesTr[hi], particlesTr[lo]);
-                        }
-                        if (getOptions().hydro.enabled) {
-                            std::swap(particlesSph[hi], particlesSph[lo]);
-                            std::swap(particlesTy[hi], particlesTy[lo]);
-                        }
-
+                        particlesSwap(hi, lo);
                         break;
                     }
                 }
@@ -1221,7 +1217,7 @@ static Vector<char> particlesFetchCacheLineRungs(ParticleInteger index) {
 }
 
 Vector<ParticleSample> particlesSample(int cnt) {
-    bool const saveForce = getOptions().analysis.saveForce;
+    auto const& analysis = getOptions().analysis;
     Vector<ParticleSample> parts;
     Vector<hpx::future<Vector<ParticleSample>>> futs;
     if (hpxRank() == 0) {
@@ -1241,16 +1237,18 @@ Vector<ParticleSample> particlesSample(int cnt) {
     gsl_rng_set(rndgen, seed);
     PRINT("Selecting %i particles\n", cnt);
     for (ParticleInteger i = 0; i < cnt; i++) {
-        ParticleSample sample;
+        ParticleSample sample{};
         ParticleInteger const index =
             ((size_t) gsl_rng_get(rndgen) * (size_t) gsl_rng_get(rndgen)) % particlesSize();
         for (int dim = 0; dim < NDIM; dim++) {
             sample.x[dim] = particlesPos(dim, index);
         }
-        if (saveForce) {
+        if (saveParticleAcceleration(analysis)) {
             for (int dim = 0; dim < NDIM; dim++) {
                 sample.g[dim] = particlesGravityAcceleration(dim, index);
             }
+        }
+        if (saveParticlePotential(analysis)) {
             sample.p = particlesPot(index);
         }
         parts.push_back(sample);
@@ -1470,7 +1468,7 @@ EnergiesT particlesSumEnergies() {
                 float const vy = particlesVel(YDIM, i);
                 float const vz = particlesVel(ZDIM, i);
                 float const m = particlesMass(i);
-                if (getOptions().analysis.saveForce) {
+                if (saveParticlePotential(getOptions().analysis)) {
                     energies.pot += 0.5 * m * particlesPot(i);
                 }
                 energies.kin += 0.5 * m * (sqr(vx) + sqr(vy) + sqr(vz));

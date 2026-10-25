@@ -12,25 +12,17 @@
 
 #include <cosmictiger/core/containers.hpp>
 #include <cosmictiger/core/hpx.hpp>
-#include <cosmictiger/fmm/fmm_types.hpp>
+#include <cosmictiger/gravity/fmm_types.hpp>
 #include <cosmictiger/gravity/kick.hpp>
+#include <cosmictiger/gravity/kick_context.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #include <cosmictiger/math/position.hpp>
 
-// The CPU tree walk for one FMM order. kick() in kick.cpp is the order-agnostic
-// dispatcher: it selects kickWalk<fmmOrder()>, which views the expansion buffer
-// as FmmExpansion<float, order>, applies the templated operators and hands
-// ExpansionBuffer copies back to kickFork() and the CUDA workspace. The HPX
-// action, the fork policy, the per-thread interaction lists and the local-return
-// bookkeeping below stay in kick.cpp.
+// Shared order-templated traversal and direct interactions. KickContext supplies
+// solver-specific task scheduling, periodic node work, and completion handling.
+// Per-order instance translation units compile the arithmetic once per order.
 
 struct KickWorkspace;
-
-// Spawns the walk of a child: synchronously, on a new HPX thread, or remotely
-// through the kick action when the child lives on another rank.
-hpx::future<KickReturn> kickFork(KickParameters params, ExpansionBuffer const& l,
-    Array<Position, NDIM> pos, TreeId self, Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
-    std::shared_ptr<KickWorkspace> cudaWorkspace, bool threadme);
 
 namespace detail {
 
@@ -53,23 +45,12 @@ void kickReleaseLists(KickLists&& lists);
 
 bool kickSourcesAreSingleRank(Vector<TreeId> const& checklist);
 
-// Sum of mass times squared distance from `center` over every particle, all ranks.
-double kickBackgroundSecondMoment(Array<Position, NDIM> center);
-
-// Local-return bookkeeping: the local root resets the counters, leaves add their
-// returns and the covered particle counts, and the result is published once every
-// particle of the local root is covered by a CPU leaf (or by the GPU batch).
-void kickBeginLocalReturn(ParticleInteger particleGoal);
-void kickCoverParticles(ParticleInteger count);
-void kickAccumulateLeafReturn(KickReturn const& kr, ParticleInteger count, bool allowPublish);
-KickReturn kickWaitLocalReturn();
-
 }    // namespace detail
 
 template <int order>
 KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, NDIM> pos,
     TreeId self, Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
-    std::shared_ptr<KickWorkspace> cudaWorkspace);
+    std::shared_ptr<KickWorkspace> cudaWorkspace, KickContext const& context);
 
 #ifdef COSMICTIGER_FMM_INSTANCE_ORDER
 // The definition pulls in the generated kernels, so only the per-order instance
@@ -83,8 +64,8 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, ND
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/core/stack_trace.hpp>
-#include <cosmictiger/fmm/fmm_acceptance.hpp>
-#include <cosmictiger/fmm/fmm_kernels.hpp>
+#include <cosmictiger/gravity/fmm_acceptance.hpp>
+#include <cosmictiger/gravity/fmm_kernels.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/kick_interaction_counts.hpp>
 #include <cosmictiger/gravity/kick_workspace.hpp>
@@ -144,62 +125,45 @@ inline void kickOpenOrDefer(bool openLargerCell, TreeNode const* sink, TreeNode 
 template <int order>
 KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, NDIM> pos,
     TreeId self, Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
-    std::shared_ptr<KickWorkspace> cudaWorkspace) {
+    std::shared_ptr<KickWorkspace> cudaWorkspace, KickContext const& context) {
     using Expansion = FmmExpansion<float, order>;
     constexpr int kLocalCoefficients = FmmOrder<order>::kLocalCoefficients_;
     constexpr int kLocalDegree = FmmOrder<order>::kLocalDegree_;
     // The buffer travels with the work item; the view aliases its leading coefficients.
     Expansion& expansion = l.template expansion<order>();
     FlopCounter<FlopCount> flops = 0;
-    if (self.proc == 0 && self.index == 0) {
+    if (!params.forceOnly && self.proc == 0 && self.index == 0) {
         profilerEnter(__FUNCTION__);
     }
     stackTraceActivate();
     TreeNode const* selfPtr = treeGetNode(self);
-    if (selfPtr->localRoot) {
-        detail::kickBeginLocalReturn(selfPtr->numberOfParticles());
+    if (selfPtr->localRoot && !params.forceOnly) {
+        context.beginReturn(selfPtr->numberOfParticles());
     }
     ASSERT(self.proc == hpxRank());
     if (selfPtr->isLocal() && selfPtr->numberOfParticles() == 0) {
-        if (selfPtr->localRoot) {
+        if (selfPtr->localRoot && !params.forceOnly) {
             // Complete the promise while HPX is alive, including on empty ranks.
-            kickSetRc(KickReturn());
+            context.publishReturn(KickReturn());
         }
-        if (self.proc == 0 && self.index == 0) {
+        if (!params.forceOnly && self.proc == 0 && self.index == 0) {
             profilerExit();
         }
         return KickReturn();
     }
-    if (self.proc == 0 && self.index == 0 && echecklist.size() == 1 && echecklist[0] == self) {
-        // The Ewald operators contain only the harmonic part. Add the uniform
-        // background once, using canonical coordinates rather than periodic
-        // nearest images. Its source trace is needed only for the potential
-        // gauge, so compute that scalar here instead of storing it in every
-        // source multipole.
-        Array<float, NDIM> displacement;
-        for (int dim = 0; dim < NDIM; dim++) {
-            displacement[dim] = unwrappedDoubleDistance(selfPtr->pos[dim], pos[dim]);
-        }
-        expansion = l2L(expansion, displacement, params.doPhi);
-        pos = selfPtr->pos;
-        double const secondMoment = params.doPhi ? detail::kickBackgroundSecondMoment(pos) : 0.0;
-        Expansion background;
-        background = 0.0f;
-        initializeBackgroundExpansion<order>(
-            background, fmmMultiPos<order>(selfPtr->mpos).multi, secondMoment);
-        for (int i = 0; i < kLocalCoefficients; i++) {
-            expansion[i] += background[i];
-        }
-        flops += detail::stf::L2lKernel<kLocalDegree, true>::kFlops_ + 26 + kLocalCoefficients;
+    if (context.background != nullptr) {
+        flops += context.background(order, params, l, pos, self, echecklist);
     }
     bool threadLeft = true;
 #ifdef USE_CUDA
     if (getOptions().compute.cuda && params.gpu) {
         if (params.gpu && cudaWorkspace == nullptr && selfPtr->isLocal()) {
-            cudaWorkspace = std::make_shared<KickWorkspace>(params, selfPtr->numberOfParticles());
+            cudaWorkspace = std::make_shared<KickWorkspace>(
+                params, selfPtr->numberOfParticles(), context.gpuExecutor);
         }
         size_t maximumGpuParticles = CUDA_KICK_PARTS_MAX;
-        auto const rng = particlesCurrentRange();
+        auto const rng = params.forceOnly ? Pair<ParticleInteger>(0, particlesOwnedSize()) :
+                                            particlesCurrentRange();
         ParticleInteger const rangeParticles = rng.second - rng.first;
         // A node that still carries Ewald checks goes over at the coarse
         // threshold, so that the kernel rather than this walk evaluates them.
@@ -212,13 +176,15 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, ND
             selfPtr->isLocal() && detail::kickSourcesAreSingleRank(dchecklist) &&
             detail::kickSourcesAreSingleRank(echecklist)) {
             if (selfPtr->numberOfParticles()) {
-                detail::kickCoverParticles(selfPtr->numberOfParticles());
-                cudaWorkspace->addWork(
-                    cudaWorkspace, l, pos, self, std::move(dchecklist), std::move(echecklist));
+                if (!cudaWorkspace->isBatch()) {
+                    context.coverParticles(selfPtr->numberOfParticles());
+                }
+                cudaWorkspace->addWork(cudaWorkspace, l, pos, self, std::move(dchecklist),
+                    std::move(echecklist), params.geometry, params.outputOffset);
             }
             addCpuFlops(flops);
-            if (selfPtr->localRoot) {
-                return detail::kickWaitLocalReturn();
+            if (selfPtr->localRoot && !params.forceOnly) {
+                return context.waitReturn();
             } else {
                 return KickReturn();
             }
@@ -230,7 +196,9 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, ND
     float const supportRadius = params.gravitySupportRadius;
     float const gm = params.gm;
     float const eta = params.eta;
-    bool const saveForce = params.saveForce;
+    bool const saveAcceleration =
+        params.saveForce || saveParticleAcceleration(getOptions().analysis);
+    bool const savePotential = params.saveForce || saveParticlePotential(getOptions().analysis);
     auto workspace = detail::kickAcquireLists();
     Vector<TreeId>& nextlist = workspace.nextlist;
     Vector<TreeId>& cclist = workspace.cclist;
@@ -266,7 +234,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, ND
         ldx[dim] = unwrappedDoubleDistance(selfPtr->pos[dim], pos[dim]);
     }
     expansion = l2L(expansion, ldx, params.doPhi);
-    flops += detail::stf::L2lKernel<kLocalDegree, true>::kFlops_ + 14 + 6 * SIMD_FLOAT_SIZE;
+    flops += detail::cartesian::L2lKernel<kLocalDegree, true>::kFlops_ + 14 + 6 * SIMD_FLOAT_SIZE;
     float const inverseSupportRadius = 1.0f / params.gravitySupportRadius;
     ForceVectors forces;
     ParticleInteger const numberOfSelfParticles = selfPtr->numberOfParticles();
@@ -279,71 +247,8 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, ND
             forces.phi[i] = particlesMass(particleIndex) * selfPhi() * inverseSupportRadius;
         }
     }
-    {
-        nextlist.resize(0);
-        cclist.resize(0);
-        leaflist.resize(0);
-        auto& checklist = echecklist;
-        do {
-            for (int ci = 0; ci < checklist.size(); ci += SIMD_FLOAT_SIZE) {
-                int const maxci = std::min((int) checklist.size(), ci + SIMD_FLOAT_SIZE);
-                int const maxi = maxci - ci;
-                for (int i = ci; i < maxci; i++) {
-                    otherPtrs[i - ci] = treeGetNode(checklist[i]);
-                }
-                for (int i = 0; i < maxi; i++) {
-                    for (int dim = 0; dim < NDIM; dim++) {
-                        simdSetLane(otherPos[dim], i, otherPtrs[i]->pos[dim].raw());
-                    }
-                    simdSetLane(otherRadius, i, otherPtrs[i]->radius);
-                    simdSetLane(otherLeaf, i, otherPtrs[i]->leaf);
-                }
-                for (int i = maxi; i < SIMD_FLOAT_SIZE; i++) {
-                    for (int dim = 0; dim < NDIM; dim++) {
-                        simdSetLane(otherPos[dim], i, 0.f);
-                    }
-                    simdSetLane(otherRadius, i, 0.f);
-                    simdSetLane(otherLeaf, i, 0);
-                    for (int dim = 0; dim < NDIM; dim++) {
-                        simdSetLane(otherBox.begin[dim], i, 0.0);
-                        simdSetLane(otherBox.end[dim], i, 0.0);
-                    }
-                }
-                for (int dim = 0; dim < NDIM; dim++) {
-                    dx[dim] =
-                        simdCast<SimdFloat>(simdPositionDifference(selfPos[dim], otherPos[dim])) *
-                        kPositionToFloat;
-                }
-                SimdFloat r2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
-                r2 = simdMax(r2,
-                    simdMax(sqr(simdBroadcast<SimdFloat>(0.5) - (selfRadius + otherRadius)),
-                        simdBroadcast<SimdFloat>(0)));
-                SimdFloat const dcc = (selfRadius + otherRadius) * thetainv;
-                auto const cc = r2 > sqr(dcc);
-                flops += SIMD_FLOAT_SIZE * 14;
-                for (int i = 0; i < maxi; i++) {
-                    if (cc[i]) {
-                        cclist.push_back(checklist[ci + i]);
-                    } else if (otherLeaf[i]) {
-                        leaflist.push_back(checklist[ci + i]);
-                    } else {
-                        detail::kickOpenOrDefer(openLargerCell, selfPtr, otherPtrs[i],
-                            checklist[ci + i], nextlist, leaflist, counts);
-                    }
-                    if (!cc[i]) {
-                        ALWAYS_ASSERT(!otherLeaf[i] || !selfPtr->leaf);
-                    }
-                }
-                counts.acceptanceTests += maxi;
-            }
-            std::swap(checklist, nextlist);
-            nextlist.resize(0);
-        } while (checklist.size() && (selfPtr->leaf || openLargerCell));
-        counts.cellCellEwald += cclist.size();
-        cpuGravityCc<order>(kGravityEwald, expansion, cclist, self, params.doPhi);
-        if (!selfPtr->leaf) {
-            checklist.insert(checklist.end(), leaflist.begin(), leaflist.end());
-        }
+    if (context.periodic != nullptr) {
+        flops += context.periodic(order, params, l, self, echecklist, counts);
     }
 
     {
@@ -378,8 +283,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, ND
                 }
                 for (int dim = 0; dim < NDIM; dim++) {
                     dx[dim] =
-                        simdCast<SimdFloat>(simdPositionDifference(selfPos[dim], otherPos[dim])) *
-                        kPositionToFloat;
+                        fmmPositionDifference(selfPos[dim], otherPos[dim], dim, params.geometry);
                 }
                 SimdFloat const r2 =
                     simdFma(dx[XDIM], dx[XDIM], simdFma(dx[YDIM], dx[YDIM], dx[ZDIM] * dx[ZDIM]));
@@ -408,8 +312,9 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, ND
                         }
                     }
                     acceptance = computeFmmAcceptance(r2, selfRadius, otherRadius,
-                        boxDistanceSquared(selfBox, otherPos),
-                        boxDistanceSquared(otherBox, selfPos), pairSupportRadius, thetainv);
+                        fmmSinkBoxDistanceSquared(selfBox, otherPos, params.geometry),
+                        fmmSourceBoxDistanceSquared(otherBox, selfPos, otherPos, params.geometry),
+                        pairSupportRadius, thetainv);
                     flops += SIMD_FLOAT_SIZE * 85;
                 }
                 for (int i = 0; i < maxi; i++) {
@@ -455,13 +360,14 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, ND
                     (long long) numberOfSelfParticles * treeGetNode(id)->numberOfParticles();
             }
         }
-        cpuGravityCc<order>(kGravityDirect, expansion, cclist, self, params.doPhi);
+        cpuGravityCc<order>(expansion, cclist, self, params.doPhi, params.geometry);
         // Internal sinks pass these source-leaf contributions to their children via L2L.
-        cpuGravityCp<order>(expansion, cplist, self, params.doPhi);
+        cpuGravityCp<order>(expansion, cplist, self, params.doPhi, params.geometry);
         if (selfPtr->leaf) {
             if (selfPtr->numberOfParticles() > 0) {
-                cpuGravityPc<order>(forces, params.doPhi, self, pclist);
-                cpuGravityPp(forces, params.doPhi, self, leaflist, params.gravitySupportRadius);
+                cpuGravityPc<order>(forces, params.doPhi, self, pclist, params.geometry);
+                cpuGravityPp(forces, params.doPhi, self, leaflist, params.gravitySupportRadius,
+                    params.geometry);
             }
         } else {
             ALWAYS_ASSERT(pclist.size() == 0);
@@ -473,7 +379,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, ND
         detail::kickReleaseLists(std::move(workspace));
         auto const rng = selfPtr->particleRange;
         for (ParticleInteger i = rng.first; i < rng.second; i++) {
-            if (particlesRung(i) >= params.minRung) {
+            if (params.forceOnly || particlesRung(i) >= params.minRung) {
                 ParticleInteger const j = i - rng.first;
                 Array<float, NDIM> dx;
                 for (ParticleInteger dim = 0; dim < NDIM; dim++) {
@@ -486,14 +392,27 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, ND
                 forces.gx[j] -= SCALE_FACTOR2 * l2(1, 0, 0);
                 forces.gy[j] -= SCALE_FACTOR2 * l2(0, 1, 0);
                 forces.gz[j] -= SCALE_FACTOR2 * l2(0, 0, 1);
+                if (params.forceOnly) {
+                    ALWAYS_ASSERT(cudaWorkspace != nullptr && cudaWorkspace->isBatch());
+                    auto const output = cudaWorkspace->output();
+                    ParticleInteger const outputIndex = i + params.outputOffset;
+                    output.potential[outputIndex] = params.doPhi ? forces.phi[j] : 0.0f;
+                    output.acceleration[XDIM][outputIndex] = forces.gx[j];
+                    output.acceleration[YDIM][outputIndex] = forces.gy[j];
+                    output.acceleration[ZDIM][outputIndex] = forces.gz[j];
+                    flops += detail::cartesian::L2pKernel<kLocalDegree, true>::kFlops_ + 14;
+                    continue;
+                }
                 forces.gx[j] *= gm;
                 forces.gy[j] *= gm;
                 forces.gz[j] *= gm;
                 forces.phi[j] *= gm;
-                if (saveForce) {
+                if (saveAcceleration) {
                     particlesGravityAcceleration(XDIM, i) = forces.gx[j];
                     particlesGravityAcceleration(YDIM, i) = forces.gy[j];
                     particlesGravityAcceleration(ZDIM, i) = forces.gz[j];
+                }
+                if (savePotential && params.doPhi) {
                     particlesPot(i) = forces.phi[j];
                 }
                 auto& vx = particlesVel(XDIM, i);
@@ -595,17 +514,21 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, ND
                     kr.pot += 0.5f * mass * forces.phi[j];
                     kr.dkin += 0.5f * mass * sqr(vx, vy, vz) - kin0;
                 }
-                flops += detail::stf::L2pKernel<kLocalDegree, true>::kFlops_ + 25;
+                flops += detail::cartesian::L2pKernel<kLocalDegree, true>::kFlops_ + 25;
             }
         }
-        detail::kickAccumulateLeafReturn(
-            kr, selfPtr->numberOfParticles(), cudaWorkspace == nullptr);
-        kickAddInteractionCounts(counts);
+        if (cudaWorkspace != nullptr && cudaWorkspace->isBatch()) {
+            cudaWorkspace->accumulateBatchReturn(kr);
+            cudaWorkspace->addInteractionCounts(counts);
+        } else {
+            context.accumulateReturn(kr, selfPtr->numberOfParticles(), cudaWorkspace == nullptr);
+            kickAddInteractionCounts(counts);
+        }
         addCpuFlops(flops);
         if (cudaWorkspace != nullptr) {
             cudaWorkspace->recordProcessedParticles(cudaWorkspace, selfPtr->numberOfParticles());
         }
-        if (selfPtr->localRoot) {
+        if (selfPtr->localRoot && !params.forceOnly) {
             return kr;
         } else {
             return KickReturn();
@@ -618,10 +541,10 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, ND
         (void) cl;
         (void) cr;
         std::array<hpx::future<KickReturn>, NCHILD> futs;
-        futs[RIGHT] = kickFork(params, l, selfPtr->pos, selfPtr->children[RIGHT], dchecklist,
+        futs[RIGHT] = context.fork(params, l, selfPtr->pos, selfPtr->children[RIGHT], dchecklist,
             echecklist, cudaWorkspace, threadLeft);
         try {
-            futs[LEFT] = kickFork(params, l, selfPtr->pos, selfPtr->children[LEFT],
+            futs[LEFT] = context.fork(params, l, selfPtr->pos, selfPtr->children[LEFT],
                 std::move(dchecklist), std::move(echecklist), cudaWorkspace, false);
         } catch (...) {
             // Keep shared tree data alive until the asynchronous sibling exits.
@@ -637,15 +560,19 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, ND
             kr += rcl;
             kr += rcr;
         } else {
-            if (selfPtr->localRoot) {
-                kr = detail::kickWaitLocalReturn();
+            if (selfPtr->localRoot && !params.forceOnly) {
+                kr = context.waitReturn();
             }
         }
-        if (self.proc == 0 && self.index == 0) {
+        if (!params.forceOnly && self.proc == 0 && self.index == 0) {
             profilerExit();
         }
 
-        kickAddInteractionCounts(counts);
+        if (cudaWorkspace != nullptr && cudaWorkspace->isBatch()) {
+            cudaWorkspace->addInteractionCounts(counts);
+        } else {
+            kickAddInteractionCounts(counts);
+        }
         addCpuFlops(flops);
         return kr;
     }

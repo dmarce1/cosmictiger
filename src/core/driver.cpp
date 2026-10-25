@@ -33,9 +33,13 @@
 #include <cosmictiger/cosmology/evolution.hpp>
 #include <cosmictiger/cosmology/fft.hpp>
 #include <cosmictiger/cosmology/initialize.hpp>
+#include <cosmictiger/gravity/dehnen/distributed_tree.hpp>
+#include <cosmictiger/gravity/dehnen/execution.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/kick_workspace.hpp>
+#include <cosmictiger/gravity/nitadori/kick.hpp>
+#include <cosmictiger/gravity/nitadori/solver.hpp>
 #include <cosmictiger/io/checkpoint.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/io/view.hpp>
@@ -49,6 +53,7 @@
 #include <cosmictiger/scenarios/glass.hpp>
 #include <cosmictiger/scenarios/plummer.hpp>
 #include <cosmictiger/scenarios/scenario.hpp>
+#include <cosmictiger/sph/cullen_and_dehnen/viscosity.hpp>
 #include <cosmictiger/sph/sph.hpp>
 #include <cosmictiger/sph/sph_chemistry.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
@@ -194,7 +199,7 @@ SphTreeCreateReturn sphStep1(int minrung, bool verbose) {
 }
 
 SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phase, double adot,
-    EnergiesT* energies, bool verbose) {
+    EnergiesT* energies, bool verbose, int uniformMinimumRung) {
     float inverseSoundTimestep;
     float inverseViscosityTimestep;
     float inverseAccelerationTimestep;
@@ -206,6 +211,10 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     double const chemistryHalfStep =
         chemistry ? std::ldexp(t0, -1 - getOptions().chemistry.synchronizedRung) : 0.0;
     sphParticlesApplyUpdates(minrung, 0, t0, tau);
+    if (chemistry) {
+        // Viscosity decay uses the current sound speed during the density pass.
+        sphParticlesRefreshChemistryEos(scale);
+    }
     SphRunParameters runParameters;
     if (getOptions().run.scenario == "cosmology") {
         runParameters.maximumTimestep =
@@ -214,6 +223,9 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     runParameters.maximumTimestep = std::min(runParameters.maximumTimestep,
         std::ldexp(static_cast<float>(t0), -getOptions().run.minRung));
     runParameters.expansionRate = adot;
+    if (runParameters.cullenDehnen && getOptions().run.scenario == "cosmology") {
+        runParameters.expansionAcceleration = scale * scale * scale * cosmosD2adt2(scale);
+    }
     runParameters.scaleFactor = scale;
     runParameters.baseTimestep = t0;
     runParameters.minimumRung = minrung;
@@ -321,8 +333,9 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
         result = SphRunReturn();
     } while (needsNeighborRefresh);
     Timer timer;
-    if (chemistry) {
-        sphParticlesRefreshChemistryEos(scale);
+    if (runParameters.cullenDehnen) {
+        // Cullen & Dehnen (2010), equation (A15), after density convergence.
+        sphParticlesUpdateCullenDehnen(minrung, t0, tau);
     }
     runParameters.phase = 0;
     runParameters.runType = SPH_RUN_HYDRO;
@@ -330,7 +343,7 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     timer.start();
     result = sphRun(runParameters, true);
     timer.stop();
-    int maxRung = 0;
+    int maxRung = std::max(0, uniformMinimumRung);
     if (verbose) {
         terminal::detailPrint("sph_run(SPH_RUN_HYDRO): tm = %e\n", timer.read());
     }
@@ -399,7 +412,9 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     timer.stop();
     timer.reset();
 
-    bool rc = true;
+    // Uniform mesh steps use the global maximum proposal. Neighbor-rung limiting
+    // cannot increase that maximum and is unnecessary when every sink is active.
+    bool rc = uniformMinimumRung < 0;
     while (rc) {
         runParameters.runType = SPH_RUN_RUNGS;
         timer.start();
@@ -419,6 +434,11 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
         }
         sphChemistrySetRungs();
         maxRung = getOptions().chemistry.synchronizedRung;
+    }
+    if (uniformMinimumRung >= 0) {
+        // The dark matter and hydro proposals have both been reduced globally.
+        // Set every rung before either species opens its next half-step.
+        particleMeshFinishKick(t0, maxRung);
     }
     sphParticlesApplyUpdates(minrung, 2, t0, tau);
     if (verbose) {
@@ -539,7 +559,30 @@ std::pair<KickReturn, TreeCreateReturn> advanceForces(int minRung, double scale,
     double scaleDerivative, double time, double baseTimestep, double theta, bool firstCall,
     bool fullEvaluation, EnergiesT& energies) {
     std::pair<KickReturn, TreeCreateReturn> result{};
-    if (getOptions().gravity.enabled) {
+    bool const meshGravity = getOptions().gravity.enabled && usesMeshGravity(getOptions().gravity);
+    if (meshGravity) {
+        Timer timer;
+        timer.start();
+        // All particles are sources and sinks at every mesh step. Migration must
+        // precede cell sorting and the SPH tree's capture of gas indices.
+        domainsBegin(0);
+        domainsEnd();
+        timer.stop();
+        domainTime += timer.read();
+        timer.reset();
+        timer.start();
+        pmmmSolve(true);
+        double maximumTimestep = std::ldexp(baseTimestep, -getOptions().run.minRung);
+        if (getOptions().run.scenario == "cosmology") {
+            maximumTimestep = std::min(maximumTimestep,
+                cosmology::expansionTimestep(
+                    scale, scaleDerivative / scale, cosmosD2adt2(scale), SCALE_DT));
+        }
+        result.first =
+            particleMeshPrepareKick(scale, baseTimestep, maximumTimestep, firstCall, minRung);
+        timer.stop();
+        kickTime += timer.read();
+    } else if (getOptions().gravity.enabled) {
         result = kickStep(
             minRung, scale, scaleDerivative, baseTimestep, theta, firstCall, fullEvaluation);
     } else {
@@ -549,16 +592,18 @@ std::pair<KickReturn, TreeCreateReturn> advanceForces(int minRung, double scale,
     }
     auto& gravity = result.first;
     if (getOptions().hydro.enabled) {
-        sphStep1(minRung);
+        int const activeRung = meshGravity ? 0 : minRung;
+        sphStep1(activeRung);
         gravity.maxRung = std::max(int(gravity.maxRung),
-            sphStep2(minRung, scale, time, baseTimestep, 1, scaleDerivative, &energies)
+            sphStep2(activeRung, scale, time, baseTimestep, 1, scaleDerivative, &energies, true,
+                meshGravity ? gravity.maxRung : -1)
                 .maximumRung);
         if (getOptions().chemistry.enabled &&
             gravity.maxRung > getOptions().chemistry.synchronizedRung) {
             THROW_ERROR("Chemistry synchronized rung violates the gravity timestep bound; "
                         "increase chemistry.synchronizedRung\n");
         }
-        if (fullEvaluation) {
+        if (fullEvaluation || meshGravity) {
             energies.pot = gravity.pot / scale;
         }
         energies.kin += gravity.darkMatterKineticCorrection / sqr(scale);
@@ -567,8 +612,43 @@ std::pair<KickReturn, TreeCreateReturn> advanceForces(int minRung, double scale,
         energies.zmom += gravity.darkMatterZMomentumCorrection / scale;
         energies.nmom += gravity.darkMatterMomentumNormCorrection / scale;
         energies.tckin = energies.kin * sqr(scale);
+    } else if (meshGravity) {
+        // Preparation left the velocities synchronized for these diagnostics.
+        energies.pot = gravity.pot / scale;
+        energies.kin = gravity.kin / sqr(scale);
+        energies.tckin = gravity.kin;
+        energies.xmom = gravity.xmom / scale;
+        energies.ymom = gravity.ymom / scale;
+        energies.zmom = gravity.zmom / scale;
+        energies.nmom = gravity.nmom / scale;
+        particleMeshFinishKick(baseTimestep, gravity.maxRung);
     }
     return result;
+}
+
+// Rung-restricted drift is deliberately locality-local. The PMMM stage entry
+// runs only on the root, so dispatch that completed stage to every locality.
+void particleMeshDriftRung(
+    double scale, double dt, double tau0, double tau1, double tauMax, int rung, double drag);
+HPX_PLAIN_ACTION(particleMeshDriftRung, ParticleMeshDriftRungAction);
+
+void particleMeshDriftRung(
+    double scale, double dt, double tau0, double tau1, double tauMax, int rung, double drag) {
+    Vector<hpx::future<void>> futures;
+    try {
+        for (auto const& child : hpxChildren()) {
+            futures.push_back(hpx::async<ParticleMeshDriftRungAction>(
+                child, scale, dt, tau0, tau1, tauMax, rung, drag));
+        }
+        drift(scale, dt, tau0, tau1, tauMax, rung, drag);
+    } catch (...) {
+        hpx::wait_all(futures.begin(), futures.end());
+        throw;
+    }
+    hpx::wait_all(futures.begin(), futures.end());
+    for (auto& future : futures) {
+        future.get();
+    }
 }
 
 std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int maxRung,
@@ -590,6 +670,7 @@ std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int m
     bool ascending = true;
     bool top;
     bool clipTop = false;
+    bool const meshGravity = usesMeshGravity(getOptions().gravity);
     //	PRINT("climbing kick ladder\n");
     Timer totalTime;
     totalTime.start();
@@ -665,7 +746,7 @@ std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int m
         TreeCreateParameters tparams(levels[li], theta, 0.f);
         tm.reset();
         tm.start();
-        auto thisSr = treeCreate(tparams);
+        TreeCreateReturn const thisSr = meshGravity ? TreeCreateReturn{} : treeCreate(tparams);
         tm.stop();
         //		PRINT("Tree create took %e\n", tm.read());
         if (top) {
@@ -686,7 +767,7 @@ std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int m
         }
         kparams.velInit = getOptions().initial.plummer;
         kparams.nodeLoad = flopsPerNode / flopsPerParticle;
-        kparams.gpu = true;
+        kparams.gpu = getOptions().compute.cuda;
         kparams.minLevel = tparams.minLevel;
         kparams.saveForce = getOptions().analysis.saveForce;
         kparams.gm = getOptions().gravity.gm;
@@ -695,7 +776,7 @@ std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int m
         kparams.a = scale;
         kparams.firstCall = tau == 0.0;
         kparams.minRung = levels[li];
-        kparams.doPhi = doPhi && top;
+        kparams.doPhi = top && (doPhi || saveParticlePotential(getOptions().analysis));
         kparams.t0 = t0;
         if (getOptions().run.scenario == "cosmology") {
             kparams.maxDt =
@@ -719,7 +800,9 @@ std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int m
             resetGravityCounters();
             setGravityCounterUse(true);
         }
-        KickReturn thisKr = kick(kparams, l, pos, rootId, checklist, checklist, nullptr);
+        KickReturn const thisKr = meshGravity ?
+            pmmmKick(kparams) :
+            kick(kparams, l, pos, rootId, checklist, checklist, nullptr);
         if (top) {
             setGravityCounterUse(false);
         }
@@ -761,11 +844,18 @@ std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int m
                 a = 1.0 / cosmosAinv(adot, scale, dt);
             }
             //			PRINT( "%e %e %e\n", a, a0, a1);
-            drift(a, dt, tau, tau + dt, getOptions().run.numberOfSteps * t0, levels[li], drag);
+            if (meshGravity) {
+                particleMeshDriftRung(
+                    a, dt, tau, tau + dt, getOptions().run.numberOfSteps * t0, levels[li], drag);
+            } else {
+                drift(a, dt, tau, tau + dt, getOptions().run.numberOfSteps * t0, levels[li], drag);
+            }
             tm.stop();
             // PRINT("Drift took %e\n", tm.read());
         }
-        treeReset();
+        if (!meshGravity) {
+            treeReset();
+        }
         if (ascending && !top) {
             particlesPopRungs();
         }
@@ -1249,7 +1339,7 @@ void driver() {
                 //			particles_displace(rand1(), rand1(), rand1());
             }
             resetFlops();
-            if (getOptions().hydro.enabled) {
+            if (!getOptions().run.hierarchicalGravity) {
                 tmp = advanceForces(
                     minrung, a, a * adot, tau, t0, theta, tau == 0.0, fullEval, energies);
             } else {
@@ -1331,7 +1421,7 @@ void driver() {
             //			PRINT("%e %e\n", a1, a);
             Timer dtm;
             dtm.start();
-            if (getOptions().hydro.enabled) {
+            if (!getOptions().run.hierarchicalGravity) {
                 drift(driftScale, dt, tau, tau + dt, tauMax);
             }
             dtm.stop();
@@ -1364,11 +1454,16 @@ void driver() {
                     (nextIntegerTime == 0 ? 1.0 : std::ldexp(double(nextIntegerTime), -64)));
             double const nextYears = years + dyears;
             double const outputRedshift = 1.0 / a - 1.0;
+            int const displayedMinimumRung =
+                !getOptions().run.hierarchicalGravity && usesMeshGravity(getOptions().gravity) ?
+                maxRung :
+                minrung;
             fprintf(textfp,
                 "%10.3e %10i %10.3e %10.3e %10.3e %10.3e %10.3e %10i %10i %10i %10.3e %10.3e "
                 "%10.3e %10.3e \n",
-                runtime, iter - 1, outputRedshift, a, adot, nextTau / t0, nextYears, minrung,
-                maxRung, bucketSize, flops * 1e-12, stepTm.read(), close, direct);
+                runtime, iter - 1, outputRedshift, a, adot, nextTau / t0, nextYears,
+                displayedMinimumRung, maxRung, bucketSize, flops * 1e-12, stepTm.read(), close,
+                direct);
             if (progressRows == 0) {
                 PRINT("  TFLOP/s estimates counted gravity and SPH work during force advancement; "
                       "chemistry is excluded.\n");
@@ -1378,8 +1473,8 @@ void driver() {
                     "dt", "MinRung", "MaxRung", "Wall[s]", "Step[s]", "TFLOP/s");
             }
             PRINT("%8i %10.3e %10.3e %10.3e %10.3e %7i %7i %10.2f %10.3f %10.3e\n", iter,
-                outputRedshift, a, nextTau / t0, dt, minrung, maxRung, runtime, stepTm.read(),
-                flops * 1e-12);
+                outputRedshift, a, nextTau / t0, dt, displayedMinimumRung, maxRung, runtime,
+                stepTm.read(), flops * 1e-12);
             progressRows++;
             fclose(textfp);
             totalTime.reset();
@@ -1445,5 +1540,5 @@ void driver() {
     if (getOptions().lightcone.enabled) {
         particlesFree();
     }
-    KickWorkspace::clearBuffers();
+    kickClearBuffers();
 }

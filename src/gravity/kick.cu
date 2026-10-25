@@ -12,7 +12,7 @@
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/cuda/cuda.hpp>
-#include <cosmictiger/fmm/fmm_order.hpp>
+#include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/kick_cuda.hpp>
@@ -20,10 +20,12 @@
 // Runtime-order dispatch to the per-order CUDA kick instantiations.
 
 KickReturn cudaExecuteKicks(KickParameters params, Position* devX, Position* devY, Position* devZ,
-    TreeNode* devTreeNodes, Vector<KickWorkitem> workitems) {
-    return fmmDispatch([&](auto order) {
-        return cudaExecuteKicksImpl<order.value>(
-            params, devX, devY, devZ, devTreeNodes, std::move(workitems));
+    TreeNode* devTreeNodes, Vector<KickWorkitem> workitems, detail::FmmForceOutput output) {
+    return kickRunCudaLaunch([&]() {
+        return fmmDispatch([&](auto order) {
+            return cudaExecuteKicksImpl<order.value>(
+                params, devX, devY, devZ, devTreeNodes, std::move(workitems), output);
+        });
     });
 }
 

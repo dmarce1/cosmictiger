@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Run the opt-in STF walk benchmark over binaries, kick policies and buckets.
+"""Run the opt-in Cartesian walk benchmark over binaries, kick policies and buckets.
 
-Each process runs --run.test=stfBenchmark once for one binary, policy, backend,
+Each process runs --run.test=cartesianBenchmark once for one binary, policy, backend,
 bucket and FMM order (--gravity.fmmOrder), cycling through the selected fixtures
 with potential off and on. --threads sets the HPX worker threads of every
 process (pinned with taskset to --cpus, by default CPUs 1 through the thread
@@ -120,26 +120,26 @@ def parse_log(text, samples, fixtures):
            'arena': None, 'occupancy': None}
     for line in text.splitlines():
         fields = line.split(',')
-        if line.startswith('STF_WALK_MEDIAN,'):
+        if line.startswith('CARTESIAN_WALK_MEDIAN,'):
             run['medians'].append(dict(fixture=fields[1], backend=fields[2],
                                        potential=bool(int(fields[3])), samples=int(fields[4]),
                                        particles=int(fields[5]), reset_seconds=float(fields[6]),
                                        tree_seconds=float(fields[7]), kick_seconds=float(fields[8]),
                                        total_seconds=float(fields[9]), position_hash=fields[10]))
-        elif line.startswith('STF_WALK_SAMPLE,'):
+        elif line.startswith('CARTESIAN_WALK_SAMPLE,'):
             if int(fields[4]) >= 0:
                 run['samples'].append(dict(fixture=fields[1], potential=bool(int(fields[3])),
                                            sample=int(fields[4]), tree_seconds=float(fields[6]),
                                            kick_seconds=float(fields[7]),
                                            total_potential=float(fields[14])))
-        elif line.startswith('STF_WALK_REFERENCE,'):
+        elif line.startswith('CARTESIAN_WALK_REFERENCE,'):
             names = ['force_relative_l2', 'force_relative_p50', 'force_relative_p99',
                      'force_relative_max', 'potential_relative_l2', 'potential_relative_p50',
                      'potential_relative_p99', 'potential_relative_max']
             run['references'].append(dict(fixture=fields[1], backend=fields[2],
                                           samples=int(fields[3]),
                                           **{name: float(value) for name, value in zip(names, fields[4:])}))
-        elif line.startswith('STF_WALK_LEAF_HISTOGRAM,'):
+        elif line.startswith('CARTESIAN_WALK_LEAF_HISTOGRAM,'):
             run['leaf_histogram'].append(dict(fixture=fields[1], depth=int(fields[2]),
                                               particles=int(fields[3]), leaves=int(fields[4])))
         elif line.startswith('CUDA kick arena'):
@@ -227,7 +227,7 @@ def main():
     for binary in args.binary:
         for policy in (policies if binary['arena'] else [{'label': 'auto', 'options': []}]):
             variants.append((binary, policy))
-    common = ['--run.test=stfBenchmark',
+    common = ['--run.test=cartesianBenchmark',
               f'--initial.particlesPerDimension={args.particles_per_dimension}',
               '--hydro.enabled=false', f'--gravity.openingAngle={args.theta}',
               '--gravity.effectiveRadius=0.01876988456953534', '--gravity.kernelFamily=ferrers',
@@ -255,10 +255,10 @@ def main():
                             command += ['--run.verbose=true']
                         if binary['arena']:
                             command += [f'--gravity.fmmOrder={order}'] + policy['options']
-                        env = dict(os.environ, COSMICTIGER_STF_WALK_SAMPLES=str(args.samples),
-                                   COSMICTIGER_STF_WALK_BUCKET=str(bucket),
-                                   COSMICTIGER_STF_WALK_FIXTURE='all' if len(fixtures) == 3 else fixtures[0],
-                                   COSMICTIGER_STF_WALK_REFERENCE=str(args.reference),
+                        env = dict(os.environ, COSMICTIGER_CARTESIAN_WALK_SAMPLES=str(args.samples),
+                                   COSMICTIGER_CARTESIAN_WALK_BUCKET=str(bucket),
+                                   COSMICTIGER_CARTESIAN_WALK_FIXTURE='all' if len(fixtures) == 3 else fixtures[0],
+                                   COSMICTIGER_CARTESIAN_WALK_REFERENCE=str(args.reference),
                                    OMP_NUM_THREADS=str(args.threads), OMP_THREAD_LIMIT=str(args.threads))
                         if len(fixtures) not in (1, 3):
                             sys.exit('The harness selects one fixture or all three')
@@ -276,7 +276,7 @@ def main():
                         if status:
                             raise RuntimeError(f'{name} exited {status}; see {logfile}')
                         run = parse_log(text, args.samples, fixtures)
-                        forces = directory / 'stf_walk_forces.csv'
+                        forces = directory / 'cartesian_walk_forces.csv'
                         run.update(binary=binary['label'], policy=policy['label'], backend=backend,
                                    bucket=bucket, order=order, pair=pair, command=command,
                                    cwd=str(directory), wall_seconds=duration,

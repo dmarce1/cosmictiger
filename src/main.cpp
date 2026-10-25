@@ -32,11 +32,13 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/options_metadata.hpp>
 #include <cosmictiger/core/unordered_set_ts.hpp>
-#include <cosmictiger/fmm/ewald_indices.hpp>
-#include <cosmictiger/fmm/fmm_kernels.hpp>
-#include <cosmictiger/fmm/fmm_order.hpp>
-#include <cosmictiger/fmm/fmm_types.hpp>
+#include <cosmictiger/gravity/dehnen/ewald_indices.hpp>
+#include <cosmictiger/gravity/dehnen/ewald_kernels.hpp>
+#include <cosmictiger/gravity/fmm_kernels.hpp>
+#include <cosmictiger/gravity/fmm_order.hpp>
+#include <cosmictiger/gravity/fmm_types.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
+#include <cosmictiger/gravity/nitadori/solver.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #include <cosmictiger/io/checkpoint.hpp>
 #include <cosmictiger/io/output.hpp>
@@ -123,9 +125,17 @@ int hpx_main(int argc, char* argv[]) {
                 driver();
             }
         }
+        pmmmDestroy();
         particlesDestroy();
     } catch (std::exception const& error) {
         PRINT("CosmicTiger failed: %s\n", error.what());
+        try {
+            pmmmDestroy();
+        } catch (std::exception const& cleanupError) {
+            PRINT("PMMM cleanup failed: %s\n", cleanupError.what());
+        } catch (...) {
+            PRINT("PMMM cleanup failed during exception handling\n");
+        }
         if (daemonStarted) {
             stopMemuseDaemon();
         }
@@ -133,6 +143,11 @@ int hpx_main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     } catch (...) {
         PRINT("CosmicTiger failed with an unknown exception\n");
+        try {
+            pmmmDestroy();
+        } catch (...) {
+            PRINT("PMMM cleanup failed during exception handling\n");
+        }
         if (daemonStarted) {
             stopMemuseDaemon();
         }

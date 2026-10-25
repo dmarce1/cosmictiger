@@ -6,6 +6,9 @@
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
+#include <algorithm>
+#include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -17,55 +20,43 @@
 #define SPH_PARTICLES_CPP
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/hpx.hpp>
+#include <cosmictiger/sph/cullen_and_dehnen/particle_exchange.hpp>
+#include <cosmictiger/sph/cullen_and_dehnen/viscosity.hpp>
+#include <cosmictiger/sph/morris_and_monaghan/viscosity.hpp>
 #include <cosmictiger/sph/sph.hpp>
 #include <cosmictiger/sph/sph_chemistry.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
 
+#include "particle_cache.hpp"
+
 static ParticleInteger capacity = 0;
 static ParticleInteger size = 0;
 
-struct LineIdType {
-    int proc;
-    ParticleInteger index;
-    inline bool operator==(LineIdType other) const {
-        return proc == other.proc && index == other.index;
+static Array<Position, NDIM> const* sphParticlesCacheReadLine(detail::SphCacheLineId lineId);
+static Pair<float> const* sphParticlesReadThermodynamicCacheLine(detail::SphCacheLineId lineId);
+static char const* sphParticlesRungCacheReadLine(detail::SphCacheLineId lineId);
+static Array<float, NDIM> const* sphParticlesReadVelocityCacheLine(detail::SphCacheLineId lineId);
+struct SphDensityCacheEntry {
+    float density{};
+    float balsaraFactor{};
+    float viscosityAlpha{};
+    template <typename Archive>
+    void serialize(Archive& archive, unsigned) {
+        archive & density & balsaraFactor;
+        if (getOptions().hydro.viscosityEvolution != "none") {
+            archive & viscosityAlpha;
+        }
     }
 };
 
-struct LineIdHash {
-    inline size_t operator()(LineIdType id) const {
-        ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
-        ParticleInteger const i = id.index / lineSize;
-        return i * (hpxSize() - 1) + ((id.proc < hpxRank()) ? id.proc : id.proc - 1);
-    }
-};
-
-struct LineIdHashLo {
-    inline size_t operator()(LineIdType id) const {
-        LineIdHash hash;
-        return hash(id) % PART_CACHE_SIZE;
-    }
-};
-
-struct LineIdHashHi {
-    inline size_t operator()(LineIdType id) const {
-        LineIdHash hash;
-        return hash(id) / PART_CACHE_SIZE;
-    }
-};
-
-static Array<Position, NDIM> const* sphParticlesCacheReadLine(LineIdType lineId);
-static Pair<float> const* sphParticlesReadThermodynamicCacheLine(LineIdType lineId);
-static char const* sphParticlesRungCacheReadLine(LineIdType lineId);
-static Array<float, NDIM> const* sphParticlesReadVelocityCacheLine(LineIdType lineId);
-static Pair<float> const* sphParticlesReadDensityCacheLine(LineIdType lineId);
-static Pair<float> const* sphParticlesReadChemistryEosCacheLine(LineIdType lineId);
+static SphDensityCacheEntry const* sphParticlesReadDensityCacheLine(detail::SphCacheLineId lineId);
+static Pair<float> const* sphParticlesReadChemistryEosCacheLine(detail::SphCacheLineId lineId);
 static Vector<Pair<float>> sphParticlesFetchChemistryEosCacheLine(ParticleInteger index);
 
 static Vector<Array<Position, NDIM>> sphParticlesFetchCacheLine(ParticleInteger index);
 static Vector<char> sphParticlesFetchRungCacheLine(ParticleInteger index);
 static Vector<Array<float, NDIM>> sphParticlesFetchVelocityCacheLine(ParticleInteger index);
-static Vector<Pair<float>> sphParticlesFetchDensityCacheLine(ParticleInteger index);
+static Vector<SphDensityCacheEntry> sphParticlesFetchDensityCacheLine(ParticleInteger index);
 static Vector<Pair<float>> sphParticlesFetchThermodynamicCacheLine(ParticleInteger index);
 
 HPX_PLAIN_ACTION(sphParticlesFetchCacheLine, SphParticlesFetchCacheLineAction);
@@ -80,28 +71,33 @@ HPX_PLAIN_ACTION(sphParticlesRefreshChemistryEos, SphParticlesRefreshChemistryEo
 HPX_PLAIN_ACTION(
     sphParticlesFetchChemistryEosCacheLine, SphParticlesFetchChemistryEosCacheLineAction);
 
-static Array<std::unordered_map<LineIdType,
-                 std::shared_ptr<hpx::shared_future<Vector<Array<Position, NDIM>>>>, LineIdHashHi>,
+static Array<std::unordered_map<detail::SphCacheLineId,
+                 std::shared_ptr<hpx::shared_future<Vector<Array<Position, NDIM>>>>,
+                 detail::SphCacheLineHashHi>,
     PART_CACHE_SIZE>
     particleCache;
-static Array<std::unordered_map<LineIdType,
-                 std::shared_ptr<hpx::shared_future<Vector<Pair<float>>>>, LineIdHashHi>,
+static Array<
+    std::unordered_map<detail::SphCacheLineId,
+        std::shared_ptr<hpx::shared_future<Vector<Pair<float>>>>, detail::SphCacheLineHashHi>,
     PART_CACHE_SIZE>
     thermodynamicParticleCache;
-static Array<
-    std::unordered_map<LineIdType, std::shared_ptr<hpx::shared_future<Vector<char>>>, LineIdHashHi>,
+static Array<std::unordered_map<detail::SphCacheLineId,
+                 std::shared_ptr<hpx::shared_future<Vector<char>>>, detail::SphCacheLineHashHi>,
     PART_CACHE_SIZE>
     rungParticleCache;
-static Array<std::unordered_map<LineIdType,
-                 std::shared_ptr<hpx::shared_future<Vector<Array<float, NDIM>>>>, LineIdHashHi>,
+static Array<std::unordered_map<detail::SphCacheLineId,
+                 std::shared_ptr<hpx::shared_future<Vector<Array<float, NDIM>>>>,
+                 detail::SphCacheLineHashHi>,
     PART_CACHE_SIZE>
     particleVelocityCache;
-static Array<std::unordered_map<LineIdType,
-                 std::shared_ptr<hpx::shared_future<Vector<Pair<float>>>>, LineIdHashHi>,
+static Array<std::unordered_map<detail::SphCacheLineId,
+                 std::shared_ptr<hpx::shared_future<Vector<SphDensityCacheEntry>>>,
+                 detail::SphCacheLineHashHi>,
     PART_CACHE_SIZE>
     densityParticleCache;
-static Array<std::unordered_map<LineIdType,
-                 std::shared_ptr<hpx::shared_future<Vector<Pair<float>>>>, LineIdHashHi>,
+static Array<
+    std::unordered_map<detail::SphCacheLineId,
+        std::shared_ptr<hpx::shared_future<Vector<Pair<float>>>>, detail::SphCacheLineHashHi>,
     PART_CACHE_SIZE>
     chemistryEosParticleCache;
 static Array<SpinlockType, PART_CACHE_SIZE> chemistryEosMutexes;
@@ -110,52 +106,6 @@ static Array<SpinlockType, PART_CACHE_SIZE> energyMutexes;
 static Array<SpinlockType, PART_CACHE_SIZE> rungMutexes;
 static Array<SpinlockType, PART_CACHE_SIZE> velocityMutexes;
 static Array<SpinlockType, PART_CACHE_SIZE> densityMutexes;
-
-template <typename Action, typename T>
-static T const* readSphCacheLine(LineIdType lineId,
-    Array<std::unordered_map<LineIdType, std::shared_ptr<hpx::shared_future<Vector<T>>>,
-              LineIdHashHi>,
-        PART_CACHE_SIZE>& cache,
-    Array<SpinlockType, PART_CACHE_SIZE>& locks) {
-    size_t const bin = LineIdHashLo()(lineId);
-    std::shared_ptr<hpx::shared_future<Vector<T>>> future;
-    {
-        std::lock_guard<SpinlockType> lock(locks[bin]);
-        auto const entry = cache[bin].find(lineId);
-        if (entry != cache[bin].end()) {
-            future = entry->second;
-        }
-    }
-    if (!future) {
-        auto promise = std::make_shared<hpx::promise<Vector<T>>>();
-        auto candidate =
-            std::make_shared<hpx::shared_future<Vector<T>>>(promise->get_future().share());
-        bool inserted;
-        {
-            std::lock_guard<SpinlockType> lock(locks[bin]);
-            auto const entry = cache[bin].emplace(lineId, candidate);
-            inserted = entry.second;
-            future = entry.first->second;
-        }
-        if (inserted) {
-            try {
-                hpx::post([promise, lineId]() {
-                    try {
-                        auto remote =
-                            hpx::async<Action>(hpxLocalities()[lineId.proc], lineId.index);
-                        promise->set_value(remote.get());
-                    } catch (...) {
-                        promise->set_exception(std::current_exception());
-                    }
-                });
-            } catch (...) {
-                promise->set_exception(std::current_exception());
-            }
-        }
-    }
-    return future->get().data();
-}
-
 HPX_PLAIN_ACTION(sphParticlesApplyUpdates, SphParticlesApplyUpdatesAction);
 void sphParticlesApplyUpdates(int minimumRung, int phase, float timeStepScale, float time) {
     // At time zero no step has opened yet, so there is no half-kick to close or correct.
@@ -182,6 +132,12 @@ void sphParticlesApplyUpdates(int minimumRung, int phase, float timeStepScale, f
                     auto const rung = sphParticlesRung(gasIndex);
                     float const halfTimeStep = 0.5f * timeStepScale / (1 << rung);
                     flops += 2;
+                    if (getOptions().hydro.viscosityEvolution == "morrisAndMonaghan" &&
+                        rung >= minimumRung) {
+                        morris_and_monaghan::applyUpdate(sphParticlesViscosityStates[gasIndex],
+                            getOptions().hydro.viscosityAlphaMin, halfTimeStep, phase);
+                        flops += 2;
+                    }
                     // Each active particle gets two half-kicks per step: one closes the step
                     // that just drifted, one opens the next. Hydro rates depend on the
                     // velocities and energies they update, so the closing half-kick is first
@@ -268,7 +224,8 @@ void sphParticlesApplyUpdates(int minimumRung, int phase, float timeStepScale, f
 namespace detail {
 
 template <typename Visitor>
-void visitSphCheckpointArrays(Visitor&& visit, bool includeChemistry = true) {
+void visitSphCheckpointArrays(
+    Visitor&& visit, bool includeChemistry = true, bool includeViscosity = true) {
     size_t const count = sphParticlesSize();
     // Keep stage fields as well as the physical fields: fine rungs may be staggered at checkpoints.
     visit(sphParticlesThermodynamicStates, count);
@@ -283,6 +240,12 @@ void visitSphCheckpointArrays(Visitor&& visit, bool includeChemistry = true) {
         visit(sphParticlesPredictedAccelerations[dim], count);
         visit(sphParticlesGravityAccelerations[dim], count);
     }
+    if (includeViscosity && sphParticlesViscosityStates != nullptr) {
+        visit(sphParticlesViscosityStates, count);
+    }
+    if (includeViscosity && sphParticlesCullenDehnenStates != nullptr) {
+        visit(sphParticlesCullenDehnenStates, count);
+    }
     if (includeChemistry && sphParticlesChemistryStates != nullptr) {
         visit(sphParticlesChemistryStates, count);
         visit(sphParticlesChemistryEos, count);
@@ -292,7 +255,9 @@ void visitSphCheckpointArrays(Visitor&& visit, bool includeChemistry = true) {
 }    // namespace detail
 
 void sphParticlesSwap(ParticleInteger i, ParticleInteger j) {
-    std::swap(sphParticlesBalsaraFactors[i], sphParticlesBalsaraFactors[j]);
+    if (sphParticlesBalsaraFactors != nullptr) {
+        std::swap(sphParticlesBalsaraFactors[i], sphParticlesBalsaraFactors[j]);
+    }
     detail::visitSphCheckpointArrays(
         [i, j](auto* values, size_t) { std::swap(values[i], values[j]); });
 }
@@ -333,13 +298,27 @@ void sphParticlesArrayResize(T*& ptr, ParticleInteger newCapacity) {
 }
 
 void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticles) {
+    bool const initializeBalsara =
+        getOptions().hydro.balsaraSwitch && sphParticlesBalsaraFactors == nullptr;
+    bool const cullenDehnen = getOptions().hydro.viscosityEvolution == "cullenAndDehnen";
+    bool const initializeCullenDehnen = cullenDehnen && sphParticlesCullenDehnenStates == nullptr;
+    bool const initializeViscosity =
+        getOptions().hydro.viscosityEvolution != "none" && sphParticlesViscosityStates == nullptr;
     if (particleCount > capacity) {
         ParticleInteger newCapacity = std::max(capacity, (ParticleInteger) 100);
         while (newCapacity < particleCount) {
             newCapacity = size_t(101) * newCapacity / size_t(100);
         }
         sphParticlesArrayResize(sphParticlesDensities, newCapacity);
-        sphParticlesArrayResize(sphParticlesBalsaraFactors, newCapacity);
+        if (getOptions().hydro.balsaraSwitch) {
+            sphParticlesArrayResize(sphParticlesBalsaraFactors, newCapacity);
+        }
+        if (getOptions().hydro.viscosityEvolution != "none") {
+            sphParticlesArrayResize(sphParticlesViscosityStates, newCapacity);
+        }
+        if (cullenDehnen) {
+            sphParticlesArrayResize(sphParticlesCullenDehnenStates, newCapacity);
+        }
         sphParticlesArrayResize(sphParticlesThermodynamicStates, newCapacity);
         sphParticlesArrayResize(sphParticlesAccelerationStates, newCapacity);
         sphParticlesArrayResize(sphParticlesConvergenceFlags, newCapacity);
@@ -356,6 +335,42 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
             sphParticlesArrayResize(sphParticlesChemistryEos, newCapacity);
         }
         capacity = newCapacity;
+    }
+    if (!getOptions().hydro.balsaraSwitch && sphParticlesBalsaraFactors != nullptr) {
+        freeManagedMemory(sphParticlesBalsaraFactors);
+        sphParticlesBalsaraFactors = nullptr;
+    } else if (getOptions().hydro.balsaraSwitch && sphParticlesBalsaraFactors == nullptr &&
+        capacity > 0) {
+        sphParticlesArrayResize(sphParticlesBalsaraFactors, capacity);
+    }
+    if (initializeBalsara) {
+        for (ParticleInteger index = 0; index < size; ++index) {
+            sphParticlesBalsaraFactors[index] = 0.0f;
+        }
+    }
+    if (getOptions().hydro.viscosityEvolution == "none" && sphParticlesViscosityStates != nullptr) {
+        freeManagedMemory(sphParticlesViscosityStates);
+        sphParticlesViscosityStates = nullptr;
+    } else if (getOptions().hydro.viscosityEvolution != "none" &&
+        sphParticlesViscosityStates == nullptr && capacity > 0) {
+        sphParticlesArrayResize(sphParticlesViscosityStates, capacity);
+    }
+    if (!cullenDehnen && sphParticlesCullenDehnenStates != nullptr) {
+        freeManagedMemory(sphParticlesCullenDehnenStates);
+        sphParticlesCullenDehnenStates = nullptr;
+    } else if (cullenDehnen && sphParticlesCullenDehnenStates == nullptr && capacity > 0) {
+        sphParticlesArrayResize(sphParticlesCullenDehnenStates, capacity);
+    }
+    if (initializeCullenDehnen) {
+        for (ParticleInteger index = 0; index < size; ++index) {
+            sphParticlesCullenDehnenStates[index] = {};
+        }
+    }
+    if (initializeViscosity) {
+        float const alpha = cullenDehnen ? 0.0f : getOptions().hydro.viscosityAlphaMin;
+        for (ParticleInteger index = 0; index < size; ++index) {
+            sphParticlesViscosityStates[index] = {alpha, 0.0f, alpha};
+        }
     }
     ParticleInteger numberOfNewParticles = particleCount - size;
     ParticleInteger offset = particlesSize();
@@ -376,7 +391,16 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
         sphParticlesPredictedInternalEnergyRates[slot] = 0.0f;
         sphParticlesInternalEnergyRates[slot] = 0.0f;
         sphParticlesDensities[slot] = 0.0f;
-        sphParticlesBalsaraFactors[slot] = 0.0f;
+        if (getOptions().hydro.balsaraSwitch) {
+            sphParticlesBalsaraFactors[slot] = 0.0f;
+        }
+        if (getOptions().hydro.viscosityEvolution != "none") {
+            float const alpha = cullenDehnen ? 0.0f : getOptions().hydro.viscosityAlphaMin;
+            sphParticlesViscosityStates[slot] = {alpha, 0.0f, alpha};
+        }
+        if (cullenDehnen) {
+            sphParticlesCullenDehnenStates[slot] = {};
+        }
         sphParticlesConvergenceFlags[slot] = 0;
         sphParticlesSemiactiveFlags[slot] = 0;
         for (int dim = 0; dim < NDIM; dim++) {
@@ -392,8 +416,10 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
 }
 
 void sphParticlesFree() {
-    freeManagedMemory(sphParticlesBalsaraFactors);
-    sphParticlesBalsaraFactors = nullptr;
+    if (sphParticlesBalsaraFactors != nullptr) {
+        freeManagedMemory(sphParticlesBalsaraFactors);
+        sphParticlesBalsaraFactors = nullptr;
+    }
     detail::visitSphCheckpointArrays([](auto*& values, size_t) {
         freeManagedMemory(values);
         values = nullptr;
@@ -432,7 +458,7 @@ void sphParticlesGlobalReadPositions(
                 z[j] = sphParticlesPosition(ZDIM, i);
             }
         } else {
-            LineIdType lineId;
+            detail::SphCacheLineId lineId;
             lineId.proc = range.proc;
             ParticleInteger const startLine = (range.range.first / lineSize) * lineSize;
             ParticleInteger const stopLine = ((range.range.second - 1) / lineSize) * lineSize;
@@ -454,8 +480,9 @@ void sphParticlesGlobalReadPositions(
     }
 }
 
-static Array<Position, NDIM> const* sphParticlesCacheReadLine(LineIdType lineId) {
-    return readSphCacheLine<SphParticlesFetchCacheLineAction>(lineId, particleCache, mutexes);
+static Array<Position, NDIM> const* sphParticlesCacheReadLine(detail::SphCacheLineId lineId) {
+    return detail::readSphCacheLine<SphParticlesFetchCacheLineAction>(
+        lineId, particleCache, mutexes);
 }
 
 static Vector<Array<Position, NDIM>> sphParticlesFetchCacheLine(ParticleInteger index) {
@@ -489,7 +516,7 @@ void sphParticlesGlobalReadInternalEnergyAndSupportRadius(ParticleGlobalRange ra
                 }
             }
         } else {
-            LineIdType lineId;
+            detail::SphCacheLineId lineId;
             lineId.proc = range.proc;
             ParticleInteger const startLine = (range.range.first / lineSize) * lineSize;
             ParticleInteger const stopLine = ((range.range.second - 1) / lineSize) * lineSize;
@@ -514,8 +541,8 @@ void sphParticlesGlobalReadInternalEnergyAndSupportRadius(ParticleGlobalRange ra
     }
 }
 
-static Pair<float> const* sphParticlesReadThermodynamicCacheLine(LineIdType lineId) {
-    return readSphCacheLine<SphParticlesFetchThermodynamicCacheLineAction>(
+static Pair<float> const* sphParticlesReadThermodynamicCacheLine(detail::SphCacheLineId lineId) {
+    return detail::readSphCacheLine<SphParticlesFetchThermodynamicCacheLineAction>(
         lineId, thermodynamicParticleCache, energyMutexes);
 }
 
@@ -542,7 +569,7 @@ void sphParticlesGlobalReadRungs(ParticleGlobalRange range, char* rungs, Particl
                 rungs[j] = sphParticlesRung(i);
             }
         } else {
-            LineIdType lineId;
+            detail::SphCacheLineId lineId;
             lineId.proc = range.proc;
             ParticleInteger const startLine = (range.range.first / lineSize) * lineSize;
             ParticleInteger const stopLine = ((range.range.second - 1) / lineSize) * lineSize;
@@ -562,8 +589,8 @@ void sphParticlesGlobalReadRungs(ParticleGlobalRange range, char* rungs, Particl
     }
 }
 
-static char const* sphParticlesRungCacheReadLine(LineIdType lineId) {
-    return readSphCacheLine<SphParticlesFetchRungCacheLineAction>(
+static char const* sphParticlesRungCacheReadLine(detail::SphCacheLineId lineId) {
+    return detail::readSphCacheLine<SphParticlesFetchRungCacheLineAction>(
         lineId, rungParticleCache, rungMutexes);
 }
 
@@ -593,7 +620,7 @@ void sphParticlesGlobalReadVelocities(
                 vz[j] = particlesVel(ZDIM, k);
             }
         } else {
-            LineIdType lineId;
+            detail::SphCacheLineId lineId;
             lineId.proc = range.proc;
             ParticleInteger const startLine = (range.range.first / lineSize) * lineSize;
             ParticleInteger const stopLine = ((range.range.second - 1) / lineSize) * lineSize;
@@ -615,8 +642,8 @@ void sphParticlesGlobalReadVelocities(
     }
 }
 
-static Array<float, NDIM> const* sphParticlesReadVelocityCacheLine(LineIdType lineId) {
-    return readSphCacheLine<SphParticlesFetchVelocityCacheLineAction>(
+static Array<float, NDIM> const* sphParticlesReadVelocityCacheLine(detail::SphCacheLineId lineId) {
+    return detail::readSphCacheLine<SphParticlesFetchVelocityCacheLineAction>(
         lineId, particleVelocityCache, velocityMutexes);
 }
 
@@ -634,8 +661,8 @@ static Vector<Array<float, NDIM>> sphParticlesFetchVelocityCacheLine(ParticleInt
     return line;
 }
 
-void sphParticlesGlobalReadDensity(
-    ParticleGlobalRange range, float* rho, ParticleInteger offset, float* balsaraFactor) {
+void sphParticlesGlobalReadDensity(ParticleGlobalRange range, float* rho, ParticleInteger offset,
+    float* balsaraFactor, float* viscosityAlpha) {
     ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
     if (range.range.first != range.range.second) {
         if (range.proc == hpxRank()) {
@@ -643,13 +670,19 @@ void sphParticlesGlobalReadDensity(
             ParticleInteger const particleCount = range.range.second - range.range.first;
             for (ParticleInteger i = range.range.first; i < range.range.second; i++) {
                 int const j = offset + i - range.range.first;
-                rho[j] = sphParticlesDensity(i);
+                if (rho) {
+                    rho[j] = sphParticlesDensity(i);
+                }
                 if (balsaraFactor) {
-                    balsaraFactor[j] = sphParticlesBalsaraFactors[i];
+                    balsaraFactor[j] =
+                        sphParticlesBalsaraFactors ? sphParticlesBalsaraFactors[i] : 1.0f;
+                }
+                if (viscosityAlpha) {
+                    viscosityAlpha[j] = sphParticlesViscosityStates[i].alpha;
                 }
             }
         } else {
-            LineIdType lineId;
+            detail::SphCacheLineId lineId;
             lineId.proc = range.proc;
             ParticleInteger const startLine = (range.range.first / lineSize) * lineSize;
             ParticleInteger const stopLine = ((range.range.second - 1) / lineSize) * lineSize;
@@ -661,9 +694,14 @@ void sphParticlesGlobalReadDensity(
                 auto const end = std::min(lineId.index + lineSize, range.range.second);
                 for (ParticleInteger i = begin; i < end; i++) {
                     ParticleInteger const srcIndex = i - lineId.index;
-                    rho[destIndex] = ptr[srcIndex].first;
+                    if (rho) {
+                        rho[destIndex] = ptr[srcIndex].density;
+                    }
                     if (balsaraFactor) {
-                        balsaraFactor[destIndex] = ptr[srcIndex].second;
+                        balsaraFactor[destIndex] = ptr[srcIndex].balsaraFactor;
+                    }
+                    if (viscosityAlpha) {
+                        viscosityAlpha[destIndex] = ptr[srcIndex].viscosityAlpha;
                     }
                     destIndex++;
                 }
@@ -672,18 +710,21 @@ void sphParticlesGlobalReadDensity(
     }
 }
 
-static Pair<float> const* sphParticlesReadDensityCacheLine(LineIdType lineId) {
-    return readSphCacheLine<SphParticlesFetchDensityCacheLineAction>(
+static SphDensityCacheEntry const* sphParticlesReadDensityCacheLine(detail::SphCacheLineId lineId) {
+    return detail::readSphCacheLine<SphParticlesFetchDensityCacheLineAction>(
         lineId, densityParticleCache, densityMutexes);
 }
 
-static Vector<Pair<float>> sphParticlesFetchDensityCacheLine(ParticleInteger index) {
+static Vector<SphDensityCacheEntry> sphParticlesFetchDensityCacheLine(ParticleInteger index) {
     ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
-    Vector<Pair<float>> line(lineSize);
+    Vector<SphDensityCacheEntry> line(lineSize);
     ParticleInteger const begin = (index / lineSize) * lineSize;
     ParticleInteger const end = std::min(sphParticlesSize(), begin + lineSize);
     for (ParticleInteger i = begin; i < end; i++) {
-        line[i - begin] = {sphParticlesDensity(i), sphParticlesBalsaraFactors[i]};
+        line[i - begin] = {sphParticlesDensity(i),
+            sphParticlesBalsaraFactors ? sphParticlesBalsaraFactors[i] : 1.0f,
+            getOptions().hydro.viscosityEvolution != "none" ? sphParticlesViscosityStates[i].alpha :
+                                                              0.0f};
     }
     return line;
 }
@@ -699,7 +740,7 @@ void sphParticlesGlobalReadChemistryEos(ParticleGlobalRange range, float* pressu
                 adiabaticIndex[j] = sphParticlesChemistryEos[i].second;
             }
         } else {
-            LineIdType lineId;
+            detail::SphCacheLineId lineId;
             lineId.proc = range.proc;
             ParticleInteger const startLine = (range.range.first / lineSize) * lineSize;
             ParticleInteger const stopLine = ((range.range.second - 1) / lineSize) * lineSize;
@@ -720,8 +761,8 @@ void sphParticlesGlobalReadChemistryEos(ParticleGlobalRange range, float* pressu
     }
 }
 
-static Pair<float> const* sphParticlesReadChemistryEosCacheLine(LineIdType lineId) {
-    return readSphCacheLine<SphParticlesFetchChemistryEosCacheLineAction>(
+static Pair<float> const* sphParticlesReadChemistryEosCacheLine(detail::SphCacheLineId lineId) {
+    return detail::readSphCacheLine<SphParticlesFetchChemistryEosCacheLineAction>(
         lineId, chemistryEosParticleCache, chemistryEosMutexes);
 }
 
@@ -764,6 +805,8 @@ void sphParticlesClearHydroCaches() {
     thermodynamicParticleCache = decltype(thermodynamicParticleCache)();
     chemistryEosParticleCache = decltype(chemistryEosParticleCache)();
     particleVelocityCache = decltype(particleVelocityCache)();
+    densityParticleCache = decltype(densityParticleCache)();
+    cullen_and_dehnen::clearDiagnosticCache();
     hpx::wait_all(futures.begin(), futures.end());
     profilerExit();
 }
@@ -780,21 +823,35 @@ void sphParticlesClearCaches() {
     rungParticleCache = decltype(rungParticleCache)();
     particleVelocityCache = decltype(particleVelocityCache)();
     densityParticleCache = decltype(densityParticleCache)();
+    cullen_and_dehnen::clearDiagnosticCache();
     hpx::wait_all(futures.begin(), futures.end());
     profilerExit();
 }
+
+namespace detail {
+
+uint32_t sphCheckpointVersion() {
+    // Preserve the fixed-viscosity payload version and identify optional state.
+    auto const& options = getOptions();
+    return (options.chemistry.enabled ? 3U : 2U) +
+        (options.hydro.viscosityEvolution == "cullenAndDehnen" ?
+                4U :
+                (options.hydro.viscosityEvolution != "none" ? 2U : 0U));
+}
+
+}    // namespace detail
 
 void sphParticlesLoad(FILE* fp) {
     uint32_t header[7];
     ParticleInteger savedCount;
     FREAD(header, sizeof(uint32_t), 7, fp);
     FREAD(&savedCount, sizeof(ParticleInteger), 1, fp);
-    if (header[0] != 0x43545350U || header[1] != (getOptions().chemistry.enabled ? 3U : 2U) ||
+    if (header[0] != 0x43545350U || header[1] != detail::sphCheckpointVersion() ||
         header[2] != sizeof(ParticleInteger) || header[3] != sizeof(SphThermodynamicState) ||
         header[4] != sizeof(SphAcceleration) || header[5] != NDIM || header[6] != sizeof(float) ||
         savedCount != sphParticlesSize()) {
-        THROW_ERROR(
-            "Incompatible SPH checkpoint payload (requires matching Monaghan/chemistry layout)\n");
+        THROW_ERROR("Incompatible SPH checkpoint payload (requires matching "
+                    "viscosity/chemistry layout)\n");
     }
     detail::visitSphCheckpointArrays(
         [fp](auto* values, size_t count) {
@@ -802,7 +859,19 @@ void sphParticlesLoad(FILE* fp) {
                 FREAD(values, sizeof(*values), count, fp);
             }
         },
-        false);
+        false, false);
+    if (getOptions().hydro.viscosityEvolution != "none") {
+        for (ParticleInteger index = 0; index < sphParticlesSize(); ++index) {
+            float words[2];
+            FREAD(words, sizeof(float), 2, fp);
+            sphParticlesViscosityStates[index] = {words[0], words[1], words[0]};
+            if (getOptions().hydro.viscosityEvolution == "cullenAndDehnen") {
+                float divergence;
+                FREAD(&divergence, sizeof(float), 1, fp);
+                sphParticlesCullenDehnenStates[index] = {divergence, 0.0f, 0.0f, 0.0f};
+            }
+        }
+    }
     if (getOptions().chemistry.enabled) {
         for (ParticleInteger index = 0; index < sphParticlesSize(); ++index) {
             float words[primordial::kAbundanceCount + 3];
@@ -819,9 +888,8 @@ void sphParticlesLoad(FILE* fp) {
 }
 
 void sphParticlesSave(FILE* fp) {
-    uint32_t header[7] = {0x43545350U, getOptions().chemistry.enabled ? 3U : 2U,
-        sizeof(ParticleInteger), sizeof(SphThermodynamicState), sizeof(SphAcceleration), NDIM,
-        sizeof(float)};
+    uint32_t header[7] = {0x43545350U, detail::sphCheckpointVersion(), sizeof(ParticleInteger),
+        sizeof(SphThermodynamicState), sizeof(SphAcceleration), NDIM, sizeof(float)};
     ParticleInteger count = sphParticlesSize();
     FWRITE(header, sizeof(uint32_t), 7, fp);
     FWRITE(&count, sizeof(ParticleInteger), 1, fp);
@@ -831,7 +899,18 @@ void sphParticlesSave(FILE* fp) {
                 FWRITE(values, sizeof(*values), count, fp);
             }
         },
-        false);
+        false, false);
+    if (getOptions().hydro.viscosityEvolution != "none") {
+        for (ParticleInteger index = 0; index < sphParticlesSize(); ++index) {
+            auto const& state = sphParticlesViscosityStates[index];
+            float words[2] = {state.alpha, state.rate};
+            FWRITE(words, sizeof(float), 2, fp);
+            if (getOptions().hydro.viscosityEvolution == "cullenAndDehnen") {
+                float divergence = sphParticlesCullenDehnenStates[index].divergence;
+                FWRITE(&divergence, sizeof(float), 1, fp);
+            }
+        }
+    }
     if (getOptions().chemistry.enabled) {
         for (ParticleInteger index = 0; index < sphParticlesSize(); ++index) {
             float words[primordial::kAbundanceCount + 3];
@@ -848,6 +927,55 @@ void sphParticlesSave(FILE* fp) {
 }
 
 void sphCheckpointTest() {
+    ALWAYS_ASSERT(sphParticlesSize() == 0 ||
+        (sphParticlesViscosityStates != nullptr) ==
+            (getOptions().hydro.viscosityEvolution != "none"));
+    ALWAYS_ASSERT(sphParticlesSize() == 0 ||
+        (sphParticlesCullenDehnenStates != nullptr) ==
+            (getOptions().hydro.viscosityEvolution == "cullenAndDehnen"));
+    Vector<SphCullenDehnenState> originalCullenDehnen;
+    if (getOptions().hydro.viscosityEvolution == "cullenAndDehnen" && sphParticlesSize() != 0) {
+        originalCullenDehnen.assign(
+            sphParticlesCullenDehnenStates, sphParticlesCullenDehnenStates + sphParticlesSize());
+        for (ParticleInteger index = 0; index < sphParticlesSize(); ++index) {
+            sphParticlesCullenDehnenStates[index] = {-0.5f + 0.025f * index, 0.0f, 0.0f, 0.0f};
+        }
+    }
+    ALWAYS_ASSERT(cullen_and_dehnen::evolvedAlpha(0.0f, 1.5f, 2.0f, 0.0f) == 1.5f);
+    ALWAYS_ASSERT(std::fabs(cullen_and_dehnen::evolvedAlpha(1.5f, 0.5f, 2.0f, 0.25f) -
+                      (0.5f + std::exp(-0.5f))) < 1.0e-6f);
+    Vector<SphViscosityState> originalViscosity;
+    if (getOptions().hydro.viscosityEvolution != "none" && sphParticlesSize() != 0) {
+        originalViscosity.assign(
+            sphParticlesViscosityStates, sphParticlesViscosityStates + sphParticlesSize());
+        for (ParticleInteger index = 0; index < sphParticlesSize(); ++index) {
+            float const alpha = 0.25f + 0.01f * index;
+            sphParticlesViscosityStates[index] = {alpha, -0.125f + 0.001f * index, alpha};
+        }
+    }
+    auto decayError = [](int steps) {
+        float const halfStep = 0.5f / steps;
+        SphViscosityState state{1.1f, -1.0f, 0.0f};
+        morris_and_monaghan::applyUpdate(state, 0.1f, halfStep, 2);
+        for (int step = 0; step < steps; ++step) {
+            morris_and_monaghan::applyUpdate(state, 0.1f, halfStep, 0);
+            state.rate = -(state.alpha - 0.1f);
+            morris_and_monaghan::applyUpdate(state, 0.1f, halfStep, 1);
+            if (step + 1 < steps) {
+                morris_and_monaghan::applyUpdate(state, 0.1f, halfStep, 2);
+            }
+        }
+        return std::fabs(double(state.alpha) - (0.1 + std::exp(-1.0)));
+    };
+    double const coarseError = decayError(8);
+    double const fineError = decayError(16);
+    ALWAYS_ASSERT(coarseError > 3.0 * fineError && fineError < 0.001);
+    SphViscosityState floorState{0.2f, -1.0f, 0.0f};
+    morris_and_monaghan::applyUpdate(floorState, 0.1f, 0.25f, 0);
+    ALWAYS_ASSERT(floorState.alpha == 0.1f);
+    floorState.rate = 1.0f;
+    morris_and_monaghan::applyUpdate(floorState, 0.1f, 0.25f, 1);
+    ALWAYS_ASSERT(std::fabs(floorState.alpha - 0.45f) < 1.0e-6f);
     primordial::State originalChemicalState{};
     bool const testChemistry = getOptions().chemistry.enabled && sphParticlesSize() != 0;
     if (testChemistry) {
@@ -886,19 +1014,23 @@ void sphCheckpointTest() {
         }
     });
     if (sphParticlesSize() >= 2) {
-        detail::visitSphCheckpointArrays([](auto* values, size_t) {
-            std::memset(values, 0x11, sizeof(*values));
-            std::memset(values + 1, 0x22, sizeof(*values));
-        });
+        detail::visitSphCheckpointArrays(
+            [](auto* values, size_t) {
+                std::memset(values, 0x11, sizeof(*values));
+                std::memset(values + 1, 0x22, sizeof(*values));
+            },
+            true, true);
         auto checkOrder = [](unsigned char first, unsigned char second) {
-            detail::visitSphCheckpointArrays([first, second](auto* values, size_t) {
-                auto const* bytes = reinterpret_cast<unsigned char const*>(values);
-                for (size_t i = 0; i < sizeof(*values); i++) {
-                    if (bytes[i] != first || bytes[sizeof(*values) + i] != second) {
-                        THROW_ERROR("SPH reorder did not preserve every gas field\n");
+            detail::visitSphCheckpointArrays(
+                [first, second](auto* values, size_t) {
+                    auto const* bytes = reinterpret_cast<unsigned char const*>(values);
+                    for (size_t i = 0; i < sizeof(*values); i++) {
+                        if (bytes[i] != first || bytes[sizeof(*values) + i] != second) {
+                            THROW_ERROR("SPH reorder did not preserve every gas field\n");
+                        }
                     }
-                }
-            });
+                },
+                true, true);
         };
         sphParticlesSwap(0, 1);
         checkOrder(0x22, 0x11);
@@ -918,6 +1050,12 @@ void sphCheckpointTest() {
     std::fclose(file);
     if (testChemistry) {
         sphParticlesChemistryStates[0] = originalChemicalState;
+    }
+    for (size_t index = 0; index < originalViscosity.size(); ++index) {
+        sphParticlesViscosityStates[index] = originalViscosity[index];
+    }
+    for (size_t index = 0; index < originalCullenDehnen.size(); ++index) {
+        sphParticlesCullenDehnenStates[index] = originalCullenDehnen[index];
     }
     PRINT("SPH checkpoint roundtrip passed (all fields and empty gas payload)\n");
 }

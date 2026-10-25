@@ -28,7 +28,7 @@
 #include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/core/startup.hpp>
 #include <cosmictiger/core/terminal.hpp>
-#include <cosmictiger/fmm/fmm_order.hpp>
+#include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #include <cosmictiger/io/output.hpp>
@@ -224,12 +224,19 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"analysis.views", options.analysis.views},
         {"analysis.viewSize", options.analysis.viewSize},
         {"analysis.sliceResolution", options.analysis.sliceResolution},
+        {"analysis.saveForce", options.analysis.saveForce},
+        {"analysis.saveAcceleration", options.analysis.saveAcceleration},
+        {"analysis.savePotential", options.analysis.savePotential},
         {"lightcone.enabled", options.lightcone.enabled},
         {"lightcone.directory", options.lightcone.directory},
         {"lightcone.linkingLength", options.lightcone.linkingLength},
         {"lightcone.mapSize", options.lightcone.mapSize},
         {"gravity.enabled", options.gravity.enabled},
         {"gravity.method", options.gravity.method},
+        {"gravity.meshSize", options.gravity.meshSize},
+        {"gravity.pmmmNearWidth", options.gravity.pmmmNearWidth},
+        {"gravity.pmmmNearMethod", options.gravity.pmmmNearMethod},
+        {"gravity.pmmmBatchParticles", options.gravity.pmmmBatchParticles},
         {"gravity.fmmOrder", options.gravity.fmmOrder},
         {"gravity.kernelFamily", options.gravity.kernelFamily},
         {"gravity.kernelDegree", options.gravity.kernelDegree},
@@ -278,6 +285,13 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"hydro.viscosityBeta", options.hydro.viscosityBeta},
         {"hydro.viscosityEpsilon", options.hydro.viscosityEpsilon},
         {"hydro.balsaraSwitch", options.hydro.balsaraSwitch},
+        {"hydro.viscosityEvolution", options.hydro.viscosityEvolution},
+        {"hydro.viscosityAlphaMin", options.hydro.viscosityAlphaMin},
+        {"hydro.viscosityDecay", options.hydro.viscosityDecay},
+        {"hydro.viscosityAlphaMax", options.hydro.viscosityAlphaMax},
+        {"hydro.viscosityDecayCD", options.hydro.viscosityDecayCD},
+        {"hydro.viscosityBetaMode", options.hydro.viscosityBetaMode},
+        {"hydro.viscosityBetaOverAlpha", options.hydro.viscosityBetaOverAlpha},
         {"hydro.gamma", options.hydro.gamma},
         {"hydro.centralAcceleration", options.hydro.centralAcceleration},
         {"hydro.centralSoftening",
@@ -439,7 +453,14 @@ bool processOptions(int argc, char* argv[]) {
         "write instantaneous HEALPix maps")("analysis.viewSize",
         po::value<int>(&opts.analysis.viewSize)->default_value(1024),
         "view HEALPix Nside")("analysis.sliceResolution",
-        po::value<int>(&opts.analysis.sliceResolution)->default_value(4096), "slice resolution");
+        po::value<int>(&opts.analysis.sliceResolution)->default_value(4096), "slice resolution")(
+        "analysis.saveForce", po::value<bool>(&opts.analysis.saveForce)->default_value(false),
+        "retain both per-particle acceleration and potential diagnostics")(
+        "analysis.saveAcceleration",
+        po::value<bool>(&opts.analysis.saveAcceleration)->default_value(false),
+        "retain per-particle acceleration diagnostics")("analysis.savePotential",
+        po::value<bool>(&opts.analysis.savePotential)->default_value(false),
+        "retain per-particle potential diagnostics");
 
     po::options_description lightconeOpts("Lightcone analysis");
     lightconeOpts.add_options()("lightcone.enabled",
@@ -454,9 +475,17 @@ bool processOptions(int argc, char* argv[]) {
 
     po::options_description gravityOpts("Gravity");
     gravityOpts.add_options()("gravity.enabled",
-        po::value<bool>(&opts.gravity.enabled)->default_value(true),
-        "enable gravity")("gravity.method",
-        po::value<std::string>(&opts.gravity.method)->default_value("fmm"), "gravity solver: fmm")(
+        po::value<bool>(&opts.gravity.enabled)->default_value(true), "enable gravity")(
+        "gravity.method", po::value<std::string>(&opts.gravity.method)->default_value("fmm"),
+        "gravity solver: fmm or periodic multipole mesh (pmmm)")("gravity.meshSize",
+        po::value<int>(&opts.gravity.meshSize)->default_value(0),
+        "PMMM cells per axis; required with gravity.method=pmmm")("gravity.pmmmBatchParticles",
+        po::value<int>(&opts.gravity.pmmmBatchParticles)->default_value(4096),
+        "target sink particles per ready PMMM batch; oversized cells run alone")(
+        "gravity.pmmmNearWidth", po::value<int>(&opts.gravity.pmmmNearWidth)->default_value(2),
+        "PMMM neighbor cube radius in cells: 1 or 2")("gravity.pmmmNearMethod",
+        po::value<std::string>(&opts.gravity.pmmmNearMethod)->default_value("pp"),
+        "PMMM primary near interactions: pp (direct pairs) or fmm (adaptive multipoles)")(
         "gravity.fmmOrder", po::value<int>(&opts.gravity.fmmOrder)->default_value(kFmmDefaultOrder),
         "FMM order (multipole degree plus two), within the build's compiled range")(
         "gravity.openingAngle", po::value<double>(&opts.gravity.openingAngle)->default_value(0.8),
@@ -519,13 +548,31 @@ bool processOptions(int argc, char* argv[]) {
         po::value<double>(&opts.hydro.zPlaneAcceleration)->default_value(0.0),
         "nonnegative acceleration magnitude toward the plane z=0.5")("hydro.viscosityAlpha",
         po::value<double>(&opts.hydro.viscosityAlpha)->default_value(1.0),
-        "constant linear artificial-viscosity coefficient alpha")("hydro.viscosityBeta",
+        "linear coefficient alpha when viscosityEvolution=none")("hydro.viscosityBeta",
         po::value<double>(&opts.hydro.viscosityBeta)->default_value(2.0),
-        "constant quadratic artificial-viscosity coefficient beta")("hydro.viscosityEpsilon",
+        "fixed quadratic coefficient beta when viscosityBetaMode=constant")(
+        "hydro.viscosityEpsilon",
         po::value<double>(&opts.hydro.viscosityEpsilon)->default_value(0.01),
         "viscosity regularization relative to the calibrated radius sqrt(5/6) effectiveRadius")(
         "hydro.balsaraSwitch", po::value<bool>(&opts.hydro.balsaraSwitch)->default_value(true),
-        "suppress artificial viscosity in shear flows with the Balsara switch")("hydro.gamma",
+        "suppress artificial viscosity in shear flows with the Balsara switch")(
+        "hydro.viscosityEvolution",
+        po::value<std::string>(&opts.hydro.viscosityEvolution)->default_value("morrisAndMonaghan"),
+        "viscosity evolution: none, morrisAndMonaghan, or cullenAndDehnen")(
+        "hydro.viscosityAlphaMin",
+        po::value<double>(&opts.hydro.viscosityAlphaMin)->default_value(0.1),
+        "Morris-Monaghan alpha floor and smooth-flow initial value")("hydro.viscosityDecay",
+        po::value<double>(&opts.hydro.viscosityDecay)->default_value(0.2),
+        "Morris-Monaghan C1 in tau=h/(C1 c)")("hydro.viscosityAlphaMax",
+        po::value<double>(&opts.hydro.viscosityAlphaMax)->default_value(2.0),
+        "maximum alpha for Cullen-Dehnen viscosity evolution")("hydro.viscosityDecayCD",
+        po::value<double>(&opts.hydro.viscosityDecayCD)->default_value(0.05),
+        "Cullen-Dehnen decay coefficient ell in tau=H/(2 ell vSignal)")("hydro.viscosityBetaMode",
+        po::value<std::string>(&opts.hydro.viscosityBetaMode)->default_value("ratio"),
+        "quadratic coefficient: ratio follows alpha, constant uses viscosityBeta")(
+        "hydro.viscosityBetaOverAlpha",
+        po::value<double>(&opts.hydro.viscosityBetaOverAlpha)->default_value(2.0),
+        "beta/alpha ratio when viscosityBetaMode=ratio")("hydro.gamma",
         po::value<double>(&opts.hydro.gamma)->default_value(5.0 / 3.0),
         "ideal-gas adiabatic index")("hydro.centralAcceleration",
         po::value<double>(&opts.hydro.centralAcceleration)->default_value(0.0),
@@ -633,8 +680,32 @@ bool processOptions(int argc, char* argv[]) {
     }
     terminal::setVerbose(opts.run.verbose);
     auto const isExplicit = [&](char const* key) { return vm.count(key) && !vm[key].defaulted(); };
-    if (opts.gravity.method != "fmm") {
-        THROW_ERROR("gravity.method must be fmm; ordinary PM gravity is no longer supported\n");
+    if (opts.gravity.method != "fmm" && !usesMeshGravity(opts.gravity)) {
+        THROW_ERROR("gravity.method must be fmm or pmmm\n");
+    }
+    if (opts.gravity.meshSize < 0) {
+        THROW_ERROR("gravity.meshSize must be nonnegative\n");
+    }
+    if (opts.gravity.pmmmBatchParticles <= 0) {
+        THROW_ERROR("gravity.pmmmBatchParticles must be positive\n");
+    }
+    if (opts.gravity.pmmmNearWidth != 1 && opts.gravity.pmmmNearWidth != 2) {
+        THROW_ERROR("gravity.pmmmNearWidth must be 1 or 2\n");
+    }
+    if (opts.gravity.pmmmNearMethod != "pp" && opts.gravity.pmmmNearMethod != "fmm") {
+        THROW_ERROR("gravity.pmmmNearMethod must be pp or fmm\n");
+    }
+    if (usesMeshGravity(opts.gravity)) {
+        if (opts.gravity.meshSize < 2 * opts.gravity.pmmmNearWidth + 1) {
+            THROW_ERROR("gravity.meshSize must be at least 2*gravity.pmmmNearWidth+1 "
+                        "with gravity.method=pmmm\n");
+        }
+        size_t const meshSize = static_cast<size_t>(opts.gravity.meshSize);
+        size_t const maximumCells = std::min(size_t(std::numeric_limits<ptrdiff_t>::max()),
+            std::numeric_limits<size_t>::max() / (8 * sizeof(float)));
+        if (meshSize > maximumCells / meshSize / meshSize) {
+            THROW_ERROR("gravity.meshSize cubed exceeds mesh indexing/allocation limits\n");
+        }
     }
     if (opts.initial.plummer && opts.initial.createGlass) {
         THROW_ERROR("initial.plummer and initial.createGlass cannot both be enabled\n");
@@ -824,6 +895,39 @@ bool processOptions(int argc, char* argv[]) {
         THROW_ERROR("hydro.viscosityAlpha and hydro.viscosityBeta must be finite and nonnegative; "
                     "hydro.viscosityEpsilon must be finite and positive\n");
     }
+    if (opts.hydro.viscosityEvolution != "none" &&
+        opts.hydro.viscosityEvolution != "morrisAndMonaghan" &&
+        opts.hydro.viscosityEvolution != "cullenAndDehnen") {
+        THROW_ERROR(
+            "hydro.viscosityEvolution must be none, morrisAndMonaghan, or cullenAndDehnen\n");
+    }
+    if (opts.hydro.viscosityBetaMode != "ratio" && opts.hydro.viscosityBetaMode != "constant") {
+        THROW_ERROR("hydro.viscosityBetaMode must be ratio or constant\n");
+    }
+    if (!detail::isPositiveFloatOption(opts.hydro.viscosityAlphaMin) ||
+        !detail::isPositiveFloatOption(opts.hydro.viscosityDecay) ||
+        !detail::isFiniteFloatOption(opts.hydro.viscosityBetaOverAlpha) ||
+        opts.hydro.viscosityBetaOverAlpha < 0.0) {
+        THROW_ERROR("hydro.viscosityAlphaMin and hydro.viscosityDecay must be finite and positive "
+                    "in single precision; hydro.viscosityBetaOverAlpha must be finite and "
+                    "nonnegative in single precision\n");
+    }
+    if (!detail::isPositiveFloatOption(opts.hydro.viscosityAlphaMax) ||
+        !detail::isPositiveFloatOption(opts.hydro.viscosityDecayCD)) {
+        THROW_ERROR(
+            "hydro.viscosityAlphaMax and hydro.viscosityDecayCD must be finite and positive "
+            "in single precision\n");
+    }
+    if (opts.hydro.viscosityBetaMode == "ratio" &&
+        !detail::isFiniteFloatOption(opts.hydro.viscosityBetaOverAlpha *
+            (opts.hydro.viscosityEvolution == "morrisAndMonaghan" ?
+                    opts.hydro.viscosityAlphaMin :
+                    (opts.hydro.viscosityEvolution == "cullenAndDehnen" ?
+                            opts.hydro.viscosityAlphaMax :
+                            opts.hydro.viscosityAlpha)))) {
+        THROW_ERROR("the initial quadratic viscosity coefficient must be finite in single "
+                    "precision\n");
+    }
     if (!detail::isFiniteOption(opts.hydro.gamma) || opts.hydro.gamma <= 1.0) {
         THROW_ERROR("hydro.gamma must be finite and greater than one\n");
     }
@@ -878,7 +982,7 @@ bool processOptions(int argc, char* argv[]) {
         THROW_ERROR("hydro support radii must remain finite and positive in single precision "
                     "after normalization by initial.particlesPerDimension\n");
     }
-    opts.run.hierarchicalGravity = true;
+    opts.run.hierarchicalGravity = opts.gravity.enabled;
     opts.hydro.damping = 0.0;
     if (opts.compute.sphBucketSize == 0) {
         // Retain the historical SPH bucket heuristic, using the final parsed
@@ -899,6 +1003,10 @@ bool processOptions(int argc, char* argv[]) {
     }
     if (opts.run.test == "sphGravity") {
         opts.hydro.enabled = true;
+    }
+    if (opts.hydro.enabled && opts.gravity.enabled && opts.gravity.method != "fmm") {
+        THROW_ERROR("SPH currently requires gravity.method=fmm when gravity.enabled=true; "
+                    "PMMM does not yet support SPH\n");
     }
     if (opts.chemistry.enabled) {
         if (!opts.hydro.enabled ||
@@ -953,7 +1061,7 @@ bool processOptions(int argc, char* argv[]) {
     opts.compute.treeCacheLineSize = 65536 / sizeof(TreeNode);
     opts.compute.treeAllocLineSize = 16 * opts.compute.treeCacheLineSize;
     opts.compute.particleCacheLineSize = 131072 / (sizeof(Position) * NDIM);
-    opts.analysis.saveForce = opts.run.test == "force";
+    opts.analysis.saveForce = opts.analysis.saveForce || opts.run.test == "force";
     if (!detail::isFiniteOption(opts.cosmology.omegaB) || opts.cosmology.omegaB < 0.0 ||
         !detail::isFiniteOption(opts.cosmology.omegaC) || opts.cosmology.omegaC < 0.0 ||
         !(opts.cosmology.omegaB + opts.cosmology.omegaC > 0.0) ||
@@ -1123,6 +1231,11 @@ bool processOptions(int argc, char* argv[]) {
                     "remain finite and positive in single precision "
                     "after normalization when gravity.enabled is true\n");
     }
+    if (opts.gravity.method == "pmmm" &&
+        opts.gravity.supportRadius > double(opts.gravity.pmmmNearWidth) / opts.gravity.meshSize) {
+        THROW_ERROR("PMMM requires the normalized gravity.supportRadius to be no larger than "
+                    "gravity.pmmmNearWidth/gravity.meshSize\n");
+    }
     detail::displayOptions = terminal::verbose() || !opts.run.test.empty();
     if (hpxRank() == 0 && opts.run.test.empty()) {
         PRINT(
@@ -1150,11 +1263,22 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("hydro.enabled", hydro.enabled);
     SHOW("gravity.enabled", gravity.enabled);
     SHOW("gravity.method", gravity.method);
+    SHOW("gravity.meshSize", gravity.meshSize);
+    SHOW("gravity.pmmmNearWidth", gravity.pmmmNearWidth);
+    SHOW("gravity.pmmmNearMethod", gravity.pmmmNearMethod);
+    SHOW("gravity.pmmmBatchParticles", gravity.pmmmBatchParticles);
     SHOW("run.hierarchicalGravity", run.hierarchicalGravity);
     SHOW("hydro.viscosityAlpha", hydro.viscosityAlpha);
     SHOW("hydro.viscosityBeta", hydro.viscosityBeta);
     SHOW("hydro.viscosityEpsilon", hydro.viscosityEpsilon);
     SHOW("hydro.balsaraSwitch", hydro.balsaraSwitch);
+    SHOW("hydro.viscosityEvolution", hydro.viscosityEvolution);
+    SHOW("hydro.viscosityAlphaMin", hydro.viscosityAlphaMin);
+    SHOW("hydro.viscosityDecay", hydro.viscosityDecay);
+    SHOW("hydro.viscosityAlphaMax", hydro.viscosityAlphaMax);
+    SHOW("hydro.viscosityDecayCD", hydro.viscosityDecayCD);
+    SHOW("hydro.viscosityBetaMode", hydro.viscosityBetaMode);
+    SHOW("hydro.viscosityBetaOverAlpha", hydro.viscosityBetaOverAlpha);
     SHOW("hydro.gamma", hydro.gamma);
     SHOW("hydro.yAcceleration", hydro.yAcceleration);
     SHOW("hydro.zPlaneAcceleration", hydro.zPlaneAcceleration);
@@ -1253,6 +1377,8 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("initial.particlesPerDimension", initial.particlesPerDimension);
     SHOW("checkpoint.readIndex", checkpoint.readIndex);
     SHOW("analysis.saveForce", analysis.saveForce);
+    SHOW("analysis.saveAcceleration", analysis.saveAcceleration);
+    SHOW("analysis.savePotential", analysis.savePotential);
     SHOW("cosmology.sigma8", cosmology.sigma8);
     SHOW("analysis.sliceResolution", analysis.sliceResolution);
     SHOW("analysis.sliceSize", analysis.sliceSize);
@@ -1301,6 +1427,14 @@ bool processOptions(int argc, char* argv[]) {
         SHOW("gravity.enabled", gravity.enabled);
         if (opts.gravity.enabled) {
             SHOW("gravity.method", gravity.method);
+            if (opts.gravity.method == "pmmm") {
+                SHOW("gravity.meshSize", gravity.meshSize);
+                SHOW("gravity.pmmmNearWidth", gravity.pmmmNearWidth);
+                SHOW("gravity.pmmmNearMethod", gravity.pmmmNearMethod);
+                SHOW("gravity.pmmmBatchParticles", gravity.pmmmBatchParticles);
+                PRINT("%-38s: periodic multipole mesh, hierarchical particle timesteps\n",
+                    "PMMM gravity");
+            }
             SHOW("gravity.fmmOrder", gravity.fmmOrder);
             SHOW("gravity.kernelFamily", gravity.kernelFamily);
             SHOW("gravity.kernelDegree", gravity.kernelDegree);
@@ -1311,6 +1445,13 @@ bool processOptions(int argc, char* argv[]) {
             SHOW("hydro.kernelFamily", hydro.kernelFamily);
             SHOW("hydro.kernelDegree", hydro.kernelDegree);
             SHOW("hydro.balsaraSwitch", hydro.balsaraSwitch);
+            SHOW("hydro.viscosityEvolution", hydro.viscosityEvolution);
+            SHOW("hydro.viscosityAlphaMin", hydro.viscosityAlphaMin);
+            SHOW("hydro.viscosityDecay", hydro.viscosityDecay);
+            SHOW("hydro.viscosityAlphaMax", hydro.viscosityAlphaMax);
+            SHOW("hydro.viscosityDecayCD", hydro.viscosityDecayCD);
+            SHOW("hydro.viscosityBetaMode", hydro.viscosityBetaMode);
+            SHOW("hydro.viscosityBetaOverAlpha", hydro.viscosityBetaOverAlpha);
         }
         SHOW("chemistry.enabled", chemistry.enabled);
         if (opts.chemistry.enabled) {

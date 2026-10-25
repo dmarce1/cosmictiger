@@ -8,7 +8,7 @@
 
 namespace sph_flops {
 
-// Costs of the expressions in monaghan_sph.hpp. Selection and unary signs
+// Costs of the expressions in monaghan/{equations,viscosity}.hpp. Selection and unary signs
 // are free; both expressions passed to simdSelect are evaluated.
 constexpr FlopCount kViscosityMu = 9;
 constexpr FlopCount kArtificialViscosity = 10;

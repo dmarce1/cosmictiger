@@ -134,7 +134,7 @@ transformed erfcx polynomial using mpmath.
 
 | Function | Existing implementation and consumers |
 | --- | --- |
-| `erfcexp` | SIMD and CUDA custom formulas; scalar double library composition. Generated Ewald real-image derivatives and `src/gravity/analytic.cu`. Returns both **erfc(x)** and **exp(-x²)**, rather than erfcx(x). |
+| `erfcexp` | SIMD and CUDA custom formulas; scalar double library composition. Generated Ewald real-image derivatives and `tests/gravity/analytic.cu`. Returns both **erfc(x)** and **exp(-x²)**, rather than erfcx(x). |
 | `sincos`, `sin`, `cos` | Custom SIMD functions; platform scalar/CUDA calls. Generated Ewald Fourier terms; analytic gravity; random Fourier phases in initialization through `expc`. |
 | `exp`, `twoPow` | Custom SIMD exponential and base-two exponential. Ewald nearest-image terms and the Gaussian within `erfcexp`. |
 | `erf`, `erfc`, `log`, `log2`, `pow` | Custom SIMD convenience functions. The principal Ewald path uses the paired `erfcexp` directly. |

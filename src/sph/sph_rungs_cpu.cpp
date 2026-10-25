@@ -16,7 +16,7 @@ SphRunReturn sphCpuRungs(
     auto const neighbors =
         detail::sphCpuNeighbors(data, targetNode, true, flops, true, parameters.minimumRung);
     for (int particleIndex = targetNode.particleRange.first;
-         particleIndex < targetNode.particleRange.second; ++particleIndex) {
+        particleIndex < targetNode.particleRange.second; ++particleIndex) {
         int const sinkRung = data.sourceRungs[particleIndex];
         if (sinkRung < parameters.minimumRung) {
             continue;

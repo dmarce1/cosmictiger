@@ -31,8 +31,10 @@ code.
 # Paper-notation exception
 
 The SPH computation code that transcribes Monaghan (1992), ARA&A 30, 543 names its
-local variables with the paper's symbols instead of camelCase: `cosmictiger/sph/monaghan_sph.hpp`
-and the pair, density, and support-radius loops in `src/sph/sph_hydro_cpu.cpp`,
+local variables with the paper's symbols instead of camelCase:
+`cosmictiger/sph/monaghan/equations.hpp`, `cosmictiger/sph/monaghan/viscosity.hpp`,
+and `cosmictiger/sph/kernels.hpp`, plus the pair, density, and support-radius loops
+in `src/sph/sph_hydro_cpu.cpp`,
 `src/sph/sph_hydro.cu`, `src/sph/sph_prehydro_cpu.cpp`, `src/sph/sph_prehydro.cu`, and
 `cosmictiger/sph/sph_cuda.hpp`. Those regions use the Unicode letters the compilers accept
 (`ρ_a`, `P_b`, `Π_ab`, `μ_ab`, `h_ab`, `gradW̃_ab`, `δt_cv`, `ΣW`) and cite the equation
@@ -40,4 +42,7 @@ they implement; function parameters, data fields, and everything outside them ke
 descriptive names above. Fence such regions with
 `NOLINTBEGIN/NOLINTEND(readability-identifier-naming)`. GCC 13 and CUDA 12.8 reject `∇`,
 `∂`, and superscript digits in identifiers; write `gradW̃_ab`, `r_ab2`, and `η2` instead.
-See `docs/monaghan_sph.md` for the symbol table.
+The fenced formula transcriptions in `cosmictiger/sph/balsara/shear_limiter.hpp`,
+`cosmictiger/sph/morris_and_monaghan/viscosity.hpp`, and
+`cosmictiger/sph/cullen_and_dehnen/viscosity.hpp` follow the same exception using
+the symbols of their cited papers. See `docs/monaghan_sph.md` for the symbol table.

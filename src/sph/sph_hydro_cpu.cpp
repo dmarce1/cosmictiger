@@ -13,10 +13,11 @@
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/vector3.hpp>
-#include <cosmictiger/sph/monaghan_sph.hpp>
+#include <cosmictiger/sph/monaghan/equations.hpp>
+#include <cosmictiger/sph/monaghan/viscosity.hpp>
 #include <cosmictiger/sph/sph_cpu.hpp>
 
-// Monaghan (1992), ARA&A 30, 543; cosmictiger/monaghan_sph.hpp gives the full citation
+// Monaghan (1992), ARA&A 30, 543; cosmictiger/sph/monaghan/equations.hpp gives the full citation
 // and the notation. The pair loop implements equations 6.4-6.5 with the artificial
 // viscosity of equations 4.1-4.2 and the symmetric kernel of p. 554; the time step
 // follows section 10.3, p. 563. Particle a is the sink and particle b a pack of staged
@@ -46,8 +47,6 @@ SphRunReturn sphCpuHydro(
     SimdFloat const half(0.5f);
     float const m_b = data.gasMass;    // every gas particle has the same mass
     SimdFloat const m_b_over_a(m_b * inverseScaleFactor);
-    float const α = parameters.viscosityAlpha;
-    float const β = parameters.viscosityBeta;
     float const ε = parameters.viscosityEpsilon;       // η²/h² of p. 551
     float const a_da_dt = parameters.expansionRate;    // a·da/dt, the Hubble flow of a pair
     for (int particleIndex = targetNode.particleRange.first;
@@ -79,6 +78,9 @@ SphRunReturn sphCpuHydro(
         Vector3<float> const v_a(data.sourceVelocityX[particleIndex],
             data.sourceVelocityY[particleIndex], data.sourceVelocityZ[particleIndex]);
         Vector3<SimdFloat> const v_a_pack(v_a);
+        float const α_a = parameters.variableViscosity ? data.sourceViscosityAlpha[particleIndex] :
+                                                         parameters.viscosityAlpha;
+        SimdFloat α_max_pack(α_a);
         float const one_over_H_a = 1.0f / H_a;
         flops += 8 + int(data.sourcePressureEnergyRatio == nullptr);
         float const one_over_H_a4 = sqr(sqr(one_over_H_a));    // 1/H_a⁴
@@ -143,11 +145,26 @@ SphRunReturn sphCpuHydro(
             SimdFloat const v_ab_dot_r_ab_physical =
                 v_ab_dot_r_ab + SimdFloat(a_da_dt) * simdSelect(interacts, r_ab2, zero);
             // Equation 4.2 and the Π_ab of p. 550.
-            SimdFloat const μ_ab = monaghan_sph::viscosityMu(r_ab2, v_ab_dot_r_ab_physical,
+            SimdFloat const μ_ab = monaghan::viscosityMu(r_ab2, v_ab_dot_r_ab_physical,
                 SimdFloat(H_a), H_b, SimdFloat(ε), SimdFloat(supportRadiusPerEffectiveRadius),
                 SimdFloat(kViscosityWidthScale));
-            SimdFloat Π_ab = monaghan_sph::artificialViscosity(
-                SimdFloat(ρ_a), ρ_b, SimdFloat(c_a), c_b, μ_ab, SimdFloat(α), SimdFloat(β));
+            // Morris & Monaghan (1997), equation (3) and p. 44: symmetric α_ab.
+            SimdFloat const α_b = parameters.variableViscosity ?
+                simdSelect(interacts,
+                    detail::sphCpuLoad(data.sourceViscosityAlpha, neighbors, first, α_a),
+                    SimdFloat(α_a)) :
+                SimdFloat(α_a);
+            SimdFloat const α_ab =
+                parameters.variableViscosity ? half * SimdFloat(α_a) + half * α_b : SimdFloat(α_a);
+            SimdFloat const β_ab = parameters.viscosityBetaIsRatio ?
+                SimdFloat(parameters.viscosityBetaOverAlpha) * α_ab :
+                SimdFloat(parameters.viscosityBeta);
+            α_max_pack = simdMax(α_max_pack, simdSelect(interacts, α_ab, SimdFloat(α_a)));
+            SimdFloat Π_ab = monaghan::artificialViscosity(
+                SimdFloat(ρ_a), ρ_b, SimdFloat(c_a), c_b, μ_ab, α_ab, β_ab);
+            flops +=
+                (3 * int(parameters.variableViscosity) + int(parameters.viscosityBetaIsRatio)) *
+                SimdFloat::size();
             if (parameters.balsaraSwitch) {
                 // GADGET-4 equation (72): Π_ab <- ½(f_a^AV + f_b^AV) Π_ab.
                 SimdFloat const f_ab_AV = half *
@@ -156,7 +173,7 @@ SphRunReturn sphCpuHydro(
                 Π_ab *= f_ab_AV;
                 flops += 3 * SimdFloat::size();
             }
-            SimdFloat const P_over_ρ2_ab = monaghan_sph::pressureCoefficient(
+            SimdFloat const P_over_ρ2_ab = monaghan::pressureCoefficient(
                 SimdFloat(ρ_a), ρ_b, SimdFloat(P_a), P_b);    // P_b/ρ_b² + P_a/ρ_a²
             // Equation 6.4: dv_a/dt = −Σ_b m_b (P_b/ρ_b² + P_a/ρ_a² + Π_ab) ∇_a W̃_ab.
             dv_a_dt_pack -= (m_b_over_a * (P_over_ρ2_ab + Π_ab)) * gradW̃_ab;
@@ -164,7 +181,7 @@ SphRunReturn sphCpuHydro(
             // with v_ab·∇_a W̃_ab = F_ab v_ab·r_ab. The pressure work takes the peculiar
             // velocity and the viscous heating the physical one.
             du_a_dt_pack += m_b_over_a *
-                monaghan_sph::pairEnergyRate(
+                monaghan::pairEnergyRate(
                     P_over_ρ2_ab, Π_ab, v_ab_dot_r_ab * F_ab, v_ab_dot_r_ab_physical * F_ab);
             μ_max_pack = simdMax(μ_max_pack, -μ_ab);
             // EOS/radius (6), inverse H (1), gradients (13), velocity products (10),
@@ -179,6 +196,10 @@ SphRunReturn sphCpuHydro(
         float du_a_dt = simdSum(du_a_dt_pack);
         flops +=
             4 * (SimdFloat::size() - 1);    // Four additive reductions; maxima are comparisons.
+        float const α_max = simdMaximum(α_max_pack);
+        float const β_max = parameters.viscosityBetaIsRatio ?
+            parameters.viscosityBetaOverAlpha * α_max :
+            parameters.viscosityBeta;
         float const μ_max = simdMaximum(μ_max_pack);    // max_b(−μ_ab) over approaching pairs
         // Accelerations outside the paper: self-gravity, the optional uniform, midplane and
         // central forces of the test problems, and velocity damping while relaxing the gas sphere.
@@ -228,7 +249,7 @@ SphRunReturn sphCpuHydro(
             // apart for the diagnostics in SphRunReturn.
             float const h_a = H_a / supportRadiusPerEffectiveRadius;
             float const one_over_δt_c = c_a / h_a;
-            float const one_over_δt_visc = 0.6f * (α * c_a + β * μ_max) / h_a;
+            float const one_over_δt_visc = 0.6f * (α_max * c_a + β_max * μ_max) / h_a;
             float const one_over_δt_cv = one_over_δt_c + one_over_δt_visc;
             float const f_a = dv_a_dt.norm();
             float const one_over_δt_f = parameters.courantFactor *

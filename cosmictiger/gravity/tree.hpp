@@ -9,63 +9,18 @@
 #ifndef TREE_HPP_
 #define TREE_HPP_
 
+#include <cstdint>
+
 #include <hpx/serialization/serialization_fwd.hpp>
 
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
-#include <cosmictiger/fmm/fmm_types.hpp>
+#include <cosmictiger/core/tree_id.hpp>
+#include <cosmictiger/gravity/fmm_types.hpp>
+#include <cosmictiger/gravity/sources.hpp>
 #include <cosmictiger/math/position.hpp>
 #include <cosmictiger/math/range.hpp>
 #include <cosmictiger/particles/particles.hpp>
-
-struct TreeId {
-    int proc;
-    int index;
-    inline bool operator==(TreeId other) const {
-        return proc == other.proc && index == other.index;
-    }
-    inline bool operator<(TreeId other) const {
-        if (proc < other.proc) {
-            return true;
-        } else if (proc > other.proc) {
-            return false;
-        } else if (index < other.index) {
-            return true;
-        } else {
-            return false;
-        }
-    }
-    inline bool operator!=(TreeId other) const {
-        return proc != other.proc || index != other.index;
-    }
-    template <class A>
-    void serialize(A&& a, unsigned) {
-        a & proc;
-        a & index;
-    }
-};
-
-struct TreeIdHash {
-    inline size_t operator()(TreeId id) const {
-        int const lineSize = getOptions().compute.treeCacheLineSize;
-        int const i = id.index / lineSize;
-        return i * (hpxSize() - 1) + ((id.proc < hpxRank()) ? id.proc : id.proc - 1);
-    }
-};
-
-struct TreeIdHashLo {
-    inline size_t operator()(TreeId id) const {
-        TreeIdHash hash;
-        return hash(id) % TREE_CACHE_SIZE;
-    }
-};
-
-struct TreeIdHashHi {
-    inline size_t operator()(TreeId id) const {
-        TreeIdHash hash;
-        return hash(id) / TREE_CACHE_SIZE;
-    }
-};
 
 // Tree multipoles live in an arena of runtime-order positioned records
 // (fmmPositionedMultipoleBytes(fmmOrder()) bytes each, stored
@@ -80,6 +35,7 @@ struct TreeNode {
     Fixed32Range box;
     Array<TreeId, NCHILD> children;
     Pair<ParticleInteger> particleRange;
+    FmmParticleStore sourceStore = FmmParticleStore::Owned;
     Pair<int, int> processRange;
     Array<Position, NDIM> pos;
     MultipolePosition* mpos;
@@ -123,6 +79,7 @@ struct TreeNode {
         arc & children;
         arc & processRange;
         arc & particleRange;
+        arc & sourceStore;
         arc & radius;
         arc & maxGravitySupportRadius;
         int localRoot0;
@@ -146,6 +103,7 @@ struct TreeNode {
         arc & children;
         arc & processRange;
         arc & particleRange;
+        arc & sourceStore;
         arc & radius;
         arc & maxGravitySupportRadius;
         int localRoot0;
@@ -159,6 +117,11 @@ struct TreeNode {
         arc & depth0;
     }
 };
+
+// Only local source nodes can be resolved against this locality's arrays.
+inline FmmSourceView treeSourceView(TreeNode const& node) {
+    return fmmSourceView(node.sourceStore);
+}
 
 struct TreeCreateReturn {
     MultipoleBuffer multi;
@@ -201,14 +164,12 @@ struct TreeCreateParameters {
     }
 };
 
-TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key = 1,
-    Pair<int, int> processRange = Pair<int>(0, hpxSize()),
-    Pair<ParticleInteger> particleRange = Pair<ParticleInteger>(-1, -1),
-    Range<double> box = unitBox<double>(), int depth = 0, bool localRoot = (hpxSize() == 1));
 void treeReset();
 void treeDestroy(bool freeTree = false);
 int treeMinLevel(double theta, double hsoft);
 TreeNode const* treeGetNode(TreeId);
+// Cumulative remote tree reads issued by this locality, never reset.
+uint64_t treeRemoteFetchCount();
 void treeSortParticlesBySphParticles();
 void treeFreeNeighborList();
 long long treeNodesSize();

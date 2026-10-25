@@ -16,7 +16,9 @@
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/cuda/cuda.hpp>
 #include <cosmictiger/cuda/cuda_memory.hpp>
+#include <cosmictiger/gravity/fmm_geometry.hpp>
 #include <cosmictiger/gravity/kick.hpp>
+#include <cosmictiger/gravity/source_access.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #include <cosmictiger/math/fixed.hpp>
 #include <cosmictiger/math/kernel.hpp>
@@ -35,20 +37,19 @@ struct ForceVectors {
     }
 };
 
-using GravityCcType = int;
-constexpr GravityCcType kGravityDirect = 0;
-constexpr GravityCcType kGravityEwald = 1;
-
 // Order-templated CPU operators; definitions live in gravity_cpu.hpp and are
 // instantiated once per FMM order by the per-order instance translation units.
 template <int order>
-void cpuGravityCc(
-    GravityCcType, FmmExpansion<float, order>&, Vector<TreeId> const&, TreeId, bool doPhi);
+void cpuGravityCc(FmmExpansion<float, order>&, Vector<TreeId> const&, TreeId, bool doPhi,
+    FmmGeometry const& geometry = {});
 template <int order>
-void cpuGravityCp(FmmExpansion<float, order>&, Vector<TreeId> const&, TreeId, bool doPhi);
+void cpuGravityCp(FmmExpansion<float, order>&, Vector<TreeId> const&, TreeId, bool doPhi,
+    FmmGeometry const& geometry = {});
 template <int order>
-void cpuGravityPc(ForceVectors&, int, TreeId, Vector<TreeId> const&);
-void cpuGravityPp(ForceVectors&, int, TreeId, Vector<TreeId> const&, float h);
+void cpuGravityPc(
+    ForceVectors&, int, TreeId, Vector<TreeId> const&, FmmGeometry const& geometry = {});
+void cpuGravityPp(
+    ForceVectors&, int, TreeId, Vector<TreeId> const&, float h, FmmGeometry const& geometry = {});
 
 void showTimings();
 

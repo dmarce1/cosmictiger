@@ -17,7 +17,7 @@
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/scenarios/sod.hpp>
-#include <cosmictiger/sph/exact_sod.hpp>
+#include <cosmictiger/scenarios/exact_sod.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
 
 namespace scenarios {

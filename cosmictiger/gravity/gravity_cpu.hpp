@@ -11,11 +11,10 @@
 #include <algorithm>
 
 #include <boost/align/aligned_allocator.hpp>
-
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/options.hpp>
-#include <cosmictiger/fmm/fmm_kernels.hpp>
-#include <cosmictiger/fmm/fmm_types.hpp>
+#include <cosmictiger/gravity/fmm_kernels.hpp>
+#include <cosmictiger/gravity/fmm_types.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #include <cosmictiger/math/math.hpp>
@@ -70,12 +69,11 @@ void gatherSourceMultipoles(Vector<TreeNode const*> const& treePtrs,
 }    // namespace detail
 
 template <int order>
-void cpuGravityCc(GravityCcType type, FmmExpansion<float, order>& lValue,
-    Vector<TreeId> const& list, TreeId self, bool doPhi) {
+void cpuGravityCc(FmmExpansion<float, order>& lValue, Vector<TreeId> const& list, TreeId self,
+    bool doPhi, FmmGeometry const& geometry) {
     constexpr int kLocalCoefficients = FmmOrder<order>::kLocalCoefficients_;
     FlopCounter<FlopCount> flops = 0;
     if (list.size()) {
-        static SimdFloat const toFloatFactor = simdBroadcast<SimdFloat>(kPositionToFloat);
         Vector<TreeNode const*> treePtrs(list.size());
         TreeNode const* selfPtr = treeGetNode(self);
         int const numberOfSources = roundUp((int) list.size(), SIMD_FLOAT_SIZE) / SIMD_FLOAT_SIZE;
@@ -95,30 +93,12 @@ void cpuGravityCc(GravityCcType type, FmmExpansion<float, order>& lValue,
         for (int j = 0; j < numberOfSources; j++) {
             Array<SimdFloat, NDIM> dx{};
             for (int dim = 0; dim < NDIM; dim++) {
-                dx[dim] = simdCast<SimdFloat>(simdPositionDifference(x[dim], yValue[j][dim])) *
-                    toFloatFactor;
+                dx[dim] = fmmPositionDifference(x[dim], yValue[j][dim], dim, geometry);
             }
-            if (type == kGravityDirect) {
-                directFlops = m2LDirect(l0, mValue[j], dx, doPhi);
-            } else {
-                Array<SimdFloat, NDIM> unwrappedPosition{};
-                for (int lane = 0; lane < SIMD_FLOAT_SIZE; lane++) {
-                    int const sourceIndex =
-                        std::min(j * SIMD_FLOAT_SIZE + lane, int(treePtrs.size()) - 1);
-                    for (int dim = 0; dim < NDIM; dim++) {
-                        simdSetLane(unwrappedPosition[dim], lane,
-                            selfPtr->mpos->pos[dim].toDouble() -
-                                treePtrs[sourceIndex]->mpos->pos[dim].toDouble());
-                    }
-                }
-                FmmExpansion<SimdFloat, order> d;
-                flops += FlopCount(SIMD_FLOAT_SIZE) * ewaldGreensFunction(d, dx, unwrappedPosition);
-                flops += FlopCount(SIMD_FLOAT_SIZE) * m2L(l0, mValue[j], d, doPhi);
-            }
+            directFlops = m2LDirect(l0, mValue[j], dx, doPhi);
         }
         // Fixed displacement and kernel work is batched outside the source loop.
-        flops += FlopCount(numberOfSources) * SIMD_FLOAT_SIZE *
-            (3 + (type == kGravityDirect ? directFlops : 9));
+        flops += FlopCount(numberOfSources) * SIMD_FLOAT_SIZE * (3 + directFlops);
         for (int i = 0; i < kLocalCoefficients; i++) {
             lValue[i] += simdSum(l0[i]);
         }
@@ -128,13 +108,12 @@ void cpuGravityCc(GravityCcType type, FmmExpansion<float, order>& lValue,
 }
 
 template <int order>
-void cpuGravityCp(
-    FmmExpansion<float, order>& lValue, Vector<TreeId> const& list, TreeId self, bool doPhi) {
+void cpuGravityCp(FmmExpansion<float, order>& lValue, Vector<TreeId> const& list, TreeId self,
+    bool doPhi, FmmGeometry const& geometry) {
     constexpr int kChunkSize = 32;
     constexpr int kLocalCoefficients = FmmOrder<order>::kLocalCoefficients_;
     FlopCounter<FlopCount> flops = 0;
     if (list.size()) {
-        static SimdFloat const toFloatFactor = simdBroadcast<SimdFloat>(kPositionToFloat);
         TreeNode const* selfPtr = treeGetNode(self);
         for (int li = 0; li < list.size(); li += kChunkSize) {
             Array<TreeNode const*, kChunkSize> treePtrs;
@@ -157,8 +136,8 @@ void cpuGravityCp(
             types.resize(numberOfSources);
             int count = 0;
             for (int i = 0; i < maxi; i++) {
-                particlesGlobalReadPos(treePtrs[i]->globalParticleRange(), srcx.data(), srcy.data(),
-                    srcz.data(), types.data(), count);
+                gravityReadSourcePositions(
+                    *treePtrs[i], srcx.data(), srcy.data(), srcz.data(), types.data(), count);
                 count += treePtrs[i]->numberOfParticles();
             }
             for (int i = 0; i < count; i++) {
@@ -168,9 +147,12 @@ void cpuGravityCp(
                     1.0f;
             }
             for (int i = count; i < numberOfSources; i++) {
-                srcx[i] = 0.0;
-                srcy[i] = 0.0;
-                srcz[i] = 0.0;
+                // A zero mass does not make an overflowing Green derivative
+                // harmless: zero times infinity is NaN. Reuse an accepted
+                // source position so every padded lane has finite geometry.
+                srcx[i] = srcx[count - 1];
+                srcy[i] = srcy[count - 1];
+                srcz[i] = srcz[count - 1];
                 masses[i] = 0.0;
             }
             Array<SimdPosition, NDIM> x{};
@@ -191,8 +173,7 @@ void cpuGravityCp(
                 }
                 Array<SimdFloat, NDIM> dx{};
                 for (int dim = 0; dim < NDIM; dim++) {
-                    dx[dim] = simdCast<SimdFloat>(simdPositionDifference(x[dim], yValue[dim])) *
-                        toFloatFactor;
+                    dx[dim] = fmmPositionDifference(x[dim], yValue[dim], dim, geometry);
                 }
                 FmmExpansion<SimdFloat, order> d;
                 greenFlops = greensFunction(d, dx);
@@ -212,10 +193,10 @@ void cpuGravityCp(
 }
 
 template <int order>
-void cpuGravityPc(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const& list) {
+void cpuGravityPc(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const& list,
+    FmmGeometry const& geometry) {
     FlopCounter<FlopCount> flops = 0;
     if (list.size()) {
-        static SimdFloat const toFloatFactor = simdBroadcast<SimdFloat>(kPositionToFloat);
         Vector<TreeNode const*> treePtrs(list.size());
         TreeNode const* selfPtr = treeGetNode(self);
         int const numberOfSources = roundUp((int) list.size(), SIMD_FLOAT_SIZE) / SIMD_FLOAT_SIZE;
@@ -240,8 +221,7 @@ void cpuGravityPc(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
             for (int j = 0; j < numberOfSources; j++) {
                 Array<SimdFloat, NDIM> dx{};
                 for (int dim = 0; dim < NDIM; dim++) {
-                    dx[dim] = simdCast<SimdFloat>(simdPositionDifference(x[dim], yValue[j][dim])) *
-                        toFloatFactor;
+                    dx[dim] = fmmPositionDifference(x[dim], yValue[j][dim], dim, geometry);
                 }
                 kernelFlops = m2P(lValue2, mValue[j], dx, doPhi);
             }

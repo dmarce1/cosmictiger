@@ -17,7 +17,7 @@
 #include <cosmictiger/analysis/rockstar_properties.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/cosmology/cosmology.hpp>
-#include <cosmictiger/gravity/bh.hpp>
+#include <cosmictiger/analysis/bh.hpp>
 #include <cosmictiger/math/constants.hpp>
 #include <cosmictiger/math/simulation_units.hpp>
 

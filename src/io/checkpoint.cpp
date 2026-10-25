@@ -89,9 +89,11 @@ constexpr uint32_t kMonaghanSph = 1;
 constexpr uint32_t kCompactSphLayout = 1U << 24;
 constexpr uint32_t kZPlaneAcceleration = 1U << 12;
 constexpr uint32_t kBalsaraSwitch = 1U << 13;
+constexpr uint32_t kVariableViscosity = 1U << 14;
 constexpr uint32_t kFixed64Positions = 1U << 15;
 // Retired PM checkpoints are recognized only to reject them before reading payloads.
 constexpr uint32_t kRetiredParticleMesh = 1U << 16;
+constexpr uint32_t kParticleMultipoleMesh = 1U << 17;
 constexpr uint64_t kFnvOffsetBasis = 14695981039346656037ULL;
 constexpr uint64_t kFnvPrime = 1099511628211ULL;
 
@@ -400,7 +402,9 @@ uint32_t checkpointFlags(Options const& opts) {
         (opts.analysis.tracers ? kTracers : 0U) | (opts.chemistry.enabled ? kChemistry : 0U) |
         (opts.hydro.enabled && opts.hydro.zPlaneAcceleration != 0.0 ? kZPlaneAcceleration : 0U) |
         (opts.hydro.enabled && opts.hydro.balsaraSwitch ? kBalsaraSwitch : 0U) |
-        (opts.compute.positionType == "fixed64" ? kFixed64Positions : 0U);
+        (opts.hydro.enabled && opts.hydro.viscosityEvolution != "none" ? kVariableViscosity : 0U) |
+        (opts.compute.positionType == "fixed64" ? kFixed64Positions : 0U) |
+        (opts.gravity.method == "pmmm" ? kParticleMultipoleMesh : 0U);
 }
 
 uint32_t checkpointKernelCode(std::string const& family, int degree) {
@@ -434,9 +438,9 @@ uint32_t checkpointPhysicsCode(Options const& opts) {
 }
 
 bool legacyCheckpointCompatible(Options const& opts) {
-    return opts.compute.positionType == "fixed32" && !opts.hydro.enabled &&
-        opts.run.hierarchicalGravity && opts.gravity.kernelFamily == "ferrers" &&
-        opts.gravity.kernelDegree == 8;
+    return opts.gravity.method == "fmm" && opts.compute.positionType == "fixed32" &&
+        !opts.hydro.enabled && opts.run.hierarchicalGravity &&
+        opts.gravity.kernelFamily == "ferrers" && opts.gravity.kernelDegree == 8;
 }
 
 CheckpointHeader checkpointHeader(Options const& opts) {
@@ -449,7 +453,8 @@ CheckpointHeader checkpointHeader(Options const& opts) {
 
 bool checkpointCompatible(CheckpointHeader const& header, Options const& opts) {
     bool const supportedVersion = header.version == kCheckpointVersion ||
-        (!opts.hydro.enabled && opts.compute.positionType == "fixed32" &&
+        (opts.gravity.method == "fmm" && !opts.hydro.enabled &&
+            opts.compute.positionType == "fixed32" &&
             header.version == kLegacyDarkMatterCheckpointVersion);
     return supportedVersion && (header.flags & kRetiredParticleMesh) == 0U &&
         header.flags == checkpointFlags(opts) && header.reserved == checkpointPhysicsCode(opts) &&
@@ -468,11 +473,21 @@ bool checkpointCompatible(CheckpointHeader const& header, Options const& opts) {
 
 // Stored only for Monaghan SPH checkpoints; the dark-matter layout is unchanged.
 std::array<double, 13> sphCheckpointParameters(Options const& opts) {
-    return {opts.hydro.viscosityAlpha, opts.hydro.viscosityBeta, opts.hydro.viscosityEpsilon,
-        opts.hydro.neighborNumber, opts.hydro.minSupportRadius, opts.hydro.maxSupportRadius,
-        opts.hydro.cfl, opts.gravity.timestepEta, opts.hydro.yAcceleration,
-        opts.hydro.centralAcceleration, opts.hydro.centralSupportRadius, opts.hydro.damping,
-        opts.gravity.enabled ? 1.0 : 0.0};
+    double const beta =
+        opts.hydro.viscosityEvolution == "none" && opts.hydro.viscosityBetaMode == "ratio" ?
+        opts.hydro.viscosityAlpha * opts.hydro.viscosityBetaOverAlpha :
+        opts.hydro.viscosityBeta;
+    return {opts.hydro.viscosityAlpha, beta, opts.hydro.viscosityEpsilon, opts.hydro.neighborNumber,
+        opts.hydro.minSupportRadius, opts.hydro.maxSupportRadius, opts.hydro.cfl,
+        opts.gravity.timestepEta, opts.hydro.yAcceleration, opts.hydro.centralAcceleration,
+        opts.hydro.centralSupportRadius, opts.hydro.damping, opts.gravity.enabled ? 1.0 : 0.0};
+}
+
+std::array<double, 7> viscosityCheckpointParameters(Options const& opts) {
+    return {opts.hydro.viscosityAlphaMin, opts.hydro.viscosityDecay,
+        opts.hydro.viscosityBetaMode == "ratio" ? 1.0 : 0.0, opts.hydro.viscosityBetaOverAlpha,
+        opts.hydro.viscosityEvolution == "cullenAndDehnen" ? 1.0 : 0.0,
+        opts.hydro.viscosityAlphaMax, opts.hydro.viscosityDecayCD};
 }
 
 bool zPlaneCheckpointCompatible(double acceleration, Options const& opts) {
@@ -483,10 +498,40 @@ bool zPlaneCheckpointCompatible(double acceleration, Options const& opts) {
         acceleration == opts.hydro.zPlaneAcceleration;
 }
 
+std::array<uint64_t, 8> pmmmCheckpointParameters(Options const& opts) {
+    uint64_t timestepEtaBits;
+    std::memcpy(&timestepEtaBits, &opts.gravity.timestepEta, sizeof(timestepEtaBits));
+    // Force convention 1: periodic spherical far field including its isotropic
+    // trace, plus compact-softened primary interactions in the neighbor cube.
+    // Runtime FFT plans and decompositions are reconstructed after restart.
+    // Version two appends the near solver. Version one always used direct PP.
+    // Opening angle and bucket size can change during evolution and are not
+    // checkpoint identity, matching the ordinary FMM restart convention.
+    return {2, static_cast<uint64_t>(opts.gravity.meshSize),
+        static_cast<uint64_t>(opts.gravity.fmmOrder),
+        static_cast<uint64_t>(opts.gravity.pmmmNearWidth), static_cast<uint64_t>(opts.run.minRung),
+        timestepEtaBits, 1, opts.gravity.pmmmNearMethod == "fmm" ? 1U : 0U};
+}
+
+bool pmmmCheckpointCompatible(std::array<uint64_t, 8> parameters, Options const& opts) {
+    if (parameters[0] == 1) {
+        parameters[0] = 2;
+        parameters[7] = 0;
+    }
+    return parameters == pmmmCheckpointParameters(opts);
+}
+
 void writeDriverState(FILE* fp, DriverParameters const& params) {
     auto const header = checkpointHeader(getOptions());
     if (fwrite(&header, sizeof(header), 1, fp) != 1) {
         THROW_ERROR("Unable to write checkpoint header\n");
+    }
+    if ((header.flags & kParticleMultipoleMesh) != 0U) {
+        auto const meshParameters = pmmmCheckpointParameters(getOptions());
+        if (fwrite(meshParameters.data(), sizeof(uint64_t), meshParameters.size(), fp) !=
+            meshParameters.size()) {
+            THROW_ERROR("Unable to write PMMM checkpoint parameters\n");
+        }
     }
     if (getOptions().hydro.enabled) {
         auto const sphParameters = sphCheckpointParameters(getOptions());
@@ -498,6 +543,13 @@ void writeDriverState(FILE* fp, DriverParameters const& params) {
         if ((header.flags & kZPlaneAcceleration) != 0U &&
             fwrite(&getOptions().hydro.zPlaneAcceleration, sizeof(double), 1, fp) != 1) {
             THROW_ERROR("Unable to write SPH z-plane acceleration\n");
+        }
+        if ((header.flags & kVariableViscosity) != 0U) {
+            auto const viscosityParameters = viscosityCheckpointParameters(getOptions());
+            if (fwrite(viscosityParameters.data(), sizeof(double), viscosityParameters.size(),
+                    fp) != viscosityParameters.size()) {
+                THROW_ERROR("Unable to write SPH variable-viscosity parameters\n");
+            }
         }
     }
     if (getOptions().chemistry.enabled) {
@@ -542,6 +594,18 @@ DriverParameters readDriverState(FILE* fp) {
             THROW_ERROR("Checkpoint physics, particle layout or integrator differs from the "
                         "requested run\n");
         }
+        if ((header.flags & kParticleMultipoleMesh) != 0U) {
+            std::array<uint64_t, 8> meshParameters{};
+            FREAD(meshParameters.data(), sizeof(uint64_t), 7, fp);
+            if (meshParameters[0] == 2) {
+                FREAD(&meshParameters[7], sizeof(uint64_t), 1, fp);
+            }
+            if (!pmmmCheckpointCompatible(meshParameters, getOptions())) {
+                THROW_ERROR(
+                    "PMMM checkpoint version, mesh size, expansion order, neighbor width/method, "
+                    "timestep parameters or force convention differs from the requested run\n");
+            }
+        }
         if (getOptions().hydro.enabled) {
             auto sphParameters = sphCheckpointParameters(getOptions());
             FREAD(sphParameters.data(), sizeof(double), sphParameters.size(), fp);
@@ -553,6 +617,14 @@ DriverParameters readDriverState(FILE* fp) {
                 FREAD(&acceleration, sizeof(acceleration), 1, fp);
                 if (!zPlaneCheckpointCompatible(acceleration, getOptions())) {
                     THROW_ERROR("SPH checkpoint hydro.zPlaneAcceleration differs from the "
+                                "requested run\n");
+                }
+            }
+            if ((header.flags & kVariableViscosity) != 0U) {
+                auto viscosityParameters = viscosityCheckpointParameters(getOptions());
+                FREAD(viscosityParameters.data(), sizeof(double), viscosityParameters.size(), fp);
+                if (viscosityParameters != viscosityCheckpointParameters(getOptions())) {
+                    THROW_ERROR("SPH checkpoint variable-viscosity parameters differ from the "
                                 "requested run\n");
                 }
             }
@@ -666,10 +738,45 @@ void checkpointStateTest() {
     ALWAYS_ASSERT(restored.energies.therm == kThermal && restored.energies.heating == kHeating);
     auto changed = getOptions();
     auto const header = detail::checkpointHeader(changed);
-    // A retired solver extension must never be interpreted as FMM driver state.
-    auto retiredPmHeader = header;
-    retiredPmHeader.flags |= detail::kRetiredParticleMesh;
-    ALWAYS_ASSERT(!detail::checkpointCompatible(retiredPmHeader, changed));
+    changed.gravity.method = changed.gravity.method == "pmmm" ? "fmm" : "pmmm";
+    ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
+    changed = getOptions();
+    // Reject the old solver bit for either supported method rather than treating
+    // its extension bytes as driver state after ordinary PM support is removed.
+    for (auto const* method : {"fmm", "pmmm"}) {
+        changed.gravity.method = method;
+        auto retiredPmHeader = detail::checkpointHeader(changed);
+        retiredPmHeader.flags &= ~detail::kParticleMultipoleMesh;
+        retiredPmHeader.flags |= detail::kRetiredParticleMesh;
+        ALWAYS_ASSERT(!detail::checkpointCompatible(retiredPmHeader, changed));
+    }
+    changed = getOptions();
+    auto const pmmmParameters = detail::pmmmCheckpointParameters(changed);
+    changed.gravity.meshSize += 1;
+    ALWAYS_ASSERT(pmmmParameters != detail::pmmmCheckpointParameters(changed));
+    changed = getOptions();
+    changed.gravity.fmmOrder += 1;
+    ALWAYS_ASSERT(pmmmParameters != detail::pmmmCheckpointParameters(changed));
+    changed = getOptions();
+    changed.gravity.pmmmNearWidth = changed.gravity.pmmmNearWidth == 1 ? 2 : 1;
+    ALWAYS_ASSERT(pmmmParameters != detail::pmmmCheckpointParameters(changed));
+    changed = getOptions();
+    changed.gravity.pmmmNearMethod = changed.gravity.pmmmNearMethod == "pp" ? "fmm" : "pp";
+    ALWAYS_ASSERT(pmmmParameters != detail::pmmmCheckpointParameters(changed));
+    auto legacyPmmmParameters = pmmmParameters;
+    legacyPmmmParameters[0] = 1;
+    legacyPmmmParameters[7] = 0;
+    changed.gravity.pmmmNearMethod = "pp";
+    ALWAYS_ASSERT(detail::pmmmCheckpointCompatible(legacyPmmmParameters, changed));
+    changed.gravity.pmmmNearMethod = "fmm";
+    ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(legacyPmmmParameters, changed));
+    changed = getOptions();
+    changed.run.minRung += 1;
+    ALWAYS_ASSERT(pmmmParameters != detail::pmmmCheckpointParameters(changed));
+    changed = getOptions();
+    changed.gravity.timestepEta *= 0.5;
+    ALWAYS_ASSERT(pmmmParameters != detail::pmmmCheckpointParameters(changed));
+    changed = getOptions();
     changed.compute.positionType =
         changed.compute.positionType == "fixed32" ? "fixed64" : "fixed32";
     ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
@@ -739,7 +846,8 @@ void checkpointStateTest() {
     legacyKernelOptions.hydro.enabled = false;
     legacyKernelOptions.run.hierarchicalGravity = true;
     ALWAYS_ASSERT(detail::legacyCheckpointCompatible(legacyKernelOptions) ==
-        (legacyKernelOptions.compute.positionType == "fixed32"));
+        (legacyKernelOptions.compute.positionType == "fixed32" &&
+            legacyKernelOptions.gravity.method == "fmm"));
     legacyKernelOptions.gravity.kernelFamily = "spline";
     ALWAYS_ASSERT(!detail::legacyCheckpointCompatible(legacyKernelOptions));
     legacyKernelOptions.gravity.kernelFamily = "ferrers";
@@ -759,7 +867,8 @@ void checkpointStateTest() {
     auto legacyDarkMatterHeader = detail::checkpointHeader(legacyDarkMatterOptions);
     legacyDarkMatterHeader.version = detail::kLegacyDarkMatterCheckpointVersion;
     ALWAYS_ASSERT(detail::checkpointCompatible(legacyDarkMatterHeader, legacyDarkMatterOptions) ==
-        (legacyDarkMatterOptions.compute.positionType == "fixed32"));
+        (legacyDarkMatterOptions.compute.positionType == "fixed32" &&
+            legacyDarkMatterOptions.gravity.method == "fmm"));
     auto const sphParameters = detail::sphCheckpointParameters(getOptions());
     auto balsaraOptions = getOptions();
     balsaraOptions.hydro.enabled = true;
@@ -772,6 +881,44 @@ void checkpointStateTest() {
     ALWAYS_ASSERT(detail::checkpointCompatible(unlimitedHeader, balsaraOptions));
     balsaraOptions.hydro.balsaraSwitch = true;
     ALWAYS_ASSERT(!detail::checkpointCompatible(unlimitedHeader, balsaraOptions));
+    auto viscosityOptions = getOptions();
+    viscosityOptions.hydro.enabled = true;
+    viscosityOptions.hydro.viscosityEvolution = "morrisAndMonaghan";
+    auto const viscosityHeader = detail::checkpointHeader(viscosityOptions);
+    auto const viscosityParameters = detail::viscosityCheckpointParameters(viscosityOptions);
+    ALWAYS_ASSERT(detail::checkpointCompatible(viscosityHeader, viscosityOptions));
+    viscosityOptions.hydro.viscosityEvolution = "none";
+    ALWAYS_ASSERT(!detail::checkpointCompatible(viscosityHeader, viscosityOptions));
+    auto const fixedViscosityHeader = detail::checkpointHeader(viscosityOptions);
+    ALWAYS_ASSERT((fixedViscosityHeader.flags & detail::kVariableViscosity) == 0U);
+    auto ratioOptions = viscosityOptions;
+    ratioOptions.hydro.viscosityAlpha = 1.0;
+    ratioOptions.hydro.viscosityBetaMode = "ratio";
+    auto const fixedViscosityParameters = detail::sphCheckpointParameters(ratioOptions);
+    ratioOptions.hydro.viscosityBetaOverAlpha += 0.5;
+    ALWAYS_ASSERT(fixedViscosityParameters != detail::sphCheckpointParameters(ratioOptions));
+    viscosityOptions.hydro.viscosityEvolution = "morrisAndMonaghan";
+    ALWAYS_ASSERT(!detail::checkpointCompatible(fixedViscosityHeader, viscosityOptions));
+    for (int parameter = 0; parameter < 7; ++parameter) {
+        auto altered = viscosityOptions;
+        if (parameter == 0) {
+            altered.hydro.viscosityAlphaMin += 0.125;
+        } else if (parameter == 1) {
+            altered.hydro.viscosityDecay += 0.125;
+        } else if (parameter == 2) {
+            altered.hydro.viscosityBetaMode =
+                altered.hydro.viscosityBetaMode == "ratio" ? "constant" : "ratio";
+        } else if (parameter == 3) {
+            altered.hydro.viscosityBetaOverAlpha += 0.125;
+        } else if (parameter == 4) {
+            altered.hydro.viscosityEvolution = "cullenAndDehnen";
+        } else if (parameter == 5) {
+            altered.hydro.viscosityAlphaMax += 0.125;
+        } else {
+            altered.hydro.viscosityDecayCD += 0.125;
+        }
+        ALWAYS_ASSERT(viscosityParameters != detail::viscosityCheckpointParameters(altered));
+    }
     auto planeOptions = getOptions();
     planeOptions.hydro.enabled = true;
     planeOptions.hydro.zPlaneAcceleration = 0.0;

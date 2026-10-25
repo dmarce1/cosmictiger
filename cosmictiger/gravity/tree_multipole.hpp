@@ -13,9 +13,9 @@
 #include <cosmictiger/core/containers.hpp>
 #include <cosmictiger/core/defs.hpp>
 #include <cosmictiger/core/flops.hpp>
-#include <cosmictiger/fmm/fmm_order.hpp>
-#include <cosmictiger/fmm/fmm_types.hpp>
-#include <cosmictiger/particles/particles.hpp>
+#include <cosmictiger/gravity/fmm_order.hpp>
+#include <cosmictiger/gravity/fmm_types.hpp>
+#include <cosmictiger/gravity/sources.hpp>
 
 // Order-templated multipole construction for treeCreate. treeCreate stays
 // order-agnostic and dispatches to exactly one of these per node through
@@ -30,14 +30,15 @@ FlopCount treeComputeMultipole(MultipoleBuffer& multi, MultipoleBuffer const& le
 
 // Leaf: accumulate P2M over the local particles of `particleRange` about `center`.
 template <int order>
-FlopCount treeComputeMultipole(
-    MultipoleBuffer& multi, Pair<ParticleInteger> particleRange, Array<double, NDIM> const& center);
+FlopCount treeComputeMultipole(MultipoleBuffer& multi, Pair<ParticleInteger> particleRange,
+    Array<double, NDIM> const& center,
+    FmmSourceView const& sources = fmmSourceView(FmmParticleStore::Owned));
 
 #ifdef COSMICTIGER_FMM_INSTANCE_ORDER
 // The definitions pull in the generated kernels, so only the per-order instance
 // translation units see them; tree.cpp compiles against the declarations above.
 
-#include <cosmictiger/fmm/fmm_kernels.hpp>
+#include <cosmictiger/gravity/fmm_kernels.hpp>
 #include <cosmictiger/math/simd.hpp>
 
 template <int order>
@@ -59,13 +60,13 @@ FlopCount treeComputeMultipole(MultipoleBuffer& multi, MultipoleBuffer const& le
     for (int i = 0; i < kMultipoleCoefficients; i++) {
         multi[i] = simdM[i][LEFT] + simdM[i][RIGHT];
     }
-    return 2 * detail::stf::M2mKernel<FmmOrder<order>::kMultipoleDegree_>::kFlops_ + 12 +
+    return 2 * detail::cartesian::M2mKernel<FmmOrder<order>::kMultipoleDegree_>::kFlops_ + 12 +
         kMultipoleCoefficients;
 }
 
 template <int order>
 FlopCount treeComputeMultipole(MultipoleBuffer& multi, Pair<ParticleInteger> particleRange,
-    Array<double, NDIM> const& center) {
+    Array<double, NDIM> const& center, FmmSourceView const& sources) {
     constexpr int kMultipoleCoefficients = FmmOrder<order>::kMultipoleCoefficients_;
     static SimdFloat const toFloatFactor = kPositionToFloat;
     FmmMultipole<double, order> mValue;
@@ -85,14 +86,14 @@ FlopCount treeComputeMultipole(MultipoleBuffer& multi, Pair<ParticleInteger> par
         ParticleInteger const maxj = std::min(i + SIMD_FLOAT_SIZE, particleRange.second);
         for (ParticleInteger j = i; j < maxj; j++) {
             for (int dim = 0; dim < NDIM; dim++) {
-                simdSetLane(xValue[dim], j - i, particlesPos(dim, j).raw());
+                simdSetLane(xValue[dim], j - i, sources.positions[dim][j].raw());
             }
-            simdSetLane(mask, j - i, particlesMass(j));
+            simdSetLane(mask, j - i, fmmSourceMass(sources, j));
         }
         for (ParticleInteger j = maxj; j < i + SIMD_FLOAT_SIZE; j++) {
             simdSetLane(mask, j - i, 0.f);
             for (int dim = 0; dim < NDIM; dim++) {
-                simdSetLane(xValue[dim], j - i, particlesPos(dim, maxj - 1).raw());
+                simdSetLane(xValue[dim], j - i, sources.positions[dim][maxj - 1].raw());
             }
         }
         Array<SimdFloat, NDIM> dx{};
@@ -113,7 +114,7 @@ FlopCount treeComputeMultipole(MultipoleBuffer& multi, Pair<ParticleInteger> par
     // coefficient has a lane multiply and a reduction plus scalar accumulation.
     return 3 +
         FlopCount(maxi - particleRange.first) *
-        (detail::stf::P2mKernel<FmmOrder<order>::kMultipoleDegree_>::kFlops_ + 6 +
+        (detail::cartesian::P2mKernel<FmmOrder<order>::kMultipoleDegree_>::kFlops_ + 6 +
             2 * kMultipoleCoefficients);
 }
 

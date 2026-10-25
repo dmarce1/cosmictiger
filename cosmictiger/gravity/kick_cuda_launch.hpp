@@ -18,6 +18,7 @@
 
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/gravity/kick_cuda_kernel.hpp>
+#include <cosmictiger/sph/sph_particles.hpp>
 
 namespace detail {
 
@@ -272,7 +273,8 @@ CudaKickArenaLayout const& kickArenaLayoutImpl() {
 
 template <int order>
 KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position* devY,
-    Position* devZ, TreeNode* devTreeNodes, Vector<KickWorkitem> workitems) {
+    Position* devZ, TreeNode* devTreeNodes, Vector<KickWorkitem> workitems,
+    detail::FmmForceOutput output) {
     using Parameters = CudaKickParameters<order>;
     Timer tm;
     tm.start();
@@ -360,29 +362,41 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
     data.x = devX;
     data.y = devY;
     data.z = devZ;
+    data.ghostSources = fmmSourceView(FmmParticleStore::Ghost);
     data.treeNodes = devTreeNodes;
-    data.vel = particlesVelData();
-    data.rungs = &particlesRung(0);
+    data.vel = kparams.forceOnly ? nullptr : particlesVelData();
+    data.rungs = kparams.forceOnly ? nullptr : &particlesRung(0);
     data.sph = getOptions().hydro.enabled;
     data.darkMatterMass = getOptions().initial.darkMatterMass;
     data.sphMass = getOptions().initial.gasMass;
     data.type = data.sph ? &particlesType(0) : nullptr;
-    data.catIndex = data.sph ? &particlesCatIndex(0) : nullptr;
-    data.sphGravityAccelerationX = data.sph ? &sphParticlesGravityAcceleration(XDIM, 0) : nullptr;
-    data.sphGravityAccelerationY = data.sph ? &sphParticlesGravityAcceleration(YDIM, 0) : nullptr;
-    data.sphGravityAccelerationZ = data.sph ? &sphParticlesGravityAcceleration(ZDIM, 0) : nullptr;
-    if (kparams.saveForce) {
-        data.gx = &particlesGravityAcceleration(XDIM, 0);
-        data.gy = &particlesGravityAcceleration(YDIM, 0);
-        data.gz = &particlesGravityAcceleration(ZDIM, 0);
-        data.pot = &particlesPot(0);
+    bool const gasKick = data.sph && !kparams.forceOnly;
+    data.catIndex = gasKick ? &particlesCatIndex(0) : nullptr;
+    data.sphGravityAccelerationX = gasKick ? &sphParticlesGravityAcceleration(XDIM, 0) : nullptr;
+    data.sphGravityAccelerationY = gasKick ? &sphParticlesGravityAcceleration(YDIM, 0) : nullptr;
+    data.sphGravityAccelerationZ = gasKick ? &sphParticlesGravityAcceleration(ZDIM, 0) : nullptr;
+    if (kparams.forceOnly) {
+        ALWAYS_ASSERT(output.potential != nullptr && output.acceleration[XDIM] != nullptr);
+        data.gx = output.acceleration[XDIM];
+        data.gy = output.acceleration[YDIM];
+        data.gz = output.acceleration[ZDIM];
+        data.pot = output.potential;
     } else {
-        data.gx = data.gy = data.gz = data.pot = nullptr;
+        bool const saveAcceleration =
+            kparams.saveForce || saveParticleAcceleration(getOptions().analysis);
+        bool const savePotential =
+            kparams.saveForce || saveParticlePotential(getOptions().analysis);
+        data.gx = saveAcceleration ? &particlesGravityAcceleration(XDIM, 0) : nullptr;
+        data.gy = saveAcceleration ? &particlesGravityAcceleration(YDIM, 0) : nullptr;
+        data.gz = saveAcceleration ? &particlesGravityAcceleration(ZDIM, 0) : nullptr;
+        data.pot = savePotential && kparams.doPhi ? &particlesPot(0) : nullptr;
     }
     ALWAYS_ASSERT(layout.massPlane == data.sph);
 
     for (int i = 0; i < workitems.size(); i++) {
         Parameters params;
+        params.geometry = workitems[i].geometry;
+        params.outputOffset = workitems[i].outputOffset;
         params.lpos = workitems[i].pos;
         params.lValue = workitems[i].l.template expansion<order>();
         params.self = workitems[i].self.index;

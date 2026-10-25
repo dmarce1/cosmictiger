@@ -4,7 +4,7 @@
 Usage: kick_arena_fixture_digests.py STAGE [--output fixture_digests.md]
 
 STAGE is a run_cuda_kick_arena.py output directory. The driver records one
-sha256 per process over stf_walk_forces.csv, which holds all three fixtures,
+sha256 per process over cartesian_walk_forces.csv, which holds all three fixtures,
 so two divisions that agree on the lattice but not on the adaptive fixture get
 different digests. This script hashes the rows of each fixture separately
 (the first column names the fixture), writes STAGE/fixture_digests.json with

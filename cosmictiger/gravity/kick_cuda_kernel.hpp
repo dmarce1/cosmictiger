@@ -19,8 +19,8 @@
 #include <cosmictiger/cuda/cuda.hpp>
 #include <cosmictiger/cuda/cuda_memory.hpp>
 #include <cosmictiger/cuda/cuda_reduce.hpp>
-#include <cosmictiger/fmm/fmm_acceptance.hpp>
-#include <cosmictiger/fmm/fmm_kernels.hpp>
+#include <cosmictiger/gravity/fmm_acceptance.hpp>
+#include <cosmictiger/gravity/fmm_kernels.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/gravity_cuda.hpp>
 #include <cosmictiger/gravity/kick.hpp>
@@ -41,7 +41,7 @@ __device__ inline void cudaCopyExpansion(float* destination, float const* source
 template <int order>
 __device__ FlopCount doKick(KickReturn& result, KickParameters params, CudaKickData const& data,
     FmmExpansion<float, order> const& lValue2, TreeNode const& self, CudaKickForceTile const& force,
-    int sinkBegin, int sinkCount) {
+    int sinkBegin, int sinkCount, ParticleInteger outputOffset) {
     int const& tid = threadIdx.x;
     auto& allPhi = data.pot;
     auto& allGx = data.gx;
@@ -81,7 +81,7 @@ __device__ FlopCount doKick(KickReturn& result, KickParameters params, CudaKickD
         float g2;
         int rung;
         sinkIndex = sinkFirst + i;
-        if (!params.htime && rungs[sinkIndex] < params.minRung) {
+        if (!params.forceOnly && !params.htime && rungs[sinkIndex] < params.minRung) {
             continue;
         }
         ASSERT(sinkIndex >= 0);
@@ -97,6 +97,15 @@ __device__ FlopCount doKick(KickReturn& result, KickParameters params, CudaKickD
         gx -= SCALE_FACTOR2 * l2(1, 0, 0);
         gy -= SCALE_FACTOR2 * l2(0, 1, 0);
         gz -= SCALE_FACTOR2 * l2(0, 0, 1);
+        if (params.forceOnly) {
+            ParticleInteger const outputIndex = sinkIndex + outputOffset;
+            allPhi[outputIndex] = params.doPhi ? phi : 0.0f;
+            allGx[outputIndex] = gx;
+            allGy[outputIndex] = gy;
+            allGz[outputIndex] = gz;
+            flops += detail::cartesian::L2pKernel<fmmLocalDegree(order), true>::kFlops_ + 14;
+            continue;
+        }
         gz *= params.gm;
         gy *= params.gm;
         gx *= params.gm;
@@ -126,10 +135,12 @@ __device__ FlopCount doKick(KickReturn& result, KickParameters params, CudaKickD
             ymomTot += vy;
             zmomTot += vz;
             nmomTot += sqrtf(sqr(vx, vy, vz));
-            if (params.saveForce) {
+            if (allGx != nullptr) {
                 allGx[sinkIndex] = gx;
                 allGy[sinkIndex] = gy;
                 allGz[sinkIndex] = gz;
+            }
+            if (allPhi != nullptr) {
                 allPhi[sinkIndex] = phi;
             }
 
@@ -171,10 +182,12 @@ __device__ FlopCount doKick(KickReturn& result, KickParameters params, CudaKickD
             ymomTot += mass * vy;
             zmomTot += mass * vz;
             nmomTot += mass * sqrtf(sqr(vx, vy, vz));
-            if (params.saveForce) {
+            if (allGx != nullptr) {
                 allGx[sinkIndex] = gx;
                 allGy[sinkIndex] = gy;
                 allGz[sinkIndex] = gz;
+            }
+            if (allPhi != nullptr) {
                 allPhi[sinkIndex] = phi;
             }
             if (!gas) {
@@ -216,7 +229,7 @@ __device__ FlopCount doKick(KickReturn& result, KickParameters params, CudaKickD
         dkinTot += kin1 - kin0;
         // Displacement, L2P coordinate scaling and force accumulation/scaling.
         // Energy and momentum diagnostics, including their reductions, are excluded.
-        flops += detail::stf::L2pKernel<fmmLocalDegree(order), true>::kFlops_ + 18;
+        flops += detail::cartesian::L2pKernel<fmmLocalDegree(order), true>::kFlops_ + 18;
     }
     sharedReduceAdd(phiTot);
     sharedReduceAdd(xmomTot);
@@ -266,6 +279,13 @@ __device__ inline void cudaOpenOrDefer(bool openLargerCell, TreeNode const& sink
         both = true;
     }
 }
+
+// The per-order composition unit supplies this node policy before explicit
+// instantiation. It is an inline device call, with no function-pointer dispatch.
+template <int order>
+__device__ __forceinline__ FlopCount cudaApplyPeriodicPolicy(CudaKickData const&,
+    KickParameters const&, FmmExpansion<float, order>&, TreeNode const&, StackVector<int>&,
+    DeviceVector<int>&, DeviceVector<int>&, DeviceVector<int>&, DeviceVector<int>&);
 
 // One 32-thread warp per block. The dynamic shared memory follows the host
 // computed CudaKickArenaLayout; see kick.hpp for the region lifetimes.
@@ -359,6 +379,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
     // Submit once after all walks, avoiding reductions and atomics per helper.
     FlopCounter<FlopCount> flops = 1;
     while (index < itemCount) {
+        FmmGeometry const geometry = params[index].geometry;
         ancestors.resize(0);
         dchecks.resize(0);
         echecks.resize(0);
@@ -405,97 +426,16 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                     __syncwarp();
                     if (tid == 0) {
                         flops += globalParams.doPhi ?
-                            detail::stf::L2lWarpKernel<fmmLocalDegree(order), true>::kFlops_ :
-                            detail::stf::L2lWarpKernel<fmmLocalDegree(order),
+                            detail::cartesian::L2lWarpKernel<fmmLocalDegree(order), true>::kFlops_ :
+                            detail::cartesian::L2lWarpKernel<fmmLocalDegree(order),
                                 true>::kFlopsNoPotential_;
                     }
                 }
                 ParticleInteger const numberOfSinks =
                     self.particleRange.second - self.particleRange.first;
                 if (numberOfSinks) {
-                    nextlist.resize(0);
-                    cclist.resize(0);
-                    leaflist.resize(0);
-                    bothlist.resize(0);
-                    constexpr int kCc = 0;
-                    constexpr int kLeaf = 1;
-                    constexpr int kNext = 2;
-                    constexpr int kBoth = 3;
-                    constexpr int kNlists = 4;
-                    Array<bool, kNlists> sw;
-                    DeviceVector<int>* lists[kNlists] = {&cclist, &leaflist, &nextlist, &bothlist};
-
-                    auto& checks = echecks;
-                    float const thetainv = fmmInverseOpeningAngle(globalParams.theta);
-                    flops += 1;
-                    do {
-                        int const maxi = roundUp(checks.size(), WARP_SIZE);
-                        for (int i = tid; i < maxi; i += WARP_SIZE) {
-                            for (int n = 0; n < kNlists; n++) {
-                                sw[n] = false;
-                            }
-                            if (i < checks.size()) {
-                                TreeNode const& other = treeNodes[checks[i]];
-                                if (other.numberOfParticles()) {
-                                    for (int dim = 0; dim < NDIM; dim++) {
-                                        dx[dim] = distance(self.pos[dim], other.pos[dim]);    // 3
-                                    }
-                                    float r2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
-                                    r2 = fmaxf(
-                                        r2, sqr(fmaxf(0.5f - (self.radius + other.radius), 0.f)));
-                                    float const dcc = (self.radius + other.radius) * thetainv;
-                                    sw[kCc] = r2 > sqr(dcc);
-                                    flops += 14;
-                                    if (!sw[kCc]) {
-                                        ALWAYS_ASSERT(!other.leaf || !self.leaf);
-                                        cudaOpenOrDefer(globalParams.openLargerCell, self, other,
-                                            sw[kNext], sw[kLeaf], sw[kBoth]);
-                                    }
-                                }
-                            }
-                            {
-                                Array<int, kNlists> l, total;
-                                for (int n = 0; n < kNlists; n++) {
-                                    l[n] = sw[n];
-                                }
-                                computeIndicesArray(l, total);
-                                for (int n = 0; n < kNlists; n++) {
-                                    int const start = lists[n]->size();
-                                    __syncwarp();
-                                    lists[n]->resize(start + total[n]);
-                                    if (sw[n]) {
-                                        (*lists[n])[l[n] + start] = checks[i];
-                                    }
-                                }
-                            }
-                        }
-                        __syncwarp();
-                        checks.resize(NCHILD * nextlist.size());
-                        for (int i = tid; i < nextlist.size(); i += WARP_SIZE) {
-                            auto const& node = treeNodes[nextlist[i]];
-                            auto const& children = node.children;
-                            checks[NCHILD * i + LEFT] = children[LEFT].index;
-                            checks[NCHILD * i + RIGHT] = children[RIGHT].index;
-                        }
-                        nextlist.resize(0);
-                        __syncwarp();
-                    } while (checks.size() && (self.leaf || globalParams.openLargerCell));
-                    flops += cudaGravityCcEwald<order>(
-                        data, expansion, self, cclist, globalParams.doPhi);
-                    if (!self.leaf) {
-                        int const start = checks.size();
-                        int const bothStart = start + leaflist.size();
-                        checks.resize(bothStart + NCHILD * bothlist.size());
-                        for (int i = tid; i < leaflist.size(); i += WARP_SIZE) {
-                            checks[start + i] = leaflist[i];
-                        }
-                        for (int i = tid; i < bothlist.size(); i += WARP_SIZE) {
-                            auto const& children = treeNodes[bothlist[i]].children;
-                            checks[bothStart + NCHILD * i + LEFT] = children[LEFT].index;
-                            checks[bothStart + NCHILD * i + RIGHT] = children[RIGHT].index;
-                        }
-                        __syncwarp();
-                    }
+                    flops += cudaApplyPeriodicPolicy<order>(data, globalParams, expansion, self,
+                        echecks, nextlist, cclist, leaflist, bothlist);
                 }
                 if (numberOfSinks) {
                     nextlist.resize(0);
@@ -527,7 +467,8 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                                 TreeNode const& other = treeNodes[checks[i]];
                                 if (other.numberOfParticles()) {
                                     for (int dim = 0; dim < NDIM; dim++) {
-                                        dx[dim] = distance(self.pos[dim], other.pos[dim]);    // 3
+                                        dx[dim] = fmmPositionDifference(
+                                            self.pos[dim], other.pos[dim], dim, geometry);    // 3
                                     }
                                     float const r2 = fmaf(dx[XDIM], dx[XDIM],
                                         fmaf(dx[YDIM], dx[YDIM], dx[ZDIM] * dx[ZDIM]));
@@ -540,10 +481,13 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                                             0.0f, pairSupportRadius, thetainv, &acceptanceFlops);
                                     flops += 8 + acceptanceFlops;
                                     if (!acceptance.cellCell && (other.leaf || self.leaf)) {
-                                        acceptance = computeFmmAcceptance(r2, self.radius,
-                                            other.radius, boxDistanceSquared(self.box, other.pos),
-                                            boxDistanceSquared(other.box, self.pos),
-                                            pairSupportRadius, thetainv, &acceptanceFlops);
+                                        acceptance =
+                                            computeFmmAcceptance(r2, self.radius, other.radius,
+                                                fmmSinkBoxDistanceSquared(
+                                                    self.box, other.pos, geometry),
+                                                fmmSourceBoxDistanceSquared(
+                                                    other.box, self.pos, other.pos, geometry),
+                                                pairSupportRadius, thetainv, &acceptanceFlops);
                                         flops += 96 + acceptanceFlops;
                                     }
                                     if (!acceptance.cellCell && self.leaf && other.leaf) {
@@ -597,13 +541,13 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                     if (self.leaf) {
                         __syncwarp();
                         flops += cudaGravityCcDirect<order>(
-                            data, expansion, self, cclist, globalParams.doPhi);
+                            data, expansion, self, cclist, globalParams.doPhi, geometry);
                         if (equalMass) {
-                            flops += cudaGravityCpDirect<order, true>(
-                                data, control, expansion, self, cplist, globalParams.doPhi);
+                            flops += cudaGravityCpDirect<order, true>(data, control, expansion,
+                                self, cplist, globalParams.doPhi, geometry);
                         } else {
-                            flops += cudaGravityCpDirect<order, false>(
-                                data, control, expansion, self, cplist, globalParams.doPhi);
+                            flops += cudaGravityCpDirect<order, false>(data, control, expansion,
+                                self, cplist, globalParams.doPhi, geometry);
                         }
                         // The cell interactions are complete, so the arena scratch is
                         // free: initialize the sink forces and stream the sink tiles.
@@ -635,19 +579,19 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                             }
                             __syncwarp();
                             flops += cudaGravityPcDirect<order>(data, control, self, sinkBegin,
-                                sinkCount, pclist, globalParams.doPhi);
+                                sinkCount, pclist, globalParams.doPhi, geometry);
                             if (equalMass) {
-                                flops +=
-                                    cudaGravityPpDirect<order, true>(data, control, self, sinkBegin,
-                                        sinkCount, leaflist, supportRadius, globalParams.doPhi);
+                                flops += cudaGravityPpDirect<order, true>(data, control, self,
+                                    sinkBegin, sinkCount, leaflist, supportRadius,
+                                    globalParams.doPhi, geometry);
                             } else {
                                 flops += cudaGravityPpDirect<order, false>(data, control, self,
                                     sinkBegin, sinkCount, leaflist, supportRadius,
-                                    globalParams.doPhi);
+                                    globalParams.doPhi, geometry);
                             }
                             __syncwarp();
                             flops += doKick<order>(kr, globalParams, data, expansion, self, force,
-                                sinkBegin, sinkCount);
+                                sinkBegin, sinkCount, params[index].outputOffset);
                             // The next tile reinitializes the force planes.
                             __syncwarp();
                         }
@@ -664,15 +608,15 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                         }
                         __syncwarp();
                         flops += cudaGravityCcDirect<order>(
-                            data, expansion, self, cclist, globalParams.doPhi);
+                            data, expansion, self, cclist, globalParams.doPhi, geometry);
                         barrier.arrive_and_wait();
                         // CP reuses the barrier, so finish the checklist copy before calling it.
                         if (equalMass) {
-                            flops += cudaGravityCpDirect<order, true>(
-                                data, control, expansion, self, cplist, globalParams.doPhi);
+                            flops += cudaGravityCpDirect<order, true>(data, control, expansion,
+                                self, cplist, globalParams.doPhi, geometry);
                         } else {
-                            flops += cudaGravityCpDirect<order, false>(
-                                data, control, expansion, self, cplist, globalParams.doPhi);
+                            flops += cudaGravityCpDirect<order, false>(data, control, expansion,
+                                self, cplist, globalParams.doPhi, geometry);
                         }
                     }
                 }

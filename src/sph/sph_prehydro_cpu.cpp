@@ -12,10 +12,13 @@
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/vector3.hpp>
-#include <cosmictiger/sph/monaghan_sph.hpp>
+#include <cosmictiger/sph/balsara/shear_limiter.hpp>
+#include <cosmictiger/sph/cullen_and_dehnen/viscosity.hpp>
+#include <cosmictiger/sph/monaghan/viscosity.hpp>
+#include <cosmictiger/sph/morris_and_monaghan/viscosity.hpp>
 #include <cosmictiger/sph/sph_cpu.hpp>
 
-// Monaghan (1992), ARA&A 30, 543; cosmictiger/monaghan_sph.hpp gives the full citation
+// Monaghan (1992), ARA&A 30, 543; cosmictiger/sph/monaghan/equations.hpp gives the full citation
 // and the notation. Particle a is the sink and particle b a pack of staged neighbors.
 // NOLINTBEGIN(readability-identifier-naming)
 namespace detail {
@@ -207,6 +210,18 @@ SphRunReturn sphCpuPrehydro2(
         SimdFloat ρ_a_pack(0.0f);
         SimdFloat ρ_a_div_v_a_pack(0.0f);
         Vector3<SimdFloat> ρ_a_curl_v_a_pack(SimdFloat(0.0f));
+        cullen_and_dehnen::GradientSums<SimdFloat> gradientSums{};
+        SimdFloat ρ_a_R_a_pack(0.0f);
+        SimdFloat v_sig_a_pack(0.0f);
+        float c_a_CD = 0.0f;
+        if (parameters.cullenDehnen) {
+            float const γ_a = data.sourceAdiabaticIndex ? data.sourceAdiabaticIndex[particleIndex] :
+                                                          data.adiabaticIndex;
+            float const P_over_ρu_a = data.sourcePressureEnergyRatio ?
+                data.sourcePressureEnergyRatio[particleIndex] :
+                γ_a - 1.0f;
+            c_a_CD = std::sqrt(γ_a * P_over_ρu_a * data.sourceInternalEnergy[particleIndex]);
+        }
         for (size_t first = 0; first < neighbors.size(); first += SimdFloat::size()) {
             Vector3<SimdFloat> const r_ab =
                 detail::sphCpuSeparations(data, particleIndex, neighbors, first);
@@ -216,7 +231,7 @@ SphRunReturn sphCpuPrehydro2(
                 m_b_over_H_a3 * kernelW(q_ab), SimdFloat(0.0f));
             flops +=
                 12 * SimdFloat::size() + sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab);
-            if (parameters.balsaraSwitch) {
+            if (parameters.balsaraSwitch || parameters.variableViscosity) {
                 // GADGET-4 equation (72): accumulate ρ_a div(v)_a and ρ_a curl(v)_a
                 // as −Σ_b m_b v_ab·gradW_ab and Σ_b m_b v_ab×gradW_ab.
                 // Their common ρ_a cancels from f_a^AV.
@@ -227,19 +242,69 @@ SphRunReturn sphCpuPrehydro2(
                         simdSelect(contributes, radius, SimdFloat(1.0f)),
                     SimdFloat(0.0f));
                 Vector3<SimdFloat> const m_b_gradW_ab = m_b_F_a * r_ab;
-                Vector3<SimdFloat> const v_ab_physical =
+                Vector3<SimdFloat> const v_ab_physical = simdSelect(contributes,
                     Vector3<SimdFloat>(SimdFloat(data.sourceVelocityX[particleIndex]),
                         SimdFloat(data.sourceVelocityY[particleIndex]),
                         SimdFloat(data.sourceVelocityZ[particleIndex])) -
-                    detail::sphCpuLoad3(data.sourceVelocityX, data.sourceVelocityY,
-                        data.sourceVelocityZ, neighbors, first, 0.0f) +
-                    SimdFloat(parameters.expansionRate) * r_ab;
+                        detail::sphCpuLoad3(data.sourceVelocityX, data.sourceVelocityY,
+                            data.sourceVelocityZ, neighbors, first, 0.0f) +
+                        SimdFloat(parameters.expansionRate) * r_ab,
+                    Vector3<SimdFloat>(SimdFloat(0)));
                 ρ_a_div_v_a_pack -= v_ab_physical.dot(m_b_gradW_ab);
                 for (int dim = 0; dim < NDIM; ++dim) {
                     int const next = (dim + 1) % NDIM;
                     int const last = (dim + 2) % NDIM;
                     ρ_a_curl_v_a_pack[dim] += v_ab_physical[next] * m_b_gradW_ab[last] -
                         v_ab_physical[last] * m_b_gradW_ab[next];
+                }
+                if (parameters.cullenDehnen) {
+                    // Cullen & Dehnen (2010), equations (B2), (B4), (B7), (B12).
+                    // Positive weights are equivalent to reversing the sign of W'/q.
+                    // B7 allows arbitrary scalar weights. Mass/kernel-gradient weights
+                    // avoid reading remote densities while this pass is updating them.
+                    SimdFloat const w_ab = -m_b_F_a;
+                    Vector3<SimdFloat> const a_ab = simdSelect(contributes,
+                        Vector3<SimdFloat>(SimdFloat(data.sourceAccelerationX[particleIndex]),
+                            SimdFloat(data.sourceAccelerationY[particleIndex]),
+                            SimdFloat(data.sourceAccelerationZ[particleIndex])) -
+                            detail::sphCpuLoad3(data.sourceAccelerationX, data.sourceAccelerationY,
+                                data.sourceAccelerationZ, neighbors, first, 0.0f),
+                        Vector3<SimdFloat>(SimdFloat(0)));
+                    for (int i = 0; i < NDIM; ++i) {
+                        for (int j = 0; j < NDIM; ++j) {
+                            gradientSums.moment[i][j] += w_ab * r_ab[i] * r_ab[j];
+                            gradientSums.velocity[i][j] += w_ab * v_ab_physical[i] * r_ab[j];
+                            gradientSums.acceleration[i][j] += w_ab * a_ab[i] * r_ab[j];
+                        }
+                    }
+                    // Equations (15), (17): use previous neighbor divergence signs.
+                    SimdFloat const div_v_b =
+                        detail::sphCpuLoad(data.sourceVelocityDivergence, neighbors, first, 0.0f);
+                    SimdFloat const sign_div_v_b = simdSelect(div_v_b > SimdFloat(0), SimdFloat(1),
+                        simdSelect(div_v_b < SimdFloat(0), SimdFloat(-1), SimdFloat(0)));
+                    ρ_a_R_a_pack += simdSelect(detail::sphCpuValidLanes(neighbors, first),
+                        m_b_over_H_a3 * kernelW(q_ab) * sign_div_v_b, SimdFloat(0));
+                    SimdFloat const γ_b = data.sourceAdiabaticIndex ?
+                        detail::sphCpuLoad(
+                            data.sourceAdiabaticIndex, neighbors, first, data.adiabaticIndex) :
+                        SimdFloat(data.adiabaticIndex);
+                    SimdFloat const P_over_ρu_b = data.sourcePressureEnergyRatio ?
+                        detail::sphCpuLoad(data.sourcePressureEnergyRatio, neighbors, first, 1.0f) :
+                        γ_b - SimdFloat(1);
+                    SimdFloat const c_b = simdSqrt(simdSelect(contributes, γ_b, SimdFloat(1)) *
+                        simdSelect(contributes, P_over_ρu_b, SimdFloat(1)) *
+                        simdSelect(contributes,
+                            detail::sphCpuLoad(data.sourceInternalEnergy, neighbors, first, 1.0f),
+                            SimdFloat(1)));
+                    SimdFloat const v_ab_dot_r̂_ab =
+                        v_ab_physical.dot(r_ab) / simdSelect(contributes, radius, SimdFloat(1));
+                    v_sig_a_pack = simdMax(v_sig_a_pack,
+                        simdSelect(contributes,
+                            SimdFloat(0.5f) * (SimdFloat(c_a_CD) + c_b) -
+                                simdMin(v_ab_dot_r̂_ab, SimdFloat(0)),
+                            SimdFloat(0)));
+                    flops += 109 * SimdFloat::size() +
+                        sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab);
                 }
                 flops += 33 * SimdFloat::size() +
                     sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab, true);
@@ -253,10 +318,49 @@ SphRunReturn sphCpuPrehydro2(
             Vector3<float> const ρ_a_curl_v_a(simdSum(ρ_a_curl_v_a_pack[XDIM]),
                 simdSum(ρ_a_curl_v_a_pack[YDIM]), simdSum(ρ_a_curl_v_a_pack[ZDIM]));
             data.sinkBalsaraFactor[sinkIndex] =
-                monaghan_sph::balsaraFactor(simdSum(ρ_a_div_v_a_pack), ρ_a_curl_v_a.norm());
+                balsara::balsaraFactor(simdSum(ρ_a_div_v_a_pack), ρ_a_curl_v_a.norm());
             flops += 4 * (SimdFloat::size() - 1) + 8;
-        } else {
+        } else if (data.sinkBalsaraFactor) {
             data.sinkBalsaraFactor[sinkIndex] = 1.0f;
+        }
+        if (parameters.variableViscosity && !parameters.cullenDehnen && active) {
+            // Morris & Monaghan (1997), equations (5), (6), (13).
+            // The sum/rho is a² div_phys(v); conformal-time rates divide by a.
+            float const div_v_a = simdSum(ρ_a_div_v_a_pack) / (ρ_a * parameters.scaleFactor);
+            float const γ_a = data.sourceAdiabaticIndex ? data.sourceAdiabaticIndex[particleIndex] :
+                                                          data.adiabaticIndex;
+            float const P_over_ρu_a = data.sourcePressureEnergyRatio ?
+                data.sourcePressureEnergyRatio[particleIndex] :
+                γ_a - 1.0f;
+            float const c_a =
+                std::sqrt(γ_a * P_over_ρu_a * data.sourceInternalEnergy[particleIndex]);
+            float const h_a = H_a / float(selectedHydroKernel().supportRadiusPerEffectiveRadius) *
+                0.9128709291752769f;
+            float const one_over_τ_a =
+                parameters.viscosityDecay * c_a / (parameters.scaleFactor * h_a);
+            auto& viscosity = data.sinkViscosityStates[sinkIndex];
+            viscosity.rate = morris_and_monaghan::viscosityAlphaRate(
+                viscosity.alpha, parameters.viscosityAlphaMin, one_over_τ_a, div_v_a);
+            flops += SimdFloat::size() - 1 + 15;
+        }
+        if (parameters.cullenDehnen) {
+            cullen_and_dehnen::GradientSums<float> sums{};
+            for (int i = 0; i < NDIM; ++i) {
+                for (int j = 0; j < NDIM; ++j) {
+                    sums.moment[i][j] = simdSum(gradientSums.moment[i][j]);
+                    sums.velocity[i][j] = simdSum(gradientSums.velocity[i][j]);
+                    sums.acceleration[i][j] = simdSum(gradientSums.acceleration[i][j]);
+                }
+            }
+            auto const diagnostics = cullen_and_dehnen::diagnostics(sums, parameters.scaleFactor,
+                parameters.expansionAcceleration, simdSum(ρ_a_R_a_pack) / ρ_a, H_a,
+                std::max(c_a_CD, simdMaximum(v_sig_a_pack)), parameters.viscosityAlphaMax,
+                parameters.viscosityDecayCD, flops);
+            auto& state = data.sinkCullenDehnenStates[sinkIndex];
+            state.pendingDivergence = diagnostics.divergence;
+            state.targetAlpha = diagnostics.targetAlpha;
+            state.inverseDecayTime = diagnostics.inverseDecayTime;
+            flops += 28 * (SimdFloat::size() - 1);
         }
         data.sinkSmoothingConverged[sinkIndex] = true;
         result.minimumSupportRadius = std::min(result.minimumSupportRadius, H_a);

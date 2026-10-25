@@ -1,0 +1,1166 @@
+/* CosmicTiger - periodic PMMM force, distribution, and cache regression; BSL-1.0. */
+
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstdint>
+#include <limits>
+#include <map>
+#include <memory>
+#include <mutex>
+#include <numbers>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+#include <cosmictiger/core/hpx.hpp>
+#include <cosmictiger/core/options.hpp>
+#include <cosmictiger/gravity/fmm_order.hpp>
+#include <cosmictiger/gravity/nitadori/cell_tree.hpp>
+#include <cosmictiger/gravity/nitadori/ghost_storage.hpp>
+#include <cosmictiger/gravity/nitadori/near_pp.hpp>
+#include <cosmictiger/gravity/nitadori/solver.hpp>
+#include <cosmictiger/gravity/sources.hpp>
+#include <cosmictiger/gravity/tree.hpp>
+#include <cosmictiger/math/kernel.hpp>
+#include <cosmictiger/particles/domain.hpp>
+#include <cosmictiger/particles/particle_mesh_sort.hpp>
+#include <cosmictiger/particles/particles.hpp>
+#include <cosmictiger/sph/sph_particles.hpp>
+
+namespace detail {
+
+size_t expectedPmmmParticleCount = 0;
+
+int pmmmFixtureParticleCount(int fixture) {
+    std::array<int, 7> constexpr kFixtureSizes{7, 1, 0, 4, 8, 320, 32};
+    return kFixtureSizes.at(fixture);
+}
+
+struct PmmmSample {
+    Array<double, NDIM> position{};
+    Array<PositionInteger, NDIM> rawPosition{};
+    Array<float, NDIM> acceleration{};
+    Array<float, NDIM> velocity{};
+    int rung{};
+    float potential{};
+    float mass{};
+    int id{};
+    int rank{};
+    uint64_t cellKey{};
+
+    template <class Archive>
+    void serialize(Archive& archive, unsigned) {
+        archive & position & rawPosition & acceleration & potential & mass & id & rank & cellKey &
+            velocity & rung;
+    }
+};
+
+void requirePmmm(bool condition, std::string const& message) {
+    if (!condition) {
+        throw std::runtime_error("PMMM regression: " + message);
+    }
+}
+
+void reservePmmmCudaFixture() {
+    // Reserve the largest fixture on every rank before temporary CPU execution.
+    // The application's retained particle/tree arenas assume a fixed backend.
+    particlesResize(320);
+    sphParticlesResize(160, false);
+    fmmGhostReserve(320);
+    fmmGhostClear();
+    particlesResize(0);
+    sphParticlesResize(0, false);
+}
+
+void resetPmmmSavedForces() {
+    // Domain migration transfers physical particle state, not saved diagnostic
+    // forces. Initialize these sentinels after migration, before testing solves.
+    for (ParticleInteger i = 0; i < particlesSize(); ++i) {
+        int const id = int(particlesVel(XDIM, i)) - 1;
+        particlesPot(i) = -0.25f * float(id + 1);
+        for (int dim = 0; dim < NDIM; ++dim) {
+            particlesGravityAcceleration(dim, i) = float(4 * (id + 1) + dim);
+        }
+    }
+}
+
+void checkPmmmNearEdges() {
+    auto options = getOptions();
+    bool const useCuda = options.compute.cuda;
+    double const support = 0.125;
+    options.gravity.supportRadius = support;
+    PmmmNearParticle const sink{{0.0, 0.0, 0.0}, 0.75, 0, 7};
+    std::vector<PmmmNearParticle> const sinks{sink};
+    std::vector<std::vector<PmmmNearParticle>> const cases{{sink}, {{{0.0, 0.0, 0.0}, 2.0, 0, 8}},
+        {{{0.0, 0.0, 0.0}, 2.0, 1, 7}}, {{{support * 0.5 / 0.25, 0.0, 0.0}, 2.0, 0, 8}},
+        {{{3.0, 0.0, 0.0}, 2.0, 0, 8}}, {}};
+    std::vector<std::array<double, 4>> cpuResults;
+    for (int backend = 0; backend < (useCuda ? 2 : 1); ++backend) {
+        options.compute.cuda = backend != 0;
+        setOptions(options);
+        auto const& kernel = selectedGravityKernel();
+        for (size_t example = 0; example < cases.size(); ++example) {
+            std::vector<std::array<double, 4>> fields{{1.0, 2.0, 3.0, 4.0}};
+            pmmmNearField(sinks, cases[example], 0.25, true, fields);
+            requirePmmm(fields.size() == 1, "near kernel changed sink output size");
+            std::array<double, 4> expected{};
+            if (example == 1 || example == 2) {
+                expected[0] = -2.0 * radial_kernel::potential(kernel, 0.0) / support;
+            } else if (example == 3) {
+                expected[0] = -2.0 * radial_kernel::potential(kernel, 0.5) / support;
+                expected[1] = radial_kernel::forceFactor(kernel, 0.5) / (support * support);
+            } else if (example == 4) {
+                // The requested image is +0.75 away. Wrapping to -0.25 would
+                // reverse the force and use the wrong subtracted primary image.
+                expected[0] = -2.0 / 0.75;
+                expected[1] = 2.0 / (0.75 * 0.75);
+            }
+            for (int component = 0; component < 4; ++component) {
+                requirePmmm(std::isfinite(fields[0][component]) &&
+                        std::abs(fields[0][component] - expected[component]) <
+                            2.0e-11 * std::max(1.0, std::abs(expected[component])),
+                    "near kernel failed identity, coincidence, softening, or image selection");
+                if (backend != 0) {
+                    requirePmmm(std::abs(fields[0][component] - cpuResults[example][component]) <
+                            2.0e-11 * std::max(1.0, std::abs(cpuResults[example][component])),
+                        "CPU/CUDA near kernels disagree");
+                }
+            }
+            if (backend == 0) {
+                cpuResults.push_back(fields[0]);
+            }
+            auto const withPotential = fields[0];
+            pmmmNearField(sinks, cases[example], 0.25, false, fields);
+            requirePmmm(fields[0][0] == 0.0, "force-only near evaluation computed a potential");
+            for (int component = 1; component < 4; ++component) {
+                requirePmmm(fields[0][component] == withPotential[component],
+                    "potential switch changed a near acceleration");
+            }
+        }
+        std::vector<std::array<double, 4>> emptyFields{{1.0, 2.0, 3.0, 4.0}};
+        pmmmNearField({}, cases[1], 0.25, true, emptyFields);
+        requirePmmm(emptyFields.empty(), "empty near sink set retained stale outputs");
+    }
+    options.compute.cuda = useCuda;
+    options.gravity.supportRadius = 0.001;
+    setOptions(options);
+}
+
+void initializePmmmFixture(int fixture, int ownership) {
+    // The first two and the next pair share cells on the n=8 mesh. Their
+    // different offsets generate dipoles and the independent radial moment.
+    std::array<std::array<double, NDIM>, 7> const points{
+        {{0.069, 0.161, 0.326}, {0.104, 0.202, 0.295}, {0.454, 0.166, 0.329}, {0.487, 0.206, 0.287},
+            {0.989, 0.171, 0.317}, {0.671, 0.839, 0.582}, {0.011, 0.986, 0.971}}};
+    int const total = pmmmFixtureParticleCount(fixture);
+    auto owner = [ownership](int id) { return ownership == 0 ? id % hpxSize() : 0; };
+    int count = 0;
+    int gasCount = 0;
+    for (int id = 0; id < total; ++id) {
+        if (owner(id) == hpxRank()) {
+            ++count;
+            gasCount += getOptions().hydro.enabled && fixture != 4 && id % 2 != 0;
+        }
+    }
+    particlesResize(count);
+    if (getOptions().hydro.enabled) {
+        sphParticlesResize(gasCount, false);
+    }
+    int local = 0;
+    int gas = 0;
+    for (int id = total - 1; id >= 0; --id) {
+        if (owner(id) != hpxRank()) {
+            continue;
+        }
+        for (int dim = 0; dim < NDIM; ++dim) {
+            double coordinate = 0.0;
+            if (fixture == 6) {
+                int const cell = dim == XDIM ? id % 8 :
+                    dim == YDIM              ? 4 * ((id / 8) % 2) :
+                                               4 * (id / 16);
+                coordinate = (cell + 0.5) / 8.0;
+            } else if (fixture == 5) {
+                int const side = getOptions().gravity.meshSize;
+                int const group = id / 64;
+                int const cell = dim == XDIM ? (group == 1 ? side - 1 : group == 3 ? 1 : 0) : 1;
+                std::array<std::array<double, 3>, 5> const centers{{{-0.22, -0.20, -0.18},
+                    {0.14, 0.03, -0.06}, {0.22, 0.20, 0.18}, {0.32, 0.05, 0.09}, {0.0, 0.0, 0.0}}};
+                int const multiplier = dim == XDIM ? 17 : dim == YDIM ? 29 : 43;
+                double const jitter = (double((id * multiplier) % 64) + 0.5) / 64.0 - 0.5;
+                coordinate = (cell + 0.5 + centers[group][dim] + 0.11 * jitter) / side;
+            } else {
+                coordinate = fixture == 4 ? 0.0625 + 0.5 * ((id >> dim) & 1) : points[id][dim];
+            }
+            if (fixture == 3 && id >= 2) {
+                coordinate = (dim == XDIM        ? 0.58 :
+                                     dim == YDIM ? 0.57 :
+                                                   0.81) +
+                    (id == 2 ? 0.013 : -0.019);
+            }
+            particlesPos(dim, local) = coordinate;
+            if (fixture == 5 && id >= total - 16) {
+                // Distinct coincident sources at the last representable point
+                // outnumber the eight-particle leaf bucket, exercising robust
+                // subdivision and a center conversion that rounds up to 1.
+                particlesPos(dim, local).setInteger(std::numeric_limits<PositionInteger>::max());
+            }
+            particlesVel(dim, local) = dim == XDIM ? float(id + 1) :
+                dim == YDIM                        ? 0.25f * float(id) :
+                                                     -0.5f * float(id);
+            particlesGravityAcceleration(dim, local) = float(4 * (id + 1) + dim);
+        }
+        particlesPot(local) = -0.25f * float(id + 1);
+        particlesRung(local) = 1 + id % 4;
+        if (getOptions().hydro.enabled) {
+            bool const isGas = fixture != 4 && id % 2 != 0;
+            particlesType(local) = isGas ? SPH_TYPE : DARK_MATTER_TYPE;
+            particlesCatIndex(local) = isGas ? gas : NO_INDEX;
+            if (isGas) {
+                sphParticlesParticleIndex(gas) = local;
+                sphParticlesSupportRadius(gas) = 0.01f;
+                for (int dim = 0; dim < NDIM; ++dim) {
+                    sphParticlesGravityAcceleration(dim, gas) = 0.0f;
+                }
+                ++gas;
+            }
+        }
+        ++local;
+    }
+}
+
+Vector<PmmmSample> readPmmmFixture() {
+    requirePmmm(particlesSize() == particlesOwnedSize(),
+        "force solve retained ghost particles in the owned population");
+    Vector<PmmmSample> samples(particlesSize());
+    for (ParticleInteger i = 0; i < particlesSize(); ++i) {
+        auto& sample = samples[i];
+        for (int dim = 0; dim < NDIM; ++dim) {
+            sample.position[dim] = particlesPos(dim, i).toDouble();
+            sample.rawPosition[dim] = particlesPos(dim, i).raw();
+        }
+        sample.acceleration = pmmmAcceleration(i);
+        sample.potential = pmmmPotential(i);
+        sample.mass = particlesMass(i);
+        sample.id = int(particlesVel(XDIM, i)) - 1;
+        requirePmmm(particlesVel(XDIM, i) == float(sample.id + 1) &&
+                particlesVel(YDIM, i) == 0.25f * float(sample.id) &&
+                particlesVel(ZDIM, i) == -0.5f * float(sample.id) &&
+                particlesRung(i) == 1 + sample.id % 4 &&
+                particlesPot(i) == -0.25f * float(sample.id + 1),
+            "force solve changed velocity, rung, or saved potential");
+        sample.rank = hpxRank();
+        sample.cellKey = 0;
+        for (int dim = 0; dim < NDIM; ++dim) {
+            requirePmmm(particlesGravityAcceleration(dim, i) == float(4 * (sample.id + 1) + dim),
+                "force solve changed saved acceleration");
+            sample.cellKey = sample.cellKey * getOptions().gravity.meshSize +
+                particleMeshCoordinate(particlesPos(dim, i).raw(), getOptions().gravity.meshSize);
+        }
+        if (getOptions().hydro.enabled && particlesType(i) == SPH_TYPE) {
+            requirePmmm(sphParticlesParticleIndex(particlesCatIndex(i)) == i,
+                "gas reverse index was not repaired after sorting");
+            for (int dim = 0; dim < NDIM; ++dim) {
+                requirePmmm(sphParticlesGravityAcceleration(dim, particlesCatIndex(i)) == 0.0f,
+                    "force solve changed gas acceleration");
+            }
+        }
+    }
+    return samples;
+}
+
+Vector<PmmmSample> readPmmmKickFixture() {
+    Vector<PmmmSample> samples(particlesSize());
+    for (ParticleInteger i = 0; i < particlesSize(); ++i) {
+        auto& sample = samples[i];
+        for (int dim = 0; dim < NDIM; ++dim) {
+            sample.position[dim] = particlesPos(dim, i).toDouble();
+            sample.rawPosition[dim] = particlesPos(dim, i).raw();
+            sample.velocity[dim] = particlesVel(dim, i);
+            if (saveParticleAcceleration(getOptions().analysis)) {
+                sample.acceleration[dim] = particlesGravityAcceleration(dim, i);
+            }
+        }
+        sample.mass = particlesMass(i);
+        sample.rung = particlesRung(i);
+        if (saveParticlePotential(getOptions().analysis)) {
+            sample.potential = particlesPot(i);
+        }
+    }
+    return samples;
+}
+
+struct PmmmOverlapGate {
+    std::mutex mutex;
+    hpx::promise<void> promise;
+    hpx::shared_future<void> release = promise.get_future().share();
+    hpx::promise<void> requestPromise;
+    hpx::shared_future<void> requestStarted = requestPromise.get_future().share();
+    uint64_t heldKey = 0;
+    bool chosen = false;
+    bool completedIndependent = false;
+    bool completedDependentEarly = false;
+    bool receivedHeld = false;
+};
+
+std::shared_ptr<PmmmOverlapGate> pmmmOverlapGate;
+
+bool pmmmCellsNeighbor(uint64_t first, uint64_t second) {
+    int const side = getOptions().gravity.meshSize;
+    int const width = getOptions().gravity.pmmmNearWidth;
+    for (int dim = 0; dim < NDIM; ++dim) {
+        int const difference = std::abs(int(first % side) - int(second % side));
+        if (std::min(difference, side - difference) > width) {
+            return false;
+        }
+        first /= side;
+        second /= side;
+    }
+    return true;
+}
+
+void installPmmmOverlapGate(bool enable, uint64_t heldKey) {
+    pmmmSetCellObserver({});
+    pmmmOverlapGate.reset();
+    if (!enable || hpxRank() != 0) {
+        return;
+    }
+    auto gate = std::make_shared<PmmmOverlapGate>();
+    gate->heldKey = heldKey;
+    pmmmOverlapGate = gate;
+    pmmmSetCellObserver([gate](PmmmCellEvent event, uint64_t key) {
+        // Ensure a very fast interior cell cannot release the gate before the
+        // chosen remote request exists. HPX suspension leaves workers free.
+        if (event == PmmmCellEvent::NearCompleted) {
+            gate->requestStarted.get();
+        }
+        bool wait = false;
+        bool release = false;
+        {
+            std::lock_guard<std::mutex> lock(gate->mutex);
+            if (event == PmmmCellEvent::GhostRequested && key == gate->heldKey && !gate->chosen) {
+                gate->chosen = true;
+                wait = true;
+            } else if (event == PmmmCellEvent::NearCompleted && !gate->completedIndependent) {
+                if (pmmmCellsNeighbor(key, gate->heldKey)) {
+                    gate->completedDependentEarly = true;
+                } else {
+                    gate->completedIndependent = true;
+                    release = true;
+                }
+            } else if (event == PmmmCellEvent::GhostReady && key == gate->heldKey) {
+                gate->receivedHeld = true;
+            }
+        }
+        if (release) {
+            gate->promise.set_value();
+        }
+        if (wait) {
+            gate->requestPromise.set_value();
+            gate->release.get();
+        }
+    });
+}
+
+Vector<int> readPmmmOverlapGate() {
+    auto const gate = pmmmOverlapGate;
+    if (!gate) {
+        return {};
+    }
+    std::lock_guard<std::mutex> lock(gate->mutex);
+    return {int(gate->chosen), int(gate->completedIndependent), int(gate->completedDependentEarly),
+        int(gate->receivedHeld)};
+}
+
+size_t verifyPmmmTreeCell(TreeId id, uint64_t key, int meshSize) {
+    auto const* node = treeGetNode(id);
+    uint64_t positionKey = 0;
+    uint64_t multipoleKey = 0;
+    for (int dim = 0; dim < NDIM; ++dim) {
+        positionKey =
+            positionKey * meshSize + particleMeshCoordinate(node->pos[dim].raw(), meshSize);
+        multipoleKey =
+            multipoleKey * meshSize + particleMeshCoordinate(node->mpos->pos[dim].raw(), meshSize);
+    }
+    requirePmmm(positionKey == key && multipoleKey == key,
+        "forest node or multipole center escaped its exact mesh cell: expected=" +
+            std::to_string(key) + " position=" + std::to_string(positionKey) +
+            " multipole=" + std::to_string(multipoleKey) + " node=" + std::to_string(id.proc) +
+            ":" + std::to_string(id.index));
+    if (node->leaf) {
+        // Every local leaf is checked by its owning locality before the roots
+        // are combined. Compare exact integers so a Q0.64 coordinate just below
+        // one cannot round onto an incorrectly inward bound during this test.
+        if (node->isLocalHere()) {
+            using WideInteger = __int128;
+            WideInteger constexpr kBoundaryScale = WideInteger(1) << (kPositionBits - 29);
+            for (ParticleInteger i = node->particleRange.first; i < node->particleRange.second;
+                ++i) {
+                long double radiusSquared = 0.0;
+                for (int dim = 0; dim < NDIM; ++dim) {
+                    WideInteger const raw = particlesPos(dim, i).raw();
+                    WideInteger const lower =
+                        WideInteger(node->box.begin[dim].raw()) * kBoundaryScale;
+                    WideInteger const upper =
+                        WideInteger(node->box.end[dim].raw()) * kBoundaryScale;
+                    requirePmmm(lower <= raw && raw <= upper,
+                        "forest leaf box excludes a represented fixed-point particle");
+                    long double const distance = std::ldexp(
+                        static_cast<long double>(raw - WideInteger(node->pos[dim].raw())),
+                        -kPositionBits);
+                    radiusSquared += distance * distance;
+                }
+                requirePmmm(radiusSquared <= static_cast<long double>(node->radius) * node->radius,
+                    "forest leaf radius excludes a represented fixed-point particle");
+            }
+        }
+        return 0;
+    }
+    auto const children = node->children;
+    size_t internalNodes = 1;
+    for (auto const& child : children) {
+        internalNodes += verifyPmmmTreeCell(child, key, meshSize);
+    }
+    return internalNodes;
+}
+
+Vector<TreeCellRoot> buildPmmmTestForest() {
+    int const meshSize = getOptions().gravity.meshSize;
+    auto const cells = particleMeshSort(meshSize);
+    auto roots = treeCreateCellForest(cells, meshSize);
+    for (auto const& root : roots) {
+        verifyPmmmTreeCell(root.id, root.key, meshSize);
+    }
+    return roots;
+}
+
+// Independent direct Ewald summation, with no generated kernels, mesh, FFT,
+// harmonic coefficients, or production image tables. The primary self term is
+// excluded; its finite periodic images remain, matching the FMM convention.
+std::array<double, 4> directPmmmReference(size_t sink, Vector<PmmmSample> const& samples) {
+    double constexpr kPi = std::numbers::pi;
+    double constexpr kAlpha = 2.0;
+    int constexpr kCutoff = 4;
+    double const inverseSqrtPi = 1.0 / std::sqrt(kPi);
+    std::array<double, 4> result{};
+    for (size_t source = 0; source < samples.size(); ++source) {
+        double const mass = samples[source].mass * getOptions().gravity.gm;
+        std::array<double, NDIM> separation{};
+        for (int dim = 0; dim < NDIM; ++dim) {
+            separation[dim] = samples[sink].position[dim] - samples[source].position[dim];
+            separation[dim] -= std::nearbyint(separation[dim]);
+        }
+        result[0] += mass * kPi / (kAlpha * kAlpha);
+        if (source == sink) {
+            result[0] += mass * 2.0 * kAlpha * inverseSqrtPi;
+        }
+        for (int x = -kCutoff; x <= kCutoff; ++x) {
+            for (int y = -kCutoff; y <= kCutoff; ++y) {
+                for (int z = -kCutoff; z <= kCutoff; ++z) {
+                    bool const origin = x == 0 && y == 0 && z == 0;
+                    std::array<double, NDIM> const displacement{
+                        separation[0] + x, separation[1] + y, separation[2] + z};
+                    double const radiusSquared = displacement[0] * displacement[0] +
+                        displacement[1] * displacement[1] + displacement[2] * displacement[2];
+                    if (!(source == sink && origin)) {
+                        double const radius = std::sqrt(radiusSquared);
+                        requirePmmm(!origin || radius > getOptions().gravity.supportRadius,
+                            "direct Ewald fixture contains a softened pair");
+                        double const screened = std::erfc(kAlpha * radius) / radius;
+                        double const radial = (screened +
+                                                  2.0 * kAlpha * inverseSqrtPi *
+                                                      std::exp(-kAlpha * kAlpha * radiusSquared)) /
+                            radiusSquared;
+                        result[0] -= mass * screened;
+                        for (int dim = 0; dim < NDIM; ++dim) {
+                            result[dim + 1] -= mass * radial * displacement[dim];
+                        }
+                    }
+                    if (!origin) {
+                        std::array<double, NDIM> const wave{
+                            2.0 * kPi * x, 2.0 * kPi * y, 2.0 * kPi * z};
+                        double const waveSquared = x * x + y * y + z * z;
+                        double const coefficient =
+                            std::exp(-kPi * kPi * waveSquared / (kAlpha * kAlpha)) /
+                            (kPi * waveSquared);
+                        double const phase = wave[0] * separation[0] + wave[1] * separation[1] +
+                            wave[2] * separation[2];
+                        result[0] -= mass * coefficient * std::cos(phase);
+                        for (int dim = 0; dim < NDIM; ++dim) {
+                            result[dim + 1] -= mass * coefficient * std::sin(phase) * wave[dim];
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return result;
+}
+
+double verifyPmmmReference(Vector<PmmmSample> const& samples, double tolerance) {
+    double maximumError = 0.0;
+    std::array<double, NDIM> momentum{};
+    double forceScale = 1.0;
+    for (size_t sink = 0; sink < samples.size(); ++sink) {
+        auto const expected = directPmmmReference(sink, samples);
+        double norm = 0.0;
+        for (int dim = 0; dim < NDIM; ++dim) {
+            norm += expected[dim + 1] * expected[dim + 1];
+        }
+        norm = std::max(1.0, std::sqrt(norm));
+        forceScale = std::max(forceScale, norm);
+        double const potentialError =
+            std::abs(samples[sink].potential - expected[0]) / std::max(1.0, std::abs(expected[0]));
+        maximumError = std::max(maximumError, potentialError);
+        requirePmmm(std::isfinite(samples[sink].potential) && potentialError < tolerance,
+            "potential differs from direct periodic Ewald for particle " + std::to_string(sink) +
+                ": relative error " + std::to_string(potentialError));
+        for (int dim = 0; dim < NDIM; ++dim) {
+            double const error =
+                std::abs(samples[sink].acceleration[dim] - expected[dim + 1]) / norm;
+            maximumError = std::max(maximumError, error);
+            requirePmmm(std::isfinite(samples[sink].acceleration[dim]) && error < tolerance,
+                "force differs from direct periodic Ewald for particle " + std::to_string(sink) +
+                    ": scaled error " + std::to_string(error));
+            momentum[dim] += samples[sink].mass * samples[sink].acceleration[dim];
+        }
+    }
+    for (double component : momentum) {
+        requirePmmm(std::abs(component) < 3.0e-5 * forceScale,
+            "unequal-mass periodic particles have nonzero total force");
+    }
+    return maximumError;
+}
+
+void comparePmmmSamples(
+    Vector<PmmmSample> const& first, Vector<PmmmSample> const& second, bool potential = true) {
+    auto const& options = getOptions();
+    std::string const context = " near=" + options.gravity.pmmmNearMethod +
+        " mesh=" + std::to_string(options.gravity.meshSize) +
+        " order=" + std::to_string(options.gravity.fmmOrder) +
+        " width=" + std::to_string(options.gravity.pmmmNearWidth) +
+        " theta=" + std::to_string(options.gravity.openingAngle) +
+        " cuda=" + std::to_string(options.compute.cuda);
+    requirePmmm(first.size() == second.size(), "solve changed the particle count");
+    for (size_t i = 0; i < first.size(); ++i) {
+        requirePmmm(first[i].id == second[i].id && first[i].mass == second[i].mass,
+            "solve changed a particle's identity or mass");
+        for (int dim = 0; dim < NDIM; ++dim) {
+            requirePmmm(first[i].rawPosition[dim] == second[i].rawPosition[dim],
+                "solve changed a particle position");
+            requirePmmm(std::abs(first[i].acceleration[dim] - second[i].acceleration[dim]) <
+                    2.0e-5 * std::max(1.0f, std::abs(first[i].acceleration[dim])),
+                "force changed for id=" + std::to_string(first[i].id) +
+                    " dim=" + std::to_string(dim) +
+                    " reference=" + std::to_string(first[i].acceleration[dim]) +
+                    " actual=" + std::to_string(second[i].acceleration[dim]) + context);
+        }
+        if (potential) {
+            // The existing FMM accumulates softened self potential and subtracts
+            // it in float. Bound that cancellation's rounding scale separately
+            // from the force/approximation limits; direct PMMM PP uses double.
+            double const selfCancellationAllowance = options.gravity.pmmmNearMethod == "fmm" ?
+                4.0 * std::numeric_limits<float>::epsilon() *
+                    std::abs(options.gravity.gm * first[i].mass *
+                        selectedGravityKernel().centralPotential / options.gravity.supportRadius) :
+                0.0;
+            requirePmmm(std::abs(first[i].potential - second[i].potential) <
+                    2.0e-5 * std::max(1.0f, std::abs(first[i].potential)) +
+                        selfCancellationAllowance,
+                "potential changed for id=" + std::to_string(first[i].id) +
+                    " reference=" + std::to_string(first[i].potential) +
+                    " actual=" + std::to_string(second[i].potential) + context);
+        }
+    }
+}
+
+}    // namespace detail
+
+HPX_PLAIN_ACTION(detail::initializePmmmFixture, InitializePmmmFixtureAction);
+HPX_PLAIN_ACTION(detail::readPmmmFixture, ReadPmmmFixtureAction);
+HPX_PLAIN_ACTION(detail::readPmmmKickFixture, ReadPmmmKickFixtureAction);
+HPX_PLAIN_ACTION(detail::installPmmmOverlapGate, InstallPmmmOverlapGateAction);
+HPX_PLAIN_ACTION(detail::readPmmmOverlapGate, ReadPmmmOverlapGateAction);
+HPX_PLAIN_ACTION(detail::buildPmmmTestForest, BuildPmmmTestForestAction);
+HPX_PLAIN_ACTION(detail::reservePmmmCudaFixture, ReservePmmmCudaFixtureAction);
+HPX_PLAIN_ACTION(detail::resetPmmmSavedForces, ResetPmmmSavedForcesAction);
+
+namespace detail {
+
+void preparePmmmFixture(int fixture, int ownership = 0) {
+    expectedPmmmParticleCount = size_t(pmmmFixtureParticleCount(fixture));
+    std::vector<hpx::future<void>> futures;
+    for (auto const& locality : hpxLocalities()) {
+        futures.push_back(hpx::async<InitializePmmmFixtureAction>(locality, fixture, ownership));
+    }
+    for (auto& future : futures) {
+        future.get();
+    }
+}
+
+void distributePmmmFixture(int fixture, bool splitCells = false) {
+    auto const saved = getOptions();
+    auto options = saved;
+    options.initial.numberOfParticles = pmmmFixtureParticleCount(fixture);
+    // Fresh fixtures deliberately place every rung on arbitrary localities.
+    // Migrate the entire population once before testing rung-selected stages.
+    options.run.hierarchicalGravity = false;
+    // The production PMMM partition aligns its domains to mesh planes. A
+    // continuous KD partition provides valid spatial ownership while exercising
+    // the forest's supported case of one mesh cell spanning several ranks.
+    if (splitCells) {
+        options.gravity.method = "fmm";
+    }
+    setOptions(options);
+    particlesSortByRung(0);
+    domainsRebound();
+    domainsBegin(0);
+    domainsEnd();
+    setOptions(saved);
+    std::vector<hpx::future<void>> futures;
+    for (auto const& locality : hpxLocalities()) {
+        futures.push_back(hpx::async<ResetPmmmSavedForcesAction>(locality));
+    }
+    for (auto& future : futures) {
+        future.get();
+    }
+}
+
+void checkPmmmForestGeometry() {
+    treePrepareCellForest();
+    std::vector<hpx::future<Vector<TreeCellRoot>>> futures;
+    for (auto const& locality : hpxLocalities()) {
+        futures.push_back(hpx::async<BuildPmmmTestForestAction>(locality));
+    }
+    hpx::wait_all(futures.begin(), futures.end());
+    std::map<uint64_t, Vector<TreeId>> contributors;
+    for (auto& future : futures) {
+        for (auto const& root : future.get()) {
+            contributors[root.key].push_back(root.id);
+        }
+    }
+    Vector<TreeCellRoot> combinedRoots;
+    for (auto const& [key, roots] : contributors) {
+        auto const combined = treeCombineCellRoots(key, getOptions().gravity.meshSize, roots);
+        combinedRoots.push_back({key, combined});
+    }
+    // Complete the forest before any remote node-cache reads: adding another
+    // root can populate slots in a cache line fetched by an earlier traversal.
+    size_t internalNodes = 0;
+    for (auto const& root : combinedRoots) {
+        internalNodes += verifyPmmmTreeCell(root.id, root.key, getOptions().gravity.meshSize);
+    }
+    requirePmmm(internalNodes > 0, "dense forest contained no internal tree nodes");
+    treeDestroy();
+    particlesCacheFree();
+}
+
+Vector<PmmmSample> gatherPmmmSamples() {
+    std::vector<hpx::future<Vector<PmmmSample>>> futures;
+    for (auto const& locality : hpxLocalities()) {
+        futures.push_back(hpx::async<ReadPmmmFixtureAction>(locality));
+    }
+    Vector<PmmmSample> samples;
+    for (auto& future : futures) {
+        auto local = future.get();
+        samples.insert(samples.end(), local.begin(), local.end());
+    }
+    requirePmmm(samples.size() == expectedPmmmParticleCount,
+        "force solve changed the fixture's global owned particle count");
+    std::sort(samples.begin(), samples.end(),
+        [](auto const& first, auto const& second) { return first.id < second.id; });
+    double mass = 0.0;
+    for (size_t i = 0; i < samples.size(); ++i) {
+        auto const& sample = samples[i];
+        requirePmmm(sample.id == int(i), "force solve lost or duplicated an owned particle");
+        mass += sample.mass;
+    }
+    auto const diagnostics = pmmmDiagnostics();
+    requirePmmm(
+        diagnostics.nearRemoteTreeFetches == 0 && diagnostics.nearRemoteParticleFetches == 0,
+        "near FMM fetched remote tree nodes or particles during its local walk");
+    if (hpxSize() == 1 || samples.empty()) {
+        requirePmmm(diagnostics.ghostParticles == 0,
+            "single-locality or empty solve retained remote ghost sources");
+    }
+    requirePmmm(std::abs(diagnostics.sourceMass - mass) < 1.0e-6 * std::max(1.0, mass),
+        "source mass differs from the particle population");
+    requirePmmm(std::abs(diagnostics.depositedMass - mass) < 2.0e-6 * std::max(1.0, mass),
+        "cell moments lost mass");
+    return samples;
+}
+
+double pmmmFieldDifference(Vector<PmmmSample> const& reference, Vector<PmmmSample> const& actual) {
+    requirePmmm(reference.size() == actual.size(), "near solver changed the particle count");
+    double maximumError = 0.0;
+    for (size_t i = 0; i < reference.size(); ++i) {
+        requirePmmm(reference[i].id == actual[i].id && reference[i].mass == actual[i].mass,
+            "near solver changed particle identities or masses");
+        double norm = 0.0;
+        double error = 0.0;
+        for (int axis = 0; axis < NDIM; ++axis) {
+            requirePmmm(reference[i].rawPosition[axis] == actual[i].rawPosition[axis],
+                "near solver changed a particle position");
+            requirePmmm(std::isfinite(actual[i].acceleration[axis]),
+                "near solver produced a nonfinite acceleration");
+            norm += double(reference[i].acceleration[axis]) * reference[i].acceleration[axis];
+            double const delta =
+                double(reference[i].acceleration[axis]) - actual[i].acceleration[axis];
+            error += delta * delta;
+        }
+        maximumError = std::max(maximumError, std::sqrt(error) / std::max(1.0, std::sqrt(norm)));
+        requirePmmm(
+            std::isfinite(actual[i].potential), "near solver produced a nonfinite potential");
+        maximumError = std::max(maximumError,
+            std::abs(double(reference[i].potential) - actual[i].potential) /
+                std::max(1.0, std::abs(double(reference[i].potential))));
+    }
+    return maximumError;
+}
+
+Vector<PmmmSample> gatherPmmmKickSamples() {
+    Vector<PmmmSample> samples;
+    std::vector<hpx::future<Vector<PmmmSample>>> futures;
+    for (auto const& locality : hpxLocalities()) {
+        futures.push_back(hpx::async<ReadPmmmKickFixtureAction>(locality));
+    }
+    for (auto& future : futures) {
+        auto local = future.get();
+        samples.insert(samples.end(), local.begin(), local.end());
+    }
+    std::sort(samples.begin(), samples.end(), [](auto const& first, auto const& second) {
+        for (int dim = 0; dim < NDIM; ++dim) {
+            if (first.rawPosition[dim] != second.rawPosition[dim]) {
+                return first.rawPosition[dim] < second.rawPosition[dim];
+            }
+        }
+        return false;
+    });
+    return samples;
+}
+
+void checkPmmmStreamedStages() {
+    auto const saved = getOptions();
+    auto options = saved;
+    options.run.hierarchicalGravity = true;
+    options.gravity.meshSize = 8;
+    options.gravity.pmmmNearWidth = 2;
+    options.gravity.fmmOrder = std::max(kFmmDefaultOrder, std::min(kFmmMinOrder + 3, kFmmMaxOrder));
+    options.gravity.openingAngle = 0.02;
+    options.analysis.saveForce = false;
+    options.analysis.saveAcceleration = false;
+    options.analysis.savePotential = false;
+    pmmmDestroy();
+    for (auto const& nearMethod : {std::string("pp"), std::string("fmm")}) {
+        options.gravity.pmmmNearMethod = nearMethod;
+        for (int batchParticles : {1, 4096}) {
+            options.gravity.pmmmBatchParticles = batchParticles;
+            setOptions(options);
+            preparePmmmFixture(0);
+            distributePmmmFixture(0);
+            auto const before = gatherPmmmKickSamples();
+            Vector<PmmmSample> active;
+            double activeMass = 0.0;
+            for (auto const& sample : before) {
+                if (sample.rung >= 3) {
+                    active.push_back(sample);
+                    activeMass += sample.mass;
+                }
+            }
+            requirePmmm(active.size() == 3 && before.size() == 7,
+                "streaming fixture did not contain both active and inactive particles");
+            particlesSortByRung(3);
+            KickParameters parameters{};
+            parameters.htime = true;
+            parameters.ascending = true;
+            parameters.descending = false;
+            parameters.top = batchParticles == 1;
+            parameters.sign = -1.0f;
+            parameters.firstCall = false;
+            parameters.saveForce = false;
+            parameters.gpu = options.compute.cuda;
+            parameters.minRung = 3;
+            parameters.minLevel = 0;
+            parameters.a = 1.0f;
+            parameters.t0 = 1.0f;
+            parameters.theta = options.gravity.openingAngle;
+            parameters.gravitySupportRadius = options.gravity.supportRadius;
+            parameters.eta = options.gravity.timestepEta;
+            parameters.gm = options.gravity.gm;
+            parameters.nodeLoad = 1.0f;
+            parameters.doPhi = true;
+            pmmmKick(parameters);
+            auto const after = gatherPmmmKickSamples();
+            auto const diagnostics = pmmmDiagnostics();
+            requirePmmm(diagnostics.storedAccelerationParticles == 0 &&
+                    diagnostics.storedPotentialParticles == 0,
+                "streamed stage allocated retained full-particle result arrays");
+            requirePmmm(std::abs(diagnostics.sourceMass - activeMass) < 1.0e-6 &&
+                    std::abs(diagnostics.depositedMass - activeMass) < 1.0e-6,
+                "hierarchical stage included inactive sources in the mesh moments");
+            requirePmmm(diagnostics.nearRemoteTreeFetches == 0 &&
+                    diagnostics.nearRemoteParticleFetches == 0,
+                "streamed local walk performed a remote fetch");
+            requirePmmm(before.size() == after.size(), "streamed stage changed owned count");
+            size_t selected = 0;
+            for (size_t i = 0; i < before.size(); ++i) {
+                bool const isActive = before[i].rung >= 3;
+                auto const reference =
+                    isActive ? directPmmmReference(selected++, active) : std::array<double, 4>{};
+                double const factor = parameters.sign * (parameters.top ? 1.0 : -1.0) / 16.0;
+                requirePmmm(
+                    before[i].rung == after[i].rung, "ascending-only kick changed a particle rung");
+                for (int dim = 0; dim < NDIM; ++dim) {
+                    requirePmmm(before[i].rawPosition[dim] == after[i].rawPosition[dim],
+                        "streamed kick changed an owned position");
+                    double const delta = factor * reference[dim + 1];
+                    double const expected = before[i].velocity[dim] + delta;
+                    requirePmmm(isActive ? std::abs(after[i].velocity[dim] - expected) <
+                                2.0e-6 * std::max(1.0, std::abs(expected)) +
+                                    1.0e-3 * std::abs(delta) :
+                                           after[i].velocity[dim] == before[i].velocity[dim],
+                        "stage kick differs from its active-source Ewald field or changed an "
+                        "inactive sink");
+                }
+            }
+            // A descending stage must select the next rung from the combined
+            // field while independently saving just the requested diagnostic.
+            options.analysis.saveAcceleration = batchParticles == 1;
+            options.analysis.savePotential = batchParticles != 1;
+            setOptions(options);
+            parameters.ascending = false;
+            parameters.descending = true;
+            parameters.maxDt = parameters.t0 / 16.0f;
+            parameters.eta = 1.0e6f;
+            pmmmKick(parameters);
+            auto const descending = gatherPmmmKickSamples();
+            selected = 0;
+            for (size_t i = 0; i < before.size(); ++i) {
+                bool const isActive = before[i].rung >= 3;
+                auto const reference =
+                    isActive ? directPmmmReference(selected++, active) : std::array<double, 4>{};
+                requirePmmm(descending[i].rung == (isActive ? 4 : before[i].rung),
+                    "descending stage selected the wrong next rung");
+                for (int dim = 0; dim < NDIM; ++dim) {
+                    if (isActive && options.analysis.saveAcceleration) {
+                        requirePmmm(std::abs(descending[i].acceleration[dim] - reference[dim + 1]) <
+                                1.0e-3 * std::max(1.0, std::abs(reference[dim + 1])),
+                            "acceleration-only diagnostics differ from the combined active-source "
+                            "field");
+                    }
+                    if (!isActive) {
+                        requirePmmm(descending[i].velocity[dim] == before[i].velocity[dim],
+                            "descending kick changed an inactive sink");
+                    }
+                }
+                if (isActive && options.analysis.savePotential) {
+                    requirePmmm(std::abs(descending[i].potential - reference[0]) <
+                            1.0e-3 * std::max(1.0, std::abs(reference[0])),
+                        "potential-only diagnostics differ from the combined active-source field");
+                }
+            }
+            options.analysis.saveAcceleration = false;
+            options.analysis.savePotential = false;
+            setOptions(options);
+            particlesSortByRung(0);
+        }
+    }
+    pmmmDestroy();
+    setOptions(saved);
+    PRINT("PMMM streamed active-source stages, signed kicks, optional fields, and batch-size "
+          "checks passed\n");
+}
+
+void checkPmmmCellOverlap() {
+    if (hpxSize() < 2) {
+        return;
+    }
+    auto const saved = getOptions();
+    auto options = saved;
+    options.gravity.meshSize = 8;
+    options.gravity.pmmmNearWidth = 1;
+    options.gravity.fmmOrder = kFmmDefaultOrder;
+    options.gravity.pmmmNearMethod = "fmm";
+    options.gravity.pmmmBatchParticles = 1;
+    options.gravity.openingAngle = 0.02;
+    pmmmDestroy();
+    setOptions(options);
+    preparePmmmFixture(6);
+    distributePmmmFixture(6);
+    pmmmSolve(true);
+    auto const reference = gatherPmmmSamples();
+    bool foundGate = false;
+    uint64_t heldKey = 0;
+    for (auto const& source : reference) {
+        if (source.rank == 0) {
+            continue;
+        }
+        bool dependent = false;
+        bool independent = false;
+        for (auto const& sink : reference) {
+            if (sink.rank == 0) {
+                dependent |= pmmmCellsNeighbor(source.cellKey, sink.cellKey);
+                independent |= !pmmmCellsNeighbor(source.cellKey, sink.cellKey);
+            }
+        }
+        if (dependent && independent) {
+            heldKey = source.cellKey;
+            foundGate = true;
+            break;
+        }
+    }
+    requirePmmm(
+        foundGate, "overlap fixture lacks independent and remote-dependent rank-zero sinks");
+    auto setGate = [heldKey](bool enabled) {
+        std::vector<hpx::future<void>> futures;
+        for (auto const& locality : hpxLocalities()) {
+            futures.push_back(hpx::async<InstallPmmmOverlapGateAction>(locality, enabled, heldKey));
+        }
+        for (auto& future : futures) {
+            future.get();
+        }
+    };
+    setGate(true);
+    try {
+        pmmmSolve(true);
+        auto const state = hpx::async<ReadPmmmOverlapGateAction>(hpxLocalities()[0]).get();
+        requirePmmm(state.size() == 4 && state[0] && state[1] && !state[2] && state[3],
+            "whole-cell gate did not prove independent completion before remote source arrival");
+        comparePmmmSamples(reference, gatherPmmmSamples());
+        requirePmmm(pmmmDiagnostics().completedWhileGhostsPending > 0,
+            "cell pipeline did not report completion while the deterministic ghost gate was held");
+    } catch (...) {
+        setGate(false);
+        throw;
+    }
+    setGate(false);
+    pmmmDestroy();
+    setOptions(saved);
+    PRINT("PMMM deterministic interior/boundary whole-cell overlap checks passed\n");
+}
+
+void checkPmmmFmmNear() {
+    auto const saved = getOptions();
+    auto options = saved;
+    // Isolated force fixtures exercise unequal masses without enabling an SPH
+    // evolution. Startup continues to reject PMMM gravity in SPH simulations.
+    options.hydro.enabled = true;
+    options.compute.bucketSize = 8;
+    options.gravity.fmmOrder = kFmmMinOrder;
+    options.gravity.pmmmNearWidth = 1;
+    options.gravity.supportRadius = 0.001;
+    if (saved.compute.cuda) {
+        setOptions(options);
+        std::vector<hpx::future<void>> futures;
+        for (auto const& locality : hpxLocalities()) {
+            futures.push_back(hpx::async<ReservePmmmCudaFixtureAction>(locality));
+        }
+        for (auto& future : futures) {
+            future.get();
+        }
+    }
+    for (int side : {3, 5, 8}) {
+        pmmmDestroy();
+        options.compute.cuda = saved.compute.cuda;
+        options.gravity.meshSize = side;
+        options.gravity.pmmmNearMethod = "pp";
+        setOptions(options);
+        preparePmmmFixture(5);
+        distributePmmmFixture(5, true);
+        // The order-four tree arena must also be allocated under the requested
+        // backend before temporarily running the CPU reference on the same data.
+        checkPmmmForestGeometry();
+        options.compute.cuda = false;
+        setOptions(options);
+        pmmmSolve(true);
+        auto const direct = gatherPmmmSamples();
+        auto const cache = pmmmDiagnostics();
+        requirePmmm(direct.size() == 320, "dense near fixture lost particles");
+        if (hpxSize() > 1) {
+            bool splitCell = false;
+            for (auto const& first : direct) {
+                for (auto const& second : direct) {
+                    splitCell |= first.cellKey == second.cellKey && first.rank != second.rank;
+                }
+            }
+            requirePmmm(splitCell, "dense fixture did not split a cell across valid domains");
+        }
+        options.gravity.pmmmNearMethod = "fmm";
+        // Order-four clustered forces can strongly cancel. These angles test
+        // a useful multipole approximation and convergence toward direct PP.
+        options.gravity.openingAngle = 0.4;
+        setOptions(options);
+        pmmmSolve(true);
+        auto const loose = gatherPmmmSamples();
+        double const looseError = pmmmFieldDifference(direct, loose);
+        auto const looseCounts = pmmmDiagnostics();
+        requirePmmm(looseCounts.nearCpuAcceptedMultipoles > 0,
+            "dense FMM near fixture never accepted a multipole interaction");
+        if (hpxSize() > 1) {
+            requirePmmm(looseCounts.ghostParticles > 0,
+                "distributed dense fixture did not exchange ghost source particles");
+        }
+        options.gravity.openingAngle = 0.02;
+        setOptions(options);
+        pmmmSolve(true);
+        auto const strict = gatherPmmmSamples();
+        double const strictError = pmmmFieldDifference(direct, strict);
+        auto const strictCounts = pmmmDiagnostics();
+        requirePmmm(
+            looseError < 2.0e-2, "loose FMM near field differs excessively from direct pairs");
+        requirePmmm(strictError < 5.0e-5 && strictError <= std::max(2.0e-5, 0.5 * looseError),
+            "tightening the FMM near angle did not converge to direct pairs");
+        requirePmmm(strictCounts.nearCpuDirectPairs > 0,
+            "dense FMM near fixture did not reach direct softened/self interactions");
+        pmmmSolve(false);
+        auto const forceOnly = gatherPmmmSamples();
+        comparePmmmSamples(strict, forceOnly, false);
+        for (auto const& sample : forceOnly) {
+            requirePmmm(sample.potential == 0.0f, "force-only FMM near solve computed a potential");
+        }
+        requirePmmm(strictCounts.planBuilds == cache.planBuilds &&
+                strictCounts.greenBuilds == cache.greenBuilds,
+            "changing the near method or angle rebuilt FFT plans/Green spectra");
+        pmmmSolve(true);
+        comparePmmmSamples(strict, gatherPmmmSamples());
+        requirePmmm(pmmmDiagnostics().ghostParticles == strictCounts.ghostParticles,
+            "repeated FMM solve accumulated or lost ghost sources");
+        options.gravity.pmmmNearMethod = "pp";
+        setOptions(options);
+        pmmmSolve(true);
+        comparePmmmSamples(direct, gatherPmmmSamples());
+        options.gravity.pmmmNearMethod = "fmm";
+        setOptions(options);
+        pmmmSolve(true);
+        comparePmmmSamples(strict, gatherPmmmSamples());
+        preparePmmmFixture(5, 1);
+        distributePmmmFixture(5);
+        pmmmSolve(true);
+        auto const repartitioned = gatherPmmmSamples();
+        double const repartitionError = pmmmFieldDifference(direct, repartitioned);
+        // Changing the kd decomposition changes the accepted multipoles. Test
+        // both approximations against PP using the same force-vector criterion;
+        // a nearly cancelling component need not match to relative float error.
+        requirePmmm(repartitionError < 5.0e-5,
+            "repartitioned FMM near field differs excessively from direct pairs");
+        if (saved.compute.cuda) {
+            options.compute.cuda = true;
+            setOptions(options);
+            pmmmSolve(true);
+            auto const cuda = gatherPmmmSamples();
+            requirePmmm(pmmmFieldDifference(direct, cuda) < 5.0e-5 &&
+                    pmmmFieldDifference(repartitioned, cuda) < 5.0e-5,
+                "CPU/CUDA FMM near fields disagree on dense periodic cells");
+            options.compute.cuda = false;
+            setOptions(options);
+        }
+        PRINT("PMMM FMM-near n=%i order=%i loose=%e strict=%e repartitioned=%e CPU accepted=%llu "
+              "direct=%llu\n",
+            side, options.gravity.fmmOrder, looseError, strictError, repartitionError,
+            static_cast<unsigned long long>(looseCounts.nearCpuAcceptedMultipoles),
+            static_cast<unsigned long long>(strictCounts.nearCpuDirectPairs));
+    }
+    pmmmDestroy();
+    setOptions(saved);
+}
+
+}    // namespace detail
+
+void pmmmTest() {
+    auto options = getOptions();
+    // Allocate type/category storage before the first fixture. Particle arrays
+    // keep a shared capacity and cannot gain the optional hydro arrays after
+    // allocation. This isolated force test performs no SPH evolution.
+    options.hydro.enabled = true;
+    options.gravity.method = "pmmm";
+    options.gravity.pmmmNearMethod = "pp";
+    options.gravity.gm = 0.125;
+    options.gravity.supportRadius = 0.001;
+    options.analysis.saveForce = true;
+    options.analysis.tracers = false;
+    options.analysis.groups = false;
+    options.initial.darkMatterMass = 0.75;
+    options.initial.gasMass = 0.25;
+    options.initial.createGlass = false;
+    options.run.hierarchicalGravity = false;
+    setOptions(options);
+    detail::checkPmmmNearEdges();
+    int const lowOrder = kFmmMinOrder;
+    int const highOrder = std::max(kFmmDefaultOrder, std::min(kFmmMinOrder + 3, kFmmMaxOrder));
+    std::vector<std::array<int, 3>> configurations{{5, highOrder, 2}};
+    if (lowOrder < highOrder) {
+        configurations.push_back({8, lowOrder, 1});
+    }
+    configurations.push_back({8, highOrder, 1});
+    configurations.push_back({8, highOrder, 2});
+    double lowOrderError = 0.0;
+    for (auto const configuration : configurations) {
+        pmmmDestroy();
+        options.gravity.meshSize = configuration[0];
+        options.gravity.fmmOrder = configuration[1];
+        options.gravity.pmmmNearWidth = configuration[2];
+        setOptions(options);
+        // Low orders establish a convergence baseline: off-center sources in
+        // the first far-cell shell can have percent-level truncation error.
+        // The higher-order accuracy and improvement checks remain independent.
+        double const tolerance = configuration[1] == 3 ? 5.0e-2 :
+            configuration[1] == 4                      ? 2.5e-2 :
+            configuration[1] == 5                      ? 5.0e-3 :
+                                                         5.0e-4;
+        int const fixtureCount = configuration[1] < highOrder ? 1 : 5;
+        for (int fixture = 0; fixture < fixtureCount; ++fixture) {
+            detail::preparePmmmFixture(fixture);
+            pmmmSolve(true);
+            auto const baseline = detail::gatherPmmmSamples();
+            double const error = detail::verifyPmmmReference(baseline, tolerance);
+            options.gravity.pmmmNearMethod = "fmm";
+            options.gravity.openingAngle = 0.05;
+            setOptions(options);
+            detail::distributePmmmFixture(fixture);
+            pmmmSolve(true);
+            detail::comparePmmmSamples(baseline, detail::gatherPmmmSamples());
+            options.gravity.pmmmNearMethod = "pp";
+            setOptions(options);
+            if (lowOrder < highOrder && configuration[0] == 8 && configuration[2] == 1 &&
+                fixture == 0) {
+                if (configuration[1] == lowOrder) {
+                    lowOrderError = error;
+                } else {
+                    double const convergence = std::pow(0.5, highOrder - lowOrder);
+                    detail::requirePmmm(error < std::max(2.0e-5, lowOrderError * convergence),
+                        "increasing total-degree truncation did not improve periodic accuracy");
+                }
+            }
+            auto const cached = pmmmDiagnostics();
+            pmmmSolve(false);
+            detail::comparePmmmSamples(baseline, detail::gatherPmmmSamples(), false);
+            pmmmSolve(true);
+            detail::comparePmmmSamples(baseline, detail::gatherPmmmSamples());
+            auto const repeated = pmmmDiagnostics();
+            detail::requirePmmm(repeated.planBuilds == cached.planBuilds &&
+                    repeated.greenBuilds == cached.greenBuilds &&
+                    repeated.solveCount == cached.solveCount + 2,
+                "repeated force/potential solves rebuilt cached plans or Green spectra");
+            if (fixture == 0) {
+                detail::preparePmmmFixture(fixture, 1);
+                pmmmSolve(true);
+                detail::comparePmmmSamples(baseline, detail::gatherPmmmSamples());
+                auto const beforeDestroy = pmmmDiagnostics();
+                pmmmDestroy();
+                pmmmSolve(true);
+                detail::comparePmmmSamples(baseline, detail::gatherPmmmSamples());
+                auto const recreated = pmmmDiagnostics();
+                detail::requirePmmm(recreated.planBuilds == beforeDestroy.planBuilds + 1 &&
+                        recreated.greenBuilds == beforeDestroy.greenBuilds + 1,
+                    "destroy/recreate did not rebuild exactly one cached plan/Green set");
+            }
+            PRINT("PMMM Ewald oracle n=%i order=%i near=%i fixture=%i error=%e\n", configuration[0],
+                configuration[1], configuration[2], fixture, error);
+        }
+    }
+    pmmmDestroy();
+    detail::checkPmmmFmmNear();
+    detail::checkPmmmStreamedStages();
+    detail::checkPmmmCellOverlap();
+    PRINT("PMMM periodic force, mass, self, ownership, convergence, and cache checks passed\n");
+}

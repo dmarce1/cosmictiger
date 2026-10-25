@@ -23,6 +23,8 @@
 
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/gravity/dehnen/distributed_tree.hpp>
+#include <cosmictiger/gravity/dehnen/execution.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #include <cosmictiger/particles/particles.hpp>

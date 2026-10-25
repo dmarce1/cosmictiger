@@ -6,10 +6,8 @@
  */
 
 #include <algorithm>
-#include <cstring>
 #include <limits>
 #include <mutex>
-#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -17,15 +15,6 @@
 #include <cosmictiger/sph/sph_particles.hpp>
 
 namespace detail {
-
-template <class Value>
-void swapParticleBytes(Value& first, Value& second) {
-    static_assert(std::is_trivially_copyable_v<Value>);
-    unsigned char temporary[sizeof(Value)];
-    std::memcpy(temporary, &first, sizeof(Value));
-    std::memcpy(&first, &second, sizeof(Value));
-    std::memcpy(&second, temporary, sizeof(Value));
-}
 
 template <class Function>
 void particleMeshParallelFor(size_t count, size_t workers, Function const& function) {
@@ -216,54 +205,27 @@ void sortParticleMeshRange(size_t begin, size_t end, uint64_t minimum, uint64_t 
 
 }    // namespace detail
 
-void particlesSwap(ParticleInteger first, ParticleInteger second) {
-    if (first == second) {
-        return;
-    }
-    CHECK_PART_BOUNDS(first);
-    CHECK_PART_BOUNDS(second);
-    for (int dim = 0; dim < NDIM; ++dim) {
-        detail::swapParticleBytes(particlesX[dim][first], particlesX[dim][second]);
-    }
-    detail::swapParticleBytes(particlesV[first], particlesV[second]);
-    detail::swapParticleBytes(particlesR[first], particlesR[second]);
-    auto const& options = getOptions();
-    if (options.analysis.saveForce) {
-        for (int dim = 0; dim < NDIM; ++dim) {
-            detail::swapParticleBytes(particlesGravityAccelerations[dim][first],
-                particlesGravityAccelerations[dim][second]);
-        }
-        detail::swapParticleBytes(particlesP[first], particlesP[second]);
-    }
-    if (options.analysis.groups) {
-        detail::swapParticleBytes(particlesLgrp[first], particlesLgrp[second]);
-    }
-    if (particlesGrp != nullptr) {
-        auto const firstGroup = particlesGrp[first].load(std::memory_order_relaxed);
-        auto const secondGroup = particlesGrp[second].load(std::memory_order_relaxed);
-        particlesGrp[first].store(secondGroup, std::memory_order_relaxed);
-        particlesGrp[second].store(firstGroup, std::memory_order_relaxed);
-    }
-    if (options.analysis.tracers) {
-        detail::swapParticleBytes(particlesTr[first], particlesTr[second]);
-    }
-    if (options.hydro.enabled) {
-        detail::swapParticleBytes(particlesSph[first], particlesSph[second]);
-        detail::swapParticleBytes(particlesTy[first], particlesTy[second]);
-    }
+Vector<ParticleMeshCell> particleMeshSort(int meshSize) {
+    return particleMeshSort(meshSize, {0, particlesSize()});
 }
 
-Vector<ParticleMeshCell> particleMeshSort(int meshSize) {
+Vector<ParticleMeshCell> particleMeshSort(int meshSize, Pair<ParticleInteger> range) {
     uint64_t const cellCount = detail::particleMeshCellCount(meshSize);
-    size_t const count = static_cast<size_t>(particlesSize());
+    if (range.first < 0 || range.second < range.first || range.second > particlesSize()) {
+        throw std::invalid_argument("Particle mesh sort range is outside owned particles");
+    }
+    size_t const first = static_cast<size_t>(range.first);
+    size_t const last = static_cast<size_t>(range.second);
+    size_t const count = last - first;
     size_t const workers = static_cast<size_t>(std::max(1, hpxHardwareConcurrency()));
     std::unique_lock<SharedMutexType> lock(particlesSharedMutex());
-    detail::sortParticleMeshRange(0, count, 0, cellCount - 1, workers, meshSize);
+    detail::sortParticleMeshRange(first, last, 0, cellCount - 1, workers, meshSize);
     if (getOptions().hydro.enabled) {
         // Gas arrays remain in their own ordering; rebuild their reverse map.
         detail::particleMeshParallelFor(workers, workers, [&](size_t worker) {
-            size_t const begin = detail::particleMeshChunkBoundary(count, worker, workers);
-            size_t const end = detail::particleMeshChunkBoundary(count, worker + 1, workers);
+            size_t const begin = first + detail::particleMeshChunkBoundary(count, worker, workers);
+            size_t const end =
+                first + detail::particleMeshChunkBoundary(count, worker + 1, workers);
             for (size_t i = begin; i < end; ++i) {
                 if (particlesType(i) == SPH_TYPE) {
                     ParticleInteger const gasIndex = particlesCatIndex(i);
@@ -281,10 +243,10 @@ Vector<ParticleMeshCell> particleMeshSort(int meshSize) {
     // no particle-sized key array, permutation, or second particle allocation.
     std::vector<size_t> offsets(workers + 1, 0);
     detail::particleMeshParallelFor(workers, workers, [&](size_t worker) {
-        size_t const begin = detail::particleMeshChunkBoundary(count, worker, workers);
-        size_t const end = detail::particleMeshChunkBoundary(count, worker + 1, workers);
-        uint64_t previous = begin == 0 ? std::numeric_limits<uint64_t>::max() :
-                                         detail::particleMeshKey(begin - 1, meshSize);
+        size_t const begin = first + detail::particleMeshChunkBoundary(count, worker, workers);
+        size_t const end = first + detail::particleMeshChunkBoundary(count, worker + 1, workers);
+        uint64_t previous = begin == first ? std::numeric_limits<uint64_t>::max() :
+                                             detail::particleMeshKey(begin - 1, meshSize);
         for (size_t i = begin; i < end; ++i) {
             uint64_t const key = detail::particleMeshKey(i, meshSize);
             offsets[worker + 1] += key != previous;
@@ -296,22 +258,22 @@ Vector<ParticleMeshCell> particleMeshSort(int meshSize) {
     }
     Vector<ParticleMeshCell> cells(offsets.back());
     detail::particleMeshParallelFor(workers, workers, [&](size_t worker) {
-        size_t const begin = detail::particleMeshChunkBoundary(count, worker, workers);
-        size_t const end = detail::particleMeshChunkBoundary(count, worker + 1, workers);
-        uint64_t previous = begin == 0 ? std::numeric_limits<uint64_t>::max() :
-                                         detail::particleMeshKey(begin - 1, meshSize);
+        size_t const begin = first + detail::particleMeshChunkBoundary(count, worker, workers);
+        size_t const end = first + detail::particleMeshChunkBoundary(count, worker + 1, workers);
+        uint64_t previous = begin == first ? std::numeric_limits<uint64_t>::max() :
+                                             detail::particleMeshKey(begin - 1, meshSize);
         size_t entry = offsets[worker];
         for (size_t i = begin; i < end; ++i) {
             uint64_t const key = detail::particleMeshKey(i, meshSize);
             if (key != previous) {
-                cells[entry++] = {key, static_cast<ParticleInteger>(i), 0};
+                cells[entry++] = {key, static_cast<ParticleInteger>(i), 0, false};
             }
             previous = key;
         }
     });
     detail::particleMeshParallelFor(cells.size(), workers, [&](size_t entry) {
         cells[entry].end =
-            entry + 1 < cells.size() ? cells[entry + 1].begin : static_cast<ParticleInteger>(count);
+            entry + 1 < cells.size() ? cells[entry + 1].begin : static_cast<ParticleInteger>(last);
     });
     return cells;
 }
