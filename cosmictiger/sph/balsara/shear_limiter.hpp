@@ -8,13 +8,8 @@
 
 #pragma once
 
+#include <cosmictiger/cuda/cuda_export.hpp>
 #include <cosmictiger/math/simd_math.hpp>
-
-#ifdef __CUDACC__
-#define COSMICTIGER_BALSARA_EXPORT __host__ __device__
-#else
-#define COSMICTIGER_BALSARA_EXPORT
-#endif
 
 namespace balsara {
 
@@ -31,7 +26,7 @@ namespace balsara {
 // to zero when both vanish; a safe denominator prevents SIMD lanes evaluating 0/0.
 // Use div_v_a and curl_v_a because ∇ is not a valid C++ identifier character.
 template <typename Real>
-COSMICTIGER_BALSARA_EXPORT inline Real balsaraFactor(Real divergence, Real curlMagnitude) {
+CUDA_EXPORT inline Real balsaraFactor(Real divergence, Real curlMagnitude) {
     Real const div_v_a = divergence;
     Real const abs_div_v_a = simdMax(div_v_a, -div_v_a);
     Real const abs_curl_v_a = curlMagnitude;
@@ -43,5 +38,3 @@ COSMICTIGER_BALSARA_EXPORT inline Real balsaraFactor(Real divergence, Real curlM
 // NOLINTEND(readability-identifier-naming)
 
 }    // namespace balsara
-
-#undef COSMICTIGER_BALSARA_EXPORT

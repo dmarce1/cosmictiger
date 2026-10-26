@@ -13,6 +13,8 @@
 #include <cstdint>
 #include <vector>
 
+#include <cosmictiger/cuda/cuda_export.hpp>
+
 struct PmmmNearParticle {
     std::array<double, 3> offset{};
     double mass = 0;
@@ -35,16 +37,10 @@ void pmmmNearField(std::vector<PmmmNearParticle> const& sinks,
 
 namespace pmmm::detail {
 
-#ifdef __CUDACC__
-#define COSMICTIGER_PMMM_NEAR_HD __host__ __device__
-#else
-#define COSMICTIGER_PMMM_NEAR_HD
-#endif
-
 // Keep the shared arithmetic independent of HPX and kernel-table headers. ADL
 // resolves forceFactor/potential to the selected radial_kernel::KernelTable.
 template <class Kernel>
-COSMICTIGER_PMMM_NEAR_HD inline void accumulateNearPair(PmmmNearParticle const& sink,
+CUDA_EXPORT inline void accumulateNearPair(PmmmNearParticle const& sink,
     PmmmNearParticle const& source, double cellWidth, double inverseSupportRadius,
     double inverseSupportRadiusCubed, bool doPotential, Kernel const& kernel,
     std::array<double, 4>& field) {
@@ -63,8 +59,6 @@ COSMICTIGER_PMMM_NEAR_HD inline void accumulateNearPair(PmmmNearParticle const& 
         field[0] -= source.mass * inverseSupportRadius * potential(kernel, q);
     }
 }
-
-#undef COSMICTIGER_PMMM_NEAR_HD
 
 #ifdef USE_CUDA
 void pmmmNearFieldCuda(std::vector<PmmmNearParticle> const& sinks,

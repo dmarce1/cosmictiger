@@ -25,10 +25,11 @@
 #endif
 
 #include <cosmictiger/core/assert.hpp>
+#include <cosmictiger/core/defs.hpp>
+#include <cosmictiger/cuda/cuda_export.hpp>
 #ifdef USE_CUDA
 #include <cosmictiger/cuda/cuda_stream.hpp>
 #endif
-#include <cosmictiger/core/defs.hpp>
 
 // Host-accessible storage follows the selected backend, not the build's capabilities.
 bool cudaEnabled();
@@ -115,8 +116,6 @@ inline __device__ double atomicAdd(double* address, double val) {
 
 #endif
 
-#define CUDA_EXPORT __host__ __device__
-
 // CUDA 12 no longer provides Thrust's experimental pinned allocator.
 // Keep the original host-vector contract with CUDA page-locked allocations.
 template <typename T>
@@ -194,8 +193,6 @@ __device__ static float atomicMin(float* address, float val) {
 
 template <class T>
 using PinnedAllocator = std::allocator<T>;
-
-#define CUDA_EXPORT
 
 #endif
 

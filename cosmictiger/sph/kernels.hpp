@@ -25,13 +25,8 @@
  */
 #pragma once
 
+#include <cosmictiger/cuda/cuda_export.hpp>
 #include <cosmictiger/math/simd_math.hpp>
-
-#ifdef __CUDACC__
-#define COSMICTIGER_SPH_KERNELS_EXPORT __host__ __device__
-#else
-#define COSMICTIGER_SPH_KERNELS_EXPORT
-#endif
 
 namespace sph_kernels {
 
@@ -48,7 +43,7 @@ constexpr double kPi = 3.141592653589793238462643383279502884;
 // with σ = 1/π in three dimensions. This returns H³ W as a function of r/H for the
 // stored support radius H = 2h, so the paper's q is twice the argument.
 template <typename Real>
-COSMICTIGER_SPH_KERNELS_EXPORT inline Real kernelValue(Real normalizedRadius) {
+CUDA_EXPORT inline Real kernelValue(Real normalizedRadius) {
     constexpr Real σ = Real(1.0 / kPi);
     constexpr Real H3_over_h3 = Real(8);    // (H/h)³ with H = 2h
     Real const q = Real(2) * normalizedRadius;
@@ -70,7 +65,7 @@ COSMICTIGER_SPH_KERNELS_EXPORT inline Real kernelValue(Real normalizedRadius) {
 //
 // where the factor 2 is dq/d(r/H) for H = 2h.
 template <typename Real>
-COSMICTIGER_SPH_KERNELS_EXPORT inline Real kernelDerivative(Real normalizedRadius) {
+CUDA_EXPORT inline Real kernelDerivative(Real normalizedRadius) {
     constexpr Real σ = Real(1.0 / kPi);
     constexpr Real H3_over_h3 = Real(8);
     constexpr Real dq_dnormalizedRadius = Real(2);
@@ -88,5 +83,3 @@ COSMICTIGER_SPH_KERNELS_EXPORT inline Real kernelDerivative(Real normalizedRadiu
 // NOLINTEND(readability-identifier-naming)
 
 }    // namespace sph_kernels
-
-#undef COSMICTIGER_SPH_KERNELS_EXPORT

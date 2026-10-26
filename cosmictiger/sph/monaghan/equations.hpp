@@ -25,13 +25,8 @@
  */
 #pragma once
 
+#include <cosmictiger/cuda/cuda_export.hpp>
 #include <cosmictiger/math/simd_math.hpp>
-
-#ifdef __CUDACC__
-#define COSMICTIGER_MONAGHAN_EXPORT __host__ __device__
-#else
-#define COSMICTIGER_MONAGHAN_EXPORT
-#endif
 
 namespace monaghan {
 
@@ -41,8 +36,7 @@ namespace monaghan {
 // its viscous form 4.1, and the variable-resolution pair equations 6.4-6.5. The same
 // factor in the force and the thermal work conserves momentum and energy (p. 549).
 template <typename Real>
-COSMICTIGER_MONAGHAN_EXPORT inline Real pressureCoefficient(
-    Real rhoI, Real rhoJ, Real pressureI, Real pressureJ) {
+CUDA_EXPORT inline Real pressureCoefficient(Real rhoI, Real rhoJ, Real pressureI, Real pressureJ) {
     Real const ρ_a = rhoI;
     Real const ρ_b = rhoJ;
     Real const P_a = pressureI;
@@ -59,7 +53,7 @@ COSMICTIGER_MONAGHAN_EXPORT inline Real pressureCoefficient(
 // physical one, which lets the caller integrate homogeneous cosmological pressure work
 // analytically (docs/monaghan_sph.md); with equal arguments it is the paper's form.
 template <typename Real>
-COSMICTIGER_MONAGHAN_EXPORT inline Real pairEnergyRate(Real pressurePair, Real viscosity,
+CUDA_EXPORT inline Real pairEnergyRate(Real pressurePair, Real viscosity,
     Real peculiarVelocityDotGradient, Real physicalVelocityDotGradient) {
     Real const P_over_ρ2_ab = pressurePair;    // P_b/ρ_b² + P_a/ρ_a²
     Real const Π_ab = viscosity;
@@ -72,5 +66,3 @@ COSMICTIGER_MONAGHAN_EXPORT inline Real pairEnergyRate(Real pressurePair, Real v
 // NOLINTEND(readability-identifier-naming)
 
 }    // namespace monaghan
-
-#undef COSMICTIGER_MONAGHAN_EXPORT

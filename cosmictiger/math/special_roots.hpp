@@ -13,13 +13,17 @@
 #include <immintrin.h>
 #endif
 
+#include <cosmictiger/cuda/cuda_export.hpp>
 #include <cosmictiger/math/special_functions_core.hpp>
 
 namespace special_functions {
 
 // FMA has one final rounding. In particular, it must not be replaced by a
 // separately rounded multiplication followed by an addition.
-COSMICTIGER_SPECIAL_HD inline float fma(float first, float second, float third) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+[[gnu::always_inline]]
+#endif
+CUDA_EXPORT inline float fma(float first, float second, float third) {
 #ifdef __CUDA_ARCH__
     return __fmaf_rn(first, second, third);
 #else
@@ -27,7 +31,10 @@ COSMICTIGER_SPECIAL_HD inline float fma(float first, float second, float third) 
 #endif
 }
 
-COSMICTIGER_SPECIAL_HD inline double fma(double first, double second, double third) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+[[gnu::always_inline]]
+#endif
+CUDA_EXPORT inline double fma(double first, double second, double third) {
 #ifdef __CUDA_ARCH__
     return __fma_rn(first, second, third);
 #else
@@ -35,7 +42,10 @@ COSMICTIGER_SPECIAL_HD inline double fma(double first, double second, double thi
 #endif
 }
 
-COSMICTIGER_SPECIAL_HD inline float sqrt(float value) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+[[gnu::always_inline]]
+#endif
+CUDA_EXPORT inline float sqrt(float value) {
 #ifdef __CUDA_ARCH__
     return __fsqrt_rn(value);
 #elif defined(__SSE__) && !defined(__CUDACC__)
@@ -45,7 +55,10 @@ COSMICTIGER_SPECIAL_HD inline float sqrt(float value) {
 #endif
 }
 
-COSMICTIGER_SPECIAL_HD inline double sqrt(double value) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+[[gnu::always_inline]]
+#endif
+CUDA_EXPORT inline double sqrt(double value) {
 #ifdef __CUDA_ARCH__
     return __dsqrt_rn(value);
 #else
@@ -55,7 +68,10 @@ COSMICTIGER_SPECIAL_HD inline double sqrt(double value) {
 
 namespace detail {
 
-    COSMICTIGER_SPECIAL_HD inline bool rootPositiveNormal(float value) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+    [[gnu::always_inline]]
+#endif
+    CUDA_EXPORT inline bool rootPositiveNormal(float value) {
 #ifdef __CUDA_ARCH__
         uint32_t const bits = __float_as_uint(value);
 #else
@@ -67,7 +83,10 @@ namespace detail {
     // Form x*y before multiplying by y: y*y can overflow at the lower end
     // of the normal input range. The correction is stable across that range.
     template <class Real>
-    COSMICTIGER_SPECIAL_HD inline Real refineRsqrt(Real value, Real estimate) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+    [[gnu::always_inline]]
+#endif
+    CUDA_EXPORT inline Real refineRsqrt(Real value, Real estimate) {
         Real const product = value * estimate;
         Real const residual = simdFma(-product, estimate, simdBroadcast<Real>(1.0f));
         return simdFma(estimate * simdBroadcast<Real>(0.5f), residual, estimate);
@@ -91,7 +110,10 @@ namespace detail {
 
 }    // namespace detail
 
-COSMICTIGER_SPECIAL_HD inline float rsqrt(float value) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+[[gnu::always_inline]]
+#endif
+CUDA_EXPORT inline float rsqrt(float value) {
 #ifdef __CUDA_ARCH__
     return __frsqrt_rn(value);
 #elif defined(__SSE__) && !defined(__CUDACC__)
@@ -105,7 +127,10 @@ COSMICTIGER_SPECIAL_HD inline float rsqrt(float value) {
 #endif
 }
 
-COSMICTIGER_SPECIAL_HD inline double rsqrt(double value) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+[[gnu::always_inline]]
+#endif
+CUDA_EXPORT inline double rsqrt(double value) {
 #ifdef __CUDA_ARCH__
     return __ddiv_rn(1.0, __dsqrt_rn(value));
 #else

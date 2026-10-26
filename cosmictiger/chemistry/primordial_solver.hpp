@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include <cosmictiger/chemistry/primordial_rates.hpp>
+#include <cosmictiger/cuda/cuda_export.hpp>
 
 namespace primordial {
 
@@ -34,32 +35,32 @@ struct StepResult {
 namespace detail {
     inline constexpr int kSolverVariables = kAbundanceCount + 1;
 
-    PRIMORDIAL_HD inline FloatFloat solverAbs(FloatFloat value) {
+    CUDA_EXPORT inline FloatFloat solverAbs(FloatFloat value) {
         return value < FloatFloat(0.0f) ? -value : value;
     }
-    PRIMORDIAL_HD inline float solverMaximum(float left, float right) {
+    CUDA_EXPORT inline float solverMaximum(float left, float right) {
         return left > right ? left : right;
     }
-    PRIMORDIAL_HD inline float solverMinimum(float left, float right) {
+    CUDA_EXPORT inline float solverMinimum(float left, float right) {
         return left < right ? left : right;
     }
-    PRIMORDIAL_HD inline FloatFloat solverValue(WorkingState const& state, int index) {
+    CUDA_EXPORT inline FloatFloat solverValue(WorkingState const& state, int index) {
         return index < kAbundanceCount ? state.abundances[index] : state.thermalEnergy;
     }
-    PRIMORDIAL_HD inline void solverSetValue(WorkingState& state, int index, FloatFloat value) {
+    CUDA_EXPORT inline void solverSetValue(WorkingState& state, int index, FloatFloat value) {
         if (index < kAbundanceCount) {
             state.abundances[index] = value;
         } else {
             state.thermalEnergy = value;
         }
     }
-    PRIMORDIAL_HD inline FloatFloat solverDerivative(Derivative const& derivative, int index) {
+    CUDA_EXPORT inline FloatFloat solverDerivative(Derivative const& derivative, int index) {
         return index < kAbundanceCount ? derivative.abundances[index] : derivative.thermalEnergy;
     }
-    PRIMORDIAL_HD inline float solverMinority(FloatFloat value) {
+    CUDA_EXPORT inline float solverMinority(FloatFloat value) {
         return (value > FloatFloat(0.5f) ? FloatFloat(1.0f) - value : value).toFloat();
     }
-    PRIMORDIAL_HD inline float solverWeight(WorkingState const& start, WorkingState const& trial,
+    CUDA_EXPORT inline float solverWeight(WorkingState const& start, WorkingState const& trial,
         SolverOptions const& options, int index) {
         if (index < kAbundanceCount) {
             return options.abundanceAbsoluteTolerance[index] +
@@ -71,7 +72,7 @@ namespace detail {
             options.relativeTolerance *
             solverMaximum(start.thermalEnergy.toFloat(), trial.thermalEnergy.toFloat());
     }
-    PRIMORDIAL_HD inline bool solverOptionsValid(SolverOptions const& options) {
+    CUDA_EXPORT inline bool solverOptionsValid(SolverOptions const& options) {
         // Coefficients and EOS temperature are FP32. Tighter requests need a
         // separately validated coefficient/Jacobian path, not a smaller number here.
         if (!finite(options.relativeTolerance) || options.relativeTolerance < 1.e-5f ||
@@ -96,14 +97,14 @@ namespace detail {
         bool upper[kAbundanceCount]{};
         FloatFloat values[kSolverVariables]{};
 
-        PRIMORDIAL_HD explicit SolverCoordinates(WorkingState const& state) {
+        CUDA_EXPORT explicit SolverCoordinates(WorkingState const& state) {
             for (int index = 0; index < kAbundanceCount; ++index) {
                 upper[index] = state.abundances[index] > FloatFloat(0.5f);
                 values[index] = state.abundances[index] - FloatFloat(upper[index] ? 1.0f : 0.0f);
             }
             values[kAbundanceCount] = state.thermalEnergy;
         }
-        PRIMORDIAL_HD WorkingState state() const {
+        CUDA_EXPORT WorkingState state() const {
             WorkingState result;
             for (int index = 0; index < kAbundanceCount; ++index) {
                 result.abundances[index] = values[index] + FloatFloat(upper[index] ? 1.0f : 0.0f);
@@ -115,9 +116,8 @@ namespace detail {
 
     // Partial-pivoted dense elimination in FloatFloat. Independent elemental
     // abundances remove redundant conservation rows before this solve.
-    PRIMORDIAL_HD inline bool solverLinearSolve(
-        FloatFloat matrix[kSolverVariables][kSolverVariables], FloatFloat right[kSolverVariables],
-        FloatFloat solution[kSolverVariables]) {
+    CUDA_EXPORT inline bool solverLinearSolve(FloatFloat matrix[kSolverVariables][kSolverVariables],
+        FloatFloat right[kSolverVariables], FloatFloat solution[kSolverVariables]) {
         for (int column = 0; column < kSolverVariables; ++column) {
             int pivot = column;
             for (int row = column + 1; row < kSolverVariables; ++row) {
@@ -159,7 +159,7 @@ namespace detail {
         return true;
     }
 
-    PRIMORDIAL_HD inline WorkingState solverInteriorAnchor(
+    CUDA_EXPORT inline WorkingState solverInteriorAnchor(
         WorkingState const& state, Environment const& environment) {
         WorkingState anchor = state;
         float const interior[kAbundanceCount] = {0.2f, 0.2f, 0.2f, 0.01f, 0.1f, 0.01f};
@@ -179,7 +179,7 @@ namespace detail {
     // coordinate derivatives. This changes only the Jacobian, never accepted state.
     // Analytic/AD Jacobians and a broader stiffness campaign remain separate gates.
     template <class Model>
-    PRIMORDIAL_HD bool solverJacobian(WorkingState const& state, Environment const& environment,
+    CUDA_EXPORT bool solverJacobian(WorkingState const& state, Environment const& environment,
         Derivative const& baseDerivative, SolverOptions const& options, Model const& model,
         FloatFloat jacobian[kSolverVariables][kSolverVariables]) {
         for (int column = 0; column < kSolverVariables; ++column) {
@@ -251,7 +251,7 @@ namespace detail {
     }
 
     template <class Model>
-    PRIMORDIAL_HD Status solverResidual(SolverCoordinates const& trial,
+    CUDA_EXPORT Status solverResidual(SolverCoordinates const& trial,
         SolverCoordinates const& startCoordinates, WorkingState const& start,
         Environment const& environment, FloatFloat interval, SolverOptions const& options,
         Model const& model, FloatFloat residual[kSolverVariables], Derivative& derivative,
@@ -277,7 +277,7 @@ namespace detail {
     }
 
     template <class Model>
-    PRIMORDIAL_HD Status backwardEuler(WorkingState const& start, Environment const& environment,
+    CUDA_EXPORT Status backwardEuler(WorkingState const& start, Environment const& environment,
         FloatFloat interval, SolverOptions const& options, Model const& model, WorkingState& result,
         unsigned& iterations) {
         SolverCoordinates const startCoordinates(start);
@@ -375,7 +375,7 @@ namespace detail {
     }
 
     struct PhysicalModel {
-        PRIMORDIAL_HD Status operator()(WorkingState const& state, Environment const& environment,
+        CUDA_EXPORT Status operator()(WorkingState const& state, Environment const& environment,
             Derivative& derivative) const {
             return evaluateRhs(state, environment, derivative);
         }
@@ -388,7 +388,7 @@ namespace detail {
 // fractions change signed-complement branch only after an accepted substep.
 // This is a first-order verification baseline, not the planned SDIRK release.
 template <class Model>
-PRIMORDIAL_HD StepResult advanceWithModel(State const& initial, Environment const& environment,
+CUDA_EXPORT StepResult advanceWithModel(State const& initial, Environment const& environment,
     float interval, SolverOptions const& options, Model const& model) {
     StepResult result;
     result.state = initial;
@@ -488,7 +488,7 @@ PRIMORDIAL_HD StepResult advanceWithModel(State const& initial, Environment cons
     return result;
 }
 
-PRIMORDIAL_HD inline StepResult advance(State const& initial, Environment const& environment,
+CUDA_EXPORT inline StepResult advance(State const& initial, Environment const& environment,
     float interval, SolverOptions const& options = SolverOptions{}) {
     return advanceWithModel(initial, environment, interval, options, detail::PhysicalModel{});
 }

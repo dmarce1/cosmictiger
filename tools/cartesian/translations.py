@@ -241,7 +241,7 @@ def emit(operator, order, withTrace, algebra):
     lines = [f'template <> class {specialization} {{',
              'public:',
              f'\ttemplate <typename Real, typename {targetType}, typename Source>',
-             f'\tCOSMICTIGER_CARTESIAN_TRANSLATION_HOST_DEVICE static void add({targetType}& target, Source const& source,',
+             f'\tCUDA_EXPORT static void add({targetType}& target, Source const& source,',
              '\t\tReal const dx, Real const dy, Real const dz, Real const scaleRatio) {']
     lines.extend(g.emitConstants(live))
     lines.append('\t\t(void) dx; (void) dy; (void) dz; (void) scaleRatio;')
@@ -266,10 +266,7 @@ def generateTranslations(minOrder, maxOrder, algebra):
     """
     if minOrder < 0 or maxOrder < minOrder:
         raise ValueError('Translation orders must form a nonnegative inclusive range')
-    definitions = ['#if defined(__CUDACC__)',
-                   '#define COSMICTIGER_CARTESIAN_TRANSLATION_HOST_DEVICE __host__ __device__',
-                   '#else', '#define COSMICTIGER_CARTESIAN_TRANSLATION_HOST_DEVICE', '#endif', '',
-                   'template <int order> class M2mKernel;',
+    definitions = ['template <int order> class M2mKernel;',
                    'template <int order, bool withTrace> class L2lKernel;', '']
     statistics = []
     for operator, order, withTrace in [('M2M', minOrder, False),
@@ -278,5 +275,4 @@ def generateTranslations(minOrder, maxOrder, algebra):
         code, counts = emit(operator, order, withTrace, algebra)
         definitions.append(code)
         statistics.append(counts)
-    definitions.append('#undef COSMICTIGER_CARTESIAN_TRANSLATION_HOST_DEVICE')
     return definitions, statistics

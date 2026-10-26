@@ -8,6 +8,7 @@
 #include <cuda_runtime.h>
 
 #include <cosmictiger/chemistry/primordial_chemistry.hpp>
+#include <cosmictiger/cuda/cuda_export.hpp>
 #include "cuda_test.hpp"
 
 namespace {
@@ -18,7 +19,7 @@ bool close(float left, float right, float scale, float absolute = 1.e-30f) {
 struct QuadraticTraceLoss {
     float coefficient{};
     bool upper{};
-    PRIMORDIAL_HD primordial::Status operator()(primordial::WorkingState const& state,
+    CUDA_EXPORT primordial::Status operator()(primordial::WorkingState const& state,
         primordial::Environment const& environment, primordial::Derivative& derivative) const {
         auto const status = primordial::validateComposition(state, environment);
         if (status != primordial::Status::Success) {
@@ -32,7 +33,7 @@ struct QuadraticTraceLoss {
         return primordial::Status::Success;
     }
 };
-PRIMORDIAL_HD primordial::StepResult quadraticCase(unsigned index) {
+CUDA_EXPORT primordial::StepResult quadraticCase(unsigned index) {
     using namespace primordial;
     float const minority = index < 2 ? 1.e-13f : 1.e-20f;
     bool const upper = index % 2 != 0;
@@ -55,7 +56,7 @@ struct ColdSample {
     primordial::Status status{};
     float cooling[5]{}, lte{}, heating{}, eosTemperature{};
 };
-PRIMORDIAL_HD ColdSample coldSample(unsigned index) {
+CUDA_EXPORT ColdSample coldSample(unsigned index) {
     using namespace primordial;
     float const temperatures[] = {10.0f, 20.0f, 30.0f, 32.0f, 35.0f, 40.0f, 49.0f, 65.0f, 79.99f,
         80.0f, 90.0f, 99.99f, 100.0f};

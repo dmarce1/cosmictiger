@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include <cosmictiger/chemistry/primordial_eos.hpp>
+#include <cosmictiger/cuda/cuda_export.hpp>
 
 namespace primordial {
 inline constexpr int kReactionCount = 37;
@@ -16,7 +17,7 @@ inline constexpr int kChemicalSpeciesCount = 9;
 // Species columns: H, H+, He, He+, He++, e, H-, H2, H2+.
 // https://arxiv.org/abs/astro-ph/9608040 ; the adopted updates are pinned in
 // docs/primordial_reactions.md. Integers make nuclei/charge audits exact.
-PRIMORDIAL_HD inline int reactionStoichiometry(int reaction, int species) {
+CUDA_EXPORT inline int reactionStoichiometry(int reaction, int species) {
     int const rows[kReactionCount][kChemicalSpeciesCount] = {{-1, 1, 0, 0, 0, 1, 0, 0, 0},
         {1, -1, 0, 0, 0, -1, 0, 0, 0}, {0, 0, -1, 1, 0, 1, 0, 0, 0}, {0, 0, 1, -1, 0, -1, 0, 0, 0},
         {0, 0, 0, -1, 1, 1, 0, 0, 0}, {0, 0, 0, 1, -1, -1, 0, 0, 0}, {-1, 0, 0, 0, 0, -1, 1, 0, 0},
@@ -48,7 +49,7 @@ struct ThermalRates {
     // product excitation/photon partition is not resolved by this thermal
     // model. Diagnostic only, not an invented thermal-energy source.
     FloatFloat unresolvedChemicalEnergyRelease{};
-    PRIMORDIAL_HD FloatFloat netHeating() const {
+    CUDA_EXPORT FloatFloat netHeating() const {
         return ((photoHeating - ionizationCooling) + (comptonHeating - freeFreeCooling)) +
             (molecularChemicalHeating - molecularChemicalCooling) - recombinationCooling -
             excitationCooling - molecularLineCooling - molecularIonLineCooling;
@@ -56,14 +57,14 @@ struct ThermalRates {
 };
 namespace detail {
     template <int count>
-    PRIMORDIAL_HD inline float polynomial(float x, float const (&coefficients)[count]) {
+    CUDA_EXPORT inline float polynomial(float x, float const (&coefficients)[count]) {
         FloatFloat result(coefficients[count - 1]);
         for (int i = count - 2; i >= 0; --i) {
             result = result * FloatFloat(x) + FloatFloat(coefficients[i]);
         }
         return result.toFloat();
     }
-    PRIMORDIAL_HD inline float coldMolecularHydrogenCollisionCooling(float temperature) {
+    CUDA_EXPORT inline float coldMolecularHydrogenCollisionCooling(float temperature) {
         // Hernandez et al. 2021, A&A 647 A155, Table 2 and eqs. (5)-(7):
         // https://doi.org/10.1051/0004-6361/202039790
         // Published CDS table2.dat, J/A+A/647/A155 (retrieved 2026-10-20):
@@ -95,7 +96,7 @@ namespace detail {
         }
         return cooling.toFloat();    // eV cm^3/s per H2--H2 pair density.
     }
-    PRIMORDIAL_HD inline float matchColdCooling(
+    CUDA_EXPORT inline float matchColdCooling(
         float temperature, float cooling, float logRatio, float logSlopeDelta) {
         if (temperature <= 80.0f) {
             return cooling;
@@ -110,17 +111,17 @@ namespace detail {
             logRatio * sSquared * (3.0f - 2.0f * s) + 20.0f * logSlopeDelta * sSquared * (s - 1.0f);
         return cooling * ::expf(correction);
     }
-    PRIMORDIAL_HD inline float hydrogenRecombination(float lambda) {
+    CUDA_EXPORT inline float hydrogenRecombination(float lambda) {
         // Hui & Gnedin 1997 Appendix A, case A (all recombination photons escape).
         // https://arxiv.org/abs/astro-ph/9612232
         return 1.269e-13f * ::powf(lambda, 1.503f) /
             ::powf(1.0f + ::powf(lambda / 0.522f, 0.470f), 1.923f);
     }
-    PRIMORDIAL_HD inline float hydrogenRecombinationCooling(float temperature, float lambda) {
+    CUDA_EXPORT inline float hydrogenRecombinationCooling(float temperature, float lambda) {
         return (1.778e-29f / kElectronVolt) * temperature * ::powf(lambda, 1.965f) /
             ::powf(1.0f + ::powf(lambda / 0.541f, 0.502f), 2.697f);
     }
-    PRIMORDIAL_HD inline float heliumRecombination(float temperature) {
+    CUDA_EXPORT inline float heliumRecombination(float temperature) {
         // Verner & Ferland 1996 eq. (4), Table 1 He I(b), valid 3..1e9 K.
         // Use their single wide-range fit, avoiding a discontinuous 1e6 K splice.
         // https://arxiv.org/abs/astro-ph/9509083
@@ -128,7 +129,7 @@ namespace detail {
         float const high = ::sqrtf(temperature / 4.677e6f);
         return 9.356e-10f / (low * ::powf(1.0f + low, 0.2108f) * ::powf(1.0f + high, 1.7892f));
     }
-    PRIMORDIAL_HD inline float molecularChargeTransfer(float temperature) {
+    CUDA_EXPORT inline float molecularChargeTransfer(float temperature) {
         // Savin et al. 2004, as tabulated by Glover & Abel 2008, Appendix A.
         // https://academic.oup.com/mnras/article/388/4/1627/981339
         // This polynomial is severely cancelling. Split decimal coefficients and
@@ -150,7 +151,7 @@ namespace detail {
     }
 }    // namespace detail
 
-PRIMORDIAL_HD inline Status evaluateRateCoefficients(
+CUDA_EXPORT inline Status evaluateRateCoefficients(
     float temperature, Network network, RateCoefficients& result) {
     if (!finite(temperature) || temperature <= 0.0f ||
         (network != Network::Atomic6 && network != Network::Molecular9)) {
@@ -244,7 +245,7 @@ PRIMORDIAL_HD inline Status evaluateRateCoefficients(
 // can underflow naturally only after interpolation; never log a rounded zero.
 // Its critical-density closure assumes electron excitation is subdominant at
 // high density, and is not a state-resolved rovibrational population model.
-PRIMORDIAL_HD inline void evaluateDensityDependentRates(Composition const& c,
+CUDA_EXPORT inline void evaluateDensityDependentRates(Composition const& c,
     Environment const& environment, float temperature, RateCoefficients& result) {
     if (environment.network != Network::Molecular9) {
         return;
@@ -274,7 +275,7 @@ PRIMORDIAL_HD inline void evaluateDensityDependentRates(Composition const& c,
     }
 }
 
-PRIMORDIAL_HD inline Status validateRadiation(Radiation const& r) {
+CUDA_EXPORT inline Status validateRadiation(Radiation const& r) {
     float const values[] = {r.hydrogenIonization, r.heliumIonization, r.heliumPlusIonization,
         r.hydrogenMinusDetachment, r.molecularHydrogenDissociation, r.molecularHydrogenIonization,
         r.molecularHydrogenPlusDissociation, r.molecularHydrogenPlusIonization,
@@ -287,7 +288,7 @@ PRIMORDIAL_HD inline Status validateRadiation(Radiation const& r) {
     }
     return Status::Success;
 }
-PRIMORDIAL_HD inline void reactionFluxes(Composition const& c, Environment const& environment,
+CUDA_EXPORT inline void reactionFluxes(Composition const& c, Environment const& environment,
     RateCoefficients const& rates, FloatFloat (&flux)[kReactionCount]) {
     FloatFloat const reactantA[] = {c.hydrogen, c.hydrogenPlus, c.helium, c.heliumPlus,
         c.heliumPlus, c.heliumDoublePlus, c.hydrogen, c.hydrogenMinus, c.hydrogen,
@@ -327,7 +328,7 @@ PRIMORDIAL_HD inline void reactionFluxes(Composition const& c, Environment const
 // Order of collision partners: H, H2, He, H+, e. All five are retained.
 // This remains spontaneous line cooling with no molecular CMB absorption or
 // evolved spin populations. Compton exchange is a separate thermal process.
-PRIMORDIAL_HD inline Status molecularCoolingCoefficients(
+CUDA_EXPORT inline Status molecularCoolingCoefficients(
     float temperature, float (&cooling)[5], float& lte) {
     if (!finite(temperature) || temperature < 10.0f || temperature > 6000.0f) {
         return Status::UnsupportedState;
@@ -392,9 +393,9 @@ PRIMORDIAL_HD inline Status molecularCoolingCoefficients(
     return Status::Success;
 }
 
-PRIMORDIAL_HD inline Status evaluateThermalRates(Composition const& c,
-    Environment const& environment, float temperature, RateCoefficients const& rates,
-    FloatFloat const (&flux)[kReactionCount], ThermalRates& result) {
+CUDA_EXPORT inline Status evaluateThermalRates(Composition const& c, Environment const& environment,
+    float temperature, RateCoefficients const& rates, FloatFloat const (&flux)[kReactionCount],
+    ThermalRates& result) {
     result = ThermalRates{};
     FloatFloat const electronDensity = FloatFloat(environment.nHydrogen) * c.electrons;
     float const root = ::sqrtf(temperature);
@@ -501,7 +502,7 @@ PRIMORDIAL_HD inline Status evaluateThermalRates(Composition const& c,
     return result.netHeating().isFinite() ? Status::Success : Status::InvalidInput;
 }
 
-PRIMORDIAL_HD inline Status evaluateRhsAtTemperature(WorkingState const& state,
+CUDA_EXPORT inline Status evaluateRhsAtTemperature(WorkingState const& state,
     Environment const& environment, float temperature, Derivative& derivative) {
     Status status = validateComposition(state, environment);
     if (status != Status::Success) {
@@ -552,7 +553,7 @@ PRIMORDIAL_HD inline Status evaluateRhsAtTemperature(WorkingState const& state,
     derivative = result;
     return Status::Success;
 }
-PRIMORDIAL_HD inline Status evaluateRhs(
+CUDA_EXPORT inline Status evaluateRhs(
     WorkingState const& state, Environment const& environment, Derivative& derivative) {
     Eos eos;
     Status const status = evaluateEos(state, environment, eos);
@@ -560,7 +561,7 @@ PRIMORDIAL_HD inline Status evaluateRhs(
         evaluateRhsAtTemperature(state, environment, eos.temperature, derivative) :
         status;
 }
-PRIMORDIAL_HD inline Status evaluateRhs(
+CUDA_EXPORT inline Status evaluateRhs(
     State const& state, Environment const& environment, Derivative& derivative) {
     Status const status = validateState(state, environment);
     return status == Status::Success ? evaluateRhs(workingState(state), environment, derivative) :

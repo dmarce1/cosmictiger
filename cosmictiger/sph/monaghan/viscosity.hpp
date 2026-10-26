@@ -25,13 +25,8 @@
  */
 #pragma once
 
+#include <cosmictiger/cuda/cuda_export.hpp>
 #include <cosmictiger/math/simd_math.hpp>
-
-#ifdef __CUDACC__
-#define COSMICTIGER_MONAGHAN_EXPORT __host__ __device__
-#else
-#define COSMICTIGER_MONAGHAN_EXPORT
-#endif
 
 namespace monaghan {
 
@@ -49,9 +44,9 @@ namespace monaghan {
 // radius to h. Their defaults give h = H/2, the cubic-spline convention, for the
 // standalone references in tests/sph/monaghan/equations.cpp.
 template <typename Real>
-COSMICTIGER_MONAGHAN_EXPORT inline Real viscosityMu(Real radiusSquared, Real velocityDotRadius,
-    Real supportI, Real supportJ, Real viscosityEpsilon,
-    Real supportRadiusPerEffectiveRadius = Real(2), Real viscosityWidthScale = Real(1)) {
+CUDA_EXPORT inline Real viscosityMu(Real radiusSquared, Real velocityDotRadius, Real supportI,
+    Real supportJ, Real viscosityEpsilon, Real supportRadiusPerEffectiveRadius = Real(2),
+    Real viscosityWidthScale = Real(1)) {
     Real const r_ab2 = radiusSquared;    // |r_ab|²
     Real const v_ab_dot_r_ab = velocityDotRadius;
     Real const H_a = supportI;
@@ -72,7 +67,7 @@ COSMICTIGER_MONAGHAN_EXPORT inline Real viscosityMu(Real radiusSquared, Real vel
 // β = 2 (p. 551). Since μ_ab already vanishes for separating pairs, the branch is
 // selected on μ_ab < 0.
 template <typename Real>
-COSMICTIGER_MONAGHAN_EXPORT inline Real artificialViscosity(
+CUDA_EXPORT inline Real artificialViscosity(
     Real rhoI, Real rhoJ, Real soundI, Real soundJ, Real mu, Real alpha, Real beta) {
     Real const ρ_a = rhoI;
     Real const ρ_b = rhoJ;
@@ -90,5 +85,3 @@ COSMICTIGER_MONAGHAN_EXPORT inline Real artificialViscosity(
 // NOLINTEND(readability-identifier-naming)
 
 }    // namespace monaghan
-
-#undef COSMICTIGER_MONAGHAN_EXPORT

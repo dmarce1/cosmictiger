@@ -5,13 +5,8 @@
 #include <limits>
 #include <type_traits>
 
+#include <cosmictiger/cuda/cuda_export.hpp>
 #include <cosmictiger/math/radial_kernel.hpp>
-
-#if defined(__CUDACC__)
-#define COSMICTIGER_DENSITY_HD __host__ __device__
-#else
-#define COSMICTIGER_DENSITY_HD
-#endif
 
 namespace radial_kernel {
 
@@ -78,7 +73,7 @@ namespace detail {
     }
 
     template <size_t dimension, typename Real>
-    COSMICTIGER_DENSITY_HD inline auto densityMask(
+    CUDA_EXPORT inline auto densityMask(
         DensityKernelTable<dimension> const& table, int piece, Real q) {
         auto const upper = q < simdBroadcast<Real>(table.changePoints[piece + 1]);
         return piece == 0 ? upper : upper && (q >= simdBroadcast<Real>(table.changePoints[piece]));
@@ -175,7 +170,7 @@ constexpr DensityKernelTable<dimension> makeDensityKernelTable(KernelSpec spec) 
 }
 
 template <size_t dimension, typename Real>
-COSMICTIGER_DENSITY_HD inline Real value(DensityKernelTable<dimension> const& table, Real q) {
+CUDA_EXPORT inline Real value(DensityKernelTable<dimension> const& table, Real q) {
     Real result = simdBroadcast<Real>(0);
     for (int piece = 0; piece < table.pieceCount; ++piece) {
         if constexpr (std::is_arithmetic_v<Real>) {
@@ -194,7 +189,7 @@ COSMICTIGER_DENSITY_HD inline Real value(DensityKernelTable<dimension> const& ta
 }
 
 template <size_t dimension, typename Real>
-COSMICTIGER_DENSITY_HD inline Real derivative(DensityKernelTable<dimension> const& table, Real q) {
+CUDA_EXPORT inline Real derivative(DensityKernelTable<dimension> const& table, Real q) {
     Real result = simdBroadcast<Real>(0);
     for (int piece = 0; piece < table.pieceCount; ++piece) {
         if constexpr (std::is_arithmetic_v<Real>) {
@@ -213,5 +208,3 @@ COSMICTIGER_DENSITY_HD inline Real derivative(DensityKernelTable<dimension> cons
 }
 
 }    // namespace radial_kernel
-
-#undef COSMICTIGER_DENSITY_HD

@@ -10,16 +10,11 @@
 #include <cmath>
 #include <utility>
 
+#include <cosmictiger/cuda/cuda_export.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/generated_cartesian_m2l.hpp>
 #include <cosmictiger/gravity/generated_cartesian_operators.hpp>
 #include <cosmictiger/gravity/generated_config.hpp>
-
-#ifdef __CUDACC__
-#define COSMICTIGER_CARTESIAN_TEST_HD __host__ __device__
-#else
-#define COSMICTIGER_CARTESIAN_TEST_HD
-#endif
 
 namespace detail {
 
@@ -69,11 +64,11 @@ template <typename Real, int count>
 struct Coefficients {
     Real values[count]{};
 
-    COSMICTIGER_CARTESIAN_TEST_HD Real& operator[](int index) {
+    CUDA_EXPORT Real& operator[](int index) {
         return values[index];
     }
 
-    COSMICTIGER_CARTESIAN_TEST_HD Real const& operator[](int index) const {
+    CUDA_EXPORT Real const& operator[](int index) const {
         return values[index];
     }
 };
@@ -91,7 +86,7 @@ template <typename Real, int order>
 using KernelResult = Coefficients<Real, KernelLayout<order>::kResultCount_>;
 
 template <typename Real, int order>
-COSMICTIGER_CARTESIAN_TEST_HD void evaluateKernels(
+CUDA_EXPORT void evaluateKernels(
     KernelInput<Real, order> const& input, KernelResult<Real, order>& result) {
     using Layout = KernelLayout<order>;
     using Multipole = Coefficients<Real, Layout::kMultipoleCount_>;
@@ -176,5 +171,3 @@ void forEachFmmOrder(F&& f) {
 }
 
 }    // namespace detail
-
-#undef COSMICTIGER_CARTESIAN_TEST_HD

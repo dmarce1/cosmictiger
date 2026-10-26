@@ -8,13 +8,8 @@
 
 #pragma once
 
+#include <cosmictiger/cuda/cuda_export.hpp>
 #include <cosmictiger/math/radial_kernel.hpp>
-
-#ifdef __CUDACC__
-#define COSMICTIGER_KERNEL_HD __host__ __device__
-#else
-#define COSMICTIGER_KERNEL_HD
-#endif
 
 namespace detail {
 inline radial_kernel::KernelTable hydroKernel =
@@ -27,7 +22,7 @@ extern __device__ __constant__ radial_kernel::KernelTable deviceGravityKernel;
 #endif
 }    // namespace detail
 
-COSMICTIGER_KERNEL_HD inline radial_kernel::KernelTable const& selectedHydroKernel() {
+CUDA_EXPORT inline radial_kernel::KernelTable const& selectedHydroKernel() {
 #ifdef __CUDA_ARCH__
     return detail::deviceHydroKernel;
 #else
@@ -35,7 +30,7 @@ COSMICTIGER_KERNEL_HD inline radial_kernel::KernelTable const& selectedHydroKern
 #endif
 }
 
-COSMICTIGER_KERNEL_HD inline radial_kernel::KernelTable const& selectedGravityKernel() {
+CUDA_EXPORT inline radial_kernel::KernelTable const& selectedGravityKernel() {
 #ifdef __CUDA_ARCH__
     return detail::deviceGravityKernel;
 #else
@@ -53,28 +48,27 @@ void setKernelSelections(
     radial_kernel::KernelSpec gravity, radial_kernel::KernelSpec hydro, bool useCuda);
 
 template <typename Real>
-COSMICTIGER_KERNEL_HD inline Real kernelW(Real q) {
+CUDA_EXPORT inline Real kernelW(Real q) {
     return radial_kernel::value(selectedHydroKernel(), q);
 }
 
 template <typename Real>
-COSMICTIGER_KERNEL_HD inline Real dkernelWDq(Real q) {
+CUDA_EXPORT inline Real dkernelWDq(Real q) {
     return radial_kernel::derivative(selectedHydroKernel(), q);
 }
 
 template <typename Real>
-COSMICTIGER_KERNEL_HD inline Real kernelFqinv(Real q) {
+CUDA_EXPORT inline Real kernelFqinv(Real q) {
     return radial_kernel::forceFactor(selectedHydroKernel(), q);
 }
 
 template <typename Real>
-COSMICTIGER_KERNEL_HD inline Real kernelPot(Real q) {
+CUDA_EXPORT inline Real kernelPot(Real q) {
     return radial_kernel::potential(selectedHydroKernel(), q);
 }
 
 // Existing support-bound smoothing correction used by particle prediction.
-COSMICTIGER_KERNEL_HD inline void dsmoothXDh(
-    float h, float hmin, float, float& value, float& derivative) {
+CUDA_EXPORT inline void dsmoothXDh(float h, float hmin, float, float& value, float& derivative) {
     if (h < 2.0f * hmin) {
         value = h / hmin - 1.0f;
         derivative = 1.0f / hmin;
@@ -84,16 +78,14 @@ COSMICTIGER_KERNEL_HD inline void dsmoothXDh(
     }
 }
 
-COSMICTIGER_KERNEL_HD inline float dlogsmoothXDlogh(float h, float hmin, float hmax) {
+CUDA_EXPORT inline float dlogsmoothXDlogh(float h, float hmin, float hmax) {
     float value, derivative;
     dsmoothXDh(h, hmin, hmax, value, derivative);
     return derivative * h / value;
 }
 
-COSMICTIGER_KERNEL_HD inline float smoothX(float h, float hmin, float hmax) {
+CUDA_EXPORT inline float smoothX(float h, float hmin, float hmax) {
     float value, derivative;
     dsmoothXDh(h, hmin, hmax, value, derivative);
     return value;
 }
-
-#undef COSMICTIGER_KERNEL_HD

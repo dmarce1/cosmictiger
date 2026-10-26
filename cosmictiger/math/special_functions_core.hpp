@@ -10,23 +10,18 @@
 #include <cstdint>
 #include <type_traits>
 
+#include <cosmictiger/cuda/cuda_export.hpp>
 #include <cosmictiger/math/simd_math.hpp>
 
-#ifdef __CUDACC__
-#define COSMICTIGER_SPECIAL_HD __host__ __device__
-#elif defined(__GNUC__)
-// GCC otherwise leaves some polynomial helpers out of line inside large
-// SIMD kernels, preventing vectorization across their call boundaries.
-#define COSMICTIGER_SPECIAL_HD [[gnu::always_inline]]
-#else
-#define COSMICTIGER_SPECIAL_HD
-#endif
-
+// Keep GCC polynomial helpers inline so SIMD kernels can vectorize across calls.
 namespace special_functions {
 namespace detail {
 
     template <class Real>
-    COSMICTIGER_SPECIAL_HD inline Real roundEven(Real value) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+    [[gnu::always_inline]]
+#endif
+    CUDA_EXPORT inline Real roundEven(Real value) {
         if constexpr (std::is_arithmetic_v<Real>) {
 #ifdef __CUDA_ARCH__
             return ::nearbyintf(value);
@@ -41,7 +36,10 @@ namespace detail {
     }
 
     template <class Real>
-    COSMICTIGER_SPECIAL_HD inline Real floor(Real value) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+    [[gnu::always_inline]]
+#endif
+    CUDA_EXPORT inline Real floor(Real value) {
         if constexpr (std::is_arithmetic_v<Real>) {
             return ::floorf(value);
         } else {
@@ -53,7 +51,10 @@ namespace detail {
 
     // n is an exactly represented integer in [-126, 127].
     template <class Real>
-    COSMICTIGER_SPECIAL_HD inline Real powerOfTwo(Real n) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+    [[gnu::always_inline]]
+#endif
+    CUDA_EXPORT inline Real powerOfTwo(Real n) {
         if constexpr (std::is_arithmetic_v<Real>) {
             int const bits = (int(n) + 127) << 23;
 #ifdef __CUDA_ARCH__

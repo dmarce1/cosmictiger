@@ -314,6 +314,7 @@ set(cosmictiger_header_files
     cosmictiger/cosmology/native_recombination.hpp
     cosmictiger/cosmology/zero_order.hpp
     cosmictiger/cuda/cuda.hpp
+    cosmictiger/cuda/cuda_export.hpp
     cosmictiger/cuda/cuda_memory.hpp
     cosmictiger/cuda/cuda_memory_advice.hpp
     cosmictiger/cuda/cuda_reduce.hpp

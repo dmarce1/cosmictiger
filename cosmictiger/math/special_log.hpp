@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <type_traits>
 
+#include <cosmictiger/cuda/cuda_export.hpp>
 #include <cosmictiger/math/special_functions_core.hpp>
 
 #ifdef __CUDACC__
@@ -30,7 +31,10 @@ namespace detail {
     // For positive normal binary32 x, obtain x = mantissa * 2^exponent with
     // sqrt(1/2) <= mantissa < sqrt(2). The integer normalization is exact.
     template <class Real>
-    COSMICTIGER_SPECIAL_HD inline LogReduction<Real> reduceLog(Real value) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+    [[gnu::always_inline]]
+#endif
+    CUDA_EXPORT inline LogReduction<Real> reduceLog(Real value) {
         constexpr uint32_t kMantissaBoundary = 0x3f3504f3U;
         constexpr uint32_t kMantissaMask = 0x007fffffU;
         if constexpr (std::is_arithmetic_v<Real>) {
@@ -69,7 +73,10 @@ namespace detail {
     // Pairing coefficients shortens Horner's dependency chain from five FMAs to
     // three, at the cost of one additional multiplication.
     template <bool baseTwo, class Real>
-    COSMICTIGER_SPECIAL_HD inline Real logPositiveNormal(Real value) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+    [[gnu::always_inline]]
+#endif
+    CUDA_EXPORT inline Real logPositiveNormal(Real value) {
         auto const reduced = reduceLog(value);
         Real const t = (reduced.mantissa - simdBroadcast<Real>(1.0f)) /
             (reduced.mantissa + simdBroadcast<Real>(1.0f));
@@ -93,7 +100,10 @@ namespace detail {
         }
     }
 
-    COSMICTIGER_SPECIAL_HD inline bool positiveNormal(float value) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+    [[gnu::always_inline]]
+#endif
+    CUDA_EXPORT inline bool positiveNormal(float value) {
 #ifdef __CUDA_ARCH__
         uint32_t const bits = __float_as_uint(value);
 #else
@@ -107,15 +117,24 @@ namespace detail {
 // Normal positive inputs follow the shared CPU/CUDA approximation. Library
 // fallbacks retain the platform's behavior for zero, subnormal, negative, and
 // nonfinite inputs.
-COSMICTIGER_SPECIAL_HD inline float log(float value) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+[[gnu::always_inline]]
+#endif
+CUDA_EXPORT inline float log(float value) {
     return detail::positiveNormal(value) ? detail::logPositiveNormal<false>(value) : ::logf(value);
 }
 
-COSMICTIGER_SPECIAL_HD inline float log2(float value) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+[[gnu::always_inline]]
+#endif
+CUDA_EXPORT inline float log2(float value) {
     return detail::positiveNormal(value) ? detail::logPositiveNormal<true>(value) : ::log2f(value);
 }
 
-COSMICTIGER_SPECIAL_HD inline float pow(float base, float exponent) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+[[gnu::always_inline]]
+#endif
+CUDA_EXPORT inline float pow(float base, float exponent) {
 #ifdef __CUDA_ARCH__
     return ::__nv_powf(base, exponent);
 #else
@@ -124,15 +143,24 @@ COSMICTIGER_SPECIAL_HD inline float pow(float base, float exponent) {
 }
 
 // Preserve precision when a caller explicitly selects a double argument.
-COSMICTIGER_SPECIAL_HD inline double log(double value) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+[[gnu::always_inline]]
+#endif
+CUDA_EXPORT inline double log(double value) {
     return ::log(value);
 }
 
-COSMICTIGER_SPECIAL_HD inline double log2(double value) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+[[gnu::always_inline]]
+#endif
+CUDA_EXPORT inline double log2(double value) {
     return ::log2(value);
 }
 
-COSMICTIGER_SPECIAL_HD inline double pow(double base, double exponent) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+[[gnu::always_inline]]
+#endif
+CUDA_EXPORT inline double pow(double base, double exponent) {
     return ::pow(base, exponent);
 }
 

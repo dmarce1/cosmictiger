@@ -11,11 +11,7 @@
 #include <cmath>
 #include <limits>
 
-#ifdef __CUDACC__
-#define COSMICTIGER_CULLEN_DEHNEN_EXPORT __host__ __device__
-#else
-#define COSMICTIGER_CULLEN_DEHNEN_EXPORT
-#endif
+#include <cosmictiger/cuda/cuda_export.hpp>
 
 // L. Cullen and W. Dehnen, "Inviscid smoothed particle hydrodynamics",
 // MNRAS 408 (2010), 669-683, doi:10.1111/j.1365-2966.2010.17158.x.
@@ -48,7 +44,7 @@ namespace detail {
     // handles well-conditioned 3D neighborhoods; Jacobi diagonalization handles the
     // remaining cases without assigning an artificial length scale to missing axes.
     template <typename Real, typename Counter>
-    COSMICTIGER_CULLEN_DEHNEN_EXPORT inline int inverseMoment(
+    CUDA_EXPORT inline int inverseMoment(
         Real const (&moment)[3][3], Real (&inverse)[3][3], Counter& floatingPointOperations) {
         Real T[3][3];
         Real scale = Real(0);
@@ -168,7 +164,7 @@ namespace detail {
 // T = Σ_j r_ij ⊗ r_ij w̄_ij, V = D T^-1. Apply the same inverse to the
 // acceleration sums for equation (B12). All three sums use identical weights.
 template <typename Real, typename Counter>
-COSMICTIGER_CULLEN_DEHNEN_EXPORT inline int reconstructGradients(GradientSums<Real> const& sums,
+CUDA_EXPORT inline int reconstructGradients(GradientSums<Real> const& sums,
     Real (&velocityGradient)[3][3], Real (&accelerationGradient)[3][3],
     Counter& floatingPointOperations) {
     Real T_inverse[3][3];
@@ -190,7 +186,7 @@ COSMICTIGER_CULLEN_DEHNEN_EXPORT inline int reconstructGradients(GradientSums<Re
 }
 
 template <typename Real>
-COSMICTIGER_CULLEN_DEHNEN_EXPORT inline int reconstructGradients(GradientSums<Real> const& sums,
+CUDA_EXPORT inline int reconstructGradients(GradientSums<Real> const& sums,
     Real (&velocityGradient)[3][3], Real (&accelerationGradient)[3][3]) {
     unsigned long long floatingPointOperations = 0;
     return reconstructGradients(
@@ -212,9 +208,9 @@ COSMICTIGER_CULLEN_DEHNEN_EXPORT inline int reconstructGradients(GradientSums<Re
 // arithmetic and math results cost one, FMA costs two, and selections/signs cost zero.
 // Its type may be FlopCounter<> so disabled instrumentation optimizes away.
 template <typename Real, typename Counter>
-COSMICTIGER_CULLEN_DEHNEN_EXPORT inline Result<Real> diagnostics(GradientSums<Real> const& sums,
-    Real scaleFactor, Real expansionAcceleration, Real signAverage, Real supportRadius,
-    Real signalSpeed, Real alphaMaximum, Real decayCoefficient, Counter& floatingPointOperations) {
+CUDA_EXPORT inline Result<Real> diagnostics(GradientSums<Real> const& sums, Real scaleFactor,
+    Real expansionAcceleration, Real signAverage, Real supportRadius, Real signalSpeed,
+    Real alphaMaximum, Real decayCoefficient, Counter& floatingPointOperations) {
     Real const a = scaleFactor;
     Real const H_i = supportRadius;
     Real const v_sig_i = signalSpeed;
@@ -260,9 +256,9 @@ COSMICTIGER_CULLEN_DEHNEN_EXPORT inline Result<Real> diagnostics(GradientSums<Re
 }
 
 template <typename Real>
-COSMICTIGER_CULLEN_DEHNEN_EXPORT inline Result<Real> diagnostics(GradientSums<Real> const& sums,
-    Real scaleFactor, Real expansionAcceleration, Real signAverage, Real supportRadius,
-    Real signalSpeed, Real alphaMaximum, Real decayCoefficient) {
+CUDA_EXPORT inline Result<Real> diagnostics(GradientSums<Real> const& sums, Real scaleFactor,
+    Real expansionAcceleration, Real signAverage, Real supportRadius, Real signalSpeed,
+    Real alphaMaximum, Real decayCoefficient) {
     unsigned long long floatingPointOperations = 0;
     return diagnostics(sums, scaleFactor, expansionAcceleration, signAverage, supportRadius,
         signalSpeed, alphaMaximum, decayCoefficient, floatingPointOperations);
@@ -272,7 +268,6 @@ COSMICTIGER_CULLEN_DEHNEN_EXPORT inline Result<Real> diagnostics(GradientSums<Re
 
 }    // namespace cullen_and_dehnen
 
-#undef COSMICTIGER_CULLEN_DEHNEN_EXPORT
 
 // Complete the diagnostic phase before the force pass snapshots alpha.
 void sphParticlesUpdateCullenDehnen(int minimumRung, float timeStepScale, float time);

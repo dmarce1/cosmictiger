@@ -8,6 +8,7 @@
 #include <cmath>
 #include <type_traits>
 
+#include <cosmictiger/cuda/cuda_export.hpp>
 #include <cosmictiger/math/special_functions_core.hpp>
 
 namespace special_functions {
@@ -15,7 +16,10 @@ namespace special_functions {
 // The fast path covers the required Ewald range of four pi in either direction.
 // Use platform math outside the tested |x| <= 16 interval.
 template <class Real>
-COSMICTIGER_SPECIAL_HD inline void sincos(Real x, Real* sine, Real* cosine) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+[[gnu::always_inline]]
+#endif
+CUDA_EXPORT inline void sincos(Real x, Real* sine, Real* cosine) {
     if constexpr (std::is_arithmetic_v<Real>) {
         static_assert(std::is_same_v<Real, float>);
     } else {
@@ -81,29 +85,44 @@ COSMICTIGER_SPECIAL_HD inline void sincos(Real x, Real* sine, Real* cosine) {
 }
 
 template <class Real>
-COSMICTIGER_SPECIAL_HD inline Real sin(Real x) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+[[gnu::always_inline]]
+#endif
+CUDA_EXPORT inline Real sin(Real x) {
     Real sine, cosine;
     special_functions::sincos(x, &sine, &cosine);
     return sine;
 }
 
 template <class Real>
-COSMICTIGER_SPECIAL_HD inline Real cos(Real x) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+[[gnu::always_inline]]
+#endif
+CUDA_EXPORT inline Real cos(Real x) {
     Real sine, cosine;
     special_functions::sincos(x, &sine, &cosine);
     return cosine;
 }
 
-COSMICTIGER_SPECIAL_HD inline void sincos(double x, double* sine, double* cosine) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+[[gnu::always_inline]]
+#endif
+CUDA_EXPORT inline void sincos(double x, double* sine, double* cosine) {
     *sine = ::sin(x);
     *cosine = ::cos(x);
 }
 
-COSMICTIGER_SPECIAL_HD inline double sin(double x) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+[[gnu::always_inline]]
+#endif
+CUDA_EXPORT inline double sin(double x) {
     return ::sin(x);
 }
 
-COSMICTIGER_SPECIAL_HD inline double cos(double x) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+[[gnu::always_inline]]
+#endif
+CUDA_EXPORT inline double cos(double x) {
     return ::cos(x);
 }
 

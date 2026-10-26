@@ -84,9 +84,9 @@ def emitDegree(degree):
             f"static constexpr int kDegree_ = {degree};", f"static constexpr int kCount_ = {count};",
             f"static constexpr int kLatticeRadius_ = {RADIUS};",
             "template <typename Real>",
-            "COSMICTIGER_SPHERICAL_EWALD_HD static void regular(Real* output, Real x, Real y, Real z, Real radiusSquared) {"]
+            "CUDA_EXPORT static void regular(Real* output, Real x, Real y, Real z, Real radiusSquared) {"]
     body += polynomial + ["}", "template <typename Real, typename Output>",
-            "COSMICTIGER_SPHERICAL_EWALD_HD static void evaluateWorking(Output& output, Real& greenTrace, Real x, Real y, Real z) {",
+            "CUDA_EXPORT static void evaluateWorking(Output& output, Real& greenTrace, Real x, Real y, Real z) {",
             f"Real harmonics[{count}];", f"Real compensation[{count}];", f"Real imagePair[{count}];",
             "Real const radiusSquared = simdFma(x, x, simdFma(y, y, z * z));",
             "regular(harmonics, x, y, z, radiusSquared);",
@@ -167,7 +167,7 @@ def emitDegree(degree):
             body += [f"detail::ewaldAccumulate(output[{slot}], compensation[{slot}], {operand} * harmonics[{slot}]);"]
             wave_cost += 1 + (f != 1) + 4
     body += ["}", "}", "}", "}", "template <typename Real, typename Output>",
-             "COSMICTIGER_SPHERICAL_EWALD_HD static void evaluate(Output& output, Real& greenTrace, Real x, Real y, Real z) {",
+             "CUDA_EXPORT static void evaluate(Output& output, Real& greenTrace, Real x, Real y, Real z) {",
              "using Working = typename detail::EwaldWorkingType<Real>::Type;",
              f"Working temporary[{count}];", "Working trace;",
              "evaluateWorking<Working>(temporary, trace, detail::ewaldConvert<Working>(x), detail::ewaldConvert<Working>(y), detail::ewaldConvert<Working>(z));",
@@ -176,7 +176,7 @@ def emitDegree(degree):
     direct, contraction_cost = contraction(degree)
     body += [f"template <> class EwaldM2lKernel<{degree}> {{", "public:", f"static constexpr int kFlops_ = {contraction_cost};",
              "template <typename Real, typename Local, typename Moments, typename Greens>",
-             "COSMICTIGER_SPHERICAL_EWALD_HD static void add(Local& local, Real& localTrace, Moments const& moments, Real sourceTrace, Greens const& greens, Real greenTrace) {"]
+             "CUDA_EXPORT static void add(Local& local, Real& localTrace, Moments const& moments, Real sourceTrace, Greens const& greens, Real greenTrace) {"]
     body += direct + ["}", "};"]
     pairs = sum(x*x+y*y+z*z <= RADIUS*RADIUS and (x>0 or x==0 and (y>0 or y==0 and z>0)) for x in range(-RADIUS,RADIUS+1) for y in range(-RADIUS,RADIUS+1) for z in range(-RADIUS,RADIUS+1))
     central_cost += 1
@@ -191,23 +191,24 @@ def emitDegree(degree):
 def generate(minLocalDegree=2,maxLocalDegree=8):
     if not 2 <= minLocalDegree <= maxLocalDegree <= 8:
         raise ValueError("Spherical Ewald is validated for local degrees 2 through 8")
-    lines = [NOTICE,"#pragma once", "#include <cmath>", "#include <type_traits>", "", "#include <cosmictiger/math/simd_math.hpp>", "#include <cosmictiger/gravity/nitadori/generated_spherical.hpp>",
-             "", "#ifdef __CUDACC__", "#define COSMICTIGER_SPHERICAL_EWALD_HD __host__ __device__", "#else", "#define COSMICTIGER_SPHERICAL_EWALD_HD", "#endif", "namespace cosmictiger::gravity::spherical {", "namespace detail {"]
+    lines = [NOTICE,"#pragma once", "#include <cmath>", "#include <type_traits>", "", "#include <cosmictiger/cuda/cuda_export.hpp>",
+             "#include <cosmictiger/gravity/nitadori/generated_spherical.hpp>", "#include <cosmictiger/math/simd_math.hpp>",
+             "", "namespace cosmictiger::gravity::spherical {", "namespace detail {"]
     lines += ["template <typename Real> class EwaldWorkingType { public: using Type = Real; };",
               "template <> class EwaldWorkingType<float> { public: using Type = double; };",
               "#ifndef __CUDACC__",
               "template <int lanes> class EwaldWorkingType<SimdVector<float, lanes>> { public: using Type = SimdVector<double, lanes>; };",
               "#endif", "template <typename Destination, typename Source>",
-              "COSMICTIGER_SPHERICAL_EWALD_HD inline Destination ewaldConvert(Source const& value) {",
+              "CUDA_EXPORT inline Destination ewaldConvert(Source const& value) {",
               "if constexpr (std::is_same_v<Destination, Source>) { return value; }",
               "else if constexpr (std::is_arithmetic_v<Destination>) { return static_cast<Destination>(value); }",
               "else { return Destination([&](auto lane) { return static_cast<typename Destination::value_type>(value[lane]); }); }", "}"]
     for name in ["Exp","Erfc","Cos","Sin"]:
         function = name.lower()
-        lines += ["template <typename Real>", f"COSMICTIGER_SPHERICAL_EWALD_HD inline Real ewald{name}(Real const& value) {{",
+        lines += ["template <typename Real>", f"CUDA_EXPORT inline Real ewald{name}(Real const& value) {{",
                   f"if constexpr (std::is_arithmetic_v<Real>) {{ return std::{function}(value); }}",
                   f"else {{ return Real([&](auto lane) {{ return std::{function}(value[lane]); }}); }}", "}"]
-    lines += ["template <typename Real>", "COSMICTIGER_SPHERICAL_EWALD_HD inline void ewaldAccumulate(Real& sum, Real& correction, Real value) {",
+    lines += ["template <typename Real>", "CUDA_EXPORT inline void ewaldAccumulate(Real& sum, Real& correction, Real value) {",
               "Real const adjusted = value - correction;", "Real const next = sum + adjusted;", "correction = (next - sum) - adjusted;", "sum = next;", "}", "}",
               "template <int degree> class EwaldGreensKernel;", "template <int degree> class EwaldM2lKernel;"]
     counts = {}
@@ -217,7 +218,7 @@ def generate(minLocalDegree=2,maxLocalDegree=8):
         counts[str(degree+1)] = report
     lines += ["template <int degree> class EwaldL2lKernel {", "public:", "static constexpr int kFlops_ = L2lKernel<degree>::kFlops_ + 9;",
               "template <typename Real, typename Local, typename Source>",
-              "COSMICTIGER_SPHERICAL_EWALD_HD static void add(Local& output, Real& outputTrace, Source const& source, Real sourceTrace, Real x, Real y, Real z) {",
+              "CUDA_EXPORT static void add(Local& output, Real& outputTrace, Source const& source, Real sourceTrace, Real x, Real y, Real z) {",
               "L2lKernel<degree>::template add<Real>(output, source, x, y, z);",
               "Real const radiusSquared = simdFma(x, x, simdFma(y, y, z * z));",
               "output[0] = simdFma(-simdBroadcast<Real>(0.5) * sourceTrace, radiusSquared, output[0]);",
@@ -227,11 +228,11 @@ def generate(minLocalDegree=2,maxLocalDegree=8):
               "outputTrace += sourceTrace;", "}", "};",
               "template <int degree> class EwaldL2pKernel {", "public:", "static constexpr int kFlops_ = L2pKernel<degree>::kFlops_ + 8;",
               "template <typename Real, typename Field, typename Source>",
-              "COSMICTIGER_SPHERICAL_EWALD_HD static void add(Field& field, Source const& source, Real sourceTrace, Real x, Real y, Real z) {",
+              "CUDA_EXPORT static void add(Field& field, Source const& source, Real sourceTrace, Real x, Real y, Real z) {",
               "L2pKernel<degree>::template add<Real>(field, source, x, y, z);",
               "Real const radiusSquared = simdFma(x, x, simdFma(y, y, z * z));",
               "field[0] = simdFma(-simdBroadcast<Real>(0.5) * sourceTrace, radiusSquared, field[0]);",
               "field[1] = simdFma(sourceTrace, x, field[1]);",
               "field[2] = simdFma(sourceTrace, y, field[2]);",
-              "field[3] = simdFma(sourceTrace, z, field[3]);", "}", "};", "}", "#undef COSMICTIGER_SPHERICAL_EWALD_HD", ""]
+              "field[3] = simdFma(sourceTrace, z, field[3]);", "}", "};", "}", ""]
     return {"generated_spherical_ewald.hpp":"\n".join(lines)}, {"cost_model":{"fma":1,"sqrt":7,"add":1,"multiply":1,"division":1,"special_functions":"reported separately"},"lattice_radius":RADIUS,"central_series_terms":SERIES_TERMS,"orders":counts}

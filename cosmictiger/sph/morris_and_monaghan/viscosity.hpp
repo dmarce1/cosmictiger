@@ -8,14 +8,9 @@
 
 #pragma once
 
+#include <cosmictiger/cuda/cuda_export.hpp>
 #include <cosmictiger/math/simd_math.hpp>
 #include <cosmictiger/sph/viscosity_state.hpp>
-
-#ifdef __CUDACC__
-#define COSMICTIGER_MORRIS_AND_MONAGHAN_EXPORT __host__ __device__
-#else
-#define COSMICTIGER_MORRIS_AND_MONAGHAN_EXPORT
-#endif
 
 namespace morris_and_monaghan {
 
@@ -28,7 +23,7 @@ namespace morris_and_monaghan {
 // Their calculations use α* = 0.1 and C₁ = 0.2; there is no upper α cap.
 // Both inverseDecayTime and divergence must refer to the integration time unit.
 template <typename Real>
-COSMICTIGER_MORRIS_AND_MONAGHAN_EXPORT inline Real viscosityAlphaRate(
+CUDA_EXPORT inline Real viscosityAlphaRate(
     Real alpha, Real alphaMinimum, Real inverseDecayTime, Real divergence) {
     Real const α_a = alpha;
     Real const α_star = alphaMinimum;
@@ -42,5 +37,3 @@ void applyUpdate(SphViscosityState& state, float minimumAlpha, float halfTimeSte
 // NOLINTEND(readability-identifier-naming)
 
 }    // namespace morris_and_monaghan
-
-#undef COSMICTIGER_MORRIS_AND_MONAGHAN_EXPORT

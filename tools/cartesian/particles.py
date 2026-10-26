@@ -55,7 +55,7 @@ def p2l(A,P):
     signature=f'''template <> class P2lKernel<{P}> {{
 public:
 \ttemplate <typename Real, typename Expansion>
-\tCOSMICTIGER_CARTESIAN_PARTICLE_HOST_DEVICE static void add(Expansion& local, Real mass,
+\tCUDA_EXPORT static void add(Expansion& local, Real mass,
 \t\tReal ux, Real uy, Real uz, Real inverseRadius, Real targetRatio) {{
 \t\t(void) ux; (void) uy; (void) uz; (void) targetRatio;'''
     return finish(A,g,outputs,signature,'P2L',P)
@@ -92,7 +92,7 @@ def m2p(A,P,centered):
     signature=f'''template <> class M2pKernel<{P}, {str(centered).lower()}> {{
 public:
 \ttemplate <typename Real, typename Field, typename Source>
-\tCOSMICTIGER_CARTESIAN_PARTICLE_HOST_DEVICE static void add(Field& field, Source const& source,
+\tCUDA_EXPORT static void add(Field& field, Source const& source,
 \t\tReal ux, Real uy, Real uz, Real inverseRadius, Real sourceRatio) {{
 \t\t(void) sourceRatio;'''
     return finish(A,g,outputs,signature,'M2P',P,{'centered':centered})
@@ -113,7 +113,7 @@ def p2m(A, order):
     signature = f'''template <> class P2mKernel<{order}> {{
 public:
 \ttemplate <typename Real, typename Multipole>
-\tCOSMICTIGER_CARTESIAN_PARTICLE_HOST_DEVICE static void add(Multipole& target, Real mass,
+\tCUDA_EXPORT static void add(Multipole& target, Real mass,
 \t\tReal dx, Real dy, Real dz) {{
 \t\t(void) dx; (void) dy; (void) dz;'''
     return finish(A, g, outputs, signature, 'P2M', order)
@@ -144,18 +144,14 @@ def l2p(A, order, withTrace):
     signature = f'''template <> class L2pKernel<{order}, {str(withTrace).lower()}> {{
 public:
 \ttemplate <typename Real, typename Field, typename Source>
-\tCOSMICTIGER_CARTESIAN_PARTICLE_HOST_DEVICE static void add(Field& field, Source const& source,
+\tCUDA_EXPORT static void add(Field& field, Source const& source,
 \t\tReal dx, Real dy, Real dz, Real inverseScale) {{
 \t\t(void) dx; (void) dy; (void) dz; (void) inverseScale;'''
     return finish(A, g, outputs, signature, 'L2P', order, {'with_trace': withTrace})
 
 
 def generateParticles(minOrder,maxOrder,algebra):
-    code=['#if defined(__CUDACC__)',
-          '#define COSMICTIGER_CARTESIAN_PARTICLE_HOST_DEVICE __host__ __device__',
-          '#else',
-          '#define COSMICTIGER_CARTESIAN_PARTICLE_HOST_DEVICE',
-          '#endif', '']
+    code=[]
     stats=[]
     for operation, args in [(p2m, (minOrder,)), (p2l, (maxOrder,)),
                             (m2p, (minOrder, True)), (m2p, (minOrder, False)),
@@ -163,5 +159,4 @@ def generateParticles(minOrder,maxOrder,algebra):
         text, counts = operation(algebra, *args)
         code.append(text)
         stats.append(counts)
-    code.append('#undef COSMICTIGER_CARTESIAN_PARTICLE_HOST_DEVICE')
     return code,stats

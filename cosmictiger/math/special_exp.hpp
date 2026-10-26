@@ -5,6 +5,7 @@
  */
 #pragma once
 
+#include <cosmictiger/cuda/cuda_export.hpp>
 #include <cosmictiger/math/special_functions_core.hpp>
 
 namespace special_functions {
@@ -13,7 +14,10 @@ namespace detail {
     // Degree seven on [-ln(2)/2, ln(2)/2]. Estrin evaluation exposes four
     // independent FMAs, instead of a chain of seven dependent FMAs.
     template <class Real>
-    COSMICTIGER_SPECIAL_HD inline Real expPolynomial(Real r) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+    [[gnu::always_inline]]
+#endif
+    CUDA_EXPORT inline Real expPolynomial(Real r) {
         Real const r2 = r * r;
         Real const r4 = r2 * r2;
         Real const p01 = simdFma(r, simdBroadcast<Real>(1), simdBroadcast<Real>(1));
@@ -28,7 +32,10 @@ namespace detail {
     // a small rounding residual. In particular, retaining the residual of -x*x
     // avoids magnifying the square's rounding error in the Gaussian tail.
     template <class Real>
-    COSMICTIGER_SPECIAL_HD inline Real expWithTail(Real x, Real tail) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+    [[gnu::always_inline]]
+#endif
+    CUDA_EXPORT inline Real expWithTail(Real x, Real tail) {
         Real const n = detail::roundEven(x * simdBroadcast<Real>(0x1.715476p+0f));
         Real r = simdFma(-n, simdBroadcast<Real>(0x1.62e430p-1f), x);
         r = simdFma(n, simdBroadcast<Real>(0x1.05c610p-29f), r);
@@ -37,7 +44,10 @@ namespace detail {
     }
 
     template <class Real>
-    COSMICTIGER_SPECIAL_HD inline Real exp2Normal(Real x) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+    [[gnu::always_inline]]
+#endif
+    CUDA_EXPORT inline Real exp2Normal(Real x) {
         Real const n = detail::roundEven(x);
         Real const fraction = x - n;
         Real const r = fraction * simdBroadcast<Real>(0x1.62e430p-1f);
@@ -49,7 +59,10 @@ namespace detail {
 // Float fast path covers every exponential evaluated by the SIMD Ewald
 // kernel, including lanes outside the scalar real-space cutoff (down to -75).
 template <class Real>
-COSMICTIGER_SPECIAL_HD inline Real exp(Real x) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+[[gnu::always_inline]]
+#endif
+CUDA_EXPORT inline Real exp(Real x) {
     if constexpr (std::is_arithmetic_v<Real>) {
         static_assert(std::is_same_v<Real, float>);
     } else {
@@ -76,7 +89,10 @@ COSMICTIGER_SPECIAL_HD inline Real exp(Real x) {
 }
 
 template <class Real>
-COSMICTIGER_SPECIAL_HD inline Real exp2(Real x) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+[[gnu::always_inline]]
+#endif
+CUDA_EXPORT inline Real exp2(Real x) {
     if constexpr (std::is_arithmetic_v<Real>) {
         static_assert(std::is_same_v<Real, float>);
     } else {
@@ -102,11 +118,17 @@ COSMICTIGER_SPECIAL_HD inline Real exp2(Real x) {
     }
 }
 
-COSMICTIGER_SPECIAL_HD inline double exp(double x) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+[[gnu::always_inline]]
+#endif
+CUDA_EXPORT inline double exp(double x) {
     return ::exp(x);
 }
 
-COSMICTIGER_SPECIAL_HD inline double exp2(double x) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+[[gnu::always_inline]]
+#endif
+CUDA_EXPORT inline double exp2(double x) {
     return ::exp2(x);
 }
 

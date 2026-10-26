@@ -13,11 +13,7 @@
 #include <limits>
 #include <type_traits>
 
-#ifdef __CUDACC__
-#define COSMICTIGER_FLOAT_FLOAT_HD __host__ __device__
-#else
-#define COSMICTIGER_FLOAT_FLOAT_HD
-#endif
+#include <cosmictiger/cuda/cuda_export.hpp>
 
 // Keep compiler fast-math assumptions out of this header, then restore the
 // caller's options below. Volatile rounding barriers are retained explicitly.
@@ -38,7 +34,7 @@ namespace detail {
 // intrinsic likewise ignores that flag. See the NVIDIA CUDA Math API,
 // Single Precision Intrinsics, __fmaf_ieee_rn:
 // https://docs.nvidia.com/cuda/cuda-math-api/cuda_math_api/group__CUDA__MATH__INTRINSIC__SINGLE.html
-COSMICTIGER_FLOAT_FLOAT_HD inline float floatFloatAdd(float left, float right) {
+CUDA_EXPORT inline float floatFloatAdd(float left, float right) {
 #ifdef __CUDA_ARCH__
     float result;
     asm("add.rn.f32 %0, %1, %2;" : "=f"(result) : "f"(left), "f"(right));
@@ -49,7 +45,7 @@ COSMICTIGER_FLOAT_FLOAT_HD inline float floatFloatAdd(float left, float right) {
 #endif
 }
 
-COSMICTIGER_FLOAT_FLOAT_HD inline float floatFloatSubtract(float left, float right) {
+CUDA_EXPORT inline float floatFloatSubtract(float left, float right) {
 #ifdef __CUDA_ARCH__
     float result;
     asm("sub.rn.f32 %0, %1, %2;" : "=f"(result) : "f"(left), "f"(right));
@@ -60,7 +56,7 @@ COSMICTIGER_FLOAT_FLOAT_HD inline float floatFloatSubtract(float left, float rig
 #endif
 }
 
-COSMICTIGER_FLOAT_FLOAT_HD inline float floatFloatMultiply(float left, float right) {
+CUDA_EXPORT inline float floatFloatMultiply(float left, float right) {
 #ifdef __CUDA_ARCH__
     float result;
     asm("mul.rn.f32 %0, %1, %2;" : "=f"(result) : "f"(left), "f"(right));
@@ -71,7 +67,7 @@ COSMICTIGER_FLOAT_FLOAT_HD inline float floatFloatMultiply(float left, float rig
 #endif
 }
 
-COSMICTIGER_FLOAT_FLOAT_HD inline float floatFloatDivide(float left, float right) {
+CUDA_EXPORT inline float floatFloatDivide(float left, float right) {
 #ifdef __CUDA_ARCH__
     float result;
     asm("div.rn.f32 %0, %1, %2;" : "=f"(result) : "f"(left), "f"(right));
@@ -85,7 +81,7 @@ COSMICTIGER_FLOAT_FLOAT_HD inline float floatFloatDivide(float left, float right
 #endif
 }
 
-COSMICTIGER_FLOAT_FLOAT_HD inline float floatFloatFma(float left, float right, float addend) {
+CUDA_EXPORT inline float floatFloatFma(float left, float right, float addend) {
 #ifdef __CUDA_ARCH__
     return __fmaf_ieee_rn(left, right, addend);
 #else
@@ -94,7 +90,7 @@ COSMICTIGER_FLOAT_FLOAT_HD inline float floatFloatFma(float left, float right, f
 #endif
 }
 
-COSMICTIGER_FLOAT_FLOAT_HD inline float floatFloatSqrt(float value) {
+CUDA_EXPORT inline float floatFloatSqrt(float value) {
 #ifdef __CUDA_ARCH__
     float result;
     asm("sqrt.rn.f32 %0, %1;" : "=f"(result) : "f"(value));
@@ -106,7 +102,7 @@ COSMICTIGER_FLOAT_FLOAT_HD inline float floatFloatSqrt(float value) {
 #endif
 }
 
-COSMICTIGER_FLOAT_FLOAT_HD inline uint32_t floatFloatBits(float value) {
+CUDA_EXPORT inline uint32_t floatFloatBits(float value) {
 #ifdef __CUDA_ARCH__
     return __float_as_uint(value);
 #else
@@ -114,7 +110,7 @@ COSMICTIGER_FLOAT_FLOAT_HD inline uint32_t floatFloatBits(float value) {
 #endif
 }
 
-COSMICTIGER_FLOAT_FLOAT_HD inline float floatFloatFromBits(uint32_t bits) {
+CUDA_EXPORT inline float floatFloatFromBits(uint32_t bits) {
 #ifdef __CUDA_ARCH__
     return __uint_as_float(bits);
 #else
@@ -122,16 +118,16 @@ COSMICTIGER_FLOAT_FLOAT_HD inline float floatFloatFromBits(uint32_t bits) {
 #endif
 }
 
-COSMICTIGER_FLOAT_FLOAT_HD inline float floatFloatNegate(float value) {
+CUDA_EXPORT inline float floatFloatNegate(float value) {
     // Plain CUDA unary minus becomes neg.ftz.f32 under --use_fast_math.
     return floatFloatFromBits(floatFloatBits(value) ^ 0x80000000U);
 }
 
-COSMICTIGER_FLOAT_FLOAT_HD inline bool floatFloatFinite(float value) {
+CUDA_EXPORT inline bool floatFloatFinite(float value) {
     return (floatFloatBits(value) & 0x7f800000U) != 0x7f800000U;
 }
 
-COSMICTIGER_FLOAT_FLOAT_HD inline uint32_t floatFloatOrder(float value) {
+CUDA_EXPORT inline uint32_t floatFloatOrder(float value) {
     uint32_t const bits = floatFloatBits(value);
     // Integer keys preserve subnormal comparisons under CUDA fast math and
     // equate the two signed zeros. NaNs are handled before comparing keys.
@@ -141,7 +137,7 @@ COSMICTIGER_FLOAT_FLOAT_HD inline uint32_t floatFloatOrder(float value) {
     return (bits & 0x80000000U) != 0 ? ~bits : (bits ^ 0x80000000U);
 }
 
-COSMICTIGER_FLOAT_FLOAT_HD inline float floatFloatNarrow(double value) {
+CUDA_EXPORT inline float floatFloatNarrow(double value) {
 #ifdef __CUDA_ARCH__
     uint64_t const bits = static_cast<uint64_t>(__double_as_longlong(value));
 #else
@@ -160,7 +156,7 @@ COSMICTIGER_FLOAT_FLOAT_HD inline float floatFloatNarrow(double value) {
 #endif
 }
 
-COSMICTIGER_FLOAT_FLOAT_HD inline double floatFloatWiden(float value) {
+CUDA_EXPORT inline double floatFloatWiden(float value) {
 #ifdef __CUDA_ARCH__
     double result;
     asm("cvt.f64.f32 %0, %1;" : "=d"(result) : "f"(value));
@@ -210,7 +206,7 @@ class FloatFloat {
     float high_ = 0.0f;
     float low_ = 0.0f;
 
-    COSMICTIGER_FLOAT_FLOAT_HD static FloatFloat twoSum(float left, float right) {
+    CUDA_EXPORT static FloatFloat twoSum(float left, float right) {
         using namespace detail;
         FloatFloat result;
         result.high_ = floatFloatAdd(left, right);
@@ -227,7 +223,7 @@ class FloatFloat {
 
     // Fast2Sum requires |left| >= |right|; used only at the normalization
     // steps justified by the cited double-word algorithms.
-    COSMICTIGER_FLOAT_FLOAT_HD static FloatFloat fastTwoSum(float left, float right) {
+    CUDA_EXPORT static FloatFloat fastTwoSum(float left, float right) {
         if ((detail::floatFloatBits(right) & 0x7fffffffU) == 0) {
             return FloatFloat(left);
         }
@@ -242,7 +238,7 @@ class FloatFloat {
 
     // TwoProdFMA: the residual is exact if it is representable and the
     // rounded product is finite (Joldes et al., Algorithm 3).
-    COSMICTIGER_FLOAT_FLOAT_HD static FloatFloat twoProduct(float left, float right) {
+    CUDA_EXPORT static FloatFloat twoProduct(float left, float right) {
         FloatFloat result;
         result.high_ = detail::floatFloatMultiply(left, right);
         if (detail::floatFloatFinite(result.high_)) {
@@ -253,7 +249,7 @@ class FloatFloat {
     }
 
     // DWTimesFP1 (Algorithm 7), used by DWDivDW2 below.
-    COSMICTIGER_FLOAT_FLOAT_HD FloatFloat multiplyFloat(float right) const {
+    CUDA_EXPORT FloatFloat multiplyFloat(float right) const {
         FloatFloat const product = twoProduct(high_, right);
         float const cross = detail::floatFloatMultiply(low_, right);
         FloatFloat const sum = fastTwoSum(product.high_, cross);
@@ -265,12 +261,12 @@ public:
     static_assert(sizeof(float) == 4 && std::numeric_limits<float>::is_iec559 &&
         std::numeric_limits<float>::digits == 24);
 
-    COSMICTIGER_FLOAT_FLOAT_HD constexpr FloatFloat() = default;
+    CUDA_EXPORT constexpr FloatFloat() = default;
 
-    COSMICTIGER_FLOAT_FLOAT_HD constexpr FloatFloat(float value)
+    CUDA_EXPORT constexpr FloatFloat(float value)
       : high_(value) {}
 
-    COSMICTIGER_FLOAT_FLOAT_HD FloatFloat(double value)
+    CUDA_EXPORT FloatFloat(double value)
       : high_(detail::floatFloatNarrow(value)) {
         if (isFinite()) {
             double const high = detail::floatFloatWiden(high_);
@@ -285,35 +281,35 @@ public:
     // As with conversion through double, integer inputs wider than 53 bits
     // may round before splitting. FloatFloat arithmetic is itself approximate.
     template <class Integer, std::enable_if_t<std::is_integral_v<Integer>, int> = 0>
-    COSMICTIGER_FLOAT_FLOAT_HD FloatFloat(Integer value)
+    CUDA_EXPORT FloatFloat(Integer value)
       : FloatFloat(static_cast<double>(value)) {}
 
     // Accept arbitrary components; callers cannot mutate the normalized pair.
-    COSMICTIGER_FLOAT_FLOAT_HD static FloatFloat fromComponents(float high, float low) {
+    CUDA_EXPORT static FloatFloat fromComponents(float high, float low) {
         return twoSum(high, low);
     }
 
-    COSMICTIGER_FLOAT_FLOAT_HD float high() const {
+    CUDA_EXPORT float high() const {
         return high_;
     }
 
-    COSMICTIGER_FLOAT_FLOAT_HD float low() const {
+    CUDA_EXPORT float low() const {
         return low_;
     }
 
-    COSMICTIGER_FLOAT_FLOAT_HD bool isFinite() const {
+    CUDA_EXPORT bool isFinite() const {
         return detail::floatFloatFinite(high_);
     }
 
-    COSMICTIGER_FLOAT_FLOAT_HD bool isNan() const {
+    CUDA_EXPORT bool isNan() const {
         return (detail::floatFloatBits(high_) & 0x7fffffffU) > 0x7f800000U;
     }
 
-    COSMICTIGER_FLOAT_FLOAT_HD float toFloat() const {
+    CUDA_EXPORT float toFloat() const {
         return high_;
     }
 
-    COSMICTIGER_FLOAT_FLOAT_HD double toDouble() const {
+    CUDA_EXPORT double toDouble() const {
         if ((detail::floatFloatBits(low_) & 0x7fffffffU) == 0) {
             return detail::floatFloatWiden(high_);
         }
@@ -321,19 +317,19 @@ public:
         return result;
     }
 
-    COSMICTIGER_FLOAT_FLOAT_HD explicit operator float() const {
+    CUDA_EXPORT explicit operator float() const {
         return toFloat();
     }
 
-    COSMICTIGER_FLOAT_FLOAT_HD explicit operator double() const {
+    CUDA_EXPORT explicit operator double() const {
         return toDouble();
     }
 
-    COSMICTIGER_FLOAT_FLOAT_HD FloatFloat operator+() const {
+    CUDA_EXPORT FloatFloat operator+() const {
         return *this;
     }
 
-    COSMICTIGER_FLOAT_FLOAT_HD FloatFloat operator-() const {
+    CUDA_EXPORT FloatFloat operator-() const {
         FloatFloat result;
         result.high_ = detail::floatFloatNegate(high_);
         result.low_ = detail::floatFloatNegate(low_);
@@ -342,7 +338,7 @@ public:
 
     // Accurate DWPlusDW (Algorithm 6); unlike "sloppy" addition this retains
     // the low-word sum's error when the high words cancel.
-    COSMICTIGER_FLOAT_FLOAT_HD friend FloatFloat operator+(FloatFloat left, FloatFloat right) {
+    CUDA_EXPORT friend FloatFloat operator+(FloatFloat left, FloatFloat right) {
         FloatFloat const highSum = twoSum(left.high_, right.high_);
         if (!highSum.isFinite()) {
             return highSum;
@@ -354,12 +350,12 @@ public:
         return fastTwoSum(sum.high_, remainder);
     }
 
-    COSMICTIGER_FLOAT_FLOAT_HD friend FloatFloat operator-(FloatFloat left, FloatFloat right) {
+    CUDA_EXPORT friend FloatFloat operator-(FloatFloat left, FloatFloat right) {
         return left + (-right);
     }
 
     // DWTimesDW3 (Algorithm 12), including the low * low contribution.
-    COSMICTIGER_FLOAT_FLOAT_HD friend FloatFloat operator*(FloatFloat left, FloatFloat right) {
+    CUDA_EXPORT friend FloatFloat operator*(FloatFloat left, FloatFloat right) {
         FloatFloat const product = twoProduct(left.high_, right.high_);
         if (!product.isFinite()) {
             return product;
@@ -373,13 +369,12 @@ public:
 
     // Convenience composition of the existing operators, with their separate
     // rounding steps. General-path cost: 12 + 20 = 32 FLOPs.
-    COSMICTIGER_FLOAT_FLOAT_HD friend FloatFloat fma(
-        FloatFloat left, FloatFloat right, FloatFloat addend) {
+    CUDA_EXPORT friend FloatFloat fma(FloatFloat left, FloatFloat right, FloatFloat addend) {
         return left * right + addend;
     }
 
     // DWDivDW2 (Algorithm 17), with the Algorithm 7 product above.
-    COSMICTIGER_FLOAT_FLOAT_HD friend FloatFloat operator/(FloatFloat left, FloatFloat right) {
+    CUDA_EXPORT friend FloatFloat operator/(FloatFloat left, FloatFloat right) {
         float const quotient = detail::floatFloatDivide(left.high_, right.high_);
         if (!detail::floatFloatFinite(quotient) ||
             (detail::floatFloatBits(quotient) & 0x7fffffffU) == 0) {
@@ -401,7 +396,7 @@ public:
     // https://www.davidhbailey.com/dhbpapers/quad-double.pdf .
     // As with multiplication, tiny squared-root residuals can underflow;
     // full double-word precision is not promised near float's underflow limit.
-    COSMICTIGER_FLOAT_FLOAT_HD friend FloatFloat sqrt(FloatFloat value) {
+    CUDA_EXPORT friend FloatFloat sqrt(FloatFloat value) {
         float const root = detail::floatFloatSqrt(value.high_);
         if (!detail::floatFloatFinite(root) || (detail::floatFloatBits(root) & 0x7fffffffU) == 0) {
             return FloatFloat(root);
@@ -422,33 +417,33 @@ public:
     // See also Hida, Li and Bailey, cited above, Sec. 5 (Taylor series and
     // argument reduction for transcendental functions).
 
-    COSMICTIGER_FLOAT_FLOAT_HD FloatFloat& operator+=(FloatFloat right) {
+    CUDA_EXPORT FloatFloat& operator+=(FloatFloat right) {
         return *this = *this + right;
     }
 
-    COSMICTIGER_FLOAT_FLOAT_HD FloatFloat& operator-=(FloatFloat right) {
+    CUDA_EXPORT FloatFloat& operator-=(FloatFloat right) {
         return *this = *this - right;
     }
 
-    COSMICTIGER_FLOAT_FLOAT_HD FloatFloat& operator*=(FloatFloat right) {
+    CUDA_EXPORT FloatFloat& operator*=(FloatFloat right) {
         return *this = *this * right;
     }
 
-    COSMICTIGER_FLOAT_FLOAT_HD FloatFloat& operator/=(FloatFloat right) {
+    CUDA_EXPORT FloatFloat& operator/=(FloatFloat right) {
         return *this = *this / right;
     }
 
-    COSMICTIGER_FLOAT_FLOAT_HD friend bool operator==(FloatFloat left, FloatFloat right) {
+    CUDA_EXPORT friend bool operator==(FloatFloat left, FloatFloat right) {
         return !left.isNan() && !right.isNan() &&
             detail::floatFloatOrder(left.high_) == detail::floatFloatOrder(right.high_) &&
             detail::floatFloatOrder(left.low_) == detail::floatFloatOrder(right.low_);
     }
 
-    COSMICTIGER_FLOAT_FLOAT_HD friend bool operator!=(FloatFloat left, FloatFloat right) {
+    CUDA_EXPORT friend bool operator!=(FloatFloat left, FloatFloat right) {
         return !(left == right);
     }
 
-    COSMICTIGER_FLOAT_FLOAT_HD friend bool operator<(FloatFloat left, FloatFloat right) {
+    CUDA_EXPORT friend bool operator<(FloatFloat left, FloatFloat right) {
         if (left.isNan() || right.isNan()) {
             return false;
         }
@@ -459,15 +454,15 @@ public:
                 detail::floatFloatOrder(left.low_) < detail::floatFloatOrder(right.low_));
     }
 
-    COSMICTIGER_FLOAT_FLOAT_HD friend bool operator>(FloatFloat left, FloatFloat right) {
+    CUDA_EXPORT friend bool operator>(FloatFloat left, FloatFloat right) {
         return right < left;
     }
 
-    COSMICTIGER_FLOAT_FLOAT_HD friend bool operator<=(FloatFloat left, FloatFloat right) {
+    CUDA_EXPORT friend bool operator<=(FloatFloat left, FloatFloat right) {
         return left < right || left == right;
     }
 
-    COSMICTIGER_FLOAT_FLOAT_HD friend bool operator>=(FloatFloat left, FloatFloat right) {
+    CUDA_EXPORT friend bool operator>=(FloatFloat left, FloatFloat right) {
         return right <= left;
     }
 };
@@ -480,5 +475,3 @@ static_assert(std::is_trivially_copyable_v<FloatFloat>);
 #elif defined(__GNUC__) && !defined(__CUDACC__)
 #pragma GCC pop_options
 #endif
-
-#undef COSMICTIGER_FLOAT_FLOAT_HD

@@ -5,6 +5,7 @@
  */
 #pragma once
 
+#include <cosmictiger/cuda/cuda_export.hpp>
 #include <cosmictiger/math/special_exp.hpp>
 
 namespace special_functions {
@@ -15,7 +16,10 @@ namespace detail {
     // are a degree-15 Chebyshev interpolant converted to powers of z.
     // Reproduce with tools/generate_special_coefficients.py.
     template <class Real>
-    COSMICTIGER_SPECIAL_HD inline Real erfcScaledPolynomial(Real z) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+    [[gnu::always_inline]]
+#endif
+    CUDA_EXPORT inline Real erfcScaledPolynomial(Real z) {
         Real const z2 = z * z;
         Real const z4 = z2 * z2;
         Real const z8 = z4 * z4;
@@ -41,8 +45,10 @@ namespace detail {
     }
 
     template <class Real>
-    COSMICTIGER_SPECIAL_HD inline void positiveErfcexp(
-        Real x, Real* complement, Real* exponential) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+    [[gnu::always_inline]]
+#endif
+    CUDA_EXPORT inline void positiveErfcexp(Real x, Real* complement, Real* exponential) {
         Real const square = x * x;
         Real const residual = simdFma(-x, x, square);
         *exponential = detail::expWithTail(-square, residual);
@@ -52,7 +58,10 @@ namespace detail {
     }
 
     template <class Real>
-    COSMICTIGER_SPECIAL_HD inline Real erfSmall(Real x) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+    [[gnu::always_inline]]
+#endif
+    CUDA_EXPORT inline Real erfSmall(Real x) {
         Real const x2 = x * x;
         Real p = simdBroadcast<Real>(1.6462114365889247e-6);
         p = simdFma(p, x2, simdBroadcast<Real>(-0.000014925650358406251));
@@ -71,7 +80,10 @@ namespace detail {
 // Both outputs refer to the exact represented input x: exp(-x*x) retains
 // the multiplication residual rather than exponentiating a rounded square.
 template <class Real>
-COSMICTIGER_SPECIAL_HD inline void erfcexp(Real x, Real* complement, Real* exponential) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+[[gnu::always_inline]]
+#endif
+CUDA_EXPORT inline void erfcexp(Real x, Real* complement, Real* exponential) {
     if constexpr (std::is_arithmetic_v<Real>) {
         static_assert(std::is_same_v<Real, float>);
     } else {
@@ -104,14 +116,20 @@ COSMICTIGER_SPECIAL_HD inline void erfcexp(Real x, Real* complement, Real* expon
 }
 
 template <class Real>
-COSMICTIGER_SPECIAL_HD inline Real erfc(Real x) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+[[gnu::always_inline]]
+#endif
+CUDA_EXPORT inline Real erfc(Real x) {
     Real complement, exponential;
     special_functions::erfcexp(x, &complement, &exponential);
     return complement;
 }
 
 template <class Real>
-COSMICTIGER_SPECIAL_HD inline Real erf(Real x) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+[[gnu::always_inline]]
+#endif
+CUDA_EXPORT inline Real erf(Real x) {
     Real const magnitude = simdMax(x, -x);
     auto const small = magnitude <= simdBroadcast<Real>(0.75);
     if (simdAllOf(small)) {
@@ -126,7 +144,10 @@ COSMICTIGER_SPECIAL_HD inline Real erf(Real x) {
     return result;
 }
 
-COSMICTIGER_SPECIAL_HD inline void erfcexp(double x, double* complement, double* exponential) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+[[gnu::always_inline]]
+#endif
+CUDA_EXPORT inline void erfcexp(double x, double* complement, double* exponential) {
     *complement = ::erfc(x);
     double const square = x * x;
     *exponential = ::exp(-square);
@@ -136,11 +157,17 @@ COSMICTIGER_SPECIAL_HD inline void erfcexp(double x, double* complement, double*
     }
 }
 
-COSMICTIGER_SPECIAL_HD inline double erfc(double x) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+[[gnu::always_inline]]
+#endif
+CUDA_EXPORT inline double erfc(double x) {
     return ::erfc(x);
 }
 
-COSMICTIGER_SPECIAL_HD inline double erf(double x) {
+#if defined(__GNUC__) && !defined(__CUDACC__)
+[[gnu::always_inline]]
+#endif
+CUDA_EXPORT inline double erf(double x) {
     return ::erf(x);
 }
 

@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include <cosmictiger/chemistry/primordial_types.hpp>
+#include <cosmictiger/cuda/cuda_export.hpp>
 
 namespace primordial {
 namespace detail {
@@ -15,7 +16,7 @@ namespace detail {
     // E = k T^2 d(log Z)/dT, cv = dE/dT; never approximate E as cv(T)*T.
     // Boley et al. 2007, eqs. (1)-(5), including the normalized ortho ground state:
     // https://arxiv.org/abs/astro-ph/0701146 . Vibrations use the harmonic closure.
-    PRIMORDIAL_HD inline MolecularModes molecularModes(
+    CUDA_EXPORT inline MolecularModes molecularModes(
         float temperature, float rotation, float vibration) {
         FloatFloat energy(0.0f), capacity(0.0f);
         for (int parity = 0; parity != 2; ++parity) {
@@ -44,14 +45,14 @@ namespace detail {
 
 // The cold molecular cooling branches use published 10 K data; see
 // primordial_rates.hpp. This is a supported-domain boundary, not a thermal floor.
-PRIMORDIAL_HD inline float minimumTemperature(Network) {
+CUDA_EXPORT inline float minimumTemperature(Network) {
     return 10.0f;
 }
-PRIMORDIAL_HD inline float maximumTemperature(Network network) {
+CUDA_EXPORT inline float maximumTemperature(Network network) {
     return network == Network::Molecular9 ? 6000.0f : 1.0e8f;
 }
 
-PRIMORDIAL_HD inline Status thermalEnergyAtTemperature(WorkingState const& state,
+CUDA_EXPORT inline Status thermalEnergyAtTemperature(WorkingState const& state,
     Environment const& environment, float temperature, FloatFloat& energy, float& heatCapacity) {
     Status const status = validateComposition(state, environment);
     if (status != Status::Success) {
@@ -89,7 +90,7 @@ PRIMORDIAL_HD inline Status thermalEnergyAtTemperature(WorkingState const& state
     }
     return Status::Success;
 }
-PRIMORDIAL_HD inline Status thermalEnergyAtTemperature(
+CUDA_EXPORT inline Status thermalEnergyAtTemperature(
     State const& state, Environment const& environment, float temperature, float& energy) {
     FloatFloat result;
     float capacity;
@@ -101,7 +102,7 @@ PRIMORDIAL_HD inline Status thermalEnergyAtTemperature(
     return status;
 }
 
-PRIMORDIAL_HD inline Status evaluateEos(
+CUDA_EXPORT inline Status evaluateEos(
     WorkingState const& state, Environment const& environment, Eos& result) {
     Status const status = validateComposition(state, environment);
     if (status != Status::Success) {
@@ -178,16 +179,15 @@ PRIMORDIAL_HD inline Status evaluateEos(
         (FloatFloat(result.pressurePerHydrogen) / state.thermalEnergy).toFloat();
     return Status::Success;
 }
-PRIMORDIAL_HD inline Status evaluateEos(
+CUDA_EXPORT inline Status evaluateEos(
     State const& state, Environment const& environment, Eos& result) {
     return evaluateEos(workingState(state), environment, result);
 }
-PRIMORDIAL_HD inline Status validateState(
-    WorkingState const& state, Environment const& environment) {
+CUDA_EXPORT inline Status validateState(WorkingState const& state, Environment const& environment) {
     Eos result;
     return evaluateEos(state, environment, result);
 }
-PRIMORDIAL_HD inline Status validateState(State const& state, Environment const& environment) {
+CUDA_EXPORT inline Status validateState(State const& state, Environment const& environment) {
     for (int i = 0; i < kAbundanceCount; ++i) {
         if (::fabsf(state.abundances[i].raw()) > 0.5f) {
             return Status::InvalidInput;

@@ -13,18 +13,13 @@
 #include <cstdint>
 #include <type_traits>
 
+#include <cosmictiger/cuda/cuda_export.hpp>
 #include <cosmictiger/math/simd_backend.hpp>
-
-#ifdef __CUDACC__
-#define COSMICTIGER_SIMD_HD __host__ __device__
-#else
-#define COSMICTIGER_SIMD_HD
-#endif
 
 using std::size_t;
 
 template <class Real, class Value>
-COSMICTIGER_SIMD_HD inline Real simdBroadcast(Value const& value) {
+CUDA_EXPORT inline Real simdBroadcast(Value const& value) {
     if constexpr (std::is_same_v<Real, Value>) {
         return value;
     } else if constexpr (std::is_arithmetic_v<Real>) {
@@ -35,7 +30,7 @@ COSMICTIGER_SIMD_HD inline Real simdBroadcast(Value const& value) {
 }
 
 template <class Mask, class Real>
-COSMICTIGER_SIMD_HD inline Real simdSelect(Mask const& mask, Real const& yes, Real const& no) {
+CUDA_EXPORT inline Real simdSelect(Mask const& mask, Real const& yes, Real const& no) {
     if constexpr (std::is_same_v<Mask, bool>) {
         return mask ? yes : no;
     } else {
@@ -50,17 +45,17 @@ COSMICTIGER_SIMD_HD inline Real simdSelect(Mask const& mask, Real const& yes, Re
 }
 
 template <class Real>
-COSMICTIGER_SIMD_HD inline Real simdMin(Real const& left, Real const& right) {
+CUDA_EXPORT inline Real simdMin(Real const& left, Real const& right) {
     return simdSelect(left < right, left, right);
 }
 
 template <class Real>
-COSMICTIGER_SIMD_HD inline Real simdMax(Real const& left, Real const& right) {
+CUDA_EXPORT inline Real simdMax(Real const& left, Real const& right) {
     return simdSelect(left > right, left, right);
 }
 
 template <class Real>
-COSMICTIGER_SIMD_HD inline Real simdSqrt(Real const& value) {
+CUDA_EXPORT inline Real simdSqrt(Real const& value) {
     if constexpr (std::is_arithmetic_v<Real>) {
         return std::sqrt(value);
     } else {
@@ -77,7 +72,7 @@ template <class Real>
 #if defined(__GNUC__) && !defined(__CUDACC__)
 [[gnu::always_inline]]
 #endif
-COSMICTIGER_SIMD_HD inline Real simdFma(Real const& first, Real const& second, Real const& third) {
+CUDA_EXPORT inline Real simdFma(Real const& first, Real const& second, Real const& third) {
     if constexpr (std::is_arithmetic_v<Real>) {
         return std::fma(first, second, third);
     } else {
@@ -97,7 +92,7 @@ COSMICTIGER_SIMD_HD inline Real simdFma(Real const& first, Real const& second, R
 }
 
 template <class Mask>
-COSMICTIGER_SIMD_HD inline bool simdAnyOf(Mask const& mask) {
+CUDA_EXPORT inline bool simdAnyOf(Mask const& mask) {
     if constexpr (std::is_same_v<Mask, bool>) {
         return mask;
     } else {
@@ -110,7 +105,7 @@ COSMICTIGER_SIMD_HD inline bool simdAnyOf(Mask const& mask) {
 }
 
 template <class Mask>
-COSMICTIGER_SIMD_HD inline bool simdAllOf(Mask const& mask) {
+CUDA_EXPORT inline bool simdAllOf(Mask const& mask) {
     if constexpr (std::is_same_v<Mask, bool>) {
         return mask;
     } else {
@@ -230,5 +225,3 @@ inline Destination simdBitCast(Source const& source) {
 }
 
 #endif
-
-#undef COSMICTIGER_SIMD_HD

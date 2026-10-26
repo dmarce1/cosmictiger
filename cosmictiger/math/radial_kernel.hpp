@@ -4,13 +4,8 @@
 #include <numbers>
 #include <type_traits>
 
+#include <cosmictiger/cuda/cuda_export.hpp>
 #include <cosmictiger/math/simd_math.hpp>
-
-#if defined(__CUDACC__)
-#define COSMICTIGER_RADIAL_HD __host__ __device__
-#else
-#define COSMICTIGER_RADIAL_HD
-#endif
 
 // Normalized spherical density kernels in three spatial dimensions. All radial
 // arguments are radius / supportRadius. The effective radius is 2 sigma,
@@ -119,7 +114,7 @@ namespace detail {
     }
 
     template <typename Real>
-    COSMICTIGER_RADIAL_HD inline Real clamp(Real value, double lower, double upper) {
+    CUDA_EXPORT inline Real clamp(Real value, double lower, double upper) {
         Real const lowerBound = simdBroadcast<Real>(lower);
         Real const upperBound = simdBroadcast<Real>(upper);
         return simdSelect(
@@ -127,7 +122,7 @@ namespace detail {
     }
 
     template <typename Real>
-    COSMICTIGER_RADIAL_HD inline Real evaluate(
+    CUDA_EXPORT inline Real evaluate(
         double const* coefficients, int degree, Real leftWeight, Real rightWeight) {
         Real work[kMaximumDegree + 4];
         for (int i = 0; i <= degree; ++i) {
@@ -142,14 +137,14 @@ namespace detail {
     }
 
     template <typename Real>
-    COSMICTIGER_RADIAL_HD inline Real evaluate(double const* coefficients, int degree, Real t) {
+    CUDA_EXPORT inline Real evaluate(double const* coefficients, int degree, Real t) {
         return evaluate(coefficients, degree, simdBroadcast<Real>(1) - t, t);
     }
 
     // Compute both Bernstein weights directly: forming 1-t loses relative
     // accuracy near a span's right endpoint, notably for the M3 derivative.
     template <typename Real>
-    COSMICTIGER_RADIAL_HD inline Real evaluateDensitySpan(
+    CUDA_EXPORT inline Real evaluateDensitySpan(
         double const* coefficients, int degree, Real q, double a, double b) {
         Real const radius = clamp(q, a, b);
         Real const width = simdBroadcast<Real>(b - a);
@@ -158,14 +153,14 @@ namespace detail {
     }
 
     template <typename Real>
-    COSMICTIGER_RADIAL_HD inline Real localCoordinate(KernelTable const& table, int piece, Real q) {
+    CUDA_EXPORT inline Real localCoordinate(KernelTable const& table, int piece, Real q) {
         double const a = table.changePoints[piece];
         double const b = table.changePoints[piece + 1];
         return (clamp(q, a, b) - simdBroadcast<Real>(a)) / simdBroadcast<Real>(b - a);
     }
 
     template <typename Real>
-    COSMICTIGER_RADIAL_HD inline auto pieceMask(KernelTable const& table, int piece, Real q) {
+    CUDA_EXPORT inline auto pieceMask(KernelTable const& table, int piece, Real q) {
         auto const upper = q < simdBroadcast<Real>(table.changePoints[piece + 1]);
         if (piece == 0) {
             return upper;
@@ -318,7 +313,7 @@ constexpr KernelTable makeKernelTable(KernelSpec spec) {
 }
 
 template <typename Real>
-COSMICTIGER_RADIAL_HD inline Real value(KernelTable const& table, Real q) {
+CUDA_EXPORT inline Real value(KernelTable const& table, Real q) {
     Real result = simdBroadcast<Real>(0);
     for (int piece = 0; piece < table.pieceCount; ++piece) {
         if constexpr (std::is_arithmetic_v<Real>) {
@@ -337,7 +332,7 @@ COSMICTIGER_RADIAL_HD inline Real value(KernelTable const& table, Real q) {
 }
 
 template <typename Real>
-COSMICTIGER_RADIAL_HD inline Real derivative(KernelTable const& table, Real q) {
+CUDA_EXPORT inline Real derivative(KernelTable const& table, Real q) {
     Real result = simdBroadcast<Real>(0);
     for (int piece = 0; piece < table.pieceCount; ++piece) {
         if constexpr (std::is_arithmetic_v<Real>) {
@@ -358,7 +353,7 @@ COSMICTIGER_RADIAL_HD inline Real derivative(KernelTable const& table, Real q) {
 namespace detail {
 
     template <typename Real>
-    COSMICTIGER_RADIAL_HD inline Real forceOnPiece(KernelTable const& table, int piece, Real q) {
+    CUDA_EXPORT inline Real forceOnPiece(KernelTable const& table, int piece, Real q) {
         Real const t = localCoordinate(table, piece, q);
         if (piece == 0) {
             return evaluate(table.centralForceCoefficients, table.degree, t);
@@ -370,8 +365,7 @@ namespace detail {
     }
 
     template <typename Real>
-    COSMICTIGER_RADIAL_HD inline Real potentialOnPiece(
-        KernelTable const& table, int piece, Real q) {
+    CUDA_EXPORT inline Real potentialOnPiece(KernelTable const& table, int piece, Real q) {
         Real const t = localCoordinate(table, piece, q);
         if (piece == 0) {
             Real const radius = clamp(q, 0, table.changePoints[1]);
@@ -389,7 +383,7 @@ namespace detail {
 // Acceleration = -G m/H^3 * forceFactor(q) * displacement. The finite origin
 // value is 4 pi W(0)/3; the actual central acceleration is zero.
 template <typename Real>
-COSMICTIGER_RADIAL_HD inline Real forceFactor(KernelTable const& table, Real q) {
+CUDA_EXPORT inline Real forceFactor(KernelTable const& table, Real q) {
     Real result = simdBroadcast<Real>(0);
     for (int piece = 0; piece < table.pieceCount; ++piece) {
         if constexpr (std::is_arithmetic_v<Real>) {
@@ -415,7 +409,7 @@ COSMICTIGER_RADIAL_HD inline Real forceFactor(KernelTable const& table, Real q) 
 // Positive potential magnitude: physical gravitational potential is -Gm/H
 // times this value, with zero at infinity and exactly 1/q outside support.
 template <typename Real>
-COSMICTIGER_RADIAL_HD inline Real potential(KernelTable const& table, Real q) {
+CUDA_EXPORT inline Real potential(KernelTable const& table, Real q) {
     Real result = simdBroadcast<Real>(0);
     for (int piece = 0; piece < table.pieceCount; ++piece) {
         if constexpr (std::is_arithmetic_v<Real>) {
@@ -438,5 +432,3 @@ COSMICTIGER_RADIAL_HD inline Real potential(KernelTable const& table, Real q) {
 }
 
 }    // namespace radial_kernel
-
-#undef COSMICTIGER_RADIAL_HD

@@ -4,13 +4,8 @@
 #include <cmath>
 #include <cstdint>
 
+#include <cosmictiger/cuda/cuda_export.hpp>
 #include <cosmictiger/math/float_float.hpp>
-
-#ifdef __CUDACC__
-#define PRIMORDIAL_HD __host__ __device__
-#else
-#define PRIMORDIAL_HD
-#endif
 
 namespace primordial {
 inline constexpr int kAbundanceCount = 6;
@@ -44,38 +39,38 @@ class SignedAbundance {
     float encoded_{};
 
 public:
-    PRIMORDIAL_HD SignedAbundance() = default;
-    PRIMORDIAL_HD static SignedAbundance fromRaw(float encoded) {
+    CUDA_EXPORT SignedAbundance() = default;
+    CUDA_EXPORT static SignedAbundance fromRaw(float encoded) {
         SignedAbundance result;
         result.encoded_ = encoded;
         return result;
     }
-    PRIMORDIAL_HD static SignedAbundance fromMinority(float minority, bool upper) {
+    CUDA_EXPORT static SignedAbundance fromMinority(float minority, bool upper) {
         return fromRaw(upper ? ::detail::floatFloatNegate(minority) : minority);
     }
-    PRIMORDIAL_HD static SignedAbundance fromFraction(float fraction) {
+    CUDA_EXPORT static SignedAbundance fromFraction(float fraction) {
         return fraction > 0.5f ? fromMinority(1.0f - fraction, true) : fromRaw(fraction);
     }
-    PRIMORDIAL_HD float raw() const {
+    CUDA_EXPORT float raw() const {
         return encoded_;
     }
-    PRIMORDIAL_HD void setRaw(float encoded) {
+    CUDA_EXPORT void setRaw(float encoded) {
         encoded_ = encoded;
     }
-    PRIMORDIAL_HD bool upper() const {
+    CUDA_EXPORT bool upper() const {
         return (::detail::floatFloatBits(encoded_) & 0x80000000U) != 0;
     }
-    PRIMORDIAL_HD FloatFloat value() const {
+    CUDA_EXPORT FloatFloat value() const {
         return upper() ? FloatFloat(1.0f) + FloatFloat(encoded_) : FloatFloat(encoded_);
     }
-    PRIMORDIAL_HD FloatFloat complement() const {
+    CUDA_EXPORT FloatFloat complement() const {
         return upper() ? FloatFloat(::detail::floatFloatNegate(encoded_)) :
                          FloatFloat(1.0f) - FloatFloat(encoded_);
     }
-    PRIMORDIAL_HD float fraction() const {
+    CUDA_EXPORT float fraction() const {
         return value().toFloat();
     }
-    PRIMORDIAL_HD float complementFraction() const {
+    CUDA_EXPORT float complementFraction() const {
         return complement().toFloat();
     }
 };
@@ -133,10 +128,10 @@ struct Eos {
     float meanMolecularWeight{};    // particle mass / mH, with mHe=4mH.
     float pressureEnergyRatio{};    // P/(rho*u).
 };
-PRIMORDIAL_HD inline bool finite(float value) {
+CUDA_EXPORT inline bool finite(float value) {
     return ::detail::floatFloatFinite(value);
 }
-PRIMORDIAL_HD inline WorkingState workingState(State const& state) {
+CUDA_EXPORT inline WorkingState workingState(State const& state) {
     WorkingState result;
     for (int i = 0; i < kAbundanceCount; ++i) {
         result.abundances[i] = state.abundances[i].value();
@@ -144,7 +139,7 @@ PRIMORDIAL_HD inline WorkingState workingState(State const& state) {
     result.thermalEnergy = FloatFloat(state.thermalEnergy);
     return result;
 }
-PRIMORDIAL_HD inline Status composeState(WorkingState const& state, State& result) {
+CUDA_EXPORT inline Status composeState(WorkingState const& state, State& result) {
     for (int i = 0; i < kAbundanceCount; ++i) {
         FloatFloat const value = state.abundances[i];
         if (!value.isFinite() || value < FloatFloat(0.0f) || value > FloatFloat(1.0f)) {
@@ -160,7 +155,7 @@ PRIMORDIAL_HD inline Status composeState(WorkingState const& state, State& resul
     result.thermalEnergy = state.thermalEnergy.toFloat();
     return Status::Success;
 }
-PRIMORDIAL_HD inline Composition composition(
+CUDA_EXPORT inline Composition composition(
     WorkingState const& state, Environment const& environment) {
     auto const* x = state.abundances;
     FloatFloat const helium(environment.heliumToHydrogenNumberRatio);
@@ -179,10 +174,10 @@ PRIMORDIAL_HD inline Composition composition(
         FloatFloat(1.0f) + helium - c.molecularHydrogen - c.molecularHydrogenPlus + c.electrons;
     return c;
 }
-PRIMORDIAL_HD inline Composition composition(State const& state, Environment const& environment) {
+CUDA_EXPORT inline Composition composition(State const& state, Environment const& environment) {
     return composition(workingState(state), environment);
 }
-PRIMORDIAL_HD inline Status validateComposition(
+CUDA_EXPORT inline Status validateComposition(
     WorkingState const& state, Environment const& environment) {
     if (!finite(environment.nHydrogen) || environment.nHydrogen < 0.0f ||
         !finite(environment.heliumToHydrogenNumberRatio) ||
@@ -211,8 +206,7 @@ PRIMORDIAL_HD inline Status validateComposition(
     }
     return Status::Success;
 }
-PRIMORDIAL_HD inline Status validateComposition(
-    State const& state, Environment const& environment) {
+CUDA_EXPORT inline Status validateComposition(State const& state, Environment const& environment) {
     return validateComposition(workingState(state), environment);
 }
 }    // namespace primordial

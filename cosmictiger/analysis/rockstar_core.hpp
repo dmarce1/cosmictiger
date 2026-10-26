@@ -3,15 +3,14 @@
 #include <cmath>
 #include <limits>
 
+#include <cosmictiger/cuda/cuda_export.hpp>
+
 namespace rockstar::detail {
 
 // Bounding boxes enclose particles, so touching faces and zero-width
 // dimensions must remain eligible for a distance calculation.
 template <class Box>
-#ifdef __CUDACC__
-__host__ __device__
-#endif
-    bool boxesOverlap(Box const& a, Box const& b, int dimensions) {
+CUDA_EXPORT bool boxesOverlap(Box const& a, Box const& b, int dimensions) {
     for (int dim = 0; dim < dimensions; dim++) {
         if (a.end[dim] < b.begin[dim] || b.end[dim] < a.begin[dim]) {
             return false;
@@ -21,10 +20,7 @@ __host__ __device__
 }
 
 template <class Box, class Point>
-#ifdef __CUDACC__
-__host__ __device__
-#endif
-    bool boxContains(Box const& box, Point const& point, int dimensions) {
+CUDA_EXPORT bool boxContains(Box const& box, Point const& point, int dimensions) {
     for (int dim = 0; dim < dimensions; dim++) {
         if (point[dim] < box.begin[dim] || point[dim] > box.end[dim]) {
             return false;
@@ -57,11 +53,8 @@ inline float normalizationScale(float variance) {
 }
 
 template <class Particle, class ReadLabel>
-#ifdef __CUDACC__
-__host__ __device__
-#endif
-    int minimumLinkedLabel(Particle const* particles, int self, int begin, int end,
-        float linkingLengthSquared, int minimum, ReadLabel readLabel) {
+CUDA_EXPORT int minimumLinkedLabel(Particle const* particles, int self, int begin, int end,
+    float linkingLengthSquared, int minimum, ReadLabel readLabel) {
     for (int other = begin; other < end; other++) {
         if (other == self) {
             continue;
