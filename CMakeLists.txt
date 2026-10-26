@@ -6,6 +6,7 @@
 
 cmake_minimum_required(VERSION 3.24)
 project(cosmictiger LANGUAGES CXX C)
+include(CTest)
 
 # C++20 uses experimental SIMD; C++26 selects standard SIMD when available.
 if(NOT DEFINED CMAKE_CXX_STANDARD)
@@ -174,8 +175,6 @@ set(cosmictiger_source_files
     src/gravity/dehnen/ewald_indices.cpp
     src/gravity/dehnen/ewald_indices.cu
     src/gravity/fmm_order.cpp
-    tests/gravity/analytic.cpp
-    tests/gravity/analytic.cu
     src/analysis/bh.cpp
     src/analysis/bh.cu
     src/gravity/gravity.cpp
@@ -229,24 +228,6 @@ set(cosmictiger_source_files
     src/sph/sph_tree.cpp
     src/scenarios/sphere.cpp
     src/scenarios/sphere.cu
-    tests/analysis_backends.cpp
-    tests/bh.cpp
-    tests/gravity/dehnen/fmm_tree.cpp
-    tests/gravity/dehnen/fmm_walk.cpp
-    tests/groups_catalogue.cpp
-    tests/kernel_selection_cuda.cu
-    tests/linear_growth.cpp
-    tests/mesh_domains.cpp
-    tests/gravity/nitadori/particle_mesh_dispatch.cpp
-    tests/particle_mesh_sort.cpp
-    tests/gravity/nitadori/particle_mesh_timestep.cpp
-    tests/gravity/nitadori/pmmm.cpp
-    tests/rockstar.cpp
-    tests/sph/gravity.cpp
-    tests/sph/tree.cpp
-    tests/test.cpp
-    tests/units_output.cpp
-    tests/distributed_output.cpp
     src/gravity/dehnen/distributed_tree.cpp
     src/gravity/dehnen/execution.cpp
     src/gravity/dehnen/gpu_staging.cpp
@@ -343,7 +324,6 @@ set(cosmictiger_header_files
     cosmictiger/gravity/fmm_types.hpp
     cosmictiger/gravity/fmm_kernels/spherical_operators.hpp
     cosmictiger/gravity/fmm_kernels/spherical_types.hpp
-    tests/gravity/analytic.hpp
     cosmictiger/analysis/bh.hpp
     cosmictiger/gravity/fmm_cpu_instances.hpp
     cosmictiger/gravity/gravity.hpp
@@ -407,7 +387,6 @@ set(cosmictiger_header_files
     cosmictiger/sph/sph_particles.hpp
     cosmictiger/sph/sph_tree.hpp
     cosmictiger/scenarios/sphere.hpp
-    tests/test.hpp
     cosmictiger/core/tree_id.hpp
     cosmictiger/gravity/dehnen/cpu_instances.hpp
     cosmictiger/gravity/dehnen/distributed_tree.hpp
@@ -443,6 +422,34 @@ set(cosmictiger_header_files
     cosmictiger/sph/sph_flops.hpp
     cosmictiger/sph/viscosity_state.hpp
 )
+
+if(BUILD_TESTING)
+    list(APPEND cosmictiger_source_files
+        tests/analysis_backends.cpp
+        tests/bh.cpp
+        tests/gravity/analytic.cpp
+        tests/gravity/analytic.cu
+        tests/gravity/dehnen/fmm_tree.cpp
+        tests/gravity/dehnen/fmm_walk.cpp
+        tests/groups_catalogue.cpp
+        tests/kernel_selection_cuda.cu
+        tests/linear_growth.cpp
+        tests/mesh_domains.cpp
+        tests/gravity/nitadori/particle_mesh_dispatch.cpp
+        tests/particle_mesh_sort.cpp
+        tests/gravity/nitadori/particle_mesh_timestep.cpp
+        tests/gravity/nitadori/pmmm.cpp
+        tests/rockstar.cpp
+        tests/sph/gravity.cpp
+        tests/sph/tree.cpp
+        tests/test.cpp
+        tests/units_output.cpp
+        tests/distributed_output.cpp)
+    list(APPEND cosmictiger_header_files tests/gravity/analytic.hpp tests/test.hpp)
+    # Only option validation and dispatch depend on test availability.
+    set_property(SOURCE src/main.cpp src/core/options.cpp APPEND PROPERTY
+        COMPILE_DEFINITIONS COSMICTIGER_BUILD_TESTING)
+endif()
 
 if(NOT COSMICTIGER_WITH_CUDA)
     list(FILTER cosmictiger_source_files EXCLUDE REGEX "\\.cu$")
@@ -500,6 +507,9 @@ set_source_files_properties(src/particles/domain.cpp tests/mesh_domains.cpp PROP
     COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
 
 option(COSMICTIGER_BUILD_CARTESIAN_BENCHMARKS "Build the opt-in Cartesian comparison harness" OFF)
+if(COSMICTIGER_BUILD_CARTESIAN_BENCHMARKS AND NOT BUILD_TESTING)
+    message(FATAL_ERROR "COSMICTIGER_BUILD_CARTESIAN_BENCHMARKS requires BUILD_TESTING=ON for run.test dispatch")
+endif()
 set(cosmictiger_application_targets cosmictiger cosmictiger_fixed64)
 foreach(application_target IN LISTS cosmictiger_application_targets)
     add_hpx_executable(${application_target}
@@ -618,14 +628,12 @@ foreach(tool_target IN ITEMS healpix2silo groups2halofunc)
     endif()
 endforeach()
 
-include(CTest)
-# Keep the application compilation independent of the selected test reporter.
-add_library(cosmictiger_application_tests STATIC)
-target_include_directories(cosmictiger_application_tests PRIVATE ${PROJECT_SOURCE_DIR})
-foreach(application_target IN LISTS cosmictiger_application_targets)
-    target_link_libraries(${application_target} PRIVATE cosmictiger_application_tests)
-endforeach()
 if(BUILD_TESTING)
+    add_library(cosmictiger_application_tests STATIC tests/application_test.cpp)
+    target_include_directories(cosmictiger_application_tests PRIVATE ${PROJECT_SOURCE_DIR})
+    foreach(application_target IN LISTS cosmictiger_application_targets)
+        target_link_libraries(${application_target} PRIVATE cosmictiger_application_tests)
+    endforeach()
     find_package(GTest CONFIG QUIET)
     if(NOT GTest_FOUND)
         include(FetchContent)
@@ -743,7 +751,6 @@ if(BUILD_TESTING)
     endif()
 
     # The selected run.test application check executes inside the HPX runtime.
-    target_sources(cosmictiger_application_tests PRIVATE tests/application_test.cpp)
     target_link_libraries(cosmictiger_application_tests PRIVATE GTest::gtest)
     add_executable(cosmology_flops_test tests/cosmology_flops.cpp src/cosmology/cosmology.cpp
         src/cosmology/friedmann.cpp)
@@ -2014,6 +2021,4 @@ if(BUILD_TESTING)
         ${PROJECT_SOURCE_DIR}/tests/run_position_selection.py
         $<TARGET_FILE:cosmictiger> ${PROJECT_BINARY_DIR}/tests/position_selection)
     set_tests_properties(position_selection PROPERTIES RUN_SERIAL TRUE TIMEOUT 600 PROCESSORS 2)
-else()
-    target_sources(cosmictiger_application_tests PRIVATE tests/application_test_direct.cpp)
 endif()

@@ -49,7 +49,9 @@
 #include <cosmictiger/math/simd.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #include <cosmictiger/sph/sph.hpp>
+#ifdef COSMICTIGER_BUILD_TESTING
 #include <tests/test.hpp>
+#endif
 
 int hpx_main(int argc, char* argv[]) {
     std::atomic<int> i;
@@ -76,13 +78,15 @@ int hpx_main(int argc, char* argv[]) {
             }
             fclose(fp);
 
-            // Help, invalid options and the metadata-only checkpoint test need no GPU.
+#ifdef COSMICTIGER_BUILD_TESTING
+            // The metadata-only checkpoint test needs no GPU.
             if (getOptions().run.test == "checkpointState" && !getOptions().hydro.enabled) {
                 test(getOptions().run.test);
                 stopMemuseDaemon();
                 daemonStarted = false;
                 return hpx::finalize();
             }
+#endif
 #ifdef USE_CUDA
             if (getOptions().compute.cuda) {
                 hpxInitCuda();
@@ -119,11 +123,15 @@ int hpx_main(int argc, char* argv[]) {
                 }
                 fclose(fp);
             });
+#ifdef COSMICTIGER_BUILD_TESTING
             if (getOptions().run.test != "") {
                 test(getOptions().run.test);
             } else {
+#endif
                 driver();
+#ifdef COSMICTIGER_BUILD_TESTING
             }
+#endif
         }
         pmmmDestroy();
         particlesDestroy();

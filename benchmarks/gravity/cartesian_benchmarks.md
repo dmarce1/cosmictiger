@@ -123,7 +123,7 @@ as a passing correctness result.
 ## Complete periodic walks
 
 Configure both source snapshots with
-`-DCOSMICTIGER_BUILD_CARTESIAN_BENCHMARKS=ON`, and inject the identical
+`-DCOSMICTIGER_BUILD_CARTESIAN_BENCHMARKS=ON -DBUILD_TESTING=ON`, and inject the identical
 `benchmarks/gravity/dehnen/cartesian_walk.cpp` and test dispatch into the baseline. Use matching
 compiler, build type, kernel choices, opening angle, softening radius, and HPX
 settings. Use the same CUDA-enabled binary for its CPU and CUDA runs, selecting

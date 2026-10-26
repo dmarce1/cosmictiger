@@ -327,7 +327,7 @@ bool processOptions(int argc, char* argv[]) {
         po::value<std::string>(&opts.configuration)->default_value(""),
         "INI configuration file; explicit command-line values take precedence")("run.test",
         po::value<std::string>(&opts.run.test)->default_value(""),
-        "name of developer regression to run")("run.verbose",
+        "name of developer regression to run (requires BUILD_TESTING=ON)")("run.verbose",
         po::value<bool>(&opts.run.verbose)->default_value(false),
         "print all resolved options and detailed internal diagnostics")("run.scenario",
         po::value<std::string>(&opts.run.scenario)->default_value("cosmology"),
@@ -679,6 +679,11 @@ bool processOptions(int argc, char* argv[]) {
     if (!rc) {
         return false;
     }
+#ifndef COSMICTIGER_BUILD_TESTING
+    if (!opts.run.test.empty()) {
+        THROW_ERROR("run.test requires a build configured with BUILD_TESTING=ON\n");
+    }
+#endif
     terminal::setVerbose(opts.run.verbose);
     auto const isExplicit = [&](char const* key) { return vm.count(key) && !vm[key].defaulted(); };
     if (opts.gravity.method != "fmm" && !usesMeshGravity(opts.gravity)) {

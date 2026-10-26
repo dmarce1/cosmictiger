@@ -178,7 +178,7 @@ unconditional CUDA calls elsewhere in the application.
 
 ## Benchmarks
 
-The opt-in `COSMICTIGER_BUILD_CARTESIAN_BENCHMARKS=ON` build adds
+The opt-in `COSMICTIGER_BUILD_CARTESIAN_BENCHMARKS=ON` build (with `BUILD_TESTING=ON`) adds
 `--run.test=cartesianBenchmark`, which measures deterministic 32^3-particle lattice and
 clustered trees with potential both enabled and disabled. It reports tree and
 kick timings separately, uses one warmup and five measured repetitions by
