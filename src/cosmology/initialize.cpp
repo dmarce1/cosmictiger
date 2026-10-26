@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <complex>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -479,10 +480,10 @@ void twolptGenerate(int dim1, int dim2, bool velocity = false) {
                         yValue[index] =
                             randNormal * amplitude * factor * kValue[dim1] * kValue[dim2] / k2;
                         if (iValue2[0] > n / 2) {
-                            yValue[index] = yValue[index].conj() * sgn;
+                            yValue[index] = std::conj(yValue[index]) * sgn;
                         } else if (iValue2[0] == 0) {
                             if (iValue2[1] > n / 2) {
-                                yValue[index] = yValue[index].conj() * sgn;
+                                yValue[index] = std::conj(yValue[index]) * sgn;
                             }
                         }
                     } else {

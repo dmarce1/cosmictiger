@@ -8,9 +8,12 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cmath>
+#include <cstdint>
 #include <fenv.h>
 #include <filesystem>
+#include <stdexcept>
 
 #include <cosmictiger/analysis/bh.hpp>
 #include <cosmictiger/analysis/rockstar.hpp>
@@ -68,6 +71,11 @@ static void nativeChemistryInitializationTest() {
  }
  */
 
+static bool fftFinite(float value) {
+    // Keep nonfinite checks effective in the application's fast-math build.
+    return (std::bit_cast<uint32_t>(value) & 0x7f800000U) != 0x7f800000U;
+}
+
 static void fft1Test() {
     int const n = 100;
     Range<int64_t> box;
@@ -82,15 +90,19 @@ static void fft1Test() {
     fft3dInit(n);
     fft3dAccumulateReal(box, aValue);
     fft3dExecute();
+    fft3dForceReal();
     fft3dInvExecute();
     auto b = fft3dReadReal(box);
     fft3dDestroy();
+    double maxError = 0.0;
     for (int i = 0; i < box.volume(); i++) {
         double const err = std::abs(aValue[i] - b[i]) / aValue[i];
-        if (err > 1.0e-5) {
-            PRINT("%e %e %e\n", err, aValue[i], b[i]);
+        if (!fftFinite(b[i]) || err > 1.0e-5) {
+            throw std::runtime_error("FFT random-field round trip exceeded relative tolerance");
         }
+        maxError = std::max(maxError, err);
     }
+    PRINT("FFT random-field round trip: maximum relative error %e\n", maxError);
 }
 
 static void fft2Test() {
@@ -115,14 +127,57 @@ static void fft2Test() {
     box.end[ZDIM] = n / 2 + 1;
     auto b = fft3dReadComplex(box);
     fft3dDestroy();
-    for (iValue[0] = 0; iValue[0] < n; iValue[0]++) {
-        for (iValue[1] = 0; iValue[1] < n; iValue[1]++) {
-            for (iValue[2] = 0; iValue[2] < n / 2 + 1; iValue[2]++) {
-                PRINT("%i %i %i %e %e\n", iValue[0], iValue[1], iValue[2],
-                    b[box.index(iValue)].real(), b[box.index(iValue)].imag());
+    auto const checkSpectrum = [&](Vector<ComplexFloat> const& spectrum) {
+        double maxError = 0.0;
+        for (iValue[0] = 0; iValue[0] < n; iValue[0]++) {
+            for (iValue[1] = 0; iValue[1] < n; iValue[1]++) {
+                for (iValue[2] = 0; iValue[2] < n / 2 + 1; iValue[2]++) {
+                    auto const value = spectrum[box.index(iValue)];
+                    double const expected =
+                        iValue[0] == 0 && iValue[1] == 0 && iValue[2] == n / 2 ? n * n * n : 0;
+                    double const error = std::max(
+                        std::abs(double(value.real()) - expected), std::abs(double(value.imag())));
+                    if (!fftFinite(value.real()) || !fftFinite(value.imag()) || error > 1.0e-5) {
+                        throw std::runtime_error(
+                            "FFT cosine spectrum differs from its analytic mode");
+                    }
+                    maxError = std::max(maxError, error);
+                }
             }
         }
+        return maxError;
+    };
+    double maxSpectrumError = checkSpectrum(b);
+
+    // Send complex values through the accumulation actions, including a zero-kz
+    // anti-Hermitian perturbation that forceReal must cancel exactly.
+    iValue[0] = 1;
+    iValue[1] = iValue[2] = 0;
+    b[box.index(iValue)] += ComplexFloat(3.0f, 4.0f);
+    iValue[0] = n - 1;
+    b[box.index(iValue)] += ComplexFloat(-3.0f, 4.0f);
+    iValue[0] = 0;
+    b[box.index(iValue)] += ComplexFloat(0.0f, 5.0f);
+    fft3dInit(n);
+    fft3dAccumulateComplex(box, b);
+    fft3dForceReal();
+    auto const forced = fft3dReadComplex(box);
+    fft3dInvExecute();
+    box.end[ZDIM] = n;
+    auto const reconstructed = fft3dReadReal(box);
+    fft3dDestroy();
+    box.end[ZDIM] = n / 2 + 1;
+    maxSpectrumError = std::max(maxSpectrumError, checkSpectrum(forced));
+    double maxRoundTripError = 0.0;
+    for (size_t index = 0; index < aValue.size(); ++index) {
+        double const error = std::abs(double(reconstructed[index]) - aValue[index]);
+        if (!fftFinite(reconstructed[index]) || error > 1.0e-5) {
+            throw std::runtime_error("FFT cosine reconstruction exceeded absolute tolerance");
+        }
+        maxRoundTripError = std::max(maxRoundTripError, error);
     }
+    PRINT("FFT cosine mode: maximum spectrum error %e, reconstruction error %e\n", maxSpectrumError,
+        maxRoundTripError);
 }
 
 static void domainTest() {

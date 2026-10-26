@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <complex>
 
 #include <cosmictiger/analysis/power.hpp>
 #include <cosmictiger/analysis/power_cpu.hpp>
@@ -140,7 +141,7 @@ static PowerSpectrumReturn powerSpectrumBin(Vector<float> const& kbins) {
                         if (iii > 0) {
                             int const bin = searchKbins(kbins, iii, 0, numberOfBins);
                             if (bin >= 0) {
-                                float const pwr = yValue[box.index(iValue2)].norm();
+                                float const pwr = std::norm(yValue[box.index(iValue2)]);
                                 count[bin] += 1;
                                 power[bin] += pwr;
                                 ktot[bin] += iii;
@@ -207,7 +208,7 @@ static PowerSpectrumReturn powerSpectrumBinDeviation(
                         if (iii > 0) {
                             int const bin = searchKbins(kbins, iii, 0, numberOfBins);
                             if (bin >= 0) {
-                                float const pwr = yValue[box.index(iValue2)].norm();
+                                float const pwr = std::norm(yValue[box.index(iValue2)]);
                                 pdev[bin] += sqr(pwr - rc.p[bin]);
                             }
                         }

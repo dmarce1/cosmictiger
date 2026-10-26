@@ -895,6 +895,31 @@ if(BUILD_TESTING)
             PROPERTIES RUN_SERIAL TRUE TIMEOUT 240 PROCESSORS 2)
     endforeach()
 
+    foreach(fft_mode IN ITEMS fft1 fft2)
+        set(fft_workdir "${PROJECT_BINARY_DIR}/tests/${fft_mode}_cpu")
+        file(MAKE_DIRECTORY "${fft_workdir}")
+        add_test(NAME ${fft_mode}_cpu COMMAND $<TARGET_FILE:cosmictiger>
+            --run.test=${fft_mode} --initial.particlesPerDimension=8
+            --hydro.enabled=false --compute.cuda=false --hpx:threads=2 --hpx:bind=none)
+        set_tests_properties(${fft_mode}_cpu PROPERTIES TIMEOUT 120 PROCESSORS 2
+            WORKING_DIRECTORY "${fft_workdir}" LABELS "fft;cpu"
+            ENVIRONMENT "CUDA_VISIBLE_DEVICES=;OMP_NUM_THREADS=1")
+        if(HPX_WITH_PARCELPORT_MPI AND MPIEXEC_EXECUTABLE)
+            set(fft_mpi_workdir "${PROJECT_BINARY_DIR}/tests/${fft_mode}_mpi")
+            file(MAKE_DIRECTORY "${fft_mpi_workdir}")
+            add_test(NAME ${fft_mode}_mpi COMMAND ${MPIEXEC_EXECUTABLE}
+                ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS}
+                $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS}
+                --run.test=${fft_mode} --initial.particlesPerDimension=8
+                --hydro.enabled=false --compute.cuda=false
+                --hpx:threads=2 --hpx:bind=none --hpx:localities=2
+                --hpx:ini=hpx.parcel.mpi.enable=1 --hpx:ini=hpx.parcel.tcp.enable=0)
+            set_tests_properties(${fft_mode}_mpi PROPERTIES TIMEOUT 180 PROCESSORS 4
+                WORKING_DIRECTORY "${fft_mpi_workdir}" LABELS "fft;cpu;mpi"
+                ENVIRONMENT "CUDA_VISIBLE_DEVICES=;OMP_NUM_THREADS=1")
+        endif()
+    endforeach()
+
     foreach(fp16_variant IN ITEMS standard fast_math)
         add_executable(fp16_${fp16_variant}_test tests/fp16.cpp)
         target_include_directories(fp16_${fp16_variant}_test PRIVATE ${PROJECT_SOURCE_DIR})

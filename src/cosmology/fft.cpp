@@ -6,9 +6,11 @@
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
+#include <complex>
 #include <mutex>
 
 #include <fftw3.h>
+#include <hpx/serialization/complex.hpp>
 #include <silo.h>
 
 #include <cosmictiger/core/hpx.hpp>
@@ -180,7 +182,7 @@ void fft3dForceReal() {
                 j[1] = (n - j[1]) % n;
                 auto const y1 = yValue[box.index(j)];
                 auto const y2 = data[mirrorBox.index(i)];
-                auto const y = (y1 + y2.conj()) * 0.5;
+                auto const y = (y1 + std::conj(y2)) * 0.5f;
                 ym[slimBox.index(j)] = y;
             }
         }
@@ -538,8 +540,8 @@ static void fft3dPhase1() {
                     fftwf_execute(p);
                     for (i[2] = 0; i[2] < n / 2 + 1; i[2]++) {
                         int64_t const l = cmplxMybox[ZDIM].index(i);
-                        yValue[l].real() = out[i[2]][0];
-                        yValue[l].imag() = out[i[2]][1];
+                        yValue[l].real(out[i[2]][0]);
+                        yValue[l].imag(out[i[2]][1]);
                     }
                 }
                 lock.lock();
@@ -584,8 +586,8 @@ static void fft3dPhase2(int dim, bool inv) {
                     fftwf_execute(p);
                     for (i[2] = 0; i[2] < n; i[2]++) {
                         int64_t const l = cmplxMybox[dim].index(i);
-                        yValue[l].real() = out[i[2]][0] * norm;
-                        yValue[l].imag() = out[i[2]][1] * norm;
+                        yValue[l].real(out[i[2]][0] * norm);
+                        yValue[l].imag(out[i[2]][1] * norm);
                     }
                 }
                 lock.lock();
