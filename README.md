@@ -441,6 +441,14 @@ single-process launches, and exits with an error if any rank supplies less.
 A CUDA-enabled HPX also checks its CUDA compiler when configuring
 CosmicTiger with CUDA disabled; a separate CPU-only HPX installation is optional.
 
+Before MPI startup, CosmicTiger defaults `HWLOC_COMPONENTS` to `-gl` to avoid
+hwloc's OpenGL discovery blocking on an X server, even for `--help`. CPU topology
+discovery and CUDA execution remain available. An explicitly set
+`HWLOC_COMPONENTS` is preserved. If an MPI launcher itself hangs before starting
+CosmicTiger, apply the setting to the launcher as well, for example
+`HWLOC_COMPONENTS=-gl mpirun -n 2 ./cosmictiger --help --hpx:threads=2`.
+See hwloc's [component selection documentation](https://www.open-mpi.org/projects/hwloc/doc/v2.13.0/envvar.html).
+
 On Ubuntu 26.04 with GCC 15 and glibc 2.43, CUDA 12.8 fails its compiler check or
 conflicts with the C library's math declarations. Ubuntu's CUDA 13.1 packages,
 including `cuda-crt-13-1` version `13.1.115-0ubuntu1.1` or newer, contain the

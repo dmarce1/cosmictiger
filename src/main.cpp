@@ -186,6 +186,13 @@ char const* mpiThreadSupportName(int threadSupport) {
 }
 
 void initializeMpi(int& argc, char**& argv, bool& ownsMpi) {
+    // MPI and HPX use hwloc for topology discovery. Its OpenGL component can
+    // block connecting to an X server even for --help; display discovery is
+    // unnecessary here. Preserve an explicitly configured component list.
+    if (::setenv("HWLOC_COMPONENTS", "-gl", 0) != 0) {
+        throw std::system_error(
+            errno, std::generic_category(), "Unable to configure hwloc before MPI startup");
+    }
     int finalized = 0;
     if (MPI_Finalized(&finalized) != MPI_SUCCESS || finalized) {
         throw std::runtime_error("Cannot start CosmicTiger after MPI finalization");

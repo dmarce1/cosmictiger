@@ -1,5 +1,5 @@
 # CosmicTiger - MPI startup integration regression; BSL-1.0.
-"""Check required MPI thread support before HPX startup and fixed64 dispatch."""
+"""Check hwloc defaults, required MPI thread support, and fixed64 dispatch."""
 
 import argparse
 import os
@@ -8,7 +8,8 @@ import signal
 import subprocess
 
 
-def run_case(args, name, *, level=None, ranks=1, target_rank=None, fixed64=False):
+def run_case(args, name, *, level=None, ranks=1, target_rank=None, fixed64=False,
+             hwloc_components=None):
     workdir = args.workdir.resolve() / name
     workdir.mkdir(parents=True, exist_ok=True)
     environment = os.environ.copy()
@@ -16,6 +17,14 @@ def run_case(args, name, *, level=None, ranks=1, target_rank=None, fixed64=False
     environment["OMP_NUM_THREADS"] = "1"
     environment["OPENBLAS_NUM_THREADS"] = "1"
     environment["LD_PRELOAD"] = str(args.guard.resolve())
+    environment.pop("HWLOC_COMPONENTS", None)
+    # The launcher discovers topology before the application can set its default.
+    if ranks > 1 and hwloc_components is None:
+        hwloc_components = "-gl"
+    if hwloc_components is not None:
+        environment["HWLOC_COMPONENTS"] = hwloc_components
+    environment["COSMICTIGER_TEST_HWLOC_COMPONENTS"] = (
+        "-gl" if hwloc_components is None else hwloc_components)
     environment.pop("COSMICTIGER_TEST_MPI_THREAD_LEVEL", None)
     environment.pop("COSMICTIGER_TEST_MPI_THREAD_RANK", None)
     if level is not None:
@@ -77,10 +86,14 @@ def main():
     else:
         run_case(args, "multiple")
         run_case(args, "multiple_fixed64", fixed64=True)
+        run_case(args, "custom_hwloc_components", hwloc_components="-gl,-opencl")
+        run_case(args, "custom_hwloc_components_fixed64", fixed64=True,
+                 hwloc_components="-gl,-opencl")
         for level in ("MPI_THREAD_SINGLE", "MPI_THREAD_FUNNELED", "MPI_THREAD_SERIALIZED"):
             run_case(args, level.lower(), level=level)
         run_case(args, "serialized_fixed64", level="MPI_THREAD_SERIALIZED", fixed64=True)
-    print("MPI startup passed: MULTIPLE accepted, lower levels rejected, MPI finalized")
+    print("MPI startup passed: hwloc defaults/overrides checked, MULTIPLE accepted, "
+          "lower levels rejected, MPI finalized")
 
 
 if __name__ == "__main__":

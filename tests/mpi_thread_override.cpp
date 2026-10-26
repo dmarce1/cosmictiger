@@ -35,6 +35,15 @@ int reportedThreadLevel(int actual) {
 }    // namespace detail
 
 extern "C" int MPI_Init_thread(int* argc, char*** argv, int required, int* provided) {
+    char const* expectedComponents = std::getenv("COSMICTIGER_TEST_HWLOC_COMPONENTS");
+    char const* actualComponents = std::getenv("HWLOC_COMPONENTS");
+    if (expectedComponents != nullptr &&
+        (actualComponents == nullptr || std::strcmp(actualComponents, expectedComponents) != 0)) {
+        std::fprintf(stderr,
+            "MPI startup probe expected HWLOC_COMPONENTS=%s before MPI initialization; got %s\n",
+            expectedComponents, actualComponents == nullptr ? "(unset)" : actualComponents);
+        return MPI_ERR_ARG;
+    }
     if (required != MPI_THREAD_MULTIPLE) {
         std::fprintf(stderr, "MPI startup probe expected MPI_THREAD_MULTIPLE\n");
         return MPI_ERR_ARG;
