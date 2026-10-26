@@ -15,7 +15,6 @@
 
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/safe_io.hpp>
-#include <cosmictiger/core/stack_trace.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/particles.hpp>
@@ -283,7 +282,6 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
     Pair<int, int> processRange, Pair<ParticleInteger> particleRange, Range<double> box, int depth,
     bool localRoot) {
     // PRINT( "%i\n", depth);
-    stackTraceActivate();
     int const bucketSize = getOptions().compute.sphBucketSize;
     SphTreeCreateReturn rc;
     if (depth >= MAX_DEPTH) {

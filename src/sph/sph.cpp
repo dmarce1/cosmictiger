@@ -23,7 +23,6 @@
 #ifdef USE_CUDA
 #include <cosmictiger/sph/sph_cuda.hpp>
 #endif
-#include <cosmictiger/core/stack_trace.hpp>
 #include <cosmictiger/core/timer.hpp>
 #include <cosmictiger/sph/cullen_and_dehnen/particle_exchange.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
@@ -156,7 +155,6 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
     ALWAYS_ASSERT(params.innerSelection);
     SphTreeNeighborReturn kr;
     FlopCounter<> flops = 4 * NDIM;    // Sentinel bound conversions in the return constructor.
-    stackTraceActivate();
     SphTreeNode const* selfPtr = sphTreeGetNode(self);
     if (params.runType == SPH_TREE_NEIGHBOR_NEIGHBORS && selfPtr->localRoot) {
         sphTreeFreeNeighborList();

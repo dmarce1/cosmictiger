@@ -384,13 +384,27 @@ dependency boundaries, and generated-code placement.
 Use CMake 3.24 or newer, C++20, HPX with CUDA and networking enabled, CUDA,
 MPI, FFTW3 with single-precision serial and MPI libraries (`fftw3f` and
 `fftw3f_mpi`), GSL, Silo, HEALPix C and C++, Boost program options and Boost.Units
-headers. Install the development packages for these dependencies; on
+headers, plus libbacktrace for stack-trace symbolization. CMake searches installed
+libbacktrace packages and the selected compiler's implicit include/library paths
+(including GCC's bundled copy). For another prefix, set `CMAKE_PREFIX_PATH` or
+`Libbacktrace_INCLUDE_DIR` and `Libbacktrace_LIBRARY`.
+Install the development packages for these dependencies; on
 Debian/Ubuntu, FFTW3, GSL and HEALPix are provided by `libfftw3-dev`,
 `libfftw3-mpi-dev`, `libgsl-dev`, `libchealpix-dev`, and `libhealpix-cxx-dev`,
 alongside the development package for the selected MPI implementation. CMake
 finds system installations automatically and verifies that the single-precision
 FFTW MPI API links with the selected MPI library. The build links the installed
 HEALPix C++ library.
+
+Fatal signals (`SIGABRT`, `SIGSEGV`, `SIGBUS`, `SIGFPE`, and `SIGILL`) report the
+host, process ID, HPX locality, and faulting thread's stack to stderr and append
+to `stack_trace.txt` in the configured output directory. Before options are
+installed, the log defaults to the working directory. The handler is installed
+on every HPX locality at runtime startup and preserves termination by the
+original signal, including core dumps when enabled. Use `RelWithDebInfo` or
+`Debug` for source-file and line information; symbolization after a fatal fault
+is best effort. This handler is adapted from OctoTiger's `stacktrace_fix` commit
+`a0720ee02feebf776b797b2fdc74edf6bcc5bd83`.
 
 Run `./build.sh` in a terminal for the interactive builder. It uses a full-screen
 menu when `whiptail` is available, with a text menu as a fallback. Choose Release,

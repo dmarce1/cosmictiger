@@ -32,6 +32,7 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/options_metadata.hpp>
 #include <cosmictiger/core/profiler.hpp>
+#include <cosmictiger/core/stack_trace.hpp>
 #include <cosmictiger/core/unordered_set_ts.hpp>
 #include <cosmictiger/gravity/dehnen/ewald_indices.hpp>
 #include <cosmictiger/gravity/fmm_kernels/cartesian_ewald_operators.hpp>
@@ -257,12 +258,16 @@ void selectPositionBackend(int argc, char* argv[]) {
 }    // namespace detail
 
 int main(int argc, char* argv[]) {
+    StackTraceHandler stackTraceHandler;
     bool ownsMpi = false;
     int result = EXIT_FAILURE;
     try {
         detail::selectPositionBackend(argc, argv);
         recordCommandLineArguments(argc, argv);
         detail::initializeMpi(argc, argv, ownsMpi);
+        // Startup callbacks also run on worker localities that do not enter hpx_main.
+        hpx::register_startup_function(
+            [&stackTraceHandler]() { stackTraceHandler.install(hpx::get_locality_id()); });
 #ifndef PROFILE_DISABLE
         // Install worker hooks before HPX creates its OS threads. The sampler
         // writes the final cumulative report from its process-exit callback.

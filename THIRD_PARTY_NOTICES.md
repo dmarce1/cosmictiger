@@ -15,6 +15,7 @@ make the combined executable distributable under Boost terms alone.
 
 | Material | Location | Attribution and retained terms |
 | --- | --- | --- |
+| Fatal-signal stack tracer | `src/core/stack_trace.cpp`, `cosmictiger/core/stack_trace.hpp`, `cmake/FindLibbacktrace.cmake` | Adapted from OctoTiger `stacktrace_fix`, commit `a0720ee02feebf776b797b2fdc74edf6bcc5bd83`; copyright 2026 AUTHORS, Boost Software License 1.0. |
 | HEALPix CUDA adaptation | `src/analysis/healpix.cu` | Copyright 1997–2010 Krzysztof M. Gorski, Eric Hivon, Benjamin D. Wandelt, Anthony J. Banday, Matthias Bartelmann, Reza Ansari and Kenneth M. Ganga. GPL version 2 or later; original notice preserved. Compiled in CUDA builds. |
 | GADGET-4 snapshot header declaration | `GadgetIoHeader` in `cosmictiger/particles/particles.hpp` | The declaration is explicitly marked as copied from GADGET-4. Upstream `src/io/snap_io.h` credits Volker Springel and contributing authors (2014–2020). GADGET-4 is GPL-licensed; the original imported revision and precise license version were not recorded here. The copied declaration is excluded from the project's Boost grant. |
 | RECFAST effective-atom recombination physics | `src/chemistry/recombination.cpp` | RECFAST 1.5.2, Douglas Scott; University of British Columbia, copyright 1999–2010. The file retains UBC's permissive use/copy/modify/distribute grant and warranty disclaimer verbatim. CosmicTiger's integration and interpolation are original. |
@@ -47,7 +48,8 @@ dependency list, including libraries used by HPX and Silo.
 | Dependency | Use | License / source of terms |
 | --- | --- | --- |
 | HPX | Parallel runtime | [Boost Software License 1.0](https://github.com/TheHPXProject/hpx/blob/master/LICENSE_1_0.txt). |
-| Boost | Program options, units and support headers | [Boost Software License 1.0](https://www.boost.org/LICENSE_1_0.txt); retain any package-specific notices. |
+| Boost | Program options, units, stack traces and support headers | [Boost Software License 1.0](https://www.boost.org/LICENSE_1_0.txt); retain any package-specific notices. |
+| libbacktrace | Stack-trace symbol and source-line resolution | The installed `backtrace.h` supplies its permissive redistribution terms; retain the selected package's copyright, conditions and disclaimer. |
 | GSL and GSL CBLAS | Random generation in initialization and particle operations | [GNU GPL](https://www.gnu.org/software/gsl/); this is an active dependency. |
 | FFTW3 single precision, serial and MPI | FFTs in `src/cosmology/fft.cpp` and MPI FFT support | [GNU GPL](https://www.fftw.org/faq/section1.html#isfftwfree), unless separately licensed; this is an active dependency. |
 | MPI implementation | HPX communication and FFTW3-MPI support | Supplied by the selected MPI implementation; retain its package-specific license and notices. |

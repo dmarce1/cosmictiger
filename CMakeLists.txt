@@ -77,6 +77,19 @@ if(COSMICTIGER_WITH_CUDA AND NOT HPX_WITH_CUDA)
         "CUDA builds require HPX built with HPX_WITH_CUDA=ON; otherwise configure COSMICTIGER_WITH_CUDA=OFF")
 endif()
 find_package(Boost REQUIRED COMPONENTS program_options)
+add_library(cosmictiger_stacktrace STATIC src/core/stack_trace.cpp)
+target_include_directories(cosmictiger_stacktrace PUBLIC ${PROJECT_SOURCE_DIR})
+target_link_libraries(cosmictiger_stacktrace PRIVATE Boost::boost ${CMAKE_DL_LIBS})
+if(NOT MSVC)
+    # Unlike older addr2line backends, libbacktrace relocates PIE addresses.
+    find_package(Libbacktrace REQUIRED)
+    target_link_libraries(cosmictiger_stacktrace PRIVATE Libbacktrace::libbacktrace)
+    target_compile_definitions(cosmictiger_stacktrace PRIVATE BOOST_STACKTRACE_USE_BACKTRACE)
+endif()
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(cosmictiger_stacktrace PUBLIC
+        "$<$<COMPILE_LANGUAGE:CXX>:-fno-omit-frame-pointer>")
+endif()
 find_package(GSL REQUIRED)
 find_package(MPI REQUIRED COMPONENTS CXX)
 find_path(FFTW3F_INCLUDE_DIR fftw3.h REQUIRED)
@@ -147,7 +160,6 @@ set(cosmictiger_source_files
     src/core/hpx.cpp
     src/core/memused.cpp
     src/core/options.cpp
-    src/core/stack_trace.cpp
     src/cosmology/boltzmann.cpp
     src/cosmology/background.cpp
     src/cosmology/evolution.cpp
@@ -451,6 +463,7 @@ target_compile_options(halo_catalog_export PRIVATE -fno-fast-math)
 # Chemistry must not inherit the application's fast-math/FTZ settings: the
 # signed-complement and FloatFloat contracts require IEEE rounding and -0.
 find_package(Threads REQUIRED)
+target_link_libraries(cosmictiger_stacktrace PRIVATE Threads::Threads)
 add_library(primordial_chemistry STATIC src/chemistry/primordial_chemistry.cpp
     src/chemistry/recombination.cpp)
 target_include_directories(primordial_chemistry PUBLIC ${PROJECT_SOURCE_DIR})
@@ -500,7 +513,8 @@ foreach(application_target IN LISTS cosmictiger_application_targets)
         set_source_files_properties(tests/test.cpp PROPERTIES COMPILE_DEFINITIONS COSMICTIGER_CARTESIAN_BENCHMARKS)
     endif()
     target_link_libraries(${application_target} PRIVATE primordial_chemistry cosmictiger_fp16
-        cosmictiger_profiler)
+        cosmictiger_profiler cosmictiger_stacktrace)
+    set_target_properties(${application_target} PROPERTIES ENABLE_EXPORTS ON)
     target_include_directories(${application_target} PRIVATE ${PROJECT_SOURCE_DIR})
     target_include_directories(${application_target} SYSTEM PRIVATE
         ${FFTW3F_INCLUDE_DIR} ${FFTW3F_MPI_INCLUDE_DIR}
@@ -516,7 +530,7 @@ foreach(application_target IN LISTS cosmictiger_application_targets)
     endif()
     if(COSMICTIGER_WITH_CUDA)
         target_link_libraries(${application_target} PUBLIC CUDA::cudart)
-        target_compile_definitions(${application_target} PRIVATE USE_CUDA BOOST_STACKTRACE_USE_ADDR2LINE)
+        target_compile_definitions(${application_target} PRIVATE USE_CUDA)
         target_compile_options(${application_target} PRIVATE
             $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math;-lineinfo>)
         set_target_properties(${application_target} PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
@@ -593,7 +607,8 @@ target_include_directories(healpix2silo SYSTEM PRIVATE ${CHEALPIX_INCLUDE_DIR} $
 
 add_hpx_executable(groups2halofunc
     SOURCES src/core/assert.cpp src/core/hpx.cpp src/tools/groups2halofunc.cpp src/analysis/group_entry.cpp)
-target_link_libraries(groups2halofunc PUBLIC Boost::program_options)
+target_link_libraries(groups2halofunc PUBLIC Boost::program_options PRIVATE cosmictiger_stacktrace)
+set_target_properties(groups2halofunc PROPERTIES ENABLE_EXPORTS ON)
 target_include_directories(groups2halofunc PRIVATE ${PROJECT_SOURCE_DIR})
 
 foreach(tool_target IN ITEMS healpix2silo groups2halofunc)
@@ -622,6 +637,42 @@ if(BUILD_TESTING)
         FetchContent_MakeAvailable(googletest)
     endif()
     include(GoogleTest)
+
+    if(UNIX AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        add_executable(stack_trace_test tests/stack_trace.cpp)
+        target_link_libraries(stack_trace_test PRIVATE cosmictiger_stacktrace Threads::Threads)
+        target_compile_options(stack_trace_test PRIVATE -g -O0 -fno-optimize-sibling-calls)
+        set_target_properties(stack_trace_test PROPERTIES ENABLE_EXPORTS ON)
+        add_test(NAME stack_trace COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/run_stack_trace.py $<TARGET_FILE:stack_trace_test>
+            ${PROJECT_BINARY_DIR}/stack_trace_test_output)
+        set_tests_properties(stack_trace PROPERTIES TIMEOUT 90 LABELS "diagnostics;cpu")
+
+        add_hpx_executable(stack_trace_hpx_test SOURCES tests/stack_trace_hpx.cpp)
+        target_link_libraries(stack_trace_hpx_test PRIVATE cosmictiger_stacktrace)
+        target_compile_options(stack_trace_hpx_test PRIVATE -g -O0 -fno-optimize-sibling-calls)
+        set_target_properties(stack_trace_hpx_test PROPERTIES ENABLE_EXPORTS ON)
+        add_test(NAME stack_trace_hpx COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/run_stack_trace_hpx.py $<TARGET_FILE:stack_trace_hpx_test>
+            ${PROJECT_BINARY_DIR}/stack_trace_hpx_test_output)
+        set_tests_properties(stack_trace_hpx PROPERTIES TIMEOUT 120 PROCESSORS 2
+            LABELS "diagnostics;cpu;hpx")
+        if(HPX_WITH_PARCELPORT_MPI AND MPIEXEC_EXECUTABLE)
+            set(stack_trace_mpi_args --mpi-exec=${MPIEXEC_EXECUTABLE}
+                --mpi-numproc-flag=${MPIEXEC_NUMPROC_FLAG} --mpi-only)
+            foreach(flag IN LISTS MPIEXEC_PREFLAGS)
+                list(APPEND stack_trace_mpi_args --mpi-preflag=${flag})
+            endforeach()
+            foreach(flag IN LISTS MPIEXEC_POSTFLAGS)
+                list(APPEND stack_trace_mpi_args --mpi-postflag=${flag})
+            endforeach()
+            add_test(NAME stack_trace_hpx_mpi COMMAND ${Python3_EXECUTABLE}
+                ${PROJECT_SOURCE_DIR}/tests/run_stack_trace_hpx.py $<TARGET_FILE:stack_trace_hpx_test>
+                ${PROJECT_BINARY_DIR}/stack_trace_hpx_mpi_test_output ${stack_trace_mpi_args})
+            set_tests_properties(stack_trace_hpx_mpi PROPERTIES TIMEOUT 120 PROCESSORS 4
+                LABELS "diagnostics;cpu;hpx;mpi")
+        endif()
+    endif()
 
     add_executable(profiler_disabled_test tests/profiler_disabled.cpp)
     target_include_directories(profiler_disabled_test PRIVATE ${PROJECT_SOURCE_DIR})

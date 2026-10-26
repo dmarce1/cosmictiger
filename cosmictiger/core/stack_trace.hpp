@@ -1,14 +1,28 @@
-/*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+// Copyright (c) 2026 Octo-Tiger AUTHORS
+// Copyright (c) 2026 Dominic C. Marcello
+// Distributed under the Boost Software License, Version 1.0.
 
-Distributed under the Boost Software License, Version 1.0.
-See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
-*/
+#pragma once
 
-#ifndef STACK_TRACE_HPP_
-#define STACK_TRACE_HPP_
+#include <memory>
+#include <string>
 
-void stackTraceActivate();
+// One owner per process, kept alive until the HPX runtime has stopped.
+// Install from an HPX startup callback, which runs on worker localities too.
+class StackTraceHandler {
+public:
+    StackTraceHandler();
+    ~StackTraceHandler();
 
-#endif /* STACK_TRACE_HPP_ */
+    StackTraceHandler(StackTraceHandler const&) = delete;
+    StackTraceHandler& operator=(StackTraceHandler const&) = delete;
+
+    void install(unsigned int localityId = 0);
+
+private:
+    struct State;
+    std::unique_ptr<State> state_;
+};
+
+// The same symbolization backend is used for assertions and fatal signals.
+std::string stackTrace();

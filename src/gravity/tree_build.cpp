@@ -12,7 +12,6 @@
 
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/safe_io.hpp>
-#include <cosmictiger/core/stack_trace.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/tree_build.hpp>
 #include <cosmictiger/gravity/tree_multipole.hpp>
@@ -31,7 +30,6 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
     bool const boundedGeometry = policy.boundedGeometry;
     auto const sources = fmmSourceView(policy.sourceStore);
     FlopCounter<FlopCount> flops = 0;
-    stackTraceActivate();
     double const h = getOptions().gravity.supportRadius;
     int bucketSize = getOptions().compute.bucketSize;
     TreeCreateReturn rc;

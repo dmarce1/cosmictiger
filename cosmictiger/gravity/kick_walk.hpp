@@ -62,7 +62,6 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, ND
 
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/options.hpp>
-#include <cosmictiger/core/stack_trace.hpp>
 #include <cosmictiger/gravity/fmm_acceptance.hpp>
 #include <cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
@@ -131,7 +130,6 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, ND
     // The buffer travels with the work item; the view aliases its leading coefficients.
     Expansion& expansion = l.template expansion<order>();
     FlopCounter<FlopCount> flops = 0;
-    stackTraceActivate();
     TreeNode const* selfPtr = treeGetNode(self);
     if (selfPtr->localRoot && !params.forceOnly) {
         context.beginReturn(selfPtr->numberOfParticles());

@@ -12,7 +12,7 @@ Location rules:
 - Ordinary runtime names below are relative to output.directory. Default is ./output/<run.scenario>. outputPath creates parent directories. src/io/output.cpp (outputPath); src/core/options.cpp (processOptions).
 - Built-in run.test mode bypasses output.directory for outputPath names, so they use the process working directory. Absolute paths stay absolute. src/io/output.cpp (outputPath).
 - Lightcone names are relative to lightcone.directory, default output.directory + /lightcone. src/core/options.cpp (processOptions).
-- stack_trace.txt defaults to the working directory before options are installed and in standalone utilities; setOptions changes it to outputPath("stack_trace.txt"). src/core/assert.cpp (stackTraceOutputPath / setStackTraceOutputPath); src/core/options.cpp (setOptions).
+- stack_trace.txt defaults to the working directory before options are installed and in standalone utilities; setOptions changes it to outputPath("stack_trace.txt"). src/core/stack_trace.cpp (stackTraceOutputPath / setStackTraceOutputPath); src/core/options.cpp (setOptions).
 - cosmictiger.profile.<pid>.txt is relative to the process working directory, independently of output.directory; each MPI process writes its own report. src/core/profiler.cpp (profile::profileStart / profile::writeProfileReport).
 - N = output/coarse-step number; R = HPX rank; E = lightcone epoch.
 
@@ -35,7 +35,7 @@ glass.bin | glass scenario/createGlass convergence and end of driver | particle-
 sod.txt | completed full-duration Sod scenario (not early iteration cutoff), gas particles present | sampled density/pressure against exact Sod solution; overwrite | src/scenarios/sod.cpp (scenarios::detail::finishSod); src/core/scenario_driver.cpp (runFixedScenario)
 blast.txt | completed full-duration blast scenario (not early iteration cutoff), gas particles present | sampled density against Sedov solution; overwrite | src/scenarios/blast.cpp (scenarios::detail::finishBlast); src/core/scenario_driver.cpp (runFixedScenario)
 view.N.dat | analysis.views=true, synchronized cosmology/glass/plummer steps | binary all-sky HEALPix projection with nside,npix,values,cycle,time; overwrite | src/io/view.cpp (outputView); src/core/driver.cpp (driver)
-stack_trace.txt | assertion failure or registered fatal signal | condition/rank/stack trace; append | src/core/assert.cpp (cosmictigerAssert); src/core/stack_trace.cpp (handler)
+stack_trace.txt | assertion failure or registered fatal signal | condition/rank or host/pid/locality/signal, plus stack trace; append | src/core/assert.cpp (cosmictigerAssert); src/core/stack_trace.cpp (detail::reportSignal)
 
 HALO CATALOGUES (analysis.groups=true; synchronized cosmology/glass/plummer steps)
 groups.N/groups.dat | snapshot header | box length,time,number,scale; binary overwrite | src/analysis/groups.cpp (groupsSave)
