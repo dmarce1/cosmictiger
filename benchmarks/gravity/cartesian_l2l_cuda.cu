@@ -16,7 +16,7 @@
 // Every FMM order from kFmmMinOrder to kFmmMaxOrder (local degrees 2 to 8) is
 // compiled in. --check validates all of them; timing runs one order, the
 // build's default (kFmmDefaultOrder) unless --order N selects another. The
-// Cartesian variants also check L2lWarpKernel::translateInto, which writes the
+// Cartesian variants also check L2LWarp::translateInto, which writes the
 // completed expansion into a shared-memory target distinct from its source. The legacy baseline
 // header implements only local degree six, so it is restricted to ORDER 7 and validated at that
 // order alone.
@@ -41,7 +41,7 @@
 #endif
 #include COSMICTIGER_CARTESIAN_BASELINE_HEADER
 #else
-#include <cosmictiger/gravity/fmm_kernels.hpp>
+#include <cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp>
 #endif
 
 #if !defined(COSMICTIGER_CARTESIAN_BASELINE_HEADER) && !defined(COSMICTIGER_CARTESIAN_L2L_LANE0)
@@ -62,11 +62,11 @@ static_assert(FmmOrder<7>::kLocalCoefficients_ == EXPANSION_SIZE,
 #elif defined(COSMICTIGER_CARTESIAN_L2L_LANE0)
 constexpr char const* kImplementation = "cartesian_lane0";
 template <int order>
-using LocalExpansion = FmmExpansion<float, order>;
+using LocalExpansion = cosmictiger::gravity::cartesian::Expansion<float, order>;
 #else
 constexpr char const* kImplementation = "cartesian_warp";
 template <int order>
-using LocalExpansion = FmmExpansion<float, order>;
+using LocalExpansion = cosmictiger::gravity::cartesian::Expansion<float, order>;
 #endif
 constexpr int kLanes = 32;
 constexpr int kMaxWarpsPerBlock = 4;
@@ -264,11 +264,26 @@ __device__ LocalExpansion<order> warpTranslate(
 #ifdef COSMICTIGER_CARTESIAN_L2L_LANE0
     LocalExpansion<order> result{};
     if (threadIdx.x == 0) {
+#ifdef COSMICTIGER_CARTESIAN_BASELINE_HEADER
         result = l2L(source, position, doPhi);
+#else
+        if (!doPhi) {
+            result[0] = source[0];
+        }
+        cosmictiger::gravity::cartesian::L2L(result, source, fmmScaleDisplacement(position), doPhi);
+#endif
     }
     return result;
 #else
+#ifdef COSMICTIGER_CARTESIAN_BASELINE_HEADER
     return l2LCuda(source, position, doPhi);
+#else
+    LocalExpansion<order> result{};
+    auto const scaled = fmmScaleDisplacement(position);
+    cosmictiger::gravity::cartesian::detail::detail::L2LWarp<order - 1, true>::translate(
+        result, source, scaled[0], scaled[1], scaled[2], doPhi);
+    return result;
+#endif
 #endif
 }
 
@@ -318,7 +333,8 @@ __global__ void validateWarp(Fixture<order> const* input, LocalExpansion<order>*
 template <int order>
 __device__ void warpTranslateInto(LocalExpansion<order>& target,
     LocalExpansion<order> const& source, Array<float, NDIM> const& position, bool doPhi) {
-    l2LCudaInto(&target[0], source, position, doPhi);
+    cosmictiger::gravity::cartesian::L2LWarpInto(
+        &target[0], source, fmmScaleDisplacement(position), doPhi);
 }
 
 template <int order>
@@ -449,7 +465,17 @@ void validate(Fixture<order> const* deviceInput, std::vector<Fixture<order>> con
                         normalized[d] = double(shift[d] * SCALE_FACTOR);
                     }
                     expected = translateReference<order>(expected, normalized, doPhi);
+#ifdef COSMICTIGER_CARTESIAN_BASELINE_HEADER
                     scalar = l2L(scalar, shift, doPhi);
+#else
+                    LocalExpansion<order> translated{};
+                    if (!doPhi) {
+                        translated[0] = scalar[0];
+                    }
+                    cosmictiger::gravity::cartesian::L2L(
+                        translated, scalar, fmmScaleDisplacement(shift), doPhi);
+                    scalar = translated;
+#endif
                 }
                 auto const scalarCanonical = canonical<order>(scalar);
                 double checksum = 0;

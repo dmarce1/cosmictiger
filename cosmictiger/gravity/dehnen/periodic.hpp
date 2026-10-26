@@ -9,8 +9,8 @@ double kickBackgroundSecondMoment(Array<Position, NDIM> center);
 }
 
 template <int order>
-void cpuGravityEwald(FmmExpansion<float, order>&, Vector<TreeId> const&, TreeId, bool,
-    FmmGeometry const& geometry = {});
+void cpuGravityEwald(cosmictiger::gravity::cartesian::Expansion<float, order>&,
+    Vector<TreeId> const&, TreeId, bool, FmmGeometry const& geometry = {});
 template <int order>
 FlopCount dehnenBackgroundImpl(
     KickParameters const&, ExpansionBuffer&, Array<Position, NDIM>&, TreeId, Vector<TreeId> const&);

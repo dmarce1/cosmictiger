@@ -20,7 +20,7 @@
 #include <cosmictiger/gravity/dehnen/execution.hpp>
 #include <cosmictiger/gravity/dehnen/periodic.hpp>
 #include <cosmictiger/gravity/fmm_acceptance.hpp>
-#include <cosmictiger/gravity/fmm_kernels.hpp>
+#include <cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/kick.hpp>
@@ -142,7 +142,9 @@ TreeId fmmWalkAddNode(Array<Position, NDIM> const& position, float radius,
             for (int dim = 0; dim < NDIM; dim++) {
                 displacement[dim] = distance(particlesPos(dim, i), position[dim]);
             }
-            auto const particleMultipole = p2M<order.value>(displacement);
+            cosmictiger::gravity::cartesian::Multipole<float, order.value> particleMultipole{};
+            cosmictiger::gravity::cartesian::P2M(
+                particleMultipole, 1.0f, fmmScaleDisplacement(displacement));
             for (int coefficient = 0; coefficient < FmmOrder<order.value>::kMultipoleCoefficients_;
                 coefficient++) {
                 moments[coefficient] += particlesMass(i) * particleMultipole[coefficient];
@@ -178,11 +180,13 @@ void fmmWalkVerifyEwald(std::string const& label, TreeId sink, Vector<TreeId> co
     auto const value = fmmDispatch([&](auto order) {
         auto& expansion = reference.expansion<order.value>();
         cpuGravityEwald<order.value>(expansion, sourceLeaves, sink, true);
-        return l2P(expansion, displacement, true);
+        cosmictiger::gravity::Field<float> field{};
+        cosmictiger::gravity::cartesian::L2P(field, expansion, fmmScaleDisplacement(displacement));
+        return field;
     });
-    std::array<double, NDIM> const expectedAcceleration = {-SCALE_FACTOR2 * value(1, 0, 0),
-        -SCALE_FACTOR2 * value(0, 1, 0), -SCALE_FACTOR2 * value(0, 0, 1)};
-    double const expectedEwaldPotential = SCALE_FACTOR1 * value(0, 0, 0);
+    std::array<double, NDIM> const expectedAcceleration = {SCALE_FACTOR2 * value.accelerationX(),
+        SCALE_FACTOR2 * value.accelerationY(), SCALE_FACTOR2 * value.accelerationZ()};
+    double const expectedEwaldPotential = SCALE_FACTOR1 * value.potential();
     // The call's support may differ from the defaults used to build the tree.
     float const support = 2.0f * getOptions().gravity.supportRadius;
     double const selfPotential = selfPhi() * (1.0f / support);
@@ -426,12 +430,14 @@ ForceVectors fmmWalkInteractionReference(
                 for (int dim = 0; dim < NDIM; dim++) {
                     displacement[dim] = distance(particlesPos(dim, i), sinkNode->pos[dim]);
                 }
-                auto const value = l2P(expansion, displacement, true);
+                cosmictiger::gravity::Field<float> value{};
+                cosmictiger::gravity::cartesian::L2P(
+                    value, expansion, fmmScaleDisplacement(displacement));
                 auto const j = i - range.first;
-                reference.gx[j] -= SCALE_FACTOR2 * value(1, 0, 0);
-                reference.gy[j] -= SCALE_FACTOR2 * value(0, 1, 0);
-                reference.gz[j] -= SCALE_FACTOR2 * value(0, 0, 1);
-                reference.phi[j] += SCALE_FACTOR1 * value(0, 0, 0);
+                reference.gx[j] += SCALE_FACTOR2 * value.accelerationX();
+                reference.gy[j] += SCALE_FACTOR2 * value.accelerationY();
+                reference.gz[j] += SCALE_FACTOR2 * value.accelerationZ();
+                reference.phi[j] += SCALE_FACTOR1 * value.potential();
             }
         });
     } else if (interaction == FmmInteraction::ParticleParticle) {

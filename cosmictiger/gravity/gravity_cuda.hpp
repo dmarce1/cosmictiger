@@ -17,7 +17,7 @@
 
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/cuda/cuda_reduce.hpp>
-#include <cosmictiger/gravity/fmm_kernels.hpp>
+#include <cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/kick_cuda.hpp>
 
@@ -170,11 +170,11 @@ __device__ inline FmmMultiPos<order> const& cudaStagedMultipole(char const* reco
 // One sink's accumulated PC field applied to its force planes. Called with the
 // arena planes or the global backing, so each call site keeps its address space.
 __device__ inline void cudaApplyPcField(
-    CudaKickForceTile const& force, int k, Expansion2<float> const& l) {
-    force.gx[k] -= SCALE_FACTOR2 * l(1, 0, 0);
-    force.gy[k] -= SCALE_FACTOR2 * l(0, 1, 0);
-    force.gz[k] -= SCALE_FACTOR2 * l(0, 0, 1);
-    force.phi[k] += SCALE_FACTOR1 * l(0, 0, 0);
+    CudaKickForceTile const& force, int k, cosmictiger::gravity::Field<float> const& l) {
+    force.gx[k] += SCALE_FACTOR2 * l.accelerationX();
+    force.gy[k] += SCALE_FACTOR2 * l.accelerationY();
+    force.gz[k] += SCALE_FACTOR2 * l.accelerationZ();
+    force.phi[k] += SCALE_FACTOR1 * l.potential();
 }
 
 // One sink's accumulated PP force applied to its force planes, the potential
@@ -343,26 +343,28 @@ __device__ inline void cudaPpSinkGroup(CudaStagedSources const& sources, int cou
 }    // namespace detail
 
 template <int order>
-__device__ FlopCount cudaGravityCcDirect(CudaKickData const& data, FmmExpansion<float, order>& lacc,
-    TreeNode const& self, DeviceVector<int> const& multlist, bool doPhi,
-    FmmGeometry const& geometry) {
+__device__ FlopCount cudaGravityCcDirect(CudaKickData const& data,
+    cosmictiger::gravity::cartesian::Expansion<float, order>& lacc, TreeNode const& self,
+    DeviceVector<int> const& multlist, bool doPhi, FmmGeometry const& geometry) {
     int const& tid = threadIdx.x;
     auto const& treeNodes = data.treeNodes;
     FlopCounter<FlopCount> flops = 0;
     if (multlist.size()) {
-        FmmExpansion<float, order> l;
+        cosmictiger::gravity::cartesian::Expansion<float, order> l;
         for (int i = 0; i < FmmOrder<order>::kLocalCoefficients_; i++) {
             l[i] = 0.0f;
         }
         for (int i = tid; i < multlist.size(); i += WARP_SIZE) {
             TreeNode const& other = treeNodes[multlist[i]];
-            FmmMultipole<float, order> const& m = fmmMultiPos<order>(other.mpos).multi;
+            cosmictiger::gravity::cartesian::Multipole<float, order> const& m =
+                fmmMultiPos<order>(other.mpos).multi;
             Array<float, NDIM> dx;
             for (int dim = 0; dim < NDIM; dim++) {
                 dx[dim] =
                     fmmPositionDifference(self.mpos->pos[dim], other.mpos->pos[dim], dim, geometry);
             }
-            flops += 3 + m2LDirect(l, m, dx, doPhi);
+            flops +=
+                3 + cosmictiger::gravity::cartesian::M2L(l, m, fmmScaleDisplacement(dx), doPhi);
         }
         sharedReduceAddArray(l);
         for (int i = tid; i < FmmOrder<order>::kLocalCoefficients_; i += WARP_SIZE) {
@@ -381,8 +383,8 @@ __device__ FlopCount cudaGravityCcDirect(CudaKickData const& data, FmmExpansion<
 
 template <int order, bool equalMass>
 __device__ FlopCount cudaGravityCpDirect(CudaKickData const& data, CudaKickControl<order>& control,
-    FmmExpansion<float, order>& lacc, TreeNode const& self, DeviceVector<int> const& partlist,
-    bool doPhi, FmmGeometry const& geometry) {
+    cosmictiger::gravity::cartesian::Expansion<float, order>& lacc, TreeNode const& self,
+    DeviceVector<int> const& partlist, bool doPhi, FmmGeometry const& geometry) {
     int const& tid = threadIdx.x;
     auto const* treeNodes = data.treeNodes;
     // The staged planes derived from the shared-memory symbol, as the PP loop
@@ -391,7 +393,7 @@ __device__ FlopCount cudaGravityCpDirect(CudaKickData const& data, CudaKickContr
     detail::CudaStagedSources const sources = detail::cudaStagedSources<order>(control);
     FlopCounter<FlopCount> flops = 0;
     if (partlist.size()) {
-        FmmExpansion<float, order> l;
+        cosmictiger::gravity::cartesian::Expansion<float, order> l;
         for (int j = 0; j < FmmOrder<order>::kLocalCoefficients_; j++) {
             l[j] = 0.0;
         }
@@ -409,9 +411,9 @@ __device__ FlopCount cudaGravityCpDirect(CudaKickData const& data, CudaKickContr
                     fmmPositionDifference(self.mpos->pos[YDIM], sources.y[j], YDIM, geometry);
                 dx[ZDIM] =
                     fmmPositionDifference(self.mpos->pos[ZDIM], sources.z[j], ZDIM, geometry);
-                FmmExpansion<float, order> d;
+                cosmictiger::gravity::cartesian::Expansion<float, order> d{};
                 flops += (equalMass ? 1 : 2) * FmmOrder<order>::kLocalCoefficients_ + 3 +
-                    greensFunction(d, dx);
+                    cosmictiger::gravity::cartesian::P2L(d, 1.0f, fmmScaleDisplacement(dx));
                 if constexpr (equalMass) {
                     for (int k = 0; k < FmmOrder<order>::kLocalCoefficients_; k++) {
                         l[k] += d[k];
@@ -485,8 +487,7 @@ __device__ FlopCount cudaGravityPcDirect(CudaKickData const& data, CudaKickContr
             barrier.arrive_and_wait();
             // Accumulate every staged multipole in registers; write each sink once.
             for (int k = tid; k < sinkCount; k += WARP_SIZE) {
-                Expansion2<float> l;
-                l(0, 0, 0) = l(1, 0, 0) = l(0, 1, 0) = l(0, 0, 1) = 0.0f;
+                cosmictiger::gravity::Field<float> l{};
                 Array<float, NDIM> dx;
                 for (int j = 0; j < mend; j++) {
                     FmmMultiPos<order> const& mp =
@@ -494,7 +495,9 @@ __device__ FlopCount cudaGravityPcDirect(CudaKickData const& data, CudaKickContr
                     dx[XDIM] = fmmPositionDifference(sinkX[k], mp.pos[XDIM], XDIM, geometry);
                     dx[YDIM] = fmmPositionDifference(sinkY[k], mp.pos[YDIM], YDIM, geometry);
                     dx[ZDIM] = fmmPositionDifference(sinkZ[k], mp.pos[ZDIM], ZDIM, geometry);
-                    flops += 3 + m2P(l, mp.multi, dx, doPhi);
+                    flops += 3 +
+                        cosmictiger::gravity::cartesian::M2P(
+                            l, mp.multi, fmmScaleDisplacement(dx), doPhi);
                 }
                 if (sharedForces) {
                     detail::cudaApplyPcField(arenaForce, k, l);

@@ -4,8 +4,8 @@
 
 | Representation | Storage through degree d | Use |
 | --- | --- | --- |
-| `Cartesian` | `(d + 1)^2` symmetric trace-free coefficients; an optional local Laplacian slot | Existing production Newtonian FMM |
-| `Spherical` | `(d + 1)^2` real slots for complex-conjugate harmonic coefficients | Newtonian free-space and periodic Ewald kernels |
+| Cartesian | `(d + 1)^2` symmetric trace-free coefficients; a local Laplacian slot | Existing production Newtonian FMM |
+| Spherical | `(d + 1)^2` real slots for complex-conjugate harmonic coefficients | Newtonian free-space and periodic Ewald kernels |
 
 The checked-in headers contain both families for local degrees 2 through 8,
 source degrees 1 through 7, corresponding to application FMM orders 3 through 9.
@@ -25,29 +25,38 @@ to compile every available order.
 
 The representations are generated and tested independently. The runtime
 walk, tree layout, checkpoint representation, and softening selection still use
-`Cartesian`. Connecting a new family to those paths is separate
-work. `Cartesian` remains symmetric and trace-free; the shorter name does not
-change its coefficient layout or mathematics. Namespaces, generator modules,
-test targets, and related source filenames use `cartesian`.
+the Cartesian representation. Connecting a new family to those paths is separate
+work. Cartesian moments remain symmetric and trace-free; these names do not
+change the coefficient layout or mathematics.
+
+The public C++ namespaces are `cosmictiger::gravity::cartesian` and
+`cosmictiger::gravity::spherical`. Both provide `Multipole` and `Expansion`
+structures and generated operators named `P2M`, `M2M`, `M2L`, `M2P`, `P2L`,
+`L2L`, and `L2P`. The derivative-contraction operator is `M2LDerivatives`.
+Cartesian `Multipole<Real, order>` and `Expansion<Real, order>` retain the
+application FMM order: their degrees are `order - 2` and `order - 1`, respectively.
+Spherical `Multipole<Real, degree>` and `Expansion<Real, degree>` retain explicit
+degrees. Generated operators in both namespaces also retain degree-based
+template arguments.
 Types use PascalCase, functions and variables camelCase, and namespaces and
-filenames snake_case.
+filenames snake_case, with the standard FMM operator abbreviations retained.
 
 ## Generate and verify
 
 ```sh
 python3 tools/generate_fmm.py
 python3 tools/generate_fmm.py --check
-python3 tests/gravity/check_generated_fmm_flops.py --generated-dir cosmictiger/gravity --compiler c++
+python3 tests/gravity/check_generated_fmm_flops.py --generated-dir cosmictiger/gravity/fmm_kernels --compiler c++
 ```
 
 Generated headers and their operation report are checked in under
-`cosmictiger/gravity/`:
+`cosmictiger/gravity/fmm_kernels/`:
 
-- `generated_cartesian_m2l.hpp`, `generated_cartesian_operators.hpp`, and
-  `generated_config.hpp` contain the Cartesian operators and degree configuration.
-- `dehnen/generated_cartesian_ewald.hpp` contains the Cartesian Ewald derivatives.
-- `nitadori/generated_spherical.hpp` and
-  `nitadori/generated_spherical_ewald.hpp` contain the spherical kernels.
+- `cartesian_m2l.hpp`, `cartesian_kernels.hpp`, and `cartesian_config.hpp`
+  contain the Cartesian operators and degree configuration.
+- `cartesian_ewald_kernels.hpp` contains the Cartesian Ewald derivatives.
+- `spherical_kernels.hpp` and `spherical_ewald_kernels.hpp` contain the
+  spherical kernels.
 - `operation_counts.json` records the generated arithmetic counts and selections.
 
 The generator defaults to this source directory and emits both families for
@@ -98,10 +107,13 @@ derivative emitter retain their existing explicit FMAs and count conventions.
 ## Spherical rotation selection
 
 For each order, M2M, M2L, M2P, L2L, and L2P generate three candidates: no rotation,
-azimuthal rotation only, and full rotation. The public kernel inherits the
-candidate with the smallest emitted weighted count. Equal counts choose the
-first candidate in that order. P2M/P2L use direct solid-harmonic recurrences.
-All candidates remain available for independent numerical comparisons.
+azimuthal rotation only, and full rotation. Generation selects the candidate
+with the smallest emitted weighted count and emits it directly as the public
+operator specialization. A comment on each specialization records its rotation
+variant; there is no C++ `Variant` type or variant template parameter. Equal
+counts choose the first candidate in that order. P2M/P2L use direct
+solid-harmonic recurrences. The operation report retains the costs of every
+candidate.
 
 Costs include geometry, rotation, translation/contraction, and accumulation into
 the caller's existing output. Addition, subtraction, multiplication, division,

@@ -10,6 +10,9 @@ generated declarations and their generators.
   parameters.
 - Use `camelCase` for functions, methods, variables, parameters, and non-type
   template parameters.
+- The FMM operator free functions `P2M`, `P2L`, `M2M`, `M2L`, `M2P`, `L2L`, and
+  `L2P` in the Cartesian and spherical namespaces are the sole uppercase
+  exception to the function rule.
 - Class data members use `camelCase_`, with a trailing underscore. Struct data
   members use `camelCase` without a trailing underscore.
 - Compile-time `constexpr` variables use `kPascalCase`; class constant data

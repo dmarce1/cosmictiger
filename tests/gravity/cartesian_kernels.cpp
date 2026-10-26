@@ -223,7 +223,7 @@ void testParticleMomentsAndTranslation() {
         auto const expected = projectedMoments<order>(particles, scales[0]);
         Multipole<order> actual{};
         for (auto const& particle : particles) {
-            kernels::P2mKernel<kMultipoleDegree>::add(actual, particle.mass,
+            kernels::P2M<kMultipoleDegree>::add(actual, particle.mass,
                 particle.position[0] / scales[0], particle.position[1] / scales[0],
                 particle.position[2] / scales[0]);
         }
@@ -237,7 +237,7 @@ void testParticleMomentsAndTranslation() {
         }
         auto const translatedExpected = projectedMoments<order>(shifted, scales[1]);
         Multipole<order> translated{};
-        kernels::M2mKernel<kMultipoleDegree>::add(translated, actual, displacement[0] / scales[1],
+        kernels::M2M<kMultipoleDegree>::add(translated, actual, displacement[0] / scales[1],
             displacement[1] / scales[1], displacement[2] / scales[1], scales[0] / scales[1]);
         compareRanks<kMultipoleDegree>(
             translated, translatedExpected, "M2M independent particle re-expansion");
@@ -293,7 +293,7 @@ void testInteractions() {
                     1.7 * derivatives.at(a) * std::pow(targetScale, rank);
             }
         }
-        kernels::M2lKernel<kLocalDegree, centered>::template add<double, Expansion<order>, Source,
+        kernels::M2L<kLocalDegree, centered>::template add<double, Expansion<order>, Source,
             kMultipoleDegree>(actual, source, separation[0] * inverseRadius,
             separation[1] * inverseRadius, separation[2] * inverseRadius, inverseRadius,
             sourceScale * inverseRadius, targetScale * inverseRadius);
@@ -314,11 +314,10 @@ void testInteractions() {
                         (degree(b) % 2 ? -1 : 1) * moment * derivatives.at(b) / factorial(b);
                 }
             }
-            kernels::M2lKernel<kLocalDegree, centered>::template add<double, Expansion<order>,
-                Source, kMultipoleDegree>(highestActual, highestSource,
-                separation[0] * inverseRadius, separation[1] * inverseRadius,
-                separation[2] * inverseRadius, inverseRadius, sourceScale * inverseRadius,
-                targetScale * inverseRadius);
+            kernels::M2L<kLocalDegree, centered>::template add<double, Expansion<order>, Source,
+                kMultipoleDegree>(highestActual, highestSource, separation[0] * inverseRadius,
+                separation[1] * inverseRadius, separation[2] * inverseRadius, inverseRadius,
+                sourceScale * inverseRadius, targetScale * inverseRadius);
             compareRanks<kLocalDegree>(highestActual, highestExpected,
                 "M2L isolated highest-source Cartesian derivative oracle");
         }
@@ -334,11 +333,11 @@ void testInteractions() {
                     }
                 }
             }
-            kernels::EwaldM2lKernel<kLocalDegree, centered>::template add<double>(
+            kernels::M2LDerivatives<kLocalDegree, centered>::template add<double>(
                 ewald, unscaledSource, storedDerivatives);
             compareRanks<kLocalDegree>(
                 ewald, unscaledExpected, "Ewald M2L full Cartesian contraction oracle");
-            kernels::P2lKernel<kLocalDegree>::add(pointActual, 1.7, separation[0] * inverseRadius,
+            kernels::P2L<kLocalDegree>::add(pointActual, 1.7, separation[0] * inverseRadius,
                 separation[1] * inverseRadius, separation[2] * inverseRadius, inverseRadius,
                 targetScale * inverseRadius);
             compareRanks<kLocalDegree>(
@@ -353,7 +352,7 @@ void testInteractions() {
                     fieldExpected[d + 1] -= coefficient * derivatives.at(a);
                 }
             }
-            kernels::M2pKernel<kMultipoleDegree, centered>::add(field, source,
+            kernels::M2P<kMultipoleDegree, centered>::add(field, source,
                 separation[0] * inverseRadius, separation[1] * inverseRadius,
                 separation[2] * inverseRadius, inverseRadius, sourceScale * inverseRadius);
             for (int i = 0; i < kFieldCount; ++i) {
@@ -427,16 +426,15 @@ void testLocalTranslation() {
         auto const source = localAt<order>(polynomial, {}, scales[0], background);
         auto const expected = localAt<order>(polynomial, displacement, scales[1], background);
         Expansion<order> actual{};
-        kernels::L2lKernel<kLocalDegree, withTrace>::add(actual, source,
-            displacement[0] / scales[0], displacement[1] / scales[0], displacement[2] / scales[0],
-            scales[1] / scales[0]);
+        kernels::L2L<kLocalDegree, withTrace>::add(actual, source, displacement[0] / scales[0],
+            displacement[1] / scales[0], displacement[2] / scales[0], scales[1] / scales[0]);
         compareRanks<kLocalDegree>(actual, expected, "L2L direct Cartesian polynomial translation");
         if constexpr (withTrace) {
             near(actual[kLocalTraceIndex], expected[kLocalTraceIndex],
                 std::abs(expected[kLocalTraceIndex]), "L2L background rescaling");
         }
         Field field{};
-        kernels::L2pKernel<kLocalDegree, withTrace>::add(field, source, displacement[0] / scales[0],
+        kernels::L2P<kLocalDegree, withTrace>::add(field, source, displacement[0] / scales[0],
             displacement[1] / scales[0], displacement[2] / scales[0], 1 / scales[0]);
         near(field[0], polynomialDerivative(polynomial, {}, displacement), 1,
             "L2P direct polynomial potential");
@@ -486,9 +484,9 @@ void testDirectParticleRemainder() {
         near(closedForm.acceleration, series.acceleration, std::abs(series.acceleration),
             "Direct particle acceleration remainder closed form", 1e-12);
         Multipole<order> source{};
-        kernels::P2mKernel<kMultipoleDegree>::add(source, 1., 2 * q, 0., 0.);
+        kernels::P2M<kMultipoleDegree>::add(source, 1., 2 * q, 0., 0.);
         Field field{};
-        kernels::M2pKernel<kMultipoleDegree, false>::add(field, source, 1., 0., 0., .5, .5);
+        kernels::M2P<kMultipoleDegree, false>::add(field, source, 1., 0., 0., .5, .5);
         double const potential = -1 / (2 * (1 - q));
         double const acceleration = -1 / (4 * (1 - q) * (1 - q));
         near(potential - field[0], series.potential, 1, "Direct particle exact potential remainder",

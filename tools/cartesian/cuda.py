@@ -9,7 +9,7 @@ lane groups reduce one output each, followed by broadcasts of completed
 coefficients. All rank selection, trace reduction and factorial algebra happen
 here; CUDA executes a fixed schedule with no tensor-index traversal.
 
-One invocation emits one fully specialized ``L2lWarpKernel<L, true>`` for the
+One invocation emits one fully specialized ``L2LWarp<L, true>`` for the
 requested local degree L in 2..11. The schedule table, the per-phase target
 table, the number of basis registers, the phase code and every lane-group width
 are compile-time constants of that degree; the emitted CUDA contains no runtime
@@ -139,8 +139,8 @@ def generateWarpL2l(order, algebra):
              '// lanes hold zero and are excluded by the generated active-lane bounds.',
              f'static __device__ unsigned char const {targetsName}[{len(targets)}][{kLanes}] = {{']
     code += ['    {' + ', '.join(f'{value}u' for value in row) + '},' for row in targets]
-    code += ['};', '', 'template <int order, bool withTrace> class L2lWarpKernel;',
-             f'template <> class L2lWarpKernel<{order}, true> {{', 'public:']
+    code += ['};', '', 'template <int order, bool withTrace> class L2LWarp;',
+             f'template <> class L2LWarp<{order}, true> {{', 'public:']
     reductions = sum(max(output[2] for _, output in groups).bit_length() - 1 for groups in phases)
     fullFlops = sum(g.counts(fullLive).values()) * 32 + len(schedule) * 32 * 5 + reductions * 32 + len(outputs) + 6
     baseFlops = sum(g.counts(baseLive).values()) * 32 + len(schedule) * 32 * 5 + reductions * 32 + len(outputs) + 2

@@ -227,11 +227,11 @@ def l2l(order, withTrace, algebra):
 def emit(operator, order, withTrace, algebra):
     if operator == 'M2M':
         g, result = m2m(order, algebra)
-        specialization = f'M2mKernel<{order}>'
+        specialization = f'M2M<{order}>'
         targetType = 'Multipole'
     else:
         g, result = l2l(order, withTrace, algebra)
-        specialization = f'L2lKernel<{order}, {str(withTrace).lower()}>'
+        specialization = f'L2L<{order}, {str(withTrace).lower()}>'
         targetType = 'Expansion'
     g, signed = algebra.normalizeSigns(g, list(result.values()))
     result = dict(zip(result, signed))
@@ -260,14 +260,14 @@ def emit(operator, order, withTrace, algebra):
 def generateTranslations(minOrder, maxOrder, algebra):
     """Return C++ definitions and operation counts for the inclusive range.
 
-    The caller emits these definitions inside its detail namespace. Traceful
+    The caller emits these definitions inside the cartesian namespace. Traceful
     L2L requires at least quadratic order; ordinary translations also support
     orders zero and one. No fixed maximum order is imposed by this module.
     """
     if minOrder < 0 or maxOrder < minOrder:
         raise ValueError('Translation orders must form a nonnegative inclusive range')
-    definitions = ['template <int order> class M2mKernel;',
-                   'template <int order, bool withTrace> class L2lKernel;', '']
+    definitions = ['template <int order> class M2M;',
+                   'template <int order, bool withTrace> class L2L;', '']
     statistics = []
     for operator, order, withTrace in [('M2M', minOrder, False),
                                        ('L2L', maxOrder, False),

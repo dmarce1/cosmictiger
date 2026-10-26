@@ -8,7 +8,8 @@ in its subsystem directory; there is no `shared/` layer.
 
 ```text
 gravity/
-├── fmm_types.hpp, fmm_order.*, fmm_kernels.hpp
+├── fmm_types.hpp, fmm_order.*
+├── fmm_kernels/                            # Flat cartesian_* and spherical_* headers
 ├── fmm_acceptance.hpp, fmm_geometry.hpp
 ├── sources.*, source_access.*
 ├── tree.hpp, tree_build.*, tree_arena.cpp, tree_multipole.hpp
@@ -20,7 +21,7 @@ gravity/
 │   ├── remote_cache.*, particle_exchange.*
 │   ├── execution.*, gpu_staging.*
 │   ├── periodic.*, periodic_cpu.hpp, periodic_cuda.hpp
-│   └── ewald_indices.*, ewald_tables.hpp, ewald_kernels.hpp
+│   └── ewald_indices.*, ewald_tables.hpp
 └── nitadori/
     ├── solver.*
     ├── fft.cpp, mesh_exchange.cpp, evaluation.cpp

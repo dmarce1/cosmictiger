@@ -62,7 +62,7 @@ def contraction(degree):
     """Expand conj(M_kl) G_(n+k,m+l) using the real-storage symmetry."""
     from .spherical import generateSimple
     _, statistics = generateSimple('M2lDerivatives',degree)
-    lines = [f"M2lDerivativesKernel<{degree}>::template add<Real>(local, moments, greens);"]
+    lines = [f"detail::M2LDerivatives<{degree}>::template add<Real>(local, moments, greens);"]
     cost = statistics['weighted_flops']
     # Source radius moment first exists when source degree >=2.
     if degree >= 3:
@@ -80,7 +80,7 @@ def contraction(degree):
 def emitDegree(degree):
     count = (degree + 1)**2
     polynomial, polynomial_cost = regular(degree)
-    body = [f"template <> class EwaldGreensKernel<{degree}> {{", "public:",
+    body = [f"template <> class EwaldGreen<{degree}> {{", "public:",
             f"static constexpr int kDegree_ = {degree};", f"static constexpr int kCount_ = {count};",
             f"static constexpr int kLatticeRadius_ = {RADIUS};",
             "template <typename Real>",
@@ -174,7 +174,7 @@ def emitDegree(degree):
              f"for (int i = 0; i < {count}; ++i) {{ output[i] = detail::ewaldConvert<Real>(temporary[i]); }}",
              "greenTrace = detail::ewaldConvert<Real>(trace);", "}", "};"]
     direct, contraction_cost = contraction(degree)
-    body += [f"template <> class EwaldM2lKernel<{degree}> {{", "public:", f"static constexpr int kFlops_ = {contraction_cost};",
+    body += [f"template <> class EwaldM2L<{degree}> {{", "public:", f"static constexpr int kFlops_ = {contraction_cost};",
              "template <typename Real, typename Local, typename Moments, typename Greens>",
              "CUDA_EXPORT static void add(Local& local, Real& localTrace, Moments const& moments, Real sourceTrace, Greens const& greens, Real greenTrace) {"]
     body += direct + ["}", "};"]
@@ -192,7 +192,7 @@ def generate(minLocalDegree=2,maxLocalDegree=8):
     if not 2 <= minLocalDegree <= maxLocalDegree <= 8:
         raise ValueError("Spherical Ewald is validated for local degrees 2 through 8")
     lines = [NOTICE,"#pragma once", "#include <cmath>", "#include <type_traits>", "", "#include <cosmictiger/cuda/cuda_export.hpp>",
-             "#include <cosmictiger/gravity/nitadori/generated_spherical.hpp>", "#include <cosmictiger/math/simd_math.hpp>",
+             "#include <cosmictiger/gravity/fmm_kernels/spherical_kernels.hpp>", "#include <cosmictiger/math/simd_math.hpp>",
              "", "namespace cosmictiger::gravity::spherical {", "namespace detail {"]
     lines += ["template <typename Real> class EwaldWorkingType { public: using Type = Real; };",
               "template <> class EwaldWorkingType<float> { public: using Type = double; };",
@@ -210,7 +210,7 @@ def generate(minLocalDegree=2,maxLocalDegree=8):
                   f"else {{ return Real([&](auto lane) {{ return std::{function}(value[lane]); }}); }}", "}"]
     lines += ["template <typename Real>", "CUDA_EXPORT inline void ewaldAccumulate(Real& sum, Real& correction, Real value) {",
               "Real const adjusted = value - correction;", "Real const next = sum + adjusted;", "correction = (next - sum) - adjusted;", "sum = next;", "}", "}",
-              "template <int degree> class EwaldGreensKernel;", "template <int degree> class EwaldM2lKernel;"]
+              "template <int degree> class EwaldGreen;", "template <int degree> class EwaldM2L;"]
     counts = {}
     for degree in range(minLocalDegree,maxLocalDegree+1):
         code,report = emitDegree(degree)
@@ -219,23 +219,23 @@ def generate(minLocalDegree=2,maxLocalDegree=8):
         lines += code
         lines.append('#endif')
         counts[str(degree+1)] = report
-    lines += ["template <int degree> class EwaldL2lKernel {", "public:", "static constexpr int kFlops_ = L2lKernel<degree>::kFlops_ + 9;",
+    lines += ["template <int degree> class EwaldL2L {", "public:", "static constexpr int kFlops_ = detail::L2L<degree>::kFlops_ + 9;",
               "template <typename Real, typename Local, typename Source>",
               "CUDA_EXPORT static void add(Local& output, Real& outputTrace, Source const& source, Real sourceTrace, Real x, Real y, Real z) {",
-              "L2lKernel<degree>::template add<Real>(output, source, x, y, z);",
+              "detail::L2L<degree>::template add<Real>(output, source, x, y, z);",
               "Real const radiusSquared = simdFma(x, x, simdFma(y, y, z * z));",
               "output[0] = simdFma(-simdBroadcast<Real>(0.5) * sourceTrace, radiusSquared, output[0]);",
               "output[3] = simdFma(-sourceTrace, x, output[3]);",
               "output[1] = simdFma(-sourceTrace, y, output[1]);",
               "output[2] = simdFma(-sourceTrace, z, output[2]);",
               "outputTrace += sourceTrace;", "}", "};",
-              "template <int degree> class EwaldL2pKernel {", "public:", "static constexpr int kFlops_ = L2pKernel<degree>::kFlops_ + 8;",
+              "template <int degree> class EwaldL2P {", "public:", "static constexpr int kFlops_ = detail::L2P<degree>::kFlops_ + 8;",
               "template <typename Real, typename Field, typename Source>",
               "CUDA_EXPORT static void add(Field& field, Source const& source, Real sourceTrace, Real x, Real y, Real z) {",
-              "L2pKernel<degree>::template add<Real>(field, source, x, y, z);",
+              "detail::L2P<degree>::template add<Real>(field, source, x, y, z);",
               "Real const radiusSquared = simdFma(x, x, simdFma(y, y, z * z));",
               "field[0] = simdFma(-simdBroadcast<Real>(0.5) * sourceTrace, radiusSquared, field[0]);",
               "field[1] = simdFma(sourceTrace, x, field[1]);",
               "field[2] = simdFma(sourceTrace, y, field[2]);",
               "field[3] = simdFma(sourceTrace, z, field[3]);", "}", "};", "}", ""]
-    return {"generated_spherical_ewald.hpp":"\n".join(lines)}, {"cost_model":{"fma":1,"sqrt":7,"add":1,"multiply":1,"division":1,"special_functions":"reported separately"},"lattice_radius":RADIUS,"central_series_terms":SERIES_TERMS,"orders":counts}
+    return {"spherical_ewald_kernels.hpp":"\n".join(lines)}, {"cost_model":{"fma":1,"sqrt":7,"add":1,"multiply":1,"division":1,"special_functions":"reported separately"},"lattice_radius":RADIUS,"central_series_terms":SERIES_TERMS,"orders":counts}

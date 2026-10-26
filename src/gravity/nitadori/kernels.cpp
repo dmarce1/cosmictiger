@@ -13,8 +13,8 @@
 #include <tuple>
 #include <vector>
 
+#include <cosmictiger/gravity/fmm_kernels/spherical_ewald_kernels.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
-#include <cosmictiger/gravity/nitadori/generated_spherical_ewald.hpp>
 #include <cosmictiger/gravity/nitadori/kernels.hpp>
 
 namespace pmmm {
@@ -94,7 +94,7 @@ void addMoments(int order, double* moments, double mass, std::array<double, 3> c
     detail::checkOrder(order);
     fmmDispatch(order, [&](auto selectedOrder) {
         constexpr int kDegree = decltype(selectedOrder)::value - 2;
-        cosmictiger::gravity::spherical::P2mKernel<kDegree>::template add<double>(
+        cosmictiger::gravity::spherical::detail::P2M<kDegree>::template add<double>(
             moments, mass, offset[0], offset[1], offset[2]);
     });
 }
@@ -116,11 +116,11 @@ void green(int order, double* coefficients, std::array<double, 3> const& boxOffs
     fmmDispatch(order, [&](auto selectedOrder) {
         constexpr int kDegree = decltype(selectedOrder)::value - 1;
         double trace = 0.0;
-        cosmictiger::gravity::spherical::EwaldGreensKernel<kDegree>::template evaluate<double>(
+        cosmictiger::gravity::spherical::EwaldGreen<kDegree>::template evaluate<double>(
             coefficients, trace, boxOffset[0], boxOffset[1], boxOffset[2]);
         if (!near) {
             std::array<double, (kDegree + 1) * (kDegree + 1)> primary;
-            cosmictiger::gravity::spherical::GreensKernel<kDegree>::template evaluate<double>(
+            cosmictiger::gravity::spherical::detail::Green<kDegree>::template evaluate<double>(
                 primary, boxOffset[0], boxOffset[1], boxOffset[2]);
             for (size_t slot = 0; slot < primary.size(); ++slot) {
                 coefficients[slot] += primary[slot];
@@ -145,7 +145,7 @@ void evaluate(int order, std::array<double, 4>& field, double const* coefficient
     field = {};
     fmmDispatch(order, [&](auto selectedOrder) {
         constexpr int kDegree = decltype(selectedOrder)::value - 1;
-        cosmictiger::gravity::spherical::EwaldL2pKernel<kDegree>::template add<double>(
+        cosmictiger::gravity::spherical::EwaldL2P<kDegree>::template add<double>(
             field, coefficients, localTrace, cellOffset[0], cellOffset[1], cellOffset[2]);
     });
     for (int component = 1; component < 4; ++component) {

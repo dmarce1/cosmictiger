@@ -27,11 +27,11 @@ static_assert(COSMICTIGER_FMM_INSTANCE_ORDER >= kFmmMinOrder &&
 
 // CPU gravity operators (gravity_cpu.hpp).
 template void cpuGravityCc<COSMICTIGER_FMM_INSTANCE_ORDER>(
-    FmmExpansion<float, COSMICTIGER_FMM_INSTANCE_ORDER>&, Vector<TreeId> const&, TreeId, bool,
-    FmmGeometry const&);
+    cosmictiger::gravity::cartesian::Expansion<float, COSMICTIGER_FMM_INSTANCE_ORDER>&,
+    Vector<TreeId> const&, TreeId, bool, FmmGeometry const&);
 template void cpuGravityCp<COSMICTIGER_FMM_INSTANCE_ORDER>(
-    FmmExpansion<float, COSMICTIGER_FMM_INSTANCE_ORDER>&, Vector<TreeId> const&, TreeId, bool,
-    FmmGeometry const&);
+    cosmictiger::gravity::cartesian::Expansion<float, COSMICTIGER_FMM_INSTANCE_ORDER>&,
+    Vector<TreeId> const&, TreeId, bool, FmmGeometry const&);
 template void cpuGravityPc<COSMICTIGER_FMM_INSTANCE_ORDER>(
     ForceVectors&, int, TreeId, Vector<TreeId> const&, FmmGeometry const&);
 

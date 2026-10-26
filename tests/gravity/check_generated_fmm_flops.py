@@ -8,7 +8,8 @@
 A temporary simd_math adapter replaces the arithmetic backend only. The actual
 emitted C++ kernels are compiled unchanged, and every executed primitive charges
 its cost. This checks live operations, destination accumulation, rotation setup,
-and all candidate/winner metadata, independently of the Python expression DAGs.
+and selected-kernel costs, independently of the Python expression DAGs. Candidate
+reports retain all variants and are checked against the selected minimum.
 """
 import argparse
 from copy import deepcopy
@@ -112,12 +113,12 @@ def appendAvailabilityChecks(lines, report, minFmmOrder, maxFmmOrder):
         sourceDegree = order - 2
         expected = str(minFmmOrder <= order <= maxFmmOrder).lower()
         kernels = (
-            f'cartesian::detail::M2lKernel<{localDegree}, false>',
-            f'cartesian::detail::P2mKernel<{sourceDegree}>',
-            f'cartesian::detail::L2lKernel<{localDegree}, true>',
-            f'spherical::M2lKernel<{localDegree}>',
-            f'spherical::P2mKernel<{sourceDegree}>',
-            f'spherical::EwaldGreensKernel<{localDegree}>',
+            f'cartesian::detail::M2L<{localDegree}, false>',
+            f'cartesian::detail::P2M<{sourceDegree}>',
+            f'cartesian::detail::L2L<{localDegree}, true>',
+            f'spherical::detail::M2L<{localDegree}>',
+            f'spherical::detail::P2M<{sourceDegree}>',
+            f'spherical::EwaldGreen<{localDegree}>',
         )
         for kernel in kernels:
             lines.append(f'static_assert(CompleteKernel<cosmictiger::gravity::{kernel}> == {expected},')
@@ -136,7 +137,7 @@ def appendCartesianChecks(lines, report, checks):
         field = 'cartesian_centered_weighted_flops' if kernel['centered'] else 'cartesian_weighted_flops'
         if row[field] != expected + 14 or row['cartesian_geometry_flops'] != 14:
             raise ValueError(f'Incorrect Cartesian M2L comparison: {row}')
-        fullName = f'cosmictiger::gravity::cartesian::detail::M2lKernel<{degree}, {centered}>'
+        fullName = f'cosmictiger::gravity::cartesian::detail::M2L<{degree}, {centered}>'
         for fullSource in (False, True):
             sourceDegree = degree if fullSource else degree - 1
             arithmetic = kernel['arithmetic_full' if fullSource else 'arithmetic_base']
@@ -183,9 +184,9 @@ def appendCartesianChecks(lines, report, checks):
             continue  # M2L is checked above; CUDA warp execution is not scalar.
         operation = kernel['operator']
         degree = kernel['order']
-        name = {'P2M': 'P2mKernel', 'M2M': 'M2mKernel', 'P2L': 'P2lKernel',
-                'M2P': 'M2pKernel', 'L2L': 'L2lKernel', 'L2P': 'L2pKernel',
-                'EwaldM2L': 'EwaldM2lKernel'}[operation]
+        name = {'P2M': 'P2M', 'M2M': 'M2M', 'P2L': 'P2L',
+                'M2P': 'M2P', 'L2L': 'L2L', 'L2P': 'L2P',
+                'EwaldM2L': 'M2LDerivatives'}[operation]
         parameters = str(degree)
         if operation in ('M2P', 'EwaldM2L'):
             parameters += ', ' + str(kernel['centered']).lower()
@@ -224,10 +225,10 @@ def appendCartesianChecks(lines, report, checks):
 def buildChecks(report, minFmmOrder, maxFmmOrder):
     checks = []
     lines = ['#include <array>', '#include <cstdio>', '',
-             '#include <cosmictiger/gravity/generated_cartesian_m2l.hpp>',
-             '#include <cosmictiger/gravity/generated_cartesian_operators.hpp>',
-             '#include <cosmictiger/gravity/nitadori/generated_spherical.hpp>',
-             '#include <cosmictiger/gravity/nitadori/generated_spherical_ewald.hpp>', '']
+             '#include <cosmictiger/gravity/fmm_kernels/cartesian_m2l.hpp>',
+             '#include <cosmictiger/gravity/fmm_kernels/cartesian_kernels.hpp>',
+             '#include <cosmictiger/gravity/fmm_kernels/spherical_kernels.hpp>',
+             '#include <cosmictiger/gravity/fmm_kernels/spherical_ewald_kernels.hpp>', '']
     appendAvailabilityChecks(lines, report, minFmmOrder, maxFmmOrder)
     lines.extend(['int specialCalls[4]{};',
                   'namespace cosmictiger::gravity::spherical::detail {'])
@@ -247,12 +248,35 @@ def buildChecks(report, minFmmOrder, maxFmmOrder):
     appendCartesianChecks(lines, report, checks)
     representations = report['representations']
     namespace = 'spherical'
-    for kernel in representations['spherical']['kernels']:
+    spherical = representations['spherical']
+    selections = {}
+    for selection in spherical['selections']:
+        candidates = selection['candidate_flops']
+        winner = min(range(len(candidates)), key=lambda i: candidates[i])
+        if selection['selected_variant'] != winner or selection['weighted_flops'] != candidates[winner]:
+            raise ValueError(f'Incorrect minimum selection: {selection}')
+        key = selection['operator'], selection['degree']
+        if key in selections:
+            raise ValueError(f'Duplicate spherical selection: {selection}')
+        variants = [kernel for kernel in spherical['kernels']
+                    if (kernel['operator'], kernel['degree']) == key]
+        if len(variants) != len(candidates) or any(
+                kernel['variant'] != variant or kernel['weighted_flops'] != candidates[variant]
+                for variant, kernel in enumerate(sorted(variants, key=lambda kernel: kernel['variant']))):
+            raise ValueError(f'Candidate report disagrees with selection: {selection}')
+        selections[key] = selection
+    for kernel in spherical['kernels']:
         operation = kernel['operator']
         degree = kernel['degree']
         variant = kernel.get('variant')
-        name = operation + ('Variant' if variant is not None else 'Kernel')
-        parameters = str(degree) + (f', {variant}' if variant is not None else '')
+        if variant is not None:
+            selection = selections[operation, degree]
+            if variant != selection['selected_variant']:
+                continue
+        name = {'P2m': 'P2M', 'M2m': 'M2M', 'M2l': 'M2L', 'M2p': 'M2P',
+                'P2l': 'P2L', 'L2l': 'L2L', 'L2p': 'L2P', 'Greens': 'Green',
+                'M2lDerivatives': 'M2LDerivatives'}[operation]
+        parameters = str(degree)
         method = 'evaluate' if operation == 'Greens' else 'add'
         if operation in ('P2m','P2l'):
             arguments = 'output, Real(0.7), Real(0.3), Real(-0.2), Real(0.4)'
@@ -262,7 +286,7 @@ def buildChecks(report, minFmmOrder, maxFmmOrder):
             arguments = 'output, source, derivatives'
         else:
             arguments = 'output, source, Real(0.3), Real(-0.2), Real(0.4)'
-        fullName = f'cosmictiger::gravity::{namespace}::{name}<{parameters}>'
+        fullName = f'cosmictiger::gravity::{namespace}::detail::{name}<{parameters}>'
         label = f'{namespace}::{name}<{parameters}>'
         expected = kernel['weighted_flops']
         lines.extend(['    {', f'        using Kernel = {fullName};',
@@ -273,27 +297,19 @@ def buildChecks(report, minFmmOrder, maxFmmOrder):
                       f'            std::fprintf(stderr, "{label}: got %d, expected {expected}\\n", Real::operations);',
                       '            return 1;', '        }', '    }'])
         checks.append(label)
-    for selection in representations['spherical']['selections']:
-        candidates = selection['candidate_flops']
-        winner = min(range(len(candidates)), key=lambda i:candidates[i])
-        if selection['selected_variant'] != winner or selection['weighted_flops'] != candidates[winner]:
-            raise ValueError(f'Incorrect minimum selection: {selection}')
-        fullName = f"cosmictiger::gravity::spherical::{selection['operator']}Kernel<{selection['degree']}>"
-        lines.append(f'    static_assert({fullName}::kVariant_ == {winner});')
-        lines.append(f'    static_assert({fullName}::kFlops_ == {candidates[winner]});')
     for order, counts in representations['sphericalEwald']['orders'].items():
         degree = counts['local_degree']
         for name, method, arguments, expected in (
-                ('EwaldGreensKernel', 'evaluate',
+                ('EwaldGreen', 'evaluate',
                  'output, trace, Real(0.13), Real(-0.21), Real(0.31)',
                  counts['green_weighted_flops']),
-                ('EwaldM2lKernel', 'add',
+                ('EwaldM2L', 'add',
                  'output, trace, source, Real(0.23), derivatives, Real(0.41)',
                  counts['contraction_weighted_flops']),
-                ('EwaldL2lKernel', 'add',
+                ('EwaldL2L', 'add',
                  'output, trace, source, Real(0.23), Real(0.13), Real(-0.21), Real(0.31)',
                  None),
-                ('EwaldL2pKernel', 'add',
+                ('EwaldL2P', 'add',
                  'output, source, Real(0.23), Real(0.13), Real(-0.21), Real(0.31)',
                  None)):
             fullName = f'cosmictiger::gravity::spherical::{name}<{degree}>'
@@ -306,7 +322,7 @@ def buildChecks(report, minFmmOrder, maxFmmOrder):
                           '            return 1;', '        }'])
             if expected is not None:
                 lines.append(f'        static_assert(Kernel::kFlops_ == {expected});')
-            if name == 'EwaldGreensKernel':
+            if name == 'EwaldGreen':
                 for i, function in enumerate(('exp', 'erfc', 'sin', 'cos')):
                     lines.append(f'        if (specialCalls[{i}] != {counts["special_function_calls"][function]}) {{ return 2; }}')
                 lines.append(f'        if (Real::squareRoots != {counts["sqrt_calls"]}) {{ return 3; }}')
@@ -344,11 +360,10 @@ def main():
         shim = root/'cosmictiger/math/simd_math.hpp'
         shim.parent.mkdir(parents=True)
         shim.write_text(COUNTING_HEADER)
-        includeDir = root/'cosmictiger/gravity'
-        includeDir.mkdir()
-        for name in ('generated_cartesian_m2l.hpp', 'generated_cartesian_operators.hpp', 'nitadori/generated_spherical.hpp',
-                     'nitadori/generated_spherical_ewald.hpp'):
-            (includeDir/name).parent.mkdir(parents=True, exist_ok=True)
+        includeDir = root/'cosmictiger/gravity/fmm_kernels'
+        includeDir.mkdir(parents=True)
+        for name in ('cartesian_m2l.hpp', 'cartesian_kernels.hpp', 'spherical_kernels.hpp',
+                     'spherical_ewald_kernels.hpp'):
             (includeDir/name).symlink_to(generated/name)
         source = root/'counts.cpp'
         source.write_text(buildChecks(report, minFmmOrder, maxFmmOrder))

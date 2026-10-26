@@ -38,7 +38,7 @@ FlopCount treeComputeMultipole(MultipoleBuffer& multi, Pair<ParticleInteger> par
 // The definitions pull in the generated kernels, so only the per-order instance
 // translation units see them; tree.cpp compiles against the declarations above.
 
-#include <cosmictiger/gravity/fmm_kernels.hpp>
+#include <cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp>
 #include <cosmictiger/math/simd.hpp>
 
 template <int order>
@@ -47,7 +47,7 @@ FlopCount treeComputeMultipole(MultipoleBuffer& multi, MultipoleBuffer const& le
     Array<double, NDIM> const& rightCenter, Array<double, NDIM> const& center) {
     constexpr int kMultipoleCoefficients = FmmOrder<order>::kMultipoleCoefficients_;
     Array<SimdDouble, NDIM> mdx{};
-    FmmMultipole<SimdDouble, order> simdM{};
+    cosmictiger::gravity::cartesian::Multipole<SimdDouble, order> simdM{};
     for (int i = 0; i < kMultipoleCoefficients; i++) {
         simdSetLane(simdM[i], LEFT, left[i]);
         simdSetLane(simdM[i], RIGHT, right[i]);
@@ -56,12 +56,15 @@ FlopCount treeComputeMultipole(MultipoleBuffer& multi, MultipoleBuffer const& le
         simdSetLane(mdx[dim], LEFT, leftCenter[dim] - center[dim]);
         simdSetLane(mdx[dim], RIGHT, rightCenter[dim] - center[dim]);
     }
-    simdM = m2M(simdM, mdx);
+    auto const source = simdM;
+    simdM = cosmictiger::gravity::cartesian::Multipole<SimdDouble, order>{};
+    cosmictiger::gravity::cartesian::M2M(simdM, source, fmmScaleDisplacement(mdx));
     for (int i = 0; i < kMultipoleCoefficients; i++) {
         multi[i] = simdM[i][LEFT] + simdM[i][RIGHT];
     }
-    return 2 * detail::cartesian::M2mKernel<FmmOrder<order>::kMultipoleDegree_>::kFlops_ + 12 +
-        kMultipoleCoefficients;
+    return 2 *
+        cosmictiger::gravity::cartesian::detail::M2M<FmmOrder<order>::kMultipoleDegree_>::kFlops_ +
+        12 + kMultipoleCoefficients;
 }
 
 template <int order>
@@ -69,7 +72,7 @@ FlopCount treeComputeMultipole(MultipoleBuffer& multi, Pair<ParticleInteger> par
     Array<double, NDIM> const& center, FmmSourceView const& sources) {
     constexpr int kMultipoleCoefficients = FmmOrder<order>::kMultipoleCoefficients_;
     static SimdFloat const toFloatFactor = kPositionToFloat;
-    FmmMultipole<double, order> mValue;
+    cosmictiger::gravity::cartesian::Multipole<double, order> mValue;
     for (int i = 0; i < kMultipoleCoefficients; i++) {
         mValue[i] = 0.0;
     }
@@ -101,7 +104,9 @@ FlopCount treeComputeMultipole(MultipoleBuffer& multi, Pair<ParticleInteger> par
             dx[dim] =
                 simdCast<SimdFloat>(simdPositionDifference(xValue[dim], y[dim])) * toFloatFactor;
         }
-        auto m = p2M<order>(dx);
+        cosmictiger::gravity::cartesian::Multipole<SimdFloat, order> m{};
+        cosmictiger::gravity::cartesian::P2M(
+            m, simdBroadcast<SimdFloat>(1), fmmScaleDisplacement(dx));
         for (int j = 0; j < kMultipoleCoefficients; j++) {
             m[j] *= mask;
             mValue[j] += simdSum(m[j]);
@@ -114,8 +119,8 @@ FlopCount treeComputeMultipole(MultipoleBuffer& multi, Pair<ParticleInteger> par
     // coefficient has a lane multiply and a reduction plus scalar accumulation.
     return 3 +
         FlopCount(maxi - particleRange.first) *
-        (detail::cartesian::P2mKernel<FmmOrder<order>::kMultipoleDegree_>::kFlops_ + 6 +
-            2 * kMultipoleCoefficients);
+        (cosmictiger::gravity::cartesian::detail::P2M<FmmOrder<order>::kMultipoleDegree_>::kFlops_ +
+            6 + 2 * kMultipoleCoefficients);
 }
 
 #endif

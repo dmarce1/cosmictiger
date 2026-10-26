@@ -48,7 +48,7 @@ dimensionDefinition = re.search(r'^#define\s+NDIM\s+(\d+)\s*$',
 if dimensionDefinition is None:
     raise RuntimeError('defs.hpp must define NDIM as an integer literal')
 NDIM = int(dimensionDefinition.group(1))
-outputDirectory = projectRoot / 'cosmictiger/gravity'
+outputDirectory = projectRoot / 'cosmictiger/gravity/fmm_kernels'
 reportPath = outputDirectory / 'operation_counts.json'
 
 
@@ -494,7 +494,7 @@ def emitKernel(E,centered):
     plan=EmissionPlan(g,signed)
     baseStats=plan.statistics(baseLive,range(len(result)))
     fullStats=plan.statistics(baseLive|topLive,range(len(signed)))
-    out=[f'template <> class M2lKernel<{E}, {str(centered).lower()}> {{',
+    out=[f'template <> class M2L<{E}, {str(centered).lower()}> {{',
          'public:',
          f"\tstatic constexpr int kFlops_ = {baseStats['conventional_flops']};",
          f"\tstatic constexpr int kWeightedFlops_ = {baseStats['weighted_flops']};",
@@ -559,7 +559,7 @@ def emitEwaldKernel(sourceOrder, expansionOrder, centered):
     live = g.live(root for root, sign in signed)
     plan = EmissionPlan(g, signed)
     statistics = plan.statistics(live, range(len(signed)))
-    code = [f'template <> class EwaldM2lKernel<{expansionOrder}, {str(centered).lower()}> {{',
+    code = [f'template <> class M2LDerivatives<{expansionOrder}, {str(centered).lower()}> {{',
             'public:',
             f"\tstatic constexpr int kFlops_ = {statistics['conventional_flops']};",
             f"\tstatic constexpr int kWeightedFlops_ = {statistics['weighted_flops']};",
@@ -587,8 +587,8 @@ def generateCartesian(minLocalDegree=2, maxLocalDegree=8):
            '#pragma once', '', '#include <cosmictiger/cuda/cuda_export.hpp>',
            '#include <cosmictiger/math/simd_math.hpp>', '',
            'namespace cosmictiger::gravity::cartesian::detail {',
-           'template <int expansionOrder, bool centered> class M2lKernel;',
-           'template <int expansionOrder, bool centered> class EwaldM2lKernel;', '']
+           'template <int expansionOrder, bool centered> class M2L;',
+           'template <int expansionOrder, bool centered> class M2LDerivatives;', '']
     stats=[]
     from cartesian.particles import generateParticles
     from cartesian.translations import generateTranslations
@@ -599,12 +599,12 @@ def generateCartesian(minLocalDegree=2, maxLocalDegree=8):
         '#pragma once', '', '#include <cosmictiger/cuda/cuda_export.hpp>',
         '#include <cosmictiger/math/simd_math.hpp>', '',
         'namespace cosmictiger::gravity::cartesian::detail {',
-        'template <int order> class M2mKernel;',
-        'template <int order, bool withTrace> class L2lKernel;',
-        'template <int order> class P2lKernel;',
-        'template <int order> class P2mKernel;',
-        'template <int order, bool withTrace> class L2pKernel;',
-        'template <int order, bool centered> class M2pKernel;', '']
+        'template <int order> class M2M;',
+        'template <int order, bool withTrace> class L2L;',
+        'template <int order> class P2L;',
+        'template <int order> class P2M;',
+        'template <int order, bool withTrace> class L2P;',
+        'template <int order, bool centered> class M2P;', '']
     operatorStats=[]
     for maxOrder in range(minLocalDegree, maxLocalDegree + 1):
         minOrder = maxOrder - 1
@@ -621,7 +621,7 @@ def generateCartesian(minLocalDegree=2, maxLocalDegree=8):
         warpCode,warpStats=generateWarpL2l(maxOrder,sys.modules[__name__])
         operators.append(orderGuard)
         operators.append(f'// FMM order {maxOrder + 1}: source degree {minOrder}, local degree {maxOrder}.')
-        operators+=translationParts+particleParts+[warpCode]
+        operators+=translationParts+particleParts+['namespace detail {', warpCode, '} // namespace detail']
         operators.append('#endif')
         operatorStats+=translationStats+particleStats+[warpStats]
     parts.append('} // namespace cosmictiger::gravity::cartesian::detail\n')
@@ -645,10 +645,10 @@ inline constexpr int kMaxMultipoleDegree = {maxLocalDegree - 1};
             'so only add the remaining listed standalone accumulations. Constant rational evaluation is compile time; '
             'geometry normalization/public validation and sqrt/division are excluded. No hardware-timing claim.',
             'kernels':stats,'operators':operatorStats}
-    return {'generated_cartesian_m2l.hpp':'\n'.join(parts),
-            'generated_cartesian_operators.hpp':'\n'.join(operators),
-            'generated_config.hpp':config,
-            'generated_cartesian_ewald.hpp':generateEwald(minLocalDegree,maxLocalDegree),
+    return {'cartesian_m2l.hpp':'\n'.join(parts),
+            'cartesian_kernels.hpp':'\n'.join(operators),
+            'cartesian_config.hpp':config,
+            'cartesian_ewald_kernels.hpp':generateEwald(minLocalDegree,maxLocalDegree),
             'operation_counts.json':json.dumps(report,indent=2)+'\n'}
 
 
@@ -724,12 +724,7 @@ def generate(minLocalDegree=2, maxLocalDegree=8):
     report['m2l_comparison'] = m2lComparison(
         report['kernels'], report['representations']['spherical']['selections'])
     outputs['operation_counts.json'] = json.dumps(report, indent=2) + '\n'
-    destinations = {
-        'generated_cartesian_ewald.hpp': 'dehnen/generated_cartesian_ewald.hpp',
-        'generated_spherical.hpp': 'nitadori/generated_spherical.hpp',
-        'generated_spherical_ewald.hpp': 'nitadori/generated_spherical_ewald.hpp',
-    }
-    return {destinations.get(name, name): contents for name, contents in outputs.items()}
+    return outputs
 
 
 def main():
@@ -741,7 +736,7 @@ def main():
                     help='largest local degree to emit (default: 8)')
     ap.add_argument('--output-dir',dest='outputDir',type=Path,default=outputDirectory,
                     help='directory receiving the generated headers and operation counts '
-                         '(default: cosmictiger/gravity in the source tree)')
+                         '(default: cosmictiger/gravity/fmm_kernels in the source tree)')
     ap.add_argument('--no-format',dest='noFormat',action='store_true',
                     help='skip clang-format for temporary output; source headers use formatting')
     args=ap.parse_args()

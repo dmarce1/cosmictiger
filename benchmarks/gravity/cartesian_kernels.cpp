@@ -28,7 +28,7 @@
 #endif
 #include COSMICTIGER_CARTESIAN_BASELINE_HEADER
 #else
-#include <cosmictiger/gravity/fmm_kernels.hpp>
+#include <cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
 #endif
 
@@ -60,15 +60,18 @@ CUDA_EXPORT BenchmarkMultipole<Real> benchmarkP2m(Array<Real, NDIM> position) {
 constexpr char const* kImplementation = "cartesian";
 constexpr int kBenchmarkOrder = kFmmDefaultOrder;
 template <class Real>
-using BenchmarkMultipole = FmmMultipole<Real, kBenchmarkOrder>;
+using BenchmarkMultipole = cosmictiger::gravity::cartesian::Multipole<Real, kBenchmarkOrder>;
 template <class Real>
-using BenchmarkExpansion = FmmExpansion<Real, kBenchmarkOrder>;
+using BenchmarkExpansion = cosmictiger::gravity::cartesian::Expansion<Real, kBenchmarkOrder>;
 constexpr int kMultipoleCount = FmmOrder<kBenchmarkOrder>::kMultipoleCoefficients_;
 constexpr int kExpansionCount = FmmOrder<kBenchmarkOrder>::kLocalCoefficients_;
 
 template <class Real>
 CUDA_EXPORT BenchmarkMultipole<Real> benchmarkP2m(Array<Real, NDIM> const& position) {
-    return p2M<kBenchmarkOrder>(position);
+    BenchmarkMultipole<Real> result{};
+    cosmictiger::gravity::cartesian::P2M(
+        result, simdBroadcast<Real>(1), fmmScaleDisplacement(position));
+    return result;
 }
 #endif
 
@@ -138,7 +141,13 @@ BenchmarkInput<Real> makeBenchmarkInput(int sample) {
     // opposite sign. Each implementation prepares its own representation of
     // the same physical point mass before the timed region.
     input.multipole = benchmarkP2m<Real>(particlePosition);
+#ifdef COSMICTIGER_CARTESIAN_BASELINE_HEADER
     greensFunction(input.local, input.separation);
+#else
+    input.local = simdBroadcast<Real>(0);
+    cosmictiger::gravity::cartesian::P2L(
+        input.local, simdBroadcast<Real>(1), fmmScaleDisplacement(input.separation));
+#endif
     return input;
 }
 
@@ -152,7 +161,13 @@ CUDA_EXPORT void evaluateBenchmark(
         }
     } else if constexpr (operation == BenchmarkOperator::M2m) {
         auto displacement = input.displacement;
+#ifdef COSMICTIGER_CARTESIAN_BASELINE_HEADER
         auto const result = m2M(input.multipole, displacement);
+#else
+        BenchmarkMultipole<Real> result{};
+        cosmictiger::gravity::cartesian::M2M(
+            result, input.multipole, fmmScaleDisplacement(displacement));
+#endif
         for (int i = 0; i < resultCount<operation>(); ++i) {
             output[i] = result[i];
         }
@@ -164,37 +179,60 @@ CUDA_EXPORT void evaluateBenchmark(
         greensFunction(derivatives, input.separation);
         m2L(result, input.multipole, derivatives, doPhi);
 #else
-        m2LDirect(result, input.multipole, input.separation, doPhi);
+        cosmictiger::gravity::cartesian::M2L(
+            result, input.multipole, fmmScaleDisplacement(input.separation), doPhi);
 #endif
         for (int i = 0; i < resultCount<operation>(); ++i) {
             output[i] = result[i];
         }
     } else if constexpr (operation == BenchmarkOperator::PcDirect) {
+#ifdef COSMICTIGER_CARTESIAN_BASELINE_HEADER
         Expansion2<Real> result{};
         result = simdBroadcast<Real>(0);
-#ifdef COSMICTIGER_CARTESIAN_BASELINE_HEADER
         BenchmarkExpansion<Real> derivatives;
         greensFunction(derivatives, input.separation);
         m2L(result, input.multipole, derivatives, doPhi);
-#else
-        m2P(result, input.multipole, input.separation, doPhi);
-#endif
         output[0] = result[0];
-        output[1] = result(1, 0, 0);
-        output[2] = result(0, 1, 0);
-        output[3] = result(0, 0, 1);
+        output[1] = -result(1, 0, 0);
+        output[2] = -result(0, 1, 0);
+        output[3] = -result(0, 0, 1);
+#else
+        cosmictiger::gravity::Field<Real> result{};
+        cosmictiger::gravity::cartesian::M2P(
+            result, input.multipole, fmmScaleDisplacement(input.separation), doPhi);
+        for (int i = 0; i < 4; ++i) {
+            output[i] = result[i];
+        }
+#endif
     } else if constexpr (operation == BenchmarkOperator::L2l) {
+#ifdef COSMICTIGER_CARTESIAN_BASELINE_HEADER
         auto const result = l2L(input.local, input.displacement, doPhi);
+#else
+        BenchmarkExpansion<Real> result{};
+        if (!doPhi) {
+            result[0] = input.local[0];
+        }
+        cosmictiger::gravity::cartesian::L2L(
+            result, input.local, fmmScaleDisplacement(input.displacement), doPhi);
+#endif
         for (int i = 0; i < resultCount<operation>(); ++i) {
             output[i] = result[i];
         }
     } else {
+#ifdef COSMICTIGER_CARTESIAN_BASELINE_HEADER
         auto const result = l2P(input.local, input.displacement, doPhi);
-        // Legacy Expansion2 includes an unused fifth entry; never read it.
         output[0] = doPhi ? result[0] : simdBroadcast<Real>(0);
-        output[1] = result(1, 0, 0);
-        output[2] = result(0, 1, 0);
-        output[3] = result(0, 0, 1);
+        output[1] = -result(1, 0, 0);
+        output[2] = -result(0, 1, 0);
+        output[3] = -result(0, 0, 1);
+#else
+        cosmictiger::gravity::Field<Real> result{};
+        cosmictiger::gravity::cartesian::L2P(
+            result, input.local, fmmScaleDisplacement(input.displacement), doPhi);
+        for (int i = 0; i < 4; ++i) {
+            output[i] = result[i];
+        }
+#endif
     }
 }
 

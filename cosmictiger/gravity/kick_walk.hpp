@@ -64,7 +64,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, ND
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/stack_trace.hpp>
 #include <cosmictiger/gravity/fmm_acceptance.hpp>
-#include <cosmictiger/gravity/fmm_kernels.hpp>
+#include <cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/kick_interaction_counts.hpp>
 #include <cosmictiger/gravity/kick_workspace.hpp>
@@ -125,7 +125,7 @@ template <int order>
 KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, NDIM> pos,
     TreeId self, Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
     std::shared_ptr<KickWorkspace> cudaWorkspace, KickContext const& context) {
-    using Expansion = FmmExpansion<float, order>;
+    using Expansion = cosmictiger::gravity::cartesian::Expansion<float, order>;
     constexpr int kLocalCoefficients = FmmOrder<order>::kLocalCoefficients_;
     constexpr int kLocalDegree = FmmOrder<order>::kLocalDegree_;
     // The buffer travels with the work item; the view aliases its leading coefficients.
@@ -226,8 +226,15 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, ND
     for (int dim = 0; dim < NDIM; dim++) {
         ldx[dim] = unwrappedDoubleDistance(selfPtr->pos[dim], pos[dim]);
     }
-    expansion = l2L(expansion, ldx, params.doPhi);
-    flops += detail::cartesian::L2lKernel<kLocalDegree, true>::kFlops_ + 14 + 6 * SIMD_FLOAT_SIZE;
+    cosmictiger::gravity::cartesian::Expansion<float, order> translated{};
+    if (!params.doPhi) {
+        translated[0] = expansion[0];
+    }
+    cosmictiger::gravity::cartesian::L2L(
+        translated, expansion, fmmScaleDisplacement(ldx), params.doPhi);
+    expansion = translated;
+    flops += cosmictiger::gravity::cartesian::detail::L2L<kLocalDegree, true>::kFlops_ + 14 +
+        6 * SIMD_FLOAT_SIZE;
     float const inverseSupportRadius = 1.0f / params.gravitySupportRadius;
     ForceVectors forces;
     ParticleInteger const numberOfSelfParticles = selfPtr->numberOfParticles();
@@ -378,13 +385,15 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, ND
                 for (ParticleInteger dim = 0; dim < NDIM; dim++) {
                     dx[dim] = unwrappedDoubleDistance(particlesPos(dim, i), selfPtr->pos[dim]);
                 }
-                auto const l2 = l2P(expansion, dx, params.doPhi);
+                cosmictiger::gravity::Field<float> l2{};
+                cosmictiger::gravity::cartesian::L2P(
+                    l2, expansion, fmmScaleDisplacement(dx), params.doPhi);
                 float const gravityEffectiveRadius = params.gravitySupportRadius /
                     selectedGravityKernel().supportRadiusPerEffectiveRadius;
-                forces.phi[j] += SCALE_FACTOR1 * l2(0, 0, 0);
-                forces.gx[j] -= SCALE_FACTOR2 * l2(1, 0, 0);
-                forces.gy[j] -= SCALE_FACTOR2 * l2(0, 1, 0);
-                forces.gz[j] -= SCALE_FACTOR2 * l2(0, 0, 1);
+                forces.phi[j] += SCALE_FACTOR1 * l2.potential();
+                forces.gx[j] += SCALE_FACTOR2 * l2.accelerationX();
+                forces.gy[j] += SCALE_FACTOR2 * l2.accelerationY();
+                forces.gz[j] += SCALE_FACTOR2 * l2.accelerationZ();
                 if (params.forceOnly) {
                     ALWAYS_ASSERT(cudaWorkspace != nullptr && cudaWorkspace->isBatch());
                     auto const output = cudaWorkspace->output();
@@ -393,7 +402,9 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, ND
                     output.acceleration[XDIM][outputIndex] = forces.gx[j];
                     output.acceleration[YDIM][outputIndex] = forces.gy[j];
                     output.acceleration[ZDIM][outputIndex] = forces.gz[j];
-                    flops += detail::cartesian::L2pKernel<kLocalDegree, true>::kFlops_ + 14;
+                    flops +=
+                        cosmictiger::gravity::cartesian::detail::L2P<kLocalDegree, true>::kFlops_ +
+                        14;
                     continue;
                 }
                 forces.gx[j] *= gm;
@@ -507,7 +518,8 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, ND
                     kr.pot += 0.5f * mass * forces.phi[j];
                     kr.dkin += 0.5f * mass * sqr(vx, vy, vz) - kin0;
                 }
-                flops += detail::cartesian::L2pKernel<kLocalDegree, true>::kFlops_ + 25;
+                flops +=
+                    cosmictiger::gravity::cartesian::detail::L2P<kLocalDegree, true>::kFlops_ + 25;
             }
         }
         if (cudaWorkspace != nullptr && cudaWorkspace->isBatch()) {

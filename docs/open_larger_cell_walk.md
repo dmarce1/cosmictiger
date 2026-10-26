@@ -73,7 +73,7 @@ of a leaf pair, and whichever side is evaluated explicitly, both walks have to
 pick the same pairing. The selection in `cosmictiger/gravity/fmm_acceptance.hpp` now
 compares flop counts whose only runtime inputs are the two particle counts;
 the per-order costs come from the generated kernels through
-`FmmHybridCost<order>` in `cosmictiger/gravity/fmm_kernels.hpp`:
+`FmmHybridCost<order>` in `cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp`:
 
 - direct summation: sinkCount times sourceCount times 38 flops, the Newtonian
   pair of the direct kernel. Hybrids are only considered for support-separated

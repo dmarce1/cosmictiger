@@ -15,9 +15,9 @@
 #include <gtest/gtest.h>
 
 #include <cosmictiger/core/hpx.hpp>
-#include <cosmictiger/gravity/dehnen/ewald_kernels.hpp>
 #include <cosmictiger/gravity/fmm_acceptance.hpp>
-#include <cosmictiger/gravity/fmm_kernels.hpp>
+#include <cosmictiger/gravity/fmm_kernels/cartesian_ewald_operators.hpp>
+#include <cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp>
 #include <tests/flop_counting_real.hpp>
 
 // Exercise the real tables without a distributed runtime, as in
@@ -50,12 +50,10 @@ void checkCount(char const* label, Function&& operation) {
 template <int order>
 void checkOrder() {
     using Real = CountingReal;
-    constexpr int kMultipoleDegree = fmmMultipoleDegree(order);
-    constexpr int kLocalDegree = fmmLocalDegree(order);
-    FmmMultipole<Real, order> source{};
-    FmmExpansion<Real, order> local{};
-    FmmExpansion<Real, order> derivatives{};
-    Expansion2<Real> field{};
+    cosmictiger::gravity::cartesian::Multipole<Real, order> source{};
+    cosmictiger::gravity::cartesian::Expansion<Real, order> local{};
+    cosmictiger::gravity::cartesian::Green<Real, order> derivatives{};
+    cosmictiger::gravity::Field<Real> field{};
     Array<Real, NDIM> position;
     position[0] = .13;
     position[1] = -.21;
@@ -68,39 +66,60 @@ void checkOrder() {
         derivatives[i] = .03 * (i + 1);
     }
     checkCount("P2M", [&] {
-        auto const result = p2M<order>(position);
-        (void) result;
-        return cartesian::P2mKernel<kMultipoleDegree>::kFlops_ + 3;
+        cosmictiger::gravity::cartesian::Multipole<Real, order> result{};
+        return cosmictiger::gravity::cartesian::P2M(
+                   result, Real(1), fmmScaleDisplacement(position)) +
+            3;
     });
     checkCount("M2M", [&] {
-        auto const result = m2M(source, position);
-        (void) result;
-        return cartesian::M2mKernel<kMultipoleDegree>::kFlops_ + 3;
+        cosmictiger::gravity::cartesian::Multipole<Real, order> result{};
+        return cosmictiger::gravity::cartesian::M2M(
+                   result, source, fmmScaleDisplacement(position)) +
+            3;
     });
     for (bool enabled : {false, true}) {
-        checkCount("P2L", [&] { return greensFunction(local, position, enabled); });
-        checkCount("M2L", [&] { return m2LDirect(local, source, position, enabled); });
-        checkCount("M2P", [&] { return m2P(field, source, position, enabled); });
-        checkCount("Ewald M2L", [&] { return m2L(local, source, derivatives, enabled); });
-        checkCount("Centered M2L", [&] {
-            return m2LDirect<Real, kLocalDegree, kMultipoleDegree, true>(
-                local, source, position, enabled);
+        checkCount("P2L", [&] {
+            return cosmictiger::gravity::cartesian::P2L(
+                       local, Real(1), fmmScaleDisplacement(position), enabled) +
+                3;
         });
-        checkCount("Centered M2P",
-            [&] { return m2P<Real, kMultipoleDegree, true>(field, source, position, enabled); });
+        checkCount("M2L", [&] {
+            return cosmictiger::gravity::cartesian::M2L(
+                       local, source, fmmScaleDisplacement(position), enabled) +
+                3;
+        });
+        checkCount("M2P", [&] {
+            return cosmictiger::gravity::cartesian::M2P(
+                       field, source, fmmScaleDisplacement(position), enabled) +
+                3;
+        });
+        checkCount("Ewald M2L", [&] {
+            return cosmictiger::gravity::cartesian::M2L(local, source, derivatives, enabled);
+        });
+        checkCount("Centered M2L", [&] {
+            return cosmictiger::gravity::cartesian::M2L<true>(
+                       local, source, fmmScaleDisplacement(position), enabled) +
+                3;
+        });
+        checkCount("Centered M2P", [&] {
+            return cosmictiger::gravity::cartesian::M2P<true>(
+                       field, source, fmmScaleDisplacement(position), enabled) +
+                3;
+        });
         checkCount("Centered Ewald M2L", [&] {
-            return m2L<Real, kLocalDegree, kMultipoleDegree, true>(
-                local, source, derivatives, enabled);
+            return cosmictiger::gravity::cartesian::M2L<true>(local, source, derivatives, enabled);
         });
         checkCount("L2L", [&] {
-            auto const result = l2L(local, position, enabled);
-            (void) result;
-            return cartesian::L2lKernel<kLocalDegree, true>::kFlops_ + 3;
+            cosmictiger::gravity::cartesian::Expansion<Real, order> result{};
+            return cosmictiger::gravity::cartesian::L2L(
+                       result, local, fmmScaleDisplacement(position), enabled) +
+                3;
         });
         checkCount("L2P", [&] {
-            auto const result = l2P(local, position, enabled);
-            (void) result;
-            return cartesian::L2pKernel<kLocalDegree, true>::kFlops_ + 3;
+            cosmictiger::gravity::Field<Real> result{};
+            return cosmictiger::gravity::cartesian::L2P(
+                       result, local, fmmScaleDisplacement(position), enabled) +
+                3;
         });
     }
 
@@ -116,7 +135,9 @@ void checkOrder() {
         }
         SymmetricTracelessTensor<Real, order> result{};
         checkCount("Ewald derivatives", [&] { return ewaldCorrectionDerivatives(result, point); });
-        checkCount("Ewald Green function", [&] { return ewaldGreensFunction(local, point); });
+        checkCount("Ewald Green function", [&] {
+            return cosmictiger::gravity::cartesian::evaluateEwaldGreen(derivatives, point);
+        });
     }
     std::printf("FMM order %d source-operation counts match executed arithmetic.\n", order);
 }

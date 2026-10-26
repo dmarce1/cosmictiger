@@ -15,15 +15,15 @@
 
 namespace cosmictiger::gravity::cartesian::detail {
 template <int expansionOrder, bool centered>
-class M2lKernel;
+class M2L;
 template <int expansionOrder, bool centered>
-class EwaldM2lKernel;
+class M2LDerivatives;
 
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 3) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 3)
 // FMM order 3: source degree 1, local degree 2.
 template <>
-class M2lKernel<2, true> {
+class M2L<2, true> {
 public:
     static constexpr int kFlops_ = 34;
     static constexpr int kWeightedFlops_ = 24;
@@ -103,7 +103,7 @@ public:
 };
 
 template <>
-class EwaldM2lKernel<2, true> {
+class M2LDerivatives<2, true> {
 public:
     static constexpr int kFlops_ = 18;
     static constexpr int kWeightedFlops_ = 9;
@@ -141,7 +141,7 @@ public:
 };
 
 template <>
-class M2lKernel<2, false> {
+class M2L<2, false> {
 public:
     static constexpr int kFlops_ = 50;
     static constexpr int kWeightedFlops_ = 33;
@@ -232,7 +232,7 @@ public:
 };
 
 template <>
-class EwaldM2lKernel<2, false> {
+class M2LDerivatives<2, false> {
 public:
     static constexpr int kFlops_ = 43;
     static constexpr int kWeightedFlops_ = 26;
@@ -283,7 +283,7 @@ public:
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 4)
 // FMM order 4: source degree 2, local degree 3.
 template <>
-class M2lKernel<3, true> {
+class M2L<3, true> {
 public:
     static constexpr int kFlops_ = 94;
     static constexpr int kWeightedFlops_ = 63;
@@ -439,7 +439,7 @@ public:
 };
 
 template <>
-class EwaldM2lKernel<3, true> {
+class M2LDerivatives<3, true> {
 public:
     static constexpr int kFlops_ = 97;
     static constexpr int kWeightedFlops_ = 61;
@@ -536,7 +536,7 @@ public:
 };
 
 template <>
-class M2lKernel<3, false> {
+class M2L<3, false> {
 public:
     static constexpr int kFlops_ = 126;
     static constexpr int kWeightedFlops_ = 85;
@@ -712,7 +712,7 @@ public:
 };
 
 template <>
-class EwaldM2lKernel<3, false> {
+class M2LDerivatives<3, false> {
 public:
     static constexpr int kFlops_ = 151;
     static constexpr int kWeightedFlops_ = 97;
@@ -839,7 +839,7 @@ public:
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 5)
 // FMM order 5: source degree 3, local degree 4.
 template <>
-class M2lKernel<4, true> {
+class M2L<4, true> {
 public:
     static constexpr int kFlops_ = 209;
     static constexpr int kWeightedFlops_ = 140;
@@ -1109,7 +1109,7 @@ public:
 };
 
 template <>
-class EwaldM2lKernel<4, true> {
+class M2LDerivatives<4, true> {
 public:
     static constexpr int kFlops_ = 315;
     static constexpr int kWeightedFlops_ = 209;
@@ -1363,7 +1363,7 @@ public:
 };
 
 template <>
-class M2lKernel<4, false> {
+class M2L<4, false> {
 public:
     static constexpr int kFlops_ = 285;
     static constexpr int kWeightedFlops_ = 186;
@@ -1682,7 +1682,7 @@ public:
 };
 
 template <>
-class EwaldM2lKernel<4, false> {
+class M2LDerivatives<4, false> {
 public:
     static constexpr int kFlops_ = 411;
     static constexpr int kWeightedFlops_ = 269;
@@ -1986,7 +1986,7 @@ public:
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 6)
 // FMM order 6: source degree 4, local degree 5.
 template <>
-class M2lKernel<5, true> {
+class M2L<5, true> {
 public:
     static constexpr int kFlops_ = 442;
     static constexpr int kWeightedFlops_ = 294;
@@ -2466,7 +2466,7 @@ public:
 };
 
 template <>
-class EwaldM2lKernel<5, true> {
+class M2LDerivatives<5, true> {
 public:
     static constexpr int kFlops_ = 783;
     static constexpr int kWeightedFlops_ = 526;
@@ -3047,7 +3047,7 @@ public:
 };
 
 template <>
-class M2lKernel<5, false> {
+class M2L<5, false> {
 public:
     static constexpr int kFlops_ = 569;
     static constexpr int kWeightedFlops_ = 379;
@@ -3617,7 +3617,7 @@ public:
 };
 
 template <>
-class EwaldM2lKernel<5, false> {
+class M2LDerivatives<5, false> {
 public:
     static constexpr int kFlops_ = 933;
     static constexpr int kWeightedFlops_ = 617;
@@ -4275,7 +4275,7 @@ public:
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 7)
 // FMM order 7: source degree 5, local degree 6.
 template <>
-class M2lKernel<6, true> {
+class M2L<6, true> {
 public:
     static constexpr int kFlops_ = 837;
     static constexpr int kWeightedFlops_ = 554;
@@ -5100,7 +5100,7 @@ public:
 };
 
 template <>
-class EwaldM2lKernel<6, true> {
+class M2LDerivatives<6, true> {
 public:
     static constexpr int kFlops_ = 1649;
     static constexpr int kWeightedFlops_ = 1112;
@@ -6277,7 +6277,7 @@ public:
 };
 
 template <>
-class M2lKernel<6, false> {
+class M2L<6, false> {
 public:
     static constexpr int kFlops_ = 1058;
     static constexpr int kWeightedFlops_ = 693;
@@ -7245,7 +7245,7 @@ public:
 };
 
 template <>
-class EwaldM2lKernel<6, false> {
+class M2LDerivatives<6, false> {
 public:
     static constexpr int kFlops_ = 1865;
     static constexpr int kWeightedFlops_ = 1240;
@@ -8532,7 +8532,7 @@ public:
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 8)
 // FMM order 8: source degree 6, local degree 7.
 template <>
-class M2lKernel<7, true> {
+class M2L<7, true> {
 public:
     static constexpr int kFlops_ = 1524;
     static constexpr int kWeightedFlops_ = 1000;
@@ -9927,7 +9927,7 @@ public:
 };
 
 template <>
-class EwaldM2lKernel<7, true> {
+class M2LDerivatives<7, true> {
 public:
     static constexpr int kFlops_ = 3107;
     static constexpr int kWeightedFlops_ = 2097;
@@ -12101,7 +12101,7 @@ public:
 };
 
 template <>
-class M2lKernel<7, false> {
+class M2L<7, false> {
 public:
     static constexpr int kFlops_ = 1874;
     static constexpr int kWeightedFlops_ = 1216;
@@ -13718,7 +13718,7 @@ public:
 };
 
 template <>
-class EwaldM2lKernel<7, false> {
+class M2LDerivatives<7, false> {
 public:
     static constexpr int kFlops_ = 3401;
     static constexpr int kWeightedFlops_ = 2268;
@@ -16041,7 +16041,7 @@ public:
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 9)
 // FMM order 9: source degree 7, local degree 8.
 template <>
-class M2lKernel<8, true> {
+class M2L<8, true> {
 public:
     static constexpr int kFlops_ = 2618;
     static constexpr int kWeightedFlops_ = 1712;
@@ -18309,7 +18309,7 @@ public:
 };
 
 template <>
-class EwaldM2lKernel<8, true> {
+class M2LDerivatives<8, true> {
 public:
     static constexpr int kFlops_ = 5402;
     static constexpr int kWeightedFlops_ = 3645;
@@ -22042,7 +22042,7 @@ public:
 };
 
 template <>
-class M2lKernel<8, false> {
+class M2L<8, false> {
 public:
     static constexpr int kFlops_ = 3170;
     static constexpr int kWeightedFlops_ = 2034;
@@ -24642,7 +24642,7 @@ public:
 };
 
 template <>
-class EwaldM2lKernel<8, false> {
+class M2LDerivatives<8, false> {
 public:
     static constexpr int kFlops_ = 5786;
     static constexpr int kWeightedFlops_ = 3865;

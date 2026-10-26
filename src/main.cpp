@@ -34,8 +34,8 @@
 #include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/core/unordered_set_ts.hpp>
 #include <cosmictiger/gravity/dehnen/ewald_indices.hpp>
-#include <cosmictiger/gravity/dehnen/ewald_kernels.hpp>
-#include <cosmictiger/gravity/fmm_kernels.hpp>
+#include <cosmictiger/gravity/fmm_kernels/cartesian_ewald_operators.hpp>
+#include <cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/fmm_types.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
@@ -92,7 +92,7 @@ int hpx_main(int argc, char* argv[]) {
             // Debug dump of the Ewald Green's function along x for the runtime order.
             fmmDispatch([](auto orderTag) {
                 constexpr int kOrder = decltype(orderTag)::value;
-                FmmExpansion<SimdFloat, kOrder> d;
+                cosmictiger::gravity::cartesian::Green<SimdFloat, kOrder> d;
                 Array<SimdFloat, NDIM> xValue;
                 FILE* fp = fopen(outputPath("ewald.txt").c_str(), "wt");
                 if (fp == nullptr) {
@@ -102,7 +102,7 @@ int hpx_main(int argc, char* argv[]) {
                 for (double x = 0.00; x < 0.5; x += 0.001) {
                     xValue[0] = simdBroadcast<SimdFloat>(x);
                     d = SimdFloat(0.0f);
-                    ewaldGreensFunction(d, xValue);
+                    cosmictiger::gravity::cartesian::evaluateEwaldGreen(d, xValue);
                     fprintf(fp, "%e ", x);
                     for (int n = 0; n < kOrder; n++) {
                         for (int m = 0; m < kOrder - n; m++) {
@@ -110,9 +110,7 @@ int hpx_main(int argc, char* argv[]) {
                                 if (l > 1 && !(l == 2 && n == 0 && m == 0)) {
                                     continue;
                                 }
-                                fprintf(fp, "%e ",
-                                    double(static_cast<FmmExpansion<SimdFloat, kOrder> const&>(d)(
-                                        n, m, l)[0]));
+                                fprintf(fp, "%e ", double(d(n, m, l)[0]));
                             }
                         }
                     }

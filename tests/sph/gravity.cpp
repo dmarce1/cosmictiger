@@ -21,7 +21,7 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/gravity/dehnen/distributed_tree.hpp>
 #include <cosmictiger/gravity/dehnen/execution.hpp>
-#include <cosmictiger/gravity/fmm_kernels.hpp>
+#include <cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/kick.hpp>
@@ -367,10 +367,13 @@ void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f) {
                     } else {
                         cpuGravityCc<order.value>(expansion, sources, self, true);
                     }
-                    return l2P(expansion, dx, true);
+                    cosmictiger::gravity::Field<float> field{};
+                    cosmictiger::gravity::cartesian::L2P(
+                        field, expansion, fmmScaleDisplacement(dx));
+                    return field;
                 });
                 requireClose(path == 0 ? "CPU cell-particle mass" : "CPU cell-cell mass",
-                    -SCALE_FACTOR2 * value(1, 0, 0), expected);
+                    SCALE_FACTOR2 * value.accelerationX(), expected);
             }
         }
     }

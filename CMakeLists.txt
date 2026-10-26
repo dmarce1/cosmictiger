@@ -323,10 +323,14 @@ set(cosmictiger_header_files
     cosmictiger/cuda/device_vector.hpp
     cosmictiger/gravity/dehnen/ewald_indices.hpp
     cosmictiger/gravity/dehnen/ewald_tables.hpp
+    cosmictiger/gravity/fmm_kernels/cartesian_types.hpp
     cosmictiger/gravity/fmm_acceptance.hpp
-    cosmictiger/gravity/fmm_kernels.hpp
+    cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp
+    cosmictiger/gravity/fmm_kernels/cartesian_ewald_operators.hpp
     cosmictiger/gravity/fmm_order.hpp
     cosmictiger/gravity/fmm_types.hpp
+    cosmictiger/gravity/fmm_kernels/spherical_operators.hpp
+    cosmictiger/gravity/fmm_kernels/spherical_types.hpp
     tests/gravity/analytic.hpp
     cosmictiger/analysis/bh.hpp
     cosmictiger/gravity/fmm_cpu_instances.hpp
@@ -395,7 +399,7 @@ set(cosmictiger_header_files
     cosmictiger/core/tree_id.hpp
     cosmictiger/gravity/dehnen/cpu_instances.hpp
     cosmictiger/gravity/dehnen/distributed_tree.hpp
-    cosmictiger/gravity/dehnen/ewald_kernels.hpp
+    cosmictiger/gravity/fmm_kernels/cartesian_ewald_operators.hpp
     cosmictiger/gravity/dehnen/execution.hpp
     cosmictiger/gravity/dehnen/gpu_staging.hpp
     cosmictiger/gravity/dehnen/particle_exchange.hpp
@@ -530,14 +534,14 @@ add_dependencies(cosmictiger cosmictiger_fixed64)
 # Checked-in kernels for FMM orders 3 to 9, regenerated only on explicit request.
 # Both representations share the same order range. Only Cartesian is currently
 # connected to the application walk. Ordinary builds use the source headers.
-set(COSMICTIGER_GENERATED_FMM_DIR ${PROJECT_SOURCE_DIR}/cosmictiger/gravity)
+set(COSMICTIGER_GENERATED_FMM_DIR ${PROJECT_SOURCE_DIR}/cosmictiger/gravity/fmm_kernels)
 set(COSMICTIGER_GENERATED_FMM_FILES
-    ${COSMICTIGER_GENERATED_FMM_DIR}/generated_config.hpp
-    ${COSMICTIGER_GENERATED_FMM_DIR}/generated_cartesian_m2l.hpp
-    ${COSMICTIGER_GENERATED_FMM_DIR}/generated_cartesian_operators.hpp
-    ${COSMICTIGER_GENERATED_FMM_DIR}/dehnen/generated_cartesian_ewald.hpp
-    ${COSMICTIGER_GENERATED_FMM_DIR}/nitadori/generated_spherical.hpp
-    ${COSMICTIGER_GENERATED_FMM_DIR}/nitadori/generated_spherical_ewald.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_config.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_m2l.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_kernels.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_ewald_kernels.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/spherical_kernels.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/spherical_ewald_kernels.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/operation_counts.json)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 # Do not declare source headers as OUTPUT/BYPRODUCTS or mark them GENERATED:
@@ -1174,6 +1178,13 @@ if(BUILD_TESTING)
     endif()
     cosmictiger_add_gtest(NAME cartesian_kernels TARGET cartesian_kernels_test
         PROPERTIES TIMEOUT 60)
+
+    add_executable(fmm_api_test tests/gravity/fmm_api.cpp)
+    target_include_directories(fmm_api_test PRIVATE ${PROJECT_SOURCE_DIR})
+    cosmictiger_use_generated_kernels(fmm_api_test)
+    cosmictiger_add_gtest(NAME fmm_api TARGET fmm_api_test
+        PROPERTIES TIMEOUT 30)
+
     # Standalone generator families: these tests do not select a new runtime walk.
     foreach(representation IN ITEMS spherical_ewald)
         set(generated_kernel_target "generated_${representation}_test")

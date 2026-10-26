@@ -1,6 +1,6 @@
 # Generated spherical Ewald kernels
 
-`tools/fmm/spherical_ewald.py` emits `generated_spherical_ewald.hpp` for the same
+`tools/fmm/spherical_ewald.py` emits `cosmictiger/gravity/fmm_kernels/spherical_ewald_kernels.hpp` for the same
 local degrees as the Cartesian and spherical generators (2 through 8,
 FMM orders 3 through 9). The source retains every order; CMake's
 `COSMICTIGER_FMM_MIN_ORDER`/`COSMICTIGER_FMM_MAX_ORDER` select the compiled
@@ -21,7 +21,7 @@ Namespace `cosmictiger::gravity::spherical` uses slots
 hold the imaginary component at positive `|m|`. Complex negative orders obey
 `C(n,-m)=(-1)^m*conj(C(n,m))`.
 
-`EwaldGreensKernel<degree>::evaluate<Real>(greens, greenTrace, x, y, z)`
+`EwaldGreen<degree>::evaluate<Real>(greens, greenTrace, x, y, z)`
 overwrites the harmonic coefficients of the **periodic correction** to negative
 Newtonian potential in a unit cubic box, with splitting parameter alpha=2.
 The displacement must be on the minimum-image branch, with each component in
@@ -63,7 +63,7 @@ use the same policy. This is an accuracy choice, not a performance claim.
 
 ## Trace and moment contracts
 
-`EwaldM2lKernel<degree>::add<Real>(local, localTrace, moments, sourceTrace,
+`EwaldM2L<degree>::add<Real>(local, localTrace, moments, sourceTrace,
                                 greens, greenTrace)`
 adds the general spherical contraction with source degree at most `degree-1`
 and combined degree at most `degree`. It preserves pre-existing destination
@@ -88,11 +88,11 @@ The generated contraction also includes its potential correction from
 Nitadori's equations 38–42. This is one specific isotropic periodic trace;
 it is not the full hierarchy of traces needed for Plummer softening.
 
-`EwaldL2lKernel<degree>::add<Real>(output, outputTrace, source, sourceTrace,
+`EwaldL2L<degree>::add<Real>(output, outputTrace, source, sourceTrace,
                                 x, y, z)`
 adds the harmonic translation and transports this quadratic polynomial.
 The offset is new center minus old center.
-`EwaldL2pKernel<degree>::add<Real>(field, source, sourceTrace, x, y, z)`
+`EwaldL2P<degree>::add<Real>(field, source, sourceTrace, x, y, z)`
 evaluates it at a point offset. Fields are `[potential, accelerationX,
 accelerationY, accelerationZ]`; acceleration is minus the potential gradient.
 A constant quadratic trace does not change on translation, but it changes

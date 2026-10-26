@@ -17,7 +17,7 @@
 #include <type_traits>
 
 #include <cosmictiger/cuda/cuda_export.hpp>
-#include <cosmictiger/gravity/nitadori/generated_spherical.hpp>
+#include <cosmictiger/gravity/fmm_kernels/spherical_kernels.hpp>
 #include <cosmictiger/math/simd_math.hpp>
 
 namespace cosmictiger::gravity::spherical {
@@ -92,13 +92,13 @@ namespace detail {
     }
 }    // namespace detail
 template <int degree>
-class EwaldGreensKernel;
+class EwaldGreen;
 template <int degree>
-class EwaldM2lKernel;
+class EwaldM2L;
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 3) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 3)
 template <>
-class EwaldGreensKernel<2> {
+class EwaldGreen<2> {
 public:
     static constexpr int kFlops_ = 114444;
     static constexpr int kDegree_ = 2;
@@ -597,13 +597,13 @@ public:
     }
 };
 template <>
-class EwaldM2lKernel<2> {
+class EwaldM2L<2> {
 public:
     static constexpr int kFlops_ = 35;
     template <typename Real, typename Local, typename Moments, typename Greens>
     CUDA_EXPORT static void add(Local& local, Real& localTrace, Moments const& moments,
         Real sourceTrace, Greens const& greens, Real greenTrace) {
-        M2lDerivativesKernel<2>::template add<Real>(local, moments, greens);
+        detail::M2LDerivatives<2>::template add<Real>(local, moments, greens);
         local[3] = simdFma(-simdBroadcast<Real>(2) * greenTrace, moments[3], local[3]);
         local[1] = simdFma(-simdBroadcast<Real>(2) * greenTrace, moments[1], local[1]);
         local[2] = simdFma(-greenTrace, moments[2], local[2]);
@@ -614,7 +614,7 @@ public:
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 4) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 4)
 template <>
-class EwaldGreensKernel<3> {
+class EwaldGreen<3> {
 public:
     static constexpr int kFlops_ = 194963;
     static constexpr int kDegree_ = 3;
@@ -1314,13 +1314,13 @@ public:
     }
 };
 template <>
-class EwaldM2lKernel<3> {
+class EwaldM2L<3> {
 public:
     static constexpr int kFlops_ = 100;
     template <typename Real, typename Local, typename Moments, typename Greens>
     CUDA_EXPORT static void add(Local& local, Real& localTrace, Moments const& moments,
         Real sourceTrace, Greens const& greens, Real greenTrace) {
-        M2lDerivativesKernel<3>::template add<Real>(local, moments, greens);
+        detail::M2LDerivatives<3>::template add<Real>(local, moments, greens);
         local[0] = simdFma(-simdBroadcast<Real>(0.5) * greenTrace, sourceTrace, local[0]);
         local[3] = simdFma(-simdBroadcast<Real>(2) * greenTrace, moments[3], local[3]);
         local[1] = simdFma(-simdBroadcast<Real>(2) * greenTrace, moments[1], local[1]);
@@ -1332,7 +1332,7 @@ public:
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 5) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 5)
 template <>
-class EwaldGreensKernel<4> {
+class EwaldGreen<4> {
 public:
     static constexpr int kFlops_ = 299055;
     static constexpr int kDegree_ = 4;
@@ -2261,13 +2261,13 @@ public:
     }
 };
 template <>
-class EwaldM2lKernel<4> {
+class EwaldM2L<4> {
 public:
     static constexpr int kFlops_ = 228;
     template <typename Real, typename Local, typename Moments, typename Greens>
     CUDA_EXPORT static void add(Local& local, Real& localTrace, Moments const& moments,
         Real sourceTrace, Greens const& greens, Real greenTrace) {
-        M2lDerivativesKernel<4>::template add<Real>(local, moments, greens);
+        detail::M2LDerivatives<4>::template add<Real>(local, moments, greens);
         local[0] = simdFma(-simdBroadcast<Real>(0.5) * greenTrace, sourceTrace, local[0]);
         local[3] = simdFma(-simdBroadcast<Real>(2) * greenTrace, moments[3], local[3]);
         local[1] = simdFma(-simdBroadcast<Real>(2) * greenTrace, moments[1], local[1]);
@@ -2279,7 +2279,7 @@ public:
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 6) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 6)
 template <>
-class EwaldGreensKernel<5> {
+class EwaldGreen<5> {
 public:
     static constexpr int kFlops_ = 426720;
     static constexpr int kDegree_ = 5;
@@ -3468,13 +3468,13 @@ public:
     }
 };
 template <>
-class EwaldM2lKernel<5> {
+class EwaldM2L<5> {
 public:
     static constexpr int kFlops_ = 457;
     template <typename Real, typename Local, typename Moments, typename Greens>
     CUDA_EXPORT static void add(Local& local, Real& localTrace, Moments const& moments,
         Real sourceTrace, Greens const& greens, Real greenTrace) {
-        M2lDerivativesKernel<5>::template add<Real>(local, moments, greens);
+        detail::M2LDerivatives<5>::template add<Real>(local, moments, greens);
         local[0] = simdFma(-simdBroadcast<Real>(0.5) * greenTrace, sourceTrace, local[0]);
         local[3] = simdFma(-simdBroadcast<Real>(2) * greenTrace, moments[3], local[3]);
         local[1] = simdFma(-simdBroadcast<Real>(2) * greenTrace, moments[1], local[1]);
@@ -3486,7 +3486,7 @@ public:
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 7) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 7)
 template <>
-class EwaldGreensKernel<6> {
+class EwaldGreen<6> {
 public:
     static constexpr int kFlops_ = 577958;
     static constexpr int kDegree_ = 6;
@@ -4964,13 +4964,13 @@ public:
     }
 };
 template <>
-class EwaldM2lKernel<6> {
+class EwaldM2L<6> {
 public:
     static constexpr int kFlops_ = 829;
     template <typename Real, typename Local, typename Moments, typename Greens>
     CUDA_EXPORT static void add(Local& local, Real& localTrace, Moments const& moments,
         Real sourceTrace, Greens const& greens, Real greenTrace) {
-        M2lDerivativesKernel<6>::template add<Real>(local, moments, greens);
+        detail::M2LDerivatives<6>::template add<Real>(local, moments, greens);
         local[0] = simdFma(-simdBroadcast<Real>(0.5) * greenTrace, sourceTrace, local[0]);
         local[3] = simdFma(-simdBroadcast<Real>(2) * greenTrace, moments[3], local[3]);
         local[1] = simdFma(-simdBroadcast<Real>(2) * greenTrace, moments[1], local[1]);
@@ -4982,7 +4982,7 @@ public:
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 8) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 8)
 template <>
-class EwaldGreensKernel<7> {
+class EwaldGreen<7> {
 public:
     static constexpr int kFlops_ = 752769;
     static constexpr int kDegree_ = 7;
@@ -6778,13 +6778,13 @@ public:
     }
 };
 template <>
-class EwaldM2lKernel<7> {
+class EwaldM2L<7> {
 public:
     static constexpr int kFlops_ = 1396;
     template <typename Real, typename Local, typename Moments, typename Greens>
     CUDA_EXPORT static void add(Local& local, Real& localTrace, Moments const& moments,
         Real sourceTrace, Greens const& greens, Real greenTrace) {
-        M2lDerivativesKernel<7>::template add<Real>(local, moments, greens);
+        detail::M2LDerivatives<7>::template add<Real>(local, moments, greens);
         local[0] = simdFma(-simdBroadcast<Real>(0.5) * greenTrace, sourceTrace, local[0]);
         local[3] = simdFma(-simdBroadcast<Real>(2) * greenTrace, moments[3], local[3]);
         local[1] = simdFma(-simdBroadcast<Real>(2) * greenTrace, moments[1], local[1]);
@@ -6796,7 +6796,7 @@ public:
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 9) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 9)
 template <>
-class EwaldGreensKernel<8> {
+class EwaldGreen<8> {
 public:
     static constexpr int kFlops_ = 951153;
     static constexpr int kDegree_ = 8;
@@ -8937,13 +8937,13 @@ public:
     }
 };
 template <>
-class EwaldM2lKernel<8> {
+class EwaldM2L<8> {
 public:
     static constexpr int kFlops_ = 2216;
     template <typename Real, typename Local, typename Moments, typename Greens>
     CUDA_EXPORT static void add(Local& local, Real& localTrace, Moments const& moments,
         Real sourceTrace, Greens const& greens, Real greenTrace) {
-        M2lDerivativesKernel<8>::template add<Real>(local, moments, greens);
+        detail::M2LDerivatives<8>::template add<Real>(local, moments, greens);
         local[0] = simdFma(-simdBroadcast<Real>(0.5) * greenTrace, sourceTrace, local[0]);
         local[3] = simdFma(-simdBroadcast<Real>(2) * greenTrace, moments[3], local[3]);
         local[1] = simdFma(-simdBroadcast<Real>(2) * greenTrace, moments[1], local[1]);
@@ -8953,13 +8953,13 @@ public:
 };
 #endif
 template <int degree>
-class EwaldL2lKernel {
+class EwaldL2L {
 public:
-    static constexpr int kFlops_ = L2lKernel<degree>::kFlops_ + 9;
+    static constexpr int kFlops_ = detail::L2L<degree>::kFlops_ + 9;
     template <typename Real, typename Local, typename Source>
     CUDA_EXPORT static void add(Local& output, Real& outputTrace, Source const& source,
         Real sourceTrace, Real x, Real y, Real z) {
-        L2lKernel<degree>::template add<Real>(output, source, x, y, z);
+        detail::L2L<degree>::template add<Real>(output, source, x, y, z);
         Real const radiusSquared = simdFma(x, x, simdFma(y, y, z * z));
         output[0] = simdFma(-simdBroadcast<Real>(0.5) * sourceTrace, radiusSquared, output[0]);
         output[3] = simdFma(-sourceTrace, x, output[3]);
@@ -8969,13 +8969,13 @@ public:
     }
 };
 template <int degree>
-class EwaldL2pKernel {
+class EwaldL2P {
 public:
-    static constexpr int kFlops_ = L2pKernel<degree>::kFlops_ + 8;
+    static constexpr int kFlops_ = detail::L2P<degree>::kFlops_ + 8;
     template <typename Real, typename Field, typename Source>
     CUDA_EXPORT static void add(
         Field& field, Source const& source, Real sourceTrace, Real x, Real y, Real z) {
-        L2pKernel<degree>::template add<Real>(field, source, x, y, z);
+        detail::L2P<degree>::template add<Real>(field, source, x, y, z);
         Real const radiusSquared = simdFma(x, x, simdFma(y, y, z * z));
         field[0] = simdFma(-simdBroadcast<Real>(0.5) * sourceTrace, radiusSquared, field[0]);
         field[1] = simdFma(sourceTrace, x, field[1]);

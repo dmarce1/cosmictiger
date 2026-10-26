@@ -46,7 +46,7 @@ order-dependent code is instantiated per order from templates:
   `FmmMultiPos<order>` (tree nodes point at its order-agnostic
   `MultipolePosition` header), and the max-size transport buffers
   `ExpansionBuffer` / `MultipoleBuffer` used by order-agnostic interfaces.
-- `cosmictiger/gravity/fmm_kernels.hpp`: operator wrappers that deduce the degrees from
+- `cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp`: operator wrappers that deduce the degrees from
   their tensor arguments over the generated STF kernels.
 - Generated code: `tools/generate_stf_m2l.py` emits one fully specialized
   kernel class per degree for local degrees 2 through 8 and one Ewald derivative

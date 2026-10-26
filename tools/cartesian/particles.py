@@ -52,7 +52,7 @@ def p2l(A,P):
             polynomial={tuple(v//2 for v in power):g.const(c)
                         for power,c in A.radialPolynomial(0,a).items()}
             outputs[f'local[{A.index(a)}]']=g.mul(coefficient,A.horner(g,polynomial,squared))
-    signature=f'''template <> class P2lKernel<{P}> {{
+    signature=f'''template <> class P2L<{P}> {{
 public:
 \ttemplate <typename Real, typename Expansion>
 \tCUDA_EXPORT static void add(Expansion& local, Real mass,
@@ -89,7 +89,7 @@ def m2p(A,P,centered):
     outputs={'field[0]':potential}
     for axis in range(A.NDIM):
         outputs[f'field[{axis+1}]']=g.mul(r2inv,g.sub(g.add(*vector[axis]),g.mul(u[axis],radial)))
-    signature=f'''template <> class M2pKernel<{P}, {str(centered).lower()}> {{
+    signature=f'''template <> class M2P<{P}, {str(centered).lower()}> {{
 public:
 \ttemplate <typename Real, typename Field, typename Source>
 \tCUDA_EXPORT static void add(Field& field, Source const& source,
@@ -110,7 +110,7 @@ def p2m(A, order):
                           for power, coefficient in cartesianMonomial(alpha)}
             outputs[f'target[{A.index(alpha)}]'] = g.mul(
                 mass, A.horner(g, polynomial, displacement))
-    signature = f'''template <> class P2mKernel<{order}> {{
+    signature = f'''template <> class P2M<{order}> {{
 public:
 \ttemplate <typename Real, typename Multipole>
 \tCUDA_EXPORT static void add(Multipole& target, Real mass,
@@ -141,7 +141,7 @@ def l2p(A, order, withTrace):
             terms.append(g.mul(trace, displacement[2]))
         value = g.add(*terms)
         outputs[f'field[{component}]'] = value if component == 0 else g.scale(g.mul(inverseScale, value), -1)
-    signature = f'''template <> class L2pKernel<{order}, {str(withTrace).lower()}> {{
+    signature = f'''template <> class L2P<{order}, {str(withTrace).lower()}> {{
 public:
 \ttemplate <typename Real, typename Field, typename Source>
 \tCUDA_EXPORT static void add(Field& field, Source const& source,

@@ -15,28 +15,28 @@
 
 namespace cosmictiger::gravity::cartesian::detail {
 template <int order>
-class M2mKernel;
+class M2M;
 template <int order, bool withTrace>
-class L2lKernel;
+class L2L;
 template <int order>
-class P2lKernel;
+class P2L;
 template <int order>
-class P2mKernel;
+class P2M;
 template <int order, bool withTrace>
-class L2pKernel;
+class L2P;
 template <int order, bool centered>
-class M2pKernel;
+class M2P;
 
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 3) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 3)
 // FMM order 3: source degree 1, local degree 2.
 template <int order>
-class M2mKernel;
+class M2M;
 template <int order, bool withTrace>
-class L2lKernel;
+class L2L;
 
 template <>
-class M2mKernel<1> {
+class M2M<1> {
 public:
     static constexpr int kFlops_ = 13;
     static constexpr int kWeightedFlops_ = 10;
@@ -61,7 +61,7 @@ public:
 };
 
 template <>
-class L2lKernel<2, false> {
+class L2L<2, false> {
 public:
     static constexpr int kFlops_ = 64;
     static constexpr int kWeightedFlops_ = 37;
@@ -130,7 +130,7 @@ public:
 };
 
 template <>
-class L2lKernel<2, true> {
+class L2L<2, true> {
 public:
     static constexpr int kFlops_ = 70;
     static constexpr int kWeightedFlops_ = 40;
@@ -204,7 +204,7 @@ public:
 };
 
 template <>
-class P2mKernel<1> {
+class P2M<1> {
 public:
     static constexpr int kFlops_ = 7;
     static constexpr int kWeightedFlops_ = 4;
@@ -227,7 +227,7 @@ public:
 };
 
 template <>
-class P2lKernel<2> {
+class P2L<2> {
 public:
     static constexpr int kFlops_ = 31;
     static constexpr int kWeightedFlops_ = 23;
@@ -281,7 +281,7 @@ public:
 };
 
 template <>
-class M2pKernel<1, true> {
+class M2P<1, true> {
 public:
     static constexpr int kFlops_ = 12;
     static constexpr int kWeightedFlops_ = 8;
@@ -309,7 +309,7 @@ public:
 };
 
 template <>
-class M2pKernel<1, false> {
+class M2P<1, false> {
 public:
     static constexpr int kFlops_ = 26;
     static constexpr int kWeightedFlops_ = 16;
@@ -346,7 +346,7 @@ public:
 };
 
 template <>
-class L2pKernel<2, false> {
+class L2P<2, false> {
 public:
     static constexpr int kFlops_ = 53;
     static constexpr int kWeightedFlops_ = 31;
@@ -399,7 +399,7 @@ public:
 };
 
 template <>
-class L2pKernel<2, true> {
+class L2P<2, true> {
 public:
     static constexpr int kFlops_ = 57;
     static constexpr int kWeightedFlops_ = 33;
@@ -453,199 +453,201 @@ public:
     }
 };
 
+namespace detail {
 #ifdef __CUDACC__
-// Read-only GLOBAL storage: row/lane loads coalesce instead of serializing
-// divergent constant-memory accesses. Internal linkage needs no device RDC.
-// Entry layout: basis | primary << 8 | secondary << 16 | kind << 24.
-static __device__ unsigned int const l2lWarpSchedule2[4][32] = {
-    {16777473u, 16777730u, 16778241u, 16778497u, 16779009u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-    {16777987u, 16778244u, 16778498u, 16778754u, 16779266u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-    {16778501u, 16778758u, 16779011u, 16779267u, 33818115u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-    {16779015u, 16779272u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-};
-// Per phase, the output coefficient reduced by each lane's group. Inactive
-// lanes hold zero and are excluded by the generated active-lane bounds.
-static __device__ unsigned char const l2lWarpTargets2[1][32] = {
-    {0u, 0u, 1u, 2u, 3u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-};
+    // Read-only GLOBAL storage: row/lane loads coalesce instead of serializing
+    // divergent constant-memory accesses. Internal linkage needs no device RDC.
+    // Entry layout: basis | primary << 8 | secondary << 16 | kind << 24.
+    static __device__ unsigned int const l2lWarpSchedule2[4][32] = {
+        {16777473u, 16777730u, 16778241u, 16778497u, 16779009u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {16777987u, 16778244u, 16778498u, 16778754u, 16779266u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {16778501u, 16778758u, 16779011u, 16779267u, 33818115u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {16779015u, 16779272u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+    };
+    // Per phase, the output coefficient reduced by each lane's group. Inactive
+    // lanes hold zero and are excluded by the generated active-lane bounds.
+    static __device__ unsigned char const l2lWarpTargets2[1][32] = {
+        {0u, 0u, 1u, 2u, 3u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+    };
 
-template <int order, bool withTrace>
-class L2lWarpKernel;
-template <>
-class L2lWarpKernel<2, true> {
-public:
-    // Whole-warp emitted floating arithmetic; a fused operation counts twice.
-    // Includes replicated basis work and padded rows, excludes index/shuffle work.
-    static constexpr int kFlops_ = 1034;
-    static constexpr int kFlopsNoPotential_ = 678;
-    static constexpr int kWeightedFlops_ = 904;
-    static constexpr int kWeightedFlopsNoPotential_ = 549;
-    static constexpr int kDegree_ = 2;
-    static constexpr int kTraceIndex_ = 9;
-    static constexpr int kCoefficients_ = 10;
-    static constexpr int kBasisWords_ = 1;
-    static constexpr int kScheduleRows_ = 4;
-    static constexpr int kPhases_ = 1;
-    template <typename Real, typename Expansion, typename Source>
-    __device__ static void translate(Expansion& target, Source const& source, Real const dx,
-        Real const dy, Real const dz, bool doPhi) {
-        // Contract: all 32 lanes enter with identical source/geometry; target
-        // is private per lane. Every lane receives the complete expansion.
-        execute<true>(target, source, dx, dy, dz, doPhi);
-    }
-    template <typename Real, typename Source>
-    __device__ static void translateInto(Real* target, Source const& source, Real const dx,
-        Real const dy, Real const dz, bool doPhi) {
-        // Contract: all 32 lanes enter with identical source/geometry; target
-        // addresses 10 values that never alias source. Group leaders store
-        // their coefficient once; strided lanes copy the unchanged ones. Every
-        // source read and target write is complete when this returns.
-        execute<false>(target, source, dx, dy, dz, doPhi);
-    }
+    template <int order, bool withTrace>
+    class L2LWarp;
+    template <>
+    class L2LWarp<2, true> {
+    public:
+        // Whole-warp emitted floating arithmetic; a fused operation counts twice.
+        // Includes replicated basis work and padded rows, excludes index/shuffle work.
+        static constexpr int kFlops_ = 1034;
+        static constexpr int kFlopsNoPotential_ = 678;
+        static constexpr int kWeightedFlops_ = 904;
+        static constexpr int kWeightedFlopsNoPotential_ = 549;
+        static constexpr int kDegree_ = 2;
+        static constexpr int kTraceIndex_ = 9;
+        static constexpr int kCoefficients_ = 10;
+        static constexpr int kBasisWords_ = 1;
+        static constexpr int kScheduleRows_ = 4;
+        static constexpr int kPhases_ = 1;
+        template <typename Real, typename Expansion, typename Source>
+        __device__ static void translate(Expansion& target, Source const& source, Real const dx,
+            Real const dy, Real const dz, bool doPhi) {
+            // Contract: all 32 lanes enter with identical source/geometry; target
+            // is private per lane. Every lane receives the complete expansion.
+            execute<true>(target, source, dx, dy, dz, doPhi);
+        }
+        template <typename Real, typename Source>
+        __device__ static void translateInto(Real* target, Source const& source, Real const dx,
+            Real const dy, Real const dz, bool doPhi) {
+            // Contract: all 32 lanes enter with identical source/geometry; target
+            // addresses 10 values that never alias source. Group leaders store
+            // their coefficient once; strided lanes copy the unchanged ones. Every
+            // source read and target write is complete when this returns.
+            execute<false>(target, source, dx, dy, dz, doPhi);
+        }
 
-private:
-    template <bool kReplicate, typename Real, typename Target, typename Source>
-    __device__ static void execute(Target& target, Source const& source, Real const dx,
-        Real const dy, Real const dz, bool doPhi) {
-        int const lane = threadIdx.x & 31;
-        constexpr unsigned int kMask = 0xffffffffu;
-        // 1 register(s) per lane hold the complete distributed Taylor basis:
-        // basis index i lives in word i >> 5 on lane i & 31. Shuffles avoid a
-        // large register-selection tree for dynamic indexing.
-        Real basis0 = simdBroadcast<Real>(0);
-        [[maybe_unused]] constexpr auto kCoefficient1 = 1;
-        [[maybe_unused]] constexpr auto kCoefficient8 = 1.0 / 2.0;
-        if (lane == 0) {
-            basis0 = simdBroadcast<Real>(kCoefficient1);
-        }
-        if (lane == 1) {
-            basis0 = dy;
-        }
-        if (lane == 2) {
-            basis0 = dx;
-        }
-        if (lane == 3) {
-            basis0 = dz;
-        }
-        if (doPhi) {
-            Real const t5 = dx * dx;
-            Real const t6 = dy * dy;
-            Real const t7 = dz * dz;
-            Real const t10 = t6 * simdBroadcast<Real>(kCoefficient8);
-            Real const t12 = t7 * simdBroadcast<Real>(kCoefficient8);
-            Real const t14 = t10 - t12;
-            Real const t15 = dx * dy;
-            Real const t16 = t5 * simdBroadcast<Real>(kCoefficient8);
-            Real const t17 = t16 - t12;
-            Real const t18 = dy * dz;
-            Real const t19 = dx * dz;
-            if (lane == 4) {
-                basis0 = t14;
+    private:
+        template <bool kReplicate, typename Real, typename Target, typename Source>
+        __device__ static void execute(Target& target, Source const& source, Real const dx,
+            Real const dy, Real const dz, bool doPhi) {
+            int const lane = threadIdx.x & 31;
+            constexpr unsigned int kMask = 0xffffffffu;
+            // 1 register(s) per lane hold the complete distributed Taylor basis:
+            // basis index i lives in word i >> 5 on lane i & 31. Shuffles avoid a
+            // large register-selection tree for dynamic indexing.
+            Real basis0 = simdBroadcast<Real>(0);
+            [[maybe_unused]] constexpr auto kCoefficient1 = 1;
+            [[maybe_unused]] constexpr auto kCoefficient8 = 1.0 / 2.0;
+            if (lane == 0) {
+                basis0 = simdBroadcast<Real>(kCoefficient1);
             }
-            if (lane == 5) {
-                basis0 = t15;
+            if (lane == 1) {
+                basis0 = dy;
             }
-            if (lane == 6) {
-                basis0 = t17;
+            if (lane == 2) {
+                basis0 = dx;
             }
-            if (lane == 7) {
-                basis0 = t18;
+            if (lane == 3) {
+                basis0 = dz;
             }
-            if (lane == 8) {
-                basis0 = t19;
-            }
-        }
-        {
-            // Fixed contraction phase 0: 4 rows, 4 outputs.
-            int const groupWidth = lane < 2 ? 2 : (lane < 5 ? 1 : (1));
-            int const targetIndex = __ldg(&l2lWarpTargets2[0][lane]);
-            Real partial = simdBroadcast<Real>(0);
-#pragma unroll
-            for (int row = 0; row < 4; ++row) {
-                unsigned int entry = __ldg(&l2lWarpSchedule2[row][lane]);
-                if (!doPhi && lane < 2) {
-                    entry = 0u;
+            if (doPhi) {
+                Real const t5 = dx * dx;
+                Real const t6 = dy * dy;
+                Real const t7 = dz * dz;
+                Real const t10 = t6 * simdBroadcast<Real>(kCoefficient8);
+                Real const t12 = t7 * simdBroadcast<Real>(kCoefficient8);
+                Real const t14 = t10 - t12;
+                Real const t15 = dx * dy;
+                Real const t16 = t5 * simdBroadcast<Real>(kCoefficient8);
+                Real const t17 = t16 - t12;
+                Real const t18 = dy * dz;
+                Real const t19 = dx * dz;
+                if (lane == 4) {
+                    basis0 = t14;
                 }
-                int const basisIndex = entry & 255u;
-                int const primaryIndex = (entry >> 8) & 255u;
-                int const secondaryIndex = (entry >> 16) & 255u;
-                int const kind = (entry >> 24) & 3u;
-                Real const sourceValue =
-                    source[primaryIndex] + simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
-                Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
-                Real const basisValue = basisValue0;
-                Real const weight =
-                    simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
-                partial = simdFma(weight, sourceValue, partial);
+                if (lane == 5) {
+                    basis0 = t15;
+                }
+                if (lane == 6) {
+                    basis0 = t17;
+                }
+                if (lane == 7) {
+                    basis0 = t18;
+                }
+                if (lane == 8) {
+                    basis0 = t19;
+                }
             }
-            Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-            partial +=
-                (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
-            bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 5;
-            if (leader) {
-                partial += source[targetIndex];
-            }
-            if (doPhi && lane == 0) {
-                partial = simdFma(simdBroadcast<Real>(0.5) * dz * dz, source[9], partial);
-            }
-            if (lane == 4) {
-                partial = simdFma(dz, source[9], partial);
+            {
+                // Fixed contraction phase 0: 4 rows, 4 outputs.
+                int const groupWidth = lane < 2 ? 2 : (lane < 5 ? 1 : (1));
+                int const targetIndex = __ldg(&l2lWarpTargets2[0][lane]);
+                Real partial = simdBroadcast<Real>(0);
+#pragma unroll
+                for (int row = 0; row < 4; ++row) {
+                    unsigned int entry = __ldg(&l2lWarpSchedule2[row][lane]);
+                    if (!doPhi && lane < 2) {
+                        entry = 0u;
+                    }
+                    int const basisIndex = entry & 255u;
+                    int const primaryIndex = (entry >> 8) & 255u;
+                    int const secondaryIndex = (entry >> 16) & 255u;
+                    int const kind = (entry >> 24) & 3u;
+                    Real const sourceValue = source[primaryIndex] +
+                        simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
+                    Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
+                    Real const basisValue = basisValue0;
+                    Real const weight =
+                        simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
+                    partial = simdFma(weight, sourceValue, partial);
+                }
+                Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
+                partial +=
+                    (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
+                bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 5;
+                if (leader) {
+                    partial += source[targetIndex];
+                }
+                if (doPhi && lane == 0) {
+                    partial = simdFma(simdBroadcast<Real>(0.5) * dz * dz, source[9], partial);
+                }
+                if (lane == 4) {
+                    partial = simdFma(dz, source[9], partial);
+                }
+                if constexpr (kReplicate) {
+                    target[0] = __shfl_sync(kMask, partial, 0);
+                    target[1] = __shfl_sync(kMask, partial, 2);
+                    target[2] = __shfl_sync(kMask, partial, 3);
+                    target[3] = __shfl_sync(kMask, partial, 4);
+                } else {
+                    if (leader) {
+                        target[targetIndex] = partial;
+                    }
+                }
             }
             if constexpr (kReplicate) {
-                target[0] = __shfl_sync(kMask, partial, 0);
-                target[1] = __shfl_sync(kMask, partial, 2);
-                target[2] = __shfl_sync(kMask, partial, 3);
-                target[3] = __shfl_sync(kMask, partial, 4);
+                target[4] = source[4];
+                target[5] = source[5];
+                target[6] = source[6];
+                target[7] = source[7];
+                target[8] = source[8];
+                target[9] = source[9];
+                if (!doPhi) {
+                    target[0] = source[0];
+                }
             } else {
-                if (leader) {
-                    target[targetIndex] = partial;
+                // Top-rank coefficients and the trace copy through unchanged.
+                for (int index = 4 + lane; index <= 9; index += 32) {
+                    target[index] = source[index];
+                }
+                // Lane zero led the potential group, so this restore is same-thread.
+                if (!doPhi && lane == 0) {
+                    target[0] = source[0];
                 }
             }
+            // The caller may overwrite shared source storage from lane zero on
+            // return. Finish EVERY lane source read (and every target write)
+            // before permitting that write.
+            __syncwarp(kMask);
         }
-        if constexpr (kReplicate) {
-            target[4] = source[4];
-            target[5] = source[5];
-            target[6] = source[6];
-            target[7] = source[7];
-            target[8] = source[8];
-            target[9] = source[9];
-            if (!doPhi) {
-                target[0] = source[0];
-            }
-        } else {
-            // Top-rank coefficients and the trace copy through unchanged.
-            for (int index = 4 + lane; index <= 9; index += 32) {
-                target[index] = source[index];
-            }
-            // Lane zero led the potential group, so this restore is same-thread.
-            if (!doPhi && lane == 0) {
-                target[0] = source[0];
-            }
-        }
-        // The caller may overwrite shared source storage from lane zero on
-        // return. Finish EVERY lane source read (and every target write)
-        // before permitting that write.
-        __syncwarp(kMask);
-    }
-};
+    };
 #endif
 
+}    // namespace detail
 #endif
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 4) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 4)
 // FMM order 4: source degree 2, local degree 3.
 template <int order>
-class M2mKernel;
+class M2M;
 template <int order, bool withTrace>
-class L2lKernel;
+class L2L;
 
 template <>
-class M2mKernel<2> {
+class M2M<2> {
 public:
     static constexpr int kFlops_ = 62;
     static constexpr int kWeightedFlops_ = 45;
@@ -708,7 +710,7 @@ public:
 };
 
 template <>
-class L2lKernel<3, false> {
+class L2L<3, false> {
 public:
     static constexpr int kFlops_ = 169;
     static constexpr int kWeightedFlops_ = 98;
@@ -853,7 +855,7 @@ public:
 };
 
 template <>
-class L2lKernel<3, true> {
+class L2L<3, true> {
 public:
     static constexpr int kFlops_ = 175;
     static constexpr int kWeightedFlops_ = 101;
@@ -1003,7 +1005,7 @@ public:
 };
 
 template <>
-class P2mKernel<2> {
+class P2M<2> {
 public:
     static constexpr int kFlops_ = 31;
     static constexpr int kWeightedFlops_ = 21;
@@ -1051,7 +1053,7 @@ public:
 };
 
 template <>
-class P2lKernel<3> {
+class P2L<3> {
 public:
     static constexpr int kFlops_ = 57;
     static constexpr int kWeightedFlops_ = 42;
@@ -1140,7 +1142,7 @@ public:
 };
 
 template <>
-class M2pKernel<2, true> {
+class M2P<2, true> {
 public:
     static constexpr int kFlops_ = 45;
     static constexpr int kWeightedFlops_ = 28;
@@ -1191,7 +1193,7 @@ public:
 };
 
 template <>
-class M2pKernel<2, false> {
+class M2P<2, false> {
 public:
     static constexpr int kFlops_ = 59;
     static constexpr int kWeightedFlops_ = 39;
@@ -1253,7 +1255,7 @@ public:
 };
 
 template <>
-class L2pKernel<3, false> {
+class L2P<3, false> {
 public:
     static constexpr int kFlops_ = 113;
     static constexpr int kWeightedFlops_ = 69;
@@ -1345,7 +1347,7 @@ public:
 };
 
 template <>
-class L2pKernel<3, true> {
+class L2P<3, true> {
 public:
     static constexpr int kFlops_ = 117;
     static constexpr int kWeightedFlops_ = 71;
@@ -1438,253 +1440,256 @@ public:
     }
 };
 
+namespace detail {
 #ifdef __CUDACC__
-// Read-only GLOBAL storage: row/lane loads coalesce instead of serializing
-// divergent constant-memory accesses. Internal linkage needs no device RDC.
-// Entry layout: basis | primary << 8 | secondary << 16 | kind << 24.
-static __device__ unsigned int const l2lWarpSchedule3[8][32] = {
-    {16777473u, 16777730u, 16778241u, 16778498u, 16778497u, 16778754u, 16779009u, 16779266u,
-        16779521u, 16779777u, 16780033u, 16780545u, 16780801u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-    {16777987u, 16778244u, 16779011u, 16779524u, 16779267u, 16779780u, 33818115u, 16780548u,
-        16779778u, 16780034u, 16780290u, 16780802u, 16781058u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-    {16778501u, 16778758u, 16779781u, 16780038u, 16780037u, 16780294u, 16780805u, 16781062u,
-        16780547u, 16780803u, 16781059u, 34147075u, 34212867u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-    {16779015u, 16779272u, 16780551u, 16780808u, 16780807u, 16781064u, 34147079u, 34212872u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-    {16779529u, 16779786u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-    {16780043u, 16780300u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-    {16780557u, 16780814u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-    {16781071u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-};
-// Per phase, the output coefficient reduced by each lane's group. Inactive
-// lanes hold zero and are excluded by the generated active-lane bounds.
-static __device__ unsigned char const l2lWarpTargets3[1][32] = {
-    {0u, 0u, 1u, 1u, 2u, 2u, 3u, 3u, 4u, 5u, 6u, 7u, 8u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-};
+    // Read-only GLOBAL storage: row/lane loads coalesce instead of serializing
+    // divergent constant-memory accesses. Internal linkage needs no device RDC.
+    // Entry layout: basis | primary << 8 | secondary << 16 | kind << 24.
+    static __device__ unsigned int const l2lWarpSchedule3[8][32] = {
+        {16777473u, 16777730u, 16778241u, 16778498u, 16778497u, 16778754u, 16779009u, 16779266u,
+            16779521u, 16779777u, 16780033u, 16780545u, 16780801u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {16777987u, 16778244u, 16779011u, 16779524u, 16779267u, 16779780u, 33818115u, 16780548u,
+            16779778u, 16780034u, 16780290u, 16780802u, 16781058u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {16778501u, 16778758u, 16779781u, 16780038u, 16780037u, 16780294u, 16780805u, 16781062u,
+            16780547u, 16780803u, 16781059u, 34147075u, 34212867u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {16779015u, 16779272u, 16780551u, 16780808u, 16780807u, 16781064u, 34147079u, 34212872u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u},
+        {16779529u, 16779786u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {16780043u, 16780300u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {16780557u, 16780814u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {16781071u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+    };
+    // Per phase, the output coefficient reduced by each lane's group. Inactive
+    // lanes hold zero and are excluded by the generated active-lane bounds.
+    static __device__ unsigned char const l2lWarpTargets3[1][32] = {
+        {0u, 0u, 1u, 1u, 2u, 2u, 3u, 3u, 4u, 5u, 6u, 7u, 8u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+    };
 
-template <int order, bool withTrace>
-class L2lWarpKernel;
-template <>
-class L2lWarpKernel<3, true> {
-public:
-    // Whole-warp emitted floating arithmetic; a fused operation counts twice.
-    // Includes replicated basis work and padded rows, excludes index/shuffle work.
-    static constexpr int kFlops_ = 2127;
-    static constexpr int kFlopsNoPotential_ = 1675;
-    static constexpr int kWeightedFlops_ = 1869;
-    static constexpr int kWeightedFlopsNoPotential_ = 1418;
-    static constexpr int kDegree_ = 3;
-    static constexpr int kTraceIndex_ = 16;
-    static constexpr int kCoefficients_ = 17;
-    static constexpr int kBasisWords_ = 1;
-    static constexpr int kScheduleRows_ = 8;
-    static constexpr int kPhases_ = 1;
-    template <typename Real, typename Expansion, typename Source>
-    __device__ static void translate(Expansion& target, Source const& source, Real const dx,
-        Real const dy, Real const dz, bool doPhi) {
-        // Contract: all 32 lanes enter with identical source/geometry; target
-        // is private per lane. Every lane receives the complete expansion.
-        execute<true>(target, source, dx, dy, dz, doPhi);
-    }
-    template <typename Real, typename Source>
-    __device__ static void translateInto(Real* target, Source const& source, Real const dx,
-        Real const dy, Real const dz, bool doPhi) {
-        // Contract: all 32 lanes enter with identical source/geometry; target
-        // addresses 17 values that never alias source. Group leaders store
-        // their coefficient once; strided lanes copy the unchanged ones. Every
-        // source read and target write is complete when this returns.
-        execute<false>(target, source, dx, dy, dz, doPhi);
-    }
+    template <int order, bool withTrace>
+    class L2LWarp;
+    template <>
+    class L2LWarp<3, true> {
+    public:
+        // Whole-warp emitted floating arithmetic; a fused operation counts twice.
+        // Includes replicated basis work and padded rows, excludes index/shuffle work.
+        static constexpr int kFlops_ = 2127;
+        static constexpr int kFlopsNoPotential_ = 1675;
+        static constexpr int kWeightedFlops_ = 1869;
+        static constexpr int kWeightedFlopsNoPotential_ = 1418;
+        static constexpr int kDegree_ = 3;
+        static constexpr int kTraceIndex_ = 16;
+        static constexpr int kCoefficients_ = 17;
+        static constexpr int kBasisWords_ = 1;
+        static constexpr int kScheduleRows_ = 8;
+        static constexpr int kPhases_ = 1;
+        template <typename Real, typename Expansion, typename Source>
+        __device__ static void translate(Expansion& target, Source const& source, Real const dx,
+            Real const dy, Real const dz, bool doPhi) {
+            // Contract: all 32 lanes enter with identical source/geometry; target
+            // is private per lane. Every lane receives the complete expansion.
+            execute<true>(target, source, dx, dy, dz, doPhi);
+        }
+        template <typename Real, typename Source>
+        __device__ static void translateInto(Real* target, Source const& source, Real const dx,
+            Real const dy, Real const dz, bool doPhi) {
+            // Contract: all 32 lanes enter with identical source/geometry; target
+            // addresses 17 values that never alias source. Group leaders store
+            // their coefficient once; strided lanes copy the unchanged ones. Every
+            // source read and target write is complete when this returns.
+            execute<false>(target, source, dx, dy, dz, doPhi);
+        }
 
-private:
-    template <bool kReplicate, typename Real, typename Target, typename Source>
-    __device__ static void execute(Target& target, Source const& source, Real const dx,
-        Real const dy, Real const dz, bool doPhi) {
-        int const lane = threadIdx.x & 31;
-        constexpr unsigned int kMask = 0xffffffffu;
-        // 1 register(s) per lane hold the complete distributed Taylor basis:
-        // basis index i lives in word i >> 5 on lane i & 31. Shuffles avoid a
-        // large register-selection tree for dynamic indexing.
-        Real basis0 = simdBroadcast<Real>(0);
-        [[maybe_unused]] constexpr auto kCoefficient1 = 1;
-        [[maybe_unused]] constexpr auto kCoefficient8 = 1.0 / 2.0;
-        [[maybe_unused]] constexpr auto kCoefficient20 = 1.0 / 6.0;
-        Real const t5 = dx * dx;
-        Real const t6 = dy * dy;
-        Real const t7 = dz * dz;
-        Real const t10 = t6 * simdBroadcast<Real>(kCoefficient8);
-        Real const t12 = t7 * simdBroadcast<Real>(kCoefficient8);
-        Real const t14 = t10 - t12;
-        Real const t15 = dx * dy;
-        Real const t16 = t5 * simdBroadcast<Real>(kCoefficient8);
-        Real const t17 = t16 - t12;
-        Real const t18 = dy * dz;
-        Real const t19 = dx * dz;
-        if (lane == 0) {
-            basis0 = simdBroadcast<Real>(kCoefficient1);
-        }
-        if (lane == 1) {
-            basis0 = dy;
-        }
-        if (lane == 2) {
-            basis0 = dx;
-        }
-        if (lane == 3) {
-            basis0 = dz;
-        }
-        if (lane == 4) {
-            basis0 = t14;
-        }
-        if (lane == 5) {
-            basis0 = t15;
-        }
-        if (lane == 6) {
-            basis0 = t17;
-        }
-        if (lane == 7) {
-            basis0 = t18;
-        }
-        if (lane == 8) {
-            basis0 = t19;
-        }
-        if (doPhi) {
-            Real const t21 = t6 * simdBroadcast<Real>(kCoefficient20);
-            Real const t22 = t21 - t12;
-            Real const t23 = dy * t22;
-            Real const t24 = dx * t14;
-            Real const t25 = dy * t17;
-            Real const t26 = t5 * simdBroadcast<Real>(kCoefficient20);
-            Real const t27 = t26 - t12;
-            Real const t28 = dx * t27;
-            Real const t31 = t7 * simdBroadcast<Real>(kCoefficient20);
-            Real const t32 = t10 - t31;
-            Real const t33 = dz * t32;
-            Real const t34 = dz * t15;
-            Real const t37 = t16 - t31;
-            Real const t38 = dz * t37;
-            if (lane == 9) {
-                basis0 = t23;
+    private:
+        template <bool kReplicate, typename Real, typename Target, typename Source>
+        __device__ static void execute(Target& target, Source const& source, Real const dx,
+            Real const dy, Real const dz, bool doPhi) {
+            int const lane = threadIdx.x & 31;
+            constexpr unsigned int kMask = 0xffffffffu;
+            // 1 register(s) per lane hold the complete distributed Taylor basis:
+            // basis index i lives in word i >> 5 on lane i & 31. Shuffles avoid a
+            // large register-selection tree for dynamic indexing.
+            Real basis0 = simdBroadcast<Real>(0);
+            [[maybe_unused]] constexpr auto kCoefficient1 = 1;
+            [[maybe_unused]] constexpr auto kCoefficient8 = 1.0 / 2.0;
+            [[maybe_unused]] constexpr auto kCoefficient20 = 1.0 / 6.0;
+            Real const t5 = dx * dx;
+            Real const t6 = dy * dy;
+            Real const t7 = dz * dz;
+            Real const t10 = t6 * simdBroadcast<Real>(kCoefficient8);
+            Real const t12 = t7 * simdBroadcast<Real>(kCoefficient8);
+            Real const t14 = t10 - t12;
+            Real const t15 = dx * dy;
+            Real const t16 = t5 * simdBroadcast<Real>(kCoefficient8);
+            Real const t17 = t16 - t12;
+            Real const t18 = dy * dz;
+            Real const t19 = dx * dz;
+            if (lane == 0) {
+                basis0 = simdBroadcast<Real>(kCoefficient1);
             }
-            if (lane == 10) {
-                basis0 = t24;
+            if (lane == 1) {
+                basis0 = dy;
             }
-            if (lane == 11) {
-                basis0 = t25;
+            if (lane == 2) {
+                basis0 = dx;
             }
-            if (lane == 12) {
-                basis0 = t28;
+            if (lane == 3) {
+                basis0 = dz;
             }
-            if (lane == 13) {
-                basis0 = t33;
+            if (lane == 4) {
+                basis0 = t14;
             }
-            if (lane == 14) {
-                basis0 = t34;
-            }
-            if (lane == 15) {
-                basis0 = t38;
-            }
-        }
-        {
-            // Fixed contraction phase 0: 8 rows, 9 outputs.
-            int const groupWidth = lane < 8 ? 2 : (lane < 13 ? 1 : (1));
-            int const targetIndex = __ldg(&l2lWarpTargets3[0][lane]);
-            Real partial = simdBroadcast<Real>(0);
-#pragma unroll
-            for (int row = 0; row < 8; ++row) {
-                unsigned int entry = __ldg(&l2lWarpSchedule3[row][lane]);
-                if (!doPhi && lane < 2) {
-                    entry = 0u;
-                }
-                int const basisIndex = entry & 255u;
-                int const primaryIndex = (entry >> 8) & 255u;
-                int const secondaryIndex = (entry >> 16) & 255u;
-                int const kind = (entry >> 24) & 3u;
-                Real const sourceValue =
-                    source[primaryIndex] + simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
-                Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
-                Real const basisValue = basisValue0;
-                Real const weight =
-                    simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
-                partial = simdFma(weight, sourceValue, partial);
-            }
-            Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-            partial +=
-                (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
-            bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 13;
-            if (leader) {
-                partial += source[targetIndex];
-            }
-            if (doPhi && lane == 0) {
-                partial = simdFma(simdBroadcast<Real>(0.5) * dz * dz, source[16], partial);
+            if (lane == 5) {
+                basis0 = t15;
             }
             if (lane == 6) {
-                partial = simdFma(dz, source[16], partial);
+                basis0 = t17;
             }
-            if constexpr (kReplicate) {
-                target[0] = __shfl_sync(kMask, partial, 0);
-                target[1] = __shfl_sync(kMask, partial, 2);
-                target[2] = __shfl_sync(kMask, partial, 4);
-                target[3] = __shfl_sync(kMask, partial, 6);
-                target[4] = __shfl_sync(kMask, partial, 8);
-                target[5] = __shfl_sync(kMask, partial, 9);
-                target[6] = __shfl_sync(kMask, partial, 10);
-                target[7] = __shfl_sync(kMask, partial, 11);
-                target[8] = __shfl_sync(kMask, partial, 12);
-            } else {
-                if (leader) {
-                    target[targetIndex] = partial;
+            if (lane == 7) {
+                basis0 = t18;
+            }
+            if (lane == 8) {
+                basis0 = t19;
+            }
+            if (doPhi) {
+                Real const t21 = t6 * simdBroadcast<Real>(kCoefficient20);
+                Real const t22 = t21 - t12;
+                Real const t23 = dy * t22;
+                Real const t24 = dx * t14;
+                Real const t25 = dy * t17;
+                Real const t26 = t5 * simdBroadcast<Real>(kCoefficient20);
+                Real const t27 = t26 - t12;
+                Real const t28 = dx * t27;
+                Real const t31 = t7 * simdBroadcast<Real>(kCoefficient20);
+                Real const t32 = t10 - t31;
+                Real const t33 = dz * t32;
+                Real const t34 = dz * t15;
+                Real const t37 = t16 - t31;
+                Real const t38 = dz * t37;
+                if (lane == 9) {
+                    basis0 = t23;
+                }
+                if (lane == 10) {
+                    basis0 = t24;
+                }
+                if (lane == 11) {
+                    basis0 = t25;
+                }
+                if (lane == 12) {
+                    basis0 = t28;
+                }
+                if (lane == 13) {
+                    basis0 = t33;
+                }
+                if (lane == 14) {
+                    basis0 = t34;
+                }
+                if (lane == 15) {
+                    basis0 = t38;
                 }
             }
+            {
+                // Fixed contraction phase 0: 8 rows, 9 outputs.
+                int const groupWidth = lane < 8 ? 2 : (lane < 13 ? 1 : (1));
+                int const targetIndex = __ldg(&l2lWarpTargets3[0][lane]);
+                Real partial = simdBroadcast<Real>(0);
+#pragma unroll
+                for (int row = 0; row < 8; ++row) {
+                    unsigned int entry = __ldg(&l2lWarpSchedule3[row][lane]);
+                    if (!doPhi && lane < 2) {
+                        entry = 0u;
+                    }
+                    int const basisIndex = entry & 255u;
+                    int const primaryIndex = (entry >> 8) & 255u;
+                    int const secondaryIndex = (entry >> 16) & 255u;
+                    int const kind = (entry >> 24) & 3u;
+                    Real const sourceValue = source[primaryIndex] +
+                        simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
+                    Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
+                    Real const basisValue = basisValue0;
+                    Real const weight =
+                        simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
+                    partial = simdFma(weight, sourceValue, partial);
+                }
+                Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
+                partial +=
+                    (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
+                bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 13;
+                if (leader) {
+                    partial += source[targetIndex];
+                }
+                if (doPhi && lane == 0) {
+                    partial = simdFma(simdBroadcast<Real>(0.5) * dz * dz, source[16], partial);
+                }
+                if (lane == 6) {
+                    partial = simdFma(dz, source[16], partial);
+                }
+                if constexpr (kReplicate) {
+                    target[0] = __shfl_sync(kMask, partial, 0);
+                    target[1] = __shfl_sync(kMask, partial, 2);
+                    target[2] = __shfl_sync(kMask, partial, 4);
+                    target[3] = __shfl_sync(kMask, partial, 6);
+                    target[4] = __shfl_sync(kMask, partial, 8);
+                    target[5] = __shfl_sync(kMask, partial, 9);
+                    target[6] = __shfl_sync(kMask, partial, 10);
+                    target[7] = __shfl_sync(kMask, partial, 11);
+                    target[8] = __shfl_sync(kMask, partial, 12);
+                } else {
+                    if (leader) {
+                        target[targetIndex] = partial;
+                    }
+                }
+            }
+            if constexpr (kReplicate) {
+                target[9] = source[9];
+                target[10] = source[10];
+                target[11] = source[11];
+                target[12] = source[12];
+                target[13] = source[13];
+                target[14] = source[14];
+                target[15] = source[15];
+                target[16] = source[16];
+                if (!doPhi) {
+                    target[0] = source[0];
+                }
+            } else {
+                // Top-rank coefficients and the trace copy through unchanged.
+                for (int index = 9 + lane; index <= 16; index += 32) {
+                    target[index] = source[index];
+                }
+                // Lane zero led the potential group, so this restore is same-thread.
+                if (!doPhi && lane == 0) {
+                    target[0] = source[0];
+                }
+            }
+            // The caller may overwrite shared source storage from lane zero on
+            // return. Finish EVERY lane source read (and every target write)
+            // before permitting that write.
+            __syncwarp(kMask);
         }
-        if constexpr (kReplicate) {
-            target[9] = source[9];
-            target[10] = source[10];
-            target[11] = source[11];
-            target[12] = source[12];
-            target[13] = source[13];
-            target[14] = source[14];
-            target[15] = source[15];
-            target[16] = source[16];
-            if (!doPhi) {
-                target[0] = source[0];
-            }
-        } else {
-            // Top-rank coefficients and the trace copy through unchanged.
-            for (int index = 9 + lane; index <= 16; index += 32) {
-                target[index] = source[index];
-            }
-            // Lane zero led the potential group, so this restore is same-thread.
-            if (!doPhi && lane == 0) {
-                target[0] = source[0];
-            }
-        }
-        // The caller may overwrite shared source storage from lane zero on
-        // return. Finish EVERY lane source read (and every target write)
-        // before permitting that write.
-        __syncwarp(kMask);
-    }
-};
+    };
 #endif
 
+}    // namespace detail
 #endif
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 5) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 5)
 // FMM order 5: source degree 3, local degree 4.
 template <int order>
-class M2mKernel;
+class M2M;
 template <int order, bool withTrace>
-class L2lKernel;
+class L2L;
 
 template <>
-class M2mKernel<3> {
+class M2M<3> {
 public:
     static constexpr int kFlops_ = 188;
     static constexpr int kWeightedFlops_ = 132;
@@ -1839,7 +1844,7 @@ public:
 };
 
 template <>
-class L2lKernel<4, false> {
+class L2L<4, false> {
 public:
     static constexpr int kFlops_ = 369;
     static constexpr int kWeightedFlops_ = 209;
@@ -2116,7 +2121,7 @@ public:
 };
 
 template <>
-class L2lKernel<4, true> {
+class L2L<4, true> {
 public:
     static constexpr int kFlops_ = 375;
     static constexpr int kWeightedFlops_ = 212;
@@ -2398,7 +2403,7 @@ public:
 };
 
 template <>
-class P2mKernel<3> {
+class P2M<3> {
 public:
     static constexpr int kFlops_ = 84;
     static constexpr int kWeightedFlops_ = 59;
@@ -2500,7 +2505,7 @@ public:
 };
 
 template <>
-class P2lKernel<4> {
+class P2L<4> {
 public:
     static constexpr int kFlops_ = 99;
     static constexpr int kWeightedFlops_ = 72;
@@ -2640,7 +2645,7 @@ public:
 };
 
 template <>
-class M2pKernel<3, true> {
+class M2P<3, true> {
 public:
     static constexpr int kFlops_ = 102;
     static constexpr int kWeightedFlops_ = 67;
@@ -2733,7 +2738,7 @@ public:
 };
 
 template <>
-class M2pKernel<3, false> {
+class M2P<3, false> {
 public:
     static constexpr int kFlops_ = 116;
     static constexpr int kWeightedFlops_ = 78;
@@ -2837,7 +2842,7 @@ public:
 };
 
 template <>
-class L2pKernel<4, false> {
+class L2P<4, false> {
 public:
     static constexpr int kFlops_ = 202;
     static constexpr int kWeightedFlops_ = 124;
@@ -2987,7 +2992,7 @@ public:
 };
 
 template <>
-class L2pKernel<4, true> {
+class L2P<4, true> {
 public:
     static constexpr int kFlops_ = 206;
     static constexpr int kWeightedFlops_ = 126;
@@ -3138,327 +3143,330 @@ public:
     }
 };
 
+namespace detail {
 #ifdef __CUDACC__
-// Read-only GLOBAL storage: row/lane loads coalesce instead of serializing
-// divergent constant-memory accesses. Internal linkage needs no device RDC.
-// Entry layout: basis | primary << 8 | secondary << 16 | kind << 24.
-static __device__ unsigned int const l2lWarpSchedule4[8][32] = {
-    {16777473u, 16777730u, 16777987u, 16778244u, 16778241u, 16778498u, 16778497u, 16778754u,
-        16779009u, 16779266u, 16779521u, 16779778u, 16779777u, 16780034u, 16780033u, 16780290u,
-        16780545u, 16780802u, 16780801u, 16781058u, 16781313u, 16781569u, 16781825u, 16782081u,
-        16782593u, 16782849u, 16783105u, 0u, 0u, 0u, 0u, 0u},
-    {16778501u, 16778758u, 16779015u, 16779272u, 16779011u, 16779524u, 16779267u, 16779780u,
-        33818115u, 16780548u, 16780547u, 16781316u, 16780803u, 16781572u, 16781059u, 16781828u,
-        34147075u, 16782596u, 34212867u, 16782852u, 16781570u, 16781826u, 16782082u, 16782338u,
-        16782850u, 16783106u, 16783362u, 0u, 0u, 0u, 0u, 0u},
-    {16779529u, 16779786u, 16780043u, 16780300u, 16779781u, 16780038u, 16780037u, 16780294u,
-        16780805u, 16781062u, 16781573u, 16781830u, 16781829u, 16782086u, 16782085u, 16782342u,
-        16782853u, 16783110u, 16783109u, 16783366u, 16782595u, 16782851u, 16783107u, 16783363u,
-        34607619u, 34673411u, 34739203u, 0u, 0u, 0u, 0u, 0u},
-    {16780557u, 16780814u, 16781071u, 16781328u, 16780551u, 16780808u, 16780807u, 16781064u,
-        34147079u, 34212872u, 16782599u, 16782856u, 16782855u, 16783112u, 16783111u, 16783368u,
-        34607623u, 34673416u, 34673415u, 34739208u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-    {16781585u, 16781842u, 16782099u, 16782356u, 16781321u, 16781578u, 16781577u, 16781834u,
-        16782601u, 16782858u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u},
-    {16782613u, 16782870u, 16783127u, 16783384u, 16781835u, 16782092u, 16782091u, 16782348u,
-        16783115u, 16783372u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u},
-    {0u, 0u, 0u, 0u, 16782605u, 16782862u, 16782861u, 16783118u, 34607629u, 34673422u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-    {0u, 0u, 0u, 0u, 16783119u, 0u, 16783375u, 0u, 34739215u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-};
-// Per phase, the output coefficient reduced by each lane's group. Inactive
-// lanes hold zero and are excluded by the generated active-lane bounds.
-static __device__ unsigned char const l2lWarpTargets4[1][32] = {
-    {0u, 0u, 0u, 0u, 1u, 1u, 2u, 2u, 3u, 3u, 4u, 4u, 5u, 5u, 6u, 6u, 7u, 7u, 8u, 8u, 9u, 10u, 11u,
-        12u, 13u, 14u, 15u, 0u, 0u, 0u, 0u, 0u},
-};
+    // Read-only GLOBAL storage: row/lane loads coalesce instead of serializing
+    // divergent constant-memory accesses. Internal linkage needs no device RDC.
+    // Entry layout: basis | primary << 8 | secondary << 16 | kind << 24.
+    static __device__ unsigned int const l2lWarpSchedule4[8][32] = {
+        {16777473u, 16777730u, 16777987u, 16778244u, 16778241u, 16778498u, 16778497u, 16778754u,
+            16779009u, 16779266u, 16779521u, 16779778u, 16779777u, 16780034u, 16780033u, 16780290u,
+            16780545u, 16780802u, 16780801u, 16781058u, 16781313u, 16781569u, 16781825u, 16782081u,
+            16782593u, 16782849u, 16783105u, 0u, 0u, 0u, 0u, 0u},
+        {16778501u, 16778758u, 16779015u, 16779272u, 16779011u, 16779524u, 16779267u, 16779780u,
+            33818115u, 16780548u, 16780547u, 16781316u, 16780803u, 16781572u, 16781059u, 16781828u,
+            34147075u, 16782596u, 34212867u, 16782852u, 16781570u, 16781826u, 16782082u, 16782338u,
+            16782850u, 16783106u, 16783362u, 0u, 0u, 0u, 0u, 0u},
+        {16779529u, 16779786u, 16780043u, 16780300u, 16779781u, 16780038u, 16780037u, 16780294u,
+            16780805u, 16781062u, 16781573u, 16781830u, 16781829u, 16782086u, 16782085u, 16782342u,
+            16782853u, 16783110u, 16783109u, 16783366u, 16782595u, 16782851u, 16783107u, 16783363u,
+            34607619u, 34673411u, 34739203u, 0u, 0u, 0u, 0u, 0u},
+        {16780557u, 16780814u, 16781071u, 16781328u, 16780551u, 16780808u, 16780807u, 16781064u,
+            34147079u, 34212872u, 16782599u, 16782856u, 16782855u, 16783112u, 16783111u, 16783368u,
+            34607623u, 34673416u, 34673415u, 34739208u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u},
+        {16781585u, 16781842u, 16782099u, 16782356u, 16781321u, 16781578u, 16781577u, 16781834u,
+            16782601u, 16782858u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u},
+        {16782613u, 16782870u, 16783127u, 16783384u, 16781835u, 16782092u, 16782091u, 16782348u,
+            16783115u, 16783372u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u},
+        {0u, 0u, 0u, 0u, 16782605u, 16782862u, 16782861u, 16783118u, 34607629u, 34673422u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {0u, 0u, 0u, 0u, 16783119u, 0u, 16783375u, 0u, 34739215u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+    };
+    // Per phase, the output coefficient reduced by each lane's group. Inactive
+    // lanes hold zero and are excluded by the generated active-lane bounds.
+    static __device__ unsigned char const l2lWarpTargets4[1][32] = {
+        {0u, 0u, 0u, 0u, 1u, 1u, 2u, 2u, 3u, 3u, 4u, 4u, 5u, 5u, 6u, 6u, 7u, 7u, 8u, 8u, 9u, 10u,
+            11u, 12u, 13u, 14u, 15u, 0u, 0u, 0u, 0u, 0u},
+    };
 
-template <int order, bool withTrace>
-class L2lWarpKernel;
-template <>
-class L2lWarpKernel<4, true> {
-public:
-    // Whole-warp emitted floating arithmetic; a fused operation counts twice.
-    // Includes replicated basis work and padded rows, excludes index/shuffle work.
-    static constexpr int kFlops_ = 2998;
-    static constexpr int kFlopsNoPotential_ = 2162;
-    static constexpr int kWeightedFlops_ = 2740;
-    static constexpr int kWeightedFlopsNoPotential_ = 1905;
-    static constexpr int kDegree_ = 4;
-    static constexpr int kTraceIndex_ = 25;
-    static constexpr int kCoefficients_ = 26;
-    static constexpr int kBasisWords_ = 1;
-    static constexpr int kScheduleRows_ = 8;
-    static constexpr int kPhases_ = 1;
-    template <typename Real, typename Expansion, typename Source>
-    __device__ static void translate(Expansion& target, Source const& source, Real const dx,
-        Real const dy, Real const dz, bool doPhi) {
-        // Contract: all 32 lanes enter with identical source/geometry; target
-        // is private per lane. Every lane receives the complete expansion.
-        execute<true>(target, source, dx, dy, dz, doPhi);
-    }
-    template <typename Real, typename Source>
-    __device__ static void translateInto(Real* target, Source const& source, Real const dx,
-        Real const dy, Real const dz, bool doPhi) {
-        // Contract: all 32 lanes enter with identical source/geometry; target
-        // addresses 26 values that never alias source. Group leaders store
-        // their coefficient once; strided lanes copy the unchanged ones. Every
-        // source read and target write is complete when this returns.
-        execute<false>(target, source, dx, dy, dz, doPhi);
-    }
+    template <int order, bool withTrace>
+    class L2LWarp;
+    template <>
+    class L2LWarp<4, true> {
+    public:
+        // Whole-warp emitted floating arithmetic; a fused operation counts twice.
+        // Includes replicated basis work and padded rows, excludes index/shuffle work.
+        static constexpr int kFlops_ = 2998;
+        static constexpr int kFlopsNoPotential_ = 2162;
+        static constexpr int kWeightedFlops_ = 2740;
+        static constexpr int kWeightedFlopsNoPotential_ = 1905;
+        static constexpr int kDegree_ = 4;
+        static constexpr int kTraceIndex_ = 25;
+        static constexpr int kCoefficients_ = 26;
+        static constexpr int kBasisWords_ = 1;
+        static constexpr int kScheduleRows_ = 8;
+        static constexpr int kPhases_ = 1;
+        template <typename Real, typename Expansion, typename Source>
+        __device__ static void translate(Expansion& target, Source const& source, Real const dx,
+            Real const dy, Real const dz, bool doPhi) {
+            // Contract: all 32 lanes enter with identical source/geometry; target
+            // is private per lane. Every lane receives the complete expansion.
+            execute<true>(target, source, dx, dy, dz, doPhi);
+        }
+        template <typename Real, typename Source>
+        __device__ static void translateInto(Real* target, Source const& source, Real const dx,
+            Real const dy, Real const dz, bool doPhi) {
+            // Contract: all 32 lanes enter with identical source/geometry; target
+            // addresses 26 values that never alias source. Group leaders store
+            // their coefficient once; strided lanes copy the unchanged ones. Every
+            // source read and target write is complete when this returns.
+            execute<false>(target, source, dx, dy, dz, doPhi);
+        }
 
-private:
-    template <bool kReplicate, typename Real, typename Target, typename Source>
-    __device__ static void execute(Target& target, Source const& source, Real const dx,
-        Real const dy, Real const dz, bool doPhi) {
-        int const lane = threadIdx.x & 31;
-        constexpr unsigned int kMask = 0xffffffffu;
-        // 1 register(s) per lane hold the complete distributed Taylor basis:
-        // basis index i lives in word i >> 5 on lane i & 31. Shuffles avoid a
-        // large register-selection tree for dynamic indexing.
-        Real basis0 = simdBroadcast<Real>(0);
-        [[maybe_unused]] constexpr auto kCoefficient1 = 1;
-        [[maybe_unused]] constexpr auto kCoefficient8 = 1.0 / 2.0;
-        [[maybe_unused]] constexpr auto kCoefficient20 = 1.0 / 6.0;
-        [[maybe_unused]] constexpr auto kCoefficient39 = 1.0 / 24.0;
-        [[maybe_unused]] constexpr auto kCoefficient43 = 1.0 / 4.0;
-        [[maybe_unused]] constexpr auto kCoefficient58 = 1.0 / 12.0;
-        Real const t5 = dx * dx;
-        Real const t6 = dy * dy;
-        Real const t7 = dz * dz;
-        Real const t10 = t6 * simdBroadcast<Real>(kCoefficient8);
-        Real const t12 = t7 * simdBroadcast<Real>(kCoefficient8);
-        Real const t14 = t10 - t12;
-        Real const t15 = dx * dy;
-        Real const t16 = t5 * simdBroadcast<Real>(kCoefficient8);
-        Real const t17 = t16 - t12;
-        Real const t18 = dy * dz;
-        Real const t19 = dx * dz;
-        Real const t21 = t6 * simdBroadcast<Real>(kCoefficient20);
-        Real const t22 = t21 - t12;
-        Real const t23 = dy * t22;
-        Real const t24 = dx * t14;
-        Real const t25 = dy * t17;
-        Real const t26 = t5 * simdBroadcast<Real>(kCoefficient20);
-        Real const t27 = t26 - t12;
-        Real const t28 = dx * t27;
-        Real const t31 = t7 * simdBroadcast<Real>(kCoefficient20);
-        Real const t32 = t10 - t31;
-        Real const t33 = dz * t32;
-        Real const t34 = dz * t15;
-        Real const t37 = t16 - t31;
-        Real const t38 = dz * t37;
-        if (lane == 0) {
-            basis0 = simdBroadcast<Real>(kCoefficient1);
-        }
-        if (lane == 1) {
-            basis0 = dy;
-        }
-        if (lane == 2) {
-            basis0 = dx;
-        }
-        if (lane == 3) {
-            basis0 = dz;
-        }
-        if (lane == 4) {
-            basis0 = t14;
-        }
-        if (lane == 5) {
-            basis0 = t15;
-        }
-        if (lane == 6) {
-            basis0 = t17;
-        }
-        if (lane == 7) {
-            basis0 = t18;
-        }
-        if (lane == 8) {
-            basis0 = t19;
-        }
-        if (lane == 9) {
-            basis0 = t23;
-        }
-        if (lane == 10) {
-            basis0 = t24;
-        }
-        if (lane == 11) {
-            basis0 = t25;
-        }
-        if (lane == 12) {
-            basis0 = t28;
-        }
-        if (lane == 13) {
-            basis0 = t33;
-        }
-        if (lane == 14) {
-            basis0 = t34;
-        }
-        if (lane == 15) {
-            basis0 = t38;
-        }
-        if (doPhi) {
-            Real const t41 = t6 * simdBroadcast<Real>(kCoefficient39);
-            Real const t44 = t7 * simdBroadcast<Real>(kCoefficient43);
-            Real const t45 = t41 - t44;
-            Real const t46 = t6 * t45;
-            Real const t47 = t7 * simdBroadcast<Real>(kCoefficient39);
-            Real const t48 = t7 * t47;
-            Real const t49 = t46 + t48;
-            Real const t51 = t6 * simdBroadcast<Real>(kCoefficient43);
-            Real const t56 = t15 * t22;
-            Real const t59 = t51 - t44;
-            Real const t60 = t5 * t59;
-            Real const t63 = t7 * simdBroadcast<Real>(kCoefficient58);
-            Real const t67 = t63 - t51;
-            Real const t68 = t7 * t67;
-            Real const t69 = t60 + t68;
-            Real const t87 = t15 * t27;
-            Real const t89 = t5 * simdBroadcast<Real>(kCoefficient39);
-            Real const t90 = t89 - t44;
-            Real const t91 = t5 * t90;
-            Real const t92 = t48 + t91;
-            Real const t97 = t21 - t31;
-            Real const t98 = t18 * t97;
-            Real const t99 = t19 * t32;
-            Real const t101 = t18 * t37;
-            Real const t103 = t26 - t31;
-            Real const t104 = t19 * t103;
-            if (lane == 16) {
-                basis0 = t49;
+    private:
+        template <bool kReplicate, typename Real, typename Target, typename Source>
+        __device__ static void execute(Target& target, Source const& source, Real const dx,
+            Real const dy, Real const dz, bool doPhi) {
+            int const lane = threadIdx.x & 31;
+            constexpr unsigned int kMask = 0xffffffffu;
+            // 1 register(s) per lane hold the complete distributed Taylor basis:
+            // basis index i lives in word i >> 5 on lane i & 31. Shuffles avoid a
+            // large register-selection tree for dynamic indexing.
+            Real basis0 = simdBroadcast<Real>(0);
+            [[maybe_unused]] constexpr auto kCoefficient1 = 1;
+            [[maybe_unused]] constexpr auto kCoefficient8 = 1.0 / 2.0;
+            [[maybe_unused]] constexpr auto kCoefficient20 = 1.0 / 6.0;
+            [[maybe_unused]] constexpr auto kCoefficient39 = 1.0 / 24.0;
+            [[maybe_unused]] constexpr auto kCoefficient43 = 1.0 / 4.0;
+            [[maybe_unused]] constexpr auto kCoefficient58 = 1.0 / 12.0;
+            Real const t5 = dx * dx;
+            Real const t6 = dy * dy;
+            Real const t7 = dz * dz;
+            Real const t10 = t6 * simdBroadcast<Real>(kCoefficient8);
+            Real const t12 = t7 * simdBroadcast<Real>(kCoefficient8);
+            Real const t14 = t10 - t12;
+            Real const t15 = dx * dy;
+            Real const t16 = t5 * simdBroadcast<Real>(kCoefficient8);
+            Real const t17 = t16 - t12;
+            Real const t18 = dy * dz;
+            Real const t19 = dx * dz;
+            Real const t21 = t6 * simdBroadcast<Real>(kCoefficient20);
+            Real const t22 = t21 - t12;
+            Real const t23 = dy * t22;
+            Real const t24 = dx * t14;
+            Real const t25 = dy * t17;
+            Real const t26 = t5 * simdBroadcast<Real>(kCoefficient20);
+            Real const t27 = t26 - t12;
+            Real const t28 = dx * t27;
+            Real const t31 = t7 * simdBroadcast<Real>(kCoefficient20);
+            Real const t32 = t10 - t31;
+            Real const t33 = dz * t32;
+            Real const t34 = dz * t15;
+            Real const t37 = t16 - t31;
+            Real const t38 = dz * t37;
+            if (lane == 0) {
+                basis0 = simdBroadcast<Real>(kCoefficient1);
             }
-            if (lane == 17) {
-                basis0 = t56;
+            if (lane == 1) {
+                basis0 = dy;
             }
-            if (lane == 18) {
-                basis0 = t69;
+            if (lane == 2) {
+                basis0 = dx;
             }
-            if (lane == 19) {
-                basis0 = t87;
+            if (lane == 3) {
+                basis0 = dz;
             }
-            if (lane == 20) {
-                basis0 = t92;
+            if (lane == 4) {
+                basis0 = t14;
             }
-            if (lane == 21) {
-                basis0 = t98;
+            if (lane == 5) {
+                basis0 = t15;
             }
-            if (lane == 22) {
-                basis0 = t99;
+            if (lane == 6) {
+                basis0 = t17;
             }
-            if (lane == 23) {
-                basis0 = t101;
-            }
-            if (lane == 24) {
-                basis0 = t104;
-            }
-        }
-        {
-            // Fixed contraction phase 0: 8 rows, 16 outputs.
-            int const groupWidth = lane < 4 ? 4 : (lane < 20 ? 2 : (lane < 27 ? 1 : (1)));
-            int const targetIndex = __ldg(&l2lWarpTargets4[0][lane]);
-            Real partial = simdBroadcast<Real>(0);
-#pragma unroll
-            for (int row = 0; row < 8; ++row) {
-                unsigned int entry = __ldg(&l2lWarpSchedule4[row][lane]);
-                if (!doPhi && lane < 4) {
-                    entry = 0u;
-                }
-                int const basisIndex = entry & 255u;
-                int const primaryIndex = (entry >> 8) & 255u;
-                int const secondaryIndex = (entry >> 16) & 255u;
-                int const kind = (entry >> 24) & 3u;
-                Real const sourceValue =
-                    source[primaryIndex] + simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
-                Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
-                Real const basisValue = basisValue0;
-                Real const weight =
-                    simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
-                partial = simdFma(weight, sourceValue, partial);
-            }
-            Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
-            partial +=
-                (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : simdBroadcast<Real>(0);
-            Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-            partial +=
-                (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
-            bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 27;
-            if (leader) {
-                partial += source[targetIndex];
-            }
-            if (doPhi && lane == 0) {
-                partial = simdFma(simdBroadcast<Real>(0.5) * dz * dz, source[25], partial);
+            if (lane == 7) {
+                basis0 = t18;
             }
             if (lane == 8) {
-                partial = simdFma(dz, source[25], partial);
+                basis0 = t19;
             }
-            if constexpr (kReplicate) {
-                target[0] = __shfl_sync(kMask, partial, 0);
-                target[1] = __shfl_sync(kMask, partial, 4);
-                target[2] = __shfl_sync(kMask, partial, 6);
-                target[3] = __shfl_sync(kMask, partial, 8);
-                target[4] = __shfl_sync(kMask, partial, 10);
-                target[5] = __shfl_sync(kMask, partial, 12);
-                target[6] = __shfl_sync(kMask, partial, 14);
-                target[7] = __shfl_sync(kMask, partial, 16);
-                target[8] = __shfl_sync(kMask, partial, 18);
-                target[9] = __shfl_sync(kMask, partial, 20);
-                target[10] = __shfl_sync(kMask, partial, 21);
-                target[11] = __shfl_sync(kMask, partial, 22);
-                target[12] = __shfl_sync(kMask, partial, 23);
-                target[13] = __shfl_sync(kMask, partial, 24);
-                target[14] = __shfl_sync(kMask, partial, 25);
-                target[15] = __shfl_sync(kMask, partial, 26);
-            } else {
-                if (leader) {
-                    target[targetIndex] = partial;
+            if (lane == 9) {
+                basis0 = t23;
+            }
+            if (lane == 10) {
+                basis0 = t24;
+            }
+            if (lane == 11) {
+                basis0 = t25;
+            }
+            if (lane == 12) {
+                basis0 = t28;
+            }
+            if (lane == 13) {
+                basis0 = t33;
+            }
+            if (lane == 14) {
+                basis0 = t34;
+            }
+            if (lane == 15) {
+                basis0 = t38;
+            }
+            if (doPhi) {
+                Real const t41 = t6 * simdBroadcast<Real>(kCoefficient39);
+                Real const t44 = t7 * simdBroadcast<Real>(kCoefficient43);
+                Real const t45 = t41 - t44;
+                Real const t46 = t6 * t45;
+                Real const t47 = t7 * simdBroadcast<Real>(kCoefficient39);
+                Real const t48 = t7 * t47;
+                Real const t49 = t46 + t48;
+                Real const t51 = t6 * simdBroadcast<Real>(kCoefficient43);
+                Real const t56 = t15 * t22;
+                Real const t59 = t51 - t44;
+                Real const t60 = t5 * t59;
+                Real const t63 = t7 * simdBroadcast<Real>(kCoefficient58);
+                Real const t67 = t63 - t51;
+                Real const t68 = t7 * t67;
+                Real const t69 = t60 + t68;
+                Real const t87 = t15 * t27;
+                Real const t89 = t5 * simdBroadcast<Real>(kCoefficient39);
+                Real const t90 = t89 - t44;
+                Real const t91 = t5 * t90;
+                Real const t92 = t48 + t91;
+                Real const t97 = t21 - t31;
+                Real const t98 = t18 * t97;
+                Real const t99 = t19 * t32;
+                Real const t101 = t18 * t37;
+                Real const t103 = t26 - t31;
+                Real const t104 = t19 * t103;
+                if (lane == 16) {
+                    basis0 = t49;
+                }
+                if (lane == 17) {
+                    basis0 = t56;
+                }
+                if (lane == 18) {
+                    basis0 = t69;
+                }
+                if (lane == 19) {
+                    basis0 = t87;
+                }
+                if (lane == 20) {
+                    basis0 = t92;
+                }
+                if (lane == 21) {
+                    basis0 = t98;
+                }
+                if (lane == 22) {
+                    basis0 = t99;
+                }
+                if (lane == 23) {
+                    basis0 = t101;
+                }
+                if (lane == 24) {
+                    basis0 = t104;
                 }
             }
+            {
+                // Fixed contraction phase 0: 8 rows, 16 outputs.
+                int const groupWidth = lane < 4 ? 4 : (lane < 20 ? 2 : (lane < 27 ? 1 : (1)));
+                int const targetIndex = __ldg(&l2lWarpTargets4[0][lane]);
+                Real partial = simdBroadcast<Real>(0);
+#pragma unroll
+                for (int row = 0; row < 8; ++row) {
+                    unsigned int entry = __ldg(&l2lWarpSchedule4[row][lane]);
+                    if (!doPhi && lane < 4) {
+                        entry = 0u;
+                    }
+                    int const basisIndex = entry & 255u;
+                    int const primaryIndex = (entry >> 8) & 255u;
+                    int const secondaryIndex = (entry >> 16) & 255u;
+                    int const kind = (entry >> 24) & 3u;
+                    Real const sourceValue = source[primaryIndex] +
+                        simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
+                    Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
+                    Real const basisValue = basisValue0;
+                    Real const weight =
+                        simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
+                    partial = simdFma(weight, sourceValue, partial);
+                }
+                Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
+                partial +=
+                    (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : simdBroadcast<Real>(0);
+                Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
+                partial +=
+                    (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
+                bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 27;
+                if (leader) {
+                    partial += source[targetIndex];
+                }
+                if (doPhi && lane == 0) {
+                    partial = simdFma(simdBroadcast<Real>(0.5) * dz * dz, source[25], partial);
+                }
+                if (lane == 8) {
+                    partial = simdFma(dz, source[25], partial);
+                }
+                if constexpr (kReplicate) {
+                    target[0] = __shfl_sync(kMask, partial, 0);
+                    target[1] = __shfl_sync(kMask, partial, 4);
+                    target[2] = __shfl_sync(kMask, partial, 6);
+                    target[3] = __shfl_sync(kMask, partial, 8);
+                    target[4] = __shfl_sync(kMask, partial, 10);
+                    target[5] = __shfl_sync(kMask, partial, 12);
+                    target[6] = __shfl_sync(kMask, partial, 14);
+                    target[7] = __shfl_sync(kMask, partial, 16);
+                    target[8] = __shfl_sync(kMask, partial, 18);
+                    target[9] = __shfl_sync(kMask, partial, 20);
+                    target[10] = __shfl_sync(kMask, partial, 21);
+                    target[11] = __shfl_sync(kMask, partial, 22);
+                    target[12] = __shfl_sync(kMask, partial, 23);
+                    target[13] = __shfl_sync(kMask, partial, 24);
+                    target[14] = __shfl_sync(kMask, partial, 25);
+                    target[15] = __shfl_sync(kMask, partial, 26);
+                } else {
+                    if (leader) {
+                        target[targetIndex] = partial;
+                    }
+                }
+            }
+            if constexpr (kReplicate) {
+                target[16] = source[16];
+                target[17] = source[17];
+                target[18] = source[18];
+                target[19] = source[19];
+                target[20] = source[20];
+                target[21] = source[21];
+                target[22] = source[22];
+                target[23] = source[23];
+                target[24] = source[24];
+                target[25] = source[25];
+                if (!doPhi) {
+                    target[0] = source[0];
+                }
+            } else {
+                // Top-rank coefficients and the trace copy through unchanged.
+                for (int index = 16 + lane; index <= 25; index += 32) {
+                    target[index] = source[index];
+                }
+                // Lane zero led the potential group, so this restore is same-thread.
+                if (!doPhi && lane == 0) {
+                    target[0] = source[0];
+                }
+            }
+            // The caller may overwrite shared source storage from lane zero on
+            // return. Finish EVERY lane source read (and every target write)
+            // before permitting that write.
+            __syncwarp(kMask);
         }
-        if constexpr (kReplicate) {
-            target[16] = source[16];
-            target[17] = source[17];
-            target[18] = source[18];
-            target[19] = source[19];
-            target[20] = source[20];
-            target[21] = source[21];
-            target[22] = source[22];
-            target[23] = source[23];
-            target[24] = source[24];
-            target[25] = source[25];
-            if (!doPhi) {
-                target[0] = source[0];
-            }
-        } else {
-            // Top-rank coefficients and the trace copy through unchanged.
-            for (int index = 16 + lane; index <= 25; index += 32) {
-                target[index] = source[index];
-            }
-            // Lane zero led the potential group, so this restore is same-thread.
-            if (!doPhi && lane == 0) {
-                target[0] = source[0];
-            }
-        }
-        // The caller may overwrite shared source storage from lane zero on
-        // return. Finish EVERY lane source read (and every target write)
-        // before permitting that write.
-        __syncwarp(kMask);
-    }
-};
+    };
 #endif
 
+}    // namespace detail
 #endif
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 6) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 6)
 // FMM order 6: source degree 4, local degree 5.
 template <int order>
-class M2mKernel;
+class M2M;
 template <int order, bool withTrace>
-class L2lKernel;
+class L2L;
 
 template <>
-class M2mKernel<4> {
+class M2M<4> {
 public:
     static constexpr int kFlops_ = 439;
     static constexpr int kWeightedFlops_ = 298;
@@ -3790,7 +3798,7 @@ public:
 };
 
 template <>
-class L2lKernel<5, false> {
+class L2L<5, false> {
 public:
     static constexpr int kFlops_ = 706;
     static constexpr int kWeightedFlops_ = 393;
@@ -4275,7 +4283,7 @@ public:
 };
 
 template <>
-class L2lKernel<5, true> {
+class L2L<5, true> {
 public:
     static constexpr int kFlops_ = 712;
     static constexpr int kWeightedFlops_ = 396;
@@ -4765,7 +4773,7 @@ public:
 };
 
 template <>
-class P2mKernel<4> {
+class P2M<4> {
 public:
     static constexpr int kFlops_ = 198;
     static constexpr int kWeightedFlops_ = 141;
@@ -4978,7 +4986,7 @@ public:
 };
 
 template <>
-class P2lKernel<5> {
+class P2L<5> {
 public:
     static constexpr int kFlops_ = 152;
     static constexpr int kWeightedFlops_ = 107;
@@ -5180,7 +5188,7 @@ public:
 };
 
 template <>
-class M2pKernel<4, true> {
+class M2P<4, true> {
 public:
     static constexpr int kFlops_ = 175;
     static constexpr int kWeightedFlops_ = 118;
@@ -5328,7 +5336,7 @@ public:
 };
 
 template <>
-class M2pKernel<4, false> {
+class M2P<4, false> {
 public:
     static constexpr int kFlops_ = 189;
     static constexpr int kWeightedFlops_ = 129;
@@ -5487,7 +5495,7 @@ public:
 };
 
 template <>
-class L2pKernel<5, false> {
+class L2P<5, false> {
 public:
     static constexpr int kFlops_ = 322;
     static constexpr int kWeightedFlops_ = 199;
@@ -5714,7 +5722,7 @@ public:
 };
 
 template <>
-class L2pKernel<5, true> {
+class L2P<5, true> {
 public:
     static constexpr int kFlops_ = 326;
     static constexpr int kWeightedFlops_ = 201;
@@ -5942,476 +5950,478 @@ public:
     }
 };
 
+namespace detail {
 #ifdef __CUDACC__
-// Read-only GLOBAL storage: row/lane loads coalesce instead of serializing
-// divergent constant-memory accesses. Internal linkage needs no device RDC.
-// Entry layout: basis | primary << 8 | secondary << 16 | kind << 24.
-static __device__ unsigned int const l2lWarpSchedule5[12][32] = {
-    {16777473u, 16777730u, 16777987u, 16778244u, 16778501u, 16778758u, 16779015u, 16779272u,
-        16778241u, 16778498u, 16779011u, 16779524u, 16778497u, 16778754u, 16779267u, 16779780u,
-        16779009u, 16779266u, 33818115u, 16780548u, 16779521u, 16779778u, 16779777u, 16780034u,
-        16780033u, 16780290u, 16780545u, 16780802u, 16780801u, 16781058u, 16781313u, 16781570u},
-    {16779529u, 16779786u, 16780043u, 16780300u, 16780557u, 16780814u, 16781071u, 16781328u,
-        16779781u, 16780038u, 16780551u, 16780808u, 16780037u, 16780294u, 16780807u, 16781064u,
-        16780805u, 16781062u, 34147079u, 34212872u, 16780547u, 16781316u, 16780803u, 16781572u,
-        16781059u, 16781828u, 34147075u, 16782596u, 34212867u, 16782852u, 16782595u, 16783620u},
-    {16781585u, 16781842u, 16782099u, 16782356u, 16782613u, 16782870u, 16783127u, 16783384u,
-        16781321u, 16781578u, 16781835u, 16782092u, 16781577u, 16781834u, 16782091u, 16782348u,
-        16782601u, 16782858u, 16783115u, 16783372u, 16781573u, 16781830u, 16781829u, 16782086u,
-        16782085u, 16782342u, 16782853u, 16783110u, 16783109u, 16783366u, 16783877u, 16784134u},
-    {16783641u, 16783898u, 16784155u, 16784412u, 16784669u, 16784926u, 16785183u, 16785440u,
-        16782605u, 16782862u, 16783119u, 16783632u, 16782861u, 16783118u, 16783375u, 16783888u,
-        34607629u, 34673422u, 34739215u, 16785168u, 16782599u, 16782856u, 16782855u, 16783112u,
-        16783111u, 16783368u, 34607623u, 34673416u, 34673415u, 34739208u, 16785159u, 16785416u},
-    {16785697u, 16785954u, 16786211u, 0u, 0u, 0u, 0u, 0u, 16783889u, 16784146u, 16784403u,
-        16784660u, 16784145u, 16784402u, 16784659u, 16784916u, 16785425u, 16785682u, 16785939u,
-        16786196u, 16783625u, 16783882u, 16783881u, 16784138u, 16784137u, 16784394u, 16785161u,
-        16785418u, 16785417u, 16785674u, 0u, 0u},
-    {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 16785173u, 16785430u, 16785687u, 16785944u, 16785429u,
-        16785686u, 16785943u, 16786200u, 35199765u, 35265558u, 35331351u, 35397144u, 16784139u,
-        16784396u, 16784395u, 16784652u, 16784651u, 16784908u, 16785675u, 16785932u, 16785931u,
-        16786188u, 0u, 0u},
-    {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 16785165u,
-        16785422u, 16785421u, 16785678u, 16785677u, 16785934u, 35199757u, 35265550u, 35265549u,
-        35331342u, 0u, 0u},
-    {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 16785679u, 0u,
-        16785935u, 0u, 16786191u, 0u, 35331343u, 0u, 35397135u, 0u, 0u, 0u},
-    {16781569u, 16781826u, 16781825u, 16782082u, 16782081u, 16782338u, 16782593u, 16782850u,
-        16782849u, 16783106u, 16783105u, 16783362u, 16783617u, 16783873u, 16784129u, 16784385u,
-        16784641u, 16785153u, 16785409u, 16785665u, 16785921u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u},
-    {16782851u, 16783876u, 16783107u, 16784132u, 16783363u, 16784388u, 34607619u, 16785156u,
-        34673411u, 16785412u, 34739203u, 16785668u, 16783874u, 16784130u, 16784386u, 16784642u,
-        16784898u, 16785410u, 16785666u, 16785922u, 16786178u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u},
-    {16784133u, 16784390u, 16784389u, 16784646u, 16784645u, 16784902u, 16785413u, 16785670u,
-        16785669u, 16785926u, 16785925u, 16786182u, 16785155u, 16785411u, 16785667u, 16785923u,
-        16786179u, 35199747u, 35265539u, 35331331u, 35397123u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u},
-    {16785415u, 16785672u, 16785671u, 16785928u, 16785927u, 16786184u, 35199751u, 35265544u,
-        35265543u, 35331336u, 35331335u, 35397128u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-};
-// Per phase, the output coefficient reduced by each lane's group. Inactive
-// lanes hold zero and are excluded by the generated active-lane bounds.
-static __device__ unsigned char const l2lWarpTargets5[2][32] = {
-    {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 1u, 1u, 1u, 1u, 2u, 2u, 2u, 2u, 3u, 3u, 3u, 3u, 4u, 4u, 5u, 5u,
-        6u, 6u, 7u, 7u, 8u, 8u, 9u, 9u},
-    {10u, 10u, 11u, 11u, 12u, 12u, 13u, 13u, 14u, 14u, 15u, 15u, 16u, 17u, 18u, 19u, 20u, 21u, 22u,
-        23u, 24u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-};
+    // Read-only GLOBAL storage: row/lane loads coalesce instead of serializing
+    // divergent constant-memory accesses. Internal linkage needs no device RDC.
+    // Entry layout: basis | primary << 8 | secondary << 16 | kind << 24.
+    static __device__ unsigned int const l2lWarpSchedule5[12][32] = {
+        {16777473u, 16777730u, 16777987u, 16778244u, 16778501u, 16778758u, 16779015u, 16779272u,
+            16778241u, 16778498u, 16779011u, 16779524u, 16778497u, 16778754u, 16779267u, 16779780u,
+            16779009u, 16779266u, 33818115u, 16780548u, 16779521u, 16779778u, 16779777u, 16780034u,
+            16780033u, 16780290u, 16780545u, 16780802u, 16780801u, 16781058u, 16781313u, 16781570u},
+        {16779529u, 16779786u, 16780043u, 16780300u, 16780557u, 16780814u, 16781071u, 16781328u,
+            16779781u, 16780038u, 16780551u, 16780808u, 16780037u, 16780294u, 16780807u, 16781064u,
+            16780805u, 16781062u, 34147079u, 34212872u, 16780547u, 16781316u, 16780803u, 16781572u,
+            16781059u, 16781828u, 34147075u, 16782596u, 34212867u, 16782852u, 16782595u, 16783620u},
+        {16781585u, 16781842u, 16782099u, 16782356u, 16782613u, 16782870u, 16783127u, 16783384u,
+            16781321u, 16781578u, 16781835u, 16782092u, 16781577u, 16781834u, 16782091u, 16782348u,
+            16782601u, 16782858u, 16783115u, 16783372u, 16781573u, 16781830u, 16781829u, 16782086u,
+            16782085u, 16782342u, 16782853u, 16783110u, 16783109u, 16783366u, 16783877u, 16784134u},
+        {16783641u, 16783898u, 16784155u, 16784412u, 16784669u, 16784926u, 16785183u, 16785440u,
+            16782605u, 16782862u, 16783119u, 16783632u, 16782861u, 16783118u, 16783375u, 16783888u,
+            34607629u, 34673422u, 34739215u, 16785168u, 16782599u, 16782856u, 16782855u, 16783112u,
+            16783111u, 16783368u, 34607623u, 34673416u, 34673415u, 34739208u, 16785159u, 16785416u},
+        {16785697u, 16785954u, 16786211u, 0u, 0u, 0u, 0u, 0u, 16783889u, 16784146u, 16784403u,
+            16784660u, 16784145u, 16784402u, 16784659u, 16784916u, 16785425u, 16785682u, 16785939u,
+            16786196u, 16783625u, 16783882u, 16783881u, 16784138u, 16784137u, 16784394u, 16785161u,
+            16785418u, 16785417u, 16785674u, 0u, 0u},
+        {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 16785173u, 16785430u, 16785687u, 16785944u, 16785429u,
+            16785686u, 16785943u, 16786200u, 35199765u, 35265558u, 35331351u, 35397144u, 16784139u,
+            16784396u, 16784395u, 16784652u, 16784651u, 16784908u, 16785675u, 16785932u, 16785931u,
+            16786188u, 0u, 0u},
+        {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 16785165u,
+            16785422u, 16785421u, 16785678u, 16785677u, 16785934u, 35199757u, 35265550u, 35265549u,
+            35331342u, 0u, 0u},
+        {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 16785679u,
+            0u, 16785935u, 0u, 16786191u, 0u, 35331343u, 0u, 35397135u, 0u, 0u, 0u},
+        {16781569u, 16781826u, 16781825u, 16782082u, 16782081u, 16782338u, 16782593u, 16782850u,
+            16782849u, 16783106u, 16783105u, 16783362u, 16783617u, 16783873u, 16784129u, 16784385u,
+            16784641u, 16785153u, 16785409u, 16785665u, 16785921u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u},
+        {16782851u, 16783876u, 16783107u, 16784132u, 16783363u, 16784388u, 34607619u, 16785156u,
+            34673411u, 16785412u, 34739203u, 16785668u, 16783874u, 16784130u, 16784386u, 16784642u,
+            16784898u, 16785410u, 16785666u, 16785922u, 16786178u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u},
+        {16784133u, 16784390u, 16784389u, 16784646u, 16784645u, 16784902u, 16785413u, 16785670u,
+            16785669u, 16785926u, 16785925u, 16786182u, 16785155u, 16785411u, 16785667u, 16785923u,
+            16786179u, 35199747u, 35265539u, 35331331u, 35397123u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u},
+        {16785415u, 16785672u, 16785671u, 16785928u, 16785927u, 16786184u, 35199751u, 35265544u,
+            35265543u, 35331336u, 35331335u, 35397128u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+    };
+    // Per phase, the output coefficient reduced by each lane's group. Inactive
+    // lanes hold zero and are excluded by the generated active-lane bounds.
+    static __device__ unsigned char const l2lWarpTargets5[2][32] = {
+        {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 1u, 1u, 1u, 1u, 2u, 2u, 2u, 2u, 3u, 3u, 3u, 3u, 4u, 4u, 5u,
+            5u, 6u, 6u, 7u, 7u, 8u, 8u, 9u, 9u},
+        {10u, 10u, 11u, 11u, 12u, 12u, 13u, 13u, 14u, 14u, 15u, 15u, 16u, 17u, 18u, 19u, 20u, 21u,
+            22u, 23u, 24u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+    };
 
-template <int order, bool withTrace>
-class L2lWarpKernel;
-template <>
-class L2lWarpKernel<5, true> {
-public:
-    // Whole-warp emitted floating arithmetic; a fused operation counts twice.
-    // Includes replicated basis work and padded rows, excludes index/shuffle work.
-    static constexpr int kFlops_ = 5055;
-    static constexpr int kFlopsNoPotential_ = 3707;
-    static constexpr int kWeightedFlops_ = 4669;
-    static constexpr int kWeightedFlopsNoPotential_ = 3322;
-    static constexpr int kDegree_ = 5;
-    static constexpr int kTraceIndex_ = 36;
-    static constexpr int kCoefficients_ = 37;
-    static constexpr int kBasisWords_ = 2;
-    static constexpr int kScheduleRows_ = 12;
-    static constexpr int kPhases_ = 2;
-    template <typename Real, typename Expansion, typename Source>
-    __device__ static void translate(Expansion& target, Source const& source, Real const dx,
-        Real const dy, Real const dz, bool doPhi) {
-        // Contract: all 32 lanes enter with identical source/geometry; target
-        // is private per lane. Every lane receives the complete expansion.
-        execute<true>(target, source, dx, dy, dz, doPhi);
-    }
-    template <typename Real, typename Source>
-    __device__ static void translateInto(Real* target, Source const& source, Real const dx,
-        Real const dy, Real const dz, bool doPhi) {
-        // Contract: all 32 lanes enter with identical source/geometry; target
-        // addresses 37 values that never alias source. Group leaders store
-        // their coefficient once; strided lanes copy the unchanged ones. Every
-        // source read and target write is complete when this returns.
-        execute<false>(target, source, dx, dy, dz, doPhi);
-    }
+    template <int order, bool withTrace>
+    class L2LWarp;
+    template <>
+    class L2LWarp<5, true> {
+    public:
+        // Whole-warp emitted floating arithmetic; a fused operation counts twice.
+        // Includes replicated basis work and padded rows, excludes index/shuffle work.
+        static constexpr int kFlops_ = 5055;
+        static constexpr int kFlopsNoPotential_ = 3707;
+        static constexpr int kWeightedFlops_ = 4669;
+        static constexpr int kWeightedFlopsNoPotential_ = 3322;
+        static constexpr int kDegree_ = 5;
+        static constexpr int kTraceIndex_ = 36;
+        static constexpr int kCoefficients_ = 37;
+        static constexpr int kBasisWords_ = 2;
+        static constexpr int kScheduleRows_ = 12;
+        static constexpr int kPhases_ = 2;
+        template <typename Real, typename Expansion, typename Source>
+        __device__ static void translate(Expansion& target, Source const& source, Real const dx,
+            Real const dy, Real const dz, bool doPhi) {
+            // Contract: all 32 lanes enter with identical source/geometry; target
+            // is private per lane. Every lane receives the complete expansion.
+            execute<true>(target, source, dx, dy, dz, doPhi);
+        }
+        template <typename Real, typename Source>
+        __device__ static void translateInto(Real* target, Source const& source, Real const dx,
+            Real const dy, Real const dz, bool doPhi) {
+            // Contract: all 32 lanes enter with identical source/geometry; target
+            // addresses 37 values that never alias source. Group leaders store
+            // their coefficient once; strided lanes copy the unchanged ones. Every
+            // source read and target write is complete when this returns.
+            execute<false>(target, source, dx, dy, dz, doPhi);
+        }
 
-private:
-    template <bool kReplicate, typename Real, typename Target, typename Source>
-    __device__ static void execute(Target& target, Source const& source, Real const dx,
-        Real const dy, Real const dz, bool doPhi) {
-        int const lane = threadIdx.x & 31;
-        constexpr unsigned int kMask = 0xffffffffu;
-        // 2 register(s) per lane hold the complete distributed Taylor basis:
-        // basis index i lives in word i >> 5 on lane i & 31. Shuffles avoid a
-        // large register-selection tree for dynamic indexing.
-        Real basis0 = simdBroadcast<Real>(0);
-        Real basis1 = simdBroadcast<Real>(0);
-        [[maybe_unused]] constexpr auto kCoefficient1 = 1;
-        [[maybe_unused]] constexpr auto kCoefficient8 = 1.0 / 2.0;
-        [[maybe_unused]] constexpr auto kCoefficient20 = 1.0 / 6.0;
-        [[maybe_unused]] constexpr auto kCoefficient39 = 1.0 / 24.0;
-        [[maybe_unused]] constexpr auto kCoefficient43 = 1.0 / 4.0;
-        [[maybe_unused]] constexpr auto kCoefficient58 = 1.0 / 12.0;
-        [[maybe_unused]] constexpr auto kCoefficient105 = 1.0 / 120.0;
-        [[maybe_unused]] constexpr auto kCoefficient182 = 1.0 / 60.0;
-        Real const t5 = dx * dx;
-        Real const t6 = dy * dy;
-        Real const t7 = dz * dz;
-        Real const t10 = t6 * simdBroadcast<Real>(kCoefficient8);
-        Real const t12 = t7 * simdBroadcast<Real>(kCoefficient8);
-        Real const t14 = t10 - t12;
-        Real const t15 = dx * dy;
-        Real const t16 = t5 * simdBroadcast<Real>(kCoefficient8);
-        Real const t17 = t16 - t12;
-        Real const t18 = dy * dz;
-        Real const t19 = dx * dz;
-        Real const t21 = t6 * simdBroadcast<Real>(kCoefficient20);
-        Real const t22 = t21 - t12;
-        Real const t23 = dy * t22;
-        Real const t24 = dx * t14;
-        Real const t25 = dy * t17;
-        Real const t26 = t5 * simdBroadcast<Real>(kCoefficient20);
-        Real const t27 = t26 - t12;
-        Real const t28 = dx * t27;
-        Real const t31 = t7 * simdBroadcast<Real>(kCoefficient20);
-        Real const t32 = t10 - t31;
-        Real const t33 = dz * t32;
-        Real const t34 = dz * t15;
-        Real const t37 = t16 - t31;
-        Real const t38 = dz * t37;
-        Real const t41 = t6 * simdBroadcast<Real>(kCoefficient39);
-        Real const t44 = t7 * simdBroadcast<Real>(kCoefficient43);
-        Real const t45 = t41 - t44;
-        Real const t46 = t6 * t45;
-        Real const t47 = t7 * simdBroadcast<Real>(kCoefficient39);
-        Real const t48 = t7 * t47;
-        Real const t49 = t46 + t48;
-        Real const t51 = t6 * simdBroadcast<Real>(kCoefficient43);
-        Real const t56 = t15 * t22;
-        Real const t59 = t51 - t44;
-        Real const t60 = t5 * t59;
-        Real const t63 = t7 * simdBroadcast<Real>(kCoefficient58);
-        Real const t67 = t63 - t51;
-        Real const t68 = t7 * t67;
-        Real const t69 = t60 + t68;
-        Real const t87 = t15 * t27;
-        Real const t89 = t5 * simdBroadcast<Real>(kCoefficient39);
-        Real const t90 = t89 - t44;
-        Real const t91 = t5 * t90;
-        Real const t92 = t48 + t91;
-        Real const t97 = t21 - t31;
-        Real const t98 = t18 * t97;
-        Real const t99 = t19 * t32;
-        Real const t101 = t18 * t37;
-        Real const t103 = t26 - t31;
-        Real const t104 = t19 * t103;
-        if (lane == 0) {
-            basis0 = simdBroadcast<Real>(kCoefficient1);
-        }
-        if (lane == 1) {
-            basis0 = dy;
-        }
-        if (lane == 2) {
-            basis0 = dx;
-        }
-        if (lane == 3) {
-            basis0 = dz;
-        }
-        if (lane == 4) {
-            basis0 = t14;
-        }
-        if (lane == 5) {
-            basis0 = t15;
-        }
-        if (lane == 6) {
-            basis0 = t17;
-        }
-        if (lane == 7) {
-            basis0 = t18;
-        }
-        if (lane == 8) {
-            basis0 = t19;
-        }
-        if (lane == 9) {
-            basis0 = t23;
-        }
-        if (lane == 10) {
-            basis0 = t24;
-        }
-        if (lane == 11) {
-            basis0 = t25;
-        }
-        if (lane == 12) {
-            basis0 = t28;
-        }
-        if (lane == 13) {
-            basis0 = t33;
-        }
-        if (lane == 14) {
-            basis0 = t34;
-        }
-        if (lane == 15) {
-            basis0 = t38;
-        }
-        if (lane == 16) {
-            basis0 = t49;
-        }
-        if (lane == 17) {
-            basis0 = t56;
-        }
-        if (lane == 18) {
-            basis0 = t69;
-        }
-        if (lane == 19) {
-            basis0 = t87;
-        }
-        if (lane == 20) {
-            basis0 = t92;
-        }
-        if (lane == 21) {
-            basis0 = t98;
-        }
-        if (lane == 22) {
-            basis0 = t99;
-        }
-        if (lane == 23) {
-            basis0 = t101;
-        }
-        if (lane == 24) {
-            basis0 = t104;
-        }
-        if (doPhi) {
-            Real const t107 = t6 * simdBroadcast<Real>(kCoefficient105);
-            Real const t109 = t107 - t63;
-            Real const t110 = t6 * t109;
-            Real const t111 = t48 + t110;
-            Real const t113 = t6 * simdBroadcast<Real>(kCoefficient58);
-            Real const t118 = dy * t111;
-            Real const t119 = dx * t49;
-            Real const t120 = t113 - t44;
-            Real const t121 = t5 * t120;
-            Real const t126 = t63 - t113;
-            Real const t127 = t7 * t126;
-            Real const t128 = t121 + t127;
-            Real const t142 = dy * t128;
-            Real const t143 = t113 - t63;
-            Real const t144 = t5 * t143;
-            Real const t146 = t68 + t144;
-            Real const t161 = dx * t146;
-            Real const t162 = dy * t92;
-            Real const t163 = t5 * simdBroadcast<Real>(kCoefficient105);
-            Real const t164 = t163 - t63;
-            Real const t165 = t5 * t164;
-            Real const t166 = t48 + t165;
-            Real const t171 = dx * t166;
-            Real const t172 = t41 - t63;
-            Real const t173 = t6 * t172;
-            Real const t174 = t7 * simdBroadcast<Real>(kCoefficient105);
-            Real const t175 = t7 * t174;
-            Real const t176 = t173 + t175;
-            Real const t180 = dz * t176;
-            Real const t181 = t34 * t97;
-            Real const t183 = t51 - t63;
-            Real const t184 = t5 * t183;
-            Real const t185 = t7 * simdBroadcast<Real>(kCoefficient182);
-            Real const t189 = t185 - t113;
-            Real const t190 = t7 * t189;
-            Real const t191 = t184 + t190;
-            Real const t205 = dz * t191;
-            Real const t206 = t34 * t103;
-            Real const t207 = t89 - t63;
-            Real const t208 = t5 * t207;
-            Real const t209 = t175 + t208;
-            Real const t213 = dz * t209;
-            if (lane == 25) {
-                basis0 = t118;
-            }
-            if (lane == 26) {
-                basis0 = t119;
-            }
-            if (lane == 27) {
-                basis0 = t142;
-            }
-            if (lane == 28) {
-                basis0 = t161;
-            }
-            if (lane == 29) {
-                basis0 = t162;
-            }
-            if (lane == 30) {
-                basis0 = t171;
-            }
-            if (lane == 31) {
-                basis0 = t180;
-            }
+    private:
+        template <bool kReplicate, typename Real, typename Target, typename Source>
+        __device__ static void execute(Target& target, Source const& source, Real const dx,
+            Real const dy, Real const dz, bool doPhi) {
+            int const lane = threadIdx.x & 31;
+            constexpr unsigned int kMask = 0xffffffffu;
+            // 2 register(s) per lane hold the complete distributed Taylor basis:
+            // basis index i lives in word i >> 5 on lane i & 31. Shuffles avoid a
+            // large register-selection tree for dynamic indexing.
+            Real basis0 = simdBroadcast<Real>(0);
+            Real basis1 = simdBroadcast<Real>(0);
+            [[maybe_unused]] constexpr auto kCoefficient1 = 1;
+            [[maybe_unused]] constexpr auto kCoefficient8 = 1.0 / 2.0;
+            [[maybe_unused]] constexpr auto kCoefficient20 = 1.0 / 6.0;
+            [[maybe_unused]] constexpr auto kCoefficient39 = 1.0 / 24.0;
+            [[maybe_unused]] constexpr auto kCoefficient43 = 1.0 / 4.0;
+            [[maybe_unused]] constexpr auto kCoefficient58 = 1.0 / 12.0;
+            [[maybe_unused]] constexpr auto kCoefficient105 = 1.0 / 120.0;
+            [[maybe_unused]] constexpr auto kCoefficient182 = 1.0 / 60.0;
+            Real const t5 = dx * dx;
+            Real const t6 = dy * dy;
+            Real const t7 = dz * dz;
+            Real const t10 = t6 * simdBroadcast<Real>(kCoefficient8);
+            Real const t12 = t7 * simdBroadcast<Real>(kCoefficient8);
+            Real const t14 = t10 - t12;
+            Real const t15 = dx * dy;
+            Real const t16 = t5 * simdBroadcast<Real>(kCoefficient8);
+            Real const t17 = t16 - t12;
+            Real const t18 = dy * dz;
+            Real const t19 = dx * dz;
+            Real const t21 = t6 * simdBroadcast<Real>(kCoefficient20);
+            Real const t22 = t21 - t12;
+            Real const t23 = dy * t22;
+            Real const t24 = dx * t14;
+            Real const t25 = dy * t17;
+            Real const t26 = t5 * simdBroadcast<Real>(kCoefficient20);
+            Real const t27 = t26 - t12;
+            Real const t28 = dx * t27;
+            Real const t31 = t7 * simdBroadcast<Real>(kCoefficient20);
+            Real const t32 = t10 - t31;
+            Real const t33 = dz * t32;
+            Real const t34 = dz * t15;
+            Real const t37 = t16 - t31;
+            Real const t38 = dz * t37;
+            Real const t41 = t6 * simdBroadcast<Real>(kCoefficient39);
+            Real const t44 = t7 * simdBroadcast<Real>(kCoefficient43);
+            Real const t45 = t41 - t44;
+            Real const t46 = t6 * t45;
+            Real const t47 = t7 * simdBroadcast<Real>(kCoefficient39);
+            Real const t48 = t7 * t47;
+            Real const t49 = t46 + t48;
+            Real const t51 = t6 * simdBroadcast<Real>(kCoefficient43);
+            Real const t56 = t15 * t22;
+            Real const t59 = t51 - t44;
+            Real const t60 = t5 * t59;
+            Real const t63 = t7 * simdBroadcast<Real>(kCoefficient58);
+            Real const t67 = t63 - t51;
+            Real const t68 = t7 * t67;
+            Real const t69 = t60 + t68;
+            Real const t87 = t15 * t27;
+            Real const t89 = t5 * simdBroadcast<Real>(kCoefficient39);
+            Real const t90 = t89 - t44;
+            Real const t91 = t5 * t90;
+            Real const t92 = t48 + t91;
+            Real const t97 = t21 - t31;
+            Real const t98 = t18 * t97;
+            Real const t99 = t19 * t32;
+            Real const t101 = t18 * t37;
+            Real const t103 = t26 - t31;
+            Real const t104 = t19 * t103;
             if (lane == 0) {
-                basis1 = t181;
+                basis0 = simdBroadcast<Real>(kCoefficient1);
             }
             if (lane == 1) {
-                basis1 = t205;
+                basis0 = dy;
             }
             if (lane == 2) {
-                basis1 = t206;
+                basis0 = dx;
             }
             if (lane == 3) {
-                basis1 = t213;
+                basis0 = dz;
             }
-        }
-        {
-            // Fixed contraction phase 0: 8 rows, 10 outputs.
-            int const groupWidth = lane < 8 ? 8 : (lane < 20 ? 4 : (2));
-            int const targetIndex = __ldg(&l2lWarpTargets5[0][lane]);
-            Real partial = simdBroadcast<Real>(0);
-#pragma unroll
-            for (int row = 0; row < 8; ++row) {
-                unsigned int entry = __ldg(&l2lWarpSchedule5[row][lane]);
-                if (!doPhi && lane < 8) {
-                    entry = 0u;
-                }
-                int const basisIndex = entry & 255u;
-                int const primaryIndex = (entry >> 8) & 255u;
-                int const secondaryIndex = (entry >> 16) & 255u;
-                int const kind = (entry >> 24) & 3u;
-                Real const sourceValue =
-                    source[primaryIndex] + simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
-                Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
-                Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
-                Real const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
-                Real const weight =
-                    simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
-                partial = simdFma(weight, sourceValue, partial);
+            if (lane == 4) {
+                basis0 = t14;
             }
-            Real const shuffled4 = __shfl_down_sync(kMask, partial, 4);
-            partial +=
-                (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : simdBroadcast<Real>(0);
-            Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
-            partial +=
-                (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : simdBroadcast<Real>(0);
-            Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-            partial +=
-                (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
-            bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
-            if (leader) {
-                partial += source[targetIndex];
+            if (lane == 5) {
+                basis0 = t15;
             }
-            if (doPhi && lane == 0) {
-                partial = simdFma(simdBroadcast<Real>(0.5) * dz * dz, source[36], partial);
+            if (lane == 6) {
+                basis0 = t17;
+            }
+            if (lane == 7) {
+                basis0 = t18;
+            }
+            if (lane == 8) {
+                basis0 = t19;
+            }
+            if (lane == 9) {
+                basis0 = t23;
+            }
+            if (lane == 10) {
+                basis0 = t24;
+            }
+            if (lane == 11) {
+                basis0 = t25;
+            }
+            if (lane == 12) {
+                basis0 = t28;
+            }
+            if (lane == 13) {
+                basis0 = t33;
+            }
+            if (lane == 14) {
+                basis0 = t34;
+            }
+            if (lane == 15) {
+                basis0 = t38;
             }
             if (lane == 16) {
-                partial = simdFma(dz, source[36], partial);
+                basis0 = t49;
             }
-            if constexpr (kReplicate) {
-                target[0] = __shfl_sync(kMask, partial, 0);
-                target[1] = __shfl_sync(kMask, partial, 8);
-                target[2] = __shfl_sync(kMask, partial, 12);
-                target[3] = __shfl_sync(kMask, partial, 16);
-                target[4] = __shfl_sync(kMask, partial, 20);
-                target[5] = __shfl_sync(kMask, partial, 22);
-                target[6] = __shfl_sync(kMask, partial, 24);
-                target[7] = __shfl_sync(kMask, partial, 26);
-                target[8] = __shfl_sync(kMask, partial, 28);
-                target[9] = __shfl_sync(kMask, partial, 30);
-            } else {
-                if (leader) {
-                    target[targetIndex] = partial;
+            if (lane == 17) {
+                basis0 = t56;
+            }
+            if (lane == 18) {
+                basis0 = t69;
+            }
+            if (lane == 19) {
+                basis0 = t87;
+            }
+            if (lane == 20) {
+                basis0 = t92;
+            }
+            if (lane == 21) {
+                basis0 = t98;
+            }
+            if (lane == 22) {
+                basis0 = t99;
+            }
+            if (lane == 23) {
+                basis0 = t101;
+            }
+            if (lane == 24) {
+                basis0 = t104;
+            }
+            if (doPhi) {
+                Real const t107 = t6 * simdBroadcast<Real>(kCoefficient105);
+                Real const t109 = t107 - t63;
+                Real const t110 = t6 * t109;
+                Real const t111 = t48 + t110;
+                Real const t113 = t6 * simdBroadcast<Real>(kCoefficient58);
+                Real const t118 = dy * t111;
+                Real const t119 = dx * t49;
+                Real const t120 = t113 - t44;
+                Real const t121 = t5 * t120;
+                Real const t126 = t63 - t113;
+                Real const t127 = t7 * t126;
+                Real const t128 = t121 + t127;
+                Real const t142 = dy * t128;
+                Real const t143 = t113 - t63;
+                Real const t144 = t5 * t143;
+                Real const t146 = t68 + t144;
+                Real const t161 = dx * t146;
+                Real const t162 = dy * t92;
+                Real const t163 = t5 * simdBroadcast<Real>(kCoefficient105);
+                Real const t164 = t163 - t63;
+                Real const t165 = t5 * t164;
+                Real const t166 = t48 + t165;
+                Real const t171 = dx * t166;
+                Real const t172 = t41 - t63;
+                Real const t173 = t6 * t172;
+                Real const t174 = t7 * simdBroadcast<Real>(kCoefficient105);
+                Real const t175 = t7 * t174;
+                Real const t176 = t173 + t175;
+                Real const t180 = dz * t176;
+                Real const t181 = t34 * t97;
+                Real const t183 = t51 - t63;
+                Real const t184 = t5 * t183;
+                Real const t185 = t7 * simdBroadcast<Real>(kCoefficient182);
+                Real const t189 = t185 - t113;
+                Real const t190 = t7 * t189;
+                Real const t191 = t184 + t190;
+                Real const t205 = dz * t191;
+                Real const t206 = t34 * t103;
+                Real const t207 = t89 - t63;
+                Real const t208 = t5 * t207;
+                Real const t209 = t175 + t208;
+                Real const t213 = dz * t209;
+                if (lane == 25) {
+                    basis0 = t118;
+                }
+                if (lane == 26) {
+                    basis0 = t119;
+                }
+                if (lane == 27) {
+                    basis0 = t142;
+                }
+                if (lane == 28) {
+                    basis0 = t161;
+                }
+                if (lane == 29) {
+                    basis0 = t162;
+                }
+                if (lane == 30) {
+                    basis0 = t171;
+                }
+                if (lane == 31) {
+                    basis0 = t180;
+                }
+                if (lane == 0) {
+                    basis1 = t181;
+                }
+                if (lane == 1) {
+                    basis1 = t205;
+                }
+                if (lane == 2) {
+                    basis1 = t206;
+                }
+                if (lane == 3) {
+                    basis1 = t213;
                 }
             }
-        }
-        {
-            // Fixed contraction phase 1: 4 rows, 15 outputs.
-            int const groupWidth = lane < 12 ? 2 : (lane < 21 ? 1 : (1));
-            int const targetIndex = __ldg(&l2lWarpTargets5[1][lane]);
-            Real partial = simdBroadcast<Real>(0);
+            {
+                // Fixed contraction phase 0: 8 rows, 10 outputs.
+                int const groupWidth = lane < 8 ? 8 : (lane < 20 ? 4 : (2));
+                int const targetIndex = __ldg(&l2lWarpTargets5[0][lane]);
+                Real partial = simdBroadcast<Real>(0);
 #pragma unroll
-            for (int row = 8; row < 12; ++row) {
-                unsigned int entry = __ldg(&l2lWarpSchedule5[row][lane]);
-                int const basisIndex = entry & 255u;
-                int const primaryIndex = (entry >> 8) & 255u;
-                int const secondaryIndex = (entry >> 16) & 255u;
-                int const kind = (entry >> 24) & 3u;
-                Real const sourceValue =
-                    source[primaryIndex] + simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
-                Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
-                Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
-                Real const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
-                Real const weight =
-                    simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
-                partial = simdFma(weight, sourceValue, partial);
-            }
-            Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-            partial +=
-                (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
-            bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 21;
-            if (leader) {
-                partial += source[targetIndex];
-            }
-            if constexpr (kReplicate) {
-                target[10] = __shfl_sync(kMask, partial, 0);
-                target[11] = __shfl_sync(kMask, partial, 2);
-                target[12] = __shfl_sync(kMask, partial, 4);
-                target[13] = __shfl_sync(kMask, partial, 6);
-                target[14] = __shfl_sync(kMask, partial, 8);
-                target[15] = __shfl_sync(kMask, partial, 10);
-                target[16] = __shfl_sync(kMask, partial, 12);
-                target[17] = __shfl_sync(kMask, partial, 13);
-                target[18] = __shfl_sync(kMask, partial, 14);
-                target[19] = __shfl_sync(kMask, partial, 15);
-                target[20] = __shfl_sync(kMask, partial, 16);
-                target[21] = __shfl_sync(kMask, partial, 17);
-                target[22] = __shfl_sync(kMask, partial, 18);
-                target[23] = __shfl_sync(kMask, partial, 19);
-                target[24] = __shfl_sync(kMask, partial, 20);
-            } else {
+                for (int row = 0; row < 8; ++row) {
+                    unsigned int entry = __ldg(&l2lWarpSchedule5[row][lane]);
+                    if (!doPhi && lane < 8) {
+                        entry = 0u;
+                    }
+                    int const basisIndex = entry & 255u;
+                    int const primaryIndex = (entry >> 8) & 255u;
+                    int const secondaryIndex = (entry >> 16) & 255u;
+                    int const kind = (entry >> 24) & 3u;
+                    Real const sourceValue = source[primaryIndex] +
+                        simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
+                    Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
+                    Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
+                    Real const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
+                    Real const weight =
+                        simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
+                    partial = simdFma(weight, sourceValue, partial);
+                }
+                Real const shuffled4 = __shfl_down_sync(kMask, partial, 4);
+                partial +=
+                    (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : simdBroadcast<Real>(0);
+                Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
+                partial +=
+                    (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : simdBroadcast<Real>(0);
+                Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
+                partial +=
+                    (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
+                bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
                 if (leader) {
-                    target[targetIndex] = partial;
+                    partial += source[targetIndex];
+                }
+                if (doPhi && lane == 0) {
+                    partial = simdFma(simdBroadcast<Real>(0.5) * dz * dz, source[36], partial);
+                }
+                if (lane == 16) {
+                    partial = simdFma(dz, source[36], partial);
+                }
+                if constexpr (kReplicate) {
+                    target[0] = __shfl_sync(kMask, partial, 0);
+                    target[1] = __shfl_sync(kMask, partial, 8);
+                    target[2] = __shfl_sync(kMask, partial, 12);
+                    target[3] = __shfl_sync(kMask, partial, 16);
+                    target[4] = __shfl_sync(kMask, partial, 20);
+                    target[5] = __shfl_sync(kMask, partial, 22);
+                    target[6] = __shfl_sync(kMask, partial, 24);
+                    target[7] = __shfl_sync(kMask, partial, 26);
+                    target[8] = __shfl_sync(kMask, partial, 28);
+                    target[9] = __shfl_sync(kMask, partial, 30);
+                } else {
+                    if (leader) {
+                        target[targetIndex] = partial;
+                    }
                 }
             }
+            {
+                // Fixed contraction phase 1: 4 rows, 15 outputs.
+                int const groupWidth = lane < 12 ? 2 : (lane < 21 ? 1 : (1));
+                int const targetIndex = __ldg(&l2lWarpTargets5[1][lane]);
+                Real partial = simdBroadcast<Real>(0);
+#pragma unroll
+                for (int row = 8; row < 12; ++row) {
+                    unsigned int entry = __ldg(&l2lWarpSchedule5[row][lane]);
+                    int const basisIndex = entry & 255u;
+                    int const primaryIndex = (entry >> 8) & 255u;
+                    int const secondaryIndex = (entry >> 16) & 255u;
+                    int const kind = (entry >> 24) & 3u;
+                    Real const sourceValue = source[primaryIndex] +
+                        simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
+                    Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
+                    Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
+                    Real const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
+                    Real const weight =
+                        simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
+                    partial = simdFma(weight, sourceValue, partial);
+                }
+                Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
+                partial +=
+                    (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
+                bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 21;
+                if (leader) {
+                    partial += source[targetIndex];
+                }
+                if constexpr (kReplicate) {
+                    target[10] = __shfl_sync(kMask, partial, 0);
+                    target[11] = __shfl_sync(kMask, partial, 2);
+                    target[12] = __shfl_sync(kMask, partial, 4);
+                    target[13] = __shfl_sync(kMask, partial, 6);
+                    target[14] = __shfl_sync(kMask, partial, 8);
+                    target[15] = __shfl_sync(kMask, partial, 10);
+                    target[16] = __shfl_sync(kMask, partial, 12);
+                    target[17] = __shfl_sync(kMask, partial, 13);
+                    target[18] = __shfl_sync(kMask, partial, 14);
+                    target[19] = __shfl_sync(kMask, partial, 15);
+                    target[20] = __shfl_sync(kMask, partial, 16);
+                    target[21] = __shfl_sync(kMask, partial, 17);
+                    target[22] = __shfl_sync(kMask, partial, 18);
+                    target[23] = __shfl_sync(kMask, partial, 19);
+                    target[24] = __shfl_sync(kMask, partial, 20);
+                } else {
+                    if (leader) {
+                        target[targetIndex] = partial;
+                    }
+                }
+            }
+            if constexpr (kReplicate) {
+                target[25] = source[25];
+                target[26] = source[26];
+                target[27] = source[27];
+                target[28] = source[28];
+                target[29] = source[29];
+                target[30] = source[30];
+                target[31] = source[31];
+                target[32] = source[32];
+                target[33] = source[33];
+                target[34] = source[34];
+                target[35] = source[35];
+                target[36] = source[36];
+                if (!doPhi) {
+                    target[0] = source[0];
+                }
+            } else {
+                // Top-rank coefficients and the trace copy through unchanged.
+                for (int index = 25 + lane; index <= 36; index += 32) {
+                    target[index] = source[index];
+                }
+                // Lane zero led the potential group, so this restore is same-thread.
+                if (!doPhi && lane == 0) {
+                    target[0] = source[0];
+                }
+            }
+            // The caller may overwrite shared source storage from lane zero on
+            // return. Finish EVERY lane source read (and every target write)
+            // before permitting that write.
+            __syncwarp(kMask);
         }
-        if constexpr (kReplicate) {
-            target[25] = source[25];
-            target[26] = source[26];
-            target[27] = source[27];
-            target[28] = source[28];
-            target[29] = source[29];
-            target[30] = source[30];
-            target[31] = source[31];
-            target[32] = source[32];
-            target[33] = source[33];
-            target[34] = source[34];
-            target[35] = source[35];
-            target[36] = source[36];
-            if (!doPhi) {
-                target[0] = source[0];
-            }
-        } else {
-            // Top-rank coefficients and the trace copy through unchanged.
-            for (int index = 25 + lane; index <= 36; index += 32) {
-                target[index] = source[index];
-            }
-            // Lane zero led the potential group, so this restore is same-thread.
-            if (!doPhi && lane == 0) {
-                target[0] = source[0];
-            }
-        }
-        // The caller may overwrite shared source storage from lane zero on
-        // return. Finish EVERY lane source read (and every target write)
-        // before permitting that write.
-        __syncwarp(kMask);
-    }
-};
+    };
 #endif
 
+}    // namespace detail
 #endif
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 7) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 7)
 // FMM order 7: source degree 5, local degree 6.
 template <int order>
-class M2mKernel;
+class M2M;
 template <int order, bool withTrace>
-class L2lKernel;
+class L2L;
 
 template <>
-class M2mKernel<5> {
+class M2M<5> {
 public:
     static constexpr int kFlops_ = 877;
     static constexpr int kWeightedFlops_ = 599;
@@ -7059,7 +7069,7 @@ public:
 };
 
 template <>
-class L2lKernel<6, false> {
+class L2L<6, false> {
 public:
     static constexpr int kFlops_ = 1242;
     static constexpr int kWeightedFlops_ = 685;
@@ -7867,7 +7877,7 @@ public:
 };
 
 template <>
-class L2lKernel<6, true> {
+class L2L<6, true> {
 public:
     static constexpr int kFlops_ = 1248;
     static constexpr int kWeightedFlops_ = 688;
@@ -8680,7 +8690,7 @@ public:
 };
 
 template <>
-class P2mKernel<5> {
+class P2M<5> {
 public:
     static constexpr int kFlops_ = 388;
     static constexpr int kWeightedFlops_ = 281;
@@ -9068,7 +9078,7 @@ public:
 };
 
 template <>
-class P2lKernel<6> {
+class P2L<6> {
 public:
     static constexpr int kFlops_ = 221;
     static constexpr int kWeightedFlops_ = 151;
@@ -9348,7 +9358,7 @@ public:
 };
 
 template <>
-class M2pKernel<5, true> {
+class M2P<5, true> {
 public:
     static constexpr int kFlops_ = 273;
     static constexpr int kWeightedFlops_ = 184;
@@ -9567,7 +9577,7 @@ public:
 };
 
 template <>
-class M2pKernel<5, false> {
+class M2P<5, false> {
 public:
     static constexpr int kFlops_ = 287;
     static constexpr int kWeightedFlops_ = 195;
@@ -9797,7 +9807,7 @@ public:
 };
 
 template <>
-class L2pKernel<6, false> {
+class L2P<6, false> {
 public:
     static constexpr int kFlops_ = 487;
     static constexpr int kWeightedFlops_ = 305;
@@ -10135,7 +10145,7 @@ public:
 };
 
 template <>
-class L2pKernel<6, true> {
+class L2P<6, true> {
 public:
     static constexpr int kFlops_ = 491;
     static constexpr int kWeightedFlops_ = 307;
@@ -10474,671 +10484,675 @@ public:
     }
 };
 
+namespace detail {
 #ifdef __CUDACC__
-// Read-only GLOBAL storage: row/lane loads coalesce instead of serializing
-// divergent constant-memory accesses. Internal linkage needs no device RDC.
-// Entry layout: basis | primary << 8 | secondary << 16 | kind << 24.
-static __device__ unsigned int const l2lWarpSchedule6[22][32] = {
-    {16777473u, 16777730u, 16777987u, 16778244u, 16778501u, 16778758u, 16779015u, 16779272u,
-        16778241u, 16778498u, 16779011u, 16779524u, 16779781u, 16780038u, 16780551u, 16780808u,
-        16778497u, 16778754u, 16779267u, 16779780u, 16780037u, 16780294u, 16780807u, 16781064u,
-        16779009u, 16779266u, 33818115u, 16780548u, 16780805u, 16781062u, 34147079u, 34212872u},
-    {16779529u, 16779786u, 16780043u, 16780300u, 16780557u, 16780814u, 16781071u, 16781328u,
-        16781321u, 16781578u, 16781835u, 16782092u, 16782605u, 16782862u, 16783119u, 16783632u,
-        16781577u, 16781834u, 16782091u, 16782348u, 16782861u, 16783118u, 16783375u, 16783888u,
-        16782601u, 16782858u, 16783115u, 16783372u, 34607629u, 34673422u, 34739215u, 16785168u},
-    {16781585u, 16781842u, 16782099u, 16782356u, 16782613u, 16782870u, 16783127u, 16783384u,
-        16783889u, 16784146u, 16784403u, 16784660u, 16785173u, 16785430u, 16785687u, 16785944u,
-        16784145u, 16784402u, 16784659u, 16784916u, 16785429u, 16785686u, 16785943u, 16786200u,
-        16785425u, 16785682u, 16785939u, 16786196u, 35199765u, 35265558u, 35331351u, 35397144u},
-    {16783641u, 16783898u, 16784155u, 16784412u, 16784669u, 16784926u, 16785183u, 16785440u,
-        16786457u, 16786714u, 16786971u, 16787228u, 16787485u, 16787742u, 16788255u, 16788512u,
-        16786713u, 16786970u, 16787227u, 16787484u, 16787741u, 16787998u, 16788511u, 16788768u,
-        16788249u, 16788506u, 16788763u, 16789020u, 16789277u, 16789534u, 35923487u, 35989280u},
-    {16785697u, 16785954u, 16786211u, 16786468u, 16786725u, 16786982u, 16787239u, 16787496u,
-        16788769u, 16789026u, 16789283u, 0u, 0u, 0u, 0u, 0u, 16789025u, 16789282u, 16789539u, 0u,
-        0u, 0u, 0u, 0u, 36055073u, 36120866u, 36186659u, 0u, 0u, 0u, 0u, 0u},
-    {16787753u, 16788010u, 16788267u, 16788524u, 16788781u, 16789038u, 16789295u, 16789552u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-    {16779521u, 16779778u, 16780547u, 16781316u, 16779777u, 16780034u, 16780803u, 16781572u,
-        16780033u, 16780290u, 16781059u, 16781828u, 16780545u, 16780802u, 34147075u, 16782596u,
-        16780801u, 16781058u, 34212867u, 16782852u, 16781313u, 16781570u, 16781569u, 16781826u,
-        16781825u, 16782082u, 16782081u, 16782338u, 16782593u, 16782850u, 16782849u, 16783106u},
-    {16781573u, 16781830u, 16782599u, 16782856u, 16781829u, 16782086u, 16782855u, 16783112u,
-        16782085u, 16782342u, 16783111u, 16783368u, 16782853u, 16783110u, 34607623u, 34673416u,
-        16783109u, 16783366u, 34673415u, 34739208u, 16782595u, 16783620u, 16782851u, 16783876u,
-        16783107u, 16784132u, 16783363u, 16784388u, 34607619u, 16785156u, 34673411u, 16785412u},
-    {16783625u, 16783882u, 16784139u, 16784396u, 16783881u, 16784138u, 16784395u, 16784652u,
-        16784137u, 16784394u, 16784651u, 16784908u, 16785161u, 16785418u, 16785675u, 16785932u,
-        16785417u, 16785674u, 16785931u, 16786188u, 16783877u, 16784134u, 16784133u, 16784390u,
-        16784389u, 16784646u, 16784645u, 16784902u, 16785413u, 16785670u, 16785669u, 16785926u},
-    {16785165u, 16785422u, 16785679u, 16786448u, 16785421u, 16785678u, 16785935u, 16786704u,
-        16785677u, 16785934u, 16786191u, 16786960u, 35199757u, 35265550u, 35331343u, 16788240u,
-        35265549u, 35331342u, 35397135u, 16788496u, 16785159u, 16785416u, 16785415u, 16785672u,
-        16785671u, 16785928u, 16785927u, 16786184u, 35199751u, 35265544u, 35265543u, 35331336u},
-    {16786705u, 16786962u, 16787219u, 16787476u, 16786961u, 16787218u, 16787475u, 16787732u,
-        16787217u, 16787474u, 16787731u, 16787988u, 16788497u, 16788754u, 16789011u, 16789268u,
-        16788753u, 16789010u, 16789267u, 16789524u, 16786441u, 16786698u, 16786697u, 16786954u,
-        16786953u, 16787210u, 16787209u, 16787466u, 16788233u, 16788490u, 16788489u, 16788746u},
-    {16788245u, 16788502u, 16788759u, 16789016u, 16788501u, 16788758u, 16789015u, 16789272u,
-        16788757u, 16789014u, 16789271u, 16789528u, 35923477u, 35989270u, 36055063u, 36120856u,
-        35989269u, 36055062u, 36120855u, 36186648u, 16786955u, 16787212u, 16787211u, 16787468u,
-        16787467u, 16787724u, 16787723u, 16787980u, 16788747u, 16789004u, 16789003u, 16789260u},
-    {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 16788237u,
-        16788494u, 16788493u, 16788750u, 16788749u, 16789006u, 16789005u, 16789262u, 35923469u,
-        35989262u, 35989261u, 36055054u},
-    {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 16788751u, 0u,
-        16789007u, 0u, 16789263u, 0u, 16789519u, 0u, 36055055u, 0u, 36120847u, 0u},
-    {16783105u, 16783362u, 16783617u, 16783874u, 16783873u, 16784130u, 16784129u, 16784386u,
-        16784385u, 16784642u, 16784641u, 16784898u, 16785153u, 16785410u, 16785409u, 16785666u,
-        16785665u, 16785922u, 16785921u, 16786178u, 16786433u, 16786689u, 16786945u, 16787201u,
-        16787457u, 16787713u, 16788225u, 16788481u, 16788737u, 16788993u, 16789249u, 0u},
-    {34739203u, 16785668u, 16785155u, 16786436u, 16785411u, 16786692u, 16785667u, 16786948u,
-        16785923u, 16787204u, 16786179u, 16787460u, 35199747u, 16788228u, 35265539u, 16788484u,
-        35331331u, 16788740u, 35397123u, 16788996u, 16786690u, 16786946u, 16787202u, 16787458u,
-        16787714u, 16787970u, 16788482u, 16788738u, 16788994u, 16789250u, 16789506u, 0u},
-    {16785925u, 16786182u, 16786693u, 16786950u, 16786949u, 16787206u, 16787205u, 16787462u,
-        16787461u, 16787718u, 16787717u, 16787974u, 16788485u, 16788742u, 16788741u, 16788998u,
-        16788997u, 16789254u, 16789253u, 16789510u, 16788227u, 16788483u, 16788739u, 16788995u,
-        16789251u, 16789507u, 35923459u, 35989251u, 36055043u, 36120835u, 36186627u, 0u},
-    {35331335u, 35397128u, 16788231u, 16788488u, 16788487u, 16788744u, 16788743u, 16789000u,
-        16788999u, 16789256u, 16789255u, 16789512u, 35923463u, 35989256u, 35989255u, 36055048u,
-        36055047u, 36120840u, 36120839u, 36186632u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-    {16788745u, 16789002u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-    {16789259u, 16789516u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-    {36055053u, 36120846u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-    {36186639u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-};
-// Per phase, the output coefficient reduced by each lane's group. Inactive
-// lanes hold zero and are excluded by the generated active-lane bounds.
-static __device__ unsigned char const l2lWarpTargets6[3][32] = {
-    {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 1u, 1u, 1u, 1u, 1u, 1u, 1u, 1u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u,
-        3u, 3u, 3u, 3u, 3u, 3u, 3u, 3u},
-    {4u, 4u, 4u, 4u, 5u, 5u, 5u, 5u, 6u, 6u, 6u, 6u, 7u, 7u, 7u, 7u, 8u, 8u, 8u, 8u, 9u, 9u, 10u,
-        10u, 11u, 11u, 12u, 12u, 13u, 13u, 14u, 14u},
-    {15u, 15u, 16u, 16u, 17u, 17u, 18u, 18u, 19u, 19u, 20u, 20u, 21u, 21u, 22u, 22u, 23u, 23u, 24u,
-        24u, 25u, 26u, 27u, 28u, 29u, 30u, 31u, 32u, 33u, 34u, 35u, 0u},
-};
+    // Read-only GLOBAL storage: row/lane loads coalesce instead of serializing
+    // divergent constant-memory accesses. Internal linkage needs no device RDC.
+    // Entry layout: basis | primary << 8 | secondary << 16 | kind << 24.
+    static __device__ unsigned int const l2lWarpSchedule6[22][32] = {
+        {16777473u, 16777730u, 16777987u, 16778244u, 16778501u, 16778758u, 16779015u, 16779272u,
+            16778241u, 16778498u, 16779011u, 16779524u, 16779781u, 16780038u, 16780551u, 16780808u,
+            16778497u, 16778754u, 16779267u, 16779780u, 16780037u, 16780294u, 16780807u, 16781064u,
+            16779009u, 16779266u, 33818115u, 16780548u, 16780805u, 16781062u, 34147079u, 34212872u},
+        {16779529u, 16779786u, 16780043u, 16780300u, 16780557u, 16780814u, 16781071u, 16781328u,
+            16781321u, 16781578u, 16781835u, 16782092u, 16782605u, 16782862u, 16783119u, 16783632u,
+            16781577u, 16781834u, 16782091u, 16782348u, 16782861u, 16783118u, 16783375u, 16783888u,
+            16782601u, 16782858u, 16783115u, 16783372u, 34607629u, 34673422u, 34739215u, 16785168u},
+        {16781585u, 16781842u, 16782099u, 16782356u, 16782613u, 16782870u, 16783127u, 16783384u,
+            16783889u, 16784146u, 16784403u, 16784660u, 16785173u, 16785430u, 16785687u, 16785944u,
+            16784145u, 16784402u, 16784659u, 16784916u, 16785429u, 16785686u, 16785943u, 16786200u,
+            16785425u, 16785682u, 16785939u, 16786196u, 35199765u, 35265558u, 35331351u, 35397144u},
+        {16783641u, 16783898u, 16784155u, 16784412u, 16784669u, 16784926u, 16785183u, 16785440u,
+            16786457u, 16786714u, 16786971u, 16787228u, 16787485u, 16787742u, 16788255u, 16788512u,
+            16786713u, 16786970u, 16787227u, 16787484u, 16787741u, 16787998u, 16788511u, 16788768u,
+            16788249u, 16788506u, 16788763u, 16789020u, 16789277u, 16789534u, 35923487u, 35989280u},
+        {16785697u, 16785954u, 16786211u, 16786468u, 16786725u, 16786982u, 16787239u, 16787496u,
+            16788769u, 16789026u, 16789283u, 0u, 0u, 0u, 0u, 0u, 16789025u, 16789282u, 16789539u,
+            0u, 0u, 0u, 0u, 0u, 36055073u, 36120866u, 36186659u, 0u, 0u, 0u, 0u, 0u},
+        {16787753u, 16788010u, 16788267u, 16788524u, 16788781u, 16789038u, 16789295u, 16789552u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u},
+        {16779521u, 16779778u, 16780547u, 16781316u, 16779777u, 16780034u, 16780803u, 16781572u,
+            16780033u, 16780290u, 16781059u, 16781828u, 16780545u, 16780802u, 34147075u, 16782596u,
+            16780801u, 16781058u, 34212867u, 16782852u, 16781313u, 16781570u, 16781569u, 16781826u,
+            16781825u, 16782082u, 16782081u, 16782338u, 16782593u, 16782850u, 16782849u, 16783106u},
+        {16781573u, 16781830u, 16782599u, 16782856u, 16781829u, 16782086u, 16782855u, 16783112u,
+            16782085u, 16782342u, 16783111u, 16783368u, 16782853u, 16783110u, 34607623u, 34673416u,
+            16783109u, 16783366u, 34673415u, 34739208u, 16782595u, 16783620u, 16782851u, 16783876u,
+            16783107u, 16784132u, 16783363u, 16784388u, 34607619u, 16785156u, 34673411u, 16785412u},
+        {16783625u, 16783882u, 16784139u, 16784396u, 16783881u, 16784138u, 16784395u, 16784652u,
+            16784137u, 16784394u, 16784651u, 16784908u, 16785161u, 16785418u, 16785675u, 16785932u,
+            16785417u, 16785674u, 16785931u, 16786188u, 16783877u, 16784134u, 16784133u, 16784390u,
+            16784389u, 16784646u, 16784645u, 16784902u, 16785413u, 16785670u, 16785669u, 16785926u},
+        {16785165u, 16785422u, 16785679u, 16786448u, 16785421u, 16785678u, 16785935u, 16786704u,
+            16785677u, 16785934u, 16786191u, 16786960u, 35199757u, 35265550u, 35331343u, 16788240u,
+            35265549u, 35331342u, 35397135u, 16788496u, 16785159u, 16785416u, 16785415u, 16785672u,
+            16785671u, 16785928u, 16785927u, 16786184u, 35199751u, 35265544u, 35265543u, 35331336u},
+        {16786705u, 16786962u, 16787219u, 16787476u, 16786961u, 16787218u, 16787475u, 16787732u,
+            16787217u, 16787474u, 16787731u, 16787988u, 16788497u, 16788754u, 16789011u, 16789268u,
+            16788753u, 16789010u, 16789267u, 16789524u, 16786441u, 16786698u, 16786697u, 16786954u,
+            16786953u, 16787210u, 16787209u, 16787466u, 16788233u, 16788490u, 16788489u, 16788746u},
+        {16788245u, 16788502u, 16788759u, 16789016u, 16788501u, 16788758u, 16789015u, 16789272u,
+            16788757u, 16789014u, 16789271u, 16789528u, 35923477u, 35989270u, 36055063u, 36120856u,
+            35989269u, 36055062u, 36120855u, 36186648u, 16786955u, 16787212u, 16787211u, 16787468u,
+            16787467u, 16787724u, 16787723u, 16787980u, 16788747u, 16789004u, 16789003u, 16789260u},
+        {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 16788237u,
+            16788494u, 16788493u, 16788750u, 16788749u, 16789006u, 16789005u, 16789262u, 35923469u,
+            35989262u, 35989261u, 36055054u},
+        {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 16788751u,
+            0u, 16789007u, 0u, 16789263u, 0u, 16789519u, 0u, 36055055u, 0u, 36120847u, 0u},
+        {16783105u, 16783362u, 16783617u, 16783874u, 16783873u, 16784130u, 16784129u, 16784386u,
+            16784385u, 16784642u, 16784641u, 16784898u, 16785153u, 16785410u, 16785409u, 16785666u,
+            16785665u, 16785922u, 16785921u, 16786178u, 16786433u, 16786689u, 16786945u, 16787201u,
+            16787457u, 16787713u, 16788225u, 16788481u, 16788737u, 16788993u, 16789249u, 0u},
+        {34739203u, 16785668u, 16785155u, 16786436u, 16785411u, 16786692u, 16785667u, 16786948u,
+            16785923u, 16787204u, 16786179u, 16787460u, 35199747u, 16788228u, 35265539u, 16788484u,
+            35331331u, 16788740u, 35397123u, 16788996u, 16786690u, 16786946u, 16787202u, 16787458u,
+            16787714u, 16787970u, 16788482u, 16788738u, 16788994u, 16789250u, 16789506u, 0u},
+        {16785925u, 16786182u, 16786693u, 16786950u, 16786949u, 16787206u, 16787205u, 16787462u,
+            16787461u, 16787718u, 16787717u, 16787974u, 16788485u, 16788742u, 16788741u, 16788998u,
+            16788997u, 16789254u, 16789253u, 16789510u, 16788227u, 16788483u, 16788739u, 16788995u,
+            16789251u, 16789507u, 35923459u, 35989251u, 36055043u, 36120835u, 36186627u, 0u},
+        {35331335u, 35397128u, 16788231u, 16788488u, 16788487u, 16788744u, 16788743u, 16789000u,
+            16788999u, 16789256u, 16789255u, 16789512u, 35923463u, 35989256u, 35989255u, 36055048u,
+            36055047u, 36120840u, 36120839u, 36186632u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u},
+        {16788745u, 16789002u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {16789259u, 16789516u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {36055053u, 36120846u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {36186639u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+    };
+    // Per phase, the output coefficient reduced by each lane's group. Inactive
+    // lanes hold zero and are excluded by the generated active-lane bounds.
+    static __device__ unsigned char const l2lWarpTargets6[3][32] = {
+        {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 1u, 1u, 1u, 1u, 1u, 1u, 1u, 1u, 2u, 2u, 2u, 2u, 2u, 2u, 2u,
+            2u, 3u, 3u, 3u, 3u, 3u, 3u, 3u, 3u},
+        {4u, 4u, 4u, 4u, 5u, 5u, 5u, 5u, 6u, 6u, 6u, 6u, 7u, 7u, 7u, 7u, 8u, 8u, 8u, 8u, 9u, 9u,
+            10u, 10u, 11u, 11u, 12u, 12u, 13u, 13u, 14u, 14u},
+        {15u, 15u, 16u, 16u, 17u, 17u, 18u, 18u, 19u, 19u, 20u, 20u, 21u, 21u, 22u, 22u, 23u, 23u,
+            24u, 24u, 25u, 26u, 27u, 28u, 29u, 30u, 31u, 32u, 33u, 34u, 35u, 0u},
+    };
 
-template <int order, bool withTrace>
-class L2lWarpKernel;
-template <>
-class L2lWarpKernel<6, true> {
-public:
-    // Whole-warp emitted floating arithmetic; a fused operation counts twice.
-    // Includes replicated basis work and padded rows, excludes index/shuffle work.
-    static constexpr int kFlops_ = 8906;
-    static constexpr int kFlopsNoPotential_ = 6726;
-    static constexpr int kWeightedFlops_ = 8200;
-    static constexpr int kWeightedFlopsNoPotential_ = 6021;
-    static constexpr int kDegree_ = 6;
-    static constexpr int kTraceIndex_ = 49;
-    static constexpr int kCoefficients_ = 50;
-    static constexpr int kBasisWords_ = 2;
-    static constexpr int kScheduleRows_ = 22;
-    static constexpr int kPhases_ = 3;
-    template <typename Real, typename Expansion, typename Source>
-    __device__ static void translate(Expansion& target, Source const& source, Real const dx,
-        Real const dy, Real const dz, bool doPhi) {
-        // Contract: all 32 lanes enter with identical source/geometry; target
-        // is private per lane. Every lane receives the complete expansion.
-        execute<true>(target, source, dx, dy, dz, doPhi);
-    }
-    template <typename Real, typename Source>
-    __device__ static void translateInto(Real* target, Source const& source, Real const dx,
-        Real const dy, Real const dz, bool doPhi) {
-        // Contract: all 32 lanes enter with identical source/geometry; target
-        // addresses 50 values that never alias source. Group leaders store
-        // their coefficient once; strided lanes copy the unchanged ones. Every
-        // source read and target write is complete when this returns.
-        execute<false>(target, source, dx, dy, dz, doPhi);
-    }
+    template <int order, bool withTrace>
+    class L2LWarp;
+    template <>
+    class L2LWarp<6, true> {
+    public:
+        // Whole-warp emitted floating arithmetic; a fused operation counts twice.
+        // Includes replicated basis work and padded rows, excludes index/shuffle work.
+        static constexpr int kFlops_ = 8906;
+        static constexpr int kFlopsNoPotential_ = 6726;
+        static constexpr int kWeightedFlops_ = 8200;
+        static constexpr int kWeightedFlopsNoPotential_ = 6021;
+        static constexpr int kDegree_ = 6;
+        static constexpr int kTraceIndex_ = 49;
+        static constexpr int kCoefficients_ = 50;
+        static constexpr int kBasisWords_ = 2;
+        static constexpr int kScheduleRows_ = 22;
+        static constexpr int kPhases_ = 3;
+        template <typename Real, typename Expansion, typename Source>
+        __device__ static void translate(Expansion& target, Source const& source, Real const dx,
+            Real const dy, Real const dz, bool doPhi) {
+            // Contract: all 32 lanes enter with identical source/geometry; target
+            // is private per lane. Every lane receives the complete expansion.
+            execute<true>(target, source, dx, dy, dz, doPhi);
+        }
+        template <typename Real, typename Source>
+        __device__ static void translateInto(Real* target, Source const& source, Real const dx,
+            Real const dy, Real const dz, bool doPhi) {
+            // Contract: all 32 lanes enter with identical source/geometry; target
+            // addresses 50 values that never alias source. Group leaders store
+            // their coefficient once; strided lanes copy the unchanged ones. Every
+            // source read and target write is complete when this returns.
+            execute<false>(target, source, dx, dy, dz, doPhi);
+        }
 
-private:
-    template <bool kReplicate, typename Real, typename Target, typename Source>
-    __device__ static void execute(Target& target, Source const& source, Real const dx,
-        Real const dy, Real const dz, bool doPhi) {
-        int const lane = threadIdx.x & 31;
-        constexpr unsigned int kMask = 0xffffffffu;
-        // 2 register(s) per lane hold the complete distributed Taylor basis:
-        // basis index i lives in word i >> 5 on lane i & 31. Shuffles avoid a
-        // large register-selection tree for dynamic indexing.
-        Real basis0 = simdBroadcast<Real>(0);
-        Real basis1 = simdBroadcast<Real>(0);
-        [[maybe_unused]] constexpr auto kCoefficient1 = 1;
-        [[maybe_unused]] constexpr auto kCoefficient8 = 1.0 / 2.0;
-        [[maybe_unused]] constexpr auto kCoefficient20 = 1.0 / 6.0;
-        [[maybe_unused]] constexpr auto kCoefficient39 = 1.0 / 24.0;
-        [[maybe_unused]] constexpr auto kCoefficient43 = 1.0 / 4.0;
-        [[maybe_unused]] constexpr auto kCoefficient58 = 1.0 / 12.0;
-        [[maybe_unused]] constexpr auto kCoefficient105 = 1.0 / 120.0;
-        [[maybe_unused]] constexpr auto kCoefficient182 = 1.0 / 60.0;
-        [[maybe_unused]] constexpr auto kCoefficient214 = 1.0 / 720.0;
-        [[maybe_unused]] constexpr auto kCoefficient216 = 1.0 / 48.0;
-        [[maybe_unused]] constexpr auto kCoefficient217 = -1.0 / 720.0;
-        [[maybe_unused]] constexpr auto kCoefficient246 = 1.0 / 8.0;
-        [[maybe_unused]] constexpr auto kCoefficient257 = 1.0 / 240.0;
-        [[maybe_unused]] constexpr auto kCoefficient314 = 1.0 / 36.0;
-        Real const t5 = dx * dx;
-        Real const t6 = dy * dy;
-        Real const t7 = dz * dz;
-        Real const t10 = t6 * simdBroadcast<Real>(kCoefficient8);
-        Real const t12 = t7 * simdBroadcast<Real>(kCoefficient8);
-        Real const t14 = t10 - t12;
-        Real const t15 = dx * dy;
-        Real const t16 = t5 * simdBroadcast<Real>(kCoefficient8);
-        Real const t17 = t16 - t12;
-        Real const t18 = dy * dz;
-        Real const t19 = dx * dz;
-        Real const t21 = t6 * simdBroadcast<Real>(kCoefficient20);
-        Real const t22 = t21 - t12;
-        Real const t23 = dy * t22;
-        Real const t24 = dx * t14;
-        Real const t25 = dy * t17;
-        Real const t26 = t5 * simdBroadcast<Real>(kCoefficient20);
-        Real const t27 = t26 - t12;
-        Real const t28 = dx * t27;
-        Real const t31 = t7 * simdBroadcast<Real>(kCoefficient20);
-        Real const t32 = t10 - t31;
-        Real const t33 = dz * t32;
-        Real const t34 = dz * t15;
-        Real const t37 = t16 - t31;
-        Real const t38 = dz * t37;
-        Real const t41 = t6 * simdBroadcast<Real>(kCoefficient39);
-        Real const t44 = t7 * simdBroadcast<Real>(kCoefficient43);
-        Real const t45 = t41 - t44;
-        Real const t46 = t6 * t45;
-        Real const t47 = t7 * simdBroadcast<Real>(kCoefficient39);
-        Real const t48 = t7 * t47;
-        Real const t49 = t46 + t48;
-        Real const t51 = t6 * simdBroadcast<Real>(kCoefficient43);
-        Real const t56 = t15 * t22;
-        Real const t59 = t51 - t44;
-        Real const t60 = t5 * t59;
-        Real const t63 = t7 * simdBroadcast<Real>(kCoefficient58);
-        Real const t67 = t63 - t51;
-        Real const t68 = t7 * t67;
-        Real const t69 = t60 + t68;
-        Real const t87 = t15 * t27;
-        Real const t89 = t5 * simdBroadcast<Real>(kCoefficient39);
-        Real const t90 = t89 - t44;
-        Real const t91 = t5 * t90;
-        Real const t92 = t48 + t91;
-        Real const t97 = t21 - t31;
-        Real const t98 = t18 * t97;
-        Real const t99 = t19 * t32;
-        Real const t101 = t18 * t37;
-        Real const t103 = t26 - t31;
-        Real const t104 = t19 * t103;
-        Real const t107 = t6 * simdBroadcast<Real>(kCoefficient105);
-        Real const t109 = t107 - t63;
-        Real const t110 = t6 * t109;
-        Real const t111 = t48 + t110;
-        Real const t113 = t6 * simdBroadcast<Real>(kCoefficient58);
-        Real const t118 = dy * t111;
-        Real const t119 = dx * t49;
-        Real const t120 = t113 - t44;
-        Real const t121 = t5 * t120;
-        Real const t126 = t63 - t113;
-        Real const t127 = t7 * t126;
-        Real const t128 = t121 + t127;
-        Real const t142 = dy * t128;
-        Real const t143 = t113 - t63;
-        Real const t144 = t5 * t143;
-        Real const t146 = t68 + t144;
-        Real const t161 = dx * t146;
-        Real const t162 = dy * t92;
-        Real const t163 = t5 * simdBroadcast<Real>(kCoefficient105);
-        Real const t164 = t163 - t63;
-        Real const t165 = t5 * t164;
-        Real const t166 = t48 + t165;
-        Real const t171 = dx * t166;
-        Real const t172 = t41 - t63;
-        Real const t173 = t6 * t172;
-        Real const t174 = t7 * simdBroadcast<Real>(kCoefficient105);
-        Real const t175 = t7 * t174;
-        Real const t176 = t173 + t175;
-        Real const t180 = dz * t176;
-        Real const t181 = t34 * t97;
-        Real const t183 = t51 - t63;
-        Real const t184 = t5 * t183;
-        Real const t185 = t7 * simdBroadcast<Real>(kCoefficient182);
-        Real const t189 = t185 - t113;
-        Real const t190 = t7 * t189;
-        Real const t191 = t184 + t190;
-        Real const t205 = dz * t191;
-        Real const t206 = t34 * t103;
-        Real const t207 = t89 - t63;
-        Real const t208 = t5 * t207;
-        Real const t209 = t175 + t208;
-        Real const t213 = dz * t209;
-        if (lane == 0) {
-            basis0 = simdBroadcast<Real>(kCoefficient1);
-        }
-        if (lane == 1) {
-            basis0 = dy;
-        }
-        if (lane == 2) {
-            basis0 = dx;
-        }
-        if (lane == 3) {
-            basis0 = dz;
-        }
-        if (lane == 4) {
-            basis0 = t14;
-        }
-        if (lane == 5) {
-            basis0 = t15;
-        }
-        if (lane == 6) {
-            basis0 = t17;
-        }
-        if (lane == 7) {
-            basis0 = t18;
-        }
-        if (lane == 8) {
-            basis0 = t19;
-        }
-        if (lane == 9) {
-            basis0 = t23;
-        }
-        if (lane == 10) {
-            basis0 = t24;
-        }
-        if (lane == 11) {
-            basis0 = t25;
-        }
-        if (lane == 12) {
-            basis0 = t28;
-        }
-        if (lane == 13) {
-            basis0 = t33;
-        }
-        if (lane == 14) {
-            basis0 = t34;
-        }
-        if (lane == 15) {
-            basis0 = t38;
-        }
-        if (lane == 16) {
-            basis0 = t49;
-        }
-        if (lane == 17) {
-            basis0 = t56;
-        }
-        if (lane == 18) {
-            basis0 = t69;
-        }
-        if (lane == 19) {
-            basis0 = t87;
-        }
-        if (lane == 20) {
-            basis0 = t92;
-        }
-        if (lane == 21) {
-            basis0 = t98;
-        }
-        if (lane == 22) {
-            basis0 = t99;
-        }
-        if (lane == 23) {
-            basis0 = t101;
-        }
-        if (lane == 24) {
-            basis0 = t104;
-        }
-        if (lane == 25) {
-            basis0 = t118;
-        }
-        if (lane == 26) {
-            basis0 = t119;
-        }
-        if (lane == 27) {
-            basis0 = t142;
-        }
-        if (lane == 28) {
-            basis0 = t161;
-        }
-        if (lane == 29) {
-            basis0 = t162;
-        }
-        if (lane == 30) {
-            basis0 = t171;
-        }
-        if (lane == 31) {
-            basis0 = t180;
-        }
-        if (lane == 0) {
-            basis1 = t181;
-        }
-        if (lane == 1) {
-            basis1 = t205;
-        }
-        if (lane == 2) {
-            basis1 = t206;
-        }
-        if (lane == 3) {
-            basis1 = t213;
-        }
-        if (doPhi) {
-            Real const t218 = t6 * simdBroadcast<Real>(kCoefficient214);
-            Real const t220 = t7 * simdBroadcast<Real>(kCoefficient216);
-            Real const t221 = t218 - t220;
-            Real const t222 = t6 * t221;
-            Real const t223 = t7 * t220;
-            Real const t224 = t222 + t223;
-            Real const t225 = t6 * t224;
-            Real const t226 = t7 * simdBroadcast<Real>(kCoefficient217);
-            Real const t228 = t7 * t226;
-            Real const t229 = t7 * t228;
-            Real const t230 = t225 + t229;
-            Real const t231 = t6 * simdBroadcast<Real>(kCoefficient216);
-            Real const t241 = t15 * t111;
-            Real const t258 = t7 * simdBroadcast<Real>(kCoefficient257);
-            Real const t264 = t6 * simdBroadcast<Real>(kCoefficient246);
-            Real const t275 = t5 * simdBroadcast<Real>(kCoefficient216);
-            Real const t276 = t275 - t220;
-            Real const t277 = t6 * t276;
-            Real const t286 = t5 * simdBroadcast<Real>(kCoefficient246);
-            Real const t287 = t47 - t286;
-            Real const t288 = t7 * t287;
-            Real const t289 = t277 + t288;
-            Real const t290 = t6 * t289;
-            Real const t291 = t275 - t258;
-            Real const t292 = t7 * t291;
-            Real const t293 = t7 * t292;
-            Real const t294 = t290 + t293;
-            Real const t315 = t6 * simdBroadcast<Real>(kCoefficient314);
-            Real const t316 = t315 - t63;
-            Real const t317 = t5 * t316;
-            Real const t319 = t127 + t317;
-            Real const t330 = t15 * t319;
-            Real const t331 = t231 - t220;
-            Real const t332 = t5 * t331;
-            Real const t341 = t47 - t264;
-            Real const t342 = t7 * t341;
-            Real const t343 = t332 + t342;
-            Real const t344 = t5 * t343;
-            Real const t345 = t231 - t258;
-            Real const t346 = t7 * t345;
-            Real const t347 = t7 * t346;
-            Real const t348 = t344 + t347;
-            Real const t386 = t15 * t166;
-            Real const t388 = t5 * simdBroadcast<Real>(kCoefficient214);
-            Real const t389 = t388 - t220;
-            Real const t390 = t5 * t389;
-            Real const t391 = t223 + t390;
-            Real const t392 = t5 * t391;
-            Real const t393 = t229 + t392;
-            Real const t403 = t7 * simdBroadcast<Real>(kCoefficient314);
-            Real const t404 = t107 - t403;
-            Real const t405 = t6 * t404;
-            Real const t406 = t175 + t405;
-            Real const t411 = t18 * t406;
-            Real const t412 = t19 * t176;
-            Real const t418 = t185 - t315;
-            Real const t419 = t7 * t418;
-            Real const t420 = t144 + t419;
-            Real const t430 = t18 * t420;
-            Real const t431 = t113 - t403;
-            Real const t432 = t5 * t431;
-            Real const t434 = t190 + t432;
-            Real const t447 = t19 * t434;
-            Real const t448 = t18 * t209;
-            Real const t450 = t163 - t403;
-            Real const t451 = t5 * t450;
-            Real const t452 = t175 + t451;
-            Real const t456 = t19 * t452;
+    private:
+        template <bool kReplicate, typename Real, typename Target, typename Source>
+        __device__ static void execute(Target& target, Source const& source, Real const dx,
+            Real const dy, Real const dz, bool doPhi) {
+            int const lane = threadIdx.x & 31;
+            constexpr unsigned int kMask = 0xffffffffu;
+            // 2 register(s) per lane hold the complete distributed Taylor basis:
+            // basis index i lives in word i >> 5 on lane i & 31. Shuffles avoid a
+            // large register-selection tree for dynamic indexing.
+            Real basis0 = simdBroadcast<Real>(0);
+            Real basis1 = simdBroadcast<Real>(0);
+            [[maybe_unused]] constexpr auto kCoefficient1 = 1;
+            [[maybe_unused]] constexpr auto kCoefficient8 = 1.0 / 2.0;
+            [[maybe_unused]] constexpr auto kCoefficient20 = 1.0 / 6.0;
+            [[maybe_unused]] constexpr auto kCoefficient39 = 1.0 / 24.0;
+            [[maybe_unused]] constexpr auto kCoefficient43 = 1.0 / 4.0;
+            [[maybe_unused]] constexpr auto kCoefficient58 = 1.0 / 12.0;
+            [[maybe_unused]] constexpr auto kCoefficient105 = 1.0 / 120.0;
+            [[maybe_unused]] constexpr auto kCoefficient182 = 1.0 / 60.0;
+            [[maybe_unused]] constexpr auto kCoefficient214 = 1.0 / 720.0;
+            [[maybe_unused]] constexpr auto kCoefficient216 = 1.0 / 48.0;
+            [[maybe_unused]] constexpr auto kCoefficient217 = -1.0 / 720.0;
+            [[maybe_unused]] constexpr auto kCoefficient246 = 1.0 / 8.0;
+            [[maybe_unused]] constexpr auto kCoefficient257 = 1.0 / 240.0;
+            [[maybe_unused]] constexpr auto kCoefficient314 = 1.0 / 36.0;
+            Real const t5 = dx * dx;
+            Real const t6 = dy * dy;
+            Real const t7 = dz * dz;
+            Real const t10 = t6 * simdBroadcast<Real>(kCoefficient8);
+            Real const t12 = t7 * simdBroadcast<Real>(kCoefficient8);
+            Real const t14 = t10 - t12;
+            Real const t15 = dx * dy;
+            Real const t16 = t5 * simdBroadcast<Real>(kCoefficient8);
+            Real const t17 = t16 - t12;
+            Real const t18 = dy * dz;
+            Real const t19 = dx * dz;
+            Real const t21 = t6 * simdBroadcast<Real>(kCoefficient20);
+            Real const t22 = t21 - t12;
+            Real const t23 = dy * t22;
+            Real const t24 = dx * t14;
+            Real const t25 = dy * t17;
+            Real const t26 = t5 * simdBroadcast<Real>(kCoefficient20);
+            Real const t27 = t26 - t12;
+            Real const t28 = dx * t27;
+            Real const t31 = t7 * simdBroadcast<Real>(kCoefficient20);
+            Real const t32 = t10 - t31;
+            Real const t33 = dz * t32;
+            Real const t34 = dz * t15;
+            Real const t37 = t16 - t31;
+            Real const t38 = dz * t37;
+            Real const t41 = t6 * simdBroadcast<Real>(kCoefficient39);
+            Real const t44 = t7 * simdBroadcast<Real>(kCoefficient43);
+            Real const t45 = t41 - t44;
+            Real const t46 = t6 * t45;
+            Real const t47 = t7 * simdBroadcast<Real>(kCoefficient39);
+            Real const t48 = t7 * t47;
+            Real const t49 = t46 + t48;
+            Real const t51 = t6 * simdBroadcast<Real>(kCoefficient43);
+            Real const t56 = t15 * t22;
+            Real const t59 = t51 - t44;
+            Real const t60 = t5 * t59;
+            Real const t63 = t7 * simdBroadcast<Real>(kCoefficient58);
+            Real const t67 = t63 - t51;
+            Real const t68 = t7 * t67;
+            Real const t69 = t60 + t68;
+            Real const t87 = t15 * t27;
+            Real const t89 = t5 * simdBroadcast<Real>(kCoefficient39);
+            Real const t90 = t89 - t44;
+            Real const t91 = t5 * t90;
+            Real const t92 = t48 + t91;
+            Real const t97 = t21 - t31;
+            Real const t98 = t18 * t97;
+            Real const t99 = t19 * t32;
+            Real const t101 = t18 * t37;
+            Real const t103 = t26 - t31;
+            Real const t104 = t19 * t103;
+            Real const t107 = t6 * simdBroadcast<Real>(kCoefficient105);
+            Real const t109 = t107 - t63;
+            Real const t110 = t6 * t109;
+            Real const t111 = t48 + t110;
+            Real const t113 = t6 * simdBroadcast<Real>(kCoefficient58);
+            Real const t118 = dy * t111;
+            Real const t119 = dx * t49;
+            Real const t120 = t113 - t44;
+            Real const t121 = t5 * t120;
+            Real const t126 = t63 - t113;
+            Real const t127 = t7 * t126;
+            Real const t128 = t121 + t127;
+            Real const t142 = dy * t128;
+            Real const t143 = t113 - t63;
+            Real const t144 = t5 * t143;
+            Real const t146 = t68 + t144;
+            Real const t161 = dx * t146;
+            Real const t162 = dy * t92;
+            Real const t163 = t5 * simdBroadcast<Real>(kCoefficient105);
+            Real const t164 = t163 - t63;
+            Real const t165 = t5 * t164;
+            Real const t166 = t48 + t165;
+            Real const t171 = dx * t166;
+            Real const t172 = t41 - t63;
+            Real const t173 = t6 * t172;
+            Real const t174 = t7 * simdBroadcast<Real>(kCoefficient105);
+            Real const t175 = t7 * t174;
+            Real const t176 = t173 + t175;
+            Real const t180 = dz * t176;
+            Real const t181 = t34 * t97;
+            Real const t183 = t51 - t63;
+            Real const t184 = t5 * t183;
+            Real const t185 = t7 * simdBroadcast<Real>(kCoefficient182);
+            Real const t189 = t185 - t113;
+            Real const t190 = t7 * t189;
+            Real const t191 = t184 + t190;
+            Real const t205 = dz * t191;
+            Real const t206 = t34 * t103;
+            Real const t207 = t89 - t63;
+            Real const t208 = t5 * t207;
+            Real const t209 = t175 + t208;
+            Real const t213 = dz * t209;
+            if (lane == 0) {
+                basis0 = simdBroadcast<Real>(kCoefficient1);
+            }
+            if (lane == 1) {
+                basis0 = dy;
+            }
+            if (lane == 2) {
+                basis0 = dx;
+            }
+            if (lane == 3) {
+                basis0 = dz;
+            }
             if (lane == 4) {
-                basis1 = t230;
+                basis0 = t14;
             }
             if (lane == 5) {
-                basis1 = t241;
+                basis0 = t15;
             }
             if (lane == 6) {
-                basis1 = t294;
+                basis0 = t17;
             }
             if (lane == 7) {
-                basis1 = t330;
+                basis0 = t18;
             }
             if (lane == 8) {
-                basis1 = t348;
+                basis0 = t19;
             }
             if (lane == 9) {
-                basis1 = t386;
+                basis0 = t23;
             }
             if (lane == 10) {
-                basis1 = t393;
+                basis0 = t24;
             }
             if (lane == 11) {
-                basis1 = t411;
+                basis0 = t25;
             }
             if (lane == 12) {
-                basis1 = t412;
+                basis0 = t28;
             }
             if (lane == 13) {
-                basis1 = t430;
+                basis0 = t33;
             }
             if (lane == 14) {
-                basis1 = t447;
+                basis0 = t34;
             }
             if (lane == 15) {
-                basis1 = t448;
+                basis0 = t38;
             }
             if (lane == 16) {
-                basis1 = t456;
+                basis0 = t49;
             }
-        }
-        {
-            // Fixed contraction phase 0: 6 rows, 4 outputs.
-            int const groupWidth = 8;
-            int const targetIndex = __ldg(&l2lWarpTargets6[0][lane]);
-            Real partial = simdBroadcast<Real>(0);
-#pragma unroll
-            for (int row = 0; row < 6; ++row) {
-                unsigned int entry = __ldg(&l2lWarpSchedule6[row][lane]);
-                if (!doPhi && lane < 8) {
-                    entry = 0u;
-                }
-                int const basisIndex = entry & 255u;
-                int const primaryIndex = (entry >> 8) & 255u;
-                int const secondaryIndex = (entry >> 16) & 255u;
-                int const kind = (entry >> 24) & 3u;
-                Real const sourceValue =
-                    source[primaryIndex] + simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
-                Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
-                Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
-                Real const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
-                Real const weight =
-                    simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
-                partial = simdFma(weight, sourceValue, partial);
+            if (lane == 17) {
+                basis0 = t56;
             }
-            Real const shuffled4 = __shfl_down_sync(kMask, partial, 4);
-            partial +=
-                (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : simdBroadcast<Real>(0);
-            Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
-            partial +=
-                (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : simdBroadcast<Real>(0);
-            Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-            partial +=
-                (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
-            bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
-            if (leader) {
-                partial += source[targetIndex];
+            if (lane == 18) {
+                basis0 = t69;
             }
-            if (doPhi && lane == 0) {
-                partial = simdFma(simdBroadcast<Real>(0.5) * dz * dz, source[49], partial);
+            if (lane == 19) {
+                basis0 = t87;
+            }
+            if (lane == 20) {
+                basis0 = t92;
+            }
+            if (lane == 21) {
+                basis0 = t98;
+            }
+            if (lane == 22) {
+                basis0 = t99;
+            }
+            if (lane == 23) {
+                basis0 = t101;
             }
             if (lane == 24) {
-                partial = simdFma(dz, source[49], partial);
+                basis0 = t104;
             }
-            if constexpr (kReplicate) {
-                target[0] = __shfl_sync(kMask, partial, 0);
-                target[1] = __shfl_sync(kMask, partial, 8);
-                target[2] = __shfl_sync(kMask, partial, 16);
-                target[3] = __shfl_sync(kMask, partial, 24);
-            } else {
-                if (leader) {
-                    target[targetIndex] = partial;
+            if (lane == 25) {
+                basis0 = t118;
+            }
+            if (lane == 26) {
+                basis0 = t119;
+            }
+            if (lane == 27) {
+                basis0 = t142;
+            }
+            if (lane == 28) {
+                basis0 = t161;
+            }
+            if (lane == 29) {
+                basis0 = t162;
+            }
+            if (lane == 30) {
+                basis0 = t171;
+            }
+            if (lane == 31) {
+                basis0 = t180;
+            }
+            if (lane == 0) {
+                basis1 = t181;
+            }
+            if (lane == 1) {
+                basis1 = t205;
+            }
+            if (lane == 2) {
+                basis1 = t206;
+            }
+            if (lane == 3) {
+                basis1 = t213;
+            }
+            if (doPhi) {
+                Real const t218 = t6 * simdBroadcast<Real>(kCoefficient214);
+                Real const t220 = t7 * simdBroadcast<Real>(kCoefficient216);
+                Real const t221 = t218 - t220;
+                Real const t222 = t6 * t221;
+                Real const t223 = t7 * t220;
+                Real const t224 = t222 + t223;
+                Real const t225 = t6 * t224;
+                Real const t226 = t7 * simdBroadcast<Real>(kCoefficient217);
+                Real const t228 = t7 * t226;
+                Real const t229 = t7 * t228;
+                Real const t230 = t225 + t229;
+                Real const t231 = t6 * simdBroadcast<Real>(kCoefficient216);
+                Real const t241 = t15 * t111;
+                Real const t258 = t7 * simdBroadcast<Real>(kCoefficient257);
+                Real const t264 = t6 * simdBroadcast<Real>(kCoefficient246);
+                Real const t275 = t5 * simdBroadcast<Real>(kCoefficient216);
+                Real const t276 = t275 - t220;
+                Real const t277 = t6 * t276;
+                Real const t286 = t5 * simdBroadcast<Real>(kCoefficient246);
+                Real const t287 = t47 - t286;
+                Real const t288 = t7 * t287;
+                Real const t289 = t277 + t288;
+                Real const t290 = t6 * t289;
+                Real const t291 = t275 - t258;
+                Real const t292 = t7 * t291;
+                Real const t293 = t7 * t292;
+                Real const t294 = t290 + t293;
+                Real const t315 = t6 * simdBroadcast<Real>(kCoefficient314);
+                Real const t316 = t315 - t63;
+                Real const t317 = t5 * t316;
+                Real const t319 = t127 + t317;
+                Real const t330 = t15 * t319;
+                Real const t331 = t231 - t220;
+                Real const t332 = t5 * t331;
+                Real const t341 = t47 - t264;
+                Real const t342 = t7 * t341;
+                Real const t343 = t332 + t342;
+                Real const t344 = t5 * t343;
+                Real const t345 = t231 - t258;
+                Real const t346 = t7 * t345;
+                Real const t347 = t7 * t346;
+                Real const t348 = t344 + t347;
+                Real const t386 = t15 * t166;
+                Real const t388 = t5 * simdBroadcast<Real>(kCoefficient214);
+                Real const t389 = t388 - t220;
+                Real const t390 = t5 * t389;
+                Real const t391 = t223 + t390;
+                Real const t392 = t5 * t391;
+                Real const t393 = t229 + t392;
+                Real const t403 = t7 * simdBroadcast<Real>(kCoefficient314);
+                Real const t404 = t107 - t403;
+                Real const t405 = t6 * t404;
+                Real const t406 = t175 + t405;
+                Real const t411 = t18 * t406;
+                Real const t412 = t19 * t176;
+                Real const t418 = t185 - t315;
+                Real const t419 = t7 * t418;
+                Real const t420 = t144 + t419;
+                Real const t430 = t18 * t420;
+                Real const t431 = t113 - t403;
+                Real const t432 = t5 * t431;
+                Real const t434 = t190 + t432;
+                Real const t447 = t19 * t434;
+                Real const t448 = t18 * t209;
+                Real const t450 = t163 - t403;
+                Real const t451 = t5 * t450;
+                Real const t452 = t175 + t451;
+                Real const t456 = t19 * t452;
+                if (lane == 4) {
+                    basis1 = t230;
+                }
+                if (lane == 5) {
+                    basis1 = t241;
+                }
+                if (lane == 6) {
+                    basis1 = t294;
+                }
+                if (lane == 7) {
+                    basis1 = t330;
+                }
+                if (lane == 8) {
+                    basis1 = t348;
+                }
+                if (lane == 9) {
+                    basis1 = t386;
+                }
+                if (lane == 10) {
+                    basis1 = t393;
+                }
+                if (lane == 11) {
+                    basis1 = t411;
+                }
+                if (lane == 12) {
+                    basis1 = t412;
+                }
+                if (lane == 13) {
+                    basis1 = t430;
+                }
+                if (lane == 14) {
+                    basis1 = t447;
+                }
+                if (lane == 15) {
+                    basis1 = t448;
+                }
+                if (lane == 16) {
+                    basis1 = t456;
                 }
             }
-        }
-        {
-            // Fixed contraction phase 1: 8 rows, 11 outputs.
-            int const groupWidth = lane < 20 ? 4 : (2);
-            int const targetIndex = __ldg(&l2lWarpTargets6[1][lane]);
-            Real partial = simdBroadcast<Real>(0);
+            {
+                // Fixed contraction phase 0: 6 rows, 4 outputs.
+                int const groupWidth = 8;
+                int const targetIndex = __ldg(&l2lWarpTargets6[0][lane]);
+                Real partial = simdBroadcast<Real>(0);
 #pragma unroll
-            for (int row = 6; row < 14; ++row) {
-                unsigned int entry = __ldg(&l2lWarpSchedule6[row][lane]);
-                int const basisIndex = entry & 255u;
-                int const primaryIndex = (entry >> 8) & 255u;
-                int const secondaryIndex = (entry >> 16) & 255u;
-                int const kind = (entry >> 24) & 3u;
-                Real const sourceValue =
-                    source[primaryIndex] + simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
-                Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
-                Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
-                Real const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
-                Real const weight =
-                    simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
-                partial = simdFma(weight, sourceValue, partial);
-            }
-            Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
-            partial +=
-                (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : simdBroadcast<Real>(0);
-            Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-            partial +=
-                (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
-            bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
-            if (leader) {
-                partial += source[targetIndex];
-            }
-            if constexpr (kReplicate) {
-                target[4] = __shfl_sync(kMask, partial, 0);
-                target[5] = __shfl_sync(kMask, partial, 4);
-                target[6] = __shfl_sync(kMask, partial, 8);
-                target[7] = __shfl_sync(kMask, partial, 12);
-                target[8] = __shfl_sync(kMask, partial, 16);
-                target[9] = __shfl_sync(kMask, partial, 20);
-                target[10] = __shfl_sync(kMask, partial, 22);
-                target[11] = __shfl_sync(kMask, partial, 24);
-                target[12] = __shfl_sync(kMask, partial, 26);
-                target[13] = __shfl_sync(kMask, partial, 28);
-                target[14] = __shfl_sync(kMask, partial, 30);
-            } else {
+                for (int row = 0; row < 6; ++row) {
+                    unsigned int entry = __ldg(&l2lWarpSchedule6[row][lane]);
+                    if (!doPhi && lane < 8) {
+                        entry = 0u;
+                    }
+                    int const basisIndex = entry & 255u;
+                    int const primaryIndex = (entry >> 8) & 255u;
+                    int const secondaryIndex = (entry >> 16) & 255u;
+                    int const kind = (entry >> 24) & 3u;
+                    Real const sourceValue = source[primaryIndex] +
+                        simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
+                    Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
+                    Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
+                    Real const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
+                    Real const weight =
+                        simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
+                    partial = simdFma(weight, sourceValue, partial);
+                }
+                Real const shuffled4 = __shfl_down_sync(kMask, partial, 4);
+                partial +=
+                    (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : simdBroadcast<Real>(0);
+                Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
+                partial +=
+                    (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : simdBroadcast<Real>(0);
+                Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
+                partial +=
+                    (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
+                bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
                 if (leader) {
-                    target[targetIndex] = partial;
+                    partial += source[targetIndex];
+                }
+                if (doPhi && lane == 0) {
+                    partial = simdFma(simdBroadcast<Real>(0.5) * dz * dz, source[49], partial);
+                }
+                if (lane == 24) {
+                    partial = simdFma(dz, source[49], partial);
+                }
+                if constexpr (kReplicate) {
+                    target[0] = __shfl_sync(kMask, partial, 0);
+                    target[1] = __shfl_sync(kMask, partial, 8);
+                    target[2] = __shfl_sync(kMask, partial, 16);
+                    target[3] = __shfl_sync(kMask, partial, 24);
+                } else {
+                    if (leader) {
+                        target[targetIndex] = partial;
+                    }
                 }
             }
-        }
-        {
-            // Fixed contraction phase 2: 8 rows, 21 outputs.
-            int const groupWidth = lane < 20 ? 2 : (lane < 31 ? 1 : (1));
-            int const targetIndex = __ldg(&l2lWarpTargets6[2][lane]);
-            Real partial = simdBroadcast<Real>(0);
+            {
+                // Fixed contraction phase 1: 8 rows, 11 outputs.
+                int const groupWidth = lane < 20 ? 4 : (2);
+                int const targetIndex = __ldg(&l2lWarpTargets6[1][lane]);
+                Real partial = simdBroadcast<Real>(0);
 #pragma unroll
-            for (int row = 14; row < 22; ++row) {
-                unsigned int entry = __ldg(&l2lWarpSchedule6[row][lane]);
-                int const basisIndex = entry & 255u;
-                int const primaryIndex = (entry >> 8) & 255u;
-                int const secondaryIndex = (entry >> 16) & 255u;
-                int const kind = (entry >> 24) & 3u;
-                Real const sourceValue =
-                    source[primaryIndex] + simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
-                Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
-                Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
-                Real const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
-                Real const weight =
-                    simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
-                partial = simdFma(weight, sourceValue, partial);
-            }
-            Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-            partial +=
-                (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
-            bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 31;
-            if (leader) {
-                partial += source[targetIndex];
-            }
-            if constexpr (kReplicate) {
-                target[15] = __shfl_sync(kMask, partial, 0);
-                target[16] = __shfl_sync(kMask, partial, 2);
-                target[17] = __shfl_sync(kMask, partial, 4);
-                target[18] = __shfl_sync(kMask, partial, 6);
-                target[19] = __shfl_sync(kMask, partial, 8);
-                target[20] = __shfl_sync(kMask, partial, 10);
-                target[21] = __shfl_sync(kMask, partial, 12);
-                target[22] = __shfl_sync(kMask, partial, 14);
-                target[23] = __shfl_sync(kMask, partial, 16);
-                target[24] = __shfl_sync(kMask, partial, 18);
-                target[25] = __shfl_sync(kMask, partial, 20);
-                target[26] = __shfl_sync(kMask, partial, 21);
-                target[27] = __shfl_sync(kMask, partial, 22);
-                target[28] = __shfl_sync(kMask, partial, 23);
-                target[29] = __shfl_sync(kMask, partial, 24);
-                target[30] = __shfl_sync(kMask, partial, 25);
-                target[31] = __shfl_sync(kMask, partial, 26);
-                target[32] = __shfl_sync(kMask, partial, 27);
-                target[33] = __shfl_sync(kMask, partial, 28);
-                target[34] = __shfl_sync(kMask, partial, 29);
-                target[35] = __shfl_sync(kMask, partial, 30);
-            } else {
+                for (int row = 6; row < 14; ++row) {
+                    unsigned int entry = __ldg(&l2lWarpSchedule6[row][lane]);
+                    int const basisIndex = entry & 255u;
+                    int const primaryIndex = (entry >> 8) & 255u;
+                    int const secondaryIndex = (entry >> 16) & 255u;
+                    int const kind = (entry >> 24) & 3u;
+                    Real const sourceValue = source[primaryIndex] +
+                        simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
+                    Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
+                    Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
+                    Real const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
+                    Real const weight =
+                        simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
+                    partial = simdFma(weight, sourceValue, partial);
+                }
+                Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
+                partial +=
+                    (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : simdBroadcast<Real>(0);
+                Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
+                partial +=
+                    (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
+                bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
                 if (leader) {
-                    target[targetIndex] = partial;
+                    partial += source[targetIndex];
+                }
+                if constexpr (kReplicate) {
+                    target[4] = __shfl_sync(kMask, partial, 0);
+                    target[5] = __shfl_sync(kMask, partial, 4);
+                    target[6] = __shfl_sync(kMask, partial, 8);
+                    target[7] = __shfl_sync(kMask, partial, 12);
+                    target[8] = __shfl_sync(kMask, partial, 16);
+                    target[9] = __shfl_sync(kMask, partial, 20);
+                    target[10] = __shfl_sync(kMask, partial, 22);
+                    target[11] = __shfl_sync(kMask, partial, 24);
+                    target[12] = __shfl_sync(kMask, partial, 26);
+                    target[13] = __shfl_sync(kMask, partial, 28);
+                    target[14] = __shfl_sync(kMask, partial, 30);
+                } else {
+                    if (leader) {
+                        target[targetIndex] = partial;
+                    }
                 }
             }
+            {
+                // Fixed contraction phase 2: 8 rows, 21 outputs.
+                int const groupWidth = lane < 20 ? 2 : (lane < 31 ? 1 : (1));
+                int const targetIndex = __ldg(&l2lWarpTargets6[2][lane]);
+                Real partial = simdBroadcast<Real>(0);
+#pragma unroll
+                for (int row = 14; row < 22; ++row) {
+                    unsigned int entry = __ldg(&l2lWarpSchedule6[row][lane]);
+                    int const basisIndex = entry & 255u;
+                    int const primaryIndex = (entry >> 8) & 255u;
+                    int const secondaryIndex = (entry >> 16) & 255u;
+                    int const kind = (entry >> 24) & 3u;
+                    Real const sourceValue = source[primaryIndex] +
+                        simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
+                    Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
+                    Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
+                    Real const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
+                    Real const weight =
+                        simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
+                    partial = simdFma(weight, sourceValue, partial);
+                }
+                Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
+                partial +=
+                    (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
+                bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 31;
+                if (leader) {
+                    partial += source[targetIndex];
+                }
+                if constexpr (kReplicate) {
+                    target[15] = __shfl_sync(kMask, partial, 0);
+                    target[16] = __shfl_sync(kMask, partial, 2);
+                    target[17] = __shfl_sync(kMask, partial, 4);
+                    target[18] = __shfl_sync(kMask, partial, 6);
+                    target[19] = __shfl_sync(kMask, partial, 8);
+                    target[20] = __shfl_sync(kMask, partial, 10);
+                    target[21] = __shfl_sync(kMask, partial, 12);
+                    target[22] = __shfl_sync(kMask, partial, 14);
+                    target[23] = __shfl_sync(kMask, partial, 16);
+                    target[24] = __shfl_sync(kMask, partial, 18);
+                    target[25] = __shfl_sync(kMask, partial, 20);
+                    target[26] = __shfl_sync(kMask, partial, 21);
+                    target[27] = __shfl_sync(kMask, partial, 22);
+                    target[28] = __shfl_sync(kMask, partial, 23);
+                    target[29] = __shfl_sync(kMask, partial, 24);
+                    target[30] = __shfl_sync(kMask, partial, 25);
+                    target[31] = __shfl_sync(kMask, partial, 26);
+                    target[32] = __shfl_sync(kMask, partial, 27);
+                    target[33] = __shfl_sync(kMask, partial, 28);
+                    target[34] = __shfl_sync(kMask, partial, 29);
+                    target[35] = __shfl_sync(kMask, partial, 30);
+                } else {
+                    if (leader) {
+                        target[targetIndex] = partial;
+                    }
+                }
+            }
+            if constexpr (kReplicate) {
+                target[36] = source[36];
+                target[37] = source[37];
+                target[38] = source[38];
+                target[39] = source[39];
+                target[40] = source[40];
+                target[41] = source[41];
+                target[42] = source[42];
+                target[43] = source[43];
+                target[44] = source[44];
+                target[45] = source[45];
+                target[46] = source[46];
+                target[47] = source[47];
+                target[48] = source[48];
+                target[49] = source[49];
+                if (!doPhi) {
+                    target[0] = source[0];
+                }
+            } else {
+                // Top-rank coefficients and the trace copy through unchanged.
+                for (int index = 36 + lane; index <= 49; index += 32) {
+                    target[index] = source[index];
+                }
+                // Lane zero led the potential group, so this restore is same-thread.
+                if (!doPhi && lane == 0) {
+                    target[0] = source[0];
+                }
+            }
+            // The caller may overwrite shared source storage from lane zero on
+            // return. Finish EVERY lane source read (and every target write)
+            // before permitting that write.
+            __syncwarp(kMask);
         }
-        if constexpr (kReplicate) {
-            target[36] = source[36];
-            target[37] = source[37];
-            target[38] = source[38];
-            target[39] = source[39];
-            target[40] = source[40];
-            target[41] = source[41];
-            target[42] = source[42];
-            target[43] = source[43];
-            target[44] = source[44];
-            target[45] = source[45];
-            target[46] = source[46];
-            target[47] = source[47];
-            target[48] = source[48];
-            target[49] = source[49];
-            if (!doPhi) {
-                target[0] = source[0];
-            }
-        } else {
-            // Top-rank coefficients and the trace copy through unchanged.
-            for (int index = 36 + lane; index <= 49; index += 32) {
-                target[index] = source[index];
-            }
-            // Lane zero led the potential group, so this restore is same-thread.
-            if (!doPhi && lane == 0) {
-                target[0] = source[0];
-            }
-        }
-        // The caller may overwrite shared source storage from lane zero on
-        // return. Finish EVERY lane source read (and every target write)
-        // before permitting that write.
-        __syncwarp(kMask);
-    }
-};
+    };
 #endif
 
+}    // namespace detail
 #endif
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 8) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 8)
 // FMM order 8: source degree 6, local degree 7.
 template <int order>
-class M2mKernel;
+class M2M;
 template <int order, bool withTrace>
-class L2lKernel;
+class L2L;
 
 template <>
-class M2mKernel<6> {
+class M2M<6> {
 public:
     static constexpr int kFlops_ = 1562;
     static constexpr int kWeightedFlops_ = 1058;
@@ -12269,7 +12283,7 @@ public:
 };
 
 template <>
-class L2lKernel<7, false> {
+class L2L<7, false> {
 public:
     static constexpr int kFlops_ = 2043;
     static constexpr int kWeightedFlops_ = 1122;
@@ -13548,7 +13562,7 @@ public:
 };
 
 template <>
-class L2lKernel<7, true> {
+class L2L<7, true> {
 public:
     static constexpr int kFlops_ = 2049;
     static constexpr int kWeightedFlops_ = 1125;
@@ -14832,7 +14846,7 @@ public:
 };
 
 template <>
-class P2mKernel<6> {
+class P2M<6> {
 public:
     static constexpr int kFlops_ = 714;
     static constexpr int kWeightedFlops_ = 529;
@@ -15518,7 +15532,7 @@ public:
 };
 
 template <>
-class P2lKernel<7> {
+class P2L<7> {
 public:
     static constexpr int kFlops_ = 315;
     static constexpr int kWeightedFlops_ = 212;
@@ -15901,7 +15915,7 @@ public:
 };
 
 template <>
-class M2pKernel<6, true> {
+class M2P<6, true> {
 public:
     static constexpr int kFlops_ = 398;
     static constexpr int kWeightedFlops_ = 268;
@@ -16208,7 +16222,7 @@ public:
 };
 
 template <>
-class M2pKernel<6, false> {
+class M2P<6, false> {
 public:
     static constexpr int kFlops_ = 412;
     static constexpr int kWeightedFlops_ = 279;
@@ -16526,7 +16540,7 @@ public:
 };
 
 template <>
-class L2pKernel<7, false> {
+class L2P<7, false> {
 public:
     static constexpr int kFlops_ = 707;
     static constexpr int kWeightedFlops_ = 451;
@@ -17014,7 +17028,7 @@ public:
 };
 
 template <>
-class L2pKernel<7, true> {
+class L2P<7, true> {
 public:
     static constexpr int kFlops_ = 711;
     static constexpr int kWeightedFlops_ = 453;
@@ -17503,971 +17517,974 @@ public:
     }
 };
 
+namespace detail {
 #ifdef __CUDACC__
-// Read-only GLOBAL storage: row/lane loads coalesce instead of serializing
-// divergent constant-memory accesses. Internal linkage needs no device RDC.
-// Entry layout: basis | primary << 8 | secondary << 16 | kind << 24.
-static __device__ unsigned int const l2lWarpSchedule7[31][32] = {
-    {16777473u, 16777730u, 16777987u, 16778244u, 16778501u, 16778758u, 16779015u, 16779272u,
-        16778241u, 16778498u, 16779011u, 16779524u, 16779781u, 16780038u, 16780551u, 16780808u,
-        16778497u, 16778754u, 16779267u, 16779780u, 16780037u, 16780294u, 16780807u, 16781064u,
-        16779009u, 16779266u, 33818115u, 16780548u, 16780805u, 16781062u, 34147079u, 34212872u},
-    {16779529u, 16779786u, 16780043u, 16780300u, 16780557u, 16780814u, 16781071u, 16781328u,
-        16781321u, 16781578u, 16781835u, 16782092u, 16782605u, 16782862u, 16783119u, 16783632u,
-        16781577u, 16781834u, 16782091u, 16782348u, 16782861u, 16783118u, 16783375u, 16783888u,
-        16782601u, 16782858u, 16783115u, 16783372u, 34607629u, 34673422u, 34739215u, 16785168u},
-    {16781585u, 16781842u, 16782099u, 16782356u, 16782613u, 16782870u, 16783127u, 16783384u,
-        16783889u, 16784146u, 16784403u, 16784660u, 16785173u, 16785430u, 16785687u, 16785944u,
-        16784145u, 16784402u, 16784659u, 16784916u, 16785429u, 16785686u, 16785943u, 16786200u,
-        16785425u, 16785682u, 16785939u, 16786196u, 35199765u, 35265558u, 35331351u, 35397144u},
-    {16783641u, 16783898u, 16784155u, 16784412u, 16784669u, 16784926u, 16785183u, 16785440u,
-        16786457u, 16786714u, 16786971u, 16787228u, 16787485u, 16787742u, 16788255u, 16788512u,
-        16786713u, 16786970u, 16787227u, 16787484u, 16787741u, 16787998u, 16788511u, 16788768u,
-        16788249u, 16788506u, 16788763u, 16789020u, 16789277u, 16789534u, 35923487u, 35989280u},
-    {16785697u, 16785954u, 16786211u, 16786468u, 16786725u, 16786982u, 16787239u, 16787496u,
-        16788769u, 16789026u, 16789283u, 16789796u, 16790053u, 16790310u, 16790567u, 16790824u,
-        16789025u, 16789282u, 16789539u, 16790052u, 16790309u, 16790566u, 16790823u, 16791080u,
-        36055073u, 36120866u, 36186659u, 16791844u, 16792101u, 16792358u, 16792615u, 16792872u},
-    {16787753u, 16788010u, 16788267u, 16788524u, 16788781u, 16789038u, 16789295u, 16789552u,
-        16791081u, 16791338u, 16791851u, 16792108u, 16792365u, 16792622u, 16792879u, 16793136u,
-        16791337u, 16791594u, 16792107u, 16792364u, 16792621u, 16792878u, 16793135u, 16793392u,
-        16793129u, 16793386u, 36778795u, 36844588u, 36910381u, 36976174u, 37041967u, 37107760u},
-    {16789809u, 16790066u, 16790323u, 16790580u, 16790837u, 16791094u, 16791351u, 16791608u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-    {16791865u, 16792122u, 16792379u, 16792636u, 16792893u, 16793150u, 16793407u, 0u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-    {16779521u, 16779778u, 16780547u, 16781316u, 16781573u, 16781830u, 16782599u, 16782856u,
-        16779777u, 16780034u, 16780803u, 16781572u, 16781829u, 16782086u, 16782855u, 16783112u,
-        16780033u, 16780290u, 16781059u, 16781828u, 16782085u, 16782342u, 16783111u, 16783368u,
-        16780545u, 16780802u, 34147075u, 16782596u, 16782853u, 16783110u, 34607623u, 34673416u},
-    {16783625u, 16783882u, 16784139u, 16784396u, 16785165u, 16785422u, 16785679u, 16786448u,
-        16783881u, 16784138u, 16784395u, 16784652u, 16785421u, 16785678u, 16785935u, 16786704u,
-        16784137u, 16784394u, 16784651u, 16784908u, 16785677u, 16785934u, 16786191u, 16786960u,
-        16785161u, 16785418u, 16785675u, 16785932u, 35199757u, 35265550u, 35331343u, 16788240u},
-    {16786705u, 16786962u, 16787219u, 16787476u, 16788245u, 16788502u, 16788759u, 16789016u,
-        16786961u, 16787218u, 16787475u, 16787732u, 16788501u, 16788758u, 16789015u, 16789272u,
-        16787217u, 16787474u, 16787731u, 16787988u, 16788757u, 16789014u, 16789271u, 16789528u,
-        16788497u, 16788754u, 16789011u, 16789268u, 35923477u, 35989270u, 36055063u, 36120856u},
-    {16789785u, 16790042u, 16790299u, 16790556u, 16790813u, 16791070u, 16791839u, 16792096u,
-        16790041u, 16790298u, 16790555u, 16790812u, 16791069u, 16791326u, 16792095u, 16792352u,
-        16790297u, 16790554u, 16790811u, 16791068u, 16791325u, 16791582u, 16792351u, 16792608u,
-        16791833u, 16792090u, 16792347u, 16792604u, 16792861u, 16793118u, 36778783u, 36844576u},
-    {16792353u, 16792610u, 16792867u, 0u, 0u, 0u, 0u, 0u, 16792609u, 16792866u, 16793123u, 0u, 0u,
-        0u, 0u, 0u, 16792865u, 16793122u, 16793379u, 0u, 0u, 0u, 0u, 0u, 36910369u, 36976162u,
-        37041955u, 0u, 0u, 0u, 0u, 0u},
-    {16780801u, 16781058u, 34212867u, 16782852u, 16783109u, 16783366u, 34673415u, 34739208u,
-        16781313u, 16781570u, 16782595u, 16783620u, 16781569u, 16781826u, 16782851u, 16783876u,
-        16781825u, 16782082u, 16783107u, 16784132u, 16782081u, 16782338u, 16783363u, 16784388u,
-        16782593u, 16782850u, 34607619u, 16785156u, 16782849u, 16783106u, 34673411u, 16785412u},
-    {16785417u, 16785674u, 16785931u, 16786188u, 35265549u, 35331342u, 35397135u, 16788496u,
-        16783877u, 16784134u, 16785159u, 16785416u, 16784133u, 16784390u, 16785415u, 16785672u,
-        16784389u, 16784646u, 16785671u, 16785928u, 16784645u, 16784902u, 16785927u, 16786184u,
-        16785413u, 16785670u, 35199751u, 35265544u, 16785669u, 16785926u, 35265543u, 35331336u},
-    {16788753u, 16789010u, 16789267u, 16789524u, 35989269u, 36055062u, 36120855u, 36186648u,
-        16786441u, 16786698u, 16786955u, 16787212u, 16786697u, 16786954u, 16787211u, 16787468u,
-        16786953u, 16787210u, 16787467u, 16787724u, 16787209u, 16787466u, 16787723u, 16787980u,
-        16788233u, 16788490u, 16788747u, 16789004u, 16788489u, 16788746u, 16789003u, 16789260u},
-    {16792089u, 16792346u, 16792603u, 16792860u, 16793117u, 16793374u, 36844575u, 36910368u,
-        16788237u, 16788494u, 16788751u, 16789776u, 16788493u, 16788750u, 16789007u, 16790032u,
-        16788749u, 16789006u, 16789263u, 16790288u, 16789005u, 16789262u, 16789519u, 16790544u,
-        35923469u, 35989262u, 36055055u, 16791824u, 35989261u, 36055054u, 36120847u, 16792080u},
-    {36976161u, 37041954u, 37107747u, 0u, 0u, 0u, 0u, 0u, 16790033u, 16790290u, 16790547u,
-        16790804u, 16790289u, 16790546u, 16790803u, 16791060u, 16790545u, 16790802u, 16791059u,
-        16791316u, 16790801u, 16791058u, 16791315u, 16791572u, 16792081u, 16792338u, 16792595u,
-        16792852u, 16792337u, 16792594u, 16792851u, 16793108u},
-    {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 16791829u, 16792086u, 16792343u, 16792600u, 16792085u,
-        16792342u, 16792599u, 16792856u, 16792341u, 16792598u, 16792855u, 16793112u, 16792597u,
-        16792854u, 16793111u, 16793368u, 36778773u, 36844566u, 36910359u, 36976152u, 36844565u,
-        36910358u, 36976151u, 37041944u},
-    {16783105u, 16783362u, 34739203u, 16785668u, 16783617u, 16783874u, 16783873u, 16784130u,
-        16784129u, 16784386u, 16784385u, 16784642u, 16784641u, 16784898u, 16785153u, 16785410u,
-        16785409u, 16785666u, 16785665u, 16785922u, 16785921u, 16786178u, 16786433u, 16786690u,
-        16786689u, 16786946u, 16786945u, 16787202u, 16787201u, 16787458u, 16787457u, 16787714u},
-    {16785925u, 16786182u, 35331335u, 35397128u, 16785155u, 16786436u, 16785411u, 16786692u,
-        16785667u, 16786948u, 16785923u, 16787204u, 16786179u, 16787460u, 35199747u, 16788228u,
-        35265539u, 16788484u, 35331331u, 16788740u, 35397123u, 16788996u, 16788227u, 16789764u,
-        16788483u, 16790020u, 16788739u, 16790276u, 16788995u, 16790532u, 16789251u, 16790788u},
-    {16788745u, 16789002u, 16789259u, 16789516u, 16786693u, 16786950u, 16786949u, 16787206u,
-        16787205u, 16787462u, 16787461u, 16787718u, 16787717u, 16787974u, 16788485u, 16788742u,
-        16788741u, 16788998u, 16788997u, 16789254u, 16789253u, 16789510u, 16790021u, 16790278u,
-        16790277u, 16790534u, 16790533u, 16790790u, 16790789u, 16791046u, 16791045u, 16791302u},
-    {36055053u, 36120846u, 36186639u, 16792336u, 16788231u, 16788488u, 16788487u, 16788744u,
-        16788743u, 16789000u, 16788999u, 16789256u, 16789255u, 16789512u, 35923463u, 35989256u,
-        35989255u, 36055048u, 36055047u, 36120840u, 36120839u, 36186632u, 16791815u, 16792072u,
-        16792071u, 16792328u, 16792327u, 16792584u, 16792583u, 16792840u, 16792839u, 16793096u},
-    {16792593u, 16792850u, 16793107u, 16793364u, 16789769u, 16790026u, 16790025u, 16790282u,
-        16790281u, 16790538u, 16790537u, 16790794u, 16790793u, 16791050u, 16791817u, 16792074u,
-        16792073u, 16792330u, 16792329u, 16792586u, 16792585u, 16792842u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u},
-    {36910357u, 36976150u, 37041943u, 37107736u, 16790283u, 16790540u, 16790539u, 16790796u,
-        16790795u, 16791052u, 16791051u, 16791308u, 16791307u, 16791564u, 16792331u, 16792588u,
-        16792587u, 16792844u, 16792843u, 16793100u, 16793099u, 16793356u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u},
-    {0u, 0u, 0u, 0u, 16791821u, 16792078u, 16792077u, 16792334u, 16792333u, 16792590u, 16792589u,
-        16792846u, 16792845u, 16793102u, 36778765u, 36844558u, 36844557u, 36910350u, 36910349u,
-        36976142u, 36976141u, 37041934u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-    {0u, 0u, 0u, 0u, 16792335u, 0u, 16792591u, 0u, 16792847u, 0u, 16793103u, 0u, 16793359u, 0u,
-        36910351u, 0u, 36976143u, 0u, 37041935u, 0u, 37107727u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u},
-    {16787713u, 16787970u, 16788225u, 16788482u, 16788481u, 16788738u, 16788737u, 16788994u,
-        16788993u, 16789250u, 16789249u, 16789506u, 16789761u, 16790017u, 16790273u, 16790529u,
-        16790785u, 16791041u, 16791297u, 16791809u, 16792065u, 16792321u, 16792577u, 16792833u,
-        16793089u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-    {16789507u, 16791044u, 35923459u, 16791812u, 35989251u, 16792068u, 36055043u, 16792324u,
-        36120835u, 16792580u, 36186627u, 16792836u, 16790018u, 16790274u, 16790530u, 16790786u,
-        16791042u, 16791298u, 16791554u, 16792066u, 16792322u, 16792578u, 16792834u, 16793090u,
-        16793346u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-    {16791301u, 16791558u, 16792069u, 16792326u, 16792325u, 16792582u, 16792581u, 16792838u,
-        16792837u, 16793094u, 16793093u, 16793350u, 16791811u, 16792067u, 16792323u, 16792579u,
-        16792835u, 16793091u, 16793347u, 36778755u, 36844547u, 36910339u, 36976131u, 37041923u,
-        37107715u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-    {16793095u, 16793352u, 36778759u, 36844552u, 36844551u, 36910344u, 36910343u, 36976136u,
-        36976135u, 37041928u, 37041927u, 37107720u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-};
-// Per phase, the output coefficient reduced by each lane's group. Inactive
-// lanes hold zero and are excluded by the generated active-lane bounds.
-static __device__ unsigned char const l2lWarpTargets7[5][32] = {
-    {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 1u, 1u, 1u, 1u, 1u, 1u, 1u, 1u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u,
-        3u, 3u, 3u, 3u, 3u, 3u, 3u, 3u},
-    {4u, 4u, 4u, 4u, 4u, 4u, 4u, 4u, 5u, 5u, 5u, 5u, 5u, 5u, 5u, 5u, 6u, 6u, 6u, 6u, 6u, 6u, 6u, 6u,
-        7u, 7u, 7u, 7u, 7u, 7u, 7u, 7u},
-    {8u, 8u, 8u, 8u, 8u, 8u, 8u, 8u, 9u, 9u, 9u, 9u, 10u, 10u, 10u, 10u, 11u, 11u, 11u, 11u, 12u,
-        12u, 12u, 12u, 13u, 13u, 13u, 13u, 14u, 14u, 14u, 14u},
-    {15u, 15u, 15u, 15u, 16u, 16u, 17u, 17u, 18u, 18u, 19u, 19u, 20u, 20u, 21u, 21u, 22u, 22u, 23u,
-        23u, 24u, 24u, 25u, 25u, 26u, 26u, 27u, 27u, 28u, 28u, 29u, 29u},
-    {30u, 30u, 31u, 31u, 32u, 32u, 33u, 33u, 34u, 34u, 35u, 35u, 36u, 37u, 38u, 39u, 40u, 41u, 42u,
-        43u, 44u, 45u, 46u, 47u, 48u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-};
+    // Read-only GLOBAL storage: row/lane loads coalesce instead of serializing
+    // divergent constant-memory accesses. Internal linkage needs no device RDC.
+    // Entry layout: basis | primary << 8 | secondary << 16 | kind << 24.
+    static __device__ unsigned int const l2lWarpSchedule7[31][32] = {
+        {16777473u, 16777730u, 16777987u, 16778244u, 16778501u, 16778758u, 16779015u, 16779272u,
+            16778241u, 16778498u, 16779011u, 16779524u, 16779781u, 16780038u, 16780551u, 16780808u,
+            16778497u, 16778754u, 16779267u, 16779780u, 16780037u, 16780294u, 16780807u, 16781064u,
+            16779009u, 16779266u, 33818115u, 16780548u, 16780805u, 16781062u, 34147079u, 34212872u},
+        {16779529u, 16779786u, 16780043u, 16780300u, 16780557u, 16780814u, 16781071u, 16781328u,
+            16781321u, 16781578u, 16781835u, 16782092u, 16782605u, 16782862u, 16783119u, 16783632u,
+            16781577u, 16781834u, 16782091u, 16782348u, 16782861u, 16783118u, 16783375u, 16783888u,
+            16782601u, 16782858u, 16783115u, 16783372u, 34607629u, 34673422u, 34739215u, 16785168u},
+        {16781585u, 16781842u, 16782099u, 16782356u, 16782613u, 16782870u, 16783127u, 16783384u,
+            16783889u, 16784146u, 16784403u, 16784660u, 16785173u, 16785430u, 16785687u, 16785944u,
+            16784145u, 16784402u, 16784659u, 16784916u, 16785429u, 16785686u, 16785943u, 16786200u,
+            16785425u, 16785682u, 16785939u, 16786196u, 35199765u, 35265558u, 35331351u, 35397144u},
+        {16783641u, 16783898u, 16784155u, 16784412u, 16784669u, 16784926u, 16785183u, 16785440u,
+            16786457u, 16786714u, 16786971u, 16787228u, 16787485u, 16787742u, 16788255u, 16788512u,
+            16786713u, 16786970u, 16787227u, 16787484u, 16787741u, 16787998u, 16788511u, 16788768u,
+            16788249u, 16788506u, 16788763u, 16789020u, 16789277u, 16789534u, 35923487u, 35989280u},
+        {16785697u, 16785954u, 16786211u, 16786468u, 16786725u, 16786982u, 16787239u, 16787496u,
+            16788769u, 16789026u, 16789283u, 16789796u, 16790053u, 16790310u, 16790567u, 16790824u,
+            16789025u, 16789282u, 16789539u, 16790052u, 16790309u, 16790566u, 16790823u, 16791080u,
+            36055073u, 36120866u, 36186659u, 16791844u, 16792101u, 16792358u, 16792615u, 16792872u},
+        {16787753u, 16788010u, 16788267u, 16788524u, 16788781u, 16789038u, 16789295u, 16789552u,
+            16791081u, 16791338u, 16791851u, 16792108u, 16792365u, 16792622u, 16792879u, 16793136u,
+            16791337u, 16791594u, 16792107u, 16792364u, 16792621u, 16792878u, 16793135u, 16793392u,
+            16793129u, 16793386u, 36778795u, 36844588u, 36910381u, 36976174u, 37041967u, 37107760u},
+        {16789809u, 16790066u, 16790323u, 16790580u, 16790837u, 16791094u, 16791351u, 16791608u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u},
+        {16791865u, 16792122u, 16792379u, 16792636u, 16792893u, 16793150u, 16793407u, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {16779521u, 16779778u, 16780547u, 16781316u, 16781573u, 16781830u, 16782599u, 16782856u,
+            16779777u, 16780034u, 16780803u, 16781572u, 16781829u, 16782086u, 16782855u, 16783112u,
+            16780033u, 16780290u, 16781059u, 16781828u, 16782085u, 16782342u, 16783111u, 16783368u,
+            16780545u, 16780802u, 34147075u, 16782596u, 16782853u, 16783110u, 34607623u, 34673416u},
+        {16783625u, 16783882u, 16784139u, 16784396u, 16785165u, 16785422u, 16785679u, 16786448u,
+            16783881u, 16784138u, 16784395u, 16784652u, 16785421u, 16785678u, 16785935u, 16786704u,
+            16784137u, 16784394u, 16784651u, 16784908u, 16785677u, 16785934u, 16786191u, 16786960u,
+            16785161u, 16785418u, 16785675u, 16785932u, 35199757u, 35265550u, 35331343u, 16788240u},
+        {16786705u, 16786962u, 16787219u, 16787476u, 16788245u, 16788502u, 16788759u, 16789016u,
+            16786961u, 16787218u, 16787475u, 16787732u, 16788501u, 16788758u, 16789015u, 16789272u,
+            16787217u, 16787474u, 16787731u, 16787988u, 16788757u, 16789014u, 16789271u, 16789528u,
+            16788497u, 16788754u, 16789011u, 16789268u, 35923477u, 35989270u, 36055063u, 36120856u},
+        {16789785u, 16790042u, 16790299u, 16790556u, 16790813u, 16791070u, 16791839u, 16792096u,
+            16790041u, 16790298u, 16790555u, 16790812u, 16791069u, 16791326u, 16792095u, 16792352u,
+            16790297u, 16790554u, 16790811u, 16791068u, 16791325u, 16791582u, 16792351u, 16792608u,
+            16791833u, 16792090u, 16792347u, 16792604u, 16792861u, 16793118u, 36778783u, 36844576u},
+        {16792353u, 16792610u, 16792867u, 0u, 0u, 0u, 0u, 0u, 16792609u, 16792866u, 16793123u, 0u,
+            0u, 0u, 0u, 0u, 16792865u, 16793122u, 16793379u, 0u, 0u, 0u, 0u, 0u, 36910369u,
+            36976162u, 37041955u, 0u, 0u, 0u, 0u, 0u},
+        {16780801u, 16781058u, 34212867u, 16782852u, 16783109u, 16783366u, 34673415u, 34739208u,
+            16781313u, 16781570u, 16782595u, 16783620u, 16781569u, 16781826u, 16782851u, 16783876u,
+            16781825u, 16782082u, 16783107u, 16784132u, 16782081u, 16782338u, 16783363u, 16784388u,
+            16782593u, 16782850u, 34607619u, 16785156u, 16782849u, 16783106u, 34673411u, 16785412u},
+        {16785417u, 16785674u, 16785931u, 16786188u, 35265549u, 35331342u, 35397135u, 16788496u,
+            16783877u, 16784134u, 16785159u, 16785416u, 16784133u, 16784390u, 16785415u, 16785672u,
+            16784389u, 16784646u, 16785671u, 16785928u, 16784645u, 16784902u, 16785927u, 16786184u,
+            16785413u, 16785670u, 35199751u, 35265544u, 16785669u, 16785926u, 35265543u, 35331336u},
+        {16788753u, 16789010u, 16789267u, 16789524u, 35989269u, 36055062u, 36120855u, 36186648u,
+            16786441u, 16786698u, 16786955u, 16787212u, 16786697u, 16786954u, 16787211u, 16787468u,
+            16786953u, 16787210u, 16787467u, 16787724u, 16787209u, 16787466u, 16787723u, 16787980u,
+            16788233u, 16788490u, 16788747u, 16789004u, 16788489u, 16788746u, 16789003u, 16789260u},
+        {16792089u, 16792346u, 16792603u, 16792860u, 16793117u, 16793374u, 36844575u, 36910368u,
+            16788237u, 16788494u, 16788751u, 16789776u, 16788493u, 16788750u, 16789007u, 16790032u,
+            16788749u, 16789006u, 16789263u, 16790288u, 16789005u, 16789262u, 16789519u, 16790544u,
+            35923469u, 35989262u, 36055055u, 16791824u, 35989261u, 36055054u, 36120847u, 16792080u},
+        {36976161u, 37041954u, 37107747u, 0u, 0u, 0u, 0u, 0u, 16790033u, 16790290u, 16790547u,
+            16790804u, 16790289u, 16790546u, 16790803u, 16791060u, 16790545u, 16790802u, 16791059u,
+            16791316u, 16790801u, 16791058u, 16791315u, 16791572u, 16792081u, 16792338u, 16792595u,
+            16792852u, 16792337u, 16792594u, 16792851u, 16793108u},
+        {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 16791829u, 16792086u, 16792343u, 16792600u, 16792085u,
+            16792342u, 16792599u, 16792856u, 16792341u, 16792598u, 16792855u, 16793112u, 16792597u,
+            16792854u, 16793111u, 16793368u, 36778773u, 36844566u, 36910359u, 36976152u, 36844565u,
+            36910358u, 36976151u, 37041944u},
+        {16783105u, 16783362u, 34739203u, 16785668u, 16783617u, 16783874u, 16783873u, 16784130u,
+            16784129u, 16784386u, 16784385u, 16784642u, 16784641u, 16784898u, 16785153u, 16785410u,
+            16785409u, 16785666u, 16785665u, 16785922u, 16785921u, 16786178u, 16786433u, 16786690u,
+            16786689u, 16786946u, 16786945u, 16787202u, 16787201u, 16787458u, 16787457u, 16787714u},
+        {16785925u, 16786182u, 35331335u, 35397128u, 16785155u, 16786436u, 16785411u, 16786692u,
+            16785667u, 16786948u, 16785923u, 16787204u, 16786179u, 16787460u, 35199747u, 16788228u,
+            35265539u, 16788484u, 35331331u, 16788740u, 35397123u, 16788996u, 16788227u, 16789764u,
+            16788483u, 16790020u, 16788739u, 16790276u, 16788995u, 16790532u, 16789251u, 16790788u},
+        {16788745u, 16789002u, 16789259u, 16789516u, 16786693u, 16786950u, 16786949u, 16787206u,
+            16787205u, 16787462u, 16787461u, 16787718u, 16787717u, 16787974u, 16788485u, 16788742u,
+            16788741u, 16788998u, 16788997u, 16789254u, 16789253u, 16789510u, 16790021u, 16790278u,
+            16790277u, 16790534u, 16790533u, 16790790u, 16790789u, 16791046u, 16791045u, 16791302u},
+        {36055053u, 36120846u, 36186639u, 16792336u, 16788231u, 16788488u, 16788487u, 16788744u,
+            16788743u, 16789000u, 16788999u, 16789256u, 16789255u, 16789512u, 35923463u, 35989256u,
+            35989255u, 36055048u, 36055047u, 36120840u, 36120839u, 36186632u, 16791815u, 16792072u,
+            16792071u, 16792328u, 16792327u, 16792584u, 16792583u, 16792840u, 16792839u, 16793096u},
+        {16792593u, 16792850u, 16793107u, 16793364u, 16789769u, 16790026u, 16790025u, 16790282u,
+            16790281u, 16790538u, 16790537u, 16790794u, 16790793u, 16791050u, 16791817u, 16792074u,
+            16792073u, 16792330u, 16792329u, 16792586u, 16792585u, 16792842u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u},
+        {36910357u, 36976150u, 37041943u, 37107736u, 16790283u, 16790540u, 16790539u, 16790796u,
+            16790795u, 16791052u, 16791051u, 16791308u, 16791307u, 16791564u, 16792331u, 16792588u,
+            16792587u, 16792844u, 16792843u, 16793100u, 16793099u, 16793356u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u},
+        {0u, 0u, 0u, 0u, 16791821u, 16792078u, 16792077u, 16792334u, 16792333u, 16792590u,
+            16792589u, 16792846u, 16792845u, 16793102u, 36778765u, 36844558u, 36844557u, 36910350u,
+            36910349u, 36976142u, 36976141u, 37041934u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {0u, 0u, 0u, 0u, 16792335u, 0u, 16792591u, 0u, 16792847u, 0u, 16793103u, 0u, 16793359u, 0u,
+            36910351u, 0u, 36976143u, 0u, 37041935u, 0u, 37107727u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u},
+        {16787713u, 16787970u, 16788225u, 16788482u, 16788481u, 16788738u, 16788737u, 16788994u,
+            16788993u, 16789250u, 16789249u, 16789506u, 16789761u, 16790017u, 16790273u, 16790529u,
+            16790785u, 16791041u, 16791297u, 16791809u, 16792065u, 16792321u, 16792577u, 16792833u,
+            16793089u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {16789507u, 16791044u, 35923459u, 16791812u, 35989251u, 16792068u, 36055043u, 16792324u,
+            36120835u, 16792580u, 36186627u, 16792836u, 16790018u, 16790274u, 16790530u, 16790786u,
+            16791042u, 16791298u, 16791554u, 16792066u, 16792322u, 16792578u, 16792834u, 16793090u,
+            16793346u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {16791301u, 16791558u, 16792069u, 16792326u, 16792325u, 16792582u, 16792581u, 16792838u,
+            16792837u, 16793094u, 16793093u, 16793350u, 16791811u, 16792067u, 16792323u, 16792579u,
+            16792835u, 16793091u, 16793347u, 36778755u, 36844547u, 36910339u, 36976131u, 37041923u,
+            37107715u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {16793095u, 16793352u, 36778759u, 36844552u, 36844551u, 36910344u, 36910343u, 36976136u,
+            36976135u, 37041928u, 37041927u, 37107720u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+    };
+    // Per phase, the output coefficient reduced by each lane's group. Inactive
+    // lanes hold zero and are excluded by the generated active-lane bounds.
+    static __device__ unsigned char const l2lWarpTargets7[5][32] = {
+        {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 1u, 1u, 1u, 1u, 1u, 1u, 1u, 1u, 2u, 2u, 2u, 2u, 2u, 2u, 2u,
+            2u, 3u, 3u, 3u, 3u, 3u, 3u, 3u, 3u},
+        {4u, 4u, 4u, 4u, 4u, 4u, 4u, 4u, 5u, 5u, 5u, 5u, 5u, 5u, 5u, 5u, 6u, 6u, 6u, 6u, 6u, 6u, 6u,
+            6u, 7u, 7u, 7u, 7u, 7u, 7u, 7u, 7u},
+        {8u, 8u, 8u, 8u, 8u, 8u, 8u, 8u, 9u, 9u, 9u, 9u, 10u, 10u, 10u, 10u, 11u, 11u, 11u, 11u,
+            12u, 12u, 12u, 12u, 13u, 13u, 13u, 13u, 14u, 14u, 14u, 14u},
+        {15u, 15u, 15u, 15u, 16u, 16u, 17u, 17u, 18u, 18u, 19u, 19u, 20u, 20u, 21u, 21u, 22u, 22u,
+            23u, 23u, 24u, 24u, 25u, 25u, 26u, 26u, 27u, 27u, 28u, 28u, 29u, 29u},
+        {30u, 30u, 31u, 31u, 32u, 32u, 33u, 33u, 34u, 34u, 35u, 35u, 36u, 37u, 38u, 39u, 40u, 41u,
+            42u, 43u, 44u, 45u, 46u, 47u, 48u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+    };
 
-template <int order, bool withTrace>
-class L2lWarpKernel;
-template <>
-class L2lWarpKernel<7, true> {
-public:
-    // Whole-warp emitted floating arithmetic; a fused operation counts twice.
-    // Includes replicated basis work and padded rows, excludes index/shuffle work.
-    static constexpr int kFlops_ = 13943;
-    static constexpr int kFlopsNoPotential_ = 10547;
-    static constexpr int kWeightedFlops_ = 12949;
-    static constexpr int kWeightedFlopsNoPotential_ = 9554;
-    static constexpr int kDegree_ = 7;
-    static constexpr int kTraceIndex_ = 64;
-    static constexpr int kCoefficients_ = 65;
-    static constexpr int kBasisWords_ = 2;
-    static constexpr int kScheduleRows_ = 31;
-    static constexpr int kPhases_ = 5;
-    template <typename Real, typename Expansion, typename Source>
-    __device__ static void translate(Expansion& target, Source const& source, Real const dx,
-        Real const dy, Real const dz, bool doPhi) {
-        // Contract: all 32 lanes enter with identical source/geometry; target
-        // is private per lane. Every lane receives the complete expansion.
-        execute<true>(target, source, dx, dy, dz, doPhi);
-    }
-    template <typename Real, typename Source>
-    __device__ static void translateInto(Real* target, Source const& source, Real const dx,
-        Real const dy, Real const dz, bool doPhi) {
-        // Contract: all 32 lanes enter with identical source/geometry; target
-        // addresses 65 values that never alias source. Group leaders store
-        // their coefficient once; strided lanes copy the unchanged ones. Every
-        // source read and target write is complete when this returns.
-        execute<false>(target, source, dx, dy, dz, doPhi);
-    }
+    template <int order, bool withTrace>
+    class L2LWarp;
+    template <>
+    class L2LWarp<7, true> {
+    public:
+        // Whole-warp emitted floating arithmetic; a fused operation counts twice.
+        // Includes replicated basis work and padded rows, excludes index/shuffle work.
+        static constexpr int kFlops_ = 13943;
+        static constexpr int kFlopsNoPotential_ = 10547;
+        static constexpr int kWeightedFlops_ = 12949;
+        static constexpr int kWeightedFlopsNoPotential_ = 9554;
+        static constexpr int kDegree_ = 7;
+        static constexpr int kTraceIndex_ = 64;
+        static constexpr int kCoefficients_ = 65;
+        static constexpr int kBasisWords_ = 2;
+        static constexpr int kScheduleRows_ = 31;
+        static constexpr int kPhases_ = 5;
+        template <typename Real, typename Expansion, typename Source>
+        __device__ static void translate(Expansion& target, Source const& source, Real const dx,
+            Real const dy, Real const dz, bool doPhi) {
+            // Contract: all 32 lanes enter with identical source/geometry; target
+            // is private per lane. Every lane receives the complete expansion.
+            execute<true>(target, source, dx, dy, dz, doPhi);
+        }
+        template <typename Real, typename Source>
+        __device__ static void translateInto(Real* target, Source const& source, Real const dx,
+            Real const dy, Real const dz, bool doPhi) {
+            // Contract: all 32 lanes enter with identical source/geometry; target
+            // addresses 65 values that never alias source. Group leaders store
+            // their coefficient once; strided lanes copy the unchanged ones. Every
+            // source read and target write is complete when this returns.
+            execute<false>(target, source, dx, dy, dz, doPhi);
+        }
 
-private:
-    template <bool kReplicate, typename Real, typename Target, typename Source>
-    __device__ static void execute(Target& target, Source const& source, Real const dx,
-        Real const dy, Real const dz, bool doPhi) {
-        int const lane = threadIdx.x & 31;
-        constexpr unsigned int kMask = 0xffffffffu;
-        // 2 register(s) per lane hold the complete distributed Taylor basis:
-        // basis index i lives in word i >> 5 on lane i & 31. Shuffles avoid a
-        // large register-selection tree for dynamic indexing.
-        Real basis0 = simdBroadcast<Real>(0);
-        Real basis1 = simdBroadcast<Real>(0);
-        [[maybe_unused]] constexpr auto kCoefficient1 = 1;
-        [[maybe_unused]] constexpr auto kCoefficient8 = 1.0 / 2.0;
-        [[maybe_unused]] constexpr auto kCoefficient20 = 1.0 / 6.0;
-        [[maybe_unused]] constexpr auto kCoefficient39 = 1.0 / 24.0;
-        [[maybe_unused]] constexpr auto kCoefficient43 = 1.0 / 4.0;
-        [[maybe_unused]] constexpr auto kCoefficient58 = 1.0 / 12.0;
-        [[maybe_unused]] constexpr auto kCoefficient105 = 1.0 / 120.0;
-        [[maybe_unused]] constexpr auto kCoefficient182 = 1.0 / 60.0;
-        [[maybe_unused]] constexpr auto kCoefficient214 = 1.0 / 720.0;
-        [[maybe_unused]] constexpr auto kCoefficient216 = 1.0 / 48.0;
-        [[maybe_unused]] constexpr auto kCoefficient217 = -1.0 / 720.0;
-        [[maybe_unused]] constexpr auto kCoefficient246 = 1.0 / 8.0;
-        [[maybe_unused]] constexpr auto kCoefficient257 = 1.0 / 240.0;
-        [[maybe_unused]] constexpr auto kCoefficient314 = 1.0 / 36.0;
-        [[maybe_unused]] constexpr auto kCoefficient457 = 1.0 / 5040.0;
-        [[maybe_unused]] constexpr auto kCoefficient458 = 1.0 / 144.0;
-        [[maybe_unused]] constexpr auto kCoefficient481 = 1.0 / 72.0;
-        [[maybe_unused]] constexpr auto kCoefficient699 = -1.0 / 5040.0;
-        [[maybe_unused]] constexpr auto kCoefficient730 = 1.0 / 1680.0;
-        Real const t5 = dx * dx;
-        Real const t6 = dy * dy;
-        Real const t7 = dz * dz;
-        Real const t10 = t6 * simdBroadcast<Real>(kCoefficient8);
-        Real const t12 = t7 * simdBroadcast<Real>(kCoefficient8);
-        Real const t14 = t10 - t12;
-        Real const t15 = dx * dy;
-        Real const t16 = t5 * simdBroadcast<Real>(kCoefficient8);
-        Real const t17 = t16 - t12;
-        Real const t18 = dy * dz;
-        Real const t19 = dx * dz;
-        Real const t21 = t6 * simdBroadcast<Real>(kCoefficient20);
-        Real const t22 = t21 - t12;
-        Real const t23 = dy * t22;
-        Real const t24 = dx * t14;
-        Real const t25 = dy * t17;
-        Real const t26 = t5 * simdBroadcast<Real>(kCoefficient20);
-        Real const t27 = t26 - t12;
-        Real const t28 = dx * t27;
-        Real const t31 = t7 * simdBroadcast<Real>(kCoefficient20);
-        Real const t32 = t10 - t31;
-        Real const t33 = dz * t32;
-        Real const t34 = dz * t15;
-        Real const t37 = t16 - t31;
-        Real const t38 = dz * t37;
-        Real const t41 = t6 * simdBroadcast<Real>(kCoefficient39);
-        Real const t44 = t7 * simdBroadcast<Real>(kCoefficient43);
-        Real const t45 = t41 - t44;
-        Real const t46 = t6 * t45;
-        Real const t47 = t7 * simdBroadcast<Real>(kCoefficient39);
-        Real const t48 = t7 * t47;
-        Real const t49 = t46 + t48;
-        Real const t51 = t6 * simdBroadcast<Real>(kCoefficient43);
-        Real const t56 = t15 * t22;
-        Real const t59 = t51 - t44;
-        Real const t60 = t5 * t59;
-        Real const t63 = t7 * simdBroadcast<Real>(kCoefficient58);
-        Real const t67 = t63 - t51;
-        Real const t68 = t7 * t67;
-        Real const t69 = t60 + t68;
-        Real const t87 = t15 * t27;
-        Real const t89 = t5 * simdBroadcast<Real>(kCoefficient39);
-        Real const t90 = t89 - t44;
-        Real const t91 = t5 * t90;
-        Real const t92 = t48 + t91;
-        Real const t97 = t21 - t31;
-        Real const t98 = t18 * t97;
-        Real const t99 = t19 * t32;
-        Real const t101 = t18 * t37;
-        Real const t103 = t26 - t31;
-        Real const t104 = t19 * t103;
-        Real const t107 = t6 * simdBroadcast<Real>(kCoefficient105);
-        Real const t109 = t107 - t63;
-        Real const t110 = t6 * t109;
-        Real const t111 = t48 + t110;
-        Real const t113 = t6 * simdBroadcast<Real>(kCoefficient58);
-        Real const t118 = dy * t111;
-        Real const t119 = dx * t49;
-        Real const t120 = t113 - t44;
-        Real const t121 = t5 * t120;
-        Real const t126 = t63 - t113;
-        Real const t127 = t7 * t126;
-        Real const t128 = t121 + t127;
-        Real const t142 = dy * t128;
-        Real const t143 = t113 - t63;
-        Real const t144 = t5 * t143;
-        Real const t146 = t68 + t144;
-        Real const t161 = dx * t146;
-        Real const t162 = dy * t92;
-        Real const t163 = t5 * simdBroadcast<Real>(kCoefficient105);
-        Real const t164 = t163 - t63;
-        Real const t165 = t5 * t164;
-        Real const t166 = t48 + t165;
-        Real const t171 = dx * t166;
-        Real const t172 = t41 - t63;
-        Real const t173 = t6 * t172;
-        Real const t174 = t7 * simdBroadcast<Real>(kCoefficient105);
-        Real const t175 = t7 * t174;
-        Real const t176 = t173 + t175;
-        Real const t180 = dz * t176;
-        Real const t181 = t34 * t97;
-        Real const t183 = t51 - t63;
-        Real const t184 = t5 * t183;
-        Real const t185 = t7 * simdBroadcast<Real>(kCoefficient182);
-        Real const t189 = t185 - t113;
-        Real const t190 = t7 * t189;
-        Real const t191 = t184 + t190;
-        Real const t205 = dz * t191;
-        Real const t206 = t34 * t103;
-        Real const t207 = t89 - t63;
-        Real const t208 = t5 * t207;
-        Real const t209 = t175 + t208;
-        Real const t213 = dz * t209;
-        Real const t218 = t6 * simdBroadcast<Real>(kCoefficient214);
-        Real const t220 = t7 * simdBroadcast<Real>(kCoefficient216);
-        Real const t221 = t218 - t220;
-        Real const t222 = t6 * t221;
-        Real const t223 = t7 * t220;
-        Real const t224 = t222 + t223;
-        Real const t225 = t6 * t224;
-        Real const t226 = t7 * simdBroadcast<Real>(kCoefficient217);
-        Real const t228 = t7 * t226;
-        Real const t229 = t7 * t228;
-        Real const t230 = t225 + t229;
-        Real const t231 = t6 * simdBroadcast<Real>(kCoefficient216);
-        Real const t241 = t15 * t111;
-        Real const t258 = t7 * simdBroadcast<Real>(kCoefficient257);
-        Real const t264 = t6 * simdBroadcast<Real>(kCoefficient246);
-        Real const t275 = t5 * simdBroadcast<Real>(kCoefficient216);
-        Real const t276 = t275 - t220;
-        Real const t277 = t6 * t276;
-        Real const t286 = t5 * simdBroadcast<Real>(kCoefficient246);
-        Real const t287 = t47 - t286;
-        Real const t288 = t7 * t287;
-        Real const t289 = t277 + t288;
-        Real const t290 = t6 * t289;
-        Real const t291 = t275 - t258;
-        Real const t292 = t7 * t291;
-        Real const t293 = t7 * t292;
-        Real const t294 = t290 + t293;
-        Real const t315 = t6 * simdBroadcast<Real>(kCoefficient314);
-        Real const t316 = t315 - t63;
-        Real const t317 = t5 * t316;
-        Real const t319 = t127 + t317;
-        Real const t330 = t15 * t319;
-        Real const t331 = t231 - t220;
-        Real const t332 = t5 * t331;
-        Real const t341 = t47 - t264;
-        Real const t342 = t7 * t341;
-        Real const t343 = t332 + t342;
-        Real const t344 = t5 * t343;
-        Real const t345 = t231 - t258;
-        Real const t346 = t7 * t345;
-        Real const t347 = t7 * t346;
-        Real const t348 = t344 + t347;
-        Real const t386 = t15 * t166;
-        Real const t388 = t5 * simdBroadcast<Real>(kCoefficient214);
-        Real const t389 = t388 - t220;
-        Real const t390 = t5 * t389;
-        Real const t391 = t223 + t390;
-        Real const t392 = t5 * t391;
-        Real const t393 = t229 + t392;
-        Real const t403 = t7 * simdBroadcast<Real>(kCoefficient314);
-        Real const t404 = t107 - t403;
-        Real const t405 = t6 * t404;
-        Real const t406 = t175 + t405;
-        Real const t411 = t18 * t406;
-        Real const t412 = t19 * t176;
-        Real const t418 = t185 - t315;
-        Real const t419 = t7 * t418;
-        Real const t420 = t144 + t419;
-        Real const t430 = t18 * t420;
-        Real const t431 = t113 - t403;
-        Real const t432 = t5 * t431;
-        Real const t434 = t190 + t432;
-        Real const t447 = t19 * t434;
-        Real const t448 = t18 * t209;
-        Real const t450 = t163 - t403;
-        Real const t451 = t5 * t450;
-        Real const t452 = t175 + t451;
-        Real const t456 = t19 * t452;
-        if (lane == 0) {
-            basis0 = simdBroadcast<Real>(kCoefficient1);
-        }
-        if (lane == 1) {
-            basis0 = dy;
-        }
-        if (lane == 2) {
-            basis0 = dx;
-        }
-        if (lane == 3) {
-            basis0 = dz;
-        }
-        if (lane == 4) {
-            basis0 = t14;
-        }
-        if (lane == 5) {
-            basis0 = t15;
-        }
-        if (lane == 6) {
-            basis0 = t17;
-        }
-        if (lane == 7) {
-            basis0 = t18;
-        }
-        if (lane == 8) {
-            basis0 = t19;
-        }
-        if (lane == 9) {
-            basis0 = t23;
-        }
-        if (lane == 10) {
-            basis0 = t24;
-        }
-        if (lane == 11) {
-            basis0 = t25;
-        }
-        if (lane == 12) {
-            basis0 = t28;
-        }
-        if (lane == 13) {
-            basis0 = t33;
-        }
-        if (lane == 14) {
-            basis0 = t34;
-        }
-        if (lane == 15) {
-            basis0 = t38;
-        }
-        if (lane == 16) {
-            basis0 = t49;
-        }
-        if (lane == 17) {
-            basis0 = t56;
-        }
-        if (lane == 18) {
-            basis0 = t69;
-        }
-        if (lane == 19) {
-            basis0 = t87;
-        }
-        if (lane == 20) {
-            basis0 = t92;
-        }
-        if (lane == 21) {
-            basis0 = t98;
-        }
-        if (lane == 22) {
-            basis0 = t99;
-        }
-        if (lane == 23) {
-            basis0 = t101;
-        }
-        if (lane == 24) {
-            basis0 = t104;
-        }
-        if (lane == 25) {
-            basis0 = t118;
-        }
-        if (lane == 26) {
-            basis0 = t119;
-        }
-        if (lane == 27) {
-            basis0 = t142;
-        }
-        if (lane == 28) {
-            basis0 = t161;
-        }
-        if (lane == 29) {
-            basis0 = t162;
-        }
-        if (lane == 30) {
-            basis0 = t171;
-        }
-        if (lane == 31) {
-            basis0 = t180;
-        }
-        if (lane == 0) {
-            basis1 = t181;
-        }
-        if (lane == 1) {
-            basis1 = t205;
-        }
-        if (lane == 2) {
-            basis1 = t206;
-        }
-        if (lane == 3) {
-            basis1 = t213;
-        }
-        if (lane == 4) {
-            basis1 = t230;
-        }
-        if (lane == 5) {
-            basis1 = t241;
-        }
-        if (lane == 6) {
-            basis1 = t294;
-        }
-        if (lane == 7) {
-            basis1 = t330;
-        }
-        if (lane == 8) {
-            basis1 = t348;
-        }
-        if (lane == 9) {
-            basis1 = t386;
-        }
-        if (lane == 10) {
-            basis1 = t393;
-        }
-        if (lane == 11) {
-            basis1 = t411;
-        }
-        if (lane == 12) {
-            basis1 = t412;
-        }
-        if (lane == 13) {
-            basis1 = t430;
-        }
-        if (lane == 14) {
-            basis1 = t447;
-        }
-        if (lane == 15) {
-            basis1 = t448;
-        }
-        if (lane == 16) {
-            basis1 = t456;
-        }
-        if (doPhi) {
-            Real const t459 = t6 * simdBroadcast<Real>(kCoefficient457);
-            Real const t460 = t459 - t258;
-            Real const t461 = t6 * t460;
-            Real const t462 = t7 * simdBroadcast<Real>(kCoefficient458);
-            Real const t463 = t7 * t462;
-            Real const t464 = t461 + t463;
-            Real const t465 = t6 * t464;
-            Real const t466 = t229 + t465;
-            Real const t467 = t6 * simdBroadcast<Real>(kCoefficient458);
-            Real const t471 = t6 * simdBroadcast<Real>(kCoefficient257);
-            Real const t478 = dy * t466;
-            Real const t479 = dx * t230;
-            Real const t489 = t7 * simdBroadcast<Real>(kCoefficient481);
-            Real const t507 = t5 * simdBroadcast<Real>(kCoefficient257);
-            Real const t508 = t507 - t258;
-            Real const t509 = t6 * t508;
-            Real const t516 = t489 - t89;
-            Real const t517 = t7 * t516;
-            Real const t518 = t509 + t517;
-            Real const t519 = t6 * t518;
-            Real const t520 = t293 + t519;
-            Real const t540 = dy * t520;
-            Real const t552 = t5 * simdBroadcast<Real>(kCoefficient458);
-            Real const t553 = t552 - t220;
-            Real const t554 = t6 * t553;
-            Real const t562 = t47 - t89;
-            Real const t563 = t7 * t562;
-            Real const t564 = t554 + t563;
-            Real const t565 = t6 * t564;
-            Real const t566 = t552 - t258;
-            Real const t567 = t7 * t566;
-            Real const t568 = t7 * t567;
-            Real const t569 = t565 + t568;
-            Real const t586 = dx * t569;
-            Real const t587 = t467 - t220;
-            Real const t588 = t5 * t587;
-            Real const t597 = t47 - t41;
-            Real const t598 = t7 * t597;
-            Real const t599 = t588 + t598;
-            Real const t600 = t5 * t599;
-            Real const t601 = t467 - t258;
-            Real const t602 = t7 * t601;
-            Real const t603 = t7 * t602;
-            Real const t604 = t600 + t603;
-            Real const t632 = dy * t604;
-            Real const t633 = t471 - t258;
-            Real const t634 = t5 * t633;
-            Real const t639 = t489 - t41;
-            Real const t640 = t7 * t639;
-            Real const t641 = t634 + t640;
-            Real const t642 = t5 * t641;
-            Real const t643 = t347 + t642;
-            Real const t682 = dx * t643;
-            Real const t683 = dy * t393;
-            Real const t684 = t5 * simdBroadcast<Real>(kCoefficient457);
-            Real const t685 = t684 - t258;
-            Real const t686 = t5 * t685;
-            Real const t687 = t463 + t686;
-            Real const t688 = t5 * t687;
-            Real const t689 = t229 + t688;
-            Real const t697 = dx * t689;
-            Real const t701 = t218 - t462;
-            Real const t702 = t6 * t701;
-            Real const t703 = t7 * t258;
-            Real const t704 = t702 + t703;
-            Real const t705 = t6 * t704;
-            Real const t706 = t7 * simdBroadcast<Real>(kCoefficient699);
-            Real const t708 = t7 * t706;
-            Real const t709 = t7 * t708;
-            Real const t710 = t705 + t709;
-            Real const t718 = dz * t710;
-            Real const t719 = t34 * t406;
-            Real const t731 = t7 * simdBroadcast<Real>(kCoefficient730);
-            Real const t745 = t275 - t462;
-            Real const t746 = t6 * t745;
-            Real const t753 = t174 - t89;
-            Real const t754 = t7 * t753;
-            Real const t755 = t746 + t754;
-            Real const t756 = t6 * t755;
-            Real const t757 = t507 - t731;
-            Real const t758 = t7 * t757;
-            Real const t759 = t7 * t758;
-            Real const t760 = t756 + t759;
-            Real const t773 = dz * t760;
-            Real const t774 = t315 - t403;
-            Real const t775 = t5 * t774;
-            Real const t777 = t419 + t775;
-            Real const t788 = t34 * t777;
-            Real const t789 = t231 - t462;
-            Real const t790 = t5 * t789;
-            Real const t797 = t174 - t41;
-            Real const t798 = t7 * t797;
-            Real const t799 = t790 + t798;
-            Real const t800 = t5 * t799;
-            Real const t801 = t471 - t731;
-            Real const t802 = t7 * t801;
-            Real const t803 = t7 * t802;
-            Real const t804 = t800 + t803;
-            Real const t837 = dz * t804;
-            Real const t838 = t34 * t452;
-            Real const t839 = t388 - t462;
-            Real const t840 = t5 * t839;
-            Real const t841 = t703 + t840;
-            Real const t842 = t5 * t841;
-            Real const t843 = t709 + t842;
-            Real const t849 = dz * t843;
+    private:
+        template <bool kReplicate, typename Real, typename Target, typename Source>
+        __device__ static void execute(Target& target, Source const& source, Real const dx,
+            Real const dy, Real const dz, bool doPhi) {
+            int const lane = threadIdx.x & 31;
+            constexpr unsigned int kMask = 0xffffffffu;
+            // 2 register(s) per lane hold the complete distributed Taylor basis:
+            // basis index i lives in word i >> 5 on lane i & 31. Shuffles avoid a
+            // large register-selection tree for dynamic indexing.
+            Real basis0 = simdBroadcast<Real>(0);
+            Real basis1 = simdBroadcast<Real>(0);
+            [[maybe_unused]] constexpr auto kCoefficient1 = 1;
+            [[maybe_unused]] constexpr auto kCoefficient8 = 1.0 / 2.0;
+            [[maybe_unused]] constexpr auto kCoefficient20 = 1.0 / 6.0;
+            [[maybe_unused]] constexpr auto kCoefficient39 = 1.0 / 24.0;
+            [[maybe_unused]] constexpr auto kCoefficient43 = 1.0 / 4.0;
+            [[maybe_unused]] constexpr auto kCoefficient58 = 1.0 / 12.0;
+            [[maybe_unused]] constexpr auto kCoefficient105 = 1.0 / 120.0;
+            [[maybe_unused]] constexpr auto kCoefficient182 = 1.0 / 60.0;
+            [[maybe_unused]] constexpr auto kCoefficient214 = 1.0 / 720.0;
+            [[maybe_unused]] constexpr auto kCoefficient216 = 1.0 / 48.0;
+            [[maybe_unused]] constexpr auto kCoefficient217 = -1.0 / 720.0;
+            [[maybe_unused]] constexpr auto kCoefficient246 = 1.0 / 8.0;
+            [[maybe_unused]] constexpr auto kCoefficient257 = 1.0 / 240.0;
+            [[maybe_unused]] constexpr auto kCoefficient314 = 1.0 / 36.0;
+            [[maybe_unused]] constexpr auto kCoefficient457 = 1.0 / 5040.0;
+            [[maybe_unused]] constexpr auto kCoefficient458 = 1.0 / 144.0;
+            [[maybe_unused]] constexpr auto kCoefficient481 = 1.0 / 72.0;
+            [[maybe_unused]] constexpr auto kCoefficient699 = -1.0 / 5040.0;
+            [[maybe_unused]] constexpr auto kCoefficient730 = 1.0 / 1680.0;
+            Real const t5 = dx * dx;
+            Real const t6 = dy * dy;
+            Real const t7 = dz * dz;
+            Real const t10 = t6 * simdBroadcast<Real>(kCoefficient8);
+            Real const t12 = t7 * simdBroadcast<Real>(kCoefficient8);
+            Real const t14 = t10 - t12;
+            Real const t15 = dx * dy;
+            Real const t16 = t5 * simdBroadcast<Real>(kCoefficient8);
+            Real const t17 = t16 - t12;
+            Real const t18 = dy * dz;
+            Real const t19 = dx * dz;
+            Real const t21 = t6 * simdBroadcast<Real>(kCoefficient20);
+            Real const t22 = t21 - t12;
+            Real const t23 = dy * t22;
+            Real const t24 = dx * t14;
+            Real const t25 = dy * t17;
+            Real const t26 = t5 * simdBroadcast<Real>(kCoefficient20);
+            Real const t27 = t26 - t12;
+            Real const t28 = dx * t27;
+            Real const t31 = t7 * simdBroadcast<Real>(kCoefficient20);
+            Real const t32 = t10 - t31;
+            Real const t33 = dz * t32;
+            Real const t34 = dz * t15;
+            Real const t37 = t16 - t31;
+            Real const t38 = dz * t37;
+            Real const t41 = t6 * simdBroadcast<Real>(kCoefficient39);
+            Real const t44 = t7 * simdBroadcast<Real>(kCoefficient43);
+            Real const t45 = t41 - t44;
+            Real const t46 = t6 * t45;
+            Real const t47 = t7 * simdBroadcast<Real>(kCoefficient39);
+            Real const t48 = t7 * t47;
+            Real const t49 = t46 + t48;
+            Real const t51 = t6 * simdBroadcast<Real>(kCoefficient43);
+            Real const t56 = t15 * t22;
+            Real const t59 = t51 - t44;
+            Real const t60 = t5 * t59;
+            Real const t63 = t7 * simdBroadcast<Real>(kCoefficient58);
+            Real const t67 = t63 - t51;
+            Real const t68 = t7 * t67;
+            Real const t69 = t60 + t68;
+            Real const t87 = t15 * t27;
+            Real const t89 = t5 * simdBroadcast<Real>(kCoefficient39);
+            Real const t90 = t89 - t44;
+            Real const t91 = t5 * t90;
+            Real const t92 = t48 + t91;
+            Real const t97 = t21 - t31;
+            Real const t98 = t18 * t97;
+            Real const t99 = t19 * t32;
+            Real const t101 = t18 * t37;
+            Real const t103 = t26 - t31;
+            Real const t104 = t19 * t103;
+            Real const t107 = t6 * simdBroadcast<Real>(kCoefficient105);
+            Real const t109 = t107 - t63;
+            Real const t110 = t6 * t109;
+            Real const t111 = t48 + t110;
+            Real const t113 = t6 * simdBroadcast<Real>(kCoefficient58);
+            Real const t118 = dy * t111;
+            Real const t119 = dx * t49;
+            Real const t120 = t113 - t44;
+            Real const t121 = t5 * t120;
+            Real const t126 = t63 - t113;
+            Real const t127 = t7 * t126;
+            Real const t128 = t121 + t127;
+            Real const t142 = dy * t128;
+            Real const t143 = t113 - t63;
+            Real const t144 = t5 * t143;
+            Real const t146 = t68 + t144;
+            Real const t161 = dx * t146;
+            Real const t162 = dy * t92;
+            Real const t163 = t5 * simdBroadcast<Real>(kCoefficient105);
+            Real const t164 = t163 - t63;
+            Real const t165 = t5 * t164;
+            Real const t166 = t48 + t165;
+            Real const t171 = dx * t166;
+            Real const t172 = t41 - t63;
+            Real const t173 = t6 * t172;
+            Real const t174 = t7 * simdBroadcast<Real>(kCoefficient105);
+            Real const t175 = t7 * t174;
+            Real const t176 = t173 + t175;
+            Real const t180 = dz * t176;
+            Real const t181 = t34 * t97;
+            Real const t183 = t51 - t63;
+            Real const t184 = t5 * t183;
+            Real const t185 = t7 * simdBroadcast<Real>(kCoefficient182);
+            Real const t189 = t185 - t113;
+            Real const t190 = t7 * t189;
+            Real const t191 = t184 + t190;
+            Real const t205 = dz * t191;
+            Real const t206 = t34 * t103;
+            Real const t207 = t89 - t63;
+            Real const t208 = t5 * t207;
+            Real const t209 = t175 + t208;
+            Real const t213 = dz * t209;
+            Real const t218 = t6 * simdBroadcast<Real>(kCoefficient214);
+            Real const t220 = t7 * simdBroadcast<Real>(kCoefficient216);
+            Real const t221 = t218 - t220;
+            Real const t222 = t6 * t221;
+            Real const t223 = t7 * t220;
+            Real const t224 = t222 + t223;
+            Real const t225 = t6 * t224;
+            Real const t226 = t7 * simdBroadcast<Real>(kCoefficient217);
+            Real const t228 = t7 * t226;
+            Real const t229 = t7 * t228;
+            Real const t230 = t225 + t229;
+            Real const t231 = t6 * simdBroadcast<Real>(kCoefficient216);
+            Real const t241 = t15 * t111;
+            Real const t258 = t7 * simdBroadcast<Real>(kCoefficient257);
+            Real const t264 = t6 * simdBroadcast<Real>(kCoefficient246);
+            Real const t275 = t5 * simdBroadcast<Real>(kCoefficient216);
+            Real const t276 = t275 - t220;
+            Real const t277 = t6 * t276;
+            Real const t286 = t5 * simdBroadcast<Real>(kCoefficient246);
+            Real const t287 = t47 - t286;
+            Real const t288 = t7 * t287;
+            Real const t289 = t277 + t288;
+            Real const t290 = t6 * t289;
+            Real const t291 = t275 - t258;
+            Real const t292 = t7 * t291;
+            Real const t293 = t7 * t292;
+            Real const t294 = t290 + t293;
+            Real const t315 = t6 * simdBroadcast<Real>(kCoefficient314);
+            Real const t316 = t315 - t63;
+            Real const t317 = t5 * t316;
+            Real const t319 = t127 + t317;
+            Real const t330 = t15 * t319;
+            Real const t331 = t231 - t220;
+            Real const t332 = t5 * t331;
+            Real const t341 = t47 - t264;
+            Real const t342 = t7 * t341;
+            Real const t343 = t332 + t342;
+            Real const t344 = t5 * t343;
+            Real const t345 = t231 - t258;
+            Real const t346 = t7 * t345;
+            Real const t347 = t7 * t346;
+            Real const t348 = t344 + t347;
+            Real const t386 = t15 * t166;
+            Real const t388 = t5 * simdBroadcast<Real>(kCoefficient214);
+            Real const t389 = t388 - t220;
+            Real const t390 = t5 * t389;
+            Real const t391 = t223 + t390;
+            Real const t392 = t5 * t391;
+            Real const t393 = t229 + t392;
+            Real const t403 = t7 * simdBroadcast<Real>(kCoefficient314);
+            Real const t404 = t107 - t403;
+            Real const t405 = t6 * t404;
+            Real const t406 = t175 + t405;
+            Real const t411 = t18 * t406;
+            Real const t412 = t19 * t176;
+            Real const t418 = t185 - t315;
+            Real const t419 = t7 * t418;
+            Real const t420 = t144 + t419;
+            Real const t430 = t18 * t420;
+            Real const t431 = t113 - t403;
+            Real const t432 = t5 * t431;
+            Real const t434 = t190 + t432;
+            Real const t447 = t19 * t434;
+            Real const t448 = t18 * t209;
+            Real const t450 = t163 - t403;
+            Real const t451 = t5 * t450;
+            Real const t452 = t175 + t451;
+            Real const t456 = t19 * t452;
+            if (lane == 0) {
+                basis0 = simdBroadcast<Real>(kCoefficient1);
+            }
+            if (lane == 1) {
+                basis0 = dy;
+            }
+            if (lane == 2) {
+                basis0 = dx;
+            }
+            if (lane == 3) {
+                basis0 = dz;
+            }
+            if (lane == 4) {
+                basis0 = t14;
+            }
+            if (lane == 5) {
+                basis0 = t15;
+            }
+            if (lane == 6) {
+                basis0 = t17;
+            }
+            if (lane == 7) {
+                basis0 = t18;
+            }
+            if (lane == 8) {
+                basis0 = t19;
+            }
+            if (lane == 9) {
+                basis0 = t23;
+            }
+            if (lane == 10) {
+                basis0 = t24;
+            }
+            if (lane == 11) {
+                basis0 = t25;
+            }
+            if (lane == 12) {
+                basis0 = t28;
+            }
+            if (lane == 13) {
+                basis0 = t33;
+            }
+            if (lane == 14) {
+                basis0 = t34;
+            }
+            if (lane == 15) {
+                basis0 = t38;
+            }
+            if (lane == 16) {
+                basis0 = t49;
+            }
             if (lane == 17) {
-                basis1 = t478;
+                basis0 = t56;
             }
             if (lane == 18) {
-                basis1 = t479;
+                basis0 = t69;
             }
             if (lane == 19) {
-                basis1 = t540;
+                basis0 = t87;
             }
             if (lane == 20) {
-                basis1 = t586;
+                basis0 = t92;
             }
             if (lane == 21) {
-                basis1 = t632;
+                basis0 = t98;
             }
             if (lane == 22) {
-                basis1 = t682;
+                basis0 = t99;
             }
             if (lane == 23) {
-                basis1 = t683;
+                basis0 = t101;
             }
             if (lane == 24) {
-                basis1 = t697;
+                basis0 = t104;
             }
             if (lane == 25) {
-                basis1 = t718;
+                basis0 = t118;
             }
             if (lane == 26) {
-                basis1 = t719;
+                basis0 = t119;
             }
             if (lane == 27) {
-                basis1 = t773;
+                basis0 = t142;
             }
             if (lane == 28) {
-                basis1 = t788;
+                basis0 = t161;
             }
             if (lane == 29) {
-                basis1 = t837;
+                basis0 = t162;
             }
             if (lane == 30) {
-                basis1 = t838;
+                basis0 = t171;
             }
             if (lane == 31) {
-                basis1 = t849;
+                basis0 = t180;
             }
-        }
-        {
-            // Fixed contraction phase 0: 8 rows, 4 outputs.
-            int const groupWidth = 8;
-            int const targetIndex = __ldg(&l2lWarpTargets7[0][lane]);
-            Real partial = simdBroadcast<Real>(0);
-#pragma unroll
-            for (int row = 0; row < 8; ++row) {
-                unsigned int entry = __ldg(&l2lWarpSchedule7[row][lane]);
-                if (!doPhi && lane < 8) {
-                    entry = 0u;
+            if (lane == 0) {
+                basis1 = t181;
+            }
+            if (lane == 1) {
+                basis1 = t205;
+            }
+            if (lane == 2) {
+                basis1 = t206;
+            }
+            if (lane == 3) {
+                basis1 = t213;
+            }
+            if (lane == 4) {
+                basis1 = t230;
+            }
+            if (lane == 5) {
+                basis1 = t241;
+            }
+            if (lane == 6) {
+                basis1 = t294;
+            }
+            if (lane == 7) {
+                basis1 = t330;
+            }
+            if (lane == 8) {
+                basis1 = t348;
+            }
+            if (lane == 9) {
+                basis1 = t386;
+            }
+            if (lane == 10) {
+                basis1 = t393;
+            }
+            if (lane == 11) {
+                basis1 = t411;
+            }
+            if (lane == 12) {
+                basis1 = t412;
+            }
+            if (lane == 13) {
+                basis1 = t430;
+            }
+            if (lane == 14) {
+                basis1 = t447;
+            }
+            if (lane == 15) {
+                basis1 = t448;
+            }
+            if (lane == 16) {
+                basis1 = t456;
+            }
+            if (doPhi) {
+                Real const t459 = t6 * simdBroadcast<Real>(kCoefficient457);
+                Real const t460 = t459 - t258;
+                Real const t461 = t6 * t460;
+                Real const t462 = t7 * simdBroadcast<Real>(kCoefficient458);
+                Real const t463 = t7 * t462;
+                Real const t464 = t461 + t463;
+                Real const t465 = t6 * t464;
+                Real const t466 = t229 + t465;
+                Real const t467 = t6 * simdBroadcast<Real>(kCoefficient458);
+                Real const t471 = t6 * simdBroadcast<Real>(kCoefficient257);
+                Real const t478 = dy * t466;
+                Real const t479 = dx * t230;
+                Real const t489 = t7 * simdBroadcast<Real>(kCoefficient481);
+                Real const t507 = t5 * simdBroadcast<Real>(kCoefficient257);
+                Real const t508 = t507 - t258;
+                Real const t509 = t6 * t508;
+                Real const t516 = t489 - t89;
+                Real const t517 = t7 * t516;
+                Real const t518 = t509 + t517;
+                Real const t519 = t6 * t518;
+                Real const t520 = t293 + t519;
+                Real const t540 = dy * t520;
+                Real const t552 = t5 * simdBroadcast<Real>(kCoefficient458);
+                Real const t553 = t552 - t220;
+                Real const t554 = t6 * t553;
+                Real const t562 = t47 - t89;
+                Real const t563 = t7 * t562;
+                Real const t564 = t554 + t563;
+                Real const t565 = t6 * t564;
+                Real const t566 = t552 - t258;
+                Real const t567 = t7 * t566;
+                Real const t568 = t7 * t567;
+                Real const t569 = t565 + t568;
+                Real const t586 = dx * t569;
+                Real const t587 = t467 - t220;
+                Real const t588 = t5 * t587;
+                Real const t597 = t47 - t41;
+                Real const t598 = t7 * t597;
+                Real const t599 = t588 + t598;
+                Real const t600 = t5 * t599;
+                Real const t601 = t467 - t258;
+                Real const t602 = t7 * t601;
+                Real const t603 = t7 * t602;
+                Real const t604 = t600 + t603;
+                Real const t632 = dy * t604;
+                Real const t633 = t471 - t258;
+                Real const t634 = t5 * t633;
+                Real const t639 = t489 - t41;
+                Real const t640 = t7 * t639;
+                Real const t641 = t634 + t640;
+                Real const t642 = t5 * t641;
+                Real const t643 = t347 + t642;
+                Real const t682 = dx * t643;
+                Real const t683 = dy * t393;
+                Real const t684 = t5 * simdBroadcast<Real>(kCoefficient457);
+                Real const t685 = t684 - t258;
+                Real const t686 = t5 * t685;
+                Real const t687 = t463 + t686;
+                Real const t688 = t5 * t687;
+                Real const t689 = t229 + t688;
+                Real const t697 = dx * t689;
+                Real const t701 = t218 - t462;
+                Real const t702 = t6 * t701;
+                Real const t703 = t7 * t258;
+                Real const t704 = t702 + t703;
+                Real const t705 = t6 * t704;
+                Real const t706 = t7 * simdBroadcast<Real>(kCoefficient699);
+                Real const t708 = t7 * t706;
+                Real const t709 = t7 * t708;
+                Real const t710 = t705 + t709;
+                Real const t718 = dz * t710;
+                Real const t719 = t34 * t406;
+                Real const t731 = t7 * simdBroadcast<Real>(kCoefficient730);
+                Real const t745 = t275 - t462;
+                Real const t746 = t6 * t745;
+                Real const t753 = t174 - t89;
+                Real const t754 = t7 * t753;
+                Real const t755 = t746 + t754;
+                Real const t756 = t6 * t755;
+                Real const t757 = t507 - t731;
+                Real const t758 = t7 * t757;
+                Real const t759 = t7 * t758;
+                Real const t760 = t756 + t759;
+                Real const t773 = dz * t760;
+                Real const t774 = t315 - t403;
+                Real const t775 = t5 * t774;
+                Real const t777 = t419 + t775;
+                Real const t788 = t34 * t777;
+                Real const t789 = t231 - t462;
+                Real const t790 = t5 * t789;
+                Real const t797 = t174 - t41;
+                Real const t798 = t7 * t797;
+                Real const t799 = t790 + t798;
+                Real const t800 = t5 * t799;
+                Real const t801 = t471 - t731;
+                Real const t802 = t7 * t801;
+                Real const t803 = t7 * t802;
+                Real const t804 = t800 + t803;
+                Real const t837 = dz * t804;
+                Real const t838 = t34 * t452;
+                Real const t839 = t388 - t462;
+                Real const t840 = t5 * t839;
+                Real const t841 = t703 + t840;
+                Real const t842 = t5 * t841;
+                Real const t843 = t709 + t842;
+                Real const t849 = dz * t843;
+                if (lane == 17) {
+                    basis1 = t478;
                 }
-                int const basisIndex = entry & 255u;
-                int const primaryIndex = (entry >> 8) & 255u;
-                int const secondaryIndex = (entry >> 16) & 255u;
-                int const kind = (entry >> 24) & 3u;
-                Real const sourceValue =
-                    source[primaryIndex] + simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
-                Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
-                Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
-                Real const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
-                Real const weight =
-                    simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
-                partial = simdFma(weight, sourceValue, partial);
+                if (lane == 18) {
+                    basis1 = t479;
+                }
+                if (lane == 19) {
+                    basis1 = t540;
+                }
+                if (lane == 20) {
+                    basis1 = t586;
+                }
+                if (lane == 21) {
+                    basis1 = t632;
+                }
+                if (lane == 22) {
+                    basis1 = t682;
+                }
+                if (lane == 23) {
+                    basis1 = t683;
+                }
+                if (lane == 24) {
+                    basis1 = t697;
+                }
+                if (lane == 25) {
+                    basis1 = t718;
+                }
+                if (lane == 26) {
+                    basis1 = t719;
+                }
+                if (lane == 27) {
+                    basis1 = t773;
+                }
+                if (lane == 28) {
+                    basis1 = t788;
+                }
+                if (lane == 29) {
+                    basis1 = t837;
+                }
+                if (lane == 30) {
+                    basis1 = t838;
+                }
+                if (lane == 31) {
+                    basis1 = t849;
+                }
             }
-            Real const shuffled4 = __shfl_down_sync(kMask, partial, 4);
-            partial +=
-                (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : simdBroadcast<Real>(0);
-            Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
-            partial +=
-                (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : simdBroadcast<Real>(0);
-            Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-            partial +=
-                (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
-            bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
-            if (leader) {
-                partial += source[targetIndex];
+            {
+                // Fixed contraction phase 0: 8 rows, 4 outputs.
+                int const groupWidth = 8;
+                int const targetIndex = __ldg(&l2lWarpTargets7[0][lane]);
+                Real partial = simdBroadcast<Real>(0);
+#pragma unroll
+                for (int row = 0; row < 8; ++row) {
+                    unsigned int entry = __ldg(&l2lWarpSchedule7[row][lane]);
+                    if (!doPhi && lane < 8) {
+                        entry = 0u;
+                    }
+                    int const basisIndex = entry & 255u;
+                    int const primaryIndex = (entry >> 8) & 255u;
+                    int const secondaryIndex = (entry >> 16) & 255u;
+                    int const kind = (entry >> 24) & 3u;
+                    Real const sourceValue = source[primaryIndex] +
+                        simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
+                    Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
+                    Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
+                    Real const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
+                    Real const weight =
+                        simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
+                    partial = simdFma(weight, sourceValue, partial);
+                }
+                Real const shuffled4 = __shfl_down_sync(kMask, partial, 4);
+                partial +=
+                    (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : simdBroadcast<Real>(0);
+                Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
+                partial +=
+                    (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : simdBroadcast<Real>(0);
+                Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
+                partial +=
+                    (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
+                bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
+                if (leader) {
+                    partial += source[targetIndex];
+                }
+                if (doPhi && lane == 0) {
+                    partial = simdFma(simdBroadcast<Real>(0.5) * dz * dz, source[64], partial);
+                }
+                if (lane == 24) {
+                    partial = simdFma(dz, source[64], partial);
+                }
+                if constexpr (kReplicate) {
+                    target[0] = __shfl_sync(kMask, partial, 0);
+                    target[1] = __shfl_sync(kMask, partial, 8);
+                    target[2] = __shfl_sync(kMask, partial, 16);
+                    target[3] = __shfl_sync(kMask, partial, 24);
+                } else {
+                    if (leader) {
+                        target[targetIndex] = partial;
+                    }
+                }
             }
-            if (doPhi && lane == 0) {
-                partial = simdFma(simdBroadcast<Real>(0.5) * dz * dz, source[64], partial);
+            {
+                // Fixed contraction phase 1: 5 rows, 4 outputs.
+                int const groupWidth = 8;
+                int const targetIndex = __ldg(&l2lWarpTargets7[1][lane]);
+                Real partial = simdBroadcast<Real>(0);
+#pragma unroll
+                for (int row = 8; row < 13; ++row) {
+                    unsigned int entry = __ldg(&l2lWarpSchedule7[row][lane]);
+                    int const basisIndex = entry & 255u;
+                    int const primaryIndex = (entry >> 8) & 255u;
+                    int const secondaryIndex = (entry >> 16) & 255u;
+                    int const kind = (entry >> 24) & 3u;
+                    Real const sourceValue = source[primaryIndex] +
+                        simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
+                    Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
+                    Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
+                    Real const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
+                    Real const weight =
+                        simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
+                    partial = simdFma(weight, sourceValue, partial);
+                }
+                Real const shuffled4 = __shfl_down_sync(kMask, partial, 4);
+                partial +=
+                    (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : simdBroadcast<Real>(0);
+                Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
+                partial +=
+                    (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : simdBroadcast<Real>(0);
+                Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
+                partial +=
+                    (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
+                bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
+                if (leader) {
+                    partial += source[targetIndex];
+                }
+                if constexpr (kReplicate) {
+                    target[4] = __shfl_sync(kMask, partial, 0);
+                    target[5] = __shfl_sync(kMask, partial, 8);
+                    target[6] = __shfl_sync(kMask, partial, 16);
+                    target[7] = __shfl_sync(kMask, partial, 24);
+                } else {
+                    if (leader) {
+                        target[targetIndex] = partial;
+                    }
+                }
             }
-            if (lane == 24) {
-                partial = simdFma(dz, source[64], partial);
+            {
+                // Fixed contraction phase 2: 6 rows, 7 outputs.
+                int const groupWidth = lane < 8 ? 8 : (4);
+                int const targetIndex = __ldg(&l2lWarpTargets7[2][lane]);
+                Real partial = simdBroadcast<Real>(0);
+#pragma unroll
+                for (int row = 13; row < 19; ++row) {
+                    unsigned int entry = __ldg(&l2lWarpSchedule7[row][lane]);
+                    int const basisIndex = entry & 255u;
+                    int const primaryIndex = (entry >> 8) & 255u;
+                    int const secondaryIndex = (entry >> 16) & 255u;
+                    int const kind = (entry >> 24) & 3u;
+                    Real const sourceValue = source[primaryIndex] +
+                        simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
+                    Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
+                    Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
+                    Real const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
+                    Real const weight =
+                        simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
+                    partial = simdFma(weight, sourceValue, partial);
+                }
+                Real const shuffled4 = __shfl_down_sync(kMask, partial, 4);
+                partial +=
+                    (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : simdBroadcast<Real>(0);
+                Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
+                partial +=
+                    (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : simdBroadcast<Real>(0);
+                Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
+                partial +=
+                    (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
+                bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
+                if (leader) {
+                    partial += source[targetIndex];
+                }
+                if constexpr (kReplicate) {
+                    target[8] = __shfl_sync(kMask, partial, 0);
+                    target[9] = __shfl_sync(kMask, partial, 8);
+                    target[10] = __shfl_sync(kMask, partial, 12);
+                    target[11] = __shfl_sync(kMask, partial, 16);
+                    target[12] = __shfl_sync(kMask, partial, 20);
+                    target[13] = __shfl_sync(kMask, partial, 24);
+                    target[14] = __shfl_sync(kMask, partial, 28);
+                } else {
+                    if (leader) {
+                        target[targetIndex] = partial;
+                    }
+                }
+            }
+            {
+                // Fixed contraction phase 3: 8 rows, 15 outputs.
+                int const groupWidth = lane < 4 ? 4 : (2);
+                int const targetIndex = __ldg(&l2lWarpTargets7[3][lane]);
+                Real partial = simdBroadcast<Real>(0);
+#pragma unroll
+                for (int row = 19; row < 27; ++row) {
+                    unsigned int entry = __ldg(&l2lWarpSchedule7[row][lane]);
+                    int const basisIndex = entry & 255u;
+                    int const primaryIndex = (entry >> 8) & 255u;
+                    int const secondaryIndex = (entry >> 16) & 255u;
+                    int const kind = (entry >> 24) & 3u;
+                    Real const sourceValue = source[primaryIndex] +
+                        simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
+                    Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
+                    Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
+                    Real const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
+                    Real const weight =
+                        simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
+                    partial = simdFma(weight, sourceValue, partial);
+                }
+                Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
+                partial +=
+                    (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : simdBroadcast<Real>(0);
+                Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
+                partial +=
+                    (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
+                bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
+                if (leader) {
+                    partial += source[targetIndex];
+                }
+                if constexpr (kReplicate) {
+                    target[15] = __shfl_sync(kMask, partial, 0);
+                    target[16] = __shfl_sync(kMask, partial, 4);
+                    target[17] = __shfl_sync(kMask, partial, 6);
+                    target[18] = __shfl_sync(kMask, partial, 8);
+                    target[19] = __shfl_sync(kMask, partial, 10);
+                    target[20] = __shfl_sync(kMask, partial, 12);
+                    target[21] = __shfl_sync(kMask, partial, 14);
+                    target[22] = __shfl_sync(kMask, partial, 16);
+                    target[23] = __shfl_sync(kMask, partial, 18);
+                    target[24] = __shfl_sync(kMask, partial, 20);
+                    target[25] = __shfl_sync(kMask, partial, 22);
+                    target[26] = __shfl_sync(kMask, partial, 24);
+                    target[27] = __shfl_sync(kMask, partial, 26);
+                    target[28] = __shfl_sync(kMask, partial, 28);
+                    target[29] = __shfl_sync(kMask, partial, 30);
+                } else {
+                    if (leader) {
+                        target[targetIndex] = partial;
+                    }
+                }
+            }
+            {
+                // Fixed contraction phase 4: 4 rows, 19 outputs.
+                int const groupWidth = lane < 12 ? 2 : (lane < 25 ? 1 : (1));
+                int const targetIndex = __ldg(&l2lWarpTargets7[4][lane]);
+                Real partial = simdBroadcast<Real>(0);
+#pragma unroll
+                for (int row = 27; row < 31; ++row) {
+                    unsigned int entry = __ldg(&l2lWarpSchedule7[row][lane]);
+                    int const basisIndex = entry & 255u;
+                    int const primaryIndex = (entry >> 8) & 255u;
+                    int const secondaryIndex = (entry >> 16) & 255u;
+                    int const kind = (entry >> 24) & 3u;
+                    Real const sourceValue = source[primaryIndex] +
+                        simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
+                    Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
+                    Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
+                    Real const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
+                    Real const weight =
+                        simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
+                    partial = simdFma(weight, sourceValue, partial);
+                }
+                Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
+                partial +=
+                    (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
+                bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 25;
+                if (leader) {
+                    partial += source[targetIndex];
+                }
+                if constexpr (kReplicate) {
+                    target[30] = __shfl_sync(kMask, partial, 0);
+                    target[31] = __shfl_sync(kMask, partial, 2);
+                    target[32] = __shfl_sync(kMask, partial, 4);
+                    target[33] = __shfl_sync(kMask, partial, 6);
+                    target[34] = __shfl_sync(kMask, partial, 8);
+                    target[35] = __shfl_sync(kMask, partial, 10);
+                    target[36] = __shfl_sync(kMask, partial, 12);
+                    target[37] = __shfl_sync(kMask, partial, 13);
+                    target[38] = __shfl_sync(kMask, partial, 14);
+                    target[39] = __shfl_sync(kMask, partial, 15);
+                    target[40] = __shfl_sync(kMask, partial, 16);
+                    target[41] = __shfl_sync(kMask, partial, 17);
+                    target[42] = __shfl_sync(kMask, partial, 18);
+                    target[43] = __shfl_sync(kMask, partial, 19);
+                    target[44] = __shfl_sync(kMask, partial, 20);
+                    target[45] = __shfl_sync(kMask, partial, 21);
+                    target[46] = __shfl_sync(kMask, partial, 22);
+                    target[47] = __shfl_sync(kMask, partial, 23);
+                    target[48] = __shfl_sync(kMask, partial, 24);
+                } else {
+                    if (leader) {
+                        target[targetIndex] = partial;
+                    }
+                }
             }
             if constexpr (kReplicate) {
-                target[0] = __shfl_sync(kMask, partial, 0);
-                target[1] = __shfl_sync(kMask, partial, 8);
-                target[2] = __shfl_sync(kMask, partial, 16);
-                target[3] = __shfl_sync(kMask, partial, 24);
+                target[49] = source[49];
+                target[50] = source[50];
+                target[51] = source[51];
+                target[52] = source[52];
+                target[53] = source[53];
+                target[54] = source[54];
+                target[55] = source[55];
+                target[56] = source[56];
+                target[57] = source[57];
+                target[58] = source[58];
+                target[59] = source[59];
+                target[60] = source[60];
+                target[61] = source[61];
+                target[62] = source[62];
+                target[63] = source[63];
+                target[64] = source[64];
+                if (!doPhi) {
+                    target[0] = source[0];
+                }
             } else {
-                if (leader) {
-                    target[targetIndex] = partial;
+                // Top-rank coefficients and the trace copy through unchanged.
+                for (int index = 49 + lane; index <= 64; index += 32) {
+                    target[index] = source[index];
+                }
+                // Lane zero led the potential group, so this restore is same-thread.
+                if (!doPhi && lane == 0) {
+                    target[0] = source[0];
                 }
             }
+            // The caller may overwrite shared source storage from lane zero on
+            // return. Finish EVERY lane source read (and every target write)
+            // before permitting that write.
+            __syncwarp(kMask);
         }
-        {
-            // Fixed contraction phase 1: 5 rows, 4 outputs.
-            int const groupWidth = 8;
-            int const targetIndex = __ldg(&l2lWarpTargets7[1][lane]);
-            Real partial = simdBroadcast<Real>(0);
-#pragma unroll
-            for (int row = 8; row < 13; ++row) {
-                unsigned int entry = __ldg(&l2lWarpSchedule7[row][lane]);
-                int const basisIndex = entry & 255u;
-                int const primaryIndex = (entry >> 8) & 255u;
-                int const secondaryIndex = (entry >> 16) & 255u;
-                int const kind = (entry >> 24) & 3u;
-                Real const sourceValue =
-                    source[primaryIndex] + simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
-                Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
-                Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
-                Real const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
-                Real const weight =
-                    simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
-                partial = simdFma(weight, sourceValue, partial);
-            }
-            Real const shuffled4 = __shfl_down_sync(kMask, partial, 4);
-            partial +=
-                (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : simdBroadcast<Real>(0);
-            Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
-            partial +=
-                (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : simdBroadcast<Real>(0);
-            Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-            partial +=
-                (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
-            bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
-            if (leader) {
-                partial += source[targetIndex];
-            }
-            if constexpr (kReplicate) {
-                target[4] = __shfl_sync(kMask, partial, 0);
-                target[5] = __shfl_sync(kMask, partial, 8);
-                target[6] = __shfl_sync(kMask, partial, 16);
-                target[7] = __shfl_sync(kMask, partial, 24);
-            } else {
-                if (leader) {
-                    target[targetIndex] = partial;
-                }
-            }
-        }
-        {
-            // Fixed contraction phase 2: 6 rows, 7 outputs.
-            int const groupWidth = lane < 8 ? 8 : (4);
-            int const targetIndex = __ldg(&l2lWarpTargets7[2][lane]);
-            Real partial = simdBroadcast<Real>(0);
-#pragma unroll
-            for (int row = 13; row < 19; ++row) {
-                unsigned int entry = __ldg(&l2lWarpSchedule7[row][lane]);
-                int const basisIndex = entry & 255u;
-                int const primaryIndex = (entry >> 8) & 255u;
-                int const secondaryIndex = (entry >> 16) & 255u;
-                int const kind = (entry >> 24) & 3u;
-                Real const sourceValue =
-                    source[primaryIndex] + simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
-                Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
-                Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
-                Real const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
-                Real const weight =
-                    simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
-                partial = simdFma(weight, sourceValue, partial);
-            }
-            Real const shuffled4 = __shfl_down_sync(kMask, partial, 4);
-            partial +=
-                (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : simdBroadcast<Real>(0);
-            Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
-            partial +=
-                (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : simdBroadcast<Real>(0);
-            Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-            partial +=
-                (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
-            bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
-            if (leader) {
-                partial += source[targetIndex];
-            }
-            if constexpr (kReplicate) {
-                target[8] = __shfl_sync(kMask, partial, 0);
-                target[9] = __shfl_sync(kMask, partial, 8);
-                target[10] = __shfl_sync(kMask, partial, 12);
-                target[11] = __shfl_sync(kMask, partial, 16);
-                target[12] = __shfl_sync(kMask, partial, 20);
-                target[13] = __shfl_sync(kMask, partial, 24);
-                target[14] = __shfl_sync(kMask, partial, 28);
-            } else {
-                if (leader) {
-                    target[targetIndex] = partial;
-                }
-            }
-        }
-        {
-            // Fixed contraction phase 3: 8 rows, 15 outputs.
-            int const groupWidth = lane < 4 ? 4 : (2);
-            int const targetIndex = __ldg(&l2lWarpTargets7[3][lane]);
-            Real partial = simdBroadcast<Real>(0);
-#pragma unroll
-            for (int row = 19; row < 27; ++row) {
-                unsigned int entry = __ldg(&l2lWarpSchedule7[row][lane]);
-                int const basisIndex = entry & 255u;
-                int const primaryIndex = (entry >> 8) & 255u;
-                int const secondaryIndex = (entry >> 16) & 255u;
-                int const kind = (entry >> 24) & 3u;
-                Real const sourceValue =
-                    source[primaryIndex] + simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
-                Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
-                Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
-                Real const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
-                Real const weight =
-                    simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
-                partial = simdFma(weight, sourceValue, partial);
-            }
-            Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
-            partial +=
-                (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : simdBroadcast<Real>(0);
-            Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-            partial +=
-                (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
-            bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
-            if (leader) {
-                partial += source[targetIndex];
-            }
-            if constexpr (kReplicate) {
-                target[15] = __shfl_sync(kMask, partial, 0);
-                target[16] = __shfl_sync(kMask, partial, 4);
-                target[17] = __shfl_sync(kMask, partial, 6);
-                target[18] = __shfl_sync(kMask, partial, 8);
-                target[19] = __shfl_sync(kMask, partial, 10);
-                target[20] = __shfl_sync(kMask, partial, 12);
-                target[21] = __shfl_sync(kMask, partial, 14);
-                target[22] = __shfl_sync(kMask, partial, 16);
-                target[23] = __shfl_sync(kMask, partial, 18);
-                target[24] = __shfl_sync(kMask, partial, 20);
-                target[25] = __shfl_sync(kMask, partial, 22);
-                target[26] = __shfl_sync(kMask, partial, 24);
-                target[27] = __shfl_sync(kMask, partial, 26);
-                target[28] = __shfl_sync(kMask, partial, 28);
-                target[29] = __shfl_sync(kMask, partial, 30);
-            } else {
-                if (leader) {
-                    target[targetIndex] = partial;
-                }
-            }
-        }
-        {
-            // Fixed contraction phase 4: 4 rows, 19 outputs.
-            int const groupWidth = lane < 12 ? 2 : (lane < 25 ? 1 : (1));
-            int const targetIndex = __ldg(&l2lWarpTargets7[4][lane]);
-            Real partial = simdBroadcast<Real>(0);
-#pragma unroll
-            for (int row = 27; row < 31; ++row) {
-                unsigned int entry = __ldg(&l2lWarpSchedule7[row][lane]);
-                int const basisIndex = entry & 255u;
-                int const primaryIndex = (entry >> 8) & 255u;
-                int const secondaryIndex = (entry >> 16) & 255u;
-                int const kind = (entry >> 24) & 3u;
-                Real const sourceValue =
-                    source[primaryIndex] + simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
-                Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
-                Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
-                Real const basisValue = basisIndex < 32 ? basisValue0 : (basisValue1);
-                Real const weight =
-                    simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
-                partial = simdFma(weight, sourceValue, partial);
-            }
-            Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-            partial +=
-                (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
-            bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 25;
-            if (leader) {
-                partial += source[targetIndex];
-            }
-            if constexpr (kReplicate) {
-                target[30] = __shfl_sync(kMask, partial, 0);
-                target[31] = __shfl_sync(kMask, partial, 2);
-                target[32] = __shfl_sync(kMask, partial, 4);
-                target[33] = __shfl_sync(kMask, partial, 6);
-                target[34] = __shfl_sync(kMask, partial, 8);
-                target[35] = __shfl_sync(kMask, partial, 10);
-                target[36] = __shfl_sync(kMask, partial, 12);
-                target[37] = __shfl_sync(kMask, partial, 13);
-                target[38] = __shfl_sync(kMask, partial, 14);
-                target[39] = __shfl_sync(kMask, partial, 15);
-                target[40] = __shfl_sync(kMask, partial, 16);
-                target[41] = __shfl_sync(kMask, partial, 17);
-                target[42] = __shfl_sync(kMask, partial, 18);
-                target[43] = __shfl_sync(kMask, partial, 19);
-                target[44] = __shfl_sync(kMask, partial, 20);
-                target[45] = __shfl_sync(kMask, partial, 21);
-                target[46] = __shfl_sync(kMask, partial, 22);
-                target[47] = __shfl_sync(kMask, partial, 23);
-                target[48] = __shfl_sync(kMask, partial, 24);
-            } else {
-                if (leader) {
-                    target[targetIndex] = partial;
-                }
-            }
-        }
-        if constexpr (kReplicate) {
-            target[49] = source[49];
-            target[50] = source[50];
-            target[51] = source[51];
-            target[52] = source[52];
-            target[53] = source[53];
-            target[54] = source[54];
-            target[55] = source[55];
-            target[56] = source[56];
-            target[57] = source[57];
-            target[58] = source[58];
-            target[59] = source[59];
-            target[60] = source[60];
-            target[61] = source[61];
-            target[62] = source[62];
-            target[63] = source[63];
-            target[64] = source[64];
-            if (!doPhi) {
-                target[0] = source[0];
-            }
-        } else {
-            // Top-rank coefficients and the trace copy through unchanged.
-            for (int index = 49 + lane; index <= 64; index += 32) {
-                target[index] = source[index];
-            }
-            // Lane zero led the potential group, so this restore is same-thread.
-            if (!doPhi && lane == 0) {
-                target[0] = source[0];
-            }
-        }
-        // The caller may overwrite shared source storage from lane zero on
-        // return. Finish EVERY lane source read (and every target write)
-        // before permitting that write.
-        __syncwarp(kMask);
-    }
-};
+    };
 #endif
 
+}    // namespace detail
 #endif
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 9) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 9)
 // FMM order 9: source degree 7, local degree 8.
 template <int order>
-class M2mKernel;
+class M2M;
 template <int order, bool withTrace>
-class L2lKernel;
+class L2L;
 
 template <>
-class M2mKernel<7> {
+class M2M<7> {
 public:
     static constexpr int kFlops_ = 2569;
     static constexpr int kWeightedFlops_ = 1724;
@@ -20292,7 +20309,7 @@ public:
 };
 
 template <>
-class L2lKernel<8, false> {
+class L2L<8, false> {
 public:
     static constexpr int kFlops_ = 3187;
     static constexpr int kWeightedFlops_ = 1743;
@@ -22235,7 +22252,7 @@ public:
 };
 
 template <>
-class L2lKernel<8, true> {
+class L2L<8, true> {
 public:
     static constexpr int kFlops_ = 3193;
     static constexpr int kWeightedFlops_ = 1746;
@@ -24183,7 +24200,7 @@ public:
 };
 
 template <>
-class P2mKernel<7> {
+class P2M<7> {
 public:
     static constexpr int kFlops_ = 1171;
     static constexpr int kWeightedFlops_ = 887;
@@ -25289,7 +25306,7 @@ public:
 };
 
 template <>
-class P2lKernel<8> {
+class P2L<8> {
 public:
     static constexpr int kFlops_ = 438;
     static constexpr int kWeightedFlops_ = 290;
@@ -25799,7 +25816,7 @@ public:
 };
 
 template <>
-class M2pKernel<7, true> {
+class M2P<7, true> {
 public:
     static constexpr int kFlops_ = 564;
     static constexpr int kWeightedFlops_ = 381;
@@ -26227,7 +26244,7 @@ public:
 };
 
 template <>
-class M2pKernel<7, false> {
+class M2P<7, false> {
 public:
     static constexpr int kFlops_ = 578;
     static constexpr int kWeightedFlops_ = 392;
@@ -26666,7 +26683,7 @@ public:
 };
 
 template <>
-class L2pKernel<8, false> {
+class L2P<8, false> {
 public:
     static constexpr int kFlops_ = 996;
     static constexpr int kWeightedFlops_ = 644;
@@ -27356,7 +27373,7 @@ public:
 };
 
 template <>
-class L2pKernel<8, true> {
+class L2P<8, true> {
 public:
     static constexpr int kFlops_ = 1000;
     static constexpr int kWeightedFlops_ = 646;
@@ -28047,1410 +28064,1421 @@ public:
     }
 };
 
+namespace detail {
 #ifdef __CUDACC__
-// Read-only GLOBAL storage: row/lane loads coalesce instead of serializing
-// divergent constant-memory accesses. Internal linkage needs no device RDC.
-// Entry layout: basis | primary << 8 | secondary << 16 | kind << 24.
-static __device__ unsigned int const l2lWarpSchedule8[52][32] = {
-    {16777473u, 16777730u, 16777987u, 16778244u, 16778501u, 16778758u, 16779015u, 16779272u,
-        16779529u, 16779786u, 16780043u, 16780300u, 16780557u, 16780814u, 16781071u, 16781328u,
-        16778241u, 16778498u, 16779011u, 16779524u, 16779781u, 16780038u, 16780551u, 16780808u,
-        16778497u, 16778754u, 16779267u, 16779780u, 16780037u, 16780294u, 16780807u, 16781064u},
-    {16781585u, 16781842u, 16782099u, 16782356u, 16782613u, 16782870u, 16783127u, 16783384u,
-        16783641u, 16783898u, 16784155u, 16784412u, 16784669u, 16784926u, 16785183u, 16785440u,
-        16781321u, 16781578u, 16781835u, 16782092u, 16782605u, 16782862u, 16783119u, 16783632u,
-        16781577u, 16781834u, 16782091u, 16782348u, 16782861u, 16783118u, 16783375u, 16783888u},
-    {16785697u, 16785954u, 16786211u, 16786468u, 16786725u, 16786982u, 16787239u, 16787496u,
-        16787753u, 16788010u, 16788267u, 16788524u, 16788781u, 16789038u, 16789295u, 16789552u,
-        16783889u, 16784146u, 16784403u, 16784660u, 16785173u, 16785430u, 16785687u, 16785944u,
-        16784145u, 16784402u, 16784659u, 16784916u, 16785429u, 16785686u, 16785943u, 16786200u},
-    {16789809u, 16790066u, 16790323u, 16790580u, 16790837u, 16791094u, 16791351u, 16791608u,
-        16791865u, 16792122u, 16792379u, 16792636u, 16792893u, 16793150u, 16793407u, 16793664u,
-        16786457u, 16786714u, 16786971u, 16787228u, 16787485u, 16787742u, 16788255u, 16788512u,
-        16786713u, 16786970u, 16787227u, 16787484u, 16787741u, 16787998u, 16788511u, 16788768u},
-    {16793921u, 16794178u, 16794435u, 16794692u, 16794949u, 16795206u, 16795463u, 16795720u,
-        16795977u, 16796234u, 16796491u, 16796748u, 16797005u, 16797262u, 16797519u, 16797776u,
-        16788769u, 16789026u, 16789283u, 16789796u, 16790053u, 16790310u, 16790567u, 16790824u,
-        16789025u, 16789282u, 16789539u, 16790052u, 16790309u, 16790566u, 16790823u, 16791080u},
-    {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 16791081u, 16791338u,
-        16791851u, 16792108u, 16792365u, 16792622u, 16792879u, 16793136u, 16791337u, 16791594u,
-        16792107u, 16792364u, 16792621u, 16792878u, 16793135u, 16793392u},
-    {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 16793649u, 16793906u,
-        16794163u, 16794420u, 16794677u, 16794934u, 16795191u, 16795448u, 16793905u, 16794162u,
-        16794419u, 16794676u, 16794933u, 16795190u, 16795447u, 16795704u},
-    {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 16795961u, 16796218u,
-        16796475u, 16796732u, 16796989u, 16797246u, 16797503u, 0u, 16796217u, 16796474u, 16796731u,
-        16796988u, 16797245u, 16797502u, 16797759u, 0u},
-    {16779009u, 16779266u, 33818115u, 16780548u, 16780805u, 16781062u, 34147079u, 34212872u,
-        16779521u, 16779778u, 16780547u, 16781316u, 16781573u, 16781830u, 16782599u, 16782856u,
-        16779777u, 16780034u, 16780803u, 16781572u, 16781829u, 16782086u, 16782855u, 16783112u,
-        16780033u, 16780290u, 16781059u, 16781828u, 16782085u, 16782342u, 16783111u, 16783368u},
-    {16782601u, 16782858u, 16783115u, 16783372u, 34607629u, 34673422u, 34739215u, 16785168u,
-        16783625u, 16783882u, 16784139u, 16784396u, 16785165u, 16785422u, 16785679u, 16786448u,
-        16783881u, 16784138u, 16784395u, 16784652u, 16785421u, 16785678u, 16785935u, 16786704u,
-        16784137u, 16784394u, 16784651u, 16784908u, 16785677u, 16785934u, 16786191u, 16786960u},
-    {16785425u, 16785682u, 16785939u, 16786196u, 35199765u, 35265558u, 35331351u, 35397144u,
-        16786705u, 16786962u, 16787219u, 16787476u, 16788245u, 16788502u, 16788759u, 16789016u,
-        16786961u, 16787218u, 16787475u, 16787732u, 16788501u, 16788758u, 16789015u, 16789272u,
-        16787217u, 16787474u, 16787731u, 16787988u, 16788757u, 16789014u, 16789271u, 16789528u},
-    {16788249u, 16788506u, 16788763u, 16789020u, 16789277u, 16789534u, 35923487u, 35989280u,
-        16789785u, 16790042u, 16790299u, 16790556u, 16790813u, 16791070u, 16791839u, 16792096u,
-        16790041u, 16790298u, 16790555u, 16790812u, 16791069u, 16791326u, 16792095u, 16792352u,
-        16790297u, 16790554u, 16790811u, 16791068u, 16791325u, 16791582u, 16792351u, 16792608u},
-    {36055073u, 36120866u, 36186659u, 16791844u, 16792101u, 16792358u, 16792615u, 16792872u,
-        16792353u, 16792610u, 16792867u, 16793636u, 16793893u, 16794150u, 16794407u, 16794664u,
-        16792609u, 16792866u, 16793123u, 16793892u, 16794149u, 16794406u, 16794663u, 16794920u,
-        16792865u, 16793122u, 16793379u, 16794148u, 16794405u, 16794662u, 16794919u, 16795176u},
-    {16793129u, 16793386u, 36778795u, 36844588u, 36910381u, 36976174u, 37041967u, 37107760u,
-        16794921u, 16795178u, 16795947u, 16796204u, 16796461u, 16796718u, 16796975u, 16797232u,
-        16795177u, 16795434u, 16796203u, 16796460u, 16796717u, 16796974u, 16797231u, 16797488u,
-        16795433u, 16795690u, 16796459u, 16796716u, 16796973u, 16797230u, 16797487u, 16797744u},
-    {16795953u, 16796210u, 16796467u, 16796724u, 16796981u, 16797238u, 16797495u, 16797752u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-    {37765689u, 37831482u, 37897275u, 37963068u, 38028861u, 38094654u, 38160447u, 0u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-    {16780545u, 16780802u, 34147075u, 16782596u, 16782853u, 16783110u, 34607623u, 34673416u,
-        16780801u, 16781058u, 34212867u, 16782852u, 16783109u, 16783366u, 34673415u, 34739208u,
-        16781313u, 16781570u, 16782595u, 16783620u, 16783877u, 16784134u, 16785159u, 16785416u,
-        16781569u, 16781826u, 16782851u, 16783876u, 16784133u, 16784390u, 16785415u, 16785672u},
-    {16785161u, 16785418u, 16785675u, 16785932u, 35199757u, 35265550u, 35331343u, 16788240u,
-        16785417u, 16785674u, 16785931u, 16786188u, 35265549u, 35331342u, 35397135u, 16788496u,
-        16786441u, 16786698u, 16786955u, 16787212u, 16788237u, 16788494u, 16788751u, 16789776u,
-        16786697u, 16786954u, 16787211u, 16787468u, 16788493u, 16788750u, 16789007u, 16790032u},
-    {16788497u, 16788754u, 16789011u, 16789268u, 35923477u, 35989270u, 36055063u, 36120856u,
-        16788753u, 16789010u, 16789267u, 16789524u, 35989269u, 36055062u, 36120855u, 36186648u,
-        16790033u, 16790290u, 16790547u, 16790804u, 16791829u, 16792086u, 16792343u, 16792600u,
-        16790289u, 16790546u, 16790803u, 16791060u, 16792085u, 16792342u, 16792599u, 16792856u},
-    {16791833u, 16792090u, 16792347u, 16792604u, 16792861u, 16793118u, 36778783u, 36844576u,
-        16792089u, 16792346u, 16792603u, 16792860u, 16793117u, 16793374u, 36844575u, 36910368u,
-        16793625u, 16793882u, 16794139u, 16794396u, 16794653u, 16794910u, 16795935u, 16796192u,
-        16793881u, 16794138u, 16794395u, 16794652u, 16794909u, 16795166u, 16796191u, 16796448u},
-    {36910369u, 36976162u, 37041955u, 16795940u, 16796197u, 16796454u, 16796711u, 16796968u,
-        36976161u, 37041954u, 37107747u, 16796196u, 16796453u, 16796710u, 16796967u, 16797224u,
-        16796449u, 16796706u, 16796963u, 0u, 0u, 0u, 0u, 0u, 16796705u, 16796962u, 16797219u, 0u,
-        0u, 0u, 0u, 0u},
-    {16797225u, 16797482u, 37765675u, 37831468u, 37897261u, 37963054u, 38028847u, 38094640u,
-        16797481u, 16797738u, 37831467u, 37897260u, 37963053u, 38028846u, 38094639u, 38160432u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-    {16781825u, 16782082u, 16783107u, 16784132u, 16784389u, 16784646u, 16785671u, 16785928u,
-        16782081u, 16782338u, 16783363u, 16784388u, 16784645u, 16784902u, 16785927u, 16786184u,
-        16782593u, 16782850u, 34607619u, 16785156u, 16785413u, 16785670u, 35199751u, 35265544u,
-        16782849u, 16783106u, 34673411u, 16785412u, 16785669u, 16785926u, 35265543u, 35331336u},
-    {16786953u, 16787210u, 16787467u, 16787724u, 16788749u, 16789006u, 16789263u, 16790288u,
-        16787209u, 16787466u, 16787723u, 16787980u, 16789005u, 16789262u, 16789519u, 16790544u,
-        16788233u, 16788490u, 16788747u, 16789004u, 35923469u, 35989262u, 36055055u, 16791824u,
-        16788489u, 16788746u, 16789003u, 16789260u, 35989261u, 36055054u, 36120847u, 16792080u},
-    {16790545u, 16790802u, 16791059u, 16791316u, 16792341u, 16792598u, 16792855u, 16793112u,
-        16790801u, 16791058u, 16791315u, 16791572u, 16792597u, 16792854u, 16793111u, 16793368u,
-        16792081u, 16792338u, 16792595u, 16792852u, 36778773u, 36844566u, 36910359u, 36976152u,
-        16792337u, 16792594u, 16792851u, 16793108u, 36844565u, 36910358u, 36976151u, 37041944u},
-    {16794137u, 16794394u, 16794651u, 16794908u, 16795165u, 16795422u, 16796447u, 16796704u,
-        16794393u, 16794650u, 16794907u, 16795164u, 16795421u, 16795678u, 16796703u, 16796960u,
-        16795929u, 16796186u, 16796443u, 16796700u, 16796957u, 16797214u, 37765663u, 37831456u,
-        16796185u, 16796442u, 16796699u, 16796956u, 16797213u, 16797470u, 37831455u, 37897248u},
-    {16796961u, 16797218u, 16797475u, 0u, 0u, 0u, 0u, 0u, 16797217u, 16797474u, 16797731u, 0u, 0u,
-        0u, 0u, 0u, 37897249u, 37963042u, 38028835u, 0u, 0u, 0u, 0u, 0u, 37963041u, 38028834u,
-        38094627u, 0u, 0u, 0u, 0u, 0u},
-    {16783105u, 16783362u, 34739203u, 16785668u, 16785925u, 16786182u, 35331335u, 35397128u,
-        16783617u, 16783874u, 16785155u, 16786436u, 16783873u, 16784130u, 16785411u, 16786692u,
-        16784129u, 16784386u, 16785667u, 16786948u, 16784385u, 16784642u, 16785923u, 16787204u,
-        16784641u, 16784898u, 16786179u, 16787460u, 16785153u, 16785410u, 35199747u, 16788228u},
-    {16788745u, 16789002u, 16789259u, 16789516u, 36055053u, 36120846u, 36186639u, 16792336u,
-        16786693u, 16786950u, 16788231u, 16788488u, 16786949u, 16787206u, 16788487u, 16788744u,
-        16787205u, 16787462u, 16788743u, 16789000u, 16787461u, 16787718u, 16788999u, 16789256u,
-        16787717u, 16787974u, 16789255u, 16789512u, 16788485u, 16788742u, 35923463u, 35989256u},
-    {16792593u, 16792850u, 16793107u, 16793364u, 36910357u, 36976150u, 37041943u, 37107736u,
-        16789769u, 16790026u, 16790283u, 16790540u, 16790025u, 16790282u, 16790539u, 16790796u,
-        16790281u, 16790538u, 16790795u, 16791052u, 16790537u, 16790794u, 16791051u, 16791308u,
-        16790793u, 16791050u, 16791307u, 16791564u, 16791817u, 16792074u, 16792331u, 16792588u},
-    {16796441u, 16796698u, 16796955u, 16797212u, 16797469u, 16797726u, 37897247u, 37963040u,
-        16791821u, 16792078u, 16792335u, 16793616u, 16792077u, 16792334u, 16792591u, 16793872u,
-        16792333u, 16792590u, 16792847u, 16794128u, 16792589u, 16792846u, 16793103u, 16794384u,
-        16792845u, 16793102u, 16793359u, 16794640u, 36778765u, 36844558u, 36910351u, 16795920u},
-    {38028833u, 38094626u, 38160419u, 0u, 0u, 0u, 0u, 0u, 16793873u, 16794130u, 16794387u,
-        16794644u, 16794129u, 16794386u, 16794643u, 16794900u, 16794385u, 16794642u, 16794899u,
-        16795156u, 16794641u, 16794898u, 16795155u, 16795412u, 16794897u, 16795154u, 16795411u,
-        16795668u, 16796177u, 16796434u, 16796691u, 16796948u},
-    {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 16795925u, 16796182u, 16796439u, 16796696u, 16796181u,
-        16796438u, 16796695u, 16796952u, 16796437u, 16796694u, 16796951u, 16797208u, 16796693u,
-        16796950u, 16797207u, 16797464u, 16796949u, 16797206u, 16797463u, 16797720u, 37765653u,
-        37831446u, 37897239u, 37963032u},
-    {16785409u, 16785666u, 35265539u, 16788484u, 16785665u, 16785922u, 35331331u, 16788740u,
-        16785921u, 16786178u, 35397123u, 16788996u, 16786433u, 16786690u, 16786689u, 16786946u,
-        16786945u, 16787202u, 16787201u, 16787458u, 16787457u, 16787714u, 16787713u, 16787970u,
-        16788225u, 16788482u, 16788481u, 16788738u, 16788737u, 16788994u, 16788993u, 16789250u},
-    {16788741u, 16788998u, 35989255u, 36055048u, 16788997u, 16789254u, 36055047u, 36120840u,
-        16789253u, 16789510u, 36120839u, 36186632u, 16788227u, 16789764u, 16788483u, 16790020u,
-        16788739u, 16790276u, 16788995u, 16790532u, 16789251u, 16790788u, 16789507u, 16791044u,
-        35923459u, 16791812u, 35989251u, 16792068u, 36055043u, 16792324u, 36120835u, 16792580u},
-    {16792073u, 16792330u, 16792587u, 16792844u, 16792329u, 16792586u, 16792843u, 16793100u,
-        16792585u, 16792842u, 16793099u, 16793356u, 16790021u, 16790278u, 16790277u, 16790534u,
-        16790533u, 16790790u, 16790789u, 16791046u, 16791045u, 16791302u, 16791301u, 16791558u,
-        16792069u, 16792326u, 16792325u, 16792582u, 16792581u, 16792838u, 16792837u, 16793094u},
-    {36844557u, 36910350u, 36976143u, 16796176u, 36910349u, 36976142u, 37041935u, 16796432u,
-        36976141u, 37041934u, 37107727u, 16796688u, 16791815u, 16792072u, 16792071u, 16792328u,
-        16792327u, 16792584u, 16792583u, 16792840u, 16792839u, 16793096u, 16793095u, 16793352u,
-        36778759u, 36844552u, 36844551u, 36910344u, 36910343u, 36976136u, 36976135u, 37041928u},
-    {16796433u, 16796690u, 16796947u, 16797204u, 16796689u, 16796946u, 16797203u, 16797460u,
-        16796945u, 16797202u, 16797459u, 16797716u, 16793609u, 16793866u, 16793865u, 16794122u,
-        16794121u, 16794378u, 16794377u, 16794634u, 16794633u, 16794890u, 16794889u, 16795146u,
-        16795913u, 16796170u, 16796169u, 16796426u, 16796425u, 16796682u, 16796681u, 16796938u},
-    {37831445u, 37897238u, 37963031u, 38028824u, 37897237u, 37963030u, 38028823u, 38094616u,
-        37963029u, 38028822u, 38094615u, 38160408u, 16794123u, 16794380u, 16794379u, 16794636u,
-        16794635u, 16794892u, 16794891u, 16795148u, 16795147u, 16795404u, 16795403u, 16795660u,
-        16796427u, 16796684u, 16796683u, 16796940u, 16796939u, 16797196u, 16797195u, 16797452u},
-    {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 16795917u, 16796174u, 16796173u, 16796430u,
-        16796429u, 16796686u, 16796685u, 16796942u, 16796941u, 16797198u, 16797197u, 16797454u,
-        37765645u, 37831438u, 37831437u, 37897230u, 37897229u, 37963022u, 37963021u, 38028814u},
-    {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 16796431u, 0u, 16796687u, 0u, 16796943u, 0u,
-        16797199u, 0u, 16797455u, 0u, 16797711u, 0u, 37897231u, 0u, 37963023u, 0u, 38028815u, 0u,
-        38094607u, 0u},
-    {16789249u, 16789506u, 16789761u, 16790018u, 16790017u, 16790274u, 16790273u, 16790530u,
-        16790529u, 16790786u, 16790785u, 16791042u, 16791041u, 16791298u, 16791297u, 16791554u,
-        16791809u, 16792066u, 16792065u, 16792322u, 16792321u, 16792578u, 16792577u, 16792834u,
-        16792833u, 16793090u, 16793089u, 16793346u, 16793601u, 16793857u, 16794113u, 16794369u},
-    {36186627u, 16792836u, 16791811u, 16793604u, 16792067u, 16793860u, 16792323u, 16794116u,
-        16792579u, 16794372u, 16792835u, 16794628u, 16793091u, 16794884u, 16793347u, 16795140u,
-        36778755u, 16795908u, 36844547u, 16796164u, 36910339u, 16796420u, 36976131u, 16796676u,
-        37041923u, 16796932u, 37107715u, 16797188u, 16793858u, 16794114u, 16794370u, 16794626u},
-    {16793093u, 16793350u, 16793861u, 16794118u, 16794117u, 16794374u, 16794373u, 16794630u,
-        16794629u, 16794886u, 16794885u, 16795142u, 16795141u, 16795398u, 16795397u, 16795654u,
-        16796165u, 16796422u, 16796421u, 16796678u, 16796677u, 16796934u, 16796933u, 16797190u,
-        16797189u, 16797446u, 16797445u, 16797702u, 16795907u, 16796163u, 16796419u, 16796675u},
-    {37041927u, 37107720u, 16795911u, 16796168u, 16796167u, 16796424u, 16796423u, 16796680u,
-        16796679u, 16796936u, 16796935u, 16797192u, 16797191u, 16797448u, 16797447u, 16797704u,
-        37765639u, 37831432u, 37831431u, 37897224u, 37897223u, 37963016u, 37963015u, 38028808u,
-        38028807u, 38094600u, 38094599u, 38160392u, 0u, 0u, 0u, 0u},
-    {16796937u, 16797194u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-    {16797451u, 16797708u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-    {38028813u, 38094606u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-    {38160399u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-    {16794625u, 16794881u, 16795137u, 16795393u, 16795905u, 16796161u, 16796417u, 16796673u,
-        16796929u, 16797185u, 16797441u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u},
-    {16794882u, 16795138u, 16795394u, 16795650u, 16796162u, 16796418u, 16796674u, 16796930u,
-        16797186u, 16797442u, 16797698u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u},
-    {16796931u, 16797187u, 16797443u, 16797699u, 37765635u, 37831427u, 37897219u, 37963011u,
-        38028803u, 38094595u, 38160387u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u},
-};
-// Per phase, the output coefficient reduced by each lane's group. Inactive
-// lanes hold zero and are excluded by the generated active-lane bounds.
-static __device__ unsigned char const l2lWarpTargets8[8][32] = {
-    {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 1u, 1u, 1u, 1u, 1u, 1u, 1u, 1u,
-        2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u},
-    {3u, 3u, 3u, 3u, 3u, 3u, 3u, 3u, 4u, 4u, 4u, 4u, 4u, 4u, 4u, 4u, 5u, 5u, 5u, 5u, 5u, 5u, 5u, 5u,
-        6u, 6u, 6u, 6u, 6u, 6u, 6u, 6u},
-    {7u, 7u, 7u, 7u, 7u, 7u, 7u, 7u, 8u, 8u, 8u, 8u, 8u, 8u, 8u, 8u, 9u, 9u, 9u, 9u, 9u, 9u, 9u, 9u,
-        10u, 10u, 10u, 10u, 10u, 10u, 10u, 10u},
-    {11u, 11u, 11u, 11u, 11u, 11u, 11u, 11u, 12u, 12u, 12u, 12u, 12u, 12u, 12u, 12u, 13u, 13u, 13u,
-        13u, 13u, 13u, 13u, 13u, 14u, 14u, 14u, 14u, 14u, 14u, 14u, 14u},
-    {15u, 15u, 15u, 15u, 15u, 15u, 15u, 15u, 16u, 16u, 16u, 16u, 17u, 17u, 17u, 17u, 18u, 18u, 18u,
-        18u, 19u, 19u, 19u, 19u, 20u, 20u, 20u, 20u, 21u, 21u, 21u, 21u},
-    {22u, 22u, 22u, 22u, 23u, 23u, 23u, 23u, 24u, 24u, 24u, 24u, 25u, 25u, 26u, 26u, 27u, 27u, 28u,
-        28u, 29u, 29u, 30u, 30u, 31u, 31u, 32u, 32u, 33u, 33u, 34u, 34u},
-    {35u, 35u, 36u, 36u, 37u, 37u, 38u, 38u, 39u, 39u, 40u, 40u, 41u, 41u, 42u, 42u, 43u, 43u, 44u,
-        44u, 45u, 45u, 46u, 46u, 47u, 47u, 48u, 48u, 49u, 50u, 51u, 52u},
-    {53u, 54u, 55u, 56u, 57u, 58u, 59u, 60u, 61u, 62u, 63u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
-        0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
-};
+    // Read-only GLOBAL storage: row/lane loads coalesce instead of serializing
+    // divergent constant-memory accesses. Internal linkage needs no device RDC.
+    // Entry layout: basis | primary << 8 | secondary << 16 | kind << 24.
+    static __device__ unsigned int const l2lWarpSchedule8[52][32] = {
+        {16777473u, 16777730u, 16777987u, 16778244u, 16778501u, 16778758u, 16779015u, 16779272u,
+            16779529u, 16779786u, 16780043u, 16780300u, 16780557u, 16780814u, 16781071u, 16781328u,
+            16778241u, 16778498u, 16779011u, 16779524u, 16779781u, 16780038u, 16780551u, 16780808u,
+            16778497u, 16778754u, 16779267u, 16779780u, 16780037u, 16780294u, 16780807u, 16781064u},
+        {16781585u, 16781842u, 16782099u, 16782356u, 16782613u, 16782870u, 16783127u, 16783384u,
+            16783641u, 16783898u, 16784155u, 16784412u, 16784669u, 16784926u, 16785183u, 16785440u,
+            16781321u, 16781578u, 16781835u, 16782092u, 16782605u, 16782862u, 16783119u, 16783632u,
+            16781577u, 16781834u, 16782091u, 16782348u, 16782861u, 16783118u, 16783375u, 16783888u},
+        {16785697u, 16785954u, 16786211u, 16786468u, 16786725u, 16786982u, 16787239u, 16787496u,
+            16787753u, 16788010u, 16788267u, 16788524u, 16788781u, 16789038u, 16789295u, 16789552u,
+            16783889u, 16784146u, 16784403u, 16784660u, 16785173u, 16785430u, 16785687u, 16785944u,
+            16784145u, 16784402u, 16784659u, 16784916u, 16785429u, 16785686u, 16785943u, 16786200u},
+        {16789809u, 16790066u, 16790323u, 16790580u, 16790837u, 16791094u, 16791351u, 16791608u,
+            16791865u, 16792122u, 16792379u, 16792636u, 16792893u, 16793150u, 16793407u, 16793664u,
+            16786457u, 16786714u, 16786971u, 16787228u, 16787485u, 16787742u, 16788255u, 16788512u,
+            16786713u, 16786970u, 16787227u, 16787484u, 16787741u, 16787998u, 16788511u, 16788768u},
+        {16793921u, 16794178u, 16794435u, 16794692u, 16794949u, 16795206u, 16795463u, 16795720u,
+            16795977u, 16796234u, 16796491u, 16796748u, 16797005u, 16797262u, 16797519u, 16797776u,
+            16788769u, 16789026u, 16789283u, 16789796u, 16790053u, 16790310u, 16790567u, 16790824u,
+            16789025u, 16789282u, 16789539u, 16790052u, 16790309u, 16790566u, 16790823u, 16791080u},
+        {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 16791081u, 16791338u,
+            16791851u, 16792108u, 16792365u, 16792622u, 16792879u, 16793136u, 16791337u, 16791594u,
+            16792107u, 16792364u, 16792621u, 16792878u, 16793135u, 16793392u},
+        {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 16793649u, 16793906u,
+            16794163u, 16794420u, 16794677u, 16794934u, 16795191u, 16795448u, 16793905u, 16794162u,
+            16794419u, 16794676u, 16794933u, 16795190u, 16795447u, 16795704u},
+        {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 16795961u, 16796218u,
+            16796475u, 16796732u, 16796989u, 16797246u, 16797503u, 0u, 16796217u, 16796474u,
+            16796731u, 16796988u, 16797245u, 16797502u, 16797759u, 0u},
+        {16779009u, 16779266u, 33818115u, 16780548u, 16780805u, 16781062u, 34147079u, 34212872u,
+            16779521u, 16779778u, 16780547u, 16781316u, 16781573u, 16781830u, 16782599u, 16782856u,
+            16779777u, 16780034u, 16780803u, 16781572u, 16781829u, 16782086u, 16782855u, 16783112u,
+            16780033u, 16780290u, 16781059u, 16781828u, 16782085u, 16782342u, 16783111u, 16783368u},
+        {16782601u, 16782858u, 16783115u, 16783372u, 34607629u, 34673422u, 34739215u, 16785168u,
+            16783625u, 16783882u, 16784139u, 16784396u, 16785165u, 16785422u, 16785679u, 16786448u,
+            16783881u, 16784138u, 16784395u, 16784652u, 16785421u, 16785678u, 16785935u, 16786704u,
+            16784137u, 16784394u, 16784651u, 16784908u, 16785677u, 16785934u, 16786191u, 16786960u},
+        {16785425u, 16785682u, 16785939u, 16786196u, 35199765u, 35265558u, 35331351u, 35397144u,
+            16786705u, 16786962u, 16787219u, 16787476u, 16788245u, 16788502u, 16788759u, 16789016u,
+            16786961u, 16787218u, 16787475u, 16787732u, 16788501u, 16788758u, 16789015u, 16789272u,
+            16787217u, 16787474u, 16787731u, 16787988u, 16788757u, 16789014u, 16789271u, 16789528u},
+        {16788249u, 16788506u, 16788763u, 16789020u, 16789277u, 16789534u, 35923487u, 35989280u,
+            16789785u, 16790042u, 16790299u, 16790556u, 16790813u, 16791070u, 16791839u, 16792096u,
+            16790041u, 16790298u, 16790555u, 16790812u, 16791069u, 16791326u, 16792095u, 16792352u,
+            16790297u, 16790554u, 16790811u, 16791068u, 16791325u, 16791582u, 16792351u, 16792608u},
+        {36055073u, 36120866u, 36186659u, 16791844u, 16792101u, 16792358u, 16792615u, 16792872u,
+            16792353u, 16792610u, 16792867u, 16793636u, 16793893u, 16794150u, 16794407u, 16794664u,
+            16792609u, 16792866u, 16793123u, 16793892u, 16794149u, 16794406u, 16794663u, 16794920u,
+            16792865u, 16793122u, 16793379u, 16794148u, 16794405u, 16794662u, 16794919u, 16795176u},
+        {16793129u, 16793386u, 36778795u, 36844588u, 36910381u, 36976174u, 37041967u, 37107760u,
+            16794921u, 16795178u, 16795947u, 16796204u, 16796461u, 16796718u, 16796975u, 16797232u,
+            16795177u, 16795434u, 16796203u, 16796460u, 16796717u, 16796974u, 16797231u, 16797488u,
+            16795433u, 16795690u, 16796459u, 16796716u, 16796973u, 16797230u, 16797487u, 16797744u},
+        {16795953u, 16796210u, 16796467u, 16796724u, 16796981u, 16797238u, 16797495u, 16797752u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u},
+        {37765689u, 37831482u, 37897275u, 37963068u, 38028861u, 38094654u, 38160447u, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {16780545u, 16780802u, 34147075u, 16782596u, 16782853u, 16783110u, 34607623u, 34673416u,
+            16780801u, 16781058u, 34212867u, 16782852u, 16783109u, 16783366u, 34673415u, 34739208u,
+            16781313u, 16781570u, 16782595u, 16783620u, 16783877u, 16784134u, 16785159u, 16785416u,
+            16781569u, 16781826u, 16782851u, 16783876u, 16784133u, 16784390u, 16785415u, 16785672u},
+        {16785161u, 16785418u, 16785675u, 16785932u, 35199757u, 35265550u, 35331343u, 16788240u,
+            16785417u, 16785674u, 16785931u, 16786188u, 35265549u, 35331342u, 35397135u, 16788496u,
+            16786441u, 16786698u, 16786955u, 16787212u, 16788237u, 16788494u, 16788751u, 16789776u,
+            16786697u, 16786954u, 16787211u, 16787468u, 16788493u, 16788750u, 16789007u, 16790032u},
+        {16788497u, 16788754u, 16789011u, 16789268u, 35923477u, 35989270u, 36055063u, 36120856u,
+            16788753u, 16789010u, 16789267u, 16789524u, 35989269u, 36055062u, 36120855u, 36186648u,
+            16790033u, 16790290u, 16790547u, 16790804u, 16791829u, 16792086u, 16792343u, 16792600u,
+            16790289u, 16790546u, 16790803u, 16791060u, 16792085u, 16792342u, 16792599u, 16792856u},
+        {16791833u, 16792090u, 16792347u, 16792604u, 16792861u, 16793118u, 36778783u, 36844576u,
+            16792089u, 16792346u, 16792603u, 16792860u, 16793117u, 16793374u, 36844575u, 36910368u,
+            16793625u, 16793882u, 16794139u, 16794396u, 16794653u, 16794910u, 16795935u, 16796192u,
+            16793881u, 16794138u, 16794395u, 16794652u, 16794909u, 16795166u, 16796191u, 16796448u},
+        {36910369u, 36976162u, 37041955u, 16795940u, 16796197u, 16796454u, 16796711u, 16796968u,
+            36976161u, 37041954u, 37107747u, 16796196u, 16796453u, 16796710u, 16796967u, 16797224u,
+            16796449u, 16796706u, 16796963u, 0u, 0u, 0u, 0u, 0u, 16796705u, 16796962u, 16797219u,
+            0u, 0u, 0u, 0u, 0u},
+        {16797225u, 16797482u, 37765675u, 37831468u, 37897261u, 37963054u, 38028847u, 38094640u,
+            16797481u, 16797738u, 37831467u, 37897260u, 37963053u, 38028846u, 38094639u, 38160432u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {16781825u, 16782082u, 16783107u, 16784132u, 16784389u, 16784646u, 16785671u, 16785928u,
+            16782081u, 16782338u, 16783363u, 16784388u, 16784645u, 16784902u, 16785927u, 16786184u,
+            16782593u, 16782850u, 34607619u, 16785156u, 16785413u, 16785670u, 35199751u, 35265544u,
+            16782849u, 16783106u, 34673411u, 16785412u, 16785669u, 16785926u, 35265543u, 35331336u},
+        {16786953u, 16787210u, 16787467u, 16787724u, 16788749u, 16789006u, 16789263u, 16790288u,
+            16787209u, 16787466u, 16787723u, 16787980u, 16789005u, 16789262u, 16789519u, 16790544u,
+            16788233u, 16788490u, 16788747u, 16789004u, 35923469u, 35989262u, 36055055u, 16791824u,
+            16788489u, 16788746u, 16789003u, 16789260u, 35989261u, 36055054u, 36120847u, 16792080u},
+        {16790545u, 16790802u, 16791059u, 16791316u, 16792341u, 16792598u, 16792855u, 16793112u,
+            16790801u, 16791058u, 16791315u, 16791572u, 16792597u, 16792854u, 16793111u, 16793368u,
+            16792081u, 16792338u, 16792595u, 16792852u, 36778773u, 36844566u, 36910359u, 36976152u,
+            16792337u, 16792594u, 16792851u, 16793108u, 36844565u, 36910358u, 36976151u, 37041944u},
+        {16794137u, 16794394u, 16794651u, 16794908u, 16795165u, 16795422u, 16796447u, 16796704u,
+            16794393u, 16794650u, 16794907u, 16795164u, 16795421u, 16795678u, 16796703u, 16796960u,
+            16795929u, 16796186u, 16796443u, 16796700u, 16796957u, 16797214u, 37765663u, 37831456u,
+            16796185u, 16796442u, 16796699u, 16796956u, 16797213u, 16797470u, 37831455u, 37897248u},
+        {16796961u, 16797218u, 16797475u, 0u, 0u, 0u, 0u, 0u, 16797217u, 16797474u, 16797731u, 0u,
+            0u, 0u, 0u, 0u, 37897249u, 37963042u, 38028835u, 0u, 0u, 0u, 0u, 0u, 37963041u,
+            38028834u, 38094627u, 0u, 0u, 0u, 0u, 0u},
+        {16783105u, 16783362u, 34739203u, 16785668u, 16785925u, 16786182u, 35331335u, 35397128u,
+            16783617u, 16783874u, 16785155u, 16786436u, 16783873u, 16784130u, 16785411u, 16786692u,
+            16784129u, 16784386u, 16785667u, 16786948u, 16784385u, 16784642u, 16785923u, 16787204u,
+            16784641u, 16784898u, 16786179u, 16787460u, 16785153u, 16785410u, 35199747u, 16788228u},
+        {16788745u, 16789002u, 16789259u, 16789516u, 36055053u, 36120846u, 36186639u, 16792336u,
+            16786693u, 16786950u, 16788231u, 16788488u, 16786949u, 16787206u, 16788487u, 16788744u,
+            16787205u, 16787462u, 16788743u, 16789000u, 16787461u, 16787718u, 16788999u, 16789256u,
+            16787717u, 16787974u, 16789255u, 16789512u, 16788485u, 16788742u, 35923463u, 35989256u},
+        {16792593u, 16792850u, 16793107u, 16793364u, 36910357u, 36976150u, 37041943u, 37107736u,
+            16789769u, 16790026u, 16790283u, 16790540u, 16790025u, 16790282u, 16790539u, 16790796u,
+            16790281u, 16790538u, 16790795u, 16791052u, 16790537u, 16790794u, 16791051u, 16791308u,
+            16790793u, 16791050u, 16791307u, 16791564u, 16791817u, 16792074u, 16792331u, 16792588u},
+        {16796441u, 16796698u, 16796955u, 16797212u, 16797469u, 16797726u, 37897247u, 37963040u,
+            16791821u, 16792078u, 16792335u, 16793616u, 16792077u, 16792334u, 16792591u, 16793872u,
+            16792333u, 16792590u, 16792847u, 16794128u, 16792589u, 16792846u, 16793103u, 16794384u,
+            16792845u, 16793102u, 16793359u, 16794640u, 36778765u, 36844558u, 36910351u, 16795920u},
+        {38028833u, 38094626u, 38160419u, 0u, 0u, 0u, 0u, 0u, 16793873u, 16794130u, 16794387u,
+            16794644u, 16794129u, 16794386u, 16794643u, 16794900u, 16794385u, 16794642u, 16794899u,
+            16795156u, 16794641u, 16794898u, 16795155u, 16795412u, 16794897u, 16795154u, 16795411u,
+            16795668u, 16796177u, 16796434u, 16796691u, 16796948u},
+        {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 16795925u, 16796182u, 16796439u, 16796696u, 16796181u,
+            16796438u, 16796695u, 16796952u, 16796437u, 16796694u, 16796951u, 16797208u, 16796693u,
+            16796950u, 16797207u, 16797464u, 16796949u, 16797206u, 16797463u, 16797720u, 37765653u,
+            37831446u, 37897239u, 37963032u},
+        {16785409u, 16785666u, 35265539u, 16788484u, 16785665u, 16785922u, 35331331u, 16788740u,
+            16785921u, 16786178u, 35397123u, 16788996u, 16786433u, 16786690u, 16786689u, 16786946u,
+            16786945u, 16787202u, 16787201u, 16787458u, 16787457u, 16787714u, 16787713u, 16787970u,
+            16788225u, 16788482u, 16788481u, 16788738u, 16788737u, 16788994u, 16788993u, 16789250u},
+        {16788741u, 16788998u, 35989255u, 36055048u, 16788997u, 16789254u, 36055047u, 36120840u,
+            16789253u, 16789510u, 36120839u, 36186632u, 16788227u, 16789764u, 16788483u, 16790020u,
+            16788739u, 16790276u, 16788995u, 16790532u, 16789251u, 16790788u, 16789507u, 16791044u,
+            35923459u, 16791812u, 35989251u, 16792068u, 36055043u, 16792324u, 36120835u, 16792580u},
+        {16792073u, 16792330u, 16792587u, 16792844u, 16792329u, 16792586u, 16792843u, 16793100u,
+            16792585u, 16792842u, 16793099u, 16793356u, 16790021u, 16790278u, 16790277u, 16790534u,
+            16790533u, 16790790u, 16790789u, 16791046u, 16791045u, 16791302u, 16791301u, 16791558u,
+            16792069u, 16792326u, 16792325u, 16792582u, 16792581u, 16792838u, 16792837u, 16793094u},
+        {36844557u, 36910350u, 36976143u, 16796176u, 36910349u, 36976142u, 37041935u, 16796432u,
+            36976141u, 37041934u, 37107727u, 16796688u, 16791815u, 16792072u, 16792071u, 16792328u,
+            16792327u, 16792584u, 16792583u, 16792840u, 16792839u, 16793096u, 16793095u, 16793352u,
+            36778759u, 36844552u, 36844551u, 36910344u, 36910343u, 36976136u, 36976135u, 37041928u},
+        {16796433u, 16796690u, 16796947u, 16797204u, 16796689u, 16796946u, 16797203u, 16797460u,
+            16796945u, 16797202u, 16797459u, 16797716u, 16793609u, 16793866u, 16793865u, 16794122u,
+            16794121u, 16794378u, 16794377u, 16794634u, 16794633u, 16794890u, 16794889u, 16795146u,
+            16795913u, 16796170u, 16796169u, 16796426u, 16796425u, 16796682u, 16796681u, 16796938u},
+        {37831445u, 37897238u, 37963031u, 38028824u, 37897237u, 37963030u, 38028823u, 38094616u,
+            37963029u, 38028822u, 38094615u, 38160408u, 16794123u, 16794380u, 16794379u, 16794636u,
+            16794635u, 16794892u, 16794891u, 16795148u, 16795147u, 16795404u, 16795403u, 16795660u,
+            16796427u, 16796684u, 16796683u, 16796940u, 16796939u, 16797196u, 16797195u, 16797452u},
+        {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 16795917u, 16796174u, 16796173u, 16796430u,
+            16796429u, 16796686u, 16796685u, 16796942u, 16796941u, 16797198u, 16797197u, 16797454u,
+            37765645u, 37831438u, 37831437u, 37897230u, 37897229u, 37963022u, 37963021u, 38028814u},
+        {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 16796431u, 0u, 16796687u, 0u, 16796943u,
+            0u, 16797199u, 0u, 16797455u, 0u, 16797711u, 0u, 37897231u, 0u, 37963023u, 0u,
+            38028815u, 0u, 38094607u, 0u},
+        {16789249u, 16789506u, 16789761u, 16790018u, 16790017u, 16790274u, 16790273u, 16790530u,
+            16790529u, 16790786u, 16790785u, 16791042u, 16791041u, 16791298u, 16791297u, 16791554u,
+            16791809u, 16792066u, 16792065u, 16792322u, 16792321u, 16792578u, 16792577u, 16792834u,
+            16792833u, 16793090u, 16793089u, 16793346u, 16793601u, 16793857u, 16794113u, 16794369u},
+        {36186627u, 16792836u, 16791811u, 16793604u, 16792067u, 16793860u, 16792323u, 16794116u,
+            16792579u, 16794372u, 16792835u, 16794628u, 16793091u, 16794884u, 16793347u, 16795140u,
+            36778755u, 16795908u, 36844547u, 16796164u, 36910339u, 16796420u, 36976131u, 16796676u,
+            37041923u, 16796932u, 37107715u, 16797188u, 16793858u, 16794114u, 16794370u, 16794626u},
+        {16793093u, 16793350u, 16793861u, 16794118u, 16794117u, 16794374u, 16794373u, 16794630u,
+            16794629u, 16794886u, 16794885u, 16795142u, 16795141u, 16795398u, 16795397u, 16795654u,
+            16796165u, 16796422u, 16796421u, 16796678u, 16796677u, 16796934u, 16796933u, 16797190u,
+            16797189u, 16797446u, 16797445u, 16797702u, 16795907u, 16796163u, 16796419u, 16796675u},
+        {37041927u, 37107720u, 16795911u, 16796168u, 16796167u, 16796424u, 16796423u, 16796680u,
+            16796679u, 16796936u, 16796935u, 16797192u, 16797191u, 16797448u, 16797447u, 16797704u,
+            37765639u, 37831432u, 37831431u, 37897224u, 37897223u, 37963016u, 37963015u, 38028808u,
+            38028807u, 38094600u, 38094599u, 38160392u, 0u, 0u, 0u, 0u},
+        {16796937u, 16797194u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {16797451u, 16797708u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {38028813u, 38094606u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {38160399u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {16794625u, 16794881u, 16795137u, 16795393u, 16795905u, 16796161u, 16796417u, 16796673u,
+            16796929u, 16797185u, 16797441u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {16794882u, 16795138u, 16795394u, 16795650u, 16796162u, 16796418u, 16796674u, 16796930u,
+            16797186u, 16797442u, 16797698u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u},
+        {16796931u, 16797187u, 16797443u, 16797699u, 37765635u, 37831427u, 37897219u, 37963011u,
+            38028803u, 38094595u, 38160387u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u},
+    };
+    // Per phase, the output coefficient reduced by each lane's group. Inactive
+    // lanes hold zero and are excluded by the generated active-lane bounds.
+    static __device__ unsigned char const l2lWarpTargets8[8][32] = {
+        {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 1u, 1u, 1u, 1u, 1u, 1u, 1u,
+            1u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u},
+        {3u, 3u, 3u, 3u, 3u, 3u, 3u, 3u, 4u, 4u, 4u, 4u, 4u, 4u, 4u, 4u, 5u, 5u, 5u, 5u, 5u, 5u, 5u,
+            5u, 6u, 6u, 6u, 6u, 6u, 6u, 6u, 6u},
+        {7u, 7u, 7u, 7u, 7u, 7u, 7u, 7u, 8u, 8u, 8u, 8u, 8u, 8u, 8u, 8u, 9u, 9u, 9u, 9u, 9u, 9u, 9u,
+            9u, 10u, 10u, 10u, 10u, 10u, 10u, 10u, 10u},
+        {11u, 11u, 11u, 11u, 11u, 11u, 11u, 11u, 12u, 12u, 12u, 12u, 12u, 12u, 12u, 12u, 13u, 13u,
+            13u, 13u, 13u, 13u, 13u, 13u, 14u, 14u, 14u, 14u, 14u, 14u, 14u, 14u},
+        {15u, 15u, 15u, 15u, 15u, 15u, 15u, 15u, 16u, 16u, 16u, 16u, 17u, 17u, 17u, 17u, 18u, 18u,
+            18u, 18u, 19u, 19u, 19u, 19u, 20u, 20u, 20u, 20u, 21u, 21u, 21u, 21u},
+        {22u, 22u, 22u, 22u, 23u, 23u, 23u, 23u, 24u, 24u, 24u, 24u, 25u, 25u, 26u, 26u, 27u, 27u,
+            28u, 28u, 29u, 29u, 30u, 30u, 31u, 31u, 32u, 32u, 33u, 33u, 34u, 34u},
+        {35u, 35u, 36u, 36u, 37u, 37u, 38u, 38u, 39u, 39u, 40u, 40u, 41u, 41u, 42u, 42u, 43u, 43u,
+            44u, 44u, 45u, 45u, 46u, 46u, 47u, 47u, 48u, 48u, 49u, 50u, 51u, 52u},
+        {53u, 54u, 55u, 56u, 57u, 58u, 59u, 60u, 61u, 62u, 63u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+            0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},
+    };
 
-template <int order, bool withTrace>
-class L2lWarpKernel;
-template <>
-class L2lWarpKernel<8, true> {
-public:
-    // Whole-warp emitted floating arithmetic; a fused operation counts twice.
-    // Includes replicated basis work and padded rows, excludes index/shuffle work.
-    static constexpr int kFlops_ = 22726;
-    static constexpr int kFlopsNoPotential_ = 17538;
-    static constexpr int kWeightedFlops_ = 21060;
-    static constexpr int kWeightedFlopsNoPotential_ = 15873;
-    static constexpr int kDegree_ = 8;
-    static constexpr int kTraceIndex_ = 81;
-    static constexpr int kCoefficients_ = 82;
-    static constexpr int kBasisWords_ = 3;
-    static constexpr int kScheduleRows_ = 52;
-    static constexpr int kPhases_ = 8;
-    template <typename Real, typename Expansion, typename Source>
-    __device__ static void translate(Expansion& target, Source const& source, Real const dx,
-        Real const dy, Real const dz, bool doPhi) {
-        // Contract: all 32 lanes enter with identical source/geometry; target
-        // is private per lane. Every lane receives the complete expansion.
-        execute<true>(target, source, dx, dy, dz, doPhi);
-    }
-    template <typename Real, typename Source>
-    __device__ static void translateInto(Real* target, Source const& source, Real const dx,
-        Real const dy, Real const dz, bool doPhi) {
-        // Contract: all 32 lanes enter with identical source/geometry; target
-        // addresses 82 values that never alias source. Group leaders store
-        // their coefficient once; strided lanes copy the unchanged ones. Every
-        // source read and target write is complete when this returns.
-        execute<false>(target, source, dx, dy, dz, doPhi);
-    }
+    template <int order, bool withTrace>
+    class L2LWarp;
+    template <>
+    class L2LWarp<8, true> {
+    public:
+        // Whole-warp emitted floating arithmetic; a fused operation counts twice.
+        // Includes replicated basis work and padded rows, excludes index/shuffle work.
+        static constexpr int kFlops_ = 22726;
+        static constexpr int kFlopsNoPotential_ = 17538;
+        static constexpr int kWeightedFlops_ = 21060;
+        static constexpr int kWeightedFlopsNoPotential_ = 15873;
+        static constexpr int kDegree_ = 8;
+        static constexpr int kTraceIndex_ = 81;
+        static constexpr int kCoefficients_ = 82;
+        static constexpr int kBasisWords_ = 3;
+        static constexpr int kScheduleRows_ = 52;
+        static constexpr int kPhases_ = 8;
+        template <typename Real, typename Expansion, typename Source>
+        __device__ static void translate(Expansion& target, Source const& source, Real const dx,
+            Real const dy, Real const dz, bool doPhi) {
+            // Contract: all 32 lanes enter with identical source/geometry; target
+            // is private per lane. Every lane receives the complete expansion.
+            execute<true>(target, source, dx, dy, dz, doPhi);
+        }
+        template <typename Real, typename Source>
+        __device__ static void translateInto(Real* target, Source const& source, Real const dx,
+            Real const dy, Real const dz, bool doPhi) {
+            // Contract: all 32 lanes enter with identical source/geometry; target
+            // addresses 82 values that never alias source. Group leaders store
+            // their coefficient once; strided lanes copy the unchanged ones. Every
+            // source read and target write is complete when this returns.
+            execute<false>(target, source, dx, dy, dz, doPhi);
+        }
 
-private:
-    template <bool kReplicate, typename Real, typename Target, typename Source>
-    __device__ static void execute(Target& target, Source const& source, Real const dx,
-        Real const dy, Real const dz, bool doPhi) {
-        int const lane = threadIdx.x & 31;
-        constexpr unsigned int kMask = 0xffffffffu;
-        // 3 register(s) per lane hold the complete distributed Taylor basis:
-        // basis index i lives in word i >> 5 on lane i & 31. Shuffles avoid a
-        // large register-selection tree for dynamic indexing.
-        Real basis0 = simdBroadcast<Real>(0);
-        Real basis1 = simdBroadcast<Real>(0);
-        Real basis2 = simdBroadcast<Real>(0);
-        [[maybe_unused]] constexpr auto kCoefficient1 = 1;
-        [[maybe_unused]] constexpr auto kCoefficient8 = 1.0 / 2.0;
-        [[maybe_unused]] constexpr auto kCoefficient20 = 1.0 / 6.0;
-        [[maybe_unused]] constexpr auto kCoefficient39 = 1.0 / 24.0;
-        [[maybe_unused]] constexpr auto kCoefficient43 = 1.0 / 4.0;
-        [[maybe_unused]] constexpr auto kCoefficient58 = 1.0 / 12.0;
-        [[maybe_unused]] constexpr auto kCoefficient105 = 1.0 / 120.0;
-        [[maybe_unused]] constexpr auto kCoefficient182 = 1.0 / 60.0;
-        [[maybe_unused]] constexpr auto kCoefficient214 = 1.0 / 720.0;
-        [[maybe_unused]] constexpr auto kCoefficient216 = 1.0 / 48.0;
-        [[maybe_unused]] constexpr auto kCoefficient217 = -1.0 / 720.0;
-        [[maybe_unused]] constexpr auto kCoefficient246 = 1.0 / 8.0;
-        [[maybe_unused]] constexpr auto kCoefficient257 = 1.0 / 240.0;
-        [[maybe_unused]] constexpr auto kCoefficient314 = 1.0 / 36.0;
-        [[maybe_unused]] constexpr auto kCoefficient457 = 1.0 / 5040.0;
-        [[maybe_unused]] constexpr auto kCoefficient458 = 1.0 / 144.0;
-        [[maybe_unused]] constexpr auto kCoefficient481 = 1.0 / 72.0;
-        [[maybe_unused]] constexpr auto kCoefficient699 = -1.0 / 5040.0;
-        [[maybe_unused]] constexpr auto kCoefficient730 = 1.0 / 1680.0;
-        [[maybe_unused]] constexpr auto kCoefficient850 = 1.0 / 40320.0;
-        [[maybe_unused]] constexpr auto kCoefficient851 = -1.0 / 1440.0;
-        [[maybe_unused]] constexpr auto kCoefficient852 = 1.0 / 576.0;
-        [[maybe_unused]] constexpr auto kCoefficient855 = 1.0 / 1440.0;
-        [[maybe_unused]] constexpr auto kCoefficient890 = -1.0 / 96.0;
-        [[maybe_unused]] constexpr auto kCoefficient891 = 1.0 / 96.0;
-        [[maybe_unused]] constexpr auto kCoefficient892 = 1.0 / 288.0;
-        [[maybe_unused]] constexpr auto kCoefficient894 = 1.0 / 10080.0;
-        [[maybe_unused]] constexpr auto kCoefficient911 = 1.0 / 480.0;
-        [[maybe_unused]] constexpr auto kCoefficient1053 = 1.0 / 6720.0;
-        [[maybe_unused]] constexpr auto kCoefficient1319 = 1.0 / 360.0;
-        Real const t5 = dx * dx;
-        Real const t6 = dy * dy;
-        Real const t7 = dz * dz;
-        Real const t10 = t6 * simdBroadcast<Real>(kCoefficient8);
-        Real const t12 = t7 * simdBroadcast<Real>(kCoefficient8);
-        Real const t14 = t10 - t12;
-        Real const t15 = dx * dy;
-        Real const t16 = t5 * simdBroadcast<Real>(kCoefficient8);
-        Real const t17 = t16 - t12;
-        Real const t18 = dy * dz;
-        Real const t19 = dx * dz;
-        Real const t21 = t6 * simdBroadcast<Real>(kCoefficient20);
-        Real const t22 = t21 - t12;
-        Real const t23 = dy * t22;
-        Real const t24 = dx * t14;
-        Real const t25 = dy * t17;
-        Real const t26 = t5 * simdBroadcast<Real>(kCoefficient20);
-        Real const t27 = t26 - t12;
-        Real const t28 = dx * t27;
-        Real const t31 = t7 * simdBroadcast<Real>(kCoefficient20);
-        Real const t32 = t10 - t31;
-        Real const t33 = dz * t32;
-        Real const t34 = dz * t15;
-        Real const t37 = t16 - t31;
-        Real const t38 = dz * t37;
-        Real const t41 = t6 * simdBroadcast<Real>(kCoefficient39);
-        Real const t44 = t7 * simdBroadcast<Real>(kCoefficient43);
-        Real const t45 = t41 - t44;
-        Real const t46 = t6 * t45;
-        Real const t47 = t7 * simdBroadcast<Real>(kCoefficient39);
-        Real const t48 = t7 * t47;
-        Real const t49 = t46 + t48;
-        Real const t51 = t6 * simdBroadcast<Real>(kCoefficient43);
-        Real const t56 = t15 * t22;
-        Real const t59 = t51 - t44;
-        Real const t60 = t5 * t59;
-        Real const t63 = t7 * simdBroadcast<Real>(kCoefficient58);
-        Real const t67 = t63 - t51;
-        Real const t68 = t7 * t67;
-        Real const t69 = t60 + t68;
-        Real const t87 = t15 * t27;
-        Real const t89 = t5 * simdBroadcast<Real>(kCoefficient39);
-        Real const t90 = t89 - t44;
-        Real const t91 = t5 * t90;
-        Real const t92 = t48 + t91;
-        Real const t97 = t21 - t31;
-        Real const t98 = t18 * t97;
-        Real const t99 = t19 * t32;
-        Real const t101 = t18 * t37;
-        Real const t103 = t26 - t31;
-        Real const t104 = t19 * t103;
-        Real const t107 = t6 * simdBroadcast<Real>(kCoefficient105);
-        Real const t109 = t107 - t63;
-        Real const t110 = t6 * t109;
-        Real const t111 = t48 + t110;
-        Real const t113 = t6 * simdBroadcast<Real>(kCoefficient58);
-        Real const t118 = dy * t111;
-        Real const t119 = dx * t49;
-        Real const t120 = t113 - t44;
-        Real const t121 = t5 * t120;
-        Real const t126 = t63 - t113;
-        Real const t127 = t7 * t126;
-        Real const t128 = t121 + t127;
-        Real const t142 = dy * t128;
-        Real const t143 = t113 - t63;
-        Real const t144 = t5 * t143;
-        Real const t146 = t68 + t144;
-        Real const t161 = dx * t146;
-        Real const t162 = dy * t92;
-        Real const t163 = t5 * simdBroadcast<Real>(kCoefficient105);
-        Real const t164 = t163 - t63;
-        Real const t165 = t5 * t164;
-        Real const t166 = t48 + t165;
-        Real const t171 = dx * t166;
-        Real const t172 = t41 - t63;
-        Real const t173 = t6 * t172;
-        Real const t174 = t7 * simdBroadcast<Real>(kCoefficient105);
-        Real const t175 = t7 * t174;
-        Real const t176 = t173 + t175;
-        Real const t180 = dz * t176;
-        Real const t181 = t34 * t97;
-        Real const t183 = t51 - t63;
-        Real const t184 = t5 * t183;
-        Real const t185 = t7 * simdBroadcast<Real>(kCoefficient182);
-        Real const t189 = t185 - t113;
-        Real const t190 = t7 * t189;
-        Real const t191 = t184 + t190;
-        Real const t205 = dz * t191;
-        Real const t206 = t34 * t103;
-        Real const t207 = t89 - t63;
-        Real const t208 = t5 * t207;
-        Real const t209 = t175 + t208;
-        Real const t213 = dz * t209;
-        Real const t218 = t6 * simdBroadcast<Real>(kCoefficient214);
-        Real const t220 = t7 * simdBroadcast<Real>(kCoefficient216);
-        Real const t221 = t218 - t220;
-        Real const t222 = t6 * t221;
-        Real const t223 = t7 * t220;
-        Real const t224 = t222 + t223;
-        Real const t225 = t6 * t224;
-        Real const t226 = t7 * simdBroadcast<Real>(kCoefficient217);
-        Real const t228 = t7 * t226;
-        Real const t229 = t7 * t228;
-        Real const t230 = t225 + t229;
-        Real const t231 = t6 * simdBroadcast<Real>(kCoefficient216);
-        Real const t241 = t15 * t111;
-        Real const t258 = t7 * simdBroadcast<Real>(kCoefficient257);
-        Real const t264 = t6 * simdBroadcast<Real>(kCoefficient246);
-        Real const t275 = t5 * simdBroadcast<Real>(kCoefficient216);
-        Real const t276 = t275 - t220;
-        Real const t277 = t6 * t276;
-        Real const t286 = t5 * simdBroadcast<Real>(kCoefficient246);
-        Real const t287 = t47 - t286;
-        Real const t288 = t7 * t287;
-        Real const t289 = t277 + t288;
-        Real const t290 = t6 * t289;
-        Real const t291 = t275 - t258;
-        Real const t292 = t7 * t291;
-        Real const t293 = t7 * t292;
-        Real const t294 = t290 + t293;
-        Real const t315 = t6 * simdBroadcast<Real>(kCoefficient314);
-        Real const t316 = t315 - t63;
-        Real const t317 = t5 * t316;
-        Real const t319 = t127 + t317;
-        Real const t330 = t15 * t319;
-        Real const t331 = t231 - t220;
-        Real const t332 = t5 * t331;
-        Real const t341 = t47 - t264;
-        Real const t342 = t7 * t341;
-        Real const t343 = t332 + t342;
-        Real const t344 = t5 * t343;
-        Real const t345 = t231 - t258;
-        Real const t346 = t7 * t345;
-        Real const t347 = t7 * t346;
-        Real const t348 = t344 + t347;
-        Real const t386 = t15 * t166;
-        Real const t388 = t5 * simdBroadcast<Real>(kCoefficient214);
-        Real const t389 = t388 - t220;
-        Real const t390 = t5 * t389;
-        Real const t391 = t223 + t390;
-        Real const t392 = t5 * t391;
-        Real const t393 = t229 + t392;
-        Real const t403 = t7 * simdBroadcast<Real>(kCoefficient314);
-        Real const t404 = t107 - t403;
-        Real const t405 = t6 * t404;
-        Real const t406 = t175 + t405;
-        Real const t411 = t18 * t406;
-        Real const t412 = t19 * t176;
-        Real const t418 = t185 - t315;
-        Real const t419 = t7 * t418;
-        Real const t420 = t144 + t419;
-        Real const t430 = t18 * t420;
-        Real const t431 = t113 - t403;
-        Real const t432 = t5 * t431;
-        Real const t434 = t190 + t432;
-        Real const t447 = t19 * t434;
-        Real const t448 = t18 * t209;
-        Real const t450 = t163 - t403;
-        Real const t451 = t5 * t450;
-        Real const t452 = t175 + t451;
-        Real const t456 = t19 * t452;
-        Real const t459 = t6 * simdBroadcast<Real>(kCoefficient457);
-        Real const t460 = t459 - t258;
-        Real const t461 = t6 * t460;
-        Real const t462 = t7 * simdBroadcast<Real>(kCoefficient458);
-        Real const t463 = t7 * t462;
-        Real const t464 = t461 + t463;
-        Real const t465 = t6 * t464;
-        Real const t466 = t229 + t465;
-        Real const t467 = t6 * simdBroadcast<Real>(kCoefficient458);
-        Real const t471 = t6 * simdBroadcast<Real>(kCoefficient257);
-        Real const t478 = dy * t466;
-        Real const t479 = dx * t230;
-        Real const t489 = t7 * simdBroadcast<Real>(kCoefficient481);
-        Real const t507 = t5 * simdBroadcast<Real>(kCoefficient257);
-        Real const t508 = t507 - t258;
-        Real const t509 = t6 * t508;
-        Real const t516 = t489 - t89;
-        Real const t517 = t7 * t516;
-        Real const t518 = t509 + t517;
-        Real const t519 = t6 * t518;
-        Real const t520 = t293 + t519;
-        Real const t540 = dy * t520;
-        Real const t552 = t5 * simdBroadcast<Real>(kCoefficient458);
-        Real const t553 = t552 - t220;
-        Real const t554 = t6 * t553;
-        Real const t562 = t47 - t89;
-        Real const t563 = t7 * t562;
-        Real const t564 = t554 + t563;
-        Real const t565 = t6 * t564;
-        Real const t566 = t552 - t258;
-        Real const t567 = t7 * t566;
-        Real const t568 = t7 * t567;
-        Real const t569 = t565 + t568;
-        Real const t586 = dx * t569;
-        Real const t587 = t467 - t220;
-        Real const t588 = t5 * t587;
-        Real const t597 = t47 - t41;
-        Real const t598 = t7 * t597;
-        Real const t599 = t588 + t598;
-        Real const t600 = t5 * t599;
-        Real const t601 = t467 - t258;
-        Real const t602 = t7 * t601;
-        Real const t603 = t7 * t602;
-        Real const t604 = t600 + t603;
-        Real const t632 = dy * t604;
-        Real const t633 = t471 - t258;
-        Real const t634 = t5 * t633;
-        Real const t639 = t489 - t41;
-        Real const t640 = t7 * t639;
-        Real const t641 = t634 + t640;
-        Real const t642 = t5 * t641;
-        Real const t643 = t347 + t642;
-        Real const t682 = dx * t643;
-        Real const t683 = dy * t393;
-        Real const t684 = t5 * simdBroadcast<Real>(kCoefficient457);
-        Real const t685 = t684 - t258;
-        Real const t686 = t5 * t685;
-        Real const t687 = t463 + t686;
-        Real const t688 = t5 * t687;
-        Real const t689 = t229 + t688;
-        Real const t697 = dx * t689;
-        Real const t701 = t218 - t462;
-        Real const t702 = t6 * t701;
-        Real const t703 = t7 * t258;
-        Real const t704 = t702 + t703;
-        Real const t705 = t6 * t704;
-        Real const t706 = t7 * simdBroadcast<Real>(kCoefficient699);
-        Real const t708 = t7 * t706;
-        Real const t709 = t7 * t708;
-        Real const t710 = t705 + t709;
-        Real const t718 = dz * t710;
-        Real const t719 = t34 * t406;
-        Real const t731 = t7 * simdBroadcast<Real>(kCoefficient730);
-        Real const t745 = t275 - t462;
-        Real const t746 = t6 * t745;
-        Real const t753 = t174 - t89;
-        Real const t754 = t7 * t753;
-        Real const t755 = t746 + t754;
-        Real const t756 = t6 * t755;
-        Real const t757 = t507 - t731;
-        Real const t758 = t7 * t757;
-        Real const t759 = t7 * t758;
-        Real const t760 = t756 + t759;
-        Real const t773 = dz * t760;
-        Real const t774 = t315 - t403;
-        Real const t775 = t5 * t774;
-        Real const t777 = t419 + t775;
-        Real const t788 = t34 * t777;
-        Real const t789 = t231 - t462;
-        Real const t790 = t5 * t789;
-        Real const t797 = t174 - t41;
-        Real const t798 = t7 * t797;
-        Real const t799 = t790 + t798;
-        Real const t800 = t5 * t799;
-        Real const t801 = t471 - t731;
-        Real const t802 = t7 * t801;
-        Real const t803 = t7 * t802;
-        Real const t804 = t800 + t803;
-        Real const t837 = dz * t804;
-        Real const t838 = t34 * t452;
-        Real const t839 = t388 - t462;
-        Real const t840 = t5 * t839;
-        Real const t841 = t703 + t840;
-        Real const t842 = t5 * t841;
-        Real const t843 = t709 + t842;
-        Real const t849 = dz * t843;
-        if (lane == 0) {
-            basis0 = simdBroadcast<Real>(kCoefficient1);
-        }
-        if (lane == 1) {
-            basis0 = dy;
-        }
-        if (lane == 2) {
-            basis0 = dx;
-        }
-        if (lane == 3) {
-            basis0 = dz;
-        }
-        if (lane == 4) {
-            basis0 = t14;
-        }
-        if (lane == 5) {
-            basis0 = t15;
-        }
-        if (lane == 6) {
-            basis0 = t17;
-        }
-        if (lane == 7) {
-            basis0 = t18;
-        }
-        if (lane == 8) {
-            basis0 = t19;
-        }
-        if (lane == 9) {
-            basis0 = t23;
-        }
-        if (lane == 10) {
-            basis0 = t24;
-        }
-        if (lane == 11) {
-            basis0 = t25;
-        }
-        if (lane == 12) {
-            basis0 = t28;
-        }
-        if (lane == 13) {
-            basis0 = t33;
-        }
-        if (lane == 14) {
-            basis0 = t34;
-        }
-        if (lane == 15) {
-            basis0 = t38;
-        }
-        if (lane == 16) {
-            basis0 = t49;
-        }
-        if (lane == 17) {
-            basis0 = t56;
-        }
-        if (lane == 18) {
-            basis0 = t69;
-        }
-        if (lane == 19) {
-            basis0 = t87;
-        }
-        if (lane == 20) {
-            basis0 = t92;
-        }
-        if (lane == 21) {
-            basis0 = t98;
-        }
-        if (lane == 22) {
-            basis0 = t99;
-        }
-        if (lane == 23) {
-            basis0 = t101;
-        }
-        if (lane == 24) {
-            basis0 = t104;
-        }
-        if (lane == 25) {
-            basis0 = t118;
-        }
-        if (lane == 26) {
-            basis0 = t119;
-        }
-        if (lane == 27) {
-            basis0 = t142;
-        }
-        if (lane == 28) {
-            basis0 = t161;
-        }
-        if (lane == 29) {
-            basis0 = t162;
-        }
-        if (lane == 30) {
-            basis0 = t171;
-        }
-        if (lane == 31) {
-            basis0 = t180;
-        }
-        if (lane == 0) {
-            basis1 = t181;
-        }
-        if (lane == 1) {
-            basis1 = t205;
-        }
-        if (lane == 2) {
-            basis1 = t206;
-        }
-        if (lane == 3) {
-            basis1 = t213;
-        }
-        if (lane == 4) {
-            basis1 = t230;
-        }
-        if (lane == 5) {
-            basis1 = t241;
-        }
-        if (lane == 6) {
-            basis1 = t294;
-        }
-        if (lane == 7) {
-            basis1 = t330;
-        }
-        if (lane == 8) {
-            basis1 = t348;
-        }
-        if (lane == 9) {
-            basis1 = t386;
-        }
-        if (lane == 10) {
-            basis1 = t393;
-        }
-        if (lane == 11) {
-            basis1 = t411;
-        }
-        if (lane == 12) {
-            basis1 = t412;
-        }
-        if (lane == 13) {
-            basis1 = t430;
-        }
-        if (lane == 14) {
-            basis1 = t447;
-        }
-        if (lane == 15) {
-            basis1 = t448;
-        }
-        if (lane == 16) {
-            basis1 = t456;
-        }
-        if (lane == 17) {
-            basis1 = t478;
-        }
-        if (lane == 18) {
-            basis1 = t479;
-        }
-        if (lane == 19) {
-            basis1 = t540;
-        }
-        if (lane == 20) {
-            basis1 = t586;
-        }
-        if (lane == 21) {
-            basis1 = t632;
-        }
-        if (lane == 22) {
-            basis1 = t682;
-        }
-        if (lane == 23) {
-            basis1 = t683;
-        }
-        if (lane == 24) {
-            basis1 = t697;
-        }
-        if (lane == 25) {
-            basis1 = t718;
-        }
-        if (lane == 26) {
-            basis1 = t719;
-        }
-        if (lane == 27) {
-            basis1 = t773;
-        }
-        if (lane == 28) {
-            basis1 = t788;
-        }
-        if (lane == 29) {
-            basis1 = t837;
-        }
-        if (lane == 30) {
-            basis1 = t838;
-        }
-        if (lane == 31) {
-            basis1 = t849;
-        }
-        if (doPhi) {
-            Real const t227 = t7 * simdBroadcast<Real>(kCoefficient214);
-            Real const t501 = t6 * simdBroadcast<Real>(kCoefficient481);
-            Real const t658 = t5 * simdBroadcast<Real>(kCoefficient481);
-            Real const t853 = t6 * simdBroadcast<Real>(kCoefficient850);
-            Real const t854 = t7 * simdBroadcast<Real>(kCoefficient851);
-            Real const t856 = t7 * simdBroadcast<Real>(kCoefficient855);
-            Real const t857 = t853 - t856;
-            Real const t858 = t6 * t857;
-            Real const t859 = t7 * simdBroadcast<Real>(kCoefficient852);
-            Real const t860 = t7 * t859;
-            Real const t861 = t858 + t860;
-            Real const t862 = t6 * t861;
-            Real const t863 = t7 * t854;
-            Real const t864 = t7 * t863;
-            Real const t865 = t862 + t864;
-            Real const t866 = t6 * t865;
-            Real const t867 = t7 * simdBroadcast<Real>(kCoefficient850);
-            Real const t868 = t7 * t867;
-            Real const t869 = t7 * t868;
-            Real const t870 = t7 * t869;
-            Real const t871 = t866 + t870;
-            Real const t873 = t6 * simdBroadcast<Real>(kCoefficient855);
-            Real const t888 = t15 * t466;
-            Real const t906 = t7 * simdBroadcast<Real>(kCoefficient892);
-            Real const t912 = t7 * simdBroadcast<Real>(kCoefficient911);
-            Real const t917 = t7 * simdBroadcast<Real>(kCoefficient894);
-            Real const t923 = t6 * simdBroadcast<Real>(kCoefficient891);
-            Real const t945 = t5 * simdBroadcast<Real>(kCoefficient855);
-            Real const t946 = t945 - t856;
-            Real const t947 = t6 * t946;
-            Real const t959 = t5 * simdBroadcast<Real>(kCoefficient890);
-            Real const t960 = t5 * simdBroadcast<Real>(kCoefficient891);
-            Real const t961 = t906 - t960;
-            Real const t962 = t7 * t961;
-            Real const t963 = t947 + t962;
-            Real const t964 = t6 * t963;
-            Real const t965 = t960 - t912;
-            Real const t966 = t7 * t965;
-            Real const t967 = t7 * t966;
-            Real const t968 = t964 + t967;
-            Real const t969 = t6 * t968;
-            Real const t971 = t917 - t945;
-            Real const t972 = t7 * t971;
-            Real const t973 = t7 * t972;
-            Real const t974 = t7 * t973;
-            Real const t975 = t969 + t974;
-            Real const t1020 = t388 - t258;
-            Real const t1021 = t6 * t1020;
-            Real const t1028 = t489 - t658;
-            Real const t1029 = t7 * t1028;
-            Real const t1030 = t1021 + t1029;
-            Real const t1031 = t6 * t1030;
-            Real const t1032 = t568 + t1031;
-            Real const t1052 = t15 * t1032;
-            Real const t1068 = t7 * simdBroadcast<Real>(kCoefficient1053);
-            Real const t1090 = t5 * simdBroadcast<Real>(kCoefficient852);
-            Real const t1106 = t859 - t960;
-            Real const t1107 = t7 * t1106;
-            Real const t1108 = t5 * t1090;
-            Real const t1109 = t1107 + t1108;
-            Real const t1110 = t6 * t1109;
-            Real const t1111 = t275 - t912;
-            Real const t1112 = t7 * t1111;
-            Real const t1113 = t5 * t959;
-            Real const t1114 = t1112 + t1113;
-            Real const t1115 = t7 * t1114;
-            Real const t1116 = t1110 + t1115;
-            Real const t1117 = t6 * t1116;
-            Real const t1119 = t5 * simdBroadcast<Real>(kCoefficient911);
-            Real const t1120 = t1068 - t1119;
-            Real const t1121 = t7 * t1120;
-            Real const t1122 = t1108 + t1121;
-            Real const t1123 = t7 * t1122;
-            Real const t1124 = t7 * t1123;
-            Real const t1125 = t1117 + t1124;
-            Real const t1156 = t218 - t258;
-            Real const t1157 = t5 * t1156;
-            Real const t1164 = t489 - t501;
-            Real const t1165 = t7 * t1164;
-            Real const t1166 = t1157 + t1165;
-            Real const t1167 = t5 * t1166;
-            Real const t1168 = t603 + t1167;
-            Real const t1196 = t15 * t1168;
-            Real const t1197 = t873 - t856;
-            Real const t1198 = t5 * t1197;
-            Real const t1209 = t906 - t923;
-            Real const t1210 = t7 * t1209;
-            Real const t1211 = t1198 + t1210;
-            Real const t1212 = t5 * t1211;
-            Real const t1213 = t923 - t912;
-            Real const t1214 = t7 * t1213;
-            Real const t1215 = t7 * t1214;
-            Real const t1216 = t1212 + t1215;
-            Real const t1217 = t5 * t1216;
-            Real const t1218 = t917 - t873;
-            Real const t1219 = t7 * t1218;
-            Real const t1220 = t7 * t1219;
-            Real const t1221 = t7 * t1220;
-            Real const t1222 = t1217 + t1221;
-            Real const t1283 = t15 * t689;
-            Real const t1285 = t5 * simdBroadcast<Real>(kCoefficient850);
-            Real const t1286 = t1285 - t856;
-            Real const t1287 = t5 * t1286;
-            Real const t1288 = t860 + t1287;
-            Real const t1289 = t5 * t1288;
-            Real const t1290 = t864 + t1289;
-            Real const t1291 = t5 * t1290;
-            Real const t1292 = t870 + t1291;
-            Real const t1303 = t459 - t227;
-            Real const t1304 = t6 * t1303;
-            Real const t1305 = t7 * t227;
-            Real const t1306 = t1304 + t1305;
-            Real const t1307 = t6 * t1306;
-            Real const t1308 = t709 + t1307;
-            Real const t1316 = t18 * t1308;
-            Real const t1317 = t19 * t710;
-            Real const t1326 = t7 * simdBroadcast<Real>(kCoefficient1319);
-            Real const t1342 = t507 - t227;
-            Real const t1343 = t6 * t1342;
-            Real const t1349 = t1326 - t658;
-            Real const t1350 = t7 * t1349;
-            Real const t1351 = t1343 + t1350;
-            Real const t1352 = t6 * t1351;
-            Real const t1353 = t759 + t1352;
-            Real const t1367 = t18 * t1353;
-            Real const t1378 = t552 - t462;
-            Real const t1379 = t6 * t1378;
-            Real const t1386 = t174 - t658;
-            Real const t1387 = t7 * t1386;
-            Real const t1388 = t1379 + t1387;
-            Real const t1389 = t6 * t1388;
-            Real const t1390 = t388 - t731;
-            Real const t1391 = t7 * t1390;
-            Real const t1392 = t7 * t1391;
-            Real const t1393 = t1389 + t1392;
-            Real const t1406 = t19 * t1393;
-            Real const t1407 = t467 - t462;
-            Real const t1408 = t5 * t1407;
-            Real const t1415 = t174 - t501;
-            Real const t1416 = t7 * t1415;
-            Real const t1417 = t1408 + t1416;
-            Real const t1418 = t5 * t1417;
-            Real const t1419 = t218 - t731;
-            Real const t1420 = t7 * t1419;
-            Real const t1421 = t7 * t1420;
-            Real const t1422 = t1418 + t1421;
-            Real const t1446 = t18 * t1422;
-            Real const t1447 = t471 - t227;
-            Real const t1448 = t5 * t1447;
-            Real const t1453 = t1326 - t501;
-            Real const t1454 = t7 * t1453;
-            Real const t1455 = t1448 + t1454;
-            Real const t1456 = t5 * t1455;
-            Real const t1457 = t803 + t1456;
-            Real const t1492 = t19 * t1457;
-            Real const t1493 = t18 * t843;
-            Real const t1495 = t684 - t227;
-            Real const t1496 = t5 * t1495;
-            Real const t1497 = t1305 + t1496;
-            Real const t1498 = t5 * t1497;
-            Real const t1499 = t709 + t1498;
-            Real const t1505 = t19 * t1499;
+    private:
+        template <bool kReplicate, typename Real, typename Target, typename Source>
+        __device__ static void execute(Target& target, Source const& source, Real const dx,
+            Real const dy, Real const dz, bool doPhi) {
+            int const lane = threadIdx.x & 31;
+            constexpr unsigned int kMask = 0xffffffffu;
+            // 3 register(s) per lane hold the complete distributed Taylor basis:
+            // basis index i lives in word i >> 5 on lane i & 31. Shuffles avoid a
+            // large register-selection tree for dynamic indexing.
+            Real basis0 = simdBroadcast<Real>(0);
+            Real basis1 = simdBroadcast<Real>(0);
+            Real basis2 = simdBroadcast<Real>(0);
+            [[maybe_unused]] constexpr auto kCoefficient1 = 1;
+            [[maybe_unused]] constexpr auto kCoefficient8 = 1.0 / 2.0;
+            [[maybe_unused]] constexpr auto kCoefficient20 = 1.0 / 6.0;
+            [[maybe_unused]] constexpr auto kCoefficient39 = 1.0 / 24.0;
+            [[maybe_unused]] constexpr auto kCoefficient43 = 1.0 / 4.0;
+            [[maybe_unused]] constexpr auto kCoefficient58 = 1.0 / 12.0;
+            [[maybe_unused]] constexpr auto kCoefficient105 = 1.0 / 120.0;
+            [[maybe_unused]] constexpr auto kCoefficient182 = 1.0 / 60.0;
+            [[maybe_unused]] constexpr auto kCoefficient214 = 1.0 / 720.0;
+            [[maybe_unused]] constexpr auto kCoefficient216 = 1.0 / 48.0;
+            [[maybe_unused]] constexpr auto kCoefficient217 = -1.0 / 720.0;
+            [[maybe_unused]] constexpr auto kCoefficient246 = 1.0 / 8.0;
+            [[maybe_unused]] constexpr auto kCoefficient257 = 1.0 / 240.0;
+            [[maybe_unused]] constexpr auto kCoefficient314 = 1.0 / 36.0;
+            [[maybe_unused]] constexpr auto kCoefficient457 = 1.0 / 5040.0;
+            [[maybe_unused]] constexpr auto kCoefficient458 = 1.0 / 144.0;
+            [[maybe_unused]] constexpr auto kCoefficient481 = 1.0 / 72.0;
+            [[maybe_unused]] constexpr auto kCoefficient699 = -1.0 / 5040.0;
+            [[maybe_unused]] constexpr auto kCoefficient730 = 1.0 / 1680.0;
+            [[maybe_unused]] constexpr auto kCoefficient850 = 1.0 / 40320.0;
+            [[maybe_unused]] constexpr auto kCoefficient851 = -1.0 / 1440.0;
+            [[maybe_unused]] constexpr auto kCoefficient852 = 1.0 / 576.0;
+            [[maybe_unused]] constexpr auto kCoefficient855 = 1.0 / 1440.0;
+            [[maybe_unused]] constexpr auto kCoefficient890 = -1.0 / 96.0;
+            [[maybe_unused]] constexpr auto kCoefficient891 = 1.0 / 96.0;
+            [[maybe_unused]] constexpr auto kCoefficient892 = 1.0 / 288.0;
+            [[maybe_unused]] constexpr auto kCoefficient894 = 1.0 / 10080.0;
+            [[maybe_unused]] constexpr auto kCoefficient911 = 1.0 / 480.0;
+            [[maybe_unused]] constexpr auto kCoefficient1053 = 1.0 / 6720.0;
+            [[maybe_unused]] constexpr auto kCoefficient1319 = 1.0 / 360.0;
+            Real const t5 = dx * dx;
+            Real const t6 = dy * dy;
+            Real const t7 = dz * dz;
+            Real const t10 = t6 * simdBroadcast<Real>(kCoefficient8);
+            Real const t12 = t7 * simdBroadcast<Real>(kCoefficient8);
+            Real const t14 = t10 - t12;
+            Real const t15 = dx * dy;
+            Real const t16 = t5 * simdBroadcast<Real>(kCoefficient8);
+            Real const t17 = t16 - t12;
+            Real const t18 = dy * dz;
+            Real const t19 = dx * dz;
+            Real const t21 = t6 * simdBroadcast<Real>(kCoefficient20);
+            Real const t22 = t21 - t12;
+            Real const t23 = dy * t22;
+            Real const t24 = dx * t14;
+            Real const t25 = dy * t17;
+            Real const t26 = t5 * simdBroadcast<Real>(kCoefficient20);
+            Real const t27 = t26 - t12;
+            Real const t28 = dx * t27;
+            Real const t31 = t7 * simdBroadcast<Real>(kCoefficient20);
+            Real const t32 = t10 - t31;
+            Real const t33 = dz * t32;
+            Real const t34 = dz * t15;
+            Real const t37 = t16 - t31;
+            Real const t38 = dz * t37;
+            Real const t41 = t6 * simdBroadcast<Real>(kCoefficient39);
+            Real const t44 = t7 * simdBroadcast<Real>(kCoefficient43);
+            Real const t45 = t41 - t44;
+            Real const t46 = t6 * t45;
+            Real const t47 = t7 * simdBroadcast<Real>(kCoefficient39);
+            Real const t48 = t7 * t47;
+            Real const t49 = t46 + t48;
+            Real const t51 = t6 * simdBroadcast<Real>(kCoefficient43);
+            Real const t56 = t15 * t22;
+            Real const t59 = t51 - t44;
+            Real const t60 = t5 * t59;
+            Real const t63 = t7 * simdBroadcast<Real>(kCoefficient58);
+            Real const t67 = t63 - t51;
+            Real const t68 = t7 * t67;
+            Real const t69 = t60 + t68;
+            Real const t87 = t15 * t27;
+            Real const t89 = t5 * simdBroadcast<Real>(kCoefficient39);
+            Real const t90 = t89 - t44;
+            Real const t91 = t5 * t90;
+            Real const t92 = t48 + t91;
+            Real const t97 = t21 - t31;
+            Real const t98 = t18 * t97;
+            Real const t99 = t19 * t32;
+            Real const t101 = t18 * t37;
+            Real const t103 = t26 - t31;
+            Real const t104 = t19 * t103;
+            Real const t107 = t6 * simdBroadcast<Real>(kCoefficient105);
+            Real const t109 = t107 - t63;
+            Real const t110 = t6 * t109;
+            Real const t111 = t48 + t110;
+            Real const t113 = t6 * simdBroadcast<Real>(kCoefficient58);
+            Real const t118 = dy * t111;
+            Real const t119 = dx * t49;
+            Real const t120 = t113 - t44;
+            Real const t121 = t5 * t120;
+            Real const t126 = t63 - t113;
+            Real const t127 = t7 * t126;
+            Real const t128 = t121 + t127;
+            Real const t142 = dy * t128;
+            Real const t143 = t113 - t63;
+            Real const t144 = t5 * t143;
+            Real const t146 = t68 + t144;
+            Real const t161 = dx * t146;
+            Real const t162 = dy * t92;
+            Real const t163 = t5 * simdBroadcast<Real>(kCoefficient105);
+            Real const t164 = t163 - t63;
+            Real const t165 = t5 * t164;
+            Real const t166 = t48 + t165;
+            Real const t171 = dx * t166;
+            Real const t172 = t41 - t63;
+            Real const t173 = t6 * t172;
+            Real const t174 = t7 * simdBroadcast<Real>(kCoefficient105);
+            Real const t175 = t7 * t174;
+            Real const t176 = t173 + t175;
+            Real const t180 = dz * t176;
+            Real const t181 = t34 * t97;
+            Real const t183 = t51 - t63;
+            Real const t184 = t5 * t183;
+            Real const t185 = t7 * simdBroadcast<Real>(kCoefficient182);
+            Real const t189 = t185 - t113;
+            Real const t190 = t7 * t189;
+            Real const t191 = t184 + t190;
+            Real const t205 = dz * t191;
+            Real const t206 = t34 * t103;
+            Real const t207 = t89 - t63;
+            Real const t208 = t5 * t207;
+            Real const t209 = t175 + t208;
+            Real const t213 = dz * t209;
+            Real const t218 = t6 * simdBroadcast<Real>(kCoefficient214);
+            Real const t220 = t7 * simdBroadcast<Real>(kCoefficient216);
+            Real const t221 = t218 - t220;
+            Real const t222 = t6 * t221;
+            Real const t223 = t7 * t220;
+            Real const t224 = t222 + t223;
+            Real const t225 = t6 * t224;
+            Real const t226 = t7 * simdBroadcast<Real>(kCoefficient217);
+            Real const t228 = t7 * t226;
+            Real const t229 = t7 * t228;
+            Real const t230 = t225 + t229;
+            Real const t231 = t6 * simdBroadcast<Real>(kCoefficient216);
+            Real const t241 = t15 * t111;
+            Real const t258 = t7 * simdBroadcast<Real>(kCoefficient257);
+            Real const t264 = t6 * simdBroadcast<Real>(kCoefficient246);
+            Real const t275 = t5 * simdBroadcast<Real>(kCoefficient216);
+            Real const t276 = t275 - t220;
+            Real const t277 = t6 * t276;
+            Real const t286 = t5 * simdBroadcast<Real>(kCoefficient246);
+            Real const t287 = t47 - t286;
+            Real const t288 = t7 * t287;
+            Real const t289 = t277 + t288;
+            Real const t290 = t6 * t289;
+            Real const t291 = t275 - t258;
+            Real const t292 = t7 * t291;
+            Real const t293 = t7 * t292;
+            Real const t294 = t290 + t293;
+            Real const t315 = t6 * simdBroadcast<Real>(kCoefficient314);
+            Real const t316 = t315 - t63;
+            Real const t317 = t5 * t316;
+            Real const t319 = t127 + t317;
+            Real const t330 = t15 * t319;
+            Real const t331 = t231 - t220;
+            Real const t332 = t5 * t331;
+            Real const t341 = t47 - t264;
+            Real const t342 = t7 * t341;
+            Real const t343 = t332 + t342;
+            Real const t344 = t5 * t343;
+            Real const t345 = t231 - t258;
+            Real const t346 = t7 * t345;
+            Real const t347 = t7 * t346;
+            Real const t348 = t344 + t347;
+            Real const t386 = t15 * t166;
+            Real const t388 = t5 * simdBroadcast<Real>(kCoefficient214);
+            Real const t389 = t388 - t220;
+            Real const t390 = t5 * t389;
+            Real const t391 = t223 + t390;
+            Real const t392 = t5 * t391;
+            Real const t393 = t229 + t392;
+            Real const t403 = t7 * simdBroadcast<Real>(kCoefficient314);
+            Real const t404 = t107 - t403;
+            Real const t405 = t6 * t404;
+            Real const t406 = t175 + t405;
+            Real const t411 = t18 * t406;
+            Real const t412 = t19 * t176;
+            Real const t418 = t185 - t315;
+            Real const t419 = t7 * t418;
+            Real const t420 = t144 + t419;
+            Real const t430 = t18 * t420;
+            Real const t431 = t113 - t403;
+            Real const t432 = t5 * t431;
+            Real const t434 = t190 + t432;
+            Real const t447 = t19 * t434;
+            Real const t448 = t18 * t209;
+            Real const t450 = t163 - t403;
+            Real const t451 = t5 * t450;
+            Real const t452 = t175 + t451;
+            Real const t456 = t19 * t452;
+            Real const t459 = t6 * simdBroadcast<Real>(kCoefficient457);
+            Real const t460 = t459 - t258;
+            Real const t461 = t6 * t460;
+            Real const t462 = t7 * simdBroadcast<Real>(kCoefficient458);
+            Real const t463 = t7 * t462;
+            Real const t464 = t461 + t463;
+            Real const t465 = t6 * t464;
+            Real const t466 = t229 + t465;
+            Real const t467 = t6 * simdBroadcast<Real>(kCoefficient458);
+            Real const t471 = t6 * simdBroadcast<Real>(kCoefficient257);
+            Real const t478 = dy * t466;
+            Real const t479 = dx * t230;
+            Real const t489 = t7 * simdBroadcast<Real>(kCoefficient481);
+            Real const t507 = t5 * simdBroadcast<Real>(kCoefficient257);
+            Real const t508 = t507 - t258;
+            Real const t509 = t6 * t508;
+            Real const t516 = t489 - t89;
+            Real const t517 = t7 * t516;
+            Real const t518 = t509 + t517;
+            Real const t519 = t6 * t518;
+            Real const t520 = t293 + t519;
+            Real const t540 = dy * t520;
+            Real const t552 = t5 * simdBroadcast<Real>(kCoefficient458);
+            Real const t553 = t552 - t220;
+            Real const t554 = t6 * t553;
+            Real const t562 = t47 - t89;
+            Real const t563 = t7 * t562;
+            Real const t564 = t554 + t563;
+            Real const t565 = t6 * t564;
+            Real const t566 = t552 - t258;
+            Real const t567 = t7 * t566;
+            Real const t568 = t7 * t567;
+            Real const t569 = t565 + t568;
+            Real const t586 = dx * t569;
+            Real const t587 = t467 - t220;
+            Real const t588 = t5 * t587;
+            Real const t597 = t47 - t41;
+            Real const t598 = t7 * t597;
+            Real const t599 = t588 + t598;
+            Real const t600 = t5 * t599;
+            Real const t601 = t467 - t258;
+            Real const t602 = t7 * t601;
+            Real const t603 = t7 * t602;
+            Real const t604 = t600 + t603;
+            Real const t632 = dy * t604;
+            Real const t633 = t471 - t258;
+            Real const t634 = t5 * t633;
+            Real const t639 = t489 - t41;
+            Real const t640 = t7 * t639;
+            Real const t641 = t634 + t640;
+            Real const t642 = t5 * t641;
+            Real const t643 = t347 + t642;
+            Real const t682 = dx * t643;
+            Real const t683 = dy * t393;
+            Real const t684 = t5 * simdBroadcast<Real>(kCoefficient457);
+            Real const t685 = t684 - t258;
+            Real const t686 = t5 * t685;
+            Real const t687 = t463 + t686;
+            Real const t688 = t5 * t687;
+            Real const t689 = t229 + t688;
+            Real const t697 = dx * t689;
+            Real const t701 = t218 - t462;
+            Real const t702 = t6 * t701;
+            Real const t703 = t7 * t258;
+            Real const t704 = t702 + t703;
+            Real const t705 = t6 * t704;
+            Real const t706 = t7 * simdBroadcast<Real>(kCoefficient699);
+            Real const t708 = t7 * t706;
+            Real const t709 = t7 * t708;
+            Real const t710 = t705 + t709;
+            Real const t718 = dz * t710;
+            Real const t719 = t34 * t406;
+            Real const t731 = t7 * simdBroadcast<Real>(kCoefficient730);
+            Real const t745 = t275 - t462;
+            Real const t746 = t6 * t745;
+            Real const t753 = t174 - t89;
+            Real const t754 = t7 * t753;
+            Real const t755 = t746 + t754;
+            Real const t756 = t6 * t755;
+            Real const t757 = t507 - t731;
+            Real const t758 = t7 * t757;
+            Real const t759 = t7 * t758;
+            Real const t760 = t756 + t759;
+            Real const t773 = dz * t760;
+            Real const t774 = t315 - t403;
+            Real const t775 = t5 * t774;
+            Real const t777 = t419 + t775;
+            Real const t788 = t34 * t777;
+            Real const t789 = t231 - t462;
+            Real const t790 = t5 * t789;
+            Real const t797 = t174 - t41;
+            Real const t798 = t7 * t797;
+            Real const t799 = t790 + t798;
+            Real const t800 = t5 * t799;
+            Real const t801 = t471 - t731;
+            Real const t802 = t7 * t801;
+            Real const t803 = t7 * t802;
+            Real const t804 = t800 + t803;
+            Real const t837 = dz * t804;
+            Real const t838 = t34 * t452;
+            Real const t839 = t388 - t462;
+            Real const t840 = t5 * t839;
+            Real const t841 = t703 + t840;
+            Real const t842 = t5 * t841;
+            Real const t843 = t709 + t842;
+            Real const t849 = dz * t843;
             if (lane == 0) {
-                basis2 = t871;
+                basis0 = simdBroadcast<Real>(kCoefficient1);
             }
             if (lane == 1) {
-                basis2 = t888;
+                basis0 = dy;
             }
             if (lane == 2) {
-                basis2 = t975;
+                basis0 = dx;
             }
             if (lane == 3) {
-                basis2 = t1052;
+                basis0 = dz;
             }
             if (lane == 4) {
-                basis2 = t1125;
+                basis0 = t14;
             }
             if (lane == 5) {
-                basis2 = t1196;
+                basis0 = t15;
             }
             if (lane == 6) {
-                basis2 = t1222;
+                basis0 = t17;
             }
             if (lane == 7) {
-                basis2 = t1283;
+                basis0 = t18;
             }
             if (lane == 8) {
-                basis2 = t1292;
+                basis0 = t19;
             }
             if (lane == 9) {
-                basis2 = t1316;
+                basis0 = t23;
             }
             if (lane == 10) {
-                basis2 = t1317;
+                basis0 = t24;
             }
             if (lane == 11) {
-                basis2 = t1367;
+                basis0 = t25;
             }
             if (lane == 12) {
-                basis2 = t1406;
+                basis0 = t28;
             }
             if (lane == 13) {
-                basis2 = t1446;
+                basis0 = t33;
             }
             if (lane == 14) {
-                basis2 = t1492;
+                basis0 = t34;
             }
             if (lane == 15) {
-                basis2 = t1493;
+                basis0 = t38;
             }
             if (lane == 16) {
-                basis2 = t1505;
+                basis0 = t49;
             }
-        }
-        {
-            // Fixed contraction phase 0: 8 rows, 3 outputs.
-            int const groupWidth = lane < 16 ? 16 : (8);
-            int const targetIndex = __ldg(&l2lWarpTargets8[0][lane]);
-            Real partial = simdBroadcast<Real>(0);
-#pragma unroll
-            for (int row = 0; row < 8; ++row) {
-                unsigned int entry = __ldg(&l2lWarpSchedule8[row][lane]);
-                if (!doPhi && lane < 16) {
-                    entry = 0u;
-                }
-                int const basisIndex = entry & 255u;
-                int const primaryIndex = (entry >> 8) & 255u;
-                int const secondaryIndex = (entry >> 16) & 255u;
-                int const kind = (entry >> 24) & 3u;
-                Real const sourceValue =
-                    source[primaryIndex] + simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
-                Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
-                Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
-                Real const basisValue2 = __shfl_sync(kMask, basis2, basisIndex & 31);
-                Real const basisValue =
-                    basisIndex < 32 ? basisValue0 : (basisIndex < 64 ? basisValue1 : (basisValue2));
-                Real const weight =
-                    simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
-                partial = simdFma(weight, sourceValue, partial);
+            if (lane == 17) {
+                basis0 = t56;
             }
-            Real const shuffled8 = __shfl_down_sync(kMask, partial, 8);
-            partial +=
-                (lane & (groupWidth - 1)) + 8 < groupWidth ? shuffled8 : simdBroadcast<Real>(0);
-            Real const shuffled4 = __shfl_down_sync(kMask, partial, 4);
-            partial +=
-                (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : simdBroadcast<Real>(0);
-            Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
-            partial +=
-                (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : simdBroadcast<Real>(0);
-            Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-            partial +=
-                (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
-            bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
-            if (leader) {
-                partial += source[targetIndex];
+            if (lane == 18) {
+                basis0 = t69;
             }
-            if (doPhi && lane == 0) {
-                partial = simdFma(simdBroadcast<Real>(0.5) * dz * dz, source[81], partial);
+            if (lane == 19) {
+                basis0 = t87;
             }
-            if constexpr (kReplicate) {
-                target[0] = __shfl_sync(kMask, partial, 0);
-                target[1] = __shfl_sync(kMask, partial, 16);
-                target[2] = __shfl_sync(kMask, partial, 24);
-            } else {
-                if (leader) {
-                    target[targetIndex] = partial;
-                }
+            if (lane == 20) {
+                basis0 = t92;
             }
-        }
-        {
-            // Fixed contraction phase 1: 8 rows, 4 outputs.
-            int const groupWidth = 8;
-            int const targetIndex = __ldg(&l2lWarpTargets8[1][lane]);
-            Real partial = simdBroadcast<Real>(0);
-#pragma unroll
-            for (int row = 8; row < 16; ++row) {
-                unsigned int entry = __ldg(&l2lWarpSchedule8[row][lane]);
-                int const basisIndex = entry & 255u;
-                int const primaryIndex = (entry >> 8) & 255u;
-                int const secondaryIndex = (entry >> 16) & 255u;
-                int const kind = (entry >> 24) & 3u;
-                Real const sourceValue =
-                    source[primaryIndex] + simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
-                Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
-                Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
-                Real const basisValue2 = __shfl_sync(kMask, basis2, basisIndex & 31);
-                Real const basisValue =
-                    basisIndex < 32 ? basisValue0 : (basisIndex < 64 ? basisValue1 : (basisValue2));
-                Real const weight =
-                    simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
-                partial = simdFma(weight, sourceValue, partial);
+            if (lane == 21) {
+                basis0 = t98;
             }
-            Real const shuffled4 = __shfl_down_sync(kMask, partial, 4);
-            partial +=
-                (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : simdBroadcast<Real>(0);
-            Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
-            partial +=
-                (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : simdBroadcast<Real>(0);
-            Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-            partial +=
-                (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
-            bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
-            if (leader) {
-                partial += source[targetIndex];
+            if (lane == 22) {
+                basis0 = t99;
+            }
+            if (lane == 23) {
+                basis0 = t101;
+            }
+            if (lane == 24) {
+                basis0 = t104;
+            }
+            if (lane == 25) {
+                basis0 = t118;
+            }
+            if (lane == 26) {
+                basis0 = t119;
+            }
+            if (lane == 27) {
+                basis0 = t142;
+            }
+            if (lane == 28) {
+                basis0 = t161;
+            }
+            if (lane == 29) {
+                basis0 = t162;
+            }
+            if (lane == 30) {
+                basis0 = t171;
+            }
+            if (lane == 31) {
+                basis0 = t180;
             }
             if (lane == 0) {
-                partial = simdFma(dz, source[81], partial);
+                basis1 = t181;
             }
-            if constexpr (kReplicate) {
-                target[3] = __shfl_sync(kMask, partial, 0);
-                target[4] = __shfl_sync(kMask, partial, 8);
-                target[5] = __shfl_sync(kMask, partial, 16);
-                target[6] = __shfl_sync(kMask, partial, 24);
-            } else {
-                if (leader) {
-                    target[targetIndex] = partial;
+            if (lane == 1) {
+                basis1 = t205;
+            }
+            if (lane == 2) {
+                basis1 = t206;
+            }
+            if (lane == 3) {
+                basis1 = t213;
+            }
+            if (lane == 4) {
+                basis1 = t230;
+            }
+            if (lane == 5) {
+                basis1 = t241;
+            }
+            if (lane == 6) {
+                basis1 = t294;
+            }
+            if (lane == 7) {
+                basis1 = t330;
+            }
+            if (lane == 8) {
+                basis1 = t348;
+            }
+            if (lane == 9) {
+                basis1 = t386;
+            }
+            if (lane == 10) {
+                basis1 = t393;
+            }
+            if (lane == 11) {
+                basis1 = t411;
+            }
+            if (lane == 12) {
+                basis1 = t412;
+            }
+            if (lane == 13) {
+                basis1 = t430;
+            }
+            if (lane == 14) {
+                basis1 = t447;
+            }
+            if (lane == 15) {
+                basis1 = t448;
+            }
+            if (lane == 16) {
+                basis1 = t456;
+            }
+            if (lane == 17) {
+                basis1 = t478;
+            }
+            if (lane == 18) {
+                basis1 = t479;
+            }
+            if (lane == 19) {
+                basis1 = t540;
+            }
+            if (lane == 20) {
+                basis1 = t586;
+            }
+            if (lane == 21) {
+                basis1 = t632;
+            }
+            if (lane == 22) {
+                basis1 = t682;
+            }
+            if (lane == 23) {
+                basis1 = t683;
+            }
+            if (lane == 24) {
+                basis1 = t697;
+            }
+            if (lane == 25) {
+                basis1 = t718;
+            }
+            if (lane == 26) {
+                basis1 = t719;
+            }
+            if (lane == 27) {
+                basis1 = t773;
+            }
+            if (lane == 28) {
+                basis1 = t788;
+            }
+            if (lane == 29) {
+                basis1 = t837;
+            }
+            if (lane == 30) {
+                basis1 = t838;
+            }
+            if (lane == 31) {
+                basis1 = t849;
+            }
+            if (doPhi) {
+                Real const t227 = t7 * simdBroadcast<Real>(kCoefficient214);
+                Real const t501 = t6 * simdBroadcast<Real>(kCoefficient481);
+                Real const t658 = t5 * simdBroadcast<Real>(kCoefficient481);
+                Real const t853 = t6 * simdBroadcast<Real>(kCoefficient850);
+                Real const t854 = t7 * simdBroadcast<Real>(kCoefficient851);
+                Real const t856 = t7 * simdBroadcast<Real>(kCoefficient855);
+                Real const t857 = t853 - t856;
+                Real const t858 = t6 * t857;
+                Real const t859 = t7 * simdBroadcast<Real>(kCoefficient852);
+                Real const t860 = t7 * t859;
+                Real const t861 = t858 + t860;
+                Real const t862 = t6 * t861;
+                Real const t863 = t7 * t854;
+                Real const t864 = t7 * t863;
+                Real const t865 = t862 + t864;
+                Real const t866 = t6 * t865;
+                Real const t867 = t7 * simdBroadcast<Real>(kCoefficient850);
+                Real const t868 = t7 * t867;
+                Real const t869 = t7 * t868;
+                Real const t870 = t7 * t869;
+                Real const t871 = t866 + t870;
+                Real const t873 = t6 * simdBroadcast<Real>(kCoefficient855);
+                Real const t888 = t15 * t466;
+                Real const t906 = t7 * simdBroadcast<Real>(kCoefficient892);
+                Real const t912 = t7 * simdBroadcast<Real>(kCoefficient911);
+                Real const t917 = t7 * simdBroadcast<Real>(kCoefficient894);
+                Real const t923 = t6 * simdBroadcast<Real>(kCoefficient891);
+                Real const t945 = t5 * simdBroadcast<Real>(kCoefficient855);
+                Real const t946 = t945 - t856;
+                Real const t947 = t6 * t946;
+                Real const t959 = t5 * simdBroadcast<Real>(kCoefficient890);
+                Real const t960 = t5 * simdBroadcast<Real>(kCoefficient891);
+                Real const t961 = t906 - t960;
+                Real const t962 = t7 * t961;
+                Real const t963 = t947 + t962;
+                Real const t964 = t6 * t963;
+                Real const t965 = t960 - t912;
+                Real const t966 = t7 * t965;
+                Real const t967 = t7 * t966;
+                Real const t968 = t964 + t967;
+                Real const t969 = t6 * t968;
+                Real const t971 = t917 - t945;
+                Real const t972 = t7 * t971;
+                Real const t973 = t7 * t972;
+                Real const t974 = t7 * t973;
+                Real const t975 = t969 + t974;
+                Real const t1020 = t388 - t258;
+                Real const t1021 = t6 * t1020;
+                Real const t1028 = t489 - t658;
+                Real const t1029 = t7 * t1028;
+                Real const t1030 = t1021 + t1029;
+                Real const t1031 = t6 * t1030;
+                Real const t1032 = t568 + t1031;
+                Real const t1052 = t15 * t1032;
+                Real const t1068 = t7 * simdBroadcast<Real>(kCoefficient1053);
+                Real const t1090 = t5 * simdBroadcast<Real>(kCoefficient852);
+                Real const t1106 = t859 - t960;
+                Real const t1107 = t7 * t1106;
+                Real const t1108 = t5 * t1090;
+                Real const t1109 = t1107 + t1108;
+                Real const t1110 = t6 * t1109;
+                Real const t1111 = t275 - t912;
+                Real const t1112 = t7 * t1111;
+                Real const t1113 = t5 * t959;
+                Real const t1114 = t1112 + t1113;
+                Real const t1115 = t7 * t1114;
+                Real const t1116 = t1110 + t1115;
+                Real const t1117 = t6 * t1116;
+                Real const t1119 = t5 * simdBroadcast<Real>(kCoefficient911);
+                Real const t1120 = t1068 - t1119;
+                Real const t1121 = t7 * t1120;
+                Real const t1122 = t1108 + t1121;
+                Real const t1123 = t7 * t1122;
+                Real const t1124 = t7 * t1123;
+                Real const t1125 = t1117 + t1124;
+                Real const t1156 = t218 - t258;
+                Real const t1157 = t5 * t1156;
+                Real const t1164 = t489 - t501;
+                Real const t1165 = t7 * t1164;
+                Real const t1166 = t1157 + t1165;
+                Real const t1167 = t5 * t1166;
+                Real const t1168 = t603 + t1167;
+                Real const t1196 = t15 * t1168;
+                Real const t1197 = t873 - t856;
+                Real const t1198 = t5 * t1197;
+                Real const t1209 = t906 - t923;
+                Real const t1210 = t7 * t1209;
+                Real const t1211 = t1198 + t1210;
+                Real const t1212 = t5 * t1211;
+                Real const t1213 = t923 - t912;
+                Real const t1214 = t7 * t1213;
+                Real const t1215 = t7 * t1214;
+                Real const t1216 = t1212 + t1215;
+                Real const t1217 = t5 * t1216;
+                Real const t1218 = t917 - t873;
+                Real const t1219 = t7 * t1218;
+                Real const t1220 = t7 * t1219;
+                Real const t1221 = t7 * t1220;
+                Real const t1222 = t1217 + t1221;
+                Real const t1283 = t15 * t689;
+                Real const t1285 = t5 * simdBroadcast<Real>(kCoefficient850);
+                Real const t1286 = t1285 - t856;
+                Real const t1287 = t5 * t1286;
+                Real const t1288 = t860 + t1287;
+                Real const t1289 = t5 * t1288;
+                Real const t1290 = t864 + t1289;
+                Real const t1291 = t5 * t1290;
+                Real const t1292 = t870 + t1291;
+                Real const t1303 = t459 - t227;
+                Real const t1304 = t6 * t1303;
+                Real const t1305 = t7 * t227;
+                Real const t1306 = t1304 + t1305;
+                Real const t1307 = t6 * t1306;
+                Real const t1308 = t709 + t1307;
+                Real const t1316 = t18 * t1308;
+                Real const t1317 = t19 * t710;
+                Real const t1326 = t7 * simdBroadcast<Real>(kCoefficient1319);
+                Real const t1342 = t507 - t227;
+                Real const t1343 = t6 * t1342;
+                Real const t1349 = t1326 - t658;
+                Real const t1350 = t7 * t1349;
+                Real const t1351 = t1343 + t1350;
+                Real const t1352 = t6 * t1351;
+                Real const t1353 = t759 + t1352;
+                Real const t1367 = t18 * t1353;
+                Real const t1378 = t552 - t462;
+                Real const t1379 = t6 * t1378;
+                Real const t1386 = t174 - t658;
+                Real const t1387 = t7 * t1386;
+                Real const t1388 = t1379 + t1387;
+                Real const t1389 = t6 * t1388;
+                Real const t1390 = t388 - t731;
+                Real const t1391 = t7 * t1390;
+                Real const t1392 = t7 * t1391;
+                Real const t1393 = t1389 + t1392;
+                Real const t1406 = t19 * t1393;
+                Real const t1407 = t467 - t462;
+                Real const t1408 = t5 * t1407;
+                Real const t1415 = t174 - t501;
+                Real const t1416 = t7 * t1415;
+                Real const t1417 = t1408 + t1416;
+                Real const t1418 = t5 * t1417;
+                Real const t1419 = t218 - t731;
+                Real const t1420 = t7 * t1419;
+                Real const t1421 = t7 * t1420;
+                Real const t1422 = t1418 + t1421;
+                Real const t1446 = t18 * t1422;
+                Real const t1447 = t471 - t227;
+                Real const t1448 = t5 * t1447;
+                Real const t1453 = t1326 - t501;
+                Real const t1454 = t7 * t1453;
+                Real const t1455 = t1448 + t1454;
+                Real const t1456 = t5 * t1455;
+                Real const t1457 = t803 + t1456;
+                Real const t1492 = t19 * t1457;
+                Real const t1493 = t18 * t843;
+                Real const t1495 = t684 - t227;
+                Real const t1496 = t5 * t1495;
+                Real const t1497 = t1305 + t1496;
+                Real const t1498 = t5 * t1497;
+                Real const t1499 = t709 + t1498;
+                Real const t1505 = t19 * t1499;
+                if (lane == 0) {
+                    basis2 = t871;
+                }
+                if (lane == 1) {
+                    basis2 = t888;
+                }
+                if (lane == 2) {
+                    basis2 = t975;
+                }
+                if (lane == 3) {
+                    basis2 = t1052;
+                }
+                if (lane == 4) {
+                    basis2 = t1125;
+                }
+                if (lane == 5) {
+                    basis2 = t1196;
+                }
+                if (lane == 6) {
+                    basis2 = t1222;
+                }
+                if (lane == 7) {
+                    basis2 = t1283;
+                }
+                if (lane == 8) {
+                    basis2 = t1292;
+                }
+                if (lane == 9) {
+                    basis2 = t1316;
+                }
+                if (lane == 10) {
+                    basis2 = t1317;
+                }
+                if (lane == 11) {
+                    basis2 = t1367;
+                }
+                if (lane == 12) {
+                    basis2 = t1406;
+                }
+                if (lane == 13) {
+                    basis2 = t1446;
+                }
+                if (lane == 14) {
+                    basis2 = t1492;
+                }
+                if (lane == 15) {
+                    basis2 = t1493;
+                }
+                if (lane == 16) {
+                    basis2 = t1505;
                 }
             }
-        }
-        {
-            // Fixed contraction phase 2: 6 rows, 4 outputs.
-            int const groupWidth = 8;
-            int const targetIndex = __ldg(&l2lWarpTargets8[2][lane]);
-            Real partial = simdBroadcast<Real>(0);
+            {
+                // Fixed contraction phase 0: 8 rows, 3 outputs.
+                int const groupWidth = lane < 16 ? 16 : (8);
+                int const targetIndex = __ldg(&l2lWarpTargets8[0][lane]);
+                Real partial = simdBroadcast<Real>(0);
 #pragma unroll
-            for (int row = 16; row < 22; ++row) {
-                unsigned int entry = __ldg(&l2lWarpSchedule8[row][lane]);
-                int const basisIndex = entry & 255u;
-                int const primaryIndex = (entry >> 8) & 255u;
-                int const secondaryIndex = (entry >> 16) & 255u;
-                int const kind = (entry >> 24) & 3u;
-                Real const sourceValue =
-                    source[primaryIndex] + simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
-                Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
-                Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
-                Real const basisValue2 = __shfl_sync(kMask, basis2, basisIndex & 31);
-                Real const basisValue =
-                    basisIndex < 32 ? basisValue0 : (basisIndex < 64 ? basisValue1 : (basisValue2));
-                Real const weight =
-                    simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
-                partial = simdFma(weight, sourceValue, partial);
-            }
-            Real const shuffled4 = __shfl_down_sync(kMask, partial, 4);
-            partial +=
-                (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : simdBroadcast<Real>(0);
-            Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
-            partial +=
-                (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : simdBroadcast<Real>(0);
-            Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-            partial +=
-                (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
-            bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
-            if (leader) {
-                partial += source[targetIndex];
-            }
-            if constexpr (kReplicate) {
-                target[7] = __shfl_sync(kMask, partial, 0);
-                target[8] = __shfl_sync(kMask, partial, 8);
-                target[9] = __shfl_sync(kMask, partial, 16);
-                target[10] = __shfl_sync(kMask, partial, 24);
-            } else {
+                for (int row = 0; row < 8; ++row) {
+                    unsigned int entry = __ldg(&l2lWarpSchedule8[row][lane]);
+                    if (!doPhi && lane < 16) {
+                        entry = 0u;
+                    }
+                    int const basisIndex = entry & 255u;
+                    int const primaryIndex = (entry >> 8) & 255u;
+                    int const secondaryIndex = (entry >> 16) & 255u;
+                    int const kind = (entry >> 24) & 3u;
+                    Real const sourceValue = source[primaryIndex] +
+                        simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
+                    Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
+                    Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
+                    Real const basisValue2 = __shfl_sync(kMask, basis2, basisIndex & 31);
+                    Real const basisValue = basisIndex < 32 ?
+                        basisValue0 :
+                        (basisIndex < 64 ? basisValue1 : (basisValue2));
+                    Real const weight =
+                        simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
+                    partial = simdFma(weight, sourceValue, partial);
+                }
+                Real const shuffled8 = __shfl_down_sync(kMask, partial, 8);
+                partial +=
+                    (lane & (groupWidth - 1)) + 8 < groupWidth ? shuffled8 : simdBroadcast<Real>(0);
+                Real const shuffled4 = __shfl_down_sync(kMask, partial, 4);
+                partial +=
+                    (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : simdBroadcast<Real>(0);
+                Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
+                partial +=
+                    (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : simdBroadcast<Real>(0);
+                Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
+                partial +=
+                    (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
+                bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
                 if (leader) {
-                    target[targetIndex] = partial;
+                    partial += source[targetIndex];
+                }
+                if (doPhi && lane == 0) {
+                    partial = simdFma(simdBroadcast<Real>(0.5) * dz * dz, source[81], partial);
+                }
+                if constexpr (kReplicate) {
+                    target[0] = __shfl_sync(kMask, partial, 0);
+                    target[1] = __shfl_sync(kMask, partial, 16);
+                    target[2] = __shfl_sync(kMask, partial, 24);
+                } else {
+                    if (leader) {
+                        target[targetIndex] = partial;
+                    }
                 }
             }
-        }
-        {
-            // Fixed contraction phase 3: 5 rows, 4 outputs.
-            int const groupWidth = 8;
-            int const targetIndex = __ldg(&l2lWarpTargets8[3][lane]);
-            Real partial = simdBroadcast<Real>(0);
+            {
+                // Fixed contraction phase 1: 8 rows, 4 outputs.
+                int const groupWidth = 8;
+                int const targetIndex = __ldg(&l2lWarpTargets8[1][lane]);
+                Real partial = simdBroadcast<Real>(0);
 #pragma unroll
-            for (int row = 22; row < 27; ++row) {
-                unsigned int entry = __ldg(&l2lWarpSchedule8[row][lane]);
-                int const basisIndex = entry & 255u;
-                int const primaryIndex = (entry >> 8) & 255u;
-                int const secondaryIndex = (entry >> 16) & 255u;
-                int const kind = (entry >> 24) & 3u;
-                Real const sourceValue =
-                    source[primaryIndex] + simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
-                Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
-                Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
-                Real const basisValue2 = __shfl_sync(kMask, basis2, basisIndex & 31);
-                Real const basisValue =
-                    basisIndex < 32 ? basisValue0 : (basisIndex < 64 ? basisValue1 : (basisValue2));
-                Real const weight =
-                    simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
-                partial = simdFma(weight, sourceValue, partial);
-            }
-            Real const shuffled4 = __shfl_down_sync(kMask, partial, 4);
-            partial +=
-                (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : simdBroadcast<Real>(0);
-            Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
-            partial +=
-                (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : simdBroadcast<Real>(0);
-            Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-            partial +=
-                (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
-            bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
-            if (leader) {
-                partial += source[targetIndex];
-            }
-            if constexpr (kReplicate) {
-                target[11] = __shfl_sync(kMask, partial, 0);
-                target[12] = __shfl_sync(kMask, partial, 8);
-                target[13] = __shfl_sync(kMask, partial, 16);
-                target[14] = __shfl_sync(kMask, partial, 24);
-            } else {
+                for (int row = 8; row < 16; ++row) {
+                    unsigned int entry = __ldg(&l2lWarpSchedule8[row][lane]);
+                    int const basisIndex = entry & 255u;
+                    int const primaryIndex = (entry >> 8) & 255u;
+                    int const secondaryIndex = (entry >> 16) & 255u;
+                    int const kind = (entry >> 24) & 3u;
+                    Real const sourceValue = source[primaryIndex] +
+                        simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
+                    Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
+                    Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
+                    Real const basisValue2 = __shfl_sync(kMask, basis2, basisIndex & 31);
+                    Real const basisValue = basisIndex < 32 ?
+                        basisValue0 :
+                        (basisIndex < 64 ? basisValue1 : (basisValue2));
+                    Real const weight =
+                        simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
+                    partial = simdFma(weight, sourceValue, partial);
+                }
+                Real const shuffled4 = __shfl_down_sync(kMask, partial, 4);
+                partial +=
+                    (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : simdBroadcast<Real>(0);
+                Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
+                partial +=
+                    (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : simdBroadcast<Real>(0);
+                Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
+                partial +=
+                    (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
+                bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
                 if (leader) {
-                    target[targetIndex] = partial;
+                    partial += source[targetIndex];
+                }
+                if (lane == 0) {
+                    partial = simdFma(dz, source[81], partial);
+                }
+                if constexpr (kReplicate) {
+                    target[3] = __shfl_sync(kMask, partial, 0);
+                    target[4] = __shfl_sync(kMask, partial, 8);
+                    target[5] = __shfl_sync(kMask, partial, 16);
+                    target[6] = __shfl_sync(kMask, partial, 24);
+                } else {
+                    if (leader) {
+                        target[targetIndex] = partial;
+                    }
                 }
             }
-        }
-        {
-            // Fixed contraction phase 4: 6 rows, 7 outputs.
-            int const groupWidth = lane < 8 ? 8 : (4);
-            int const targetIndex = __ldg(&l2lWarpTargets8[4][lane]);
-            Real partial = simdBroadcast<Real>(0);
+            {
+                // Fixed contraction phase 2: 6 rows, 4 outputs.
+                int const groupWidth = 8;
+                int const targetIndex = __ldg(&l2lWarpTargets8[2][lane]);
+                Real partial = simdBroadcast<Real>(0);
 #pragma unroll
-            for (int row = 27; row < 33; ++row) {
-                unsigned int entry = __ldg(&l2lWarpSchedule8[row][lane]);
-                int const basisIndex = entry & 255u;
-                int const primaryIndex = (entry >> 8) & 255u;
-                int const secondaryIndex = (entry >> 16) & 255u;
-                int const kind = (entry >> 24) & 3u;
-                Real const sourceValue =
-                    source[primaryIndex] + simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
-                Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
-                Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
-                Real const basisValue2 = __shfl_sync(kMask, basis2, basisIndex & 31);
-                Real const basisValue =
-                    basisIndex < 32 ? basisValue0 : (basisIndex < 64 ? basisValue1 : (basisValue2));
-                Real const weight =
-                    simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
-                partial = simdFma(weight, sourceValue, partial);
-            }
-            Real const shuffled4 = __shfl_down_sync(kMask, partial, 4);
-            partial +=
-                (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : simdBroadcast<Real>(0);
-            Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
-            partial +=
-                (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : simdBroadcast<Real>(0);
-            Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-            partial +=
-                (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
-            bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
-            if (leader) {
-                partial += source[targetIndex];
-            }
-            if constexpr (kReplicate) {
-                target[15] = __shfl_sync(kMask, partial, 0);
-                target[16] = __shfl_sync(kMask, partial, 8);
-                target[17] = __shfl_sync(kMask, partial, 12);
-                target[18] = __shfl_sync(kMask, partial, 16);
-                target[19] = __shfl_sync(kMask, partial, 20);
-                target[20] = __shfl_sync(kMask, partial, 24);
-                target[21] = __shfl_sync(kMask, partial, 28);
-            } else {
+                for (int row = 16; row < 22; ++row) {
+                    unsigned int entry = __ldg(&l2lWarpSchedule8[row][lane]);
+                    int const basisIndex = entry & 255u;
+                    int const primaryIndex = (entry >> 8) & 255u;
+                    int const secondaryIndex = (entry >> 16) & 255u;
+                    int const kind = (entry >> 24) & 3u;
+                    Real const sourceValue = source[primaryIndex] +
+                        simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
+                    Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
+                    Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
+                    Real const basisValue2 = __shfl_sync(kMask, basis2, basisIndex & 31);
+                    Real const basisValue = basisIndex < 32 ?
+                        basisValue0 :
+                        (basisIndex < 64 ? basisValue1 : (basisValue2));
+                    Real const weight =
+                        simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
+                    partial = simdFma(weight, sourceValue, partial);
+                }
+                Real const shuffled4 = __shfl_down_sync(kMask, partial, 4);
+                partial +=
+                    (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : simdBroadcast<Real>(0);
+                Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
+                partial +=
+                    (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : simdBroadcast<Real>(0);
+                Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
+                partial +=
+                    (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
+                bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
                 if (leader) {
-                    target[targetIndex] = partial;
+                    partial += source[targetIndex];
+                }
+                if constexpr (kReplicate) {
+                    target[7] = __shfl_sync(kMask, partial, 0);
+                    target[8] = __shfl_sync(kMask, partial, 8);
+                    target[9] = __shfl_sync(kMask, partial, 16);
+                    target[10] = __shfl_sync(kMask, partial, 24);
+                } else {
+                    if (leader) {
+                        target[targetIndex] = partial;
+                    }
                 }
             }
-        }
-        {
-            // Fixed contraction phase 5: 8 rows, 13 outputs.
-            int const groupWidth = lane < 12 ? 4 : (2);
-            int const targetIndex = __ldg(&l2lWarpTargets8[5][lane]);
-            Real partial = simdBroadcast<Real>(0);
+            {
+                // Fixed contraction phase 3: 5 rows, 4 outputs.
+                int const groupWidth = 8;
+                int const targetIndex = __ldg(&l2lWarpTargets8[3][lane]);
+                Real partial = simdBroadcast<Real>(0);
 #pragma unroll
-            for (int row = 33; row < 41; ++row) {
-                unsigned int entry = __ldg(&l2lWarpSchedule8[row][lane]);
-                int const basisIndex = entry & 255u;
-                int const primaryIndex = (entry >> 8) & 255u;
-                int const secondaryIndex = (entry >> 16) & 255u;
-                int const kind = (entry >> 24) & 3u;
-                Real const sourceValue =
-                    source[primaryIndex] + simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
-                Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
-                Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
-                Real const basisValue2 = __shfl_sync(kMask, basis2, basisIndex & 31);
-                Real const basisValue =
-                    basisIndex < 32 ? basisValue0 : (basisIndex < 64 ? basisValue1 : (basisValue2));
-                Real const weight =
-                    simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
-                partial = simdFma(weight, sourceValue, partial);
-            }
-            Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
-            partial +=
-                (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : simdBroadcast<Real>(0);
-            Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-            partial +=
-                (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
-            bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
-            if (leader) {
-                partial += source[targetIndex];
-            }
-            if constexpr (kReplicate) {
-                target[22] = __shfl_sync(kMask, partial, 0);
-                target[23] = __shfl_sync(kMask, partial, 4);
-                target[24] = __shfl_sync(kMask, partial, 8);
-                target[25] = __shfl_sync(kMask, partial, 12);
-                target[26] = __shfl_sync(kMask, partial, 14);
-                target[27] = __shfl_sync(kMask, partial, 16);
-                target[28] = __shfl_sync(kMask, partial, 18);
-                target[29] = __shfl_sync(kMask, partial, 20);
-                target[30] = __shfl_sync(kMask, partial, 22);
-                target[31] = __shfl_sync(kMask, partial, 24);
-                target[32] = __shfl_sync(kMask, partial, 26);
-                target[33] = __shfl_sync(kMask, partial, 28);
-                target[34] = __shfl_sync(kMask, partial, 30);
-            } else {
+                for (int row = 22; row < 27; ++row) {
+                    unsigned int entry = __ldg(&l2lWarpSchedule8[row][lane]);
+                    int const basisIndex = entry & 255u;
+                    int const primaryIndex = (entry >> 8) & 255u;
+                    int const secondaryIndex = (entry >> 16) & 255u;
+                    int const kind = (entry >> 24) & 3u;
+                    Real const sourceValue = source[primaryIndex] +
+                        simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
+                    Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
+                    Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
+                    Real const basisValue2 = __shfl_sync(kMask, basis2, basisIndex & 31);
+                    Real const basisValue = basisIndex < 32 ?
+                        basisValue0 :
+                        (basisIndex < 64 ? basisValue1 : (basisValue2));
+                    Real const weight =
+                        simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
+                    partial = simdFma(weight, sourceValue, partial);
+                }
+                Real const shuffled4 = __shfl_down_sync(kMask, partial, 4);
+                partial +=
+                    (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : simdBroadcast<Real>(0);
+                Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
+                partial +=
+                    (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : simdBroadcast<Real>(0);
+                Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
+                partial +=
+                    (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
+                bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
                 if (leader) {
-                    target[targetIndex] = partial;
+                    partial += source[targetIndex];
+                }
+                if constexpr (kReplicate) {
+                    target[11] = __shfl_sync(kMask, partial, 0);
+                    target[12] = __shfl_sync(kMask, partial, 8);
+                    target[13] = __shfl_sync(kMask, partial, 16);
+                    target[14] = __shfl_sync(kMask, partial, 24);
+                } else {
+                    if (leader) {
+                        target[targetIndex] = partial;
+                    }
                 }
             }
-        }
-        {
-            // Fixed contraction phase 6: 8 rows, 18 outputs.
-            int const groupWidth = lane < 28 ? 2 : (1);
-            int const targetIndex = __ldg(&l2lWarpTargets8[6][lane]);
-            Real partial = simdBroadcast<Real>(0);
+            {
+                // Fixed contraction phase 4: 6 rows, 7 outputs.
+                int const groupWidth = lane < 8 ? 8 : (4);
+                int const targetIndex = __ldg(&l2lWarpTargets8[4][lane]);
+                Real partial = simdBroadcast<Real>(0);
 #pragma unroll
-            for (int row = 41; row < 49; ++row) {
-                unsigned int entry = __ldg(&l2lWarpSchedule8[row][lane]);
-                int const basisIndex = entry & 255u;
-                int const primaryIndex = (entry >> 8) & 255u;
-                int const secondaryIndex = (entry >> 16) & 255u;
-                int const kind = (entry >> 24) & 3u;
-                Real const sourceValue =
-                    source[primaryIndex] + simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
-                Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
-                Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
-                Real const basisValue2 = __shfl_sync(kMask, basis2, basisIndex & 31);
-                Real const basisValue =
-                    basisIndex < 32 ? basisValue0 : (basisIndex < 64 ? basisValue1 : (basisValue2));
-                Real const weight =
-                    simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
-                partial = simdFma(weight, sourceValue, partial);
-            }
-            Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
-            partial +=
-                (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
-            bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
-            if (leader) {
-                partial += source[targetIndex];
-            }
-            if constexpr (kReplicate) {
-                target[35] = __shfl_sync(kMask, partial, 0);
-                target[36] = __shfl_sync(kMask, partial, 2);
-                target[37] = __shfl_sync(kMask, partial, 4);
-                target[38] = __shfl_sync(kMask, partial, 6);
-                target[39] = __shfl_sync(kMask, partial, 8);
-                target[40] = __shfl_sync(kMask, partial, 10);
-                target[41] = __shfl_sync(kMask, partial, 12);
-                target[42] = __shfl_sync(kMask, partial, 14);
-                target[43] = __shfl_sync(kMask, partial, 16);
-                target[44] = __shfl_sync(kMask, partial, 18);
-                target[45] = __shfl_sync(kMask, partial, 20);
-                target[46] = __shfl_sync(kMask, partial, 22);
-                target[47] = __shfl_sync(kMask, partial, 24);
-                target[48] = __shfl_sync(kMask, partial, 26);
-                target[49] = __shfl_sync(kMask, partial, 28);
-                target[50] = __shfl_sync(kMask, partial, 29);
-                target[51] = __shfl_sync(kMask, partial, 30);
-                target[52] = __shfl_sync(kMask, partial, 31);
-            } else {
+                for (int row = 27; row < 33; ++row) {
+                    unsigned int entry = __ldg(&l2lWarpSchedule8[row][lane]);
+                    int const basisIndex = entry & 255u;
+                    int const primaryIndex = (entry >> 8) & 255u;
+                    int const secondaryIndex = (entry >> 16) & 255u;
+                    int const kind = (entry >> 24) & 3u;
+                    Real const sourceValue = source[primaryIndex] +
+                        simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
+                    Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
+                    Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
+                    Real const basisValue2 = __shfl_sync(kMask, basis2, basisIndex & 31);
+                    Real const basisValue = basisIndex < 32 ?
+                        basisValue0 :
+                        (basisIndex < 64 ? basisValue1 : (basisValue2));
+                    Real const weight =
+                        simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
+                    partial = simdFma(weight, sourceValue, partial);
+                }
+                Real const shuffled4 = __shfl_down_sync(kMask, partial, 4);
+                partial +=
+                    (lane & (groupWidth - 1)) + 4 < groupWidth ? shuffled4 : simdBroadcast<Real>(0);
+                Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
+                partial +=
+                    (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : simdBroadcast<Real>(0);
+                Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
+                partial +=
+                    (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
+                bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
                 if (leader) {
-                    target[targetIndex] = partial;
+                    partial += source[targetIndex];
+                }
+                if constexpr (kReplicate) {
+                    target[15] = __shfl_sync(kMask, partial, 0);
+                    target[16] = __shfl_sync(kMask, partial, 8);
+                    target[17] = __shfl_sync(kMask, partial, 12);
+                    target[18] = __shfl_sync(kMask, partial, 16);
+                    target[19] = __shfl_sync(kMask, partial, 20);
+                    target[20] = __shfl_sync(kMask, partial, 24);
+                    target[21] = __shfl_sync(kMask, partial, 28);
+                } else {
+                    if (leader) {
+                        target[targetIndex] = partial;
+                    }
                 }
             }
-        }
-        {
-            // Fixed contraction phase 7: 3 rows, 11 outputs.
-            int const groupWidth = lane < 11 ? 1 : (1);
-            int const targetIndex = __ldg(&l2lWarpTargets8[7][lane]);
-            Real partial = simdBroadcast<Real>(0);
+            {
+                // Fixed contraction phase 5: 8 rows, 13 outputs.
+                int const groupWidth = lane < 12 ? 4 : (2);
+                int const targetIndex = __ldg(&l2lWarpTargets8[5][lane]);
+                Real partial = simdBroadcast<Real>(0);
 #pragma unroll
-            for (int row = 49; row < 52; ++row) {
-                unsigned int entry = __ldg(&l2lWarpSchedule8[row][lane]);
-                int const basisIndex = entry & 255u;
-                int const primaryIndex = (entry >> 8) & 255u;
-                int const secondaryIndex = (entry >> 16) & 255u;
-                int const kind = (entry >> 24) & 3u;
-                Real const sourceValue =
-                    source[primaryIndex] + simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
-                Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
-                Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
-                Real const basisValue2 = __shfl_sync(kMask, basis2, basisIndex & 31);
-                Real const basisValue =
-                    basisIndex < 32 ? basisValue0 : (basisIndex < 64 ? basisValue1 : (basisValue2));
-                Real const weight =
-                    simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
-                partial = simdFma(weight, sourceValue, partial);
-            }
-            bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 11;
-            if (leader) {
-                partial += source[targetIndex];
-            }
-            if constexpr (kReplicate) {
-                target[53] = __shfl_sync(kMask, partial, 0);
-                target[54] = __shfl_sync(kMask, partial, 1);
-                target[55] = __shfl_sync(kMask, partial, 2);
-                target[56] = __shfl_sync(kMask, partial, 3);
-                target[57] = __shfl_sync(kMask, partial, 4);
-                target[58] = __shfl_sync(kMask, partial, 5);
-                target[59] = __shfl_sync(kMask, partial, 6);
-                target[60] = __shfl_sync(kMask, partial, 7);
-                target[61] = __shfl_sync(kMask, partial, 8);
-                target[62] = __shfl_sync(kMask, partial, 9);
-                target[63] = __shfl_sync(kMask, partial, 10);
-            } else {
+                for (int row = 33; row < 41; ++row) {
+                    unsigned int entry = __ldg(&l2lWarpSchedule8[row][lane]);
+                    int const basisIndex = entry & 255u;
+                    int const primaryIndex = (entry >> 8) & 255u;
+                    int const secondaryIndex = (entry >> 16) & 255u;
+                    int const kind = (entry >> 24) & 3u;
+                    Real const sourceValue = source[primaryIndex] +
+                        simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
+                    Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
+                    Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
+                    Real const basisValue2 = __shfl_sync(kMask, basis2, basisIndex & 31);
+                    Real const basisValue = basisIndex < 32 ?
+                        basisValue0 :
+                        (basisIndex < 64 ? basisValue1 : (basisValue2));
+                    Real const weight =
+                        simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
+                    partial = simdFma(weight, sourceValue, partial);
+                }
+                Real const shuffled2 = __shfl_down_sync(kMask, partial, 2);
+                partial +=
+                    (lane & (groupWidth - 1)) + 2 < groupWidth ? shuffled2 : simdBroadcast<Real>(0);
+                Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
+                partial +=
+                    (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
+                bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
                 if (leader) {
-                    target[targetIndex] = partial;
+                    partial += source[targetIndex];
+                }
+                if constexpr (kReplicate) {
+                    target[22] = __shfl_sync(kMask, partial, 0);
+                    target[23] = __shfl_sync(kMask, partial, 4);
+                    target[24] = __shfl_sync(kMask, partial, 8);
+                    target[25] = __shfl_sync(kMask, partial, 12);
+                    target[26] = __shfl_sync(kMask, partial, 14);
+                    target[27] = __shfl_sync(kMask, partial, 16);
+                    target[28] = __shfl_sync(kMask, partial, 18);
+                    target[29] = __shfl_sync(kMask, partial, 20);
+                    target[30] = __shfl_sync(kMask, partial, 22);
+                    target[31] = __shfl_sync(kMask, partial, 24);
+                    target[32] = __shfl_sync(kMask, partial, 26);
+                    target[33] = __shfl_sync(kMask, partial, 28);
+                    target[34] = __shfl_sync(kMask, partial, 30);
+                } else {
+                    if (leader) {
+                        target[targetIndex] = partial;
+                    }
                 }
             }
+            {
+                // Fixed contraction phase 6: 8 rows, 18 outputs.
+                int const groupWidth = lane < 28 ? 2 : (1);
+                int const targetIndex = __ldg(&l2lWarpTargets8[6][lane]);
+                Real partial = simdBroadcast<Real>(0);
+#pragma unroll
+                for (int row = 41; row < 49; ++row) {
+                    unsigned int entry = __ldg(&l2lWarpSchedule8[row][lane]);
+                    int const basisIndex = entry & 255u;
+                    int const primaryIndex = (entry >> 8) & 255u;
+                    int const secondaryIndex = (entry >> 16) & 255u;
+                    int const kind = (entry >> 24) & 3u;
+                    Real const sourceValue = source[primaryIndex] +
+                        simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
+                    Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
+                    Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
+                    Real const basisValue2 = __shfl_sync(kMask, basis2, basisIndex & 31);
+                    Real const basisValue = basisIndex < 32 ?
+                        basisValue0 :
+                        (basisIndex < 64 ? basisValue1 : (basisValue2));
+                    Real const weight =
+                        simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
+                    partial = simdFma(weight, sourceValue, partial);
+                }
+                Real const shuffled1 = __shfl_down_sync(kMask, partial, 1);
+                partial +=
+                    (lane & (groupWidth - 1)) + 1 < groupWidth ? shuffled1 : simdBroadcast<Real>(0);
+                bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 32;
+                if (leader) {
+                    partial += source[targetIndex];
+                }
+                if constexpr (kReplicate) {
+                    target[35] = __shfl_sync(kMask, partial, 0);
+                    target[36] = __shfl_sync(kMask, partial, 2);
+                    target[37] = __shfl_sync(kMask, partial, 4);
+                    target[38] = __shfl_sync(kMask, partial, 6);
+                    target[39] = __shfl_sync(kMask, partial, 8);
+                    target[40] = __shfl_sync(kMask, partial, 10);
+                    target[41] = __shfl_sync(kMask, partial, 12);
+                    target[42] = __shfl_sync(kMask, partial, 14);
+                    target[43] = __shfl_sync(kMask, partial, 16);
+                    target[44] = __shfl_sync(kMask, partial, 18);
+                    target[45] = __shfl_sync(kMask, partial, 20);
+                    target[46] = __shfl_sync(kMask, partial, 22);
+                    target[47] = __shfl_sync(kMask, partial, 24);
+                    target[48] = __shfl_sync(kMask, partial, 26);
+                    target[49] = __shfl_sync(kMask, partial, 28);
+                    target[50] = __shfl_sync(kMask, partial, 29);
+                    target[51] = __shfl_sync(kMask, partial, 30);
+                    target[52] = __shfl_sync(kMask, partial, 31);
+                } else {
+                    if (leader) {
+                        target[targetIndex] = partial;
+                    }
+                }
+            }
+            {
+                // Fixed contraction phase 7: 3 rows, 11 outputs.
+                int const groupWidth = lane < 11 ? 1 : (1);
+                int const targetIndex = __ldg(&l2lWarpTargets8[7][lane]);
+                Real partial = simdBroadcast<Real>(0);
+#pragma unroll
+                for (int row = 49; row < 52; ++row) {
+                    unsigned int entry = __ldg(&l2lWarpSchedule8[row][lane]);
+                    int const basisIndex = entry & 255u;
+                    int const primaryIndex = (entry >> 8) & 255u;
+                    int const secondaryIndex = (entry >> 16) & 255u;
+                    int const kind = (entry >> 24) & 3u;
+                    Real const sourceValue = source[primaryIndex] +
+                        simdBroadcast<Real>(kind == 2) * source[secondaryIndex];
+                    Real const basisValue0 = __shfl_sync(kMask, basis0, basisIndex & 31);
+                    Real const basisValue1 = __shfl_sync(kMask, basis1, basisIndex & 31);
+                    Real const basisValue2 = __shfl_sync(kMask, basis2, basisIndex & 31);
+                    Real const basisValue = basisIndex < 32 ?
+                        basisValue0 :
+                        (basisIndex < 64 ? basisValue1 : (basisValue2));
+                    Real const weight =
+                        simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;
+                    partial = simdFma(weight, sourceValue, partial);
+                }
+                bool const leader = (lane & (groupWidth - 1)) == 0 && lane < 11;
+                if (leader) {
+                    partial += source[targetIndex];
+                }
+                if constexpr (kReplicate) {
+                    target[53] = __shfl_sync(kMask, partial, 0);
+                    target[54] = __shfl_sync(kMask, partial, 1);
+                    target[55] = __shfl_sync(kMask, partial, 2);
+                    target[56] = __shfl_sync(kMask, partial, 3);
+                    target[57] = __shfl_sync(kMask, partial, 4);
+                    target[58] = __shfl_sync(kMask, partial, 5);
+                    target[59] = __shfl_sync(kMask, partial, 6);
+                    target[60] = __shfl_sync(kMask, partial, 7);
+                    target[61] = __shfl_sync(kMask, partial, 8);
+                    target[62] = __shfl_sync(kMask, partial, 9);
+                    target[63] = __shfl_sync(kMask, partial, 10);
+                } else {
+                    if (leader) {
+                        target[targetIndex] = partial;
+                    }
+                }
+            }
+            if constexpr (kReplicate) {
+                target[64] = source[64];
+                target[65] = source[65];
+                target[66] = source[66];
+                target[67] = source[67];
+                target[68] = source[68];
+                target[69] = source[69];
+                target[70] = source[70];
+                target[71] = source[71];
+                target[72] = source[72];
+                target[73] = source[73];
+                target[74] = source[74];
+                target[75] = source[75];
+                target[76] = source[76];
+                target[77] = source[77];
+                target[78] = source[78];
+                target[79] = source[79];
+                target[80] = source[80];
+                target[81] = source[81];
+                if (!doPhi) {
+                    target[0] = source[0];
+                }
+            } else {
+                // Top-rank coefficients and the trace copy through unchanged.
+                for (int index = 64 + lane; index <= 81; index += 32) {
+                    target[index] = source[index];
+                }
+                // Lane zero led the potential group, so this restore is same-thread.
+                if (!doPhi && lane == 0) {
+                    target[0] = source[0];
+                }
+            }
+            // The caller may overwrite shared source storage from lane zero on
+            // return. Finish EVERY lane source read (and every target write)
+            // before permitting that write.
+            __syncwarp(kMask);
         }
-        if constexpr (kReplicate) {
-            target[64] = source[64];
-            target[65] = source[65];
-            target[66] = source[66];
-            target[67] = source[67];
-            target[68] = source[68];
-            target[69] = source[69];
-            target[70] = source[70];
-            target[71] = source[71];
-            target[72] = source[72];
-            target[73] = source[73];
-            target[74] = source[74];
-            target[75] = source[75];
-            target[76] = source[76];
-            target[77] = source[77];
-            target[78] = source[78];
-            target[79] = source[79];
-            target[80] = source[80];
-            target[81] = source[81];
-            if (!doPhi) {
-                target[0] = source[0];
-            }
-        } else {
-            // Top-rank coefficients and the trace copy through unchanged.
-            for (int index = 64 + lane; index <= 81; index += 32) {
-                target[index] = source[index];
-            }
-            // Lane zero led the potential group, so this restore is same-thread.
-            if (!doPhi && lane == 0) {
-                target[0] = source[0];
-            }
-        }
-        // The caller may overwrite shared source storage from lane zero on
-        // return. Finish EVERY lane source read (and every target write)
-        // before permitting that write.
-        __syncwarp(kMask);
-    }
-};
+    };
 #endif
 
+}    // namespace detail
 #endif
 }    // namespace cosmictiger::gravity::cartesian::detail

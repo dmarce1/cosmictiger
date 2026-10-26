@@ -28,6 +28,6 @@ CheckOptions:
   readability-identifier-naming.ConstexprVariablePrefix: k
   readability-identifier-naming.ConstexprVariableIgnoredRegexp: '^k[A-Z][A-Za-z0-9]*_$'
   readability-identifier-naming.StructIgnoredRegexp: '^numeric_limits$'
-  readability-identifier-naming.FunctionIgnoredRegexp: '^hpx_main$'
+  readability-identifier-naming.FunctionIgnoredRegexp: '^(hpx_main|P2M|P2L|M2M|M2L|M2P|L2L|L2P)$'
   readability-identifier-naming.TypeAliasIgnoredRegexp: '^(value_type|size_type|difference_type|pointer|const_pointer|reference|const_reference|iterator|const_iterator|reverse_iterator|const_reverse_iterator|is_always_equal|propagate_on_container_.*|type|other)$'
   readability-identifier-naming.TypedefIgnoredRegexp: '^(value_type|size_type|difference_type|pointer|const_pointer|reference|const_reference|iterator|const_iterator|reverse_iterator|const_reverse_iterator|is_always_equal|propagate_on_container_.*|type|other)$'

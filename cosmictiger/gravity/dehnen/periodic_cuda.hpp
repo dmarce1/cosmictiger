@@ -1,24 +1,26 @@
 /* CosmicTiger - global FMM periodic CUDA policy; BSL-1.0. */
 #pragma once
 
-#include <cosmictiger/gravity/dehnen/ewald_kernels.hpp>
+#include <cosmictiger/gravity/fmm_kernels/cartesian_ewald_operators.hpp>
 #include <cosmictiger/gravity/kick_cuda_kernel.hpp>
 
 template <int order>
-__device__ FlopCount cudaGravityCcEwald(CudaKickData const& data, FmmExpansion<float, order>& lacc,
-    TreeNode const& self, DeviceVector<int> const& multlist, bool doPhi) {
+__device__ FlopCount cudaGravityCcEwald(CudaKickData const& data,
+    cosmictiger::gravity::cartesian::Expansion<float, order>& lacc, TreeNode const& self,
+    DeviceVector<int> const& multlist, bool doPhi) {
     int const& tid = threadIdx.x;
     auto const& treeNodes = data.treeNodes;
     FlopCounter<FlopCount> flops = 0;
     if (multlist.size()) {
-        FmmExpansion<float, order> l;
-        FmmExpansion<float, order> d;
+        cosmictiger::gravity::cartesian::Expansion<float, order> l;
+        cosmictiger::gravity::cartesian::Green<float, order> d{};
         for (int i = 0; i < FmmOrder<order>::kLocalCoefficients_; i++) {
             l[i] = 0.0f;
         }
         for (int i = tid; i < multlist.size(); i += WARP_SIZE) {
             TreeNode const& other = treeNodes[multlist[i]];
-            FmmMultipole<float, order> const m = fmmMultiPos<order>(other.mpos).multi;
+            cosmictiger::gravity::cartesian::Multipole<float, order> const m =
+                fmmMultiPos<order>(other.mpos).multi;
             Array<float, NDIM> dx;
             Array<float, NDIM> unwrappedPosition;
             for (int dim = 0; dim < NDIM; dim++) {
@@ -26,8 +28,9 @@ __device__ FlopCount cudaGravityCcEwald(CudaKickData const& data, FmmExpansion<f
                 unwrappedPosition[dim] =
                     unwrappedDistance(self.mpos->pos[dim], other.mpos->pos[dim]);
             }
-            flops += 6 + ewaldGreensFunction(d, dx, unwrappedPosition);
-            flops += m2L(l, m, d, doPhi);
+            flops +=
+                6 + cosmictiger::gravity::cartesian::evaluateEwaldGreen(d, dx, unwrappedPosition);
+            flops += cosmictiger::gravity::cartesian::M2L(l, m, d, doPhi);
         }
         sharedReduceAddArray(l);
         for (int i = tid; i < FmmOrder<order>::kLocalCoefficients_; i += WARP_SIZE) {
@@ -46,7 +49,8 @@ __device__ FlopCount cudaGravityCcEwald(CudaKickData const& data, FmmExpansion<f
 
 template <int order>
 __device__ __forceinline__ FlopCount cudaApplyPeriodicPolicy(CudaKickData const& data,
-    KickParameters const& globalParams, FmmExpansion<float, order>& expansion, TreeNode const& self,
+    KickParameters const& globalParams,
+    cosmictiger::gravity::cartesian::Expansion<float, order>& expansion, TreeNode const& self,
     StackVector<int>& echecks, DeviceVector<int>& nextlist, DeviceVector<int>& cclist,
     DeviceVector<int>& leaflist, DeviceVector<int>& bothlist) {
     int const tid = threadIdx.x;

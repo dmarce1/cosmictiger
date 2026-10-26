@@ -5,8 +5,8 @@
 #include <cosmictiger/gravity/dehnen/periodic_cpu.hpp>
 
 template void cpuGravityEwald<COSMICTIGER_FMM_INSTANCE_ORDER>(
-    FmmExpansion<float, COSMICTIGER_FMM_INSTANCE_ORDER>&, Vector<TreeId> const&, TreeId, bool,
-    FmmGeometry const&);
+    cosmictiger::gravity::cartesian::Expansion<float, COSMICTIGER_FMM_INSTANCE_ORDER>&,
+    Vector<TreeId> const&, TreeId, bool, FmmGeometry const&);
 template FlopCount dehnenBackgroundImpl<COSMICTIGER_FMM_INSTANCE_ORDER>(
     KickParameters const&, ExpansionBuffer&, Array<Position, NDIM>&, TreeId, Vector<TreeId> const&);
 template FlopCount dehnenPeriodicImpl<COSMICTIGER_FMM_INSTANCE_ORDER>(

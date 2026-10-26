@@ -1,5 +1,10 @@
 # Cartesian performance comparisons
 
+The Cartesian structures are `cosmictiger::gravity::cartesian::Multipole<Real, order>`
+and `cartesian::Expansion<Real, order>`, indexed by the application FMM order.
+Generated operators retain degree-based arguments in the same namespace and the
+standard abbreviations `P2M`, `M2M`, `M2L`, `M2P`, `P2L`, `L2L`, and `L2P`.
+
 Run comparisons after the correctness checks pass, with other compilation and
 benchmark jobs idle. Microbenchmarks measure particular operators. The complete
 walk includes tree creation, acceptance decisions, direct and periodic

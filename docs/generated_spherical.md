@@ -1,6 +1,6 @@
 # Generated spherical kernels
 
-`tools/generate_fmm.py` generates `generated_spherical.hpp` for the same
+`tools/generate_fmm.py` generates `cosmictiger/gravity/fmm_kernels/spherical_kernels.hpp` for the same
 inclusive local-degree range as the Cartesian representations. FMM order `q`
 means source degree `q-2` and local degree `q-1`; the source headers contain
 orders 3–9, with source degrees 1–7 and local degrees 2–8. CMake's
@@ -11,8 +11,12 @@ This adds a generated API, not a runtime gravity-method selection.
 
 ## Normalization and storage
 
-`cosmictiger::gravity::spherical::Spherical<Real, degree>` stores `(degree+1)^2`
-real numbers. Slot `n(n+1)+m` stores the real part for `m>=0` and the imaginary
+`cosmictiger::gravity::spherical::Multipole<Real, order>` and
+`cosmictiger::gravity::spherical::Expansion<Real, order>` are distinct types.
+Their template argument is the FMM order: multipoles store `(order-1)^2`
+coefficients through degree `order-2`, while expansions store `order^2`
+coefficients through degree `order-1`.
+Slot `n(n+1)+m` stores the real part for `m>=0` and the imaginary
 part of the positive-order coefficient for `m<0`. Complex negative orders obey
 `C(n,-m)=(-1)^m conjugate(C(n,m))`. Do not confuse a negative storage index order
 with the real or imaginary part of the corresponding negative complex order.
@@ -38,23 +42,24 @@ accelerationZ]`, with acceleration equal to the negative gradient.
 
 ## API
 
-The following generated classes have templated static methods. All `add`
+The generated implementation classes in `spherical::detail` have templated static methods. All `add`
 methods accumulate into initialized output; input and output must not alias.
 They accept any coefficient containers supporting `operator[]`, including
-`Spherical`, fixed C arrays and `std::array`. `Real` is explicit because the
-containers can differ. CUDA scalar and CPU scalar/SIMD math share the emitter.
+`Multipole`, `Expansion`, fixed C arrays and `std::array`. `Real` is explicit
+because the containers can differ. CUDA scalar and CPU scalar/SIMD math share
+the emitter.
 
 | Class | Method arguments after explicit `<Real>` |
 | --- | --- |
-| `P2mKernel<S>` | `add(output,mass,x,y,z)` |
-| `M2mKernel<S>` | `add(output,source,x,y,z)` |
-| `M2lKernel<L>` | `add(output,source,x,y,z)` |
-| `M2pKernel<L>` | `add(field,source,x,y,z)` |
-| `L2lKernel<L>` | `add(output,source,x,y,z)` |
-| `L2pKernel<L>` | `add(field,source,x,y,z)` |
-| `P2lKernel<L>` | `add(output,mass,x,y,z)` |
-| `GreensKernel<L>` | `evaluate(output,x,y,z)` (overwrites) |
-| `M2lDerivativesKernel<L>` | `add(output,source,derivatives)` |
+| `P2M<S>` | `add(output,mass,x,y,z)` |
+| `M2M<S>` | `add(output,source,x,y,z)` |
+| `M2L<L>` | `add(output,source,x,y,z)` |
+| `M2P<L>` | `add(field,source,x,y,z)` |
+| `L2L<L>` | `add(output,source,x,y,z)` |
+| `L2P<L>` | `add(field,source,x,y,z)` |
+| `P2L<L>` | `add(output,mass,x,y,z)` |
+| `Green<L>` | `evaluate(output,x,y,z)` (overwrites) |
+| `M2LDerivatives<L>` | `add(output,source,derivatives)` |
 
 Here `S=L-1`. M2M displacement is the old source center minus the new source
 center. L2L displacement is the new local center minus the old local center;
@@ -63,13 +68,14 @@ source center. M2L and Green functions use target center/point minus source
 center. Free-space singular kernels require nonzero separation. Translations
 accept zero displacement, either axis sign and heterogeneous SIMD lanes.
 
-`M2lDerivativesKernel` contracts a general spherical Green array. A periodic
+`M2LDerivatives` contracts a general spherical Green array. A periodic
 uniform-background quadratic needs an additional scalar trace; use the Ewald
 API described in `generated_spherical_ewald.md` rather than dropping it.
 
 ## Rotation choices and costs
 
-Each translation or evaluation operator is emitted as `XxxVariant<degree,v>`:
+The generator compares three rotation candidates for each translation or
+evaluation operator:
 
 - `v=0`: direct complex-harmonic contraction, emitted as real arithmetic;
 - `v=1`: azimuthal rotation places the displacement in the x–z plane, where
@@ -88,15 +94,17 @@ expressions are interned, and a backwards traversal from the required outputs
 omits unneeded rotation components and harmonics. The resulting arithmetic
 uses explicit `simdFma` calls.
 
-The selected `XxxKernel<degree>` inherits the variant with the smallest emitted
-weighted count. `kVariant_` exposes the choice; `kFlops_` exposes its count.
-Every candidate's count and the winning variant appear in the operation
-report. Ties choose the lower variant number. Counts include geometry setup,
-rotation, contraction and output accumulation. Add/subtract/multiply/divide/FMA
+Only the candidate with the smallest emitted weighted count is emitted in
+each public operator, such as `M2L<degree>`. Its preceding comment identifies
+the chosen variant; `kFlops_` exposes its count. There are no public variant
+classes or variant template arguments. Every candidate's count and the winning
+variant appear in the operation report. Ties choose the lower variant number.
+Counts include geometry setup, rotation, contraction and output accumulation.
+Add/subtract/multiply/divide/FMA
 cost 1; sqrt costs 7. Inverse square root is explicitly division by sqrt and
 costs 8. Unary signs, constants, copies, comparisons and lane selection cost
 zero. These are the user's weighted arithmetic costs, not hardware timings.
-All three variants remain available for correctness comparison.
+The operation report retains the candidates' costs for selection checks.
 
 ## Mathematical provenance
 
@@ -113,8 +121,8 @@ previous finite-order rotation pitfalls. Its C++ generator is not copied.
 
 `tests/gravity/nitadori/generated_spherical.cpp` uses independently written loop-based complex
 harmonic recurrences and translation/contraction sums, rather than the Python
-DAG. It checks all three candidates, selected M2L dispatch, arbitrary Green
-contraction, additive outputs, P2M/P2L normalization, and a three-particle direct
+DAG. It checks the selected operators, arbitrary Green contraction, additive
+outputs, P2M/P2L normalization, and a three-particle direct
 force comparison. Multipoles and locals include arbitrary real and imaginary
 coefficients in every rank. Fixtures include both axis signs, zero translations,
 near-axis directions and general displacements. P2M errors are normalized by

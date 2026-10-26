@@ -11,10 +11,10 @@
 #include <utility>
 
 #include <cosmictiger/cuda/cuda_export.hpp>
+#include <cosmictiger/gravity/fmm_kernels/cartesian_config.hpp>
+#include <cosmictiger/gravity/fmm_kernels/cartesian_kernels.hpp>
+#include <cosmictiger/gravity/fmm_kernels/cartesian_m2l.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
-#include <cosmictiger/gravity/generated_cartesian_m2l.hpp>
-#include <cosmictiger/gravity/generated_cartesian_operators.hpp>
-#include <cosmictiger/gravity/generated_config.hpp>
 
 namespace detail {
 
@@ -94,36 +94,35 @@ CUDA_EXPORT void evaluateKernels(
     constexpr int kLocalDegree = Layout::kLocalDegree_;
     auto const& g = input.geometry;
     auto* p2m = result.values + Layout::kP2mOffset_;
-    kernels::P2mKernel<kMultipoleDegree>::add(p2m, g[10], g[6], g[7], g[8]);
+    kernels::P2M<kMultipoleDegree>::add(p2m, g[10], g[6], g[7], g[8]);
     auto* m2m = result.values + Layout::kM2mOffset_;
-    kernels::M2mKernel<kMultipoleDegree>::add(m2m, input.multipole, g[6], g[7], g[8], g[9]);
+    kernels::M2M<kMultipoleDegree>::add(m2m, input.multipole, g[6], g[7], g[8], g[9]);
     auto* p2l = result.values + Layout::kP2lOffset_;
-    kernels::P2lKernel<kLocalDegree>::add(p2l, g[10], g[0], g[1], g[2], g[3], g[5]);
+    kernels::P2L<kLocalDegree>::add(p2l, g[10], g[0], g[1], g[2], g[3], g[5]);
     auto* m2l = result.values + Layout::kM2lOffset_;
-    kernels::M2lKernel<kLocalDegree, false>::template add<Real, Real*, Multipole, kMultipoleDegree>(
+    kernels::M2L<kLocalDegree, false>::template add<Real, Real*, Multipole, kMultipoleDegree>(
         m2l, input.multipole, g[0], g[1], g[2], g[3], g[4], g[5]);
     auto* m2lCentered = result.values + Layout::kM2lCenteredOffset_;
-    kernels::M2lKernel<kLocalDegree, true>::template add<Real, Real*, Multipole, kMultipoleDegree>(
+    kernels::M2L<kLocalDegree, true>::template add<Real, Real*, Multipole, kMultipoleDegree>(
         m2lCentered, input.multipole, g[0], g[1], g[2], g[3], g[4], g[5]);
     auto* l2l = result.values + Layout::kL2lOffset_;
-    kernels::L2lKernel<kLocalDegree, true>::add(l2l, input.local, g[6], g[7], g[8], g[9]);
+    kernels::L2L<kLocalDegree, true>::add(l2l, input.local, g[6], g[7], g[8], g[9]);
     auto* l2lHarmonic = result.values + Layout::kL2lHarmonicOffset_;
-    kernels::L2lKernel<kLocalDegree, false>::add(l2lHarmonic, input.local, g[6], g[7], g[8], g[9]);
+    kernels::L2L<kLocalDegree, false>::add(l2lHarmonic, input.local, g[6], g[7], g[8], g[9]);
     auto* m2p = result.values + Layout::kM2pOffset_;
-    kernels::M2pKernel<kMultipoleDegree, false>::add(
-        m2p, input.multipole, g[0], g[1], g[2], g[3], g[4]);
+    kernels::M2P<kMultipoleDegree, false>::add(m2p, input.multipole, g[0], g[1], g[2], g[3], g[4]);
     auto* m2pCentered = result.values + Layout::kM2pCenteredOffset_;
-    kernels::M2pKernel<kMultipoleDegree, true>::add(
+    kernels::M2P<kMultipoleDegree, true>::add(
         m2pCentered, input.multipole, g[0], g[1], g[2], g[3], g[4]);
     auto* l2p = result.values + Layout::kL2pOffset_;
-    kernels::L2pKernel<kLocalDegree, true>::add(l2p, input.local, g[6], g[7], g[8], g[11]);
+    kernels::L2P<kLocalDegree, true>::add(l2p, input.local, g[6], g[7], g[8], g[11]);
     auto* l2pHarmonic = result.values + Layout::kL2pHarmonicOffset_;
-    kernels::L2pKernel<kLocalDegree, false>::add(l2pHarmonic, input.local, g[6], g[7], g[8], g[11]);
+    kernels::L2P<kLocalDegree, false>::add(l2pHarmonic, input.local, g[6], g[7], g[8], g[11]);
     auto* ewaldM2l = result.values + Layout::kEwaldM2lOffset_;
-    kernels::EwaldM2lKernel<kLocalDegree, false>::template add<Real>(
+    kernels::M2LDerivatives<kLocalDegree, false>::template add<Real>(
         ewaldM2l, input.multipole, input.local);
     auto* ewaldM2lCentered = result.values + Layout::kEwaldM2lCenteredOffset_;
-    kernels::EwaldM2lKernel<kLocalDegree, true>::template add<Real>(
+    kernels::M2LDerivatives<kLocalDegree, true>::template add<Real>(
         ewaldM2lCentered, input.multipole, input.local);
 }
 

@@ -4,13 +4,13 @@
 #include <cosmictiger/gravity/dehnen/periodic.hpp>
 
 #ifdef COSMICTIGER_FMM_INSTANCE_ORDER
-#include <cosmictiger/gravity/dehnen/ewald_kernels.hpp>
+#include <cosmictiger/gravity/fmm_kernels/cartesian_ewald_operators.hpp>
 #include <cosmictiger/gravity/gravity_cpu.hpp>
 #include <cosmictiger/gravity/kick_walk.hpp>
 
 template <int order>
-void cpuGravityEwald(FmmExpansion<float, order>& lValue, Vector<TreeId> const& list, TreeId self,
-    bool doPhi, FmmGeometry const& geometry) {
+void cpuGravityEwald(cosmictiger::gravity::cartesian::Expansion<float, order>& lValue,
+    Vector<TreeId> const& list, TreeId self, bool doPhi, FmmGeometry const& geometry) {
     constexpr int kLocalCoefficients = FmmOrder<order>::kLocalCoefficients_;
     FlopCounter<FlopCount> flops = 0;
     if (list.size()) {
@@ -20,14 +20,16 @@ void cpuGravityEwald(FmmExpansion<float, order>& lValue, Vector<TreeId> const& l
         for (int i = 0; i < list.size(); i++) {
             treePtrs[i] = treeGetNode(list[i]);
         }
-        static thread_local detail::SimdAlignedVector<FmmMultipole<SimdFloat, order>> mValue;
+        static thread_local detail::SimdAlignedVector<
+            cosmictiger::gravity::cartesian::Multipole<SimdFloat, order>>
+            mValue;
         static thread_local detail::SimdAlignedVector<Array<SimdPosition, NDIM>> yValue;
         detail::gatherSourceMultipoles<order>(treePtrs, mValue, yValue);
         Array<SimdPosition, NDIM> x{};
         for (int dim = 0; dim < NDIM; dim++) {
             x[dim] = simdBroadcast<SimdPosition>(selfPtr->mpos->pos[dim].raw());
         }
-        FmmExpansion<SimdFloat, order> l0;
+        cosmictiger::gravity::cartesian::Expansion<SimdFloat, order> l0;
         l0 = simdBroadcast<SimdFloat>(0.0f);
         for (int j = 0; j < numberOfSources; j++) {
             Array<SimdFloat, NDIM> dx{};
@@ -44,9 +46,11 @@ void cpuGravityEwald(FmmExpansion<float, order>& lValue, Vector<TreeId> const& l
                             treePtrs[sourceIndex]->mpos->pos[dim].toDouble());
                 }
             }
-            FmmExpansion<SimdFloat, order> d;
-            flops += FlopCount(SIMD_FLOAT_SIZE) * ewaldGreensFunction(d, dx, unwrappedPosition);
-            flops += FlopCount(SIMD_FLOAT_SIZE) * m2L(l0, mValue[j], d, doPhi);
+            cosmictiger::gravity::cartesian::Green<SimdFloat, order> d{};
+            flops += FlopCount(SIMD_FLOAT_SIZE) *
+                cosmictiger::gravity::cartesian::evaluateEwaldGreen(d, dx, unwrappedPosition);
+            flops += FlopCount(SIMD_FLOAT_SIZE) *
+                cosmictiger::gravity::cartesian::M2L(l0, mValue[j], d, doPhi);
         }
         // Fixed displacement and kernel work is batched outside the source loop.
         flops += FlopCount(numberOfSources) * SIMD_FLOAT_SIZE * (3 + 9);
@@ -61,7 +65,7 @@ void cpuGravityEwald(FmmExpansion<float, order>& lValue, Vector<TreeId> const& l
 template <int order>
 FlopCount dehnenBackgroundImpl(KickParameters const& params, ExpansionBuffer& l,
     Array<Position, NDIM>& pos, TreeId self, Vector<TreeId> const& echecklist) {
-    using Expansion = FmmExpansion<float, order>;
+    using Expansion = cosmictiger::gravity::cartesian::Expansion<float, order>;
     constexpr int kLocalCoefficients = FmmOrder<order>::kLocalCoefficients_;
     constexpr int kLocalDegree = FmmOrder<order>::kLocalDegree_;
     auto& expansion = l.template expansion<order>();
@@ -78,7 +82,13 @@ FlopCount dehnenBackgroundImpl(KickParameters const& params, ExpansionBuffer& l,
         for (int dim = 0; dim < NDIM; dim++) {
             displacement[dim] = unwrappedDoubleDistance(selfPtr->pos[dim], pos[dim]);
         }
-        expansion = l2L(expansion, displacement, params.doPhi);
+        Expansion translated{};
+        if (!params.doPhi) {
+            translated[0] = expansion[0];
+        }
+        cosmictiger::gravity::cartesian::L2L(
+            translated, expansion, fmmScaleDisplacement(displacement), params.doPhi);
+        expansion = translated;
         pos = selfPtr->pos;
         double const secondMoment = params.doPhi ? detail::kickBackgroundSecondMoment(pos) : 0.0;
         Expansion background;
@@ -88,8 +98,8 @@ FlopCount dehnenBackgroundImpl(KickParameters const& params, ExpansionBuffer& l,
         for (int i = 0; i < kLocalCoefficients; i++) {
             expansion[i] += background[i];
         }
-        flops +=
-            detail::cartesian::L2lKernel<kLocalDegree, true>::kFlops_ + 26 + kLocalCoefficients;
+        flops += cosmictiger::gravity::cartesian::detail::L2L<kLocalDegree, true>::kFlops_ + 26 +
+            kLocalCoefficients;
     }
     return flops;
 }

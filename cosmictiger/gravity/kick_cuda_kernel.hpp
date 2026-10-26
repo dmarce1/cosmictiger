@@ -20,7 +20,7 @@
 #include <cosmictiger/cuda/cuda_memory.hpp>
 #include <cosmictiger/cuda/cuda_reduce.hpp>
 #include <cosmictiger/gravity/fmm_acceptance.hpp>
-#include <cosmictiger/gravity/fmm_kernels.hpp>
+#include <cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/gravity_cuda.hpp>
 #include <cosmictiger/gravity/kick.hpp>
@@ -40,8 +40,8 @@ __device__ inline void cudaCopyExpansion(float* destination, float const* source
 
 template <int order>
 __device__ FlopCount doKick(KickReturn& result, KickParameters params, CudaKickData const& data,
-    FmmExpansion<float, order> const& lValue2, TreeNode const& self, CudaKickForceTile const& force,
-    int sinkBegin, int sinkCount, ParticleInteger outputOffset) {
+    cosmictiger::gravity::cartesian::Expansion<float, order> const& lValue2, TreeNode const& self,
+    CudaKickForceTile const& force, int sinkBegin, int sinkCount, ParticleInteger outputOffset) {
     int const& tid = threadIdx.x;
     auto& allPhi = data.pot;
     auto& allGx = data.gx;
@@ -71,7 +71,7 @@ __device__ FlopCount doKick(KickReturn& result, KickParameters params, CudaKickD
         params.gravitySupportRadius / selectedGravityKernel().supportRadiusPerEffectiveRadius;
     FlopCounter<FlopCount> flops = 1;
     for (int i = tid; i < sinkCount; i += WARP_SIZE) {
-        Expansion2<float> l2;
+        cosmictiger::gravity::Field<float> l2{};
         Array<float, NDIM> dx;
         ParticleInteger sinkIndex;
         float vx;
@@ -88,22 +88,24 @@ __device__ FlopCount doKick(KickReturn& result, KickParameters params, CudaKickD
         dx[XDIM] = unwrappedDistance(sinkX[i], self.pos[XDIM]);
         dx[YDIM] = unwrappedDistance(sinkY[i], self.pos[YDIM]);
         dx[ZDIM] = unwrappedDistance(sinkZ[i], self.pos[ZDIM]);
-        l2 = l2P(lValue2, dx, params.doPhi);
+        cosmictiger::gravity::cartesian::L2P(l2, lValue2, fmmScaleDisplacement(dx), params.doPhi);
         float gx = force.gx[i];
         float gy = force.gy[i];
         float gz = force.gz[i];
         float phi = force.phi[i];
-        phi += SCALE_FACTOR1 * l2(0, 0, 0);
-        gx -= SCALE_FACTOR2 * l2(1, 0, 0);
-        gy -= SCALE_FACTOR2 * l2(0, 1, 0);
-        gz -= SCALE_FACTOR2 * l2(0, 0, 1);
+        phi += SCALE_FACTOR1 * l2.potential();
+        gx += SCALE_FACTOR2 * l2.accelerationX();
+        gy += SCALE_FACTOR2 * l2.accelerationY();
+        gz += SCALE_FACTOR2 * l2.accelerationZ();
         if (params.forceOnly) {
             ParticleInteger const outputIndex = sinkIndex + outputOffset;
             allPhi[outputIndex] = params.doPhi ? phi : 0.0f;
             allGx[outputIndex] = gx;
             allGy[outputIndex] = gy;
             allGz[outputIndex] = gz;
-            flops += detail::cartesian::L2pKernel<fmmLocalDegree(order), true>::kFlops_ + 14;
+            flops +=
+                cosmictiger::gravity::cartesian::detail::L2P<fmmLocalDegree(order), true>::kFlops_ +
+                14;
             continue;
         }
         gz *= params.gm;
@@ -229,7 +231,8 @@ __device__ FlopCount doKick(KickReturn& result, KickParameters params, CudaKickD
         dkinTot += kin1 - kin0;
         // Displacement, L2P coordinate scaling and force accumulation/scaling.
         // Energy and momentum diagnostics, including their reductions, are excluded.
-        flops += detail::cartesian::L2pKernel<fmmLocalDegree(order), true>::kFlops_ + 18;
+        flops +=
+            cosmictiger::gravity::cartesian::detail::L2P<fmmLocalDegree(order), true>::kFlops_ + 18;
     }
     sharedReduceAdd(phiTot);
     sharedReduceAdd(xmomTot);
@@ -284,8 +287,9 @@ __device__ inline void cudaOpenOrDefer(bool openLargerCell, TreeNode const& sink
 // instantiation. It is an inline device call, with no function-pointer dispatch.
 template <int order>
 __device__ __forceinline__ FlopCount cudaApplyPeriodicPolicy(CudaKickData const&,
-    KickParameters const&, FmmExpansion<float, order>&, TreeNode const&, StackVector<int>&,
-    DeviceVector<int>&, DeviceVector<int>&, DeviceVector<int>&, DeviceVector<int>&);
+    KickParameters const&, cosmictiger::gravity::cartesian::Expansion<float, order>&,
+    TreeNode const&, StackVector<int>&, DeviceVector<int>&, DeviceVector<int>&, DeviceVector<int>&,
+    DeviceVector<int>&);
 
 // One 32-thread warp per block. The dynamic shared memory follows the host
 // computed CudaKickArenaLayout; see kick.hpp for the region lifetimes.
@@ -296,7 +300,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
     int const& tid = threadIdx.x;
     extern __shared__ __align__(16) char shmemPtr[];
     using Control = CudaKickControl<order>;
-    using Expansion = FmmExpansion<float, order>;
+    using Expansion = cosmictiger::gravity::cartesian::Expansion<float, order>;
     constexpr int kLocalExpansionBytes = FmmOrder<order>::kLocalExpansionBytes_;
     Control& control = *reinterpret_cast<Control*>(shmemPtr + layout.controlOffset);
     if (layout.listSlabBytes > 0) {
@@ -418,7 +422,8 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                 {
                     // Cooperative translation into the scratch expansion, then
                     // publish it as the active expansion at this node's center.
-                    l2LCudaInto(scratch, expansion, dx, globalParams.doPhi);
+                    cosmictiger::gravity::cartesian::L2LWarpInto(
+                        scratch, expansion, fmmScaleDisplacement(dx), globalParams.doPhi);
                     detail::cudaCopyExpansion<order>(&expansion[0], scratch);
                     if (tid < NDIM) {
                         expansionPos[tid] = self.pos[tid];
@@ -426,9 +431,10 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                     __syncwarp();
                     if (tid == 0) {
                         flops += globalParams.doPhi ?
-                            detail::cartesian::L2lWarpKernel<fmmLocalDegree(order), true>::kFlops_ :
-                            detail::cartesian::L2lWarpKernel<fmmLocalDegree(order),
-                                true>::kFlopsNoPotential_;
+                            cosmictiger::gravity::cartesian::detail::detail::L2LWarp<
+                                fmmLocalDegree(order), true>::kFlops_ :
+                            cosmictiger::gravity::cartesian::detail::detail::L2LWarp<
+                                fmmLocalDegree(order), true>::kFlopsNoPotential_;
                     }
                 }
                 ParticleInteger const numberOfSinks =

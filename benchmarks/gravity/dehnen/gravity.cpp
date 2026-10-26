@@ -29,7 +29,7 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/gravity/dehnen/distributed_tree.hpp>
 #include <cosmictiger/gravity/dehnen/periodic.hpp>
-#include <cosmictiger/gravity/fmm_kernels.hpp>
+#include <cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/tree.hpp>
@@ -202,7 +202,8 @@ TreeId benchmarkAddNode(
                 particleRadiusSquared += double(displacement[dimension]) * displacement[dimension];
             }
             radiusSquared = std::max(radiusSquared, particleRadiusSquared);
-            auto const moment = p2M<order.value>(displacement);
+            cosmictiger::gravity::cartesian::Multipole<float, order.value> moment{};
+            cosmictiger::gravity::cartesian::P2M(moment, 1.0f, fmmScaleDisplacement(displacement));
             for (int coefficient = 0; coefficient < FmmOrder<order.value>::kMultipoleCoefficients_;
                 ++coefficient) {
                 moments[coefficient] += particlesMass(index) * moment[coefficient];
@@ -337,12 +338,16 @@ std::vector<double> benchmarkValues(
                     distance(particlesPos(dimension, index), center[dimension]);
             }
             auto const force = fmmDispatch([&](auto order) {
-                return l2P(output.expansion.expansion<order.value>(), displacement, testCase.doPhi);
+                cosmictiger::gravity::Field<float> field{};
+                cosmictiger::gravity::cartesian::L2P(field,
+                    output.expansion.expansion<order.value>(), fmmScaleDisplacement(displacement),
+                    testCase.doPhi);
+                return field;
             });
-            values.push_back(-SCALE_FACTOR2 * force(1, 0, 0));
-            values.push_back(-SCALE_FACTOR2 * force(0, 1, 0));
-            values.push_back(-SCALE_FACTOR2 * force(0, 0, 1));
-            values.push_back(testCase.doPhi ? SCALE_FACTOR1 * force(0, 0, 0) : 0.0f);
+            values.push_back(SCALE_FACTOR2 * force.accelerationX());
+            values.push_back(SCALE_FACTOR2 * force.accelerationY());
+            values.push_back(SCALE_FACTOR2 * force.accelerationZ());
+            values.push_back(testCase.doPhi ? SCALE_FACTOR1 * force.potential() : 0.0f);
         }
     } else {
         for (int index = 0; index < kBenchmarkSinkParticles; ++index) {
