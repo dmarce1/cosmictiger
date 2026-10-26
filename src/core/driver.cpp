@@ -1464,9 +1464,6 @@ void driver() {
                 PRINT("\n  Stopped at the iteration limit.\n");
                 break;
             }
-#ifndef PROFILE_DISABLE
-            profile::writeProfileReport();
-#endif
             jiter++;
             if (jiter > 100) {
                 //			abort();
