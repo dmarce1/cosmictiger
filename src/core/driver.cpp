@@ -99,7 +99,6 @@ static void flushTimings(bool reset) {
 }
 
 void doGroups(int number, double scale, double years) {
-    profilerEnter(__FUNCTION__);
     groupsPrepareHistory(number);
 
     Timer total;
@@ -167,7 +166,6 @@ void doGroups(int number, double scale, double years) {
     terminal::detailPrint("Total time = %e\n", total.read());
     terminal::detailPrint("Group count = %li of %li candidates\n", ngroups.first, ngroups.second);
     particlesGroupsDestroy();
-    profilerExit();
 }
 
 SphTreeCreateReturn sphStep1(int minrung, bool verbose) {
@@ -186,9 +184,7 @@ SphTreeCreateReturn sphStep1(int minrung, bool verbose) {
     if (verbose) {
         terminal::detailPrint("starting sph_tree_create = %e\n", timer.read());
     }
-    profilerEnter("sph_tree_create");
     treeResult = sphTreeCreate(treeParameters);
-    profilerExit();
     timer.stop();
     if (verbose) {
         terminal::detailPrint(
@@ -242,11 +238,9 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     Vector<TreeId> checklist;
     checklist.push_back(rootId);
 
-    profilerEnter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
     neighborParameters.innerSelection = SPH_INTERACTIONS_I;
     neighborParameters.runType = SPH_TREE_NEIGHBOR_NEIGHBORS;
     sphTreeNeighbor(neighborParameters, rootId, checklist).get();
-    profilerExit();
 
     runParameters.phase = 0;
     int densityIterations = 0;
@@ -272,9 +266,7 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
         neighborParameters.outerSelection = needsNeighborRefresh ? SPH_SET_ACTIVE : SPH_SET_ALL;
         neighborParameters.innerSelection = SPH_SET_ALL;
         timer.start();
-        profilerEnter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
         sphTreeNeighbor(neighborParameters, rootId, Vector<TreeId>()).get();
-        profilerExit();
         timer.stop();
         terminal::detailPrint("%e\n", timer.read());
         timer.reset();
@@ -282,9 +274,7 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
         neighborParameters.innerSelection =
             needsNeighborRefresh ? SPH_INTERACTIONS_I : SPH_INTERACTIONS_IJ;
         neighborParameters.runType = SPH_TREE_NEIGHBOR_NEIGHBORS;
-        profilerEnter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_BOXES");
         sphTreeNeighbor(neighborParameters, rootId, checklist).get();
-        profilerExit();
         timer.stop();
         terminal::detailPrint("%e\n", timer.read());
         timer.reset();
@@ -315,18 +305,14 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
         neighborParameters.outerSelection = SPH_SET_ALL;
         neighborParameters.innerSelection = SPH_SET_ALL;
         timer.start();
-        profilerEnter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
         sphTreeNeighbor(neighborParameters, rootId, Vector<TreeId>()).get();
-        profilerExit();
         timer.stop();
         terminal::detailPrint("%e\n", timer.read());
         timer.reset();
         timer.start();
         neighborParameters.innerSelection = SPH_INTERACTIONS_IJ;
         neighborParameters.runType = SPH_TREE_NEIGHBOR_NEIGHBORS;
-        profilerEnter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_BOXES");
         sphTreeNeighbor(neighborParameters, rootId, checklist).get();
-        profilerExit();
         timer.stop();
         terminal::detailPrint("%e\n", timer.read());
         timer.reset();
@@ -398,17 +384,13 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     neighborParameters.innerSelection = SPH_SET_ALL;
     neighborParameters.outerSelection = SPH_SET_ACTIVE;
     timer.start();
-    profilerEnter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
     sphTreeNeighbor(neighborParameters, rootId, Vector<TreeId>()).get();
-    profilerExit();
     timer.stop();
     timer.reset();
     timer.start();
     neighborParameters.innerSelection = SPH_INTERACTIONS_IJ;
     neighborParameters.runType = SPH_TREE_NEIGHBOR_NEIGHBORS;
-    profilerEnter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_BOXES");
     sphTreeNeighbor(neighborParameters, rootId, checklist).get();
-    profilerExit();
     timer.stop();
     timer.reset();
 
@@ -493,9 +475,7 @@ std::pair<KickReturn, TreeCreateReturn> kickStep(int minrung, double scale, doub
     // ALWAYS_ASSERT(sph_particles_max_smooth_len() != INFINITY);
     TreeCreateParameters tparams(minrung, theta, 0.f);
     terminal::detailPrint("Create tree %i %e\n", minrung, theta);
-    profilerEnter("tree_create");
     auto sr = treeCreate(tparams);
-    profilerExit();
     terminal::detailPrint("Done with tree\n");
 
     tm.stop();
@@ -543,9 +523,7 @@ std::pair<KickReturn, TreeCreateReturn> kickStep(int minrung, double scale, doub
     Vector<TreeId> checklist;
     checklist.push_back(rootId);
     terminal::detailPrint("Do kick\n");
-    profilerEnter("kick");
     KickReturn kr = kick(kparams, l, pos, rootId, checklist, checklist, nullptr);
-    profilerExit();
     tm.stop();
     kickTime += tm.read();
 
@@ -654,7 +632,6 @@ void particleMeshDriftRung(
 std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int maxRung,
     double scale, double adot, double tau, double t0, double theta, EnergiesT* energies,
     int minrung0, bool doPhi, hpx::future<void>* lcFut, bool nocrop, double drag) {
-    profilerEnter(__FUNCTION__);
     Timer tm;
     KickReturn kr;
     TreeCreateReturn sr;
@@ -871,7 +848,6 @@ std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int m
     }
     timings[bucketSize].numberOfParticles += particlesProcessed;
     timings[bucketSize].time += totalTime.read();
-    profilerExit();
     return std::make_pair(kr, sr);
 }
 
@@ -883,7 +859,6 @@ double doPowerSpectrum(int num, double a, double adot) {
             return 1.0 - sqr(kh) / 14.0 + sqr(sqr(kh)) / 504.0;
         }
     };
-    profilerEnter(__FUNCTION__);
     int const m = 8;
     terminal::detailPrint("Computing power spectrum\n");
     double const h = getOptions().cosmology.hubble;
@@ -944,12 +919,10 @@ double doPowerSpectrum(int num, double a, double adot) {
         kmin = kmax;
     }
     fclose(fp);
-    profilerExit();
     return maxpow;
 }
 
 void outputTimeFile(DriverParameters const& parameters) {
-    profilerEnter(__FUNCTION__);
     double const a0 = 1.0 / (1.0 + getOptions().cosmology.startRedshift);
     auto const background = cosmology::simulationBackground(parameters.tauMax);
     bool const expandingBackground = getOptions().run.scenario == "cosmology";
@@ -973,7 +946,6 @@ void outputTimeFile(DriverParameters const& parameters) {
             (initialTime + sample.physicalTime) * c0, (initialTau + elapsed) * c0, a, z);
     }
     fclose(fp);
-    profilerExit();
 }
 
 void driver() {
@@ -1143,7 +1115,6 @@ void driver() {
         particlesSetMinrung(minrung0);
     }
     auto const checkLc = [&tau, &dt, &tauMax, &a, &iter](bool force) {
-        //	profiler_enter("light cone");
         if (force || lcTimeToFlush(tau, tauMax)) {
             Timer tm;
             terminal::detailPrint("Flushing light cone\n");
@@ -1202,7 +1173,6 @@ void driver() {
             terminal::detailPrint("lc_init %e\n", tm.read());
             tm.reset();
         }
-        //	profiler_exit();
     };
     auto checkpointlist = readCheckpointList();
     double const hsoft0 = getOptions().gravity.supportRadius;
@@ -1221,7 +1191,6 @@ void driver() {
         do {
             Timer stepTm;
             stepTm.start();
-            profilerEnter(__FUNCTION__);
             tmr.stop();
             if ((params.iter > 0 && params.iter != lastCheckpointIteration &&
                     tmr.read() > getOptions().checkpoint.intervalSeconds) ||
@@ -1496,9 +1465,9 @@ void driver() {
                 PRINT("\n  Stopped at the iteration limit.\n");
                 break;
             }
-            profilerExit();
-            profilerOutput();
-            profilerEnter(__FUNCTION__);
+#ifndef PROFILE_DISABLE
+            profile::writeProfileReport();
+#endif
             jiter++;
             if (jiter > 100) {
                 //			abort();

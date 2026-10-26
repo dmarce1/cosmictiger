@@ -64,9 +64,6 @@ static hpx::future<TreeCreateReturn> treeCreateFork(TreeBuildRequest request, bo
 
 TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, int> processRange,
     Pair<ParticleInteger> particleRange, Range<double> box, int depth, bool localRoot) {
-    if (key == 1) {
-        profilerEnter(__FUNCTION__);
-    }
     if (depth == 0) {
         treeAllocateNodes();
     }
@@ -100,9 +97,6 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
         treeBuild({params, key, processRange, particleRange, box, depth, localRoot}, policy);
     if (localRoot && getOptions().hydro.enabled) {
         particlesResolveWithSphParticles();
-    }
-    if (key == 1) {
-        profilerExit();
     }
     return result;
 }

@@ -112,7 +112,6 @@ void sphParticlesApplyUpdates(int minimumRung, int phase, float timeStepScale, f
     if (!(phase == 2 || time > 0.0)) {
         return;
     }
-    profilerEnter(__FUNCTION__);
     Vector<hpx::future<void>> futures;
     for (auto& child : hpxChildren()) {
         futures.push_back(hpx::async<SphParticlesApplyUpdatesAction>(
@@ -218,7 +217,6 @@ void sphParticlesApplyUpdates(int minimumRung, int phase, float timeStepScale, f
     for (auto& future : futures) {
         future.get();
     }
-    profilerExit();
 }
 
 namespace detail {
@@ -797,7 +795,6 @@ void sphParticlesRefreshChemistryEos(double scaleFactor) {
 }
 
 void sphParticlesClearHydroCaches() {
-    profilerEnter(__FUNCTION__);
     Vector<hpx::future<void>> futures;
     for (auto const& c : hpxChildren()) {
         futures.push_back(hpx::async<SphParticlesClearHydroCachesAction>(c));
@@ -808,11 +805,9 @@ void sphParticlesClearHydroCaches() {
     densityParticleCache = decltype(densityParticleCache)();
     cullen_and_dehnen::clearDiagnosticCache();
     hpx::wait_all(futures.begin(), futures.end());
-    profilerExit();
 }
 
 void sphParticlesClearCaches() {
-    profilerEnter(__FUNCTION__);
     Vector<hpx::future<void>> futures;
     for (auto const& c : hpxChildren()) {
         futures.push_back(hpx::async<SphParticlesClearCachesAction>(c));
@@ -825,7 +820,6 @@ void sphParticlesClearCaches() {
     densityParticleCache = decltype(densityParticleCache)();
     cullen_and_dehnen::clearDiagnosticCache();
     hpx::wait_all(futures.begin(), futures.end());
-    profilerExit();
 }
 
 namespace detail {

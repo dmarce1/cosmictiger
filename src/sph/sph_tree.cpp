@@ -510,8 +510,6 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
 }
 
 void sphTreeDestroy(bool freeSphTree) {
-    profilerEnter(__FUNCTION__);
-
     Vector<hpx::future<void>> futs;
     auto const children = hpxChildren();
     for (auto const& c : children) {
@@ -526,7 +524,6 @@ void sphTreeDestroy(bool freeSphTree) {
     treeCache = decltype(treeCache)();
     resetLastCacheEntries();
     hpx::wait_all(futs.begin(), futs.end());
-    profilerExit();
 }
 
 void sphTreeSetNumberOfActiveParticles(TreeId id, ParticleInteger i) {

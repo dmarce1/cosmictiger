@@ -24,7 +24,6 @@
 #include <cosmictiger/core/driver.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
-#include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/io/checkpoint.hpp>
 #include <cosmictiger/io/output.hpp>
@@ -1014,7 +1013,6 @@ void checkpointStateTest() {
 }
 
 void writeCheckpoint(DriverParameters params) {
-    profilerEnter(__FUNCTION__);
     auto const directory = detail::checkpointDirectory(params.iter);
     auto const stagingDirectory = detail::checkpointStagingDirectory(params.iter);
     if (hpxRank() == 0) {
@@ -1058,7 +1056,6 @@ void writeCheckpoint(DriverParameters params) {
         detail::syncDirectory(directory.has_parent_path() ? directory.parent_path() : ".");
         PRINT("  Checkpoint saved: %s\n", directory.c_str());
     }
-    profilerExit();
 }
 
 DriverParameters readCheckpoint() {

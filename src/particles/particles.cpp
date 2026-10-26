@@ -513,13 +513,11 @@ void particlesCacheFreeLocal() {
 
 void particlesCacheFree() {
     particlesCacheFreeLocal();
-    profilerEnter(__FUNCTION__);
     Vector<hpx::future<void>> futs;
     for (auto const& c : hpxChildren()) {
         futs.push_back(hpx::async<ParticlesCacheFreeAction>(c));
     }
     hpx::wait_all(futs.begin(), futs.end());
-    profilerExit();
 }
 
 static std::function<void()> undoLastMemadvise = nullptr;
@@ -682,7 +680,6 @@ static GroupParticle const* particlesGroupCacheReadLine(LineIdType lineId) {
 HPX_PLAIN_ACTION(particlesRungCounts, ParticlesRungCountsAction);
 
 Vector<size_t> particlesRungCounts() {
-    profilerEnter(__FUNCTION__);
     Vector<hpx::future<Vector<size_t>>> futs;
     for (auto& c : hpxChildren()) {
         futs.push_back(hpx::async<ParticlesRungCountsAction>(c));
@@ -720,14 +717,12 @@ Vector<size_t> particlesRungCounts() {
         }
         //	ALWAYS_ASSERT(tot == numberOfParticles);
     }
-    profilerExit();
     return counts;
 }
 
 HPX_PLAIN_ACTION(particlesSetMinrung, ParticlesSetMinrungAction);
 
 void particlesSetMinrung(int minrung) {
-    profilerEnter(__FUNCTION__);
     Vector<hpx::future<void>> futs;
     for (auto& c : hpxChildren()) {
         futs.push_back(hpx::async<ParticlesSetMinrungAction>(c, minrung));
@@ -746,7 +741,6 @@ void particlesSetMinrung(int minrung) {
     for (auto& f : futs) {
         f.get();
     }
-    profilerExit();
 }
 
 void particlesGlobalReadPos(ParticleGlobalRange range, Position* x, Position* y, Position* z,
@@ -1138,7 +1132,6 @@ Pair<ParticleInteger, ParticleInteger> particlesCurrentRange() {
 HPX_PLAIN_ACTION(particlesSortByRung, ParticlesSortByRungAction);
 
 void particlesSortByRung(int minrung) {
-    profilerEnter(__FUNCTION__);
     Vector<hpx::future<void>> futs;
     for (auto& c : hpxChildren()) {
         futs.push_back(hpx::async<ParticlesSortByRungAction>(c, minrung));
@@ -1168,7 +1161,6 @@ void particlesSortByRung(int minrung) {
     }
 
     hpx::wait_all(futs.begin(), futs.end());
-    profilerExit();
 }
 
 void particlesGlobalReadRungs(ParticleGlobalRange range, char* r, ParticleInteger offset) {
@@ -1451,7 +1443,6 @@ static Vector<Array<float, NDIM>> particlesFetchCacheLineVels(ParticleInteger in
 HPX_PLAIN_ACTION(particlesSumEnergies, ParticlesSumEnergiesAction);
 
 EnergiesT particlesSumEnergies() {
-    profilerEnter(__FUNCTION__);
     std::vector<hpx::future<EnergiesT>> futs;
     for (auto& c : hpxChildren()) {
         futs.push_back(hpx::async<ParticlesSumEnergiesAction>(c));
@@ -1488,7 +1479,6 @@ EnergiesT particlesSumEnergies() {
     for (auto& f : futs) {
         energies += f.get();
     }
-    profilerExit();
     return energies;
 }
 

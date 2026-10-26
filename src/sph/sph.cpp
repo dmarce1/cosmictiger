@@ -309,8 +309,6 @@ SphRunReturn sphRun(SphRunParameters params, bool cuda) {
     if (hpxRank() == 0 && hpxSize() > 1) {
         sphParticlesClearCaches();
     }
-    std::string profileName = "sph_run:" + std::to_string(params.runType);
-    profilerEnter(profileName.c_str());
 
     params.courantFactor = getOptions().hydro.cfl;
     if (getOptions().compute.cuda == false) {
@@ -373,7 +371,6 @@ SphRunReturn sphRun(SphRunParameters params, bool cuda) {
     for (auto& f : futs) {
         rc += f.get();
     }
-    profilerExit();
     return rc;
 }
 

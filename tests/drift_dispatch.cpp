@@ -35,7 +35,6 @@ size_t capturedWorkers = 0;
 size_t lightconeCalls = 0;
 double capturedScale = 0.0;
 double capturedTau = 0.0;
-int profilerDepth = 0;
 
 void require(bool condition, char const* message) {
     if (!condition) {
@@ -127,7 +126,6 @@ void checkDispatch(size_t count, int rung, bool glass) {
         }
     }
     require(lightconeCalls == 0, "disabled lightcone unexpectedly received particles");
-    require(profilerDepth == 0, "dispatch did not balance profiling calls");
 }
 
 void checkEmptyRanges() {
@@ -142,7 +140,6 @@ void checkEmptyRanges() {
     particleCount = 17;
     currentRange = Pair<ParticleInteger>(9, 9);
     drift(0.5, 0.125, 0.0, 0.125, 0.0, 1);
-    require(profilerDepth == 0, "empty dispatch did not balance profiling calls");
     require(lightconeCalls == 0, "empty dispatch unexpectedly emitted particles");
 }
 
@@ -200,14 +197,6 @@ Vector<hpx::id_type> const& hpxChildren() {
 
 int hpxHardwareConcurrency() {
     return 2;
-}
-
-void profilerEnter(char const*) {
-    ++detail::profilerDepth;
-}
-
-void profilerExit() {
-    --detail::profilerDepth;
 }
 
 void cosmictigerAssert(char const* condition, bool value, char const* file, int line) {

@@ -17,6 +17,7 @@ set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 option(COSMICTIGER_WITH_CUDA "Enable CUDA" ON)
+option(COSMICTIGER_ENABLE_PROFILING "Enable statistical CPU sampling and PROFILE() metadata" ON)
 option(COSMICTIGER_WITH_LONG_LONG_PART_INT "Use long long to index local particles" OFF)
 # FMM order: multipole degree p plus two. Source multipoles carry degree p,
 # local expansions degree p + 1, and Ewald derivatives ranks through p + 1.
@@ -63,6 +64,14 @@ if(COSMICTIGER_WITH_CUDA)
 endif()
 
 find_package(HPX REQUIRED NO_CMAKE_PACKAGE_REGISTRY)
+add_library(cosmictiger_profiler STATIC src/core/profiler.cpp)
+target_include_directories(cosmictiger_profiler PUBLIC ${PROJECT_SOURCE_DIR})
+target_compile_features(cosmictiger_profiler PUBLIC cxx_std_20)
+target_link_libraries(cosmictiger_profiler PUBLIC HPX::hpx ${CMAKE_DL_LIBS}
+    "$<$<PLATFORM_ID:Linux>:rt>")
+if(NOT COSMICTIGER_ENABLE_PROFILING)
+    target_compile_definitions(cosmictiger_profiler PUBLIC PROFILE_DISABLE=1)
+endif()
 if(COSMICTIGER_WITH_CUDA AND NOT HPX_WITH_CUDA)
     message(FATAL_ERROR
         "CUDA builds require HPX built with HPX_WITH_CUDA=ON; otherwise configure COSMICTIGER_WITH_CUDA=OFF")
@@ -138,7 +147,6 @@ set(cosmictiger_source_files
     src/core/hpx.cpp
     src/core/memused.cpp
     src/core/options.cpp
-    src/core/profiler.cpp
     src/core/stack_trace.cpp
     src/cosmology/boltzmann.cpp
     src/cosmology/background.cpp
@@ -486,7 +494,8 @@ foreach(application_target IN LISTS cosmictiger_application_targets)
         target_sources(${application_target} PRIVATE benchmarks/gravity/dehnen/cartesian_walk.cpp)
         set_source_files_properties(tests/test.cpp PROPERTIES COMPILE_DEFINITIONS COSMICTIGER_CARTESIAN_BENCHMARKS)
     endif()
-    target_link_libraries(${application_target} PRIVATE primordial_chemistry cosmictiger_fp16)
+    target_link_libraries(${application_target} PRIVATE primordial_chemistry cosmictiger_fp16
+        cosmictiger_profiler)
     target_include_directories(${application_target} PRIVATE ${PROJECT_SOURCE_DIR})
     target_include_directories(${application_target} SYSTEM PRIVATE
         ${FFTW3F_INCLUDE_DIR} ${FFTW3F_MPI_INCLUDE_DIR}
@@ -621,6 +630,21 @@ if(BUILD_TESTING)
         FetchContent_MakeAvailable(googletest)
     endif()
     include(GoogleTest)
+
+    add_executable(profiler_disabled_test tests/profiler_disabled.cpp)
+    target_include_directories(profiler_disabled_test PRIVATE ${PROJECT_SOURCE_DIR})
+    target_compile_definitions(profiler_disabled_test PRIVATE PROFILE_DISABLE=1)
+    add_test(NAME profiler_disabled COMMAND profiler_disabled_test)
+    set_tests_properties(profiler_disabled PROPERTIES TIMEOUT 10 LABELS "profiler;cpu")
+    if(COSMICTIGER_ENABLE_PROFILING AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
+       CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64|aarch64|arm64)$")
+        add_hpx_executable(profiler_test SOURCES tests/profiler.cpp)
+        target_link_libraries(profiler_test PRIVATE cosmictiger_profiler)
+        add_test(NAME profiler COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/run_profiler.py $<TARGET_FILE:profiler_test>)
+        set_tests_properties(profiler PROPERTIES TIMEOUT 90 PROCESSORS 2
+            LABELS "profiler;cpu" ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1")
+    endif()
 
     # Keep each assertion group visible to CTest, with the same resource limits
     # and compiler variants as the standalone regression executables.

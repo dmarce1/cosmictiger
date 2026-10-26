@@ -72,7 +72,6 @@ void cpuDrift(int rung, float a, float dt, float tau0, float tau1, float tauMax,
 
 void drift(
     double scale, double dt, double tau0, double tau1, double tauMax, int rung, double drag) {
-    profilerEnter(__FUNCTION__);
     Vector<hpx::future<void>> futures;
     if (rung < 0) {
         for (auto const& child : hpxChildren()) {
@@ -92,5 +91,4 @@ void drift(
     for (auto& future : futures) {
         future.get();
     }
-    profilerExit();
 }

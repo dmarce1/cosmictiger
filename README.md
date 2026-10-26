@@ -332,6 +332,40 @@ pattern used here. See the [output-file inventory](docs/output_files.txt) for
 runtime diagnostics, analysis products, and tool outputs other than Silo and
 checkpoints, including their names and the conditions that create them.
 
+## CPU profiling
+
+`COSMICTIGER_ENABLE_PROFILING=ON` is the CMake default. The internal profiler is
+the statistical CPU sampler adapted from
+[`dmarce1/experimental` at `7ba8f1829fdede7348a1418b7cb36c0e7a955302`](https://github.com/dmarce1/experimental/blob/7ba8f1829fdede7348a1418b7cb36c0e7a955302/src/profiler.cpp).
+It requires Linux on x86-64 or AArch64. Configure with
+`-DCOSMICTIGER_ENABLE_PROFILING=OFF` to disable it.
+
+Sampling starts before HPX initialization. Each attached OS worker has a timer
+that samples its interrupted instruction address every 10 ms of that worker's
+CPU time. HPX startup and shutdown hooks attach and detach workers automatically,
+so HPX tasks can suspend, wait for futures, and resume on other workers without
+manual profiling markers. There is no separate sampling thread. Optional
+`PROFILE()` calls register metadata once per function specialization; they do
+not set the current function or delimit a timed scope. They remain valid in
+C++20 `constexpr` functions and become no-ops with `PROFILE_DISABLE` or in CUDA
+device compilation.
+
+Reports resolve sampled instruction addresses to ELF function symbols, including
+functions without `PROFILE()` calls. Rows contain samples, estimated exclusive
+CPU seconds, and their percentage of delivered samples. Inlined work belongs to
+the enclosing compiled function. Parallel CPU totals can exceed elapsed wall
+time. This does not measure call counts, inclusive time, blocked waiting time,
+or GPU execution; simulation progress tables still report elapsed wall time.
+Keep executable and shared-library symbol tables for useful function names.
+
+The driver writes cumulative reports during execution, and normal process exit
+writes a final report to the terminal and `cosmictiger.profile.<pid>.txt` in the
+working directory. Each process has its own file; reports are not reduced across
+MPI localities. Repeated reports overwrite that file with accumulated samples.
+The report includes dropped samples, missed timer ticks, and setup failures so
+sampling losses remain visible. The bounded signal-handler buffers are allocated
+before sampling; symbol resolution and demangling happen while reporting.
+
 ## Source layout
 
 Common gravity and SPH machinery lives directly in each subsystem directory.

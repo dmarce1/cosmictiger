@@ -272,7 +272,6 @@ void chooseMeshDomainSplits(Vector<DomainGlobal> const& domains, int depth, Vect
 }    // namespace detail
 
 double domainsGetLoadImbalance() {
-    profilerEnter(__FUNCTION__);
     auto const loads = domainsGetLoads();
     size_t max = 0;
     double avg = 0;
@@ -282,7 +281,6 @@ double domainsGetLoadImbalance() {
     }
     avg /= loads.size();
     double const imbalance = max / avg - 1.0;
-    profilerExit();
     return imbalance;
 }
 
@@ -454,7 +452,6 @@ void domainsReboundSort(Vector<double> bounds, int depth) {
 }
 
 void domainsRebound() {
-    profilerEnter(__FUNCTION__);
     domainsInitRebounds();
     //	PRINT( "Starting rebound\n");
     Vector<DomainGlobal> domains(1);
@@ -597,7 +594,6 @@ void domainsRebound() {
         depth++;
     }
     domainsTransmitBoxes(boxesByKey);
-    profilerExit();
 }
 
 void domainsTransmitParticles(Vector<Particle> parts) {
@@ -813,7 +809,6 @@ void domainsBegin(int rung) {
         beginSphMigration(rung);
         return;
     }
-    profilerEnter(__FUNCTION__);
     Vector<hpx::future<void>> futs;
     auto children = hpxChildren();
     for (auto& c : children) {
@@ -881,7 +876,6 @@ void domainsBegin(int rung) {
     }
 
     hpx::wait_all(futs.begin(), futs.end());
-    profilerExit();
 }
 
 void domainsEnd() {
@@ -889,7 +883,6 @@ void domainsEnd() {
         endSphMigration();
         return;
     }
-    profilerEnter(__FUNCTION__);
     Vector<hpx::future<void>> futs;
     auto children = hpxChildren();
     for (auto& c : children) {
@@ -973,7 +966,6 @@ void domainsEnd() {
 #ifdef DOMAINS_CHECK
     domainsCheck();
 #endif
-    profilerExit();
 }
 
 Range<double> domainsFindMyBox() {

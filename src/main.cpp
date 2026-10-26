@@ -31,6 +31,7 @@
 #include <cosmictiger/core/memused.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/options_metadata.hpp>
+#include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/core/unordered_set_ts.hpp>
 #include <cosmictiger/gravity/dehnen/ewald_indices.hpp>
 #include <cosmictiger/gravity/dehnen/ewald_kernels.hpp>
@@ -264,6 +265,21 @@ int main(int argc, char* argv[]) {
         detail::selectPositionBackend(argc, argv);
         recordCommandLineArguments(argc, argv);
         detail::initializeMpi(argc, argv, ownsMpi);
+#ifndef PROFILE_DISABLE
+        // Install worker hooks before HPX creates its OS threads. The sampler
+        // writes the final cumulative report from its process-exit callback.
+        int const profilerStarted = profile::profileStart() ? 1 : 0;
+        int allProfilersStarted = 0;
+        if (MPI_Allreduce(&profilerStarted, &allProfilersStarted, 1, MPI_INT, MPI_MIN,
+                MPI_COMM_WORLD) != MPI_SUCCESS) {
+            profile::profileStop();
+            throw std::runtime_error("MPI_Allreduce failed while checking profiler startup");
+        }
+        if (!allProfilersStarted) {
+            profile::profileStop();
+            throw std::runtime_error("Unable to start the CPU sampling profiler on every MPI rank");
+        }
+#endif
         std::vector<std::string> cfg = {"hpx.commandline.allow_unknown=1"};
         cfg.push_back("hpx.stacks.small_size=524288");
 #ifdef HPX_EARLY

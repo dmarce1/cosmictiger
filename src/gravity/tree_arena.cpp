@@ -358,8 +358,6 @@ int treeAvgLeafSize() {
 HPX_PLAIN_ACTION(treeDestroy, TreeDestroyAction);
 
 void treeDestroy(bool freeTree) {
-    profilerEnter(__FUNCTION__);
-
     Vector<hpx::future<void>> futs;
     auto const children = hpxChildren();
     for (auto const& c : children) {
@@ -367,7 +365,6 @@ void treeDestroy(bool freeTree) {
     }
     treeResetLocal();
     hpx::wait_all(futs.begin(), futs.end());
-    profilerExit();
 }
 
 TreeNode const* treeGetNode(TreeId id) {

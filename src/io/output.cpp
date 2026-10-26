@@ -78,14 +78,11 @@ void outputParticles(std::string const filename, Vector<OutputParticle> const& p
 }
 
 void outputTracers(int number) {
-    profilerEnter("output_tracers");
     std::string const filename = outputPath("tracers." + std::to_string(number) + ".silo");
     outputParticles(filename, particlesGetTracers());
-    profilerExit();
 }
 
 void outputSlice(int number, double time) {
-    profilerEnter("output_slice");
     constexpr int kNdim = 2;
     auto pixels = outputGetSlice();
     int const res = getOptions().analysis.sliceResolution;
@@ -118,7 +115,6 @@ void outputSlice(int number, double time) {
         DB_ZONECENT, optlist);
     DBFreeOptlist(optlist);
     DBClose(db);
-    profilerExit();
 }
 
 Vector<float> outputGetSlice() {

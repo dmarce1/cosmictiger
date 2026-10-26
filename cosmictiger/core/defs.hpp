@@ -10,8 +10,6 @@
 #ifndef DEFS_HPP_
 #define DEFS_HPP_
 
-#include <cosmictiger/core/profiler.hpp>
-
 // #define LONG_LONG_PART_INT
 
 #define COUNT_FLOPS

@@ -13,6 +13,7 @@ Location rules:
 - Built-in run.test mode bypasses output.directory for outputPath names, so they use the process working directory. Absolute paths stay absolute. src/io/output.cpp (outputPath).
 - Lightcone names are relative to lightcone.directory, default output.directory + /lightcone. src/core/options.cpp (processOptions).
 - stack_trace.txt defaults to the working directory before options are installed and in standalone utilities; setOptions changes it to outputPath("stack_trace.txt"). src/core/assert.cpp (stackTraceOutputPath / setStackTraceOutputPath); src/core/options.cpp (setOptions).
+- cosmictiger.profile.<pid>.txt is relative to the process working directory, independently of output.directory; each MPI process writes its own report. src/core/profiler.cpp (profile::profileStart / profile::writeProfileReport).
 - N = output/coarse-step number; R = HPX rank; E = lightcone epoch.
 
 ORDINARY RUNTIME FILES
@@ -26,7 +27,7 @@ rho.dat | fixed-time scenarios, synchronized/full evaluations | time and maximum
 timestep.txt | SPH step when hydro.enabled | time,rung,inverse sound/viscosity/acceleration timestep,limiting criterion; append | src/core/driver.cpp (sphStep2)
 time.txt | fresh cosmology/glass/plummer driver initialization, not checkpoint restart | planned coarse-step/cosmic-time/conformal-time/scale/redshift table; overwrite | src/core/driver.cpp (outputTimeFile)
 energy.txt | cosmology/glass/plummer driver, minimum rung <= 0 | time,scale,momentum,energies,error,glass-convergence diagnostic; append | src/core/driver.cpp (driver)
-profile.txt | non-final cosmology/glass/plummer iterations reaching profilerOutput | aggregate named phase timings and percentages; overwrite | src/core/profiler.cpp (profilerOutput); src/core/driver.cpp (driver)
+cosmictiger.profile.<pid>.txt | profiling-enabled non-final cosmology/glass/plummer iterations and normal process exit | cumulative samples, estimated exclusive CPU seconds, percentages, and sampling diagnostics; overwrite and print to terminal | src/core/profiler.cpp (profile::writeProfileReport / profile::detail::reportAtExit); src/core/driver.cpp (driver)
 buckets.txt | completion of cosmology/glass/plummer driver | bucket size and timing accumulators; append | src/core/driver.cpp (driver)
 power.dat | cosmological initial-condition power calculation | native Einstein-Boltzmann P_cb table: k,matter power,baryon power; overwrite | src/cosmology/initialize.cpp (computePowerSpectrum)
 power.N.txt | analysis.power=true, synchronized cosmology/glass/plummer steps | measured power spectrum with lower/central/upper estimates and shot noise; overwrite | src/core/driver.cpp (doPowerSpectrum)

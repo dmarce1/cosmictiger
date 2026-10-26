@@ -760,12 +760,10 @@ void viewOutputViews(int cycle, double a, bool force, double physicalYears) {
         (!force && cycle % getOptions().output.siloInterval != 0)) {
         return;
     }
-    profilerEnter("view_output_views");
     double const time = physicalYears >= 0.0 ?
         physicalYears / 1.0e9 :
         cosmosTime(1e-6, a) * getOptions().units.timeSeconds * constants::kSecondsToYears / 1e9;
     detail::writeDistributedParticleViews(cycle, a, time);
-    profilerExit();
 }
 
 void viewConfigure() {
@@ -808,7 +806,6 @@ void viewConfigure() {
 }
 
 Vector<float> outputView(int number, double time) {
-    profilerEnter("output_view");
     Vector<hpx::future<void>> futs;
     Vector<hpx::future<Vector<float>>> valFuts;
     for (auto const& c : hpxChildren()) {
@@ -871,6 +868,5 @@ Vector<float> outputView(int number, double time) {
         fwrite(&time, sizeof(double), 1, fp);
         fclose(fp);
     }
-    profilerExit();
     return results;
 }
