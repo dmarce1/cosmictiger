@@ -11,11 +11,17 @@
 #include <hpx/hpx_init.hpp>
 #include <hpx/include/async.hpp>
 #include <hpx/include/threads.hpp>
+#include <hpx/runtime_local/startup_function.hpp>
 #include <time.h>
 
+#include <cosmictiger/core/interrupt_profile.hpp>
 #include <cosmictiger/core/profiler.hpp>
 
 namespace detail {
+
+enum class InterruptMode { None, Report, BlockOutput };
+
+InterruptMode interruptMode = InterruptMode::None;
 
 constexpr int profiledConstant(int value) {
     PROFILE();
@@ -111,6 +117,19 @@ int hpx_main(int, char*[]) {
     for (auto& result : work) {
         detail::require(result.get() != 0, "CPU fixture lost its nonzero state");
     }
+    if (detail::interruptMode != detail::InterruptMode::None) {
+        if (detail::interruptMode == detail::InterruptMode::BlockOutput) {
+            // Keep this OS worker on CPU after taking the lock. The reporter
+            // must remain interruptible even when terminal output cannot proceed.
+            ::flockfile(stdout);
+        }
+        detail::saveReport("interrupt_ready.txt", "ready\n");
+        std::uint64_t value = 1;
+        while (true) {
+            value = detail::unregisteredHotLoop(value);
+            detail::require(value != 0, "interrupt fixture lost its nonzero state");
+        }
+    }
     return hpx::finalize();
 }
 
@@ -120,13 +139,20 @@ int main(int argc, char* argv[]) {
             return detail::invalidInterval();
         }
         bool const automaticExit = argc > 1 && std::string(argv[1]) == "--automatic-exit";
-        if (automaticExit) {
+        if (argc > 1 && std::string(argv[1]) == "--interrupt-exit") {
+            detail::interruptMode = detail::InterruptMode::Report;
+        } else if (argc > 1 && std::string(argv[1]) == "--interrupt-block-output") {
+            detail::interruptMode = detail::InterruptMode::BlockOutput;
+        }
+        if (automaticExit || detail::interruptMode != detail::InterruptMode::None) {
             for (int argument = 1; argument + 1 < argc; argument++) {
                 argv[argument] = argv[argument + 1];
             }
             argv[--argc] = nullptr;
         }
         detail::require(profile::profileStart(), "cannot start the sampler");
+        profile::InterruptReportHandler interruptHandler;
+        hpx::register_startup_function([&interruptHandler]() { interruptHandler.install(); });
         std::vector<std::string> configuration = {
             "hpx.os_threads=2", "hpx.stacks.small_size=524288"};
 #ifdef HPX_EARLY

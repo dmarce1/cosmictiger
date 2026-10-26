@@ -28,6 +28,7 @@
 #include <cosmictiger/analysis/rockstar.hpp>
 #include <cosmictiger/core/driver.hpp>
 #include <cosmictiger/core/hpx.hpp>
+#include <cosmictiger/core/interrupt_profile.hpp>
 #include <cosmictiger/core/memused.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/options_metadata.hpp>
@@ -274,6 +275,9 @@ void selectPositionBackend(int argc, char* argv[]) {
 
 int main(int argc, char* argv[]) {
     StackTraceHandler stackTraceHandler;
+#ifndef PROFILE_DISABLE
+    profile::InterruptReportHandler interruptReportHandler;
+#endif
     bool ownsMpi = false;
     int result = EXIT_FAILURE;
     try {
@@ -297,6 +301,8 @@ int main(int argc, char* argv[]) {
             profile::profileStop();
             throw std::runtime_error("Unable to start the CPU sampling profiler on every MPI rank");
         }
+        hpx::register_startup_function(
+            [&interruptReportHandler]() { interruptReportHandler.install(); });
 #endif
         std::vector<std::string> cfg = {"hpx.commandline.allow_unknown=1"};
         cfg.push_back("hpx.stacks.small_size=524288");

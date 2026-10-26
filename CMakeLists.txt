@@ -65,7 +65,7 @@ if(COSMICTIGER_WITH_CUDA)
 endif()
 
 find_package(HPX REQUIRED NO_CMAKE_PACKAGE_REGISTRY)
-add_library(cosmictiger_profiler STATIC src/core/profiler.cpp)
+add_library(cosmictiger_profiler STATIC src/core/profiler.cpp src/core/interrupt_profile.cpp)
 target_include_directories(cosmictiger_profiler PUBLIC ${PROJECT_SOURCE_DIR})
 target_compile_features(cosmictiger_profiler PUBLIC cxx_std_20)
 target_link_libraries(cosmictiger_profiler PUBLIC HPX::hpx ${CMAKE_DL_LIBS}
@@ -470,6 +470,7 @@ target_compile_options(halo_catalog_export PRIVATE -fno-fast-math)
 # Chemistry must not inherit the application's fast-math/FTZ settings: the
 # signed-complement and FloatFloat contracts require IEEE rounding and -0.
 find_package(Threads REQUIRED)
+target_link_libraries(cosmictiger_profiler PRIVATE Threads::Threads)
 target_link_libraries(cosmictiger_stacktrace PRIVATE Threads::Threads)
 add_library(primordial_chemistry STATIC src/chemistry/primordial_chemistry.cpp
     src/chemistry/recombination.cpp)

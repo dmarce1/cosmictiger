@@ -358,10 +358,14 @@ time. This does not measure call counts, inclusive time, blocked waiting time,
 or GPU execution; simulation progress tables still report elapsed wall time.
 Keep executable and shared-library symbol tables for useful function names.
 
-The driver writes cumulative reports during execution, and normal process exit
-writes a final report to the terminal and `cosmictiger.profile.<pid>.txt` in the
-working directory. Each process has its own file; reports are not reduced across
-MPI localities. Repeated reports overwrite that file with accumulated samples.
+Normal process exit writes a final report to the terminal and
+`cosmictiger.profile.<pid>.txt` in the working directory. The driver does not
+print reports after individual steps. Ctrl-C during an active run stops sampling
+and writes the same final report before terminating with SIGINT. A dedicated
+reporting thread performs this work outside the signal handler. Pressing Ctrl-C
+again forces immediate termination if reporting is blocked; the report may then
+be incomplete. Interrupt reporting does not write a final simulation checkpoint.
+Each process has its own file; reports are not reduced across MPI localities.
 The report includes dropped samples, missed timer ticks, and setup failures so
 sampling losses remain visible. The bounded signal-handler buffers are allocated
 before sampling; symbol resolution and demangling happen while reporting.

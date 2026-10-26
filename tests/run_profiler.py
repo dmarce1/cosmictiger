@@ -1,11 +1,14 @@
-"""Check sampler attribution, diagnostics, and automatic final report delivery."""
+"""Check sampler attribution, diagnostics, and normal/Ctrl-C final report delivery."""
 
 import argparse
 import math
+import os
 from pathlib import Path
 import re
+import signal
 import subprocess
 import tempfile
+import time
 
 
 def require(condition, message):
@@ -55,6 +58,69 @@ def check_report(report):
                              abs_tol=0.011), f"wrong sample percentage for {function}")
 
 
+def wait_until(process, condition, message, timeout=45):
+    deadline = time.monotonic() + timeout
+    while not condition():
+        require(process.poll() is None,
+                f"{message}: fixture exited early ({process.returncode})")
+        require(time.monotonic() < deadline, f"{message}: timed out")
+        time.sleep(0.01)
+
+
+def check_interrupt(executable, directory, block_output=False):
+    directory.mkdir()
+    output_path = directory / "stdout.log"
+    error_path = directory / "stderr.log"
+    mode = "--interrupt-block-output" if block_output else "--interrupt-exit"
+    command = [str(executable), mode, "--hpx:threads=2", "--hpx:bind=none"]
+    notice = "Ctrl-C: writing CPU profile; press Ctrl-C again to terminate immediately."
+    with output_path.open("w") as output, error_path.open("w") as error:
+        process = subprocess.Popen(command, cwd=directory, stdout=output, stderr=error,
+                                   start_new_session=True)
+        try:
+            ready = directory / "interrupt_ready.txt"
+            wait_until(process, lambda: ready.exists() and ready.read_text() == "ready\n",
+                       "interrupt fixture did not finish sampled HPX work")
+            process.send_signal(signal.SIGINT)
+            if block_output:
+                wait_until(process, lambda: notice in error_path.read_text(),
+                           "first interrupt did not reach the profile reporter", timeout=20)
+                require(process.poll() is None,
+                        "blocked profile report did not wait for terminal output")
+                require("CosmicTiger statistical CPU profile (" not in output_path.read_text(),
+                        "terminal report escaped the fixture's stdout lock")
+                process.send_signal(signal.SIGINT)
+            try:
+                returncode = process.wait(timeout=5 if block_output else 20)
+            except subprocess.TimeoutExpired as exception:
+                raise RuntimeError("interrupt fixture did not terminate promptly") from exception
+        except Exception as exception:
+            raise RuntimeError(f"{mode}: {exception}\nstdout:\n{output_path.read_text()}"
+                               f"\nstderr:\n{error_path.read_text()}") from exception
+        finally:
+            if process.poll() is None:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                process.wait(timeout=5)
+    output = output_path.read_text()
+    error = error_path.read_text()
+    require(returncode == -signal.SIGINT,
+            f"interrupt fixture did not terminate with SIGINT ({returncode}):\n{error}")
+    require(error.count(notice) == 1, "interrupt did not request exactly one profile report")
+    require("SIGABRT" not in error and "terminate called" not in error and
+            "Aborted" not in error, f"HPX aborted during interrupt reporting:\n{error}")
+    if not block_output:
+        reports = list(directory.glob("cosmictiger.profile.*.txt"))
+        require(len(reports) == 1, "interrupt did not produce one per-process report file")
+        report = reports[0].read_text()
+        require(output.count("CosmicTiger statistical CPU profile (") == 1 and
+                output.endswith(report),
+                "interrupt did not emit exactly one matching terminal/file report")
+        check_report(report)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("executable", type=Path)
@@ -90,7 +156,10 @@ def main():
                 "invalid interval did not emit a diagnostic")
         require(summary((invalid / "invalid_interval.txt").read_text()) == (0, 0, 0, 1),
                 "invalid interval did not report exactly one setup failure")
-    print("Profiler regression passed: HPX waits, PC attribution, diagnostics, and final reports")
+        check_interrupt(executable, directory / "interrupt_exit")
+        check_interrupt(executable, directory / "interrupt_block_output", block_output=True)
+    print("Profiler regression passed: HPX waits, PC attribution, diagnostics, final reports, "
+          "and Ctrl-C reporting/escape")
 
 
 if __name__ == "__main__":
