@@ -1211,6 +1211,27 @@ if(BUILD_TESTING)
     set_tests_properties(units_output_fixed64 PROPERTIES
         WORKING_DIRECTORY "${units_output_fixed64_workdir}" RUN_SERIAL TRUE TIMEOUT 120 PROCESSORS 2)
 
+    # Keep the existing cases on the default model and cover the other state layouts.
+    foreach(units_viscosity IN ITEMS none cullen_and_dehnen)
+        if(units_viscosity STREQUAL "none")
+            set(units_viscosity_option none)
+        else()
+            set(units_viscosity_option cullenAndDehnen)
+        endif()
+        foreach(units_position IN ITEMS fixed32 fixed64)
+            set(units_test "units_output_${units_viscosity}_${units_position}")
+            set(units_workdir "${PROJECT_BINARY_DIR}/tests/${units_test}")
+            file(MAKE_DIRECTORY "${units_workdir}")
+            add_test(NAME ${units_test} COMMAND cosmictiger --run.test=unitsOutput
+                --compute.positionType=${units_position}
+                --hydro.viscosityEvolution=${units_viscosity_option}
+                --initial.particlesPerDimension=8 --hydro.enabled=true --compute.cuda=false
+                --hpx:threads=2 --hpx:bind=none)
+            set_tests_properties(${units_test} PROPERTIES
+                WORKING_DIRECTORY "${units_workdir}" RUN_SERIAL TRUE TIMEOUT 120 PROCESSORS 2)
+        endforeach()
+    endforeach()
+
     set(distributed_output_workdir "${PROJECT_BINARY_DIR}/tests/distributed_output")
     file(MAKE_DIRECTORY "${distributed_output_workdir}")
     add_test(NAME distributed_output COMMAND cosmictiger --run.test=distributedOutput

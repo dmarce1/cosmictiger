@@ -29,6 +29,8 @@
 
 namespace detail {
 
+constexpr float kUnitsOutputViscosityAlpha = 0.375f;
+
 void requireUnitsOutput(bool condition, std::string const& message) {
     if (!condition) {
         throw std::runtime_error("units output: " + message);
@@ -141,13 +143,24 @@ void checkUnitsOutputField(
         requireUnitsOutput(field->units && std::string(field->units) == unit, name + " units");
     }
     bool const gas = name.find("hydro_") != std::string::npos || name.ends_with("rho") ||
-        name.ends_with("eint") || name.ends_with("kernel_support_radius");
+        name.ends_with("eint") || name.ends_with("kernel_support_radius") ||
+        name.ends_with("alpha");
     requireUnitsOutput(field->meshname &&
             std::filesystem::path(field->meshname).filename() == (gas ? "gas" : "dark_matter"),
         name + " attaches to the correct particle species");
     auto const* values = static_cast<double const*>(field->vals[0]);
     for (int i = 0; i < field->nels; i++) {
         requireUnitsOutputClose(values[i], expected, name + " value");
+    }
+}
+
+void checkUnitsOutputViscosity(DBfile* file, std::string const& path) {
+    std::string const name = path + "alpha";
+    if (getOptions().hydro.viscosityEvolution == "none") {
+        requireUnitsOutput(
+            !DBInqVarExists(file, name.c_str()), name + " is absent for constant viscosity");
+    } else {
+        checkUnitsOutputField(file, name, 1, double(kUnitsOutputViscosityAlpha), "1");
     }
 }
 
@@ -179,8 +192,7 @@ void checkUnitsOutputGas(DBfile* file, std::string const& name, int count, doubl
 void checkConvertedUnitsOutput(DBfile* file, bool cosmological, bool lab) {
     std::string const path =
         std::string(cosmological ? "cosmological/" : "cgs/") + (lab ? "lab/" : "comoving/");
-    requireUnitsOutput(
-        !DBInqVarExists(file, (path + "alpha").c_str()), "converted output omits particle alpha");
+    checkUnitsOutputViscosity(file, path);
     double const a = 0.25;
     double const hubble = 0.7;
     double const length = 2.0e24;
@@ -296,6 +308,11 @@ void unitsOutputParticleFixture(bool initialize) {
         sphParticlesSupportRadius(0) = 0.03125;
         sphParticlesDensity(0) = 8.0;
         sphParticlesThermodynamicStates[0].internalEnergy = 4.0;
+        if (getOptions().hydro.viscosityEvolution != "none") {
+            // Distinct from the scalar CLI alpha; unchanged by unit/frame conversion.
+            sphParticlesViscosityStates[0] = {
+                detail::kUnitsOutputViscosityAlpha, 0.0f, detail::kUnitsOutputViscosityAlpha};
+        }
     } else {
         detail::requireUnitsOutput(particlesPos(kXDimension, 0).raw() ==
                     (PositionInteger(0x80000000U) << (kPositionBits - 32)) &&
@@ -342,8 +359,7 @@ void unitsOutputTest() {
     for (int rank = 0; rank < hpxSize(); rank++) {
         auto file = openUnitsOutput(0, rank);
         checkUnitsOutputCommandLine(file.get());
-        requireUnitsOutput(
-            !DBInqVarExists(file.get(), "alpha"), "code-unit output omits particle alpha");
+        checkUnitsOutputViscosity(file.get(), "");
         UnitsOutputMesh mesh(DBGetPointmesh(file.get(), "dark_matter"), DBFreePointmesh);
         requireUnitsOutput(bool(mesh) && mesh->datatype == DB_DOUBLE && mesh->nels == 2,
             "code-unit dark matter mesh schema");
