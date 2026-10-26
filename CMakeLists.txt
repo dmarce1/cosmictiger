@@ -679,6 +679,27 @@ if(BUILD_TESTING)
         endif()
     endfunction()
 
+    # Exercise the actual allocator on CPU with controlled scheduling and CUDA
+    # allocation failures, including in configurations without a CUDA toolkit.
+    add_executable(cuda_memory_host_test tests/cuda_memory.cpp)
+    target_include_directories(cuda_memory_host_test BEFORE PRIVATE
+        ${PROJECT_SOURCE_DIR}/tests/cuda_memory_stubs ${PROJECT_SOURCE_DIR})
+    target_compile_definitions(cuda_memory_host_test PRIVATE CUDA_MEM_STACK_SIZE=16)
+    target_link_libraries(cuda_memory_host_test PRIVATE Threads::Threads)
+    cosmictiger_add_gtest(NAME cuda_memory_host TARGET cuda_memory_host_test
+        PROPERTIES TIMEOUT 60 PROCESSORS 4)
+
+    if(COSMICTIGER_WITH_CUDA)
+        add_executable(cuda_memory_cuda_test tests/cuda_memory_cuda.cu
+            tests/cuda_memory_backend.cpp src/cuda/cuda_memory.cu src/core/assert.cu)
+        target_include_directories(cuda_memory_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_compile_definitions(cuda_memory_cuda_test PRIVATE USE_CUDA CUDA_MEM_STACK_SIZE=128)
+        target_link_libraries(cuda_memory_cuda_test PRIVATE CUDA::cudart)
+        set_target_properties(cuda_memory_cuda_test PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+        cosmictiger_add_gtest(NAME cuda_memory_cuda TARGET cuda_memory_cuda_test
+            PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE)
+    endif()
+
     # The selected run.test application check executes inside the HPX runtime.
     target_sources(cosmictiger_application_tests PRIVATE tests/application_test.cpp)
     target_link_libraries(cosmictiger_application_tests PRIVATE GTest::gtest)

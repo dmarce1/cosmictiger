@@ -1,0 +1,100 @@
+#pragma once
+
+#include <atomic>
+#include <cstddef>
+#include <cstdint>
+#include <type_traits>
+
+// Only the CUDA atomic API used by cuda_memory.cu is modeled here. GCC's
+// atomic builtins preserve its host memory ordering, while the callback lets
+// tests suspend a thread at a specific real allocator operation.
+namespace cuda_memory_test {
+enum class AtomicOperation { Load, CompareExchange, Store };
+
+struct AtomicEvent {
+    AtomicOperation operation;
+    void const* address;
+    uint64_t value;
+    bool success;
+    std::memory_order order;
+};
+
+inline thread_local void (*atomicHook)(AtomicEvent const&) = nullptr;
+
+inline void observeAtomic(AtomicEvent const& event) {
+    if (atomicHook != nullptr) {
+        atomicHook(event);
+    }
+}
+
+namespace detail {
+    inline int memoryOrder(std::memory_order order) {
+        switch (order) {
+        case std::memory_order_relaxed:
+            return __ATOMIC_RELAXED;
+        case std::memory_order_consume:
+            return __ATOMIC_CONSUME;
+        case std::memory_order_acquire:
+            return __ATOMIC_ACQUIRE;
+        case std::memory_order_release:
+            return __ATOMIC_RELEASE;
+        case std::memory_order_acq_rel:
+            return __ATOMIC_ACQ_REL;
+        default:
+            return __ATOMIC_SEQ_CST;
+        }
+    }
+}    // namespace detail
+}    // namespace cuda_memory_test
+
+namespace cuda {
+enum thread_scope { thread_scope_system, thread_scope_block };
+using std::memory_order;
+using std::memory_order_acquire;
+using std::memory_order_relaxed;
+using std::memory_order_release;
+using std::memory_order_seq_cst;
+
+template <class Value, thread_scope scope>
+class atomic_ref {
+    static_assert(scope == thread_scope_system);
+    static_assert(std::is_integral_v<Value>);
+    Value* pointer_;
+
+public:
+    static constexpr size_t required_alignment = alignof(Value);
+
+    explicit atomic_ref(Value& value)
+      : pointer_(&value) {}
+
+    Value load(memory_order order = memory_order_seq_cst) const {
+        Value const result =
+            __atomic_load_n(pointer_, cuda_memory_test::detail::memoryOrder(order));
+        cuda_memory_test::observeAtomic({cuda_memory_test::AtomicOperation::Load, pointer_,
+            static_cast<uint64_t>(result), true, order});
+        return result;
+    }
+
+    bool compare_exchange_weak(
+        Value& expected, Value desired, memory_order order = memory_order_seq_cst) const {
+        auto failureOrder = order;
+        if (order == std::memory_order_release) {
+            failureOrder = std::memory_order_relaxed;
+        } else if (order == std::memory_order_acq_rel) {
+            failureOrder = std::memory_order_acquire;
+        }
+        bool const result = __atomic_compare_exchange_n(pointer_, &expected, desired, true,
+            cuda_memory_test::detail::memoryOrder(order),
+            cuda_memory_test::detail::memoryOrder(failureOrder));
+        cuda_memory_test::observeAtomic({cuda_memory_test::AtomicOperation::CompareExchange,
+            pointer_, static_cast<uint64_t>(desired), result, order});
+        return result;
+    }
+
+    void store(Value desired, memory_order order = memory_order_seq_cst) const {
+        __atomic_store_n(pointer_, desired, cuda_memory_test::detail::memoryOrder(order));
+        cuda_memory_test::observeAtomic({cuda_memory_test::AtomicOperation::Store, pointer_,
+            static_cast<uint64_t>(desired), true, order});
+    }
+};
+}    // namespace cuda

@@ -8,6 +8,9 @@
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
+#include <cstddef>
+#include <cstdint>
+
 #include <cosmictiger/core/containers.hpp>
 #include <cosmictiger/cuda/cuda.hpp>
 #include <cosmictiger/math/math.hpp>
@@ -19,24 +22,33 @@ inline void syncthreads() {
 #endif
 }
 
+#ifndef CUDA_MEM_STACK_SIZE
 #define CUDA_MEM_STACK_SIZE (1024 * 1024)
+#endif
 #define CUDA_MEM_NBIN 32
 
 using CudaMemoryInteger = uint64_t;
 
 class CudaMemory {
-    Array<Array<char*, CUDA_MEM_STACK_SIZE>, CUDA_MEM_NBIN> q_;
-    Array<long long, CUDA_MEM_NBIN> qin_;
-    Array<long long, CUDA_MEM_NBIN> qout_;
+    struct Slot {
+        CudaMemoryInteger sequence;
+        char* pointer;
+    };
+
+    static_assert(
+        CUDA_MEM_STACK_SIZE >= 2 && (CUDA_MEM_STACK_SIZE & (CUDA_MEM_STACK_SIZE - 1)) == 0);
+    Array<Array<Slot, CUDA_MEM_STACK_SIZE>, CUDA_MEM_NBIN> q_;
+    Array<CudaMemoryInteger, CUDA_MEM_NBIN> qin_;
+    Array<CudaMemoryInteger, CUDA_MEM_NBIN> qout_;
     char* heapBegin_;
-    char* next_;
-    char* heapEnd_;
+    CudaMemoryInteger next_;
+    size_t heapSize_;
     CUDA_EXPORT
     void push(int bin, char* ptr);
     CUDA_EXPORT
     char* pop(int bin);
     CUDA_EXPORT
-    bool createNewAllocation(int bin);
+    char* createNewAllocation(int bin);
 
 public:
     CUDA_EXPORT
@@ -45,6 +57,7 @@ public:
     void free(void* ptr);
     CudaMemory(size_t heapSize);
     ~CudaMemory();
+    // All users of the pool must be quiescent before resetting or destroying it.
     void reset();
 };
 
