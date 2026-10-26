@@ -142,15 +142,15 @@ double benchmarkWrap(double value) {
     return value - std::floor(value);
 }
 
-Array<Position, NDIM> benchmarkCenter(int cell, bool near) {
+Array<Position, kDimensions> benchmarkCenter(int cell, bool near) {
     // Source x coordinates wrap through zero while sinks remain near one. This
     // exercises the signed interpretation of periodic fixed-point subtraction.
-    std::array<double, NDIM> const origin{1023.0 / 1024, 371.0 / 1024, 433.0 / 1024};
-    std::array<double, NDIM> const separation = near ?
-        std::array<double, NDIM>{1.0 / 64, 1.0 / 128, -1.0 / 256} :
-        std::array<double, NDIM>{3.0 / 16, 1.0 / 32, -1.0 / 64};
-    Array<Position, NDIM> position;
-    for (int dimension = 0; dimension < NDIM; ++dimension) {
+    std::array<double, kDimensions> const origin{1023.0 / 1024, 371.0 / 1024, 433.0 / 1024};
+    std::array<double, kDimensions> const separation = near ?
+        std::array<double, kDimensions>{1.0 / 64, 1.0 / 128, -1.0 / 256} :
+        std::array<double, kDimensions>{3.0 / 16, 1.0 / 32, -1.0 / 64};
+    Array<Position, kDimensions> position;
+    for (int dimension = 0; dimension < kDimensions; ++dimension) {
         position[dimension] = benchmarkWrap(origin[dimension] +
             (cell < 0 ? 0 :
                         separation[dimension] + benchmarkOffset(cell + 101, dimension) / 16384.0));
@@ -158,18 +158,19 @@ Array<Position, NDIM> benchmarkCenter(int cell, bool near) {
     return position;
 }
 
-Array<Position, NDIM> benchmarkParticle(Array<Position, NDIM> const& center, int index) {
-    Array<Position, NDIM> position;
-    for (int dimension = 0; dimension < NDIM; ++dimension) {
+Array<Position, kDimensions> benchmarkParticle(
+    Array<Position, kDimensions> const& center, int index) {
+    Array<Position, kDimensions> position;
+    for (int dimension = 0; dimension < kDimensions; ++dimension) {
         position[dimension] = benchmarkWrap(
             center[dimension].toDouble() + benchmarkOffset(index, dimension) / 32768.0);
     }
     return position;
 }
 
-void benchmarkSetPositions(std::vector<Array<Position, NDIM>> const& positions) {
+void benchmarkSetPositions(std::vector<Array<Position, kDimensions>> const& positions) {
     for (size_t index = 0; index < positions.size(); ++index) {
-        for (int dimension = 0; dimension < NDIM; ++dimension) {
+        for (int dimension = 0; dimension < kDimensions; ++dimension) {
             particlesPos(dimension, index) = positions[index][dimension];
             particlesVel(dimension, index) = 0.0f;
         }
@@ -178,7 +179,7 @@ void benchmarkSetPositions(std::vector<Array<Position, NDIM>> const& positions) 
 }
 
 TreeId benchmarkAddNode(
-    Array<Position, NDIM> const& center, Pair<ParticleInteger> range, bool sink) {
+    Array<Position, kDimensions> const& center, Pair<ParticleInteger> range, bool sink) {
     TreeNode node{};
     node.pos = center;
     node.particleRange = range;
@@ -186,7 +187,7 @@ TreeId benchmarkAddNode(
     node.depth = 4;
     node.localRoot = sink;
     node.leaf = true;
-    node.children[LEFT] = node.children[RIGHT] = TreeId{-1, -1};
+    node.children[kLeftChild] = node.children[kRightChild] = TreeId{-1, -1};
     node.maxGravitySupportRadius = kBenchmarkSupport;
     MultipoleBuffer multipole;
     multipole.zero();
@@ -194,9 +195,9 @@ TreeId benchmarkAddNode(
     fmmDispatch([&](auto order) {
         auto& moments = multipole.multipole<order.value>();
         for (ParticleInteger index = range.first; index < range.second; ++index) {
-            Array<float, NDIM> displacement;
+            Array<float, kDimensions> displacement;
             double particleRadiusSquared = 0;
-            for (int dimension = 0; dimension < NDIM; ++dimension) {
+            for (int dimension = 0; dimension < kDimensions; ++dimension) {
                 displacement[dimension] =
                     distance(particlesPos(dimension, index), center[dimension]);
                 particleRadiusSquared += double(displacement[dimension]) * displacement[dimension];
@@ -214,7 +215,7 @@ TreeId benchmarkAddNode(
     node.mpos = treeAddMultipole(center, multipole);
     // The direct operator entry points do not use opening boxes. A complete
     // periodic-domain box remains conservative for cells crossing the seam.
-    for (int dimension = 0; dimension < NDIM; ++dimension) {
+    for (int dimension = 0; dimension < kDimensions; ++dimension) {
         node.box.begin[dimension] = 0.0;
         node.box.end[dimension] = 1.0;
     }
@@ -228,7 +229,8 @@ public:
 
     explicit BenchmarkArena(BenchmarkCase const& testCase) {
         int const sourceParticles = testCase.shape.sourceCells * testCase.shape.particlesPerCell;
-        std::vector<Array<Position, NDIM>> positions(kBenchmarkSinkParticles + sourceParticles);
+        std::vector<Array<Position, kDimensions>> positions(
+            kBenchmarkSinkParticles + sourceParticles);
         auto const sinkCenter = benchmarkCenter(-1, false);
         for (int index = 0; index < kBenchmarkSinkParticles; ++index) {
             positions[index] = benchmarkParticle(sinkCenter, index);
@@ -332,8 +334,8 @@ std::vector<double> benchmarkValues(
         // acceleration/potential at every sink; scaling must not hide errors.
         auto const center = treeGetNode(arena.sink_)->pos;
         for (int index = 0; index < kBenchmarkSinkParticles; ++index) {
-            Array<float, NDIM> displacement;
-            for (int dimension = 0; dimension < NDIM; ++dimension) {
+            Array<float, kDimensions> displacement;
+            for (int dimension = 0; dimension < kDimensions; ++dimension) {
                 displacement[dimension] =
                     distance(particlesPos(dimension, index), center[dimension]);
             }
@@ -344,10 +346,10 @@ std::vector<double> benchmarkValues(
                     testCase.doPhi);
                 return field;
             });
-            values.push_back(SCALE_FACTOR2 * force.accelerationX());
-            values.push_back(SCALE_FACTOR2 * force.accelerationY());
-            values.push_back(SCALE_FACTOR2 * force.accelerationZ());
-            values.push_back(testCase.doPhi ? SCALE_FACTOR1 * force.potential() : 0.0f);
+            values.push_back(kScaleFactor2 * force.accelerationX());
+            values.push_back(kScaleFactor2 * force.accelerationY());
+            values.push_back(kScaleFactor2 * force.accelerationZ());
+            values.push_back(testCase.doPhi ? kScaleFactor1 * force.potential() : 0.0f);
         }
     } else {
         for (int index = 0; index < kBenchmarkSinkParticles; ++index) {

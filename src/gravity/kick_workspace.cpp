@@ -90,8 +90,8 @@ void KickWorkspace::recordProcessedParticles(
 }
 
 void KickWorkspace::addWork(std::shared_ptr<KickWorkspace> ptr, ExpansionBuffer const& l,
-    Array<Position, NDIM> pos, TreeId self, Vector<TreeId>&& dchecks, Vector<TreeId>&& echecks,
-    FmmGeometry const& geometry, ParticleInteger outputOffset) {
+    Array<Position, kDimensions> pos, TreeId self, Vector<TreeId>&& dchecks,
+    Vector<TreeId>&& echecks, FmmGeometry const& geometry, ParticleInteger outputOffset) {
     KickWorkitem item;
     item.geometry = geometry;
     item.outputOffset = outputOffset;

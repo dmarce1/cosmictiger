@@ -17,7 +17,7 @@ using GroupRange = Range<double>;
 
 struct GroupTreeNode {
     GroupRange box;
-    Array<TreeId, NCHILD> children;
+    Array<TreeId, kChildCount> children;
     Pair<ParticleInteger> particleRange;
     Pair<int> processRange;
     bool localRoot;

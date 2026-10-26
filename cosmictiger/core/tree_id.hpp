@@ -51,13 +51,13 @@ struct TreeIdHash {
 struct TreeIdHashLo {
     inline size_t operator()(TreeId id) const {
         TreeIdHash hash;
-        return hash(id) % TREE_CACHE_SIZE;
+        return hash(id) % kTreeCacheSize;
     }
 };
 
 struct TreeIdHashHi {
     inline size_t operator()(TreeId id) const {
         TreeIdHash hash;
-        return hash(id) / TREE_CACHE_SIZE;
+        return hash(id) / kTreeCacheSize;
     }
 };

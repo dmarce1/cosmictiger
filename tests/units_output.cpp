@@ -155,12 +155,13 @@ void checkUnitsOutputGas(DBfile* file, std::string const& name, int count, doubl
     char const* lengthUnit = nullptr, double time = 0.0) {
     UnitsOutputMesh mesh(DBGetPointmesh(file, name.c_str()), DBFreePointmesh);
     requireUnitsOutput(bool(mesh), name + " point mesh exists");
-    requireUnitsOutput(mesh->ndims == NDIM && mesh->datatype == DB_DOUBLE && mesh->nels == count,
+    requireUnitsOutput(
+        mesh->ndims == kDimensions && mesh->datatype == DB_DOUBLE && mesh->nels == count,
         name + " one point per particle");
     if (lengthUnit) {
         requireUnitsOutputClose(mesh->dtime, time, name + " mesh time metadata");
     }
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         requireUnitsOutput(mesh->coords[dim], name + " particle coordinates");
         if (lengthUnit) {
             requireUnitsOutput(mesh->units[dim] && std::string(mesh->units[dim]) == lengthUnit,
@@ -168,7 +169,7 @@ void checkUnitsOutputGas(DBfile* file, std::string const& name, int count, doubl
         }
         auto const* coordinates = static_cast<double const*>(mesh->coords[dim]);
         double const expected =
-            (0.5 + (dim == XDIM ? std::ldexp(1.0, -32) : 0.0)) * coordinateScale;
+            (0.5 + (dim == kXDimension ? std::ldexp(1.0, -32) : 0.0)) * coordinateScale;
         for (int i = 0; i < count; i++) {
             requireUnitsOutputClose(coordinates[i], expected, name + " particle position");
         }
@@ -234,7 +235,7 @@ void checkConvertedUnitsOutput(DBfile* file, bool cosmological, bool lab) {
     requireUnitsOutput(bool(mesh) && mesh->datatype == DB_DOUBLE && mesh->nels == 2,
         "dark matter mesh shape and datatype");
     requireUnitsOutputClose(mesh->dtime, epoch, "mesh time metadata");
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         requireUnitsOutput(
             mesh->units[dim] && std::string(mesh->units[dim]) == lengthUnit, "coordinate unit");
         auto const* coordinates = static_cast<double const*>(mesh->coords[dim]);
@@ -243,9 +244,9 @@ void checkConvertedUnitsOutput(DBfile* file, bool cosmological, bool lab) {
         double const hi = *bounds.second;
         requireUnitsOutputClose(lo, 0.5 * coordinateScale, "first fixed position");
         requireUnitsOutputClose(hi,
-            (0.5 + (dim == XDIM ? std::ldexp(1.0, -32) : 0.0)) * coordinateScale,
+            (0.5 + (dim == kXDimension ? std::ldexp(1.0, -32) : 0.0)) * coordinateScale,
             "second fixed position");
-        if (dim == XDIM) {
+        if (dim == kXDimension) {
             requireUnitsOutput(hi > lo, "adjacent fixed-point positions stay distinct");
         }
     }
@@ -278,27 +279,27 @@ void unitsOutputParticleFixture(bool initialize) {
         particlesResize(3);
         sphParticlesResize(1, false);
         for (ParticleInteger i = 0; i < 3; i++) {
-            for (int dim = 0; dim < NDIM; dim++) {
+            for (int dim = 0; dim < kDimensions; dim++) {
                 particlesPos(dim, i).setInteger(
-                    (PositionInteger(0x80000000U) + (i != 0 && dim == XDIM ? 1U : 0U))
+                    (PositionInteger(0x80000000U) + (i != 0 && dim == kXDimension ? 1U : 0U))
                     << (kPositionBits - 32));
-                particlesVel(dim, i) = i == 2 ? (dim == XDIM        ? 0.125 :
-                                                        dim == YDIM ? 0.25 :
-                                                                      -0.5) :
+                particlesVel(dim, i) = i == 2 ? (dim == kXDimension        ? 0.125 :
+                                                        dim == kYDimension ? 0.25 :
+                                                                             -0.5) :
                                                 0.0;
             }
             particlesRung(i) = 1;
-            particlesType(i) = i == 2 ? SPH_TYPE : DARK_MATTER_TYPE;
-            particlesCatIndex(i) = i == 2 ? 0 : NO_INDEX;
+            particlesType(i) = i == 2 ? kSphType : kDarkMatterType;
+            particlesCatIndex(i) = i == 2 ? 0 : kNoParticleIndex;
         }
         sphParticlesParticleIndex(0) = 2;
         sphParticlesSupportRadius(0) = 0.03125;
         sphParticlesDensity(0) = 8.0;
         sphParticlesThermodynamicStates[0].internalEnergy = 4.0;
     } else {
-        detail::requireUnitsOutput(
-            particlesPos(XDIM, 0).raw() == (PositionInteger(0x80000000U) << (kPositionBits - 32)) &&
-                particlesPos(XDIM, 1).raw() ==
+        detail::requireUnitsOutput(particlesPos(kXDimension, 0).raw() ==
+                    (PositionInteger(0x80000000U) << (kPositionBits - 32)) &&
+                particlesPos(kXDimension, 1).raw() ==
                     (PositionInteger(0x80000001U) << (kPositionBits - 32)),
             "particle fixed-point storage unchanged on every locality");
     }
@@ -329,7 +330,7 @@ void unitsOutputTest() {
     options.hydro.viscosityAlpha = 1.75;
     options.gravity.supportRadius = 0.125 *
         selectedGravityKernel().supportRadiusPerEffectiveRadius /
-        std::pow(double(options.initial.numberOfParticles), 1.0 / NDIM);
+        std::pow(double(options.initial.numberOfParticles), 1.0 / kDimensions);
     options.gravity.timestepEta = 0.3;
     options.hydro.minSupportRadius = 0.2 / options.initial.particlesPerDimension;
     options.hydro.maxSupportRadius = 0.4 / options.initial.particlesPerDimension;
@@ -346,7 +347,7 @@ void unitsOutputTest() {
         UnitsOutputMesh mesh(DBGetPointmesh(file.get(), "dark_matter"), DBFreePointmesh);
         requireUnitsOutput(bool(mesh) && mesh->datatype == DB_DOUBLE && mesh->nels == 2,
             "code-unit dark matter mesh schema");
-        auto const* positions = static_cast<double const*>(mesh->coords[XDIM]);
+        auto const* positions = static_cast<double const*>(mesh->coords[kXDimension]);
         auto const bounds = std::minmax_element(positions, positions + mesh->nels);
         requireUnitsOutputClose(*bounds.first, 0.5, "first code-unit dark matter position");
         requireUnitsOutputClose(

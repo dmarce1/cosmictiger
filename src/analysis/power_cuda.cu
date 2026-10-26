@@ -23,19 +23,21 @@ __global__ void accumulateDensityKernel(Position const* xValue, Position const* 
         float y = fmodf(mfold * yValue[i].toFloat(), 1.0f);
         float z = fmodf(mfold * zValue[i].toFloat(), 1.0f);
         int const j = (x * ndim);
-        if (j >= intbox.begin[XDIM] - CLOUD_MIN && j < intbox.end[XDIM] - CLOUD_MAX) {
+        if (j >= intbox.begin[kXDimension] - kCloudMin && j < intbox.end[kXDimension] - kCloudMax) {
             int const k = (y * ndim);
-            if (k >= intbox.begin[YDIM] - CLOUD_MIN && k < intbox.end[YDIM] - CLOUD_MAX) {
+            if (k >= intbox.begin[kYDimension] - kCloudMin &&
+                k < intbox.end[kYDimension] - kCloudMax) {
                 int const l = (z * ndim);
-                if (l >= intbox.begin[ZDIM] - CLOUD_MIN && l < intbox.end[ZDIM] - CLOUD_MAX) {
+                if (l >= intbox.begin[kZDimension] - kCloudMin &&
+                    l < intbox.end[kZDimension] - kCloudMax) {
                     float const x0 = x * ndim - j;
                     float const y0 = y * ndim - k;
                     float const z0 = z * ndim - l;
-                    for (int j0 = CLOUD_MIN; j0 <= CLOUD_MAX; j0++) {
+                    for (int j0 = kCloudMin; j0 <= kCloudMax; j0++) {
                         float wtX = cloudWeight(x0 - j0);
-                        for (int k0 = CLOUD_MIN; k0 <= CLOUD_MAX; k0++) {
+                        for (int k0 = kCloudMin; k0 <= kCloudMax; k0++) {
                             float wtY = cloudWeight(y0 - k0);
-                            for (int l0 = CLOUD_MIN; l0 <= CLOUD_MAX; l0++) {
+                            for (int l0 = kCloudMin; l0 <= kCloudMax; l0++) {
                                 float wtZ = cloudWeight(z0 - l0);
                                 float const mass = masses == nullptr ? 1.0f : masses[i];
                                 float const wt = wtX * wtY * wtZ * mass;

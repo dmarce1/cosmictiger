@@ -16,8 +16,8 @@
 namespace detail {
 
 struct MeshTimestepSample {
-    Array<float, NDIM> acceleration{};
-    Array<float, NDIM> velocity{};
+    Array<float, kDimensions> acceleration{};
+    Array<float, kDimensions> velocity{};
     double position{};
     int rung{};
     int rank{};
@@ -45,8 +45,8 @@ void initializeMeshTimestepFixture() {
         if ((point == 1 && !center) || (point != 1 && !endpoints)) {
             continue;
         }
-        for (int dim = 0; dim < NDIM; ++dim) {
-            particlesPos(dim, local) = dim == XDIM ? 0.375 + 0.125 * point : 0.5;
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            particlesPos(dim, local) = dim == kXDimension ? 0.375 + 0.125 * point : 0.5;
             particlesVel(dim, local) = 0.0f;
         }
         particlesRung(local) = 1;
@@ -59,10 +59,10 @@ Vector<MeshTimestepSample> readMeshTimestepFixture() {
     for (ParticleInteger i = 0; i < particlesSize(); ++i) {
         auto& sample = samples[i];
         sample.acceleration = pmmmAcceleration(i);
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             sample.velocity[dim] = particlesVel(dim, i);
         }
-        sample.position = particlesPos(XDIM, i).toDouble();
+        sample.position = particlesPos(kXDimension, i).toDouble();
         sample.rung = particlesRung(i);
         sample.rank = hpxRank();
     }
@@ -102,7 +102,7 @@ void checkMeshTimestepKick(Vector<MeshTimestepSample> const& before,
                       "preparation changed a rung before all proposals were reduced");
         double const halfStep =
             firstCall ? 0.0 : std::ldexp(0.5, -(opening ? commonRung : before[i].rung));
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             double const expected =
                 std::fma(double(before[i].acceleration[dim]), halfStep, before[i].velocity[dim]);
             requireMeshTimestep(std::isfinite(after[i].velocity[dim]) &&

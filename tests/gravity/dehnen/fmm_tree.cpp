@@ -33,14 +33,14 @@ void requireFmmTree(bool condition, char const* message) {
     }
 }
 
-Array<Position, NDIM> fmmTreePosition(int rank, int particle) {
-    Array<Position, NDIM> position;
-    position[XDIM] = 0.25 + 0.125 * (rank + (particle & 1)) / hpxSize();
-    position[YDIM] = 0.25 + 0.0625 * ((particle >> 1) & 1);
-    position[ZDIM] = 0.25 + 0.0625 * ((particle >> 2) & 1);
+Array<Position, kDimensions> fmmTreePosition(int rank, int particle) {
+    Array<Position, kDimensions> position;
+    position[kXDimension] = 0.25 + 0.125 * (rank + (particle & 1)) / hpxSize();
+    position[kYDimension] = 0.25 + 0.0625 * ((particle >> 1) & 1);
+    position[kZDimension] = 0.25 + 0.0625 * ((particle >> 2) & 1);
     // X/Z extrema fall between stored box coordinates; Y remains exactly aligned.
-    position[XDIM].raw() += 1;
-    position[ZDIM].raw() += 3;
+    position[kXDimension].raw() += 1;
+    position[kZDimension].raw() += 3;
     return position;
 }
 
@@ -56,7 +56,7 @@ void verifyTreeReturnArchive() {
     for (int i = 0; i < coefficientCount; i++) {
         expected.multi[i] = float(i + 1);
     }
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         expected.pos[dim] = 0.25 + 0.0625 * dim;
         expected.box.begin[dim] = 0.125 + 0.0625 * dim;
         expected.box.end[dim] = 0.5 + 0.0625 * dim;
@@ -69,7 +69,7 @@ void verifyTreeReturnArchive() {
     TreeCreateReturn actual;
     actual.multi.zero();
     actual.maxGravitySupportRadius = -1.0f;
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         actual.box.begin[dim] = actual.box.end[dim] = -1.0;
     }
     {
@@ -83,7 +83,7 @@ void verifyTreeReturnArchive() {
         requireFmmTree(
             actual.multi[i] == expected.multi[i], "multipole did not survive the HPX archive");
     }
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         requireFmmTree(actual.pos[dim] == expected.pos[dim] &&
                 actual.box.begin[dim] == expected.box.begin[dim] &&
                 actual.box.end[dim] == expected.box.end[dim],
@@ -116,11 +116,11 @@ void verifyTreeNodeArchive(TreeId id) {
             actual.depth == expected.depth && actual.localRoot == expected.localRoot &&
             actual.leaf == expected.leaf,
         "tree-node metadata did not survive the HPX archive");
-    for (int child = 0; child < NCHILD; ++child) {
+    for (int child = 0; child < kChildCount; ++child) {
         requireFmmTree(actual.children[child] == expected.children[child],
             "tree-node child did not survive the HPX archive");
     }
-    for (int dim = 0; dim < NDIM; ++dim) {
+    for (int dim = 0; dim < kDimensions; ++dim) {
         requireFmmTree(actual.box.begin[dim] == expected.box.begin[dim] &&
                 actual.box.end[dim] == expected.box.end[dim] &&
                 actual.pos[dim] == expected.pos[dim] &&
@@ -142,7 +142,7 @@ float verifyTreeGeometry(TreeId id, bool empty, float supportRadius, int distinc
     TreeNode const* node = treeGetNode(id);
     requireFmmTree(
         std::isfinite(node->radius) && node->radius >= 0.0f, "node has an invalid bounding radius");
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         requireFmmTree(
             node->box.begin[dim] <= node->box.end[dim], "node has reversed particle bounds");
     }
@@ -164,7 +164,7 @@ float verifyTreeGeometry(TreeId id, bool empty, float supportRadius, int distinc
     float expectedSupport = 0.0f;
     if (!node->leaf) {
         auto const children = node->children;
-        for (int child = 0; child < NCHILD; child++) {
+        for (int child = 0; child < kChildCount; child++) {
             float const childSupport = verifyTreeGeometry(
                 children[child], empty, supportRadius, distinctSupportRank, distinctSupportRadius);
             expectedSupport = std::max(expectedSupport, childSupport);
@@ -183,7 +183,7 @@ void initializeFmmTreeRegression(bool empty) {
     particlesResize(empty ? 0 : detail::kFmmTreeParticlesPerRank);
     for (ParticleInteger i = 0; i < particlesSize(); i++) {
         auto const position = detail::fmmTreePosition(hpxRank(), i);
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             particlesPos(dim, i) = position[dim];
             particlesVel(dim, i) = 0.0f;
         }
@@ -235,10 +235,10 @@ void fmmTreeTest() {
         "clustered tree lost particle mass");
     detail::requireFmmTree(built.radius > 0.0f, "clustered global node has zero radius");
     auto const* root = treeGetNode(built.id);
-    for (int dim = 0; dim < NDIM; dim++) {
-        double const offset = dim == YDIM ? 0.0 : (dim + 1) * Position::kToFloatFactor_;
+    for (int dim = 0; dim < kDimensions; dim++) {
+        double const offset = dim == kYDimension ? 0.0 : (dim + 1) * Position::kToFloatFactor_;
         double const lower = 0.25 + offset;
-        double const upper = (dim == XDIM ? 0.375 : 0.3125) + offset;
+        double const upper = (dim == kXDimension ? 0.375 : 0.3125) + offset;
         detail::requireFmmTree(built.box.begin[dim] == lower && built.box.end[dim] == upper,
             "clustered global bounds differ from the particle extrema");
         detail::requireFmmTree(
@@ -253,7 +253,7 @@ void fmmTreeTest() {
         for (int i = 0; i < detail::kFmmTreeParticlesPerRank; i++) {
             auto const position = detail::fmmTreePosition(rank, i);
             double radiusSquared = 0.0;
-            for (int dim = 0; dim < NDIM; dim++) {
+            for (int dim = 0; dim < kDimensions; dim++) {
                 double const displacement = position[dim].toDouble() - built.pos[dim].toDouble();
                 radiusSquared += displacement * displacement;
                 detail::requireFmmTree(

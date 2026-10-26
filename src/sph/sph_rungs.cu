@@ -32,7 +32,7 @@ __global__ void sphCudaRungs(
     __syncthreads();
     new (&workspace) detail::RungsWorkspace();
     FlopCounter<> flops = 0;
-    Array<Position, NDIM> position;
+    Array<Position, kDimensions> position;
     int changes = 0;
     while (targetNodeIndex < data.numberOfTargetNodes) {
         __syncthreads();
@@ -59,9 +59,9 @@ __global__ void sphCudaRungs(
                 if (sourceParticleIndex < neighborNode.particleRange.second) {
                     rung = data.sourceRungs[sourceParticleIndex];
                     if (rung >= parameters.minimumRung) {
-                        position[XDIM] = data.sourcePositionX[sourceParticleIndex];
-                        position[YDIM] = data.sourcePositionY[sourceParticleIndex];
-                        position[ZDIM] = data.sourcePositionZ[sourceParticleIndex];
+                        position[kXDimension] = data.sourcePositionX[sourceParticleIndex];
+                        position[kYDimension] = data.sourcePositionY[sourceParticleIndex];
+                        position[kZDimension] = data.sourcePositionZ[sourceParticleIndex];
                         if (targetNode.outerBox.contains(position, &flops)) {
                             contains = true;
                         } else {
@@ -71,7 +71,7 @@ __global__ void sphCudaRungs(
                     }
                 }
                 neighborIndex = contains;
-                computeIndices<RUNGS_BLOCK_SIZE>(neighborIndex, total);
+                computeIndices<kRungsBlockSize>(neighborIndex, total);
                 int const offset = workspace.positionX.size();
                 __syncthreads();
                 int const nextSize = offset + total;
@@ -83,9 +83,9 @@ __global__ void sphCudaRungs(
                 if (contains) {
                     ASSERT(neighborIndex < total);
                     int const k = offset + neighborIndex;
-                    workspace.positionX[k] = position[XDIM];
-                    workspace.positionY[k] = position[YDIM];
-                    workspace.positionZ[k] = position[ZDIM];
+                    workspace.positionX[k] = position[kXDimension];
+                    workspace.positionY[k] = position[kYDimension];
+                    workspace.positionZ[k] = position[kZDimension];
                     workspace.supportRadius[k] = data.sourceSupportRadius[sourceParticleIndex];
                     workspace.rungs[k] = rung;
                 }
@@ -129,12 +129,12 @@ __global__ void sphCudaRungs(
                         flops += 9;
                     }
                 }
-                sharedReduceMax<RUNGS_BLOCK_SIZE>(maximumNeighborRung);
+                sharedReduceMax<kRungsBlockSize>(maximumNeighborRung);
                 if (threadIndex == 0) {
-                    if (sinkRung < maximumNeighborRung - MAX_NEIGHBOR_RUNG_DIFFERENCE) {
+                    if (sinkRung < maximumNeighborRung - kMaxNeighborRungDifference) {
                         changes++;
                         data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]] =
-                            maximumNeighborRung - MAX_NEIGHBOR_RUNG_DIFFERENCE;
+                            maximumNeighborRung - kMaxNeighborRungDifference;
                     }
                 }
             }

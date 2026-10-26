@@ -17,7 +17,7 @@ void initializeGlass(DriverParameters& state) {
     auto const count = getOptions().initial.numberOfParticles;
     particlesResize(count);
     for (ParticleInteger i = 0; i < count; i++) {
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             particlesPos(dim, i) = rand1();
             particlesVel(dim, i) = 0.0;
         }
@@ -38,7 +38,7 @@ void saveGlass() {
         fclose(file);
         THROW_ERROR("Unable to write glass dimensions\n");
     }
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         for (ParticleInteger i = 0; i < particlesSize(); i++) {
             auto const position = particlesPos(dim, i);
             if (fwrite(&position, sizeof(position), 1, file) != 1) {

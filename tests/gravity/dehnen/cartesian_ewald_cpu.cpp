@@ -71,7 +71,7 @@ void checkImageIndices() {
                     double const nearest = std::max(std::abs(coordinate) - .5, 0.);
                     radiusSquared += nearest * nearest;
                 }
-                if ((x || y || z) && radiusSquared < EWALD_REAL_CUTOFF2) {
+                if ((x || y || z) && radiusSquared < kEwaldRealCutoffSquared) {
                     expected.insert({x, y, z});
                 }
             }
@@ -82,7 +82,7 @@ void checkImageIndices() {
         auto const& image = EwaldConst::realIndex(i);
         actual.insert({int(image[0]), int(image[1]), int(image[2])});
     }
-    if (actual != expected || actual.size() != NREAL) {
+    if (actual != expected || actual.size() != kEwaldRealIndexCount) {
         throw std::runtime_error("CPU Ewald real-image list has omitted or duplicate images");
     }
 }
@@ -107,7 +107,7 @@ void checkSelfDerivatives() {
                         (referenceFactorial(x / 2) * referenceFactorial(y / 2) *
                             referenceFactorial(z / 2));
                 }
-                double const physical = derivatives(x, y, z) * std::pow(SCALE_FACTOR, rank + 1);
+                double const physical = derivatives(x, y, z) * std::pow(kScaleFactor, rank + 1);
                 requireNear(physical, expected, 2e-6 * std::max(1., std::abs(expected)),
                     "CPU Ewald self derivative erf-series reference");
             }
@@ -132,7 +132,7 @@ void checkFourierScaling() {
                     double const sign = rank == 0 ? 1. : -1.;
                     double const expected = amplitude * sign * std::pow(2 * kPi, rank) *
                         std::pow(wave[0], x) * std::pow(wave[1], y) * std::pow(wave[2], z);
-                    double const physical = derivative(x, y, z) * std::pow(SCALE_FACTOR, rank + 1);
+                    double const physical = derivative(x, y, z) * std::pow(kScaleFactor, rank + 1);
                     requireNear(physical, expected, 2e-6 * std::max(1e-20, std::abs(expected)),
                         "CPU Ewald Fourier normalization");
                 }
@@ -199,16 +199,16 @@ void checkPeriodicField() {
         {.23, -.17, .31}, {-.23, .17, -.31}, {.499, -.497, .11}, {-.49, .48, .47}}};
     for (auto const& position : kPositions) {
         auto const expected = directEwaldCorrection(position);
-        Array<double, NDIM> separation;
+        Array<double, kDimensions> separation;
         for (int d = 0; d < 3; ++d) {
             separation[d] = position[d];
         }
         SymmetricTracelessTensor<double, order> actual;
         ewaldCorrectionDerivatives(actual, separation);
-        requireNear(actual(0, 0, 0) * SCALE_FACTOR, expected[0], 2e-5,
+        requireNear(actual(0, 0, 0) * kScaleFactor, expected[0], 2e-5,
             "CPU Ewald independent periodic potential");
         for (int d = 0; d < 3; ++d) {
-            requireNear(actual(d == 0, d == 1, d == 2) * SCALE_FACTOR2, expected[d + 1], 2e-5,
+            requireNear(actual(d == 0, d == 1, d == 2) * kScaleFactor2, expected[d + 1], 2e-5,
                 "CPU Ewald independent periodic gradient");
         }
     }
@@ -223,9 +223,9 @@ void checkFloatDerivatives() {
         {.125, -.125, .125}, {.0625, .03, -.02}, {.01, .005, -.002}, {.25, .125, 0.},
         {.4, -.3, .45}, {-.499, .497, -.11}, {.5, .5, .5}}};
     for (auto const& position : kPositions) {
-        Array<double, NDIM> separation;
-        Array<SimdFloat, NDIM> floatSeparation;
-        for (int d = 0; d < NDIM; ++d) {
+        Array<double, kDimensions> separation;
+        Array<SimdFloat, kDimensions> floatSeparation;
+        for (int d = 0; d < kDimensions; ++d) {
             float const coordinate = float(position[d]);
             separation[d] = coordinate;
             floatSeparation[d] = simdBroadcast<SimdFloat>(coordinate);
@@ -247,7 +247,7 @@ void checkFloatDerivatives() {
             };
             // Cubic symmetry makes some ranks small near the origin. Use the
             // nearest image's natural derivative scale as an absolute floor.
-            double scale = std::pow(kAlpha / SCALE_FACTOR, rank + 1);
+            double scale = std::pow(kAlpha / kScaleFactor, rank + 1);
             components([&](int nx, int ny, int nz) {
                 scale = std::max(scale, std::abs(expected(nx, ny, nz)));
             });
@@ -264,8 +264,8 @@ void checkCubicSymmetry() {
     constexpr std::array<Position, 3> kPositions{
         {{0., 0., 0.}, {.23, -.17, .31}, {.499, -.497, .11}}};
     for (auto const& position : kPositions) {
-        Array<double, NDIM> separation;
-        Array<double, NDIM> exchangedSeparation;
+        Array<double, kDimensions> separation;
+        Array<double, kDimensions> exchangedSeparation;
         for (int d = 0; d < 3; ++d) {
             separation[d] = position[d];
             exchangedSeparation[d] = position[2 - d];
@@ -280,7 +280,7 @@ void checkCubicSymmetry() {
         // Include reconstructed z components, so this checks the Cartesian
         // projection independently of its coefficient formula, including rank eight.
         for (int rank = 0; rank < order; ++rank) {
-            double const physicalScale = std::pow(SCALE_FACTOR, rank + 1);
+            double const physicalScale = std::pow(kScaleFactor, rank + 1);
             double magnitude = 1;
             for (int x = 0; x <= rank; ++x) {
                 for (int y = 0; y <= rank - x; ++y) {

@@ -5,7 +5,7 @@
 namespace pmmm::detail {
 
 void consumeField(ParticleInteger index, std::array<double, 4> const& field, KickReturn& result) {
-    Array<float, NDIM> acceleration;
+    Array<float, kDimensions> acceleration;
     double const gm = getOptions().gravity.gm;
     for (int component = 0; component < 4; ++component) {
         if (!std::isfinite(field[component]) ||
@@ -80,7 +80,7 @@ void evaluateParticles(bool doPotential) {
                 }
                 auto const displacement = displacements.at(result.key);
                 for (auto source : result.sources) {
-                    for (int axis = 0; axis < NDIM; ++axis) {
+                    for (int axis = 0; axis < kDimensions; ++axis) {
                         source.offset[axis] -= displacement[axis];
                     }
                     sources.push_back(source);

@@ -20,13 +20,13 @@ class UnorderedSetTs {
     struct HashLo {
         size_t operator()(T const& member) const {
             HASH hash;
-            return hash(member) % UNORDERED_SET_SIZE;
+            return hash(member) % kUnorderedSetSize;
         }
     };
     struct HashHi {
         size_t operator()(T const& member) const {
             HASH hash;
-            return hash(member) / UNORDERED_SET_SIZE;
+            return hash(member) / kUnorderedSetSize;
         }
     };
     Vector<std::unordered_set<T, HashHi>> sets_;
@@ -34,8 +34,8 @@ class UnorderedSetTs {
 
 public:
     UnorderedSetTs() {
-        sets_.resize(UNORDERED_SET_SIZE);
-        mutexes_.resize(UNORDERED_SET_SIZE, std::make_shared<SpinlockType>());
+        sets_.resize(kUnorderedSetSize);
+        mutexes_.resize(kUnorderedSetSize, std::make_shared<SpinlockType>());
     }
     void insert(T const& member) {
         PRINT("Inserting\n");
@@ -47,11 +47,11 @@ public:
     Vector<T> toVector() const {
         Vector<T> members;
         int size = 0;
-        for (int i = 0; i < UNORDERED_SET_SIZE; i++) {
+        for (int i = 0; i < kUnorderedSetSize; i++) {
             size += sets_[i].size();
         }
         members.reserve(size);
-        for (int i = 0; i < UNORDERED_SET_SIZE; i++) {
+        for (int i = 0; i < kUnorderedSetSize; i++) {
             for (auto j = sets_[i].begin(); j != sets_[i].end(); j++) {
                 members.push_back(*j);
             }

@@ -92,8 +92,9 @@ void fft3d2silo(bool real);
  return 1.0 / (sqr(s*sqr(s)));
  }
  */
-#define CLOUD_MIN -2
-#define CLOUD_MAX 3
+inline constexpr int kCloudMin = -2;
+inline constexpr int kCloudMax = 3;
+
 inline CUDA_EXPORT float cloudWeight(float x) {
     x = fabs(x);
     float const x2 = sqr(x);

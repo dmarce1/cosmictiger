@@ -51,9 +51,9 @@ size_t particleMeshChunkBoundary(size_t count, size_t chunk, size_t chunks) {
 }
 
 uint64_t particleMeshKey(size_t index, uint32_t meshSize) {
-    uint64_t const x = particleMeshCoordinate(particlesX[XDIM][index].raw(), meshSize);
-    uint64_t const y = particleMeshCoordinate(particlesX[YDIM][index].raw(), meshSize);
-    uint64_t const z = particleMeshCoordinate(particlesX[ZDIM][index].raw(), meshSize);
+    uint64_t const x = particleMeshCoordinate(particlesX[kXDimension][index].raw(), meshSize);
+    uint64_t const y = particleMeshCoordinate(particlesX[kYDimension][index].raw(), meshSize);
+    uint64_t const z = particleMeshCoordinate(particlesX[kZDimension][index].raw(), meshSize);
     return (x * meshSize + y) * meshSize + z;
 }
 
@@ -227,7 +227,7 @@ Vector<ParticleMeshCell> particleMeshSort(int meshSize, Pair<ParticleInteger> ra
             size_t const end =
                 first + detail::particleMeshChunkBoundary(count, worker + 1, workers);
             for (size_t i = begin; i < end; ++i) {
-                if (particlesType(i) == SPH_TYPE) {
+                if (particlesType(i) == kSphType) {
                     ParticleInteger const gasIndex = particlesCatIndex(i);
                     if (gasIndex < 0 || gasIndex >= sphParticlesSize()) {
                         throw std::runtime_error("Invalid gas index after particle mesh sort");

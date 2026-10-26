@@ -42,7 +42,7 @@ ParticleInteger fmmSourcePartition(FmmParticleStore store, FmmSourceView const& 
             while (lower != upper) {
                 --upper;
                 if (sources.positions[dimension][upper] < split) {
-                    for (int dim = 0; dim < NDIM; ++dim) {
+                    for (int dim = 0; dim < kDimensions; ++dim) {
                         std::swap(sources.positions[dim][lower], sources.positions[dim][upper]);
                     }
                     std::swap(sources.types[lower], sources.types[upper]);

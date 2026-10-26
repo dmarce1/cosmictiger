@@ -25,7 +25,7 @@ inline void syncthreads() {
 #ifndef CUDA_MEM_STACK_SIZE
 #define CUDA_MEM_STACK_SIZE (1024 * 1024)
 #endif
-#define CUDA_MEM_NBIN 32
+inline constexpr int kCudaMemoryBinCount = 32;
 
 using CudaMemoryInteger = uint64_t;
 
@@ -37,9 +37,9 @@ class CudaMemory {
 
     static_assert(
         CUDA_MEM_STACK_SIZE >= 2 && (CUDA_MEM_STACK_SIZE & (CUDA_MEM_STACK_SIZE - 1)) == 0);
-    Array<Array<Slot, CUDA_MEM_STACK_SIZE>, CUDA_MEM_NBIN> q_;
-    Array<CudaMemoryInteger, CUDA_MEM_NBIN> qin_;
-    Array<CudaMemoryInteger, CUDA_MEM_NBIN> qout_;
+    Array<Array<Slot, CUDA_MEM_STACK_SIZE>, kCudaMemoryBinCount> q_;
+    Array<CudaMemoryInteger, kCudaMemoryBinCount> qin_;
+    Array<CudaMemoryInteger, kCudaMemoryBinCount> qout_;
     char* heapBegin_;
     CudaMemoryInteger next_;
     size_t heapSize_;

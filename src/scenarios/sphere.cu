@@ -6,6 +6,8 @@
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
+#include <numbers>
+
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/cuda/cuda.hpp>
 #include <cosmictiger/cuda/cuda_memory.hpp>
@@ -13,8 +15,6 @@
 #include <cosmictiger/cuda/device_vector.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/scenarios/sphere.hpp>
-
-#define BLOCK_SIZE detail::kSphereSurfaceStreams
 
 __global__ void sphereSurfaceKernel(float** xMain, float** yMain, float** zMain, int* nMain) {
     int const tid = threadIdx.x;
@@ -37,13 +37,14 @@ __global__ void sphereSurfaceKernel(float** xMain, float** yMain, float** zMain,
     new (&gy) DeviceVector<float>(nValue);
     new (&gz) DeviceVector<float>(nValue);
     float gmax;
-    float const h = detail::kSphereSurfaceSoftening * sqrt(4.f * float(M_PI) / nValue);
+    float const h =
+        detail::kSphereSurfaceSoftening * sqrt(4.f * std::numbers::pi_v<float> / nValue);
     float const h2 = h * h;
     float const hinv = 1.f / h;
     float const h3inv = hinv * hinv * hinv;
     float const m = 1.0f / nValue;
     __syncthreads();
-    for (int i = tid; i < nValue; i += BLOCK_SIZE) {
+    for (int i = tid; i < nValue; i += detail::kSphereSurfaceStreams) {
         vx[i] = 0.f;
         vy[i] = 0.f;
         vz[i] = 0.f;
@@ -58,7 +59,7 @@ __global__ void sphereSurfaceKernel(float** xMain, float** yMain, float** zMain,
         gmax = 0.f;
         __syncthreads();
         float phi = 0.f;
-        for (int i = tid; i < nValue; i += BLOCK_SIZE) {
+        for (int i = tid; i < nValue; i += detail::kSphereSurfaceStreams) {
             float fx = 0.f;
             float fy = 0.f;
             float fz = 0.f;
@@ -90,15 +91,15 @@ __global__ void sphereSurfaceKernel(float** xMain, float** yMain, float** zMain,
             float const g = sqrt(fmaf(fx, fx, fmaf(fy, fy, fz * fz)));
             gmax = fmaxf(gmax, g);
         }
-        sharedReduceMax<BLOCK_SIZE>(gmax);
-        sharedReduceAdd<float, BLOCK_SIZE>(phi);
+        sharedReduceMax<detail::kSphereSurfaceStreams>(gmax);
+        sharedReduceAdd<float, detail::kSphereSurfaceStreams>(phi);
         __syncthreads();
         float const dt =
             detail::kSphereSurfaceEta * fminf(sqrtf(h / gmax), 1.f / detail::kSphereSurfaceDamping);
         float const halfdt = 0.5f * dt;
         float const deninv = 1.f / (1.f + halfdt * detail::kSphereSurfaceDamping);
         __syncthreads();
-        for (int i = tid; i < nValue; i += BLOCK_SIZE) {
+        for (int i = tid; i < nValue; i += detail::kSphereSurfaceStreams) {
             vx[i] = (fmaf(halfdt, gx[i], vx[i])) * deninv;
             vy[i] = (fmaf(halfdt, gy[i], vy[i])) * deninv;
             vz[i] = (fmaf(halfdt, gz[i], vz[i])) * deninv;
@@ -111,7 +112,7 @@ __global__ void sphereSurfaceKernel(float** xMain, float** yMain, float** zMain,
         }
         __syncthreads();
         float kin = 0.f;
-        for (int i = tid; i < nValue; i += BLOCK_SIZE) {
+        for (int i = tid; i < nValue; i += detail::kSphereSurfaceStreams) {
             float const norm = sqrt(sqr(x[i], y[i], z[i]));
             float const inv = 1.f / norm;
             x[i] *= inv;
@@ -128,7 +129,7 @@ __global__ void sphereSurfaceKernel(float** xMain, float** yMain, float** zMain,
             vz[i] -= nz * vr;
             kin += fmaf(vx[i], vx[i], fmaf(vy[i], vy[i], vz[i] * vz[i])) * 0.5f * m;
         }
-        sharedReduceAdd<float, BLOCK_SIZE>(kin);
+        sharedReduceAdd<float, detail::kSphereSurfaceStreams>(kin);
         error = kin / phi;
         iter++;
     } while (error > detail::kSphereSurfaceTolerance || iter < detail::kSphereSurfaceMinIterations);
@@ -144,7 +145,7 @@ __global__ void sphereSurfaceKernel(float** xMain, float** yMain, float** zMain,
     (&gz)->~DeviceVector<float>();
 }
 
-void solveSphereSurfaceProblemCuda(Vector<Array<Vector<float>, NDIM>>& xValue) {
+void solveSphereSurfaceProblemCuda(Vector<Array<Vector<float>, kDimensions>>& xValue) {
     float** devX;
     float** devY;
     float** devZ;
@@ -154,11 +155,11 @@ void solveSphereSurfaceProblemCuda(Vector<Array<Vector<float>, NDIM>>& xValue) {
     CUDA_CHECK(cudaMallocManaged(&devZ, sizeof(float*) * xValue.size()));
     CUDA_CHECK(cudaMallocManaged(&devN, sizeof(int) * xValue.size()));
     for (int i = 0; i < xValue.size(); i++) {
-        int const nValue = xValue[i][XDIM].size();
+        int const nValue = xValue[i][kXDimension].size();
         CUDA_CHECK(cudaMallocManaged(&devX[i], sizeof(float) * nValue));
         CUDA_CHECK(cudaMallocManaged(&devY[i], sizeof(float) * nValue));
         CUDA_CHECK(cudaMallocManaged(&devZ[i], sizeof(float) * nValue));
-        devN[i] = xValue[i][XDIM].size();
+        devN[i] = xValue[i][kXDimension].size();
     }
     auto const releaseBuffers = [&]() {
         for (int i = 0; i < xValue.size(); i++) {
@@ -173,8 +174,8 @@ void solveSphereSurfaceProblemCuda(Vector<Array<Vector<float>, NDIM>>& xValue) {
     };
     try {
         CudaStream stream(cudaGetDevice());
-        sphereSurfaceKernel<<<xValue.size(), BLOCK_SIZE, 0, stream.nativeHandle()>>>(
-            devX, devY, devZ, devN);
+        sphereSurfaceKernel<<<xValue.size(), detail::kSphereSurfaceStreams, 0,
+            stream.nativeHandle()>>>(devX, devY, devZ, devN);
         stream.checkLaunch();
         stream.wait();
     } catch (...) {
@@ -182,9 +183,9 @@ void solveSphereSurfaceProblemCuda(Vector<Array<Vector<float>, NDIM>>& xValue) {
         throw;
     }
     for (int i = 0; i < xValue.size(); i++) {
-        memcpy(xValue[i][XDIM].data(), devX[i], sizeof(float) * devN[i]);
-        memcpy(xValue[i][YDIM].data(), devY[i], sizeof(float) * devN[i]);
-        memcpy(xValue[i][ZDIM].data(), devZ[i], sizeof(float) * devN[i]);
+        memcpy(xValue[i][kXDimension].data(), devX[i], sizeof(float) * devN[i]);
+        memcpy(xValue[i][kYDimension].data(), devY[i], sizeof(float) * devN[i]);
+        memcpy(xValue[i][kZDimension].data(), devZ[i], sizeof(float) * devN[i]);
     }
     releaseBuffers();
 }

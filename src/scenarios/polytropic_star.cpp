@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <numbers>
 #include <stdexcept>
 #include <utility>
 
@@ -44,7 +45,7 @@ namespace detail {
     }
 
     static inline double fm(double theta, double, double r, double n) {
-        constexpr static double kFourPi = double(4) * M_PI;
+        constexpr static double kFourPi = double(4) * std::numbers::pi;
         return kFourPi * powN(theta, n) * r * r;
     }
 
@@ -133,9 +134,9 @@ namespace detail {
         for (int i = 0; i < nsample; i++) {
             ParticleInteger const k = rand() % sphParticlesSize();
             float const d0 = sphParticlesDensity(k);
-            float const x = sphParticlesPosition(XDIM, k).toDouble();
-            float const y = sphParticlesPosition(YDIM, k).toDouble();
-            float const z = sphParticlesPosition(ZDIM, k).toDouble();
+            float const x = sphParticlesPosition(kXDimension, k).toDouble();
+            float const y = sphParticlesPosition(kYDimension, k).toDouble();
+            float const z = sphParticlesPosition(kZDimension, k).toDouble();
             float const r = sqrt(sqr(x - 0.5, y - 0.5, z - 0.5));
             float d1 = 0.0;
             if (r < kMaximumRadius) {
@@ -163,14 +164,14 @@ ScenarioPlan initializePolytropicStar() {
     double const rho0 = detail::kCentralDensity;
     double const npoly = detail::kPolytropicIndex;
     auto const rho = detail::polytropicDensity;
-    double kValue =
-        4.0 * M_PI * opts.gravity.gm / (npoly + 1.0) * powf(rho0, 1.0 - 1.0 / npoly) / sqr(r0);
+    double kValue = 4.0 * std::numbers::pi * opts.gravity.gm / (npoly + 1.0) *
+        powf(rho0, 1.0 - 1.0 / npoly) / sqr(r0);
     double d;
     double r = 0.0;
     int ntot = 0;
     int nr = 0;
     double const rmax = detail::kMaximumRadius;
-    Vector<Array<Vector<float>, NDIM>> xValue;
+    Vector<Array<Vector<float>, kDimensions>> xValue;
     Vector<float> radius;
     do {
         d = rho(r * r0);
@@ -183,9 +184,9 @@ ScenarioPlan initializePolytropicStar() {
             r += 0.5 * (dr2 - dr1);
             if (r < rmax) {
                 dr1 = dr2;
-                int const nValue = 4.0 * M_PI * r * r * dr2 * (d / m) + 0.5;
-                Array<Vector<float>, NDIM> x;
-                for (int dim = 0; dim < NDIM; dim++) {
+                int const nValue = 4.0 * std::numbers::pi * r * r * dr2 * (d / m) + 0.5;
+                Array<Vector<float>, kDimensions> x;
+                for (int dim = 0; dim < kDimensions; dim++) {
                     x[dim].resize(nValue);
                 }
                 xValue.push_back(std::move(x));
@@ -202,22 +203,23 @@ ScenarioPlan initializePolytropicStar() {
     solveSphereSurfaceProblem(xValue);
     for (int i = 0; i < xValue.size(); i++) {
         double const d = rho(radius[i] * r0);
-        double h = pow(m * getOptions().hydro.neighborNumber / (4.0 * M_PI / 3.0 * d), 1.0 / 3.0);
-        int const nValue = xValue[i][XDIM].size();
+        double h = pow(
+            m * getOptions().hydro.neighborNumber / (4.0 * std::numbers::pi / 3.0 * d), 1.0 / 3.0);
+        int const nValue = xValue[i][kXDimension].size();
         for (int l = 0; l < nValue; l++) {
             ParticleInteger const k = sphParticlesSize();
             sphParticlesResize(k + 1);
-            sphParticlesPosition(XDIM, k) = xValue[i][XDIM][l] * radius[i] + 0.5;
-            sphParticlesPosition(YDIM, k) = xValue[i][YDIM][l] * radius[i] + 0.5;
-            sphParticlesPosition(ZDIM, k) = xValue[i][ZDIM][l] * radius[i] + 0.5;
+            sphParticlesPosition(kXDimension, k) = xValue[i][kXDimension][l] * radius[i] + 0.5;
+            sphParticlesPosition(kYDimension, k) = xValue[i][kYDimension][l] * radius[i] + 0.5;
+            sphParticlesPosition(kZDimension, k) = xValue[i][kZDimension][l] * radius[i] + 0.5;
             sphParticlesSupportRadius(k) = h;
             double const pValue = kValue * pow(d, 1.0 + 1.0 / npoly);
             double const eValue = pValue * npoly;
             double const eint = eValue / d;
             sphParticlesThermodynamicState(k).internalEnergy = eint;
-            sphParticlesVelocity(XDIM, k) = 0;
-            sphParticlesVelocity(YDIM, k) = 0;
-            sphParticlesVelocity(ZDIM, k) = 0;
+            sphParticlesVelocity(kXDimension, k) = 0;
+            sphParticlesVelocity(kYDimension, k) = 0;
+            sphParticlesVelocity(kZDimension, k) = 0;
             sphParticlesRung(k) = 0;
         }
     }

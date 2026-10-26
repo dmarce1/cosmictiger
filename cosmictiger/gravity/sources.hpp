@@ -16,7 +16,7 @@ enum class FmmParticleStore { Owned, Ghost };
 // The view is passed by value to device work. A node's particle indices refer
 // only to its selected store; sink indices always refer to owned particles.
 struct FmmSourceView {
-    Array<Position*, NDIM> positions{};
+    Array<Position*, kDimensions> positions{};
     char* types = nullptr;
     char* rungs = nullptr;
     ParticleInteger count = 0;
@@ -35,6 +35,6 @@ inline float fmmSourceMass(FmmSourceView const& sources, ParticleInteger index) 
     if (!getOptions().hydro.enabled) {
         return 1.0f;
     }
-    return sources.types[index] == DARK_MATTER_TYPE ? getOptions().initial.darkMatterMass :
-                                                      getOptions().initial.gasMass;
+    return sources.types[index] == kDarkMatterType ? getOptions().initial.darkMatterMass :
+                                                     getOptions().initial.gasMass;
 }

@@ -58,7 +58,7 @@ bool cartesianWalkIsFinite(float value) {
 
 struct CartesianWalkChecksums {
     uint64_t positions = 0;
-    std::array<double, NDIM> acceleration{};
+    std::array<double, kDimensions> acceleration{};
     double accelerationSquared = 0;
     double potential = 0;
 };
@@ -126,19 +126,20 @@ double cartesianWalkJitter(size_t particle, int dimension) {
     return (double(value & 0xffffu) / 65535. - 0.5) * 0.2;
 }
 
-std::vector<Array<Position, NDIM>> cartesianWalkPositions(std::string const& fixture, int side) {
+std::vector<Array<Position, kDimensions>> cartesianWalkPositions(
+    std::string const& fixture, int side) {
     bool const clustered = fixture == "clustered";
     bool const adaptive = fixture == "adaptive";
-    std::array<double, NDIM> const clusterCenter{0.41, 0.47, 0.53};
+    std::array<double, kDimensions> const clusterCenter{0.41, 0.47, 0.53};
     size_t const count = size_t(side) * side * side;
     double const halfSide = 0.5 * side;
-    std::vector<Array<Position, NDIM>> positions(count);
+    std::vector<Array<Position, kDimensions>> positions(count);
     for (int z = 0; z < side; ++z) {
         for (int y = 0; y < side; ++y) {
             for (int x = 0; x < side; ++x) {
                 size_t const index = (size_t(z) * side + y) * side + x;
-                std::array<int, NDIM> const cell{x, y, z};
-                for (int dim = 0; dim < NDIM; ++dim) {
+                std::array<int, kDimensions> const cell{x, y, z};
+                for (int dim = 0; dim < kDimensions; ++dim) {
                     double const coordinate = cell[dim] + 0.5 + cartesianWalkJitter(index, dim);
                     if (clustered) {
                         int const half = 2 * cell[dim] / side;
@@ -163,9 +164,9 @@ std::vector<Array<Position, NDIM>> cartesianWalkPositions(std::string const& fix
     return positions;
 }
 
-void cartesianWalkReset(std::vector<Array<Position, NDIM>> const& positions) {
+void cartesianWalkReset(std::vector<Array<Position, kDimensions>> const& positions) {
     for (size_t index = 0; index < positions.size(); ++index) {
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             particlesPos(dim, index) = positions[index][dim];
             particlesVel(dim, index) = 0.0f;
             particlesGravityAcceleration(dim, index) = std::numeric_limits<float>::quiet_NaN();
@@ -207,14 +208,14 @@ CartesianWalkChecksums cartesianWalkChecksums(bool doPhi) {
     for (ParticleInteger index = 0; index < particlesSize(); ++index) {
         uint64_t positionHash = 1469598103934665603ull;
         double weight = 1;
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             positionHash ^= uint32_t(particlesPos(dim, index).raw());
             positionHash *= 1099511628211ull;
             weight += (2 * dim + 1) * particlesPos(dim, index).toDouble();
         }
         // A commutative sum preserves the fingerprint across tree reordering.
         result.positions += positionHash;
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             float const accelerationValue = particlesGravityAcceleration(dim, index);
             if (!cartesianWalkIsFinite(accelerationValue)) {
                 throw std::runtime_error("Cartesian walk left a particle force unset or nonfinite");
@@ -239,13 +240,13 @@ CartesianWalkChecksums cartesianWalkChecksums(bool doPhi) {
 void cartesianWalkSaveForces(std::ofstream& stream, char const* fixture) {
     for (ParticleInteger index = 0; index < particlesSize(); ++index) {
         stream << fixture;
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             stream << ',' << uint32_t(particlesPos(dim, index).raw());
         }
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             stream << ',' << particlesPos(dim, index).toDouble();
         }
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             stream << ',' << particlesGravityAcceleration(dim, index);
         }
         stream << ',' << particlesPot(index) << '\n';
@@ -276,7 +277,7 @@ void cartesianWalkLeafHistogram(TreeId root, char const* fixture) {
                 occupiedParticles += size_t(count);
             }
         } else {
-            for (int child = 0; child < NCHILD; ++child) {
+            for (int child = 0; child < kChildCount; ++child) {
                 pending.push_back(node->children[child]);
             }
         }
@@ -293,7 +294,7 @@ void cartesianWalkLeafHistogram(TreeId root, char const* fixture) {
 // Compare the saved forces and potentials of a deterministic particle sample
 // with the direct periodic (Ewald) sum. The kick used gm = 1, as does the sum.
 void cartesianWalkReferenceErrors(char const* fixture, char const* backend, int count,
-    std::vector<Array<Position, NDIM>> const& positions, std::ofstream& stream) {
+    std::vector<Array<Position, kDimensions>> const& positions, std::ofstream& stream) {
     size_t const sampleCount = std::min(size_t(count), positions.size());
     // Select physical particles before tree ordering. A coprime permutation
     // avoids the coordinate planes selected by a simple lattice-index stride.
@@ -304,24 +305,24 @@ void cartesianWalkReferenceErrors(char const* fixture, char const* backend, int 
     Vector<Position> sinkx;
     Vector<Position> sinky;
     Vector<Position> sinkz;
-    std::map<std::array<uint32_t, NDIM>, size_t> selected;
+    std::map<std::array<uint32_t, kDimensions>, size_t> selected;
     for (size_t i = 0; i < sampleCount; ++i) {
         auto const& position = positions[(i * step) % positions.size()];
-        std::array<uint32_t, NDIM> key;
-        for (int dim = 0; dim < NDIM; ++dim) {
+        std::array<uint32_t, kDimensions> key;
+        for (int dim = 0; dim < kDimensions; ++dim) {
             key[dim] = uint32_t(position[dim].raw());
         }
         if (!selected.emplace(key, i).second) {
             throw std::runtime_error("Cartesian reference sample contains duplicate coordinates");
         }
-        sinkx.push_back(position[XDIM]);
-        sinky.push_back(position[YDIM]);
-        sinkz.push_back(position[ZDIM]);
+        sinkx.push_back(position[kXDimension]);
+        sinky.push_back(position[kYDimension]);
+        sinkz.push_back(position[kZDimension]);
     }
     std::vector<ParticleInteger> indices(sampleCount, particlesSize());
     for (ParticleInteger index = 0; index < particlesSize(); ++index) {
-        std::array<uint32_t, NDIM> key;
-        for (int dim = 0; dim < NDIM; ++dim) {
+        std::array<uint32_t, kDimensions> key;
+        for (int dim = 0; dim < kDimensions; ++dim) {
             key[dim] = uint32_t(particlesPos(dim, index).raw());
         }
         auto const found = selected.find(key);
@@ -345,20 +346,20 @@ void cartesianWalkReferenceErrors(char const* fixture, char const* backend, int 
     double potentialNorm = 0;
     for (size_t i = 0; i < indices.size(); ++i) {
         stream << fixture;
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             stream << ',' << uint32_t(particlesPos(dim, indices[i]).raw());
         }
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             stream << ',' << particlesGravityAcceleration(dim, indices[i]);
         }
         stream << ',' << particlesPot(indices[i]);
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             stream << ',' << reference.second[dim][i];
         }
         stream << ',' << reference.first[i] << '\n';
         double difference = 0;
         double norm = 0;
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             double const expected = reference.second[dim][i];
             double const actual = particlesGravityAcceleration(dim, indices[i]);
             difference += (actual - expected) * (actual - expected);

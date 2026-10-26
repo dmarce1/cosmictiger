@@ -56,7 +56,7 @@ struct AcceptanceResult {
 
 struct BoxInput {
     Fixed32Range box;
-    Array<Position, NDIM> point;
+    Array<Position, kDimensions> point;
 };
 
 struct SelectionInput {
@@ -340,7 +340,7 @@ void runSelections() {
 BoxInput makeBox(double low, double high, double x, double y, double z) {
     BoxInput input;
     double const coordinates[] = {x, y, z};
-    for (int dim = 0; dim < NDIM; ++dim) {
+    for (int dim = 0; dim < kDimensions; ++dim) {
         input.box.begin[dim] = low;
         input.box.end[dim] = high;
         input.point[dim] = coordinates[dim];
@@ -353,20 +353,20 @@ void runBoxes() {
     inputs.push_back(makeBox(.25, .375, .3125, .3125, .3125));
     inputs.push_back(makeBox(.25, .375, .375, .3125, .3125));
     inputs.push_back(makeBox(.25, .375, .375, .3125, .3125));
-    inputs.back().point[XDIM].raw() += 8;
+    inputs.back().point[kXDimension].raw() += 8;
     inputs.push_back(makeBox(.25, .375, .25, .3125, .3125));
-    inputs.back().point[XDIM].raw() -= 8;
+    inputs.back().point[kXDimension].raw() -= 8;
     inputs.push_back(makeBox(.25, .375, .375, .375, .25));
-    inputs.back().point[XDIM].raw() += 8;
-    inputs.back().point[YDIM].raw() += 24;
-    inputs.back().point[ZDIM].raw() -= 40;
+    inputs.back().point[kXDimension].raw() += 8;
+    inputs.back().point[kYDimension].raw() += 24;
+    inputs.back().point[kZDimension].raw() -= 40;
     inputs.push_back(makeBox(.75, .875, .875, .8125, .8125));
-    inputs.back().point[XDIM].raw() += 8;
+    inputs.back().point[kXDimension].raw() += 8;
     inputs.push_back(makeBox(.125, .25, .75, .5, .375));
     inputs.push_back(makeBox(0.0, .125, .9375, .0625, .0625));
     inputs.push_back(makeBox(.875, 1.0, .0625, .9375, .9375));
     inputs.push_back(makeBox(0.0, .125, 0.0, .0625, .0625));
-    inputs.back().point[XDIM].raw() -= 8;
+    inputs.back().point[kXDimension].raw() -= 8;
     inputs.push_back(makeBox(-.0625, .125, .9375, .0625, .0625));
     inputs.push_back(makeBox(.875, 1.0625, .0625, .9375, .9375));
     auto const results = runDevice<BoxInput, float>(

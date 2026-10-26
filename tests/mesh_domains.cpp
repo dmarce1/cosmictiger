@@ -46,7 +46,7 @@ PositionInteger meshDomainPosition(int identity, int dim, int fixture, int phase
         }
     } else {
         int const cell = fixture == 2 ? 3 :
-            dim == XDIM               ? (identity < 80 ? 1 : 2 + identity % 5) :
+            dim == kXDimension        ? (identity < 80 ? 1 : 2 + identity % 5) :
                                         (identity * 5 + 2 * dim) % kMeshDomainSide;
         raw = period * (2 * cell + 1) / (2 * kMeshDomainSide) + identity % 3;
     }
@@ -70,8 +70,8 @@ int meshDomainReferenceCell(PositionInteger raw) {
 }
 
 struct MeshDomainRecord {
-    Array<PositionInteger, NDIM> raw;
-    Array<float, NDIM> velocity;
+    Array<PositionInteger, kDimensions> raw;
+    Array<float, kDimensions> velocity;
     GroupInteger lastGroup;
     int rung;
     int tracer;
@@ -96,7 +96,7 @@ void initializeMeshDomains(int fixture) {
     int const count = hpxRank() == 0 ? meshDomainFixtureCount(fixture) : 0;
     particlesResize(count);
     for (int identity = 0; identity < count; ++identity) {
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             particlesPos(dim, identity).setInteger(meshDomainPosition(identity, dim, fixture, 0));
             particlesVel(dim, identity) = float(identity + 1) + 0.25f * dim;
         }
@@ -108,8 +108,8 @@ void initializeMeshDomains(int fixture) {
 
 void moveMeshDomains(int fixture, int phase) {
     for (ParticleInteger index = 0; index < particlesSize(); ++index) {
-        int const identity = int(particlesVel(XDIM, index)) - 1;
-        for (int dim = 0; dim < NDIM; ++dim) {
+        int const identity = int(particlesVel(kXDimension, index)) - 1;
+        for (int dim = 0; dim < kDimensions; ++dim) {
             particlesPos(dim, index).setInteger(meshDomainPosition(identity, dim, fixture, phase));
         }
     }
@@ -121,7 +121,7 @@ MeshDomainSnapshot readMeshDomains() {
     result.records.resize(particlesSize());
     for (ParticleInteger index = 0; index < particlesSize(); ++index) {
         auto& record = result.records[index];
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             record.raw[dim] = particlesPos(dim, index).raw();
             record.velocity[dim] = particlesVel(dim, index);
         }
@@ -144,7 +144,7 @@ void reloadMeshDomainLayout() {
 
 Range<int> meshDomainIntegerBox(Range<double> const& box) {
     Range<int> result;
-    for (int dim = 0; dim < NDIM; ++dim) {
+    for (int dim = 0; dim < kDimensions; ++dim) {
         result.begin[dim] = int(std::llround(box.begin[dim] * kMeshDomainSide));
         result.end[dim] = int(std::llround(box.end[dim] * kMeshDomainSide));
         requireMeshDomain(result.begin[dim] >= 0 && result.end[dim] <= kMeshDomainSide &&
@@ -157,9 +157,9 @@ Range<int> meshDomainIntegerBox(Range<double> const& box) {
     return result;
 }
 
-Array<int, NDIM> meshDomainRecordCell(MeshDomainRecord const& record) {
-    Array<int, NDIM> cell;
-    for (int dim = 0; dim < NDIM; ++dim) {
+Array<int, kDimensions> meshDomainRecordCell(MeshDomainRecord const& record) {
+    Array<int, kDimensions> cell;
+    for (int dim = 0; dim < kDimensions; ++dim) {
         cell[dim] = meshDomainReferenceCell(record.raw[dim]);
     }
     return cell;
@@ -173,9 +173,9 @@ void verifyMeshDomainSplits(
     auto const parent = meshDomainIntegerBox(domainsRange(key));
     auto const left = meshDomainIntegerBox(domainsRange(key * 2));
     auto const right = meshDomainIntegerBox(domainsRange(key * 2 + 1));
-    int const axis = depth % NDIM;
+    int const axis = depth % kDimensions;
     int const actualPlane = left.end[axis];
-    for (int dim = 0; dim < NDIM; ++dim) {
+    for (int dim = 0; dim < kDimensions; ++dim) {
         requireMeshDomain(left.begin[dim] == parent.begin[dim] &&
                 right.end[dim] == parent.end[dim] &&
                 (dim == axis ?
@@ -244,13 +244,13 @@ void verifyMeshDomains(int fixture, int phase, bool balanced) {
             }
         }
         for (auto const& record : snapshot.records) {
-            int const identity = int(record.velocity[XDIM]) - 1;
+            int const identity = int(record.velocity[kXDimension]) - 1;
             requireMeshDomain(identity >= 0 && identity < count && !seen[identity],
                 "migration lost or duplicated particle identities");
             seen[identity] = true;
             requireMeshDomain(box.contains(meshDomainRecordCell(record)),
                 "particle belongs to a mesh cell outside its owning locality");
-            for (int dim = 0; dim < NDIM; ++dim) {
+            for (int dim = 0; dim < kDimensions; ++dim) {
                 requireMeshDomain(
                     record.raw[dim] == meshDomainPosition(identity, dim, fixture, phase) &&
                         record.velocity[dim] == float(identity + 1) + 0.25f * dim,
@@ -331,7 +331,7 @@ void meshDomainsTest() {
     domainsBegin(0);
     domainsEnd();
     if (hpxSize() > 1) {
-        double const split = domainsRange(2).end[XDIM];
+        double const split = domainsRange(2).end[kXDimension];
         double const meshSplit =
             double(std::llround(split * detail::kMeshDomainSide)) / detail::kMeshDomainSide;
         detail::requireMeshDomain(split != meshSplit,

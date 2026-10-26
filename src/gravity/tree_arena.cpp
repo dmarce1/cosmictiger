@@ -98,7 +98,7 @@ static void treeWriteMultipole(MultipolePosition* record, MultipoleBuffer const&
 }
 
 MultipolePosition* treeAddMultipole(
-    Array<Position, NDIM> const& pos, MultipoleBuffer const& multipole) {
+    Array<Position, kDimensions> const& pos, MultipoleBuffer const& multipole) {
     int const treeAllocLineSize = getOptions().compute.treeAllocLineSize;
     size_t const index = nextMultId++ + treeAllocLineSize;
     if (index >= nodesSize) {
@@ -219,7 +219,7 @@ void tree2Gpu() {
 }
 
 size_t treeNodeCapacity(size_t sourceParticleCount) {
-    size_t const multiplier = TREE_NODE_ALLOCATION_SIZE;
+    size_t const multiplier = kTreeNodeAllocationSize;
     if (sourceParticleCount > std::numeric_limits<size_t>::max() / multiplier) {
         throw std::overflow_error("Tree arena capacity overflows size_t");
     }
@@ -234,7 +234,7 @@ void treeAllocateNodesLocal(size_t capacity) {
         }
         return first * second;
     };
-    size_t const sz = std::max(capacity, size_t(NTREES_MIN));
+    size_t const sz = std::max(capacity, size_t(kMinTrees));
     if (sz > size_t(std::numeric_limits<int>::max() - treeAllocLineSize)) {
         throw std::overflow_error("Tree arena exceeds TreeId index range");
     }

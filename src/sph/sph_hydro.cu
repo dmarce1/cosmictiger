@@ -89,11 +89,11 @@ __global__ void sphCudaHydro(
             for (int sourceParticleIndex = neighborNode.particleRange.first + threadIndex;
                 sourceParticleIndex < end; sourceParticleIndex += blockSize) {
                 bool contains = false;
-                Array<Position, NDIM> position;
+                Array<Position, kDimensions> position;
                 if (sourceParticleIndex < neighborNode.particleRange.second) {
-                    position[XDIM] = data.sourcePositionX[sourceParticleIndex];
-                    position[YDIM] = data.sourcePositionY[sourceParticleIndex];
-                    position[ZDIM] = data.sourcePositionZ[sourceParticleIndex];
+                    position[kXDimension] = data.sourcePositionX[sourceParticleIndex];
+                    position[kYDimension] = data.sourcePositionY[sourceParticleIndex];
+                    position[kZDimension] = data.sourcePositionZ[sourceParticleIndex];
                     contains = targetNode.outerBox.contains(position, &flops);
                     if (!contains) {
                         contains = sphSupportIntersects(targetNode.innerBox, position,
@@ -102,14 +102,15 @@ __global__ void sphCudaHydro(
                 }
                 int slot = contains;
                 int total;
-                computeIndices<HYDRO_BLOCK_SIZE>(slot, total);
+                computeIndices<kHydroBlockSize>(slot, total);
                 int const offset = workspace.neighbors.size();
                 __syncthreads();
                 workspace.neighbors.resize(offset + total);
                 if (contains) {
                     flops += data.sourcePressureEnergyRatio ? 0 : 1;
-                    workspace.neighbors[offset + slot] = {position[XDIM], position[YDIM],
-                        position[ZDIM], data.sourceSupportRadius[sourceParticleIndex],
+                    workspace.neighbors[offset + slot] = {position[kXDimension],
+                        position[kYDimension], position[kZDimension],
+                        data.sourceSupportRadius[sourceParticleIndex],
                         data.sourceVelocityX[sourceParticleIndex],
                         data.sourceVelocityY[sourceParticleIndex],
                         data.sourceVelocityZ[sourceParticleIndex],
@@ -245,13 +246,13 @@ __global__ void sphCudaHydro(
                     sph_flops::densityKernelFlops(selectedHydroKernel(), q_a, true) +
                     sph_flops::densityKernelFlops(selectedHydroKernel(), q_b, true);
             }
-            sharedReduceAdd<float, HYDRO_BLOCK_SIZE>(dv_a_dt[XDIM]);
-            sharedReduceAdd<float, HYDRO_BLOCK_SIZE>(dv_a_dt[YDIM]);
-            sharedReduceAdd<float, HYDRO_BLOCK_SIZE>(dv_a_dt[ZDIM]);
-            sharedReduceAdd<float, HYDRO_BLOCK_SIZE>(du_a_dt);
-            sharedReduceMax<HYDRO_BLOCK_SIZE>(μ_max);
-            sharedReduceMax<HYDRO_BLOCK_SIZE>(α_max);
-            flops += 4 * detail::sphReductionFlops<HYDRO_BLOCK_SIZE>();
+            sharedReduceAdd<float, kHydroBlockSize>(dv_a_dt[kXDimension]);
+            sharedReduceAdd<float, kHydroBlockSize>(dv_a_dt[kYDimension]);
+            sharedReduceAdd<float, kHydroBlockSize>(dv_a_dt[kZDimension]);
+            sharedReduceAdd<float, kHydroBlockSize>(du_a_dt);
+            sharedReduceMax<kHydroBlockSize>(μ_max);
+            sharedReduceMax<kHydroBlockSize>(α_max);
+            flops += 4 * detail::sphReductionFlops<kHydroBlockSize>();
             if (threadIndex == 0) {
                 // Accelerations outside the paper: self-gravity, the optional uniform, midplane
                 // and central forces of the test problems, and velocity damping while relaxing
@@ -262,8 +263,8 @@ __global__ void sphCudaHydro(
                         data.sinkGravityAccelerationZ[sinkIndex]) :
                     Vector3<float>(0.0f);
                 dv_a_dt += gravityAcceleration;
-                dv_a_dt[YDIM] += parameters.uniformAccelerationY;
-                dv_a_dt[ZDIM] += parameters.midplaneAccelerationZ(z_a);
+                dv_a_dt[kYDimension] += parameters.uniformAccelerationY;
+                dv_a_dt[kZDimension] += parameters.midplaneAccelerationZ(z_a);
                 flops += 6;    // Force sums and the midplane fixed-point conversion.
                 if (data.centralAcceleration != 0.0f) {
                     Vector3<float> const separation(distance(x_a, Position(0.5)),
@@ -279,7 +280,7 @@ __global__ void sphCudaHydro(
                         24 + sph_flops::forceKernelFlops(selectedGravityKernel(), normalizedRadius);
                 }
                 dv_a_dt -= parameters.velocityDampingRate * v_a;
-                for (int dim = 0; dim < NDIM; dim++) {
+                for (int dim = 0; dim < kDimensions; dim++) {
                     data.sinkAccelerations[sinkIndex].acceleration[dim] = dv_a_dt[dim];
                 }
                 // E=a^2 u and homogeneous work du/dt=-3 H P/rho give
@@ -331,7 +332,7 @@ __global__ void sphCudaHydro(
                         max(1, int(ceilf(log2f(parameters.baseTimestep / gravityTimestep))));
                     int const nextRung = max(max(parameters.minimumRung, previousRung - 1),
                         max(hydroRung, data.selfGravityEnabled ? gravityRung : 1));
-                    ALWAYS_ASSERT(nextRung < MAX_RUNG);
+                    ALWAYS_ASSERT(nextRung < kMaxRung);
                     data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]] = nextRung;
                     maximumHydroRung = max(maximumHydroRung, hydroRung);
                     maximumGravityRung = max(maximumGravityRung, gravityRung);

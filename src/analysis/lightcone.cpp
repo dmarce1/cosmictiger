@@ -10,6 +10,7 @@
 #include <cmath>
 #include <filesystem>
 #include <memory>
+#include <numbers>
 #include <shared_mutex>
 #include <unordered_map>
 #include <unordered_set>
@@ -137,17 +138,17 @@ size_t lcAddParticleEntries(EntryLists const& entries) {
                             int const j = i - b;
                             auto& pi = particleBuffer[i];
                             auto const& pj = entry[j];
-                            pi.pos[XDIM] = pj.x;
-                            pi.pos[YDIM] = pj.y;
-                            pi.pos[ZDIM] = pj.z;
+                            pi.pos[kXDimension] = pj.x;
+                            pi.pos[kYDimension] = pj.y;
+                            pi.pos[kZDimension] = pj.z;
                             double const tau1 =
                                 std::sqrt(sqr(pj.x.toDouble(), pj.y.toDouble(), pj.z.toDouble()));
                             auto const a = lightconeEmissionScale(
                                 *background, background->finalConformalTime(), tau1);
                             ALWAYS_ASSERT(a > 0.0);
-                            pi.vel[XDIM] = pj.vx / a;
-                            pi.vel[YDIM] = pj.vy / a;
-                            pi.vel[ZDIM] = pj.vz / a;
+                            pi.vel[kXDimension] = pj.vx / a;
+                            pi.vel[kYDimension] = pj.vy / a;
+                            pi.vel[kZDimension] = pj.vz / a;
                         }
                         k = index++;
                     }
@@ -247,7 +248,7 @@ size_t lcTimeToFlush(double tau, double requestedTauMax) {
          if (tm > 63.0) {
          factor = (64.0 - tm) / 8.0;
          }*/
-        if (numberOfParticles >= (M_PI / 10.0) * particlesPerRank) {
+        if (numberOfParticles >= (std::numbers::pi / 10.0) * particlesPerRank) {
             return 1;
         } else {
             return 0;
@@ -266,15 +267,15 @@ void lcParts2groups(double a, double linkingLength, int ti) {
     int i = 0;
     while (i < particleBuffer.size()) {
         auto const grp = particleBuffer[i].group;
-        if (grp != LC_EDGE_GROUP) {
+        if (grp != kLightconeEdgeGroup) {
             LightconeEntry entry;
             auto const& p = particleBuffer[i];
-            entry.x = p.pos[XDIM];
-            entry.y = p.pos[YDIM];
-            entry.z = p.pos[ZDIM];
-            entry.vx = p.vel[XDIM];
-            entry.vy = p.vel[YDIM];
-            entry.vz = p.vel[ZDIM];
+            entry.x = p.pos[kXDimension];
+            entry.y = p.pos[kYDimension];
+            entry.z = p.pos[kZDimension];
+            entry.vx = p.vel[kXDimension];
+            entry.vy = p.vel[kYDimension];
+            entry.vz = p.vel[kZDimension];
             groupsMap[grp].push_back(entry);
             particleBuffer[i] = particleBuffer.back();
             particleBuffer.pop_back();
@@ -283,12 +284,12 @@ void lcParts2groups(double a, double linkingLength, int ti) {
         }
     }
     static int total = 0;
-    auto const minSz = ROCKSTAR_MIN_GROUP;
+    auto const minSz = kRockstarMinGroup;
     auto j = groupsMap.begin();
     while (j != groupsMap.end()) {
-        if (j->second.size() < minSz && j->first != LC_NO_GROUP) {
-            groupsMap[LC_NO_GROUP].insert(
-                groupsMap[LC_NO_GROUP].end(), j->second.begin(), j->second.end());
+        if (j->second.size() < minSz && j->first != kLightconeNoGroup) {
+            groupsMap[kLightconeNoGroup].insert(
+                groupsMap[kLightconeNoGroup].end(), j->second.begin(), j->second.end());
             j = groupsMap.erase(j);
         } else {
             j++;
@@ -316,7 +317,7 @@ void lcParts2groups(double a, double linkingLength, int ti) {
         futs.push_back(hpx::async([&recs, &mutex, &nextIndex, &groups]() {
             int index = nextIndex++;
             while (index < groups.size()) {
-                if (groups[index].first != LC_NO_GROUP) {
+                if (groups[index].first != kLightconeNoGroup) {
                     auto theseRecs = rockstarFindSubgroups(groups[index].second, tauMax);
                     for (auto& r : theseRecs) {
                         r.id.fofId = groups[index].first;
@@ -340,7 +341,7 @@ void lcParts2groups(double a, double linkingLength, int ti) {
 }
 
 static int rankFromGroupId(long long id) {
-    if (id != LC_NO_GROUP && id != LC_EDGE_GROUP) {
+    if (id != kLightconeNoGroup && id != kLightconeEdgeGroup) {
         return (id - 1) % hpxSize();
     } else {
         return -1;
@@ -351,10 +352,10 @@ static void lcSendParticles(Vector<LightconeParticle> parts) {
     Timer tm;
     auto& particleMap = *particleMapPtr;
     for (auto const& part : parts) {
-        int const pix = vec2pix(
-            part.pos[XDIM].toDouble(), part.pos[YDIM].toDouble(), part.pos[ZDIM].toDouble());
+        int const pix = vec2pix(part.pos[kXDimension].toDouble(), part.pos[kYDimension].toDouble(),
+            part.pos[kZDimension].toDouble());
         std::unique_lock<SpinlockType> lock(*mutexMap[pix]);
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             particleMap[pix].pos[dim].pushBack(part.pos[dim]);
             particleMap[pix].vel[dim].pushBack(part.vel[dim]);
         }
@@ -394,8 +395,8 @@ void lcBuffer2homes() {
             std::unordered_map<int, Vector<LightconeParticle>> sends;
             for (int i = begin; i < end; i++) {
                 auto const& part = particleBuffer[i];
-                int const pix = vec2pix(part.pos[XDIM].toDouble(), part.pos[YDIM].toDouble(),
-                    part.pos[ZDIM].toDouble());
+                int const pix = vec2pix(part.pos[kXDimension].toDouble(),
+                    part.pos[kYDimension].toDouble(), part.pos[kZDimension].toDouble());
                 int const rank = pix2rank(pix);
                 sends[rank].push_back(part);
             }
@@ -426,13 +427,13 @@ void lcGroups2homes() {
             for (int i = 0; i < parts.group.size(); i++) {
                 int rank = rankFromGroupId(parts.group[i]);
                 if (rank == -1) {
-                    if (parts.group[i] == LC_EDGE_GROUP) {
+                    if (parts.group[i] == kLightconeEdgeGroup) {
                         rank = hpxRank();
                     }
                 }
                 if (rank != -1) {
                     LightconeParticle part;
-                    for (int dim = 0; dim < NDIM; dim++) {
+                    for (int dim = 0; dim < kDimensions; dim++) {
                         part.pos[dim] = parts.pos[dim][i];
                         part.vel[dim] = parts.vel[dim][i];
                     }
@@ -464,7 +465,7 @@ static int lcParticlesSort(int pix, Pair<int> rng, double xm, int xdim) {
             while (lo != hi) {
                 hi--;
                 if (parts.pos[xdim][hi] < xmid) {
-                    for (int dim = 0; dim < NDIM; dim++) {
+                    for (int dim = 0; dim < kDimensions; dim++) {
                         std::swap(parts.pos[dim][hi], parts.pos[dim][lo]);
                         std::swap(parts.vel[dim][hi], parts.vel[dim][lo]);
                     }
@@ -479,7 +480,7 @@ static int lcParticlesSort(int pix, Pair<int> rng, double xm, int xdim) {
 }
 
 std::pair<int, Range<double>> lcTreeCreate(int pix, Range<double> box, Pair<int> particleRange) {
-    constexpr int kBucketSize = GROUP_BUCKET_SIZE;
+    constexpr int kBucketSize = kGroupBucketSize;
     LightconeTreeNode thisNode;
     auto& particleMap = *particleMapPtr;
     auto& treeMap = *treeMapPtr;
@@ -504,29 +505,29 @@ std::pair<int, Range<double>> lcTreeCreate(int pix, Range<double> box, Pair<int>
         leftParticleRange.second = rightParticleRange.first = mid;
         auto const rcl = lcTreeCreate(pix, boxLeft, leftParticleRange);
         auto const rcr = lcTreeCreate(pix, boxRight, rightParticleRange);
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             particleBox.begin[dim] = std::min(rcl.second.begin[dim], rcr.second.begin[dim]);
             particleBox.end[dim] = std::max(rcl.second.end[dim], rcr.second.end[dim]);
         }
-        thisNode.children[LEFT].pix = thisNode.children[RIGHT].pix = pix;
-        thisNode.children[LEFT].index = rcl.first;
-        thisNode.children[RIGHT].index = rcr.first;
+        thisNode.children[kLeftChild].pix = thisNode.children[kRightChild].pix = pix;
+        thisNode.children[kLeftChild].index = rcl.first;
+        thisNode.children[kRightChild].index = rcr.first;
     } else {
         leaf = true;
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             particleBox.begin[dim] = 1.0;
             particleBox.end[dim] = -1.0;
         }
         for (int i = particleRange.first; i < particleRange.second; i++) {
-            parts.group[i] = LC_NO_GROUP;
-            for (int dim = 0; dim < NDIM; dim++) {
+            parts.group[i] = kLightconeNoGroup;
+            for (int dim = 0; dim < kDimensions; dim++) {
                 double const x = parts.pos[dim][i].toDouble();
                 particleBox.begin[dim] = std::min(particleBox.begin[dim], x);
                 particleBox.end[dim] = std::max(particleBox.end[dim], x);
             }
         }
-        thisNode.children[LEFT].index = thisNode.children[RIGHT].index = -1;
-        thisNode.children[LEFT].pix = thisNode.children[RIGHT].pix = -1;
+        thisNode.children[kLeftChild].index = thisNode.children[kRightChild].index = -1;
+        thisNode.children[kLeftChild].pix = thisNode.children[kRightChild].pix = -1;
     }
     thisNode.particleRange = particleRange;
     thisNode.box = particleBox;
@@ -556,23 +557,23 @@ void lcFindNeighborsLocal(
     leaflist.resize(0);
     auto& treeMap = *treeMapPtr;
     auto& self = treeMap[selfId.pix][selfId.index];
-    bool const iamleaf = self.children[LEFT].index == -1;
+    bool const iamleaf = self.children[kLeftChild].index == -1;
     auto mybox = self.box.pad(linkingLength * 1.01);
     do {
         for (int ci = 0; ci < checklist.size(); ci++) {
             auto const check = checklist[ci];
             auto const& other = treeMap[check.pix][check.index];
             bool overlaps = other.particleRange.first != other.particleRange.second;
-            for (int dim = 0; dim < NDIM; dim++) {
+            for (int dim = 0; dim < kDimensions; dim++) {
                 overlaps = overlaps && mybox.begin[dim] <= other.box.end[dim] &&
                     other.box.begin[dim] <= mybox.end[dim];
             }
             if (overlaps) {
-                if (other.children[LEFT].index == -1) {
+                if (other.children[kLeftChild].index == -1) {
                     leaflist.push_back(check);
                 } else {
-                    nextlist.push_back(other.children[LEFT]);
-                    nextlist.push_back(other.children[RIGHT]);
+                    nextlist.push_back(other.children[kLeftChild]);
+                    nextlist.push_back(other.children[kRightChild]);
                 }
             }
         }
@@ -585,8 +586,8 @@ void lcFindNeighborsLocal(
     } else {
         checklist.insert(checklist.end(), leaflist.begin(), leaflist.end());
         if (checklist.size()) {
-            lcFindNeighborsLocal(self.children[LEFT], checklist, linkingLength);
-            lcFindNeighborsLocal(self.children[RIGHT], std::move(checklist), linkingLength);
+            lcFindNeighborsLocal(self.children[kLeftChild], checklist, linkingLength);
+            lcFindNeighborsLocal(self.children[kRightChild], std::move(checklist), linkingLength);
         }
     }
 }
@@ -599,7 +600,7 @@ size_t lcFindNeighbors() {
     }
     size_t rc = 0;
     double const linkingLength = getOptions().lightcone.linkingLength *
-        pow(getOptions().initial.numberOfParticles, -1.0 / NDIM);
+        pow(getOptions().initial.numberOfParticles, -1.0 / kDimensions);
     for (int pix = myPixRange.first; pix < myPixRange.second; pix++) {
         futs.push_back(hpx::async([pix, linkingLength, &treeMap]() {
             Vector<int> checkPix;
@@ -627,7 +628,7 @@ size_t lcFindGroups() {
     }
     size_t rc = 0;
     double const linkingLength = getOptions().lightcone.linkingLength *
-        pow(getOptions().initial.numberOfParticles, -1.0 / NDIM);
+        pow(getOptions().initial.numberOfParticles, -1.0 / kDimensions);
     prepareLightconeGroupIteration(leafNodes, treeMap, myPixRange);
 
 #ifdef USE_CUDA
@@ -788,12 +789,12 @@ void lcFormTrees(double tau, double linkingLength) {
             Pair<int> particleRange;
             particleRange.first = 0;
             particleRange.second = parts.group.size();
-            for (int dim = 0; dim < NDIM; dim++) {
+            for (int dim = 0; dim < kDimensions; dim++) {
                 box.begin[dim] = 1.0;
                 box.end[dim] = -1.0;
             }
             for (int i = 0; i < parts.group.size(); i++) {
-                for (int dim = 0; dim < NDIM; dim++) {
+                for (int dim = 0; dim < kDimensions; dim++) {
                     auto const x = parts.pos[dim][i].toDouble();
                     box.begin[dim] = std::min(box.begin[dim], x);
                     box.end[dim] = std::max(box.end[dim], x);
@@ -801,16 +802,16 @@ void lcFormTrees(double tau, double linkingLength) {
             }
             lcTreeCreate(pix, box, particleRange);
             for (int i = 0; i < parts.group.size(); i++) {
-                double const x = parts.pos[XDIM][i].toDouble();
-                double const y = parts.pos[YDIM][i].toDouble();
-                double const z = parts.pos[ZDIM][i].toDouble();
+                double const x = parts.pos[kXDimension][i].toDouble();
+                double const y = parts.pos[kYDimension][i].toDouble();
+                double const z = parts.pos[kZDimension][i].toDouble();
                 double const r2 = sqr(x, y, z);
                 double const rValue = sqrt(r2);
                 if (sqr((float) (rValue - (tauMax - tau))) < (float) sqr(linkingLength) &&
                     tau < tauMax) {
-                    parts.group[i] = LC_EDGE_GROUP;
+                    parts.group[i] = kLightconeEdgeGroup;
                 } else {
-                    parts.group[i] = LC_NO_GROUP;
+                    parts.group[i] = kLightconeNoGroup;
                 }
                 if (rValue + 1e-4 < tauMax - tau) {
                     PRINT("-----> low R %e %e\n", rValue, tauMax - tau);
@@ -855,7 +856,7 @@ static int computeNside(double tau) {
     double nside = std::sqrt(8.0 * hpxHardwareConcurrency() * hpxSize() / 12.0);
     double const w0 = std::max((tauMax - tau) / tauMax, 0.0);
     nside = std::min(nside,
-        (pow(getOptions().initial.numberOfParticles, 1.0 / NDIM) * std::sqrt(3) /
+        (pow(getOptions().initial.numberOfParticles, 1.0 / kDimensions) * std::sqrt(3) /
             getOptions().lightcone.linkingLength / 2.0 * w0));
     nsideValue = 1;
     while (nsideValue < nside) {
@@ -900,7 +901,7 @@ void lcInit(double tau, double requestedTauMax) {
     myPixRange.second = (size_t) (hpxRank() + 1) * npixValue / hpxSize();
     for (int pix = myPixRange.first; pix < myPixRange.second; pix++) {
         particleMap[pix].group.resize(0);
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             particleMap[pix].pos[dim].resize(0);
             particleMap[pix].vel[dim].resize(0);
         }
@@ -911,7 +912,7 @@ void lcInit(double tau, double requestedTauMax) {
             if (n < myPixRange.first || n >= myPixRange.second) {
                 bndPix.insert(n);
                 particleMap[n].group.resize(0);
-                for (int dim = 0; dim < NDIM; dim++) {
+                for (int dim = 0; dim < kDimensions; dim++) {
                     particleMap[n].pos[dim].resize(0);
                     particleMap[n].vel[dim].resize(0);
                 }
@@ -1022,7 +1023,7 @@ void lcSiloOut(char const* filename, Vector<Subgroup> const& subgroups) {
         auto const outputFilename = outputPath(filename);
         DBfile* db = DBCreateReal(outputFilename.c_str(), DB_CLOBBER, DB_LOCAL, "Meshless", DB_PDB);
         float* coords[] = {x.data(), y.data(), z.data()};
-        DBPutPointmesh(db, "points", NDIM, coords, x.size(), DB_FLOAT, NULL);
+        DBPutPointmesh(db, "points", kDimensions, coords, x.size(), DB_FLOAT, NULL);
         DBPutPointvar1(db, "vx", "points", x.data(), vx.size(), DB_FLOAT, NULL);
         DBPutPointvar1(db, "vy", "points", y.data(), vy.size(), DB_FLOAT, NULL);
         DBPutPointvar1(db, "vz", "points", z.data(), vz.size(), DB_FLOAT, NULL);

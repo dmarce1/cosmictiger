@@ -16,13 +16,13 @@
 
 __device__ inline void computeIndices(int& index, int& total) {
     int const& tid = threadIdx.x;
-    for (int p = 1; p < WARP_SIZE; p *= 2) {
+    for (int p = 1; p < kWarpSize; p *= 2) {
         auto tmp = __shfl_up_sync(0xFFFFFFFF, index, p);
         if (tid >= p) {
             index += tmp;
         }
     }
-    total = __shfl_sync(0xFFFFFFFF, index, WARP_SIZE - 1);
+    total = __shfl_sync(0xFFFFFFFF, index, kWarpSize - 1);
     auto tmp = __shfl_up_sync(0xFFFFFFFF, index, 1);
     if (tid >= 1) {
         index = tmp;
@@ -35,13 +35,13 @@ template <int nValue>
 __device__ inline void computeIndicesArray(Array<int, nValue>& indices, Array<int, nValue>& total) {
     int const& tid = threadIdx.x;
     for (int n = 0; n < nValue; n++) {
-        for (int p = 1; p < WARP_SIZE; p *= 2) {
+        for (int p = 1; p < kWarpSize; p *= 2) {
             auto tmp = __shfl_up_sync(0xFFFFFFFF, indices[n], p);
             if (tid >= p) {
                 indices[n] += tmp;
             }
         }
-        total[n] = __shfl_sync(0xFFFFFFFF, indices[n], WARP_SIZE - 1);
+        total[n] = __shfl_sync(0xFFFFFFFF, indices[n], kWarpSize - 1);
         auto tmp = __shfl_up_sync(0xFFFFFFFF, indices[n], 1);
         if (tid >= 1) {
             indices[n] = tmp;
@@ -69,7 +69,7 @@ __device__ inline void sharedReduceAddArray(Array<T, nValue>& number) {
 
 template <class T, int blockSize>
 __device__ inline void sharedReduceAdd(T& number) {
-    int p = WARP_SIZE;
+    int p = kWarpSize;
     while (p < blockSize) {
         p *= 2;
     }
@@ -96,7 +96,7 @@ __device__ inline void sharedReduceAdd(T& number) {
 
 template <int blockSize>
 __device__ inline void sharedReduceMax(float& number) {
-    int p = WARP_SIZE;
+    int p = kWarpSize;
     while (p < blockSize) {
         p *= 2;
     }
@@ -123,7 +123,7 @@ __device__ inline void sharedReduceMax(float& number) {
 
 template <int blockSize>
 __device__ inline void sharedReduceMin(unsigned long long& number) {
-    int p = WARP_SIZE;
+    int p = kWarpSize;
     while (p < blockSize) {
         p *= 2;
     }
@@ -150,7 +150,7 @@ __device__ inline void sharedReduceMin(unsigned long long& number) {
 
 template <int blockSize>
 __device__ inline void sharedReduceMin(int& number) {
-    int p = WARP_SIZE;
+    int p = kWarpSize;
     while (p < blockSize) {
         p *= 2;
     }
@@ -177,7 +177,7 @@ __device__ inline void sharedReduceMin(int& number) {
 
 template <int blockSize>
 __device__ inline void sharedReduceMax(int& number) {
-    int p = WARP_SIZE;
+    int p = kWarpSize;
     while (p < blockSize) {
         p *= 2;
     }
@@ -206,7 +206,7 @@ __device__ inline void sharedReduceMax(int& number) {
 
 template <int blockSize>
 __device__ inline void computeIndices(int& index, int& total) {
-    int m = WARP_SIZE;
+    int m = kWarpSize;
     while (m < blockSize) {
         m *= 2;
     }

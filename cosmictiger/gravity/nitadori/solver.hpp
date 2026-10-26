@@ -49,7 +49,7 @@ void pmmmDestroy();
 PmmmDiagnostics pmmmDiagnostics();
 
 // Results remain valid until the next particle permutation or solve.
-Array<float, NDIM> const& pmmmAcceleration(ParticleInteger index);
+Array<float, kDimensions> const& pmmmAcceleration(ParticleInteger index);
 float pmmmPotential(ParticleInteger index);
 double pmmmEffectiveRadius();
 

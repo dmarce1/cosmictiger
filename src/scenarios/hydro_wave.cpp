@@ -7,6 +7,7 @@
  */
 
 #include <cmath>
+#include <numbers>
 #include <stdexcept>
 
 #include <cosmictiger/core/options.hpp>
@@ -21,7 +22,7 @@ ScenarioPlan initializeHydroWave() {
     double p0 = 0.845154255;
     auto opts = getOptions();
     ParticleInteger const ndim = getOptions().initial.particlesPerDimension;
-    ParticleInteger const numberOfParticles = std::pow(ndim, NDIM);
+    ParticleInteger const numberOfParticles = std::pow(ndim, kDimensions);
     opts.initial.gasMass = rho / numberOfParticles;
     double const m = opts.initial.gasMass;
     setOptions(opts);
@@ -35,7 +36,8 @@ ScenarioPlan initializeHydroWave() {
                 double z = (iz + 0.5) * dx;
                 double eint = p0 / rho / (getOptions().hydro.gamma - 1);
                 double h = pow(
-                    m * getOptions().hydro.neighborNumber / (4.0 * M_PI / 3.0 * rho), 1.0 / 3.0);
+                    m * getOptions().hydro.neighborNumber / (4.0 * std::numbers::pi / 3.0 * rho),
+                    1.0 / 3.0);
 
                 if (ix == ndim / 2) {
                     x += 0.99 * dx;
@@ -44,12 +46,12 @@ ScenarioPlan initializeHydroWave() {
                 }
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSupportRadius(i) = h;
-                sphParticlesPosition(XDIM, i) = x;
-                sphParticlesPosition(YDIM, i) = y;
-                sphParticlesPosition(ZDIM, i) = z;
-                sphParticlesVelocity(XDIM, i) = 0.f;
-                sphParticlesVelocity(YDIM, i) = 0.f;
-                sphParticlesVelocity(ZDIM, i) = 0.f;
+                sphParticlesPosition(kXDimension, i) = x;
+                sphParticlesPosition(kYDimension, i) = y;
+                sphParticlesPosition(kZDimension, i) = z;
+                sphParticlesVelocity(kXDimension, i) = 0.f;
+                sphParticlesVelocity(kYDimension, i) = 0.f;
+                sphParticlesVelocity(kZDimension, i) = 0.f;
                 sphParticlesRung(i) = 0;
                 sphParticlesThermodynamicState(i).internalEnergy = eint;
                 i++;

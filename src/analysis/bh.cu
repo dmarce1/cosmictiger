@@ -10,12 +10,6 @@
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/math/math.hpp>
 
-#define BH_LIST_SIZE 1024
-#define BH_SOURCE_LIST_SIZE (16 * 1024)
-#define BH_STACK_SIZE 16384
-#define BH_MAX_DEPTH 32
-#define BH_WORKSIZE 1024
-
 struct BhWorkspace {
     DeviceVector<int> nextlist;
     DeviceVector<int> leaflist;
@@ -28,13 +22,13 @@ struct BhWorkspace {
 
 struct BhShmem {
     int si;
-    Array<float, BH_BUCKET_SIZE> sinkX;
-    Array<float, BH_BUCKET_SIZE> sinkY;
-    Array<float, BH_BUCKET_SIZE> sinkZ;
+    Array<float, kBhBucketSize> sinkX;
+    Array<float, kBhBucketSize> sinkY;
+    Array<float, kBhBucketSize> sinkZ;
 };
 
 __global__ void bhTreeEvaluateKernel(BhTreeNode const* treeNodes, int const* sinkBuckets,
-    float* phi, Array<float, NDIM> const* parts, float relativeError, float hsoft, float gm,
+    float* phi, Array<float, kDimensions> const* parts, float relativeError, float hsoft, float gm,
     int* nextSinkBucket, int numberOfSinks) {
     int const tid = threadIdx.x;
     int const bid = blockIdx.x;
@@ -67,26 +61,26 @@ __global__ void bhTreeEvaluateKernel(BhTreeNode const* treeNodes, int const* sin
         auto const& self = treeNodes[sinkIndex];
         float const myRadius = self.radius;
         int sinkSize = self.parts.second - self.parts.first;
-        for (int i = tid; i < sinkSize; i += WARP_SIZE) {
-            sinkX[i] = parts[self.parts.first + i][XDIM];
-            sinkY[i] = parts[self.parts.first + i][YDIM];
-            sinkZ[i] = parts[self.parts.first + i][ZDIM];
+        for (int i = tid; i < sinkSize; i += kWarpSize) {
+            sinkX[i] = parts[self.parts.first + i][kXDimension];
+            sinkY[i] = parts[self.parts.first + i][kYDimension];
+            sinkZ[i] = parts[self.parts.first + i][kZDimension];
         }
         while (checklist.size()) {
-            int maxci = roundUp(checklist.size(), WARP_SIZE);
-            for (int ci = tid; ci < maxci; ci += WARP_SIZE) {
+            int maxci = roundUp(checklist.size(), kWarpSize);
+            for (int ci = tid; ci < maxci; ci += kWarpSize) {
                 bool source = false;
                 bool leaf = false;
                 bool next = false;
                 if (ci < checklist.size()) {
                     auto const& other = treeNodes[checklist[ci]];
-                    float const dx = self.pos[XDIM] - other.pos[XDIM];
-                    float const dy = self.pos[YDIM] - other.pos[YDIM];
-                    float const dz = self.pos[ZDIM] - other.pos[ZDIM];
+                    float const dx = self.pos[kXDimension] - other.pos[kXDimension];
+                    float const dy = self.pos[kYDimension] - other.pos[kYDimension];
+                    float const dz = self.pos[kZDimension] - other.pos[kZDimension];
                     float const r2 = sqr(dx, dy, dz);
                     if (detail::bhAcceptMonopole(r2, other, myRadius, hsoft, relativeError)) {
                         source = true;
-                    } else if (other.children[LEFT] == -1) {
+                    } else if (other.children[kLeftChild] == -1) {
                         leaf = true;
                     } else {
                         next = true;
@@ -107,9 +101,9 @@ __global__ void bhTreeEvaluateKernel(BhTreeNode const* treeNodes, int const* sin
                 index += offset;
                 if (source) {
                     auto const& other = treeNodes[checklist[ci]];
-                    sourceX[index] = other.pos[XDIM];
-                    sourceY[index] = other.pos[YDIM];
-                    sourceZ[index] = other.pos[ZDIM];
+                    sourceX[index] = other.pos[kXDimension];
+                    sourceY[index] = other.pos[kYDimension];
+                    sourceZ[index] = other.pos[kZDimension];
                     srcM[index] = other.mass;
                 }
 
@@ -130,12 +124,12 @@ __global__ void bhTreeEvaluateKernel(BhTreeNode const* treeNodes, int const* sin
                 nextlist.resize(offset + 2 * total);
                 index = 2 * index + offset;
                 if (next) {
-                    nextlist[index + LEFT] = treeNodes[checklist[ci]].children[LEFT];
-                    nextlist[index + RIGHT] = treeNodes[checklist[ci]].children[RIGHT];
+                    nextlist[index + kLeftChild] = treeNodes[checklist[ci]].children[kLeftChild];
+                    nextlist[index + kRightChild] = treeNodes[checklist[ci]].children[kRightChild];
                 }
             }
             checklist.resize(nextlist.size());
-            for (int ci = tid; ci < nextlist.size(); ci += WARP_SIZE) {
+            for (int ci = tid; ci < nextlist.size(); ci += kWarpSize) {
                 checklist[ci] = nextlist[ci];
             }
 
@@ -148,11 +142,11 @@ __global__ void bhTreeEvaluateKernel(BhTreeNode const* treeNodes, int const* sin
                 sourceY.resize(newSize);
                 sourceZ.resize(newSize);
                 srcM.resize(newSize);
-                for (int j = tid + other.parts.first; j < other.parts.second; j += WARP_SIZE) {
+                for (int j = tid + other.parts.first; j < other.parts.second; j += kWarpSize) {
                     int k = j + offset - other.parts.first;
-                    sourceX[k] = parts[j][XDIM];
-                    sourceY[k] = parts[j][YDIM];
-                    sourceZ[k] = parts[j][ZDIM];
+                    sourceX[k] = parts[j][kXDimension];
+                    sourceY[k] = parts[j][kYDimension];
+                    sourceZ[k] = parts[j][kZDimension];
                     srcM[k] = 1.0f;
                 }
                 __syncwarp();
@@ -165,7 +159,7 @@ __global__ void bhTreeEvaluateKernel(BhTreeNode const* treeNodes, int const* sin
         float const h2 = h * h;
         for (int i = 0; i < sinkSize; i++) {
             float thisPhi = 0.0;
-            for (int j = tid; j < sourceX.size(); j += WARP_SIZE) {
+            for (int j = tid; j < sourceX.size(); j += kWarpSize) {
                 float rinv1, m;
                 float const dx = sourceX[j] - sinkX[i];
                 float const dy = sourceY[j] - sinkY[i];
@@ -195,8 +189,8 @@ __global__ void bhTreeEvaluateKernel(BhTreeNode const* treeNodes, int const* sin
 }
 
 __global__ void bhTreeEvaluatePointsKernel(BhTreeNode const* treeNodes, float* phi,
-    Array<float, NDIM> const* parts, Array<float, NDIM> const* sinks, float relativeError,
-    float hsoft, float gm, int* nextSink, int numberOfSinks) {
+    Array<float, kDimensions> const* parts, Array<float, kDimensions> const* sinks,
+    float relativeError, float hsoft, float gm, int* nextSink, int numberOfSinks) {
     int const tid = threadIdx.x;
     int const bid = blockIdx.x;
     __shared__ int si;
@@ -207,7 +201,7 @@ __global__ void bhTreeEvaluatePointsKernel(BhTreeNode const* treeNodes, float* p
     __shared__ BhWorkspace ws;
     new (&ws) BhWorkspace();
     while (si < numberOfSinks) {
-        Array<float, NDIM> const& sink = sinks[si];
+        Array<float, kDimensions> const& sink = sinks[si];
         auto& checklist = ws.checklist;
         auto& nextlist = ws.nextlist;
         auto& sourceX = ws.sourceX;
@@ -222,20 +216,20 @@ __global__ void bhTreeEvaluatePointsKernel(BhTreeNode const* treeNodes, float* p
         checklist.resize(1);
         checklist[0] = 0;
         while (checklist.size()) {
-            int maxci = roundUp(checklist.size(), WARP_SIZE);
-            for (int ci = tid; ci < maxci; ci += WARP_SIZE) {
+            int maxci = roundUp(checklist.size(), kWarpSize);
+            for (int ci = tid; ci < maxci; ci += kWarpSize) {
                 bool source = false;
                 bool leaf = false;
                 bool next = false;
                 if (ci < checklist.size()) {
                     auto const& other = treeNodes[checklist[ci]];
-                    float const dx = sink[XDIM] - other.pos[XDIM];
-                    float const dy = sink[YDIM] - other.pos[YDIM];
-                    float const dz = sink[ZDIM] - other.pos[ZDIM];
+                    float const dx = sink[kXDimension] - other.pos[kXDimension];
+                    float const dy = sink[kYDimension] - other.pos[kYDimension];
+                    float const dz = sink[kZDimension] - other.pos[kZDimension];
                     float const r2 = sqr(dx, dy, dz);
                     if (detail::bhAcceptMonopole(r2, other, 0.0f, hsoft, relativeError)) {
                         source = true;
-                    } else if (other.children[LEFT] == -1) {
+                    } else if (other.children[kLeftChild] == -1) {
                         leaf = true;
                     } else {
                         next = true;
@@ -256,9 +250,9 @@ __global__ void bhTreeEvaluatePointsKernel(BhTreeNode const* treeNodes, float* p
                 index += offset;
                 if (source) {
                     auto const& other = treeNodes[checklist[ci]];
-                    sourceX[index] = other.pos[XDIM];
-                    sourceY[index] = other.pos[YDIM];
-                    sourceZ[index] = other.pos[ZDIM];
+                    sourceX[index] = other.pos[kXDimension];
+                    sourceY[index] = other.pos[kYDimension];
+                    sourceZ[index] = other.pos[kZDimension];
                     srcM[index] = other.mass;
                 }
 
@@ -279,12 +273,12 @@ __global__ void bhTreeEvaluatePointsKernel(BhTreeNode const* treeNodes, float* p
                 nextlist.resize(offset + 2 * total);
                 index = 2 * index + offset;
                 if (next) {
-                    nextlist[index + LEFT] = treeNodes[checklist[ci]].children[LEFT];
-                    nextlist[index + RIGHT] = treeNodes[checklist[ci]].children[RIGHT];
+                    nextlist[index + kLeftChild] = treeNodes[checklist[ci]].children[kLeftChild];
+                    nextlist[index + kRightChild] = treeNodes[checklist[ci]].children[kRightChild];
                 }
             }
             checklist.resize(nextlist.size());
-            for (int ci = tid; ci < nextlist.size(); ci += WARP_SIZE) {
+            for (int ci = tid; ci < nextlist.size(); ci += kWarpSize) {
                 checklist[ci] = nextlist[ci];
             }
 
@@ -297,11 +291,11 @@ __global__ void bhTreeEvaluatePointsKernel(BhTreeNode const* treeNodes, float* p
                 sourceY.resize(newSize);
                 sourceZ.resize(newSize);
                 srcM.resize(newSize);
-                for (int j = tid + other.parts.first; j < other.parts.second; j += WARP_SIZE) {
+                for (int j = tid + other.parts.first; j < other.parts.second; j += kWarpSize) {
                     int k = j + offset - other.parts.first;
-                    sourceX[k] = parts[j][XDIM];
-                    sourceY[k] = parts[j][YDIM];
-                    sourceZ[k] = parts[j][ZDIM];
+                    sourceX[k] = parts[j][kXDimension];
+                    sourceY[k] = parts[j][kYDimension];
+                    sourceZ[k] = parts[j][kZDimension];
                     srcM[k] = 1.0f;
                 }
                 __syncwarp();
@@ -316,11 +310,11 @@ __global__ void bhTreeEvaluatePointsKernel(BhTreeNode const* treeNodes, float* p
             phi[si] = 0.f;
         }
         float thisPhi = 0.0f;
-        for (int j = tid; j < sourceX.size(); j += WARP_SIZE) {
+        for (int j = tid; j < sourceX.size(); j += kWarpSize) {
             float rinv1, m;
-            float const dx = sourceX[j] - sink[XDIM];
-            float const dy = sourceY[j] - sink[YDIM];
-            float const dz = sourceZ[j] - sink[ZDIM];
+            float const dx = sourceX[j] - sink[kXDimension];
+            float const dy = sourceY[j] - sink[kYDimension];
+            float const dz = sourceZ[j] - sink[kZDimension];
             m = srcM[j];
             float const r2 = sqr(dx, dy, dz);
             float const r = sqrt(r2);    // 4
@@ -345,7 +339,7 @@ __global__ void bhTreeEvaluatePointsKernel(BhTreeNode const* treeNodes, float* p
 }
 
 DeviceVector<float> bhEvaluatePotentialGpu(DeviceVector<BhTreeNode> const& devTreeNodes,
-    DeviceVector<Array<float, NDIM>> const& devX, DeviceVector<int> const devSinkBuckets,
+    DeviceVector<Array<float, kDimensions>> const& devX, DeviceVector<int> const devSinkBuckets,
     float relativeError, float hsoft, float gm, int maximumBlockCount) {
     BhWorkspace* workspaces;
     int* nextSinkBucket;
@@ -353,7 +347,7 @@ DeviceVector<float> bhEvaluatePotentialGpu(DeviceVector<BhTreeNode> const& devTr
     int numberOfBlocks;
     Timer tm1;
     CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &numberOfBlocks, (void const*) bhTreeEvaluateKernel, WARP_SIZE, sizeof(BhShmem)));
+        &numberOfBlocks, (void const*) bhTreeEvaluateKernel, kWarpSize, sizeof(BhShmem)));
     numberOfBlocks *= cudaSmpCount();
     numberOfBlocks = std::min(numberOfBlocks, devSinkBuckets.size());
     // A bounded launch also lets regression tests exercise multiple buckets
@@ -369,7 +363,7 @@ DeviceVector<float> bhEvaluatePotentialGpu(DeviceVector<BhTreeNode> const& devTr
     tm1.start();
     DeviceVector<float> devPhi(devX.size());
     CudaStream stream(cudaGetDevice());
-    bhTreeEvaluateKernel<<<numberOfBlocks, WARP_SIZE, 0, stream.nativeHandle()>>>(
+    bhTreeEvaluateKernel<<<numberOfBlocks, kWarpSize, 0, stream.nativeHandle()>>>(
         devTreeNodes.data(), devSinkBuckets.data(), devPhi.data(), devX.data(), relativeError,
         hsoft, gm, nextSinkBucket, devSinkBuckets.size());
     stream.checkLaunch();
@@ -379,16 +373,17 @@ DeviceVector<float> bhEvaluatePotentialGpu(DeviceVector<BhTreeNode> const& devTr
 }
 
 DeviceVector<float> bhEvaluatePotentialPointsGpu(DeviceVector<BhTreeNode> const& devTreeNodes,
-    DeviceVector<Array<float, NDIM>> const& devX, DeviceVector<Array<float, NDIM>> const& devY,
-    float relativeError, float hsoft, float gm) {
+    DeviceVector<Array<float, kDimensions>> const& devX,
+    DeviceVector<Array<float, kDimensions>> const& devY, float relativeError, float hsoft,
+    float gm) {
     int* nextSink;
     int zero = 0;
     int numberOfBlocks;
     Timer tm1;
     CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &numberOfBlocks, (void const*) bhTreeEvaluatePointsKernel, WARP_SIZE, 0));
+        &numberOfBlocks, (void const*) bhTreeEvaluatePointsKernel, kWarpSize, 0));
     numberOfBlocks *= cudaSmpCount();
-    numberOfBlocks = std::max(1, std::min(numberOfBlocks, devY.size() / BH_BUCKET_SIZE));
+    numberOfBlocks = std::max(1, std::min(numberOfBlocks, devY.size() / kBhBucketSize));
     std::unique_ptr<int, decltype(&cudaRelease)> counterOwner(
         static_cast<int*>(cudaAllocate(sizeof(int))), cudaRelease);
     nextSink = counterOwner.get();
@@ -396,7 +391,7 @@ DeviceVector<float> bhEvaluatePotentialPointsGpu(DeviceVector<BhTreeNode> const&
     tm1.start();
     DeviceVector<float> devPhi(devY.size());
     CudaStream stream(cudaGetDevice());
-    bhTreeEvaluatePointsKernel<<<numberOfBlocks, WARP_SIZE, 0, stream.nativeHandle()>>>(
+    bhTreeEvaluatePointsKernel<<<numberOfBlocks, kWarpSize, 0, stream.nativeHandle()>>>(
         devTreeNodes.data(), devPhi.data(), devX.data(), devY.data(), relativeError, hsoft, gm,
         nextSink, devY.size());
     stream.checkLaunch();

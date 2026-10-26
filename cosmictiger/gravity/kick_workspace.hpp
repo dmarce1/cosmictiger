@@ -56,7 +56,7 @@ public:
     template <class A>
     void serialize(A&&, unsigned) {}
     void addWork(std::shared_ptr<KickWorkspace> ptr, ExpansionBuffer const& l,
-        Array<Position, NDIM> pos, TreeId self, Vector<TreeId>&& dchecklist,
+        Array<Position, kDimensions> pos, TreeId self, Vector<TreeId>&& dchecklist,
         Vector<TreeId>&& echecklist, FmmGeometry const& geometry, ParticleInteger outputOffset = 0);
     void recordProcessedParticles(std::shared_ptr<KickWorkspace> ptr, ParticleInteger n);
     KickReturn toGpu();

@@ -165,14 +165,14 @@ void test(KernelSpec spec) {
     close(density(1.5), 0, 0, "compact support");
 #if defined(RADIAL_KERNEL_TEST_SIMD)
     SimdFloat radii{};
-    for (int lane = 0; lane < SIMD_FLOAT_SIZE; ++lane) {
-        simdSetLane(radii, lane, 2.0f * lane / SIMD_FLOAT_SIZE);
+    for (int lane = 0; lane < kSimdFloatSize; ++lane) {
+        simdSetLane(radii, lane, 2.0f * lane / kSimdFloatSize);
     }
     simdSetLane(radii, 1, 1e-30f);
     simdSetLane(radii, 2, std::nextafter(1.0f, 0.0f));
     auto const values = radial_kernel::value(table, radii);
     auto const derivatives = radial_kernel::derivative(table, radii);
-    for (int lane = 0; lane < SIMD_FLOAT_SIZE; ++lane) {
+    for (int lane = 0; lane < kSimdFloatSize; ++lane) {
         close(values[lane], density(radii[lane]), 8e-6, "D-dimensional SIMD density");
         close(derivatives[lane], radial_kernel::derivative(table, double(radii[lane])), 8e-6,
             "D-dimensional SIMD derivative");

@@ -12,7 +12,7 @@ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
 #include <cosmictiger/core/containers.hpp>
 #include <cosmictiger/math/position.hpp>
 
-std::pair<Vector<double>, Array<Vector<double>, NDIM>> gravityAnalyticCallKernel(
+std::pair<Vector<double>, Array<Vector<double>, kDimensions>> gravityAnalyticCallKernel(
     Vector<Position> const& sinkx, Vector<Position> const& sinky, Vector<Position> const& sinkz);
 Pair<double> analyticCompare(int numberOfSamples);
 

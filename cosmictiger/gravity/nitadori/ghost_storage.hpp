@@ -11,8 +11,8 @@
 
 // Frozen source record sent once per occupied PMMM cell fragment.
 struct ParticleGhost {
-    Array<Position, NDIM> x;
-    char type = DARK_MATTER_TYPE;
+    Array<Position, kDimensions> x;
+    char type = kDarkMatterType;
     char rung = 0;
 
     template <class Archive>

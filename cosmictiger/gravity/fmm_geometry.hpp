@@ -8,7 +8,7 @@
 // instead fixes the source image by mesh cell, consistently through its tree.
 struct FmmGeometry {
     int meshSize = 0;
-    Array<int, NDIM> sinkCell{};
+    Array<int, kDimensions> sinkCell{};
 
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
@@ -51,10 +51,10 @@ CUDA_EXPORT inline double fmmBoundaryDifference(RangeFixed boundary, Position po
     return fmmShiftedDifference(fraction, point, image - whole);
 }
 
-CUDA_EXPORT inline float fmmBoxDistanceSquared(
-    Fixed32Range const& box, Array<Position, NDIM> const& point, Array<int, NDIM> const& image) {
+CUDA_EXPORT inline float fmmBoxDistanceSquared(Fixed32Range const& box,
+    Array<Position, kDimensions> const& point, Array<int, kDimensions> const& image) {
     float result = 0;
-    for (int dim = 0; dim < NDIM; ++dim) {
+    for (int dim = 0; dim < kDimensions; ++dim) {
         double const lower = fmmBoundaryDifference(box.begin[dim], point[dim], image[dim]);
         double const upper = fmmBoundaryDifference(box.end[dim], point[dim], image[dim]);
         float const delta = float(lower > 0 ? lower : (upper < 0 ? -upper : 0));
@@ -74,26 +74,26 @@ CUDA_EXPORT inline float fmmPositionDifference(
         detail::fmmShiftedDifference(sink, source, detail::fmmSourceImage(source, dim, geometry)));
 }
 
-CUDA_EXPORT inline float fmmSinkBoxDistanceSquared(
-    Fixed32Range const& box, Array<Position, NDIM> const& source, FmmGeometry const& geometry) {
+CUDA_EXPORT inline float fmmSinkBoxDistanceSquared(Fixed32Range const& box,
+    Array<Position, kDimensions> const& source, FmmGeometry const& geometry) {
     if (geometry.meshSize == 0) {
         return boxDistanceSquared(box, source);
     }
-    Array<int, NDIM> image;
-    for (int dim = 0; dim < NDIM; ++dim) {
+    Array<int, kDimensions> image;
+    for (int dim = 0; dim < kDimensions; ++dim) {
         image[dim] = detail::fmmSourceImage(source[dim], dim, geometry);
     }
     return detail::fmmBoxDistanceSquared(box, source, image);
 }
 
 CUDA_EXPORT inline float fmmSourceBoxDistanceSquared(Fixed32Range const& box,
-    Array<Position, NDIM> const& sink, Array<Position, NDIM> const& source,
+    Array<Position, kDimensions> const& sink, Array<Position, kDimensions> const& source,
     FmmGeometry const& geometry) {
     if (geometry.meshSize == 0) {
         return boxDistanceSquared(box, sink);
     }
-    Array<int, NDIM> image;
-    for (int dim = 0; dim < NDIM; ++dim) {
+    Array<int, kDimensions> image;
+    for (int dim = 0; dim < kDimensions; ++dim) {
         image[dim] = -detail::fmmSourceImage(source[dim], dim, geometry);
     }
     return detail::fmmBoxDistanceSquared(box, sink, image);
@@ -115,14 +115,14 @@ inline SimdFloat fmmPositionDifference(
 }
 
 inline SimdFloat fmmSinkBoxDistanceSquared(Range<SimdDouble8> const& box,
-    Array<SimdPosition, NDIM> const& source, FmmGeometry const& geometry) {
+    Array<SimdPosition, kDimensions> const& source, FmmGeometry const& geometry) {
     if (geometry.meshSize == 0) {
         return boxDistanceSquared(box, source);
     }
     return SimdFloat([&](auto lane) {
         Fixed32Range scalarBox;
-        Array<Position, NDIM> point;
-        for (int dim = 0; dim < NDIM; ++dim) {
+        Array<Position, kDimensions> point;
+        for (int dim = 0; dim < kDimensions; ++dim) {
             scalarBox.begin[dim] = box.begin[dim][lane];
             scalarBox.end[dim] = box.end[dim][lane];
             point[dim].setInteger(static_cast<PositionInteger>(source[dim][lane]));
@@ -132,15 +132,15 @@ inline SimdFloat fmmSinkBoxDistanceSquared(Range<SimdDouble8> const& box,
 }
 
 inline SimdFloat fmmSourceBoxDistanceSquared(Range<SimdDouble8> const& box,
-    Array<SimdPosition, NDIM> const& sink, Array<SimdPosition, NDIM> const& source,
+    Array<SimdPosition, kDimensions> const& sink, Array<SimdPosition, kDimensions> const& source,
     FmmGeometry const& geometry) {
     if (geometry.meshSize == 0) {
         return boxDistanceSquared(box, sink);
     }
     return SimdFloat([&](auto lane) {
         Fixed32Range scalarBox;
-        Array<Position, NDIM> a, b;
-        for (int dim = 0; dim < NDIM; ++dim) {
+        Array<Position, kDimensions> a, b;
+        for (int dim = 0; dim < kDimensions; ++dim) {
             scalarBox.begin[dim] = box.begin[dim][lane];
             scalarBox.end[dim] = box.end[dim][lane];
             a[dim].setInteger(static_cast<PositionInteger>(sink[dim][lane]));

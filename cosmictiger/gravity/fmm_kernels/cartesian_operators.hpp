@@ -21,9 +21,9 @@ static_assert(cosmictiger::gravity::cartesian::kMinLocalDegree <= fmmLocalDegree
 // Application coordinates are scaled at the boundary. The typed FMM API below
 // uses the same coordinates as its moments and expansions.
 template <class Real>
-CUDA_EXPORT Array<Real, NDIM> fmmScaleDisplacement(Array<Real, NDIM> value) {
-    for (int dim = 0; dim < NDIM; dim++) {
-        value[dim] *= simdBroadcast<Real>(SCALE_FACTOR);
+CUDA_EXPORT Array<Real, kDimensions> fmmScaleDisplacement(Array<Real, kDimensions> value) {
+    for (int dim = 0; dim < kDimensions; dim++) {
+        value[dim] *= simdBroadcast<Real>(kScaleFactor);
     }
     return value;
 }
@@ -31,7 +31,7 @@ CUDA_EXPORT Array<Real, NDIM> fmmScaleDisplacement(Array<Real, NDIM> value) {
 namespace cosmictiger::gravity::cartesian {
 namespace detail {
     template <class Real>
-    CUDA_EXPORT Real inverseRadius(Array<Real, NDIM> const& position) {
+    CUDA_EXPORT Real inverseRadius(Array<Real, kDimensions> const& position) {
         Real const radius = simdSqrt(simdFma(position[0], position[0],
             simdFma(position[1], position[1], position[2] * position[2])));
         return simdSelect(radius > simdBroadcast<Real>(0), simdBroadcast<Real>(1),
@@ -42,7 +42,7 @@ namespace detail {
 
 template <class Real, int order>
 CUDA_EXPORT int P2M(
-    Multipole<Real, order>& target, Real mass, Array<Real, NDIM> const& particleOffset) {
+    Multipole<Real, order>& target, Real mass, Array<Real, kDimensions> const& particleOffset) {
     detail::P2M<order - 2>::add(
         target, mass, particleOffset[0], particleOffset[1], particleOffset[2]);
     return detail::P2M<order - 2>::kFlops_;
@@ -50,7 +50,7 @@ CUDA_EXPORT int P2M(
 
 template <class Real, int order>
 CUDA_EXPORT int P2L(Expansion<Real, order>& target, Real mass,
-    Array<Real, NDIM> const& displacement, bool doPotential = true) {
+    Array<Real, kDimensions> const& displacement, bool doPotential = true) {
     Real const inverse = detail::inverseRadius(displacement);
     Real const oldPotential = target[0];
     detail::P2L<order - 1>::add(target, mass, displacement[0] * inverse, displacement[1] * inverse,
@@ -63,7 +63,7 @@ CUDA_EXPORT int P2L(Expansion<Real, order>& target, Real mass,
 
 template <class Real, int order>
 CUDA_EXPORT int M2M(Multipole<Real, order>& target, Multipole<Real, order> const& source,
-    Array<Real, NDIM> const& displacement) {
+    Array<Real, kDimensions> const& displacement) {
     ASSERT(&target != &source);
     detail::M2M<order - 2>::add(
         target, source, displacement[0], displacement[1], displacement[2], simdBroadcast<Real>(1));
@@ -72,7 +72,7 @@ CUDA_EXPORT int M2M(Multipole<Real, order>& target, Multipole<Real, order> const
 
 template <bool centered = false, class Real, int order>
 CUDA_EXPORT int M2L(Expansion<Real, order>& target, Multipole<Real, order> const& source,
-    Array<Real, NDIM> const& displacement, bool doPotential = true) {
+    Array<Real, kDimensions> const& displacement, bool doPotential = true) {
     Real const inverse = detail::inverseRadius(displacement);
     Real const oldPotential = target[0];
     detail::M2L<order - 1, centered>::template add<Real, Expansion<Real, order>,
@@ -85,7 +85,8 @@ CUDA_EXPORT int M2L(Expansion<Real, order>& target, Multipole<Real, order> const
 }
 
 template <class Real, int order>
-CUDA_EXPORT void evaluateGreen(Green<Real, order>& target, Array<Real, NDIM> const& displacement) {
+CUDA_EXPORT void evaluateGreen(
+    Green<Real, order>& target, Array<Real, kDimensions> const& displacement) {
     Real const inverse = detail::inverseRadius(displacement);
     target = simdBroadcast<Real>(0);
     detail::P2L<order - 1>::add(target, simdBroadcast<Real>(1), displacement[0] * inverse,
@@ -105,7 +106,7 @@ CUDA_EXPORT int M2L(Expansion<Real, order>& target, Multipole<Real, order> const
 
 template <bool centered = false, class Real, int order>
 CUDA_EXPORT int M2P(gravity::Field<Real>& target, Multipole<Real, order> const& source,
-    Array<Real, NDIM> const& displacement, bool doPotential = true) {
+    Array<Real, kDimensions> const& displacement, bool doPotential = true) {
     Real const inverse = detail::inverseRadius(displacement);
     Real const oldPotential = target[0];
     detail::M2P<order - 2, centered>::add(target, source, displacement[0] * inverse,
@@ -118,7 +119,7 @@ CUDA_EXPORT int M2P(gravity::Field<Real>& target, Multipole<Real, order> const& 
 
 template <class Real, int order>
 CUDA_EXPORT int L2L(Expansion<Real, order>& target, Expansion<Real, order> const& source,
-    Array<Real, NDIM> const& displacement, bool doPotential = true) {
+    Array<Real, kDimensions> const& displacement, bool doPotential = true) {
     ASSERT(&target != &source);
     Real const oldPotential = target[0];
     detail::L2L<order - 1, true>::add(
@@ -131,7 +132,7 @@ CUDA_EXPORT int L2L(Expansion<Real, order>& target, Expansion<Real, order> const
 
 template <class Real, int order>
 CUDA_EXPORT int L2P(gravity::Field<Real>& target, Expansion<Real, order> const& source,
-    Array<Real, NDIM> const& displacement, bool doPotential = true) {
+    Array<Real, kDimensions> const& displacement, bool doPotential = true) {
     Real const oldPotential = target[0];
     detail::L2P<order - 1, true>::add(
         target, source, displacement[0], displacement[1], displacement[2], simdBroadcast<Real>(1));
@@ -145,7 +146,7 @@ CUDA_EXPORT int L2P(gravity::Field<Real>& target, Expansion<Real, order> const& 
 // Every warp lane participates. The raw target is caller-owned shared storage.
 template <class Real, int order>
 __device__ void L2LWarpInto(Real* target, Expansion<Real, order> const& source,
-    Array<Real, NDIM> const& displacement, bool doPotential) {
+    Array<Real, kDimensions> const& displacement, bool doPotential) {
     detail::detail::L2LWarp<order - 1, true>::translateInto(
         target, source, displacement[0], displacement[1], displacement[2], doPotential);
 }

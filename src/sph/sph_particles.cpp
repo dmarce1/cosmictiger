@@ -32,10 +32,11 @@
 static ParticleInteger capacity = 0;
 static ParticleInteger size = 0;
 
-static Array<Position, NDIM> const* sphParticlesCacheReadLine(detail::SphCacheLineId lineId);
+static Array<Position, kDimensions> const* sphParticlesCacheReadLine(detail::SphCacheLineId lineId);
 static Pair<float> const* sphParticlesReadThermodynamicCacheLine(detail::SphCacheLineId lineId);
 static char const* sphParticlesRungCacheReadLine(detail::SphCacheLineId lineId);
-static Array<float, NDIM> const* sphParticlesReadVelocityCacheLine(detail::SphCacheLineId lineId);
+static Array<float, kDimensions> const* sphParticlesReadVelocityCacheLine(
+    detail::SphCacheLineId lineId);
 struct SphDensityCacheEntry {
     float density{};
     float balsaraFactor{};
@@ -53,9 +54,9 @@ static SphDensityCacheEntry const* sphParticlesReadDensityCacheLine(detail::SphC
 static Pair<float> const* sphParticlesReadChemistryEosCacheLine(detail::SphCacheLineId lineId);
 static Vector<Pair<float>> sphParticlesFetchChemistryEosCacheLine(ParticleInteger index);
 
-static Vector<Array<Position, NDIM>> sphParticlesFetchCacheLine(ParticleInteger index);
+static Vector<Array<Position, kDimensions>> sphParticlesFetchCacheLine(ParticleInteger index);
 static Vector<char> sphParticlesFetchRungCacheLine(ParticleInteger index);
-static Vector<Array<float, NDIM>> sphParticlesFetchVelocityCacheLine(ParticleInteger index);
+static Vector<Array<float, kDimensions>> sphParticlesFetchVelocityCacheLine(ParticleInteger index);
 static Vector<SphDensityCacheEntry> sphParticlesFetchDensityCacheLine(ParticleInteger index);
 static Vector<Pair<float>> sphParticlesFetchThermodynamicCacheLine(ParticleInteger index);
 
@@ -72,40 +73,40 @@ HPX_PLAIN_ACTION(
     sphParticlesFetchChemistryEosCacheLine, SphParticlesFetchChemistryEosCacheLineAction);
 
 static Array<std::unordered_map<detail::SphCacheLineId,
-                 std::shared_ptr<hpx::shared_future<Vector<Array<Position, NDIM>>>>,
+                 std::shared_ptr<hpx::shared_future<Vector<Array<Position, kDimensions>>>>,
                  detail::SphCacheLineHashHi>,
-    PART_CACHE_SIZE>
+    kParticleCacheSize>
     particleCache;
 static Array<
     std::unordered_map<detail::SphCacheLineId,
         std::shared_ptr<hpx::shared_future<Vector<Pair<float>>>>, detail::SphCacheLineHashHi>,
-    PART_CACHE_SIZE>
+    kParticleCacheSize>
     thermodynamicParticleCache;
 static Array<std::unordered_map<detail::SphCacheLineId,
                  std::shared_ptr<hpx::shared_future<Vector<char>>>, detail::SphCacheLineHashHi>,
-    PART_CACHE_SIZE>
+    kParticleCacheSize>
     rungParticleCache;
 static Array<std::unordered_map<detail::SphCacheLineId,
-                 std::shared_ptr<hpx::shared_future<Vector<Array<float, NDIM>>>>,
+                 std::shared_ptr<hpx::shared_future<Vector<Array<float, kDimensions>>>>,
                  detail::SphCacheLineHashHi>,
-    PART_CACHE_SIZE>
+    kParticleCacheSize>
     particleVelocityCache;
 static Array<std::unordered_map<detail::SphCacheLineId,
                  std::shared_ptr<hpx::shared_future<Vector<SphDensityCacheEntry>>>,
                  detail::SphCacheLineHashHi>,
-    PART_CACHE_SIZE>
+    kParticleCacheSize>
     densityParticleCache;
 static Array<
     std::unordered_map<detail::SphCacheLineId,
         std::shared_ptr<hpx::shared_future<Vector<Pair<float>>>>, detail::SphCacheLineHashHi>,
-    PART_CACHE_SIZE>
+    kParticleCacheSize>
     chemistryEosParticleCache;
-static Array<SpinlockType, PART_CACHE_SIZE> chemistryEosMutexes;
-static Array<SpinlockType, PART_CACHE_SIZE> mutexes;
-static Array<SpinlockType, PART_CACHE_SIZE> energyMutexes;
-static Array<SpinlockType, PART_CACHE_SIZE> rungMutexes;
-static Array<SpinlockType, PART_CACHE_SIZE> velocityMutexes;
-static Array<SpinlockType, PART_CACHE_SIZE> densityMutexes;
+static Array<SpinlockType, kParticleCacheSize> chemistryEosMutexes;
+static Array<SpinlockType, kParticleCacheSize> mutexes;
+static Array<SpinlockType, kParticleCacheSize> energyMutexes;
+static Array<SpinlockType, kParticleCacheSize> rungMutexes;
+static Array<SpinlockType, kParticleCacheSize> velocityMutexes;
+static Array<SpinlockType, kParticleCacheSize> densityMutexes;
 HPX_PLAIN_ACTION(sphParticlesApplyUpdates, SphParticlesApplyUpdatesAction);
 void sphParticlesApplyUpdates(int minimumRung, int phase, float timeStepScale, float time) {
     // At time zero no step has opened yet, so there is no half-kick to close or correct.
@@ -147,12 +148,12 @@ void sphParticlesApplyUpdates(int minimumRung, int phase, float timeStepScale, f
                         // so the hydro run sees velocities and energies at the end of the
                         // drift. Save those rates so phase 1 can take this kick back out.
                         if (rung >= minimumRung) {
-                            flops += 2 * NDIM + 2;
-                            for (int dimension = 0; dimension < NDIM; dimension++) {
+                            flops += 2 * kDimensions + 2;
+                            for (int dimension = 0; dimension < kDimensions; dimension++) {
                                 sphParticlesPredictedAcceleration(dimension, gasIndex) =
                                     sphParticlesAcceleration(dimension, gasIndex);
                             }
-                            for (int dimension = 0; dimension < NDIM; dimension++) {
+                            for (int dimension = 0; dimension < kDimensions; dimension++) {
                                 particlesVel(dimension, gravityIndex) +=
                                     sphParticlesAcceleration(dimension, gasIndex) * halfTimeStep;
                             }
@@ -171,8 +172,8 @@ void sphParticlesApplyUpdates(int minimumRung, int phase, float timeStepScale, f
                         // energy after either step is reported before the assertion fires.
                         // Particles are now synchronized for the energy diagnostics.
                         if (rung >= minimumRung) {
-                            flops += 3 * NDIM + 4;
-                            for (int dimension = 0; dimension < NDIM; dimension++) {
+                            flops += 3 * kDimensions + 4;
+                            for (int dimension = 0; dimension < kDimensions; dimension++) {
                                 particlesVel(dimension, gravityIndex) +=
                                     (sphParticlesAcceleration(dimension, gasIndex) -
                                         sphParticlesPredictedAcceleration(dimension, gasIndex)) *
@@ -199,8 +200,8 @@ void sphParticlesApplyUpdates(int minimumRung, int phase, float timeStepScale, f
                         // the next step with the synchronized rates and the new rung's
                         // half-step, ahead of the drift. The next step's phase 0 closes it.
                         if (rung >= minimumRung) {
-                            flops += 2 * NDIM + 2;
-                            for (int dimension = 0; dimension < NDIM; dimension++) {
+                            flops += 2 * kDimensions + 2;
+                            for (int dimension = 0; dimension < kDimensions; dimension++) {
                                 particlesVel(dimension, gravityIndex) +=
                                     sphParticlesAcceleration(dimension, gasIndex) * halfTimeStep;
                             }
@@ -234,7 +235,7 @@ void visitSphCheckpointArrays(
     visit(sphParticlesDensities, count);
     visit(sphParticlesConvergenceFlags, count);
     visit(sphParticlesSemiactiveFlags, count);
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         visit(sphParticlesPredictedAccelerations[dim], count);
         visit(sphParticlesGravityAccelerations[dim], count);
     }
@@ -324,7 +325,7 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
         sphParticlesArrayResize(sphParticlesParticleIndices, newCapacity);
         sphParticlesArrayResize(sphParticlesPredictedInternalEnergyRates, newCapacity);
         sphParticlesArrayResize(sphParticlesInternalEnergyRates, newCapacity);
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             sphParticlesArrayResize(sphParticlesPredictedAccelerations[dim], newCapacity);
             sphParticlesArrayResize(sphParticlesGravityAccelerations[dim], newCapacity);
         }
@@ -385,7 +386,7 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
             sphParticlesChemistryEos[slot] = {};
         }
         sphParticlesAccelerationStates[slot] = {};
-        sphParticlesParticleIndices[slot] = NO_INDEX;
+        sphParticlesParticleIndices[slot] = kNoParticleIndex;
         sphParticlesPredictedInternalEnergyRates[slot] = 0.0f;
         sphParticlesInternalEnergyRates[slot] = 0.0f;
         sphParticlesDensities[slot] = 0.0f;
@@ -401,13 +402,13 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
         }
         sphParticlesConvergenceFlags[slot] = 0;
         sphParticlesSemiactiveFlags[slot] = 0;
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             sphParticlesPredictedAccelerations[dim][slot] = 0.0f;
             sphParticlesGravityAccelerations[dim][slot] = 0.0f;
         }
         if (resizeGravityParticles) {
             particlesCatIndex(offset + i) = previousSize + i;
-            particlesType(offset + i) = SPH_TYPE;
+            particlesType(offset + i) = kSphType;
             sphParticlesParticleIndex(previousSize + i) = offset + i;
         }
     }
@@ -451,9 +452,9 @@ void sphParticlesGlobalReadPositions(
             ParticleInteger const particleCount = range.range.second - range.range.first;
             for (ParticleInteger i = range.range.first; i < range.range.second; i++) {
                 int const j = offset + i - range.range.first;
-                x[j] = sphParticlesPosition(XDIM, i);
-                y[j] = sphParticlesPosition(YDIM, i);
-                z[j] = sphParticlesPosition(ZDIM, i);
+                x[j] = sphParticlesPosition(kXDimension, i);
+                y[j] = sphParticlesPosition(kYDimension, i);
+                z[j] = sphParticlesPosition(kZDimension, i);
             }
         } else {
             detail::SphCacheLineId lineId;
@@ -468,9 +469,9 @@ void sphParticlesGlobalReadPositions(
                 auto const end = std::min(lineId.index + lineSize, range.range.second);
                 for (ParticleInteger i = begin; i < end; i++) {
                     ParticleInteger const srcIndex = i - lineId.index;
-                    x[destIndex] = ptr[srcIndex][XDIM];
-                    y[destIndex] = ptr[srcIndex][YDIM];
-                    z[destIndex] = ptr[srcIndex][ZDIM];
+                    x[destIndex] = ptr[srcIndex][kXDimension];
+                    y[destIndex] = ptr[srcIndex][kYDimension];
+                    z[destIndex] = ptr[srcIndex][kZDimension];
                     destIndex++;
                 }
             }
@@ -478,18 +479,19 @@ void sphParticlesGlobalReadPositions(
     }
 }
 
-static Array<Position, NDIM> const* sphParticlesCacheReadLine(detail::SphCacheLineId lineId) {
+static Array<Position, kDimensions> const* sphParticlesCacheReadLine(
+    detail::SphCacheLineId lineId) {
     return detail::readSphCacheLine<SphParticlesFetchCacheLineAction>(
         lineId, particleCache, mutexes);
 }
 
-static Vector<Array<Position, NDIM>> sphParticlesFetchCacheLine(ParticleInteger index) {
+static Vector<Array<Position, kDimensions>> sphParticlesFetchCacheLine(ParticleInteger index) {
     ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
-    Vector<Array<Position, NDIM>> line(lineSize);
+    Vector<Array<Position, kDimensions>> line(lineSize);
     ParticleInteger const begin = (index / lineSize) * lineSize;
     ParticleInteger const end = std::min(sphParticlesSize(), begin + lineSize);
     for (ParticleInteger i = begin; i < end; i++) {
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             line[i - begin][dim] = sphParticlesPosition(dim, i);
         }
     }
@@ -613,9 +615,9 @@ void sphParticlesGlobalReadVelocities(
             for (ParticleInteger i = range.range.first; i < range.range.second; i++) {
                 int const j = offset + i - range.range.first;
                 int const k = sphParticlesParticleIndex(i);
-                vx[j] = particlesVel(XDIM, k);
-                vy[j] = particlesVel(YDIM, k);
-                vz[j] = particlesVel(ZDIM, k);
+                vx[j] = particlesVel(kXDimension, k);
+                vy[j] = particlesVel(kYDimension, k);
+                vz[j] = particlesVel(kZDimension, k);
             }
         } else {
             detail::SphCacheLineId lineId;
@@ -630,9 +632,9 @@ void sphParticlesGlobalReadVelocities(
                 auto const end = std::min(lineId.index + lineSize, range.range.second);
                 for (ParticleInteger i = begin; i < end; i++) {
                     ParticleInteger const srcIndex = i - lineId.index;
-                    vx[destIndex] = ptr[srcIndex][XDIM];
-                    vy[destIndex] = ptr[srcIndex][YDIM];
-                    vz[destIndex] = ptr[srcIndex][ZDIM];
+                    vx[destIndex] = ptr[srcIndex][kXDimension];
+                    vy[destIndex] = ptr[srcIndex][kYDimension];
+                    vz[destIndex] = ptr[srcIndex][kZDimension];
                     destIndex++;
                 }
             }
@@ -640,21 +642,22 @@ void sphParticlesGlobalReadVelocities(
     }
 }
 
-static Array<float, NDIM> const* sphParticlesReadVelocityCacheLine(detail::SphCacheLineId lineId) {
+static Array<float, kDimensions> const* sphParticlesReadVelocityCacheLine(
+    detail::SphCacheLineId lineId) {
     return detail::readSphCacheLine<SphParticlesFetchVelocityCacheLineAction>(
         lineId, particleVelocityCache, velocityMutexes);
 }
 
-static Vector<Array<float, NDIM>> sphParticlesFetchVelocityCacheLine(ParticleInteger index) {
+static Vector<Array<float, kDimensions>> sphParticlesFetchVelocityCacheLine(ParticleInteger index) {
     ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
-    Vector<Array<float, NDIM>> line(lineSize);
+    Vector<Array<float, kDimensions>> line(lineSize);
     ParticleInteger const begin = (index / lineSize) * lineSize;
     ParticleInteger const end = std::min(sphParticlesSize(), begin + lineSize);
     for (ParticleInteger i = begin; i < end; i++) {
         int const k = sphParticlesParticleIndex(i);
-        line[i - begin][XDIM] = particlesVel(XDIM, k);
-        line[i - begin][YDIM] = particlesVel(YDIM, k);
-        line[i - begin][ZDIM] = particlesVel(ZDIM, k);
+        line[i - begin][kXDimension] = particlesVel(kXDimension, k);
+        line[i - begin][kYDimension] = particlesVel(kYDimension, k);
+        line[i - begin][kZDimension] = particlesVel(kZDimension, k);
     }
     return line;
 }
@@ -842,8 +845,8 @@ void sphParticlesLoad(FILE* fp) {
     FREAD(&savedCount, sizeof(ParticleInteger), 1, fp);
     if (header[0] != 0x43545350U || header[1] != detail::sphCheckpointVersion() ||
         header[2] != sizeof(ParticleInteger) || header[3] != sizeof(SphThermodynamicState) ||
-        header[4] != sizeof(SphAcceleration) || header[5] != NDIM || header[6] != sizeof(float) ||
-        savedCount != sphParticlesSize()) {
+        header[4] != sizeof(SphAcceleration) || header[5] != kDimensions ||
+        header[6] != sizeof(float) || savedCount != sphParticlesSize()) {
         THROW_ERROR("Incompatible SPH checkpoint payload (requires matching "
                     "viscosity/chemistry layout)\n");
     }
@@ -883,7 +886,7 @@ void sphParticlesLoad(FILE* fp) {
 
 void sphParticlesSave(FILE* fp) {
     uint32_t header[7] = {0x43545350U, detail::sphCheckpointVersion(), sizeof(ParticleInteger),
-        sizeof(SphThermodynamicState), sizeof(SphAcceleration), NDIM, sizeof(float)};
+        sizeof(SphThermodynamicState), sizeof(SphAcceleration), kDimensions, sizeof(float)};
     ParticleInteger count = sphParticlesSize();
     FWRITE(header, sizeof(uint32_t), 7, fp);
     FWRITE(&count, sizeof(ParticleInteger), 1, fp);

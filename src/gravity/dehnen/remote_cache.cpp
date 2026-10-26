@@ -25,9 +25,9 @@ HPX_PLAIN_ACTION(treeFetchCacheLine, TreeFetchCacheLineAction);
 
 static Array<
     std::unordered_map<TreeId, std::shared_ptr<hpx::shared_future<Vector<TreeNode>>>, TreeIdHashHi>,
-    TREE_CACHE_SIZE>
+    kTreeCacheSize>
     treeCache;
-static Array<SpinlockType, TREE_CACHE_SIZE> mutex;
+static Array<SpinlockType, kTreeCacheSize> mutex;
 struct LastCacheEntryT;
 
 static std::unordered_set<LastCacheEntryT*> lastCacheEntries;
@@ -144,7 +144,7 @@ static Vector<TreeNode> treeFetchCacheLine(int index) {
     static FmmMultiPos<kFmmMaxOrder> emptyMultipole = [] {
         FmmMultiPos<kFmmMaxOrder> empty;
         empty.multi = 0.0f;
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             empty.pos[dim] = 0.0;
         }
         return empty;
@@ -158,7 +158,7 @@ static Vector<TreeNode> treeFetchCacheLine(int index) {
             empty.mpos = reinterpret_cast<MultipolePosition*>(&emptyMultipole);
             empty.leaf = true;
             empty.processRange = Pair<int>(hpxRank(), hpxRank() + 1);
-            for (int child = 0; child < NCHILD; child++) {
+            for (int child = 0; child < kChildCount; child++) {
                 empty.children[child].proc = hpxRank();
                 empty.children[child].index = -1;
             }

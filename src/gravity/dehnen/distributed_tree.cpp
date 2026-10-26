@@ -73,7 +73,7 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
     TreeBuildPolicy policy;
     policy.representedProcessRange = processRange;
     float boxR = 0.0f;
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         boxR += sqr(0.5 * (box.end[dim] - box.begin[dim]));
     }
     boxR = sqrt(boxR);

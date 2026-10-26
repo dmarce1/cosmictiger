@@ -195,7 +195,7 @@ void testScalarCases(std::vector<AcceptanceCase> const& cases) {
 
 #if defined(FMM_ACCEPTANCE_TEST_SIMD)
 void testSimdCases(std::vector<AcceptanceCase> const& cases) {
-    for (size_t start = 0; start < cases.size(); start += SIMD_FLOAT_SIZE) {
+    for (size_t start = 0; start < cases.size(); start += kSimdFloatSize) {
         SimdFloat centerDistanceSquared{};
         SimdFloat sinkRadius{};
         SimdFloat sourceRadius{};
@@ -203,7 +203,7 @@ void testSimdCases(std::vector<AcceptanceCase> const& cases) {
         SimdFloat sourceBoxToSinkCenterSquared{};
         SimdFloat pairSupportRadius{};
         SimdFloat inverseTheta{};
-        for (int lane = 0; lane < SIMD_FLOAT_SIZE; lane++) {
+        for (int lane = 0; lane < kSimdFloatSize; lane++) {
             auto const& value = cases[(start + lane) % cases.size()];
             simdSetLane(centerDistanceSquared, lane, value.centerDistanceSquared);
             simdSetLane(sinkRadius, lane, value.sinkRadius);
@@ -216,7 +216,7 @@ void testSimdCases(std::vector<AcceptanceCase> const& cases) {
         auto const acceptance = computeFmmAcceptance(centerDistanceSquared, sinkRadius,
             sourceRadius, sinkBoxToSourceCenterSquared, sourceBoxToSinkCenterSquared,
             pairSupportRadius, inverseTheta);
-        for (int lane = 0; lane < SIMD_FLOAT_SIZE; lane++) {
+        for (int lane = 0; lane < kSimdFloatSize; lane++) {
             auto const& value = cases[(start + lane) % cases.size()];
             auto const scalar = evaluate<float>(value);
             require(acceptance.cellCell[lane] == scalar.cellCell &&

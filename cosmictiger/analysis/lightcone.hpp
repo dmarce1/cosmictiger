@@ -26,8 +26,8 @@ void healpixInit();
 __device__ void vec2pixNest(long const nside, double* vec, long* ipix);
 #endif
 
-#define LC_NO_GROUP (0xFFFFFFFFFFFFFFULL)
-#define LC_EDGE_GROUP (0x0ULL)
+inline constexpr unsigned long long kLightconeNoGroup = (0xFFFFFFFFFFFFFFULL);
+inline constexpr unsigned long long kLightconeEdgeGroup = (0x0ULL);
 
 struct LightconeTreeId {
     int pix;
@@ -41,7 +41,7 @@ struct LightconeTreeId {
 
 struct LightconeTreeNode {
     Range<double> box;
-    Array<LightconeTreeId, NCHILD> children;
+    Array<LightconeTreeId, kChildCount> children;
     Pair<int> particleRange;
     int active;
     int lastActive;
@@ -66,8 +66,8 @@ inline float velreal2float(LightconeVelocityReal i, float vmax) {
 using LightconeGroup = unsigned long long;
 
 struct LightconeParticle {
-    Array<LightconeReal, NDIM> pos;
-    Array<float, NDIM> vel;
+    Array<LightconeReal, kDimensions> pos;
+    Array<float, kDimensions> vel;
     LightconeGroup group;
     template <class A>
     void serialize(A&& arc, unsigned) {
@@ -78,8 +78,8 @@ struct LightconeParticle {
 };
 
 struct LightconeParticles {
-    Array<DeviceVector<LightconeReal>, NDIM> pos;
-    Array<DeviceVector<float>, NDIM> vel;
+    Array<DeviceVector<LightconeReal>, kDimensions> pos;
+    Array<DeviceVector<float>, kDimensions> vel;
     DeviceVector<LightconeGroup> group;
 };
 

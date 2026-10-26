@@ -78,13 +78,13 @@ static hpx::future<TreeCreateReturn> treeCreateFork(TreeCreateParameters params,
 
 namespace detail {
 
-Array<uint64_t, NDIM> treeCellCoordinates(uint64_t key, int meshSize) {
+Array<uint64_t, kDimensions> treeCellCoordinates(uint64_t key, int meshSize) {
     uint64_t const count = particleMeshCellCount(meshSize);
     if (key >= count) {
         throw std::invalid_argument("Tree cell key is outside the mesh");
     }
-    Array<uint64_t, NDIM> coordinate;
-    for (int dim = NDIM - 1; dim >= 0; --dim) {
+    Array<uint64_t, kDimensions> coordinate;
+    for (int dim = kDimensions - 1; dim >= 0; --dim) {
         coordinate[dim] = key % meshSize;
         key /= meshSize;
     }
@@ -94,7 +94,7 @@ Array<uint64_t, NDIM> treeCellCoordinates(uint64_t key, int meshSize) {
 Range<double> treeCellBox(uint64_t key, int meshSize) {
     auto const coordinate = treeCellCoordinates(key, meshSize);
     Range<double> box;
-    for (int dim = 0; dim < NDIM; ++dim) {
+    for (int dim = 0; dim < kDimensions; ++dim) {
         box.begin[dim] = double(coordinate[dim]) / meshSize;
         box.end[dim] = double(coordinate[dim] + 1) / meshSize;
     }
@@ -104,12 +104,12 @@ Range<double> treeCellBox(uint64_t key, int meshSize) {
 // The center is used both as a fixed-point record and as a floating-point M2M
 // origin. Choose a double whose conversion remains in the exact half-open cell,
 // including odd meshes and fixed64 values whose toDouble() rounds to one.
-void treeClampCellCenter(
-    Array<double, NDIM>& center, Array<Position, NDIM>& position, TreeCellBuild const& cellBuild) {
+void treeClampCellCenter(Array<double, kDimensions>& center, Array<Position, kDimensions>& position,
+    TreeCellBuild const& cellBuild) {
     auto const coordinate = treeCellCoordinates(cellBuild.cellKey, cellBuild.meshSize);
     unsigned __int128 const scale = static_cast<unsigned __int128>(1) << kPositionBits;
     auto const meshSize = static_cast<uint64_t>(cellBuild.meshSize);
-    for (int dim = 0; dim < NDIM; ++dim) {
+    for (int dim = 0; dim < kDimensions; ++dim) {
         auto const lower =
             static_cast<PositionInteger>((coordinate[dim] * scale + meshSize - 1) / meshSize);
         auto const upper = static_cast<PositionInteger>(
@@ -249,7 +249,7 @@ void treePrepareCellForest() {
         int const meshSize = getOptions().gravity.meshSize;
         for (ParticleInteger i = 0; i < particlesSize(); ++i) {
             uint64_t key = 0;
-            for (int dim = 0; dim < NDIM; ++dim) {
+            for (int dim = 0; dim < kDimensions; ++dim) {
                 key = key * meshSize +
                     detail::particleMeshCoordinate(particlesPos(dim, i).raw(), meshSize);
             }
@@ -331,7 +331,7 @@ TreeCellRoot treeCreateCell(ParticleMeshCell const& cell, int meshSize, FmmParti
     } else if (store == FmmParticleStore::Owned) {
         box = box.intersection(hpxSize() == 1 ? unitBox<double>() : domainsRange(domainKey));
     }
-    for (int dim = 0; dim < NDIM; ++dim) {
+    for (int dim = 0; dim < kDimensions; ++dim) {
         if (box.end[dim] < box.begin[dim]) {
             throw std::runtime_error("Occupied mesh cell does not intersect its source domain");
         }
@@ -344,7 +344,7 @@ TreeCellRoot treeCreateCell(ParticleMeshCell const& cell, int meshSize, FmmParti
         // The completed cell owns these particle/category pairs. Repair only
         // their reverse links while other disjoint cells may still be sorting.
         for (ParticleInteger i = cell.begin; i < cell.end; ++i) {
-            if (particlesType(i) == SPH_TYPE) {
+            if (particlesType(i) == kSphType) {
                 ParticleInteger const gasIndex = particlesCatIndex(i);
                 if (gasIndex < 0 || gasIndex >= sphParticlesSize()) {
                     throw std::runtime_error("Invalid gas index after cell tree construction");

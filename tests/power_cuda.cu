@@ -59,9 +59,12 @@ void testDensity(size_t count) {
     CudaBuffer<Position> positionY(count);
     CudaBuffer<Position> positionZ(count);
     CudaBuffer<float> masses(count);
-    std::copy(fixture.positions[XDIM].begin(), fixture.positions[XDIM].end(), positionX.data());
-    std::copy(fixture.positions[YDIM].begin(), fixture.positions[YDIM].end(), positionY.data());
-    std::copy(fixture.positions[ZDIM].begin(), fixture.positions[ZDIM].end(), positionZ.data());
+    std::copy(fixture.positions[kXDimension].begin(), fixture.positions[kXDimension].end(),
+        positionX.data());
+    std::copy(fixture.positions[kYDimension].begin(), fixture.positions[kYDimension].end(),
+        positionY.data());
+    std::copy(fixture.positions[kZDimension].begin(), fixture.positions[kZDimension].end(),
+        positionZ.data());
     std::copy(fixture.masses.begin(), fixture.masses.end(), masses.data());
     for (bool weighted : {false, true}) {
         for (int fold : {1, 3}) {
@@ -87,8 +90,9 @@ void testDensity(size_t count) {
                     });
                 auto const cpuDensity = assignTiledDensity(
                     kGridSize, tileSize, [&](Range<int64_t> const& box, float* output) {
-                        accumulateDensityCpuKernel(fixture.positions[XDIM].data(),
-                            fixture.positions[YDIM].data(), fixture.positions[ZDIM].data(),
+                        accumulateDensityCpuKernel(fixture.positions[kXDimension].data(),
+                            fixture.positions[kYDimension].data(),
+                            fixture.positions[kZDimension].data(),
                             weighted ? fixture.masses.data() : nullptr, count, fold, kGridSize, box,
                             output);
                     });

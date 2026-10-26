@@ -44,8 +44,8 @@ Vector<float> accumulateDensityCuda(int m, int ndim, Range<int64_t> intbox) {
     numberOfBlocks *= cudaSmpCount();
     CudaStream stream(cudaGetDevice());
     accumulateDensityKernel<<<numberOfBlocks, kBlockSize, 0, stream.nativeHandle()>>>(
-        &particlesPos(XDIM, 0), &particlesPos(YDIM, 0), &particlesPos(ZDIM, 0), devRho, masses, m,
-        particlesSize(), ndim, intbox);
+        &particlesPos(kXDimension, 0), &particlesPos(kYDimension, 0), &particlesPos(kZDimension, 0),
+        devRho, masses, m, particlesSize(), ndim, intbox);
     stream.checkLaunch();
     stream.wait();
     memcpy(rho.data(), devRho, sizeof(float) * n3);

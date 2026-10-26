@@ -31,7 +31,8 @@ struct TreeBuildPolicy {
     FlopCount subdivisionFlops = 0;
     Pair<int, int> representedProcessRange;
     void* context = nullptr;
-    void (*constrainCenter)(void*, Array<double, NDIM>&, Array<Position, NDIM>&) = nullptr;
+    void (*constrainCenter)(
+        void*, Array<double, kDimensions>&, Array<Position, kDimensions>&) = nullptr;
     void (*splitDomains)(void*, TreeBuildRequest&, TreeBuildRequest&) = nullptr;
     hpx::future<TreeCreateReturn> (*fork)(void*, TreeBuildRequest, bool, bool) = nullptr;
 };

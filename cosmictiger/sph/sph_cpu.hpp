@@ -41,10 +41,10 @@ inline std::vector<int> sphCpuNeighbors(SphRunData const& data, SphTreeNode cons
             if (activeOnly && data.sourceRungs[sourceIndex] < minimumRung) {
                 continue;
             }
-            Array<Position, NDIM> position;
-            position[XDIM] = data.sourcePositionX[sourceIndex];
-            position[YDIM] = data.sourcePositionY[sourceIndex];
-            position[ZDIM] = data.sourcePositionZ[sourceIndex];
+            Array<Position, kDimensions> position;
+            position[kXDimension] = data.sourcePositionX[sourceIndex];
+            position[kYDimension] = data.sourcePositionY[sourceIndex];
+            position[kZDimension] = data.sourcePositionZ[sourceIndex];
             if (targetNode.outerBox.contains(position, &flops) ||
                 (symmetric &&
                     sphSupportIntersects(targetNode.innerBox, position,
@@ -79,10 +79,10 @@ inline Vector3<SimdFloat> sphCpuLoad3(float const* x, float const* y, float cons
 // Sink minus source positions, r_a - r_b, for one pack of neighbors.
 inline Vector3<SimdFloat> sphCpuSeparations(
     SphRunData const& data, int particleIndex, std::vector<int> const& neighbors, size_t first) {
-    Position const* positions[NDIM] = {
+    Position const* positions[kDimensions] = {
         data.sourcePositionX, data.sourcePositionY, data.sourcePositionZ};
     Vector3<SimdFloat> separation;
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         SignedPositionInteger const sinkPosition =
             static_cast<SignedPositionInteger>(positions[dim][particleIndex].raw());
         SimdPosition const sourcePosition([&](auto lane) {

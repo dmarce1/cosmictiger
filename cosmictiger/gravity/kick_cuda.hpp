@@ -25,7 +25,7 @@
 
 template <int order>
 struct CudaExpansionType {
-    Array<Position, NDIM> pos;
+    Array<Position, kDimensions> pos;
     cosmictiger::gravity::cartesian::Expansion<float, order> expansion;
 };
 
@@ -97,7 +97,7 @@ CUDA_EXPORT inline int kickCarveListStorage(
     CudaKickArenaLayout const& layout, char* base, CudaKickListStorage<order>& storage) {
     detail::KickListCarver carver{base, 0};
     storage.listEntries = layout.listReserve;
-    storage.depth = CUDA_MAX_DEPTH;
+    storage.depth = kCudaMaxDepth;
     storage.forceEntries = layout.forceBackingCapacity;
     storage.currentEntries = layout.expansionOffset >= 0 ? 0 : 1;
     storage.dchecks = carver.take<int>(storage.listEntries);
@@ -145,7 +145,7 @@ struct CudaKickControl {
     char* multipoles;
     float* scratchExpansion;
     cosmictiger::gravity::cartesian::Expansion<float, order>* expansion;
-    Array<Position, NDIM>* expansionPos;
+    Array<Position, kDimensions>* expansionPos;
     CudaKickForceTile forces;
     CudaKickArenaLayout layout;
 
@@ -171,7 +171,7 @@ template <int order>
 struct CudaKickParameters {
     FmmGeometry geometry;
     ParticleInteger outputOffset;
-    Array<Position, NDIM> lpos;
+    Array<Position, kDimensions> lpos;
     cosmictiger::gravity::cartesian::Expansion<float, order> lValue;
     int self;
     int* dchecks;

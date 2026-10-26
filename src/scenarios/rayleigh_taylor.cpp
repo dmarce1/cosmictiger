@@ -7,6 +7,7 @@
  */
 
 #include <cmath>
+#include <numbers>
 #include <stdexcept>
 
 #include <cosmictiger/core/options.hpp>
@@ -46,8 +47,8 @@ ScenarioPlan initializeRayleighTaylor() {
                 bool const heavy = iz < quarterDim;
                 double const density = heavy ? kHeavyDensity : kLightDensity;
                 int const samples = heavy ? 2 : 1;
-                double const supportRadius =
-                    std::cbrt(mass * opts.hydro.neighborNumber / (4.0 * M_PI / 3.0 * density));
+                double const supportRadius = std::cbrt(
+                    mass * opts.hydro.neighborNumber / (4.0 * std::numbers::pi / 3.0 * density));
                 for (int sample = 0; sample < samples; sample++) {
                     double const offset = heavy ? 0.25 + 0.5 * sample : 0.5;
                     Position const x((ix + offset) * dx);
@@ -65,18 +66,19 @@ ScenarioPlan initializeRayleighTaylor() {
                     double const transverse = x.toDouble() - 0.5;
                     double const velocity = kVelocityAmplitude / 4.0 *
                         (1.0 +
-                            std::cos(8.0 * M_PI * transverse) *
-                                (1.0 + std::cos(6.0 * M_PI * transverse))) *
-                        std::sin(2.0 * M_PI * height);
+                            std::cos(8.0 * std::numbers::pi * transverse) *
+                                (1.0 + std::cos(6.0 * std::numbers::pi * transverse))) *
+                        std::sin(2.0 * std::numbers::pi * height);
                     // Mirror in fixed-point coordinates so paired positions sum to one
                     // exactly. Scalars are even and the normal velocity is odd.
                     for (int side = 0; side < 2; side++) {
-                        sphParticlesPosition(XDIM, index) = x;
-                        sphParticlesPosition(YDIM, index) = y;
-                        sphParticlesPosition(ZDIM, index) = side == 0 ? z : Position(0.0) - z;
-                        sphParticlesVelocity(XDIM, index) = 0.0f;
-                        sphParticlesVelocity(YDIM, index) = 0.0f;
-                        sphParticlesVelocity(ZDIM, index) = side == 0 ? velocity : -velocity;
+                        sphParticlesPosition(kXDimension, index) = x;
+                        sphParticlesPosition(kYDimension, index) = y;
+                        sphParticlesPosition(kZDimension, index) =
+                            side == 0 ? z : Position(0.0) - z;
+                        sphParticlesVelocity(kXDimension, index) = 0.0f;
+                        sphParticlesVelocity(kYDimension, index) = 0.0f;
+                        sphParticlesVelocity(kZDimension, index) = side == 0 ? velocity : -velocity;
                         sphParticlesSupportRadius(index) = supportRadius;
                         sphParticlesThermodynamicState(index).internalEnergy = internalEnergy;
                         sphParticlesRung(index) = 0;

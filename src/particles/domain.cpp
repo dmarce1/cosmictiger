@@ -43,7 +43,7 @@ static Vector<ParticleInteger> freeIndices;
 static Vector<Vector<Particle>> transParticles;
 static std::unordered_map<size_t, DomainT> boxesByKey;
 
-static int findParticleDomain(Array<double, NDIM> const& x, size_t key = 1, int depth = 0);
+static int findParticleDomain(Array<double, kDimensions> const& x, size_t key = 1, int depth = 0);
 static void domainsCheck();
 static Vector<DomainLocal> localDomains;
 static int alignedMeshSize = 0;
@@ -62,7 +62,7 @@ bool meshLayoutAligned() {
                    mesh_domain::boundaryIndex(value, meshSize), meshSize) == value;
     };
     auto const alignedBox = [&](Range<double> const& box) {
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             if (!aligned(box.begin[dim]) || !aligned(box.end[dim])) {
                 return false;
             }
@@ -84,7 +84,7 @@ bool meshLayoutAligned() {
 
 bool meshDomainContains(Range<double> const& box, ParticleInteger particle) {
     uint32_t const meshSize = getOptions().gravity.meshSize;
-    for (int dim = 0; dim < NDIM; ++dim) {
+    for (int dim = 0; dim < kDimensions; ++dim) {
         if (!mesh_domain::contains(particlesPos(dim, particle).raw(),
                 mesh_domain::boundaryIndex(box.begin[dim], meshSize),
                 mesh_domain::boundaryIndex(box.end[dim], meshSize), meshSize)) {
@@ -100,8 +100,8 @@ int findMeshParticleDomain(ParticleInteger particle) {
     int depth = 0;
     while (boxesByKey.at(key).rank == -1) {
         uint32_t const plane = mesh_domain::boundaryIndex(boxesByKey.at(key).midx, meshSize);
-        bool const left =
-            mesh_domain::belowBoundary(particlesPos(depth % NDIM, particle).raw(), plane, meshSize);
+        bool const left = mesh_domain::belowBoundary(
+            particlesPos(depth % kDimensions, particle).raw(), plane, meshSize);
         key = 2 * key + !left;
         ++depth;
     }
@@ -161,8 +161,8 @@ void chooseMeshDomainSplits(Vector<DomainGlobal> const& domains, int depth, Vect
     for (size_t i = 0; i < domains.size(); ++i) {
         auto const& domain = domains[i];
         auto& search = searches[i];
-        search.begin = mesh_domain::boundaryIndex(domain.box.begin[depth % NDIM], meshSize);
-        search.end = mesh_domain::boundaryIndex(domain.box.end[depth % NDIM], meshSize);
+        search.begin = mesh_domain::boundaryIndex(domain.box.begin[depth % kDimensions], meshSize);
+        search.end = mesh_domain::boundaryIndex(domain.box.end[depth % kDimensions], meshSize);
         search.lower = search.begin;
         search.upper = search.end;
         search.ranks = domain.processRange.second - domain.processRange.first;
@@ -376,7 +376,7 @@ Vector<size_t> domainsCountBelow(Vector<double> bounds, int depth) {
                         hpxHardwareConcurrency() / (size_t) particlesSize(),
                     (size_t) 1);
                 Vector<hpx::future<void>> futs;
-                int const xdim = depth % NDIM;
+                int const xdim = depth % kDimensions;
                 bool const mesh = detail::usesMeshDomains();
                 uint32_t const meshSize = getOptions().gravity.meshSize;
                 uint32_t const plane = mesh ? mesh_domain::boundaryIndex(bounds[i], meshSize) : 0;
@@ -422,8 +422,8 @@ void domainsReboundSort(Vector<double> bounds, int depth) {
                 mids[i] = detail::usesMeshDomains() ?
                     detail::partitionMeshDomain(localDomains[i].particleRange,
                         mesh_domain::boundaryIndex(bounds[i], getOptions().gravity.meshSize),
-                        depth % NDIM) :
-                    particlesSort(localDomains[i].particleRange, bounds[i], depth % NDIM);
+                        depth % kDimensions) :
+                    particlesSort(localDomains[i].particleRange, bounds[i], depth % kDimensions);
                 ///	PRINT( "!!!!!!!! %i %i %e %i %i\n", hpx_rank(), mids[i], bounds[i],
                 /// local_domains[i].part_range.first, local_domains[i].part_range.second);
             }));
@@ -437,7 +437,7 @@ void domainsReboundSort(Vector<double> bounds, int depth) {
             DomainLocal right;
             left = localDomains[i];
             right = localDomains[i];
-            left.box.end[depth % NDIM] = right.box.begin[depth % NDIM] = bounds[i];
+            left.box.end[depth % kDimensions] = right.box.begin[depth % kDimensions] = bounds[i];
             left.particleRange.second = right.particleRange.first = mids[i];
             left.processRange.second = right.processRange.first =
                 (localDomains[i].processRange.first + localDomains[i].processRange.second) / 2;
@@ -500,7 +500,7 @@ void domainsRebound() {
                 boxesByKey[domains[i].key].midx = bounds[i];
             }
         } else {
-            for (int iter = 0; iter < DOMAIN_REBOUND_ITERS; iter++) {
+            for (int iter = 0; iter < kDomainReboundIterations; iter++) {
                 for (auto& c : counts) {
                     c = 0;
                 }
@@ -563,11 +563,12 @@ void domainsRebound() {
                 DomainGlobal right;
                 left = domains[i];
                 right = domains[i];
-                left.box.end[depth % NDIM] = right.box.begin[depth % NDIM] = bounds[i];
+                left.box.end[depth % kDimensions] = right.box.begin[depth % kDimensions] =
+                    bounds[i];
                 left.processRange.second = right.processRange.first =
                     (domains[i].processRange.first + domains[i].processRange.second) / 2;
-                int const leftdim = (depth + 1) % NDIM;
-                int const rightdim = (depth + 1) % NDIM;
+                int const leftdim = (depth + 1) % kDimensions;
+                int const rightdim = (depth + 1) % kDimensions;
                 left.totalCount = counts[i];
                 right.totalCount = domains[i].totalCount - counts[i];
                 left.midhi = left.box.end[leftdim];
@@ -605,7 +606,7 @@ void domainsTransmitParticles(Vector<Particle> parts) {
 // Ordinary SPH timesteps migrate the complete gas state together with its
 // gravity particle. Category indices are local and are rebuilt at the receiver.
 struct GasMigrationState {
-    Array<float, NDIM> acceleration, predictedAcceleration, gravityAcceleration;
+    Array<float, kDimensions> acceleration, predictedAcceleration, gravityAcceleration;
     float supportRadius, internalEnergy, predictedInternalEnergyRate, internalEnergyRate, density;
     char converged, semiactive;
     Pair<float> viscosity;    // Alpha and its previous conformal-time rate.
@@ -642,7 +643,7 @@ struct SphMigrationParticle {
     template <class Archive>
     void serialize(Archive& arc, unsigned) {
         arc & part;
-        if (part.type == SPH_TYPE) {
+        if (part.type == kSphType) {
             arc & gas;
         }
     }
@@ -658,8 +659,8 @@ HPX_PLAIN_ACTION(receiveSphParticles, ReceiveSphParticlesAction);
 static SphMigrationParticle packSphParticle(ParticleInteger index) {
     SphMigrationParticle result;
     result.part = particlesGetParticle(index);
-    ALWAYS_ASSERT(result.part.type == DARK_MATTER_TYPE || result.part.type == SPH_TYPE);
-    if (result.part.type == SPH_TYPE) {
+    ALWAYS_ASSERT(result.part.type == kDarkMatterType || result.part.type == kSphType);
+    if (result.part.type == kSphType) {
         auto const i = particlesCatIndex(index);
         auto& gas = result.gas;
         gas.supportRadius = sphParticlesThermodynamicStates[i].supportRadius;
@@ -685,7 +686,7 @@ static SphMigrationParticle packSphParticle(ParticleInteger index) {
             gas.chemistry[primordial::kAbundanceCount] = state.thermalEnergy;
             gas.chemistryEos = sphParticlesChemistryEos[i];
         }
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             gas.predictedAcceleration[dim] = sphParticlesPredictedAccelerations[dim][i];
             gas.gravityAcceleration[dim] = sphParticlesGravityAccelerations[dim][i];
         }
@@ -694,11 +695,11 @@ static SphMigrationParticle packSphParticle(ParticleInteger index) {
 }
 static void unpackSphParticle(
     SphMigrationParticle record, ParticleInteger index, ParticleInteger gasIndex) {
-    if (record.part.type == SPH_TYPE) {
+    if (record.part.type == kSphType) {
         record.part.catIndex = gasIndex;
     }
     particlesSetParticle(record.part, index);
-    if (record.part.type == SPH_TYPE) {
+    if (record.part.type == kSphType) {
         auto const i = gasIndex;
         auto const& gas = record.gas;
         sphParticlesParticleIndex(i) = index;
@@ -725,7 +726,7 @@ static void unpackSphParticle(
             state.thermalEnergy = gas.chemistry[primordial::kAbundanceCount];
             sphParticlesChemistryEos[i] = gas.chemistryEos;
         }
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             sphParticlesPredictedAccelerations[dim][i] = gas.predictedAcceleration[dim];
             sphParticlesGravityAccelerations[dim][i] = gas.gravityAcceleration[dim];
         }
@@ -742,8 +743,8 @@ static void beginSphMigration(int rung) {
     // The ordinary integrator retains every rung in the same particle range.
     // Moving every out-of-domain particle also handles domain rebalancing.
     for (ParticleInteger i = 0; i < particlesSize(); i++) {
-        Array<double, NDIM> x;
-        for (int dim = 0; dim < NDIM; dim++) {
+        Array<double, kDimensions> x;
+        for (int dim = 0; dim < kDimensions; dim++) {
             x[dim] = positionDomainCoordinate(particlesPos(dim, i));
         }
         auto record = packSphParticle(i);
@@ -753,7 +754,7 @@ static void beginSphMigration(int rung) {
             auto const rank = findParticleDomain(x);
             auto& send = sends[rank];
             send.push_back(std::move(record));
-            if (send.size() >= MAX_PARTICLES_PER_PARCEL) {
+            if (send.size() >= kMaxParticlesPerParcel) {
                 pending.push_back(
                     hpx::async<ReceiveSphParticlesAction>(hpxLocalities()[rank], std::move(send)));
                 send.clear();
@@ -783,14 +784,14 @@ static void endSphMigration() {
     receivedSphParticles.clear();
     ParticleInteger gasCount = 0;
     for (auto const& record : retainedSphParticles) {
-        gasCount += record.part.type == SPH_TYPE;
+        gasCount += record.part.type == kSphType;
     }
     particlesResize(retainedSphParticles.size());
     sphParticlesResize(gasCount, false);
     ParticleInteger gasIndex = 0;
     for (ParticleInteger i = 0; i < retainedSphParticles.size(); i++) {
         unpackSphParticle(retainedSphParticles[i], i, gasIndex);
-        gasIndex += retainedSphParticles[i].part.type == SPH_TYPE;
+        gasIndex += retainedSphParticles[i].part.type == kSphType;
     }
     retainedSphParticles.clear();
     for (auto& future : pending) {
@@ -834,9 +835,9 @@ void domainsBegin(int rung) {
                     // Ordinary timesteps drift every rung together. Rebalance
                     // all particles before building their common gravity tree.
                     if (!getOptions().run.hierarchicalGravity || particlesRung(i) == rung) {
-                        Array<double, NDIM> x;
+                        Array<double, kDimensions> x;
                         if (!mesh) {
-                            for (ParticleInteger dim = 0; dim < NDIM; dim++) {
+                            for (ParticleInteger dim = 0; dim < kDimensions; dim++) {
                                 x[dim] = positionDomainCoordinate(particlesPos(dim, i));
                             }
                         }
@@ -847,7 +848,7 @@ void domainsBegin(int rung) {
                                 mesh ? detail::findMeshParticleDomain(i) : findParticleDomain(x);
                             auto& send = sends[rank];
                             send.push_back(particlesGetParticle(i));
-                            if (send.size() >= MAX_PARTICLES_PER_PARCEL) {
+                            if (send.size() >= kMaxParticlesPerParcel) {
                                 //				PRINT( "Sending %i from %i to %i\n", send.size(),
                                 // hpx_rank(), rank);
                                 futs.push_back(hpx::async<DomainsTransmitParticlesAction>(
@@ -889,7 +890,7 @@ void domainsEnd() {
         futs.push_back(hpx::async<DomainsEndAction>(c));
     }
     auto const particleCompare = [](Particle a, Particle b) {
-        for (ParticleInteger dim = 0; dim < NDIM; dim++) {
+        for (ParticleInteger dim = 0; dim < kDimensions; dim++) {
             if (a.x[dim] < b.x[dim]) {
                 return true;
             } else if (a.x[dim] > b.x[dim]) {
@@ -985,8 +986,8 @@ static void domainsCheck() {
             ParticleInteger const end =
                 size_t(proc + 1) * (rng.second - rng.first) / numberOfThreads + rng.first;
             for (ParticleInteger i = begin; i < end; i++) {
-                Array<double, NDIM> x;
-                for (int dim = 0; dim < NDIM; dim++) {
+                Array<double, kDimensions> x;
+                for (int dim = 0; dim < kDimensions; dim++) {
                     x[dim] = positionDomainCoordinate(particlesPos(dim, i));
                 }
                 bool const contained = detail::usesMeshDomains() ?
@@ -1075,10 +1076,10 @@ static void domainsCheck() {
 
  */
 
-static int findParticleDomain(Array<double, NDIM> const& x, size_t key, int depth) {
+static int findParticleDomain(Array<double, kDimensions> const& x, size_t key, int depth) {
     auto const& entry = boxesByKey[key];
     if (entry.rank == -1) {
-        int const xdim = depth % NDIM;
+        int const xdim = depth % kDimensions;
         key <<= 1;
         if (x[xdim] >= entry.midx) {
             key += 1;

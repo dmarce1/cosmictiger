@@ -229,7 +229,7 @@ void testMathApproximations() {
     SimdFloat errorComplement;
     SimdFloat errorExponential;
     erfcexp(errorInput, &errorComplement, &errorExponential);
-    for (int lane = 0; lane < SIMD_FLOAT_SIZE; ++lane) {
+    for (int lane = 0; lane < kSimdFloatSize; ++lane) {
         double const expectedExponential = std::exp(double(exponentArguments[lane]));
         requireNear(exponential[lane], expectedExponential, 3.0e-6 * expectedExponential,
             "SIMD exponential approximation");

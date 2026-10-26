@@ -9,6 +9,7 @@
 #include <bit>
 #include <cmath>
 #include <cstdint>
+#include <numbers>
 #include <stdexcept>
 #include <vector>
 
@@ -75,7 +76,8 @@ double ZeroOrderUniverse::redshiftToDensity(double z) const {
     double const a = 1.0 / (1.0 + z);
     double const omegaM = params.omegaB + params.omegaC;
     double const hubbleToday = params.hubble * constants::kH0;
-    return omegaM * 3.0 * hubbleToday * hubbleToday / (8.0 * M_PI * constants::kG * a * a * a);
+    return omegaM * 3.0 * hubbleToday * hubbleToday /
+        (8.0 * std::numbers::pi * constants::kG * a * a * a);
 }
 
 double ZeroOrderUniverse::scaleFactorToConformalTime(double a) {
@@ -203,7 +205,7 @@ void createZeroOrderUniverse(ZeroOrderUniverse* uniPtr, std::function<double(dou
     auto const rhoBaryon = [=](double a) {
         using namespace constants;
         //		PRINT( "%e\n", omega_b);
-        return 3.0 * pow(littleh * kH0, 2) / (8.0 * M_PI * kG) * omegaB / (a * a * a);
+        return 3.0 * pow(littleh * kH0, 2) / (8.0 * std::numbers::pi * kG) * omegaB / (a * a * a);
     };
 
     auto const tRadiation = [=](double a) {

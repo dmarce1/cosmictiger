@@ -10,8 +10,6 @@
 #pragma once
 // Inclusive local-degree range; each local degree L pairs with source degree L - 1
 // and FMM order L + 1.
-#define COSMICTIGER_CARTESIAN_GENERATED_MIN_LOCAL_DEGREE 2
-#define COSMICTIGER_CARTESIAN_GENERATED_MAX_LOCAL_DEGREE 8
 namespace cosmictiger::gravity::cartesian {
 inline constexpr int kMinLocalDegree = 2;
 inline constexpr int kMaxLocalDegree = 8;

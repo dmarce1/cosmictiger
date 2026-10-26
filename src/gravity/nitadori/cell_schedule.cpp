@@ -85,7 +85,7 @@ void computeReadyCells() {
                 item.l.zero();
                 item.geometry.meshSize = cache.meshSize;
                 auto const center = coordinates(root.key);
-                for (int dim = 0; dim < NDIM; ++dim) {
+                for (int dim = 0; dim < kDimensions; ++dim) {
                     item.geometry.sinkCell[dim] = center[dim];
                 }
                 for (size_t source : state.sinkSources[sink]) {
@@ -119,7 +119,7 @@ void computeReadyCells() {
                     auto const value = particle(index, center);
                     evaluate(cache.order, field, coefficients.data(), localTrace, value.offset, h);
                     field[0] += fields.potential[compact];
-                    for (int dim = 0; dim < NDIM; ++dim) {
+                    for (int dim = 0; dim < kDimensions; ++dim) {
                         field[dim + 1] += fields.acceleration[dim][compact];
                     }
                     consumeField(index, field, result);

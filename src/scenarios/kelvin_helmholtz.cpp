@@ -7,6 +7,7 @@
  */
 
 #include <cmath>
+#include <numbers>
 #include <stdexcept>
 
 #include <cosmictiger/core/options.hpp>
@@ -54,15 +55,17 @@ ScenarioPlan initializeKelvinHelmholtz() {
                 double z = (iz + 0.5) * dx;
                 double eint = p1 / rho1 / (getOptions().hydro.gamma - 1);
                 double h = pow(
-                    m * getOptions().hydro.neighborNumber / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
+                    m * getOptions().hydro.neighborNumber / (4.0 * std::numbers::pi / 3.0 * rho1),
+                    1.0 / 3.0);
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSupportRadius(i) = h;
-                sphParticlesPosition(XDIM, i) = x;
-                sphParticlesPosition(YDIM, i) = y;
-                sphParticlesPosition(ZDIM, i) = z;
-                sphParticlesVelocity(XDIM, i) = kEta * sin(kFreq * 2.0 * M_PI * y);
-                sphParticlesVelocity(YDIM, i) = vy1;
-                sphParticlesVelocity(ZDIM, i) = 0.0;
+                sphParticlesPosition(kXDimension, i) = x;
+                sphParticlesPosition(kYDimension, i) = y;
+                sphParticlesPosition(kZDimension, i) = z;
+                sphParticlesVelocity(kXDimension, i) =
+                    kEta * sin(kFreq * 2.0 * std::numbers::pi * y);
+                sphParticlesVelocity(kYDimension, i) = vy1;
+                sphParticlesVelocity(kZDimension, i) = 0.0;
                 sphParticlesRung(i) = 0;
                 sphParticlesThermodynamicState(i).internalEnergy = eint;
 
@@ -72,12 +75,13 @@ ScenarioPlan initializeKelvinHelmholtz() {
                 z = (iz) *dx;
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSupportRadius(i) = h;
-                sphParticlesPosition(XDIM, i) = x;
-                sphParticlesPosition(YDIM, i) = y;
-                sphParticlesPosition(ZDIM, i) = z;
-                sphParticlesVelocity(XDIM, i) = kEta * sin(kFreq * 2.0 * M_PI * y);
-                sphParticlesVelocity(YDIM, i) = vy1;
-                sphParticlesVelocity(ZDIM, i) = 0.0;
+                sphParticlesPosition(kXDimension, i) = x;
+                sphParticlesPosition(kYDimension, i) = y;
+                sphParticlesPosition(kZDimension, i) = z;
+                sphParticlesVelocity(kXDimension, i) =
+                    kEta * sin(kFreq * 2.0 * std::numbers::pi * y);
+                sphParticlesVelocity(kYDimension, i) = vy1;
+                sphParticlesVelocity(kZDimension, i) = 0.0;
                 sphParticlesRung(i) = 0;
                 sphParticlesThermodynamicState(i).internalEnergy = eint;
 
@@ -95,15 +99,17 @@ ScenarioPlan initializeKelvinHelmholtz() {
                 double z = (iz + 0.5) * dx;
                 double eint = p0 / rho0 / (getOptions().hydro.gamma - 1);
                 double h = pow(
-                    m * getOptions().hydro.neighborNumber / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
+                    m * getOptions().hydro.neighborNumber / (4.0 * std::numbers::pi / 3.0 * rho0),
+                    1.0 / 3.0);
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSupportRadius(i) = h;
-                sphParticlesPosition(XDIM, i) = x;
-                sphParticlesPosition(YDIM, i) = y;
-                sphParticlesPosition(ZDIM, i) = z;
-                sphParticlesVelocity(XDIM, i) = kEta * sin(kFreq * 2.0 * M_PI * y);
-                sphParticlesVelocity(YDIM, i) = vy0;
-                sphParticlesVelocity(ZDIM, i) = 0.0;
+                sphParticlesPosition(kXDimension, i) = x;
+                sphParticlesPosition(kYDimension, i) = y;
+                sphParticlesPosition(kZDimension, i) = z;
+                sphParticlesVelocity(kXDimension, i) =
+                    kEta * sin(kFreq * 2.0 * std::numbers::pi * y);
+                sphParticlesVelocity(kYDimension, i) = vy0;
+                sphParticlesVelocity(kZDimension, i) = 0.0;
                 sphParticlesRung(i) = 0;
                 sphParticlesThermodynamicState(i).internalEnergy = eint;
 
@@ -113,12 +119,13 @@ ScenarioPlan initializeKelvinHelmholtz() {
                 z = (iz) *dx;
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSupportRadius(i) = h;
-                sphParticlesPosition(XDIM, i) = x;
-                sphParticlesPosition(YDIM, i) = y;
-                sphParticlesPosition(ZDIM, i) = z;
-                sphParticlesVelocity(XDIM, i) = kEta * sin(kFreq * 2.0 * M_PI * y);
-                sphParticlesVelocity(YDIM, i) = vy0;
-                sphParticlesVelocity(ZDIM, i) = 0.0;
+                sphParticlesPosition(kXDimension, i) = x;
+                sphParticlesPosition(kYDimension, i) = y;
+                sphParticlesPosition(kZDimension, i) = z;
+                sphParticlesVelocity(kXDimension, i) =
+                    kEta * sin(kFreq * 2.0 * std::numbers::pi * y);
+                sphParticlesVelocity(kYDimension, i) = vy0;
+                sphParticlesVelocity(kZDimension, i) = 0.0;
                 sphParticlesRung(i) = 0;
                 sphParticlesThermodynamicState(i).internalEnergy = eint;
 

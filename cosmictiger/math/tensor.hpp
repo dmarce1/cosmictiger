@@ -107,11 +107,11 @@ public:
         }
     }
 
-    T operator()(Array<int, NDIM> const& n) const {
+    T operator()(Array<int, kDimensions> const& n) const {
         return (*this)(n[0], n[1], n[2]);
     }
 
-    T& operator()(Array<int, NDIM> const& n) {
+    T& operator()(Array<int, kDimensions> const& n) {
         return (*this)(n[0], n[1], n[2]);
     }
 };
@@ -130,7 +130,7 @@ inline bool indicesInc(Vector<int>& i) {
         return false;
     }
     int j = 0;
-    while (i[j] == NDIM - 1) {
+    while (i[j] == kDimensions - 1) {
         i[j] = 0;
         j++;
         if (j == i.size()) {
@@ -152,8 +152,8 @@ inline Vector<int> indicesEnd(int pValue2) {
     return v;
 }
 
-inline Array<int, NDIM> indicesToSym(Vector<int> const& indices) {
-    Array<int, NDIM> j;
+inline Array<int, kDimensions> indicesToSym(Vector<int> const& indices) {
+    Array<int, kDimensions> j;
     j[0] = j[1] = j[2] = 0;
     for (int i = 0; i < indices.size(); i++) {
         j[indices[i]]++;
@@ -161,10 +161,10 @@ inline Array<int, NDIM> indicesToSym(Vector<int> const& indices) {
     return j;
 }
 
-inline Vector<int> symToIndices(Array<int, NDIM> const& i) {
+inline Vector<int> symToIndices(Array<int, kDimensions> const& i) {
     Vector<int> indices;
     indices.reserve(i[0] + i[1] + i[2]);
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         for (int j = 0; j < i[dim]; j++) {
             indices.push_back(dim);
         }
@@ -218,20 +218,20 @@ public:
         return (*this)[l * (l + 1) * (l + 2) / 6 + m * (m + 1) / 2 + n];
     }
 
-    T operator()(Array<int, NDIM> const& n) const {
+    T operator()(Array<int, kDimensions> const& n) const {
         return (*this)(n[0], n[1], n[2]);
     }
 
-    T& operator()(Array<int, NDIM> const& n) {
+    T& operator()(Array<int, kDimensions> const& n) {
         return (*this)(n[0], n[1], n[2]);
     }
 
     inline SymmetricTracelessTensor<T, pValue> detraceD() const {
         SymmetricTracelessTensor<T, pValue> aValue;
         SymmetricTensor<T, pValue> const& bValue = *this;
-        Array<int, NDIM> m;
-        Array<int, NDIM> k;
-        Array<int, NDIM> n;
+        Array<int, kDimensions> m;
+        Array<int, kDimensions> k;
+        Array<int, kDimensions> n;
         for (n[0] = 0; n[0] < pValue; n[0]++) {
             for (n[1] = 0; n[1] < pValue - n[0]; n[1]++) {
                 int const nzmax =
@@ -273,9 +273,9 @@ public:
 
 template <class T, int pValue>
 
-SymmetricTensor<T, pValue> vectorToSymTensor(Array<T, NDIM> const& vec) {
+SymmetricTensor<T, pValue> vectorToSymTensor(Array<T, kDimensions> const& vec) {
     SymmetricTensor<T, pValue> xValue;
-    Array<int, NDIM> n;
+    Array<int, kDimensions> n;
     T x = T(1);
     for (n[0] = 0; n[0] < pValue; n[0]++) {
         T y = T(1);

@@ -12,8 +12,9 @@
 // Consume one completed, gm-scaled near+far field without retaining a force
 // array. Particle membership is fixed by the caller's current ladder stage;
 // only this owned sink's velocity/rung and requested diagnostics are modified.
-KickReturn particleMeshApplyField(ParticleInteger index, Array<float, NDIM> const& acceleration,
-    float potential, KickParameters const& parameters);
+KickReturn particleMeshApplyField(ParticleInteger index,
+    Array<float, kDimensions> const& acceleration, float potential,
+    KickParameters const& parameters);
 
 // PMMM integration using the total far-field and near-field force.
 // Both operations recurse over all localities. Preparation closes the previous

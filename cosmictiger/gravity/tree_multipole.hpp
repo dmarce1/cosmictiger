@@ -25,13 +25,13 @@
 // Internal node: translate the children's multipoles to `center` and sum them.
 template <int order>
 FlopCount treeComputeMultipole(MultipoleBuffer& multi, MultipoleBuffer const& left,
-    MultipoleBuffer const& right, Array<double, NDIM> const& leftCenter,
-    Array<double, NDIM> const& rightCenter, Array<double, NDIM> const& center);
+    MultipoleBuffer const& right, Array<double, kDimensions> const& leftCenter,
+    Array<double, kDimensions> const& rightCenter, Array<double, kDimensions> const& center);
 
 // Leaf: accumulate P2M over the local particles of `particleRange` about `center`.
 template <int order>
 FlopCount treeComputeMultipole(MultipoleBuffer& multi, Pair<ParticleInteger> particleRange,
-    Array<double, NDIM> const& center,
+    Array<double, kDimensions> const& center,
     FmmSourceView const& sources = fmmSourceView(FmmParticleStore::Owned));
 
 #ifdef COSMICTIGER_FMM_INSTANCE_ORDER
@@ -43,24 +43,24 @@ FlopCount treeComputeMultipole(MultipoleBuffer& multi, Pair<ParticleInteger> par
 
 template <int order>
 FlopCount treeComputeMultipole(MultipoleBuffer& multi, MultipoleBuffer const& left,
-    MultipoleBuffer const& right, Array<double, NDIM> const& leftCenter,
-    Array<double, NDIM> const& rightCenter, Array<double, NDIM> const& center) {
+    MultipoleBuffer const& right, Array<double, kDimensions> const& leftCenter,
+    Array<double, kDimensions> const& rightCenter, Array<double, kDimensions> const& center) {
     constexpr int kMultipoleCoefficients = FmmOrder<order>::kMultipoleCoefficients_;
-    Array<SimdDouble, NDIM> mdx{};
+    Array<SimdDouble, kDimensions> mdx{};
     cosmictiger::gravity::cartesian::Multipole<SimdDouble, order> simdM{};
     for (int i = 0; i < kMultipoleCoefficients; i++) {
-        simdSetLane(simdM[i], LEFT, left[i]);
-        simdSetLane(simdM[i], RIGHT, right[i]);
+        simdSetLane(simdM[i], kLeftChild, left[i]);
+        simdSetLane(simdM[i], kRightChild, right[i]);
     }
-    for (int dim = 0; dim < NDIM; dim++) {
-        simdSetLane(mdx[dim], LEFT, leftCenter[dim] - center[dim]);
-        simdSetLane(mdx[dim], RIGHT, rightCenter[dim] - center[dim]);
+    for (int dim = 0; dim < kDimensions; dim++) {
+        simdSetLane(mdx[dim], kLeftChild, leftCenter[dim] - center[dim]);
+        simdSetLane(mdx[dim], kRightChild, rightCenter[dim] - center[dim]);
     }
     auto const source = simdM;
     simdM = cosmictiger::gravity::cartesian::Multipole<SimdDouble, order>{};
     cosmictiger::gravity::cartesian::M2M(simdM, source, fmmScaleDisplacement(mdx));
     for (int i = 0; i < kMultipoleCoefficients; i++) {
-        multi[i] = simdM[i][LEFT] + simdM[i][RIGHT];
+        multi[i] = simdM[i][kLeftChild] + simdM[i][kRightChild];
     }
     return 2 *
         cosmictiger::gravity::cartesian::detail::M2M<FmmOrder<order>::kMultipoleDegree_>::kFlops_ +
@@ -69,7 +69,7 @@ FlopCount treeComputeMultipole(MultipoleBuffer& multi, MultipoleBuffer const& le
 
 template <int order>
 FlopCount treeComputeMultipole(MultipoleBuffer& multi, Pair<ParticleInteger> particleRange,
-    Array<double, NDIM> const& center, FmmSourceView const& sources) {
+    Array<double, kDimensions> const& center, FmmSourceView const& sources) {
     constexpr int kMultipoleCoefficients = FmmOrder<order>::kMultipoleCoefficients_;
     static SimdFloat const toFloatFactor = kPositionToFloat;
     cosmictiger::gravity::cartesian::Multipole<double, order> mValue;
@@ -77,30 +77,30 @@ FlopCount treeComputeMultipole(MultipoleBuffer& multi, Pair<ParticleInteger> par
         mValue[i] = 0.0;
     }
     ParticleInteger const maxi =
-        roundUp(particleRange.second - particleRange.first, (ParticleInteger) SIMD_FLOAT_SIZE) +
+        roundUp(particleRange.second - particleRange.first, (ParticleInteger) kSimdFloatSize) +
         particleRange.first;
-    Array<SimdPosition, NDIM> y{};
-    for (int dim = 0; dim < NDIM; dim++) {
+    Array<SimdPosition, kDimensions> y{};
+    for (int dim = 0; dim < kDimensions; dim++) {
         y[dim] = simdBroadcast<SimdPosition>(Position(center[dim]).raw());
     }
-    for (ParticleInteger i = particleRange.first; i < maxi; i += SIMD_FLOAT_SIZE) {
-        Array<SimdPosition, NDIM> xValue{};
+    for (ParticleInteger i = particleRange.first; i < maxi; i += kSimdFloatSize) {
+        Array<SimdPosition, kDimensions> xValue{};
         SimdFloat mask{};
-        ParticleInteger const maxj = std::min(i + SIMD_FLOAT_SIZE, particleRange.second);
+        ParticleInteger const maxj = std::min(i + kSimdFloatSize, particleRange.second);
         for (ParticleInteger j = i; j < maxj; j++) {
-            for (int dim = 0; dim < NDIM; dim++) {
+            for (int dim = 0; dim < kDimensions; dim++) {
                 simdSetLane(xValue[dim], j - i, sources.positions[dim][j].raw());
             }
             simdSetLane(mask, j - i, fmmSourceMass(sources, j));
         }
-        for (ParticleInteger j = maxj; j < i + SIMD_FLOAT_SIZE; j++) {
+        for (ParticleInteger j = maxj; j < i + kSimdFloatSize; j++) {
             simdSetLane(mask, j - i, 0.f);
-            for (int dim = 0; dim < NDIM; dim++) {
+            for (int dim = 0; dim < kDimensions; dim++) {
                 simdSetLane(xValue[dim], j - i, sources.positions[dim][maxj - 1].raw());
             }
         }
-        Array<SimdFloat, NDIM> dx{};
-        for (int dim = 0; dim < NDIM; dim++) {
+        Array<SimdFloat, kDimensions> dx{};
+        for (int dim = 0; dim < kDimensions; dim++) {
             dx[dim] =
                 simdCast<SimdFloat>(simdPositionDifference(xValue[dim], y[dim])) * toFloatFactor;
         }

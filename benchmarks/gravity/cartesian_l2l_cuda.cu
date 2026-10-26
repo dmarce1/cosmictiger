@@ -117,7 +117,7 @@ char const* variantName(Variant variant) {
 template <int order>
 struct Fixture {
     LocalExpansion<order> source;
-    Array<float, NDIM> displacement;
+    Array<float, kDimensions> displacement;
 };
 
 void checkCuda(cudaError_t status) {
@@ -260,7 +260,7 @@ Canonical<order> translateReference(
 
 template <int order>
 __device__ LocalExpansion<order> warpTranslate(
-    LocalExpansion<order> const& source, Array<float, NDIM> position, bool doPhi) {
+    LocalExpansion<order> const& source, Array<float, kDimensions> position, bool doPhi) {
 #ifdef COSMICTIGER_CARTESIAN_L2L_LANE0
     LocalExpansion<order> result{};
     if (threadIdx.x == 0) {
@@ -302,7 +302,7 @@ __global__ void validateWarp(Fixture<order> const* input, LocalExpansion<order>*
     __syncwarp();
     for (int step = 0; step < steps; ++step) {
         auto displacement = input[sample].displacement;
-        for (int d = 0; d < NDIM; ++d) {
+        for (int d = 0; d < kDimensions; ++d) {
             displacement[d] *= step % 2 ? -1.f : 1.f;
         }
         auto const result = warpTranslate<order>(workspace[sample], displacement, doPhi);
@@ -332,7 +332,7 @@ __global__ void validateWarp(Fixture<order> const* input, LocalExpansion<order>*
 // may read the completed target immediately after the call.
 template <int order>
 __device__ void warpTranslateInto(LocalExpansion<order>& target,
-    LocalExpansion<order> const& source, Array<float, NDIM> const& position, bool doPhi) {
+    LocalExpansion<order> const& source, Array<float, kDimensions> const& position, bool doPhi) {
     cosmictiger::gravity::cartesian::L2LWarpInto(
         &target[0], source, fmmScaleDisplacement(position), doPhi);
 }
@@ -355,7 +355,7 @@ __global__ void validateWarpInto(Fixture<order> const* input, LocalExpansion<ord
     int current = 0;
     for (int step = 0; step < steps; ++step) {
         auto displacement = input[sample].displacement;
-        for (int d = 0; d < NDIM; ++d) {
+        for (int d = 0; d < kDimensions; ++d) {
             displacement[d] *= step % 2 ? -1.f : 1.f;
         }
         // Ping-pong: the previous source becomes the next target. Its last
@@ -462,7 +462,7 @@ void validate(Fixture<order> const* deviceInput, std::vector<Fixture<order>> con
                     Position normalized{};
                     for (int d = 0; d < 3; ++d) {
                         shift[d] *= step % 2 ? -1.f : 1.f;
-                        normalized[d] = double(shift[d] * SCALE_FACTOR);
+                        normalized[d] = double(shift[d] * kScaleFactor);
                     }
                     expected = translateReference<order>(expected, normalized, doPhi);
 #ifdef COSMICTIGER_CARTESIAN_BASELINE_HEADER

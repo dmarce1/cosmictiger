@@ -98,7 +98,7 @@ void verifySphExceptionMask() {
                 throw std::runtime_error("Could not mask floating-point exceptions");
             }
             SphRunParameters params;
-            params.runType = SPH_RUN_RUNGS;
+            params.runType = kSphRunRungs;
             params.phase = 0;
             params.minimumRung = 0;
             params.baseTimestep = 1.0f;
@@ -135,27 +135,27 @@ void initializePair(double separation) {
     particlesResize(2);
     sphParticlesResize(1, false);
     for (ParticleInteger i = 0; i < 2; i++) {
-        for (int dim = 0; dim < NDIM; dim++) {
-            particlesPos(dim, i) = dim == XDIM ? 0.375 - i * separation : 0.375;
+        for (int dim = 0; dim < kDimensions; dim++) {
+            particlesPos(dim, i) = dim == kXDimension ? 0.375 - i * separation : 0.375;
             particlesVel(dim, i) = i == 1 ? 0.125 * (dim + 1) : 0.0;
         }
         particlesRung(i) = 1;
-        particlesType(i) = i == 0 ? DARK_MATTER_TYPE : SPH_TYPE;
-        particlesCatIndex(i) = i == 0 ? NO_INDEX : 0;
+        particlesType(i) = i == 0 ? kDarkMatterType : kSphType;
+        particlesCatIndex(i) = i == 0 ? kNoParticleIndex : 0;
     }
     sphParticlesParticleIndex(0) = 1;
     sphParticlesSupportRadius(0) = 0.02;
     sphParticlesThermodynamicStates[0].internalEnergy = 4.0;
     sphParticlesPredictedInternalEnergyRate(0) = 0.75;
     sphParticlesInternalEnergyRate(0) = 0.125;
-    sphParticlesGravityAcceleration(XDIM, 0) = 0.0;
+    sphParticlesGravityAcceleration(kXDimension, 0) = 0.0;
 }
 TreeId findLeaf(TreeId node, ParticleInteger particle) {
     auto const* ptr = treeGetNode(node);
     if (ptr->leaf) {
         return node;
     }
-    for (int child = 0; child < NCHILD; child++) {
+    for (int child = 0; child < kChildCount; child++) {
         auto const next = ptr->children[child];
         auto const range = treeGetNode(next)->particleRange;
         if (particle >= range.first && particle < range.second) {
@@ -198,7 +198,7 @@ KickParameters makeKickParams() {
 void resetKickState() {
     for (ParticleInteger i = 0; i < particlesSize(); i++) {
         particlesRung(i) = 1;
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             particlesVel(dim, i) = particlesIsSph(i) ? 0.125 * (dim + 1) : 0.0;
             particlesGravityAcceleration(dim, i) = 0.0;
         }
@@ -212,18 +212,19 @@ void verifyKick(double inverseCube, double inverseRadius, double separation) {
             gas ? getOptions().initial.darkMatterMass : getOptions().initial.gasMass;
         double const acceleration =
             kGravityScale * (gas ? 1.0 : -1.0) * sourceMass * separation * inverseCube;
-        requireClose("kick acceleration", particlesGravityAcceleration(XDIM, i), acceleration);
+        requireClose(
+            "kick acceleration", particlesGravityAcceleration(kXDimension, i), acceleration);
         requireClose("kick potential with self mass removed", particlesPot(i),
             -kGravityScale * sourceMass * inverseRadius, 2e-4);
-        requireClose("transverse force", particlesGravityAcceleration(YDIM, i), 0.0);
+        requireClose("transverse force", particlesGravityAcceleration(kYDimension, i), 0.0);
         if (gas) {
             requireClose("gas acceleration handoff",
-                sphParticlesGravityAcceleration(XDIM, particlesCatIndex(i)), acceleration);
-            for (int dim = 0; dim < NDIM; dim++) {
+                sphParticlesGravityAcceleration(kXDimension, particlesCatIndex(i)), acceleration);
+            for (int dim = 0; dim < kDimensions; dim++) {
                 requireClose("gas velocity must not be gravity-kicked twice", particlesVel(dim, i),
                     0.125 * (dim + 1));
             }
-        } else if (particlesVel(XDIM, i) == 0.0) {
+        } else if (particlesVel(kXDimension, i) == 0.0) {
             throw std::runtime_error("Ordinary DM kick did not update velocity");
         }
     }
@@ -232,8 +233,8 @@ void verifySynchronizedDiagnostics(KickReturn const& result) {
     double kinetic = 0.0, xMomentum = 0.0, yMomentum = 0.0, zMomentum = 0.0, momentumNorm = 0.0;
     for (ParticleInteger i = 0; i < particlesSize(); i++) {
         double const mass = particlesMass(i);
-        double const vx = particlesVel(XDIM, i), vy = particlesVel(YDIM, i),
-                     vz = particlesVel(ZDIM, i);
+        double const vx = particlesVel(kXDimension, i), vy = particlesVel(kYDimension, i),
+                     vz = particlesVel(kZDimension, i);
         kinetic += 0.5 * mass * (vx * vx + vy * vy + vz * vz);
         xMomentum += mass * vx;
         yMomentum += mass * vy;
@@ -288,13 +289,13 @@ void softenedPairReference(double separation, double& inverseCube, double& inver
 
 void verifyBhPotentials(bool useCuda) {
     double const separation = 0.25 * getOptions().gravity.supportRadius;
-    DeviceVector<Array<float, NDIM>> sources(2);
-    for (int dim = 0; dim < NDIM; ++dim) {
+    DeviceVector<Array<float, kDimensions>> sources(2);
+    for (int dim = 0; dim < kDimensions; ++dim) {
         sources[0][dim] = 0.375;
-        sources[1][dim] = dim == XDIM ? 0.375 + separation : 0.375;
+        sources[1][dim] = dim == kXDimension ? 0.375 + separation : 0.375;
     }
     // Match the stored float positions used by the independent halo-potential path.
-    double const actualSeparation = double(sources[1][XDIM]) - sources[0][XDIM];
+    double const actualSeparation = double(sources[1][kXDimension]) - sources[0][kXDimension];
     double inverseCube, inverseRadius;
     softenedPairReference(actualSeparation, inverseCube, inverseRadius);
     double const expected = -getOptions().gravity.gm * inverseRadius;
@@ -302,16 +303,17 @@ void verifyBhPotentials(bool useCuda) {
     for (int i = 0; i < 2; ++i) {
         requireClose("halo potential uses selected gravity kernel", potential[i], expected);
     }
-    DeviceVector<Array<float, NDIM>> points(2);
-    for (int dim = 0; dim < NDIM; ++dim) {
+    DeviceVector<Array<float, kDimensions>> points(2);
+    for (int dim = 0; dim < kDimensions; ++dim) {
         points[0][dim] = 0.375;
-        points[1][dim] = dim == XDIM ? float(0.375 + 0.5 * actualSeparation) : 0.375;
+        points[1][dim] = dim == kXDimension ? float(0.375 + 0.5 * actualSeparation) : 0.375;
     }
     potential = bhEvaluatePoints(points, sources, useCuda);
     requireClose("halo point potential excludes coincident source", potential[0], expected);
     double expectedMidpoint = 0.0;
     for (int i = 0; i < 2; ++i) {
-        double const pointSeparation = std::abs(double(points[1][XDIM]) - sources[i][XDIM]);
+        double const pointSeparation =
+            std::abs(double(points[1][kXDimension]) - sources[i][kXDimension]);
         softenedPairReference(pointSeparation, inverseCube, inverseRadius);
         expectedMidpoint -= getOptions().gravity.gm * inverseRadius;
     }
@@ -330,8 +332,8 @@ void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f) {
         built.maxGravitySupportRadius, getOptions().gravity.supportRadius);
     ParticleInteger const gas = sphParticlesParticleIndex(0);
     ParticleInteger const darkMatterIndex = 1 - gas;
-    double const separation =
-        particlesPos(XDIM, darkMatterIndex).toDouble() - particlesPos(XDIM, gas).toDouble();
+    double const separation = particlesPos(kXDimension, darkMatterIndex).toDouble() -
+        particlesPos(kXDimension, gas).toDouble();
     double inverseCube = 1.0 / (separation * separation * separation);
     double inverseRadius = 1.0 / separation;
     if (softened) {
@@ -356,8 +358,8 @@ void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f) {
             for (int path = 0; path < 2; path++) {
                 ExpansionBuffer local;
                 local.zero();
-                Array<float, NDIM> dx;
-                for (int dim = 0; dim < NDIM; dim++) {
+                Array<float, kDimensions> dx;
+                for (int dim = 0; dim < kDimensions; dim++) {
                     dx[dim] = distance(particlesPos(dim, sink), treeGetNode(self)->pos[dim]);
                 }
                 auto const value = fmmDispatch([&](auto order) {
@@ -373,14 +375,14 @@ void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f) {
                     return field;
                 });
                 requireClose(path == 0 ? "CPU cell-particle mass" : "CPU cell-cell mass",
-                    SCALE_FACTOR2 * value.accelerationX(), expected);
+                    kScaleFactor2 * value.accelerationX(), expected);
             }
         }
     }
     ExpansionBuffer local;
     local.zero();
-    Array<Position, NDIM> origin;
-    for (int dim = 0; dim < NDIM; dim++) {
+    Array<Position, kDimensions> origin;
+    for (int dim = 0; dim < kDimensions; dim++) {
         origin[dim] = 0.0;
     }
     auto params = makeKickParams();
@@ -410,8 +412,9 @@ void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f) {
         item.pos = origin;
         item.self = built.id;
         item.dchecklist.push_back(built.id);
-        auto const cudaResult = cudaExecuteKicks(params, particlesX[XDIM], particlesX[YDIM],
-            particlesX[ZDIM], treeData(), Vector<KickWorkitem>{item});
+        auto const cudaResult =
+            cudaExecuteKicks(params, particlesX[kXDimension], particlesX[kYDimension],
+                particlesX[kZDimension], treeData(), Vector<KickWorkitem>{item});
         requireClose("CUDA kick total potential", cudaResult.pot, cpuResult.pot, 2e-4);
         verifyKick(inverseCube, inverseRadius, separation);
         requireClose("CUDA gravity rung uses the variance smoothing length",
@@ -433,9 +436,9 @@ void checkpointPair() {
         throw std::runtime_error("Cannot create temporary checkpoint");
     }
     ParticleInteger const gas = sphParticlesParticleIndex(0);
-    auto const position = particlesPos(XDIM, gas);
+    auto const position = particlesPos(kXDimension, gas);
     particlesSave(file);
-    particlesPos(XDIM, gas) = 0.9;
+    particlesPos(kXDimension, gas) = 0.9;
     sphParticlesSupportRadius(0) = 0.5;
     sphParticlesThermodynamicStates[0].internalEnergy = 99.0;
     sphParticlesPredictedInternalEnergyRate(0) = 99.0;
@@ -446,8 +449,8 @@ void checkpointPair() {
     verifyMappings();
     requireClose("checkpoint particle count", particlesSize(), 2);
     requireClose("checkpoint gas count", sphParticlesSize(), 1);
-    requireClose("checkpoint position", particlesPos(XDIM, sphParticlesParticleIndex(0)).toDouble(),
-        position.toDouble());
+    requireClose("checkpoint position",
+        particlesPos(kXDimension, sphParticlesParticleIndex(0)).toDouble(), position.toDouble());
     requireClose("checkpoint hydro length", sphParticlesSupportRadius(0), 0.02);
     requireClose(
         "checkpoint internal energy", sphParticlesThermodynamicStates[0].internalEnergy, 4.0);
@@ -462,14 +465,14 @@ void initializeSphDomainRegression() {
     initializePair(0.25);
     int const target = (hpxRank() + 1) % hpxSize();
     for (ParticleInteger i = 0; i < 2; i++) {
-        particlesPos(XDIM, i) = (target + (i == 0 ? 0.25 : 0.75)) / hpxSize();
-        particlesPos(XDIM, i).raw() += 17;
+        particlesPos(kXDimension, i) = (target + (i == 0 ? 0.25 : 0.75)) / hpxSize();
+        particlesPos(kXDimension, i).raw() += 17;
     }
     sphParticlesPredictedInternalEnergyRate(0) = 10.0 + target;
     sphParticlesInternalEnergyRate(0) = 20.0 + target;
-    sphParticlesAccelerationStates[0].acceleration[XDIM] = 30.0 + target;
-    sphParticlesPredictedAccelerations[YDIM][0] = 40.0 + target;
-    sphParticlesGravityAccelerations[ZDIM][0] = 50.0 + target;
+    sphParticlesAccelerationStates[0].acceleration[kXDimension] = 30.0 + target;
+    sphParticlesPredictedAccelerations[kYDimension][0] = 40.0 + target;
+    sphParticlesGravityAccelerations[kZDimension][0] = 50.0 + target;
     if (getOptions().hydro.viscosityEvolution != "none") {
         sphParticlesViscosityStates[0] = {0.5f + target / 16.0f, -0.0625f + target / 128.0f, 99.0f};
     }
@@ -492,13 +495,13 @@ void validateSphPositionGather() {
     ParticleInteger const expectedParticles[] = {1, 0, 1, 0};
     constexpr size_t kGatherCount = 4;
     auto const positions = particlesGet(remoteRank, ranges).get();
-    if (positions.size() != NDIM * kGatherCount) {
+    if (positions.size() != kDimensions * kGatherCount) {
         throw std::runtime_error("Remote position gather returned the wrong coordinate count");
     }
-    for (int dim = 0; dim < NDIM; ++dim) {
+    for (int dim = 0; dim < kDimensions; ++dim) {
         for (size_t i = 0; i < kGatherCount; ++i) {
             Position expected(0.375);
-            if (dim == XDIM) {
+            if (dim == kXDimension) {
                 expected = (target + (expectedParticles[i] == 0 ? 0.25 : 0.75)) / hpxSize();
                 expected.raw() += 17;
             }
@@ -515,11 +518,11 @@ void validateSphDomainRegression() {
     verifyMappings();
     requireClose("migrated gas count", sphParticlesSize(), 1);
     auto const gas = sphParticlesParticleIndex(0);
-    int const target = int(positionDomainCoordinate(particlesPos(XDIM, gas)) * hpxSize());
+    int const target = int(positionDomainCoordinate(particlesPos(kXDimension, gas)) * hpxSize());
     for (ParticleInteger particle = 0; particle < particlesSize(); ++particle) {
-        double const offset = particlesType(particle) == DARK_MATTER_TYPE ? 0.25 : 0.75;
+        double const offset = particlesType(particle) == kDarkMatterType ? 0.25 : 0.75;
         Position const expected((target + offset) / hpxSize());
-        if (particlesPos(XDIM, particle).raw() != expected.raw() + 17) {
+        if (particlesPos(kXDimension, particle).raw() != expected.raw() + 17) {
             throw std::runtime_error("Migration changed native position bits");
         }
     }
@@ -527,10 +530,11 @@ void validateSphDomainRegression() {
         sphParticlesPredictedInternalEnergyRate(0), 10.0 + target);
     requireClose("migration thermal stage", sphParticlesInternalEnergyRate(0), 20.0 + target);
     requireClose("migration acceleration stage",
-        sphParticlesAccelerationStates[0].acceleration[XDIM], 30.0 + target);
-    requireClose("migration predicted acceleration", sphParticlesPredictedAccelerations[YDIM][0],
-        40.0 + target);
-    requireClose("migration gravity", sphParticlesGravityAccelerations[ZDIM][0], 50.0 + target);
+        sphParticlesAccelerationStates[0].acceleration[kXDimension], 30.0 + target);
+    requireClose("migration predicted acceleration",
+        sphParticlesPredictedAccelerations[kYDimension][0], 40.0 + target);
+    requireClose(
+        "migration gravity", sphParticlesGravityAccelerations[kZDimension][0], 50.0 + target);
     if (getOptions().hydro.viscosityEvolution != "none") {
         requireClose(
             "migration viscosity alpha", sphParticlesViscosityStates[0].alpha, 0.5 + target / 16.0);
@@ -573,16 +577,18 @@ void validateSphDomainRegression() {
         requireClose("remote viscosity upper padding", alpha[2], -9.0);
     }
     if (getOptions().hydro.viscosityEvolution == "cullenAndDehnen") {
-        float acceleration[NDIM][3]{};
+        float acceleration[kDimensions][3]{};
         float divergence[3]{};
-        sphParticlesGlobalReadViscosityDiagnostics(
-            remote, acceleration[XDIM], acceleration[YDIM], acceleration[ZDIM], divergence, 1);
-        requireClose("remote prior acceleration cache", acceleration[XDIM][1], 30.0 + remote.proc);
+        sphParticlesGlobalReadViscosityDiagnostics(remote, acceleration[kXDimension],
+            acceleration[kYDimension], acceleration[kZDimension], divergence, 1);
+        requireClose(
+            "remote prior acceleration cache", acceleration[kXDimension][1], 30.0 + remote.proc);
         requireClose("remote prior divergence cache", divergence[1], -1.5 + remote.proc / 8.0);
     }
-    float velocity[NDIM][3]{};
-    sphParticlesGlobalReadVelocities(remote, velocity[XDIM], velocity[YDIM], velocity[ZDIM], 1);
-    for (int dimension = 0; dimension < NDIM; ++dimension) {
+    float velocity[kDimensions][3]{};
+    sphParticlesGlobalReadVelocities(
+        remote, velocity[kXDimension], velocity[kYDimension], velocity[kZDimension], 1);
+    for (int dimension = 0; dimension < kDimensions; ++dimension) {
         requireClose("remote velocity cache", velocity[dimension][1], 0.125 * (dimension + 1));
     }
     if (getOptions().chemistry.enabled) {
@@ -597,9 +603,9 @@ void validateSphDomainRegression() {
         requireClose("EOS cache preserves preceding destination", pressureRatio[0], 0.0);
         requireClose("EOS cache preserves following destination", adiabaticIndex[2], 0.0);
     }
-    Array<double, NDIM> position;
+    Array<double, kDimensions> position;
     for (ParticleInteger i = 0; i < particlesSize(); i++) {
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             position[dim] = particlesPos(dim, i).toDouble();
         }
         if (!domainsFindMyBox().contains(position)) {
@@ -664,7 +670,7 @@ void sphGravityTest() {
         checkpointPair();
         sphParticlesResize(2);
         auto const secondGas = sphParticlesParticleIndex(1);
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             particlesPos(dim, secondGas) = 0.75;
             particlesVel(dim, secondGas) = 0.0;
         }

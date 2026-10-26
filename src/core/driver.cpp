@@ -6,14 +6,12 @@
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
-#define SMOOTHLEN_BUFFER 0.21
-#define SCALE_DT 0.01
-
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <limits>
 #include <memory>
+#include <numbers>
 #include <string>
 
 #include <cosmictiger/analysis/group_tree.hpp>
@@ -59,6 +57,9 @@
 #include <cosmictiger/sph/sph_particles.hpp>
 #include <cosmictiger/sph/sph_tree.hpp>
 
+constexpr double kSmoothLengthBuffer = 0.21;
+constexpr double kScaleTimestep = 0.01;
+
 double domainTime = 0.0;
 double sortTime = 0.0;
 double kickTime = 0.0;
@@ -75,9 +76,6 @@ struct Timing {
         numberOfParticles = time = 0.0;
     }
 };
-
-#define MIN_BUCKET 64
-#define MAX_BUCKET 192
 
 Vector<Timing> timings;
 
@@ -139,7 +137,7 @@ void doGroups(int number, double scale, double years) {
     terminal::detailPrint("tree cleanup = %e\n", tm.read());
     Timer reduce;
     reduce.start();
-    for (int wave = 0; wave < GROUP_WAVES; wave++) {
+    for (int wave = 0; wave < kGroupWaves; wave++) {
         tm.start();
         groupsAddParticles(wave, scale);
         tm.stop();
@@ -177,7 +175,7 @@ SphTreeCreateReturn sphStep1(int minrung, bool verbose) {
 
     Timer timer;
     treeParameters.minimumRung = minrung;
-    treeParameters.supportRadiusMultiplier = (1.0 + SMOOTHLEN_BUFFER);
+    treeParameters.supportRadiusMultiplier = (1.0 + kSmoothLengthBuffer);
     SphTreeCreateReturn treeResult;
 
     timer.start();
@@ -214,7 +212,7 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     SphRunParameters runParameters;
     if (getOptions().run.scenario == "cosmology") {
         runParameters.maximumTimestep =
-            cosmology::expansionTimestep(scale, adot / scale, cosmosD2adt2(scale), SCALE_DT);
+            cosmology::expansionTimestep(scale, adot / scale, cosmosD2adt2(scale), kScaleTimestep);
     }
     runParameters.maximumTimestep = std::min(runParameters.maximumTimestep,
         std::ldexp(static_cast<float>(t0), -getOptions().run.minRung));
@@ -230,7 +228,7 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
 
     runParameters.phase = phase;
     SphTreeNeighborParameters neighborParameters;
-    neighborParameters.supportRadiusMultiplier = (1.0 + SMOOTHLEN_BUFFER);
+    neighborParameters.supportRadiusMultiplier = (1.0 + kSmoothLengthBuffer);
     neighborParameters.minimumRung = minrung;
     TreeId rootId;
     rootId.proc = 0;
@@ -238,8 +236,8 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     Vector<TreeId> checklist;
     checklist.push_back(rootId);
 
-    neighborParameters.innerSelection = SPH_INTERACTIONS_I;
-    neighborParameters.runType = SPH_TREE_NEIGHBOR_NEIGHBORS;
+    neighborParameters.innerSelection = kSphInteractionsI;
+    neighborParameters.runType = kSphTreeNeighborNeighbors;
     sphTreeNeighbor(neighborParameters, rootId, checklist).get();
 
     runParameters.phase = 0;
@@ -250,7 +248,7 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
             THROW_ERROR("SPH smoothing lengths did not converge after 256 tree rebuilds\n");
         }
 
-        runParameters.runType = SPH_RUN_PREHYDRO1;
+        runParameters.runType = kSphRunPrehydro1;
         Timer timer;
         timer.start();
         result = sphRun(runParameters, true);
@@ -261,10 +259,10 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
         }
         timer.reset();
         needsNeighborRefresh = result.needsAnotherPass;
-        neighborParameters.supportRadiusMultiplier = (1.0 + SMOOTHLEN_BUFFER);
-        neighborParameters.runType = SPH_TREE_NEIGHBOR_BOXES;
-        neighborParameters.outerSelection = needsNeighborRefresh ? SPH_SET_ACTIVE : SPH_SET_ALL;
-        neighborParameters.innerSelection = SPH_SET_ALL;
+        neighborParameters.supportRadiusMultiplier = (1.0 + kSmoothLengthBuffer);
+        neighborParameters.runType = kSphTreeNeighborBoxes;
+        neighborParameters.outerSelection = needsNeighborRefresh ? kSphSetActive : kSphSetAll;
+        neighborParameters.innerSelection = kSphSetAll;
         timer.start();
         sphTreeNeighbor(neighborParameters, rootId, Vector<TreeId>()).get();
         timer.stop();
@@ -272,8 +270,8 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
         timer.reset();
         timer.start();
         neighborParameters.innerSelection =
-            needsNeighborRefresh ? SPH_INTERACTIONS_I : SPH_INTERACTIONS_IJ;
-        neighborParameters.runType = SPH_TREE_NEIGHBOR_NEIGHBORS;
+            needsNeighborRefresh ? kSphInteractionsI : kSphInteractionsIJ;
+        neighborParameters.runType = kSphTreeNeighborNeighbors;
         sphTreeNeighbor(neighborParameters, rootId, checklist).get();
         timer.stop();
         terminal::detailPrint("%e\n", timer.read());
@@ -288,7 +286,7 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
             THROW_ERROR("SPH neighbor densities did not converge after 256 tree rebuilds\n");
         }
 
-        runParameters.runType = SPH_RUN_PREHYDRO2;
+        runParameters.runType = kSphRunPrehydro2;
         Timer timer;
         timer.start();
         result = sphRun(runParameters, true);
@@ -300,18 +298,18 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
         timer.reset();
         needsNeighborRefresh = result.needsAnotherPass;
         neighborParameters.supportRadiusMultiplier =
-            needsNeighborRefresh ? (1.0 + SMOOTHLEN_BUFFER) : 1.01;
-        neighborParameters.runType = SPH_TREE_NEIGHBOR_BOXES;
-        neighborParameters.outerSelection = SPH_SET_ALL;
-        neighborParameters.innerSelection = SPH_SET_ALL;
+            needsNeighborRefresh ? (1.0 + kSmoothLengthBuffer) : 1.01;
+        neighborParameters.runType = kSphTreeNeighborBoxes;
+        neighborParameters.outerSelection = kSphSetAll;
+        neighborParameters.innerSelection = kSphSetAll;
         timer.start();
         sphTreeNeighbor(neighborParameters, rootId, Vector<TreeId>()).get();
         timer.stop();
         terminal::detailPrint("%e\n", timer.read());
         timer.reset();
         timer.start();
-        neighborParameters.innerSelection = SPH_INTERACTIONS_IJ;
-        neighborParameters.runType = SPH_TREE_NEIGHBOR_NEIGHBORS;
+        neighborParameters.innerSelection = kSphInteractionsIJ;
+        neighborParameters.runType = kSphTreeNeighborNeighbors;
         sphTreeNeighbor(neighborParameters, rootId, checklist).get();
         timer.stop();
         terminal::detailPrint("%e\n", timer.read());
@@ -324,7 +322,7 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
         sphParticlesUpdateCullenDehnen(minrung, t0, tau);
     }
     runParameters.phase = 0;
-    runParameters.runType = SPH_RUN_HYDRO;
+    runParameters.runType = kSphRunHydro;
     timer.reset();
     timer.start();
     result = sphRun(runParameters, true);
@@ -363,7 +361,7 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
         sphParticlesRefreshChemistryEos(scale);
     }
     runParameters.phase = 1;
-    runParameters.runType = SPH_RUN_HYDRO;
+    runParameters.runType = kSphRunHydro;
     timer.reset();
     timer.start();
     result = sphRun(runParameters, true);
@@ -380,16 +378,16 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     timer.reset();
 
     neighborParameters.supportRadiusMultiplier = 1.01;
-    neighborParameters.runType = SPH_TREE_NEIGHBOR_BOXES;
-    neighborParameters.innerSelection = SPH_SET_ALL;
-    neighborParameters.outerSelection = SPH_SET_ACTIVE;
+    neighborParameters.runType = kSphTreeNeighborBoxes;
+    neighborParameters.innerSelection = kSphSetAll;
+    neighborParameters.outerSelection = kSphSetActive;
     timer.start();
     sphTreeNeighbor(neighborParameters, rootId, Vector<TreeId>()).get();
     timer.stop();
     timer.reset();
     timer.start();
-    neighborParameters.innerSelection = SPH_INTERACTIONS_IJ;
-    neighborParameters.runType = SPH_TREE_NEIGHBOR_NEIGHBORS;
+    neighborParameters.innerSelection = kSphInteractionsIJ;
+    neighborParameters.runType = kSphTreeNeighborNeighbors;
     sphTreeNeighbor(neighborParameters, rootId, checklist).get();
     timer.stop();
     timer.reset();
@@ -398,7 +396,7 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     // cannot increase that maximum and is unnecessary when every sink is active.
     bool rc = uniformMinimumRung < 0;
     while (rc) {
-        runParameters.runType = SPH_RUN_RUNGS;
+        runParameters.runType = kSphRunRungs;
         timer.start();
         rc = sphRun(runParameters, true).needsAnotherPass;
         //	max_rung = kr.max_rung;
@@ -486,7 +484,7 @@ std::pair<KickReturn, TreeCreateReturn> kickStep(int minrung, double scale, doub
     KickParameters kparams;
     if (getOptions().run.scenario == "cosmology") {
         kparams.maxDt =
-            cosmology::expansionTimestep(scale, dadt / scale, cosmosD2adt2(scale), SCALE_DT);
+            cosmology::expansionTimestep(scale, dadt / scale, cosmosD2adt2(scale), kScaleTimestep);
     }
     // The ordinary path visits every starting particle, including rung zero,
     // while the chosen step must still honor the configured starting-rung floor.
@@ -513,8 +511,8 @@ std::pair<KickReturn, TreeCreateReturn> kickStep(int minrung, double scale, doub
     kparams.theta = theta;
     ExpansionBuffer l;
     l.zero();
-    Array<Position, NDIM> pos;
-    for (int dim = 0; dim < NDIM; dim++) {
+    Array<Position, kDimensions> pos;
+    for (int dim = 0; dim < kDimensions; dim++) {
         pos[dim] = 0.f;
     }
     TreeId rootId;
@@ -554,7 +552,7 @@ std::pair<KickReturn, TreeCreateReturn> advanceForces(int minRung, double scale,
         if (getOptions().run.scenario == "cosmology") {
             maximumTimestep = std::min(maximumTimestep,
                 cosmology::expansionTimestep(
-                    scale, scaleDerivative / scale, cosmosD2adt2(scale), SCALE_DT));
+                    scale, scaleDerivative / scale, cosmosD2adt2(scale), kScaleTimestep));
         }
         result.first =
             particleMeshPrepareKick(scale, baseTimestep, maximumTimestep, firstCall, minRung);
@@ -757,13 +755,13 @@ std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int m
         kparams.t0 = t0;
         if (getOptions().run.scenario == "cosmology") {
             kparams.maxDt =
-                cosmology::expansionTimestep(scale, adot, cosmosD2adt2(scale), SCALE_DT);
+                cosmology::expansionTimestep(scale, adot, cosmosD2adt2(scale), kScaleTimestep);
         }
         kparams.theta = theta;
         ExpansionBuffer l;
         l.zero();
-        Array<Position, NDIM> pos;
-        for (int dim = 0; dim < NDIM; dim++) {
+        Array<Position, kDimensions> pos;
+        for (int dim = 0; dim < kDimensions; dim++) {
             pos[dim] = 0.f;
         }
         TreeId rootId;
@@ -904,7 +902,8 @@ double doPowerSpectrum(int num, double a, double adot) {
         //		kmax = sqrt(power0.k.front() * kmax * M);
         //	}
         double const c1 = h * h * h * factor;
-        double const kshot = 2.0 * M_PI * getOptions().initial.particlesPerDimension / boxSize;
+        double const kshot =
+            2.0 * std::numbers::pi * getOptions().initial.particlesPerDimension / boxSize;
         for (int i = 0; i < power0.p.size(); i++) {
             double const k = power0.k[i];
             if (k >= kmin && k <= kmax) {
@@ -1056,13 +1055,13 @@ void driver() {
         opts.units.massG = header.mass[1] * 1e10 / opts.cosmology.hubble;
         opts.units.massG *= constants::kM0;
         opts.units.lengthCm =
-            pow(opts.units.massG * (8.0 * M_PI) * numberOfParticles * constants::kG /
+            pow(opts.units.massG * (8.0 * std::numbers::pi) * numberOfParticles * constants::kG /
                     (3.0 * opts.cosmology.omegaM * sqr(constants::kH0 * opts.cosmology.hubble)),
                 1.0 / 3.0);
         opts.units.timeSeconds = opts.units.lengthCm / constants::kC;
         double hValue = constants::kH0 * opts.units.timeSeconds;
         opts.gravity.gm = opts.cosmology.omegaM * 3.0 * sqr(hValue * opts.cosmology.hubble) /
-            (8.0 * M_PI) / numberOfParticles;
+            (8.0 * std::numbers::pi) / numberOfParticles;
         opts.cosmology.startRedshift = header.redshift;
         setOptions(opts);
         params.a = 1.0 / (header.redshift + 1.0);
@@ -1130,7 +1129,7 @@ void driver() {
             tm.reset();
             tm.start();
             double const linkingLength = getOptions().lightcone.linkingLength *
-                pow(getOptions().initial.numberOfParticles, -1.0 / NDIM);
+                pow(getOptions().initial.numberOfParticles, -1.0 / kDimensions);
             lcFormTrees(tau, linkingLength);
             tm.stop();
             terminal::detailPrint("lc_form_trees %e\n", tm.read());
@@ -1237,7 +1236,7 @@ void driver() {
             } else if (minrung == 0) {
                 //				PRINT("Checking imbalance\n");
                 double imbalance = domainsGetLoadImbalance();
-                rebound = (imbalance > MAX_LOAD_IMBALANCE);
+                rebound = (imbalance > kMaxLoadImbalance);
             }
             if (rebound) {
                 terminal::detailPrint("Doing rebound\n");

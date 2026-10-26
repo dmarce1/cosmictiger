@@ -10,6 +10,7 @@
 #define MATH_HPP_
 
 #include <atomic>
+#include <numbers>
 
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/cuda/cuda.hpp>
@@ -32,7 +33,7 @@ inline float rand1() {
 inline float randNormal() {
     double const x = rand1();
     double const y = rand1();
-    return sqrt(-2.0 * log(x)) * cos(2 * M_PI * y);
+    return sqrt(-2.0 * log(x)) * cos(2 * std::numbers::pi * y);
 }
 
 template <class T>
@@ -196,6 +197,6 @@ inline double doubleFactorial(int n) {
 
 #include <cosmictiger/core/containers.hpp>
 
-Pair<double, Array<double, NDIM>> findEigenpair(
-    Array<Array<double, NDIM>, NDIM> const& aValue, double mu);
+Pair<double, Array<double, kDimensions>> findEigenpair(
+    Array<Array<double, kDimensions>, kDimensions> const& aValue, double mu);
 #endif /* MATH_HPP_ */

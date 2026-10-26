@@ -9,6 +9,7 @@
 #pragma once
 
 #include <cmath>
+#include <numbers>
 
 #include <cosmictiger/core/containers.hpp>
 #include <cosmictiger/core/defs.hpp>
@@ -33,19 +34,21 @@ void ewaldFillTables(EwaldConstants& constants) {
     using Symmetric = SymmetricTensor<float, order>;
     static_assert(Traceless::kN_ <= kFmmMaxTracelessTensorCount);
     static_assert(Symmetric::kN_ <= kFmmMaxSymmetricTensorCount);
-    for (int i = 0; i < NFOUR; i++) {
-        Array<float, NDIM> const h = constants.fourIndices[i];
+    for (int i = 0; i < kEwaldFourierIndexCount; i++) {
+        Array<float, kDimensions> const h = constants.fourIndices[i];
         auto d0Value = vectorToSymTensor<float, order>(h);
         float const h2 = sqr(h[0]) + sqr(h[1]) + sqr(h[2]);    // 5 OP
-        float const c0 = -1.0 / h2 * exp(-M_PI * M_PI * h2 / 4.0) / M_PI;
-        Array<int, NDIM> n;
+        float const c0 =
+            -1.0 / h2 * exp(-std::numbers::pi * std::numbers::pi * h2 / 4.0) / std::numbers::pi;
+        Array<int, kDimensions> n;
         int const signs[4] = {1, -1, -1, 1};
         for (n[0] = 0; n[0] < order; n[0]++) {
             for (n[1] = 0; n[1] < order - n[0]; n[1]++) {
                 for (n[2] = 0; n[2] < order - n[0] - n[1]; n[2]++) {
                     int const n0 = n[0] + n[1] + n[2];
-                    d0Value(n) *= (signs[n0 % 4] * pow(2.0 * M_PI * SCALE_FACTOR_INV1, n0) * c0) *
-                        SCALE_FACTOR_INV1;
+                    d0Value(n) *= (signs[n0 % 4] *
+                                      pow(2.0 * std::numbers::pi * kScaleFactorInverse1, n0) * c0) *
+                        kScaleFactorInverse1;
                 }
             }
         }
@@ -66,8 +69,8 @@ void ewaldFillTables(EwaldConstants& constants) {
     for (int n = 0; n < order; n += 2) {
         for (int m = 0; m < order - n; m += 2) {
             for (int l = 0; l < order - n - m; l += 2) {
-                d(n, m, l) = pow(SCALE_FACTOR_INV1, n + m + l + 1) *
-                    pow(-2.0, (n + m + l) / 2 + 1) / ((n + m + l + 1.0) * sqrt(M_PI)) *
+                d(n, m, l) = pow(kScaleFactorInverse1, n + m + l + 1) *
+                    pow(-2.0, (n + m + l) / 2 + 1) / ((n + m + l + 1.0) * sqrt(std::numbers::pi)) *
                     pow(kAlpha, n + m + l + 1) * doubleFactorial(n - 1) * doubleFactorial(m - 1) *
                     doubleFactorial(l - 1);
             }

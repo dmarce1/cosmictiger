@@ -10,6 +10,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <numbers>
 #include <random>
 #include <set>
 #include <stdexcept>
@@ -364,12 +365,13 @@ double rockstarTestVirialDensity(double scale) {
             options.cosmology.omegaLambda * scale * scale * scale);
     double const x = omega - 1.0;
     return options.initial.numberOfParticles *
-        (18.0 * M_PI * M_PI + (openFit ? 60.0 : 82.0) * x - (openFit ? 32.0 : 39.0) * x * x) /
+        (18.0 * std::numbers::pi * std::numbers::pi + (openFit ? 60.0 : 82.0) * x -
+            (openFit ? 32.0 : 39.0) * x * x) /
         omega;
 }
 
 double rockstarTestRadius(int count, double density) {
-    return std::cbrt(3.0 * count / (4.0 * M_PI * density));
+    return std::cbrt(3.0 * count / (4.0 * std::numbers::pi * density));
 }
 
 std::vector<double> directRockstarPotentials(Subgroup const& group) {
@@ -381,7 +383,7 @@ std::vector<double> directRockstarPotentials(Subgroup const& group) {
                 continue;
             }
             double r2 = 0.0;
-            for (int dim = 0; dim < NDIM; ++dim) {
+            for (int dim = 0; dim < kDimensions; ++dim) {
                 double const dx = double(group.parts[i].xValue[dim]) - group.parts[j].xValue[dim];
                 r2 += dx * dx;
             }
@@ -453,7 +455,7 @@ void checkRockstarSphericalOverdensities() {
         requireRockstarClose(group.mass2500, 12.0, 0.0, "critical 2500 SO shell count");
         requireRockstarClose(group.rVir, rockstarTestRadius(36, rockstarTestVirialDensity(scale)),
             2.e-6, "epoch-dependent virial radius");
-        Array<double, NDIM> const origin{};
+        Array<double, kDimensions> const origin{};
         auto const record = rockstarMakeRecord(groups, 0, scale, origin);
         requireRockstarClose(record.mvir, 36.0, 2.e-6, "record virial mass conversion");
         requireRockstarClose(record.m200, group.mass200, 2.e-6, "record critical SO mass");
@@ -493,14 +495,14 @@ void checkRockstarHierarchyAndHistory() {
     for (int i = 0; i < 2; ++i) {
         for (auto& particle : groups[i].parts) {
             particle.previousHalo = i == 0 ? 100 : 200;
-            particle.previousHost = i == 0 ? NO_GROUP : 100;
+            particle.previousHost = i == 0 ? kNoParticleGroup : 100;
         }
     }
     rockstarFinalizeSubgroups(groups, 1.0f);
     requireRockstar(groups.size() == 2, "temporal fixture halos disappeared");
     requireRockstar(groups[0].internalParent == -1 && groups[1].internalParent == 0,
         "previous host identity lost when exclusive particle counts reverse");
-    Array<double, NDIM> const origin{};
+    Array<double, kDimensions> const origin{};
     auto const entry = rockstarMakeGroupEntry(groups, 1, 1.0f, origin);
     requireRockstar(entry.parents.at(200) == 40, "particle overlap history was not retained");
 }
@@ -535,7 +537,7 @@ void checkRockstarMajorMerger() {
         for (int j = 0; j < groups[i].parts.size(); ++j) {
             auto& particle = groups[i].parts[j];
             particle.previousHalo = i == 0 ? 100 : 200;
-            particle.previousHost = i == 0 ? NO_GROUP : 100;
+            particle.previousHost = i == 0 ? kNoParticleGroup : 100;
             if (i == 1) {
                 particle.vx = j % 2 ? escapingSpeed : -escapingSpeed;
             }
@@ -582,15 +584,15 @@ void checkRockstarCenterUnits() {
     for (int i = 0; i < 128; ++i) {
         auto particle = rockstarTestParticle(0, 0, 0, i);
         float const width = i < 32 ? 1.e-5f : 1.e-4f;
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             particle.xValue[dim] = width * gaussian(random);
-            particle.xValue[dim + NDIM] = 1.e-5f * gaussian(random);
+            particle.xValue[dim + kDimensions] = 1.e-5f * gaussian(random);
         }
         original.pushBack(particle);
     }
     auto scaled = original;
     for (auto& particle : scaled) {
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             particle.xValue[dim] *= 2.0f;
         }
     }
@@ -626,7 +628,7 @@ void checkRockstarTiedShellBoundary() {
             std::nextafter(float(boundary), inside ? 0.0f : std::numeric_limits<float>::infinity());
         auto group = rockstarTestGroup(12, 0.0f, 1, radius);
         Vector<Subgroup> groups{group};
-        Array<double, NDIM> const origin{};
+        Array<double, kDimensions> const origin{};
         auto const record = rockstarMakeRecord(groups, 0, 1.0f, origin);
         requireRockstarClose(record.mvir, inside ? 12.0 : 0.0, 2.e-6,
             "tied shell must cross the SO boundary as a complete shell");
@@ -644,7 +646,7 @@ void checkRockstarTiedShellBoundary() {
 std::vector<int> rockstarCanonicalPartition(DeviceVector<RockstarParticle> const& particles) {
     std::map<int, int> minimum;
     for (auto const& particle : particles) {
-        if (particle.subgroup != ROCKSTAR_NO_GROUP) {
+        if (particle.subgroup != kRockstarNoGroup) {
             auto [it, inserted] = minimum.emplace(particle.subgroup, particle.index);
             if (!inserted) {
                 it->second = std::min(it->second, int(particle.index));
@@ -654,7 +656,7 @@ std::vector<int> rockstarCanonicalPartition(DeviceVector<RockstarParticle> const
     std::vector<int> result(particles.size());
     for (auto const& particle : particles) {
         result[particle.index] =
-            particle.subgroup == ROCKSTAR_NO_GROUP ? particle.index : minimum.at(particle.subgroup);
+            particle.subgroup == kRockstarNoGroup ? particle.index : minimum.at(particle.subgroup);
     }
     return result;
 }
@@ -672,7 +674,7 @@ void checkRockstarCudaConnectivity() {
         auto& node = manualNodes[leaf];
         node.particleBegin = particles.size();
         node.particleEnd = node.particleBegin + kLeafSize;
-        node.children[LEFT] = node.children[RIGHT] = -1;
+        node.children[kLeftChild] = node.children[kRightChild] = -1;
         node.neighbors.pushBack(leaf);
         leaves.pushBack(leaf);
         for (int lane = 0; lane < kLeafSize; ++lane) {
@@ -736,7 +738,7 @@ Vector<ParticleData> makeRockstarSnapshot(int count, bool planar) {
     Vector<ParticleData> particles(count);
     for (int i = 0; i < count; ++i) {
         auto& particle = particles[i];
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             particle.x[dim] = Position(0.25);
             particle.v[dim] = 0.0f;
         }
@@ -750,8 +752,8 @@ Vector<ParticleData> makeRockstarSnapshot(int count, bool planar) {
         particle.index = i;
         particle.rank = 0;
         particle.identity = i + 1;
-        particle.lastGroup = NO_GROUP;
-        particle.lastHost = NO_GROUP;
+        particle.lastGroup = kNoParticleGroup;
+        particle.lastHost = kNoParticleGroup;
     }
     return particles;
 }
@@ -792,7 +794,7 @@ void checkRockstarRecordInvariance() {
     }
     rockstarUpdateStatistics(group, 1.0f, 1.0f, 1.0f);
     Vector<Subgroup> groups{group};
-    Array<double, NDIM> const origin{};
+    Array<double, kDimensions> const origin{};
     auto const record = rockstarMakeRecord(groups, 0, 1.0f, origin);
     requireRockstarClose(record.jx, 0.0, 0.0, "rotation has no Jx");
     requireRockstarClose(record.jy, 0.0, 0.0, "rotation has no Jy");
@@ -808,9 +810,9 @@ void checkRockstarRecordInvariance() {
     shifted.y += shift[1];
     shifted.z += shift[2];
     for (auto& particle : shifted.parts) {
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             particle.xValue[dim] += shift[dim];
-            particle.xValue[dim + NDIM] += boost[dim];
+            particle.xValue[dim + kDimensions] += boost[dim];
         }
     }
     groups[0] = std::move(shifted);
@@ -865,7 +867,7 @@ void checkRockstarLightconeEpoch() {
         // H0*tau=3 lies strictly on the contracting branch.
         double const hubble =
             units::normalizedHubble100(contracting) * contracting.cosmology.hubble;
-        for (double const phase : {1.0, 0.5 * M_PI, 3.0}) {
+        for (double const phase : {1.0, 0.5 * std::numbers::pi, 3.0}) {
             double const emissionTime = phase / hubble;
             double const observationTime = emissionTime + particles[0].x.toDouble();
             double const scale = 1.0 + std::sin(phase);

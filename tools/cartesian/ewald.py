@@ -218,7 +218,7 @@ def computeDetraceEwald(code, order):
 def radialDerivatives(code, order, origin):
     code.extend([
         'T const r = simdSqrt(r2);',
-        'T const n8r = simdBroadcast<T>(-8*SCALE_FACTOR_INV2) * r;',
+        'T const n8r = simdBroadcast<T>(-8*kScaleFactorInverse2) * r;',
         'T const rinv = simdSelect(r > simdBroadcast<T>(0), simdBroadcast<T>(1), '
         'simdBroadcast<T>(0)) / simdMax(r, simdBroadcast<T>(1.0e-20));',
     ])
@@ -226,8 +226,8 @@ def radialDerivatives(code, order, origin):
         code.extend([
             'T exp0;',
             'T erfc0;',
-            'erfcexp(simdBroadcast<T>(2.*SCALE_FACTOR_INV1) * r, &erfc0, &exp0);',
-            'T const expfactor = fouroversqrtpi * simdBroadcast<T>(SCALE_FACTOR_INV1) * exp0;',
+            'erfcexp(simdBroadcast<T>(2.*kScaleFactorInverse1) * r, &erfc0, &exp0);',
+            'T const expfactor = fouroversqrtpi * simdBroadcast<T>(kScaleFactorInverse1) * exp0;',
             'T e0 = expfactor * rinv;',
         ])
     code.extend([
@@ -255,7 +255,7 @@ def radialDerivatives(code, order, origin):
         seriesTerms = 20
         code.extend([
             '// Stable nearest-image radial terms: series followed by downward recurrence.',
-            'T const ar2 = simdBroadcast<T>(4*SCALE_FACTOR_INV2) * r2;',
+            'T const ar2 = simdBroadcast<T>(4*kScaleFactorInverse2) * r2;',
             'T const twoAr2 = ar2 + ar2;',
             'T const expAr2 = exp(-ar2);',
         ])
@@ -272,7 +272,7 @@ def radialDerivatives(code, order, origin):
         for degree in range(order - 1, 0, -1):
             code.append(f'T const s{degree - 1} = simdFma(twoAr2, s{degree}, expAr2) '
                         f'* simdBroadcast<T>({1.0 / (2 * degree - 1):.17e});')
-        code.append('T radialFactor = simdBroadcast<T>(2.256758334191025*SCALE_FACTOR_INV1);')
+        code.append('T radialFactor = simdBroadcast<T>(2.256758334191025*kScaleFactorInverse1);')
         for degree in range(order):
             code.append(f'T const d{degree} = radialFactor * s{degree};')
             if degree != order - 1:
@@ -291,7 +291,7 @@ def radialDerivatives(code, order, origin):
                 code.append(f'T const dRinvPower{degree}Order{traceCount} '
                             f'= d{degree} * rinv{traceCount};')
                 flops += 1
-    code.append('Array<T, NDIM> dxrinv;')
+    code.append('Array<T, kDimensions> dxrinv;')
     for axis in range(3):
         code.append(f'dxrinv[{axis}] = dx[{axis}] * rinv;')
     flops += computeDx(code, order)
@@ -305,10 +305,10 @@ def ewald(code, order):
         f'// FMM order {order}.',
         'template<class T>',
         f'CUDA_EXPORT int ewaldCorrectionDerivatives(SymmetricTracelessTensor<T, {order}> &d, '
-        'Array<T, NDIM> position) {',
-        'position[0] *= simdBroadcast<T>(SCALE_FACTOR);',
-        'position[1] *= simdBroadcast<T>(SCALE_FACTOR);',
-        'position[2] *= simdBroadcast<T>(SCALE_FACTOR);',
+        'Array<T, kDimensions> position) {',
+        'position[0] *= simdBroadcast<T>(kScaleFactor);',
+        'position[1] *= simdBroadcast<T>(kScaleFactor);',
+        'position[2] *= simdBroadcast<T>(kScaleFactor);',
         '// Per-lane source-operation estimate; FMA=2, elementary results=1.',
         'T r = simdSqrt(simdFma(position[0], position[0], simdFma(position[1], position[1], '
         'sqr(position[2]))));',
@@ -328,7 +328,8 @@ def ewald(code, order):
         'T const hdotx = simdFma(simdBroadcast<T>(h[0]), position[0], '
         'simdFma(simdBroadcast<T>(h[1]), position[1], simdBroadcast<T>(h[2]) * position[2]));',
         'T cn, sn;',
-        'sincos(simdBroadcast<T>(2.0 * M_PI * SCALE_FACTOR_INV1) * hdotx, &sn, &cn);',
+        'sincos(simdBroadcast<T>(SimdScalar<T>(2) * std::numbers::pi_v<SimdScalar<T>> * '
+        'kScaleFactorInverse1) * hdotx, &sn, &cn);',
     ])
     # Keep the Fourier sum first: overlapping its live accumulators with the
     # real-space work changes CUDA register allocation and table-load scheduling.
@@ -340,7 +341,7 @@ def ewald(code, order):
                     f'dfour[{index}]);')
     code.extend([
         '}',
-        'Array<T, NDIM> dx;',
+        'Array<T, kDimensions> dx;',
         'dx = position;',
         '{',
         'T r2 = simdFma(dx[0], dx[0], simdFma(dx[1], dx[1], sqr(dx[2])));',
@@ -354,12 +355,12 @@ def ewald(code, order):
         '}',
         'for (int i = 0; i < realsz; i++) {',
         'auto const n = EwaldConst::realIndex(i);',
-        'Array<T, NDIM> dx;',
-        'for (int dim = 0; dim < NDIM; dim++) {',
-        'dx[dim] = position[dim] - simdBroadcast<T>(SCALE_FACTOR) * n[dim];',
+        'Array<T, kDimensions> dx;',
+        'for (int dim = 0; dim < kDimensions; dim++) {',
+        'dx[dim] = position[dim] - simdBroadcast<T>(kScaleFactor) * n[dim];',
         '}',
         'T r2 = simdFma(dx[0], dx[0], simdFma(dx[1], dx[1], sqr(dx[2])));',
-        'if (simdAnyOf(r2 < simdBroadcast<T>(SCALE_FACTOR2*EWALD_REAL_CUTOFF2))) {',
+        'if (simdAnyOf(r2 < simdBroadcast<T>(kScaleFactor2*kEwaldRealCutoffSquared))) {',
         '++acceptedRealImages;',
     ])
     realFlops = radialDerivatives(code, order, False)
@@ -368,7 +369,7 @@ def ewald(code, order):
     fourierFlops = 8 + 2 * (order * order + 1)
     code.extend([
         'd = d + dfour;',
-        f'd[0] = simdBroadcast<T>({pi / 4.0:.9e} * SCALE_FACTOR_INV1) + d[0];',
+        f'd[0] = simdBroadcast<T>({pi / 4.0:.9e} * kScaleFactorInverse1) + d[0];',
         # Scale/radius (9), repeated origin radius squared (5), tensor sum (N),
         # potential shift (1), and each image displacement/radius squared (11).
         f'return {14 + originFlops + detraceFlops + order * order + 2} '
@@ -382,6 +383,8 @@ def generateEwald(minLocalDegree, maxLocalDegree):
     code = [
         '// Generated by tools/generate_fmm.py. Do not edit.',
         '#pragma once',
+        '',
+        '#include <numbers>',
         '',
         '#include <cosmictiger/core/flops.hpp>',
         '#include <cosmictiger/gravity/dehnen/ewald_indices.hpp>',

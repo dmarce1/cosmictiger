@@ -17,7 +17,7 @@
 #include <cosmictiger/particles/particles.hpp>
 
 struct SphTreeNode {
-    Array<TreeId, NCHILD> children;
+    Array<TreeId, kChildCount> children;
     Pair<int, int> processRange;
     Pair<ParticleInteger> particleRange;
     Pair<ParticleInteger> sinkParticleRange;
@@ -44,11 +44,11 @@ struct SphTreeNode {
       , activeNodes(0)
       , depth(0)
       , neighborRange(0, 0) {
-        for (int child = 0; child < NCHILD; child++) {
+        for (int child = 0; child < kChildCount; child++) {
             children[child].proc = -1;
             children[child].index = -1;
         }
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             innerBox.begin[dim] = innerBox.end[dim] = 0.0;
             outerBox.begin[dim] = outerBox.end[dim] = 0.0;
             box.begin[dim] = box.end[dim] = 0.0;

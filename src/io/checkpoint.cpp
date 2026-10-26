@@ -972,7 +972,7 @@ void checkpointStateTest() {
         constexpr ParticleInteger kCount = 4;
         particlesResize(kCount);
         for (ParticleInteger particle = 0; particle < kCount; ++particle) {
-            for (int dim = 0; dim < NDIM; ++dim) {
+            for (int dim = 0; dim < kDimensions; ++dim) {
                 PositionInteger const raw = (PositionInteger(1) << (kPositionBits - 1)) +
                     PositionInteger(17 * particle + dim + 1);
                 particlesPos(dim, particle).raw() = raw;
@@ -988,7 +988,7 @@ void checkpointStateTest() {
         }
         particlesSave(fp);
         for (ParticleInteger particle = 0; particle < kCount; ++particle) {
-            for (int dim = 0; dim < NDIM; ++dim) {
+            for (int dim = 0; dim < kDimensions; ++dim) {
                 particlesPos(dim, particle).raw() = 0;
             }
         }
@@ -996,7 +996,7 @@ void checkpointStateTest() {
         particlesLoad(fp);
         ALWAYS_ASSERT(particlesSize() == kCount);
         for (ParticleInteger particle = 0; particle < kCount; ++particle) {
-            for (int dim = 0; dim < NDIM; ++dim) {
+            for (int dim = 0; dim < kDimensions; ++dim) {
                 PositionInteger const expected = (PositionInteger(1) << (kPositionBits - 1)) +
                     PositionInteger(17 * particle + dim + 1);
                 ALWAYS_ASSERT(particlesPos(dim, particle).raw() == expected);

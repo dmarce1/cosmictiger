@@ -216,7 +216,7 @@ void writeParticlePointmesh(DBfile* db, ViewDirectoryMetadata& metadata, char co
     if (particles.size() > size_t(std::numeric_limits<int>::max())) {
         throw std::runtime_error("Too many particles for a Silo point mesh");
     }
-    std::array<Vector<double>, NDIM> coordinates;
+    std::array<Vector<double>, kDimensions> coordinates;
     for (auto& axis : coordinates) {
         axis.reserve(particles.size());
     }
@@ -227,7 +227,7 @@ void writeParticlePointmesh(DBfile* db, ViewDirectoryMetadata& metadata, char co
     }
     double* coordinatePointers[] = {
         coordinates[0].data(), coordinates[1].data(), coordinates[2].data()};
-    checkViewWrite(DBPutPointmesh(db, mesh, NDIM, coordinatePointers, int(particles.size()),
+    checkViewWrite(DBPutPointmesh(db, mesh, kDimensions, coordinatePointers, int(particles.size()),
                        DB_DOUBLE, options),
         mesh);
     if constexpr (std::is_same_v<Particle, SphParticleInfo>) {
@@ -399,16 +399,16 @@ ViewParticles collectViewParticles() {
     ViewParticles snapshot;
     for (ParticleInteger i = 0; i < particlesSize(); ++i) {
         DarkMatterParticleInfo info{};
-        info.x = particlesPos(XDIM, i);
-        info.y = particlesPos(YDIM, i);
-        info.z = particlesPos(ZDIM, i);
-        info.vx = particlesVel(XDIM, i);
-        info.vy = particlesVel(YDIM, i);
-        info.vz = particlesVel(ZDIM, i);
+        info.x = particlesPos(kXDimension, i);
+        info.y = particlesPos(kYDimension, i);
+        info.z = particlesPos(kZDimension, i);
+        info.vx = particlesVel(kXDimension, i);
+        info.vy = particlesVel(kYDimension, i);
+        info.vz = particlesVel(kZDimension, i);
         info.rung = particlesRung(i);
-        if (particlesType(i) == DARK_MATTER_TYPE) {
+        if (particlesType(i) == kDarkMatterType) {
             snapshot.darkMatter.push_back(info);
-        } else if (particlesType(i) == SPH_TYPE) {
+        } else if (particlesType(i) == kSphType) {
             SphParticleInfo gas{};
             static_cast<DarkMatterParticleInfo&>(gas) = info;
             int const index = particlesCatIndex(i);
@@ -619,7 +619,7 @@ ViewLeafMetadata writeParticleLeaf(Vector<Range<double>> const& boxes, int cycle
         ViewParticles particles;
         auto selectParticles = [&](auto const& source, auto& selected) {
             for (auto const& particle : source) {
-                Array<double, NDIM> position;
+                Array<double, kDimensions> position;
                 position[0] = particle.x.toDouble();
                 position[1] = particle.y.toDouble();
                 position[2] = particle.z.toDouble();
@@ -786,12 +786,12 @@ void viewConfigure() {
             directoryError.message().c_str());
     }
     Range<double> viewBox;
-    viewBox.begin[XDIM] = opts.output.xMin;
-    viewBox.end[XDIM] = opts.output.xMax;
-    viewBox.begin[YDIM] = opts.output.yMin;
-    viewBox.end[YDIM] = opts.output.yMax;
-    viewBox.begin[ZDIM] = opts.output.zMin;
-    viewBox.end[ZDIM] = opts.output.zMax;
+    viewBox.begin[kXDimension] = opts.output.xMin;
+    viewBox.end[kXDimension] = opts.output.xMax;
+    viewBox.begin[kYDimension] = opts.output.yMin;
+    viewBox.end[kYDimension] = opts.output.yMax;
+    viewBox.begin[kZDimension] = opts.output.zMin;
+    viewBox.end[kZDimension] = opts.output.zMax;
     viewBoxes.push_back(viewBox);
     if (terminal::verbose() || !opts.run.test.empty()) {
         PRINT("Silo particle output: x [%g, %g], y [%g, %g], z [%g, %g], every %d synchronized "
@@ -827,12 +827,13 @@ Vector<float> outputView(int number, double time) {
                     for (int xi = -1; xi <= 0; xi++) {
                         for (int yi = -1; yi <= 0; yi++) {
                             for (int zi = -1; zi <= 0; zi++) {
-                                double vec[NDIM];
+                                double vec[kDimensions];
                                 long int ipix;
-                                vec[XDIM] = particlesPos(XDIM, i).toFloat() + xi;
-                                vec[YDIM] = particlesPos(YDIM, i).toFloat() + yi;
-                                vec[ZDIM] = particlesPos(ZDIM, i).toFloat() + zi;
-                                float const r2 = sqr(vec[XDIM], vec[YDIM], vec[ZDIM]);
+                                vec[kXDimension] = particlesPos(kXDimension, i).toFloat() + xi;
+                                vec[kYDimension] = particlesPos(kYDimension, i).toFloat() + yi;
+                                vec[kZDimension] = particlesPos(kZDimension, i).toFloat() + zi;
+                                float const r2 =
+                                    sqr(vec[kXDimension], vec[kYDimension], vec[kZDimension]);
                                 if (r2 < 1.0 && r2 > 0.0) {
                                     vec2pix_ring(nside, vec, &ipix);
                                     atomicAdd(values[ipix], particlesMass(i) / r2);

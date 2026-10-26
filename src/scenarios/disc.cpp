@@ -7,6 +7,7 @@
  */
 
 #include <cmath>
+#include <numbers>
 #include <stdexcept>
 
 #include <cosmictiger/core/options.hpp>
@@ -28,7 +29,8 @@ ScenarioPlan initializeDisc() {
     opts.initial.gasMass = 1.0;
     setOptions(opts);
     double const m = opts.initial.gasMass;
-    double h = pow(m * getOptions().hydro.neighborNumber / (4.0 * M_PI / 3.0 * rho), 1.0 / 3.0);
+    double h = pow(
+        m * getOptions().hydro.neighborNumber / (4.0 * std::numbers::pi / 3.0 * rho), 1.0 / 3.0);
     int i = 0;
     int const nz = 3;
     int dim = sqrt(totalNumberOfParticles) / nz;
@@ -48,16 +50,16 @@ ScenarioPlan initializeDisc() {
                 if (r > innerRadius && r < outerRadius) {
                     sphParticlesResize(sphParticlesSize() + 1);
                     sphParticlesSupportRadius(i) = h;
-                    sphParticlesPosition(XDIM, i) = x;
-                    sphParticlesPosition(YDIM, i) = y;
-                    sphParticlesPosition(ZDIM, i) = z;
+                    sphParticlesPosition(kXDimension, i) = x;
+                    sphParticlesPosition(kYDimension, i) = y;
+                    sphParticlesPosition(kZDimension, i) = z;
                     double const v = 1.00 * sqrt(1 / r);
                     double const vx = -(y - 0.5) / r * v;
                     double const vy = (x - 0.5) / r * v;
                     double const vz = 0.0;
-                    sphParticlesVelocity(XDIM, i) = vx;
-                    sphParticlesVelocity(YDIM, i) = vy;
-                    sphParticlesVelocity(ZDIM, i) = vz;
+                    sphParticlesVelocity(kXDimension, i) = vx;
+                    sphParticlesVelocity(kYDimension, i) = vy;
+                    sphParticlesVelocity(kZDimension, i) = vz;
                     sphParticlesRung(i) = 0;
                     sphParticlesThermodynamicState(i).internalEnergy = internalEnergy;
 

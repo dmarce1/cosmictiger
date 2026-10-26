@@ -45,8 +45,8 @@ bool kickSourcesAreSingleRank(Vector<TreeId> const& checklist) {
 
 }    // namespace detail
 
-KickReturn kickWalkDispatch(KickParameters params, ExpansionBuffer l, Array<Position, NDIM> pos,
-    TreeId self, Vector<TreeId> direct, Vector<TreeId> periodic,
+KickReturn kickWalkDispatch(KickParameters params, ExpansionBuffer l,
+    Array<Position, kDimensions> pos, TreeId self, Vector<TreeId> direct, Vector<TreeId> periodic,
     std::shared_ptr<KickWorkspace> workspace, KickContext const& context) {
     return fmmDispatch([&](auto orderTag) {
         return kickWalk<decltype(orderTag)::value>(params, std::move(l), pos, self,

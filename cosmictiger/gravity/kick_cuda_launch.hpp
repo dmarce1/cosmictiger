@@ -28,7 +28,7 @@ constexpr int kKickDefaultSinkTile = 128;
 constexpr int kKickDefaultParticleTile = 512;
 constexpr int kKickDefaultMultipoleTile = 32;
 constexpr int kKickMaximumMultipoleTile = 64;
-constexpr int kKickMinimumParticleTile = WARP_SIZE;
+constexpr int kKickMinimumParticleTile = kWarpSize;
 
 struct KickDeviceResources {
     int numberOfRegisters;
@@ -61,7 +61,7 @@ KickDeviceResources kickDeviceResources() {
     CUDA_CHECK(cudaDeviceGetAttribute(
         &resources.maximumBlocksPerMultiprocessor, cudaDevAttrMaxBlocksPerMultiprocessor, device));
     CUDA_CHECK(cudaDeviceGetAttribute(&threads, cudaDevAttrMaxThreadsPerMultiProcessor, device));
-    resources.maximumWarpsPerMultiprocessor = threads / WARP_SIZE;
+    resources.maximumWarpsPerMultiprocessor = threads / kWarpSize;
     return resources;
 }
 
@@ -76,7 +76,7 @@ inline int kickRoundDown(int value, int multiple) {
 // Warps allocate registers in units of 256, with per-thread counts rounded to 8.
 inline int kickRegisterResidencyLimit(KickDeviceResources const& resources) {
     int const registersPerWarp =
-        kickRoundUp(kickRoundUp(resources.numberOfRegisters, 8) * WARP_SIZE, 256);
+        kickRoundUp(kickRoundUp(resources.numberOfRegisters, 8) * kWarpSize, 256);
     int limit = resources.registersPerMultiprocessor / std::max(1, registersPerWarp);
     limit = std::min(limit, resources.maximumBlocksPerMultiprocessor);
     limit = std::min(limit, resources.maximumWarpsPerMultiprocessor);
@@ -112,7 +112,7 @@ bool kickBuildLayout(Compute const& compute, bool massPlane, int residency, int 
         layout.expansionOffset = offset;
         offset += kickRoundUp(
             kickRoundUp(FmmOrder<order>::kLocalExpansionBytes_, int(alignof(Position))) +
-                NDIM * int(sizeof(Position)),
+                kDimensions * int(sizeof(Position)),
             kKickArenaAlignment);
     } else {
         layout.expansionOffset = -1;
@@ -131,12 +131,12 @@ bool kickBuildLayout(Compute const& compute, bool massPlane, int residency, int 
     bool const sinkAuto = compute.cudaKickSinkTile == 0;
     int sinkCapacity = 0;
     if (compute.cudaKickSinkTile > 0) {
-        sinkCapacity = kickRoundUp(compute.cudaKickSinkTile, WARP_SIZE);
+        sinkCapacity = kickRoundUp(compute.cudaKickSinkTile, kWarpSize);
     } else if (sinkAuto) {
-        sinkCapacity = kickRoundUp(bucket, WARP_SIZE);
+        sinkCapacity = kickRoundUp(bucket, kWarpSize);
     }
     int const particleBytesPerSource =
-        int(sizeof(Position)) * NDIM + (massPlane ? int(sizeof(float)) : 0);
+        int(sizeof(Position)) * kDimensions + (massPlane ? int(sizeof(float)) : 0);
     // Staged records keep the tree arena's stride, so cudaGravityPcDirect
     // stages each record with one aligned asynchronous copy.
     static_assert(FmmOrder<order>::kPositionedMultipoleStride_ % kKickArenaAlignment == 0,
@@ -146,7 +146,7 @@ bool kickBuildLayout(Compute const& compute, bool massPlane, int residency, int 
     bool const particleAuto = compute.cudaKickParticleTile <= 0;
     bool const multipoleAuto = compute.cudaKickMultipoleTile <= 0;
     int particleCapacity = particleAuto ? kKickDefaultParticleTile :
-                                          kickRoundUp(compute.cudaKickParticleTile, WARP_SIZE);
+                                          kickRoundUp(compute.cudaKickParticleTile, kWarpSize);
     int multipoleCapacity = multipoleAuto ? multipoleTarget : compute.cudaKickMultipoleTile;
     while (true) {
         int const forceBytes = 4 * int(sizeof(float)) * sinkCapacity;
@@ -182,11 +182,11 @@ bool kickBuildLayout(Compute const& compute, bool massPlane, int residency, int 
         // Trim: particles first, then multipoles, then an automatic sink tile.
         if (particleAuto && particleCapacity > kKickMinimumParticleTile &&
             particleBytes >= multipoleBytes) {
-            particleCapacity -= WARP_SIZE;
+            particleCapacity -= kWarpSize;
         } else if (multipoleAuto && multipoleCapacity > 1 && multipoleBytes > particleBytes) {
             multipoleCapacity--;
         } else if (particleAuto && particleCapacity > kKickMinimumParticleTile) {
-            particleCapacity -= WARP_SIZE;
+            particleCapacity -= kWarpSize;
         } else if (multipoleAuto && multipoleCapacity > 1) {
             multipoleCapacity--;
         } else if (sinkAuto && sinkCapacity > kKickDefaultSinkTile) {
@@ -195,8 +195,8 @@ bool kickBuildLayout(Compute const& compute, bool massPlane, int residency, int 
             sinkCapacity = kKickDefaultSinkTile;
             particleCapacity = particleAuto ? kKickDefaultParticleTile : particleCapacity;
             multipoleCapacity = multipoleAuto ? multipoleTarget : multipoleCapacity;
-        } else if (sinkAuto && sinkCapacity > WARP_SIZE) {
-            sinkCapacity -= WARP_SIZE;
+        } else if (sinkAuto && sinkCapacity > kWarpSize) {
+            sinkCapacity -= kWarpSize;
             particleCapacity = particleAuto ? kKickDefaultParticleTile : particleCapacity;
             multipoleCapacity = multipoleAuto ? multipoleTarget : multipoleCapacity;
         } else {
@@ -225,7 +225,7 @@ CudaKickArenaLayout kickSelectLayout() {
             }
             int achieved = 0;
             CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-                &achieved, (void const*) cudaKickKernel<order>, WARP_SIZE, layout.totalBytes));
+                &achieved, (void const*) cudaKickKernel<order>, kWarpSize, layout.totalBytes));
             if (achieved >= residency) {
                 // The launch uses residency blocks per multiprocessor (and the
                 // CPU/GPU handoff divides by that count), so a requested
@@ -372,23 +372,26 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
     data.type = data.sph ? &particlesType(0) : nullptr;
     bool const gasKick = data.sph && !kparams.forceOnly;
     data.catIndex = gasKick ? &particlesCatIndex(0) : nullptr;
-    data.sphGravityAccelerationX = gasKick ? &sphParticlesGravityAcceleration(XDIM, 0) : nullptr;
-    data.sphGravityAccelerationY = gasKick ? &sphParticlesGravityAcceleration(YDIM, 0) : nullptr;
-    data.sphGravityAccelerationZ = gasKick ? &sphParticlesGravityAcceleration(ZDIM, 0) : nullptr;
+    data.sphGravityAccelerationX =
+        gasKick ? &sphParticlesGravityAcceleration(kXDimension, 0) : nullptr;
+    data.sphGravityAccelerationY =
+        gasKick ? &sphParticlesGravityAcceleration(kYDimension, 0) : nullptr;
+    data.sphGravityAccelerationZ =
+        gasKick ? &sphParticlesGravityAcceleration(kZDimension, 0) : nullptr;
     if (kparams.forceOnly) {
-        ALWAYS_ASSERT(output.potential != nullptr && output.acceleration[XDIM] != nullptr);
-        data.gx = output.acceleration[XDIM];
-        data.gy = output.acceleration[YDIM];
-        data.gz = output.acceleration[ZDIM];
+        ALWAYS_ASSERT(output.potential != nullptr && output.acceleration[kXDimension] != nullptr);
+        data.gx = output.acceleration[kXDimension];
+        data.gy = output.acceleration[kYDimension];
+        data.gz = output.acceleration[kZDimension];
         data.pot = output.potential;
     } else {
         bool const saveAcceleration =
             kparams.saveForce || saveParticleAcceleration(getOptions().analysis);
         bool const savePotential =
             kparams.saveForce || saveParticlePotential(getOptions().analysis);
-        data.gx = saveAcceleration ? &particlesGravityAcceleration(XDIM, 0) : nullptr;
-        data.gy = saveAcceleration ? &particlesGravityAcceleration(YDIM, 0) : nullptr;
-        data.gz = saveAcceleration ? &particlesGravityAcceleration(ZDIM, 0) : nullptr;
+        data.gx = saveAcceleration ? &particlesGravityAcceleration(kXDimension, 0) : nullptr;
+        data.gy = saveAcceleration ? &particlesGravityAcceleration(kYDimension, 0) : nullptr;
+        data.gz = saveAcceleration ? &particlesGravityAcceleration(kZDimension, 0) : nullptr;
         data.pot = savePotential && kparams.doPhi ? &particlesPot(0) : nullptr;
     }
     ALWAYS_ASSERT(layout.massPlane == data.sph);
@@ -410,7 +413,7 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
     CudaStream stream(cudaGetDevice());
     stream.copyAsync(devDataPtr, dataPtr, sizeof(char) * allocSize, cudaMemcpyHostToDevice);
     cudaKickKernel<order>
-        <<<numberOfBlocks, WARP_SIZE, layout.totalBytes, stream.nativeHandle()>>>(devReturnArg,
+        <<<numberOfBlocks, kWarpSize, layout.totalBytes, stream.nativeHandle()>>>(devReturnArg,
             kparams, data, devIkickParams, workitems.size(), devCurrentIndex, layout, devListSlab);
     stream.checkLaunch();
     stream.copyAsync(result, devReturnArg, sizeof(KickReturn), cudaMemcpyDeviceToHost);

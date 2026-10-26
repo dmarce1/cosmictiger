@@ -42,5 +42,5 @@ CUDA_EXPORT inline double positionDomainCoordinate(Position position) {
 }
 
 #ifndef __CUDACC__
-using SimdPosition = SimdVector<SignedPositionInteger, SIMD_FLOAT_SIZE>;
+using SimdPosition = SimdVector<SignedPositionInteger, kSimdFloatSize>;
 #endif

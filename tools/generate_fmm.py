@@ -43,10 +43,10 @@ from pathlib import Path
 # Regeneration should not leave Python cache artifacts in the source tree.
 sys.dont_write_bytecode = True
 projectRoot = Path(__file__).resolve().parents[1]
-dimensionDefinition = re.search(r'^#define\s+NDIM\s+(\d+)\s*$',
+dimensionDefinition = re.search(r'^inline\s+constexpr\s+int\s+kDimensions\s*=\s*(\d+)\s*;\s*$',
                                 (projectRoot / 'cosmictiger/core/defs.hpp').read_text(), re.MULTILINE)
 if dimensionDefinition is None:
-    raise RuntimeError('defs.hpp must define NDIM as an integer literal')
+    raise RuntimeError('defs.hpp must define kDimensions as an inline constexpr int integer literal')
 NDIM = int(dimensionDefinition.group(1))
 outputDirectory = projectRoot / 'cosmictiger/gravity/fmm_kernels'
 reportPath = outputDirectory / 'operation_counts.json'
@@ -630,8 +630,6 @@ def generateCartesian(minLocalDegree=2, maxLocalDegree=8):
 #pragma once
 // Inclusive local-degree range; each local degree L pairs with source degree L - 1
 // and FMM order L + 1.
-#define COSMICTIGER_CARTESIAN_GENERATED_MIN_LOCAL_DEGREE {minLocalDegree}
-#define COSMICTIGER_CARTESIAN_GENERATED_MAX_LOCAL_DEGREE {maxLocalDegree}
 namespace cosmictiger::gravity::cartesian {{
 inline constexpr int kMinLocalDegree = {minLocalDegree};
 inline constexpr int kMaxLocalDegree = {maxLocalDegree};

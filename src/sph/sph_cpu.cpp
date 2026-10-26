@@ -10,13 +10,13 @@
 SphRunReturn sphRunCpuNode(
     SphRunParameters const& parameters, SphRunData const& data, int targetNodeIndex) {
     switch (parameters.runType) {
-    case SPH_RUN_PREHYDRO1:
+    case kSphRunPrehydro1:
         return sphCpuPrehydro1(parameters, data, targetNodeIndex);
-    case SPH_RUN_PREHYDRO2:
+    case kSphRunPrehydro2:
         return sphCpuPrehydro2(parameters, data, targetNodeIndex);
-    case SPH_RUN_HYDRO:
+    case kSphRunHydro:
         return sphCpuHydro(parameters, data, targetNodeIndex);
-    case SPH_RUN_RUNGS:
+    case kSphRunRungs:
         return sphCpuRungs(parameters, data, targetNodeIndex);
     default:
         ALWAYS_ASSERT(false);

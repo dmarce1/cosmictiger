@@ -13,14 +13,14 @@
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
-using ReturnType = std::pair<Vector<double>, Array<Vector<double>, NDIM>>;
+using ReturnType = std::pair<Vector<double>, Array<Vector<double>, kDimensions>>;
 
 static ReturnType doAnalytic(
     Vector<Position> const& sinkx, Vector<Position> const& sinky, Vector<Position> const& sinkz);
 
 HPX_PLAIN_ACTION(doAnalytic, DoAnalyticAction);
 
-using ReturnType = std::pair<Vector<double>, Array<Vector<double>, NDIM>>;
+using ReturnType = std::pair<Vector<double>, Array<Vector<double>, kDimensions>>;
 
 static ReturnType doAnalytic(
     Vector<Position> const& sinkx, Vector<Position> const& sinky, Vector<Position> const& sinkz) {
@@ -36,7 +36,7 @@ static ReturnType doAnalytic(
         auto other = f.get();
         for (int i = 0; i < sinkx.size(); i++) {
             results.first[i] += other.first[i];
-            for (int dim = 0; dim < NDIM; dim++) {
+            for (int dim = 0; dim < kDimensions; dim++) {
                 results.second[dim][i] += other.second[dim][i];
             }
         }
@@ -58,9 +58,9 @@ Pair<double> analyticCompare(int numberOfSamples) {
     Vector<Position> sinky(numberOfSamples);
     Vector<Position> sinkz(numberOfSamples);
     for (int i = 0; i < numberOfSamples; i++) {
-        sinkx[i] = samples[i].x[XDIM];
-        sinky[i] = samples[i].x[YDIM];
-        sinkz[i] = samples[i].x[ZDIM];
+        sinkx[i] = samples[i].x[kXDimension];
+        sinky[i] = samples[i].x[kYDimension];
+        sinkz[i] = samples[i].x[kZDimension];
     }
     double const gm = getOptions().gravity.gm;
     auto results = doAnalytic(sinkx, sinky, sinkz);
@@ -68,7 +68,7 @@ Pair<double> analyticCompare(int numberOfSamples) {
     for (int i = 0; i < numberOfSamples; i++) {
         double f1 = 0.0, f2 = 0.0;
         double g1 = 0.0, g2 = 0.0;
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             g1 += sqr(samples[i].g[dim]);
             g2 += sqr(gm * results.second[dim][i]);
         }

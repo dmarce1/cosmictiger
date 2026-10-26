@@ -57,9 +57,9 @@ static std::atomic<int> treeThreadCount(0);
 static std::atomic<int> nextId;
 static Array<std::unordered_map<TreeId, std::shared_ptr<hpx::shared_future<Vector<SphTreeNode>>>,
                  TreeIdHashHi>,
-    SPH_TREE_CACHE_SIZE>
+    kSphTreeCacheSize>
     treeCache;
-static Array<SpinlockType, SPH_TREE_CACHE_SIZE> mutex;
+static Array<SpinlockType, kSphTreeCacheSize> mutex;
 static std::atomic<int> allocatorMtx(0);
 static Vector<Pair<ParticleInteger>> leafParticleRanges;
 static MutexType leafParticleRangeMutex;
@@ -221,9 +221,9 @@ hpx::future<SphTreeCreateReturn> sphTreeCreateFork(SphTreeCreateParameters param
         threadme = true;
         remote = true;
     } else if (threadme) {
-        threadme = particleRange.second - particleRange.first > MIN_SORT_THREAD_PARTS;
+        threadme = particleRange.second - particleRange.first > kMinSortThreadParts;
         if (threadme) {
-            if (numberOfThreads++ < SORT_OVERSUBSCRIPTION * hpx::thread::hardware_concurrency() ||
+            if (numberOfThreads++ < kSortOversubscription * hpx::thread::hardware_concurrency() ||
                 processRange.second - processRange.first > 1) {
                 threadme = true;
             } else {
@@ -258,8 +258,8 @@ static void sphTreeAllocateNodes() {
         futs.push_back(hpx::async<SphTreeAllocateNodesAction>(c));
     }
     size_t const requiredNodes =
-        std::max(size_t(size_t(SPH_TREE_NODE_ALLOCATION_SIZE) * sphParticlesSize() / bucketSize),
-            (size_t) NSPH_TREES_MIN);
+        std::max(size_t(size_t(kSphTreeNodeAllocationSize) * sphParticlesSize() / bucketSize),
+            (size_t) kMinSphTrees);
     // Rebuilds reuse the constructed arena. Grow only at this completed-work
     // boundary, before any tree tasks can retain pointers into the vector.
     if (requiredNodes > nodes.size()) {
@@ -284,7 +284,7 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
     // PRINT( "%i\n", depth);
     int const bucketSize = getOptions().compute.sphBucketSize;
     SphTreeCreateReturn rc;
-    if (depth >= MAX_DEPTH) {
+    if (depth >= kMaxDepth) {
         THROW_ERROR("%s\n", "Maximum depth exceeded\n");
     }
     if (depth == 0) {
@@ -295,9 +295,9 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
         particleRange.first = 0;
         particleRange.second = sphParticlesSize();
     }
-    Array<TreeId, NCHILD> children;
-    Array<Position, NDIM> x;
-    Array<double, NDIM> xc;
+    Array<TreeId, kChildCount> children;
+    Array<Position, kDimensions> x;
+    Array<double, kDimensions> xc;
     size_t numberOfActiveParticles;
     FlopCounter<> flops;
     double totalFlops = 0.0;
@@ -342,7 +342,7 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
         } else {
             double spanMax = 0.0;
             int xdim;
-            for (int dim = 0; dim < NDIM; dim++) {
+            for (int dim = 0; dim < kDimensions; dim++) {
                 auto const span = box.end[dim] - box.begin[dim];
                 if (span > spanMax) {
                     spanMax = span;
@@ -354,7 +354,7 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
             leftParticleRange.second = rightParticleRange.first = mid;
             leftBox.end[xdim] = rightBox.begin[xdim] = xmid;
             // Three spans, midpoint addition/multiplication and the fixed split conversion.
-            flops += NDIM + 3;
+            flops += kDimensions + 3;
         }
         auto futr = sphTreeCreateFork(params, (key << 1) + 1, rightRange, rightParticleRange,
             rightBox, depth + 1, rightLocalRoot, true);
@@ -370,15 +370,15 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
         maxDepth = std::max(rcl.maxDepth, rcr.maxDepth);
         totalFlops += rcl.floatingPointOperations + rcr.floatingPointOperations;
         numberOfActiveParticles = rcl.numberOfActiveParticles + rcr.numberOfActiveParticles;
-        children[LEFT] = rcl.id;
-        children[RIGHT] = rcr.id;
+        children[kLeftChild] = rcl.id;
+        children[kRightChild] = rcr.id;
         nodeCount = 1 + rcl.nodeCount + rcr.nodeCount;
         leafNodes = rcl.leafNodes + rcr.leafNodes;
         activeLeafNodes = rcl.activeLeafNodes + rcr.activeLeafNodes;
         if (rcl.numberOfActiveParticles || rcr.numberOfActiveParticles) {
             activeNodes += 1 + rcl.activeNodes + rcr.activeNodes;
         }
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             innerBox.begin[dim] = std::min(iboxl.begin[dim], iboxr.begin[dim]);
             innerBox.end[dim] = std::max(iboxl.end[dim], iboxr.end[dim]);
             outerBox.begin[dim] = std::min(oboxl.begin[dim], oboxr.begin[dim]);
@@ -389,25 +389,25 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
         // iboxr.begin[XDIM], iboxr.end[XDIM], oboxl.begin[XDIM], oboxl.end[XDIM],
         // oboxr.begin[XDIM], oboxr.end[XDIM]);
     } else {
-        children[LEFT].index = children[RIGHT].index = -1;
-        children[LEFT].proc = children[RIGHT].proc = -1;
+        children[kLeftChild].index = children[kRightChild].index = -1;
+        children[kLeftChild].proc = children[kRightChild].proc = -1;
         numberOfActiveParticles = 0;
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             innerBox.begin[dim] = 1.9;
             innerBox.end[dim] = -0.9;
             outerBox.begin[dim] = 1.9;
             outerBox.end[dim] = -0.9;
         }
         auto const tiny = 2.0 * RangeFixed::min().toDouble();
-        flops += 4 * NDIM + 2;
+        flops += 4 * kDimensions + 2;
         for (ParticleInteger i = particleRange.first; i < particleRange.second; i++) {
             float const h = params.supportRadiusMultiplier * sphParticlesSupportRadius(i);
             flops += 1;
-            Array<Position, NDIM> xValue;
-            for (int dim = 0; dim < NDIM; dim++) {
+            Array<Position, kDimensions> xValue;
+            for (int dim = 0; dim < kDimensions; dim++) {
                 xValue[dim] = sphParticlesPosition(dim, i);
             }
-            for (int dim = 0; dim < NDIM; dim++) {
+            for (int dim = 0; dim < kDimensions; dim++) {
                 double const x = xValue[dim].toDouble();
                 innerBox.begin[dim] = std::min(innerBox.begin[dim].toDouble(), x - tiny);
                 innerBox.end[dim] = std::max(innerBox.end[dim].toDouble(), x + tiny);
@@ -483,7 +483,7 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
     rc.id.proc = hpxRank();
     rc.innerBox = node.innerBox;
     rc.outerBox = node.outerBox;
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         node.box.begin[dim] = box.begin[dim];
         node.box.end[dim] =
             box.end[dim];    // == 1.0 ? fixed32::max() : fixed32(box.end[dim]);
@@ -495,7 +495,7 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
     rc.activeLeafNodes = activeLeafNodes;
     rc.nodeCount = node.nodeCount;
     rc.numberOfActiveParticles = numberOfActiveParticles;
-    flops += 2 * NDIM;     // Store the double spatial box as fixed-point bounds.
+    flops += 2 * kDimensions;    // Store the double spatial box as fixed-point bounds.
     addCpuFlops(flops);    // Children submit their own work; do not submit their totals twice.
     totalFlops += FlopCount(flops);
     rc.floatingPointOperations = totalFlops;

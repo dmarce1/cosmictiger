@@ -19,21 +19,21 @@
 static void addTreeNode(std::vector<TreeId>& trees, TreeId id) {
     TreeNode const* node = treeGetNode(id);
     trees.push_back(id);
-    if (node->children[LEFT].index != -1) {
-        addTreeNode(trees, node->children[LEFT]);
-        addTreeNode(trees, node->children[RIGHT]);
+    if (node->children[kLeftChild].index != -1) {
+        addTreeNode(trees, node->children[kLeftChild]);
+        addTreeNode(trees, node->children[kRightChild]);
     }
 }
 
-bool mortonCompare(Array<Position, NDIM> a, Array<Position, NDIM> b) {
-    Array<PositionInteger, NDIM> abits;
-    Array<PositionInteger, NDIM> bbits;
-    for (int dim = 0; dim < NDIM; dim++) {
+bool mortonCompare(Array<Position, kDimensions> a, Array<Position, kDimensions> b) {
+    Array<PositionInteger, kDimensions> abits;
+    Array<PositionInteger, kDimensions> bbits;
+    for (int dim = 0; dim < kDimensions; dim++) {
         abits[dim] = a[dim].raw();
         bbits[dim] = b[dim].raw();
     }
     for (int i = 0; i < kPositionBits; i++) {
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             bool const abit = (abits[dim] >> (kPositionBits - 1)) != 0;
             bool const bbit = (bbits[dim] >> (kPositionBits - 1)) != 0;
             if (bbit && !abit) {
@@ -82,7 +82,7 @@ KickReturn dehnenStageGpu(KickParameters params, Vector<KickWorkitem> workitems,
     MutexType mutex;
     Vector<hpx::future<void>> futs1;
     Vector<TreeId> treeIdsVector(treeIds.begin(), treeIds.end());
-    Vector<Vector<TreeId>> idsByDepth(MAX_DEPTH);
+    Vector<Vector<TreeId>> idsByDepth(kMaxDepth);
     int numberOfThreads = hpxSize() == 1 ? 1 : std::max(1, (int) hpxHardwareConcurrency() / 2);
     for (int proc = 0; proc < numberOfThreads; proc++) {
         futs1.push_back(hpx::async([proc, numberOfThreads, &treeIdsVector, &idsByDepth, &mutex]() {
@@ -120,7 +120,7 @@ KickReturn dehnenStageGpu(KickParameters params, Vector<KickWorkitem> workitems,
     size_t const maximumParticlesPerRequest = 64 * 1024 * 1024;
     Vector<hpx::future<Vector<TreeId>>> futs0;
     Vector<TreeId> trees;
-    for (int depth = 0; depth < MAX_DEPTH; depth++) {
+    for (int depth = 0; depth < kMaxDepth; depth++) {
         auto const& ids = idsByDepth[depth];
         for (int proc = 0; proc < numberOfThreads; proc++) {
             futs0.push_back(
@@ -216,7 +216,7 @@ KickReturn dehnenStageGpu(KickParameters params, Vector<KickWorkitem> workitems,
                         gpr.range = ranges[k];
                         auto localRange = particleMap[gpr];
                         auto const numberOfParticles = localRange.second - localRange.first;
-                        for (int dim = 0; dim < NDIM; dim++) {
+                        for (int dim = 0; dim < kDimensions; dim++) {
                             memcpy(&particlesPos(dim, localRange.first), &data[sz * dim + index],
                                 numberOfParticles * sizeof(Position));
                         }
@@ -245,11 +245,11 @@ KickReturn dehnenStageGpu(KickParameters params, Vector<KickWorkitem> workitems,
             HPX_PRIORITY_HI, [proc, numberOfThreads, &treeMap, &treeNodes, treeNodesRemoteBegin]() {
                 for (int i = treeNodesRemoteBegin + proc; i < treeNodesNextIndex();
                     i += numberOfThreads) {
-                    if (treeNodes[i].children[LEFT].index != -1) {
-                        ASSERT(treeMap.find(treeNodes[i].children[LEFT]) != treeMap.end());
-                        ASSERT(treeMap.find(treeNodes[i].children[RIGHT]) != treeMap.end());
-                        auto& left = treeNodes[i].children[LEFT];
-                        auto& right = treeNodes[i].children[RIGHT];
+                    if (treeNodes[i].children[kLeftChild].index != -1) {
+                        ASSERT(treeMap.find(treeNodes[i].children[kLeftChild]) != treeMap.end());
+                        ASSERT(treeMap.find(treeNodes[i].children[kRightChild]) != treeMap.end());
+                        auto& left = treeNodes[i].children[kLeftChild];
+                        auto& right = treeNodes[i].children[kRightChild];
                         left.index = treeMap[left];
                         right.index = treeMap[right];
                     }
@@ -265,9 +265,9 @@ KickReturn dehnenStageGpu(KickParameters params, Vector<KickWorkitem> workitems,
         node.particleRange.second += offset;
         ASSERT(node.particleRange.first >= 0);
         ASSERT(node.particleRange.second <= particlesSize());
-        if (node.children[LEFT].index != -1) {
-            adjustParticleReferences(node.children[LEFT].index, offset);
-            adjustParticleReferences(node.children[RIGHT].index, offset);
+        if (node.children[kLeftChild].index != -1) {
+            adjustParticleReferences(node.children[kLeftChild].index, offset);
+            adjustParticleReferences(node.children[kRightChild].index, offset);
         }
     };
     for (auto i = remoteRoots.begin(); i != remoteRoots.end(); i++) {
@@ -325,8 +325,9 @@ KickReturn dehnenStageGpu(KickParameters params, Vector<KickWorkitem> workitems,
     tm.start();
     tree2Gpu();
     particlesMemadviseGpu();
-    auto const kr = cudaExecuteKicks(params, &particlesPos(XDIM, 0), &particlesPos(YDIM, 0),
-        &particlesPos(ZDIM, 0), treeNodes, std::move(workitems));
+    auto const kr =
+        cudaExecuteKicks(params, &particlesPos(kXDimension, 0), &particlesPos(kYDimension, 0),
+            &particlesPos(kZDimension, 0), treeNodes, std::move(workitems));
     tree2Cpu();
     tm.stop();
     particlesResize(originalParticleCount);

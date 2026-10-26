@@ -51,17 +51,17 @@ void outputParticles(std::string const filename, Vector<OutputParticle> const& p
     Vector<double> y(parts.size());
     Vector<double> z(parts.size());
     for (int i = 0; i < parts.size(); i++) {
-        x[i] = parts[i].x[XDIM].toDouble();
-        y[i] = parts[i].x[YDIM].toDouble();
-        z[i] = parts[i].x[ZDIM].toDouble();
+        x[i] = parts[i].x[kXDimension].toDouble();
+        y[i] = parts[i].x[kYDimension].toDouble();
+        z[i] = parts[i].x[kZDimension].toDouble();
     }
     int const numberOfParticles = parts.size();
-    double* coords[NDIM] = {x.data(), y.data(), z.data()};
-    DBPutPointmesh(db, "points", NDIM, coords, numberOfParticles, DB_DOUBLE, NULL);
+    double* coords[kDimensions] = {x.data(), y.data(), z.data()};
+    DBPutPointmesh(db, "points", kDimensions, coords, numberOfParticles, DB_DOUBLE, NULL);
     x = decltype(x)();
     y = decltype(y)();
     z = decltype(z)();
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         Vector<float> v(parts.size());
         for (int i = 0; i < parts.size(); i++) {
             v[i] = parts[i].v[dim];
@@ -125,10 +125,10 @@ Vector<float> outputGetSlice() {
         futs.push_back(hpx::async<OutputGetSliceAction>(c));
     }
     for (int i = 0; i < particlesSize(); i++) {
-        double const z = particlesPos(ZDIM, i).toDouble();
+        double const z = particlesPos(kZDimension, i).toDouble();
         if (z < getOptions().analysis.sliceSize) {
-            double const x = particlesPos(XDIM, i).toDouble();
-            double const y = particlesPos(YDIM, i).toDouble();
+            double const x = particlesPos(kXDimension, i).toDouble();
+            double const y = particlesPos(kYDimension, i).toDouble();
             int const xi = x * res;
             int const yi = y * res;
             int const j = xi * res + yi;

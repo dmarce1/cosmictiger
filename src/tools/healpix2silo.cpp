@@ -7,6 +7,7 @@
  */
 
 #include <iostream>
+#include <numbers>
 #include <stdio.h>
 #include <stdlib.h>
 #include <vector>
@@ -23,21 +24,21 @@ void sphToCart(double psi, double lambda, double* x, double* y) {
     int iters = 0;
     do {
         theta0 = theta;
-        theta -= (2.0 * theta + std::sin(2.0 * theta) - M_PI * std::sin(psi)) /
+        theta -= (2.0 * theta + std::sin(2.0 * theta) - std::numbers::pi * std::sin(psi)) /
             (2.0 + 2.0 * std::cos(2.0 * theta));
         iters++;
     } while (std::abs(theta0 - theta) > 1.0e-6);
-    *x = 2.0 * lambda * std::cos(theta) / (M_PI);
+    *x = 2.0 * lambda * std::cos(theta) / (std::numbers::pi);
     *y = std::sin(theta);
 }
 
 bool cartToSph(double x, double y, double* psi, double* lambda) {
     auto const theta = std::asin(y);
-    auto const arg = (2.0 * theta + std::sin(2.0 * theta)) / M_PI;
+    auto const arg = (2.0 * theta + std::sin(2.0 * theta)) / std::numbers::pi;
 
     *psi = std::asin(arg);
-    *lambda = M_PI * x / (2.0 * std::cos(theta));
-    if (*lambda < -M_PI || *lambda > M_PI) {
+    *lambda = std::numbers::pi * x / (2.0 * std::cos(theta));
+    if (*lambda < -std::numbers::pi || *lambda > std::numbers::pi) {
         return false;
     } else {
         return true;
@@ -134,7 +135,7 @@ int main(int argc, char** argv) {
                     double psi, lambda;
                     if (cartToSph(x, y, &psi, &lambda)) {
                         long ipring;
-                        ang2pix_ring(nside, psi + M_PI / 2.0, lambda, &ipring);
+                        ang2pix_ring(nside, psi + std::numbers::pi / 2.0, lambda, &ipring);
                         value += healpixData[ipring];
                     }
                 }

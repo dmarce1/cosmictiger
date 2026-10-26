@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <complex>
+#include <numbers>
 
 #include <cosmictiger/analysis/power.hpp>
 #include <cosmictiger/analysis/power_cpu.hpp>
@@ -65,7 +66,7 @@ static PowerSpectrumT powerSpectrumFromTransform() {
             ks[i] /= count[i];
         }
         ks[i] = sqrt(kbins[i] * kbins[i + 1]);
-        ks[i] *= 2.0 * M_PI / boxSize;
+        ks[i] *= 2.0 * std::numbers::pi / boxSize;
         ret.p[i] = power[i];
         ret.k[i] = ks[i];
     }
@@ -114,7 +115,7 @@ static PowerSpectrumReturn powerSpectrumBin(Vector<float> const& kbins) {
         (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
     auto const box = fft3dComplexRange();
     Vector<ComplexFloat>& yValue = fft3dComplexVector();
-    Array<int64_t, NDIM> iValue;
+    Array<int64_t, kDimensions> iValue;
 
     int const numberOfBins = kbins.size() - 1;
     Vector<float> power(numberOfBins, 0.0);
@@ -122,19 +123,19 @@ static PowerSpectrumReturn powerSpectrumBin(Vector<float> const& kbins) {
     Vector<float> ktot(numberOfBins, 0.0);
     for (iValue[0] = box.begin[0]; iValue[0] != box.end[0]; iValue[0]++) {
         futs.push_back(hpx::async(
-            [n, numberOfBins, &kbins, box, &yValue](Array<int64_t, NDIM> iValue2) {
+            [n, numberOfBins, &kbins, box, &yValue](Array<int64_t, kDimensions> iValue2) {
                 int64_t const i = iValue2[0] < n / 2 ? iValue2[0] : iValue2[0] - n;
-                double const sx = cloudFilter(2.0 * M_PI * i / n);
+                double const sx = cloudFilter(2.0 * std::numbers::pi * i / n);
                 PowerSpectrumReturn ret;
                 Vector<float> power(numberOfBins, 0.0);
                 Vector<double> count(numberOfBins, 0);
                 Vector<float> ktot(numberOfBins, 0.0);
                 for (iValue2[1] = box.begin[1]; iValue2[1] != box.end[1]; iValue2[1]++) {
                     int64_t const j = iValue2[1] < n / 2 ? iValue2[1] : iValue2[1] - n;
-                    double const sy = cloudFilter(2.0 * M_PI * j / n);
+                    double const sy = cloudFilter(2.0 * std::numbers::pi * j / n);
                     for (iValue2[2] = box.begin[2]; iValue2[2] != box.end[2]; iValue2[2]++) {
                         int64_t const k = iValue2[2] < n / 2 ? iValue2[2] : iValue2[2] - n;
-                        double const sz = cloudFilter(2.0 * M_PI * k / n);
+                        double const sz = cloudFilter(2.0 * std::numbers::pi * k / n);
                         double const c0 = sx * sy * sz;
                         yValue[box.index(iValue2)] *= c0;
                         double const iii = std::sqrt(i * i + j * j + k * k);
@@ -185,23 +186,23 @@ static PowerSpectrumReturn powerSpectrumBinDeviation(
         (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
     auto const box = fft3dComplexRange();
     Vector<ComplexFloat>& yValue = fft3dComplexVector();
-    Array<int64_t, NDIM> iValue;
+    Array<int64_t, kDimensions> iValue;
 
     int const numberOfBins = kbins.size() - 1;
     Vector<float> devs(numberOfBins, 0.0);
     for (iValue[0] = box.begin[0]; iValue[0] != box.end[0]; iValue[0]++) {
         futs.push_back(hpx::async(
-            [n, numberOfBins, &kbins, box, rc, &yValue](Array<int64_t, NDIM> iValue2) {
+            [n, numberOfBins, &kbins, box, rc, &yValue](Array<int64_t, kDimensions> iValue2) {
                 int64_t const i = iValue2[0] < n / 2 ? iValue2[0] : iValue2[0] - n;
-                double const sx = sinc(M_PI * i / n);
+                double const sx = sinc(std::numbers::pi * i / n);
                 PowerSpectrumReturn ret;
                 Vector<float> pdev(numberOfBins, 0.0);
                 for (iValue2[1] = box.begin[1]; iValue2[1] != box.end[1]; iValue2[1]++) {
                     int64_t const j = iValue2[1] < n / 2 ? iValue2[1] : iValue2[1] - n;
-                    double const sy = sinc(M_PI * j / n);
+                    double const sy = sinc(std::numbers::pi * j / n);
                     for (iValue2[2] = box.begin[2]; iValue2[2] != box.end[2]; iValue2[2]++) {
                         int64_t const k = iValue2[2] < n / 2 ? iValue2[2] : iValue2[2] - n;
-                        double const sz = sinc(M_PI * k / n);
+                        double const sz = sinc(std::numbers::pi * k / n);
                         double const c0 = pow(1.0 / (sx * sy * sz), 3);
                         yValue[box.index(iValue2)] *= c0;
                         double const iii = std::sqrt(i * i + j * j + k * k);
@@ -256,9 +257,9 @@ Vector<float> accumulateDensityCpu(int fold, int gridSize, Range<int64_t> box) {
             masses[index] = particlesMass(index);
         }
     }
-    accumulateDensityCpuKernel(&particlesPos(XDIM, 0), &particlesPos(YDIM, 0),
-        &particlesPos(ZDIM, 0), masses.empty() ? nullptr : masses.data(), particleCount, fold,
-        gridSize, box, density.data());
+    accumulateDensityCpuKernel(&particlesPos(kXDimension, 0), &particlesPos(kYDimension, 0),
+        &particlesPos(kZDimension, 0), masses.empty() ? nullptr : masses.data(), particleCount,
+        fold, gridSize, box, density.data());
     return density;
 }
 
@@ -278,12 +279,12 @@ static void computeDensityFolded(int m) {
         for (size_t k = 0; k < ndim; k += nper) {
             for (size_t l = 0; l < ndim; l += nper) {
                 Range<int64_t> intbox;
-                intbox.begin[XDIM] = int64_t(j) + CLOUD_MIN;
-                intbox.begin[YDIM] = int64_t(k) + CLOUD_MIN;
-                intbox.begin[ZDIM] = int64_t(l) + CLOUD_MIN;
-                intbox.end[XDIM] = std::min(j + nper, ndim) + CLOUD_MAX;
-                intbox.end[YDIM] = std::min(k + nper, ndim) + CLOUD_MAX;
-                intbox.end[ZDIM] = std::min(l + nper, ndim) + CLOUD_MAX;
+                intbox.begin[kXDimension] = int64_t(j) + kCloudMin;
+                intbox.begin[kYDimension] = int64_t(k) + kCloudMin;
+                intbox.begin[kZDimension] = int64_t(l) + kCloudMin;
+                intbox.end[kXDimension] = std::min(j + nper, ndim) + kCloudMax;
+                intbox.end[kYDimension] = std::min(k + nper, ndim) + kCloudMax;
+                intbox.end[kZDimension] = std::min(l + nper, ndim) + kCloudMax;
                 Vector<float> rho;
 #ifdef USE_CUDA
                 if (cudaEnabled()) {

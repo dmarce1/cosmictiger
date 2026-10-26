@@ -19,11 +19,11 @@ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
 #include <cosmictiger/particles/particles.hpp>
 
 struct ParticleData {
-    Array<Position, NDIM> x;
-    Array<float, NDIM> v;
+    Array<Position, kDimensions> x;
+    Array<float, kDimensions> v;
     GroupInteger lastGroup;
-    GroupInteger identity = NO_GROUP;
-    GroupInteger lastHost = NO_GROUP;
+    GroupInteger identity = kNoParticleGroup;
+    GroupInteger lastHost = kNoParticleGroup;
     ParticleInteger index;
     int rank;
     template <class A>

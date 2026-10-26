@@ -31,7 +31,7 @@ SphRunReturn sphCpuRungs(
             auto const separation =
                 detail::sphCpuSeparations(data, particleIndex, neighbors, first);
             auto const squaredSeparation =
-                sqr(separation[XDIM], separation[YDIM], separation[ZDIM]);
+                sqr(separation[kXDimension], separation[kYDimension], separation[kZDimension]);
             auto const neighborSupport =
                 detail::sphCpuLoad(data.sourceSupportRadius, neighbors, first, 0.0f);
             SimdFloat const neighborRungs([&](auto lane) {
@@ -45,9 +45,9 @@ SphRunReturn sphCpuRungs(
                 maximumNeighborRungs, simdSelect(intersects, neighborRungs, SimdFloat(0.0f)));
         }
         int const maximumNeighborRung = int(simdMaximum(maximumNeighborRungs));
-        if (sinkRung < maximumNeighborRung - MAX_NEIGHBOR_RUNG_DIFFERENCE) {
+        if (sinkRung < maximumNeighborRung - kMaxNeighborRungDifference) {
             data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]] =
-                maximumNeighborRung - MAX_NEIGHBOR_RUNG_DIFFERENCE;
+                maximumNeighborRung - kMaxNeighborRungDifference;
             result.needsAnotherPass = true;
         }
     }

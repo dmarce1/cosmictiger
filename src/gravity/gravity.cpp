@@ -32,7 +32,7 @@ void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
         SimdFloat const h2invI = sqr(hinvI);
         SimdFloat const h3invI = hinvI * h2invI;
         SimdFloat const h2 = sqr(sinkHsoft);
-        flops += 4 * SIMD_FLOAT_SIZE;
+        flops += 4 * kSimdFloatSize;
         FlopCount softenedPackets = 0;
         FlopCount const softeningFlops =
             detail::gravitySofteningFlops(selectedGravityKernel(), SimdFloat{}, doPhi);
@@ -42,8 +42,8 @@ void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
         int const numberOfSinks = selfPtr->numberOfParticles();
         auto const range = selfPtr->particleRange;
         for (int li = 0; li < list.size(); li += kChunkSize) {
-            Array<SimdPosition, NDIM> x{};
-            Array<SimdPosition, NDIM> yValue{};
+            Array<SimdPosition, kDimensions> x{};
+            Array<SimdPosition, kDimensions> yValue{};
             SimdPosition srcType{};
             Array<TreeNode const*, kChunkSize> treePtrs;
             int numberOfSources = 0;
@@ -52,7 +52,7 @@ void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
                 treePtrs[i - li] = treeGetNode(list[i]);
                 numberOfSources += treePtrs[i - li]->numberOfParticles();
             }
-            numberOfSources = roundUp(numberOfSources, SIMD_FLOAT_SIZE);
+            numberOfSources = roundUp(numberOfSources, kSimdFloatSize);
             Vector<Position> srcx;
             Vector<Position> srcy;
             Vector<Position> srcz;
@@ -70,8 +70,8 @@ void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
             }
             for (int i = 0; i < count; i++) {
                 sourceWeights[i] = getOptions().hydro.enabled ?
-                    (types[i] == DARK_MATTER_TYPE ? getOptions().initial.darkMatterMass :
-                                                    getOptions().initial.gasMass) :
+                    (types[i] == kDarkMatterType ? getOptions().initial.darkMatterMass :
+                                                   getOptions().initial.gasMass) :
                     1.0f;
             }
             for (int i = count; i < numberOfSources; i++) {
@@ -88,23 +88,23 @@ void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
                 SimdFloat gy = simdBroadcast<SimdFloat>(0.0);
                 SimdFloat gz = simdBroadcast<SimdFloat>(0.0);
                 SimdFloat phi = simdBroadcast<SimdFloat>(0.0);
-                for (int dim = 0; dim < NDIM; dim++) {
+                for (int dim = 0; dim < kDimensions; dim++) {
                     x[dim] = simdBroadcast<SimdPosition>(particlesPos(dim, i).raw());
                 }
                 //					simd_float self_flags(0);
-                for (int j = 0; j < numberOfSources; j += SIMD_FLOAT_SIZE) {
+                for (int j = 0; j < numberOfSources; j += kSimdFloatSize) {
                     SimdFloat sourceWeight{};
-                    for (int l = 0; l < SIMD_FLOAT_SIZE; l++) {
-                        simdSetLane(yValue[XDIM], l, srcx[j + l].raw());
-                        simdSetLane(yValue[YDIM], l, srcy[j + l].raw());
-                        simdSetLane(yValue[ZDIM], l, srcz[j + l].raw());
+                    for (int l = 0; l < kSimdFloatSize; l++) {
+                        simdSetLane(yValue[kXDimension], l, srcx[j + l].raw());
+                        simdSetLane(yValue[kYDimension], l, srcy[j + l].raw());
+                        simdSetLane(yValue[kZDimension], l, srcz[j + l].raw());
                         simdSetLane(sourceWeight, l, sourceWeights[j + l]);
                     }
-                    Array<SimdFloat, NDIM> dx{};
-                    for (int dim = 0; dim < NDIM; dim++) {
+                    Array<SimdFloat, kDimensions> dx{};
+                    for (int dim = 0; dim < kDimensions; dim++) {
                         dx[dim] = fmmPositionDifference(x[dim], yValue[dim], dim, geometry);
                     }
-                    SimdFloat const r2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
+                    SimdFloat const r2 = sqr(dx[kXDimension], dx[kYDimension], dx[kZDimension]);
                     SimdFloat const rinv1Far =
                         simdBroadcast<SimdFloat>(1) / simdSqrt(simdMax(r2, tiny));
                     SimdFloat const rinv3Far = rinv1Far * sqr(rinv1Far);
@@ -126,9 +126,9 @@ void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
                     }
                     rinv3 *= sourceWeight;
                     rinv1 *= sourceWeight;
-                    gx = simdFma(rinv3, dx[XDIM], gx);
-                    gy = simdFma(rinv3, dx[YDIM], gy);
-                    gz = simdFma(rinv3, dx[ZDIM], gz);
+                    gx = simdFma(rinv3, dx[kXDimension], gx);
+                    gy = simdFma(rinv3, dx[kYDimension], gy);
+                    gz = simdFma(rinv3, dx[kZDimension], gz);
                     phi -= rinv1;
                 }
                 int const j = i - range.first;
@@ -141,7 +141,7 @@ void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
             // Per pair: displacement 3, norm 5, sqrt/divide 2, inverse cube 2,
             // weights 2, three FMAs 6, and potential accumulation 1.
             flops +=
-                FlopCount(numberOfSinks) * (FlopCount(numberOfSources) * 21 + 4 * SIMD_FLOAT_SIZE);
+                FlopCount(numberOfSinks) * (FlopCount(numberOfSources) * 21 + 4 * kSimdFloatSize);
         }
         flops += softenedPackets * softeningFlops;
     }

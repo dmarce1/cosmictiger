@@ -31,7 +31,7 @@ namespace detail {
 
 template <int order>
 __device__ inline void cudaCopyExpansion(float* destination, float const* source) {
-    for (int i = threadIdx.x; i < FmmOrder<order>::kLocalCoefficients_; i += WARP_SIZE) {
+    for (int i = threadIdx.x; i < FmmOrder<order>::kLocalCoefficients_; i += kWarpSize) {
         destination[i] = source[i];
     }
 }
@@ -70,9 +70,9 @@ __device__ FlopCount doKick(KickReturn& result, KickParameters params, CudaKickD
     float const gravityEffectiveRadius =
         params.gravitySupportRadius / selectedGravityKernel().supportRadiusPerEffectiveRadius;
     FlopCounter<FlopCount> flops = 1;
-    for (int i = tid; i < sinkCount; i += WARP_SIZE) {
+    for (int i = tid; i < sinkCount; i += kWarpSize) {
         cosmictiger::gravity::Field<float> l2{};
-        Array<float, NDIM> dx;
+        Array<float, kDimensions> dx;
         ParticleInteger sinkIndex;
         float vx;
         float vy;
@@ -85,18 +85,19 @@ __device__ FlopCount doKick(KickReturn& result, KickParameters params, CudaKickD
             continue;
         }
         ASSERT(sinkIndex >= 0);
-        dx[XDIM] = unwrappedDistance(sinkX[i], self.pos[XDIM]);
-        dx[YDIM] = unwrappedDistance(sinkY[i], self.pos[YDIM]);
-        dx[ZDIM] = unwrappedDistance(sinkZ[i], self.pos[ZDIM]);
-        cosmictiger::gravity::cartesian::L2P(l2, lValue2, fmmScaleDisplacement(dx), params.doPhi);
+        dx[kXDimension] = unwrappedDistance(sinkX[i], self.pos[kXDimension]);
+        dx[kYDimension] = unwrappedDistance(sinkY[i], self.pos[kYDimension]);
+        dx[kZDimension] = unwrappedDistance(sinkZ[i], self.pos[kZDimension]);
+        cosmictiger::gravity::cartesian::L2P(
+            l2, lValue2, fmmScaleDisplacement(dx), params.doPhi);
         float gx = force.gx[i];
         float gy = force.gy[i];
         float gz = force.gz[i];
         float phi = force.phi[i];
-        phi += SCALE_FACTOR1 * l2.potential();
-        gx += SCALE_FACTOR2 * l2.accelerationX();
-        gy += SCALE_FACTOR2 * l2.accelerationY();
-        gz += SCALE_FACTOR2 * l2.accelerationZ();
+        phi += kScaleFactor1 * l2.potential();
+        gx += kScaleFactor2 * l2.accelerationX();
+        gy += kScaleFactor2 * l2.accelerationY();
+        gz += kScaleFactor2 * l2.accelerationZ();
         if (params.forceOnly) {
             ParticleInteger const outputIndex = sinkIndex + outputOffset;
             allPhi[outputIndex] = params.doPhi ? phi : 0.0f;
@@ -112,11 +113,11 @@ __device__ FlopCount doKick(KickReturn& result, KickParameters params, CudaKickD
         gy *= params.gm;
         gx *= params.gm;
         phi *= params.gm;
-        vx = vels[sinkIndex][XDIM];
-        vy = vels[sinkIndex][YDIM];
-        vz = vels[sinkIndex][ZDIM];
+        vx = vels[sinkIndex][kXDimension];
+        vy = vels[sinkIndex][kYDimension];
+        vz = vels[sinkIndex][kZDimension];
         float const mass = data.sph ?
-            (data.type[sinkIndex] == DARK_MATTER_TYPE ? data.darkMatterMass : data.sphMass) :
+            (data.type[sinkIndex] == kDarkMatterType ? data.darkMatterMass : data.sphMass) :
             1.0f;
         float const kin0 = 0.5f * mass * sqr(vx, vy, vz);
         if (params.htime) {
@@ -158,7 +159,7 @@ __device__ FlopCount doKick(KickReturn& result, KickParameters params, CudaKickD
                 rungs[sinkIndex] = rung;
                 maxRung = max(rung, maxRung);
                 ALWAYS_ASSERT(rung >= 0);
-                ALWAYS_ASSERT(rung < MAX_RUNG);
+                ALWAYS_ASSERT(rung < kMaxRung);
                 dt = 0.5f * rungDt[params.minRung] * params.t0;    // 2
                 vx = fmaf(sgn * gx, dt, vx);                       // 3
                 vy = fmaf(sgn * gy, dt, vy);                       // 3
@@ -166,7 +167,7 @@ __device__ FlopCount doKick(KickReturn& result, KickParameters params, CudaKickD
                 flops += 24;
             }
         } else {
-            bool const gas = data.sph && data.type[sinkIndex] == SPH_TYPE;
+            bool const gas = data.sph && data.type[sinkIndex] == kSphType;
             if (gas) {
                 ParticleInteger const k = data.catIndex[sinkIndex];
                 data.sphGravityAccelerationX[k] = gx;
@@ -206,7 +207,7 @@ __device__ FlopCount doKick(KickReturn& result, KickParameters params, CudaKickD
                     maxRung = max(maxRung, int(rung));
                     rung = params.fixedRung;
                 }
-                ALWAYS_ASSERT(rung >= 0 && rung < MAX_RUNG);
+                ALWAYS_ASSERT(rung >= 0 && rung < kMaxRung);
                 rungs[sinkIndex] = rung;
                 dt = 0.5f * rungDt[rung] * params.t0;
                 vx = fmaf(gx, dt, vx);
@@ -224,9 +225,9 @@ __device__ FlopCount doKick(KickReturn& result, KickParameters params, CudaKickD
             maxRung = max(maxRung, (int) rungs[sinkIndex]);
         }
         float kin1 = 0.5 * mass * sqr(vx, vy, vz);
-        vels[sinkIndex][XDIM] = vx;
-        vels[sinkIndex][YDIM] = vy;
-        vels[sinkIndex][ZDIM] = vz;
+        vels[sinkIndex][kXDimension] = vx;
+        vels[sinkIndex][kYDimension] = vy;
+        vels[sinkIndex][kZDimension] = vz;
         phiTot += 0.5f * mass * phi;
         dkinTot += kin1 - kin0;
         // Displacement, L2P coordinate scaling and force accumulation/scaling.
@@ -333,7 +334,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
         if (sharedExpansion) {
             char* expansionBytes = shmemPtr + layout.expansionOffset;
             control.expansion = reinterpret_cast<Expansion*>(expansionBytes);
-            control.expansionPos = reinterpret_cast<Array<Position, NDIM>*>(expansionBytes +
+            control.expansionPos = reinterpret_cast<Array<Position, kDimensions>*>(expansionBytes +
                 (kLocalExpansionBytes + alignof(Position) - 1) / alignof(Position) *
                     alignof(Position));
         } else {
@@ -360,7 +361,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
     auto& leaflist = control.leaflist;
     auto& barrier = control.barrier;
     Expansion& expansion = *control.expansion;
-    Array<Position, NDIM>& expansionPos = *control.expansionPos;
+    Array<Position, kDimensions>& expansionPos = *control.expansionPos;
     float* scratch = control.scratchExpansion;
     auto& treeNodes = data.treeNodes;
     bool const equalMass = !data.sph;
@@ -389,15 +390,15 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
         echecks.resize(0);
         sparams.resize(0);
         detail::cudaCopyExpansion<order>(&expansion[0], &params[index].lValue[0]);
-        if (tid < NDIM) {
+        if (tid < kDimensions) {
             expansionPos[tid] = params[index].lpos[tid];
         }
         dchecks.resize(params[index].dcount);
         echecks.resize(params[index].ecount);
-        for (int i = tid; i < params[index].dcount; i += WARP_SIZE) {
+        for (int i = tid; i < params[index].dcount; i += kWarpSize) {
             dchecks[i] = params[index].dchecks[i];
         }
-        for (int i = tid; i < params[index].ecount; i += WARP_SIZE) {
+        for (int i = tid; i < params[index].ecount; i += kWarpSize) {
             echecks[i] = params[index].echecks[i];
         }
         {
@@ -412,8 +413,8 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
             auto const& self = treeNodes[sparams.back().self];
             switch (sparams.back().phase) {
             case 0: {
-                Array<float, NDIM> dx;
-                for (int dim = 0; dim < NDIM; dim++) {
+                Array<float, kDimensions> dx;
+                for (int dim = 0; dim < kDimensions; dim++) {
                     dx[dim] = unwrappedDistance(self.pos[dim], expansionPos[dim]);
                 }
                 // Displacement conversion and the three coordinate scalings
@@ -425,7 +426,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                     cosmictiger::gravity::cartesian::L2LWarpInto(
                         scratch, expansion, fmmScaleDisplacement(dx), globalParams.doPhi);
                     detail::cudaCopyExpansion<order>(&expansion[0], scratch);
-                    if (tid < NDIM) {
+                    if (tid < kDimensions) {
                         expansionPos[tid] = self.pos[tid];
                     }
                     __syncwarp();
@@ -464,20 +465,21 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                     float const thetainv = fmmInverseOpeningAngle(globalParams.theta);
                     flops += 1;
                     do {
-                        int const maxi = roundUp(checks.size(), WARP_SIZE);
-                        for (int i = tid; i < maxi; i += WARP_SIZE) {
+                        int const maxi = roundUp(checks.size(), kWarpSize);
+                        for (int i = tid; i < maxi; i += kWarpSize) {
                             for (int n = 0; n < kNlists; n++) {
                                 sw[n] = false;
                             }
                             if (i < checks.size()) {
                                 TreeNode const& other = treeNodes[checks[i]];
                                 if (other.numberOfParticles()) {
-                                    for (int dim = 0; dim < NDIM; dim++) {
+                                    for (int dim = 0; dim < kDimensions; dim++) {
                                         dx[dim] = fmmPositionDifference(
                                             self.pos[dim], other.pos[dim], dim, geometry);    // 3
                                     }
-                                    float const r2 = fmaf(dx[XDIM], dx[XDIM],
-                                        fmaf(dx[YDIM], dx[YDIM], dx[ZDIM] * dx[ZDIM]));
+                                    float const r2 = fmaf(dx[kXDimension], dx[kXDimension],
+                                        fmaf(dx[kYDimension], dx[kYDimension],
+                                            dx[kZDimension] * dx[kZDimension]));
                                     float const pairSupportRadius = fmmPairSupportRadius(
                                         supportRadius, self.maxGravitySupportRadius,
                                         other.maxGravitySupportRadius);
@@ -533,12 +535,12 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                             }
                         }
                         __syncwarp();
-                        checks.resize(NCHILD * nextlist.size());
-                        for (int i = tid; i < nextlist.size(); i += WARP_SIZE) {
+                        checks.resize(kChildCount * nextlist.size());
+                        for (int i = tid; i < nextlist.size(); i += kWarpSize) {
                             auto const& node = treeNodes[nextlist[i]];
                             auto const& children = node.children;
-                            checks[NCHILD * i + LEFT] = children[LEFT].index;
-                            checks[NCHILD * i + RIGHT] = children[RIGHT].index;
+                            checks[kChildCount * i + kLeftChild] = children[kLeftChild].index;
+                            checks[kChildCount * i + kRightChild] = children[kRightChild].index;
                         }
                         nextlist.resize(0);
                         __syncwarp();
@@ -571,13 +573,12 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                         for (int sinkBegin = 0; sinkBegin < numberOfSinks; sinkBegin += tile) {
                             int const sinkCount = min(tile, int(numberOfSinks - sinkBegin));
                             auto const& force = control.forces;
-                            for (int l = tid; l < sinkCount; l += WARP_SIZE) {
+                            for (int l = tid; l < sinkCount; l += kWarpSize) {
                                 ParticleInteger const sinkIndex =
                                     self.particleRange.first + sinkBegin + l;
                                 float const mass = data.sph ?
-                                    (data.type[sinkIndex] == DARK_MATTER_TYPE ?
-                                            data.darkMatterMass :
-                                            data.sphMass) :
+                                    (data.type[sinkIndex] == kDarkMatterType ? data.darkMatterMass :
+                                                                               data.sphMass) :
                                     1.0f;
                                 force.gx[l] = force.gy[l] = force.gz[l] = 0.f;
                                 force.phi[l] = mass * selfPhi() * inverseSupportRadius;
@@ -604,13 +605,15 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                     } else {
                         int const start = checks.size();
                         int const bothStart = start + leaflist.size();
-                        checks.resize(bothStart + NCHILD * bothlist.size());
+                        checks.resize(bothStart + kChildCount * bothlist.size());
                         cuda::memcpy_async(group, checks.data() + start, leaflist.data(),
                             leaflist.size() * sizeof(int), barrier);
-                        for (int i = tid; i < bothlist.size(); i += WARP_SIZE) {
+                        for (int i = tid; i < bothlist.size(); i += kWarpSize) {
                             auto const& children = treeNodes[bothlist[i]].children;
-                            checks[bothStart + NCHILD * i + LEFT] = children[LEFT].index;
-                            checks[bothStart + NCHILD * i + RIGHT] = children[RIGHT].index;
+                            checks[bothStart + kChildCount * i + kLeftChild] =
+                                children[kLeftChild].index;
+                            checks[bothStart + kChildCount * i + kRightChild] =
+                                children[kRightChild].index;
                         }
                         __syncwarp();
                         flops += cudaGravityCcDirect<order>(
@@ -633,11 +636,11 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                 } else {
                     // Keep this node's expansion for the right child while the
                     // left child translates the active copy.
-                    TreeId const child = self.children[LEFT];
+                    TreeId const child = self.children[kLeftChild];
                     int const top = ancestors.size();
                     ancestors.resize(top + 1);
                     detail::cudaCopyExpansion<order>(&ancestors[top].expansion[0], &expansion[0]);
-                    if (tid < NDIM) {
+                    if (tid < kDimensions) {
                         ancestors[top].pos[tid] = expansionPos[tid];
                     }
                     __syncwarp();
@@ -658,7 +661,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                 // Restore this node's expansion for the right child.
                 int const top = ancestors.size() - 1;
                 detail::cudaCopyExpansion<order>(&expansion[0], &ancestors[top].expansion[0]);
-                if (tid < NDIM) {
+                if (tid < kDimensions) {
                     expansionPos[tid] = ancestors[top].pos[tid];
                 }
                 __syncwarp();
@@ -669,7 +672,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                 {
                     SearchParameters sparam;
                     sparam.phase = 0;
-                    sparam.self = self.children[RIGHT].index;
+                    sparam.self = self.children[kRightChild].index;
                     sparams.pushBack(sparam);
                 }
                 depth++;

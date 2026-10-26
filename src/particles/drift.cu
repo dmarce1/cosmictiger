@@ -6,6 +6,8 @@
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
+#include <numbers>
+
 #include <cosmictiger/analysis/lightcone.hpp>
 #include <cosmictiger/core/defs.hpp>
 #include <cosmictiger/core/timer.hpp>
@@ -15,14 +17,14 @@
 #include <cosmictiger/particles/drift.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
-#define BLOCK_SIZE 512
+constexpr int kDriftBlockSize = 512;
 
 using ListType = DeviceVector<DeviceVector<LightconeEntry>>;
 
 __managed__ ListType* listPtr;
 
 __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __restrict__ const y,
-    Position* __restrict__ const z, Array<float, NDIM>* const vels, char const* const rungs,
+    Position* __restrict__ const z, Array<float, kDimensions>* const vels, char const* const rungs,
     ParticleInteger count, int rung, double a, double dt, double tau0, double tau1, double tauMax,
     bool doLc, int nside, double drag) {
     doLc = doLc && (tauMax - tau1 < 1.0f);
@@ -35,17 +37,17 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
     auto const& numberOfBlocks = gridDim.x;
     ParticleInteger const begin = (size_t) bid * count / numberOfBlocks;
     ParticleInteger const end = (size_t) (bid + 1) * count / numberOfBlocks;
-    ParticleInteger const end0 = roundUp(end - begin, BLOCK_SIZE) + begin;
+    ParticleInteger const end0 = roundUp(end - begin, kDriftBlockSize) + begin;
     double const c1 = dt / a;
     if (doLc) {
         list->resize(0);
     }
-    for (ParticleInteger i = begin + tid; i < end0; i += BLOCK_SIZE) {
+    for (ParticleInteger i = begin + tid; i < end0; i += kDriftBlockSize) {
         int thisRung = -1;
         double x0 = 0.0, y0 = 0.0, z0 = 0.0, x1 = 0.0, y1 = 0.0, z1 = 0.0;
         double displacementX = 0.0, displacementY = 0.0, displacementZ = 0.0;
-        Array<double, NDIM> x0Value;
-        Array<double, NDIM> x1Value;
+        Array<double, kDimensions> x0Value;
+        Array<double, kDimensions> x1Value;
         float vx, vy, vz;
         float* vel;
         if (i < end) {
@@ -55,15 +57,15 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
                 x0 = x[i].toDouble();
                 y0 = y[i].toDouble();
                 z0 = z[i].toDouble();
-                displacementX = double(vel[XDIM]) * c1;
-                displacementY = double(vel[YDIM]) * c1;
-                displacementZ = double(vel[ZDIM]) * c1;
+                displacementX = double(vel[kXDimension]) * c1;
+                displacementY = double(vel[kYDimension]) * c1;
+                displacementZ = double(vel[kZDimension]) * c1;
                 x1 = x0 + displacementX;
                 y1 = y0 + displacementY;
                 z1 = z0 + displacementZ;
                 if (drag != 0.0) {
                     double const c0 = 1.0 / (1.0 + drag * dt);
-                    for (int dim = 0; dim < NDIM; dim++) {
+                    for (int dim = 0; dim < kDimensions; dim++) {
                         vel[dim] *= c0;
                     }
                 }
@@ -71,17 +73,17 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
         }
         if (doLc) {
             for (int xi = -1; xi <= 0; xi++) {
-                x0Value[XDIM] = x0 + (double) xi;
-                x1Value[XDIM] = x1 + (double) xi;
+                x0Value[kXDimension] = x0 + (double) xi;
+                x1Value[kXDimension] = x1 + (double) xi;
                 for (int yi = -1; yi <= 0; yi++) {
-                    x0Value[YDIM] = y0 + (double) yi;
-                    x1Value[YDIM] = y1 + (double) yi;
+                    x0Value[kYDimension] = y0 + (double) yi;
+                    x1Value[kYDimension] = y1 + (double) yi;
                     for (int zi = -1; zi <= 0; zi++) {
                         bool test = false;
                         LightconeEntry entry;
                         if (i < end && (rung < 0 || thisRung == rung)) {
-                            x0Value[ZDIM] = z0 + (double) zi;
-                            x1Value[ZDIM] = z1 + (double) zi;
+                            x0Value[kZDimension] = z0 + (double) zi;
+                            x1Value[kZDimension] = z1 + (double) zi;
                             double const dist0 = sqrt(sqr(x0Value[0], x0Value[1], x0Value[2]));
                             double const dist1 = sqrt(sqr(x1Value[0], x1Value[1], x1Value[2]));
                             double const lightconeTau0 = double(tau0) + dist0;
@@ -89,12 +91,12 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
                             int const i0 = (double) (lightconeTau0 * c0);
                             int const i1 = (double) (lightconeTau1 * c0);
                             if (i0 != i1 && ((dist1 <= 1.0 || dist0 <= 1.0))) {
-                                vx = vel[XDIM] * ainv;
-                                vy = vel[YDIM] * ainv;
-                                vz = vel[ZDIM] * ainv;
-                                double const& x0 = x0Value[XDIM];
-                                double const& y0 = x0Value[YDIM];
-                                double const& z0 = x0Value[ZDIM];
+                                vx = vel[kXDimension] * ainv;
+                                vy = vel[kYDimension] * ainv;
+                                vz = vel[kZDimension] * ainv;
+                                double const& x0 = x0Value[kXDimension];
+                                double const& y0 = x0Value[kYDimension];
+                                double const& z0 = x0Value[kZDimension];
                                 double const ti = double((double) (i0 + 1)) * double(tauMax);
                                 double const sqrtauimtau0 = sqr(ti - t0);
                                 double const tau0mtaui = t0 - ti;
@@ -110,22 +112,22 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
                                 double const r2 = sqr(x1, y1, z1);
                                 if (r2 <= 1.0) {
                                     long ipix;
-                                    double xValue[NDIM] = {x1, y1, z1};
+                                    double xValue[kDimensions] = {x1, y1, z1};
                                     vec2pixNest(nside, xValue, &ipix);
                                     entry.pix = ipix;
                                     entry.x = x1;
                                     entry.y = y1;
                                     entry.z = z1;
-                                    entry.vx = vel[XDIM];
-                                    entry.vy = vel[YDIM];
-                                    entry.vz = vel[ZDIM];
+                                    entry.vx = vel[kXDimension];
+                                    entry.vy = vel[kYDimension];
+                                    entry.vz = vel[kZDimension];
                                     test = true;
                                 }
                             }
                         }
                         int index = test;
                         int total;
-                        computeIndices<BLOCK_SIZE>(index, total);
+                        computeIndices<kDriftBlockSize>(index, total);
                         if (total) {
                             auto const start = list->size();
                             list->resize(start + total);
@@ -164,7 +166,7 @@ void cudaDrift(int rung, float a, float dt, float tau0, float tau1, float tauMax
     Timer tm1;
     tm1.start();
     CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &numberOfBlocks, (void const*) cudaDriftKernel, BLOCK_SIZE, 0));
+        &numberOfBlocks, (void const*) cudaDriftKernel, kDriftBlockSize, 0));
     cudaFuncAttributes attr;
     CUDA_CHECK(cudaFuncGetAttributes(&attr, (void const*) cudaDriftKernel));
     numberOfBlocks *= cudaSmpCount();
@@ -173,7 +175,8 @@ void cudaDrift(int rung, float a, float dt, float tau0, float tau1, float tauMax
         return;
     }
     bool const doLc = getOptions().lightcone.enabled && tauMax - tau1 < 1.0f;
-    numberOfBlocks = std::min(numberOfBlocks, std::max((rng.second - rng.first) / BLOCK_SIZE, 1));
+    numberOfBlocks =
+        std::min(numberOfBlocks, std::max((rng.second - rng.first) / kDriftBlockSize, 1));
     auto cnt = rng.second - rng.first;
     if (doLc) {
         if (!init) {
@@ -183,15 +186,15 @@ void cudaDrift(int rung, float a, float dt, float tau0, float tau1, float tauMax
         }
         listPtr->resize(numberOfBlocks);
     }
-    Position* x = &particlesPos(XDIM, rng.first);
-    Position* y = &particlesPos(YDIM, rng.first);
-    Position* z = &particlesPos(ZDIM, rng.first);
+    Position* x = &particlesPos(kXDimension, rng.first);
+    Position* y = &particlesPos(kYDimension, rng.first);
+    Position* z = &particlesPos(kZDimension, rng.first);
     auto* vels = particlesVelData() + rng.first;
     auto const* rungs = &particlesRung(rng.first);
-    drag = getOptions().initial.createGlass ? M_PI : 0.0;
+    drag = getOptions().initial.createGlass ? std::numbers::pi : 0.0;
     CudaStream stream(cudaGetDevice());
-    cudaDriftKernel<<<numberOfBlocks, BLOCK_SIZE, 0, stream.nativeHandle()>>>(x, y, z, vels, rungs,
-        cnt, rung, a, dt, tau0, tau1, tauMax, doLc, getOptions().lightcone.mapSize, drag);
+    cudaDriftKernel<<<numberOfBlocks, kDriftBlockSize, 0, stream.nativeHandle()>>>(x, y, z, vels,
+        rungs, cnt, rung, a, dt, tau0, tau1, tauMax, doLc, getOptions().lightcone.mapSize, drag);
     stream.checkLaunch();
     stream.wait();
     cnt = 0;

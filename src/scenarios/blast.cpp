@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <numbers>
 #include <stdexcept>
 
 #include <cosmictiger/core/options.hpp>
@@ -36,9 +37,9 @@ namespace detail {
         for (int l = 0; l < kN; l++) {
             int const i = rand() % sphParticlesSize();
             int const j = sphParticlesParticleIndex(i);
-            float x = particlesPos(XDIM, j).toDouble() - 0.5;
-            float y = particlesPos(YDIM, j).toDouble() - 0.5;
-            float z = particlesPos(ZDIM, j).toDouble() - 0.5;
+            float x = particlesPos(kXDimension, j).toDouble() - 0.5;
+            float y = particlesPos(kYDimension, j).toDouble() - 0.5;
+            float z = particlesPos(kZDimension, j).toDouble() - 0.5;
             float const rho = sphParticlesDensity(i);
             double time = endTime;
             double r = sqrt(sqr(x, y, z));
@@ -67,7 +68,7 @@ ScenarioPlan initializeBlast() {
     double rho0 = 1.0;
     auto opts = getOptions();
     ParticleInteger ndim = getOptions().initial.particlesPerDimension;
-    ParticleInteger numberOfParticles = std::pow(ndim, NDIM);
+    ParticleInteger numberOfParticles = std::pow(ndim, kDimensions);
     ndim = pow(numberOfParticles / 2, 1. / 3.);
     if (ndim < 1) {
         throw std::runtime_error("The blast scenario needs a resolved lattice; "
@@ -88,21 +89,23 @@ ScenarioPlan initializeBlast() {
                 double z = (iz + 0.5) * dx;
                 double r = sqrt(sqr(x - 0.5, y - 0.5, z - 0.5));
                 double eint = std::max(1.0 / sigma / sigma / sigma /
-                        sqrt(8.0 * M_PI * M_PI * M_PI) * exp(-0.5 * sqr(r / sigma)),
+                        sqrt(8.0 * std::numbers::pi * std::numbers::pi * std::numbers::pi) *
+                        exp(-0.5 * sqr(r / sigma)),
                     1e-20);
                 double vx = 0.0;
                 double vy = 0.0;
                 double vz = 0.0;
                 double h = pow(
-                    m * getOptions().hydro.neighborNumber / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
+                    m * getOptions().hydro.neighborNumber / (4.0 * std::numbers::pi / 3.0 * rho0),
+                    1.0 / 3.0);
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSupportRadius(i) = h;
-                sphParticlesPosition(XDIM, i) = x;
-                sphParticlesPosition(YDIM, i) = y;
-                sphParticlesPosition(ZDIM, i) = z;
-                sphParticlesVelocity(XDIM, i) = vx;
-                sphParticlesVelocity(YDIM, i) = vy;
-                sphParticlesVelocity(ZDIM, i) = vz;
+                sphParticlesPosition(kXDimension, i) = x;
+                sphParticlesPosition(kYDimension, i) = y;
+                sphParticlesPosition(kZDimension, i) = z;
+                sphParticlesVelocity(kXDimension, i) = vx;
+                sphParticlesVelocity(kYDimension, i) = vy;
+                sphParticlesVelocity(kZDimension, i) = vz;
                 sphParticlesRung(i) = 0;
                 sphParticlesThermodynamicState(i).internalEnergy = eint;
 
@@ -111,7 +114,8 @@ ScenarioPlan initializeBlast() {
                 y = (iy + 0.0) * dx;
                 z = (iz + 0.0) * dx;
                 r = sqrt(sqr(x - 0.5, y - 0.5, z - 0.5));
-                eint = std::max(1.0 / sigma / sigma / sigma / sqrt(8.0 * M_PI * M_PI * M_PI) *
+                eint = std::max(1.0 / sigma / sigma / sigma /
+                        sqrt(8.0 * std::numbers::pi * std::numbers::pi * std::numbers::pi) *
                         exp(-0.5 * sqr(r / sigma)),
                     1e-20);
                 vx = 0.0;
@@ -119,12 +123,12 @@ ScenarioPlan initializeBlast() {
                 vz = 0.0;
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSupportRadius(i) = h;
-                sphParticlesPosition(XDIM, i) = x;
-                sphParticlesPosition(YDIM, i) = y;
-                sphParticlesPosition(ZDIM, i) = z;
-                sphParticlesVelocity(XDIM, i) = vx;
-                sphParticlesVelocity(YDIM, i) = vy;
-                sphParticlesVelocity(ZDIM, i) = vz;
+                sphParticlesPosition(kXDimension, i) = x;
+                sphParticlesPosition(kYDimension, i) = y;
+                sphParticlesPosition(kZDimension, i) = z;
+                sphParticlesVelocity(kXDimension, i) = vx;
+                sphParticlesVelocity(kYDimension, i) = vy;
+                sphParticlesVelocity(kZDimension, i) = vz;
                 sphParticlesRung(i) = 0;
                 sphParticlesThermodynamicState(i).internalEnergy = eint;
 

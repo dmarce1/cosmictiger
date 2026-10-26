@@ -48,7 +48,7 @@ bool kickSourcesAreSingleRank(Vector<TreeId> const& checklist);
 }    // namespace detail
 
 template <int order>
-KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, NDIM> pos,
+KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, kDimensions> pos,
     TreeId self, Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
     std::shared_ptr<KickWorkspace> cudaWorkspace, KickContext const& context);
 
@@ -105,15 +105,15 @@ inline void kickOpenOrDefer(bool openLargerCell, TreeNode const* sink, TreeNode 
     KickInteractionCounts& counts) {
     auto const& children = source->children;
     if (!openLargerCell || sink->leaf || source->radius > sink->radius) {
-        kickPushOccupied(retry, children[LEFT]);
-        kickPushOccupied(retry, children[RIGHT]);
+        kickPushOccupied(retry, children[kLeftChild]);
+        kickPushOccupied(retry, children[kRightChild]);
         counts.sourceOpenings++;
     } else if (source->radius < sink->radius) {
         deferred.push_back(sourceId);
         counts.deferredSources++;
     } else {
-        kickPushOccupied(deferred, children[LEFT]);
-        kickPushOccupied(deferred, children[RIGHT]);
+        kickPushOccupied(deferred, children[kLeftChild]);
+        kickPushOccupied(deferred, children[kRightChild]);
         counts.sourceOpenings++;
     }
 }
@@ -121,7 +121,7 @@ inline void kickOpenOrDefer(bool openLargerCell, TreeNode const* sink, TreeNode 
 }    // namespace detail
 
 template <int order>
-KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, NDIM> pos,
+KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, kDimensions> pos,
     TreeId self, Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
     std::shared_ptr<KickWorkspace> cudaWorkspace, KickContext const& context) {
     using Expansion = cosmictiger::gravity::cartesian::Expansion<float, order>;
@@ -152,7 +152,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, ND
             cudaWorkspace = std::make_shared<KickWorkspace>(
                 params, selfPtr->numberOfParticles(), context.gpuExecutor);
         }
-        size_t maximumGpuParticles = CUDA_KICK_PARTS_MAX;
+        size_t maximumGpuParticles = kCudaKickPartsMax;
         auto const rng = params.forceOnly ? Pair<ParticleInteger>(0, particlesOwnedSize()) :
                                             particlesCurrentRange();
         ParticleInteger const rangeParticles = rng.second - rng.first;
@@ -201,27 +201,27 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, ND
     // open-larger rule, and hand down only what the rule defers.
     bool const openLargerCell = params.openLargerCell;
     KickInteractionCounts counts{};
-    Array<TreeNode const*, SIMD_FLOAT_SIZE> otherPtrs;
-    Array<float, NDIM> ldx;
+    Array<TreeNode const*, kSimdFloatSize> otherPtrs;
+    Array<float, kDimensions> ldx;
     SimdFloat selfRadius = selfPtr->radius;
-    Array<SimdPosition, NDIM> selfPos{};
+    Array<SimdPosition, kDimensions> selfPos{};
     Range<SimdDouble8> selfBox{};
-    Array<SimdPosition, NDIM> otherPos{};
-    Array<SimdFloat, NDIM> dx{};
+    Array<SimdPosition, kDimensions> otherPos{};
+    Array<SimdFloat, kDimensions> dx{};
     SimdFloat otherRadius{};
     SimdFloat otherLeaf{};
     SimdFloat otherSupportRadius{};
     Range<SimdDouble8> otherBox{};
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         selfPos[dim] = simdBroadcast<SimdPosition>(selfPtr->pos[dim].raw());
         selfBox.begin[dim] = (double) selfPtr->box.begin[dim].raw();
         selfBox.end[dim] = (double) selfPtr->box.end[dim].raw();
     }
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         selfBox.begin[dim] *= RangeFixed::kToFloatFactor_;
         selfBox.end[dim] *= RangeFixed::kToFloatFactor_;
     }
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         ldx[dim] = unwrappedDoubleDistance(selfPtr->pos[dim], pos[dim]);
     }
     cosmictiger::gravity::cartesian::Expansion<float, order> translated{};
@@ -232,7 +232,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, ND
         translated, expansion, fmmScaleDisplacement(ldx), params.doPhi);
     expansion = translated;
     flops += cosmictiger::gravity::cartesian::detail::L2L<kLocalDegree, true>::kFlops_ + 14 +
-        6 * SIMD_FLOAT_SIZE;
+        6 * kSimdFloatSize;
     float const inverseSupportRadius = 1.0f / params.gravitySupportRadius;
     ForceVectors forces;
     ParticleInteger const numberOfSelfParticles = selfPtr->numberOfParticles();
@@ -257,54 +257,54 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, ND
         leaflist.resize(0);
         auto& checklist = dchecklist;
         do {
-            for (int ci = 0; ci < checklist.size(); ci += SIMD_FLOAT_SIZE) {
-                int const maxci = std::min((int) checklist.size(), ci + SIMD_FLOAT_SIZE);
+            for (int ci = 0; ci < checklist.size(); ci += kSimdFloatSize) {
+                int const maxci = std::min((int) checklist.size(), ci + kSimdFloatSize);
                 int const maxi = maxci - ci;
                 for (int i = ci; i < maxci; i++) {
                     otherPtrs[i - ci] = treeGetNode(checklist[i]);
                 }
                 for (int i = 0; i < maxi; i++) {
-                    for (int dim = 0; dim < NDIM; dim++) {
+                    for (int dim = 0; dim < kDimensions; dim++) {
                         simdSetLane(otherPos[dim], i, otherPtrs[i]->pos[dim].raw());
                     }
                     simdSetLane(otherRadius, i, otherPtrs[i]->radius);
                     simdSetLane(otherLeaf, i, otherPtrs[i]->leaf);
                     simdSetLane(otherSupportRadius, i, otherPtrs[i]->maxGravitySupportRadius);
                 }
-                for (int i = maxi; i < SIMD_FLOAT_SIZE; i++) {
-                    for (int dim = 0; dim < NDIM; dim++) {
+                for (int i = maxi; i < kSimdFloatSize; i++) {
+                    for (int dim = 0; dim < kDimensions; dim++) {
                         simdSetLane(otherPos[dim], i, 0.f);
                     }
                     simdSetLane(otherRadius, i, 0.f);
                     simdSetLane(otherLeaf, i, 0);
                     simdSetLane(otherSupportRadius, i, 0.f);
                 }
-                for (int dim = 0; dim < NDIM; dim++) {
+                for (int dim = 0; dim < kDimensions; dim++) {
                     dx[dim] =
                         fmmPositionDifference(selfPos[dim], otherPos[dim], dim, params.geometry);
                 }
-                SimdFloat const r2 =
-                    simdFma(dx[XDIM], dx[XDIM], simdFma(dx[YDIM], dx[YDIM], dx[ZDIM] * dx[ZDIM]));
+                SimdFloat const r2 = simdFma(dx[kXDimension], dx[kXDimension],
+                    simdFma(dx[kYDimension], dx[kYDimension], dx[kZDimension] * dx[kZDimension]));
                 SimdFloat const pairSupportRadius = fmmPairSupportRadius(
                     simdBroadcast<SimdFloat>(supportRadius),
                     simdBroadcast<SimdFloat>(selfPtr->maxGravitySupportRadius), otherSupportRadius);
                 auto acceptance =
                     computeFmmAcceptance(r2, selfRadius, otherRadius, simdBroadcast<SimdFloat>(0),
                         simdBroadcast<SimdFloat>(0), pairSupportRadius, thetainv);
-                flops += SIMD_FLOAT_SIZE * 27;
+                flops += kSimdFloatSize * 27;
                 if (selfPtr->leaf || simdAnyOf(otherLeaf != simdBroadcast<SimdFloat>(0.0f))) {
                     for (int i = 0; i < maxi; i++) {
-                        for (int dim = 0; dim < NDIM; dim++) {
+                        for (int dim = 0; dim < kDimensions; dim++) {
                             simdSetLane(otherBox.begin[dim], i, otherPtrs[i]->box.begin[dim].raw());
                             simdSetLane(otherBox.end[dim], i, otherPtrs[i]->box.end[dim].raw());
                         }
                     }
-                    for (int dim = 0; dim < NDIM; dim++) {
+                    for (int dim = 0; dim < kDimensions; dim++) {
                         otherBox.begin[dim] *= RangeFixed::kToFloatFactor_;
                         otherBox.end[dim] *= RangeFixed::kToFloatFactor_;
                     }
-                    for (int i = maxi; i < SIMD_FLOAT_SIZE; i++) {
-                        for (int dim = 0; dim < NDIM; dim++) {
+                    for (int i = maxi; i < kSimdFloatSize; i++) {
+                        for (int dim = 0; dim < kDimensions; dim++) {
                             simdSetLane(otherBox.begin[dim], i, 0.0);
                             simdSetLane(otherBox.end[dim], i, 0.0);
                         }
@@ -313,7 +313,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, ND
                         fmmSinkBoxDistanceSquared(selfBox, otherPos, params.geometry),
                         fmmSourceBoxDistanceSquared(otherBox, selfPos, otherPos, params.geometry),
                         pairSupportRadius, thetainv);
-                    flops += SIMD_FLOAT_SIZE * 85;
+                    flops += kSimdFloatSize * 85;
                 }
                 for (int i = 0; i < maxi; i++) {
                     auto const interaction = selectFmmInteraction(bool(acceptance.cellCell[i]),
@@ -379,8 +379,8 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, ND
         for (ParticleInteger i = rng.first; i < rng.second; i++) {
             if (params.forceOnly || particlesRung(i) >= params.minRung) {
                 ParticleInteger const j = i - rng.first;
-                Array<float, NDIM> dx;
-                for (ParticleInteger dim = 0; dim < NDIM; dim++) {
+                Array<float, kDimensions> dx;
+                for (ParticleInteger dim = 0; dim < kDimensions; dim++) {
                     dx[dim] = unwrappedDoubleDistance(particlesPos(dim, i), selfPtr->pos[dim]);
                 }
                 cosmictiger::gravity::Field<float> l2{};
@@ -388,21 +388,19 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, ND
                     l2, expansion, fmmScaleDisplacement(dx), params.doPhi);
                 float const gravityEffectiveRadius = params.gravitySupportRadius /
                     selectedGravityKernel().supportRadiusPerEffectiveRadius;
-                forces.phi[j] += SCALE_FACTOR1 * l2.potential();
-                forces.gx[j] += SCALE_FACTOR2 * l2.accelerationX();
-                forces.gy[j] += SCALE_FACTOR2 * l2.accelerationY();
-                forces.gz[j] += SCALE_FACTOR2 * l2.accelerationZ();
+                forces.phi[j] += kScaleFactor1 * l2.potential();
+                forces.gx[j] += kScaleFactor2 * l2.accelerationX();
+                forces.gy[j] += kScaleFactor2 * l2.accelerationY();
+                forces.gz[j] += kScaleFactor2 * l2.accelerationZ();
                 if (params.forceOnly) {
                     ALWAYS_ASSERT(cudaWorkspace != nullptr && cudaWorkspace->isBatch());
                     auto const output = cudaWorkspace->output();
                     ParticleInteger const outputIndex = i + params.outputOffset;
                     output.potential[outputIndex] = params.doPhi ? forces.phi[j] : 0.0f;
-                    output.acceleration[XDIM][outputIndex] = forces.gx[j];
-                    output.acceleration[YDIM][outputIndex] = forces.gy[j];
-                    output.acceleration[ZDIM][outputIndex] = forces.gz[j];
-                    flops +=
-                        cosmictiger::gravity::cartesian::detail::L2P<kLocalDegree, true>::kFlops_ +
-                        14;
+                    output.acceleration[kXDimension][outputIndex] = forces.gx[j];
+                    output.acceleration[kYDimension][outputIndex] = forces.gy[j];
+                    output.acceleration[kZDimension][outputIndex] = forces.gz[j];
+                    flops += cosmictiger::gravity::cartesian::detail::L2P<kLocalDegree, true>::kFlops_ + 14;
                     continue;
                 }
                 forces.gx[j] *= gm;
@@ -410,16 +408,16 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, ND
                 forces.gz[j] *= gm;
                 forces.phi[j] *= gm;
                 if (saveAcceleration) {
-                    particlesGravityAcceleration(XDIM, i) = forces.gx[j];
-                    particlesGravityAcceleration(YDIM, i) = forces.gy[j];
-                    particlesGravityAcceleration(ZDIM, i) = forces.gz[j];
+                    particlesGravityAcceleration(kXDimension, i) = forces.gx[j];
+                    particlesGravityAcceleration(kYDimension, i) = forces.gy[j];
+                    particlesGravityAcceleration(kZDimension, i) = forces.gz[j];
                 }
                 if (savePotential && params.doPhi) {
                     particlesPot(i) = forces.phi[j];
                 }
-                auto& vx = particlesVel(XDIM, i);
-                auto& vy = particlesVel(YDIM, i);
-                auto& vz = particlesVel(ZDIM, i);
+                auto& vx = particlesVel(kXDimension, i);
+                auto& vy = particlesVel(kYDimension, i);
+                auto& vz = particlesVel(kZDimension, i);
                 auto& rung = particlesRung(i);
                 if (params.htime) {
                     float g2;
@@ -451,7 +449,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, ND
                             (int) (rung - 1));
                         kr.maxRung = std::max((int) rung, kr.maxRung);
                         ALWAYS_ASSERT(rung >= 0);
-                        ALWAYS_ASSERT(rung < MAX_RUNG);
+                        ALWAYS_ASSERT(rung < kMaxRung);
                         dt = 0.5f * rungDt[params.minRung] * params.t0;
                         vx = fmaf(sgn * forces.gx[j], dt, vx);
                         vy = fmaf(sgn * forces.gy[j], dt, vy);
@@ -463,13 +461,13 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, ND
                     kr.dkin += kin1 - kin0;
                 } else {
                     float const mass = particlesMass(i);
-                    bool const gas = getOptions().hydro.enabled && particlesType(i) == SPH_TYPE;
+                    bool const gas = getOptions().hydro.enabled && particlesType(i) == kSphType;
                     float const kin0 = 0.5f * mass * sqr(vx, vy, vz);
                     if (gas) {
                         ParticleInteger const k = particlesCatIndex(i);
-                        sphParticlesGravityAcceleration(XDIM, k) = forces.gx[j];
-                        sphParticlesGravityAcceleration(YDIM, k) = forces.gy[j];
-                        sphParticlesGravityAcceleration(ZDIM, k) = forces.gz[j];
+                        sphParticlesGravityAcceleration(kXDimension, k) = forces.gx[j];
+                        sphParticlesGravityAcceleration(kYDimension, k) = forces.gy[j];
+                        sphParticlesGravityAcceleration(kZDimension, k) = forces.gz[j];
                     } else if (!params.firstCall) {
                         flops += 8;
                         float const dt = 0.5f * rungDt[rung] * params.t0;
@@ -499,7 +497,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, ND
                             kr.maxRung = std::max(kr.maxRung, int(rung));
                             rung = params.fixedRung;
                         }
-                        ALWAYS_ASSERT(rung >= 0 && rung < MAX_RUNG);
+                        ALWAYS_ASSERT(rung >= 0 && rung < kMaxRung);
                         dt = 0.5f * rungDt[rung] * params.t0;
                         vx = fmaf(forces.gx[j], dt, vx);
                         vy = fmaf(forces.gy[j], dt, vy);
@@ -539,26 +537,26 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, ND
     } else {
         detail::kickReleaseLists(std::move(workspace));
         // Fetch both children (and their cache lines) before forking the walks.
-        TreeNode const* cl = treeGetNode(selfPtr->children[LEFT]);
-        TreeNode const* cr = treeGetNode(selfPtr->children[RIGHT]);
+        TreeNode const* cl = treeGetNode(selfPtr->children[kLeftChild]);
+        TreeNode const* cr = treeGetNode(selfPtr->children[kRightChild]);
         (void) cl;
         (void) cr;
-        std::array<hpx::future<KickReturn>, NCHILD> futs;
-        futs[RIGHT] = context.fork(params, l, selfPtr->pos, selfPtr->children[RIGHT], dchecklist,
-            echecklist, cudaWorkspace, threadLeft);
+        std::array<hpx::future<KickReturn>, kChildCount> futs;
+        futs[kRightChild] = context.fork(params, l, selfPtr->pos, selfPtr->children[kRightChild],
+            dchecklist, echecklist, cudaWorkspace, threadLeft);
         try {
-            futs[LEFT] = context.fork(params, l, selfPtr->pos, selfPtr->children[LEFT],
+            futs[kLeftChild] = context.fork(params, l, selfPtr->pos, selfPtr->children[kLeftChild],
                 std::move(dchecklist), std::move(echecklist), cudaWorkspace, false);
         } catch (...) {
             // Keep shared tree data alive until the asynchronous sibling exits.
-            futs[RIGHT].wait();
+            futs[kRightChild].wait();
             throw;
         }
         hpx::wait_all(futs);
         // Surface launch/completion failures before waiting for a result that
         // only a successful GPU batch can publish.
-        auto const rcl = futs[LEFT].get();
-        auto const rcr = futs[RIGHT].get();
+        auto const rcl = futs[kLeftChild].get();
+        auto const rcr = futs[kRightChild].get();
         if (selfPtr->processRange.second - selfPtr->processRange.first > 1) {
             kr += rcl;
             kr += rcr;

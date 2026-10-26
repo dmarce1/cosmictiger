@@ -21,8 +21,8 @@
 #include <cosmictiger/math/simd.hpp>
 
 template <class T>
-inline Array<T, NDIM> shiftUp(Array<T, NDIM> i) {
-    Array<T, NDIM> j;
+inline Array<T, kDimensions> shiftUp(Array<T, kDimensions> i) {
+    Array<T, kDimensions> j;
     j[2] = i[0];
     j[0] = i[1];
     j[1] = i[2];
@@ -30,15 +30,15 @@ inline Array<T, NDIM> shiftUp(Array<T, NDIM> i) {
 }
 
 template <class T>
-inline Array<T, NDIM> shiftDown(Array<T, NDIM> i) {
-    Array<T, NDIM> j;
+inline Array<T, kDimensions> shiftDown(Array<T, kDimensions> i) {
+    Array<T, kDimensions> j;
     j[1] = i[0];
     j[2] = i[1];
     j[0] = i[2];
     return j;
 }
 
-template <class T, int n = NDIM>
+template <class T, int n = kDimensions>
 struct Range {
     Array<T, n> begin;
     Array<T, n> end;
@@ -341,7 +341,7 @@ struct Range {
     }
 };
 
-template <class T, int n = NDIM>
+template <class T, int n = kDimensions>
 inline Range<T, n> unitBox() {
     Range<T, n> r;
     for (int dim = 0; dim < n; dim++) {
@@ -355,7 +355,7 @@ inline Range<T, n> unitBox() {
 
 inline Range<Position> fixed32UnitBox() {
     Range<Position> r;
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         r.begin[dim] = 0.0;
         r.end[dim] = Position::max();
     }
@@ -364,7 +364,7 @@ inline Range<Position> fixed32UnitBox() {
 
 inline Range<Position> rngdbl2rngfixed32(Range<double> const& other) {
     Range<Position> rc;
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         rc.begin[dim] = other.begin[dim];
         rc.end[dim] = other.end[dim];
     }
@@ -398,16 +398,16 @@ struct Fixed32Range : public Range<RangeFixed> {
         end = other.end;
     }
     CUDA_EXPORT
-    bool contains(Array<Position, NDIM> const& pt, FlopCounter<>* flops = nullptr) const {
+    bool contains(Array<Position, kDimensions> const& pt, FlopCounter<>* flops = nullptr) const {
         for (int i = -1; i <= 1; i++) {
             for (int j = -1; j <= 1; j++) {
                 for (int k = -1; k <= 1; k++) {
                     bool contains = true;
-                    Array<double, NDIM> iValue;
+                    Array<double, kDimensions> iValue;
                     iValue[0] = i;
                     iValue[1] = j;
                     iValue[2] = k;
-                    for (int dim = 0; dim < NDIM; dim++) {
+                    for (int dim = 0; dim < kDimensions; dim++) {
                         if (flops) {
                             *flops += 1;    // Image offset conversion to fixed-point.
                         }
@@ -482,9 +482,9 @@ inline float distance(Position b, RangeFixed a) {
 }
 
 CUDA_EXPORT inline float boxDistanceSquared(
-    Fixed32Range const& box, Array<Position, NDIM> const& x) {
+    Fixed32Range const& box, Array<Position, kDimensions> const& x) {
     float d2 = 0.0f;
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         float outside;
         if constexpr (kPositionBits == 64) {
             double const lower = box.begin[dim].toDouble();
@@ -509,21 +509,21 @@ CUDA_EXPORT inline float boxDistanceSquared(
 }
 
 CUDA_EXPORT inline bool boxIntersectsSphere(
-    Fixed32Range const& box, Array<Position, NDIM> const& x, float r) {
+    Fixed32Range const& box, Array<Position, kDimensions> const& x, float r) {
     return boxDistanceSquared(box, x) < sqr(r);
 }
 
 #ifndef __CUDACC__
 inline SimdFloat boxDistanceSquared(
-    Range<SimdDouble8> const& box, Array<SimdPosition, NDIM> const& x) {
+    Range<SimdDouble8> const& box, Array<SimdPosition, kDimensions> const& x) {
     if constexpr (kPositionBits == 64) {
         // The SIMD box endpoints originate in RangeFixed. Reuse the integer
         // comparisons and subtraction so conversion to double cannot erase
         // a particle's low bits at an endpoint.
         return SimdFloat([&](auto lane) {
             Fixed32Range scalarBox;
-            Array<Position, NDIM> point;
-            for (int dim = 0; dim < NDIM; ++dim) {
+            Array<Position, kDimensions> point;
+            for (int dim = 0; dim < kDimensions; ++dim) {
                 scalarBox.begin[dim] = box.begin[dim][lane];
                 scalarBox.end[dim] = box.end[dim][lane];
                 point[dim].setInteger(static_cast<PositionInteger>(x[dim][lane]));
@@ -532,7 +532,7 @@ inline SimdFloat boxDistanceSquared(
         });
     }
     SimdFloat d2 = 0.0f;
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         SimdDouble8 xValue =
             simdCast<SimdDouble8>(x[dim]) * simdBroadcast<SimdDouble8>(Position::kToFloatFactor_);
         // Positions are unsigned coordinates in [0, 1), not signed displacements.
@@ -556,7 +556,7 @@ inline SimdFloat boxDistanceSquared(
 }
 
 inline auto boxIntersectsSphere(
-    Range<SimdDouble8> const& box, Array<SimdPosition, NDIM> const& x, SimdFloat r) {
+    Range<SimdDouble8> const& box, Array<SimdPosition, kDimensions> const& x, SimdFloat r) {
     return boxDistanceSquared(box, x) < sqr(r);
 }
 #endif

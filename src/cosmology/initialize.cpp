@@ -13,6 +13,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iomanip>
+#include <numbers>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -80,7 +81,7 @@ HPX_PLAIN_ACTION(twolptDestroy, TwolptDestroyAction);
 static Vector<float> delta2;
 static Vector<ComplexFloat> delta2Inv;
 static Vector<float> delta2Part;
-static Vector<Position> x0Value[NDIM];
+static Vector<Position> x0Value[kDimensions];
 
 static void initX0();
 static void clearX0();
@@ -223,16 +224,16 @@ void initialize(double z0) {
     terminal::detailPrint("D2 = %e\n", d2Value);
     terminal::detailPrint("Linear velocity factor = %e\n", linearVelocityFactor / a0);
     terminal::detailPrint("prefac2 = %e\n", prefac2 / a0);
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         fft3dInit(n);
-        zeldovichBegin(dim, NDIM);
+        zeldovichBegin(dim, kDimensions);
         //		fft3d_force_real();
         fft3dInvExecute();
         float const dxmax = zeldovichEnd(dim, dim == 0, 1.0f, 0.0f);
         terminal::detailPrint("Initial %c displacement maximum: %e\n", 'x' + dim, dxmax);
         fft3dDestroy();
         fft3dInit(n);
-        zeldovichBegin(dim, NDIM, true);
+        zeldovichBegin(dim, kDimensions, true);
         fft3dInvExecute();
         zeldovichEnd(dim, false, 1.0f, linearVelocityFactor, true);
         fft3dDestroy();
@@ -291,7 +292,7 @@ void initialize(double z0) {
         //		system( "cp complex.silo complex.3.silo\n");
         fft3dDestroy();
 
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             terminal::detailPrint(
                 "Computing 2LPT correction to %c positions and velocities\n", 'x' + dim);
             twolptCorrection2(dim);
@@ -346,24 +347,24 @@ void twolptCorrection2(int dim) {
     float const factor = std::pow(boxSize, -1.5) * n * n * n;
     auto const box = fft3dComplexRange();
     auto yValue = delta2Inv;
-    Array<int64_t, NDIM> iValue;
+    Array<int64_t, kDimensions> iValue;
     Vector<hpx::future<void>> futs2;
     for (iValue[0] = box.begin[0]; iValue[0] != box.end[0]; iValue[0]++) {
         futs2.push_back(hpx::async(
-            [n, box, boxSize, &yValue, dim, factor](Array<int64_t, NDIM> iValue2) {
+            [n, box, boxSize, &yValue, dim, factor](Array<int64_t, kDimensions> iValue2) {
                 int const i = (iValue2[0] < n / 2 ? iValue2[0] : iValue2[0] - n);
-                float const kx = 2.f * (float) M_PI / boxSize * float(i);
+                float const kx = 2.f * std::numbers::pi_v<float> / boxSize * float(i);
                 for (iValue2[1] = box.begin[1]; iValue2[1] != box.end[1]; iValue2[1]++) {
                     int const j = (iValue2[1] < n / 2 ? iValue2[1] : iValue2[1] - n);
-                    float const ky = 2.f * (float) M_PI / boxSize * float(j);
+                    float const ky = 2.f * std::numbers::pi_v<float> / boxSize * float(j);
                     for (iValue2[2] = box.begin[2]; iValue2[2] != box.end[2]; iValue2[2]++) {
                         int const k = (iValue2[2] < n / 2 ? iValue2[2] : iValue2[2] - n);
                         int const i2 = sqr(i, j, k);
                         int64_t const index = box.index(iValue2);
                         if (i2 > 0) {
-                            float kz = 2.f * (float) M_PI / boxSize * float(k);
+                            float kz = 2.f * std::numbers::pi_v<float> / boxSize * float(k);
                             float k2 = kx * kx + ky * ky + kz * kz;
-                            float const kValue[NDIM] = {kx, ky, kz};
+                            float const kValue[kDimensions] = {kx, ky, kz};
                             yValue[index] = -ComplexFloat(0, 1) * kValue[dim] * yValue[index] / k2;
                             yValue[index] *= cloudFilter(kx * boxSize / n);
                             yValue[index] *= cloudFilter(ky * boxSize / n);
@@ -396,17 +397,17 @@ void twolptGenerate(int dim1, int dim2, bool velocity = false) {
     static auto const power = computePowerSpectrum();
     auto const box = fft3dComplexRange();
     yValue.resize(box.volume());
-    Array<int64_t, NDIM> iValue;
+    Array<int64_t, kDimensions> iValue;
     constexpr int kRandInitIters = 8;
     Vector<hpx::future<void>> futs2;
     //	const auto filter = get_options().use_glass || get_options().close_pack;
-    bool const filter = (dim1 != NDIM || dim2 != NDIM);
+    bool const filter = (dim1 != kDimensions || dim2 != kDimensions);
     for (iValue[0] = box.begin[0]; iValue[0] != box.end[0]; iValue[0]++) {
         futs2.push_back(hpx::async(
             [n, box, boxSize, &yValue, dim1, dim2, factor, filter, velocity](
-                Array<int64_t, NDIM> iValue2) {
+                Array<int64_t, kDimensions> iValue2) {
                 int const i = (iValue2[0] < n / 2 ? iValue2[0] : iValue2[0] - n);
-                float const kx = 2.f * (float) M_PI / boxSize * float(i);
+                float const kx = 2.f * std::numbers::pi_v<float> / boxSize * float(i);
                 for (iValue2[1] = box.begin[1]; iValue2[1] != box.end[1]; iValue2[1]++) {
                     int seed = (iValue2[0] * n + iValue2[1]) * 1234 + 42;
                     gsl_rng* rndgen = gsl_rng_alloc(gsl_rng_taus);
@@ -415,23 +416,24 @@ void twolptGenerate(int dim1, int dim2, bool velocity = false) {
                         gsl_rng_uniform_pos(rndgen);
                     }
                     int const j = (iValue2[1] < n / 2 ? iValue2[1] : iValue2[1] - n);
-                    float const ky = 2.f * (float) M_PI / boxSize * float(j);
+                    float const ky = 2.f * std::numbers::pi_v<float> / boxSize * float(j);
                     for (iValue2[2] = box.begin[2]; iValue2[2] != box.end[2]; iValue2[2]++) {
                         int64_t const index = box.index(iValue2);
                         if (iValue2[2] > 0) {
                             int const k = (iValue2[2] < n / 2 ? iValue2[2] : iValue2[2] - n);
                             int const i2 = sqr(i, j, k);
-                            float const kz = 2.f * (float) M_PI / boxSize * float(k);
+                            float const kz = 2.f * std::numbers::pi_v<float> / boxSize * float(k);
                             if (i2 > 0) {
-                                float const kz = 2.f * (float) M_PI / boxSize * float(k);
+                                float const kz =
+                                    2.f * std::numbers::pi_v<float> / boxSize * float(k);
                                 float const k2 = kx * kx + ky * ky + kz * kz;
                                 float const k0Value = sqrtf(kx * kx + ky * ky + kz * kz);
                                 float const x = gsl_rng_uniform_pos(rndgen);
                                 float const y = gsl_rng_uniform_pos(rndgen);
-                                ComplexFloat const kValue[NDIM + 1] = {
+                                ComplexFloat const kValue[kDimensions + 1] = {
                                     {0, -kx}, {0, -ky}, {0, -kz}, {1, 0}};
                                 auto const randNormal =
-                                    expc(ComplexFloat(0, 1) * 2.f * float(M_PI) * y) *
+                                    expc(ComplexFloat(0, 1) * 2.f * std::numbers::pi_v<float> * y) *
                                     sqrtf(-logf(fabsf(x)));
                                 float const amplitude = power.amplitude(k0Value, velocity);
                                 yValue[index] = randNormal * amplitude * factor * kValue[dim1] *
@@ -460,21 +462,22 @@ void twolptGenerate(int dim1, int dim2, bool velocity = false) {
                     int const k = (iValue2[2] < n / 2 ? iValue2[2] : iValue2[2] - n);
                     int const i2 = sqr(i, j, k);
                     float sgn = 1.0;
-                    if (dim1 != NDIM) {
+                    if (dim1 != kDimensions) {
                         sgn *= -1.0;
                     }
-                    if (dim2 != NDIM) {
+                    if (dim2 != kDimensions) {
                         sgn *= -1.0;
                     }
-                    float const kz = 2.f * (float) M_PI / boxSize * float(k);
+                    float const kz = 2.f * std::numbers::pi_v<float> / boxSize * float(k);
                     if (i2 > 0) {
                         float const k2 = kx * kx + ky * ky + kz * kz;
                         float const k0Value = sqrtf(kx * kx + ky * ky + kz * kz);
                         float const x = gsl_rng_uniform_pos(rndgen);
                         float const y = gsl_rng_uniform_pos(rndgen);
-                        ComplexFloat const kValue[NDIM + 1] = {
+                        ComplexFloat const kValue[kDimensions + 1] = {
                             {0, -kx}, {0, -ky}, {0, -kz}, {1, 0}};
-                        auto const randNormal = expc(ComplexFloat(0, 1) * 2.f * float(M_PI) * y) *
+                        auto const randNormal =
+                            expc(ComplexFloat(0, 1) * 2.f * std::numbers::pi_v<float> * y) *
                             sqrtf(-logf(fabsf(x)));
                         float const amplitude = power.amplitude(k0Value, velocity);
                         yValue[index] =
@@ -533,7 +536,7 @@ void twolptPhase(int phase) {
     }
     auto const box = fft3dRealRange();
     auto const vol = box.volume();
-    if (phase > 2 * NDIM) {
+    if (phase > 2 * kDimensions) {
         auto thisDelta2Part = fft3dReadReal(box);
         for (int i = 0; i < vol; i++) {
             delta2[i] -= thisDelta2Part[i] * thisDelta2Part[i];
@@ -586,7 +589,7 @@ static Range<int64_t> findMyBox(Range<int64_t> box, int begin, int end, int dept
     if (end - begin == 1) {
         return box;
     } else {
-        int const xdim = depth % NDIM;
+        int const xdim = depth % kDimensions;
         int const mid = (begin + end) / 2;
         float const w = float(mid - begin) / float(end - begin);
         if (hpxRank() < mid) {
@@ -603,7 +606,7 @@ static Range<int64_t> findMyBox(Range<int64_t> box, int begin, int end, int dept
 
 static Range<int64_t> findMyBox() {
     Range<int64_t> box;
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         box.begin[dim] = 0;
         box.end[dim] = getOptions().initial.fourierSize;
     }
@@ -617,7 +620,7 @@ static void clearX0() {
             futures.push_back(hpx::async<ClearX0Action>(child));
         }
     }
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         x0Value[dim] = Vector<Position>();
     }
     for (auto& future : futures) {
@@ -639,20 +642,20 @@ static void initX0() {
     auto const closePack = getOptions().initial.closePack;
     if (!glass) {
         auto box = findMyBox();
-        Array<int64_t, NDIM> iValue;
+        Array<int64_t, kDimensions> iValue;
         ParticleInteger index = 0;
         size_t total = box.volume();
         if (closePack) {
             total *= 2;
         }
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             x0Value[dim].resize(total);
         }
         for (iValue[0] = box.begin[0]; iValue[0] != box.end[0]; iValue[0]++) {
             for (iValue[1] = box.begin[1]; iValue[1] != box.end[1]; iValue[1]++) {
                 for (iValue[2] = box.begin[2]; iValue[2] != box.end[2]; iValue[2]++) {
                     if (closePack) {
-                        for (int dim1 = 0; dim1 < NDIM; dim1++) {
+                        for (int dim1 = 0; dim1 < kDimensions; dim1++) {
                             double x = iValue[dim1] * ninv;
                             x0Value[dim1][index] =
                                 x + (getOptions().hydro.enabled ? 0.25 * ninv : 0.25);
@@ -660,7 +663,7 @@ static void initX0() {
                         }
                         index += 2;
                     } else {
-                        for (int dim1 = 0; dim1 < NDIM; dim1++) {
+                        for (int dim1 = 0; dim1 < kDimensions; dim1++) {
                             double x = iValue[dim1] * ninv;
                             x0Value[dim1][index] = x;
                         }
@@ -677,7 +680,7 @@ static void initX0() {
         }
         int glassParticlesPerDimension;
         int particlesPerDimension = getOptions().initial.particlesPerDimension;
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             box.begin[dim] = (double) ibox.begin[dim] / particlesPerDimension;
             box.end[dim] = (double) ibox.end[dim] / particlesPerDimension;
         }
@@ -698,12 +701,12 @@ static void initX0() {
         FREAD(z.data(), sizeof(Fixed32), numberOfGlassParticles, fp);
         fclose(fp);
 
-        int const jb = box.begin[XDIM] * nf;
-        int const lb = box.begin[ZDIM] * nf;
-        int const kb = box.begin[YDIM] * nf;
-        int const je = std::min((int) box.end[XDIM] * nf, nf - 1) + 1;
-        int const ke = std::min((int) box.end[YDIM] * nf, nf - 1) + 1;
-        int const le = std::min((int) box.end[ZDIM] * nf, nf - 1) + 1;
+        int const jb = box.begin[kXDimension] * nf;
+        int const lb = box.begin[kZDimension] * nf;
+        int const kb = box.begin[kYDimension] * nf;
+        int const je = std::min((int) box.end[kXDimension] * nf, nf - 1) + 1;
+        int const ke = std::min((int) box.end[kYDimension] * nf, nf - 1) + 1;
+        int const le = std::min((int) box.end[kZDimension] * nf, nf - 1) + 1;
         MutexType mutex;
         Vector<ParticleInteger> counts(je - jb);
         for (int j = jb; j < je; j++) {
@@ -717,11 +720,14 @@ static void initX0() {
                                 double y0 = y[i].toDouble();
                                 double z0 = z[i].toDouble();
                                 double const xValue = (j + x0) / nf;
-                                if (xValue >= box.begin[XDIM] && xValue < box.end[XDIM]) {
+                                if (xValue >= box.begin[kXDimension] &&
+                                    xValue < box.end[kXDimension]) {
                                     double const yValue = (k + y0) / nf;
-                                    if (yValue >= box.begin[YDIM] && yValue < box.end[YDIM]) {
+                                    if (yValue >= box.begin[kYDimension] &&
+                                        yValue < box.end[kYDimension]) {
                                         double const zValue = (l + z0) / nf;
-                                        if (zValue >= box.begin[ZDIM] && zValue < box.end[ZDIM]) {
+                                        if (zValue >= box.begin[kZDimension] &&
+                                            zValue < box.end[kZDimension]) {
                                             thisCount++;
                                         }
                                     }
@@ -740,7 +746,7 @@ static void initX0() {
             counts[i] = total;
             total += thisCount;
         }
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             x0Value[dim].resize(total);
         }
         for (int j = jb; j < je; j++) {
@@ -755,14 +761,17 @@ static void initX0() {
                                 double y0 = y[i].toDouble();
                                 double z0 = z[i].toDouble();
                                 double const xValue = (j + x0) / nf;
-                                if (xValue >= box.begin[XDIM] && xValue < box.end[XDIM]) {
+                                if (xValue >= box.begin[kXDimension] &&
+                                    xValue < box.end[kXDimension]) {
                                     double const yValue = (k + y0) / nf;
-                                    if (yValue >= box.begin[YDIM] && yValue < box.end[YDIM]) {
+                                    if (yValue >= box.begin[kYDimension] &&
+                                        yValue < box.end[kYDimension]) {
                                         double const zValue = (l + z0) / nf;
-                                        if (zValue >= box.begin[ZDIM] && zValue < box.end[ZDIM]) {
-                                            x0Value[XDIM][iii] = xValue;
-                                            x0Value[YDIM][iii] = yValue;
-                                            x0Value[ZDIM][iii] = zValue;
+                                        if (zValue >= box.begin[kZDimension] &&
+                                            zValue < box.end[kZDimension]) {
+                                            x0Value[kXDimension][iii] = xValue;
+                                            x0Value[kYDimension][iii] = yValue;
+                                            x0Value[kZDimension][iii] = zValue;
                                             iii++;
                                         }
                                     }
@@ -774,14 +783,14 @@ static void initX0() {
         }
     }
     hpx::wait_all(futs.begin(), futs.end());
-    particlesResize(x0Value[XDIM].size());
-    for (ParticleInteger i = 0; i < x0Value[XDIM].size(); i++) {
-        particlesPos(XDIM, i) = x0Value[XDIM][i];
-        particlesPos(YDIM, i) = x0Value[YDIM][i];
-        particlesPos(ZDIM, i) = x0Value[ZDIM][i];
-        particlesVel(XDIM, i) = 0.0;
-        particlesVel(YDIM, i) = 0.0;
-        particlesVel(ZDIM, i) = 0.0;
+    particlesResize(x0Value[kXDimension].size());
+    for (ParticleInteger i = 0; i < x0Value[kXDimension].size(); i++) {
+        particlesPos(kXDimension, i) = x0Value[kXDimension][i];
+        particlesPos(kYDimension, i) = x0Value[kYDimension][i];
+        particlesPos(kZDimension, i) = x0Value[kZDimension][i];
+        particlesVel(kXDimension, i) = 0.0;
+        particlesVel(kYDimension, i) = 0.0;
+        particlesVel(kZDimension, i) = 0.0;
         particlesRung(i) = 0;
     }
     if (getOptions().hydro.enabled) {
@@ -789,7 +798,7 @@ static void initX0() {
         ParticleInteger const count = particlesSize();
         sphParticlesResize(count);
         double const gasOffset = (closePack ? 0.25 : 0.5) * ninv;
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             x0Value[dim].resize(2 * size_t(count));
             for (ParticleInteger i = 0; i < count; i++) {
                 double x = x0Value[dim][i].toDouble() + gasOffset;
@@ -816,7 +825,7 @@ static void initX0() {
         double const density =
             getOptions().initial.gasMass * getOptions().initial.numberOfParticles;
         float const smoothLength = std::cbrt(getOptions().hydro.neighborNumber /
-            ((4.0 * M_PI / 3.0) * getOptions().initial.numberOfParticles));
+            ((4.0 * std::numbers::pi / 3.0) * getOptions().initial.numberOfParticles));
         for (ParticleInteger i = 0; i < count; i++) {
             particlesRung(count + i) = 0;
             sphParticlesThermodynamicState(i).internalEnergy = storedThermalEnergy;
@@ -842,9 +851,9 @@ static float zeldovichEnd(
         (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
     auto box = findMyBox();
     bool const glass = getOptions().initial.useGlass;
-    for (int dim = 0; dim < NDIM; dim++) {
-        box.end[dim] += CLOUD_MAX + (getOptions().hydro.enabled ? 1 : 0);
-        box.begin[dim] += CLOUD_MIN;
+    for (int dim = 0; dim < kDimensions; dim++) {
+        box.end[dim] += kCloudMax + (getOptions().hydro.enabled ? 1 : 0);
+        box.begin[dim] += kCloudMin;
     }
     Vector<hpx::future<float>> futs;
     for (auto c : hpxChildren()) {
@@ -853,7 +862,7 @@ static float zeldovichEnd(
     }
     static Vector<float> yValue;
     yValue = fft3dReadReal(box);
-    Array<int64_t, NDIM> iValue;
+    Array<int64_t, kDimensions> iValue;
     float const ninv = 1.0 / n;
     int const numberOfThreads = hpxHardwareConcurrency();
     double const boxSizeInv = 1.0 / boxSize;
@@ -864,32 +873,32 @@ static float zeldovichEnd(
                 size_t const e = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
                 double dxmax = 0.0;
                 for (ParticleInteger i = b; i < e; i++) {
-                    double const x0 = x0Value[XDIM][i].toDouble();
-                    double const y0 = x0Value[YDIM][i].toDouble();
-                    double const z0 = x0Value[ZDIM][i].toDouble();
+                    double const x0 = x0Value[kXDimension][i].toDouble();
+                    double const y0 = x0Value[kYDimension][i].toDouble();
+                    double const z0 = x0Value[kZDimension][i].toDouble();
                     int i1 = x0 * n;
                     int j1 = y0 * n;
                     int k1 = z0 * n;
-                    double t[NDIM] = {x0 * n - i1, y0 * n - j1, z0 * n - k1};
+                    double t[kDimensions] = {x0 * n - i1, y0 * n - j1, z0 * n - k1};
                     if (getOptions().hydro.enabled) {
                         // A positive gas offset may wrap through the upper periodic boundary.
-                        if (i1 < box.begin[XDIM] - CLOUD_MIN) {
+                        if (i1 < box.begin[kXDimension] - kCloudMin) {
                             i1 += n;
                         }
-                        if (j1 < box.begin[YDIM] - CLOUD_MIN) {
+                        if (j1 < box.begin[kYDimension] - kCloudMin) {
                             j1 += n;
                         }
-                        if (k1 < box.begin[ZDIM] - CLOUD_MIN) {
+                        if (k1 < box.begin[kZDimension] - kCloudMin) {
                             k1 += n;
                         }
                     }
                     double dx = 0.0;
-                    for (int j = CLOUD_MIN; j <= CLOUD_MAX; j++) {
-                        double wtx = cloudWeight(-j + t[XDIM]);
-                        for (int k = CLOUD_MIN; k <= CLOUD_MAX; k++) {
-                            double wty = cloudWeight(-k + t[YDIM]);
-                            for (int l = CLOUD_MIN; l <= CLOUD_MAX; l++) {
-                                double wtz = cloudWeight(-l + t[ZDIM]);
+                    for (int j = kCloudMin; j <= kCloudMax; j++) {
+                        double wtx = cloudWeight(-j + t[kXDimension]);
+                        for (int k = kCloudMin; k <= kCloudMax; k++) {
+                            double wty = cloudWeight(-k + t[kYDimension]);
+                            for (int l = kCloudMin; l <= kCloudMax; l++) {
+                                double wtz = cloudWeight(-l + t[kZDimension]);
                                 double wt = wtx * wty * wtz;
                                 dx += yValue[box.index(i1 + j, j1 + k, k1 + l)] * wt;
                             }
@@ -902,7 +911,8 @@ static float zeldovichEnd(
                         particlesPos(dim, i) = x;
                     }
                     particlesVel(dim, i) += prefac1 * dx;
-                    double const ndim = pow(getOptions().initial.numberOfParticles, 1.0 / NDIM);
+                    double const ndim =
+                        pow(getOptions().initial.numberOfParticles, 1.0 / kDimensions);
                     dxmax = std::max(dxmax, std::abs(dx) * ndim);
                 }
                 return (float) dxmax;

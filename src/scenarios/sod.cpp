@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <numbers>
 #include <stdexcept>
 
 #include <cosmictiger/core/options.hpp>
@@ -38,7 +39,7 @@ namespace detail {
         for (int l = 0; l < kN; l++) {
             int const i = rand() % sphParticlesSize();
             int const j = sphParticlesParticleIndex(i);
-            float x = particlesPos(XDIM, j).toDouble();
+            float x = particlesPos(kXDimension, j).toDouble();
             float const rho = sphParticlesDensity(i);
             float const eint = sphParticlesInternalEnergy(i);
             float const p = (getOptions().hydro.gamma - 1.0) * rho * eint;
@@ -106,7 +107,8 @@ ScenarioPlan initializeSod() {
     constexpr float kEta = 0.0;
     double const ne = getOptions().hydro.neighborNumber;
     terminal::detailPrint("Sod dimensions are %i and %i rho0 %e rho1 %e\n", 2 * rightDim,
-        2 * leftDim, rho0 / (m * ne) * (4.0 * M_PI / 3.0), rho1 / (m * ne) * (4.0 * M_PI / 3.0));
+        2 * leftDim, rho0 / (m * ne) * (4.0 * std::numbers::pi / 3.0),
+        rho1 / (m * ne) * (4.0 * std::numbers::pi / 3.0));
     for (int ix = 0; ix < leftDim; ix++) {
         for (int iy = 0; iy < 2 * leftDim; iy++) {
             for (int iz = 0; iz < 2 * leftDim; iz++) {
@@ -115,15 +117,16 @@ ScenarioPlan initializeSod() {
                 double z = (iz) *dx;
 
                 double h = pow(
-                    m * getOptions().hydro.neighborNumber / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
+                    m * getOptions().hydro.neighborNumber / (4.0 * std::numbers::pi / 3.0 * rho1),
+                    1.0 / 3.0);
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSupportRadius(i) = h;
-                sphParticlesPosition(XDIM, i) = x + rand1() * dx * kEta;
-                sphParticlesPosition(YDIM, i) = y + rand1() * dx * kEta;
-                sphParticlesPosition(ZDIM, i) = z + rand1() * dx * kEta;
-                sphParticlesVelocity(XDIM, i) = vx0;
-                sphParticlesVelocity(YDIM, i) = vy0;
-                sphParticlesVelocity(ZDIM, i) = vz0;
+                sphParticlesPosition(kXDimension, i) = x + rand1() * dx * kEta;
+                sphParticlesPosition(kYDimension, i) = y + rand1() * dx * kEta;
+                sphParticlesPosition(kZDimension, i) = z + rand1() * dx * kEta;
+                sphParticlesVelocity(kXDimension, i) = vx0;
+                sphParticlesVelocity(kYDimension, i) = vy0;
+                sphParticlesVelocity(kZDimension, i) = vz0;
                 sphParticlesRung(i) = 0;
                 sphParticlesThermodynamicState(i).internalEnergy =
                     p1 / (getOptions().hydro.gamma - 1.0) / rho1;
@@ -133,12 +136,12 @@ ScenarioPlan initializeSod() {
                 z = (iz + 0.5) * dx;
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSupportRadius(i) = h;
-                sphParticlesPosition(XDIM, i) = x + rand1() * dx * kEta;
-                sphParticlesPosition(YDIM, i) = y + rand1() * dx * kEta;
-                sphParticlesPosition(ZDIM, i) = z + rand1() * dx * kEta;
-                sphParticlesVelocity(XDIM, i) = vx0;
-                sphParticlesVelocity(YDIM, i) = vy0;
-                sphParticlesVelocity(ZDIM, i) = vz0;
+                sphParticlesPosition(kXDimension, i) = x + rand1() * dx * kEta;
+                sphParticlesPosition(kYDimension, i) = y + rand1() * dx * kEta;
+                sphParticlesPosition(kZDimension, i) = z + rand1() * dx * kEta;
+                sphParticlesVelocity(kXDimension, i) = vx0;
+                sphParticlesVelocity(kYDimension, i) = vy0;
+                sphParticlesVelocity(kZDimension, i) = vz0;
                 sphParticlesRung(i) = 0;
                 sphParticlesThermodynamicState(i).internalEnergy =
                     p1 / (getOptions().hydro.gamma - 1.0) / rho1;
@@ -156,15 +159,16 @@ ScenarioPlan initializeSod() {
                 double z = (iz) *dx;
 
                 double h = pow(
-                    m * getOptions().hydro.neighborNumber / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
+                    m * getOptions().hydro.neighborNumber / (4.0 * std::numbers::pi / 3.0 * rho0),
+                    1.0 / 3.0);
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSupportRadius(i) = h;
-                sphParticlesPosition(XDIM, i) = x + rand1() * dx * kEta;
-                sphParticlesPosition(YDIM, i) = y + rand1() * dx * kEta;
-                sphParticlesPosition(ZDIM, i) = z + rand1() * dx * kEta;
-                sphParticlesVelocity(XDIM, i) = 0;
-                sphParticlesVelocity(YDIM, i) = 0;
-                sphParticlesVelocity(ZDIM, i) = 0;
+                sphParticlesPosition(kXDimension, i) = x + rand1() * dx * kEta;
+                sphParticlesPosition(kYDimension, i) = y + rand1() * dx * kEta;
+                sphParticlesPosition(kZDimension, i) = z + rand1() * dx * kEta;
+                sphParticlesVelocity(kXDimension, i) = 0;
+                sphParticlesVelocity(kYDimension, i) = 0;
+                sphParticlesVelocity(kZDimension, i) = 0;
 
                 sphParticlesRung(i) = 0;
                 sphParticlesThermodynamicState(i).internalEnergy =
@@ -176,12 +180,12 @@ ScenarioPlan initializeSod() {
                 z = (iz + 0.5) * dx;
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSupportRadius(i) = h;
-                sphParticlesPosition(XDIM, i) = x + rand1() * dx * kEta;
-                sphParticlesPosition(YDIM, i) = y + rand1() * dx * kEta;
-                sphParticlesPosition(ZDIM, i) = z + rand1() * dx * kEta;
-                sphParticlesVelocity(XDIM, i) = 0;
-                sphParticlesVelocity(YDIM, i) = 0;
-                sphParticlesVelocity(ZDIM, i) = 0;
+                sphParticlesPosition(kXDimension, i) = x + rand1() * dx * kEta;
+                sphParticlesPosition(kYDimension, i) = y + rand1() * dx * kEta;
+                sphParticlesPosition(kZDimension, i) = z + rand1() * dx * kEta;
+                sphParticlesVelocity(kXDimension, i) = 0;
+                sphParticlesVelocity(kYDimension, i) = 0;
+                sphParticlesVelocity(kZDimension, i) = 0;
 
                 sphParticlesRung(i) = 0;
                 sphParticlesThermodynamicState(i).internalEnergy =

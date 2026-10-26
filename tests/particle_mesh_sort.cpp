@@ -89,7 +89,7 @@ PositionInteger meshSortTestPosition(size_t identity, int dimension, int pattern
 
 uint64_t meshSortReferenceKey(ParticleInteger index, int meshSize) {
     uint64_t result = 0;
-    for (int dim = 0; dim < NDIM; ++dim) {
+    for (int dim = 0; dim < kDimensions; ++dim) {
         result =
             result * meshSize + referenceMeshCoordinate(particlesPos(dim, index).raw(), meshSize);
     }
@@ -100,7 +100,7 @@ void initializeMeshSortFixture(ParticleInteger count, int pattern) {
     particlesResize(count);
     sphParticlesResize((count + 1) / 2, false);
     for (ParticleInteger i = 0; i < count; ++i) {
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             particlesPos(dim, i).setInteger(meshSortTestPosition(i, dim, pattern));
             particlesVel(dim, i) = float(i) + 0.25f * dim;
             // Saved forces may not yet be initialized at the first force pass.
@@ -113,8 +113,8 @@ void initializeMeshSortFixture(ParticleInteger count, int pattern) {
         particlesLastgroup(i) = 100000 + i;
         particlesGrp[i].store(200000 + i, std::memory_order_relaxed);
         particlesTracer(i) = i % 2;
-        particlesType(i) = i % 2 == 0 ? SPH_TYPE : DARK_MATTER_TYPE;
-        particlesCatIndex(i) = i % 2 == 0 ? i / 2 : NO_INDEX;
+        particlesType(i) = i % 2 == 0 ? kSphType : kDarkMatterType;
+        particlesCatIndex(i) = i % 2 == 0 ? i / 2 : kNoParticleIndex;
         if (i % 2 == 0) {
             ParticleInteger const gasIndex = i / 2;
             sphParticlesParticleIndex(gasIndex) = i;
@@ -126,7 +126,7 @@ void initializeMeshSortFixture(ParticleInteger count, int pattern) {
             sphParticlesPredictedInternalEnergyRates[gasIndex] = float(i) + 1.75f;
             sphParticlesConvergenceFlags[gasIndex] = i % 7;
             sphParticlesSemiactiveFlags[gasIndex] = i % 5;
-            for (int dim = 0; dim < NDIM; ++dim) {
+            for (int dim = 0; dim < kDimensions; ++dim) {
                 sphParticlesAcceleration(dim, gasIndex) = float(i) + 2.0f + dim;
                 sphParticlesPredictedAcceleration(dim, gasIndex) = float(i) + 3.0f + dim;
                 sphParticlesGravityAcceleration(dim, gasIndex) = float(i) + 4.0f + dim;
@@ -144,7 +144,7 @@ void checkMeshSortFixture(int meshSize, int pattern) {
     requireParticleMeshSort(
         particlesSize() == count && particlesV == originalVelocities && particlesR == originalRungs,
         "Particle mesh sort resized particle storage");
-    for (int dim = 0; dim < NDIM; ++dim) {
+    for (int dim = 0; dim < kDimensions; ++dim) {
         requireParticleMeshSort(particlesX[dim] == originalPositions[dim],
             "Particle mesh sort replaced a position array");
     }
@@ -158,7 +158,7 @@ void checkMeshSortFixture(int meshSize, int pattern) {
         auto const key = meshSortReferenceKey(i, meshSize);
         requireParticleMeshSort(i == 0 || key >= previousKey, "Particle mesh keys are not sorted");
         previousKey = key;
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             requireParticleMeshSort(
                 particlesPos(dim, i).raw() == meshSortTestPosition(identity, dim, pattern) &&
                     particlesVel(dim, i) == float(identity) + 0.25f * dim &&
@@ -171,7 +171,7 @@ void checkMeshSortFixture(int meshSize, int pattern) {
                 particlesRung(i) == identity % 11 && particlesLastgroup(i) == 100000 + identity &&
                 particlesGrp[i].load(std::memory_order_relaxed) == 200000 + identity &&
                 particlesTracer(i) == identity % 2 &&
-                particlesType(i) == (identity % 2 == 0 ? SPH_TYPE : DARK_MATTER_TYPE),
+                particlesType(i) == (identity % 2 == 0 ? kSphType : kDarkMatterType),
             "Particle mesh sort detached a particle field");
         if (identity % 2 == 0) {
             ParticleInteger const gasIndex = identity / 2;
@@ -186,7 +186,7 @@ void checkMeshSortFixture(int meshSize, int pattern) {
                     sphParticlesConvergenceFlags[gasIndex] == identity % 7 &&
                     sphParticlesSemiactiveFlags[gasIndex] == identity % 5,
                 "Particle mesh sort changed gas state or broke its reverse map");
-            for (int dim = 0; dim < NDIM; ++dim) {
+            for (int dim = 0; dim < kDimensions; ++dim) {
                 requireParticleMeshSort(
                     sphParticlesAcceleration(dim, gasIndex) == float(identity) + 2.0f + dim &&
                         sphParticlesPredictedAcceleration(dim, gasIndex) ==
@@ -196,7 +196,7 @@ void checkMeshSortFixture(int meshSize, int pattern) {
                     "Particle mesh sort changed a gas acceleration");
             }
         } else {
-            requireParticleMeshSort(particlesCatIndex(i) == ParticleInteger(NO_INDEX),
+            requireParticleMeshSort(particlesCatIndex(i) == ParticleInteger(kNoParticleIndex),
                 "Particle mesh sort changed a dark matter category index");
         }
     }

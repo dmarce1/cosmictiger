@@ -58,7 +58,7 @@ void prepare(SolveRequest const& request) {
         state.diagnostics.greenBuilds = previous.greenBuilds;
         state.diagnostics.solveCount = previous.solveCount;
         if (request.applyKick) {
-            Vector<Array<float, NDIM>>().swap(state.acceleration);
+            Vector<Array<float, kDimensions>>().swap(state.acceleration);
             Vector<float>().swap(state.potential);
         } else {
             state.acceleration.resize(particlesSize());
@@ -228,7 +228,7 @@ PmmmDiagnostics pmmmDiagnostics() {
     return pmmm::detail::globalDiagnostics;
 }
 
-Array<float, NDIM> const& pmmmAcceleration(ParticleInteger index) {
+Array<float, kDimensions> const& pmmmAcceleration(ParticleInteger index) {
     return pmmm::detail::state.acceleration.at(index);
 }
 

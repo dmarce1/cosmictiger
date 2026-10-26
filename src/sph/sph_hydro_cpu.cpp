@@ -191,8 +191,8 @@ SphRunReturn sphCpuHydro(
                         sph_flops::kPressureCoefficient + sph_flops::kPairEnergyRate) +
                 int(data.sourcePressureEnergyRatio == nullptr);
         }
-        Vector3<float> dv_a_dt(
-            simdSum(dv_a_dt_pack[XDIM]), simdSum(dv_a_dt_pack[YDIM]), simdSum(dv_a_dt_pack[ZDIM]));
+        Vector3<float> dv_a_dt(simdSum(dv_a_dt_pack[kXDimension]),
+            simdSum(dv_a_dt_pack[kYDimension]), simdSum(dv_a_dt_pack[kZDimension]));
         float du_a_dt = simdSum(du_a_dt_pack);
         flops +=
             4 * (SimdFloat::size() - 1);    // Four additive reductions; maxima are comparisons.
@@ -209,8 +209,9 @@ SphRunReturn sphCpuHydro(
                 data.sinkGravityAccelerationZ[sinkIndex]) :
             Vector3<float>(0.0f);
         dv_a_dt += gravityAcceleration;
-        dv_a_dt[YDIM] += parameters.uniformAccelerationY;
-        dv_a_dt[ZDIM] += parameters.midplaneAccelerationZ(data.sourcePositionZ[particleIndex]);
+        dv_a_dt[kYDimension] += parameters.uniformAccelerationY;
+        dv_a_dt[kZDimension] +=
+            parameters.midplaneAccelerationZ(data.sourcePositionZ[particleIndex]);
         flops += 6;    // Five acceleration additions and fixed-point midpoint conversion.
         if (data.centralAcceleration != 0.0f) {
             Vector3<float> const separation(
@@ -227,7 +228,7 @@ SphRunReturn sphCpuHydro(
             flops += 24 + sph_flops::forceKernelFlops(selectedGravityKernel(), q);
         }
         dv_a_dt -= parameters.velocityDampingRate * v_a;
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             data.sinkAccelerations[sinkIndex].acceleration[dim] = dv_a_dt[dim];
         }
         // E=a^2 u and homogeneous adiabatic work du/dt=-3 H P/rho give
@@ -275,7 +276,7 @@ SphRunReturn sphCpuHydro(
                 std::max(1, int(std::ceil(std::log2(parameters.baseTimestep / gravityTimestep))));
             int const nextRung = std::max(std::max(parameters.minimumRung, previousRung - 1),
                 std::max(hydroRung, data.selfGravityEnabled ? gravityRung : 1));
-            ALWAYS_ASSERT(nextRung < MAX_RUNG);
+            ALWAYS_ASSERT(nextRung < kMaxRung);
             data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]] = nextRung;
             result.maximumHydroRung = std::max(result.maximumHydroRung, hydroRung);
             result.maximumGravityRung = std::max(result.maximumGravityRung, gravityRung);

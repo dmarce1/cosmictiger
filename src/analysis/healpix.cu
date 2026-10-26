@@ -30,6 +30,8 @@
  */
 
 /* Standard Includes */
+#include <numbers>
+
 #include <cosmictiger/core/assert.hpp>
 #include <cosmictiger/math/math.hpp>
 
@@ -89,7 +91,7 @@ __device__ void vec2pixNest(long const nside, double* vec, long* ipix) {
     int faceNum, jp, jm;
     long ifp, ifm;
     int ix, iy, ixLow, ixHi, iyLow, iyHi, ipf, ntt;
-    double const piover2 = 0.5 * M_PI, twopi = 2.0 * M_PI;
+    double const piover2 = 0.5 * std::numbers::pi, twopi = 2.0 * std::numbers::pi;
     constexpr int kNsMax = 8192;
 
     if (nside < 1 || nside > kNsMax) {

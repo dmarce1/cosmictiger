@@ -17,8 +17,6 @@
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/math/math.hpp>
 
-#define NHEAL 1024
-
 HPX_PLAIN_ACTION(EwaldConst::init, EwaldConstInitAction);
 
 #ifndef USE_CUDA
@@ -40,7 +38,7 @@ void EwaldConst::init() {
 
     int n2max = 12;
     int nmax = std::sqrt(n2max) + 1;
-    Array<float, NDIM> thisH;
+    Array<float, kDimensions> thisH;
     int count = 0;
     for (int i = -nmax; i <= nmax; i++) {
         for (int j = -nmax; j <= nmax; j++) {
@@ -50,7 +48,7 @@ void EwaldConst::init() {
                 double const y = std::max(std::abs(j) - 0.5, 0.0);
                 double const z = std::max(std::abs(k) - 0.5, 0.0);
                 double const distance = std::sqrt(sqr(x, y, z));
-                if (distance < EWALD_REAL_CUTOFF && i2 > 0) {
+                if (distance < kEwaldRealCutoff && i2 > 0) {
                     thisH[0] = i;
                     thisH[1] = j;
                     thisH[2] = k;
@@ -59,7 +57,8 @@ void EwaldConst::init() {
             }
         }
     }
-    auto const sortFunc = [](Array<float, NDIM> const& a, Array<float, NDIM> const& b) {
+    auto const sortFunc = [](Array<float, kDimensions> const& a,
+                              Array<float, kDimensions> const& b) {
         auto const a2 = sqr(a[0], a[1], a[2]);
         auto const b2 = sqr(b[0], b[1], b[2]);
         return a2 > b2;

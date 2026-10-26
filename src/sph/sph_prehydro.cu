@@ -65,22 +65,22 @@ __global__ void sphCudaPrehydro1(
             for (int sourceParticleIndex = neighborNode.particleRange.first + threadIndex;
                 sourceParticleIndex < end; sourceParticleIndex += blockSize) {
                 bool contains = false;
-                Array<Position, NDIM> position;
+                Array<Position, kDimensions> position;
                 if (sourceParticleIndex < neighborNode.particleRange.second) {
-                    position[XDIM] = data.sourcePositionX[sourceParticleIndex];
-                    position[YDIM] = data.sourcePositionY[sourceParticleIndex];
-                    position[ZDIM] = data.sourcePositionZ[sourceParticleIndex];
+                    position[kXDimension] = data.sourcePositionX[sourceParticleIndex];
+                    position[kYDimension] = data.sourcePositionY[sourceParticleIndex];
+                    position[kZDimension] = data.sourcePositionZ[sourceParticleIndex];
                     contains = targetNode.outerBox.contains(position, &flops);
                 }
                 int slot = contains;
                 int total;
-                computeIndices<PREHYDRO1_BLOCK_SIZE>(slot, total);
+                computeIndices<kPrehydro1BlockSize>(slot, total);
                 int const offset = workspace.positions.size();
                 __syncthreads();
                 workspace.positions.resize(offset + total);
                 if (contains) {
                     workspace.positions[offset + slot] = {
-                        position[XDIM], position[YDIM], position[ZDIM]};
+                        position[kXDimension], position[kYDimension], position[kZDimension]};
                 }
             }
         }
@@ -92,12 +92,12 @@ __global__ void sphCudaPrehydro1(
             bool const active = data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]] >=
                 parameters.minimumRung;
             if (active && !data.sinkSmoothingConverged[sinkIndex]) {
-                Array<Position, NDIM> position;
-                position[XDIM] = data.sourcePositionX[particleIndex];
-                position[YDIM] = data.sourcePositionY[particleIndex];
-                position[ZDIM] = data.sourcePositionZ[particleIndex];
+                Array<Position, kDimensions> position;
+                position[kXDimension] = data.sourcePositionX[particleIndex];
+                position[kYDimension] = data.sourcePositionY[particleIndex];
+                position[kZDimension] = data.sourcePositionZ[particleIndex];
                 float& supportRadius = data.sinkThermodynamicStates[sinkIndex].supportRadius;
-                bool const converged = solveSphSupportRadius<PREHYDRO1_BLOCK_SIZE>(supportRadius,
+                bool const converged = solveSphSupportRadius<kPrehydro1BlockSize>(supportRadius,
                     parameters.minimumSupportRadius, parameters.maximumSupportRadius,
                     data.targetNeighborCount, workspace.positions, position, targetNode.outerBox,
                     flops);
@@ -147,11 +147,11 @@ __global__ void sphCudaPrehydro2(
             for (int sourceParticleIndex = neighborNode.particleRange.first + threadIndex;
                 sourceParticleIndex < end; sourceParticleIndex += blockSize) {
                 bool contains = false;
-                Array<Position, NDIM> position;
+                Array<Position, kDimensions> position;
                 if (sourceParticleIndex < neighborNode.particleRange.second) {
-                    position[XDIM] = data.sourcePositionX[sourceParticleIndex];
-                    position[YDIM] = data.sourcePositionY[sourceParticleIndex];
-                    position[ZDIM] = data.sourcePositionZ[sourceParticleIndex];
+                    position[kXDimension] = data.sourcePositionX[sourceParticleIndex];
+                    position[kYDimension] = data.sourcePositionY[sourceParticleIndex];
+                    position[kZDimension] = data.sourcePositionZ[sourceParticleIndex];
                     contains = targetNode.outerBox.contains(position, &flops);
                     if (!contains) {
                         contains = sphSupportIntersects(targetNode.innerBox, position,
@@ -160,14 +160,14 @@ __global__ void sphCudaPrehydro2(
                 }
                 int slot = contains;
                 int total;
-                computeIndices<PREHYDRO2_BLOCK_SIZE>(slot, total);
+                computeIndices<kPrehydro2BlockSize>(slot, total);
                 int const offset = workspace.positions.size();
                 __syncthreads();
                 workspace.positions.resize(offset + total);
                 workspace.particles.resize(offset + total);
                 if (contains) {
                     workspace.positions[offset + slot] = {
-                        position[XDIM], position[YDIM], position[ZDIM]};
+                        position[kXDimension], position[kYDimension], position[kZDimension]};
                     workspace.particles[offset + slot] = {
                         data.sourceSupportRadius[sourceParticleIndex],
                         data.sourceRungs[sourceParticleIndex],
@@ -207,10 +207,10 @@ __global__ void sphCudaPrehydro2(
                 targetNode.sinkParticleRange.first - targetNode.particleRange.first + particleIndex;
             bool const active = data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]] >=
                 parameters.minimumRung;
-            Array<Position, NDIM> position;
-            position[XDIM] = data.sourcePositionX[particleIndex];
-            position[YDIM] = data.sourcePositionY[particleIndex];
-            position[ZDIM] = data.sourcePositionZ[particleIndex];
+            Array<Position, kDimensions> position;
+            position[kXDimension] = data.sourcePositionX[particleIndex];
+            position[kYDimension] = data.sourcePositionY[particleIndex];
+            position[kZDimension] = data.sourcePositionZ[particleIndex];
             float& supportRadius = data.sinkThermodynamicStates[sinkIndex].supportRadius;
             int semiactive = active;
             if (!active) {
@@ -219,9 +219,12 @@ __global__ void sphCudaPrehydro2(
                     auto const& neighbor = workspace.positions[neighborIndex];
                     auto const& particle = workspace.particles[neighborIndex];
                     if (particle.rung >= parameters.minimumRung) {
-                        float const separationX = distance(position[XDIM], neighbor.positionX);
-                        float const separationY = distance(position[YDIM], neighbor.positionY);
-                        float const separationZ = distance(position[ZDIM], neighbor.positionZ);
+                        float const separationX =
+                            distance(position[kXDimension], neighbor.positionX);
+                        float const separationY =
+                            distance(position[kYDimension], neighbor.positionY);
+                        float const separationZ =
+                            distance(position[kZDimension], neighbor.positionZ);
                         flops += 10;    // Three fixed distances, squared norm, two supports.
                         if (sqr(separationX, separationY, separationZ) <
                             fmaxf(sqr(supportRadius), sqr(particle.supportRadius))) {
@@ -229,7 +232,7 @@ __global__ void sphCudaPrehydro2(
                         }
                     }
                 }
-                sharedReduceAdd<int, PREHYDRO2_BLOCK_SIZE>(semiactive);
+                sharedReduceAdd<int, kPrehydro2BlockSize>(semiactive);
             }
             if (threadIndex == 0) {
                 data.sinkSemiactive[sinkIndex] = semiactive != 0;
@@ -239,7 +242,7 @@ __global__ void sphCudaPrehydro2(
             }
             bool converged = true;
             if (!active && !data.sinkSmoothingConverged[sinkIndex]) {
-                converged = solveSphSupportRadius<PREHYDRO2_BLOCK_SIZE>(supportRadius,
+                converged = solveSphSupportRadius<kPrehydro2BlockSize>(supportRadius,
                     parameters.minimumSupportRadius, parameters.maximumSupportRadius,
                     data.targetNeighborCount, workspace.positions, position, targetNode.outerBox,
                     flops);
@@ -279,9 +282,9 @@ __global__ void sphCudaPrehydro2(
             for (int neighborIndex = threadIndex; neighborIndex < workspace.positions.size();
                 neighborIndex += blockSize) {
                 auto const& neighbor = workspace.positions[neighborIndex];
-                Vector3<float> const r_ab(distance(position[XDIM], neighbor.positionX),
-                    distance(position[YDIM], neighbor.positionY),
-                    distance(position[ZDIM], neighbor.positionZ));
+                Vector3<float> const r_ab(distance(position[kXDimension], neighbor.positionX),
+                    distance(position[kYDimension], neighbor.positionY),
+                    distance(position[kZDimension], neighbor.positionZ));
                 float const radius = sqrtf(r_ab.dot(r_ab));
                 float const q_ab = radius * one_over_H_a;    // r_ab/H_a
                 ρ_a += m_b_over_H_a3 * kernelW(q_ab);
@@ -308,9 +311,9 @@ __global__ void sphCudaPrehydro2(
                         Vector3<float>(particle.velocityX, particle.velocityY, particle.velocityZ) +
                         parameters.expansionRate * r_ab;
                     ρ_a_div_v_a -= v_ab_physical.dot(m_b_gradW_ab);
-                    for (int dim = 0; dim < NDIM; ++dim) {
-                        int const next = (dim + 1) % NDIM;
-                        int const last = (dim + 2) % NDIM;
+                    for (int dim = 0; dim < kDimensions; ++dim) {
+                        int const next = (dim + 1) % kDimensions;
+                        int const last = (dim + 2) % kDimensions;
                         ρ_a_curl_v_a[dim] += v_ab_physical[next] * m_b_gradW_ab[last] -
                             v_ab_physical[last] * m_b_gradW_ab[next];
                     }
@@ -325,8 +328,8 @@ __global__ void sphCudaPrehydro2(
                                 data.sourceAccelerationZ[particleIndex]) -
                             Vector3<float>(particle.accelerationX, particle.accelerationY,
                                 particle.accelerationZ);
-                        for (int i = 0; i < NDIM; ++i) {
-                            for (int j = 0; j < NDIM; ++j) {
+                        for (int i = 0; i < kDimensions; ++i) {
+                            for (int j = 0; j < kDimensions; ++j) {
                                 gradientSums.moment[i][j] += w_ab * r_ab[i] * r_ab[j];
                                 gradientSums.velocity[i][j] += w_ab * v_ab_physical[i] * r_ab[j];
                                 gradientSums.acceleration[i][j] += w_ab * a_ab[i] * r_ab[j];
@@ -343,27 +346,27 @@ __global__ void sphCudaPrehydro2(
                     flops += 33 + sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab, true);
                 }
             }
-            sharedReduceAdd<float, PREHYDRO2_BLOCK_SIZE>(ρ_a);
-            flops += detail::sphReductionFlops<PREHYDRO2_BLOCK_SIZE>();
+            sharedReduceAdd<float, kPrehydro2BlockSize>(ρ_a);
+            flops += detail::sphReductionFlops<kPrehydro2BlockSize>();
             if (parameters.balsaraSwitch || parameters.variableViscosity) {
-                sharedReduceAdd<float, PREHYDRO2_BLOCK_SIZE>(ρ_a_div_v_a);
-                for (int dim = 0; dim < NDIM; ++dim) {
-                    sharedReduceAdd<float, PREHYDRO2_BLOCK_SIZE>(ρ_a_curl_v_a[dim]);
+                sharedReduceAdd<float, kPrehydro2BlockSize>(ρ_a_div_v_a);
+                for (int dim = 0; dim < kDimensions; ++dim) {
+                    sharedReduceAdd<float, kPrehydro2BlockSize>(ρ_a_curl_v_a[dim]);
                 }
-                flops += 4 * detail::sphReductionFlops<PREHYDRO2_BLOCK_SIZE>();
+                flops += 4 * detail::sphReductionFlops<kPrehydro2BlockSize>();
             }
             if (parameters.cullenDehnen) {
-                sharedReduceAdd<float, PREHYDRO2_BLOCK_SIZE>(ρ_a_R_a);
-                sharedReduceMax<PREHYDRO2_BLOCK_SIZE>(v_sig_a);
-                for (int i = 0; i < NDIM; ++i) {
-                    for (int j = 0; j < NDIM; ++j) {
-                        sharedReduceAdd<float, PREHYDRO2_BLOCK_SIZE>(gradientSums.moment[i][j]);
-                        sharedReduceAdd<float, PREHYDRO2_BLOCK_SIZE>(gradientSums.velocity[i][j]);
-                        sharedReduceAdd<float, PREHYDRO2_BLOCK_SIZE>(
+                sharedReduceAdd<float, kPrehydro2BlockSize>(ρ_a_R_a);
+                sharedReduceMax<kPrehydro2BlockSize>(v_sig_a);
+                for (int i = 0; i < kDimensions; ++i) {
+                    for (int j = 0; j < kDimensions; ++j) {
+                        sharedReduceAdd<float, kPrehydro2BlockSize>(gradientSums.moment[i][j]);
+                        sharedReduceAdd<float, kPrehydro2BlockSize>(gradientSums.velocity[i][j]);
+                        sharedReduceAdd<float, kPrehydro2BlockSize>(
                             gradientSums.acceleration[i][j]);
                     }
                 }
-                flops += 28 * detail::sphReductionFlops<PREHYDRO2_BLOCK_SIZE>();
+                flops += 28 * detail::sphReductionFlops<kPrehydro2BlockSize>();
             }
             // NOLINTEND(readability-identifier-naming)
             if (threadIndex == 0) {

@@ -362,16 +362,16 @@ template <int degree>
 void typedTraceCases() {
     using namespace cosmictiger::gravity::spherical;
     constexpr int kOrder = degree + 1;
-    Array<double, NDIM> particleOffset{};
+    Array<double, kDimensions> particleOffset{};
     particleOffset[0] = .2;
     particleOffset[1] = -.1;
     particleOffset[2] = .4;
-    Array<double, NDIM> displacement{};
+    Array<double, kDimensions> displacement{};
     displacement[0] = .3;
     displacement[1] = .5;
     displacement[2] = -.2;
-    Array<double, NDIM> translatedOffset{};
-    for (int dim = 0; dim < NDIM; ++dim) {
+    Array<double, kDimensions> translatedOffset{};
+    for (int dim = 0; dim < kDimensions; ++dim) {
         translatedOffset[dim] = particleOffset[dim] + displacement[dim];
     }
     Multipole<double, kOrder> source{};

@@ -9,6 +9,8 @@
 #ifndef SPH_CUDA_HPP_
 #define SPH_CUDA_HPP_
 
+#include <numbers>
+
 #include <cosmictiger/core/defs.hpp>
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/timer.hpp>
@@ -28,10 +30,10 @@
 
 using SphRunCudaData = SphRunData;
 
-#define PREHYDRO1_BLOCK_SIZE 160
-#define PREHYDRO2_BLOCK_SIZE 64
-#define HYDRO_BLOCK_SIZE 96
-#define RUNGS_BLOCK_SIZE 256
+inline constexpr int kPrehydro1BlockSize = 160;
+inline constexpr int kPrehydro2BlockSize = 64;
+inline constexpr int kHydroBlockSize = 96;
+inline constexpr int kRungsBlockSize = 256;
 
 struct SphReduction {
     int nextNodeIndex;
@@ -78,7 +80,7 @@ namespace detail {
 // therefore have lane-dependent costs; integer reductions do not contribute.
 template <int blockSize>
 __device__ inline FlopCount sphReductionFlops() {
-    int powerOfTwo = WARP_SIZE;
+    int powerOfTwo = kWarpSize;
     while (powerOfTwo < blockSize) {
         powerOfTwo *= 2;
     }
@@ -95,7 +97,7 @@ __device__ inline void recordSphGpuFlops(FlopCount count, SphReduction* reductio
         // Every SPH block is a multiple of a full warp. Keep the per-launch
         // diagnostic exact independently of the global reporting interval.
         sharedReduceAdd(count);
-        if (threadIdx.x % WARP_SIZE == 0) {
+        if (threadIdx.x % kWarpSize == 0) {
             atomicAdd(&reduction->floatingPointOperations, count);
         }
     }
@@ -113,8 +115,9 @@ __device__ inline void recordSphGpuFlops(FlopCount count, SphReduction* reductio
 template <int blockSize>
 inline __device__ bool solveSphSupportRadius(float& supportRadius, float minimumSupportRadius,
     float maximumSupportRadius, float targetNeighborCount,
-    DeviceVector<SphNeighborPosition> const& neighbors, Array<Position, NDIM> const& position,
-    Fixed32Range const& neighborSearchBox, FlopCounter<>& flops) {
+    DeviceVector<SphNeighborPosition> const& neighbors,
+    Array<Position, kDimensions> const& position, Fixed32Range const& neighborSearchBox,
+    FlopCounter<>& flops) {
     int const threadIndex = threadIdx.x;
     int const runtimeBlockSize = blockDim.x;
     ALWAYS_ASSERT(minimumSupportRadius > 0.0f && maximumSupportRadius >= minimumSupportRadius &&
@@ -125,11 +128,11 @@ inline __device__ bool solveSphSupportRadius(float& supportRadius, float minimum
     __syncthreads();
     float lower = minimumSupportRadius;
     float upper = maximumSupportRadius;
-    float const ΣW_target = targetNeighborCount * float(3.0 / (4.0 * M_PI));
+    float const ΣW_target = targetNeighborCount * (3.0f / (4.0f * std::numbers::pi_v<float>) );
     flops += 1;
     for (int iteration = 0; iteration < 128; iteration++) {
         int boxExceeded = false;
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             bool const upperExceeded = neighborSearchBox.end[dim] <
                 RangeFixed(position[dim]) + RangeFixed(supportRadius) + RangeFixed::min();
             flops += 1;    // Floating support-to-fixed scaling, preserving short circuiting.
@@ -153,9 +156,9 @@ inline __device__ bool solveSphSupportRadius(float& supportRadius, float minimum
         for (int neighborIndex = threadIndex; neighborIndex < neighbors.size();
             neighborIndex += runtimeBlockSize) {
             auto const& neighbor = neighbors[neighborIndex];
-            Vector3<float> const r_ab(distance(position[XDIM], neighbor.positionX),
-                distance(position[YDIM], neighbor.positionY),
-                distance(position[ZDIM], neighbor.positionZ));
+            Vector3<float> const r_ab(distance(position[kXDimension], neighbor.positionX),
+                distance(position[kYDimension], neighbor.positionY),
+                distance(position[kZDimension], neighbor.positionZ));
             float const q_ab = sqrtf(r_ab.dot(r_ab)) * one_over_H_a;
             flops += 10;    // Three fixed distances, dot, root, normalized radius.
             if (q_ab < 1.0f) {
@@ -170,7 +173,7 @@ inline __device__ bool solveSphSupportRadius(float& supportRadius, float minimum
         flops += 2 * detail::sphReductionFlops<blockSize>();
         float const residual = ΣW - ΣW_target;
         flops += 2;    // Residual and relative tolerance product (absolute value is free).
-        if (fabsf(residual) <= SPH_SUPPORT_RADIUS_TOLERANCE * ΣW_target ||
+        if (fabsf(residual) <= kSphSupportRadiusTolerance * ΣW_target ||
             (supportRadius <= minimumSupportRadius && residual >= 0.0f) ||
             (supportRadius >= maximumSupportRadius && residual <= 0.0f)) {
             return true;

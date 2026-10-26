@@ -37,14 +37,14 @@ struct SphCacheLineHash {
 struct SphCacheLineHashLo {
     inline size_t operator()(SphCacheLineId id) const {
         SphCacheLineHash hash;
-        return hash(id) % PART_CACHE_SIZE;
+        return hash(id) % kParticleCacheSize;
     }
 };
 
 struct SphCacheLineHashHi {
     inline size_t operator()(SphCacheLineId id) const {
         SphCacheLineHash hash;
-        return hash(id) / PART_CACHE_SIZE;
+        return hash(id) / kParticleCacheSize;
     }
 };
 
@@ -52,8 +52,8 @@ template <typename Action, typename T>
 T const* readSphCacheLine(SphCacheLineId lineId,
     Array<std::unordered_map<SphCacheLineId, std::shared_ptr<hpx::shared_future<Vector<T>>>,
               SphCacheLineHashHi>,
-        PART_CACHE_SIZE>& cache,
-    Array<SpinlockType, PART_CACHE_SIZE>& locks) {
+        kParticleCacheSize>& cache,
+    Array<SpinlockType, kParticleCacheSize>& locks) {
     size_t const bin = SphCacheLineHashLo()(lineId);
     std::shared_ptr<hpx::shared_future<Vector<T>>> future;
     {

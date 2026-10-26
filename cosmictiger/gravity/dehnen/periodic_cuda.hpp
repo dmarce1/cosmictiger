@@ -17,13 +17,13 @@ __device__ FlopCount cudaGravityCcEwald(CudaKickData const& data,
         for (int i = 0; i < FmmOrder<order>::kLocalCoefficients_; i++) {
             l[i] = 0.0f;
         }
-        for (int i = tid; i < multlist.size(); i += WARP_SIZE) {
+        for (int i = tid; i < multlist.size(); i += kWarpSize) {
             TreeNode const& other = treeNodes[multlist[i]];
             cosmictiger::gravity::cartesian::Multipole<float, order> const m =
                 fmmMultiPos<order>(other.mpos).multi;
-            Array<float, NDIM> dx;
-            Array<float, NDIM> unwrappedPosition;
-            for (int dim = 0; dim < NDIM; dim++) {
+            Array<float, kDimensions> dx;
+            Array<float, kDimensions> unwrappedPosition;
+            for (int dim = 0; dim < kDimensions; dim++) {
                 dx[dim] = distance(self.mpos->pos[dim], other.mpos->pos[dim]);
                 unwrappedPosition[dim] =
                     unwrappedDistance(self.mpos->pos[dim], other.mpos->pos[dim]);
@@ -33,7 +33,7 @@ __device__ FlopCount cudaGravityCcEwald(CudaKickData const& data,
             flops += cosmictiger::gravity::cartesian::M2L(l, m, d, doPhi);
         }
         sharedReduceAddArray(l);
-        for (int i = tid; i < FmmOrder<order>::kLocalCoefficients_; i += WARP_SIZE) {
+        for (int i = tid; i < FmmOrder<order>::kLocalCoefficients_; i += kWarpSize) {
             lacc[i] += l[i];
         }
         // Five butterfly additions per coefficient in every lane, followed
@@ -55,7 +55,7 @@ __device__ __forceinline__ FlopCount cudaApplyPeriodicPolicy(CudaKickData const&
     DeviceVector<int>& leaflist, DeviceVector<int>& bothlist) {
     int const tid = threadIdx.x;
     auto const& treeNodes = data.treeNodes;
-    Array<float, NDIM> dx;
+    Array<float, kDimensions> dx;
     FlopCounter<FlopCount> flops = 0;
     nextlist.resize(0);
     cclist.resize(0);
@@ -73,18 +73,18 @@ __device__ __forceinline__ FlopCount cudaApplyPeriodicPolicy(CudaKickData const&
     float const thetainv = fmmInverseOpeningAngle(globalParams.theta);
     flops += 1;
     do {
-        int const maxi = roundUp(checks.size(), WARP_SIZE);
-        for (int i = tid; i < maxi; i += WARP_SIZE) {
+        int const maxi = roundUp(checks.size(), kWarpSize);
+        for (int i = tid; i < maxi; i += kWarpSize) {
             for (int n = 0; n < kNlists; n++) {
                 sw[n] = false;
             }
             if (i < checks.size()) {
                 TreeNode const& other = treeNodes[checks[i]];
                 if (other.numberOfParticles()) {
-                    for (int dim = 0; dim < NDIM; dim++) {
+                    for (int dim = 0; dim < kDimensions; dim++) {
                         dx[dim] = distance(self.pos[dim], other.pos[dim]);    // 3
                     }
-                    float r2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
+                    float r2 = sqr(dx[kXDimension], dx[kYDimension], dx[kZDimension]);
                     r2 = fmaxf(r2, sqr(fmaxf(0.5f - (self.radius + other.radius), 0.f)));
                     float const dcc = (self.radius + other.radius) * thetainv;
                     sw[kCc] = r2 > sqr(dcc);
@@ -113,12 +113,12 @@ __device__ __forceinline__ FlopCount cudaApplyPeriodicPolicy(CudaKickData const&
             }
         }
         __syncwarp();
-        checks.resize(NCHILD * nextlist.size());
-        for (int i = tid; i < nextlist.size(); i += WARP_SIZE) {
+        checks.resize(kChildCount * nextlist.size());
+        for (int i = tid; i < nextlist.size(); i += kWarpSize) {
             auto const& node = treeNodes[nextlist[i]];
             auto const& children = node.children;
-            checks[NCHILD * i + LEFT] = children[LEFT].index;
-            checks[NCHILD * i + RIGHT] = children[RIGHT].index;
+            checks[kChildCount * i + kLeftChild] = children[kLeftChild].index;
+            checks[kChildCount * i + kRightChild] = children[kRightChild].index;
         }
         nextlist.resize(0);
         __syncwarp();
@@ -127,14 +127,14 @@ __device__ __forceinline__ FlopCount cudaApplyPeriodicPolicy(CudaKickData const&
     if (!self.leaf) {
         int const start = checks.size();
         int const bothStart = start + leaflist.size();
-        checks.resize(bothStart + NCHILD * bothlist.size());
-        for (int i = tid; i < leaflist.size(); i += WARP_SIZE) {
+        checks.resize(bothStart + kChildCount * bothlist.size());
+        for (int i = tid; i < leaflist.size(); i += kWarpSize) {
             checks[start + i] = leaflist[i];
         }
-        for (int i = tid; i < bothlist.size(); i += WARP_SIZE) {
+        for (int i = tid; i < bothlist.size(); i += kWarpSize) {
             auto const& children = treeNodes[bothlist[i]].children;
-            checks[bothStart + NCHILD * i + LEFT] = children[LEFT].index;
-            checks[bothStart + NCHILD * i + RIGHT] = children[RIGHT].index;
+            checks[bothStart + kChildCount * i + kLeftChild] = children[kLeftChild].index;
+            checks[bothStart + kChildCount * i + kRightChild] = children[kRightChild].index;
         }
         __syncwarp();
     }

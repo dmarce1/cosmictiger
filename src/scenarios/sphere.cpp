@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 #include <vector>
 
 #include <hpx/future.hpp>
@@ -110,7 +111,7 @@ static void relaxSphereSurfaceShell(SphereSurfaceShell shell) {
         }
         return;
     }
-    shell.h = kSphereSurfaceSoftening * std::sqrt(4.f * float(M_PI) / n);
+    shell.h = kSphereSurfaceSoftening * std::sqrt(4.f * std::numbers::pi_v<float> / n);
     shell.mass = 1.0f / n;
     std::vector<float> vx(n, 0.f);
     std::vector<float> vy(n, 0.f);
@@ -169,12 +170,13 @@ static void relaxSphereSurfaceShell(SphereSurfaceShell shell) {
 
 }    // namespace detail
 
-void solveSphereSurfaceProblemCpu(Vector<Array<Vector<float>, NDIM>>& x) {
+void solveSphereSurfaceProblemCpu(Vector<Array<Vector<float>, kDimensions>>& x) {
     std::vector<hpx::future<void>> futs;
     futs.reserve(x.size());
     for (auto& shell : x) {
-        detail::SphereSurfaceShell const points{shell[XDIM].data(), shell[YDIM].data(),
-            shell[ZDIM].data(), static_cast<int>(shell[XDIM].size()), 0.f, 0.f};
+        detail::SphereSurfaceShell const points{shell[kXDimension].data(),
+            shell[kYDimension].data(), shell[kZDimension].data(),
+            static_cast<int>(shell[kXDimension].size()), 0.f, 0.f};
         futs.push_back(hpx::async(detail::relaxSphereSurfaceShell, points));
     }
     hpx::wait_all(futs);
@@ -183,7 +185,7 @@ void solveSphereSurfaceProblemCpu(Vector<Array<Vector<float>, NDIM>>& x) {
     }
 }
 
-void solveSphereSurfaceProblem(Vector<Array<Vector<float>, NDIM>>& x) {
+void solveSphereSurfaceProblem(Vector<Array<Vector<float>, kDimensions>>& x) {
 #ifdef USE_CUDA
     if (cudaEnabled()) {
         solveSphereSurfaceProblemCuda(x);

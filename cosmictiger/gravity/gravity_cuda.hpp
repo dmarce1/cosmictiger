@@ -45,9 +45,9 @@ __device__ int cudaStageParticleSources(CudaKickData const& data, CudaKickContro
     while (particleIndex < capacity && i < partsz) {
         auto const store = treeNodes[partlist[i]].sourceStore;
         bool const ghost = store == FmmParticleStore::Ghost;
-        auto const* sourceX = ghost ? data.ghostSources.positions[XDIM] : data.x;
-        auto const* sourceY = ghost ? data.ghostSources.positions[YDIM] : data.y;
-        auto const* sourceZ = ghost ? data.ghostSources.positions[ZDIM] : data.z;
+        auto const* sourceX = ghost ? data.ghostSources.positions[kXDimension] : data.x;
+        auto const* sourceY = ghost ? data.ghostSources.positions[kYDimension] : data.y;
+        auto const* sourceZ = ghost ? data.ghostSources.positions[kZDimension] : data.z;
         auto const* sourceTypes = ghost ? data.ghostSources.types : data.type;
         while (i + 1 < partsz) {
             auto const& otherNode = treeNodes[partlist[i + 1]];
@@ -71,9 +71,9 @@ __device__ int cudaStageParticleSources(CudaKickData const& data, CudaKickContro
         cuda::memcpy_async(group, control.sourceZ + particleIndex, sourceZ + imin,
             sizeof(Position) * sz, control.barrier);
         if constexpr (!equalMass) {
-            for (int j = tid; j < sz; j += WARP_SIZE) {
+            for (int j = tid; j < sz; j += kWarpSize) {
                 control.sourceMass[particleIndex + j] =
-                    sourceTypes[imin + j] == DARK_MATTER_TYPE ? data.darkMatterMass : data.sphMass;
+                    sourceTypes[imin + j] == kDarkMatterType ? data.darkMatterMass : data.sphMass;
             }
         }
         __syncwarp();
@@ -169,12 +169,12 @@ __device__ inline FmmMultiPos<order> const& cudaStagedMultipole(char const* reco
 
 // One sink's accumulated PC field applied to its force planes. Called with the
 // arena planes or the global backing, so each call site keeps its address space.
-__device__ inline void cudaApplyPcField(
-    CudaKickForceTile const& force, int k, cosmictiger::gravity::Field<float> const& l) {
-    force.gx[k] += SCALE_FACTOR2 * l.accelerationX();
-    force.gy[k] += SCALE_FACTOR2 * l.accelerationY();
-    force.gz[k] += SCALE_FACTOR2 * l.accelerationZ();
-    force.phi[k] += SCALE_FACTOR1 * l.potential();
+__device__ inline void cudaApplyPcField(CudaKickForceTile const& force, int k,
+    cosmictiger::gravity::Field<float> const& l) {
+    force.gx[k] += kScaleFactor2 * l.accelerationX();
+    force.gy[k] += kScaleFactor2 * l.accelerationY();
+    force.gz[k] += kScaleFactor2 * l.accelerationZ();
+    force.phi[k] += kScaleFactor1 * l.potential();
 }
 
 // One sink's accumulated PP force applied to its force planes, the potential
@@ -281,9 +281,9 @@ __device__ inline void cudaPpSinkGroup(CudaStagedSources const& sources, int cou
 #pragma unroll
             for (int s = 0; s < nSinks; s++) {
                 int const p = u * nSinks + s;
-                dx0[p] = fmmPositionDifference(sinkX[s], sourceX, XDIM, geometry);    // 1
-                dx1[p] = fmmPositionDifference(sinkY[s], sourceY, YDIM, geometry);    // 1
-                dx2[p] = fmmPositionDifference(sinkZ[s], sourceZ, ZDIM, geometry);    // 1
+                dx0[p] = fmmPositionDifference(sinkX[s], sourceX, kXDimension, geometry);    // 1
+                dx1[p] = fmmPositionDifference(sinkY[s], sourceY, kYDimension, geometry);    // 1
+                dx2[p] = fmmPositionDifference(sinkZ[s], sourceZ, kZDimension, geometry);    // 1
                 r2[p] = sqr(dx0[p], dx1[p], dx2[p]);                                  // 5
             }
         }
@@ -320,9 +320,9 @@ __device__ inline void cudaPpSinkGroup(CudaStagedSources const& sources, int cou
         float r1inv[nSinks];
 #pragma unroll
         for (int s = 0; s < nSinks; s++) {
-            dx0[s] = fmmPositionDifference(sinkX[s], sourceX, XDIM, geometry);
-            dx1[s] = fmmPositionDifference(sinkY[s], sourceY, YDIM, geometry);
-            dx2[s] = fmmPositionDifference(sinkZ[s], sourceZ, ZDIM, geometry);
+            dx0[s] = fmmPositionDifference(sinkX[s], sourceX, kXDimension, geometry);
+            dx1[s] = fmmPositionDifference(sinkY[s], sourceY, kYDimension, geometry);
+            dx2[s] = fmmPositionDifference(sinkZ[s], sourceZ, kZDimension, geometry);
             r2[s] = sqr(dx0[s], dx1[s], dx2[s]);
         }
         cudaPpInversePowers<nSinks>(r2, h2, hinv, h2inv, h3inv, doPhi, r3inv, r1inv, close, flops);
@@ -354,12 +354,12 @@ __device__ FlopCount cudaGravityCcDirect(CudaKickData const& data,
         for (int i = 0; i < FmmOrder<order>::kLocalCoefficients_; i++) {
             l[i] = 0.0f;
         }
-        for (int i = tid; i < multlist.size(); i += WARP_SIZE) {
+        for (int i = tid; i < multlist.size(); i += kWarpSize) {
             TreeNode const& other = treeNodes[multlist[i]];
             cosmictiger::gravity::cartesian::Multipole<float, order> const& m =
                 fmmMultiPos<order>(other.mpos).multi;
-            Array<float, NDIM> dx;
-            for (int dim = 0; dim < NDIM; dim++) {
+            Array<float, kDimensions> dx;
+            for (int dim = 0; dim < kDimensions; dim++) {
                 dx[dim] =
                     fmmPositionDifference(self.mpos->pos[dim], other.mpos->pos[dim], dim, geometry);
             }
@@ -367,7 +367,7 @@ __device__ FlopCount cudaGravityCcDirect(CudaKickData const& data,
                 3 + cosmictiger::gravity::cartesian::M2L(l, m, fmmScaleDisplacement(dx), doPhi);
         }
         sharedReduceAddArray(l);
-        for (int i = tid; i < FmmOrder<order>::kLocalCoefficients_; i += WARP_SIZE) {
+        for (int i = tid; i < FmmOrder<order>::kLocalCoefficients_; i += kWarpSize) {
             lacc[i] += l[i];
         }
         // Five butterfly additions per coefficient in every lane, followed
@@ -403,14 +403,14 @@ __device__ FlopCount cudaGravityCpDirect(CudaKickData const& data, CudaKickContr
         while (i < partsz) {
             int const count = detail::cudaStageParticleSources<order, equalMass>(
                 data, control, partlist, i, particleRange);
-            for (int j = tid; j < count; j += WARP_SIZE) {
-                Array<float, NDIM> dx;
-                dx[XDIM] =
-                    fmmPositionDifference(self.mpos->pos[XDIM], sources.x[j], XDIM, geometry);
-                dx[YDIM] =
-                    fmmPositionDifference(self.mpos->pos[YDIM], sources.y[j], YDIM, geometry);
-                dx[ZDIM] =
-                    fmmPositionDifference(self.mpos->pos[ZDIM], sources.z[j], ZDIM, geometry);
+            for (int j = tid; j < count; j += kWarpSize) {
+                Array<float, kDimensions> dx;
+                dx[kXDimension] = fmmPositionDifference(
+                    self.mpos->pos[kXDimension], sources.x[j], kXDimension, geometry);
+                dx[kYDimension] = fmmPositionDifference(
+                    self.mpos->pos[kYDimension], sources.y[j], kYDimension, geometry);
+                dx[kZDimension] = fmmPositionDifference(
+                    self.mpos->pos[kZDimension], sources.z[j], kZDimension, geometry);
                 cosmictiger::gravity::cartesian::Expansion<float, order> d{};
                 flops += (equalMass ? 1 : 2) * FmmOrder<order>::kLocalCoefficients_ + 3 +
                     cosmictiger::gravity::cartesian::P2L(d, 1.0f, fmmScaleDisplacement(dx));
@@ -429,7 +429,7 @@ __device__ FlopCount cudaGravityCpDirect(CudaKickData const& data, CudaKickContr
             __syncwarp();
         }
         sharedReduceAddArray(l);
-        for (int i = tid; i < FmmOrder<order>::kLocalCoefficients_; i += WARP_SIZE) {
+        for (int i = tid; i < FmmOrder<order>::kLocalCoefficients_; i += kWarpSize) {
             lacc[i] += l[i];
         }
         // Five butterfly additions per coefficient in every lane, followed
@@ -486,18 +486,20 @@ __device__ FlopCount cudaGravityPcDirect(CudaKickData const& data, CudaKickContr
             mi += mend;
             barrier.arrive_and_wait();
             // Accumulate every staged multipole in registers; write each sink once.
-            for (int k = tid; k < sinkCount; k += WARP_SIZE) {
+            for (int k = tid; k < sinkCount; k += kWarpSize) {
                 cosmictiger::gravity::Field<float> l{};
-                Array<float, NDIM> dx;
+                Array<float, kDimensions> dx;
                 for (int j = 0; j < mend; j++) {
                     FmmMultiPos<order> const& mp =
                         detail::cudaStagedMultipole<order>(multipoles + j * kStride);
-                    dx[XDIM] = fmmPositionDifference(sinkX[k], mp.pos[XDIM], XDIM, geometry);
-                    dx[YDIM] = fmmPositionDifference(sinkY[k], mp.pos[YDIM], YDIM, geometry);
-                    dx[ZDIM] = fmmPositionDifference(sinkZ[k], mp.pos[ZDIM], ZDIM, geometry);
-                    flops += 3 +
-                        cosmictiger::gravity::cartesian::M2P(
-                            l, mp.multi, fmmScaleDisplacement(dx), doPhi);
+                    dx[kXDimension] =
+                        fmmPositionDifference(sinkX[k], mp.pos[kXDimension], kXDimension, geometry);
+                    dx[kYDimension] =
+                        fmmPositionDifference(sinkY[k], mp.pos[kYDimension], kYDimension, geometry);
+                    dx[kZDimension] =
+                        fmmPositionDifference(sinkZ[k], mp.pos[kZDimension], kZDimension, geometry);
+                    flops += 3 + cosmictiger::gravity::cartesian::M2P(
+                        l, mp.multi, fmmScaleDisplacement(dx), doPhi);
                 }
                 if (sharedForces) {
                     detail::cudaApplyPcField(arenaForce, k, l);
@@ -546,8 +548,8 @@ __device__ FlopCount cudaGravityPpDirect(CudaKickData const& data, CudaKickContr
         while (i < partsz) {
             int const particleIndex = detail::cudaStageParticleSources<order, equalMass>(
                 data, control, partlist, i, particleRange);
-            int kmid = (sinkCount / WARP_SIZE) * WARP_SIZE;
-            if (sinkCount - kmid >= WARP_SIZE / 2) {
+            int kmid = (sinkCount / kWarpSize) * kWarpSize;
+            if (sinkCount - kmid >= kWarpSize / 2) {
                 kmid = sinkCount;
             }
             // Lanes own sinks k = tid, tid + WARP_SIZE, ...: two per lane while
@@ -555,10 +557,10 @@ __device__ FlopCount cudaGravityPpDirect(CudaKickData const& data, CudaKickContr
             // matches the one-sink pass), then one per lane for the rest.
             constexpr int kPair = 2;
             int k = tid;
-            for (; k - tid + kPair * WARP_SIZE <= kmid; k += kPair * WARP_SIZE) {
-                Position const sx[kPair] = {sinkX[k], sinkX[k + WARP_SIZE]};
-                Position const sy[kPair] = {sinkY[k], sinkY[k + WARP_SIZE]};
-                Position const sz[kPair] = {sinkZ[k], sinkZ[k + WARP_SIZE]};
+            for (; k - tid + kPair * kWarpSize <= kmid; k += kPair * kWarpSize) {
+                Position const sx[kPair] = {sinkX[k], sinkX[k + kWarpSize]};
+                Position const sy[kPair] = {sinkY[k], sinkY[k + kWarpSize]};
+                Position const sz[kPair] = {sinkZ[k], sinkZ[k + kWarpSize]};
                 float fx[kPair] = {0.f, 0.f};
                 float fy[kPair] = {0.f, 0.f};
                 float fz[kPair] = {0.f, 0.f};
@@ -567,7 +569,7 @@ __device__ FlopCount cudaGravityPpDirect(CudaKickData const& data, CudaKickContr
                     hinv, h2inv, h3inv, doPhi, fx, fy, fz, pot, close, flops, geometry);
 #pragma unroll
                 for (int s = 0; s < kPair; s++) {
-                    int const sink = k + s * WARP_SIZE;
+                    int const sink = k + s * kWarpSize;
                     if (sharedForces) {
                         detail::cudaApplyPpForce(
                             arenaForce, sink, fx[s], fy[s], fz[s], pot[s], doPhi);
@@ -579,7 +581,7 @@ __device__ FlopCount cudaGravityPpDirect(CudaKickData const& data, CudaKickContr
                 pairs += FlopCount(kPair) * particleIndex;
                 flops += kPair * forceAddFlops;
             }
-            for (; k < kmid; k += WARP_SIZE) {
+            for (; k < kmid; k += kWarpSize) {
                 Position const sx[1] = {sinkX[k]};
                 Position const sy[1] = {sinkY[k]};
                 Position const sz[1] = {sinkZ[k]};
@@ -607,13 +609,13 @@ __device__ FlopCount cudaGravityPpDirect(CudaKickData const& data, CudaKickContr
                 Position const sx = sinkX[sink];
                 Position const sy = sinkY[sink];
                 Position const sz = sinkZ[sink];
-                for (int j = tid; j < particleIndex; j += WARP_SIZE) {
+                for (int j = tid; j < particleIndex; j += kWarpSize) {
                     float const dx0 =
-                        fmmPositionDifference(sx, sources.x[j], XDIM, geometry);    // 1
+                        fmmPositionDifference(sx, sources.x[j], kXDimension, geometry);    // 1
                     float const dx1 =
-                        fmmPositionDifference(sy, sources.y[j], YDIM, geometry);    // 1
+                        fmmPositionDifference(sy, sources.y[j], kYDimension, geometry);    // 1
                     float const dx2 =
-                        fmmPositionDifference(sz, sources.z[j], ZDIM, geometry);    // 1
+                        fmmPositionDifference(sz, sources.z[j], kZDimension, geometry);    // 1
                     float const r2[1] = {sqr(dx0, dx1, dx2)};                       // 5
                     float r3inv[1];
                     float r1inv[1];

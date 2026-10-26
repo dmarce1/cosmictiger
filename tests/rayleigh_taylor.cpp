@@ -26,8 +26,8 @@
 
 // Ordinary host storage lets this test call the production initializer without
 // starting HPX, allocating managed memory, or running the evolution driver.
-Array<Position*, NDIM> particlesX;
-Array<float, NDIM>* particlesV;
+Array<Position*, kDimensions> particlesX;
+Array<float, kDimensions>* particlesV;
 char* particlesR;
 ParticleInteger* sphParticlesParticleIndices;
 SphThermodynamicState* sphParticlesThermodynamicStates;
@@ -36,8 +36,8 @@ namespace detail {
 
 constexpr double kPi = 3.141592653589793238462643383279502884;
 Options options;
-std::array<std::vector<Position>, NDIM> positions;
-std::vector<Array<float, NDIM>> velocities;
+std::array<std::vector<Position>, kDimensions> positions;
+std::vector<Array<float, kDimensions>> velocities;
 std::vector<char> rungs;
 std::vector<ParticleInteger> indices;
 std::vector<SphThermodynamicState> thermodynamicStates;
@@ -82,7 +82,7 @@ ParticleInteger particlesSize() {
 
 void sphParticlesResize(ParticleInteger count, bool) {
     ParticleInteger const oldCount = sphParticlesSize();
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         detail::positions[dim].resize(count);
         particlesX[dim] = detail::positions[dim].data();
     }
@@ -118,11 +118,11 @@ void testInitialization(int resolution, ParticleInteger expectedCount, double ac
     double const mass = getOptions().initial.gasMass;
     ParticleInteger lightCount = 0;
     ParticleInteger heavyCount = 0;
-    std::set<std::array<PositionInteger, NDIM>> occupied;
+    std::set<std::array<PositionInteger, kDimensions>> occupied;
     std::map<double, double> pressureByHeight;
     for (ParticleInteger i = 0; i < sphParticlesSize(); i++) {
-        double const x = sphParticlesPosition(XDIM, i).toDouble();
-        double const z = sphParticlesPosition(ZDIM, i).toDouble();
+        double const x = sphParticlesPosition(kXDimension, i).toDouble();
+        double const z = sphParticlesPosition(kZDimension, i).toDouble();
         require(z > 0.0 && z < 1.0 && z != 0.25 && z != 0.5 && z != 0.75,
             "particles lie inside material layers away from symmetry planes");
         bool const heavy = z < 0.25 || z > 0.75;
@@ -132,8 +132,8 @@ void testInitialization(int resolution, ParticleInteger expectedCount, double ac
         } else {
             lightCount++;
         }
-        std::array<PositionInteger, NDIM> key{};
-        for (int dim = 0; dim < NDIM; dim++) {
+        std::array<PositionInteger, kDimensions> key{};
+        for (int dim = 0; dim < kDimensions; dim++) {
             key[dim] = sphParticlesPosition(dim, i).raw();
         }
         require(occupied.insert(key).second, "particle positions must be unique");
@@ -155,12 +155,12 @@ void testInitialization(int resolution, ParticleInteger expectedCount, double ac
             mass * configured.hydro.neighborNumber /
                 (4.0 * kPi / 3.0 * support * support * support),
             density);
-        requireClose("zero transverse x velocity", sphParticlesVelocity(XDIM, i), 0.0);
-        requireClose("zero transverse y velocity", sphParticlesVelocity(YDIM, i), 0.0);
+        requireClose("zero transverse x velocity", sphParticlesVelocity(kXDimension, i), 0.0);
+        requireClose("zero transverse y velocity", sphParticlesVelocity(kYDimension, i), 0.0);
         double const expectedVelocity = 0.025 *
             (1.0 + std::cos(8.0 * kPi * (x - 0.5)) * (1.0 + std::cos(6.0 * kPi * (x - 0.5)))) *
             std::sin(2.0 * kPi * z);
-        requireClose("normal velocity perturbation", sphParticlesVelocity(ZDIM, i),
+        requireClose("normal velocity perturbation", sphParticlesVelocity(kZDimension, i),
             expectedVelocity, 2.0e-8);
         require(sphParticlesRung(i) == 0, "initial rung");
     }
@@ -169,15 +169,17 @@ void testInitialization(int resolution, ParticleInteger expectedCount, double ac
     requireClose("heavy layer mass", mass * heavyCount, 1.0);
     requireClose("total mass", mass * sphParticlesSize(), 1.5);
     for (ParticleInteger i = 0; i < sphParticlesSize(); i += 2) {
-        require(
-            sphParticlesPosition(ZDIM, i) < Position(0.5), "lower particle precedes its mirror");
-        require(sphParticlesPosition(XDIM, i).raw() == sphParticlesPosition(XDIM, i + 1).raw() &&
-                sphParticlesPosition(YDIM, i).raw() == sphParticlesPosition(YDIM, i + 1).raw(),
+        require(sphParticlesPosition(kZDimension, i) < Position(0.5),
+            "lower particle precedes its mirror");
+        require(sphParticlesPosition(kXDimension, i).raw() ==
+                    sphParticlesPosition(kXDimension, i + 1).raw() &&
+                sphParticlesPosition(kYDimension, i).raw() ==
+                    sphParticlesPosition(kYDimension, i + 1).raw(),
             "mirrored pairs share transverse positions");
-        require(PositionInteger(sphParticlesPosition(ZDIM, i).raw() +
-                    sphParticlesPosition(ZDIM, i + 1).raw()) == 0U,
+        require(PositionInteger(sphParticlesPosition(kZDimension, i).raw() +
+                    sphParticlesPosition(kZDimension, i + 1).raw()) == 0U,
             "mirrored z coordinates are exact in fixed point");
-        require(sphParticlesVelocity(ZDIM, i) == -sphParticlesVelocity(ZDIM, i + 1),
+        require(sphParticlesVelocity(kZDimension, i) == -sphParticlesVelocity(kZDimension, i + 1),
             "normal velocities are exactly odd about the midplane");
         require(sphParticlesInternalEnergy(i) == sphParticlesInternalEnergy(i + 1) &&
                 sphParticlesSupportRadius(i) == sphParticlesSupportRadius(i + 1),

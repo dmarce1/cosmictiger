@@ -13,10 +13,10 @@
 #include <cosmictiger/gravity/gravity.hpp>
 
 namespace detail {
-using BhPositions = DeviceVector<Array<float, NDIM>>;
+using BhPositions = DeviceVector<Array<float, kDimensions>>;
 
-Array<float, NDIM> bhPosition(float x, float y, float z) {
-    Array<float, NDIM> position;
+Array<float, kDimensions> bhPosition(float x, float y, float z) {
+    Array<float, kDimensions> position;
     position[0] = x;
     position[1] = y;
     position[2] = z;
@@ -37,8 +37,8 @@ void requireBhClose(char const* label, double actual, double expected, double to
     }
 }
 
-double directBhPotential(Array<float, NDIM> const& sink, BhPositions const& sources, int selfIndex,
-    bool skipCoincident) {
+double directBhPotential(Array<float, kDimensions> const& sink, BhPositions const& sources,
+    int selfIndex, bool skipCoincident) {
     auto const& options = getOptions();
     double const support = options.gravity.supportRadius;
     double potential = 0.0;
@@ -47,7 +47,7 @@ double directBhPotential(Array<float, NDIM> const& sink, BhPositions const& sour
             continue;
         }
         double distanceSquared = 0.0;
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             double const delta = double(sink[dim]) - sources[j][dim];
             distanceSquared += delta * delta;
         }
@@ -75,7 +75,7 @@ BhPositions makeBhCloud(int count, float width) {
     std::uniform_real_distribution<float> distribution(-width, width);
     BhPositions positions(count);
     for (int i = 0; i < count; ++i) {
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             positions[i][dim] = distribution(generator);
         }
     }
@@ -96,19 +96,19 @@ void compareBhPoints(char const* label, BhPositions const& sources, BhPositions 
 #ifdef USE_CUDA
 void verifyBhCudaWorkspaceReuse() {
     float const support = getOptions().gravity.supportRadius;
-    BhPositions positions(2 * BH_BUCKET_SIZE);
+    BhPositions positions(2 * kBhBucketSize);
     for (int i = 0; i < positions.size(); ++i) {
         positions[i] = bhPosition(0.1f * support * i, 0.0f, 0.0f);
     }
     // Use the production kernel with two valid leaf buckets, and bound its
     // worker count so both buckets necessarily reuse the same workspace.
     DeviceVector<BhTreeNode> nodes(3);
-    nodes[0].children[LEFT] = 1;
-    nodes[0].children[RIGHT] = 2;
+    nodes[0].children[kLeftChild] = 1;
+    nodes[0].children[kRightChild] = 2;
     for (int nodeIndex = 0; nodeIndex < nodes.size(); ++nodeIndex) {
         auto& node = nodes[nodeIndex];
-        int const begin = nodeIndex == 2 ? BH_BUCKET_SIZE : 0;
-        int const end = nodeIndex == 1 ? BH_BUCKET_SIZE : positions.size();
+        int const begin = nodeIndex == 2 ? kBhBucketSize : 0;
+        int const end = nodeIndex == 1 ? kBhBucketSize : positions.size();
         node.parts = {begin, end};
         node.mass = end - begin;
         node.pos = bhPosition(0.05f * support * (begin + end - 1), 0.0f, 0.0f);

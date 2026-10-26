@@ -359,7 +359,7 @@ void distributedOutputParticleFixture(int activeRanks, bool verify, bool segrega
             particlesVel(dim, i) = dim == 0 ? 0.125 + global / 256.0 : dim == 1 ? -0.25 : 0.5;
         }
         particlesRung(i) = global % 5;
-        particlesType(i) = SPH_TYPE;
+        particlesType(i) = kSphType;
         particlesCatIndex(i) = i;
         sphParticlesParticleIndex(i) = i;
         sphParticlesSupportRadius(i) = 0.03125 + global / 4096.0;
@@ -374,8 +374,8 @@ void distributedOutputParticleFixture(int activeRanks, bool verify, bool segrega
                 particlesVel(dim, particle) = 0.0;
             }
             particlesRung(particle) = 0;
-            particlesType(particle) = DARK_MATTER_TYPE;
-            particlesCatIndex(particle) = NO_INDEX;
+            particlesType(particle) = kDarkMatterType;
+            particlesCatIndex(particle) = kNoParticleIndex;
         }
     }
     for (auto& future : pending) {

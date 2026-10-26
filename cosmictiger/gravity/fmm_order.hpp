@@ -51,7 +51,6 @@ inline constexpr int kFmmMaxOrder = FMM_MAX_ORDER;
 inline constexpr int kFmmDefaultOrder = ORDER;
 static_assert(kFmmDefaultOrder >= kFmmMinOrder && kFmmDefaultOrder <= kFmmMaxOrder,
     "COSMICTIGER_WITH_ORDER must select an FMM order from 3 to 9");
-static_assert(LORDER == ORDER, "LORDER must equal the default FMM order");
 
 CUDA_EXPORT constexpr int fmmMultipoleDegree(int order) {
     return order - 2;
@@ -84,8 +83,8 @@ CUDA_EXPORT constexpr int fmmLocalCoefficientCount(int order) {
 
 // A positioned multipole stores NDIM Position positions followed by the coefficients.
 CUDA_EXPORT constexpr int fmmPositionedMultipoleBytes(int order) {
-    int const bytes =
-        int(sizeof(float)) * fmmMultipoleCoefficientCount(order) + NDIM * int(sizeof(Position));
+    int const bytes = int(sizeof(float)) * fmmMultipoleCoefficientCount(order) +
+        kDimensions * int(sizeof(Position));
     // Include the C++ record's tail padding for its position alignment.
     return (bytes + int(alignof(Position)) - 1) / int(alignof(Position)) * int(alignof(Position));
 }
@@ -205,20 +204,9 @@ decltype(auto) fmmDispatch(F&& f) {
 }
 
 // Internal normalized FMM coordinate scale. Physical lengths use the unit box.
-#define SCALE_FACTOR 1.000000e+03f
-#define SCALE_FACTOR0 1.000000e+00f
-#define SCALE_FACTOR_INV0 1.000000e+00f
-#define SCALE_FACTOR1 1.000000e+03f
-#define SCALE_FACTOR_INV1 1.000000e-03f
-#define SCALE_FACTOR2 1.000000e+06f
-#define SCALE_FACTOR_INV2 1.000000e-06f
-#define SCALE_FACTOR3 1.000000e+09f
-#define SCALE_FACTOR_INV3 1.000000e-09f
-#define SCALE_FACTOR4 1.000000e+12f
-#define SCALE_FACTOR_INV4 1.000000e-12f
-#define SCALE_FACTOR5 1.000000e+15f
-#define SCALE_FACTOR_INV5 1.000000e-15f
-#define SCALE_FACTOR6 1.000000e+18f
-#define SCALE_FACTOR_INV6 1.000000e-18f
-#define SCALE_FACTOR7 1.000000e+21f
-#define SCALE_FACTOR_INV7 1.000000e-21f
+inline constexpr float kScaleFactor = 1.000000e+03f;
+inline constexpr float kScaleFactor1 = 1.000000e+03f;
+inline constexpr float kScaleFactorInverse1 = 1.000000e-03f;
+inline constexpr float kScaleFactor2 = 1.000000e+06f;
+inline constexpr float kScaleFactorInverse2 = 1.000000e-06f;
+inline constexpr float kScaleFactorInverse3 = 1.000000e-09f;

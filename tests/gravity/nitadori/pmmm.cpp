@@ -38,10 +38,10 @@ int pmmmFixtureParticleCount(int fixture) {
 }
 
 struct PmmmSample {
-    Array<double, NDIM> position{};
-    Array<PositionInteger, NDIM> rawPosition{};
-    Array<float, NDIM> acceleration{};
-    Array<float, NDIM> velocity{};
+    Array<double, kDimensions> position{};
+    Array<PositionInteger, kDimensions> rawPosition{};
+    Array<float, kDimensions> acceleration{};
+    Array<float, kDimensions> velocity{};
     int rung{};
     float potential{};
     float mass{};
@@ -77,9 +77,9 @@ void resetPmmmSavedForces() {
     // Domain migration transfers physical particle state, not saved diagnostic
     // forces. Initialize these sentinels after migration, before testing solves.
     for (ParticleInteger i = 0; i < particlesSize(); ++i) {
-        int const id = int(particlesVel(XDIM, i)) - 1;
+        int const id = int(particlesVel(kXDimension, i)) - 1;
         particlesPot(i) = -0.25f * float(id + 1);
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             particlesGravityAcceleration(dim, i) = float(4 * (id + 1) + dim);
         }
     }
@@ -150,7 +150,7 @@ void checkPmmmNearEdges() {
 void initializePmmmFixture(int fixture, int ownership) {
     // The first two and the next pair share cells on the n=8 mesh. Their
     // different offsets generate dipoles and the independent radial moment.
-    std::array<std::array<double, NDIM>, 7> const points{
+    std::array<std::array<double, kDimensions>, 7> const points{
         {{0.069, 0.161, 0.326}, {0.104, 0.202, 0.295}, {0.454, 0.166, 0.329}, {0.487, 0.206, 0.287},
             {0.989, 0.171, 0.317}, {0.671, 0.839, 0.582}, {0.011, 0.986, 0.971}}};
     int const total = pmmmFixtureParticleCount(fixture);
@@ -173,29 +173,32 @@ void initializePmmmFixture(int fixture, int ownership) {
         if (owner(id) != hpxRank()) {
             continue;
         }
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             double coordinate = 0.0;
             if (fixture == 6) {
-                int const cell = dim == XDIM ? id % 8 :
-                    dim == YDIM              ? 4 * ((id / 8) % 2) :
-                                               4 * (id / 16);
+                int const cell = dim == kXDimension ? id % 8 :
+                    dim == kYDimension              ? 4 * ((id / 8) % 2) :
+                                                      4 * (id / 16);
                 coordinate = (cell + 0.5) / 8.0;
             } else if (fixture == 5) {
                 int const side = getOptions().gravity.meshSize;
                 int const group = id / 64;
-                int const cell = dim == XDIM ? (group == 1 ? side - 1 : group == 3 ? 1 : 0) : 1;
+                int const cell = dim == kXDimension ? (group == 1        ? side - 1 :
+                                                              group == 3 ? 1 :
+                                                                           0) :
+                                                      1;
                 std::array<std::array<double, 3>, 5> const centers{{{-0.22, -0.20, -0.18},
                     {0.14, 0.03, -0.06}, {0.22, 0.20, 0.18}, {0.32, 0.05, 0.09}, {0.0, 0.0, 0.0}}};
-                int const multiplier = dim == XDIM ? 17 : dim == YDIM ? 29 : 43;
+                int const multiplier = dim == kXDimension ? 17 : dim == kYDimension ? 29 : 43;
                 double const jitter = (double((id * multiplier) % 64) + 0.5) / 64.0 - 0.5;
                 coordinate = (cell + 0.5 + centers[group][dim] + 0.11 * jitter) / side;
             } else {
                 coordinate = fixture == 4 ? 0.0625 + 0.5 * ((id >> dim) & 1) : points[id][dim];
             }
             if (fixture == 3 && id >= 2) {
-                coordinate = (dim == XDIM        ? 0.58 :
-                                     dim == YDIM ? 0.57 :
-                                                   0.81) +
+                coordinate = (dim == kXDimension        ? 0.58 :
+                                     dim == kYDimension ? 0.57 :
+                                                          0.81) +
                     (id == 2 ? 0.013 : -0.019);
             }
             particlesPos(dim, local) = coordinate;
@@ -205,21 +208,21 @@ void initializePmmmFixture(int fixture, int ownership) {
                 // subdivision and a center conversion that rounds up to 1.
                 particlesPos(dim, local).setInteger(std::numeric_limits<PositionInteger>::max());
             }
-            particlesVel(dim, local) = dim == XDIM ? float(id + 1) :
-                dim == YDIM                        ? 0.25f * float(id) :
-                                                     -0.5f * float(id);
+            particlesVel(dim, local) = dim == kXDimension ? float(id + 1) :
+                dim == kYDimension                        ? 0.25f * float(id) :
+                                                            -0.5f * float(id);
             particlesGravityAcceleration(dim, local) = float(4 * (id + 1) + dim);
         }
         particlesPot(local) = -0.25f * float(id + 1);
         particlesRung(local) = 1 + id % 4;
         if (getOptions().hydro.enabled) {
             bool const isGas = fixture != 4 && id % 2 != 0;
-            particlesType(local) = isGas ? SPH_TYPE : DARK_MATTER_TYPE;
-            particlesCatIndex(local) = isGas ? gas : NO_INDEX;
+            particlesType(local) = isGas ? kSphType : kDarkMatterType;
+            particlesCatIndex(local) = isGas ? gas : kNoParticleIndex;
             if (isGas) {
                 sphParticlesParticleIndex(gas) = local;
                 sphParticlesSupportRadius(gas) = 0.01f;
-                for (int dim = 0; dim < NDIM; ++dim) {
+                for (int dim = 0; dim < kDimensions; ++dim) {
                     sphParticlesGravityAcceleration(dim, gas) = 0.0f;
                 }
                 ++gas;
@@ -235,32 +238,32 @@ Vector<PmmmSample> readPmmmFixture() {
     Vector<PmmmSample> samples(particlesSize());
     for (ParticleInteger i = 0; i < particlesSize(); ++i) {
         auto& sample = samples[i];
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             sample.position[dim] = particlesPos(dim, i).toDouble();
             sample.rawPosition[dim] = particlesPos(dim, i).raw();
         }
         sample.acceleration = pmmmAcceleration(i);
         sample.potential = pmmmPotential(i);
         sample.mass = particlesMass(i);
-        sample.id = int(particlesVel(XDIM, i)) - 1;
-        requirePmmm(particlesVel(XDIM, i) == float(sample.id + 1) &&
-                particlesVel(YDIM, i) == 0.25f * float(sample.id) &&
-                particlesVel(ZDIM, i) == -0.5f * float(sample.id) &&
+        sample.id = int(particlesVel(kXDimension, i)) - 1;
+        requirePmmm(particlesVel(kXDimension, i) == float(sample.id + 1) &&
+                particlesVel(kYDimension, i) == 0.25f * float(sample.id) &&
+                particlesVel(kZDimension, i) == -0.5f * float(sample.id) &&
                 particlesRung(i) == 1 + sample.id % 4 &&
                 particlesPot(i) == -0.25f * float(sample.id + 1),
             "force solve changed velocity, rung, or saved potential");
         sample.rank = hpxRank();
         sample.cellKey = 0;
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             requirePmmm(particlesGravityAcceleration(dim, i) == float(4 * (sample.id + 1) + dim),
                 "force solve changed saved acceleration");
             sample.cellKey = sample.cellKey * getOptions().gravity.meshSize +
                 particleMeshCoordinate(particlesPos(dim, i).raw(), getOptions().gravity.meshSize);
         }
-        if (getOptions().hydro.enabled && particlesType(i) == SPH_TYPE) {
+        if (getOptions().hydro.enabled && particlesType(i) == kSphType) {
             requirePmmm(sphParticlesParticleIndex(particlesCatIndex(i)) == i,
                 "gas reverse index was not repaired after sorting");
-            for (int dim = 0; dim < NDIM; ++dim) {
+            for (int dim = 0; dim < kDimensions; ++dim) {
                 requirePmmm(sphParticlesGravityAcceleration(dim, particlesCatIndex(i)) == 0.0f,
                     "force solve changed gas acceleration");
             }
@@ -273,7 +276,7 @@ Vector<PmmmSample> readPmmmKickFixture() {
     Vector<PmmmSample> samples(particlesSize());
     for (ParticleInteger i = 0; i < particlesSize(); ++i) {
         auto& sample = samples[i];
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             sample.position[dim] = particlesPos(dim, i).toDouble();
             sample.rawPosition[dim] = particlesPos(dim, i).raw();
             sample.velocity[dim] = particlesVel(dim, i);
@@ -308,7 +311,7 @@ std::shared_ptr<PmmmOverlapGate> pmmmOverlapGate;
 bool pmmmCellsNeighbor(uint64_t first, uint64_t second) {
     int const side = getOptions().gravity.meshSize;
     int const width = getOptions().gravity.pmmmNearWidth;
-    for (int dim = 0; dim < NDIM; ++dim) {
+    for (int dim = 0; dim < kDimensions; ++dim) {
         int const difference = std::abs(int(first % side) - int(second % side));
         if (std::min(difference, side - difference) > width) {
             return false;
@@ -376,7 +379,7 @@ size_t verifyPmmmTreeCell(TreeId id, uint64_t key, int meshSize) {
     auto const* node = treeGetNode(id);
     uint64_t positionKey = 0;
     uint64_t multipoleKey = 0;
-    for (int dim = 0; dim < NDIM; ++dim) {
+    for (int dim = 0; dim < kDimensions; ++dim) {
         positionKey =
             positionKey * meshSize + particleMeshCoordinate(node->pos[dim].raw(), meshSize);
         multipoleKey =
@@ -397,7 +400,7 @@ size_t verifyPmmmTreeCell(TreeId id, uint64_t key, int meshSize) {
             for (ParticleInteger i = node->particleRange.first; i < node->particleRange.second;
                 ++i) {
                 long double radiusSquared = 0.0;
-                for (int dim = 0; dim < NDIM; ++dim) {
+                for (int dim = 0; dim < kDimensions; ++dim) {
                     WideInteger const raw = particlesPos(dim, i).raw();
                     WideInteger const lower =
                         WideInteger(node->box.begin[dim].raw()) * kBoundaryScale;
@@ -445,8 +448,8 @@ std::array<double, 4> directPmmmReference(size_t sink, Vector<PmmmSample> const&
     std::array<double, 4> result{};
     for (size_t source = 0; source < samples.size(); ++source) {
         double const mass = samples[source].mass * getOptions().gravity.gm;
-        std::array<double, NDIM> separation{};
-        for (int dim = 0; dim < NDIM; ++dim) {
+        std::array<double, kDimensions> separation{};
+        for (int dim = 0; dim < kDimensions; ++dim) {
             separation[dim] = samples[sink].position[dim] - samples[source].position[dim];
             separation[dim] -= std::nearbyint(separation[dim]);
         }
@@ -458,7 +461,7 @@ std::array<double, 4> directPmmmReference(size_t sink, Vector<PmmmSample> const&
             for (int y = -kCutoff; y <= kCutoff; ++y) {
                 for (int z = -kCutoff; z <= kCutoff; ++z) {
                     bool const origin = x == 0 && y == 0 && z == 0;
-                    std::array<double, NDIM> const displacement{
+                    std::array<double, kDimensions> const displacement{
                         separation[0] + x, separation[1] + y, separation[2] + z};
                     double const radiusSquared = displacement[0] * displacement[0] +
                         displacement[1] * displacement[1] + displacement[2] * displacement[2];
@@ -472,12 +475,12 @@ std::array<double, 4> directPmmmReference(size_t sink, Vector<PmmmSample> const&
                                                       std::exp(-kAlpha * kAlpha * radiusSquared)) /
                             radiusSquared;
                         result[0] -= mass * screened;
-                        for (int dim = 0; dim < NDIM; ++dim) {
+                        for (int dim = 0; dim < kDimensions; ++dim) {
                             result[dim + 1] -= mass * radial * displacement[dim];
                         }
                     }
                     if (!origin) {
-                        std::array<double, NDIM> const wave{
+                        std::array<double, kDimensions> const wave{
                             2.0 * kPi * x, 2.0 * kPi * y, 2.0 * kPi * z};
                         double const waveSquared = x * x + y * y + z * z;
                         double const coefficient =
@@ -486,7 +489,7 @@ std::array<double, 4> directPmmmReference(size_t sink, Vector<PmmmSample> const&
                         double const phase = wave[0] * separation[0] + wave[1] * separation[1] +
                             wave[2] * separation[2];
                         result[0] -= mass * coefficient * std::cos(phase);
-                        for (int dim = 0; dim < NDIM; ++dim) {
+                        for (int dim = 0; dim < kDimensions; ++dim) {
                             result[dim + 1] -= mass * coefficient * std::sin(phase) * wave[dim];
                         }
                     }
@@ -499,12 +502,12 @@ std::array<double, 4> directPmmmReference(size_t sink, Vector<PmmmSample> const&
 
 double verifyPmmmReference(Vector<PmmmSample> const& samples, double tolerance) {
     double maximumError = 0.0;
-    std::array<double, NDIM> momentum{};
+    std::array<double, kDimensions> momentum{};
     double forceScale = 1.0;
     for (size_t sink = 0; sink < samples.size(); ++sink) {
         auto const expected = directPmmmReference(sink, samples);
         double norm = 0.0;
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             norm += expected[dim + 1] * expected[dim + 1];
         }
         norm = std::max(1.0, std::sqrt(norm));
@@ -515,7 +518,7 @@ double verifyPmmmReference(Vector<PmmmSample> const& samples, double tolerance) 
         requirePmmm(std::isfinite(samples[sink].potential) && potentialError < tolerance,
             "potential differs from direct periodic Ewald for particle " + std::to_string(sink) +
                 ": relative error " + std::to_string(potentialError));
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             double const error =
                 std::abs(samples[sink].acceleration[dim] - expected[dim + 1]) / norm;
             maximumError = std::max(maximumError, error);
@@ -545,7 +548,7 @@ void comparePmmmSamples(
     for (size_t i = 0; i < first.size(); ++i) {
         requirePmmm(first[i].id == second[i].id && first[i].mass == second[i].mass,
             "solve changed a particle's identity or mass");
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             requirePmmm(first[i].rawPosition[dim] == second[i].rawPosition[dim],
                 "solve changed a particle position");
             requirePmmm(std::abs(first[i].acceleration[dim] - second[i].acceleration[dim]) <
@@ -698,7 +701,7 @@ double pmmmFieldDifference(Vector<PmmmSample> const& reference, Vector<PmmmSampl
             "near solver changed particle identities or masses");
         double norm = 0.0;
         double error = 0.0;
-        for (int axis = 0; axis < NDIM; ++axis) {
+        for (int axis = 0; axis < kDimensions; ++axis) {
             requirePmmm(reference[i].rawPosition[axis] == actual[i].rawPosition[axis],
                 "near solver changed a particle position");
             requirePmmm(std::isfinite(actual[i].acceleration[axis]),
@@ -729,7 +732,7 @@ Vector<PmmmSample> gatherPmmmKickSamples() {
         samples.insert(samples.end(), local.begin(), local.end());
     }
     std::sort(samples.begin(), samples.end(), [](auto const& first, auto const& second) {
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             if (first.rawPosition[dim] != second.rawPosition[dim]) {
                 return first.rawPosition[dim] < second.rawPosition[dim];
             }
@@ -810,7 +813,7 @@ void checkPmmmStreamedStages() {
                 double const factor = parameters.sign * (parameters.top ? 1.0 : -1.0) / 16.0;
                 requirePmmm(
                     before[i].rung == after[i].rung, "ascending-only kick changed a particle rung");
-                for (int dim = 0; dim < NDIM; ++dim) {
+                for (int dim = 0; dim < kDimensions; ++dim) {
                     requirePmmm(before[i].rawPosition[dim] == after[i].rawPosition[dim],
                         "streamed kick changed an owned position");
                     double const delta = factor * reference[dim + 1];
@@ -841,7 +844,7 @@ void checkPmmmStreamedStages() {
                     isActive ? directPmmmReference(selected++, active) : std::array<double, 4>{};
                 requirePmmm(descending[i].rung == (isActive ? 4 : before[i].rung),
                     "descending stage selected the wrong next rung");
-                for (int dim = 0; dim < NDIM; ++dim) {
+                for (int dim = 0; dim < kDimensions; ++dim) {
                     if (isActive && options.analysis.saveAcceleration) {
                         requirePmmm(std::abs(descending[i].acceleration[dim] - reference[dim + 1]) <
                                 1.0e-3 * std::max(1.0, std::abs(reference[dim + 1])),

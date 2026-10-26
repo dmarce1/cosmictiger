@@ -4,20 +4,20 @@
 #include <cosmictiger/core/containers.hpp>
 
 struct CompressedBlock {
-    Array<Fixed<int, 31>, NDIM> xc;
-    Array<float, NDIM> vc;
+    Array<Fixed<int, 31>, kDimensions> xc;
+    Array<float, kDimensions> vc;
     float xmax;
     float vmax;
-    Array<Vector<unsigned short>, NDIM> x;
-    Array<Vector<unsigned short>, NDIM> v;
+    Array<Vector<unsigned short>, kDimensions> x;
+    Array<Vector<unsigned short>, kDimensions> v;
     void write(FILE* fp);
     void read(FILE* fp);
 };
 
 struct CompressedParticles {
     LightconeGroup groupId;
-    Array<Fixed<int, 31>, NDIM> xc;
-    Array<float, NDIM> vc;
+    Array<Fixed<int, 31>, kDimensions> xc;
+    Array<float, kDimensions> vc;
     float xmax;
     float vmax;
     Vector<CompressedBlock> blocks;

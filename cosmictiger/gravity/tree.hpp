@@ -28,16 +28,16 @@
 // order-agnostic position header; per-order code views the moments through
 // fmmMultiPos<order>(node.mpos).
 MultipolePosition* treeAddMultipole(
-    Array<Position, NDIM> const& pos, MultipoleBuffer const& multipole);
+    Array<Position, kDimensions> const& pos, MultipoleBuffer const& multipole);
 void treeReadMultipole(MultipolePosition const* record, MultipoleBuffer& multipole);
 
 struct TreeNode {
     Fixed32Range box;
-    Array<TreeId, NCHILD> children;
+    Array<TreeId, kChildCount> children;
     Pair<ParticleInteger> particleRange;
     FmmParticleStore sourceStore = FmmParticleStore::Owned;
     Pair<int, int> processRange;
-    Array<Position, NDIM> pos;
+    Array<Position, kDimensions> pos;
     MultipolePosition* mpos;
     float radius;
     // Maximum actual compact gravity support among represented particles, not an
@@ -69,7 +69,7 @@ struct TreeNode {
     HPX_SERIALIZATION_SPLIT_MEMBER();
     template <class A>
     void load(A&& arc, unsigned) {
-        Array<Position, NDIM> multipolePosition;
+        Array<Position, kDimensions> multipolePosition;
         MultipoleBuffer multipole;
         arc & multipolePosition;
         arc & multipole;
@@ -125,7 +125,7 @@ inline FmmSourceView treeSourceView(TreeNode const& node) {
 
 struct TreeCreateReturn {
     MultipoleBuffer multi;
-    Array<Position, NDIM> pos;
+    Array<Position, kDimensions> pos;
     TreeId id;
     float radius;
     float maxGravitySupportRadius = 0.0f;

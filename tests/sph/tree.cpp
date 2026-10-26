@@ -34,12 +34,12 @@ void initializeSphTreeParticles(ParticleInteger count, int generation) {
     sphParticlesResize(count, false);
     double const offset = generation == 1 ? 0.5625 : 0.125;
     for (ParticleInteger i = 0; i < count; ++i) {
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             particlesPos(dim, i) = offset + 0.25 * ((i >> dim) & 1);
             particlesVel(dim, i) = 0.0f;
         }
         particlesRung(i) = (i + generation) % 3 == 0 ? 0 : 2;
-        particlesType(i) = SPH_TYPE;
+        particlesType(i) = kSphType;
         particlesCatIndex(i) = i;
         sphParticlesParticleIndex(i) = i;
         sphParticlesSupportRadius(i) = float(generation + 1) / 64.0f;
@@ -80,7 +80,7 @@ SphTreeSummary verifySphTreeNode(TreeId id, int depth, std::set<int>& leaves) {
     requireSphTree(node.numberOfActiveParticles == activeParticles,
         "node retained an old active-particle count");
     double const quantum = RangeFixed::kToFloatFactor_;
-    for (int dim = 0; dim < NDIM; ++dim) {
+    for (int dim = 0; dim < kDimensions; ++dim) {
         double lower = std::numeric_limits<double>::infinity();
         double upper = -std::numeric_limits<double>::infinity();
         double supportLower = lower;
@@ -131,8 +131,8 @@ SphTreeSummary verifySphTreeNode(TreeId id, int depth, std::set<int>& leaves) {
                 "leaf retained children from an old internal node");
         }
     } else {
-        auto const& left = *sphTreeGetNode(node.children[LEFT]);
-        auto const& right = *sphTreeGetNode(node.children[RIGHT]);
+        auto const& left = *sphTreeGetNode(node.children[kLeftChild]);
+        auto const& right = *sphTreeGetNode(node.children[kRightChild]);
         requireSphTree(left.particleRange.first == node.particleRange.first &&
                 left.particleRange.second == right.particleRange.first &&
                 right.particleRange.second == node.particleRange.second,
@@ -154,7 +154,7 @@ void verifySphTreeBuild(SphTreeCreateReturn const& built, ParticleInteger count)
     auto const& root = *sphTreeGetNode(built.id);
     requireSphTree(root.particleRange.first == 0 && root.particleRange.second == count,
         "root retained the previous population range");
-    for (int dim = 0; dim < NDIM; ++dim) {
+    for (int dim = 0; dim < kDimensions; ++dim) {
         requireSphTree(root.box.begin[dim].toDouble() == 0.0 && root.box.end[dim].toDouble() == 1.0,
             "root spatial box was not initialized");
         requireSphTree(built.innerBox.begin[dim] == root.innerBox.begin[dim] &&
@@ -184,7 +184,7 @@ void seedOldSphTreeState(TreeId id) {
     sphTreeSetNumberOfActiveParticles(id, 1000);
     sphTreeSetNeighborRange(id, Pair<int>(123, 456));
     Fixed32Range staleBox;
-    for (int dim = 0; dim < NDIM; ++dim) {
+    for (int dim = 0; dim < kDimensions; ++dim) {
         staleBox.begin[dim] = 1.5;
         staleBox.end[dim] = 1.75;
     }

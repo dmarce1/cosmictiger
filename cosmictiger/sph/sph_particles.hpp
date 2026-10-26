@@ -35,7 +35,7 @@ struct SphThermodynamicState {
 };
 
 struct SphAcceleration {
-    Array<float, NDIM> acceleration;
+    Array<float, kDimensions> acceleration;
 };
 
 // Optional chemistry storage. Abundances are authoritative; the source bridge
@@ -47,8 +47,8 @@ SPH_PARTICLES_EXTERN SphThermodynamicState* sphParticlesThermodynamicStates;
 SPH_PARTICLES_EXTERN SphAcceleration* sphParticlesAccelerationStates;
 SPH_PARTICLES_EXTERN ParticleInteger* sphParticlesParticleIndices;
 // Rates used by the predictor, retained until the corrector replaces their kick.
-SPH_PARTICLES_EXTERN Array<float*, NDIM> sphParticlesPredictedAccelerations;
-SPH_PARTICLES_EXTERN Array<float*, NDIM> sphParticlesGravityAccelerations;
+SPH_PARTICLES_EXTERN Array<float*, kDimensions> sphParticlesPredictedAccelerations;
+SPH_PARTICLES_EXTERN Array<float*, kDimensions> sphParticlesGravityAccelerations;
 SPH_PARTICLES_EXTERN float* sphParticlesPredictedInternalEnergyRates;
 SPH_PARTICLES_EXTERN float* sphParticlesInternalEnergyRates;
 SPH_PARTICLES_EXTERN float* sphParticlesDensities;

@@ -19,14 +19,14 @@ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
 #include <cosmictiger/math/range.hpp>
 
 struct BhTreeNode {
-    Array<float, NDIM> pos;
-    Array<int, NDIM> children;
+    Array<float, kDimensions> pos;
+    Array<int, kDimensions> children;
     Pair<int> parts;
     float mass;
     float radius;
     float meanSquaredRadius;
     BhTreeNode() {
-        children[LEFT] = children[RIGHT] = -1;
+        children[kLeftChild] = children[kRightChild] = -1;
         mass = 0;
         radius = 0;
         meanSquaredRadius = 0;
@@ -55,18 +55,19 @@ CUDA_EXPORT inline bool bhAcceptMonopole(float distanceSquared, BhTreeNode const
 }    // namespace detail
 
 struct BhSource {
-    Array<float, NDIM> x;
+    Array<float, kDimensions> x;
     float m;
 };
 
-DeviceVector<float> bhEvaluatePotential(DeviceVector<Array<float, NDIM>>& x, bool gpu = false);
-DeviceVector<float> bhEvaluatePoints(
-    DeviceVector<Array<float, NDIM>>& y, DeviceVector<Array<float, NDIM>>& x, bool gpu = false);
+DeviceVector<float> bhEvaluatePotential(
+    DeviceVector<Array<float, kDimensions>>& x, bool gpu = false);
+DeviceVector<float> bhEvaluatePoints(DeviceVector<Array<float, kDimensions>>& y,
+    DeviceVector<Array<float, kDimensions>>& x, bool gpu = false);
 DeviceVector<float> bhEvaluatePotentialGpu(DeviceVector<BhTreeNode> const& treeNodes,
-    DeviceVector<Array<float, NDIM>> const& x, DeviceVector<int> const sinkBuckets,
+    DeviceVector<Array<float, kDimensions>> const& x, DeviceVector<int> const sinkBuckets,
     float relativeError, float hsoft, float gm, int maximumBlockCount = 0);
 DeviceVector<float> bhEvaluatePotentialPointsGpu(DeviceVector<BhTreeNode> const& treeNodes,
-    DeviceVector<Array<float, NDIM>> const& x, DeviceVector<Array<float, NDIM>> const& y,
-    float relativeError, float hsoft, float gm);
+    DeviceVector<Array<float, kDimensions>> const& x,
+    DeviceVector<Array<float, kDimensions>> const& y, float relativeError, float hsoft, float gm);
 
 #endif /* BH_HPP_ */

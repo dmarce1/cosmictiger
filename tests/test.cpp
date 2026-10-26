@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <fenv.h>
 #include <filesystem>
+#include <numbers>
 #include <stdexcept>
 
 #include <cosmictiger/analysis/bh.hpp>
@@ -79,7 +80,7 @@ static bool fftFinite(float value) {
 static void fft1Test() {
     int const n = 100;
     Range<int64_t> box;
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         box.begin[dim] = 0;
         box.end[dim] = n;
     }
@@ -108,23 +109,23 @@ static void fft1Test() {
 static void fft2Test() {
     int const n = 4;
     Range<int64_t> box;
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         box.begin[dim] = 0;
         box.end[dim] = n;
     }
     Vector<float> aValue(box.volume());
-    Array<int64_t, NDIM> iValue;
+    Array<int64_t, kDimensions> iValue;
     for (iValue[0] = 0; iValue[0] < n; iValue[0]++) {
         for (iValue[1] = 0; iValue[1] < n; iValue[1]++) {
             for (iValue[2] = 0; iValue[2] < n; iValue[2]++) {
-                aValue[box.index(iValue)] = cos(M_PI * iValue[2]);
+                aValue[box.index(iValue)] = cos(std::numbers::pi * iValue[2]);
             }
         }
     }
     fft3dInit(n);
     fft3dAccumulateReal(box, aValue);
     fft3dExecute();
-    box.end[ZDIM] = n / 2 + 1;
+    box.end[kZDimension] = n / 2 + 1;
     auto b = fft3dReadComplex(box);
     fft3dDestroy();
     auto const checkSpectrum = [&](Vector<ComplexFloat> const& spectrum) {
@@ -163,10 +164,10 @@ static void fft2Test() {
     fft3dForceReal();
     auto const forced = fft3dReadComplex(box);
     fft3dInvExecute();
-    box.end[ZDIM] = n;
+    box.end[kZDimension] = n;
     auto const reconstructed = fft3dReadReal(box);
     fft3dDestroy();
-    box.end[ZDIM] = n / 2 + 1;
+    box.end[kZDimension] = n / 2 + 1;
     maxSpectrumError = std::max(maxSpectrumError, checkSpectrum(forced));
     double maxRoundTripError = 0.0;
     for (size_t index = 0; index < aValue.size(); ++index) {
@@ -324,8 +325,8 @@ static void kickTest() {
     kparams.theta = getOptions().gravity.openingAngle;
     ExpansionBuffer l;
     l.zero();
-    Array<Position, NDIM> pos;
-    for (int dim = 0; dim < NDIM; dim++) {
+    Array<Position, kDimensions> pos;
+    for (int dim = 0; dim < kDimensions; dim++) {
         pos[dim] = 0.f;
     }
     TreeId rootId;
@@ -374,19 +375,20 @@ static void reportKickInteractions(double theta) {
         counts.particleCell - counts.particleCellFromLeafSources);
     if (getOptions().analysis.saveForce) {
         auto const range = particlesCurrentRange();
-        std::array<double, NDIM> total{};
+        std::array<double, kDimensions> total{};
         double magnitudeSum = 0.0;
         for (ParticleInteger i = range.first; i < range.second; i++) {
             double squared = 0.0;
-            for (int dim = 0; dim < NDIM; dim++) {
+            for (int dim = 0; dim < kDimensions; dim++) {
                 double const force = particlesMass(i) * particlesGravityAcceleration(dim, i);
                 total[dim] += force;
                 squared += force * force;
             }
             magnitudeSum += std::sqrt(squared);
         }
-        double const residual = std::sqrt(total[XDIM] * total[XDIM] + total[YDIM] * total[YDIM] +
-                                    total[ZDIM] * total[ZDIM]) /
+        double const residual =
+            std::sqrt(total[kXDimension] * total[kXDimension] +
+                total[kYDimension] * total[kYDimension] + total[kZDimension] * total[kZDimension]) /
             std::max(1.0, magnitudeSum);
         PRINT("walk theta %.3f openLargerCell %i: rank-local net force residual %.3e\n", theta,
             int(getOptions().gravity.openLargerCell), residual);
@@ -463,8 +465,8 @@ static void forceTest() {
         kparams.theta = thetas[iter];
         ExpansionBuffer l;
         l.zero();
-        Array<Position, NDIM> pos;
-        for (int dim = 0; dim < NDIM; dim++) {
+        Array<Position, kDimensions> pos;
+        for (int dim = 0; dim < kDimensions; dim++) {
             pos[dim] = 0.f;
         }
         TreeId rootId;
@@ -551,8 +553,8 @@ static void bucketTest() {
             kparams.ascending = kparams.descending = false;
             ExpansionBuffer l;
             l.zero();
-            Array<Position, NDIM> pos;
-            for (int dim = 0; dim < NDIM; dim++) {
+            Array<Position, kDimensions> pos;
+            for (int dim = 0; dim < kDimensions; dim++) {
                 pos[dim] = 0.f;
             }
             TreeId rootId;
@@ -635,8 +637,8 @@ static void speedTest() {
             kparams.theta = thetas[ci];
             ExpansionBuffer l;
             l.zero();
-            Array<Position, NDIM> pos;
-            for (int dim = 0; dim < NDIM; dim++) {
+            Array<Position, kDimensions> pos;
+            for (int dim = 0; dim < kDimensions; dim++) {
                 pos[dim] = 0.f;
             }
             TreeId rootId;

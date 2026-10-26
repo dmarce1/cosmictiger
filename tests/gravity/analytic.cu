@@ -6,6 +6,7 @@
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 #include <memory>
+#include <numbers>
 #include <vector>
 
 #include <cosmictiger/core/defs.hpp>
@@ -18,12 +19,12 @@ __global__ void analyticGravityKernel(Position* sinkx, Position* sinky, Position
     Position* sourcex, Position* sourcey, Position* sourcez, int numberOfSources, double* rphi,
     double* rgx, double* rgy, double* rgz, float hsoft);
 
-#define ANALYTIC_BLOCK_SIZE 256
+constexpr int kAnalyticBlockSize = 256;
 
-std::pair<Vector<double>, Array<Vector<double>, NDIM>> gravityAnalyticCallKernel(
+std::pair<Vector<double>, Array<Vector<double>, kDimensions>> gravityAnalyticCallKernel(
     Vector<Position> const& sinkx, Vector<Position> const& sinky, Vector<Position> const& sinkz) {
     cudaSetDevice();
-    std::pair<Vector<double>, Array<Vector<double>, NDIM>> rc;
+    std::pair<Vector<double>, Array<Vector<double>, kDimensions>> rc;
     Position* devSinkx;
     Position* devSinky;
     Position* devSinkz;
@@ -71,10 +72,10 @@ std::pair<Vector<double>, Array<Vector<double>, NDIM>> gravityAnalyticCallKernel
     }
     PRINT("%li free\n", cudaFreeMemory());
     size_t const particlesPerLoop =
-        (size_t) cudaFreeMemory() / (NDIM * sizeof(Position)) * 85 / 100;
+        (size_t) cudaFreeMemory() / (kDimensions * sizeof(Position)) * 85 / 100;
     int occupancy;
     CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&occupancy, analyticGravityKernel,
-        ANALYTIC_BLOCK_SIZE, sizeof(double) * (NDIM + 1) * ANALYTIC_BLOCK_SIZE));
+        kAnalyticBlockSize, sizeof(double) * (kDimensions + 1) * kAnalyticBlockSize));
     int numberOfKernels = std::max((int) (occupancy * cudaSmpCount() / numberOfSinks), 1);
     std::vector<std::unique_ptr<CudaStream>> streams;
     streams.reserve(numberOfKernels);
@@ -100,7 +101,7 @@ std::pair<Vector<double>, Array<Vector<double>, NDIM>> gravityAnalyticCallKernel
             for (int j = 0; j < numberOfKernels; j++) {
                 int const begin = size_t(j) * size_t(totalSize) / size_t(numberOfKernels);
                 int const end = size_t(j + 1) * size_t(totalSize) / size_t(numberOfKernels);
-                analyticGravityKernel<<<numberOfSinks, ANALYTIC_BLOCK_SIZE, 0,
+                analyticGravityKernel<<<numberOfSinks, kAnalyticBlockSize, 0,
                     streams[j]->nativeHandle()>>>(devSinkx, devSinky, devSinkz, devSrcx + begin,
                     devSrcy + begin, devSrcz + begin, end - begin, devPhi, devGx, devGy, devGz,
                     getOptions().gravity.supportRadius);
@@ -116,18 +117,18 @@ std::pair<Vector<double>, Array<Vector<double>, NDIM>> gravityAnalyticCallKernel
         }
     }
     rc.first.resize(numberOfSinks);
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         rc.second[dim].resize(numberOfSinks);
     }
     CudaStream copies(cudaGetDevice());
     copies.copyAsync(
         rc.first.data(), devPhi, sizeof(double) * numberOfSinks, cudaMemcpyDeviceToHost);
-    copies.copyAsync(
-        rc.second[XDIM].data(), devGx, sizeof(double) * numberOfSinks, cudaMemcpyDeviceToHost);
-    copies.copyAsync(
-        rc.second[YDIM].data(), devGy, sizeof(double) * numberOfSinks, cudaMemcpyDeviceToHost);
-    copies.copyAsync(
-        rc.second[ZDIM].data(), devGz, sizeof(double) * numberOfSinks, cudaMemcpyDeviceToHost);
+    copies.copyAsync(rc.second[kXDimension].data(), devGx, sizeof(double) * numberOfSinks,
+        cudaMemcpyDeviceToHost);
+    copies.copyAsync(rc.second[kYDimension].data(), devGy, sizeof(double) * numberOfSinks,
+        cudaMemcpyDeviceToHost);
+    copies.copyAsync(rc.second[kZDimension].data(), devGz, sizeof(double) * numberOfSinks,
+        cudaMemcpyDeviceToHost);
     copies.wait();
     return rc;
 }
@@ -135,10 +136,10 @@ std::pair<Vector<double>, Array<Vector<double>, NDIM>> gravityAnalyticCallKernel
 __global__ void analyticGravityKernel(Position* sinkx, Position* sinky, Position* sinkz,
     Position* sourcex, Position* sourcey, Position* sourcez, int numberOfSources, double* rphi,
     double* rgx, double* rgy, double* rgz, float h) {
-    __shared__ double phi[ANALYTIC_BLOCK_SIZE];
-    __shared__ double gx[ANALYTIC_BLOCK_SIZE];
-    __shared__ double gy[ANALYTIC_BLOCK_SIZE];
-    __shared__ double gz[ANALYTIC_BLOCK_SIZE];
+    __shared__ double phi[kAnalyticBlockSize];
+    __shared__ double gx[kAnalyticBlockSize];
+    __shared__ double gy[kAnalyticBlockSize];
+    __shared__ double gz[kAnalyticBlockSize];
 
     int const& tid = threadIdx.x;
     int const& bid = blockIdx.x;
@@ -146,13 +147,13 @@ __global__ void analyticGravityKernel(Position* sinkx, Position* sinky, Position
     Position const x = sinkx[bid];
     Position const y = sinky[bid];
     Position const z = sinkz[bid];
-    float const cons1 = float(4.0f / sqrtf(M_PI));
+    float const cons1 = 4.0f / sqrtf(std::numbers::pi_v<float>);
     float const h2 = h * h;
     float const hinv = 1.0f / h;
     float const h2inv = hinv * hinv;
     float const h3inv = h2inv * hinv;
     phi[tid] = gx[tid] = gy[tid] = gz[tid] = 0.0f;
-    for (int sourcei = tid; sourcei < numberOfSources; sourcei += ANALYTIC_BLOCK_SIZE) {
+    for (int sourcei = tid; sourcei < numberOfSources; sourcei += kAnalyticBlockSize) {
         float const xValue = distance(x, sourcex[sourcei]);
         float const yValue = distance(y, sourcey[sourcei]);
         float const zValue = distance(z, sourcez[sourcei]);
@@ -188,7 +189,7 @@ __global__ void analyticGravityKernel(Position* sinkx, Position* sinky, Position
                     }
                 }
             }
-            phi[tid] += float(M_PI / 4.f);
+            phi[tid] += std::numbers::pi_v<float> / 4.f;
             for (int xi = -2; xi <= +2; xi++) {
                 for (int yi = -2; yi <= +2; yi++) {
                     for (int zi = -2; zi <= +2; zi++) {
@@ -198,12 +199,15 @@ __global__ void analyticGravityKernel(Position* sinkx, Position* sinky, Position
                         float const h2 = sqr(hx, hy, hz);
                         if (h2 > 0.0f && h2 <= 8) {
                             float const hdotx = xValue * hx + yValue * hy + zValue * hz;
-                            float const omega = float(2.0 * M_PI) * hdotx;
+                            float const omega = (2.0f * std::numbers::pi_v<float>) *hdotx;
                             float c, s;
                             sincosf(omega, &s, &c);
-                            float const c0 = -1.0f / h2 * expf(float(-M_PI * M_PI * 0.25f) * h2) *
-                                float(1.f / M_PI);
-                            float const c1 = -s * 2.0 * M_PI * c0;
+                            float const c0 = -1.0f / h2 *
+                                expf((-std::numbers::pi_v<float> * std::numbers::pi_v<float> *
+                                         0.25f) *
+                                    h2) *
+                                (1.f / std::numbers::pi_v<float>);
+                            float const c1 = -s * 2.0f * std::numbers::pi_v<float> * c0;
                             pot += c0 * c;
                             fx -= c1 * hx;
                             fy -= c1 * hy;
@@ -236,7 +240,7 @@ __global__ void analyticGravityKernel(Position* sinkx, Position* sinky, Position
         gz[tid] += fz;
     }
     __syncthreads();
-    for (int p = ANALYTIC_BLOCK_SIZE / 2; p >= 1; p /= 2) {
+    for (int p = kAnalyticBlockSize / 2; p >= 1; p /= 2) {
         if (tid < p) {
             gx[tid] += gx[tid + p];
             gy[tid] += gy[tid + p];

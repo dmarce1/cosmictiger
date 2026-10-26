@@ -14,24 +14,24 @@
 
 namespace detail {
 
-void appendDriftLightconeEntries(Array<double, NDIM> const& before,
-    Array<double, NDIM> const& after, Array<float, NDIM> const& velocity,
+void appendDriftLightconeEntries(Array<double, kDimensions> const& before,
+    Array<double, kDimensions> const& after, Array<float, kDimensions> const& velocity,
     DriftParameters const& parameters, std::vector<LightconeEntry>& entries) {
     double const inverseScale = 1.0 / parameters.scale;
     double const inverseTauMax = 1.0 / parameters.tauMax;
     // CUDA uses float physical velocities for the crossing interpolation.
-    float const vx = velocity[XDIM] * inverseScale;
-    float const vy = velocity[YDIM] * inverseScale;
-    float const vz = velocity[ZDIM] * inverseScale;
+    float const vx = velocity[kXDimension] * inverseScale;
+    float const vy = velocity[kYDimension] * inverseScale;
+    float const vz = velocity[kZDimension] * inverseScale;
     for (int imageX = -1; imageX <= 0; ++imageX) {
-        double const x0 = before[XDIM] + imageX;
-        double const x1 = after[XDIM] + imageX;
+        double const x0 = before[kXDimension] + imageX;
+        double const x1 = after[kXDimension] + imageX;
         for (int imageY = -1; imageY <= 0; ++imageY) {
-            double const y0 = before[YDIM] + imageY;
-            double const y1 = after[YDIM] + imageY;
+            double const y0 = before[kYDimension] + imageY;
+            double const y1 = after[kYDimension] + imageY;
             for (int imageZ = -1; imageZ <= 0; ++imageZ) {
-                double const z0 = before[ZDIM] + imageZ;
-                double const z1 = after[ZDIM] + imageZ;
+                double const z0 = before[kZDimension] + imageZ;
+                double const z1 = after[kZDimension] + imageZ;
                 double const radius0 = std::sqrt(x0 * x0 + y0 * y0 + z0 * z0);
                 double const radius1 = std::sqrt(x1 * x1 + y1 * y1 + z1 * z1);
                 int const shell0 = (parameters.tau0 + radius0) * inverseTauMax;
@@ -47,19 +47,20 @@ void appendDriftLightconeEntries(Array<double, NDIM> const& before,
                 double const time =
                     -(linear + std::sqrt(linear * linear - 4.0 * quadratic * constant)) /
                     (2.0 * quadratic);
-                double crossing[NDIM] = {x0 + vx * time, y0 + vy * time, z0 + vz * time};
-                double const radiusSquared = crossing[XDIM] * crossing[XDIM] +
-                    crossing[YDIM] * crossing[YDIM] + crossing[ZDIM] * crossing[ZDIM];
+                double crossing[kDimensions] = {x0 + vx * time, y0 + vy * time, z0 + vz * time};
+                double const radiusSquared = crossing[kXDimension] * crossing[kXDimension] +
+                    crossing[kYDimension] * crossing[kYDimension] +
+                    crossing[kZDimension] * crossing[kZDimension];
                 if (radiusSquared <= 1.0) {
                     long pixel;
                     vec2pix_nest(parameters.mapSize, crossing, &pixel);
                     LightconeEntry entry;
-                    entry.x = crossing[XDIM];
-                    entry.y = crossing[YDIM];
-                    entry.z = crossing[ZDIM];
-                    entry.vx = velocity[XDIM];
-                    entry.vy = velocity[YDIM];
-                    entry.vz = velocity[ZDIM];
+                    entry.x = crossing[kXDimension];
+                    entry.y = crossing[kYDimension];
+                    entry.z = crossing[kZDimension];
+                    entry.vx = velocity[kXDimension];
+                    entry.vy = velocity[kYDimension];
+                    entry.vz = velocity[kZDimension];
                     entry.pix = pixel;
                     entries.push_back(entry);
                 }
@@ -70,7 +71,7 @@ void appendDriftLightconeEntries(Array<double, NDIM> const& before,
 
 }    // namespace detail
 
-void cpuDriftKernel(Position* x, Position* y, Position* z, Array<float, NDIM>* velocities,
+void cpuDriftKernel(Position* x, Position* y, Position* z, Array<float, kDimensions>* velocities,
     char const* rungs, size_t count, DriftParameters const& parameters,
     std::vector<LightconeEntry>* entries) {
     if (count == 0) {
@@ -83,7 +84,7 @@ void cpuDriftKernel(Position* x, Position* y, Position* z, Array<float, NDIM>* v
     }
     double const driftFactor = parameters.timestep / parameters.scale;
     double const damping = 1.0 / (1.0 + parameters.drag * parameters.timestep);
-    Position* positions[NDIM] = {x, y, z};
+    Position* positions[kDimensions] = {x, y, z};
     size_t index = 0;
     if (!lightcone) {
         using DriftPack = NativeSimdVector<double>;
@@ -92,7 +93,7 @@ void cpuDriftKernel(Position* x, Position* y, Position* z, Array<float, NDIM>* v
         DriftPack const zero(0.0);
         DriftPack const one(1.0);
         for (; count - index >= kWidth; index += kWidth) {
-            for (int dim = 0; dim < NDIM; ++dim) {
+            for (int dim = 0; dim < kDimensions; ++dim) {
                 DriftPack const position(
                     [&](auto lane) { return positions[dim][index + lane].toDouble(); });
                 DriftPack const velocity([&](auto lane) {
@@ -127,10 +128,10 @@ void cpuDriftKernel(Position* x, Position* y, Position* z, Array<float, NDIM>* v
         if (parameters.rung >= 0 && rungs[index] != parameters.rung) {
             continue;
         }
-        Array<double, NDIM> before;
-        Array<double, NDIM> after;
-        Array<double, NDIM> displacement;
-        for (int dim = 0; dim < NDIM; ++dim) {
+        Array<double, kDimensions> before;
+        Array<double, kDimensions> after;
+        Array<double, kDimensions> displacement;
+        for (int dim = 0; dim < kDimensions; ++dim) {
             before[dim] = positions[dim][index].toDouble();
             after[dim] = std::fma(double(velocities[index][dim]), driftFactor, before[dim]);
             displacement[dim] = double(velocities[index][dim]) * driftFactor;
@@ -142,7 +143,7 @@ void cpuDriftKernel(Position* x, Position* y, Position* z, Array<float, NDIM>* v
             detail::appendDriftLightconeEntries(
                 before, after, velocities[index], parameters, *entries);
         }
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             if constexpr (kPositionBits == 64) {
                 positions[dim][index] += Position(displacement[dim]);
             } else {

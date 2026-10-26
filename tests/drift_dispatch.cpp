@@ -21,8 +21,8 @@
 #include <cosmictiger/analysis/lightcone_entry.hpp>
 #include <cosmictiger/particles/drift.hpp>
 
-Array<Position*, NDIM> particlesX;
-Array<float, NDIM>* particlesV = nullptr;
+Array<Position*, kDimensions> particlesX;
+Array<float, kDimensions>* particlesV = nullptr;
 char* particlesR = nullptr;
 
 namespace detail {
@@ -49,8 +49,8 @@ void resetCapture() {
 }
 
 struct Fixture {
-    std::array<std::vector<Position>, NDIM> positions;
-    std::vector<Array<float, NDIM>> velocities;
+    std::array<std::vector<Position>, kDimensions> positions;
+    std::vector<Array<float, kDimensions>> velocities;
     std::vector<char> rungs;
 
     explicit Fixture(size_t count)
@@ -61,7 +61,7 @@ struct Fixture {
         options = Options{};
         options.compute.cuda = false;
         resetCapture();
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             positions[dim].resize(count);
             particlesX[dim] = positions[dim].data();
         }
@@ -69,7 +69,7 @@ struct Fixture {
         particlesR = rungs.data();
         for (size_t index = 0; index < count; ++index) {
             rungs[index] = index % 3;
-            for (int dim = 0; dim < NDIM; ++dim) {
+            for (int dim = 0; dim < kDimensions; ++dim) {
                 positions[dim][index].setInteger(
                     PositionInteger(uint32_t(index * 2654435761ULL + (dim + 1) * 2246822519ULL))
                     << (kPositionBits - 32));
@@ -79,7 +79,7 @@ struct Fixture {
     }
 
     ~Fixture() {
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             particlesX[dim] = nullptr;
         }
         particlesV = nullptr;
@@ -111,7 +111,7 @@ void checkDispatch(size_t count, int rung, bool glass) {
         bool const selected = rung < 0 ||
             (index >= size_t(currentRange.first) && index < size_t(currentRange.second) &&
                 fixture.rungs[index] == rung);
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             PositionInteger const expectedPosition = selected ?
                 referencePosition(
                     initialPositions[dim][index].raw(), initialVelocities[index][dim]) :
@@ -131,7 +131,7 @@ void checkDispatch(size_t count, int rung, bool glass) {
 void checkEmptyRanges() {
     Fixture fixture(0);
     // Null storage catches accidental formation or dereferencing of element-zero pointers.
-    for (int dim = 0; dim < NDIM; ++dim) {
+    for (int dim = 0; dim < kDimensions; ++dim) {
         particlesX[dim] = nullptr;
     }
     particlesV = nullptr;
@@ -149,7 +149,7 @@ void checkLightcone() {
     options.lightcone.enabled = true;
     options.lightcone.mapSize = 2;
     for (size_t index = 0; index < kCount; ++index) {
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             fixture.positions[dim][index] = 0.25;
             fixture.velocities[index][dim] = 0.0f;
         }

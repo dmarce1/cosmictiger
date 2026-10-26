@@ -175,7 +175,7 @@ public:
             node.sinkParticleRange = {
                 sinkIndex(tree * count / treeCount), sinkIndex((tree + 1) * count / treeCount)};
             node.neighborRange = {0, treeCount};
-            for (int dim = 0; dim < NDIM; dim++) {
+            for (int dim = 0; dim < kDimensions; dim++) {
                 node.innerBox.begin[dim] = 0.0;
                 node.innerBox.end[dim] = 1.0;
                 node.outerBox.begin[dim] = -1.0;
@@ -230,7 +230,7 @@ public:
     }
 
     void densityPass() {
-        run(SPH_RUN_PREHYDRO2);
+        run(kSphRunPrehydro2);
     }
 
     void enableCompositionEos() {
@@ -275,7 +275,7 @@ public:
             data_.sourceSupportRadius[sourceIndex(i)] =
                 data_.sinkThermodynamicStates[sinkIndex(i)].supportRadius = initial;
         }
-        run(SPH_RUN_PREHYDRO1);
+        run(kSphRunPrehydro1);
         require(!reduction_->needsAnotherPass,
             "complete neighbor fixture must converge without refresh");
         for (int i = 0; i < count_; i++) {
@@ -291,7 +291,7 @@ public:
     }
 
     void density() {
-        run(SPH_RUN_PREHYDRO2);
+        run(kSphRunPrehydro2);
         require(
             !reduction_->needsAnotherPass, "density fixture unexpectedly needs neighbor refresh");
         for (int i = 0; i < count_; i++) {
@@ -304,18 +304,18 @@ public:
 
     void hydro(int phase = 0) {
         params_.phase = phase;
-        run(SPH_RUN_HYDRO);
+        run(kSphRunHydro);
         for (int i = 0; i < count_; i++) {
             int const sink = sinkIndex(i);
             require(
                 isFinite(data_.sinkInternalEnergyRate[sink]), "finite active-kernel thermal rate");
-            for (int dim = 0; dim < NDIM; dim++) {
+            for (int dim = 0; dim < kDimensions; dim++) {
                 require(isFinite(data_.sinkAccelerations[sink].acceleration[dim]),
                     "finite active-kernel acceleration");
             }
             if (phase == 1) {
                 require(data_.sinkParticleRungs[particleIndex(i)] >= 1 &&
-                        data_.sinkParticleRungs[particleIndex(i)] < MAX_RUNG,
+                        data_.sinkParticleRungs[particleIndex(i)] < kMaxRung,
                     "valid active-kernel timestep rung");
             }
         }
@@ -323,7 +323,7 @@ public:
     }
 
     void checkConservation() const {
-        std::array<double, NDIM> momentum{};
+        std::array<double, kDimensions> momentum{};
         double energy = 0.0;
         double absoluteEnergy = 0.0;
         double absoluteForce = 0.0;
@@ -332,18 +332,18 @@ public:
             int const sink = sinkIndex(i);
             auto const& acceleration = data_.sinkAccelerations[sink].acceleration;
             double const kinetic = data_.gasMass *
-                (data_.sourceVelocityX[source] * acceleration[XDIM] +
-                    data_.sourceVelocityY[source] * acceleration[YDIM] +
-                    data_.sourceVelocityZ[source] * acceleration[ZDIM]);
+                (data_.sourceVelocityX[source] * acceleration[kXDimension] +
+                    data_.sourceVelocityY[source] * acceleration[kYDimension] +
+                    data_.sourceVelocityZ[source] * acceleration[kZDimension]);
             double const thermal = data_.gasMass * data_.sinkInternalEnergyRate[sink];
             energy += kinetic + thermal;
             absoluteEnergy += std::abs(kinetic) + std::abs(thermal);
-            for (int dim = 0; dim < NDIM; dim++) {
+            for (int dim = 0; dim < kDimensions; dim++) {
                 momentum[dim] += data_.gasMass * acceleration[dim];
                 absoluteForce += std::abs(data_.gasMass * acceleration[dim]);
             }
         }
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             requireClose("active-kernel total momentum rate", momentum[dim], 0.0,
                 3.0e-5 * std::max(1.0, absoluteForce));
         }
@@ -458,7 +458,7 @@ void testCullenDehnenDensity() {
                 double gradient[3][3]{};
                 double accelerationGradient[3][3]{};
                 if (flow == 0 || flow == 1) {
-                    for (int dim = 0; dim < NDIM; ++dim) {
+                    for (int dim = 0; dim < kDimensions; ++dim) {
                         gradient[dim][dim] = -a2;
                         accelerationGradient[dim][dim] = flow == 1 ? a2 * a2 / scaleFactor : 0.0;
                     }
@@ -468,7 +468,7 @@ void testCullenDehnenDensity() {
                 } else {
                     gradient[0][1] = 4.0 * a2;
                 }
-                for (int dim = 0; dim < NDIM; ++dim) {
+                for (int dim = 0; dim < kDimensions; ++dim) {
                     accelerationGradient[dim][dim] -= expansionAcceleration / scaleFactor;
                 }
                 for (int i = 0; i < fixture.count_; ++i) {
@@ -481,10 +481,10 @@ void testCullenDehnenDensity() {
                         data.sourceVelocityX, data.sourceVelocityY, data.sourceVelocityZ};
                     float* acceleration[] = {data.sourceAccelerationX, data.sourceAccelerationY,
                         data.sourceAccelerationZ};
-                    for (int dim = 0; dim < NDIM; ++dim) {
+                    for (int dim = 0; dim < kDimensions; ++dim) {
                         double value = 0.125 * (dim + 1) - expansion * position[dim];
                         double force = 0.01 * (dim + 1);
-                        for (int axis = 0; axis < NDIM; ++axis) {
+                        for (int axis = 0; axis < kDimensions; ++axis) {
                             value += gradient[dim][axis] * position[axis];
                             force += accelerationGradient[dim][axis] * position[axis];
                         }
@@ -538,9 +538,9 @@ void testCullenDehnenDensity() {
                         double(i / 3 % 3 - 1) * 0.0625, double(i % 3 - 1) * 0.0625};
                     double radiusSquared = 0.0;
                     double projection = 0.0;
-                    for (int dim = 0; dim < NDIM; ++dim) {
+                    for (int dim = 0; dim < kDimensions; ++dim) {
                         radiusSquared += position[dim] * position[dim];
-                        for (int axis = 0; axis < NDIM; ++axis) {
+                        for (int axis = 0; axis < kDimensions; ++axis) {
                             projection += position[dim] * gradient[dim][axis] * position[axis];
                         }
                     }
@@ -612,7 +612,7 @@ void testVariableViscosityPairs() {
                 int const sink = fixture.sinkIndex(i);
                 requireClose("variable pair alpha and beta heating", heating[i],
                     data.sinkInternalEnergyRate[sink], 1.0e-5);
-                for (int dim = 0; dim < NDIM; ++dim) {
+                for (int dim = 0; dim < kDimensions; ++dim) {
                     requireClose("symmetric variable pair alpha and beta force",
                         force[i].acceleration[dim], data.sinkAccelerations[sink].acceleration[dim],
                         1.0e-5);
@@ -681,20 +681,20 @@ void initializeLattice(Fixture& fixture, int side) {
 
 void testPeriodicSupport() {
     Fixed32Range box;
-    Array<Position, NDIM> source;
-    for (int dim = 0; dim < NDIM; dim++) {
+    Array<Position, kDimensions> source;
+    for (int dim = 0; dim < kDimensions; dim++) {
         box.begin[dim] = 0.49;
         box.end[dim] = 0.51;
         source[dim] = 0.5;
     }
-    box.begin[XDIM] = 0.90;
-    box.end[XDIM] = 0.95;
-    source[XDIM] = 0.40;
+    box.begin[kXDimension] = 0.90;
+    box.end[kXDimension] = 0.95;
+    source[kXDimension] = 0.40;
     require(sphSupportIntersects(box, source, 0.49f),
         "periodic support reaches the far end of a sink box");
     require(!sphSupportIntersects(box, source, 0.40f),
         "periodic support excludes a genuinely separated box");
-    source[XDIM] = 0.02;
+    source[kXDimension] = 0.02;
     require(sphSupportIntersects(box, source, 0.10f), "periodic support crosses the box boundary");
 }
 
@@ -730,7 +730,7 @@ void testLattice() {
     for (int i = 0; i < fixture.count_; i++) {
         requireClose(
             "uniform gas thermal rate", fixture.data_.sinkInternalEnergyRate[i], 0.0, 2.0e-5);
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             requireClose("uniform gas force", fixture.data_.sinkAccelerations[i].acceleration[dim],
                 0.0, 2.0e-4);
         }
@@ -749,7 +749,7 @@ void testLattice() {
     fixture.checkConservation();
     double forceNorm = 0.0;
     for (int i = 0; i < fixture.count_; i++) {
-        forceNorm += std::abs(fixture.data_.sinkAccelerations[i].acceleration[XDIM]);
+        forceNorm += std::abs(fixture.data_.sinkAccelerations[i].acceleration[kXDimension]);
     }
     require(forceNorm > 0.1, "perturbed gas must exercise nonzero acceleration");
 
@@ -783,8 +783,8 @@ void testUnequalSupports() {
         data.sourceSupportRadius[i] = data.sinkThermodynamicStates[i].supportRadius =
             i == 0 ? 0.2f : 0.45f;
         auto& node = data.treeNodes[i];
-        for (int dim = 0; dim < NDIM; dim++) {
-            double const position = dim == XDIM ? data.sourcePositionX[i].toDouble() : 0.5;
+        for (int dim = 0; dim < kDimensions; dim++) {
+            double const position = dim == kXDimension ? data.sourcePositionX[i].toDouble() : 0.5;
             node.innerBox.begin[dim] = node.innerBox.end[dim] = position;
             node.outerBox.begin[dim] = position - data.sourceSupportRadius[i];
             node.outerBox.end[dim] = position + data.sourceSupportRadius[i];
@@ -797,8 +797,8 @@ void testUnequalSupports() {
     data.sourceVelocityX[1] = -0.1f;
     fixture.hydro();
     fixture.checkConservation();
-    require(data.sinkAccelerations[0].acceleration[XDIM] < 0.0f &&
-            data.sinkAccelerations[1].acceleration[XDIM] > 0.0f,
+    require(data.sinkAccelerations[0].acceleration[kXDimension] < 0.0f &&
+            data.sinkAccelerations[1].acceleration[kXDimension] > 0.0f,
         "union support must include both directions of repulsive force");
     std::array<float, 2> const viscousEnergy = {
         data.sinkInternalEnergyRate[0], data.sinkInternalEnergyRate[1]};
@@ -859,7 +859,7 @@ void testSelectedKernel() {
     }
     fixture.hydro(1);
     requireClose("selected kernel scalar/SIMD pressure force",
-        data.sinkAccelerations[0].acceleration[XDIM], data.gasMass * pressurePair * gradient,
+        data.sinkAccelerations[0].acceleration[kXDimension], data.gasMass * pressurePair * gradient,
         8.0e-6);
     requireClose("selected kernel effective-width CFL", fixture.reduction_->inverseSoundTimestep,
         inverseCfl, 3.0e-6);
@@ -905,7 +905,7 @@ void testCompositionEos() {
     }
     fixture.hydro(1);
     requireClose("composition-dependent pressure force",
-        data.sinkAccelerations[0].acceleration[XDIM], data.gasMass * pressurePair * gradient,
+        data.sinkAccelerations[0].acceleration[kXDimension], data.gasMass * pressurePair * gradient,
         8.0e-6);
     requireClose("composition-dependent sound speed", fixture.reduction_->inverseSoundTimestep,
         inverseCfl, 3.0e-6);
@@ -937,7 +937,7 @@ void testSelectedCentralGravity() {
         std::pow(double(data.centralSupportRadius), 3) *
         radial_kernel::forceFactor(selectedGravityKernel(), radius / data.centralSupportRadius);
     requireClose("selected gravity kernel central force",
-        data.sinkAccelerations[0].acceleration[XDIM], expected, 5.0e-6);
+        data.sinkAccelerations[0].acceleration[kXDimension], expected, 5.0e-6);
 }
 
 void testFixedGravityTimestep() {
@@ -998,10 +998,10 @@ void testZPlaneAcceleration() {
         data.sourcePositionZ[source] = positions[i];
         fixture.hydro(1);
         auto const& acceleration = data.sinkAccelerations[sink].acceleration;
-        requireClose("midplane force has no x component", acceleration[XDIM], 0.0, 1.0e-7);
-        requireClose("midplane force has no y component", acceleration[YDIM], 0.0, 1.0e-7);
+        requireClose("midplane force has no x component", acceleration[kXDimension], 0.0, 1.0e-7);
+        requireClose("midplane force has no y component", acceleration[kYDimension], 0.0, 1.0e-7);
         requireClose("midplane force points inward including adjacent fixed coordinates",
-            acceleration[ZDIM], expectedAccelerations[i], 1.0e-7);
+            acceleration[kZDimension], expectedAccelerations[i], 1.0e-7);
         if (expectedAccelerations[i] != 0.0) {
             requireClose("midplane force contributes to acceleration timestep",
                 fixture.reduction_->inverseAccelerationTimestep, referenceInverseTimestep, 2.0e-7);
@@ -1017,7 +1017,7 @@ void testZPlaneAcceleration() {
     fixture.params_.zPlaneAcceleration = 0.0f;
     fixture.hydro();
     requireClose("zero magnitude disables midplane force",
-        data.sinkAccelerations[sink].acceleration[ZDIM], 0.0, 1.0e-7);
+        data.sinkAccelerations[sink].acceleration[kZDimension], 0.0, 1.0e-7);
 
     fixture.params_.zPlaneAcceleration = 0.5f;
     fixture.params_.uniformAccelerationY = 0.25f;
@@ -1028,11 +1028,11 @@ void testZPlaneAcceleration() {
         data.selfGravityEnabled = selfGravity;
         fixture.hydro();
         auto const& acceleration = data.sinkAccelerations[sink].acceleration;
-        requireClose("midplane force preserves enabled self gravity in x", acceleration[XDIM],
-            selfGravity ? 0.125 : 0.0, 1.0e-7);
-        requireClose("uniform y force remains independent of midplane force", acceleration[YDIM],
-            selfGravity ? 0.1875 : 0.25, 1.0e-7);
-        requireClose("midplane force adds to enabled self gravity in z", acceleration[ZDIM],
+        requireClose("midplane force preserves enabled self gravity in x",
+            acceleration[kXDimension], selfGravity ? 0.125 : 0.0, 1.0e-7);
+        requireClose("uniform y force remains independent of midplane force",
+            acceleration[kYDimension], selfGravity ? 0.1875 : 0.25, 1.0e-7);
+        requireClose("midplane force adds to enabled self gravity in z", acceleration[kZDimension],
             selfGravity ? -0.25 : -0.5, 1.0e-7);
     }
 }
@@ -1091,7 +1091,7 @@ void testDefaultThermalTimestep() {
         double const oldWidth = 0.5 * data.sourceSupportRadius[i];
         double const sound =
             std::sqrt(kAdiabaticIndex * (kAdiabaticIndex - 1.0f) * data.sourceInternalEnergy[i]);
-        double const acceleration = std::abs(data.sinkAccelerations[i].acceleration[XDIM]);
+        double const acceleration = std::abs(data.sinkAccelerations[i].acceleration[kXDimension]);
         double const soundStep = 0.25 * oldWidth / sound;
         double const accelerationStep = oldEta * std::sqrt(oldWidth / acceleration);
         double const thermalStep =
@@ -1108,7 +1108,7 @@ void testDefaultThermalTimestep() {
 // A nonmultiple of the SIMD width exercises every masked tail, while unrelated
 // staged, SPH-sink, and full-particle offsets exercise all three index spaces.
 void testPeriodicTailsAndOffsets() {
-    int const count = 2 * SIMD_FLOAT_SIZE + 3;
+    int const count = 2 * kSimdFloatSize + 3;
     Fixture shifted(count, 3, 5, 11, 7);
     Fixture compact(count, 3);
     for (Fixture* fixture : {&shifted, &compact}) {
@@ -1129,12 +1129,12 @@ void testPeriodicTailsAndOffsets() {
         for (int i = 0; i < fixture->sinkOffset_; i++) {
             data.sinkDensity[i] = -91.0f;
             data.sinkInternalEnergyRate[i] = -92.0f;
-            data.sinkAccelerations[i].acceleration[XDIM] = -93.0f;
+            data.sinkAccelerations[i].acceleration[kXDimension] = -93.0f;
         }
         data.sinkDensity[fixture->sinkIndex(count)] = -91.0f;
         data.sinkInternalEnergyRate[fixture->sinkIndex(count)] = -92.0f;
-        data.sinkAccelerations[fixture->sinkIndex(count)].acceleration[XDIM] = -93.0f;
-        fixture->run(SPH_RUN_PREHYDRO2);
+        data.sinkAccelerations[fixture->sinkIndex(count)].acceleration[kXDimension] = -93.0f;
+        fixture->run(kSphRunPrehydro2);
         for (int i = 0; i < count; i++) {
             int const source = fixture->sourceIndex(i);
             double const support = data.sourceSupportRadius[source];
@@ -1157,7 +1157,7 @@ void testPeriodicTailsAndOffsets() {
         }
         fixture->publishDensity();
         fixture->params_.phase = 1;
-        fixture->run(SPH_RUN_HYDRO);
+        fixture->run(kSphRunHydro);
         for (int i = 0; i < count; i++) {
             require(data.sourceRungs[fixture->sourceIndex(i)] == 1,
                 "hydro leaves source rung snapshots unchanged");
@@ -1166,15 +1166,16 @@ void testPeriodicTailsAndOffsets() {
         for (int i = 0; i < fixture->sinkOffset_; i++) {
             requireClose("density guard before sinks", data.sinkDensity[i], -91.0, 0.0);
             requireClose("heating guard before sinks", data.sinkInternalEnergyRate[i], -92.0, 0.0);
-            requireClose("force guard before sinks", data.sinkAccelerations[i].acceleration[XDIM],
-                -93.0, 0.0);
+            requireClose("force guard before sinks",
+                data.sinkAccelerations[i].acceleration[kXDimension], -93.0, 0.0);
         }
         requireClose(
             "density guard after sinks", data.sinkDensity[fixture->sinkIndex(count)], -91.0, 0.0);
         requireClose("heating guard after sinks",
             data.sinkInternalEnergyRate[fixture->sinkIndex(count)], -92.0, 0.0);
         requireClose("force guard after sinks",
-            data.sinkAccelerations[fixture->sinkIndex(count)].acceleration[XDIM], -93.0, 0.0);
+            data.sinkAccelerations[fixture->sinkIndex(count)].acceleration[kXDimension], -93.0,
+            0.0);
     }
     for (int i = 0; i < count; i++) {
         int const sink = shifted.sinkIndex(i);
@@ -1182,7 +1183,7 @@ void testPeriodicTailsAndOffsets() {
             compact.data_.sinkDensity[i], 1.0e-6);
         requireClose("offset-invariant heating", shifted.data_.sinkInternalEnergyRate[sink],
             compact.data_.sinkInternalEnergyRate[i], 1.0e-6);
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             requireClose("offset-invariant force",
                 shifted.data_.sinkAccelerations[sink].acceleration[dim],
                 compact.data_.sinkAccelerations[i].acceleration[dim], 1.0e-6);
@@ -1207,7 +1208,7 @@ void testActivity() {
             i == 0 ? 4 : 1;
         data.sinkDensity[sink] = -11.0f;
         data.sinkInternalEnergyRate[sink] = -12.0f;
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             data.sinkAccelerations[sink].acceleration[dim] = -13.0f;
         }
     }
@@ -1238,11 +1239,11 @@ void testActivity() {
     data.sourceInternalEnergy[fixture.sourceIndex(2)] = 0.0f;
     fixture.params_.phase = 1;
     sphCpuHydro(fixture.params_, data, 0);
-    require(data.sinkAccelerations[fixture.sinkIndex(0)].acceleration[XDIM] < 0.0f,
+    require(data.sinkAccelerations[fixture.sinkIndex(0)].acceleration[kXDimension] < 0.0f,
         "active particle feels its semiactive neighbor");
     require(isFinite(data.sinkInternalEnergyRate[fixture.sinkIndex(0)]),
         "excluded zero-density neighbor leaves finite heating");
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         require(isFinite(data.sinkAccelerations[fixture.sinkIndex(0)].acceleration[dim]),
             "excluded zero-density neighbor leaves finite force");
     }
@@ -1250,7 +1251,7 @@ void testActivity() {
         int const sink = fixture.sinkIndex(i);
         requireClose(
             "inactive heating is preserved", data.sinkInternalEnergyRate[sink], -12.0, 0.0);
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             requireClose("inactive force is preserved",
                 data.sinkAccelerations[sink].acceleration[dim], -13.0, 0.0);
         }
@@ -1266,7 +1267,7 @@ void testSupportRefresh() {
     active.params_.minimumSupportRadius = 0.1f;
     active.params_.maximumSupportRadius = 0.3f;
     data.sourceSupportRadius[0] = data.sinkThermodynamicStates[0].supportRadius = 0.1f;
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         data.treeNodes[0].outerBox.begin[dim] = 0.39;
         data.treeNodes[0].outerBox.end[dim] = 0.61;
     }
@@ -1277,7 +1278,7 @@ void testSupportRefresh() {
         "retry retains the enlarged support for the next search");
     requireClose(
         "retry preserves the source support snapshot", data.sourceSupportRadius[0], 0.1f, 0.0);
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         data.treeNodes[0].outerBox.begin[dim] = -1.0;
         data.treeNodes[0].outerBox.end[dim] = 2.0;
     }
@@ -1301,7 +1302,7 @@ void testSupportRefresh() {
         semiData.sinkSmoothingConverged[i] = i == 0;
         semiData.sinkDensity[i] = -21.0f;
     }
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         semiData.treeNodes[0].outerBox.begin[dim] = 0.43;
         semiData.treeNodes[0].outerBox.end[dim] = 0.67;
     }
@@ -1310,7 +1311,7 @@ void testSupportRefresh() {
             !semiData.sinkSmoothingConverged[1],
         "semiactive smoothing requests a neighbor refresh");
     requireClose("failed semiactive solve preserves density", semiData.sinkDensity[1], -21.0, 0.0);
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         semiData.treeNodes[0].outerBox.begin[dim] = -1.0;
         semiData.treeNodes[0].outerBox.end[dim] = 2.0;
     }
@@ -1347,7 +1348,7 @@ void testRungPropagation() {
             }
             expectedChange = expectedChange || expected[i] != previous[i];
         }
-        auto const result = fixture.run(SPH_RUN_RUNGS);
+        auto const result = fixture.run(kSphRunRungs);
         require(result.needsAnotherPass == expectedChange,
             "rung reduction accurately reports pending changes");
         for (int i = 0; i < kCount; i++) {
@@ -1458,7 +1459,7 @@ TEST_F(SphCpuTest, BalsaraVelocityGradients) {
             data.sinkSmoothingConverged[sink] = true;
             data.sourceBalsaraFactor[source] = -7.0f;
         }
-        fixture.run(SPH_RUN_PREHYDRO2);
+        fixture.run(kSphRunPrehydro2);
         for (int i = 0; i < fixture.count_; ++i) {
             float const factor = data.sinkBalsaraFactor[fixture.sinkIndex(i)];
             EXPECT_GE(factor, 0.0f);
@@ -1470,7 +1471,7 @@ TEST_F(SphCpuTest, BalsaraVelocityGradients) {
         EXPECT_EQ(data.sinkBalsaraFactor[fixture.sinkIndex(fixture.count_)], 0.0f);
     }
     fixture.params_.balsaraSwitch = false;
-    fixture.run(SPH_RUN_PREHYDRO2);
+    fixture.run(kSphRunPrehydro2);
     for (int i = 0; i < fixture.count_; ++i) {
         EXPECT_EQ(data.sinkBalsaraFactor[fixture.sinkIndex(i)], 1.0f);
     }
@@ -1507,7 +1508,7 @@ TEST_F(SphCpuTest, BalsaraSymmetricForceAndHeating) {
         EXPECT_GT(fullHeating[i], pressureHeating[i]);
         EXPECT_NEAR(data.sinkInternalEnergyRate[i],
             pressureHeating[i] + 0.5f * (fullHeating[i] - pressureHeating[i]), 2.0e-6f);
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             EXPECT_NEAR(data.sinkAccelerations[i].acceleration[dim],
                 pressureForce[i].acceleration[dim] +
                     0.5f * (fullForce[i].acceleration[dim] - pressureForce[i].acceleration[dim]),
@@ -1530,7 +1531,7 @@ TEST_F(SphCpuTest, EveryPhaseSubmitsItsArithmeticCount) {
         fixture.data_.sourcePositionZ[source] = 0.5f;
         fixture.data_.sourceDensity[source] = 1.0f;
     }
-    for (int runType : {SPH_RUN_PREHYDRO1, SPH_RUN_PREHYDRO2, SPH_RUN_HYDRO, SPH_RUN_RUNGS}) {
+    for (int runType : {kSphRunPrehydro1, kSphRunPrehydro2, kSphRunHydro, kSphRunRungs}) {
         detail::submittedSphFlops = 0;
         auto const result = fixture.run(runType);
         EXPECT_GT(detail::submittedSphFlops, 0) << "phase " << runType;
@@ -1548,13 +1549,13 @@ TEST_F(SphCpuTest, DensityAndRungsCountPaddedPackets) {
     // Every neighbor passes all three dimensions of the first periodic image:
     // six fixed-point image conversions per source. Two SIMD packets execute
     // per sink, including the unused lanes of the final packet.
-    auto const rungs = fixture.run(SPH_RUN_RUNGS);
+    auto const rungs = fixture.run(kSphRunRungs);
     EXPECT_EQ(rungs.floatingPointOperations, double(fixture.count_) * (7 + 18 * width));
     // Cubic density evaluates both Bernstein spans in every lane: each span
     // has six interpolation steps (18 operations), four weights, one scalar
     // width subtraction. Include distance/normalization, density accumulation,
     // four scalar setup operations and a width-1 additive reduction per sink.
-    auto const density = fixture.run(SPH_RUN_PREHYDRO2);
+    auto const density = fixture.run(kSphRunPrehydro2);
     EXPECT_EQ(density.floatingPointOperations, double(fixture.count_) * (13 + 113 * width));
 }
 
@@ -1564,9 +1565,9 @@ TEST_F(SphCpuTest, DisabledGravityTimestepDiagnosticsAreExcluded) {
     for (int i = 0; i < fixture.count_; ++i) {
         fixture.data_.sourceDensity[fixture.sourceIndex(i)] = 1.0f;
     }
-    auto const withoutGravity = fixture.run(SPH_RUN_HYDRO);
+    auto const withoutGravity = fixture.run(kSphRunHydro);
     fixture.data_.selfGravityEnabled = true;
-    auto const withGravity = fixture.run(SPH_RUN_HYDRO);
+    auto const withGravity = fixture.run(kSphRunHydro);
     // The same gravity limit and rung expressions execute in both cases, but
     // constrain the evolution only when self-gravity is enabled. Otherwise
     // their 13 operations produce diagnostics and must not enter the count.

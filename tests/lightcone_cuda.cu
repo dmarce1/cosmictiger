@@ -58,7 +58,7 @@ int cudaSmpCount() {
 
 namespace detail {
 
-using Position = std::array<double, NDIM>;
+using Position = std::array<double, kDimensions>;
 
 struct Fixture {
     LightconeParticleMapType particles;
@@ -75,18 +75,18 @@ struct Fixture {
         node.lastActive = 0;
         node.particleRange.first = parts.group.size();
         node.particleRange.second = node.particleRange.first + positions.size();
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             node.box.begin[dim] = std::numeric_limits<double>::max();
             node.box.end[dim] = -std::numeric_limits<double>::max();
         }
         for (size_t index = 0; index < positions.size(); index++) {
-            for (int dim = 0; dim < NDIM; dim++) {
+            for (int dim = 0; dim < kDimensions; dim++) {
                 LightconeReal const position = positions[index][dim];
                 parts.pos[dim].pushBack(position);
                 node.box.begin[dim] = std::min(node.box.begin[dim], position.toDouble());
                 node.box.end[dim] = std::max(node.box.end[dim], position.toDouble());
             }
-            parts.group.pushBack(labels.empty() ? LC_NO_GROUP : labels[index]);
+            parts.group.pushBack(labels.empty() ? kLightconeNoGroup : labels[index]);
         }
         LightconeTreeId const leaf{pixel, trees[pixel].size()};
         trees[pixel].pushBack(std::move(node));
@@ -97,9 +97,9 @@ struct Fixture {
         addLeaf(0, {{0.0, 0.0, 0.0}, {0.05, 0.0, 0.0}, {0.10, 0.0, 0.0}});
         addLeaf(0, {{0.15, 0.0, 0.0}, {0.20, 0.0, 0.0}, {0.7, 0.0, 0.0}});
         addLeaf(1, {{0.25, 0.0, 0.0}, {0.30, 0.0, 0.0}, {0.35, 0.0, 0.0}},
-            {LC_NO_GROUP, LC_NO_GROUP, LC_EDGE_GROUP});
+            {kLightconeNoGroup, kLightconeNoGroup, kLightconeEdgeGroup});
         addLeaf(1, {{-0.5, 0.0, 0.0}, {-0.45, 0.0, 0.0}, {-0.40, 0.0, 0.0}},
-            {LC_NO_GROUP, 23, LC_NO_GROUP});
+            {kLightconeNoGroup, 23, kLightconeNoGroup});
         addLeaf(2, {{0.0, 0.0, 0.5}, {0.05, 0.0, 0.5}, {0.05, 0.0, 0.5}});
         addLeaf(2, {{-0.75, -0.5, 0.0}, {-0.6875, -0.5, 0.0}});
         for (auto const& leaf : leaves) {
@@ -155,8 +155,10 @@ TEST_F(LightconeCuda, ConnectedComponentsMatchCpu) {
         auto const cpuLabels = cpu->labels();
         auto const gpuLabels = gpu->labels();
         for (size_t first = 0; first < cpuLabels.size(); first++) {
-            if ((cpuLabels[first] == LC_NO_GROUP) != (gpuLabels[first] == LC_NO_GROUP) ||
-                (cpuLabels[first] == LC_EDGE_GROUP) != (gpuLabels[first] == LC_EDGE_GROUP)) {
+            if ((cpuLabels[first] == kLightconeNoGroup) !=
+                    (gpuLabels[first] == kLightconeNoGroup) ||
+                (cpuLabels[first] == kLightconeEdgeGroup) !=
+                    (gpuLabels[first] == kLightconeEdgeGroup)) {
                 throw std::runtime_error("CPU/CUDA singleton or edge labels differ");
             }
             for (size_t second = 0; second < cpuLabels.size(); second++) {

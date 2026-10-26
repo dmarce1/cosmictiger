@@ -23,7 +23,7 @@
 namespace cosmictiger::gravity {
 // Physical point result in normalized FMM units. Acceleration is -grad(potential).
 template <class Real>
-struct Field : Array<Real, NDIM + 1> {
+struct Field : Array<Real, kDimensions + 1> {
     CUDA_EXPORT Real& potential() {
         return (*this)[0];
     }
@@ -49,7 +49,7 @@ struct Field : Array<Real, NDIM + 1> {
         return (*this)[3];
     }
 };
-static_assert(sizeof(Field<float>) == (NDIM + 1) * sizeof(float));
+static_assert(sizeof(Field<float>) == (kDimensions + 1) * sizeof(float));
 }    // namespace cosmictiger::gravity
 
 static_assert(sizeof(cosmictiger::gravity::cartesian::Multipole<float, 7>) ==
@@ -60,12 +60,12 @@ static_assert(
 // Positioned multipole record. The center comes first so order-agnostic tree
 // code reads it through MultipolePosition; the per-order view adds the moments.
 struct MultipolePosition {
-    Array<Position, NDIM> pos;
+    Array<Position, kDimensions> pos;
 };
 
 template <int order>
 struct FmmMultiPos {
-    Array<Position, NDIM> pos;
+    Array<Position, kDimensions> pos;
     cosmictiger::gravity::cartesian::Multipole<float, order> multi;
 };
 

@@ -42,16 +42,16 @@ HPX_PLAIN_ACTION(groupsCull, GroupsCullAction);
 HPX_PLAIN_ACTION(groupsQueueAssignments, GroupsQueueAssignmentsAction);
 HPX_PLAIN_ACTION(groupsInstallHistory, GroupsInstallHistoryAction);
 
-#define GROUP_TABLE_SIZE 1024
+constexpr int kGroupTableSize = 1024;
 
 struct GroupHashHi {
     size_t operator()(GroupInteger grp) const {
-        return grp / (GROUP_TABLE_SIZE * GROUP_WAVES);
+        return grp / (kGroupTableSize * kGroupWaves);
     }
 };
 
-static Array<SpinlockType, GROUP_TABLE_SIZE> mutexes;
-static Array<std::unordered_map<GroupInteger, Vector<ParticleData>, GroupHashHi>, GROUP_TABLE_SIZE>
+static Array<SpinlockType, kGroupTableSize> mutexes;
+static Array<std::unordered_map<GroupInteger, Vector<ParticleData>, GroupHashHi>, kGroupTableSize>
     groupData;
 static Vector<GroupEntry> groups;
 static Vector<RockstarRecord> rockstarRecords;
@@ -132,8 +132,8 @@ void groupsPrepareHistory(int number) {
             GroupInteger halo;
             GroupInteger host;
             while (input >> halo) {
-                if (!(input >> host) || halo < 0 || host < 0 || halo == NO_GROUP || host == halo ||
-                    !identifiers.insert(halo).second) {
+                if (!(input >> host) || halo < 0 || host < 0 || halo == kNoParticleGroup ||
+                    host == halo || !identifiers.insert(halo).second) {
                     throw std::runtime_error("Malformed ROCKSTAR host history: " + path.string());
                 }
                 entries.push_back({halo, host});
@@ -146,7 +146,7 @@ void groupsPrepareHistory(int number) {
             throw std::runtime_error("Incomplete ROCKSTAR host history");
         }
         for (auto const& entry : entries) {
-            if (entry.second != NO_GROUP && identifiers.count(entry.second) == 0) {
+            if (entry.second != kNoParticleGroup && identifiers.count(entry.second) == 0) {
                 throw std::runtime_error("ROCKSTAR history refers to an unwritten host halo");
             }
         }
@@ -194,9 +194,9 @@ void groupsCull() {
             ParticleInteger const begin = (size_t) proc * particlesSize() / numberOfThreads;
             ParticleInteger const end = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
             for (ParticleInteger i = begin; i < end; i++) {
-                if (particlesGroup(i) != NO_GROUP) {
+                if (particlesGroup(i) != kNoParticleGroup) {
                     if (finalExisting.find(particlesGroup(i)) == finalExisting.end()) {
-                        particlesGroup(i) = NO_GROUP;
+                        particlesGroup(i) = kNoParticleGroup;
                     }
                 }
             }
@@ -305,7 +305,7 @@ std::pair<size_t, size_t> groupsSave(int number, double scale, double time) {
         // represented explicitly for a previously catalogued halo.
         std::unordered_map<GroupInteger, std::pair<GroupInteger, int>> descendants;
         for (auto const& previous : previousHaloHosts) {
-            descendants.emplace(previous.first, std::make_pair(NO_GROUP, 0));
+            descendants.emplace(previous.first, std::make_pair(kNoParticleGroup, 0));
         }
         for (int sourceRank = 0; sourceRank < hpxSize(); ++sourceRank) {
             std::string const groupName = directory + "groups." + std::to_string(number) + "." +
@@ -361,19 +361,19 @@ std::pair<size_t, size_t> groupsSave(int number, double scale, double time) {
     return std::make_pair(count, (size_t) groupCandidates);
 }
 
-#define GROUPS_REDUCE_OVERSUBSCRIBE 2
+constexpr int kGroupsReduceOversubscribe = 2;
 
 void groupsReduce(double scaleFactor) {
     Vector<hpx::future<void>> futures;
     for (auto const& child : hpxChildren()) {
         futures.push_back(hpx::async<GroupsReduceAction>(child, scaleFactor));
     }
-    int const numberOfThreads = GROUPS_REDUCE_OVERSUBSCRIBE * hpxHardwareConcurrency();
+    int const numberOfThreads = kGroupsReduceOversubscribe * hpxHardwareConcurrency();
     SpinlockType mutex;
     for (int proc = 0; proc < numberOfThreads; ++proc) {
         futures.push_back(hpx::async([proc, numberOfThreads, &mutex, scaleFactor]() {
             std::unordered_map<int, Vector<Pair<ParticleInteger, GroupInteger>>> assignments;
-            for (int bin = proc; bin < GROUP_TABLE_SIZE; bin += numberOfThreads) {
+            for (int bin = proc; bin < kGroupTableSize; bin += numberOfThreads) {
                 for (auto const& candidate : groupData[bin]) {
                     ++groupCandidates;
                     auto const& particles = candidate.second;
@@ -381,15 +381,15 @@ void groupsReduce(double scaleFactor) {
                     // overwrite only particles retained in an exclusive halo.
                     std::unordered_map<int, std::unordered_map<ParticleInteger, GroupInteger>> tags;
                     for (auto const& particle : particles) {
-                        tags[particle.rank][particle.index] = NO_GROUP;
+                        tags[particle.rank][particle.index] = kNoParticleGroup;
                     }
                     if (particles.size() >= getOptions().analysis.minGroupSize) {
                         auto const halos = rockstarFindSubgroups(particles, scaleFactor);
                         if (halos.size() > 32767) {
                             throw std::runtime_error("ROCKSTAR record halo ID capacity exceeded");
                         }
-                        Array<double, NDIM> origin;
-                        for (int dim = 0; dim < NDIM; ++dim) {
+                        Array<double, kDimensions> origin;
+                        for (int dim = 0; dim < kDimensions; ++dim) {
                             origin[dim] = particles.front().x[dim].toDouble();
                         }
                         for (int i = 0; i < halos.size(); ++i) {
@@ -405,8 +405,9 @@ void groupsReduce(double scaleFactor) {
                             record.id.fofId = candidate.first;
                             record.id.haloId = i;
                             record.pid = halo.parent;
-                            GroupInteger const host =
-                                halo.parent >= 0 ? halos[halo.parent].catalogueId : NO_GROUP;
+                            GroupInteger const host = halo.parent >= 0 ?
+                                halos[halo.parent].catalogueId :
+                                kNoParticleGroup;
                             std::lock_guard<SpinlockType> lock(mutex);
                             groups.push_back(std::move(entry));
                             rockstarRecords.push_back(record);
@@ -447,7 +448,7 @@ void groupsTransmitParticles(Vector<std::pair<GroupInteger, Vector<ParticleData>
         futs.push_back(hpx::async([numberOfThreads, proc, &entries]() {
             for (int i = proc; i < entries.size(); i += numberOfThreads) {
                 auto const grp = entries[i].first;
-                int const bin = (grp / GROUP_WAVES) % GROUP_TABLE_SIZE;
+                int const bin = (grp / kGroupWaves) % kGroupTableSize;
                 std::lock_guard<SpinlockType> lock(mutexes[bin]);
                 auto& entry = groupData[bin][grp];
                 entry.insert(entry.end(), entries[i].second.begin(), entries[i].second.end());
@@ -477,16 +478,16 @@ void groupsAddParticles(int wave, double scale) {
             ParticleInteger const end = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
             for (ParticleInteger i = begin; i < end; i++) {
                 auto const grp = (GroupInteger) particlesGroup(i);
-                if (grp != NO_GROUP) {
+                if (grp != kNoParticleGroup) {
                     int const home = particlesGroupHome(grp);
-                    if (grp % GROUP_WAVES == wave) {
+                    if (grp % kGroupWaves == wave) {
                         if (localGroups[home].find(grp) == localGroups[home].end()) {
                             std::lock_guard<SpinlockType> lock(mutex);
                             localExistingGroups.push_back(grp);
                         }
                         auto& entry = localGroups[home][grp];
                         ParticleData part;
-                        for (int dim = 0; dim < NDIM; dim++) {
+                        for (int dim = 0; dim < kDimensions; dim++) {
                             part.x[dim] = particlesPos(dim, i);
                             part.v[dim] = particlesVel(dim, i) * ainv;
                         }
@@ -496,7 +497,7 @@ void groupsAddParticles(int wave, double scale) {
                         part.identity = particlesGroupInit(i);
                         auto const previousHost = previousHaloHosts.find(part.lastGroup);
                         part.lastHost = previousHost == previousHaloHosts.end() ?
-                            NO_GROUP :
+                            kNoParticleGroup :
                             previousHost->second;
                         entry.push_back(part);
                     }

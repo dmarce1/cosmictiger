@@ -16,55 +16,55 @@ void cpuGravityEwald(cosmictiger::gravity::cartesian::Expansion<float, order>& l
     if (list.size()) {
         Vector<TreeNode const*> treePtrs(list.size());
         TreeNode const* selfPtr = treeGetNode(self);
-        int const numberOfSources = roundUp((int) list.size(), SIMD_FLOAT_SIZE) / SIMD_FLOAT_SIZE;
+        int const numberOfSources = roundUp((int) list.size(), kSimdFloatSize) / kSimdFloatSize;
         for (int i = 0; i < list.size(); i++) {
             treePtrs[i] = treeGetNode(list[i]);
         }
         static thread_local detail::SimdAlignedVector<
             cosmictiger::gravity::cartesian::Multipole<SimdFloat, order>>
             mValue;
-        static thread_local detail::SimdAlignedVector<Array<SimdPosition, NDIM>> yValue;
+        static thread_local detail::SimdAlignedVector<Array<SimdPosition, kDimensions>> yValue;
         detail::gatherSourceMultipoles<order>(treePtrs, mValue, yValue);
-        Array<SimdPosition, NDIM> x{};
-        for (int dim = 0; dim < NDIM; dim++) {
+        Array<SimdPosition, kDimensions> x{};
+        for (int dim = 0; dim < kDimensions; dim++) {
             x[dim] = simdBroadcast<SimdPosition>(selfPtr->mpos->pos[dim].raw());
         }
         cosmictiger::gravity::cartesian::Expansion<SimdFloat, order> l0;
         l0 = simdBroadcast<SimdFloat>(0.0f);
         for (int j = 0; j < numberOfSources; j++) {
-            Array<SimdFloat, NDIM> dx{};
-            for (int dim = 0; dim < NDIM; dim++) {
+            Array<SimdFloat, kDimensions> dx{};
+            for (int dim = 0; dim < kDimensions; dim++) {
                 dx[dim] = fmmPositionDifference(x[dim], yValue[j][dim], dim, geometry);
             }
-            Array<SimdFloat, NDIM> unwrappedPosition{};
-            for (int lane = 0; lane < SIMD_FLOAT_SIZE; lane++) {
+            Array<SimdFloat, kDimensions> unwrappedPosition{};
+            for (int lane = 0; lane < kSimdFloatSize; lane++) {
                 int const sourceIndex =
-                    std::min(j * SIMD_FLOAT_SIZE + lane, int(treePtrs.size()) - 1);
-                for (int dim = 0; dim < NDIM; dim++) {
+                    std::min(j * kSimdFloatSize + lane, int(treePtrs.size()) - 1);
+                for (int dim = 0; dim < kDimensions; dim++) {
                     simdSetLane(unwrappedPosition[dim], lane,
                         selfPtr->mpos->pos[dim].toDouble() -
                             treePtrs[sourceIndex]->mpos->pos[dim].toDouble());
                 }
             }
             cosmictiger::gravity::cartesian::Green<SimdFloat, order> d{};
-            flops += FlopCount(SIMD_FLOAT_SIZE) *
+            flops += FlopCount(kSimdFloatSize) *
                 cosmictiger::gravity::cartesian::evaluateEwaldGreen(d, dx, unwrappedPosition);
-            flops += FlopCount(SIMD_FLOAT_SIZE) *
+            flops += FlopCount(kSimdFloatSize) *
                 cosmictiger::gravity::cartesian::M2L(l0, mValue[j], d, doPhi);
         }
         // Fixed displacement and kernel work is batched outside the source loop.
-        flops += FlopCount(numberOfSources) * SIMD_FLOAT_SIZE * (3 + 9);
+        flops += FlopCount(numberOfSources) * kSimdFloatSize * (3 + 9);
         for (int i = 0; i < kLocalCoefficients; i++) {
             lValue[i] += simdSum(l0[i]);
         }
-        flops += SIMD_FLOAT_SIZE * kLocalCoefficients;
+        flops += kSimdFloatSize * kLocalCoefficients;
     }
     addCpuFlops(flops);
 }
 
 template <int order>
 FlopCount dehnenBackgroundImpl(KickParameters const& params, ExpansionBuffer& l,
-    Array<Position, NDIM>& pos, TreeId self, Vector<TreeId> const& echecklist) {
+    Array<Position, kDimensions>& pos, TreeId self, Vector<TreeId> const& echecklist) {
     using Expansion = cosmictiger::gravity::cartesian::Expansion<float, order>;
     constexpr int kLocalCoefficients = FmmOrder<order>::kLocalCoefficients_;
     constexpr int kLocalDegree = FmmOrder<order>::kLocalDegree_;
@@ -78,8 +78,8 @@ FlopCount dehnenBackgroundImpl(KickParameters const& params, ExpansionBuffer& l,
         // nearest images. Its source trace is needed only for the potential
         // gauge, so compute that scalar here instead of storing it in every
         // source multipole.
-        Array<float, NDIM> displacement;
-        for (int dim = 0; dim < NDIM; dim++) {
+        Array<float, kDimensions> displacement;
+        for (int dim = 0; dim < kDimensions; dim++) {
             displacement[dim] = unwrappedDoubleDistance(selfPtr->pos[dim], pos[dim]);
         }
         Expansion translated{};
@@ -115,15 +115,15 @@ FlopCount dehnenPeriodicImpl(KickParameters const& params, ExpansionBuffer& l, T
     auto& leaflist = workspace.leaflist;
     SimdFloat const thetainv = simdBroadcast<SimdFloat>(fmmInverseOpeningAngle(params.theta));
     bool const openLargerCell = params.openLargerCell;
-    Array<TreeNode const*, SIMD_FLOAT_SIZE> otherPtrs;
+    Array<TreeNode const*, kSimdFloatSize> otherPtrs;
     SimdFloat selfRadius = selfPtr->radius;
-    Array<SimdPosition, NDIM> selfPos{};
-    Array<SimdPosition, NDIM> otherPos{};
-    Array<SimdFloat, NDIM> dx{};
+    Array<SimdPosition, kDimensions> selfPos{};
+    Array<SimdPosition, kDimensions> otherPos{};
+    Array<SimdFloat, kDimensions> dx{};
     SimdFloat otherRadius{};
     SimdFloat otherLeaf{};
     Range<SimdDouble8> otherBox{};
-    for (int dim = 0; dim < NDIM; ++dim) {
+    for (int dim = 0; dim < kDimensions; ++dim) {
         selfPos[dim] = simdBroadcast<SimdPosition>(selfPtr->pos[dim].raw());
     }
     FlopCounter<FlopCount> flops = 0;
@@ -133,42 +133,42 @@ FlopCount dehnenPeriodicImpl(KickParameters const& params, ExpansionBuffer& l, T
         leaflist.resize(0);
         auto& checklist = echecklist;
         do {
-            for (int ci = 0; ci < checklist.size(); ci += SIMD_FLOAT_SIZE) {
-                int const maxci = std::min((int) checklist.size(), ci + SIMD_FLOAT_SIZE);
+            for (int ci = 0; ci < checklist.size(); ci += kSimdFloatSize) {
+                int const maxci = std::min((int) checklist.size(), ci + kSimdFloatSize);
                 int const maxi = maxci - ci;
                 for (int i = ci; i < maxci; i++) {
                     otherPtrs[i - ci] = treeGetNode(checklist[i]);
                 }
                 for (int i = 0; i < maxi; i++) {
-                    for (int dim = 0; dim < NDIM; dim++) {
+                    for (int dim = 0; dim < kDimensions; dim++) {
                         simdSetLane(otherPos[dim], i, otherPtrs[i]->pos[dim].raw());
                     }
                     simdSetLane(otherRadius, i, otherPtrs[i]->radius);
                     simdSetLane(otherLeaf, i, otherPtrs[i]->leaf);
                 }
-                for (int i = maxi; i < SIMD_FLOAT_SIZE; i++) {
-                    for (int dim = 0; dim < NDIM; dim++) {
+                for (int i = maxi; i < kSimdFloatSize; i++) {
+                    for (int dim = 0; dim < kDimensions; dim++) {
                         simdSetLane(otherPos[dim], i, 0.f);
                     }
                     simdSetLane(otherRadius, i, 0.f);
                     simdSetLane(otherLeaf, i, 0);
-                    for (int dim = 0; dim < NDIM; dim++) {
+                    for (int dim = 0; dim < kDimensions; dim++) {
                         simdSetLane(otherBox.begin[dim], i, 0.0);
                         simdSetLane(otherBox.end[dim], i, 0.0);
                     }
                 }
-                for (int dim = 0; dim < NDIM; dim++) {
+                for (int dim = 0; dim < kDimensions; dim++) {
                     dx[dim] =
                         simdCast<SimdFloat>(simdPositionDifference(selfPos[dim], otherPos[dim])) *
                         kPositionToFloat;
                 }
-                SimdFloat r2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
+                SimdFloat r2 = sqr(dx[kXDimension], dx[kYDimension], dx[kZDimension]);
                 r2 = simdMax(r2,
                     simdMax(sqr(simdBroadcast<SimdFloat>(0.5) - (selfRadius + otherRadius)),
                         simdBroadcast<SimdFloat>(0)));
                 SimdFloat const dcc = (selfRadius + otherRadius) * thetainv;
                 auto const cc = r2 > sqr(dcc);
-                flops += SIMD_FLOAT_SIZE * 14;
+                flops += kSimdFloatSize * 14;
                 for (int i = 0; i < maxi; i++) {
                     if (cc[i]) {
                         cclist.push_back(checklist[ci + i]);

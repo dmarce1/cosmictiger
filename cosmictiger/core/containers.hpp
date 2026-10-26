@@ -103,17 +103,17 @@ public:
 };
 
 template <class T>
-inline Array<T, NDIM> operator*(Array<T, NDIM> const& a, T b) {
-    Array<T, NDIM> c;
-    for (int dim = 0; dim < NDIM; dim++) {
+inline Array<T, kDimensions> operator*(Array<T, kDimensions> const& a, T b) {
+    Array<T, kDimensions> c;
+    for (int dim = 0; dim < kDimensions; dim++) {
         c[dim] = a[dim] * b;
     }
     return c;
 }
 
 template <class T>
-inline bool operator==(Array<T, NDIM> const& a, Array<T, NDIM> const& b) {
-    for (int dim = 0; dim < NDIM; dim++) {
+inline bool operator==(Array<T, kDimensions> const& a, Array<T, kDimensions> const& b) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         if (a[dim] != b[dim]) {
             return false;
         }
@@ -122,23 +122,25 @@ inline bool operator==(Array<T, NDIM> const& a, Array<T, NDIM> const& b) {
 }
 
 template <class T>
-inline bool operator!=(Array<T, NDIM> const& a, Array<T, NDIM> const& b) {
+inline bool operator!=(Array<T, kDimensions> const& a, Array<T, kDimensions> const& b) {
     return !(a == b);
 }
 
 template <class T>
-inline Array<T, NDIM> operator+(Array<T, NDIM> const& a, Array<T, NDIM> const& b) {
-    Array<T, NDIM> c;
-    for (int dim = 0; dim < NDIM; dim++) {
+inline Array<T, kDimensions> operator+(
+    Array<T, kDimensions> const& a, Array<T, kDimensions> const& b) {
+    Array<T, kDimensions> c;
+    for (int dim = 0; dim < kDimensions; dim++) {
         c[dim] = a[dim] + b[dim];
     }
     return c;
 }
 
 template <class T>
-inline Array<T, NDIM> operator-(Array<T, NDIM> const& a, Array<T, NDIM> const& b) {
-    Array<T, NDIM> c;
-    for (int dim = 0; dim < NDIM; dim++) {
+inline Array<T, kDimensions> operator-(
+    Array<T, kDimensions> const& a, Array<T, kDimensions> const& b) {
+    Array<T, kDimensions> c;
+    for (int dim = 0; dim < kDimensions; dim++) {
         c[dim] = a[dim] - b[dim];
     }
     return c;

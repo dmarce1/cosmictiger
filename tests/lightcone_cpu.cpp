@@ -42,7 +42,7 @@ void copyCudaMemory(void* destination, void* source, int bytes) {
 
 namespace detail {
 
-using Position = std::array<double, NDIM>;
+using Position = std::array<double, kDimensions>;
 
 void require(bool condition, char const* message) {
     if (!condition) {
@@ -74,18 +74,18 @@ struct Fixture {
         node.pix = pixel;
         node.active = 1;
         node.lastActive = 0;
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             node.box.begin[dim] = std::numeric_limits<double>::max();
             node.box.end[dim] = -std::numeric_limits<double>::max();
         }
         for (size_t index = 0; index < positions.size(); index++) {
-            for (int dim = 0; dim < NDIM; dim++) {
+            for (int dim = 0; dim < kDimensions; dim++) {
                 LightconeReal const position = positions[index][dim];
                 parts.pos[dim].pushBack(position);
                 node.box.begin[dim] = std::min(node.box.begin[dim], position.toDouble());
                 node.box.end[dim] = std::max(node.box.end[dim], position.toDouble());
             }
-            parts.group.pushBack(labels.empty() ? LC_NO_GROUP : labels[index]);
+            parts.group.pushBack(labels.empty() ? kLightconeNoGroup : labels[index]);
         }
         LightconeTreeId const leaf{pixel, trees[pixel].size()};
         trees[pixel].pushBack(std::move(node));
@@ -136,7 +136,7 @@ struct Fixture {
             auto const& node = trees[leaf.pix][leaf.index];
             for (int index = node.particleRange.first; index < node.particleRange.second; index++) {
                 Position position;
-                for (int dim = 0; dim < NDIM; dim++) {
+                for (int dim = 0; dim < kDimensions; dim++) {
                     position[dim] = particles[leaf.pix].pos[dim][index].toDouble();
                 }
                 result.push_back(position);
@@ -156,7 +156,7 @@ void checkOracle(Fixture& fixture, double linkingLength) {
         connected[first][first] = true;
         for (size_t second = first + 1; second < count; second++) {
             double distanceSquared = 0.0;
-            for (int dim = 0; dim < NDIM; dim++) {
+            for (int dim = 0; dim < kDimensions; dim++) {
                 double const delta = positions[first][dim] - positions[second][dim];
                 distanceSquared += delta * delta;
             }
@@ -175,22 +175,22 @@ void checkOracle(Fixture& fixture, double linkingLength) {
     fixture.converge(linkingLength);
     auto const actual = fixture.labels();
     for (size_t first = 0; first < count; first++) {
-        LightconeGroup expected = LC_NO_GROUP;
+        LightconeGroup expected = kLightconeNoGroup;
         size_t members = 0;
         for (size_t second = 0; second < count; second++) {
             if (connected[first][second]) {
                 members++;
                 expected = std::min(expected, original[second]);
                 require(actual[first] == actual[second], "connected particles share a label");
-            } else if (actual[first] != LC_NO_GROUP) {
+            } else if (actual[first] != kLightconeNoGroup) {
                 require(actual[first] != actual[second],
                     "disconnected components have distinct labels");
             }
         }
-        if (members == 1 || expected != LC_NO_GROUP) {
+        if (members == 1 || expected != kLightconeNoGroup) {
             require(actual[first] == expected, "singleton or pre-existing minimum label preserved");
         } else {
-            require(actual[first] != LC_NO_GROUP && actual[first] != LC_EDGE_GROUP,
+            require(actual[first] != kLightconeNoGroup && actual[first] != kLightconeEdgeGroup,
                 "unlabelled linked components receive a group");
             require((actual[first] - 1) % fixture.ranks == fixture.rank,
                 "new IDs retain the locality residue");
@@ -216,10 +216,10 @@ void testComponents() {
 void testExistingLabels() {
     Fixture fixture;
     fixture.nextGroup = 1000;
-    fixture.addLeaf(0, {{0.0, 0.0, 0.0}, {0.05, 0.0, 0.0}}, {91, LC_NO_GROUP});
-    fixture.addLeaf(1, {{0.10, 0.0, 0.0}, {0.15, 0.0, 0.0}}, {17, LC_NO_GROUP});
-    fixture.addLeaf(1, {{-0.5, 0.0, 0.0}, {-0.45, 0.0, 0.0}}, {LC_EDGE_GROUP, 14});
-    fixture.addLeaf(2, {{-0.40, 0.0, 0.0}}, {LC_NO_GROUP});
+    fixture.addLeaf(0, {{0.0, 0.0, 0.0}, {0.05, 0.0, 0.0}}, {91, kLightconeNoGroup});
+    fixture.addLeaf(1, {{0.10, 0.0, 0.0}, {0.15, 0.0, 0.0}}, {17, kLightconeNoGroup});
+    fixture.addLeaf(1, {{-0.5, 0.0, 0.0}, {-0.45, 0.0, 0.0}}, {kLightconeEdgeGroup, 14});
+    fixture.addLeaf(2, {{-0.40, 0.0, 0.0}}, {kLightconeNoGroup});
     fixture.addLeaf(2, {{0.75, 0.75, 0.75}}, {129});
     fixture.connectLeaves();
     checkOracle(fixture, 0.0625);
@@ -231,8 +231,8 @@ void testThresholdAndDuplicates() {
     fixture.addLeaf(1, {{0.5, 0.0, 0.0}, {0.5, 0.0, 0.0}, {0.5625, 0.0, 0.0}});
     fixture.connectLeaves();
     checkOracle(fixture, 0.125);
-    require(fixture.particles[0].group[0] == LC_NO_GROUP &&
-            fixture.particles[0].group[1] == LC_NO_GROUP,
+    require(fixture.particles[0].group[0] == kLightconeNoGroup &&
+            fixture.particles[0].group[1] == kLightconeNoGroup,
         "exact linking-length separation is excluded");
     Fixture zero;
     zero.addLeaf(0, {{0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}});
@@ -271,7 +271,7 @@ void testDistributedChain() {
         fixture.ownedPixels.second = rank + 1;
         for (int pixel = 0; pixel < kRanks; pixel++) {
             fixture.addLeaf(pixel, {{pixel * 0.05, 0.0, 0.0}},
-                {pixel == 2 ? LC_EDGE_GROUP : LC_NO_GROUP}, pixel == rank);
+                {pixel == 2 ? kLightconeEdgeGroup : kLightconeNoGroup}, pixel == rank);
         }
         fixture.connectLeaves();
     }
@@ -299,7 +299,7 @@ void testDistributedChain() {
     }
     require(converged, "distributed chain converges");
     for (int rank = 0; rank < kRanks; rank++) {
-        require(fixtures[rank].particles[rank].group[0] == LC_EDGE_GROUP,
+        require(fixtures[rank].particles[rank].group[0] == kLightconeEdgeGroup,
             "edge label crosses multiple locality boundaries");
     }
 }
@@ -311,7 +311,7 @@ void testDeterministicCloud() {
         std::vector<Position> positions;
         for (int index = 0; index < 6; index++) {
             Position position;
-            for (int dim = 0; dim < NDIM; dim++) {
+            for (int dim = 0; dim < kDimensions; dim++) {
                 state = state * 1664525u + 1013904223u;
                 position[dim] = (static_cast<double>((state >> 16) % 81) - 40.0) / 128.0;
             }

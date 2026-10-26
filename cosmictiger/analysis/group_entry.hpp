@@ -20,9 +20,9 @@ using GroupInteger = long long;
 
 struct GroupEntry {
     GroupInteger id;
-    Array<double, NDIM> com;
-    Array<float, NDIM> vel;
-    Array<float, NDIM> lang;
+    Array<double, kDimensions> com;
+    Array<float, kDimensions> vel;
+    Array<float, kDimensions> lang;
     float mass;
     float ekin;
     float epot;

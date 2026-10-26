@@ -66,21 +66,21 @@ struct SphRunData {
     float centralSupportRadius;    // Support radius of the selected gravity kernel.
 };
 
-#define MAX_NEIGHBOR_RUNG_DIFFERENCE 1
-#define SPH_SUPPORT_RADIUS_TOLERANCE float(1.0e-4)
+inline constexpr int kMaxNeighborRungDifference = 1;
+inline constexpr float kSphSupportRadiusTolerance = float(1.0e-4);
 
 // A source can reach any sink in this box through a periodic image. Expanding
 // the unwrapped interval before testing avoids inconsistent endpoint wrapping.
 CUDA_EXPORT inline bool sphSupportIntersects(Fixed32Range const& sinkBox,
-    Array<Position, NDIM> const& sourcePosition, float sourceSupport,
+    Array<Position, kDimensions> const& sourcePosition, float sourceSupport,
     FlopCounter<>* flops = nullptr) {
     Fixed32Range expanded = sinkBox;
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         expanded.begin[dim] -= RangeFixed(sourceSupport);
         expanded.end[dim] += RangeFixed(sourceSupport);
     }
     if (flops) {
-        *flops += 2 * NDIM;    // Two support-to-fixed scaling products per dimension.
+        *flops += 2 * kDimensions;    // Two support-to-fixed scaling products per dimension.
     }
     return expanded.contains(sourcePosition, flops);
 }

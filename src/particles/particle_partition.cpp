@@ -25,14 +25,14 @@ void particlesSwap(ParticleInteger first, ParticleInteger second) {
     }
     CHECK_PART_BOUNDS(first);
     CHECK_PART_BOUNDS(second);
-    for (int dim = 0; dim < NDIM; ++dim) {
+    for (int dim = 0; dim < kDimensions; ++dim) {
         detail::swapParticleBytes(particlesX[dim][first], particlesX[dim][second]);
     }
     detail::swapParticleBytes(particlesV[first], particlesV[second]);
     detail::swapParticleBytes(particlesR[first], particlesR[second]);
     auto const& options = getOptions();
     if (saveParticleAcceleration(options.analysis)) {
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             detail::swapParticleBytes(particlesGravityAccelerations[dim][first],
                 particlesGravityAccelerations[dim][second]);
         }

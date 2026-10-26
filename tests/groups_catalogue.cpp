@@ -54,13 +54,13 @@ void groupsCatalogueTest() {
         float const support = getOptions().gravity.supportRadius;
         float const speed = 0.03f * std::sqrt(getOptions().gravity.gm / support);
         for (int i = 0; i < kParticleCount; ++i) {
-            for (int dim = 0; dim < NDIM; ++dim) {
+            for (int dim = 0; dim < kDimensions; ++dim) {
                 particlesPos(dim, i) = 0.5 + 0.2 * support * distribution(generator);
                 particlesVel(dim, i) = speed * distribution(generator);
             }
-            particlesLastgroup(i) = NO_GROUP;
+            particlesLastgroup(i) = kNoParticleGroup;
         }
-        Vector<GroupInteger> firstTags(kParticleCount, NO_GROUP);
+        Vector<GroupInteger> firstTags(kParticleCount, kNoParticleGroup);
         size_t firstHaloCount = 0;
         for (int snapshot = 1; snapshot <= 2; ++snapshot) {
             int const snapshotNumber = snapshot == 1 ? 1 : 3;
@@ -82,7 +82,7 @@ void groupsCatalogueTest() {
                 particlesGroup(i) = particlesGroupInit(0);
             }
             particlesGroup(kHaloParticles) = particlesGroupInit(kHaloParticles);
-            for (int wave = 0; wave < GROUP_WAVES; ++wave) {
+            for (int wave = 0; wave < kGroupWaves; ++wave) {
                 groupsAddParticles(wave, 1.0);
                 if (snapshot == 2) {
                     detail::groupsForEachCandidate(
@@ -95,7 +95,7 @@ void groupsCatalogueTest() {
                                     "Particle identity missing from distributed group input");
                                 auto const host = hosts.find(particle.lastGroup);
                                 require(particle.lastHost ==
-                                        (host == hosts.end() ? NO_GROUP : host->second),
+                                        (host == hosts.end() ? kNoParticleGroup : host->second),
                                     "Previous host missing from finder input");
                             }
                         });
@@ -108,21 +108,21 @@ void groupsCatalogueTest() {
             groupsCull();
             require(!detail::groupsLocalEntries().empty(),
                 "Bound synthetic group produced an empty catalogue");
-            require(particlesGroup(kHaloParticles) == NO_GROUP,
+            require(particlesGroup(kHaloParticles) == kNoParticleGroup,
                 "Undersized FOF group retained a particle tag");
-            require(particlesGroup(kParticleCount - 1) == NO_GROUP,
+            require(particlesGroup(kParticleCount - 1) == kNoParticleGroup,
                 "FOF culling skipped the last particle partition");
             std::unordered_map<GroupInteger, std::unordered_map<GroupInteger, int>>
                 expectedOverlaps;
             for (int i = 0; i < kParticleCount; ++i) {
                 GroupInteger const current = particlesGroup(i);
-                if (current != NO_GROUP && firstTags[i] != NO_GROUP) {
+                if (current != kNoParticleGroup && firstTags[i] != kNoParticleGroup) {
                     ++expectedOverlaps[current][firstTags[i]];
                 }
             }
             std::unordered_map<GroupInteger, std::pair<GroupInteger, int>> expectedDescendants;
             for (auto const& previous : detail::groupsPreviousHaloHosts()) {
-                expectedDescendants.emplace(previous.first, std::make_pair(NO_GROUP, 0));
+                expectedDescendants.emplace(previous.first, std::make_pair(kNoParticleGroup, 0));
             }
             std::unordered_set<GroupInteger> identifiers;
             for (auto const& group : detail::groupsLocalEntries()) {
@@ -143,13 +143,13 @@ void groupsCatalogueTest() {
             size_t retained = 0;
             for (int i = 0; i < kParticleCount; ++i) {
                 GroupInteger const tag = particlesGroup(i);
-                if (tag != NO_GROUP) {
+                if (tag != kNoParticleGroup) {
                     require(identifiers.count(tag) != 0, "Particle points to an unwritten halo");
                     ++retained;
                 }
                 firstTags[i] = tag;
             }
-            require(retained >= ROCKSTAR_MIN_GROUP, "Synthetic halo lost all particle memberships");
+            require(retained >= kRockstarMinGroup, "Synthetic halo lost all particle memberships");
             auto const written = groupsSave(snapshotNumber, 1.0, 0.0);
             require(written.first == identifiers.size(), "Saved halo count does not match records");
             auto const name = "groups." + std::to_string(snapshotNumber) + "/groups." +
@@ -240,11 +240,11 @@ void groupsCatalogueDistributedSetup(std::string directory) {
     float const speed = 0.03f * std::sqrt(getOptions().gravity.gm / support);
     for (int i = 0; i < kDistributedLocalCount; ++i) {
         double const center = i < kDistributedHaloHalf ? 0.25 : 0.75;
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             particlesPos(dim, i) = center + 0.2 * support * distribution(generator);
             particlesVel(dim, i) = speed * distribution(generator);
         }
-        particlesLastgroup(i) = NO_GROUP;
+        particlesLastgroup(i) = kNoParticleGroup;
     }
 }
 HPX_PLAIN_ACTION(groupsCatalogueDistributedSetup, GroupsCatalogueDistributedSetupAction);
@@ -268,7 +268,7 @@ void groupsCatalogueDistributedBegin(
             "Distributed particle history did not persist between snapshots");
         particlesGroup(i) = i < 2 * kDistributedHaloHalf ?
             distributedFofId(snapshot, i) :
-            (i == 2 * kDistributedHaloHalf ? particlesGroupInit(i) : NO_GROUP);
+            (i == 2 * kDistributedHaloHalf ? particlesGroupInit(i) : kNoParticleGroup);
     }
 }
 HPX_PLAIN_ACTION(groupsCatalogueDistributedBegin, GroupsCatalogueDistributedBeginAction);
@@ -296,7 +296,7 @@ int groupsCatalogueDistributedInspect(int snapshot) {
                 "Previous halo membership did not reach the remote finder");
             auto const host = hosts.find(particle.lastGroup);
             requireDistributedCatalogue(
-                particle.lastHost == (host == hosts.end() ? NO_GROUP : host->second),
+                particle.lastHost == (host == hosts.end() ? kNoParticleGroup : host->second),
                 "Previous host did not reach the remote finder");
             if (realHalo) {
                 requireDistributedCatalogue(particle.index < 2 * kDistributedHaloHalf &&
@@ -353,9 +353,9 @@ Vector<GroupInteger> groupsCatalogueDistributedAfterCull(Vector<GroupInteger> id
     for (int i = 0; i < kDistributedLocalCount; ++i) {
         GroupInteger const tag = particlesGroup(i);
         if (i >= 2 * kDistributedHaloHalf) {
-            requireDistributedCatalogue(tag == NO_GROUP,
+            requireDistributedCatalogue(tag == kNoParticleGroup,
                 "Distributed culling retained a rejected or unprocessed FOF particle");
-        } else if (tag != NO_GROUP) {
+        } else if (tag != kNoParticleGroup) {
             requireDistributedCatalogue(valid.count(tag) != 0,
                 "Distributed particle membership refers to an unwritten halo");
             ++retained[i / kDistributedHaloHalf];
@@ -363,7 +363,7 @@ Vector<GroupInteger> groupsCatalogueDistributedAfterCull(Vector<GroupInteger> id
         tags.push_back(tag);
     }
     requireDistributedCatalogue(
-        retained[0] >= ROCKSTAR_MIN_GROUP && retained[1] >= ROCKSTAR_MIN_GROUP,
+        retained[0] >= kRockstarMinGroup && retained[1] >= kRockstarMinGroup,
         "Remote membership delivery lost a synthetic halo on a source locality");
     return tags;
 }
@@ -401,7 +401,7 @@ void groupsCatalogueDistributedTest() {
         for (auto const& locality : hpxLocalities()) {
             hpx::async<GroupsCatalogueDistributedSetupAction>(locality, directory.string()).get();
         }
-        Vector<GroupInteger> previousTags(2 * kDistributedLocalCount, NO_GROUP);
+        Vector<GroupInteger> previousTags(2 * kDistributedLocalCount, kNoParticleGroup);
         Vector<Pair<GroupInteger>> previousHosts;
         for (int snapshot = 1; snapshot <= 2; ++snapshot) {
             groupsPrepareHistory(snapshot);
@@ -412,7 +412,7 @@ void groupsCatalogueDistributedTest() {
                     .get();
             }
             int inputCount = 0;
-            for (int wave = 0; wave < GROUP_WAVES; ++wave) {
+            for (int wave = 0; wave < kGroupWaves; ++wave) {
                 groupsAddParticles(wave, 1.0);
                 for (auto const& locality : hpxLocalities()) {
                     inputCount +=
@@ -446,13 +446,13 @@ void groupsCatalogueDistributedTest() {
             std::unordered_map<GroupInteger, std::unordered_map<GroupInteger, int>>
                 expectedOverlaps;
             for (size_t i = 0; i < tags.size(); ++i) {
-                if (tags[i] != NO_GROUP && previousTags[i] != NO_GROUP) {
+                if (tags[i] != kNoParticleGroup && previousTags[i] != kNoParticleGroup) {
                     ++expectedOverlaps[tags[i]][previousTags[i]];
                 }
             }
             std::unordered_map<GroupInteger, std::pair<GroupInteger, int>> expectedDescendants;
             for (auto const& previous : previousHosts) {
-                expectedDescendants.emplace(previous.first, std::make_pair(NO_GROUP, 0));
+                expectedDescendants.emplace(previous.first, std::make_pair(kNoParticleGroup, 0));
             }
             for (auto const& descendant : expectedOverlaps) {
                 for (auto const& parent : descendant.second) {
@@ -514,7 +514,7 @@ void groupsCatalogueDistributedTest() {
                 size_t hostCount = 0;
                 while (hosts >> halo >> host) {
                     requireDistributedCatalogue(rankIds.erase(halo) == 1 &&
-                            (host == NO_GROUP || uniqueIds.count(host) != 0),
+                            (host == kNoParticleGroup || uniqueIds.count(host) != 0),
                         "Written distributed host history is missing or refers to an unwritten "
                         "halo");
                     currentHosts.push_back({halo, host});

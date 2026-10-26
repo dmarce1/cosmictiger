@@ -20,10 +20,10 @@ Vector<ParticleGhost> readGhostParticles(uint64_t generation, uint64_t key) {
     Vector<ParticleGhost> result(cell.end - cell.begin);
     for (ParticleInteger i = cell.begin; i < cell.end; ++i) {
         auto& particle = result[i - cell.begin];
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             particle.x[dim] = particlesPos(dim, i);
         }
-        particle.type = getOptions().hydro.enabled ? particlesType(i) : DARK_MATTER_TYPE;
+        particle.type = getOptions().hydro.enabled ? particlesType(i) : kDarkMatterType;
         particle.rung = state.stageRungs[i - state.activeRange.first];
     }
     return result;
@@ -104,7 +104,7 @@ void planGhosts() {
     state.diagnostics.ghostParticles = ghostCount;
     state.diagnostics.ghostCells = state.pendingGhosts;
     state.diagnostics.ghostBytes =
-        uint64_t(ghostCount) * (NDIM * sizeof(PositionInteger) + 2 * sizeof(char));
+        uint64_t(ghostCount) * (kDimensions * sizeof(PositionInteger) + 2 * sizeof(char));
     state.sinkSources.resize(state.cells.size());
     state.unresolvedSources.resize(state.cells.size());
     for (size_t sink = 0; sink < state.cells.size(); ++sink) {
@@ -140,7 +140,7 @@ void receiveGhostCell(size_t index) {
         }
         for (ParticleInteger i = cell.begin; i < cell.end; ++i) {
             auto const& particle = packet[i - cell.begin];
-            for (int dim = 0; dim < NDIM; ++dim) {
+            for (int dim = 0; dim < kDimensions; ++dim) {
                 view.positions[dim][i] = particle.x[dim];
             }
             view.types[i] = particle.type;

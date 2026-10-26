@@ -53,10 +53,7 @@ using NativeSimdVector = std::experimental::native_simd<Value>;
 #endif
 
 // Logical widths are independent of the target's hardware register width.
-#define SIMD_FLOAT4_SIZE 4
-#define SIMD_FLOAT8_SIZE 8
-#define SIMD_FLOAT16_SIZE 16
-#define SIMD_FLOAT_SIZE SIMD_FLOAT8_SIZE
+inline constexpr int kSimdFloatSize = 8;
 
 using SimdFloat4 = SimdVector<float, 4>;
 using SimdFloat8 = SimdVector<float, 8>;

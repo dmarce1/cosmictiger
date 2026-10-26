@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstdio>
 #include <limits>
+#include <numbers>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -21,7 +22,7 @@
 
 namespace detail {
 
-using Shells = Vector<Array<Vector<float>, NDIM>>;
+using Shells = Vector<Array<Vector<float>, kDimensions>>;
 
 static void require(bool const condition, std::string const& message) {
     if (!condition) {
@@ -29,16 +30,16 @@ static void require(bool const condition, std::string const& message) {
     }
 }
 
-static double dot(Array<Vector<float>, NDIM> const& shell, int const i, int const j) {
+static double dot(Array<Vector<float>, kDimensions> const& shell, int const i, int const j) {
     double sum = 0.0;
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         sum += double(shell[dim][i]) * shell[dim][j];
     }
     return sum;
 }
 
-static void checkUnitSphere(Array<Vector<float>, NDIM> const& shell) {
-    int const n = shell[XDIM].size();
+static void checkUnitSphere(Array<Vector<float>, kDimensions> const& shell) {
+    int const n = shell[kXDimension].size();
     for (int i = 0; i < n; i++) {
         double const norm = std::sqrt(dot(shell, i, i));
         require(std::isfinite(norm) && std::abs(norm - 1.0) < 1e-5,
@@ -49,8 +50,8 @@ static void checkUnitSphere(Array<Vector<float>, NDIM> const& shell) {
 // Every pair dot product of the shell must match one of the expected values,
 // counted per point; this fixes the antipodal pair, tetrahedron and octahedron.
 static void checkPolyhedron(
-    Array<Vector<float>, NDIM> const& shell, std::vector<double> const& expected) {
-    int const n = shell[XDIM].size();
+    Array<Vector<float>, kDimensions> const& shell, std::vector<double> const& expected) {
+    int const n = shell[kXDimension].size();
     for (int i = 0; i < n; i++) {
         std::vector<double> dots;
         for (int j = 0; j < n; j++) {
@@ -69,13 +70,13 @@ static void checkPolyhedron(
 
 // Random points crowd to separations of order 1/n; the relaxed shell must keep
 // every nearest neighbor near the hexagonal spacing sqrt(8 pi / (sqrt(3) n)).
-static void checkEvenSpacing(Array<Vector<float>, NDIM> const& shell) {
-    int const n = shell[XDIM].size();
-    double const spacing = std::sqrt(4.0 * M_PI / n);
+static void checkEvenSpacing(Array<Vector<float>, kDimensions> const& shell) {
+    int const n = shell[kXDimension].size();
+    double const spacing = std::sqrt(4.0 * std::numbers::pi / n);
     double minNearest = std::numeric_limits<double>::max();
     double maxNearest = 0.0;
-    Array<double, NDIM> centroid;
-    for (int dim = 0; dim < NDIM; dim++) {
+    Array<double, kDimensions> centroid;
+    for (int dim = 0; dim < kDimensions; dim++) {
         centroid[dim] = 0.0;
     }
     for (int i = 0; i < n; i++) {
@@ -87,7 +88,7 @@ static void checkEvenSpacing(Array<Vector<float>, NDIM> const& shell) {
         }
         minNearest = std::min(minNearest, nearest);
         maxNearest = std::max(maxNearest, nearest);
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             centroid[dim] += shell[dim][i] / double(n);
         }
     }
@@ -97,8 +98,9 @@ static void checkEvenSpacing(Array<Vector<float>, NDIM> const& shell) {
         std::to_string(n) + "-point shell has crowded points: " + std::to_string(minNearest));
     require(maxNearest < 1.25 * spacing,
         std::to_string(n) + "-point shell has a gap: " + std::to_string(maxNearest));
-    double const offset = std::sqrt(centroid[XDIM] * centroid[XDIM] +
-        centroid[YDIM] * centroid[YDIM] + centroid[ZDIM] * centroid[ZDIM]);
+    double const offset = std::sqrt(centroid[kXDimension] * centroid[kXDimension] +
+        centroid[kYDimension] * centroid[kYDimension] +
+        centroid[kZDimension] * centroid[kZDimension]);
     require(
         offset < 1e-2, std::to_string(n) + "-point shell is lopsided: " + std::to_string(offset));
 }
@@ -106,8 +108,8 @@ static void checkEvenSpacing(Array<Vector<float>, NDIM> const& shell) {
 static Shells makeShells(std::vector<int> const& counts) {
     Shells shells;
     for (int const count : counts) {
-        Array<Vector<float>, NDIM> shell;
-        for (int dim = 0; dim < NDIM; dim++) {
+        Array<Vector<float>, kDimensions> shell;
+        for (int dim = 0; dim < kDimensions; dim++) {
             shell[dim].resize(count);
         }
         shells.push_back(std::move(shell));
@@ -130,7 +132,7 @@ static void checkSphereSurface() {
     Shells repeat = makeShells(counts);
     solveSphereSurfaceProblem(repeat);
     for (int i = 0; i < static_cast<int>(shells.size()); i++) {
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             require(repeat[i][dim] == shells[i][dim],
                 "the CPU solver is not deterministic for shell " + std::to_string(i));
         }

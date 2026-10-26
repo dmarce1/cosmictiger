@@ -23,7 +23,7 @@ struct SphTreeNeighborReturn {
     Fixed32Range outerBox;
     CUDA_EXPORT
     SphTreeNeighborReturn() {
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             innerBox.begin[dim] = 1.9;
             innerBox.end[dim] = -0.9;
             outerBox.begin[dim] = 1.9;
@@ -32,7 +32,7 @@ struct SphTreeNeighborReturn {
     }
     CUDA_EXPORT
     SphTreeNeighborReturn& operator+=(SphTreeNeighborReturn const& other) {
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             innerBox.begin[dim] = std::min(innerBox.begin[dim], other.innerBox.begin[dim]);
             innerBox.end[dim] = std::max(innerBox.end[dim], other.innerBox.end[dim]);
             outerBox.begin[dim] = std::min(outerBox.begin[dim], other.outerBox.begin[dim]);
@@ -48,13 +48,13 @@ struct SphTreeNeighborReturn {
 };
 #endif
 
-#define SPH_TREE_NEIGHBOR_BOXES 0
-#define SPH_TREE_NEIGHBOR_NEIGHBORS 1
-#define SPH_INTERACTIONS_I 1
-#define SPH_INTERACTIONS_J 2
-#define SPH_INTERACTIONS_IJ 3
-#define SPH_SET_ACTIVE 1
-#define SPH_SET_ALL 4
+inline constexpr int kSphTreeNeighborBoxes = 0;
+inline constexpr int kSphTreeNeighborNeighbors = 1;
+inline constexpr int kSphInteractionsI = 1;
+inline constexpr int kSphInteractionsJ = 2;
+inline constexpr int kSphInteractionsIJ = 3;
+inline constexpr int kSphSetActive = 1;
+inline constexpr int kSphSetAll = 4;
 
 struct SphTreeNeighborParameters {
     int runType = 0;
@@ -199,10 +199,10 @@ struct SphRunParameters {
     }
 };
 
-#define SPH_RUN_PREHYDRO1 0
-#define SPH_RUN_PREHYDRO2 1
-#define SPH_RUN_HYDRO 2
-#define SPH_RUN_RUNGS 3
+inline constexpr int kSphRunPrehydro1 = 0;
+inline constexpr int kSphRunPrehydro2 = 1;
+inline constexpr int kSphRunHydro = 2;
+inline constexpr int kSphRunRungs = 3;
 
 SphRunReturn sphRun(SphRunParameters params, bool cuda = false);
 #ifndef __CUDACC__

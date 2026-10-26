@@ -13,7 +13,7 @@ namespace cosmictiger::gravity::spherical {
 
 template <class Real, int order>
 CUDA_EXPORT int P2M(
-    Multipole<Real, order>& target, Real mass, Array<Real, NDIM> const& particleOffset) {
+    Multipole<Real, order>& target, Real mass, Array<Real, kDimensions> const& particleOffset) {
     detail::P2M<order - 2>::template add<Real>(
         target, mass, particleOffset[0], particleOffset[1], particleOffset[2]);
     return detail::P2M<order - 2>::kFlops_;
@@ -22,7 +22,7 @@ CUDA_EXPORT int P2M(
 // The radial second moment is independent of the harmonic coefficients.
 template <class Real, int order>
 CUDA_EXPORT int P2M(Multipole<Real, order>& target, Real& targetTrace, Real mass,
-    Array<Real, NDIM> const& particleOffset) {
+    Array<Real, kDimensions> const& particleOffset) {
     int const flops = P2M(target, mass, particleOffset);
     Real const radiusSquared = simdFma(particleOffset[0], particleOffset[0],
         simdFma(particleOffset[1], particleOffset[1], particleOffset[2] * particleOffset[2]));
@@ -32,7 +32,7 @@ CUDA_EXPORT int P2M(Multipole<Real, order>& target, Real& targetTrace, Real mass
 
 template <class Real, int order>
 CUDA_EXPORT int P2L(Expansion<Real, order>& target, Real mass,
-    Array<Real, NDIM> const& displacement, bool doPotential = true) {
+    Array<Real, kDimensions> const& displacement, bool doPotential = true) {
     Real const oldPotential = target[0];
     detail::P2L<order - 1>::template add<Real>(
         target, mass, displacement[0], displacement[1], displacement[2]);
@@ -44,7 +44,7 @@ CUDA_EXPORT int P2L(Expansion<Real, order>& target, Real mass,
 
 template <class Real, int order>
 CUDA_EXPORT int M2M(Multipole<Real, order>& target, Multipole<Real, order> const& source,
-    Array<Real, NDIM> const& displacement) {
+    Array<Real, kDimensions> const& displacement) {
     ASSERT(&target != &source);
     detail::M2M<order - 2>::template add<Real>(
         target, source, displacement[0], displacement[1], displacement[2]);
@@ -53,7 +53,8 @@ CUDA_EXPORT int M2M(Multipole<Real, order>& target, Multipole<Real, order> const
 
 template <class Real, int order>
 CUDA_EXPORT int M2M(Multipole<Real, order>& target, Real& targetTrace,
-    Multipole<Real, order> const& source, Real sourceTrace, Array<Real, NDIM> const& displacement) {
+    Multipole<Real, order> const& source, Real sourceTrace,
+    Array<Real, kDimensions> const& displacement) {
     Real const radiusSquared = simdFma(displacement[0], displacement[0],
         simdFma(displacement[1], displacement[1], displacement[2] * displacement[2]));
     // M_1^1 = -(sum mass*x + i*sum mass*y)/2 and M_1^0 = -sum mass*z.
@@ -66,7 +67,7 @@ CUDA_EXPORT int M2M(Multipole<Real, order>& target, Real& targetTrace,
 
 template <class Real, int order>
 CUDA_EXPORT int M2L(Expansion<Real, order>& target, Multipole<Real, order> const& source,
-    Array<Real, NDIM> const& displacement, bool doPotential = true) {
+    Array<Real, kDimensions> const& displacement, bool doPotential = true) {
     Real const oldPotential = target[0];
     detail::M2L<order - 1>::template add<Real>(
         target, source, displacement[0], displacement[1], displacement[2]);
@@ -77,7 +78,8 @@ CUDA_EXPORT int M2L(Expansion<Real, order>& target, Multipole<Real, order> const
 }
 
 template <class Real, int order>
-CUDA_EXPORT void evaluateGreen(Green<Real, order>& target, Array<Real, NDIM> const& displacement) {
+CUDA_EXPORT void evaluateGreen(
+    Green<Real, order>& target, Array<Real, kDimensions> const& displacement) {
     detail::Green<order - 1>::template evaluate<Real>(
         target, displacement[0], displacement[1], displacement[2]);
 }
@@ -95,7 +97,7 @@ CUDA_EXPORT int M2L(Expansion<Real, order>& target, Multipole<Real, order> const
 
 template <class Real, int order>
 CUDA_EXPORT int M2P(gravity::Field<Real>& target, Multipole<Real, order> const& source,
-    Array<Real, NDIM> const& displacement, bool doPotential = true) {
+    Array<Real, kDimensions> const& displacement, bool doPotential = true) {
     Real const oldPotential = target[0];
     detail::M2P<order - 1>::template add<Real>(
         target, source, displacement[0], displacement[1], displacement[2]);
@@ -107,7 +109,7 @@ CUDA_EXPORT int M2P(gravity::Field<Real>& target, Multipole<Real, order> const& 
 
 template <class Real, int order>
 CUDA_EXPORT int L2L(Expansion<Real, order>& target, Expansion<Real, order> const& source,
-    Array<Real, NDIM> const& displacement, bool doPotential = true) {
+    Array<Real, kDimensions> const& displacement, bool doPotential = true) {
     ASSERT(&target != &source);
     Real const oldPotential = target[0];
     detail::L2L<order - 1>::template add<Real>(
@@ -120,7 +122,7 @@ CUDA_EXPORT int L2L(Expansion<Real, order>& target, Expansion<Real, order> const
 
 template <class Real, int order>
 CUDA_EXPORT int L2P(gravity::Field<Real>& target, Expansion<Real, order> const& source,
-    Array<Real, NDIM> const& displacement, bool doPotential = true) {
+    Array<Real, kDimensions> const& displacement, bool doPotential = true) {
     Real const oldPotential = target[0];
     detail::L2P<order - 1>::template add<Real>(
         target, source, displacement[0], displacement[1], displacement[2]);
@@ -146,8 +148,8 @@ CUDA_EXPORT int M2L(Expansion<Real, order>& target, Real& localTrace,
 
 template <class Real, int order>
 CUDA_EXPORT int L2L(Expansion<Real, order>& target, Real& targetTrace,
-    Expansion<Real, order> const& source, Real sourceTrace, Array<Real, NDIM> const& displacement,
-    bool doPotential = true) {
+    Expansion<Real, order> const& source, Real sourceTrace,
+    Array<Real, kDimensions> const& displacement, bool doPotential = true) {
     ASSERT(&target != &source);
     Real const oldPotential = target[0];
     EwaldL2L<order - 1>::template add<Real>(target, targetTrace, source, sourceTrace,
@@ -160,7 +162,7 @@ CUDA_EXPORT int L2L(Expansion<Real, order>& target, Real& targetTrace,
 
 template <class Real, int order>
 CUDA_EXPORT int L2P(gravity::Field<Real>& target, Expansion<Real, order> const& source,
-    Real sourceTrace, Array<Real, NDIM> const& displacement, bool doPotential = true) {
+    Real sourceTrace, Array<Real, kDimensions> const& displacement, bool doPotential = true) {
     Real const oldPotential = target[0];
     EwaldL2P<order - 1>::template add<Real>(
         target, source, sourceTrace, displacement[0], displacement[1], displacement[2]);

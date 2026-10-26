@@ -37,8 +37,9 @@ void testFoldedDensity() {
             for (int tileSize : {1, 3, kGridSize}) {
                 auto const actual = assignTiledDensity(
                     kGridSize, tileSize, [&](Range<int64_t> const& box, float* density) {
-                        accumulateDensityCpuKernel(fixture.positions[XDIM].data(),
-                            fixture.positions[YDIM].data(), fixture.positions[ZDIM].data(),
+                        accumulateDensityCpuKernel(fixture.positions[kXDimension].data(),
+                            fixture.positions[kYDimension].data(),
+                            fixture.positions[kZDimension].data(),
                             weighted ? fixture.masses.data() : nullptr, fixture.masses.size(), fold,
                             kGridSize, box, density);
                     });
@@ -55,17 +56,17 @@ void testUniformLattice() {
         for (int y = 0; y < kGridSize; y++) {
             for (int z = 0; z < kGridSize; z++) {
                 size_t const index = (x * kGridSize + y) * kGridSize + z;
-                fixture.positions[XDIM][index] = double(x) / kGridSize;
-                fixture.positions[YDIM][index] = double(y) / kGridSize;
-                fixture.positions[ZDIM][index] = double(z) / kGridSize;
+                fixture.positions[kXDimension][index] = double(x) / kGridSize;
+                fixture.positions[kYDimension][index] = double(y) / kGridSize;
+                fixture.positions[kZDimension][index] = double(z) / kGridSize;
             }
         }
     }
     auto const density =
         assignTiledDensity(kGridSize, 3, [&](Range<int64_t> const& box, float* output) {
-            accumulateDensityCpuKernel(fixture.positions[XDIM].data(),
-                fixture.positions[YDIM].data(), fixture.positions[ZDIM].data(), nullptr,
-                fixture.masses.size(), 1, kGridSize, box, output);
+            accumulateDensityCpuKernel(fixture.positions[kXDimension].data(),
+                fixture.positions[kYDimension].data(), fixture.positions[kZDimension].data(),
+                nullptr, fixture.masses.size(), 1, kGridSize, box, output);
         });
     for (double value : density) {
         requireClose(value, 1.0, 2.0e-5, "unit lattice produces uniform density");

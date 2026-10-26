@@ -53,7 +53,7 @@ constexpr int kExpansionCount = EXPANSION_SIZE;
 
 // Legacy P2M mutates its argument; the copy keeps the caller's position intact.
 template <class Real>
-CUDA_EXPORT BenchmarkMultipole<Real> benchmarkP2m(Array<Real, NDIM> position) {
+CUDA_EXPORT BenchmarkMultipole<Real> benchmarkP2m(Array<Real, kDimensions> position) {
     return p2M(position);
 }
 #else
@@ -67,7 +67,7 @@ constexpr int kMultipoleCount = FmmOrder<kBenchmarkOrder>::kMultipoleCoefficient
 constexpr int kExpansionCount = FmmOrder<kBenchmarkOrder>::kLocalCoefficients_;
 
 template <class Real>
-CUDA_EXPORT BenchmarkMultipole<Real> benchmarkP2m(Array<Real, NDIM> const& position) {
+CUDA_EXPORT BenchmarkMultipole<Real> benchmarkP2m(Array<Real, kDimensions> const& position) {
     BenchmarkMultipole<Real> result{};
     cosmictiger::gravity::cartesian::P2M(
         result, simdBroadcast<Real>(1), fmmScaleDisplacement(position));
@@ -79,8 +79,8 @@ enum class BenchmarkOperator { P2m, M2m, CcDirect, PcDirect, L2l, L2p };
 
 template <class Real>
 struct BenchmarkInput {
-    Array<Real, NDIM> displacement;
-    Array<Real, NDIM> separation;
+    Array<Real, kDimensions> displacement;
+    Array<Real, kDimensions> separation;
     BenchmarkMultipole<Real> multipole;
     BenchmarkExpansion<Real> local;
 };
@@ -131,8 +131,8 @@ Real sampleValue(int sample, int axis, bool separation) {
 template <class Real>
 BenchmarkInput<Real> makeBenchmarkInput(int sample) {
     BenchmarkInput<Real> input{};
-    Array<Real, NDIM> particlePosition;
-    for (int axis = 0; axis < NDIM; ++axis) {
+    Array<Real, kDimensions> particlePosition;
+    for (int axis = 0; axis < kDimensions; ++axis) {
         input.displacement[axis] = sampleValue<Real>(sample, axis, false);
         input.separation[axis] = sampleValue<Real>(sample, axis, true);
         particlePosition[axis] = sampleValue<Real>(sample + 31, axis, false);

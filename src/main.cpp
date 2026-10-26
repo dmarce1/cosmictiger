@@ -94,7 +94,7 @@ int hpx_main(int argc, char* argv[]) {
             fmmDispatch([](auto orderTag) {
                 constexpr int kOrder = decltype(orderTag)::value;
                 cosmictiger::gravity::cartesian::Green<SimdFloat, kOrder> d;
-                Array<SimdFloat, NDIM> xValue;
+                Array<SimdFloat, kDimensions> xValue;
                 FILE* fp = fopen(outputPath("ewald.txt").c_str(), "wt");
                 if (fp == nullptr) {
                     THROW_ERROR("Unable to write ewald.txt\n");

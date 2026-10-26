@@ -14,8 +14,8 @@
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/math/tensor.hpp>
 
-#define NREAL 178
-#define NFOUR 92
+inline constexpr int kEwaldRealIndexCount = 178;
+inline constexpr int kEwaldFourierIndexCount = 92;
 
 // Ewald image lists and Fourier derivative tables. The tables are filled once
 // for the runtime FMM order: each Fourier row holds a
@@ -24,9 +24,9 @@
 // view the leading entries; they are only valid for the order the tables were
 // built for, which the generated Ewald derivative of that order guarantees.
 struct EwaldConstants {
-    Array<Array<float, NDIM>, NREAL> realIndices;
-    Array<Array<float, NDIM>, NFOUR> fourIndices;
-    Array<Array<float, kFmmMaxTracelessTensorCount>, NFOUR> fourExpanse;
+    Array<Array<float, kDimensions>, kEwaldRealIndexCount> realIndices;
+    Array<Array<float, kDimensions>, kEwaldFourierIndexCount> fourIndices;
+    Array<Array<float, kFmmMaxTracelessTensorCount>, kEwaldFourierIndexCount> fourExpanse;
     Array<float, kFmmMaxSymmetricTensorCount> d0;
     int order;
 };
@@ -38,10 +38,10 @@ extern __constant__ EwaldConstants ecDev;
 
 struct EwaldConst {
     CUDA_EXPORT static int nfour() {
-        return NFOUR;
+        return kEwaldFourierIndexCount;
     }
     CUDA_EXPORT static int nreal() {
-        return NREAL;
+        return kEwaldRealIndexCount;
     }
     // Build the image lists and the tables for fmmOrder() on every locality.
     static void init();
@@ -53,10 +53,10 @@ struct EwaldConst {
         return ec;
 #endif
     }
-    CUDA_EXPORT static Array<float, NDIM> const& realIndex(int i) {
+    CUDA_EXPORT static Array<float, kDimensions> const& realIndex(int i) {
         return constants().realIndices[i];
     }
-    CUDA_EXPORT static Array<float, NDIM> const& fourIndex(int i) {
+    CUDA_EXPORT static Array<float, kDimensions> const& fourIndex(int i) {
         return constants().fourIndices[i];
     }
     template <int order>

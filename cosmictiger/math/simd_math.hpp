@@ -18,8 +18,25 @@
 
 using std::size_t;
 
+namespace detail {
+template <class Real, class = void>
+struct SimdScalarType {
+    using Type = Real;
+};
+
+template <class Real>
+struct SimdScalarType<Real, std::void_t<typename Real::value_type>> {
+    using Type = typename Real::value_type;
+};
+}    // namespace detail
+
+// Select constants at the arithmetic precision of either a scalar or a SIMD lane.
+template <class Real>
+using SimdScalar = typename detail::SimdScalarType<Real>::Type;
+
+// Pass values directly so CUDA does not bind references to host constexpr storage.
 template <class Real, class Value>
-CUDA_EXPORT inline Real simdBroadcast(Value const& value) {
+CUDA_EXPORT inline Real simdBroadcast(Value value) {
     if constexpr (std::is_same_v<Real, Value>) {
         return value;
     } else if constexpr (std::is_arithmetic_v<Real>) {

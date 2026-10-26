@@ -34,15 +34,15 @@ KickReturn localBatchGpu(KickParameters params, Vector<KickWorkitem> workitems,
         return treeGetNode(left.self)->particleRange.first <
             treeGetNode(right.self)->particleRange.first;
     });
-    return cudaExecuteKicks(params, &particlesPos(XDIM, 0), &particlesPos(YDIM, 0),
-        &particlesPos(ZDIM, 0), treeData(), std::move(workitems), output);
+    return cudaExecuteKicks(params, &particlesPos(kXDimension, 0), &particlesPos(kYDimension, 0),
+        &particlesPos(kZDimension, 0), treeData(), std::move(workitems), output);
 #else
     THROW_ERROR("GPU gravity requested in a build without CUDA\n");
     return {};
 #endif
 }
 hpx::future<KickReturn> localBatchFork(KickParameters params, ExpansionBuffer const& l,
-    Array<Position, NDIM> pos, TreeId self, Vector<TreeId> direct, Vector<TreeId> periodic,
+    Array<Position, kDimensions> pos, TreeId self, Vector<TreeId> direct, Vector<TreeId> periodic,
     std::shared_ptr<KickWorkspace> workspace, bool threadme) {
     ALWAYS_ASSERT(self.proc == hpxRank() && periodic.empty());
     auto run = [params, l, pos, self, workspace](Vector<TreeId> direct) {
@@ -52,8 +52,7 @@ hpx::future<KickReturn> localBatchFork(KickParameters params, ExpansionBuffer co
         return kickWalkDispatch(params, l, pos, self, std::move(direct), {}, workspace, context);
     };
     static std::atomic<int> threads{1};
-    bool const eligible =
-        threadme && treeGetNode(self)->numberOfParticles() > MIN_KICK_THREAD_PARTS;
+    bool const eligible = threadme && treeGetNode(self)->numberOfParticles() > kMinKickThreadParts;
     int const maximumThreads = std::max(
         1, hpxSize() == 1 ? int(hpxHardwareConcurrency()) * 2 : int(hpxHardwareConcurrency()) / 2);
     if (eligible) {
@@ -109,7 +108,7 @@ FmmForceResult kickCellBatch(Vector<KickWorkitem> workitems, bool doPotential) {
     }
     size_t const size = particleGoal;
     result.potential.resize(size);
-    for (int dim = 0; dim < NDIM; ++dim) {
+    for (int dim = 0; dim < kDimensions; ++dim) {
         result.acceleration[dim].resize(size);
     }
     if (particleGoal == 0) {
@@ -120,7 +119,7 @@ FmmForceResult kickCellBatch(Vector<KickWorkitem> workitems, bool doPotential) {
     std::fill_n(storage.get(), 4 * size, 0.0f);
     detail::FmmForceOutput output;
     output.potential = storage.get();
-    for (int dim = 0; dim < NDIM; ++dim) {
+    for (int dim = 0; dim < kDimensions; ++dim) {
         output.acceleration[dim] = storage.get() + (dim + 1) * size;
     }
     KickParameters params;
@@ -165,7 +164,7 @@ FmmForceResult kickCellBatch(Vector<KickWorkitem> workitems, bool doPotential) {
         throw;
     }
     std::copy_n(output.potential, size, result.potential.begin());
-    for (int dim = 0; dim < NDIM; ++dim) {
+    for (int dim = 0; dim < kDimensions; ++dim) {
         std::copy_n(output.acceleration[dim], size, result.acceleration[dim].begin());
     }
     result.interactionCounts = workspace->interactionCounts();

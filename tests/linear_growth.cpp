@@ -32,8 +32,8 @@
 
 namespace detail {
 
-using LinearVector = std::array<double, NDIM>;
-using LinearWave = std::array<int, NDIM>;
+using LinearVector = std::array<double, kDimensions>;
+using LinearWave = std::array<int, kDimensions>;
 using LinearField = std::vector<LinearVector>;
 constexpr double kLinearFourPi = 4.0 * std::numbers::pi;
 
@@ -96,7 +96,7 @@ struct LinearExperiment {
                     throw std::runtime_error("Linear-growth particle load has too many rows");
                 }
                 std::istringstream row(line);
-                for (int dim = 0; dim < NDIM; ++dim) {
+                for (int dim = 0; dim < kDimensions; ++dim) {
                     double& coordinate = reference[count][dim];
                     if (!(row >> coordinate) || !std::isfinite(coordinate) ||
                         !(coordinate >= 0.0 && coordinate < 1.0)) {
@@ -131,7 +131,7 @@ struct LinearExperiment {
 
     double phase(LinearWave const& wave, size_t index) const {
         double result = 0.0;
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             result += wave[dim] * reference[index][dim];
         }
         return 2.0 * std::numbers::pi * result;
@@ -142,7 +142,7 @@ struct LinearExperiment {
         for (size_t index = 0; index < result.size(); ++index) {
             int const kind = index / perSpecies;
             double const sine = std::sin(phase(wave, index));
-            for (int dim = 0; dim < NDIM; ++dim) {
+            for (int dim = 0; dim < kDimensions; ++dim) {
                 result[index][dim] = amplitudes[kind][dim] * sine / side;
             }
         }
@@ -151,7 +151,7 @@ struct LinearExperiment {
 
     LinearProjection project(LinearField const& field, LinearWave const& wave) const {
         LinearProjection result;
-        using ProjectionMatrix = std::array<std::array<double, 3 + NDIM>, 3>;
+        using ProjectionMatrix = std::array<std::array<double, 3 + kDimensions>, 3>;
         std::array<ProjectionMatrix, 2> equations{};
         for (size_t index = 0; index < reference.size(); ++index) {
             int const kind = index / perSpecies;
@@ -161,7 +161,7 @@ struct LinearExperiment {
                 for (int column = 0; column < 3; ++column) {
                     equations[kind][row][column] += basis[row] * basis[column] / perSpecies;
                 }
-                for (int dim = 0; dim < NDIM; ++dim) {
+                for (int dim = 0; dim < kDimensions; ++dim) {
                     equations[kind][row][3 + dim] += basis[row] * field[index][dim] / perSpecies;
                 }
             }
@@ -180,19 +180,19 @@ struct LinearExperiment {
                 }
                 std::swap(matrix[pivot], matrix[column]);
                 double const diagonal = matrix[column][column];
-                for (int entry = column; entry < 3 + NDIM; ++entry) {
+                for (int entry = column; entry < 3 + kDimensions; ++entry) {
                     matrix[column][entry] /= diagonal;
                 }
                 for (int row = 0; row < 3; ++row) {
                     if (row != column) {
                         double const factor = matrix[row][column];
-                        for (int entry = column; entry < 3 + NDIM; ++entry) {
+                        for (int entry = column; entry < 3 + kDimensions; ++entry) {
                             matrix[row][entry] -= factor * matrix[column][entry];
                         }
                     }
                 }
             }
-            for (int dim = 0; dim < NDIM; ++dim) {
+            for (int dim = 0; dim < kDimensions; ++dim) {
                 result.mean[kind][dim] = matrix[0][3 + dim];
                 result.sine[kind][dim] = matrix[1][3 + dim];
                 result.cosine[kind][dim] = matrix[2][3 + dim];
@@ -202,14 +202,14 @@ struct LinearExperiment {
             int const kind = index / perSpecies;
             double const sine = std::sin(phase(wave, index));
             double const cosine = std::cos(phase(wave, index));
-            for (int dim = 0; dim < NDIM; ++dim) {
+            for (int dim = 0; dim < kDimensions; ++dim) {
                 double const residual = field[index][dim] - result.mean[kind][dim] -
                     result.sine[kind][dim] * sine - result.cosine[kind][dim] * cosine;
                 result.residual[kind][dim] += residual * residual / perSpecies;
             }
         }
         for (int kind = 0; kind < species; ++kind) {
-            for (int dim = 0; dim < NDIM; ++dim) {
+            for (int dim = 0; dim < kDimensions; ++dim) {
                 result.residual[kind][dim] = std::sqrt(result.residual[kind][dim]);
             }
         }
@@ -222,23 +222,23 @@ struct LinearExperiment {
         if (species == 2) {
             sphParticlesResize(perSpecies, false);
         }
-        using PositionKey = std::array<PositionInteger, NDIM + 1>;
+        using PositionKey = std::array<PositionInteger, kDimensions + 1>;
         std::map<PositionKey, size_t> labels;
         for (size_t index = 0; index < reference.size(); ++index) {
             int const kind = index / perSpecies;
             particlesRung(index) = 1;
             particlesPot(index) = 0.0f;
             if (species == 2) {
-                particlesType(index) = kind == 0 ? DARK_MATTER_TYPE : SPH_TYPE;
-                particlesCatIndex(index) = kind == 0 ? NO_INDEX : index - perSpecies;
+                particlesType(index) = kind == 0 ? kDarkMatterType : kSphType;
+                particlesCatIndex(index) = kind == 0 ? kNoParticleIndex : index - perSpecies;
                 if (kind == 1) {
                     sphParticlesParticleIndex(index - perSpecies) = index;
                     sphParticlesSupportRadius(index - perSpecies) = 1.0 / side;
                 }
             }
             PositionKey key{};
-            key[NDIM] = kind;
-            for (int dim = 0; dim < NDIM; ++dim) {
+            key[kDimensions] = kind;
+            for (int dim = 0; dim < kDimensions; ++dim) {
                 if (!std::isfinite(displacement[index][dim])) {
                     throw std::runtime_error("Nonfinite linear-growth displacement");
                 }
@@ -286,7 +286,7 @@ struct LinearExperiment {
         parameters.doPhi = true;
         ExpansionBuffer local;
         local.zero();
-        Array<Position, NDIM> origin{};
+        Array<Position, kDimensions> origin{};
         kick(parameters, local, origin, built.id, Vector<TreeId>{built.id},
             Vector<TreeId>{built.id}, nullptr);
         LinearSample result;
@@ -296,8 +296,8 @@ struct LinearExperiment {
         for (ParticleInteger particle = 0; particle < particlesSize(); ++particle) {
             int const kind = species == 2 && particlesIsSph(particle) ? 1 : 0;
             PositionKey key{};
-            key[NDIM] = kind;
-            for (int dim = 0; dim < NDIM; ++dim) {
+            key[kDimensions] = kind;
+            for (int dim = 0; dim < kDimensions; ++dim) {
                 key[dim] = particlesPos(dim, particle).raw();
             }
             auto const found = labels.find(key);
@@ -314,7 +314,7 @@ struct LinearExperiment {
             result.meanSupport[kind] += support / perSpecies;
             result.minimumSupport = std::min(result.minimumSupport, support);
             result.maximumSupport = std::max(result.maximumSupport, support);
-            for (int dim = 0; dim < NDIM; ++dim) {
+            for (int dim = 0; dim < kDimensions; ++dim) {
                 result.acceleration[index][dim] = particlesGravityAcceleration(dim, particle);
                 double difference = particlesPos(dim, particle).toDouble() - reference[index][dim];
                 difference -= std::round(difference);
@@ -331,7 +331,7 @@ struct LinearExperiment {
 
 void validateLinearWave(LinearWave const& wave, int side) {
     int norm = 0;
-    for (int dim = 0; dim < NDIM; ++dim) {
+    for (int dim = 0; dim < kDimensions; ++dim) {
         norm += wave[dim] * wave[dim];
         if (std::abs(wave[dim]) >= side / 2) {
             throw std::runtime_error("Linear-growth mode must be below component Nyquist");
@@ -348,11 +348,11 @@ std::vector<LinearWave> linearWaves(int side) {
         linearEnvironment("COSMICTIGER_LINEAR_GROWTH_MODES", "1,0,0;2,0,0;3,0,0;1,1,0;1,1,1");
     for (auto const& item : linearSplit(text, ';')) {
         auto const components = linearSplit(item, ',');
-        if (components.size() != NDIM) {
+        if (components.size() != kDimensions) {
             throw std::runtime_error("Linear-growth modes require three comma-separated integers");
         }
         LinearWave wave;
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             wave[dim] = std::stoi(components[dim]);
         }
         validateLinearWave(wave, side);
@@ -429,7 +429,7 @@ void writeLinearInitialParticles(LinearExperiment const& experiment, LinearSampl
         for (double coordinate : experiment.reference[index]) {
             output << ',' << coordinate;
         }
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             double position = experiment.reference[index][dim] + sample.displacement[index][dim];
             position -= std::floor(position);
             output << ',' << position;
@@ -480,7 +480,7 @@ void measureLinearResponse(LinearExperiment const& experiment, LinearSample cons
             PRINT("Linear response mode=(%i,%i,%i) amplitude=%g cells\n", wave[0], wave[1], wave[2],
                 amplitude);
             for (int inputKind = 0; inputKind < experiment.species; ++inputKind) {
-                for (int inputAxis = 0; inputAxis < NDIM; ++inputAxis) {
+                for (int inputAxis = 0; inputAxis < kDimensions; ++inputAxis) {
                     std::array<LinearVector, 2> coefficients{};
                     coefficients[inputKind][inputAxis] = amplitude;
                     auto const positive = experiment.force(experiment.mode(wave, coefficients));
@@ -488,7 +488,7 @@ void measureLinearResponse(LinearExperiment const& experiment, LinearSample cons
                     auto const negative = experiment.force(experiment.mode(wave, coefficients));
                     if (particleOutputEnabled) {
                         for (size_t index = 0; index < experiment.reference.size(); ++index) {
-                            for (int dim = 0; dim < NDIM; ++dim) {
+                            for (int dim = 0; dim < kDimensions; ++dim) {
                                 particleOutput << wave[0] << ',' << wave[1] << ',' << wave[2] << ','
                                                << amplitude << ',' << inputKind << ',' << inputAxis
                                                << ',' << index << ','
@@ -502,7 +502,7 @@ void measureLinearResponse(LinearExperiment const& experiment, LinearSample cons
                     }
                     auto accelerationDifference = positive.acceleration;
                     for (size_t index = 0; index < accelerationDifference.size(); ++index) {
-                        for (int dim = 0; dim < NDIM; ++dim) {
+                        for (int dim = 0; dim < kDimensions; ++dim) {
                             accelerationDifference[index][dim] -= negative.acceleration[index][dim];
                         }
                     }
@@ -514,7 +514,7 @@ void measureLinearResponse(LinearExperiment const& experiment, LinearSample cons
                     double const realized = positiveDisplacement.sine[inputKind][inputAxis] -
                         negativeDisplacement.sine[inputKind][inputAxis];
                     for (int outputKind = 0; outputKind < experiment.species; ++outputKind) {
-                        for (int outputAxis = 0; outputAxis < NDIM; ++outputAxis) {
+                        for (int outputAxis = 0; outputAxis < kDimensions; ++outputAxis) {
                             double const sine =
                                 response.sine[outputKind][outputAxis] / (kLinearFourPi * realized);
                             double const cosine = response.cosine[outputKind][outputAxis] /
@@ -567,7 +567,7 @@ void writeLinearParticleStates(std::ostream& output, LinearExperiment const& exp
                    << (paired ? trajectoryNames[trajectory] : "single") << ',' << index << ','
                    << index / experiment.perSpecies;
             LinearVector realizedDisplacement{};
-            for (int dim = 0; dim < NDIM; ++dim) {
+            for (int dim = 0; dim < kDimensions; ++dim) {
                 double position = experiment.reference[index][dim] + state.displacement[index][dim];
                 position -= std::floor(position);
                 Position const realizedPosition(position);
@@ -593,7 +593,7 @@ void writeLinearParticleStates(std::ostream& output, LinearExperiment const& exp
 LinearState linearAdd(LinearState const& state, LinearState const& derivative, double step) {
     auto result = state;
     for (size_t index = 0; index < state.displacement.size(); ++index) {
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             result.displacement[index][dim] += step * derivative.displacement[index][dim];
             result.velocity[index][dim] += step * derivative.velocity[index][dim];
         }
@@ -615,7 +615,7 @@ LinearState linearDerivative(
     auto const sample = experiment.force(state.displacement);
     LinearState result{state.velocity, LinearField(state.velocity.size())};
     for (size_t index = 0; index < state.displacement.size(); ++index) {
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             result.velocity[index][dim] =
                 gravity * sample.acceleration[index][dim] - drag * state.velocity[index][dim];
         }
@@ -633,7 +633,7 @@ void advanceLinearState(
     auto const fourth =
         linearDerivative(experiment, linearAdd(state, third, stepSize), logScale + stepSize);
     for (size_t index = 0; index < state.displacement.size(); ++index) {
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             state.displacement[index][dim] += stepSize / 6.0 *
                 (first.displacement[index][dim] + 2.0 * second.displacement[index][dim] +
                     2.0 * third.displacement[index][dim] + fourth.displacement[index][dim]);
@@ -649,12 +649,12 @@ std::array<LinearVector, 2> linearFieldRms(
     std::array<LinearVector, 2> result{};
     for (size_t index = 0; index < field.size(); ++index) {
         int const kind = index / experiment.perSpecies;
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             result[kind][dim] += field[index][dim] * field[index][dim] / experiment.perSpecies;
         }
     }
     for (int kind = 0; kind < experiment.species; ++kind) {
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             result[kind][dim] = std::sqrt(result[kind][dim]);
         }
     }
@@ -666,7 +666,7 @@ std::array<std::complex<double>, 2> linearDensity(
     std::array<std::complex<double>, 2> result{};
     for (size_t index = 0; index < experiment.reference.size(); ++index) {
         double phase = 0.0;
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             double position = experiment.reference[index][dim] + state.displacement[index][dim];
             position -= std::floor(position);
             Position const realizedPosition(position);
@@ -722,7 +722,7 @@ void evolveLinearModes(LinearExperiment const& experiment, std::string const& fi
         }
         std::string const label = values[0];
         LinearWave wave;
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             wave[dim] = std::stoi(values[1 + dim]);
         }
         validateLinearWave(wave, experiment.side);
@@ -734,7 +734,7 @@ void evolveLinearModes(LinearExperiment const& experiment, std::string const& fi
         }
         std::array<LinearVector, 2> displacement{}, velocity{};
         for (int kind = 0; kind < experiment.species; ++kind) {
-            for (int dim = 0; dim < NDIM; ++dim) {
+            for (int dim = 0; dim < kDimensions; ++dim) {
                 displacement[kind][dim] = std::stod(values[7 + 6 * kind + dim]);
                 velocity[kind][dim] = std::stod(values[10 + 6 * kind + dim]);
             }
@@ -744,7 +744,7 @@ void evolveLinearModes(LinearExperiment const& experiment, std::string const& fi
         if (paired) {
             auto negative = states.front();
             for (size_t index = 0; index < experiment.reference.size(); ++index) {
-                for (int dim = 0; dim < NDIM; ++dim) {
+                for (int dim = 0; dim < kDimensions; ++dim) {
                     negative.displacement[index][dim] *= -1.0;
                     negative.velocity[index][dim] *= -1.0;
                 }
@@ -766,7 +766,7 @@ void evolveLinearModes(LinearExperiment const& experiment, std::string const& fi
             if (paired) {
                 auto even = states.front();
                 for (size_t index = 0; index < experiment.reference.size(); ++index) {
-                    for (int dim = 0; dim < NDIM; ++dim) {
+                    for (int dim = 0; dim < kDimensions; ++dim) {
                         observed.displacement[index][dim] = 0.5 *
                             (states[0].displacement[index][dim] -
                                 states[1].displacement[index][dim]);
@@ -799,7 +799,7 @@ void evolveLinearModes(LinearExperiment const& experiment, std::string const& fi
                                   << differential.imag() << ',' << baselineDensity[kind].real()
                                   << ',' << baselineDensity[kind].imag() << ','
                                   << evenDensity.real() << ',' << evenDensity.imag() << '\n';
-                    for (int dim = 0; dim < NDIM; ++dim) {
+                    for (int dim = 0; dim < kDimensions; ++dim) {
                         baselineOutput << label << ',' << run << ',' << step << ','
                                        << std::exp(logScale) << ',' << kind << ',' << dim << ','
                                        << experiment.side * baselineU.sine[kind][dim] << ','
@@ -819,7 +819,7 @@ void evolveLinearModes(LinearExperiment const& experiment, std::string const& fi
             auto const u = experiment.project(observed.displacement, wave);
             auto const v = experiment.project(observed.velocity, wave);
             for (int kind = 0; kind < experiment.species; ++kind) {
-                for (int dim = 0; dim < NDIM; ++dim) {
+                for (int dim = 0; dim < kDimensions; ++dim) {
                     output << label << ',' << run << ',' << step << ',' << std::exp(logScale) << ','
                            << kind << ',' << dim << ',' << experiment.side * u.sine[kind][dim]
                            << ',' << experiment.side * u.cosine[kind][dim] << ','

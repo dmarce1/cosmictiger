@@ -33,7 +33,7 @@ struct CudaKickData {
     Position* y;
     Position* z;
     FmmSourceView ghostSources;
-    Array<float, NDIM>* vel;
+    Array<float, kDimensions>* vel;
     float* sphGravityAccelerationX;
     float* sphGravityAccelerationY;
     float* sphGravityAccelerationZ;
@@ -224,7 +224,7 @@ struct KickWorkitem {
     FmmGeometry geometry{};
     ParticleInteger outputOffset = 0;
     ExpansionBuffer l;
-    Array<Position, NDIM> pos;
+    Array<Position, kDimensions> pos;
     TreeId self;
     Vector<TreeId> dchecklist;
     Vector<TreeId> echecklist;
@@ -237,7 +237,7 @@ struct FmmForceResult {
     // owned particle indices. A complete forest has the identity mapping.
     Vector<ParticleInteger> particleIndices;
     Vector<float> potential;
-    Array<Vector<float>, NDIM> acceleration;
+    Array<Vector<float>, kDimensions> acceleration;
     KickInteractionCounts interactionCounts{};
 };
 
@@ -246,7 +246,7 @@ namespace detail {
 // The batch owns this scratch until its CPU walks and CUDA launch both finish.
 struct FmmForceOutput {
     float* potential = nullptr;
-    Array<float*, NDIM> acceleration{};
+    Array<float*, kDimensions> acceleration{};
 };
 
 }    // namespace detail

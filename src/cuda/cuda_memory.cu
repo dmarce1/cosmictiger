@@ -101,7 +101,7 @@ char* CudaMemory::createNewAllocation(int bin) {
 
 CUDA_EXPORT
 void* CudaMemory::allocate(size_t sz) {
-    size_t const maximumSize = size_t(1) << (CUDA_MEM_NBIN - 1);
+    size_t const maximumSize = size_t(1) << (kCudaMemoryBinCount - 1);
     if (sz > maximumSize) {
         return nullptr;
     }
@@ -119,7 +119,7 @@ void* CudaMemory::allocate(size_t sz) {
 
 CUDA_EXPORT void CudaMemory::free(void* ptr) {
     size_t* binptr = (size_t*) ((char*) ptr - sizeof(size_t));
-    if (*binptr >= CUDA_MEM_NBIN) {
+    if (*binptr >= kCudaMemoryBinCount) {
         printf("Corrupt free! %li\n", *binptr);
         ALWAYS_ASSERT(false);
     }
@@ -137,7 +137,7 @@ CudaMemory::CudaMemory(size_t heapSize)
 
 void CudaMemory::reset() {
     next_ = 0;
-    for (int i = 0; i < CUDA_MEM_NBIN; i++) {
+    for (int i = 0; i < kCudaMemoryBinCount; i++) {
         for (int j = 0; j < CUDA_MEM_STACK_SIZE; j++) {
             q_[i][j].sequence = j;
             q_[i][j].pointer = nullptr;

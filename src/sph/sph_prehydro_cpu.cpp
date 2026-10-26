@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 #include <vector>
 
 #include <cosmictiger/math/kernel.hpp>
@@ -38,10 +39,10 @@ bool solveSphCpuSupportRadius(SphRunParameters const& parameters, SphRunData con
         data.targetNeighborCount > 0.0f);
     float& H_a = supportRadius;
     H_a = std::min(std::max(H_a, minimumSupportRadius), maximumSupportRadius);
-    Array<Position, NDIM> position;
-    position[XDIM] = data.sourcePositionX[particleIndex];
-    position[YDIM] = data.sourcePositionY[particleIndex];
-    position[ZDIM] = data.sourcePositionZ[particleIndex];
+    Array<Position, kDimensions> position;
+    position[kXDimension] = data.sourcePositionX[particleIndex];
+    position[kYDimension] = data.sourcePositionY[particleIndex];
+    position[kZDimension] = data.sourcePositionZ[particleIndex];
     // Distances do not change during the bounded support-radius solve.
     std::vector<SimdFloat> r_ab;    // |r_ab| for each pack of neighbors
     r_ab.reserve((neighbors.size() + SimdFloat::size() - 1) / SimdFloat::size());
@@ -53,10 +54,10 @@ bool solveSphCpuSupportRadius(SphRunParameters const& parameters, SphRunData con
     }
     float lower = minimumSupportRadius;
     float upper = maximumSupportRadius;
-    float const ΣW_target = data.targetNeighborCount * float(3.0 / (4.0 * M_PI));
+    float const ΣW_target = data.targetNeighborCount * (3.0f / (4.0f * std::numbers::pi_v<float>) );
     flops += 1;
     for (int iteration = 0; iteration < 128; ++iteration) {
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             flops += 1;    // Float-to-fixed scaling; fixed-point arithmetic is integer.
             if (targetNode.outerBox.end[dim] <
                 RangeFixed(position[dim]) + RangeFixed(H_a) + RangeFixed::min()) {
@@ -86,7 +87,7 @@ bool solveSphCpuSupportRadius(SphRunParameters const& parameters, SphRunData con
         float const residual = simdSum(ΣW_pack) - ΣW_target;
         flops += SimdFloat::size() - 1 +
             2;    // Reduction, residual and tolerance; abs is a sign operation.
-        if (std::abs(residual) <= SPH_SUPPORT_RADIUS_TOLERANCE * ΣW_target ||
+        if (std::abs(residual) <= kSphSupportRadiusTolerance * ΣW_target ||
             (H_a <= minimumSupportRadius && residual >= 0.0f) ||
             (H_a >= maximumSupportRadius && residual <= 0.0f)) {
             return true;
@@ -251,9 +252,9 @@ SphRunReturn sphCpuPrehydro2(
                         SimdFloat(parameters.expansionRate) * r_ab,
                     Vector3<SimdFloat>(SimdFloat(0)));
                 ρ_a_div_v_a_pack -= v_ab_physical.dot(m_b_gradW_ab);
-                for (int dim = 0; dim < NDIM; ++dim) {
-                    int const next = (dim + 1) % NDIM;
-                    int const last = (dim + 2) % NDIM;
+                for (int dim = 0; dim < kDimensions; ++dim) {
+                    int const next = (dim + 1) % kDimensions;
+                    int const last = (dim + 2) % kDimensions;
                     ρ_a_curl_v_a_pack[dim] += v_ab_physical[next] * m_b_gradW_ab[last] -
                         v_ab_physical[last] * m_b_gradW_ab[next];
                 }
@@ -270,8 +271,8 @@ SphRunReturn sphCpuPrehydro2(
                             detail::sphCpuLoad3(data.sourceAccelerationX, data.sourceAccelerationY,
                                 data.sourceAccelerationZ, neighbors, first, 0.0f),
                         Vector3<SimdFloat>(SimdFloat(0)));
-                    for (int i = 0; i < NDIM; ++i) {
-                        for (int j = 0; j < NDIM; ++j) {
+                    for (int i = 0; i < kDimensions; ++i) {
+                        for (int j = 0; j < kDimensions; ++j) {
                             gradientSums.moment[i][j] += w_ab * r_ab[i] * r_ab[j];
                             gradientSums.velocity[i][j] += w_ab * v_ab_physical[i] * r_ab[j];
                             gradientSums.acceleration[i][j] += w_ab * a_ab[i] * r_ab[j];
@@ -315,8 +316,8 @@ SphRunReturn sphCpuPrehydro2(
         ALWAYS_ASSERT(H_a > 0.0f && ρ_a > 0.0f);
         data.sinkDensity[sinkIndex] = ρ_a;
         if (parameters.balsaraSwitch) {
-            Vector3<float> const ρ_a_curl_v_a(simdSum(ρ_a_curl_v_a_pack[XDIM]),
-                simdSum(ρ_a_curl_v_a_pack[YDIM]), simdSum(ρ_a_curl_v_a_pack[ZDIM]));
+            Vector3<float> const ρ_a_curl_v_a(simdSum(ρ_a_curl_v_a_pack[kXDimension]),
+                simdSum(ρ_a_curl_v_a_pack[kYDimension]), simdSum(ρ_a_curl_v_a_pack[kZDimension]));
             data.sinkBalsaraFactor[sinkIndex] =
                 balsara::balsaraFactor(simdSum(ρ_a_div_v_a_pack), ρ_a_curl_v_a.norm());
             flops += 4 * (SimdFloat::size() - 1) + 8;
@@ -345,8 +346,8 @@ SphRunReturn sphCpuPrehydro2(
         }
         if (parameters.cullenDehnen) {
             cullen_and_dehnen::GradientSums<float> sums{};
-            for (int i = 0; i < NDIM; ++i) {
-                for (int j = 0; j < NDIM; ++j) {
+            for (int i = 0; i < kDimensions; ++i) {
+                for (int j = 0; j < kDimensions; ++j) {
                     sums.moment[i][j] = simdSum(gradientSums.moment[i][j]);
                     sums.velocity[i][j] = simdSum(gradientSums.velocity[i][j]);
                     sums.acceleration[i][j] = simdSum(gradientSums.acceleration[i][j]);

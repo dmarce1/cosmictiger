@@ -176,7 +176,7 @@ struct SolveState {
     std::unordered_map<uint64_t, std::vector<CellOwner>> sourceOwners;
     double radialTrace = 0;
     std::array<double, 5> background{};
-    Vector<Array<float, NDIM>> acceleration;
+    Vector<Array<float, kDimensions>> acceleration;
     Vector<float> potential;
     PmmmDiagnostics diagnostics;
     MutexType accumulationMutex;

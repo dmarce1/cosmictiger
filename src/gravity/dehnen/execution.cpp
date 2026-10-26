@@ -31,13 +31,13 @@
 
 HPX_PLAIN_ACTION(kick, KickAction);
 namespace detail {
-double kickBackgroundSecondMoment(Array<Position, NDIM> center);
+double kickBackgroundSecondMoment(Array<Position, kDimensions> center);
 }
 
 HPX_PLAIN_ACTION(detail::kickBackgroundSecondMoment, KickBackgroundSecondMomentAction);
 
 namespace detail {
-double kickBackgroundSecondMoment(Array<Position, NDIM> center) {
+double kickBackgroundSecondMoment(Array<Position, kDimensions> center) {
     Vector<hpx::future<double>> children;
     for (auto const& locality : hpxChildren()) {
         children.push_back(hpx::async<KickBackgroundSecondMomentAction>(locality, center));
@@ -46,7 +46,7 @@ double kickBackgroundSecondMoment(Array<Position, NDIM> center) {
     auto const range = particlesCurrentRange();
     for (ParticleInteger i = range.first; i < range.second; i++) {
         double radiusSquared = 0.0;
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             double const displacement = unwrappedDoubleDistance(particlesPos(dim, i), center[dim]);
             radiusSquared += displacement * displacement;
         }
@@ -108,8 +108,8 @@ KickReturn kickWaitLocalReturn() {
 }    // namespace detail
 
 hpx::future<KickReturn> kickFork(KickParameters params, ExpansionBuffer const& l,
-    Array<Position, NDIM> pos, TreeId self, Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
-    std::shared_ptr<KickWorkspace> cudaWorkspace, bool threadme) {
+    Array<Position, kDimensions> pos, TreeId self, Vector<TreeId> dchecklist,
+    Vector<TreeId> echecklist, std::shared_ptr<KickWorkspace> cudaWorkspace, bool threadme) {
     static std::atomic<int> numberOfThreads(1);
     hpx::future<KickReturn> rc;
     TreeNode const* selfPtr = treeGetNode(self);
@@ -126,7 +126,7 @@ hpx::future<KickReturn> kickFork(KickParameters params, ExpansionBuffer const& l
         remote = true;
     } else if (threadme) {
         threadme =
-            selfPtr->particleRange.second - selfPtr->particleRange.first > MIN_KICK_THREAD_PARTS;
+            selfPtr->particleRange.second - selfPtr->particleRange.first > kMinKickThreadParts;
         int const maximumThreads = std::max(1,
             hpxSize() == 1 ? (int) hpxHardwareConcurrency() * 2 :
                              (int) hpxHardwareConcurrency() / 2);
@@ -170,8 +170,9 @@ hpx::future<KickReturn> kickFork(KickParameters params, ExpansionBuffer const& l
     return rc;
 }
 
-KickReturn kick(KickParameters params, ExpansionBuffer l, Array<Position, NDIM> pos, TreeId self,
-    Vector<TreeId> direct, Vector<TreeId> periodic, std::shared_ptr<KickWorkspace> workspace) {
+KickReturn kick(KickParameters params, ExpansionBuffer l, Array<Position, kDimensions> pos,
+    TreeId self, Vector<TreeId> direct, Vector<TreeId> periodic,
+    std::shared_ptr<KickWorkspace> workspace) {
     params.openLargerCell = getOptions().gravity.openLargerCell;
     gravitySetRemoteSourceReader(dehnenReadSourcePositions);
     KickContext context;

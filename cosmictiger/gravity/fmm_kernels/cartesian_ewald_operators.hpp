@@ -11,7 +11,8 @@ namespace cosmictiger::gravity::cartesian {
 // unwrapped separation, so the removed quadratic sums to one root polynomial.
 template <class Real, int order>
 CUDA_EXPORT int evaluateEwaldGreen(Green<Real, order>& local,
-    Array<Real, NDIM> const& wrappedPosition, Array<Real, NDIM> const& unwrappedPosition) {
+    Array<Real, kDimensions> const& wrappedPosition,
+    Array<Real, kDimensions> const& unwrappedPosition) {
     constexpr int degree = order - 1;
     constexpr int kTensorOrder = order;
     SymmetricTracelessTensor<Real, kTensorOrder> derivatives;
@@ -24,25 +25,27 @@ CUDA_EXPORT int evaluateEwaldGreen(Green<Real, order>& local,
             }
         }
     }
-    Real const coefficient = simdBroadcast<Real>(4.0 * std::numbers::pi / 3.0);
+    Real const coefficient = simdBroadcast<Real>(
+        SimdScalar<Real>(4) * std::numbers::pi_v<SimdScalar<Real>> / SimdScalar<Real>(3));
     Real radiusSquared = simdBroadcast<Real>(0);
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         radiusSquared = simdFma(unwrappedPosition[dim], unwrappedPosition[dim], radiusSquared);
-        int const nx = dim == XDIM;
-        int const ny = dim == YDIM;
-        int const nz = dim == ZDIM;
+        int const nx = dim == kXDimension;
+        int const ny = dim == kYDimension;
+        int const nz = dim == kZDimension;
         local(nx, ny, nz) +=
-            coefficient * simdBroadcast<Real>(SCALE_FACTOR_INV2) * unwrappedPosition[dim];
+            coefficient * simdBroadcast<Real>(kScaleFactorInverse2) * unwrappedPosition[dim];
     }
-    local[0] += simdBroadcast<Real>(0.5 * SCALE_FACTOR_INV1) * coefficient * radiusSquared;
-    local(2, 0, 0) += coefficient * simdBroadcast<Real>(SCALE_FACTOR_INV3);
-    local(0, 2, 0) += coefficient * simdBroadcast<Real>(SCALE_FACTOR_INV3);
+    local[0] += simdBroadcast<Real>(0.5 * kScaleFactorInverse1) * coefficient * radiusSquared;
+    local(2, 0, 0) += coefficient * simdBroadcast<Real>(kScaleFactorInverse3);
+    local(0, 2, 0) += coefficient * simdBroadcast<Real>(kScaleFactorInverse3);
     local[Green<Real, order>::kCount_] = simdBroadcast<Real>(0);
     return flops + 22;
 }
 
 template <class Real, int order>
-CUDA_EXPORT int evaluateEwaldGreen(Green<Real, order>& local, Array<Real, NDIM> const& position) {
+CUDA_EXPORT int evaluateEwaldGreen(
+    Green<Real, order>& local, Array<Real, kDimensions> const& position) {
     return evaluateEwaldGreen(local, position, position);
 }
 }    // namespace cosmictiger::gravity::cartesian
@@ -54,11 +57,11 @@ inline void initializeBackgroundExpansion(
     double secondMomentTrace) {
     double const coefficient = 4.0 * std::numbers::pi / 3.0;
     local = 0.0f;
-    local[0] = -0.5 * coefficient * secondMomentTrace * SCALE_FACTOR_INV1;
-    local(1, 0, 0) = coefficient * rootMultipole(1, 0, 0) * SCALE_FACTOR_INV3;
-    local(0, 1, 0) = coefficient * rootMultipole(0, 1, 0) * SCALE_FACTOR_INV3;
-    local(0, 0, 1) = coefficient * rootMultipole(0, 0, 1) * SCALE_FACTOR_INV3;
-    local(2, 0, 0) = local(0, 2, 0) = -coefficient * rootMultipole[0] * SCALE_FACTOR_INV3;
+    local[0] = -0.5 * coefficient * secondMomentTrace * kScaleFactorInverse1;
+    local(1, 0, 0) = coefficient * rootMultipole(1, 0, 0) * kScaleFactorInverse3;
+    local(0, 1, 0) = coefficient * rootMultipole(0, 1, 0) * kScaleFactorInverse3;
+    local(0, 0, 1) = coefficient * rootMultipole(0, 0, 1) * kScaleFactorInverse3;
+    local(2, 0, 0) = local(0, 2, 0) = -coefficient * rootMultipole[0] * kScaleFactorInverse3;
     local[FmmOrder<order>::kLocalTraceIndex_] =
-        -4.0 * std::numbers::pi * rootMultipole[0] * SCALE_FACTOR_INV3;
+        -4.0 * std::numbers::pi * rootMultipole[0] * kScaleFactorInverse3;
 }

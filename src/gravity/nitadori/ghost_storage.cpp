@@ -38,16 +38,17 @@ void fmmGhostReserve(ParticleInteger count) {
     if (count > ghostCapacity) {
         constexpr size_t kAlignment = 64;
         size_t const entries = static_cast<size_t>(count);
-        if (entries >
-            (std::numeric_limits<size_t>::max() - kAlignment) / (NDIM * sizeof(Position) + 2)) {
+        if (entries > (std::numeric_limits<size_t>::max() - kAlignment) /
+                (kDimensions * sizeof(Position) + 2)) {
             throw std::length_error("Ghost source arena size overflows size_t");
         }
         size_t const stride =
             (entries * sizeof(Position) + kAlignment - 1) / kAlignment * kAlignment;
-        if (stride > (std::numeric_limits<size_t>::max() - 2 * entries - kAlignment) / NDIM) {
+        if (stride >
+            (std::numeric_limits<size_t>::max() - 2 * entries - kAlignment) / kDimensions) {
             throw std::length_error("Ghost source arena size overflows size_t");
         }
-        size_t const bytes = NDIM * stride + 2 * entries;
+        size_t const bytes = kDimensions * stride + 2 * entries;
         size_t space = bytes + kAlignment - 1;
         char* replacement = static_cast<char*>(allocateManagedMemory(space));
         if (replacement == nullptr) {
@@ -57,10 +58,10 @@ void fmmGhostReserve(ParticleInteger count) {
         std::align(kAlignment, bytes, aligned, space);
         char* data = static_cast<char*>(aligned);
         FmmSourceView next;
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             next.positions[dim] = reinterpret_cast<Position*>(data + dim * stride);
         }
-        next.types = data + NDIM * stride;
+        next.types = data + kDimensions * stride;
         next.rungs = next.types + entries;
         if (ghostArena != nullptr) {
             freeManagedMemory(ghostArena);

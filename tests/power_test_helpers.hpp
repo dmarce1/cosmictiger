@@ -40,7 +40,7 @@ inline void requireClose(double actual, double expected, double tolerance, char 
 }
 
 struct PowerFixture {
-    std::array<std::vector<Position>, NDIM> positions;
+    std::array<std::vector<Position>, kDimensions> positions;
     std::vector<float> masses;
 
     explicit PowerFixture(size_t count)
@@ -53,7 +53,7 @@ struct PowerFixture {
             0x20000000 - 128, 0x20000000, 0x20000000 + 128, 0x60000000 - 128, 0x60000000,
             0x60000000 + 128, 0x80000000, 0xe0000000};
         for (size_t index = 0; index < count; index++) {
-            for (size_t dimension = 0; dimension < NDIM; dimension++) {
+            for (size_t dimension = 0; dimension < kDimensions; dimension++) {
                 random = 1664525 * random + 1013904223;
                 uint32_t const raw = index < std::size(boundaryPositions) ?
                     boundaryPositions[(index + dimension * 3) % std::size(boundaryPositions)] :
@@ -85,8 +85,8 @@ inline std::vector<double> referenceDensity(
     PowerFixture const& fixture, int fold, int gridSize, bool weighted) {
     std::vector<double> result(size_t(gridSize) * gridSize * gridSize, 0.0);
     for (size_t index = 0; index < fixture.masses.size(); index++) {
-        std::array<std::vector<long double>, NDIM> weights;
-        for (int dimension = 0; dimension < NDIM; dimension++) {
+        std::array<std::vector<long double>, kDimensions> weights;
+        for (int dimension = 0; dimension < kDimensions; dimension++) {
             weights[dimension].resize(gridSize, 0.0L);
             // Match the specified single-precision folding, including raw
             // Position values just below one that round to 1.0f before folding.
@@ -106,7 +106,8 @@ inline std::vector<double> referenceDensity(
             for (int y = 0; y < gridSize; y++) {
                 for (int z = 0; z < gridSize; z++) {
                     size_t const cell = (size_t(x) * gridSize + y) * gridSize + z;
-                    result[cell] += mass * weights[XDIM][x] * weights[YDIM][y] * weights[ZDIM][z];
+                    result[cell] += mass * weights[kXDimension][x] * weights[kYDimension][y] *
+                        weights[kZDimension][z];
                 }
             }
         }
@@ -121,11 +122,11 @@ std::vector<double> assignTiledDensity(int gridSize, int tileSize, AssignDensity
         for (int y = 0; y < gridSize; y += tileSize) {
             for (int z = 0; z < gridSize; z += tileSize) {
                 Range<int64_t> box;
-                int const start[NDIM] = {x, y, z};
-                for (int dimension = 0; dimension < NDIM; dimension++) {
-                    box.begin[dimension] = start[dimension] + CLOUD_MIN;
+                int const start[kDimensions] = {x, y, z};
+                for (int dimension = 0; dimension < kDimensions; dimension++) {
+                    box.begin[dimension] = start[dimension] + kCloudMin;
                     box.end[dimension] =
-                        std::min(start[dimension] + tileSize, gridSize) + CLOUD_MAX;
+                        std::min(start[dimension] + tileSize, gridSize) + kCloudMax;
                 }
                 constexpr float kGuard = 123456.0f;
                 std::vector<float> density(box.volume() + 2, 0.0f);
@@ -134,9 +135,9 @@ std::vector<double> assignTiledDensity(int gridSize, int tileSize, AssignDensity
                 require(density.front() == kGuard && density.back() == kGuard,
                     "density assignment preserves guards around the padded tile");
                 // Emulate the periodic folding performed by fft3dAccumulateReal.
-                for (int64_t i = box.begin[XDIM]; i < box.end[XDIM]; i++) {
-                    for (int64_t j = box.begin[YDIM]; j < box.end[YDIM]; j++) {
-                        for (int64_t k = box.begin[ZDIM]; k < box.end[ZDIM]; k++) {
+                for (int64_t i = box.begin[kXDimension]; i < box.end[kXDimension]; i++) {
+                    for (int64_t j = box.begin[kYDimension]; j < box.end[kYDimension]; j++) {
+                        for (int64_t k = box.begin[kZDimension]; k < box.end[kZDimension]; k++) {
                             int64_t const wrappedX = (i % gridSize + gridSize) % gridSize;
                             int64_t const wrappedY = (j % gridSize + gridSize) % gridSize;
                             int64_t const wrappedZ = (k % gridSize + gridSize) % gridSize;

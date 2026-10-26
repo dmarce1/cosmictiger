@@ -22,7 +22,7 @@ __constant__ EwaldConstants ecDev;
 void EwaldConst::initGpu() {
     int n2max = 12;
     int nmax = std::sqrt(n2max) + 1;
-    Array<float, NDIM> thisH;
+    Array<float, kDimensions> thisH;
     int count = 0;
     for (int i = -nmax; i <= nmax; i++) {
         for (int j = -nmax; j <= nmax; j++) {
@@ -32,7 +32,7 @@ void EwaldConst::initGpu() {
                 double const y = std::max(abs(j) - 0.5, 0.0);
                 double const z = std::max(abs(k) - 0.5, 0.0);
                 double const d = sqrt(sqr(x, y, z));
-                if (d < EWALD_REAL_CUTOFF && i2 > 0) {
+                if (d < kEwaldRealCutoff && i2 > 0) {
                     thisH[0] = i;
                     thisH[1] = j;
                     thisH[2] = k;
@@ -41,8 +41,9 @@ void EwaldConst::initGpu() {
             }
         }
     }
-    terminal::detailPrint("count = %i %i\n", count, NREAL);
-    auto const sortFunc = [](Array<float, NDIM> const& a, Array<float, NDIM> const& b) {
+    terminal::detailPrint("count = %i %i\n", count, kEwaldRealIndexCount);
+    auto const sortFunc = [](Array<float, kDimensions> const& a,
+                              Array<float, kDimensions> const& b) {
         auto const a2 = sqr(a[0], a[1], a[2]);
         auto const b2 = sqr(b[0], b[1], b[2]);
         return a2 > b2;

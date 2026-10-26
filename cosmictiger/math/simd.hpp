@@ -9,6 +9,7 @@
 #pragma once
 
 #include <cmath>
+#include <numbers>
 
 #include <cosmictiger/math/simd_math.hpp>
 
@@ -54,8 +55,8 @@ inline SimdFloat sin(SimdFloat const& x0) {
     static SimdFloat const piMajor = simdBroadcast<SimdFloat>(3.1415927);
     static SimdFloat const piMinor = simdBroadcast<SimdFloat>(-0.00000008742278);
     x = x -
-        simdRound(x * simdBroadcast<SimdFloat>(1.0 / (2.0 * M_PI))) *
-            simdBroadcast<SimdFloat>(2.0 * M_PI);
+        simdRound(x * simdBroadcast<SimdFloat>(1.0f / (2.0f * std::numbers::pi_v<float>) )) *
+            simdBroadcast<SimdFloat>(2.0f * std::numbers::pi_v<float>);
     SimdFloat const x2 = x * x;
     SimdFloat p = simdBroadcast<SimdFloat>(0.00000000013291342);
     p = simdFma(p, x2, simdBroadcast<SimdFloat>(-0.000000023317787));
@@ -74,7 +75,7 @@ inline SimdFloat sinf(SimdFloat const& x0) {
 }
 
 inline SimdFloat cos(SimdFloat const& x) {
-    return sin(x + simdBroadcast<SimdFloat>(M_PI / 2.0));
+    return sin(x + simdBroadcast<SimdFloat>(std::numbers::pi_v<float> / 2.0f));
 }
 
 inline void sincos(SimdFloat const& x, SimdFloat* s, SimdFloat* c) {
@@ -126,7 +127,7 @@ inline SimdFloat erff(SimdFloat const x) {
 }
 
 inline SimdFloat log2(SimdFloat const& value) {
-    using UnsignedPack = SimdVector<uint32_t, SIMD_FLOAT_SIZE>;
+    using UnsignedPack = SimdVector<uint32_t, kSimdFloatSize>;
     auto const exponent = simdBitCast<UnsignedPack>(value) >> 23;
     auto const exponentScale = simdBitCast<SimdFloat>(exponent << 23);
     auto const exponentValue = simdCast<SimdFloat>(simdCast<SimdInt>(exponent) - SimdInt(127));

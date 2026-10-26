@@ -92,9 +92,9 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighborFork(SphTreeNeighborParameters
         remote = true;
     } else if (threadme) {
         threadme =
-            selfPtr->particleRange.second - selfPtr->particleRange.first > MIN_KICK_THREAD_PARTS;
+            selfPtr->particleRange.second - selfPtr->particleRange.first > kMinKickThreadParts;
         if (threadme) {
-            if (numberOfThreads++ < KICK_OVERSUBSCRIPTION * hpx::thread::hardware_concurrency() ||
+            if (numberOfThreads++ < kKickOversubscription * hpx::thread::hardware_concurrency() ||
                 !selfPtr->isLocal()) {
                 threadme = true;
             } else {
@@ -154,22 +154,23 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
     }
     ALWAYS_ASSERT(params.innerSelection);
     SphTreeNeighborReturn kr;
-    FlopCounter<> flops = 4 * NDIM;    // Sentinel bound conversions in the return constructor.
+    FlopCounter<> flops =
+        4 * kDimensions;    // Sentinel bound conversions in the return constructor.
     SphTreeNode const* selfPtr = sphTreeGetNode(self);
-    if (params.runType == SPH_TREE_NEIGHBOR_NEIGHBORS && selfPtr->localRoot) {
+    if (params.runType == kSphTreeNeighborNeighbors && selfPtr->localRoot) {
         sphTreeFreeNeighborList();
         sphTreeClearNeighborRanges();
     }
-    if (params.runType == SPH_TREE_NEIGHBOR_NEIGHBORS && checklist.size() == 0) {
+    if (params.runType == kSphTreeNeighborNeighbors && checklist.size() == 0) {
         addCpuFlops(flops);
         return hpx::make_ready_future(kr);
     }
     ASSERT(self.proc == hpxRank());
     Vector<TreeId> nextlist;
     Vector<TreeId> leaflist;
-    if ((params.innerSelection | SPH_INTERACTIONS_I) && selfPtr->numberOfActiveParticles) {
+    if ((params.innerSelection | kSphInteractionsI) && selfPtr->numberOfActiveParticles) {
         if (!rangeIntersect(selfPtr->outerBox, selfPtr->innerBox)) {
-            for (int dim = 0; dim < NDIM; dim++) {
+            for (int dim = 0; dim < kDimensions; dim++) {
                 PRINT("%e %e\n", selfPtr->outerBox.begin[dim].toDouble(),
                     selfPtr->outerBox.end[dim].toDouble());
                 PRINT("%e %e\n", selfPtr->innerBox.begin[dim].toDouble(),
@@ -178,29 +179,29 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
         }
     }
 
-    if ((params.innerSelection | SPH_INTERACTIONS_J) && selfPtr->numberOfActiveParticles) {
+    if ((params.innerSelection | kSphInteractionsJ) && selfPtr->numberOfActiveParticles) {
         ALWAYS_ASSERT(rangeIntersect(selfPtr->innerBox, selfPtr->outerBox));
     }
 
-    if (params.runType == SPH_TREE_NEIGHBOR_NEIGHBORS) {
+    if (params.runType == kSphTreeNeighborNeighbors) {
         do {
             nextlist.resize(0);
             for (int ci = 0; ci < checklist.size(); ci++) {
                 auto const* other = sphTreeGetNode(checklist[ci]);
                 bool test2 = false;
                 bool test1 = false;
-                if (params.innerSelection | SPH_INTERACTIONS_I) {
+                if (params.innerSelection | kSphInteractionsI) {
                     test1 = rangeIntersect(selfPtr->outerBox, other->innerBox, &flops);
                 }
-                if (params.innerSelection | SPH_INTERACTIONS_J) {
+                if (params.innerSelection | kSphInteractionsJ) {
                     test2 = rangeIntersect(selfPtr->innerBox, other->outerBox, &flops);
                 }
                 if (test1 || test2) {
                     if (other->leaf) {
                         leaflist.push_back(checklist[ci]);
                     } else {
-                        nextlist.push_back(other->children[LEFT]);
-                        nextlist.push_back(other->children[RIGHT]);
+                        nextlist.push_back(other->children[kLeftChild]);
+                        nextlist.push_back(other->children[kRightChild]);
                     }
                 }
             }
@@ -209,48 +210,48 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
     }
     if (selfPtr->leaf) {
         switch (params.runType) {
-        case SPH_TREE_NEIGHBOR_NEIGHBORS: {
+        case kSphTreeNeighborNeighbors: {
             Pair<int> rng;
             rng.first = sphTreeAllocateNeighborList(leaflist);
             rng.second = leaflist.size() + rng.first;
             sphTreeSetNeighborRange(self, rng);
         } break;
-        case SPH_TREE_NEIGHBOR_BOXES: {
+        case kSphTreeNeighborBoxes: {
             Fixed32Range ibox, obox;
-            for (int dim = 0; dim < NDIM; dim++) {
+            for (int dim = 0; dim < kDimensions; dim++) {
                 ibox.begin[dim] = obox.begin[dim] = 1.9;
                 ibox.end[dim] = obox.end[dim] = -.9;
             }
-            flops += 2 * NDIM;    // Chained assignment converts each sentinel once.
+            flops += 2 * kDimensions;    // Chained assignment converts each sentinel once.
             bool factive = false;
             for (ParticleInteger i = selfPtr->particleRange.first;
                 i < selfPtr->particleRange.second; i++) {
                 bool const active = sphParticlesRung(i) >= params.minimumRung;
                 float const h = params.supportRadiusMultiplier * sphParticlesSupportRadius(i);
-                auto const myx = sphParticlesPosition(XDIM, i);
-                auto const myy = sphParticlesPosition(YDIM, i);
-                auto const myz = sphParticlesPosition(ZDIM, i);
-                Array<Position, NDIM> xValue;
-                xValue[XDIM] = myx;
-                xValue[YDIM] = myy;
-                xValue[ZDIM] = myz;
+                auto const myx = sphParticlesPosition(kXDimension, i);
+                auto const myy = sphParticlesPosition(kYDimension, i);
+                auto const myz = sphParticlesPosition(kZDimension, i);
+                Array<Position, kDimensions> xValue;
+                xValue[kXDimension] = myx;
+                xValue[kYDimension] = myy;
+                xValue[kZDimension] = myz;
                 auto const tiny = 10.0 * RangeFixed::min().toDouble();
                 flops += 3;    // Support multiplier and the two tiny-offset operations.
                 if (active) {
                     factive = true;
                 }
-                if ((params.outerSelection & SPH_SET_ALL) ||
-                    (active && (params.outerSelection & SPH_SET_ACTIVE))) {
-                    for (int dim = 0; dim < NDIM; dim++) {
+                if ((params.outerSelection & kSphSetAll) ||
+                    (active && (params.outerSelection & kSphSetActive))) {
+                    for (int dim = 0; dim < kDimensions; dim++) {
                         double const x = xValue[dim].toDouble();
                         obox.begin[dim] = std::min(obox.begin[dim].toDouble(), x - h - tiny);
                         obox.end[dim] = std::max(obox.end[dim].toDouble(), x + h + tiny);
                         flops += 9;
                     }
                 }
-                if ((params.innerSelection & SPH_SET_ALL) ||
-                    (active && (params.innerSelection & SPH_SET_ACTIVE))) {
-                    for (int dim = 0; dim < NDIM; dim++) {
+                if ((params.innerSelection & kSphSetAll) ||
+                    (active && (params.innerSelection & kSphSetActive))) {
+                    for (int dim = 0; dim < kDimensions; dim++) {
                         double const x = xValue[dim].toDouble();
                         ibox.begin[dim] = std::min(ibox.begin[dim].toDouble(), x - tiny);
                         ibox.end[dim] = std::max(ibox.end[dim].toDouble(), x + tiny);
@@ -271,32 +272,33 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
     } else {
         addCpuFlops(flops);
         checklist.insert(checklist.end(), leaflist.begin(), leaflist.end());
-        std::array<hpx::future<SphTreeNeighborReturn>, NCHILD> futs;
-        futs[RIGHT] = sphTreeNeighborFork(params, selfPtr->children[RIGHT], checklist, level, true);
-        futs[LEFT] = sphTreeNeighborFork(
-            params, selfPtr->children[LEFT], std::move(checklist), level, false);
+        std::array<hpx::future<SphTreeNeighborReturn>, kChildCount> futs;
+        futs[kRightChild] =
+            sphTreeNeighborFork(params, selfPtr->children[kRightChild], checklist, level, true);
+        futs[kLeftChild] = sphTreeNeighborFork(
+            params, selfPtr->children[kLeftChild], std::move(checklist), level, false);
 
         auto const finish = [self, params](hpx::future<SphTreeNeighborReturn>& fl,
                                 hpx::future<SphTreeNeighborReturn>& fr) {
             SphTreeNeighborReturn kr;
-            addCpuFlops(4 * NDIM);
+            addCpuFlops(4 * kDimensions);
             auto const rcl = fl.get();
             auto const rcr = fr.get();
             kr += rcl;
             kr += rcr;
-            if (params.runType == SPH_TREE_NEIGHBOR_BOXES) {
+            if (params.runType == kSphTreeNeighborBoxes) {
                 sphTreeSetBoxes(self, kr.innerBox, kr.outerBox);
             }
             return kr;
         };
-        if (futs[LEFT].is_ready() && futs[RIGHT].is_ready()) {
-            return hpx::make_ready_future(finish(futs[LEFT], futs[RIGHT]));
+        if (futs[kLeftChild].is_ready() && futs[kRightChild].is_ready()) {
+            return hpx::make_ready_future(finish(futs[kLeftChild], futs[kRightChild]));
         } else {
             return hpx::when_all(futs.begin(), futs.end())
                 .then([finish, selfPtr](
                           hpx::future<std::vector<hpx::future<SphTreeNeighborReturn>>> futsfut) {
                     auto futs = futsfut.get();
-                    return finish(futs[LEFT], futs[RIGHT]);
+                    return finish(futs[kLeftChild], futs[kRightChild]);
                 });
         }
     }
@@ -334,20 +336,20 @@ SphRunReturn sphRun(SphRunParameters params, bool cuda) {
                 auto const* self = sphTreeGetNode(selfid);
                 bool test = false;
                 switch (params.runType) {
-                case SPH_RUN_RUNGS:
+                case kSphRunRungs:
                     test = self->numberOfActiveParticles > 0;
                     break;
 
-                case SPH_RUN_PREHYDRO1:
+                case kSphRunPrehydro1:
                     test = self->numberOfActiveParticles > 0 && !isConverged(self);
                     break;
 
-                case SPH_RUN_PREHYDRO2:
+                case kSphRunPrehydro2:
                     test = hasActiveNeighbors(self);
                     test = test && !isConverged(self);
                     break;
 
-                case SPH_RUN_HYDRO:
+                case kSphRunHydro:
                     test = self->numberOfActiveParticles > 0;
                     break;
                 }
@@ -417,36 +419,36 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
     hostPositionX.resize(particleStorageSize);
     hostPositionY.resize(particleStorageSize);
     hostPositionZ.resize(particleStorageSize);
-    if (params.runType != SPH_RUN_PREHYDRO1) {
+    if (params.runType != kSphRunPrehydro1) {
         hostSupportRadius.resize(particleStorageSize);
     }
-    if (params.runType == SPH_RUN_PREHYDRO2 || params.runType == SPH_RUN_RUNGS) {
+    if (params.runType == kSphRunPrehydro2 || params.runType == kSphRunRungs) {
         hostRungs.resize(particleStorageSize);
     }
-    if (params.runType == SPH_RUN_HYDRO && params.balsaraSwitch) {
+    if (params.runType == kSphRunHydro && params.balsaraSwitch) {
         hostBalsaraFactor.resize(particleStorageSize);
     }
-    if (params.runType == SPH_RUN_PREHYDRO2 && params.cullenDehnen) {
+    if (params.runType == kSphRunPrehydro2 && params.cullenDehnen) {
         hostAccelerationX.resize(particleStorageSize);
         hostAccelerationY.resize(particleStorageSize);
         hostAccelerationZ.resize(particleStorageSize);
         hostVelocityDivergence.resize(particleStorageSize);
     }
-    if (params.runType == SPH_RUN_HYDRO && params.variableViscosity) {
+    if (params.runType == kSphRunHydro && params.variableViscosity) {
         hostViscosityAlpha.resize(particleStorageSize);
     }
-    if (params.runType == SPH_RUN_HYDRO ||
-        (params.runType == SPH_RUN_PREHYDRO2 &&
+    if (params.runType == kSphRunHydro ||
+        (params.runType == kSphRunPrehydro2 &&
             (params.balsaraSwitch || params.variableViscosity))) {
         hostVelocityX.resize(particleStorageSize);
         hostVelocityY.resize(particleStorageSize);
         hostVelocityZ.resize(particleStorageSize);
     }
-    if (params.runType == SPH_RUN_HYDRO) {
+    if (params.runType == kSphRunHydro) {
         hostDensity.resize(particleStorageSize);
     }
-    if (params.runType == SPH_RUN_HYDRO ||
-        (params.runType == SPH_RUN_PREHYDRO2 && params.variableViscosity)) {
+    if (params.runType == kSphRunHydro ||
+        (params.runType == kSphRunPrehydro2 && params.variableViscosity)) {
         hostInternalEnergy.resize(particleStorageSize);
         if (getOptions().chemistry.enabled) {
             hostPressureEnergyRatio.resize(particleStorageSize);
@@ -469,7 +471,7 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
                 ParticleInteger const offset = (particleIndex += size) - size;
                 sphParticlesGlobalReadPositions(node.globalParticleRange(), hostPositionX.data(),
                     hostPositionY.data(), hostPositionZ.data(), offset);
-                if (params.runType == SPH_RUN_PREHYDRO2 || params.runType == SPH_RUN_RUNGS) {
+                if (params.runType == kSphRunPrehydro2 || params.runType == kSphRunRungs) {
                     sphParticlesGlobalReadInternalEnergyAndSupportRadius(node.globalParticleRange(),
                         hostInternalEnergy.empty() ? nullptr : hostInternalEnergy.data(),
                         hostSupportRadius.data(), offset);
@@ -479,7 +481,7 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
                     }
                     sphParticlesGlobalReadRungs(
                         node.globalParticleRange(), hostRungs.data(), offset);
-                } else if (params.runType == SPH_RUN_HYDRO) {
+                } else if (params.runType == kSphRunHydro) {
                     sphParticlesGlobalReadInternalEnergyAndSupportRadius(node.globalParticleRange(),
                         hostInternalEnergy.data(), hostSupportRadius.data(), offset);
                     if (getOptions().chemistry.enabled) {
@@ -490,7 +492,7 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
                         offset, params.balsaraSwitch ? hostBalsaraFactor.data() : nullptr,
                         params.variableViscosity ? hostViscosityAlpha.data() : nullptr);
                 }
-                if (params.runType == SPH_RUN_PREHYDRO2 && params.cullenDehnen) {
+                if (params.runType == kSphRunPrehydro2 && params.cullenDehnen) {
                     sphParticlesGlobalReadViscosityDiagnostics(node.globalParticleRange(),
                         hostAccelerationX.data(), hostAccelerationY.data(),
                         hostAccelerationZ.data(), hostVelocityDivergence.data(), offset);
@@ -544,9 +546,9 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
     runData.sinkCullenDehnenStates = sphParticlesCullenDehnenStates;
     runData.sinkThermodynamicStates = &sphParticlesThermodynamicState(0);
     runData.sinkInternalEnergyRate = &sphParticlesInternalEnergyRate(0);
-    runData.sinkGravityAccelerationX = &sphParticlesGravityAcceleration(XDIM, 0);
-    runData.sinkGravityAccelerationY = &sphParticlesGravityAcceleration(YDIM, 0);
-    runData.sinkGravityAccelerationZ = &sphParticlesGravityAcceleration(ZDIM, 0);
+    runData.sinkGravityAccelerationX = &sphParticlesGravityAcceleration(kXDimension, 0);
+    runData.sinkGravityAccelerationY = &sphParticlesGravityAcceleration(kYDimension, 0);
+    runData.sinkGravityAccelerationZ = &sphParticlesGravityAcceleration(kZDimension, 0);
     runData.adiabaticIndex = getOptions().hydro.gamma;
     runData.gravityEffectiveRadius = getOptions().gravity.method == "pmmm" ?
         pmmmEffectiveRadius() :

@@ -14,6 +14,7 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <numbers>
 #include <stdexcept>
 
 #include <hpx/modules/program_options.hpp>
@@ -170,7 +171,7 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
     auto const hydroTable = radial_kernel::makeKernelTable(
         detail::kernelSpec(options.hydro.kernelFamily, options.hydro.kernelDegree));
     double const effectiveRadius = options.gravity.supportRadius *
-        std::pow(double(options.initial.numberOfParticles), 1.0 / NDIM) /
+        std::pow(double(options.initial.numberOfParticles), 1.0 / kDimensions) /
         gravityTable.supportRadiusPerEffectiveRadius;
     double const timestepEta = options.gravity.timestepEta;
     return {
@@ -246,7 +247,7 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"gravity.effectiveRadius", effectiveRadius},
         {"gravity.supportRadius",
             options.gravity.supportRadius *
-                std::pow(double(options.initial.numberOfParticles), 1.0 / NDIM)},
+                std::pow(double(options.initial.numberOfParticles), 1.0 / kDimensions)},
         {"gravity.timestepEta", timestepEta},
         {"cosmology.startRedshift", options.cosmology.startRedshift},
         {"cosmology.endRedshift", options.cosmology.endRedshift},
@@ -810,7 +811,8 @@ bool processOptions(int argc, char* argv[]) {
     opts.hydro.maxSupportRadius =
         resolveSupportRadius("hydro.maxEffectiveRadius", "hydro.maxSupportRadius", nullptr,
             opts.hydro.maxSupportRadius, hydroTable.supportRadiusPerEffectiveRadius);
-    double const selfNeighborFloor = 4.0 * M_PI / 3.0 * radial_kernel::value(hydroTable, 0.0);
+    double const selfNeighborFloor =
+        4.0 * std::numbers::pi / 3.0 * radial_kernel::value(hydroTable, 0.0);
     if (opts.output.siloInterval <= 0) {
         THROW_ERROR("output.siloInterval must be positive\n");
     }
@@ -833,7 +835,7 @@ bool processOptions(int argc, char* argv[]) {
     double const outputMin[] = {opts.output.xMin, opts.output.yMin, opts.output.zMin};
     double const outputMax[] = {opts.output.xMax, opts.output.yMax, opts.output.zMax};
     char const* const outputAxes[] = {"x", "y", "z"};
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         if (!detail::isFiniteOption(outputMin[dim]) || !detail::isFiniteOption(outputMax[dim]) ||
             outputMin[dim] < 0.0 || outputMax[dim] > 1.0 || outputMin[dim] >= outputMax[dim]) {
             THROW_ERROR("output.%sMin and output.%sMax must be finite and satisfy "
@@ -987,7 +989,7 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.compute.sphBucketSize == 0) {
         // Retain the historical SPH bucket heuristic, using the final parsed
         // neighbor target rather than the independently tuned gravity bucket.
-        double const bucketSize = 8.0 / M_PI * opts.hydro.neighborNumber;
+        double const bucketSize = 8.0 / std::numbers::pi * opts.hydro.neighborNumber;
         if (bucketSize > std::numeric_limits<int>::max()) {
             THROW_ERROR("compute.sphBucketSize automatic value exceeds the integer range; "
                         "set a positive compute.sphBucketSize\n");
@@ -1017,7 +1019,7 @@ bool processOptions(int argc, char* argv[]) {
         if (opts.chemistry.network != "atomic6" && opts.chemistry.network != "molecular9") {
             THROW_ERROR("chemistry.network must be atomic6 or molecular9\n");
         }
-        if (opts.chemistry.synchronizedRung < 1 || opts.chemistry.synchronizedRung >= MAX_RUNG) {
+        if (opts.chemistry.synchronizedRung < 1 || opts.chemistry.synchronizedRung >= kMaxRung) {
             THROW_ERROR("chemistry.synchronizedRung must be in [1, MAX_RUNG)\n");
         }
         if (!detail::isPositiveFloatOption(opts.chemistry.relativeTolerance) ||
@@ -1060,7 +1062,7 @@ bool processOptions(int argc, char* argv[]) {
     }
     opts.compute.treeCacheLineSize = 65536 / sizeof(TreeNode);
     opts.compute.treeAllocLineSize = 16 * opts.compute.treeCacheLineSize;
-    opts.compute.particleCacheLineSize = 131072 / (sizeof(Position) * NDIM);
+    opts.compute.particleCacheLineSize = 131072 / (sizeof(Position) * kDimensions);
     opts.analysis.saveForce = opts.analysis.saveForce || opts.run.test == "force";
     if (!detail::isFiniteOption(opts.cosmology.omegaB) || opts.cosmology.omegaB < 0.0 ||
         !detail::isFiniteOption(opts.cosmology.omegaC) || opts.cosmology.omegaC < 0.0 ||
@@ -1094,18 +1096,19 @@ bool processOptions(int argc, char* argv[]) {
     }
 
     opts.units.massG *= constants::kM0;
-    opts.units.lengthCm =
-        pow(opts.units.massG * (8.0 * M_PI) * opts.initial.numberOfParticles * constants::kG /
-                (3.0 * opts.cosmology.omegaM * sqr(constants::kH0 * opts.cosmology.hubble)),
-            1.0 / 3.0);
+    opts.units.lengthCm = pow(opts.units.massG * (8.0 * std::numbers::pi) *
+            opts.initial.numberOfParticles * constants::kG /
+            (3.0 * opts.cosmology.omegaM * sqr(constants::kH0 * opts.cosmology.hubble)),
+        1.0 / 3.0);
     opts.units.timeSeconds = opts.units.lengthCm / constants::kC;
     double h = constants::kH0 * opts.units.timeSeconds;
-    opts.gravity.gm = opts.cosmology.omegaM * 3.0 * sqr(h * opts.cosmology.hubble) / (8.0 * M_PI) /
-        opts.initial.numberOfParticles;
+    opts.gravity.gm = opts.cosmology.omegaM * 3.0 * sqr(h * opts.cosmology.hubble) /
+        (8.0 * std::numbers::pi) / opts.initial.numberOfParticles;
     terminal::detailPrint("box_size = %e Mpc\n", opts.units.lengthCm / constants::kMpcToCm);
     opts.analysis.sliceSize =
         std::min((20.0 / opts.cosmology.hubble) / (opts.units.lengthCm / constants::kMpcToCm), 1.0);
-    auto const nside1 = pow(M_PI * opts.initial.numberOfParticles / 10000.0 / 12.0, 0.5);
+    auto const nside1 =
+        pow(std::numbers::pi * opts.initial.numberOfParticles / 10000.0 / 12.0, 0.5);
     int nside = 1;
     while (nside < nside1 / 2.0) {
         nside *= 2;
@@ -1117,7 +1120,7 @@ bool processOptions(int argc, char* argv[]) {
 
     // The photon density depends only on T_CMB and H_0. Adding massless species
     // changes the neutrino density without changing the photons.
-    opts.cosmology.omegaGamma = 32.0 * M_PI / 3.0 * constants::kG * constants::kSigma *
+    opts.cosmology.omegaGamma = 32.0 * std::numbers::pi / 3.0 * constants::kG * constants::kSigma *
         std::pow(constants::kH0, -2) * std::pow(constants::kC, -3) *
         std::pow(constants::kTcmb * opts.cosmology.thetaCmb, 4) *
         std::pow(opts.cosmology.hubble, -2);
@@ -1208,7 +1211,7 @@ bool processOptions(int argc, char* argv[]) {
     }
     // ROCKSTAR Sec. III.1 and Table 2: outer FOF linking length b=0.28.
     // Behroozi, Wechsler & Wu (2013), https://arxiv.org/html/1110.4372v3
-    opts.analysis.linkingLength = pow(opts.initial.numberOfParticles, -1.0 / NDIM) * 0.28;
+    opts.analysis.linkingLength = pow(opts.initial.numberOfParticles, -1.0 / kDimensions) * 0.28;
     opts.analysis.minGroupSize = 20;
     if (opts.initial.createGlass) {
         opts.gravity.gm = 1.0 / opts.initial.numberOfParticles;
@@ -1218,11 +1221,11 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.initial.particlesPerDimension % 2 == 1) {
         THROW_ERROR("initial.particlesPerDimension must be an even number\n");
     }
-    opts.gravity.supportRadius *= pow(opts.initial.numberOfParticles, -1.0 / NDIM);
+    opts.gravity.supportRadius *= pow(opts.initial.numberOfParticles, -1.0 / kDimensions);
     if (opts.initial.plummer) {
         opts.gravity.supportRadius = gravityTable.supportRadiusPerEffectiveRadius *
             1.5015907655628273 *
-            pow((4.0 / 3.0 * M_PI * pow(opts.initial.plummerRadius, 3.0)) /
+            pow((4.0 / 3.0 * std::numbers::pi * pow(opts.initial.plummerRadius, 3.0)) /
                     opts.initial.numberOfParticles,
                 1.0 / 3.0);
     }
@@ -1344,13 +1347,16 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("gravity.timestepEta", gravity.timestepEta);
     SHOW("gravity.gm", gravity.gm);
     show("gravity.softening",
-        opts.gravity.supportRadius * std::pow(double(opts.initial.numberOfParticles), 1.0 / NDIM) /
+        opts.gravity.supportRadius *
+            std::pow(double(opts.initial.numberOfParticles), 1.0 / kDimensions) /
             gravityTable.supportRadiusPerEffectiveRadius);
     show("gravity.effectiveRadius",
-        opts.gravity.supportRadius * std::pow(double(opts.initial.numberOfParticles), 1.0 / NDIM) /
+        opts.gravity.supportRadius *
+            std::pow(double(opts.initial.numberOfParticles), 1.0 / kDimensions) /
             gravityTable.supportRadiusPerEffectiveRadius);
     show("gravity.supportRadius",
-        opts.gravity.supportRadius * std::pow(double(opts.initial.numberOfParticles), 1.0 / NDIM));
+        opts.gravity.supportRadius *
+            std::pow(double(opts.initial.numberOfParticles), 1.0 / kDimensions));
     show("hydro.centralEffectiveRadius",
         opts.hydro.centralSupportRadius / gravityTable.supportRadiusPerEffectiveRadius);
     show("hydro.centralSupportRadius", opts.hydro.centralSupportRadius);

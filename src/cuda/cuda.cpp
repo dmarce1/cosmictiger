@@ -201,7 +201,7 @@ void cudaInit() {
         hpx::cuda::experimental::check_cuda_error(cudaDeviceReset());
         // Reset clears constant memory populated during option propagation.
         uploadKernelSelections();
-        cudaMemoryInitialize(HEAP_SIZE);
+        cudaMemoryInitialize(kHeapSize);
     });
     /*	size_t value = 64;
         size_t oval = value;

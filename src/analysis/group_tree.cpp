@@ -39,7 +39,7 @@ public:
 };
 
 static Vector<GroupTreeAllocator*> allocatorList;
-static Array<SpinlockType, TREE_CACHE_SIZE> mutex;
+static Array<SpinlockType, kTreeCacheSize> mutex;
 static thread_local GroupTreeAllocator allocator;
 static std::atomic<int> nextId;
 static Vector<GroupTreeNode> nodes;
@@ -51,7 +51,7 @@ struct TreeCacheEntry {
 
 static int treeCacheEpoch;
 
-static Array<std::unordered_map<TreeId, TreeCacheEntry, TreeIdHashHi>, TREE_CACHE_SIZE> treeCache;
+static Array<std::unordered_map<TreeId, TreeCacheEntry, TreeIdHashHi>, kTreeCacheSize> treeCache;
 
 struct LastCacheEntryT;
 
@@ -101,9 +101,9 @@ hpx::future<GroupTreeReturn> groupTreeCreateFork(size_t key, Pair<int, int> proc
         threadme = true;
         remote = true;
     } else if (threadme) {
-        threadme = particleRange.second - particleRange.first > MIN_SORT_THREAD_PARTS;
+        threadme = particleRange.second - particleRange.first > kMinSortThreadParts;
         if (threadme) {
-            if (numberOfThreads++ < SORT_OVERSUBSCRIPTION * hpxHardwareConcurrency() ||
+            if (numberOfThreads++ < kSortOversubscription * hpxHardwareConcurrency() ||
                 processRange.second - processRange.first > 1) {
                 threadme = true;
             } else {
@@ -131,14 +131,14 @@ hpx::future<GroupTreeReturn> groupTreeCreateFork(size_t key, Pair<int, int> proc
 GroupTreeReturn groupTreeCreate(size_t key, Pair<int, int> processRange,
     Pair<ParticleInteger> particleRange, GroupRange box, int depth, bool localRoot) {
     int const treeCacheLineSize = getOptions().compute.treeCacheLineSize;
-    if (depth >= MAX_DEPTH) {
+    if (depth >= kMaxDepth) {
         THROW_ERROR("%s\n", "Maximum depth exceeded\n");
     }
     if (nodes.size() == 0) {
         nextId = -treeCacheLineSize;
-        nodes.resize(std::max(
-            size_t(size_t(TREE_NODE_ALLOCATION_SIZE) * particlesSize() / GROUP_BUCKET_SIZE),
-            (size_t) 1));
+        nodes.resize(
+            std::max(size_t(size_t(kTreeNodeAllocationSize) * particlesSize() / kGroupBucketSize),
+                (size_t) 1));
         while (allocatorMtx++ != 0) {
             allocatorMtx--;
         }
@@ -160,7 +160,7 @@ GroupTreeReturn groupTreeCreate(size_t key, Pair<int, int> processRange,
     GroupTreeNode node;
     GroupRange particleBox;
     if (processRange.second - processRange.first > 1 ||
-        particleRange.second - particleRange.first > GROUP_BUCKET_SIZE) {
+        particleRange.second - particleRange.first > kGroupBucketSize) {
         auto leftBox = box;
         auto rightBox = box;
         auto leftRange = processRange;
@@ -191,25 +191,25 @@ GroupTreeReturn groupTreeCreate(size_t key, Pair<int, int> processRange,
             (key << 1), leftRange, leftParticleRange, leftBox, depth + 1, leftLocalRoot, false);
         auto const rcl = futl.get();
         auto const rcr = futr.get();
-        node.children[LEFT] = rcl.id;
-        node.children[RIGHT] = rcr.id;
-        for (int dim = 0; dim < NDIM; dim++) {
+        node.children[kLeftChild] = rcl.id;
+        node.children[kRightChild] = rcr.id;
+        for (int dim = 0; dim < kDimensions; dim++) {
             particleBox.begin[dim] = std::min(rcr.box.begin[dim], rcl.box.begin[dim]);
             particleBox.end[dim] = std::max(rcr.box.end[dim], rcl.box.end[dim]);
         }
     } else {
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             particleBox.begin[dim] = 1.0;
             particleBox.end[dim] = 0.0;
         }
         for (ParticleInteger i = particleRange.first; i < particleRange.second; i++) {
-            for (int dim = 0; dim < NDIM; dim++) {
+            for (int dim = 0; dim < kDimensions; dim++) {
                 double const x = particlesPos(dim, i).toDouble();
                 particleBox.begin[dim] = std::min(particleBox.begin[dim], x);
                 particleBox.end[dim] = std::max(particleBox.end[dim], x);
             }
         }
-        node.children[LEFT].index = node.children[RIGHT].index = -1;
+        node.children[kLeftChild].index = node.children[kRightChild].index = -1;
     }
     node.processRange = processRange;
     node.particleRange = particleRange;

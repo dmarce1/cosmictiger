@@ -46,13 +46,13 @@ SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, CudaSt
     if (first) {
         first = false;
         CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-            &smoothingBlockCount, (void const*) sphCudaPrehydro1, PREHYDRO1_BLOCK_SIZE, 0));
+            &smoothingBlockCount, (void const*) sphCudaPrehydro1, kPrehydro1BlockSize, 0));
         CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-            &densityBlockCount, (void const*) sphCudaPrehydro2, PREHYDRO2_BLOCK_SIZE, 0));
+            &densityBlockCount, (void const*) sphCudaPrehydro2, kPrehydro2BlockSize, 0));
         CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-            &hydroBlockCount, (void const*) sphCudaHydro, HYDRO_BLOCK_SIZE, 0));
+            &hydroBlockCount, (void const*) sphCudaHydro, kHydroBlockSize, 0));
         CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-            &rungBlockCount, (void const*) sphCudaRungs, RUNGS_BLOCK_SIZE, 0));
+            &rungBlockCount, (void const*) sphCudaRungs, kRungsBlockSize, 0));
         smoothingBlockCount *= cudaSmpCount();
         densityBlockCount *= cudaSmpCount();
         hydroBlockCount *= cudaSmpCount();
@@ -60,8 +60,8 @@ SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, CudaSt
     }
     timer.start();
     switch (parameters.runType) {
-    case SPH_RUN_PREHYDRO1: {
-        sphCudaPrehydro1<<<smoothingBlockCount, PREHYDRO1_BLOCK_SIZE, 0, stream.nativeHandle()>>>(
+    case kSphRunPrehydro1: {
+        sphCudaPrehydro1<<<smoothingBlockCount, kPrehydro1BlockSize, 0, stream.nativeHandle()>>>(
             parameters, data, reduction);
         stream.checkLaunch();
         stream.wait();
@@ -69,8 +69,8 @@ SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, CudaSt
         result.minimumSupportRadius = reduction->minimumSupportRadius;
         result.maximumSupportRadius = reduction->maximumSupportRadius;
     } break;
-    case SPH_RUN_PREHYDRO2: {
-        sphCudaPrehydro2<<<densityBlockCount, PREHYDRO2_BLOCK_SIZE, 0, stream.nativeHandle()>>>(
+    case kSphRunPrehydro2: {
+        sphCudaPrehydro2<<<densityBlockCount, kPrehydro2BlockSize, 0, stream.nativeHandle()>>>(
             parameters, data, reduction);
         stream.checkLaunch();
         stream.wait();
@@ -78,8 +78,8 @@ SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, CudaSt
         result.minimumSupportRadius = reduction->minimumSupportRadius;
         result.maximumSupportRadius = reduction->maximumSupportRadius;
     } break;
-    case SPH_RUN_RUNGS: {
-        sphCudaRungs<<<rungBlockCount, RUNGS_BLOCK_SIZE, 0, stream.nativeHandle()>>>(
+    case kSphRunRungs: {
+        sphCudaRungs<<<rungBlockCount, kRungsBlockSize, 0, stream.nativeHandle()>>>(
             parameters, data, reduction);
         stream.checkLaunch();
         stream.wait();
@@ -89,8 +89,8 @@ SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, CudaSt
         result.maximumRung = reduction->maximumRung;
         result.needsAnotherPass = reduction->pendingChanges;
     } break;
-    case SPH_RUN_HYDRO: {
-        sphCudaHydro<<<hydroBlockCount, HYDRO_BLOCK_SIZE, 0, stream.nativeHandle()>>>(
+    case kSphRunHydro: {
+        sphCudaHydro<<<hydroBlockCount, kHydroBlockSize, 0, stream.nativeHandle()>>>(
             parameters, data, reduction);
         stream.checkLaunch();
         stream.wait();

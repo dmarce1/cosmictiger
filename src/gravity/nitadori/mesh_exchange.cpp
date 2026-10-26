@@ -20,7 +20,7 @@ std::array<int, 3> coordinates(uint64_t key) {
 
 PmmmNearParticle particle(ParticleInteger index, std::array<int, 3> const& cell) {
     PmmmNearParticle result{};
-    for (int axis = 0; axis < NDIM; ++axis) {
+    for (int axis = 0; axis < kDimensions; ++axis) {
         result.offset[axis] = positionDomainCoordinate(particlesPos(axis, index)) * cache.meshSize -
             (cell[axis] + 0.5);
     }
@@ -116,7 +116,7 @@ void deposit() {
             for (ParticleInteger i = range.begin; i < range.end; ++i) {
                 auto const source = particle(i, cellCoordinates);
                 addMoments(cache.order, cell.coefficients.data(), source.mass, source.offset);
-                for (int axis = 0; axis < NDIM; ++axis) {
+                for (int axis = 0; axis < kDimensions; ++axis) {
                     cell.radialTrace += source.mass * source.offset[axis] * source.offset[axis];
                 }
                 if (!useFmm) {

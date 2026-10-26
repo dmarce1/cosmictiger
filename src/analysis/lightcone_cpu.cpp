@@ -10,9 +10,12 @@ namespace detail {
 
 bool lightconeParticlesLinked(LightconeParticles const& first, int firstIndex,
     LightconeParticles const& second, int secondIndex, float linkingLengthSquared) {
-    float const dx = distance(first.pos[XDIM][firstIndex], second.pos[XDIM][secondIndex]);
-    float const dy = distance(first.pos[YDIM][firstIndex], second.pos[YDIM][secondIndex]);
-    float const dz = distance(first.pos[ZDIM][firstIndex], second.pos[ZDIM][secondIndex]);
+    float const dx =
+        distance(first.pos[kXDimension][firstIndex], second.pos[kXDimension][secondIndex]);
+    float const dy =
+        distance(first.pos[kYDimension][firstIndex], second.pos[kYDimension][secondIndex]);
+    float const dz =
+        distance(first.pos[kZDimension][firstIndex], second.pos[kZDimension][secondIndex]);
     return sqr(dx, dy, dz) < linkingLengthSquared;
 }
 
@@ -48,7 +51,7 @@ size_t cpuLightcone(DeviceVector<LightconeTreeId> const& leaves,
     float const linkingLengthSquared = sqr(linkingLength);
     auto const generateGroup = [&nextGroup, rank, ranks]() {
         LightconeGroup const group = nextGroup++ * ranks + rank + 1;
-        ALWAYS_ASSERT(group != LC_EDGE_GROUP && group < LC_NO_GROUP);
+        ALWAYS_ASSERT(group != kLightconeEdgeGroup && group < kLightconeNoGroup);
         return group;
     };
     size_t changedLeaves = 0;
@@ -70,8 +73,8 @@ size_t cpuLightcone(DeviceVector<LightconeTreeId> const& leaves,
             auto const& otherParticles = particleMap[other.pix];
             for (int otherIndex = other.particleRange.first;
                  otherIndex < other.particleRange.second; otherIndex++) {
-                Array<double, NDIM> position;
-                for (int dim = 0; dim < NDIM; dim++) {
+                Array<double, kDimensions> position;
+                for (int dim = 0; dim < kDimensions; dim++) {
                     position[dim] = otherParticles.pos[dim][otherIndex].toDouble();
                 }
                 if (!box.contains(position)) {
@@ -83,8 +86,8 @@ size_t cpuLightcone(DeviceVector<LightconeTreeId> const& leaves,
                     if (detail::lightconeParticlesLinked(
                             particles, index, otherParticles, otherIndex, linkingLengthSquared)) {
                         auto& group = particles.group[index];
-                        if (group == LC_NO_GROUP) {
-                            group = otherGroup == LC_NO_GROUP ? generateGroup() : otherGroup;
+                        if (group == kLightconeNoGroup) {
+                            group = otherGroup == kLightconeNoGroup ? generateGroup() : otherGroup;
                             changed = true;
                         } else if (otherGroup < group) {
                             group = otherGroup;
@@ -111,7 +114,7 @@ size_t cpuLightcone(DeviceVector<LightconeTreeId> const& leaves,
                 }
             }
         }
-        std::vector<LightconeGroup> labels(count, LC_NO_GROUP);
+        std::vector<LightconeGroup> labels(count, kLightconeNoGroup);
         std::vector<int> sizes(count, 0);
         for (int index = 0; index < count; index++) {
             int const root = detail::lightconeComponentRoot(parents, index);
@@ -119,7 +122,7 @@ size_t cpuLightcone(DeviceVector<LightconeTreeId> const& leaves,
             sizes[root]++;
         }
         for (int index = 0; index < count; index++) {
-            if (sizes[index] > 1 && labels[index] == LC_NO_GROUP) {
+            if (sizes[index] > 1 && labels[index] == kLightconeNoGroup) {
                 labels[index] = generateGroup();
             }
         }

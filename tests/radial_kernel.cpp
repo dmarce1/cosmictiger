@@ -200,9 +200,9 @@ void testTable(KernelSpec spec) {
 #if defined(RADIAL_KERNEL_TEST_SIMD)
     for (int sample = 0; sample < 32; ++sample) {
         SimdFloat radius{};
-        for (int lane = 0; lane < SIMD_FLOAT_SIZE; ++lane) {
+        for (int lane = 0; lane < kSimdFloatSize; ++lane) {
             simdSetLane(
-                radius, lane, static_cast<float>((sample * SIMD_FLOAT_SIZE + lane) % 31) / 15);
+                radius, lane, static_cast<float>((sample * kSimdFloatSize + lane) % 31) / 15);
         }
         if (sample == 0) {
             simdSetLane(radius, 0, 0);
@@ -213,7 +213,7 @@ void testTable(KernelSpec spec) {
         auto const derivatives = radial_kernel::derivative(table, radius);
         auto const forces = radial_kernel::forceFactor(table, radius);
         auto const potentials = radial_kernel::potential(table, radius);
-        for (int lane = 0; lane < SIMD_FLOAT_SIZE; ++lane) {
+        for (int lane = 0; lane < kSimdFloatSize; ++lane) {
             float const scalarRadius = radius[lane];
             close(values[lane], radial_kernel::value(table, scalarRadius), 5e-6, "SIMD density");
             close(derivatives[lane], radial_kernel::derivative(table, scalarRadius), 5e-6,

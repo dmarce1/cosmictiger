@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <memory>
+#include <numbers>
 #include <stdexcept>
 #include <string>
 
@@ -41,12 +42,12 @@ int analysisPixelOwner(int pixel, int pixels) {
 LightconeParticle analysisLightconeParticle(
     int identity, double radius, double angle, double height = 0.0) {
     LightconeParticle particle{};
-    particle.pos[XDIM] = radius * std::cos(angle);
-    particle.pos[YDIM] = radius * std::sin(angle);
-    particle.pos[ZDIM] = height;
+    particle.pos[kXDimension] = radius * std::cos(angle);
+    particle.pos[kYDimension] = radius * std::sin(angle);
+    particle.pos[kZDimension] = height;
     // Velocities carry exact identities through tree permutation and routing.
-    particle.vel[XDIM] = identity;
-    particle.group = LC_NO_GROUP;
+    particle.vel[kXDimension] = identity;
+    particle.group = kLightconeNoGroup;
     return particle;
 }
 
@@ -64,7 +65,7 @@ Vector<LightconeParticle> analysisLightconeFixture(int nside) {
             return analysisPixelOwner(pixels.vec2pix(direction), pixelCount);
         };
         constexpr int kSamples = 4096;
-        double const increment = 2.0 * M_PI / kSamples;
+        double const increment = 2.0 * std::numbers::pi / kSamples;
         bool foundBoundary = false;
         for (int i = 1; i < kSamples; ++i) {
             if (owner((i - 1) * increment) != owner(i * increment)) {
@@ -85,7 +86,7 @@ Vector<LightconeParticle> analysisLightconeFixture(int nside) {
     }
     for (int i = 6; i < 10; ++i) {
         particles.push_back(
-            analysisLightconeParticle(i, 0.55, angle + M_PI, 0.08 + 0.0002 * (i - 6)));
+            analysisLightconeParticle(i, 0.55, angle + std::numbers::pi, 0.08 + 0.0002 * (i - 6)));
     }
     for (int i = 10; i < 12; ++i) {
         auto particle = analysisLightconeParticle(i, 0.002 * (i - 10), 0.0, 0.8);
@@ -106,10 +107,11 @@ void analysisPowerSetup(bool perturb) {
     for (int global = begin; global < end; ++global) {
         int const local = global - begin;
         double const x = (global / (side * side) + 0.5) / side;
-        particlesPos(XDIM, local) = x + (perturb ? 0.03 * std::sin(2.0 * M_PI * x) : 0.0);
-        particlesPos(YDIM, local) = ((global / side) % side + 0.5) / side;
-        particlesPos(ZDIM, local) = (global % side + 0.5) / side;
-        for (int dim = 0; dim < NDIM; ++dim) {
+        particlesPos(kXDimension, local) =
+            x + (perturb ? 0.03 * std::sin(2.0 * std::numbers::pi * x) : 0.0);
+        particlesPos(kYDimension, local) = ((global / side) % side + 0.5) / side;
+        particlesPos(kZDimension, local) = (global % side + 0.5) / side;
+        for (int dim = 0; dim < kDimensions; ++dim) {
             particlesVel(dim, local) = 0.0f;
         }
     }
@@ -119,9 +121,9 @@ HPX_PLAIN_ACTION(analysisPowerSetup, AnalysisPowerSetupAction);
 double analysisDensityMass(int fold) {
     int const side = getOptions().initial.fourierSize;
     Range<int64_t> box;
-    for (int dim = 0; dim < NDIM; ++dim) {
-        box.begin[dim] = CLOUD_MIN;
-        box.end[dim] = side + CLOUD_MAX;
+    for (int dim = 0; dim < kDimensions; ++dim) {
+        box.begin[dim] = kCloudMin;
+        box.end[dim] = side + kCloudMax;
     }
     auto const density = accumulateDensityCpu(fold, side, box);
     double mass = 0.0;
@@ -164,8 +166,9 @@ Vector<LightconeParticle> analysisGatherLightcone() {
         auto local = hpx::async<AnalysisReadLightconeBufferAction>(locality).get();
         particles.insert(particles.end(), local.begin(), local.end());
     }
-    std::sort(particles.begin(), particles.end(),
-        [](auto const& left, auto const& right) { return left.vel[XDIM] < right.vel[XDIM]; });
+    std::sort(particles.begin(), particles.end(), [](auto const& left, auto const& right) {
+        return left.vel[kXDimension] < right.vel[kXDimension];
+    });
     return particles;
 }
 
@@ -182,7 +185,7 @@ void analysisDistributeLightcone(Vector<LightconeParticle> const& particles) {
 
 void analysisFindLightconeGroups(double tau) {
     double const linkingLength = getOptions().lightcone.linkingLength *
-        std::pow(getOptions().initial.numberOfParticles, -1.0 / NDIM);
+        std::pow(getOptions().initial.numberOfParticles, -1.0 / kDimensions);
     lcBuffer2homes();
     lcParticleBoundaries1();
     lcFormTrees(tau, linkingLength);
@@ -202,10 +205,10 @@ void analysisFindLightconeGroups(double tau) {
 void analysisCheckComponent(Vector<LightconeParticle> const& particles, int begin, int end,
     int firstIdentity, bool edge = false) {
     auto const group = particles[begin].group;
-    requireAnalysis(group != LC_NO_GROUP && (group == LC_EDGE_GROUP) == edge,
+    requireAnalysis(group != kLightconeNoGroup && (group == kLightconeEdgeGroup) == edge,
         "Lightcone component has an incorrect group classification");
     for (int i = begin; i < end; ++i) {
-        requireAnalysis(particles[i].vel[XDIM] == firstIdentity + i - begin,
+        requireAnalysis(particles[i].vel[kXDimension] == firstIdentity + i - begin,
             "Lightcone grouping lost, duplicated or reordered particle identities");
         requireAnalysis(particles[i].group == group,
             "Lightcone linked component did not converge to a common group");
@@ -214,7 +217,7 @@ void analysisCheckComponent(Vector<LightconeParticle> const& particles, int begi
 
 void analysisWriteLightconeCatalogue(int epoch, double tau) {
     double const linkingLength = getOptions().lightcone.linkingLength *
-        std::pow(getOptions().initial.numberOfParticles, -1.0 / NDIM);
+        std::pow(getOptions().initial.numberOfParticles, -1.0 / kDimensions);
     lcParts2groups(1.0, linkingLength, epoch);
     for (int rank = 0; rank < hpxSize(); ++rank) {
         auto const path = std::filesystem::path(getOptions().lightcone.directory) /

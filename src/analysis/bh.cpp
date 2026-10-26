@@ -18,8 +18,8 @@
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/simd.hpp>
 
-int bhSort(DeviceVector<Array<float, NDIM>>& parts, Vector<int>& sortOrder, int begin, int end,
-    float xm, int xdim) {
+int bhSort(DeviceVector<Array<float, kDimensions>>& parts, Vector<int>& sortOrder, int begin,
+    int end, float xm, int xdim) {
     int lo = begin;
     int hi = end;
     float xmid(xm);
@@ -42,18 +42,18 @@ int bhSort(DeviceVector<Array<float, NDIM>>& parts, Vector<int>& sortOrder, int 
 }
 
 void bhCreateTree(DeviceVector<BhTreeNode>& nodes, DeviceVector<int>& sinkBuckets, int self,
-    DeviceVector<Array<float, NDIM>>& parts, Vector<int>& sortOrder, Range<float> box, int begin,
-    int end, int bucketSize, int depth = 0) {
+    DeviceVector<Array<float, kDimensions>>& parts, Vector<int>& sortOrder, Range<float> box,
+    int begin, int end, int bucketSize, int depth = 0) {
     ALWAYS_ASSERT(begin < end);
     // Recompute tight bounds after every split, including the count-based
     // fallback for coincident points or a midpoint rounded onto a boundary.
-    Array<double, NDIM> sum{};
-    for (int dim = 0; dim < NDIM; ++dim) {
+    Array<double, kDimensions> sum{};
+    for (int dim = 0; dim < kDimensions; ++dim) {
         box.begin[dim] = std::numeric_limits<float>::max();
         box.end[dim] = -std::numeric_limits<float>::max();
     }
     for (int i = begin; i < end; ++i) {
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             sum[dim] += parts[i][dim];
             box.begin[dim] = std::min(box.begin[dim], parts[i][dim]);
             box.end[dim] = std::max(box.end[dim], parts[i][dim]);
@@ -62,7 +62,7 @@ void bhCreateTree(DeviceVector<BhTreeNode>& nodes, DeviceVector<int>& sinkBucket
     auto& node = nodes[self];
     node.parts = {begin, end};
     node.mass = end - begin;
-    for (int dim = 0; dim < NDIM; ++dim) {
+    for (int dim = 0; dim < kDimensions; ++dim) {
         node.pos[dim] = sum[dim] / node.mass;
     }
     // ROCKSTAR Appendix B, Eq. (B2): equal-mass cell variance about its COM.
@@ -71,7 +71,7 @@ void bhCreateTree(DeviceVector<BhTreeNode>& nodes, DeviceVector<int>& sinkBucket
     double sumSquaredRadius = 0.0;
     for (int i = begin; i < end; ++i) {
         double squaredRadius = 0.0;
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             double const displacement = double(parts[i][dim]) - node.pos[dim];
             squaredRadius += displacement * displacement;
         }
@@ -98,9 +98,9 @@ void bhCreateTree(DeviceVector<BhTreeNode>& nodes, DeviceVector<int>& sinkBucket
     }
     int const left = nodes.size();
     int const right = left + 1;
-    node.children[LEFT] = left;
-    node.children[RIGHT] = right;
-    nodes.resize(nodes.size() + NCHILD);
+    node.children[kLeftChild] = left;
+    node.children[kRightChild] = right;
+    nodes.resize(nodes.size() + kChildCount);
     bhCreateTree(
         nodes, sinkBuckets, left, parts, sortOrder, box, begin, middle, bucketSize, depth + 1);
     bhCreateTree(
@@ -108,7 +108,7 @@ void bhCreateTree(DeviceVector<BhTreeNode>& nodes, DeviceVector<int>& sinkBucket
 }
 
 void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& sinkBuckets,
-    DeviceVector<float>& phi, DeviceVector<Array<float, NDIM>>& parts, float relativeError) {
+    DeviceVector<float>& phi, DeviceVector<Array<float, kDimensions>>& parts, float relativeError) {
     float const h = getOptions().gravity.supportRadius;
     float const gm = getOptions().gravity.gm;
     float const hinv = 1.0 / h;
@@ -135,16 +135,16 @@ void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& si
                     nextlist.resize(0);
                     for (int ci = 0; ci < checklist.size(); ci++) {
                         auto const& node = nodes[checklist[ci]];
-                        float const dx = mypos[XDIM] - node.pos[XDIM];
-                        float const dy = mypos[YDIM] - node.pos[YDIM];
-                        float const dz = mypos[ZDIM] - node.pos[ZDIM];
+                        float const dx = mypos[kXDimension] - node.pos[kXDimension];
+                        float const dy = mypos[kYDimension] - node.pos[kYDimension];
+                        float const dz = mypos[kZDimension] - node.pos[kZDimension];
                         float const r2 = sqr(dx, dy, dz);
                         if (detail::bhAcceptMonopole(r2, node, myradius, h, relativeError)) {
                             BhSource source;
                             source.x = node.pos;
                             source.m = node.mass;
                             sourcelist.push_back(source);
-                        } else if (node.children[LEFT] == -1) {
+                        } else if (node.children[kLeftChild] == -1) {
                             for (int i = node.parts.first; i < node.parts.second; i++) {
                                 BhSource source;
                                 source.x = parts[i];
@@ -152,41 +152,42 @@ void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& si
                                 sourcelist.push_back(source);
                             }
                         } else {
-                            nextlist.push_back(node.children[LEFT]);
-                            nextlist.push_back(node.children[RIGHT]);
+                            nextlist.push_back(node.children[kLeftChild]);
+                            nextlist.push_back(node.children[kRightChild]);
                         }
                     }
                     std::swap(nextlist, checklist);
                 }
-                int const maxi = roundUp((int) sourcelist.size(), SIMD_FLOAT_SIZE);
+                int const maxi = roundUp((int) sourcelist.size(), kSimdFloatSize);
                 while (sourcelist.size() < maxi) {
                     BhSource src;
                     src.m = 0.0f;
-                    for (int dim = 0; dim < NDIM; dim++) {
+                    for (int dim = 0; dim < kDimensions; dim++) {
                         src.x[dim] = 0.f;
                     }
                     sourcelist.push_back(src);
                 }
                 for (int i = myparts.first; i < myparts.second; i++) {
-                    Array<SimdFloat, NDIM> xValue{};
-                    for (int dim = 0; dim < NDIM; dim++) {
+                    Array<SimdFloat, kDimensions> xValue{};
+                    for (int dim = 0; dim < kDimensions; dim++) {
                         xValue[dim] = parts[i][dim];
                     }
-                    for (int j = 0; j < sourcelist.size(); j += SIMD_FLOAT_SIZE) {
-                        Array<SimdFloat, NDIM> yValue{};
+                    for (int j = 0; j < sourcelist.size(); j += kSimdFloatSize) {
+                        Array<SimdFloat, kDimensions> yValue{};
                         SimdFloat mValue{};
-                        for (int k = 0; k < SIMD_FLOAT_SIZE; k++) {
+                        for (int k = 0; k < kSimdFloatSize; k++) {
                             auto const& src = sourcelist[j + k];
-                            for (int dim = 0; dim < NDIM; dim++) {
+                            for (int dim = 0; dim < kDimensions; dim++) {
                                 simdSetLane(yValue[dim], k, src.x[dim]);
                             }
                             simdSetLane(mValue, k, src.m);
                         }
-                        Array<SimdFloat, NDIM> dx{};
-                        for (int dim = 0; dim < NDIM; dim++) {
+                        Array<SimdFloat, kDimensions> dx{};
+                        for (int dim = 0; dim < kDimensions; dim++) {
                             dx[dim] = xValue[dim] - yValue[dim];    // 3
                         }
-                        SimdFloat const separationSquared = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
+                        SimdFloat const separationSquared =
+                            sqr(dx[kXDimension], dx[kYDimension], dx[kZDimension]);
                         SimdFloat const r2 = simdMax(separationSquared, tiny);
                         auto const farFlag = separationSquared > h2;
                         SimdFloat rinv1{};
@@ -211,8 +212,8 @@ void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& si
     hpx::wait_all(futs.begin(), futs.end());
 }
 
-void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Array<float, NDIM> pt, float& phi,
-    DeviceVector<Array<float, NDIM>>& parts, float relativeError) {
+void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Array<float, kDimensions> pt,
+    float& phi, DeviceVector<Array<float, kDimensions>>& parts, float relativeError) {
     float const h = getOptions().gravity.supportRadius;
     float const gm = getOptions().gravity.gm;
     float const hinv = 1.0f / h;
@@ -229,16 +230,16 @@ void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Array<float, NDI
         nextlist.resize(0);
         for (int ci = 0; ci < checklist.size(); ci++) {
             auto const& node = nodes[checklist[ci]];
-            float const dx = pt[XDIM] - node.pos[XDIM];
-            float const dy = pt[YDIM] - node.pos[YDIM];
-            float const dz = pt[ZDIM] - node.pos[ZDIM];
+            float const dx = pt[kXDimension] - node.pos[kXDimension];
+            float const dy = pt[kYDimension] - node.pos[kYDimension];
+            float const dz = pt[kZDimension] - node.pos[kZDimension];
             float const r2 = sqr(dx, dy, dz);
             if (detail::bhAcceptMonopole(r2, node, 0.0f, h, relativeError)) {
                 BhSource source;
                 source.x = node.pos;
                 source.m = node.mass;
                 sourcelist.push_back(source);
-            } else if (node.children[LEFT] == -1) {
+            } else if (node.children[kLeftChild] == -1) {
                 for (int i = node.parts.first; i < node.parts.second; i++) {
                     BhSource source;
                     source.x = parts[i];
@@ -246,40 +247,40 @@ void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Array<float, NDI
                     sourcelist.push_back(source);
                 }
             } else {
-                nextlist.push_back(node.children[LEFT]);
-                nextlist.push_back(node.children[RIGHT]);
+                nextlist.push_back(node.children[kLeftChild]);
+                nextlist.push_back(node.children[kRightChild]);
             }
         }
         std::swap(nextlist, checklist);
     }
-    int const maxi = roundUp((int) sourcelist.size(), SIMD_FLOAT_SIZE);
+    int const maxi = roundUp((int) sourcelist.size(), kSimdFloatSize);
     while (sourcelist.size() < maxi) {
         BhSource src;
         src.m = 0.0f;
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             src.x[dim] = 0.f;
         }
         sourcelist.push_back(src);
     }
-    Array<SimdFloat, NDIM> xValue{};
-    for (int dim = 0; dim < NDIM; dim++) {
+    Array<SimdFloat, kDimensions> xValue{};
+    for (int dim = 0; dim < kDimensions; dim++) {
         xValue[dim] = pt[dim];
     }
-    for (int j = 0; j < sourcelist.size(); j += SIMD_FLOAT_SIZE) {
-        Array<SimdFloat, NDIM> yValue{};
+    for (int j = 0; j < sourcelist.size(); j += kSimdFloatSize) {
+        Array<SimdFloat, kDimensions> yValue{};
         SimdFloat mValue{};
-        for (int k = 0; k < SIMD_FLOAT_SIZE; k++) {
+        for (int k = 0; k < kSimdFloatSize; k++) {
             auto const& src = sourcelist[j + k];
-            for (int dim = 0; dim < NDIM; dim++) {
+            for (int dim = 0; dim < kDimensions; dim++) {
                 simdSetLane(yValue[dim], k, src.x[dim]);
             }
             simdSetLane(mValue, k, src.m);
         }
-        Array<SimdFloat, NDIM> dx{};
-        for (int dim = 0; dim < NDIM; dim++) {
+        Array<SimdFloat, kDimensions> dx{};
+        for (int dim = 0; dim < kDimensions; dim++) {
             dx[dim] = xValue[dim] - yValue[dim];    // 3
         }
-        SimdFloat const separationSquared = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
+        SimdFloat const separationSquared = sqr(dx[kXDimension], dx[kYDimension], dx[kZDimension]);
         SimdFloat const r2 = simdMax(separationSquared, tiny);
         auto const farFlag = separationSquared > h2;
         SimdFloat rinv1{};
@@ -300,7 +301,7 @@ void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Array<float, NDI
     phi *= gm;
 }
 
-DeviceVector<float> bhEvaluatePotential(DeviceVector<Array<float, NDIM>>& x, bool gpu) {
+DeviceVector<float> bhEvaluatePotential(DeviceVector<Array<float, kDimensions>>& x, bool gpu) {
     gpu = gpu && getOptions().compute.cuda;
 #ifndef USE_CUDA
     gpu = false;
@@ -314,12 +315,12 @@ DeviceVector<float> bhEvaluatePotential(DeviceVector<Array<float, NDIM>>& x, boo
     }
     DeviceVector<BhTreeNode> nodes(1);
     Range<float> box;
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         box.begin[dim] = std::numeric_limits<float>::max();
         box.end[dim] = -std::numeric_limits<float>::max();
     }
     for (auto const& pos : x) {
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             auto const thisX = pos[dim];
             box.begin[dim] = std::min(box.begin[dim], thisX);
             box.end[dim] = std::max(box.end[dim], thisX);
@@ -333,7 +334,7 @@ DeviceVector<float> bhEvaluatePotential(DeviceVector<Array<float, NDIM>>& x, boo
         sortOrder.push_back(i);
     }
     DeviceVector<float> pot(x.size());
-    bhCreateTree(nodes, sinkBuckets, 0, x, sortOrder, box, 0, x.size(), BH_BUCKET_SIZE);
+    bhCreateTree(nodes, sinkBuckets, 0, x, sortOrder, box, 0, x.size(), kBhBucketSize);
     if (!gpu) {
         bhTreeEvaluate(nodes, sinkBuckets, pot, x, kBhMaximumRelativePotentialError);
     } else {
@@ -353,8 +354,8 @@ DeviceVector<float> bhEvaluatePotential(DeviceVector<Array<float, NDIM>>& x, boo
     return rpot;
 }
 
-DeviceVector<float> bhEvaluatePoints(
-    DeviceVector<Array<float, NDIM>>& y, DeviceVector<Array<float, NDIM>>& x, bool gpu) {
+DeviceVector<float> bhEvaluatePoints(DeviceVector<Array<float, kDimensions>>& y,
+    DeviceVector<Array<float, kDimensions>>& x, bool gpu) {
     gpu = gpu && getOptions().compute.cuda;
 #ifndef USE_CUDA
     gpu = false;
@@ -368,12 +369,12 @@ DeviceVector<float> bhEvaluatePoints(
     }
     DeviceVector<BhTreeNode> nodes(1);
     Range<float> box;
-    for (int dim = 0; dim < NDIM; dim++) {
+    for (int dim = 0; dim < kDimensions; dim++) {
         box.begin[dim] = std::numeric_limits<float>::max();
         box.end[dim] = -std::numeric_limits<float>::max();
     }
     for (auto const& pos : x) {
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             auto const thisX = pos[dim];
             box.begin[dim] = std::min(box.begin[dim], thisX);
             box.end[dim] = std::max(box.end[dim], thisX);
@@ -387,7 +388,7 @@ DeviceVector<float> bhEvaluatePoints(
         sortOrder.push_back(i);
     }
     DeviceVector<float> pot(y.size());
-    bhCreateTree(nodes, sinkBuckets, 0, x, sortOrder, box, 0, x.size(), BH_BUCKET_SIZE);
+    bhCreateTree(nodes, sinkBuckets, 0, x, sortOrder, box, 0, x.size(), kBhBucketSize);
     if (gpu) {
 #ifdef USE_CUDA
         pot = bhEvaluatePotentialPointsGpu(nodes, x, y, kBhMaximumRelativePotentialError,

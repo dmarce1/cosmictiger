@@ -8,6 +8,7 @@
 
 #include <cmath>
 #include <functional>
+#include <numbers>
 
 #include <cosmictiger/core/driver.hpp>
 #include <cosmictiger/core/options.hpp>
@@ -30,7 +31,7 @@ namespace detail {
             menc += 0.5 * iValue * dr;
             i0 = 0.5 * iValue;
             r += dr;
-            iValue = f(r) * 4.0 * M_PI * sqr(r);
+            iValue = f(r) * 4.0 * std::numbers::pi * sqr(r);
             i0 += 0.5 * iValue;
             menc += 0.5 * iValue * dr;
         }
@@ -50,7 +51,7 @@ void initializePlummerParticles() {
     for (ParticleInteger i = 0; i < numberOfParticles; i += 2) {
         double r;
         r = detail::sampleDensityDistribution(
-            [](double r) { return (3.0 / (4.0 * M_PI)) * pow(1.0 + sqr(r), -2.5); });
+            [](double r) { return (3.0 / (4.0 * std::numbers::pi)) * pow(1.0 + sqr(r), -2.5); });
         r *= getOptions().initial.plummerRadius;
         double nx, ny, nz, n2;
         do {
@@ -81,18 +82,18 @@ void initializePlummerParticles() {
         double vx = v * nx;
         double vy = v * ny;
         double vz = v * nz;
-        particlesPos(XDIM, i) = x;
-        particlesPos(YDIM, i) = y;
-        particlesPos(ZDIM, i) = z;
-        particlesVel(XDIM, i) = vx;
-        particlesVel(YDIM, i) = vy;
-        particlesVel(ZDIM, i) = vz;
-        particlesPos(XDIM, i + 1) = 2.0 * x0 - x;
-        particlesPos(YDIM, i + 1) = 2.0 * y0 - y;
-        particlesPos(ZDIM, i + 1) = 2.0 * z0 - z;
-        particlesVel(XDIM, i + 1) = -vx;
-        particlesVel(YDIM, i + 1) = -vy;
-        particlesVel(ZDIM, i + 1) = -vz;
+        particlesPos(kXDimension, i) = x;
+        particlesPos(kYDimension, i) = y;
+        particlesPos(kZDimension, i) = z;
+        particlesVel(kXDimension, i) = vx;
+        particlesVel(kYDimension, i) = vy;
+        particlesVel(kZDimension, i) = vz;
+        particlesPos(kXDimension, i + 1) = 2.0 * x0 - x;
+        particlesPos(kYDimension, i + 1) = 2.0 * y0 - y;
+        particlesPos(kZDimension, i + 1) = 2.0 * z0 - z;
+        particlesVel(kXDimension, i + 1) = -vx;
+        particlesVel(kYDimension, i + 1) = -vy;
+        particlesVel(kZDimension, i + 1) = -vz;
         particlesRung(i + 1) = 0;
         particlesRung(i) = 0;
     }

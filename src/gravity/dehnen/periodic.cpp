@@ -3,7 +3,7 @@
 #include <cosmictiger/gravity/fmm_order.hpp>
 
 FlopCount dehnenBackground(int order, KickParameters const& params, ExpansionBuffer& expansion,
-    Array<Position, NDIM>& position, TreeId self, Vector<TreeId> const& checks) {
+    Array<Position, kDimensions>& position, TreeId self, Vector<TreeId> const& checks) {
     return fmmDispatch(order, [&](auto tag) {
         return dehnenBackgroundImpl<decltype(tag)::value>(
             params, expansion, position, self, checks);

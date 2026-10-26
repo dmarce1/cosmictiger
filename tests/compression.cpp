@@ -29,7 +29,7 @@ void cosmictigerAssert(char const* expression, bool condition, char const* file,
 
 namespace detail {
 
-using Particle = std::array<double, 2 * NDIM>;
+using Particle = std::array<double, 2 * kDimensions>;
 
 void require(bool condition, char const* message) {
     if (!condition) {
@@ -57,7 +57,7 @@ std::vector<Particle> decode(CompressedParticles const& archive) {
         require(count > 0 && count <= 64, "Compressed blocks must contain 1 to 64 particles");
         require(
             std::isfinite(block.xmax) && std::isfinite(block.vmax), "Block scales must be finite");
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             require(block.x[dim].size() == count && block.v[dim].size() == count,
                 "Compressed block dimensions must have equal lengths");
             require(std::isfinite(archive.vc[dim]) && std::isfinite(block.vc[dim]),
@@ -65,14 +65,14 @@ std::vector<Particle> decode(CompressedParticles const& archive) {
         }
         for (size_t i = 0; i < count; i++) {
             Particle particle;
-            for (int dim = 0; dim < NDIM; dim++) {
+            for (int dim = 0; dim < kDimensions; dim++) {
                 double const x = (block.x[dim][i] + 0.5) / (1 << 15) - 1.0;
                 double const v = (block.v[dim][i] + 0.5) / (1 << 15) - 1.0;
                 particle[dim] = (x * block.xmax + block.xc[dim].toDouble()) * archive.xmax +
                     archive.xc[dim].toDouble();
-                particle[NDIM + dim] =
+                particle[kDimensions + dim] =
                     (v * block.vmax + block.vc[dim]) * archive.vmax + archive.vc[dim];
-                require(std::isfinite(particle[dim]) && std::isfinite(particle[NDIM + dim]),
+                require(std::isfinite(particle[dim]) && std::isfinite(particle[kDimensions + dim]),
                     "Decoded coordinates must be finite");
             }
             particles.push_back(particle);
@@ -90,7 +90,7 @@ void testCompression(Vector<LightconeEntry> const& input) {
     if (input.empty()) {
         require(archive.blocks.empty() && archive.xmax == 0.0f && archive.vmax == 0.0f,
             "An empty archive must have no blocks and zero scales");
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             require(archive.xc[dim].raw() == 0 && archive.vc[dim] == 0.0f,
                 "An empty archive must have zero centers");
         }
@@ -118,10 +118,11 @@ void testCompression(Vector<LightconeEntry> const& input) {
     double const positionTolerance = 4.0e-5 * std::max(1.0, double(archive.xmax));
     double const velocityTolerance = 4.0e-5 * std::max(1.0, double(archive.vmax));
     for (size_t i = 0; i < expected.size(); i++) {
-        for (int dim = 0; dim < NDIM; dim++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
             require(std::abs(decoded[i][dim] - expected[i][dim]) <= positionTolerance,
                 "Position round trip exceeded quantization tolerance");
-            require(std::abs(decoded[i][NDIM + dim] - expected[i][NDIM + dim]) <= velocityTolerance,
+            require(std::abs(decoded[i][kDimensions + dim] - expected[i][kDimensions + dim]) <=
+                    velocityTolerance,
                 "Velocity round trip exceeded quantization tolerance");
         }
     }

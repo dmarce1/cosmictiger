@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 #include <vector>
 
 #include <cosmictiger/core/hpx.hpp>
@@ -31,7 +32,7 @@ void cpuDrift(int rung, float a, float dt, float tau0, float tau1, float tauMax,
     parameters.tau1 = tau1;
     parameters.tauMax = tauMax;
     // Match the glass damping policy in cudaDrift, including its override of drag.
-    drag = getOptions().initial.createGlass ? M_PI : 0.0;
+    drag = getOptions().initial.createGlass ? std::numbers::pi : 0.0;
     parameters.drag = drag;
     parameters.lightcone = getOptions().lightcone.enabled && tauMax > 0.0f && tauMax - tau1 < 1.0f;
     parameters.mapSize = getOptions().lightcone.mapSize;
@@ -42,8 +43,8 @@ void cpuDrift(int rung, float a, float dt, float tau0, float tau1, float tauMax,
     auto const run = [&](size_t worker) {
         size_t const begin = size_t(range.first) + worker * count / workers;
         size_t const end = size_t(range.first) + (worker + 1) * count / workers;
-        cpuDriftKernel(&particlesPos(XDIM, begin), &particlesPos(YDIM, begin),
-            &particlesPos(ZDIM, begin), particlesVelData() + begin, &particlesRung(begin),
+        cpuDriftKernel(&particlesPos(kXDimension, begin), &particlesPos(kYDimension, begin),
+            &particlesPos(kZDimension, begin), particlesVelData() + begin, &particlesRung(begin),
             end - begin, parameters, parameters.lightcone ? &entries[worker] : nullptr);
     };
     if (workers == 1) {

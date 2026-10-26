@@ -23,8 +23,9 @@
 HPX_PLAIN_ACTION(particleMeshPrepareKick, ParticleMeshPrepareKickAction);
 HPX_PLAIN_ACTION(particleMeshFinishKick, ParticleMeshFinishKickAction);
 
-KickReturn particleMeshApplyField(ParticleInteger index, Array<float, NDIM> const& acceleration,
-    float potential, KickParameters const& parameters) {
+KickReturn particleMeshApplyField(ParticleInteger index,
+    Array<float, kDimensions> const& acceleration, float potential,
+    KickParameters const& parameters) {
     KickReturn result;
     auto const& options = getOptions();
     auto& rung = particlesRung(index);
@@ -35,19 +36,19 @@ KickReturn particleMeshApplyField(ParticleInteger index, Array<float, NDIM> cons
         parameters.saveForce || saveParticleAcceleration(options.analysis);
     bool const savePotential = parameters.saveForce || saveParticlePotential(options.analysis);
     if (saveAcceleration) {
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             particlesGravityAcceleration(dim, index) = acceleration[dim];
         }
     }
     if (savePotential && parameters.doPhi) {
         particlesPot(index) = potential;
     }
-    auto& vx = particlesVel(XDIM, index);
-    auto& vy = particlesVel(YDIM, index);
-    auto& vz = particlesVel(ZDIM, index);
-    float const gx = acceleration[XDIM];
-    float const gy = acceleration[YDIM];
-    float const gz = acceleration[ZDIM];
+    auto& vx = particlesVel(kXDimension, index);
+    auto& vy = particlesVel(kYDimension, index);
+    auto& vz = particlesVel(kZDimension, index);
+    float const gx = acceleration[kXDimension];
+    float const gy = acceleration[kYDimension];
+    float const gz = acceleration[kZDimension];
     float const effectiveRadius =
         parameters.gravitySupportRadius / selectedGravityKernel().supportRadiusPerEffectiveRadius;
     float const mass = particlesMass(index);
@@ -63,7 +64,7 @@ KickReturn particleMeshApplyField(ParticleInteger index, Array<float, NDIM> cons
             THROW_ERROR("PMMM kick timestep is not finite and positive\n");
         }
         float const requestedRung = std::ceil(std::log2(parameters.t0 / requiredTimestep));
-        if (!std::isfinite(requestedRung) || requestedRung >= MAX_RUNG) {
+        if (!std::isfinite(requestedRung) || requestedRung >= kMaxRung) {
             THROW_ERROR("PMMM kick timestep exceeds the available rung range\n");
         }
         proposedRung = int(requestedRung);
@@ -85,7 +86,7 @@ KickReturn particleMeshApplyField(ParticleInteger index, Array<float, NDIM> cons
             rung = std::max(
                 parameters.minRung + int(proposedRung > parameters.minRung), int(rung) - 1);
             result.maxRung = rung;
-            ALWAYS_ASSERT(rung >= 0 && rung < MAX_RUNG);
+            ALWAYS_ASSERT(rung >= 0 && rung < kMaxRung);
             vx = std::fma(sign * gx, halfStep, vx);
             vy = std::fma(sign * gy, halfStep, vy);
             vz = std::fma(sign * gz, halfStep, vz);
@@ -111,7 +112,7 @@ KickReturn particleMeshApplyField(ParticleInteger index, Array<float, NDIM> cons
         if (parameters.fixedRung != 0) {
             rung = parameters.fixedRung;
         }
-        ALWAYS_ASSERT(rung >= 0 && rung < MAX_RUNG);
+        ALWAYS_ASSERT(rung >= 0 && rung < kMaxRung);
         float const halfStep = 0.5f * rungDt[rung] * parameters.t0;
         vx = std::fma(sign * gx, halfStep, vx);
         vy = std::fma(sign * gy, halfStep, vy);
@@ -151,7 +152,7 @@ KickReturn particleMeshPrepareKick(
                 for (size_t i = worker * count / workers; i < (worker + 1) * count / workers; ++i) {
                     auto const& acceleration = pmmmAcceleration(i);
                     double accelerationSquared = 0.0;
-                    for (int dim = 0; dim < NDIM; ++dim) {
+                    for (int dim = 0; dim < kDimensions; ++dim) {
                         accelerationSquared += double(acceleration[dim]) * acceleration[dim];
                     }
                     double const timestep = std::min(maximumTimestep,
@@ -162,17 +163,17 @@ KickReturn particleMeshPrepareKick(
                         THROW_ERROR("Particle mesh timestep is not finite and positive\n");
                     }
                     double const requestedRung = std::ceil(std::log2(baseTimestep / timestep));
-                    if (!(requestedRung < MAX_RUNG)) {
+                    if (!(requestedRung < kMaxRung)) {
                         THROW_ERROR("Particle mesh timestep exceeds the available rung range\n");
                     }
                     int const previousRung = particlesRung(i);
                     result.maxRung = std::max(result.maxRung,
                         std::max({1, int(requestedRung), previousRung - 1, minimumRung}));
-                    bool const gas = options.hydro.enabled && particlesType(i) == SPH_TYPE;
+                    bool const gas = options.hydro.enabled && particlesType(i) == kSphType;
                     double const oldHalfStep =
                         firstCall ? 0.0 : std::ldexp(0.5 * baseTimestep, -previousRung);
                     double velocitySquared = 0.0;
-                    for (int dim = 0; dim < NDIM; ++dim) {
+                    for (int dim = 0; dim < kDimensions; ++dim) {
                         if (gas) {
                             sphParticlesGravityAcceleration(dim, particlesCatIndex(i)) =
                                 sign * acceleration[dim];
@@ -193,9 +194,9 @@ KickReturn particleMeshPrepareKick(
                     }
                     result.pot += 0.5 * mass * potential;
                     result.kin += 0.5 * mass * velocitySquared;
-                    result.xmom += mass * particlesVel(XDIM, i);
-                    result.ymom += mass * particlesVel(YDIM, i);
-                    result.zmom += mass * particlesVel(ZDIM, i);
+                    result.xmom += mass * particlesVel(kXDimension, i);
+                    result.ymom += mass * particlesVel(kYDimension, i);
+                    result.zmom += mass * particlesVel(kZDimension, i);
                     result.nmom += mass * std::sqrt(velocitySquared);
                     flops += 32;
                 }
@@ -216,7 +217,7 @@ KickReturn particleMeshPrepareKick(
 }
 
 void particleMeshFinishKick(double baseTimestep, int rung) {
-    ALWAYS_ASSERT(rung >= 0 && rung < MAX_RUNG);
+    ALWAYS_ASSERT(rung >= 0 && rung < kMaxRung);
     std::vector<hpx::future<void>> futures;
     for (auto const& child : hpxChildren()) {
         futures.push_back(hpx::async<ParticleMeshFinishKickAction>(child, baseTimestep, rung));
@@ -233,13 +234,13 @@ void particleMeshFinishKick(double baseTimestep, int rung) {
                 FlopCounter<> flops;
                 for (size_t i = worker * count / workers; i < (worker + 1) * count / workers; ++i) {
                     particlesRung(i) = rung;
-                    if (!hydro || particlesType(i) != SPH_TYPE) {
+                    if (!hydro || particlesType(i) != kSphType) {
                         auto const& acceleration = pmmmAcceleration(i);
-                        for (int dim = 0; dim < NDIM; ++dim) {
+                        for (int dim = 0; dim < kDimensions; ++dim) {
                             particlesVel(dim, i) =
                                 std::fma(acceleration[dim], halfStep, particlesVel(dim, i));
                         }
-                        flops += 2 * NDIM;
+                        flops += 2 * kDimensions;
                     }
                 }
                 addCpuFlops(flops);

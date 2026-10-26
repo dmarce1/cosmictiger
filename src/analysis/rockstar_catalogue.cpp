@@ -7,6 +7,7 @@
 #include <fstream>
 #include <functional>
 #include <limits>
+#include <numbers>
 #include <numeric>
 #include <stdexcept>
 #include <string>
@@ -78,7 +79,7 @@ void rockstarWriteCatalogue(
 
 namespace detail {
 
-constexpr double kFourPiOverThree = 4.0 * M_PI / 3.0;
+constexpr double kFourPiOverThree = 4.0 * std::numbers::pi / 3.0;
 
 rockstar::HaloDensityThresholds haloOverdensity(double scale) {
     auto const& cosmology = getOptions().cosmology;
@@ -104,12 +105,12 @@ std::vector<double> sortedRadii(DeviceVector<RockstarParticle> const& particles,
     return radii;
 }
 
-Array<double, NDIM> bulkVelocity(DeviceVector<RockstarParticle> const& particles) {
-    Array<double, NDIM> result{};
+Array<double, kDimensions> bulkVelocity(DeviceVector<RockstarParticle> const& particles) {
+    Array<double, kDimensions> result{};
     if (!particles.empty()) {
         for (auto const& particle : particles) {
-            for (int dim = 0; dim < NDIM; ++dim) {
-                result[dim] += particle.xValue[dim + NDIM] / double(particles.size());
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                result[dim] += particle.xValue[dim + kDimensions] / double(particles.size());
             }
         }
     }
@@ -118,7 +119,7 @@ Array<double, NDIM> bulkVelocity(DeviceVector<RockstarParticle> const& particles
 
 // Sec. III.5.1: the core-velocity aperture is 0.1 Rvir.
 void coreVelocity(Subgroup& group, DeviceVector<RockstarParticle> const& particles, double radius) {
-    Array<double, NDIM> velocity{};
+    Array<double, kDimensions> velocity{};
     size_t count = 0;
     double nearest = std::numeric_limits<double>::max();
     size_t nearestIndex = 0;
@@ -129,8 +130,8 @@ void coreVelocity(Subgroup& group, DeviceVector<RockstarParticle> const& particl
             nearestIndex = i;
         }
         if (r2 <= 0.01 * radius * radius) {
-            for (int dim = 0; dim < NDIM; ++dim) {
-                velocity[dim] += particles[i].xValue[dim + NDIM];
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                velocity[dim] += particles[i].xValue[dim + kDimensions];
             }
             ++count;
         }
@@ -139,8 +140,8 @@ void coreVelocity(Subgroup& group, DeviceVector<RockstarParticle> const& particl
     // particle rather than silently changing the aperture to ten percent by count.
     if (count == 0 && !particles.empty()) {
         count = 1;
-        for (int dim = 0; dim < NDIM; ++dim) {
-            velocity[dim] = particles[nearestIndex].xValue[dim + NDIM];
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            velocity[dim] = particles[nearestIndex].xValue[dim + kDimensions];
         }
     }
     group.vxc = count ? velocity[0] / count : 0.0;
@@ -149,10 +150,10 @@ void coreVelocity(Subgroup& group, DeviceVector<RockstarParticle> const& particl
 }
 
 DeviceVector<float> potentials(DeviceVector<RockstarParticle> const& particles) {
-    DeviceVector<Array<float, NDIM>> positions;
+    DeviceVector<Array<float, kDimensions>> positions;
     for (auto const& particle : particles) {
-        Array<float, NDIM> position;
-        for (int dim = 0; dim < NDIM; ++dim) {
+        Array<float, kDimensions> position;
+        for (int dim = 0; dim < kDimensions; ++dim) {
             position[dim] = particle.xValue[dim];
         }
         positions.pushBack(position);
@@ -166,8 +167,8 @@ void energies(Subgroup& group, DeviceVector<RockstarParticle> const& particles, 
     double kinetic = 0.0;
     double potential = 0.0;
     for (size_t i = 0; i < particles.size(); ++i) {
-        for (int dim = 0; dim < NDIM; ++dim) {
-            double const dv = particles[i].xValue[dim + NDIM] - velocity[dim];
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            double const dv = particles[i].xValue[dim + kDimensions] - velocity[dim];
             kinetic += 0.5 * dv * dv;
         }
         // Our units: BH returns comoving specific potential; phi/a is physical.
@@ -221,7 +222,8 @@ std::pair<GroupInteger, GroupInteger> previousCore(Subgroup const& group) {
     std::unordered_map<GroupInteger, GroupInteger> hosts;
     double const aperture = 0.01 * group.rVir * group.rVir;
     for (auto const& particle : group.parts) {
-        if (particle.previousHalo != NO_GROUP && radiusSquared(particle, group) <= aperture) {
+        if (particle.previousHalo != kNoParticleGroup &&
+            radiusSquared(particle, group) <= aperture) {
             ++counts[particle.previousHalo];
             hosts[particle.previousHalo] = particle.previousHost;
         }
@@ -231,7 +233,7 @@ std::pair<GroupInteger, GroupInteger> previousCore(Subgroup const& group) {
         RockstarParticle const* nearest = nullptr;
         for (auto const& particle : group.parts) {
             double const distance = radiusSquared(particle, group);
-            if (particle.previousHalo != NO_GROUP && distance < closest) {
+            if (particle.previousHalo != kNoParticleGroup && distance < closest) {
                 closest = distance;
                 nearest = &particle;
             }
@@ -240,7 +242,7 @@ std::pair<GroupInteger, GroupInteger> previousCore(Subgroup const& group) {
             return {nearest->previousHalo, nearest->previousHost};
         }
     }
-    GroupInteger winner = NO_GROUP;
+    GroupInteger winner = kNoParticleGroup;
     size_t most = 0;
     for (auto const& entry : counts) {
         if (entry.second > most || (entry.second == most && entry.first < winner)) {
@@ -248,7 +250,7 @@ std::pair<GroupInteger, GroupInteger> previousCore(Subgroup const& group) {
             most = entry.second;
         }
     }
-    return {winner, winner == NO_GROUP ? NO_GROUP : hosts[winner]};
+    return {winner, winner == kNoParticleGroup ? kNoParticleGroup : hosts[winner]};
 }
 
 // Sec. III.4 uses Eq. (3) to choose internal parents before SO masses exist.
@@ -284,7 +286,7 @@ void internalHierarchy(Vector<Subgroup>& groups) {
     // exchange which one has the larger current exclusive particle count.
     for (size_t i = 0; i < groups.size(); ++i) {
         int const parent = groups[i].internalParent;
-        if (parent >= 0 && previous[i].first != NO_GROUP &&
+        if (parent >= 0 && previous[i].first != kNoParticleGroup &&
             previous[parent].second == previous[i].first &&
             previous[parent].first != previous[i].first) {
             groups[i].internalParent = groups[parent].internalParent;
@@ -385,15 +387,15 @@ void rockstarUpdateStatistics(
         return;
     }
     auto const velocity = detail::bulkVelocity(group.parts);
-    Array<double, NDIM> center{};
+    Array<double, kDimensions> center{};
     for (auto const& particle : group.parts) {
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             center[dim] += particle.xValue[dim] / double(group.parts.size());
         }
     }
     double positionVariance = 0.0;
     for (auto const& particle : group.parts) {
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             double const dx = particle.xValue[dim] - center[dim];
             positionVariance += dx * dx / group.parts.size();
         }
@@ -463,8 +465,8 @@ bool rockstarHaloBound(Subgroup& halo, Vector<RockstarParticle>& unboundParticle
             retained.pushBack(particle);
         }
     }
-    bool const accepted = retained.size() >= ROCKSTAR_MIN_GROUP &&
-        retained.size() >= ROCKSTAR_MIN_BOUND * originalCount;
+    bool const accepted = retained.size() >= kRockstarMinGroup &&
+        retained.size() >= kRockstarMinBound * originalCount;
     if (!accepted) {
         for (auto const& particle : retained) {
             unboundParticles.push_back(particle);
@@ -489,7 +491,7 @@ void rockstarFinalizeSubgroups(Vector<Subgroup>& groups, float scale) {
     detail::internalHierarchy(groups);
     struct BindingSystem {
         std::unordered_map<int, double> potentials;
-        Array<double, NDIM> velocity{};
+        Array<double, kDimensions> velocity{};
     };
     std::vector<BindingSystem> systems(groups.size());
     std::vector<int> bindingRoot(groups.size());
@@ -534,8 +536,8 @@ void rockstarFinalizeSubgroups(Vector<Subgroup>& groups, float scale) {
         Vector<RockstarParticle> removed;
         for (auto const& particle : group.parts) {
             double kinetic = 0.0;
-            for (int dim = 0; dim < NDIM; ++dim) {
-                double const dv = particle.xValue[dim + NDIM] - system.velocity[dim];
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                double const dv = particle.xValue[dim + kDimensions] - system.velocity[dim];
                 kinetic += 0.5 * dv * dv;
             }
             if (kinetic + system.potentials.at(particle.ordinal) <= 0.0) {
@@ -544,8 +546,8 @@ void rockstarFinalizeSubgroups(Vector<Subgroup>& groups, float scale) {
                 removed.push_back(particle);
             }
         }
-        keep[index] = retained.size() >= ROCKSTAR_MIN_GROUP &&
-            retained.size() >= ROCKSTAR_MIN_BOUND * originalCount;
+        keep[index] = retained.size() >= kRockstarMinGroup &&
+            retained.size() >= kRockstarMinBound * originalCount;
         if (!keep[index]) {
             for (auto const& particle : retained) {
                 removed.push_back(particle);
@@ -568,7 +570,7 @@ void rockstarPruneCatalogueGroups(Vector<Subgroup>& groups, float scale) {
     auto const refresh = [&groups, scale]() {
         for (auto& group : groups) {
             rockstarUpdateStatistics(group, 1.0, 1.0, scale);
-            group.catalogueId = NO_GROUP;
+            group.catalogueId = kNoParticleGroup;
             for (auto const& particle : group.parts) {
                 group.catalogueId = std::min(group.catalogueId, particle.identity);
             }
@@ -580,7 +582,7 @@ void rockstarPruneCatalogueGroups(Vector<Subgroup>& groups, float scale) {
         std::vector<bool> keep;
         bool removed = false;
         for (auto const& group : groups) {
-            keep.push_back(group.massVir >= ROCKSTAR_MIN_GROUP);
+            keep.push_back(group.massVir >= kRockstarMinGroup);
             removed = removed || !keep.back();
         }
         if (!removed) {
@@ -633,7 +635,7 @@ void rockstarPruneCatalogueGroups(Vector<Subgroup>& groups, float scale) {
 }
 
 RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, float scale,
-    Array<double, NDIM> const& origin, bool inclusive) {
+    Array<double, kDimensions> const& origin, bool inclusive) {
     Subgroup const& group = groups[index];
     auto candidates = inclusive ? rockstarGatherParticles(groups, index) : group.parts;
     auto const density = detail::haloOverdensity(scale);
@@ -658,8 +660,8 @@ RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, flo
     double sigmaX = 0.0;
     double sigmaCore = 0.0;
     double sigmaBulk = 0.0;
-    Array<double, NDIM> center{};
-    Array<double, NDIM> angular{};
+    Array<double, kDimensions> center{};
+    Array<double, kDimensions> angular{};
     for (auto const& particle : particles) {
         double const dx = double(particle.x) - group.x;
         double const dy = double(particle.y) - group.y;
@@ -676,7 +678,7 @@ RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, flo
         double const cy = particle.vy - measured.vyc;
         double const cz = particle.vz - measured.vzc;
         sigmaCore += (cx * cx + cy * cy + cz * cz) / particles.size();
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             center[dim] += particle.xValue[dim] / double(particles.size());
         }
     }
@@ -699,7 +701,7 @@ RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, flo
     }
     double rs = 0.0;
     double rho = 0.0;
-    if (radii.size() >= ROCKSTAR_MIN_GROUP && radii.back() > 0.0) {
+    if (radii.size() >= kRockstarMinGroup && radii.back() > 0.0) {
         Vector<double> fitRadii(radii.begin(), radii.end());
         cosmosNfwFit(fitRadii, rs, rho);
     }
@@ -792,8 +794,8 @@ RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, flo
     return record;
 }
 
-GroupEntry rockstarMakeGroupEntry(
-    Vector<Subgroup> const& groups, int index, float scale, Array<double, NDIM> const& origin) {
+GroupEntry rockstarMakeGroupEntry(Vector<Subgroup> const& groups, int index, float scale,
+    Array<double, kDimensions> const& origin) {
     auto const& group = groups[index];
     auto const allParticles = rockstarGatherParticles(groups, index);
     auto const candidates = detail::sortedRadii(allParticles, group);
@@ -810,15 +812,15 @@ GroupEntry rockstarMakeGroupEntry(
     Subgroup measured;
     detail::energies(measured, particles, scale);
     double const count = std::max(1, particles.size());
-    Array<double, NDIM> center{};
+    Array<double, kDimensions> center{};
     for (auto const& particle : particles) {
-        for (int dim = 0; dim < NDIM; ++dim) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
             center[dim] += particle.xValue[dim] / count;
         }
     }
     entry.ekin = measured.t / count;
     entry.epot = measured.w / count;
-    for (int dim = 0; dim < NDIM; ++dim) {
+    for (int dim = 0; dim < kDimensions; ++dim) {
         double const position = origin[dim] + center[dim];
         entry.com[dim] = position - std::floor(position);
         entry.vel[dim] = bulk[dim];
@@ -867,7 +869,7 @@ GroupEntry rockstarMakeGroupEntry(
     entry.rmax = radii.empty() ? 0.0 : radii.back();
     // Sec. III.5.4: exclusive overlaps supply the particle-based merger tree links.
     for (auto const& particle : group.parts) {
-        if (particle.previousHalo != NO_GROUP) {
+        if (particle.previousHalo != kNoParticleGroup) {
             ++entry.parents[particle.previousHalo];
         }
     }

@@ -14,15 +14,13 @@
 // arXiv:1110.4372v3: https://arxiv.org/html/1110.4372v3
 
 // #define ROCKSTAR_CPU_BUCKET_SIZE 32
-#define ROCKSTAR_BUCKET_SIZE 64
-#define ROCKSTAR_NO_GROUP 0x7FFFFFFF
-#define ROCKSTAR_HAS_GROUP -1
+inline constexpr int kRockstarBucketSize = 64;
+inline constexpr int kRockstarNoGroup = 0x7FFFFFFF;
 // Sec. III.2: refinement fraction and minimum seed size.
-#define ROCKSTAR_FF 0.7
-#define ROCKSTAR_MIN_GROUP 10
+inline constexpr double kRockstarLinkingFraction = 0.7;
+inline constexpr int kRockstarMinGroup = 10;
 // Sec. III.5.3: minimum retained bound fraction.
-#define ROCKSTAR_MIN_BOUND 0.5
-#define ROCKSTAR_TARGET_BLOCKS (1024)
+inline constexpr double kRockstarMinBound = 0.5;
 
 struct RockstarParticles {
     float* x;
@@ -36,7 +34,7 @@ struct RockstarParticles {
 
 struct RockstarParticle {
     union {
-        Array<float, 2 * NDIM> xValue;
+        Array<float, 2 * kDimensions> xValue;
         struct {
             float x;
             float y;
@@ -50,17 +48,17 @@ struct RockstarParticle {
     ParticleInteger index;
     float minDist2;
     int rank = 0;
-    GroupInteger identity = NO_GROUP;
-    GroupInteger previousHalo = NO_GROUP;
-    GroupInteger previousHost = NO_GROUP;
+    GroupInteger identity = kNoParticleGroup;
+    GroupInteger previousHalo = kNoParticleGroup;
+    GroupInteger previousHost = kNoParticleGroup;
     int ordinal = -1;
 };
 
 struct RockstarTree {
     int particleBegin;
     int particleEnd;
-    Array<int, NCHILD> children;
-    Range<float, 2 * NDIM> box;
+    Array<int, kChildCount> children;
+    Range<float, 2 * kDimensions> box;
     int activeCount;
     bool active;
     bool lastActive;
@@ -71,7 +69,7 @@ struct Subgroup {
     int id = -1;
     int parent;
     int internalParent = -1;
-    GroupInteger catalogueId = NO_GROUP;
+    GroupInteger catalogueId = kNoParticleGroup;
     double massVir = 0.0;
     double mass200 = 0.0;
     double mass500 = 0.0;
@@ -122,13 +120,13 @@ void rockstarFinalizeSubgroups(Vector<Subgroup>& groups, float scale);
 void rockstarPruneCatalogueGroups(Vector<Subgroup>& groups, float scale);
 DeviceVector<RockstarParticle> rockstarGatherParticles(Vector<Subgroup> const& groups, int index);
 RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, float scale,
-    Array<double, NDIM> const& origin, bool inclusive = true);
+    Array<double, kDimensions> const& origin, bool inclusive = true);
 // Checked IEEE binary16 storage for finite physical catalogue properties.
 Float16 rockstarEncodeHalf(double value, char const* fieldName);
 // Publish native records and an encoding sidecar after a successful close.
 void rockstarWriteCatalogue(
     std::string const& filename, RockstarRecord const* records, size_t count);
-GroupEntry rockstarMakeGroupEntry(
-    Vector<Subgroup> const& groups, int index, float scale, Array<double, NDIM> const& origin);
+GroupEntry rockstarMakeGroupEntry(Vector<Subgroup> const& groups, int index, float scale,
+    Array<double, kDimensions> const& origin);
 // A single candidate, exposed for independent unbinding regressions.
 bool rockstarHaloBound(Subgroup& halo, Vector<RockstarParticle>& unboundParticles, float scale);

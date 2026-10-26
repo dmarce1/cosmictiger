@@ -54,7 +54,7 @@ void checkOrder() {
     cosmictiger::gravity::cartesian::Expansion<Real, order> local{};
     cosmictiger::gravity::cartesian::Green<Real, order> derivatives{};
     cosmictiger::gravity::Field<Real> field{};
-    Array<Real, NDIM> position;
+    Array<Real, kDimensions> position;
     position[0] = .13;
     position[1] = -.21;
     position[2] = .38;
@@ -129,8 +129,8 @@ void checkOrder() {
     // different accepted-image counts, including the self-origin selection.
     for (auto const& sample :
         std::array<std::array<double, 3>, 3>{{{0., 0., 0.}, {.13, -.21, .38}, {.49, -.49, .49}}}) {
-        Array<Real, NDIM> point;
-        for (int dim = 0; dim < NDIM; ++dim) {
+        Array<Real, kDimensions> point;
+        for (int dim = 0; dim < kDimensions; ++dim) {
             point[dim] = sample[dim];
         }
         SymmetricTracelessTensor<Real, order> result{};
