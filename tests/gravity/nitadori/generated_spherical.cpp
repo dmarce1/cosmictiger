@@ -19,6 +19,28 @@
 
 namespace detail {
 
+#ifdef FMM_MIN_ORDER
+constexpr int kMinCompiledDegree = FMM_MIN_ORDER - 1;
+#else
+constexpr int kMinCompiledDegree = 2;
+#endif
+#ifdef FMM_MAX_ORDER
+constexpr int kMaxCompiledDegree = FMM_MAX_ORDER - 1;
+#else
+constexpr int kMaxCompiledDegree = 8;
+#endif
+static_assert(
+    2 <= kMinCompiledDegree && kMinCompiledDegree <= kMaxCompiledDegree && kMaxCompiledDegree <= 8);
+#ifdef GENERATED_SPHERICAL_TEST_DEGREE
+constexpr int kMinTestDegree = GENERATED_SPHERICAL_TEST_DEGREE;
+constexpr int kMaxTestDegree = GENERATED_SPHERICAL_TEST_DEGREE;
+static_assert(kMinCompiledDegree <= kMinTestDegree && kMaxTestDegree <= kMaxCompiledDegree,
+    "The requested spherical test degree must be inside the compiled FMM order range");
+#else
+constexpr int kMinTestDegree = kMinCompiledDegree;
+constexpr int kMaxTestDegree = kMaxCompiledDegree;
+#endif
+
 namespace spherical = cosmictiger::gravity::spherical;
 using Complex = std::complex<double>;
 using Point = std::array<double, 3>;
@@ -393,19 +415,20 @@ void directParticleCheck() {
     }
 }
 
-template <typename Real>
+template <typename Real, int degree = kMinTestDegree>
 void allOrders() {
-#ifdef GENERATED_SPHERICAL_TEST_DEGREE
-    testOrder<Real, GENERATED_SPHERICAL_TEST_DEGREE>();
-#else
-    testOrder<Real, 2>();
-    testOrder<Real, 3>();
-    testOrder<Real, 4>();
-    testOrder<Real, 5>();
-    testOrder<Real, 6>();
-    testOrder<Real, 7>();
-    testOrder<Real, 8>();
-#endif
+    testOrder<Real, degree>();
+    if constexpr (degree < kMaxTestDegree) {
+        allOrders<Real, degree + 1>();
+    }
+}
+
+template <int degree = kMinTestDegree>
+void allDirectParticleChecks() {
+    directParticleCheck<degree>();
+    if constexpr (degree < kMaxTestDegree) {
+        allDirectParticleChecks<degree + 1>();
+    }
 }
 
 }    // namespace detail
@@ -417,17 +440,7 @@ int main() {
 #if !defined(__CUDACC__) && !defined(GENERATED_SPHERICAL_SKIP_SIMD)
         detail::allOrders<SimdVector<double, 4>>();
 #endif
-#ifdef GENERATED_SPHERICAL_TEST_DEGREE
-        detail::directParticleCheck<GENERATED_SPHERICAL_TEST_DEGREE>();
-#else
-        detail::directParticleCheck<2>();
-        detail::directParticleCheck<3>();
-        detail::directParticleCheck<4>();
-        detail::directParticleCheck<5>();
-        detail::directParticleCheck<6>();
-        detail::directParticleCheck<7>();
-        detail::directParticleCheck<8>();
-#endif
+        detail::allDirectParticleChecks();
         std::printf(
             "Generated Spherical: %zu independent checks passed, worst scaled discrepancy %.3e\n",
             detail::checks, detail::worst);

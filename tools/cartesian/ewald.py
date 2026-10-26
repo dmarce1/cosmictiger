@@ -392,6 +392,9 @@ def generateEwald(minLocalDegree, maxLocalDegree):
         'namespace detail {',
     ]
     for localDegree in range(minLocalDegree, maxLocalDegree + 1):
+        code.append(f'#if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= {localDegree + 1}) && '
+                    f'(!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= {localDegree + 1})')
         ewald(code, localDegree + 1)
+        code.append('#endif')
     code.append('} // namespace detail')
     return '\n'.join(code) + '\n'

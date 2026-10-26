@@ -1,0 +1,5660 @@
+{
+  "min_local_degree": 2,
+  "max_local_degree": 8,
+  "description": "Static emitted arithmetic counts. +, - and * each count one. Explicit FMAs are listed separately: kFlops_ uses conventional FMA=2; kWeightedFlops_ uses FMA=1. Fused output accumulations are included in arithmetic, so only add the remaining listed standalone accumulations. Constant rational evaluation is compile time; geometry normalization/public validation and sqrt/division are excluded. No hardware-timing claim.",
+  "kernels": [
+    {
+      "expansion_order": 2,
+      "centered": true,
+      "base_source_order": 1,
+      "arithmetic_base": {
+        "*": 13,
+        "fma": 10
+      },
+      "arithmetic_full": {
+        "*": 19,
+        "fma": 17
+      },
+      "trace_extra_arithmetic": {},
+      "base_accumulations": 1,
+      "full_extra_accumulations": 0,
+      "base_fused_accumulations": 8,
+      "full_extra_fused_accumulations": 1,
+      "weighted_flops_base": 24,
+      "weighted_flops_full": 37,
+      "conventional_flops_base": 34,
+      "conventional_flops_full": 54,
+      "trace_accumulations": 0
+    },
+    {
+      "arithmetic": {
+        "fma": 9
+      },
+      "accumulations": 0,
+      "fused_accumulations": 9,
+      "weighted_flops": 9,
+      "conventional_flops": 18,
+      "operator": "EwaldM2L",
+      "source_order": 1,
+      "order": 2,
+      "centered": true
+    },
+    {
+      "expansion_order": 2,
+      "centered": false,
+      "base_source_order": 1,
+      "arithmetic_base": {
+        "*": 15,
+        "+": 1,
+        "fma": 17
+      },
+      "arithmetic_full": {
+        "*": 21,
+        "+": 1,
+        "fma": 24
+      },
+      "trace_extra_arithmetic": {},
+      "base_accumulations": 0,
+      "full_extra_accumulations": 0,
+      "base_fused_accumulations": 9,
+      "full_extra_fused_accumulations": 1,
+      "weighted_flops_base": 33,
+      "weighted_flops_full": 46,
+      "conventional_flops_base": 50,
+      "conventional_flops_full": 70,
+      "trace_accumulations": 0
+    },
+    {
+      "arithmetic": {
+        "*": 4,
+        "+": 1,
+        "fma": 17
+      },
+      "accumulations": 4,
+      "fused_accumulations": 5,
+      "weighted_flops": 26,
+      "conventional_flops": 43,
+      "operator": "EwaldM2L",
+      "source_order": 1,
+      "order": 2,
+      "centered": false
+    },
+    {
+      "expansion_order": 3,
+      "centered": true,
+      "base_source_order": 2,
+      "arithmetic_base": {
+        "*": 27,
+        "+": 1,
+        "-": 4,
+        "fma": 31
+      },
+      "arithmetic_full": {
+        "*": 43,
+        "+": 1,
+        "-": 8,
+        "fma": 40
+      },
+      "trace_extra_arithmetic": {},
+      "base_accumulations": 0,
+      "full_extra_accumulations": 0,
+      "base_fused_accumulations": 16,
+      "full_extra_fused_accumulations": 1,
+      "weighted_flops_base": 63,
+      "weighted_flops_full": 92,
+      "conventional_flops_base": 94,
+      "conventional_flops_full": 132,
+      "trace_accumulations": 0
+    },
+    {
+      "arithmetic": {
+        "*": 16,
+        "+": 5,
+        "fma": 36
+      },
+      "accumulations": 4,
+      "fused_accumulations": 12,
+      "weighted_flops": 61,
+      "conventional_flops": 97,
+      "operator": "EwaldM2L",
+      "source_order": 2,
+      "order": 3,
+      "centered": true
+    },
+    {
+      "expansion_order": 3,
+      "centered": false,
+      "base_source_order": 2,
+      "arithmetic_base": {
+        "*": 34,
+        "+": 4,
+        "-": 6,
+        "fma": 41
+      },
+      "arithmetic_full": {
+        "*": 50,
+        "+": 4,
+        "-": 10,
+        "fma": 50
+      },
+      "trace_extra_arithmetic": {},
+      "base_accumulations": 0,
+      "full_extra_accumulations": 0,
+      "base_fused_accumulations": 16,
+      "full_extra_fused_accumulations": 1,
+      "weighted_flops_base": 85,
+      "weighted_flops_full": 114,
+      "conventional_flops_base": 126,
+      "conventional_flops_full": 164,
+      "trace_accumulations": 0
+    },
+    {
+      "arithmetic": {
+        "*": 25,
+        "+": 5,
+        "-": 4,
+        "fma": 54
+      },
+      "accumulations": 9,
+      "fused_accumulations": 7,
+      "weighted_flops": 97,
+      "conventional_flops": 151,
+      "operator": "EwaldM2L",
+      "source_order": 2,
+      "order": 3,
+      "centered": false
+    },
+    {
+      "expansion_order": 4,
+      "centered": true,
+      "base_source_order": 3,
+      "arithmetic_base": {
+        "*": 50,
+        "+": 6,
+        "-": 15,
+        "fma": 69
+      },
+      "arithmetic_full": {
+        "*": 68,
+        "+": 6,
+        "-": 22,
+        "fma": 84
+      },
+      "trace_extra_arithmetic": {},
+      "base_accumulations": 0,
+      "full_extra_accumulations": 0,
+      "base_fused_accumulations": 25,
+      "full_extra_fused_accumulations": 1,
+      "weighted_flops_base": 140,
+      "weighted_flops_full": 180,
+      "conventional_flops_base": 209,
+      "conventional_flops_full": 264,
+      "trace_accumulations": 0
+    },
+    {
+      "arithmetic": {
+        "*": 76,
+        "+": 15,
+        "-": 3,
+        "fma": 106
+      },
+      "accumulations": 9,
+      "fused_accumulations": 16,
+      "weighted_flops": 209,
+      "conventional_flops": 315,
+      "operator": "EwaldM2L",
+      "source_order": 3,
+      "order": 4,
+      "centered": true
+    },
+    {
+      "expansion_order": 4,
+      "centered": false,
+      "base_source_order": 3,
+      "arithmetic_base": {
+        "*": 62,
+        "+": 13,
+        "-": 12,
+        "fma": 99
+      },
+      "arithmetic_full": {
+        "*": 80,
+        "+": 13,
+        "-": 19,
+        "fma": 114
+      },
+      "trace_extra_arithmetic": {},
+      "base_accumulations": 0,
+      "full_extra_accumulations": 0,
+      "base_fused_accumulations": 25,
+      "full_extra_fused_accumulations": 1,
+      "weighted_flops_base": 186,
+      "weighted_flops_full": 226,
+      "conventional_flops_base": 285,
+      "conventional_flops_full": 340,
+      "trace_accumulations": 0
+    },
+    {
+      "arithmetic": {
+        "*": 88,
+        "+": 15,
+        "-": 8,
+        "fma": 142
+      },
+      "accumulations": 16,
+      "fused_accumulations": 9,
+      "weighted_flops": 269,
+      "conventional_flops": 411,
+      "operator": "EwaldM2L",
+      "source_order": 3,
+      "order": 4,
+      "centered": false
+    },
+    {
+      "expansion_order": 5,
+      "centered": true,
+      "base_source_order": 4,
+      "arithmetic_base": {
+        "*": 99,
+        "+": 17,
+        "-": 30,
+        "fma": 148
+      },
+      "arithmetic_full": {
+        "*": 126,
+        "+": 17,
+        "-": 38,
+        "fma": 172
+      },
+      "trace_extra_arithmetic": {},
+      "base_accumulations": 0,
+      "full_extra_accumulations": 0,
+      "base_fused_accumulations": 36,
+      "full_extra_fused_accumulations": 1,
+      "weighted_flops_base": 294,
+      "weighted_flops_full": 353,
+      "conventional_flops_base": 442,
+      "conventional_flops_full": 525,
+      "trace_accumulations": 0
+    },
+    {
+      "arithmetic": {
+        "*": 214,
+        "+": 33,
+        "-": 6,
+        "fma": 257
+      },
+      "accumulations": 16,
+      "fused_accumulations": 20,
+      "weighted_flops": 526,
+      "conventional_flops": 783,
+      "operator": "EwaldM2L",
+      "source_order": 4,
+      "order": 5,
+      "centered": true
+    },
+    {
+      "expansion_order": 5,
+      "centered": false,
+      "base_source_order": 4,
+      "arithmetic_base": {
+        "*": 125,
+        "+": 20,
+        "-": 44,
+        "fma": 190
+      },
+      "arithmetic_full": {
+        "*": 152,
+        "+": 20,
+        "-": 52,
+        "fma": 214
+      },
+      "trace_extra_arithmetic": {},
+      "base_accumulations": 0,
+      "full_extra_accumulations": 0,
+      "base_fused_accumulations": 36,
+      "full_extra_fused_accumulations": 1,
+      "weighted_flops_base": 379,
+      "weighted_flops_full": 438,
+      "conventional_flops_base": 569,
+      "conventional_flops_full": 652,
+      "trace_accumulations": 0
+    },
+    {
+      "arithmetic": {
+        "*": 230,
+        "+": 33,
+        "-": 13,
+        "fma": 316
+      },
+      "accumulations": 25,
+      "fused_accumulations": 11,
+      "weighted_flops": 617,
+      "conventional_flops": 933,
+      "operator": "EwaldM2L",
+      "source_order": 4,
+      "order": 5,
+      "centered": false
+    },
+    {
+      "expansion_order": 6,
+      "centered": true,
+      "base_source_order": 5,
+      "arithmetic_base": {
+        "*": 168,
+        "+": 42,
+        "-": 61,
+        "fma": 283
+      },
+      "arithmetic_full": {
+        "*": 206,
+        "+": 42,
+        "-": 76,
+        "fma": 317
+      },
+      "trace_extra_arithmetic": {},
+      "base_accumulations": 0,
+      "full_extra_accumulations": 0,
+      "base_fused_accumulations": 49,
+      "full_extra_fused_accumulations": 1,
+      "weighted_flops_base": 554,
+      "weighted_flops_full": 641,
+      "conventional_flops_base": 837,
+      "conventional_flops_full": 958,
+      "trace_accumulations": 0
+    },
+    {
+      "arithmetic": {
+        "*": 479,
+        "+": 61,
+        "-": 10,
+        "fma": 537
+      },
+      "accumulations": 25,
+      "fused_accumulations": 24,
+      "weighted_flops": 1112,
+      "conventional_flops": 1649,
+      "operator": "EwaldM2L",
+      "source_order": 5,
+      "order": 6,
+      "centered": true
+    },
+    {
+      "expansion_order": 6,
+      "centered": false,
+      "base_source_order": 5,
+      "arithmetic_base": {
+        "*": 205,
+        "+": 56,
+        "-": 67,
+        "fma": 365
+      },
+      "arithmetic_full": {
+        "*": 243,
+        "+": 56,
+        "-": 82,
+        "fma": 399
+      },
+      "trace_extra_arithmetic": {},
+      "base_accumulations": 0,
+      "full_extra_accumulations": 0,
+      "base_fused_accumulations": 49,
+      "full_extra_fused_accumulations": 1,
+      "weighted_flops_base": 693,
+      "weighted_flops_full": 780,
+      "conventional_flops_base": 1058,
+      "conventional_flops_full": 1179,
+      "trace_accumulations": 0
+    },
+    {
+      "arithmetic": {
+        "*": 499,
+        "+": 61,
+        "-": 19,
+        "fma": 625
+      },
+      "accumulations": 36,
+      "fused_accumulations": 13,
+      "weighted_flops": 1240,
+      "conventional_flops": 1865,
+      "operator": "EwaldM2L",
+      "source_order": 5,
+      "order": 6,
+      "centered": false
+    },
+    {
+      "expansion_order": 7,
+      "centered": true,
+      "base_source_order": 6,
+      "arithmetic_base": {
+        "*": 290,
+        "+": 73,
+        "-": 113,
+        "fma": 524
+      },
+      "arithmetic_full": {
+        "*": 352,
+        "+": 73,
+        "-": 139,
+        "fma": 568
+      },
+      "trace_extra_arithmetic": {},
+      "base_accumulations": 0,
+      "full_extra_accumulations": 0,
+      "base_fused_accumulations": 64,
+      "full_extra_fused_accumulations": 1,
+      "weighted_flops_base": 1000,
+      "weighted_flops_full": 1132,
+      "conventional_flops_base": 1524,
+      "conventional_flops_full": 1700,
+      "trace_accumulations": 0
+    },
+    {
+      "arithmetic": {
+        "*": 935,
+        "+": 101,
+        "-": 15,
+        "fma": 1010
+      },
+      "accumulations": 36,
+      "fused_accumulations": 28,
+      "weighted_flops": 2097,
+      "conventional_flops": 3107,
+      "operator": "EwaldM2L",
+      "source_order": 6,
+      "order": 7,
+      "centered": true
+    },
+    {
+      "expansion_order": 7,
+      "centered": false,
+      "base_source_order": 6,
+      "arithmetic_base": {
+        "*": 346,
+        "+": 82,
+        "-": 130,
+        "fma": 658
+      },
+      "arithmetic_full": {
+        "*": 408,
+        "+": 82,
+        "-": 156,
+        "fma": 702
+      },
+      "trace_extra_arithmetic": {},
+      "base_accumulations": 0,
+      "full_extra_accumulations": 0,
+      "base_fused_accumulations": 64,
+      "full_extra_fused_accumulations": 1,
+      "weighted_flops_base": 1216,
+      "weighted_flops_full": 1348,
+      "conventional_flops_base": 1874,
+      "conventional_flops_full": 2050,
+      "trace_accumulations": 0
+    },
+    {
+      "arithmetic": {
+        "*": 959,
+        "+": 101,
+        "-": 26,
+        "fma": 1133
+      },
+      "accumulations": 49,
+      "fused_accumulations": 15,
+      "weighted_flops": 2268,
+      "conventional_flops": 3401,
+      "operator": "EwaldM2L",
+      "source_order": 6,
+      "order": 7,
+      "centered": false
+    },
+    {
+      "expansion_order": 8,
+      "centered": true,
+      "base_source_order": 7,
+      "arithmetic_base": {
+        "*": 467,
+        "+": 151,
+        "-": 188,
+        "fma": 906
+      },
+      "arithmetic_full": {
+        "*": 553,
+        "+": 151,
+        "-": 222,
+        "fma": 967
+      },
+      "trace_extra_arithmetic": {},
+      "base_accumulations": 0,
+      "full_extra_accumulations": 0,
+      "base_fused_accumulations": 81,
+      "full_extra_fused_accumulations": 1,
+      "weighted_flops_base": 1712,
+      "weighted_flops_full": 1893,
+      "conventional_flops_base": 2618,
+      "conventional_flops_full": 2860,
+      "trace_accumulations": 0
+    },
+    {
+      "arithmetic": {
+        "*": 1663,
+        "+": 155,
+        "-": 21,
+        "fma": 1757
+      },
+      "accumulations": 49,
+      "fused_accumulations": 32,
+      "weighted_flops": 3645,
+      "conventional_flops": 5402,
+      "operator": "EwaldM2L",
+      "source_order": 7,
+      "order": 8,
+      "centered": true
+    },
+    {
+      "expansion_order": 8,
+      "centered": false,
+      "base_source_order": 7,
+      "arithmetic_base": {
+        "*": 538,
+        "+": 187,
+        "-": 173,
+        "fma": 1136
+      },
+      "arithmetic_full": {
+        "*": 624,
+        "+": 187,
+        "-": 207,
+        "fma": 1197
+      },
+      "trace_extra_arithmetic": {},
+      "base_accumulations": 0,
+      "full_extra_accumulations": 0,
+      "base_fused_accumulations": 81,
+      "full_extra_fused_accumulations": 1,
+      "weighted_flops_base": 2034,
+      "weighted_flops_full": 2215,
+      "conventional_flops_base": 3170,
+      "conventional_flops_full": 3412,
+      "trace_accumulations": 0
+    },
+    {
+      "arithmetic": {
+        "*": 1691,
+        "+": 155,
+        "-": 34,
+        "fma": 1921
+      },
+      "accumulations": 64,
+      "fused_accumulations": 17,
+      "weighted_flops": 3865,
+      "conventional_flops": 5786,
+      "operator": "EwaldM2L",
+      "source_order": 7,
+      "order": 8,
+      "centered": false
+    }
+  ],
+  "operators": [
+    {
+      "arithmetic": {
+        "*": 3,
+        "fma": 3
+      },
+      "accumulations": 4,
+      "fused_accumulations": 0,
+      "weighted_flops": 10,
+      "conventional_flops": 13,
+      "operator": "M2M",
+      "order": 1
+    },
+    {
+      "arithmetic": {
+        "*": 8,
+        "+": 1,
+        "fma": 27
+      },
+      "accumulations": 1,
+      "fused_accumulations": 8,
+      "weighted_flops": 37,
+      "conventional_flops": 64,
+      "operator": "L2L",
+      "order": 2,
+      "with_trace": false
+    },
+    {
+      "arithmetic": {
+        "*": 8,
+        "+": 1,
+        "fma": 30
+      },
+      "accumulations": 1,
+      "fused_accumulations": 9,
+      "weighted_flops": 40,
+      "conventional_flops": 70,
+      "operator": "L2L",
+      "order": 2,
+      "with_trace": true
+    },
+    {
+      "arithmetic": {
+        "fma": 3
+      },
+      "accumulations": 1,
+      "fused_accumulations": 3,
+      "weighted_flops": 4,
+      "conventional_flops": 7,
+      "operator": "P2M",
+      "order": 1
+    },
+    {
+      "arithmetic": {
+        "*": 12,
+        "fma": 8
+      },
+      "accumulations": 3,
+      "fused_accumulations": 6,
+      "weighted_flops": 23,
+      "conventional_flops": 31,
+      "operator": "P2L",
+      "order": 2
+    },
+    {
+      "arithmetic": {
+        "*": 4,
+        "fma": 4
+      },
+      "accumulations": 0,
+      "fused_accumulations": 4,
+      "weighted_flops": 8,
+      "conventional_flops": 12,
+      "operator": "M2P",
+      "order": 1,
+      "centered": true
+    },
+    {
+      "arithmetic": {
+        "*": 5,
+        "+": 1,
+        "fma": 10
+      },
+      "accumulations": 0,
+      "fused_accumulations": 4,
+      "weighted_flops": 16,
+      "conventional_flops": 26,
+      "operator": "M2P",
+      "order": 1,
+      "centered": false
+    },
+    {
+      "arithmetic": {
+        "*": 7,
+        "+": 1,
+        "fma": 22
+      },
+      "accumulations": 1,
+      "fused_accumulations": 3,
+      "weighted_flops": 31,
+      "conventional_flops": 53,
+      "operator": "L2P",
+      "order": 2,
+      "with_trace": false
+    },
+    {
+      "arithmetic": {
+        "*": 7,
+        "+": 1,
+        "fma": 24
+      },
+      "accumulations": 1,
+      "fused_accumulations": 3,
+      "weighted_flops": 33,
+      "conventional_flops": 57,
+      "operator": "L2P",
+      "order": 2,
+      "with_trace": true
+    },
+    {
+      "operator": "CUDA_L2L_WARP",
+      "order": 2,
+      "with_trace": true,
+      "coefficients": 10,
+      "schedule_rows": 4,
+      "phases": 1,
+      "basis_words_per_lane": 1,
+      "shuffle_instructions_per_lane": 9,
+      "shuffle_instructions_per_lane_into": 5,
+      "whole_warp_flops_with_potential": 1034,
+      "whole_warp_flops_without_potential": 678,
+      "whole_warp_weighted_flops_with_potential": 904,
+      "whole_warp_weighted_flops_without_potential": 549
+    },
+    {
+      "arithmetic": {
+        "*": 16,
+        "+": 3,
+        "fma": 17
+      },
+      "accumulations": 9,
+      "fused_accumulations": 0,
+      "weighted_flops": 45,
+      "conventional_flops": 62,
+      "operator": "M2M",
+      "order": 2
+    },
+    {
+      "arithmetic": {
+        "*": 19,
+        "+": 3,
+        "-": 4,
+        "fma": 71
+      },
+      "accumulations": 1,
+      "fused_accumulations": 15,
+      "weighted_flops": 98,
+      "conventional_flops": 169,
+      "operator": "L2L",
+      "order": 3,
+      "with_trace": false
+    },
+    {
+      "arithmetic": {
+        "*": 19,
+        "+": 3,
+        "-": 4,
+        "fma": 74
+      },
+      "accumulations": 1,
+      "fused_accumulations": 16,
+      "weighted_flops": 101,
+      "conventional_flops": 175,
+      "operator": "L2L",
+      "order": 3,
+      "with_trace": true
+    },
+    {
+      "arithmetic": {
+        "*": 8,
+        "fma": 10
+      },
+      "accumulations": 3,
+      "fused_accumulations": 6,
+      "weighted_flops": 21,
+      "conventional_flops": 31,
+      "operator": "P2M",
+      "order": 2
+    },
+    {
+      "arithmetic": {
+        "*": 20,
+        "-": 4,
+        "fma": 15
+      },
+      "accumulations": 3,
+      "fused_accumulations": 13,
+      "weighted_flops": 42,
+      "conventional_flops": 57,
+      "operator": "P2L",
+      "order": 3
+    },
+    {
+      "arithmetic": {
+        "*": 10,
+        "+": 1,
+        "fma": 17
+      },
+      "accumulations": 0,
+      "fused_accumulations": 4,
+      "weighted_flops": 28,
+      "conventional_flops": 45,
+      "operator": "M2P",
+      "order": 2,
+      "centered": true
+    },
+    {
+      "arithmetic": {
+        "*": 14,
+        "+": 4,
+        "-": 1,
+        "fma": 20
+      },
+      "accumulations": 0,
+      "fused_accumulations": 4,
+      "weighted_flops": 39,
+      "conventional_flops": 59,
+      "operator": "M2P",
+      "order": 2,
+      "centered": false
+    },
+    {
+      "arithmetic": {
+        "*": 17,
+        "+": 3,
+        "-": 4,
+        "fma": 44
+      },
+      "accumulations": 1,
+      "fused_accumulations": 3,
+      "weighted_flops": 69,
+      "conventional_flops": 113,
+      "operator": "L2P",
+      "order": 3,
+      "with_trace": false
+    },
+    {
+      "arithmetic": {
+        "*": 17,
+        "+": 3,
+        "-": 4,
+        "fma": 46
+      },
+      "accumulations": 1,
+      "fused_accumulations": 3,
+      "weighted_flops": 71,
+      "conventional_flops": 117,
+      "operator": "L2P",
+      "order": 3,
+      "with_trace": true
+    },
+    {
+      "operator": "CUDA_L2L_WARP",
+      "order": 3,
+      "with_trace": true,
+      "coefficients": 17,
+      "schedule_rows": 8,
+      "phases": 1,
+      "basis_words_per_lane": 1,
+      "shuffle_instructions_per_lane": 18,
+      "shuffle_instructions_per_lane_into": 9,
+      "whole_warp_flops_with_potential": 2127,
+      "whole_warp_flops_without_potential": 1675,
+      "whole_warp_weighted_flops_with_potential": 1869,
+      "whole_warp_weighted_flops_without_potential": 1418
+    },
+    {
+      "arithmetic": {
+        "*": 43,
+        "+": 8,
+        "-": 9,
+        "fma": 56
+      },
+      "accumulations": 16,
+      "fused_accumulations": 0,
+      "weighted_flops": 132,
+      "conventional_flops": 188,
+      "operator": "M2M",
+      "order": 3
+    },
+    {
+      "arithmetic": {
+        "*": 33,
+        "+": 6,
+        "-": 9,
+        "fma": 160
+      },
+      "accumulations": 1,
+      "fused_accumulations": 24,
+      "weighted_flops": 209,
+      "conventional_flops": 369,
+      "operator": "L2L",
+      "order": 4,
+      "with_trace": false
+    },
+    {
+      "arithmetic": {
+        "*": 33,
+        "+": 6,
+        "-": 9,
+        "fma": 163
+      },
+      "accumulations": 1,
+      "fused_accumulations": 25,
+      "weighted_flops": 212,
+      "conventional_flops": 375,
+      "operator": "L2L",
+      "order": 4,
+      "with_trace": true
+    },
+    {
+      "arithmetic": {
+        "*": 29,
+        "-": 1,
+        "fma": 25
+      },
+      "accumulations": 4,
+      "fused_accumulations": 12,
+      "weighted_flops": 59,
+      "conventional_flops": 84,
+      "operator": "P2M",
+      "order": 3
+    },
+    {
+      "arithmetic": {
+        "*": 32,
+        "-": 10,
+        "fma": 27
+      },
+      "accumulations": 3,
+      "fused_accumulations": 22,
+      "weighted_flops": 72,
+      "conventional_flops": 99,
+      "operator": "P2L",
+      "order": 4
+    },
+    {
+      "arithmetic": {
+        "*": 26,
+        "+": 6,
+        "fma": 35
+      },
+      "accumulations": 0,
+      "fused_accumulations": 4,
+      "weighted_flops": 67,
+      "conventional_flops": 102,
+      "operator": "M2P",
+      "order": 3,
+      "centered": true
+    },
+    {
+      "arithmetic": {
+        "*": 30,
+        "+": 9,
+        "-": 1,
+        "fma": 38
+      },
+      "accumulations": 0,
+      "fused_accumulations": 4,
+      "weighted_flops": 78,
+      "conventional_flops": 116,
+      "operator": "M2P",
+      "order": 3,
+      "centered": false
+    },
+    {
+      "arithmetic": {
+        "*": 30,
+        "+": 6,
+        "-": 9,
+        "fma": 78
+      },
+      "accumulations": 1,
+      "fused_accumulations": 3,
+      "weighted_flops": 124,
+      "conventional_flops": 202,
+      "operator": "L2P",
+      "order": 4,
+      "with_trace": false
+    },
+    {
+      "arithmetic": {
+        "*": 30,
+        "+": 6,
+        "-": 9,
+        "fma": 80
+      },
+      "accumulations": 1,
+      "fused_accumulations": 3,
+      "weighted_flops": 126,
+      "conventional_flops": 206,
+      "operator": "L2P",
+      "order": 4,
+      "with_trace": true
+    },
+    {
+      "operator": "CUDA_L2L_WARP",
+      "order": 4,
+      "with_trace": true,
+      "coefficients": 26,
+      "schedule_rows": 8,
+      "phases": 1,
+      "basis_words_per_lane": 1,
+      "shuffle_instructions_per_lane": 26,
+      "shuffle_instructions_per_lane_into": 10,
+      "whole_warp_flops_with_potential": 2998,
+      "whole_warp_flops_without_potential": 2162,
+      "whole_warp_weighted_flops_with_potential": 2740,
+      "whole_warp_weighted_flops_without_potential": 1905
+    },
+    {
+      "arithmetic": {
+        "*": 90,
+        "+": 20,
+        "-": 22,
+        "fma": 141
+      },
+      "accumulations": 25,
+      "fused_accumulations": 0,
+      "weighted_flops": 298,
+      "conventional_flops": 439,
+      "operator": "M2M",
+      "order": 4
+    },
+    {
+      "arithmetic": {
+        "*": 53,
+        "+": 10,
+        "-": 16,
+        "fma": 313
+      },
+      "accumulations": 1,
+      "fused_accumulations": 35,
+      "weighted_flops": 393,
+      "conventional_flops": 706,
+      "operator": "L2L",
+      "order": 5,
+      "with_trace": false
+    },
+    {
+      "arithmetic": {
+        "*": 53,
+        "+": 10,
+        "-": 16,
+        "fma": 316
+      },
+      "accumulations": 1,
+      "fused_accumulations": 36,
+      "weighted_flops": 396,
+      "conventional_flops": 712,
+      "operator": "L2L",
+      "order": 5,
+      "with_trace": true
+    },
+    {
+      "arithmetic": {
+        "*": 76,
+        "-": 4,
+        "fma": 57
+      },
+      "accumulations": 4,
+      "fused_accumulations": 21,
+      "weighted_flops": 141,
+      "conventional_flops": 198,
+      "operator": "P2M",
+      "order": 4
+    },
+    {
+      "arithmetic": {
+        "*": 42,
+        "-": 17,
+        "fma": 45
+      },
+      "accumulations": 3,
+      "fused_accumulations": 33,
+      "weighted_flops": 107,
+      "conventional_flops": 152,
+      "operator": "P2L",
+      "order": 5
+    },
+    {
+      "arithmetic": {
+        "*": 45,
+        "+": 12,
+        "-": 4,
+        "fma": 57
+      },
+      "accumulations": 0,
+      "fused_accumulations": 4,
+      "weighted_flops": 118,
+      "conventional_flops": 175,
+      "operator": "M2P",
+      "order": 4,
+      "centered": true
+    },
+    {
+      "arithmetic": {
+        "*": 49,
+        "+": 15,
+        "-": 5,
+        "fma": 60
+      },
+      "accumulations": 0,
+      "fused_accumulations": 4,
+      "weighted_flops": 129,
+      "conventional_flops": 189,
+      "operator": "M2P",
+      "order": 4,
+      "centered": false
+    },
+    {
+      "arithmetic": {
+        "*": 49,
+        "+": 10,
+        "-": 16,
+        "fma": 123
+      },
+      "accumulations": 1,
+      "fused_accumulations": 3,
+      "weighted_flops": 199,
+      "conventional_flops": 322,
+      "operator": "L2P",
+      "order": 5,
+      "with_trace": false
+    },
+    {
+      "arithmetic": {
+        "*": 49,
+        "+": 10,
+        "-": 16,
+        "fma": 125
+      },
+      "accumulations": 1,
+      "fused_accumulations": 3,
+      "weighted_flops": 201,
+      "conventional_flops": 326,
+      "operator": "L2P",
+      "order": 5,
+      "with_trace": true
+    },
+    {
+      "operator": "CUDA_L2L_WARP",
+      "order": 5,
+      "with_trace": true,
+      "coefficients": 37,
+      "schedule_rows": 12,
+      "phases": 2,
+      "basis_words_per_lane": 2,
+      "shuffle_instructions_per_lane": 53,
+      "shuffle_instructions_per_lane_into": 28,
+      "whole_warp_flops_with_potential": 5055,
+      "whole_warp_flops_without_potential": 3707,
+      "whole_warp_weighted_flops_with_potential": 4669,
+      "whole_warp_weighted_flops_without_potential": 3322
+    },
+    {
+      "arithmetic": {
+        "*": 179,
+        "+": 63,
+        "-": 43,
+        "fma": 278
+      },
+      "accumulations": 36,
+      "fused_accumulations": 0,
+      "weighted_flops": 599,
+      "conventional_flops": 877,
+      "operator": "M2M",
+      "order": 5
+    },
+    {
+      "arithmetic": {
+        "*": 83,
+        "+": 15,
+        "-": 29,
+        "fma": 557
+      },
+      "accumulations": 1,
+      "fused_accumulations": 48,
+      "weighted_flops": 685,
+      "conventional_flops": 1242,
+      "operator": "L2L",
+      "order": 6,
+      "with_trace": false
+    },
+    {
+      "arithmetic": {
+        "*": 83,
+        "+": 15,
+        "-": 29,
+        "fma": 560
+      },
+      "accumulations": 1,
+      "fused_accumulations": 49,
+      "weighted_flops": 688,
+      "conventional_flops": 1248,
+      "operator": "L2L",
+      "order": 6,
+      "with_trace": true
+    },
+    {
+      "arithmetic": {
+        "*": 159,
+        "+": 1,
+        "-": 10,
+        "fma": 107
+      },
+      "accumulations": 4,
+      "fused_accumulations": 32,
+      "weighted_flops": 281,
+      "conventional_flops": 388,
+      "operator": "P2M",
+      "order": 5
+    },
+    {
+      "arithmetic": {
+        "*": 51,
+        "+": 1,
+        "-": 26,
+        "fma": 70
+      },
+      "accumulations": 3,
+      "fused_accumulations": 46,
+      "weighted_flops": 151,
+      "conventional_flops": 221,
+      "operator": "P2L",
+      "order": 6
+    },
+    {
+      "arithmetic": {
+        "*": 67,
+        "+": 13,
+        "-": 15,
+        "fma": 89
+      },
+      "accumulations": 0,
+      "fused_accumulations": 4,
+      "weighted_flops": 184,
+      "conventional_flops": 273,
+      "operator": "M2P",
+      "order": 5,
+      "centered": true
+    },
+    {
+      "arithmetic": {
+        "*": 71,
+        "+": 16,
+        "-": 16,
+        "fma": 92
+      },
+      "accumulations": 0,
+      "fused_accumulations": 4,
+      "weighted_flops": 195,
+      "conventional_flops": 287,
+      "operator": "M2P",
+      "order": 5,
+      "centered": false
+    },
+    {
+      "arithmetic": {
+        "*": 78,
+        "+": 15,
+        "-": 29,
+        "fma": 182
+      },
+      "accumulations": 1,
+      "fused_accumulations": 3,
+      "weighted_flops": 305,
+      "conventional_flops": 487,
+      "operator": "L2P",
+      "order": 6,
+      "with_trace": false
+    },
+    {
+      "arithmetic": {
+        "*": 78,
+        "+": 15,
+        "-": 29,
+        "fma": 184
+      },
+      "accumulations": 1,
+      "fused_accumulations": 3,
+      "weighted_flops": 307,
+      "conventional_flops": 491,
+      "operator": "L2P",
+      "order": 6,
+      "with_trace": true
+    },
+    {
+      "operator": "CUDA_L2L_WARP",
+      "order": 6,
+      "with_trace": true,
+      "coefficients": 50,
+      "schedule_rows": 22,
+      "phases": 3,
+      "basis_words_per_lane": 2,
+      "shuffle_instructions_per_lane": 86,
+      "shuffle_instructions_per_lane_into": 50,
+      "whole_warp_flops_with_potential": 8906,
+      "whole_warp_flops_without_potential": 6726,
+      "whole_warp_weighted_flops_with_potential": 8200,
+      "whole_warp_weighted_flops_without_potential": 6021
+    },
+    {
+      "arithmetic": {
+        "*": 296,
+        "+": 132,
+        "-": 77,
+        "fma": 504
+      },
+      "accumulations": 49,
+      "fused_accumulations": 0,
+      "weighted_flops": 1058,
+      "conventional_flops": 1562,
+      "operator": "M2M",
+      "order": 6
+    },
+    {
+      "arithmetic": {
+        "*": 128,
+        "+": 21,
+        "-": 51,
+        "fma": 921
+      },
+      "accumulations": 1,
+      "fused_accumulations": 63,
+      "weighted_flops": 1122,
+      "conventional_flops": 2043,
+      "operator": "L2L",
+      "order": 7,
+      "with_trace": false
+    },
+    {
+      "arithmetic": {
+        "*": 128,
+        "+": 21,
+        "-": 51,
+        "fma": 924
+      },
+      "accumulations": 1,
+      "fused_accumulations": 64,
+      "weighted_flops": 1125,
+      "conventional_flops": 2049,
+      "operator": "L2L",
+      "order": 7,
+      "with_trace": true
+    },
+    {
+      "arithmetic": {
+        "*": 316,
+        "+": 4,
+        "-": 20,
+        "fma": 185
+      },
+      "accumulations": 4,
+      "fused_accumulations": 45,
+      "weighted_flops": 529,
+      "conventional_flops": 714,
+      "operator": "P2M",
+      "order": 6
+    },
+    {
+      "arithmetic": {
+        "*": 64,
+        "+": 2,
+        "-": 40,
+        "fma": 103
+      },
+      "accumulations": 3,
+      "fused_accumulations": 61,
+      "weighted_flops": 212,
+      "conventional_flops": 315,
+      "operator": "P2L",
+      "order": 7
+    },
+    {
+      "arithmetic": {
+        "*": 95,
+        "+": 21,
+        "-": 22,
+        "fma": 130
+      },
+      "accumulations": 0,
+      "fused_accumulations": 4,
+      "weighted_flops": 268,
+      "conventional_flops": 398,
+      "operator": "M2P",
+      "order": 6,
+      "centered": true
+    },
+    {
+      "arithmetic": {
+        "*": 99,
+        "+": 24,
+        "-": 23,
+        "fma": 133
+      },
+      "accumulations": 0,
+      "fused_accumulations": 4,
+      "weighted_flops": 279,
+      "conventional_flops": 412,
+      "operator": "M2P",
+      "order": 6,
+      "centered": false
+    },
+    {
+      "arithmetic": {
+        "*": 122,
+        "+": 21,
+        "-": 51,
+        "fma": 256
+      },
+      "accumulations": 1,
+      "fused_accumulations": 3,
+      "weighted_flops": 451,
+      "conventional_flops": 707,
+      "operator": "L2P",
+      "order": 7,
+      "with_trace": false
+    },
+    {
+      "arithmetic": {
+        "*": 122,
+        "+": 21,
+        "-": 51,
+        "fma": 258
+      },
+      "accumulations": 1,
+      "fused_accumulations": 3,
+      "weighted_flops": 453,
+      "conventional_flops": 711,
+      "operator": "L2P",
+      "order": 7,
+      "with_trace": true
+    },
+    {
+      "operator": "CUDA_L2L_WARP",
+      "order": 7,
+      "with_trace": true,
+      "coefficients": 65,
+      "schedule_rows": 31,
+      "phases": 5,
+      "basis_words_per_lane": 2,
+      "shuffle_instructions_per_lane": 123,
+      "shuffle_instructions_per_lane_into": 74,
+      "whole_warp_flops_with_potential": 13943,
+      "whole_warp_flops_without_potential": 10547,
+      "whole_warp_weighted_flops_with_potential": 12949,
+      "whole_warp_weighted_flops_without_potential": 9554
+    },
+    {
+      "arithmetic": {
+        "*": 448,
+        "+": 237,
+        "-": 130,
+        "fma": 845
+      },
+      "accumulations": 64,
+      "fused_accumulations": 0,
+      "weighted_flops": 1724,
+      "conventional_flops": 2569,
+      "operator": "M2M",
+      "order": 7
+    },
+    {
+      "arithmetic": {
+        "*": 191,
+        "+": 28,
+        "-": 79,
+        "fma": 1444
+      },
+      "accumulations": 1,
+      "fused_accumulations": 80,
+      "weighted_flops": 1743,
+      "conventional_flops": 3187,
+      "operator": "L2L",
+      "order": 8,
+      "with_trace": false
+    },
+    {
+      "arithmetic": {
+        "*": 191,
+        "+": 28,
+        "-": 79,
+        "fma": 1447
+      },
+      "accumulations": 1,
+      "fused_accumulations": 81,
+      "weighted_flops": 1746,
+      "conventional_flops": 3193,
+      "operator": "L2L",
+      "order": 8,
+      "with_trace": true
+    },
+    {
+      "arithmetic": {
+        "*": 549,
+        "+": 14,
+        "-": 36,
+        "fma": 284
+      },
+      "accumulations": 4,
+      "fused_accumulations": 60,
+      "weighted_flops": 887,
+      "conventional_flops": 1171,
+      "operator": "P2M",
+      "order": 7
+    },
+    {
+      "arithmetic": {
+        "*": 77,
+        "+": 3,
+        "-": 59,
+        "fma": 148
+      },
+      "accumulations": 3,
+      "fused_accumulations": 78,
+      "weighted_flops": 290,
+      "conventional_flops": 438,
+      "operator": "P2L",
+      "order": 8
+    },
+    {
+      "arithmetic": {
+        "*": 133,
+        "+": 30,
+        "-": 35,
+        "fma": 183
+      },
+      "accumulations": 0,
+      "fused_accumulations": 4,
+      "weighted_flops": 381,
+      "conventional_flops": 564,
+      "operator": "M2P",
+      "order": 7,
+      "centered": true
+    },
+    {
+      "arithmetic": {
+        "*": 137,
+        "+": 33,
+        "-": 36,
+        "fma": 186
+      },
+      "accumulations": 0,
+      "fused_accumulations": 4,
+      "weighted_flops": 392,
+      "conventional_flops": 578,
+      "operator": "M2P",
+      "order": 7,
+      "centered": false
+    },
+    {
+      "arithmetic": {
+        "*": 184,
+        "+": 28,
+        "-": 79,
+        "fma": 352
+      },
+      "accumulations": 1,
+      "fused_accumulations": 3,
+      "weighted_flops": 644,
+      "conventional_flops": 996,
+      "operator": "L2P",
+      "order": 8,
+      "with_trace": false
+    },
+    {
+      "arithmetic": {
+        "*": 184,
+        "+": 28,
+        "-": 79,
+        "fma": 354
+      },
+      "accumulations": 1,
+      "fused_accumulations": 3,
+      "weighted_flops": 646,
+      "conventional_flops": 1000,
+      "operator": "L2P",
+      "order": 8,
+      "with_trace": true
+    },
+    {
+      "operator": "CUDA_L2L_WARP",
+      "order": 8,
+      "with_trace": true,
+      "coefficients": 82,
+      "schedule_rows": 52,
+      "phases": 8,
+      "basis_words_per_lane": 3,
+      "shuffle_instructions_per_lane": 239,
+      "shuffle_instructions_per_lane_into": 175,
+      "whole_warp_flops_with_potential": 22726,
+      "whole_warp_flops_without_potential": 17538,
+      "whole_warp_weighted_flops_with_potential": 21060,
+      "whole_warp_weighted_flops_without_potential": 15873
+    }
+  ],
+  "representations": {
+    "spherical": {
+      "representation": "Spherical",
+      "cost_model": {
+        "add": 1,
+        "subtract": 1,
+        "multiply": 1,
+        "divide": 1,
+        "fma": 1,
+        "sqrt": 7
+      },
+      "description": "Exact live emitted arithmetic per lane, including geometry and output accumulation. Unary signs, copies, comparisons and selects cost zero. Division by square root costs eight. These weighted costs are not measured timings.",
+      "kernels": [
+        {
+          "operator": "P2m",
+          "degree": 1,
+          "variant": null,
+          "arithmetic": {
+            "multiply": 5,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 9
+        },
+        {
+          "operator": "P2l",
+          "degree": 2,
+          "variant": null,
+          "arithmetic": {
+            "multiply": 18,
+            "fma": 11,
+            "divide": 2,
+            "sqrt": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 41
+        },
+        {
+          "operator": "Greens",
+          "degree": 2,
+          "variant": null,
+          "arithmetic": {
+            "multiply": 15,
+            "fma": 5,
+            "divide": 2,
+            "sqrt": 1
+          },
+          "weighted_flops": 29
+        },
+        {
+          "operator": "M2lDerivatives",
+          "degree": 2,
+          "variant": null,
+          "arithmetic": {
+            "multiply": 6,
+            "fma": 19,
+            "add": 4
+          },
+          "weighted_flops": 29
+        },
+        {
+          "operator": "M2m",
+          "degree": 1,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 2,
+            "fma": 3,
+            "add": 4
+          },
+          "weighted_flops": 9
+        },
+        {
+          "operator": "M2m",
+          "degree": 1,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 9,
+            "fma": 7,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 4
+          },
+          "weighted_flops": 28
+        },
+        {
+          "operator": "M2m",
+          "degree": 1,
+          "variant": 2,
+          "arithmetic": {
+            "fma": 8,
+            "multiply": 11,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 3
+          },
+          "weighted_flops": 30
+        },
+        {
+          "operator": "M2l",
+          "degree": 2,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 25,
+            "fma": 22,
+            "divide": 2,
+            "sqrt": 1,
+            "add": 4,
+            "subtract": 2
+          },
+          "weighted_flops": 62
+        },
+        {
+          "operator": "M2l",
+          "degree": 2,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 32,
+            "fma": 18,
+            "selectZero": 2,
+            "sqrt": 2,
+            "divide": 3,
+            "add": 4,
+            "subtract": 4
+          },
+          "weighted_flops": 75
+        },
+        {
+          "operator": "M2l",
+          "degree": 2,
+          "variant": 2,
+          "arithmetic": {
+            "multiply": 37,
+            "fma": 22,
+            "selectZero": 3,
+            "sqrt": 2,
+            "divide": 2,
+            "add": 5
+          },
+          "weighted_flops": 80
+        },
+        {
+          "operator": "M2p",
+          "degree": 2,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 23,
+            "fma": 19,
+            "divide": 2,
+            "sqrt": 1,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 55
+        },
+        {
+          "operator": "M2p",
+          "degree": 2,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 24,
+            "fma": 15,
+            "selectZero": 2,
+            "sqrt": 2,
+            "divide": 3,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 60
+        },
+        {
+          "operator": "M2p",
+          "degree": 2,
+          "variant": 2,
+          "arithmetic": {
+            "multiply": 25,
+            "fma": 12,
+            "selectZero": 3,
+            "sqrt": 2,
+            "divide": 2,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 57
+        },
+        {
+          "operator": "L2l",
+          "degree": 2,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 17,
+            "fma": 24,
+            "add": 9
+          },
+          "weighted_flops": 50
+        },
+        {
+          "operator": "L2l",
+          "degree": 2,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 28,
+            "fma": 30,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 9
+          },
+          "weighted_flops": 75
+        },
+        {
+          "operator": "L2l",
+          "degree": 2,
+          "variant": 2,
+          "arithmetic": {
+            "multiply": 30,
+            "fma": 30,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 9
+          },
+          "weighted_flops": 77
+        },
+        {
+          "operator": "L2p",
+          "degree": 2,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 17,
+            "fma": 24,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 45
+        },
+        {
+          "operator": "L2p",
+          "degree": 2,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 24,
+            "fma": 25,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 61
+        },
+        {
+          "operator": "L2p",
+          "degree": 2,
+          "variant": 2,
+          "arithmetic": {
+            "multiply": 19,
+            "fma": 21,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 52
+        },
+        {
+          "operator": "P2m",
+          "degree": 2,
+          "variant": null,
+          "arithmetic": {
+            "multiply": 14,
+            "fma": 10,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 28
+        },
+        {
+          "operator": "P2l",
+          "degree": 3,
+          "variant": null,
+          "arithmetic": {
+            "multiply": 32,
+            "fma": 21,
+            "divide": 2,
+            "sqrt": 1,
+            "subtract": 5
+          },
+          "weighted_flops": 67
+        },
+        {
+          "operator": "Greens",
+          "degree": 3,
+          "variant": null,
+          "arithmetic": {
+            "multiply": 27,
+            "fma": 10,
+            "divide": 2,
+            "sqrt": 1
+          },
+          "weighted_flops": 46
+        },
+        {
+          "operator": "M2lDerivatives",
+          "degree": 3,
+          "variant": null,
+          "arithmetic": {
+            "multiply": 15,
+            "fma": 68,
+            "add": 9
+          },
+          "weighted_flops": 92
+        },
+        {
+          "operator": "M2m",
+          "degree": 2,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 13,
+            "fma": 24,
+            "add": 9
+          },
+          "weighted_flops": 46
+        },
+        {
+          "operator": "M2m",
+          "degree": 2,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 26,
+            "fma": 30,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 9
+          },
+          "weighted_flops": 73
+        },
+        {
+          "operator": "M2m",
+          "degree": 2,
+          "variant": 2,
+          "arithmetic": {
+            "multiply": 33,
+            "fma": 31,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 8
+          },
+          "weighted_flops": 80
+        },
+        {
+          "operator": "M2l",
+          "degree": 3,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 50,
+            "fma": 76,
+            "divide": 2,
+            "sqrt": 1,
+            "add": 9,
+            "subtract": 2
+          },
+          "weighted_flops": 146
+        },
+        {
+          "operator": "M2l",
+          "degree": 3,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 56,
+            "fma": 62,
+            "selectZero": 2,
+            "sqrt": 2,
+            "divide": 3,
+            "add": 9
+          },
+          "weighted_flops": 144
+        },
+        {
+          "operator": "M2l",
+          "degree": 3,
+          "variant": 2,
+          "arithmetic": {
+            "multiply": 78,
+            "fma": 54,
+            "selectZero": 3,
+            "sqrt": 2,
+            "divide": 2,
+            "add": 10,
+            "subtract": 1
+          },
+          "weighted_flops": 159
+        },
+        {
+          "operator": "M2p",
+          "degree": 3,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 43,
+            "fma": 50,
+            "divide": 2,
+            "sqrt": 1,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 106
+        },
+        {
+          "operator": "M2p",
+          "degree": 3,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 42,
+            "fma": 38,
+            "selectZero": 2,
+            "sqrt": 2,
+            "divide": 3,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 101
+        },
+        {
+          "operator": "M2p",
+          "degree": 3,
+          "variant": 2,
+          "arithmetic": {
+            "multiply": 44,
+            "fma": 30,
+            "selectZero": 3,
+            "sqrt": 2,
+            "divide": 2,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 94
+        },
+        {
+          "operator": "L2l",
+          "degree": 3,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 36,
+            "fma": 78,
+            "add": 16
+          },
+          "weighted_flops": 130
+        },
+        {
+          "operator": "L2l",
+          "degree": 3,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 56,
+            "fma": 77,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 16
+          },
+          "weighted_flops": 157
+        },
+        {
+          "operator": "L2l",
+          "degree": 3,
+          "variant": 2,
+          "arithmetic": {
+            "multiply": 62,
+            "fma": 76,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 16
+          },
+          "weighted_flops": 162
+        },
+        {
+          "operator": "L2p",
+          "degree": 3,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 36,
+            "fma": 57,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 97
+        },
+        {
+          "operator": "L2p",
+          "degree": 3,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 44,
+            "fma": 51,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 107
+        },
+        {
+          "operator": "L2p",
+          "degree": 3,
+          "variant": 2,
+          "arithmetic": {
+            "multiply": 33,
+            "fma": 44,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 89
+        },
+        {
+          "operator": "P2m",
+          "degree": 3,
+          "variant": null,
+          "arithmetic": {
+            "multiply": 29,
+            "fma": 20,
+            "add": 1,
+            "subtract": 5
+          },
+          "weighted_flops": 55
+        },
+        {
+          "operator": "P2l",
+          "degree": 4,
+          "variant": null,
+          "arithmetic": {
+            "multiply": 49,
+            "fma": 35,
+            "divide": 2,
+            "sqrt": 1,
+            "subtract": 7
+          },
+          "weighted_flops": 100
+        },
+        {
+          "operator": "Greens",
+          "degree": 4,
+          "variant": null,
+          "arithmetic": {
+            "multiply": 42,
+            "fma": 17,
+            "divide": 2,
+            "sqrt": 1
+          },
+          "weighted_flops": 68
+        },
+        {
+          "operator": "M2lDerivatives",
+          "degree": 4,
+          "variant": null,
+          "arithmetic": {
+            "multiply": 28,
+            "fma": 176,
+            "add": 16
+          },
+          "weighted_flops": 220
+        },
+        {
+          "operator": "M2m",
+          "degree": 3,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 30,
+            "fma": 78,
+            "add": 16
+          },
+          "weighted_flops": 124
+        },
+        {
+          "operator": "M2m",
+          "degree": 3,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 53,
+            "fma": 77,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 16
+          },
+          "weighted_flops": 154
+        },
+        {
+          "operator": "M2m",
+          "degree": 3,
+          "variant": 2,
+          "arithmetic": {
+            "multiply": 64,
+            "fma": 76,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "subtract": 1,
+            "add": 15
+          },
+          "weighted_flops": 164
+        },
+        {
+          "operator": "M2l",
+          "degree": 4,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 82,
+            "fma": 191,
+            "divide": 2,
+            "sqrt": 1,
+            "add": 16,
+            "subtract": 2
+          },
+          "weighted_flops": 300
+        },
+        {
+          "operator": "M2l",
+          "degree": 4,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 98,
+            "fma": 135,
+            "selectZero": 2,
+            "sqrt": 2,
+            "divide": 3,
+            "add": 16,
+            "subtract": 4
+          },
+          "weighted_flops": 270
+        },
+        {
+          "operator": "M2l",
+          "degree": 4,
+          "variant": 2,
+          "arithmetic": {
+            "multiply": 141,
+            "fma": 118,
+            "selectZero": 3,
+            "sqrt": 2,
+            "divide": 2,
+            "add": 17,
+            "subtract": 1
+          },
+          "weighted_flops": 293
+        },
+        {
+          "operator": "M2p",
+          "degree": 4,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 68,
+            "fma": 95,
+            "divide": 2,
+            "sqrt": 1,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 176
+        },
+        {
+          "operator": "M2p",
+          "degree": 4,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 64,
+            "fma": 70,
+            "selectZero": 2,
+            "sqrt": 2,
+            "divide": 3,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 155
+        },
+        {
+          "operator": "M2p",
+          "degree": 4,
+          "variant": 2,
+          "arithmetic": {
+            "multiply": 68,
+            "fma": 58,
+            "selectZero": 3,
+            "sqrt": 2,
+            "divide": 2,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 146
+        },
+        {
+          "operator": "L2l",
+          "degree": 4,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 61,
+            "fma": 193,
+            "add": 25
+          },
+          "weighted_flops": 279
+        },
+        {
+          "operator": "L2l",
+          "degree": 4,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 92,
+            "fma": 162,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 25
+          },
+          "weighted_flops": 287
+        },
+        {
+          "operator": "L2l",
+          "degree": 4,
+          "variant": 2,
+          "arithmetic": {
+            "multiply": 104,
+            "fma": 150,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 27
+          },
+          "weighted_flops": 289
+        },
+        {
+          "operator": "L2p",
+          "degree": 4,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 61,
+            "fma": 104,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 169
+        },
+        {
+          "operator": "L2p",
+          "degree": 4,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 70,
+            "fma": 86,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 168
+        },
+        {
+          "operator": "L2p",
+          "degree": 4,
+          "variant": 2,
+          "arithmetic": {
+            "multiply": 48,
+            "fma": 76,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 136
+        },
+        {
+          "operator": "P2m",
+          "degree": 4,
+          "variant": null,
+          "arithmetic": {
+            "multiply": 48,
+            "fma": 34,
+            "add": 1,
+            "subtract": 7
+          },
+          "weighted_flops": 90
+        },
+        {
+          "operator": "P2l",
+          "degree": 5,
+          "variant": null,
+          "arithmetic": {
+            "multiply": 69,
+            "fma": 53,
+            "divide": 2,
+            "sqrt": 1,
+            "subtract": 9
+          },
+          "weighted_flops": 140
+        },
+        {
+          "operator": "Greens",
+          "degree": 5,
+          "variant": null,
+          "arithmetic": {
+            "multiply": 60,
+            "fma": 26,
+            "divide": 2,
+            "sqrt": 1
+          },
+          "weighted_flops": 95
+        },
+        {
+          "operator": "M2lDerivatives",
+          "degree": 5,
+          "variant": null,
+          "arithmetic": {
+            "multiply": 45,
+            "fma": 379,
+            "add": 25
+          },
+          "weighted_flops": 449
+        },
+        {
+          "operator": "M2m",
+          "degree": 4,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 53,
+            "fma": 193,
+            "add": 25
+          },
+          "weighted_flops": 271
+        },
+        {
+          "operator": "M2m",
+          "degree": 4,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 88,
+            "fma": 162,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 25
+          },
+          "weighted_flops": 283
+        },
+        {
+          "operator": "M2m",
+          "degree": 4,
+          "variant": 2,
+          "arithmetic": {
+            "multiply": 105,
+            "fma": 151,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 25,
+            "subtract": 1
+          },
+          "weighted_flops": 290
+        },
+        {
+          "operator": "M2l",
+          "degree": 5,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 121,
+            "fma": 403,
+            "divide": 2,
+            "sqrt": 1,
+            "add": 25,
+            "subtract": 2
+          },
+          "weighted_flops": 560
+        },
+        {
+          "operator": "M2l",
+          "degree": 5,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 142,
+            "fma": 270,
+            "selectZero": 2,
+            "sqrt": 2,
+            "divide": 3,
+            "add": 25
+          },
+          "weighted_flops": 454
+        },
+        {
+          "operator": "M2l",
+          "degree": 5,
+          "variant": 2,
+          "arithmetic": {
+            "multiply": 220,
+            "fma": 202,
+            "selectZero": 3,
+            "sqrt": 2,
+            "divide": 2,
+            "add": 28,
+            "subtract": 2
+          },
+          "weighted_flops": 468
+        },
+        {
+          "operator": "M2p",
+          "degree": 5,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 98,
+            "fma": 154,
+            "divide": 2,
+            "sqrt": 1,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 265
+        },
+        {
+          "operator": "M2p",
+          "degree": 5,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 92,
+            "fma": 111,
+            "selectZero": 2,
+            "sqrt": 2,
+            "divide": 3,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 224
+        },
+        {
+          "operator": "M2p",
+          "degree": 5,
+          "variant": 2,
+          "arithmetic": {
+            "multiply": 100,
+            "fma": 95,
+            "selectZero": 3,
+            "sqrt": 2,
+            "divide": 2,
+            "add": 2,
+            "subtract": 3
+          },
+          "weighted_flops": 216
+        },
+        {
+          "operator": "L2l",
+          "degree": 5,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 91,
+            "fma": 405,
+            "add": 36
+          },
+          "weighted_flops": 532
+        },
+        {
+          "operator": "L2l",
+          "degree": 5,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 135,
+            "fma": 304,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 36
+          },
+          "weighted_flops": 483
+        },
+        {
+          "operator": "L2l",
+          "degree": 5,
+          "variant": 2,
+          "arithmetic": {
+            "multiply": 154,
+            "fma": 264,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 38
+          },
+          "weighted_flops": 464
+        },
+        {
+          "operator": "L2p",
+          "degree": 5,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 91,
+            "fma": 165,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 260
+        },
+        {
+          "operator": "L2p",
+          "degree": 5,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 101,
+            "fma": 130,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 243
+        },
+        {
+          "operator": "L2p",
+          "degree": 5,
+          "variant": 2,
+          "arithmetic": {
+            "multiply": 65,
+            "fma": 121,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 198
+        },
+        {
+          "operator": "P2m",
+          "degree": 5,
+          "variant": null,
+          "arithmetic": {
+            "multiply": 70,
+            "fma": 52,
+            "add": 1,
+            "subtract": 9
+          },
+          "weighted_flops": 132
+        },
+        {
+          "operator": "P2l",
+          "degree": 6,
+          "variant": null,
+          "arithmetic": {
+            "multiply": 90,
+            "fma": 75,
+            "divide": 2,
+            "sqrt": 1,
+            "subtract": 11
+          },
+          "weighted_flops": 185
+        },
+        {
+          "operator": "Greens",
+          "degree": 6,
+          "variant": null,
+          "arithmetic": {
+            "multiply": 79,
+            "fma": 37,
+            "divide": 2,
+            "sqrt": 1
+          },
+          "weighted_flops": 125
+        },
+        {
+          "operator": "M2lDerivatives",
+          "degree": 6,
+          "variant": null,
+          "arithmetic": {
+            "multiply": 66,
+            "fma": 719,
+            "add": 36
+          },
+          "weighted_flops": 821
+        },
+        {
+          "operator": "M2m",
+          "degree": 5,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 81,
+            "fma": 405,
+            "add": 36
+          },
+          "weighted_flops": 522
+        },
+        {
+          "operator": "M2m",
+          "degree": 5,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 130,
+            "fma": 304,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 36
+          },
+          "weighted_flops": 478
+        },
+        {
+          "operator": "M2m",
+          "degree": 5,
+          "variant": 2,
+          "arithmetic": {
+            "multiply": 155,
+            "fma": 265,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 36,
+            "subtract": 1
+          },
+          "weighted_flops": 465
+        },
+        {
+          "operator": "M2l",
+          "degree": 6,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 165,
+            "fma": 754,
+            "divide": 2,
+            "sqrt": 1,
+            "add": 36,
+            "subtract": 2
+          },
+          "weighted_flops": 966
+        },
+        {
+          "operator": "M2l",
+          "degree": 6,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 200,
+            "fma": 473,
+            "selectZero": 2,
+            "sqrt": 2,
+            "divide": 3,
+            "add": 36,
+            "subtract": 4
+          },
+          "weighted_flops": 730
+        },
+        {
+          "operator": "M2l",
+          "degree": 6,
+          "variant": 2,
+          "arithmetic": {
+            "multiply": 319,
+            "fma": 334,
+            "selectZero": 3,
+            "sqrt": 2,
+            "divide": 2,
+            "add": 39,
+            "subtract": 2
+          },
+          "weighted_flops": 710
+        },
+        {
+          "operator": "M2p",
+          "degree": 6,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 131,
+            "fma": 227,
+            "divide": 2,
+            "sqrt": 1,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 371
+        },
+        {
+          "operator": "M2p",
+          "degree": 6,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 122,
+            "fma": 161,
+            "selectZero": 2,
+            "sqrt": 2,
+            "divide": 3,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 304
+        },
+        {
+          "operator": "M2p",
+          "degree": 6,
+          "variant": 2,
+          "arithmetic": {
+            "multiply": 138,
+            "fma": 147,
+            "selectZero": 3,
+            "sqrt": 2,
+            "divide": 2,
+            "add": 2,
+            "subtract": 3
+          },
+          "weighted_flops": 306
+        },
+        {
+          "operator": "L2l",
+          "degree": 6,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 128,
+            "fma": 756,
+            "add": 49
+          },
+          "weighted_flops": 933
+        },
+        {
+          "operator": "L2l",
+          "degree": 6,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 187,
+            "fma": 525,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 49
+          },
+          "weighted_flops": 769
+        },
+        {
+          "operator": "L2l",
+          "degree": 6,
+          "variant": 2,
+          "arithmetic": {
+            "multiply": 212,
+            "fma": 424,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 51
+          },
+          "weighted_flops": 695
+        },
+        {
+          "operator": "L2p",
+          "degree": 6,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 128,
+            "fma": 240,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 372
+        },
+        {
+          "operator": "L2p",
+          "degree": 6,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 139,
+            "fma": 183,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 334
+        },
+        {
+          "operator": "L2p",
+          "degree": 6,
+          "variant": 2,
+          "arithmetic": {
+            "multiply": 83,
+            "fma": 179,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 274
+        },
+        {
+          "operator": "P2m",
+          "degree": 6,
+          "variant": null,
+          "arithmetic": {
+            "multiply": 97,
+            "fma": 74,
+            "add": 1,
+            "subtract": 11
+          },
+          "weighted_flops": 183
+        },
+        {
+          "operator": "P2l",
+          "degree": 7,
+          "variant": null,
+          "arithmetic": {
+            "multiply": 116,
+            "fma": 101,
+            "divide": 2,
+            "sqrt": 1,
+            "subtract": 13
+          },
+          "weighted_flops": 239
+        },
+        {
+          "operator": "Greens",
+          "degree": 7,
+          "variant": null,
+          "arithmetic": {
+            "multiply": 103,
+            "fma": 50,
+            "divide": 2,
+            "sqrt": 1
+          },
+          "weighted_flops": 162
+        },
+        {
+          "operator": "M2lDerivatives",
+          "degree": 7,
+          "variant": null,
+          "arithmetic": {
+            "multiply": 91,
+            "fma": 1248,
+            "add": 49
+          },
+          "weighted_flops": 1388
+        },
+        {
+          "operator": "M2m",
+          "degree": 6,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 116,
+            "fma": 756,
+            "add": 49
+          },
+          "weighted_flops": 921
+        },
+        {
+          "operator": "M2m",
+          "degree": 6,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 181,
+            "fma": 525,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 49
+          },
+          "weighted_flops": 763
+        },
+        {
+          "operator": "M2m",
+          "degree": 6,
+          "variant": 2,
+          "arithmetic": {
+            "multiply": 213,
+            "fma": 425,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 49,
+            "subtract": 1
+          },
+          "weighted_flops": 696
+        },
+        {
+          "operator": "M2l",
+          "degree": 7,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 218,
+            "fma": 1296,
+            "divide": 2,
+            "sqrt": 1,
+            "add": 49,
+            "subtract": 2
+          },
+          "weighted_flops": 1574
+        },
+        {
+          "operator": "M2l",
+          "degree": 7,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 262,
+            "fma": 786,
+            "selectZero": 2,
+            "sqrt": 2,
+            "divide": 3,
+            "add": 49
+          },
+          "weighted_flops": 1114
+        },
+        {
+          "operator": "M2l",
+          "degree": 7,
+          "variant": 2,
+          "arithmetic": {
+            "multiply": 432,
+            "fma": 496,
+            "selectZero": 3,
+            "sqrt": 2,
+            "divide": 2,
+            "add": 53,
+            "subtract": 4
+          },
+          "weighted_flops": 1001
+        },
+        {
+          "operator": "M2p",
+          "degree": 7,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 171,
+            "fma": 314,
+            "divide": 2,
+            "sqrt": 1,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 498
+        },
+        {
+          "operator": "M2p",
+          "degree": 7,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 160,
+            "fma": 220,
+            "selectZero": 2,
+            "sqrt": 2,
+            "divide": 3,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 401
+        },
+        {
+          "operator": "M2p",
+          "degree": 7,
+          "variant": 2,
+          "arithmetic": {
+            "multiply": 181,
+            "fma": 213,
+            "selectZero": 3,
+            "sqrt": 2,
+            "divide": 2,
+            "add": 2,
+            "subtract": 3
+          },
+          "weighted_flops": 415
+        },
+        {
+          "operator": "L2l",
+          "degree": 7,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 170,
+            "fma": 1298,
+            "add": 64
+          },
+          "weighted_flops": 1532
+        },
+        {
+          "operator": "L2l",
+          "degree": 7,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 246,
+            "fma": 852,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 64
+          },
+          "weighted_flops": 1170
+        },
+        {
+          "operator": "L2l",
+          "degree": 7,
+          "variant": 2,
+          "arithmetic": {
+            "multiply": 278,
+            "fma": 638,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 66
+          },
+          "weighted_flops": 990
+        },
+        {
+          "operator": "L2p",
+          "degree": 7,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 170,
+            "fma": 329,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 503
+        },
+        {
+          "operator": "L2p",
+          "degree": 7,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 182,
+            "fma": 245,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 439
+        },
+        {
+          "operator": "L2p",
+          "degree": 7,
+          "variant": 2,
+          "arithmetic": {
+            "multiply": 103,
+            "fma": 254,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 369
+        },
+        {
+          "operator": "P2m",
+          "degree": 7,
+          "variant": null,
+          "arithmetic": {
+            "multiply": 127,
+            "fma": 100,
+            "add": 1,
+            "subtract": 13
+          },
+          "weighted_flops": 241
+        },
+        {
+          "operator": "P2l",
+          "degree": 8,
+          "variant": null,
+          "arithmetic": {
+            "multiply": 144,
+            "fma": 131,
+            "divide": 2,
+            "sqrt": 1,
+            "subtract": 15
+          },
+          "weighted_flops": 299
+        },
+        {
+          "operator": "Greens",
+          "degree": 8,
+          "variant": null,
+          "arithmetic": {
+            "multiply": 129,
+            "fma": 65,
+            "divide": 2,
+            "sqrt": 1
+          },
+          "weighted_flops": 203
+        },
+        {
+          "operator": "M2lDerivatives",
+          "degree": 8,
+          "variant": null,
+          "arithmetic": {
+            "multiply": 120,
+            "fma": 2024,
+            "add": 64
+          },
+          "weighted_flops": 2208
+        },
+        {
+          "operator": "M2m",
+          "degree": 7,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 156,
+            "fma": 1298,
+            "add": 64
+          },
+          "weighted_flops": 1518
+        },
+        {
+          "operator": "M2m",
+          "degree": 7,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 239,
+            "fma": 852,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 64
+          },
+          "weighted_flops": 1163
+        },
+        {
+          "operator": "M2m",
+          "degree": 7,
+          "variant": 2,
+          "arithmetic": {
+            "multiply": 278,
+            "fma": 639,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 64,
+            "subtract": 1
+          },
+          "weighted_flops": 990
+        },
+        {
+          "operator": "M2l",
+          "degree": 8,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 277,
+            "fma": 2087,
+            "divide": 2,
+            "sqrt": 1,
+            "add": 64,
+            "subtract": 2
+          },
+          "weighted_flops": 2439
+        },
+        {
+          "operator": "M2l",
+          "degree": 8,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 339,
+            "fma": 1223,
+            "selectZero": 2,
+            "sqrt": 2,
+            "divide": 3,
+            "add": 64,
+            "subtract": 4
+          },
+          "weighted_flops": 1647
+        },
+        {
+          "operator": "M2l",
+          "degree": 8,
+          "variant": 2,
+          "arithmetic": {
+            "multiply": 562,
+            "fma": 720,
+            "selectZero": 3,
+            "sqrt": 2,
+            "divide": 2,
+            "add": 69,
+            "subtract": 3
+          },
+          "weighted_flops": 1370
+        },
+        {
+          "operator": "M2p",
+          "degree": 8,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 215,
+            "fma": 415,
+            "divide": 2,
+            "sqrt": 1,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 643
+        },
+        {
+          "operator": "M2p",
+          "degree": 8,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 201,
+            "fma": 288,
+            "selectZero": 2,
+            "sqrt": 2,
+            "divide": 3,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 510
+        },
+        {
+          "operator": "M2p",
+          "degree": 8,
+          "variant": 2,
+          "arithmetic": {
+            "multiply": 229,
+            "fma": 297,
+            "selectZero": 3,
+            "sqrt": 2,
+            "divide": 2,
+            "add": 2,
+            "subtract": 3
+          },
+          "weighted_flops": 547
+        },
+        {
+          "operator": "L2l",
+          "degree": 8,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 218,
+            "fma": 2089,
+            "add": 81
+          },
+          "weighted_flops": 2388
+        },
+        {
+          "operator": "L2l",
+          "degree": 8,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 313,
+            "fma": 1315,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 81
+          },
+          "weighted_flops": 1717
+        },
+        {
+          "operator": "L2l",
+          "degree": 8,
+          "variant": 2,
+          "arithmetic": {
+            "multiply": 352,
+            "fma": 910,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 83
+          },
+          "weighted_flops": 1353
+        },
+        {
+          "operator": "L2p",
+          "degree": 8,
+          "variant": 0,
+          "arithmetic": {
+            "multiply": 218,
+            "fma": 432,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 654
+        },
+        {
+          "operator": "L2p",
+          "degree": 8,
+          "variant": 1,
+          "arithmetic": {
+            "multiply": 231,
+            "fma": 316,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 559
+        },
+        {
+          "operator": "L2p",
+          "degree": 8,
+          "variant": 2,
+          "arithmetic": {
+            "multiply": 124,
+            "fma": 346,
+            "selectZero": 2,
+            "sqrt": 1,
+            "divide": 1,
+            "add": 1,
+            "subtract": 3
+          },
+          "weighted_flops": 482
+        }
+      ],
+      "selections": [
+        {
+          "operator": "M2m",
+          "fmm_order": 3,
+          "degree": 1,
+          "candidate_flops": [
+            9,
+            28,
+            30
+          ],
+          "selected_variant": 0,
+          "weighted_flops": 9
+        },
+        {
+          "operator": "M2l",
+          "fmm_order": 3,
+          "degree": 2,
+          "candidate_flops": [
+            62,
+            75,
+            80
+          ],
+          "selected_variant": 0,
+          "weighted_flops": 62
+        },
+        {
+          "operator": "M2p",
+          "fmm_order": 3,
+          "degree": 2,
+          "candidate_flops": [
+            55,
+            60,
+            57
+          ],
+          "selected_variant": 0,
+          "weighted_flops": 55
+        },
+        {
+          "operator": "L2l",
+          "fmm_order": 3,
+          "degree": 2,
+          "candidate_flops": [
+            50,
+            75,
+            77
+          ],
+          "selected_variant": 0,
+          "weighted_flops": 50
+        },
+        {
+          "operator": "L2p",
+          "fmm_order": 3,
+          "degree": 2,
+          "candidate_flops": [
+            45,
+            61,
+            52
+          ],
+          "selected_variant": 0,
+          "weighted_flops": 45
+        },
+        {
+          "operator": "M2m",
+          "fmm_order": 4,
+          "degree": 2,
+          "candidate_flops": [
+            46,
+            73,
+            80
+          ],
+          "selected_variant": 0,
+          "weighted_flops": 46
+        },
+        {
+          "operator": "M2l",
+          "fmm_order": 4,
+          "degree": 3,
+          "candidate_flops": [
+            146,
+            144,
+            159
+          ],
+          "selected_variant": 1,
+          "weighted_flops": 144
+        },
+        {
+          "operator": "M2p",
+          "fmm_order": 4,
+          "degree": 3,
+          "candidate_flops": [
+            106,
+            101,
+            94
+          ],
+          "selected_variant": 2,
+          "weighted_flops": 94
+        },
+        {
+          "operator": "L2l",
+          "fmm_order": 4,
+          "degree": 3,
+          "candidate_flops": [
+            130,
+            157,
+            162
+          ],
+          "selected_variant": 0,
+          "weighted_flops": 130
+        },
+        {
+          "operator": "L2p",
+          "fmm_order": 4,
+          "degree": 3,
+          "candidate_flops": [
+            97,
+            107,
+            89
+          ],
+          "selected_variant": 2,
+          "weighted_flops": 89
+        },
+        {
+          "operator": "M2m",
+          "fmm_order": 5,
+          "degree": 3,
+          "candidate_flops": [
+            124,
+            154,
+            164
+          ],
+          "selected_variant": 0,
+          "weighted_flops": 124
+        },
+        {
+          "operator": "M2l",
+          "fmm_order": 5,
+          "degree": 4,
+          "candidate_flops": [
+            300,
+            270,
+            293
+          ],
+          "selected_variant": 1,
+          "weighted_flops": 270
+        },
+        {
+          "operator": "M2p",
+          "fmm_order": 5,
+          "degree": 4,
+          "candidate_flops": [
+            176,
+            155,
+            146
+          ],
+          "selected_variant": 2,
+          "weighted_flops": 146
+        },
+        {
+          "operator": "L2l",
+          "fmm_order": 5,
+          "degree": 4,
+          "candidate_flops": [
+            279,
+            287,
+            289
+          ],
+          "selected_variant": 0,
+          "weighted_flops": 279
+        },
+        {
+          "operator": "L2p",
+          "fmm_order": 5,
+          "degree": 4,
+          "candidate_flops": [
+            169,
+            168,
+            136
+          ],
+          "selected_variant": 2,
+          "weighted_flops": 136
+        },
+        {
+          "operator": "M2m",
+          "fmm_order": 6,
+          "degree": 4,
+          "candidate_flops": [
+            271,
+            283,
+            290
+          ],
+          "selected_variant": 0,
+          "weighted_flops": 271
+        },
+        {
+          "operator": "M2l",
+          "fmm_order": 6,
+          "degree": 5,
+          "candidate_flops": [
+            560,
+            454,
+            468
+          ],
+          "selected_variant": 1,
+          "weighted_flops": 454
+        },
+        {
+          "operator": "M2p",
+          "fmm_order": 6,
+          "degree": 5,
+          "candidate_flops": [
+            265,
+            224,
+            216
+          ],
+          "selected_variant": 2,
+          "weighted_flops": 216
+        },
+        {
+          "operator": "L2l",
+          "fmm_order": 6,
+          "degree": 5,
+          "candidate_flops": [
+            532,
+            483,
+            464
+          ],
+          "selected_variant": 2,
+          "weighted_flops": 464
+        },
+        {
+          "operator": "L2p",
+          "fmm_order": 6,
+          "degree": 5,
+          "candidate_flops": [
+            260,
+            243,
+            198
+          ],
+          "selected_variant": 2,
+          "weighted_flops": 198
+        },
+        {
+          "operator": "M2m",
+          "fmm_order": 7,
+          "degree": 5,
+          "candidate_flops": [
+            522,
+            478,
+            465
+          ],
+          "selected_variant": 2,
+          "weighted_flops": 465
+        },
+        {
+          "operator": "M2l",
+          "fmm_order": 7,
+          "degree": 6,
+          "candidate_flops": [
+            966,
+            730,
+            710
+          ],
+          "selected_variant": 2,
+          "weighted_flops": 710
+        },
+        {
+          "operator": "M2p",
+          "fmm_order": 7,
+          "degree": 6,
+          "candidate_flops": [
+            371,
+            304,
+            306
+          ],
+          "selected_variant": 1,
+          "weighted_flops": 304
+        },
+        {
+          "operator": "L2l",
+          "fmm_order": 7,
+          "degree": 6,
+          "candidate_flops": [
+            933,
+            769,
+            695
+          ],
+          "selected_variant": 2,
+          "weighted_flops": 695
+        },
+        {
+          "operator": "L2p",
+          "fmm_order": 7,
+          "degree": 6,
+          "candidate_flops": [
+            372,
+            334,
+            274
+          ],
+          "selected_variant": 2,
+          "weighted_flops": 274
+        },
+        {
+          "operator": "M2m",
+          "fmm_order": 8,
+          "degree": 6,
+          "candidate_flops": [
+            921,
+            763,
+            696
+          ],
+          "selected_variant": 2,
+          "weighted_flops": 696
+        },
+        {
+          "operator": "M2l",
+          "fmm_order": 8,
+          "degree": 7,
+          "candidate_flops": [
+            1574,
+            1114,
+            1001
+          ],
+          "selected_variant": 2,
+          "weighted_flops": 1001
+        },
+        {
+          "operator": "M2p",
+          "fmm_order": 8,
+          "degree": 7,
+          "candidate_flops": [
+            498,
+            401,
+            415
+          ],
+          "selected_variant": 1,
+          "weighted_flops": 401
+        },
+        {
+          "operator": "L2l",
+          "fmm_order": 8,
+          "degree": 7,
+          "candidate_flops": [
+            1532,
+            1170,
+            990
+          ],
+          "selected_variant": 2,
+          "weighted_flops": 990
+        },
+        {
+          "operator": "L2p",
+          "fmm_order": 8,
+          "degree": 7,
+          "candidate_flops": [
+            503,
+            439,
+            369
+          ],
+          "selected_variant": 2,
+          "weighted_flops": 369
+        },
+        {
+          "operator": "M2m",
+          "fmm_order": 9,
+          "degree": 7,
+          "candidate_flops": [
+            1518,
+            1163,
+            990
+          ],
+          "selected_variant": 2,
+          "weighted_flops": 990
+        },
+        {
+          "operator": "M2l",
+          "fmm_order": 9,
+          "degree": 8,
+          "candidate_flops": [
+            2439,
+            1647,
+            1370
+          ],
+          "selected_variant": 2,
+          "weighted_flops": 1370
+        },
+        {
+          "operator": "M2p",
+          "fmm_order": 9,
+          "degree": 8,
+          "candidate_flops": [
+            643,
+            510,
+            547
+          ],
+          "selected_variant": 1,
+          "weighted_flops": 510
+        },
+        {
+          "operator": "L2l",
+          "fmm_order": 9,
+          "degree": 8,
+          "candidate_flops": [
+            2388,
+            1717,
+            1353
+          ],
+          "selected_variant": 2,
+          "weighted_flops": 1353
+        },
+        {
+          "operator": "L2p",
+          "fmm_order": 9,
+          "degree": 8,
+          "candidate_flops": [
+            654,
+            559,
+            482
+          ],
+          "selected_variant": 2,
+          "weighted_flops": 482
+        }
+      ]
+    },
+    "sphericalEwald": {
+      "cost_model": {
+        "fma": 1,
+        "sqrt": 7,
+        "add": 1,
+        "multiply": 1,
+        "division": 1,
+        "special_functions": "reported separately"
+      },
+      "lattice_radius": 6,
+      "central_series_terms": 48,
+      "orders": {
+        "3": {
+          "local_degree": 2,
+          "source_degree": 1,
+          "real_image_count": 924,
+          "reciprocal_pair_count": 462,
+          "central_weighted_flops": 330,
+          "real_pair_weighted_flops": 167,
+          "reciprocal_pair_weighted_flops": 80,
+          "green_weighted_flops": 114444,
+          "contraction_weighted_flops": 35,
+          "special_function_calls": {
+            "exp": 1387,
+            "erfc": 924,
+            "sin": 462,
+            "cos": 462
+          },
+          "sqrt_calls": 924
+        },
+        "4": {
+          "local_degree": 3,
+          "source_degree": 2,
+          "real_image_count": 924,
+          "reciprocal_pair_count": 462,
+          "central_weighted_flops": 461,
+          "real_pair_weighted_flops": 278,
+          "reciprocal_pair_weighted_flops": 143,
+          "green_weighted_flops": 194963,
+          "contraction_weighted_flops": 100,
+          "special_function_calls": {
+            "exp": 1387,
+            "erfc": 924,
+            "sin": 462,
+            "cos": 462
+          },
+          "sqrt_calls": 924
+        },
+        "5": {
+          "local_degree": 4,
+          "source_degree": 3,
+          "real_image_count": 924,
+          "reciprocal_pair_count": 462,
+          "central_weighted_flops": 603,
+          "real_pair_weighted_flops": 421,
+          "reciprocal_pair_weighted_flops": 225,
+          "green_weighted_flops": 299055,
+          "contraction_weighted_flops": 228,
+          "special_function_calls": {
+            "exp": 1387,
+            "erfc": 924,
+            "sin": 462,
+            "cos": 462
+          },
+          "sqrt_calls": 924
+        },
+        "6": {
+          "local_degree": 5,
+          "source_degree": 4,
+          "real_image_count": 924,
+          "reciprocal_pair_count": 462,
+          "central_weighted_flops": 756,
+          "real_pair_weighted_flops": 596,
+          "reciprocal_pair_weighted_flops": 326,
+          "green_weighted_flops": 426720,
+          "contraction_weighted_flops": 457,
+          "special_function_calls": {
+            "exp": 1387,
+            "erfc": 924,
+            "sin": 462,
+            "cos": 462
+          },
+          "sqrt_calls": 924
+        },
+        "7": {
+          "local_degree": 6,
+          "source_degree": 5,
+          "real_image_count": 924,
+          "reciprocal_pair_count": 462,
+          "central_weighted_flops": 920,
+          "real_pair_weighted_flops": 803,
+          "reciprocal_pair_weighted_flops": 446,
+          "green_weighted_flops": 577958,
+          "contraction_weighted_flops": 829,
+          "special_function_calls": {
+            "exp": 1387,
+            "erfc": 924,
+            "sin": 462,
+            "cos": 462
+          },
+          "sqrt_calls": 924
+        },
+        "8": {
+          "local_degree": 7,
+          "source_degree": 6,
+          "real_image_count": 924,
+          "reciprocal_pair_count": 462,
+          "central_weighted_flops": 1095,
+          "real_pair_weighted_flops": 1042,
+          "reciprocal_pair_weighted_flops": 585,
+          "green_weighted_flops": 752769,
+          "contraction_weighted_flops": 1396,
+          "special_function_calls": {
+            "exp": 1387,
+            "erfc": 924,
+            "sin": 462,
+            "cos": 462
+          },
+          "sqrt_calls": 924
+        },
+        "9": {
+          "local_degree": 8,
+          "source_degree": 7,
+          "real_image_count": 924,
+          "reciprocal_pair_count": 462,
+          "central_weighted_flops": 1281,
+          "real_pair_weighted_flops": 1313,
+          "reciprocal_pair_weighted_flops": 743,
+          "green_weighted_flops": 951153,
+          "contraction_weighted_flops": 2216,
+          "special_function_calls": {
+            "exp": 1387,
+            "erfc": 924,
+            "sin": 462,
+            "cos": 462
+          },
+          "sqrt_calls": 924
+        }
+      }
+    },
+    "cartesian": {
+      "description": "Static emitted arithmetic counts. +, - and * each count one. Explicit FMAs are listed separately: kFlops_ uses conventional FMA=2; kWeightedFlops_ uses FMA=1. Fused output accumulations are included in arithmetic, so only add the remaining listed standalone accumulations. Constant rational evaluation is compile time; geometry normalization/public validation and sqrt/division are excluded. No hardware-timing claim.",
+      "kernels": [
+        {
+          "expansion_order": 2,
+          "centered": true,
+          "base_source_order": 1,
+          "arithmetic_base": {
+            "*": 13,
+            "fma": 10
+          },
+          "arithmetic_full": {
+            "*": 19,
+            "fma": 17
+          },
+          "trace_extra_arithmetic": {},
+          "base_accumulations": 1,
+          "full_extra_accumulations": 0,
+          "base_fused_accumulations": 8,
+          "full_extra_fused_accumulations": 1,
+          "weighted_flops_base": 24,
+          "weighted_flops_full": 37,
+          "conventional_flops_base": 34,
+          "conventional_flops_full": 54,
+          "trace_accumulations": 0
+        },
+        {
+          "arithmetic": {
+            "fma": 9
+          },
+          "accumulations": 0,
+          "fused_accumulations": 9,
+          "weighted_flops": 9,
+          "conventional_flops": 18,
+          "operator": "EwaldM2L",
+          "source_order": 1,
+          "order": 2,
+          "centered": true
+        },
+        {
+          "expansion_order": 2,
+          "centered": false,
+          "base_source_order": 1,
+          "arithmetic_base": {
+            "*": 15,
+            "+": 1,
+            "fma": 17
+          },
+          "arithmetic_full": {
+            "*": 21,
+            "+": 1,
+            "fma": 24
+          },
+          "trace_extra_arithmetic": {},
+          "base_accumulations": 0,
+          "full_extra_accumulations": 0,
+          "base_fused_accumulations": 9,
+          "full_extra_fused_accumulations": 1,
+          "weighted_flops_base": 33,
+          "weighted_flops_full": 46,
+          "conventional_flops_base": 50,
+          "conventional_flops_full": 70,
+          "trace_accumulations": 0
+        },
+        {
+          "arithmetic": {
+            "*": 4,
+            "+": 1,
+            "fma": 17
+          },
+          "accumulations": 4,
+          "fused_accumulations": 5,
+          "weighted_flops": 26,
+          "conventional_flops": 43,
+          "operator": "EwaldM2L",
+          "source_order": 1,
+          "order": 2,
+          "centered": false
+        },
+        {
+          "expansion_order": 3,
+          "centered": true,
+          "base_source_order": 2,
+          "arithmetic_base": {
+            "*": 27,
+            "+": 1,
+            "-": 4,
+            "fma": 31
+          },
+          "arithmetic_full": {
+            "*": 43,
+            "+": 1,
+            "-": 8,
+            "fma": 40
+          },
+          "trace_extra_arithmetic": {},
+          "base_accumulations": 0,
+          "full_extra_accumulations": 0,
+          "base_fused_accumulations": 16,
+          "full_extra_fused_accumulations": 1,
+          "weighted_flops_base": 63,
+          "weighted_flops_full": 92,
+          "conventional_flops_base": 94,
+          "conventional_flops_full": 132,
+          "trace_accumulations": 0
+        },
+        {
+          "arithmetic": {
+            "*": 16,
+            "+": 5,
+            "fma": 36
+          },
+          "accumulations": 4,
+          "fused_accumulations": 12,
+          "weighted_flops": 61,
+          "conventional_flops": 97,
+          "operator": "EwaldM2L",
+          "source_order": 2,
+          "order": 3,
+          "centered": true
+        },
+        {
+          "expansion_order": 3,
+          "centered": false,
+          "base_source_order": 2,
+          "arithmetic_base": {
+            "*": 34,
+            "+": 4,
+            "-": 6,
+            "fma": 41
+          },
+          "arithmetic_full": {
+            "*": 50,
+            "+": 4,
+            "-": 10,
+            "fma": 50
+          },
+          "trace_extra_arithmetic": {},
+          "base_accumulations": 0,
+          "full_extra_accumulations": 0,
+          "base_fused_accumulations": 16,
+          "full_extra_fused_accumulations": 1,
+          "weighted_flops_base": 85,
+          "weighted_flops_full": 114,
+          "conventional_flops_base": 126,
+          "conventional_flops_full": 164,
+          "trace_accumulations": 0
+        },
+        {
+          "arithmetic": {
+            "*": 25,
+            "+": 5,
+            "-": 4,
+            "fma": 54
+          },
+          "accumulations": 9,
+          "fused_accumulations": 7,
+          "weighted_flops": 97,
+          "conventional_flops": 151,
+          "operator": "EwaldM2L",
+          "source_order": 2,
+          "order": 3,
+          "centered": false
+        },
+        {
+          "expansion_order": 4,
+          "centered": true,
+          "base_source_order": 3,
+          "arithmetic_base": {
+            "*": 50,
+            "+": 6,
+            "-": 15,
+            "fma": 69
+          },
+          "arithmetic_full": {
+            "*": 68,
+            "+": 6,
+            "-": 22,
+            "fma": 84
+          },
+          "trace_extra_arithmetic": {},
+          "base_accumulations": 0,
+          "full_extra_accumulations": 0,
+          "base_fused_accumulations": 25,
+          "full_extra_fused_accumulations": 1,
+          "weighted_flops_base": 140,
+          "weighted_flops_full": 180,
+          "conventional_flops_base": 209,
+          "conventional_flops_full": 264,
+          "trace_accumulations": 0
+        },
+        {
+          "arithmetic": {
+            "*": 76,
+            "+": 15,
+            "-": 3,
+            "fma": 106
+          },
+          "accumulations": 9,
+          "fused_accumulations": 16,
+          "weighted_flops": 209,
+          "conventional_flops": 315,
+          "operator": "EwaldM2L",
+          "source_order": 3,
+          "order": 4,
+          "centered": true
+        },
+        {
+          "expansion_order": 4,
+          "centered": false,
+          "base_source_order": 3,
+          "arithmetic_base": {
+            "*": 62,
+            "+": 13,
+            "-": 12,
+            "fma": 99
+          },
+          "arithmetic_full": {
+            "*": 80,
+            "+": 13,
+            "-": 19,
+            "fma": 114
+          },
+          "trace_extra_arithmetic": {},
+          "base_accumulations": 0,
+          "full_extra_accumulations": 0,
+          "base_fused_accumulations": 25,
+          "full_extra_fused_accumulations": 1,
+          "weighted_flops_base": 186,
+          "weighted_flops_full": 226,
+          "conventional_flops_base": 285,
+          "conventional_flops_full": 340,
+          "trace_accumulations": 0
+        },
+        {
+          "arithmetic": {
+            "*": 88,
+            "+": 15,
+            "-": 8,
+            "fma": 142
+          },
+          "accumulations": 16,
+          "fused_accumulations": 9,
+          "weighted_flops": 269,
+          "conventional_flops": 411,
+          "operator": "EwaldM2L",
+          "source_order": 3,
+          "order": 4,
+          "centered": false
+        },
+        {
+          "expansion_order": 5,
+          "centered": true,
+          "base_source_order": 4,
+          "arithmetic_base": {
+            "*": 99,
+            "+": 17,
+            "-": 30,
+            "fma": 148
+          },
+          "arithmetic_full": {
+            "*": 126,
+            "+": 17,
+            "-": 38,
+            "fma": 172
+          },
+          "trace_extra_arithmetic": {},
+          "base_accumulations": 0,
+          "full_extra_accumulations": 0,
+          "base_fused_accumulations": 36,
+          "full_extra_fused_accumulations": 1,
+          "weighted_flops_base": 294,
+          "weighted_flops_full": 353,
+          "conventional_flops_base": 442,
+          "conventional_flops_full": 525,
+          "trace_accumulations": 0
+        },
+        {
+          "arithmetic": {
+            "*": 214,
+            "+": 33,
+            "-": 6,
+            "fma": 257
+          },
+          "accumulations": 16,
+          "fused_accumulations": 20,
+          "weighted_flops": 526,
+          "conventional_flops": 783,
+          "operator": "EwaldM2L",
+          "source_order": 4,
+          "order": 5,
+          "centered": true
+        },
+        {
+          "expansion_order": 5,
+          "centered": false,
+          "base_source_order": 4,
+          "arithmetic_base": {
+            "*": 125,
+            "+": 20,
+            "-": 44,
+            "fma": 190
+          },
+          "arithmetic_full": {
+            "*": 152,
+            "+": 20,
+            "-": 52,
+            "fma": 214
+          },
+          "trace_extra_arithmetic": {},
+          "base_accumulations": 0,
+          "full_extra_accumulations": 0,
+          "base_fused_accumulations": 36,
+          "full_extra_fused_accumulations": 1,
+          "weighted_flops_base": 379,
+          "weighted_flops_full": 438,
+          "conventional_flops_base": 569,
+          "conventional_flops_full": 652,
+          "trace_accumulations": 0
+        },
+        {
+          "arithmetic": {
+            "*": 230,
+            "+": 33,
+            "-": 13,
+            "fma": 316
+          },
+          "accumulations": 25,
+          "fused_accumulations": 11,
+          "weighted_flops": 617,
+          "conventional_flops": 933,
+          "operator": "EwaldM2L",
+          "source_order": 4,
+          "order": 5,
+          "centered": false
+        },
+        {
+          "expansion_order": 6,
+          "centered": true,
+          "base_source_order": 5,
+          "arithmetic_base": {
+            "*": 168,
+            "+": 42,
+            "-": 61,
+            "fma": 283
+          },
+          "arithmetic_full": {
+            "*": 206,
+            "+": 42,
+            "-": 76,
+            "fma": 317
+          },
+          "trace_extra_arithmetic": {},
+          "base_accumulations": 0,
+          "full_extra_accumulations": 0,
+          "base_fused_accumulations": 49,
+          "full_extra_fused_accumulations": 1,
+          "weighted_flops_base": 554,
+          "weighted_flops_full": 641,
+          "conventional_flops_base": 837,
+          "conventional_flops_full": 958,
+          "trace_accumulations": 0
+        },
+        {
+          "arithmetic": {
+            "*": 479,
+            "+": 61,
+            "-": 10,
+            "fma": 537
+          },
+          "accumulations": 25,
+          "fused_accumulations": 24,
+          "weighted_flops": 1112,
+          "conventional_flops": 1649,
+          "operator": "EwaldM2L",
+          "source_order": 5,
+          "order": 6,
+          "centered": true
+        },
+        {
+          "expansion_order": 6,
+          "centered": false,
+          "base_source_order": 5,
+          "arithmetic_base": {
+            "*": 205,
+            "+": 56,
+            "-": 67,
+            "fma": 365
+          },
+          "arithmetic_full": {
+            "*": 243,
+            "+": 56,
+            "-": 82,
+            "fma": 399
+          },
+          "trace_extra_arithmetic": {},
+          "base_accumulations": 0,
+          "full_extra_accumulations": 0,
+          "base_fused_accumulations": 49,
+          "full_extra_fused_accumulations": 1,
+          "weighted_flops_base": 693,
+          "weighted_flops_full": 780,
+          "conventional_flops_base": 1058,
+          "conventional_flops_full": 1179,
+          "trace_accumulations": 0
+        },
+        {
+          "arithmetic": {
+            "*": 499,
+            "+": 61,
+            "-": 19,
+            "fma": 625
+          },
+          "accumulations": 36,
+          "fused_accumulations": 13,
+          "weighted_flops": 1240,
+          "conventional_flops": 1865,
+          "operator": "EwaldM2L",
+          "source_order": 5,
+          "order": 6,
+          "centered": false
+        },
+        {
+          "expansion_order": 7,
+          "centered": true,
+          "base_source_order": 6,
+          "arithmetic_base": {
+            "*": 290,
+            "+": 73,
+            "-": 113,
+            "fma": 524
+          },
+          "arithmetic_full": {
+            "*": 352,
+            "+": 73,
+            "-": 139,
+            "fma": 568
+          },
+          "trace_extra_arithmetic": {},
+          "base_accumulations": 0,
+          "full_extra_accumulations": 0,
+          "base_fused_accumulations": 64,
+          "full_extra_fused_accumulations": 1,
+          "weighted_flops_base": 1000,
+          "weighted_flops_full": 1132,
+          "conventional_flops_base": 1524,
+          "conventional_flops_full": 1700,
+          "trace_accumulations": 0
+        },
+        {
+          "arithmetic": {
+            "*": 935,
+            "+": 101,
+            "-": 15,
+            "fma": 1010
+          },
+          "accumulations": 36,
+          "fused_accumulations": 28,
+          "weighted_flops": 2097,
+          "conventional_flops": 3107,
+          "operator": "EwaldM2L",
+          "source_order": 6,
+          "order": 7,
+          "centered": true
+        },
+        {
+          "expansion_order": 7,
+          "centered": false,
+          "base_source_order": 6,
+          "arithmetic_base": {
+            "*": 346,
+            "+": 82,
+            "-": 130,
+            "fma": 658
+          },
+          "arithmetic_full": {
+            "*": 408,
+            "+": 82,
+            "-": 156,
+            "fma": 702
+          },
+          "trace_extra_arithmetic": {},
+          "base_accumulations": 0,
+          "full_extra_accumulations": 0,
+          "base_fused_accumulations": 64,
+          "full_extra_fused_accumulations": 1,
+          "weighted_flops_base": 1216,
+          "weighted_flops_full": 1348,
+          "conventional_flops_base": 1874,
+          "conventional_flops_full": 2050,
+          "trace_accumulations": 0
+        },
+        {
+          "arithmetic": {
+            "*": 959,
+            "+": 101,
+            "-": 26,
+            "fma": 1133
+          },
+          "accumulations": 49,
+          "fused_accumulations": 15,
+          "weighted_flops": 2268,
+          "conventional_flops": 3401,
+          "operator": "EwaldM2L",
+          "source_order": 6,
+          "order": 7,
+          "centered": false
+        },
+        {
+          "expansion_order": 8,
+          "centered": true,
+          "base_source_order": 7,
+          "arithmetic_base": {
+            "*": 467,
+            "+": 151,
+            "-": 188,
+            "fma": 906
+          },
+          "arithmetic_full": {
+            "*": 553,
+            "+": 151,
+            "-": 222,
+            "fma": 967
+          },
+          "trace_extra_arithmetic": {},
+          "base_accumulations": 0,
+          "full_extra_accumulations": 0,
+          "base_fused_accumulations": 81,
+          "full_extra_fused_accumulations": 1,
+          "weighted_flops_base": 1712,
+          "weighted_flops_full": 1893,
+          "conventional_flops_base": 2618,
+          "conventional_flops_full": 2860,
+          "trace_accumulations": 0
+        },
+        {
+          "arithmetic": {
+            "*": 1663,
+            "+": 155,
+            "-": 21,
+            "fma": 1757
+          },
+          "accumulations": 49,
+          "fused_accumulations": 32,
+          "weighted_flops": 3645,
+          "conventional_flops": 5402,
+          "operator": "EwaldM2L",
+          "source_order": 7,
+          "order": 8,
+          "centered": true
+        },
+        {
+          "expansion_order": 8,
+          "centered": false,
+          "base_source_order": 7,
+          "arithmetic_base": {
+            "*": 538,
+            "+": 187,
+            "-": 173,
+            "fma": 1136
+          },
+          "arithmetic_full": {
+            "*": 624,
+            "+": 187,
+            "-": 207,
+            "fma": 1197
+          },
+          "trace_extra_arithmetic": {},
+          "base_accumulations": 0,
+          "full_extra_accumulations": 0,
+          "base_fused_accumulations": 81,
+          "full_extra_fused_accumulations": 1,
+          "weighted_flops_base": 2034,
+          "weighted_flops_full": 2215,
+          "conventional_flops_base": 3170,
+          "conventional_flops_full": 3412,
+          "trace_accumulations": 0
+        },
+        {
+          "arithmetic": {
+            "*": 1691,
+            "+": 155,
+            "-": 34,
+            "fma": 1921
+          },
+          "accumulations": 64,
+          "fused_accumulations": 17,
+          "weighted_flops": 3865,
+          "conventional_flops": 5786,
+          "operator": "EwaldM2L",
+          "source_order": 7,
+          "order": 8,
+          "centered": false
+        }
+      ],
+      "operators": [
+        {
+          "arithmetic": {
+            "*": 3,
+            "fma": 3
+          },
+          "accumulations": 4,
+          "fused_accumulations": 0,
+          "weighted_flops": 10,
+          "conventional_flops": 13,
+          "operator": "M2M",
+          "order": 1
+        },
+        {
+          "arithmetic": {
+            "*": 8,
+            "+": 1,
+            "fma": 27
+          },
+          "accumulations": 1,
+          "fused_accumulations": 8,
+          "weighted_flops": 37,
+          "conventional_flops": 64,
+          "operator": "L2L",
+          "order": 2,
+          "with_trace": false
+        },
+        {
+          "arithmetic": {
+            "*": 8,
+            "+": 1,
+            "fma": 30
+          },
+          "accumulations": 1,
+          "fused_accumulations": 9,
+          "weighted_flops": 40,
+          "conventional_flops": 70,
+          "operator": "L2L",
+          "order": 2,
+          "with_trace": true
+        },
+        {
+          "arithmetic": {
+            "fma": 3
+          },
+          "accumulations": 1,
+          "fused_accumulations": 3,
+          "weighted_flops": 4,
+          "conventional_flops": 7,
+          "operator": "P2M",
+          "order": 1
+        },
+        {
+          "arithmetic": {
+            "*": 12,
+            "fma": 8
+          },
+          "accumulations": 3,
+          "fused_accumulations": 6,
+          "weighted_flops": 23,
+          "conventional_flops": 31,
+          "operator": "P2L",
+          "order": 2
+        },
+        {
+          "arithmetic": {
+            "*": 4,
+            "fma": 4
+          },
+          "accumulations": 0,
+          "fused_accumulations": 4,
+          "weighted_flops": 8,
+          "conventional_flops": 12,
+          "operator": "M2P",
+          "order": 1,
+          "centered": true
+        },
+        {
+          "arithmetic": {
+            "*": 5,
+            "+": 1,
+            "fma": 10
+          },
+          "accumulations": 0,
+          "fused_accumulations": 4,
+          "weighted_flops": 16,
+          "conventional_flops": 26,
+          "operator": "M2P",
+          "order": 1,
+          "centered": false
+        },
+        {
+          "arithmetic": {
+            "*": 7,
+            "+": 1,
+            "fma": 22
+          },
+          "accumulations": 1,
+          "fused_accumulations": 3,
+          "weighted_flops": 31,
+          "conventional_flops": 53,
+          "operator": "L2P",
+          "order": 2,
+          "with_trace": false
+        },
+        {
+          "arithmetic": {
+            "*": 7,
+            "+": 1,
+            "fma": 24
+          },
+          "accumulations": 1,
+          "fused_accumulations": 3,
+          "weighted_flops": 33,
+          "conventional_flops": 57,
+          "operator": "L2P",
+          "order": 2,
+          "with_trace": true
+        },
+        {
+          "operator": "CUDA_L2L_WARP",
+          "order": 2,
+          "with_trace": true,
+          "coefficients": 10,
+          "schedule_rows": 4,
+          "phases": 1,
+          "basis_words_per_lane": 1,
+          "shuffle_instructions_per_lane": 9,
+          "shuffle_instructions_per_lane_into": 5,
+          "whole_warp_flops_with_potential": 1034,
+          "whole_warp_flops_without_potential": 678,
+          "whole_warp_weighted_flops_with_potential": 904,
+          "whole_warp_weighted_flops_without_potential": 549
+        },
+        {
+          "arithmetic": {
+            "*": 16,
+            "+": 3,
+            "fma": 17
+          },
+          "accumulations": 9,
+          "fused_accumulations": 0,
+          "weighted_flops": 45,
+          "conventional_flops": 62,
+          "operator": "M2M",
+          "order": 2
+        },
+        {
+          "arithmetic": {
+            "*": 19,
+            "+": 3,
+            "-": 4,
+            "fma": 71
+          },
+          "accumulations": 1,
+          "fused_accumulations": 15,
+          "weighted_flops": 98,
+          "conventional_flops": 169,
+          "operator": "L2L",
+          "order": 3,
+          "with_trace": false
+        },
+        {
+          "arithmetic": {
+            "*": 19,
+            "+": 3,
+            "-": 4,
+            "fma": 74
+          },
+          "accumulations": 1,
+          "fused_accumulations": 16,
+          "weighted_flops": 101,
+          "conventional_flops": 175,
+          "operator": "L2L",
+          "order": 3,
+          "with_trace": true
+        },
+        {
+          "arithmetic": {
+            "*": 8,
+            "fma": 10
+          },
+          "accumulations": 3,
+          "fused_accumulations": 6,
+          "weighted_flops": 21,
+          "conventional_flops": 31,
+          "operator": "P2M",
+          "order": 2
+        },
+        {
+          "arithmetic": {
+            "*": 20,
+            "-": 4,
+            "fma": 15
+          },
+          "accumulations": 3,
+          "fused_accumulations": 13,
+          "weighted_flops": 42,
+          "conventional_flops": 57,
+          "operator": "P2L",
+          "order": 3
+        },
+        {
+          "arithmetic": {
+            "*": 10,
+            "+": 1,
+            "fma": 17
+          },
+          "accumulations": 0,
+          "fused_accumulations": 4,
+          "weighted_flops": 28,
+          "conventional_flops": 45,
+          "operator": "M2P",
+          "order": 2,
+          "centered": true
+        },
+        {
+          "arithmetic": {
+            "*": 14,
+            "+": 4,
+            "-": 1,
+            "fma": 20
+          },
+          "accumulations": 0,
+          "fused_accumulations": 4,
+          "weighted_flops": 39,
+          "conventional_flops": 59,
+          "operator": "M2P",
+          "order": 2,
+          "centered": false
+        },
+        {
+          "arithmetic": {
+            "*": 17,
+            "+": 3,
+            "-": 4,
+            "fma": 44
+          },
+          "accumulations": 1,
+          "fused_accumulations": 3,
+          "weighted_flops": 69,
+          "conventional_flops": 113,
+          "operator": "L2P",
+          "order": 3,
+          "with_trace": false
+        },
+        {
+          "arithmetic": {
+            "*": 17,
+            "+": 3,
+            "-": 4,
+            "fma": 46
+          },
+          "accumulations": 1,
+          "fused_accumulations": 3,
+          "weighted_flops": 71,
+          "conventional_flops": 117,
+          "operator": "L2P",
+          "order": 3,
+          "with_trace": true
+        },
+        {
+          "operator": "CUDA_L2L_WARP",
+          "order": 3,
+          "with_trace": true,
+          "coefficients": 17,
+          "schedule_rows": 8,
+          "phases": 1,
+          "basis_words_per_lane": 1,
+          "shuffle_instructions_per_lane": 18,
+          "shuffle_instructions_per_lane_into": 9,
+          "whole_warp_flops_with_potential": 2127,
+          "whole_warp_flops_without_potential": 1675,
+          "whole_warp_weighted_flops_with_potential": 1869,
+          "whole_warp_weighted_flops_without_potential": 1418
+        },
+        {
+          "arithmetic": {
+            "*": 43,
+            "+": 8,
+            "-": 9,
+            "fma": 56
+          },
+          "accumulations": 16,
+          "fused_accumulations": 0,
+          "weighted_flops": 132,
+          "conventional_flops": 188,
+          "operator": "M2M",
+          "order": 3
+        },
+        {
+          "arithmetic": {
+            "*": 33,
+            "+": 6,
+            "-": 9,
+            "fma": 160
+          },
+          "accumulations": 1,
+          "fused_accumulations": 24,
+          "weighted_flops": 209,
+          "conventional_flops": 369,
+          "operator": "L2L",
+          "order": 4,
+          "with_trace": false
+        },
+        {
+          "arithmetic": {
+            "*": 33,
+            "+": 6,
+            "-": 9,
+            "fma": 163
+          },
+          "accumulations": 1,
+          "fused_accumulations": 25,
+          "weighted_flops": 212,
+          "conventional_flops": 375,
+          "operator": "L2L",
+          "order": 4,
+          "with_trace": true
+        },
+        {
+          "arithmetic": {
+            "*": 29,
+            "-": 1,
+            "fma": 25
+          },
+          "accumulations": 4,
+          "fused_accumulations": 12,
+          "weighted_flops": 59,
+          "conventional_flops": 84,
+          "operator": "P2M",
+          "order": 3
+        },
+        {
+          "arithmetic": {
+            "*": 32,
+            "-": 10,
+            "fma": 27
+          },
+          "accumulations": 3,
+          "fused_accumulations": 22,
+          "weighted_flops": 72,
+          "conventional_flops": 99,
+          "operator": "P2L",
+          "order": 4
+        },
+        {
+          "arithmetic": {
+            "*": 26,
+            "+": 6,
+            "fma": 35
+          },
+          "accumulations": 0,
+          "fused_accumulations": 4,
+          "weighted_flops": 67,
+          "conventional_flops": 102,
+          "operator": "M2P",
+          "order": 3,
+          "centered": true
+        },
+        {
+          "arithmetic": {
+            "*": 30,
+            "+": 9,
+            "-": 1,
+            "fma": 38
+          },
+          "accumulations": 0,
+          "fused_accumulations": 4,
+          "weighted_flops": 78,
+          "conventional_flops": 116,
+          "operator": "M2P",
+          "order": 3,
+          "centered": false
+        },
+        {
+          "arithmetic": {
+            "*": 30,
+            "+": 6,
+            "-": 9,
+            "fma": 78
+          },
+          "accumulations": 1,
+          "fused_accumulations": 3,
+          "weighted_flops": 124,
+          "conventional_flops": 202,
+          "operator": "L2P",
+          "order": 4,
+          "with_trace": false
+        },
+        {
+          "arithmetic": {
+            "*": 30,
+            "+": 6,
+            "-": 9,
+            "fma": 80
+          },
+          "accumulations": 1,
+          "fused_accumulations": 3,
+          "weighted_flops": 126,
+          "conventional_flops": 206,
+          "operator": "L2P",
+          "order": 4,
+          "with_trace": true
+        },
+        {
+          "operator": "CUDA_L2L_WARP",
+          "order": 4,
+          "with_trace": true,
+          "coefficients": 26,
+          "schedule_rows": 8,
+          "phases": 1,
+          "basis_words_per_lane": 1,
+          "shuffle_instructions_per_lane": 26,
+          "shuffle_instructions_per_lane_into": 10,
+          "whole_warp_flops_with_potential": 2998,
+          "whole_warp_flops_without_potential": 2162,
+          "whole_warp_weighted_flops_with_potential": 2740,
+          "whole_warp_weighted_flops_without_potential": 1905
+        },
+        {
+          "arithmetic": {
+            "*": 90,
+            "+": 20,
+            "-": 22,
+            "fma": 141
+          },
+          "accumulations": 25,
+          "fused_accumulations": 0,
+          "weighted_flops": 298,
+          "conventional_flops": 439,
+          "operator": "M2M",
+          "order": 4
+        },
+        {
+          "arithmetic": {
+            "*": 53,
+            "+": 10,
+            "-": 16,
+            "fma": 313
+          },
+          "accumulations": 1,
+          "fused_accumulations": 35,
+          "weighted_flops": 393,
+          "conventional_flops": 706,
+          "operator": "L2L",
+          "order": 5,
+          "with_trace": false
+        },
+        {
+          "arithmetic": {
+            "*": 53,
+            "+": 10,
+            "-": 16,
+            "fma": 316
+          },
+          "accumulations": 1,
+          "fused_accumulations": 36,
+          "weighted_flops": 396,
+          "conventional_flops": 712,
+          "operator": "L2L",
+          "order": 5,
+          "with_trace": true
+        },
+        {
+          "arithmetic": {
+            "*": 76,
+            "-": 4,
+            "fma": 57
+          },
+          "accumulations": 4,
+          "fused_accumulations": 21,
+          "weighted_flops": 141,
+          "conventional_flops": 198,
+          "operator": "P2M",
+          "order": 4
+        },
+        {
+          "arithmetic": {
+            "*": 42,
+            "-": 17,
+            "fma": 45
+          },
+          "accumulations": 3,
+          "fused_accumulations": 33,
+          "weighted_flops": 107,
+          "conventional_flops": 152,
+          "operator": "P2L",
+          "order": 5
+        },
+        {
+          "arithmetic": {
+            "*": 45,
+            "+": 12,
+            "-": 4,
+            "fma": 57
+          },
+          "accumulations": 0,
+          "fused_accumulations": 4,
+          "weighted_flops": 118,
+          "conventional_flops": 175,
+          "operator": "M2P",
+          "order": 4,
+          "centered": true
+        },
+        {
+          "arithmetic": {
+            "*": 49,
+            "+": 15,
+            "-": 5,
+            "fma": 60
+          },
+          "accumulations": 0,
+          "fused_accumulations": 4,
+          "weighted_flops": 129,
+          "conventional_flops": 189,
+          "operator": "M2P",
+          "order": 4,
+          "centered": false
+        },
+        {
+          "arithmetic": {
+            "*": 49,
+            "+": 10,
+            "-": 16,
+            "fma": 123
+          },
+          "accumulations": 1,
+          "fused_accumulations": 3,
+          "weighted_flops": 199,
+          "conventional_flops": 322,
+          "operator": "L2P",
+          "order": 5,
+          "with_trace": false
+        },
+        {
+          "arithmetic": {
+            "*": 49,
+            "+": 10,
+            "-": 16,
+            "fma": 125
+          },
+          "accumulations": 1,
+          "fused_accumulations": 3,
+          "weighted_flops": 201,
+          "conventional_flops": 326,
+          "operator": "L2P",
+          "order": 5,
+          "with_trace": true
+        },
+        {
+          "operator": "CUDA_L2L_WARP",
+          "order": 5,
+          "with_trace": true,
+          "coefficients": 37,
+          "schedule_rows": 12,
+          "phases": 2,
+          "basis_words_per_lane": 2,
+          "shuffle_instructions_per_lane": 53,
+          "shuffle_instructions_per_lane_into": 28,
+          "whole_warp_flops_with_potential": 5055,
+          "whole_warp_flops_without_potential": 3707,
+          "whole_warp_weighted_flops_with_potential": 4669,
+          "whole_warp_weighted_flops_without_potential": 3322
+        },
+        {
+          "arithmetic": {
+            "*": 179,
+            "+": 63,
+            "-": 43,
+            "fma": 278
+          },
+          "accumulations": 36,
+          "fused_accumulations": 0,
+          "weighted_flops": 599,
+          "conventional_flops": 877,
+          "operator": "M2M",
+          "order": 5
+        },
+        {
+          "arithmetic": {
+            "*": 83,
+            "+": 15,
+            "-": 29,
+            "fma": 557
+          },
+          "accumulations": 1,
+          "fused_accumulations": 48,
+          "weighted_flops": 685,
+          "conventional_flops": 1242,
+          "operator": "L2L",
+          "order": 6,
+          "with_trace": false
+        },
+        {
+          "arithmetic": {
+            "*": 83,
+            "+": 15,
+            "-": 29,
+            "fma": 560
+          },
+          "accumulations": 1,
+          "fused_accumulations": 49,
+          "weighted_flops": 688,
+          "conventional_flops": 1248,
+          "operator": "L2L",
+          "order": 6,
+          "with_trace": true
+        },
+        {
+          "arithmetic": {
+            "*": 159,
+            "+": 1,
+            "-": 10,
+            "fma": 107
+          },
+          "accumulations": 4,
+          "fused_accumulations": 32,
+          "weighted_flops": 281,
+          "conventional_flops": 388,
+          "operator": "P2M",
+          "order": 5
+        },
+        {
+          "arithmetic": {
+            "*": 51,
+            "+": 1,
+            "-": 26,
+            "fma": 70
+          },
+          "accumulations": 3,
+          "fused_accumulations": 46,
+          "weighted_flops": 151,
+          "conventional_flops": 221,
+          "operator": "P2L",
+          "order": 6
+        },
+        {
+          "arithmetic": {
+            "*": 67,
+            "+": 13,
+            "-": 15,
+            "fma": 89
+          },
+          "accumulations": 0,
+          "fused_accumulations": 4,
+          "weighted_flops": 184,
+          "conventional_flops": 273,
+          "operator": "M2P",
+          "order": 5,
+          "centered": true
+        },
+        {
+          "arithmetic": {
+            "*": 71,
+            "+": 16,
+            "-": 16,
+            "fma": 92
+          },
+          "accumulations": 0,
+          "fused_accumulations": 4,
+          "weighted_flops": 195,
+          "conventional_flops": 287,
+          "operator": "M2P",
+          "order": 5,
+          "centered": false
+        },
+        {
+          "arithmetic": {
+            "*": 78,
+            "+": 15,
+            "-": 29,
+            "fma": 182
+          },
+          "accumulations": 1,
+          "fused_accumulations": 3,
+          "weighted_flops": 305,
+          "conventional_flops": 487,
+          "operator": "L2P",
+          "order": 6,
+          "with_trace": false
+        },
+        {
+          "arithmetic": {
+            "*": 78,
+            "+": 15,
+            "-": 29,
+            "fma": 184
+          },
+          "accumulations": 1,
+          "fused_accumulations": 3,
+          "weighted_flops": 307,
+          "conventional_flops": 491,
+          "operator": "L2P",
+          "order": 6,
+          "with_trace": true
+        },
+        {
+          "operator": "CUDA_L2L_WARP",
+          "order": 6,
+          "with_trace": true,
+          "coefficients": 50,
+          "schedule_rows": 22,
+          "phases": 3,
+          "basis_words_per_lane": 2,
+          "shuffle_instructions_per_lane": 86,
+          "shuffle_instructions_per_lane_into": 50,
+          "whole_warp_flops_with_potential": 8906,
+          "whole_warp_flops_without_potential": 6726,
+          "whole_warp_weighted_flops_with_potential": 8200,
+          "whole_warp_weighted_flops_without_potential": 6021
+        },
+        {
+          "arithmetic": {
+            "*": 296,
+            "+": 132,
+            "-": 77,
+            "fma": 504
+          },
+          "accumulations": 49,
+          "fused_accumulations": 0,
+          "weighted_flops": 1058,
+          "conventional_flops": 1562,
+          "operator": "M2M",
+          "order": 6
+        },
+        {
+          "arithmetic": {
+            "*": 128,
+            "+": 21,
+            "-": 51,
+            "fma": 921
+          },
+          "accumulations": 1,
+          "fused_accumulations": 63,
+          "weighted_flops": 1122,
+          "conventional_flops": 2043,
+          "operator": "L2L",
+          "order": 7,
+          "with_trace": false
+        },
+        {
+          "arithmetic": {
+            "*": 128,
+            "+": 21,
+            "-": 51,
+            "fma": 924
+          },
+          "accumulations": 1,
+          "fused_accumulations": 64,
+          "weighted_flops": 1125,
+          "conventional_flops": 2049,
+          "operator": "L2L",
+          "order": 7,
+          "with_trace": true
+        },
+        {
+          "arithmetic": {
+            "*": 316,
+            "+": 4,
+            "-": 20,
+            "fma": 185
+          },
+          "accumulations": 4,
+          "fused_accumulations": 45,
+          "weighted_flops": 529,
+          "conventional_flops": 714,
+          "operator": "P2M",
+          "order": 6
+        },
+        {
+          "arithmetic": {
+            "*": 64,
+            "+": 2,
+            "-": 40,
+            "fma": 103
+          },
+          "accumulations": 3,
+          "fused_accumulations": 61,
+          "weighted_flops": 212,
+          "conventional_flops": 315,
+          "operator": "P2L",
+          "order": 7
+        },
+        {
+          "arithmetic": {
+            "*": 95,
+            "+": 21,
+            "-": 22,
+            "fma": 130
+          },
+          "accumulations": 0,
+          "fused_accumulations": 4,
+          "weighted_flops": 268,
+          "conventional_flops": 398,
+          "operator": "M2P",
+          "order": 6,
+          "centered": true
+        },
+        {
+          "arithmetic": {
+            "*": 99,
+            "+": 24,
+            "-": 23,
+            "fma": 133
+          },
+          "accumulations": 0,
+          "fused_accumulations": 4,
+          "weighted_flops": 279,
+          "conventional_flops": 412,
+          "operator": "M2P",
+          "order": 6,
+          "centered": false
+        },
+        {
+          "arithmetic": {
+            "*": 122,
+            "+": 21,
+            "-": 51,
+            "fma": 256
+          },
+          "accumulations": 1,
+          "fused_accumulations": 3,
+          "weighted_flops": 451,
+          "conventional_flops": 707,
+          "operator": "L2P",
+          "order": 7,
+          "with_trace": false
+        },
+        {
+          "arithmetic": {
+            "*": 122,
+            "+": 21,
+            "-": 51,
+            "fma": 258
+          },
+          "accumulations": 1,
+          "fused_accumulations": 3,
+          "weighted_flops": 453,
+          "conventional_flops": 711,
+          "operator": "L2P",
+          "order": 7,
+          "with_trace": true
+        },
+        {
+          "operator": "CUDA_L2L_WARP",
+          "order": 7,
+          "with_trace": true,
+          "coefficients": 65,
+          "schedule_rows": 31,
+          "phases": 5,
+          "basis_words_per_lane": 2,
+          "shuffle_instructions_per_lane": 123,
+          "shuffle_instructions_per_lane_into": 74,
+          "whole_warp_flops_with_potential": 13943,
+          "whole_warp_flops_without_potential": 10547,
+          "whole_warp_weighted_flops_with_potential": 12949,
+          "whole_warp_weighted_flops_without_potential": 9554
+        },
+        {
+          "arithmetic": {
+            "*": 448,
+            "+": 237,
+            "-": 130,
+            "fma": 845
+          },
+          "accumulations": 64,
+          "fused_accumulations": 0,
+          "weighted_flops": 1724,
+          "conventional_flops": 2569,
+          "operator": "M2M",
+          "order": 7
+        },
+        {
+          "arithmetic": {
+            "*": 191,
+            "+": 28,
+            "-": 79,
+            "fma": 1444
+          },
+          "accumulations": 1,
+          "fused_accumulations": 80,
+          "weighted_flops": 1743,
+          "conventional_flops": 3187,
+          "operator": "L2L",
+          "order": 8,
+          "with_trace": false
+        },
+        {
+          "arithmetic": {
+            "*": 191,
+            "+": 28,
+            "-": 79,
+            "fma": 1447
+          },
+          "accumulations": 1,
+          "fused_accumulations": 81,
+          "weighted_flops": 1746,
+          "conventional_flops": 3193,
+          "operator": "L2L",
+          "order": 8,
+          "with_trace": true
+        },
+        {
+          "arithmetic": {
+            "*": 549,
+            "+": 14,
+            "-": 36,
+            "fma": 284
+          },
+          "accumulations": 4,
+          "fused_accumulations": 60,
+          "weighted_flops": 887,
+          "conventional_flops": 1171,
+          "operator": "P2M",
+          "order": 7
+        },
+        {
+          "arithmetic": {
+            "*": 77,
+            "+": 3,
+            "-": 59,
+            "fma": 148
+          },
+          "accumulations": 3,
+          "fused_accumulations": 78,
+          "weighted_flops": 290,
+          "conventional_flops": 438,
+          "operator": "P2L",
+          "order": 8
+        },
+        {
+          "arithmetic": {
+            "*": 133,
+            "+": 30,
+            "-": 35,
+            "fma": 183
+          },
+          "accumulations": 0,
+          "fused_accumulations": 4,
+          "weighted_flops": 381,
+          "conventional_flops": 564,
+          "operator": "M2P",
+          "order": 7,
+          "centered": true
+        },
+        {
+          "arithmetic": {
+            "*": 137,
+            "+": 33,
+            "-": 36,
+            "fma": 186
+          },
+          "accumulations": 0,
+          "fused_accumulations": 4,
+          "weighted_flops": 392,
+          "conventional_flops": 578,
+          "operator": "M2P",
+          "order": 7,
+          "centered": false
+        },
+        {
+          "arithmetic": {
+            "*": 184,
+            "+": 28,
+            "-": 79,
+            "fma": 352
+          },
+          "accumulations": 1,
+          "fused_accumulations": 3,
+          "weighted_flops": 644,
+          "conventional_flops": 996,
+          "operator": "L2P",
+          "order": 8,
+          "with_trace": false
+        },
+        {
+          "arithmetic": {
+            "*": 184,
+            "+": 28,
+            "-": 79,
+            "fma": 354
+          },
+          "accumulations": 1,
+          "fused_accumulations": 3,
+          "weighted_flops": 646,
+          "conventional_flops": 1000,
+          "operator": "L2P",
+          "order": 8,
+          "with_trace": true
+        },
+        {
+          "operator": "CUDA_L2L_WARP",
+          "order": 8,
+          "with_trace": true,
+          "coefficients": 82,
+          "schedule_rows": 52,
+          "phases": 8,
+          "basis_words_per_lane": 3,
+          "shuffle_instructions_per_lane": 239,
+          "shuffle_instructions_per_lane_into": 175,
+          "whole_warp_flops_with_potential": 22726,
+          "whole_warp_flops_without_potential": 17538,
+          "whole_warp_weighted_flops_with_potential": 21060,
+          "whole_warp_weighted_flops_without_potential": 15873
+        }
+      ]
+    }
+  },
+  "m2l_comparison": {
+    "description": "Free-space M2L, including displacement geometry and additive output; source degree = FMM order - 2, local degree = FMM order - 1. Generic source dipoles are retained. The separate centered Cartesian column is valid only for zero source dipole. Application coordinate-unit conversion is excluded from both families. +, -, *, / and explicit FMA cost 1; sqrt costs 7. Both families emit explicit FMAs; no additional compiler contraction is assumed. These are emitted arithmetic counts, not measured instruction counts or timings.",
+    "orders": [
+      {
+        "fmm_order": 3,
+        "source_degree": 1,
+        "local_degree": 2,
+        "cartesian_kernel_flops": 33,
+        "cartesian_geometry_flops": 14,
+        "cartesian_weighted_flops": 47,
+        "cartesian_centered_weighted_flops": 38,
+        "spherical_weighted_flops": 62,
+        "spherical_variant": "none"
+      },
+      {
+        "fmm_order": 4,
+        "source_degree": 2,
+        "local_degree": 3,
+        "cartesian_kernel_flops": 85,
+        "cartesian_geometry_flops": 14,
+        "cartesian_weighted_flops": 99,
+        "cartesian_centered_weighted_flops": 77,
+        "spherical_weighted_flops": 144,
+        "spherical_variant": "azimuth"
+      },
+      {
+        "fmm_order": 5,
+        "source_degree": 3,
+        "local_degree": 4,
+        "cartesian_kernel_flops": 186,
+        "cartesian_geometry_flops": 14,
+        "cartesian_weighted_flops": 200,
+        "cartesian_centered_weighted_flops": 154,
+        "spherical_weighted_flops": 270,
+        "spherical_variant": "azimuth"
+      },
+      {
+        "fmm_order": 6,
+        "source_degree": 4,
+        "local_degree": 5,
+        "cartesian_kernel_flops": 379,
+        "cartesian_geometry_flops": 14,
+        "cartesian_weighted_flops": 393,
+        "cartesian_centered_weighted_flops": 308,
+        "spherical_weighted_flops": 454,
+        "spherical_variant": "azimuth"
+      },
+      {
+        "fmm_order": 7,
+        "source_degree": 5,
+        "local_degree": 6,
+        "cartesian_kernel_flops": 693,
+        "cartesian_geometry_flops": 14,
+        "cartesian_weighted_flops": 707,
+        "cartesian_centered_weighted_flops": 568,
+        "spherical_weighted_flops": 710,
+        "spherical_variant": "full"
+      },
+      {
+        "fmm_order": 8,
+        "source_degree": 6,
+        "local_degree": 7,
+        "cartesian_kernel_flops": 1216,
+        "cartesian_geometry_flops": 14,
+        "cartesian_weighted_flops": 1230,
+        "cartesian_centered_weighted_flops": 1014,
+        "spherical_weighted_flops": 1001,
+        "spherical_variant": "full"
+      },
+      {
+        "fmm_order": 9,
+        "source_degree": 7,
+        "local_degree": 8,
+        "cartesian_kernel_flops": 2034,
+        "cartesian_geometry_flops": 14,
+        "cartesian_weighted_flops": 2048,
+        "cartesian_centered_weighted_flops": 1726,
+        "spherical_weighted_flops": 1370,
+        "spherical_variant": "full"
+      }
+    ]
+  }
+}

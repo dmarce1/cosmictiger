@@ -527,12 +527,10 @@ target_compile_definitions(cosmictiger_fixed64 PRIVATE COSMICTIGER_POSITION_BITS
 # Building the public entry point also builds its runtime-selected companion.
 add_dependencies(cosmictiger cosmictiger_fixed64)
 
-# Generated kernels for every FMM order, produced together in the build tree.
-# Both representations share the same order range. Only
-# Cartesian is currently connected to the application walk.
-set(COSMICTIGER_GENERATED_INCLUDE_DIR ${PROJECT_BINARY_DIR}/generated)
-set(COSMICTIGER_GENERATED_FMM_DIR
-    ${COSMICTIGER_GENERATED_INCLUDE_DIR}/cosmictiger/gravity)
+# Checked-in kernels for FMM orders 3 to 9, regenerated only on explicit request.
+# Both representations share the same order range. Only Cartesian is currently
+# connected to the application walk. Ordinary builds use the source headers.
+set(COSMICTIGER_GENERATED_FMM_DIR ${PROJECT_SOURCE_DIR}/cosmictiger/gravity)
 set(COSMICTIGER_GENERATED_FMM_FILES
     ${COSMICTIGER_GENERATED_FMM_DIR}/generated_config.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/generated_cartesian_m2l.hpp
@@ -542,36 +540,25 @@ set(COSMICTIGER_GENERATED_FMM_FILES
     ${COSMICTIGER_GENERATED_FMM_DIR}/nitadori/generated_spherical_ewald.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/operation_counts.json)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
-set(COSMICTIGER_FMM_GENERATOR_SOURCES
-    ${PROJECT_SOURCE_DIR}/tools/generate_fmm.py
-    ${PROJECT_SOURCE_DIR}/tools/cartesian/cuda.py
-    ${PROJECT_SOURCE_DIR}/tools/cartesian/ewald.py
-    ${PROJECT_SOURCE_DIR}/tools/cartesian/particles.py
-    ${PROJECT_SOURCE_DIR}/tools/cartesian/translations.py
-    ${PROJECT_SOURCE_DIR}/tools/cartesian/generated_notice.txt
-    ${PROJECT_SOURCE_DIR}/tools/fmm/spherical.py
-    ${PROJECT_SOURCE_DIR}/tools/fmm/spherical_ewald.py
-    ${PROJECT_SOURCE_DIR}/cosmictiger/core/defs.hpp)
-add_custom_command(
-    OUTPUT ${COSMICTIGER_GENERATED_FMM_FILES}
+# Do not declare source headers as OUTPUT/BYPRODUCTS or mark them GENERATED:
+# build-system clean targets must never delete these version-controlled files.
+add_custom_target(generate_fmm_kernels
     COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/generate_fmm.py
-        --output-dir ${COSMICTIGER_GENERATED_FMM_DIR} --no-format
-    DEPENDS ${COSMICTIGER_FMM_GENERATOR_SOURCES}
+        --output-dir ${COSMICTIGER_GENERATED_FMM_DIR} --min-order 2 --max-order 8
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-    COMMENT "Generating Cartesian and Spherical FMM orders 3 to 9")
-add_custom_target(generate_fmm_kernels DEPENDS ${COSMICTIGER_GENERATED_FMM_FILES})
-add_custom_target(generate_cartesian_kernels DEPENDS ${COSMICTIGER_GENERATED_FMM_FILES})
-add_custom_target(cosmictiger_generated_kernels
-    DEPENDS ${COSMICTIGER_GENERATED_FMM_FILES})
+    COMMENT "Regenerating source headers for Cartesian and Spherical FMM orders 3 to 9"
+    VERBATIM)
+add_custom_target(generate_cartesian_kernels DEPENDS generate_fmm_kernels)
+add_custom_target(cosmictiger_generated_kernels DEPENDS generate_fmm_kernels)
 # Compile a target against the generated kernels and the order/bucket defaults.
 function(cosmictiger_use_generated_kernels target)
-    target_include_directories(${target} BEFORE PRIVATE ${COSMICTIGER_GENERATED_INCLUDE_DIR})
+    target_include_directories(${target} BEFORE PRIVATE ${PROJECT_SOURCE_DIR})
     target_compile_definitions(${target} PRIVATE ORDER=${COSMICTIGER_WITH_ORDER}
         MAX_BUCKET_SIZE=${COSMICTIGER_WITH_MAX_BUCKET})
-    add_dependencies(${target} cosmictiger_generated_kernels)
 endfunction()
 foreach(application_target IN LISTS cosmictiger_application_targets)
     cosmictiger_use_generated_kernels(${application_target})
+    target_sources(${application_target} PRIVATE ${COSMICTIGER_GENERATED_FMM_FILES})
 endforeach()
 # Per-order instantiation units: the heavy order-specific code (CPU gravity and
 # walk, tree multipoles, Ewald tables, CUDA kick) compiles once per order in its
@@ -1199,7 +1186,7 @@ if(BUILD_TESTING)
             TIMEOUT 180 PROCESSORS 1 LABELS "fmm;generator;cpu")
     endforeach()
     # Splitting the spherical templates by order bounds compiler memory use.
-    foreach(spherical_order RANGE 3 9)
+    foreach(spherical_order IN LISTS COSMICTIGER_FMM_ORDERS)
         math(EXPR spherical_degree "${spherical_order} - 1")
         set(spherical_target "generated_spherical_order_${spherical_order}_test")
         add_executable(${spherical_target} tests/gravity/nitadori/generated_spherical.cpp)
@@ -1213,13 +1200,15 @@ if(BUILD_TESTING)
             TIMEOUT 180 PROCESSORS 1 LABELS "fmm;generator;cpu")
     endforeach()
     add_test(NAME generated_fmm_current COMMAND ${Python3_EXECUTABLE}
-        ${PROJECT_SOURCE_DIR}/tools/generate_fmm.py --check --no-format
-        --output-dir ${COSMICTIGER_GENERATED_FMM_DIR})
+        ${PROJECT_SOURCE_DIR}/tools/generate_fmm.py --check
+        --output-dir ${COSMICTIGER_GENERATED_FMM_DIR} --min-order 2 --max-order 8)
     set_tests_properties(generated_fmm_current PROPERTIES
         TIMEOUT 180 PROCESSORS 1 LABELS "fmm;generator")
     add_test(NAME generated_fmm_flops COMMAND ${Python3_EXECUTABLE}
         ${PROJECT_SOURCE_DIR}/tests/gravity/check_generated_fmm_flops.py
         --generated-dir ${COSMICTIGER_GENERATED_FMM_DIR}
+        --min-fmm-order ${COSMICTIGER_FMM_MIN_ORDER}
+        --max-fmm-order ${COSMICTIGER_FMM_MAX_ORDER}
         --compiler ${CMAKE_CXX_COMPILER})
     set_tests_properties(generated_fmm_flops PROPERTIES
         TIMEOUT 300 PROCESSORS 1 LABELS "fmm;generator")

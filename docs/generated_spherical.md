@@ -2,7 +2,11 @@
 
 `tools/generate_fmm.py` generates `generated_spherical.hpp` for the same
 inclusive local-degree range as the Cartesian representations. FMM order `q`
-means source degree `q-2` and local degree `q-1`; the default orders are 3–9.
+means source degree `q-2` and local degree `q-1`; the source headers contain
+orders 3–9, with source degrees 1–7 and local degrees 2–8. CMake's
+`COSMICTIGER_FMM_MIN_ORDER`/`COSMICTIGER_FMM_MAX_ORDER` select the compiled
+range, defaulting to 4–8. `FMM_MIN_ORDER`/`FMM_MAX_ORDER` preprocessor guards
+exclude other orders from compilation without removing them from the source.
 This adds a generated API, not a runtime gravity-method selection.
 
 ## Normalization and storage
@@ -116,14 +120,15 @@ coefficients in every rank. Fixtures include both axis signs, zero translations,
 near-axis directions and general displacements. P2M errors are normalized by
 the norm of each rank so small high-order moments remain meaningfully tested.
 
-The split order-3 through order-9 executables passed 181,468 comparisons with
-GCC, strict arithmetic (`-fno-fast-math -ffp-contract=off`), scalar float/double
-and heterogeneous four-lane double SIMD. Worst scaled discrepancy was
+A historical run of the split order-3 through order-9 executables passed
+181,468 comparisons with GCC, strict arithmetic (`-fno-fast-math -ffp-contract=off`),
+scalar float/double and heterogeneous four-lane double SIMD. Worst scaled
+discrepancy was
 `3.876e-5` in the intentionally ill-conditioned float arbitrary-moment stress
 cases; the float test budget is `4e-5`, and the double/SIMD budget is `2e-10`.
 These are numerical and emitted-arithmetic checks, not runtime speed benchmarks.
 
 CMake splits this source with `GENERATED_SPHERICAL_TEST_DEGREE` to keep each
-compilation bounded. Run the `generated_spherical_order_3` through
-`generated_spherical_order_9` CTest tests. Defining
+compilation bounded. It creates `generated_spherical_order_<order>` CTest tests
+for each order in the selected build range. Defining
 `GENERATED_SPHERICAL_SKIP_SIMD` is available for a scalar-only diagnostic build.

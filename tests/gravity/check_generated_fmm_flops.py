@@ -11,6 +11,7 @@ its cost. This checks live operations, destination accumulation, rotation setup,
 and all candidate/winner metadata, independently of the Python expression DAGs.
 """
 import argparse
+from copy import deepcopy
 import json
 from pathlib import Path
 import subprocess
@@ -69,6 +70,58 @@ template <typename Real>
 Real simdSelect(bool condition, Real yes, Real no) { return condition ? yes : no; }
 template <typename Real, int lanes> class SimdVector;
 '''
+
+
+def cartesianFmmOrder(kernel):
+    if 'expansion_order' in kernel:
+        return kernel['expansion_order'] + 1
+    offset = 2 if kernel['operator'] in ('P2M', 'M2M', 'M2P') else 1
+    return kernel['order'] + offset
+
+
+def sphericalFmmOrder(kernel):
+    offset = 2 if kernel['operator'] in ('P2m', 'M2m') else 1
+    return kernel['degree'] + offset
+
+
+def selectReportOrders(report, minFmmOrder, maxFmmOrder):
+    selected = deepcopy(report)
+
+    def includes(order):
+        return minFmmOrder <= order <= maxFmmOrder
+
+    cartesian = selected['representations']['cartesian']
+    for key in ('kernels', 'operators'):
+        selected[key] = [row for row in selected[key] if includes(cartesianFmmOrder(row))]
+        cartesian[key] = [row for row in cartesian[key] if includes(cartesianFmmOrder(row))]
+    spherical = selected['representations']['spherical']
+    spherical['kernels'] = [row for row in spherical['kernels'] if includes(sphericalFmmOrder(row))]
+    spherical['selections'] = [row for row in spherical['selections'] if includes(row['fmm_order'])]
+    ewald = selected['representations']['sphericalEwald']
+    ewald['orders'] = {order: counts for order, counts in ewald['orders'].items() if includes(int(order))}
+    comparisons = selected['m2l_comparison']
+    comparisons['orders'] = [row for row in comparisons['orders'] if includes(row['fmm_order'])]
+    return selected
+
+
+def appendAvailabilityChecks(lines, report, minFmmOrder, maxFmmOrder):
+    lines.extend(['template <typename Type>',
+                  'concept CompleteKernel = requires { sizeof(Type); };'])
+    for order in range(report['min_local_degree'] + 1, report['max_local_degree'] + 2):
+        localDegree = order - 1
+        sourceDegree = order - 2
+        expected = str(minFmmOrder <= order <= maxFmmOrder).lower()
+        kernels = (
+            f'cartesian::detail::M2lKernel<{localDegree}, false>',
+            f'cartesian::detail::P2mKernel<{sourceDegree}>',
+            f'cartesian::detail::L2lKernel<{localDegree}, true>',
+            f'spherical::M2lKernel<{localDegree}>',
+            f'spherical::P2mKernel<{sourceDegree}>',
+            f'spherical::EwaldGreensKernel<{localDegree}>',
+        )
+        for kernel in kernels:
+            lines.append(f'static_assert(CompleteKernel<cosmictiger::gravity::{kernel}> == {expected},')
+            lines.append(f'    "FMM order {order} availability mismatch: {kernel}");')
 
 
 def appendCartesianChecks(lines, report, checks):
@@ -168,15 +221,16 @@ def appendCartesianChecks(lines, report, checks):
         checks.append(label)
 
 
-def buildChecks(report):
+def buildChecks(report, minFmmOrder, maxFmmOrder):
     checks = []
-    lines = ['#include <array>', '#include <cstdio>',
+    lines = ['#include <array>', '#include <cstdio>', '',
              '#include <cosmictiger/gravity/generated_cartesian_m2l.hpp>',
              '#include <cosmictiger/gravity/generated_cartesian_operators.hpp>',
              '#include <cosmictiger/gravity/nitadori/generated_spherical.hpp>',
-             '#include <cosmictiger/gravity/nitadori/generated_spherical_ewald.hpp>',
-             'int specialCalls[4]{};',
-             'namespace cosmictiger::gravity::spherical::detail {']
+             '#include <cosmictiger/gravity/nitadori/generated_spherical_ewald.hpp>', '']
+    appendAvailabilityChecks(lines, report, minFmmOrder, maxFmmOrder)
+    lines.extend(['int specialCalls[4]{};',
+                  'namespace cosmictiger::gravity::spherical::detail {'])
     for i, name in enumerate(('Exp', 'Erfc', 'Sin', 'Cos')):
         lines.extend(['template <>',
                       f'CountingReal ewald{name}(CountingReal const& value) {{',
@@ -269,9 +323,22 @@ def main():
     parser.add_argument('--generated-dir', type=Path, required=True,
                         help='Directory containing operation_counts.json and generated headers')
     parser.add_argument('--compiler', default='c++')
+    parser.add_argument('--min-fmm-order', type=int,
+                        help='Smallest FMM order to compile and audit (default: generated minimum)')
+    parser.add_argument('--max-fmm-order', type=int,
+                        help='Largest FMM order to compile and audit (default: generated maximum)')
     args = parser.parse_args()
+    projectRoot = Path(__file__).resolve().parents[2]
     generated = args.generated_dir.resolve()
     report = json.loads((generated/'operation_counts.json').read_text())
+    generatedMinOrder = report['min_local_degree'] + 1
+    generatedMaxOrder = report['max_local_degree'] + 1
+    minFmmOrder = args.min_fmm_order if args.min_fmm_order is not None else generatedMinOrder
+    maxFmmOrder = args.max_fmm_order if args.max_fmm_order is not None else generatedMaxOrder
+    if not generatedMinOrder <= minFmmOrder <= maxFmmOrder <= generatedMaxOrder:
+        parser.error(f'FMM orders must form an inclusive range within '
+                     f'{generatedMinOrder}..{generatedMaxOrder}')
+    report = selectReportOrders(report, minFmmOrder, maxFmmOrder)
     with tempfile.TemporaryDirectory(prefix='cosmictiger_fmm_counts_') as directory:
         root = Path(directory)
         shim = root/'cosmictiger/math/simd_math.hpp'
@@ -284,10 +351,12 @@ def main():
             (includeDir/name).parent.mkdir(parents=True, exist_ok=True)
             (includeDir/name).symlink_to(generated/name)
         source = root/'counts.cpp'
-        source.write_text(buildChecks(report))
+        source.write_text(buildChecks(report, minFmmOrder, maxFmmOrder))
         executable = root/'counts'
         subprocess.run([args.compiler, '-std=c++20', '-O0', '-fno-fast-math',
-                        '-ffp-contract=off', '-I'+str(root), str(source), '-o', str(executable)], check=True)
+                        '-ffp-contract=off', '-I'+str(root), '-I'+str(projectRoot),
+                        f'-DFMM_MIN_ORDER={minFmmOrder}', f'-DFMM_MAX_ORDER={maxFmmOrder}',
+                        str(source), '-o', str(executable)], check=True)
         subprocess.run([str(executable)], check=True)
 
 

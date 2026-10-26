@@ -214,7 +214,10 @@ def generate(minLocalDegree=2,maxLocalDegree=8):
     counts = {}
     for degree in range(minLocalDegree,maxLocalDegree+1):
         code,report = emitDegree(degree)
+        lines.append(f'#if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= {degree + 1}) && '
+                     f'(!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= {degree + 1})')
         lines += code
+        lines.append('#endif')
         counts[str(degree+1)] = report
     lines += ["template <int degree> class EwaldL2lKernel {", "public:", "static constexpr int kFlops_ = L2lKernel<degree>::kFlops_ + 9;",
               "template <typename Real, typename Local, typename Source>",

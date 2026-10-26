@@ -7,12 +7,21 @@
 | `Cartesian` | `(d + 1)^2` symmetric trace-free coefficients; an optional local Laplacian slot | Existing production Newtonian FMM |
 | `Spherical` | `(d + 1)^2` real slots for complex-conjugate harmonic coefficients | Newtonian free-space and periodic Ewald kernels |
 
-The same inclusive local-degree range is used for both families. Defaults
-are local degrees 2 through 8, source degrees 1 through 7, corresponding to
-application FMM orders 3 through 9. M2L keeps terms of combined source and local
-degree at most the local-degree limit. `--min-order` and `--max-order` retain the
+The checked-in headers contain both families for local degrees 2 through 8,
+source degrees 1 through 7, corresponding to application FMM orders 3 through 9.
+M2L keeps terms of combined source and local degree at most the local-degree
+limit. `--min-order` and `--max-order` retain the
 existing generator convention: their arguments are **local degrees**, not the
 application FMM order.
+
+New CMake configurations compile orders 4 through 8 by default; the runtime
+default remains order 7. `COSMICTIGER_FMM_MIN_ORDER` and
+`COSMICTIGER_FMM_MAX_ORDER` set the `FMM_MIN_ORDER`/`FMM_MAX_ORDER` preprocessor
+guards and the per-order instantiations. Orders outside that selected range
+remain in the source headers but are excluded from compilation. Existing
+caches retain their configured range. Set
+`-DCOSMICTIGER_FMM_MIN_ORDER=3 -DCOSMICTIGER_FMM_MAX_ORDER=9` when reconfiguring
+to compile every available order.
 
 The representations are generated and tested independently. The runtime
 walk, tree layout, checkpoint representation, and softening selection still use
@@ -26,25 +35,46 @@ filenames snake_case.
 ## Generate and verify
 
 ```sh
-python3 tools/generate_fmm.py --output-dir build/generated/cosmictiger/gravity --no-format
-python3 tools/generate_fmm.py --output-dir build/generated/cosmictiger/gravity --no-format --check
-python3 tests/gravity/check_generated_fmm_flops.py --generated-dir build/generated/cosmictiger/gravity --compiler c++
+python3 tools/generate_fmm.py
+python3 tools/generate_fmm.py --check
+python3 tests/gravity/check_generated_fmm_flops.py --generated-dir cosmictiger/gravity --compiler c++
 ```
 
-CMake's `generate_fmm_kernels` target generates every family. The
-`generate_cartesian_kernels` target remains an alias to the
-same complete generation command. Generated files live in the build directory;
-never hand-edit generated headers. Without `--no-format`, the generator uses the
-repository's clang-format configuration.
+Generated headers and their operation report are checked in under
+`cosmictiger/gravity/`:
 
-The standalone CTest executables are
-`generated_spherical_order_3` through `generated_spherical_order_9`, and
-`generated_spherical_ewald`. The existing representation
-has `cartesian_kernels` and corresponding Ewald/CUDA tests.
-`generated_fmm_current` checks reproducibility; `generated_fmm_flops` compiles and
-executes every ordinary Cartesian and spherical arithmetic specialization with
-an independent counting scalar. Cartesian checks cover both M2L source-degree
-branches and verify FMA counts as well as both operation-count conventions.
+- `generated_cartesian_m2l.hpp`, `generated_cartesian_operators.hpp`, and
+  `generated_config.hpp` contain the Cartesian operators and degree configuration.
+- `dehnen/generated_cartesian_ewald.hpp` contains the Cartesian Ewald derivatives.
+- `nitadori/generated_spherical.hpp` and
+  `nitadori/generated_spherical_ewald.hpp` contain the spherical kernels.
+- `operation_counts.json` records the generated arithmetic counts and selections.
+
+The generator defaults to this source directory and emits both families for
+FMM orders 3 through 9, formatting headers with the repository's clang-format
+configuration. Use `--output-dir` to write a separate copy. Never hand-edit
+generated headers; update their generators and regenerate them. `--check`
+compares the expected output with the existing files without changing them.
+
+CMake's explicit `generate_fmm_kernels` target always regenerates every family
+for orders 3 through 9 in the source tree, independently of the selected build
+range. `generate_cartesian_kernels` and `cosmictiger_generated_kernels`
+remain aliases to the same command. Ordinary builds compile the checked-in
+headers directly and do not regenerate or modify them. Regeneration requires
+Python 3 and clang-format.
+
+The numerical tests follow the selected build range: CMake creates
+`generated_spherical_order_<order>` for each selected order, and
+`generated_spherical_ewald`, `cartesian_kernels`, and corresponding Ewald/CUDA
+tests exercise that range. `generated_fmm_current` checks reproducibility of
+the complete source output. CTest's `generated_fmm_flops` passes the configured
+range through `--min-fmm-order` and `--max-fmm-order`, compiling and executing
+the selected Cartesian and spherical arithmetic specializations with an
+independent counting scalar. Its `CompleteKernel` checks verify that selected
+kernel classes are defined and excluded classes are not. Cartesian checks cover
+both M2L source-degree branches and verify FMA counts as well as both
+operation-count conventions. The direct Python counting command above omits
+the range options and checks all generated orders 3 through 9.
 
 ## Cartesian fused arithmetic
 

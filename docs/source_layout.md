@@ -107,15 +107,26 @@ in `scenarios/`, alongside the scenarios that use them.
 ## Generated code and build integration
 
 The old `cosmictiger/fmm/` and `src/fmm/` directories are folded into gravity.
-Generated headers are written beneath the build tree's
-`generated/cosmictiger/gravity/`:
+Generated headers are checked in beneath `cosmictiger/gravity/`:
 
 - Common Cartesian free-space operators and configuration stay at the parent level.
 - Cartesian Ewald operators go into `dehnen/`.
 - Spherical PMMM and spherical Ewald operators go into `nitadori/`.
 
 Generators remain organized by representation under `tools/cartesian/` and
-`tools/fmm/`, with `tools/generate_fmm.py` as the entry point. Per-order CPU/CUDA
+`tools/fmm/`, with `tools/generate_fmm.py` as the entry point. Running it without
+arguments regenerates both families for FMM orders 3 through 9 in the source
+header directory, using the repository's clang-format configuration.
+`generate_fmm_kernels` is the explicit CMake regeneration target;
+`generate_cartesian_kernels` and `cosmictiger_generated_kernels` are aliases.
+These targets always regenerate all orders 3 through 9. CMake's
+`COSMICTIGER_FMM_MIN_ORDER` and `COSMICTIGER_FMM_MAX_ORDER` select the compiled
+range, defaulting to 4 through 8, through `FMM_MIN_ORDER`/`FMM_MAX_ORDER`
+preprocessor guards and per-order instantiations.
+Ordinary builds use the checked-in headers without rewriting them, and
+`python3 tools/generate_fmm.py --check` verifies them without writing.
+
+Per-order CPU/CUDA
 instantiation templates remain in `src/gravity/`; they assemble common and
 solver-specific instantiations exactly once per order. These are build
 composition points, not an algorithm dependency from common numerical code to

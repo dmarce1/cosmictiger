@@ -6,7 +6,11 @@ at commit `7ba8f1829fdede7348a1418b7cb36c0e7a955302`. Its Boost license is retai
 in `tools/cartesian/LICENSE`; the surrounding application remains GPL.
 
 Kernels are generated for every supported FMM order, 3 through 9: source
-degrees 1 through 7 paired with local degrees 2 through 8. A run selects one
+degrees 1 through 7 paired with local degrees 2 through 8. CMake's
+`COSMICTIGER_FMM_MIN_ORDER` and `COSMICTIGER_FMM_MAX_ORDER` select the compiled
+range, defaulting to 4 through 8. The corresponding `FMM_MIN_ORDER` and
+`FMM_MAX_ORDER` preprocessor guards exclude other orders from compilation while
+retaining all orders in the source headers. A run selects one compiled
 order with `gravity.fmmOrder` (default 7, the build's `COSMICTIGER_WITH_ORDER`),
 and `fmmDispatch()` switches to that order's instantiation at coarse boundaries.
 At order 7 the source stores 36 coefficients and the local stores 49 Cartesian
@@ -90,28 +94,40 @@ harmonic.
 
 ## Regeneration and validation
 
-The generated kernels are no longer checked in. The build produces them for
-every order in its own tree, and every test target includes them from there:
+Generated kernels are checked in under `cosmictiger/gravity/`. Ordinary builds
+and tests include these source headers directly; they do not regenerate or
+modify them. Regenerate explicitly after changing a generator:
 
-```
-ninja -C build cosmictiger_generated_kernels
+```sh
+python3 tools/generate_fmm.py
+python3 tools/generate_fmm.py --check
+# Equivalent regeneration through a configured build:
+cmake --build build --target generate_fmm_kernels
 ```
 
-That target runs `python3 tools/generate_fmm.py --output-dir
-build/generated/cosmictiger/gravity --no-format`, which emits one specialized
-kernel class per degree for local degrees 2 through 8 (`generated_config.hpp`
-records the range as `kMinLocalDegree`/`kMaxLocalDegree`) and one
-`ewaldCorrectionDerivatives` overload per order in `generated_cartesian_ewald.hpp`.
+The generator defaults to the source header directory and uses the repository's
+clang-format configuration. It emits both Cartesian and spherical families for
+FMM orders 3 through 9: one specialized kernel class per degree for local
+degrees 2 through 8 (`generated_config.hpp` records the available range as
+`kMinLocalDegree`/`kMaxLocalDegree`) and one `ewaldCorrectionDerivatives` overload
+per order in `dehnen/generated_cartesian_ewald.hpp`. The Cartesian free-space
+operators are in `generated_cartesian_m2l.hpp` and
+`generated_cartesian_operators.hpp`; spherical operators are in
+`nitadori/generated_spherical.hpp` and `nitadori/generated_spherical_ewald.hpp`.
+`operation_counts.json` accompanies the headers.
 The same Python entry point uses `tools/cartesian/ewald.py` for the Ewald
 derivatives, so generation does not require compiling a separate C++ tool.
-The compatibility targets `generate_fmm_kernels` and `generate_cartesian_kernels`
-produce the same complete output set. The former checked-in
-`cosmictiger/gravity/stf/generated/` directory and the generator's `--check`
-comparison against it are gone; regenerate by rebuilding.
+The compatibility targets `generate_cartesian_kernels` and
+`cosmictiger_generated_kernels` invoke the same explicit regeneration command.
+This command always emits orders 3 through 9, regardless of the selected
+compiled range.
+Regeneration requires Python 3 and clang-format. Never hand-edit generated
+headers; `--check` verifies them without writing, and CTest's
+`generated_fmm_current` runs that comparison against the source headers.
 
 `cartesian_kernels` checks independent Cartesian polynomial references, translations,
 nonzero dipoles, constant Laplacians, the truncated direct-particle remainder
-series, and SIMD lanes for every FMM order 3 through 9 in one executable,
+series, and SIMD lanes for every order in the selected compiled range,
 printing one pass line per order with the worst normalized discrepancy it saw.
 `cartesian_kernels_cuda` executes the same operations on the device in float and
 double, one launch per order. The complete `fmmWalk` regression compares
@@ -120,7 +136,7 @@ runtime order, including periodic seams and excluded inactive particles.
 
 `cartesian_l2l_cuda` independently checks every coefficient and every lane after one
 and 17 translations, both potential modes, nonzero traces, linear fields, and
-multiple warps per block, at every local degree 2 through 8. It checks
+multiple warps per block, at each selected order's local degree. It checks
 `translate` through the caller's synchronized in-place update pattern and
 `translateInto` through ping-pong shared-memory source and target expansions.
 The old CUDA generator omitted the last of 616 nonpotential terms,
@@ -129,10 +145,11 @@ in the unchanged legacy baseline, which exists only at local degree six.
 
 `cartesian_ewald_cpu` also compiles the CUDA-disabled Ewald initializer and checks its
 image list, self terms, normalization, periodic potential/gradient values, and
-cubic axis-permutation symmetry at every order from 3 through 9, re-filling the
+cubic axis-permutation symmetry at every selected order, re-filling the
 tables through `setFmmOrder` and `EwaldConst::init`. The symmetry check includes
-every derivative rank through eight. Moving the Ewald emitter to Python removed
-signed-integer overflow in ten rank-eight projection coefficients; Fourier table
+every derivative rank through that order's local degree. Moving the Ewald
+emitter to Python removed signed-integer overflow in ten rank-eight projection
+coefficients; Fourier table
 generation also converts factors before multiplying to avoid the same overflow.
 Equal-destination terms now accumulate in a deterministic stable order, so
 floating-point results need not be bitwise identical to the former C++ emitter.
@@ -143,8 +160,8 @@ the downward recurrence `S_(l-1) = (exp(-y) + 2 y S_l) / (2l - 1)`.
 Here `y = alpha^2 r^2 <= 3` for wrapped separations. This avoids the
 catastrophic cancellation of the former upward recurrence at small separation.
 The float derivative regression compares every stored rank against double
-precision at ten separations, including the origin and box corner, for orders
-3 through 9. The other periodic images retain their existing `erfc` recurrence.
+precision at ten separations, including the origin and box corner, for every
+selected order. The other periodic images retain their existing `erfc` recurrence.
 
 CPU runtime validation uses
 `--compute.cuda=false` in the CUDA-enabled application. A complete

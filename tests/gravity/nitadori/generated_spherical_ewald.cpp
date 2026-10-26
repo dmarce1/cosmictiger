@@ -87,6 +87,28 @@ inline counted::Real simdFma(
 }
 
 namespace {
+#ifdef FMM_MIN_ORDER
+constexpr int kMinCompiledDegree = FMM_MIN_ORDER - 1;
+#else
+constexpr int kMinCompiledDegree = 2;
+#endif
+#ifdef FMM_MAX_ORDER
+constexpr int kMaxCompiledDegree = FMM_MAX_ORDER - 1;
+#else
+constexpr int kMaxCompiledDegree = 8;
+#endif
+static_assert(
+    2 <= kMinCompiledDegree && kMinCompiledDegree <= kMaxCompiledDegree && kMaxCompiledDegree <= 8);
+#ifdef GENERATED_SPHERICAL_EWALD_TEST_DEGREE
+constexpr int kMinTestDegree = GENERATED_SPHERICAL_EWALD_TEST_DEGREE;
+constexpr int kMaxTestDegree = GENERATED_SPHERICAL_EWALD_TEST_DEGREE;
+static_assert(kMinCompiledDegree <= kMinTestDegree && kMaxTestDegree <= kMaxCompiledDegree,
+    "The requested spherical Ewald test degree must be inside the compiled FMM order range");
+#else
+constexpr int kMinTestDegree = kMinCompiledDegree;
+constexpr int kMaxTestDegree = kMaxCompiledDegree;
+#endif
+
 using Complex = std::complex<double>;
 using Point = std::array<double, 3>;
 constexpr double kPi = 3.1415926535897932384626433832795;
@@ -385,21 +407,15 @@ void run() {
     countCase<degree>();
     simdCase<degree, float>();
     simdCase<degree, double>();
-#ifndef GENERATED_SPHERICAL_EWALD_TEST_DEGREE
-    if constexpr (degree < 8) {
+    if constexpr (degree < kMaxTestDegree) {
         run<degree + 1>();
     }
-#endif
 }
 }    // namespace
 
 int main() {
     try {
-#ifdef GENERATED_SPHERICAL_EWALD_TEST_DEGREE
-        run<GENERATED_SPHERICAL_EWALD_TEST_DEGREE>();
-#else
-        run<2>();
-#endif
+        run<kMinTestDegree>();
         std::printf(
             "Spherical Ewald: %zu independent coefficient/trace/FLOP checks passed\n", checks);
     } catch (std::exception const& error) {

@@ -564,6 +564,8 @@ def generate(minLocalDegree=2,maxLocalDegree=8):
     for operation in ('P2m','P2l','Greens','M2lDerivatives'):
         parts.append(f'template <int degree> class {operation}Kernel;\n')
     for localDegree in range(minLocalDegree,maxLocalDegree+1):
+        parts.append(f'#if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= {localDegree + 1}) && '
+                     f'(!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= {localDegree + 1})')
         for operation in ('P2m','P2l','Greens','M2lDerivatives'):
             degree = localDegree-1 if operation=='P2m' else localDegree
             code,stats = generateSimple(operation,degree)
@@ -582,5 +584,6 @@ def generate(minLocalDegree=2,maxLocalDegree=8):
                          f'public:\n    static constexpr int kVariant_ = {selected};\n}};\n')
             report['selections'].append(dict(operator=operation,fmm_order=localDegree+1,degree=degree,
                                              candidate_flops=candidates,selected_variant=selected,weighted_flops=candidates[selected]))
+        parts.append('#endif')
     parts.append('} // namespace cosmictiger::gravity::spherical\n')
     return {'generated_spherical.hpp':'\n'.join(parts)},report

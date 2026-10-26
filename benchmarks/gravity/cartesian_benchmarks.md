@@ -34,10 +34,11 @@ host compiler because the legacy header declares CUDA storage. Override
 `--cxx`, `--cuda-root`, and `--arch` together for a different toolchain.
 `--skip-cuda` omits the CUDA binaries; it does not remove the CUDA-header
 requirement for this legacy source. The Cartesian variants include the generated
-kernels from a configured build tree (`ninja -C build
-cosmictiger_generated_kernels`), so the compile commands need
-`-I<build>/generated` in addition to the source root; they time the build's
-default FMM order (`ORDER`, 7), the only order the legacy header implements.
+kernels checked in under `cosmictiger/gravity/`, using the source-root include
+path already supplied by the runner. After changing a generator, explicitly
+regenerate with `python3 tools/generate_fmm.py`; ordinary builds leave the
+headers unchanged. The runner fixes the FMM order at `ORDER=7`, the application
+default and the only order the legacy header implements.
 
 Use a fresh output directory. The build manifest records compiler versions,
 exact argument arrays, source/header hashes, and executable hashes. Builds do

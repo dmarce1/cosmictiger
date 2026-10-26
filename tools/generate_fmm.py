@@ -608,15 +608,21 @@ def generateCartesian(minLocalDegree=2, maxLocalDegree=8):
     operatorStats=[]
     for maxOrder in range(minLocalDegree, maxLocalDegree + 1):
         minOrder = maxOrder - 1
+        orderGuard = (f'#if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= {maxOrder + 1}) && '
+                      f'(!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= {maxOrder + 1})')
+        parts.append(orderGuard)
         parts.append(f'// FMM order {maxOrder + 1}: source degree {minOrder}, local degree {maxOrder}.')
         for centered in (True,False):
             code,counts=emitKernel(maxOrder,centered); parts.append(code); stats.append(counts)
             code,counts=emitEwaldKernel(minOrder,maxOrder,centered); parts.append(code); stats.append(counts)
+        parts.append('#endif')
         particleParts,particleStats=generateParticles(minOrder,maxOrder,sys.modules[__name__])
         translationParts,translationStats=generateTranslations(minOrder,maxOrder,sys.modules[__name__])
         warpCode,warpStats=generateWarpL2l(maxOrder,sys.modules[__name__])
+        operators.append(orderGuard)
         operators.append(f'// FMM order {maxOrder + 1}: source degree {minOrder}, local degree {maxOrder}.')
         operators+=translationParts+particleParts+[warpCode]
+        operators.append('#endif')
         operatorStats+=translationStats+particleStats+[warpStats]
     parts.append('} // namespace cosmictiger::gravity::cartesian::detail\n')
     operators.append('} // namespace cosmictiger::gravity::cartesian::detail\n')
@@ -733,10 +739,11 @@ def main():
                     help='smallest local degree to emit; FMM order is local degree + 1 (default: 2)')
     ap.add_argument('--max-order',dest='maxLocalDegree',type=int,default=8,
                     help='largest local degree to emit (default: 8)')
-    ap.add_argument('--output-dir',dest='outputDir',type=Path,required=True,
-                    help='directory receiving the generated headers and operation counts')
+    ap.add_argument('--output-dir',dest='outputDir',type=Path,default=outputDirectory,
+                    help='directory receiving the generated headers and operation counts '
+                         '(default: cosmictiger/gravity in the source tree)')
     ap.add_argument('--no-format',dest='noFormat',action='store_true',
-                    help='skip clang-format (build-directory generation; compiled code is unchanged)')
+                    help='skip clang-format for temporary output; source headers use formatting')
     args=ap.parse_args()
     if args.minLocalDegree < 2 or args.maxLocalDegree < args.minLocalDegree:
         ap.error('local degrees must form an inclusive range starting at 2 or more')
@@ -760,7 +767,9 @@ def main():
         if args.check:
             if not path.exists() or path.read_text()!=text: failed.append(str(path))
         else:
-            path.parent.mkdir(parents=True,exist_ok=True); path.write_text(text)
+            path.parent.mkdir(parents=True,exist_ok=True)
+            if not path.exists() or path.read_text()!=text:
+                path.write_text(text)
     if failed: ap.exit(1,'Stale generated files: '+', '.join(failed)+'\n')
     print('Generated files are current.' if args.check else
           f'Generated Cartesian and Spherical operators '
