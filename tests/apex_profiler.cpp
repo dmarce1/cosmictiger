@@ -1,9 +1,12 @@
 /* CosmicTiger - HPX APEX and CPU sampler coexistence regression; BSL-1.0. */
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <fstream>
+#include <memory>
+#include <numeric>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -24,6 +27,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/interrupt_profile.hpp>
 #include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/core/profiling_runtime.hpp>
@@ -198,6 +202,38 @@ std::uint64_t apexRegressionAction(std::uint64_t seed) {
 HPX_PLAIN_ACTION(apexRegressionAction, ApexRegressionAction);
 
 int hpx_main(int, char*[]) {
+    // Each move-only closure has a different object address. All instances must
+    // aggregate under one stable label, including work launched by an executor.
+    std::vector<hpx::future<std::uint64_t>> closures;
+    for (std::uint64_t task = 1; task <= 12; task++) {
+        closures.push_back(hpx::async(HPX_PRIORITY_HI,
+            hpx::annotated_function(
+                [value = std::make_unique<std::uint64_t>(task)]() {
+                    hpx::this_thread::yield();
+                    return *value;
+                },
+                "cosmictiger.apex.lambda")));
+    }
+    for (size_t task = 0; task < closures.size(); task++) {
+        detail::require(closures[task].get() == task + 1, "annotated closure lost its capture");
+    }
+    // Parallel algorithms create their own task closures; annotate their
+    // executor so those internal tasks inherit the application phase name.
+    std::vector<int> values(131072);
+    std::iota(values.rbegin(), values.rend(), 1);
+    hpx::sort(annotatedParallelPolicy("cosmictiger.apex.sort"), values.begin(), values.end()).get();
+    detail::require(std::is_sorted(values.begin(), values.end()), "annotated sort failed");
+    std::vector<int> copy(values.size());
+    hpx::copy(annotatedParallelPolicy("cosmictiger.apex.copy"), values.begin(), values.end(),
+        copy.begin())
+        .get();
+    detail::require(copy == values, "annotated copy failed");
+    hpx::fill(annotatedParallelPolicy("cosmictiger.apex.fill"), values.begin(), values.end(), 42)
+        .get();
+    detail::require(
+        std::all_of(values.begin(), values.end(), [](int value) { return value == 42; }),
+        "annotated fill failed");
+
     std::vector<hpx::future<std::uint64_t>> work;
     for (std::uint64_t task = 1; task <= 4; task++) {
         work.push_back(hpx::async(hpx::launch::async,

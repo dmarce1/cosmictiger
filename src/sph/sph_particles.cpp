@@ -17,6 +17,8 @@
 #include <mutex>
 #include <unordered_map>
 
+#include <hpx/threading_base/annotated_function.hpp>
+
 #define SPH_PARTICLES_CPP
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/hpx.hpp>
@@ -120,8 +122,8 @@ void sphParticlesApplyUpdates(int minimumRung, int phase, float timeStepScale, f
     }
     int const numberOfThreads = hpxHardwareConcurrency();
     for (int threadIndex = 0; threadIndex < numberOfThreads; threadIndex++) {
-        futures.push_back(
-            hpx::async([timeStepScale, numberOfThreads, threadIndex, phase, minimumRung]() {
+        futures.push_back(hpx::async(hpx::annotated_function(
+            [timeStepScale, numberOfThreads, threadIndex, phase, minimumRung]() {
                 ParticleInteger const rangeBegin =
                     (size_t) threadIndex * sphParticlesSize() / numberOfThreads;
                 ParticleInteger const rangeEnd =
@@ -213,7 +215,11 @@ void sphParticlesApplyUpdates(int minimumRung, int phase, float timeStepScale, f
                     }
                 }
                 addCpuFlops(flops);
-            }));
+            },
+            phase == 0     ? "sph.particles.predictKick" :
+                phase == 1 ? "sph.particles.correctKick" :
+                phase == 2 ? "sph.particles.openKick" :
+                             "sph.particles.unknownKickPhase")));
     }
     for (auto& future : futures) {
         future.get();
@@ -290,7 +296,8 @@ template <typename T>
 void sphParticlesArrayResize(T*& ptr, ParticleInteger newCapacity) {
     T* newPtr = static_cast<T*>(allocateManagedMemory(sizeof(T) * newCapacity));
     if (capacity > 0 && ptr != nullptr) {
-        hpx_copy(PAR_EXECUTION_POLICY, ptr, ptr + size, newPtr).get();
+        hpx_copy(annotatedParallelPolicy("sph.particles.resize.copy"), ptr, ptr + size, newPtr)
+            .get();
         freeManagedMemory(ptr);
     }
     ptr = newPtr;
@@ -431,14 +438,17 @@ void sphParticlesResolveWithParticles() {
     int const numberOfThreads = hpxHardwareConcurrency();
     std::vector<hpx::future<void>> futures;
     for (int proc = 0; proc < numberOfThreads; proc++) {
-        futures.push_back(hpx::async([proc, numberOfThreads] {
-            ParticleInteger const b = (size_t) proc * sphParticlesSize() / numberOfThreads;
-            ParticleInteger const e = (size_t) (proc + 1) * sphParticlesSize() / numberOfThreads;
-            for (ParticleInteger i = b; i < e; i++) {
-                int const j = sphParticlesParticleIndex(i);
-                particlesCatIndex(j) = i;
-            }
-        }));
+        futures.push_back(hpx::async(hpx::annotated_function(
+            [proc, numberOfThreads] {
+                ParticleInteger const b = (size_t) proc * sphParticlesSize() / numberOfThreads;
+                ParticleInteger const e =
+                    (size_t) (proc + 1) * sphParticlesSize() / numberOfThreads;
+                for (ParticleInteger i = b; i < e; i++) {
+                    int const j = sphParticlesParticleIndex(i);
+                    particlesCatIndex(j) = i;
+                }
+            },
+            "sph.particles.resolveIndices")));
     }
     hpx::wait_all(futures.begin(), futures.end());
 }
@@ -1066,13 +1076,16 @@ void sphParticlesResetConverged() {
         futures.push_back(hpx::async<SphParticlesResetConvergedAction>(c));
     }
     for (int proc = 0; proc < numberOfThreads; proc++) {
-        futures.push_back(hpx::async([proc, numberOfThreads] {
-            ParticleInteger const b = (size_t) proc * sphParticlesSize() / numberOfThreads;
-            ParticleInteger const e = (size_t) (proc + 1) * sphParticlesSize() / numberOfThreads;
-            for (ParticleInteger i = b; i < e; i++) {
-                sphParticlesConverged(i) = false;
-            }
-        }));
+        futures.push_back(hpx::async(hpx::annotated_function(
+            [proc, numberOfThreads] {
+                ParticleInteger const b = (size_t) proc * sphParticlesSize() / numberOfThreads;
+                ParticleInteger const e =
+                    (size_t) (proc + 1) * sphParticlesSize() / numberOfThreads;
+                for (ParticleInteger i = b; i < e; i++) {
+                    sphParticlesConverged(i) = false;
+                }
+            },
+            "sph.particles.resetConverged")));
     }
     hpx::wait_all(futures.begin(), futures.end());
 }
@@ -1086,13 +1099,16 @@ void sphParticlesResetSemiactive() {
         futures.push_back(hpx::async<SphParticlesResetSemiactiveAction>(c));
     }
     for (int proc = 0; proc < numberOfThreads; proc++) {
-        futures.push_back(hpx::async([proc, numberOfThreads] {
-            ParticleInteger const b = (size_t) proc * sphParticlesSize() / numberOfThreads;
-            ParticleInteger const e = (size_t) (proc + 1) * sphParticlesSize() / numberOfThreads;
-            for (ParticleInteger i = b; i < e; i++) {
-                sphParticlesSemiactive(i) = false;
-            }
-        }));
+        futures.push_back(hpx::async(hpx::annotated_function(
+            [proc, numberOfThreads] {
+                ParticleInteger const b = (size_t) proc * sphParticlesSize() / numberOfThreads;
+                ParticleInteger const e =
+                    (size_t) (proc + 1) * sphParticlesSize() / numberOfThreads;
+                for (ParticleInteger i = b; i < e; i++) {
+                    sphParticlesSemiactive(i) = false;
+                }
+            },
+            "sph.particles.resetSemiactive")));
     }
     hpx::wait_all(futures.begin(), futures.end());
 }

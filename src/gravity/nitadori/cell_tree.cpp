@@ -16,6 +16,8 @@
 #include <stdexcept>
 #include <unordered_map>
 
+#include <hpx/threading_base/annotated_function.hpp>
+
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/gravity/nitadori/cell_tree.hpp>
 #include <cosmictiger/gravity/tree_build.hpp>
@@ -68,11 +70,12 @@ static hpx::future<TreeCreateReturn> treeCreateFork(TreeCreateParameters params,
         rc = hpx::async<TreeCreateCellImplAction>(hpxLocalities()[owner], params, key, processRange,
             particleRange, box, depth, localRoot, cellBuild);
     } else {
-        rc = hpx::async(
+        rc = hpx::async(hpx::annotated_function(
             [params, processRange, key, particleRange, depth, localRoot, box, cellBuild]() {
                 return treeCreateCellImpl(
                     params, key, processRange, particleRange, box, depth, localRoot, cellBuild);
-            });
+            },
+            "gravity.pmmm.buildCellTree"));
     }
     return rc;
 }
@@ -390,12 +393,14 @@ Vector<TreeCellRoot> treeCreateCellForest(Vector<ParticleMeshCell> const& cells,
     Vector<hpx::future<void>> futures;
     try {
         for (size_t worker = 0; worker < workers; ++worker) {
-            futures.push_back(hpx::async([&, worker]() {
-                for (size_t i = worker; i < cells.size(); i += workers) {
-                    result[i] = treeCreateCell(cells[i], meshSize,
-                        cells[i].ghost ? FmmParticleStore::Ghost : FmmParticleStore::Owned);
-                }
-            }));
+            futures.push_back(hpx::async(hpx::annotated_function(
+                [&, worker]() {
+                    for (size_t i = worker; i < cells.size(); i += workers) {
+                        result[i] = treeCreateCell(cells[i], meshSize,
+                            cells[i].ghost ? FmmParticleStore::Ghost : FmmParticleStore::Owned);
+                    }
+                },
+                "gravity.pmmm.buildCellForest")));
         }
     } catch (...) {
         hpx::wait_all(futures.begin(), futures.end());

@@ -27,6 +27,7 @@
 #include <hpx/serialization/array.hpp>
 #include <hpx/serialization/vector.hpp>
 #include <hpx/synchronization/condition_variable.hpp>
+#include <hpx/threading_base/annotated_function.hpp>
 
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/hpx.hpp>
@@ -239,9 +240,13 @@ void prepareCollectively(Function function) {
         failure = std::current_exception();
     }
     try {
-        hpx::run_as_os_thread([&]() {
-            collectiveCheck(!failure, "A locality failed while preparing a PMMM collective");
-        }).get();
+        hpx::run_as_os_thread(hpx::annotated_function(
+                                  [&]() {
+                                      collectiveCheck(!failure,
+                                          "A locality failed while preparing a PMMM collective");
+                                  },
+                                  "gravity.pmmm.checkCollectivePreparation"))
+            .get();
     } catch (...) {
         if (failure) {
             std::rethrow_exception(failure);
@@ -251,7 +256,7 @@ void prepareCollectively(Function function) {
 }
 
 template <class Function>
-void parallelFor(size_t count, Function function) {
+void parallelFor(size_t count, char const* taskName, Function function) {
     size_t const workers = std::min(count, std::max(size_t(1), hpx::get_os_thread_count()));
     std::atomic<size_t> next{0};
     std::vector<hpx::future<void>> futures;
@@ -259,15 +264,17 @@ void parallelFor(size_t count, Function function) {
     std::exception_ptr failure;
     try {
         for (size_t worker = 0; worker < workers; ++worker) {
-            futures.push_back(hpx::async([&]() {
-                for (;;) {
-                    size_t const index = next.fetch_add(1, std::memory_order_relaxed);
-                    if (index >= count) {
-                        break;
+            futures.push_back(hpx::async(hpx::annotated_function(
+                [&]() {
+                    for (;;) {
+                        size_t const index = next.fetch_add(1, std::memory_order_relaxed);
+                        if (index >= count) {
+                            break;
+                        }
+                        function(index);
                     }
-                    function(index);
-                }
-            }));
+                },
+                taskName)));
         }
     } catch (...) {
         failure = std::current_exception();

@@ -10,6 +10,8 @@
 #include <cmath>
 #include <limits>
 
+#include <hpx/threading_base/annotated_function.hpp>
+
 #include <cosmictiger/core/assert.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/timer.hpp>
@@ -118,96 +120,98 @@ void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& si
         std::max(std::min((int) parts.size() / 512, 2 * (int) hpxHardwareConcurrency()), 1);
     Vector<hpx::future<void>> futs;
     for (int proc = 0; proc < numberOfThreads; proc++) {
-        futs.push_back(hpx::async([proc, numberOfThreads, &sinkBuckets, &nodes, &phi, &parts, h, gm,
-                                      hinv, h2, relativeError, tiny]() {
-            for (int i = proc; i < sinkBuckets.size(); i += numberOfThreads) {
-                auto const& sinkBucket = sinkBuckets[i];
-                Vector<int> checklist(1, 0);
-                Vector<int> nextlist;
-                Vector<BhSource> sourcelist;
-                auto const myparts = nodes[sinkBucket].parts;
-                auto const mypos = nodes[sinkBucket].pos;
-                auto const myradius = nodes[sinkBucket].radius;
-                for (int i = myparts.first; i < myparts.second; i++) {
-                    phi[i] = selfPhi() * hinv;
-                }
-                while (checklist.size()) {
-                    nextlist.resize(0);
-                    for (int ci = 0; ci < checklist.size(); ci++) {
-                        auto const& node = nodes[checklist[ci]];
-                        float const dx = mypos[kXDimension] - node.pos[kXDimension];
-                        float const dy = mypos[kYDimension] - node.pos[kYDimension];
-                        float const dz = mypos[kZDimension] - node.pos[kZDimension];
-                        float const r2 = sqr(dx, dy, dz);
-                        if (detail::bhAcceptMonopole(r2, node, myradius, h, relativeError)) {
-                            BhSource source;
-                            source.x = node.pos;
-                            source.m = node.mass;
-                            sourcelist.push_back(source);
-                        } else if (node.children[kLeftChild] == -1) {
-                            for (int i = node.parts.first; i < node.parts.second; i++) {
+        futs.push_back(hpx::async(hpx::annotated_function(
+            [proc, numberOfThreads, &sinkBuckets, &nodes, &phi, &parts, h, gm, hinv, h2,
+                relativeError, tiny]() {
+                for (int i = proc; i < sinkBuckets.size(); i += numberOfThreads) {
+                    auto const& sinkBucket = sinkBuckets[i];
+                    Vector<int> checklist(1, 0);
+                    Vector<int> nextlist;
+                    Vector<BhSource> sourcelist;
+                    auto const myparts = nodes[sinkBucket].parts;
+                    auto const mypos = nodes[sinkBucket].pos;
+                    auto const myradius = nodes[sinkBucket].radius;
+                    for (int i = myparts.first; i < myparts.second; i++) {
+                        phi[i] = selfPhi() * hinv;
+                    }
+                    while (checklist.size()) {
+                        nextlist.resize(0);
+                        for (int ci = 0; ci < checklist.size(); ci++) {
+                            auto const& node = nodes[checklist[ci]];
+                            float const dx = mypos[kXDimension] - node.pos[kXDimension];
+                            float const dy = mypos[kYDimension] - node.pos[kYDimension];
+                            float const dz = mypos[kZDimension] - node.pos[kZDimension];
+                            float const r2 = sqr(dx, dy, dz);
+                            if (detail::bhAcceptMonopole(r2, node, myradius, h, relativeError)) {
                                 BhSource source;
-                                source.x = parts[i];
-                                source.m = 1.0f;
+                                source.x = node.pos;
+                                source.m = node.mass;
                                 sourcelist.push_back(source);
+                            } else if (node.children[kLeftChild] == -1) {
+                                for (int i = node.parts.first; i < node.parts.second; i++) {
+                                    BhSource source;
+                                    source.x = parts[i];
+                                    source.m = 1.0f;
+                                    sourcelist.push_back(source);
+                                }
+                            } else {
+                                nextlist.push_back(node.children[kLeftChild]);
+                                nextlist.push_back(node.children[kRightChild]);
                             }
-                        } else {
-                            nextlist.push_back(node.children[kLeftChild]);
-                            nextlist.push_back(node.children[kRightChild]);
                         }
+                        std::swap(nextlist, checklist);
                     }
-                    std::swap(nextlist, checklist);
-                }
-                int const maxi = roundUp((int) sourcelist.size(), kSimdFloatSize);
-                while (sourcelist.size() < maxi) {
-                    BhSource src;
-                    src.m = 0.0f;
-                    for (int dim = 0; dim < kDimensions; dim++) {
-                        src.x[dim] = 0.f;
-                    }
-                    sourcelist.push_back(src);
-                }
-                for (int i = myparts.first; i < myparts.second; i++) {
-                    Array<SimdFloat, kDimensions> xValue{};
-                    for (int dim = 0; dim < kDimensions; dim++) {
-                        xValue[dim] = parts[i][dim];
-                    }
-                    for (int j = 0; j < sourcelist.size(); j += kSimdFloatSize) {
-                        Array<SimdFloat, kDimensions> yValue{};
-                        SimdFloat mValue{};
-                        for (int k = 0; k < kSimdFloatSize; k++) {
-                            auto const& src = sourcelist[j + k];
-                            for (int dim = 0; dim < kDimensions; dim++) {
-                                simdSetLane(yValue[dim], k, src.x[dim]);
-                            }
-                            simdSetLane(mValue, k, src.m);
-                        }
-                        Array<SimdFloat, kDimensions> dx{};
+                    int const maxi = roundUp((int) sourcelist.size(), kSimdFloatSize);
+                    while (sourcelist.size() < maxi) {
+                        BhSource src;
+                        src.m = 0.0f;
                         for (int dim = 0; dim < kDimensions; dim++) {
-                            dx[dim] = xValue[dim] - yValue[dim];    // 3
+                            src.x[dim] = 0.f;
                         }
-                        SimdFloat const separationSquared =
-                            sqr(dx[kXDimension], dx[kYDimension], dx[kZDimension]);
-                        SimdFloat const r2 = simdMax(separationSquared, tiny);
-                        auto const farFlag = separationSquared > h2;
-                        SimdFloat rinv1{};
-                        if (simdAllOf(farFlag)) {     // 7/8
-                            rinv1 = simdRsqrt(r2);    // 5
-                        } else {
-                            SimdFloat const r = simdSqrt(separationSquared);
-                            SimdFloat const rinv1Far = simdBroadcast<SimdFloat>(1) /
-                                (r + simdBroadcast<SimdFloat>(1e-30));    // 5
-                            SimdFloat const q = r * hinv;
-                            SimdFloat const rinv1Near =
-                                radial_kernel::potential(selectedGravityKernel(), q) * hinv;
-                            rinv1 = simdSelect(farFlag, rinv1Far, rinv1Near);    // 4
-                        }
-                        phi[i] -= simdSum(mValue * rinv1);    // 1
+                        sourcelist.push_back(src);
                     }
-                    phi[i] *= gm;
+                    for (int i = myparts.first; i < myparts.second; i++) {
+                        Array<SimdFloat, kDimensions> xValue{};
+                        for (int dim = 0; dim < kDimensions; dim++) {
+                            xValue[dim] = parts[i][dim];
+                        }
+                        for (int j = 0; j < sourcelist.size(); j += kSimdFloatSize) {
+                            Array<SimdFloat, kDimensions> yValue{};
+                            SimdFloat mValue{};
+                            for (int k = 0; k < kSimdFloatSize; k++) {
+                                auto const& src = sourcelist[j + k];
+                                for (int dim = 0; dim < kDimensions; dim++) {
+                                    simdSetLane(yValue[dim], k, src.x[dim]);
+                                }
+                                simdSetLane(mValue, k, src.m);
+                            }
+                            Array<SimdFloat, kDimensions> dx{};
+                            for (int dim = 0; dim < kDimensions; dim++) {
+                                dx[dim] = xValue[dim] - yValue[dim];    // 3
+                            }
+                            SimdFloat const separationSquared =
+                                sqr(dx[kXDimension], dx[kYDimension], dx[kZDimension]);
+                            SimdFloat const r2 = simdMax(separationSquared, tiny);
+                            auto const farFlag = separationSquared > h2;
+                            SimdFloat rinv1{};
+                            if (simdAllOf(farFlag)) {     // 7/8
+                                rinv1 = simdRsqrt(r2);    // 5
+                            } else {
+                                SimdFloat const r = simdSqrt(separationSquared);
+                                SimdFloat const rinv1Far = simdBroadcast<SimdFloat>(1) /
+                                    (r + simdBroadcast<SimdFloat>(1e-30));    // 5
+                                SimdFloat const q = r * hinv;
+                                SimdFloat const rinv1Near =
+                                    radial_kernel::potential(selectedGravityKernel(), q) * hinv;
+                                rinv1 = simdSelect(farFlag, rinv1Far, rinv1Near);    // 4
+                            }
+                            phi[i] -= simdSum(mValue * rinv1);    // 1
+                        }
+                        phi[i] *= gm;
+                    }
                 }
-            }
-        }));
+            },
+            "analysis.bh.evaluateBuckets")));
     }
     hpx::wait_all(futs.begin(), futs.end());
 }

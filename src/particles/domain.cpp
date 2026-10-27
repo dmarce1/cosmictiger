@@ -11,6 +11,8 @@
 #include <shared_mutex>
 #include <unordered_map>
 
+#include <hpx/threading_base/annotated_function.hpp>
+
 #include <cosmictiger/core/containers.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
@@ -150,45 +152,49 @@ Vector<size_t> domainsCountBelow(Vector<double> bounds, int depth) {
     Vector<hpx::future<void>> futs;
     for (int i = 0; i < localDomains.size(); i++) {
         if (localDomains[i].depth == depth) {
-            futs.push_back(hpx::async([i, &bounds, depth, &counts]() {
-                //							PRINT("???? %i %i %i %i \n", hpx_rank(), i,
-                // local_domains[i].part_range.first, local_domains[i].part_range.second);
-                auto const rng = localDomains[i].particleRange;
-                // Root-created initial conditions leave other localities empty
-                // until this rebalance migrates their particles. Empty ranges
-                // contribute zero without dividing by the local population.
-                if (rng.first == rng.second) {
-                    counts[i] = 0;
-                    return;
-                }
-                int const numberOfThreads = std::max(2 * (size_t) (rng.second - rng.first) *
-                        hpxHardwareConcurrency() / (size_t) particlesSize(),
-                    (size_t) 1);
-                Vector<hpx::future<void>> futs;
-                int const xdim = depth % kDimensions;
-                Position const xmid(bounds[i]);
-                std::atomic<size_t> count(0);
-                auto const func = [numberOfThreads, rng, xdim, xmid, &count](int proc) {
-                    size_t const begin =
-                        rng.first + (size_t) proc * (rng.second - rng.first) / numberOfThreads;
-                    size_t const end = rng.first +
-                        (size_t) (proc + 1) * (rng.second - rng.first) / numberOfThreads;
-                    size_t thisCount = 0;
-                    for (size_t i = begin; i < end; i++) {
-                        if (particlesPos(xdim, i) < xmid) {
-                            thisCount++;
-                        }
+            futs.push_back(hpx::async(hpx::annotated_function(
+                [i, &bounds, depth, &counts]() {
+                    //							PRINT("???? %i %i %i %i \n", hpx_rank(), i,
+                    // local_domains[i].part_range.first, local_domains[i].part_range.second);
+                    auto const rng = localDomains[i].particleRange;
+                    // Root-created initial conditions leave other localities empty
+                    // until this rebalance migrates their particles. Empty ranges
+                    // contribute zero without dividing by the local population.
+                    if (rng.first == rng.second) {
+                        counts[i] = 0;
+                        return;
                     }
-                    count += thisCount;
-                };
+                    int const numberOfThreads = std::max(2 * (size_t) (rng.second - rng.first) *
+                            hpxHardwareConcurrency() / (size_t) particlesSize(),
+                        (size_t) 1);
+                    Vector<hpx::future<void>> futs;
+                    int const xdim = depth % kDimensions;
+                    Position const xmid(bounds[i]);
+                    std::atomic<size_t> count(0);
+                    auto const func = [numberOfThreads, rng, xdim, xmid, &count](int proc) {
+                        size_t const begin =
+                            rng.first + (size_t) proc * (rng.second - rng.first) / numberOfThreads;
+                        size_t const end = rng.first +
+                            (size_t) (proc + 1) * (rng.second - rng.first) / numberOfThreads;
+                        size_t thisCount = 0;
+                        for (size_t i = begin; i < end; i++) {
+                            if (particlesPos(xdim, i) < xmid) {
+                                thisCount++;
+                            }
+                        }
+                        count += thisCount;
+                    };
 
-                for (int proc = 1; proc < numberOfThreads; proc++) {
-                    futs.push_back(hpx::async(func, proc));
-                }
-                func(0);
-                hpx::wait_all(futs.begin(), futs.end());
-                counts[i] = count;
-            }));
+                    for (int proc = 1; proc < numberOfThreads; proc++) {
+                        futs.push_back(hpx::async(
+                            hpx::annotated_function(func, "particles.domainsCountBelowChunk"),
+                            proc));
+                    }
+                    func(0);
+                    hpx::wait_all(futs.begin(), futs.end());
+                    counts[i] = count;
+                },
+                "particles.domainsCountBelow")));
         }
     }
     hpx::wait_all(futs.begin(), futs.end());
@@ -201,12 +207,14 @@ void domainsReboundSort(Vector<double> bounds, int depth) {
     Vector<hpx::future<void>> futs;
     for (int i = 0; i < localDomains.size(); i++) {
         if (localDomains[i].depth == depth) {
-            futs.push_back(hpx::async([i, &bounds, depth, &mids]() {
-                mids[i] =
-                    particlesSort(localDomains[i].particleRange, bounds[i], depth % kDimensions);
-                ///	PRINT( "!!!!!!!! %i %i %e %i %i\n", hpx_rank(), mids[i], bounds[i],
-                /// local_domains[i].part_range.first, local_domains[i].part_range.second);
-            }));
+            futs.push_back(hpx::async(hpx::annotated_function(
+                [i, &bounds, depth, &mids]() {
+                    mids[i] = particlesSort(
+                        localDomains[i].particleRange, bounds[i], depth % kDimensions);
+                    ///	PRINT( "!!!!!!!! %i %i %e %i %i\n", hpx_rank(), mids[i], bounds[i],
+                    /// local_domains[i].part_range.first, local_domains[i].part_range.second);
+                },
+                "particles.domainsReboundSort")));
         }
     }
     hpx::wait_all(futs.begin(), futs.end());
@@ -572,52 +580,54 @@ void domainsBegin(int rung) {
     std::atomic<ParticleInteger> nextBegin(0);
     constexpr int kChunkSize = 1024;
     for (int proc = 0; proc < numberOfThreads; proc++) {
-        futs.push_back(hpx::async([proc, numberOfThreads, &mutex, &nextBegin, myDomain,
-                                      currentRange, rung]() {
-            std::unordered_map<int, Vector<Particle>> sends;
-            Vector<hpx::future<void>> futs;
-            Vector<ParticleInteger> myFreeIndices;
-            ParticleInteger begin = nextBegin++ * kChunkSize + currentRange.first;
-            while (begin < currentRange.second) {
-                ParticleInteger const end = std::min(begin + kChunkSize, currentRange.second);
-                for (ParticleInteger i = begin; i < end; i++) {
-                    // Ordinary timesteps drift every rung together. Rebalance
-                    // all particles before building their common gravity tree.
-                    if (!getOptions().run.hierarchicalGravity || particlesRung(i) == rung) {
-                        Array<double, kDimensions> x;
-                        for (ParticleInteger dim = 0; dim < kDimensions; dim++) {
-                            x[dim] = positionDomainCoordinate(particlesPos(dim, i));
-                        }
-                        if (!myDomain.contains(x)) {
-                            ParticleInteger const rank = findParticleDomain(x);
-                            auto& send = sends[rank];
-                            send.push_back(particlesGetParticle(i));
-                            if (send.size() >= kMaxParticlesPerParcel) {
-                                //				PRINT( "Sending %i from %i to %i\n", send.size(),
-                                // hpx_rank(), rank);
-                                futs.push_back(hpx::async<DomainsTransmitParticlesAction>(
-                                    hpxLocalities()[rank], std::move(send)));
+        futs.push_back(hpx::async(hpx::annotated_function(
+            [proc, numberOfThreads, &mutex, &nextBegin, myDomain, currentRange, rung]() {
+                std::unordered_map<int, Vector<Particle>> sends;
+                Vector<hpx::future<void>> futs;
+                Vector<ParticleInteger> myFreeIndices;
+                ParticleInteger begin = nextBegin++ * kChunkSize + currentRange.first;
+                while (begin < currentRange.second) {
+                    ParticleInteger const end = std::min(begin + kChunkSize, currentRange.second);
+                    for (ParticleInteger i = begin; i < end; i++) {
+                        // Ordinary timesteps drift every rung together. Rebalance
+                        // all particles before building their common gravity tree.
+                        if (!getOptions().run.hierarchicalGravity || particlesRung(i) == rung) {
+                            Array<double, kDimensions> x;
+                            for (ParticleInteger dim = 0; dim < kDimensions; dim++) {
+                                x[dim] = positionDomainCoordinate(particlesPos(dim, i));
                             }
-                            myFreeIndices.push_back(i);
+                            if (!myDomain.contains(x)) {
+                                ParticleInteger const rank = findParticleDomain(x);
+                                auto& send = sends[rank];
+                                send.push_back(particlesGetParticle(i));
+                                if (send.size() >= kMaxParticlesPerParcel) {
+                                    //				PRINT( "Sending %i from %i to %i\n", send.size(),
+                                    // hpx_rank(), rank);
+                                    futs.push_back(hpx::async<DomainsTransmitParticlesAction>(
+                                        hpxLocalities()[rank], std::move(send)));
+                                }
+                                myFreeIndices.push_back(i);
+                            }
                         }
                     }
+                    begin = nextBegin++ * kChunkSize + currentRange.first;
                 }
-                begin = nextBegin++ * kChunkSize + currentRange.first;
-            }
-            for (auto i = sends.begin(); i != sends.end(); i++) {
-                if (i->second.size()) {
-                    //			PRINT( "Sending %i from %i to %i\n", i->second.size(),
-                    // hpx_rank(),i->first);
-                    futs.push_back(hpx::async<DomainsTransmitParticlesAction>(
-                        hpxLocalities()[i->first], std::move(i->second)));
+                for (auto i = sends.begin(); i != sends.end(); i++) {
+                    if (i->second.size()) {
+                        //			PRINT( "Sending %i from %i to %i\n", i->second.size(),
+                        // hpx_rank(),i->first);
+                        futs.push_back(hpx::async<DomainsTransmitParticlesAction>(
+                            hpxLocalities()[i->first], std::move(i->second)));
+                    }
                 }
-            }
-            {
-                std::lock_guard<MutexType> lock(mutex);
-                freeIndices.insert(freeIndices.end(), myFreeIndices.begin(), myFreeIndices.end());
-            }
-            hpx::wait_all(futs.begin(), futs.end());
-        }));
+                {
+                    std::lock_guard<MutexType> lock(mutex);
+                    freeIndices.insert(
+                        freeIndices.end(), myFreeIndices.begin(), myFreeIndices.end());
+                }
+                hpx::wait_all(futs.begin(), futs.end());
+            },
+            "particles.collectDomainTransfers")));
     }
 
     hpx::wait_all(futs.begin(), futs.end());
@@ -646,7 +656,8 @@ void domainsEnd() {
     hpx::future<void> fut1;
     hpx::future<void> fut2;
     if (freeIndices.size()) {
-        fut1 = hpx::sort(PAR_EXECUTION_POLICY, freeIndices.begin(), freeIndices.end());
+        fut1 = hpx::sort(annotatedParallelPolicy("particles.sortFreeIndices"), freeIndices.begin(),
+            freeIndices.end());
     } else {
         fut1 = hpx::make_ready_future();
     }
@@ -662,20 +673,22 @@ void domainsEnd() {
     int const numberOfThreads = hpxHardwareConcurrency();
     std::atomic<int> index(0);
     for (int proc = 0; proc < numberOfThreads; proc++) {
-        futs1.push_back(hpx::async([&index, &allTransParticles, &offsets]() {
-            int i;
-            while ((i = index++) < transParticles.size()) {
-                for (ParticleInteger j = 0; j < transParticles[i].size(); j++) {
-                    allTransParticles[offsets[i] + j] = transParticles[i][j];
+        futs1.push_back(hpx::async(hpx::annotated_function(
+            [&index, &allTransParticles, &offsets]() {
+                int i;
+                while ((i = index++) < transParticles.size()) {
+                    for (ParticleInteger j = 0; j < transParticles[i].size(); j++) {
+                        allTransParticles[offsets[i] + j] = transParticles[i][j];
+                    }
                 }
-            }
-        }));
+            },
+            "particles.gatherDomainTransfers")));
     }
     hpx::wait_all(futs1.begin(), futs1.end());
     transParticles = decltype(transParticles)();
     if (allTransParticles.size()) {
-        fut2 = hpx::sort(PAR_EXECUTION_POLICY, allTransParticles.begin(), allTransParticles.end(),
-            particleCompare);
+        fut2 = hpx::sort(annotatedParallelPolicy("particles.sortDomainTransfers"),
+            allTransParticles.begin(), allTransParticles.end(), particleCompare);
     } else {
         fut2 = hpx::make_ready_future();
     }
@@ -697,13 +710,16 @@ void domainsEnd() {
     }
     // PRINT("unloading particles on %i\n", hpx_rank());
     for (int proc = 0; proc < numberOfThreads; proc++) {
-        futs.push_back(hpx::async([numberOfThreads, proc, &allTransParticles]() {
-            ParticleInteger const begin = (size_t) proc * freeIndices.size() / numberOfThreads;
-            ParticleInteger const end = (size_t) (proc + 1) * freeIndices.size() / numberOfThreads;
-            for (ParticleInteger i = begin; i < end; i++) {
-                particlesSetParticle(allTransParticles[i], freeIndices[i]);
-            }
-        }));
+        futs.push_back(hpx::async(hpx::annotated_function(
+            [numberOfThreads, proc, &allTransParticles]() {
+                ParticleInteger const begin = (size_t) proc * freeIndices.size() / numberOfThreads;
+                ParticleInteger const end =
+                    (size_t) (proc + 1) * freeIndices.size() / numberOfThreads;
+                for (ParticleInteger i = begin; i < end; i++) {
+                    particlesSetParticle(allTransParticles[i], freeIndices[i]);
+                }
+            },
+            "particles.installDomainTransfers")));
     }
     hpx::wait_all(futs.begin(), futs.end());
     // PRINT("Done on %i\n", hpx_rank());
@@ -723,26 +739,28 @@ static void domainsCheck() {
     int const numberOfThreads = hpxHardwareConcurrency();
     Vector<hpx::future<void>> futs;
     for (int proc = 0; proc < numberOfThreads; proc++) {
-        futs.push_back(hpx::async([proc, numberOfThreads, &fail, myDomain]() {
-            auto const rng = particlesCurrentRange();
-            ParticleInteger const begin =
-                size_t(proc) * (rng.second - rng.first) / numberOfThreads + rng.first;
-            ParticleInteger const end =
-                size_t(proc + 1) * (rng.second - rng.first) / numberOfThreads + rng.first;
-            for (ParticleInteger i = begin; i < end; i++) {
-                Array<double, kDimensions> x;
-                for (int dim = 0; dim < kDimensions; dim++) {
-                    x[dim] = positionDomainCoordinate(particlesPos(dim, i));
+        futs.push_back(hpx::async(hpx::annotated_function(
+            [proc, numberOfThreads, &fail, myDomain]() {
+                auto const rng = particlesCurrentRange();
+                ParticleInteger const begin =
+                    size_t(proc) * (rng.second - rng.first) / numberOfThreads + rng.first;
+                ParticleInteger const end =
+                    size_t(proc + 1) * (rng.second - rng.first) / numberOfThreads + rng.first;
+                for (ParticleInteger i = begin; i < end; i++) {
+                    Array<double, kDimensions> x;
+                    for (int dim = 0; dim < kDimensions; dim++) {
+                        x[dim] = positionDomainCoordinate(particlesPos(dim, i));
+                    }
+                    if (!myDomain.contains(x)) {
+                        PRINT("particle out of range %li of %li %e %e %e rung %i\n", (long long) i,
+                            (long long) particlesSize(), x[0], x[1], x[2], particlesRung(i));
+                        PRINT("%s\n", domainsFindMyBox().toString().c_str());
+                        ALWAYS_ASSERT(false);
+                        fail++;
+                    }
                 }
-                if (!myDomain.contains(x)) {
-                    PRINT("particle out of range %li of %li %e %e %e rung %i\n", (long long) i,
-                        (long long) particlesSize(), x[0], x[1], x[2], particlesRung(i));
-                    PRINT("%s\n", domainsFindMyBox().toString().c_str());
-                    ALWAYS_ASSERT(false);
-                    fail++;
-                }
-            }
-        }));
+            },
+            "particles.domainsCheck")));
     }
     hpx::wait_all(futs.begin(), futs.end());
     if (int(fail)) {

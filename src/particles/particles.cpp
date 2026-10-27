@@ -20,6 +20,7 @@ constexpr bool kVerbose = true;
 #include <vector>
 
 #include <gsl/gsl_rng.h>
+#include <hpx/threading_base/annotated_function.hpp>
 
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/hpx.hpp>
@@ -196,21 +197,23 @@ void particlesDisplace(double dx, double dy, double dz) {
     }
     int const numberOfThreads = hpxHardwareConcurrency();
     for (int proc = 0; proc < numberOfThreads; proc++) {
-        futs.push_back(hpx::async([numberOfThreads, proc, dx, dy, dz]() {
-            ParticleInteger const begin = (size_t) proc * particlesSize() / numberOfThreads;
-            ParticleInteger const end = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
-            for (ParticleInteger i = begin; i < end; i++) {
-                double x = particlesPos(kXDimension, i).toDouble();
-                double y = particlesPos(kYDimension, i).toDouble();
-                double z = particlesPos(kZDimension, i).toDouble();
-                x = fmod(x + dx, 1.0);
-                y = fmod(y + dy, 1.0);
-                z = fmod(z + dz, 1.0);
-                particlesPos(kXDimension, i) = x;
-                particlesPos(kYDimension, i) = y;
-                particlesPos(kZDimension, i) = z;
-            }
-        }));
+        futs.push_back(hpx::async(hpx::annotated_function(
+            [numberOfThreads, proc, dx, dy, dz]() {
+                ParticleInteger const begin = (size_t) proc * particlesSize() / numberOfThreads;
+                ParticleInteger const end = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
+                for (ParticleInteger i = begin; i < end; i++) {
+                    double x = particlesPos(kXDimension, i).toDouble();
+                    double y = particlesPos(kYDimension, i).toDouble();
+                    double z = particlesPos(kZDimension, i).toDouble();
+                    x = fmod(x + dx, 1.0);
+                    y = fmod(y + dy, 1.0);
+                    z = fmod(z + dz, 1.0);
+                    particlesPos(kXDimension, i) = x;
+                    particlesPos(kYDimension, i) = y;
+                    particlesPos(kZDimension, i) = z;
+                }
+            },
+            "particles.displace")));
     }
     hpx::wait_all(futs.begin(), futs.end());
     for (auto& f : futs) {
@@ -324,18 +327,20 @@ static T const* readParticleCacheLine(LineIdType lineId,
         }
         if (inserted) {
             try {
-                hpx::post([promise, lineId]() {
-                    try {
-                        if constexpr (std::is_same_v<Action, ParticlesFetchCacheLineAction>) {
-                            remoteParticleFetches.fetch_add(1, std::memory_order_relaxed);
+                hpx::post(hpx::annotated_function(
+                    [promise, lineId]() {
+                        try {
+                            if constexpr (std::is_same_v<Action, ParticlesFetchCacheLineAction>) {
+                                remoteParticleFetches.fetch_add(1, std::memory_order_relaxed);
+                            }
+                            auto remote =
+                                hpx::async<Action>(hpxLocalities()[lineId.proc], lineId.index);
+                            promise->set_value(remote.get());
+                        } catch (...) {
+                            promise->set_exception(std::current_exception());
                         }
-                        auto remote =
-                            hpx::async<Action>(hpxLocalities()[lineId.proc], lineId.index);
-                        promise->set_value(remote.get());
-                    } catch (...) {
-                        promise->set_exception(std::current_exception());
-                    }
-                });
+                    },
+                    "particles.readCacheLine"));
             } catch (...) {
                 promise->set_exception(std::current_exception());
             }
@@ -431,7 +436,8 @@ std::unordered_map<int, ParticleInteger> particlesGroupsInit() {
 
     ALWAYS_ASSERT(!particlesGrp);
     particlesGrp = new std::atomic<GroupInteger>[size];
-    hpx_fill(PAR_EXECUTION_POLICY, particlesGrp, particlesGrp + particlesSize(), kNoParticleGroup)
+    hpx_fill(annotatedParallelPolicy("particles.groupsInit"), particlesGrp,
+        particlesGrp + particlesSize(), kNoParticleGroup)
         .get();
     groupCacheEpoch = 0;
 
@@ -489,13 +495,15 @@ void particlesGroupsDestroy() {
     int const numberOfThreads = hpxHardwareConcurrency();
     Vector<hpx::future<void>> futs2;
     for (int proc = 0; proc < numberOfThreads; proc++) {
-        futs2.push_back(hpx::async([numberOfThreads, proc]() {
-            ParticleInteger const begin = (size_t) proc * particlesSize() / numberOfThreads;
-            ParticleInteger const end = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
-            for (ParticleInteger i = begin; i < end; i++) {
-                particlesLastgroup(i) = particlesGroup(i);
-            }
-        }));
+        futs2.push_back(hpx::async(hpx::annotated_function(
+            [numberOfThreads, proc]() {
+                ParticleInteger const begin = (size_t) proc * particlesSize() / numberOfThreads;
+                ParticleInteger const end = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
+                for (ParticleInteger i = begin; i < end; i++) {
+                    particlesLastgroup(i) = particlesGroup(i);
+                }
+            },
+            "particles.groupsDestroy")));
     }
     hpx::wait_all(futs2.begin(), futs2.end());
     delete[] (particlesGrp);
@@ -656,26 +664,28 @@ static GroupParticle const* particlesGroupCacheReadLine(LineIdType lineId) {
         }
         if (inserted) {
             try {
-                hpx::post([promise, lineId, old]() {
-                    try {
-                        if (old) {
-                            auto data = old->get();
-                            auto groups = hpx::async<ParticlesGroupRefreshCacheLineAction>(
-                                hpxLocalities()[lineId.proc], lineId.index)
-                                              .get();
-                            for (int i = 0; i < groups.size(); i++) {
-                                data[i].g = groups[i];
+                hpx::post(hpx::annotated_function(
+                    [promise, lineId, old]() {
+                        try {
+                            if (old) {
+                                auto data = old->get();
+                                auto groups = hpx::async<ParticlesGroupRefreshCacheLineAction>(
+                                    hpxLocalities()[lineId.proc], lineId.index)
+                                                  .get();
+                                for (int i = 0; i < groups.size(); i++) {
+                                    data[i].g = groups[i];
+                                }
+                                promise->set_value(std::move(data));
+                            } else {
+                                promise->set_value(hpx::async<ParticlesGroupFetchCacheLineAction>(
+                                    hpxLocalities()[lineId.proc], lineId.index)
+                                        .get());
                             }
-                            promise->set_value(std::move(data));
-                        } else {
-                            promise->set_value(hpx::async<ParticlesGroupFetchCacheLineAction>(
-                                hpxLocalities()[lineId.proc], lineId.index)
-                                    .get());
+                        } catch (...) {
+                            promise->set_exception(std::current_exception());
                         }
-                    } catch (...) {
-                        promise->set_exception(std::current_exception());
-                    }
-                });
+                    },
+                    "particles.readGroupCacheLine"));
             } catch (...) {
                 promise->set_exception(std::current_exception());
             }
@@ -693,19 +703,21 @@ Vector<size_t> particlesRungCounts() {
     }
     int const numberOfThreads = hpxHardwareConcurrency();
     for (int proc = 0; proc < numberOfThreads; proc++) {
-        futs.push_back(hpx::async([proc, numberOfThreads]() {
-            Vector<size_t> counts;
-            ParticleInteger const b = (size_t) proc * particlesSize() / numberOfThreads;
-            ParticleInteger const e = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
-            for (ParticleInteger i = b; i < e; i++) {
-                auto const rung = particlesRung(i);
-                if (counts.size() <= rung) {
-                    counts.resize(rung + 1, 0);
+        futs.push_back(hpx::async(hpx::annotated_function(
+            [proc, numberOfThreads]() {
+                Vector<size_t> counts;
+                ParticleInteger const b = (size_t) proc * particlesSize() / numberOfThreads;
+                ParticleInteger const e = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
+                for (ParticleInteger i = b; i < e; i++) {
+                    auto const rung = particlesRung(i);
+                    if (counts.size() <= rung) {
+                        counts.resize(rung + 1, 0);
+                    }
+                    counts[rung]++;
                 }
-                counts[rung]++;
-            }
-            return counts;
-        }));
+                return counts;
+            },
+            "particles.rungCounts")));
     }
     Vector<size_t> counts;
     for (auto& f : futs) {
@@ -736,14 +748,16 @@ void particlesSetMinrung(int minrung) {
     }
     int const numberOfThreads = hpxHardwareConcurrency();
     for (int proc = 0; proc < numberOfThreads; proc++) {
-        futs.push_back(hpx::async([proc, numberOfThreads, minrung]() {
-            ParticleInteger const b = (size_t) proc * particlesSize() / numberOfThreads;
-            ParticleInteger const e = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
-            for (ParticleInteger i = b; i < e; i++) {
-                auto& rung = particlesRung(i);
-                rung = std::max((int) rung, minrung);
-            }
-        }));
+        futs.push_back(hpx::async(hpx::annotated_function(
+            [proc, numberOfThreads, minrung]() {
+                ParticleInteger const b = (size_t) proc * particlesSize() / numberOfThreads;
+                ParticleInteger const e = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
+                for (ParticleInteger i = b; i < e; i++) {
+                    auto& rung = particlesRung(i);
+                    rung = std::max((int) rung, minrung);
+                }
+            },
+            "particles.setMinrung")));
     }
     for (auto& f : futs) {
         f.get();
@@ -1018,21 +1032,23 @@ void particlesRandomInit() {
     particlesResize(localParticleCount);
     int const numberOfThreads = hpxHardwareConcurrency();
     for (int proc = 0; proc < numberOfThreads; proc++) {
-        futs.push_back(hpx::async([proc, numberOfThreads]() {
-            ParticleInteger const begin = (size_t) proc * particlesSize() / numberOfThreads;
-            ParticleInteger const end = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
-            int const seed = 4321 * (hpxRank() * numberOfThreads + proc) + 42;
-            gsl_rng* rndgen = gsl_rng_alloc(gsl_rng_taus);
-            gsl_rng_set(rndgen, seed);
-            for (ParticleInteger i = begin; i < end; i++) {
-                for (int dim = 0; dim < kDimensions; dim++) {
-                    particlesPos(dim, i) = gsl_rng_uniform(rndgen);
-                    particlesVel(dim, i) = 0.0f;
+        futs.push_back(hpx::async(hpx::annotated_function(
+            [proc, numberOfThreads]() {
+                ParticleInteger const begin = (size_t) proc * particlesSize() / numberOfThreads;
+                ParticleInteger const end = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
+                int const seed = 4321 * (hpxRank() * numberOfThreads + proc) + 42;
+                gsl_rng* rndgen = gsl_rng_alloc(gsl_rng_taus);
+                gsl_rng_set(rndgen, seed);
+                for (ParticleInteger i = begin; i < end; i++) {
+                    for (int dim = 0; dim < kDimensions; dim++) {
+                        particlesPos(dim, i) = gsl_rng_uniform(rndgen);
+                        particlesVel(dim, i) = 0.0f;
+                    }
+                    particlesRung(i) = 0;
                 }
-                particlesRung(i) = 0;
-            }
-            gsl_rng_free(rndgen);
-        }));
+                gsl_rng_free(rndgen);
+            },
+            "particles.randomInit")));
     }
     hpx::wait_all(futs.begin(), futs.end());
 }
@@ -1063,7 +1079,8 @@ Pair<Array<double, kDimensions>, double> particlesEnclosingSphere(Pair<ParticleI
     };
     Vector<hpx::future<Range<double>>> futs1;
     for (int proc = 1; proc < numberOfThreads; proc++) {
-        futs1.push_back(hpx::async(func1, proc));
+        futs1.push_back(
+            hpx::async(hpx::annotated_function(func1, "particles.enclosingSphereBounds"), proc));
     }
     auto box = func1(0);
     for (auto& fut : futs1) {
@@ -1094,7 +1111,8 @@ Pair<Array<double, kDimensions>, double> particlesEnclosingSphere(Pair<ParticleI
     };
     Vector<hpx::future<double>> futs2;
     for (int proc = 1; proc < numberOfThreads; proc++) {
-        futs2.push_back(hpx::async(func2, proc));
+        futs2.push_back(
+            hpx::async(hpx::annotated_function(func2, "particles.enclosingSphereRadius"), proc));
     }
     auto rmax = func2(0);
     for (auto& fut : futs2) {
@@ -1379,17 +1397,19 @@ void particlesResolveWithSphParticles() {
     int const numberOfThreads = hpxHardwareConcurrency();
     std::vector<hpx::future<void>> futs;
     for (int proc = 0; proc < numberOfThreads; proc++) {
-        futs.push_back(hpx::async([proc, numberOfThreads] {
-            ParticleInteger const b = (size_t) proc * particlesSize() / numberOfThreads;
-            ParticleInteger const e = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
-            for (ParticleInteger i = b; i < e; i++) {
-                int const type = particlesType(i);
-                if (type == kSphType) {
-                    ParticleInteger const index = particlesCatIndex(i);
-                    sphParticlesParticleIndex(index) = i;
+        futs.push_back(hpx::async(hpx::annotated_function(
+            [proc, numberOfThreads] {
+                ParticleInteger const b = (size_t) proc * particlesSize() / numberOfThreads;
+                ParticleInteger const e = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
+                for (ParticleInteger i = b; i < e; i++) {
+                    int const type = particlesType(i);
+                    if (type == kSphType) {
+                        ParticleInteger const index = particlesCatIndex(i);
+                        sphParticlesParticleIndex(index) = i;
+                    }
                 }
-            }
-        }));
+            },
+            "particles.resolveSphIndices")));
     }
     hpx::wait_all(futs.begin(), futs.end());
 }
@@ -1460,30 +1480,32 @@ EnergiesT particlesSumEnergies() {
     EnergiesT energies;
     int const numberOfThreads = hpxHardwareConcurrency();
     for (int proc = 0; proc < numberOfThreads; proc++) {
-        futs.push_back(hpx::async([numberOfThreads, proc]() {
-            EnergiesT energies;
-            ParticleInteger const b = (size_t) proc * particlesSize() / numberOfThreads;
-            ParticleInteger const e = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
-            for (ParticleInteger i = b; i != e; i++) {
-                float const vx = particlesVel(kXDimension, i);
-                float const vy = particlesVel(kYDimension, i);
-                float const vz = particlesVel(kZDimension, i);
-                float const m = particlesMass(i);
-                if (saveParticlePotential(getOptions().analysis)) {
-                    energies.pot += 0.5 * m * particlesPot(i);
+        futs.push_back(hpx::async(hpx::annotated_function(
+            [numberOfThreads, proc]() {
+                EnergiesT energies;
+                ParticleInteger const b = (size_t) proc * particlesSize() / numberOfThreads;
+                ParticleInteger const e = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
+                for (ParticleInteger i = b; i != e; i++) {
+                    float const vx = particlesVel(kXDimension, i);
+                    float const vy = particlesVel(kYDimension, i);
+                    float const vz = particlesVel(kZDimension, i);
+                    float const m = particlesMass(i);
+                    if (saveParticlePotential(getOptions().analysis)) {
+                        energies.pot += 0.5 * m * particlesPot(i);
+                    }
+                    energies.kin += 0.5 * m * (sqr(vx) + sqr(vy) + sqr(vz));
+                    energies.xmom += m * vx;
+                    energies.ymom += m * vy;
+                    energies.zmom += m * vz;
+                    energies.nmom += m * std::sqrt(sqr(vx) + sqr(vy) + sqr(vz));
+                    if (particlesType(i) == kSphType) {
+                        int const kk = particlesCatIndex(i);
+                        energies.therm += m * sphParticlesInternalEnergy(kk);
+                    }
                 }
-                energies.kin += 0.5 * m * (sqr(vx) + sqr(vy) + sqr(vz));
-                energies.xmom += m * vx;
-                energies.ymom += m * vy;
-                energies.zmom += m * vz;
-                energies.nmom += m * std::sqrt(sqr(vx) + sqr(vy) + sqr(vz));
-                if (particlesType(i) == kSphType) {
-                    int const kk = particlesCatIndex(i);
-                    energies.therm += m * sphParticlesInternalEnergy(kk);
-                }
-            }
-            return energies;
-        }));
+                return energies;
+            },
+            "particles.sumEnergies")));
     }
 
     for (auto& f : futs) {
@@ -1529,7 +1551,7 @@ Vector<Position> particlesGetLocal(Vector<Pair<ParticleInteger>> const& ranges) 
             }
         }
     };
-    auto fut1 = hpx::async(func1);
+    auto fut1 = hpx::async(hpx::annotated_function(func1, "particles.getLocalPositions"));
     func2();
     fut1.get();
     return rc;

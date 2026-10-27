@@ -55,7 +55,7 @@ void evaluateParticles(bool doPotential) {
     if (begin != state.cells.size()) {
         batches.emplace_back(begin, state.cells.size());
     }
-    parallelFor(batches.size(), [&](size_t batchIndex) {
+    parallelFor(batches.size(), "gravity.pmmm.evaluateParticles", [&](size_t batchIndex) {
         struct BatchCell {
             size_t sinkBegin;
             std::vector<double> coefficients;

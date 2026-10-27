@@ -6,6 +6,7 @@
 
 #include <hpx/async_base/launch_policy.hpp>
 #include <hpx/futures/future.hpp>
+#include <hpx/threading_base/annotated_function.hpp>
 
 namespace particle_mesh::detail {
 
@@ -22,13 +23,16 @@ void dispatchCollectively(size_t count, Launch launch) {
         for (size_t index = 0; index < count; ++index) {
             // Observe every failure immediately: waiting on an earlier future
             // first could hang while its rank waits for the failed participant.
-            futures.push_back(launch(index).then(hpx::launch::sync, [](hpx::future<void> future) {
-                try {
-                    future.get();
-                } catch (...) {
-                    abortCollectiveDispatch();
-                }
-            }));
+            futures.push_back(launch(index).then(hpx::launch::sync,
+                hpx::annotated_function(
+                    [](hpx::future<void> future) {
+                        try {
+                            future.get();
+                        } catch (...) {
+                            abortCollectiveDispatch();
+                        }
+                    },
+                    "gravity.pmmm.observeCollective")));
         }
         for (auto& future : futures) {
             future.get();

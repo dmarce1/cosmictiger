@@ -14,6 +14,8 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include <hpx/threading_base/annotated_function.hpp>
+
 #include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/gravity/dehnen/remote_cache.hpp>
 #include <cosmictiger/gravity/tree_build.hpp>
@@ -107,16 +109,18 @@ static TreeNode const* treeCacheRead(TreeId id) {
             }
             if (inserted) {
                 try {
-                    hpx::post([promise, lineId]() {
-                        try {
-                            treeRecordRemoteFetch();
-                            promise->set_value(hpx::async<TreeFetchCacheLineAction>(
-                                hpxLocalities()[lineId.proc], lineId.index)
-                                    .get());
-                        } catch (...) {
-                            promise->set_exception(std::current_exception());
-                        }
-                    });
+                    hpx::post(hpx::annotated_function(
+                        [promise, lineId]() {
+                            try {
+                                treeRecordRemoteFetch();
+                                promise->set_value(hpx::async<TreeFetchCacheLineAction>(
+                                    hpxLocalities()[lineId.proc], lineId.index)
+                                        .get());
+                            } catch (...) {
+                                promise->set_exception(std::current_exception());
+                            }
+                        },
+                        "gravity.fetchTreeCacheLine"));
                 } catch (...) {
                     promise->set_exception(std::current_exception());
                 }

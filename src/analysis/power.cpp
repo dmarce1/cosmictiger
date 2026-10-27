@@ -11,6 +11,8 @@
 #include <complex>
 #include <numbers>
 
+#include <hpx/threading_base/annotated_function.hpp>
+
 #include <cosmictiger/analysis/power.hpp>
 #include <cosmictiger/analysis/power_cpu.hpp>
 #include <cosmictiger/core/hpx.hpp>
@@ -123,38 +125,40 @@ static PowerSpectrumReturn powerSpectrumBin(Vector<float> const& kbins) {
     Vector<float> ktot(numberOfBins, 0.0);
     for (iValue[0] = box.begin[0]; iValue[0] != box.end[0]; iValue[0]++) {
         futs.push_back(hpx::async(
-            [n, numberOfBins, &kbins, box, &yValue](Array<int64_t, kDimensions> iValue2) {
-                int64_t const i = iValue2[0] < n / 2 ? iValue2[0] : iValue2[0] - n;
-                double const sx = cloudFilter(2.0 * std::numbers::pi * i / n);
-                PowerSpectrumReturn ret;
-                Vector<float> power(numberOfBins, 0.0);
-                Vector<double> count(numberOfBins, 0);
-                Vector<float> ktot(numberOfBins, 0.0);
-                for (iValue2[1] = box.begin[1]; iValue2[1] != box.end[1]; iValue2[1]++) {
-                    int64_t const j = iValue2[1] < n / 2 ? iValue2[1] : iValue2[1] - n;
-                    double const sy = cloudFilter(2.0 * std::numbers::pi * j / n);
-                    for (iValue2[2] = box.begin[2]; iValue2[2] != box.end[2]; iValue2[2]++) {
-                        int64_t const k = iValue2[2] < n / 2 ? iValue2[2] : iValue2[2] - n;
-                        double const sz = cloudFilter(2.0 * std::numbers::pi * k / n);
-                        double const c0 = sx * sy * sz;
-                        yValue[box.index(iValue2)] *= c0;
-                        double const iii = std::sqrt(i * i + j * j + k * k);
-                        if (iii > 0) {
-                            int const bin = searchKbins(kbins, iii, 0, numberOfBins);
-                            if (bin >= 0) {
-                                float const pwr = std::norm(yValue[box.index(iValue2)]);
-                                count[bin] += 1;
-                                power[bin] += pwr;
-                                ktot[bin] += iii;
+            hpx::annotated_function(
+                [n, numberOfBins, &kbins, box, &yValue](Array<int64_t, kDimensions> iValue2) {
+                    int64_t const i = iValue2[0] < n / 2 ? iValue2[0] : iValue2[0] - n;
+                    double const sx = cloudFilter(2.0 * std::numbers::pi * i / n);
+                    PowerSpectrumReturn ret;
+                    Vector<float> power(numberOfBins, 0.0);
+                    Vector<double> count(numberOfBins, 0);
+                    Vector<float> ktot(numberOfBins, 0.0);
+                    for (iValue2[1] = box.begin[1]; iValue2[1] != box.end[1]; iValue2[1]++) {
+                        int64_t const j = iValue2[1] < n / 2 ? iValue2[1] : iValue2[1] - n;
+                        double const sy = cloudFilter(2.0 * std::numbers::pi * j / n);
+                        for (iValue2[2] = box.begin[2]; iValue2[2] != box.end[2]; iValue2[2]++) {
+                            int64_t const k = iValue2[2] < n / 2 ? iValue2[2] : iValue2[2] - n;
+                            double const sz = cloudFilter(2.0 * std::numbers::pi * k / n);
+                            double const c0 = sx * sy * sz;
+                            yValue[box.index(iValue2)] *= c0;
+                            double const iii = std::sqrt(i * i + j * j + k * k);
+                            if (iii > 0) {
+                                int const bin = searchKbins(kbins, iii, 0, numberOfBins);
+                                if (bin >= 0) {
+                                    float const pwr = std::norm(yValue[box.index(iValue2)]);
+                                    count[bin] += 1;
+                                    power[bin] += pwr;
+                                    ktot[bin] += iii;
+                                }
                             }
                         }
                     }
-                }
-                ret.p = std::move(power);
-                ret.c = std::move(count);
-                ret.k = std::move(ktot);
-                return ret;
-            },
+                    ret.p = std::move(power);
+                    ret.c = std::move(count);
+                    ret.k = std::move(ktot);
+                    return ret;
+                },
+                "analysis.power.binSpectrum"),
             iValue));
     }
     for (auto& f : futs) {
@@ -192,32 +196,34 @@ static PowerSpectrumReturn powerSpectrumBinDeviation(
     Vector<float> devs(numberOfBins, 0.0);
     for (iValue[0] = box.begin[0]; iValue[0] != box.end[0]; iValue[0]++) {
         futs.push_back(hpx::async(
-            [n, numberOfBins, &kbins, box, rc, &yValue](Array<int64_t, kDimensions> iValue2) {
-                int64_t const i = iValue2[0] < n / 2 ? iValue2[0] : iValue2[0] - n;
-                double const sx = sinc(std::numbers::pi * i / n);
-                PowerSpectrumReturn ret;
-                Vector<float> pdev(numberOfBins, 0.0);
-                for (iValue2[1] = box.begin[1]; iValue2[1] != box.end[1]; iValue2[1]++) {
-                    int64_t const j = iValue2[1] < n / 2 ? iValue2[1] : iValue2[1] - n;
-                    double const sy = sinc(std::numbers::pi * j / n);
-                    for (iValue2[2] = box.begin[2]; iValue2[2] != box.end[2]; iValue2[2]++) {
-                        int64_t const k = iValue2[2] < n / 2 ? iValue2[2] : iValue2[2] - n;
-                        double const sz = sinc(std::numbers::pi * k / n);
-                        double const c0 = pow(1.0 / (sx * sy * sz), 3);
-                        yValue[box.index(iValue2)] *= c0;
-                        double const iii = std::sqrt(i * i + j * j + k * k);
-                        if (iii > 0) {
-                            int const bin = searchKbins(kbins, iii, 0, numberOfBins);
-                            if (bin >= 0) {
-                                float const pwr = std::norm(yValue[box.index(iValue2)]);
-                                pdev[bin] += sqr(pwr - rc.p[bin]);
+            hpx::annotated_function(
+                [n, numberOfBins, &kbins, box, rc, &yValue](Array<int64_t, kDimensions> iValue2) {
+                    int64_t const i = iValue2[0] < n / 2 ? iValue2[0] : iValue2[0] - n;
+                    double const sx = sinc(std::numbers::pi * i / n);
+                    PowerSpectrumReturn ret;
+                    Vector<float> pdev(numberOfBins, 0.0);
+                    for (iValue2[1] = box.begin[1]; iValue2[1] != box.end[1]; iValue2[1]++) {
+                        int64_t const j = iValue2[1] < n / 2 ? iValue2[1] : iValue2[1] - n;
+                        double const sy = sinc(std::numbers::pi * j / n);
+                        for (iValue2[2] = box.begin[2]; iValue2[2] != box.end[2]; iValue2[2]++) {
+                            int64_t const k = iValue2[2] < n / 2 ? iValue2[2] : iValue2[2] - n;
+                            double const sz = sinc(std::numbers::pi * k / n);
+                            double const c0 = pow(1.0 / (sx * sy * sz), 3);
+                            yValue[box.index(iValue2)] *= c0;
+                            double const iii = std::sqrt(i * i + j * j + k * k);
+                            if (iii > 0) {
+                                int const bin = searchKbins(kbins, iii, 0, numberOfBins);
+                                if (bin >= 0) {
+                                    float const pwr = std::norm(yValue[box.index(iValue2)]);
+                                    pdev[bin] += sqr(pwr - rc.p[bin]);
+                                }
                             }
                         }
                     }
-                }
-                ret.pdev = std::move(pdev);
-                return ret;
-            },
+                    ret.pdev = std::move(pdev);
+                    return ret;
+                },
+                "analysis.power.binDeviation"),
             iValue));
     }
     for (auto& f : futs) {

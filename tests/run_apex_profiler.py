@@ -24,7 +24,8 @@ def check_apex(directory, full_thread_descriptions):
             "APEX CSV profile is missing timer-count columns")
     expected = {"cosmictiger.apex.parent": 4, "cosmictiger.apex.child": 4,
                 "cosmictiger.apex.post": 1, "cosmictiger.apex.continuation": 1,
-                "ApexRegressionAction": 1, "cosmictiger.apex.migrated": 1}
+                "ApexRegressionAction": 1, "cosmictiger.apex.migrated": 1,
+                "cosmictiger.apex.lambda": 12}
     for name, count in expected.items():
         matches = [row for row in rows if row["name"] == name and row["type"] == "timer"]
         require(len(matches) == 1, f"missing or duplicate APEX timer for {name}: {matches}")
@@ -33,6 +34,10 @@ def check_apex(directory, full_thread_descriptions):
         if name != "cosmictiger.apex.child":
             require(float(matches[0]["yields"]) > 0,
                     f"APEX did not observe suspended/resumed contexts for {name}")
+    for name in ("cosmictiger.apex.sort", "cosmictiger.apex.copy", "cosmictiger.apex.fill"):
+        matches = [row for row in rows if row["name"] == name and row["type"] == "timer"]
+        require(len(matches) == 1 and float(matches[0]["num samples/calls"]) >= 1,
+                f"parallel algorithm tasks did not retain their phase annotation: {name}: {matches}")
     if full_thread_descriptions:
         for name in ("detail::unannotatedTask(", "detail::unannotatedForkTask("):
             matches = [row for row in rows if name in row["name"] and row["type"] == "timer"]

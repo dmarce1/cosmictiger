@@ -11,6 +11,8 @@
 #include <numbers>
 #include <vector>
 
+#include <hpx/threading_base/annotated_function.hpp>
+
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/particles/drift.hpp>
 #include <cosmictiger/particles/drift_cpu.hpp>
@@ -54,7 +56,8 @@ void cpuDrift(int rung, float a, float dt, float tau0, float tau1, float tauMax,
         futures.reserve(workers);
         try {
             for (size_t worker = 0; worker < workers; ++worker) {
-                futures.push_back(hpx::async(run, worker));
+                futures.push_back(
+                    hpx::async(hpx::annotated_function(run, "particles.drift"), worker));
             }
         } catch (...) {
             hpx::wait_all(futures);

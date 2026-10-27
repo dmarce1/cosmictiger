@@ -13,6 +13,8 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include <hpx/threading_base/annotated_function.hpp>
+
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/math/math.hpp>
@@ -240,12 +242,14 @@ hpx::future<SphTreeCreateReturn> sphTreeCreateFork(SphTreeCreateParameters param
         rc = hpx::async<SphTreeCreateAction>(hpxLocalities()[processRange.first], params, key,
             processRange, particleRange, box, depth, localRoot);
     } else {
-        rc = hpx::async([params, processRange, key, particleRange, depth, localRoot, box]() {
-            auto rc =
-                sphTreeCreate(params, key, processRange, particleRange, box, depth, localRoot);
-            numberOfThreads--;
-            return rc;
-        });
+        rc = hpx::async(hpx::annotated_function(
+            [params, processRange, key, particleRange, depth, localRoot, box]() {
+                auto rc =
+                    sphTreeCreate(params, key, processRange, particleRange, box, depth, localRoot);
+                numberOfThreads--;
+                return rc;
+            },
+            "sph.tree.create"));
     }
     return rc;
 }
@@ -581,15 +585,17 @@ static SphTreeNode const* treeCacheRead(TreeId id) {
             }
             if (inserted) {
                 try {
-                    hpx::post([promise, lineId]() {
-                        try {
-                            auto remote = hpx::async<SphTreeFetchCacheLineAction>(
-                                hpxLocalities()[lineId.proc], lineId.index);
-                            promise->set_value(remote.get());
-                        } catch (...) {
-                            promise->set_exception(std::current_exception());
-                        }
-                    });
+                    hpx::post(hpx::annotated_function(
+                        [promise, lineId]() {
+                            try {
+                                auto remote = hpx::async<SphTreeFetchCacheLineAction>(
+                                    hpxLocalities()[lineId.proc], lineId.index);
+                                promise->set_value(remote.get());
+                            } catch (...) {
+                                promise->set_exception(std::current_exception());
+                            }
+                        },
+                        "sph.tree.fetchCacheLine"));
                 } catch (...) {
                     promise->set_exception(std::current_exception());
                 }

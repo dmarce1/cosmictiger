@@ -13,6 +13,8 @@
 #include <stack>
 #include <utility>
 
+#include <hpx/threading_base/annotated_function.hpp>
+
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
@@ -161,10 +163,12 @@ hpx::future<KickReturn> kickFork(KickParameters params, ExpansionBuffer const& l
                 params, l, pos, self, std::move(dchecklist), std::move(echecklist), cudaWorkspace);
         };
         if (allLocal) {
-            rc = hpx::async(std::move(run), std::move(dchecklist), std::move(echecklist));
+            rc = hpx::async(hpx::annotated_function(std::move(run), "gravity.kickWalk"),
+                std::move(dchecklist), std::move(echecklist));
         } else {
-            rc = hpx::async(
-                HPX_PRIORITY_HI, std::move(run), std::move(dchecklist), std::move(echecklist));
+            rc = hpx::async(HPX_PRIORITY_HI,
+                hpx::annotated_function(std::move(run), "gravity.kickWalk"), std::move(dchecklist),
+                std::move(echecklist));
         }
     }
     return rc;

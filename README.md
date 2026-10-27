@@ -403,7 +403,13 @@ HPX then creates APEX tasks from the descriptions it already knows and starts,
 yields, resumes, and stops their timers at scheduler boundaries. HPX owns APEX
 initialization and finalization; CosmicTiger must not initialize it again.
 Explicit `hpx::annotated_function` labels distinguish anonymous task entry
-points. Registered actions already supply their action names. When HPX was
+points. Use a stable string literal for each phase so repeated task instances
+aggregate under the same name. This applies to `async`, `post`, continuations,
+and `run_as_os_thread` callables. Parallel sort, copy, and fill use
+`annotatedParallelPolicy("phase.name")` to name their generated worker tasks.
+Registered actions already supply their action names. HPX's FULL description
+fallback uses the object address for unnamed lambdas and functors; those
+addresses can appear as `UNRESOLVED ADDR` even with debug symbols. When HPX was
 built without `HPX_WITH_THREAD_DESCRIPTION_FULL`, unannotated local callables
 can inherit a parent name instead of getting distinct function names.
 Full descriptions allow ordinary function pointers to be resolved. Anonymous

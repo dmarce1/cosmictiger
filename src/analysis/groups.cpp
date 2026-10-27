@@ -17,6 +17,8 @@
 #include <unordered_set>
 #include <vector>
 
+#include <hpx/threading_base/annotated_function.hpp>
+
 #include <cosmictiger/analysis/groups.hpp>
 #include <cosmictiger/analysis/rockstar.hpp>
 #include <cosmictiger/core/containers.hpp>
@@ -164,25 +166,27 @@ void groupsCull() {
     MutexType mutex;
     int const numberOfThreads = hpxHardwareConcurrency();
     for (int proc = 0; proc < numberOfThreads; proc++) {
-        futs2.push_back(hpx::async([proc, numberOfThreads, &mutex, &finalExisting]() {
-            std::unordered_map<int, Vector<GroupInteger>> map;
-            for (int i = proc; i < localExistingGroups.size(); i += numberOfThreads) {
-                auto const& grp = localExistingGroups[i];
-                map[particlesGroupHome(grp)].push_back(grp);
-            }
-            Vector<hpx::future<Vector<GroupInteger>>> futs;
-            for (auto i = map.begin(); i != map.end(); i++) {
-                futs.push_back(
-                    hpx::async<GroupsExistAction>(hpxLocalities()[i->first], std::move(i->second)));
-            }
-            for (auto& f : futs) {
-                auto v = f.get();
-                std::lock_guard<MutexType> lock(mutex);
-                for (auto const& grp : v) {
-                    finalExisting.insert(grp);
+        futs2.push_back(hpx::async(hpx::annotated_function(
+            [proc, numberOfThreads, &mutex, &finalExisting]() {
+                std::unordered_map<int, Vector<GroupInteger>> map;
+                for (int i = proc; i < localExistingGroups.size(); i += numberOfThreads) {
+                    auto const& grp = localExistingGroups[i];
+                    map[particlesGroupHome(grp)].push_back(grp);
                 }
-            }
-        }));
+                Vector<hpx::future<Vector<GroupInteger>>> futs;
+                for (auto i = map.begin(); i != map.end(); i++) {
+                    futs.push_back(hpx::async<GroupsExistAction>(
+                        hpxLocalities()[i->first], std::move(i->second)));
+                }
+                for (auto& f : futs) {
+                    auto v = f.get();
+                    std::lock_guard<MutexType> lock(mutex);
+                    for (auto const& grp : v) {
+                        finalExisting.insert(grp);
+                    }
+                }
+            },
+            "analysis.groups.cull.queryExisting")));
     }
     hpx::wait_all(futs2.begin(), futs2.end());
     for (auto& future : futs2) {
@@ -190,17 +194,19 @@ void groupsCull() {
     }
     localExistingGroups = decltype(localExistingGroups)();
     for (int proc = 0; proc < numberOfThreads; proc++) {
-        futs1.push_back(hpx::async([proc, numberOfThreads, &finalExisting]() {
-            ParticleInteger const begin = (size_t) proc * particlesSize() / numberOfThreads;
-            ParticleInteger const end = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
-            for (ParticleInteger i = begin; i < end; i++) {
-                if (particlesGroup(i) != kNoParticleGroup) {
-                    if (finalExisting.find(particlesGroup(i)) == finalExisting.end()) {
-                        particlesGroup(i) = kNoParticleGroup;
+        futs1.push_back(hpx::async(hpx::annotated_function(
+            [proc, numberOfThreads, &finalExisting]() {
+                ParticleInteger const begin = (size_t) proc * particlesSize() / numberOfThreads;
+                ParticleInteger const end = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
+                for (ParticleInteger i = begin; i < end; i++) {
+                    if (particlesGroup(i) != kNoParticleGroup) {
+                        if (finalExisting.find(particlesGroup(i)) == finalExisting.end()) {
+                            particlesGroup(i) = kNoParticleGroup;
+                        }
                     }
                 }
-            }
-        }));
+            },
+            "analysis.groups.cull.removeStale")));
     }
     hpx::wait_all(futs1.begin(), futs1.end());
     for (auto& future : futs1) {
@@ -263,8 +269,8 @@ std::pair<size_t, size_t> groupsSave(int number, double scale, double time) {
         THROW_ERROR("Unable to open %s\n", fname.c_str());
     }
     if (groups.size()) {
-        hpx::sort(PAR_EXECUTION_POLICY, groups.begin(), groups.end(),
-            [](GroupEntry const& a, GroupEntry const& b) { return a.id < b.id; })
+        hpx::sort(annotatedParallelPolicy("analysis.groups.sortCatalogue"), groups.begin(),
+            groups.end(), [](GroupEntry const& a, GroupEntry const& b) { return a.id < b.id; })
             .get();
     }
     for (int i = 0; i < groups.size(); i++) {
@@ -371,68 +377,72 @@ void groupsReduce(double scaleFactor) {
     int const numberOfThreads = kGroupsReduceOversubscribe * hpxHardwareConcurrency();
     SpinlockType mutex;
     for (int proc = 0; proc < numberOfThreads; ++proc) {
-        futures.push_back(hpx::async([proc, numberOfThreads, &mutex, scaleFactor]() {
-            std::unordered_map<int, Vector<Pair<ParticleInteger, GroupInteger>>> assignments;
-            for (int bin = proc; bin < kGroupTableSize; bin += numberOfThreads) {
-                for (auto const& candidate : groupData[bin]) {
-                    ++groupCandidates;
-                    auto const& particles = candidate.second;
-                    // Start with a rejected assignment for every input particle;
-                    // overwrite only particles retained in an exclusive halo.
-                    std::unordered_map<int, std::unordered_map<ParticleInteger, GroupInteger>> tags;
-                    for (auto const& particle : particles) {
-                        tags[particle.rank][particle.index] = kNoParticleGroup;
-                    }
-                    if (particles.size() >= getOptions().analysis.minGroupSize) {
-                        auto const halos = rockstarFindSubgroups(particles, scaleFactor);
-                        if (halos.size() > 32767) {
-                            throw std::runtime_error("ROCKSTAR record halo ID capacity exceeded");
+        futures.push_back(hpx::async(hpx::annotated_function(
+            [proc, numberOfThreads, &mutex, scaleFactor]() {
+                std::unordered_map<int, Vector<Pair<ParticleInteger, GroupInteger>>> assignments;
+                for (int bin = proc; bin < kGroupTableSize; bin += numberOfThreads) {
+                    for (auto const& candidate : groupData[bin]) {
+                        ++groupCandidates;
+                        auto const& particles = candidate.second;
+                        // Start with a rejected assignment for every input particle;
+                        // overwrite only particles retained in an exclusive halo.
+                        std::unordered_map<int, std::unordered_map<ParticleInteger, GroupInteger>>
+                            tags;
+                        for (auto const& particle : particles) {
+                            tags[particle.rank][particle.index] = kNoParticleGroup;
                         }
-                        Array<double, kDimensions> origin;
-                        for (int dim = 0; dim < kDimensions; ++dim) {
-                            origin[dim] = particles.front().x[dim].toDouble();
-                        }
-                        for (int i = 0; i < halos.size(); ++i) {
-                            auto const& halo = halos[i];
-                            auto entry = rockstarMakeGroupEntry(halos, i, scaleFactor, origin);
-                            entry.id = halo.catalogueId;
-                            for (int particleIndex = 0; particleIndex < halo.parts.size();
-                                ++particleIndex) {
-                                auto const& particle = halo.parts[particleIndex];
-                                tags[particle.rank][particle.index] = halo.catalogueId;
+                        if (particles.size() >= getOptions().analysis.minGroupSize) {
+                            auto const halos = rockstarFindSubgroups(particles, scaleFactor);
+                            if (halos.size() > 32767) {
+                                throw std::runtime_error(
+                                    "ROCKSTAR record halo ID capacity exceeded");
                             }
-                            auto record = rockstarMakeRecord(halos, i, scaleFactor, origin);
-                            record.id.fofId = candidate.first;
-                            record.id.haloId = i;
-                            record.pid = halo.parent;
-                            GroupInteger const host = halo.parent >= 0 ?
-                                halos[halo.parent].catalogueId :
-                                kNoParticleGroup;
-                            std::lock_guard<SpinlockType> lock(mutex);
-                            groups.push_back(std::move(entry));
-                            rockstarRecords.push_back(record);
-                            haloHosts.push_back({halo.catalogueId, host});
-                            existingGroups.insert(candidate.first);
+                            Array<double, kDimensions> origin;
+                            for (int dim = 0; dim < kDimensions; ++dim) {
+                                origin[dim] = particles.front().x[dim].toDouble();
+                            }
+                            for (int i = 0; i < halos.size(); ++i) {
+                                auto const& halo = halos[i];
+                                auto entry = rockstarMakeGroupEntry(halos, i, scaleFactor, origin);
+                                entry.id = halo.catalogueId;
+                                for (int particleIndex = 0; particleIndex < halo.parts.size();
+                                    ++particleIndex) {
+                                    auto const& particle = halo.parts[particleIndex];
+                                    tags[particle.rank][particle.index] = halo.catalogueId;
+                                }
+                                auto record = rockstarMakeRecord(halos, i, scaleFactor, origin);
+                                record.id.fofId = candidate.first;
+                                record.id.haloId = i;
+                                record.pid = halo.parent;
+                                GroupInteger const host = halo.parent >= 0 ?
+                                    halos[halo.parent].catalogueId :
+                                    kNoParticleGroup;
+                                std::lock_guard<SpinlockType> lock(mutex);
+                                groups.push_back(std::move(entry));
+                                rockstarRecords.push_back(record);
+                                haloHosts.push_back({halo.catalogueId, host});
+                                existingGroups.insert(candidate.first);
+                            }
                         }
-                    }
-                    for (auto const& rank : tags) {
-                        for (auto const& assignment : rank.second) {
-                            assignments[rank.first].push_back(
-                                {assignment.first, assignment.second});
+                        for (auto const& rank : tags) {
+                            for (auto const& assignment : rank.second) {
+                                assignments[rank.first].push_back(
+                                    {assignment.first, assignment.second});
+                            }
                         }
                     }
                 }
-            }
-            Vector<hpx::future<void>> transmissions;
-            for (auto& rank : assignments) {
-                transmissions.push_back(hpx::async<GroupsQueueAssignmentsAction>(
-                    hpxLocalities()[rank.first], std::move(rank.second)));
-            }
-            hpx::wait_all(transmissions.begin(), transmissions.end());
-            for (auto& transmission : transmissions) {
-                transmission.get();
-            }
-        }));
+                Vector<hpx::future<void>> transmissions;
+                for (auto& rank : assignments) {
+                    transmissions.push_back(hpx::async<GroupsQueueAssignmentsAction>(
+                        hpxLocalities()[rank.first], std::move(rank.second)));
+                }
+                hpx::wait_all(transmissions.begin(), transmissions.end());
+                for (auto& transmission : transmissions) {
+                    transmission.get();
+                }
+            },
+            "analysis.groups.reduceHalos")));
     }
     hpx::wait_all(futures.begin(), futures.end());
     for (auto& future : futures) {
@@ -445,15 +455,17 @@ void groupsTransmitParticles(Vector<std::pair<GroupInteger, Vector<ParticleData>
     Vector<hpx::future<void>> futs;
     int const numberOfThreads = hpxHardwareConcurrency();
     for (int proc = 0; proc < numberOfThreads; proc++) {
-        futs.push_back(hpx::async([numberOfThreads, proc, &entries]() {
-            for (int i = proc; i < entries.size(); i += numberOfThreads) {
-                auto const grp = entries[i].first;
-                int const bin = (grp / kGroupWaves) % kGroupTableSize;
-                std::lock_guard<SpinlockType> lock(mutexes[bin]);
-                auto& entry = groupData[bin][grp];
-                entry.insert(entry.end(), entries[i].second.begin(), entries[i].second.end());
-            }
-        }));
+        futs.push_back(hpx::async(hpx::annotated_function(
+            [numberOfThreads, proc, &entries]() {
+                for (int i = proc; i < entries.size(); i += numberOfThreads) {
+                    auto const grp = entries[i].first;
+                    int const bin = (grp / kGroupWaves) % kGroupTableSize;
+                    std::lock_guard<SpinlockType> lock(mutexes[bin]);
+                    auto& entry = groupData[bin][grp];
+                    entry.insert(entry.end(), entries[i].second.begin(), entries[i].second.end());
+                }
+            },
+            "analysis.groups.receiveParticles")));
     }
     hpx::wait_all(futs.begin(), futs.end());
     for (auto& future : futs) {
@@ -470,53 +482,55 @@ void groupsAddParticles(int wave, double scale) {
     SpinlockType mutex;
     float const ainv = 1.0 / scale;
     for (int proc = 0; proc < numberOfThreads; proc++) {
-        futs.push_back(hpx::async([proc, numberOfThreads, wave, &mutex, ainv]() {
-            Vector<hpx::future<void>> futs;
-            std::unordered_map<int, std::unordered_map<GroupInteger, Vector<ParticleData>>>
-                localGroups;
-            ParticleInteger const begin = (size_t) proc * particlesSize() / numberOfThreads;
-            ParticleInteger const end = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
-            for (ParticleInteger i = begin; i < end; i++) {
-                auto const grp = (GroupInteger) particlesGroup(i);
-                if (grp != kNoParticleGroup) {
-                    int const home = particlesGroupHome(grp);
-                    if (grp % kGroupWaves == wave) {
-                        if (localGroups[home].find(grp) == localGroups[home].end()) {
-                            std::lock_guard<SpinlockType> lock(mutex);
-                            localExistingGroups.push_back(grp);
+        futs.push_back(hpx::async(hpx::annotated_function(
+            [proc, numberOfThreads, wave, &mutex, ainv]() {
+                Vector<hpx::future<void>> futs;
+                std::unordered_map<int, std::unordered_map<GroupInteger, Vector<ParticleData>>>
+                    localGroups;
+                ParticleInteger const begin = (size_t) proc * particlesSize() / numberOfThreads;
+                ParticleInteger const end = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
+                for (ParticleInteger i = begin; i < end; i++) {
+                    auto const grp = (GroupInteger) particlesGroup(i);
+                    if (grp != kNoParticleGroup) {
+                        int const home = particlesGroupHome(grp);
+                        if (grp % kGroupWaves == wave) {
+                            if (localGroups[home].find(grp) == localGroups[home].end()) {
+                                std::lock_guard<SpinlockType> lock(mutex);
+                                localExistingGroups.push_back(grp);
+                            }
+                            auto& entry = localGroups[home][grp];
+                            ParticleData part;
+                            for (int dim = 0; dim < kDimensions; dim++) {
+                                part.x[dim] = particlesPos(dim, i);
+                                part.v[dim] = particlesVel(dim, i) * ainv;
+                            }
+                            part.index = i;
+                            part.lastGroup = particlesLastgroup(i);
+                            part.rank = hpxRank();
+                            part.identity = particlesGroupInit(i);
+                            auto const previousHost = previousHaloHosts.find(part.lastGroup);
+                            part.lastHost = previousHost == previousHaloHosts.end() ?
+                                kNoParticleGroup :
+                                previousHost->second;
+                            entry.push_back(part);
                         }
-                        auto& entry = localGroups[home][grp];
-                        ParticleData part;
-                        for (int dim = 0; dim < kDimensions; dim++) {
-                            part.x[dim] = particlesPos(dim, i);
-                            part.v[dim] = particlesVel(dim, i) * ainv;
-                        }
-                        part.index = i;
-                        part.lastGroup = particlesLastgroup(i);
-                        part.rank = hpxRank();
-                        part.identity = particlesGroupInit(i);
-                        auto const previousHost = previousHaloHosts.find(part.lastGroup);
-                        part.lastHost = previousHost == previousHaloHosts.end() ?
-                            kNoParticleGroup :
-                            previousHost->second;
-                        entry.push_back(part);
                     }
                 }
-            }
-            for (auto iter = localGroups.begin(); iter != localGroups.end(); iter++) {
-                Vector<std::pair<GroupInteger, Vector<ParticleData>>> data;
-                data.reserve(iter->second.size());
-                for (auto j = iter->second.begin(); j != iter->second.end(); j++) {
-                    data.push_back(std::move(*j));
+                for (auto iter = localGroups.begin(); iter != localGroups.end(); iter++) {
+                    Vector<std::pair<GroupInteger, Vector<ParticleData>>> data;
+                    data.reserve(iter->second.size());
+                    for (auto j = iter->second.begin(); j != iter->second.end(); j++) {
+                        data.push_back(std::move(*j));
+                    }
+                    futs.push_back(hpx::async<GroupsTransmitParticlesAction>(
+                        hpxLocalities()[iter->first], std::move(data)));
                 }
-                futs.push_back(hpx::async<GroupsTransmitParticlesAction>(
-                    hpxLocalities()[iter->first], std::move(data)));
-            }
-            hpx::wait_all(futs.begin(), futs.end());
-            for (auto& future : futs) {
-                future.get();
-            }
-        }));
+                hpx::wait_all(futs.begin(), futs.end());
+                for (auto& future : futs) {
+                    future.get();
+                }
+            },
+            "analysis.groups.collectParticles")));
     }
     if (wave == 0) {
         groupCandidates = 0;

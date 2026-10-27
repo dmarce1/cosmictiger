@@ -8,6 +8,8 @@
 
 #include <cmath>
 
+#include <hpx/threading_base/annotated_function.hpp>
+
 #include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/core/timer.hpp>
 #include <cosmictiger/gravity/dehnen/distributed_tree.hpp>
@@ -59,7 +61,8 @@ static hpx::future<TreeCreateReturn> treeCreateFork(TreeBuildRequest request, bo
     threadme = threadme &&
         request.particleRange.second - request.particleRange.first >=
             request.params.parallelParticleThreshold;
-    return threadme ? hpx::async(build) : hpx::make_ready_future(build());
+    return threadme ? hpx::async(hpx::annotated_function(build, "gravity.buildTree")) :
+                      hpx::make_ready_future(build());
 }
 
 TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, int> processRange,

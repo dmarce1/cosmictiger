@@ -1,5 +1,7 @@
 /* CosmicTiger - Nitadori PMMM cell schedule; BSL-1.0. */
 
+#include <hpx/threading_base/annotated_function.hpp>
+
 #include "actions.hpp"
 
 namespace pmmm::detail {
@@ -159,28 +161,33 @@ void startPipeline() {
     state.tasks.reserve(2 * workers + state.sourceCells.size() - ownedCount);
     try {
         for (size_t worker = 0; worker < workers; ++worker) {
-            state.tasks.push_back(hpx::async([worker, workers, ownedCount]() {
-                for (size_t index = worker; index < ownedCount; index += workers) {
-                    try {
-                        auto const& cell = state.cells[index];
-                        auto root = treeCreateCell(cell, cache.meshSize, FmmParticleStore::Owned);
-                        for (ParticleInteger i = cell.begin; i < cell.end; ++i) {
-                            state.stageRungs[i - state.activeRange.first] = particlesRung(i);
+            state.tasks.push_back(hpx::async(hpx::annotated_function(
+                [worker, workers, ownedCount]() {
+                    for (size_t index = worker; index < ownedCount; index += workers) {
+                        try {
+                            auto const& cell = state.cells[index];
+                            auto root =
+                                treeCreateCell(cell, cache.meshSize, FmmParticleStore::Owned);
+                            for (ParticleInteger i = cell.begin; i < cell.end; ++i) {
+                                state.stageRungs[i - state.activeRange.first] = particlesRung(i);
+                            }
+                            publishSource(index, root);
+                        } catch (...) {
+                            failSource(index, std::current_exception());
                         }
-                        publishSource(index, root);
-                    } catch (...) {
-                        failSource(index, std::current_exception());
                     }
-                }
-            }));
+                },
+                "gravity.pmmm.buildOwnedSourceCells")));
         }
         // Each receive suspends independently: a delayed cell must not stop
         // requests for other cells that can release ready boundary work.
         for (size_t index = ownedCount; index < state.sourceCells.size(); ++index) {
-            state.tasks.push_back(hpx::async(receiveGhostCell, index));
+            state.tasks.push_back(hpx::async(
+                hpx::annotated_function(receiveGhostCell, "gravity.pmmm.receiveGhostCell"), index));
         }
         for (size_t worker = 0; worker < workers; ++worker) {
-            state.tasks.push_back(hpx::async(computeReadyCells));
+            state.tasks.push_back(hpx::async(
+                hpx::annotated_function(computeReadyCells, "gravity.pmmm.computeReadyCells")));
         }
     } catch (...) {
         auto failure = std::current_exception();

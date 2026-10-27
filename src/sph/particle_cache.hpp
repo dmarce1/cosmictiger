@@ -13,6 +13,8 @@
 #include <mutex>
 #include <unordered_map>
 
+#include <hpx/threading_base/annotated_function.hpp>
+
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
 
@@ -76,15 +78,17 @@ T const* readSphCacheLine(SphCacheLineId lineId,
         }
         if (inserted) {
             try {
-                hpx::post([promise, lineId]() {
-                    try {
-                        auto remote =
-                            hpx::async<Action>(hpxLocalities()[lineId.proc], lineId.index);
-                        promise->set_value(remote.get());
-                    } catch (...) {
-                        promise->set_exception(std::current_exception());
-                    }
-                });
+                hpx::post(hpx::annotated_function(
+                    [promise, lineId]() {
+                        try {
+                            auto remote =
+                                hpx::async<Action>(hpxLocalities()[lineId.proc], lineId.index);
+                            promise->set_value(remote.get());
+                        } catch (...) {
+                            promise->set_exception(std::current_exception());
+                        }
+                    },
+                    "sph.particles.fetchCacheLine"));
             } catch (...) {
                 promise->set_exception(std::current_exception());
             }

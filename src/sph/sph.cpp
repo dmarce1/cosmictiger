@@ -10,6 +10,7 @@
 #include <stack>
 #include <vector>
 
+#include <hpx/threading_base/annotated_function.hpp>
 #include <unistd.h>
 
 #include <cosmictiger/core/flops.hpp>
@@ -112,12 +113,14 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighborFork(SphTreeNeighborParameters
         rc = hpx::async<SphTreeNeighborAction>(hpxLocalities()[selfPtr->processRange.first], params,
             self, std::move(checklist), level + 1);
     } else {
-        rc = hpx::async(
-            [self, level, params](Vector<TreeId> checklist) {
-                auto rc = sphTreeNeighbor(params, self, std::move(checklist), level + 1);
-                numberOfThreads--;
-                return rc;
-            },
+        rc = hpx::async(hpx::annotated_function(
+                            [self, level, params](Vector<TreeId> checklist) {
+                                auto rc =
+                                    sphTreeNeighbor(params, self, std::move(checklist), level + 1);
+                                numberOfThreads--;
+                                return rc;
+                            },
+                            "sph.neighbors.walk"),
             std::move(checklist));
     }
     return rc;
@@ -295,11 +298,13 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
             return hpx::make_ready_future(finish(futs[kLeftChild], futs[kRightChild]));
         } else {
             return hpx::when_all(futs.begin(), futs.end())
-                .then([finish, selfPtr](
-                          hpx::future<std::vector<hpx::future<SphTreeNeighborReturn>>> futsfut) {
-                    auto futs = futsfut.get();
-                    return finish(futs[kLeftChild], futs[kRightChild]);
-                });
+                .then(hpx::annotated_function(
+                    [finish, selfPtr](
+                        hpx::future<std::vector<hpx::future<SphTreeNeighborReturn>>> futsfut) {
+                        auto futs = futsfut.get();
+                        return finish(futs[kLeftChild], futs[kRightChild]);
+                    },
+                    "sph.neighbors.combineChildren"));
         }
     }
 }
@@ -328,39 +333,41 @@ SphRunReturn sphRun(SphRunParameters params, bool cuda) {
     static std::atomic<int> next;
     next = 0;
     for (int proc = 0; proc < numberOfThreads; proc++) {
-        futs2.push_back(hpx::async([proc, numberOfThreads, params, cuda, workspacePtr]() {
-            SphRunReturn rc;
-            int index = next++;
-            while (index < sphTreeLeaflistSize()) {
-                auto const selfid = sphTreeGetLeaf(index);
-                auto const* self = sphTreeGetNode(selfid);
-                bool test = false;
-                switch (params.runType) {
-                case kSphRunRungs:
-                    test = self->numberOfActiveParticles > 0;
-                    break;
+        futs2.push_back(hpx::async(hpx::annotated_function(
+            [proc, numberOfThreads, params, cuda, workspacePtr]() {
+                SphRunReturn rc;
+                int index = next++;
+                while (index < sphTreeLeaflistSize()) {
+                    auto const selfid = sphTreeGetLeaf(index);
+                    auto const* self = sphTreeGetNode(selfid);
+                    bool test = false;
+                    switch (params.runType) {
+                    case kSphRunRungs:
+                        test = self->numberOfActiveParticles > 0;
+                        break;
 
-                case kSphRunPrehydro1:
-                    test = self->numberOfActiveParticles > 0 && !isConverged(self);
-                    break;
+                    case kSphRunPrehydro1:
+                        test = self->numberOfActiveParticles > 0 && !isConverged(self);
+                        break;
 
-                case kSphRunPrehydro2:
-                    test = hasActiveNeighbors(self);
-                    test = test && !isConverged(self);
-                    break;
+                    case kSphRunPrehydro2:
+                        test = hasActiveNeighbors(self);
+                        test = test && !isConverged(self);
+                        break;
 
-                case kSphRunHydro:
-                    test = self->numberOfActiveParticles > 0;
-                    break;
+                    case kSphRunHydro:
+                        test = self->numberOfActiveParticles > 0;
+                        break;
+                    }
+                    if (test) {
+                        workspacePtr->addWork(selfid);
+                    }
+
+                    index = next++;
                 }
-                if (test) {
-                    workspacePtr->addWork(selfid);
-                }
-
-                index = next++;
-            }
-            return rc;
-        }));
+                return rc;
+            },
+            "sph.run.collectLeaves")));
     }
     for (auto& f : futs2) {
         rc += f.get();
@@ -463,49 +470,56 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
         hostTrees[hostTargetNodeIndices[i]].neighborRange = neighborRanges[i];
     }
     for (int proc = 0; proc < numberOfThreads; proc++) {
-        futs.push_back(hpx::async([&index, this, &particleIndex]() {
-            int thisIndex = index++;
-            while (thisIndex < hostTrees.size()) {
-                auto& node = hostTrees[thisIndex];
-                ParticleInteger const size = node.particleRange.second - node.particleRange.first;
-                ParticleInteger const offset = (particleIndex += size) - size;
-                sphParticlesGlobalReadPositions(node.globalParticleRange(), hostPositionX.data(),
-                    hostPositionY.data(), hostPositionZ.data(), offset);
-                if (params.runType == kSphRunPrehydro2 || params.runType == kSphRunRungs) {
-                    sphParticlesGlobalReadInternalEnergyAndSupportRadius(node.globalParticleRange(),
-                        hostInternalEnergy.empty() ? nullptr : hostInternalEnergy.data(),
-                        hostSupportRadius.data(), offset);
-                    if (!hostPressureEnergyRatio.empty()) {
-                        sphParticlesGlobalReadChemistryEos(node.globalParticleRange(),
-                            hostPressureEnergyRatio.data(), hostAdiabaticIndex.data(), offset);
+        futs.push_back(hpx::async(hpx::annotated_function(
+            [&index, this, &particleIndex]() {
+                int thisIndex = index++;
+                while (thisIndex < hostTrees.size()) {
+                    auto& node = hostTrees[thisIndex];
+                    ParticleInteger const size =
+                        node.particleRange.second - node.particleRange.first;
+                    ParticleInteger const offset = (particleIndex += size) - size;
+                    sphParticlesGlobalReadPositions(node.globalParticleRange(),
+                        hostPositionX.data(), hostPositionY.data(), hostPositionZ.data(), offset);
+                    if (params.runType == kSphRunPrehydro2 || params.runType == kSphRunRungs) {
+                        sphParticlesGlobalReadInternalEnergyAndSupportRadius(
+                            node.globalParticleRange(),
+                            hostInternalEnergy.empty() ? nullptr : hostInternalEnergy.data(),
+                            hostSupportRadius.data(), offset);
+                        if (!hostPressureEnergyRatio.empty()) {
+                            sphParticlesGlobalReadChemistryEos(node.globalParticleRange(),
+                                hostPressureEnergyRatio.data(), hostAdiabaticIndex.data(), offset);
+                        }
+                        sphParticlesGlobalReadRungs(
+                            node.globalParticleRange(), hostRungs.data(), offset);
+                    } else if (params.runType == kSphRunHydro) {
+                        sphParticlesGlobalReadInternalEnergyAndSupportRadius(
+                            node.globalParticleRange(), hostInternalEnergy.data(),
+                            hostSupportRadius.data(), offset);
+                        if (getOptions().chemistry.enabled) {
+                            sphParticlesGlobalReadChemistryEos(node.globalParticleRange(),
+                                hostPressureEnergyRatio.data(), hostAdiabaticIndex.data(), offset);
+                        }
+                        sphParticlesGlobalReadDensity(node.globalParticleRange(),
+                            hostDensity.data(), offset,
+                            params.balsaraSwitch ? hostBalsaraFactor.data() : nullptr,
+                            params.variableViscosity ? hostViscosityAlpha.data() : nullptr);
                     }
-                    sphParticlesGlobalReadRungs(
-                        node.globalParticleRange(), hostRungs.data(), offset);
-                } else if (params.runType == kSphRunHydro) {
-                    sphParticlesGlobalReadInternalEnergyAndSupportRadius(node.globalParticleRange(),
-                        hostInternalEnergy.data(), hostSupportRadius.data(), offset);
-                    if (getOptions().chemistry.enabled) {
-                        sphParticlesGlobalReadChemistryEos(node.globalParticleRange(),
-                            hostPressureEnergyRatio.data(), hostAdiabaticIndex.data(), offset);
+                    if (params.runType == kSphRunPrehydro2 && params.cullenDehnen) {
+                        sphParticlesGlobalReadViscosityDiagnostics(node.globalParticleRange(),
+                            hostAccelerationX.data(), hostAccelerationY.data(),
+                            hostAccelerationZ.data(), hostVelocityDivergence.data(), offset);
                     }
-                    sphParticlesGlobalReadDensity(node.globalParticleRange(), hostDensity.data(),
-                        offset, params.balsaraSwitch ? hostBalsaraFactor.data() : nullptr,
-                        params.variableViscosity ? hostViscosityAlpha.data() : nullptr);
+                    if (!hostVelocityX.empty()) {
+                        sphParticlesGlobalReadVelocities(node.globalParticleRange(),
+                            hostVelocityX.data(), hostVelocityY.data(), hostVelocityZ.data(),
+                            offset);
+                    }
+                    node.particleRange.first = offset;
+                    node.particleRange.second = offset + size;
+                    thisIndex = index++;
                 }
-                if (params.runType == kSphRunPrehydro2 && params.cullenDehnen) {
-                    sphParticlesGlobalReadViscosityDiagnostics(node.globalParticleRange(),
-                        hostAccelerationX.data(), hostAccelerationY.data(),
-                        hostAccelerationZ.data(), hostVelocityDivergence.data(), offset);
-                }
-                if (!hostVelocityX.empty()) {
-                    sphParticlesGlobalReadVelocities(node.globalParticleRange(),
-                        hostVelocityX.data(), hostVelocityY.data(), hostVelocityZ.data(), offset);
-                }
-                node.particleRange.first = offset;
-                node.particleRange.second = offset + size;
-                thisIndex = index++;
-            }
-        }));
+            },
+            "sph.run.stageParticles")));
     }
     for (auto& future : futs) {
         future.get();
@@ -586,14 +600,20 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
         workers.reserve(workerCount);
         try {
             for (int worker = 0; worker < workerCount; worker++) {
-                workers.push_back(hpx::async([&]() {
-                    SphRunReturn result;
-                    for (int nodeIndex = nextNode++; nodeIndex < runData.numberOfTargetNodes;
-                        nodeIndex = nextNode++) {
-                        result += sphRunCpuNode(params, runData, nodeIndex);
-                    }
-                    return result;
-                }));
+                workers.push_back(hpx::async(hpx::annotated_function(
+                    [&]() {
+                        SphRunReturn result;
+                        for (int nodeIndex = nextNode++; nodeIndex < runData.numberOfTargetNodes;
+                            nodeIndex = nextNode++) {
+                            result += sphRunCpuNode(params, runData, nodeIndex);
+                        }
+                        return result;
+                    },
+                    params.runType == kSphRunRungs         ? "sph.cpu.rungs" :
+                        params.runType == kSphRunPrehydro1 ? "sph.cpu.prehydro1" :
+                        params.runType == kSphRunPrehydro2 ? "sph.cpu.prehydro2" :
+                        params.runType == kSphRunHydro     ? "sph.cpu.hydro" :
+                                                             "sph.cpu.unknownPhase")));
             }
         } catch (...) {
             hpx::wait_all(workers.begin(), workers.end());

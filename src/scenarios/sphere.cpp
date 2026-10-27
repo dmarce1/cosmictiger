@@ -12,6 +12,7 @@
 #include <vector>
 
 #include <hpx/future.hpp>
+#include <hpx/threading_base/annotated_function.hpp>
 
 #include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/cuda/cuda.hpp>
@@ -129,9 +130,11 @@ static void relaxSphereSurfaceShell(SphereSurfaceShell shell) {
         for (int task = 1; task < tasks; task++) {
             int const begin = task * kSphereSurfaceRowsPerTask;
             int const end = std::min(n, begin + kSphereSurfaceRowsPerTask);
-            futs.push_back(hpx::async([&shell, &gx, &gy, &gz, begin, end]() {
-                return sphereSurfaceForces(shell, gx.data(), gy.data(), gz.data(), begin, end);
-            }));
+            futs.push_back(hpx::async(hpx::annotated_function(
+                [&shell, &gx, &gy, &gz, begin, end]() {
+                    return sphereSurfaceForces(shell, gx.data(), gy.data(), gz.data(), begin, end);
+                },
+                "scenarios.sphereSurfaceForces")));
         }
         SphereSurfaceForceSums sums = sphereSurfaceForces(
             shell, gx.data(), gy.data(), gz.data(), 0, std::min(n, kSphereSurfaceRowsPerTask));
@@ -177,7 +180,9 @@ void solveSphereSurfaceProblemCpu(Vector<Array<Vector<float>, kDimensions>>& x) 
         detail::SphereSurfaceShell const points{shell[kXDimension].data(),
             shell[kYDimension].data(), shell[kZDimension].data(),
             static_cast<int>(shell[kXDimension].size()), 0.f, 0.f};
-        futs.push_back(hpx::async(detail::relaxSphereSurfaceShell, points));
+        futs.push_back(hpx::async(hpx::annotated_function(detail::relaxSphereSurfaceShell,
+                                      "scenarios.relaxSphereSurfaceShell"),
+            points));
     }
     hpx::wait_all(futs);
     for (auto& fut : futs) {

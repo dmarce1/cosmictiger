@@ -2,6 +2,8 @@
 #include <cstdlib>
 #include <cstring>
 
+#include <hpx/threading_base/annotated_function.hpp>
+
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/core/timer.hpp>
@@ -84,7 +86,7 @@ static void memuseDaemon(std::string filename) {
 }
 
 void startMemuseDaemon() {
-    hpx::post(memuseDaemon, outputPath("maxmem.txt"));
+    hpx::post(hpx::annotated_function(memuseDaemon, "core.memuseDaemon"), outputPath("maxmem.txt"));
 }
 
 void stopMemuseDaemon() {

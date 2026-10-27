@@ -9,6 +9,8 @@
 #include <cmath>
 #include <vector>
 
+#include <hpx/threading_base/annotated_function.hpp>
+
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
@@ -162,66 +164,70 @@ KickReturn particleMeshPrepareKick(
         size_t(std::max(1, hpxHardwareConcurrency())), std::max(size_t(1), (count + 4095) / 4096));
     try {
         for (size_t worker = 0; worker < workers; ++worker) {
-            futures.push_back(hpx::async([=]() {
-                KickReturn result;
-                FlopCounter<> flops;
-                for (size_t i = worker * count / workers; i < (worker + 1) * count / workers; ++i) {
-                    auto const& acceleration = pmmmAcceleration(i);
-                    double accelerationSquared = 0.0;
-                    for (int dim = 0; dim < kDimensions; ++dim) {
-                        accelerationSquared += double(acceleration[dim]) * acceleration[dim];
-                    }
-                    double const timestep = std::min(maximumTimestep,
-                        options.gravity.timestepEta *
-                            std::sqrt(scale * effectiveRadius /
-                                std::max(std::sqrt(accelerationSquared), 1.0e-30)));
-                    if (!(timestep > 0.0) || !std::isfinite(timestep)) {
-                        THROW_ERROR("Particle mesh timestep is not finite and positive\n");
-                    }
-                    double const requestedRung = std::ceil(std::log2(baseTimestep / timestep));
-                    if (!(requestedRung < kMaxRung)) {
-                        THROW_ERROR("Particle mesh timestep exceeds the available rung range\n");
-                    }
-                    int const previousRung = particlesRung(i);
-                    result.maxRung = std::max(result.maxRung,
-                        std::max({1, int(requestedRung), previousRung - 1, minimumRung}));
-                    bool const gas = options.hydro.enabled && particlesType(i) == kSphType;
-                    double const oldHalfStep =
-                        firstCall ? 0.0 : std::ldexp(0.5 * baseTimestep, -previousRung);
-                    // Acceleration norm, timestep/rung proposal, and optional old half-step.
-                    flops += 2 * kDimensions + 8 + (firstCall ? 0 : 2);
-                    double velocitySquared = 0.0;
-                    for (int dim = 0; dim < kDimensions; ++dim) {
-                        if (gas) {
-                            sphParticlesGravityAcceleration(dim, particlesCatIndex(i)) =
-                                sign * acceleration[dim];
-                            flops += 1;
-                        } else {
-                            particlesVel(dim, i) = std::fma(
-                                sign * acceleration[dim], oldHalfStep, particlesVel(dim, i));
-                            flops += 3;
+            futures.push_back(hpx::async(hpx::annotated_function(
+                [=]() {
+                    KickReturn result;
+                    FlopCounter<> flops;
+                    for (size_t i = worker * count / workers; i < (worker + 1) * count / workers;
+                        ++i) {
+                        auto const& acceleration = pmmmAcceleration(i);
+                        double accelerationSquared = 0.0;
+                        for (int dim = 0; dim < kDimensions; ++dim) {
+                            accelerationSquared += double(acceleration[dim]) * acceleration[dim];
                         }
-                        if (saveParticleAcceleration(options.analysis)) {
-                            particlesGravityAcceleration(dim, i) = acceleration[dim];
+                        double const timestep = std::min(maximumTimestep,
+                            options.gravity.timestepEta *
+                                std::sqrt(scale * effectiveRadius /
+                                    std::max(std::sqrt(accelerationSquared), 1.0e-30)));
+                        if (!(timestep > 0.0) || !std::isfinite(timestep)) {
+                            THROW_ERROR("Particle mesh timestep is not finite and positive\n");
                         }
-                        double const velocity = particlesVel(dim, i);
-                        velocitySquared += velocity * velocity;
+                        double const requestedRung = std::ceil(std::log2(baseTimestep / timestep));
+                        if (!(requestedRung < kMaxRung)) {
+                            THROW_ERROR(
+                                "Particle mesh timestep exceeds the available rung range\n");
+                        }
+                        int const previousRung = particlesRung(i);
+                        result.maxRung = std::max(result.maxRung,
+                            std::max({1, int(requestedRung), previousRung - 1, minimumRung}));
+                        bool const gas = options.hydro.enabled && particlesType(i) == kSphType;
+                        double const oldHalfStep =
+                            firstCall ? 0.0 : std::ldexp(0.5 * baseTimestep, -previousRung);
+                        // Acceleration norm, timestep/rung proposal, and optional old half-step.
+                        flops += 2 * kDimensions + 8 + (firstCall ? 0 : 2);
+                        double velocitySquared = 0.0;
+                        for (int dim = 0; dim < kDimensions; ++dim) {
+                            if (gas) {
+                                sphParticlesGravityAcceleration(dim, particlesCatIndex(i)) =
+                                    sign * acceleration[dim];
+                                flops += 1;
+                            } else {
+                                particlesVel(dim, i) = std::fma(
+                                    sign * acceleration[dim], oldHalfStep, particlesVel(dim, i));
+                                flops += 3;
+                            }
+                            if (saveParticleAcceleration(options.analysis)) {
+                                particlesGravityAcceleration(dim, i) = acceleration[dim];
+                            }
+                            double const velocity = particlesVel(dim, i);
+                            velocitySquared += velocity * velocity;
+                        }
+                        double const mass = particlesMass(i);
+                        double const potential = pmmmPotential(i);
+                        if (saveParticlePotential(options.analysis)) {
+                            particlesPot(i) = potential;
+                        }
+                        result.pot += 0.5 * mass * potential;
+                        result.kin += 0.5 * mass * velocitySquared;
+                        result.xmom += mass * particlesVel(kXDimension, i);
+                        result.ymom += mass * particlesVel(kYDimension, i);
+                        result.zmom += mass * particlesVel(kZDimension, i);
+                        result.nmom += mass * std::sqrt(velocitySquared);
                     }
-                    double const mass = particlesMass(i);
-                    double const potential = pmmmPotential(i);
-                    if (saveParticlePotential(options.analysis)) {
-                        particlesPot(i) = potential;
-                    }
-                    result.pot += 0.5 * mass * potential;
-                    result.kin += 0.5 * mass * velocitySquared;
-                    result.xmom += mass * particlesVel(kXDimension, i);
-                    result.ymom += mass * particlesVel(kYDimension, i);
-                    result.zmom += mass * particlesVel(kZDimension, i);
-                    result.nmom += mass * std::sqrt(velocitySquared);
-                }
-                addCpuFlops(flops);
-                return result;
-            }));
+                    addCpuFlops(flops);
+                    return result;
+                },
+                "gravity.pmmm.prepareKick")));
         }
     } catch (...) {
         hpx::wait_all(futures);
@@ -250,21 +256,24 @@ void particleMeshFinishKick(double baseTimestep, int rung) {
         size_t(std::max(1, hpxHardwareConcurrency())), std::max(size_t(1), (count + 4095) / 4096));
     try {
         for (size_t worker = 0; worker < workers; ++worker) {
-            futures.push_back(hpx::async([=]() {
-                FlopCounter<> flops;
-                for (size_t i = worker * count / workers; i < (worker + 1) * count / workers; ++i) {
-                    particlesRung(i) = rung;
-                    if (!hydro || particlesType(i) != kSphType) {
-                        auto const& acceleration = pmmmAcceleration(i);
-                        for (int dim = 0; dim < kDimensions; ++dim) {
-                            particlesVel(dim, i) =
-                                std::fma(acceleration[dim], halfStep, particlesVel(dim, i));
+            futures.push_back(hpx::async(hpx::annotated_function(
+                [=]() {
+                    FlopCounter<> flops;
+                    for (size_t i = worker * count / workers; i < (worker + 1) * count / workers;
+                        ++i) {
+                        particlesRung(i) = rung;
+                        if (!hydro || particlesType(i) != kSphType) {
+                            auto const& acceleration = pmmmAcceleration(i);
+                            for (int dim = 0; dim < kDimensions; ++dim) {
+                                particlesVel(dim, i) =
+                                    std::fma(acceleration[dim], halfStep, particlesVel(dim, i));
+                            }
+                            flops += 2 * kDimensions;
                         }
-                        flops += 2 * kDimensions;
                     }
-                }
-                addCpuFlops(flops);
-            }));
+                    addCpuFlops(flops);
+                },
+                "gravity.pmmm.finishKick")));
         }
     } catch (...) {
         hpx::wait_all(futures);

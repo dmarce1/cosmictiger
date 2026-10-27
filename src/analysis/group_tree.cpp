@@ -8,6 +8,8 @@
 
 #include <unordered_set>
 
+#include <hpx/threading_base/annotated_function.hpp>
+
 #include <cosmictiger/analysis/group_tree.hpp>
 #include <cosmictiger/particles/domain.hpp>
 
@@ -119,11 +121,13 @@ hpx::future<GroupTreeReturn> groupTreeCreateFork(size_t key, Pair<int, int> proc
         rc = hpx::async<GroupTreeCreateAction>(hpxLocalities()[processRange.first], key,
             processRange, particleRange, box, depth, localRoot);
     } else {
-        rc = hpx::async([processRange, particleRange, depth, localRoot, box, key]() {
-            auto rc = groupTreeCreate(key, processRange, particleRange, box, depth, localRoot);
-            numberOfThreads--;
-            return rc;
-        });
+        rc = hpx::async(hpx::annotated_function(
+            [processRange, particleRange, depth, localRoot, box, key]() {
+                auto rc = groupTreeCreate(key, processRange, particleRange, box, depth, localRoot);
+                numberOfThreads--;
+                return rc;
+            },
+            "analysis.groupTree.create"));
     }
     return rc;
 }
@@ -310,12 +314,15 @@ static GroupTreeNode const* groupTreeCacheRead(TreeId id) {
             entry.data = prms->get_future();
             entry.epoch = treeCacheEpoch;
             lock.unlock();
-            hpx::async(HPX_PRIORITY_HI, [prms, lineId]() {
-                auto lineFut = hpx::async<GroupTreeFetchCacheLineAction>(
-                    hpxLocalities()[lineId.proc], lineId.index);
-                prms->set_value(lineFut.get());
-                return 'a';
-            });
+            hpx::async(HPX_PRIORITY_HI,
+                hpx::annotated_function(
+                    [prms, lineId]() {
+                        auto lineFut = hpx::async<GroupTreeFetchCacheLineAction>(
+                            hpxLocalities()[lineId.proc], lineId.index);
+                        prms->set_value(lineFut.get());
+                        return 'a';
+                    },
+                    "analysis.groupTree.fetchCacheLine"));
             lock.lock();
             iter = treeCache[bin].find(lineId);
         } else if (iter->second.epoch < treeCacheEpoch) {
@@ -326,18 +333,19 @@ static GroupTreeNode const* groupTreeCacheRead(TreeId id) {
             entry.epoch = treeCacheEpoch;
             lock.unlock();
             auto oldData = oldFut.get();
-            hpx::async(
-                HPX_PRIORITY_HI,
-                [prms, lineId](Vector<GroupTreeNode> data) {
-                    auto lineFut = hpx::async<GroupTreeRefreshCacheLineAction>(
-                        hpxLocalities()[lineId.proc], lineId.index);
-                    auto newData = lineFut.get();
-                    for (int i = 0; i < newData.size(); i++) {
-                        data[i].lastActive = newData[i];
-                    }
-                    prms->set_value(std::move(data));
-                    return 'a';
-                },
+            hpx::async(HPX_PRIORITY_HI,
+                hpx::annotated_function(
+                    [prms, lineId](Vector<GroupTreeNode> data) {
+                        auto lineFut = hpx::async<GroupTreeRefreshCacheLineAction>(
+                            hpxLocalities()[lineId.proc], lineId.index);
+                        auto newData = lineFut.get();
+                        for (int i = 0; i < newData.size(); i++) {
+                            data[i].lastActive = newData[i];
+                        }
+                        prms->set_value(std::move(data));
+                        return 'a';
+                    },
+                    "analysis.groupTree.refreshCacheLine"),
                 std::move(oldData));
             lock.lock();
             iter = treeCache[bin].find(lineId);

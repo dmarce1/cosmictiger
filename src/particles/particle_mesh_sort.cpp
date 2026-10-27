@@ -11,13 +11,16 @@
 #include <utility>
 #include <vector>
 
+#include <hpx/threading_base/annotated_function.hpp>
+
 #include <cosmictiger/particles/particle_mesh_sort.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
 
 namespace detail {
 
 template <class Function>
-void particleMeshParallelFor(size_t count, size_t workers, Function const& function) {
+void particleMeshParallelFor(
+    size_t count, size_t workers, char const* annotation, Function const& function) {
     workers = std::min(count, workers);
     if (workers <= 1) {
         for (size_t i = 0; i < count; ++i) {
@@ -29,11 +32,13 @@ void particleMeshParallelFor(size_t count, size_t workers, Function const& funct
     futures.reserve(workers);
     try {
         for (size_t worker = 0; worker < workers; ++worker) {
-            futures.push_back(hpx::async([&, worker] {
-                for (size_t i = worker; i < count; i += workers) {
-                    function(i);
-                }
-            }));
+            futures.push_back(hpx::async(hpx::annotated_function(
+                [&, worker] {
+                    for (size_t i = worker; i < count; i += workers) {
+                        function(i);
+                    }
+                },
+                annotation)));
         }
     } catch (...) {
         // References captured by already launched work must outlive that work.
@@ -125,7 +130,7 @@ void sortParticleMeshRange(size_t begin, size_t end, uint64_t minimum, uint64_t 
     // Each chunk is first partitioned independently. Only O(workers) boundary
     // metadata is needed to repair the combined partition in place.
     std::vector<ParticleMeshPartition> partitions(workers);
-    particleMeshParallelFor(workers, workers, [&](size_t chunk) {
+    particleMeshParallelFor(workers, workers, "particles.meshPartition", [&](size_t chunk) {
         size_t const chunkBegin = begin + particleMeshChunkBoundary(count, chunk, workers);
         size_t const chunkEnd = begin + particleMeshChunkBoundary(count, chunk + 1, workers);
         partitions[chunk] = partitionParticleMeshRange(chunkBegin, chunkEnd, split, meshSize);
@@ -177,7 +182,7 @@ void sortParticleMeshRange(size_t begin, size_t end, uint64_t minimum, uint64_t 
         upperRun += upper.first == upper.second;
     }
     // The paired ranges are disjoint, so no atomics or particle locks are needed.
-    particleMeshParallelFor(swaps.size(), workers, [&](size_t run) {
+    particleMeshParallelFor(swaps.size(), workers, "particles.meshSwapPartitions", [&](size_t run) {
         auto const& swap = swaps[run];
         for (size_t i = 0; i < swap.count; ++i) {
             particlesSwap(static_cast<ParticleInteger>(swap.first + i),
@@ -191,7 +196,7 @@ void sortParticleMeshRange(size_t begin, size_t end, uint64_t minimum, uint64_t 
     } else {
         size_t const lowerWorkers =
             std::clamp((middle - begin) / (count / workers + 1), size_t(1), workers - 1);
-        particleMeshParallelFor(2, 2, [&](size_t side) {
+        particleMeshParallelFor(2, 2, "particles.meshSortRanges", [&](size_t side) {
             if (side == 0) {
                 sortParticleMeshRange(
                     begin, middle, lowerMinimum, lowerMaximum, lowerWorkers, meshSize);
@@ -222,58 +227,65 @@ Vector<ParticleMeshCell> particleMeshSort(int meshSize, Pair<ParticleInteger> ra
     detail::sortParticleMeshRange(first, last, 0, cellCount - 1, workers, meshSize);
     if (getOptions().hydro.enabled) {
         // Gas arrays remain in their own ordering; rebuild their reverse map.
-        detail::particleMeshParallelFor(workers, workers, [&](size_t worker) {
-            size_t const begin = first + detail::particleMeshChunkBoundary(count, worker, workers);
-            size_t const end =
-                first + detail::particleMeshChunkBoundary(count, worker + 1, workers);
-            for (size_t i = begin; i < end; ++i) {
-                if (particlesType(i) == kSphType) {
-                    ParticleInteger const gasIndex = particlesCatIndex(i);
-                    if (gasIndex < 0 || gasIndex >= sphParticlesSize()) {
-                        throw std::runtime_error("Invalid gas index after particle mesh sort");
+        detail::particleMeshParallelFor(
+            workers, workers, "particles.meshRebuildSphIndices", [&](size_t worker) {
+                size_t const begin =
+                    first + detail::particleMeshChunkBoundary(count, worker, workers);
+                size_t const end =
+                    first + detail::particleMeshChunkBoundary(count, worker + 1, workers);
+                for (size_t i = begin; i < end; ++i) {
+                    if (particlesType(i) == kSphType) {
+                        ParticleInteger const gasIndex = particlesCatIndex(i);
+                        if (gasIndex < 0 || gasIndex >= sphParticlesSize()) {
+                            throw std::runtime_error("Invalid gas index after particle mesh sort");
+                        }
+                        sphParticlesParticleIndex(gasIndex) = static_cast<ParticleInteger>(i);
                     }
-                    sphParticlesParticleIndex(gasIndex) = static_cast<ParticleInteger>(i);
                 }
-            }
-        });
+            });
     }
     particlesCacheFreeLocal();
 
     // Two parallel scans construct only the occupied-cell directory. There is
     // no particle-sized key array, permutation, or second particle allocation.
     std::vector<size_t> offsets(workers + 1, 0);
-    detail::particleMeshParallelFor(workers, workers, [&](size_t worker) {
-        size_t const begin = first + detail::particleMeshChunkBoundary(count, worker, workers);
-        size_t const end = first + detail::particleMeshChunkBoundary(count, worker + 1, workers);
-        uint64_t previous = begin == first ? std::numeric_limits<uint64_t>::max() :
-                                             detail::particleMeshKey(begin - 1, meshSize);
-        for (size_t i = begin; i < end; ++i) {
-            uint64_t const key = detail::particleMeshKey(i, meshSize);
-            offsets[worker + 1] += key != previous;
-            previous = key;
-        }
-    });
+    detail::particleMeshParallelFor(
+        workers, workers, "particles.meshCountCells", [&](size_t worker) {
+            size_t const begin = first + detail::particleMeshChunkBoundary(count, worker, workers);
+            size_t const end =
+                first + detail::particleMeshChunkBoundary(count, worker + 1, workers);
+            uint64_t previous = begin == first ? std::numeric_limits<uint64_t>::max() :
+                                                 detail::particleMeshKey(begin - 1, meshSize);
+            for (size_t i = begin; i < end; ++i) {
+                uint64_t const key = detail::particleMeshKey(i, meshSize);
+                offsets[worker + 1] += key != previous;
+                previous = key;
+            }
+        });
     for (size_t worker = 0; worker < workers; ++worker) {
         offsets[worker + 1] += offsets[worker];
     }
     Vector<ParticleMeshCell> cells(offsets.back());
-    detail::particleMeshParallelFor(workers, workers, [&](size_t worker) {
-        size_t const begin = first + detail::particleMeshChunkBoundary(count, worker, workers);
-        size_t const end = first + detail::particleMeshChunkBoundary(count, worker + 1, workers);
-        uint64_t previous = begin == first ? std::numeric_limits<uint64_t>::max() :
-                                             detail::particleMeshKey(begin - 1, meshSize);
-        size_t entry = offsets[worker];
-        for (size_t i = begin; i < end; ++i) {
-            uint64_t const key = detail::particleMeshKey(i, meshSize);
-            if (key != previous) {
-                cells[entry++] = {key, static_cast<ParticleInteger>(i), 0, false};
+    detail::particleMeshParallelFor(
+        workers, workers, "particles.meshInitializeCells", [&](size_t worker) {
+            size_t const begin = first + detail::particleMeshChunkBoundary(count, worker, workers);
+            size_t const end =
+                first + detail::particleMeshChunkBoundary(count, worker + 1, workers);
+            uint64_t previous = begin == first ? std::numeric_limits<uint64_t>::max() :
+                                                 detail::particleMeshKey(begin - 1, meshSize);
+            size_t entry = offsets[worker];
+            for (size_t i = begin; i < end; ++i) {
+                uint64_t const key = detail::particleMeshKey(i, meshSize);
+                if (key != previous) {
+                    cells[entry++] = {key, static_cast<ParticleInteger>(i), 0, false};
+                }
+                previous = key;
             }
-            previous = key;
-        }
-    });
-    detail::particleMeshParallelFor(cells.size(), workers, [&](size_t entry) {
-        cells[entry].end =
-            entry + 1 < cells.size() ? cells[entry + 1].begin : static_cast<ParticleInteger>(last);
-    });
+        });
+    detail::particleMeshParallelFor(
+        cells.size(), workers, "particles.meshFinalizeCells", [&](size_t entry) {
+            cells[entry].end = entry + 1 < cells.size() ? cells[entry + 1].begin :
+                                                          static_cast<ParticleInteger>(last);
+        });
     return cells;
 }

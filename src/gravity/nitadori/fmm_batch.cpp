@@ -13,6 +13,8 @@
 #include <stack>
 #include <utility>
 
+#include <hpx/threading_base/annotated_function.hpp>
+
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
@@ -58,15 +60,16 @@ hpx::future<KickReturn> localBatchFork(KickParameters params, ExpansionBuffer co
     if (eligible) {
         if (threads.fetch_add(1) < maximumThreads) {
             try {
-                return hpx::async(
-                    [run = std::move(run)](Vector<TreeId> direct) mutable {
-                        struct ThreadCountGuard {
-                            ~ThreadCountGuard() {
-                                --threads;
-                            }
-                        } guard;
-                        return run(std::move(direct));
-                    },
+                return hpx::async(hpx::annotated_function(
+                                      [run = std::move(run)](Vector<TreeId> direct) mutable {
+                                          struct ThreadCountGuard {
+                                              ~ThreadCountGuard() {
+                                                  --threads;
+                                              }
+                                          } guard;
+                                          return run(std::move(direct));
+                                      },
+                                      "gravity.pmmm.kickBatchWalk"),
                     std::move(direct));
             } catch (...) {
                 --threads;

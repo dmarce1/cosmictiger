@@ -383,30 +383,33 @@ void twolptCorrection2(int dim) {
     Vector<hpx::future<void>> futs2;
     for (iValue[0] = box.begin[0]; iValue[0] != box.end[0]; iValue[0]++) {
         futs2.push_back(hpx::async(
-            [n, box, boxSize, &yValue, dim, factor](Array<int64_t, kDimensions> iValue2) {
-                int const i = (iValue2[0] < n / 2 ? iValue2[0] : iValue2[0] - n);
-                float const kx = 2.f * std::numbers::pi_v<float> / boxSize * float(i);
-                for (iValue2[1] = box.begin[1]; iValue2[1] != box.end[1]; iValue2[1]++) {
-                    int const j = (iValue2[1] < n / 2 ? iValue2[1] : iValue2[1] - n);
-                    float const ky = 2.f * std::numbers::pi_v<float> / boxSize * float(j);
-                    for (iValue2[2] = box.begin[2]; iValue2[2] != box.end[2]; iValue2[2]++) {
-                        int const k = (iValue2[2] < n / 2 ? iValue2[2] : iValue2[2] - n);
-                        int const i2 = sqr(i, j, k);
-                        int64_t const index = box.index(iValue2);
-                        if (i2 > 0) {
-                            float kz = 2.f * std::numbers::pi_v<float> / boxSize * float(k);
-                            float k2 = kx * kx + ky * ky + kz * kz;
-                            float const kValue[kDimensions] = {kx, ky, kz};
-                            yValue[index] = -ComplexFloat(0, 1) * kValue[dim] * yValue[index] / k2;
-                            yValue[index] *= cloudFilter(kx * boxSize / n);
-                            yValue[index] *= cloudFilter(ky * boxSize / n);
-                            yValue[index] *= cloudFilter(kz * boxSize / n);
-                        } else {
-                            yValue[index] = ComplexFloat(0, 0);
+            hpx::annotated_function(
+                [n, box, boxSize, &yValue, dim, factor](Array<int64_t, kDimensions> iValue2) {
+                    int const i = (iValue2[0] < n / 2 ? iValue2[0] : iValue2[0] - n);
+                    float const kx = 2.f * std::numbers::pi_v<float> / boxSize * float(i);
+                    for (iValue2[1] = box.begin[1]; iValue2[1] != box.end[1]; iValue2[1]++) {
+                        int const j = (iValue2[1] < n / 2 ? iValue2[1] : iValue2[1] - n);
+                        float const ky = 2.f * std::numbers::pi_v<float> / boxSize * float(j);
+                        for (iValue2[2] = box.begin[2]; iValue2[2] != box.end[2]; iValue2[2]++) {
+                            int const k = (iValue2[2] < n / 2 ? iValue2[2] : iValue2[2] - n);
+                            int const i2 = sqr(i, j, k);
+                            int64_t const index = box.index(iValue2);
+                            if (i2 > 0) {
+                                float kz = 2.f * std::numbers::pi_v<float> / boxSize * float(k);
+                                float k2 = kx * kx + ky * ky + kz * kz;
+                                float const kValue[kDimensions] = {kx, ky, kz};
+                                yValue[index] =
+                                    -ComplexFloat(0, 1) * kValue[dim] * yValue[index] / k2;
+                                yValue[index] *= cloudFilter(kx * boxSize / n);
+                                yValue[index] *= cloudFilter(ky * boxSize / n);
+                                yValue[index] *= cloudFilter(kz * boxSize / n);
+                            } else {
+                                yValue[index] = ComplexFloat(0, 0);
+                            }
                         }
                     }
-                }
-            },
+                },
+                "cosmology.twolptCorrection2"),
             iValue));
     }
     hpx::wait_all(futs2.begin(), futs2.end());
@@ -436,102 +439,105 @@ void twolptGenerate(int dim1, int dim2, bool velocity = false) {
     bool const filter = (dim1 != kDimensions || dim2 != kDimensions);
     for (iValue[0] = box.begin[0]; iValue[0] != box.end[0]; iValue[0]++) {
         futs2.push_back(hpx::async(
-            [n, box, boxSize, &yValue, dim1, dim2, factor, filter, velocity](
-                Array<int64_t, kDimensions> iValue2) {
-                int const i = (iValue2[0] < n / 2 ? iValue2[0] : iValue2[0] - n);
-                float const kx = 2.f * std::numbers::pi_v<float> / boxSize * float(i);
-                for (iValue2[1] = box.begin[1]; iValue2[1] != box.end[1]; iValue2[1]++) {
-                    int seed = (iValue2[0] * n + iValue2[1]) * 1234 + 42;
-                    gsl_rng* rndgen = gsl_rng_alloc(gsl_rng_taus);
-                    gsl_rng_set(rndgen, seed);
-                    for (int l = 0; l < kRandInitIters; l++) {
-                        gsl_rng_uniform_pos(rndgen);
-                    }
-                    int const j = (iValue2[1] < n / 2 ? iValue2[1] : iValue2[1] - n);
-                    float const ky = 2.f * std::numbers::pi_v<float> / boxSize * float(j);
-                    for (iValue2[2] = box.begin[2]; iValue2[2] != box.end[2]; iValue2[2]++) {
-                        int64_t const index = box.index(iValue2);
-                        if (iValue2[2] > 0) {
-                            int const k = (iValue2[2] < n / 2 ? iValue2[2] : iValue2[2] - n);
-                            int const i2 = sqr(i, j, k);
-                            float const kz = 2.f * std::numbers::pi_v<float> / boxSize * float(k);
-                            if (i2 > 0) {
+            hpx::annotated_function(
+                [n, box, boxSize, &yValue, dim1, dim2, factor, filter, velocity](
+                    Array<int64_t, kDimensions> iValue2) {
+                    int const i = (iValue2[0] < n / 2 ? iValue2[0] : iValue2[0] - n);
+                    float const kx = 2.f * std::numbers::pi_v<float> / boxSize * float(i);
+                    for (iValue2[1] = box.begin[1]; iValue2[1] != box.end[1]; iValue2[1]++) {
+                        int seed = (iValue2[0] * n + iValue2[1]) * 1234 + 42;
+                        gsl_rng* rndgen = gsl_rng_alloc(gsl_rng_taus);
+                        gsl_rng_set(rndgen, seed);
+                        for (int l = 0; l < kRandInitIters; l++) {
+                            gsl_rng_uniform_pos(rndgen);
+                        }
+                        int const j = (iValue2[1] < n / 2 ? iValue2[1] : iValue2[1] - n);
+                        float const ky = 2.f * std::numbers::pi_v<float> / boxSize * float(j);
+                        for (iValue2[2] = box.begin[2]; iValue2[2] != box.end[2]; iValue2[2]++) {
+                            int64_t const index = box.index(iValue2);
+                            if (iValue2[2] > 0) {
+                                int const k = (iValue2[2] < n / 2 ? iValue2[2] : iValue2[2] - n);
+                                int const i2 = sqr(i, j, k);
                                 float const kz =
                                     2.f * std::numbers::pi_v<float> / boxSize * float(k);
-                                float const k2 = kx * kx + ky * ky + kz * kz;
-                                float const k0Value = sqrtf(kx * kx + ky * ky + kz * kz);
-                                float const x = gsl_rng_uniform_pos(rndgen);
-                                float const y = gsl_rng_uniform_pos(rndgen);
-                                ComplexFloat const kValue[kDimensions + 1] = {
-                                    {0, -kx}, {0, -ky}, {0, -kz}, {1, 0}};
-                                auto const randNormal =
-                                    expc(ComplexFloat(0, 1) * 2.f * std::numbers::pi_v<float> * y) *
-                                    sqrtf(-logf(fabsf(x)));
-                                float const amplitude = power.amplitude(k0Value, velocity);
-                                yValue[index] = randNormal * amplitude * factor * kValue[dim1] *
-                                    kValue[dim2] / k2;
-                            } else {
-                                yValue[index] = ComplexFloat(0.f, 0.f);
-                            }
-                            if (filter) {
-                                yValue[index] *= cloudFilter(kx * boxSize / n);
-                                yValue[index] *= cloudFilter(ky * boxSize / n);
-                                yValue[index] *= cloudFilter(kz * boxSize / n);
+                                if (i2 > 0) {
+                                    float const kz =
+                                        2.f * std::numbers::pi_v<float> / boxSize * float(k);
+                                    float const k2 = kx * kx + ky * ky + kz * kz;
+                                    float const k0Value = sqrtf(kx * kx + ky * ky + kz * kz);
+                                    float const x = gsl_rng_uniform_pos(rndgen);
+                                    float const y = gsl_rng_uniform_pos(rndgen);
+                                    ComplexFloat const kValue[kDimensions + 1] = {
+                                        {0, -kx}, {0, -ky}, {0, -kz}, {1, 0}};
+                                    auto const randNormal = expc(ComplexFloat(0, 1) * 2.f *
+                                                                std::numbers::pi_v<float> * y) *
+                                        sqrtf(-logf(fabsf(x)));
+                                    float const amplitude = power.amplitude(k0Value, velocity);
+                                    yValue[index] = randNormal * amplitude * factor * kValue[dim1] *
+                                        kValue[dim2] / k2;
+                                } else {
+                                    yValue[index] = ComplexFloat(0.f, 0.f);
+                                }
+                                if (filter) {
+                                    yValue[index] *= cloudFilter(kx * boxSize / n);
+                                    yValue[index] *= cloudFilter(ky * boxSize / n);
+                                    yValue[index] *= cloudFilter(kz * boxSize / n);
+                                }
                             }
                         }
-                    }
-                    gsl_rng_free(rndgen);
-                    iValue2[2] = 0;
-                    int64_t const index = box.index(iValue2);
-                    int const j0 = iValue2[0] > n / 2 ? n - iValue2[0] : iValue2[0];
-                    int const j1Value = iValue2[1] > n / 2 ? n - iValue2[1] : iValue2[1];
-                    seed = (j0 * n + j1Value) * 1234 + 42;
-                    rndgen = gsl_rng_alloc(gsl_rng_taus);
-                    gsl_rng_set(rndgen, seed);
-                    for (int l = 0; l < kRandInitIters; l++) {
-                        gsl_rng_uniform_pos(rndgen);
-                    }
-                    int const k = (iValue2[2] < n / 2 ? iValue2[2] : iValue2[2] - n);
-                    int const i2 = sqr(i, j, k);
-                    float sgn = 1.0;
-                    if (dim1 != kDimensions) {
-                        sgn *= -1.0;
-                    }
-                    if (dim2 != kDimensions) {
-                        sgn *= -1.0;
-                    }
-                    float const kz = 2.f * std::numbers::pi_v<float> / boxSize * float(k);
-                    if (i2 > 0) {
-                        float const k2 = kx * kx + ky * ky + kz * kz;
-                        float const k0Value = sqrtf(kx * kx + ky * ky + kz * kz);
-                        float const x = gsl_rng_uniform_pos(rndgen);
-                        float const y = gsl_rng_uniform_pos(rndgen);
-                        ComplexFloat const kValue[kDimensions + 1] = {
-                            {0, -kx}, {0, -ky}, {0, -kz}, {1, 0}};
-                        auto const randNormal =
-                            expc(ComplexFloat(0, 1) * 2.f * std::numbers::pi_v<float> * y) *
-                            sqrtf(-logf(fabsf(x)));
-                        float const amplitude = power.amplitude(k0Value, velocity);
-                        yValue[index] =
-                            randNormal * amplitude * factor * kValue[dim1] * kValue[dim2] / k2;
-                        if (iValue2[0] > n / 2) {
-                            yValue[index] = std::conj(yValue[index]) * sgn;
-                        } else if (iValue2[0] == 0) {
-                            if (iValue2[1] > n / 2) {
+                        gsl_rng_free(rndgen);
+                        iValue2[2] = 0;
+                        int64_t const index = box.index(iValue2);
+                        int const j0 = iValue2[0] > n / 2 ? n - iValue2[0] : iValue2[0];
+                        int const j1Value = iValue2[1] > n / 2 ? n - iValue2[1] : iValue2[1];
+                        seed = (j0 * n + j1Value) * 1234 + 42;
+                        rndgen = gsl_rng_alloc(gsl_rng_taus);
+                        gsl_rng_set(rndgen, seed);
+                        for (int l = 0; l < kRandInitIters; l++) {
+                            gsl_rng_uniform_pos(rndgen);
+                        }
+                        int const k = (iValue2[2] < n / 2 ? iValue2[2] : iValue2[2] - n);
+                        int const i2 = sqr(i, j, k);
+                        float sgn = 1.0;
+                        if (dim1 != kDimensions) {
+                            sgn *= -1.0;
+                        }
+                        if (dim2 != kDimensions) {
+                            sgn *= -1.0;
+                        }
+                        float const kz = 2.f * std::numbers::pi_v<float> / boxSize * float(k);
+                        if (i2 > 0) {
+                            float const k2 = kx * kx + ky * ky + kz * kz;
+                            float const k0Value = sqrtf(kx * kx + ky * ky + kz * kz);
+                            float const x = gsl_rng_uniform_pos(rndgen);
+                            float const y = gsl_rng_uniform_pos(rndgen);
+                            ComplexFloat const kValue[kDimensions + 1] = {
+                                {0, -kx}, {0, -ky}, {0, -kz}, {1, 0}};
+                            auto const randNormal =
+                                expc(ComplexFloat(0, 1) * 2.f * std::numbers::pi_v<float> * y) *
+                                sqrtf(-logf(fabsf(x)));
+                            float const amplitude = power.amplitude(k0Value, velocity);
+                            yValue[index] =
+                                randNormal * amplitude * factor * kValue[dim1] * kValue[dim2] / k2;
+                            if (iValue2[0] > n / 2) {
                                 yValue[index] = std::conj(yValue[index]) * sgn;
+                            } else if (iValue2[0] == 0) {
+                                if (iValue2[1] > n / 2) {
+                                    yValue[index] = std::conj(yValue[index]) * sgn;
+                                }
                             }
+                        } else {
+                            yValue[index] = ComplexFloat(0.f, 0.f);
                         }
-                    } else {
-                        yValue[index] = ComplexFloat(0.f, 0.f);
+                        if (filter) {
+                            yValue[index] *= cloudFilter(kx * boxSize / n);
+                            yValue[index] *= cloudFilter(ky * boxSize / n);
+                            yValue[index] *= cloudFilter(kz * boxSize / n);
+                        }
+                        gsl_rng_free(rndgen);
                     }
-                    if (filter) {
-                        yValue[index] *= cloudFilter(kx * boxSize / n);
-                        yValue[index] *= cloudFilter(ky * boxSize / n);
-                        yValue[index] *= cloudFilter(kz * boxSize / n);
-                    }
-                    gsl_rng_free(rndgen);
-                }
-            },
+                },
+                "cosmology.twolptGenerate"),
             iValue));
     }
     hpx::wait_all(futs2.begin(), futs2.end());
@@ -742,7 +748,7 @@ static void initX0() {
         MutexType mutex;
         Vector<ParticleInteger> counts(je - jb);
         for (int j = jb; j < je; j++) {
-            futs.push_back(hpx::async(
+            futs.push_back(hpx::async(hpx::annotated_function(
                 [j, lb, le, jb, kb, ke, numberOfGlassParticles, &mutex, box, nf, &counts]() {
                     ParticleInteger thisCount = 0;
                     for (int k = kb; k < ke; k++) {
@@ -768,7 +774,8 @@ static void initX0() {
                         }
                     }
                     counts[j - jb] = thisCount;
-                }));
+                },
+                "cosmology.countGlassParticles")));
         }
         hpx::wait_all(futs.begin(), futs.end());
         futs.resize(0);
@@ -783,7 +790,7 @@ static void initX0() {
         }
         for (int j = jb; j < je; j++) {
             ParticleInteger const indexBegin = counts[j - jb];
-            futs.push_back(hpx::async(
+            futs.push_back(hpx::async(hpx::annotated_function(
                 [j, lb, le, kb, ke, numberOfGlassParticles, &mutex, box, nf, indexBegin]() {
                     ParticleInteger iii = indexBegin;
                     for (int k = kb; k < ke; k++) {
@@ -811,7 +818,8 @@ static void initX0() {
                             }
                         }
                     }
-                }));
+                },
+                "cosmology.initializeGlassParticles")));
         }
     }
     hpx::wait_all(futs.begin(), futs.end());
@@ -899,7 +907,7 @@ static float zeldovichEnd(
     int const numberOfThreads = hpxHardwareConcurrency();
     double const boxSizeInv = 1.0 / boxSize;
     for (ParticleInteger proc = 0; proc < numberOfThreads; proc++) {
-        futs.push_back(hpx::async(
+        futs.push_back(hpx::async(hpx::annotated_function(
             [proc, numberOfThreads, n, box, boxSizeInv, dim, d1Value, prefac1, velocityOnly]() {
                 size_t const b = (size_t) proc * particlesSize() / numberOfThreads;
                 size_t const e = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
@@ -948,7 +956,8 @@ static float zeldovichEnd(
                     dxmax = std::max(dxmax, std::abs(dx) * ndim);
                 }
                 return (float) dxmax;
-            }));
+            },
+            "cosmology.zeldovichEnd")));
     }
     for (auto& f : futs) {
         auto const tmp = f.get();

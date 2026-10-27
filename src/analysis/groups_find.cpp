@@ -8,6 +8,8 @@
 
 #include <stack>
 
+#include <hpx/threading_base/annotated_function.hpp>
+
 #include <cosmictiger/analysis/group_tree.hpp>
 #include <cosmictiger/analysis/groups_find.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
@@ -50,12 +52,13 @@ hpx::future<size_t> groupsFindFork(
         rc = hpx::async<GroupsFindAction>(hpxLocalities()[selfPtr->processRange.first], self,
             std::move(checklist), linkingLength);
     } else {
-        rc = hpx::async(
-            [self, linkingLength](Vector<TreeId> checklist) {
-                auto rc = groupsFind(self, std::move(checklist), linkingLength);
-                numberOfThreads--;
-                return rc;
-            },
+        rc = hpx::async(hpx::annotated_function(
+                            [self, linkingLength](Vector<TreeId> checklist) {
+                                auto rc = groupsFind(self, std::move(checklist), linkingLength);
+                                numberOfThreads--;
+                                return rc;
+                            },
+                            "analysis.groups.find"),
             std::move(checklist));
     }
     return rc;
@@ -316,12 +319,14 @@ hpx::future<size_t> groupsFind(TreeId self, Vector<TreeId> checklist, double lin
                 return hpx::make_ready_future(tot);
             } else {
                 return hpx::when_all(futs.begin(), futs.end())
-                    .then([self](hpx::future<std::vector<hpx::future<size_t>>> futfut) {
-                        auto futs = futfut.get();
-                        auto const tot = futs[kLeftChild].get() + futs[kRightChild].get();
-                        groupTreeSetActive(self, tot != 0);
-                        return tot;
-                    });
+                    .then(hpx::annotated_function(
+                        [self](hpx::future<std::vector<hpx::future<size_t>>> futfut) {
+                            auto futs = futfut.get();
+                            auto const tot = futs[kLeftChild].get() + futs[kRightChild].get();
+                            groupTreeSetActive(self, tot != 0);
+                            return tot;
+                        },
+                        "analysis.groups.combineChildren"));
             }
         } else {
             groupTreeSetActive(self, false);

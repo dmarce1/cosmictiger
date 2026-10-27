@@ -115,59 +115,60 @@ std::vector<CellData> readCells(std::vector<uint64_t> const& keys, uint64_t expa
 void deposit() {
     // Bound packet sizes and outstanding remote writes independently of N.
     constexpr size_t kCellsPerPacket = 32;
-    parallelFor((state.cells.size() + kCellsPerPacket - 1) / kCellsPerPacket, [&](size_t batch) {
-        FlopCount flops = 0;
-        std::unordered_map<int, std::vector<CellData>> packets;
-        size_t const end = std::min(state.cells.size(), (batch + 1) * kCellsPerPacket);
-        for (size_t cellIndex = batch * kCellsPerPacket; cellIndex < end; ++cellIndex) {
-            auto const& range = state.cells[cellIndex];
-            auto const cellCoordinates = coordinates(range.key);
-            CellData cell;
-            cell.key = range.key;
-            cell.coefficients.assign(cache.sourceCount, 0.0);
-            constexpr bool kUseFmm = gravity::kBuildPmmmNearUsesFmm;
-            if constexpr (kUseFmm) {
-                cell.sourceRank = hpxRank();
-                cell.particleCount = range.end - range.begin;
-            } else {
-                cell.sources.reserve(range.end - range.begin);
-            }
-            for (ParticleInteger i = range.begin; i < range.end; ++i) {
-                auto const source = particle(i, cellCoordinates, flops);
-                flops +=
-                    addMoments(cache.order, cell.coefficients.data(), source.mass, source.offset);
-                for (int axis = 0; axis < kDimensions; ++axis) {
-                    cell.radialTrace += source.mass * source.offset[axis] * source.offset[axis];
+    parallelFor((state.cells.size() + kCellsPerPacket - 1) / kCellsPerPacket,
+        "gravity.pmmm.depositMoments", [&](size_t batch) {
+            FlopCount flops = 0;
+            std::unordered_map<int, std::vector<CellData>> packets;
+            size_t const end = std::min(state.cells.size(), (batch + 1) * kCellsPerPacket);
+            for (size_t cellIndex = batch * kCellsPerPacket; cellIndex < end; ++cellIndex) {
+                auto const& range = state.cells[cellIndex];
+                auto const cellCoordinates = coordinates(range.key);
+                CellData cell;
+                cell.key = range.key;
+                cell.coefficients.assign(cache.sourceCount, 0.0);
+                constexpr bool kUseFmm = gravity::kBuildPmmmNearUsesFmm;
+                if constexpr (kUseFmm) {
+                    cell.sourceRank = hpxRank();
+                    cell.particleCount = range.end - range.begin;
+                } else {
+                    cell.sources.reserve(range.end - range.begin);
                 }
-                flops += 3 * kDimensions;
-                if constexpr (!kUseFmm) {
-                    cell.sources.push_back(source);
+                for (ParticleInteger i = range.begin; i < range.end; ++i) {
+                    auto const source = particle(i, cellCoordinates, flops);
+                    flops += addMoments(
+                        cache.order, cell.coefficients.data(), source.mass, source.offset);
+                    for (int axis = 0; axis < kDimensions; ++axis) {
+                        cell.radialTrace += source.mass * source.offset[axis] * source.offset[axis];
+                    }
+                    flops += 3 * kDimensions;
+                    if constexpr (!kUseFmm) {
+                        cell.sources.push_back(source);
+                    }
                 }
+                packets[cache.slabOwner[cellCoordinates[0]]].push_back(std::move(cell));
             }
-            packets[cache.slabOwner[cellCoordinates[0]]].push_back(std::move(cell));
-        }
-        addCpuFlops(flops);
-        std::vector<hpx::future<void>> futures;
-        futures.reserve(packets.size());
-        std::exception_ptr failure;
-        try {
-            for (auto& [owner, packet] : packets) {
-                futures.push_back(
-                    hpx::async<PmmmAccumulateAction>(cache.owners[owner], std::move(packet)));
+            addCpuFlops(flops);
+            std::vector<hpx::future<void>> futures;
+            futures.reserve(packets.size());
+            std::exception_ptr failure;
+            try {
+                for (auto& [owner, packet] : packets) {
+                    futures.push_back(
+                        hpx::async<PmmmAccumulateAction>(cache.owners[owner], std::move(packet)));
+                }
+            } catch (...) {
+                failure = std::current_exception();
             }
-        } catch (...) {
-            failure = std::current_exception();
-        }
-        for (auto& future : futures) {
-            future.wait();
-        }
-        if (failure) {
-            std::rethrow_exception(failure);
-        }
-        for (auto& future : futures) {
-            future.get();
-        }
-    });
+            for (auto& future : futures) {
+                future.wait();
+            }
+            if (failure) {
+                std::rethrow_exception(failure);
+            }
+            for (auto& future : futures) {
+                future.get();
+            }
+        });
 }
 
 std::vector<double> localExpansion(uint64_t key) {

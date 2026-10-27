@@ -10,6 +10,8 @@
 #include <mutex>
 #include <set>
 
+#include <hpx/threading_base/annotated_function.hpp>
+
 #include <cosmictiger/core/timer.hpp>
 #include <cosmictiger/gravity/dehnen/execution.hpp>
 #include <cosmictiger/gravity/dehnen/gpu_staging.hpp>
@@ -85,17 +87,19 @@ KickReturn dehnenStageGpu(KickParameters params, Vector<KickWorkitem> workitems,
     Vector<Vector<TreeId>> idsByDepth(kMaxDepth);
     int numberOfThreads = hpxSize() == 1 ? 1 : std::max(1, (int) hpxHardwareConcurrency() / 2);
     for (int proc = 0; proc < numberOfThreads; proc++) {
-        futs1.push_back(hpx::async([proc, numberOfThreads, &treeIdsVector, &idsByDepth, &mutex]() {
-            std::unique_lock<MutexType> lock(mutex);
-            int const b = (size_t) proc * treeIdsVector.size() / numberOfThreads;
-            int const e = (size_t) (proc + 1) * treeIdsVector.size() / numberOfThreads;
-            for (int i = b; i < e; i++) {
-                lock.unlock();
-                TreeNode const* ptr = treeGetNode(treeIdsVector[i]);
-                lock.lock();
-                idsByDepth[ptr->depth].push_back(treeIdsVector[i]);
-            }
-        }));
+        futs1.push_back(hpx::async(hpx::annotated_function(
+            [proc, numberOfThreads, &treeIdsVector, &idsByDepth, &mutex]() {
+                std::unique_lock<MutexType> lock(mutex);
+                int const b = (size_t) proc * treeIdsVector.size() / numberOfThreads;
+                int const e = (size_t) (proc + 1) * treeIdsVector.size() / numberOfThreads;
+                for (int i = b; i < e; i++) {
+                    lock.unlock();
+                    TreeNode const* ptr = treeGetNode(treeIdsVector[i]);
+                    lock.lock();
+                    idsByDepth[ptr->depth].push_back(treeIdsVector[i]);
+                }
+            },
+            "gravity.gpuStage.groupTreeNodes")));
     }
     hpx::wait_all(futs1.begin(), futs1.end());
     tm2.stop();
@@ -123,9 +127,9 @@ KickReturn dehnenStageGpu(KickParameters params, Vector<KickWorkitem> workitems,
     for (int depth = 0; depth < kMaxDepth; depth++) {
         auto const& ids = idsByDepth[depth];
         for (int proc = 0; proc < numberOfThreads; proc++) {
-            futs0.push_back(
-                hpx::async([proc, numberOfThreads, &ids, &treeMap, &mutex, &particleRequests,
-                               &particleMap, &particleIndex, &remoteRoots]() {
+            futs0.push_back(hpx::async(hpx::annotated_function(
+                [proc, numberOfThreads, &ids, &treeMap, &mutex, &particleRequests, &particleMap,
+                    &particleIndex, &remoteRoots]() {
                     Vector<TreeId> trees;
                     int const b = (size_t) proc * ids.size() / numberOfThreads;
                     int const e = (size_t) (proc + 1) * ids.size() / numberOfThreads;
@@ -160,7 +164,8 @@ KickReturn dehnenStageGpu(KickParameters params, Vector<KickWorkitem> workitems,
                         }
                     }
                     return trees;
-                }));
+                },
+                "gravity.gpuStage.collectSources")));
         }
         hpx::wait_all(futs0.begin(), futs0.end());
         auto const start = trees.size();
@@ -200,61 +205,67 @@ KickReturn dehnenStageGpu(KickParameters params, Vector<KickWorkitem> workitems,
         for (int j = 0; j < i->second.data.size(); j++) {
             size_t const count = i->second.data[j].size();
             if (count) {
-                fut = fut.then([rank, count, &particleMap, i, j](hpx::future<void> fut) {
-                    fut.get();
-                    auto const& ranges = i->second.data[j];
-                    auto const data = particlesGet(rank, ranges).get();
-                    ParticleInteger index = 0;
-                    for (int k = 0; k < ranges.size(); k++) {
-                        index += ranges[k].second - ranges[k].first;
-                    }
-                    size_t sz = index;
-                    index = 0;
-                    for (int k = 0; k < ranges.size(); k++) {
-                        GlobalParticleRange gpr;
-                        gpr.rank = rank;
-                        gpr.range = ranges[k];
-                        auto localRange = particleMap[gpr];
-                        auto const numberOfParticles = localRange.second - localRange.first;
-                        for (int dim = 0; dim < kDimensions; dim++) {
-                            memcpy(&particlesPos(dim, localRange.first), &data[sz * dim + index],
-                                numberOfParticles * sizeof(Position));
+                fut = fut.then(hpx::annotated_function(
+                    [rank, count, &particleMap, i, j](hpx::future<void> fut) {
+                        fut.get();
+                        auto const& ranges = i->second.data[j];
+                        auto const data = particlesGet(rank, ranges).get();
+                        ParticleInteger index = 0;
+                        for (int k = 0; k < ranges.size(); k++) {
+                            index += ranges[k].second - ranges[k].first;
                         }
-                        if (getOptions().hydro.enabled) {
-                            Vector<Position> x(numberOfParticles), y(numberOfParticles),
-                                z(numberOfParticles);
-                            Vector<char> types(numberOfParticles);
-                            ParticleGlobalRange source;
-                            source.proc = rank;
-                            source.range = ranges[k];
-                            particlesGlobalReadPos(
-                                source, x.data(), y.data(), z.data(), types.data(), 0);
-                            std::memcpy(&particlesType(localRange.first), types.data(),
-                                numberOfParticles * sizeof(char));
+                        size_t sz = index;
+                        index = 0;
+                        for (int k = 0; k < ranges.size(); k++) {
+                            GlobalParticleRange gpr;
+                            gpr.rank = rank;
+                            gpr.range = ranges[k];
+                            auto localRange = particleMap[gpr];
+                            auto const numberOfParticles = localRange.second - localRange.first;
+                            for (int dim = 0; dim < kDimensions; dim++) {
+                                memcpy(&particlesPos(dim, localRange.first),
+                                    &data[sz * dim + index], numberOfParticles * sizeof(Position));
+                            }
+                            if (getOptions().hydro.enabled) {
+                                Vector<Position> x(numberOfParticles), y(numberOfParticles),
+                                    z(numberOfParticles);
+                                Vector<char> types(numberOfParticles);
+                                ParticleGlobalRange source;
+                                source.proc = rank;
+                                source.range = ranges[k];
+                                particlesGlobalReadPos(
+                                    source, x.data(), y.data(), z.data(), types.data(), 0);
+                                std::memcpy(&particlesType(localRange.first), types.data(),
+                                    numberOfParticles * sizeof(char));
+                            }
+                            index += numberOfParticles;
                         }
-                        index += numberOfParticles;
-                    }
-                });
+                    },
+                    "gravity.gpuStage.fetchParticles"));
             }
         }
         futs1.push_back(std::move(fut));
     }
     auto* treeNodes = treeData();
     for (int proc = 0; proc < numberOfThreads; proc++) {
-        futs2.push_back(hpx::async(
-            HPX_PRIORITY_HI, [proc, numberOfThreads, &treeMap, &treeNodes, treeNodesRemoteBegin]() {
-                for (int i = treeNodesRemoteBegin + proc; i < treeNodesNextIndex();
-                    i += numberOfThreads) {
-                    if (treeNodes[i].children[kLeftChild].index != -1) {
-                        ASSERT(treeMap.find(treeNodes[i].children[kLeftChild]) != treeMap.end());
-                        ASSERT(treeMap.find(treeNodes[i].children[kRightChild]) != treeMap.end());
-                        auto& left = treeNodes[i].children[kLeftChild];
-                        auto& right = treeNodes[i].children[kRightChild];
-                        left.index = treeMap[left];
-                        right.index = treeMap[right];
+        futs2.push_back(hpx::async(HPX_PRIORITY_HI,
+            hpx::annotated_function(
+                [proc, numberOfThreads, &treeMap, &treeNodes, treeNodesRemoteBegin]() {
+                    for (int i = treeNodesRemoteBegin + proc; i < treeNodesNextIndex();
+                        i += numberOfThreads) {
+                        if (treeNodes[i].children[kLeftChild].index != -1) {
+                            ASSERT(
+                                treeMap.find(treeNodes[i].children[kLeftChild]) != treeMap.end());
+                            ASSERT(
+                                treeMap.find(treeNodes[i].children[kRightChild]) != treeMap.end());
+                            auto& left = treeNodes[i].children[kLeftChild];
+                            auto& right = treeNodes[i].children[kRightChild];
+                            left.index = treeMap[left];
+                            right.index = treeMap[right];
+                        }
                     }
-                }
-            }));
+                },
+                "gravity.gpuStage.remapTreeNodes")));
     }
     hpx::wait_all(futs2.begin(), futs2.end());
     futs2.resize(0);
@@ -272,47 +283,51 @@ KickReturn dehnenStageGpu(KickParameters params, Vector<KickWorkitem> workitems,
     };
     for (auto i = remoteRoots.begin(); i != remoteRoots.end(); i++) {
         futs3.push_back(hpx::async(HPX_PRIORITY_HI,
-            [i, &treeMap, &particleMap, adjustParticleReferences, &treeNodes,
-                treeNodesRemoteBegin]() {
-                GlobalParticleRange gpr;
-                ASSERT(treeMap.find(*i) != treeMap.end());
-                int index = treeMap[*i];
-                ASSERT(index >= treeNodesRemoteBegin);
-                auto& node = treeNodes[index];
-                gpr.rank = node.processRange.first;
-                gpr.range = node.particleRange;
-                ASSERT(particleMap.find(gpr) != particleMap.end());
-                auto localRange = particleMap[gpr];
-                ParticleInteger offset = localRange.first - gpr.range.first;
-                ASSERT(treeNodes[index].particleRange.first == gpr.range.first);
-                adjustParticleReferences(index, offset);
-            }));
+            hpx::annotated_function(
+                [i, &treeMap, &particleMap, adjustParticleReferences, &treeNodes,
+                    treeNodesRemoteBegin]() {
+                    GlobalParticleRange gpr;
+                    ASSERT(treeMap.find(*i) != treeMap.end());
+                    int index = treeMap[*i];
+                    ASSERT(index >= treeNodesRemoteBegin);
+                    auto& node = treeNodes[index];
+                    gpr.rank = node.processRange.first;
+                    gpr.range = node.particleRange;
+                    ASSERT(particleMap.find(gpr) != particleMap.end());
+                    auto localRange = particleMap[gpr];
+                    ParticleInteger offset = localRange.first - gpr.range.first;
+                    ASSERT(treeNodes[index].particleRange.first == gpr.range.first);
+                    adjustParticleReferences(index, offset);
+                },
+                "gravity.gpuStage.remapParticleRanges")));
     }
     for (int proc = 0; proc < numberOfThreads; proc++) {
-        futs2.push_back(
-            hpx::async(HPX_PRIORITY_HI, [&workitems, proc, numberOfThreads, &treeMap]() {
-                for (int i = proc; i < workitems.size(); i += numberOfThreads) {
-                    for (int j = 0; j < workitems[i].dchecklist.size(); j++) {
-                        if (workitems[i].dchecklist[j].proc != hpxRank()) {
-                            auto const iter = treeMap.find(workitems[i].dchecklist[j]);
-                            ASSERT(iter != treeMap.end());
-                            workitems[i].dchecklist[j].index = iter->second;
+        futs2.push_back(hpx::async(HPX_PRIORITY_HI,
+            hpx::annotated_function(
+                [&workitems, proc, numberOfThreads, &treeMap]() {
+                    for (int i = proc; i < workitems.size(); i += numberOfThreads) {
+                        for (int j = 0; j < workitems[i].dchecklist.size(); j++) {
+                            if (workitems[i].dchecklist[j].proc != hpxRank()) {
+                                auto const iter = treeMap.find(workitems[i].dchecklist[j]);
+                                ASSERT(iter != treeMap.end());
+                                workitems[i].dchecklist[j].index = iter->second;
+                            }
+                        }
+                        for (int j = 0; j < workitems[i].echecklist.size(); j++) {
+                            if (workitems[i].echecklist[j].proc != hpxRank()) {
+                                auto const iter = treeMap.find(workitems[i].echecklist[j]);
+                                ASSERT(iter != treeMap.end());
+                                workitems[i].echecklist[j].index = iter->second;
+                            }
                         }
                     }
-                    for (int j = 0; j < workitems[i].echecklist.size(); j++) {
-                        if (workitems[i].echecklist[j].proc != hpxRank()) {
-                            auto const iter = treeMap.find(workitems[i].echecklist[j]);
-                            ASSERT(iter != treeMap.end());
-                            workitems[i].echecklist[j].index = iter->second;
-                        }
-                    }
-                }
-            }));
+                },
+                "gravity.gpuStage.remapWorkitems")));
     }
     hpx::wait_all(futs2.begin(), futs2.end());
     futs2.resize(0);
-    auto sfut = hpx::sort(PAR_EXECUTION_POLICY, workitems.begin(), workitems.end(),
-        [](KickWorkitem const& a, KickWorkitem const& b) {
+    auto sfut = hpx::sort(annotatedParallelPolicy("gravity.gpuStage.sortWorkitems"),
+        workitems.begin(), workitems.end(), [](KickWorkitem const& a, KickWorkitem const& b) {
             return treeGetNode(a.self)->particleRange.first <
                 treeGetNode(b.self)->particleRange.first;
         });
