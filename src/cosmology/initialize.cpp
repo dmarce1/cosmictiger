@@ -19,8 +19,10 @@
 #include <vector>
 
 #include <gsl/gsl_rng.h>
+#include <hpx/threading_base/annotated_function.hpp>
 
 #include <cosmictiger/core/hpx.hpp>
+#include <cosmictiger/core/interrupt_profile.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/cosmology/boltzmann.hpp>
@@ -133,9 +135,11 @@ PowerSpectrumFunction computePowerSpectrum() {
     try {
         for (size_t i = 0; i < count; ++i) {
             wavenumbers[i] = std::exp(lower + span * i / (count - 1));
-            futures.push_back(hpx::async([&, i]() {
-                transfers[i] = solveBoltzmannTransfers(universe, wavenumbers[i], scales);
-            }));
+            futures.push_back(hpx::async(hpx::annotated_function(
+                [&, i]() {
+                    transfers[i] = solveBoltzmannTransfers(universe, wavenumbers[i], scales);
+                },
+                "cosmology.solveBoltzmannMode")));
         }
     } catch (...) {
         hpx::wait_all(futures.begin(), futures.end());
@@ -197,6 +201,17 @@ PowerSpectrumFunction computePowerSpectrum() {
 }
 
 void initialize(double z0) {
+    profile::checkForInterrupt();
+    auto const checkInitializationInterrupt = []() {
+        if (profile::interruptRequested()) {
+            // Call only after distributed phases have joined. These temporaries
+            // are process-local storage populated through completed actions.
+            fft3dDestroy();
+            twolptDestroy();
+            clearX0();
+            throw profile::Interrupted();
+        }
+    };
     if (getOptions().cosmology.sigma8 == 0.0) {
         // A homogeneous lattice needs no transfer functions. This also permits
         // curved-background evolution without applying the flat-only native
@@ -210,6 +225,7 @@ void initialize(double z0) {
             "The internal Einstein-Boltzmann solver requires a flat universe");
     }
     initX0();
+    checkInitializationInterrupt();
     int64_t const n = getOptions().initial.fourierSize;
     float const omegaM = getOptions().cosmology.omegaM;
     float const a0 = 1.0 / (z0 + 1.0);
@@ -227,16 +243,21 @@ void initialize(double z0) {
     for (int dim = 0; dim < kDimensions; dim++) {
         fft3dInit(n);
         zeldovichBegin(dim, kDimensions);
+        // This also joins every rank's Einstein-Boltzmann transfer tasks before
+        // allowing an interrupt to unwind their background/output storage.
+        checkInitializationInterrupt();
         //		fft3d_force_real();
         fft3dInvExecute();
         float const dxmax = zeldovichEnd(dim, dim == 0, 1.0f, 0.0f);
         terminal::detailPrint("Initial %c displacement maximum: %e\n", 'x' + dim, dxmax);
         fft3dDestroy();
+        checkInitializationInterrupt();
         fft3dInit(n);
         zeldovichBegin(dim, kDimensions, true);
         fft3dInvExecute();
         zeldovichEnd(dim, false, 1.0f, linearVelocityFactor, true);
         fft3dDestroy();
+        checkInitializationInterrupt();
     }
     if (getOptions().initial.twoLpt) {
         twolptInit();
@@ -245,52 +266,62 @@ void initialize(double z0) {
         twolpt(1, 1);
         twolptPhase(0);
         fft3dDestroy();
+        checkInitializationInterrupt();
 
         terminal::detailPrint("2LPT phase 2\n");
         twolpt(2, 2);
         twolptPhase(1);
         fft3dDestroy();
+        checkInitializationInterrupt();
 
         terminal::detailPrint("2LPT phase 3\n");
         twolpt(0, 0);
         twolptPhase(2);
         fft3dDestroy();
+        checkInitializationInterrupt();
 
         terminal::detailPrint("2LPT phase 4\n");
         twolpt(2, 2);
         twolptPhase(3);
         fft3dDestroy();
+        checkInitializationInterrupt();
 
         terminal::detailPrint("2LPT phase 5\n");
         twolpt(0, 0);
         twolptPhase(4);
         fft3dDestroy();
+        checkInitializationInterrupt();
 
         terminal::detailPrint("2LPT phase 6\n");
         twolpt(1, 1);
         twolptPhase(5);
         fft3dDestroy();
+        checkInitializationInterrupt();
 
         terminal::detailPrint("2LPT phase 7\n");
         twolpt(0, 1);
         twolptPhase(6);
         fft3dDestroy();
+        checkInitializationInterrupt();
 
         terminal::detailPrint("2LPT phase 8\n");
         twolpt(0, 2);
         twolptPhase(7);
         fft3dDestroy();
+        checkInitializationInterrupt();
 
         terminal::detailPrint("2LPT phase 9\n");
         twolpt(1, 2);
         twolptPhase(8);
         fft3dDestroy();
+        checkInitializationInterrupt();
 
         twolptCorrection1();
         twolptF2delta2Inv();
         //		fft3d2silo(false);
         //		system( "cp complex.silo complex.3.silo\n");
         fft3dDestroy();
+        checkInitializationInterrupt();
 
         for (int dim = 0; dim < kDimensions; dim++) {
             terminal::detailPrint(
@@ -298,6 +329,7 @@ void initialize(double z0) {
             twolptCorrection2(dim);
             float dxmax = zeldovichEnd(dim, false, -d2Value, prefac2);
             fft3dDestroy();
+            checkInitializationInterrupt();
             terminal::detailPrint("2LPT %c displacement maximum: %e\n", 'x' + dim, dxmax);
         }
         twolptDestroy();

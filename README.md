@@ -377,15 +377,173 @@ Keep executable and shared-library symbol tables for useful function names.
 
 Normal process exit writes a final report to the terminal and
 `cosmictiger.profile.<pid>.txt` in the working directory. The driver does not
-print reports after individual steps. Ctrl-C during an active run stops sampling
-and writes the same final report before terminating with SIGINT. A dedicated
-reporting thread performs this work outside the signal handler. Pressing Ctrl-C
-again forces immediate termination if reporting is blocked; the report may then
-be incomplete. Interrupt reporting does not write a final simulation checkpoint.
+print reports after individual steps. The first Ctrl-C requests a clean stop at
+the next safe phase or completed substep. Active work finishes, the simulation's
+ordinary final checkpoint is written when a completed state is available, and
+HPX/MPI shutdown finalizes the CPU, APEX, and TAU reports. The handler remains
+available when CPU sampling is disabled. Long initialization batches or force
+calculations must finish before shutdown; the signal handler never cancels a
+worker or calls MPI. A second Ctrl-C forces immediate termination and can leave
+reports or checkpoints incomplete. A clean interrupted run exits successfully.
 Each process has its own file; reports are not reduced across MPI localities.
 The report includes dropped samples, missed timer ticks, and setup failures so
 sampling losses remain visible. The bounded signal-handler buffers are allocated
 before sampling; symbol resolution and demangling happen while reporting.
+
+### HPX task profiles with APEX
+
+The CPU sampler sees ordinary functions executing inside HPX tasks, including
+`async`, `post`, actions, and continuations. A context switch does not hide the
+currently executing instruction. Its flat report does not retain the active
+HPX task's identity, parent, or suspend/resume history.
+
+Use an HPX installation built with `HPX_WITH_APEX=ON` for task instrumentation.
+HPX then creates APEX tasks from the descriptions it already knows and starts,
+yields, resumes, and stops their timers at scheduler boundaries. HPX owns APEX
+initialization and finalization; CosmicTiger must not initialize it again.
+Explicit `hpx::annotated_function` labels distinguish anonymous task entry
+points. Registered actions already supply their action names. When HPX was
+built without `HPX_WITH_THREAD_DESCRIPTION_FULL`, unannotated local callables
+can inherit a parent name instead of getting distinct function names.
+Full descriptions allow ordinary function pointers to be resolved. Anonymous
+callables still need explicit labels when HPX supplies a functor object's address.
+
+`COSMICTIGER_REQUIRE_APEX=ON` rejects an HPX installation without that support.
+It defaults to ON for RelWithDebInfo, Debug, and Profile, and OFF otherwise.
+An existing CMake cache retains its explicitly selected value. Set it to OFF
+to deliberately allow an HPX installation without APEX; this does not disable
+APEX in an installation that already has it. Configuration always reports the
+selected HPX's actual instrumentation status. `build.sh` requires APEX for its
+non-Release modes and selects the RelWithDebInfo HPX prefix for Profile.
+Setting `HPX_WITH_APEX=ON` in the application cannot retrofit an installed HPX.
+
+For example, select a compatible APEX-enabled HPX installation (built against
+the same MPI and CUDA toolkit as CosmicTiger):
+
+```sh
+cmake -S . -B build/apex -G Ninja \
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+  -DCMAKE_PREFIX_PATH=/path/to/apex-enabled-hpx \
+  -DCOSMICTIGER_REQUIRE_APEX=ON
+cmake --build build/apex --target cosmictiger --parallel 4
+./build/apex/cosmictiger --configuration=lcdm.ini --hpx:threads=4
+```
+
+With an APEX-enabled HPX, CosmicTiger enables the screen summary,
+`apex_profiles.csv`, and `apex_tasktree.csv` by default, even when the separate
+CPU sampler is disabled. Set `APEX_SCREEN_OUTPUT=0`, `APEX_CSV_OUTPUT=0`, or
+`APEX_TASKTREE_OUTPUT=0` to disable individual reports. Existing environment
+settings are preserved. `APEX_OUTPUT_FILE_PATH` selects their directory;
+otherwise APEX writes to the working directory. APEX 1.11 gives an explicitly
+requested `APEX_TASKGRAPH_OUTPUT=1` precedence over task-tree output.
+
+APEX's task summary, CSV, and task tree complement the existing
+`cosmictiger.profile.<pid>.txt`. Task timers measure execution intervals between
+scheduler events; they are not the sampler's exclusive CPU-time estimates.
+`APEX_TRACE_EVENT=1` additionally requests a task timeline viewable in Perfetto.
+APEX task instrumentation alone does not establish CUDA kernel profiling;
+device activity requires a compatible GPU instrumentation backend.
+
+### Combining task context and ordinary function samples
+
+Use the TAU launcher to collect ordinary function samples under the active HPX
+task name. APEX forwards task start/resume and yield/stop events to TAU. HPX
+1.11 requires the TAU shutdown fix described below; the local Debug, Release,
+and RelWithDebInfo HPX installations already include it. Build the pinned TAU
+runtime once, then launch the application:
+
+```sh
+./scripts/build_tau.sh
+./scripts/profile_tau.sh ./build/apex/cosmictiger \
+  --configuration=lcdm.ini --hpx:threads=4
+```
+
+The dependency script installs TAU 2.35.2 with MPI, pthread, BFD symbol
+resolution, and libunwind into `~/local/tau`. It verifies archive checksums and
+limits build parallelism. `TAU_PREFIX`, `TAU_BUILD_ROOT`, and `TAU_BUILD_JOBS`
+override those choices. The launcher finds `tau_exec` through `TAU_EXEC`, PATH,
+or `TAU_ROOT` (default `~/local/tau`). It keeps the application's working
+directory and arguments unchanged. Prefer RelWithDebInfo for debug symbols;
+optimized/inlined code may not retain a separate sample entry for every source
+function.
+
+Each launch creates `profiles/tau-<timestamp>-<pid>/`, with TAU's combined
+`profile.<rank>.<context>.<thread>` files in `tau/` and APEX reports in `apex/`.
+Set `COSMICTIGER_PROFILE_DIR` to choose a stable output root. `PROFILEDIR` and
+`APEX_OUTPUT_FILE_PATH` can override the individual directories. For MPI, pass
+the same output root to every rank and use the Ctrl-C-aware MPI wrapper shown
+below.
+
+Open the TAU directory in ParaProf, or run `~/local/tau/x86_64/bin/pprof -a`
+from that directory. Contextual entries connect the task timer to a
+`[CONTEXT]` node (`[INTERMEDIATE]` in older releases) and then a `[SAMPLE]`
+function. These are the combined task/function profiles; the old
+`cosmictiger.profile.<pid>.txt` remains a separate flat CPU report.
+
+The launcher enables `APEX_TAU=1`, TAU profiling and sampling, and disables
+TAU tracing. Defaults are function resolution, a 10 ms sampling period,
+callpaths enabled, and stack unwinding and timer throttling disabled. The
+`TAU_EBS_*`, `TAU_CALLPATH`, `TAU_THROTTLE`, and `APEX_THROTTLE_TIMERS`
+environment settings override these defaults. No stack unwinding is needed
+for the function-to-task association. `APEX_PROFILE_OUTPUT=1` alone only
+writes APEX timers in TAU format; it does not collect ordinary function samples.
+The local dependency scripts include compatibility fixes for TAU's Linux
+PIE/shared-library address resolution, APEX 1.11's HPX shutdown ordering, and
+thread-safe initialization of APEX's task-tree root.
+The dependency fixes are preserved in `cmake/patches/`. For HPX 1.11, apply
+`hpx_full_thread_descriptions.patch` from the HPX source root. Apply both
+`hpx_apex_compatibility.patch` and `hpx_apex_tau.patch` from its APEX source root
+(normally `<hpx-build>/_deps/apex-src` after configuration). Each patch records
+its source revision. Check with `git apply --check /absolute/path/to/patch`
+before `git apply /absolute/path/to/patch`. Rebuild and reinstall HPX with
+`HPX_WITH_APEX=ON` and `HPX_WITH_THREAD_DESCRIPTION_FULL=ON`; rebuilding only
+APEX does not install the HPX header fixes. The local `~/scripts/build-hpx.sh`
+applies these fixes idempotently.
+APEX's synthetic root is omitted from TAU, which already supplies an application
+root. TAU's wrappers finalize after HPX workers exit, avoiding cross-thread
+timer closure during HPX teardown; still-active shutdown timers can therefore
+include teardown time. APEX's own root report and actual HPX task events are
+retained. MPI task-tree merging uses the reporting thread without creating
+an additional worker pool. The launcher
+requires active APEX instrumentation and leaves optional OS-thread lifetime
+timers disabled (`APEX_TIME_TOP_LEVEL_OS_THREADS=0`).
+See the [APEX TAU listener](https://github.com/STEllAR-GROUP/apex/blob/hpx_v1.11.0/src/apex/tau_listener.cpp)
+and [TAU sampling options](https://www.cs.uoregon.edu/research/tau/docs/html-docs/latest/newguide/environment.html).
+
+The listener forwards active task names, not the complete asynchronous parent
+graph; keep APEX's task tree for that information. TAU timer call counts include
+resumptions, whereas APEX reports completed tasks and yields separately. Linux
+TAU timer sampling uses a wall-clock timer; CosmicTiger's independent sampler
+uses a thread CPU clock. Their totals are not directly interchangeable.
+
+Ctrl-C uses the same clean HPX/MPI shutdown as a completed run. For MPI, place
+the supplied wrapper outside the launcher so terminal Ctrl-C requests shutdown
+instead of invoking Open MPI's job-abort behavior:
+
+```sh
+COSMICTIGER_PROFILE_DIR="$PWD/profiles/tau_mpi" \
+  ./scripts/run_mpi.py -n 2 ./scripts/profile_tau.sh ./build/apex/cosmictiger \
+    --configuration=lcdm.ini --hpx:threads=4
+```
+
+The wrapper queues an early interrupt until handlers are ready and forwards a
+cooperative SIGUSR1 request. A second Ctrl-C aborts the job. It can also launch
+the application directly without TAU. This wrapper requires Linux, Open MPI,
+and a working directory visible at the same path on every host. Direct SIGINT or SIGUSR1 to an application
+rank requests a clean stop across the localities. See
+[Open MPI signal handling](https://docs.open-mpi.org/en/v5.0.10/man-openmpi/man1/mpirun.1.html#signal-handling).
+
+The `tau_profiler_enabled` and
+`tau_profiler_disabled` CTests are registered when `tau_exec` is found (or set
+`COSMICTIGER_TAU_EXEC` at CMake configuration). They require sampled ordinary
+functions to be connected to their distinct task contexts, reject crossed
+parent/child attribution, observe an explicit worker migration, and check
+coexistence with the independent CPU sampler. The APEX tests also cover default reporting and
+explicit report opt-outs. `tau_profiler_config` checks configuration-file
+precedence, and `tau_profiler_mpi_startup` checks a two-rank application startup
+and shutdown with separate rank profiles and a bounded task-tree merge.
+The interrupt regressions check first-interrupt finalization, second-interrupt
+emergency termination, and APEX/TAU output with CPU sampling compiled out.
 
 ## Source layout
 
@@ -439,7 +597,7 @@ any positive count. Use `./build.sh -j 24` to select a count, or `./build.sh -j`
 (also `-j max`) to use all detected CPUs. Default test concurrency accounts for
 two MPI localities with two HPX threads each.
 
-The builder uses `~/local/hpx/<build type>` when installed (Release for Profile),
+The builder uses `~/local/hpx/<build type>` when installed (RelWithDebInfo for Profile),
 or normal CMake package discovery. Additional dependency prefixes default to the
 system search paths; use the menu or `CMAKE_PREFIX_PATH` only for installations
 outside those paths. The builder refreshes cached GSL and HEALPix locations when

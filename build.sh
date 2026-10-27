@@ -420,10 +420,10 @@ fi
 logFile=$(mktemp "$buildDir/builder.XXXXXX.log") || exit 1
 
 case "$buildMode" in
-    release) buildType=Release; hpxBuildType=Release ;;
-    relwithdebinfo) buildType=RelWithDebInfo; hpxBuildType=RelWithDebInfo ;;
-    debug) buildType=Debug; hpxBuildType=Debug ;;
-    profile) buildType=Profile; hpxBuildType=Release ;;
+    release) buildType=Release; hpxBuildType=Release; requireApex=OFF ;;
+    relwithdebinfo) buildType=RelWithDebInfo; hpxBuildType=RelWithDebInfo; requireApex=ON ;;
+    debug) buildType=Debug; hpxBuildType=Debug; requireApex=ON ;;
+    profile) buildType=Profile; hpxBuildType=RelWithDebInfo; requireApex=ON ;;
 esac
 if [[ -z $hpxPrefix && -z ${HPX_DIR:-} && -n ${HOME:-} &&
     -d $HOME/local/hpx/$hpxBuildType ]]; then
@@ -446,6 +446,7 @@ configureCommand=(cmake -S "$rootDir" -B "$buildDir" -G Ninja
     "-DCOSMICTIGER_GRAVITY_METHOD=$gravityMethod"
     "-DCOSMICTIGER_PMMM_NEAR_METHOD=$pmmmNearMethod"
     "-DCOSMICTIGER_WITH_ORDER=$fmmOrder"
+    "-DCOSMICTIGER_REQUIRE_APEX=$requireApex"
     "-DBUILD_TESTING=$testSuite"
     "-DCMAKE_PREFIX_PATH=$prefixPath")
 # Help FindMPI locate mpi.h when Open MPI wrapper output contains diagnostics.

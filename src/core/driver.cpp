@@ -22,6 +22,7 @@
 #include <cosmictiger/core/defs.hpp>
 #include <cosmictiger/core/driver.hpp>
 #include <cosmictiger/core/flops.hpp>
+#include <cosmictiger/core/interrupt_profile.hpp>
 #include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/core/time.hpp>
@@ -948,6 +949,7 @@ void outputTimeFile(DriverParameters const& parameters) {
 }
 
 void driver() {
+    profile::checkForInterrupt();
     if (scenarios::definition(getOptions().run.scenario).fixedTime) {
         runFixedScenario();
         return;
@@ -965,6 +967,7 @@ void driver() {
     double a0 = 1.0 / (1.0 + getOptions().cosmology.startRedshift);
     if (getOptions().checkpoint.readIndex != -1) {
         params = readCheckpoint();
+        profile::checkForInterrupt();
         double const coarseInterval = params.tauMax / getOptions().run.numberOfSteps;
         double const endpointTolerance =
             32.0 * std::numeric_limits<double>::epsilon() * params.tauMax;
@@ -1023,6 +1026,7 @@ void driver() {
         } else {
             scenarios::initializeCosmology(params);
         }
+        profile::checkForInterrupt();
         if (getOptions().run.endTime > 0.0) {
             params.tauMax = getOptions().run.endTime;
         }
@@ -1181,6 +1185,7 @@ void driver() {
     buckets50.start();
     EnergiesT energies0;
     double glassError = 1.0;
+    bool interrupted = false;
     for (;; step++) {
         if (cosmology::endTimeReached(tau, tauMax)) {
             break;
@@ -1188,6 +1193,12 @@ void driver() {
         //		PRINT("STEP  = %i\n", step);
         double t0 = tauMax / getOptions().run.numberOfSteps;
         do {
+            // Stop only between completed substeps, retaining the current clock
+            // for the ordinary final checkpoint and distributed cleanup below.
+            if (profile::interruptRequested()) {
+                interrupted = true;
+                break;
+            }
             Timer stepTm;
             stepTm.start();
             tmr.stop();
@@ -1474,12 +1485,17 @@ void driver() {
             lcFut = hpx::make_ready_future();
 
         } while (itime != 0);
-        if (cosmology::endTimeReached(tau, tauMax) || thisIter > getOptions().run.maxIterations) {
+        if (interrupted || cosmology::endTimeReached(tau, tauMax) ||
+            thisIter > getOptions().run.maxIterations) {
             break;
         } else if (getOptions().initial.createGlass && std::abs(glassError) < 1.0e-5) {
             scenarios::saveGlass();
             break;
         }
+    }
+    lcFut.get();
+    if (interrupted) {
+        PRINT("\n  Interrupted: saving the completed simulation state before shutdown.\n");
     }
     viewOutputViews(params.step + 1, a, true, years);
     if (getOptions().initial.createGlass) {

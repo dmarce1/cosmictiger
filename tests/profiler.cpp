@@ -119,15 +119,22 @@ int hpx_main(int, char*[]) {
     }
     if (detail::interruptMode != detail::InterruptMode::None) {
         if (detail::interruptMode == detail::InterruptMode::BlockOutput) {
-            // Keep this OS worker on CPU after taking the lock. The reporter
-            // must remain interruptible even when terminal output cannot proceed.
+            // Deliberately ignore cooperative shutdown while holding stdout.
+            // A second interrupt must still terminate without runtime cleanup.
             ::flockfile(stdout);
         }
         detail::saveReport("interrupt_ready.txt", "ready\n");
         std::uint64_t value = 1;
-        while (true) {
-            value = detail::unregisteredHotLoop(value);
-            detail::require(value != 0, "interrupt fixture lost its nonzero state");
+        try {
+            while (true) {
+                value = detail::unregisteredHotLoop(value);
+                detail::require(value != 0, "interrupt fixture lost its nonzero state");
+                if (detail::interruptMode == detail::InterruptMode::Report) {
+                    profile::checkForInterrupt();
+                }
+            }
+        } catch (profile::Interrupted const&) {
+            detail::require(profile::interruptRequested(), "interrupt request was lost");
         }
     }
     return hpx::finalize();
@@ -163,6 +170,12 @@ int main(int argc, char* argv[]) {
         int const status = hpx::init(argc, argv, parameters);
 #endif
         detail::require(status == 0, "HPX fixture failed");
+        if (detail::interruptMode == detail::InterruptMode::Report) {
+            std::puts("INTERRUPT_HPX_FINALIZED=1");
+            // Normal process exit now writes the sole interrupt CPU report,
+            // after HPX and its APEX task lifecycle have finished cleanly.
+            return 0;
+        }
         if (automaticExit) {
             detail::require(
                 profile::profileReport().find("Sampling is still active") != std::string::npos,

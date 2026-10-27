@@ -1,0 +1,76 @@
+APEX hpx_v1.11.0: include fixed-width integer declarations for GCC 15
+and resolve no-BFD function names using the original runtime address.
+This complements hpx_apex_tau.patch; either patch can be applied first.
+
+Base revision: 151f5535f58f94cab264bbf8af306589e418d283
+Apply from the dependency source root with git apply --check, then git apply.
+Rebuild and reinstall that dependency after applying the patch.
+
+diff --git a/src/apex/address_resolution.cpp b/src/apex/address_resolution.cpp
+index a9699143..0ddf05ba 100644
+--- a/src/apex/address_resolution.cpp
++++ b/src/apex/address_resolution.cpp
+@@ -15,8 +15,8 @@
+ #include <stdio.h>
+ #include <string.h>
+
+-#ifdef __APPLE__
+ #include <dlfcn.h>
++#ifdef __APPLE__
+ #define _XOPEN_SOURCE 600 /* Single UNIX Specification, Version 3 */
+ #if defined(TAU_HAVE_CORESYMBOLICATION)
+ #include "CoreSymbolication.h"
+@@ -93,21 +93,15 @@ namespace apex {
+ #ifdef APEX_HAVE_BFD
+         Apex_bfd_resolveBfdInfo(ar->my_bfd_unit_handle, ip, node->info);
+ #else
+-        void * const buffer[1] = {(void *)ip};
+-        char ** names = backtrace_symbols((void * const *)buffer, 1);
+-        /* Split the backtrace strings into tokens, and get the 4th one */
+-        std::vector<std::string> result;
+-	    std::istringstream iss(names[0]);
+-	    for (std::string s; iss >> s; ) {
+-		    result.push_back(s);
+-        }
++        Dl_info info{};
++        int const resolved = dladdr(reinterpret_cast<void const*>(ip_in), &info);
+         node->info.probeAddr = ip;
+-        node->info.filename = strdup("?");
+-        if (result.size() > 3) {
+-            node->info.funcname = strdup(result[3].c_str());
++        node->info.filename = strdup(resolved && info.dli_fname ? info.dli_fname : "?");
++        if (resolved && info.dli_sname) {
++            node->info.funcname = strdup(info.dli_sname);
+         } else {
+             stringstream ss;
+-            ss << "UNRESOLVED  ADDR 0x" << hex << ip;
++            ss << "UNRESOLVED  ADDR 0x" << hex << ip_in;
+             node->info.funcname = strdup(ss.str().c_str());
+         }
+ #endif
+diff --git a/src/apex/apex_clock.hpp b/src/apex/apex_clock.hpp
+index 40f36d01..9f774720 100644
+--- a/src/apex/apex_clock.hpp
++++ b/src/apex/apex_clock.hpp
+@@ -8,6 +8,8 @@
+
+ #pragma once
+
++#include <cstdint>
++
+ #include <chrono>
+ #if defined(APEX_WITH_LEVEL0) // needed to map to GPU time
+ #define MYCLOCK std::chrono::steady_clock
+diff --git a/src/apex/gzstream.hpp b/src/apex/gzstream.hpp
+index 7b4a7961..abede543 100644
+--- a/src/apex/gzstream.hpp
++++ b/src/apex/gzstream.hpp
+@@ -9,6 +9,8 @@
+
+ #pragma once
+
++#include <cstdint>
++
+ #include <streambuf>
+ #include <istream>
+ #include <ostream>

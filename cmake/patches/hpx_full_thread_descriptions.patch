@@ -1,0 +1,105 @@
+HPX v1.11.0: preserve address-backed thread descriptions in async/fork
+dispatch and avoid taking the address of the action invoker template.
+Required when HPX_WITH_THREAD_DESCRIPTION_FULL=ON.
+
+Base revision: c9b81b401fbe6ba4a0306feff71d18ef01c71b34
+Apply from the dependency source root with git apply --check, then git apply.
+Rebuild and reinstall that dependency after applying the patch.
+
+diff --git a/libs/core/execution/include/hpx/execution/detail/async_launch_policy_dispatch.hpp b/libs/core/execution/include/hpx/execution/detail/async_launch_policy_dispatch.hpp
+index dd3af81985..84c5da8a60 100644
+--- a/libs/core/execution/include/hpx/execution/detail/async_launch_policy_dispatch.hpp
++++ b/libs/core/execution/include/hpx/execution/detail/async_launch_policy_dispatch.hpp
+@@ -81,6 +81,11 @@ namespace hpx::detail {
+         call(Policy&&, hpx::threads::thread_description const& desc, F&& f,
+             Ts&&... ts)
+         {
++            if (desc.kind() == hpx::threads::thread_description::data_type::address)
++            {
++                auto ann = hpx::scoped_annotation(f);
++                return call_sync(HPX_FORWARD(F, f), HPX_FORWARD(Ts, ts)...);
++            }
+             auto ann = hpx::scoped_annotation(desc.get_description());
+             return call_sync(HPX_FORWARD(F, f), HPX_FORWARD(Ts, ts)...);
+         }
+@@ -92,6 +97,11 @@ namespace hpx::detail {
+         call(Policy&&, hpx::threads::thread_description const& desc,
+             threads::thread_pool_base*, F&& f, Ts&&... ts)
+         {
++            if (desc.kind() == hpx::threads::thread_description::data_type::address)
++            {
++                auto ann = hpx::scoped_annotation(f);
++                return call_sync(HPX_FORWARD(F, f), HPX_FORWARD(Ts, ts)...);
++            }
+             auto ann = hpx::scoped_annotation(desc.get_description());
+             return call_sync(HPX_FORWARD(F, f), HPX_FORWARD(Ts, ts)...);
+         }
+@@ -121,6 +131,11 @@ namespace hpx::detail {
+         call(Policy&& policy, hpx::threads::thread_description const& desc,
+             F&& f, Ts&&... ts)
+         {
++            if (desc.kind() == hpx::threads::thread_description::data_type::address)
++            {
++                return call(HPX_FORWARD(Policy, policy),
++                    HPX_FORWARD(F, f), HPX_FORWARD(Ts, ts)...);
++            }
+             return call(HPX_FORWARD(Policy, policy),
+                 hpx::annotated_function(
+                     HPX_FORWARD(F, f), desc.get_description()),
+@@ -134,6 +149,11 @@ namespace hpx::detail {
+         call(Policy&& policy, hpx::threads::thread_description const& desc,
+             threads::thread_pool_base*, F&& f, Ts&&... ts)
+         {
++            if (desc.kind() == hpx::threads::thread_description::data_type::address)
++            {
++                return call(HPX_FORWARD(Policy, policy),
++                    HPX_FORWARD(F, f), HPX_FORWARD(Ts, ts)...);
++            }
+             return call(HPX_FORWARD(Policy, policy),
+                 hpx::annotated_function(
+                     HPX_FORWARD(F, f), desc.get_description()),
+@@ -173,7 +193,9 @@ namespace hpx::detail {
+                 util::deferred_call(HPX_FORWARD(F, f), HPX_FORWARD(Ts, ts)...));
+
+             if (threads::thread_id_ref_type tid =
+-                    p.post(pool, desc.get_description(), HPX_MOVE(policy)))
++                    p.post(pool,
++                        desc.kind() == hpx::threads::thread_description::data_type::description ?
++                            desc.get_description() : nullptr, HPX_MOVE(policy)))
+             {
+                 auto runs_as_child = hint.runs_as_child_mode();
+                 if (runs_as_child ==
+@@ -253,7 +275,9 @@ namespace hpx::detail {
+                 util::deferred_call(HPX_FORWARD(F, f), HPX_FORWARD(Ts, ts)...));
+
+             threads::thread_id_ref_type tid =
+-                p.post(pool, desc.get_description(), policy);
++                p.post(pool,
++                        desc.kind() == hpx::threads::thread_description::data_type::description ?
++                            desc.get_description() : nullptr, policy);
+
+             // make sure this thread is executed last
+             threads::thread_id_type const tid_self = threads::get_self_id();
+@@ -264,7 +288,7 @@ namespace hpx::detail {
+                 // yield_to
+                 hpx::this_thread::suspend(
+                     threads::thread_schedule_state::pending, tid.noref(),
+-                    desc.get_description());
++                    desc);
+
+                 auto runs_as_child = hint.runs_as_child_mode();
+                 if (runs_as_child ==
+diff --git a/libs/full/async_distributed/include/hpx/async_distributed/detail/async_implementations.hpp b/libs/full/async_distributed/include/hpx/async_distributed/detail/async_implementations.hpp
+index d1fe5b1edc..dd4dddeb2c 100644
+--- a/libs/full/async_distributed/include/hpx/async_distributed/detail/async_implementations.hpp
++++ b/libs/full/async_distributed/include/hpx/async_distributed/detail/async_implementations.hpp
+@@ -357,6 +357,8 @@ namespace hpx::traits {
+         static constexpr std::size_t call(
+             hpx::detail::action_invoker<Action> const&) noexcept
+         {
+-            return reinterpret_cast<std::size_t>(&Action::invoker);
++            // The action annotation always supplies its registered name.
++            // Action::invoker is a template, so it has no unique address.
++            return 0;
+         }
+     };

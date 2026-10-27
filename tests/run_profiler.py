@@ -73,7 +73,8 @@ def check_interrupt(executable, directory, block_output=False):
     error_path = directory / "stderr.log"
     mode = "--interrupt-block-output" if block_output else "--interrupt-exit"
     command = [str(executable), mode, "--hpx:threads=2", "--hpx:bind=none"]
-    notice = "Ctrl-C: writing CPU profile; press Ctrl-C again to terminate immediately."
+    notice = ("Ctrl-C: clean shutdown requested; finishing active work. "
+              "Press Ctrl-C again to terminate immediately.")
     with output_path.open("w") as output, error_path.open("w") as error:
         process = subprocess.Popen(command, cwd=directory, stdout=output, stderr=error,
                                    start_new_session=True)
@@ -84,9 +85,9 @@ def check_interrupt(executable, directory, block_output=False):
             process.send_signal(signal.SIGINT)
             if block_output:
                 wait_until(process, lambda: notice in error_path.read_text(),
-                           "first interrupt did not reach the profile reporter", timeout=20)
+                           "first interrupt did not request cooperative shutdown", timeout=20)
                 require(process.poll() is None,
-                        "blocked profile report did not wait for terminal output")
+                        "first interrupt forcibly terminated uncooperative work")
                 require("CosmicTiger statistical CPU profile (" not in output_path.read_text(),
                         "terminal report escaped the fixture's stdout lock")
                 process.send_signal(signal.SIGINT)
@@ -106,12 +107,15 @@ def check_interrupt(executable, directory, block_output=False):
                 process.wait(timeout=5)
     output = output_path.read_text()
     error = error_path.read_text()
-    require(returncode == -signal.SIGINT,
-            f"interrupt fixture did not terminate with SIGINT ({returncode}):\n{error}")
-    require(error.count(notice) == 1, "interrupt did not request exactly one profile report")
+    expected_returncode = -signal.SIGINT if block_output else 0
+    require(returncode == expected_returncode,
+            f"interrupt fixture returned {returncode}, expected {expected_returncode}:\n{error}")
+    require(error.count(notice) == 1, "interrupt did not request exactly one clean shutdown")
     require("SIGABRT" not in error and "terminate called" not in error and
             "Aborted" not in error, f"HPX aborted during interrupt reporting:\n{error}")
     if not block_output:
+        require(output.count("INTERRUPT_HPX_FINALIZED=1") == 1,
+                "first interrupt did not return cleanly from HPX")
         reports = list(directory.glob("cosmictiger.profile.*.txt"))
         require(len(reports) == 1, "interrupt did not produce one per-process report file")
         report = reports[0].read_text()
@@ -159,7 +163,7 @@ def main():
         check_interrupt(executable, directory / "interrupt_exit")
         check_interrupt(executable, directory / "interrupt_block_output", block_output=True)
     print("Profiler regression passed: HPX waits, PC attribution, diagnostics, final reports, "
-          "and Ctrl-C reporting/escape")
+          "and Ctrl-C clean shutdown/emergency escape")
 
 
 if __name__ == "__main__":

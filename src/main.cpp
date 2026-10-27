@@ -33,6 +33,7 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/options_metadata.hpp>
 #include <cosmictiger/core/profiler.hpp>
+#include <cosmictiger/core/profiling_runtime.hpp>
 #include <cosmictiger/core/stack_trace.hpp>
 #include <cosmictiger/core/unordered_set_ts.hpp>
 #include <cosmictiger/gravity/dehnen/ewald_indices.hpp>
@@ -65,7 +66,9 @@ int hpx_main(int argc, char* argv[]) {
     hpxInit();
     bool daemonStarted = false;
     try {
+        profile::checkForInterrupt();
         if (processOptions(argc, argv)) {
+            profile::checkForInterrupt();
             startMemuseDaemon();
             daemonStarted = true;
             FILE* fp = fopen(outputPath("soft.txt").c_str(), "wt");
@@ -94,6 +97,7 @@ int hpx_main(int argc, char* argv[]) {
                 healpixInit();
             }
 #endif
+            profile::checkForInterrupt();
             EwaldConst::init();
             // Debug dump of the Ewald Green's function along x for the runtime order.
             fmmDispatch([](auto orderTag) {
@@ -124,6 +128,7 @@ int hpx_main(int argc, char* argv[]) {
                 }
                 fclose(fp);
             });
+            profile::checkForInterrupt();
 #ifdef COSMICTIGER_BUILD_TESTING
             if (getOptions().run.test != "") {
                 test(getOptions().run.test);
@@ -136,6 +141,26 @@ int hpx_main(int argc, char* argv[]) {
         }
         pmmmDestroy();
         particlesDestroy();
+    } catch (profile::Interrupted const&) {
+        PRINT("\n  Interrupted: finishing cleanup and writing profiling reports.\n");
+        try {
+            pmmmDestroy();
+            particlesDestroy();
+        } catch (std::exception const& error) {
+            PRINT("Cleanup after interruption failed: %s\n", error.what());
+            if (daemonStarted) {
+                stopMemuseDaemon();
+            }
+            hpx::finalize();
+            return EXIT_FAILURE;
+        } catch (...) {
+            PRINT("Cleanup after interruption failed with an unknown exception\n");
+            if (daemonStarted) {
+                stopMemuseDaemon();
+            }
+            hpx::finalize();
+            return EXIT_FAILURE;
+        }
     } catch (std::exception const& error) {
         PRINT("CosmicTiger failed: %s\n", error.what());
         try {
@@ -275,12 +300,11 @@ void selectPositionBackend(int argc, char* argv[]) {
 
 int main(int argc, char* argv[]) {
     StackTraceHandler stackTraceHandler;
-#ifndef PROFILE_DISABLE
     profile::InterruptReportHandler interruptReportHandler;
-#endif
     bool ownsMpi = false;
     int result = EXIT_FAILURE;
     try {
+        profile::configureRuntimeProfiling();
         detail::selectPositionBackend(argc, argv);
         recordCommandLineArguments(argc, argv);
         detail::initializeMpi(argc, argv, ownsMpi);
@@ -301,9 +325,9 @@ int main(int argc, char* argv[]) {
             profile::profileStop();
             throw std::runtime_error("Unable to start the CPU sampling profiler on every MPI rank");
         }
+#endif
         hpx::register_startup_function(
             [&interruptReportHandler]() { interruptReportHandler.install(); });
-#endif
         std::vector<std::string> cfg = {"hpx.commandline.allow_unknown=1"};
         cfg.push_back("hpx.stacks.small_size=524288");
 #ifdef HPX_EARLY

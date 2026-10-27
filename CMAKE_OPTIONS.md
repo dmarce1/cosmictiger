@@ -33,6 +33,7 @@ Defaults apply to a fresh CMake configuration. Boolean options accept `ON` or
 | `COSMICTIGER_WITH_CUDA` | `ON` | Builds CUDA code. Requires the CUDA toolkit and HPX built with CUDA support. |
 | `COSMICTIGER_WITH_LONG_LONG_PART_INT` | `OFF` | Uses `long long` to index local particles. |
 | `COSMICTIGER_ENABLE_PROFILING` | `ON` | Enables statistical CPU sampling and `PROFILE()` metadata. Independent of the installed HPX's APEX support. |
+| `COSMICTIGER_REQUIRE_APEX` | Depends on build type | Defaults to `ON` for `Debug`, `RelWithDebInfo`, and `Profile`; otherwise `OFF`. Rejects an HPX installation without APEX when enabled. |
 | `COSMICTIGER_BUILD_CARTESIAN_BENCHMARKS` | `OFF` | Builds the optional Cartesian comparison harness. Requires `BUILD_TESTING=ON`. Enabling it does not itself run a benchmark. |
 | `BUILD_TESTING` | `ON` | Standard CTest option used here to include standalone tests and embedded `run.test` application tests. `OFF` excludes both. |
 
@@ -165,9 +166,11 @@ are `Release`, global FMM, order 7, CUDA enabled, and tests disabled. In particu
 default `ON`. It uses Ninja and build directories named
 `build/<mode>_<variant>_order<order>`, such as `build/release_pmmm_fmm_order7`.
 
-The script builds both position-storage executables, supplies the custom
-`Profile` flags above, and rediscovers cached HPX, MPI, GSL, and HEALPix paths.
-For settings not offered by the menu, configure directly with CMake.
+The script builds both position-storage executables, chooses the APEX
+requirement from the build mode, supplies the custom `Profile` flags above,
+and rediscovers cached HPX, MPI, GSL, and HEALPix paths. `Profile` uses a
+`RelWithDebInfo` HPX installation. For settings not offered by the menu,
+configure directly with CMake.
 
 ## Inspecting and changing a configured build
 
@@ -186,8 +189,10 @@ cmake --help-variable CMAKE_BUILD_TYPE
 ```
 
 Options persist in `CMakeCache.txt`; omitting a previously supplied option does
-not reset it. Supply an explicit value when changing an existing
-configuration. A new build directory gives fresh defaults.
+not reset it. This includes `COSMICTIGER_REQUIRE_APEX`: its build-type-dependent
+default is chosen when the cache entry is first created. Supply an explicit
+value when changing an existing configuration. A new build directory gives
+fresh defaults.
 
 The cache listing contains dependency settings and detected results as well
 as user options. Internal probe results such as `COSMICTIGER_FFTW3F_MPI_LINKS`

@@ -7,6 +7,7 @@
 #include <cosmictiger/core/driver.hpp>
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/hpx.hpp>
+#include <cosmictiger/core/interrupt_profile.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/core/timer.hpp>
@@ -50,8 +51,10 @@ void writeScenarioDiagnostics(DriverParameters const& state) {
 }    // namespace detail
 
 void runFixedScenario() {
+    profile::checkForInterrupt();
     auto const& definition = scenarios::definition(getOptions().run.scenario);
     auto plan = definition.initialize();
+    profile::checkForInterrupt();
     auto const baseOptions = getOptions();
     double const defaultDuration = std::accumulate(plan.stages.begin(), plan.stages.end(), 0.0,
         [](double sum, auto const& stage) { return sum + stage.duration; });
@@ -120,6 +123,7 @@ void runFixedScenario() {
         checkpointTimer.start();
     };
     double stageStart = 0.0;
+    bool interrupted = false;
     for (auto const& stage : plan.stages) {
         double const stageEnd = stageStart + stage.duration;
         double const tolerance = 1.0e-12 * duration;
@@ -135,6 +139,10 @@ void runFixedScenario() {
         setOptions(stageOptions);
         double const baseTimestep = duration / baseOptions.run.numberOfSteps;
         while (state.tau < stageEnd - tolerance && iterations < baseOptions.run.maxIterations) {
+            if (profile::interruptRequested()) {
+                interrupted = true;
+                break;
+            }
             Timer stepTimer;
             stepTimer.start();
             int const minimumRung = minRung(state.itime);
@@ -224,7 +232,7 @@ void runFixedScenario() {
                 progressRows++;
             }
         }
-        if (iterations >= baseOptions.run.maxIterations) {
+        if (interrupted || iterations >= baseOptions.run.maxIterations) {
             break;
         }
         state.tau = stageEnd;
@@ -245,7 +253,7 @@ void runFixedScenario() {
     if (hpxRank() == 0) {
         bool const finished = state.tau >= duration * (1.0 - 1.0e-12);
         PRINT("\n  %s: %s at t=%.6e after %i steps (%.2f s total wall time).\n", definition.name,
-            finished ? "finished" : "paused at the iteration limit", state.tau, state.iter,
-            restoredRuntime + runtime.read());
+            finished ? "finished" : (interrupted ? "interrupted" : "paused at the iteration limit"),
+            state.tau, state.iter, restoredRuntime + runtime.read());
     }
 }

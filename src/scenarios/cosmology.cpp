@@ -1,4 +1,5 @@
 #include <cosmictiger/core/driver.hpp>
+#include <cosmictiger/core/interrupt_profile.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/cosmology/background.hpp>
 #include <cosmictiger/cosmology/cosmology.hpp>
@@ -14,6 +15,7 @@ void initializeCosmology(DriverParameters& state) {
     state.tauMax = cosmology::configuredDuration(state.a);
     // Validate the whole requested trajectory before generating particles.
     cosmology::simulationBackground(state.tauMax);
+    profile::checkForInterrupt();
     initialize(getOptions().cosmology.startRedshift);
 }
 
