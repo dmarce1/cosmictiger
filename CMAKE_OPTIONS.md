@@ -34,7 +34,6 @@ Defaults apply to a fresh CMake configuration. Boolean options accept `ON` or
 | `COSMICTIGER_WITH_LONG_LONG_PART_INT` | `OFF` | Uses `long long` to index local particles. |
 | `COSMICTIGER_ENABLE_PROFILING` | `ON` | Enables statistical CPU sampling and `PROFILE()` metadata. Independent of the installed HPX's APEX support. |
 | `COSMICTIGER_REQUIRE_APEX` | Depends on build type | Defaults to `ON` for `Debug`, `RelWithDebInfo`, and `Profile`; otherwise `OFF`. Rejects an HPX installation without APEX when enabled. |
-| `COSMICTIGER_BUILD_CARTESIAN_BENCHMARKS` | `OFF` | Builds the optional Cartesian comparison harness. Requires `BUILD_TESTING=ON`. Enabling it does not itself run a benchmark. |
 | `BUILD_TESTING` | `ON` | Standard CTest option used here to include standalone tests and embedded `run.test` application tests. `OFF` excludes both. |
 
 Both `cosmictiger` (32-bit fixed-point positions) and `cosmictiger_fixed64`

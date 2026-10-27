@@ -176,21 +176,11 @@ CPU runtime validation uses
 `COSMICTIGER_WITH_CUDA=OFF` application build still has pre-existing
 unconditional CUDA calls elsewhere in the application.
 
-## Benchmarks
+## Historical benchmarks
 
-The opt-in `COSMICTIGER_BUILD_CARTESIAN_BENCHMARKS=ON` build (with `BUILD_TESTING=ON`) adds
-`--run.test=cartesianBenchmark`, which measures deterministic 32^3-particle lattice and
-clustered trees with potential both enabled and disabled. It reports tree and
-kick timings separately, uses one warmup and five measured repetitions by
-default, writes forces outside the measured interval, and records the runtime
-FMM order in its `CARTESIAN_WALK_CONFIG` line. `benchmarks/run_cuda_kick_arena.py`
-takes `--orders` to sweep `gravity.fmmOrder` values.
-
-`benchmarks/gravity/cartesian_kernels.cpp` and `benchmarks/gravity/cartesian_kernels_cuda.cu` measure individual
-operators. `COSMICTIGER_CARTESIAN_BASELINE_HEADER` selects an external legacy header so
-the exact same harness can compare the old and new implementations. Timings
-must be collected after validation, with builds and other benchmark jobs idle.
-See [benchmark instructions](../benchmarks/gravity/cartesian_benchmarks.md) for reproducible
-builds, timing, and force comparisons, and the
-[measured results](stf_benchmark_results.md) for CPU, CUDA, and cooperative L2L
-performance and numerical comparisons.
+The Cartesian comparison harness, microbenchmarks, and associated runner and
+analysis scripts are archived in the Git stash named
+`retired_cartesian_benchmarks_and_generic_fmm_2026_10_27`.
+The [measured results](stf_benchmark_results.md) remain as historical CPU, CUDA,
+and cooperative L2L performance and numerical comparisons. The CUDA L2L
+correctness checks remain in `tests/gravity/cartesian_l2l_cuda.cu`.

@@ -706,10 +706,6 @@ void particleMeshTimestepTest();
 void particleMeshDispatchLaunchFailureTest();
 void particleMeshDispatchAsyncFailureTest();
 
-#ifdef COSMICTIGER_CARTESIAN_BENCHMARKS
-void cartesianWalkBenchmark();
-#endif
-
 void rockstarTest();
 void bhPotentialTest();
 void groupsCatalogueTest();
@@ -730,9 +726,6 @@ ApplicationTest const applicationTests[] = {
     {"bhPotential", bhPotentialTest},
     {"groupsCatalogueDistributed", groupsCatalogueDistributedTest},
     {"groupsCatalogue", groupsCatalogueTest},
-#ifdef COSMICTIGER_CARTESIAN_BENCHMARKS
-    {"cartesianBenchmark", cartesianWalkBenchmark},
-#endif
     {"linearGrowth", linearGrowthTest},
     {"fmmWalk", fmmWalkTest},
     {"fmmTree", fmmTreeTest},

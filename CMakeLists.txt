@@ -540,10 +540,8 @@ set_source_files_properties(
 set_source_files_properties(src/particles/domain.cpp tests/mesh_domains.cpp PROPERTIES
     COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
 
-option(COSMICTIGER_BUILD_CARTESIAN_BENCHMARKS "Build the opt-in Cartesian comparison harness" OFF)
-if(COSMICTIGER_BUILD_CARTESIAN_BENCHMARKS AND NOT BUILD_TESTING)
-    message(FATAL_ERROR "COSMICTIGER_BUILD_CARTESIAN_BENCHMARKS requires BUILD_TESTING=ON for run.test dispatch")
-endif()
+# Remove the retired comparison harness option from existing build caches.
+unset(COSMICTIGER_BUILD_CARTESIAN_BENCHMARKS CACHE)
 set(cosmictiger_application_targets cosmictiger cosmictiger_fixed64)
 foreach(application_target IN LISTS cosmictiger_application_targets)
     add_hpx_executable(${application_target}
@@ -552,10 +550,6 @@ foreach(application_target IN LISTS cosmictiger_application_targets)
             ${SILO_LIBRARY} ${CHEALPIX_LIBRARY} ${HEALPIX_CXX_LIBRARY} dl quadmath
         SOURCES ${cosmictiger_source_files}
         HEADERS ${cosmictiger_header_files})
-    if(COSMICTIGER_BUILD_CARTESIAN_BENCHMARKS)
-        target_sources(${application_target} PRIVATE benchmarks/gravity/dehnen/cartesian_walk.cpp)
-        set_source_files_properties(tests/test.cpp PROPERTIES COMPILE_DEFINITIONS COSMICTIGER_CARTESIAN_BENCHMARKS)
-    endif()
     target_link_libraries(${application_target} PRIVATE primordial_chemistry cosmictiger_fp16
         cosmictiger_profiler cosmictiger_stacktrace)
     set_target_properties(${application_target} PROPERTIES ENABLE_EXPORTS ON)
