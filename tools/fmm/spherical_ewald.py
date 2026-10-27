@@ -34,6 +34,7 @@ def scalar(value):
 def regular(degree):
     lines = ["output[0] = simdBroadcast<Real>(1);"]
     cost = 0
+    fmas = 0
     for m in range(degree + 1):
         if m:
             if m == 1:
@@ -45,6 +46,7 @@ def regular(degree):
                 lines += [f"output[{index(m,m)}] = {scalar(1/(2*m))} * simdFma(x, output[{a}], -y * output[{b}]);",
                           f"output[{index(m,-m)}] = {scalar(1/(2*m))} * simdFma(y, output[{a}], x * output[{b}]);"]
                 cost += 6
+                fmas += 2
         if m < degree:
             for component in ([0] if m == 0 else [m, -m]):
                 lines += [f"output[{index(m+1,component)}] = z * output[{index(m,component)}];"]
@@ -55,7 +57,8 @@ def regular(degree):
             for component in ([0] if m == 0 else [m, -m]):
                 lines += [f"output[{index(n,component)}] = {scalar(1/(n*n-m*m))} * simdFma(zFactor{n}_{m}, output[{index(n-1,component)}], -radiusSquared * output[{index(n-2,component)}]);"]
                 cost += 3
-    return lines, cost
+                fmas += 1
+    return lines, cost, fmas
 
 
 def contraction(degree):
@@ -64,22 +67,26 @@ def contraction(degree):
     _, statistics = generateSimple('M2lDerivatives',degree)
     lines = [f"detail::M2LDerivatives<{degree}>::template add<Real>(local, moments, greens);"]
     cost = statistics['weighted_flops']
+    conventional = statistics['conventional_flops']
     # Source radius moment first exists when source degree >=2.
     if degree >= 3:
         lines += [f"local[0] = simdFma(-{scalar(.5)} * greenTrace, sourceTrace, local[0]);"]
         cost += 2
+        conventional += 3
     for component, factor in [(3, 2), (1, 2), (2, 1)]:
         operand = "-greenTrace" if factor == 1 else f"-{scalar(factor)} * greenTrace"
         lines += [f"local[{component}] = simdFma({operand}, moments[{component}], local[{component}]);"]
         cost += 1 + (factor != 1)
+        conventional += 2 + (factor != 1)
     lines += ["localTrace = simdFma(greenTrace, moments[0], localTrace);"]
     cost += 1
-    return lines, cost
+    conventional += 2
+    return lines, cost, conventional
 
 
 def emitDegree(degree):
     count = (degree + 1)**2
-    polynomial, polynomial_cost = regular(degree)
+    polynomial, polynomial_cost, polynomial_fmas = regular(degree)
     body = [f"template <> class EwaldGreen<{degree}> {{", "public:",
             f"static constexpr int kDegree_ = {degree};", f"static constexpr int kCount_ = {count};",
             f"static constexpr int kLatticeRadius_ = {RADIUS};",
@@ -173,18 +180,30 @@ def emitDegree(degree):
              "evaluateWorking<Working>(temporary, trace, detail::ewaldConvert<Working>(x), detail::ewaldConvert<Working>(y), detail::ewaldConvert<Working>(z));",
              f"for (int i = 0; i < {count}; ++i) {{ output[i] = detail::ewaldConvert<Real>(temporary[i]); }}",
              "greenTrace = detail::ewaldConvert<Real>(trace);", "}", "};"]
-    direct, contraction_cost = contraction(degree)
+    direct, contraction_cost, contraction_conventional = contraction(degree)
     body += [f"template <> class EwaldM2L<{degree}> {{", "public:", f"static constexpr int kFlops_ = {contraction_cost};",
+             f"static constexpr int kConventionalFlops_ = {contraction_conventional};",
              "template <typename Real, typename Local, typename Moments, typename Greens>",
              "CUDA_EXPORT static void add(Local& local, Real& localTrace, Moments const& moments, Real sourceTrace, Greens const& greens, Real greenTrace) {"]
     body += direct + ["}", "};"]
     pairs = sum(x*x+y*y+z*z <= RADIUS*RADIUS and (x>0 or x==0 and (y>0 or y==0 and z>0)) for x in range(-RADIUS,RADIUS+1) for y in range(-RADIUS,RADIUS+1) for z in range(-RADIUS,RADIUS+1))
     central_cost += 1
+    # Preserve the historical arithmetic weights for kernel selection/reporting.
+    # Runtime counters use FMA=2, sqrt=1 and one per elementary-function result.
+    central_conventional = central_cost + polynomial_fmas + 2 + 1 + (degree + 1) * SERIES_TERMS
+    real_conventional = real_cost + polynomial_fmas + 2 - 6 + 2
+    wave_conventional = wave_cost + polynomial_fmas + 2 + 3
     report = {"local_degree":degree,"source_degree":degree-1,"real_image_count":2*pairs,"reciprocal_pair_count":pairs,"central_weighted_flops":central_cost,
               "real_pair_weighted_flops":2*real_cost+count*5,"reciprocal_pair_weighted_flops":wave_cost,
               "green_weighted_flops":central_cost+pairs*(2*real_cost+count*5+wave_cost),"contraction_weighted_flops":contraction_cost,
+              "central_conventional_flops":central_conventional,
+              "real_pair_conventional_flops":2*real_conventional+count*5,
+              "reciprocal_pair_conventional_flops":wave_conventional,
+              "green_conventional_flops":central_conventional+pairs*(2*real_conventional+count*5+wave_conventional),
+              "contraction_conventional_flops":contraction_conventional,
               "special_function_calls":{"exp":1+3*pairs,"erfc":2*pairs,"sin":pairs,"cos":pairs},"sqrt_calls":2*pairs}
     body.insert(2, f"static constexpr int kFlops_ = {report['green_weighted_flops']};")
+    body.insert(3, f"static constexpr int kConventionalFlops_ = {report['green_conventional_flops']};")
     return body,report
 
 
@@ -220,6 +239,7 @@ def generate(minLocalDegree=2,maxLocalDegree=8):
         lines.append('#endif')
         counts[str(degree+1)] = report
     lines += ["template <int degree> class EwaldL2L {", "public:", "static constexpr int kFlops_ = detail::L2L<degree>::kFlops_ + 9;",
+              "static constexpr int kConventionalFlops_ = detail::L2L<degree>::kConventionalFlops_ + 15;",
               "template <typename Real, typename Local, typename Source>",
               "CUDA_EXPORT static void add(Local& output, Real& outputTrace, Source const& source, Real sourceTrace, Real x, Real y, Real z) {",
               "detail::L2L<degree>::template add<Real>(output, source, x, y, z);",
@@ -230,6 +250,7 @@ def generate(minLocalDegree=2,maxLocalDegree=8):
               "output[2] = simdFma(-sourceTrace, z, output[2]);",
               "outputTrace += sourceTrace;", "}", "};",
               "template <int degree> class EwaldL2P {", "public:", "static constexpr int kFlops_ = detail::L2P<degree>::kFlops_ + 8;",
+              "static constexpr int kConventionalFlops_ = detail::L2P<degree>::kConventionalFlops_ + 14;",
               "template <typename Real, typename Field, typename Source>",
               "CUDA_EXPORT static void add(Field& field, Source const& source, Real sourceTrace, Real x, Real y, Real z) {",
               "detail::L2P<degree>::template add<Real>(field, source, x, y, z);",
@@ -238,4 +259,4 @@ def generate(minLocalDegree=2,maxLocalDegree=8):
               "field[1] = simdFma(sourceTrace, x, field[1]);",
               "field[2] = simdFma(sourceTrace, y, field[2]);",
               "field[3] = simdFma(sourceTrace, z, field[3]);", "}", "};", "}", ""]
-    return {"spherical_ewald_kernels.hpp":"\n".join(lines)}, {"cost_model":{"fma":1,"sqrt":7,"add":1,"multiply":1,"division":1,"special_functions":"reported separately"},"lattice_radius":RADIUS,"central_series_terms":SERIES_TERMS,"orders":counts}
+    return {"spherical_ewald_kernels.hpp":"\n".join(lines)}, {"cost_model":{"fma":1,"sqrt":7,"add":1,"multiply":1,"division":1,"special_functions":"reported separately"},"conventional_cost_model":{"fma":2,"sqrt":1,"add":1,"multiply":1,"division":1,"special_functions":1},"lattice_radius":RADIUS,"central_series_terms":SERIES_TERMS,"orders":counts}

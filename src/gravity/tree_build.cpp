@@ -19,6 +19,18 @@
 
 constexpr bool kVerbose = true;
 
+namespace detail {
+
+// The shared tree estimates already include the first scaling multiply in a
+// Position(double) conversion. Host Fixed64 adds three limb-splitting operations;
+// either position format also calls fmod when the input leaves (-1, 1).
+constexpr FlopCount treePositionConversionExtraFlops(double coordinate) {
+    return FlopCount(kPositionBits == 64 ? 3 : 0) +
+        FlopCount(!(coordinate > -1.0 && coordinate < 1.0));
+}
+
+}    // namespace detail
+
 TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& policy) {
     auto params = request.params;
     auto const key = request.key;
@@ -88,6 +100,9 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
             ParticleInteger mid = fmmSourcePartition(
                 policy.sourceStore, sources, particleRange, Position(xmid), xdim);
             addCpuFlops(1);
+            if (boundedGeometry) {
+                flops += detail::treePositionConversionExtraFlops(xmid);
+            }
             if (boundedGeometry && (mid == particleRange.first || mid == particleRange.second)) {
                 // Empty midpoint branches needlessly consume depth and arena
                 // slots. Retain the same kd partition but tighten its split to
@@ -122,6 +137,7 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
                     mid = particleRange.first + numberOfParticles / 2;
                 }
                 xmid = split.toDouble();
+                flops += 1;
             }
             leftParticleRange.second = rightParticleRange.first = mid;
             leftBox.end[xdim] = rightBox.begin[xdim] = xmid;
@@ -191,6 +207,9 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
             Array<SimdPosition, kDimensions> xc{};
             for (int dim = 0; dim < kDimensions; dim++) {
                 xc[dim] = simdBroadcast<SimdPosition>(Position(xc1[dim]).raw());
+                if (boundedGeometry) {
+                    flops += detail::treePositionConversionExtraFlops(xc1[dim]);
+                }
             }
             flops += 9;
             SimdFloat r2Max = simdBroadcast<SimdFloat>(0.0);
@@ -292,8 +311,8 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
             flops += 6;
         }
 
-        flops += 3;
         if (boundedGeometry) {
+            // The cell adapter accounts for all of its center conversions.
             policy.constrainCenter(policy.context, xcValue, x);
             double leftDistanceSquared = 0.0;
             double rightDistanceSquared = 0.0;
@@ -306,10 +325,12 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
             double const enclosingRadius = std::max(std::sqrt(leftDistanceSquared) + rlValue,
                 std::sqrt(rightDistanceSquared) + rrValue);
             radius = std::nextafter(float(enclosingRadius), std::numeric_limits<float>::infinity());
+            flops += 6 * kDimensions + 5;
         } else {
             for (int dim = 0; dim < kDimensions; dim++) {
                 x[dim] = xcValue[dim];
             }
+            flops += 3;
         }
         flops += fmmDispatch([&](auto orderTag) {
             return treeComputeMultipole<decltype(orderTag)::value>(
@@ -338,8 +359,16 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
                 double upper = lower;
                 if (boundedGeometry) {
                     lower = positionDomainCoordinate(position);
+                    flops += 1;    // Additional fixed-to-double scaling in the domain helper.
+                    if constexpr (kPositionBits == 64) {
+                        // Its guard skips Position(upper) at one; otherwise the
+                        // host Fixed64 conversion uses four floating operations.
+                        flops += (upper < 1.0 ? 4 : 0) + int(lower != upper);
+                    }
+                    flops += upper < 1.0 ? (kPositionBits == 64 ? 4 : 1) : 0;
                     if (upper < 1.0 && Position(upper).raw() < position.raw()) {
                         upper = std::nextafter(upper, 1.0);
+                        flops += 1;
                     }
                 }
                 xmaxValue[dim] = std::max(xmaxValue[dim], upper);
@@ -353,7 +382,9 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
             policy.constrainCenter(policy.context, xcValue, x);
         }
         r = 0.0;
-        flops += 6 + FlopCount(numberOfParticles) * 15;
+        // Bounded displacement subtracts integer positions before its one
+        // scaling multiply, saving one floating subtraction per dimension.
+        flops += 6 + FlopCount(numberOfParticles) * (boundedGeometry ? 12 : 15);
         for (ParticleInteger i = particleRange.first; i < particleRange.second; i++) {
             double thisRadius = 0.0;
             for (int dim = 0; dim < kDimensions; dim++) {
@@ -367,6 +398,7 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
         radius = std::sqrt(r);
         if (boundedGeometry) {
             radius = std::nextafter(radius, std::numeric_limits<float>::infinity());
+            flops += 1;
         }
         flops += 4;    // Square root and three center-to-fixed conversions below.
         children[kLeftChild].index = children[kRightChild].index = -1;
@@ -376,6 +408,11 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
         });
         for (int dim = 0; dim < kDimensions; dim++) {
             x[dim] = xcValue[dim];
+            if (boundedGeometry) {
+                // Both this assignment and the P2M center conversion above
+                // have one scaling multiply in the existing shared estimates.
+                flops += 2 * detail::treePositionConversionExtraFlops(xcValue[dim]);
+            }
         }
     }
     TreeNode node;

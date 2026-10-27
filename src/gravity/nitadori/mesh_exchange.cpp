@@ -18,11 +18,25 @@ std::array<int, 3> coordinates(uint64_t key) {
     return {int(key / (n * n)), int(key / n % n), int(key % n)};
 }
 
-PmmmNearParticle particle(ParticleInteger index, std::array<int, 3> const& cell) {
+PmmmNearParticle particle(ParticleInteger index, std::array<int, 3> const& cell, FlopCount& flops) {
     PmmmNearParticle result{};
     for (int axis = 0; axis < kDimensions; ++axis) {
         result.offset[axis] = positionDomainCoordinate(particlesPos(axis, index)) * cache.meshSize -
             (cell[axis] + 0.5);
+        // Fixed conversion, mesh scaling, center construction, and subtraction.
+        flops += 4;
+        if constexpr (kPositionBits == 64) {
+            // Mirror the half-open rounding branches in positionDomainCoordinate.
+            // These repeated predicates are accounting overhead, not solver work.
+            auto const position = particlesPos(axis, index);
+            double const coordinate = position.toDouble();
+            if (coordinate < 1.0) {
+                flops += 4;    // Fixed64 limb split in Position(coordinate).
+            }
+            if (coordinate >= 1.0 || Position(coordinate).raw() > position.raw()) {
+                ++flops;    // nextafter.
+            }
+        }
     }
     result.mass = particlesMass(index);
     result.rank = hpxRank();
@@ -48,6 +62,7 @@ void accumulate(std::vector<CellData> const& cells) {
             sources.insert(sources.end(), cell.sources.begin(), cell.sources.end());
         }
     }
+    addCpuFlops(FlopCount(cells.size()) * (cache.sourceCount + 1));
 }
 
 std::vector<CellOwners> readOwners(std::vector<uint64_t> const& keys) {
@@ -67,6 +82,7 @@ std::vector<CellData> readCells(std::vector<uint64_t> const& keys, uint64_t expa
     result.reserve(keys.size());
     int const n = cache.meshSize;
     double const normalization = 1.0 / (double(n) * n * n);
+    FlopCount flops = 3;
     for (auto key : keys) {
         CellData cell;
         cell.key = key;
@@ -88,9 +104,11 @@ std::vector<CellData> readCells(std::vector<uint64_t> const& keys, uint64_t expa
             cell.coefficients[3] -= 2 * traceFactor * state.background[1];
             cell.coefficients[1] -= 2 * traceFactor * state.background[2];
             cell.coefficients[2] -= traceFactor * state.background[3];
+            flops += cache.localCount + 10 + (cache.order >= 4 ? 3 : 0);
         }
         result.push_back(std::move(cell));
     }
+    addCpuFlops(flops);
     return result;
 }
 
@@ -98,6 +116,7 @@ void deposit() {
     // Bound packet sizes and outstanding remote writes independently of N.
     constexpr size_t kCellsPerPacket = 32;
     parallelFor((state.cells.size() + kCellsPerPacket - 1) / kCellsPerPacket, [&](size_t batch) {
+        FlopCount flops = 0;
         std::unordered_map<int, std::vector<CellData>> packets;
         size_t const end = std::min(state.cells.size(), (batch + 1) * kCellsPerPacket);
         for (size_t cellIndex = batch * kCellsPerPacket; cellIndex < end; ++cellIndex) {
@@ -114,17 +133,20 @@ void deposit() {
                 cell.sources.reserve(range.end - range.begin);
             }
             for (ParticleInteger i = range.begin; i < range.end; ++i) {
-                auto const source = particle(i, cellCoordinates);
-                addMoments(cache.order, cell.coefficients.data(), source.mass, source.offset);
+                auto const source = particle(i, cellCoordinates, flops);
+                flops +=
+                    addMoments(cache.order, cell.coefficients.data(), source.mass, source.offset);
                 for (int axis = 0; axis < kDimensions; ++axis) {
                     cell.radialTrace += source.mass * source.offset[axis] * source.offset[axis];
                 }
+                flops += 3 * kDimensions;
                 if constexpr (!kUseFmm) {
                     cell.sources.push_back(source);
                 }
             }
             packets[cache.slabOwner[cellCoordinates[0]]].push_back(std::move(cell));
         }
+        addCpuFlops(flops);
         std::vector<hpx::future<void>> futures;
         futures.reserve(packets.size());
         std::exception_ptr failure;

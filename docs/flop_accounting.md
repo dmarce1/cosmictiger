@@ -4,7 +4,8 @@ The progress-table rate is the sum of instrumented CPU and CUDA solver operation
 on every locality, divided by wall time between `resetFlops()` and completion of
 force advancement. It includes gravity force **and potential** kernels and SPH.
 Energy/momentum diagnostics, diagnostic reductions, signal-speed reporting,
-assertion checks, and the counters themselves are excluded. Chemistry and FFTs
+assertion checks, and the counters themselves are excluded. PMMM FFT executions
+are included using their cached FFTW plan counts. Chemistry and other FFT paths
 are not instrumented; their elapsed time is included if they run in this interval.
 
 These are source-operation estimates: arithmetic, square roots, divisions and
@@ -78,6 +79,39 @@ The audit checked each interaction family and its route to the global counter.
 Diagnostic energy/momentum arithmetic and return-value reductions were removed
 from the gravity counts. Potential evaluation remains included. Automatic CUDA
 handoff sizing includes its four arithmetic/math operations.
+
+## PMMM accounting
+
+Both PMMM-PP and PMMM-FMM include moment deposition, fixed-position conversion,
+moment-packet accumulation, periodic background terms, spectral contraction,
+local evaluation, field combination, and particle kicks. The existing shared
+FMM tree/walk counters cover the adaptive near solver; PMMM additionally counts
+its cell bounds and center-clamping arithmetic. Diagnostic reductions and
+representability checks remain excluded.
+
+| Stage | Counted work |
+| --- | --- |
+| Spherical P2M, periodic Green, and Ewald L2P | Generated `kConventionalFlops_` uses FMA=2 and elementary results=1. Historical weighted `kFlops_` and kernel selection remain unchanged. Wrappers return counts for task-level batching. |
+| Green initialization | Generated Ewald work, optional primary Green addition, displacement and degree scaling, and the Green FFT. Charged only when the cache is built. |
+| Forward/inverse FFT | Cached `fftwf_flops` additions + multiplications + 2*FMAs for each executed plan. MPI plan queries are collective and already return a global sum, so only locality zero submits it. Planner work and copies are excluded. |
+| Fourier contraction | Ten operations per executed real spherical contraction term per complex Fourier mode. |
+| Background reduction | Four local additions per mesh cell, plus five logical sums of `localities-1` additions counted once globally. Internal MPI algorithm redundancy is not measured. |
+| Direct PP, CPU and CUDA | Three setup operations per nonempty call. Every non-self pair counts 21 geometry/scaling/accumulation operations plus the selected radial force evaluation; potential adds three scaling/accumulation operations plus its selected radial evaluation. Identical rank/index pairs contribute zero. |
+| Field application | Three acceleration scalings and optional potential scaling; actual timestep/rung and velocity-update branches. Energy/momentum diagnostics are excluded. |
+
+PP uses 64-bit accumulation once per CPU call or CUDA thread, with the existing
+warp aggregation for GPU submissions. Mesh work submits per packet, row, or
+completed phase, and field evaluation/kicks submit per cell or ready-cell batch.
+The FFT convention follows [FFTW's plan operation counts](https://www.fftw.org/fftw3_doc/Using-Plans.html).
+These remain operation estimates divided by force-advancement wall time, not
+hardware performance counters or isolated kernel throughput.
+
+Regression coverage includes independent arithmetic-intercepting checks of the
+generated operators, every scalar softening family/span and potential branch,
+Fourier contraction, and exact production PP submissions on CPU/CUDA (including
+partial warps and blocks). Production tests also check cold/warm Green caches,
+an exact empty-mesh total across MPI localities, and hierarchical/nonhierarchical
+kick branches with 64-bit accumulation.
 
 ## Cosmological evolution
 

@@ -101,6 +101,7 @@ template <>
 class EwaldGreen<2> {
 public:
     static constexpr int kFlops_ = 114444;
+    static constexpr int kConventionalFlops_ = 119214;
     static constexpr int kDegree_ = 2;
     static constexpr int kCount_ = 9;
     static constexpr int kLatticeRadius_ = 6;
@@ -600,6 +601,7 @@ template <>
 class EwaldM2L<2> {
 public:
     static constexpr int kFlops_ = 35;
+    static constexpr int kConventionalFlops_ = 58;
     template <typename Real, typename Local, typename Moments, typename Greens>
     CUDA_EXPORT static void add(Local& local, Real& localTrace, Moments const& moments,
         Real sourceTrace, Greens const& greens, Real greenTrace) {
@@ -617,6 +619,7 @@ template <>
 class EwaldGreen<3> {
 public:
     static constexpr int kFlops_ = 194963;
+    static constexpr int kConventionalFlops_ = 206716;
     static constexpr int kDegree_ = 3;
     static constexpr int kCount_ = 16;
     static constexpr int kLatticeRadius_ = 6;
@@ -1317,6 +1320,7 @@ template <>
 class EwaldM2L<3> {
 public:
     static constexpr int kFlops_ = 100;
+    static constexpr int kConventionalFlops_ = 173;
     template <typename Real, typename Local, typename Moments, typename Greens>
     CUDA_EXPORT static void add(Local& local, Real& localTrace, Moments const& moments,
         Real sourceTrace, Greens const& greens, Real greenTrace) {
@@ -1335,6 +1339,7 @@ template <>
 class EwaldGreen<4> {
 public:
     static constexpr int kFlops_ = 299055;
+    static constexpr int kConventionalFlops_ = 320565;
     static constexpr int kDegree_ = 4;
     static constexpr int kCount_ = 25;
     static constexpr int kLatticeRadius_ = 6;
@@ -2264,6 +2269,7 @@ template <>
 class EwaldM2L<4> {
 public:
     static constexpr int kFlops_ = 228;
+    static constexpr int kConventionalFlops_ = 409;
     template <typename Real, typename Local, typename Moments, typename Greens>
     CUDA_EXPORT static void add(Local& local, Real& localTrace, Moments const& moments,
         Real sourceTrace, Greens const& greens, Real greenTrace) {
@@ -2282,6 +2288,7 @@ template <>
 class EwaldGreen<5> {
 public:
     static constexpr int kFlops_ = 426720;
+    static constexpr int kConventionalFlops_ = 460761;
     static constexpr int kDegree_ = 5;
     static constexpr int kCount_ = 36;
     static constexpr int kLatticeRadius_ = 6;
@@ -3471,6 +3478,7 @@ template <>
 class EwaldM2L<5> {
 public:
     static constexpr int kFlops_ = 457;
+    static constexpr int kConventionalFlops_ = 841;
     template <typename Real, typename Local, typename Moments, typename Greens>
     CUDA_EXPORT static void add(Local& local, Real& localTrace, Moments const& moments,
         Real sourceTrace, Greens const& greens, Real greenTrace) {
@@ -3489,6 +3497,7 @@ template <>
 class EwaldGreen<6> {
 public:
     static constexpr int kFlops_ = 577958;
+    static constexpr int kConventionalFlops_ = 627304;
     static constexpr int kDegree_ = 6;
     static constexpr int kCount_ = 49;
     static constexpr int kLatticeRadius_ = 6;
@@ -4967,6 +4976,7 @@ template <>
 class EwaldM2L<6> {
 public:
     static constexpr int kFlops_ = 829;
+    static constexpr int kConventionalFlops_ = 1553;
     template <typename Real, typename Local, typename Moments, typename Greens>
     CUDA_EXPORT static void add(Local& local, Real& localTrace, Moments const& moments,
         Real sourceTrace, Greens const& greens, Real greenTrace) {
@@ -4985,6 +4995,7 @@ template <>
 class EwaldGreen<7> {
 public:
     static constexpr int kFlops_ = 752769;
+    static constexpr int kConventionalFlops_ = 820194;
     static constexpr int kDegree_ = 7;
     static constexpr int kCount_ = 64;
     static constexpr int kLatticeRadius_ = 6;
@@ -6781,6 +6792,7 @@ template <>
 class EwaldM2L<7> {
 public:
     static constexpr int kFlops_ = 1396;
+    static constexpr int kConventionalFlops_ = 2649;
     template <typename Real, typename Local, typename Moments, typename Greens>
     CUDA_EXPORT static void add(Local& local, Real& localTrace, Moments const& moments,
         Real sourceTrace, Greens const& greens, Real greenTrace) {
@@ -6799,6 +6811,7 @@ template <>
 class EwaldGreen<8> {
 public:
     static constexpr int kFlops_ = 951153;
+    static constexpr int kConventionalFlops_ = 1039431;
     static constexpr int kDegree_ = 8;
     static constexpr int kCount_ = 81;
     static constexpr int kLatticeRadius_ = 6;
@@ -8940,6 +8953,7 @@ template <>
 class EwaldM2L<8> {
 public:
     static constexpr int kFlops_ = 2216;
+    static constexpr int kConventionalFlops_ = 4245;
     template <typename Real, typename Local, typename Moments, typename Greens>
     CUDA_EXPORT static void add(Local& local, Real& localTrace, Moments const& moments,
         Real sourceTrace, Greens const& greens, Real greenTrace) {
@@ -8956,6 +8970,7 @@ template <int degree>
 class EwaldL2L {
 public:
     static constexpr int kFlops_ = detail::L2L<degree>::kFlops_ + 9;
+    static constexpr int kConventionalFlops_ = detail::L2L<degree>::kConventionalFlops_ + 15;
     template <typename Real, typename Local, typename Source>
     CUDA_EXPORT static void add(Local& output, Real& outputTrace, Source const& source,
         Real sourceTrace, Real x, Real y, Real z) {
@@ -8972,6 +8987,7 @@ template <int degree>
 class EwaldL2P {
 public:
     static constexpr int kFlops_ = detail::L2P<degree>::kFlops_ + 8;
+    static constexpr int kConventionalFlops_ = detail::L2P<degree>::kConventionalFlops_ + 14;
     template <typename Real, typename Field, typename Source>
     CUDA_EXPORT static void add(
         Field& field, Source const& source, Real sourceTrace, Real x, Real y, Real z) {

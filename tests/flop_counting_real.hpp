@@ -81,6 +81,9 @@ public:
     friend bool operator>=(CountingReal left, CountingReal right) {
         return left.value_ >= right.value_;
     }
+    friend bool operator==(CountingReal left, CountingReal right) {
+        return left.value_ == right.value_;
+    }
 
     friend CountingReal simdFma(CountingReal first, CountingReal second, CountingReal third) {
         CountingReal::add(2);

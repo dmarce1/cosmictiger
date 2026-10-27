@@ -1613,6 +1613,14 @@
         "fma": 1,
         "sqrt": 7
       },
+      "conventional_cost_model": {
+        "add": 1,
+        "subtract": 1,
+        "multiply": 1,
+        "divide": 1,
+        "fma": 2,
+        "sqrt": 1
+      },
       "description": "Exact live emitted arithmetic per lane, including geometry and output accumulation. Unary signs, copies, comparisons and selects cost zero. Division by square root costs eight. These weighted costs are not measured timings.",
       "kernels": [
         {
@@ -1624,7 +1632,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 9
+          "weighted_flops": 9,
+          "conventional_flops": 9
         },
         {
           "operator": "P2l",
@@ -1637,7 +1646,8 @@
             "sqrt": 1,
             "subtract": 3
           },
-          "weighted_flops": 41
+          "weighted_flops": 41,
+          "conventional_flops": 46
         },
         {
           "operator": "Greens",
@@ -1649,7 +1659,8 @@
             "divide": 2,
             "sqrt": 1
           },
-          "weighted_flops": 29
+          "weighted_flops": 29,
+          "conventional_flops": 28
         },
         {
           "operator": "M2lDerivatives",
@@ -1660,7 +1671,8 @@
             "fma": 19,
             "add": 4
           },
-          "weighted_flops": 29
+          "weighted_flops": 29,
+          "conventional_flops": 48
         },
         {
           "operator": "M2m",
@@ -1671,7 +1683,8 @@
             "fma": 3,
             "add": 4
           },
-          "weighted_flops": 9
+          "weighted_flops": 9,
+          "conventional_flops": 12
         },
         {
           "operator": "M2m",
@@ -1685,7 +1698,8 @@
             "divide": 1,
             "add": 4
           },
-          "weighted_flops": 28
+          "weighted_flops": 28,
+          "conventional_flops": 29
         },
         {
           "operator": "M2m",
@@ -1699,7 +1713,8 @@
             "divide": 1,
             "add": 3
           },
-          "weighted_flops": 30
+          "weighted_flops": 30,
+          "conventional_flops": 32
         },
         {
           "operator": "M2l",
@@ -1713,7 +1728,8 @@
             "add": 4,
             "subtract": 2
           },
-          "weighted_flops": 62
+          "weighted_flops": 62,
+          "conventional_flops": 78
         },
         {
           "operator": "M2l",
@@ -1728,7 +1744,8 @@
             "add": 4,
             "subtract": 4
           },
-          "weighted_flops": 75
+          "weighted_flops": 75,
+          "conventional_flops": 81
         },
         {
           "operator": "M2l",
@@ -1742,7 +1759,8 @@
             "divide": 2,
             "add": 5
           },
-          "weighted_flops": 80
+          "weighted_flops": 80,
+          "conventional_flops": 90
         },
         {
           "operator": "M2p",
@@ -1756,7 +1774,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 55
+          "weighted_flops": 55,
+          "conventional_flops": 68
         },
         {
           "operator": "M2p",
@@ -1771,7 +1790,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 60
+          "weighted_flops": 60,
+          "conventional_flops": 63
         },
         {
           "operator": "M2p",
@@ -1786,7 +1806,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 57
+          "weighted_flops": 57,
+          "conventional_flops": 57
         },
         {
           "operator": "L2l",
@@ -1797,7 +1818,8 @@
             "fma": 24,
             "add": 9
           },
-          "weighted_flops": 50
+          "weighted_flops": 50,
+          "conventional_flops": 74
         },
         {
           "operator": "L2l",
@@ -1811,7 +1833,8 @@
             "divide": 1,
             "add": 9
           },
-          "weighted_flops": 75
+          "weighted_flops": 75,
+          "conventional_flops": 99
         },
         {
           "operator": "L2l",
@@ -1825,7 +1848,8 @@
             "divide": 1,
             "add": 9
           },
-          "weighted_flops": 77
+          "weighted_flops": 77,
+          "conventional_flops": 101
         },
         {
           "operator": "L2p",
@@ -1837,7 +1861,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 45
+          "weighted_flops": 45,
+          "conventional_flops": 69
         },
         {
           "operator": "L2p",
@@ -1852,7 +1877,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 61
+          "weighted_flops": 61,
+          "conventional_flops": 80
         },
         {
           "operator": "L2p",
@@ -1867,7 +1893,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 52
+          "weighted_flops": 52,
+          "conventional_flops": 67
         },
         {
           "operator": "P2m",
@@ -1879,7 +1906,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 28
+          "weighted_flops": 28,
+          "conventional_flops": 38
         },
         {
           "operator": "P2l",
@@ -1892,7 +1920,8 @@
             "sqrt": 1,
             "subtract": 5
           },
-          "weighted_flops": 67
+          "weighted_flops": 67,
+          "conventional_flops": 82
         },
         {
           "operator": "Greens",
@@ -1904,7 +1933,8 @@
             "divide": 2,
             "sqrt": 1
           },
-          "weighted_flops": 46
+          "weighted_flops": 46,
+          "conventional_flops": 50
         },
         {
           "operator": "M2lDerivatives",
@@ -1915,7 +1945,8 @@
             "fma": 68,
             "add": 9
           },
-          "weighted_flops": 92
+          "weighted_flops": 92,
+          "conventional_flops": 160
         },
         {
           "operator": "M2m",
@@ -1926,7 +1957,8 @@
             "fma": 24,
             "add": 9
           },
-          "weighted_flops": 46
+          "weighted_flops": 46,
+          "conventional_flops": 70
         },
         {
           "operator": "M2m",
@@ -1940,7 +1972,8 @@
             "divide": 1,
             "add": 9
           },
-          "weighted_flops": 73
+          "weighted_flops": 73,
+          "conventional_flops": 97
         },
         {
           "operator": "M2m",
@@ -1954,7 +1987,8 @@
             "divide": 1,
             "add": 8
           },
-          "weighted_flops": 80
+          "weighted_flops": 80,
+          "conventional_flops": 105
         },
         {
           "operator": "M2l",
@@ -1968,7 +2002,8 @@
             "add": 9,
             "subtract": 2
           },
-          "weighted_flops": 146
+          "weighted_flops": 146,
+          "conventional_flops": 216
         },
         {
           "operator": "M2l",
@@ -1982,7 +2017,8 @@
             "divide": 3,
             "add": 9
           },
-          "weighted_flops": 144
+          "weighted_flops": 144,
+          "conventional_flops": 194
         },
         {
           "operator": "M2l",
@@ -1997,7 +2033,8 @@
             "add": 10,
             "subtract": 1
           },
-          "weighted_flops": 159
+          "weighted_flops": 159,
+          "conventional_flops": 201
         },
         {
           "operator": "M2p",
@@ -2011,7 +2048,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 106
+          "weighted_flops": 106,
+          "conventional_flops": 150
         },
         {
           "operator": "M2p",
@@ -2026,7 +2064,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 101
+          "weighted_flops": 101,
+          "conventional_flops": 127
         },
         {
           "operator": "M2p",
@@ -2041,7 +2080,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 94
+          "weighted_flops": 94,
+          "conventional_flops": 112
         },
         {
           "operator": "L2l",
@@ -2052,7 +2092,8 @@
             "fma": 78,
             "add": 16
           },
-          "weighted_flops": 130
+          "weighted_flops": 130,
+          "conventional_flops": 208
         },
         {
           "operator": "L2l",
@@ -2066,7 +2107,8 @@
             "divide": 1,
             "add": 16
           },
-          "weighted_flops": 157
+          "weighted_flops": 157,
+          "conventional_flops": 228
         },
         {
           "operator": "L2l",
@@ -2080,7 +2122,8 @@
             "divide": 1,
             "add": 16
           },
-          "weighted_flops": 162
+          "weighted_flops": 162,
+          "conventional_flops": 232
         },
         {
           "operator": "L2p",
@@ -2092,7 +2135,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 97
+          "weighted_flops": 97,
+          "conventional_flops": 154
         },
         {
           "operator": "L2p",
@@ -2107,7 +2151,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 107
+          "weighted_flops": 107,
+          "conventional_flops": 152
         },
         {
           "operator": "L2p",
@@ -2122,7 +2167,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 89
+          "weighted_flops": 89,
+          "conventional_flops": 127
         },
         {
           "operator": "P2m",
@@ -2134,7 +2180,8 @@
             "add": 1,
             "subtract": 5
           },
-          "weighted_flops": 55
+          "weighted_flops": 55,
+          "conventional_flops": 75
         },
         {
           "operator": "P2l",
@@ -2147,7 +2194,8 @@
             "sqrt": 1,
             "subtract": 7
           },
-          "weighted_flops": 100
+          "weighted_flops": 100,
+          "conventional_flops": 129
         },
         {
           "operator": "Greens",
@@ -2159,7 +2207,8 @@
             "divide": 2,
             "sqrt": 1
           },
-          "weighted_flops": 68
+          "weighted_flops": 68,
+          "conventional_flops": 79
         },
         {
           "operator": "M2lDerivatives",
@@ -2170,7 +2219,8 @@
             "fma": 176,
             "add": 16
           },
-          "weighted_flops": 220
+          "weighted_flops": 220,
+          "conventional_flops": 396
         },
         {
           "operator": "M2m",
@@ -2181,7 +2231,8 @@
             "fma": 78,
             "add": 16
           },
-          "weighted_flops": 124
+          "weighted_flops": 124,
+          "conventional_flops": 202
         },
         {
           "operator": "M2m",
@@ -2195,7 +2246,8 @@
             "divide": 1,
             "add": 16
           },
-          "weighted_flops": 154
+          "weighted_flops": 154,
+          "conventional_flops": 225
         },
         {
           "operator": "M2m",
@@ -2210,7 +2262,8 @@
             "subtract": 1,
             "add": 15
           },
-          "weighted_flops": 164
+          "weighted_flops": 164,
+          "conventional_flops": 234
         },
         {
           "operator": "M2l",
@@ -2224,7 +2277,8 @@
             "add": 16,
             "subtract": 2
           },
-          "weighted_flops": 300
+          "weighted_flops": 300,
+          "conventional_flops": 485
         },
         {
           "operator": "M2l",
@@ -2239,7 +2293,8 @@
             "add": 16,
             "subtract": 4
           },
-          "weighted_flops": 270
+          "weighted_flops": 270,
+          "conventional_flops": 393
         },
         {
           "operator": "M2l",
@@ -2254,7 +2309,8 @@
             "add": 17,
             "subtract": 1
           },
-          "weighted_flops": 293
+          "weighted_flops": 293,
+          "conventional_flops": 399
         },
         {
           "operator": "M2p",
@@ -2268,7 +2324,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 176
+          "weighted_flops": 176,
+          "conventional_flops": 265
         },
         {
           "operator": "M2p",
@@ -2283,7 +2340,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 155
+          "weighted_flops": 155,
+          "conventional_flops": 213
         },
         {
           "operator": "M2p",
@@ -2298,7 +2356,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 146
+          "weighted_flops": 146,
+          "conventional_flops": 192
         },
         {
           "operator": "L2l",
@@ -2309,7 +2368,8 @@
             "fma": 193,
             "add": 25
           },
-          "weighted_flops": 279
+          "weighted_flops": 279,
+          "conventional_flops": 472
         },
         {
           "operator": "L2l",
@@ -2323,7 +2383,8 @@
             "divide": 1,
             "add": 25
           },
-          "weighted_flops": 287
+          "weighted_flops": 287,
+          "conventional_flops": 443
         },
         {
           "operator": "L2l",
@@ -2337,7 +2398,8 @@
             "divide": 1,
             "add": 27
           },
-          "weighted_flops": 289
+          "weighted_flops": 289,
+          "conventional_flops": 433
         },
         {
           "operator": "L2p",
@@ -2349,7 +2411,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 169
+          "weighted_flops": 169,
+          "conventional_flops": 273
         },
         {
           "operator": "L2p",
@@ -2364,7 +2427,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 168
+          "weighted_flops": 168,
+          "conventional_flops": 248
         },
         {
           "operator": "L2p",
@@ -2379,7 +2443,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 136
+          "weighted_flops": 136,
+          "conventional_flops": 206
         },
         {
           "operator": "P2m",
@@ -2391,7 +2456,8 @@
             "add": 1,
             "subtract": 7
           },
-          "weighted_flops": 90
+          "weighted_flops": 90,
+          "conventional_flops": 124
         },
         {
           "operator": "P2l",
@@ -2404,7 +2470,8 @@
             "sqrt": 1,
             "subtract": 9
           },
-          "weighted_flops": 140
+          "weighted_flops": 140,
+          "conventional_flops": 187
         },
         {
           "operator": "Greens",
@@ -2416,7 +2483,8 @@
             "divide": 2,
             "sqrt": 1
           },
-          "weighted_flops": 95
+          "weighted_flops": 95,
+          "conventional_flops": 115
         },
         {
           "operator": "M2lDerivatives",
@@ -2427,7 +2495,8 @@
             "fma": 379,
             "add": 25
           },
-          "weighted_flops": 449
+          "weighted_flops": 449,
+          "conventional_flops": 828
         },
         {
           "operator": "M2m",
@@ -2438,7 +2507,8 @@
             "fma": 193,
             "add": 25
           },
-          "weighted_flops": 271
+          "weighted_flops": 271,
+          "conventional_flops": 464
         },
         {
           "operator": "M2m",
@@ -2452,7 +2522,8 @@
             "divide": 1,
             "add": 25
           },
-          "weighted_flops": 283
+          "weighted_flops": 283,
+          "conventional_flops": 439
         },
         {
           "operator": "M2m",
@@ -2467,7 +2538,8 @@
             "add": 25,
             "subtract": 1
           },
-          "weighted_flops": 290
+          "weighted_flops": 290,
+          "conventional_flops": 435
         },
         {
           "operator": "M2l",
@@ -2481,7 +2553,8 @@
             "add": 25,
             "subtract": 2
           },
-          "weighted_flops": 560
+          "weighted_flops": 560,
+          "conventional_flops": 957
         },
         {
           "operator": "M2l",
@@ -2495,7 +2568,8 @@
             "divide": 3,
             "add": 25
           },
-          "weighted_flops": 454
+          "weighted_flops": 454,
+          "conventional_flops": 712
         },
         {
           "operator": "M2l",
@@ -2510,7 +2584,8 @@
             "add": 28,
             "subtract": 2
           },
-          "weighted_flops": 468
+          "weighted_flops": 468,
+          "conventional_flops": 658
         },
         {
           "operator": "M2p",
@@ -2524,7 +2599,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 265
+          "weighted_flops": 265,
+          "conventional_flops": 413
         },
         {
           "operator": "M2p",
@@ -2539,7 +2615,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 224
+          "weighted_flops": 224,
+          "conventional_flops": 323
         },
         {
           "operator": "M2p",
@@ -2554,7 +2631,8 @@
             "add": 2,
             "subtract": 3
           },
-          "weighted_flops": 216
+          "weighted_flops": 216,
+          "conventional_flops": 299
         },
         {
           "operator": "L2l",
@@ -2565,7 +2643,8 @@
             "fma": 405,
             "add": 36
           },
-          "weighted_flops": 532
+          "weighted_flops": 532,
+          "conventional_flops": 937
         },
         {
           "operator": "L2l",
@@ -2579,7 +2658,8 @@
             "divide": 1,
             "add": 36
           },
-          "weighted_flops": 483
+          "weighted_flops": 483,
+          "conventional_flops": 781
         },
         {
           "operator": "L2l",
@@ -2593,7 +2673,8 @@
             "divide": 1,
             "add": 38
           },
-          "weighted_flops": 464
+          "weighted_flops": 464,
+          "conventional_flops": 722
         },
         {
           "operator": "L2p",
@@ -2605,7 +2686,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 260
+          "weighted_flops": 260,
+          "conventional_flops": 425
         },
         {
           "operator": "L2p",
@@ -2620,7 +2702,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 243
+          "weighted_flops": 243,
+          "conventional_flops": 367
         },
         {
           "operator": "L2p",
@@ -2635,7 +2718,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 198
+          "weighted_flops": 198,
+          "conventional_flops": 313
         },
         {
           "operator": "P2m",
@@ -2647,7 +2731,8 @@
             "add": 1,
             "subtract": 9
           },
-          "weighted_flops": 132
+          "weighted_flops": 132,
+          "conventional_flops": 184
         },
         {
           "operator": "P2l",
@@ -2660,7 +2745,8 @@
             "sqrt": 1,
             "subtract": 11
           },
-          "weighted_flops": 185
+          "weighted_flops": 185,
+          "conventional_flops": 254
         },
         {
           "operator": "Greens",
@@ -2672,7 +2758,8 @@
             "divide": 2,
             "sqrt": 1
           },
-          "weighted_flops": 125
+          "weighted_flops": 125,
+          "conventional_flops": 156
         },
         {
           "operator": "M2lDerivatives",
@@ -2683,7 +2770,8 @@
             "fma": 719,
             "add": 36
           },
-          "weighted_flops": 821
+          "weighted_flops": 821,
+          "conventional_flops": 1540
         },
         {
           "operator": "M2m",
@@ -2694,7 +2782,8 @@
             "fma": 405,
             "add": 36
           },
-          "weighted_flops": 522
+          "weighted_flops": 522,
+          "conventional_flops": 927
         },
         {
           "operator": "M2m",
@@ -2708,7 +2797,8 @@
             "divide": 1,
             "add": 36
           },
-          "weighted_flops": 478
+          "weighted_flops": 478,
+          "conventional_flops": 776
         },
         {
           "operator": "M2m",
@@ -2723,7 +2813,8 @@
             "add": 36,
             "subtract": 1
           },
-          "weighted_flops": 465
+          "weighted_flops": 465,
+          "conventional_flops": 724
         },
         {
           "operator": "M2l",
@@ -2737,7 +2828,8 @@
             "add": 36,
             "subtract": 2
           },
-          "weighted_flops": 966
+          "weighted_flops": 966,
+          "conventional_flops": 1714
         },
         {
           "operator": "M2l",
@@ -2752,7 +2844,8 @@
             "add": 36,
             "subtract": 4
           },
-          "weighted_flops": 730
+          "weighted_flops": 730,
+          "conventional_flops": 1191
         },
         {
           "operator": "M2l",
@@ -2767,7 +2860,8 @@
             "add": 39,
             "subtract": 2
           },
-          "weighted_flops": 710
+          "weighted_flops": 710,
+          "conventional_flops": 1032
         },
         {
           "operator": "M2p",
@@ -2781,7 +2875,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 371
+          "weighted_flops": 371,
+          "conventional_flops": 592
         },
         {
           "operator": "M2p",
@@ -2796,7 +2891,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 304
+          "weighted_flops": 304,
+          "conventional_flops": 453
         },
         {
           "operator": "M2p",
@@ -2811,7 +2907,8 @@
             "add": 2,
             "subtract": 3
           },
-          "weighted_flops": 306
+          "weighted_flops": 306,
+          "conventional_flops": 441
         },
         {
           "operator": "L2l",
@@ -2822,7 +2919,8 @@
             "fma": 756,
             "add": 49
           },
-          "weighted_flops": 933
+          "weighted_flops": 933,
+          "conventional_flops": 1689
         },
         {
           "operator": "L2l",
@@ -2836,7 +2934,8 @@
             "divide": 1,
             "add": 49
           },
-          "weighted_flops": 769
+          "weighted_flops": 769,
+          "conventional_flops": 1288
         },
         {
           "operator": "L2l",
@@ -2850,7 +2949,8 @@
             "divide": 1,
             "add": 51
           },
-          "weighted_flops": 695
+          "weighted_flops": 695,
+          "conventional_flops": 1113
         },
         {
           "operator": "L2p",
@@ -2862,7 +2962,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 372
+          "weighted_flops": 372,
+          "conventional_flops": 612
         },
         {
           "operator": "L2p",
@@ -2877,7 +2978,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 334
+          "weighted_flops": 334,
+          "conventional_flops": 511
         },
         {
           "operator": "L2p",
@@ -2892,7 +2994,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 274
+          "weighted_flops": 274,
+          "conventional_flops": 447
         },
         {
           "operator": "P2m",
@@ -2904,7 +3007,8 @@
             "add": 1,
             "subtract": 11
           },
-          "weighted_flops": 183
+          "weighted_flops": 183,
+          "conventional_flops": 257
         },
         {
           "operator": "P2l",
@@ -2917,7 +3021,8 @@
             "sqrt": 1,
             "subtract": 13
           },
-          "weighted_flops": 239
+          "weighted_flops": 239,
+          "conventional_flops": 334
         },
         {
           "operator": "Greens",
@@ -2929,7 +3034,8 @@
             "divide": 2,
             "sqrt": 1
           },
-          "weighted_flops": 162
+          "weighted_flops": 162,
+          "conventional_flops": 206
         },
         {
           "operator": "M2lDerivatives",
@@ -2940,7 +3046,8 @@
             "fma": 1248,
             "add": 49
           },
-          "weighted_flops": 1388
+          "weighted_flops": 1388,
+          "conventional_flops": 2636
         },
         {
           "operator": "M2m",
@@ -2951,7 +3058,8 @@
             "fma": 756,
             "add": 49
           },
-          "weighted_flops": 921
+          "weighted_flops": 921,
+          "conventional_flops": 1677
         },
         {
           "operator": "M2m",
@@ -2965,7 +3073,8 @@
             "divide": 1,
             "add": 49
           },
-          "weighted_flops": 763
+          "weighted_flops": 763,
+          "conventional_flops": 1282
         },
         {
           "operator": "M2m",
@@ -2980,7 +3089,8 @@
             "add": 49,
             "subtract": 1
           },
-          "weighted_flops": 696
+          "weighted_flops": 696,
+          "conventional_flops": 1115
         },
         {
           "operator": "M2l",
@@ -2994,7 +3104,8 @@
             "add": 49,
             "subtract": 2
           },
-          "weighted_flops": 1574
+          "weighted_flops": 1574,
+          "conventional_flops": 2864
         },
         {
           "operator": "M2l",
@@ -3008,7 +3119,8 @@
             "divide": 3,
             "add": 49
           },
-          "weighted_flops": 1114
+          "weighted_flops": 1114,
+          "conventional_flops": 1888
         },
         {
           "operator": "M2l",
@@ -3023,7 +3135,8 @@
             "add": 53,
             "subtract": 4
           },
-          "weighted_flops": 1001
+          "weighted_flops": 1001,
+          "conventional_flops": 1485
         },
         {
           "operator": "M2p",
@@ -3037,7 +3150,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 498
+          "weighted_flops": 498,
+          "conventional_flops": 806
         },
         {
           "operator": "M2p",
@@ -3052,7 +3166,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 401
+          "weighted_flops": 401,
+          "conventional_flops": 609
         },
         {
           "operator": "M2p",
@@ -3067,7 +3182,8 @@
             "add": 2,
             "subtract": 3
           },
-          "weighted_flops": 415
+          "weighted_flops": 415,
+          "conventional_flops": 616
         },
         {
           "operator": "L2l",
@@ -3078,7 +3194,8 @@
             "fma": 1298,
             "add": 64
           },
-          "weighted_flops": 1532
+          "weighted_flops": 1532,
+          "conventional_flops": 2830
         },
         {
           "operator": "L2l",
@@ -3092,7 +3209,8 @@
             "divide": 1,
             "add": 64
           },
-          "weighted_flops": 1170
+          "weighted_flops": 1170,
+          "conventional_flops": 2016
         },
         {
           "operator": "L2l",
@@ -3106,7 +3224,8 @@
             "divide": 1,
             "add": 66
           },
-          "weighted_flops": 990
+          "weighted_flops": 990,
+          "conventional_flops": 1622
         },
         {
           "operator": "L2p",
@@ -3118,7 +3237,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 503
+          "weighted_flops": 503,
+          "conventional_flops": 832
         },
         {
           "operator": "L2p",
@@ -3133,7 +3253,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 439
+          "weighted_flops": 439,
+          "conventional_flops": 678
         },
         {
           "operator": "L2p",
@@ -3148,7 +3269,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 369
+          "weighted_flops": 369,
+          "conventional_flops": 617
         },
         {
           "operator": "P2m",
@@ -3160,7 +3282,8 @@
             "add": 1,
             "subtract": 13
           },
-          "weighted_flops": 241
+          "weighted_flops": 241,
+          "conventional_flops": 341
         },
         {
           "operator": "P2l",
@@ -3173,7 +3296,8 @@
             "sqrt": 1,
             "subtract": 15
           },
-          "weighted_flops": 299
+          "weighted_flops": 299,
+          "conventional_flops": 424
         },
         {
           "operator": "Greens",
@@ -3185,7 +3309,8 @@
             "divide": 2,
             "sqrt": 1
           },
-          "weighted_flops": 203
+          "weighted_flops": 203,
+          "conventional_flops": 262
         },
         {
           "operator": "M2lDerivatives",
@@ -3196,7 +3321,8 @@
             "fma": 2024,
             "add": 64
           },
-          "weighted_flops": 2208
+          "weighted_flops": 2208,
+          "conventional_flops": 4232
         },
         {
           "operator": "M2m",
@@ -3207,7 +3333,8 @@
             "fma": 1298,
             "add": 64
           },
-          "weighted_flops": 1518
+          "weighted_flops": 1518,
+          "conventional_flops": 2816
         },
         {
           "operator": "M2m",
@@ -3221,7 +3348,8 @@
             "divide": 1,
             "add": 64
           },
-          "weighted_flops": 1163
+          "weighted_flops": 1163,
+          "conventional_flops": 2009
         },
         {
           "operator": "M2m",
@@ -3236,7 +3364,8 @@
             "add": 64,
             "subtract": 1
           },
-          "weighted_flops": 990
+          "weighted_flops": 990,
+          "conventional_flops": 1623
         },
         {
           "operator": "M2l",
@@ -3250,7 +3379,8 @@
             "add": 64,
             "subtract": 2
           },
-          "weighted_flops": 2439
+          "weighted_flops": 2439,
+          "conventional_flops": 4520
         },
         {
           "operator": "M2l",
@@ -3265,7 +3395,8 @@
             "add": 64,
             "subtract": 4
           },
-          "weighted_flops": 1647
+          "weighted_flops": 1647,
+          "conventional_flops": 2858
         },
         {
           "operator": "M2l",
@@ -3280,7 +3411,8 @@
             "add": 69,
             "subtract": 3
           },
-          "weighted_flops": 1370
+          "weighted_flops": 1370,
+          "conventional_flops": 2078
         },
         {
           "operator": "M2p",
@@ -3294,7 +3426,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 643
+          "weighted_flops": 643,
+          "conventional_flops": 1052
         },
         {
           "operator": "M2p",
@@ -3309,7 +3442,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 510
+          "weighted_flops": 510,
+          "conventional_flops": 786
         },
         {
           "operator": "M2p",
@@ -3324,7 +3458,8 @@
             "add": 2,
             "subtract": 3
           },
-          "weighted_flops": 547
+          "weighted_flops": 547,
+          "conventional_flops": 832
         },
         {
           "operator": "L2l",
@@ -3335,7 +3470,8 @@
             "fma": 2089,
             "add": 81
           },
-          "weighted_flops": 2388
+          "weighted_flops": 2388,
+          "conventional_flops": 4477
         },
         {
           "operator": "L2l",
@@ -3349,7 +3485,8 @@
             "divide": 1,
             "add": 81
           },
-          "weighted_flops": 1717
+          "weighted_flops": 1717,
+          "conventional_flops": 3026
         },
         {
           "operator": "L2l",
@@ -3363,7 +3500,8 @@
             "divide": 1,
             "add": 83
           },
-          "weighted_flops": 1353
+          "weighted_flops": 1353,
+          "conventional_flops": 2257
         },
         {
           "operator": "L2p",
@@ -3375,7 +3513,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 654
+          "weighted_flops": 654,
+          "conventional_flops": 1086
         },
         {
           "operator": "L2p",
@@ -3390,7 +3529,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 559
+          "weighted_flops": 559,
+          "conventional_flops": 869
         },
         {
           "operator": "L2p",
@@ -3405,7 +3545,8 @@
             "add": 1,
             "subtract": 3
           },
-          "weighted_flops": 482
+          "weighted_flops": 482,
+          "conventional_flops": 822
         }
       ],
       "selections": [
@@ -3840,6 +3981,14 @@
         "division": 1,
         "special_functions": "reported separately"
       },
+      "conventional_cost_model": {
+        "fma": 2,
+        "sqrt": 1,
+        "add": 1,
+        "multiply": 1,
+        "division": 1,
+        "special_functions": 1
+      },
       "lattice_radius": 6,
       "central_series_terms": 48,
       "orders": {
@@ -3853,6 +4002,11 @@
           "reciprocal_pair_weighted_flops": 80,
           "green_weighted_flops": 114444,
           "contraction_weighted_flops": 35,
+          "central_conventional_flops": 480,
+          "real_pair_conventional_flops": 169,
+          "reciprocal_pair_conventional_flops": 88,
+          "green_conventional_flops": 119214,
+          "contraction_conventional_flops": 58,
           "special_function_calls": {
             "exp": 1387,
             "erfc": 924,
@@ -3871,6 +4025,11 @@
           "reciprocal_pair_weighted_flops": 143,
           "green_weighted_flops": 194963,
           "contraction_weighted_flops": 100,
+          "central_conventional_flops": 664,
+          "real_pair_conventional_flops": 290,
+          "reciprocal_pair_conventional_flops": 156,
+          "green_conventional_flops": 206716,
+          "contraction_conventional_flops": 173,
           "special_function_calls": {
             "exp": 1387,
             "erfc": 924,
@@ -3889,6 +4048,11 @@
           "reciprocal_pair_weighted_flops": 225,
           "green_weighted_flops": 299055,
           "contraction_weighted_flops": 228,
+          "central_conventional_flops": 861,
+          "real_pair_conventional_flops": 447,
+          "reciprocal_pair_conventional_flops": 245,
+          "green_conventional_flops": 320565,
+          "contraction_conventional_flops": 409,
           "special_function_calls": {
             "exp": 1387,
             "erfc": 924,
@@ -3907,6 +4071,11 @@
           "reciprocal_pair_weighted_flops": 326,
           "green_weighted_flops": 426720,
           "contraction_weighted_flops": 457,
+          "central_conventional_flops": 1071,
+          "real_pair_conventional_flops": 640,
+          "reciprocal_pair_conventional_flops": 355,
+          "green_conventional_flops": 460761,
+          "contraction_conventional_flops": 841,
           "special_function_calls": {
             "exp": 1387,
             "erfc": 924,
@@ -3925,6 +4094,11 @@
           "reciprocal_pair_weighted_flops": 446,
           "green_weighted_flops": 577958,
           "contraction_weighted_flops": 829,
+          "central_conventional_flops": 1294,
+          "real_pair_conventional_flops": 869,
+          "reciprocal_pair_conventional_flops": 486,
+          "green_conventional_flops": 627304,
+          "contraction_conventional_flops": 1553,
           "special_function_calls": {
             "exp": 1387,
             "erfc": 924,
@@ -3943,6 +4117,11 @@
           "reciprocal_pair_weighted_flops": 585,
           "green_weighted_flops": 752769,
           "contraction_weighted_flops": 1396,
+          "central_conventional_flops": 1530,
+          "real_pair_conventional_flops": 1134,
+          "reciprocal_pair_conventional_flops": 638,
+          "green_conventional_flops": 820194,
+          "contraction_conventional_flops": 2649,
           "special_function_calls": {
             "exp": 1387,
             "erfc": 924,
@@ -3961,6 +4140,11 @@
           "reciprocal_pair_weighted_flops": 743,
           "green_weighted_flops": 951153,
           "contraction_weighted_flops": 2216,
+          "central_conventional_flops": 1779,
+          "real_pair_conventional_flops": 1435,
+          "reciprocal_pair_conventional_flops": 811,
+          "green_conventional_flops": 1039431,
+          "contraction_conventional_flops": 4245,
           "special_function_calls": {
             "exp": 1387,
             "erfc": 924,

@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
@@ -27,6 +28,7 @@
 #include <cosmictiger/particles/particle_mesh_sort.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
+#include <src/gravity/nitadori/state.hpp>
 
 namespace detail {
 
@@ -85,6 +87,31 @@ void resetPmmmSavedForces() {
     }
 }
 
+void checkedPmmmNearField(std::vector<PmmmNearParticle> const& sinks,
+    std::vector<PmmmNearParticle> const& sources, double cellWidth, bool doPotential,
+    std::vector<std::array<double, 4>>& fields) {
+    FlopCount expected = 0;
+    if (!sinks.empty() && !sources.empty()) {
+        expected = 3;
+        double const inverseRadius = 1 / getOptions().gravity.supportRadius;
+        double const inverseCubed = inverseRadius * inverseRadius * inverseRadius;
+        for (auto const& sink : sinks) {
+            std::array<double, 4> ignored{};
+            for (auto const& source : sources) {
+                expected += pmmm::detail::accumulateNearPair<true>(sink, source, cellWidth,
+                    inverseRadius, inverseCubed, doPotential, selectedGravityKernel(), ignored);
+            }
+        }
+    }
+    // The arithmetic oracle is separately tested against CountingReal. This
+    // check verifies that the production CPU/CUDA path submits it exactly once.
+    resetFlops();
+    pmmmNearField(sinks, sources, cellWidth, doPotential, fields);
+    requirePmmm(readFlops() == expected, "PP backend lost or duplicated operation counts");
+    FlopCount const expectedGpu = getOptions().compute.cuda && expected != 0 ? expected - 3 : 0;
+    requirePmmm(getGpuFlops() == expectedGpu, "PP arithmetic was charged to the wrong backend");
+}
+
 void checkPmmmNearEdges() {
     auto options = getOptions();
     bool const useCuda = options.compute.cuda;
@@ -102,7 +129,7 @@ void checkPmmmNearEdges() {
         auto const& kernel = selectedGravityKernel();
         for (size_t example = 0; example < cases.size(); ++example) {
             std::vector<std::array<double, 4>> fields{{1.0, 2.0, 3.0, 4.0}};
-            pmmmNearField(sinks, cases[example], 0.25, true, fields);
+            checkedPmmmNearField(sinks, cases[example], 0.25, true, fields);
             requirePmmm(fields.size() == 1, "near kernel changed sink output size");
             std::array<double, 4> expected{};
             if (example == 1 || example == 2) {
@@ -131,7 +158,7 @@ void checkPmmmNearEdges() {
                 cpuResults.push_back(fields[0]);
             }
             auto const withPotential = fields[0];
-            pmmmNearField(sinks, cases[example], 0.25, false, fields);
+            checkedPmmmNearField(sinks, cases[example], 0.25, false, fields);
             requirePmmm(fields[0][0] == 0.0, "force-only near evaluation computed a potential");
             for (int component = 1; component < 4; ++component) {
                 requirePmmm(fields[0][component] == withPotential[component],
@@ -139,8 +166,18 @@ void checkPmmmNearEdges() {
             }
         }
         std::vector<std::array<double, 4>> emptyFields{{1.0, 2.0, 3.0, 4.0}};
-        pmmmNearField({}, cases[1], 0.25, true, emptyFields);
+        checkedPmmmNearField({}, cases[1], 0.25, true, emptyFields);
         requirePmmm(emptyFields.empty(), "empty near sink set retained stale outputs");
+        // Cross warp/block boundaries with both self-skipped and active lanes.
+        for (size_t count : {size_t(31), size_t(33), size_t(129)}) {
+            std::vector<PmmmNearParticle> manySinks(count, sink);
+            for (size_t i = 0; i < count; ++i) {
+                manySinks[i].index += i;
+            }
+            for (bool doPotential : {false, true}) {
+                checkedPmmmNearField(manySinks, sinks, 0.25, doPotential, emptyFields);
+            }
+        }
     }
     options.compute.cuda = useCuda;
     options.gravity.supportRadius = 0.001;
@@ -1099,14 +1136,43 @@ void pmmmTest() {
         for (int fixture = 0; fixture < 5; ++fixture) {
             detail::preparePmmmFixture(fixture);
             detail::distributePmmmFixture(fixture);
+            resetFlops();
             pmmmSolve(true);
+            FlopCount const firstFlops = readFlops();
+            detail::requirePmmm(firstFlops > 0, "PMMM solve did not submit arithmetic counts");
             auto const baseline = detail::gatherPmmmSamples();
             double const error = detail::verifyPmmmReference(baseline, tolerance);
             detail::distributePmmmFixture(fixture);
+            resetFlops();
             pmmmSolve(true);
+            FlopCount const cachedFlops = readFlops();
+            detail::requirePmmm(cachedFlops > 0, "cached PMMM solve did not count its work");
+            if (fixture == 0) {
+                detail::requirePmmm(firstFlops > cachedFlops,
+                    "cached PMMM solve still charged Green initialization");
+            }
             detail::comparePmmmSamples(baseline, detail::gatherPmmmSamples());
             auto const cached = pmmmDiagnostics();
+            resetFlops();
             pmmmSolve(false);
+            FlopCount const forceFlops = readFlops();
+            detail::requirePmmm(forceFlops > 0, "force-only PMMM solve did not count its work");
+            if (fixture == 2) {
+                detail::requirePmmm(
+                    forceFlops == cachedFlops, "empty PMMM solve invented potential work");
+                // With no particles, every remaining operation is mesh work.
+                // This also detects charging FFTW's global MPI count per rank.
+                auto const& mesh = pmmm::detail::cache;
+                FlopCount const n = options.gravity.meshSize;
+                detail::requirePmmm(mesh.forwardFlops > 0 && mesh.inverseFlops > 0,
+                    "FFTW plan arithmetic was not cached on the root locality");
+                FlopCount const expected = mesh.forwardFlops + mesh.inverseFlops + 4 * n * n * n +
+                    10 * n * n * (n / 2 + 1) * mesh.terms.size() + 5 * FlopCount(hpxSize() - 1) +
+                    (gravity::kBuildPmmmNearUsesFmm ? 0 : 4 * FlopCount(hpxSize()));
+                detail::requirePmmm(forceFlops == expected,
+                    "empty PMMM mesh operation total is incomplete or counted more than once: " +
+                        std::to_string(forceFlops) + " expected " + std::to_string(expected));
+            }
             detail::comparePmmmSamples(baseline, detail::gatherPmmmSamples(), false);
             pmmmSolve(true);
             detail::comparePmmmSamples(baseline, detail::gatherPmmmSamples());

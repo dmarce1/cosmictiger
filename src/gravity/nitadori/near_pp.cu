@@ -25,15 +25,18 @@ __global__ void nearKernel(PmmmNearParticle const* sinks, size_t sinkCount,
     PmmmNearParticle const* sources, size_t sourceCount, double cellWidth,
     double inverseSupportRadius, double inverseSupportRadiusCubed, bool doPotential,
     std::array<double, 4>* fields) {
+    FlopCounter<> flops;
     for (size_t sink = size_t(blockIdx.x) * blockDim.x + threadIdx.x; sink < sinkCount;
         sink += size_t(blockDim.x) * gridDim.x) {
         std::array<double, 4> field{};
         for (size_t source = 0; source < sourceCount; ++source) {
-            accumulateNearPair(sinks[sink], sources[source], cellWidth, inverseSupportRadius,
-                inverseSupportRadiusCubed, doPotential, selectedGravityKernel(), field);
+            flops +=
+                accumulateNearPair(sinks[sink], sources[source], cellWidth, inverseSupportRadius,
+                    inverseSupportRadiusCubed, doPotential, selectedGravityKernel(), field);
         }
         fields[sink] = field;
     }
+    addGpuFlops(flops);
 }
 
 struct DeviceDeleter {
@@ -79,6 +82,7 @@ void pmmmNearFieldCuda(std::vector<PmmmNearParticle> const& sinks,
     double const inverseSupportRadius = 1 / supportRadius;
     double const inverseSupportRadiusCubed =
         inverseSupportRadius * inverseSupportRadius * inverseSupportRadius;
+    addCpuFlops(3);
     int const blocks = static_cast<int>(std::min(
         size_t(65535), (sinks.size() + size_t(kNearBlockSize) - 1) / size_t(kNearBlockSize)));
     nearKernel<<<blocks, kNearBlockSize, 0, stream.nativeHandle()>>>(deviceSinks.get(),

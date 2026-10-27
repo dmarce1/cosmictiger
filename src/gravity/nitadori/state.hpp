@@ -28,6 +28,7 @@
 #include <hpx/serialization/vector.hpp>
 #include <hpx/synchronization/condition_variable.hpp>
 
+#include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/terminal.hpp>
@@ -130,6 +131,9 @@ struct MeshCache {
     fftwf_plan forward = nullptr;
     fftwf_plan inverse = nullptr;
     fftwf_plan greenForward = nullptr;
+    FlopCount forwardFlops = 0;
+    FlopCount inverseFlops = 0;
+    FlopCount greenForwardFlops = 0;
     bool greenReady = false;
     Vector<hpx::id_type> owners;
     std::vector<int> slabOwner;
@@ -196,7 +200,7 @@ void collectiveCheck(bool okay, char const* message);
 int periodicIndex(int index);
 int signedIndex(int index);
 std::array<int, 3> coordinates(uint64_t key);
-PmmmNearParticle particle(ParticleInteger index, std::array<int, 3> const& cell);
+PmmmNearParticle particle(ParticleInteger index, std::array<int, 3> const& cell, FlopCount& flops);
 void initialize();
 void initializeGreen();
 void prepare(SolveRequest const& request);
@@ -212,7 +216,8 @@ void failSource(size_t index, std::exception_ptr failure);
 void clearGhosts();
 void deposit();
 void transform();
-void consumeField(ParticleInteger index, std::array<double, 4> const& field, KickReturn& result);
+void consumeField(ParticleInteger index, std::array<double, 4> const& field, KickReturn& result,
+    FlopCount& flops);
 std::vector<double> localExpansion(uint64_t key);
 void computeReadyCells();
 void startPipeline();

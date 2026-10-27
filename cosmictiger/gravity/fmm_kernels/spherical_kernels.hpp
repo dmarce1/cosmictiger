@@ -52,6 +52,7 @@ template <>
 class P2M<1> {
 public:
     static constexpr int kFlops_ = 9;
+    static constexpr int kConventionalFlops_ = 9;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Real mass, Real x, Real y, Real z) {
@@ -75,6 +76,7 @@ template <>
 class P2L<2> {
 public:
     static constexpr int kFlops_ = 41;
+    static constexpr int kConventionalFlops_ = 46;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Real mass, Real x, Real y, Real z) {
@@ -129,6 +131,7 @@ template <>
 class Green<2> {
 public:
     static constexpr int kFlops_ = 29;
+    static constexpr int kConventionalFlops_ = 28;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void evaluate(Output& output, Real x, Real y, Real z) {
@@ -171,6 +174,7 @@ template <>
 class M2LDerivatives<2> {
 public:
     static constexpr int kFlops_ = 29;
+    static constexpr int kConventionalFlops_ = 48;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(
@@ -221,6 +225,7 @@ template <>
 class M2M<1> {
 public:
     static constexpr int kFlops_ = 9;
+    static constexpr int kConventionalFlops_ = 12;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
@@ -245,6 +250,7 @@ template <>
 class M2L<2> {
 public:
     static constexpr int kFlops_ = 62;
+    static constexpr int kConventionalFlops_ = 78;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
@@ -321,6 +327,7 @@ template <>
 class M2P<2> {
 public:
     static constexpr int kFlops_ = 55;
+    static constexpr int kConventionalFlops_ = 68;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
@@ -385,6 +392,7 @@ template <>
 class L2L<2> {
 public:
     static constexpr int kFlops_ = 50;
+    static constexpr int kConventionalFlops_ = 74;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
@@ -455,6 +463,7 @@ template <>
 class L2P<2> {
 public:
     static constexpr int kFlops_ = 45;
+    static constexpr int kConventionalFlops_ = 69;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
@@ -517,6 +526,7 @@ template <>
 class P2M<2> {
 public:
     static constexpr int kFlops_ = 28;
+    static constexpr int kConventionalFlops_ = 38;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Real mass, Real x, Real y, Real z) {
@@ -564,6 +574,7 @@ template <>
 class P2L<3> {
 public:
     static constexpr int kFlops_ = 67;
+    static constexpr int kConventionalFlops_ = 82;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Real mass, Real x, Real y, Real z) {
@@ -651,6 +662,7 @@ template <>
 class Green<3> {
 public:
     static constexpr int kFlops_ = 46;
+    static constexpr int kConventionalFlops_ = 50;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void evaluate(Output& output, Real x, Real y, Real z) {
@@ -717,6 +729,7 @@ template <>
 class M2LDerivatives<3> {
 public:
     static constexpr int kFlops_ = 92;
+    static constexpr int kConventionalFlops_ = 160;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(
@@ -837,6 +850,7 @@ template <>
 class M2M<2> {
 public:
     static constexpr int kFlops_ = 46;
+    static constexpr int kConventionalFlops_ = 70;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
@@ -903,6 +917,7 @@ template <>
 class M2L<3> {
 public:
     static constexpr int kFlops_ = 144;
+    static constexpr int kConventionalFlops_ = 194;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
@@ -1066,6 +1081,7 @@ template <>
 class M2P<3> {
 public:
     static constexpr int kFlops_ = 94;
+    static constexpr int kConventionalFlops_ = 112;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
@@ -1169,6 +1185,7 @@ template <>
 class L2L<3> {
 public:
     static constexpr int kFlops_ = 130;
+    static constexpr int kConventionalFlops_ = 208;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
@@ -1326,6 +1343,7 @@ template <>
 class L2P<3> {
 public:
     static constexpr int kFlops_ = 89;
+    static constexpr int kConventionalFlops_ = 127;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
@@ -1430,6 +1448,7 @@ template <>
 class P2M<3> {
 public:
     static constexpr int kFlops_ = 55;
+    static constexpr int kConventionalFlops_ = 75;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Real mass, Real x, Real y, Real z) {
@@ -1511,6 +1530,7 @@ template <>
 class P2L<4> {
 public:
     static constexpr int kFlops_ = 100;
+    static constexpr int kConventionalFlops_ = 129;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Real mass, Real x, Real y, Real z) {
@@ -1640,6 +1660,7 @@ template <>
 class Green<4> {
 public:
     static constexpr int kFlops_ = 68;
+    static constexpr int kConventionalFlops_ = 79;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void evaluate(Output& output, Real x, Real y, Real z) {
@@ -1737,6 +1758,7 @@ template <>
 class M2LDerivatives<4> {
 public:
     static constexpr int kFlops_ = 220;
+    static constexpr int kConventionalFlops_ = 396;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(
@@ -1994,6 +2016,7 @@ template <>
 class M2M<3> {
 public:
     static constexpr int kFlops_ = 124;
+    static constexpr int kConventionalFlops_ = 202;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
@@ -2145,6 +2168,7 @@ template <>
 class M2L<4> {
 public:
     static constexpr int kFlops_ = 270;
+    static constexpr int kConventionalFlops_ = 393;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
@@ -2443,6 +2467,7 @@ template <>
 class M2P<4> {
 public:
     static constexpr int kFlops_ = 146;
+    static constexpr int kConventionalFlops_ = 192;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
@@ -2598,6 +2623,7 @@ template <>
 class L2L<4> {
 public:
     static constexpr int kFlops_ = 279;
+    static constexpr int kConventionalFlops_ = 472;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
@@ -2913,6 +2939,7 @@ template <>
 class L2P<4> {
 public:
     static constexpr int kFlops_ = 136;
+    static constexpr int kConventionalFlops_ = 206;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
@@ -3064,6 +3091,7 @@ template <>
 class P2M<4> {
 public:
     static constexpr int kFlops_ = 90;
+    static constexpr int kConventionalFlops_ = 124;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Real mass, Real x, Real y, Real z) {
@@ -3189,6 +3217,7 @@ template <>
 class P2L<5> {
 public:
     static constexpr int kFlops_ = 140;
+    static constexpr int kConventionalFlops_ = 187;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Real mass, Real x, Real y, Real z) {
@@ -3369,6 +3398,7 @@ template <>
 class Green<5> {
 public:
     static constexpr int kFlops_ = 95;
+    static constexpr int kConventionalFlops_ = 115;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void evaluate(Output& output, Real x, Real y, Real z) {
@@ -3504,6 +3534,7 @@ template <>
 class M2LDerivatives<5> {
 public:
     static constexpr int kFlops_ = 449;
+    static constexpr int kConventionalFlops_ = 828;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(
@@ -4001,6 +4032,7 @@ template <>
 class M2M<4> {
 public:
     static constexpr int kFlops_ = 271;
+    static constexpr int kConventionalFlops_ = 464;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
@@ -4308,6 +4340,7 @@ template <>
 class M2L<5> {
 public:
     static constexpr int kFlops_ = 454;
+    static constexpr int kConventionalFlops_ = 712;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
@@ -4801,6 +4834,7 @@ template <>
 class M2P<5> {
 public:
     static constexpr int kFlops_ = 216;
+    static constexpr int kConventionalFlops_ = 299;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
@@ -5026,6 +5060,7 @@ template <>
 class L2L<5> {
 public:
     static constexpr int kFlops_ = 464;
+    static constexpr int kConventionalFlops_ = 722;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
@@ -5535,6 +5570,7 @@ template <>
 class L2P<5> {
 public:
     static constexpr int kFlops_ = 198;
+    static constexpr int kConventionalFlops_ = 313;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
@@ -5748,6 +5784,7 @@ template <>
 class P2M<5> {
 public:
     static constexpr int kFlops_ = 132;
+    static constexpr int kConventionalFlops_ = 184;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Real mass, Real x, Real y, Real z) {
@@ -5926,6 +5963,7 @@ template <>
 class P2L<6> {
 public:
     static constexpr int kFlops_ = 185;
+    static constexpr int kConventionalFlops_ = 254;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Real mass, Real x, Real y, Real z) {
@@ -6164,6 +6202,7 @@ template <>
 class Green<6> {
 public:
     static constexpr int kFlops_ = 125;
+    static constexpr int kConventionalFlops_ = 156;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void evaluate(Output& output, Real x, Real y, Real z) {
@@ -6342,6 +6381,7 @@ template <>
 class M2LDerivatives<6> {
 public:
     static constexpr int kFlops_ = 821;
+    static constexpr int kConventionalFlops_ = 1540;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(
@@ -7224,6 +7264,7 @@ template <>
 class M2M<5> {
 public:
     static constexpr int kFlops_ = 465;
+    static constexpr int kConventionalFlops_ = 724;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
@@ -7734,6 +7775,7 @@ template <>
 class M2L<6> {
 public:
     static constexpr int kFlops_ = 710;
+    static constexpr int kConventionalFlops_ = 1032;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
@@ -8498,6 +8540,7 @@ template <>
 class M2P<6> {
 public:
     static constexpr int kFlops_ = 304;
+    static constexpr int kConventionalFlops_ = 453;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
@@ -8809,6 +8852,7 @@ template <>
 class L2L<6> {
 public:
     static constexpr int kFlops_ = 695;
+    static constexpr int kConventionalFlops_ = 1113;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
@@ -9562,6 +9606,7 @@ template <>
 class L2P<6> {
 public:
     static constexpr int kFlops_ = 274;
+    static constexpr int kConventionalFlops_ = 447;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
@@ -9851,6 +9896,7 @@ template <>
 class P2M<6> {
 public:
     static constexpr int kFlops_ = 183;
+    static constexpr int kConventionalFlops_ = 257;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Real mass, Real x, Real y, Real z) {
@@ -10093,6 +10139,7 @@ template <>
 class P2L<7> {
 public:
     static constexpr int kFlops_ = 239;
+    static constexpr int kConventionalFlops_ = 334;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Real mass, Real x, Real y, Real z) {
@@ -10400,6 +10447,7 @@ template <>
 class Green<7> {
 public:
     static constexpr int kFlops_ = 162;
+    static constexpr int kConventionalFlops_ = 206;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void evaluate(Output& output, Real x, Real y, Real z) {
@@ -10630,6 +10678,7 @@ template <>
 class M2LDerivatives<7> {
 public:
     static constexpr int kFlops_ = 1388;
+    static constexpr int kConventionalFlops_ = 2636;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(
@@ -12094,6 +12143,7 @@ template <>
 class M2M<6> {
 public:
     static constexpr int kFlops_ = 696;
+    static constexpr int kConventionalFlops_ = 1115;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
@@ -12848,6 +12898,7 @@ template <>
 class M2L<7> {
 public:
     static constexpr int kFlops_ = 1001;
+    static constexpr int kConventionalFlops_ = 1485;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
@@ -13918,6 +13969,7 @@ template <>
 class M2P<7> {
 public:
     static constexpr int kFlops_ = 401;
+    static constexpr int kConventionalFlops_ = 609;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
@@ -14326,6 +14378,7 @@ template <>
 class L2L<7> {
 public:
     static constexpr int kFlops_ = 990;
+    static constexpr int kConventionalFlops_ = 1622;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
@@ -15389,6 +15442,7 @@ template <>
 class L2P<7> {
 public:
     static constexpr int kFlops_ = 369;
+    static constexpr int kConventionalFlops_ = 617;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
@@ -15773,6 +15827,7 @@ template <>
 class P2M<7> {
 public:
     static constexpr int kFlops_ = 241;
+    static constexpr int kConventionalFlops_ = 341;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Real mass, Real x, Real y, Real z) {
@@ -16088,6 +16143,7 @@ template <>
 class P2L<8> {
 public:
     static constexpr int kFlops_ = 299;
+    static constexpr int kConventionalFlops_ = 424;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Real mass, Real x, Real y, Real z) {
@@ -16472,6 +16528,7 @@ template <>
 class Green<8> {
 public:
     static constexpr int kFlops_ = 203;
+    static constexpr int kConventionalFlops_ = 262;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void evaluate(Output& output, Real x, Real y, Real z) {
@@ -16760,6 +16817,7 @@ template <>
 class M2LDerivatives<8> {
 public:
     static constexpr int kFlops_ = 2208;
+    static constexpr int kConventionalFlops_ = 4232;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(
@@ -19061,6 +19119,7 @@ template <>
 class M2M<7> {
 public:
     static constexpr int kFlops_ = 990;
+    static constexpr int kConventionalFlops_ = 1623;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
@@ -20124,6 +20183,7 @@ template <>
 class M2L<8> {
 public:
     static constexpr int kFlops_ = 1370;
+    static constexpr int kConventionalFlops_ = 2078;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
@@ -21580,6 +21640,7 @@ template <>
 class M2P<8> {
 public:
     static constexpr int kFlops_ = 510;
+    static constexpr int kConventionalFlops_ = 786;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
@@ -22097,6 +22158,7 @@ template <>
 class L2L<8> {
 public:
     static constexpr int kFlops_ = 1353;
+    static constexpr int kConventionalFlops_ = 2257;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {
@@ -23540,6 +23602,7 @@ template <>
 class L2P<8> {
 public:
     static constexpr int kFlops_ = 482;
+    static constexpr int kConventionalFlops_ = 822;
     template <typename Real, typename Output, typename Source = Output,
         typename Derivatives = Source>
     CUDA_EXPORT static void add(Output& output, Source const& source, Real x, Real y, Real z) {

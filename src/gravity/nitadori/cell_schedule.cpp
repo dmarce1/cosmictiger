@@ -104,6 +104,7 @@ void computeReadyCells() {
             state.farReady.get();
             double const h = 1.0 / cache.meshSize;
             double const localTrace = (4 * std::numbers::pi / 3) * h * h * state.background[0];
+            FlopCount flops = 4;
             KickReturn result;
             size_t compact = 0;
             for (size_t sink : sinks) {
@@ -116,15 +117,18 @@ void computeReadyCells() {
                         throw std::runtime_error("PMMM batch output lost its sink mapping");
                     }
                     std::array<double, 4> field{};
-                    auto const value = particle(index, center);
-                    evaluate(cache.order, field, coefficients.data(), localTrace, value.offset, h);
+                    auto const value = particle(index, center, flops);
+                    flops += evaluate(
+                        cache.order, field, coefficients.data(), localTrace, value.offset, h);
                     field[0] += fields.potential[compact];
                     for (int dim = 0; dim < kDimensions; ++dim) {
                         field[dim + 1] += fields.acceleration[dim][compact];
                     }
-                    consumeField(index, field, result);
+                    flops += 4;
+                    consumeField(index, field, result, flops);
                 }
             }
+            addCpuFlops(flops);
             {
                 std::lock_guard<MutexType> lock(state.queueMutex);
                 state.kickResult += result;

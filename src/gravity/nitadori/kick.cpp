@@ -25,8 +25,9 @@ HPX_PLAIN_ACTION(particleMeshFinishKick, ParticleMeshFinishKickAction);
 
 KickReturn particleMeshApplyField(ParticleInteger index,
     Array<float, kDimensions> const& acceleration, float potential,
-    KickParameters const& parameters) {
+    KickParameters const& parameters, FlopCount* flopCount) {
     KickReturn result;
+    FlopCounter<> flops;
     auto const& options = getOptions();
     auto& rung = particlesRung(index);
     if (rung < parameters.minRung) {
@@ -51,6 +52,7 @@ KickReturn particleMeshApplyField(ParticleInteger index,
     float const gz = acceleration[kZDimension];
     float const effectiveRadius =
         parameters.gravitySupportRadius / selectedGravityKernel().supportRadiusPerEffectiveRadius;
+    flops += 1;
     float const mass = particlesMass(index);
     float const oldKinetic = 0.5f * mass * sqr(vx, vy, vz);
     int proposedRung = 0;
@@ -68,14 +70,18 @@ KickReturn particleMeshApplyField(ParticleInteger index,
             THROW_ERROR("PMMM kick timestep exceeds the available rung range\n");
         }
         proposedRung = int(requestedRung);
+        // Squared acceleration, timestep bound, and division/log2/ceil rung proposal.
+        flops += 15;
     }
     if (parameters.htime) {
         float const sign = parameters.sign * (parameters.top ? 1.0f : -1.0f);
         float const halfStep = 0.5f * rungDt[parameters.minRung] * parameters.t0;
+        flops += 3;
         if (parameters.ascending && !parameters.firstCall) {
             vx = std::fma(sign * gx, halfStep, vx);
             vy = std::fma(sign * gy, halfStep, vy);
             vz = std::fma(sign * gz, halfStep, vz);
+            flops += 3 * kDimensions;
         }
         result.kin = 0.5f * mass * sqr(vx, vy, vz);
         result.xmom = mass * vx;
@@ -90,6 +96,7 @@ KickReturn particleMeshApplyField(ParticleInteger index,
             vx = std::fma(sign * gx, halfStep, vx);
             vy = std::fma(sign * gy, halfStep, vy);
             vz = std::fma(sign * gz, halfStep, vz);
+            flops += 3 * kDimensions;
         }
     } else {
         float const sign = parameters.sign;
@@ -98,6 +105,7 @@ KickReturn particleMeshApplyField(ParticleInteger index,
             vx = std::fma(sign * gx, halfStep, vx);
             vy = std::fma(sign * gy, halfStep, vy);
             vz = std::fma(sign * gz, halfStep, vz);
+            flops += 2 + 3 * kDimensions;
         }
         result.kin = 0.5f * mass * sqr(vx, vy, vz);
         result.xmom = mass * vx;
@@ -117,6 +125,7 @@ KickReturn particleMeshApplyField(ParticleInteger index,
         vx = std::fma(sign * gx, halfStep, vx);
         vy = std::fma(sign * gy, halfStep, vy);
         vz = std::fma(sign * gz, halfStep, vz);
+        flops += 2 + 3 * kDimensions;
         result.darkMatterKineticCorrection =
             0.5f * mass * (sqr(synchronizedVx, synchronizedVy, synchronizedVz) - sqr(vx, vy, vz));
         result.darkMatterXMomentumCorrection = mass * (synchronizedVx - vx);
@@ -128,6 +137,12 @@ KickReturn particleMeshApplyField(ParticleInteger index,
     }
     result.pot = parameters.doPhi ? 0.5f * mass * potential : 0.0;
     result.dkin = 0.5f * mass * sqr(vx, vy, vz) - oldKinetic;
+    // Energy/momentum diagnostics and their reductions are deliberately excluded.
+    if (flopCount != nullptr) {
+        *flopCount += flops;
+    } else {
+        addCpuFlops(flops);
+    }
     return result;
 }
 
@@ -140,6 +155,7 @@ KickReturn particleMeshPrepareKick(
     }
     auto const& options = getOptions();
     double const effectiveRadius = pmmmEffectiveRadius();
+    addCpuFlops(1);    // Support-radius conversion, once per locality.
     double const sign = options.initial.createGlass ? -1.0 : 1.0;
     size_t const count = particlesSize();
     size_t const workers = std::min(
@@ -172,14 +188,18 @@ KickReturn particleMeshPrepareKick(
                     bool const gas = options.hydro.enabled && particlesType(i) == kSphType;
                     double const oldHalfStep =
                         firstCall ? 0.0 : std::ldexp(0.5 * baseTimestep, -previousRung);
+                    // Acceleration norm, timestep/rung proposal, and optional old half-step.
+                    flops += 2 * kDimensions + 8 + (firstCall ? 0 : 2);
                     double velocitySquared = 0.0;
                     for (int dim = 0; dim < kDimensions; ++dim) {
                         if (gas) {
                             sphParticlesGravityAcceleration(dim, particlesCatIndex(i)) =
                                 sign * acceleration[dim];
+                            flops += 1;
                         } else {
                             particlesVel(dim, i) = std::fma(
                                 sign * acceleration[dim], oldHalfStep, particlesVel(dim, i));
+                            flops += 3;
                         }
                         if (saveParticleAcceleration(options.analysis)) {
                             particlesGravityAcceleration(dim, i) = acceleration[dim];
@@ -198,7 +218,6 @@ KickReturn particleMeshPrepareKick(
                     result.ymom += mass * particlesVel(kYDimension, i);
                     result.zmom += mass * particlesVel(kZDimension, i);
                     result.nmom += mass * std::sqrt(velocitySquared);
-                    flops += 32;
                 }
                 addCpuFlops(flops);
                 return result;
@@ -224,6 +243,7 @@ void particleMeshFinishKick(double baseTimestep, int rung) {
     }
     double const sign = getOptions().initial.createGlass ? -1.0 : 1.0;
     double const halfStep = sign * std::ldexp(0.5 * baseTimestep, -rung);
+    addCpuFlops(3);    // Half-step multiplication, ldexp, and sign multiplication.
     bool const hydro = getOptions().hydro.enabled;
     size_t const count = particlesSize();
     size_t const workers = std::min(

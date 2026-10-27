@@ -2,6 +2,8 @@
 
 #include "actions.hpp"
 
+#include <cosmictiger/gravity/nitadori/fft_flops.hpp>
+
 namespace pmmm::detail {
 
 void mpiCheck(int status, char const* operation) {
@@ -133,6 +135,21 @@ void initialize() {
         }
         collectiveCheck(cache.forward && cache.greenForward && cache.inverse,
             "Unable to create the cached PMMM FFT plans");
+        bool counted = true;
+        try {
+            std::lock_guard<std::mutex> lock(fftwPlannerMutex());
+            cache.forwardFlops = fftPlanFlops(cache.forward);
+            cache.greenForwardFlops = fftPlanFlops(cache.greenForward);
+            cache.inverseFlops = fftPlanFlops(cache.inverse);
+            // FFTW's MPI cost hook already sums all ranks. Every rank must
+            // query, but the distributed application counter must submit once.
+            if (hpxRank() != 0) {
+                cache.forwardFlops = cache.greenForwardFlops = cache.inverseFlops = 0;
+            }
+        } catch (...) {
+            counted = false;
+        }
+        collectiveCheck(counted, "PMMM FFT operation count exceeds the supported range");
         ++state.diagnostics.planBuilds;
         int64_t const slab[2] = {cache.localBegin, cache.localSize};
         mpiCheck(
@@ -169,9 +186,11 @@ void initializeGreen() {
     }
     int const n = cache.meshSize;
     double const h = 1.0 / n;
+    addCpuFlops(1);
     prepareCollectively([&]() {
         std::fill_n(cache.localReal, 2 * cache.localAllocation, 0.0f);
         parallelFor(size_t(cache.localSize) * n, [&](size_t row) {
+            FlopCount flops = 0;
             int const x = signedIndex(int(row / n + cache.localBegin));
             int const y = signedIndex(int(row % n));
             std::vector<double> coefficients(cache.localCount);
@@ -179,7 +198,8 @@ void initializeGreen() {
                 int const dz = signedIndex(z);
                 bool const near =
                     std::max({std::abs(x), std::abs(y), std::abs(dz)}) <= cache.nearWidth;
-                green(cache.order, coefficients.data(), {x * h, y * h, dz * h}, h, near);
+                flops +=
+                    3 + green(cache.order, coefficients.data(), {x * h, y * h, dz * h}, h, near);
                 size_t const begin = (row * (2 * (n / 2 + 1)) + z) * cache.localCount;
                 for (int component = 0; component < cache.localCount; ++component) {
                     if (!std::isfinite(coefficients[component]) ||
@@ -189,9 +209,11 @@ void initializeGreen() {
                     cache.localReal[begin + component] = coefficients[component];
                 }
             }
+            addCpuFlops(flops);
         });
     });
     hpx::run_as_os_thread([]() { fftwf_execute(cache.greenForward); }).get();
+    addCpuFlops(cache.greenForwardFlops);
     cache.greenReady = true;
     ++state.diagnostics.greenBuilds;
 }
@@ -218,6 +240,7 @@ void transform() {
         }
         background[4] = state.radialTrace;
         state.diagnostics.depositedMass = background[0];
+        addCpuFlops(4 * FlopCount(cache.cellCount()));
     });
     hpx::run_as_os_thread([&]() {
         mpiCheck(MPI_Allreduce(background.data(), state.background.data(), 5, MPI_DOUBLE, MPI_SUM,
@@ -225,6 +248,12 @@ void transform() {
             "periodic background reduction");
         fftwf_execute(cache.forward);
     }).get();
+    addCpuFlops(cache.forwardFlops);
+    // Count the logical five-component sum once across all localities. MPI's
+    // internal transport/redundant reduction implementation is not measured.
+    if (hpxRank() == 0) {
+        addCpuFlops(5 * FlopCount(hpxSize() - 1));
+    }
     prepareCollectively([&]() {
         size_t const modes = size_t(cache.spectralSize) * n * (n / 2 + 1);
         parallelFor(modes, [&](size_t mode) {
@@ -234,10 +263,8 @@ void transform() {
             for (auto const& term : cache.terms) {
                 auto const& source = cache.sourceSpectrum[mode * cache.sourceCount + term.source];
                 auto const& kernel = cache.greenSpectrum[mode * cache.localCount + term.green];
-                real[term.local] +=
-                    term.weight * (double(source[0]) * kernel[0] - double(source[1]) * kernel[1]);
-                imaginary[term.local] +=
-                    term.weight * (double(source[0]) * kernel[1] + double(source[1]) * kernel[0]);
+                accumulateFourierTerm(real[term.local], imaginary[term.local], term.weight,
+                    double(source[0]), double(source[1]), double(kernel[0]), double(kernel[1]));
             }
             for (int component = 0; component < cache.localCount; ++component) {
                 if (!std::isfinite(real[component]) || !std::isfinite(imaginary[component]) ||
@@ -250,8 +277,10 @@ void transform() {
                 value[1] = imaginary[component];
             }
         });
+        addCpuFlops(kFourierTermFlops * FlopCount(modes) * cache.terms.size());
     });
     hpx::run_as_os_thread([]() { fftwf_execute(cache.inverse); }).get();
+    addCpuFlops(cache.inverseFlops);
     state.farPromise->set_value();
 }
 

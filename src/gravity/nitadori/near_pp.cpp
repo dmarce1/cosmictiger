@@ -33,10 +33,12 @@ void pmmmNearField(std::vector<PmmmNearParticle> const& sinks,
     double const inverseSupportRadiusCubed =
         inverseSupportRadius * inverseSupportRadius * inverseSupportRadius;
     auto const& kernel = selectedGravityKernel();
+    FlopCounter<> flops = 3;
     for (size_t sink = 0; sink < sinks.size(); ++sink) {
         for (auto const& source : sources) {
-            pmmm::detail::accumulateNearPair(sinks[sink], source, cellWidth, inverseSupportRadius,
-                inverseSupportRadiusCubed, doPotential, kernel, fields[sink]);
+            flops += pmmm::detail::accumulateNearPair(sinks[sink], source, cellWidth,
+                inverseSupportRadius, inverseSupportRadiusCubed, doPotential, kernel, fields[sink]);
         }
     }
+    addCpuFlops(flops);
 }

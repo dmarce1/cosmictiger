@@ -7,14 +7,17 @@
 
 #pragma once
 
+#include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 
 // Consume one completed, gm-scaled near+far field without retaining a force
 // array. Particle membership is fixed by the caller's current ladder stage;
 // only this owned sink's velocity/rung and requested diagnostics are modified.
+// Accumulate source-operation counts in flopCount when supplied, so callers can
+// submit a whole sink batch once; otherwise submit this particle's count here.
 KickReturn particleMeshApplyField(ParticleInteger index,
     Array<float, kDimensions> const& acceleration, float potential,
-    KickParameters const& parameters);
+    KickParameters const& parameters, FlopCount* flopCount = nullptr);
 
 // PMMM integration using the total far-field and near-field force.
 // Both operations recurse over all localities. Preparation closes the previous

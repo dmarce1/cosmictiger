@@ -90,16 +90,19 @@ std::vector<ContractionTerm> contractionTerms(int order) {
     return terms;
 }
 
-void addMoments(int order, double* moments, double mass, std::array<double, 3> const& offset) {
+FlopCount addMoments(int order, double* moments, double mass, std::array<double, 3> const& offset) {
     detail::checkOrder(order);
+    FlopCount count = 0;
     fmmDispatch(order, [&](auto selectedOrder) {
         constexpr int kDegree = decltype(selectedOrder)::value - 2;
         cosmictiger::gravity::spherical::detail::P2M<kDegree>::template add<double>(
             moments, mass, offset[0], offset[1], offset[2]);
+        count = cosmictiger::gravity::spherical::detail::P2M<kDegree>::kConventionalFlops_;
     });
+    return count;
 }
 
-void green(int order, double* coefficients, std::array<double, 3> const& boxOffset,
+FlopCount green(int order, double* coefficients, std::array<double, 3> const& boxOffset,
     double cellWidth, bool near) {
     detail::checkOrder(order);
     if (!(cellWidth > 0.0) || !std::isfinite(cellWidth)) {
@@ -113,11 +116,13 @@ void green(int order, double* coefficients, std::array<double, 3> const& boxOffs
     if (!near && boxOffset[0] == 0.0 && boxOffset[1] == 0.0 && boxOffset[2] == 0.0) {
         throw std::invalid_argument("PMMM primary origin must be excluded by the near-field mask");
     }
+    FlopCount count = 0;
     fmmDispatch(order, [&](auto selectedOrder) {
         constexpr int kDegree = decltype(selectedOrder)::value - 1;
         double trace = 0.0;
         cosmictiger::gravity::spherical::EwaldGreen<kDegree>::template evaluate<double>(
             coefficients, trace, boxOffset[0], boxOffset[1], boxOffset[2]);
+        count = cosmictiger::gravity::spherical::EwaldGreen<kDegree>::kConventionalFlops_;
         if (!near) {
             std::array<double, (kDegree + 1) * (kDegree + 1)> primary;
             cosmictiger::gravity::spherical::detail::Green<kDegree>::template evaluate<double>(
@@ -125,6 +130,8 @@ void green(int order, double* coefficients, std::array<double, 3> const& boxOffs
             for (size_t slot = 0; slot < primary.size(); ++slot) {
                 coefficients[slot] += primary[slot];
             }
+            count += cosmictiger::gravity::spherical::detail::Green<kDegree>::kConventionalFlops_ +
+                primary.size();
         }
         double scale = 1.0;
         for (int rank = 0; rank <= kDegree; ++rank) {
@@ -133,24 +140,29 @@ void green(int order, double* coefficients, std::array<double, 3> const& boxOffs
             }
             scale *= cellWidth;
         }
+        count += (kDegree + 1) * (kDegree + 1) + (kDegree + 1);
     });
+    return count;
 }
 
-void evaluate(int order, std::array<double, 4>& field, double const* coefficients,
+FlopCount evaluate(int order, std::array<double, 4>& field, double const* coefficients,
     double localTrace, std::array<double, 3> const& cellOffset, double cellWidth) {
     detail::checkOrder(order);
     if (!(cellWidth > 0.0) || !std::isfinite(cellWidth)) {
         throw std::invalid_argument("PMMM cell width must be finite and positive");
     }
     field = {};
+    FlopCount count = 0;
     fmmDispatch(order, [&](auto selectedOrder) {
         constexpr int kDegree = decltype(selectedOrder)::value - 1;
         cosmictiger::gravity::spherical::EwaldL2P<kDegree>::template add<double>(
             field, coefficients, localTrace, cellOffset[0], cellOffset[1], cellOffset[2]);
+        count = cosmictiger::gravity::spherical::EwaldL2P<kDegree>::kConventionalFlops_;
     });
     for (int component = 1; component < 4; ++component) {
         field[component] /= cellWidth;
     }
+    return count + 3;
 }
 
 }    // namespace pmmm

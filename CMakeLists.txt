@@ -1393,13 +1393,26 @@ if(BUILD_TESTING)
     target_compile_options(mesh_domain_test PRIVATE -fno-fast-math -ffp-contract=off)
     cosmictiger_add_gtest(NAME mesh_domain TARGET mesh_domain_test
         PROPERTIES TIMEOUT 30 LABELS "particle_mesh;cpu")
-    add_executable(pmmm_kernels_test tests/gravity/nitadori/pmmm_kernels.cpp src/gravity/nitadori/kernels.cpp)
+    add_executable(pmmm_kernels_test tests/gravity/nitadori/pmmm_kernels.cpp
+        tests/gravity/nitadori/pmmm_kernel_flops.cpp src/gravity/nitadori/kernels.cpp)
     target_include_directories(pmmm_kernels_test PRIVATE ${PROJECT_SOURCE_DIR})
     cosmictiger_use_generated_kernels(pmmm_kernels_test)
     target_link_libraries(pmmm_kernels_test PRIVATE HPX::hpx Boost::boost)
     target_compile_options(pmmm_kernels_test PRIVATE -fno-fast-math -ffp-contract=off)
     cosmictiger_add_gtest(NAME pmmm_kernels TARGET pmmm_kernels_test
         PROPERTIES TIMEOUT 180 LABELS "pmmm;cpu")
+    add_executable(pmmm_near_flops_test tests/gravity/nitadori/near_pp_flops.cpp)
+    target_include_directories(pmmm_near_flops_test PRIVATE ${PROJECT_SOURCE_DIR})
+    target_link_libraries(pmmm_near_flops_test PRIVATE HPX::hpx Boost::boost)
+    target_compile_options(pmmm_near_flops_test PRIVATE -fno-fast-math -ffp-contract=off)
+    cosmictiger_add_gtest(NAME pmmm_near_flops TARGET pmmm_near_flops_test
+        PROPERTIES TIMEOUT 60 LABELS "pmmm;cpu;flops")
+    add_executable(pmmm_fft_flops_test tests/gravity/nitadori/fft_flops.cpp)
+    target_include_directories(pmmm_fft_flops_test PRIVATE ${PROJECT_SOURCE_DIR} ${FFTW3F_INCLUDE_DIR})
+    target_link_libraries(pmmm_fft_flops_test PRIVATE HPX::hpx Boost::boost ${FFTW3F_LIBRARY})
+    target_compile_options(pmmm_fft_flops_test PRIVATE -fno-fast-math -ffp-contract=off)
+    cosmictiger_add_gtest(NAME pmmm_fft_flops TARGET pmmm_fft_flops_test
+        PROPERTIES TIMEOUT 60 LABELS "pmmm;cpu;flops")
     if(COSMICTIGER_GRAVITY_METHOD STREQUAL "pmmm")
         foreach(position_type IN ITEMS fixed32 fixed64)
             set(pmmm_workdir "${PROJECT_BINARY_DIR}/tests/pmmm_${position_type}")

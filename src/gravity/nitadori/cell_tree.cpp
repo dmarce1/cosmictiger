@@ -16,6 +16,7 @@
 #include <stdexcept>
 #include <unordered_map>
 
+#include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/gravity/nitadori/cell_tree.hpp>
 #include <cosmictiger/gravity/tree_build.hpp>
 #include <cosmictiger/particles/domain.hpp>
@@ -98,6 +99,7 @@ Range<double> treeCellBox(uint64_t key, int meshSize) {
         box.begin[dim] = double(coordinate[dim]) / meshSize;
         box.end[dim] = double(coordinate[dim] + 1) / meshSize;
     }
+    addCpuFlops(2 * kDimensions);
     return box;
 }
 
@@ -106,6 +108,10 @@ Range<double> treeCellBox(uint64_t key, int meshSize) {
 // including odd meshes and fixed64 values whose toDouble() rounds to one.
 void treeClampCellCenter(Array<double, kDimensions>& center, Array<Position, kDimensions>& position,
     TreeCellBuild const& cellBuild) {
+    FlopCounter<> flops;
+    // Fixed64's host conversion splits the scaled value into two safe uint32
+    // limbs: one scaling multiply plus two multiplies and a subtraction.
+    constexpr FlopCount kPositionConstructionFlops = kPositionBits == 64 ? 4 : 1;
     auto const coordinate = treeCellCoordinates(cellBuild.cellKey, cellBuild.meshSize);
     unsigned __int128 const scale = static_cast<unsigned __int128>(1) << kPositionBits;
     auto const meshSize = static_cast<uint64_t>(cellBuild.meshSize);
@@ -120,18 +126,25 @@ void treeClampCellCenter(Array<double, kDimensions>& center, Array<Position, kDi
         upperPosition.raw() = upper;
         double lowerValue = lowerPosition.toDouble();
         double upperValue = upperPosition.toDouble();
+        flops += 2 + kPositionConstructionFlops;
         if (Position(lowerValue).raw() < lower) {
             lowerValue = std::nextafter(lowerValue, 1.0);
+            flops += 1;
         }
+        // The upper conversion is skipped when rounding has already reached one.
+        flops += upperValue < 1.0 ? kPositionConstructionFlops : 0;
         if (upperValue >= 1.0 || Position(upperValue).raw() > upper) {
             upperValue = std::nextafter(upperValue, 0.0);
+            flops += 1;
         }
         position[dim] = std::clamp(center[dim], lowerValue, upperValue);
         center[dim] = position[dim].toDouble();
+        flops += kPositionConstructionFlops + 1;
         if (particleMeshCoordinate(position[dim].raw(), cellBuild.meshSize) != coordinate[dim]) {
             throw std::runtime_error("Tree multipole center left its mesh cell");
         }
     }
+    addCpuFlops(flops);
 }
 
 }    // namespace detail

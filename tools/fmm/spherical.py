@@ -414,9 +414,11 @@ def emitFunction(className,parameters,g,outputs,arguments,additive=True,operatio
                 value = g.add(g.symbol(f'output[{slot}]'),value)
         roots.append(value)
     lines,counts,flops = g.emit(roots)
+    conventional = flops + counts.get('fma', 0) - 6 * counts.get('sqrt', 0)
     method = 'add' if additive else 'evaluate'
     declaration = f'template <> class {className}<{parameters}> {{\npublic:\n'
     declaration += f'    static constexpr int kFlops_ = {flops};\n'
+    declaration += f'    static constexpr int kConventionalFlops_ = {conventional};\n'
     declaration += '    template <typename Real, typename Output, typename Source = Output, typename Derivatives = Source>\n'
     declaration += f'    CUDA_EXPORT static void {method}(Output &output, {arguments}) {{\n'
     declaration += '\n'.join(lines)+'\n'
@@ -424,7 +426,7 @@ def emitFunction(className,parameters,g,outputs,arguments,additive=True,operatio
         declaration += f'        output[{slot}] = {g.expression(root)};\n'
     declaration += '    }\n};\n'
     record = dict(operator=operation or className,degree=degree,variant=variant,
-                  arithmetic=counts,weighted_flops=flops)
+                  arithmetic=counts,weighted_flops=flops,conventional_flops=conventional)
     return declaration,record
 
 
@@ -543,6 +545,7 @@ namespace cosmictiger::gravity::spherical::detail {
 def generate(minLocalDegree=2,maxLocalDegree=8):
     parts = [HEADER]
     report = {'representation':'Spherical', 'cost_model':{'add':1,'subtract':1,'multiply':1,'divide':1,'fma':1,'sqrt':7},
+              'conventional_cost_model':{'add':1,'subtract':1,'multiply':1,'divide':1,'fma':2,'sqrt':1},
               'description':'Exact live emitted arithmetic per lane, including geometry and output accumulation. Unary signs, copies, comparisons and selects cost zero. Division by square root costs eight. These weighted costs are not measured timings.',
               'kernels':[],'selections':[]}
     for operation in ('M2m','M2l','M2p','L2l','L2p','P2m','P2l','Greens','M2lDerivatives'):
