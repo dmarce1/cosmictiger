@@ -1,5 +1,5 @@
 # CosmicTiger - MPI startup integration regression; BSL-1.0.
-"""Check hwloc defaults, required MPI thread support, and fixed64 dispatch."""
+"""Check hwloc defaults, MPI thread support, profiling shutdown, and fixed64 dispatch."""
 
 import argparse
 import os
@@ -9,10 +9,19 @@ import subprocess
 
 
 def run_case(args, name, *, level=None, ranks=1, target_rank=None, fixed64=False,
-             hwloc_components=None):
+             hwloc_components=None, threads=2, apex_reports=False):
     workdir = args.workdir.resolve() / name
     workdir.mkdir(parents=True, exist_ok=True)
     environment = os.environ.copy()
+    if apex_reports:
+        # Exercise profiling shutdown independently of user report opt-outs.
+        environment = {key: value for key, value in environment.items()
+                       if not key.startswith(("APEX_", "TAU_"))}
+        report_directory = workdir / "apex"
+        report_directory.mkdir(exist_ok=True)
+        environment["APEX_OUTPUT_FILE_PATH"] = str(report_directory)
+        environment.update({key: "1" for key in
+                            ("APEX_SCREEN_OUTPUT", "APEX_CSV_OUTPUT", "APEX_TASKTREE_OUTPUT")})
     environment["CUDA_VISIBLE_DEVICES"] = ""
     environment["OMP_NUM_THREADS"] = "1"
     environment["OPENBLAS_NUM_THREADS"] = "1"
@@ -32,13 +41,14 @@ def run_case(args, name, *, level=None, ranks=1, target_rank=None, fixed64=False
     if target_rank is not None:
         environment["COSMICTIGER_TEST_MPI_THREAD_RANK"] = str(target_rank)
     command = [str(args.executable.resolve()), "--help", "--compute.cuda=false",
-               "--hpx:threads=2", "--hpx:bind=none"]
+               f"--hpx:threads={threads}", "--hpx:bind=none"]
     if fixed64:
         command.append("--compute.positionType=fixed64")
     if ranks > 1:
         command = ([args.mpi_exec, args.mpi_numproc_flag, str(ranks)]
                    + args.mpi_preflag + command[:1] + args.mpi_postflag + command[1:])
         command.append(f"--hpx:localities={ranks}")
+        command.append("--hpx:ini=hpx.parcel.mpi.enable=1")
     log_path = workdir / "startup.log"
     with log_path.open("w") as log:
         with subprocess.Popen(command, cwd=workdir, env=environment, text=True,
@@ -53,7 +63,7 @@ def run_case(args, name, *, level=None, ranks=1, target_rank=None, fixed64=False
                 except subprocess.TimeoutExpired:
                     os.killpg(process.pid, signal.SIGKILL)
                     process.wait()
-                raise RuntimeError(f"{name}: MPI startup timed out; see {log_path}")
+                raise RuntimeError(f"{name}: MPI startup or shutdown timed out; see {log_path}")
     output = log_path.read_text()
     for rank in range(ranks):
         for stage in ("initialized", "finalized"):
@@ -81,6 +91,9 @@ def main():
     args = parser.parse_args()
     if args.mpi_exec:
         run_case(args, "multiple_two_ranks", ranks=2)
+        # A single worker exposes collective profiling shutdown deadlocks.
+        run_case(args, "profiling_shutdown_three_ranks", ranks=3, threads=1,
+                 apex_reports=True)
         run_case(args, "serialized_one_rank", level="MPI_THREAD_SERIALIZED",
                  ranks=2, target_rank=1)
     else:

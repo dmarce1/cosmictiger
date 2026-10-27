@@ -130,6 +130,11 @@ void setOptions(Options const& opts) {
         throw std::invalid_argument("Gravity solver and PMMM near method must match this "
                                     "executable's build configuration");
     }
+    if (opts.run.hierarchicalGravity !=
+        (integration::kBuildUsesHierarchical && opts.gravity.enabled)) {
+        throw std::invalid_argument(
+            "Time integrator must match this executable's build configuration");
+    }
     setFmmOrder(opts.gravity.fmmOrder);
     terminal::setVerbose(opts.run.verbose);
     std::vector<hpx::future<void>> futs;
@@ -180,6 +185,7 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         gravityTable.supportRadiusPerEffectiveRadius;
     double const timestepEta = options.gravity.timestepEta;
     return {
+        {"build.timeIntegrator", std::string(integration::kBuildTimeIntegrator)},
         {"build.gravityMethod", std::string(gravity::kBuildGravityMethod)},
         {"build.pmmmNearMethod", std::string(gravity::kBuildPmmmNearMethod)},
         {"build.fmmOrder", gravity::kBuildFmmOrder},
@@ -660,6 +666,7 @@ bool processOptions(int argc, char* argv[]) {
     po::notify(vm);
     if (vm.count("help")) {
         std::cout << "Build configuration (fixed at compile time):\n"
+                  << "  Time integrator: " << integration::kBuildTimeIntegrator << "\n"
                   << "  Gravity solver: " << gravity::kBuildGravityMethod << "\n"
                   << "  PMMM near method: " << gravity::kBuildPmmmNearMethod << "\n"
                   << "  FMM/PMMM expansion order: " << gravity::kBuildFmmOrder << "\n\n";
@@ -986,7 +993,7 @@ bool processOptions(int argc, char* argv[]) {
         THROW_ERROR("hydro support radii must remain finite and positive in single precision "
                     "after normalization by initial.particlesPerDimension\n");
     }
-    opts.run.hierarchicalGravity = opts.gravity.enabled;
+    opts.run.hierarchicalGravity = integration::kBuildUsesHierarchical && opts.gravity.enabled;
     opts.hydro.damping = 0.0;
     if (opts.compute.sphBucketSize == 0) {
         // Retain the historical SPH bucket heuristic, using the final parsed
@@ -1007,6 +1014,10 @@ bool processOptions(int argc, char* argv[]) {
     }
     if (opts.run.test == "sphGravity") {
         opts.hydro.enabled = true;
+    }
+    if (opts.hydro.enabled && integration::kBuildUsesHierarchical) {
+        THROW_ERROR("SPH requires ordinary block-timestep leapfrog; rebuild with "
+                    "COSMICTIGER_TIME_INTEGRATOR=leapfrog\n");
     }
     if (opts.hydro.enabled && opts.gravity.enabled && usesMeshGravity(opts.gravity)) {
         THROW_ERROR("SPH currently requires an FMM build when gravity.enabled=true; "
@@ -1037,7 +1048,6 @@ bool processOptions(int argc, char* argv[]) {
         }
     }
     if (opts.hydro.enabled) {
-        opts.run.hierarchicalGravity = false;
         if (opts.initial.createGlass || opts.initial.plummer ||
             !opts.initial.gadget4Restart.empty()) {
             THROW_ERROR("SPH cannot use the dark-matter-only glass, Plummer or Gadget loaders\n");
@@ -1267,6 +1277,7 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("chemistry.maxSubsteps", chemistry.maxSubsteps);
     SHOW("hydro.enabled", hydro.enabled);
     SHOW("gravity.enabled", gravity.enabled);
+    show("build.timeIntegrator", std::string(integration::kBuildTimeIntegrator));
     SHOW("build.gravityMethod", gravity.method);
     SHOW("gravity.meshSize", gravity.meshSize);
     SHOW("gravity.pmmmNearWidth", gravity.pmmmNearWidth);
@@ -1432,6 +1443,7 @@ bool processOptions(int argc, char* argv[]) {
             size_t(hpx::get_num_worker_threads()));
         SHOW("compute.cuda", compute.cuda);
         SHOW("compute.positionType", compute.positionType);
+        show("build.timeIntegrator", std::string(integration::kBuildTimeIntegrator));
         SHOW("gravity.enabled", gravity.enabled);
         if (opts.gravity.enabled) {
             SHOW("build.gravityMethod", gravity.method);
@@ -1440,8 +1452,8 @@ bool processOptions(int argc, char* argv[]) {
                 SHOW("gravity.pmmmNearWidth", gravity.pmmmNearWidth);
                 SHOW("build.pmmmNearMethod", gravity.pmmmNearMethod);
                 SHOW("gravity.pmmmBatchParticles", gravity.pmmmBatchParticles);
-                PRINT("%-38s: periodic multipole mesh, hierarchical particle timesteps\n",
-                    "PMMM gravity");
+                PRINT("%-38s: periodic multipole mesh, %s particle timesteps\n", "PMMM gravity",
+                    integration::kBuildUsesHierarchical ? "hierarchical" : "ordinary block");
             }
             SHOW("build.fmmOrder", gravity.fmmOrder);
             SHOW("gravity.kernelFamily", gravity.kernelFamily);

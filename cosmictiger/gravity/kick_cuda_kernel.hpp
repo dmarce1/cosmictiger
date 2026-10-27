@@ -174,11 +174,11 @@ __device__ FlopCount doKick(KickReturn& result, KickParameters params, CudaKickD
                 data.sphGravityAccelerationY[k] = gy;
                 data.sphGravityAccelerationZ[k] = gz;
             } else if (!params.firstCall) {
-                float const dt = 0.5f * rungDt[rungs[sinkIndex]] * params.t0;
+                float const dt = params.sign * 0.5f * rungDt[rungs[sinkIndex]] * params.t0;
                 vx = fmaf(gx, dt, vx);
                 vy = fmaf(gy, dt, vy);
                 vz = fmaf(gz, dt, vz);
-                flops += 8;
+                flops += 9;
             }
             kinTot += 0.5f * mass * sqr(vx, vy, vz);
             xmomTot += mass * vx;
@@ -209,7 +209,7 @@ __device__ FlopCount doKick(KickReturn& result, KickParameters params, CudaKickD
                 }
                 ALWAYS_ASSERT(rung >= 0 && rung < kMaxRung);
                 rungs[sinkIndex] = rung;
-                dt = 0.5f * rungDt[rung] * params.t0;
+                dt = params.sign * 0.5f * rungDt[rung] * params.t0;
                 vx = fmaf(gx, dt, vx);
                 vy = fmaf(gy, dt, vy);
                 vz = fmaf(gz, dt, vz);
@@ -220,7 +220,7 @@ __device__ FlopCount doKick(KickReturn& result, KickParameters params, CudaKickD
                 darkMatterZMomentumCorrection += mass * (syncVz - vz);
                 darkMatterMomentumNormCorrection +=
                     mass * (sqrtf(sqr(syncVx, syncVy, syncVz)) - sqrtf(sqr(vx, vy, vz)));
-                flops += 23;    // Timestep/rung selection and velocity kick only.
+                flops += 24;    // Timestep/rung selection and signed velocity kick.
             }
             maxRung = max(maxRung, (int) rungs[sinkIndex]);
         }

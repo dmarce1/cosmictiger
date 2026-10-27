@@ -21,6 +21,7 @@
 #include <utility>
 #include <vector>
 
+#include <cosmictiger/core/build_config.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/gravity/dehnen/distributed_tree.hpp>
@@ -857,7 +858,7 @@ void linearGrowthTest() {
             "use COSMICTIGER_LINEAR_GROWTH_LOAD_FILE for a custom particle load");
     }
     options.gravity.enabled = true;
-    options.run.hierarchicalGravity = false;
+    options.run.hierarchicalGravity = integration::kBuildUsesHierarchical;
 
     options.analysis.saveForce = true;
 

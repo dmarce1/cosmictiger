@@ -285,21 +285,31 @@ among ranks. FFT padding, allocation imbalance, and plan storage add overhead.
 These estimates exclude particle arrays, source copies, cell forests and metadata,
 communication packets, output fields, and near-field CPU/CUDA workspaces.
 
-PMMM uses the same hierarchical particle timesteps as ordinary collisionless
-FMM. Every ladder stage selects one particle range as both its sources and
-sinks. Moment deposition, remote cell packets, and near FMM all use that same
-selection; an inactive slow particle does not enter a fast stage's force.
-The existing ascending/descending signed kicks and per-rung drifts are retained.
-The timestep criterion uses the selected compact kernel's effective radius and
-the complete near-plus-far acceleration.
+`COSMICTIGER_TIME_INTEGRATOR=leapfrog` is the default. PMMM's leapfrog path uses
+conservative synchronized kick-drift-kick steps: all particles are sources and
+sinks in every mesh solve, and all particles advance on the most restrictive
+requested rung across the job. It calls `pmmmSolve(true)`, retaining acceleration
+and potential arrays for kick preparation, then applies a common rung before
+the drift. This differs from the individual block timesteps used by leapfrog
+with global FMM.
 
-Production calls `pmmmKick`: each completed cell's combined field is consumed
-immediately for the kick and rung decision. It does not retain acceleration or
-potential arrays for all particles. `analysis.saveAcceleration=true` and
+Build with `COSMICTIGER_TIME_INTEGRATOR=hierarchical` to use the hierarchical
+particle timestep ladder for dark matter. Every ladder stage selects one
+particle range as both its sources and sinks. Moment deposition, remote cell
+packets, and near FMM all use that same selection; an inactive slow particle
+does not enter a fast stage's force. Ascending/descending signed kicks and
+per-rung drifts are retained. In both integrators, the timestep criterion uses
+the selected compact kernel's effective radius and the complete near-plus-far
+acceleration.
+
+The hierarchical path calls `pmmmKick`: each completed cell's combined field is
+consumed immediately for the kick and rung decision, without retaining
+acceleration or potential arrays for all particles.
+`analysis.saveAcceleration=true` and
 `analysis.savePotential=true` independently request persistent particle
 diagnostics; legacy `analysis.saveForce=true` requests both. These optional
-fields are not checkpoint state. Explicit diagnostic calls to `pmmmSolve` still
-collect full fields for force comparisons and do not advance particles.
+fields are not checkpoint state. Calls to `pmmmSolve` alone collect full fields
+and do not advance particles.
 
 PMMM and adaptive FMM have different error and work controls even at the same
 nominal order. Mesh refinement, near width, and order convergence should be

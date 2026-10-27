@@ -85,8 +85,9 @@ The legacy `glass.bin` exchange format remains Q0.32 in both modes; checkpoints
 retain the selected position precision.
 
 Choose **FMM**, **PMMM-FMM**, or **PMMM-PP**, and one expansion order from 3
-through 9 in `./build.sh`. Each executable contains the selected gravity variant
-and order. The CMake equivalents are:
+through 9 in `./build.sh`. The menu also selects **leapfrog** (the default) or
+**hierarchical** time integration. Each executable contains the selected gravity
+variant, order, and time integrator. The CMake equivalents are:
 
 ```sh
 # Global FMM, order 7 (the defaults)
@@ -95,8 +96,14 @@ cmake -S . -B build_fmm -DCOSMICTIGER_GRAVITY_METHOD=fmm -DCOSMICTIGER_WITH_ORDE
 cmake -S . -B build_pmmm_fmm -DCOSMICTIGER_GRAVITY_METHOD=pmmm \
   -DCOSMICTIGER_PMMM_NEAR_METHOD=fmm -DCOSMICTIGER_WITH_ORDER=8
 # Use -DCOSMICTIGER_PMMM_NEAR_METHOD=pp for direct near pairs (the PMMM default).
+# Hierarchical gravity integration for dark matter only (leapfrog is the default)
+cmake -S . -B build_fmm_hierarchical -DCOSMICTIGER_TIME_INTEGRATOR=hierarchical
 ```
 
+Leapfrog is the ordinary block-timestep kick-drift-kick (KDK) integrator and is
+the default for both dark matter and SPH. The hierarchical gravity integrator
+supports dark matter only. Hierarchical builds reject `hydro.enabled=true`;
+rebuild with `-DCOSMICTIGER_TIME_INTEGRATOR=leapfrog` to enable SPH.
 See [CMake options](CMAKE_OPTIONS.md) for all build settings and defaults.
 
 The former `gravity.method`, `gravity.pmmmNearMethod`, and `gravity.fmmOrder`
@@ -112,7 +119,7 @@ order applies to both the PMMM expansion and near FMM. Ghost width remains a
 runtime option: it defaults to two and accepts one or two cells. The opening
 angle remains available through `--gravity.openingAngle` for global FMM and
 PMMM-FMM near interactions.
-PMMM uses the hierarchical particle timestep ladder;
+PMMM uses the compiled time integrator;
 `compute.cuda` selects CPU or CUDA near-field execution and drift. See [PMMM](docs/pmmm.md)
 for order conventions, independent particle and FFT ownership, memory costs, CPU/CUDA
 near fields, and restarts.
@@ -228,10 +235,10 @@ The gas solver uses Monaghan's 1992 density/internal-energy SPH: the cubic splin
 symmetric pressure forces and thermal work, and constant alpha/beta artificial
 viscosity. It is integrated with FMM gravity and particle storage. See
 [the formulation and paper references](docs/monaghan_sph.md) for the equations,
-cosmological conversions, and deliberate implementation choices. The normal
-dark-matter-only FMM mode keeps its hierarchical gravity integrator. Enable gas explicitly
-with `--hydro.enabled=true`; gas runs with gravity require an FMM build
-and use the ordinary block-timestep gravity/SPH path. Hydrodynamics without
+cosmological conversions, and deliberate implementation choices. Enable gas
+explicitly with `--hydro.enabled=true`; gas runs require the default leapfrog
+integrator, and gas runs with gravity also require an FMM build. SPH uses the
+ordinary block-timestep gravity/SPH path. Hydrodynamics without
 gravity remains supported.
 Select SIMD CPU SPH with `--compute.cuda=false` or CUDA SPH with `--compute.cuda=true`.
 Particle drift also follows `compute.cuda`: the CPU path uses SIMD position updates
@@ -514,6 +521,9 @@ retained. MPI task-tree merging uses the reporting thread without creating
 an additional worker pool. The launcher
 requires active APEX instrumentation and leaves optional OS-thread lifetime
 timers disabled (`APEX_TIME_TOP_LEVEL_OS_THREADS=0`).
+CosmicTiger finalizes APEX reports on HPX's native I/O pool in an early
+pre-shutdown callback. This keeps HPX workers available to deliver every
+rank's shutdown actions, including runs with one worker per rank.
 See the [APEX TAU listener](https://github.com/STEllAR-GROUP/apex/blob/hpx_v1.11.0/src/apex/tau_listener.cpp)
 and [TAU sampling options](https://www.cs.uoregon.edu/research/tau/docs/html-docs/latest/newguide/environment.html).
 

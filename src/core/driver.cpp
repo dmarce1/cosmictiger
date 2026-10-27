@@ -494,7 +494,7 @@ std::pair<KickReturn, TreeCreateReturn> kickStep(int minrung, double scale, doub
     kparams.htime = false;
     kparams.ascending = kparams.descending = kparams.top = true;
     kparams.doPhi = fullEval;
-    kparams.sign = 1.0;
+    kparams.sign = getOptions().initial.createGlass ? -1.0 : 1.0;
     kparams.nodeLoad = flopsPerNode / flopsPerParticle;
     kparams.gpu = getOptions().compute.cuda;
     usedGpu = kparams.gpu;
@@ -599,6 +599,20 @@ std::pair<KickReturn, TreeCreateReturn> advanceForces(int minRung, double scale,
         energies.zmom = gravity.zmom / scale;
         energies.nmom = gravity.nmom / scale;
         particleMeshFinishKick(baseTimestep, gravity.maxRung);
+    } else if (getOptions().gravity.enabled) {
+        // Ordinary FMM kicks update only the active rungs. Keep the global
+        // staggered kinetic energy current between synchronized force passes.
+        if (fullEvaluation) {
+            energies.tckin = gravity.kin - gravity.darkMatterKineticCorrection;
+            energies.pot = gravity.pot / scale;
+            energies.kin = gravity.kin / sqr(scale);
+            energies.xmom = gravity.xmom / scale;
+            energies.ymom = gravity.ymom / scale;
+            energies.zmom = gravity.zmom / scale;
+            energies.nmom = gravity.nmom / scale;
+        } else {
+            energies.tckin += gravity.dkin;
+        }
     }
     return result;
 }
@@ -1318,7 +1332,7 @@ void driver() {
                 //			particles_displace(rand1(), rand1(), rand1());
             }
             resetFlops();
-            if (!getOptions().run.hierarchicalGravity) {
+            if (!integration::kBuildUsesHierarchical || !getOptions().gravity.enabled) {
                 tmp = advanceForces(
                     minrung, a, a * adot, tau, t0, theta, tau == 0.0, fullEval, energies);
             } else {
@@ -1400,7 +1414,7 @@ void driver() {
             //			PRINT("%e %e\n", a1, a);
             Timer dtm;
             dtm.start();
-            if (!getOptions().run.hierarchicalGravity) {
+            if (!integration::kBuildUsesHierarchical || !getOptions().gravity.enabled) {
                 drift(driftScale, dt, tau, tau + dt, tauMax);
             }
             dtm.stop();
@@ -1434,7 +1448,8 @@ void driver() {
             double const nextYears = years + dyears;
             double const outputRedshift = 1.0 / a - 1.0;
             int const displayedMinimumRung =
-                !getOptions().run.hierarchicalGravity && usesMeshGravity(getOptions().gravity) ?
+                (!integration::kBuildUsesHierarchical || !getOptions().gravity.enabled) &&
+                    usesMeshGravity(getOptions().gravity) ?
                 maxRung :
                 minrung;
             fprintf(textfp,

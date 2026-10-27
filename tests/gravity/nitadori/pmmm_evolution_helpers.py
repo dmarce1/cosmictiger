@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Dominic C. Marcello
 # SPDX-License-Identifier: BSL-1.0
 
-"""Decode PMMM checkpoints and verify hierarchical clocks, drift, and restart state."""
+"""Decode PMMM checkpoints and verify clocks, drift, and restart state for either integrator."""
 
 import ctypes
 import math
@@ -49,13 +49,14 @@ def require(condition, message):
         raise RuntimeError(message)
 
 
-def read_rank(path, expected_iteration, ranks):
+def read_rank(path, expected_iteration, ranks, time_integrator):
     data = path.read_bytes()
     header = Header.from_buffer_copy(data)
     require(header.magic == 0x4354535048303031 and header.version == 3,
             f"{path}: unsupported checkpoint header")
     require(header.flags & (1 << 17), f"{path}: PMMM flag is missing")
-    require(header.flags & (1 << 6), f"{path}: hierarchical timestep flag is missing")
+    require(bool(header.flags & (1 << 6)) == (time_integrator == "hierarchical"),
+            f"{path}: checkpoint time integrator differs from the compiled selection")
     require(not header.flags & (1 << 16), f"{path}: removed PM solver flag is set")
     require(not header.flags & ((1 << 7) | (1 << 8) | (1 << 9) | (1 << 11) | (1 << 12)),
             f"{path}: fixture unexpectedly enabled optional checkpoint fields")
@@ -155,7 +156,7 @@ def read_rank(path, expected_iteration, ranks):
     return header, driver, rows
 
 
-def read_checkpoint(path, ranks):
+def read_checkpoint(path, ranks, time_integrator):
     iteration = int(path.name.split(".")[1])
     lines = (path / "checkpoint.meta").read_text().splitlines()
     require(lines[0].split() == ["COSMICTIGER_CHECKPOINT", "2", "3", str(iteration), str(ranks)],
@@ -168,7 +169,7 @@ def read_checkpoint(path, ranks):
         record = lines[rank + 1].split()
         require(record == [str(rank), str(len(data)), f"{fnv1a64(data):016x}"],
                 f"{path}: rank {rank} size/checksum mismatch")
-        header, driver, particles = read_rank(rank_path, iteration, ranks)
+        header, driver, particles = read_rank(rank_path, iteration, ranks, time_integrator)
         if state is None:
             state = driver
         else:
@@ -176,8 +177,12 @@ def read_checkpoint(path, ranks):
                     (driver.tau, driver.integer_time, driver.max_rung),
                     f"{path}: locality clocks differ")
         rows.extend(particles)
-    require(rows and all(state.min_rung <= row["rung"] <= state.max_rung < 64 for row in rows),
-            f"{path}: particle rung lies outside the hierarchical timestep range")
+    minimum_rung = state.min_rung if time_integrator == "hierarchical" else 0
+    require(rows and all(minimum_rung <= row["rung"] <= state.max_rung < 64 for row in rows),
+            f"{path}: particle rung lies outside the timestep range")
+    if time_integrator == "leapfrog":
+        require(all(row["rung"] == state.max_rung for row in rows),
+                f"{path}: ordinary PMMM leapfrog did not synchronize every particle rung")
     return header, state, rows
 
 
@@ -253,7 +258,10 @@ def check_single_drift(before, after):
     base_timestep = old_state.tau_max / header.steps
     clock_rung = (64 - (old_state.integer_time & -old_state.integer_time).bit_length() + 1
                   if old_state.integer_time else 0)
-    active_rung = max(clock_rung, state.min_rung)
+    # Hierarchical steps drift only the active rungs. Ordinary PMMM leapfrog
+    # assigns every particle the common rung and drifts the entire population.
+    hierarchical = bool(header.flags & (1 << 6))
+    active_rung = max(clock_rung, state.min_rung) if hierarchical else 0
     quantum = 2.0 ** (-64 if header.flags & (1 << 15) else -32)
     signal = error = 0.0
     for old, new in match_drift_rows(old_rows, rows, base_timestep, active_rung):

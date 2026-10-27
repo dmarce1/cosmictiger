@@ -22,13 +22,14 @@ Run examples from the repository root. CMake creates the directory specified by
 ## Project options
 
 Defaults apply to a fresh CMake configuration. Boolean options accept `ON` or
-`OFF`; solver names are lowercase.
+`OFF`; solver and integrator names are lowercase.
 
 | Option | Default | Values and purpose |
 | --- | --- | --- |
 | `COSMICTIGER_GRAVITY_METHOD` | `fmm` | `fmm` for global FMM, or `pmmm` for PMMM. Selects the gravity solver at compile time. |
 | `COSMICTIGER_PMMM_NEAR_METHOD` | `pp` | `pp` for direct particle-particle near interactions, or `fmm` for cell FMM near interactions. Affects PMMM builds. |
 | `COSMICTIGER_WITH_ORDER` | `7` | One integer from `3` through `9`. Compiles one FMM kernel order, also used by PMMM expansions. The convention is multipole degree plus two. |
+| `COSMICTIGER_TIME_INTEGRATOR` | `leapfrog` | `leapfrog` for ordinary block-timestep kick-drift-kick (KDK), or `hierarchical` for hierarchical gravity. Selects the time integrator at compile time. Hierarchical builds reject SPH; rebuild with `leapfrog` to enable hydro. |
 | `COSMICTIGER_WITH_MAX_BUCKET` | `128` | One of `32`, `64`, `128`, `256`, `512`, `1024`. Compile-time ceiling for the runtime `compute.bucketSize`. |
 | `COSMICTIGER_WITH_CUDA` | `ON` | Builds CUDA code. Requires the CUDA toolkit and HPX built with CUDA support. |
 | `COSMICTIGER_WITH_LONG_LONG_PART_INT` | `OFF` | Uses `long long` to index local particles. |
@@ -52,7 +53,10 @@ Preprocessor definitions such as `ORDER`, `FMM_MIN_ORDER`, `FMM_MAX_ORDER`,
 `MAX_BUCKET_SIZE`, `COSMICTIGER_GRAVITY_PMMM`, and `COSMICTIGER_PMMM_NEAR_FMM`
 are derived from these settings, not independent CMake options.
 
-The solver, PMMM near method, and kernel order require rebuilding to change.
+The solver, PMMM near method, kernel order, and time integrator require rebuilding
+to change. Leapfrog is the default for both dark matter and SPH. The hierarchical
+integrator supports dark matter only; `hydro.enabled=true` requires a build with
+`-DCOSMICTIGER_TIME_INTEGRATOR=leapfrog`.
 PMMM ghost width remains a runtime option, `--gravity.pmmmNearWidth` (1–2,
 default 2). Global FMM theta remains `--gravity.openingAngle`. PMMM also requires
 the runtime `--gravity.meshSize` setting.
@@ -161,9 +165,11 @@ itself built with CUDA may require CUDA toolchain discovery even when
 ## Using build.sh
 
 `./build.sh` provides an interactive configure/build menu. Its initial choices
-are `Release`, global FMM, order 7, CUDA enabled, and tests disabled. In particular, its `BUILD_TESTING=OFF` differs from direct CMake's
+are `Release`, global FMM, order 7, leapfrog, CUDA enabled, and tests disabled. In particular, its `BUILD_TESTING=OFF` differs from direct CMake's
 default `ON`. It uses Ninja and build directories named
-`build/<mode>_<variant>_order<order>`, such as `build/release_pmmm_fmm_order7`.
+`build/<mode>_<variant>_order<order>_<integrator>`, such as
+`build/release_pmmm_fmm_order7_leapfrog`. Selecting the other integrator uses a
+separate build directory.
 
 The script builds both position-storage executables, chooses the APEX
 requirement from the build mode, supplies the custom `Profile` flags above,

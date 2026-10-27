@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include <cosmictiger/core/build_config.hpp>
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
@@ -36,7 +37,7 @@ namespace detail {
 size_t expectedPmmmParticleCount = 0;
 
 int pmmmFixtureParticleCount(int fixture) {
-    constexpr std::array<int, 8> kFixtureSizes{7, 1, 0, 4, 8, 320, 32, 7};
+    constexpr std::array<int, 9> kFixtureSizes{7, 1, 0, 4, 8, 320, 32, 7, 7};
     return kFixtureSizes.at(fixture);
 }
 
@@ -343,7 +344,13 @@ void initializePmmmFixture(int fixture, int ownership) {
         }
         for (int dim = 0; dim < kDimensions; ++dim) {
             double coordinate = 0.0;
-            if (fixture == 7) {
+            if (fixture == 8) {
+                // Centered, distinct sources eliminate multipole truncation
+                // from the stage test while retaining near and far pairs.
+                constexpr std::array<std::array<int, kDimensions>, 7> kStageCells{
+                    {{0, 1, 2}, {1, 1, 2}, {3, 1, 2}, {3, 2, 2}, {7, 1, 2}, {5, 6, 4}, {0, 7, 7}}};
+                coordinate = (kStageCells[id][dim] + 0.5) / 8.0;
+            } else if (fixture == 7) {
                 // Every rank owns a fragment of the same mesh cell. Distinct
                 // positions avoid softened pairs in the independent Ewald sum.
                 int const multiplier = dim == kXDimension ? 1 : dim == kYDimension ? 3 : 5;
@@ -780,8 +787,8 @@ void distributePmmmFixture(int fixture) {
     auto options = saved;
     options.initial.numberOfParticles = pmmmFixtureParticleCount(fixture);
     // Fresh fixtures deliberately place every rung on arbitrary localities.
-    // Migrate the entire population once before testing rung-selected stages.
-    options.run.hierarchicalGravity = false;
+    // The mixed-mass fixture uses the all-particle hydro migration path before
+    // testing rung-selected stages, independently of the compiled integrator.
     // Use the ordinary particle-balanced domains, including split mesh cells.
     setOptions(options);
     particlesSortByRung(0);
@@ -955,7 +962,8 @@ void checkPmmmPpBatchTargets() {
 void checkPmmmStreamedStages() {
     auto const saved = getOptions();
     auto options = saved;
-    options.run.hierarchicalGravity = true;
+    // Exercise the hierarchical stage operator directly in either integrator
+    // build, without changing the application's compiled evolution policy.
     options.gravity.meshSize = 8;
     options.gravity.pmmmNearWidth = 2;
     options.gravity.fmmOrder = kFmmDefaultOrder;
@@ -969,8 +977,11 @@ void checkPmmmStreamedStages() {
         for (int batchParticles : {1, 4096}) {
             options.gravity.pmmmBatchParticles = batchParticles;
             setOptions(options);
-            preparePmmmFixture(0);
-            distributePmmmFixture(0);
+            // At cell centers PMMM matches the independent Ewald field at every
+            // supported order. Off-center force accuracy is checked separately;
+            // its finite-order truncation must not set the kick tolerance.
+            preparePmmmFixture(8);
+            distributePmmmFixture(8);
             auto const before = gatherPmmmKickSamples();
             Vector<PmmmSample> active;
             double activeMass = 0.0;
@@ -1047,23 +1058,31 @@ void checkPmmmStreamedStages() {
             parameters.eta = 1.0e6f;
             pmmmKick(parameters);
             auto const descending = gatherPmmmKickSamples();
+            requirePmmm(descending.size() == before.size(), "descending stage changed owned count");
             selected = 0;
             for (size_t i = 0; i < before.size(); ++i) {
                 bool const isActive = before[i].rung >= 3;
                 auto const reference =
                     isActive ? directPmmmReference(selected++, active) : std::array<double, 4>{};
+                double const factor = parameters.sign * (parameters.top ? 1.0 : -1.0) / 16.0;
                 requirePmmm(descending[i].rung == (isActive ? 4 : before[i].rung),
                     "descending stage selected the wrong next rung");
                 for (int dim = 0; dim < kDimensions; ++dim) {
+                    requirePmmm(descending[i].rawPosition[dim] == before[i].rawPosition[dim],
+                        "descending kick changed an owned position");
+                    double const delta = factor * reference[dim + 1];
+                    double const expected = after[i].velocity[dim] + delta;
+                    requirePmmm(isActive ? std::abs(descending[i].velocity[dim] - expected) <
+                                2.0e-6 * std::max(1.0, std::abs(expected)) +
+                                    1.0e-3 * std::abs(delta) :
+                                           descending[i].velocity[dim] == before[i].velocity[dim],
+                        "descending kick differs from its active-source Ewald field or changed an "
+                        "inactive sink");
                     if (isActive && options.analysis.saveAcceleration) {
                         requirePmmm(std::abs(descending[i].acceleration[dim] - reference[dim + 1]) <
                                 1.0e-3 * std::max(1.0, std::abs(reference[dim + 1])),
                             "acceleration-only diagnostics differ from the combined active-source "
                             "field");
-                    }
-                    if (!isActive) {
-                        requirePmmm(descending[i].velocity[dim] == before[i].velocity[dim],
-                            "descending kick changed an inactive sink");
                     }
                 }
                 if (isActive && options.analysis.savePotential) {
@@ -1291,7 +1310,8 @@ void pmmmTest() {
     options.initial.darkMatterMass = 0.75;
     options.initial.gasMass = 0.25;
     options.initial.createGlass = false;
-    options.run.hierarchicalGravity = false;
+    options.run.hierarchicalGravity =
+        integration::kBuildUsesHierarchical && options.gravity.enabled;
     setOptions(options);
     detail::checkPmmmNearEdges();
     detail::checkPmmmNearBatches();

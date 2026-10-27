@@ -17,6 +17,7 @@
 #include <thread>
 
 #include <cosmictiger/analysis/bh.hpp>
+#include <cosmictiger/core/build_config.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/gravity/dehnen/distributed_tree.hpp>
@@ -644,6 +645,7 @@ void sphGravityTest() {
     opts.hydro.enabled = true;
 
     opts.gravity.enabled = true;
+    opts.run.hierarchicalGravity = integration::kBuildUsesHierarchical;
     opts.analysis.saveForce = true;
 
     opts.analysis.groups = false;

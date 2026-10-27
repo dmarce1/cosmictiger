@@ -23,6 +23,7 @@ def main():
     parser.add_argument("--gravity-method", choices=("fmm", "pmmm"), required=True)
     parser.add_argument("--near-method", choices=("pp", "fmm"), required=True)
     parser.add_argument("--order", type=int, choices=range(3, 10), required=True)
+    parser.add_argument("--time-integrator", choices=("leapfrog", "hierarchical"), required=True)
     args = parser.parse_args()
     args.workdir.mkdir(parents=True, exist_ok=True)
     unused_view = args.workdir / "view.txt"
@@ -54,6 +55,9 @@ def main():
             raise RuntimeError(f"incorrect {key}: expected {expected}")
 
     help_text = run("help", ["--help"])
+    if not re.search(r"^\s*Time integrator:\s*" + args.time_integrator + r"\s*$",
+                     help_text, re.MULTILINE):
+        raise RuntimeError("help did not identify the compiled time integrator")
     option_names = set(re.findall(r"^\s+--([A-Za-z][A-Za-z0-9_.]*)", help_text, re.MULTILINE))
     required = {"help", "configuration", "run.scenario", "run.endTime", "run.verbose",
                 "initial.particlesPerDimension", "compute.cuda", "compute.bucketSize",
@@ -82,7 +86,8 @@ def main():
     removed_options = {"hydro.chemistry", "hydro.conduction", "hydro.diffusion",
                        "hydro.yReflect", "gravity.sphSmoothing", "cosmology.omegaK",
                        "initial.usePowerFile", "gravity.cloud", "gravity.method",
-                       "gravity.pmmmNearMethod", "gravity.fmmOrder"}
+                       "gravity.pmmmNearMethod", "gravity.fmmOrder",
+                       "run.timeIntegrator", "run.hierarchicalGravity"}
     if removed_options & option_names:
         raise RuntimeError(f"removed options remain in help: {sorted(removed_options & option_names)}")
     for name in option_names - {"help", "configuration"}:
@@ -150,13 +155,22 @@ mapSize = 8
     balsara_default = run("balsara_default", metadata_options)
     def assertCompiledSettings(output):
         for key, value in (("build.gravityMethod", args.gravity_method),
-                           ("build.pmmmNearMethod", args.near_method)):
+                           ("build.pmmmNearMethod", args.near_method),
+                           ("build.timeIntegrator", args.time_integrator)):
             if not re.search(r"^" + re.escape(key) + r"\s*:\s*" + value + r"\s*$",
                              output, re.MULTILINE):
                 raise RuntimeError(f"compiled metadata did not retain {key}={value}")
         assertNumericSetting(output, "build.fmmOrder", args.order)
+        expected_hierarchical = "T" if args.time_integrator == "hierarchical" else "F"
+        if not re.search(r"^run\.hierarchicalGravity\s*:\s*" + expected_hierarchical + r"\s*$",
+                         output, re.MULTILINE):
+            raise RuntimeError("gravity stepping did not match the compiled time integrator")
 
     assertCompiledSettings(balsara_default)
+    assertCompiledSettings(configured)
+    for scenario in ("plummer", "glass"):
+        output = run(f"integrator_{scenario}", metadata_options + [f"--run.scenario={scenario}"])
+        assertCompiledSettings(output)
     assertNumericSetting(balsara_default, "gravity.openingAngle", 0.8)
     scalar_angle = run("runtime_scalar_angle", metadata_options + ["--gravity.openingAngle=0.73"])
     assertNumericSetting(scalar_angle, "gravity.openingAngle", 0.73)
@@ -170,8 +184,6 @@ mapSize = 8
             for key, expected in (("gravity.meshSize", mesh_size),
                                   ("gravity.pmmmNearWidth", near_width)):
                 assertNumericSetting(pmmm_output, key, expected)
-            if not re.search(r"^run\.hierarchicalGravity\s*:\s*T\s*$", pmmm_output, re.MULTILINE):
-                raise RuntimeError("PMMM did not retain hierarchical gravity")
         assertNumericSetting(balsara_default, "gravity.pmmmNearWidth", 2)
         assertNumericSetting(balsara_default, "gravity.pmmmBatchParticles", 4096)
     for selected_field in ("saveAcceleration", "savePotential"):
@@ -207,7 +219,31 @@ mapSize = 8
     sph_options = [option for option in metadata_options
                    if not option.startswith("--hydro.enabled=")]
     sph_gravity_error = "SPH currently requires an FMM build when gravity.enabled=true"
-    if args.gravity_method == "pmmm":
+    if args.time_integrator == "hierarchical":
+        sph_integrator_error = "COSMICTIGER_TIME_INTEGRATOR=leapfrog"
+        for gravity_enabled in ("true", "false"):
+            rejected = run(f"hierarchical_sph_gravity_{gravity_enabled}", sph_options + [
+                "--hydro.enabled=true", f"--gravity.enabled={gravity_enabled}"], success=False)
+            if sph_integrator_error not in rejected:
+                raise RuntimeError("hierarchical SPH lacked integrator build guidance")
+        forced_sph = [option for option in metadata_options
+                      if not option.startswith("--run.test=")]
+        rejected = run("hierarchical_forced_sph_rejected", forced_sph + [
+            "--run.test=sphGravity"], success=False)
+        if sph_integrator_error not in rejected:
+            raise RuntimeError("hierarchical SPH restriction was bypassed through run.test")
+        rejected = run("hierarchical_scenario_sph_rejected", [
+            "--run.scenario=sod", "--compute.cuda=false",
+            "--initial.particlesPerDimension=8"], success=False)
+        if sph_integrator_error not in rejected:
+            raise RuntimeError("hierarchical SPH restriction was bypassed through scenario defaults")
+        sph_config = args.workdir / "hierarchical_sph.ini"
+        sph_config.write_text("[hydro]\nenabled = true\n")
+        rejected = run("hierarchical_ini_sph_rejected", sph_options + [
+            f"--configuration={sph_config.resolve()}"], success=False)
+        if sph_integrator_error not in rejected:
+            raise RuntimeError("hierarchical SPH restriction was bypassed through an INI file")
+    elif args.gravity_method == "pmmm":
         rejected = run("pmmm_sph_rejected", sph_options + [
             "--hydro.enabled=true", "--gravity.enabled=true"], success=False)
         if sph_gravity_error not in rejected:
@@ -230,10 +266,13 @@ mapSize = 8
             f"--configuration={sph_config.resolve()}"], success=False)
         if sph_gravity_error not in rejected:
             raise RuntimeError("PMMM bypassed the SPH restriction through an INI file")
-        run("pmmm_hydro_without_gravity", sph_options + [
+        output = run("pmmm_hydro_without_gravity", sph_options + [
             "--hydro.enabled=true", "--gravity.enabled=false"])
+        assertCompiledSettings(output)
     else:
-        run("fmm_sph_allowed", sph_options + ["--gravity.enabled=true", "--hydro.enabled=true"])
+        output = run("fmm_sph_allowed", sph_options + [
+            "--gravity.enabled=true", "--hydro.enabled=true"])
+        assertCompiledSettings(output)
     if not re.search(r"^hydro\.balsaraSwitch\s*:\s*T\s*$", balsara_default, re.MULTILINE):
         raise RuntimeError("Balsara switch must default to enabled")
     balsara_override = run("balsara_cli_override", [f"--configuration={config.resolve()}",
@@ -303,84 +342,86 @@ mapSize = 8
             ["--hydro.kernelFamily=wendland", "--hydro.kernelDegree=8", "--hydro.neighborNumber=12"])):
         run(f"invalid_kernel_{index}", metadata_options + invalid, success=False)
 
-    # Both checkpoint layouts round-trip: zero retains the existing SPH block,
-    # while nonzero acceleration appends the flagged z-plane force parameter.
-    hydro_metadata_options = [option for option in metadata_options
-                              if not option.startswith("--hydro.enabled=")] + [
-                                  "--hydro.enabled=true"]
-    if args.gravity_method == "pmmm":
-        hydro_metadata_options.append("--gravity.enabled=false")
-    for acceleration in (0.0, 0.5):
-        output = run(f"z_plane_checkpoint_{acceleration}", hydro_metadata_options + [
-            f"--configuration={config.resolve()}",
-            f"--hydro.zPlaneAcceleration={acceleration}"])
-        assertNumericSetting(output, "hydro.zPlaneAcceleration", acceleration)
-        if "Checkpoint state and mode validation passed" not in output:
-            raise RuntimeError("z-plane acceleration checkpoint state did not round-trip")
-
-    chemistry_options = [option for option in metadata_options
-                         if not option.startswith("--hydro.enabled=")] + [
-                             "--hydro.enabled=true", "--chemistry.enabled=true",
-                             "--cosmology.startRedshift=49"]
-    if args.gravity_method == "pmmm":
-        chemistry_options.append("--gravity.enabled=false")
     chemistry_fields = ("initialTemperature", "hydrogenIonFraction",
                         "heliumIonFraction", "heliumDoubleIonFraction")
 
-    def chemistrySettings(output):
-        result = {}
-        for field in chemistry_fields:
-            match = re.search(r"^chemistry\." + field + r"\s*:\s*(\S+)", output, re.MULTILINE)
-            if match is None or not math.isfinite(float(match.group(1))):
-                raise RuntimeError(f"missing finite resolved chemistry.{field}")
-            result[field] = float(match.group(1))
-        return result
+    if args.time_integrator == "leapfrog":
+        # Both checkpoint layouts round-trip: zero retains the existing SPH block,
+        # while nonzero acceleration appends the flagged z-plane force parameter.
+        hydro_metadata_options = [option for option in metadata_options
+                                  if not option.startswith("--hydro.enabled=")] + [
+                                      "--hydro.enabled=true"]
+        if args.gravity_method == "pmmm":
+            hydro_metadata_options.append("--gravity.enabled=false")
+        for acceleration in (0.0, 0.5):
+            output = run(f"z_plane_checkpoint_{acceleration}", hydro_metadata_options + [
+                f"--configuration={config.resolve()}",
+                f"--hydro.zPlaneAcceleration={acceleration}"])
+            assertNumericSetting(output, "hydro.zPlaneAcceleration", acceleration)
+            if "Checkpoint state and mode validation passed" not in output:
+                raise RuntimeError("z-plane acceleration checkpoint state did not round-trip")
 
-    native = chemistrySettings(run("chemistry_native_defaults", chemistry_options))
-    if not (10 < native["initialTemperature"] < 100 and
-            1e-5 < native["hydrogenIonFraction"] < 1e-3):
-        raise RuntimeError(f"Native chemistry defaults are not a cold residual plasma: {native}")
-    earlier = chemistrySettings(run("chemistry_native_earlier_epoch", [
-        option for option in chemistry_options if not option.startswith("--cosmology.startRedshift=")
-    ] + ["--cosmology.startRedshift=99"]))
-    if earlier["initialTemperature"] <= native["initialTemperature"]:
-        raise RuntimeError("Native chemistry initialization ignored the requested starting epoch")
-    restarted = chemistrySettings(run("chemistry_restart_resolution",
-                                      chemistry_options + ["--checkpoint.readIndex=1"]))
-    if restarted != native:
-        raise RuntimeError("Restart option resolution changed native initialization metadata")
-    manual = run("chemistry_manual_defaults",
-                 chemistry_options + ["--chemistry.initialization=manual"])
-    for field, value in zip(chemistry_fields, (1000.0, 2e-4, 0.0, 0.0)):
-        assertNumericSetting(manual, f"chemistry.{field}", value)
-    for field, value in zip(chemistry_fields, (777.0, 0.01, 0.1, 0.02)):
-        output = run(f"chemistry_override_{field}", chemistry_options + [f"--chemistry.{field}={value}"])
-        for checked in chemistry_fields:
-            assertNumericSetting(output, f"chemistry.{checked}",
-                                 value if checked == field else native[checked])
-    chemistry_config = args.workdir / "chemistry_initialization.ini"
-    chemistry_config.write_text("[chemistry]\ninitialTemperature = 500\nhydrogenIonFraction = 0.01\n")
-    output = run("chemistry_override_precedence", chemistry_options + [
-        f"--configuration={chemistry_config.resolve()}", "--chemistry.initialTemperature=750"])
-    for field, value in (("initialTemperature", 750), ("hydrogenIonFraction", 0.01),
-                         ("heliumIonFraction", native["heliumIonFraction"]),
-                         ("heliumDoubleIonFraction", native["heliumDoubleIonFraction"])):
-        assertNumericSetting(output, f"chemistry.{field}", value)
-    molecular_native = chemistrySettings(run(
-        "chemistry_molecular_native", chemistry_options + ["--chemistry.network=molecular9"]))
-    if molecular_native != native:
-        raise RuntimeError("Cold molecular initialization differs from the native atomic history")
-    for label, extra in (("unknown_mode", ["--chemistry.initialization=unknown"]),
-                         ("molecular_hot", ["--chemistry.network=molecular9",
-                                            "--chemistry.initialTemperature=6001"])):
-        output = run(f"chemistry_{label}", chemistry_options + extra, success=False)
+        chemistry_options = [option for option in metadata_options
+                             if not option.startswith("--hydro.enabled=")] + [
+                                 "--hydro.enabled=true", "--chemistry.enabled=true",
+                                 "--cosmology.startRedshift=49"]
+        if args.gravity_method == "pmmm":
+            chemistry_options.append("--gravity.enabled=false")
+
+        def chemistrySettings(output):
+            result = {}
+            for field in chemistry_fields:
+                match = re.search(r"^chemistry\." + field + r"\s*:\s*(\S+)", output, re.MULTILINE)
+                if match is None or not math.isfinite(float(match.group(1))):
+                    raise RuntimeError(f"missing finite resolved chemistry.{field}")
+                result[field] = float(match.group(1))
+            return result
+
+        native = chemistrySettings(run("chemistry_native_defaults", chemistry_options))
+        if not (10 < native["initialTemperature"] < 100 and
+                1e-5 < native["hydrogenIonFraction"] < 1e-3):
+            raise RuntimeError(f"Native chemistry defaults are not a cold residual plasma: {native}")
+        earlier = chemistrySettings(run("chemistry_native_earlier_epoch", [
+            option for option in chemistry_options if not option.startswith("--cosmology.startRedshift=")
+        ] + ["--cosmology.startRedshift=99"]))
+        if earlier["initialTemperature"] <= native["initialTemperature"]:
+            raise RuntimeError("Native chemistry initialization ignored the requested starting epoch")
+        restarted = chemistrySettings(run("chemistry_restart_resolution",
+                                          chemistry_options + ["--checkpoint.readIndex=1"]))
+        if restarted != native:
+            raise RuntimeError("Restart option resolution changed native initialization metadata")
+        manual = run("chemistry_manual_defaults",
+                     chemistry_options + ["--chemistry.initialization=manual"])
+        for field, value in zip(chemistry_fields, (1000.0, 2e-4, 0.0, 0.0)):
+            assertNumericSetting(manual, f"chemistry.{field}", value)
+        for field, value in zip(chemistry_fields, (777.0, 0.01, 0.1, 0.02)):
+            output = run(f"chemistry_override_{field}", chemistry_options + [f"--chemistry.{field}={value}"])
+            for checked in chemistry_fields:
+                assertNumericSetting(output, f"chemistry.{checked}",
+                                     value if checked == field else native[checked])
+        chemistry_config = args.workdir / "chemistry_initialization.ini"
+        chemistry_config.write_text("[chemistry]\ninitialTemperature = 500\nhydrogenIonFraction = 0.01\n")
+        output = run("chemistry_override_precedence", chemistry_options + [
+            f"--configuration={chemistry_config.resolve()}", "--chemistry.initialTemperature=750"])
+        for field, value in (("initialTemperature", 750), ("hydrogenIonFraction", 0.01),
+                             ("heliumIonFraction", native["heliumIonFraction"]),
+                             ("heliumDoubleIonFraction", native["heliumDoubleIonFraction"])):
+            assertNumericSetting(output, f"chemistry.{field}", value)
+        molecular_native = chemistrySettings(run(
+            "chemistry_molecular_native", chemistry_options + ["--chemistry.network=molecular9"]))
+        if molecular_native != native:
+            raise RuntimeError("Cold molecular initialization differs from the native atomic history")
+        for label, extra in (("unknown_mode", ["--chemistry.initialization=unknown"]),
+                             ("molecular_hot", ["--chemistry.network=molecular9",
+                                                "--chemistry.initialTemperature=6001"])):
+            output = run(f"chemistry_{label}", chemistry_options + extra, success=False)
+            if "chemistry" not in output.lower():
+                raise RuntimeError(f"Invalid chemistry initialization {label} lacked a diagnostic")
+        output = run("chemistry_molecular_below_floor", [
+            option for option in chemistry_options if not option.startswith("--cosmology.startRedshift=")
+        ] + ["--cosmology.startRedshift=10", "--chemistry.network=molecular9"], success=False)
         if "chemistry" not in output.lower():
-            raise RuntimeError(f"Invalid chemistry initialization {label} lacked a diagnostic")
-    output = run("chemistry_molecular_below_floor", [
-        option for option in chemistry_options if not option.startswith("--cosmology.startRedshift=")
-    ] + ["--cosmology.startRedshift=10", "--chemistry.network=molecular9"], success=False)
-    if "chemistry" not in output.lower():
-        raise RuntimeError("Native molecular initialization below 10 K lacked a diagnostic")
+            raise RuntimeError("Native molecular initialization below 10 K lacked a diagnostic")
 
     # Photon density is fixed by the requested blackbody temperature and H0;
     # neutrinos add radiation without changing that photon density.
@@ -799,7 +840,8 @@ mapSize = 8
     for option in sorted(removed_options):
         value = {"cosmology.omegaK": "0.1", "gravity.cloud": "pcs",
                  "gravity.method": args.gravity_method, "gravity.pmmmNearMethod": args.near_method,
-                 "gravity.fmmOrder": str(args.order)
+                 "gravity.fmmOrder": str(args.order),
+                 "run.timeIntegrator": args.time_integrator
                  }.get(option, "false")
         group, name = option.split(".")
         removed_config.write_text(f"[{group}]\n{name} = {value}\n")
@@ -809,7 +851,7 @@ mapSize = 8
             output = run(f"removed_{source}_{option}", arguments, success=False)
             if option not in output or not re.search(r"unrecogni[sz]ed option", output):
                 raise RuntimeError(f"removed {source} option {option} was not rejected explicitly")
-    if args.gravity_method == "fmm":
+    if args.gravity_method == "fmm" and args.time_integrator == "leapfrog":
         for parameter in ("omegaB", "omegaC"):
             for value in ("0", "-0.1", "nan", "inf"):
                 output = run(f"invalid_class_mass_{parameter}_{value}", [

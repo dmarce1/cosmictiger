@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include <cosmictiger/core/build_config.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/particles/domain.hpp>
@@ -25,6 +26,16 @@ constexpr int kMeshDomainSide = 7;
 void requireMeshDomain(bool condition, char const* message) {
     if (!condition) {
         throw std::runtime_error(std::string("Mesh domain regression: ") + message);
+    }
+}
+
+void migrateMeshDomainFixture() {
+    // These ownership checks move every rung. Hierarchical builds migrate one
+    // rung per call; ordinary leapfrog migrates the whole population together.
+    constexpr int kLastRung = integration::kBuildUsesHierarchical ? 7 : 0;
+    for (int rung = 0; rung <= kLastRung; ++rung) {
+        domainsBegin(rung);
+        domainsEnd();
     }
 }
 
@@ -317,7 +328,7 @@ void meshDomainsTest() {
     options.hydro.enabled = false;
     options.gravity.enabled = true;
     options.gravity.meshSize = detail::kMeshDomainSide;
-    options.run.hierarchicalGravity = false;
+    options.run.hierarchicalGravity = integration::kBuildUsesHierarchical;
     options.analysis.groups = true;
     options.analysis.tracers = true;
     options.analysis.saveForce = false;
@@ -334,8 +345,7 @@ void meshDomainsTest() {
             future.get();
         }
         domainsRebound();
-        domainsBegin(0);
-        domainsEnd();
+        detail::migrateMeshDomainFixture();
         detail::verifyMeshDomains(fixture, 0, true);
         pending.clear();
         for (auto const& locality : hpxLocalities()) {
@@ -344,12 +354,10 @@ void meshDomainsTest() {
         for (auto& future : pending) {
             future.get();
         }
-        domainsBegin(0);
-        domainsEnd();
+        detail::migrateMeshDomainFixture();
         detail::verifyMeshDomains(fixture, 1, false);
         domainsRebound();
-        domainsBegin(0);
-        domainsEnd();
+        detail::migrateMeshDomainFixture();
         detail::verifyMeshDomains(fixture, 1, true);
     }
 
@@ -366,8 +374,7 @@ void meshDomainsTest() {
         future.get();
     }
     domainsRebound();
-    domainsBegin(0);
-    domainsEnd();
+    detail::migrateMeshDomainFixture();
     detail::verifyMeshDomains(kFixture, 0, true);
     if (hpxSize() > 1) {
         double const split = domainsRange(2).end[kXDimension];
@@ -385,19 +392,16 @@ void meshDomainsTest() {
     for (auto& future : pending) {
         future.get();
     }
-    domainsBegin(0);
-    domainsEnd();
+    detail::migrateMeshDomainFixture();
     detail::verifyMeshDomains(kFixture, 0, true);
     detail::verifyMeshDomainLayout(originalLayout);
     options.gravity.meshSize = 11;
     setOptions(options);
-    domainsBegin(0);
-    domainsEnd();
+    detail::migrateMeshDomainFixture();
     detail::verifyMeshDomains(kFixture, 0, true);
     detail::verifyMeshDomainLayout(originalLayout);
     domainsRebound();
-    domainsBegin(0);
-    domainsEnd();
+    detail::migrateMeshDomainFixture();
     detail::verifyMeshDomains(kFixture, 0, true);
     detail::verifyMeshDomainLayout(originalLayout);
     PRINT("Independent particle domains, split cells, balancing and migration passed "

@@ -426,7 +426,8 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, kD
                 if (params.htime) {
                     float g2;
                     float kin0 = 0.5 * sqr(vx, vy, vz);
-                    float const sgn = params.top ? 1 : -1;
+                    float const sgn = params.sign * (params.top ? 1.f : -1.f);
+                    flops += 1;
                     if (params.ascending) {
                         flops += 2;
                         float const dt = 0.5f * rungDt[params.minRung] * params.t0;
@@ -473,8 +474,8 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, kD
                         sphParticlesGravityAcceleration(kYDimension, k) = forces.gy[j];
                         sphParticlesGravityAcceleration(kZDimension, k) = forces.gz[j];
                     } else if (!params.firstCall) {
-                        flops += 8;
-                        float const dt = 0.5f * rungDt[rung] * params.t0;
+                        flops += 9;
+                        float const dt = params.sign * 0.5f * rungDt[rung] * params.t0;
                         vx = fmaf(forces.gx[j], dt, vx);
                         vy = fmaf(forces.gy[j], dt, vy);
                         vz = fmaf(forces.gz[j], dt, vz);
@@ -485,7 +486,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, kD
                     kr.zmom += mass * vz;
                     kr.nmom += mass * sqrt(sqr(vx, vy, vz));
                     if (!gas) {
-                        flops += 23;    // Timestep/rung selection and velocity kick only.
+                        flops += 24;    // Timestep/rung selection and signed velocity kick.
                         float const syncVx = vx, syncVy = vy, syncVz = vz;
                         float const g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]) + 1e-35f;
                         float dt = std::min(
@@ -502,7 +503,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, kD
                             rung = params.fixedRung;
                         }
                         ALWAYS_ASSERT(rung >= 0 && rung < kMaxRung);
-                        dt = 0.5f * rungDt[rung] * params.t0;
+                        dt = params.sign * 0.5f * rungDt[rung] * params.t0;
                         vx = fmaf(forces.gx[j], dt, vx);
                         vy = fmaf(forces.gy[j], dt, vy);
                         vz = fmaf(forces.gz[j], dt, vz);

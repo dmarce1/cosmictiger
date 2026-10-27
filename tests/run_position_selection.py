@@ -18,6 +18,7 @@ def main():
     parser.add_argument("executable", type=Path)
     parser.add_argument("workdir", type=Path)
     parser.add_argument("--gravity-method", choices=("fmm", "pmmm"), required=True)
+    parser.add_argument("--time-integrator", choices=("leapfrog", "hierarchical"), required=True)
     args = parser.parse_args()
     executable = args.executable.resolve()
     workdir = args.workdir.resolve()
@@ -37,6 +38,9 @@ def main():
         if not re.search(r"^compute\.positionType\s*:\s*" + expected + r"\s*$",
                          output, re.MULTILINE):
             raise RuntimeError(f"{name}: incorrect selected position representation")
+        if not re.search(r"^build\.timeIntegrator\s*:\s*" + args.time_integrator + r"\s*$",
+                         output, re.MULTILINE):
+            raise RuntimeError(f"{name}: position backend changed the compiled time integrator")
         bits = 64 if expected == "fixed64" else 32
         if f"Checkpoint position payload round trip passed ({bits} bits)" not in output:
             raise RuntimeError(f"{name}: native position payload was not verified")
@@ -101,11 +105,18 @@ def main():
     hydro = prepareCase(workdir, "hydro64")
     hydro_options = [option for option in common if not option.startswith(
         ("--hydro.enabled=", "--initial.particlesPerDimension="))]
-    runSimulation([str(executable), *hydro_options, "--compute.positionType=fixed64",
-                   "--hydro.enabled=true",
-                   "--initial.particlesPerDimension=8", "--run.scenario=sod",
-                   "--run.endTime=0.00001", "--run.numberOfSteps=2", "--run.maxIterations=1",
-                   "--checkpoint.intervalSeconds=1000000000"], hydro, "run.log")
+    output = runSimulation([str(executable), *hydro_options, "--compute.positionType=fixed64",
+                            "--hydro.enabled=true",
+                            "--initial.particlesPerDimension=8", "--run.scenario=sod",
+                            "--run.endTime=0.00001", "--run.numberOfSteps=2", "--run.maxIterations=1",
+                            "--checkpoint.intervalSeconds=1000000000"], hydro, "run.log",
+                           expectSuccess=args.time_integrator == "leapfrog")
+    if args.time_integrator == "hierarchical":
+        if "COSMICTIGER_TIME_INTEGRATOR=leapfrog" not in output:
+            raise RuntimeError("fixed64 SPH rejection lacked integrator build guidance")
+        print("Position selection, raw checkpoint bits, fixed64 evolution/restart, width rejection, "
+              "and hierarchical SPH incompatibility passed")
+        return 0
     hydro_checkpoint = hydro / "checkpoint.1"
     checkManifest(hydro_checkpoint, 1, scenario="sod", endTime=0.00001, gravity=False)
     if checkpoint_position_bytes((hydro_checkpoint / "checkpoint.0.dat").read_bytes()) != 8:

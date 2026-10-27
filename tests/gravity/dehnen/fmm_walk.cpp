@@ -9,10 +9,13 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <numbers>
 #include <random>
 #include <stdexcept>
 #include <string>
 
+#include <cosmictiger/core/build_config.hpp>
+#include <cosmictiger/core/driver.hpp>
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
@@ -27,6 +30,7 @@
 #include <cosmictiger/gravity/kick_interaction_counts.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #include <cosmictiger/particles/domain.hpp>
+#include <cosmictiger/particles/drift.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
 namespace detail {
@@ -987,6 +991,173 @@ FmmWalkPeriodicField fmmWalkDirectPeriodicReference(ParticleInteger sink) {
     return fmmWalkDirectPeriodicReference(sink - range.first, positions, masses);
 }
 
+void fmmWalkOrdinaryTimesteps(bool useCuda) {
+    auto const saved = getOptions();
+    auto options = saved;
+    options.chemistry.enabled = false;
+    options.lightcone.enabled = false;
+    options.run.minRung = 2;
+    options.gravity.gm = 0.125;
+    options.gravity.timestepEta = 1.0e6;
+    options.initial.numberOfParticles = 3;
+    constexpr double kScale = 0.5;
+    constexpr double kBaseTimestep = 0.03125;
+    constexpr double kDriftTimestep = 0.0078125;
+    constexpr double kKickTolerance = 5.0e-6;
+    std::array<Array<Position, kDimensions>, 3> const positions{fmmWalkDistributedPosition(0),
+        fmmWalkDistributedPosition(1), fmmWalkDistributedPosition(2)};
+    Vector<Array<Position, kDimensions>> referencePositions(positions.begin(), positions.end());
+    Vector<double> masses(positions.size(), 1.0);
+    std::array<FmmWalkPeriodicField, 3> references;
+    for (size_t i = 0; i < positions.size(); ++i) {
+        references[i] = fmmWalkDirectPeriodicReference(i, referencePositions, masses);
+    }
+    auto const initialVelocity = [](size_t particle, int dim) {
+        return 0.125f * (particle + 1) * (dim + 1);
+    };
+    for (int backend = 0; backend < (useCuda ? 2 : 1); ++backend) {
+        options.compute.cuda = backend != 0;
+        for (bool glass : {false, true}) {
+            options.initial.createGlass = glass;
+            options.run.scenario = glass ? "glass" : "plummer";
+            setOptions(options);
+            for (int pass = 0; pass < 3; ++pass) {
+                bool const firstCall = pass == 0;
+                bool const fullEvaluation = pass != 2;
+                int const minimumRung = fullEvaluation ? 0 : 3;
+                std::string const label = std::string("ordinary timestep ") +
+                    (backend ? "CUDA " : "CPU ") + (glass ? "glass " : "normal ") +
+                    (firstCall             ? "first" :
+                            fullEvaluation ? "followup" :
+                                             "partial");
+                particlesResize(positions.size());
+                double initialKinetic = 0.0;
+                for (size_t i = 0; i < positions.size(); ++i) {
+                    fmmWalkSetParticlePosition(i, positions[i]);
+                    particlesRung(i) = i == 0 ? 2 : 3;
+                    for (int dim = 0; dim < kDimensions; ++dim) {
+                        float const velocity = initialVelocity(i, dim);
+                        particlesVel(dim, i) = velocity;
+                        initialKinetic += 0.5 * velocity * velocity;
+                        particlesGravityAcceleration(dim, i) = 12345.0f;
+                    }
+                    particlesPot(i) = 6789.0f;
+                }
+                particlesSortByRung(0);
+                domainsRebound();
+                EnergiesT energies{};
+                energies.pot = 11.0;
+                energies.kin = 12.0;
+                energies.xmom = 13.0;
+                energies.ymom = 14.0;
+                energies.zmom = 15.0;
+                energies.nmom = 16.0;
+                energies.tckin = initialKinetic;
+                advanceForces(minimumRung, kScale, 0.0, firstCall ? 0.0 : kBaseTimestep,
+                    kBaseTimestep, 0.1, firstCall, fullEvaluation, energies);
+                if (particlesSize() != positions.size()) {
+                    throw std::runtime_error(label + " changed particle count");
+                }
+                double kinetic = 0.0, synchronizedKinetic = 0.0, potential = 0.0;
+                std::array<double, kDimensions> momentum{};
+                double momentumNorm = 0.0;
+                for (size_t i = 0; i < positions.size(); ++i) {
+                    size_t id = positions.size();
+                    for (size_t candidate = 0; candidate < positions.size(); ++candidate) {
+                        bool matches = true;
+                        for (int dim = 0; dim < kDimensions; ++dim) {
+                            matches &=
+                                particlesPos(dim, i).raw() == positions[candidate][dim].raw();
+                        }
+                        if (matches) {
+                            id = candidate;
+                            break;
+                        }
+                    }
+                    if (id == positions.size()) {
+                        throw std::runtime_error(label + " changed a particle position");
+                    }
+                    int const oldRung = id == 0 ? 2 : 3;
+                    bool const active = oldRung >= minimumRung;
+                    int const newRung = active ? (fullEvaluation ? 2 : 3) : oldRung;
+                    fmmWalkRequireClose(label + " rung", particlesRung(i), newRung, 0.0);
+                    double speedSquared = 0.0;
+                    for (int dim = 0; dim < kDimensions; ++dim) {
+                        float expected = initialVelocity(id, dim);
+                        float synchronized = expected;
+                        if (active) {
+                            float const acceleration = particlesGravityAcceleration(dim, i);
+                            fmmWalkRequireClose(label + " unsigned acceleration", acceleration,
+                                options.gravity.gm * references[id].acceleration[dim]);
+                            float const sign = glass ? -1.0f : 1.0f;
+                            if (!firstCall) {
+                                synchronized = std::fma(acceleration,
+                                    sign * std::ldexp(float(0.5 * kBaseTimestep), -oldRung),
+                                    synchronized);
+                            }
+                            expected = std::fma(acceleration,
+                                sign * std::ldexp(float(0.5 * kBaseTimestep), -newRung),
+                                synchronized);
+                        }
+                        fmmWalkRequireClose(label + " signed half kicks", particlesVel(dim, i),
+                            expected, active ? kKickTolerance : 0.0);
+                        kinetic += 0.5 * double(expected) * expected;
+                        synchronizedKinetic += 0.5 * double(synchronized) * synchronized;
+                        momentum[dim] += synchronized;
+                        speedSquared += double(synchronized) * synchronized;
+                    }
+                    momentumNorm += std::sqrt(speedSquared);
+                    if (fullEvaluation) {
+                        fmmWalkRequireClose(label + " unsigned potential", particlesPot(i),
+                            options.gravity.gm * references[id].potential);
+                        potential += 0.5 * particlesPot(i);
+                    }
+                }
+                fmmWalkRequireClose(
+                    label + " actual kinetic accumulator", energies.tckin, kinetic, kKickTolerance);
+                fmmWalkRequireClose(label + " synchronized potential", energies.pot,
+                    fullEvaluation ? potential / kScale : 11.0, kKickTolerance);
+                fmmWalkRequireClose(label + " synchronized kinetic", energies.kin,
+                    fullEvaluation ? synchronizedKinetic / (kScale * kScale) : 12.0,
+                    kKickTolerance);
+                fmmWalkRequireClose(label + " synchronized x momentum", energies.xmom,
+                    fullEvaluation ? momentum[0] / kScale : 13.0, kKickTolerance);
+                fmmWalkRequireClose(label + " synchronized y momentum", energies.ymom,
+                    fullEvaluation ? momentum[1] / kScale : 14.0, kKickTolerance);
+                fmmWalkRequireClose(label + " synchronized z momentum", energies.zmom,
+                    fullEvaluation ? momentum[2] / kScale : 15.0, kKickTolerance);
+                fmmWalkRequireClose(label + " synchronized momentum norm", energies.nmom,
+                    fullEvaluation ? momentumNorm / kScale : 16.0, kKickTolerance);
+                std::array<std::array<float, kDimensions>, 3> beforeDrift;
+                std::array<Array<Position, kDimensions>, 3> beforePositions;
+                for (size_t i = 0; i < positions.size(); ++i) {
+                    for (int dim = 0; dim < kDimensions; ++dim) {
+                        beforeDrift[i][dim] = particlesVel(dim, i);
+                        beforePositions[i][dim] = particlesPos(dim, i);
+                    }
+                }
+                drift(kScale, kDriftTimestep, 0.0, kDriftTimestep, 1.0);
+                double const damping =
+                    glass ? 1.0 / (1.0 + std::numbers::pi * kDriftTimestep) : 1.0;
+                double const positionTolerance = std::max(2.0 * std::ldexp(1.0, -kPositionBits),
+                    4.0 * std::numeric_limits<double>::epsilon());
+                for (size_t i = 0; i < positions.size(); ++i) {
+                    for (int dim = 0; dim < kDimensions; ++dim) {
+                        fmmWalkRequireClose(label + " drift damping", particlesVel(dim, i),
+                            beforeDrift[i][dim] * damping, kKickTolerance);
+                        double const displaced = beforePositions[i][dim].toDouble() +
+                            beforeDrift[i][dim] * (kDriftTimestep / kScale);
+                        fmmWalkRequireClose(label + " drift position",
+                            particlesPos(dim, i).toDouble(), displaced - std::floor(displaced),
+                            positionTolerance);
+                    }
+                }
+            }
+        }
+    }
+    setOptions(saved);
+}
+
 void fmmWalkPeriodicBackground(bool useCuda) {
     constexpr float kTheta = 0.1f;
     constexpr float kUntouchedPotential = 12345.0f;
@@ -1360,6 +1531,7 @@ void fmmWalkTest() {
     options.hydro.enabled = false;
 
     options.gravity.enabled = true;
+    options.run.hierarchicalGravity = integration::kBuildUsesHierarchical;
     options.analysis.saveForce = true;
 
     options.analysis.groups = false;
@@ -1377,6 +1549,9 @@ void fmmWalkTest() {
         detail::fmmWalkInternalCloudHybrid(useCuda);
         detail::fmmWalkCellSupportBounds(useCuda);
         detail::fmmWalkPeriodicBackground(useCuda);
+        if constexpr (!integration::kBuildUsesHierarchical) {
+            detail::fmmWalkOrdinaryTimesteps(useCuda);
+        }
         detail::fmmWalkOpenLargerCell(useCuda);
     } else {
         Vector<hpx::future<void>> pending;

@@ -591,7 +591,8 @@ void domainsBegin(int rung) {
                     for (ParticleInteger i = begin; i < end; i++) {
                         // Ordinary timesteps drift every rung together. Rebalance
                         // all particles before building their common gravity tree.
-                        if (!getOptions().run.hierarchicalGravity || particlesRung(i) == rung) {
+                        if (!integration::kBuildUsesHierarchical || !getOptions().gravity.enabled ||
+                            particlesRung(i) == rung) {
                             Array<double, kDimensions> x;
                             for (ParticleInteger dim = 0; dim < kDimensions; dim++) {
                                 x[dim] = positionDomainCoordinate(particlesPos(dim, i));

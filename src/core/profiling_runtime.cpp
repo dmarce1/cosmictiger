@@ -8,6 +8,11 @@
 #include <system_error>
 
 #include <hpx/config.hpp>
+#if defined(HPX_HAVE_APEX)
+#include <hpx/runtime_local/run_as_os_thread.hpp>
+#include <hpx/runtime_local/shutdown_function.hpp>
+#include <hpx/threading_base/external_timer.hpp>
+#endif
 #if defined(__linux__)
 #include <dlfcn.h>
 #endif
@@ -51,6 +56,12 @@ void configureRuntimeProfiling() {
                 std::string("Unable to configure profiling option ") + name);
         }
     }
+    // Register before hpx::init installs APEX's own pre-shutdown callback.
+    // Its MPI report reductions must not block the only HPX worker before
+    // the other ranks receive their shutdown actions. Wait cooperatively for
+    // native-thread finalization; APEX's later finalize call is idempotent.
+    hpx::register_pre_shutdown_function(
+        []() { hpx::run_as_os_thread([]() { hpx::util::external_timer::finalize(); }).get(); });
 #endif
 }
 

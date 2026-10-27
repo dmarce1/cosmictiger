@@ -94,7 +94,8 @@ void runFixedScenario() {
     }
     state.minrung0 = std::max(state.minrung0, baseOptions.run.minRung);
     bool const hierarchicalMesh =
-        baseOptions.run.hierarchicalGravity && usesMeshGravity(baseOptions.gravity);
+        integration::kBuildUsesHierarchical && baseOptions.gravity.enabled &&
+        usesMeshGravity(baseOptions.gravity);
     domainsRebound();
     Timer checkpointTimer;
     checkpointTimer.start();

@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Dominic C. Marcello
 # SPDX-License-Identifier: BSL-1.0
 
-"""Check periodic PMMM hierarchical evolution, restart, and solver identity."""
+"""Check periodic PMMM evolution, restart, and compiled solver/integrator identity."""
 
 import argparse
 import ctypes
@@ -46,7 +46,8 @@ def use_legacy_pp_extension(checkpoint, ranks):
     rewriteCheckpoint(checkpoint, ranks, transform)
 
 
-def changeCompiledIdentity(checkpoint, ranks, *, order=None, near_method=None, fmm=False):
+def changeCompiledIdentity(checkpoint, ranks, *, order=None, near_method=None, fmm=False,
+                           time_integrator=None):
     """Present the executable with a validly checksummed incompatible variant."""
     def transform(data, offset):
         payload = bytearray(data)
@@ -56,11 +57,17 @@ def changeCompiledIdentity(checkpoint, ranks, *, order=None, near_method=None, f
             struct.pack_into("=Q", payload, offset + 8 * 2, order)
         if near_method is not None:
             struct.pack_into("=Q", payload, offset + 8 * 7, int(near_method == "fmm"))
-        if fmm:
+        if fmm or time_integrator is not None:
             header = Header.from_buffer_copy(payload)
-            header.flags &= ~(1 << 17)
+            if time_integrator == "hierarchical":
+                header.flags |= 1 << 6
+            elif time_integrator == "leapfrog":
+                header.flags &= ~(1 << 6)
+            if fmm:
+                header.flags &= ~(1 << 17)
             payload[:offset] = bytes(header)
-            del payload[offset:offset + 64]
+            if fmm:
+                del payload[offset:offset + 64]
         return bytes(payload)
     rewriteCheckpoint(checkpoint, ranks, transform)
 
@@ -80,6 +87,7 @@ def main():
     parser.add_argument("--cuda", action="store_true")
     parser.add_argument("--near-method", choices=("pp", "fmm"), required=True)
     parser.add_argument("--order", type=int, choices=range(3, 10), required=True)
+    parser.add_argument("--time-integrator", choices=("leapfrog", "hierarchical"), required=True)
     args = parser.parse_args()
     executable = args.executable.resolve()
     root = args.workdir.resolve()
@@ -117,13 +125,17 @@ def main():
         if hydro:
             rejected = prepareCase(root, label + "_rejected")
             log = run(rejected, dict(options, **{"run.maxIterations": 0}), False)
-            require("SPH currently requires an FMM build when gravity.enabled=true" in log,
+            diagnostic = ("COSMICTIGER_TIME_INTEGRATOR=leapfrog"
+                          if args.time_integrator == "hierarchical" else
+                          "SPH currently requires an FMM build when gravity.enabled=true")
+            require(diagnostic in log,
                     "PMMM with SPH was not rejected with the expected diagnostic")
             print(f"{label}: unsupported PMMM with SPH rejected at startup")
             continue
         baseline = prepareCase(root, label + "_baseline")
         log = run(baseline, dict(options, **{"run.maxIterations": 3}))
-        for key, expected in (("build.gravityMethod", "pmmm"),
+        for key, expected in (("build.timeIntegrator", args.time_integrator),
+                              ("build.gravityMethod", "pmmm"),
                               ("build.pmmmNearMethod", args.near_method),
                               ("build.fmmOrder", str(args.order))):
             require(re.search(r"^" + re.escape(key) + r"\s*:\s*" + expected + r"\s*$",
@@ -133,9 +145,10 @@ def main():
                        key=lambda path: int(path.name.split(".")[1]))
         require([int(path.name.split(".")[1]) for path in paths] == [1, 2, 3, 4],
                 f"{label}: expected one PMMM checkpoint per step")
-        states = [read_checkpoint(path, ranks) for path in paths]
-        require(any(len({row["rung"] for row in rows}) > 1 for _, _, rows in states),
-                "hierarchical evolution fixture did not exercise simultaneous particle rungs")
+        states = [read_checkpoint(path, ranks, args.time_integrator) for path in paths]
+        if args.time_integrator == "hierarchical":
+            require(any(len({row["rung"] for row in rows}) > 1 for _, _, rows in states),
+                    "hierarchical evolution fixture did not exercise simultaneous particle rungs")
         check_clock(states)
         for before, after in zip(states, states[1:]):
             check_single_drift(before, after)
@@ -144,14 +157,16 @@ def main():
         log = run(resumed, dict(options, **{"checkpoint.readIndex": 2,
                                           "run.maxIterations": 1}))
         require("Done reading checkpoint" in log, "PMMM restart did not load its checkpoint")
-        compare_restart(states[-1], read_checkpoint(resumed / "checkpoint.4", ranks))
+        compare_restart(states[-1], read_checkpoint(
+            resumed / "checkpoint.4", ranks, args.time_integrator))
         if near_method == "pp":
             legacy = prepareCase(root, label + "_legacy", source)
             use_legacy_pp_extension(legacy / source.name, ranks)
             # The inspection decoder and application must both accept v1 as PP.
-            read_checkpoint(legacy / source.name, ranks)
+            read_checkpoint(legacy / source.name, ranks, args.time_integrator)
             run(legacy, dict(options, **{"checkpoint.readIndex": 2, "run.maxIterations": 1}))
-            compare_restart(states[-1], read_checkpoint(legacy / "checkpoint.4", ranks))
+            compare_restart(states[-1], read_checkpoint(
+                legacy / "checkpoint.4", ranks, args.time_integrator))
         else:
             rejected = prepareCase(root, label + "_legacy_reject_fmm", source)
             use_legacy_pp_extension(rejected / source.name, ranks)
@@ -167,17 +182,19 @@ def main():
             require("checkpoint" in log.lower(), f"{name} mismatch lacked a checkpoint diagnostic")
         identities = (("order", {"order": 3 if args.order != 3 else 4}),
                       ("near_method", {"near_method": "fmm" if near_method == "pp" else "pp"}),
-                      ("solver", {"fmm": True}))
+                      ("solver", {"fmm": True}),
+                      ("integrator", {"time_integrator": "hierarchical"
+                                      if args.time_integrator == "leapfrog" else "leapfrog"}))
         for name, identity in identities:
             rejected = prepareCase(root, label + "_reject_" + name, source)
             changeCompiledIdentity(rejected / source.name, ranks, **identity)
             log = run(rejected, dict(options, **{
                 "checkpoint.readIndex": 2, "run.maxIterations": 0}), False)
             require("checkpoint" in log.lower(), f"{name} mismatch lacked a checkpoint diagnostic")
-        print(f"{label}: hierarchical dyadic steps, scheduled single drifts, restart state, and PMMM mesh/order/near-width/method/solver "
-              "mismatch rejection passed")
+        print(f"{label}: {args.time_integrator} dyadic steps, scheduled single drifts, restart state, "
+              "and PMMM mesh/order/near-width/method/solver/integrator mismatch rejection passed")
     print(f"PMMM evolution passed ({ranks} rank(s), {'CUDA' if args.cuda else 'CPU'} drift, "
-          f"{args.position_type})")
+          f"{args.position_type}, {args.time_integrator})")
     return 0
 
 

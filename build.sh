@@ -97,6 +97,7 @@ fi
 buildMode=release
 gravityVariant=fmm
 fmmOrder=7
+timeIntegrator=leapfrog
 enableCuda=ON
 testSuite=OFF
 buildJobs=4
@@ -176,6 +177,19 @@ chooseFmmOrder() {
     done
 }
 
+chooseTimeIntegrator() {
+    while true; do
+        printf '\nTime integrator: 1) Leapfrog (KDK)  2) Hierarchical (dark matter only)\n'
+        readInput "Choice [${timeIntegrator}]: "
+        case "${promptValue,,}" in
+            '') return ;;
+            1|leapfrog) timeIntegrator=leapfrog; return ;;
+            2|hierarchical) timeIntegrator=hierarchical; return ;;
+        esac
+        printf 'Choose 1 or 2, or press Enter to keep the current integrator.\n'
+    done
+}
+
 chooseToggle() {
     local label=$1
     local currentValue=$2
@@ -229,6 +243,7 @@ showMainMenu() {
     printf '  8) Additional dependency prefixes: %s\n' "${dependencyPrefixes:-system default}"
     printf '  9) Gravity solver: %s\n' "$gravityVariant"
     printf ' 10) FMM kernel order: %s\n' "$fmmOrder"
+    printf ' 11) Time integrator: %s\n' "$timeIntegrator"
     printf '  Enter or b) Configure and build    q) Quit\n'
     printf 'Build jobs accept any positive count; MPI tests use four CPUs each.\n'
 }
@@ -279,7 +294,7 @@ if command -v whiptail >/dev/null 2>&1 && [[ ${TERM:-dumb} != dumb ]]; then
         if ! menuChoice=$(dialogChoice --title 'Build configuration' \
             --cancel-button 'Quit' --default-item 1 --notags \
             --menu 'Use arrow keys to choose a setting. Build jobs accept any positive count.' \
-            23 78 12 \
+            24 78 13 \
             1 "Build mode: $buildMode" \
             2 "CUDA: $enableCuda" \
             3 "Build and run test suite: $testSuite" \
@@ -290,6 +305,7 @@ if command -v whiptail >/dev/null 2>&1 && [[ ${TERM:-dumb} != dumb ]]; then
             8 "Additional dependency prefixes: ${dependencyPrefixes:-system default}" \
             9 "Gravity solver: $gravityVariant" \
             10 "FMM kernel order: $fmmOrder" \
+            11 "Time integrator: $timeIntegrator" \
             b 'Configure and build' \
             q 'Quit'); then
             printf 'No build started.\n'
@@ -315,6 +331,15 @@ if command -v whiptail >/dev/null 2>&1 && [[ ${TERM:-dumb} != dumb ]]; then
                     7 'Multipole degree 5' 8 'Multipole degree 6' \
                     9 'Multipole degree 7'); then
                     fmmOrder=$promptValue
+                fi
+                ;;
+            11)
+                if promptValue=$(dialogChoice --title 'Time integrator' \
+                    --default-item "$timeIntegrator" \
+                    --menu 'Select the time integrator compiled into this executable.' 12 72 2 \
+                    leapfrog 'Ordinary block-timestep kick-drift-kick (default)' \
+                    hierarchical 'Hierarchical gravity (dark matter only; no SPH)'); then
+                    timeIntegrator=$promptValue
                 fi
                 ;;
             b) break ;;
@@ -391,6 +416,7 @@ else
             8) chooseText 'Additional dependency prefixes' "$dependencyPrefixes"; dependencyPrefixes=$promptValue ;;
             9) chooseGravityVariant ;;
             10) chooseFmmOrder ;;
+            11) chooseTimeIntegrator ;;
             *) printf 'Unknown option.\n' ;;
         esac
     done
@@ -412,7 +438,7 @@ case "$gravityVariant" in
     pmmm_fmm) gravityMethod=pmmm; pmmmNearMethod=fmm ;;
     pmmm_pp) gravityMethod=pmmm; pmmmNearMethod=pp ;;
 esac
-buildDir="$rootDir/build/${buildMode}_${gravityVariant}_order${fmmOrder}"
+buildDir="$rootDir/build/${buildMode}_${gravityVariant}_order${fmmOrder}_${timeIntegrator}"
 if ! mkdir -p -- "$buildDir"; then
     printf 'Cannot create build directory: %s\n' "$buildDir" >&2
     exit 1
@@ -446,6 +472,7 @@ configureCommand=(cmake -S "$rootDir" -B "$buildDir" -G Ninja
     "-DCOSMICTIGER_GRAVITY_METHOD=$gravityMethod"
     "-DCOSMICTIGER_PMMM_NEAR_METHOD=$pmmmNearMethod"
     "-DCOSMICTIGER_WITH_ORDER=$fmmOrder"
+    "-DCOSMICTIGER_TIME_INTEGRATOR=$timeIntegrator"
     "-DCOSMICTIGER_REQUIRE_APEX=$requireApex"
     "-DBUILD_TESTING=$testSuite"
     "-DCMAKE_PREFIX_PATH=$prefixPath")
@@ -496,6 +523,7 @@ runStage() {
 }
 
 printf '\nGravity solver: %s; FMM kernel order: %s\n' "$gravityVariant" "$fmmOrder"
+printf 'Time integrator: %s\n' "$timeIntegrator"
 printf 'Build directory: %s\nLog: %s\n' "$buildDir" "$logFile"
 runStage Configure "${configureCommand[@]}" || exit $?
 runStage 'Build cosmictiger' "${buildCommand[@]}" || exit $?

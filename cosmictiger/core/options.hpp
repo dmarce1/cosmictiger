@@ -11,6 +11,7 @@
 #include <stddef.h>
 #include <string>
 
+#include <cosmictiger/core/build_config.hpp>
 #include <cosmictiger/gravity/build_config.hpp>
 
 // Public data groups mirror the CLI/INI category names. Radius aliases are
@@ -26,8 +27,8 @@ struct Run {
     // run.test=force: build the tree once at this opening angle and sweep only
     // the kick's angle upward from it; zero rebuilds the tree at every angle.
     double treeOpeningAngle{};
-    // Derived run mode: use hierarchical gravity steps for dark matter.
-    bool hierarchicalGravity{};
+    // Build-selected mode; retained in the historical serialized layout.
+    bool hierarchicalGravity{integration::kBuildUsesHierarchical};
 };
 
 struct Compute {
