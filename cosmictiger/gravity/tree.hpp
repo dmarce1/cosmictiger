@@ -22,7 +22,7 @@
 #include <cosmictiger/math/range.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
-// Tree multipoles live in an arena of runtime-order positioned records
+// Tree multipoles live in an arena of build-order positioned records
 // (fmmPositionedMultipoleBytes(fmmOrder()) bytes each, stored
 // fmmPositionedMultipoleStride(fmmOrder()) bytes apart). Nodes point at the
 // order-agnostic position header; per-order code views the moments through

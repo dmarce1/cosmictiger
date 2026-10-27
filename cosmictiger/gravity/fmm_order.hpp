@@ -9,11 +9,11 @@
 #pragma once
 
 #include <type_traits>
-#include <utility>
 
 #include <cosmictiger/core/assert.hpp>
 #include <cosmictiger/core/defs.hpp>
 #include <cosmictiger/cuda/cuda.hpp>
+#include <cosmictiger/gravity/build_config.hpp>
 #include <cosmictiger/math/position.hpp>
 
 // FMM order conventions.
@@ -26,11 +26,9 @@
 // background quadratic; order 9 (degree-7 multipoles, degree-8 expansions) is
 // the largest: single precision gains nothing measurable beyond it.
 //
-// Every order in [kFmmMinOrder, kFmmMaxOrder] is compiled into the binary. The
-// run selects one order at startup (gravity.fmmOrder, defaulting to the build's
-// COSMICTIGER_WITH_ORDER) and fmmDispatch() switches to the matching
-// instantiation at coarse boundaries: tree construction, a CPU walk, a CUDA
-// launch. Inner loops never test the order.
+// COSMICTIGER_WITH_ORDER selects the only order compiled into this binary.
+// fmmDispatch() directly instantiates it at tree, CPU walk, and CUDA launch
+// boundaries; no runtime order selection is performed.
 //
 // Coefficient counts use compact rank-major Cartesian storage: a degree-d
 // harmonic tensor stores (d + 1)^2 coefficients, and local expansions append one constant Laplacian
@@ -45,12 +43,9 @@
 inline constexpr int kFmmMinOrder = FMM_MIN_ORDER;
 inline constexpr int kFmmMaxOrder = FMM_MAX_ORDER;
 
-#ifndef ORDER
-#error "ORDER (the default FMM order, COSMICTIGER_WITH_ORDER) must be defined"
-#endif
-inline constexpr int kFmmDefaultOrder = ORDER;
-static_assert(kFmmDefaultOrder >= kFmmMinOrder && kFmmDefaultOrder <= kFmmMaxOrder,
-    "COSMICTIGER_WITH_ORDER must select an FMM order from 3 to 9");
+inline constexpr int kFmmDefaultOrder = gravity::kBuildFmmOrder;
+static_assert(kFmmMinOrder == kFmmDefaultOrder && kFmmMaxOrder == kFmmDefaultOrder,
+    "FMM_MIN_ORDER and FMM_MAX_ORDER must equal the selected COSMICTIGER_WITH_ORDER");
 
 CUDA_EXPORT constexpr int fmmMultipoleDegree(int order) {
     return order - 2;
@@ -154,53 +149,23 @@ struct FmmOrder {
     static constexpr int kEwaldTensorOrder_ = order;
 };
 
-// The order selected for this run. setFmmOrder validates the range; options
-// parsing calls it before any tree, kick or Ewald table is built.
-int fmmOrder();
+// Compatibility checks for callers carrying serialized or explicit orders.
+// The selected order itself is a constant for the lifetime of the executable.
+inline constexpr int fmmOrder() {
+    return kFmmDefaultOrder;
+}
 void setFmmOrder(int order);
 
-// Call f(std::integral_constant<int, order>{}) for the runtime order.
+// Explicit-order callers must request this binary's sole compiled order.
 template <class F>
 decltype(auto) fmmDispatch(int order, F&& f) {
-    switch (order) {
-#if FMM_MIN_ORDER <= 3 && FMM_MAX_ORDER >= 3
-    case 3:
-        return f(std::integral_constant<int, 3>{});
-#endif
-#if FMM_MIN_ORDER <= 4 && FMM_MAX_ORDER >= 4
-    case 4:
-        return f(std::integral_constant<int, 4>{});
-#endif
-#if FMM_MIN_ORDER <= 5 && FMM_MAX_ORDER >= 5
-    case 5:
-        return f(std::integral_constant<int, 5>{});
-#endif
-#if FMM_MIN_ORDER <= 6 && FMM_MAX_ORDER >= 6
-    case 6:
-        return f(std::integral_constant<int, 6>{});
-#endif
-#if FMM_MIN_ORDER <= 7 && FMM_MAX_ORDER >= 7
-    case 7:
-        return f(std::integral_constant<int, 7>{});
-#endif
-#if FMM_MIN_ORDER <= 8 && FMM_MAX_ORDER >= 8
-    case 8:
-        return f(std::integral_constant<int, 8>{});
-#endif
-#if FMM_MIN_ORDER <= 9 && FMM_MAX_ORDER >= 9
-    case 9:
-        return f(std::integral_constant<int, 9>{});
-#endif
-    default:
-        break;
-    }
-    ALWAYS_ASSERT(false);
+    ALWAYS_ASSERT(order == kFmmDefaultOrder);
     return f(std::integral_constant<int, kFmmDefaultOrder>{});
 }
 
 template <class F>
 decltype(auto) fmmDispatch(F&& f) {
-    return fmmDispatch(fmmOrder(), std::forward<F>(f));
+    return f(std::integral_constant<int, kFmmDefaultOrder>{});
 }
 
 // Internal normalized FMM coordinate scale. Physical lengths use the unit box.

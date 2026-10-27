@@ -129,10 +129,10 @@ void meshTimestepStep(TimeType clock, int expectedRung, bool firstCall = false) 
 
 void particleMeshTimestepTest() {
     auto options = getOptions();
-    options.gravity.method = "pmmm";
+    options.gravity.method = gravity::kBuildGravityMethod;
     options.gravity.meshSize = 8;
     options.gravity.pmmmNearWidth = 2;
-    options.gravity.pmmmNearMethod = "pp";
+    options.gravity.pmmmNearMethod = gravity::kBuildPmmmNearMethod;
     options.gravity.gm = 1.0;
     options.compute.cuda = false;
     options.hydro.enabled = false;

@@ -4,7 +4,9 @@
 accuracy runs one explicit order/angle on clustered, adaptive, or both fixtures.
 The baseline is order 7 at theta 0.61; candidates require its summary.json.
 timing accepts only explicit ORDER:THETA=summary.json candidates that passed on
-both fixtures with the same binary and source state. It runs three alternating
+both fixtures with the same binary for each order and the same source state.
+Build a separate FMM executable for each order. Accuracy uses --binary; timing
+uses --binary for the baseline and --order-binary ORDER=PATH for other orders. It runs three alternating
 pairs of eleven measured samples. This is a synthetic full-walk comparison,
 not a production checkpoint replay or a high-precision reference validation.
 """
@@ -23,7 +25,7 @@ import subprocess
 import sys
 import time
 
-from run_cuda_kick_arena import digest, parse_log
+from run_cuda_kick_arena import binaryCapabilities, digest, parse_log
 
 
 FIXTURES = ("clustered", "adaptive")
@@ -125,9 +127,14 @@ def evidence(path):
 
 
 def compatible(first, second):
-    for field in ("binary_sha256", "git_head", "git_diff_sha256", "driver_sha256", "settings"):
+    for field in ("git_head", "git_diff_sha256", "driver_sha256", "settings"):
         if first[field] != second[field]:
             raise RuntimeError(f"Accuracy evidence differs in {field}")
+    if "binaries" not in first or "binaries" not in second:
+        raise RuntimeError("Accuracy evidence must record the compiled executable for each order")
+    for order in first["binaries"].keys() & second["binaries"].keys():
+        if first["binaries"][order]["sha256"] != second["binaries"][order]["sha256"]:
+            raise RuntimeError(f"Accuracy evidence differs in the order-{order} executable")
 
 
 def checked_rows(record, fixture):
@@ -177,11 +184,25 @@ def metadata(args):
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repository, text=True).strip()
     difference = subprocess.check_output(["git", "diff", "--binary", "HEAD", "--"], cwd=repository)
     binary = Path(args.binary).resolve(strict=True)
+    binaries = {}
+    for expectedOrder, path in [(None, binary), *args.order_binary]:
+        path = Path(path).resolve(strict=True)
+        capability = binaryCapabilities({"label": str(path), "path": str(path)})
+        order = capability["compiled_order"]
+        if capability["gravity_method"] != "fmm" or order is None:
+            raise RuntimeError(f"{path}: requires an FMM executable with a reported compiled order")
+        if expectedOrder is not None and order != expectedOrder:
+            raise RuntimeError(f"{path}: compiled order {order} differs from requested {expectedOrder}")
+        record = {"path": str(path), "sha256": digest(path), "order": order}
+        if str(order) in binaries and binaries[str(order)] != record:
+            raise RuntimeError(f"Multiple executables supplied for order {order}")
+        binaries[str(order)] = record
     return {
         "utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "command": shlex.join(sys.argv),
         "binary": str(binary),
         "binary_sha256": digest(binary),
+        "binaries": binaries,
         "git_head": head,
         "git_diff_sha256": hashlib.sha256(difference).hexdigest(),
         "driver_sha256": digest(__file__),
@@ -197,16 +218,25 @@ def prepare_output(path):
     return path
 
 
+def requireBinary(info, order):
+    record = info["binaries"].get(str(order))
+    if record is None:
+        raise RuntimeError(f"Order {order} requires a matching --binary or --order-binary {order}=PATH")
+    if digest(record["path"]) != record["sha256"]:
+        raise RuntimeError(f"Compiled order-{order} executable changed after the option probe")
+    return record
+
+
 def run_case(output, info, config, fixture, samples, reference, name):
+    binary = requireBinary(info, config["order"])
     directory = output / "runs" / name
     directory.mkdir(parents=True)
     settings = info["settings"]
     command = [
-        "taskset", "-c", settings["cpus"], info["binary"],
+        "taskset", "-c", settings["cpus"], binary["path"],
         "--run.test=cartesianBenchmark", "--compute.cuda=true",
         f"--initial.particlesPerDimension={settings['side']}",
         f"--compute.bucketSize={settings['bucket']}",
-        f"--gravity.fmmOrder={config['order']}",
         f"--gravity.openingAngle={config['theta']:.17g}",
         f"--gravity.effectiveRadius={settings['effective_radius']:.17g}",
         f"--gravity.kernelFamily={settings['kernel_family']}",
@@ -233,7 +263,7 @@ def run_case(output, info, config, fixture, samples, reference, name):
     if result.returncode:
         raise RuntimeError(f"Benchmark exited {result.returncode}; see {logfile}")
     parsed = parse_log(logfile.read_text(), samples, [fixture])
-    parsed.update(config=config, fixture=fixture, command=command, log=str(logfile),
+    parsed.update(config=config, binary=binary, fixture=fixture, command=command, log=str(logfile),
                   wall_seconds=time.monotonic() - started)
     if reference:
         reference_csv = directory / "cartesian_walk_reference.csv"
@@ -246,6 +276,7 @@ def run_case(output, info, config, fixture, samples, reference, name):
 def run_accuracy(args):
     info = metadata(args)
     config = {"order": args.order, "theta": args.theta}
+    requireBinary(info, args.order)
     fixtures = FIXTURES if args.fixture == "both" else (args.fixture,)
     base = evidence(args.baseline) if args.baseline else None
     if base:
@@ -312,10 +343,12 @@ def run_timing(args):
     compatible(info, base["metadata"])
     if base["config"] != BASELINE or not base["qualified_for_timing"]:
         raise RuntimeError("Baseline must have completed valid accuracy evidence on both fixtures")
+    requireBinary(info, BASELINE["order"])
     variants = [("baseline", BASELINE)]
     candidate_evidence = []
     for index, (config, path) in enumerate(args.candidate, 1):
         candidate = evidence(path)
+        requireBinary(info, config["order"])
         compatible(info, candidate["metadata"])
         if candidate["config"] != config or config == BASELINE:
             raise RuntimeError(f"Candidate configuration does not match evidence: {path}")
@@ -380,17 +413,30 @@ def run_timing(args):
     print(f"Timing complete: {output / 'summary.md'}", flush=True)
 
 
+def parseOrderBinary(text):
+    orderText, separator, path = text.partition("=")
+    try:
+        order = int(orderText)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("Use ORDER=PATH with order from 3 to 9") from error
+    if not separator or not path or not 3 <= order <= 9:
+        raise argparse.ArgumentTypeError("Use ORDER=PATH with order from 3 to 9")
+    return order, Path(path)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
     for name in ("accuracy", "timing"):
         child = subparsers.add_parser(name)
         child.add_argument("--binary", type=Path, required=True)
+        child.add_argument("--order-binary", type=parseOrderBinary, action="append", default=[],
+                           help="Additional compiled FMM executable as ORDER=PATH")
         child.add_argument("--output", type=Path, required=True)
         child.add_argument("--cpus", default="1-8", help="Exactly eight taskset CPU IDs")
         child.add_argument("--baseline", type=Path, required=name == "timing")
         if name == "accuracy":
-            child.add_argument("--order", type=int, choices=(5, 6, 7), required=True)
+            child.add_argument("--order", type=int, choices=range(3, 10), required=True)
             child.add_argument("--theta", type=float, required=True)
             child.add_argument("--fixture", choices=(*FIXTURES, "both"), default="both")
         else:

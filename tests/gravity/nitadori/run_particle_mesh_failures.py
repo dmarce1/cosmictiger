@@ -33,11 +33,13 @@ def run_case(args, name, marker, blocker):
     command = ([args.mpi_exec, args.mpi_numproc_flag, "2"]
                + args.mpi_preflag + [str(args.executable.resolve())]
                + args.mpi_postflag
-               + [f"--run.test={name}", "--gravity.method=pmmm", "--gravity.meshSize=8",
+               + [f"--run.test={name}", "--gravity.meshSize=8",
                   "--initial.particlesPerDimension=8", "--hydro.enabled=false",
                   "--compute.cuda=false", "--hpx:threads=2", "--hpx:bind=none",
                   "--hpx:localities=2", "--hpx:ini=hpx.parcel.mpi.enable=1",
-                  "--hpx:ini=hpx.parcel.tcp.enable=0", "--hpx:ini=hpx.threadpools.io_pool_size=1"])
+                  "--hpx:ini=hpx.threadpools.io_pool_size=1"])
+    if args.disable_tcp:
+        command.append("--hpx:ini=hpx.parcel.tcp.enable=0")
     log_path = workdir / "failure.log"
     with log_path.open("w") as log:
         with subprocess.Popen(command, cwd=workdir, env=environment, text=True,
@@ -69,6 +71,8 @@ def main():
     parser.add_argument("--mpi-numproc-flag", default="-n")
     parser.add_argument("--mpi-preflag", action="append", default=[])
     parser.add_argument("--mpi-postflag", action="append", default=[])
+    parser.add_argument("--disable-tcp", action="store_true",
+                        help="disable the TCP parcelport when it is present in the HPX build")
     args = parser.parse_args()
     run_case(args, "particleMeshDispatchLaunchFailure", "launch", 0)
     run_case(args, "particleMeshDispatchAsyncFailure", "asynchronous", 1)

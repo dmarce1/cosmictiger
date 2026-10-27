@@ -550,7 +550,7 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
     runData.sinkGravityAccelerationY = &sphParticlesGravityAcceleration(kYDimension, 0);
     runData.sinkGravityAccelerationZ = &sphParticlesGravityAcceleration(kZDimension, 0);
     runData.adiabaticIndex = getOptions().hydro.gamma;
-    runData.gravityEffectiveRadius = getOptions().gravity.method == "pmmm" ?
+    runData.gravityEffectiveRadius = gravity::kBuildUsesPmmm ?
         pmmmEffectiveRadius() :
         getOptions().gravity.supportRadius /
             selectedGravityKernel().supportRadiusPerEffectiveRadius;

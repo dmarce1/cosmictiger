@@ -24,7 +24,7 @@ for all options and defaults. HPX's own options retain their `--hpx:*` syntax.
 | `output` | Particle Silo output, cadence, directory, unit system, frame, and selected box |
 | `analysis` | Power spectrum, halos, tracers, slices, and views |
 | `lightcone` | Lightcone output and group finding |
-| `gravity` | FMM or PMMM gravity, mesh selection, softening, opening angle, and timestep |
+| `gravity` | Mesh selection, softening, global FMM opening angle, and timestep |
 | `cosmology` | Redshifts, density parameters, and primordial spectrum |
 | `units` | Particle mass unit in solar masses |
 | `hydro` | SPH, equation of state, smoothing radii, and artificial viscosity |
@@ -84,18 +84,35 @@ record the representation and must be restarted with the same `compute.positionT
 The legacy `glass.bin` exchange format remains Q0.32 in both modes; checkpoints
 retain the selected position precision.
 
-The default gravity solver is `gravity.method=fmm`. SPH currently requires FMM
-when gravity is enabled; PMMM rejects `hydro.enabled=true`.
+Choose **FMM**, **PMMM-FMM**, or **PMMM-PP**, and one expansion order from 3
+through 9 in `./build.sh`. Each executable contains the selected gravity variant
+and order. The CMake equivalents are:
 
-Select periodic particle mesh multipoles with `--gravity.method=pmmm
---gravity.meshSize=32 --gravity.fmmOrder=7 --gravity.pmmmNearWidth=2
---hydro.enabled=false`. PMMM uses
-the spherical FMM's total-degree M2L truncation, one FFTW3-MPI group containing
-all localities, cached FFT plans and Green spectra, and direct softened near
-interactions by default. Add `--gravity.pmmmNearMethod=fmm` to evaluate the same
-near-cell region with the existing adaptive Cartesian FMM operators;
-`gravity.openingAngle` then controls this additional approximation. The global
-default solver remains FMM. PMMM uses the hierarchical particle timestep ladder;
+```sh
+# Global FMM, order 7 (the defaults)
+cmake -S . -B build_fmm -DCOSMICTIGER_GRAVITY_METHOD=fmm -DCOSMICTIGER_WITH_ORDER=7
+# PMMM with an FMM near field, order 8
+cmake -S . -B build_pmmm_fmm -DCOSMICTIGER_GRAVITY_METHOD=pmmm \
+  -DCOSMICTIGER_PMMM_NEAR_METHOD=fmm -DCOSMICTIGER_WITH_ORDER=8
+# Use -DCOSMICTIGER_PMMM_NEAR_METHOD=pp for direct near pairs (the PMMM default).
+```
+
+See [CMake options](CMAKE_OPTIONS.md) for all build settings and defaults.
+
+The former `gravity.method`, `gravity.pmmmNearMethod`, and `gravity.fmmOrder`
+CLI/INI settings are no longer accepted. `--help` and the
+`build.*` startup fields identify the compiled variant. SPH with gravity requires
+an FMM build; PMMM rejects `hydro.enabled=true` when gravity is enabled.
+
+Run a PMMM executable with `--gravity.meshSize=32 --gravity.pmmmNearWidth=2
+--hydro.enabled=false`. PMMM uses the spherical FMM's total-degree M2L truncation,
+one FFTW3-MPI group containing all localities, cached FFT plans and Green spectra,
+and the compiled direct-pair or adaptive Cartesian FMM near field. The compiled
+order applies to both the PMMM expansion and near FMM. Ghost width remains a
+runtime option: it defaults to two and accepts one or two cells. The opening
+angle remains available through `--gravity.openingAngle` for global FMM and
+PMMM-FMM near interactions.
+PMMM uses the hierarchical particle timestep ladder;
 `compute.cuda` selects CPU or CUDA near-field execution and drift. See [PMMM](docs/pmmm.md)
 for order conventions, mesh-aligned particle ownership, memory costs, CPU/CUDA
 near fields, and restarts.
@@ -213,7 +230,7 @@ viscosity. It is integrated with FMM gravity and particle storage. See
 [the formulation and paper references](docs/monaghan_sph.md) for the equations,
 cosmological conversions, and deliberate implementation choices. The normal
 dark-matter-only FMM mode keeps its hierarchical gravity integrator. Enable gas explicitly
-with `--hydro.enabled=true`; gas runs with gravity require `gravity.method=fmm`
+with `--hydro.enabled=true`; gas runs with gravity require an FMM build
 and use the ordinary block-timestep gravity/SPH path. Hydrodynamics without
 gravity remains supported.
 Select SIMD CPU SPH with `--compute.cuda=false` or CUDA SPH with `--compute.cuda=true`.
@@ -413,8 +430,10 @@ is best effort. This handler is adapted from OctoTiger's `stacktrace_fix` commit
 Run `./build.sh` in a terminal for the interactive builder. It uses a full-screen
 menu when `whiptail` is available, with a text menu as a fallback. Choose Release,
 RelWithDebInfo, Debug, or Profile (host gprof instrumentation), CUDA, job counts,
-HPX prefix, CUDA architectures, and additional dependency prefixes. Builds go in
-`build/<mode>` with live output and a `builder.*.log`. The default builds
+HPX prefix, CUDA architectures, additional dependency prefixes, gravity variant
+(FMM, PMMM-FMM, or PMMM-PP), and one kernel order from 3 through 9. Builds go in
+`build/<mode>_<variant>_order<order>` (for example `build/release_pmmm_fmm_order8`)
+with live output and a `builder.*.log`. The default builds
 `cosmictiger`; building and running the test suite is opt-in. Build jobs accept
 any positive count. Use `./build.sh -j 24` to select a count, or `./build.sh -j`
 (also `-j max`) to use all detected CPUs. Default test concurrency accounts for

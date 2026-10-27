@@ -106,8 +106,8 @@ void deposit() {
             CellData cell;
             cell.key = range.key;
             cell.coefficients.assign(cache.sourceCount, 0.0);
-            bool const useFmm = getOptions().gravity.pmmmNearMethod == "fmm";
-            if (useFmm) {
+            constexpr bool kUseFmm = gravity::kBuildPmmmNearUsesFmm;
+            if constexpr (kUseFmm) {
                 cell.sourceRank = hpxRank();
                 cell.particleCount = range.end - range.begin;
             } else {
@@ -119,7 +119,7 @@ void deposit() {
                 for (int axis = 0; axis < kDimensions; ++axis) {
                     cell.radialTrace += source.mass * source.offset[axis] * source.offset[axis];
                 }
-                if (!useFmm) {
+                if constexpr (!kUseFmm) {
                     cell.sources.push_back(source);
                 }
             }

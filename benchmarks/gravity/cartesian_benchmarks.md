@@ -148,12 +148,20 @@ each iteration and provides the complete root direct and Ewald checklists.
 Each case has one warmup and five measured samples; override the latter with
 `COSMICTIGER_CARTESIAN_WALK_SAMPLES`.
 
-`CARTESIAN_WALK_CONFIG` records the actual workload settings, including the runtime
-FMM order (`order=`, from `--gravity.fmmOrder`). `CARTESIAN_WALK_SAMPLE` and
+`CARTESIAN_WALK_CONFIG` records the actual workload settings, including the compiled
+FMM order (`order=`, selected by `COSMICTIGER_WITH_ORDER`). `CARTESIAN_WALK_SAMPLE` and
 `CARTESIAN_WALK_MEDIAN` report reset, tree, and kick times separately, plus an
 order-independent input-position fingerprint and force/potential checksums.
-`run_cuda_kick_arena.py --orders 5,7,9` sweeps orders; the order appears in run
-names, result keys, and every summary table.
+Build a separate FMM executable for each order. For example,
+`run_cuda_kick_arena.py --binary o5=/path/order5/cosmictiger:arena
+--binary o7=/path/order7/cosmictiger:arena --binary o9=/path/order9/cosmictiger:arena
+--orders 5,7,9` selects those compiled orders; the order appears in run names,
+result keys, and every summary table. The driver reads each binary's build
+configuration with `--help`, rejects PMMM builds, and never passes an order option
+to a current executable. Historical binaries with an advertised runtime order
+option retain their original invocation. `run_production_accuracy.py` requires
+current compiled-order binaries; supply additional timing candidates with
+`--order-binary ORDER=PATH`.
 Checksums, file output, tree cleanup, and kick workspace cleanup are outside
 the timed tree/kick intervals.
 

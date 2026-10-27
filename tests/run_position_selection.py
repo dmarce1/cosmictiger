@@ -17,6 +17,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("executable", type=Path)
     parser.add_argument("workdir", type=Path)
+    parser.add_argument("--gravity-method", choices=("fmm", "pmmm"), required=True)
     args = parser.parse_args()
     executable = args.executable.resolve()
     workdir = args.workdir.resolve()
@@ -26,6 +27,8 @@ def main():
               "--initial.particlesPerDimension=4", "--analysis.groups=false",
               "--analysis.tracers=false", "--analysis.views=false", "--analysis.power=false",
               "--lightcone.enabled=false", "--output.silo=false", "--output.directory=."]
+    if args.gravity_method == "pmmm":
+        common.append("--gravity.meshSize=8")
     metadata = ["--run.test=checkpointState"]
 
     def selection(name, options, expected, program=executable):

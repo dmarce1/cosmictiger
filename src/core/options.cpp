@@ -125,6 +125,12 @@ void setOptions(Options const& opts) {
         throw std::invalid_argument(
             "compute.positionType differs from this locality's application backend");
     }
+    if (opts.gravity.method != gravity::kBuildGravityMethod ||
+        opts.gravity.pmmmNearMethod != gravity::kBuildPmmmNearMethod) {
+        throw std::invalid_argument("Gravity solver and PMMM near method must match this "
+                                    "executable's build configuration");
+    }
+    setFmmOrder(opts.gravity.fmmOrder);
     terminal::setVerbose(opts.run.verbose);
     std::vector<hpx::future<void>> futs;
     for (auto c : hpxChildren()) {
@@ -144,7 +150,6 @@ void setOptions(Options const& opts) {
     }
 #endif
     setKernelSelections(gravitySpec, hydroSpec, opts.compute.cuda);
-    setFmmOrder(opts.gravity.fmmOrder);
     globalOpts = opts;
     setStackTraceOutputPath(outputPath("stack_trace.txt"));
     for (auto& future : futs) {
@@ -175,6 +180,9 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         gravityTable.supportRadiusPerEffectiveRadius;
     double const timestepEta = options.gravity.timestepEta;
     return {
+        {"build.gravityMethod", std::string(gravity::kBuildGravityMethod)},
+        {"build.pmmmNearMethod", std::string(gravity::kBuildPmmmNearMethod)},
+        {"build.fmmOrder", gravity::kBuildFmmOrder},
         {"configuration", options.configuration},
         {"run.test", options.run.test},
         {"run.verbose", options.run.verbose},
@@ -477,20 +485,14 @@ bool processOptions(int argc, char* argv[]) {
     po::options_description gravityOpts("Gravity");
     gravityOpts.add_options()("gravity.enabled",
         po::value<bool>(&opts.gravity.enabled)->default_value(true), "enable gravity")(
-        "gravity.method", po::value<std::string>(&opts.gravity.method)->default_value("fmm"),
-        "gravity solver: fmm or periodic multipole mesh (pmmm)")("gravity.meshSize",
-        po::value<int>(&opts.gravity.meshSize)->default_value(0),
-        "PMMM cells per axis; required with gravity.method=pmmm")("gravity.pmmmBatchParticles",
+        "gravity.meshSize", po::value<int>(&opts.gravity.meshSize)->default_value(0),
+        "PMMM cells per axis; required for PMMM builds")("gravity.pmmmBatchParticles",
         po::value<int>(&opts.gravity.pmmmBatchParticles)->default_value(4096),
         "target sink particles per ready PMMM batch; oversized cells run alone")(
         "gravity.pmmmNearWidth", po::value<int>(&opts.gravity.pmmmNearWidth)->default_value(2),
-        "PMMM neighbor cube radius in cells: 1 or 2")("gravity.pmmmNearMethod",
-        po::value<std::string>(&opts.gravity.pmmmNearMethod)->default_value("pp"),
-        "PMMM primary near interactions: pp (direct pairs) or fmm (adaptive multipoles)")(
-        "gravity.fmmOrder", po::value<int>(&opts.gravity.fmmOrder)->default_value(kFmmDefaultOrder),
-        "FMM order (multipole degree plus two), within the build's compiled range")(
-        "gravity.openingAngle", po::value<double>(&opts.gravity.openingAngle)->default_value(0.8),
-        "opening angle for test problems")("gravity.openLargerCell",
+        "PMMM neighbor cube radius in cells: 1 or 2")("gravity.openingAngle",
+        po::value<double>(&opts.gravity.openingAngle)->default_value(0.8),
+        "opening angle for global FMM and PMMM FMM near interactions")("gravity.openLargerCell",
         po::value<bool>(&opts.gravity.openLargerCell)->default_value(true),
         "tree walk opens only the larger of two rejected cells instead of both")(
         "gravity.softening",
@@ -657,6 +659,10 @@ bool processOptions(int argc, char* argv[]) {
     po::store(po::parse_command_line(argc, argv, commandOpts), vm);
     po::notify(vm);
     if (vm.count("help")) {
+        std::cout << "Build configuration (fixed at compile time):\n"
+                  << "  Gravity solver: " << gravity::kBuildGravityMethod << "\n"
+                  << "  PMMM near method: " << gravity::kBuildPmmmNearMethod << "\n"
+                  << "  FMM/PMMM expansion order: " << gravity::kBuildFmmOrder << "\n\n";
         std::cout << commandOpts << "\n";
         rc = false;
     } else {
@@ -686,9 +692,6 @@ bool processOptions(int argc, char* argv[]) {
 #endif
     terminal::setVerbose(opts.run.verbose);
     auto const isExplicit = [&](char const* key) { return vm.count(key) && !vm[key].defaulted(); };
-    if (opts.gravity.method != "fmm" && !usesMeshGravity(opts.gravity)) {
-        THROW_ERROR("gravity.method must be fmm or pmmm\n");
-    }
     if (opts.gravity.meshSize < 0) {
         THROW_ERROR("gravity.meshSize must be nonnegative\n");
     }
@@ -698,13 +701,10 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.gravity.pmmmNearWidth != 1 && opts.gravity.pmmmNearWidth != 2) {
         THROW_ERROR("gravity.pmmmNearWidth must be 1 or 2\n");
     }
-    if (opts.gravity.pmmmNearMethod != "pp" && opts.gravity.pmmmNearMethod != "fmm") {
-        THROW_ERROR("gravity.pmmmNearMethod must be pp or fmm\n");
-    }
     if (usesMeshGravity(opts.gravity)) {
         if (opts.gravity.meshSize < 2 * opts.gravity.pmmmNearWidth + 1) {
             THROW_ERROR("gravity.meshSize must be at least 2*gravity.pmmmNearWidth+1 "
-                        "with gravity.method=pmmm\n");
+                        "for a PMMM build\n");
         }
         size_t const meshSize = static_cast<size_t>(opts.gravity.meshSize);
         size_t const maximumCells = std::min(size_t(std::numeric_limits<ptrdiff_t>::max()),
@@ -869,9 +869,6 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.compute.sphBucketSize < 0) {
         THROW_ERROR("compute.sphBucketSize must be nonnegative (0 selects automatic sizing)\n");
     }
-    if (opts.gravity.fmmOrder < kFmmMinOrder || opts.gravity.fmmOrder > kFmmMaxOrder) {
-        THROW_ERROR("gravity.fmmOrder must be between %i and %i\n", kFmmMinOrder, kFmmMaxOrder);
-    }
     if (opts.compute.bucketSize > MAX_BUCKET_SIZE) {
         THROW_ERROR("compute.bucketSize must not exceed the compile-time maximum %i "
                     "(COSMICTIGER_WITH_MAX_BUCKET)\n",
@@ -1011,8 +1008,8 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.run.test == "sphGravity") {
         opts.hydro.enabled = true;
     }
-    if (opts.hydro.enabled && opts.gravity.enabled && opts.gravity.method != "fmm") {
-        THROW_ERROR("SPH currently requires gravity.method=fmm when gravity.enabled=true; "
+    if (opts.hydro.enabled && opts.gravity.enabled && usesMeshGravity(opts.gravity)) {
+        THROW_ERROR("SPH currently requires an FMM build when gravity.enabled=true; "
                     "PMMM does not yet support SPH\n");
     }
     if (opts.chemistry.enabled) {
@@ -1239,7 +1236,7 @@ bool processOptions(int argc, char* argv[]) {
                     "remain finite and positive in single precision "
                     "after normalization when gravity.enabled is true\n");
     }
-    if (opts.gravity.method == "pmmm" &&
+    if (usesMeshGravity(opts.gravity) &&
         opts.gravity.supportRadius > double(opts.gravity.pmmmNearWidth) / opts.gravity.meshSize) {
         THROW_ERROR("PMMM requires the normalized gravity.supportRadius to be no larger than "
                     "gravity.pmmmNearWidth/gravity.meshSize\n");
@@ -1270,10 +1267,10 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("chemistry.maxSubsteps", chemistry.maxSubsteps);
     SHOW("hydro.enabled", hydro.enabled);
     SHOW("gravity.enabled", gravity.enabled);
-    SHOW("gravity.method", gravity.method);
+    SHOW("build.gravityMethod", gravity.method);
     SHOW("gravity.meshSize", gravity.meshSize);
     SHOW("gravity.pmmmNearWidth", gravity.pmmmNearWidth);
-    SHOW("gravity.pmmmNearMethod", gravity.pmmmNearMethod);
+    SHOW("build.pmmmNearMethod", gravity.pmmmNearMethod);
     SHOW("gravity.pmmmBatchParticles", gravity.pmmmBatchParticles);
     SHOW("run.hierarchicalGravity", run.hierarchicalGravity);
     SHOW("hydro.viscosityAlpha", hydro.viscosityAlpha);
@@ -1323,7 +1320,7 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("units.timeSeconds", units.timeSeconds);
     SHOW("compute.cuda", compute.cuda);
     SHOW("compute.positionType", compute.positionType);
-    SHOW("gravity.fmmOrder", gravity.fmmOrder);
+    SHOW("build.fmmOrder", gravity.fmmOrder);
     SHOW("compute.cudaKickResidency", compute.cudaKickResidency);
     SHOW("compute.cudaKickSinkTile", compute.cudaKickSinkTile);
     SHOW("compute.cudaKickParticleTile", compute.cudaKickParticleTile);
@@ -1437,16 +1434,16 @@ bool processOptions(int argc, char* argv[]) {
         SHOW("compute.positionType", compute.positionType);
         SHOW("gravity.enabled", gravity.enabled);
         if (opts.gravity.enabled) {
-            SHOW("gravity.method", gravity.method);
-            if (opts.gravity.method == "pmmm") {
+            SHOW("build.gravityMethod", gravity.method);
+            if (usesMeshGravity(opts.gravity)) {
                 SHOW("gravity.meshSize", gravity.meshSize);
                 SHOW("gravity.pmmmNearWidth", gravity.pmmmNearWidth);
-                SHOW("gravity.pmmmNearMethod", gravity.pmmmNearMethod);
+                SHOW("build.pmmmNearMethod", gravity.pmmmNearMethod);
                 SHOW("gravity.pmmmBatchParticles", gravity.pmmmBatchParticles);
                 PRINT("%-38s: periodic multipole mesh, hierarchical particle timesteps\n",
                     "PMMM gravity");
             }
-            SHOW("gravity.fmmOrder", gravity.fmmOrder);
+            SHOW("build.fmmOrder", gravity.fmmOrder);
             SHOW("gravity.kernelFamily", gravity.kernelFamily);
             SHOW("gravity.kernelDegree", gravity.kernelDegree);
         }

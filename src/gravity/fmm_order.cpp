@@ -6,23 +6,13 @@
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
-#include <atomic>
-
 #include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
 
-namespace {
-std::atomic<int> runtimeOrder{kFmmDefaultOrder};
-}
-
-int fmmOrder() {
-    return runtimeOrder.load(std::memory_order_relaxed);
-}
-
 void setFmmOrder(int order) {
-    if (order < kFmmMinOrder || order > kFmmMaxOrder) {
-        THROW_ERROR("gravity.fmmOrder must be between %i and %i; got %i\n", kFmmMinOrder,
-            kFmmMaxOrder, order);
+    if (order != kFmmDefaultOrder) {
+        THROW_ERROR("This executable was built for FMM order %i; requested order %i. "
+                    "Rebuild with COSMICTIGER_WITH_ORDER=%i to change the order.\n",
+            kFmmDefaultOrder, order, order);
     }
-    runtimeOrder.store(order, std::memory_order_relaxed);
 }

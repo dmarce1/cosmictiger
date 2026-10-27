@@ -17,7 +17,7 @@
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/kick_cuda.hpp>
 
-// Runtime-order dispatch to the per-order CUDA kick instantiations.
+// Dispatch to the single compiled CUDA kick order.
 
 KickReturn cudaExecuteKicks(KickParameters params, Position* devX, Position* devY, Position* devZ,
     TreeNode* devTreeNodes, Vector<KickWorkitem> workitems, detail::FmmForceOutput output) {

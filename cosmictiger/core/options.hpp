@@ -11,6 +11,8 @@
 #include <stddef.h>
 #include <string>
 
+#include <cosmictiger/gravity/build_config.hpp>
+
 // Public data groups mirror the CLI/INI category names. Radius aliases are
 // resolved during parsing; canonical radii and unit conversions are stored below.
 struct Run {
@@ -122,12 +124,14 @@ struct Lightcone {
 
 struct Gravity {
     bool enabled{};
-    std::string method{"fmm"};
+    // Build descriptors are retained in the historical serialized layout.
+    // Solver dispatch uses build_config.hpp; setOptions rejects mismatches.
+    std::string method{gravity::kBuildGravityMethod};
     int meshSize{};          // PMMM cells per axis; independent of the initial-condition mesh.
     int pmmmNearWidth{2};    // Direct neighbor cube radius for periodic PMMM, one or two cells.
-    std::string pmmmNearMethod{"pp"};    // Primary near cells: direct pairs (pp) or adaptive FMM.
-    int pmmmBatchParticles{4096};        // Target owned sink count per ready near-field batch.
-    int fmmOrder{};    // FMM order (multipole degree + 2) selected at run time, 3..9
+    std::string pmmmNearMethod{gravity::kBuildPmmmNearMethod};
+    int pmmmBatchParticles{4096};             // Target owned sink count per ready near-field batch.
+    int fmmOrder{gravity::kBuildFmmOrder};    // Fixed multipole degree + 2, selected at build time.
     std::string kernelFamily{"ferrers"};
     int kernelDegree{4};
     double openingAngle{};
@@ -139,8 +143,8 @@ struct Gravity {
     double gm{};
 };
 
-inline bool usesMeshGravity(Gravity const& gravity) {
-    return gravity.method == "pmmm";
+inline constexpr bool usesMeshGravity(Gravity const&) {
+    return gravity::kBuildUsesPmmm;
 }
 
 struct Cosmology {

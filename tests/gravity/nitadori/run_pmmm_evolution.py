@@ -21,22 +21,48 @@ from pmmm_evolution_helpers import (check_clock, check_single_drift, compare_res
                                     Header, read_checkpoint, require)
 
 
-def use_legacy_pp_extension(checkpoint, ranks):
-    """Turn a copied v2 PP checkpoint into the historical seven-word v1 layout."""
+def rewriteCheckpoint(checkpoint, ranks, transform):
+    """Update a copied rank payload and its manifest checksum together."""
     manifest = checkpoint / "checkpoint.meta"
     lines = manifest.read_text().splitlines()
     offset = ctypes.sizeof(Header)
     for rank in range(ranks):
         path = checkpoint / f"checkpoint.{rank}.dat"
         data = path.read_bytes()
-        extension = struct.unpack_from("=8Q", data, offset)
-        require(extension[0] == 2 and extension[7] == 0,
-                "legacy fixture requires a version-two PP checkpoint")
-        data = (data[:offset] + struct.pack("=Q", 1) + data[offset + 8:offset + 56]
-                + data[offset + 64:])
+        data = transform(data, offset)
         path.write_bytes(data)
         lines[rank + 1] = f"{rank} {len(data)} {fnv1a64(data):016x}"
     manifest.write_text("\n".join(lines) + "\n")
+
+
+def use_legacy_pp_extension(checkpoint, ranks):
+    """Give a copied checkpoint the historical seven-word PP-only v1 layout."""
+    def transform(data, offset):
+        extension_version = struct.unpack_from("=Q", data, offset)[0]
+        require(extension_version in (1, 2), "legacy fixture has an unknown PMMM version")
+        extension_size = {1: 7, 2: 8}[extension_version]
+        return (data[:offset] + struct.pack("=Q", 1) + data[offset + 8:offset + 56]
+                + data[offset + 8 * extension_size:])
+    rewriteCheckpoint(checkpoint, ranks, transform)
+
+
+def changeCompiledIdentity(checkpoint, ranks, *, order=None, near_method=None, fmm=False):
+    """Present the executable with a validly checksummed incompatible variant."""
+    def transform(data, offset):
+        payload = bytearray(data)
+        require(struct.unpack_from("=Q", payload, offset)[0] == 2,
+                "identity fixture requires PMMM extension version two")
+        if order is not None:
+            struct.pack_into("=Q", payload, offset + 8 * 2, order)
+        if near_method is not None:
+            struct.pack_into("=Q", payload, offset + 8 * 7, int(near_method == "fmm"))
+        if fmm:
+            header = Header.from_buffer_copy(payload)
+            header.flags &= ~(1 << 17)
+            payload[:offset] = bytes(header)
+            del payload[offset:offset + 64]
+        return bytes(payload)
+    rewriteCheckpoint(checkpoint, ranks, transform)
 
 
 def main():
@@ -47,16 +73,20 @@ def main():
     parser.add_argument("--mpi-numproc-flag", default="-n")
     parser.add_argument("--mpi-preflag", action="append", default=[])
     parser.add_argument("--mpi-postflag", action="append", default=[])
+    parser.add_argument("--disable-tcp", action="store_true",
+                        help="disable the TCP parcelport when it is present in the HPX build")
     parser.add_argument("--ranks", type=int, default=2)
     parser.add_argument("--position-type", choices=("fixed32", "fixed64"), default="fixed32")
     parser.add_argument("--cuda", action="store_true")
+    parser.add_argument("--near-method", choices=("pp", "fmm"), required=True)
+    parser.add_argument("--order", type=int, choices=range(3, 10), required=True)
     args = parser.parse_args()
     executable = args.executable.resolve()
     root = args.workdir.resolve()
     root.mkdir(parents=True, exist_ok=True)
     ranks = args.ranks if args.mpi_exec else 1
-    common = {"hpx:threads": 2, "hpx:bind": "none", "gravity.method": "pmmm",
-              "gravity.meshSize": 8, "gravity.fmmOrder": 7, "gravity.pmmmNearWidth": 2,
+    common = {"hpx:threads": 2, "hpx:bind": "none",
+              "gravity.meshSize": 8, "gravity.pmmmNearWidth": 2,
               "gravity.enabled": "true", "compute.cuda": str(args.cuda).lower(),
               "compute.positionType": args.position_type,
               "initial.particlesPerDimension": 8, "initial.closePack": "false",
@@ -74,24 +104,30 @@ def main():
             command = ([args.mpi_exec, args.mpi_numproc_flag, str(ranks)] + args.mpi_preflag
                        + command[:1] + args.mpi_postflag + command[1:])
         if ranks > 1:
-            command += ["--hpx:ini=hpx.parcel.mpi.enable=1",
-                        "--hpx:ini=hpx.parcel.tcp.enable=0"]
+            command.append("--hpx:ini=hpx.parcel.mpi.enable=1")
+            if args.disable_tcp:
+                command.append("--hpx:ini=hpx.parcel.tcp.enable=0")
         return runSimulation(command, directory, "run.log", expectSuccess=success)
 
-    for near_method, hydro in (("pp", False), ("fmm", False), ("pp", True), ("fmm", True)):
+    near_method = args.near_method
+    for hydro in (False, True):
         label = near_method + ("_mixed" if hydro else "_dark_matter")
         options = dict(common, **{"hydro.enabled": str(hydro).lower(),
-                                  "gravity.pmmmNearMethod": near_method,
                                   "run.scenario": "cosmology" if hydro else "plummer"})
         if hydro:
             rejected = prepareCase(root, label + "_rejected")
             log = run(rejected, dict(options, **{"run.maxIterations": 0}), False)
-            require("SPH currently requires gravity.method=fmm when gravity.enabled=true" in log,
+            require("SPH currently requires an FMM build when gravity.enabled=true" in log,
                     "PMMM with SPH was not rejected with the expected diagnostic")
             print(f"{label}: unsupported PMMM with SPH rejected at startup")
             continue
         baseline = prepareCase(root, label + "_baseline")
-        run(baseline, dict(options, **{"run.maxIterations": 3}))
+        log = run(baseline, dict(options, **{"run.maxIterations": 3}))
+        for key, expected in (("build.gravityMethod", "pmmm"),
+                              ("build.pmmmNearMethod", args.near_method),
+                              ("build.fmmOrder", str(args.order))):
+            require(re.search(r"^" + re.escape(key) + r"\s*:\s*" + expected + r"\s*$",
+                              log, re.MULTILINE), f"compiled variant differs from {key}={expected}")
         paths = sorted((path for path in baseline.glob("checkpoint.*") if path.is_dir() and
                         re.fullmatch(r"checkpoint\.[0-9]+", path.name)),
                        key=lambda path: int(path.name.split(".")[1]))
@@ -116,20 +152,27 @@ def main():
             read_checkpoint(legacy / source.name, ranks)
             run(legacy, dict(options, **{"checkpoint.readIndex": 2, "run.maxIterations": 1}))
             compare_restart(states[-1], read_checkpoint(legacy / "checkpoint.4", ranks))
+        else:
             rejected = prepareCase(root, label + "_legacy_reject_fmm", source)
             use_legacy_pp_extension(rejected / source.name, ranks)
-            log = run(rejected, dict(options, **{"gravity.pmmmNearMethod": "fmm",
+            log = run(rejected, dict(options, **{
                 "checkpoint.readIndex": 2, "run.maxIterations": 0}), False)
             require("PMMM checkpoint" in log, "legacy PP checkpoint accepted FMM near solver")
         changes = (("mesh", {"gravity.meshSize": 10}),
-                   ("order", {"gravity.fmmOrder": 5}),
-                   ("near_width", {"gravity.pmmmNearWidth": 1}),
-                   ("near_method", {"gravity.pmmmNearMethod": "fmm" if near_method == "pp" else "pp"}),
-                   ("fmm", {"gravity.method": "fmm"}))
+                   ("near_width", {"gravity.pmmmNearWidth": 1}))
         for name, change in changes:
             rejected = prepareCase(root, label + "_reject_" + name, source)
             log = run(rejected, dict(options, **change,
                                     **{"checkpoint.readIndex": 2, "run.maxIterations": 0}), False)
+            require("checkpoint" in log.lower(), f"{name} mismatch lacked a checkpoint diagnostic")
+        identities = (("order", {"order": 3 if args.order != 3 else 4}),
+                      ("near_method", {"near_method": "fmm" if near_method == "pp" else "pp"}),
+                      ("solver", {"fmm": True}))
+        for name, identity in identities:
+            rejected = prepareCase(root, label + "_reject_" + name, source)
+            changeCompiledIdentity(rejected / source.name, ranks, **identity)
+            log = run(rejected, dict(options, **{
+                "checkpoint.readIndex": 2, "run.maxIterations": 0}), False)
             require("checkpoint" in log.lower(), f"{name} mismatch lacked a checkpoint diagnostic")
         print(f"{label}: hierarchical dyadic steps, scheduled single drifts, restart state, and PMMM mesh/order/near-width/method/solver "
               "mismatch rejection passed")

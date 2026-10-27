@@ -36,7 +36,7 @@ void initialize() {
         return;
     }
     cache.meshSize = options.meshSize;
-    cache.order = options.fmmOrder;
+    cache.order = gravity::kBuildFmmOrder;
     cache.nearWidth = options.pmmmNearWidth;
     cache.sourceCount = fmmMultipoleCoefficientCount(cache.order);
     cache.localCount = fmmLocalHarmonicCoefficientCount(cache.order);

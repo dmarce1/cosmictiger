@@ -281,7 +281,7 @@ void meshDomainsTest() {
     options.analysis.groups = true;
     options.analysis.tracers = true;
     options.analysis.saveForce = false;
-    options.gravity.method = "pmmm";
+    options.gravity.enabled = true;
     for (int fixture = 0; fixture < 4; ++fixture) {
         // The balancing target must use the current distributed population,
         // rather than an initial-condition count that can become stale.
@@ -317,7 +317,7 @@ void meshDomainsTest() {
     // Older mesh checkpoints contain the same continuous cuts that FMM
     // produces. Loading those domains must trigger an automatic mesh
     // rebalance before migration, without a caller-side rebound request.
-    options.gravity.method = "fmm";
+    options.gravity.enabled = false;
     options.initial.numberOfParticles = detail::meshDomainFixtureCount(0);
     setOptions(options);
     Vector<hpx::future<void>> pending;
@@ -337,7 +337,7 @@ void meshDomainsTest() {
         detail::requireMeshDomain(split != meshSplit,
             "legacy fixture did not produce a continuous non-mesh domain boundary");
     }
-    options.gravity.method = "pmmm";
+    options.gravity.enabled = true;
     setOptions(options);
     pending.clear();
     for (auto const& locality : hpxLocalities()) {

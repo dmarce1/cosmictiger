@@ -95,6 +95,8 @@ if (( maxTestJobs < 1 )); then
 fi
 
 buildMode=release
+gravityVariant=fmm
+fmmOrder=7
 enableCuda=ON
 testSuite=OFF
 buildJobs=4
@@ -149,6 +151,31 @@ chooseMode() {
     done
 }
 
+chooseGravityVariant() {
+    while true; do
+        printf '\nGravity solver: 1) FMM  2) PMMM-FMM  3) PMMM-PP\n'
+        readInput "Choice [${gravityVariant}]: "
+        case "${promptValue,,}" in
+            '') return ;;
+            1|fmm) gravityVariant=fmm; return ;;
+            2|pmmm_fmm|pmmm-fmm) gravityVariant=pmmm_fmm; return ;;
+            3|pmmm_pp|pmmm-pp) gravityVariant=pmmm_pp; return ;;
+        esac
+        printf 'Choose 1 through 3, or press Enter to keep the current solver.\n'
+    done
+}
+
+chooseFmmOrder() {
+    while true; do
+        readInput "FMM kernel order [${fmmOrder}] (3 through 9, Enter keeps): "
+        case "$promptValue" in
+            '') return ;;
+            [3-9]) fmmOrder=$promptValue; return ;;
+        esac
+        printf 'Enter an integer from 3 through 9.\n'
+    done
+}
+
 chooseToggle() {
     local label=$1
     local currentValue=$2
@@ -200,6 +227,8 @@ showMainMenu() {
     printf '  6) HPX installation prefix: %s\n' "${hpxPrefix:-automatic by build mode}"
     printf '  7) CUDA architectures: %s\n' "${cudaArchitectures:-$defaultCudaArchitectures}"
     printf '  8) Additional dependency prefixes: %s\n' "${dependencyPrefixes:-system default}"
+    printf '  9) Gravity solver: %s\n' "$gravityVariant"
+    printf ' 10) FMM kernel order: %s\n' "$fmmOrder"
     printf '  Enter or b) Configure and build    q) Quit\n'
     printf 'Build jobs accept any positive count; MPI tests use four CPUs each.\n'
 }
@@ -250,7 +279,7 @@ if command -v whiptail >/dev/null 2>&1 && [[ ${TERM:-dumb} != dumb ]]; then
         if ! menuChoice=$(dialogChoice --title 'Build configuration' \
             --cancel-button 'Quit' --default-item 1 --notags \
             --menu 'Use arrow keys to choose a setting. Build jobs accept any positive count.' \
-            21 78 10 \
+            23 78 12 \
             1 "Build mode: $buildMode" \
             2 "CUDA: $enableCuda" \
             3 "Build and run test suite: $testSuite" \
@@ -259,12 +288,35 @@ if command -v whiptail >/dev/null 2>&1 && [[ ${TERM:-dumb} != dumb ]]; then
             6 "HPX installation prefix: ${hpxPrefix:-automatic by build mode}" \
             7 "CUDA architectures: ${cudaArchitectures:-$defaultCudaArchitectures}" \
             8 "Additional dependency prefixes: ${dependencyPrefixes:-system default}" \
+            9 "Gravity solver: $gravityVariant" \
+            10 "FMM kernel order: $fmmOrder" \
             b 'Configure and build' \
             q 'Quit'); then
             printf 'No build started.\n'
             exit 0
         fi
         case "$menuChoice" in
+            9)
+                if promptValue=$(dialogChoice --title 'Gravity solver' \
+                    --default-item "$gravityVariant" \
+                    --menu 'Select the solver compiled into this executable.' 13 68 3 \
+                    fmm 'Global FMM' \
+                    pmmm_fmm 'PMMM with FMM near interactions' \
+                    pmmm_pp 'PMMM with direct particle-pair near interactions'); then
+                    gravityVariant=$promptValue
+                fi
+                ;;
+            10)
+                if promptValue=$(dialogChoice --title 'FMM kernel order' \
+                    --default-item "$fmmOrder" \
+                    --menu 'Select the only FMM order compiled into this executable.' 17 68 7 \
+                    3 'Multipole degree 1' 4 'Multipole degree 2' \
+                    5 'Multipole degree 3' 6 'Multipole degree 4' \
+                    7 'Multipole degree 5' 8 'Multipole degree 6' \
+                    9 'Multipole degree 7'); then
+                    fmmOrder=$promptValue
+                fi
+                ;;
             b) break ;;
             q) printf 'No build started.\n'; exit 0 ;;
             1)
@@ -337,6 +389,8 @@ else
             6) chooseText 'HPX installation prefix' "$hpxPrefix"; hpxPrefix=$promptValue ;;
             7) chooseText 'CUDA architectures' "$cudaArchitectures"; cudaArchitectures=$promptValue ;;
             8) chooseText 'Additional dependency prefixes' "$dependencyPrefixes"; dependencyPrefixes=$promptValue ;;
+            9) chooseGravityVariant ;;
+            10) chooseFmmOrder ;;
             *) printf 'Unknown option.\n' ;;
         esac
     done
@@ -353,7 +407,12 @@ if [[ $testSuite == ON ]] && ! command -v ctest >/dev/null 2>&1; then
     exit 1
 fi
 
-buildDir="$rootDir/build/$buildMode"
+case "$gravityVariant" in
+    fmm) gravityMethod=fmm; pmmmNearMethod=pp ;;
+    pmmm_fmm) gravityMethod=pmmm; pmmmNearMethod=fmm ;;
+    pmmm_pp) gravityMethod=pmmm; pmmmNearMethod=pp ;;
+esac
+buildDir="$rootDir/build/${buildMode}_${gravityVariant}_order${fmmOrder}"
 if ! mkdir -p -- "$buildDir"; then
     printf 'Cannot create build directory: %s\n' "$buildDir" >&2
     exit 1
@@ -384,6 +443,9 @@ configureCommand=(cmake -S "$rootDir" -B "$buildDir" -G Ninja
     '-U*GSL*' '-UCHEALPIX_*' '-UHEALPIX_CXX_*'
     "-DCMAKE_BUILD_TYPE=$buildType"
     "-DCOSMICTIGER_WITH_CUDA=$enableCuda"
+    "-DCOSMICTIGER_GRAVITY_METHOD=$gravityMethod"
+    "-DCOSMICTIGER_PMMM_NEAR_METHOD=$pmmmNearMethod"
+    "-DCOSMICTIGER_WITH_ORDER=$fmmOrder"
     "-DBUILD_TESTING=$testSuite"
     "-DCMAKE_PREFIX_PATH=$prefixPath")
 # Help FindMPI locate mpi.h when Open MPI wrapper output contains diagnostics.
@@ -432,7 +494,8 @@ runStage() {
     printf '%s succeeded.\n' "$stageName"
 }
 
-printf '\nBuild directory: %s\nLog: %s\n' "$buildDir" "$logFile"
+printf '\nGravity solver: %s; FMM kernel order: %s\n' "$gravityVariant" "$fmmOrder"
+printf 'Build directory: %s\nLog: %s\n' "$buildDir" "$logFile"
 runStage Configure "${configureCommand[@]}" || exit $?
 runStage 'Build cosmictiger' "${buildCommand[@]}" || exit $?
 if [[ $testSuite == ON ]]; then

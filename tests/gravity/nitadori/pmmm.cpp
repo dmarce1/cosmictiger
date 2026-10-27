@@ -612,7 +612,7 @@ void distributePmmmFixture(int fixture, bool splitCells = false) {
     // continuous KD partition provides valid spatial ownership while exercising
     // the forest's supported case of one mesh cell spanning several ranks.
     if (splitCells) {
-        options.gravity.method = "fmm";
+        options.gravity.enabled = false;
     }
     setOptions(options);
     particlesSortByRung(0);
@@ -748,13 +748,13 @@ void checkPmmmStreamedStages() {
     options.run.hierarchicalGravity = true;
     options.gravity.meshSize = 8;
     options.gravity.pmmmNearWidth = 2;
-    options.gravity.fmmOrder = std::max(kFmmDefaultOrder, std::min(kFmmMinOrder + 3, kFmmMaxOrder));
+    options.gravity.fmmOrder = kFmmDefaultOrder;
     options.gravity.openingAngle = 0.02;
     options.analysis.saveForce = false;
     options.analysis.saveAcceleration = false;
     options.analysis.savePotential = false;
     pmmmDestroy();
-    for (auto const& nearMethod : {std::string("pp"), std::string("fmm")}) {
+    for (auto const& nearMethod : {std::string(gravity::kBuildPmmmNearMethod)}) {
         options.gravity.pmmmNearMethod = nearMethod;
         for (int batchParticles : {1, 4096}) {
             options.gravity.pmmmBatchParticles = batchParticles;
@@ -875,7 +875,7 @@ void checkPmmmStreamedStages() {
 }
 
 void checkPmmmCellOverlap() {
-    if (hpxSize() < 2) {
+    if (hpxSize() < 2 || !gravity::kBuildPmmmNearUsesFmm) {
         return;
     }
     auto const saved = getOptions();
@@ -883,7 +883,6 @@ void checkPmmmCellOverlap() {
     options.gravity.meshSize = 8;
     options.gravity.pmmmNearWidth = 1;
     options.gravity.fmmOrder = kFmmDefaultOrder;
-    options.gravity.pmmmNearMethod = "fmm";
     options.gravity.pmmmBatchParticles = 1;
     options.gravity.openingAngle = 0.02;
     pmmmDestroy();
@@ -943,13 +942,16 @@ void checkPmmmCellOverlap() {
 }
 
 void checkPmmmFmmNear() {
+    if constexpr (!gravity::kBuildPmmmNearUsesFmm) {
+        return;
+    }
     auto const saved = getOptions();
     auto options = saved;
     // Isolated force fixtures exercise unequal masses without enabling an SPH
     // evolution. Startup continues to reject PMMM gravity in SPH simulations.
     options.hydro.enabled = true;
     options.compute.bucketSize = 8;
-    options.gravity.fmmOrder = kFmmMinOrder;
+    options.gravity.fmmOrder = kFmmDefaultOrder;
     options.gravity.pmmmNearWidth = 1;
     options.gravity.supportRadius = 0.001;
     if (saved.compute.cuda) {
@@ -966,16 +968,19 @@ void checkPmmmFmmNear() {
         pmmmDestroy();
         options.compute.cuda = saved.compute.cuda;
         options.gravity.meshSize = side;
-        options.gravity.pmmmNearMethod = "pp";
+        options.gravity.openingAngle = 1.0e-6;
         setOptions(options);
         preparePmmmFixture(5);
         distributePmmmFixture(5, true);
-        // The order-four tree arena must also be allocated under the requested
+        // The tree arena must also be allocated under the requested
         // backend before temporarily running the CPU reference on the same data.
         checkPmmmForestGeometry();
         options.compute.cuda = false;
         setOptions(options);
         pmmmSolve(true);
+        // A very tight angle supplies a near-direct reference; point-sized
+        // cells can still use exact monopoles. The small fixtures separately
+        // check the independent periodic Ewald sum.
         auto const direct = gatherPmmmSamples();
         auto const cache = pmmmDiagnostics();
         requirePmmm(direct.size() == 320, "dense near fixture lost particles");
@@ -988,8 +993,7 @@ void checkPmmmFmmNear() {
             }
             requirePmmm(splitCell, "dense fixture did not split a cell across valid domains");
         }
-        options.gravity.pmmmNearMethod = "fmm";
-        // Order-four clustered forces can strongly cancel. These angles test
+        // Clustered forces can strongly cancel. These angles test
         // a useful multipole approximation and convergence toward direct PP.
         options.gravity.openingAngle = 0.4;
         setOptions(options);
@@ -1023,19 +1027,11 @@ void checkPmmmFmmNear() {
         }
         requirePmmm(strictCounts.planBuilds == cache.planBuilds &&
                 strictCounts.greenBuilds == cache.greenBuilds,
-            "changing the near method or angle rebuilt FFT plans/Green spectra");
+            "changing the near angle rebuilt FFT plans/Green spectra");
         pmmmSolve(true);
         comparePmmmSamples(strict, gatherPmmmSamples());
         requirePmmm(pmmmDiagnostics().ghostParticles == strictCounts.ghostParticles,
             "repeated FMM solve accumulated or lost ghost sources");
-        options.gravity.pmmmNearMethod = "pp";
-        setOptions(options);
-        pmmmSolve(true);
-        comparePmmmSamples(direct, gatherPmmmSamples());
-        options.gravity.pmmmNearMethod = "fmm";
-        setOptions(options);
-        pmmmSolve(true);
-        comparePmmmSamples(strict, gatherPmmmSamples());
         preparePmmmFixture(5, 1);
         distributePmmmFixture(5);
         pmmmSolve(true);
@@ -1075,10 +1071,10 @@ void pmmmTest() {
     // keep a shared capacity and cannot gain the optional hydro arrays after
     // allocation. This isolated force test performs no SPH evolution.
     options.hydro.enabled = true;
-    options.gravity.method = "pmmm";
-    options.gravity.pmmmNearMethod = "pp";
     options.gravity.gm = 0.125;
     options.gravity.supportRadius = 0.001;
+    options.gravity.fmmOrder = kFmmDefaultOrder;
+    options.gravity.openingAngle = 0.05;
     options.analysis.saveForce = true;
     options.analysis.tracers = false;
     options.analysis.groups = false;
@@ -1088,52 +1084,27 @@ void pmmmTest() {
     options.run.hierarchicalGravity = false;
     setOptions(options);
     detail::checkPmmmNearEdges();
-    int const lowOrder = kFmmMinOrder;
-    int const highOrder = std::max(kFmmDefaultOrder, std::min(kFmmMinOrder + 3, kFmmMaxOrder));
-    std::vector<std::array<int, 3>> configurations{{5, highOrder, 2}};
-    if (lowOrder < highOrder) {
-        configurations.push_back({8, lowOrder, 1});
-    }
-    configurations.push_back({8, highOrder, 1});
-    configurations.push_back({8, highOrder, 2});
-    double lowOrderError = 0.0;
+    std::array<std::array<int, 2>, 3> const configurations{{{5, 2}, {8, 1}, {8, 2}}};
+    // Off-center sources have larger far-field truncation error at low orders.
+    // Each build checks its selected order against the independent Ewald sum.
+    double const tolerance = kFmmDefaultOrder == 3 ? 5.0e-2 :
+        kFmmDefaultOrder == 4                      ? 2.5e-2 :
+        kFmmDefaultOrder == 5                      ? 5.0e-3 :
+                                                     5.0e-4;
     for (auto const configuration : configurations) {
         pmmmDestroy();
         options.gravity.meshSize = configuration[0];
-        options.gravity.fmmOrder = configuration[1];
-        options.gravity.pmmmNearWidth = configuration[2];
+        options.gravity.pmmmNearWidth = configuration[1];
         setOptions(options);
-        // Low orders establish a convergence baseline: off-center sources in
-        // the first far-cell shell can have percent-level truncation error.
-        // The higher-order accuracy and improvement checks remain independent.
-        double const tolerance = configuration[1] == 3 ? 5.0e-2 :
-            configuration[1] == 4                      ? 2.5e-2 :
-            configuration[1] == 5                      ? 5.0e-3 :
-                                                         5.0e-4;
-        int const fixtureCount = configuration[1] < highOrder ? 1 : 5;
-        for (int fixture = 0; fixture < fixtureCount; ++fixture) {
+        for (int fixture = 0; fixture < 5; ++fixture) {
             detail::preparePmmmFixture(fixture);
+            detail::distributePmmmFixture(fixture);
             pmmmSolve(true);
             auto const baseline = detail::gatherPmmmSamples();
             double const error = detail::verifyPmmmReference(baseline, tolerance);
-            options.gravity.pmmmNearMethod = "fmm";
-            options.gravity.openingAngle = 0.05;
-            setOptions(options);
             detail::distributePmmmFixture(fixture);
             pmmmSolve(true);
             detail::comparePmmmSamples(baseline, detail::gatherPmmmSamples());
-            options.gravity.pmmmNearMethod = "pp";
-            setOptions(options);
-            if (lowOrder < highOrder && configuration[0] == 8 && configuration[2] == 1 &&
-                fixture == 0) {
-                if (configuration[1] == lowOrder) {
-                    lowOrderError = error;
-                } else {
-                    double const convergence = std::pow(0.5, highOrder - lowOrder);
-                    detail::requirePmmm(error < std::max(2.0e-5, lowOrderError * convergence),
-                        "increasing total-degree truncation did not improve periodic accuracy");
-                }
-            }
             auto const cached = pmmmDiagnostics();
             pmmmSolve(false);
             detail::comparePmmmSamples(baseline, detail::gatherPmmmSamples(), false);
@@ -1146,6 +1117,7 @@ void pmmmTest() {
                 "repeated force/potential solves rebuilt cached plans or Green spectra");
             if (fixture == 0) {
                 detail::preparePmmmFixture(fixture, 1);
+                detail::distributePmmmFixture(fixture);
                 pmmmSolve(true);
                 detail::comparePmmmSamples(baseline, detail::gatherPmmmSamples());
                 auto const beforeDestroy = pmmmDiagnostics();
@@ -1158,12 +1130,14 @@ void pmmmTest() {
                     "destroy/recreate did not rebuild exactly one cached plan/Green set");
             }
             PRINT("PMMM Ewald oracle n=%i order=%i near=%i fixture=%i error=%e\n", configuration[0],
-                configuration[1], configuration[2], fixture, error);
+                kFmmDefaultOrder, configuration[1], fixture, error);
         }
     }
     pmmmDestroy();
     detail::checkPmmmFmmNear();
     detail::checkPmmmStreamedStages();
     detail::checkPmmmCellOverlap();
-    PRINT("PMMM periodic force, mass, self, ownership, convergence, and cache checks passed\n");
+    PRINT("PMMM periodic force, mass, self, ownership, and cache checks passed at order %i "
+          "with %s near interactions\n",
+        kFmmDefaultOrder, gravity::kBuildPmmmNearMethod);
 }

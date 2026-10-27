@@ -121,18 +121,18 @@ void solve(SolveRequest request) {
         sphParticlesClearCaches();
     }
     allLocalities<PmmmPrepareAction>(request);
-    bool const useFmm = getOptions().gravity.pmmmNearMethod == "fmm";
+    constexpr bool kUseFmm = gravity::kBuildPmmmNearUsesFmm;
     std::exception_ptr failure;
     bool started = false;
     try {
         allLocalities<PmmmDepositAction>();
-        if (useFmm) {
+        if constexpr (kUseFmm) {
             allLocalities<PmmmPlanGhostsAction>();
             started = true;
             allLocalities<PmmmStartPipelineAction>();
         }
         allLocalities<PmmmTransformAction>();
-        if (useFmm) {
+        if constexpr (kUseFmm) {
             allLocalities<PmmmFinishPipelineAction>();
         } else {
             allLocalities<PmmmEvaluateAction>(request.doPotential);
@@ -149,7 +149,7 @@ void solve(SolveRequest request) {
             }
         }
     };
-    if (useFmm) {
+    if constexpr (kUseFmm) {
         if (failure && started) {
             cleanup([]() { allLocalities<PmmmAbortPipelineAction>(); });
             cleanup([]() { allLocalities<PmmmFinishPipelineAction>(); });

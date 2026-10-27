@@ -2,7 +2,7 @@
 """Run the opt-in Cartesian walk benchmark over binaries, kick policies and buckets.
 
 Each process runs --run.test=cartesianBenchmark once for one binary, policy, backend,
-bucket and FMM order (--gravity.fmmOrder), cycling through the selected fixtures
+bucket and compiled FMM order, cycling through the selected fixtures
 with potential off and on. --threads sets the HPX worker threads of every
 process (pinned with taskset to --cpus, by default CPUs 1 through the thread
 count) and --particles-per-dimension the fixture side (32: 32,768 particles).
@@ -13,7 +13,8 @@ harness compares a particle sample with the direct Ewald sum when
 --reference is positive. Nothing here regenerates or rebuilds binaries.
 Each binary receives a bounded, CPU-only --help probe so newer builds enable
 --run.verbose=true for arena details while historical baselines keep their
-original command line.
+original command line. Build separate executables for each requested order;
+--orders filters the orders represented by --binary inputs.
 """
 import argparse
 import csv
@@ -47,22 +48,37 @@ def parse_policy(text):
     return {'label': label, 'options': [item for item in options.split(',') if item]}
 
 
-def supports_run_verbose(binary):
-    if 'supports_run_verbose' not in binary:
-        command = [binary['path'], '--help', '--compute.cuda=false',
-                   '--hpx:threads=1', '--hpx:bind=none']
-        env = dict(os.environ, CUDA_VISIBLE_DEVICES='', OMP_NUM_THREADS='1', OMP_THREAD_LIMIT='1')
-        try:
-            result = subprocess.run(command, env=env, stdout=subprocess.PIPE,
-                                    stderr=subprocess.STDOUT, text=True, timeout=30)
-        except (OSError, subprocess.TimeoutExpired) as error:
-            raise RuntimeError(f'Cannot probe options for {binary["label"]}: {error}') from error
-        if result.returncode:
-            raise RuntimeError(f'Option probe for {binary["label"]} exited {result.returncode}:\n'
-                               + result.stdout)
-        binary['supports_run_verbose'] = bool(
-            re.search(r'^\s*--run\.verbose(?:\s|=|$)', result.stdout, re.MULTILINE))
-    return binary['supports_run_verbose']
+def binaryCapabilities(binary):
+    command = [binary['path'], '--help', '--compute.cuda=false',
+               '--hpx:threads=1', '--hpx:bind=none']
+    env = dict(os.environ, CUDA_VISIBLE_DEVICES='', OMP_NUM_THREADS='1', OMP_THREAD_LIMIT='1')
+    try:
+        result = subprocess.run(command, env=env, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise RuntimeError(f'Cannot probe options for {binary["label"]}: {error}') from error
+    if result.returncode:
+        raise RuntimeError(f'Option probe for {binary["label"]} exited {result.returncode}:\n'
+                           + result.stdout)
+    compiledOrder = re.search(r'^\s*FMM/PMMM expansion order:\s*(\d+)\s*$',
+                              result.stdout, re.MULTILINE)
+    gravityMethod = re.search(r'^\s*Gravity solver:\s*(\w+)\s*$',
+                              result.stdout, re.MULTILINE)
+    return {
+        'supports_run_verbose': bool(re.search(
+            r'^\s*--run\.verbose(?:\s|=|$)', result.stdout, re.MULTILINE)),
+        'runtime_order': bool(re.search(
+            r'^\s*--gravity\.fmmOrder(?:\s|=|$)', result.stdout, re.MULTILINE)),
+        'compiled_order': int(compiledOrder.group(1)) if compiledOrder else None,
+        'gravity_method': gravityMethod.group(1) if gravityMethod else None,
+    }
+
+
+def supportsOrder(binary, order):
+    if binary['compiled_order'] is not None:
+        return binary['compiled_order'] == order
+    # Historical binaries either expose an order selector or have order seven.
+    return binary['runtime_order'] or order == 7
 
 
 def digest(path):
@@ -162,8 +178,8 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--fixtures', default='lattice,clustered,adaptive')
     parser.add_argument('--buckets', default='64')
-    parser.add_argument('--orders', default='7',
-                        help='comma list of FMM orders passed as --gravity.fmmOrder (3 to 9)')
+    parser.add_argument('--orders',
+                        help='comma list of compiled orders to measure (3 to 9); default: all supplied binaries')
     parser.add_argument('--backends', default='cuda')
     parser.add_argument('--samples', type=int, default=15)
     parser.add_argument('--pairs', type=int, default=3)
@@ -191,9 +207,6 @@ def main():
         args.cpus = f'1-{args.threads}'
     fixtures = args.fixtures.split(',')
     buckets = [int(value) for value in args.buckets.split(',')]
-    orders = [int(value) for value in args.orders.split(',')]
-    if any(order < 3 or order > 10 for order in orders):
-        sys.exit('--orders must list FMM orders from 3 to 9')
     backends = args.backends.split(',')
     policies = args.policy or [{'label': 'auto', 'options': []}]
     args.output.mkdir(parents=True, exist_ok=True)
@@ -201,10 +214,18 @@ def main():
         sys.exit('Output directory already holds runs.json; choose a fresh directory')
     capabilities = {}
     for binary in args.binary:
-        if binary['path'] in capabilities:
-            binary['supports_run_verbose'] = capabilities[binary['path']]
-        else:
-            capabilities[binary['path']] = supports_run_verbose(binary)
+        if binary['path'] not in capabilities:
+            capabilities[binary['path']] = binaryCapabilities(binary)
+        binary.update(capabilities[binary['path']])
+        if binary['gravity_method'] not in (None, 'fmm'):
+            sys.exit(f'{binary["label"]}: Cartesian walk benchmarks require an FMM build')
+    orders = ([int(value) for value in args.orders.split(',')] if args.orders else
+              sorted({binary['compiled_order'] or 7 for binary in args.binary}))
+    if not orders or any(order < 3 or order > 9 for order in orders):
+        sys.exit('--orders must list FMM orders from 3 to 9')
+    for order in orders:
+        if not any(supportsOrder(binary, order) for binary in args.binary):
+            sys.exit(f'No binary supplies order {order}; build and pass an executable for that order')
     metadata = {
         'utc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
         'platform': platform.platform(),
@@ -241,8 +262,7 @@ def main():
             for backend in backends:
                 for bucket in buckets:
                     for order in orders:
-                        if not binary['arena'] and order != 7:
-                            # A fixed-order baseline binary only measures order 7.
+                        if not supportsOrder(binary, order):
                             continue
                         name = (f'{binary["label"]}_{policy["label"]}_{backend}_b{bucket}'
                                 f'_o{order}_pair{pair}')
@@ -253,8 +273,10 @@ def main():
                                    f'--compute.bucketSize={bucket}']
                         if binary['supports_run_verbose']:
                             command += ['--run.verbose=true']
+                        if binary['compiled_order'] is None and binary['runtime_order']:
+                            command += [f'--gravity.fmmOrder={order}']
                         if binary['arena']:
-                            command += [f'--gravity.fmmOrder={order}'] + policy['options']
+                            command += policy['options']
                         env = dict(os.environ, COSMICTIGER_CARTESIAN_WALK_SAMPLES=str(args.samples),
                                    COSMICTIGER_CARTESIAN_WALK_BUCKET=str(bucket),
                                    COSMICTIGER_CARTESIAN_WALK_FIXTURE='all' if len(fixtures) == 3 else fixtures[0],

@@ -21,7 +21,8 @@ struct OptionsMetadataEntry {
 };
 
 // Effective public application options at the output epoch, expressed in their
-// CLI units. Includes configuration; excludes help and internal/derived fields.
+// CLI units, together with fixed build descriptors. Includes configuration;
+// excludes help and other internal/derived fields.
 std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options);
 
 // Call once at process startup, before HPX parses or removes its own arguments.
