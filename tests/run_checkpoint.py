@@ -70,6 +70,54 @@ def prepareCase(baseWorkdir, name, sourceCheckpoint=None):
     return workdir
 
 
+def checkFreshOutput(options, baseWorkdir, baseline):
+    """Reject occupied checkpoint output before changing any prior run files."""
+    def snapshot(directory):
+        result = {}
+        for path in directory.rglob("*"):
+            name = path.relative_to(directory).as_posix()
+            if path.is_symlink():
+                result[name] = ("symlink", os.readlink(path))
+            elif path.is_file():
+                result[name] = ("file", path.read_bytes(), path.stat().st_mtime_ns)
+            else:
+                result[name] = ("directory",)
+        return result
+
+    def reject(workdir, outputDirectory, command):
+        before = snapshot(outputDirectory)
+        output = runSimulation(command + ["--run.maxIterations=0",
+                                           "--checkpoint.intervalSeconds=1000000000"],
+                               workdir, "fresh_start.log", expectSuccess=False)
+        if ("existing checkpoint" not in output.lower() or
+                "--output.directory" not in output or "--checkpoint.readIndex" not in output):
+            raise RuntimeError("fresh run lacked actionable checkpoint-output guidance")
+        if snapshot(outputDirectory) != before:
+            raise RuntimeError("rejected fresh run changed existing output or wrote simulation files")
+
+    # Reuse the actual completed output, including progress and diagnostics.
+    # Keep invocation logs/profiles in a separate working directory.
+    workdir = prepareCase(baseWorkdir, "fresh_existing_output")
+    command = [option for option in options if not option.startswith("--output.directory=")]
+    reject(workdir, baseline, command + [f"--output.directory={baseline}"])
+    for name, entry in (("incomplete_output", "checkpoint.999.incomplete"),
+                        ("numbered_file_output", "checkpoint.999")):
+        workdir = prepareCase(baseWorkdir, name)
+        outputDirectory = workdir / "preserved output"
+        outputDirectory.mkdir()
+        checkpoint = outputDirectory / entry
+        if entry.endswith(".incomplete"):
+            checkpoint.mkdir()
+            (checkpoint / "preserve.txt").write_text("unfinished checkpoint\n")
+        else:
+            checkpoint.write_text("occupied checkpoint path\n")
+        (outputDirectory / "progress.txt").write_text("prior run progress\n")
+        command = [option for option in options if not option.startswith("--output.directory=")]
+        command += ["--output.directory=preserved output"]
+        reject(workdir, outputDirectory, command)
+    print("fresh output: existing checkpoints and staging paths rejected before output changes")
+
+
 def checkManifest(checkpointDir, iteration, scenario="cosmology", endTime=0.0, gravity=True,
                   testFixture=False):
     manifest = checkpointDir / "checkpoint.meta"
@@ -192,7 +240,10 @@ def main():
     parser.add_argument("executable", type=Path)
     parser.add_argument("workdir", type=Path)
     parser.add_argument("--viscosity-only", action="store_true")
+    parser.add_argument("--fresh-output-only", action="store_true")
     args = parser.parse_args()
+    if args.viscosity_only and args.fresh_output_only:
+        parser.error("--fresh-output-only cannot be combined with --viscosity-only")
     executable = args.executable.resolve()
     baseWorkdir = args.workdir.resolve()
     baseWorkdir.mkdir(parents=True, exist_ok=True)
@@ -205,11 +256,14 @@ def main():
                "--initial.particlesPerDimension=8", "--hydro.enabled=false",
                "--compute.cuda=false", "--analysis.views=false",
                "--lightcone.enabled=false", "--analysis.power=false",
-               "--analysis.groups=false", "--gravity.kernelDegree=8", "--output.directory=."]
+               "--analysis.groups=false", "--gravity.kernelDegree=8", "--output.directory=.",
+               # Checkpoint publication and integrity need no linear-power calculation.
+               "--cosmology.sigma8=0"]
     baseline = prepareCase(baseWorkdir, "baseline")
     # The first step crosses this redshift. Its checkpoint must keep a numbered
     # restart path, while the second step must produce a final checkpoint.
     (baseline / "checkpoint.txt").write_text("48.9\n")
+    (baseline / "checkpoint.z.42.0").write_text("unrelated redshift alias name\n")
     baselineOutput = runSimulation(options + ["--run.maxIterations=1",
                                               "--checkpoint.intervalSeconds=1000000000"],
                                    baseline, "run.log")
@@ -230,6 +284,7 @@ def main():
         raise RuntimeError("completed checkpoint left a staging directory")
     checkManifest(triggeredCheckpoint, 1)
     checkManifest(checkpoint, iteration)
+    checkFreshOutput(options, baseWorkdir, baseline)
 
     def restart(name, mutate=None, expectSuccess=True):
         workdir = prepareCase(baseWorkdir, name, checkpoint)
@@ -247,6 +302,9 @@ def main():
         return output
 
     restart("current")
+    if args.fresh_output_only:
+        print("fresh output: new runs succeed and explicit checkpoint restarts remain supported")
+        return 0
 
     def leaveOnlyStagingDirectory(checkpointDir):
         checkpointDir.rename(checkpointDir.with_name(checkpointDir.name + ".incomplete"))

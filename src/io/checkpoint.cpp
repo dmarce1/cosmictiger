@@ -13,7 +13,9 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <stdexcept>
 #include <string>
+#include <string_view>
 #include <system_error>
 
 #include <fcntl.h>
@@ -36,6 +38,37 @@
 
 HPX_PLAIN_ACTION(writeCheckpoint, WriteCheckpointAction);
 HPX_PLAIN_ACTION(readCheckpoint, ReadCheckpointAction);
+
+void validateCheckpointOutput() {
+    auto const& options = getOptions();
+    if (hpxRank() != 0 || !options.run.test.empty() || options.checkpoint.readIndex >= 0) {
+        return;
+    }
+    std::filesystem::path const directory(options.output.directory);
+    if (!std::filesystem::exists(directory)) {
+        return;
+    }
+    for (auto const& entry : std::filesystem::directory_iterator(directory)) {
+        auto const name = entry.path().filename().string();
+        std::string_view index(name);
+        if (!index.starts_with("checkpoint.")) {
+            continue;
+        }
+        index.remove_prefix(sizeof("checkpoint.") - 1);
+        if (index.ends_with(".incomplete")) {
+            index.remove_suffix(sizeof(".incomplete") - 1);
+        }
+        if (index.empty() || index.find_first_not_of("0123456789") != std::string_view::npos) {
+            continue;
+        }
+        throw std::runtime_error("Cannot start a fresh run: output.directory contains an existing "
+                                 "checkpoint path " +
+            entry.path().string() +
+            ". Choose a new --output.directory, or use --checkpoint.readIndex to restart from "
+            "a completed checkpoint. Preserve or move the previous run before reusing its "
+            "output directory.");
+    }
+}
 
 Vector<double> readCheckpointList() {
     Vector<double> chkpts;

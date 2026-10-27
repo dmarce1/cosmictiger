@@ -69,6 +69,7 @@ int hpx_main(int argc, char* argv[]) {
         profile::checkForInterrupt();
         if (processOptions(argc, argv)) {
             profile::checkForInterrupt();
+            validateCheckpointOutput();
             startMemuseDaemon();
             daemonStarted = true;
             FILE* fp = fopen(outputPath("soft.txt").c_str(), "wt");

@@ -11,6 +11,9 @@
 #include <cosmictiger/core/containers.hpp>
 #include <cosmictiger/core/driver.hpp>
 
+// Reject stale checkpoint paths before a fresh simulation writes any output.
+void validateCheckpointOutput();
+
 // Checkpoint directories: one rank file per locality plus a manifest, written
 // to a staging directory and renamed into place once every rank has synced.
 void writeCheckpoint(DriverParameters params);
