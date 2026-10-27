@@ -35,7 +35,7 @@ namespace detail {
 size_t expectedPmmmParticleCount = 0;
 
 int pmmmFixtureParticleCount(int fixture) {
-    std::array<int, 7> constexpr kFixtureSizes{7, 1, 0, 4, 8, 320, 32};
+    constexpr std::array<int, 8> kFixtureSizes{7, 1, 0, 4, 8, 320, 32, 7};
     return kFixtureSizes.at(fixture);
 }
 
@@ -212,7 +212,13 @@ void initializePmmmFixture(int fixture, int ownership) {
         }
         for (int dim = 0; dim < kDimensions; ++dim) {
             double coordinate = 0.0;
-            if (fixture == 6) {
+            if (fixture == 7) {
+                // Every rank owns a fragment of the same mesh cell. Distinct
+                // positions avoid softened pairs in the independent Ewald sum.
+                int const multiplier = dim == kXDimension ? 1 : dim == kYDimension ? 3 : 5;
+                double const offset = 0.2 + 0.1 * ((id * multiplier) % 7);
+                coordinate = (1.0 + offset) / getOptions().gravity.meshSize;
+            } else if (fixture == 6) {
                 int const cell = dim == kXDimension ? id % 8 :
                     dim == kYDimension              ? 4 * ((id / 8) % 2) :
                                                       4 * (id / 16);
@@ -638,19 +644,14 @@ void preparePmmmFixture(int fixture, int ownership = 0) {
     }
 }
 
-void distributePmmmFixture(int fixture, bool splitCells = false) {
+void distributePmmmFixture(int fixture) {
     auto const saved = getOptions();
     auto options = saved;
     options.initial.numberOfParticles = pmmmFixtureParticleCount(fixture);
     // Fresh fixtures deliberately place every rung on arbitrary localities.
     // Migrate the entire population once before testing rung-selected stages.
     options.run.hierarchicalGravity = false;
-    // The production PMMM partition aligns its domains to mesh planes. A
-    // continuous KD partition provides valid spatial ownership while exercising
-    // the forest's supported case of one mesh cell spanning several ranks.
-    if (splitCells) {
-        options.gravity.enabled = false;
-    }
+    // Use the ordinary particle-balanced domains, including split mesh cells.
     setOptions(options);
     particlesSortByRung(0);
     domainsRebound();
@@ -1008,7 +1009,7 @@ void checkPmmmFmmNear() {
         options.gravity.openingAngle = 1.0e-6;
         setOptions(options);
         preparePmmmFixture(5);
-        distributePmmmFixture(5, true);
+        distributePmmmFixture(5);
         // The tree arena must also be allocated under the requested
         // backend before temporarily running the CPU reference on the same data.
         checkPmmmForestGeometry();
@@ -1133,7 +1134,7 @@ void pmmmTest() {
         options.gravity.meshSize = configuration[0];
         options.gravity.pmmmNearWidth = configuration[1];
         setOptions(options);
-        for (int fixture = 0; fixture < 5; ++fixture) {
+        for (int fixture : {0, 1, 2, 3, 4, 7}) {
             detail::preparePmmmFixture(fixture);
             detail::distributePmmmFixture(fixture);
             resetFlops();
@@ -1141,6 +1142,16 @@ void pmmmTest() {
             FlopCount const firstFlops = readFlops();
             detail::requirePmmm(firstFlops > 0, "PMMM solve did not submit arithmetic counts");
             auto const baseline = detail::gatherPmmmSamples();
+            if (fixture == 7 && hpxSize() > 1) {
+                bool splitCell = false;
+                for (auto const& sample : baseline) {
+                    detail::requirePmmm(sample.cellKey == baseline.front().cellKey,
+                        "split-cell Ewald fixture spans more than one mesh cell");
+                    splitCell |= sample.rank != baseline.front().rank;
+                }
+                detail::requirePmmm(
+                    splitCell, "ordinary PMMM domains did not split the Ewald fixture's mesh cell");
+            }
             double const error = detail::verifyPmmmReference(baseline, tolerance);
             detail::distributePmmmFixture(fixture);
             resetFlops();

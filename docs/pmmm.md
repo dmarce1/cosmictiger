@@ -182,24 +182,25 @@ parcel traffic, and require the application's existing `MPI_THREAD_MULTIPLE`
 startup guarantee. FFTW planner operations share the process-wide planner
 lock with other FFTW users.
 
-PMMM uses spatial domains whose boundaries lie on mesh-cell planes. Each
-recursive cut chooses the mesh plane that most evenly balances particles per
-locality in the two child groups. Equal-count choices prefer the proportionally
-spaced plane, then the lower plane. Every mesh cell belongs to one locality;
-a heavily populated cell can limit the achievable balance. Exact integer cell
-indices govern counting, partitioning, and migration in both coordinate
-precisions, including odd meshes. Old checkpoint layouts with continuous domain
-cuts are realigned before their first migration. Each solve sorts local particle
-arrays in place into cell ranges, using parallel CPU partitioning and preserving
-all attached particle fields.
-Owners send cell moments to the FFTW slab owners, then fetch their local
-expansions for particle evaluation. In PP mode, slab owners also hold copies
+PMMM uses the same spatial particle-domain decomposition as global FMM. Each
+recursive cut balances the current particle count between two locality groups,
+without requiring the cut to follow a mesh-cell plane. A mesh cell can therefore
+have particle fragments on several localities, including when a dense cell
+needs to be split for balance. Particle migration and checkpoint reload preserve
+these continuous domains independently of the FFT mesh. Each solve sorts local
+particle arrays in place into cell-fragment ranges, using parallel CPU
+partitioning and preserving all attached particle fields.
+The FFTW mesh retains its separate slab distribution, independent of particle
+counts and particle-domain boundaries. Each particle owner forms partial cell
+moments about the same mesh-cell center and sends them to that cell's FFTW slab
+owner, which sums all fragments before the FFT. After the inverse FFT, every
+particle owner fetches the completed expansion for each of its occupied cells
+and evaluates it on its own particles. In PP mode, slab owners also hold copies
 of near-source particles and return the requested neighboring records. In FMM
 mode, a cell-owner directory identifies the sources needed by each locality's
 occupied sink cells. Their owners send complete particle records for those
-remote source cells; each arrival permits its source-tree construction. Multiple
-owner fragments of one mesh cell are available locally, so split-cell inputs
-remain supported. A source
+remote source-cell fragments; each arrival permits its source-tree construction.
+All owner fragments of a required mesh cell are made available locally. A source
 cell is copied once per recipient even when several sink cells need it.
 
 Ghost records occupy a separate source arena; owned particle arrays retain their

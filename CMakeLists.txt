@@ -517,7 +517,7 @@ set_source_files_properties(
     src/gravity/nitadori/cell_schedule.cpp
     src/gravity/nitadori/evaluation.cpp
     PROPERTIES COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
-# Mesh boundary coordinates must round identically when stored and reloaded.
+# Domain boundary coordinates must round identically when stored and reloaded.
 set_source_files_properties(src/particles/domain.cpp tests/mesh_domains.cpp PROPERTIES
     COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
 
@@ -1512,7 +1512,7 @@ if(BUILD_TESTING)
                 ${cosmictiger_mpi_transport_args})
             set_tests_properties(pmmm_mpi_fixed64 PROPERTIES TIMEOUT 300 PROCESSORS 3
                 WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/tests/pmmm_mpi_fixed64" LABELS "pmmm;mpi")
-            foreach(mesh_domain_ranks IN ITEMS 2 3 6)
+            foreach(mesh_domain_ranks IN ITEMS 2 3 6 9)
                 foreach(position_type IN ITEMS fixed32 fixed64)
                     set(mesh_domain_name "mesh_domains_mpi_${mesh_domain_ranks}_${position_type}")
                     set(mesh_domain_workdir "${PROJECT_BINARY_DIR}/tests/${mesh_domain_name}")

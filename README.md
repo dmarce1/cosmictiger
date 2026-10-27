@@ -114,7 +114,7 @@ angle remains available through `--gravity.openingAngle` for global FMM and
 PMMM-FMM near interactions.
 PMMM uses the hierarchical particle timestep ladder;
 `compute.cuda` selects CPU or CUDA near-field execution and drift. See [PMMM](docs/pmmm.md)
-for order conventions, mesh-aligned particle ownership, memory costs, CPU/CUDA
+for order conventions, independent particle and FFT ownership, memory costs, CPU/CUDA
 near fields, and restarts.
 
 FMM gravity and SPH can select radial kernels independently. Both use an effective radius

@@ -7,6 +7,7 @@
  */
 
 #include <algorithm>
+#include <cmath>
 #include <shared_mutex>
 #include <unordered_map>
 
@@ -16,7 +17,6 @@
 #include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/particles/domain.hpp>
-#include <cosmictiger/particles/mesh_domain.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
 
@@ -46,87 +46,8 @@ static std::unordered_map<size_t, DomainT> boxesByKey;
 static int findParticleDomain(Array<double, kDimensions> const& x, size_t key = 1, int depth = 0);
 static void domainsCheck();
 static Vector<DomainLocal> localDomains;
-static int alignedMeshSize = 0;
 
 namespace detail {
-
-bool usesMeshDomains() {
-    auto const& gravity = getOptions().gravity;
-    return gravity.enabled && usesMeshGravity(gravity);
-}
-
-bool meshLayoutAligned() {
-    uint32_t const meshSize = getOptions().gravity.meshSize;
-    auto const aligned = [meshSize](double value) {
-        return mesh_domain::boundaryCoordinate(
-                   mesh_domain::boundaryIndex(value, meshSize), meshSize) == value;
-    };
-    auto const alignedBox = [&](Range<double> const& box) {
-        for (int dim = 0; dim < kDimensions; ++dim) {
-            if (!aligned(box.begin[dim]) || !aligned(box.end[dim])) {
-                return false;
-            }
-        }
-        return true;
-    };
-    for (auto const& [key, domain] : boxesByKey) {
-        if (!alignedBox(domain.box) || (domain.rank == -1 && !aligned(domain.midx))) {
-            return false;
-        }
-    }
-    for (auto const& domain : localDomains) {
-        if (!alignedBox(domain.box)) {
-            return false;
-        }
-    }
-    return !boxesByKey.empty() && localDomains.size() == size_t(hpxSize());
-}
-
-bool meshDomainContains(Range<double> const& box, ParticleInteger particle) {
-    uint32_t const meshSize = getOptions().gravity.meshSize;
-    for (int dim = 0; dim < kDimensions; ++dim) {
-        if (!mesh_domain::contains(particlesPos(dim, particle).raw(),
-                mesh_domain::boundaryIndex(box.begin[dim], meshSize),
-                mesh_domain::boundaryIndex(box.end[dim], meshSize), meshSize)) {
-            return false;
-        }
-    }
-    return true;
-}
-
-int findMeshParticleDomain(ParticleInteger particle) {
-    uint32_t const meshSize = getOptions().gravity.meshSize;
-    size_t key = 1;
-    int depth = 0;
-    while (boxesByKey.at(key).rank == -1) {
-        uint32_t const plane = mesh_domain::boundaryIndex(boxesByKey.at(key).midx, meshSize);
-        bool const left = mesh_domain::belowBoundary(
-            particlesPos(depth % kDimensions, particle).raw(), plane, meshSize);
-        key = 2 * key + !left;
-        ++depth;
-    }
-    return boxesByKey.at(key).rank;
-}
-
-ParticleInteger partitionMeshDomain(Pair<ParticleInteger> range, uint32_t plane, int dimension) {
-    uint32_t const meshSize = getOptions().gravity.meshSize;
-    auto const below = [&](ParticleInteger index) {
-        return mesh_domain::belowBoundary(particlesPos(dimension, index).raw(), plane, meshSize);
-    };
-    auto begin = range.first;
-    auto end = range.second;
-    while (begin < end) {
-        if (below(begin)) {
-            ++begin;
-        } else {
-            --end;
-            if (begin < end) {
-                particlesSwap(begin, end);
-            }
-        }
-    }
-    return begin;
-}
 
 Vector<size_t> countDomainSplits(Vector<double> const& bounds, int depth) {
     Vector<hpx::future<Vector<size_t>>> pending;
@@ -141,132 +62,6 @@ Vector<size_t> countDomainSplits(Vector<double> const& bounds, int depth) {
         }
     }
     return counts;
-}
-
-void chooseMeshDomainSplits(Vector<DomainGlobal> const& domains, int depth, Vector<double>& bounds,
-    Vector<size_t>& counts) {
-    struct SplitSearch {
-        uint32_t begin;
-        uint32_t end;
-        uint32_t lower;
-        uint32_t upper;
-        uint32_t best;
-        uint32_t geometric;
-        uint32_t ranks;
-        uint32_t leftRanks;
-    };
-    uint32_t const meshSize = getOptions().gravity.meshSize;
-    Vector<SplitSearch> searches(domains.size());
-    bounds.resize(domains.size());
-    for (size_t i = 0; i < domains.size(); ++i) {
-        auto const& domain = domains[i];
-        auto& search = searches[i];
-        search.begin = mesh_domain::boundaryIndex(domain.box.begin[depth % kDimensions], meshSize);
-        search.end = mesh_domain::boundaryIndex(domain.box.end[depth % kDimensions], meshSize);
-        search.lower = search.begin;
-        search.upper = search.end;
-        search.ranks = domain.processRange.second - domain.processRange.first;
-        search.leftRanks = search.ranks / 2;
-        // Prefer the rank-proportional geometric plane when several planes
-        // have equal particle balance, including completely empty domains.
-        search.best = search.begin +
-            (uint64_t(search.end - search.begin) * search.leftRanks + (search.ranks - 1) / 2) /
-                search.ranks;
-        search.geometric = search.best;
-        bounds[i] = mesh_domain::boundaryCoordinate(search.best, meshSize);
-    }
-    counts = countDomainSplits(bounds, depth);
-    auto const consider = [&](size_t i, uint32_t plane, size_t below) {
-        auto& search = searches[i];
-        if (search.ranks > 1 &&
-            mesh_domain::betterSplit(plane, below, search.best, counts[i], domains[i].totalCount,
-                search.leftRanks, search.ranks, search.begin, search.end)) {
-            search.best = plane;
-            counts[i] = below;
-        }
-    };
-    // Counts are monotone in the integer plane. Locate the first count at or
-    // above the exact rank-weighted target, then compare its predecessor.
-    while (true) {
-        bool searching = false;
-        Vector<uint32_t> planes(domains.size());
-        for (size_t i = 0; i < domains.size(); ++i) {
-            auto const& search = searches[i];
-            planes[i] = search.lower + (search.upper - search.lower) / 2;
-            bounds[i] = mesh_domain::boundaryCoordinate(planes[i], meshSize);
-            searching |= search.ranks > 1 && search.lower < search.upper;
-        }
-        if (!searching) {
-            break;
-        }
-        auto const trialCounts = countDomainSplits(bounds, depth);
-        for (size_t i = 0; i < domains.size(); ++i) {
-            auto& search = searches[i];
-            if (search.ranks <= 1 || search.lower == search.upper) {
-                continue;
-            }
-            consider(i, planes[i], trialCounts[i]);
-            if (mesh_domain::compareTarget(
-                    trialCounts[i], domains[i].totalCount, search.leftRanks, search.ranks) < 0) {
-                search.lower = planes[i] + 1;
-            } else {
-                search.upper = planes[i];
-            }
-        }
-    }
-    for (int predecessor = 0; predecessor <= 1; ++predecessor) {
-        for (size_t i = 0; i < domains.size(); ++i) {
-            auto const& search = searches[i];
-            uint32_t const plane = search.lower - (predecessor && search.lower > search.begin);
-            bounds[i] = mesh_domain::boundaryCoordinate(plane, meshSize);
-        }
-        auto const trialCounts = countDomainSplits(bounds, depth);
-        for (size_t i = 0; i < domains.size(); ++i) {
-            consider(i, mesh_domain::boundaryIndex(bounds[i], meshSize), trialCounts[i]);
-        }
-    }
-    // A run of empty cells gives several planes the same optimal count.
-    // Find the member of that plateau nearest the geometric target rather
-    // than letting the binary-search path determine the tie.
-    for (auto& search : searches) {
-        search.lower = std::min(search.best, search.geometric);
-        search.upper = std::max(search.best, search.geometric);
-    }
-    while (true) {
-        bool searching = false;
-        Vector<uint32_t> planes(domains.size());
-        for (size_t i = 0; i < domains.size(); ++i) {
-            auto const& search = searches[i];
-            bool const towardRight = search.best < search.geometric;
-            planes[i] = search.lower + (search.upper - search.lower + towardRight) / 2;
-            bounds[i] = mesh_domain::boundaryCoordinate(planes[i], meshSize);
-            searching |= search.ranks > 1 && search.lower < search.upper;
-        }
-        if (!searching) {
-            break;
-        }
-        auto const trialCounts = countDomainSplits(bounds, depth);
-        for (size_t i = 0; i < domains.size(); ++i) {
-            auto& search = searches[i];
-            if (search.ranks <= 1 || search.lower == search.upper) {
-                continue;
-            }
-            if (search.best < search.geometric) {
-                if (trialCounts[i] <= counts[i]) {
-                    search.lower = planes[i];
-                } else {
-                    search.upper = planes[i] - 1;
-                }
-            } else if (trialCounts[i] >= counts[i]) {
-                search.upper = planes[i];
-            } else {
-                search.lower = planes[i] + 1;
-            }
-        }
-    }
-    for (size_t i = 0; i < domains.size(); ++i) {
-        bounds[i] = mesh_domain::boundaryCoordinate(searches[i].lower, meshSize);
-    }
 }
 
 }    // namespace detail
@@ -318,9 +113,6 @@ void domainsLoad(FILE* fp) {
     }
     localDomains.resize(hpxSize());
     FREAD(localDomains.data(), sizeof(DomainLocal), hpxSize(), fp);
-    alignedMeshSize = detail::usesMeshDomains() && detail::meshLayoutAligned() ?
-        getOptions().gravity.meshSize :
-        0;
 }
 
 Range<double> domainsRange(size_t key) {
@@ -333,9 +125,6 @@ void domainsTransmitBoxes(std::unordered_map<size_t, DomainT> boxes) {
         futs.push_back(hpx::async<DomainsTransmitBoxesAction>(c, boxes));
     }
     boxesByKey = std::move(boxes);
-    alignedMeshSize = detail::usesMeshDomains() && detail::meshLayoutAligned() ?
-        getOptions().gravity.meshSize :
-        0;
     hpx::wait_all(futs.begin(), futs.end());
 }
 
@@ -377,22 +166,16 @@ Vector<size_t> domainsCountBelow(Vector<double> bounds, int depth) {
                     (size_t) 1);
                 Vector<hpx::future<void>> futs;
                 int const xdim = depth % kDimensions;
-                bool const mesh = detail::usesMeshDomains();
-                uint32_t const meshSize = getOptions().gravity.meshSize;
-                uint32_t const plane = mesh ? mesh_domain::boundaryIndex(bounds[i], meshSize) : 0;
-                Position const xmid = mesh ? Position{} : Position(bounds[i]);
+                Position const xmid(bounds[i]);
                 std::atomic<size_t> count(0);
-                auto const func = [numberOfThreads, rng, xdim, xmid, mesh, plane, meshSize, &count](
-                                      int proc) {
+                auto const func = [numberOfThreads, rng, xdim, xmid, &count](int proc) {
                     size_t const begin =
                         rng.first + (size_t) proc * (rng.second - rng.first) / numberOfThreads;
                     size_t const end = rng.first +
                         (size_t) (proc + 1) * (rng.second - rng.first) / numberOfThreads;
                     size_t thisCount = 0;
                     for (size_t i = begin; i < end; i++) {
-                        if (mesh ? mesh_domain::belowBoundary(
-                                       particlesPos(xdim, i).raw(), plane, meshSize) :
-                                   particlesPos(xdim, i) < xmid) {
+                        if (particlesPos(xdim, i) < xmid) {
                             thisCount++;
                         }
                     }
@@ -419,10 +202,7 @@ void domainsReboundSort(Vector<double> bounds, int depth) {
     for (int i = 0; i < localDomains.size(); i++) {
         if (localDomains[i].depth == depth) {
             futs.push_back(hpx::async([i, &bounds, depth, &mids]() {
-                mids[i] = detail::usesMeshDomains() ?
-                    detail::partitionMeshDomain(localDomains[i].particleRange,
-                        mesh_domain::boundaryIndex(bounds[i], getOptions().gravity.meshSize),
-                        depth % kDimensions) :
+                mids[i] =
                     particlesSort(localDomains[i].particleRange, bounds[i], depth % kDimensions);
                 ///	PRINT( "!!!!!!!! %i %i %e %i %i\n", hpx_rank(), mids[i], bounds[i],
                 /// local_domains[i].part_range.first, local_domains[i].part_range.second);
@@ -459,13 +239,11 @@ void domainsRebound() {
     domains[0].box = unitBox<double>();
     domains[0].processRange.first = 0;
     domains[0].processRange.second = hpxSize();
-    domains[0].totalCount = getOptions().initial.numberOfParticles;
-    bool const mesh = detail::usesMeshDomains();
-    if (mesh) {
-        domains[0].totalCount = 0;
-        for (auto const count : domainsGetLoads()) {
-            domains[0].totalCount += count;
-        }
+    // Both gravity solvers balance the current particle population independently
+    // of the FFT slabs. PMMM cell fragments are reduced by the mesh exchange.
+    domains[0].totalCount = 0;
+    for (auto const count : domainsGetLoads()) {
+        domains[0].totalCount += count;
     }
     domains[0].midhi = 1.0;
     domains[0].midlo = 0.0;
@@ -494,62 +272,39 @@ void domainsRebound() {
         domains = std::move(newDomains);
         Vector<size_t> counts(domains.size());
         Vector<double> bounds;
-        if (mesh) {
-            detail::chooseMeshDomainSplits(domains, depth, bounds, counts);
+        for (int iter = 0; iter < kDomainReboundIterations; ++iter) {
+            bounds.clear();
+            for (auto const& domain : domains) {
+                bounds.push_back((domain.midhi + domain.midlo) * 0.5);
+            }
+            counts = detail::countDomainSplits(bounds, depth);
             for (size_t i = 0; i < domains.size(); ++i) {
-                boxesByKey[domains[i].key].midx = bounds[i];
-            }
-        } else {
-            for (int iter = 0; iter < kDomainReboundIterations; iter++) {
-                for (auto& c : counts) {
-                    c = 0;
-                }
-                Vector<double> bounds;
-                for (int i = 0; i < domains.size(); i++) {
-                    double const midx = (domains[i].midhi + domains[i].midlo) * 0.5;
-                    bounds.push_back(midx);
-                }
-                //			PRINT( "Counting\n");
-                Vector<hpx::future<Vector<size_t>>> countFuts;
-                for (int i = 0; i < hpxSize(); i++) {
-                    countFuts.push_back(
-                        hpx::async<DomainsCountBelowAction>(hpxLocalities()[i], bounds, depth));
-                }
-                for (auto& f : countFuts) {
-                    auto const count = f.get();
-                    for (int i = 0; i < count.size(); i++) {
-                        counts[i] += count[i];
-                    }
-                }
-                //			PRINT( "Done counting\n");
-                for (int i = 0; i < domains.size(); i++) {
-                    //				PRINT( "%i\n", i);
-                    int const firstProcess = domains[i].processRange.first;
-                    int const lastProcess = domains[i].processRange.second;
-                    int const middleProcess = (firstProcess + lastProcess) / 2;
-                    ALWAYS_ASSERT(lastProcess - firstProcess >= 1);
-                    size_t const targetCount = (size_t) (middleProcess - firstProcess) *
-                        domains[i].totalCount / (lastProcess - firstProcess);
-                    double const midx = (domains[i].midhi + domains[i].midlo) * 0.5;
-                    if (counts[i] < targetCount) {
-                        domains[i].midlo = midx;
-                    } else {
-                        domains[i].midhi = midx;
-                    }
-                    //				PRINT("----- %i %li %e %e\n", i, counts[i], domains[i].midlo,
-                    // domains[i].midhi);
-                }
-            }
-            for (int i = 0; i < domains.size(); i++) {
-                if (domains[i].processRange.second - domains[i].processRange.first) {
-                    double const midx = (domains[i].midhi + domains[i].midlo) * 0.5;
-                    boxesByKey[domains[i].key].midx = midx;
-                    bounds.push_back(midx);
+                int const firstProcess = domains[i].processRange.first;
+                int const lastProcess = domains[i].processRange.second;
+                int const middleProcess = (firstProcess + lastProcess) / 2;
+                ALWAYS_ASSERT(lastProcess - firstProcess >= 1);
+                size_t const targetCount = size_t(middleProcess - firstProcess) *
+                    domains[i].totalCount / (lastProcess - firstProcess);
+                if (counts[i] < targetCount) {
+                    domains[i].midlo = bounds[i];
                 } else {
-                    bounds.push_back(0.0);
+                    domains[i].midhi = bounds[i];
                 }
             }
         }
+        bounds.clear();
+        for (auto const& domain : domains) {
+            // Counting and sorting use Position comparisons. Store the same
+            // representable plane so migration agrees after repeated cuts on
+            // an axis, including when the double midpoint rounds up to one.
+            double const midpoint =
+                std::min((domain.midhi + domain.midlo) * 0.5, std::nextafter(1.0, 0.0));
+            double const midx = positionDomainCoordinate(Position(midpoint));
+            boxesByKey[domain.key].midx = midx;
+            bounds.push_back(midx);
+        }
+        // Child targets must use the count at the actual final split plane.
+        counts = detail::countDomainSplits(bounds, depth);
         Vector<hpx::future<void>> sortFuts;
         for (int i = 0; i < hpxSize(); i++) {
             sortFuts.push_back(
@@ -800,12 +555,6 @@ static void endSphMigration() {
 }
 
 void domainsBegin(int rung) {
-    bool const mesh = detail::usesMeshDomains();
-    if (hpxRank() == 0 && mesh && alignedMeshSize != getOptions().gravity.meshSize) {
-        // Older mesh checkpoints used continuous domain cuts. Rebuild them
-        // collectively before the first migration, preserving the file layout.
-        domainsRebound();
-    }
     if (getOptions().hydro.enabled) {
         beginSphMigration(rung);
         return;
@@ -824,7 +573,7 @@ void domainsBegin(int rung) {
     constexpr int kChunkSize = 1024;
     for (int proc = 0; proc < numberOfThreads; proc++) {
         futs.push_back(hpx::async([proc, numberOfThreads, &mutex, &nextBegin, myDomain,
-                                      currentRange, rung, mesh]() {
+                                      currentRange, rung]() {
             std::unordered_map<int, Vector<Particle>> sends;
             Vector<hpx::future<void>> futs;
             Vector<ParticleInteger> myFreeIndices;
@@ -836,16 +585,11 @@ void domainsBegin(int rung) {
                     // all particles before building their common gravity tree.
                     if (!getOptions().run.hierarchicalGravity || particlesRung(i) == rung) {
                         Array<double, kDimensions> x;
-                        if (!mesh) {
-                            for (ParticleInteger dim = 0; dim < kDimensions; dim++) {
-                                x[dim] = positionDomainCoordinate(particlesPos(dim, i));
-                            }
+                        for (ParticleInteger dim = 0; dim < kDimensions; dim++) {
+                            x[dim] = positionDomainCoordinate(particlesPos(dim, i));
                         }
-                        bool const contained =
-                            mesh ? detail::meshDomainContains(myDomain, i) : myDomain.contains(x);
-                        if (!contained) {
-                            ParticleInteger const rank =
-                                mesh ? detail::findMeshParticleDomain(i) : findParticleDomain(x);
+                        if (!myDomain.contains(x)) {
+                            ParticleInteger const rank = findParticleDomain(x);
                             auto& send = sends[rank];
                             send.push_back(particlesGetParticle(i));
                             if (send.size() >= kMaxParticlesPerParcel) {
@@ -990,10 +734,7 @@ static void domainsCheck() {
                 for (int dim = 0; dim < kDimensions; dim++) {
                     x[dim] = positionDomainCoordinate(particlesPos(dim, i));
                 }
-                bool const contained = detail::usesMeshDomains() ?
-                    detail::meshDomainContains(myDomain, i) :
-                    myDomain.contains(x);
-                if (!contained) {
+                if (!myDomain.contains(x)) {
                     PRINT("particle out of range %li of %li %e %e %e rung %i\n", (long long) i,
                         (long long) particlesSize(), x[0], x[1], x[2], particlesRung(i));
                     PRINT("%s\n", domainsFindMyBox().toString().c_str());

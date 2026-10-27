@@ -9,7 +9,6 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
-#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -44,10 +43,16 @@ PositionInteger meshDomainPosition(int identity, int dim, int fixture, int phase
         if (identity % 21 == 0) {
             raw = dim % 2 == 0 ? 0 : period - 1;
         }
+    } else if (fixture == 2) {
+        // Distinct coordinates inside one cell must be balanced across ranks.
+        // Keep their separation well above the domain search resolution.
+        int const count = meshDomainFixtureCount(fixture);
+        int const multiplier = dim == kXDimension ? 1 : dim == kYDimension ? 13 : 23;
+        int const offset = 1 + identity * multiplier % count;
+        raw = period / 2 + period * offset / (32 * (count + 1));
     } else {
-        int const cell = fixture == 2 ? 3 :
-            dim == kXDimension        ? (identity < 80 ? 1 : 2 + identity % 5) :
-                                        (identity * 5 + 2 * dim) % kMeshDomainSide;
+        int const cell = dim == kXDimension ? (identity < 80 ? 1 : 2 + identity % 5) :
+                                              (identity * 5 + 2 * dim) % kMeshDomainSide;
         raw = period * (2 * cell + 1) / (2 * kMeshDomainSide) + identity % 3;
     }
     // An exactly representable periodic translation moves particles through
@@ -142,19 +147,18 @@ void reloadMeshDomainLayout() {
     std::fclose(file);
 }
 
-Range<int> meshDomainIntegerBox(Range<double> const& box) {
-    Range<int> result;
+long double meshDomainCoordinate(PositionInteger raw) {
+    return std::ldexp(static_cast<long double>(raw), -kPositionBits);
+}
+
+bool meshDomainContains(Range<double> const& box, MeshDomainRecord const& record) {
     for (int dim = 0; dim < kDimensions; ++dim) {
-        result.begin[dim] = int(std::llround(box.begin[dim] * kMeshDomainSide));
-        result.end[dim] = int(std::llround(box.end[dim] * kMeshDomainSide));
-        requireMeshDomain(result.begin[dim] >= 0 && result.end[dim] <= kMeshDomainSide &&
-                result.begin[dim] <= result.end[dim],
-            "domain bounds do not form a valid mesh interval");
-        requireMeshDomain(box.begin[dim] == double(result.begin[dim]) / kMeshDomainSide &&
-                box.end[dim] == double(result.end[dim]) / kMeshDomainSide,
-            "domain boundary is not an exact mesh plane");
+        auto const coordinate = meshDomainCoordinate(record.raw[dim]);
+        if (coordinate < box.begin[dim] || coordinate >= box.end[dim]) {
+            return false;
+        }
     }
-    return result;
+    return true;
 }
 
 Array<int, kDimensions> meshDomainRecordCell(MeshDomainRecord const& record) {
@@ -166,15 +170,19 @@ Array<int, kDimensions> meshDomainRecordCell(MeshDomainRecord const& record) {
 }
 
 void verifyMeshDomainSplits(
-    Vector<MeshDomainRecord> const& records, size_t key, int ranks, int depth) {
+    Vector<MeshDomainRecord> const& records, size_t key, int ranks, int depth, bool balanced) {
+    auto const parent = domainsRange(key);
+    for (int dim = 0; dim < kDimensions; ++dim) {
+        requireMeshDomain(parent.begin[dim] >= 0.0 && parent.end[dim] <= 1.0 &&
+                parent.begin[dim] <= parent.end[dim],
+            "domain bounds do not form a valid spatial interval");
+    }
     if (ranks == 1) {
         return;
     }
-    auto const parent = meshDomainIntegerBox(domainsRange(key));
-    auto const left = meshDomainIntegerBox(domainsRange(key * 2));
-    auto const right = meshDomainIntegerBox(domainsRange(key * 2 + 1));
+    auto const left = domainsRange(key * 2);
+    auto const right = domainsRange(key * 2 + 1);
     int const axis = depth % kDimensions;
-    int const actualPlane = left.end[axis];
     for (int dim = 0; dim < kDimensions; ++dim) {
         requireMeshDomain(left.begin[dim] == parent.begin[dim] &&
                 right.end[dim] == parent.end[dim] &&
@@ -183,34 +191,51 @@ void verifyMeshDomainSplits(
                         left.end[dim] == parent.end[dim] && right.begin[dim] == parent.begin[dim]),
             "child domains do not partition their parent along the selected axis");
     }
-    size_t total = 0;
-    for (auto const& record : records) {
-        total += parent.contains(meshDomainRecordCell(record));
-    }
-    int bestPlane = parent.begin[axis];
-    uint64_t bestError = std::numeric_limits<uint64_t>::max();
-    int bestDistance = std::numeric_limits<int>::max();
     int const leftRanks = ranks / 2;
-    for (int plane = parent.begin[axis]; plane <= parent.end[axis]; ++plane) {
-        size_t below = 0;
+    if (balanced) {
+        std::vector<long double> coordinates;
         for (auto const& record : records) {
-            auto const cell = meshDomainRecordCell(record);
-            below += parent.contains(cell) && cell[axis] < plane;
+            if (meshDomainContains(parent, record)) {
+                coordinates.push_back(meshDomainCoordinate(record.raw[axis]));
+            }
         }
-        int64_t const residual = int64_t(below) * ranks - int64_t(total) * leftRanks;
-        uint64_t const error = residual < 0 ? uint64_t(-residual) : uint64_t(residual);
-        int const distance = std::abs((plane - parent.begin[axis]) * ranks -
-            (parent.end[axis] - parent.begin[axis]) * leftRanks);
-        if (error < bestError || (error == bestError && distance < bestDistance)) {
-            bestError = error;
-            bestDistance = distance;
-            bestPlane = plane;
+        std::sort(coordinates.begin(), coordinates.end());
+        size_t const target = coordinates.size() * leftRanks / ranks;
+        long double const lower = target == 0 ? parent.begin[axis] : coordinates[target - 1];
+        long double const upper =
+            target == coordinates.size() ? parent.end[axis] : coordinates[target];
+        // A coordinate quantile is independent of the bisection implementation.
+        // Coincident or sub-resolution points need not be split exactly evenly.
+        long double const tolerance =
+            std::ldexp(parent.end[axis] - parent.begin[axis], -kDomainReboundIterations) +
+            std::ldexp(1.0L, -kPositionBits);
+        requireMeshDomain(
+            left.end[axis] >= lower - tolerance && left.end[axis] <= upper + tolerance,
+            "domain cut does not balance the current particle population");
+    }
+    verifyMeshDomainSplits(records, key * 2, leftRanks, depth + 1, balanced);
+    verifyMeshDomainSplits(records, key * 2 + 1, ranks - leftRanks, depth + 1, balanced);
+}
+
+void readMeshDomainLayout(Vector<Range<double>>& boxes, size_t key, int ranks) {
+    boxes.push_back(domainsRange(key));
+    if (ranks > 1) {
+        readMeshDomainLayout(boxes, key * 2, ranks / 2);
+        readMeshDomainLayout(boxes, key * 2 + 1, ranks - ranks / 2);
+    }
+}
+
+void verifyMeshDomainLayout(Vector<Range<double>> const& expected) {
+    Vector<Range<double>> actual;
+    readMeshDomainLayout(actual, 1, hpxSize());
+    requireMeshDomain(actual.size() == expected.size(), "domain topology changed");
+    for (size_t index = 0; index < actual.size(); ++index) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            requireMeshDomain(actual[index].begin[dim] == expected[index].begin[dim] &&
+                    actual[index].end[dim] == expected[index].end[dim],
+                "checkpoint reload or mesh size changed particle domain boundaries");
         }
     }
-    requireMeshDomain(actualPlane == bestPlane,
-        "selected plane is not the most balanced legal split with deterministic tie breaking");
-    verifyMeshDomainSplits(records, key * 2, leftRanks, depth + 1);
-    verifyMeshDomainSplits(records, key * 2 + 1, ranks - leftRanks, depth + 1);
 }
 
 }    // namespace detail
@@ -229,27 +254,38 @@ void verifyMeshDomains(int fixture, int phase, bool balanced) {
     }
     int const count = meshDomainFixtureCount(fixture);
     std::vector<bool> seen(count, false);
-    std::vector<int> cellOwners(kMeshDomainSide * kMeshDomainSide * kMeshDomainSide, -1);
+    std::vector<int> firstCellOwner(kMeshDomainSide * kMeshDomainSide * kMeshDomainSide, -1);
+    bool splitCell = false;
     Vector<MeshDomainRecord> allRecords;
     for (int rank = 0; rank < hpxSize(); ++rank) {
         auto const snapshot = pending[rank].get();
-        auto const box = meshDomainIntegerBox(snapshot.box);
-        for (int x = box.begin[0]; x < box.end[0]; ++x) {
-            for (int y = box.begin[1]; y < box.end[1]; ++y) {
-                for (int z = box.begin[2]; z < box.end[2]; ++z) {
-                    int const key = (x * kMeshDomainSide + y) * kMeshDomainSide + z;
-                    requireMeshDomain(cellOwners[key] == -1, "one cell has multiple owners");
-                    cellOwners[key] = rank;
-                }
+        if (balanced && fixture == 2) {
+            // A finite bisection may miss its target by one particle per cut.
+            int tolerance = 0;
+            for (int ranks = hpxSize(); ranks > 1; ranks = (ranks + 1) / 2) {
+                ++tolerance;
             }
+            requireMeshDomain(
+                snapshot.records.size() >= size_t(std::max(0, count / hpxSize() - tolerance)) &&
+                    snapshot.records.size() <=
+                        size_t((count + hpxSize() - 1) / hpxSize() + tolerance),
+                "particles in one mesh cell were not balanced across localities");
         }
         for (auto const& record : snapshot.records) {
             int const identity = int(record.velocity[kXDimension]) - 1;
             requireMeshDomain(identity >= 0 && identity < count && !seen[identity],
                 "migration lost or duplicated particle identities");
             seen[identity] = true;
-            requireMeshDomain(box.contains(meshDomainRecordCell(record)),
-                "particle belongs to a mesh cell outside its owning locality");
+            requireMeshDomain(meshDomainContains(snapshot.box, record),
+                "particle lies outside its owning locality's spatial domain");
+            auto const cell = meshDomainRecordCell(record);
+            int const key = (cell[0] * kMeshDomainSide + cell[1]) * kMeshDomainSide + cell[2];
+            auto& owner = firstCellOwner[key];
+            if (owner < 0) {
+                owner = rank;
+            } else {
+                splitCell |= owner != rank;
+            }
             for (int dim = 0; dim < kDimensions; ++dim) {
                 requireMeshDomain(
                     record.raw[dim] == meshDomainPosition(identity, dim, fixture, phase) &&
@@ -263,10 +299,14 @@ void verifyMeshDomains(int fixture, int phase, bool balanced) {
         }
     }
     requireMeshDomain(allRecords.size() == size_t(count), "migration changed particle count");
-    requireMeshDomain(std::find(cellOwners.begin(), cellOwners.end(), -1) == cellOwners.end(),
-        "domain partition left a mesh cell without an owner");
-    if (balanced) {
-        verifyMeshDomainSplits(allRecords, 1, hpxSize(), 0);
+    auto const root = domainsRange(1);
+    for (int dim = 0; dim < kDimensions; ++dim) {
+        requireMeshDomain(root.begin[dim] == 0.0 && root.end[dim] == 1.0,
+            "particle domains do not cover the periodic volume");
+    }
+    verifyMeshDomainSplits(allRecords, 1, hpxSize(), 0, balanced);
+    if (balanced && fixture == 2 && hpxSize() > 1) {
+        requireMeshDomain(splitCell, "dense mesh cell does not span particle localities");
     }
 }
 
@@ -281,7 +321,6 @@ void meshDomainsTest() {
     options.analysis.groups = true;
     options.analysis.tracers = true;
     options.analysis.saveForce = false;
-    options.gravity.enabled = true;
     for (int fixture = 0; fixture < 4; ++fixture) {
         // The balancing target must use the current distributed population,
         // rather than an initial-condition count that can become stale.
@@ -314,15 +353,14 @@ void meshDomainsTest() {
         detail::verifyMeshDomains(fixture, 1, true);
     }
 
-    // Older mesh checkpoints contain the same continuous cuts that FMM
-    // produces. Loading those domains must trigger an automatic mesh
-    // rebalance before migration, without a caller-side rebound request.
-    options.gravity.enabled = false;
-    options.initial.numberOfParticles = detail::meshDomainFixtureCount(0);
+    // Continuous cuts survive checkpoint round trips and mesh-size changes.
+    // Use the dense fixture so each nontrivial cut lies inside a mesh cell.
+    constexpr int kFixture = 2;
+    options.initial.numberOfParticles = detail::meshDomainFixtureCount(kFixture) + 11;
     setOptions(options);
     Vector<hpx::future<void>> pending;
     for (auto const& locality : hpxLocalities()) {
-        pending.push_back(hpx::async<InitializeMeshDomainsAction>(locality, 0));
+        pending.push_back(hpx::async<InitializeMeshDomainsAction>(locality, kFixture));
     }
     for (auto& future : pending) {
         future.get();
@@ -330,15 +368,16 @@ void meshDomainsTest() {
     domainsRebound();
     domainsBegin(0);
     domainsEnd();
+    detail::verifyMeshDomains(kFixture, 0, true);
     if (hpxSize() > 1) {
         double const split = domainsRange(2).end[kXDimension];
         double const meshSplit =
             double(std::llround(split * detail::kMeshDomainSide)) / detail::kMeshDomainSide;
         detail::requireMeshDomain(split != meshSplit,
-            "legacy fixture did not produce a continuous non-mesh domain boundary");
+            "dense fixture did not produce a continuous non-mesh domain boundary");
     }
-    options.gravity.enabled = true;
-    setOptions(options);
+    Vector<Range<double>> originalLayout;
+    detail::readMeshDomainLayout(originalLayout, 1, hpxSize());
     pending.clear();
     for (auto const& locality : hpxLocalities()) {
         pending.push_back(hpx::async<ReloadMeshDomainLayoutAction>(locality));
@@ -348,7 +387,20 @@ void meshDomainsTest() {
     }
     domainsBegin(0);
     domainsEnd();
-    detail::verifyMeshDomains(0, 0, true);
-    PRINT("Mesh-aligned domain ownership, balancing and migration passed (%i bits, %i ranks)\n",
+    detail::verifyMeshDomains(kFixture, 0, true);
+    detail::verifyMeshDomainLayout(originalLayout);
+    options.gravity.meshSize = 11;
+    setOptions(options);
+    domainsBegin(0);
+    domainsEnd();
+    detail::verifyMeshDomains(kFixture, 0, true);
+    detail::verifyMeshDomainLayout(originalLayout);
+    domainsRebound();
+    domainsBegin(0);
+    domainsEnd();
+    detail::verifyMeshDomains(kFixture, 0, true);
+    detail::verifyMeshDomainLayout(originalLayout);
+    PRINT("Independent particle domains, split cells, balancing and migration passed "
+          "(%i bits, %i ranks)\n",
         kPositionBits, hpxSize());
 }
