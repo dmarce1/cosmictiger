@@ -48,7 +48,6 @@ void clearGhosts() {
 }
 
 void computeReadyCells() {
-    constexpr size_t kMaximumBatchCells = 32;
     size_t const targetParticles = getOptions().gravity.pmmmBatchParticles;
     for (;;) {
         std::vector<size_t> sinks;
@@ -61,7 +60,9 @@ void computeReadyCells() {
             if (state.failure || state.remainingSinks == 0) {
                 return;
             }
-            while (!state.readySinks.empty() && sinks.size() < kMaximumBatchCells) {
+            // Bound batches by particles so sparsely populated mesh cells can
+            // still fill one shared CPU/GPU work packet.
+            while (!state.readySinks.empty()) {
                 size_t const index = state.readySinks.front();
                 auto const& cell = state.cells[index];
                 size_t const count = cell.end - cell.begin;

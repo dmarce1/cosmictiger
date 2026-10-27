@@ -243,6 +243,21 @@ uses the existing FMM CPU/CUDA work distribution. Diagnostic fields named
 `nearCpuAcceptedMultipoles` and `nearCpuDirectPairs` count CPU tree-walk work;
 they do not claim to count GPU interactions.
 
+Both near methods group whole sink cells toward `gravity.pmmmBatchParticles`.
+The PP path packs the cells into one submission, preserving a separate source
+range and periodic image coordinates for each sink. CUDA buffers and streams
+are reused across completed submissions and released by `pmmmDestroy()`.
+PP uses the CPU when a complete batch has fewer than 128 sinks with nonempty
+source ranges or fewer than 65,536 candidate pairs. These conservative dispatch
+thresholds are heuristics, not measured crossover points. The PP source staging
+budget is 64 MiB per batch; a single oversized cell runs whole.
+
+The local FMM path also compares the generated M2L arithmetic estimate with
+direct PP work for geometrically accepted leaf pairs, choosing PP when its
+estimate is smaller. Non-leaf acceptance and global FMM behavior are unchanged.
+Batching follows the particle target without a separate 32-cell limit, so sparse
+mesh cells can fill a useful batch.
+
 The existing FMM near path accumulates potential and removes the softened
 primary self term in single precision. That subtraction can lose precision
 when the self potential is large compared with the remaining potential,
@@ -292,9 +307,11 @@ checked on the intended particle distribution. Clustered cells can make the
 direct near field expensive. No relative performance claim follows from the
 coefficient counts or the FFT decomposition alone.
 
-The application's FLOP accounting remains incomplete for PMMM: its FFT and
-spherical far-field work are not included. Reported TFLOP/s therefore does not
-describe the complete PMMM solve.
+PMMM counts moment deposition, spherical far-field operators, spectral
+contraction, FFTW plan execution, near interactions, and particle kicks.
+Reported TFLOP/s divides these source-operation counts by the force-advancement
+wall time, including communication, staging, and scheduling overhead. See
+`flop_accounting.md` for the counting convention.
 
 ## Restart and regression checks
 

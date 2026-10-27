@@ -285,6 +285,11 @@ void transform() {
 }
 
 void destroy() {
+#ifdef USE_CUDA
+    // Every solve has drained its tasks before this quiescent teardown. Release
+    // retained PP buffers even when only the standalone near-field API ran.
+    clearPmmmNearCudaWorkspaces();
+#endif
     if (cache.communicator == MPI_COMM_NULL) {
         return;
     }

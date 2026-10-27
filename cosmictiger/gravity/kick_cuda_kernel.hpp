@@ -498,7 +498,10 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                                                 pairSupportRadius, thetainv, &acceptanceFlops);
                                         flops += 96 + acceptanceFlops;
                                     }
-                                    if (!acceptance.cellCell && self.leaf && other.leaf) {
+                                    if (acceptance.cellCell && self.leaf && other.leaf &&
+                                        geometry.meshSize > 0) {
+                                        flops += 2;
+                                    } else if (!acceptance.cellCell && self.leaf && other.leaf) {
                                         flops += 2 + int(acceptance.particleCell) +
                                             int(acceptance.cellParticle);
                                     }
@@ -508,7 +511,9 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                                         self.radius, other.radius, int(self.numberOfParticles()),
                                         int(other.numberOfParticles()),
                                         FmmHybridCost<order>::kHybridPerParticle_,
-                                        FmmHybridCost<order>::kParticlePair_);
+                                        FmmHybridCost<order>::kParticlePair_,
+                                        geometry.meshSize > 0 ? FmmHybridCost<order>::kCellCell_ :
+                                                                0.0f);
                                     sw[kCc] = interaction == FmmInteraction::CellCell;
                                     sw[kPc] = interaction == FmmInteraction::ParticleCell;
                                     sw[kCp] = interaction == FmmInteraction::CellParticle;

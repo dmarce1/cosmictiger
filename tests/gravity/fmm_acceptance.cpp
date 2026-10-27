@@ -296,3 +296,29 @@ TEST(FmmAcceptance, InverseOpeningAngle) {
 TEST(FmmAcceptance, HybridCosts) {
     detail::testHybridCosts();
 }
+
+TEST(FmmAcceptance, AcceptedLeafCellCosts) {
+    using Interaction = FmmInteraction;
+    for (auto const counts : {std::pair{2, 8}, std::pair{8, 2}, std::pair{8, 8}}) {
+        EXPECT_EQ(selectFmmInteraction(true, true, true, true, true, 1.0f, 1.0f, counts.first,
+                      counts.second, 300.0f, 38.0f, 4000.0f),
+            Interaction::ParticleParticle);
+    }
+    EXPECT_EQ(selectFmmInteraction(
+                  true, true, true, true, true, 1.0f, 1.0f, 64, 64, 300.0f, 38.0f, 4000.0f),
+        Interaction::CellCell);
+    EXPECT_EQ(selectFmmInteraction(
+                  true, true, true, true, true, 1.0f, 1.0f, 8, 8, 300.0f, 38.0f, 2432.0f),
+        Interaction::CellCell);
+    for (auto const leaves :
+        {std::pair{false, false}, std::pair{false, true}, std::pair{true, false}}) {
+        EXPECT_EQ(selectFmmInteraction(true, true, true, leaves.first, leaves.second, 1.0f, 1.0f, 2,
+                      2, 300.0f, 38.0f, 4000.0f),
+            Interaction::CellCell);
+    }
+    EXPECT_EQ(selectFmmInteraction(true, true, true, true, true, 1.0f, 1.0f, 2, 2, 300.0f, 38.0f),
+        Interaction::CellCell);
+    EXPECT_EQ(
+        selectFmmInteraction(true, true, true, true, true, 1.0f, 1.0f, 2, 2, 300.0f, 0.0f, 4000.0f),
+        Interaction::CellCell);
+}

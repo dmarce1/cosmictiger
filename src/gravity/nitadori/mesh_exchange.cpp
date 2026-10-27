@@ -172,7 +172,8 @@ void deposit() {
 
 std::vector<double> localExpansion(uint64_t key) {
     auto const owner = cache.slabOwner[key / (uint64_t(cache.meshSize) * cache.meshSize)];
-    auto packet =
+    auto packet = cache.owners[owner] == hpx::find_here() ?
+        readCells(std::vector<uint64_t>{key}, key) :
         hpx::async<PmmmReadCellsAction>(cache.owners[owner], std::vector<uint64_t>{key}, key).get();
     if (packet.size() != 1 || packet[0].coefficients.size() != size_t(cache.localCount)) {
         throw std::runtime_error("PMMM local expansion is missing");

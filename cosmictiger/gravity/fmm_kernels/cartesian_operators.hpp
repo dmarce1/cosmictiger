@@ -169,4 +169,8 @@ struct FmmHybridCost {
     static constexpr float kHybridPerParticle_ =
         0.5f * (kParticleCellPerParticle_ + kCellParticlePerParticle_);
     static constexpr float kParticlePair_ = 38.0f;
+    // M2L arithmetic and displacement scaling, excluding SIMD padding and
+    // reductions shared by a list. This is a work estimate, not a timing model.
+    static constexpr float kCellCell_ =
+        float(cosmictiger::gravity::cartesian::detail::M2L<kLocalDegree_, false>::kFlops_) + 13.0f;
 };

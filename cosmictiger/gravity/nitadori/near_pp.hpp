@@ -28,6 +28,11 @@ struct PmmmNearParticle {
     }
 };
 
+struct PmmmNearSourceRange {
+    size_t begin = 0;
+    size_t end = 0;
+};
+
 // Coordinates are in cell units about the same sink-cell center, with the
 // source-cell periodic image already selected. No nearest-image wrapping is
 // performed here. Fields are overwritten as {potential, ax, ay, az}, in unit-box
@@ -36,7 +41,24 @@ void pmmmNearField(std::vector<PmmmNearParticle> const& sinks,
     std::vector<PmmmNearParticle> const& sources, double cellWidth, bool doPotential,
     std::vector<std::array<double, 4>>& fields);
 
+// Each sink uses its own half-open source range. Batching retains each sink's
+// existing source order and selected periodic image.
+void pmmmNearFieldBatch(std::vector<PmmmNearParticle> const& sinks,
+    std::vector<PmmmNearParticle> const& sources,
+    std::vector<PmmmNearSourceRange> const& sourceRanges, double cellWidth, bool doPotential,
+    std::vector<std::array<double, 4>>& fields);
+
 namespace pmmm::detail {
+
+// Conservative launch-amortization thresholds, not measured device optima.
+// Apply these to the whole batch, including all cells and excluding empty sinks.
+inline constexpr size_t kPmmmNearCudaMinimumSinks = 128;
+inline constexpr size_t kPmmmNearCudaMinimumPairs = 65536;
+
+inline constexpr bool shouldUsePmmmNearCuda(size_t usefulSinkCount, size_t candidatePairs) {
+    return usefulSinkCount >= kPmmmNearCudaMinimumSinks &&
+        candidatePairs >= kPmmmNearCudaMinimumPairs;
+}
 
 CUDA_EXPORT inline FlopCount nearBernsteinFlops(int degree) {
     return FlopCount(3) * degree * (degree + 1) / 2;
@@ -94,8 +116,12 @@ CUDA_EXPORT inline FlopCount accumulateNearPair(PmmmNearParticle const& sink,
 
 #ifdef USE_CUDA
 void pmmmNearFieldCuda(std::vector<PmmmNearParticle> const& sinks,
-    std::vector<PmmmNearParticle> const& sources, double cellWidth, double supportRadius,
+    std::vector<PmmmNearParticle> const& sources,
+    std::vector<PmmmNearSourceRange> const& sourceRanges, double cellWidth, double supportRadius,
     bool doPotential, std::vector<std::array<double, 4>>& fields);
+
+// Call only after all PMMM batches have completed, before CUDA device teardown.
+void clearPmmmNearCudaWorkspaces();
 #endif
 
 }    // namespace pmmm::detail

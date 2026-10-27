@@ -313,7 +313,8 @@ an estimate of instrumented gravity, SPH and tree arithmetic divided by the wall
 of force advancement, summed across CPU workers, CUDA kernels and localities.
 SPH includes neighbor geometry, each density/support-radius iteration, pressure
 and viscosity pairs, timestep/rung calculations, and predictor/corrector kicks.
-Chemistry, FFTs and other uninstrumented work are not counted;
+PMMM includes its spherical operators, spectral contraction, and cached FFTW
+execution counts. Chemistry, other FFT paths and other uninstrumented work are not counted;
 when they run inside force advancement their elapsed time is included. The
 cosmological `progress.txt` retains its existing `Tflops` field and layout.
 

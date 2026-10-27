@@ -115,11 +115,18 @@ CUDA_EXPORT inline FmmAcceptance<T> computeFmmAcceptance(T const& centerDistance
 // and mirrors between the two sides. Zero costs leave the radius rule alone;
 // a leaf against an internal cell is never costed, since its alternative is
 // opening the cell, not direct summation.
+// A caller may also provide an M2L cost to use direct summation for cheaper
+// accepted leaf pairs. Zero keeps unconditional cell-cell precedence.
 CUDA_EXPORT inline FmmInteraction selectFmmInteraction(bool cellCellAccepted,
     bool particleCellAccepted, bool cellParticleAccepted, bool sinkLeaf, bool sourceLeaf,
     float sinkRadius, float sourceRadius, int sinkCount = 0, int sourceCount = 0,
-    float hybridFlopsPerParticle = 0.0f, float particlePairFlops = 0.0f) {
+    float hybridFlopsPerParticle = 0.0f, float particlePairFlops = 0.0f,
+    float cellCellFlops = 0.0f) {
     if (cellCellAccepted) {
+        if (sinkLeaf && sourceLeaf && cellCellFlops > 0.0f && particlePairFlops > 0.0f &&
+            float(sinkCount) * float(sourceCount) * particlePairFlops < cellCellFlops) {
+            return FmmInteraction::ParticleParticle;
+        }
         return FmmInteraction::CellCell;
     }
     bool particleCell = particleCellAccepted && sinkLeaf;

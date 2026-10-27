@@ -321,8 +321,12 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, kD
                         selfPtr->leaf, bool(otherLeaf[i]), selfPtr->radius, otherPtrs[i]->radius,
                         int(numberOfSelfParticles), int(otherPtrs[i]->numberOfParticles()),
                         FmmHybridCost<order>::kHybridPerParticle_,
-                        FmmHybridCost<order>::kParticlePair_);
-                    if (!acceptance.cellCell[i] && selfPtr->leaf && otherLeaf[i]) {
+                        FmmHybridCost<order>::kParticlePair_,
+                        params.geometry.meshSize > 0 ? FmmHybridCost<order>::kCellCell_ : 0.0f);
+                    if (acceptance.cellCell[i] && selfPtr->leaf && otherLeaf[i] &&
+                        params.geometry.meshSize > 0) {
+                        flops += 2;
+                    } else if (!acceptance.cellCell[i] && selfPtr->leaf && otherLeaf[i]) {
                         flops += 2 + int(bool(acceptance.particleCell[i])) +
                             int(bool(acceptance.cellParticle[i]));
                     }

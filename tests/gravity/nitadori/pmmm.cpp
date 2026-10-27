@@ -11,6 +11,7 @@
 #include <numbers>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <cosmictiger/core/flops.hpp>
@@ -108,8 +109,138 @@ void checkedPmmmNearField(std::vector<PmmmNearParticle> const& sinks,
     resetFlops();
     pmmmNearField(sinks, sources, cellWidth, doPotential, fields);
     requirePmmm(readFlops() == expected, "PP backend lost or duplicated operation counts");
-    FlopCount const expectedGpu = getOptions().compute.cuda && expected != 0 ? expected - 3 : 0;
+    bool const useCuda = getOptions().compute.cuda &&
+        pmmm::detail::shouldUsePmmmNearCuda(
+            sources.empty() ? 0 : sinks.size(), sinks.size() * sources.size());
+    FlopCount const expectedGpu = useCuda && expected != 0 ? expected - 3 : 0;
     requirePmmm(getGpuFlops() == expectedGpu, "PP arithmetic was charged to the wrong backend");
+}
+
+void checkedPmmmNearFieldBatch(std::vector<PmmmNearParticle> const& sinks,
+    std::vector<PmmmNearParticle> const& sources,
+    std::vector<PmmmNearSourceRange> const& sourceRanges, bool doPotential,
+    std::vector<std::array<double, 4>>& fields) {
+    constexpr double kCellWidth = 0.25;
+    double const inverseRadius = 1 / getOptions().gravity.supportRadius;
+    double const inverseCubed = inverseRadius * inverseRadius * inverseRadius;
+    FlopCount expected = 0;
+    size_t usefulSinks = 0;
+    size_t candidatePairs = 0;
+    std::vector<std::array<double, 4>> reference(sinks.size());
+    for (size_t sink = 0; sink < sinks.size(); ++sink) {
+        auto const range = sourceRanges[sink];
+        usefulSinks += range.begin != range.end;
+        candidatePairs += range.end - range.begin;
+        for (size_t source = range.begin; source < range.end; ++source) {
+            expected += pmmm::detail::accumulateNearPair<true>(sinks[sink], sources[source],
+                kCellWidth, inverseRadius, inverseCubed, doPotential, selectedGravityKernel(),
+                reference[sink]);
+        }
+    }
+    if (candidatePairs != 0) {
+        expected += 3;
+    }
+    resetFlops();
+    pmmmNearFieldBatch(sinks, sources, sourceRanges, kCellWidth, doPotential, fields);
+    requirePmmm(readFlops() == expected, "PP batch lost or duplicated operation counts");
+    bool const useCuda = getOptions().compute.cuda &&
+        pmmm::detail::shouldUsePmmmNearCuda(usefulSinks, candidatePairs);
+    FlopCount const expectedGpu = useCuda && expected != 0 ? expected - 3 : 0;
+    requirePmmm(getGpuFlops() == expectedGpu, "PP batch arithmetic used the wrong backend");
+    requirePmmm(fields.size() == reference.size(), "PP batch retained stale sink outputs");
+    for (size_t sink = 0; sink < sinks.size(); ++sink) {
+        for (int component = 0; component < 4; ++component) {
+            requirePmmm(std::isfinite(fields[sink][component]) &&
+                    std::abs(fields[sink][component] - reference[sink][component]) <
+                        2.0e-11 * std::max(1.0, std::abs(reference[sink][component])),
+                "PP batch mixed source ranges, identities, images, or retained stale fields");
+        }
+    }
+}
+
+void checkPmmmNearBatches() {
+    auto const saved = getOptions();
+    auto options = saved;
+    options.gravity.supportRadius = 0.125;
+    // Rectangles straddle both CUDA scheduling limits.
+    // Later heterogeneous batches grow and shrink both reusable device buffers.
+    struct BatchShape {
+        size_t sinks;
+        size_t sources;
+        bool mixedRanges;
+    };
+    std::array<BatchShape, 13> const shapes{
+        {{0, 129, false}, {1, 0, false}, {31, 129, false}, {127, 512, false}, {128, 511, false},
+            {128, 512, false}, {129, 512, false}, {513, 257, true}, {257, 257, true},
+            {513, 385, true}, {129, 1024, false}, {513, 257, true}, {33, 129, false}}};
+    for (int backend = 0; backend < (saved.compute.cuda ? 2 : 1); ++backend) {
+        options.compute.cuda = backend != 0;
+        setOptions(options);
+        bool usedCuda = false;
+        std::vector<std::array<double, 4>> fields{{1.0, 2.0, 3.0, 4.0}};
+        for (auto const shape : shapes) {
+            std::vector<PmmmNearParticle> sources(shape.sources);
+            for (size_t source = 0; source < sources.size(); ++source) {
+                auto& particle = sources[source];
+                // Offsets beyond +/-2 retain the specified periodic image;
+                // repeated positions include coincident particles with distinct IDs.
+                particle.offset = {0.75 * (int(source % 9) - 4), 0.0625 * int(source % 5),
+                    -0.125 * int(source % 3)};
+                particle.mass = 0.5 + 0.125 * double(source % 7);
+                particle.rank = int(source % 2);
+                particle.index = int64_t(source);
+            }
+            std::vector<PmmmNearParticle> sinks(shape.sinks);
+            std::vector<PmmmNearSourceRange> sourceRanges(shape.sinks, {0, sources.size()});
+            for (size_t sink = 0; sink < sinks.size(); ++sink) {
+                if (!sources.empty()) {
+                    sinks[sink] = sources[sink % sources.size()];
+                    if (sink % 3 == 0) {
+                        sinks[sink].index += int64_t(sources.size());
+                    }
+                }
+                if (shape.mixedRanges) {
+                    // Unequal cell populations and source spans share one batch.
+                    sourceRanges[sink] = sink % 3 == 0 ? PmmmNearSourceRange{129, sources.size()} :
+                                                         PmmmNearSourceRange{0, 129};
+                }
+            }
+            if (shape.mixedRanges) {
+                sourceRanges[0] = {sources.size(), sources.size()};
+            }
+            for (bool doPotential : {true, false}) {
+                checkedPmmmNearFieldBatch(sinks, sources, sourceRanges, doPotential, fields);
+                usedCuda |= getGpuFlops() != 0;
+            }
+            if (!sinks.empty()) {
+                // A pooled buffer containing a previous field must not leak into
+                // a call whose sources are all omitted by its ranges.
+                std::fill(sourceRanges.begin(), sourceRanges.end(), PmmmNearSourceRange{});
+                checkedPmmmNearFieldBatch(sinks, sources, sourceRanges, true, fields);
+            }
+        }
+        requirePmmm(backend == 0 || usedCuda, "PP batch regression never exercised CUDA");
+        std::vector<PmmmNearParticle> const invalidSinks(2);
+        std::vector<PmmmNearParticle> const invalidSources(3);
+        std::vector<std::vector<PmmmNearSourceRange>> const invalidRanges{
+            {}, {{0, 3}}, {{0, 3}, {0, 3}, {0, 3}}, {{0, 3}, {2, 1}}, {{0, 3}, {0, 4}}};
+        for (auto const& ranges : invalidRanges) {
+            std::vector<std::array<double, 4>> const sentinel{{1.0, 2.0, 3.0, 4.0}};
+            fields = sentinel;
+            bool rejected = false;
+            resetFlops();
+            try {
+                pmmmNearFieldBatch(invalidSinks, invalidSources, ranges, 0.25, true, fields);
+            } catch (std::invalid_argument const&) {
+                rejected = true;
+            }
+            requirePmmm(rejected, "PP batch accepted invalid source range bounds or cardinality");
+            requirePmmm(fields == sentinel, "invalid PP batch corrupted its output fields");
+            requirePmmm(readFlops() == 0 && getGpuFlops() == 0,
+                "invalid PP batch submitted arithmetic counts");
+        }
+    }
+    setOptions(saved);
 }
 
 void checkPmmmNearEdges() {
@@ -780,6 +911,47 @@ Vector<PmmmSample> gatherPmmmKickSamples() {
     return samples;
 }
 
+void checkPmmmPpBatchTargets() {
+    if constexpr (gravity::kBuildPmmmNearUsesFmm) {
+        return;
+    }
+    auto const saved = getOptions();
+    auto options = saved;
+    options.gravity.meshSize = 8;
+    options.gravity.pmmmNearWidth = 1;
+    options.gravity.pmmmBatchParticles = 1;
+    pmmmDestroy();
+    setOptions(options);
+    preparePmmmFixture(0);
+    distributePmmmFixture(0);
+    pmmmSolve(true);
+    auto const baseline = gatherPmmmSamples();
+    auto const small = pmmmDiagnostics();
+    std::map<std::pair<int, uint64_t>, size_t> cellPopulations;
+    std::map<int, size_t> rankPopulations;
+    size_t largestCell = 0;
+    size_t largestRank = 0;
+    for (auto const& sample : baseline) {
+        largestCell = std::max(largestCell, ++cellPopulations[{sample.rank, sample.cellKey}]);
+        largestRank = std::max(largestRank, ++rankPopulations[sample.rank]);
+    }
+    requirePmmm(
+        small.nearBatches == cellPopulations.size() && small.peakBatchParticles == largestCell,
+        "PP target one did not submit one complete occupied cell per batch");
+    options.gravity.pmmmBatchParticles = 4096;
+    setOptions(options);
+    pmmmSolve(true);
+    comparePmmmSamples(baseline, gatherPmmmSamples());
+    auto const large = pmmmDiagnostics();
+    requirePmmm(
+        large.nearBatches == rankPopulations.size() && large.peakBatchParticles == largestRank,
+        "PP large target did not combine the locality's occupied cells");
+    requirePmmm(large.planBuilds == small.planBuilds && large.greenBuilds == small.greenBuilds,
+        "changing the PP batch target rebuilt its FFT or Green cache");
+    pmmmDestroy();
+    setOptions(saved);
+}
+
 void checkPmmmStreamedStages() {
     auto const saved = getOptions();
     auto options = saved;
@@ -1122,6 +1294,7 @@ void pmmmTest() {
     options.run.hierarchicalGravity = false;
     setOptions(options);
     detail::checkPmmmNearEdges();
+    detail::checkPmmmNearBatches();
     std::array<std::array<int, 2>, 3> const configurations{{{5, 2}, {8, 1}, {8, 2}}};
     // Off-center sources have larger far-field truncation error at low orders.
     // Each build checks its selected order against the independent Ewald sum.
@@ -1212,6 +1385,7 @@ void pmmmTest() {
     }
     pmmmDestroy();
     detail::checkPmmmFmmNear();
+    detail::checkPmmmPpBatchTargets();
     detail::checkPmmmStreamedStages();
     detail::checkPmmmCellOverlap();
     PRINT("PMMM periodic force, mass, self, ownership, and cache checks passed at order %i "
