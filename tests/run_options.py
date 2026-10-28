@@ -66,7 +66,7 @@ def main():
                 "hydro.enabled", "hydro.viscosityAlpha", "hydro.viscosityBeta",
                 "hydro.viscosityEpsilon", "hydro.balsaraSwitch", "hydro.neighborNumber", "gravity.enabled",
                 "gravity.kernelFamily", "gravity.kernelDegree",
-                "gravity.meshSize", "gravity.pmmmNearWidth",
+                "gravity.meshSize", "gravity.pmmmNearWidth", "gravity.pmmmMaxPrimeFactor",
                 "gravity.openingAngle", "gravity.openingSchedule",
                 "hydro.kernelFamily", "hydro.kernelDegree",
                 "gravity.effectiveRadius", "gravity.supportRadius",
@@ -169,6 +169,32 @@ mapSize = 8
 
     assertCompiledSettings(balsara_default)
     assertCompiledSettings(configured)
+    assertNumericSetting(balsara_default, "gravity.pmmmMaxPrimeFactor", 5)
+    prime_config = args.workdir / "pmmm_prime_factor.ini"
+    for value in ("2", "6", "7", "2147483647", "infinity", "inf"):
+        expected = "infinity" if value in ("infinity", "inf") else value
+        prime_config.write_text(f"[gravity]\npmmmMaxPrimeFactor = {value}\n")
+        for source, arguments in (
+                ("cli", [f"--gravity.pmmmMaxPrimeFactor={value}"]),
+                ("ini", [f"--configuration={prime_config.resolve()}"])):
+            output = run(f"pmmm_prime_factor_{source}_{value}", metadata_options + arguments)
+            if not re.search(r"^gravity\.pmmmMaxPrimeFactor\s*:\s*" + expected + r"\s*$",
+                             output, re.MULTILINE):
+                raise RuntimeError(f"{source} maximum prime factor did not resolve to {expected}")
+    prime_config.write_text("[gravity]\npmmmMaxPrimeFactor = infinity\n")
+    output = run("pmmm_prime_factor_cli_override", metadata_options + [
+        f"--configuration={prime_config.resolve()}", "--gravity.pmmmMaxPrimeFactor=5"])
+    assertNumericSetting(output, "gravity.pmmmMaxPrimeFactor", 5)
+    for index, value in enumerate(("", "0", "1", "-2", "2.5", "nan", "2e1",
+                                   "5tail", "2147483648", "infinite")):
+        prime_config.write_text(f"[gravity]\npmmmMaxPrimeFactor = {value}\n")
+        for source, arguments in (
+                ("cli", [f"--gravity.pmmmMaxPrimeFactor={value}"]),
+                ("ini", [f"--configuration={prime_config.resolve()}"])):
+            rejected = run(f"pmmm_prime_factor_invalid_{source}_{index}",
+                           metadata_options + arguments, success=False)
+            if "gravity.pmmmMaxPrimeFactor" not in rejected:
+                raise RuntimeError("invalid maximum prime factor lacked its option diagnostic")
     for scenario in ("plummer", "glass"):
         output = run(f"integrator_{scenario}", metadata_options + [f"--run.scenario={scenario}"])
         assertCompiledSettings(output)
@@ -224,7 +250,28 @@ mapSize = 8
             assertNumericSetting(pmmm_output, "gravity.openingAngle", math.sqrt(3) / (near_width + 1))
         assertNumericSetting(balsara_default, "gravity.pmmmNearWidth", 2)
         assertNumericSetting(balsara_default, "gravity.pmmmBatchParticles", 4096)
+        assertNumericSetting(balsara_default, "gravity.effectiveMeshSize", 8)
         assertNumericSetting(balsara_default, "gravity.openingAngle", math.sqrt(3) / 3)
+        for limit, requested, expected in (("5", 7, 8), ("2", 9, 16), ("6", 11, 12),
+                                           ("7", 7, 7), ("infinity", 7, 7)):
+            output = run(f"pmmm_effective_mesh_{limit}", metadata_options + [
+                f"--gravity.meshSize={requested}", f"--gravity.pmmmMaxPrimeFactor={limit}"])
+            assertNumericSetting(output, "gravity.meshSize", requested)
+            assertNumericSetting(output, "gravity.effectiveMeshSize", expected)
+        radius_options = metadata_options + ["--gravity.meshSize=7", "--gravity.supportRadius=2.1"]
+        run("pmmm_unrestricted_support", radius_options + ["--gravity.pmmmMaxPrimeFactor=infinity"])
+        rejected = run("pmmm_rounded_support", radius_options + ["--gravity.pmmmMaxPrimeFactor=5"],
+                       success=False)
+        if "normalized gravity.supportRadius" not in rejected or "effectiveMeshSize" not in rejected:
+            raise RuntimeError("PMMM support validation did not use the rounded mesh")
+        allocation_options = metadata_options + ["--gravity.meshSize=800000",
+                                                  "--gravity.supportRadius=1e-6"]
+        run("pmmm_unrestricted_allocation", allocation_options + [
+            "--gravity.pmmmMaxPrimeFactor=infinity"])
+        rejected = run("pmmm_rounded_allocation", allocation_options + [
+            "--gravity.pmmmMaxPrimeFactor=2"], success=False)
+        if "indexing/allocation limits" not in rejected or "rounding" not in rejected:
+            raise RuntimeError("PMMM allocation validation did not use the rounded mesh")
         for scenario in ("cosmology", "plummer"):
             pmmm_output = run(f"pmmm_derived_angle_{scenario}", metadata_options + [
                 f"--run.scenario={scenario}", "--gravity.openingAngle=0.99"])
@@ -253,12 +300,15 @@ mapSize = 8
             run(f"pmmm_invalid_{index}", metadata_options + invalid,
                 success=False, pmmm_mesh=None)
         pmmm_config = args.workdir / "pmmm.ini"
-        pmmm_config.write_text("[gravity]\nmeshSize = 7\npmmmNearWidth = 2\nopeningAngle = 0.1\n")
+        pmmm_config.write_text("[gravity]\nmeshSize = 7\npmmmNearWidth = 2\nopeningAngle = 0.1\n"
+                               "pmmmMaxPrimeFactor = infinity\n")
         pmmm_output = run("pmmm_ini_cli", metadata_options + [
             f"--configuration={pmmm_config.resolve()}", "--gravity.pmmmNearWidth=1",
-            "--gravity.openingAngle=0.9"], pmmm_mesh=None)
+            "--gravity.openingAngle=0.9", "--gravity.pmmmMaxPrimeFactor=5"], pmmm_mesh=None)
         assertCompiledSettings(pmmm_output)
         assertNumericSetting(pmmm_output, "gravity.meshSize", 7)
+        assertNumericSetting(pmmm_output, "gravity.pmmmMaxPrimeFactor", 5)
+        assertNumericSetting(pmmm_output, "gravity.effectiveMeshSize", 8)
         assertNumericSetting(pmmm_output, "gravity.pmmmNearWidth", 1)
         assertNumericSetting(pmmm_output, "gravity.openingAngle", math.sqrt(3) / 2)
 

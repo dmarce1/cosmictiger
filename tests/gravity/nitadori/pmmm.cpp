@@ -1449,6 +1449,119 @@ void checkPmmmStageMeshes() {
           "reuse/eviction checks passed\n");
 }
 
+void checkPmmmPrimeFactorMeshes() {
+    auto const saved = getOptions();
+    auto options = saved;
+    options.gravity.meshSize = 8;
+    options.gravity.pmmmMaxPrimeFactor = 0;
+    options.gravity.pmmmNearWidth = 2;
+    options.gravity.fmmOrder = kFmmDefaultOrder;
+    options.gravity.pmmmOrder = options.gravity.fmmOrder;
+    options.gravity.openingAngle = 0.02;
+    options.analysis.saveForce = false;
+    options.analysis.saveAcceleration = false;
+    options.analysis.savePotential = false;
+    pmmmDestroy();
+    setOptions(options);
+    preparePmmmFixture(8);
+    distributePmmmFixture(8);
+    pmmmSolve(true);
+    auto const fullReference = gatherPmmmSamples();
+    pmmmDestroy();
+    options.gravity.meshSize = 7;
+    options.gravity.pmmmMaxPrimeFactor = 5;
+    setOptions(options);
+    pmmmSolve(true);
+    comparePmmmSamples(fullReference, gatherPmmmSamples());
+    auto const initial = pmmmDiagnostics();
+    requirePmmm(
+        initial.meshSize == 8 && initial.activeParticles == 7 && initial.totalParticles == 7,
+        "finite prime-factor limit did not round the full requested side 7 upward to 8");
+
+    KickParameters parameters{};
+    parameters.htime = true;
+    parameters.ascending = true;
+    parameters.descending = false;
+    parameters.top = true;
+    parameters.sign = 0.0f;
+    parameters.firstCall = false;
+    parameters.saveForce = false;
+    parameters.gpu = options.compute.cuda;
+    parameters.minLevel = 0;
+    parameters.a = 1.0f;
+    parameters.t0 = 1.0f;
+    parameters.theta = options.gravity.openingAngle;
+    parameters.gravitySupportRadius = options.gravity.supportRadius;
+    parameters.eta = options.gravity.timestepEta;
+    parameters.gm = options.gravity.gm;
+    parameters.nodeLoad = 1.0f;
+    parameters.doPhi = true;
+    auto stage = [&](int minRung, uint64_t expectedActive, int expectedMesh) {
+        particlesSortByRung(0);
+        particlesSortByRung(minRung);
+        parameters.minRung = minRung;
+        pmmmKick(parameters);
+        auto const diagnostics = pmmmDiagnostics();
+        requirePmmm(diagnostics.meshSize == expectedMesh &&
+                diagnostics.activeParticles == expectedActive && diagnostics.totalParticles == 7,
+            "hierarchical stage did not select the expected prime-limited FFT mesh");
+        requirePmmm(getOptions().gravity.meshSize == options.gravity.meshSize &&
+                getOptions().gravity.pmmmMaxPrimeFactor == options.gravity.pmmmMaxPrimeFactor,
+            "prime-limited mesh selection changed the configured mesh or prime-factor limit");
+        return diagnostics;
+    };
+    auto const partial = stage(3, 3, 6);
+    requirePmmm(partial.planBuilds == initial.planBuilds + 1 &&
+            partial.greenBuilds == initial.greenBuilds + 1,
+        "first prime-limited partial stage did not build exactly one reduced mesh cache");
+    auto const repeatedPartial = stage(3, 3, 6);
+    requirePmmm(repeatedPartial.planBuilds == partial.planBuilds &&
+            repeatedPartial.greenBuilds == partial.greenBuilds,
+        "repeated prime-limited partial stage rebuilt its effective mesh");
+    auto const minimum = stage(4, 1, 5);
+    requirePmmm(minimum.planBuilds == partial.planBuilds + 1 &&
+            minimum.greenBuilds == partial.greenBuilds + 1,
+        "first prime-limited reduced mesh did not build exactly one FFT and Green cache");
+    auto const empty = stage(5, 0, 5);
+    auto const restored = stage(0, 7, 8);
+    requirePmmm(empty.planBuilds == minimum.planBuilds &&
+            empty.greenBuilds == minimum.greenBuilds && restored.planBuilds == empty.planBuilds &&
+            restored.greenBuilds == empty.greenBuilds,
+        "prime-limited empty/full stages rebuilt retained effective meshes");
+    pmmmSolve(true);
+    comparePmmmSamples(fullReference, gatherPmmmSamples());
+    pmmmDestroy();
+
+    options.gravity.meshSize = 9;
+    options.gravity.pmmmMaxPrimeFactor = 3;
+    setOptions(options);
+    stage(0, 7, 9);
+    auto const roundedMinimum = stage(5, 0, 6);
+    auto const sparse = stage(4, 1, 6);
+    requirePmmm(sparse.planBuilds == roundedMinimum.planBuilds &&
+            sparse.greenBuilds == roundedMinimum.greenBuilds,
+        "nonempty stage did not reuse the prime-rounded minimum mesh");
+    pmmmDestroy();
+
+    options.gravity.meshSize = 9;
+    options.gravity.pmmmMaxPrimeFactor = 2;
+    setOptions(options);
+    auto const powerOfTwoBase = stage(0, 7, 16);
+    auto const powerOfTwoPartial = stage(3, 3, 8);
+    requirePmmm(powerOfTwoPartial.planBuilds == powerOfTwoBase.planBuilds + 1 &&
+            powerOfTwoPartial.greenBuilds == powerOfTwoBase.greenBuilds + 1,
+        "power-of-two stage scaled the rounded full mesh instead of the requested base");
+    auto const powerOfTwoMinimum = stage(5, 0, 8);
+    requirePmmm(powerOfTwoMinimum.planBuilds == powerOfTwoPartial.planBuilds &&
+            powerOfTwoMinimum.greenBuilds == powerOfTwoPartial.greenBuilds,
+        "power-of-two minimum did not reuse the effective partial mesh");
+    particlesSortByRung(0);
+    pmmmDestroy();
+    setOptions(saved);
+    PRINT("PMMM prime-limited full/stage meshes, rounded near minimum, and cache reuse checks "
+          "passed\n");
+}
+
 void checkPmmmCellOverlap() {
     if (hpxSize() < 2 || !gravity::kBuildPmmmNearUsesFmm) {
         return;
@@ -1647,6 +1760,9 @@ void checkPmmmFmmNear() {
 
 void pmmmTest() {
     auto options = getOptions();
+    // Legacy force oracles intentionally cover arbitrary odd and prime mesh
+    // lengths; prime-limited behavior has its own full/stage regression below.
+    options.gravity.pmmmMaxPrimeFactor = 0;
     // Allocate type/category storage before the first fixture. Particle arrays
     // keep a shared capacity and cannot gain the optional hydro arrays after
     // allocation. This isolated force test performs no SPH evolution.
@@ -1759,6 +1875,7 @@ void pmmmTest() {
     detail::checkPmmmPpBatchTargets();
     detail::checkPmmmStreamedStages();
     detail::checkPmmmStageMeshes();
+    detail::checkPmmmPrimeFactorMeshes();
     detail::checkPmmmCellOverlap();
     PRINT("PMMM periodic force, mass, self, ownership, and cache checks passed at order %i "
           "with %s near interactions\n",

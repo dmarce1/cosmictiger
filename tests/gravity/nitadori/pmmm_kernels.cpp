@@ -124,26 +124,26 @@ namespace detail {
 
 TEST(PmmmMeshSize, ScalesCellVolumeAndRoundsTheSideUp) {
     auto const meshSize = pmmm::detail::hierarchicalMeshSize;
-    EXPECT_EQ(meshSize(32, 1, 1, 1), 32);
-    EXPECT_EQ(meshSize(32, 1, 1, 8), 16);
-    EXPECT_EQ(meshSize(32, 1, 1, 64), 8);
-    EXPECT_EQ(meshSize(32, 1, 1, 512), 4);
-    EXPECT_EQ(meshSize(8, 2, 3, 7), 7);
-    EXPECT_EQ(meshSize(8, 1, 64, 512), 4);
-    EXPECT_EQ(meshSize(8, 1, 65, 512), 5);
-    EXPECT_EQ(meshSize(9, 1, 64, 729), 4);
-    EXPECT_EQ(meshSize(9, 1, 65, 729), 5);
+    EXPECT_EQ(meshSize(32, 1, 1, 1, 0), 32);
+    EXPECT_EQ(meshSize(32, 1, 1, 8, 0), 16);
+    EXPECT_EQ(meshSize(32, 1, 1, 64, 0), 8);
+    EXPECT_EQ(meshSize(32, 1, 1, 512, 0), 4);
+    EXPECT_EQ(meshSize(8, 2, 3, 7, 0), 7);
+    EXPECT_EQ(meshSize(8, 1, 64, 512, 0), 4);
+    EXPECT_EQ(meshSize(8, 1, 65, 512, 0), 5);
+    EXPECT_EQ(meshSize(9, 1, 64, 729, 0), 4);
+    EXPECT_EQ(meshSize(9, 1, 65, 729, 0), 5);
 }
 
 TEST(PmmmMeshSize, PreservesNearGeometryAndHandlesEmptyPopulations) {
     auto const meshSize = pmmm::detail::hierarchicalMeshSize;
     for (int nearWidth = 1; nearWidth <= 4; ++nearWidth) {
         int const minimumSize = 2 * nearWidth + 1;
-        EXPECT_EQ(meshSize(32, nearWidth, 1, 32768), minimumSize);
-        EXPECT_EQ(meshSize(32, nearWidth, 0, 32768), minimumSize);
-        EXPECT_EQ(meshSize(32, nearWidth, 0, 0), minimumSize);
-        EXPECT_EQ(meshSize(minimumSize, nearWidth, 1, 8), minimumSize);
-        EXPECT_EQ(meshSize(minimumSize, nearWidth, 8, 8), minimumSize);
+        EXPECT_EQ(meshSize(32, nearWidth, 1, 32768, 0), minimumSize);
+        EXPECT_EQ(meshSize(32, nearWidth, 0, 32768, 0), minimumSize);
+        EXPECT_EQ(meshSize(32, nearWidth, 0, 0, 0), minimumSize);
+        EXPECT_EQ(meshSize(minimumSize, nearWidth, 1, 8, 0), minimumSize);
+        EXPECT_EQ(meshSize(minimumSize, nearWidth, 8, 8, 0), minimumSize);
     }
 }
 
@@ -152,19 +152,109 @@ TEST(PmmmMeshSize, ResolvesCubeBoundariesWithLargeParticleCounts) {
     constexpr uint64_t kEighth = kTotal / 8;
     constexpr uint64_t kMaximum = std::numeric_limits<uint64_t>::max();
     auto const meshSize = pmmm::detail::hierarchicalMeshSize;
-    EXPECT_EQ(meshSize(32, 1, kEighth - 1, kTotal), 16);
-    EXPECT_EQ(meshSize(32, 1, kEighth, kTotal), 16);
-    EXPECT_EQ(meshSize(32, 1, kEighth + 1, kTotal), 17);
-    EXPECT_EQ(meshSize(32, 1, kMaximum, kMaximum), 32);
-    EXPECT_EQ(meshSize(32, 1, kMaximum / 8, kMaximum), 16);
+    EXPECT_EQ(meshSize(32, 1, kEighth - 1, kTotal, 0), 16);
+    EXPECT_EQ(meshSize(32, 1, kEighth, kTotal, 0), 16);
+    EXPECT_EQ(meshSize(32, 1, kEighth + 1, kTotal, 0), 17);
+    EXPECT_EQ(meshSize(32, 1, kMaximum, kMaximum, 0), 32);
+    EXPECT_EQ(meshSize(32, 1, kMaximum / 8, kMaximum, 0), 16);
 }
 
 TEST(PmmmMeshSize, RejectsInvalidGeometryAndCounts) {
     auto const meshSize = pmmm::detail::hierarchicalMeshSize;
-    EXPECT_THROW(meshSize(4, 2, 1, 1), std::invalid_argument);
-    EXPECT_THROW(meshSize(8, 0, 1, 1), std::invalid_argument);
-    EXPECT_THROW(meshSize(8, 1, 2, 1), std::invalid_argument);
-    EXPECT_THROW(meshSize(8, 1, 1, 0), std::invalid_argument);
+    EXPECT_THROW(meshSize(4, 2, 1, 1, 0), std::invalid_argument);
+    EXPECT_THROW(meshSize(8, 0, 1, 1, 0), std::invalid_argument);
+    EXPECT_THROW(meshSize(8, 1, 2, 1, 0), std::invalid_argument);
+    EXPECT_THROW(meshSize(8, 1, 1, 0, 0), std::invalid_argument);
+}
+
+TEST(PmmmMeshSize, RoundsUpToTheNextAllowedPrimeFactorization) {
+    auto const meshSize = pmmm::detail::fftMeshSize;
+    EXPECT_EQ(meshSize(1, 5), 1);
+    EXPECT_EQ(meshSize(7, 5), 8);
+    EXPECT_EQ(meshSize(11, 5), 12);
+    EXPECT_EQ(meshSize(17, 5), 18);
+    EXPECT_EQ(meshSize(49, 5), 50);
+    EXPECT_EQ(meshSize(121, 5), 125);
+    EXPECT_EQ(meshSize(125, 5), 125);
+    EXPECT_EQ(meshSize(3, 2), 4);
+    EXPECT_EQ(meshSize(5, 2), 8);
+    EXPECT_EQ(meshSize(65, 2), 128);
+    EXPECT_EQ(meshSize(7, 3), 8);
+    EXPECT_EQ(meshSize(10, 3), 12);
+    EXPECT_EQ(meshSize(17, 3), 18);
+    EXPECT_EQ(meshSize(25, 3), 27);
+    EXPECT_EQ(meshSize(49, 7), 49);
+    EXPECT_EQ(meshSize(11, 11), 11);
+}
+
+TEST(PmmmMeshSize, CompositeCapsLimitPrimeFactorsAndZeroLeavesSizesUnchanged) {
+    auto const meshSize = pmmm::detail::fftMeshSize;
+    for (int requested : {1, 7, 11, 17, 25, 49, 121}) {
+        EXPECT_EQ(meshSize(requested, 4), meshSize(requested, 3));
+        EXPECT_EQ(meshSize(requested, 6), meshSize(requested, 5));
+        EXPECT_EQ(meshSize(requested, 0), requested);
+    }
+}
+
+TEST(PmmmMeshSize, MatchesIndependentPrimeFactorSieveMinimalityOracle) {
+    constexpr int kOracleLimit = 2048;
+    constexpr int kRequestedLimit = 1024;
+    std::array<int, kOracleLimit + 1> largestPrimeFactor{};
+    // Ascending prime sieving overwrites each multiple with its largest prime
+    // factor. This oracle does not use the selector's product enumeration or
+    // factorization routines.
+    for (int prime = 2; prime <= kOracleLimit; ++prime) {
+        if (largestPrimeFactor[prime] == 0) {
+            for (int multiple = prime; multiple <= kOracleLimit; multiple += prime) {
+                largestPrimeFactor[multiple] = prime;
+            }
+        }
+    }
+    for (int cap : {2, 3, 4, 5, 6, 7, 13, 16, 17, 18, 19, 23, 50}) {
+        for (int requested = 1; requested <= kRequestedLimit; ++requested) {
+            int expected = requested;
+            while (expected <= kOracleLimit && largestPrimeFactor[expected] > cap) {
+                ++expected;
+            }
+            ASSERT_LE(expected, kOracleLimit);
+            EXPECT_EQ(pmmm::detail::fftMeshSize(requested, cap), expected)
+                << "requested=" << requested << " maxPrimeFactor=" << cap;
+        }
+    }
+}
+
+TEST(PmmmMeshSize, ScalesFromTheRequestedBaseBeforePrimeRounding) {
+    auto const meshSize = pmmm::detail::hierarchicalMeshSize;
+    EXPECT_EQ(meshSize(7, 2, 7, 7, 5), 8);
+    EXPECT_EQ(meshSize(7, 2, 3, 7, 5), 6);
+    EXPECT_EQ(meshSize(7, 2, 1, 7, 5), 5);
+    // Scale the requested base before rounding: pre-rounding 7 to 8 would
+    // incorrectly select 6 here, and pre-rounding 9 to 16 would select 16.
+    EXPECT_EQ(meshSize(7, 1, 8, 27, 5), 5);
+    EXPECT_EQ(meshSize(9, 2, 1, 2, 2), 8);
+    EXPECT_EQ(meshSize(9, 2, 2, 2, 2), 16);
+    EXPECT_EQ(meshSize(9, 2, 1, 729, 3), 6);
+    EXPECT_EQ(meshSize(9, 2, 0, 729, 3), 6);
+    EXPECT_EQ(meshSize(9, 2, 0, 0, 3), 6);
+    EXPECT_EQ(meshSize(7, 2, 0, 7, 2), 8);
+    EXPECT_EQ(meshSize(7, 3, 0, 0, 5), 8);
+    EXPECT_EQ(meshSize(8, 2, 3, 7, 0), 7);
+}
+
+TEST(PmmmMeshSize, RejectsInvalidPrimeLimitsAndPreservesTheUnlimitedIntegerLimit) {
+    constexpr int kMaximum = std::numeric_limits<int>::max();
+    auto const meshSize = pmmm::detail::fftMeshSize;
+    EXPECT_EQ(meshSize(kMaximum, 0), kMaximum);
+    EXPECT_EQ(meshSize(kMaximum, kMaximum), kMaximum);
+    EXPECT_THROW(meshSize(0, 5), std::invalid_argument);
+    EXPECT_THROW(meshSize(-1, 5), std::invalid_argument);
+    EXPECT_THROW(meshSize(8, -1), std::invalid_argument);
+    EXPECT_THROW(meshSize(8, 1), std::invalid_argument);
+    EXPECT_THROW(pmmm::detail::hierarchicalMeshSize(8, 2, 1, 7, 1), std::invalid_argument);
+    EXPECT_EQ(meshSize(1 << 30, 2), 1 << 30);
+    EXPECT_THROW(meshSize((1 << 30) + 1, 2), std::overflow_error);
+    EXPECT_THROW(meshSize(kMaximum, 3), std::overflow_error);
+    EXPECT_THROW(meshSize(kMaximum, 5), std::overflow_error);
 }
 
 TEST(PmmmKernels, MomentsUseNegativeCellOffsetAndAccumulate) {

@@ -49,9 +49,19 @@ The former `gravity.method`, `gravity.pmmmNearMethod`, `gravity.fmmOrder`, and
 `gravity.pmmmOrder` inputs are rejected on both the CLI and in INI files.
 `--help` and the `build.*` startup fields report the selected build configuration.
 
-`gravity.meshSize=n` sets the full-particle mesh to `n` cells on each axis of
-the normalized unit box, independently of the initial-condition particle count.
+`gravity.meshSize=n` requests `n` full-particle cells on each axis of the
+normalized unit box, independently of the initial-condition particle count.
 The default value zero is unset and is rejected for PMMM.
+`gravity.pmmmMaxPrimeFactor` sets the largest allowed prime factor of each FFT
+side length. Its default is `5`, allowing lengths of the form `2^a * 3^b * 5^c`
+for nonnegative integer exponents. Each requested length rounds up to the
+smallest allowed integer, and all three sides use that same length. For example,
+requested lengths 7, 17, and 49 become 8, 18, and 50. Finite limits must be
+integers at least two; the limit itself need not be prime. Set
+`--gravity.pmmmMaxPrimeFactor=infinity` to retain unrestricted integer lengths.
+The same key works in the `[gravity]` INI section. Resolved output reports both
+the requested `gravity.meshSize` and the full-particle `gravity.effectiveMeshSize`.
+
 `gravity.pmmmNearWidth=w` sets the ghost
 width and accepts integers from one through four, defaulting to two. The near
 region contains `(2*w+1)^3` cells (27, 125, 343, or 729, respectively), including
@@ -85,7 +95,8 @@ distribution. With a PMMM-FMM build:
 ```
 
 The compact gravity softening support must fit inside that near region:
-the normalized support radius must be no larger than `w/n`. The existing
+the normalized support radius must be no larger than `w/N`, where `N` is the
+rounded full-particle side length. The existing
 `gravity.supportRadius` and `gravity.effectiveRadius` input conventions still
 apply; the parser checks this bound after converting the configured radius
 to box units. Both near methods retain the selected compact gravity kernel for
@@ -221,8 +232,8 @@ order eight, a normal solve performs 49 scalar-equivalent forward transforms and
 transforms belong to initialization. This describes work, not measured speed.
 
 Each mesh cache lasts until eviction, explicit PMMM destruction, or application
-shutdown. Changing the configured base mesh size, order, or near width requires
-explicit PMMM destruction.
+shutdown. Changing the requested base mesh size, maximum prime factor, order,
+or near width requires explicit PMMM destruction.
 The near opening angle is fixed by the near width.
 The solver, near method, and expansion order require a different build.
 Plans use `FFTW_ESTIMATE`; there is no persistent disk-wisdom cache. MPI calls
@@ -352,22 +363,26 @@ the selected compact kernel's effective radius and the complete near-plus-far
 acceleration.
 
 Each hierarchical stage scales the mesh volume with its active particle fraction.
-With `N0 = gravity.meshSize`, `w = gravity.pmmmNearWidth`, and global owned
-particle counts `active` and `total`, the effective side length is
+With requested `N0 = gravity.meshSize`, `w = gravity.pmmmNearWidth`, and global
+owned particle counts `active` and `total`, the effective side length is
 
 ```text
-N = clamp(ceil(N0 * cbrt(active / total)), 2*w+1, N0).
+target = clamp(ceil(N0 * cbrt(active / total)), 2*w+1, N0)
+N = nextAllowedLength(target, gravity.pmmmMaxPrimeFactor)
 ```
 
 The count includes the entire stage-selected source-and-sink range, including
 faster rungs, and excludes ghosts. Exact integer volume comparisons implement
 the ceiling without floating-point ambiguity at cube boundaries. An empty
-selection uses the minimum mesh. For example, one eighth of the particles
-uses half the base side length unless the minimum mesh is reached. The base
-configuration remains unchanged, and full-particle solves use `N0`.
+selection rounds the minimum side up to an allowed length. Scaling always
+uses the requested base size, before prime-factor rounding. For example,
+`N0=7` with limit five gives a full-particle side of eight, while a stage with
+three sevenths of the particles uses side six. The base configuration remains
+unchanged. With `infinity`, prime-factor rounding is disabled and the sizing
+matches the unrestricted integer policy.
 All ranks use the same effective size for cell sorting, FFTs, ghost exchange,
 and near-field geometry. Plans and Green spectra are reused by effective mesh
-size, retaining at most eight meshes and twice the base mesh's global FFT
+size, retaining at most eight meshes and twice the rounded base mesh's global FFT
 buffer allocation. Transient moments and FFTW's internal plan storage are
 separate from this buffer cap. Mesh switches occur only after the previous
 solve has completed. `PmmmDiagnostics` reports `meshSize`, `activeParticles`, and
@@ -427,13 +442,18 @@ wall time, including communication, staging, and scheduling overhead. See
 
 ## Restart and regression checks
 
-Checkpoints identify PMMM separately from FMM and record its mesh size, order,
-near width, near method, and timestep compatibility parameters. Changing
+Checkpoints identify PMMM separately from FMM and record its requested mesh size,
+maximum prime factor, order, near width, near method, and timestep compatibility parameters. Changing
 these incompatible settings on restart is rejected, including restarting with a
 binary compiled for a different solver, near method, or order. Historical ordinary PM
 checkpoints are unsupported. Checkpoints do not store
 FFTW plans or Green spectra: the first solve after restart reconstructs the
 cache, then reuses it for later steps.
+PMMM extension version four adds the maximum prime factor. Versions one through
+three used unrestricted lengths and require
+`--gravity.pmmmMaxPrimeFactor=infinity` on restart. The policy is checkpoint
+identity even when two limits give the same current full-particle mesh, because
+their hierarchical stage meshes can differ.
 PMMM extension version three appends the PMMM order and resolved opening angle
 to the version-two metadata, which added the near-method selection. Historical
 version-one and version-two extensions retain their legacy shared order

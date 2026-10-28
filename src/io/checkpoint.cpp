@@ -532,7 +532,7 @@ bool zPlaneCheckpointCompatible(double acceleration, Options const& opts) {
         acceleration == opts.hydro.zPlaneAcceleration;
 }
 
-std::array<uint64_t, 10> pmmmCheckpointParameters(Options const& opts) {
+std::array<uint64_t, 11> pmmmCheckpointParameters(Options const& opts) {
     uint64_t timestepEtaBits;
     std::memcpy(&timestepEtaBits, &opts.gravity.timestepEta, sizeof(timestepEtaBits));
     uint64_t openingAngleBits;
@@ -543,14 +543,33 @@ std::array<uint64_t, 10> pmmmCheckpointParameters(Options const& opts) {
     // Version two appends the near solver. Version one always used direct PP.
     // Version three records the PMMM order and geometry-derived opening angle
     // so a restart preserves the shared near/far order and accuracy settings.
-    return {3, static_cast<uint64_t>(opts.gravity.meshSize),
+    // Version four appends the maximum FFT prime factor. Earlier versions used
+    // unrestricted mesh sizes, represented by zero. Preserve the requested base
+    // mesh as well as the cap: both determine all future hierarchical meshes.
+    return {4, static_cast<uint64_t>(opts.gravity.meshSize),
         static_cast<uint64_t>(opts.gravity.fmmOrder),
         static_cast<uint64_t>(opts.gravity.pmmmNearWidth), static_cast<uint64_t>(opts.run.minRung),
         timestepEtaBits, 1, opts.gravity.pmmmNearMethod == "fmm" ? 1U : 0U,
-        static_cast<uint64_t>(opts.gravity.pmmmOrder), openingAngleBits};
+        static_cast<uint64_t>(opts.gravity.pmmmOrder), openingAngleBits,
+        static_cast<uint64_t>(opts.gravity.pmmmMaxPrimeFactor)};
 }
 
-bool pmmmCheckpointCompatible(std::array<uint64_t, 10> parameters, Options const& opts) {
+std::array<uint64_t, 11> readPmmmCheckpointParameters(FILE* fp) {
+    std::array<uint64_t, 11> parameters{};
+    FREAD(parameters.data(), sizeof(uint64_t), 7, fp);
+    if (parameters[0] == 2) {
+        FREAD(&parameters[7], sizeof(uint64_t), 1, fp);
+    } else if (parameters[0] == 3) {
+        FREAD(&parameters[7], sizeof(uint64_t), 3, fp);
+    } else if (parameters[0] == 4) {
+        FREAD(&parameters[7], sizeof(uint64_t), 4, fp);
+    } else if (parameters[0] != 1) {
+        THROW_ERROR("Unsupported PMMM checkpoint parameter version\n");
+    }
+    return parameters;
+}
+
+bool pmmmCheckpointCompatible(std::array<uint64_t, 11> parameters, Options const& opts) {
     auto const expected = pmmmCheckpointParameters(opts);
     if (parameters[0] == 1 || parameters[0] == 2) {
         if (parameters[0] == 1) {
@@ -561,6 +580,10 @@ bool pmmmCheckpointCompatible(std::array<uint64_t, 10> parameters, Options const
         parameters[8] = parameters[2];
         parameters[9] = expected[9];
         parameters[0] = 3;
+    }
+    if (parameters[0] == 3) {
+        parameters[10] = 0;
+        parameters[0] = 4;
     }
     return parameters == expected;
 }
@@ -641,20 +664,17 @@ DriverParameters readDriverState(FILE* fp) {
                         "requested run\n");
         }
         if ((header.flags & kParticleMultipoleMesh) != 0U) {
-            std::array<uint64_t, 10> meshParameters{};
-            FREAD(meshParameters.data(), sizeof(uint64_t), 7, fp);
-            if (meshParameters[0] == 2) {
-                FREAD(&meshParameters[7], sizeof(uint64_t), 1, fp);
-            } else if (meshParameters[0] == 3) {
-                FREAD(&meshParameters[7], sizeof(uint64_t), 3, fp);
-            } else if (meshParameters[0] != 1) {
-                THROW_ERROR("Unsupported PMMM checkpoint parameter version\n");
+            auto const meshParameters = readPmmmCheckpointParameters(fp);
+            if (meshParameters[0] < 4 && getOptions().gravity.pmmmMaxPrimeFactor != 0) {
+                THROW_ERROR("This PMMM checkpoint predates gravity.pmmmMaxPrimeFactor and used "
+                            "unrestricted FFT mesh sizes. Restart with "
+                            "--gravity.pmmmMaxPrimeFactor=infinity to preserve its mesh policy.\n");
             }
             if (!pmmmCheckpointCompatible(meshParameters, getOptions())) {
                 THROW_ERROR(
                     "PMMM checkpoint version, mesh size, near/far expansion orders, opening "
-                    "angle, neighbor width/method, timestep parameters or force convention "
-                    "differs from the requested run\n");
+                    "angle, neighbor width/method, gravity.pmmmMaxPrimeFactor, timestep parameters "
+                    "or force convention differs from the requested run\n");
             }
         }
         if (getOptions().hydro.enabled) {
@@ -807,6 +827,8 @@ void checkpointStateTest() {
     }
     changed = getOptions();
     auto const pmmmParameters = detail::pmmmCheckpointParameters(changed);
+    ALWAYS_ASSERT(pmmmParameters[0] == 4 &&
+        pmmmParameters[10] == uint64_t(changed.gravity.pmmmMaxPrimeFactor));
     changed.gravity.meshSize += 1;
     ALWAYS_ASSERT(pmmmParameters != detail::pmmmCheckpointParameters(changed));
     changed = getOptions();
@@ -825,8 +847,19 @@ void checkpointStateTest() {
     changed.gravity.pmmmNearMethod = changed.gravity.pmmmNearMethod == "pp" ? "fmm" : "pp";
     ALWAYS_ASSERT(pmmmParameters != detail::pmmmCheckpointParameters(changed));
     changed = getOptions();
+    changed.gravity.pmmmMaxPrimeFactor = changed.gravity.pmmmMaxPrimeFactor == 0 ? 5 : 0;
+    ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(pmmmParameters, changed));
+    // A matching current mesh does not make two prime-factor policies equivalent:
+    // their next rung-selected mesh may differ after the restart.
+    changed.gravity.meshSize = 8;
+    changed.gravity.pmmmMaxPrimeFactor = 5;
+    auto const smoothPmmmParameters = detail::pmmmCheckpointParameters(changed);
+    changed.gravity.pmmmMaxPrimeFactor = 3;
+    ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(smoothPmmmParameters, changed));
+    changed = getOptions();
     changed.gravity.pmmmOrder = changed.gravity.fmmOrder;
     changed.gravity.pmmmNearMethod = "pp";
+    changed.gravity.pmmmMaxPrimeFactor = 0;
     auto legacyPmmmParameters = detail::pmmmCheckpointParameters(changed);
     legacyPmmmParameters[0] = 1;
     legacyPmmmParameters[7] = 0;
@@ -841,6 +874,41 @@ void checkpointStateTest() {
     ALWAYS_ASSERT(detail::pmmmCheckpointCompatible(legacyPmmmParameters, changed));
     changed.gravity.pmmmOrder += 1;
     ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(legacyPmmmParameters, changed));
+    changed = getOptions();
+    changed.gravity.pmmmMaxPrimeFactor = 0;
+    legacyPmmmParameters = detail::pmmmCheckpointParameters(changed);
+    legacyPmmmParameters[0] = 3;
+    ALWAYS_ASSERT(detail::pmmmCheckpointCompatible(legacyPmmmParameters, changed));
+    changed.gravity.pmmmMaxPrimeFactor = 5;
+    ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(legacyPmmmParameters, changed));
+    // Decode each historical extension without consuming any following driver
+    // bytes, and require the old mesh policy to remain explicitly unrestricted.
+    constexpr std::array<size_t, 4> kPmmmParameterWords{7, 8, 10, 11};
+    constexpr uint64_t kFollowingPayload = 0x0123456789abcdefULL;
+    for (uint64_t version = 1; version <= 4; ++version) {
+        changed = getOptions();
+        changed.gravity.pmmmOrder = changed.gravity.fmmOrder;
+        changed.gravity.pmmmNearMethod = "pp";
+        changed.gravity.pmmmMaxPrimeFactor = version < 4 ? 0 : 5;
+        auto serialized = detail::pmmmCheckpointParameters(changed);
+        serialized[0] = version;
+        detail::CheckpointFile stream(tmpfile());
+        ALWAYS_ASSERT(stream != nullptr);
+        size_t const words = kPmmmParameterWords[version - 1];
+        ALWAYS_ASSERT(fwrite(serialized.data(), sizeof(uint64_t), words, stream.get()) == words);
+        ALWAYS_ASSERT(fwrite(&kFollowingPayload, sizeof(uint64_t), 1, stream.get()) == 1);
+        rewind(stream.get());
+        auto const decoded = detail::readPmmmCheckpointParameters(stream.get());
+        ALWAYS_ASSERT(detail::pmmmCheckpointCompatible(decoded, changed));
+        uint64_t followingPayload = 0;
+        ALWAYS_ASSERT(fread(&followingPayload, sizeof(uint64_t), 1, stream.get()) == 1 &&
+            followingPayload == kFollowingPayload);
+        if (version < 4) {
+            ALWAYS_ASSERT(decoded[10] == 0);
+            changed.gravity.pmmmMaxPrimeFactor = 5;
+            ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(decoded, changed));
+        }
+    }
     changed = getOptions();
     changed.run.minRung += 1;
     ALWAYS_ASSERT(pmmmParameters != detail::pmmmCheckpointParameters(changed));

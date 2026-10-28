@@ -3,6 +3,7 @@
 #include <hpx/threading_base/annotated_function.hpp>
 
 #include <cosmictiger/gravity/nitadori/fft_flops.hpp>
+#include <cosmictiger/gravity/nitadori/mesh_size.hpp>
 #include "actions.hpp"
 
 namespace pmmm::detail {
@@ -27,7 +28,9 @@ constexpr size_t kMaxMeshCaches = 8;
 
 struct MeshCachePool {
     std::array<MeshCache, kMaxMeshCaches - 1> inactive;
+    int requestedMeshSize = 0;
     int baseMeshSize = 0;
+    int maxPrimeFactor = 0;
     int order = 0;
     int nearWidth = 0;
     double byteBudget = 0;
@@ -88,21 +91,27 @@ static double fftWorkspaceBytes(ptrdiff_t sourceAllocation, ptrdiff_t localAlloc
 
 void initialize(int meshSize) {
     auto const& options = getOptions().gravity;
+    int const baseMeshSize = fftMeshSize(options.meshSize, options.pmmmMaxPrimeFactor);
     if (options.meshSize < 3 || options.pmmmNearWidth < 1 || options.pmmmNearWidth > 4 ||
         options.pmmmNearWidth > (options.meshSize - 1) / 2 || options.pmmmOrder < kFmmMinOrder ||
         options.pmmmOrder > kFmmMaxOrder || !(options.supportRadius > 0) ||
-        options.supportRadius > double(options.pmmmNearWidth) / options.meshSize ||
-        meshSize < 2 * options.pmmmNearWidth + 1 || meshSize > options.meshSize) {
+        options.supportRadius > double(options.pmmmNearWidth) / baseMeshSize ||
+        meshSize < 2 * options.pmmmNearWidth + 1 || meshSize > baseMeshSize ||
+        fftMeshSize(meshSize, options.pmmmMaxPrimeFactor) != meshSize) {
         throw std::runtime_error("Invalid PMMM mesh, order, near width or softening support");
     }
     if (meshCachePool.baseMeshSize != 0) {
-        if (meshCachePool.baseMeshSize != options.meshSize ||
+        if (meshCachePool.requestedMeshSize != options.meshSize ||
+            meshCachePool.baseMeshSize != baseMeshSize ||
+            meshCachePool.maxPrimeFactor != options.pmmmMaxPrimeFactor ||
             meshCachePool.order != options.pmmmOrder ||
             meshCachePool.nearWidth != options.pmmmNearWidth) {
             throw std::runtime_error("PMMM configuration changed without destroying its plans");
         }
     } else {
-        meshCachePool.baseMeshSize = options.meshSize;
+        meshCachePool.requestedMeshSize = options.meshSize;
+        meshCachePool.baseMeshSize = baseMeshSize;
+        meshCachePool.maxPrimeFactor = options.pmmmMaxPrimeFactor;
         meshCachePool.order = options.pmmmOrder;
         meshCachePool.nearWidth = options.pmmmNearWidth;
     }
@@ -143,7 +152,7 @@ void initialize(int meshSize) {
     uint64_t const limit = std::min(uint64_t(std::numeric_limits<ptrdiff_t>::max()),
                                uint64_t(std::numeric_limits<size_t>::max() / sizeof(double))) /
         cache.localCount / 2;
-    if (uint64_t(options.meshSize) > limit / options.meshSize / options.meshSize) {
+    if (uint64_t(baseMeshSize) > limit / baseMeshSize / baseMeshSize) {
         throw std::runtime_error("PMMM coefficient mesh exceeds indexing/allocation limits");
     }
     int const locality = hpxRank();
@@ -190,12 +199,12 @@ void initialize(int meshSize) {
                             FFTW_MPI_DEFAULT_BLOCK, FFTW_MPI_DEFAULT_BLOCK, cache.communicator,
                             &otherSize, &otherBegin, &otherSpectralSize, &otherSpectralBegin);
                     if (meshCachePool.byteBudget == 0) {
-                        if (n == options.meshSize) {
+                        if (n == baseMeshSize) {
                             baseSourceAllocation = cache.sourceAllocation;
                             baseLocalAllocation = cache.localAllocation;
                         } else {
                             ptrdiff_t const baseDimensions[3] = {
-                                options.meshSize, options.meshSize, options.meshSize / 2 + 1};
+                                baseMeshSize, baseMeshSize, baseMeshSize / 2 + 1};
                             ptrdiff_t ignoredSize = 0, ignoredBegin = 0, ignoredSpectralSize = 0,
                                       ignoredSpectralBegin = 0;
                             baseSourceAllocation = fftwf_mpi_local_size_many_transposed(3,

@@ -35,13 +35,18 @@ def rewriteCheckpoint(checkpoint, ranks, transform):
     manifest.write_text("\n".join(lines) + "\n")
 
 
-def use_legacy_pp_extension(checkpoint, ranks):
-    """Give a copied checkpoint the historical seven-word PP-only v1 layout."""
+def use_legacy_extension(checkpoint, ranks, version):
+    """Give a copied unrestricted checkpoint a historical PMMM extension."""
+    require(version in (1, 2, 3), "invalid historical PMMM version")
     def transform(data, offset):
         extension_version = struct.unpack_from("=Q", data, offset)[0]
-        require(extension_version in (1, 2, 3), "legacy fixture has an unknown PMMM version")
-        extension_size = {1: 7, 2: 8, 3: 10}[extension_version]
-        return (data[:offset] + struct.pack("=Q", 1) + data[offset + 8:offset + 56]
+        require(extension_version == 4, "legacy fixture requires PMMM extension version four")
+        require(struct.unpack_from("=Q", data, offset + 80)[0] == 0,
+                "legacy fixture must originate from unrestricted FFT meshes")
+        extension_size = 11
+        legacy_size = {1: 7, 2: 8, 3: 10}[version]
+        return (data[:offset] + struct.pack("=Q", version)
+                + data[offset + 8:offset + 8 * legacy_size]
                 + data[offset + 8 * extension_size:])
     rewriteCheckpoint(checkpoint, ranks, transform)
 
@@ -51,8 +56,8 @@ def changeCompiledIdentity(checkpoint, ranks, *, order=None, near_method=None, f
     """Present the executable with a validly checksummed incompatible variant."""
     def transform(data, offset):
         payload = bytearray(data)
-        require(struct.unpack_from("=Q", payload, offset)[0] == 3,
-                "identity fixture requires PMMM extension version three")
+        require(struct.unpack_from("=Q", payload, offset)[0] == 4,
+                "identity fixture requires PMMM extension version four")
         if order is not None:
             for word in (2, 8):
                 struct.pack_into("=Q", payload, offset + 8 * word, order)
@@ -68,7 +73,7 @@ def changeCompiledIdentity(checkpoint, ranks, *, order=None, near_method=None, f
                 header.flags &= ~(1 << 17)
             payload[:offset] = bytes(header)
             if fmm:
-                del payload[offset:offset + 80]
+                del payload[offset:offset + 88]
         return bytes(payload)
     rewriteCheckpoint(checkpoint, ranks, transform)
 
@@ -160,22 +165,40 @@ def main():
         require("Done reading checkpoint" in log, "PMMM restart did not load its checkpoint")
         compare_restart(states[-1], read_checkpoint(
             resumed / "checkpoint.4", ranks, args.time_integrator))
-        if near_method == "pp":
-            legacy = prepareCase(root, label + "_legacy", source)
-            use_legacy_pp_extension(legacy / source.name, ranks)
-            # The inspection decoder and application must both accept v1 as PP.
-            read_checkpoint(legacy / source.name, ranks, args.time_integrator)
-            run(legacy, dict(options, **{"checkpoint.readIndex": 2, "run.maxIterations": 1}))
-            compare_restart(states[-1], read_checkpoint(
-                legacy / "checkpoint.4", ranks, args.time_integrator))
-        else:
-            rejected = prepareCase(root, label + "_legacy_reject_fmm", source)
-            use_legacy_pp_extension(rejected / source.name, ranks)
+        # Historical checkpoints used unrestricted mesh lengths. Their restart
+        # reference must use the same policy, including every intermediate rung.
+        unlimited_options = dict(options, **{"gravity.pmmmMaxPrimeFactor": "infinity"})
+        unlimited = prepareCase(root, label + "_unlimited_baseline")
+        run(unlimited, dict(unlimited_options, **{"run.maxIterations": 3}))
+        unlimited_reference = read_checkpoint(unlimited / "checkpoint.4", ranks,
+                                             args.time_integrator)
+        unlimited_source = unlimited / "checkpoint.2"
+        for version in ((1, 2, 3) if near_method == "pp" else (2, 3)):
+            rejected = prepareCase(root, f"{label}_legacy_v{version}_reject_cap", unlimited_source)
+            use_legacy_extension(rejected / unlimited_source.name, ranks, version)
+            read_checkpoint(rejected / unlimited_source.name, ranks, args.time_integrator)
             log = run(rejected, dict(options, **{
+                "checkpoint.readIndex": 2, "run.maxIterations": 0}), False)
+            require("--gravity.pmmmMaxPrimeFactor=infinity" in log,
+                    f"legacy v{version} checkpoint lacked unrestricted-mesh restart guidance")
+            legacy = prepareCase(root, f"{label}_legacy_v{version}", unlimited_source)
+            use_legacy_extension(legacy / unlimited_source.name, ranks, version)
+            log = run(legacy, dict(unlimited_options, **{
+                "checkpoint.readIndex": 2, "run.maxIterations": 1}))
+            require("Done reading checkpoint" in log,
+                    f"legacy v{version} checkpoint was not accepted with infinity")
+            compare_restart(unlimited_reference, read_checkpoint(
+                legacy / "checkpoint.4", ranks, args.time_integrator))
+        if near_method == "fmm":
+            rejected = prepareCase(root, label + "_legacy_reject_fmm", unlimited_source)
+            use_legacy_extension(rejected / unlimited_source.name, ranks, 1)
+            log = run(rejected, dict(unlimited_options, **{
                 "checkpoint.readIndex": 2, "run.maxIterations": 0}), False)
             require("PMMM checkpoint" in log, "legacy PP checkpoint accepted FMM near solver")
         changes = (("mesh", {"gravity.meshSize": 10}),
-                   ("near_width", {"gravity.pmmmNearWidth": 1}))
+                   ("near_width", {"gravity.pmmmNearWidth": 1}),
+                   ("prime_factor", {"gravity.pmmmMaxPrimeFactor": 3}),
+                   ("unlimited", {"gravity.pmmmMaxPrimeFactor": "infinity"}))
         for name, change in changes:
             rejected = prepareCase(root, label + "_reject_" + name, source)
             log = run(rejected, dict(options, **change,
@@ -193,7 +216,8 @@ def main():
                 "checkpoint.readIndex": 2, "run.maxIterations": 0}), False)
             require("checkpoint" in log.lower(), f"{name} mismatch lacked a checkpoint diagnostic")
         print(f"{label}: {args.time_integrator} dyadic steps, scheduled single drifts, restart state, "
-              "and PMMM mesh/order/near-width/method/solver/integrator mismatch rejection passed")
+              "legacy unrestricted meshes, and PMMM mesh/prime-factor/order/near-width/method/"
+              "solver/integrator mismatch rejection passed")
     print(f"PMMM evolution passed ({ranks} rank(s), {'CUDA' if args.cuda else 'CPU'} drift, "
           f"{args.position_type}, {args.time_integrator})")
     return 0
