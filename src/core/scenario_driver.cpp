@@ -9,6 +9,7 @@
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/interrupt_profile.hpp>
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/core/section_timing.hpp>
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/core/timer.hpp>
 #include <cosmictiger/gravity/dehnen/execution.hpp>
@@ -53,7 +54,8 @@ void writeScenarioDiagnostics(DriverParameters const& state) {
 void runFixedScenario() {
     profile::checkForInterrupt();
     auto const& definition = scenarios::definition(getOptions().run.scenario);
-    auto plan = definition.initialize();
+    auto plan = section_timing::measure(
+        section_timing::Section::initialization, [&]() { return definition.initialize(); });
     profile::checkForInterrupt();
     auto const baseOptions = getOptions();
     double const defaultDuration = std::accumulate(plan.stages.begin(), plan.stages.end(), 0.0,
@@ -85,7 +87,8 @@ void runFixedScenario() {
     state.bucketSize = baseOptions.compute.bucketSize;
     bool const restarting = baseOptions.checkpoint.readIndex >= 0;
     if (restarting) {
-        state = readCheckpoint();
+        state = section_timing::measure(
+            section_timing::Section::checkpointRead, []() { return readCheckpoint(); });
         if (state.tauMax != duration) {
             THROW_ERROR("Checkpoint duration differs from the selected scenario\n");
         }
@@ -96,7 +99,7 @@ void runFixedScenario() {
     bool const hierarchicalMesh =
         integration::kBuildUsesHierarchical && baseOptions.gravity.enabled &&
         usesMeshGravity(baseOptions.gravity);
-    domainsRebound();
+    section_timing::measure(section_timing::Section::domains, []() { domainsRebound(); });
     Timer checkpointTimer;
     checkpointTimer.start();
     Timer runtime;
@@ -117,7 +120,8 @@ void runFixedScenario() {
     auto const checkpoint = [&]() {
         auto const stageOptions = getOptions();
         setOptions(baseOptions);
-        writeCheckpoint(state);
+        section_timing::measure(
+            section_timing::Section::checkpointWrite, [&]() { writeCheckpoint(state); });
         setOptions(stageOptions);
         lastCheckpoint = state.iter;
         checkpointTimer.reset();
@@ -149,7 +153,8 @@ void runFixedScenario() {
             int const minimumRung = minRung(state.itime);
             bool const fullEvaluation = minimumRung == 0;
             if (fullEvaluation) {
-                viewOutputViews(state.step, 1.0);
+                section_timing::measure(section_timing::Section::snapshotOutput,
+                    [&]() { viewOutputViews(state.step, 1.0); });
             }
             resetFlops();
             std::pair<KickReturn, TreeCreateReturn> result;
@@ -180,14 +185,16 @@ void runFixedScenario() {
                 state.energy0 = state.energies.kin + state.energies.therm + state.energies.pot;
             }
             if (fullEvaluation) {
-                detail::writeScenarioDiagnostics(state);
+                section_timing::measure(section_timing::Section::analysis,
+                    [&]() { detail::writeScenarioDiagnostics(state); });
             }
             double const timestep = std::ldexp(baseTimestep, -state.maxRung);
             if (!(timestep > 0.0) || state.tau + timestep == state.tau) {
                 THROW_ERROR("Scenario timestep cannot advance time\n");
             }
             if (!hierarchicalMesh) {
-                drift(1.0, timestep, state.tau, state.tau + timestep, duration);
+                section_timing::measure(section_timing::Section::drift,
+                    [&]() { drift(1.0, timestep, state.tau, state.tau + timestep, duration); });
             }
             state.tau += timestep;
             state.itime = inc(state.itime, state.maxRung);
@@ -241,10 +248,12 @@ void runFixedScenario() {
         stageStart = stageEnd;
     }
     // Use the next cycle for a final partial coarse step, preserving earlier snapshots.
-    viewOutputViews(state.step + (state.itime != 0), 1.0, true);
+    section_timing::measure(section_timing::Section::snapshotOutput,
+        [&]() { viewOutputViews(state.step + (state.itime != 0), 1.0, true); });
     setOptions(baseOptions);
     if (state.iter > 0 && state.iter != lastCheckpoint) {
-        writeCheckpoint(state);
+        section_timing::measure(
+            section_timing::Section::checkpointWrite, [&]() { writeCheckpoint(state); });
     }
     if (state.tau >= duration * (1.0 - 1.0e-12) && plan.finish != nullptr) {
         plan.finish(state.tau);

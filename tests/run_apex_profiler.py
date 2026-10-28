@@ -123,6 +123,9 @@ def main():
             full_markers = re.findall(r"^APEX_FULL_THREAD_DESCRIPTION=([01])$",
                                       result.stdout, re.MULTILINE)
             require(len(full_markers) == 1, "fixture did not report its FULL description setting")
+            require("CPU Timers" not in result.stdout and
+                    "CosmicTiger statistical CPU profile (" not in result.stdout,
+                    "detailed profiler reports leaked to the terminal")
             if args.reports_disabled:
                 require(not list(directory.glob("apex*")) and
                         not list(directory.glob("taskgraph.*")),
@@ -133,7 +136,6 @@ def main():
                 check_apex(directory, full_markers[0] == "1")
                 require(list(directory.glob("apex_tasktree*")),
                         "APEX task tree was not enabled by default")
-                require("CPU Timers" in result.stdout, "APEX screen summary was not enabled")
             if args.sampler_disabled:
                 require(not (directory / "cpu_samples.txt").exists() and
                         not list(directory.glob("cosmictiger.profile.*.txt")),

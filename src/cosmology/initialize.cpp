@@ -25,6 +25,7 @@
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/interrupt_profile.hpp>
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/core/section_timing.hpp>
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/cosmology/boltzmann.hpp>
 #include <cosmictiger/cosmology/cosmology.hpp>
@@ -92,6 +93,7 @@ HPX_PLAIN_ACTION(initX0, InitX0Action);
 HPX_PLAIN_ACTION(clearX0, ClearX0Action);
 
 PowerSpectrumFunction computePowerSpectrum() {
+    section_timing::ScopedSection transferTimer(section_timing::Section::transferFunctions);
     auto const& options = getOptions();
     if (std::abs(options.cosmology.omegaK) > 1.0e-12) {
         throw std::invalid_argument(

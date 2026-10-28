@@ -71,6 +71,9 @@ def run_regression(args, directory):
                 "interrupt fixture was not compiled with PROFILE_DISABLE")
     markers = re.findall(r"^APEX_FULL_THREAD_DESCRIPTION=([01])$", result.stdout, re.MULTILINE)
     require(len(markers) == 1, "fixture did not report its FULL description setting")
+    require("CPU Timers" not in result.stdout and
+            "CosmicTiger statistical CPU profile (" not in result.stdout,
+            "interrupt printed detailed profiler reports to the terminal")
     check_apex(directory, markers[0] == "1")
     if args.sampler_disabled:
         require(not (directory / "cpu_samples.txt").exists() and

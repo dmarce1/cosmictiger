@@ -34,6 +34,7 @@
 #include <cosmictiger/core/options_metadata.hpp>
 #include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/core/profiling_runtime.hpp>
+#include <cosmictiger/core/section_timing.hpp>
 #include <cosmictiger/core/stack_trace.hpp>
 #include <cosmictiger/core/unordered_set_ts.hpp>
 #include <cosmictiger/gravity/dehnen/ewald_indices.hpp>
@@ -70,6 +71,9 @@ int hpx_main(int argc, char* argv[]) {
         if (processOptions(argc, argv)) {
             profile::checkForInterrupt();
             validateCheckpointOutput();
+            if (hpxRank() == 0 && getOptions().run.test.empty()) {
+                section_timing::start(outputPath("section_timings.txt"));
+            }
             startMemuseDaemon();
             daemonStarted = true;
             FILE* fp = fopen(outputPath("soft.txt").c_str(), "wt");
@@ -300,6 +304,7 @@ void selectPositionBackend(int argc, char* argv[]) {
 }    // namespace detail
 
 int main(int argc, char* argv[]) {
+    section_timing::registerExitReport();
     StackTraceHandler stackTraceHandler;
     profile::InterruptReportHandler interruptReportHandler;
     bool ownsMpi = false;

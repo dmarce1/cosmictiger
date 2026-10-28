@@ -359,6 +359,15 @@ checkpoints, including their names and the conditions that create them.
 
 ## CPU profiling
 
+Normal simulation exit and a clean first Ctrl-C print a compact **Major section
+timings** table to the terminal and save the same table as `section_timings.txt`
+in the simulation output directory. It lists call count, total wall seconds, and
+mean wall seconds for the major sections that ran (initial conditions, domains,
+tree build, gravity, hydrodynamics, drift, checkpoints, snapshots, and analysis).
+These are inclusive coordinator timings; nested sections overlap and must not be
+added together as a breakdown of total runtime. Detailed profiler reports stay
+in files by default.
+
 `COSMICTIGER_ENABLE_PROFILING=ON` is the CMake default. The internal profiler is
 the statistical CPU sampler adapted from
 [`dmarce1/experimental` at `7ba8f1829fdede7348a1418b7cb36c0e7a955302`](https://github.com/dmarce1/experimental/blob/7ba8f1829fdede7348a1418b7cb36c0e7a955302/src/profiler.cpp).
@@ -383,7 +392,7 @@ time. This does not measure call counts, inclusive time, blocked waiting time,
 or GPU execution; simulation progress tables still report elapsed wall time.
 Keep executable and shared-library symbol tables for useful function names.
 
-Normal process exit writes a final report to the terminal and
+Normal process exit writes the detailed report to
 `cosmictiger.profile.<pid>.txt` in the working directory. The driver does not
 print reports after individual steps. The first Ctrl-C requests a clean stop at
 the next safe phase or completed substep. Active work finishes, the simulation's
@@ -443,11 +452,12 @@ cmake --build build/apex --target cosmictiger --parallel 4
 ./build/apex/cosmictiger --configuration=lcdm.ini --hpx:threads=4
 ```
 
-With an APEX-enabled HPX, CosmicTiger enables the screen summary,
-`apex_profiles.csv`, and `apex_tasktree.csv` by default, even when the separate
-CPU sampler is disabled. Set `APEX_SCREEN_OUTPUT=0`, `APEX_CSV_OUTPUT=0`, or
-`APEX_TASKTREE_OUTPUT=0` to disable individual reports. Existing environment
-settings are preserved. `APEX_OUTPUT_FILE_PATH` selects their directory;
+With an APEX-enabled HPX, CosmicTiger enables `apex_profiles.csv` and
+`apex_tasktree.csv` by default, even when the separate CPU sampler is disabled.
+The detailed screen report is off by default, including through
+`scripts/profile_tau.sh`. Set `APEX_SCREEN_OUTPUT=1` to request it explicitly, or
+`APEX_CSV_OUTPUT=0` and `APEX_TASKTREE_OUTPUT=0` to disable individual file reports.
+Existing environment settings are preserved. `APEX_OUTPUT_FILE_PATH` selects their directory;
 otherwise APEX writes to the working directory. APEX 1.11 gives an explicitly
 requested `APEX_TASKGRAPH_OUTPUT=1` precedence over task-tree output.
 

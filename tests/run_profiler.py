@@ -89,7 +89,7 @@ def check_interrupt(executable, directory, block_output=False):
                 require(process.poll() is None,
                         "first interrupt forcibly terminated uncooperative work")
                 require("CosmicTiger statistical CPU profile (" not in output_path.read_text(),
-                        "terminal report escaped the fixture's stdout lock")
+                        "detailed CPU report leaked to the terminal during interruption")
                 process.send_signal(signal.SIGINT)
             try:
                 returncode = process.wait(timeout=5 if block_output else 20)
@@ -119,9 +119,8 @@ def check_interrupt(executable, directory, block_output=False):
         reports = list(directory.glob("cosmictiger.profile.*.txt"))
         require(len(reports) == 1, "interrupt did not produce one per-process report file")
         report = reports[0].read_text()
-        require(output.count("CosmicTiger statistical CPU profile (") == 1 and
-                output.endswith(report),
-                "interrupt did not emit exactly one matching terminal/file report")
+        require("CosmicTiger statistical CPU profile (" not in output,
+                "interrupt printed the detailed CPU report to the terminal")
         check_report(report)
 
 
@@ -140,8 +139,8 @@ def main():
         require(len(automatic) == 1, "exit did not produce one per-process report file")
         require(automatic[0].read_text() == report,
                 "automatic exit file differs from the stopped snapshot")
-        require(output.count(report) == 2 and output.endswith(report),
-                "explicit and automatic terminal reports differ from their files")
+        require("CosmicTiger statistical CPU profile (" not in output,
+                "explicit or automatic detailed CPU report leaked to the terminal")
         check_report(report)
         active_exit = directory / "automatic_exit"
         active_exit.mkdir()
@@ -149,9 +148,8 @@ def main():
         exit_files = list(active_exit.glob("cosmictiger.profile.*.txt"))
         require(len(exit_files) == 1, "active exit did not produce one per-process report file")
         exit_report = exit_files[0].read_text()
-        require(exit_output.count("CosmicTiger statistical CPU profile (") == 1 and
-                exit_output.endswith(exit_report),
-                "active exit did not emit exactly one matching terminal/file report")
+        require("CosmicTiger statistical CPU profile (" not in exit_output,
+                "active exit printed the detailed CPU report to the terminal")
         check_report(exit_report)
         invalid = directory / "invalid"
         invalid.mkdir()

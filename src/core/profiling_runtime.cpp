@@ -50,7 +50,12 @@ void configureRuntimeProfiling() {
 #if defined(HPX_HAVE_APEX)
     // APEX reads its options lazily during initialization. Set defaults before
     // MPI/HPX can initialize it; HPX remains responsible for its lifetime.
-    for (char const* name : {"APEX_SCREEN_OUTPUT", "APEX_CSV_OUTPUT", "APEX_TASKTREE_OUTPUT"}) {
+    // Keep detailed task reports in files; the application prints phase timings.
+    if (::setenv("APEX_SCREEN_OUTPUT", "0", 0) != 0) {
+        throw std::system_error(errno, std::generic_category(),
+            "Unable to configure profiling option APEX_SCREEN_OUTPUT");
+    }
+    for (char const* name : {"APEX_CSV_OUTPUT", "APEX_TASKTREE_OUTPUT"}) {
         if (::setenv(name, "1", 0) != 0) {
             throw std::system_error(errno, std::generic_category(),
                 std::string("Unable to configure profiling option ") + name);

@@ -131,6 +131,9 @@ def run_regression(args, directory):
         require(len(migration_markers) == 1 and
                 migration_markers[0][0] != migration_markers[0][1],
                 "fixture did not confirm HPX task migration between two distinct workers")
+        require("CPU Timers" not in result.stdout and
+                "CosmicTiger statistical CPU profile (" not in result.stdout,
+                "TAU launcher printed detailed profiler reports to the terminal")
         check_apex(directory / "apex", full_markers[0] == "1")
         profiles, contexts = check_tau(directory / "tau")
         if args.sampler_disabled:

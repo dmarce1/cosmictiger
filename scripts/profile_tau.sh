@@ -44,7 +44,7 @@ export TAU_TRACE=0
 export COSMICTIGER_TAU_EXEC_REPLACE=1
 # Preserve explicit report and sampling choices. No stack unwinding is needed
 # to associate a sampled instruction with its active APEX task context.
-export APEX_SCREEN_OUTPUT="${APEX_SCREEN_OUTPUT-1}"
+export APEX_SCREEN_OUTPUT="${APEX_SCREEN_OUTPUT-0}"
 export APEX_CSV_OUTPUT="${APEX_CSV_OUTPUT-1}"
 export APEX_TASKTREE_OUTPUT="${APEX_TASKTREE_OUTPUT-1}"
 export APEX_THROTTLE_TIMERS="${APEX_THROTTLE_TIMERS-0}"

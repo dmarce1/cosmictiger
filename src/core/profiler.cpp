@@ -1183,12 +1183,6 @@ bool writeProfileReport(std::string const& filename) noexcept {
         auto& state = detail::registry();
         auto const report = profileReport();
         std::string const outputFilename = filename.empty() ? state.filename() : filename;
-        bool const terminalWritten =
-            std::fwrite(report.data(), 1, report.size(), stdout) == report.size() &&
-            std::fflush(stdout) == 0;
-        if (!terminalWritten) {
-            std::fputs("CosmicTiger profiler: unable to write terminal report\n", stderr);
-        }
         FILE* file = std::fopen(outputFilename.c_str(), "wb");
         if (file == nullptr) {
             std::fprintf(stderr, "CosmicTiger profiler: unable to open report file '%s'\n",
@@ -1202,7 +1196,7 @@ bool writeProfileReport(std::string const& filename) noexcept {
             std::fprintf(stderr, "CosmicTiger profiler: unable to finish report file '%s'\n",
                 outputFilename.c_str());
         }
-        return terminalWritten && fileWritten && fileClosed;
+        return fileWritten && fileClosed;
     } catch (...) {
         std::fputs("CosmicTiger profiler: unable to construct report\n", stderr);
         return false;

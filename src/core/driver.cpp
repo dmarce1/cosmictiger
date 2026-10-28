@@ -24,6 +24,7 @@
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/interrupt_profile.hpp>
 #include <cosmictiger/core/profiler.hpp>
+#include <cosmictiger/core/section_timing.hpp>
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/core/time.hpp>
 #include <cosmictiger/core/timer.hpp>
@@ -98,6 +99,7 @@ static void flushTimings(bool reset) {
 }
 
 void doGroups(int number, double scale, double years) {
+    section_timing::ScopedSection sectionTimer(section_timing::Section::analysis);
     groupsPrepareHistory(number);
 
     Timer total;
@@ -419,7 +421,8 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     if (uniformMinimumRung >= 0) {
         // The dark matter and hydro proposals have both been reduced globally.
         // Set every rung before either species opens its next half-step.
-        particleMeshFinishKick(t0, maxRung);
+        section_timing::measure(section_timing::Section::gravity,
+            [&]() { particleMeshFinishKick(t0, maxRung); });
     }
     sphParticlesApplyUpdates(minrung, 2, t0, tau);
     if (verbose) {
@@ -463,9 +466,11 @@ std::pair<KickReturn, TreeCreateReturn> kickStep(int minrung, double scale, doub
     Timer tm;
     tm.start();
     terminal::detailPrint("domains_begin\n");
-    domainsBegin(minrung);
-    terminal::detailPrint("domains_end \n");
-    domainsEnd();
+    section_timing::measure(section_timing::Section::domains, [&]() {
+        domainsBegin(minrung);
+        terminal::detailPrint("domains_end \n");
+        domainsEnd();
+    });
     tm.stop();
     domainTime += tm.read();
     tm.reset();
@@ -474,7 +479,8 @@ std::pair<KickReturn, TreeCreateReturn> kickStep(int minrung, double scale, doub
     // ALWAYS_ASSERT(sph_particles_max_smooth_len() != INFINITY);
     TreeCreateParameters tparams(minrung, theta, 0.f);
     terminal::detailPrint("Create tree %i %e\n", minrung, theta);
-    auto sr = treeCreate(tparams);
+    auto sr = section_timing::measure(
+        section_timing::Section::treeBuild, [&]() { return treeCreate(tparams); });
     terminal::detailPrint("Done with tree\n");
 
     tm.stop();
@@ -522,7 +528,8 @@ std::pair<KickReturn, TreeCreateReturn> kickStep(int minrung, double scale, doub
     Vector<TreeId> checklist;
     checklist.push_back(rootId);
     terminal::detailPrint("Do kick\n");
-    KickReturn kr = kick(kparams, l, pos, rootId, checklist, checklist, nullptr);
+    KickReturn kr = section_timing::measure(section_timing::Section::gravity,
+        [&]() { return kick(kparams, l, pos, rootId, checklist, checklist, nullptr); });
     tm.stop();
     kickTime += tm.read();
 
@@ -542,12 +549,15 @@ std::pair<KickReturn, TreeCreateReturn> advanceForces(int minRung, double scale,
         timer.start();
         // All particles are sources and sinks at every mesh step. Migration must
         // precede cell sorting and the SPH tree's capture of gas indices.
-        domainsBegin(0);
-        domainsEnd();
+        section_timing::measure(section_timing::Section::domains, [&]() {
+            domainsBegin(0);
+            domainsEnd();
+        });
         timer.stop();
         domainTime += timer.read();
         timer.reset();
         timer.start();
+        section_timing::ScopedSection gravityTimer(section_timing::Section::gravity);
         pmmmSolve(true);
         double maximumTimestep = std::ldexp(baseTimestep, -getOptions().run.minRung);
         if (getOptions().run.scenario == "cosmology") {
@@ -564,11 +574,14 @@ std::pair<KickReturn, TreeCreateReturn> advanceForces(int minRung, double scale,
             minRung, scale, scaleDerivative, baseTimestep, theta, firstCall, fullEvaluation);
     } else {
         // Migration must finish before the SPH tree captures gas particle indices.
-        domainsBegin(minRung);
-        domainsEnd();
+        section_timing::measure(section_timing::Section::domains, [&]() {
+            domainsBegin(minRung);
+            domainsEnd();
+        });
     }
     auto& gravity = result.first;
     if (getOptions().hydro.enabled) {
+        section_timing::ScopedSection hydroTimer(section_timing::Section::hydrodynamics);
         int const activeRung = meshGravity ? 0 : minRung;
         sphStep1(activeRung);
         gravity.maxRung = std::max(int(gravity.maxRung),
@@ -598,7 +611,8 @@ std::pair<KickReturn, TreeCreateReturn> advanceForces(int minRung, double scale,
         energies.ymom = gravity.ymom / scale;
         energies.zmom = gravity.zmom / scale;
         energies.nmom = gravity.nmom / scale;
-        particleMeshFinishKick(baseTimestep, gravity.maxRung);
+        section_timing::measure(section_timing::Section::gravity,
+            [&]() { particleMeshFinishKick(baseTimestep, gravity.maxRung); });
     } else if (getOptions().gravity.enabled) {
         // Ordinary FMM kicks update only the active rungs. Keep the global
         // staggered kinetic energy current between synchronized force passes.
@@ -687,8 +701,10 @@ std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int m
         if (ascending || top) {
             tm.reset();
             tm.start();
-            domainsBegin(levels[li]);
-            domainsEnd();
+            section_timing::measure(section_timing::Section::domains, [&]() {
+                domainsBegin(levels[li]);
+                domainsEnd();
+            });
             tm.stop();
             //			PRINT("Domains took %e\n", tm.read());
         }
@@ -696,7 +712,8 @@ std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int m
         if (!ascending) {
             tm.reset();
             tm.start();
-            particlesSortByRung(levels[li]);
+            section_timing::measure(
+                section_timing::Section::particleSort, [&]() { particlesSortByRung(levels[li]); });
             tm.stop();
             //			PRINT("Rung sort took %e\n", tm.read());
         }
@@ -736,7 +753,9 @@ std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int m
         TreeCreateParameters tparams(levels[li], theta, 0.f);
         tm.reset();
         tm.start();
-        TreeCreateReturn const thisSr = meshGravity ? TreeCreateReturn{} : treeCreate(tparams);
+        TreeCreateReturn const thisSr = meshGravity ? TreeCreateReturn{} :
+            section_timing::measure(
+                section_timing::Section::treeBuild, [&]() { return treeCreate(tparams); });
         tm.stop();
         //		PRINT("Tree create took %e\n", tm.read());
         if (top) {
@@ -790,9 +809,11 @@ std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int m
             resetGravityCounters();
             setGravityCounterUse(true);
         }
-        KickReturn const thisKr = meshGravity ?
-            pmmmKick(kparams) :
-            kick(kparams, l, pos, rootId, checklist, checklist, nullptr);
+        KickReturn const thisKr = section_timing::measure(section_timing::Section::gravity,
+            [&]() {
+                return meshGravity ? pmmmKick(kparams) :
+                    kick(kparams, l, pos, rootId, checklist, checklist, nullptr);
+            });
         if (top) {
             setGravityCounterUse(false);
         }
@@ -835,10 +856,14 @@ std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int m
             }
             //			PRINT( "%e %e %e\n", a, a0, a1);
             if (meshGravity) {
-                particleMeshDriftRung(
-                    a, dt, tau, tau + dt, getOptions().run.numberOfSteps * t0, levels[li], drag);
+                section_timing::measure(section_timing::Section::drift, [&]() {
+                    particleMeshDriftRung(
+                        a, dt, tau, tau + dt, getOptions().run.numberOfSteps * t0, levels[li], drag);
+                });
             } else {
-                drift(a, dt, tau, tau + dt, getOptions().run.numberOfSteps * t0, levels[li], drag);
+                section_timing::measure(section_timing::Section::drift, [&]() {
+                    drift(a, dt, tau, tau + dt, getOptions().run.numberOfSteps * t0, levels[li], drag);
+                });
             }
             tm.stop();
             // PRINT("Drift took %e\n", tm.read());
@@ -865,6 +890,7 @@ std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int m
 }
 
 double doPowerSpectrum(int num, double a, double adot) {
+    section_timing::ScopedSection sectionTimer(section_timing::Section::analysis);
     auto const softFilter = [](double kh) {
         if (kh > 0.01) {
             return -15.0 * (3.0 * kh * cos(kh) + ((sqr(kh) - 3.0) * sin(kh))) * pow(kh, -5.0);
@@ -980,7 +1006,8 @@ void driver() {
     int buckets[11] = {80, 112, 112, 128, 128, 160, 176, 184, 184, 184, 192};
     double a0 = 1.0 / (1.0 + getOptions().cosmology.startRedshift);
     if (getOptions().checkpoint.readIndex != -1) {
-        params = readCheckpoint();
+        params = section_timing::measure(
+            section_timing::Section::checkpointRead, []() { return readCheckpoint(); });
         profile::checkForInterrupt();
         double const coarseInterval = params.tauMax / getOptions().run.numberOfSteps;
         double const endpointTolerance =
@@ -1033,6 +1060,7 @@ void driver() {
             }
         }
     } else {
+        section_timing::ScopedSection initializationTimer(section_timing::Section::initialization);
         if (getOptions().run.scenario == "glass") {
             scenarios::initializeGlass(params);
         } else if (getOptions().run.scenario == "plummer") {
@@ -1133,6 +1161,7 @@ void driver() {
     }
     auto const checkLc = [&tau, &dt, &tauMax, &a, &iter](bool force) {
         if (force || lcTimeToFlush(tau, tauMax)) {
+            section_timing::ScopedSection analysisTimer(section_timing::Section::analysis);
             Timer tm;
             terminal::detailPrint("Flushing light cone\n");
             tm.start();
@@ -1225,7 +1254,8 @@ void driver() {
                 totalTime.start();
                 terminal::detailPrint(
                     "WRITING CHECKPOINT FOR Z = %e\n", doCheck ? checkz : 1.0 / a - 1.0);
-                writeCheckpoint(params);
+                section_timing::measure(
+                    section_timing::Section::checkpointWrite, [&]() { writeCheckpoint(params); });
                 lastCheckpointIteration = params.iter;
                 tmr.reset();
                 if (doCheck && hpxRank() == 0) {
@@ -1237,6 +1267,7 @@ void driver() {
             int minrung = getOptions().chemistry.enabled ? 0 : minRung(itime);
             bool fullEval = minrung == 0;
             if (fullEval) {
+                section_timing::ScopedSection outputTimer(section_timing::Section::snapshotOutput);
                 int const number = step;
                 if (getOptions().analysis.tracers) {
                     outputTracers(number);
@@ -1264,6 +1295,7 @@ void driver() {
                 rebound = (imbalance > kMaxLoadImbalance);
             }
             if (rebound) {
+                section_timing::ScopedSection domainTimer(section_timing::Section::domains);
                 terminal::detailPrint("Doing rebound\n");
                 domainsRebound();
                 domainsBegin(0);
@@ -1415,7 +1447,8 @@ void driver() {
             Timer dtm;
             dtm.start();
             if (!integration::kBuildUsesHierarchical || !getOptions().gravity.enabled) {
-                drift(driftScale, dt, tau, tau + dt, tauMax);
+                section_timing::measure(section_timing::Section::drift,
+                    [&]() { drift(driftScale, dt, tau, tau + dt, tauMax); });
             }
             dtm.stop();
             driftTime += dtm.read();
@@ -1512,7 +1545,8 @@ void driver() {
     if (interrupted) {
         PRINT("\n  Interrupted: saving the completed simulation state before shutdown.\n");
     }
-    viewOutputViews(params.step + 1, a, true, years);
+    section_timing::measure(section_timing::Section::snapshotOutput,
+        [&]() { viewOutputViews(params.step + 1, a, true, years); });
     if (getOptions().initial.createGlass) {
         scenarios::saveGlass();
     }
@@ -1528,7 +1562,8 @@ void driver() {
         totalTime.stop();
         runtime += totalTime.read();
         terminal::detailPrint("Writing final checkpoint for iteration %i\n", params.iter);
-        writeCheckpoint(params);
+        section_timing::measure(
+            section_timing::Section::checkpointWrite, [&]() { writeCheckpoint(params); });
         if (doCheck && hpxRank() == 0) {
             detail::checkpointRedshiftAlias(params.iter, checkz);
         }
