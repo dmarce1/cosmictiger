@@ -43,6 +43,9 @@ void prepare(SolveRequest const& request) {
         state.pendingGhosts = 0;
         state.farPromise = std::make_shared<hpx::promise<void>>();
         state.farReady = state.farPromise->get_future().share();
+#if COSMICTIGER_PMMM_NEAR_FMM
+        // Only the FMM pipeline fulfills these per-cell promises. Creating them
+        // for PP would report a broken promise for every cell on the next solve.
         for (size_t index = 0; index < state.cells.size(); ++index) {
             auto source = std::make_shared<SourceCell>();
             source->range = state.cells[index];
@@ -51,6 +54,7 @@ void prepare(SolveRequest const& request) {
             state.sourceCellsByKey[source->range.key].push_back(index);
             state.sourceCells.push_back(std::move(source));
         }
+#endif
         state.radialTrace = 0;
         auto const previous = state.diagnostics;
         state.diagnostics = {};
