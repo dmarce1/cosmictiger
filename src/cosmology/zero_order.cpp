@@ -180,17 +180,17 @@ void createZeroOrderUniverse(ZeroOrderUniverse* uniPtr, std::function<double(dou
     std::vector<double> thomson(nValue + 1);
     std::vector<double> soundSpeed2(nValue + 1);
 
-    PRINT("\t\tParameters:\n");
-    PRINT("\t\t\t h                 = %f\n", littleh);
-    PRINT("\t\t\t omega_m           = %f\n", omegaM);
-    PRINT("\t\t\t omega_r           = %f\n", omegaR);
-    PRINT("\t\t\t omega_lambda      = %f\n", 1 - omegaR - omegaM);
-    PRINT("\t\t\t omega_b           = %f\n", omegaB);
-    PRINT("\t\t\t omega_c           = %f\n", omegaC);
-    PRINT("\t\t\t omega_gam         = %f\n", omegaGam);
-    PRINT("\t\t\t omega_nu          = %f\n", omegaNu);
-    PRINT("\t\t\t Neff              = %f\n", neff);
-    PRINT("\t\t\t temperature today = %f\n\n", 2.73 * theta);
+    PRINT("    Parameters:\n");
+    PRINT("      h                 = %f\n", littleh);
+    PRINT("      Ω_m               = %f\n", omegaM);
+    PRINT("      Ω_r               = %f\n", omegaR);
+    PRINT("      Ω_Λ               = %f\n", 1 - omegaR - omegaM);
+    PRINT("      Ω_b               = %f\n", omegaB);
+    PRINT("      Ω_c               = %f\n", omegaC);
+    PRINT("      Ω_γ               = %f\n", omegaGam);
+    PRINT("      Ω_ν               = %f\n", omegaNu);
+    PRINT("      N_eff             = %f\n", neff);
+    PRINT("      temperature today = %f K\n\n", 2.73 * theta);
 
     dloga = (logamax - logamin) / nValue;
     auto const cosmicHubble = [=](double a) {
@@ -247,7 +247,6 @@ void createZeroOrderUniverse(ZeroOrderUniverse* uniPtr, std::function<double(dou
         t += dt;
     }
     a = exp(logamin);
-    PRINT("%e \n", p);
     //	print_time(t);
     //	PRINT(
     //			", redshift %.0f: Big Bang nucleosynthesis has ended. The Universe is dominated by

@@ -7,6 +7,7 @@
  */
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <complex>
 #include <cstdio>
@@ -130,26 +131,53 @@ PowerSpectrumFunction computePowerSpectrum() {
     }
     size_t const initialIndex = initialScale <= 1.0 ? 0 : 1;
     size_t const todayIndex = initialScale < 1.0 ? 1 : 0;
+    constexpr size_t kProgressInterval = 32;
+    bool const showProgress = hpxRank() == 0;
+    std::atomic<size_t> completedModes{0};
     Vector<hpx::future<void>> futures;
     futures.reserve(count);
+    if (showProgress) {
+        PRINT("  Einstein–Boltzmann: %zu modes (one dot per %zu completed modes)\n    ", count,
+            kProgressInterval);
+    }
     try {
         for (size_t i = 0; i < count; ++i) {
             wavenumbers[i] = std::exp(lower + span * i / (count - 1));
             futures.push_back(hpx::async(hpx::annotated_function(
                 [&, i]() {
                     transfers[i] = solveBoltzmannTransfers(universe, wavenumbers[i], scales);
+                    if (showProgress) {
+                        size_t const completed =
+                            completedModes.fetch_add(1, std::memory_order_relaxed) + 1;
+                        if (completed % kProgressInterval == 0 || completed == count) {
+                            PRINT(".");
+                        }
+                    }
                 },
                 "cosmology.solveBoltzmannMode")));
         }
     } catch (...) {
         hpx::wait_all(futures.begin(), futures.end());
+        if (showProgress) {
+            PRINT(" failed\n");
+        }
         throw;
     }
     // Every task captures the background and output arrays by reference. Join
     // all tasks before propagating any exception and destroying those locals.
     hpx::wait_all(futures.begin(), futures.end());
-    for (auto& future : futures) {
-        future.get();
+    try {
+        for (auto& future : futures) {
+            future.get();
+        }
+    } catch (...) {
+        if (showProgress) {
+            PRINT(" failed\n");
+        }
+        throw;
+    }
+    if (showProgress) {
+        PRINT(" done (%zu/%zu modes)\n", count, count);
     }
 
     double const baryonFraction = params.omegaB / (params.omegaB + params.omegaC);
