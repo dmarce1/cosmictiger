@@ -512,11 +512,11 @@ else
     platformVariant=cpu
 fi
 if [[ $enableSph == ON ]]; then
-    sphVariant=sph
+    sphVariant=_sph
 else
-    sphVariant=nosph
+    sphVariant=
 fi
-buildTarget="cosmictiger_${timeIntegrator}_${gravityVariant}_${sphVariant}_${fmmOrder}"
+buildTarget="cosmictiger_${timeIntegrator}_${gravityVariant}${sphVariant}_${fmmOrder}"
 buildDir="$rootDir/build/${buildMode}_${platformVariant}"
 if ! mkdir -p -- "$buildDir"; then
     printf 'Cannot create build directory: %s\n' "$buildDir" >&2

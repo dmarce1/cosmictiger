@@ -95,19 +95,19 @@ once with Unix Makefiles, then build any desired target:
 ```sh
 cmake -S . -B build/release_cuda -G 'Unix Makefiles' \
   -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
-make -C build/release_cuda -j4 cosmictiger_leapfrog_pmmm_pp_nosph_7
+make -C build/release_cuda -j4 cosmictiger_leapfrog_pmmm_pp_7
 make -C build/release_cuda -j4 cosmictiger_leapfrog_fmm_sph_7
 make -C build/release_cuda -j4 cosmictiger_leapfrog_pmmm_pp_sph_7
-make -C build/release_cuda -j4 cosmictiger_hierarchical_pmmm_fmm_nosph_8
+make -C build/release_cuda -j4 cosmictiger_hierarchical_pmmm_fmm_8
 ```
 
-Targets have the form `cosmictiger_<integrator>_<gravity>_<sph>_<order>`:
+Targets have the form `cosmictiger_<integrator>_<gravity>[_sph]_<order>`:
 
 | Component | Supported values |
 | --- | --- |
 | Integrator | `leapfrog` (ordinary block-timestep KDK), `hierarchical` |
 | Gravity | `fmm`, `pmmm_pp`, `pmmm_fmm` |
-| SPH | `nosph` for every integrator/solver pair; `sph` with leapfrog and any gravity method |
+| SPH | Omit `_sph` for collisionless targets; include `_sph` with leapfrog and any gravity method |
 | Order | `3` through `9` (multipole degree plus two) |
 
 There are 42 collisionless variants (2 integrators × 3 gravity methods × 7
@@ -123,7 +123,7 @@ Each requested target reuses the shared core library.
 Configuration-independent sources compile once per build directory;
 variant sources have their own target-specific definitions and source lists.
 Global FMM variants exclude PMMM sources, PMMM variants include only their
-selected near-field implementation, and `nosph` variants exclude SPH sources.
+selected near-field implementation, and collisionless variants exclude SPH sources.
 Other named variants are excluded from the default `all` build, so plain `make`
 builds only the configured default executable and enabled tests.
 

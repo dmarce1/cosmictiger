@@ -106,7 +106,7 @@ class BuildVariantsTest(unittest.TestCase):
 
     def testWrongIntegratorDefinition(self):
         for command in self.commands:
-            if "cosmictiger_hierarchical_pmmm_pp_nosph_7_objects.dir" in " ".join(command["arguments"]):
+            if "cosmictiger_hierarchical_pmmm_pp_7_objects.dir" in " ".join(command["arguments"]):
                 command["arguments"].remove("-DCOSMICTIGER_INTEGRATOR_HIERARCHICAL=1")
                 command["arguments"].append("-DCOSMICTIGER_INTEGRATOR_HIERARCHICAL=0")
                 break
@@ -115,7 +115,7 @@ class BuildVariantsTest(unittest.TestCase):
 
     def testWrongPositionWidth(self):
         for command in self.commands:
-            if "cosmictiger_leapfrog_pmmm_pp_nosph_7.dir" in " ".join(command["arguments"]):
+            if "cosmictiger_leapfrog_pmmm_pp_7.dir" in " ".join(command["arguments"]):
                 command["arguments"].remove("-DCOSMICTIGER_POSITION_BITS=32")
                 command["arguments"].append("-DCOSMICTIGER_POSITION_BITS=64")
                 break
@@ -143,7 +143,7 @@ class BuildVariantsTest(unittest.TestCase):
 
     def testNearSolverLeak(self):
         configuration = ("leapfrog", "pmmm_pp", False, 7)
-        self.addCompilation("cosmictiger_leapfrog_pmmm_pp_nosph_7_objects",
+        self.addCompilation("cosmictiger_leapfrog_pmmm_pp_7_objects",
                             "src/gravity/nitadori/cell_tree.cpp",
                             configurationDefinitions(configuration, 32))
         with self.assertRaisesRegex(ValueError, "compiles the other near solver"):
@@ -151,7 +151,7 @@ class BuildVariantsTest(unittest.TestCase):
 
     def testSphSourceLeak(self):
         configuration = ("leapfrog", "fmm", False, 7)
-        self.addCompilation("cosmictiger_leapfrog_fmm_nosph_7_objects", "src/sph/sph.cpp",
+        self.addCompilation("cosmictiger_leapfrog_fmm_7_objects", "src/sph/sph.cpp",
                             configurationDefinitions(configuration, 32))
         with self.assertRaisesRegex(ValueError, "SPH disabled but compiles SPH source"):
             self.check()
@@ -175,7 +175,7 @@ class BuildVariantsTest(unittest.TestCase):
 
     def testMissingVariant(self):
         self.commands = [command for command in self.commands if
-                         "cosmictiger_hierarchical_pmmm_fmm_nosph_9.dir" not in
+                         "cosmictiger_hierarchical_pmmm_fmm_9.dir" not in
                          " ".join(command["arguments"])]
         with self.assertRaisesRegex(ValueError, "missing application target"):
             self.check()
@@ -183,13 +183,13 @@ class BuildVariantsTest(unittest.TestCase):
     def testWrongLegacyObjects(self):
         linkPath = self.buildDirectory / "CMakeFiles/cosmictiger.dir/link.txt"
         linkPath.write_text(linkPath.read_text().replace(self.default + "_objects",
-                           "cosmictiger_hierarchical_pmmm_pp_nosph_3_objects"))
+                           "cosmictiger_hierarchical_pmmm_pp_3_objects"))
         with self.assertRaisesRegex(ValueError, "links variant objects"):
             self.check()
 
     def testWrongGeneratedOrder(self):
         for command in self.commands:
-            if "cosmictiger_hierarchical_fmm_nosph_9_objects.dir" in " ".join(command["arguments"]) and \
+            if "cosmictiger_hierarchical_fmm_9_objects.dir" in " ".join(command["arguments"]) and \
                     command["file"].endswith("fmm_instance_cpu_9.cpp"):
                 command["file"] = command["file"].replace("fmm_instance_cpu_9.cpp", "fmm_instance_cpu_7.cpp")
                 break
@@ -198,7 +198,7 @@ class BuildVariantsTest(unittest.TestCase):
 
     def testUnnecessaryPmmmPpInstantiation(self):
         configuration = ("leapfrog", "pmmm_pp", False, 7)
-        self.addCompilation("cosmictiger_leapfrog_pmmm_pp_nosph_7_objects",
+        self.addCompilation("cosmictiger_leapfrog_pmmm_pp_7_objects",
                             "instances/fmm_instance_cpu_7.cpp",
                             configurationDefinitions(configuration, 32))
         with self.assertRaisesRegex(ValueError, "generated FMM instances"):
@@ -226,7 +226,7 @@ class BuildVariantsTest(unittest.TestCase):
         self.makefilePath.write_text(self.makefilePath.read_text() +
                                     "all: CMakeFiles/cosmictiger_core.dir/all\n"
                                     "CMakeFiles/cosmictiger_core.dir/all: "
-                                    "CMakeFiles/cosmictiger_hierarchical_pmmm_pp_nosph_3_objects.dir/all\n")
+                                    "CMakeFiles/cosmictiger_hierarchical_pmmm_pp_3_objects.dir/all\n")
         with self.assertRaisesRegex(ValueError, "root all reaches an unselected variant target"):
             self.check()
 

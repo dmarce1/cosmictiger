@@ -11,7 +11,7 @@ cmake -S . -B build/release_cpu -G 'Unix Makefiles' \
   -DCOSMICTIGER_WITH_CUDA=OFF \
   -DBUILD_TESTING=OFF
 make -C build/release_cpu -j4 cosmictiger_leapfrog_fmm_sph_7
-make -C build/release_cpu -j4 cosmictiger_hierarchical_pmmm_pp_nosph_8
+make -C build/release_cpu -j4 cosmictiger_hierarchical_pmmm_pp_8
 ```
 
 Run examples from the repository root. CMake creates the directory specified by
@@ -33,7 +33,7 @@ Defaults apply to a fresh CMake configuration. Boolean options accept `ON` or
 | `COSMICTIGER_POSITION_TYPE` | `fixed32` | `fixed32` or `fixed64` position storage for the default executable and every named variant in this build directory. Target and executable names are unchanged. |
 | `COSMICTIGER_WITH_MAX_BUCKET` | `128` | One of `32`, `64`, `128`, `256`, `512`, `1024`. Compile-time ceiling for the runtime `compute.bucketSize`. |
 | `COSMICTIGER_WITH_CUDA` | `ON` | Builds CUDA code. Requires the CUDA toolkit and HPX built with CUDA support. |
-| `COSMICTIGER_WITH_SPH` | `ON` | Selects SPH support for the default executable and, when testing is enabled, SPH tests. `OFF` excludes SPH implementation sources from that executable and omits SPH tests. SPH supports leapfrog with global FMM or either PMMM near method. Named targets independently select `sph` or `nosph`. |
+| `COSMICTIGER_WITH_SPH` | `ON` | Selects SPH support for the default executable and, when testing is enabled, SPH tests. `OFF` excludes SPH implementation sources from that executable and omits SPH tests. SPH supports leapfrog with global FMM or either PMMM near method. Named targets include `_sph` for SPH support and omit it for collisionless builds. |
 | `COSMICTIGER_WITH_LONG_LONG_PART_INT` | `OFF` | Uses `long long` to index local particles. |
 | `COSMICTIGER_ENABLE_PROFILING` | `ON` | Enables statistical CPU sampling and `PROFILE()` metadata. Independent of the installed HPX's APEX support. |
 | `COSMICTIGER_REQUIRE_APEX` | Depends on build type | Defaults to `ON` for `Debug`, `RelWithDebInfo`, and `Profile`; otherwise `OFF`. Rejects an HPX installation without APEX when enabled. |
@@ -96,20 +96,21 @@ and position storage. Standard `make help` lists available targets,
 including `cosmictiger_help`.
 
 Every configuration provides targets named
-`cosmictiger_<integrator>_<gravity>_<sph>_<order>`. Replace `<order>` in each
-supported family below with any integer from 3 through 9:
+`cosmictiger_<integrator>_<gravity>[_sph]_<order>`. The optional `_sph` selects SPH;
+omit it for collisionless builds. Replace `<order>` in each supported family
+below with any integer from 3 through 9:
 
 | Target family | Physics |
 | --- | --- |
 | `cosmictiger_leapfrog_fmm_sph_<order>` | Leapfrog, global FMM, SPH available |
 | `cosmictiger_leapfrog_pmmm_pp_sph_<order>` | Leapfrog, PMMM with direct near pairs, SPH available |
 | `cosmictiger_leapfrog_pmmm_fmm_sph_<order>` | Leapfrog, PMMM with FMM near interactions, SPH available |
-| `cosmictiger_leapfrog_fmm_nosph_<order>` | Leapfrog, global FMM, no SPH |
-| `cosmictiger_leapfrog_pmmm_pp_nosph_<order>` | Leapfrog, PMMM with direct near pairs, no SPH |
-| `cosmictiger_leapfrog_pmmm_fmm_nosph_<order>` | Leapfrog, PMMM with FMM near interactions, no SPH |
-| `cosmictiger_hierarchical_fmm_nosph_<order>` | Hierarchical, global FMM, no SPH |
-| `cosmictiger_hierarchical_pmmm_pp_nosph_<order>` | Hierarchical, PMMM with direct near pairs, no SPH |
-| `cosmictiger_hierarchical_pmmm_fmm_nosph_<order>` | Hierarchical, PMMM with FMM near interactions, no SPH |
+| `cosmictiger_leapfrog_fmm_<order>` | Leapfrog, global FMM, no SPH |
+| `cosmictiger_leapfrog_pmmm_pp_<order>` | Leapfrog, PMMM with direct near pairs, no SPH |
+| `cosmictiger_leapfrog_pmmm_fmm_<order>` | Leapfrog, PMMM with FMM near interactions, no SPH |
+| `cosmictiger_hierarchical_fmm_<order>` | Hierarchical, global FMM, no SPH |
+| `cosmictiger_hierarchical_pmmm_pp_<order>` | Hierarchical, PMMM with direct near pairs, no SPH |
+| `cosmictiger_hierarchical_pmmm_fmm_<order>` | Hierarchical, PMMM with FMM near interactions, no SPH |
 
 The 63 physics variants comprise 42 collisionless combinations (2 integrators
 × 3 gravity methods × 7 orders) and 21 SPH combinations (leapfrog × 3 gravity
@@ -133,13 +134,13 @@ matrix. Request additional variants from the same Makefile, without
 reconfiguring:
 
 ```sh
-make -C build/release_cpu -j4 cosmictiger_leapfrog_pmmm_fmm_nosph_7
-make -C build/release_cpu -j4 cosmictiger_leapfrog_pmmm_pp_nosph_5
+make -C build/release_cpu -j4 cosmictiger_leapfrog_pmmm_fmm_7
+make -C build/release_cpu -j4 cosmictiger_leapfrog_pmmm_pp_5
 make -C build/release_cpu -j4 cosmictiger_leapfrog_pmmm_fmm_sph_7
 
 # Equivalent generator-independent command:
 cmake --build build/release_cpu --parallel 4 \
-  --target cosmictiger_leapfrog_pmmm_pp_nosph_5
+  --target cosmictiger_leapfrog_pmmm_pp_5
 ```
 
 For a different default executable and matching test selection, reconfigure

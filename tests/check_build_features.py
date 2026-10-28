@@ -35,7 +35,7 @@ def namedVariants():
                 if sph and integrator != "leapfrog":
                     continue
                 for order in range(3, 10):
-                    name = f"cosmictiger_{integrator}_{gravity}_{'sph' if sph else 'nosph'}_{order}"
+                    name = f"cosmictiger_{integrator}_{gravity}{'_sph' if sph else ''}_{order}"
                     variants[name] = (integrator, gravity, sph, order)
     return variants
 
