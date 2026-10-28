@@ -98,8 +98,10 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
     };
     auto result =
         treeBuild({params, key, processRange, particleRange, box, depth, localRoot}, policy);
+#if COSMICTIGER_WITH_SPH
     if (localRoot && getOptions().hydro.enabled) {
         particlesResolveWithSphParticles();
     }
+#endif
     return result;
 }

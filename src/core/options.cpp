@@ -122,6 +122,11 @@ Options const& getOptions() {
 }
 
 void setOptions(Options const& opts) {
+#if !COSMICTIGER_WITH_SPH
+    if (opts.hydro.enabled || opts.chemistry.enabled) {
+        throw std::invalid_argument("Hydrodynamics and chemistry require COSMICTIGER_WITH_SPH=ON");
+    }
+#endif
     if (opts.compute.positionType != (kPositionBits == 64 ? "fixed64" : "fixed32")) {
         throw std::invalid_argument(
             "compute.positionType differs from this locality's application backend");
@@ -1031,6 +1036,12 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.run.test == "sphGravity") {
         opts.hydro.enabled = true;
     }
+#if !COSMICTIGER_WITH_SPH
+    if (opts.hydro.enabled || opts.chemistry.enabled) {
+        THROW_ERROR("hydro.enabled=true or chemistry.enabled=true requires "
+                    "COSMICTIGER_WITH_SPH=ON\n");
+    }
+#endif
     if (opts.hydro.enabled && integration::kBuildUsesHierarchical) {
         THROW_ERROR("SPH requires ordinary block-timestep leapfrog; rebuild with "
                     "COSMICTIGER_TIME_INTEGRATOR=leapfrog\n");

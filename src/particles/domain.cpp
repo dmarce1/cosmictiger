@@ -20,7 +20,9 @@
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/particles.hpp>
+#if COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/sph_particles.hpp>
+#endif
 
 constexpr bool kVerbose = true;
 
@@ -366,6 +368,7 @@ void domainsTransmitParticles(Vector<Particle> parts) {
     transParticles.push_back(parts);
 }
 
+#if COSMICTIGER_WITH_SPH
 // Ordinary SPH timesteps migrate the complete gas state together with its
 // gravity particle. Category indices are local and are rebuilt at the receiver.
 struct GasMigrationState {
@@ -562,11 +565,14 @@ static void endSphMigration() {
     }
 }
 
+#endif
 void domainsBegin(int rung) {
+#if COSMICTIGER_WITH_SPH
     if (getOptions().hydro.enabled) {
         beginSphMigration(rung);
         return;
     }
+#endif
     Vector<hpx::future<void>> futs;
     auto children = hpxChildren();
     for (auto& c : children) {
@@ -635,10 +641,12 @@ void domainsBegin(int rung) {
 }
 
 void domainsEnd() {
+#if COSMICTIGER_WITH_SPH
     if (getOptions().hydro.enabled) {
         endSphMigration();
         return;
     }
+#endif
     Vector<hpx::future<void>> futs;
     auto children = hpxChildren();
     for (auto& c : children) {

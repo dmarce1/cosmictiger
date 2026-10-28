@@ -121,29 +121,33 @@ void allLocalities(Arguments... arguments) {
 void solve(SolveRequest request) {
     std::unique_lock<MutexType> lock(solveMutex);
     request.generation = ++nextGeneration;
+#if COSMICTIGER_WITH_SPH
     if (getOptions().hydro.enabled) {
         sphParticlesClearCaches();
     }
+#endif
     allLocalities<PmmmPrepareAction>(request);
-    constexpr bool kUseFmm = gravity::kBuildPmmmNearUsesFmm;
     std::exception_ptr failure;
+#if COSMICTIGER_PMMM_NEAR_FMM
     bool started = false;
+#endif
     try {
         allLocalities<PmmmDepositAction>();
-        if constexpr (kUseFmm) {
-            allLocalities<PmmmPlanGhostsAction>();
-            started = true;
-            allLocalities<PmmmStartPipelineAction>();
-        }
+#if COSMICTIGER_PMMM_NEAR_FMM
+        allLocalities<PmmmPlanGhostsAction>();
+        started = true;
+        allLocalities<PmmmStartPipelineAction>();
+#endif
         allLocalities<PmmmTransformAction>();
-        if constexpr (kUseFmm) {
-            allLocalities<PmmmFinishPipelineAction>();
-        } else {
-            allLocalities<PmmmEvaluateAction>(request.doPotential);
-        }
+#if COSMICTIGER_PMMM_NEAR_FMM
+        allLocalities<PmmmFinishPipelineAction>();
+#else
+        allLocalities<PmmmEvaluateAction>(request.doPotential);
+#endif
     } catch (...) {
         failure = std::current_exception();
     }
+#if COSMICTIGER_PMMM_NEAR_FMM
     auto cleanup = [&](auto&& operation) {
         try {
             operation();
@@ -153,15 +157,14 @@ void solve(SolveRequest request) {
             }
         }
     };
-    if constexpr (kUseFmm) {
-        if (failure && started) {
-            cleanup([]() { allLocalities<PmmmAbortPipelineAction>(); });
-            cleanup([]() { allLocalities<PmmmFinishPipelineAction>(); });
-        }
-        cleanup([]() { treeDestroy(); });
-        cleanup([]() { particlesCacheFree(); });
-        cleanup([]() { allLocalities<PmmmClearGhostsAction>(); });
+    if (failure && started) {
+        cleanup([]() { allLocalities<PmmmAbortPipelineAction>(); });
+        cleanup([]() { allLocalities<PmmmFinishPipelineAction>(); });
     }
+    cleanup([]() { treeDestroy(); });
+    cleanup([]() { particlesCacheFree(); });
+    cleanup([]() { allLocalities<PmmmClearGhostsAction>(); });
+#endif
     if (failure) {
         std::rethrow_exception(failure);
     }

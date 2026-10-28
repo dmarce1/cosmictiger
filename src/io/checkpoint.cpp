@@ -32,9 +32,11 @@
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/particles.hpp>
+#if COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/sph.hpp>
 #include <cosmictiger/sph/sph_chemistry.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
+#endif
 
 HPX_PLAIN_ACTION(writeCheckpoint, WriteCheckpointAction);
 HPX_PLAIN_ACTION(readCheckpoint, ReadCheckpointAction);
@@ -594,6 +596,7 @@ void writeDriverState(FILE* fp, DriverParameters const& params) {
             }
         }
     }
+#if COSMICTIGER_WITH_SPH
     if (getOptions().chemistry.enabled) {
         auto const chemicalParameters = sphChemistryCheckpointParameters();
         uint64_t const radiationChecksum = sphChemistryRadiationChecksum();
@@ -614,6 +617,7 @@ void writeDriverState(FILE* fp, DriverParameters const& params) {
             THROW_ERROR("Unable to write chemistry source phase\n");
         }
     }
+#endif
     if (fwrite(&params, sizeof(params), 1, fp) != 1) {
         THROW_ERROR("Unable to write checkpoint driver state\n");
     }
@@ -676,6 +680,7 @@ DriverParameters readDriverState(FILE* fp) {
                 }
             }
         }
+#if COSMICTIGER_WITH_SPH
         std::array<double, 3> sourcePhase{};
         if (getOptions().chemistry.enabled) {
             auto chemicalParameters = sphChemistryCheckpointParameters();
@@ -713,7 +718,9 @@ DriverParameters readDriverState(FILE* fp) {
             }
             sphChemistryPendingHeating() = sourcePhase[2];
         }
+#endif
         FREAD(&params, sizeof(params), 1, fp);
+#if COSMICTIGER_WITH_SPH
         if (getOptions().chemistry.enabled &&
             (sourcePhase[0] != (params.tau == 0.0 ? 0.0 : 1.0) ||
                 sourcePhase[1] !=
@@ -721,6 +728,7 @@ DriverParameters readDriverState(FILE* fp) {
                         -1 - getOptions().chemistry.synchronizedRung))) {
             THROW_ERROR("Checkpoint chemistry source phase is inconsistent\n");
         }
+#endif
     } else {
         if (!legacyCheckpointCompatible(getOptions())) {
             THROW_ERROR("Legacy checkpoints support only the original dark-matter hierarchical "

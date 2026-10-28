@@ -18,6 +18,7 @@
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/gravity/fmm_kernels/spherical_ewald_kernels.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/nitadori/cell_tree.hpp>
 #include <cosmictiger/gravity/nitadori/ghost_storage.hpp>
@@ -29,7 +30,9 @@
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/particle_mesh_sort.hpp>
 #include <cosmictiger/particles/particles.hpp>
+#if COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/sph_particles.hpp>
+#endif
 #include <src/gravity/nitadori/state.hpp>
 
 namespace detail {
@@ -66,16 +69,23 @@ void requirePmmm(bool condition, std::string const& message) {
     }
 }
 
+#if COSMICTIGER_PMMM_NEAR_FMM
 void reservePmmmCudaFixture() {
     // Reserve the largest fixture on every rank before temporary CPU execution.
     // The application's retained particle/tree arenas assume a fixed backend.
     particlesResize(320);
+#if COSMICTIGER_WITH_SPH
     sphParticlesResize(160, false);
+#endif
     fmmGhostReserve(320);
     fmmGhostClear();
     particlesResize(0);
+#if COSMICTIGER_WITH_SPH
     sphParticlesResize(0, false);
+#endif
 }
+
+#endif
 
 void resetPmmmSavedForces() {
     // Domain migration transfers physical particle state, not saved diagnostic
@@ -89,6 +99,7 @@ void resetPmmmSavedForces() {
     }
 }
 
+#if !COSMICTIGER_PMMM_NEAR_FMM
 void checkedPmmmNearField(std::vector<PmmmNearParticle> const& sinks,
     std::vector<PmmmNearParticle> const& sources, double cellWidth, bool doPotential,
     std::vector<std::array<double, 4>>& fields) {
@@ -316,6 +327,8 @@ void checkPmmmNearEdges() {
     setOptions(options);
 }
 
+#endif
+
 void initializePmmmFixture(int fixture, int ownership) {
     // The first two and the next pair share cells on the n=8 mesh. Their
     // different offsets generate dipoles and the independent radial moment.
@@ -333,9 +346,11 @@ void initializePmmmFixture(int fixture, int ownership) {
         }
     }
     particlesResize(count);
+#if COSMICTIGER_WITH_SPH
     if (getOptions().hydro.enabled) {
         sphParticlesResize(gasCount, false);
     }
+#endif
     int local = 0;
     int gas = 0;
     for (int id = total - 1; id >= 0; --id) {
@@ -396,6 +411,7 @@ void initializePmmmFixture(int fixture, int ownership) {
         }
         particlesPot(local) = -0.25f * float(id + 1);
         particlesRung(local) = 1 + id % 4;
+#if COSMICTIGER_WITH_SPH
         if (getOptions().hydro.enabled) {
             bool const isGas = fixture != 4 && id % 2 != 0;
             particlesType(local) = isGas ? kSphType : kDarkMatterType;
@@ -409,6 +425,7 @@ void initializePmmmFixture(int fixture, int ownership) {
                 ++gas;
             }
         }
+#endif
         ++local;
     }
 }
@@ -441,6 +458,7 @@ Vector<PmmmSample> readPmmmFixture() {
             sample.cellKey = sample.cellKey * getOptions().gravity.meshSize +
                 particleMeshCoordinate(particlesPos(dim, i).raw(), getOptions().gravity.meshSize);
         }
+#if COSMICTIGER_WITH_SPH
         if (getOptions().hydro.enabled && particlesType(i) == kSphType) {
             requirePmmm(sphParticlesParticleIndex(particlesCatIndex(i)) == i,
                 "gas reverse index was not repaired after sorting");
@@ -449,6 +467,7 @@ Vector<PmmmSample> readPmmmFixture() {
                     "force solve changed gas acceleration");
             }
         }
+#endif
     }
     return samples;
 }
@@ -556,6 +575,7 @@ Vector<int> readPmmmOverlapGate() {
         int(gate->receivedHeld)};
 }
 
+#if COSMICTIGER_PMMM_NEAR_FMM
 size_t verifyPmmmTreeCell(TreeId id, uint64_t key, int meshSize) {
     auto const* node = treeGetNode(id);
     uint64_t positionKey = 0;
@@ -617,6 +637,8 @@ Vector<TreeCellRoot> buildPmmmTestForest() {
     }
     return roots;
 }
+
+#endif
 
 // Independent direct Ewald summation, with no generated kernels, mesh, FFT,
 // harmonic coefficients, or production image tables. The primary self term is
@@ -681,26 +703,139 @@ std::array<double, 4> directPmmmReference(size_t sink, Vector<PmmmSample> const&
     return result;
 }
 
-double verifyPmmmReference(Vector<PmmmSample> const& samples, double tolerance) {
+// Evaluate the selected finite expansion directly in double precision. Physical
+// offsets and generated M2L bypass mesh deposition, the contraction table, FFTs,
+// and cell-width rescaling. This checks implementation error separately from
+// truncation; directPmmmReference remains the independent full Ewald oracle.
+std::array<double, 4> directPmmmExpansionReference(size_t sink, Vector<PmmmSample> const& samples) {
+    namespace spherical = cosmictiger::gravity::spherical;
+    constexpr int kSourceDegree = kFmmDefaultOrder - 2;
+    constexpr int kLocalDegree = kFmmDefaultOrder - 1;
+    auto const& options = getOptions();
+    int const n = options.gravity.meshSize;
+    auto const coordinates = [n](PmmmSample const& sample) {
+        return std::array<int, kDimensions>{
+            int(sample.cellKey / (n * n)), int(sample.cellKey / n % n), int(sample.cellKey % n)};
+    };
+    auto const sinkCell = coordinates(samples[sink]);
+    std::array<double, kDimensions> sinkOffset{};
+    for (int dim = 0; dim < kDimensions; ++dim) {
+        sinkOffset[dim] = samples[sink].position[dim] - (sinkCell[dim] + 0.5) / n;
+    }
+    std::array<double, (kLocalDegree + 1) * (kLocalDegree + 1)> local{};
+    std::array<double, 4> field{};
+    double localTrace = 0.0;
+    for (size_t source = 0; source < samples.size(); ++source) {
+        auto const sourceCell = coordinates(samples[source]);
+        std::array<double, kDimensions> sourceOffset{}, displacement{}, pair{};
+        int cellDistance = 0;
+        double sourceTrace = 0.0;
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            sourceOffset[dim] = samples[source].position[dim] - (sourceCell[dim] + 0.5) / n;
+            int delta = (sinkCell[dim] - sourceCell[dim] + n) % n;
+            if (delta > n / 2) {
+                delta -= n;
+            }
+            cellDistance = std::max(cellDistance, std::abs(delta));
+            displacement[dim] = double(delta) / n;
+            pair[dim] = displacement[dim] + sinkOffset[dim] - sourceOffset[dim];
+            sourceTrace += samples[source].mass * sourceOffset[dim] * sourceOffset[dim];
+        }
+        bool const near = cellDistance <= options.gravity.pmmmNearWidth;
+        std::array<double, (kSourceDegree + 1) * (kSourceDegree + 1)> moments{};
+        spherical::detail::P2M<kSourceDegree>::add<double>(
+            moments, samples[source].mass, sourceOffset[0], sourceOffset[1], sourceOffset[2]);
+        std::array<double, (kLocalDegree + 1) * (kLocalDegree + 1)> green{};
+        double greenTrace = 0.0;
+        spherical::EwaldGreen<kLocalDegree>::evaluate<double>(
+            green, greenTrace, displacement[0], displacement[1], displacement[2]);
+        if (!near) {
+            std::array<double, (kLocalDegree + 1) * (kLocalDegree + 1)> primary{};
+            spherical::detail::Green<kLocalDegree>::evaluate<double>(
+                primary, displacement[0], displacement[1], displacement[2]);
+            for (size_t slot = 0; slot < green.size(); ++slot) {
+                green[slot] += primary[slot];
+            }
+        }
+        spherical::EwaldM2L<kLocalDegree>::add<double>(
+            local, localTrace, moments, sourceTrace, green, greenTrace);
+        if (near && source != sink) {
+            double const radiusSquared = pair[0] * pair[0] + pair[1] * pair[1] + pair[2] * pair[2];
+            double const radius = std::sqrt(radiusSquared);
+            requirePmmm(radius > options.gravity.supportRadius,
+                "direct expansion fixture contains a softened pair");
+            field[0] -= samples[source].mass / radius;
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                field[dim + 1] -= samples[source].mass * pair[dim] / (radius * radiusSquared);
+            }
+        }
+    }
+    spherical::EwaldL2P<kLocalDegree>::add<double>(
+        field, local, localTrace, sinkOffset[0], sinkOffset[1], sinkOffset[2]);
+    for (double& component : field) {
+        component *= options.gravity.gm;
+    }
+    return field;
+}
+
+double verifyPmmmReference(Vector<PmmmSample> const& samples) {
     auto const& options = getOptions();
     std::string const context = " mesh=" + std::to_string(options.gravity.meshSize) +
         " order=" + std::to_string(options.gravity.pmmmOrder) +
         " width=" + std::to_string(options.gravity.pmmmNearWidth);
+    // Potential/force truncation budgets for these off-center fixtures, measured
+    // against the independent Ewald sum with a direct double expansion for both
+    // unit and mixed masses. They are not universal PMMM accuracy guarantees.
+    // In particular order 6 reaches 1.615e-3 force error, even without FFTs;
+    // it cannot share the order-7 5e-4 budget. Numerical error is bounded below
+    // independently and never absorbed into the truncation allowance.
+    constexpr std::array<std::array<double, 2>, 7> kTruncationBudgets{
+        {{3.0e-2, 6.0e-2}, {1.5e-3, 2.5e-2}, {3.5e-4, 7.5e-3}, {6.0e-5, 2.0e-3}, {3.0e-5, 5.0e-4},
+            {8.0e-6, 1.25e-4}, {3.0e-6, 5.0e-5}}};
+    auto const budget = kTruncationBudgets[kFmmDefaultOrder - 3];
+    constexpr double kNumericalTolerance = 2.0e-5;
     double maximumError = 0.0;
     std::array<double, kDimensions> momentum{};
     double forceScale = 1.0;
     for (size_t sink = 0; sink < samples.size(); ++sink) {
         auto const expected = directPmmmReference(sink, samples);
+        auto const expansion = directPmmmExpansionReference(sink, samples);
         double norm = 0.0;
         for (int dim = 0; dim < kDimensions; ++dim) {
             norm += expected[dim + 1] * expected[dim + 1];
         }
         norm = std::max(1.0, std::sqrt(norm));
         forceScale = std::max(forceScale, norm);
+        double const potentialScale = std::max(1.0, std::abs(expected[0]));
+        // Near FMM subtracts softened self potential in float; keep that
+        // cancellation allowance separate from both expansion and FFT errors.
+        double const selfCancellationAllowance = gravity::kBuildPmmmNearUsesFmm ?
+            4.0 * std::numeric_limits<float>::epsilon() *
+                std::abs(options.gravity.gm * samples[sink].mass *
+                    selectedGravityKernel().centralPotential / options.gravity.supportRadius) :
+            0.0;
+        for (int component = 0; component < 4; ++component) {
+            double const scale = component == 0 ? potentialScale : norm;
+            double const actual = component == 0 ? samples[sink].potential :
+                                                   samples[sink].acceleration[component - 1];
+            double const numericalAllowance =
+                kNumericalTolerance * scale + (component == 0 ? selfCancellationAllowance : 0.0);
+            requirePmmm(std::abs(actual - expansion[component]) < numericalAllowance,
+                "field differs from direct finite expansion for particle " + std::to_string(sink) +
+                    " component=" + std::to_string(component) +
+                    " actual=" + std::to_string(actual) +
+                    " expected=" + std::to_string(expansion[component]) + context);
+            requirePmmm(std::abs(expansion[component] - expected[component]) <
+                    budget[component == 0 ? 0 : 1] * scale,
+                "finite expansion exceeds the Ewald truncation budget for particle " +
+                    std::to_string(sink) + " component=" + std::to_string(component) + context);
+        }
         double const potentialError =
-            std::abs(samples[sink].potential - expected[0]) / std::max(1.0, std::abs(expected[0]));
+            std::abs(samples[sink].potential - expected[0]) / potentialScale;
         maximumError = std::max(maximumError, potentialError);
-        requirePmmm(std::isfinite(samples[sink].potential) && potentialError < tolerance,
+        requirePmmm(std::isfinite(samples[sink].potential) &&
+                potentialError <
+                    budget[0] + kNumericalTolerance + selfCancellationAllowance / potentialScale,
             "potential differs from direct periodic Ewald for particle " + std::to_string(sink) +
                 ": scaled error " + std::to_string(potentialError) +
                 " actual=" + std::to_string(samples[sink].potential) +
@@ -709,7 +844,8 @@ double verifyPmmmReference(Vector<PmmmSample> const& samples, double tolerance) 
             double const error =
                 std::abs(samples[sink].acceleration[dim] - expected[dim + 1]) / norm;
             maximumError = std::max(maximumError, error);
-            requirePmmm(std::isfinite(samples[sink].acceleration[dim]) && error < tolerance,
+            requirePmmm(std::isfinite(samples[sink].acceleration[dim]) &&
+                    error < budget[1] + kNumericalTolerance,
                 "force differs from direct periodic Ewald for particle " + std::to_string(sink) +
                     ": scaled error " + std::to_string(error) + " dim=" + std::to_string(dim) +
                     " actual=" + std::to_string(samples[sink].acceleration[dim]) +
@@ -774,8 +910,10 @@ HPX_PLAIN_ACTION(detail::readPmmmFixture, ReadPmmmFixtureAction);
 HPX_PLAIN_ACTION(detail::readPmmmKickFixture, ReadPmmmKickFixtureAction);
 HPX_PLAIN_ACTION(detail::installPmmmOverlapGate, InstallPmmmOverlapGateAction);
 HPX_PLAIN_ACTION(detail::readPmmmOverlapGate, ReadPmmmOverlapGateAction);
+#if COSMICTIGER_PMMM_NEAR_FMM
 HPX_PLAIN_ACTION(detail::buildPmmmTestForest, BuildPmmmTestForestAction);
 HPX_PLAIN_ACTION(detail::reservePmmmCudaFixture, ReservePmmmCudaFixtureAction);
+#endif
 HPX_PLAIN_ACTION(detail::resetPmmmSavedForces, ResetPmmmSavedForcesAction);
 
 namespace detail {
@@ -814,6 +952,7 @@ void distributePmmmFixture(int fixture) {
     }
 }
 
+#if COSMICTIGER_PMMM_NEAR_FMM
 void checkPmmmForestGeometry() {
     treePrepareCellForest();
     std::vector<hpx::future<Vector<TreeCellRoot>>> futures;
@@ -842,6 +981,8 @@ void checkPmmmForestGeometry() {
     treeDestroy();
     particlesCacheFree();
 }
+
+#endif
 
 Vector<PmmmSample> gatherPmmmSamples() {
     std::vector<hpx::future<Vector<PmmmSample>>> futures;
@@ -1181,6 +1322,7 @@ void checkPmmmCellOverlap() {
     PRINT("PMMM deterministic interior/boundary whole-cell overlap checks passed\n");
 }
 
+#if COSMICTIGER_PMMM_NEAR_FMM
 void checkPmmmFmmNear() {
     if constexpr (!gravity::kBuildPmmmNearUsesFmm) {
         return;
@@ -1189,7 +1331,7 @@ void checkPmmmFmmNear() {
     auto options = saved;
     // Isolated force fixtures exercise unequal masses without enabling an SPH
     // evolution. Startup continues to reject PMMM gravity in SPH simulations.
-    options.hydro.enabled = true;
+    options.hydro.enabled = COSMICTIGER_WITH_SPH;
     options.compute.bucketSize = 8;
     options.gravity.fmmOrder = kFmmDefaultOrder;
     options.gravity.pmmmOrder = options.gravity.fmmOrder;
@@ -1304,6 +1446,8 @@ void checkPmmmFmmNear() {
     setOptions(saved);
 }
 
+#endif
+
 }    // namespace detail
 
 void pmmmTest() {
@@ -1311,7 +1455,7 @@ void pmmmTest() {
     // Allocate type/category storage before the first fixture. Particle arrays
     // keep a shared capacity and cannot gain the optional hydro arrays after
     // allocation. This isolated force test performs no SPH evolution.
-    options.hydro.enabled = true;
+    options.hydro.enabled = COSMICTIGER_WITH_SPH;
     options.gravity.gm = 0.125;
     options.gravity.supportRadius = 0.001;
     options.gravity.fmmOrder = kFmmDefaultOrder;
@@ -1326,16 +1470,12 @@ void pmmmTest() {
     options.run.hierarchicalGravity =
         integration::kBuildUsesHierarchical && options.gravity.enabled;
     setOptions(options);
+#if !COSMICTIGER_PMMM_NEAR_FMM
     detail::checkPmmmNearEdges();
     detail::checkPmmmNearBatches();
+#endif
     std::array<std::array<int, 2>, 5> const configurations{
         {{5, 2}, {8, 1}, {8, 2}, {8, 3}, {10, 4}}};
-    // Off-center sources have larger far-field truncation error at low orders.
-    // Each build checks its selected order against the independent Ewald sum.
-    double const tolerance = kFmmDefaultOrder == 3 ? 5.0e-2 :
-        kFmmDefaultOrder == 4                      ? 2.5e-2 :
-        kFmmDefaultOrder == 5                      ? 5.0e-3 :
-                                                     5.0e-4;
     for (auto const configuration : configurations) {
         pmmmDestroy();
         options.gravity.meshSize = configuration[0];
@@ -1359,7 +1499,7 @@ void pmmmTest() {
                 detail::requirePmmm(
                     splitCell, "ordinary PMMM domains did not split the Ewald fixture's mesh cell");
             }
-            double const error = detail::verifyPmmmReference(baseline, tolerance);
+            double const error = detail::verifyPmmmReference(baseline);
             detail::distributePmmmFixture(fixture);
             resetFlops();
             pmmmSolve(true);
@@ -1418,7 +1558,9 @@ void pmmmTest() {
         }
     }
     pmmmDestroy();
+#if COSMICTIGER_PMMM_NEAR_FMM
     detail::checkPmmmFmmNear();
+#endif
     detail::checkPmmmPpBatchTargets();
     detail::checkPmmmStreamedStages();
     detail::checkPmmmCellOverlap();

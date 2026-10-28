@@ -12,7 +12,9 @@
 #include <cosmictiger/core/section_timing.hpp>
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/core/timer.hpp>
+#if !COSMICTIGER_GRAVITY_PMMM
 #include <cosmictiger/gravity/dehnen/execution.hpp>
+#endif
 #include <cosmictiger/gravity/kick_workspace.hpp>
 #include <cosmictiger/io/checkpoint.hpp>
 #include <cosmictiger/io/output.hpp>
@@ -21,7 +23,9 @@
 #include <cosmictiger/particles/drift.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #include <cosmictiger/scenarios/scenario.hpp>
+#if COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/sph_particles.hpp>
+#endif
 
 namespace detail {
 
@@ -38,9 +42,11 @@ void writeScenarioDiagnostics(DriverParameters const& state) {
         energy.kin, energy.therm, total, energy.pot, (total - state.energy0) / normalization);
     fclose(file);
     double maximumDensity = 0.0;
+#if COSMICTIGER_WITH_SPH
     for (ParticleInteger i = 0; i < sphParticlesSize(); i++) {
         maximumDensity = std::max(maximumDensity, double(sphParticlesDensity(i)));
     }
+#endif
     file = fopen(outputPath("rho.dat").c_str(), "at");
     if (file == nullptr) {
         THROW_ERROR("Unable to write scenario density diagnostics\n");
@@ -258,7 +264,9 @@ void runFixedScenario() {
     if (state.tau >= duration * (1.0 - 1.0e-12) && plan.finish != nullptr) {
         plan.finish(state.tau);
     }
+#if !COSMICTIGER_GRAVITY_PMMM
     kickClearBuffers();
+#endif
     runtime.stop();
     if (hpxRank() == 0) {
         bool const finished = state.tau >= duration * (1.0 - 1.0e-12);

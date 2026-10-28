@@ -44,10 +44,17 @@ and the direct-PP or cell-FMM near-field adapters. The directory names identify
 method families; the numerical documentation records the particular conventions
 and implementation choices.
 
-Both solvers use the parent directory's Cartesian operators, local tree
-construction, acceptance tests, traversal, and CPU/CUDA workspaces. In
-particular, the PMMM cell FMM uses these common routines without invoking the
-global solver. The common tree builder accepts bounded-center and child-routing
+Paper-name directories contain only code that can be excluded when that solver
+is not built. Shared implementation belongs in the parent subsystem directory.
+`COSMICTIGER_GRAVITY_METHOD=fmm` excludes Nitadori sources and headers; `pmmm`
+excludes Dehnen sources and headers. PMMM also compiles only its selected near
+solver and corresponding tests.
+
+Global FMM and PMMM's FMM near solver use the parent directory's Cartesian
+operators, local tree construction, acceptance tests, traversal, and CPU/CUDA
+workspaces. PMMM with the PP near solver omits this tree-walk implementation.
+The PMMM cell FMM uses the common routines without invoking the global solver.
+The common tree builder accepts bounded-center and child-routing
 callbacks; the common walk receives solver execution callbacks. Remote source
 and tree access are registered by the active solver. These adapters run at task,
 node, or source-copy boundaries; pair operators remain inline CPU/CUDA code.
@@ -65,6 +72,10 @@ gravity and SPH. The analysis Barnes–Hut tree lives in `analysis/`; analytic
 force references used by tests live in `tests/gravity/`.
 
 ## SPH
+
+`COSMICTIGER_WITH_SPH` defaults to `ON`. Setting it to `OFF` excludes SPH,
+hydrodynamic scenarios, particle chemistry, and their tests. Homogeneous
+recombination remains available for collisionless cosmology.
 
 ```text
 sph/

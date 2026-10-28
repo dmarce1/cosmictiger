@@ -18,7 +18,9 @@
 
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/gravity/kick_cuda_kernel.hpp>
+#if COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/sph_particles.hpp>
+#endif
 
 namespace detail {
 
@@ -366,10 +368,11 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
     data.treeNodes = devTreeNodes;
     data.vel = kparams.forceOnly ? nullptr : particlesVelData();
     data.rungs = kparams.forceOnly ? nullptr : &particlesRung(0);
-    data.sph = getOptions().hydro.enabled;
+    data.sph = COSMICTIGER_WITH_SPH && getOptions().hydro.enabled;
     data.darkMatterMass = getOptions().initial.darkMatterMass;
     data.sphMass = getOptions().initial.gasMass;
     data.type = data.sph ? &particlesType(0) : nullptr;
+#if COSMICTIGER_WITH_SPH
     bool const gasKick = data.sph && !kparams.forceOnly;
     data.catIndex = gasKick ? &particlesCatIndex(0) : nullptr;
     data.sphGravityAccelerationX =
@@ -378,6 +381,12 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
         gasKick ? &sphParticlesGravityAcceleration(kYDimension, 0) : nullptr;
     data.sphGravityAccelerationZ =
         gasKick ? &sphParticlesGravityAcceleration(kZDimension, 0) : nullptr;
+#else
+    data.catIndex = nullptr;
+    data.sphGravityAccelerationX = nullptr;
+    data.sphGravityAccelerationY = nullptr;
+    data.sphGravityAccelerationZ = nullptr;
+#endif
     if (kparams.forceOnly) {
         ALWAYS_ASSERT(output.potential != nullptr && output.acceleration[kXDimension] != nullptr);
         data.gx = output.acceleration[kXDimension];

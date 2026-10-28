@@ -10,6 +10,7 @@ set -u
 showUsage() {
     printf 'Usage: %s [-j [jobs|max]]\n' "${0##*/}"
     printf 'Run the interactive CosmicTiger configure and build menu in a terminal.\n'
+    printf 'The menu includes SPH support, enabled by default; disable it to omit SPH code and tests.\n'
     printf 'Use -j with no argument or -j max to use all available CPUs.\n'
 }
 
@@ -100,6 +101,7 @@ fmmOrder=7
 fmmOrderExplicit=false
 timeIntegrator=leapfrog
 enableCuda=ON
+enableSph=ON
 testSuite=OFF
 buildJobs=4
 testJobs=2
@@ -256,6 +258,7 @@ showMainMenu() {
     printf '  9) Gravity solver: %s\n' "$gravityVariant"
     printf ' 10) FMM kernel order: %s\n' "$fmmOrder"
     printf ' 11) Time integrator: %s\n' "$timeIntegrator"
+    printf ' 12) Build SPH support: %s\n' "$enableSph"
     printf '  Enter or b) Configure and build    q) Quit\n'
     printf 'Build jobs accept any positive count; MPI tests use four CPUs each.\n'
 }
@@ -318,6 +321,7 @@ if command -v whiptail >/dev/null 2>&1 && [[ ${TERM:-dumb} != dumb ]]; then
             9 "Gravity solver: $gravityVariant" \
             10 "FMM kernel order: $fmmOrder" \
             11 "Time integrator: $timeIntegrator" \
+            12 "Build SPH support: $enableSph" \
             b 'Configure and build' \
             q 'Quit'); then
             printf 'No build started.\n'
@@ -368,13 +372,16 @@ if command -v whiptail >/dev/null 2>&1 && [[ ${TERM:-dumb} != dumb ]]; then
                     buildMode=$promptValue
                 fi
                 ;;
-            2|3)
+            2|3|12)
                 if [[ $menuChoice == 2 ]]; then
                     dialogLabel='CUDA'
                     dialogCurrent=$enableCuda
-                else
+                elif [[ $menuChoice == 3 ]]; then
                     dialogLabel='Build and run test suite'
                     dialogCurrent=$testSuite
+                else
+                    dialogLabel='Build SPH support'
+                    dialogCurrent=$enableSph
                 fi
                 if promptValue=$(dialogChoice --title "$dialogLabel" \
                     --default-item "$dialogCurrent" \
@@ -382,8 +389,10 @@ if command -v whiptail >/dev/null 2>&1 && [[ ${TERM:-dumb} != dumb ]]; then
                     ON 'Enabled' OFF 'Disabled'); then
                     if [[ $menuChoice == 2 ]]; then
                         enableCuda=$promptValue
-                    else
+                    elif [[ $menuChoice == 3 ]]; then
                         testSuite=$promptValue
+                    else
+                        enableSph=$promptValue
                     fi
                 fi
                 ;;
@@ -430,6 +439,7 @@ else
             9) chooseGravityVariant ;;
             10) chooseFmmOrder ;;
             11) chooseTimeIntegrator ;;
+            12) chooseToggle 'Build SPH support' "$enableSph"; enableSph=$promptValue ;;
             *) printf 'Unknown option.\n' ;;
         esac
     done
@@ -482,6 +492,7 @@ configureCommand=(cmake -S "$rootDir" -B "$buildDir" -G Ninja
     '-U*GSL*' '-UCHEALPIX_*' '-UHEALPIX_CXX_*'
     "-DCMAKE_BUILD_TYPE=$buildType"
     "-DCOSMICTIGER_WITH_CUDA=$enableCuda"
+    "-DCOSMICTIGER_WITH_SPH=$enableSph"
     "-DCOSMICTIGER_GRAVITY_METHOD=$gravityMethod"
     "-DCOSMICTIGER_PMMM_NEAR_METHOD=$pmmmNearMethod"
     "-DCOSMICTIGER_WITH_ORDER=$fmmOrder"
@@ -537,6 +548,7 @@ runStage() {
 
 printf '\nGravity solver: %s; FMM kernel order: %s\n' "$gravityVariant" "$fmmOrder"
 printf 'Time integrator: %s\n' "$timeIntegrator"
+printf 'SPH support: %s\n' "$enableSph"
 printf 'Build directory: %s\nLog: %s\n' "$buildDir" "$logFile"
 runStage Configure "${configureCommand[@]}" || exit $?
 runStage 'Build cosmictiger' "${buildCommand[@]}" || exit $?

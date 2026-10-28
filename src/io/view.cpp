@@ -43,9 +43,11 @@
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/units.hpp>
 #include <cosmictiger/particles/particles.hpp>
+#if COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/sph.hpp>
 #include <cosmictiger/sph/sph_chemistry.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
+#endif
 
 HPX_PLAIN_ACTION(outputView, OutputViewAction);
 
@@ -61,6 +63,7 @@ struct DarkMatterParticleInfo {
     int rung;
 };
 
+#if COSMICTIGER_WITH_SPH
 struct SphParticleInfo : public DarkMatterParticleInfo {
     float eint;
     float rho;
@@ -70,8 +73,11 @@ struct SphParticleInfo : public DarkMatterParticleInfo {
     primordial::State chemistry;
 };
 
+#endif
 struct ViewParticles {
+#if COSMICTIGER_WITH_SPH
     Vector<SphParticleInfo> gas;
+#endif
     Vector<DarkMatterParticleInfo> darkMatter;
 };
 
@@ -230,9 +236,12 @@ void writeParticlePointmesh(DBfile* db, ViewDirectoryMetadata& metadata, char co
     checkViewWrite(DBPutPointmesh(db, mesh, kDimensions, coordinatePointers, int(particles.size()),
                        DB_DOUBLE, options),
         mesh);
+#if COSMICTIGER_WITH_SPH
     if constexpr (std::is_same_v<Particle, SphParticleInfo>) {
         metadata.gas = true;
-    } else {
+    } else
+#endif
+    {
         metadata.darkMatter = true;
     }
 }
@@ -250,9 +259,12 @@ void writeViewField(DBfile* db, ViewDirectoryMetadata& metadata, char const* nam
     checkViewWrite(
         DBPutPointvar1(db, name, mesh, values.data(), int(values.size()), DB_DOUBLE, options),
         name);
+#if COSMICTIGER_WITH_SPH
     if constexpr (std::is_same_v<Particle, SphParticleInfo>) {
         metadata.gasVariables.emplace_back(name);
-    } else {
+    } else
+#endif
+    {
         metadata.darkMatterVariables.emplace_back(name);
     }
     DBFreeOptlist(options);
@@ -286,6 +298,7 @@ void writeViewSpecies(DBfile* db, ViewDirectoryMetadata& metadata, char const* m
         [&conversion, mass](Particle const&) { return conversion.mass(mass); });
 }
 
+#if COSMICTIGER_WITH_SPH
 void writeViscosityField(
     DBfile* db, ViewDirectoryMetadata& metadata, Vector<SphParticleInfo> const& gas) {
     if (getOptions().hydro.viscosityEvolution != "none") {
@@ -326,6 +339,7 @@ void writeChemistryFields(
     writeViewText(db, "chemistry_network", getOptions().chemistry.network.c_str());
 }
 
+#endif
 void writeConvertedView(DBfile* db, ViewDirectoryMetadata& metadata, ViewParticles const& particles,
     double a, double time, bool cosmological, bool lab, int cycle) {
     char const* lengthUnit = cosmological ? "Mpc/h" : "cm";
@@ -365,6 +379,7 @@ void writeConvertedView(DBfile* db, ViewDirectoryMetadata& metadata, ViewParticl
         writeViewSpecies(db, metadata, "dark_matter", "", particles.darkMatter, conversion,
             lengthUnit, velocityUnit, massUnit, mass, time, cycle);
     }
+#if COSMICTIGER_WITH_SPH
     auto const& gas = particles.gas;
     if (!gas.empty()) {
         writeViewSpecies(db, metadata, "gas", "hydro_", gas, conversion, lengthUnit, velocityUnit,
@@ -391,6 +406,7 @@ void writeConvertedView(DBfile* db, ViewDirectoryMetadata& metadata, ViewParticl
             [&conversion](
                 SphParticleInfo const& particle) { return conversion.length(particle.h); });
     }
+#endif
 }
 
 std::mutex siloViewMutex;
@@ -408,7 +424,9 @@ ViewParticles collectViewParticles() {
         info.rung = particlesRung(i);
         if (particlesType(i) == kDarkMatterType) {
             snapshot.darkMatter.push_back(info);
-        } else if (particlesType(i) == kSphType) {
+        }
+#if COSMICTIGER_WITH_SPH
+        else if (particlesType(i) == kSphType) {
             SphParticleInfo gas{};
             static_cast<DarkMatterParticleInfo&>(gas) = info;
             int const index = particlesCatIndex(i);
@@ -426,6 +444,7 @@ ViewParticles collectViewParticles() {
             }
             snapshot.gas.push_back(gas);
         }
+#endif
     }
     return snapshot;
 }
@@ -545,9 +564,11 @@ ViewFile createParticleViewFile(std::filesystem::path const& path) {
 }
 
 void writeParticleMetadata(DBfile* db) {
+#if COSMICTIGER_WITH_SPH
     writeViewText(db, "gas_geometry", "SPH particle point mesh");
     writeViewText(db, "gas_field_convention", "Node-centered SPH particle values.");
     writeViewText(db, "gas_mass_convention", "hydro_mass is the mass of each SPH particle.");
+#endif
 }
 
 void writeCodeParticleView(DBfile* db, ViewDirectoryMetadata& metadata,
@@ -569,6 +590,7 @@ void writeCodeParticleView(DBfile* db, ViewDirectoryMetadata& metadata,
         writeViewField(db, metadata, "rung", "dark_matter", darkMatter, "1",
             [](auto const& p) { return p.rung; });
     }
+#if COSMICTIGER_WITH_SPH
     auto const& gas = particles.gas;
     if (!gas.empty()) {
         writeParticlePointmesh(
@@ -599,6 +621,7 @@ void writeCodeParticleView(DBfile* db, ViewDirectoryMetadata& metadata,
                 "Physical velocity divergence including Hubble flow; last SPH evaluation.");
         }
     }
+#endif
     DBFreeOptlist(options);
 }
 
@@ -628,7 +651,9 @@ ViewLeafMetadata writeParticleLeaf(Vector<Range<double>> const& boxes, int cycle
                 }
             }
         };
+#if COSMICTIGER_WITH_SPH
         selectParticles(snapshot.gas, particles.gas);
+#endif
         selectParticles(snapshot.darkMatter, particles.darkMatter);
         for (auto const& frame : frames) {
             ViewDirectoryMetadata directoryMetadata;

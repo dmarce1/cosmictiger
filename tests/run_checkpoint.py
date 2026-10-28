@@ -239,7 +239,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("executable", type=Path)
     parser.add_argument("workdir", type=Path)
-    parser.add_argument("--viscosity-only", action="store_true")
+    sph_mode = parser.add_mutually_exclusive_group()
+    sph_mode.add_argument("--viscosity-only", action="store_true")
+    sph_mode.add_argument("--without-sph", action="store_true")
     parser.add_argument("--fresh-output-only", action="store_true")
     args = parser.parse_args()
     if args.viscosity_only and args.fresh_output_only:
@@ -394,7 +396,8 @@ def main():
     restart("version_one", downgradeToVersionOne)
     print(f"checkpoint {iteration}: redshift and final publication, payload version 3, "
           "scenario manifest v2, restart, corruption rejection, and labelled version 1 decoding passed")
-    checkViscosityRestarts(executable, baseWorkdir)
+    if not args.without_sph:
+        checkViscosityRestarts(executable, baseWorkdir)
     return 0
 
 

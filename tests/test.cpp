@@ -24,8 +24,10 @@
 #include <cosmictiger/core/timer.hpp>
 #include <cosmictiger/cosmology/fft.hpp>
 #include <cosmictiger/cosmology/initialize.hpp>
+#if !COSMICTIGER_GRAVITY_PMMM
 #include <cosmictiger/gravity/dehnen/distributed_tree.hpp>
 #include <cosmictiger/gravity/dehnen/execution.hpp>
+#endif
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/kick_interaction_counts.hpp>
@@ -209,6 +211,7 @@ static void domainTest() {
     tm.reset();
 }
 
+#if !COSMICTIGER_GRAVITY_PMMM
 static void treeTest() {
     Timer tm;
 
@@ -655,6 +658,8 @@ static void speedTest() {
     PRINT("TOTAL TIME = %e\n", tm.read());
 }
 
+#endif
+
 void bhTest() {
     /*	int N = 100000;
      int M = 10;
@@ -720,34 +725,48 @@ struct ApplicationTest {
 };
 
 ApplicationTest const applicationTests[] = {
+#if COSMICTIGER_WITH_SPH
     {"nativeChemistryInitialization", nativeChemistryInitializationTest},
+#endif
     {"analysisBackends", analysisBackendsTest},
     {"rockstar", rockstarTest},
     {"bhPotential", bhPotentialTest},
     {"groupsCatalogueDistributed", groupsCatalogueDistributedTest},
     {"groupsCatalogue", groupsCatalogueTest},
+#if !COSMICTIGER_GRAVITY_PMMM
     {"linearGrowth", linearGrowthTest},
     {"fmmWalk", fmmWalkTest},
     {"fmmTree", fmmTreeTest},
+#endif
+#if COSMICTIGER_GRAVITY_PMMM
     {"meshDomains", meshDomainsTest},
     {"pmmm", pmmmTest},
     {"particleMeshSort", particleMeshSortTest},
     {"particleMeshTimestep", particleMeshTimestepTest},
     {"particleMeshDispatchLaunchFailure", particleMeshDispatchLaunchFailureTest},
     {"particleMeshDispatchAsyncFailure", particleMeshDispatchAsyncFailureTest},
+#endif
+#if COSMICTIGER_WITH_SPH
     {"unitsOutput", unitsOutputTest},
     {"distributedOutput", distributedOutputTest},
+#endif
     {"checkpointState", checkpointStateTest},
+#if COSMICTIGER_WITH_SPH
+#if !COSMICTIGER_GRAVITY_PMMM
     {"sphGravity", sphGravityTest},
+#endif
     {"sphTree", sphTreeTest},
+#endif
     {"domain", domainTest},
     {"fft1", fft1Test},
     {"fft2", fft2Test},
+#if !COSMICTIGER_GRAVITY_PMMM
     {"speed", speedTest},
     {"buckets", bucketTest},
     {"force", forceTest},
     {"kick", kickTest},
     {"tree", treeTest},
+#endif
     {"bh", bhTest},
 };
 

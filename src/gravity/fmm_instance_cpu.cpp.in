@@ -10,5 +10,7 @@
 // order-templated CPU code live in fmm_cpu_instances.hpp.
 #define COSMICTIGER_FMM_INSTANCE_ORDER @FMM_INSTANCE_ORDER@
 
+#if !COSMICTIGER_GRAVITY_PMMM
 #include <cosmictiger/gravity/dehnen/cpu_instances.hpp>
+#endif
 #include <cosmictiger/gravity/fmm_cpu_instances.hpp>

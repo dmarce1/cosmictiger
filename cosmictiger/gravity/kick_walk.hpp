@@ -72,7 +72,9 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, kD
 #include <cosmictiger/math/range.hpp>
 #include <cosmictiger/math/simd.hpp>
 #include <cosmictiger/particles/particles.hpp>
+#if COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/sph_particles.hpp>
+#endif
 
 namespace detail {
 
@@ -466,14 +468,21 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, kD
                     kr.dkin += kin1 - kin0;
                 } else {
                     float const mass = particlesMass(i);
+#if COSMICTIGER_WITH_SPH
                     bool const gas = getOptions().hydro.enabled && particlesType(i) == kSphType;
+#else
+                    bool const gas = false;
+#endif
                     float const kin0 = 0.5f * mass * sqr(vx, vy, vz);
+#if COSMICTIGER_WITH_SPH
                     if (gas) {
                         ParticleInteger const k = particlesCatIndex(i);
                         sphParticlesGravityAcceleration(kXDimension, k) = forces.gx[j];
                         sphParticlesGravityAcceleration(kYDimension, k) = forces.gy[j];
                         sphParticlesGravityAcceleration(kZDimension, k) = forces.gz[j];
-                    } else if (!params.firstCall) {
+                    }
+#endif
+                    if (!gas && !params.firstCall) {
                         flops += 9;
                         float const dt = params.sign * 0.5f * rungDt[rung] * params.t0;
                         vx = fmaf(forces.gx[j], dt, vx);

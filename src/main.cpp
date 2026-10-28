@@ -39,13 +39,17 @@
 #include <cosmictiger/core/stack_trace.hpp>
 #include <cosmictiger/core/unordered_set_ts.hpp>
 #include <cosmictiger/cosmology/fftw_threads.hpp>
+#if !COSMICTIGER_GRAVITY_PMMM
 #include <cosmictiger/gravity/dehnen/ewald_indices.hpp>
 #include <cosmictiger/gravity/fmm_kernels/cartesian_ewald_operators.hpp>
+#endif
 #include <cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/fmm_types.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
+#if COSMICTIGER_GRAVITY_PMMM
 #include <cosmictiger/gravity/nitadori/solver.hpp>
+#endif
 #include <cosmictiger/gravity/tree.hpp>
 #include <cosmictiger/io/checkpoint.hpp>
 #include <cosmictiger/io/output.hpp>
@@ -53,7 +57,6 @@
 #include <cosmictiger/math/position.hpp>
 #include <cosmictiger/math/simd.hpp>
 #include <cosmictiger/particles/particles.hpp>
-#include <cosmictiger/sph/sph.hpp>
 #ifdef COSMICTIGER_BUILD_TESTING
 #include <tests/test.hpp>
 #endif
@@ -105,6 +108,7 @@ int hpx_main(int argc, char* argv[]) {
             }
 #endif
             profile::checkForInterrupt();
+#if !COSMICTIGER_GRAVITY_PMMM
             EwaldConst::init();
             // Debug dump of the Ewald Green's function along x for the runtime order.
             fmmDispatch([](auto orderTag) {
@@ -135,6 +139,7 @@ int hpx_main(int argc, char* argv[]) {
                 }
                 fclose(fp);
             });
+#endif
             profile::checkForInterrupt();
 #ifdef COSMICTIGER_BUILD_TESTING
             if (getOptions().run.test != "") {
@@ -146,12 +151,16 @@ int hpx_main(int argc, char* argv[]) {
             }
 #endif
         }
+#if COSMICTIGER_GRAVITY_PMMM
         pmmmDestroy();
+#endif
         particlesDestroy();
     } catch (profile::Interrupted const&) {
         PRINT("\n  Interrupted: finishing cleanup and writing profiling reports.\n");
         try {
+#if COSMICTIGER_GRAVITY_PMMM
             pmmmDestroy();
+#endif
             particlesDestroy();
         } catch (std::exception const& error) {
             PRINT("Cleanup after interruption failed: %s\n", error.what());
@@ -171,7 +180,9 @@ int hpx_main(int argc, char* argv[]) {
     } catch (std::exception const& error) {
         PRINT("CosmicTiger failed: %s\n", error.what());
         try {
+#if COSMICTIGER_GRAVITY_PMMM
             pmmmDestroy();
+#endif
         } catch (std::exception const& cleanupError) {
             PRINT("PMMM cleanup failed: %s\n", cleanupError.what());
         } catch (...) {
@@ -185,7 +196,9 @@ int hpx_main(int argc, char* argv[]) {
     } catch (...) {
         PRINT("CosmicTiger failed with an unknown exception\n");
         try {
+#if COSMICTIGER_GRAVITY_PMMM
             pmmmDestroy();
+#endif
         } catch (...) {
             PRINT("PMMM cleanup failed during exception handling\n");
         }

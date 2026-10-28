@@ -20,7 +20,9 @@
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/particles/particles.hpp>
+#if COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/sph_particles.hpp>
+#endif
 
 HPX_PLAIN_ACTION(particleMeshPrepareKick, ParticleMeshPrepareKickAction);
 HPX_PLAIN_ACTION(particleMeshFinishKick, ParticleMeshFinishKickAction);
@@ -190,18 +192,23 @@ KickReturn particleMeshPrepareKick(
                         int const previousRung = particlesRung(i);
                         result.maxRung = std::max(result.maxRung,
                             std::max({1, int(requestedRung), previousRung - 1, minimumRung}));
+#if COSMICTIGER_WITH_SPH
                         bool const gas = options.hydro.enabled && particlesType(i) == kSphType;
+#endif
                         double const oldHalfStep =
                             firstCall ? 0.0 : std::ldexp(0.5 * baseTimestep, -previousRung);
                         // Acceleration norm, timestep/rung proposal, and optional old half-step.
                         flops += 2 * kDimensions + 8 + (firstCall ? 0 : 2);
                         double velocitySquared = 0.0;
                         for (int dim = 0; dim < kDimensions; ++dim) {
+#if COSMICTIGER_WITH_SPH
                             if (gas) {
                                 sphParticlesGravityAcceleration(dim, particlesCatIndex(i)) =
                                     sign * acceleration[dim];
                                 flops += 1;
-                            } else {
+                            } else
+#endif
+                            {
                                 particlesVel(dim, i) = std::fma(
                                     sign * acceleration[dim], oldHalfStep, particlesVel(dim, i));
                                 flops += 3;

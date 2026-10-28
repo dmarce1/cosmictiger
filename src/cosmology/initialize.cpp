@@ -39,8 +39,10 @@
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/simulation_units.hpp>
 #include <cosmictiger/particles/particles.hpp>
+#if COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/sph_chemistry.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
+#endif
 
 struct PowerSpectrumFunction {
     linear_power::LogarithmicTable densityAmplitude;
@@ -863,6 +865,7 @@ static void initX0() {
         particlesVel(kZDimension, i) = 0.0;
         particlesRung(i) = 0;
     }
+#if COSMICTIGER_WITH_SPH
     if (getOptions().hydro.enabled) {
         // numberOfParticles counts one species; the two species carry complementary mass fractions.
         ParticleInteger const count = particlesSize();
@@ -906,6 +909,7 @@ static void initX0() {
             }
         }
     }
+#endif
     for (auto& future : remoteFutures) {
         future.get();
     }

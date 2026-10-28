@@ -363,6 +363,37 @@ checked on the intended particle distribution. Clustered cells can make the
 direct near field expensive. No relative performance claim follows from the
 coefficient counts or the FFT decomposition alone.
 
+The `pmmm` regression separates finite-expansion accuracy from implementation
+error. It compares the computed field with a direct double-precision expansion
+in physical coordinates, bypassing mesh deposition, the Fourier contraction
+table, FFTs, and cell-width rescaling. That comparison allows `2e-5` scaled
+numerical error, with a separate allowance for near FMM's subtraction of softened
+self potential in float. The independent direct Ewald sum remains the physical
+reference for both the finite expansion and the computed field.
+
+The off-center fixtures have the following potential and force truncation
+budgets. These cover the unit-mass collisionless and mixed-mass SPH fixtures,
+mesh sizes 5, 8, and 10, and near widths 1 through 4. They are regression limits
+for these fixtures, not accuracy guarantees for arbitrary particle distributions.
+Potential error is scaled by `max(1, abs(referencePotential))`; each force-component
+error uses `max(1, norm(referenceAcceleration))`.
+
+| Order | Potential budget | Force budget |
+| ---: | ---: | ---: |
+| 3 | `3e-2` | `6e-2` |
+| 4 | `1.5e-3` | `2.5e-2` |
+| 5 | `3.5e-4` | `7.5e-3` |
+| 6 | `6e-5` | `2e-3` |
+| 7 | `3e-5` | `5e-4` |
+| 8 | `8e-6` | `1.25e-4` |
+| 9 | `3e-6` | `5e-5` |
+
+A direct double expansion reaches about `1.614e-3` force error at order six in
+these fixtures, so the former `5e-4` limit for every order from six onward was
+too strict even before FFT roundoff. The numerical allowance is checked
+independently and added to the truncation budget for the computed-field Ewald
+comparison.
+
 PMMM counts moment deposition, spherical far-field operators, spectral
 contraction, FFTW plan execution, near interactions, and particle kicks.
 Reported TFLOP/s divides these source-operation counts by the force-advancement

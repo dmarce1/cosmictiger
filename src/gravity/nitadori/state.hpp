@@ -48,7 +48,9 @@
 #include <cosmictiger/gravity/tree.hpp>
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/particles/particle_mesh_sort.hpp>
+#if COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/sph_particles.hpp>
+#endif
 
 namespace pmmm::detail {
 

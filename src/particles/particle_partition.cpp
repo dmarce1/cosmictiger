@@ -4,7 +4,6 @@
 #include <type_traits>
 
 #include <cosmictiger/particles/particles.hpp>
-#include <cosmictiger/sph/sph_particles.hpp>
 
 namespace detail {
 

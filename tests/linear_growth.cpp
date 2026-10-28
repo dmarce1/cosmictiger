@@ -29,7 +29,9 @@
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #include <cosmictiger/particles/particles.hpp>
+#if COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/sph_particles.hpp>
+#endif
 
 namespace detail {
 
@@ -220,15 +222,18 @@ struct LinearExperiment {
     LinearSample force(LinearField const& displacement) const {
         auto const& options = getOptions();
         particlesResize(reference.size());
+#if COSMICTIGER_WITH_SPH
         if (species == 2) {
             sphParticlesResize(perSpecies, false);
         }
+#endif
         using PositionKey = std::array<PositionInteger, kDimensions + 1>;
         std::map<PositionKey, size_t> labels;
         for (size_t index = 0; index < reference.size(); ++index) {
             int const kind = index / perSpecies;
             particlesRung(index) = 1;
             particlesPot(index) = 0.0f;
+#if COSMICTIGER_WITH_SPH
             if (species == 2) {
                 particlesType(index) = kind == 0 ? kDarkMatterType : kSphType;
                 particlesCatIndex(index) = kind == 0 ? kNoParticleIndex : index - perSpecies;
@@ -237,6 +242,7 @@ struct LinearExperiment {
                     sphParticlesSupportRadius(index - perSpecies) = 1.0 / side;
                 }
             }
+#endif
             PositionKey key{};
             key[kDimensions] = kind;
             for (int dim = 0; dim < kDimensions; ++dim) {

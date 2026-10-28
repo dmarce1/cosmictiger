@@ -30,7 +30,9 @@ constexpr bool kVerbose = true;
 #include <cosmictiger/particles/particle_partition.hpp>
 #include <cosmictiger/particles/particle_selection.hpp>
 #include <cosmictiger/particles/particles.hpp>
+#if COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/sph_particles.hpp>
+#endif
 
 struct LineIdType;
 
@@ -1283,10 +1285,11 @@ Vector<ParticleSample> particlesSample(int cnt) {
 }
 
 void particlesLoad(FILE* fp) {
-    ParticleInteger sphSize = 0;
     ParticleInteger size;
     FREAD(&size, sizeof(ParticleInteger), 1, fp);
+#if COSMICTIGER_WITH_SPH
     if (getOptions().hydro.enabled) {
+        ParticleInteger sphSize = 0;
         FREAD(&sphSize, sizeof(ParticleInteger), 1, fp);
         PRINT("Reading %i total particles %i sph\n", size, sphSize);
         if (sphSize < 0 || sphSize > size) {
@@ -1294,7 +1297,9 @@ void particlesLoad(FILE* fp) {
         }
         particlesResize(size);
         sphParticlesResize(sphSize, false);
-    } else {
+    } else
+#endif
+    {
         PRINT("Reading %i total particles.\n", size);
         particlesResize(size);
     }
@@ -1310,11 +1315,13 @@ void particlesLoad(FILE* fp) {
     if (getOptions().analysis.tracers) {
         FREAD(&particlesTracer(0), sizeof(char), particlesSize(), fp);
     }
+#if COSMICTIGER_WITH_SPH
     if (getOptions().hydro.enabled) {
         FREAD(&particlesType(0), sizeof(char), particlesSize(), fp);
         FREAD(&particlesCatIndex(0), sizeof(ParticleInteger), particlesSize(), fp);
         sphParticlesLoad(fp);
     }
+#endif
     FREAD(&size, sizeof(int), 1, fp);
     rungBegins.resize(size);
     FREAD(&rungBegin, sizeof(int), 1, fp);
@@ -1322,12 +1329,14 @@ void particlesLoad(FILE* fp) {
 }
 
 void particlesSave(FILE* fp) {
-    ParticleInteger sphSize = getOptions().hydro.enabled ? sphParticlesSize() : 0;
     ParticleInteger size = particlesSize();
     fwrite(&size, sizeof(ParticleInteger), 1, fp);
+#if COSMICTIGER_WITH_SPH
     if (getOptions().hydro.enabled) {
+        ParticleInteger const sphSize = sphParticlesSize();
         fwrite(&sphSize, sizeof(ParticleInteger), 1, fp);
     }
+#endif
     fwrite(&particlesPos(kXDimension, 0), sizeof(Position), particlesSize(), fp);
     fwrite(&particlesPos(kYDimension, 0), sizeof(Position), particlesSize(), fp);
     fwrite(&particlesPos(kZDimension, 0), sizeof(Position), particlesSize(), fp);
@@ -1339,11 +1348,13 @@ void particlesSave(FILE* fp) {
     if (getOptions().analysis.tracers) {
         fwrite(&particlesTracer(0), sizeof(char), particlesSize(), fp);
     }
+#if COSMICTIGER_WITH_SPH
     if (getOptions().hydro.enabled) {
         fwrite(&particlesType(0), sizeof(char), particlesSize(), fp);
         fwrite(&particlesCatIndex(0), sizeof(ParticleInteger), particlesSize(), fp);
         sphParticlesSave(fp);
     }
+#endif
     size = rungBegins.size();
     fwrite(&size, sizeof(int), 1, fp);
     fwrite(&rungBegin, sizeof(int), 1, fp);
@@ -1393,6 +1404,7 @@ void particlesSaveGlass(char const* filename) {
     fclose(fp);
 }
 
+#if COSMICTIGER_WITH_SPH
 void particlesResolveWithSphParticles() {
     int const numberOfThreads = hpxHardwareConcurrency();
     std::vector<hpx::future<void>> futs;
@@ -1414,6 +1426,7 @@ void particlesResolveWithSphParticles() {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
+#endif
 void particlesGlobalReadVels(
     ParticleGlobalRange range, float* vx, float* vy, float* vz, ParticleInteger offset) {
     static bool const sph = getOptions().hydro.enabled;
@@ -1498,10 +1511,12 @@ EnergiesT particlesSumEnergies() {
                     energies.ymom += m * vy;
                     energies.zmom += m * vz;
                     energies.nmom += m * std::sqrt(sqr(vx) + sqr(vy) + sqr(vz));
+#if COSMICTIGER_WITH_SPH
                     if (particlesType(i) == kSphType) {
                         int const kk = particlesCatIndex(i);
                         energies.therm += m * sphParticlesInternalEnergy(kk);
                     }
+#endif
                 }
                 return energies;
             },

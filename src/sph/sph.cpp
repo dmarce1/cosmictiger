@@ -15,7 +15,9 @@
 
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/safe_io.hpp>
+#if COSMICTIGER_GRAVITY_PMMM
 #include <cosmictiger/gravity/nitadori/solver.hpp>
+#endif
 #include <cosmictiger/math/constants.hpp>
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/math/math.hpp>
@@ -564,10 +566,12 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
     runData.sinkGravityAccelerationY = &sphParticlesGravityAcceleration(kYDimension, 0);
     runData.sinkGravityAccelerationZ = &sphParticlesGravityAcceleration(kZDimension, 0);
     runData.adiabaticIndex = getOptions().hydro.gamma;
-    runData.gravityEffectiveRadius = gravity::kBuildUsesPmmm ?
-        pmmmEffectiveRadius() :
-        getOptions().gravity.supportRadius /
-            selectedGravityKernel().supportRadiusPerEffectiveRadius;
+#if COSMICTIGER_GRAVITY_PMMM
+    runData.gravityEffectiveRadius = pmmmEffectiveRadius();
+#else
+    runData.gravityEffectiveRadius = getOptions().gravity.supportRadius /
+        selectedGravityKernel().supportRadiusPerEffectiveRadius;
+#endif
     addCpuFlops(1);
     runData.numberOfTargetNodes = hostTargetNodeIndices.size();
     runData.sinkSmoothingConverged = &sphParticlesConverged(0);

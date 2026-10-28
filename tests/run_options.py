@@ -24,6 +24,7 @@ def main():
     parser.add_argument("--near-method", choices=("pp", "fmm"), required=True)
     parser.add_argument("--order", type=int, choices=range(3, 10), required=True)
     parser.add_argument("--time-integrator", choices=("leapfrog", "hierarchical"), required=True)
+    parser.add_argument("--without-sph", action="store_true")
     args = parser.parse_args()
     args.workdir.mkdir(parents=True, exist_ok=True)
     unused_view = args.workdir / "view.txt"
@@ -264,7 +265,35 @@ mapSize = 8
     sph_options = [option for option in metadata_options
                    if not option.startswith("--hydro.enabled=")]
     sph_gravity_error = "SPH currently requires an FMM build when gravity.enabled=true"
-    if args.time_integrator == "hierarchical":
+    if args.without_sph:
+        sph_build_error = "COSMICTIGER_WITH_SPH=ON"
+        for gravity_enabled in ("true", "false"):
+            rejected = run(f"disabled_sph_cli_gravity_{gravity_enabled}", sph_options + [
+                "--hydro.enabled=true", f"--gravity.enabled={gravity_enabled}"], success=False)
+            if sph_build_error not in rejected:
+                raise RuntimeError("disabled SPH CLI request lacked build guidance")
+        sph_config = args.workdir / "disabled_sph.ini"
+        sph_config.write_text("[hydro]\nenabled = true\n")
+        rejected = run("disabled_sph_ini", sph_options + [
+            f"--configuration={sph_config.resolve()}"], success=False)
+        if sph_build_error not in rejected:
+            raise RuntimeError("disabled SPH INI request lacked build guidance")
+        rejected = run("disabled_sph_scenario", [
+            "--run.scenario=sod", "--compute.cuda=false", "--run.maxIterations=0",
+            "--initial.particlesPerDimension=8"], success=False)
+        if sph_build_error not in rejected:
+            raise RuntimeError("disabled SPH scenario request lacked build guidance")
+        forced_sph = [option for option in metadata_options
+                      if not option.startswith("--run.test=")]
+        rejected = run("disabled_sph_test", forced_sph + [
+            "--run.test=sphGravity"], success=False)
+        if sph_build_error not in rejected:
+            raise RuntimeError("disabled SPH regression request lacked build guidance")
+        rejected = run("disabled_sph_chemistry", metadata_options + [
+            "--chemistry.enabled=true"], success=False)
+        if sph_build_error not in rejected:
+            raise RuntimeError("disabled SPH chemistry request lacked build guidance")
+    elif args.time_integrator == "hierarchical":
         sph_integrator_error = "COSMICTIGER_TIME_INTEGRATOR=leapfrog"
         for gravity_enabled in ("true", "false"):
             rejected = run(f"hierarchical_sph_gravity_{gravity_enabled}", sph_options + [
@@ -390,7 +419,7 @@ mapSize = 8
     chemistry_fields = ("initialTemperature", "hydrogenIonFraction",
                         "heliumIonFraction", "heliumDoubleIonFraction")
 
-    if args.time_integrator == "leapfrog":
+    if not args.without_sph and args.time_integrator == "leapfrog":
         # Both checkpoint layouts round-trip: zero retains the existing SPH block,
         # while nonzero acceleration appends the flagged z-plane force parameter.
         hydro_metadata_options = [option for option in metadata_options
@@ -778,8 +807,12 @@ mapSize = 8
                                f"{sorted(optional_keys - documented_alternatives)}")
         if ini["output"]["units"] != "code" or ini["output"]["frame"] != "comoving":
             raise RuntimeError(f"{path.name} must preserve native output defaults")
-        output = run(f"complete_{path.stem}", metadata_options + [f"--configuration={path}",
-                     "--chemistry.enabled=false"])
+        preset_options = [f"--configuration={path}", "--chemistry.enabled=false"]
+        if args.without_sph and ini["run"]["scenario"] not in ("cosmology", "plummer", "glass"):
+            # Keep validating every example's option coverage and syntax when its
+            # physical scenario is unavailable in the compiled executable.
+            preset_options.append("--run.scenario=cosmology")
+        output = run(f"complete_{path.stem}", metadata_options + preset_options)
         if "Checkpoint state and mode validation passed" not in output:
             raise RuntimeError(f"{path.name} did not finish metadata validation")
         if path.name in preset_curvatures:
@@ -896,7 +929,7 @@ mapSize = 8
             output = run(f"removed_{source}_{option}", arguments, success=False)
             if option not in output or not re.search(r"unrecogni[sz]ed option", output):
                 raise RuntimeError(f"removed {source} option {option} was not rejected explicitly")
-    if args.gravity_method == "fmm" and args.time_integrator == "leapfrog":
+    if not args.without_sph and args.gravity_method == "fmm" and args.time_integrator == "leapfrog":
         for parameter in ("omegaB", "omegaC"):
             for value in ("0", "-0.1", "nan", "inf"):
                 output = run(f"invalid_class_mass_{parameter}_{value}", [

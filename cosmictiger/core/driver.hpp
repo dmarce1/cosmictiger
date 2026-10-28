@@ -13,8 +13,10 @@
 
 #include <cosmictiger/core/time.hpp>
 #include <cosmictiger/gravity/kick.hpp>
+#if COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/sph.hpp>
 #include <cosmictiger/sph/sph_tree.hpp>
+#endif
 
 struct DriverParameters {
     double a;
@@ -55,9 +57,11 @@ struct DriverParameters {
     }
 };
 
+#if COSMICTIGER_WITH_SPH
 SphTreeCreateReturn sphStep1(int minrung, bool verbose = true);
 SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phase, double adot,
     EnergiesT* energies, bool verbose = true, int uniformMinimumRung = -1);
+#endif
 std::pair<KickReturn, TreeCreateReturn> kickStep(
     int minrung, double scale, double, double t0, double theta, bool firstCall, bool fullEval);
 std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minimumRung, int maximumRung,

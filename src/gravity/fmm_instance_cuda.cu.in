@@ -11,5 +11,7 @@
 // periodic node policy before instantiating the shared kernel and launch.
 #define COSMICTIGER_FMM_INSTANCE_ORDER @FMM_INSTANCE_ORDER@
 
+#if !COSMICTIGER_GRAVITY_PMMM
 #include <cosmictiger/gravity/dehnen/periodic_cuda.hpp>
+#endif
 #include <cosmictiger/gravity/kick_cuda_instances.hpp>

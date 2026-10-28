@@ -22,7 +22,9 @@
 #include <cosmictiger/gravity/nitadori/cell_tree.hpp>
 #include <cosmictiger/gravity/tree_build.hpp>
 #include <cosmictiger/particles/domain.hpp>
+#if COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/sph_particles.hpp>
+#endif
 
 constexpr bool kVerbose = true;
 
@@ -356,6 +358,7 @@ TreeCellRoot treeCreateCell(ParticleMeshCell const& cell, int meshSize, FmmParti
     TreeCreateParameters params(0, gravity.openingAngle, gravity.supportRadius);
     auto const built = treeCreateCellImpl(params, domainKey, processRange,
         Pair<ParticleInteger>(cell.begin, cell.end), box, domainDepth, true, context);
+#if COSMICTIGER_WITH_SPH
     if (store == FmmParticleStore::Owned && getOptions().hydro.enabled) {
         // The completed cell owns these particle/category pairs. Repair only
         // their reverse links while other disjoint cells may still be sorting.
@@ -369,6 +372,7 @@ TreeCellRoot treeCreateCell(ParticleMeshCell const& cell, int meshSize, FmmParti
             }
         }
     }
+#endif
     {
         std::unique_lock<MutexType> lock(cellRootMutex);
         cellRootReturns.emplace(built.id.index, built);

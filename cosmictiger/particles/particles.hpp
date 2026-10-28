@@ -193,7 +193,9 @@ std::unordered_map<int, ParticleInteger> particlesGroupsInit();
 void particlesGroupsDestroy();
 void particlesResize(ParticleInteger, bool lock = true);
 void particlesRandomInit();
+#if COSMICTIGER_WITH_SPH
 void particlesResolveWithSphParticles();
+#endif
 void particlesPopRungs();
 void particlesPushRungs();
 void particlesDisplace(double dx, double dy, double dz);

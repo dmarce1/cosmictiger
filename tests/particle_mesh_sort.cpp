@@ -13,7 +13,9 @@
 #include <vector>
 
 #include <cosmictiger/particles/particle_mesh_sort.hpp>
+#if COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/sph_particles.hpp>
+#endif
 
 namespace detail {
 
@@ -98,7 +100,9 @@ uint64_t meshSortReferenceKey(ParticleInteger index, int meshSize) {
 
 void initializeMeshSortFixture(ParticleInteger count, int pattern) {
     particlesResize(count);
+#if COSMICTIGER_WITH_SPH
     sphParticlesResize((count + 1) / 2, false);
+#endif
     for (ParticleInteger i = 0; i < count; ++i) {
         for (int dim = 0; dim < kDimensions; ++dim) {
             particlesPos(dim, i).setInteger(meshSortTestPosition(i, dim, pattern));
@@ -113,6 +117,7 @@ void initializeMeshSortFixture(ParticleInteger count, int pattern) {
         particlesLastgroup(i) = 100000 + i;
         particlesGrp[i].store(200000 + i, std::memory_order_relaxed);
         particlesTracer(i) = i % 2;
+#if COSMICTIGER_WITH_SPH
         particlesType(i) = i % 2 == 0 ? kSphType : kDarkMatterType;
         particlesCatIndex(i) = i % 2 == 0 ? i / 2 : kNoParticleIndex;
         if (i % 2 == 0) {
@@ -132,6 +137,7 @@ void initializeMeshSortFixture(ParticleInteger count, int pattern) {
                 sphParticlesGravityAcceleration(dim, gasIndex) = float(i) + 4.0f + dim;
             }
         }
+#endif
     }
 }
 
@@ -171,8 +177,10 @@ void checkMeshSortFixture(int meshSize, int pattern) {
                 particlesRung(i) == identity % 11 && particlesLastgroup(i) == 100000 + identity &&
                 particlesGrp[i].load(std::memory_order_relaxed) == 200000 + identity &&
                 particlesTracer(i) == identity % 2 &&
-                particlesType(i) == (identity % 2 == 0 ? kSphType : kDarkMatterType),
+                particlesType(i) ==
+                    (COSMICTIGER_WITH_SPH && identity % 2 == 0 ? kSphType : kDarkMatterType),
             "Particle mesh sort detached a particle field");
+#if COSMICTIGER_WITH_SPH
         if (identity % 2 == 0) {
             ParticleInteger const gasIndex = identity / 2;
             requireParticleMeshSort(particlesCatIndex(i) == gasIndex &&
@@ -199,6 +207,7 @@ void checkMeshSortFixture(int meshSize, int pattern) {
             requireParticleMeshSort(particlesCatIndex(i) == ParticleInteger(kNoParticleIndex),
                 "Particle mesh sort changed a dark matter category index");
         }
+#endif
     }
     ParticleInteger end = 0;
     previousKey = 0;
@@ -237,7 +246,7 @@ void particleMeshSortTest() {
 
     auto const originalOptions = getOptions();
     auto options = originalOptions;
-    options.hydro.enabled = true;
+    options.hydro.enabled = COSMICTIGER_WITH_SPH != 0;
     options.analysis.saveForce = true;
     options.analysis.tracers = true;
     options.analysis.groups = true;
@@ -258,7 +267,11 @@ void particleMeshSortTest() {
     }
     particlesGroupsDestroy();
     particlesResize(0);
+#if COSMICTIGER_WITH_SPH
     sphParticlesResize(0, false);
+#endif
     setOptions(originalOptions);
-    PRINT("Particle mesh in-place sort passed (all fields, gas maps and fixed boundaries)\n");
+    PRINT("Particle mesh in-place sort passed (%s)\n",
+        COSMICTIGER_WITH_SPH ? "all fields, gas maps and fixed boundaries" :
+                               "collisionless fields and fixed boundaries");
 }

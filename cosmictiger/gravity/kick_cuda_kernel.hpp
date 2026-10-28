@@ -167,13 +167,20 @@ __device__ FlopCount doKick(KickReturn& result, KickParameters params, CudaKickD
                 flops += 24;
             }
         } else {
+#if COSMICTIGER_WITH_SPH
             bool const gas = data.sph && data.type[sinkIndex] == kSphType;
+#else
+            bool const gas = false;
+#endif
+#if COSMICTIGER_WITH_SPH
             if (gas) {
                 ParticleInteger const k = data.catIndex[sinkIndex];
                 data.sphGravityAccelerationX[k] = gx;
                 data.sphGravityAccelerationY[k] = gy;
                 data.sphGravityAccelerationZ[k] = gz;
-            } else if (!params.firstCall) {
+            }
+#endif
+            if (!gas && !params.firstCall) {
                 float const dt = params.sign * 0.5f * rungDt[rungs[sinkIndex]] * params.t0;
                 vx = fmaf(gx, dt, vx);
                 vy = fmaf(gy, dt, vy);
@@ -364,7 +371,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
     Array<Position, kDimensions>& expansionPos = *control.expansionPos;
     float* scratch = control.scratchExpansion;
     auto& treeNodes = data.treeNodes;
-    bool const equalMass = !data.sph;
+    bool const equalMass = !COSMICTIGER_WITH_SPH || !data.sph;
     bool const sharedForces = layout.forceOffset >= 0;
     float const& supportRadius = globalParams.gravitySupportRadius;
     float const inverseSupportRadius = 1.f / supportRadius;
@@ -440,10 +447,12 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                 }
                 ParticleInteger const numberOfSinks =
                     self.particleRange.second - self.particleRange.first;
+#if !COSMICTIGER_GRAVITY_PMMM
                 if (numberOfSinks) {
                     flops += cudaApplyPeriodicPolicy<order>(data, globalParams, expansion, self,
                         echecks, nextlist, cclist, leaflist, bothlist);
                 }
+#endif
                 if (numberOfSinks) {
                     nextlist.resize(0);
                     leaflist.resize(0);

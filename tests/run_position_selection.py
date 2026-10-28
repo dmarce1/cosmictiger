@@ -19,6 +19,7 @@ def main():
     parser.add_argument("workdir", type=Path)
     parser.add_argument("--gravity-method", choices=("fmm", "pmmm"), required=True)
     parser.add_argument("--time-integrator", choices=("leapfrog", "hierarchical"), required=True)
+    parser.add_argument("--without-sph", action="store_true")
     args = parser.parse_args()
     executable = args.executable.resolve()
     workdir = args.workdir.resolve()
@@ -110,7 +111,13 @@ def main():
                             "--initial.particlesPerDimension=8", "--run.scenario=sod",
                             "--run.endTime=0.00001", "--run.numberOfSteps=2", "--run.maxIterations=1",
                             "--checkpoint.intervalSeconds=1000000000"], hydro, "run.log",
-                           expectSuccess=args.time_integrator == "leapfrog")
+                           expectSuccess=not args.without_sph and args.time_integrator == "leapfrog")
+    if args.without_sph:
+        if "COSMICTIGER_WITH_SPH=ON" not in output:
+            raise RuntimeError("fixed64 SPH rejection lacked SPH build guidance")
+        print("Position selection, raw checkpoint bits, fixed64 evolution/restart, width rejection, "
+              "and disabled SPH rejection passed")
+        return 0
     if args.time_integrator == "hierarchical":
         if "COSMICTIGER_TIME_INTEGRATOR=leapfrog" not in output:
             raise RuntimeError("fixed64 SPH rejection lacked integrator build guidance")

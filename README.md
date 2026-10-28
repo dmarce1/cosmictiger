@@ -99,7 +99,15 @@ cmake -S . -B build_pmmm_fmm -DCOSMICTIGER_GRAVITY_METHOD=pmmm \
 # Use -DCOSMICTIGER_PMMM_NEAR_METHOD=pp for direct near pairs (the PMMM default).
 # Hierarchical gravity integration for dark matter only (leapfrog is the default)
 cmake -S . -B build_fmm_hierarchical -DCOSMICTIGER_TIME_INTEGRATOR=hierarchical
+# Omit SPH implementation sources and tests (SPH support is enabled by default)
+cmake -S . -B build_fmm_no_sph -DCOSMICTIGER_WITH_SPH=OFF
 ```
+
+Global FMM builds exclude PMMM implementation sources. PMMM builds compile only
+the selected near-field implementation, together with shared gravity utilities.
+Disable "Build SPH support" in `./build.sh`, or set `COSMICTIGER_WITH_SPH=OFF`
+as above, to omit SPH code and tests. Such executables reject `hydro.enabled=true`
+with instructions to rebuild with SPH enabled.
 
 Leapfrog is the ordinary block-timestep kick-drift-kick (KDK) integrator and is
 the default for both dark matter and SPH. The hierarchical gravity integrator
@@ -239,7 +247,8 @@ The gas solver uses Monaghan's 1992 density/internal-energy SPH: the cubic splin
 symmetric pressure forces and thermal work, and constant alpha/beta artificial
 viscosity. It is integrated with FMM gravity and particle storage. See
 [the formulation and paper references](docs/monaghan_sph.md) for the equations,
-cosmological conversions, and deliberate implementation choices. Enable gas
+cosmological conversions, and deliberate implementation choices. SPH support is
+built by default; `-DCOSMICTIGER_WITH_SPH=OFF` excludes it. Enable gas
 explicitly with `--hydro.enabled=true`; gas runs require the default leapfrog
 integrator, and gas runs with gravity also require an FMM build. SPH uses the
 ordinary block-timestep gravity/SPH path. Hydrodynamics without
@@ -618,12 +627,12 @@ is best effort. This handler is adapted from OctoTiger's `stacktrace_fix` commit
 
 Run `./build.sh` in a terminal for the interactive builder. It uses a full-screen
 menu when `whiptail` is available, with a text menu as a fallback. Choose Release,
-RelWithDebInfo, Debug, or Profile (host gprof instrumentation), CUDA, job counts,
+RelWithDebInfo, Debug, or Profile (host gprof instrumentation), CUDA, SPH, job counts,
 HPX prefix, CUDA architectures, additional dependency prefixes, gravity variant
 (FMM, PMMM-FMM, or PMMM-PP), and one kernel order from 3 through 9. Builds go in
 `build/<mode>_<variant>_order<order>` (for example `build/release_pmmm_fmm_order8`)
 with live output and a `builder.*.log`. The default builds
-`cosmictiger`; building and running the test suite is opt-in. Build jobs accept
+`cosmictiger` with SPH support; building and running the test suite is opt-in. Build jobs accept
 any positive count. Use `./build.sh -j 24` to select a count, or `./build.sh -j`
 (also `-j max`) to use all detected CPUs. Default test concurrency accounts for
 two MPI localities with two HPX threads each.

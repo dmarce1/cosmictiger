@@ -21,7 +21,6 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/cuda/cuda.hpp>
 #include <cosmictiger/cuda/cuda_memory.hpp>
-#include <cosmictiger/gravity/dehnen/ewald_indices.hpp>
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/particles/particles.hpp>
 

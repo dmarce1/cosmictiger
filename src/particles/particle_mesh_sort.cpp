@@ -14,7 +14,9 @@
 #include <hpx/threading_base/annotated_function.hpp>
 
 #include <cosmictiger/particles/particle_mesh_sort.hpp>
+#if COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/sph_particles.hpp>
+#endif
 
 namespace detail {
 
@@ -225,6 +227,7 @@ Vector<ParticleMeshCell> particleMeshSort(int meshSize, Pair<ParticleInteger> ra
     size_t const workers = static_cast<size_t>(std::max(1, hpxHardwareConcurrency()));
     std::unique_lock<SharedMutexType> lock(particlesSharedMutex());
     detail::sortParticleMeshRange(first, last, 0, cellCount - 1, workers, meshSize);
+#if COSMICTIGER_WITH_SPH
     if (getOptions().hydro.enabled) {
         // Gas arrays remain in their own ordering; rebuild their reverse map.
         detail::particleMeshParallelFor(
@@ -244,6 +247,7 @@ Vector<ParticleMeshCell> particleMeshSort(int meshSize, Pair<ParticleInteger> ra
                 }
             });
     }
+#endif
     particlesCacheFreeLocal();
 
     // Two parallel scans construct only the occupied-cell directory. There is
