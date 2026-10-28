@@ -20,6 +20,7 @@
 #include <utility>
 #include <vector>
 
+#include <fftw3.h>
 #include <hpx/modules/program_options.hpp>
 #include <mpi.h>
 #include <unistd.h>
@@ -37,6 +38,7 @@
 #include <cosmictiger/core/section_timing.hpp>
 #include <cosmictiger/core/stack_trace.hpp>
 #include <cosmictiger/core/unordered_set_ts.hpp>
+#include <cosmictiger/cosmology/fftw_threads.hpp>
 #include <cosmictiger/gravity/dehnen/ewald_indices.hpp>
 #include <cosmictiger/gravity/fmm_kernels/cartesian_ewald_operators.hpp>
 #include <cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp>
@@ -257,6 +259,20 @@ void initializeMpi(int& argc, char**& argv, bool& ownsMpi) {
     }
 }
 
+void initializeFftw() {
+    // Initialize before HPX starts: cosmology may create serial plans before
+    // PMMM initializes FFTW MPI. Thread support must precede both kinds of use.
+    int const initialized = fftwf_init_threads() ? 1 : 0;
+    int allInitialized = 0;
+    if (MPI_Allreduce(&initialized, &allInitialized, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD) !=
+        MPI_SUCCESS) {
+        throw std::runtime_error("MPI_Allreduce failed while checking FFTW thread support");
+    }
+    if (!allInitialized) {
+        throw std::runtime_error("Unable to initialize FFTW thread support on every MPI rank");
+    }
+}
+
 // Every locality chooses the same position ABI before HPX/MPI initializes. Keep
 // unknown application/HPX options for their normal parsers after this dispatch.
 void selectPositionBackend(int argc, char* argv[]) {
@@ -314,6 +330,8 @@ int main(int argc, char* argv[]) {
         detail::selectPositionBackend(argc, argv);
         recordCommandLineArguments(argc, argv);
         detail::initializeMpi(argc, argv, ownsMpi);
+        detail::initializeFftw();
+        hpx::register_startup_function(fftw_threads::initialize);
         // Startup callbacks also run on worker localities that do not enter hpx_main.
         hpx::register_startup_function(
             [&stackTraceHandler]() { stackTraceHandler.install(hpx::get_locality_id()); });

@@ -133,33 +133,42 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 find_package(GSL REQUIRED)
 find_package(MPI REQUIRED COMPONENTS CXX)
+find_package(Threads REQUIRED)
 find_path(FFTW3F_INCLUDE_DIR fftw3.h REQUIRED)
 find_library(FFTW3F_LIBRARY NAMES fftw3f REQUIRED)
+find_library(FFTW3F_THREADS_LIBRARY NAMES fftw3f_threads REQUIRED)
 find_path(FFTW3F_MPI_INCLUDE_DIR fftw3-mpi.h HINTS ${FFTW3F_INCLUDE_DIR} REQUIRED)
 find_library(FFTW3F_MPI_LIBRARY NAMES fftw3f_mpi REQUIRED)
 
-# Check the single-precision MPI API without initializing or running MPI during
-# configuration. Keep the MPI FFTW library before its serial FFTW dependency.
+# Check the threaded single-precision MPI API without running it during
+# configuration. Keep MPI and threads before their serial FFTW dependency.
 include(CheckCXXSourceCompiles)
 include(CMakePushCheckState)
 cmake_push_check_state(RESET)
 set(CMAKE_REQUIRED_INCLUDES ${FFTW3F_INCLUDE_DIR} ${FFTW3F_MPI_INCLUDE_DIR})
-set(CMAKE_REQUIRED_LIBRARIES ${FFTW3F_MPI_LIBRARY} ${FFTW3F_LIBRARY} MPI::MPI_CXX)
+set(CMAKE_REQUIRED_LIBRARIES ${FFTW3F_MPI_LIBRARY} ${FFTW3F_THREADS_LIBRARY}
+    ${FFTW3F_LIBRARY} MPI::MPI_CXX Threads::Threads)
 check_cxx_source_compiles([=[
 #include <fftw3-mpi.h>
 
 int main() {
     int provided = MPI_THREAD_SINGLE;
     MPI_Query_thread(&provided);
+    if (!fftwf_init_threads()) {
+        return 1;
+    }
     fftwf_mpi_init();
+    fftwf_threads_set_callback(nullptr, nullptr);
+    fftwf_plan_with_nthreads(2);
     fftwf_mpi_cleanup();
+    fftwf_cleanup_threads();
     return provided;
 }
-]=] COSMICTIGER_FFTW3F_MPI_LINKS)
+]=] COSMICTIGER_FFTW3F_MPI_CALLBACK_LINKS)
 cmake_pop_check_state()
-if(NOT COSMICTIGER_FFTW3F_MPI_LINKS)
+if(NOT COSMICTIGER_FFTW3F_MPI_CALLBACK_LINKS)
     message(FATAL_ERROR
-        "FFTW3 single-precision MPI support must compile and link with the selected MPI installation")
+        "FFTW3 single-precision MPI and thread callback support must compile and link with the selected MPI installation")
 endif()
 
 find_path(SILO_INCLUDE_DIR silo.h REQUIRED)
@@ -212,6 +221,7 @@ set(cosmictiger_source_files
     src/cosmology/friedmann.cpp
     src/cosmology/cosmology.cpp
     src/cosmology/fft.cpp
+    src/cosmology/fftw_threads.cpp
     src/cosmology/initialize.cpp
     src/cosmology/zero_order.cpp
     src/cuda/cuda.cpp
@@ -514,7 +524,6 @@ target_compile_options(halo_catalog_export PRIVATE -fno-fast-math)
 
 # Chemistry must not inherit the application's fast-math/FTZ settings: the
 # signed-complement and FloatFloat contracts require IEEE rounding and -0.
-find_package(Threads REQUIRED)
 target_link_libraries(cosmictiger_profiler PRIVATE Threads::Threads)
 target_link_libraries(cosmictiger_stacktrace PRIVATE Threads::Threads)
 add_library(primordial_chemistry STATIC src/chemistry/primordial_chemistry.cpp
@@ -558,7 +567,8 @@ set(cosmictiger_application_targets cosmictiger cosmictiger_fixed64)
 foreach(application_target IN LISTS cosmictiger_application_targets)
     add_hpx_executable(${application_target}
         DEPENDENCIES Boost::boost Boost::program_options GSL::gsl GSL::gslcblas
-            ${FFTW3F_MPI_LIBRARY} ${FFTW3F_LIBRARY} MPI::MPI_CXX
+            ${FFTW3F_MPI_LIBRARY} ${FFTW3F_THREADS_LIBRARY} ${FFTW3F_LIBRARY}
+            MPI::MPI_CXX Threads::Threads
             ${SILO_LIBRARY} ${CHEALPIX_LIBRARY} ${HEALPIX_CXX_LIBRARY} dl quadmath
         SOURCES ${cosmictiger_source_files}
         HEADERS ${cosmictiger_header_files})
@@ -950,6 +960,19 @@ if(BUILD_TESTING)
             endforeach()
         endforeach()
     endif()
+
+    add_hpx_executable(fftw_threads_test
+        SOURCES tests/fftw_threads.cpp src/cosmology/fftw_threads.cpp)
+    target_include_directories(fftw_threads_test PRIVATE ${PROJECT_SOURCE_DIR} ${FFTW3F_INCLUDE_DIR})
+    target_link_libraries(fftw_threads_test PRIVATE
+        ${FFTW3F_THREADS_LIBRARY} ${FFTW3F_LIBRARY} Threads::Threads)
+    cosmictiger_add_gtest(NAME fftw_hpx_threads TARGET fftw_threads_test HPX_MAIN
+        ARGS --hpx:threads=2 --hpx:bind=none
+        PROPERTIES TIMEOUT 30 PROCESSORS 2 LABELS "fft;cpu;threads")
+    add_test(NAME fftw_hpx_single_worker COMMAND $<TARGET_FILE:fftw_threads_test>
+        --hpx:threads=1 --hpx:bind=none)
+    set_tests_properties(fftw_hpx_single_worker PROPERTIES
+        TIMEOUT 30 PROCESSORS 1 LABELS "fft;cpu;threads")
 
     add_hpx_executable(flops_test SOURCES tests/flops.cpp src/core/flops.cpp)
     target_include_directories(flops_test PRIVATE ${PROJECT_SOURCE_DIR})
@@ -1634,6 +1657,18 @@ if(BUILD_TESTING)
             foreach(flag IN LISTS MPIEXEC_POSTFLAGS)
                 list(APPEND pm_launcher_args "--mpi-postflag=${flag}")
             endforeach()
+            set(pmmm_threaded_workdir "${PROJECT_BINARY_DIR}/tests/pmmm_mpi_threads")
+            file(MAKE_DIRECTORY "${pmmm_threaded_workdir}")
+            add_test(NAME pmmm_mpi_threads COMMAND ${MPIEXEC_EXECUTABLE}
+                ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS}
+                $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS}
+                --run.test=pmmm --initial.particlesPerDimension=8
+                --gravity.meshSize=8 --hydro.enabled=false --compute.cuda=false
+                --hpx:threads=2 --hpx:bind=none --hpx:localities=2
+                ${cosmictiger_mpi_transport_args})
+            # FFTW and the near-field tasks share each rank's HPX workers.
+            set_tests_properties(pmmm_mpi_threads PROPERTIES TIMEOUT 300 PROCESSORS 4
+                WORKING_DIRECTORY "${pmmm_threaded_workdir}" LABELS "pmmm;cpu;mpi;threads")
             foreach(pmmm_ranks IN ITEMS 3 6)
                 set(pmmm_workdir "${PROJECT_BINARY_DIR}/tests/pmmm_mpi_${pmmm_ranks}")
                 file(MAKE_DIRECTORY "${pmmm_workdir}")

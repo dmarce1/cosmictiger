@@ -16,6 +16,17 @@ uniform mesh, spherical multipoles about cell centers and FFT convolution for
 distant interactions. Neighboring cells use the compiled direct-pair or adaptive
 FMM near field.
 
+PMMM's forward, inverse, and cached Green-function FFTs run their parallel jobs
+on the existing HPX worker pool through FFTW's threading callback. They share
+the workers selected by `--hpx:threads` with the near-field tasks; FFTW does not
+create a separate worker pool. Small transforms may expose fewer parallel jobs.
+MPI still distributes the mesh between processes, with blocking MPI operations
+kept on HPX's native I/O threads. The build still requires `fftw3f_threads` for
+the callback API alongside `fftw3f_mpi` and `fftw3f`. Cosmology's independent
+one-dimensional transforms remain single-threaded inside FFTW and are
+parallelized by HPX. Their planning and destruction also run on native I/O
+threads so waiting for the shared planner lock cannot block HPX workers.
+
 ```sh
 ./build_pmmm/cosmictiger --gravity.meshSize=32 --gravity.pmmmNearWidth=2 \
   --initial.particlesPerDimension=32 --hydro.enabled=false \

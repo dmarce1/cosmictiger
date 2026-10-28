@@ -52,6 +52,8 @@ void initialize() {
     }
     int const locality = hpxRank();
     int const localityCount = hpxSize();
+    int const fftThreads = int(
+        std::clamp(hpx::get_os_thread_count(), size_t(1), size_t(std::numeric_limits<int>::max())));
     std::vector<int> localityIds;
     std::vector<int64_t> slabs;
     hpx::run_as_os_thread(
@@ -130,6 +132,7 @@ void initialize() {
                 ptrdiff_t const realDimensions[3] = {n, n, n};
                 {
                     std::lock_guard<std::mutex> lock(fftwPlannerMutex());
+                    fftwf_plan_with_nthreads(fftThreads);
                     cache.forward = fftwf_mpi_plan_many_dft_r2c(3, realDimensions,
                         cache.sourceCount, FFTW_MPI_DEFAULT_BLOCK, FFTW_MPI_DEFAULT_BLOCK,
                         cache.sourceReal, cache.sourceSpectrum, cache.communicator,
@@ -142,6 +145,9 @@ void initialize() {
                         FFTW_MPI_DEFAULT_BLOCK, FFTW_MPI_DEFAULT_BLOCK, cache.localSpectrum,
                         cache.localReal, cache.communicator,
                         FFTW_ESTIMATE | FFTW_MPI_TRANSPOSED_IN);
+                    // Plans retain their thread limit. Cosmology already parallelizes
+                    // independent 1D transforms with HPX, so keep its future plans serial.
+                    fftwf_plan_with_nthreads(1);
                 }
                 collectiveCheck(cache.forward && cache.greenForward && cache.inverse,
                     "Unable to create the cached PMMM FFT plans");

@@ -7,7 +7,6 @@
  */
 
 #include <complex>
-#include <mutex>
 
 #include <fftw3.h>
 #include <hpx/serialization/complex.hpp>
@@ -535,9 +534,9 @@ static void fft3dPhase1() {
                                fftwf_plan p;
                                fftwf_complex out[n / 2 + 1];
                                float in[n];
-                               std::unique_lock<std::mutex> lock(fftwPlannerMutex());
-                               p = fftwf_plan_dft_r2c_1d(n, in, out, FFTW_ESTIMATE);
-                               lock.unlock();
+                               p = withFftwPlannerLock([input = &in[0], output = &out[0]]() {
+                                   return fftwf_plan_dft_r2c_1d(n, input, output, FFTW_ESTIMATE);
+                               });
                                auto i = j;
                                for (i[1] = realMybox.begin[1]; i[1] != realMybox.end[1]; i[1]++) {
                                    for (i[2] = 0; i[2] != n; i[2]++) {
@@ -550,9 +549,7 @@ static void fft3dPhase1() {
                                        yValue[l].imag(out[i[2]][1]);
                                    }
                                }
-                               lock.lock();
-                               fftwf_destroy_plan(p);
-                               lock.unlock();
+                               withFftwPlannerLock([p]() { fftwf_destroy_plan(p); });
                            },
                            "cosmology.fftPhase1"),
                 i));
@@ -570,39 +567,37 @@ static void fft3dPhase2(int dim, bool inv) {
     Array<int64_t, kDimensions> i;
     float const norm = inv ? 1.0f / n : 1.0;
     for (i[0] = cmplxMybox[dim].begin[0]; i[0] != cmplxMybox[dim].end[0]; i[0]++) {
-        futs.push_back(hpx::async(hpx::annotated_function(
-                                      [dim, inv, norm](Array<int64_t, kDimensions> j) {
-                                          fftwf_complex out[n];
-                                          fftwf_complex in[n];
-                                          fftwf_plan p;
-                                          std::unique_lock<std::mutex> lock(fftwPlannerMutex());
-                                          p = fftwf_plan_dft_1d(n, in, out,
-                                              inv ? FFTW_BACKWARD : FFTW_FORWARD, FFTW_ESTIMATE);
-                                          lock.unlock();
-                                          auto i = j;
-                                          for (i[1] = cmplxMybox[dim].begin[1];
-                                              i[1] != cmplxMybox[dim].end[1]; i[1]++) {
-                                              ASSERT(cmplxMybox[dim].begin[2] == 0);
-                                              ASSERT(cmplxMybox[dim].end[2] == n);
-                                              for (i[2] = 0; i[2] < n; i[2]++) {
-                                                  auto const l = cmplxMybox[dim].index(i);
-                                                  ASSERT(l >= 0);
-                                                  ASSERT(l < yValue.size());
-                                                  in[i[2]][0] = yValue[l].real();
-                                                  in[i[2]][1] = yValue[l].imag();
-                                              }
-                                              fftwf_execute(p);
-                                              for (i[2] = 0; i[2] < n; i[2]++) {
-                                                  int64_t const l = cmplxMybox[dim].index(i);
-                                                  yValue[l].real(out[i[2]][0] * norm);
-                                                  yValue[l].imag(out[i[2]][1] * norm);
-                                              }
-                                          }
-                                          lock.lock();
-                                          fftwf_destroy_plan(p);
-                                          lock.unlock();
-                                      },
-                                      "cosmology.fftPhase2"),
+        futs.push_back(hpx::async(
+            hpx::annotated_function(
+                [dim, inv, norm](Array<int64_t, kDimensions> j) {
+                    fftwf_complex out[n];
+                    fftwf_complex in[n];
+                    fftwf_plan p;
+                    p = withFftwPlannerLock([input = &in[0], output = &out[0], inv]() {
+                        return fftwf_plan_dft_1d(
+                            n, input, output, inv ? FFTW_BACKWARD : FFTW_FORWARD, FFTW_ESTIMATE);
+                    });
+                    auto i = j;
+                    for (i[1] = cmplxMybox[dim].begin[1]; i[1] != cmplxMybox[dim].end[1]; i[1]++) {
+                        ASSERT(cmplxMybox[dim].begin[2] == 0);
+                        ASSERT(cmplxMybox[dim].end[2] == n);
+                        for (i[2] = 0; i[2] < n; i[2]++) {
+                            auto const l = cmplxMybox[dim].index(i);
+                            ASSERT(l >= 0);
+                            ASSERT(l < yValue.size());
+                            in[i[2]][0] = yValue[l].real();
+                            in[i[2]][1] = yValue[l].imag();
+                        }
+                        fftwf_execute(p);
+                        for (i[2] = 0; i[2] < n; i[2]++) {
+                            int64_t const l = cmplxMybox[dim].index(i);
+                            yValue[l].real(out[i[2]][0] * norm);
+                            yValue[l].imag(out[i[2]][1] * norm);
+                        }
+                    }
+                    withFftwPlannerLock([p]() { fftwf_destroy_plan(p); });
+                },
+                "cosmology.fftPhase2"),
             i));
     }
     hpx::wait_all(futs.begin(), futs.end());
@@ -618,41 +613,39 @@ static void fft3dPhase3() {
     rValue.resize(realMybox.volume());
     float const ninv = 1.0 / n;
     for (i[0] = cmplxMybox[kZDimension].begin[0]; i[0] != cmplxMybox[kZDimension].end[0]; i[0]++) {
-        futs.push_back(hpx::async(hpx::annotated_function(
-                                      [ninv](Array<int64_t, kDimensions> j) {
-                                          fftwf_plan p;
-                                          fftwf_complex in[n / 2 + 1];
-                                          float out[n];
-                                          std::unique_lock<std::mutex> lock(fftwPlannerMutex());
-                                          p = fftwf_plan_dft_c2r_1d(n, in, out, FFTW_ESTIMATE);
-                                          lock.unlock();
-                                          auto i = j;
-                                          for (i[1] = cmplxMybox[kZDimension].begin[1];
-                                              i[1] != cmplxMybox[kZDimension].end[1]; i[1]++) {
-                                              for (i[2] = 0; i[2] < n / 2 + 1; i[2]++) {
-                                                  int64_t const l =
-                                                      cmplxMybox[kZDimension].index(i);
-                                                  in[i[2]][0] = yValue[l].real();
-                                                  in[i[2]][1] = yValue[l].imag();
-                                                  /*					if( i[2] == 0 || i[2] == N / 2) {
-                         const float value = Y[l].imag() / (Y[l].abs()+1e-20);
-                         if(std::abs(value) > 5.0e-3) {
-                         PRINT( "!!!! %i %i %i %e %e\n", i[0], i[1], i[2], Y[l].real(),
-                         Y[l].imag());
-                         }
-                         }*/
-                                              }
-                                              fftwf_execute(p);
-                                              for (i[2] = 0; i[2] != n; i[2]++) {
-                                                  rValue[realMybox.index(i)] = out[i[2]] * ninv;
-                                              }
-                                          }
-                                          lock.lock();
-                                          fftwf_destroy_plan(p);
-                                          lock.unlock();
-                                      },
-                                      "cosmology.fftPhase3"),
-            i));
+        futs.push_back(
+            hpx::async(hpx::annotated_function(
+                           [ninv](Array<int64_t, kDimensions> j) {
+                               fftwf_plan p;
+                               fftwf_complex in[n / 2 + 1];
+                               float out[n];
+                               p = withFftwPlannerLock([input = &in[0], output = &out[0]]() {
+                                   return fftwf_plan_dft_c2r_1d(n, input, output, FFTW_ESTIMATE);
+                               });
+                               auto i = j;
+                               for (i[1] = cmplxMybox[kZDimension].begin[1];
+                                   i[1] != cmplxMybox[kZDimension].end[1]; i[1]++) {
+                                   for (i[2] = 0; i[2] < n / 2 + 1; i[2]++) {
+                                       int64_t const l = cmplxMybox[kZDimension].index(i);
+                                       in[i[2]][0] = yValue[l].real();
+                                       in[i[2]][1] = yValue[l].imag();
+                                       /*					if( i[2] == 0 || i[2] == N / 2) {
+              const float value = Y[l].imag() / (Y[l].abs()+1e-20);
+              if(std::abs(value) > 5.0e-3) {
+              PRINT( "!!!! %i %i %i %e %e\n", i[0], i[1], i[2], Y[l].real(),
+              Y[l].imag());
+              }
+              }*/
+                                   }
+                                   fftwf_execute(p);
+                                   for (i[2] = 0; i[2] != n; i[2]++) {
+                                       rValue[realMybox.index(i)] = out[i[2]] * ninv;
+                                   }
+                               }
+                               withFftwPlannerLock([p]() { fftwf_destroy_plan(p); });
+                           },
+                           "cosmology.fftPhase3"),
+                i));
     }
     hpx::wait_all(futs.begin(), futs.end());
     yValue = decltype(yValue)();
