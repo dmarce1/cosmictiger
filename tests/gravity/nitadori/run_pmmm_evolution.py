@@ -94,7 +94,16 @@ def main():
     parser.add_argument("--near-method", choices=("pp", "fmm"), required=True)
     parser.add_argument("--order", type=int, choices=range(3, 10), required=True)
     parser.add_argument("--time-integrator", choices=("leapfrog", "hierarchical"), required=True)
+    parser.add_argument("--viscosity-evolution",
+                        choices=("none", "morrisAndMonaghan", "cullenAndDehnen"),
+                        default="morrisAndMonaghan")
+    parser.add_argument("--with-sph", action="store_true",
+                        help="exercise mixed gas/dark-matter evolution in an SPH-enabled build")
+    parser.add_argument("--sph-only", action="store_true",
+                        help="run only mixed evolution and restart, without dark-matter cases")
     args = parser.parse_args()
+    if args.sph_only and (not args.with_sph or args.time_integrator != "leapfrog"):
+        parser.error("--sph-only requires --with-sph and --time-integrator=leapfrog")
     executable = args.executable.resolve()
     root = args.workdir.resolve()
     root.mkdir(parents=True, exist_ok=True)
@@ -124,19 +133,21 @@ def main():
         return runSimulation(command, directory, "run.log", expectSuccess=success)
 
     near_method = args.near_method
-    for hydro in (False, True):
+    for hydro in ((True,) if args.sph_only else (False, True)):
         label = near_method + ("_mixed" if hydro else "_dark_matter")
         options = dict(common, **{"hydro.enabled": str(hydro).lower(),
                                   "run.scenario": "cosmology" if hydro else "plummer"})
         if hydro:
+            options["hydro.viscosityEvolution"] = args.viscosity_evolution
+        if hydro and (not args.with_sph or args.time_integrator == "hierarchical"):
             rejected = prepareCase(root, label + "_rejected")
             log = run(rejected, dict(options, **{"run.maxIterations": 0}), False)
             diagnostic = ("COSMICTIGER_TIME_INTEGRATOR=leapfrog"
                           if args.time_integrator == "hierarchical" else
-                          "SPH currently requires an FMM build when gravity.enabled=true")
-            require(diagnostic in log or "requires COSMICTIGER_WITH_SPH=ON" in log,
-                    "PMMM with SPH was not rejected with the expected diagnostic")
-            print(f"{label}: unsupported PMMM with SPH rejected at startup")
+                          "COSMICTIGER_WITH_SPH=ON")
+            require(diagnostic in log or "COSMICTIGER_WITH_SPH=ON" in log,
+                    "unavailable SPH was not rejected with the expected diagnostic")
+            print(f"{label}: unavailable SPH rejected at startup")
             continue
         baseline = prepareCase(root, label + "_baseline")
         log = run(baseline, dict(options, **{"run.maxIterations": 3}))
@@ -156,8 +167,20 @@ def main():
             require(any(len({row["rung"] for row in rows}) > 1 for _, _, rows in states),
                     "hierarchical evolution fixture did not exercise simultaneous particle rungs")
         check_clock(states)
-        for before, after in zip(states, states[1:]):
-            check_single_drift(before, after)
+        if not hydro:
+            for before, after in zip(states, states[1:]):
+                check_single_drift(before, after)
+        else:
+            # The mixed fixture expands cosmologically, so its drift uses the
+            # Friedmann integral instead of the static-background check above.
+            # Occupied cells span the PMMM forest; every checkpoint also checks
+            # gas/particle reverse links after mesh and near-FMM sorting.
+            gas = [row for row in states[-1][2] if row["type"] == 1]
+            cells = {tuple(min(7, int(coordinate * 8)) for coordinate in row["x"])
+                     for row in gas}
+            require(len(cells) > 8, "SPH fixture did not occupy multiple PMMM cells")
+            require(any(any(row["gas"][index] != 0.0 for index in (11, 13, 15))
+                        for row in gas), "PMMM did not deliver gravity acceleration to gas")
         source = baseline / "checkpoint.2"
         resumed = prepareCase(root, label + "_resumed", source)
         log = run(resumed, dict(options, **{"checkpoint.readIndex": 2,
@@ -165,6 +188,10 @@ def main():
         require("Done reading checkpoint" in log, "PMMM restart did not load its checkpoint")
         compare_restart(states[-1], read_checkpoint(
             resumed / "checkpoint.4", ranks, args.time_integrator))
+        if hydro:
+            print(f"{label}: four uniform steps across {len(cells)} gas cells, finite positive "
+                  "gas state, particle mappings, gravity handoff, and restart state passed")
+            continue
         # Historical checkpoints used unrestricted mesh lengths. Their restart
         # reference must use the same policy, including every intermediate rung.
         unlimited_options = dict(options, **{"gravity.pmmmMaxPrimeFactor": "infinity"})

@@ -1,5 +1,5 @@
 # CosmicTiger - MPI startup integration regression; BSL-1.0.
-"""Check hwloc defaults, MPI thread support, profiling shutdown, and fixed64 dispatch."""
+"""Check hwloc defaults, MPI thread support, profiling shutdown, and configured position storage."""
 
 import argparse
 import os
@@ -8,7 +8,7 @@ import signal
 import subprocess
 
 
-def run_case(args, name, *, level=None, ranks=1, target_rank=None, fixed64=False,
+def run_case(args, name, *, level=None, ranks=1, target_rank=None, explicit_position=False,
              hwloc_components=None, threads=2, apex_reports=False):
     workdir = args.workdir.resolve() / name
     workdir.mkdir(parents=True, exist_ok=True)
@@ -42,8 +42,8 @@ def run_case(args, name, *, level=None, ranks=1, target_rank=None, fixed64=False
         environment["COSMICTIGER_TEST_MPI_THREAD_RANK"] = str(target_rank)
     command = [str(args.executable.resolve()), "--help", "--compute.cuda=false",
                f"--hpx:threads={threads}", "--hpx:bind=none"]
-    if fixed64:
-        command.append("--compute.positionType=fixed64")
+    if explicit_position:
+        command.append(f"--compute.positionType={args.position_type}")
     if ranks > 1:
         command = ([args.mpi_exec, args.mpi_numproc_flag, str(ranks)]
                    + args.mpi_preflag + command[:1] + args.mpi_postflag + command[1:])
@@ -84,6 +84,7 @@ def main():
     parser.add_argument("executable", type=Path)
     parser.add_argument("guard", type=Path)
     parser.add_argument("workdir", type=Path)
+    parser.add_argument("--position-type", choices=("fixed32", "fixed64"), required=True)
     parser.add_argument("--mpi-exec")
     parser.add_argument("--mpi-numproc-flag", default="-n")
     parser.add_argument("--mpi-preflag", action="append", default=[])
@@ -98,13 +99,13 @@ def main():
                  ranks=2, target_rank=1)
     else:
         run_case(args, "multiple")
-        run_case(args, "multiple_fixed64", fixed64=True)
+        run_case(args, "multiple_explicit_position", explicit_position=True)
         run_case(args, "custom_hwloc_components", hwloc_components="-gl,-opencl")
-        run_case(args, "custom_hwloc_components_fixed64", fixed64=True,
+        run_case(args, "custom_hwloc_components_explicit_position", explicit_position=True,
                  hwloc_components="-gl,-opencl")
         for level in ("MPI_THREAD_SINGLE", "MPI_THREAD_FUNNELED", "MPI_THREAD_SERIALIZED"):
             run_case(args, level.lower(), level=level)
-        run_case(args, "serialized_fixed64", level="MPI_THREAD_SERIALIZED", fixed64=True)
+        run_case(args, "serialized_explicit_position", level="MPI_THREAD_SERIALIZED", explicit_position=True)
     print("MPI startup passed: hwloc defaults/overrides checked, MULTIPLE accepted, "
           "lower levels rejected, MPI finalized")
 

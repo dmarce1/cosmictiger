@@ -345,7 +345,6 @@ mapSize = 8
 
     sph_options = [option for option in metadata_options
                    if not option.startswith("--hydro.enabled=")]
-    sph_gravity_error = "SPH currently requires an FMM build when gravity.enabled=true"
     if args.without_sph:
         sph_build_error = "COSMICTIGER_WITH_SPH=ON"
         for gravity_enabled in ("true", "false"):
@@ -398,36 +397,21 @@ mapSize = 8
             f"--configuration={sph_config.resolve()}"], success=False)
         if sph_integrator_error not in rejected:
             raise RuntimeError("hierarchical SPH restriction was bypassed through an INI file")
-    elif args.gravity_method == "pmmm":
-        rejected = run("pmmm_sph_rejected", sph_options + [
-            "--hydro.enabled=true", "--gravity.enabled=true"], success=False)
-        if sph_gravity_error not in rejected:
-            raise RuntimeError("PMMM with SPH lacked the solver compatibility diagnostic")
-        forced_sph = [option for option in metadata_options
-                      if not option.startswith("--run.test=")]
-        rejected = run("pmmm_forced_sph_rejected", forced_sph + [
-            "--run.test=sphGravity", "--gravity.enabled=true"], success=False)
-        if sph_gravity_error not in rejected:
-            raise RuntimeError("PMMM bypassed the SPH restriction through run.test")
-        rejected = run("pmmm_scenario_sph_rejected", [
-            "--run.scenario=sod", "--compute.cuda=false", "--gravity.enabled=true",
-            "--initial.particlesPerDimension=8"], success=False)
-        if sph_gravity_error not in rejected:
-            raise RuntimeError("PMMM bypassed the SPH restriction through scenario defaults")
-        sph_config = args.workdir / "pmmm_sph.ini"
+    else:
+        for gravity_enabled in ("true", "false"):
+            output = run(f"sph_cli_gravity_{gravity_enabled}", sph_options + [
+                "--hydro.enabled=true", f"--gravity.enabled={gravity_enabled}"])
+            assertCompiledSettings(output)
+            if not re.search(r"^hydro\.enabled\s*:\s*T\s*$", output, re.MULTILINE):
+                raise RuntimeError("SPH CLI request was not enabled")
+        sph_config = args.workdir / "sph_allowed.ini"
         sph_config.write_text("[gravity]\nenabled = true\nmeshSize = 8\n"
                               "[hydro]\nenabled = true\n")
-        rejected = run("pmmm_ini_sph_rejected", sph_options + [
-            f"--configuration={sph_config.resolve()}"], success=False)
-        if sph_gravity_error not in rejected:
-            raise RuntimeError("PMMM bypassed the SPH restriction through an INI file")
-        output = run("pmmm_hydro_without_gravity", sph_options + [
-            "--hydro.enabled=true", "--gravity.enabled=false"])
+        output = run("sph_ini_allowed", sph_options + [
+            f"--configuration={sph_config.resolve()}"])
         assertCompiledSettings(output)
-    else:
-        output = run("fmm_sph_allowed", sph_options + [
-            "--gravity.enabled=true", "--hydro.enabled=true"])
-        assertCompiledSettings(output)
+        if not re.search(r"^hydro\.enabled\s*:\s*T\s*$", output, re.MULTILINE):
+            raise RuntimeError("SPH INI request was not enabled")
     if not re.search(r"^hydro\.balsaraSwitch\s*:\s*T\s*$", balsara_default, re.MULTILINE):
         raise RuntimeError("Balsara switch must default to enabled")
     balsara_override = run("balsara_cli_override", [f"--configuration={config.resolve()}",
@@ -506,8 +490,6 @@ mapSize = 8
         hydro_metadata_options = [option for option in metadata_options
                                   if not option.startswith("--hydro.enabled=")] + [
                                       "--hydro.enabled=true"]
-        if args.gravity_method == "pmmm":
-            hydro_metadata_options.append("--gravity.enabled=false")
         for acceleration in (0.0, 0.5):
             output = run(f"z_plane_checkpoint_{acceleration}", hydro_metadata_options + [
                 f"--configuration={config.resolve()}",
@@ -520,8 +502,6 @@ mapSize = 8
                              if not option.startswith("--hydro.enabled=")] + [
                                  "--hydro.enabled=true", "--chemistry.enabled=true",
                                  "--cosmology.startRedshift=49"]
-        if args.gravity_method == "pmmm":
-            chemistry_options.append("--gravity.enabled=false")
 
         def chemistrySettings(output):
             result = {}
@@ -853,7 +833,7 @@ mapSize = 8
     # are introduced. Loading each through the executable also verifies comments
     # and empty-string defaults without running its physical problem.
     root = Path(__file__).resolve().parents[1]
-    optional_keys = {"gravity.effectiveRadius", "gravity.supportRadius",
+    optional_keys = {"compute.positionType", "gravity.effectiveRadius", "gravity.supportRadius",
                      "hydro.centralEffectiveRadius", "hydro.centralSupportRadius",
                      "hydro.minEffectiveRadius", "hydro.maxEffectiveRadius",
                      *(f"chemistry.{field}" for field in chemistry_fields)}
@@ -872,8 +852,9 @@ mapSize = 8
         actual_keys = {f"{section}.{key}" for section in ini.sections() for key in ini[section]}
         if actual_keys != expected_keys:
             raise RuntimeError(f"{path.name} option coverage differs: {sorted(actual_keys ^ expected_keys)}")
-        # Radius alternatives and manual chemistry overrides remain commented,
-        # preserving one radius representation and native initialization.
+        # Position width, radius alternatives, and manual chemistry overrides
+        # remain commented, preserving the compiled width, one radius
+        # representation, and native initialization.
         documented_alternatives = set()
         section = None
         for line in path.read_text().splitlines():

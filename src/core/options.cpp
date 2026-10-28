@@ -397,7 +397,8 @@ bool processOptions(int argc, char* argv[]) {
     computeOpts.add_options()("compute.positionType",
         po::value<std::string>(&opts.compute.positionType)
             ->default_value(kPositionBits == 64 ? "fixed64" : "fixed32"),
-        "position storage: fixed32 (Q0.32) or fixed64 (Q0.64)")
+        "position storage: fixed32 (Q0.32) or fixed64 (Q0.64); must match "
+        "COSMICTIGER_POSITION_TYPE at build time")
 #ifdef USE_CUDA
         ("compute.cuda", po::value<bool>(&opts.compute.cuda)->default_value(true), "use CUDA")
 #else
@@ -1098,10 +1099,6 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.hydro.enabled && integration::kBuildUsesHierarchical) {
         THROW_ERROR("SPH requires ordinary block-timestep leapfrog; rebuild with "
                     "COSMICTIGER_TIME_INTEGRATOR=leapfrog\n");
-    }
-    if (opts.hydro.enabled && opts.gravity.enabled && usesMeshGravity(opts.gravity)) {
-        THROW_ERROR("SPH currently requires an FMM build when gravity.enabled=true; "
-                    "PMMM does not yet support SPH\n");
     }
     if (opts.chemistry.enabled) {
         if (!opts.hydro.enabled ||

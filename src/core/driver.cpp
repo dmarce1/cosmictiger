@@ -604,6 +604,9 @@ std::pair<KickReturn, TreeCreateReturn> advanceForces(int minRung, double scale,
     if (getOptions().hydro.enabled) {
         section_timing::ScopedSection hydroTimer(section_timing::Section::hydrodynamics);
         int const activeRung = meshGravity ? 0 : minRung;
+        // SPH builds its own global neighbor tree after gravity finishes. PMMM's
+        // cell forest is only a gravity structure; its sorting has already
+        // repaired the gas-to-particle indices used by this independent tree.
         sphStep1(activeRung);
         gravity.maxRung = std::max(int(gravity.maxRung),
             sphStep2(activeRung, scale, time, baseTimestep, 1, scaleDerivative, &energies, true,

@@ -124,7 +124,7 @@ def run_regression(args, directory):
     simulation = directory / "simulation"
     (directory / "apex").mkdir()
     options = {"configuration": source / "configurations" / f"{preset}.ini",
-               "compute.cuda": "false", "compute.positionType": "fixed32",
+               "compute.cuda": "false",
                "initial.particlesPerDimension": 8, "initial.closePack": "false",
                "initial.useGlass": "false", "chemistry.enabled": "false",
                "gravity.enabled": str(args.scenario == "plummer").lower(),

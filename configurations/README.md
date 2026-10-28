@@ -6,7 +6,10 @@ The evolution driver calls gravity, SPH, and chemistry according to the enabled
 physics. `run.test` is reserved for developer regressions and benchmarks.
 
 Each INI below contains every application option except the top-level `help`
-and `configuration` options, including commented alternatives for radius inputs.
+and `configuration` options, including commented alternatives for radius inputs
+and an optional position-width assertion. Leave `compute.positionType` commented
+to use the width selected by `COSMICTIGER_POSITION_TYPE` when building. An explicit
+position width must match the executable.
 The files are independent: no other INI is loaded or inherited. Sections map to
 CLI groups, and explicit CLI values override values in the selected file.
 [default.ini](../default.ini) records the application defaults; the cosmology
@@ -18,8 +21,10 @@ controls only. Global FMM keeps `gravity.openingAngle` and `gravity.openingSched
 as runtime controls. A PMMM build requires an explicit valid `gravity.meshSize`,
 and retains `gravity.pmmmNearWidth` at runtime. The supplied `meshSize = 0` is
 unset; override it for PMMM, for example with `--gravity.meshSize=32`.
-Gravity with SPH requires an FMM build. To use a collisionless cosmology with a
-PMMM build, also set `--hydro.enabled=false --chemistry.enabled=false`.
+SPH uses `leapfrog_<gravity>_sph` builds with global FMM, PMMM-PP, or PMMM-FMM.
+Hierarchical hydro integration is not implemented. To run a collisionless
+cosmology, set
+`--hydro.enabled=false --chemistry.enabled=false`.
 
 | Configuration | `run.scenario` | Enabled physics | Output directory |
 | --- | --- | --- | --- |

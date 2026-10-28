@@ -10,7 +10,9 @@ set -u
 showUsage() {
     printf 'Usage: %s [-j [jobs|max]]\n' "${0##*/}"
     printf 'Run the interactive CosmicTiger configure and build menu in a terminal.\n'
-    printf 'The menu includes SPH support, enabled by default; disable it to omit SPH code and tests.\n'
+    printf 'The menu selects a named target in one Makefile per build mode and CUDA setting.\n'
+    printf 'SPH is enabled by default and requires leapfrog; all gravity methods support it.\n'
+    printf 'Position storage is selected for the whole build directory; fixed32 is the default.\n'
     printf 'Use -j with no argument or -j max to use all available CPUs.\n'
 }
 
@@ -67,7 +69,7 @@ readBuildDefaults() {
 }
 
 # Prefer the default build, then reuse another build belonging to this checkout.
-for cacheFile in "$rootDir/build/release/CMakeCache.txt" "$rootDir"/build/*/CMakeCache.txt; do
+for cacheFile in "$rootDir/build/release_cuda/CMakeCache.txt" "$rootDir"/build/*/CMakeCache.txt; do
     readBuildDefaults "$cacheFile"
     if [[ -n $defaultCudaArchitectures ]]; then
         break
@@ -100,6 +102,7 @@ gravityVariant=fmm
 fmmOrder=7
 fmmOrderExplicit=false
 timeIntegrator=leapfrog
+positionType=fixed32
 enableCuda=ON
 enableSph=ON
 testSuite=OFF
@@ -204,6 +207,19 @@ chooseTimeIntegrator() {
     done
 }
 
+choosePositionType() {
+    while true; do
+        printf '\nPosition storage: 1) fixed32 (default)  2) fixed64\n'
+        readInput "Choice [${positionType}]: "
+        case "${promptValue,,}" in
+            '') return ;;
+            1|fixed32) positionType=fixed32; return ;;
+            2|fixed64) positionType=fixed64; return ;;
+        esac
+        printf 'Choose 1 or 2, or press Enter to keep the current position storage.\n'
+    done
+}
+
 chooseToggle() {
     local label=$1
     local currentValue=$2
@@ -259,8 +275,24 @@ showMainMenu() {
     printf ' 10) FMM kernel order: %s\n' "$fmmOrder"
     printf ' 11) Time integrator: %s\n' "$timeIntegrator"
     printf ' 12) Build SPH support: %s\n' "$enableSph"
+    printf ' 13) Position storage: %s\n' "$positionType"
     printf '  Enter or b) Configure and build    q) Quit\n'
     printf 'Build jobs accept any positive count; MPI tests use four CPUs each.\n'
+}
+
+validateVariant() {
+    local message
+    if [[ $enableSph == ON && $timeIntegrator != leapfrog ]]; then
+        message='SPH requires leapfrog. Disable SPH, or select leapfrog, before building.'
+        if [[ $useDialog == true ]]; then
+            whiptail --clear --backtitle 'CosmicTiger builder' \
+                --title 'Unsupported physics combination' --msgbox "$message" 10 74
+        else
+            printf '\n%s\n' "$message" >&2
+        fi
+        return 1
+    fi
+    return 0
 }
 
 dialogChoice() {
@@ -304,12 +336,14 @@ chooseDialogText() {
     fi
 }
 
+useDialog=false
 if command -v whiptail >/dev/null 2>&1 && [[ ${TERM:-dumb} != dumb ]]; then
+    useDialog=true
     while true; do
         if ! menuChoice=$(dialogChoice --title 'Build configuration' \
             --cancel-button 'Quit' --default-item 1 --notags \
             --menu 'Use arrow keys to choose a setting. Build jobs accept any positive count.' \
-            24 78 13 \
+            25 78 14 \
             1 "Build mode: $buildMode" \
             2 "CUDA: $enableCuda" \
             3 "Build and run test suite: $testSuite" \
@@ -322,6 +356,7 @@ if command -v whiptail >/dev/null 2>&1 && [[ ${TERM:-dumb} != dumb ]]; then
             10 "FMM kernel order: $fmmOrder" \
             11 "Time integrator: $timeIntegrator" \
             12 "Build SPH support: $enableSph" \
+            13 "Position storage: $positionType" \
             b 'Configure and build' \
             q 'Quit'); then
             printf 'No build started.\n'
@@ -359,7 +394,16 @@ if command -v whiptail >/dev/null 2>&1 && [[ ${TERM:-dumb} != dumb ]]; then
                     timeIntegrator=$promptValue
                 fi
                 ;;
-            b) break ;;
+            13)
+                if promptValue=$(dialogChoice --title 'Position storage' \
+                    --default-item "$positionType" \
+                    --menu 'Select position storage for every target in this build directory.' 12 72 2 \
+                    fixed32 '32-bit fixed point (default)' \
+                    fixed64 '64-bit fixed point'); then
+                    positionType=$promptValue
+                fi
+                ;;
+            b) if validateVariant; then break; fi ;;
             q) printf 'No build started.\n'; exit 0 ;;
             1)
                 if promptValue=$(dialogChoice --title 'Build mode' \
@@ -426,7 +470,7 @@ else
         showMainMenu
         readInput 'Choice [build]: '
         case "${promptValue,,}" in
-            ''|b|build) break ;;
+            ''|b|build) if validateVariant; then break; fi ;;
             q|quit) printf 'No build started.\n'; exit 0 ;;
             1) chooseMode ;;
             2) chooseToggle 'Enable CUDA' "$enableCuda"; enableCuda=$promptValue ;;
@@ -440,12 +484,13 @@ else
             10) chooseFmmOrder ;;
             11) chooseTimeIntegrator ;;
             12) chooseToggle 'Build SPH support' "$enableSph"; enableSph=$promptValue ;;
+            13) choosePositionType ;;
             *) printf 'Unknown option.\n' ;;
         esac
     done
 fi
 
-for requiredCommand in cmake ninja tee mktemp; do
+for requiredCommand in cmake make tee mktemp; do
     if ! command -v "$requiredCommand" >/dev/null 2>&1; then
         printf 'Missing required command: %s\n' "$requiredCommand" >&2
         exit 1
@@ -461,7 +506,18 @@ case "$gravityVariant" in
     pmmm_fmm) gravityMethod=pmmm; pmmmNearMethod=fmm ;;
     pmmm_pp) gravityMethod=pmmm; pmmmNearMethod=pp ;;
 esac
-buildDir="$rootDir/build/${buildMode}_${gravityVariant}_order${fmmOrder}_${timeIntegrator}"
+if [[ $enableCuda == ON ]]; then
+    platformVariant=cuda
+else
+    platformVariant=cpu
+fi
+if [[ $enableSph == ON ]]; then
+    sphVariant=sph
+else
+    sphVariant=nosph
+fi
+buildTarget="cosmictiger_${timeIntegrator}_${gravityVariant}_${sphVariant}_${fmmOrder}"
+buildDir="$rootDir/build/${buildMode}_${platformVariant}"
 if ! mkdir -p -- "$buildDir"; then
     printf 'Cannot create build directory: %s\n' "$buildDir" >&2
     exit 1
@@ -487,7 +543,7 @@ if [[ -n $hpxPrefix ]]; then
 fi
 
 # Rediscover dependency paths so old cached /tmp installs do not hide system packages.
-configureCommand=(cmake -S "$rootDir" -B "$buildDir" -G Ninja
+configureCommand=(cmake -S "$rootDir" -B "$buildDir" -G 'Unix Makefiles'
     -UHPX_DIR '-UMPI_*'
     '-U*GSL*' '-UCHEALPIX_*' '-UHEALPIX_CXX_*'
     "-DCMAKE_BUILD_TYPE=$buildType"
@@ -497,6 +553,7 @@ configureCommand=(cmake -S "$rootDir" -B "$buildDir" -G Ninja
     "-DCOSMICTIGER_PMMM_NEAR_METHOD=$pmmmNearMethod"
     "-DCOSMICTIGER_WITH_ORDER=$fmmOrder"
     "-DCOSMICTIGER_TIME_INTEGRATOR=$timeIntegrator"
+    "-DCOSMICTIGER_POSITION_TYPE=$positionType"
     "-DCOSMICTIGER_REQUIRE_APEX=$requireApex"
     "-DBUILD_TESTING=$testSuite"
     "-DCMAKE_PREFIX_PATH=$prefixPath")
@@ -521,7 +578,7 @@ fi
 if [[ $enableCuda == ON ]]; then
     configureCommand+=("-DCMAKE_CUDA_ARCHITECTURES=${cudaArchitectures:-$defaultCudaArchitectures}")
 fi
-buildCommand=(cmake --build "$buildDir" --target cosmictiger --parallel "$buildJobs")
+buildCommand=(cmake --build "$buildDir" --target "$buildTarget" --parallel "$buildJobs")
 testBuildCommand=(cmake --build "$buildDir" --target all --parallel "$buildJobs")
 testCommand=(ctest --test-dir "$buildDir" --output-on-failure --parallel "$testJobs")
 
@@ -549,14 +606,16 @@ runStage() {
 printf '\nGravity solver: %s; FMM kernel order: %s\n' "$gravityVariant" "$fmmOrder"
 printf 'Time integrator: %s\n' "$timeIntegrator"
 printf 'SPH support: %s\n' "$enableSph"
+printf 'Position storage: %s\n' "$positionType"
+printf 'Build target: %s\n' "$buildTarget"
 printf 'Build directory: %s\nLog: %s\n' "$buildDir" "$logFile"
 runStage Configure "${configureCommand[@]}" || exit $?
-runStage 'Build cosmictiger' "${buildCommand[@]}" || exit $?
+runStage "Build $buildTarget" "${buildCommand[@]}" || exit $?
 if [[ $testSuite == ON ]]; then
     runStage 'Build test suite' "${testBuildCommand[@]}" || exit $?
     runStage 'Run test suite' "${testCommand[@]}" || exit $?
 fi
-printf '\nCosmicTiger build succeeded: %s\nLog: %s\n' "$buildDir" "$logFile"
+printf '\nCosmicTiger build succeeded: %s/%s\nLog: %s\n' "$buildDir" "$buildTarget" "$logFile"
 if [[ $testSuite == ON ]]; then
     printf 'Test suite passed.\n'
 else

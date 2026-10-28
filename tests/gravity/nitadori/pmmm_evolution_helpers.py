@@ -84,6 +84,13 @@ def read_rank(path, expected_iteration, ranks, time_integrator):
         require(extension[10] == 0 or 2 <= extension[10] <= 2 ** 31 - 1,
                 f"{path}: invalid PMMM maximum FFT prime factor")
     offset += 8 * extension_size + (104 if hydro else 0)
+    gas_version = 2
+    if hydro and header.flags & (1 << 14):
+        viscosity = struct.unpack_from("=7d", data, offset)
+        require(all(math.isfinite(value) for value in viscosity) and viscosity[4] in (0.0, 1.0),
+                f"{path}: invalid variable-viscosity parameters")
+        gas_version = 6 if viscosity[4] else 4
+        offset += 56
     driver = Driver.from_buffer_copy(data, offset)
     require(driver.iteration == expected_iteration, f"{path}: driver layout/iteration mismatch")
     require(all(math.isfinite(value) for value in
@@ -115,7 +122,7 @@ def read_rank(path, expected_iteration, ranks, time_integrator):
                  "rung": rungs[i], "type": types[i], "gas": ()} for i in range(count)]
         if hydro:
             gas_header = take("I", 7)
-            require(gas_header == (0x43545350, 2, integer_bytes, 8, 12, 3, 4),
+            require(gas_header == (0x43545350, gas_version, integer_bytes, 8, 12, 3, 4),
                     f"{path}: unsupported gas layout {gas_header}")
             require(take(integer_code, 1)[0] == gas_count, f"{path}: inconsistent gas count")
             thermodynamic = take("f", 2 * gas_count)
@@ -124,6 +131,13 @@ def read_rank(path, expected_iteration, ranks, time_integrator):
             scalar_fields = [take("f", gas_count) for _ in range(3)]
             flags = [take("B", gas_count) for _ in range(2)]
             vector_fields = [take("f", gas_count) for _ in range(6)]
+            # Production writes two separate arrays: the common two-float
+            # viscosity state, then Cullen-Dehnen's one-float extension.
+            viscosity = take("f", 2 * gas_count) if gas_version >= 4 else ()
+            cullen_dehnen = take("f", gas_count) if gas_version == 6 else ()
+            require(sorted(gravity_indices) == [i for i, species in enumerate(types)
+                                                if species == 1],
+                    f"{path}: missing or duplicate gas mapping")
             for gas_index, particle in enumerate(gravity_indices):
                 require(0 <= particle < count and types[particle] == 1 and
                         gas_indices[particle] == gas_index, f"{path}: broken gas mapping")
@@ -132,7 +146,13 @@ def read_rank(path, expected_iteration, ranks, time_integrator):
                     *acceleration[3 * gas_index:3 * gas_index + 3],
                     *(field[gas_index] for field in scalar_fields),
                     *(field[gas_index] for field in flags),
-                    *(field[gas_index] for field in vector_fields))
+                    *(field[gas_index] for field in vector_fields),
+                    *viscosity[2 * gas_index:2 * gas_index + 2],
+                    *cullen_dehnen[gas_index:gas_index + 1])
+                require(thermodynamic[2 * gas_index] > 0.0 and
+                        thermodynamic[2 * gas_index + 1] > 0.0 and
+                        scalar_fields[2][gas_index] > 0.0,
+                        f"{path}: nonpositive gas energy, support radius, or density")
         rung_count, rung_begin = take("i", 2)
         require(0 <= rung_count <= 64 and 0 <= rung_begin <= count,
                 f"{path}: invalid rung stack")
@@ -196,6 +216,10 @@ def read_checkpoint(path, ranks, time_integrator):
     if time_integrator == "leapfrog":
         require(all(row["rung"] == state.max_rung for row in rows),
                 f"{path}: ordinary PMMM leapfrog did not synchronize every particle rung")
+    if header.flags & 1:
+        require(sum(row["type"] == 0 for row in rows) == header.particles_per_species and
+                sum(row["type"] == 1 for row in rows) == header.particles_per_species,
+                f"{path}: mixed evolution lost dark matter or gas particles")
     return header, state, rows
 
 

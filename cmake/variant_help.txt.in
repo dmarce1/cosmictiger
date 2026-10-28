@@ -1,0 +1,46 @@
+CosmicTiger build target selection
+=================================
+
+@cosmictiger_variant_count@ physics configurations:
+  Without SPH: 2 integrators x 3 gravity methods x @cosmictiger_variant_order_count@ orders = @cosmictiger_nosph_variant_count@
+  With SPH:    leapfrog x 3 gravity methods x @cosmictiger_variant_order_count@ orders      = @cosmictiger_sph_variant_count@
+
+SPH supports leapfrog with all three gravity methods. Hierarchical stepping
+lacks hydro integration and requires nosph. This restriction means the SPH
+choice does not double every combination.
+
+Choose a target family below and replace <order> with one of:
+  @cosmictiger_variant_order_help@
+
+@cosmictiger_variant_family_help@
+Gravity names:
+  fmm       Global FMM
+  pmmm_pp   PMMM with direct particle-particle near interactions
+  pmmm_fmm  PMMM with FMM near interactions
+
+Examples (run from this build directory):
+  make -j12 cosmictiger_leapfrog_pmmm_pp_nosph_7
+  make -j12 cosmictiger_leapfrog_fmm_sph_7
+  make -j12 cosmictiger_leapfrog_pmmm_fmm_sph_7
+  make -j12 cosmictiger_hierarchical_pmmm_fmm_nosph_5
+
+Build only the target you need. Selecting another named target does not require
+reconfiguring and reuses the shared core library and previously built objects.
+
+Position storage: @COSMICTIGER_POSITION_TYPE@ (default: fixed32).
+Each target builds one executable. Select fixed32 or fixed64 when configuring:
+  cmake -S @PROJECT_SOURCE_DIR@ -B . -DCOSMICTIGER_POSITION_TYPE=fixed64
+Target and executable names stay the same. Rebuild after changing this option.
+The runtime compute.positionType option, if supplied, must match the build.
+
+Configured default: @cosmictiger_default_variant@
+  make cosmictiger    Builds the configured default executable.
+  make                Builds that default executable and enabled tests/tools.
+                      It does not build all physics configurations.
+
+Build type: @CMAKE_BUILD_TYPE@    CUDA: @COSMICTIGER_WITH_CUDA@    Tests: @BUILD_TESTING@
+These settings apply to the whole build directory, outside the physics matrix.
+
+  make cosmictiger_help    Shows this guide without compiling.
+  make help               Lists CMake's available build targets.
+  cmake --build . --target cosmictiger_help    Equivalent help with any generator.

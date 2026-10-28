@@ -12,7 +12,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
-#include <filesystem>
 #include <fstream>
 #include <stdexcept>
 #include <string>
@@ -23,7 +22,6 @@
 #include <fftw3.h>
 #include <hpx/modules/program_options.hpp>
 #include <mpi.h>
-#include <unistd.h>
 
 #include <cosmictiger/analysis/lightcone.hpp>
 #include <cosmictiger/analysis/rockstar.hpp>
@@ -286,9 +284,9 @@ void initializeFftw() {
     }
 }
 
-// Every locality chooses the same position ABI before HPX/MPI initializes. Keep
-// unknown application/HPX options for their normal parsers after this dispatch.
-void selectPositionBackend(int argc, char* argv[]) {
+// Reject a position ABI mismatch before HPX/MPI initializes. Keep unknown
+// application/HPX options for their normal parsers after this check.
+void validatePositionType(int argc, char* argv[]) {
     namespace po = hpx::program_options;
     po::options_description selection;
     selection.add_options()("help", "help")("configuration", po::value<std::string>(), "INI file")(
@@ -319,15 +317,10 @@ void selectPositionBackend(int argc, char* argv[]) {
     if ((requested == "fixed64") == (kPositionBits == 64)) {
         return;
     }
-    // Resolve the actual running file, including invocation through PATH or a
-    // symlink. exec preserves MPI environment, signals, and the original argv.
-    auto const executable = std::filesystem::read_symlink("/proc/self/exe");
-    auto const backend =
-        executable.parent_path() / (requested == "fixed64" ? "cosmictiger_fixed64" : "cosmictiger");
-    ::execv(backend.c_str(), argv);
-    throw std::system_error(errno, std::generic_category(),
-        "Cannot launch " + requested + " position backend " + backend.string() +
-            "; keep cosmictiger and cosmictiger_fixed64 together");
+    std::string const compiled = kPositionBits == 64 ? "fixed64" : "fixed32";
+    throw std::invalid_argument("this build uses " + compiled +
+        " positions; configure with -DCOSMICTIGER_POSITION_TYPE=" + requested + " to use " +
+        requested);
 }
 
 }    // namespace detail
@@ -340,7 +333,7 @@ int main(int argc, char* argv[]) {
     int result = EXIT_FAILURE;
     try {
         profile::configureRuntimeProfiling();
-        detail::selectPositionBackend(argc, argv);
+        detail::validatePositionType(argc, argv);
         recordCommandLineArguments(argc, argv);
         detail::initializeMpi(argc, argv, ownsMpi);
         detail::initializeFftw();
