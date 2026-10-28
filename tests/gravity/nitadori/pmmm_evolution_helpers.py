@@ -64,12 +64,22 @@ def read_rank(path, expected_iteration, ranks, time_integrator):
     position_bytes = 8 if header.flags & (1 << 15) else 4
     offset = ctypes.sizeof(Header)
     extension_version = struct.unpack_from("=Q", data, offset)[0]
-    extension_size = 8 if extension_version == 2 else 7
+    require(extension_version in (1, 2, 3), f"{path}: unsupported PMMM version")
+    extension_size = {1: 7, 2: 8, 3: 10}[extension_version]
     extension = struct.unpack_from(f"={extension_size}Q", data, offset)
-    require(extension_version in (1, 2) and extension[6] == 1,
-            f"{path}: unsupported PMMM convention")
-    if extension_version == 2:
+    require(extension[6] == 1, f"{path}: unsupported PMMM convention")
+    if extension_version >= 2:
         require(extension[7] in (0, 1), f"{path}: unknown PMMM near solver")
+    if extension_version == 3:
+        theta = struct.unpack("=d", struct.pack("=Q", extension[9]))[0]
+        require(3 <= extension[8] <= 9 and extension[2] == extension[8],
+                f"{path}: PMMM and near FMM orders differ or are invalid")
+        width = extension[3]
+        require(1 <= width <= 4 and extension[1] >= 2 * width + 1,
+                f"{path}: invalid PMMM near width or mesh size")
+        require(math.isfinite(theta) and math.isclose(
+                    theta, math.sqrt(3.0) / (width + 1), rel_tol=1.0e-15, abs_tol=0.0),
+                f"{path}: PMMM opening angle differs from the near-width geometry")
     offset += 8 * extension_size + (104 if hydro else 0)
     driver = Driver.from_buffer_copy(data, offset)
     require(driver.iteration == expected_iteration, f"{path}: driver layout/iteration mismatch")

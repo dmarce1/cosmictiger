@@ -60,7 +60,12 @@ add_compile_definitions(COSMICTIGER_GRAVITY_PMMM=${cosmictiger_gravity_pmmm}
     COSMICTIGER_PMMM_NEAR_FMM=${cosmictiger_pmmm_near_fmm})
 # FMM order: multipole degree p plus two. Source multipoles carry degree p,
 # local expansions degree p + 1, and Ewald derivatives ranks through p + 1.
-set(COSMICTIGER_WITH_ORDER "7" CACHE STRING "FMM order to compile (3 to 9)")
+set(cosmictiger_default_order 7)
+if(COSMICTIGER_GRAVITY_METHOD STREQUAL "pmmm")
+    set(cosmictiger_default_order 8)
+endif()
+set(COSMICTIGER_WITH_ORDER "${cosmictiger_default_order}" CACHE STRING
+    "Shared FMM/PMMM order to compile (3 to 9; default 7 for FMM, 8 for PMMM)")
 set_property(CACHE COSMICTIGER_WITH_ORDER PROPERTY STRINGS 3 4 5 6 7 8 9)
 if(NOT COSMICTIGER_WITH_ORDER MATCHES "^[3-9]$")
     message(FATAL_ERROR
@@ -918,6 +923,12 @@ if(BUILD_TESTING)
     target_include_directories(friedmann_test PRIVATE ${PROJECT_SOURCE_DIR})
     target_compile_options(friedmann_test PRIVATE -fno-fast-math -ffp-contract=off)
     cosmictiger_add_gtest(NAME friedmann TARGET friedmann_test PROPERTIES TIMEOUT 60)
+
+    add_executable(opening_schedule_test tests/gravity/opening_schedule.cpp)
+    target_include_directories(opening_schedule_test PRIVATE ${PROJECT_SOURCE_DIR})
+    target_compile_options(opening_schedule_test PRIVATE -ffast-math)
+    cosmictiger_add_gtest(NAME opening_schedule TARGET opening_schedule_test
+        PROPERTIES TIMEOUT 30)
 
     add_executable(cosmology_evolution_test tests/cosmology_evolution.cpp)
     target_include_directories(cosmology_evolution_test PRIVATE ${PROJECT_SOURCE_DIR})

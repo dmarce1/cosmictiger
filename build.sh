@@ -97,6 +97,7 @@ fi
 buildMode=release
 gravityVariant=fmm
 fmmOrder=7
+fmmOrderExplicit=false
 timeIntegrator=leapfrog
 enableCuda=ON
 testSuite=OFF
@@ -152,15 +153,26 @@ chooseMode() {
     done
 }
 
+setGravityVariant() {
+    gravityVariant=$1
+    if [[ $fmmOrderExplicit == false ]]; then
+        if [[ $gravityVariant == fmm ]]; then
+            fmmOrder=7
+        else
+            fmmOrder=8
+        fi
+    fi
+}
+
 chooseGravityVariant() {
     while true; do
         printf '\nGravity solver: 1) FMM  2) PMMM-FMM  3) PMMM-PP\n'
         readInput "Choice [${gravityVariant}]: "
         case "${promptValue,,}" in
             '') return ;;
-            1|fmm) gravityVariant=fmm; return ;;
-            2|pmmm_fmm|pmmm-fmm) gravityVariant=pmmm_fmm; return ;;
-            3|pmmm_pp|pmmm-pp) gravityVariant=pmmm_pp; return ;;
+            1|fmm) setGravityVariant fmm; return ;;
+            2|pmmm_fmm|pmmm-fmm) setGravityVariant pmmm_fmm; return ;;
+            3|pmmm_pp|pmmm-pp) setGravityVariant pmmm_pp; return ;;
         esac
         printf 'Choose 1 through 3, or press Enter to keep the current solver.\n'
     done
@@ -171,7 +183,7 @@ chooseFmmOrder() {
         readInput "FMM kernel order [${fmmOrder}] (3 through 9, Enter keeps): "
         case "$promptValue" in
             '') return ;;
-            [3-9]) fmmOrder=$promptValue; return ;;
+            [3-9]) fmmOrder=$promptValue; fmmOrderExplicit=true; return ;;
         esac
         printf 'Enter an integer from 3 through 9.\n'
     done
@@ -319,7 +331,7 @@ if command -v whiptail >/dev/null 2>&1 && [[ ${TERM:-dumb} != dumb ]]; then
                     fmm 'Global FMM' \
                     pmmm_fmm 'PMMM with FMM near interactions' \
                     pmmm_pp 'PMMM with direct particle-pair near interactions'); then
-                    gravityVariant=$promptValue
+                    setGravityVariant "$promptValue"
                 fi
                 ;;
             10)
@@ -331,6 +343,7 @@ if command -v whiptail >/dev/null 2>&1 && [[ ${TERM:-dumb} != dumb ]]; then
                     7 'Multipole degree 5' 8 'Multipole degree 6' \
                     9 'Multipole degree 7'); then
                     fmmOrder=$promptValue
+                    fmmOrderExplicit=true
                 fi
                 ;;
             11)

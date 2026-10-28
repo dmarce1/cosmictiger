@@ -14,7 +14,8 @@ scenario configuration below also enables primordial chemistry explicitly.
 
 The gravity solver, PMMM near method, and expansion order are selected by
 `./build.sh` or CMake when building the executable; the INIs contain runtime
-controls only. `gravity.openingAngle` remains a runtime control. A PMMM build requires an explicit valid `gravity.meshSize`,
+controls only. Global FMM keeps `gravity.openingAngle` and `gravity.openingSchedule`
+as runtime controls. A PMMM build requires an explicit valid `gravity.meshSize`,
 and retains `gravity.pmmmNearWidth` at runtime. The supplied `meshSize = 0` is
 unset; override it for PMMM, for example with `--gravity.meshSize=32`.
 Gravity with SPH requires an FMM build. To use a collisionless cosmology with a

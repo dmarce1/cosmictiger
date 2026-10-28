@@ -243,7 +243,19 @@ def main():
     hubble = initial["hubble"]
     duration = math.pi / hubble
 
-    closed, output = exercise("closed_turnaround", {"run.endTime": repr(duration)})
+    opening_schedule = "0.1:0.4,-0.25:0.5,-0.4:0.6"
+    schedule_pattern = r"FMM opening schedule: z=(\S+) theta=(\S+)"
+    closed, output = exercise("closed_turnaround", {
+        "run.endTime": repr(duration), "run.verbose": "true",
+        "gravity.openingSchedule": opening_schedule,
+    })
+    schedule_updates = [(float(redshift), float(theta))
+                        for redshift, theta in re.findall(schedule_pattern, output)]
+    require([theta for _, theta in schedule_updates] == [0.4, 0.5, 0.6, 0.5, 0.4],
+            f"closed model did not apply the requested opening schedule: {schedule_updates}")
+    require(schedule_updates[1][0] <= -0.25 and schedule_updates[2][0] <= -0.4 and
+            schedule_updates[3][0] > -0.4 and schedule_updates[4][0] > -0.25,
+            "opening schedule changed before crossing its redshift threshold")
     require("Finished:" in output, "closed model stopped before its requested endpoint")
     states = checkpoint_states(closed, duration)
     require(any(state["adot"] > 0.0 for state in states) and
@@ -267,6 +279,30 @@ def main():
                 "contracting closed model did not execute CUDA gravity interactions")
     check_closed_time_table(closed, 32)
     print("closed matter: expansion, turnaround, contraction, both time coordinates, and endpoint passed")
+
+    # At this contracting epoch the closest schedule entry is z=-0.4,
+    # theta=0.6. Replaying the expansion intervals instead restores theta=0.5
+    # until redshift rises above -0.25, when the initial theta=0.4 returns.
+    schedule_candidates = [state for state in states[:-1] if state["adot"] < 0.0 and
+                           -0.4 < 1.0 / state["a"] - 1.0 < -0.325]
+    require(schedule_candidates, "no contracting checkpoint for opening schedule restart")
+    schedule_saved = schedule_candidates[0]
+    scheduled_restart, restart_output = exercise("opening_schedule_restart", {
+        "run.endTime": repr(duration), "run.verbose": "true",
+        "gravity.openingSchedule": opening_schedule,
+        "checkpoint.readIndex": str(schedule_saved["iteration"]),
+    }, checkpoint=schedule_saved["path"])
+    restart_updates = [(float(redshift), float(theta))
+                       for redshift, theta in re.findall(schedule_pattern, restart_output)]
+    require([theta for _, theta in restart_updates] == [0.5, 0.4],
+            f"restart did not replay the original opening schedule intervals: {restart_updates}")
+    scheduled_final = checkpoint_states(scheduled_restart, duration)[-1]
+    require(scheduled_final["iteration"] == states[-1]["iteration"],
+            "opening schedule restart changed the completed step count")
+    for name in ("a", "adot", "tau", "end"):
+        require_close(scheduled_final[name], states[-1][name], f"opening schedule restarted {name}",
+                      relative=2.e-12, absolute=2.e-14 * (hubble if name == "adot" else 1.0))
+    print("global FMM: scheduled opening angles, reverse crossings, and contracting restart passed")
 
     dimensionless_interval = negative_lambda_interval(8192)
     require_close(dimensionless_interval, negative_lambda_interval(4096),

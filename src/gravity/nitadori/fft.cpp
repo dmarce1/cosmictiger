@@ -25,14 +25,14 @@ void collectiveCheck(bool okay, char const* message) {
 
 void initialize() {
     auto const& options = getOptions().gravity;
-    if (options.meshSize < 2 * options.pmmmNearWidth + 1 || options.pmmmNearWidth < 1 ||
-        options.pmmmNearWidth > 2 || options.fmmOrder < kFmmMinOrder ||
-        options.fmmOrder > kFmmMaxOrder || !(options.supportRadius > 0) ||
+    if (options.meshSize < 3 || options.pmmmNearWidth < 1 || options.pmmmNearWidth > 4 ||
+        options.pmmmNearWidth > (options.meshSize - 1) / 2 || options.pmmmOrder < kFmmMinOrder ||
+        options.pmmmOrder > kFmmMaxOrder || !(options.supportRadius > 0) ||
         options.supportRadius > double(options.pmmmNearWidth) / options.meshSize) {
         throw std::runtime_error("Invalid PMMM mesh, order, near width or softening support");
     }
     if (cache.communicator != MPI_COMM_NULL) {
-        if (cache.meshSize != options.meshSize || cache.order != options.fmmOrder ||
+        if (cache.meshSize != options.meshSize || cache.order != options.pmmmOrder ||
             cache.nearWidth != options.pmmmNearWidth) {
             throw std::runtime_error("PMMM configuration changed without destroying its plans");
         }

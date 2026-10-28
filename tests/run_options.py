@@ -66,7 +66,7 @@ def main():
                 "hydro.viscosityEpsilon", "hydro.balsaraSwitch", "hydro.neighborNumber", "gravity.enabled",
                 "gravity.kernelFamily", "gravity.kernelDegree",
                 "gravity.meshSize", "gravity.pmmmNearWidth",
-                "gravity.openingAngle",
+                "gravity.openingAngle", "gravity.openingSchedule",
                 "hydro.kernelFamily", "hydro.kernelDegree",
                 "gravity.effectiveRadius", "gravity.supportRadius",
                 "hydro.minEffectiveRadius", "hydro.maxEffectiveRadius",
@@ -86,7 +86,7 @@ def main():
     removed_options = {"hydro.chemistry", "hydro.conduction", "hydro.diffusion",
                        "hydro.yReflect", "gravity.sphSmoothing", "cosmology.omegaK",
                        "initial.usePowerFile", "gravity.cloud", "gravity.method",
-                       "gravity.pmmmNearMethod", "gravity.fmmOrder",
+                       "gravity.pmmmNearMethod", "gravity.pmmmOrder", "gravity.fmmOrder",
                        "run.timeIntegrator", "run.hierarchicalGravity"}
     if removed_options & option_names:
         raise RuntimeError(f"removed options remain in help: {sorted(removed_options & option_names)}")
@@ -171,12 +171,48 @@ mapSize = 8
     for scenario in ("plummer", "glass"):
         output = run(f"integrator_{scenario}", metadata_options + [f"--run.scenario={scenario}"])
         assertCompiledSettings(output)
-    assertNumericSetting(balsara_default, "gravity.openingAngle", 0.8)
-    scalar_angle = run("runtime_scalar_angle", metadata_options + ["--gravity.openingAngle=0.73"])
-    assertNumericSetting(scalar_angle, "gravity.openingAngle", 0.73)
+    if args.gravity_method == "fmm":
+        assertNumericSetting(balsara_default, "gravity.openingAngle", 0.8)
+        scalar_angle = run("fmm_scalar_angle", metadata_options + ["--gravity.openingAngle=0.73"])
+        assertNumericSetting(scalar_angle, "gravity.openingAngle", 0.73)
+        schedule_config = args.workdir / "opening_schedule.ini"
+        schedule_config.write_text("[gravity]\nopeningSchedule = 2:0.61,49:0.41,20:0.51\n"
+                                   "openingAngle = 0.73\n[cosmology]\nstartRedshift = 30\n")
+        schedule_output = run("opening_schedule_ini", metadata_options + [
+            f"--configuration={schedule_config.resolve()}"])
+        assertNumericSetting(schedule_output, "gravity.openingAngle", 0.51)
+        if not re.search(r"^gravity\.openingSchedule\s*:\s*2:0\.61,49:0\.41,20:0\.51\s*$",
+                         schedule_output, re.MULTILINE):
+            raise RuntimeError("INI opening schedule was not retained in option metadata")
+        schedule_output = run("opening_schedule_cli_override", metadata_options + [
+            f"--configuration={schedule_config.resolve()}", "--cosmology.startRedshift=46",
+            "--gravity.openingSchedule=20:0.55,49:0.44,2:0.66"])
+        assertNumericSetting(schedule_output, "gravity.openingAngle", 0.44)
+        schedule_output = run("opening_schedule_empty_override", metadata_options + [
+            f"--configuration={schedule_config.resolve()}", "--gravity.openingSchedule=none"])
+        assertNumericSetting(schedule_output, "gravity.openingAngle", 0.73)
+        schedule_output = run("opening_schedule_tie", metadata_options + [
+            "--cosmology.startRedshift=34.5", "--gravity.openingSchedule=20:0.51,49:0.41"])
+        assertNumericSetting(schedule_output, "gravity.openingAngle", 0.41)
+    for index, schedule in enumerate((
+            "49", "49:0.41,", "49:0.41:0.51", "49:0.41,49:0.51",
+            "nan:0.41", "49:nan", "inf:0.41", "49:inf", "-1:0.41",
+            "49:0", "49:-0.41")):
+        rejected = run(f"opening_schedule_invalid_{index}", metadata_options + [
+            f"--gravity.openingSchedule={schedule}"], success=False)
+        if "gravity.openingSchedule" not in rejected:
+            raise RuntimeError("invalid opening schedule lacked an option-specific diagnostic")
+    unsupported_schedules = [("plummer", ["--run.scenario=plummer"])]
+    if args.gravity_method == "pmmm":
+        unsupported_schedules.append(("pmmm", []))
+    for name, options in unsupported_schedules:
+        rejected = run(f"opening_schedule_unsupported_{name}", metadata_options + options + [
+            "--gravity.openingSchedule=49:0.41,20:0.51"], success=False)
+        if "gravity.openingSchedule" not in rejected:
+            raise RuntimeError(f"opening schedule was not explicitly rejected for {name}")
     run("gravity_negative_mesh", metadata_options + ["--gravity.meshSize=-1"], success=False)
     if args.gravity_method == "pmmm":
-        for near_width in (1, 2):
+        for near_width in (1, 2, 3, 4):
             mesh_size = 2 * near_width + 1
             pmmm_output = run(f"pmmm_metadata_{near_width}", metadata_options + [
                 f"--gravity.meshSize={mesh_size}", f"--gravity.pmmmNearWidth={near_width}"])
@@ -184,8 +220,15 @@ mapSize = 8
             for key, expected in (("gravity.meshSize", mesh_size),
                                   ("gravity.pmmmNearWidth", near_width)):
                 assertNumericSetting(pmmm_output, key, expected)
+            assertNumericSetting(pmmm_output, "gravity.openingAngle", math.sqrt(3) / (near_width + 1))
         assertNumericSetting(balsara_default, "gravity.pmmmNearWidth", 2)
         assertNumericSetting(balsara_default, "gravity.pmmmBatchParticles", 4096)
+        assertNumericSetting(balsara_default, "gravity.openingAngle", math.sqrt(3) / 3)
+        for scenario in ("cosmology", "plummer"):
+            pmmm_output = run(f"pmmm_derived_angle_{scenario}", metadata_options + [
+                f"--run.scenario={scenario}", "--gravity.openingAngle=0.99"])
+            assertCompiledSettings(pmmm_output)
+            assertNumericSetting(pmmm_output, "gravity.openingAngle", math.sqrt(3) / 3)
     for selected_field in ("saveAcceleration", "savePotential"):
         output = run(f"diagnostic_{selected_field}", metadata_options + [
             f"--analysis.{selected_field}=true"])
@@ -198,7 +241,9 @@ mapSize = 8
         for index, invalid in enumerate((
                 [], ["--gravity.meshSize=4"],
                 ["--gravity.meshSize=3", "--gravity.pmmmNearWidth=0"],
-                ["--gravity.meshSize=7", "--gravity.pmmmNearWidth=3"],
+                ["--gravity.meshSize=11", "--gravity.pmmmNearWidth=5"],
+                ["--gravity.meshSize=6", "--gravity.pmmmNearWidth=3"],
+                ["--gravity.meshSize=8", "--gravity.pmmmNearWidth=4"],
                 ["--gravity.meshSize=2", "--gravity.pmmmNearWidth=1"],
                 ["--gravity.meshSize=7", "--gravity.supportRadius=8"],
                 ["--gravity.meshSize=7", "--gravity.pmmmBatchParticles=0"],
@@ -214,7 +259,7 @@ mapSize = 8
         assertCompiledSettings(pmmm_output)
         assertNumericSetting(pmmm_output, "gravity.meshSize", 7)
         assertNumericSetting(pmmm_output, "gravity.pmmmNearWidth", 1)
-        assertNumericSetting(pmmm_output, "gravity.openingAngle", 0.9)
+        assertNumericSetting(pmmm_output, "gravity.openingAngle", math.sqrt(3) / 2)
 
     sph_options = [option for option in metadata_options
                    if not option.startswith("--hydro.enabled=")]
@@ -840,7 +885,7 @@ mapSize = 8
     for option in sorted(removed_options):
         value = {"cosmology.omegaK": "0.1", "gravity.cloud": "pcs",
                  "gravity.method": args.gravity_method, "gravity.pmmmNearMethod": args.near_method,
-                 "gravity.fmmOrder": str(args.order),
+                 "gravity.fmmOrder": str(args.order), "gravity.pmmmOrder": str(args.order),
                  "run.timeIntegrator": args.time_integrator
                  }.get(option, "false")
         group, name = option.split(".")

@@ -530,27 +530,37 @@ bool zPlaneCheckpointCompatible(double acceleration, Options const& opts) {
         acceleration == opts.hydro.zPlaneAcceleration;
 }
 
-std::array<uint64_t, 8> pmmmCheckpointParameters(Options const& opts) {
+std::array<uint64_t, 10> pmmmCheckpointParameters(Options const& opts) {
     uint64_t timestepEtaBits;
     std::memcpy(&timestepEtaBits, &opts.gravity.timestepEta, sizeof(timestepEtaBits));
+    uint64_t openingAngleBits;
+    std::memcpy(&openingAngleBits, &opts.gravity.openingAngle, sizeof(openingAngleBits));
     // Force convention 1: periodic spherical far field including its isotropic
     // trace, plus compact-softened primary interactions in the neighbor cube.
     // Runtime FFT plans and decompositions are reconstructed after restart.
     // Version two appends the near solver. Version one always used direct PP.
-    // Opening angle and bucket size can change during evolution and are not
-    // checkpoint identity, matching the ordinary FMM restart convention.
-    return {2, static_cast<uint64_t>(opts.gravity.meshSize),
+    // Version three records the PMMM order and geometry-derived opening angle
+    // so a restart preserves the shared near/far order and accuracy settings.
+    return {3, static_cast<uint64_t>(opts.gravity.meshSize),
         static_cast<uint64_t>(opts.gravity.fmmOrder),
         static_cast<uint64_t>(opts.gravity.pmmmNearWidth), static_cast<uint64_t>(opts.run.minRung),
-        timestepEtaBits, 1, opts.gravity.pmmmNearMethod == "fmm" ? 1U : 0U};
+        timestepEtaBits, 1, opts.gravity.pmmmNearMethod == "fmm" ? 1U : 0U,
+        static_cast<uint64_t>(opts.gravity.pmmmOrder), openingAngleBits};
 }
 
-bool pmmmCheckpointCompatible(std::array<uint64_t, 8> parameters, Options const& opts) {
-    if (parameters[0] == 1) {
-        parameters[0] = 2;
-        parameters[7] = 0;
+bool pmmmCheckpointCompatible(std::array<uint64_t, 10> parameters, Options const& opts) {
+    auto const expected = pmmmCheckpointParameters(opts);
+    if (parameters[0] == 1 || parameters[0] == 2) {
+        if (parameters[0] == 1) {
+            parameters[7] = 0;
+        }
+        // Historical checkpoints used one order for both solvers and did not
+        // record theta. Their original order must still match both new orders.
+        parameters[8] = parameters[2];
+        parameters[9] = expected[9];
+        parameters[0] = 3;
     }
-    return parameters == pmmmCheckpointParameters(opts);
+    return parameters == expected;
 }
 
 void writeDriverState(FILE* fp, DriverParameters const& params) {
@@ -627,15 +637,20 @@ DriverParameters readDriverState(FILE* fp) {
                         "requested run\n");
         }
         if ((header.flags & kParticleMultipoleMesh) != 0U) {
-            std::array<uint64_t, 8> meshParameters{};
+            std::array<uint64_t, 10> meshParameters{};
             FREAD(meshParameters.data(), sizeof(uint64_t), 7, fp);
             if (meshParameters[0] == 2) {
                 FREAD(&meshParameters[7], sizeof(uint64_t), 1, fp);
+            } else if (meshParameters[0] == 3) {
+                FREAD(&meshParameters[7], sizeof(uint64_t), 3, fp);
+            } else if (meshParameters[0] != 1) {
+                THROW_ERROR("Unsupported PMMM checkpoint parameter version\n");
             }
             if (!pmmmCheckpointCompatible(meshParameters, getOptions())) {
                 THROW_ERROR(
-                    "PMMM checkpoint version, mesh size, expansion order, neighbor width/method, "
-                    "timestep parameters or force convention differs from the requested run\n");
+                    "PMMM checkpoint version, mesh size, near/far expansion orders, opening "
+                    "angle, neighbor width/method, timestep parameters or force convention "
+                    "differs from the requested run\n");
             }
         }
         if (getOptions().hydro.enabled) {
@@ -790,17 +805,33 @@ void checkpointStateTest() {
     changed.gravity.fmmOrder += 1;
     ALWAYS_ASSERT(pmmmParameters != detail::pmmmCheckpointParameters(changed));
     changed = getOptions();
+    changed.gravity.pmmmOrder += 1;
+    ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(pmmmParameters, changed));
+    changed = getOptions();
+    changed.gravity.openingAngle *= 0.5;
+    ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(pmmmParameters, changed));
+    changed = getOptions();
     changed.gravity.pmmmNearWidth = changed.gravity.pmmmNearWidth == 1 ? 2 : 1;
     ALWAYS_ASSERT(pmmmParameters != detail::pmmmCheckpointParameters(changed));
     changed = getOptions();
     changed.gravity.pmmmNearMethod = changed.gravity.pmmmNearMethod == "pp" ? "fmm" : "pp";
     ALWAYS_ASSERT(pmmmParameters != detail::pmmmCheckpointParameters(changed));
-    auto legacyPmmmParameters = pmmmParameters;
+    changed = getOptions();
+    changed.gravity.pmmmOrder = changed.gravity.fmmOrder;
+    changed.gravity.pmmmNearMethod = "pp";
+    auto legacyPmmmParameters = detail::pmmmCheckpointParameters(changed);
     legacyPmmmParameters[0] = 1;
     legacyPmmmParameters[7] = 0;
-    changed.gravity.pmmmNearMethod = "pp";
+    legacyPmmmParameters[8] = legacyPmmmParameters[9] = 0;
     ALWAYS_ASSERT(detail::pmmmCheckpointCompatible(legacyPmmmParameters, changed));
     changed.gravity.pmmmNearMethod = "fmm";
+    ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(legacyPmmmParameters, changed));
+    legacyPmmmParameters[0] = 2;
+    legacyPmmmParameters[7] = 1;
+    ALWAYS_ASSERT(detail::pmmmCheckpointCompatible(legacyPmmmParameters, changed));
+    changed.gravity.openingAngle *= 0.5;
+    ALWAYS_ASSERT(detail::pmmmCheckpointCompatible(legacyPmmmParameters, changed));
+    changed.gravity.pmmmOrder += 1;
     ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(legacyPmmmParameters, changed));
     changed = getOptions();
     changed.run.minRung += 1;

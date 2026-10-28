@@ -682,6 +682,10 @@ std::array<double, 4> directPmmmReference(size_t sink, Vector<PmmmSample> const&
 }
 
 double verifyPmmmReference(Vector<PmmmSample> const& samples, double tolerance) {
+    auto const& options = getOptions();
+    std::string const context = " mesh=" + std::to_string(options.gravity.meshSize) +
+        " order=" + std::to_string(options.gravity.pmmmOrder) +
+        " width=" + std::to_string(options.gravity.pmmmNearWidth);
     double maximumError = 0.0;
     std::array<double, kDimensions> momentum{};
     double forceScale = 1.0;
@@ -698,14 +702,18 @@ double verifyPmmmReference(Vector<PmmmSample> const& samples, double tolerance) 
         maximumError = std::max(maximumError, potentialError);
         requirePmmm(std::isfinite(samples[sink].potential) && potentialError < tolerance,
             "potential differs from direct periodic Ewald for particle " + std::to_string(sink) +
-                ": relative error " + std::to_string(potentialError));
+                ": scaled error " + std::to_string(potentialError) +
+                " actual=" + std::to_string(samples[sink].potential) +
+                " expected=" + std::to_string(expected[0]) + context);
         for (int dim = 0; dim < kDimensions; ++dim) {
             double const error =
                 std::abs(samples[sink].acceleration[dim] - expected[dim + 1]) / norm;
             maximumError = std::max(maximumError, error);
             requirePmmm(std::isfinite(samples[sink].acceleration[dim]) && error < tolerance,
                 "force differs from direct periodic Ewald for particle " + std::to_string(sink) +
-                    ": scaled error " + std::to_string(error));
+                    ": scaled error " + std::to_string(error) + " dim=" + std::to_string(dim) +
+                    " actual=" + std::to_string(samples[sink].acceleration[dim]) +
+                    " expected=" + std::to_string(expected[dim + 1]) + context);
             momentum[dim] += samples[sink].mass * samples[sink].acceleration[dim];
         }
     }
@@ -721,7 +729,8 @@ void comparePmmmSamples(
     auto const& options = getOptions();
     std::string const context = " near=" + options.gravity.pmmmNearMethod +
         " mesh=" + std::to_string(options.gravity.meshSize) +
-        " order=" + std::to_string(options.gravity.fmmOrder) +
+        " fmmOrder=" + std::to_string(options.gravity.fmmOrder) +
+        " pmmmOrder=" + std::to_string(options.gravity.pmmmOrder) +
         " width=" + std::to_string(options.gravity.pmmmNearWidth) +
         " theta=" + std::to_string(options.gravity.openingAngle) +
         " cuda=" + std::to_string(options.compute.cuda);
@@ -967,6 +976,7 @@ void checkPmmmStreamedStages() {
     options.gravity.meshSize = 8;
     options.gravity.pmmmNearWidth = 2;
     options.gravity.fmmOrder = kFmmDefaultOrder;
+    options.gravity.pmmmOrder = options.gravity.fmmOrder;
     options.gravity.openingAngle = 0.02;
     options.analysis.saveForce = false;
     options.analysis.saveAcceleration = false;
@@ -1112,6 +1122,7 @@ void checkPmmmCellOverlap() {
     options.gravity.meshSize = 8;
     options.gravity.pmmmNearWidth = 1;
     options.gravity.fmmOrder = kFmmDefaultOrder;
+    options.gravity.pmmmOrder = options.gravity.fmmOrder;
     options.gravity.pmmmBatchParticles = 1;
     options.gravity.openingAngle = 0.02;
     pmmmDestroy();
@@ -1181,6 +1192,7 @@ void checkPmmmFmmNear() {
     options.hydro.enabled = true;
     options.compute.bucketSize = 8;
     options.gravity.fmmOrder = kFmmDefaultOrder;
+    options.gravity.pmmmOrder = options.gravity.fmmOrder;
     options.gravity.pmmmNearWidth = 1;
     options.gravity.supportRadius = 0.001;
     if (saved.compute.cuda) {
@@ -1303,6 +1315,7 @@ void pmmmTest() {
     options.gravity.gm = 0.125;
     options.gravity.supportRadius = 0.001;
     options.gravity.fmmOrder = kFmmDefaultOrder;
+    options.gravity.pmmmOrder = kFmmDefaultOrder;
     options.gravity.openingAngle = 0.05;
     options.analysis.saveForce = true;
     options.analysis.tracers = false;
@@ -1315,7 +1328,8 @@ void pmmmTest() {
     setOptions(options);
     detail::checkPmmmNearEdges();
     detail::checkPmmmNearBatches();
-    std::array<std::array<int, 2>, 3> const configurations{{{5, 2}, {8, 1}, {8, 2}}};
+    std::array<std::array<int, 2>, 5> const configurations{
+        {{5, 2}, {8, 1}, {8, 2}, {8, 3}, {10, 4}}};
     // Off-center sources have larger far-field truncation error at low orders.
     // Each build checks its selected order against the independent Ewald sum.
     double const tolerance = kFmmDefaultOrder == 3 ? 5.0e-2 :
