@@ -31,6 +31,7 @@
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
+#include <cosmictiger/gravity/opening_schedule.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/io/view.hpp>
@@ -126,9 +127,11 @@ void setOptions(Options const& opts) {
             "compute.positionType differs from this locality's application backend");
     }
     if (opts.gravity.method != gravity::kBuildGravityMethod ||
-        opts.gravity.pmmmNearMethod != gravity::kBuildPmmmNearMethod) {
-        throw std::invalid_argument("Gravity solver and PMMM near method must match this "
-                                    "executable's build configuration");
+        opts.gravity.pmmmNearMethod != gravity::kBuildPmmmNearMethod ||
+        opts.gravity.pmmmOrder != gravity::kBuildFmmOrder) {
+        throw std::invalid_argument(
+            "Gravity solver, PMMM near method, and expansion order must match this "
+            "executable's build configuration");
     }
     if (opts.run.hierarchicalGravity !=
         (integration::kBuildUsesHierarchical && opts.gravity.enabled)) {
@@ -252,10 +255,12 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"gravity.pmmmNearWidth", options.gravity.pmmmNearWidth},
         {"gravity.pmmmNearMethod", options.gravity.pmmmNearMethod},
         {"gravity.pmmmBatchParticles", options.gravity.pmmmBatchParticles},
+        {"gravity.pmmmOrder", options.gravity.pmmmOrder},
         {"gravity.fmmOrder", options.gravity.fmmOrder},
         {"gravity.kernelFamily", options.gravity.kernelFamily},
         {"gravity.kernelDegree", options.gravity.kernelDegree},
         {"gravity.openingAngle", options.gravity.openingAngle},
+        {"gravity.openingSchedule", options.gravity.openingSchedule},
         {"gravity.openLargerCell", options.gravity.openLargerCell},
         {"gravity.softening", effectiveRadius},
         {"gravity.effectiveRadius", effectiveRadius},
@@ -496,9 +501,13 @@ bool processOptions(int argc, char* argv[]) {
         po::value<int>(&opts.gravity.pmmmBatchParticles)->default_value(4096),
         "target sink particles per ready PMMM batch; oversized cells run alone")(
         "gravity.pmmmNearWidth", po::value<int>(&opts.gravity.pmmmNearWidth)->default_value(2),
-        "PMMM neighbor cube radius in cells: 1 or 2")("gravity.openingAngle",
+        "PMMM neighbor cube radius in cells: 1 through 4")("gravity.openingAngle",
         po::value<double>(&opts.gravity.openingAngle)->default_value(0.8),
-        "opening angle for global FMM and PMMM FMM near interactions")("gravity.openLargerCell",
+        "global FMM opening angle; PMMM derives sqrt(3)/(pmmmNearWidth+1)")(
+        "gravity.openingSchedule",
+        po::value<std::string>(&opts.gravity.openingSchedule)->default_value(""),
+        "global cosmological FMM z:theta pairs, comma separated; none selects a constant angle")(
+        "gravity.openLargerCell",
         po::value<bool>(&opts.gravity.openLargerCell)->default_value(true),
         "tree walk opens only the larger of two rejected cells instead of both")(
         "gravity.softening",
@@ -705,10 +714,11 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.gravity.pmmmBatchParticles <= 0) {
         THROW_ERROR("gravity.pmmmBatchParticles must be positive\n");
     }
-    if (opts.gravity.pmmmNearWidth != 1 && opts.gravity.pmmmNearWidth != 2) {
-        THROW_ERROR("gravity.pmmmNearWidth must be 1 or 2\n");
+    if (opts.gravity.pmmmNearWidth < 1 || opts.gravity.pmmmNearWidth > 4) {
+        THROW_ERROR("gravity.pmmmNearWidth must be between 1 and 4\n");
     }
     if (usesMeshGravity(opts.gravity)) {
+        opts.gravity.openingAngle = std::sqrt(3.0) / (opts.gravity.pmmmNearWidth + 1);
         if (opts.gravity.meshSize < 2 * opts.gravity.pmmmNearWidth + 1) {
             THROW_ERROR("gravity.meshSize must be at least 2*gravity.pmmmNearWidth+1 "
                         "for a PMMM build\n");
@@ -752,6 +762,12 @@ bool processOptions(int argc, char* argv[]) {
         if (!isExplicit("output.directory")) {
             opts.output.directory = "./output/" + opts.run.scenario;
         }
+    }
+    auto const openingSchedule = gravity::parseOpeningSchedule(opts.gravity.openingSchedule);
+    if (!openingSchedule.empty() &&
+        (usesMeshGravity(opts.gravity) || opts.run.scenario != "cosmology")) {
+        THROW_ERROR("gravity.openingSchedule requires an FMM build and "
+                    "run.scenario=cosmology\n");
     }
     bool const automaticLambda = omegaLambdaInput == "auto";
     if (!automaticLambda) {
@@ -1325,6 +1341,14 @@ bool processOptions(int argc, char* argv[]) {
     opts.analysis.groups = true;
 #endif
 
+    if (usesMeshGravity(opts.gravity)) {
+        // Scenario defaults must not replace the PMMM geometry-derived angle.
+        opts.gravity.openingAngle = std::sqrt(3.0) / (opts.gravity.pmmmNearWidth + 1);
+    } else {
+        opts.gravity.openingAngle = gravity::openingScheduleInitialTheta(
+            openingSchedule, opts.cosmology.startRedshift, opts.gravity.openingAngle);
+    }
+
     SHOW("checkpoint.intervalSeconds", checkpoint.intervalSeconds);
     SHOW("units.lengthCm", units.lengthCm);
     SHOW("units.massG", units.massG);
@@ -1403,6 +1427,7 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("analysis.sliceSize", analysis.sliceSize);
     SHOW("cosmology.thetaCmb", cosmology.thetaCmb);
     SHOW("gravity.openingAngle", gravity.openingAngle);
+    SHOW("gravity.openingSchedule", gravity.openingSchedule);
     SHOW("analysis.tracerCount", analysis.tracerCount);
     SHOW("compute.treeCacheLineSize", compute.treeCacheLineSize);
     SHOW("initial.twoLpt", initial.twoLpt);
@@ -1456,6 +1481,10 @@ bool processOptions(int argc, char* argv[]) {
                     integration::kBuildUsesHierarchical ? "hierarchical" : "ordinary block");
             }
             SHOW("build.fmmOrder", gravity.fmmOrder);
+            SHOW("gravity.openingAngle", gravity.openingAngle);
+            if (!opts.gravity.openingSchedule.empty()) {
+                SHOW("gravity.openingSchedule", gravity.openingSchedule);
+            }
             SHOW("gravity.kernelFamily", gravity.kernelFamily);
             SHOW("gravity.kernelDegree", gravity.kernelDegree);
         }

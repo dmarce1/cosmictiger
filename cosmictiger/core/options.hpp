@@ -129,13 +129,16 @@ struct Gravity {
     // Solver dispatch uses build_config.hpp; setOptions rejects mismatches.
     std::string method{gravity::kBuildGravityMethod};
     int meshSize{};          // PMMM cells per axis; independent of the initial-condition mesh.
-    int pmmmNearWidth{2};    // Direct neighbor cube radius for periodic PMMM, one or two cells.
+    int pmmmNearWidth{2};    // Direct neighbor cube radius for periodic PMMM, one to four cells.
+    int pmmmOrder{gravity::kBuildFmmOrder};    // Shared far-field and near-field build order.
     std::string pmmmNearMethod{gravity::kBuildPmmmNearMethod};
     int pmmmBatchParticles{4096};             // Target owned sink count per ready near-field batch.
     int fmmOrder{gravity::kBuildFmmOrder};    // Fixed multipole degree + 2, selected at build time.
     std::string kernelFamily{"ferrers"};
     int kernelDegree{4};
     double openingAngle{};
+    // Global cosmological FMM redshift:theta pairs; empty retains the scalar angle.
+    std::string openingSchedule{};
     // Open only the larger of two rejected cells instead of both.
     bool openLargerCell{};
     // Fixed comoving compact support in box units; effectiveRadius is 2 sigma.
@@ -388,6 +391,8 @@ struct Options {
         arc & analysis.saveAcceleration;
         arc & analysis.savePotential;
         arc & gravity.pmmmBatchParticles;
+        arc & gravity.pmmmOrder;
+        arc & gravity.openingSchedule;
     }
 };
 

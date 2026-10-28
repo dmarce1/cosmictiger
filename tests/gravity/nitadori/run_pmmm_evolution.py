@@ -39,8 +39,8 @@ def use_legacy_pp_extension(checkpoint, ranks):
     """Give a copied checkpoint the historical seven-word PP-only v1 layout."""
     def transform(data, offset):
         extension_version = struct.unpack_from("=Q", data, offset)[0]
-        require(extension_version in (1, 2), "legacy fixture has an unknown PMMM version")
-        extension_size = {1: 7, 2: 8}[extension_version]
+        require(extension_version in (1, 2, 3), "legacy fixture has an unknown PMMM version")
+        extension_size = {1: 7, 2: 8, 3: 10}[extension_version]
         return (data[:offset] + struct.pack("=Q", 1) + data[offset + 8:offset + 56]
                 + data[offset + 8 * extension_size:])
     rewriteCheckpoint(checkpoint, ranks, transform)
@@ -51,10 +51,11 @@ def changeCompiledIdentity(checkpoint, ranks, *, order=None, near_method=None, f
     """Present the executable with a validly checksummed incompatible variant."""
     def transform(data, offset):
         payload = bytearray(data)
-        require(struct.unpack_from("=Q", payload, offset)[0] == 2,
-                "identity fixture requires PMMM extension version two")
+        require(struct.unpack_from("=Q", payload, offset)[0] == 3,
+                "identity fixture requires PMMM extension version three")
         if order is not None:
-            struct.pack_into("=Q", payload, offset + 8 * 2, order)
+            for word in (2, 8):
+                struct.pack_into("=Q", payload, offset + 8 * word, order)
         if near_method is not None:
             struct.pack_into("=Q", payload, offset + 8 * 7, int(near_method == "fmm"))
         if fmm or time_integrator is not None:
@@ -67,7 +68,7 @@ def changeCompiledIdentity(checkpoint, ranks, *, order=None, near_method=None, f
                 header.flags &= ~(1 << 17)
             payload[:offset] = bytes(header)
             if fmm:
-                del payload[offset:offset + 64]
+                del payload[offset:offset + 80]
         return bytes(payload)
     rewriteCheckpoint(checkpoint, ranks, transform)
 

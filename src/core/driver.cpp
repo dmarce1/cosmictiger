@@ -40,6 +40,7 @@
 #include <cosmictiger/gravity/kick_workspace.hpp>
 #include <cosmictiger/gravity/nitadori/kick.hpp>
 #include <cosmictiger/gravity/nitadori/solver.hpp>
+#include <cosmictiger/gravity/opening_schedule.hpp>
 #include <cosmictiger/io/checkpoint.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/io/view.hpp>
@@ -1120,6 +1121,21 @@ void driver() {
         terminal::detailPrint("code_to_cm = %e\n", opts.units.lengthCm);
         terminal::detailPrint("code_to_s = %e\n", opts.units.timeSeconds);
     }
+    auto const openingSchedule =
+        gravity::parseOpeningSchedule(getOptions().gravity.openingSchedule);
+    bool const useOpeningSchedule = getOptions().run.scenario == "cosmology" &&
+        !usesMeshGravity(getOptions().gravity) && !openingSchedule.empty();
+    if (useOpeningSchedule) {
+        auto opts = getOptions();
+        // Use the same expansion intervals on either branch and after restart.
+        // Restarting requires the same requested opening schedule.
+        opts.gravity.openingAngle =
+            gravity::openingScheduleTheta(openingSchedule, opts.cosmology.startRedshift,
+                1.0 / params.a - 1.0, opts.gravity.openingAngle);
+        setOptions(opts);
+        terminal::detailPrint("FMM opening schedule: z=%.17g theta=%.17g\n", 1.0 / params.a - 1.0,
+            opts.gravity.openingAngle);
+    }
     if (getOptions().checkpoint.readIndex == -1) {
         outputTimeFile(params);
     }
@@ -1148,7 +1164,6 @@ void driver() {
     size_t progressRows = 0;
     terminal::section(getOptions().run.scenario.c_str());
     PRINT("  tau is conformal time / coarse interval; dt is in code units.\n");
-    double lastTheta = -1.0;
     Timer reset;
     reset.start();
     if (getOptions().lightcone.enabled) {
@@ -1302,29 +1317,12 @@ void driver() {
                 domainsEnd();
                 terminal::detailPrint("Rebound done\n");
             }
-            double theta;
-            double const z = 1.0 / a - 1.0;
             auto opts = getOptions();
             opts.gravity.supportRadius =
                 hsoft0;    // Fixed comoving support for every particle type.
-            if (getOptions().run.scenario != "cosmology") {
-                theta = getOptions().gravity.openingAngle;
-            } else {
-                /*				if (z > 20.0) {
-                 theta = 0.41;
-                 } else if (z > 2.0) {
-                 theta = 0.51;
-                 } else {
-                 theta = 0.61;
-                 }*/
-                if (z > 20.0) {
-                    theta = 0.41;
-                } else if (z > 2.0) {
-                    theta = 0.51;
-                } else {
-                    theta = 0.61;
-                }
-            }
+            // Global FMM schedules advance after drift; PMMM retains its angle
+            // derived from the ghost width throughout evolution.
+            double const theta = opts.gravity.openingAngle;
             auto const ts = 100 * tau / t0 / getOptions().run.numberOfSteps;
             if (ts <= 10.0) {
                 bucketSize = 112;
@@ -1337,7 +1335,6 @@ void driver() {
             opts.compute.bucketSize = bucketSize;
             opts.gravity.openingAngle = theta;
             setOptions(opts);
-            lastTheta = theta;
             std::pair<KickReturn, TreeCreateReturn> tmp;
             bool nocrop = false;
             if (int(tau / t0) % 8 == 0 && fullEval) {
@@ -1436,6 +1433,17 @@ void driver() {
                 physicalInterval * getOptions().units.timeSeconds / constants::kSpyr;
             auto const z0 = 1.0 / a0 - 1.0;
             auto const z1 = 1.0 / a - 1.0;
+            if (useOpeningSchedule) {
+                double const nextTheta = gravity::openingScheduleTheta(
+                    openingSchedule, getOptions().cosmology.startRedshift, z1, theta);
+                if (nextTheta != theta) {
+                    auto nextOptions = getOptions();
+                    nextOptions.gravity.openingAngle = nextTheta;
+                    setOptions(nextOptions);
+                    terminal::detailPrint(
+                        "FMM opening schedule: z=%.17g theta=%.17g\n", z1, nextTheta);
+                }
+            }
             for (auto& z : checkpointlist) {
                 if ((z - z0) * (z - z1) < 0.0) {
                     doCheck = true;

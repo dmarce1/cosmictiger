@@ -87,7 +87,8 @@ retain the selected position precision.
 Choose **FMM**, **PMMM-FMM**, or **PMMM-PP**, and one expansion order from 3
 through 9 in `./build.sh`. The menu also selects **leapfrog** (the default) or
 **hierarchical** time integration. Each executable contains the selected gravity
-variant, order, and time integrator. The CMake equivalents are:
+variant, order, and time integrator. The default order is 7 for global FMM and
+8 for PMMM; an explicit order selection overrides that default. The CMake equivalents are:
 
 ```sh
 # Global FMM, order 7 (the defaults)
@@ -106,8 +107,8 @@ supports dark matter only. Hierarchical builds reject `hydro.enabled=true`;
 rebuild with `-DCOSMICTIGER_TIME_INTEGRATOR=leapfrog` to enable SPH.
 See [CMake options](CMAKE_OPTIONS.md) for all build settings and defaults.
 
-The former `gravity.method`, `gravity.pmmmNearMethod`, and `gravity.fmmOrder`
-CLI/INI settings are no longer accepted. `--help` and the
+The former `gravity.method`, `gravity.pmmmNearMethod`, `gravity.fmmOrder`, and
+`gravity.pmmmOrder` CLI/INI settings are no longer accepted. `--help` and the
 `build.*` startup fields identify the compiled variant. SPH with gravity requires
 an FMM build; PMMM rejects `hydro.enabled=true` when gravity is enabled.
 
@@ -116,9 +117,12 @@ Run a PMMM executable with `--gravity.meshSize=32 --gravity.pmmmNearWidth=2
 one FFTW3-MPI group containing all localities, cached FFT plans and Green spectra,
 and the compiled direct-pair or adaptive Cartesian FMM near field. The compiled
 order applies to both the PMMM expansion and near FMM. Ghost width remains a
-runtime option: it defaults to two and accepts one or two cells. The opening
-angle remains available through `--gravity.openingAngle` for global FMM and
-PMMM-FMM near interactions.
+runtime option: it defaults to two, accepts one through four, and fixes near FMM
+theta to `sqrt(3)/(pmmmNearWidth+1)`.
+Global FMM cosmology runs can select redshift/theta pairs with
+`--gravity.openingSchedule='49:0.41,20:0.51,2:0.61'`. Expansion applies the
+listed changes; contraction reverses them at the same boundaries, restoring
+the previous theta. See the [opening schedule rules](docs/pmmm.md#global-fmm-opening-schedules).
 PMMM uses the compiled time integrator;
 `compute.cuda` selects CPU or CUDA near-field execution and drift. See [PMMM](docs/pmmm.md)
 for order conventions, independent particle and FFT ownership, memory costs, CPU/CUDA
