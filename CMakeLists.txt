@@ -117,7 +117,7 @@ if(COSMICTIGER_WITH_CUDA AND NOT HPX_WITH_CUDA)
     message(FATAL_ERROR
         "CUDA builds require HPX built with HPX_WITH_CUDA=ON; otherwise configure COSMICTIGER_WITH_CUDA=OFF")
 endif()
-find_package(Boost REQUIRED COMPONENTS program_options)
+find_package(Boost CONFIG REQUIRED COMPONENTS program_options)
 add_library(cosmictiger_stacktrace STATIC src/core/stack_trace.cpp)
 target_include_directories(cosmictiger_stacktrace PUBLIC ${PROJECT_SOURCE_DIR})
 target_link_libraries(cosmictiger_stacktrace PRIVATE Boost::boost ${CMAKE_DL_LIBS})
