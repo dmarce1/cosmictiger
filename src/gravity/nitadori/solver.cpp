@@ -1,5 +1,6 @@
 /* CosmicTiger - Nitadori PMMM solver; BSL-1.0. */
 
+#include <cosmictiger/gravity/nitadori/mesh_size.hpp>
 #include "actions.hpp"
 
 namespace pmmm::detail {
@@ -18,13 +19,26 @@ void observe(PmmmCellEvent event, uint64_t key) {
     }
 }
 
+Pair<ParticleInteger> selectedRange(bool applyKick) {
+    ParticleInteger const owned = particlesOwnedSize();
+    auto const range = applyKick ? particlesCurrentRange() : Pair<ParticleInteger>(0, owned);
+    if (range.first < 0 || range.first > owned || range.second < range.first) {
+        throw std::runtime_error("Invalid PMMM selected particle range");
+    }
+    return {range.first, std::min(range.second, owned)};
+}
+
+std::array<uint64_t, 2> particleCounts(bool applyKick) {
+    auto const range = selectedRange(applyKick);
+    return {uint64_t(range.second - range.first), uint64_t(particlesOwnedSize())};
+}
+
 void prepare(SolveRequest const& request) {
-    initialize();
+    initialize(request.meshSize);
     initializeGreen();
     prepareCollectively([&]() {
         state.request = request;
-        state.activeRange =
-            request.applyKick ? particlesCurrentRange() : Pair<ParticleInteger>(0, particlesSize());
+        state.activeRange = selectedRange(request.applyKick);
         state.cells = particleMeshSort(cache.meshSize, state.activeRange);
         state.stageRungs.resize(state.activeRange.second - state.activeRange.first);
         state.moments.assign(cache.cellCount() * cache.sourceCount, 0.0);
@@ -61,6 +75,9 @@ void prepare(SolveRequest const& request) {
         state.diagnostics.planBuilds = previous.planBuilds;
         state.diagnostics.greenBuilds = previous.greenBuilds;
         state.diagnostics.solveCount = previous.solveCount;
+        state.diagnostics.meshSize = request.meshSize;
+        state.diagnostics.activeParticles = request.activeParticles;
+        state.diagnostics.totalParticles = request.totalParticles;
         if (request.applyKick) {
             Vector<Array<float, kDimensions>>().swap(state.acceleration);
             Vector<float>().swap(state.potential);
@@ -121,6 +138,31 @@ void allLocalities(Arguments... arguments) {
 void solve(SolveRequest request) {
     std::unique_lock<MutexType> lock(solveMutex);
     request.generation = ++nextGeneration;
+    std::vector<hpx::future<std::array<uint64_t, 2>>> counts;
+    counts.reserve(hpxLocalities().size());
+    try {
+        for (auto const& locality : hpxLocalities()) {
+            counts.push_back(hpx::async<PmmmParticleCountsAction>(locality, request.applyKick));
+        }
+    } catch (...) {
+        hpx::wait_all(counts);
+        throw;
+    }
+    hpx::wait_all(counts);
+    for (auto& future : counts) {
+        auto const value = future.get();
+        if (value[0] > std::numeric_limits<uint64_t>::max() - request.activeParticles ||
+            value[1] > std::numeric_limits<uint64_t>::max() - request.totalParticles) {
+            throw std::runtime_error("PMMM global particle count overflow");
+        }
+        request.activeParticles += value[0];
+        request.totalParticles += value[1];
+    }
+    auto const& options = getOptions().gravity;
+    request.meshSize = request.applyKick ?
+        hierarchicalMeshSize(options.meshSize, options.pmmmNearWidth, request.activeParticles,
+            request.totalParticles) :
+        options.meshSize;
 #if COSMICTIGER_WITH_SPH
     if (getOptions().hydro.enabled) {
         sphParticlesClearCaches();
@@ -169,6 +211,9 @@ void solve(SolveRequest request) {
         std::rethrow_exception(failure);
     }
     globalDiagnostics = {};
+    globalDiagnostics.meshSize = request.meshSize;
+    globalDiagnostics.activeParticles = request.activeParticles;
+    globalDiagnostics.totalParticles = request.totalParticles;
     globalKickResult = {};
     std::vector<hpx::future<PmmmDiagnostics>> diagnosticsFutures;
     std::vector<hpx::future<KickReturn>> kickFutures;
@@ -207,6 +252,7 @@ void solve(SolveRequest request) {
 }    // namespace pmmm::detail
 
 HPX_REGISTER_ACTION(PmmmPrepareAction, PmmmPrepareAction);
+HPX_REGISTER_ACTION(PmmmParticleCountsAction, PmmmParticleCountsAction);
 HPX_REGISTER_ACTION(PmmmDiagnosticsAction, PmmmDiagnosticsAction);
 HPX_REGISTER_ACTION(PmmmKickResultAction, PmmmKickResultAction);
 

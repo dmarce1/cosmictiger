@@ -502,7 +502,7 @@ bool processOptions(int argc, char* argv[]) {
     gravityOpts.add_options()("gravity.enabled",
         po::value<bool>(&opts.gravity.enabled)->default_value(true), "enable gravity")(
         "gravity.meshSize", po::value<int>(&opts.gravity.meshSize)->default_value(0),
-        "PMMM cells per axis; required for PMMM builds")("gravity.pmmmBatchParticles",
+        "Full-particle PMMM cells per axis; required for PMMM builds")("gravity.pmmmBatchParticles",
         po::value<int>(&opts.gravity.pmmmBatchParticles)->default_value(4096),
         "target sink particles per ready PMMM batch; oversized cells run alone")(
         "gravity.pmmmNearWidth", po::value<int>(&opts.gravity.pmmmNearWidth)->default_value(2),

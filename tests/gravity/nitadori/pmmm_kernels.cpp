@@ -9,7 +9,9 @@
 #include <array>
 #include <cmath>
 #include <complex>
+#include <cstdint>
 #include <cstdio>
+#include <limits>
 #include <numbers>
 #include <stdexcept>
 #include <vector>
@@ -18,6 +20,7 @@
 
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/nitadori/kernels.hpp>
+#include <cosmictiger/gravity/nitadori/mesh_size.hpp>
 
 // This numerical test has no HPX runtime; fmmDispatch's failure branch still
 // needs an assertion implementation even though the public API checks orders.
@@ -118,6 +121,51 @@ namespace detail {
     }
 
 }    // namespace detail
+
+TEST(PmmmMeshSize, ScalesCellVolumeAndRoundsTheSideUp) {
+    auto const meshSize = pmmm::detail::hierarchicalMeshSize;
+    EXPECT_EQ(meshSize(32, 1, 1, 1), 32);
+    EXPECT_EQ(meshSize(32, 1, 1, 8), 16);
+    EXPECT_EQ(meshSize(32, 1, 1, 64), 8);
+    EXPECT_EQ(meshSize(32, 1, 1, 512), 4);
+    EXPECT_EQ(meshSize(8, 2, 3, 7), 7);
+    EXPECT_EQ(meshSize(8, 1, 64, 512), 4);
+    EXPECT_EQ(meshSize(8, 1, 65, 512), 5);
+    EXPECT_EQ(meshSize(9, 1, 64, 729), 4);
+    EXPECT_EQ(meshSize(9, 1, 65, 729), 5);
+}
+
+TEST(PmmmMeshSize, PreservesNearGeometryAndHandlesEmptyPopulations) {
+    auto const meshSize = pmmm::detail::hierarchicalMeshSize;
+    for (int nearWidth = 1; nearWidth <= 4; ++nearWidth) {
+        int const minimumSize = 2 * nearWidth + 1;
+        EXPECT_EQ(meshSize(32, nearWidth, 1, 32768), minimumSize);
+        EXPECT_EQ(meshSize(32, nearWidth, 0, 32768), minimumSize);
+        EXPECT_EQ(meshSize(32, nearWidth, 0, 0), minimumSize);
+        EXPECT_EQ(meshSize(minimumSize, nearWidth, 1, 8), minimumSize);
+        EXPECT_EQ(meshSize(minimumSize, nearWidth, 8, 8), minimumSize);
+    }
+}
+
+TEST(PmmmMeshSize, ResolvesCubeBoundariesWithLargeParticleCounts) {
+    constexpr uint64_t kTotal = uint64_t(1) << 63;
+    constexpr uint64_t kEighth = kTotal / 8;
+    constexpr uint64_t kMaximum = std::numeric_limits<uint64_t>::max();
+    auto const meshSize = pmmm::detail::hierarchicalMeshSize;
+    EXPECT_EQ(meshSize(32, 1, kEighth - 1, kTotal), 16);
+    EXPECT_EQ(meshSize(32, 1, kEighth, kTotal), 16);
+    EXPECT_EQ(meshSize(32, 1, kEighth + 1, kTotal), 17);
+    EXPECT_EQ(meshSize(32, 1, kMaximum, kMaximum), 32);
+    EXPECT_EQ(meshSize(32, 1, kMaximum / 8, kMaximum), 16);
+}
+
+TEST(PmmmMeshSize, RejectsInvalidGeometryAndCounts) {
+    auto const meshSize = pmmm::detail::hierarchicalMeshSize;
+    EXPECT_THROW(meshSize(4, 2, 1, 1), std::invalid_argument);
+    EXPECT_THROW(meshSize(8, 0, 1, 1), std::invalid_argument);
+    EXPECT_THROW(meshSize(8, 1, 2, 1), std::invalid_argument);
+    EXPECT_THROW(meshSize(8, 1, 1, 0), std::invalid_argument);
+}
 
 TEST(PmmmKernels, MomentsUseNegativeCellOffsetAndAccumulate) {
     std::array<detail::Point, 3> const offsets{

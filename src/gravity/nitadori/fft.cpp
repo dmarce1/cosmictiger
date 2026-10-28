@@ -23,22 +23,118 @@ void collectiveCheck(bool okay, char const* message) {
     }
 }
 
-void initialize() {
+constexpr size_t kMaxMeshCaches = 8;
+
+struct MeshCachePool {
+    std::array<MeshCache, kMaxMeshCaches - 1> inactive;
+    int baseMeshSize = 0;
+    int order = 0;
+    int nearWidth = 0;
+    double byteBudget = 0;
+    uint64_t nextUse = 0;
+};
+
+static MeshCachePool meshCachePool;
+
+// Called on an OS thread, in the same cache order on every locality. A cache
+// owns its FFTW plans and communicator even while it is inactive.
+static void releaseMeshCache(MeshCache& entry) {
+    if (entry.communicator == MPI_COMM_NULL) {
+        return;
+    }
+    int const present[3] = {
+        entry.forward != nullptr, entry.inverse != nullptr, entry.greenForward != nullptr};
+    int allPresent[3]{};
+    mpiCheck(MPI_Allreduce(present, allPresent, 3, MPI_INT, MPI_MIN, entry.communicator),
+        "plan destruction agreement");
+    {
+        std::lock_guard<std::mutex> lock(fftwPlannerMutex());
+        if (allPresent[0]) {
+            fftwf_destroy_plan(entry.forward);
+        }
+        if (allPresent[1]) {
+            fftwf_destroy_plan(entry.inverse);
+        }
+        if (allPresent[2]) {
+            fftwf_destroy_plan(entry.greenForward);
+        }
+        fftwf_free(entry.sourceReal);
+        fftwf_free(entry.localReal);
+        fftwf_free(entry.sourceSpectrum);
+        fftwf_free(entry.localSpectrum);
+        fftwf_free(entry.greenSpectrum);
+    }
+    mpiCheck(MPI_Comm_free(&entry.communicator), "communicator destruction");
+    entry = MeshCache{};
+}
+
+static MeshCache& oldestInactiveCache() {
+    auto const oldest = std::min_element(meshCachePool.inactive.begin(),
+        meshCachePool.inactive.end(), [](MeshCache const& first, MeshCache const& second) {
+            if (first.communicator == MPI_COMM_NULL) {
+                return false;
+            }
+            return second.communicator == MPI_COMM_NULL || first.lastUsed < second.lastUsed;
+        });
+    return *oldest;
+}
+
+static double fftWorkspaceBytes(ptrdiff_t sourceAllocation, ptrdiff_t localAllocation) {
+    // Empty FFT slabs still own the one-element allocation required by FFTW.
+    return sizeof(float) *
+        (4.0 * std::max(ptrdiff_t(1), sourceAllocation) +
+            6.0 * std::max(ptrdiff_t(1), localAllocation));
+}
+
+void initialize(int meshSize) {
     auto const& options = getOptions().gravity;
     if (options.meshSize < 3 || options.pmmmNearWidth < 1 || options.pmmmNearWidth > 4 ||
         options.pmmmNearWidth > (options.meshSize - 1) / 2 || options.pmmmOrder < kFmmMinOrder ||
         options.pmmmOrder > kFmmMaxOrder || !(options.supportRadius > 0) ||
-        options.supportRadius > double(options.pmmmNearWidth) / options.meshSize) {
+        options.supportRadius > double(options.pmmmNearWidth) / options.meshSize ||
+        meshSize < 2 * options.pmmmNearWidth + 1 || meshSize > options.meshSize) {
         throw std::runtime_error("Invalid PMMM mesh, order, near width or softening support");
     }
-    if (cache.communicator != MPI_COMM_NULL) {
-        if (cache.meshSize != options.meshSize || cache.order != options.pmmmOrder ||
-            cache.nearWidth != options.pmmmNearWidth) {
+    if (meshCachePool.baseMeshSize != 0) {
+        if (meshCachePool.baseMeshSize != options.meshSize ||
+            meshCachePool.order != options.pmmmOrder ||
+            meshCachePool.nearWidth != options.pmmmNearWidth) {
             throw std::runtime_error("PMMM configuration changed without destroying its plans");
         }
+    } else {
+        meshCachePool.baseMeshSize = options.meshSize;
+        meshCachePool.order = options.pmmmOrder;
+        meshCachePool.nearWidth = options.pmmmNearWidth;
+    }
+    if (cache.communicator != MPI_COMM_NULL && !cache.initialized) {
+        throw std::runtime_error("PMMM initialization failed; destroy its plans before retrying");
+    }
+    if (cache.initialized && cache.meshSize == meshSize) {
+        cache.lastUsed = ++meshCachePool.nextUse;
         return;
     }
-    cache.meshSize = options.meshSize;
+    for (auto& entry : meshCachePool.inactive) {
+        if (entry.initialized && entry.meshSize == meshSize) {
+            std::swap(cache, entry);
+            cache.lastUsed = ++meshCachePool.nextUse;
+            return;
+        }
+    }
+    if (cache.communicator != MPI_COMM_NULL) {
+        auto empty = std::find_if(meshCachePool.inactive.begin(), meshCachePool.inactive.end(),
+            [](MeshCache const& entry) { return entry.communicator == MPI_COMM_NULL; });
+        if (empty == meshCachePool.inactive.end()) {
+            auto& oldest = oldestInactiveCache();
+            hpx::run_as_os_thread(hpx::annotated_function([&]() { releaseMeshCache(oldest); },
+                                      "gravity.pmmm.evictFftCache"))
+                .get();
+            std::swap(cache, oldest);
+        } else {
+            std::swap(cache, *empty);
+        }
+    }
+    cache.meshSize = meshSize;
+    cache.lastUsed = ++meshCachePool.nextUse;
     cache.order = gravity::kBuildFmmOrder;
     cache.nearWidth = options.pmmmNearWidth;
     cache.sourceCount = fmmMultipoleCoefficientCount(cache.order);
@@ -47,7 +143,7 @@ void initialize() {
     uint64_t const limit = std::min(uint64_t(std::numeric_limits<ptrdiff_t>::max()),
                                uint64_t(std::numeric_limits<size_t>::max() / sizeof(double))) /
         cache.localCount / 2;
-    if (uint64_t(n) > limit / n / n) {
+    if (uint64_t(options.meshSize) > limit / options.meshSize / options.meshSize) {
         throw std::runtime_error("PMMM coefficient mesh exceeds indexing/allocation limits");
     }
     int const locality = hpxRank();
@@ -81,6 +177,7 @@ void initialize() {
                 ptrdiff_t const dimensions[3] = {n, n, n / 2 + 1};
                 ptrdiff_t otherSize = 0, otherBegin = 0, otherSpectralSize = 0,
                           otherSpectralBegin = 0;
+                ptrdiff_t baseSourceAllocation = 0, baseLocalAllocation = 0;
                 {
                     std::lock_guard<std::mutex> lock(fftwPlannerMutex());
                     fftwf_mpi_init();
@@ -92,6 +189,25 @@ void initialize() {
                         fftwf_mpi_local_size_many_transposed(3, dimensions, cache.localCount,
                             FFTW_MPI_DEFAULT_BLOCK, FFTW_MPI_DEFAULT_BLOCK, cache.communicator,
                             &otherSize, &otherBegin, &otherSpectralSize, &otherSpectralBegin);
+                    if (meshCachePool.byteBudget == 0) {
+                        if (n == options.meshSize) {
+                            baseSourceAllocation = cache.sourceAllocation;
+                            baseLocalAllocation = cache.localAllocation;
+                        } else {
+                            ptrdiff_t const baseDimensions[3] = {
+                                options.meshSize, options.meshSize, options.meshSize / 2 + 1};
+                            ptrdiff_t ignoredSize = 0, ignoredBegin = 0, ignoredSpectralSize = 0,
+                                      ignoredSpectralBegin = 0;
+                            baseSourceAllocation = fftwf_mpi_local_size_many_transposed(3,
+                                baseDimensions, cache.sourceCount, FFTW_MPI_DEFAULT_BLOCK,
+                                FFTW_MPI_DEFAULT_BLOCK, cache.communicator, &ignoredSize,
+                                &ignoredBegin, &ignoredSpectralSize, &ignoredSpectralBegin);
+                            baseLocalAllocation = fftwf_mpi_local_size_many_transposed(3,
+                                baseDimensions, cache.localCount, FFTW_MPI_DEFAULT_BLOCK,
+                                FFTW_MPI_DEFAULT_BLOCK, cache.communicator, &ignoredSize,
+                                &ignoredBegin, &ignoredSpectralSize, &ignoredSpectralBegin);
+                        }
+                    }
                 }
                 collectiveCheck(otherSize == cache.localSize && otherBegin == cache.localBegin &&
                         otherSpectralSize == cache.spectralSize &&
@@ -102,19 +218,39 @@ void initialize() {
                         uint64_t(count) <= std::numeric_limits<size_t>::max() / (2 * sizeof(float));
                 };
                 collectiveCheck(validAllocation(cache.sourceAllocation) &&
-                        validAllocation(cache.localAllocation),
+                        validAllocation(cache.localAllocation) &&
+                        validAllocation(baseSourceAllocation) &&
+                        validAllocation(baseLocalAllocation),
                     "PMMM FFT allocation exceeds addressable memory");
-                double const localBytes =
-                    sizeof(float) * (4.0 * cache.sourceAllocation + 6.0 * cache.localAllocation) +
-                    sizeof(double) * cache.cellCount() * cache.sourceCount;
-                double totalBytes = 0;
+                double const localBytes[3] = {
+                    fftWorkspaceBytes(cache.sourceAllocation, cache.localAllocation),
+                    fftWorkspaceBytes(baseSourceAllocation, baseLocalAllocation),
+                    sizeof(double) * double(cache.cellCount()) * cache.sourceCount};
+                double totalBytes[3]{};
                 mpiCheck(MPI_Allreduce(
-                             &localBytes, &totalBytes, 1, MPI_DOUBLE, MPI_SUM, cache.communicator),
+                             localBytes, totalBytes, 3, MPI_DOUBLE, MPI_SUM, cache.communicator),
                     "workspace size estimate");
+                cache.workspaceBytes = totalBytes[0];
+                if (meshCachePool.byteBudget == 0) {
+                    meshCachePool.byteBudget = 2 * totalBytes[1];
+                }
+                collectiveCheck(cache.workspaceBytes <= meshCachePool.byteBudget,
+                    "PMMM mesh exceeds the FFT cache memory budget");
+                double retainedBytes = cache.workspaceBytes;
+                for (auto const& entry : meshCachePool.inactive) {
+                    retainedBytes += entry.workspaceBytes;
+                }
+                // Every byte count is global, so every locality makes the same
+                // eviction decision before allocating the new FFT buffers.
+                while (retainedBytes > meshCachePool.byteBudget) {
+                    auto& oldest = oldestInactiveCache();
+                    retainedBytes -= oldest.workspaceBytes;
+                    releaseMeshCache(oldest);
+                }
                 if (locality == 0) {
                     terminal::detailPrint(
                         "PMMM persistent FFT/moment workspace: %.3f GiB across %i localities\n",
-                        totalBytes / (1024.0 * 1024 * 1024), ranks);
+                        (totalBytes[0] + totalBytes[2]) / (1024.0 * 1024 * 1024), ranks);
                 }
                 {
                     std::lock_guard<std::mutex> lock(fftwPlannerMutex());
@@ -196,6 +332,7 @@ void initialize() {
         }
         cache.terms = contractionTerms(cache.order);
     });
+    cache.initialized = true;
 }
 
 void initializeGreen() {
@@ -310,55 +447,21 @@ void transform() {
 }
 
 void destroy() {
-#ifdef USE_CUDA
+#if defined(USE_CUDA) && !COSMICTIGER_PMMM_NEAR_FMM
     // Every solve has drained its tasks before this quiescent teardown. Release
     // retained PP buffers even when only the standalone near-field API ran.
     clearPmmmNearCudaWorkspaces();
 #endif
-    if (cache.communicator == MPI_COMM_NULL) {
-        return;
-    }
-    hpx::run_as_os_thread(
-        hpx::annotated_function(
-            []() {
-                int const present[3] = {cache.forward != nullptr, cache.inverse != nullptr,
-                    cache.greenForward != nullptr};
-                int allPresent[3]{};
-                mpiCheck(
-                    MPI_Allreduce(present, allPresent, 3, MPI_INT, MPI_MIN, cache.communicator),
-                    "plan destruction agreement");
-                {
-                    std::lock_guard<std::mutex> lock(fftwPlannerMutex());
-                    if (allPresent[0]) {
-                        fftwf_destroy_plan(cache.forward);
-                    }
-                    if (allPresent[1]) {
-                        fftwf_destroy_plan(cache.inverse);
-                    }
-                    if (allPresent[2]) {
-                        fftwf_destroy_plan(cache.greenForward);
-                    }
-                    cache.forward = nullptr;
-                    cache.inverse = nullptr;
-                    cache.greenForward = nullptr;
-                    fftwf_free(cache.sourceReal);
-                    fftwf_free(cache.localReal);
-                    fftwf_free(cache.sourceSpectrum);
-                    fftwf_free(cache.localSpectrum);
-                    fftwf_free(cache.greenSpectrum);
-                    cache.sourceReal = nullptr;
-                    cache.localReal = nullptr;
-                    cache.sourceSpectrum = nullptr;
-                    cache.localSpectrum = nullptr;
-                    cache.greenSpectrum = nullptr;
-                }
-                mpiCheck(MPI_Comm_free(&cache.communicator), "communicator destruction");
-            },
-            "gravity.pmmm.destroyFft"))
+    hpx::run_as_os_thread(hpx::annotated_function(
+                              []() {
+                                  releaseMeshCache(cache);
+                                  for (auto& entry : meshCachePool.inactive) {
+                                      releaseMeshCache(entry);
+                                  }
+                              },
+                              "gravity.pmmm.destroyFft"))
         .get();
-    cache.greenReady = false;
-    cache.owners.clear();
-    cache.slabOwner.clear();
+    meshCachePool = MeshCachePool{};
     state.cells.clear();
     state.moments.clear();
     state.sources.clear();
@@ -366,7 +469,6 @@ void destroy() {
     state.sourceCellsByKey.clear();
     state.sourceOwners.clear();
     state.tasks.clear();
-    cache.terms.clear();
     state.acceleration.clear();
     state.potential.clear();
 }

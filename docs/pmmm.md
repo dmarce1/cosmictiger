@@ -49,9 +49,10 @@ The former `gravity.method`, `gravity.pmmmNearMethod`, `gravity.fmmOrder`, and
 `gravity.pmmmOrder` inputs are rejected on both the CLI and in INI files.
 `--help` and the `build.*` startup fields report the selected build configuration.
 
-`gravity.meshSize=n` sets `n` cells on each axis of the normalized unit box,
-independently of the initial-condition particle count. The default value zero
-is unset and is rejected for PMMM. `gravity.pmmmNearWidth=w` sets the ghost
+`gravity.meshSize=n` sets the full-particle mesh to `n` cells on each axis of
+the normalized unit box, independently of the initial-condition particle count.
+The default value zero is unset and is rejected for PMMM.
+`gravity.pmmmNearWidth=w` sets the ghost
 width and accepts integers from one through four, defaulting to two. The near
 region contains `(2*w+1)^3` cells (27, 125, 343, or 729, respectively), including
 the sink cell. The mesh must satisfy `n >= 2*w+1`, so periodic near cells are
@@ -205,21 +206,23 @@ retained.
 
 ## FFT distribution, cache, and particle ownership
 
-One FFTW3-MPI communicator contains every locality. All coefficient fields
-use interleaved batched real-to-complex or complex-to-real transforms. Forward
+Each cached mesh has an FFTW3-MPI communicator containing every locality.
+All coefficient fields use interleaved batched real-to-complex or complex-to-real
+transforms. Forward
 plans produce transposed slabs, contraction operates directly on that layout,
 and the inverse plan consumes it. There are no separate locality groups or
 coefficient-group redistributions in this implementation.
 
-The first solve creates three plans: source forward, Green-filter forward,
-and local inverse. It also constructs and transforms the Green filters once.
+The first solve at a mesh size creates three plans: source forward, Green-filter
+forward, and local inverse. It also constructs and transforms the Green filters once.
 Subsequent solves reuse those plans, buffers, and Green spectra. At the default
 order eight, a normal solve performs 49 scalar-equivalent forward transforms and
 64 inverse transforms through two batched execution calls; the 64 Green
 transforms belong to initialization. This describes work, not measured speed.
 
-The cache lasts until explicit PMMM destruction or application shutdown.
-Mesh size, order, and near width cannot change while the cache is live.
+Each mesh cache lasts until eviction, explicit PMMM destruction, or application
+shutdown. Changing the configured base mesh size, order, or near width requires
+explicit PMMM destruction.
 The near opening angle is fixed by the near width.
 The solver, near method, and expansion order require a different build.
 Plans use `FFTW_ESTIMATE`; there is no persistent disk-wisdom cache. MPI calls
@@ -347,6 +350,28 @@ does not enter a fast stage's force. Ascending/descending signed kicks and
 per-rung drifts are retained. In both integrators, the timestep criterion uses
 the selected compact kernel's effective radius and the complete near-plus-far
 acceleration.
+
+Each hierarchical stage scales the mesh volume with its active particle fraction.
+With `N0 = gravity.meshSize`, `w = gravity.pmmmNearWidth`, and global owned
+particle counts `active` and `total`, the effective side length is
+
+```text
+N = clamp(ceil(N0 * cbrt(active / total)), 2*w+1, N0).
+```
+
+The count includes the entire stage-selected source-and-sink range, including
+faster rungs, and excludes ghosts. Exact integer volume comparisons implement
+the ceiling without floating-point ambiguity at cube boundaries. An empty
+selection uses the minimum mesh. For example, one eighth of the particles
+uses half the base side length unless the minimum mesh is reached. The base
+configuration remains unchanged, and full-particle solves use `N0`.
+All ranks use the same effective size for cell sorting, FFTs, ghost exchange,
+and near-field geometry. Plans and Green spectra are reused by effective mesh
+size, retaining at most eight meshes and twice the base mesh's global FFT
+buffer allocation. Transient moments and FFTW's internal plan storage are
+separate from this buffer cap. Mesh switches occur only after the previous
+solve has completed. `PmmmDiagnostics` reports `meshSize`, `activeParticles`, and
+`totalParticles` for the most recent solve.
 
 The hierarchical path calls `pmmmKick`: each completed cell's combined field is
 consumed immediately for the kick and rung decision, without retaining

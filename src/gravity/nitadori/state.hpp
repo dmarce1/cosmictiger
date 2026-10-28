@@ -56,13 +56,17 @@ namespace pmmm::detail {
 
 struct SolveRequest {
     uint64_t generation = 0;
+    int meshSize = 0;
+    uint64_t activeParticles = 0;
+    uint64_t totalParticles = 0;
     bool doPotential = false;
     bool applyKick = false;
     KickParameters parameters;
 
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
-        archive & generation & doPotential & applyKick;
+        archive & generation & meshSize & activeParticles & totalParticles & doPotential &
+            applyKick;
         if (applyKick) {
             archive & parameters;
         }
@@ -137,6 +141,10 @@ struct MeshCache {
     FlopCount forwardFlops = 0;
     FlopCount inverseFlops = 0;
     FlopCount greenForwardFlops = 0;
+    // Global FFT buffer bytes; all localities use the same eviction decisions.
+    double workspaceBytes = 0;
+    uint64_t lastUsed = 0;
+    bool initialized = false;
     bool greenReady = false;
     Vector<hpx::id_type> owners;
     std::vector<int> slabOwner;
@@ -204,7 +212,8 @@ int periodicIndex(int index);
 int signedIndex(int index);
 std::array<int, 3> coordinates(uint64_t key);
 PmmmNearParticle particle(ParticleInteger index, std::array<int, 3> const& cell, FlopCount& flops);
-void initialize();
+void initialize(int meshSize);
+std::array<uint64_t, 2> particleCounts(bool applyKick);
 void initializeGreen();
 void prepare(SolveRequest const& request);
 void accumulate(std::vector<CellData> const& cells);

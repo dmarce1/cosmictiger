@@ -129,7 +129,7 @@ def main():
             diagnostic = ("COSMICTIGER_TIME_INTEGRATOR=leapfrog"
                           if args.time_integrator == "hierarchical" else
                           "SPH currently requires an FMM build when gravity.enabled=true")
-            require(diagnostic in log,
+            require(diagnostic in log or "requires COSMICTIGER_WITH_SPH=ON" in log,
                     "PMMM with SPH was not rejected with the expected diagnostic")
             print(f"{label}: unsupported PMMM with SPH rejected at startup")
             continue

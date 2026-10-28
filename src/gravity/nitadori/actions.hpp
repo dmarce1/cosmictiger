@@ -3,6 +3,8 @@
 
 #include "state.hpp"
 
+HPX_DEFINE_PLAIN_ACTION(pmmm::detail::particleCounts, PmmmParticleCountsAction);
+HPX_REGISTER_ACTION_DECLARATION(PmmmParticleCountsAction, PmmmParticleCountsAction);
 HPX_DEFINE_PLAIN_ACTION(pmmm::detail::accumulate, PmmmAccumulateAction);
 HPX_REGISTER_ACTION_DECLARATION(PmmmAccumulateAction, PmmmAccumulateAction);
 HPX_DEFINE_PLAIN_ACTION(pmmm::detail::readCells, PmmmReadCellsAction);

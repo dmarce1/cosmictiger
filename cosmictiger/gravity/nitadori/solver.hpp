@@ -8,6 +8,10 @@
 #include <cosmictiger/particles/particles.hpp>
 
 struct PmmmDiagnostics {
+    // Effective mesh and global owned population for the most recent solve.
+    int meshSize = 0;
+    uint64_t activeParticles = 0;
+    uint64_t totalParticles = 0;
     double sourceMass = 0;
     double depositedMass = 0;
     // Current solve CPU traversal counts (CUDA work is not counted).
@@ -32,11 +36,11 @@ struct PmmmDiagnostics {
 
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
-        archive & sourceMass & depositedMass & nearCpuAcceptedMultipoles & nearCpuDirectPairs &
-            ghostParticles & ghostCells & ghostBytes & nearRemoteTreeFetches &
-            nearRemoteParticleFetches & nearBatches & peakBatchParticles &
-            completedWhileGhostsPending & storedAccelerationParticles & storedPotentialParticles &
-            planBuilds & greenBuilds & solveCount;
+        archive & meshSize & activeParticles & totalParticles & sourceMass & depositedMass &
+            nearCpuAcceptedMultipoles & nearCpuDirectPairs & ghostParticles & ghostCells &
+            ghostBytes & nearRemoteTreeFetches & nearRemoteParticleFetches & nearBatches &
+            peakBatchParticles & completedWhileGhostsPending & storedAccelerationParticles &
+            storedPotentialParticles & planBuilds & greenBuilds & solveCount;
     }
 };
 

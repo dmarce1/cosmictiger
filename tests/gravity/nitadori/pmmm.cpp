@@ -361,10 +361,11 @@ void initializePmmmFixture(int fixture, int ownership) {
             double coordinate = 0.0;
             if (fixture == 8) {
                 // Centered, distinct sources eliminate multipole truncation
-                // from the stage test while retaining near and far pairs.
+                // from the stage test while retaining near and far pairs. The
+                // selected three of seven particles reduce the base side 8 to 7.
                 constexpr std::array<std::array<int, kDimensions>, 7> kStageCells{
-                    {{0, 1, 2}, {1, 1, 2}, {3, 1, 2}, {3, 2, 2}, {7, 1, 2}, {5, 6, 4}, {0, 7, 7}}};
-                coordinate = (kStageCells[id][dim] + 0.5) / 8.0;
+                    {{0, 1, 2}, {1, 1, 2}, {3, 1, 2}, {3, 2, 2}, {6, 1, 2}, {5, 6, 4}, {0, 6, 6}}};
+                coordinate = (kStageCells[id][dim] + 0.5) / 7.0;
             } else if (fixture == 7) {
                 // Every rank owns a fragment of the same mesh cell. Distinct
                 // positions avoid softened pairs in the independent Ewald sum.
@@ -447,14 +448,20 @@ Vector<PmmmSample> readPmmmFixture() {
         requirePmmm(particlesVel(kXDimension, i) == float(sample.id + 1) &&
                 particlesVel(kYDimension, i) == 0.25f * float(sample.id) &&
                 particlesVel(kZDimension, i) == -0.5f * float(sample.id) &&
-                particlesRung(i) == 1 + sample.id % 4 &&
-                particlesPot(i) == -0.25f * float(sample.id + 1),
-            "force solve changed velocity, rung, or saved potential");
+                particlesRung(i) == 1 + sample.id % 4,
+            "force solve changed velocity or rung");
+        if (saveParticlePotential(getOptions().analysis)) {
+            requirePmmm(particlesPot(i) == -0.25f * float(sample.id + 1),
+                "force solve changed saved potential");
+        }
         sample.rank = hpxRank();
         sample.cellKey = 0;
         for (int dim = 0; dim < kDimensions; ++dim) {
-            requirePmmm(particlesGravityAcceleration(dim, i) == float(4 * (sample.id + 1) + dim),
-                "force solve changed saved acceleration");
+            if (saveParticleAcceleration(getOptions().analysis)) {
+                requirePmmm(
+                    particlesGravityAcceleration(dim, i) == float(4 * (sample.id + 1) + dim),
+                    "force solve changed saved acceleration");
+            }
             sample.cellKey = sample.cellKey * getOptions().gravity.meshSize +
                 particleMeshCoordinate(particlesPos(dim, i).raw(), getOptions().gravity.meshSize);
         }
@@ -934,9 +941,11 @@ void distributePmmmFixture(int fixture) {
     auto options = saved;
     options.initial.numberOfParticles = pmmmFixtureParticleCount(fixture);
     // Fresh fixtures deliberately place every rung on arbitrary localities.
-    // The mixed-mass fixture uses the all-particle hydro migration path before
-    // testing rung-selected stages, independently of the compiled integrator.
-    // Use the ordinary particle-balanced domains, including split mesh cells.
+    // Disable gravity only during migration so the hierarchical dark-matter
+    // path transfers every owned rung, just as the mixed-mass hydro path does.
+    // Domain geometry still uses the same particle-balanced spatial cuts.
+    options.gravity.enabled = false;
+    options.run.hierarchicalGravity = false;
     setOptions(options);
     particlesSortByRung(0);
     domainsRebound();
@@ -1167,6 +1176,9 @@ void checkPmmmStreamedStages() {
             pmmmKick(parameters);
             auto const after = gatherPmmmKickSamples();
             auto const diagnostics = pmmmDiagnostics();
+            requirePmmm(diagnostics.meshSize == 7 && diagnostics.activeParticles == 3 &&
+                    diagnostics.totalParticles == 7,
+                "streamed stage did not scale the mesh using global active and owned counts");
             requirePmmm(diagnostics.storedAccelerationParticles == 0 &&
                     diagnostics.storedPotentialParticles == 0,
                 "streamed stage allocated retained full-particle result arrays");
@@ -1209,6 +1221,13 @@ void checkPmmmStreamedStages() {
             parameters.eta = 1.0e6f;
             pmmmKick(parameters);
             auto const descending = gatherPmmmKickSamples();
+            auto const descendingDiagnostics = pmmmDiagnostics();
+            requirePmmm(descendingDiagnostics.meshSize == 7 &&
+                    descendingDiagnostics.activeParticles == 3 &&
+                    descendingDiagnostics.totalParticles == 7 &&
+                    descendingDiagnostics.planBuilds == diagnostics.planBuilds &&
+                    descendingDiagnostics.greenBuilds == diagnostics.greenBuilds,
+                "descending stage changed or rebuilt the same active-particle mesh");
             requirePmmm(descending.size() == before.size(), "descending stage changed owned count");
             selected = 0;
             for (size_t i = 0; i < before.size(); ++i) {
@@ -1252,6 +1271,182 @@ void checkPmmmStreamedStages() {
     setOptions(saved);
     PRINT("PMMM streamed active-source stages, signed kicks, optional fields, and batch-size "
           "checks passed\n");
+}
+
+void checkPmmmStageMeshes() {
+    auto const saved = getOptions();
+    auto options = saved;
+    options.gravity.meshSize = 8;
+    options.gravity.pmmmNearWidth = 2;
+    options.gravity.fmmOrder = kFmmDefaultOrder;
+    options.gravity.pmmmOrder = options.gravity.fmmOrder;
+    options.gravity.openingAngle = 0.02;
+    options.analysis.saveForce = false;
+    options.analysis.saveAcceleration = false;
+    options.analysis.savePotential = false;
+    // The configured initial population is deliberately unrelated to the
+    // current owned fixture. Mesh selection must reduce actual owned counts.
+    options.initial.numberOfParticles = 32768;
+    pmmmDestroy();
+    setOptions(options);
+    preparePmmmFixture(8);
+    distributePmmmFixture(8);
+    auto const before = gatherPmmmKickSamples();
+    pmmmSolve(true);
+    auto const fullReference = gatherPmmmSamples();
+    auto const initial = pmmmDiagnostics();
+    requirePmmm(
+        initial.meshSize == 8 && initial.activeParticles == 7 && initial.totalParticles == 7,
+        "all-particle solve did not retain the configured base mesh and actual owned count");
+
+    KickParameters parameters{};
+    parameters.htime = true;
+    parameters.ascending = true;
+    parameters.descending = false;
+    parameters.top = true;
+    parameters.sign = 0.0f;
+    parameters.firstCall = false;
+    parameters.saveForce = false;
+    parameters.gpu = options.compute.cuda;
+    parameters.minLevel = 0;
+    parameters.a = 1.0f;
+    parameters.t0 = 1.0f;
+    parameters.theta = options.gravity.openingAngle;
+    parameters.gravitySupportRadius = options.gravity.supportRadius;
+    parameters.eta = options.gravity.timestepEta;
+    parameters.gm = options.gravity.gm;
+    parameters.nodeLoad = 1.0f;
+    parameters.doPhi = true;
+    auto stage = [&](int minRung, uint64_t expectedActive, int expectedMesh) {
+        particlesSortByRung(0);
+        particlesSortByRung(minRung);
+        parameters.minRung = minRung;
+        pmmmKick(parameters);
+        auto const diagnostics = pmmmDiagnostics();
+        requirePmmm(diagnostics.meshSize == expectedMesh &&
+                diagnostics.activeParticles == expectedActive && diagnostics.totalParticles == 7,
+            "hierarchical mesh used a local or configured initial particle count");
+        requirePmmm(getOptions().gravity.meshSize == 8,
+            "hierarchical mesh selection changed the configured base mesh");
+        double selectedMass = 0.0;
+        for (auto const& sample : before) {
+            if (sample.rung >= minRung) {
+                selectedMass += sample.mass;
+            }
+        }
+        requirePmmm(std::abs(diagnostics.sourceMass - selectedMass) < 1.0e-6 &&
+                std::abs(diagnostics.depositedMass - selectedMass) < 1.0e-6,
+            "changing the hierarchical mesh changed the selected source mass");
+        auto const after = gatherPmmmKickSamples();
+        requirePmmm(before.size() == after.size(), "mesh switching changed the owned count");
+        for (size_t i = 0; i < before.size(); ++i) {
+            requirePmmm(before[i].rung == after[i].rung,
+                "mesh switching changed a particle rung without a descending kick");
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                requirePmmm(before[i].rawPosition[dim] == after[i].rawPosition[dim] &&
+                        before[i].velocity[dim] == after[i].velocity[dim],
+                    "mesh switching changed physical particle state with a zero signed kick");
+            }
+        }
+        return diagnostics;
+    };
+    auto const full = stage(0, 7, 8);
+    requirePmmm(full.planBuilds == initial.planBuilds && full.greenBuilds == initial.greenBuilds,
+        "full hierarchical stage rebuilt the existing all-particle mesh");
+    auto const partial = stage(3, 3, 7);
+    requirePmmm(
+        partial.planBuilds == full.planBuilds + 1 && partial.greenBuilds == full.greenBuilds + 1,
+        "first reduced mesh did not build exactly one FFT and Green cache");
+    auto const grown = stage(0, 7, 8);
+    requirePmmm(grown.planBuilds == partial.planBuilds && grown.greenBuilds == partial.greenBuilds,
+        "return to the base mesh rebuilt a retained FFT or Green cache");
+    auto const minimum = stage(4, 1, 5);
+    requirePmmm(
+        minimum.planBuilds == grown.planBuilds + 1 && minimum.greenBuilds == grown.greenBuilds + 1,
+        "minimum-width mesh did not build exactly one FFT and Green cache");
+    auto const empty = stage(5, 0, 5);
+    requirePmmm(empty.planBuilds == minimum.planBuilds && empty.greenBuilds == minimum.greenBuilds,
+        "empty stage rebuilt its retained minimum-width mesh");
+    auto const reducedAgain = stage(3, 3, 7);
+    requirePmmm(reducedAgain.planBuilds == empty.planBuilds &&
+            reducedAgain.greenBuilds == empty.greenBuilds,
+        "return to a retained reduced mesh rebuilt the FFT or Green cache");
+
+    // The retained rung-selected range must not affect an ordinary force solve.
+    pmmmSolve(true);
+    comparePmmmSamples(fullReference, gatherPmmmSamples());
+    auto const restored = pmmmDiagnostics();
+    requirePmmm(restored.meshSize == 8 && restored.activeParticles == 7 &&
+            restored.totalParticles == 7 && restored.planBuilds == reducedAgain.planBuilds &&
+            restored.greenBuilds == reducedAgain.greenBuilds,
+        "ordinary force solve did not restore the cached full-particle mesh");
+    particlesSortByRung(0);
+    preparePmmmFixture(2);
+    distributePmmmFixture(2);
+    parameters.minRung = 0;
+    pmmmKick(parameters);
+    auto const noParticles = pmmmDiagnostics();
+    requirePmmm(noParticles.meshSize == 5 && noParticles.activeParticles == 0 &&
+            noParticles.totalParticles == 0 && noParticles.sourceMass == 0.0 &&
+            noParticles.depositedMass == 0.0,
+        "empty population did not select the valid minimum-width mesh");
+    pmmmDestroy();
+
+    // Two particles on each rung produce four distinct meshes whose combined
+    // FFT workspaces exceed twice the base allocation, including slab padding.
+    options.gravity.meshSize = 12;
+    setOptions(options);
+    preparePmmmFixture(4);
+    distributePmmmFixture(4);
+    pmmmSolve(true);
+    auto const evictionReference = gatherPmmmSamples();
+    auto const evictionInitial = pmmmDiagnostics();
+    double const byteBudget = 2 * pmmm::detail::cache.workspaceBytes;
+    double distinctWorkspaceBytes = pmmm::detail::cache.workspaceBytes;
+    constexpr std::array<int, 3> kReducedSizes{11, 10, 8};
+    for (int minRung = 2; minRung <= 4; ++minRung) {
+        particlesSortByRung(0);
+        particlesSortByRung(minRung);
+        parameters.minRung = minRung;
+        pmmmKick(parameters);
+        auto const current = pmmmDiagnostics();
+        requirePmmm(current.meshSize == kReducedSizes[minRung - 2] &&
+                current.activeParticles == uint64_t(2 * (5 - minRung)) &&
+                current.totalParticles == 8 &&
+                current.planBuilds == evictionInitial.planBuilds + minRung - 1 &&
+                current.greenBuilds == evictionInitial.greenBuilds + minRung - 1,
+            "cache-pressure stages did not build their distinct reduced meshes");
+        distinctWorkspaceBytes += pmmm::detail::cache.workspaceBytes;
+    }
+    requirePmmm(distinctWorkspaceBytes > byteBudget,
+        "cache-pressure fixture did not exceed the retained FFT workspace budget");
+    auto const pressured = pmmmDiagnostics();
+    pmmmKick(parameters);
+    auto const recent = pmmmDiagnostics();
+    requirePmmm(
+        recent.planBuilds == pressured.planBuilds && recent.greenBuilds == pressured.greenBuilds,
+        "cache pressure discarded the most recently used mesh");
+    pmmmSolve(true);
+    comparePmmmSamples(evictionReference, gatherPmmmSamples());
+    auto const rebuilt = pmmmDiagnostics();
+    requirePmmm(rebuilt.meshSize == 12 && rebuilt.activeParticles == 8 &&
+            rebuilt.totalParticles == 8 && rebuilt.planBuilds == recent.planBuilds + 1 &&
+            rebuilt.greenBuilds == recent.greenBuilds + 1,
+        "cache pressure did not evict and rebuild the least recently used base mesh");
+    pmmmDestroy();
+    // Size 8 was inactive at destruction; it must not survive in the pool.
+    particlesSortByRung(0);
+    particlesSortByRung(parameters.minRung);
+    pmmmKick(parameters);
+    auto const afterDestroy = pmmmDiagnostics();
+    requirePmmm(afterDestroy.meshSize == 8 && afterDestroy.planBuilds == rebuilt.planBuilds + 1 &&
+            afterDestroy.greenBuilds == rebuilt.greenBuilds + 1,
+        "explicit destruction retained an inactive FFT or Green cache");
+    particlesSortByRung(0);
+    pmmmDestroy();
+    setOptions(saved);
+    PRINT("PMMM hierarchical mesh scaling, global counts, minimum/empty stages, and cache "
+          "reuse/eviction checks passed\n");
 }
 
 void checkPmmmCellOverlap() {
@@ -1563,6 +1758,7 @@ void pmmmTest() {
 #endif
     detail::checkPmmmPpBatchTargets();
     detail::checkPmmmStreamedStages();
+    detail::checkPmmmStageMeshes();
     detail::checkPmmmCellOverlap();
     PRINT("PMMM periodic force, mass, self, ownership, and cache checks passed at order %i "
           "with %s near interactions\n",

@@ -128,7 +128,7 @@ struct Gravity {
     // Build descriptors are retained in the historical serialized layout.
     // Solver dispatch uses build_config.hpp; setOptions rejects mismatches.
     std::string method{gravity::kBuildGravityMethod};
-    int meshSize{};          // PMMM cells per axis; independent of the initial-condition mesh.
+    int meshSize{};          // Full-particle PMMM cells per axis; hierarchical stages scale down.
     int pmmmNearWidth{2};    // Direct neighbor cube radius for periodic PMMM, one to four cells.
     int pmmmOrder{gravity::kBuildFmmOrder};    // Shared far-field and near-field build order.
     std::string pmmmNearMethod{gravity::kBuildPmmmNearMethod};
