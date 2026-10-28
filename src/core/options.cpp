@@ -274,6 +274,8 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"lightcone.linkingLength", options.lightcone.linkingLength},
         {"lightcone.mapSize", options.lightcone.mapSize},
         {"gravity.enabled", options.gravity.enabled},
+        {"gravity.errorInterval", options.gravity.errorInterval},
+        {"gravity.errorSampleSize", options.gravity.errorSampleSize},
         {"gravity.method", options.gravity.method},
         {"gravity.meshSize", options.gravity.meshSize},
         {"gravity.pmmmMaxPrimeFactor",
@@ -523,6 +525,11 @@ bool processOptions(int argc, char* argv[]) {
     po::options_description gravityOpts("Gravity");
     gravityOpts.add_options()("gravity.enabled",
         po::value<bool>(&opts.gravity.enabled)->default_value(true), "enable gravity")(
+        "gravity.errorInterval", po::value<int>(&opts.gravity.errorInterval)->default_value(0),
+        "compare sampled accelerations with a direct solve every N rung-0 steps (0 disables)")(
+        "gravity.errorSampleSize",
+        po::value<int>(&opts.gravity.errorSampleSize)->default_value(100),
+        "number of evenly spaced particles for gravity error checks (capped at particle count)")(
         "gravity.meshSize", po::value<int>(&opts.gravity.meshSize)->default_value(0),
         "Requested full-particle PMMM cells per axis; required for PMMM builds")(
         "gravity.pmmmMaxPrimeFactor",
@@ -741,6 +748,13 @@ bool processOptions(int argc, char* argv[]) {
     auto const isExplicit = [&](char const* key) { return vm.count(key) && !vm[key].defaulted(); };
     opts.gravity.pmmmMaxPrimeFactor = detail::parsePmmmMaxPrimeFactor(pmmmMaxPrimeFactorInput);
     int effectiveMeshSize = opts.gravity.meshSize;
+    if (opts.gravity.errorInterval < 0) {
+        THROW_ERROR("gravity.errorInterval must be nonnegative\n");
+    }
+    if (opts.gravity.errorInterval > 0 && opts.gravity.errorSampleSize <= 0) {
+        THROW_ERROR(
+            "gravity.errorSampleSize must be positive when gravity.errorInterval is enabled\n");
+    }
     if (opts.gravity.meshSize < 0) {
         THROW_ERROR("gravity.meshSize must be nonnegative\n");
     }
@@ -803,6 +817,9 @@ bool processOptions(int argc, char* argv[]) {
         if (!isExplicit("output.directory")) {
             opts.output.directory = "./output/" + opts.run.scenario;
         }
+    }
+    if (opts.gravity.errorInterval > 0 && !opts.gravity.enabled) {
+        THROW_ERROR("gravity.errorInterval requires gravity.enabled=true\n");
     }
     auto const openingSchedule = gravity::parseOpeningSchedule(opts.gravity.openingSchedule);
     if (!openingSchedule.empty() &&
@@ -1341,6 +1358,8 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("chemistry.maxSubsteps", chemistry.maxSubsteps);
     SHOW("hydro.enabled", hydro.enabled);
     SHOW("gravity.enabled", gravity.enabled);
+    SHOW("gravity.errorInterval", gravity.errorInterval);
+    SHOW("gravity.errorSampleSize", gravity.errorSampleSize);
     show("build.timeIntegrator", std::string(integration::kBuildTimeIntegrator));
     SHOW("build.gravityMethod", gravity.method);
     SHOW("gravity.meshSize", gravity.meshSize);
@@ -1525,6 +1544,10 @@ bool processOptions(int argc, char* argv[]) {
         SHOW("gravity.enabled", gravity.enabled);
         if (opts.gravity.enabled) {
             SHOW("build.gravityMethod", gravity.method);
+            if (opts.gravity.errorInterval > 0) {
+                SHOW("gravity.errorInterval", gravity.errorInterval);
+                SHOW("gravity.errorSampleSize", gravity.errorSampleSize);
+            }
             if (usesMeshGravity(opts.gravity)) {
                 SHOW("gravity.meshSize", gravity.meshSize);
                 show("gravity.pmmmMaxPrimeFactor",

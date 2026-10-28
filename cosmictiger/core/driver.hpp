@@ -67,11 +67,11 @@ std::pair<KickReturn, TreeCreateReturn> kickStep(
 std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minimumRung, int maximumRung,
     double scale, double scaleDerivative, double time, double baseTimestep, double theta,
     EnergiesT* energies, int minimumRungFloor, bool doPotential, hpx::future<void>* lightcone,
-    bool keepTop, double drag);
+    bool keepTop, double drag, int gravityErrorStep = -1);
 
 std::pair<KickReturn, TreeCreateReturn> advanceForces(int minRung, double scale,
     double scaleDerivative, double time, double baseTimestep, double theta, bool firstCall,
-    bool fullEvaluation, EnergiesT& energies);
+    bool fullEvaluation, EnergiesT& energies, int gravityErrorStep = -1);
 
 void runFixedScenario();
 void driver();

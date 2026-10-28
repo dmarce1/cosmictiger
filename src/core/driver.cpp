@@ -37,6 +37,7 @@
 #include <cosmictiger/gravity/dehnen/distributed_tree.hpp>
 #include <cosmictiger/gravity/dehnen/execution.hpp>
 #endif
+#include <cosmictiger/gravity/error.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/kick_workspace.hpp>
@@ -556,8 +557,11 @@ std::pair<KickReturn, TreeCreateReturn> kickStep(int minrung, double scale, doub
 
 std::pair<KickReturn, TreeCreateReturn> advanceForces(int minRung, double scale,
     double scaleDerivative, double time, double baseTimestep, double theta, bool firstCall,
-    bool fullEvaluation, EnergiesT& energies) {
+    bool fullEvaluation, EnergiesT& energies, int gravityErrorStep) {
     std::pair<KickReturn, TreeCreateReturn> result{};
+    if (gravityErrorStep >= 0) {
+        section_timing::measure(section_timing::Section::analysis, []() { gravityErrorBegin(); });
+    }
     bool const meshGravity = getOptions().gravity.enabled && usesMeshGravity(getOptions().gravity);
     if (getOptions().gravity.enabled) {
 #if COSMICTIGER_GRAVITY_PMMM
@@ -650,6 +654,10 @@ std::pair<KickReturn, TreeCreateReturn> advanceForces(int minRung, double scale,
             energies.tckin += gravity.dkin;
         }
     }
+    if (gravityErrorStep >= 0) {
+        section_timing::measure(section_timing::Section::analysis,
+            [&]() { gravityErrorFinish(gravityErrorStep, time, scale); });
+    }
     return result;
 }
 
@@ -683,7 +691,8 @@ void particleMeshDriftRung(
 
 std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int maxRung,
     double scale, double adot, double tau, double t0, double theta, EnergiesT* energies,
-    int minrung0, bool doPhi, hpx::future<void>* lcFut, bool nocrop, double drag) {
+    int minrung0, bool doPhi, hpx::future<void>* lcFut, bool nocrop, double drag,
+    int gravityErrorStep) {
     Timer tm;
     KickReturn kr;
     TreeCreateReturn sr;
@@ -775,6 +784,10 @@ std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int m
          terminal::detailPrint("drift = %e\n", tm.read());
          }*/
         int minimumTreeLevel = 0;
+        if (top && gravityErrorStep >= 0) {
+            section_timing::measure(
+                section_timing::Section::analysis, []() { gravityErrorBegin(); });
+        }
         tm.reset();
         tm.start();
         TreeCreateReturn thisSr{};
@@ -851,6 +864,10 @@ std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int m
             if constexpr (!gravity::kBuildUsesPmmm || gravity::kBuildPmmmNearUsesFmm) {
                 setGravityCounterUse(false);
             }
+        }
+        if (top && gravityErrorStep >= 0) {
+            section_timing::measure(section_timing::Section::analysis,
+                [&]() { gravityErrorFinish(gravityErrorStep, tau, scale); });
         }
         energies->tckin += thisKr.dkin;
         tm.stop();
@@ -1395,12 +1412,15 @@ void driver() {
                 //			particles_displace(rand1(), rand1(), rand1());
             }
             resetFlops();
+            int const errorInterval = getOptions().gravity.errorInterval;
+            int const gravityErrorStep =
+                itime == 0 && errorInterval > 0 && step % errorInterval == 0 ? step : -1;
             if (!integration::kBuildUsesHierarchical || !getOptions().gravity.enabled) {
-                tmp = advanceForces(
-                    minrung, a, a * adot, tau, t0, theta, tau == 0.0, fullEval, energies);
+                tmp = advanceForces(minrung, a, a * adot, tau, t0, theta, tau == 0.0, fullEval,
+                    energies, gravityErrorStep);
             } else {
                 tmp = kickStepHierarchical(om, maxRung, a, adot, tau, t0, theta, &energies,
-                    minrung0, fullEval, &lcFut, nocrop, sqrt(glassError));
+                    minrung0, fullEval, &lcFut, nocrop, sqrt(glassError), gravityErrorStep);
             }
             if (tau == 0.0) {
                 energies0 = energies;

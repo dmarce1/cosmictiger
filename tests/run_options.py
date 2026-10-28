@@ -68,6 +68,7 @@ def main():
                 "gravity.kernelFamily", "gravity.kernelDegree",
                 "gravity.meshSize", "gravity.pmmmNearWidth", "gravity.pmmmMaxPrimeFactor",
                 "gravity.openingAngle", "gravity.openingSchedule",
+                "gravity.errorInterval", "gravity.errorSampleSize",
                 "hydro.kernelFamily", "hydro.kernelDegree",
                 "gravity.effectiveRadius", "gravity.supportRadius",
                 "hydro.minEffectiveRadius", "hydro.maxEffectiveRadius",
@@ -150,6 +151,36 @@ mapSize = 8
 
     metadata_options = ["--run.test=checkpointState", "--compute.cuda=false",
                         "--hydro.enabled=false", "--initial.particlesPerDimension=8"]
+
+    error_defaults = run("gravity_error_defaults", metadata_options)
+    assertNumericSetting(error_defaults, "gravity.errorInterval", 0)
+    assertNumericSetting(error_defaults, "gravity.errorSampleSize", 100)
+    error_config = args.workdir / "gravity_error.ini"
+    error_config.write_text("[gravity]\nerrorInterval = 3\nerrorSampleSize = 7\n")
+    error_configured = run("gravity_error_config", metadata_options + [
+        f"--configuration={error_config.resolve()}"])
+    assertNumericSetting(error_configured, "gravity.errorInterval", 3)
+    assertNumericSetting(error_configured, "gravity.errorSampleSize", 7)
+    error_override = run("gravity_error_cli_override", metadata_options + [
+        f"--configuration={error_config.resolve()}", "--gravity.errorInterval=2",
+        "--gravity.errorSampleSize=11"])
+    assertNumericSetting(error_override, "gravity.errorInterval", 2)
+    assertNumericSetting(error_override, "gravity.errorSampleSize", 11)
+    for label, options, diagnostic in (
+            ("interval", ["--gravity.errorInterval=-1"],
+             "gravity.errorInterval must be nonnegative"),
+            ("empty", ["--gravity.errorInterval=1", "--gravity.errorSampleSize=0"],
+             "gravity.errorSampleSize must be positive"),
+            ("negative", ["--gravity.errorInterval=1", "--gravity.errorSampleSize=-2"],
+             "gravity.errorSampleSize must be positive"),
+            ("disabled_gravity", ["--gravity.errorInterval=1", "--gravity.enabled=false"],
+             "gravity.errorInterval requires gravity.enabled=true")):
+        rejected = run(f"gravity_error_reject_{label}", metadata_options + options, False)
+        if diagnostic not in rejected:
+            raise RuntimeError(f"{label}: missing gravity-error option diagnostic")
+    error_disabled = run("gravity_error_disabled", metadata_options + [
+        "--gravity.errorInterval=0", "--gravity.errorSampleSize=0"])
+    assertNumericSetting(error_disabled, "gravity.errorInterval", 0)
 
     if not re.search(r"^hydro\.balsaraSwitch\s*:\s*F\s*$", configured, re.MULTILINE):
         raise RuntimeError("INI hydro.balsaraSwitch=false was not applied")

@@ -136,6 +136,11 @@ PMMM uses the compiled time integrator;
 for order conventions, independent particle and FFT ownership, memory costs, CPU/CUDA
 near fields, and restarts.
 
+Use `--gravity.errorInterval=10 --gravity.errorSampleSize=100` to compare the
+gravity solver with direct accelerations on evenly spaced particles at coarse
+steps 0, 10, 20, and so on. Results are written to `gravity_error.csv` in the output
+directory; see [gravity accuracy diagnostics](docs/gravity_error.md).
+
 FMM gravity and SPH can select radial kernels independently. Both use an effective radius
 `effectiveRadius = 2 sigma`, where sigma is the standard deviation along one
 coordinate axis. This preserves the existing numerical length scale: adopting

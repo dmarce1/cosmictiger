@@ -413,6 +413,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, kD
                 forces.gy[j] *= gm;
                 forces.gz[j] *= gm;
                 forces.phi[j] *= gm;
+                particlesCaptureGravitySample(i, forces.gx[j], forces.gy[j], forces.gz[j]);
                 if (saveAcceleration) {
                     particlesGravityAcceleration(kXDimension, i) = forces.gx[j];
                     particlesGravityAcceleration(kYDimension, i) = forces.gy[j];

@@ -116,6 +116,7 @@ struct Particle {
     char r;
     char t;
     char type;
+    ParticleInteger gravitySample = -1;
     template <class A>
     void serialize(A&& a, unsigned) {
         static bool doGroups = getOptions().analysis.groups;
@@ -130,6 +131,9 @@ struct Particle {
         }
         if (doTracers) {
             a & t;
+        }
+        if (getOptions().gravity.errorInterval > 0) {
+            a & gravitySample;
         }
         if (getOptions().hydro.enabled) {
             a & catIndex;
@@ -177,6 +181,9 @@ PARTICLES_EXTERN ParticleInteger* particlesSph;
 PARTICLES_EXTERN GroupInteger* particlesLgrp;
 PARTICLES_EXTERN char* particlesTr;
 PARTICLES_EXTERN char* particlesTy;
+// Transient gravity-check attributes: -1 is unselected, otherwise the global sample slot.
+PARTICLES_EXTERN ParticleInteger* particlesGravitySampleIndices;
+PARTICLES_EXTERN Array<float, kDimensions>* particlesGravitySampleAccelerations;
 PARTICLES_EXTERN size_t particlesGlobalOffset;
 
 struct ParticleGlobalRange {
@@ -233,6 +240,8 @@ SharedMutexType& particlesSharedMutex();
 #endif
 void particlesSetTracers(size_t count = 0);
 Vector<OutputParticle> particlesGetTracers();
+// Local operation. A zero count disables capture and releases the compact result buffer.
+void particlesGravitySamplesBegin(size_t sampleCount);
 void particlesMemadviseCpu();
 void particlesGlobalReadVels(
     ParticleGlobalRange range, float* vx, float* vy, float* z, ParticleInteger offset);
@@ -322,6 +331,22 @@ inline char& particlesTracer(ParticleInteger index) {
     return particlesTr[index];
 }
 
+inline ParticleInteger& particlesGravitySample(ParticleInteger index) {
+    CHECK_PART_BOUNDS(index);
+    return particlesGravitySampleIndices[index];
+}
+
+inline void particlesCaptureGravitySample(ParticleInteger index, float gx, float gy, float gz) {
+    if (particlesGravitySampleAccelerations != nullptr) {
+        ParticleInteger const slot = particlesGravitySample(index);
+        if (slot >= 0) {
+            particlesGravitySampleAccelerations[slot][kXDimension] = gx;
+            particlesGravitySampleAccelerations[slot][kYDimension] = gy;
+            particlesGravitySampleAccelerations[slot][kZDimension] = gz;
+        }
+    }
+}
+
 inline ParticleInteger& particlesCatIndex(ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     return particlesSph[index];
@@ -342,6 +367,9 @@ inline Particle particlesGetParticle(ParticleInteger index) {
     }
     if (doTracers) {
         p.t = particlesTracer(index);
+    }
+    if (getOptions().gravity.errorInterval > 0) {
+        p.gravitySample = particlesGravitySample(index);
     }
     if (getOptions().hydro.enabled) {
         p.type = particlesType(index);
@@ -364,6 +392,9 @@ inline void particlesSetParticle(Particle p, ParticleInteger index) {
     }
     if (doTracers) {
         particlesTracer(index) = p.t;
+    }
+    if (getOptions().gravity.errorInterval > 0) {
+        particlesGravitySample(index) = p.gravitySample;
     }
     if (getOptions().hydro.enabled) {
         particlesType(index) = p.type;

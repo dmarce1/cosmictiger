@@ -100,6 +100,7 @@ uint64_t meshSortReferenceKey(ParticleInteger index, int meshSize) {
 
 void initializeMeshSortFixture(ParticleInteger count, int pattern) {
     particlesResize(count);
+    particlesGravitySamplesBegin(count);
 #if COSMICTIGER_WITH_SPH
     sphParticlesResize((count + 1) / 2, false);
 #endif
@@ -117,6 +118,7 @@ void initializeMeshSortFixture(ParticleInteger count, int pattern) {
         particlesLastgroup(i) = 100000 + i;
         particlesGrp[i].store(200000 + i, std::memory_order_relaxed);
         particlesTracer(i) = i % 2;
+        particlesGravitySample(i) = i % 3 == 0 ? i : -1;
 #if COSMICTIGER_WITH_SPH
         particlesType(i) = i % 2 == 0 ? kSphType : kDarkMatterType;
         particlesCatIndex(i) = i % 2 == 0 ? i / 2 : kNoParticleIndex;
@@ -177,9 +179,20 @@ void checkMeshSortFixture(int meshSize, int pattern) {
                 particlesRung(i) == identity % 11 && particlesLastgroup(i) == 100000 + identity &&
                 particlesGrp[i].load(std::memory_order_relaxed) == 200000 + identity &&
                 particlesTracer(i) == identity % 2 &&
+                particlesGravitySample(i) == (identity % 3 == 0 ? identity : -1) &&
                 particlesType(i) ==
                     (COSMICTIGER_WITH_SPH && identity % 2 == 0 ? kSphType : kDarkMatterType),
             "Particle mesh sort detached a particle field");
+        particlesCaptureGravitySample(i, float(identity), float(identity + 1), float(identity + 2));
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            float const captured = particlesGravitySampleAccelerations[identity][dim];
+            uint32_t const unsetBits =
+                std::bit_cast<uint32_t>(std::numeric_limits<float>::quiet_NaN());
+            requireParticleMeshSort(identity % 3 == 0 ?
+                    captured == float(identity + dim) :
+                    std::bit_cast<uint32_t>(captured) == unsetBits,
+                "Sorted particle gravity capture used the wrong sample slot");
+        }
 #if COSMICTIGER_WITH_SPH
         if (identity % 2 == 0) {
             ParticleInteger const gasIndex = identity / 2;
@@ -250,10 +263,18 @@ void particleMeshSortTest() {
     options.analysis.saveForce = true;
     options.analysis.tracers = true;
     options.analysis.groups = true;
+    options.gravity.errorInterval = 0;
     options.chemistry.enabled = false;
     setOptions(options);
     constexpr ParticleInteger kMaximumCount = 25003;
     particlesResize(kMaximumCount);
+    options.gravity.errorInterval = 1;
+    setOptions(options);
+    particlesGravitySamplesBegin(1);
+    for (ParticleInteger index = 0; index < particlesSize(); ++index) {
+        detail::requireParticleMeshSort(particlesGravitySample(index) == -1,
+            "Enabling samples on existing particles left uninitialized attributes");
+    }
     particlesGroupsInit();
     for (int pattern : {0, 1, 2}) {
         for (ParticleInteger count : {0, 1, 2, 31, 4097, kMaximumCount}) {
@@ -266,6 +287,9 @@ void particleMeshSortTest() {
         }
     }
     particlesGroupsDestroy();
+    particlesGravitySamplesBegin(0);
+    detail::requireParticleMeshSort(particlesGravitySampleAccelerations == nullptr,
+        "Disabling gravity samples retained a capture buffer");
     particlesResize(0);
 #if COSMICTIGER_WITH_SPH
     sphParticlesResize(0, false);

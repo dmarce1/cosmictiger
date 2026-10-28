@@ -47,6 +47,8 @@ struct CudaKickData {
     float* gy;
     float* gz;
     float* pot;
+    ParticleInteger const* gravitySampleIndices;
+    Array<float, kDimensions>* gravitySampleAccelerations;
 };
 
 // Host-computed byte layout of one block's dynamic shared memory.

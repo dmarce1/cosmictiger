@@ -113,6 +113,14 @@ __device__ FlopCount doKick(KickReturn& result, KickParameters params, CudaKickD
         gy *= params.gm;
         gx *= params.gm;
         phi *= params.gm;
+        if (data.gravitySampleAccelerations != nullptr) {
+            ParticleInteger const slot = data.gravitySampleIndices[sinkIndex];
+            if (slot >= 0) {
+                data.gravitySampleAccelerations[slot][kXDimension] = gx;
+                data.gravitySampleAccelerations[slot][kYDimension] = gy;
+                data.gravitySampleAccelerations[slot][kZDimension] = gz;
+            }
+        }
         vx = vels[sinkIndex][kXDimension];
         vy = vels[sinkIndex][kYDimension];
         vz = vels[sinkIndex][kZDimension];

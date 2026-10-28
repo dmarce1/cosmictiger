@@ -895,6 +895,10 @@ void particlesDestroy() {
     particlesV = decltype(particlesV)();
     particlesP = decltype(particlesP)();
     particlesR = decltype(particlesR)();
+    freeManagedMemory(particlesGravitySampleIndices);
+    freeManagedMemory(particlesGravitySampleAccelerations);
+    particlesGravitySampleIndices = nullptr;
+    particlesGravitySampleAccelerations = nullptr;
     hpx::wait_all(futs.begin(), futs.end());
 }
 
@@ -927,6 +931,14 @@ void particlesArrayResize(T*& ptr, ParticleInteger newCapacity, bool reg) {
         }
     }
     ptr = newPtr;
+}
+
+static void particlesEnsureGravitySampleStorage() {
+    if (getOptions().gravity.errorInterval > 0 && particlesGravitySampleIndices == nullptr &&
+        capacity > 0) {
+        particlesArrayResize(particlesGravitySampleIndices, capacity, true);
+        std::fill_n(particlesGravitySampleIndices, capacity, ParticleInteger{-1});
+    }
 }
 
 static void particlesResizeStorage(ParticleInteger sz, bool lock) {
@@ -963,6 +975,13 @@ static void particlesResizeStorage(ParticleInteger sz, bool lock) {
         if (getOptions().analysis.tracers) {
             particlesArrayResize(particlesTr, newCapacity, false);
         }
+        if (getOptions().gravity.errorInterval > 0 || particlesGravitySampleIndices != nullptr) {
+            bool const firstAllocation = particlesGravitySampleIndices == nullptr;
+            particlesArrayResize(particlesGravitySampleIndices, newCapacity, true);
+            ParticleInteger const begin = firstAllocation ? 0 : size;
+            std::fill(particlesGravitySampleIndices + begin,
+                particlesGravitySampleIndices + newCapacity, ParticleInteger{-1});
+        }
         if (getOptions().hydro.enabled) {
             particlesArrayResize(particlesSph, newCapacity, true);
             particlesArrayResize(particlesTy, newCapacity, true);
@@ -972,8 +991,14 @@ static void particlesResizeStorage(ParticleInteger sz, bool lock) {
             sharedMutex.unlock();
         }
     }
+    particlesEnsureGravitySampleStorage();
     int oldsz = size;
     size = sz;
+    if (particlesGravitySampleIndices != nullptr) {
+        for (ParticleInteger i = oldsz; i < sz; ++i) {
+            particlesGravitySample(i) = -1;
+        }
+    }
     if (getOptions().hydro.enabled) {
         for (int i = oldsz; i < sz; i++) {
             particlesCatIndex(i) = kNoParticleIndex;
@@ -985,11 +1010,43 @@ static void particlesResizeStorage(ParticleInteger sz, bool lock) {
 void particlesResize(ParticleInteger sz, bool lock) {
     if (sz != size) {
         particlesResizeStorage(sz, lock);
+    } else {
+        particlesEnsureGravitySampleStorage();
     }
 }
 
 void particlesRegisterReleaseHook(void (*hook)()) {
     particleReleaseHooks.push_back(hook);
+}
+
+void particlesGravitySamplesBegin(size_t sampleCount) {
+    if (sampleCount > 0 && getOptions().gravity.errorInterval <= 0) {
+        throw std::logic_error("Gravity sample capture requires gravity.errorInterval > 0");
+    }
+    if (sampleCount > size_t(std::numeric_limits<ParticleInteger>::max()) ||
+        sampleCount > std::numeric_limits<size_t>::max() / sizeof(Array<float, kDimensions>)) {
+        throw std::length_error("Gravity sample count exceeds the particle index range");
+    }
+    particlesEnsureGravitySampleStorage();
+    Array<float, kDimensions>* accelerations = nullptr;
+    if (sampleCount > 0) {
+        accelerations = static_cast<Array<float, kDimensions>*>(
+            allocateManagedMemory(sampleCount * sizeof(Array<float, kDimensions>)));
+        if (accelerations == nullptr) {
+            throw std::bad_alloc();
+        }
+        float const unset = std::numeric_limits<float>::quiet_NaN();
+        for (size_t i = 0; i < sampleCount; ++i) {
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                accelerations[i][dim] = unset;
+            }
+        }
+    }
+    freeManagedMemory(particlesGravitySampleAccelerations);
+    particlesGravitySampleAccelerations = accelerations;
+    if (particlesGravitySampleIndices != nullptr) {
+        std::fill_n(particlesGravitySampleIndices, particlesSize(), ParticleInteger{-1});
+    }
 }
 
 void particlesFree() {
@@ -1001,6 +1058,10 @@ void particlesFree() {
     }
     freeManagedMemory(particlesV);
     freeManagedMemory(particlesR);
+    freeManagedMemory(particlesGravitySampleIndices);
+    freeManagedMemory(particlesGravitySampleAccelerations);
+    particlesGravitySampleIndices = nullptr;
+    particlesGravitySampleAccelerations = nullptr;
     if (getOptions().analysis.groups) {
         free(particlesLgrp);
     }
@@ -1303,6 +1364,9 @@ void particlesLoad(FILE* fp) {
         PRINT("Reading %i total particles.\n", size);
         particlesResize(size);
     }
+    // Sample identities and captured forces describe only an in-progress force pass.
+    // They are intentionally absent from checkpoints, including same-process reloads.
+    particlesGravitySamplesBegin(0);
     PRINT("particles_size  = %i\n", particlesSize());
     FREAD(&particlesPos(kXDimension, 0), sizeof(Position), particlesSize(), fp);
     FREAD(&particlesPos(kYDimension, 0), sizeof(Position), particlesSize(), fp);

@@ -91,10 +91,11 @@ struct MeshDomainRecord {
     GroupInteger lastGroup;
     int rung;
     int tracer;
+    ParticleInteger gravitySample;
 
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
-        archive & raw & velocity & lastGroup & rung & tracer;
+        archive & raw & velocity & lastGroup & rung & tracer & gravitySample;
     }
 };
 
@@ -119,6 +120,7 @@ void initializeMeshDomains(int fixture) {
         particlesRung(identity) = 1 + identity % 7;
         particlesLastgroup(identity) = 1000 + identity;
         particlesTracer(identity) = identity % 2;
+        particlesGravitySample(identity) = identity % 3 == 0 ? identity : -1;
     }
 }
 
@@ -144,6 +146,7 @@ MeshDomainSnapshot readMeshDomains() {
         record.rung = particlesRung(index);
         record.lastGroup = particlesLastgroup(index);
         record.tracer = particlesTracer(index);
+        record.gravitySample = particlesGravitySample(index);
     }
     return result;
 }
@@ -156,6 +159,27 @@ void reloadMeshDomainLayout() {
     std::rewind(file);
     domainsLoad(file);
     std::fclose(file);
+}
+
+void checkGravitySampleCheckpointReset() {
+    FILE* const file = std::tmpfile();
+    requireMeshDomain(file != nullptr, "cannot create particle-checkpoint round-trip file");
+    particlesGravitySamplesBegin(1);
+    if (particlesSize() > 0) {
+        particlesGravitySample(0) = 0;
+        particlesCaptureGravitySample(0, 1.0f, 2.0f, 3.0f);
+    }
+    particlesSave(file);
+    requireMeshDomain(std::fflush(file) == 0, "cannot flush particle-checkpoint round-trip file");
+    std::rewind(file);
+    particlesLoad(file);
+    std::fclose(file);
+    requireMeshDomain(particlesGravitySampleAccelerations == nullptr,
+        "checkpoint reload retained a transient gravity capture buffer");
+    for (ParticleInteger index = 0; index < particlesSize(); ++index) {
+        requireMeshDomain(particlesGravitySample(index) == -1,
+            "checkpoint reload retained a transient gravity sample slot");
+    }
 }
 
 long double meshDomainCoordinate(PositionInteger raw) {
@@ -255,6 +279,8 @@ HPX_PLAIN_ACTION(detail::initializeMeshDomains, InitializeMeshDomainsAction);
 HPX_PLAIN_ACTION(detail::moveMeshDomains, MoveMeshDomainsAction);
 HPX_PLAIN_ACTION(detail::readMeshDomains, ReadMeshDomainsAction);
 HPX_PLAIN_ACTION(detail::reloadMeshDomainLayout, ReloadMeshDomainLayoutAction);
+HPX_PLAIN_ACTION(
+    detail::checkGravitySampleCheckpointReset, CheckGravitySampleCheckpointResetAction);
 
 namespace detail {
 
@@ -304,8 +330,9 @@ void verifyMeshDomains(int fixture, int phase, bool balanced) {
                     "partitioning or migration detached a particle position or velocity");
             }
             requireMeshDomain(record.rung == 1 + identity % 7 &&
-                    record.lastGroup == 1000 + identity && record.tracer == identity % 2,
-                "partitioning or migration detached a rung, group or tracer field");
+                    record.lastGroup == 1000 + identity && record.tracer == identity % 2 &&
+                    record.gravitySample == (identity % 3 == 0 ? identity : -1),
+                "partitioning or migration detached a rung, group, tracer or gravity sample");
             allRecords.push_back(record);
         }
     }
@@ -328,6 +355,7 @@ void meshDomainsTest() {
     options.hydro.enabled = false;
     options.gravity.enabled = true;
     options.gravity.meshSize = detail::kMeshDomainSide;
+    options.gravity.errorInterval = 1;
     options.run.hierarchicalGravity = integration::kBuildUsesHierarchical;
     options.analysis.groups = true;
     options.analysis.tracers = true;
@@ -404,6 +432,13 @@ void meshDomainsTest() {
     detail::migrateMeshDomainFixture();
     detail::verifyMeshDomains(kFixture, 0, true);
     detail::verifyMeshDomainLayout(originalLayout);
+    pending.clear();
+    for (auto const& locality : hpxLocalities()) {
+        pending.push_back(hpx::async<CheckGravitySampleCheckpointResetAction>(locality));
+    }
+    for (auto& future : pending) {
+        future.get();
+    }
     PRINT("Independent particle domains, split cells, balancing and migration passed "
           "(%i bits, %i ranks)\n",
         kPositionBits, hpxSize());

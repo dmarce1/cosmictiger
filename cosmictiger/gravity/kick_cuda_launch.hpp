@@ -368,6 +368,9 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
     data.treeNodes = devTreeNodes;
     data.vel = kparams.forceOnly ? nullptr : particlesVelData();
     data.rungs = kparams.forceOnly ? nullptr : &particlesRung(0);
+    data.gravitySampleIndices = kparams.forceOnly ? nullptr : particlesGravitySampleIndices;
+    data.gravitySampleAccelerations =
+        kparams.forceOnly ? nullptr : particlesGravitySampleAccelerations;
     data.sph = COSMICTIGER_WITH_SPH && getOptions().hydro.enabled;
     data.darkMatterMass = getOptions().initial.darkMatterMass;
     data.sphMass = getOptions().initial.gasMass;

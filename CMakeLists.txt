@@ -236,6 +236,7 @@ set(cosmictiger_source_files
     src/cuda/cuda_memory.cu
     src/cuda/cuda_stream.cpp
     src/gravity/fmm_order.cpp
+    src/gravity/error.cpp
     src/analysis/bh.cpp
     src/analysis/bh.cu
     src/io/checkpoint.cpp
@@ -593,7 +594,7 @@ set_source_files_properties(src/sph/sph_chemistry.cpp PROPERTIES COMPILE_OPTIONS
 set_source_files_properties(src/cosmology/boltzmann.cpp PROPERTIES
     COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
 # Background and clock guards must remain effective in release builds.
-set_source_files_properties(src/core/driver.cpp
+set_source_files_properties(src/core/driver.cpp src/gravity/error.cpp
     src/gravity/nitadori/solver.cpp src/gravity/nitadori/kernels.cpp src/gravity/nitadori/near_pp.cpp tests/gravity/nitadori/pmmm.cpp
     src/gravity/nitadori/kick.cpp src/cosmology/friedmann.cpp src/cosmology/cosmology.cpp
     src/cosmology/background.cpp src/cosmology/evolution.cpp PROPERTIES
@@ -1373,6 +1374,54 @@ if(BUILD_TESTING)
     # Hundreds of expected rejections each produce a symbolized stack trace.
     set_tests_properties(grouped_options PROPERTIES RUN_SERIAL TRUE TIMEOUT 600 PROCESSORS 2)
 
+    foreach(gravity_error_positions IN ITEMS fixed32 fixed64)
+        set(gravity_error_name gravity_error_cpu)
+        if(gravity_error_positions STREQUAL "fixed64")
+            string(APPEND gravity_error_name _fixed64)
+        endif()
+        add_test(NAME ${gravity_error_name} COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/run_gravity_error.py $<TARGET_FILE:cosmictiger>
+            ${PROJECT_BINARY_DIR}/tests/${gravity_error_name}
+            --gravity-method ${COSMICTIGER_GRAVITY_METHOD}
+            --position-type ${gravity_error_positions})
+        set_tests_properties(${gravity_error_name} PROPERTIES TIMEOUT 300 PROCESSORS 2
+            LABELS "gravity;accuracy")
+    endforeach()
+    if(COSMICTIGER_WITH_CUDA)
+        foreach(gravity_error_positions IN ITEMS fixed32 fixed64)
+            set(gravity_error_name gravity_error_cuda)
+            if(gravity_error_positions STREQUAL "fixed64")
+                string(APPEND gravity_error_name _fixed64)
+            endif()
+            add_test(NAME ${gravity_error_name} COMMAND ${Python3_EXECUTABLE}
+                ${PROJECT_SOURCE_DIR}/tests/run_gravity_error.py $<TARGET_FILE:cosmictiger>
+                ${PROJECT_BINARY_DIR}/tests/${gravity_error_name} --cuda
+                --gravity-method ${COSMICTIGER_GRAVITY_METHOD}
+                --position-type ${gravity_error_positions})
+            set_tests_properties(${gravity_error_name} PROPERTIES TIMEOUT 300 PROCESSORS 2
+                RUN_SERIAL TRUE LABELS "gravity;accuracy;cuda")
+        endforeach()
+    endif()
+    if(MPIEXEC_EXECUTABLE)
+        set(gravity_error_mpi_args --mpi-exec=${MPIEXEC_EXECUTABLE}
+            --mpi-numproc-flag=${MPIEXEC_NUMPROC_FLAG})
+        foreach(flag IN LISTS MPIEXEC_PREFLAGS)
+            list(APPEND gravity_error_mpi_args "--mpi-preflag=${flag}")
+        endforeach()
+        foreach(flag IN LISTS MPIEXEC_POSTFLAGS)
+            list(APPEND gravity_error_mpi_args "--mpi-postflag=${flag}")
+        endforeach()
+        if(HPX_WITH_PARCELPORT_TCP)
+            list(APPEND gravity_error_mpi_args --disable-tcp)
+        endif()
+        add_test(NAME gravity_error_mpi COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/run_gravity_error.py $<TARGET_FILE:cosmictiger>
+            ${PROJECT_BINARY_DIR}/tests/gravity_error_mpi ${gravity_error_mpi_args} --ranks 2
+            --gravity-method ${COSMICTIGER_GRAVITY_METHOD})
+        set_tests_properties(gravity_error_mpi PROPERTIES TIMEOUT 300 PROCESSORS 4
+            RUN_SERIAL TRUE LABELS "gravity;accuracy;mpi")
+    endif()
+
     if(COSMICTIGER_WITH_SPH AND COSMICTIGER_GRAVITY_METHOD STREQUAL "fmm" AND
             COSMICTIGER_TIME_INTEGRATOR STREQUAL "leapfrog")
         add_test(NAME linear_growth_response COMMAND ${Python3_EXECUTABLE}
@@ -2057,6 +2106,12 @@ if(BUILD_TESTING)
     target_include_directories(particle_selection_test PRIVATE ${PROJECT_SOURCE_DIR})
     cosmictiger_add_gtest(NAME particle_selection TARGET particle_selection_test
         PROPERTIES TIMEOUT 10)
+
+    add_executable(gravity_direct_reference_test tests/gravity/direct_reference.cpp)
+    target_include_directories(gravity_direct_reference_test PRIVATE ${PROJECT_SOURCE_DIR})
+    target_compile_options(gravity_direct_reference_test PRIVATE -fno-fast-math -ffp-contract=off)
+    cosmictiger_add_gtest(NAME gravity_direct_reference TARGET gravity_direct_reference_test
+        PROPERTIES TIMEOUT 30)
 
     if(COSMICTIGER_WITH_CUDA)
         foreach(special_variant IN ITEMS standard fast_math)

@@ -37,6 +37,8 @@ KickReturn particleMeshApplyField(ParticleInteger index,
     if (rung < parameters.minRung) {
         return result;
     }
+    particlesCaptureGravitySample(
+        index, acceleration[kXDimension], acceleration[kYDimension], acceleration[kZDimension]);
     bool const saveAcceleration =
         parameters.saveForce || saveParticleAcceleration(options.analysis);
     bool const savePotential = parameters.saveForce || saveParticlePotential(options.analysis);
@@ -173,6 +175,8 @@ KickReturn particleMeshPrepareKick(
                     for (size_t i = worker * count / workers; i < (worker + 1) * count / workers;
                         ++i) {
                         auto const& acceleration = pmmmAcceleration(i);
+                        particlesCaptureGravitySample(i, acceleration[kXDimension],
+                            acceleration[kYDimension], acceleration[kZDimension]);
                         double accelerationSquared = 0.0;
                         for (int dim = 0; dim < kDimensions; ++dim) {
                             accelerationSquared += double(acceleration[dim]) * acceleration[dim];

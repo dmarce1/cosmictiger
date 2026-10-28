@@ -163,6 +163,11 @@ void runFixedScenario() {
                     [&]() { viewOutputViews(state.step, 1.0); });
             }
             resetFlops();
+            int const errorInterval = baseOptions.gravity.errorInterval;
+            int const gravityErrorStep =
+                state.itime == 0 && errorInterval > 0 && state.step % errorInterval == 0 ?
+                state.step :
+                -1;
             std::pair<KickReturn, TreeCreateReturn> result;
             if (hierarchicalMesh) {
                 if (minimumRung == 0) {
@@ -172,14 +177,14 @@ void runFixedScenario() {
                 int const previousActiveRung = activeRung;
                 result = kickStepHierarchical(activeRung, state.maxRung, 1.0, 0.0, state.tau,
                     baseTimestep, baseOptions.gravity.openingAngle, &state.energies, state.minrung0,
-                    fullEvaluation, nullptr, true, 0.0);
+                    fullEvaluation, nullptr, true, 0.0, gravityErrorStep);
                 if (activeRung != previousActiveRung) {
                     ++state.minrung0;
                 }
             } else {
                 result = advanceForces(minimumRung, 1.0, 0.0, state.tau, baseTimestep,
                     baseOptions.gravity.openingAngle, state.iter == 0, fullEvaluation,
-                    state.energies);
+                    state.energies, gravityErrorStep);
             }
             double const flops = flopsPerSecond();
             state.maxRung =

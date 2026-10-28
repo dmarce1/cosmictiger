@@ -51,6 +51,10 @@ void particlesSwap(ParticleInteger first, ParticleInteger second) {
     if (options.analysis.tracers) {
         detail::swapParticleBytes(particlesTr[first], particlesTr[second]);
     }
+    if (options.gravity.errorInterval > 0) {
+        detail::swapParticleBytes(
+            particlesGravitySampleIndices[first], particlesGravitySampleIndices[second]);
+    }
     if (options.hydro.enabled) {
         detail::swapParticleBytes(particlesSph[first], particlesSph[second]);
         detail::swapParticleBytes(particlesTy[first], particlesTy[second]);

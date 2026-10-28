@@ -125,6 +125,10 @@ struct Lightcone {
 
 struct Gravity {
     bool enabled{};
+    // Coarse-step cadence for sampled direct-force comparisons; zero disables.
+    int errorInterval{};
+    // Evenly spaced global particle indices, capped at the particle count.
+    int errorSampleSize{100};
     // Build descriptors are retained in the historical serialized layout.
     // Solver dispatch uses build_config.hpp; setOptions rejects mismatches.
     std::string method{gravity::kBuildGravityMethod};
@@ -395,6 +399,8 @@ struct Options {
         arc & gravity.pmmmOrder;
         arc & gravity.openingSchedule;
         arc & gravity.pmmmMaxPrimeFactor;
+        arc & gravity.errorInterval;
+        arc & gravity.errorSampleSize;
     }
 };
 
