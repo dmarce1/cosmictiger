@@ -406,7 +406,9 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, kD
                     output.acceleration[kXDimension][outputIndex] = forces.gx[j];
                     output.acceleration[kYDimension][outputIndex] = forces.gy[j];
                     output.acceleration[kZDimension][outputIndex] = forces.gz[j];
-                    flops += cosmictiger::gravity::cartesian::detail::L2P<kLocalDegree, true>::kFlops_ + 14;
+                    flops +=
+                        cosmictiger::gravity::cartesian::detail::L2P<kLocalDegree, true>::kFlops_ +
+                        14;
                     continue;
                 }
                 forces.gx[j] *= gm;

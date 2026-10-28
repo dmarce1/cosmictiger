@@ -28,8 +28,8 @@ __device__ FlopCount cudaGravityCcEwald(CudaKickData const& data,
                 unwrappedPosition[dim] =
                     unwrappedDistance(self.mpos->pos[dim], other.mpos->pos[dim]);
             }
-            flops +=
-                6 + cosmictiger::gravity::cartesian::evaluateEwaldGreen(d, dx, unwrappedPosition);
+            flops += 6 +
+                cosmictiger::gravity::cartesian::evaluateEwaldGreen(d, dx, unwrappedPosition);
             flops += cosmictiger::gravity::cartesian::M2L(l, m, d, doPhi);
         }
         sharedReduceAddArray(l);

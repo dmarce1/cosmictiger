@@ -88,8 +88,7 @@ __device__ FlopCount doKick(KickReturn& result, KickParameters params, CudaKickD
         dx[kXDimension] = unwrappedDistance(sinkX[i], self.pos[kXDimension]);
         dx[kYDimension] = unwrappedDistance(sinkY[i], self.pos[kYDimension]);
         dx[kZDimension] = unwrappedDistance(sinkZ[i], self.pos[kZDimension]);
-        cosmictiger::gravity::cartesian::L2P(
-            l2, lValue2, fmmScaleDisplacement(dx), params.doPhi);
+        cosmictiger::gravity::cartesian::L2P(l2, lValue2, fmmScaleDisplacement(dx), params.doPhi);
         float gx = force.gx[i];
         float gy = force.gy[i];
         float gz = force.gz[i];

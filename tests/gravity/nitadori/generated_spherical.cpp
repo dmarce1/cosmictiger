@@ -366,8 +366,7 @@ void testOrder() {
         clear(selectedLocal);
         spherical::detail::Green<degree>::template evaluate<Real>(green, x, y, z);
         spherical::detail::P2L<degree>::template add<Real>(pointLocal, mass, x, y, z);
-        spherical::detail::M2LDerivatives<degree>::template add<Real>(
-            derivativeLocal, source, green);
+        spherical::detail::M2LDerivatives<degree>::template add<Real>(derivativeLocal, source, green);
         spherical::detail::M2L<degree>::template add<Real>(selectedLocal, source, x, y, z);
         context = "Green/P2L/arbitrary M2L/selected M2L degree " + std::to_string(degree);
         for (int laneIndex = 0; laneIndex < laneCount<Real>(); ++laneIndex) {
@@ -390,13 +389,11 @@ void directParticleCheck() {
     std::array<Point, 3> const particles = {
         {{0.002, -0.001, 0.003}, {-0.002, 0.003, 0.001}, {0.001, 0.001, -0.002}}};
     for (Point const& point : particles) {
-        spherical::detail::P2M<degree - 1>::template add<double>(
-            source, 0.7, point[0], point[1], point[2]);
+        spherical::detail::P2M<degree - 1>::template add<double>(source, 0.7, point[0], point[1], point[2]);
     }
     Point const target = {0.9, -0.7, 1.1};
     std::array<double, 4> field{};
-    spherical::detail::M2P<degree>::template add<double>(
-        field, source, target[0], target[1], target[2]);
+    spherical::detail::M2P<degree>::template add<double>(field, source, target[0], target[1], target[2]);
     std::array<double, 4> expected{};
     for (Point const& point : particles) {
         Point displacement;

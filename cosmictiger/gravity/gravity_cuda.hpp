@@ -363,8 +363,8 @@ __device__ FlopCount cudaGravityCcDirect(CudaKickData const& data,
                 dx[dim] =
                     fmmPositionDifference(self.mpos->pos[dim], other.mpos->pos[dim], dim, geometry);
             }
-            flops +=
-                3 + cosmictiger::gravity::cartesian::M2L(l, m, fmmScaleDisplacement(dx), doPhi);
+            flops += 3 + cosmictiger::gravity::cartesian::M2L(
+                l, m, fmmScaleDisplacement(dx), doPhi);
         }
         sharedReduceAddArray(l);
         for (int i = tid; i < FmmOrder<order>::kLocalCoefficients_; i += kWarpSize) {
@@ -413,7 +413,8 @@ __device__ FlopCount cudaGravityCpDirect(CudaKickData const& data, CudaKickContr
                     self.mpos->pos[kZDimension], sources.z[j], kZDimension, geometry);
                 cosmictiger::gravity::cartesian::Expansion<float, order> d{};
                 flops += (equalMass ? 1 : 2) * FmmOrder<order>::kLocalCoefficients_ + 3 +
-                    cosmictiger::gravity::cartesian::P2L(d, 1.0f, fmmScaleDisplacement(dx));
+                    cosmictiger::gravity::cartesian::P2L(
+                        d, 1.0f, fmmScaleDisplacement(dx));
                 if constexpr (equalMass) {
                     for (int k = 0; k < FmmOrder<order>::kLocalCoefficients_; k++) {
                         l[k] += d[k];

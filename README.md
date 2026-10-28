@@ -634,8 +634,10 @@ Run `./build.sh` in a terminal for the interactive builder. It uses a full-scree
 menu when `whiptail` is available, with a text menu as a fallback. Choose Release,
 RelWithDebInfo, Debug, or Profile (host gprof instrumentation), CUDA, SPH, job counts,
 HPX prefix, CUDA architectures, additional dependency prefixes, gravity variant
-(FMM, PMMM-FMM, or PMMM-PP), and one kernel order from 3 through 9. Builds go in
-`build/<mode>_<variant>_order<order>` (for example `build/release_pmmm_fmm_order8`)
+(FMM, PMMM-FMM, or PMMM-PP), one kernel order from 3 through 9, and time integrator.
+Builds go in
+`build/<mode>_<variant>_order<order>_<integrator>` (for example
+`build/release_pmmm_fmm_order8_leapfrog`)
 with live output and a `builder.*.log`. The default builds
 `cosmictiger` with SPH support; building and running the test suite is opt-in. Build jobs accept
 any positive count. Use `./build.sh -j 24` to select a count, or `./build.sh -j`

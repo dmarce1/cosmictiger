@@ -102,9 +102,8 @@ void runFixedScenario() {
         particlesSetMinrung(baseOptions.run.minRung);
     }
     state.minrung0 = std::max(state.minrung0, baseOptions.run.minRung);
-    bool const hierarchicalMesh =
-        integration::kBuildUsesHierarchical && baseOptions.gravity.enabled &&
-        usesMeshGravity(baseOptions.gravity);
+    bool const hierarchicalMesh = integration::kBuildUsesHierarchical &&
+        baseOptions.gravity.enabled && usesMeshGravity(baseOptions.gravity);
     section_timing::measure(section_timing::Section::domains, []() { domainsRebound(); });
     Timer checkpointTimer;
     checkpointTimer.start();

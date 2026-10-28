@@ -204,7 +204,8 @@ TreeId benchmarkAddNode(
             }
             radiusSquared = std::max(radiusSquared, particleRadiusSquared);
             cosmictiger::gravity::cartesian::Multipole<float, order.value> moment{};
-            cosmictiger::gravity::cartesian::P2M(moment, 1.0f, fmmScaleDisplacement(displacement));
+            cosmictiger::gravity::cartesian::P2M(
+                moment, 1.0f, fmmScaleDisplacement(displacement));
             for (int coefficient = 0; coefficient < FmmOrder<order.value>::kMultipoleCoefficients_;
                 ++coefficient) {
                 moments[coefficient] += particlesMass(index) * moment[coefficient];
@@ -342,8 +343,8 @@ std::vector<double> benchmarkValues(
             auto const force = fmmDispatch([&](auto order) {
                 cosmictiger::gravity::Field<float> field{};
                 cosmictiger::gravity::cartesian::L2P(field,
-                    output.expansion.expansion<order.value>(), fmmScaleDisplacement(displacement),
-                    testCase.doPhi);
+                    output.expansion.expansion<order.value>(),
+                    fmmScaleDisplacement(displacement), testCase.doPhi);
                 return field;
             });
             values.push_back(kScaleFactor2 * force.accelerationX());

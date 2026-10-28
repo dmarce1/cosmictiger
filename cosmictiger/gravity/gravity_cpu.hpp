@@ -180,8 +180,8 @@ void cpuGravityCp(cosmictiger::gravity::cartesian::Expansion<float, order>& lVal
                 }
                 cosmictiger::gravity::cartesian::Expansion<SimdFloat, order> d;
                 d = simdBroadcast<SimdFloat>(0);
-                greenFlops = cosmictiger::gravity::cartesian::P2L(
-                    d, simdBroadcast<SimdFloat>(1), fmmScaleDisplacement(dx));
+                greenFlops = cosmictiger::gravity::cartesian::P2L(d,
+                    simdBroadcast<SimdFloat>(1), fmmScaleDisplacement(dx));
                 for (int l = 0; l < kLocalCoefficients; l++) {
                     l0[l] += mass * d[l];
                 }

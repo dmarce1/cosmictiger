@@ -19,8 +19,8 @@
 #include <cosmictiger/core/assert.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/gravity/dehnen/ewald_indices.hpp>
-#include <cosmictiger/gravity/fmm_kernels/cartesian_ewald_kernels.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
+#include <cosmictiger/gravity/fmm_kernels/cartesian_ewald_kernels.hpp>
 #include <cosmictiger/math/simd.hpp>
 
 // This standalone test exercises the actual CUDA-disabled initializer without

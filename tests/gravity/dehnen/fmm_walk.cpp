@@ -186,7 +186,8 @@ void fmmWalkVerifyEwald(std::string const& label, TreeId sink, Vector<TreeId> co
         auto& expansion = reference.expansion<order.value>();
         cpuGravityEwald<order.value>(expansion, sourceLeaves, sink, true);
         cosmictiger::gravity::Field<float> field{};
-        cosmictiger::gravity::cartesian::L2P(field, expansion, fmmScaleDisplacement(displacement));
+        cosmictiger::gravity::cartesian::L2P(
+            field, expansion, fmmScaleDisplacement(displacement));
         return field;
     });
     std::array<double, kDimensions> const expectedAcceleration = {

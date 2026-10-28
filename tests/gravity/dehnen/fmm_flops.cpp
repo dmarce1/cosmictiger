@@ -15,8 +15,8 @@
 #include <gtest/gtest.h>
 
 #include <cosmictiger/core/hpx.hpp>
-#include <cosmictiger/gravity/fmm_acceptance.hpp>
 #include <cosmictiger/gravity/fmm_kernels/cartesian_ewald_operators.hpp>
+#include <cosmictiger/gravity/fmm_acceptance.hpp>
 #include <cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp>
 #include <tests/flop_counting_real.hpp>
 
@@ -68,58 +68,50 @@ void checkOrder() {
     checkCount("P2M", [&] {
         cosmictiger::gravity::cartesian::Multipole<Real, order> result{};
         return cosmictiger::gravity::cartesian::P2M(
-                   result, Real(1), fmmScaleDisplacement(position)) +
-            3;
+                   result, Real(1), fmmScaleDisplacement(position)) + 3;
     });
     checkCount("M2M", [&] {
         cosmictiger::gravity::cartesian::Multipole<Real, order> result{};
         return cosmictiger::gravity::cartesian::M2M(
-                   result, source, fmmScaleDisplacement(position)) +
-            3;
+                   result, source, fmmScaleDisplacement(position)) + 3;
     });
     for (bool enabled : {false, true}) {
         checkCount("P2L", [&] {
             return cosmictiger::gravity::cartesian::P2L(
-                       local, Real(1), fmmScaleDisplacement(position), enabled) +
-                3;
+                       local, Real(1), fmmScaleDisplacement(position), enabled) + 3;
         });
         checkCount("M2L", [&] {
             return cosmictiger::gravity::cartesian::M2L(
-                       local, source, fmmScaleDisplacement(position), enabled) +
-                3;
+                       local, source, fmmScaleDisplacement(position), enabled) + 3;
         });
         checkCount("M2P", [&] {
             return cosmictiger::gravity::cartesian::M2P(
-                       field, source, fmmScaleDisplacement(position), enabled) +
-                3;
+                       field, source, fmmScaleDisplacement(position), enabled) + 3;
         });
         checkCount("Ewald M2L", [&] {
             return cosmictiger::gravity::cartesian::M2L(local, source, derivatives, enabled);
         });
         checkCount("Centered M2L", [&] {
             return cosmictiger::gravity::cartesian::M2L<true>(
-                       local, source, fmmScaleDisplacement(position), enabled) +
-                3;
+                       local, source, fmmScaleDisplacement(position), enabled) + 3;
         });
         checkCount("Centered M2P", [&] {
             return cosmictiger::gravity::cartesian::M2P<true>(
-                       field, source, fmmScaleDisplacement(position), enabled) +
-                3;
+                       field, source, fmmScaleDisplacement(position), enabled) + 3;
         });
         checkCount("Centered Ewald M2L", [&] {
-            return cosmictiger::gravity::cartesian::M2L<true>(local, source, derivatives, enabled);
+            return cosmictiger::gravity::cartesian::M2L<true>(
+                local, source, derivatives, enabled);
         });
         checkCount("L2L", [&] {
             cosmictiger::gravity::cartesian::Expansion<Real, order> result{};
             return cosmictiger::gravity::cartesian::L2L(
-                       result, local, fmmScaleDisplacement(position), enabled) +
-                3;
+                       result, local, fmmScaleDisplacement(position), enabled) + 3;
         });
         checkCount("L2P", [&] {
             cosmictiger::gravity::Field<Real> result{};
             return cosmictiger::gravity::cartesian::L2P(
-                       result, local, fmmScaleDisplacement(position), enabled) +
-                3;
+                       result, local, fmmScaleDisplacement(position), enabled) + 3;
         });
     }
 

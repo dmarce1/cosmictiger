@@ -11,10 +11,10 @@
 #include <utility>
 
 #include <cosmictiger/cuda/cuda_export.hpp>
-#include <cosmictiger/gravity/fmm_kernels/cartesian_config.hpp>
-#include <cosmictiger/gravity/fmm_kernels/cartesian_kernels.hpp>
-#include <cosmictiger/gravity/fmm_kernels/cartesian_m2l.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
+#include <cosmictiger/gravity/fmm_kernels/cartesian_m2l.hpp>
+#include <cosmictiger/gravity/fmm_kernels/cartesian_kernels.hpp>
+#include <cosmictiger/gravity/fmm_kernels/cartesian_config.hpp>
 
 namespace detail {
 

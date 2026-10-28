@@ -98,8 +98,7 @@ FlopCount dehnenBackgroundImpl(KickParameters const& params, ExpansionBuffer& l,
         for (int i = 0; i < kLocalCoefficients; i++) {
             expansion[i] += background[i];
         }
-        flops += cosmictiger::gravity::cartesian::detail::L2L<kLocalDegree, true>::kFlops_ + 26 +
-            kLocalCoefficients;
+        flops += cosmictiger::gravity::cartesian::detail::L2L<kLocalDegree, true>::kFlops_ + 26 + kLocalCoefficients;
     }
     return flops;
 }

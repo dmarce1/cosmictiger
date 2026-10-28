@@ -12,7 +12,7 @@ cmake --build build_pmmm --parallel 12
 ```
 
 Set `COSMICTIGER_PMMM_NEAR_METHOD=fmm` for an adaptive FMM near field. Each build
-uses one solver variant and one order from 3 through 9. PMMM uses a periodic
+contains one solver variant and one order from 3 through 9. PMMM uses a periodic
 uniform mesh, spherical multipoles about cell centers and FFT convolution for
 distant interactions. Neighboring cells use the compiled direct-pair or adaptive
 FMM near field.
@@ -64,15 +64,15 @@ the requested `gravity.meshSize` and the full-particle `gravity.effectiveMeshSiz
 
 `gravity.pmmmNearWidth=w` sets the ghost
 width and accepts integers from one through four, defaulting to two. The near
-region contains `(2*w+1)^3` cells (27, 125, 343, or 729, respectively), including
-the sink cell. The mesh must satisfy `n >= 2*w+1`, so periodic near cells are
-distinct. Odd mesh sizes are supported.
+region contains `(2*w+1)^3` cells (27, 125, 343, or 729, respectively),
+including the sink cell. The mesh must satisfy `n >= 2*w+1`, so periodic near
+cells are distinct. Odd mesh sizes are supported.
 
 `COSMICTIGER_PMMM_NEAR_METHOD=pp|fmm` selects how those near cells are evaluated
-at build time. The default `pp` sums all primary particle pairs. The `fmm` choice
-uses the existing Cartesian FMM operators and adaptive tree acceptance within
-the same near-cell region. It first exchanges complete remote source-cell
-particle records and builds local source trees as individual cells become ready.
+at build time. The default `pp` sums all primary particle pairs. The `fmm` choice uses the
+existing Cartesian FMM operators and adaptive tree acceptance within the same
+near-cell region. It first exchanges complete remote source-cell particle
+records and builds local source trees as individual cells become ready.
 Owned sink cells run once every near-source cell they need is ready, allowing
 interior and ready boundary work to overlap outstanding cell fetches.
 It adds no second periodic correction or distant-cell force:
@@ -101,9 +101,9 @@ rounded full-particle side length. The existing
 apply; the parser checks this bound after converting the configured radius
 to box units. Both near methods retain the selected compact gravity kernel for
 direct pairs, including distinct coincident particles, and exclude primary self.
-PMMM accuracy is controlled by mesh size, compiled expansion order, and near
-width. The derived opening angle controls only the optional near FMM; the near
-width also changes which interactions are included in the far-field convolution.
+PMMM accuracy is controlled by mesh size, expansion order, and near width.
+The derived opening angle controls only the optional near FMM; the near width
+also changes which interactions are included in the far-field convolution.
 
 ## Global FMM opening schedules
 
@@ -458,11 +458,10 @@ PMMM extension version three appends the PMMM order and resolved opening angle
 to the version-two metadata, which added the near-method selection. Historical
 version-one and version-two extensions retain their legacy shared order
 convention; their saved FMM order must match the compiled PMMM order. Version-one
-extensions identify the PP near method and are rejected by PMMM-FMM builds.
-Version-three restarts also require the resolved opening angle to match. The
-checkpoint hierarchy flag must match: historical synchronous PMMM evolution
-checkpoints cannot resume under the hierarchical driver. Opening angle is
-derived from the recorded near width; bucket size remains a mutable control
+extensions identify the PP near method and are rejected by PMMM-FMM builds. Version-three restarts also require the resolved opening angle
+to match. The checkpoint hierarchy flag must match: historical synchronous PMMM
+evolution checkpoints cannot resume under the hierarchical driver. Opening angle
+is derived from the recorded near width; bucket size remains a mutable control
 rather than checkpoint identity.
 
 The standalone `pmmm_kernels` tests check the numerical adapters and total

@@ -608,7 +608,8 @@ void domainsBegin(int rung) {
                                 auto& send = sends[rank];
                                 send.push_back(particlesGetParticle(i));
                                 if (send.size() >= kMaxParticlesPerParcel) {
-                                    //				PRINT( "Sending %i from %i to %i\n", send.size(),
+                                    //				PRINT( "Sending %i from %i to %i\n",
+                                    //send.size(),
                                     // hpx_rank(), rank);
                                     futs.push_back(hpx::async<DomainsTransmitParticlesAction>(
                                         hpxLocalities()[rank], std::move(send)));

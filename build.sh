@@ -366,9 +366,9 @@ if command -v whiptail >/dev/null 2>&1 && [[ ${TERM:-dumb} != dumb ]]; then
                     --default-item "$buildMode" \
                     --menu 'Select a build mode.' 14 64 4 \
                     release 'Optimized, without debug symbols' \
-                    relwithdebinfo 'Optimized, with debug symbols' \
-                    debug 'Debug checks and symbols' \
-                    profile 'Profiling with gprof'); then
+                    relwithdebinfo 'Optimized, debug symbols and APEX tasks' \
+                    debug 'Debug checks, symbols and APEX tasks' \
+                    profile 'APEX tasks and host gprof instrumentation'); then
                     buildMode=$promptValue
                 fi
                 ;;

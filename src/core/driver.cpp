@@ -10,7 +10,6 @@
 #include <cmath>
 #include <cstdio>
 #include <limits>
-#include <memory>
 #include <numbers>
 #include <string>
 
@@ -431,8 +430,8 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
         // The dark matter and hydro proposals have both been reduced globally.
         // Set every rung before either species opens its next half-step.
 #if COSMICTIGER_GRAVITY_PMMM
-        section_timing::measure(section_timing::Section::gravity,
-            [&]() { particleMeshFinishKick(t0, maxRung); });
+        section_timing::measure(
+            section_timing::Section::gravity, [&]() { particleMeshFinishKick(t0, maxRung); });
 #endif
     }
     sphParticlesApplyUpdates(minrung, 2, t0, tau);
@@ -1180,9 +1179,8 @@ void driver() {
         auto opts = getOptions();
         // Use the same expansion intervals on either branch and after restart.
         // Restarting requires the same requested opening schedule.
-        opts.gravity.openingAngle =
-            gravity::openingScheduleTheta(openingSchedule, opts.cosmology.startRedshift,
-                1.0 / params.a - 1.0, opts.gravity.openingAngle);
+        opts.gravity.openingAngle = gravity::openingScheduleTheta(openingSchedule,
+            opts.cosmology.startRedshift, 1.0 / params.a - 1.0, opts.gravity.openingAngle);
         setOptions(opts);
         terminal::detailPrint("FMM opening schedule: z=%.17g theta=%.17g\n", 1.0 / params.a - 1.0,
             opts.gravity.openingAngle);

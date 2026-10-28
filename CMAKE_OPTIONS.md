@@ -137,7 +137,7 @@ installation is not found or when selecting a particular installation.
 | Variable(s) | Selects |
 | --- | --- |
 | `HPX_DIR` | Directory containing the installed `HPXConfig.cmake`. Alternatively supply the HPX installation prefix through `CMAKE_PREFIX_PATH`. |
-| `Boost_DIR` | Directory containing `BoostConfig.cmake` when using package-config discovery; Boost.Program_options is required. `CMAKE_PREFIX_PATH` can select its installation prefix. |
+| `Boost_DIR` | Directory containing `BoostConfig.cmake`; Boost.Program_options is required. |
 | `CUDAToolkit_ROOT` | CUDA toolkit installation prefix for CUDA builds. |
 | `MPI_CXX_COMPILER` | MPI C++ compiler wrapper used by CMake's MPI finder. MPI C++ support is required even for CPU-only builds. |
 | `MPI_CXX_HEADER_DIR` | Explicit MPI header directory when automatic discovery needs assistance. |

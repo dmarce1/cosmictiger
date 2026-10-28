@@ -85,10 +85,10 @@ snapshot. This can be different from npart if one is dealing with a multi-file s
     double
         mass[kParticleHeaderTypeCount]; /**< mass of particles of each type. If 0, then the masses
   are explicitly stored in the mass-block of the snapshot file, otherwise they are omitted */
-    double time;                /**< time of snapshot file */
-    double redshift;            /**< redshift of snapshot file */
-    double boxSize;             /**< box-size of simulation in case periodic boundaries were used */
-    int numFiles;               /**< number of files in multi-file snapshot */
+    double time;                        /**< time of snapshot file */
+    double redshift;                    /**< redshift of snapshot file */
+    double boxSize; /**< box-size of simulation in case periodic boundaries were used */
+    int numFiles;   /**< number of files in multi-file snapshot */
 
     long long ntrees;
     long long totNtrees;
