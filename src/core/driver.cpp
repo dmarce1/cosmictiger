@@ -1053,9 +1053,6 @@ void driver() {
     Timer tmr;
     tmr.start();
     DriverParameters params{};
-    Timer buckets50;
-    Timer buckets20;
-    Timer buckets2;
     hpx::future<void> lcFut = hpx::make_ready_future();
     int buckets[11] = {80, 112, 112, 128, 128, 160, 176, 184, 184, 184, 192};
     double a0 = 1.0 / (1.0 + getOptions().cosmology.startRedshift);
@@ -1292,7 +1289,6 @@ void driver() {
     bool doCheck = false;
     double checkz = 1.0 / a - 1.0;
     int lastCheckpointIteration = getOptions().checkpoint.readIndex >= 0 ? params.iter : -1;
-    buckets50.start();
     EnergiesT energies0;
     double glassError = 1.0;
     bool interrupted = false;
@@ -1455,6 +1451,16 @@ void driver() {
                         std::max(fabs(a * energies.pot), 1.0e-30);
                 }
                 FILE* fp = fopen(outputPath("energy.txt").c_str(), "at");
+                if (fp == nullptr) {
+                    THROW_ERROR("unable to open energy.txt for writing\n");
+                }
+                // Label the columns once, when the file is new; restarts append.
+                fseek(fp, 0, SEEK_END);
+                if (ftell(fp) == 0) {
+                    fprintf(fp,
+                        "# step a px/sum|p| py/sum|p| pz/sum|p| a*W a*K cosmic energy_error "
+                        "glass_error\n");
+                }
                 double const momentumNorm = energies.nmom > 0.0 ? energies.nmom : 1.0;
                 fprintf(fp, "%e %e %e %e %e %e %e %e %e %e\n", tau / t0, a,
                     energies.xmom / momentumNorm, energies.ymom / momentumNorm,
@@ -1615,11 +1621,6 @@ void driver() {
     if (getOptions().initial.createGlass) {
         scenarios::saveGlass();
     }
-    buckets2.stop();
-    FILE* fp = fopen(outputPath("buckets.txt").c_str(), "at");
-    fprintf(fp, "%i %e %e %e\n", getOptions().compute.bucketSize, buckets50.read(),
-        buckets20.read(), buckets2.read());
-    fclose(fp);
     if (getOptions().lightcone.enabled) {
         checkLc(true);
     }

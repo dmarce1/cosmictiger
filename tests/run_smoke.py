@@ -149,7 +149,8 @@ def main():
                     row[7] < args.minimum_rung for row in rows[1:]):
                 raise RuntimeError(f"{args.mode} ignored minimum starting rung {args.minimum_rung}")
         energies = [[float(value) for value in line.split()]
-                    for line in (args.workdir / "energy.txt").read_text().splitlines()]
+                    for line in (args.workdir / "energy.txt").read_text().splitlines()
+                    if not line.startswith("#")]
         if not energies or any(len(row) != 10 for row in energies) or any(not math.isfinite(value) for row in energies for value in row):
             raise RuntimeError(f"{args.mode} energy output is empty or nonfinite")
         print(f"{args.mode}: {len(rows)} completed steps with finite physical diagnostics")

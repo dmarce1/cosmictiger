@@ -118,6 +118,20 @@ int hpx_main(int argc, char* argv[]) {
                     THROW_ERROR("Unable to write ewald.txt\n");
                 }
                 xValue[0] = xValue[1] = xValue[2] = SimdFloat(0.0f);
+                // D(nx,ny,nz) is the Green's function derivative of order nx, ny, nz
+                // in x, y, z, sampled along the x axis.
+                fprintf(fp, "# x");
+                for (int n = 0; n < kOrder; n++) {
+                    for (int m = 0; m < kOrder - n; m++) {
+                        for (int l = 0; l < kOrder - n - m; l++) {
+                            if (l > 1 && !(l == 2 && n == 0 && m == 0)) {
+                                continue;
+                            }
+                            fprintf(fp, " D(%i,%i,%i)", n, m, l);
+                        }
+                    }
+                }
+                fprintf(fp, "\n");
                 for (double x = 0.00; x < 0.5; x += 0.001) {
                     xValue[0] = simdBroadcast<SimdFloat>(x);
                     d = SimdFloat(0.0f);

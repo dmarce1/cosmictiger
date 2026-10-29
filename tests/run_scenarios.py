@@ -82,7 +82,8 @@ def check_bool(output, key, expected):
 def check_finite_rows(path):
     if not path.is_file():
         raise RuntimeError(f"missing evolution diagnostic {path}")
-    rows = [line.split() for line in path.read_text().splitlines() if line.strip()]
+    rows = [line.split() for line in path.read_text().splitlines()
+            if line.strip() and not line.startswith("#")]
     if not rows:
         raise RuntimeError(f"empty evolution diagnostic {path}")
     if any(not math.isfinite(float(value)) for row in rows for value in row):
