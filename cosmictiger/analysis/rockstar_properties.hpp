@@ -196,7 +196,10 @@ namespace detail {
 }    // namespace detail
 
 struct NfwFit {
-    // Zero denotes an unresolved or boundary-limited fit.
+    // Zero denotes an unresolved fit: fewer than two radial bins, degenerate
+    // shells, or a likelihood that does not constrain log c at one sigma
+    // inside the search window (see nfwFit). A nonzero scale radius lies
+    // within (0, 1] times the outermost fitted radius.
     double scaleRadius = 0.0;
     double density = 0.0;
 };
@@ -261,8 +264,19 @@ inline NfwFit nfwFit(std::vector<double> const& sortedRadii) {
     };
     // Fit the multinomial radial-bin likelihood, including the shell-integrated
     // NFW mass. Sampling density at bin midpoints biases resolved scale radii.
-    // The wide finite interval also bounds work on unresolved/non-NFW profiles.
-    constexpr double kMinLogConcentration = -16.0;
+    // The window starts at c = 1 (Rs equal to the outer radius), mirroring
+    // reference ROCKSTAR, whose calc_scale_from_bins (nfw.c) keeps Rs strictly
+    // inside the binned radial range and reports the clamped value; treating a
+    // scale radius outside the fitted profile as unresolved, and the e^16 upper
+    // edge, are this project's conventions. Toward c -> 0 every NFW profile
+    // tends to M(<r) ~ r^2 (rho ~ 1/r) and the likelihood is asymptotically flat
+    // in log c, which let shot noise place Rs arbitrarily far outside the halo.
+    // The Klypin limit c >= 2.1626 (Eqs. (5)-(6)) is not used as the edge: it
+    // expresses the degeneracy of the Vmax inversion, not of the density
+    // profile, whose logarithmic slope still runs from -1 to -2 inside the
+    // outer radius for 1 <= c < 2.1626. The finite upper edge also bounds
+    // work on unresolved/non-NFW profiles.
+    constexpr double kMinLogConcentration = 0.0;
     constexpr double kMaxLogConcentration = 16.0;
     constexpr double kGoldenRatio = 0.6180339887498948482;
     double lower = kMinLogConcentration;
@@ -290,9 +304,19 @@ inline NfwFit nfwFit(std::vector<double> const& sortedRadii) {
     double const likelihood = negativeLogLikelihood(logConcentration);
     double const boundaryLikelihood = std::min(
         negativeLogLikelihood(kMinLogConcentration), negativeLogLikelihood(kMaxLogConcentration));
-    double const likelihoodResolution = 256.0 * std::numeric_limits<double>::epsilon() *
-        std::max(1.0, std::abs(boundaryLikelihood));
-    if (!detail::isFinite(likelihood) || boundaryLikelihood - likelihood <= likelihoodResolution) {
+    // Resolution is a statistical statement, not a round-off one.
+    // negativeLogLikelihood is the per-particle mean, so particleCount times
+    // its rise from the optimum to an edge is half the likelihood-ratio
+    // statistic (Wilks 1938); requiring at least one half at both edges
+    // places the one-sigma profile-likelihood interval of ln c strictly
+    // inside the window. An optimum converged onto an edge, or sitting on a
+    // likelihood plateau next to one, is then unresolved even when it lies
+    // strictly inside the window. The threshold is a quality knob: lowering
+    // it reports more boundary-biased small-halo fits but cannot reintroduce
+    // scale radii outside the profile, which the window excludes.
+    constexpr double kMinBoundaryLogLikelihoodRise = 0.5;
+    double const likelihoodRise = double(particleCount) * (boundaryLikelihood - likelihood);
+    if (!detail::isFinite(likelihood) || !(likelihoodRise >= kMinBoundaryLogLikelihoodRise)) {
         return {};
     }
     double const concentration = std::exp(logConcentration);
@@ -300,7 +324,8 @@ inline NfwFit nfwFit(std::vector<double> const& sortedRadii) {
     double const density = particleCount /
         (4.0 * std::numbers::pi * scaleRadius * scaleRadius * scaleRadius *
             detail::nfwMassIntegral(concentration));
-    if (!(scaleRadius > 0.0) || !detail::isFinite(scaleRadius) || !detail::isFinite(density)) {
+    if (!(scaleRadius > 0.0) || !detail::isFinite(scaleRadius) || !(density > 0.0) ||
+        !detail::isFinite(density)) {
         return {};
     }
     return {scaleRadius, density};

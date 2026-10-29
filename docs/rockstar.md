@@ -37,10 +37,13 @@ with the simulation's gravity softening and the output conventions below.
   of at least one half. Recompute reported energies from the final measured set.
 - Section III.5.4: compute circular velocity from the enclosed count, fit an NFW
   profile using up to 50 radial bins with at least 15 particles per bin and a
-  shell-integrated likelihood, and calculate the Klypin radius from `Vmax`,
-  `Mvir`, and `Rvir`. Compute angular momentum, both spin parameters, offsets,
-  and `T/|U|`. Shape tensors exclude substructure and use an orthogonal symmetric
-  eigensolver. Snapshot descendants use the largest exclusive particle overlap.
+  shell-integrated likelihood (the concentration `c = rmax / rs` is searched in
+  `[1, e^16]` and reported only when the one-sigma profile-likelihood interval
+  of `ln c` lies inside that window), and calculate the Klypin radius from
+  `Vmax`, `Mvir`, and `Rvir`. Compute angular momentum, both spin parameters,
+  offsets, and `T/|U|`. Shape tensors exclude substructure and use an orthogonal
+  symmetric eigensolver. Snapshot descendants use the largest exclusive particle
+  overlap.
 
 ## Internal gravity
 
@@ -179,12 +182,61 @@ descendants do not implement the separate Consistent Trees algorithm that repair
 disappearances and reappearances. Lightcone analysis treats each finite FOF group
 at one representative epoch, rather than evolving all members to a common time.
 
-NFW fits with fewer than two resolved radial bins, degenerate shells, or a
-likelihood optimum at the finite search boundary return zero scale radius and
-scale density. The Klypin estimate returns zero for inconsistent or nonfinite
-inputs; `Vmax=Vvir` uses the limiting concentration `2.162581587`. Half-precision
-record fields retain 11 significand bits for normal values; their maximum finite
-magnitude is now 65504, and the smallest positive subnormal is `2^-24`.
+NFW fits search the concentration `c = rmax / rs` in `[1, e^16]`. The lower edge
+mirrors reference ROCKSTAR, whose `calc_scale_from_bins` (`nfw.c`) keeps `Rs`
+strictly inside its binned radial range and reports the clamped value; treating
+a scale radius outside the fitted profile as unresolved, and the `e^16` upper
+edge, are this project's conventions, so a nonzero `rs` always satisfies
+`rs <= rmax`. The Klypin limit
+`c >= 2.1626` (Eqs. (5)-(6)) is not used as the lower edge because it expresses
+the degeneracy of the `Vmax` inversion, not of the density profile; it would zero
+the 33%/27%/13%/3% of true `c = 2/3/5/10` halos at 30 particles whose likelihood
+optimum lies below it (fits the one-sigma test already rejects at that size) and
+about 65% of true `c = 2` fits at 300 particles. A fit is
+reported only when the total negative log-likelihood rises by at least `1/2` from
+its optimum to both window edges, i.e. the one-sigma profile-likelihood interval
+of `ln c` lies strictly inside the window (Wilks 1938); fits with fewer than two
+resolved radial bins or degenerate shells return zero as before. Toward `c -> 0`
+every NFW profile tends to `rho ~ 1/r` and the likelihood is flat in `ln c`, so a
+30-44 particle halo (an exactly determined two-bin fit) or an unrelaxed shallow
+profile could previously place its optimum at a tiny interior concentration,
+numerically distinct from the window edge yet statistically identical to it; such
+fits produced scale radii of up to `1e6 rmax` and aborted catalogue writes through
+the binary16 range check.
+
+Expect zero `rs` for many halos below roughly 100-150 particles with `c <~ 3`:
+Poisson-sampled NFW halos are reported in about 55%/85%/96%/99% of cases for
+`c = 3` at 30/60/100/150 particles, 34%/56%/72%/85%/98% for `c = 2` at
+30/60/100/150/300, 79%/94%/98% for `c = 5` at 30/45/60, 96% for `c = 10` at 30,
+and essentially always for `c >= 5` from 100 particles or `c >= 2` from 300; a
+reported `rs` never exceeds about `0.43 rmax` at 30 particles. Halos with `c < 2`
+need of order 1000 particles to exclude `c = 1` at one sigma: `c = 1.5` is
+reported in about 53%/73%/98% of cases at 150/300/1000 particles. The surviving
+low-concentration small-halo sample is biased high (median fitted-to-true `c`
+about 1.75 for `c = 2` at 30 particles, 1.07 at 100; 1.33 for `c = 3` at 30). The
+one-sigma test reports an exact `c = 1` halo as resolved about 10% of the time at
+30 particles, rising to the asymptotic 16% (half of `P(chi^2_1 >= 1)`, Chernoff
+1954) for well-sampled halos, and the record carries no significance field, so a
+one-sigma `rs` is indistinguishable from a decisive one.
+
+A zero `rs` means unresolved; consumers should fall back to `rkly`, which
+reproduces reference ROCKSTAR's fallback (`nfw.c` skips the fit below 100
+analysed particles and stores the Klypin radius instead; Behroozi, Wechsler & Wu
+2013, Sec. III.5.4, note only that it is more robust below 100 particles; this
+project fits from 30). The threshold `kMinBoundaryLogLikelihoodRise` in
+`rockstar::nfwFit` is a quality knob; lowering it reports more boundary-biased
+small-halo fits but cannot reintroduce scale radii outside the profile. The
+golden-section search assumes a unimodal likelihood in `ln c`; a profile with a
+compact central cusp can have a second optimum near `c ~ 1e4`, and the fit may
+then report that local optimum.
+Independently of the fit, the catalogue writer maps any `rs` outside `(0, rmax]`,
+or nonfinite, to zero before the strict half-precision encoding, so encoding `rs`
+can only fail if `rmax` already has. Catalogues written before this change may
+contain `rs > rmax`; treat them as unresolved there. The Klypin estimate returns
+zero for inconsistent or nonfinite inputs; `Vmax=Vvir` uses the limiting
+concentration `2.162581587`. Half-precision record fields retain 11 significand
+bits for normal values; their maximum finite magnitude is now 65504, and the
+smallest positive subnormal is `2^-24`.
 
 ## Regression coverage
 
@@ -199,13 +251,19 @@ sidecars, along with field-specific overflow/nonfinite errors.
 
 `rockstar_properties` checks SO membership/density consistency, equal-radius ties,
 multiple crossings, distant dense pairs, cosmology limits, rotated and degenerate
-shape tensors, NFW recovery from deterministic mass quantiles, and Klypin inversion.
+shape tensors, NFW recovery from deterministic mass quantiles, the synthetic
+two-bin likelihood plateau, the `[1, e^16]` concentration window and the one-sigma
+resolution criterion (pinned from both sides, with exact `rho ~ 1/r` quantiles up
+to 5000 particles, an upper-edge cusp and deterministic Poisson samples), and
+Klypin inversion. Both the standard and the `-ffast-math` build of the test run
+these cases.
 `rockstar_eigenpair` exercises the public eigenpair wrapper. `lightcone_epoch`
 checks emission-time direction, equivalent reference epochs, and velocity scaling.
 
 The runtime `rockstar_cpu` regression checks unbinding order, SO properties at
 multiple epochs, the core aperture, internal/output host separation, temporal host
-preservation, major-merger binding, degenerate finder inputs, record translation
+preservation, major-merger binding, degenerate finder inputs, the writer-level
+scale-radius guard and a synthetic plateau halo's record, record translation
 and rotation properties, and lightcone epochs. `groupsCatalogue_cpu` checks snapshot
 catalogue publication, particle tags, and temporal history. `groupsCatalogue_mpi`
 uses two MPI localities with split FOF inputs, checks deferred remote membership

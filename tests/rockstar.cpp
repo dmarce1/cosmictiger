@@ -642,6 +642,78 @@ void checkRockstarTiedShellBoundary() {
     }
 }
 
+void checkRockstarScaleRadiusBounds() {
+    // The catalogue writer maps any scale radius outside (0, rmax] to the
+    // documented unresolved value. This file is compiled with -ffast-math, so
+    // the nonfinite arguments come from runtime bit patterns, not literals.
+    auto const fromBits = [](uint64_t bits) {
+        uint64_t const volatile runtimeBits = bits;
+        return std::bit_cast<double>(uint64_t(runtimeBits));
+    };
+    double const nan = fromBits(UINT64_C(0x7ff8000000000000));
+    double const infinity = fromBits(UINT64_C(0x7ff0000000000000));
+    requireRockstar(
+        rockstarBoundedScaleRadius(0.5, 1.0) == 0.5 && rockstarBoundedScaleRadius(1.0, 1.0) == 1.0,
+        "scale radii inside the fitted profile must pass the writer guard unchanged");
+    for (double const value :
+        {std::nextafter(1.0, 2.0), 1.3424, 134240.342278, 0.0, -1.0, infinity, -infinity, nan}) {
+        requireRockstar(rockstarBoundedScaleRadius(value, 1.0) == 0.0,
+            "scale radii outside (0, rmax] must become the unresolved value zero");
+    }
+    requireRockstar(rockstarBoundedScaleRadius(0.5, 0.0) == 0.0 &&
+            rockstarBoundedScaleRadius(0.5, nan) == 0.0 &&
+            rockstarBoundedScaleRadius(0.5, infinity) == 0.0,
+        "a degenerate outer radius must leave the scale radius unresolved");
+    // End to end, a reproduction of the halo class that aborted the 128^3 LCDM
+    // production run at step 1367 (z = 1.47): rho ~ 1/r quantiles whose median
+    // pair sits just inside the two-bin likelihood plateau. Ten particles per
+    // unit volume make the virial SO radius of thirty particles (0.1286) enclose
+    // a halo whose outermost particle sits at 0.1, so rmax = 100 kpc/h in the
+    // fixture units. Before the fix the two-bin fit returned Rs = 2006 rmax =
+    // 200,576 kpc/h and rockstarEncodeHalf("rs") threw std::overflow_error from
+    // this call, as it did for the production halo's Rs = 134,240 kpc/h.
+    static constexpr std::array<double, 30> kRadii{0.129099, 0.223607, 0.288675, 0.341565, 0.387298,
+        0.428174, 0.465475, 0.5, 0.532291, 0.562731, 0.591608, 0.619139, 0.645497, 0.67082,
+        0.706988, 0.707088, 0.74162, 0.763763, 0.785281, 0.806226, 0.82664, 0.846562, 0.866025,
+        0.885061, 0.903696, 0.921954, 0.939858, 0.957427, 0.974679, 1.0};
+    auto const options = getOptions();
+    auto sparse = options;
+    sparse.initial.numberOfParticles = 10;
+    setOptions(sparse);
+    try {
+        Subgroup group;
+        group.id = 1;
+        group.x = group.y = group.z = 0.0f;
+        group.sigmaXMin = 0.0f;
+        for (size_t i = 0; i < kRadii.size(); ++i) {
+            auto particle = rockstarTestParticle(0, 0, 0, int(i));
+            // Axis-aligned positions keep the binary32 radii exact.
+            float const radius = float(0.1 * kRadii[i]);
+            particle.xValue[i % 3] = (i % 2 ? -radius : radius);
+            group.parts.pushBack(particle);
+        }
+        rockstarUpdateStatistics(group, 1.0f, 1.0f, 1.0f);
+        Vector<Subgroup> groups{group};
+        Array<double, kDimensions> const origin{};
+        auto const record = rockstarMakeRecord(groups, 0, 1.0f, origin);
+        double const virialRadius = rockstarTestRadius(30, rockstarTestVirialDensity(1.0));
+        requireRockstarClose(record.mvir, 30.0, 2.e-6, "plateau halo virial mass");
+        requireRockstarClose(float162double(record.rmax), 100.0, 1.e-3, "plateau halo rmax");
+        requireRockstarClose(
+            float162double(record.rvir), 1000.0 * virialRadius, 1.e-3, "plateau halo rvir");
+        requireRockstar(record.rs.bits == 0, "the production two-bin plateau must store Rs = 0");
+        double const klypin = float162double(record.rkly);
+        requireRockstar(
+            klypin > 0.0 && klypin <= 1.001 * float162double(record.rvir) / 2.1625815870646098,
+            "Klypin radius must stay inside Rvir / 2.1626");
+        checkRockstarCatalogueRoundtrip(&record, 1, "plateau catalogue");
+    } catch (...) {
+        setOptions(options);
+        throw;
+    }
+    setOptions(options);
+}
+
 #ifdef USE_CUDA
 std::vector<int> rockstarCanonicalPartition(DeviceVector<RockstarParticle> const& particles) {
     std::map<int, int> minimum;
@@ -929,6 +1001,7 @@ void rockstarTest() {
         detail::checkRockstarPrunedDonation();
         detail::checkRockstarCenterUnits();
         detail::checkRockstarTiedShellBoundary();
+        detail::checkRockstarScaleRadiusBounds();
         detail::checkRockstarFinderDegeneracies();
         detail::checkRockstarRecordInvariance();
         detail::checkRockstarLightconeEpoch();

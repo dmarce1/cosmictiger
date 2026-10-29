@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <limits>
 #include <numbers>
+#include <random>
 #include <stdexcept>
 #include <vector>
 
@@ -228,6 +229,193 @@ void testNfwFits() {
         "A boundary-limited NFW likelihood must report an unresolved fit");
 }
 
+// Radius enclosing the given NFW mass fraction, in units of the outer radius.
+double nfwQuantile(double concentration, double massFraction) {
+    double const targetMass =
+        massFraction * (std::log1p(concentration) - concentration / (1.0 + concentration));
+    double lower = 0.0;
+    double upper = concentration;
+    for (int iteration = 0; iteration < 64; ++iteration) {
+        double const middle = 0.5 * (lower + upper);
+        double const mass = std::log1p(middle) - middle / (1.0 + middle);
+        if (mass < targetMass) {
+            lower = middle;
+        } else {
+            upper = middle;
+        }
+    }
+    return 0.5 * (lower + upper) / concentration;
+}
+
+// Exact NFW mass quantiles (index + 1/2) / count with the outer radius at one.
+std::vector<double> nfwQuantileRadii(double concentration, size_t count) {
+    std::vector<double> radii(count);
+    for (size_t index = 0; index < count; ++index) {
+        radii[index] = nfwQuantile(concentration, (index + 0.5) / count);
+    }
+    radii.back() = 1.0;
+    return radii;
+}
+
+// A thirty-particle reproduction of the halo class that aborted the 128^3 LCDM
+// production run at step 1367 (z = 1.47): exact rho ~ 1/r mass quantiles, in
+// units of the outer radius, with the median pair moved so that the two
+// equal-mass bins put the inner mass fraction barely above the rho ~ 1/r limit.
+// The former ln c >= -16 window accepted c = 5e-4, a scale radius of 2007
+// outer radii, which overflowed the binary16 record field after conversion to
+// kpc/h, as the production halo's Rs = 134 Mpc/h did.
+std::vector<double> productionFailureRadii() {
+    return {0.129099, 0.223607, 0.288675, 0.341565, 0.387298, 0.428174, 0.465475, 0.5, 0.532291,
+        0.562731, 0.591608, 0.619139, 0.645497, 0.67082, 0.706988, 0.707088, 0.74162, 0.763763,
+        0.785281, 0.806226, 0.82664, 0.846562, 0.866025, 0.885061, 0.903696, 0.921954, 0.939858,
+        0.957427, 0.974679, 1.0};
+}
+
+// Exact rho ~ 1/r mass quantiles, the c -> 0 limit of the NFW family.
+std::vector<double> inverseRadiusQuantiles(size_t count) {
+    std::vector<double> radii(count);
+    for (size_t index = 0; index < count; ++index) {
+        radii[index] = std::sqrt((index + 0.5) / count);
+    }
+    radii.back() = 1.0;
+    return radii;
+}
+
+// Thirty radii whose single equal-mass boundary solves p(c) = 1/2 exactly at the
+// given concentration, so a two-bin fit probes the window edges directly.
+std::vector<double> twoBinRadii(double concentration) {
+    double const boundary = nfwQuantile(concentration, 0.5);
+    std::vector<double> radii;
+    for (int index = 1; index <= 14; ++index) {
+        radii.push_back(0.999 * boundary * std::sqrt(index / 15.0));
+    }
+    radii.push_back(boundary - 1.e-6);
+    radii.push_back(boundary + 1.e-6);
+    for (int index = 1; index <= 13; ++index) {
+        radii.push_back(boundary + (1.0 - boundary) * index / 14.0);
+    }
+    radii.push_back(1.0);
+    return radii;
+}
+
+// Half the particles inside 2e-5 outer radii drive the optimum to the upper
+// window edge; the criterion is symmetric and reports that as unresolved too.
+std::vector<double> centralCuspRadii() {
+    std::vector<double> radii(30);
+    for (size_t index = 0; index < 16; ++index) {
+        radii[index] = 1.e-5 * (1.0 + (index + 0.5) / 16.0);
+    }
+    for (size_t index = 16; index < 30; ++index) {
+        radii[index] = 0.1 + 0.9 * (index - 15.0) / 14.0;
+    }
+    return radii;
+}
+
+// Deterministic Poisson sample from the raw engine mantissa, so the sequence is
+// identical on every standard library. A negative concentration selects a
+// uniform sphere, zero selects rho ~ 1/r, and a positive value selects NFW.
+std::vector<double> sampledRadii(double concentration, size_t count, std::mt19937_64& engine) {
+    std::vector<double> radii(count);
+    for (auto& radius : radii) {
+        double const massFraction = double(engine() >> 11) * 0x1.0p-53;
+        if (concentration > 0.0) {
+            radius = nfwQuantile(concentration, massFraction);
+        } else if (concentration == 0.0) {
+            radius = std::sqrt(massFraction);
+        } else {
+            radius = std::cbrt(massFraction);
+        }
+    }
+    std::sort(radii.begin(), radii.end());
+    return radii;
+}
+
+void testNfwScaleRadiusWindow() {
+    // Catalogue radii derive from binary32 positions; the synthetic plateau halo
+    // must report an unresolved fit at every outer radius.
+    for (double const outerRadius : {1.0, 0.12, 0.1, 1.e-3}) {
+        std::vector<double> radii;
+        for (double const radius : productionFailureRadii()) {
+            radii.push_back(double(float(radius * outerRadius)));
+        }
+        std::sort(radii.begin(), radii.end());
+        auto const fit = rockstar::nfwFit(radii);
+        require(fit.scaleRadius == 0.0 && fit.density == 0.0,
+            "The production two-bin likelihood plateau must report an unresolved fit");
+    }
+    // rho ~ 1/r is the c -> 0 limit itself and must stay unresolved at every count.
+    for (size_t const count : {30, 45, 100, 300, 1000, 5000}) {
+        require(rockstar::nfwFit(inverseRadiusQuantiles(count)).scaleRadius == 0.0,
+            "The rho ~ 1/r limit must not resolve a scale radius at any particle count");
+    }
+    // Two equal-mass bins determine the concentration exactly. Optima at or below
+    // the c = 1 edge, and interior optima within one sigma of it, are unresolved;
+    // decisive optima are recovered exactly. The rises at c* = 2.25 (0.47) and
+    // c* = 2.35 (0.53) pin kMinBoundaryLogLikelihoodRise = 0.5 from both sides.
+    for (double const concentration : {0.5, 0.9, 0.999, 1.0000001, 1.5, 2.0, 2.25}) {
+        require(rockstar::nfwFit(twoBinRadii(concentration)).scaleRadius == 0.0,
+            "A two-bin optimum within one sigma of the c = 1 edge must be unresolved");
+    }
+    for (double const concentration : {2.35, 3.0, 5.0, 20.0, 9000.0}) {
+        auto const fit = rockstar::nfwFit(twoBinRadii(concentration));
+        require(fit.scaleRadius > 0.0 && fit.scaleRadius < 1.0,
+            "A decisive two-bin median must resolve a scale radius inside the profile");
+        requireClose(1.0 / fit.scaleRadius / concentration, 1.0, 1.e-4,
+            "Two-bin fits inside the window must still be exactly determined");
+    }
+    require(rockstar::nfwFit(centralCuspRadii()).scaleRadius == 0.0,
+        "An optimum pinned at the upper window edge must be unresolved");
+    // Ideal halos: the likelihood rise at the c = 1 edge grows with N and c, so
+    // concentrated small halos stay resolved and recover their concentration ...
+    for (double const concentration : {3.0, 5.0, 10.0}) {
+        auto const fit = rockstar::nfwFit(nfwQuantileRadii(concentration, 30));
+        require(fit.scaleRadius > 0.0 && fit.density > 0.0,
+            "Exact NFW quantiles of a concentrated small halo must remain resolved");
+        requireClose(1.0 / fit.scaleRadius / concentration, 1.0, 0.005,
+            "A resolved small halo must recover its concentration");
+    }
+    for (double const concentration : {2.0, 3.0, 5.0, 10.0}) {
+        auto const fit = rockstar::nfwFit(nfwQuantileRadii(concentration, 150));
+        require(fit.scaleRadius > 0.0 && fit.density > 0.0,
+            "Exact NFW quantiles of a 150-particle halo must remain resolved");
+        requireClose(1.0 / fit.scaleRadius / concentration, 1.0, 0.005,
+            "A resolved 150-particle halo must recover its concentration");
+    }
+    auto const nearEdge = rockstar::nfwFit(nfwQuantileRadii(1.5, 5000));
+    requireClose(1.0 / nearEdge.scaleRadius / 1.5, 1.0, 0.005,
+        "A well-sampled profile close to the c = 1 edge must still be recovered");
+    // ... while profiles consistent with c = 1 at one sigma are unresolved.
+    require(rockstar::nfwFit(nfwQuantileRadii(2.0, 30)).scaleRadius == 0.0,
+        "A c = 2 halo with thirty particles cannot exclude c = 1 at one sigma");
+    require(rockstar::nfwFit(nfwQuantileRadii(1.5, 60)).scaleRadius == 0.0,
+        "A c = 1.5 halo with sixty particles cannot exclude c = 1 at one sigma");
+    require(rockstar::nfwFit(nfwQuantileRadii(1.0, 5000)).scaleRadius == 0.0,
+        "A scale radius at the outer radius is unresolved by definition");
+    // Structural invariants on deterministic Poisson samples of uniform, rho ~ 1/r
+    // and NFW profiles: a resolved scale radius never leaves the fitted profile,
+    // and the scale radius and density are resolved together.
+    std::mt19937_64 engine(20261028);
+    size_t resolved = 0;
+    for (double const concentration : {-1.0, 0.0, 1.0, 3.0, 10.0}) {
+        for (size_t const count : {30, 45, 100}) {
+            for (int trial = 0; trial < 100; ++trial) {
+                double const outerRadius = 1.e-3 + 0.5 * double(engine() >> 11) * 0x1.0p-53;
+                auto radii = sampledRadii(concentration, count, engine);
+                for (double& radius : radii) {
+                    radius *= outerRadius;
+                }
+                auto const fit = rockstar::nfwFit(radii);
+                require(fit.scaleRadius >= 0.0 && fit.scaleRadius <= radii.back(),
+                    "A fitted scale radius must never exceed the outermost fitted radius");
+                require((fit.scaleRadius > 0.0) == (fit.density > 0.0),
+                    "Scale radius and density must be resolved together");
+                resolved += fit.scaleRadius > 0.0;
+            }
+        }
+    }
+    require(resolved > 0, "Sampled profiles must include resolved fits");
+}
+
 void testKlypinFit() {
     constexpr double kMaximumRadiusRatio = 2.1625815870646098;
     double const peakIntegral =
@@ -269,6 +457,10 @@ TEST(RockstarProperties, Eigenpairs) {
 
 TEST(RockstarProperties, NfwFits) {
     detail::testNfwFits();
+}
+
+TEST(RockstarProperties, NfwScaleRadiusWindow) {
+    detail::testNfwScaleRadiusWindow();
 }
 
 TEST(RockstarProperties, KlypinFit) {

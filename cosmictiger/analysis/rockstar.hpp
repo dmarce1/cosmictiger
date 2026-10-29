@@ -123,6 +123,9 @@ RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, flo
     Array<double, kDimensions> const& origin, bool inclusive = true);
 // Checked IEEE binary16 storage for finite physical catalogue properties.
 Float16 rockstarEncodeHalf(double value, char const* fieldName);
+// Catalogue scale radii are bounded by the radius of the profile that produced
+// them; a nonfinite, nonpositive, or larger value is the unresolved value zero.
+double rockstarBoundedScaleRadius(double scaleRadius, double outerRadius);
 // Publish native records and an encoding sidecar after a successful close.
 void rockstarWriteCatalogue(
     std::string const& filename, RockstarRecord const* records, size_t count);

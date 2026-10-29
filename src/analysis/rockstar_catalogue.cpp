@@ -39,6 +39,15 @@ Float16 rockstarEncodeHalf(double value, char const* fieldName) {
     return encoded;
 }
 
+double rockstarBoundedScaleRadius(double scaleRadius, double outerRadius) {
+    // Production builds use -ffast-math; test finiteness by bits, not comparisons.
+    if (!rockstar::detail::isFinite(scaleRadius) || !rockstar::detail::isFinite(outerRadius) ||
+        !(scaleRadius > 0.0) || !(scaleRadius <= outerRadius)) {
+        return 0.0;
+    }
+    return scaleRadius;
+}
+
 void rockstarWriteCatalogue(
     std::string const& filename, RockstarRecord const* records, size_t count) {
     static_assert(
@@ -699,12 +708,19 @@ RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, flo
         }
         i = end;
     }
+    double const outerRadius = radii.empty() ? 0.0 : radii.back();
     double rs = 0.0;
     double rho = 0.0;
-    if (radii.size() >= kRockstarMinGroup && radii.back() > 0.0) {
+    if (radii.size() >= kRockstarMinGroup && outerRadius > 0.0) {
         Vector<double> fitRadii(radii.begin(), radii.end());
         cosmosNfwFit(fitRadii, rs, rho);
     }
+    // Reference ROCKSTAR (nfw.c, calc_scale_from_bins) keeps Rs inside the
+    // binned profile; this project stores a scale radius outside the fitted
+    // profile as the unresolved value zero. The fit already guarantees
+    // rs <= rmax; the guard makes it structural, so encoding rs can only fail
+    // when encoding rmax already has.
+    rs = rockstarBoundedScaleRadius(rs, outerRadius);
     double const klypin = circular > 0.0 && virial.count && virial.radius > 0.0 ?
         cosmosKlypinFit(circular, scale * virial.radius, virial.count) / scale :
         0.0;
@@ -752,8 +768,7 @@ RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, flo
     record.sigVb = rockstarEncodeHalf(std::sqrt(sigmaBulk) * velocityConversion, "sigVb");
     record.sigX = rockstarEncodeHalf(std::sqrt(sigmaX) * lengthConversion, "sigX");
     record.rvir = rockstarEncodeHalf(virial.radius * lengthConversion, "rvir");
-    record.rmax =
-        rockstarEncodeHalf((radii.empty() ? 0.0 : radii.back()) * lengthConversion, "rmax");
+    record.rmax = rockstarEncodeHalf(outerRadius * lengthConversion, "rmax");
     record.rvmax = rockstarEncodeHalf(circularRadius * lengthConversion, "rvmax");
     record.rs = rockstarEncodeHalf(rs * lengthConversion, "rs");
     record.rkly = rockstarEncodeHalf(klypin * lengthConversion, "rkly");
