@@ -507,21 +507,20 @@ bool checkpointCompatible(CheckpointHeader const& header, Options const& opts) {
 
 // Stored only for Monaghan SPH checkpoints; the dark-matter layout is unchanged.
 std::array<double, 13> sphCheckpointParameters(Options const& opts) {
-    double const beta =
-        opts.hydro.viscosityEvolution == "none" && opts.hydro.viscosityBetaMode == "ratio" ?
-        opts.hydro.viscosityAlpha * opts.hydro.viscosityBetaOverAlpha :
-        opts.hydro.viscosityBeta;
-    return {opts.hydro.viscosityAlpha, beta, opts.hydro.viscosityEpsilon, opts.hydro.neighborNumber,
-        opts.hydro.minSupportRadius, opts.hydro.maxSupportRadius, opts.hydro.cfl,
-        opts.gravity.timestepEta, opts.hydro.yAcceleration, opts.hydro.centralAcceleration,
-        opts.hydro.centralSupportRadius, opts.hydro.damping, opts.gravity.enabled ? 1.0 : 0.0};
+    return {opts.hydro.viscosityAlpha, opts.hydro.viscosityBeta, opts.hydro.viscosityEpsilon,
+        opts.hydro.neighborNumber, opts.hydro.minSupportRadius, opts.hydro.maxSupportRadius,
+        opts.hydro.cfl, opts.gravity.timestepEta, opts.hydro.yAcceleration,
+        opts.hydro.centralAcceleration, opts.hydro.centralSupportRadius, opts.hydro.damping,
+        opts.gravity.enabled ? 1.0 : 0.0};
 }
 
 std::array<double, 7> viscosityCheckpointParameters(Options const& opts) {
-    return {opts.hydro.viscosityAlphaMin, opts.hydro.viscosityDecay,
-        opts.hydro.viscosityBetaMode == "ratio" ? 1.0 : 0.0, opts.hydro.viscosityBetaOverAlpha,
-        opts.hydro.viscosityEvolution == "cullenAndDehnen" ? 1.0 : 0.0,
-        opts.hydro.viscosityAlphaMax, opts.hydro.viscosityDecayCD};
+    double const model = opts.hydro.viscosityEvolution == "cullenAndDehnen" ?
+        1.0 :
+        (opts.hydro.viscosityEvolution == "priceEtAl" ? 2.0 : 0.0);
+    return {opts.hydro.viscosityAlphaMin, opts.hydro.viscosityDecay, model,
+        opts.hydro.viscosityAlphaMax, opts.hydro.viscosityDecayCD,
+        opts.hydro.viscosityAlphaMaxPrice, opts.hydro.viscosityDecayPrice};
 }
 
 bool zPlaneCheckpointCompatible(double acceleration, Options const& opts) {
@@ -1030,12 +1029,11 @@ void checkpointStateTest() {
     ALWAYS_ASSERT(!detail::checkpointCompatible(viscosityHeader, viscosityOptions));
     auto const fixedViscosityHeader = detail::checkpointHeader(viscosityOptions);
     ALWAYS_ASSERT((fixedViscosityHeader.flags & detail::kVariableViscosity) == 0U);
-    auto ratioOptions = viscosityOptions;
-    ratioOptions.hydro.viscosityAlpha = 1.0;
-    ratioOptions.hydro.viscosityBetaMode = "ratio";
-    auto const fixedViscosityParameters = detail::sphCheckpointParameters(ratioOptions);
-    ratioOptions.hydro.viscosityBetaOverAlpha += 0.5;
-    ALWAYS_ASSERT(fixedViscosityParameters != detail::sphCheckpointParameters(ratioOptions));
+    auto betaOptions = viscosityOptions;
+    betaOptions.hydro.viscosityAlpha = 1.0;
+    auto const fixedViscosityParameters = detail::sphCheckpointParameters(betaOptions);
+    betaOptions.hydro.viscosityBeta += 0.5;
+    ALWAYS_ASSERT(fixedViscosityParameters != detail::sphCheckpointParameters(betaOptions));
     viscosityOptions.hydro.viscosityEvolution = "morrisAndMonaghan";
     ALWAYS_ASSERT(!detail::checkpointCompatible(fixedViscosityHeader, viscosityOptions));
     for (int parameter = 0; parameter < 7; ++parameter) {
@@ -1045,16 +1043,15 @@ void checkpointStateTest() {
         } else if (parameter == 1) {
             altered.hydro.viscosityDecay += 0.125;
         } else if (parameter == 2) {
-            altered.hydro.viscosityBetaMode =
-                altered.hydro.viscosityBetaMode == "ratio" ? "constant" : "ratio";
-        } else if (parameter == 3) {
-            altered.hydro.viscosityBetaOverAlpha += 0.125;
-        } else if (parameter == 4) {
             altered.hydro.viscosityEvolution = "cullenAndDehnen";
-        } else if (parameter == 5) {
+        } else if (parameter == 3) {
+            altered.hydro.viscosityEvolution = "priceEtAl";
+        } else if (parameter == 4) {
             altered.hydro.viscosityAlphaMax += 0.125;
-        } else {
+        } else if (parameter == 5) {
             altered.hydro.viscosityDecayCD += 0.125;
+        } else {
+            altered.hydro.viscosityAlphaMaxPrice += 0.125;
         }
         ALWAYS_ASSERT(viscosityParameters != detail::viscosityCheckpointParameters(altered));
     }

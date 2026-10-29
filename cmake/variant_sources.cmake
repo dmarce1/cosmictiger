@@ -153,6 +153,7 @@ function(cosmictiger_variant_sources output gravity near sph)
             src/sph/cullen_and_dehnen/particle_exchange.cpp
             src/sph/cullen_and_dehnen/viscosity.cpp
             src/sph/morris_and_monaghan/viscosity.cpp
+            src/sph/price_etal/viscosity.cpp
         )
     endif()
 

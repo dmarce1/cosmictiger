@@ -94,6 +94,8 @@ sph/
 │   ├── viscosity.*
 │   ├── state.hpp
 │   └── particle_exchange.*
+├── price_etal/
+│   └── viscosity.*
 └── balsara/
     └── shear_limiter.hpp
 ```

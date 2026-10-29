@@ -11,6 +11,7 @@
 #include <cosmictiger/sph/cullen_and_dehnen/viscosity.hpp>
 #include <cosmictiger/sph/monaghan/viscosity.hpp>
 #include <cosmictiger/sph/morris_and_monaghan/viscosity.hpp>
+#include <cosmictiger/sph/price_etal/viscosity.hpp>
 #include <cosmictiger/sph/sph_cuda.hpp>
 
 namespace detail {
@@ -180,12 +181,15 @@ __global__ void sphCudaPrehydro2(
                         (parameters.balsaraSwitch || parameters.variableViscosity) ?
                             data.sourceVelocityZ[sourceParticleIndex] :
                             0.0f,
-                        parameters.cullenDehnen ? data.sourceAccelerationX[sourceParticleIndex] :
-                                                  0.0f,
-                        parameters.cullenDehnen ? data.sourceAccelerationY[sourceParticleIndex] :
-                                                  0.0f,
-                        parameters.cullenDehnen ? data.sourceAccelerationZ[sourceParticleIndex] :
-                                                  0.0f,
+                        parameters.gradientSwitch() ?
+                            data.sourceAccelerationX[sourceParticleIndex] :
+                            0.0f,
+                        parameters.gradientSwitch() ?
+                            data.sourceAccelerationY[sourceParticleIndex] :
+                            0.0f,
+                        parameters.gradientSwitch() ?
+                            data.sourceAccelerationZ[sourceParticleIndex] :
+                            0.0f,
                         parameters.cullenDehnen ?
                             data.sourceVelocityDivergence[sourceParticleIndex] :
                             0.0f,
@@ -269,15 +273,15 @@ __global__ void sphCudaPrehydro2(
             cullen_and_dehnen::GradientSums<float> gradientSums{};
             float ρ_a_R_a = 0.0f;
             float v_sig_a = 0.0f;
-            float c_a_CD = 0.0f;
-            if (parameters.cullenDehnen) {
+            float c_a_switch = 0.0f;    // Sound speed for the CD signal speed or Price target.
+            if (parameters.gradientSwitch()) {
                 float const γ_a = data.sourceAdiabaticIndex ?
                     data.sourceAdiabaticIndex[particleIndex] :
                     data.adiabaticIndex;
                 float const P_over_ρu_a = data.sourcePressureEnergyRatio ?
                     data.sourcePressureEnergyRatio[particleIndex] :
                     γ_a - 1.0f;
-                c_a_CD = sqrtf(γ_a * P_over_ρu_a * data.sourceInternalEnergy[particleIndex]);
+                c_a_switch = sqrtf(γ_a * P_over_ρu_a * data.sourceInternalEnergy[particleIndex]);
             }
             for (int neighborIndex = threadIndex; neighborIndex < workspace.positions.size();
                 neighborIndex += blockSize) {
@@ -317,8 +321,9 @@ __global__ void sphCudaPrehydro2(
                         ρ_a_curl_v_a[dim] += v_ab_physical[next] * m_b_gradW_ab[last] -
                             v_ab_physical[last] * m_b_gradW_ab[next];
                     }
-                    if (parameters.cullenDehnen) {
-                        // Cullen & Dehnen (2010), equations (B2), (B4), (B7), (B12).
+                    if (parameters.gradientSwitch()) {
+                        // Cullen & Dehnen (2010), equations (B2), (B4), (B7), (B12), which
+                        // Price et al. (2018) equations (51)-(53) also use.
                         // Equation (B7) permits mass/kernel-gradient weights, independent
                         // of densities being updated by other MPI ranks in this pass.
                         float const w_ab = -m_b_F_a;
@@ -335,13 +340,16 @@ __global__ void sphCudaPrehydro2(
                                 gradientSums.acceleration[i][j] += w_ab * a_ab[i] * r_ab[j];
                             }
                         }
+                        flops += 84;
+                    }
+                    if (parameters.cullenDehnen) {
                         // Equation (15): maximum approaching-pair signal speed.
                         float const v_ab_dot_r̂_ab = v_ab_physical.dot(r_ab) / radius;
                         float const c_b = sqrtf(particle.adiabaticIndex *
                             particle.pressureEnergyRatio * particle.internalEnergy);
                         v_sig_a =
-                            fmaxf(v_sig_a, 0.5f * (c_a_CD + c_b) - fminf(v_ab_dot_r̂_ab, 0.0f));
-                        flops += 97;
+                            fmaxf(v_sig_a, 0.5f * (c_a_switch + c_b) - fminf(v_ab_dot_r̂_ab, 0.0f));
+                        flops += 13;
                     }
                     flops += 33 + sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab, true);
                 }
@@ -358,6 +366,9 @@ __global__ void sphCudaPrehydro2(
             if (parameters.cullenDehnen) {
                 sharedReduceAdd<float, kPrehydro2BlockSize>(ρ_a_R_a);
                 sharedReduceMax<kPrehydro2BlockSize>(v_sig_a);
+                flops += detail::sphReductionFlops<kPrehydro2BlockSize>();
+            }
+            if (parameters.gradientSwitch()) {
                 for (int i = 0; i < kDimensions; ++i) {
                     for (int j = 0; j < kDimensions; ++j) {
                         sharedReduceAdd<float, kPrehydro2BlockSize>(gradientSums.moment[i][j]);
@@ -366,7 +377,7 @@ __global__ void sphCudaPrehydro2(
                             gradientSums.acceleration[i][j]);
                     }
                 }
-                flops += 28 * detail::sphReductionFlops<kPrehydro2BlockSize>();
+                flops += 27 * detail::sphReductionFlops<kPrehydro2BlockSize>();
             }
             // NOLINTEND(readability-identifier-naming)
             if (threadIndex == 0) {
@@ -378,7 +389,7 @@ __global__ void sphCudaPrehydro2(
                         1.0f;
                 }
                 flops += parameters.balsaraSwitch ? 8 : 0;
-                if (parameters.variableViscosity && !parameters.cullenDehnen && active) {
+                if (parameters.variableViscosity && !parameters.gradientSwitch() && active) {
                     // Morris & Monaghan (1997), equations (5), (6), (13), in conformal time.
                     // NOLINTBEGIN(readability-identifier-naming)
                     float const div_v_a = ρ_a_div_v_a / (ρ_a * parameters.scaleFactor);
@@ -401,11 +412,26 @@ __global__ void sphCudaPrehydro2(
                     // NOLINTEND(readability-identifier-naming)
                     flops += 15;
                 }
-                if (parameters.cullenDehnen) {
-                    auto const diagnostics = cullen_and_dehnen::diagnostics(gradientSums,
-                        parameters.scaleFactor, parameters.expansionAcceleration, ρ_a_R_a / ρ_a,
-                        H_a, fmaxf(c_a_CD, v_sig_a), parameters.viscosityAlphaMax,
-                        parameters.viscosityDecayCD, flops);
+                if (parameters.gradientSwitch()) {
+                    cullen_and_dehnen::Result<float> diagnostics;
+                    if (parameters.cullenDehnen) {
+                        diagnostics = cullen_and_dehnen::diagnostics(gradientSums,
+                            parameters.scaleFactor, parameters.expansionAcceleration, ρ_a_R_a / ρ_a,
+                            H_a, fmaxf(c_a_switch, v_sig_a), parameters.viscosityAlphaMax,
+                            parameters.viscosityDecayCD, flops);
+                        flops += 1;
+                    } else {
+                        // Price et al. (2018), equations (46)-(48): the paper's smoothing
+                        // length is the same calibrated viscosity length as Morris & Monaghan's h.
+                        float const h_a = H_a /
+                            float(selectedHydroKernel().supportRadiusPerEffectiveRadius) *
+                            0.9128709291752769f;
+                        diagnostics = price_etal::diagnostics(gradientSums, parameters.scaleFactor,
+                            parameters.expansionAcceleration, h_a, c_a_switch,
+                            parameters.viscosityAlphaMaxPrice, parameters.viscosityDecayPrice,
+                            flops);
+                        flops += 2;
+                    }
                     auto& state = data.sinkCullenDehnenStates[sinkIndex];
                     state.pendingDivergence = diagnostics.divergence;
                     state.targetAlpha = diagnostics.targetAlpha;

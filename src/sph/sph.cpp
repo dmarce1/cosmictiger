@@ -437,11 +437,14 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
     if (params.runType == kSphRunHydro && params.balsaraSwitch) {
         hostBalsaraFactor.resize(particleStorageSize);
     }
-    if (params.runType == kSphRunPrehydro2 && params.cullenDehnen) {
+    if (params.runType == kSphRunPrehydro2 && params.gradientSwitch()) {
         hostAccelerationX.resize(particleStorageSize);
         hostAccelerationY.resize(particleStorageSize);
         hostAccelerationZ.resize(particleStorageSize);
-        hostVelocityDivergence.resize(particleStorageSize);
+        if (params.cullenDehnen) {
+            // Only Cullen-Dehnen equation (17) reads the neighbors' previous divergences.
+            hostVelocityDivergence.resize(particleStorageSize);
+        }
     }
     if (params.runType == kSphRunHydro && params.variableViscosity) {
         hostViscosityAlpha.resize(particleStorageSize);
@@ -506,10 +509,11 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
                             params.balsaraSwitch ? hostBalsaraFactor.data() : nullptr,
                             params.variableViscosity ? hostViscosityAlpha.data() : nullptr);
                     }
-                    if (params.runType == kSphRunPrehydro2 && params.cullenDehnen) {
+                    if (params.runType == kSphRunPrehydro2 && params.gradientSwitch()) {
                         sphParticlesGlobalReadViscosityDiagnostics(node.globalParticleRange(),
                             hostAccelerationX.data(), hostAccelerationY.data(),
-                            hostAccelerationZ.data(), hostVelocityDivergence.data(), offset);
+                            hostAccelerationZ.data(),
+                            params.cullenDehnen ? hostVelocityDivergence.data() : nullptr, offset);
                     }
                     if (!hostVelocityX.empty()) {
                         sphParticlesGlobalReadVelocities(node.globalParticleRange(),

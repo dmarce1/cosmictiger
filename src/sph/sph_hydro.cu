@@ -214,13 +214,12 @@ __global__ void sphCudaHydro(
                 float const α_ab = parameters.variableViscosity ?
                     0.5f * α_a + 0.5f * neighbor.viscosityAlpha :
                     α_a;
-                float const β_ab = parameters.viscosityBetaIsRatio ?
-                    parameters.viscosityBetaOverAlpha * α_ab :
-                    parameters.viscosityBeta;
+                // Price et al. (2018), equation (41): β stays constant under their switch.
+                float const β_ab = parameters.betaFollowsAlpha() ? parameters.viscosityBeta * α_ab :
+                                                                   parameters.viscosityBeta;
                 α_max = fmaxf(α_max, α_ab);
                 float Π_ab = monaghan::artificialViscosity(ρ_a, ρ_b, c_a, c_b, μ_ab, α_ab, β_ab);
-                flops +=
-                    3 * int(parameters.variableViscosity) + int(parameters.viscosityBetaIsRatio);
+                flops += 3 * int(parameters.variableViscosity) + int(parameters.betaFollowsAlpha());
                 if (parameters.balsaraSwitch) {
                     // GADGET-4 equation (72): Π_ab <- ½(f_a^AV + f_b^AV) Π_ab.
                     float const f_ab_AV =
@@ -303,8 +302,8 @@ __global__ void sphCudaHydro(
                     // the fixed 0.25. The reciprocals are kept apart for the diagnostics.
                     float const h_a = H_a / supportRadiusPerEffectiveRadius;
                     float const one_over_δt_c = c_a / h_a;
-                    float const β_max = parameters.viscosityBetaIsRatio ?
-                        parameters.viscosityBetaOverAlpha * α_max :
+                    float const β_max = parameters.betaFollowsAlpha() ?
+                        parameters.viscosityBeta * α_max :
                         parameters.viscosityBeta;
                     float const one_over_δt_visc = 0.6f * (α_max * c_a + β_max * μ_max) / h_a;
                     float const one_over_δt_cv = one_over_δt_c + one_over_δt_visc;

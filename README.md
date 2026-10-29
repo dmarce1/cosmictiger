@@ -627,8 +627,9 @@ Common gravity and SPH machinery lives directly in each subsystem directory.
 The same layout is used beneath `cosmictiger/` for headers and `src/` for
 implementations. Gravity solver code is in `gravity/dehnen/` for global adaptive
 FMM and `gravity/nitadori/` for PMMM. SPH numerical modules are in
-`sph/monaghan/`, `sph/morris_and_monaghan/`, `sph/cullen_and_dehnen/`, and
-`sph/balsara/`. Owned particle storage stays in `particles/`; PMMM owns its
+`sph/monaghan/`, `sph/morris_and_monaghan/`, `sph/cullen_and_dehnen/`,
+`sph/price_etal/`, and `sph/balsara/`.
+ Owned particle storage stays in `particles/`; PMMM owns its
 separate ghost arena in `gravity/nitadori/`.
 
 See [the source organization guide](docs/source_layout.md) for file responsibilities,

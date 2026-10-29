@@ -376,7 +376,7 @@ struct GasMigrationState {
     float supportRadius, internalEnergy, predictedInternalEnergyRate, internalEnergyRate, density;
     char converged, semiactive;
     Pair<float> viscosity;    // Alpha and its previous conformal-time rate.
-    float divergence;         // Previous physical divergence for Cullen-Dehnen.
+    float divergence;         // Previous physical divergence for Cullen-Dehnen and Price et al.
     Array<float, primordial::kAbundanceCount + 1> chemistry;
     Pair<float> chemistryEos;
     template <class Archive>
@@ -394,7 +394,7 @@ struct GasMigrationState {
         if (getOptions().hydro.viscosityEvolution != "none") {
             arc & viscosity;
         }
-        if (getOptions().hydro.viscosityEvolution == "cullenAndDehnen") {
+        if (getOptions().hydro.viscosityGradientSwitch()) {
             arc & divergence;
         }
         if (getOptions().chemistry.enabled) {
@@ -441,7 +441,7 @@ static SphMigrationParticle packSphParticle(ParticleInteger index) {
             auto const& state = sphParticlesViscosityStates[i];
             gas.viscosity = {state.alpha, state.rate};
         }
-        if (getOptions().hydro.viscosityEvolution == "cullenAndDehnen") {
+        if (getOptions().hydro.viscosityGradientSwitch()) {
             gas.divergence = sphParticlesCullenDehnenStates[i].divergence;
         }
         if (getOptions().chemistry.enabled) {
@@ -481,7 +481,7 @@ static void unpackSphParticle(
             sphParticlesViscosityStates[i] = {
                 gas.viscosity.first, gas.viscosity.second, gas.viscosity.first};
         }
-        if (getOptions().hydro.viscosityEvolution == "cullenAndDehnen") {
+        if (getOptions().hydro.viscosityGradientSwitch()) {
             sphParticlesCullenDehnenStates[i] = {gas.divergence, 0.0f, 0.0f, 0.0f};
         }
         if (getOptions().chemistry.enabled) {

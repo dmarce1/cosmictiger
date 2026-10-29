@@ -154,7 +154,7 @@ def hydro_particle_payload(checkpoint, expected_count=None):
     data = (checkpoint / "checkpoint.0.dat").read_bytes()
     position_bytes = checkpoint_position_bytes(data)
     candidates = [data.find(struct.pack("=7I", 0x43545350, version, integer_bytes, 8, 12, 3, 4))
-                  for integer_bytes in (4, 8) for version in (2, 4, 6)]
+                  for integer_bytes in (4, 8) for version in (2, 4, 6, 8)]
     offset = max(candidates)
     if offset < 0:
         raise RuntimeError(f"missing versioned SPH payload in {checkpoint}")
@@ -170,7 +170,8 @@ def hydro_particle_payload(checkpoint, expected_count=None):
     # the gas header. The 38 bytes below are rates, density, flags, and six
     # predictor/gravity acceleration floats in visitSphCheckpointArrays().
     start = offset - 2 * integer_bytes - count * (3 * position_bytes + 14 + integer_bytes)
-    viscosity_bytes = {2: 0, 4: 8, 6: 12}[header[1]]
+    # Price et al. (version 8) shares the Cullen-Dehnen divergence layout.
+    viscosity_bytes = {2: 0, 4: 8, 6: 12, 8: 12}[header[1]]
     end = offset + 28 + integer_bytes + count * (
         header[3] + header[4] + integer_bytes + 38 + viscosity_bytes)
     if start < 0 or end > len(data):
@@ -183,14 +184,14 @@ def hydro_particle_payload(checkpoint, expected_count=None):
 
 
 def checkViscosityRestarts(executable, baseWorkdir):
-    """Check both viscosity switches with and without the independent shear limiter."""
+    """Check every viscosity switch with and without the independent shear limiter."""
     configuration = Path(__file__).resolve().parents[1] / "configurations/hydro_wave.ini"
     common = [str(executable), f"--configuration={configuration}", "--hpx:threads=2",
               "--hpx:bind=none", "--initial.particlesPerDimension=8", "--compute.cuda=false",
               "--run.endTime=0.00001", "--checkpoint.intervalSeconds=0",
               "--output.directory=.", "--output.silo=false", "--analysis.views=false",
               "--analysis.power=false", "--analysis.groups=false", "--lightcone.enabled=false"]
-    for model in ("none", "morrisAndMonaghan", "cullenAndDehnen"):
+    for model in ("none", "morrisAndMonaghan", "cullenAndDehnen", "priceEtAl"):
         for limiter in (False, True):
             name = f"viscosity_{model}_{int(limiter)}"
             options = common + [f"--hydro.viscosityEvolution={model}",
@@ -212,16 +213,17 @@ def checkViscosityRestarts(executable, baseWorkdir):
                           gravity=False)
             if not limiter:
                 mutations = {"model": "--hydro.viscosityEvolution=" + (
-                    "morrisAndMonaghan" if model == "none" else "none")}
-                if model != "none":
-                    mutations.update({"beta_mode": "--hydro.viscosityBetaMode=constant",
-                                      "beta_ratio": "--hydro.viscosityBetaOverAlpha=3"})
+                    "morrisAndMonaghan" if model == "none" else "none"),
+                             "beta": "--hydro.viscosityBeta=3"}
                 if model == "morrisAndMonaghan":
                     mutations.update({"floor": "--hydro.viscosityAlphaMin=0.2",
                                       "decay": "--hydro.viscosityDecay=0.3"})
                 if model == "cullenAndDehnen":
                     mutations.update({"maximum": "--hydro.viscosityAlphaMax=3",
                                       "decay": "--hydro.viscosityDecayCD=0.1"})
+                if model == "priceEtAl":
+                    mutations.update({"maximum": "--hydro.viscosityAlphaMaxPrice=0.5",
+                                      "decay": "--hydro.viscosityDecayPrice=0.2"})
                 for label, changed in mutations.items():
                     directory = prepareCase(baseWorkdir, name + "_reject_" + label, checkpoint)
                     changed_key = changed.split("=", 1)[0] + "="

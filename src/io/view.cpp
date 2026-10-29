@@ -386,7 +386,7 @@ void writeConvertedView(DBfile* db, ViewDirectoryMetadata& metadata, ViewParticl
             massUnit, getOptions().initial.gasMass, time, cycle);
         writeChemistryFields(db, metadata, gas, a);
         writeViscosityField(db, metadata, gas);
-        if (getOptions().hydro.viscosityEvolution == "cullenAndDehnen") {
+        if (getOptions().hydro.viscosityGradientSwitch()) {
             writeViewField(db, metadata, "divv", "gas", gas,
                 cosmological ? "(km/s)/(Mpc/h)" : "1/s",
                 [&conversion](SphParticleInfo const& particle) {
@@ -436,7 +436,7 @@ ViewParticles collectViewParticles() {
             if (getOptions().hydro.viscosityEvolution != "none") {
                 gas.alpha = sphParticlesViscosityStates[index].alpha;
             }
-            if (getOptions().hydro.viscosityEvolution == "cullenAndDehnen") {
+            if (getOptions().hydro.viscosityGradientSwitch()) {
                 gas.divergence = sphParticlesCullenDehnenStates[index].divergence;
             }
             if (getOptions().chemistry.enabled) {
@@ -614,7 +614,7 @@ void writeCodeParticleView(DBfile* db, ViewDirectoryMetadata& metadata,
             [](auto const& p) { return p.h; });
         writeChemistryFields(db, metadata, gas, a);
         writeViscosityField(db, metadata, gas);
-        if (getOptions().hydro.viscosityEvolution == "cullenAndDehnen") {
+        if (getOptions().hydro.viscosityGradientSwitch()) {
             writeViewField(db, metadata, "divv", "gas", gas, "1/code_time",
                 [](SphParticleInfo const& particle) { return double(particle.divergence); });
             writeViewText(db, "divv_convention",

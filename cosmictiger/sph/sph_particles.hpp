@@ -86,6 +86,9 @@ void sphParticlesLoad(FILE* fp);
 void sphParticlesSave(FILE* fp);
 void sphCheckpointTest();
 void sphParticlesApplyUpdates(int minimumRung, int phase, float timeStepScale, float time);
+// Cullen-Dehnen and Price et al.: commit the pending divergences and move alpha toward the
+// density pass's target before the force pass snapshots it.
+void sphParticlesUpdateTargetAlpha(int minimumRung, float timeStepScale, float time);
 
 inline float& sphParticlesPredictedInternalEnergyRate(ParticleInteger index) {
     return sphParticlesPredictedInternalEnergyRates[index];

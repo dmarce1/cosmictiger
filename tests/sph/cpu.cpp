@@ -150,7 +150,7 @@ public:
         params_.balsaraSwitch = false;
         params_.variableViscosity = false;
         params_.cullenDehnen = false;
-        params_.viscosityBetaIsRatio = false;
+        params_.priceEtAl = false;
         params_.minimumSupportRadius = 0.1f;
         params_.maximumSupportRadius = 0.49f;
         params_.uniformAccelerationY = 0.0f;
@@ -206,21 +206,25 @@ public:
         return particleOffset_ + count_ - index - 1;
     }
 
-    void enableVariableViscosity(bool cullenDehnen = false) {
+    void enableVariableViscosity(bool cullenDehnen = false, bool priceEtAl = false) {
         params_.variableViscosity = true;
         params_.cullenDehnen = cullenDehnen;
+        params_.priceEtAl = priceEtAl;
         params_.viscosityAlphaMin = 0.1f;
         params_.viscosityDecay = 0.2f;
         params_.viscosityAlphaMax = 2.0f;
         params_.viscosityDecayCD = 0.05f;
-        params_.viscosityBetaOverAlpha = 2.0f;
+        params_.viscosityAlphaMaxPrice = 1.0f;
+        params_.viscosityDecayPrice = 0.1f;
         data_.sourceViscosityAlpha = allocate<float>(count_ + sourceOffset_ + 3);
         data_.sinkViscosityStates = allocate<SphViscosityState>(count_ + sinkOffset_ + 3);
-        if (cullenDehnen) {
+        if (cullenDehnen || priceEtAl) {
             data_.sourceAccelerationX = allocate<float>(count_ + sourceOffset_ + 3);
             data_.sourceAccelerationY = allocate<float>(count_ + sourceOffset_ + 3);
             data_.sourceAccelerationZ = allocate<float>(count_ + sourceOffset_ + 3);
-            data_.sourceVelocityDivergence = allocate<float>(count_ + sourceOffset_ + 3);
+            if (cullenDehnen) {
+                data_.sourceVelocityDivergence = allocate<float>(count_ + sourceOffset_ + 3);
+            }
             data_.sinkCullenDehnenStates = allocate<SphCullenDehnenState>(count_ + sinkOffset_ + 3);
         }
         for (int i = 0; i < count_; ++i) {
@@ -568,6 +572,105 @@ void testCullenDehnenDensity() {
     }
 }
 
+void testPriceEtAlDensity() {
+    Fixture fixture(27, 3, 5, 3, 7);
+    fixture.enableVariableViscosity(false, true);
+    initializeViscosityStencil(fixture);
+    auto& data = fixture.data_;
+    // Price et al. (2018), equations (46)-(48), on affine flows: steepening and
+    // nonsteepening homologous compression, sheared compression, and pure shear.
+    for (float const scaleFactor : {1.0f, 0.7f}) {
+        for (int flow = 0; flow < 4; ++flow) {
+            double const a2 = double(scaleFactor) * scaleFactor;
+            double const expansion = 0.12;
+            double const expansionAcceleration = 0.03;
+            fixture.params_.scaleFactor = scaleFactor;
+            fixture.params_.expansionRate = float(expansion);
+            fixture.params_.expansionAcceleration = float(expansionAcceleration);
+            double gradient[3][3]{};
+            double accelerationGradient[3][3]{};
+            if (flow == 0 || flow == 1) {
+                for (int dim = 0; dim < kDimensions; ++dim) {
+                    gradient[dim][dim] = -a2;
+                    accelerationGradient[dim][dim] = flow == 1 ? a2 * a2 / scaleFactor : 0.0;
+                }
+            } else if (flow == 2) {
+                gradient[0][0] = -a2;
+                gradient[0][1] = 10.0 * a2;
+            } else {
+                gradient[0][1] = 4.0 * a2;
+            }
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                accelerationGradient[dim][dim] -= expansionAcceleration / scaleFactor;
+            }
+            for (int i = 0; i < fixture.count_; ++i) {
+                int const source = fixture.sourceIndex(i);
+                int const sink = fixture.sinkIndex(i);
+                double const position[3] = {data.sourcePositionX[source].toDouble() - 0.5,
+                    data.sourcePositionY[source].toDouble() - 0.5,
+                    data.sourcePositionZ[source].toDouble() - 0.5};
+                float* velocity[] = {
+                    data.sourceVelocityX, data.sourceVelocityY, data.sourceVelocityZ};
+                float* acceleration[] = {
+                    data.sourceAccelerationX, data.sourceAccelerationY, data.sourceAccelerationZ};
+                for (int dim = 0; dim < kDimensions; ++dim) {
+                    double value = 0.125 * (dim + 1) - expansion * position[dim];
+                    double force = 0.01 * (dim + 1);
+                    for (int axis = 0; axis < kDimensions; ++axis) {
+                        value += gradient[dim][axis] * position[axis];
+                        force += accelerationGradient[dim][axis] * position[axis];
+                    }
+                    velocity[dim][source] = float(value);
+                    acceleration[dim][source] = float(force);
+                }
+                data.sinkCullenDehnenStates[sink] = {9.0f, 8.0f, 7.0f, 6.0f};
+                data.sourceRungs[source] = data.sinkParticleRungs[fixture.particleIndex(i)] =
+                    i == 13 ? 1 : 0;
+            }
+            fixture.densityPass();
+            for (int i = 0; i < fixture.count_; ++i) {
+                int const sink = fixture.sinkIndex(i);
+                auto const& state = data.sinkCullenDehnenStates[sink];
+                double const expectedDivergence = flow < 2 ? -3.0 : (flow == 2 ? -1.0 : 0.0);
+                requireClose("Price affine physical divergence", state.pendingDivergence,
+                    expectedDivergence, 3.0e-5);
+                require(state.divergence == 9.0f,
+                    "Price density preserves previous divergence until all sinks finish");
+                require(data.sinkViscosityStates[sink].alpha == 0.7f &&
+                        data.sinkViscosityStates[sink].rate == -9.0f,
+                    "Price density does not apply the M&M update");
+                if (flow == 1 || flow == 3) {
+                    requireClose(
+                        "nonsteepening flow has no Price target", state.targetAlpha, 0.0, 3.0e-5);
+                }
+            }
+            // Equation (47) from the reconstructed gradient: |curl v|² is 100 for the sheared
+            // compression and 16 for pure shear, in the same a⁴ units as |div v|².
+            int const center = fixture.sinkIndex(13);
+            double const divergence = flow < 2 ? -3.0 : (flow == 2 ? -1.0 : 0.0);
+            double const curlSquared = flow == 2 ? 100.0 : (flow == 3 ? 16.0 : 0.0);
+            double const limiter = divergence != 0.0 ?
+                divergence * divergence / (divergence * divergence + curlSquared) :
+                0.0;
+            double const detector = flow == 0 ? 3.0 : (flow == 2 ? 1.0 : 0.0);
+            double const sound =
+                std::sqrt(double(data.adiabaticIndex) * (data.adiabaticIndex - 1.0) * 0.9);
+            double const viscosityLength =
+                0.25 / selectedHydroKernel().supportRadiusPerEffectiveRadius * 0.9128709291752769;
+            double const expectedTarget = std::min(1.0,
+                10.0 * viscosityLength * viscosityLength * a2 * a2 * limiter * detector /
+                    (sound * sound));
+            requireClose("Price shock target uses the calibrated smoothing length and sound speed",
+                data.sinkCullenDehnenStates[center].targetAlpha, expectedTarget, 4.0e-5);
+            requireClose("Price conformal decay uses the sound speed",
+                data.sinkCullenDehnenStates[center].inverseDecayTime,
+                0.1 * sound / (scaleFactor * viscosityLength), 3.0e-5);
+            require(data.sourceVelocityDivergence == nullptr,
+                "Price et al. needs no neighbor divergence snapshot");
+        }
+    }
+}
+
 void testVariableViscosityPairs() {
     Fixture fixture(2, 2);
     fixture.enableVariableViscosity();
@@ -583,13 +686,14 @@ void testVariableViscosityPairs() {
         data.sourceViscosityAlpha[source] = i == 0 ? 0.2f : 1.4f;
         data.sinkViscosityStates[sink].alpha = data.sourceViscosityAlpha[source];
     }
-    for (bool const ratioMode : {false, true}) {
-        for (float const ratio : {0.0f, 2.0f, 3.5f}) {
+    // Morris-Monaghan and Cullen-Dehnen pairs use beta_ab = viscosityBeta alpha_ab; Price
+    // et al. pairs keep the constant beta of their equation (41).
+    for (bool const priceEtAl : {false, true}) {
+        for (float const beta : {0.0f, 2.0f, 3.5f}) {
             fixture.params_.variableViscosity = true;
+            fixture.params_.priceEtAl = priceEtAl;
             fixture.params_.viscosityAlpha = 8.0f;    // Must not replace particle alpha.
-            fixture.params_.viscosityBeta = 0.9f;
-            fixture.params_.viscosityBetaOverAlpha = ratio;
-            fixture.params_.viscosityBetaIsRatio = ratioMode;
+            fixture.params_.viscosityBeta = beta;
             fixture.hydro();
             fixture.checkConservation();
             std::array<float, 2> heating;
@@ -599,9 +703,9 @@ void testVariableViscosityPairs() {
                 force[i] = data.sinkAccelerations[fixture.sinkIndex(i)];
             }
             fixture.params_.variableViscosity = false;
+            fixture.params_.priceEtAl = false;
             fixture.params_.viscosityAlpha = 0.8f;
-            fixture.params_.viscosityBetaIsRatio = false;
-            fixture.params_.viscosityBeta = ratioMode ? 0.8f * ratio : 0.9f;
+            fixture.params_.viscosityBeta = priceEtAl ? beta : 0.8f * beta;
             auto* sourceAlpha = data.sourceViscosityAlpha;
             auto* states = data.sinkViscosityStates;
             data.sourceViscosityAlpha = nullptr;
@@ -627,8 +731,7 @@ void testVariableViscosityPairs() {
 void testCullenDehnenExcludedThermodynamics() {
     Fixture fixture(2, 2);
     fixture.enableVariableViscosity(true);
-    fixture.params_.viscosityBetaIsRatio = true;
-    fixture.params_.viscosityBetaOverAlpha = 4.0f;
+    fixture.params_.viscosityBeta = 4.0f;
     auto& data = fixture.data_;
     for (int i = 0; i < 2; ++i) {
         int const source = fixture.sourceIndex(i);
@@ -1413,6 +1516,10 @@ TEST_F(SphCpuTest, MorrisMonaghanDensity) {
 
 TEST_F(SphCpuTest, CullenDehnenDensity) {
     detail::testCullenDehnenDensity();
+}
+
+TEST_F(SphCpuTest, PriceEtAlDensity) {
+    detail::testPriceEtAlDensity();
 }
 
 TEST_F(SphCpuTest, VariableViscosityPairs) {

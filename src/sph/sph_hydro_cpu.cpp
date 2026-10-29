@@ -156,14 +156,14 @@ SphRunReturn sphCpuHydro(
                 SimdFloat(α_a);
             SimdFloat const α_ab =
                 parameters.variableViscosity ? half * SimdFloat(α_a) + half * α_b : SimdFloat(α_a);
-            SimdFloat const β_ab = parameters.viscosityBetaIsRatio ?
-                SimdFloat(parameters.viscosityBetaOverAlpha) * α_ab :
+            // Price et al. (2018), equation (41): β stays constant under their switch.
+            SimdFloat const β_ab = parameters.betaFollowsAlpha() ?
+                SimdFloat(parameters.viscosityBeta) * α_ab :
                 SimdFloat(parameters.viscosityBeta);
             α_max_pack = simdMax(α_max_pack, simdSelect(interacts, α_ab, SimdFloat(α_a)));
             SimdFloat Π_ab = monaghan::artificialViscosity(
                 SimdFloat(ρ_a), ρ_b, SimdFloat(c_a), c_b, μ_ab, α_ab, β_ab);
-            flops +=
-                (3 * int(parameters.variableViscosity) + int(parameters.viscosityBetaIsRatio)) *
+            flops += (3 * int(parameters.variableViscosity) + int(parameters.betaFollowsAlpha())) *
                 SimdFloat::size();
             if (parameters.balsaraSwitch) {
                 // GADGET-4 equation (72): Π_ab <- ½(f_a^AV + f_b^AV) Π_ab.
@@ -197,9 +197,8 @@ SphRunReturn sphCpuHydro(
         flops +=
             4 * (SimdFloat::size() - 1);    // Four additive reductions; maxima are comparisons.
         float const α_max = simdMaximum(α_max_pack);
-        float const β_max = parameters.viscosityBetaIsRatio ?
-            parameters.viscosityBetaOverAlpha * α_max :
-            parameters.viscosityBeta;
+        float const β_max = parameters.betaFollowsAlpha() ? parameters.viscosityBeta * α_max :
+                                                            parameters.viscosityBeta;
         float const μ_max = simdMaximum(μ_max_pack);    // max_b(−μ_ab) over approaching pairs
         // Accelerations outside the paper: self-gravity, the optional uniform, midplane and
         // central forces of the test problems, and velocity damping while relaxing the gas sphere.

@@ -81,8 +81,8 @@ def main():
                 "output.zMin", "output.zMax", "chemistry.initialization"}
     required.update({"hydro.viscosityEvolution", "hydro.viscosityAlphaMin",
                      "hydro.viscosityDecay", "hydro.viscosityAlphaMax",
-                     "hydro.viscosityDecayCD", "hydro.viscosityBetaMode",
-                     "hydro.viscosityBetaOverAlpha"})
+                     "hydro.viscosityDecayCD", "hydro.viscosityAlphaMaxPrice",
+                     "hydro.viscosityDecayPrice"})
     if not required <= option_names:
         raise RuntimeError(f"grouped help is missing {sorted(required - option_names)}")
     removed_options = {"hydro.chemistry", "hydro.conduction", "hydro.diffusion",
@@ -120,8 +120,8 @@ viscosityAlphaMin = 0.15
 viscosityDecay = 0.3
 viscosityAlphaMax = 1.5
 viscosityDecayCD = 0.1
-viscosityBetaMode = constant
-viscosityBetaOverAlpha = 2.5
+viscosityAlphaMaxPrice = 0.8
+viscosityDecayPrice = 0.15
 zPlaneAcceleration = 0.25
 gamma = 1.4
 neighborNumber = 48
@@ -136,7 +136,7 @@ mapSize = 8
                 "hydro.viscosityBeta": 1.5, "hydro.viscosityEpsilon": 0.02,
                 "hydro.viscosityAlphaMin": 0.15, "hydro.viscosityDecay": 0.3,
                 "hydro.viscosityAlphaMax": 1.5, "hydro.viscosityDecayCD": 0.1,
-                "hydro.viscosityBetaOverAlpha": 2.5,
+                "hydro.viscosityAlphaMaxPrice": 0.8, "hydro.viscosityDecayPrice": 0.15,
                 "hydro.gamma": 1.4, "hydro.neighborNumber": 48.0,
                 "hydro.cfl": 0.3, "hydro.zPlaneAcceleration": 0.25, "lightcone.mapSize": 8.0,
                 "hydro.minSupportRadius": 1.0e-6, "hydro.maxSupportRadius": 4.0,
@@ -419,22 +419,22 @@ mapSize = 8
     if not re.search(r"^hydro\.balsaraSwitch\s*:\s*T\s*$", balsara_override, re.MULTILINE):
         raise RuntimeError("CLI hydro.balsaraSwitch did not override INI")
 
-    for key, expected_value in (("hydro.viscosityEvolution", "none"),
-                                ("hydro.viscosityBetaMode", "constant")):
+    for key, expected_value in (("hydro.viscosityEvolution", "none"),):
         if not re.search(r"^" + re.escape(key) + r"\s*:\s*" + expected_value + r"\s*$",
                          configured, re.MULTILINE):
             raise RuntimeError(f"INI {key} was not applied")
-    for key, expected_value in (("hydro.viscosityEvolution", "morrisAndMonaghan"),
-                                ("hydro.viscosityBetaMode", "ratio")):
+    for key, expected_value in (("hydro.viscosityEvolution", "morrisAndMonaghan"),):
         if not re.search(r"^" + re.escape(key) + r"\s*:\s*" + expected_value + r"\s*$",
                          balsara_default, re.MULTILINE):
             raise RuntimeError(f"unexpected default for {key}")
+    for key in ("hydro.viscosityBetaMode", "hydro.viscosityBetaOverAlpha"):
+        if re.search(r"^" + re.escape(key) + r"\s*:", balsara_default, re.MULTILINE):
+            raise RuntimeError(f"removed option {key} is still reported")
     viscosity_override = run("variable_viscosity_cli_override", [
-        f"--configuration={config.resolve()}", "--hydro.viscosityEvolution=cullenAndDehnen",
-        "--hydro.viscosityBetaMode=ratio", "--hydro.viscosityBetaOverAlpha=3"])
-    for key, expected_value in (("hydro.viscosityEvolution", "cullenAndDehnen"),
-                                ("hydro.viscosityBetaMode", "ratio"),
-                                ("hydro.viscosityBetaOverAlpha", "3")):
+        f"--configuration={config.resolve()}", "--hydro.viscosityEvolution=priceEtAl",
+        "--hydro.viscosityAlphaMaxPrice=3"])
+    for key, expected_value in (("hydro.viscosityEvolution", "priceEtAl"),
+                                ("hydro.viscosityAlphaMaxPrice", "3")):
         match = re.search(r"^" + re.escape(key) + r"\s*:\s*(\S+)",
                           viscosity_override, re.MULTILINE)
         if match is None or (float(match.group(1)) != 3 if expected_value == "3"
@@ -644,7 +644,7 @@ mapSize = 8
                        ("hydro.neighborNumber", 42), ("hydro.kernelDegree", 3),
                        ("hydro.viscosityAlphaMin", 0.1), ("hydro.viscosityDecay", 0.2),
                        ("hydro.viscosityAlphaMax", 2), ("hydro.viscosityDecayCD", 0.05),
-                       ("hydro.viscosityBetaOverAlpha", 2),
+                       ("hydro.viscosityAlphaMaxPrice", 1), ("hydro.viscosityDecayPrice", 0.1),
                        ("compute.bucketSize", 128), ("compute.sphBucketSize", 106)):
         assertNumericSetting(defaults, key, value)
 
@@ -949,14 +949,16 @@ mapSize = 8
         ("viscosity_evolution", "--hydro.viscosityEvolution=unknown", "hydro.viscosityEvolution"),
         ("viscosity_alpha_max", "--hydro.viscosityAlphaMax=0", "hydro.viscosityAlphaMax"),
         ("viscosity_decay_cd", "--hydro.viscosityDecayCD=0", "hydro.viscosityDecayCD"),
-        ("variable_viscosity_mode", "--hydro.viscosityBetaMode=unknown", "hydro.viscosityBetaMode"),
+        ("viscosity_alpha_max_price", "--hydro.viscosityAlphaMaxPrice=0",
+         "hydro.viscosityAlphaMaxPrice"),
+        ("viscosity_decay_price", "--hydro.viscosityDecayPrice=0", "hydro.viscosityDecayPrice"),
+        ("beta_mode_removed", "--hydro.viscosityBetaMode=ratio", "hydro.viscosityBetaMode"),
         ("alpha_floor_zero", "--hydro.viscosityAlphaMin=0", "hydro.viscosityAlphaMin"),
         ("alpha_floor_underflow", "--hydro.viscosityAlphaMin=1e-100", "single precision"),
         ("viscosity_decay_zero", "--hydro.viscosityDecay=0", "hydro.viscosityDecay"),
         ("viscosity_decay_overflow", "--hydro.viscosityDecay=1e100", "single precision"),
-        ("beta_ratio_negative", "--hydro.viscosityBetaOverAlpha=-1", "hydro.viscosityBetaOverAlpha"),
-        ("beta_ratio_overflow", "--hydro.viscosityBetaOverAlpha=1e100", "single precision"),
-        ("beta_ratio_nan", "--hydro.viscosityBetaOverAlpha=nan", "hydro.viscosityBetaOverAlpha"),
+        ("beta_overflow", "--hydro.viscosityBeta=1e100", "single precision"),
+        ("beta_nan", "--hydro.viscosityBeta=nan", "hydro.viscosityBeta"),
         ("alpha", "--hydro.viscosityAlpha=-1", "hydro.viscosityAlpha"),
         ("beta", "--hydro.viscosityBeta=-1", "hydro.viscosityBeta"),
         ("epsilon", "--hydro.viscosityEpsilon=0", "hydro.viscosityEpsilon"),

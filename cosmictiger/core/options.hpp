@@ -196,8 +196,17 @@ struct Hydro {
     double viscosityDecay{0.2};
     double viscosityAlphaMax{2.0};
     double viscosityDecayCD{0.05};
-    std::string viscosityBetaMode{"ratio"};
-    double viscosityBetaOverAlpha{2.0};
+    double viscosityAlphaMaxPrice{1.0};
+    double viscosityDecayPrice{0.1};
+    // Cullen-Dehnen and Price et al. share the gradient-based shock detector and its state.
+    bool viscosityGradientSwitch() const {
+        return viscosityEvolution == "cullenAndDehnen" || viscosityEvolution == "priceEtAl";
+    }
+    // Morris-Monaghan and Cullen-Dehnen use beta_ij = viscosityBeta alpha_ij; the fixed
+    // Monaghan coefficients and Price et al. use beta_ij = viscosityBeta.
+    bool viscosityBetaFollowsAlpha() const {
+        return viscosityEvolution == "morrisAndMonaghan" || viscosityEvolution == "cullenAndDehnen";
+    }
     double gamma{};
     double cfl{};
     double neighborNumber{42.0};
@@ -267,8 +276,8 @@ struct Options {
         arc & hydro.viscosityDecay;
         arc & hydro.viscosityAlphaMax;
         arc & hydro.viscosityDecayCD;
-        arc & hydro.viscosityBetaMode;
-        arc & hydro.viscosityBetaOverAlpha;
+        arc & hydro.viscosityAlphaMaxPrice;
+        arc & hydro.viscosityDecayPrice;
         arc & hydro.neighborNumber;
         arc & hydro.minSupportRadius;
         arc & hydro.maxSupportRadius;

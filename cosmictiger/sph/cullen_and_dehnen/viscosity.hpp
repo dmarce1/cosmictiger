@@ -267,7 +267,3 @@ CUDA_EXPORT inline Result<Real> diagnostics(GradientSums<Real> const& sums, Real
 // NOLINTEND(readability-identifier-naming)
 
 }    // namespace cullen_and_dehnen
-
-
-// Complete the diagnostic phase before the force pass snapshots alpha.
-void sphParticlesUpdateCullenDehnen(int minimumRung, float timeStepScale, float time);

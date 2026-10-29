@@ -25,6 +25,7 @@
 #include <cosmictiger/sph/cullen_and_dehnen/particle_exchange.hpp>
 #include <cosmictiger/sph/cullen_and_dehnen/viscosity.hpp>
 #include <cosmictiger/sph/morris_and_monaghan/viscosity.hpp>
+#include <cosmictiger/sph/price_etal/viscosity.hpp>
 #include <cosmictiger/sph/sph.hpp>
 #include <cosmictiger/sph/sph_chemistry.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
@@ -306,8 +307,8 @@ void sphParticlesArrayResize(T*& ptr, ParticleInteger newCapacity) {
 void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticles) {
     bool const initializeBalsara =
         getOptions().hydro.balsaraSwitch && sphParticlesBalsaraFactors == nullptr;
-    bool const cullenDehnen = getOptions().hydro.viscosityEvolution == "cullenAndDehnen";
-    bool const initializeCullenDehnen = cullenDehnen && sphParticlesCullenDehnenStates == nullptr;
+    bool const gradientSwitch = getOptions().hydro.viscosityGradientSwitch();
+    bool const initializeCullenDehnen = gradientSwitch && sphParticlesCullenDehnenStates == nullptr;
     bool const initializeViscosity =
         getOptions().hydro.viscosityEvolution != "none" && sphParticlesViscosityStates == nullptr;
     if (particleCount > capacity) {
@@ -322,7 +323,7 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
         if (getOptions().hydro.viscosityEvolution != "none") {
             sphParticlesArrayResize(sphParticlesViscosityStates, newCapacity);
         }
-        if (cullenDehnen) {
+        if (gradientSwitch) {
             sphParticlesArrayResize(sphParticlesCullenDehnenStates, newCapacity);
         }
         sphParticlesArrayResize(sphParticlesThermodynamicStates, newCapacity);
@@ -361,10 +362,10 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
         sphParticlesViscosityStates == nullptr && capacity > 0) {
         sphParticlesArrayResize(sphParticlesViscosityStates, capacity);
     }
-    if (!cullenDehnen && sphParticlesCullenDehnenStates != nullptr) {
+    if (!gradientSwitch && sphParticlesCullenDehnenStates != nullptr) {
         freeManagedMemory(sphParticlesCullenDehnenStates);
         sphParticlesCullenDehnenStates = nullptr;
-    } else if (cullenDehnen && sphParticlesCullenDehnenStates == nullptr && capacity > 0) {
+    } else if (gradientSwitch && sphParticlesCullenDehnenStates == nullptr && capacity > 0) {
         sphParticlesArrayResize(sphParticlesCullenDehnenStates, capacity);
     }
     if (initializeCullenDehnen) {
@@ -373,7 +374,7 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
         }
     }
     if (initializeViscosity) {
-        float const alpha = cullenDehnen ? 0.0f : getOptions().hydro.viscosityAlphaMin;
+        float const alpha = gradientSwitch ? 0.0f : getOptions().hydro.viscosityAlphaMin;
         for (ParticleInteger index = 0; index < size; ++index) {
             sphParticlesViscosityStates[index] = {alpha, 0.0f, alpha};
         }
@@ -401,10 +402,10 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
             sphParticlesBalsaraFactors[slot] = 0.0f;
         }
         if (getOptions().hydro.viscosityEvolution != "none") {
-            float const alpha = cullenDehnen ? 0.0f : getOptions().hydro.viscosityAlphaMin;
+            float const alpha = gradientSwitch ? 0.0f : getOptions().hydro.viscosityAlphaMin;
             sphParticlesViscosityStates[slot] = {alpha, 0.0f, alpha};
         }
-        if (cullenDehnen) {
+        if (gradientSwitch) {
             sphParticlesCullenDehnenStates[slot] = {};
         }
         sphParticlesConvergenceFlags[slot] = 0;
@@ -843,7 +844,9 @@ uint32_t sphCheckpointVersion() {
     return (options.chemistry.enabled ? 3U : 2U) +
         (options.hydro.viscosityEvolution == "cullenAndDehnen" ?
                 4U :
-                (options.hydro.viscosityEvolution != "none" ? 2U : 0U));
+                (options.hydro.viscosityEvolution == "priceEtAl" ?
+                        6U :
+                        (options.hydro.viscosityEvolution != "none" ? 2U : 0U)));
 }
 
 }    // namespace detail
@@ -872,7 +875,7 @@ void sphParticlesLoad(FILE* fp) {
             float words[2];
             FREAD(words, sizeof(float), 2, fp);
             sphParticlesViscosityStates[index] = {words[0], words[1], words[0]};
-            if (getOptions().hydro.viscosityEvolution == "cullenAndDehnen") {
+            if (getOptions().hydro.viscosityGradientSwitch()) {
                 float divergence;
                 FREAD(&divergence, sizeof(float), 1, fp);
                 sphParticlesCullenDehnenStates[index] = {divergence, 0.0f, 0.0f, 0.0f};
@@ -912,7 +915,7 @@ void sphParticlesSave(FILE* fp) {
             auto const& state = sphParticlesViscosityStates[index];
             float words[2] = {state.alpha, state.rate};
             FWRITE(words, sizeof(float), 2, fp);
-            if (getOptions().hydro.viscosityEvolution == "cullenAndDehnen") {
+            if (getOptions().hydro.viscosityGradientSwitch()) {
                 float divergence = sphParticlesCullenDehnenStates[index].divergence;
                 FWRITE(&divergence, sizeof(float), 1, fp);
             }
@@ -939,9 +942,9 @@ void sphCheckpointTest() {
             (getOptions().hydro.viscosityEvolution != "none"));
     ALWAYS_ASSERT(sphParticlesSize() == 0 ||
         (sphParticlesCullenDehnenStates != nullptr) ==
-            (getOptions().hydro.viscosityEvolution == "cullenAndDehnen"));
+            getOptions().hydro.viscosityGradientSwitch());
     Vector<SphCullenDehnenState> originalCullenDehnen;
-    if (getOptions().hydro.viscosityEvolution == "cullenAndDehnen" && sphParticlesSize() != 0) {
+    if (getOptions().hydro.viscosityGradientSwitch() && sphParticlesSize() != 0) {
         originalCullenDehnen.assign(
             sphParticlesCullenDehnenStates, sphParticlesCullenDehnenStates + sphParticlesSize());
         for (ParticleInteger index = 0; index < sphParticlesSize(); ++index) {
@@ -951,6 +954,10 @@ void sphCheckpointTest() {
     ALWAYS_ASSERT(cullen_and_dehnen::evolvedAlpha(0.0f, 1.5f, 2.0f, 0.0f) == 1.5f);
     ALWAYS_ASSERT(std::fabs(cullen_and_dehnen::evolvedAlpha(1.5f, 0.5f, 2.0f, 0.25f) -
                       (0.5f + std::exp(-0.5f))) < 1.0e-6f);
+    // Price et al. (2018), equation (50): (1.5 + 0.5 * 0.5) / 1.5 after one backward Euler step.
+    ALWAYS_ASSERT(price_etal::evolvedAlpha(0.0f, 1.5f, 2.0f, 0.0f) == 1.5f);
+    ALWAYS_ASSERT(
+        std::fabs(price_etal::evolvedAlpha(1.5f, 0.5f, 2.0f, 0.25f) - 1.75f / 1.5f) < 1.0e-6f);
     Vector<SphViscosityState> originalViscosity;
     if (getOptions().hydro.viscosityEvolution != "none" && sphParticlesSize() != 0) {
         originalViscosity.assign(
@@ -1111,4 +1118,41 @@ void sphParticlesResetSemiactive() {
             "sph.particles.resetSemiactive")));
     }
     hpx::wait_all(futures.begin(), futures.end());
+}
+
+HPX_PLAIN_ACTION(sphParticlesUpdateTargetAlpha, SphParticlesUpdateTargetAlphaAction);
+void sphParticlesUpdateTargetAlpha(int minimumRung, float timeStepScale, float time) {
+    if (!getOptions().hydro.viscosityGradientSwitch()) {
+        return;
+    }
+    bool const cullenDehnen = getOptions().hydro.viscosityEvolution == "cullenAndDehnen";
+    Vector<hpx::future<void>> pending;
+    for (auto const& child : hpxChildren()) {
+        pending.push_back(hpx::async<SphParticlesUpdateTargetAlphaAction>(
+            child, minimumRung, timeStepScale, time));
+    }
+    FlopCounter<> flops;
+    for (ParticleInteger index = 0; index < sphParticlesSize(); ++index) {
+        int const rung = sphParticlesRung(index);
+        bool const active = rung >= minimumRung;
+        auto& diagnostic = sphParticlesCullenDehnenStates[index];
+        if (active || sphParticlesSemiactive(index)) {
+            diagnostic.divergence = diagnostic.pendingDivergence;
+        }
+        if (active) {
+            float const timeStep = time > 0.0f ? timeStepScale / (1 << rung) : 0.0f;
+            auto& state = sphParticlesViscosityStates[index];
+            // Cullen & Dehnen (2010), equation (A15), or Price et al. (2018), equation (50).
+            state.alpha = cullenDehnen ?
+                cullen_and_dehnen::evolvedAlpha(
+                    state.alpha, diagnostic.targetAlpha, diagnostic.inverseDecayTime, timeStep) :
+                price_etal::evolvedAlpha(
+                    state.alpha, diagnostic.targetAlpha, diagnostic.inverseDecayTime, timeStep);
+            flops += 7;
+        }
+    }
+    addCpuFlops(flops);
+    for (auto& future : pending) {
+        future.get();
+    }
 }

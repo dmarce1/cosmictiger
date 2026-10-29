@@ -477,7 +477,7 @@ void initializeSphDomainRegression() {
     if (getOptions().hydro.viscosityEvolution != "none") {
         sphParticlesViscosityStates[0] = {0.5f + target / 16.0f, -0.0625f + target / 128.0f, 99.0f};
     }
-    if (getOptions().hydro.viscosityEvolution == "cullenAndDehnen") {
+    if (getOptions().hydro.viscosityGradientSwitch()) {
         sphParticlesCullenDehnenStates[0] = {-1.5f + target / 8.0f, 77.0f, 88.0f, 99.0f};
     }
     if (getOptions().chemistry.enabled) {
@@ -544,7 +544,7 @@ void validateSphDomainRegression() {
         requireClose("migration resets predictor scratch",
             sphParticlesViscosityStates[0].predictedAlpha, sphParticlesViscosityStates[0].alpha);
     }
-    if (getOptions().hydro.viscosityEvolution == "cullenAndDehnen") {
+    if (getOptions().hydro.viscosityGradientSwitch()) {
         auto const& state = sphParticlesCullenDehnenStates[0];
         requireClose(
             "migration preserves physical divergence", state.divergence, -1.5 + target / 8.0);
@@ -577,7 +577,7 @@ void validateSphDomainRegression() {
         requireClose("remote viscosity lower padding", alpha[0], -9.0);
         requireClose("remote viscosity upper padding", alpha[2], -9.0);
     }
-    if (getOptions().hydro.viscosityEvolution == "cullenAndDehnen") {
+    if (getOptions().hydro.viscosityGradientSwitch()) {
         float acceleration[kDimensions][3]{};
         float divergence[3]{};
         sphParticlesGlobalReadViscosityDiagnostics(remote, acceleration[kXDimension],

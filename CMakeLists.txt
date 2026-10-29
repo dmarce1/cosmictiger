@@ -360,6 +360,7 @@ set(cosmictiger_header_files
     cosmictiger/sph/monaghan/equations.hpp
     cosmictiger/sph/monaghan/viscosity.hpp
     cosmictiger/sph/morris_and_monaghan/viscosity.hpp
+    cosmictiger/sph/price_etal/viscosity.hpp
     cosmictiger/sph/sph_flops.hpp
     cosmictiger/sph/viscosity_state.hpp
 )
@@ -1277,9 +1278,11 @@ if(BUILD_TESTING)
         set_tests_properties(units_output PROPERTIES
             WORKING_DIRECTORY "${units_output_workdir}" RUN_SERIAL TRUE TIMEOUT 120)
         # Keep the existing cases on the default model and cover the other state layouts.
-        foreach(units_viscosity IN ITEMS none cullen_and_dehnen)
+        foreach(units_viscosity IN ITEMS none cullen_and_dehnen price_etal)
             if(units_viscosity STREQUAL "none")
                 set(units_viscosity_option none)
+            elseif(units_viscosity STREQUAL "price_etal")
+                set(units_viscosity_option priceEtAl)
             else()
                 set(units_viscosity_option cullenAndDehnen)
             endif()
@@ -1614,6 +1617,11 @@ if(BUILD_TESTING)
         add_executable(cullen_and_dehnen_test tests/sph/cullen_and_dehnen/viscosity.cpp)
         target_include_directories(cullen_and_dehnen_test PRIVATE ${PROJECT_SOURCE_DIR})
         cosmictiger_add_gtest(NAME cullen_and_dehnen TARGET cullen_and_dehnen_test
+            PROPERTIES TIMEOUT 30 LABELS "sph;cpu")
+
+        add_executable(price_etal_test tests/sph/price_etal/viscosity.cpp src/sph/price_etal/viscosity.cpp)
+        target_include_directories(price_etal_test PRIVATE ${PROJECT_SOURCE_DIR})
+        cosmictiger_add_gtest(NAME price_etal TARGET price_etal_test
             PROPERTIES TIMEOUT 30 LABELS "sph;cpu")
 
         add_executable(balsara_test tests/sph/balsara/shear_limiter.cpp)

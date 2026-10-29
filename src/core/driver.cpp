@@ -59,7 +59,6 @@
 #include <cosmictiger/scenarios/plummer.hpp>
 #include <cosmictiger/scenarios/scenario.hpp>
 #if COSMICTIGER_WITH_SPH
-#include <cosmictiger/sph/cullen_and_dehnen/viscosity.hpp>
 #include <cosmictiger/sph/sph.hpp>
 #include <cosmictiger/sph/sph_chemistry.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
@@ -228,7 +227,7 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     runParameters.maximumTimestep = std::min(runParameters.maximumTimestep,
         std::ldexp(static_cast<float>(t0), -getOptions().run.minRung));
     runParameters.expansionRate = adot;
-    if (runParameters.cullenDehnen && getOptions().run.scenario == "cosmology") {
+    if (runParameters.gradientSwitch() && getOptions().run.scenario == "cosmology") {
         runParameters.expansionAcceleration = scale * scale * scale * cosmosD2adt2(scale);
     }
     runParameters.scaleFactor = scale;
@@ -328,9 +327,10 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
         result = SphRunReturn();
     } while (needsNeighborRefresh);
     Timer timer;
-    if (runParameters.cullenDehnen) {
-        // Cullen & Dehnen (2010), equation (A15), after density convergence.
-        sphParticlesUpdateCullenDehnen(minrung, t0, tau);
+    if (runParameters.gradientSwitch()) {
+        // Cullen & Dehnen (2010), equation (A15), or Price et al. (2018), equation (50),
+        // after density convergence.
+        sphParticlesUpdateTargetAlpha(minrung, t0, tau);
     }
     runParameters.phase = 0;
     runParameters.runType = kSphRunHydro;

@@ -17,6 +17,7 @@
 #include <cosmictiger/sph/cullen_and_dehnen/viscosity.hpp>
 #include <cosmictiger/sph/monaghan/viscosity.hpp>
 #include <cosmictiger/sph/morris_and_monaghan/viscosity.hpp>
+#include <cosmictiger/sph/price_etal/viscosity.hpp>
 #include <cosmictiger/sph/sph_cpu.hpp>
 
 // Monaghan (1992), ARA&A 30, 543; cosmictiger/sph/monaghan/equations.hpp gives the full citation
@@ -214,14 +215,14 @@ SphRunReturn sphCpuPrehydro2(
         cullen_and_dehnen::GradientSums<SimdFloat> gradientSums{};
         SimdFloat ρ_a_R_a_pack(0.0f);
         SimdFloat v_sig_a_pack(0.0f);
-        float c_a_CD = 0.0f;
-        if (parameters.cullenDehnen) {
+        float c_a_switch = 0.0f;    // Sound speed for the CD signal speed or the Price target.
+        if (parameters.gradientSwitch()) {
             float const γ_a = data.sourceAdiabaticIndex ? data.sourceAdiabaticIndex[particleIndex] :
                                                           data.adiabaticIndex;
             float const P_over_ρu_a = data.sourcePressureEnergyRatio ?
                 data.sourcePressureEnergyRatio[particleIndex] :
                 γ_a - 1.0f;
-            c_a_CD = std::sqrt(γ_a * P_over_ρu_a * data.sourceInternalEnergy[particleIndex]);
+            c_a_switch = std::sqrt(γ_a * P_over_ρu_a * data.sourceInternalEnergy[particleIndex]);
         }
         for (size_t first = 0; first < neighbors.size(); first += SimdFloat::size()) {
             Vector3<SimdFloat> const r_ab =
@@ -258,8 +259,9 @@ SphRunReturn sphCpuPrehydro2(
                     ρ_a_curl_v_a_pack[dim] += v_ab_physical[next] * m_b_gradW_ab[last] -
                         v_ab_physical[last] * m_b_gradW_ab[next];
                 }
-                if (parameters.cullenDehnen) {
-                    // Cullen & Dehnen (2010), equations (B2), (B4), (B7), (B12).
+                if (parameters.gradientSwitch()) {
+                    // Cullen & Dehnen (2010), equations (B2), (B4), (B7), (B12), which
+                    // Price et al. (2018) equations (51)-(53) also use.
                     // Positive weights are equivalent to reversing the sign of W'/q.
                     // B7 allows arbitrary scalar weights. Mass/kernel-gradient weights
                     // avoid reading remote densities while this pass is updating them.
@@ -278,6 +280,9 @@ SphRunReturn sphCpuPrehydro2(
                             gradientSums.acceleration[i][j] += w_ab * a_ab[i] * r_ab[j];
                         }
                     }
+                    flops += 84 * SimdFloat::size();
+                }
+                if (parameters.cullenDehnen) {
                     // Equations (15), (17): use previous neighbor divergence signs.
                     SimdFloat const div_v_b =
                         detail::sphCpuLoad(data.sourceVelocityDivergence, neighbors, first, 0.0f);
@@ -301,10 +306,10 @@ SphRunReturn sphCpuPrehydro2(
                         v_ab_physical.dot(r_ab) / simdSelect(contributes, radius, SimdFloat(1));
                     v_sig_a_pack = simdMax(v_sig_a_pack,
                         simdSelect(contributes,
-                            SimdFloat(0.5f) * (SimdFloat(c_a_CD) + c_b) -
+                            SimdFloat(0.5f) * (SimdFloat(c_a_switch) + c_b) -
                                 simdMin(v_ab_dot_r̂_ab, SimdFloat(0)),
                             SimdFloat(0)));
-                    flops += 109 * SimdFloat::size() +
+                    flops += 25 * SimdFloat::size() +
                         sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab);
                 }
                 flops += 33 * SimdFloat::size() +
@@ -324,7 +329,7 @@ SphRunReturn sphCpuPrehydro2(
         } else if (data.sinkBalsaraFactor) {
             data.sinkBalsaraFactor[sinkIndex] = 1.0f;
         }
-        if (parameters.variableViscosity && !parameters.cullenDehnen && active) {
+        if (parameters.variableViscosity && !parameters.gradientSwitch() && active) {
             // Morris & Monaghan (1997), equations (5), (6), (13).
             // The sum/rho is a² div_phys(v); conformal-time rates divide by a.
             float const div_v_a = simdSum(ρ_a_div_v_a_pack) / (ρ_a * parameters.scaleFactor);
@@ -344,7 +349,7 @@ SphRunReturn sphCpuPrehydro2(
                 viscosity.alpha, parameters.viscosityAlphaMin, one_over_τ_a, div_v_a);
             flops += SimdFloat::size() - 1 + 15;
         }
-        if (parameters.cullenDehnen) {
+        if (parameters.gradientSwitch()) {
             cullen_and_dehnen::GradientSums<float> sums{};
             for (int i = 0; i < kDimensions; ++i) {
                 for (int j = 0; j < kDimensions; ++j) {
@@ -353,15 +358,29 @@ SphRunReturn sphCpuPrehydro2(
                     sums.acceleration[i][j] = simdSum(gradientSums.acceleration[i][j]);
                 }
             }
-            auto const diagnostics = cullen_and_dehnen::diagnostics(sums, parameters.scaleFactor,
-                parameters.expansionAcceleration, simdSum(ρ_a_R_a_pack) / ρ_a, H_a,
-                std::max(c_a_CD, simdMaximum(v_sig_a_pack)), parameters.viscosityAlphaMax,
-                parameters.viscosityDecayCD, flops);
             auto& state = data.sinkCullenDehnenStates[sinkIndex];
+            cullen_and_dehnen::Result<float> diagnostics;
+            if (parameters.cullenDehnen) {
+                diagnostics = cullen_and_dehnen::diagnostics(sums, parameters.scaleFactor,
+                    parameters.expansionAcceleration, simdSum(ρ_a_R_a_pack) / ρ_a, H_a,
+                    std::max(c_a_switch, simdMaximum(v_sig_a_pack)), parameters.viscosityAlphaMax,
+                    parameters.viscosityDecayCD, flops);
+                flops += SimdFloat::size() - 1;
+            } else {
+                // Price et al. (2018), equations (46)-(48): the paper's smoothing length is
+                // the same calibrated viscosity length as Morris & Monaghan's h.
+                float const h_a = H_a /
+                    float(selectedHydroKernel().supportRadiusPerEffectiveRadius) *
+                    0.9128709291752769f;
+                diagnostics = price_etal::diagnostics(sums, parameters.scaleFactor,
+                    parameters.expansionAcceleration, h_a, c_a_switch,
+                    parameters.viscosityAlphaMaxPrice, parameters.viscosityDecayPrice, flops);
+                flops += 2;
+            }
             state.pendingDivergence = diagnostics.divergence;
             state.targetAlpha = diagnostics.targetAlpha;
             state.inverseDecayTime = diagnostics.inverseDecayTime;
-            flops += 28 * (SimdFloat::size() - 1);
+            flops += 27 * (SimdFloat::size() - 1);
         }
         data.sinkSmoothingConverged[sinkIndex] = true;
         result.minimumSupportRadius = std::min(result.minimumSupportRadius, H_a);

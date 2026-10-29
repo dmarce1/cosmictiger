@@ -135,13 +135,14 @@ struct SphRunParameters {
     bool balsaraSwitch;
     bool variableViscosity;
     bool cullenDehnen;
+    bool priceEtAl;
     float viscosityAlphaMax;
     float viscosityDecayCD;
+    float viscosityAlphaMaxPrice;
+    float viscosityDecayPrice;
     float expansionAcceleration = 0.0f;    // a³ d²a/dt² for the physical CD acceleration gradient.
-    bool viscosityBetaIsRatio;
     float viscosityAlphaMin;
     float viscosityDecay;
-    float viscosityBetaOverAlpha;
     float velocityDampingRate;    // Velocity damping used while relaxing the gas sphere.
     SphRunParameters() {
         auto const opts = getOptions();
@@ -156,12 +157,23 @@ struct SphRunParameters {
         balsaraSwitch = opts.hydro.balsaraSwitch;
         variableViscosity = opts.hydro.viscosityEvolution != "none";
         cullenDehnen = opts.hydro.viscosityEvolution == "cullenAndDehnen";
-        viscosityBetaIsRatio = opts.hydro.viscosityBetaMode == "ratio";
+        priceEtAl = opts.hydro.viscosityEvolution == "priceEtAl";
         viscosityAlphaMax = opts.hydro.viscosityAlphaMax;
         viscosityDecayCD = opts.hydro.viscosityDecayCD;
+        viscosityAlphaMaxPrice = opts.hydro.viscosityAlphaMaxPrice;
+        viscosityDecayPrice = opts.hydro.viscosityDecayPrice;
         viscosityAlphaMin = opts.hydro.viscosityAlphaMin;
         viscosityDecay = opts.hydro.viscosityDecay;
-        viscosityBetaOverAlpha = opts.hydro.viscosityBetaOverAlpha;
+    }
+    // Cullen-Dehnen and Price et al. both need the gradient sums, previous accelerations,
+    // and the shared target-alpha state of the density pass.
+    CUDA_EXPORT bool gradientSwitch() const {
+        return cullenDehnen || priceEtAl;
+    }
+    // Morris-Monaghan and Cullen-Dehnen pairs use beta_ab = viscosityBeta alpha_ab; fixed
+    // Monaghan coefficients and Price et al. (2018) equation (41) use the constant beta.
+    CUDA_EXPORT bool betaFollowsAlpha() const {
+        return variableViscosity && !priceEtAl;
     }
     template <typename Archive>
     void serialize(Archive&& arc, unsigned) {
@@ -171,13 +183,14 @@ struct SphRunParameters {
         arc & balsaraSwitch;
         arc & variableViscosity;
         arc & cullenDehnen;
+        arc & priceEtAl;
         arc & viscosityAlphaMax;
         arc & viscosityDecayCD;
+        arc & viscosityAlphaMaxPrice;
+        arc & viscosityDecayPrice;
         arc & expansionAcceleration;
-        arc & viscosityBetaIsRatio;
         arc & viscosityAlphaMin;
         arc & viscosityDecay;
-        arc & viscosityBetaOverAlpha;
         arc & velocityDampingRate;
         arc & minimumSupportRadius;
         arc & maximumSupportRadius;

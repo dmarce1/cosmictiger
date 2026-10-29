@@ -231,17 +231,19 @@ smooth-flow initialization is an implementation choice, since the paper uses
 problem-dependent initial values, including elevated α near the initial Sod interface.
 
 Pair forces and heating use \(\bar\alpha_{ij}=(\alpha_i+\alpha_j)/2\), preserving
-pair symmetry. The quadratic coefficient has two selectable meanings:
+pair symmetry. The single quadratic coefficient `hydro.viscosityBeta` (default 2)
+has a model-dependent meaning:
 
-- `--hydro.viscosityBetaMode=ratio --hydro.viscosityBetaOverAlpha=2` gives
-  \(\beta_{ij}=2\bar\alpha_{ij}\), the default and the convention of their equation (3).
-- `--hydro.viscosityBetaMode=constant --hydro.viscosityBeta=2` keeps
-  \(\beta_{ij}=2\) even as α decays.
+- With `morrisAndMonaghan` and `cullenAndDehnen`, \(\beta_{ij}=\texttt{viscosityBeta}\,
+  \bar\alpha_{ij}\), the convention of Morris & Monaghan's equation (3), so β decays
+  with α.
+- With `none` and `priceEtAl`, \(\beta_{ij}=\texttt{viscosityBeta}\) is constant: the
+  fixed Monaghan coefficients, and Phantom's equation (41), in which β does not
+  multiply α.
 
-The same choice applies with `--hydro.viscosityEvolution=none`, when every pair
-uses the constant `hydro.viscosityAlpha` instead. The disabled mode allocates no
-per-particle variable-viscosity state. For independently fixed α and β, disable
-variable viscosity and select `viscosityBetaMode=constant`.
+With `--hydro.viscosityEvolution=none` every pair uses the constant
+`hydro.viscosityAlpha` and `hydro.viscosityBeta`; the disabled mode allocates no
+per-particle variable-viscosity state.
 
 The density pass computes the instantaneous velocity divergence and the new α
 rate for active particles. Divergence and curl are then discarded; neither their
@@ -312,11 +314,50 @@ Equation (B12) computes the material divergence derivative as
 it does not finite-difference stored divergence values.
 
 CD nevertheless retains the previous divergence for the immutable neighbor-sign
-snapshot in equation (17), following the sweep order in Appendix A4. Only CD
-allocates this extra state and writes the physical velocity divergence as `divv`
-in Silo, with inverse-time units. Both evolution schemes write dimensionless
-`alpha`; selecting `none` allocates neither α evolution state nor divergence state.
-The β mode described above applies to both schemes.
+snapshot in equation (17), following the sweep order in Appendix A4. CD and the
+Price et al. switch below allocate this extra state and write the physical velocity
+divergence as `divv` in Silo, with inverse-time units. Every evolution scheme writes
+dimensionless `alpha`; selecting `none` allocates neither α evolution state nor
+divergence state. Under CD, β follows α as described above.
+
+## Price et al. (Phantom) variable viscosity
+
+`--hydro.viscosityEvolution=priceEtAl` selects the switch of Price et al. (2018),
+*Phantom: A smoothed particle hydrodynamics and magnetohydrodynamics code for
+astrophysics*, PASA 35, e031,
+[doi:10.1017/pasa.2018.25](https://doi.org/10.1017/pasa.2018.25)
+([arXiv:1702.03930](https://arxiv.org/abs/1702.03930)), section 2.2.9. It is their
+variation on Cullen & Dehnen, implemented in `sph/price_etal/`:
+
+\[
+ A_i=\xi_i\max\!\left[-\frac{d}{dt}(\nabla\cdot\mathbf v_i),0\right]\ \text{(46)},\qquad
+ \xi_i=\frac{|\nabla\cdot\mathbf v_i|^2}{|\nabla\cdot\mathbf v_i|^2+|\nabla\times\mathbf v_i|^2}
+ \ \text{(47)},
+\]
+\[
+ \alpha_{{\rm loc},i}=\min\!\left(\frac{10\,h_i^2A_i}{c_{s,i}^2},\alpha_{\max}\right)
+ \ \text{(48)},\qquad
+ \tau_i=\frac{h_i}{\sigma_{\rm decay}c_{s,i}}.
+\]
+
+The differences from CD are: ξ is the Balsara-type ratio of equation (47) rather than
+the sign-weighted \(\operatorname{tr}(\mathbf S\mathbf S^T)\) limiter, so no neighbor
+divergence snapshot is gathered; the target uses the sound speed and the fixed factor
+10, capped at `hydro.viscosityAlphaMaxPrice` (default 1, the paper's \(\alpha_{\max}\));
+the decay time uses the sound speed with `hydro.viscosityDecayPrice`
+(\(\sigma_{\rm decay}=0.1\)); and when \(\alpha_{{\rm loc}}\le\alpha\) the decay of
+equation (49) is integrated with the backward Euler step of equation (50),
+\(\alpha^{n+1}=(\alpha^n+\alpha_{\rm loc}\Delta t/\tau)/(1+\Delta t/\tau)\), otherwise α
+is set to \(\alpha_{\rm loc}\) immediately. The paper's \(h_i\) is the smoothing length
+with support \(2h_i\) for the cubic spline, so the code uses the same calibrated
+viscosity length \(h_{M,i}\) as Morris–Monaghan. The velocity gradient, its curl, and
+\(d(\nabla\cdot\mathbf v)/dt=\operatorname{tr}(\nabla\mathbf a-\mathbf V^2)\)
+(their equations (51)–(54)) come from the same CD appendix-B matrix reconstruction,
+with the previous accelerations and the cosmological terms described above. The
+initial α is zero, and the paper's quadratic coefficient is the constant
+`hydro.viscosityBeta` of their equation (41); the pair viscosity itself remains
+Monaghan's \(\Pi_{ij}\) above rather than Phantom's \(q_{ab}\) form. α and the
+previous divergence share the CD storage, migration, checkpoint, and Silo fields.
 
 ## Time integration and cosmological variables
 
@@ -404,14 +445,14 @@ hydrodynamic controls are:
 | `hydro.kernelDegree` | `3` | Density polynomial degree; valid values depend on family |
 | `hydro.gamma` | `5/3` | Ideal-gas adiabatic index |
 | `hydro.viscosityAlpha` | `1` | Constant linear coefficient when variable viscosity is disabled |
-| `hydro.viscosityBeta` | `2` | Fixed quadratic coefficient in `constant` mode |
-| `hydro.viscosityEvolution` | `morrisAndMonaghan` | α evolution: `none`, `morrisAndMonaghan`, or `cullenAndDehnen` |
+| `hydro.viscosityBeta` | `2` | Quadratic coefficient: multiplies \(\bar\alpha_{ij}\) for `morrisAndMonaghan` and `cullenAndDehnen`, constant for `none` and `priceEtAl` |
+| `hydro.viscosityEvolution` | `morrisAndMonaghan` | α evolution: `none`, `morrisAndMonaghan`, `cullenAndDehnen`, or `priceEtAl` |
 | `hydro.viscosityAlphaMin` | `0.1` | Morris–Monaghan positive α floor and initial value |
 | `hydro.viscosityDecay` | `0.2` | Morris–Monaghan decay coefficient \(\mathcal C_1\) |
 | `hydro.viscosityAlphaMax` | `2` | Cullen–Dehnen maximum α; the MM scheme has no upper cap |
 | `hydro.viscosityDecayCD` | `0.05` | Cullen–Dehnen decay coefficient \(\ell\) |
-| `hydro.viscosityBetaMode` | `ratio` | `ratio` follows α; `constant` uses the fixed β |
-| `hydro.viscosityBetaOverAlpha` | `2` | Nonnegative β/α ratio in `ratio` mode |
+| `hydro.viscosityAlphaMaxPrice` | `1` | Price et al. maximum α in equation (48) |
+| `hydro.viscosityDecayPrice` | `0.1` | Price et al. decay coefficient \(\sigma_{\rm decay}\) |
 | `hydro.viscosityEpsilon` | `0.01` | Denominator coefficient multiplying \(\bar\ell^2\) |
 | `hydro.balsaraSwitch` | `true` | Apply the Balsara shear limiter to artificial viscosity |
 | `hydro.neighborNumber` | `42` | Kernel-weighted support-sphere count |
@@ -516,10 +557,12 @@ The numerical components live in author-named directories:
 - `monaghan/`: pair pressure work and the baseline artificial-viscosity formula.
 - `morris_and_monaghan/`: compression/decay rate and predictor/corrector updates of alpha.
 - `cullen_and_dehnen/`: gradient reconstruction, shock detection, alpha updates, and model diagnostics.
-- `balsara/`: the shear limiter, composable with either evolving-alpha model.
+- `price_etal/`: the Phantom shock detector and backward Euler alpha update, reusing the CD gradient reconstruction and state.
+- `balsara/`: the shear limiter, composable with every evolving-alpha model.
 
-The common `viscosity_state.hpp` defines alpha storage used by both evolution
-models; the Cullen–Dehnen diagnostic state belongs to its own module. Allocation,
+The common `viscosity_state.hpp` defines alpha storage used by all evolution
+models; the Cullen–Dehnen diagnostic state is shared with Price et al. Allocation,
+
 reordering, migration, and checkpoint traversal remain in common particle code.
 The shared density and hydro passes call these policies without duplicating
 neighbor walks. Standalone policy tests use the same author-directory organization.
