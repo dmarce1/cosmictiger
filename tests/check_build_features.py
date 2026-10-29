@@ -78,7 +78,8 @@ def sourceSelectionErrors(sources, configuration):
 
 def requiredSources(configuration, cuda):
     _, gravity, sph, _ = configuration
-    required = {"src/core/driver.cpp", "src/particles/particles.cpp", "src/cosmology/fft.cpp"}
+    required = {"src/core/driver.cpp", "src/particles/particles.cpp", "src/cosmology/fft.cpp",
+                "src/gravity/error.cpp", "src/gravity/reference_table.cpp"}
     if gravity == "fmm":
         required.add("src/gravity/dehnen/execution.cpp")
     else:
@@ -97,6 +98,7 @@ def requiredSources(configuration, cuda):
                              "src/sph/sph_prehydro.cu", "src/sph/sph_rungs.cu"})
     if cuda:
         required.add("src/particles/drift.cu")
+        required.add("src/gravity/error_cuda.cu")
     return required
 
 
@@ -219,9 +221,14 @@ def checkBuild(buildDirectory):
                 definitions.setdefault(name, set()).add(value)
         definitionsByTarget.setdefault(target, []).append((source, definitions))
         compiledPositionBits = definitions.get("COSMICTIGER_POSITION_BITS")
-        if compiledPositionBits is not None and compiledPositionBits != {str(positionBits)}:
-            errors.append(f"{target}: {source} needs COSMICTIGER_POSITION_BITS={positionBits}, "
-                          f"found {sorted(compiledPositionBits)}")
+        # The diagnostic's standalone CUDA tests deliberately cover both
+        # widths in every build, independently of the application's selection.
+        precisionTest = re.fullmatch(r"gravity_error_cuda_reference_(32|64)_test", target)
+        expectedPositionBits = precisionTest.group(1) if precisionTest else str(positionBits)
+        if ((precisionTest or compiledPositionBits is not None)
+                and compiledPositionBits != {expectedPositionBits}):
+            errors.append(f"{target}: {source} needs COSMICTIGER_POSITION_BITS={expectedPositionBits}, "
+                          f"found {sorted(compiledPositionBits or set())}")
 
     coreSources = set(sourcesByTarget.get("cosmictiger_core", {}))
     if not coreSources:

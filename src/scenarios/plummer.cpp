@@ -9,6 +9,7 @@
 #include <cmath>
 #include <functional>
 #include <numbers>
+#include <random>
 
 #include <cosmictiger/core/driver.hpp>
 #include <cosmictiger/core/options.hpp>
@@ -20,8 +21,7 @@ namespace scenarios {
 
 namespace detail {
 
-    double sampleDensityDistribution(std::function<double(double)> const& f) {
-        double target = rand1();
+    double sampleDensityDistribution(std::function<double(double)> const& f, double target) {
         double menc = 0.0;
         double r = 0.0;
         double dr = 0.001;
@@ -44,6 +44,12 @@ namespace detail {
 void initializePlummerParticles() {
     auto const numberOfParticles = getOptions().initial.numberOfParticles;
     particlesResize(numberOfParticles);
+    // Runtime and profiling libraries may reseed the process-global C RNG.
+    // An owned generator keeps this initial realization reproducible.
+    std::mt19937 generator(1);
+    auto const sampleUniform = [&generator] {
+        return (static_cast<double>(generator()) + 0.5) / 4294967296.0;
+    };
     double x0 = 0.5;
     double y0 = 0.5;
     double z0 = 0.5;
@@ -51,13 +57,14 @@ void initializePlummerParticles() {
     for (ParticleInteger i = 0; i < numberOfParticles; i += 2) {
         double r;
         r = detail::sampleDensityDistribution(
-            [](double r) { return (3.0 / (4.0 * std::numbers::pi)) * pow(1.0 + sqr(r), -2.5); });
+            [](double r) { return (3.0 / (4.0 * std::numbers::pi)) * pow(1.0 + sqr(r), -2.5); },
+            sampleUniform());
         r *= getOptions().initial.plummerRadius;
         double nx, ny, nz, n2;
         do {
-            nx = 2.0 * rand1() - 1.0;
-            ny = 2.0 * rand1() - 1.0;
-            nz = 2.0 * rand1() - 1.0;
+            nx = 2.0 * sampleUniform() - 1.0;
+            ny = 2.0 * sampleUniform() - 1.0;
+            nz = 2.0 * sampleUniform() - 1.0;
             n2 = sqr(nx, ny, nz);
         } while (n2 == 0.0 || n2 > 1.0);
         double ninv = 1.0 / sqrt(n2);
@@ -70,9 +77,9 @@ void initializePlummerParticles() {
         double v = sqrt(getOptions().gravity.gm * numberOfParticles /
             sqrt(sqr(getOptions().initial.plummerRadius) + sqr(r)) / 2);
         do {
-            nx = 2.0 * rand1() - 1.0;
-            ny = 2.0 * rand1() - 1.0;
-            nz = 2.0 * rand1() - 1.0;
+            nx = 2.0 * sampleUniform() - 1.0;
+            ny = 2.0 * sampleUniform() - 1.0;
+            nz = 2.0 * sampleUniform() - 1.0;
             n2 = sqr(nx, ny, nz);
         } while (n2 == 0.0 || n2 > 1.0);
         ninv = 1.0 / sqrt(n2);

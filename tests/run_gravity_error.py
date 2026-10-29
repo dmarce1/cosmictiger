@@ -206,6 +206,9 @@ def main():
     sampled = prepareCase(workdir, "sampled")
     sampleOptions = {"gravity.errorInterval": 2, "gravity.errorSampleSize": 7}
     sampledLog = run(sampled, sampleOptions)
+    referenceBackend = "CUDA" if args.cuda else "CPU"
+    require(f"using {referenceBackend} Ewald table" in sampledLog,
+            f"sampled evolution did not select the {referenceBackend} reference backend")
     if args.cuda and args.gravity_method == "fmm":
         require("CUDA kick arena (" in sampledLog,
                 "sampled FMM evolution did not execute the CUDA kick path")

@@ -44,6 +44,8 @@ function(cosmictiger_variant_sources output gravity near sph)
         src/cuda/cuda_stream.cpp
         src/gravity/fmm_order.cpp
         src/gravity/error.cpp
+        src/gravity/error_cuda.cu
+        src/gravity/reference_table.cpp
         src/analysis/bh.cpp
         src/analysis/bh.cu
         src/io/checkpoint.cpp

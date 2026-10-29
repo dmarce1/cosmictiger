@@ -417,11 +417,14 @@ set_source_files_properties(src/sph/sph_chemistry.cpp PROPERTIES COMPILE_OPTIONS
 set_source_files_properties(src/cosmology/boltzmann.cpp PROPERTIES
     COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
 # Background and clock guards must remain effective in release builds.
-set_source_files_properties(src/core/driver.cpp src/gravity/error.cpp
+set_source_files_properties(src/core/driver.cpp src/gravity/error.cpp src/gravity/reference_table.cpp
     src/gravity/nitadori/solver.cpp src/gravity/nitadori/kernels.cpp src/gravity/nitadori/near_pp.cpp tests/gravity/nitadori/pmmm.cpp
     src/gravity/nitadori/kick.cpp src/cosmology/friedmann.cpp src/cosmology/cosmology.cpp
     src/cosmology/background.cpp src/cosmology/evolution.cpp PROPERTIES
     COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
+# Keep the diagnostic's compensated double sums intact on both host and device.
+set_source_files_properties(src/gravity/error_cuda.cu PROPERTIES COMPILE_OPTIONS
+    "--ftz=false;--prec-div=true;--prec-sqrt=true;--fmad=false;-Xcompiler=-fno-fast-math;-Xcompiler=-ffp-contract=off")
 set_source_files_properties(
     src/gravity/nitadori/fft.cpp
     src/gravity/nitadori/mesh_exchange.cpp
@@ -1780,6 +1783,32 @@ if(BUILD_TESTING)
     cosmictiger_add_gtest(NAME gravity_direct_reference TARGET gravity_direct_reference_test
         PROPERTIES TIMEOUT 30)
 
+    add_executable(gravity_reference_table_test tests/gravity/reference_table.cpp
+        src/gravity/reference_table.cpp)
+    target_include_directories(gravity_reference_table_test PRIVATE ${PROJECT_SOURCE_DIR})
+    target_compile_options(gravity_reference_table_test PRIVATE -fno-fast-math -ffp-contract=off)
+    cosmictiger_add_gtest(NAME gravity_reference_table TARGET gravity_reference_table_test
+        PROPERTIES TIMEOUT 60)
+
+    if(COSMICTIGER_WITH_CUDA)
+        foreach(position_bits IN ITEMS 32 64)
+            set(reference_target gravity_error_cuda_reference_${position_bits}_test)
+            add_executable(${reference_target} tests/gravity/error_cuda.cpp
+                src/gravity/error_cuda.cu src/gravity/reference_table.cpp src/cuda/cuda_stream.cpp)
+            target_include_directories(${reference_target} PRIVATE ${PROJECT_SOURCE_DIR})
+            target_compile_definitions(${reference_target} PRIVATE USE_CUDA
+                COSMICTIGER_POSITION_BITS=${position_bits})
+            target_link_libraries(${reference_target} PRIVATE HPX::hpx CUDA::cudart)
+            target_compile_options(${reference_target} PRIVATE
+                $<$<COMPILE_LANGUAGE:CXX>:-fno-fast-math;-ffp-contract=off>
+                $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>)
+            set_target_properties(${reference_target} PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+            cosmictiger_add_gtest(NAME gravity_error_cuda_reference_${position_bits}
+                TARGET ${reference_target}
+                PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+        endforeach()
+    endif()
+
     if(COSMICTIGER_WITH_CUDA)
         foreach(special_variant IN ITEMS standard fast_math)
             set(special_target special_functions_cuda_${special_variant}_test)
@@ -2121,6 +2150,10 @@ endif()
 if(BUILD_TESTING)
     get_property(cosmictiger_targets_after_tests DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
     list(REMOVE_ITEM cosmictiger_targets_after_tests ${cosmictiger_targets_before_tests})
+    # These standalone tests deliberately compile both position widths, rather
+    # than inheriting the configured application's position definition.
+    list(REMOVE_ITEM cosmictiger_targets_after_tests
+        gravity_error_cuda_reference_32_test gravity_error_cuda_reference_64_test)
     foreach(test_target IN LISTS cosmictiger_targets_after_tests)
         get_target_property(test_type ${test_target} TYPE)
         if(NOT test_type STREQUAL "UTILITY")

@@ -35,6 +35,39 @@ PMMM solve when the kick finishes. The direct solve uses the configured softenin
 kernel and periodic gravity convention. Comparison does not require retaining
 acceleration fields for every particle with `analysis.saveAcceleration`.
 
+The reference uses CUDA when `compute.cuda=true`, and otherwise uses HPX CPU
+tasks. The startup message identifies the reference backend separately from the
+production gravity solver. CUDA distributes work across source tiles as well as
+samples, so even a small sample can use multiple blocks. Both paths retain fixed
+particle coordinates until forming double-precision separations, use the same
+compact-support radial force function as the production PP kernels, and accumulate
+mass-weighted forces in compensated double precision.
+
+The smooth periodic correction is interpolated from an independent Ewald force
+table, following the correction-plus-primary-force split in
+[Hernquist, Bouchet & Suto (1991), section II](https://adsabs.harvard.edu/pdf/1991ApJS...75..231H).
+The table is built once per process on first use. It uses 64 intervals per
+half-box axis, three additional nodes beyond the half-box for centered
+interpolation, and eight-point Lagrange interpolation in each direction.
+Reflection and axis-permutation symmetry compress the table to 54,740 nodes,
+each holding three doubles: 1,313,760 bytes (about 1.25 MiB). Only the periodic
+correction is tabulated; the primary softened force is evaluated directly.
+
+Table construction uses an independent double Ewald sum with alpha 2, real-space
+radius 3.6, and reciprocal lattice radius 4. It does not use the production
+FMM/PMMM coefficients. Numerical regressions check the interpolated correction
+against explicit sums, including an alternative alpha, boundaries, near-zero
+separations, and all sign/permutation symmetries. The table regressions require
+component errors below `1e-11` for the unit-source correction in a unit box;
+this is a tested tolerance, not a uniform analytic interpolation bound. Relative
+accuracy cannot be guaranteed when the total reference force nearly cancels.
+The diagnostic therefore retains absolute error fields.
+
+The table remains in process memory; it creates no disk cache or checkpoint
+payload. CUDA uses bounded temporary source batches and copies the same table
+for each diagnostic invocation. Saved direct accelerations still scale with the
+sample count, rather than requiring a force array for every particle.
+
 The program prints a summary and writes `gravity_error.csv` under
 `output.directory`. The CSV includes:
 

@@ -16,8 +16,11 @@
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/safe_io.hpp>
+#include <cosmictiger/cuda/cuda.hpp>
 #include <cosmictiger/gravity/direct_reference.hpp>
 #include <cosmictiger/gravity/error.hpp>
+#include <cosmictiger/gravity/error_cuda.hpp>
+#include <cosmictiger/gravity/reference_table.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/particles/particle_selection.hpp>
@@ -74,11 +77,43 @@ Vector<GravityErrorSample> gravityErrorSelect(
 
 Vector<GravityErrorAcceleration> gravityErrorDirect(Vector<GravityErrorSample> const& samples) {
     Vector<GravityErrorAcceleration> result(samples.size());
+    if (samples.empty() || particlesSize() == 0) {
+        return result;
+    }
+    auto const& correctionTable = gravityReferenceCorrectionTable();
+    double const supportRadius = getOptions().gravity.supportRadius;
+    double const gm = getOptions().gravity.gm;
+#ifdef USE_CUDA
+    if (cudaEnabled()) {
+        std::vector<GravityErrorPosition> positions(samples.size());
+        for (size_t slot = 0; slot < samples.size(); ++slot) {
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                positions[slot][dim] = samples[slot].position[dim];
+            }
+        }
+        auto const accelerations = gravityErrorDirectCuda(
+            positions, particlesSize(),
+            [](size_t begin, std::span<GravityErrorSource> sources) {
+                for (size_t offset = 0; offset < sources.size(); ++offset) {
+                    ParticleInteger const source = begin + offset;
+                    for (int dim = 0; dim < kDimensions; ++dim) {
+                        sources[offset].position[dim] = particlesPos(dim, source);
+                    }
+                    sources[offset].mass = particlesMass(source);
+                }
+            },
+            selectedGravityKernel(), supportRadius, correctionTable);
+        for (size_t slot = 0; slot < samples.size(); ++slot) {
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                result[slot][dim] = gm * accelerations[slot][dim];
+            }
+        }
+        return result;
+    }
+#endif
     int const threads = std::max(1, hpxHardwareConcurrency());
     Vector<hpx::future<void>> work;
     int const tasks = std::min(size_t(threads), samples.size());
-    double const supportRadius = getOptions().gravity.supportRadius;
-    double const gm = getOptions().gravity.gm;
     for (int task = 0; task < tasks; ++task) {
         work.push_back(hpx::async(hpx::annotated_function(
             [&, task] {
@@ -92,8 +127,8 @@ Vector<GravityErrorAcceleration> gravityErrorDirect(Vector<GravityErrorSample> c
                             separation[dim] = doubleDistance(
                                 samples[slot].position[dim], particlesPos(dim, source));
                         }
-                        auto const force = directGravityReference(
-                            separation, selectedGravityKernel(), supportRadius);
+                        auto const force = tabulatedGravityReference(separation,
+                            selectedGravityKernel(), supportRadius, correctionTable.data());
                         double const mass = particlesMass(source);
                         for (int dim = 0; dim < kDimensions; ++dim) {
                             sum[dim].add(mass * force[dim]);
@@ -164,8 +199,8 @@ void gravityErrorBegin() {
             samples[sample.slot] = sample;
         }
     }
-    PRINT("Computing direct gravity reference for %zu of %zu particles\n", sampleCount,
-        offsets.back());
+    PRINT("Computing direct gravity reference for %zu of %zu particles using %s Ewald table\n",
+        sampleCount, offsets.back(), cudaEnabled() ? "CUDA" : "CPU");
     Vector<hpx::future<Vector<detail::GravityErrorAcceleration>>> references;
     for (auto const& locality : localities) {
         references.push_back(hpx::async<GravityErrorDirectAction>(locality, samples));
