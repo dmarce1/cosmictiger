@@ -2,8 +2,9 @@
 """Exercise the native snapshot exporter, SQLite importer, and browser API.
 
 Only Python's standard library is required. The native fixture deliberately
-contains two rank files, nested substructure, IEEE half subnormals, and IDs
-larger than JavaScript's exact integer range.
+contains two rank files, nested substructure, IEEE half subnormals, IDs larger
+than JavaScript's exact integer range, and binary32 magnitudes whose seventeen
+significant digits are all integral.
 """
 
 import argparse
@@ -13,6 +14,7 @@ import io
 import json
 import math
 from pathlib import Path
+import re
 import shutil
 import socket
 import sqlite3
@@ -32,6 +34,9 @@ kHalfFields = (
     "sigVb", "vcircMax", "deltaV", "boa", "coa", "ax", "ay", "az", "boa500", "coa500",
     "ax500", "ay500", "az500", "lambda", "lambdaB", "vxc", "vyc", "vzc", "vxb", "vyb", "vzb",
 )
+kRealFields = ("x", "y", "z", "mvir", "e", "jx", "jy", "jz", "m200", "m500", "m2500", *kHalfFields)
+# RFC 8259 section 6: the only number syntax JSON readers must accept.
+kJsonNumber = re.compile(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][-+]?[0-9]+)?")
 
 
 def runCommand(arguments, expectedSuccess=True):
@@ -49,6 +54,79 @@ def loadBackend():
     backend = importlib.util.module_from_spec(specification)
     specification.loader.exec_module(backend)
     return backend
+
+
+def rejectConstant(token):
+    raise ValueError(f"Non-JSON number {token}")
+
+
+def loadStrictJson(text, parse_float=float):
+    """Decode one exporter line without json's NaN/Infinity extensions."""
+    return json.loads(text, parse_constant=rejectConstant, parse_float=parse_float)
+
+
+class ExportNumberTests(unittest.TestCase):
+    """Every exported number is a JSON real that recovers its binary field exactly.
+
+    std::showpoint formatting printed seventeen integral significant digits as
+    "-98411092459388928.", which JSON rejects, so the viewer could not import
+    the later snapshots of a 128^3 LCDM run.
+    """
+
+    def test_numbers_are_json_reals_matching_binary_records(self):
+        with tempfile.TemporaryDirectory(prefix="halo_export_numbers_") as temporary:
+            snapshot = Path(temporary) / "snapshot"
+            runCommand([str(arguments.fixture), str(snapshot)])
+            lines = runCommand([str(arguments.exporter), str(snapshot)]).stdout.splitlines()
+            tokens = []
+
+            def parseReal(token):
+                tokens.append(token)
+                return float(token)
+
+            rows = []
+            for line in lines:
+                try:
+                    rows.append(loadStrictJson(line, parseReal))
+                except ValueError as error:
+                    self.fail(f"Exporter wrote invalid JSON ({error}):\n{line}")
+            for token in tokens:
+                self.assertTrue(kJsonNumber.fullmatch(token), token)
+            self.assertTrue(any("e" in token for token in tokens), "no exponent notation")
+            self.assertTrue(any("e" not in token for token in tokens), "no fixed notation")
+
+            metadata, halos = rows[0], rows[1:]
+            self.assertEqual(metadata["type"], "catalog")
+            self.assertEqual(len(halos), 64)
+            header = struct.unpack_from("@i3d", (snapshot / "groups.dat").read_bytes())
+            self.assertEqual((metadata["snapshot"], metadata["time"], metadata["box_length_mpc"],
+                              metadata["scale_factor"]), header)
+            for key in ("time", "box_length_mpc", "scale_factor"):
+                self.assertIsInstance(metadata[key], float, key)
+
+            for rank in (0, 1):
+                data = (snapshot / f"rockstar.{rank}.dat").read_bytes()
+                sidecar = dict(line.split() for line in
+                               (snapshot / f"rockstar.{rank}.dat.format").read_text().splitlines())
+                self.assertEqual(int(sidecar["record_size"]), 128)
+                endian = "<" if sidecar["byte_order"] == "little" else ">"
+                for row in (halo for halo in halos if halo["rank"] == rank):
+                    reference = struct.unpack_from(endian + "Q3d8fh31e", data, row["ordinal"] * 128)
+                    self.assertEqual(row["pid"], reference[12])
+                    for field, value in zip(kRealFields, reference[1:12] + reference[13:]):
+                        self.assertIsInstance(row[field], float, field)
+                        self.assertEqual(row[field], value, field)
+                        self.assertEqual(math.copysign(1.0, row[field]), math.copysign(1.0, value), field)
+
+            # The fixture must keep exercising the formats that matter: seventeen
+            # integral digits, exponent notation, signed zero, and a half subnormal.
+            self.assertTrue(any(1.0e16 <= abs(row["e"]) < 1.0e17 for row in halos))
+            self.assertTrue(any(abs(row["jz"]) >= 1.0e21 for row in halos))
+            self.assertTrue(any(row["m2500"] == 0.0 and math.copysign(1.0, row["m2500"]) > 0
+                                for row in halos))
+            self.assertTrue(any(row["vzc"] == 0.0 and math.copysign(1.0, row["vzc"]) < 0
+                                for row in halos))
+            self.assertTrue(any(row["rs"] == math.ldexp(1.0, -24) for row in halos))
 
 
 class DensityConventionTests(unittest.TestCase):
@@ -92,7 +170,7 @@ class HaloViewerTests(unittest.TestCase):
         cls.database = cls.directory / "catalog.sqlite"
         runCommand([str(arguments.fixture), str(cls.snapshot)])
         exported = runCommand([str(arguments.exporter), str(cls.snapshot)])
-        cls.exported = [json.loads(line) for line in exported.stdout.splitlines() if line.strip()]
+        cls.exported = [loadStrictJson(line) for line in exported.stdout.splitlines() if line.strip()]
         cls.metadata = cls.exported[0]
         cls.expected = cls.exported[1:]
         if len(cls.expected) != 64:
@@ -491,7 +569,7 @@ class HaloViewerTests(unittest.TestCase):
                     path = destination / f"rockstar.{rank}.dat.format"
                     path.write_text(path.read_text() + f"virial_density {convention}\n"
                                     f"so_density_reference {reference}\n")
-                native = json.loads(runCommand(
+                native = loadStrictJson(runCommand(
                     [str(arguments.exporter), str(destination)]).stdout.splitlines()[0])
                 self.assertEqual(native["virial_density"], convention)
                 self.assertEqual(native["so_density_reference"], reference)

@@ -65,6 +65,22 @@ RockstarRecord makeRecord(size_t index) {
     record.m200 = record.mvir * 0.9f;
     record.m500 = record.mvir * 0.7f;
     record.m2500 = record.mvir * 0.4f;
+    if (index == 1) {
+        // Binary32 magnitudes in [1e16, 1e17) carry seventeen integral significant
+        // digits once promoted to binary64, like the halo energies of a 128^3 LCDM
+        // run; std::showpoint formatting wrote them as "-98411092459388928.".
+        record.e = -9.8411092459388928e16f;
+        record.jx = 1.2345678e16f;
+        record.jy = -5.0e16f;
+        record.jz = 9.99e16f;
+    } else if (index == 2) {
+        // Magnitudes written in exponent notation, plus an exact zero.
+        record.e = -1.5e18f;
+        record.jx = 1.0e18f;
+        record.jy = -1.0e20f;
+        record.jz = 1.0e21f;
+        record.m2500 = 0.0f;
+    }
     for (size_t i = 0; i < kHalfFields.size(); ++i) {
         record.*kHalfFields[i] = double2float16(0.25 * (i + 1));
     }

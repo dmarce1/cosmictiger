@@ -5,13 +5,13 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
-#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <map>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <vector>
 
@@ -57,6 +57,32 @@ constexpr std::array<std::pair<char const*, Float16 RockstarRecord::*>, 31> kHal
 
 [[noreturn]] void fail(fs::path const& path, std::string const& reason) {
     throw std::runtime_error(path.string() + ": " + reason);
+}
+
+// A finite binary64 value as JSON number text: the shortest decimal that
+// std::from_chars recovers exactly, always carrying a fraction or an exponent so
+// that readers which distinguish integers from reals keep every property real,
+// including the sign of a negative zero. Streaming with std::showpoint wrote a
+// value of seventeen integral digits as "-98411092459388928.", which JSON rejects.
+struct JsonNumber {
+    double value;
+};
+
+std::ostream& operator<<(std::ostream& output, JsonNumber const number) {
+    if (!std::isfinite(number.value)) {
+        throw std::runtime_error("nonfinite value cannot be written as a JSON number");
+    }
+    std::array<char, 32> buffer{};
+    auto const result = std::to_chars(buffer.data(), buffer.data() + buffer.size(), number.value);
+    if (result.ec != std::errc{}) {
+        throw std::runtime_error("cannot format a JSON number");
+    }
+    std::string_view const text(buffer.data(), static_cast<size_t>(result.ptr - buffer.data()));
+    output << text;
+    if (text.find_first_of(".e") == std::string_view::npos) {
+        output << ".0";
+    }
+    return output;
 }
 
 std::ifstream openText(fs::path const& path) {
@@ -313,13 +339,13 @@ void exportSnapshot(fs::path const& directory) {
     CatalogueFormat format;
     auto const halos =
         readHalos(directory, static_cast<int>(ranks), static_cast<size_t>(count), format);
-    std::cout << std::showpoint << std::setprecision(std::numeric_limits<double>::max_digits10)
-              << "{\"type\":\"catalog\",\"schema_version\":1,\"snapshot\":" << header.number
-              << ",\"scale_factor\":" << header.scale << ",\"time\":" << header.time
-              << ",\"box_length_mpc\":" << header.boxLength << ",\"rank_count\":" << ranks
-              << ",\"halo_count\":" << halos.size() << ",\"virial_density\":\""
-              << format.virialDensity << "\",\"so_density_reference\":\""
-              << format.soDensityReference << "\"}\n";
+    std::cout << "{\"type\":\"catalog\",\"schema_version\":1,\"snapshot\":" << header.number
+              << ",\"scale_factor\":" << JsonNumber{header.scale}
+              << ",\"time\":" << JsonNumber{header.time}
+              << ",\"box_length_mpc\":" << JsonNumber{header.boxLength}
+              << ",\"rank_count\":" << ranks << ",\"halo_count\":" << halos.size()
+              << ",\"virial_density\":\"" << format.virialDensity
+              << "\",\"so_density_reference\":\"" << format.soDensityReference << "\"}\n";
     for (auto const& halo : halos) {
         auto const& record = halo.record;
         std::cout << "{\"type\":\"halo\",\"rank\":" << halo.rank << ",\"ordinal\":" << halo.ordinal
@@ -332,13 +358,16 @@ void exportSnapshot(fs::path const& directory) {
         std::cout << ",\"fof_id\":\"" << record.id.fofId
                   << "\",\"local_halo_id\":" << record.id.haloId
                   << ",\"sys\":" << (record.id.sys ? "true" : "false") << ",\"pid\":" << record.pid
-                  << ",\"x\":" << record.x << ",\"y\":" << record.y << ",\"z\":" << record.z
-                  << ",\"mvir\":" << record.mvir << ",\"e\":" << record.e << ",\"jx\":" << record.jx
-                  << ",\"jy\":" << record.jy << ",\"jz\":" << record.jz
-                  << ",\"m200\":" << record.m200 << ",\"m500\":" << record.m500
-                  << ",\"m2500\":" << record.m2500;
+                  << ",\"x\":" << JsonNumber{record.x} << ",\"y\":" << JsonNumber{record.y}
+                  << ",\"z\":" << JsonNumber{record.z} << ",\"mvir\":" << JsonNumber{record.mvir}
+                  << ",\"e\":" << JsonNumber{record.e} << ",\"jx\":" << JsonNumber{record.jx}
+                  << ",\"jy\":" << JsonNumber{record.jy} << ",\"jz\":" << JsonNumber{record.jz}
+                  << ",\"m200\":" << JsonNumber{record.m200}
+                  << ",\"m500\":" << JsonNumber{record.m500}
+                  << ",\"m2500\":" << JsonNumber{record.m2500};
         for (auto const& field : kHalfFields) {
-            std::cout << ",\"" << field.first << "\":" << float162double(record.*field.second);
+            std::cout << ",\"" << field.first
+                      << "\":" << JsonNumber{float162double(record.*field.second)};
         }
         std::cout << "}\n";
     }

@@ -97,8 +97,11 @@ Record row `i` corresponds to host-sidecar row `i` within the same rank, as
 guaranteed by the current writer. The reader checks this correspondence against
 the FOF/local `pid` host index, rejects duplicate IDs, missing hosts, cycles,
 nonfinite properties, truncated files, and count mismatches, and validates all
-files before producing JSONL. Persistent snapshot IDs and packed local record
-indices remain distinct.
+files before producing JSONL. Every property is written as a JSON real: the
+shortest decimal that recovers the stored binary64, binary32, or binary16 value
+exactly, so integral magnitudes such as a halo energy of -9.84e16 stay
+parseable. Persistent snapshot IDs and packed local record indices remain
+distinct.
 
 The importer hashes its source files before and after decoding, inserts in one
 transaction, and publishes a catalog only after successful validation. An import
