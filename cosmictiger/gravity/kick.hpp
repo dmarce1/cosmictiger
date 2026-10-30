@@ -12,6 +12,7 @@
 #include <functional>
 #include <memory>
 
+#include <cosmictiger/core/force_step.hpp>
 #include <cosmictiger/gravity/fmm_geometry.hpp>
 #include <cosmictiger/gravity/fmm_types.hpp>
 #include <cosmictiger/gravity/kick_interaction_counts.hpp>
@@ -88,73 +89,7 @@ struct CudaKickArenaLayout {
     int listSlabBytes;           // per-block bytes of the per-launch list slab; 0: pool growth
 };
 
-struct KickReturn;
-
-struct KickReturn {
-    int maxRung;
-    double pot;
-    double kin;
-    double dkin;
-    double xmom;
-    double ymom;
-    double zmom;
-    double nmom;
-    double darkMatterKineticCorrection;
-    double darkMatterXMomentumCorrection;
-    double darkMatterYMomentumCorrection;
-    double darkMatterZMomentumCorrection;
-    double darkMatterMomentumNormCorrection;
-
-    CUDA_EXPORT
-    KickReturn() {
-        maxRung = 0;
-        pot = 0.0;
-        kin = 0.0;
-        xmom = ymom = zmom = nmom = 0.0;
-        dkin = 0.0;
-        darkMatterKineticCorrection = 0.0;
-        darkMatterXMomentumCorrection = 0.0;
-        darkMatterYMomentumCorrection = 0.0;
-        darkMatterZMomentumCorrection = 0.0;
-        darkMatterMomentumNormCorrection = 0.0;
-    }
-    CUDA_EXPORT
-    KickReturn& operator+=(KickReturn const& other) {
-        if (other.maxRung > maxRung) {
-            maxRung = other.maxRung;
-        }
-        pot += other.pot;
-        kin += other.kin;
-        xmom += other.xmom;
-        ymom += other.ymom;
-        zmom += other.zmom;
-        nmom += other.nmom;
-        dkin += other.dkin;
-        darkMatterKineticCorrection += other.darkMatterKineticCorrection;
-        darkMatterXMomentumCorrection += other.darkMatterXMomentumCorrection;
-        darkMatterYMomentumCorrection += other.darkMatterYMomentumCorrection;
-        darkMatterZMomentumCorrection += other.darkMatterZMomentumCorrection;
-        darkMatterMomentumNormCorrection += other.darkMatterMomentumNormCorrection;
-
-        return *this;
-    }
-    template <class A>
-    void serialize(A&& arc, unsigned) {
-        arc & maxRung;
-        arc & pot;
-        arc & kin;
-        arc & xmom;
-        arc & ymom;
-        arc & zmom;
-        arc & nmom;
-        arc & dkin;
-        arc & darkMatterKineticCorrection;
-        arc & darkMatterXMomentumCorrection;
-        arc & darkMatterYMomentumCorrection;
-        arc & darkMatterZMomentumCorrection;
-        arc & darkMatterMomentumNormCorrection;
-    }
-};
+using KickReturn = ForceStepResult;
 
 struct KickParameters {
     FmmGeometry geometry{};
@@ -164,7 +99,7 @@ struct KickParameters {
     float sign;
     int minLevel;
     int minRung;
-    int fixedRung{};    // Nonzero only for synchronized primordial source splitting.
+    int fixedRung{};    // Optional fixed-rung override used by kick regressions.
     float a;
     float t0;
     float theta;

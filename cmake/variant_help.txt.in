@@ -3,13 +3,15 @@ CosmicTiger build target selection
 
 @cosmictiger_variant_count@ physics configurations:
   Without SPH: 2 integrators x 3 gravity methods x @cosmictiger_variant_order_count@ orders = @cosmictiger_nosph_variant_count@
-  With SPH:    leapfrog x 3 gravity methods x @cosmictiger_variant_order_count@ orders      = @cosmictiger_sph_variant_count@
+  With gravity and SPH:    leapfrog x 3 gravity methods x @cosmictiger_variant_order_count@ orders = @cosmictiger_sph_variant_count@
+
+  Without gravity: cosmictiger_leapfrog_sph (one order-independent SPH target)
 
 SPH supports leapfrog with all three gravity methods. Hierarchical stepping
 lacks hydro integration and requires SPH disabled. This restriction means the SPH
 choice does not double every combination.
 
-Target format: cosmictiger_<integrator>_<gravity>[_sph]_<order>
+Gravity-enabled target format: cosmictiger_<integrator>_<gravity>[_sph]_<order>
 Include _sph to enable SPH; omit it for collisionless targets.
 
 Choose a target family below and replace <order> with one of:
@@ -17,11 +19,13 @@ Choose a target family below and replace <order> with one of:
 
 @cosmictiger_variant_family_help@
 Gravity names:
+  none      SPH only: cosmictiger_leapfrog_sph, without gravitational forces
   fmm       Global FMM
   pmmm_pp   PMMM with direct particle-particle near interactions
   pmmm_fmm  PMMM with FMM near interactions
 
 Examples (run from this build directory):
+  make -j12 cosmictiger_leapfrog_sph
   make -j12 cosmictiger_leapfrog_pmmm_pp_7
   make -j12 cosmictiger_leapfrog_fmm_sph_7
   make -j12 cosmictiger_leapfrog_pmmm_fmm_sph_7
@@ -35,6 +39,10 @@ Each target builds one executable. Select fixed32 or fixed64 when configuring:
   cmake -S @PROJECT_SOURCE_DIR@ -B . -DCOSMICTIGER_POSITION_TYPE=fixed64
 Target and executable names stay the same. Rebuild after changing this option.
 The runtime compute.positionType option, if supplied, must match the build.
+
+Select the SPH-only default with -DCOSMICTIGER_GRAVITY_METHOD=none,
+-DCOSMICTIGER_WITH_SPH=ON, and -DCOSMICTIGER_TIME_INTEGRATOR=leapfrog.
+FMM order does not apply to this target. Cosmology and FFTW support remain shared.
 
 Configured default: @cosmictiger_default_variant@
   make cosmictiger    Builds the configured default executable.

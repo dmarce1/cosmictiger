@@ -36,7 +36,9 @@ void cpuDrift(int rung, float a, float dt, float tau0, float tau1, float tauMax,
     // Match the glass damping policy in cudaDrift, including its override of drag.
     drag = getOptions().initial.createGlass ? std::numbers::pi : 0.0;
     parameters.drag = drag;
+#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
     parameters.lightcone = getOptions().lightcone.enabled && tauMax > 0.0f && tauMax - tau1 < 1.0f;
+#endif
     parameters.mapSize = getOptions().lightcone.mapSize;
     constexpr size_t kMinimumChunkSize = 4096;
     size_t const workers = std::min(
@@ -69,9 +71,11 @@ void cpuDrift(int rung, float a, float dt, float tau0, float tau1, float tauMax,
             future.get();
         }
     }
+#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
     if (parameters.lightcone) {
         lcAddParticles(entries, a, tau0);
     }
+#endif
 }
 
 void drift(

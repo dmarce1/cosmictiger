@@ -95,13 +95,14 @@ once with Unix Makefiles, then build any desired target:
 ```sh
 cmake -S . -B build/release_cuda -G 'Unix Makefiles' \
   -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+make -C build/release_cuda -j3 cosmictiger_leapfrog_sph
 make -C build/release_cuda -j4 cosmictiger_leapfrog_pmmm_pp_7
 make -C build/release_cuda -j4 cosmictiger_leapfrog_fmm_sph_7
 make -C build/release_cuda -j4 cosmictiger_leapfrog_pmmm_pp_sph_7
 make -C build/release_cuda -j4 cosmictiger_hierarchical_pmmm_fmm_8
 ```
 
-Targets have the form `cosmictiger_<integrator>_<gravity>[_sph]_<order>`:
+Gravity-enabled targets have the form `cosmictiger_<integrator>_<gravity>[_sph]_<order>`:
 
 | Component | Supported values |
 | --- | --- |
@@ -111,8 +112,20 @@ Targets have the form `cosmictiger_<integrator>_<gravity>[_sph]_<order>`:
 | Order | `3` through `9` (multipole degree plus two) |
 
 There are 42 collisionless variants (2 integrators × 3 gravity methods × 7
-orders) and 21 SPH variants (leapfrog × 3 gravity methods × 7 orders), giving
-63 physics variants and 63 named executables per build directory.
+orders), 21 SPH variants with gravity (leapfrog × 3 gravity methods × 7 orders),
+and one SPH-only variant, giving 64 physics variants and named executables per
+build directory. The SPH-only target is `cosmictiger_leapfrog_sph`; it has no
+expansion order. It compiles no gravity solvers, gravity diagnostics, generated
+FMM instances, or halo potential analysis. It retains SPH, imposed hydro fields,
+chemistry, cosmology, and the shared FFTW/MPI dependencies.
+
+To select it as the default executable and test suite, configure with
+`-DCOSMICTIGER_GRAVITY_METHOD=none -DCOSMICTIGER_WITH_SPH=ON
+-DCOSMICTIGER_TIME_INTEGRATOR=leapfrog`. CPU/CUDA and position storage still apply
+to the whole build directory. SPH-only builds default to hydrodynamics enabled
+and self-gravity disabled; requesting self-gravity or collisionless evolution
+is rejected.
+
 Run `make cosmictiger_help` from a configured build
 directory, or `make -C build/release_cuda cosmictiger_help`, to see those families,
 selection examples, the current default, CPU/CUDA mode, and position storage
@@ -133,8 +146,9 @@ choices reuses that directory and keeps previously built variants available.
 The initial choices are leapfrog, FMM, SPH, order 7, and fixed32 positions.
 Position storage is a menu choice applied to the whole build directory; changing
 it rebuilds the requested target under the same name. Selecting PMMM changes
-the menu's default order to 8 unless an order was explicitly selected; disable
-SPH when selecting hierarchical integration. For CPU-only builds, use
+the menu's default order to 8 unless an order was explicitly selected. Selecting
+`none` enables SPH and leapfrog, and the order setting is ignored. Disable SPH
+when selecting hierarchical integration. For CPU-only builds, use
 `-DCOSMICTIGER_WITH_CUDA=OFF` in a separate directory such as `build/release_cpu`.
 
 The existing `COSMICTIGER_GRAVITY_METHOD`, `COSMICTIGER_PMMM_NEAR_METHOD`,
@@ -147,7 +161,7 @@ sets these options to match the selected target. See
 The former `gravity.method`, `gravity.pmmmNearMethod`, `gravity.fmmOrder`, and
 `gravity.pmmmOrder` CLI/INI settings are no longer accepted. `--help` and the
 `build.*` startup fields identify the compiled variant. SPH is available with
-leapfrog and all three gravity methods. The hierarchical driver lacks the SPH
+leapfrog, with all three gravity methods or without gravity. The hierarchical driver lacks the SPH
 integration stages, so its supported targets remain collisionless.
 
 Run a PMMM executable with `--gravity.meshSize=32 --gravity.pmmmNearWidth=2`.
@@ -666,7 +680,8 @@ Run `./build.sh` in a terminal for the interactive builder. It uses a full-scree
 menu when `whiptail` is available, with a text menu as a fallback. Choose Release,
 RelWithDebInfo, Debug, or Profile (host gprof instrumentation), CUDA, SPH, job counts,
 HPX prefix, CUDA architectures, additional dependency prefixes, gravity variant
-(FMM, PMMM-FMM, or PMMM-PP), one kernel order from 3 through 9, time integrator,
+(none, FMM, PMMM-FMM, or PMMM-PP), one kernel order from 3 through 9 for
+gravity builds, time integrator,
 and fixed32 or fixed64 position storage.
 Builds share one generated Makefile in `build/<mode>_<cuda|cpu>` (for example
 `build/release_cuda`), with live output and a `builder.*.log`. The default builds

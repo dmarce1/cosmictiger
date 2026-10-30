@@ -34,24 +34,31 @@ endif()
 option(COSMICTIGER_REQUIRE_APEX "Require HPX task profiling through an APEX-enabled HPX installation"
     ${cosmictiger_require_apex_default})
 option(COSMICTIGER_WITH_LONG_LONG_PART_INT "Use long long to index local particles" OFF)
-# Each executable has one time integrator, one gravity solver and one FMM order.
+# Each executable selects its integrator and physics; gravity variants also select an order.
 set(COSMICTIGER_TIME_INTEGRATOR "leapfrog" CACHE STRING
     "Default particle time integrator: leapfrog or hierarchical")
 set_property(CACHE COSMICTIGER_TIME_INTEGRATOR PROPERTY STRINGS leapfrog hierarchical)
 if(NOT COSMICTIGER_TIME_INTEGRATOR MATCHES "^(leapfrog|hierarchical)$")
     message(FATAL_ERROR "COSMICTIGER_TIME_INTEGRATOR must be leapfrog or hierarchical")
 endif()
-set(COSMICTIGER_GRAVITY_METHOD "fmm" CACHE STRING "Default gravity solver: fmm or pmmm")
-set_property(CACHE COSMICTIGER_GRAVITY_METHOD PROPERTY STRINGS fmm pmmm)
-if(NOT COSMICTIGER_GRAVITY_METHOD MATCHES "^(fmm|pmmm)$")
-    message(FATAL_ERROR "COSMICTIGER_GRAVITY_METHOD must be fmm or pmmm")
+set(COSMICTIGER_GRAVITY_METHOD "fmm" CACHE STRING "Default gravity solver: none, fmm or pmmm")
+set_property(CACHE COSMICTIGER_GRAVITY_METHOD PROPERTY STRINGS none fmm pmmm)
+if(NOT COSMICTIGER_GRAVITY_METHOD MATCHES "^(none|fmm|pmmm)$")
+    message(FATAL_ERROR "COSMICTIGER_GRAVITY_METHOD must be none, fmm or pmmm")
 endif()
 set(COSMICTIGER_PMMM_NEAR_METHOD "pp" CACHE STRING "Default PMMM near solver: pp or fmm")
 set_property(CACHE COSMICTIGER_PMMM_NEAR_METHOD PROPERTY STRINGS pp fmm)
 if(NOT COSMICTIGER_PMMM_NEAR_METHOD MATCHES "^(pp|fmm)$")
     message(FATAL_ERROR "COSMICTIGER_PMMM_NEAR_METHOD must be pp or fmm")
 endif()
-if(COSMICTIGER_GRAVITY_METHOD STREQUAL "fmm")
+set(COSMICTIGER_WITH_GRAVITY ON)
+if(COSMICTIGER_GRAVITY_METHOD STREQUAL "none")
+    set(COSMICTIGER_WITH_GRAVITY OFF)
+    if(NOT COSMICTIGER_WITH_SPH OR NOT COSMICTIGER_TIME_INTEGRATOR STREQUAL "leapfrog")
+        message(FATAL_ERROR "Gravity-free builds require SPH enabled and the leapfrog integrator")
+    endif()
+endif()
+if(NOT COSMICTIGER_GRAVITY_METHOD STREQUAL "pmmm")
     # The unused near method must not create a second global-FMM configuration.
     set(COSMICTIGER_PMMM_NEAR_METHOD pp)
 endif()
@@ -67,6 +74,11 @@ set_property(CACHE COSMICTIGER_WITH_ORDER PROPERTY STRINGS 3 4 5 6 7 8 9)
 if(NOT COSMICTIGER_WITH_ORDER MATCHES "^[3-9]$")
     message(FATAL_ERROR
         "COSMICTIGER_WITH_ORDER must be an integer from 3 to 9; got '${COSMICTIGER_WITH_ORDER}'")
+endif()
+# Gravity-free targets do not have an expansion order. Retain the cached gravity
+# order so switching the selected default back to a gravity solver remains easy.
+if(NOT COSMICTIGER_WITH_GRAVITY)
+    set(COSMICTIGER_WITH_ORDER 0)
 endif()
 # Retire the runtime-order range, including values from an older build cache.
 unset(COSMICTIGER_FMM_MIN_ORDER CACHE)
@@ -185,7 +197,9 @@ message(STATUS "cosmictiger gravity solver = ${COSMICTIGER_GRAVITY_METHOD}")
 if(COSMICTIGER_GRAVITY_METHOD STREQUAL "pmmm")
     message(STATUS "cosmictiger PMMM near solver = ${COSMICTIGER_PMMM_NEAR_METHOD}")
 endif()
-message(STATUS "cosmictiger compiled FMM order = ${COSMICTIGER_WITH_ORDER}")
+if(COSMICTIGER_WITH_GRAVITY)
+    message(STATUS "cosmictiger compiled FMM order = ${COSMICTIGER_WITH_ORDER}")
+endif()
 message(STATUS "cosmictiger maximum bucket size = ${COSMICTIGER_WITH_MAX_BUCKET}")
 
 include(CheckCXXCompilerFlag)
@@ -222,6 +236,7 @@ set(cosmictiger_header_files
     cosmictiger/core/containers.hpp
     cosmictiger/core/defs.hpp
     cosmictiger/core/driver.hpp
+    cosmictiger/core/force_step.hpp
     cosmictiger/core/diagnostic_output.hpp
     cosmictiger/core/fixed_capacity_vector.hpp
     cosmictiger/core/flops.hpp
@@ -656,7 +671,7 @@ if(BUILD_TESTING)
                     set_tests_properties(tau_interrupt_simulation_hydro PROPERTIES TIMEOUT 240
                         PROCESSORS 2 LABELS "profiler;apex;tau;cpu;hpx;interrupt")
                 endif()
-                if(HPX_WITH_PARCELPORT_MPI AND MPIEXEC_EXECUTABLE)
+                if(COSMICTIGER_WITH_GRAVITY AND HPX_WITH_PARCELPORT_MPI AND MPIEXEC_EXECUTABLE)
                     set(tau_mpi_args --mpi-numproc-flag=${MPIEXEC_NUMPROC_FLAG})
                     foreach(flag IN LISTS MPIEXEC_PREFLAGS)
                         list(APPEND tau_mpi_args --mpi-preflag=${flag})
@@ -751,11 +766,13 @@ if(BUILD_TESTING)
     target_compile_options(friedmann_test PRIVATE -fno-fast-math -ffp-contract=off)
     cosmictiger_add_gtest(NAME friedmann TARGET friedmann_test PROPERTIES TIMEOUT 60)
 
-    add_executable(opening_schedule_test tests/gravity/opening_schedule.cpp)
-    target_include_directories(opening_schedule_test PRIVATE ${PROJECT_SOURCE_DIR})
-    target_compile_options(opening_schedule_test PRIVATE -ffast-math)
-    cosmictiger_add_gtest(NAME opening_schedule TARGET opening_schedule_test
-        PROPERTIES TIMEOUT 30)
+    if(COSMICTIGER_WITH_GRAVITY)
+        add_executable(opening_schedule_test tests/gravity/opening_schedule.cpp)
+        target_include_directories(opening_schedule_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_compile_options(opening_schedule_test PRIVATE -ffast-math)
+        cosmictiger_add_gtest(NAME opening_schedule TARGET opening_schedule_test
+            PROPERTIES TIMEOUT 30)
+    endif()
 
     add_executable(cosmology_evolution_test tests/cosmology_evolution.cpp)
     target_include_directories(cosmology_evolution_test PRIVATE ${PROJECT_SOURCE_DIR})
@@ -894,7 +911,7 @@ if(BUILD_TESTING)
         set_tests_properties(primordial_integration_cpu PROPERTIES TIMEOUT 1200 RUN_SERIAL TRUE)
     endif()
 
-    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    if(COSMICTIGER_WITH_GRAVITY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
         add_library(mpi_thread_override SHARED tests/mpi_thread_override.cpp)
         target_link_libraries(mpi_thread_override PRIVATE MPI::MPI_CXX)
         add_test(NAME mpi_thread_support COMMAND ${Python3_EXECUTABLE}
@@ -1019,30 +1036,32 @@ if(BUILD_TESTING)
         endforeach()
     endif()
 
-    foreach(fft_mode IN ITEMS fft1 fft2)
-        set(fft_workdir "${PROJECT_BINARY_DIR}/tests/${fft_mode}_cpu")
-        file(MAKE_DIRECTORY "${fft_workdir}")
-        add_test(NAME ${fft_mode}_cpu COMMAND $<TARGET_FILE:cosmictiger>
-            --run.test=${fft_mode} ${cosmictiger_test_gravity_args} --initial.particlesPerDimension=8
-            --hydro.enabled=false --compute.cuda=false --hpx:threads=2 --hpx:bind=none)
-        set_tests_properties(${fft_mode}_cpu PROPERTIES TIMEOUT 120 PROCESSORS 2
-            WORKING_DIRECTORY "${fft_workdir}" LABELS "fft;cpu"
-            ENVIRONMENT "CUDA_VISIBLE_DEVICES=;OMP_NUM_THREADS=1")
-        if(HPX_WITH_PARCELPORT_MPI AND MPIEXEC_EXECUTABLE)
-            set(fft_mpi_workdir "${PROJECT_BINARY_DIR}/tests/${fft_mode}_mpi")
-            file(MAKE_DIRECTORY "${fft_mpi_workdir}")
-            add_test(NAME ${fft_mode}_mpi COMMAND ${MPIEXEC_EXECUTABLE}
-                ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS}
-                $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS}
+    if(COSMICTIGER_WITH_GRAVITY)
+        foreach(fft_mode IN ITEMS fft1 fft2)
+            set(fft_workdir "${PROJECT_BINARY_DIR}/tests/${fft_mode}_cpu")
+            file(MAKE_DIRECTORY "${fft_workdir}")
+            add_test(NAME ${fft_mode}_cpu COMMAND $<TARGET_FILE:cosmictiger>
                 --run.test=${fft_mode} ${cosmictiger_test_gravity_args} --initial.particlesPerDimension=8
-                --hydro.enabled=false --compute.cuda=false
-                --hpx:threads=2 --hpx:bind=none --hpx:localities=2
-                ${cosmictiger_mpi_transport_args})
-            set_tests_properties(${fft_mode}_mpi PROPERTIES TIMEOUT 180 PROCESSORS 4
-                WORKING_DIRECTORY "${fft_mpi_workdir}" LABELS "fft;cpu;mpi"
+                --hydro.enabled=false --compute.cuda=false --hpx:threads=2 --hpx:bind=none)
+            set_tests_properties(${fft_mode}_cpu PROPERTIES TIMEOUT 120 PROCESSORS 2
+                WORKING_DIRECTORY "${fft_workdir}" LABELS "fft;cpu"
                 ENVIRONMENT "CUDA_VISIBLE_DEVICES=;OMP_NUM_THREADS=1")
-        endif()
-    endforeach()
+            if(HPX_WITH_PARCELPORT_MPI AND MPIEXEC_EXECUTABLE)
+                set(fft_mpi_workdir "${PROJECT_BINARY_DIR}/tests/${fft_mode}_mpi")
+                file(MAKE_DIRECTORY "${fft_mpi_workdir}")
+                add_test(NAME ${fft_mode}_mpi COMMAND ${MPIEXEC_EXECUTABLE}
+                    ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS}
+                    $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS}
+                    --run.test=${fft_mode} ${cosmictiger_test_gravity_args} --initial.particlesPerDimension=8
+                    --hydro.enabled=false --compute.cuda=false
+                    --hpx:threads=2 --hpx:bind=none --hpx:localities=2
+                    ${cosmictiger_mpi_transport_args})
+                set_tests_properties(${fft_mode}_mpi PROPERTIES TIMEOUT 180 PROCESSORS 4
+                    WORKING_DIRECTORY "${fft_mpi_workdir}" LABELS "fft;cpu;mpi"
+                    ENVIRONMENT "CUDA_VISIBLE_DEVICES=;OMP_NUM_THREADS=1")
+            endif()
+        endforeach()
+    endif()
 
     foreach(fp16_variant IN ITEMS standard fast_math)
         add_executable(fp16_${fp16_variant}_test tests/fp16.cpp)
@@ -1072,60 +1091,63 @@ if(BUILD_TESTING)
             PROPERTIES TIMEOUT 30)
     endforeach()
 
-    add_executable(rockstar_eigenpair_test tests/rockstar_eigenpair.cpp src/math/math.cpp)
-    target_include_directories(rockstar_eigenpair_test PRIVATE ${PROJECT_SOURCE_DIR})
-    target_compile_definitions(rockstar_eigenpair_test PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
-    cosmictiger_use_generated_kernels(rockstar_eigenpair_test)
-    cosmictiger_add_gtest(NAME rockstar_eigenpair TARGET rockstar_eigenpair_test
-        PROPERTIES TIMEOUT 30)
-    foreach(halo_unit IN ITEMS rockstar_core rockstar_properties lightcone_epoch)
-        add_executable(${halo_unit}_test tests/${halo_unit}.cpp)
-        target_include_directories(${halo_unit}_test PRIVATE ${PROJECT_SOURCE_DIR})
-        target_compile_definitions(${halo_unit}_test PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
-        cosmictiger_use_generated_kernels(${halo_unit}_test)
-        cosmictiger_add_gtest(NAME ${halo_unit} TARGET ${halo_unit}_test
+    if(COSMICTIGER_WITH_GRAVITY)
+        add_executable(rockstar_eigenpair_test tests/rockstar_eigenpair.cpp src/math/math.cpp)
+        target_include_directories(rockstar_eigenpair_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_compile_definitions(rockstar_eigenpair_test PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
+        cosmictiger_use_generated_kernels(rockstar_eigenpair_test)
+        cosmictiger_add_gtest(NAME rockstar_eigenpair TARGET rockstar_eigenpair_test
             PROPERTIES TIMEOUT 30)
-    endforeach()
-    target_sources(lightcone_epoch_test PRIVATE src/cosmology/background.cpp
-        src/cosmology/friedmann.cpp)
-    target_link_libraries(lightcone_epoch_test PRIVATE HPX::hpx Boost::boost)
-    target_compile_options(lightcone_epoch_test PRIVATE -fno-fast-math -ffp-contract=off)
-    add_executable(rockstar_properties_fast_math_test tests/rockstar_properties.cpp)
-    target_include_directories(rockstar_properties_fast_math_test PRIVATE ${PROJECT_SOURCE_DIR})
-    target_compile_options(rockstar_properties_fast_math_test PRIVATE -ffast-math)
-    cosmictiger_add_gtest(NAME rockstar_properties_fast_math TARGET rockstar_properties_fast_math_test
-        PROPERTIES TIMEOUT 30)
-    foreach(halo_mode IN ITEMS rockstar bhPotential groupsCatalogue)
-        foreach(halo_backend IN ITEMS cpu cuda)
-            if(halo_backend STREQUAL "cuda" AND (NOT COSMICTIGER_WITH_CUDA OR halo_mode STREQUAL "groupsCatalogue"))
-                continue()
-            endif()
-            if(halo_backend STREQUAL "cuda")
-                set(halo_cuda true)
-            else()
-                set(halo_cuda false)
-            endif()
-            set(halo_workdir "${PROJECT_BINARY_DIR}/tests/${halo_mode}_${halo_backend}")
-            file(MAKE_DIRECTORY "${halo_workdir}")
-            add_test(NAME ${halo_mode}_${halo_backend} COMMAND cosmictiger
-                --run.test=${halo_mode} ${cosmictiger_test_gravity_args} --compute.cuda=${halo_cuda} --hydro.enabled=false
-                --initial.particlesPerDimension=8 --analysis.groups=true
-                --hpx:threads=2 --hpx:bind=none)
-            set_tests_properties(${halo_mode}_${halo_backend} PROPERTIES
-                WORKING_DIRECTORY "${halo_workdir}" TIMEOUT 180 PROCESSORS 2)
+        foreach(halo_unit IN ITEMS rockstar_core rockstar_properties lightcone_epoch)
+            add_executable(${halo_unit}_test tests/${halo_unit}.cpp)
+            target_include_directories(${halo_unit}_test PRIVATE ${PROJECT_SOURCE_DIR})
+            target_compile_definitions(${halo_unit}_test PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
+            cosmictiger_use_generated_kernels(${halo_unit}_test)
+            cosmictiger_add_gtest(NAME ${halo_unit} TARGET ${halo_unit}_test
+                PROPERTIES TIMEOUT 30)
         endforeach()
-    endforeach()
-    if(MPIEXEC_EXECUTABLE)
-        set(halo_mpi_workdir "${PROJECT_BINARY_DIR}/tests/groupsCatalogue_mpi")
-        file(MAKE_DIRECTORY "${halo_mpi_workdir}")
-        add_test(NAME groupsCatalogue_mpi COMMAND ${MPIEXEC_EXECUTABLE}
-            ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger>
-            --run.test=groupsCatalogueDistributed ${cosmictiger_test_gravity_args} --compute.cuda=false --hydro.enabled=false
-            --initial.particlesPerDimension=8 --analysis.groups=true
-            --hpx:threads=2 --hpx:bind=none --hpx:localities=2 ${MPIEXEC_POSTFLAGS})
-        set_tests_properties(groupsCatalogue_mpi PROPERTIES
-            WORKING_DIRECTORY "${halo_mpi_workdir}" TIMEOUT 240 PROCESSORS 4 RUN_SERIAL TRUE)
+        target_sources(lightcone_epoch_test PRIVATE src/cosmology/background.cpp
+            src/cosmology/friedmann.cpp)
+        target_link_libraries(lightcone_epoch_test PRIVATE HPX::hpx Boost::boost)
+        target_compile_options(lightcone_epoch_test PRIVATE -fno-fast-math -ffp-contract=off)
+        add_executable(rockstar_properties_fast_math_test tests/rockstar_properties.cpp)
+        target_include_directories(rockstar_properties_fast_math_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_compile_options(rockstar_properties_fast_math_test PRIVATE -ffast-math)
+        cosmictiger_add_gtest(NAME rockstar_properties_fast_math TARGET rockstar_properties_fast_math_test
+            PROPERTIES TIMEOUT 30)
+        foreach(halo_mode IN ITEMS rockstar bhPotential groupsCatalogue)
+            foreach(halo_backend IN ITEMS cpu cuda)
+                if(halo_backend STREQUAL "cuda" AND (NOT COSMICTIGER_WITH_CUDA OR halo_mode STREQUAL "groupsCatalogue"))
+                    continue()
+                endif()
+                if(halo_backend STREQUAL "cuda")
+                    set(halo_cuda true)
+                else()
+                    set(halo_cuda false)
+                endif()
+                set(halo_workdir "${PROJECT_BINARY_DIR}/tests/${halo_mode}_${halo_backend}")
+                file(MAKE_DIRECTORY "${halo_workdir}")
+                add_test(NAME ${halo_mode}_${halo_backend} COMMAND cosmictiger
+                    --run.test=${halo_mode} ${cosmictiger_test_gravity_args} --compute.cuda=${halo_cuda} --hydro.enabled=false
+                    --initial.particlesPerDimension=8 --analysis.groups=true
+                    --hpx:threads=2 --hpx:bind=none)
+                set_tests_properties(${halo_mode}_${halo_backend} PROPERTIES
+                    WORKING_DIRECTORY "${halo_workdir}" TIMEOUT 180 PROCESSORS 2)
+            endforeach()
+        endforeach()
+        if(MPIEXEC_EXECUTABLE)
+            set(halo_mpi_workdir "${PROJECT_BINARY_DIR}/tests/groupsCatalogue_mpi")
+            file(MAKE_DIRECTORY "${halo_mpi_workdir}")
+            add_test(NAME groupsCatalogue_mpi COMMAND ${MPIEXEC_EXECUTABLE}
+                ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger>
+                --run.test=groupsCatalogueDistributed ${cosmictiger_test_gravity_args} --compute.cuda=false --hydro.enabled=false
+                --initial.particlesPerDimension=8 --analysis.groups=true
+                --hpx:threads=2 --hpx:bind=none --hpx:localities=2 ${MPIEXEC_POSTFLAGS})
+            set_tests_properties(groupsCatalogue_mpi PROPERTIES
+                WORKING_DIRECTORY "${halo_mpi_workdir}" TIMEOUT 240 PROCESSORS 4 RUN_SERIAL TRUE)
+        endif()
     endif()
+
     if(COSMICTIGER_WITH_SPH AND COSMICTIGER_GRAVITY_METHOD STREQUAL "fmm" AND
             COSMICTIGER_TIME_INTEGRATOR STREQUAL "leapfrog")
         add_test(NAME scenarios COMMAND ${Python3_EXECUTABLE}
@@ -1138,52 +1160,56 @@ if(BUILD_TESTING)
     if(NOT COSMICTIGER_WITH_SPH)
         list(APPEND cosmictiger_sph_test_args --without-sph)
     endif()
-    add_test(NAME grouped_options COMMAND ${Python3_EXECUTABLE}
-        ${PROJECT_SOURCE_DIR}/tests/run_options.py $<TARGET_FILE:cosmictiger>
-        ${PROJECT_BINARY_DIR}/tests/grouped_options ${cosmictiger_sph_test_args}
-        --gravity-method ${COSMICTIGER_GRAVITY_METHOD}
-        --near-method ${COSMICTIGER_PMMM_NEAR_METHOD} --order ${COSMICTIGER_WITH_ORDER}
-        --time-integrator ${COSMICTIGER_TIME_INTEGRATOR})
-    # Hundreds of expected rejections each produce a symbolized stack trace.
-    set_tests_properties(grouped_options PROPERTIES RUN_SERIAL TRUE TIMEOUT 600 PROCESSORS 2)
+    if(COSMICTIGER_WITH_GRAVITY)
+        add_test(NAME grouped_options COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/run_options.py $<TARGET_FILE:cosmictiger>
+            ${PROJECT_BINARY_DIR}/tests/grouped_options ${cosmictiger_sph_test_args}
+            --gravity-method ${COSMICTIGER_GRAVITY_METHOD}
+            --near-method ${COSMICTIGER_PMMM_NEAR_METHOD} --order ${COSMICTIGER_WITH_ORDER}
+            --time-integrator ${COSMICTIGER_TIME_INTEGRATOR})
+        # Hundreds of expected rejections each produce a symbolized stack trace.
+        set_tests_properties(grouped_options PROPERTIES RUN_SERIAL TRUE TIMEOUT 600 PROCESSORS 2)
+    endif()
 
-    set(gravity_error_name gravity_error_cpu)
-    add_test(NAME ${gravity_error_name} COMMAND ${Python3_EXECUTABLE}
-        ${PROJECT_SOURCE_DIR}/tests/run_gravity_error.py $<TARGET_FILE:cosmictiger>
-        ${PROJECT_BINARY_DIR}/tests/${gravity_error_name}
-        --gravity-method ${COSMICTIGER_GRAVITY_METHOD}
-        --position-type ${COSMICTIGER_POSITION_TYPE})
-    set_tests_properties(${gravity_error_name} PROPERTIES TIMEOUT 300 PROCESSORS 2
-        LABELS "gravity;accuracy")
-    if(COSMICTIGER_WITH_CUDA)
-        set(gravity_error_name gravity_error_cuda)
+    if(COSMICTIGER_WITH_GRAVITY)
+        set(gravity_error_name gravity_error_cpu)
         add_test(NAME ${gravity_error_name} COMMAND ${Python3_EXECUTABLE}
             ${PROJECT_SOURCE_DIR}/tests/run_gravity_error.py $<TARGET_FILE:cosmictiger>
-            ${PROJECT_BINARY_DIR}/tests/${gravity_error_name} --cuda
+            ${PROJECT_BINARY_DIR}/tests/${gravity_error_name}
             --gravity-method ${COSMICTIGER_GRAVITY_METHOD}
             --position-type ${COSMICTIGER_POSITION_TYPE})
         set_tests_properties(${gravity_error_name} PROPERTIES TIMEOUT 300 PROCESSORS 2
-            RUN_SERIAL TRUE LABELS "gravity;accuracy;cuda")
-    endif()
-    if(MPIEXEC_EXECUTABLE)
-        set(gravity_error_mpi_args --mpi-exec=${MPIEXEC_EXECUTABLE}
-            --mpi-numproc-flag=${MPIEXEC_NUMPROC_FLAG})
-        foreach(flag IN LISTS MPIEXEC_PREFLAGS)
-            list(APPEND gravity_error_mpi_args "--mpi-preflag=${flag}")
-        endforeach()
-        foreach(flag IN LISTS MPIEXEC_POSTFLAGS)
-            list(APPEND gravity_error_mpi_args "--mpi-postflag=${flag}")
-        endforeach()
-        if(HPX_WITH_PARCELPORT_TCP)
-            list(APPEND gravity_error_mpi_args --disable-tcp)
+            LABELS "gravity;accuracy")
+        if(COSMICTIGER_WITH_CUDA)
+            set(gravity_error_name gravity_error_cuda)
+            add_test(NAME ${gravity_error_name} COMMAND ${Python3_EXECUTABLE}
+                ${PROJECT_SOURCE_DIR}/tests/run_gravity_error.py $<TARGET_FILE:cosmictiger>
+                ${PROJECT_BINARY_DIR}/tests/${gravity_error_name} --cuda
+                --gravity-method ${COSMICTIGER_GRAVITY_METHOD}
+                --position-type ${COSMICTIGER_POSITION_TYPE})
+            set_tests_properties(${gravity_error_name} PROPERTIES TIMEOUT 300 PROCESSORS 2
+                RUN_SERIAL TRUE LABELS "gravity;accuracy;cuda")
         endif()
-        add_test(NAME gravity_error_mpi COMMAND ${Python3_EXECUTABLE}
-            ${PROJECT_SOURCE_DIR}/tests/run_gravity_error.py $<TARGET_FILE:cosmictiger>
-            ${PROJECT_BINARY_DIR}/tests/gravity_error_mpi ${gravity_error_mpi_args} --ranks 2
-            --position-type ${COSMICTIGER_POSITION_TYPE}
-            --gravity-method ${COSMICTIGER_GRAVITY_METHOD})
-        set_tests_properties(gravity_error_mpi PROPERTIES TIMEOUT 300 PROCESSORS 4
-            RUN_SERIAL TRUE LABELS "gravity;accuracy;mpi")
+        if(MPIEXEC_EXECUTABLE)
+            set(gravity_error_mpi_args --mpi-exec=${MPIEXEC_EXECUTABLE}
+                --mpi-numproc-flag=${MPIEXEC_NUMPROC_FLAG})
+            foreach(flag IN LISTS MPIEXEC_PREFLAGS)
+                list(APPEND gravity_error_mpi_args "--mpi-preflag=${flag}")
+            endforeach()
+            foreach(flag IN LISTS MPIEXEC_POSTFLAGS)
+                list(APPEND gravity_error_mpi_args "--mpi-postflag=${flag}")
+            endforeach()
+            if(HPX_WITH_PARCELPORT_TCP)
+                list(APPEND gravity_error_mpi_args --disable-tcp)
+            endif()
+            add_test(NAME gravity_error_mpi COMMAND ${Python3_EXECUTABLE}
+                ${PROJECT_SOURCE_DIR}/tests/run_gravity_error.py $<TARGET_FILE:cosmictiger>
+                ${PROJECT_BINARY_DIR}/tests/gravity_error_mpi ${gravity_error_mpi_args} --ranks 2
+                --position-type ${COSMICTIGER_POSITION_TYPE}
+                --gravity-method ${COSMICTIGER_GRAVITY_METHOD})
+            set_tests_properties(gravity_error_mpi PROPERTIES TIMEOUT 300 PROCESSORS 4
+                RUN_SERIAL TRUE LABELS "gravity;accuracy;mpi")
+        endif()
     endif()
 
     if(COSMICTIGER_WITH_SPH AND COSMICTIGER_GRAVITY_METHOD STREQUAL "fmm" AND
@@ -1325,20 +1351,22 @@ if(BUILD_TESTING)
     cosmictiger_add_gtest(NAME radial_kernel TARGET radial_kernel_test
         PROPERTIES TIMEOUT 30)
 
-    add_executable(cartesian_kernels_test tests/gravity/cartesian_kernels.cpp)
-    target_include_directories(cartesian_kernels_test PRIVATE ${PROJECT_SOURCE_DIR})
-    cosmictiger_use_generated_kernels(cartesian_kernels_test)
-    if(COMPILER_SUPPORTS_MARCH_NATIVE)
-        target_compile_options(cartesian_kernels_test PRIVATE -march=native)
-    endif()
-    cosmictiger_add_gtest(NAME cartesian_kernels TARGET cartesian_kernels_test
-        PROPERTIES TIMEOUT 60)
+    if(COSMICTIGER_WITH_GRAVITY)
+        add_executable(cartesian_kernels_test tests/gravity/cartesian_kernels.cpp)
+        target_include_directories(cartesian_kernels_test PRIVATE ${PROJECT_SOURCE_DIR})
+        cosmictiger_use_generated_kernels(cartesian_kernels_test)
+        if(COMPILER_SUPPORTS_MARCH_NATIVE)
+            target_compile_options(cartesian_kernels_test PRIVATE -march=native)
+        endif()
+        cosmictiger_add_gtest(NAME cartesian_kernels TARGET cartesian_kernels_test
+            PROPERTIES TIMEOUT 60)
 
-    add_executable(fmm_api_test tests/gravity/fmm_api.cpp)
-    target_include_directories(fmm_api_test PRIVATE ${PROJECT_SOURCE_DIR})
-    cosmictiger_use_generated_kernels(fmm_api_test)
-    cosmictiger_add_gtest(NAME fmm_api TARGET fmm_api_test
-        PROPERTIES TIMEOUT 30)
+        add_executable(fmm_api_test tests/gravity/fmm_api.cpp)
+        target_include_directories(fmm_api_test PRIVATE ${PROJECT_SOURCE_DIR})
+        cosmictiger_use_generated_kernels(fmm_api_test)
+        cosmictiger_add_gtest(NAME fmm_api TARGET fmm_api_test
+            PROPERTIES TIMEOUT 30)
+    endif()
 
     # Standalone generator families: these tests do not select a new runtime walk.
     if(COSMICTIGER_GRAVITY_METHOD STREQUAL "pmmm")
@@ -1368,19 +1396,22 @@ if(BUILD_TESTING)
         endforeach()
     endif()
 
-    add_test(NAME generated_fmm_current COMMAND ${Python3_EXECUTABLE}
-        ${PROJECT_SOURCE_DIR}/tools/generate_fmm.py --check
-        --output-dir ${COSMICTIGER_GENERATED_FMM_DIR} --min-order 2 --max-order 8)
-    set_tests_properties(generated_fmm_current PROPERTIES
-        TIMEOUT 180 PROCESSORS 1 LABELS "fmm;generator")
-    add_test(NAME generated_fmm_flops COMMAND ${Python3_EXECUTABLE}
-        ${PROJECT_SOURCE_DIR}/tests/gravity/check_generated_fmm_flops.py
-        --generated-dir ${COSMICTIGER_GENERATED_FMM_DIR}
-        --min-fmm-order ${COSMICTIGER_FMM_MIN_ORDER}
-        --max-fmm-order ${COSMICTIGER_FMM_MAX_ORDER}
-        --compiler ${CMAKE_CXX_COMPILER})
-    set_tests_properties(generated_fmm_flops PROPERTIES
-        TIMEOUT 300 PROCESSORS 1 LABELS "fmm;generator")
+    if(COSMICTIGER_WITH_GRAVITY)
+        add_test(NAME generated_fmm_current COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tools/generate_fmm.py --check
+            --output-dir ${COSMICTIGER_GENERATED_FMM_DIR} --min-order 2 --max-order 8)
+        set_tests_properties(generated_fmm_current PROPERTIES
+            TIMEOUT 180 PROCESSORS 1 LABELS "fmm;generator")
+        add_test(NAME generated_fmm_flops COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/gravity/check_generated_fmm_flops.py
+            --generated-dir ${COSMICTIGER_GENERATED_FMM_DIR}
+            --min-fmm-order ${COSMICTIGER_FMM_MIN_ORDER}
+            --max-fmm-order ${COSMICTIGER_FMM_MAX_ORDER}
+            --compiler ${CMAKE_CXX_COMPILER})
+        set_tests_properties(generated_fmm_flops PROPERTIES
+            TIMEOUT 300 PROCESSORS 1 LABELS "fmm;generator")
+    endif()
+
     # Exercise the CUDA-disabled Ewald initializer even in a CUDA-enabled build.
     if(COSMICTIGER_GRAVITY_METHOD STREQUAL "fmm")
         add_executable(cartesian_ewald_cpu_test tests/gravity/dehnen/cartesian_ewald_cpu.cpp src/gravity/dehnen/ewald_indices.cpp src/gravity/fmm_order.cpp)
@@ -1402,14 +1433,16 @@ if(BUILD_TESTING)
             PROPERTIES TIMEOUT 30)
     endif()
 
-    add_executable(softening_flops_test tests/softening_flops.cpp)
-    target_include_directories(softening_flops_test PRIVATE ${PROJECT_SOURCE_DIR})
-    target_include_directories(softening_flops_test SYSTEM PRIVATE ${CHEALPIX_INCLUDE_DIR})
-    target_compile_definitions(softening_flops_test PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
-    cosmictiger_use_generated_kernels(softening_flops_test)
-    target_link_libraries(softening_flops_test PRIVATE HPX::hpx Boost::boost)
-    cosmictiger_add_gtest(NAME softening_flops TARGET softening_flops_test
-        PROPERTIES TIMEOUT 30)
+    if(COSMICTIGER_WITH_GRAVITY)
+        add_executable(softening_flops_test tests/softening_flops.cpp)
+        target_include_directories(softening_flops_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_include_directories(softening_flops_test SYSTEM PRIVATE ${CHEALPIX_INCLUDE_DIR})
+        target_compile_definitions(softening_flops_test PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
+        cosmictiger_use_generated_kernels(softening_flops_test)
+        target_link_libraries(softening_flops_test PRIVATE HPX::hpx Boost::boost)
+        cosmictiger_add_gtest(NAME softening_flops TARGET softening_flops_test
+            PROPERTIES TIMEOUT 30)
+    endif()
 
     if(COSMICTIGER_WITH_SPH)
         add_executable(sph_flops_test tests/sph/flops.cpp)
@@ -1421,15 +1454,17 @@ if(BUILD_TESTING)
             PROPERTIES TIMEOUT 30)
     endif()
 
-    add_executable(fmm_acceptance_test tests/gravity/fmm_acceptance.cpp)
-    target_include_directories(fmm_acceptance_test PRIVATE ${PROJECT_SOURCE_DIR})
-    target_compile_options(fmm_acceptance_test PRIVATE -ffast-math)
-    target_compile_definitions(fmm_acceptance_test PRIVATE FMM_ACCEPTANCE_TEST_SIMD)
-    if(COMPILER_SUPPORTS_MARCH_NATIVE)
-        target_compile_options(fmm_acceptance_test PRIVATE -march=native)
+    if(COSMICTIGER_WITH_GRAVITY)
+        add_executable(fmm_acceptance_test tests/gravity/fmm_acceptance.cpp)
+        target_include_directories(fmm_acceptance_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_compile_options(fmm_acceptance_test PRIVATE -ffast-math)
+        target_compile_definitions(fmm_acceptance_test PRIVATE FMM_ACCEPTANCE_TEST_SIMD)
+        if(COMPILER_SUPPORTS_MARCH_NATIVE)
+            target_compile_options(fmm_acceptance_test PRIVATE -march=native)
+        endif()
+        cosmictiger_add_gtest(NAME fmm_acceptance TARGET fmm_acceptance_test
+            PROPERTIES TIMEOUT 30)
     endif()
-    cosmictiger_add_gtest(NAME fmm_acceptance TARGET fmm_acceptance_test
-        PROPERTIES TIMEOUT 30)
 
     add_executable(mesh_domain_test tests/mesh_domain.cpp)
     target_include_directories(mesh_domain_test PRIVATE ${PROJECT_SOURCE_DIR})
@@ -1645,6 +1680,9 @@ if(BUILD_TESTING)
     endif()
 
     foreach(analysis_kernel IN ITEMS power lightcone)
+        if(analysis_kernel STREQUAL "lightcone" AND NOT COSMICTIGER_WITH_GRAVITY)
+            continue()
+        endif()
         add_executable(${analysis_kernel}_cpu_test
             tests/${analysis_kernel}_cpu.cpp src/analysis/${analysis_kernel}_cpu.cpp)
         target_include_directories(${analysis_kernel}_cpu_test PRIVATE ${PROJECT_SOURCE_DIR})
@@ -1666,17 +1704,19 @@ if(BUILD_TESTING)
         cosmictiger_add_gtest(NAME power_cuda TARGET power_cuda_test
             PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
 
-        add_executable(lightcone_cuda_test tests/lightcone_cuda.cu src/analysis/lightcone.cu
-            src/analysis/lightcone_cpu.cpp src/core/assert.cu src/cuda/cuda_stream.cpp)
-        target_include_directories(lightcone_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
-        target_compile_definitions(lightcone_cuda_test PRIVATE USE_CUDA ORDER=${COSMICTIGER_WITH_ORDER})
-        cosmictiger_use_generated_kernels(lightcone_cuda_test)
-        target_link_libraries(lightcone_cuda_test PRIVATE HPX::hpx CUDA::cudart)
-        target_compile_options(lightcone_cuda_test PRIVATE
-            $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math>)
-        set_target_properties(lightcone_cuda_test PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
-        cosmictiger_add_gtest(NAME lightcone_cuda TARGET lightcone_cuda_test
-            PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+        if(COSMICTIGER_WITH_GRAVITY)
+            add_executable(lightcone_cuda_test tests/lightcone_cuda.cu src/analysis/lightcone.cu
+                src/analysis/lightcone_cpu.cpp src/core/assert.cu src/cuda/cuda_stream.cpp)
+            target_include_directories(lightcone_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
+            target_compile_definitions(lightcone_cuda_test PRIVATE USE_CUDA ORDER=${COSMICTIGER_WITH_ORDER})
+            cosmictiger_use_generated_kernels(lightcone_cuda_test)
+            target_link_libraries(lightcone_cuda_test PRIVATE HPX::hpx CUDA::cudart)
+            target_compile_options(lightcone_cuda_test PRIVATE
+                $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math>)
+            set_target_properties(lightcone_cuda_test PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+            cosmictiger_add_gtest(NAME lightcone_cuda TARGET lightcone_cuda_test
+                PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+        endif()
 
         add_hpx_executable(cuda_async_test
             SOURCES tests/cuda_async.cpp tests/cuda_async.cu src/cuda/cuda_stream.cpp)
@@ -1760,13 +1800,15 @@ if(BUILD_TESTING)
     cosmictiger_add_gtest(NAME numerical_utilities TARGET numerical_utilities_test
         PROPERTIES TIMEOUT 10)
 
-    add_executable(fmm_geometry_test tests/gravity/fmm_geometry.cpp)
-    target_include_directories(fmm_geometry_test PRIVATE ${PROJECT_SOURCE_DIR})
-    if(COMPILER_SUPPORTS_MARCH_NATIVE)
-        target_compile_options(fmm_geometry_test PRIVATE -march=native)
+    if(COSMICTIGER_WITH_GRAVITY)
+        add_executable(fmm_geometry_test tests/gravity/fmm_geometry.cpp)
+        target_include_directories(fmm_geometry_test PRIVATE ${PROJECT_SOURCE_DIR})
+        if(COMPILER_SUPPORTS_MARCH_NATIVE)
+            target_compile_options(fmm_geometry_test PRIVATE -march=native)
+        endif()
+        cosmictiger_add_gtest(NAME fmm_geometry TARGET fmm_geometry_test
+            PROPERTIES TIMEOUT 10)
     endif()
-    cosmictiger_add_gtest(NAME fmm_geometry TARGET fmm_geometry_test
-        PROPERTIES TIMEOUT 10)
 
     if(COSMICTIGER_WITH_SPH)
         add_executable(rayleigh_taylor_test tests/rayleigh_taylor.cpp src/scenarios/rayleigh_taylor.cpp)
@@ -1783,36 +1825,38 @@ if(BUILD_TESTING)
     cosmictiger_add_gtest(NAME particle_selection TARGET particle_selection_test
         PROPERTIES TIMEOUT 10)
 
-    add_executable(gravity_direct_reference_test tests/gravity/direct_reference.cpp)
-    target_include_directories(gravity_direct_reference_test PRIVATE ${PROJECT_SOURCE_DIR})
-    target_compile_options(gravity_direct_reference_test PRIVATE -fno-fast-math -ffp-contract=off)
-    cosmictiger_add_gtest(NAME gravity_direct_reference TARGET gravity_direct_reference_test
-        PROPERTIES TIMEOUT 30)
+    if(COSMICTIGER_WITH_GRAVITY)
+        add_executable(gravity_direct_reference_test tests/gravity/direct_reference.cpp)
+        target_include_directories(gravity_direct_reference_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_compile_options(gravity_direct_reference_test PRIVATE -fno-fast-math -ffp-contract=off)
+        cosmictiger_add_gtest(NAME gravity_direct_reference TARGET gravity_direct_reference_test
+            PROPERTIES TIMEOUT 30)
 
-    add_executable(gravity_reference_table_test tests/gravity/reference_table.cpp
-        src/gravity/reference_table.cpp)
-    target_include_directories(gravity_reference_table_test PRIVATE ${PROJECT_SOURCE_DIR})
-    target_compile_options(gravity_reference_table_test PRIVATE -fno-fast-math -ffp-contract=off)
-    cosmictiger_add_gtest(NAME gravity_reference_table TARGET gravity_reference_table_test
-        PROPERTIES TIMEOUT 60)
+        add_executable(gravity_reference_table_test tests/gravity/reference_table.cpp
+            src/gravity/reference_table.cpp)
+        target_include_directories(gravity_reference_table_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_compile_options(gravity_reference_table_test PRIVATE -fno-fast-math -ffp-contract=off)
+        cosmictiger_add_gtest(NAME gravity_reference_table TARGET gravity_reference_table_test
+            PROPERTIES TIMEOUT 60)
 
-    if(COSMICTIGER_WITH_CUDA)
-        foreach(position_bits IN ITEMS 32 64)
-            set(reference_target gravity_error_cuda_reference_${position_bits}_test)
-            add_executable(${reference_target} tests/gravity/error_cuda.cpp
-                src/gravity/error_cuda.cu src/gravity/reference_table.cpp src/cuda/cuda_stream.cpp)
-            target_include_directories(${reference_target} PRIVATE ${PROJECT_SOURCE_DIR})
-            target_compile_definitions(${reference_target} PRIVATE USE_CUDA
-                COSMICTIGER_POSITION_BITS=${position_bits})
-            target_link_libraries(${reference_target} PRIVATE HPX::hpx CUDA::cudart)
-            target_compile_options(${reference_target} PRIVATE
-                $<$<COMPILE_LANGUAGE:CXX>:-fno-fast-math;-ffp-contract=off>
-                $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>)
-            set_target_properties(${reference_target} PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
-            cosmictiger_add_gtest(NAME gravity_error_cuda_reference_${position_bits}
-                TARGET ${reference_target}
-                PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
-        endforeach()
+        if(COSMICTIGER_WITH_CUDA)
+            foreach(position_bits IN ITEMS 32 64)
+                set(reference_target gravity_error_cuda_reference_${position_bits}_test)
+                add_executable(${reference_target} tests/gravity/error_cuda.cpp
+                    src/gravity/error_cuda.cu src/gravity/reference_table.cpp src/cuda/cuda_stream.cpp)
+                target_include_directories(${reference_target} PRIVATE ${PROJECT_SOURCE_DIR})
+                target_compile_definitions(${reference_target} PRIVATE USE_CUDA
+                    COSMICTIGER_POSITION_BITS=${position_bits})
+                target_link_libraries(${reference_target} PRIVATE HPX::hpx CUDA::cudart)
+                target_compile_options(${reference_target} PRIVATE
+                    $<$<COMPILE_LANGUAGE:CXX>:-fno-fast-math;-ffp-contract=off>
+                    $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>)
+                set_target_properties(${reference_target} PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+                cosmictiger_add_gtest(NAME gravity_error_cuda_reference_${position_bits}
+                    TARGET ${reference_target}
+                    PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+            endforeach()
+        endif()
     endif()
 
     if(COSMICTIGER_WITH_CUDA)
@@ -1849,31 +1893,33 @@ if(BUILD_TESTING)
                 PROPERTIES TIMEOUT 30 SKIP_RETURN_CODE 77)
         endforeach()
 
-        add_executable(cartesian_kernels_cuda_test tests/gravity/cartesian_kernels_cuda.cu)
-        target_include_directories(cartesian_kernels_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
-        cosmictiger_use_generated_kernels(cartesian_kernels_cuda_test)
-        target_link_libraries(cartesian_kernels_cuda_test PRIVATE CUDA::cudart)
-        cosmictiger_add_gtest(NAME cartesian_kernels_cuda TARGET cartesian_kernels_cuda_test
-            PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+        if(COSMICTIGER_WITH_GRAVITY)
+            add_executable(cartesian_kernels_cuda_test tests/gravity/cartesian_kernels_cuda.cu)
+            target_include_directories(cartesian_kernels_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
+            cosmictiger_use_generated_kernels(cartesian_kernels_cuda_test)
+            target_link_libraries(cartesian_kernels_cuda_test PRIVATE CUDA::cudart)
+            cosmictiger_add_gtest(NAME cartesian_kernels_cuda TARGET cartesian_kernels_cuda_test
+                PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
 
-        add_executable(cartesian_l2l_cuda_test tests/gravity/cartesian_l2l_cuda.cu)
-        target_include_directories(cartesian_l2l_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
-        target_compile_definitions(cartesian_l2l_cuda_test PRIVATE USE_CUDA ORDER=${COSMICTIGER_WITH_ORDER})
-        cosmictiger_use_generated_kernels(cartesian_l2l_cuda_test)
-        target_link_libraries(cartesian_l2l_cuda_test PRIVATE CUDA::cudart)
-        target_compile_options(cartesian_l2l_cuda_test PRIVATE
-            $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr;--use_fast_math>)
-        cosmictiger_add_gtest(NAME cartesian_l2l_cuda TARGET cartesian_l2l_cuda_test
-            PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+            add_executable(cartesian_l2l_cuda_test tests/gravity/cartesian_l2l_cuda.cu)
+            target_include_directories(cartesian_l2l_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
+            target_compile_definitions(cartesian_l2l_cuda_test PRIVATE USE_CUDA ORDER=${COSMICTIGER_WITH_ORDER})
+            cosmictiger_use_generated_kernels(cartesian_l2l_cuda_test)
+            target_link_libraries(cartesian_l2l_cuda_test PRIVATE CUDA::cudart)
+            target_compile_options(cartesian_l2l_cuda_test PRIVATE
+                $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr;--use_fast_math>)
+            cosmictiger_add_gtest(NAME cartesian_l2l_cuda TARGET cartesian_l2l_cuda_test
+                PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
 
-        add_executable(fmm_acceptance_cuda_test tests/gravity/fmm_acceptance_cuda.cu)
-        target_include_directories(fmm_acceptance_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
-        target_compile_definitions(fmm_acceptance_cuda_test PRIVATE USE_CUDA)
-        target_link_libraries(fmm_acceptance_cuda_test PRIVATE CUDA::cudart)
-        target_compile_options(fmm_acceptance_cuda_test PRIVATE
-            $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr;--use_fast_math;-Xcompiler=-ffast-math>)
-        cosmictiger_add_gtest(NAME fmm_acceptance_cuda TARGET fmm_acceptance_cuda_test
-            PROPERTIES RUN_SERIAL TRUE TIMEOUT 120 SKIP_RETURN_CODE 77)
+            add_executable(fmm_acceptance_cuda_test tests/gravity/fmm_acceptance_cuda.cu)
+            target_include_directories(fmm_acceptance_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
+            target_compile_definitions(fmm_acceptance_cuda_test PRIVATE USE_CUDA)
+            target_link_libraries(fmm_acceptance_cuda_test PRIVATE CUDA::cudart)
+            target_compile_options(fmm_acceptance_cuda_test PRIVATE
+                $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr;--use_fast_math;-Xcompiler=-ffast-math>)
+            cosmictiger_add_gtest(NAME fmm_acceptance_cuda TARGET fmm_acceptance_cuda_test
+                PROPERTIES RUN_SERIAL TRUE TIMEOUT 120 SKIP_RETURN_CODE 77)
+        endif()
 
         add_executable(radial_kernel_cuda_test tests/radial_kernel_cuda.cu)
         target_include_directories(radial_kernel_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
@@ -1933,39 +1979,42 @@ if(BUILD_TESTING)
         set_target_properties(units_cuda_compile PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
     endif()
 
-    foreach(test_name IN ITEMS sph_gravity_cpu sph_gravity_cuda
-        checkpoint_state_dm checkpoint_state_sph)
-        if((NOT COSMICTIGER_WITH_SPH OR COSMICTIGER_GRAVITY_METHOD STREQUAL "pmmm" OR
-                COSMICTIGER_TIME_INTEGRATOR STREQUAL "hierarchical") AND
-                NOT test_name STREQUAL "checkpoint_state_dm")
-            continue()
-        endif()
-        set(test_workdir "${PROJECT_BINARY_DIR}/tests/${test_name}")
-        file(MAKE_DIRECTORY "${test_workdir}")
-        if(test_name MATCHES "^sph_gravity")
-            set(test_mode sphGravity)
-            set(test_sph true)
-        else()
-            set(test_mode checkpointState)
-            if(test_name STREQUAL "checkpoint_state_sph")
+    if(COSMICTIGER_WITH_GRAVITY)
+        foreach(test_name IN ITEMS sph_gravity_cpu sph_gravity_cuda
+            checkpoint_state_dm checkpoint_state_sph)
+            if((NOT COSMICTIGER_WITH_SPH OR COSMICTIGER_GRAVITY_METHOD STREQUAL "pmmm" OR
+                    COSMICTIGER_TIME_INTEGRATOR STREQUAL "hierarchical") AND
+                    NOT test_name STREQUAL "checkpoint_state_dm")
+                continue()
+            endif()
+            set(test_workdir "${PROJECT_BINARY_DIR}/tests/${test_name}")
+            file(MAKE_DIRECTORY "${test_workdir}")
+            if(test_name MATCHES "^sph_gravity")
+                set(test_mode sphGravity)
                 set(test_sph true)
             else()
-                set(test_sph false)
+                set(test_mode checkpointState)
+                if(test_name STREQUAL "checkpoint_state_sph")
+                    set(test_sph true)
+                else()
+                    set(test_sph false)
+                endif()
             endif()
-        endif()
-        if(test_name STREQUAL "sph_gravity_cuda" OR test_name STREQUAL "checkpoint_state_sph")
-            set(test_cuda true)
-        else()
-            set(test_cuda false)
-        endif()
-        set(test_position_type ${COSMICTIGER_POSITION_TYPE})
-        add_test(NAME ${test_name} COMMAND cosmictiger
-            --run.test=${test_mode} ${cosmictiger_test_gravity_args} --initial.particlesPerDimension=8 --hydro.enabled=${test_sph}
-            --compute.cuda=${test_cuda} --compute.positionType=${test_position_type}
-            --hpx:threads=2 --hpx:bind=none)
-        set_tests_properties(${test_name} PROPERTIES
-            WORKING_DIRECTORY "${test_workdir}" RUN_SERIAL TRUE TIMEOUT 120 PROCESSORS 2)
-    endforeach()
+            if(test_name STREQUAL "sph_gravity_cuda" OR test_name STREQUAL "checkpoint_state_sph")
+                set(test_cuda true)
+            else()
+                set(test_cuda false)
+            endif()
+            set(test_position_type ${COSMICTIGER_POSITION_TYPE})
+            add_test(NAME ${test_name} COMMAND cosmictiger
+                --run.test=${test_mode} ${cosmictiger_test_gravity_args} --initial.particlesPerDimension=8 --hydro.enabled=${test_sph}
+                --compute.cuda=${test_cuda} --compute.positionType=${test_position_type}
+                --hpx:threads=2 --hpx:bind=none)
+            set_tests_properties(${test_name} PROPERTIES
+                WORKING_DIRECTORY "${test_workdir}" RUN_SERIAL TRUE TIMEOUT 120 PROCESSORS 2)
+        endforeach()
+    endif()
+
     if(COSMICTIGER_GRAVITY_METHOD STREQUAL "fmm")
         if(COSMICTIGER_WITH_SPH AND COSMICTIGER_TIME_INTEGRATOR STREQUAL "leapfrog")
             set(sph_tree_workdir "${PROJECT_BINARY_DIR}/tests/sph_tree")
@@ -2037,6 +2086,46 @@ if(BUILD_TESTING)
                 --extra-option=--hydro.neighborNumber=120 ${kernel_options})
             set_tests_properties(smoke_kernels_${kernel_case} PROPERTIES RUN_SERIAL TRUE TIMEOUT 600)
         endforeach()
+    endif()
+
+    if(NOT COSMICTIGER_WITH_GRAVITY)
+        add_test(NAME sph_only_cpu COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/run_sph_only.py $<TARGET_FILE:cosmictiger>
+            ${PROJECT_BINARY_DIR}/tests/sph_only_cpu --position-type ${COSMICTIGER_POSITION_TYPE})
+        set_tests_properties(sph_only_cpu PROPERTIES RUN_SERIAL TRUE TIMEOUT 600
+            PROCESSORS 2 LABELS "sph;cpu;gravity_free")
+
+        set(sph_only_tree_workdir "${PROJECT_BINARY_DIR}/tests/sph_tree_cpu")
+        file(MAKE_DIRECTORY "${sph_only_tree_workdir}")
+        add_test(NAME sph_tree_cpu COMMAND $<TARGET_FILE:cosmictiger>
+            --run.test=sphTree --initial.particlesPerDimension=8 --hydro.enabled=true
+            --compute.cuda=false --hpx:threads=2 --hpx:bind=none)
+        set_tests_properties(sph_tree_cpu PROPERTIES WORKING_DIRECTORY "${sph_only_tree_workdir}"
+            RUN_SERIAL TRUE TIMEOUT 120 PROCESSORS 2 LABELS "sph;cpu;gravity_free"
+            ENVIRONMENT "CUDA_VISIBLE_DEVICES=;OMP_NUM_THREADS=1")
+
+        if(HPX_WITH_PARCELPORT_MPI AND MPIEXEC_EXECUTABLE)
+            set(sph_only_mpi_workdir "${PROJECT_BINARY_DIR}/tests/sph_only_mpi")
+            set(sph_only_mpi_setup "${PROJECT_BINARY_DIR}/tests/prepare_sph_only_mpi.cmake")
+            file(GENERATE OUTPUT "${sph_only_mpi_setup}" CONTENT
+                "file(REMOVE_RECURSE [==[${sph_only_mpi_workdir}]==])\nfile(MAKE_DIRECTORY [==[${sph_only_mpi_workdir}]==])\n")
+            add_test(NAME sph_only_mpi_prepare COMMAND ${CMAKE_COMMAND} -P "${sph_only_mpi_setup}")
+            set_tests_properties(sph_only_mpi_prepare PROPERTIES
+                FIXTURES_SETUP sph_only_mpi_directory LABELS "sph;cpu;gravity_free;mpi")
+            add_test(NAME sph_only_mpi COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2
+                ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS}
+                --run.scenario=hydroWave --initial.particlesPerDimension=8 --hydro.enabled=true
+                --run.maxIterations=1 --run.endTime=1e-5 --compute.cuda=false
+                --chemistry.enabled=false --output.directory=. --output.silo=false
+                --analysis.groups=false --analysis.views=false --analysis.power=false
+                --lightcone.enabled=false --checkpoint.intervalSeconds=0
+                --hpx:threads=1 --hpx:bind=none --hpx:localities=2
+                ${cosmictiger_mpi_transport_args})
+            set_tests_properties(sph_only_mpi PROPERTIES WORKING_DIRECTORY "${sph_only_mpi_workdir}"
+                FIXTURES_REQUIRED sph_only_mpi_directory RUN_SERIAL TRUE TIMEOUT 240 PROCESSORS 2
+                LABELS "sph;cpu;gravity_free;mpi"
+                ENVIRONMENT "CUDA_VISIBLE_DEVICES=;OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1")
+        endif()
     endif()
 
     set(rejected_options_workdir "${PROJECT_BINARY_DIR}/tests/rejected_options")
@@ -2139,18 +2228,21 @@ if(BUILD_TESTING)
         endif()
     endif()
 
-    set(position_selection_args)
-    if(NOT COSMICTIGER_WITH_SPH)
-        list(APPEND position_selection_args --without-sph)
+    if(COSMICTIGER_WITH_GRAVITY)
+        set(position_selection_args)
+        if(NOT COSMICTIGER_WITH_SPH)
+            list(APPEND position_selection_args --without-sph)
+        endif()
+        add_test(NAME position_selection COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/run_position_selection.py
+            $<TARGET_FILE:cosmictiger> ${PROJECT_BINARY_DIR}/tests/position_selection
+            ${position_selection_args} --position-type ${COSMICTIGER_POSITION_TYPE}
+            --gravity-method ${COSMICTIGER_GRAVITY_METHOD}
+            --time-integrator ${COSMICTIGER_TIME_INTEGRATOR}
+            --near-method ${COSMICTIGER_PMMM_NEAR_METHOD} --order ${COSMICTIGER_WITH_ORDER})
+        set_tests_properties(position_selection PROPERTIES RUN_SERIAL TRUE TIMEOUT 600 PROCESSORS 2)
     endif()
-    add_test(NAME position_selection COMMAND ${Python3_EXECUTABLE}
-        ${PROJECT_SOURCE_DIR}/tests/run_position_selection.py
-        $<TARGET_FILE:cosmictiger> ${PROJECT_BINARY_DIR}/tests/position_selection
-        ${position_selection_args} --position-type ${COSMICTIGER_POSITION_TYPE}
-        --gravity-method ${COSMICTIGER_GRAVITY_METHOD}
-        --time-integrator ${COSMICTIGER_TIME_INTEGRATOR}
-        --near-method ${COSMICTIGER_PMMM_NEAR_METHOD} --order ${COSMICTIGER_WITH_ORDER})
-    set_tests_properties(position_selection PROPERTIES RUN_SERIAL TRUE TIMEOUT 600 PROCESSORS 2)
+
 endif()
 
 if(BUILD_TESTING)

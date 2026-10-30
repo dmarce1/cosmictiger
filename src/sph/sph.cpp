@@ -566,10 +566,10 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
     runData.sinkCullenDehnenStates = sphParticlesCullenDehnenStates;
     runData.sinkThermodynamicStates = &sphParticlesThermodynamicState(0);
     runData.sinkInternalEnergyRate = &sphParticlesInternalEnergyRate(0);
+#if COSMICTIGER_WITH_GRAVITY
     runData.sinkGravityAccelerationX = &sphParticlesGravityAcceleration(kXDimension, 0);
     runData.sinkGravityAccelerationY = &sphParticlesGravityAcceleration(kYDimension, 0);
     runData.sinkGravityAccelerationZ = &sphParticlesGravityAcceleration(kZDimension, 0);
-    runData.adiabaticIndex = getOptions().hydro.gamma;
 #if COSMICTIGER_GRAVITY_PMMM
     runData.gravityEffectiveRadius = pmmmEffectiveRadius();
 #else
@@ -577,9 +577,11 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
         selectedGravityKernel().supportRadiusPerEffectiveRadius;
 #endif
     addCpuFlops(1);
+    runData.selfGravityEnabled = getOptions().gravity.enabled;
+#endif
+    runData.adiabaticIndex = getOptions().hydro.gamma;
     runData.numberOfTargetNodes = hostTargetNodeIndices.size();
     runData.sinkSmoothingConverged = &sphParticlesConverged(0);
-    runData.selfGravityEnabled = getOptions().gravity.enabled;
     runData.sinkAccelerations = &sphParticlesAccelerationState(0);
     runData.centralAcceleration = getOptions().hydro.centralAcceleration;
     runData.centralSupportRadius = getOptions().hydro.centralSupportRadius;

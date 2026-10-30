@@ -7,20 +7,11 @@ function(cosmictiger_variant_sources output gravity near sph)
     set(cosmictiger_source_files
         src/analysis/compress.cpp
         src/analysis/group_entry.cpp
-        src/analysis/group_tree.cpp
-        src/analysis/groups.cpp
-        src/analysis/groups_find.cpp
         src/analysis/healpix.cu
-        src/analysis/lightcone.cpp
-        src/analysis/lightcone.cu
-        src/analysis/lightcone_cpu.cpp
         src/analysis/power.cpp
         src/analysis/power.cu
         src/analysis/power_cpu.cpp
         src/analysis/power_cuda.cu
-        src/analysis/rockstar.cpp
-        src/analysis/rockstar.cu
-        src/analysis/rockstar_catalogue.cpp
         src/core/assert.cpp
         src/core/assert.cu
         src/core/driver.cpp
@@ -42,12 +33,6 @@ function(cosmictiger_variant_sources output gravity near sph)
         src/cuda/cuda.cpp
         src/cuda/cuda_memory.cu
         src/cuda/cuda_stream.cpp
-        src/gravity/fmm_order.cpp
-        src/gravity/error.cpp
-        src/gravity/error_cuda.cu
-        src/gravity/reference_table.cpp
-        src/analysis/bh.cpp
-        src/analysis/bh.cu
         src/io/checkpoint.cpp
         src/io/output.cpp
         src/io/view.cpp
@@ -61,15 +46,35 @@ function(cosmictiger_variant_sources output gravity near sph)
         src/particles/drift_cpu.cpp
         src/particles/particles.cpp
         src/scenarios/scenario.cpp
-        src/scenarios/plummer.cpp
         src/scenarios/cosmology.cpp
-        src/scenarios/glass.cpp
         src/particles/particle_partition.cpp
     )
 
+    if(NOT gravity STREQUAL "none")
+        list(APPEND cosmictiger_source_files
+            src/analysis/group_tree.cpp
+            src/analysis/groups.cpp
+            src/analysis/groups_find.cpp
+            src/analysis/lightcone.cpp
+            src/analysis/lightcone.cu
+            src/analysis/lightcone_cpu.cpp
+            src/analysis/rockstar.cpp
+            src/analysis/rockstar.cu
+            src/analysis/rockstar_catalogue.cpp
+            src/gravity/fmm_order.cpp
+            src/gravity/error.cpp
+            src/gravity/error_cuda.cu
+            src/gravity/reference_table.cpp
+            src/analysis/bh.cpp
+            src/analysis/bh.cu
+            src/scenarios/plummer.cpp
+            src/scenarios/glass.cpp
+        )
+    endif()
+
     # The tree walk is shared by global FMM and PMMM's optional near-cell FMM.
     set(cosmictiger_uses_fmm OFF)
-    if(COSMICTIGER_GRAVITY_METHOD STREQUAL "fmm" OR COSMICTIGER_PMMM_NEAR_METHOD STREQUAL "fmm")
+    if(gravity STREQUAL "fmm" OR (gravity STREQUAL "pmmm" AND near STREQUAL "fmm"))
         set(cosmictiger_uses_fmm ON)
     endif()
     if(cosmictiger_uses_fmm)
@@ -161,11 +166,11 @@ function(cosmictiger_variant_sources output gravity near sph)
 
     if(BUILD_TESTING)
         list(APPEND cosmictiger_source_files
-            tests/analysis_backends.cpp
-            tests/bh.cpp
-            tests/groups_catalogue.cpp
-            tests/rockstar.cpp
             tests/test.cpp)
+        if(NOT gravity STREQUAL "none")
+            list(APPEND cosmictiger_source_files
+                tests/analysis_backends.cpp tests/bh.cpp tests/groups_catalogue.cpp tests/rockstar.cpp)
+        endif()
         if(COSMICTIGER_GRAVITY_METHOD STREQUAL "pmmm")
             list(APPEND cosmictiger_source_files
                 tests/mesh_domains.cpp
@@ -173,10 +178,13 @@ function(cosmictiger_variant_sources output gravity near sph)
                 tests/particle_mesh_sort.cpp
                 tests/gravity/nitadori/particle_mesh_timestep.cpp
                 tests/gravity/nitadori/pmmm.cpp)
-        else()
+        elseif(COSMICTIGER_GRAVITY_METHOD STREQUAL "fmm")
             list(APPEND cosmictiger_source_files
                 tests/gravity/dehnen/fmm_tree.cpp tests/gravity/dehnen/fmm_walk.cpp
                 tests/gravity/analytic.cpp tests/gravity/analytic.cu tests/linear_growth.cpp)
+        endif()
+        if(gravity STREQUAL "none")
+            list(APPEND cosmictiger_source_files tests/sph/no_gravity.cpp)
         endif()
         if(COSMICTIGER_WITH_SPH)
             list(APPEND cosmictiger_source_files

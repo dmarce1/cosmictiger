@@ -8,7 +8,9 @@
 
 #include <numbers>
 
+#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/analysis/lightcone.hpp>
+#endif
 #include <cosmictiger/core/defs.hpp>
 #include <cosmictiger/core/timer.hpp>
 #include <cosmictiger/cuda/cuda_reduce.hpp>
@@ -19,36 +21,44 @@
 
 constexpr int kDriftBlockSize = 512;
 
+#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
 using ListType = DeviceVector<DeviceVector<LightconeEntry>>;
 
 __managed__ ListType* listPtr;
+#endif
 
 __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __restrict__ const y,
     Position* __restrict__ const z, Array<float, kDimensions>* const vels, char const* const rungs,
     ParticleInteger count, int rung, double a, double dt, double tau0, double tau1, double tauMax,
     bool doLc, int nside, double drag) {
-    doLc = doLc && (tauMax - tau1 < 1.0f);
     auto const& tid = threadIdx.x;
     auto const& bid = blockIdx.x;
+#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
+    doLc = doLc && (tauMax - tau1 < 1.0f);
     auto* list = doLc ? &(*listPtr)[bid] : nullptr;
     double const c0 = doLc ? 1.0 / tauMax : 0.0;
     double const t0(tau0);
     double const ainv = 1.0 / a;
+#endif
     auto const& numberOfBlocks = gridDim.x;
     ParticleInteger const begin = (size_t) bid * count / numberOfBlocks;
     ParticleInteger const end = (size_t) (bid + 1) * count / numberOfBlocks;
     ParticleInteger const end0 = roundUp(end - begin, kDriftBlockSize) + begin;
     double const c1 = dt / a;
+#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
     if (doLc) {
         list->resize(0);
     }
+#endif
     for (ParticleInteger i = begin + tid; i < end0; i += kDriftBlockSize) {
         int thisRung = -1;
         double x0 = 0.0, y0 = 0.0, z0 = 0.0, x1 = 0.0, y1 = 0.0, z1 = 0.0;
         double displacementX = 0.0, displacementY = 0.0, displacementZ = 0.0;
+#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
         Array<double, kDimensions> x0Value;
         Array<double, kDimensions> x1Value;
         float vx, vy, vz;
+#endif
         float* vel;
         if (i < end) {
             thisRung = rungs[i];
@@ -71,6 +81,7 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
                 }
             }
         }
+#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
         if (doLc) {
             for (int xi = -1; xi <= 0; xi++) {
                 x0Value[kXDimension] = x0 + (double) xi;
@@ -139,6 +150,7 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
                 }
             }
         }
+#endif
         if (i < end && (rung < 0 || thisRung == rung)) {
             if constexpr (kPositionBits == 64) {
                 // Preserve sub-double motion and the original low position bits.
@@ -161,7 +173,9 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
 }
 
 void cudaDrift(int rung, float a, float dt, float tau0, float tau1, float tauMax, double drag) {
+#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
     static bool init = false;
+#endif
     int numberOfBlocks;
     Timer tm1;
     tm1.start();
@@ -174,10 +188,15 @@ void cudaDrift(int rung, float a, float dt, float tau0, float tau1, float tauMax
     if (rng.first == rng.second) {
         return;
     }
+#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
     bool const doLc = getOptions().lightcone.enabled && tauMax - tau1 < 1.0f;
+#else
+    bool const doLc = false;
+#endif
     numberOfBlocks =
         std::min(numberOfBlocks, std::max((rng.second - rng.first) / kDriftBlockSize, 1));
     auto cnt = rng.second - rng.first;
+#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
     if (doLc) {
         if (!init) {
             listPtr = (ListType*) cudaAllocate(sizeof(ListType));
@@ -186,6 +205,7 @@ void cudaDrift(int rung, float a, float dt, float tau0, float tau1, float tauMax
         }
         listPtr->resize(numberOfBlocks);
     }
+#endif
     Position* x = &particlesPos(kXDimension, rng.first);
     Position* y = &particlesPos(kYDimension, rng.first);
     Position* z = &particlesPos(kZDimension, rng.first);
@@ -197,6 +217,7 @@ void cudaDrift(int rung, float a, float dt, float tau0, float tau1, float tauMax
         rungs, cnt, rung, a, dt, tau0, tau1, tauMax, doLc, getOptions().lightcone.mapSize, drag);
     stream.checkLaunch();
     stream.wait();
+#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
     cnt = 0;
     static size_t totalCnt = 0;
     if (doLc) {
@@ -207,5 +228,6 @@ void cudaDrift(int rung, float a, float dt, float tau0, float tau1, float tauMax
         PRINT("%i flushed now %i flushed total\n", cnt, totalCnt);
     }
 
+#endif
     tm1.stop();
 }

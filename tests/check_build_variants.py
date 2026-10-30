@@ -57,7 +57,7 @@ class BuildVariantsTest(unittest.TestCase):
     def addApplication(self, application, objects, definitions):
         self.addCompilation(application, "src/main.cpp", definitions)
         linkPath = self.buildDirectory / "CMakeFiles" / (application + ".dir") / "link.txt"
-        linkPath.parent.mkdir(parents=True)
+        linkPath.parent.mkdir(parents=True, exist_ok=True)
         linkPath.write_text(f"c++ CMakeFiles/{application}.dir/src/main.cpp.o "
                            f"CMakeFiles/{objects}.dir/src/core/driver.cpp.o "
                            "libcosmictiger_core.a libcosmictiger_recombination.a\n")
@@ -69,10 +69,71 @@ class BuildVariantsTest(unittest.TestCase):
         return checkBuild(self.buildDirectory)
 
     def testCompleteMatrix(self):
-        self.assertEqual(len(namedVariants()), 63)
-        self.assertIn("63 physics variants", self.check())
-        self.assertIn("64 Makefile link commands checked", self.check())
+        self.assertEqual(len(namedVariants()), 64)
+        self.assertIn("64 physics variants", self.check())
+        self.assertIn("65 Makefile link commands checked", self.check())
         self.assertIn("positions=fixed32", self.check())
+
+    def selectSphOnlyDefault(self):
+        cachePath = self.buildDirectory / "CMakeCache.txt"
+        cachePath.write_text(cachePath.read_text().replace(
+            "COSMICTIGER_GRAVITY_METHOD:STRING=fmm", "COSMICTIGER_GRAVITY_METHOD:STRING=none"))
+        self.commands = [command for command in self.commands if
+                         "CMakeFiles/cosmictiger.dir/" not in " ".join(command["arguments"])]
+        self.default = "cosmictiger_leapfrog_sph"
+        self.addApplication("cosmictiger", self.default + "_objects",
+                            configurationDefinitions(namedVariants()[self.default], 32))
+        self.makefilePath.write_text(
+            "all: CMakeFiles/cosmictiger.dir/all\n"
+            f"CMakeFiles/cosmictiger.dir/all: CMakeFiles/{self.default}_objects.dir/all\n")
+
+    def testSphOnlyDefault(self):
+        self.selectSphOnlyDefault()
+        self.assertIn("default all selects only cosmictiger_leapfrog_sph", self.check())
+        self.assertEqual(namedVariants()[self.default], ("leapfrog", "none", True, 0))
+
+    def testSphOnlyGravitySourceLeak(self):
+        configuration = namedVariants()["cosmictiger_leapfrog_sph"]
+        self.addCompilation("cosmictiger_leapfrog_sph_objects", "src/gravity/reference_table.cpp",
+                            configurationDefinitions(configuration, 32))
+        with self.assertRaisesRegex(ValueError, "gravity disabled but compiles gravity source"):
+            self.check()
+
+    def testSphOnlyHaloPotentialLeak(self):
+        configuration = namedVariants()["cosmictiger_leapfrog_sph"]
+        self.addCompilation("cosmictiger_leapfrog_sph_objects", "src/analysis/bh.cpp",
+                            configurationDefinitions(configuration, 32))
+        with self.assertRaisesRegex(ValueError, "gravity disabled but compiles gravity source"):
+            self.check()
+
+    def testSphOnlyLinkedGravityLibrary(self):
+        self.addCompilation("gravity_helper", "src/gravity/reference_table.cpp", {})
+        linkPath = self.buildDirectory / "CMakeFiles/cosmictiger_leapfrog_sph.dir/link.txt"
+        linkPath.write_text(linkPath.read_text() + "libgravity_helper.a\n")
+        with self.assertRaisesRegex(ValueError, "linked libraries: gravity disabled"):
+            self.check()
+
+    def testSphOnlyStandaloneGravityTest(self):
+        self.selectSphOnlyDefault()
+        cachePath = self.buildDirectory / "CMakeCache.txt"
+        cachePath.write_text(cachePath.read_text().replace("BUILD_TESTING:STRING=OFF", "BUILD_TESTING:STRING=ON"))
+        self.addCompilation("gravity_test", "tests/gravity/reference_table.cpp", {})
+        with self.assertRaisesRegex(ValueError, "gravity_test: gravity disabled"):
+            self.check()
+
+    def testGravityBuildSphOnlyDiagnosticLeak(self):
+        configuration = namedVariants()[self.default]
+        self.addCompilation(self.default + "_objects", "tests/sph/no_gravity.cpp",
+                            configurationDefinitions(configuration, 32))
+        with self.assertRaisesRegex(ValueError, "gravity-enabled build compiles SPH-only"):
+            self.check()
+
+    def testSphOnlyGeneratedInstanceLeak(self):
+        configuration = namedVariants()["cosmictiger_leapfrog_sph"]
+        self.addCompilation("cosmictiger_leapfrog_sph_objects", "instances/fmm_instance_cpu_7.cpp",
+                            configurationDefinitions(configuration, 32))
+        with self.assertRaisesRegex(ValueError, "generated FMM instances"):
+            self.check()
 
     def testFixed64Matrix(self):
         cachePath = self.buildDirectory / "CMakeCache.txt"
@@ -82,7 +143,7 @@ class BuildVariantsTest(unittest.TestCase):
                                                        "COSMICTIGER_POSITION_BITS=64")
                                     for argument in command["arguments"]]
         self.assertIn("positions=fixed64", self.check())
-        self.assertIn("64 Makefile link commands checked", self.check())
+        self.assertIn("65 Makefile link commands checked", self.check())
 
     def testSphFamilies(self):
         variants = namedVariants()

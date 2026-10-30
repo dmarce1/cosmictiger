@@ -13,10 +13,12 @@
 #include <numbers>
 #include <string>
 
+#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/analysis/group_tree.hpp>
 #include <cosmictiger/analysis/groups.hpp>
 #include <cosmictiger/analysis/groups_find.hpp>
 #include <cosmictiger/analysis/lightcone.hpp>
+#endif
 #include <cosmictiger/analysis/power.hpp>
 #include <cosmictiger/core/defs.hpp>
 #include <cosmictiger/core/driver.hpp>
@@ -32,6 +34,7 @@
 #include <cosmictiger/cosmology/evolution.hpp>
 #include <cosmictiger/cosmology/fft.hpp>
 #include <cosmictiger/cosmology/initialize.hpp>
+#if COSMICTIGER_WITH_GRAVITY
 #if !COSMICTIGER_GRAVITY_PMMM
 #include <cosmictiger/gravity/dehnen/distributed_tree.hpp>
 #include <cosmictiger/gravity/dehnen/execution.hpp>
@@ -45,6 +48,7 @@
 #include <cosmictiger/gravity/nitadori/solver.hpp>
 #endif
 #include <cosmictiger/gravity/opening_schedule.hpp>
+#endif
 #include <cosmictiger/io/checkpoint.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/io/view.hpp>
@@ -55,8 +59,10 @@
 #include <cosmictiger/particles/drift.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #include <cosmictiger/scenarios/cosmology.hpp>
+#if COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/scenarios/glass.hpp>
 #include <cosmictiger/scenarios/plummer.hpp>
+#endif
 #include <cosmictiger/scenarios/scenario.hpp>
 #if COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/sph.hpp>
@@ -104,6 +110,7 @@ static void flushTimings(bool reset) {
     fclose(fp);
 }
 
+#if COSMICTIGER_WITH_GRAVITY
 void doGroups(int number, double scale, double years) {
     section_timing::ScopedSection sectionTimer(section_timing::Section::analysis);
     groupsPrepareHistory(number);
@@ -177,6 +184,8 @@ void doGroups(int number, double scale, double years) {
     terminal::detailPrint("Group count = %li of %li candidates\n", ngroups.first, ngroups.second);
     particlesGroupsDestroy();
 }
+
+#endif
 
 #if COSMICTIGER_WITH_SPH
 SphTreeCreateReturn sphStep1(int minrung, bool verbose) {
@@ -490,9 +499,9 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
 
 #endif
 
-#if !COSMICTIGER_GRAVITY_PMMM
-std::pair<KickReturn, TreeCreateReturn> kickStep(int minrung, double scale, double dadt, double t0,
-    double theta, bool firstCall, bool fullEval) {
+#if COSMICTIGER_WITH_GRAVITY && !COSMICTIGER_GRAVITY_PMMM
+ForceStepResult kickStep(int minrung, double scale, double dadt, double t0, double theta,
+    bool firstCall, bool fullEval) {
     Timer tm;
     tm.start();
     terminal::detailPrint("domains_begin\n");
@@ -509,7 +518,7 @@ std::pair<KickReturn, TreeCreateReturn> kickStep(int minrung, double scale, doub
     // ALWAYS_ASSERT(sph_particles_max_smooth_len() != INFINITY);
     TreeCreateParameters tparams(minrung, theta, 0.f);
     terminal::detailPrint("Create tree %i %e\n", minrung, theta);
-    auto sr = section_timing::measure(
+    section_timing::measure(
         section_timing::Section::treeBuild, [&]() { return treeCreate(tparams); });
     terminal::detailPrint("Done with tree\n");
 
@@ -566,19 +575,20 @@ std::pair<KickReturn, TreeCreateReturn> kickStep(int minrung, double scale, doub
     treeDestroy();
     particlesCacheFree();
     terminal::detailPrint("kick done\n");
-    return std::make_pair(kr, sr);
+    return kr;
 }
 
 #endif
 
-std::pair<KickReturn, TreeCreateReturn> advanceForces(int minRung, double scale,
-    double scaleDerivative, double time, double baseTimestep, double theta, bool firstCall,
-    bool fullEvaluation, EnergiesT& energies, int gravityErrorStep, bool closingOnly) {
-    std::pair<KickReturn, TreeCreateReturn> result{};
+ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative, double time,
+    double baseTimestep, double theta, bool firstCall, bool fullEvaluation, EnergiesT& energies,
+    int gravityErrorStep, bool closingOnly) {
+    ForceStepResult result{};
+    bool const meshGravity = getOptions().gravity.enabled && usesMeshGravity(getOptions().gravity);
+#if COSMICTIGER_WITH_GRAVITY
     if (gravityErrorStep >= 0) {
         section_timing::measure(section_timing::Section::analysis, []() { gravityErrorBegin(); });
     }
-    bool const meshGravity = getOptions().gravity.enabled && usesMeshGravity(getOptions().gravity);
     if (getOptions().gravity.enabled) {
 #if COSMICTIGER_GRAVITY_PMMM
         Timer timer;
@@ -601,22 +611,23 @@ std::pair<KickReturn, TreeCreateReturn> advanceForces(int minRung, double scale,
                 cosmology::expansionTimestep(
                     scale, scaleDerivative / scale, cosmosD2adt2(scale), kScaleTimestep));
         }
-        result.first =
-            particleMeshPrepareKick(scale, baseTimestep, maximumTimestep, firstCall, minRung);
+        result = particleMeshPrepareKick(scale, baseTimestep, maximumTimestep, firstCall, minRung);
         timer.stop();
         kickTime += timer.read();
 #else
         result = kickStep(
             minRung, scale, scaleDerivative, baseTimestep, theta, firstCall, fullEvaluation);
 #endif
-    } else {
+    } else
+#endif
+    {
         // Migration must finish before the SPH tree captures gas particle indices.
         section_timing::measure(section_timing::Section::domains, [&]() {
             domainsBegin(minRung);
             domainsEnd();
         });
     }
-    auto& gravity = result.first;
+    auto& gravity = result;
 #if COSMICTIGER_WITH_SPH
     if (getOptions().hydro.enabled) {
         section_timing::ScopedSection hydroTimer(section_timing::Section::hydrodynamics);
@@ -650,6 +661,7 @@ std::pair<KickReturn, TreeCreateReturn> advanceForces(int minRung, double scale,
         }
     }
 #endif
+#if COSMICTIGER_WITH_GRAVITY
     if (meshGravity && !getOptions().hydro.enabled) {
         // Preparation left the velocities synchronized for these diagnostics.
         energies.pot = gravity.pot / scale;
@@ -683,9 +695,11 @@ std::pair<KickReturn, TreeCreateReturn> advanceForces(int minRung, double scale,
         section_timing::measure(section_timing::Section::analysis,
             [&]() { gravityErrorFinish(gravityErrorStep, time, scale); });
     }
+#endif
     return result;
 }
 
+#if COSMICTIGER_WITH_GRAVITY
 #if COSMICTIGER_GRAVITY_PMMM
 // Rung-restricted drift is deliberately locality-local. The PMMM stage entry
 // runs only on the root, so dispatch that completed stage to every locality.
@@ -714,16 +728,14 @@ void particleMeshDriftRung(
 
 #endif
 
-std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int maxRung,
-    double scale, double adot, double tau, double t0, double theta, EnergiesT* energies,
-    int minrung0, bool doPhi, hpx::future<void>* lcFut, bool nocrop, double drag,
-    int gravityErrorStep, bool closingOnly) {
+ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, double adot,
+    double tau, double t0, double theta, EnergiesT* energies, int minrung0, bool doPhi,
+    hpx::future<void>* lcFut, bool nocrop, double drag, int gravityErrorStep, bool closingOnly) {
     // A terminal energy evaluation consumes only the outstanding closing
     // ladder. The saved checkpoint retains the original staggered momenta.
     nocrop = nocrop || closingOnly;
     Timer tm;
     KickReturn kr;
-    TreeCreateReturn sr;
     //	minrung = std::max(minrung, 1);
     //	max_rung = std::max(max_rung,minrung);
     // PRINT( "%i %i %i\n", minrung, max_rung, minrung0);
@@ -818,18 +830,14 @@ std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int m
         }
         tm.reset();
         tm.start();
-        TreeCreateReturn thisSr{};
 #if !COSMICTIGER_GRAVITY_PMMM
         TreeCreateParameters tparams(levels[li], theta, 0.f);
-        thisSr = section_timing::measure(
+        section_timing::measure(
             section_timing::Section::treeBuild, [&]() { return treeCreate(tparams); });
         minimumTreeLevel = tparams.minLevel;
 #endif
         tm.stop();
         //		PRINT("Tree create took %e\n", tm.read());
-        if (top) {
-            sr = thisSr;
-        }
         KickParameters kparams;
         if (clipTop && levels[li] == minrung0 + 1) {
             kparams.top = true;
@@ -972,8 +980,10 @@ std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int m
     }
     timings[bucketSize].numberOfParticles += particlesProcessed;
     timings[bucketSize].time += totalTime.read();
-    return std::make_pair(kr, sr);
+    return kr;
 }
+
+#endif
 
 double doPowerSpectrum(int num, double a, double adot) {
     section_timing::ScopedSection sectionTimer(section_timing::Section::analysis);
@@ -1165,11 +1175,14 @@ void driver() {
         }
     } else {
         section_timing::ScopedSection initializationTimer(section_timing::Section::initialization);
+#if COSMICTIGER_WITH_GRAVITY
         if (getOptions().run.scenario == "glass") {
             scenarios::initializeGlass(params);
         } else if (getOptions().run.scenario == "plummer") {
             scenarios::initializePlummer(params);
-        } else {
+        } else
+#endif
+        {
             scenarios::initializeCosmology(params);
         }
         profile::checkForInterrupt();
@@ -1224,6 +1237,7 @@ void driver() {
         terminal::detailPrint("code_to_cm = %e\n", opts.units.lengthCm);
         terminal::detailPrint("code_to_s = %e\n", opts.units.timeSeconds);
     }
+#if COSMICTIGER_WITH_GRAVITY
     auto const openingSchedule =
         gravity::parseOpeningSchedule(getOptions().gravity.openingSchedule);
     bool const useOpeningSchedule = getOptions().run.scenario == "cosmology" &&
@@ -1238,6 +1252,7 @@ void driver() {
         terminal::detailPrint("FMM opening schedule: z=%.17g theta=%.17g\n", 1.0 / params.a - 1.0,
             opts.gravity.openingAngle);
     }
+#endif
     if (getOptions().checkpoint.readIndex == -1) {
         outputTimeFile(params);
     }
@@ -1269,14 +1284,17 @@ void driver() {
           "  Wall durations use hh:mm::ss.ss; initialization is excluded.\n");
     Timer reset;
     reset.start();
+#if COSMICTIGER_WITH_GRAVITY
     if (getOptions().lightcone.enabled) {
         lcInit(tau, tauMax);
     }
+#endif
     double dt = 0.0;
     int jiter = 0;
     if (tau == 0.0) {
         particlesSetMinrung(minrung0);
     }
+#if COSMICTIGER_WITH_GRAVITY
     auto const checkLc = [&tau, &dt, &tauMax, &a, &iter](bool force) {
         if (force || lcTimeToFlush(tau, tauMax)) {
             section_timing::ScopedSection analysisTimer(section_timing::Section::analysis);
@@ -1344,6 +1362,7 @@ void driver() {
             tm.reset();
         }
     };
+#endif
     auto checkpointlist = readCheckpointList();
     double const hsoft0 = getOptions().gravity.supportRadius;
     bool doCheck = false;
@@ -1447,7 +1466,7 @@ void driver() {
             opts.compute.bucketSize = bucketSize;
             opts.gravity.openingAngle = theta;
             setOptions(opts);
-            std::pair<KickReturn, TreeCreateReturn> tmp;
+            ForceStepResult tmp;
             bool nocrop = false;
             if (int(tau / t0) % 8 == 0 && fullEval) {
                 nocrop = true;
@@ -1463,7 +1482,7 @@ void driver() {
                 if (getOptions().analysis.power) {
                     doPowerSpectrum(step, a, adot);
                 }
-#ifndef CHECK_MUTUAL_SORT
+#if COSMICTIGER_WITH_GRAVITY && !defined(CHECK_MUTUAL_SORT)
                 if (getOptions().analysis.groups) {
                     doGroups(step, a, years);
                 }
@@ -1479,9 +1498,11 @@ void driver() {
             if (!integration::kBuildUsesHierarchical || !getOptions().gravity.enabled) {
                 tmp = advanceForces(minrung, a, a * adot, tau, t0, theta, tau == 0.0, fullEval,
                     energies, gravityErrorStep);
+#if COSMICTIGER_WITH_GRAVITY
             } else {
                 tmp = kickStepHierarchical(om, maxRung, a, adot, tau, t0, theta, &energies,
                     minrung0, fullEval, &lcFut, nocrop, sqrt(glassError), gravityErrorStep);
+#endif
             }
             if (tau == 0.0) {
                 energies0 = energies;
@@ -1490,7 +1511,7 @@ void driver() {
             if (om != thisMinrung) {
                 minrung0++;
             }
-            KickReturn kr = tmp.first;
+            ForceStepResult const& kr = tmp;
             int maxRung0 = maxRung;
             // A force pass can be empty after particles move to coarser rungs.
             // Finish the current integer-clock subdivision before taking a
@@ -1513,7 +1534,6 @@ void driver() {
                 energies0.pot *= a;
             }
             dt = std::ldexp(t0, -maxRung);
-            TreeCreateReturn sr = tmp.second;
             //			PRINT("Done kicking\n");
             double a0 = a;
             double physicalInterval = a * dt;
@@ -1536,6 +1556,7 @@ void driver() {
                 physicalInterval * getOptions().units.timeSeconds / constants::kSpyr;
             auto const z0 = 1.0 / a0 - 1.0;
             auto const z1 = 1.0 / a - 1.0;
+#if COSMICTIGER_WITH_GRAVITY
             if (useOpeningSchedule) {
                 double const nextTheta = gravity::openingScheduleTheta(
                     openingSchedule, getOptions().cosmology.startRedshift, z1, theta);
@@ -1547,6 +1568,7 @@ void driver() {
                         "FMM opening schedule: z=%.17g theta=%.17g\n", z1, nextTheta);
                 }
             }
+#endif
             for (auto& z : checkpointlist) {
                 if ((z - z0) * (z - z1) < 0.0) {
                     doCheck = true;
@@ -1576,9 +1598,11 @@ void driver() {
             //	PRINT( "%e %e %e %e\n", kr.node_flops, kr.part_flops, sr.flops, dr.flops);
             double const numberOfParticles = getOptions().initial.numberOfParticles;
             double close = 0.0, direct = 0.0;
+#if COSMICTIGER_WITH_GRAVITY
             if constexpr (!gravity::kBuildUsesPmmm || gravity::kBuildPmmmNearUsesFmm) {
                 getGravityCounters(close, direct);
             }
+#endif
             direct += close;
             if (fullEval) {
                 fprintf(textfp,
@@ -1641,18 +1665,22 @@ void driver() {
             if (jiter > 100) {
                 //			abort();
             }
+#if COSMICTIGER_WITH_GRAVITY
             if (getOptions().lightcone.enabled && minRung(itime) <= minrung0) {
                 checkLc(false);
             }
+#endif
             lcFut = hpx::make_ready_future();
 
         } while (itime != 0);
         if (interrupted || cosmology::endTimeReached(tau, tauMax) ||
             thisIter > getOptions().run.maxIterations) {
             break;
+#if COSMICTIGER_WITH_GRAVITY
         } else if (getOptions().initial.createGlass && std::abs(glassError) < 1.0e-5) {
             scenarios::saveGlass();
             break;
+#endif
         }
     }
     lcFut.get();
@@ -1661,12 +1689,14 @@ void driver() {
     }
     section_timing::measure(section_timing::Section::snapshotOutput,
         [&]() { viewOutputViews(params.step + 1, a, true, years); });
+#if COSMICTIGER_WITH_GRAVITY
     if (getOptions().initial.createGlass) {
         scenarios::saveGlass();
     }
     if (getOptions().lightcone.enabled) {
         checkLc(true);
     }
+#endif
     if (params.iter > 0 && params.iter != lastCheckpointIteration) {
         totalTime.stop();
         runtime += totalTime.read();
@@ -1686,11 +1716,14 @@ void driver() {
         EnergiesT finalEnergies = energies;
         double const t0 = tauMax / getOptions().run.numberOfSteps;
         double const theta = getOptions().gravity.openingAngle;
+#if COSMICTIGER_WITH_GRAVITY
         if (integration::kBuildUsesHierarchical && getOptions().gravity.enabled) {
             int minimumRung = minrung0;
             kickStepHierarchical(minimumRung, maxRung, a, adot, tau, t0, theta, &finalEnergies,
                 minrung0, true, nullptr, true, 0.0, -1, true);
-        } else {
+        } else
+#endif
+        {
             // Ordinary force advancement records diagnostics between closing
             // and opening kicks. Its terminal particle state is discarded.
             advanceForces(0, a, a * adot, tau, t0, theta, false, true, finalEnergies, -1, true);
@@ -1702,7 +1735,7 @@ void driver() {
     if (getOptions().lightcone.enabled) {
         particlesFree();
     }
-#if !COSMICTIGER_GRAVITY_PMMM
+#if COSMICTIGER_WITH_GRAVITY && !COSMICTIGER_GRAVITY_PMMM
     kickClearBuffers();
 #endif
     evolutionTime.stop();

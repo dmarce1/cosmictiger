@@ -256,15 +256,18 @@ __global__ void sphCudaHydro(
                 // Accelerations outside the paper: self-gravity, the optional uniform, midplane
                 // and central forces of the test problems, and velocity damping while relaxing
                 // the gas sphere.
+#if COSMICTIGER_WITH_GRAVITY
                 Vector3<float> const gravityAcceleration = data.selfGravityEnabled ?
                     Vector3<float>(data.sinkGravityAccelerationX[sinkIndex],
                         data.sinkGravityAccelerationY[sinkIndex],
                         data.sinkGravityAccelerationZ[sinkIndex]) :
                     Vector3<float>(0.0f);
                 dv_a_dt += gravityAcceleration;
+                flops += 3;
+#endif
                 dv_a_dt[kYDimension] += parameters.uniformAccelerationY;
                 dv_a_dt[kZDimension] += parameters.midplaneAccelerationZ(z_a);
-                flops += 6;    // Force sums and the midplane fixed-point conversion.
+                flops += 3;    // Force sums and the midplane fixed-point conversion.
                 if (data.centralAcceleration != 0.0f) {
                     Vector3<float> const separation(distance(x_a, Position(0.5)),
                         distance(y_a, Position(0.5)), distance(z_a, Position(0.5)));
@@ -320,26 +323,29 @@ __global__ void sphCudaHydro(
                         δt = fminf(δt,
                             parameters.courantFactor / kViscosityWidthScale * u_a / fabsf(du_a_dt));
                     }
+                    ALWAYS_ASSERT(isfinite(δt) && δt > 0.0f);
+                    int const hydroRung = max(1, int(ceilf(log2f(parameters.baseTimestep / δt))));
+                    int nextRung = max(max(parameters.minimumRung, previousRung - 1), hydroRung);
+#if COSMICTIGER_WITH_GRAVITY
                     float const gravityTimestep = fminf(parameters.maximumTimestep,
                         data.accelerationTimestepFactor *
                             sqrtf(parameters.scaleFactor * data.gravityEffectiveRadius /
                                 fmaxf(sqrtf(gravityAcceleration.dot(gravityAcceleration)),
                                     1.0e-30f)));
-                    ALWAYS_ASSERT(isfinite(δt) && δt > 0.0f);
-                    int const hydroRung = max(1, int(ceilf(log2f(parameters.baseTimestep / δt))));
                     int const gravityRung =
                         max(1, int(ceilf(log2f(parameters.baseTimestep / gravityTimestep))));
-                    int const nextRung = max(max(parameters.minimumRung, previousRung - 1),
-                        max(hydroRung, data.selfGravityEnabled ? gravityRung : 1));
+                    nextRung = max(nextRung, data.selfGravityEnabled ? gravityRung : 1);
+                    maximumGravityRung = max(maximumGravityRung, gravityRung);
+                    // Exclude the bound computed only for disabled-gravity diagnostics.
+                    flops += data.selfGravityEnabled ? 13 : 0;
+#endif
                     ALWAYS_ASSERT(nextRung < kMaxRung);
                     data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]] = nextRung;
                     maximumHydroRung = max(maximumHydroRung, hydroRung);
-                    maximumGravityRung = max(maximumGravityRung, gravityRung);
                     maximumRung = max(maximumRung, nextRung);
                     maximumSignalSpeed = fmaxf(maximumSignalSpeed, one_over_δt_cv * h_a);
-                    // Exclude the signal-speed report and the gravity timestep/rung
-                    // computed only for diagnostics when self-gravity is disabled.
-                    flops += 25 + (data.selfGravityEnabled ? 13 : 0);
+                    // Exclude the signal-speed report.
+                    flops += 25;
                     atomicMax(&reduction->inverseSoundTimestep, one_over_δt_c);
                     atomicMax(&reduction->inverseViscosityTimestep, one_over_δt_visc);
                     atomicMax(&reduction->inverseAccelerationTimestep, one_over_δt_f);

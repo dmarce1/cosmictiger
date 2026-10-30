@@ -24,7 +24,6 @@
 #include <mpi.h>
 
 #include <cosmictiger/analysis/lightcone.hpp>
-#include <cosmictiger/analysis/rockstar.hpp>
 #include <cosmictiger/core/driver.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/interrupt_profile.hpp>
@@ -37,10 +36,11 @@
 #include <cosmictiger/core/stack_trace.hpp>
 #include <cosmictiger/core/unordered_set_ts.hpp>
 #include <cosmictiger/cosmology/fftw_threads.hpp>
-#if !COSMICTIGER_GRAVITY_PMMM
+#if COSMICTIGER_WITH_GRAVITY && !COSMICTIGER_GRAVITY_PMMM
 #include <cosmictiger/gravity/dehnen/ewald_indices.hpp>
 #include <cosmictiger/gravity/fmm_kernels/cartesian_ewald_operators.hpp>
 #endif
+#if COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/fmm_types.hpp>
@@ -49,6 +49,7 @@
 #include <cosmictiger/gravity/nitadori/solver.hpp>
 #endif
 #include <cosmictiger/gravity/tree.hpp>
+#endif
 #include <cosmictiger/io/checkpoint.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/fp16.hpp>
@@ -79,6 +80,7 @@ int hpx_main(int argc, char* argv[]) {
             }
             startMemuseDaemon();
             daemonStarted = true;
+#if COSMICTIGER_WITH_GRAVITY
             FILE* fp = fopen(outputPath("soft.txt").c_str(), "wt");
             if (fp == nullptr) {
                 THROW_ERROR("Unable to write soft.txt\n");
@@ -89,6 +91,8 @@ int hpx_main(int argc, char* argv[]) {
                 fprintf(fp, "%e %e %e\n", r, phi, f);
             }
             fclose(fp);
+
+#endif
 
 #ifdef COSMICTIGER_BUILD_TESTING
             // The metadata-only checkpoint test needs no GPU.
@@ -106,7 +110,7 @@ int hpx_main(int argc, char* argv[]) {
             }
 #endif
             profile::checkForInterrupt();
-#if !COSMICTIGER_GRAVITY_PMMM
+#if COSMICTIGER_WITH_GRAVITY && !COSMICTIGER_GRAVITY_PMMM
             EwaldConst::init();
             // Debug dump of the Ewald Green's function along x for the runtime order.
             fmmDispatch([](auto orderTag) {

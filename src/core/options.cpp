@@ -30,11 +30,12 @@
 #include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/core/startup.hpp>
 #include <cosmictiger/core/terminal.hpp>
+#if COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/gravity/fmm_order.hpp>
-#include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/nitadori/mesh_size.hpp>
 #include <cosmictiger/gravity/opening_schedule.hpp>
 #include <cosmictiger/gravity/tree.hpp>
+#endif
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/io/view.hpp>
 #include <cosmictiger/math/constants.hpp>
@@ -42,6 +43,9 @@
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/position.hpp>
 #include <cosmictiger/scenarios/scenario.hpp>
+#if !COSMICTIGER_WITH_GRAVITY && COSMICTIGER_WITH_SPH
+#include <cosmictiger/sph/sph_tree.hpp>
+#endif
 
 #define SHOW(label, opt) show(label, opts.opt)
 
@@ -141,6 +145,12 @@ Options const& getOptions() {
 }
 
 void setOptions(Options const& opts) {
+#if !COSMICTIGER_WITH_GRAVITY
+    if (opts.gravity.enabled || opts.analysis.groups || opts.lightcone.enabled) {
+        throw std::invalid_argument(
+            "Self-gravity, halo groups, and lightcones require a gravity-enabled build");
+    }
+#endif
 #if !COSMICTIGER_WITH_SPH
     if (opts.hydro.enabled || opts.chemistry.enabled) {
         throw std::invalid_argument("Hydrodynamics and chemistry require COSMICTIGER_WITH_SPH=ON");
@@ -162,7 +172,9 @@ void setOptions(Options const& opts) {
         throw std::invalid_argument(
             "Time integrator must match this executable's build configuration");
     }
+#if COSMICTIGER_WITH_GRAVITY
     setFmmOrder(opts.gravity.fmmOrder);
+#endif
     terminal::setVerbose(opts.run.verbose);
     std::vector<hpx::future<void>> futs;
     for (auto c : hpxChildren()) {
@@ -525,8 +537,9 @@ bool processOptions(int argc, char* argv[]) {
 
     po::options_description gravityOpts("Gravity");
     gravityOpts.add_options()("gravity.enabled",
-        po::value<bool>(&opts.gravity.enabled)->default_value(true), "enable gravity")(
-        "gravity.errorInterval", po::value<int>(&opts.gravity.errorInterval)->default_value(0),
+        po::value<bool>(&opts.gravity.enabled)->default_value(gravity::kBuildHasGravity),
+        "enable gravity")("gravity.errorInterval",
+        po::value<int>(&opts.gravity.errorInterval)->default_value(0),
         "compare sampled accelerations with a direct solve every N rung-0 steps (0 disables)")(
         "gravity.errorSampleSize",
         po::value<int>(&opts.gravity.errorSampleSize)->default_value(100),
@@ -715,9 +728,12 @@ bool processOptions(int argc, char* argv[]) {
     if (vm.count("help")) {
         std::cout << "Build configuration (fixed at compile time):\n"
                   << "  Time integrator: " << integration::kBuildTimeIntegrator << "\n"
-                  << "  Gravity solver: " << gravity::kBuildGravityMethod << "\n"
-                  << "  PMMM near method: " << gravity::kBuildPmmmNearMethod << "\n"
-                  << "  FMM/PMMM expansion order: " << gravity::kBuildFmmOrder << "\n\n";
+                  << "  Gravity solver: " << gravity::kBuildGravityMethod << "\n";
+#if COSMICTIGER_WITH_GRAVITY
+        std::cout << "  PMMM near method: " << gravity::kBuildPmmmNearMethod << "\n"
+                  << "  FMM/PMMM expansion order: " << gravity::kBuildFmmOrder << "\n";
+#endif
+        std::cout << "\n";
         std::cout << commandOpts << "\n";
         rc = false;
     } else {
@@ -765,6 +781,7 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.gravity.pmmmNearWidth < 1 || opts.gravity.pmmmNearWidth > 4) {
         THROW_ERROR("gravity.pmmmNearWidth must be between 1 and 4\n");
     }
+#if COSMICTIGER_WITH_GRAVITY
     if (usesMeshGravity(opts.gravity)) {
         opts.gravity.openingAngle = std::sqrt(3.0) / (opts.gravity.pmmmNearWidth + 1);
         if (opts.gravity.meshSize < 2 * opts.gravity.pmmmNearWidth + 1) {
@@ -786,6 +803,7 @@ bool processOptions(int argc, char* argv[]) {
                         "rounding exceeds mesh indexing/allocation limits\n");
         }
     }
+#endif
     if (opts.initial.plummer && opts.initial.createGlass) {
         THROW_ERROR("initial.plummer and initial.createGlass cannot both be enabled\n");
     }
@@ -796,12 +814,25 @@ bool processOptions(int argc, char* argv[]) {
         }
         opts.run.scenario = legacy;
     }
+#if !COSMICTIGER_WITH_GRAVITY
+    if (opts.gravity.enabled) {
+        THROW_ERROR("gravity.enabled=true requires a gravity-enabled build; "
+                    "this executable was built with COSMICTIGER_GRAVITY_METHOD=none\n");
+    }
+    if (opts.run.scenario == "plummer" || opts.run.scenario == "glass") {
+        THROW_ERROR(
+            "run.scenario=%s requires a gravity-enabled build\n", opts.run.scenario.c_str());
+    }
+    if (opts.analysis.groups || opts.lightcone.enabled) {
+        THROW_ERROR("Halo groups and lightcones require a gravity-enabled build\n");
+    }
+#endif
     auto const& scenario = scenarios::definition(opts.run.scenario);
     opts.initial.plummer = opts.run.scenario == "plummer";
     opts.initial.createGlass = opts.run.scenario == "glass";
     if (opts.run.test.empty()) {
         if (!isExplicit("gravity.enabled")) {
-            opts.gravity.enabled = scenario.gravity;
+            opts.gravity.enabled = gravity::kBuildHasGravity && scenario.gravity;
         }
         if (!isExplicit("hydro.enabled")) {
             opts.hydro.enabled = scenario.hydro;
@@ -822,12 +853,18 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.gravity.errorInterval > 0 && !opts.gravity.enabled) {
         THROW_ERROR("gravity.errorInterval requires gravity.enabled=true\n");
     }
+#if COSMICTIGER_WITH_GRAVITY
     auto const openingSchedule = gravity::parseOpeningSchedule(opts.gravity.openingSchedule);
     if (!openingSchedule.empty() &&
         (usesMeshGravity(opts.gravity) || opts.run.scenario != "cosmology")) {
         THROW_ERROR("gravity.openingSchedule requires an FMM build and "
                     "run.scenario=cosmology\n");
     }
+#else
+    if (!opts.gravity.openingSchedule.empty()) {
+        THROW_ERROR("gravity.openingSchedule requires an FMM build\n");
+    }
+#endif
     bool const automaticLambda = omegaLambdaInput == "auto";
     if (!automaticLambda) {
         try {
@@ -1147,7 +1184,11 @@ bool processOptions(int argc, char* argv[]) {
         opts.initial.numberOfParticles *= 2;
         //		opts.Nfour *= 2;
     }
+#if COSMICTIGER_WITH_GRAVITY
     opts.compute.treeCacheLineSize = 65536 / sizeof(TreeNode);
+#else
+    opts.compute.treeCacheLineSize = 65536 / sizeof(SphTreeNode);
+#endif
     opts.compute.treeAllocLineSize = 16 * opts.compute.treeCacheLineSize;
     opts.compute.particleCacheLineSize = 131072 / (sizeof(Position) * kDimensions);
     opts.analysis.saveForce = opts.analysis.saveForce || opts.run.test == "force";
@@ -1408,6 +1449,7 @@ bool processOptions(int argc, char* argv[]) {
     opts.analysis.groups = true;
 #endif
 
+#if COSMICTIGER_WITH_GRAVITY
     if (usesMeshGravity(opts.gravity)) {
         // Scenario defaults must not replace the PMMM geometry-derived angle.
         opts.gravity.openingAngle = std::sqrt(3.0) / (opts.gravity.pmmmNearWidth + 1);
@@ -1415,6 +1457,7 @@ bool processOptions(int argc, char* argv[]) {
         opts.gravity.openingAngle = gravity::openingScheduleInitialTheta(
             openingSchedule, opts.cosmology.startRedshift, opts.gravity.openingAngle);
     }
+#endif
 
     SHOW("checkpoint.intervalSeconds", checkpoint.intervalSeconds);
     SHOW("units.lengthCm", units.lengthCm);

@@ -941,6 +941,23 @@ static void particlesEnsureGravitySampleStorage() {
     }
 }
 
+#if !COSMICTIGER_WITH_GRAVITY
+static void particlesClearGravityDiagnostics(ParticleInteger begin, ParticleInteger end) {
+    if (begin >= end) {
+        return;
+    }
+    // These output arrays have no force pass to populate them in an SPH-only build.
+    if (saveParticleAcceleration(getOptions().analysis)) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            std::fill_n(particlesGravityAccelerations[dim] + begin, end - begin, 0.0f);
+        }
+    }
+    if (saveParticlePotential(getOptions().analysis)) {
+        std::fill_n(particlesP + begin, end - begin, 0.0f);
+    }
+}
+#endif
+
 static void particlesResizeStorage(ParticleInteger sz, bool lock) {
     //	PRINT( "Resizing particles to %i\n", sz);
     if (sz > capacity) {
@@ -994,6 +1011,9 @@ static void particlesResizeStorage(ParticleInteger sz, bool lock) {
     particlesEnsureGravitySampleStorage();
     int oldsz = size;
     size = sz;
+#if !COSMICTIGER_WITH_GRAVITY
+    particlesClearGravityDiagnostics(oldsz, sz);
+#endif
     if (particlesGravitySampleIndices != nullptr) {
         for (ParticleInteger i = oldsz; i < sz; ++i) {
             particlesGravitySample(i) = -1;
@@ -1390,6 +1410,10 @@ void particlesLoad(FILE* fp) {
     rungBegins.resize(size);
     FREAD(&rungBegin, sizeof(int), 1, fp);
     FREAD(rungBegins.data(), sizeof(int), rungBegins.size(), fp);
+#if !COSMICTIGER_WITH_GRAVITY
+    // Force diagnostics are absent from the checkpoint, including same-process reloads.
+    particlesClearGravityDiagnostics(0, particlesSize());
+#endif
 }
 
 void particlesSave(FILE* fp) {

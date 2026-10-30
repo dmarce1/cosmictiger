@@ -11,8 +11,9 @@
 #include <cstdio>
 #include <stddef.h>
 
+#include <cosmictiger/core/force_step.hpp>
 #include <cosmictiger/core/time.hpp>
-#include <cosmictiger/gravity/kick.hpp>
+#include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/sph.hpp>
 #include <cosmictiger/sph/sph_tree.hpp>
@@ -63,16 +64,19 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     EnergiesT* energies, bool verbose = true, int uniformMinimumRung = -1,
     bool closingOnly = false);
 #endif
-std::pair<KickReturn, TreeCreateReturn> kickStep(
+#if COSMICTIGER_WITH_GRAVITY
+ForceStepResult kickStep(
     int minrung, double scale, double, double t0, double theta, bool firstCall, bool fullEval);
-std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minimumRung, int maximumRung,
-    double scale, double scaleDerivative, double time, double baseTimestep, double theta,
-    EnergiesT* energies, int minimumRungFloor, bool doPotential, hpx::future<void>* lightcone,
-    bool keepTop, double drag, int gravityErrorStep = -1, bool closingOnly = false);
+ForceStepResult kickStepHierarchical(int& minimumRung, int maximumRung, double scale,
+    double scaleDerivative, double time, double baseTimestep, double theta, EnergiesT* energies,
+    int minimumRungFloor, bool doPotential, hpx::future<void>* lightcone, bool keepTop, double drag,
+    int gravityErrorStep = -1, bool closingOnly = false);
 
-std::pair<KickReturn, TreeCreateReturn> advanceForces(int minRung, double scale,
-    double scaleDerivative, double time, double baseTimestep, double theta, bool firstCall,
-    bool fullEvaluation, EnergiesT& energies, int gravityErrorStep = -1, bool closingOnly = false);
+#endif
+
+ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative, double time,
+    double baseTimestep, double theta, bool firstCall, bool fullEvaluation, EnergiesT& energies,
+    int gravityErrorStep = -1, bool closingOnly = false);
 
 void runFixedScenario();
 void driver();

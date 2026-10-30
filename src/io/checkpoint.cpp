@@ -22,7 +22,9 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#if COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/analysis/lightcone.hpp>
+#endif
 #include <cosmictiger/core/driver.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
@@ -843,7 +845,7 @@ void checkpointStateTest() {
     changed.gravity.pmmmNearWidth = changed.gravity.pmmmNearWidth == 1 ? 2 : 1;
     ALWAYS_ASSERT(pmmmParameters != detail::pmmmCheckpointParameters(changed));
     changed = getOptions();
-    changed.gravity.pmmmNearMethod = changed.gravity.pmmmNearMethod == "pp" ? "fmm" : "pp";
+    changed.gravity.pmmmNearMethod = changed.gravity.pmmmNearMethod == "fmm" ? "pp" : "fmm";
     ALWAYS_ASSERT(pmmmParameters != detail::pmmmCheckpointParameters(changed));
     changed = getOptions();
     changed.gravity.pmmmMaxPrimeFactor = changed.gravity.pmmmMaxPrimeFactor == 0 ? 5 : 0;
@@ -1175,9 +1177,11 @@ void writeCheckpoint(DriverParameters params) {
     detail::writeDriverState(file.get(), params);
     particlesSave(file.get());
     domainsSave(file.get());
+#if COSMICTIGER_WITH_GRAVITY
     if (getOptions().lightcone.enabled) {
         lcSave(file.get());
     }
+#endif
     detail::flushAndCloseCheckpointFile(file, rankPath);
     for (auto& future : futs) {
         future.get();
@@ -1216,9 +1220,11 @@ DriverParameters readCheckpoint() {
     params = detail::readDriverState(file.get());
     particlesLoad(file.get());
     domainsLoad(file.get());
+#if COSMICTIGER_WITH_GRAVITY
     if (getOptions().lightcone.enabled) {
         lcLoad(file.get());
     }
+#endif
     if (ferror(file.get()) != 0) {
         THROW_ERROR("Unable to read checkpoint file %s\n", rankPath.c_str());
     }

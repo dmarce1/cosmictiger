@@ -12,7 +12,7 @@ import sys
 
 
 VARIANT_DEFINITIONS = {"ORDER", "FMM_MIN_ORDER", "FMM_MAX_ORDER",
-                       "COSMICTIGER_POSITION_BITS", "COSMICTIGER_WITH_SPH",
+                       "COSMICTIGER_POSITION_BITS", "COSMICTIGER_WITH_SPH", "COSMICTIGER_WITH_GRAVITY",
                        "COSMICTIGER_INTEGRATOR_HIERARCHICAL", "COSMICTIGER_GRAVITY_PMMM",
                        "COSMICTIGER_PMMM_NEAR_FMM"}
 TARGET_PATTERN = re.compile(r"CMakeFiles[/\\]([^/\\]+)\.dir[/\\]")
@@ -37,6 +37,7 @@ def namedVariants():
                 for order in range(3, 10):
                     name = f"cosmictiger_{integrator}_{gravity}{'_sph' if sph else ''}_{order}"
                     variants[name] = (integrator, gravity, sph, order)
+    variants["cosmictiger_leapfrog_sph"] = ("leapfrog", "none", True, 0)
     return variants
 
 
@@ -45,7 +46,8 @@ def configurationDefinitions(configuration, bits):
     return {"ORDER": str(order), "FMM_MIN_ORDER": str(order), "FMM_MAX_ORDER": str(order),
             "COSMICTIGER_POSITION_BITS": str(bits), "COSMICTIGER_WITH_SPH": str(int(sph)),
             "COSMICTIGER_INTEGRATOR_HIERARCHICAL": str(int(integrator == "hierarchical")),
-            "COSMICTIGER_GRAVITY_PMMM": str(int(gravity != "fmm")),
+            "COSMICTIGER_WITH_GRAVITY": str(int(gravity != "none")),
+            "COSMICTIGER_GRAVITY_PMMM": str(int(gravity.startswith("pmmm_"))),
             "COSMICTIGER_PMMM_NEAR_FMM": str(int(gravity == "pmmm_fmm"))}
 
 
@@ -55,7 +57,20 @@ def sourceSelectionErrors(sources, configuration):
     otherSolver = "nitadori" if gravity == "fmm" else "dehnen"
     collisionlessScenarios = {"scenario.cpp", "cosmology.cpp", "plummer.cpp", "glass.cpp"}
     for source in sorted(sources):
-        if source.startswith((f"src/gravity/{otherSolver}/", f"tests/gravity/{otherSolver}/")):
+        if gravity == "none":
+            gravitySource = source.startswith(("src/gravity/", "tests/gravity/"))
+            haloSource = re.fullmatch(
+                r"src/analysis/(?:bh|groups|group_tree|groups_find|rockstar|rockstar_catalogue|"
+                r"lightcone|lightcone_cpu)\.(?:cpp|cu)", source)
+            excludedTest = source in {"tests/analysis_backends.cpp", "tests/bh.cpp",
+                                      "tests/groups_catalogue.cpp", "tests/rockstar.cpp",
+                                      "tests/softening_flops.cpp", "tests/sph/gravity.cpp"}
+            excludedScenario = source in {"src/scenarios/plummer.cpp", "src/scenarios/glass.cpp"}
+            if (gravitySource or haloSource or excludedTest or excludedScenario
+                    or Path(source).name.startswith("fmm_instance_")):
+                errors.append(f"gravity disabled but compiles gravity source: {source}")
+        if gravity != "none" and source.startswith(
+                (f"src/gravity/{otherSolver}/", f"tests/gravity/{otherSolver}/")):
             errors.append(f"{gravity} compiles the other gravity solver: {source}")
         if gravity.startswith("pmmm_"):
             nearPattern = (r"(?:src|tests)/gravity/nitadori/near_pp[^/]*\.(?:cpp|cu)$"
@@ -63,6 +78,8 @@ def sourceSelectionErrors(sources, configuration):
                            r"(?:src|tests)/gravity/nitadori/(?:cell_|ghost_|fmm_batch)[^/]*\.(?:cpp|cu)$")
             if re.fullmatch(nearPattern, source):
                 errors.append(f"{gravity} compiles the other near solver: {source}")
+        if gravity != "none" and source == "tests/sph/no_gravity.cpp":
+            errors.append(f"gravity-enabled build compiles SPH-only diagnostic regression: {source}")
         if (not sph or gravity != "fmm") and source == "tests/kernel_selection_cuda.cu":
             errors.append(f"unavailable SPH gravity regression's CUDA helper: {source}")
         if not sph:
@@ -78,11 +95,12 @@ def sourceSelectionErrors(sources, configuration):
 
 def requiredSources(configuration, cuda):
     _, gravity, sph, _ = configuration
-    required = {"src/core/driver.cpp", "src/particles/particles.cpp", "src/cosmology/fft.cpp",
-                "src/gravity/error.cpp", "src/gravity/reference_table.cpp"}
+    required = {"src/core/driver.cpp", "src/particles/particles.cpp", "src/cosmology/fft.cpp"}
+    if gravity != "none":
+        required.update({"src/gravity/error.cpp", "src/gravity/reference_table.cpp"})
     if gravity == "fmm":
         required.add("src/gravity/dehnen/execution.cpp")
-    else:
+    elif gravity.startswith("pmmm_"):
         required.add("src/gravity/nitadori/solver.cpp")
         required.add("src/gravity/nitadori/" +
                      ("fmm_batch.cpp" if gravity == "pmmm_fmm" else "near_pp.cpp"))
@@ -98,7 +116,8 @@ def requiredSources(configuration, cuda):
                              "src/sph/sph_prehydro.cu", "src/sph/sph_rungs.cu"})
     if cuda:
         required.add("src/particles/drift.cu")
-        required.add("src/gravity/error_cuda.cu")
+        if gravity != "none":
+            required.add("src/gravity/error_cuda.cu")
     return required
 
 
@@ -162,11 +181,12 @@ def checkBuild(buildDirectory):
     sourceDirectory = Path(setting("CMAKE_HOME_DIRECTORY")).resolve()
     gravity = setting("COSMICTIGER_GRAVITY_METHOD")
     near = setting("COSMICTIGER_PMMM_NEAR_METHOD")
-    if gravity not in ("fmm", "pmmm") or near not in ("pp", "fmm"):
+    if gravity not in ("none", "fmm", "pmmm") or near not in ("pp", "fmm"):
         raise ValueError("invalid gravity or PMMM near method in CMakeCache.txt")
     selectedConfiguration = (setting("COSMICTIGER_TIME_INTEGRATOR"),
-                             "fmm" if gravity == "fmm" else f"pmmm_{near}",
-                             enabled("COSMICTIGER_WITH_SPH"), int(setting("COSMICTIGER_WITH_ORDER")))
+                             f"pmmm_{near}" if gravity == "pmmm" else gravity,
+                             enabled("COSMICTIGER_WITH_SPH"),
+                             0 if gravity == "none" else int(setting("COSMICTIGER_WITH_ORDER")))
     cuda = enabled("COSMICTIGER_WITH_CUDA")
     testing = enabled("BUILD_TESTING")
     positionType = setting("COSMICTIGER_POSITION_TYPE")

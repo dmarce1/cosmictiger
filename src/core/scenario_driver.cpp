@@ -12,10 +12,12 @@
 #include <cosmictiger/core/section_timing.hpp>
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/core/timer.hpp>
+#if COSMICTIGER_WITH_GRAVITY
 #if !COSMICTIGER_GRAVITY_PMMM
 #include <cosmictiger/gravity/dehnen/execution.hpp>
 #endif
 #include <cosmictiger/gravity/kick_workspace.hpp>
+#endif
 #include <cosmictiger/io/checkpoint.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/io/view.hpp>
@@ -168,7 +170,8 @@ void runFixedScenario() {
                 state.itime == 0 && errorInterval > 0 && state.step % errorInterval == 0 ?
                 state.step :
                 -1;
-            std::pair<KickReturn, TreeCreateReturn> result;
+            ForceStepResult result;
+#if COSMICTIGER_WITH_GRAVITY
             if (hierarchicalMesh) {
                 if (minimumRung == 0) {
                     state.minrung0 = std::max(state.minrung0 - 1, baseOptions.run.minRung);
@@ -181,14 +184,15 @@ void runFixedScenario() {
                 if (activeRung != previousActiveRung) {
                     ++state.minrung0;
                 }
-            } else {
+            } else
+#endif
+            {
                 result = advanceForces(minimumRung, 1.0, 0.0, state.tau, baseTimestep,
                     baseOptions.gravity.openingAngle, state.iter == 0, fullEvaluation,
                     state.energies, gravityErrorStep);
             }
             double const flops = flopsPerSecond();
-            state.maxRung =
-                std::max({int(result.first.maxRung), baseOptions.run.minRung, minimumRung});
+            state.maxRung = std::max({int(result.maxRung), baseOptions.run.minRung, minimumRung});
             int const displayedMinimumRung =
                 usesMeshGravity(baseOptions.gravity) && !hierarchicalMesh ? state.maxRung :
                                                                             minimumRung;
@@ -270,7 +274,7 @@ void runFixedScenario() {
     if (state.tau >= duration * (1.0 - 1.0e-12) && plan.finish != nullptr) {
         plan.finish(state.tau);
     }
-#if !COSMICTIGER_GRAVITY_PMMM
+#if COSMICTIGER_WITH_GRAVITY && !COSMICTIGER_GRAVITY_PMMM
     kickClearBuffers();
 #endif
     runtime.stop();

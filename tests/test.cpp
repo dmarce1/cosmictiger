@@ -16,23 +16,23 @@
 #include <numbers>
 #include <stdexcept>
 
-#include <cosmictiger/analysis/bh.hpp>
-#include <cosmictiger/analysis/rockstar.hpp>
 #include <cosmictiger/core/driver.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/core/timer.hpp>
 #include <cosmictiger/cosmology/fft.hpp>
 #include <cosmictiger/cosmology/initialize.hpp>
-#if !COSMICTIGER_GRAVITY_PMMM
+#if COSMICTIGER_WITH_GRAVITY && !COSMICTIGER_GRAVITY_PMMM
 #include <cosmictiger/gravity/dehnen/distributed_tree.hpp>
 #include <cosmictiger/gravity/dehnen/execution.hpp>
 #endif
+#if COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/kick_interaction_counts.hpp>
 #include <cosmictiger/gravity/kick_workspace.hpp>
 #include <cosmictiger/gravity/tree.hpp>
+#endif
 #include <cosmictiger/io/checkpoint.hpp>
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/drift.hpp>
@@ -40,7 +40,9 @@
 #include <cosmictiger/scenarios/cosmology.hpp>
 #include <cosmictiger/scenarios/plummer.hpp>
 #include <tests/application_test.hpp>
+#if COSMICTIGER_WITH_GRAVITY
 #include <tests/gravity/analytic.hpp>
+#endif
 #include <tests/test.hpp>
 
 constexpr bool kVerbose = true;
@@ -211,7 +213,7 @@ static void domainTest() {
     tm.reset();
 }
 
-#if !COSMICTIGER_GRAVITY_PMMM
+#if COSMICTIGER_WITH_GRAVITY && !COSMICTIGER_GRAVITY_PMMM
 static void treeTest() {
     Timer tm;
 
@@ -699,6 +701,7 @@ void bhTest() {
 
 void sphGravityTest();
 void sphTreeTest();
+void sphOnlyDiagnosticsTest();
 void linearGrowthTest();
 void unitsOutputTest();
 void distributedOutputTest();
@@ -725,15 +728,20 @@ struct ApplicationTest {
 };
 
 ApplicationTest const applicationTests[] = {
+#if !COSMICTIGER_WITH_GRAVITY
+    {"sphOnlyDiagnostics", sphOnlyDiagnosticsTest},
+#endif
 #if COSMICTIGER_WITH_SPH
     {"nativeChemistryInitialization", nativeChemistryInitializationTest},
 #endif
+#if COSMICTIGER_WITH_GRAVITY
     {"analysisBackends", analysisBackendsTest},
     {"rockstar", rockstarTest},
     {"bhPotential", bhPotentialTest},
     {"groupsCatalogueDistributed", groupsCatalogueDistributedTest},
     {"groupsCatalogue", groupsCatalogueTest},
-#if !COSMICTIGER_GRAVITY_PMMM
+#endif
+#if COSMICTIGER_WITH_GRAVITY && !COSMICTIGER_GRAVITY_PMMM
     {"linearGrowth", linearGrowthTest},
     {"fmmWalk", fmmWalkTest},
     {"fmmTree", fmmTreeTest},
@@ -752,7 +760,7 @@ ApplicationTest const applicationTests[] = {
 #endif
     {"checkpointState", checkpointStateTest},
 #if COSMICTIGER_WITH_SPH
-#if !COSMICTIGER_GRAVITY_PMMM
+#if COSMICTIGER_WITH_GRAVITY && !COSMICTIGER_GRAVITY_PMMM
     {"sphGravity", sphGravityTest},
 #endif
     {"sphTree", sphTreeTest},
@@ -760,7 +768,7 @@ ApplicationTest const applicationTests[] = {
     {"domain", domainTest},
     {"fft1", fft1Test},
     {"fft2", fft2Test},
-#if !COSMICTIGER_GRAVITY_PMMM
+#if COSMICTIGER_WITH_GRAVITY && !COSMICTIGER_GRAVITY_PMMM
     {"speed", speedTest},
     {"buckets", bucketTest},
     {"force", forceTest},

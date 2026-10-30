@@ -1334,6 +1334,7 @@ void testFixedGravityTimestep() {
     data.sinkGravityAccelerationX[0] = 0.1f;
     fixture.density();
     fixture.hydro(1);
+#if COSMICTIGER_WITH_GRAVITY
     double const gravityStep = data.accelerationTimestepFactor *
         std::sqrt(fixture.params_.scaleFactor * data.gravityEffectiveRadius /
             data.sinkGravityAccelerationX[0]);
@@ -1346,6 +1347,22 @@ void testFixedGravityTimestep() {
     fixture.hydro(1);
     require(fixture.reduction_->maximumGravityRung == expectedGravityRung,
         "changing gas smoothing must not change the gravity timestep");
+#else
+    require(fixture.reduction_->maximumGravityRung == 0,
+        "SPH-only builds must not report a self-gravity timestep");
+    requireClose("SPH-only ignores stored self-gravity",
+        data.sinkAccelerations[0].acceleration[kXDimension], 0.0, 0.0);
+    int const hydroRung = fixture.reduction_->maximumHydroRung;
+    data.sinkGravityAccelerationX[0] = 1.0e20f;
+    data.gravityEffectiveRadius = 1.0e-20f;
+    fixture.hydro(1);
+    require(fixture.reduction_->maximumGravityRung == 0 &&
+            fixture.reduction_->maximumHydroRung == hydroRung &&
+            fixture.reduction_->maximumRung == hydroRung,
+        "stored self-gravity must not constrain SPH-only timesteps");
+    requireClose("SPH-only ignores changed stored self-gravity",
+        data.sinkAccelerations[0].acceleration[kXDimension], 0.0, 0.0);
+#endif
 }
 
 void testZPlaneAcceleration() {
@@ -1410,12 +1427,13 @@ void testZPlaneAcceleration() {
         data.selfGravityEnabled = selfGravity;
         fixture.hydro();
         auto const& acceleration = data.sinkAccelerations[sink].acceleration;
+        bool const expectSelfGravity = COSMICTIGER_WITH_GRAVITY && selfGravity;
         requireClose("midplane force preserves enabled self gravity in x",
-            acceleration[kXDimension], selfGravity ? 0.125 : 0.0, 1.0e-7);
+            acceleration[kXDimension], expectSelfGravity ? 0.125 : 0.0, 1.0e-7);
         requireClose("uniform y force remains independent of midplane force",
-            acceleration[kYDimension], selfGravity ? 0.1875 : 0.25, 1.0e-7);
+            acceleration[kYDimension], expectSelfGravity ? 0.1875 : 0.25, 1.0e-7);
         requireClose("midplane force adds to enabled self gravity in z", acceleration[kZDimension],
-            selfGravity ? -0.25 : -0.5, 1.0e-7);
+            expectSelfGravity ? -0.25 : -0.5, 1.0e-7);
     }
 }
 
