@@ -334,6 +334,8 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"cosmology.hubble", options.cosmology.hubble},
         {"cosmology.spectralIndex", options.cosmology.spectralIndex},
         {"units.massSolar", options.units.massG / constants::kM0},
+        {"units.boxLength",
+            options.units.lengthCm / constants::kMpcToCm * options.cosmology.hubble},
         {"chemistry.enabled", options.chemistry.enabled},
         {"chemistry.network", options.chemistry.network},
         {"chemistry.initialization", options.chemistry.initialization},
@@ -391,6 +393,7 @@ bool processOptions(int argc, char* argv[]) {
     Options opts{};
     double gravityEffectiveRadius;
     double centralEffectiveRadius;
+    double boxLength = 0.0;
     std::string omegaLambdaInput;
     std::string pmmmMaxPrimeFactorInput;
     int expansionDegree = gravity::kBuildFmmOrder > 0 ? gravity::kBuildFmmOrder - 1 : 0;
@@ -628,7 +631,9 @@ bool processOptions(int argc, char* argv[]) {
     po::options_description unitsOpts("Units");
     unitsOpts.add_options()("units.massSolar",
         po::value<double>(&opts.units.massG)->default_value(1.e9 / .6732),
-        "particle mass unit in solar masses");
+        "particle mass unit in solar masses; mutually exclusive with units.boxLength")(
+        "units.boxLength", po::value<double>(&boxLength),
+        "comoving box side length in Mpc/h; mutually exclusive with units.massSolar");
 
     po::options_description hydroOpts("Monaghan (1992) SPH");
     hydroOpts.add_options()("hydro.enabled",
@@ -796,6 +801,17 @@ bool processOptions(int argc, char* argv[]) {
 #endif
     terminal::setVerbose(opts.run.verbose);
     auto const isExplicit = [&](char const* key) { return vm.count(key) && !vm[key].defaulted(); };
+    bool const hasBoxLength = isExplicit("units.boxLength");
+    if (hasBoxLength && isExplicit("units.massSolar")) {
+        THROW_ERROR("Set either units.massSolar or units.boxLength, not both\n");
+    }
+    if (hasBoxLength) {
+        if (!detail::isFiniteOption(boxLength) || boxLength <= 0.0) {
+            THROW_ERROR("units.boxLength must be finite and positive\n");
+        }
+    } else if (!detail::isFiniteOption(opts.units.massG) || opts.units.massG <= 0.0) {
+        THROW_ERROR("units.massSolar must be finite and positive\n");
+    }
     opts.gravity.pmmmMaxPrimeFactor = detail::parsePmmmMaxPrimeFactor(pmmmMaxPrimeFactorInput);
     int effectiveMeshSize = opts.gravity.meshSize;
     if (opts.gravity.errorInterval < 0) {
@@ -1335,15 +1351,48 @@ bool processOptions(int argc, char* argv[]) {
                     "from cosmology.omegaB and cosmology.omegaC\n");
     }
 
-    opts.units.massG *= constants::kM0;
-    opts.units.lengthCm = pow(opts.units.massG * (8.0 * std::numbers::pi) *
-            opts.initial.numberOfParticles * constants::kG /
-            (3.0 * opts.cosmology.omegaM * sqr(constants::kH0 * opts.cosmology.hubble)),
-        1.0 / 3.0);
-    opts.units.timeSeconds = opts.units.lengthCm / constants::kC;
-    double h = constants::kH0 * opts.units.timeSeconds;
-    opts.gravity.gm = opts.cosmology.omegaM * 3.0 * sqr(h * opts.cosmology.hubble) /
-        (8.0 * std::numbers::pi) / opts.initial.numberOfParticles;
+    if (hasBoxLength) {
+        if (opts.initial.createGlass || !opts.initial.gadget4Restart.empty()) {
+            THROW_ERROR("units.boxLength cannot be used with glass generation or Gadget4 input, "
+                        "which supply their own length scale\n");
+        }
+        // Extended intermediates allow range checks before conversion to code units.
+        long double const lengthCm =
+            static_cast<long double>(boxLength) * constants::kMpcToCm / opts.cosmology.hubble;
+        long double const hubblePhysical =
+            static_cast<long double>(constants::kH0) * opts.cosmology.hubble;
+        long double const density = 3.0L * opts.cosmology.omegaM * hubblePhysical * hubblePhysical /
+            (8.0L * std::numbers::pi * constants::kG);
+        long double const massG =
+            density * lengthCm * lengthCm * lengthCm / opts.initial.numberOfParticles;
+        long double const timeSeconds = lengthCm / constants::kC;
+        long double const hubbleCode = hubblePhysical * timeSeconds;
+        long double const gm = opts.cosmology.omegaM * 3.0L * hubbleCode * hubbleCode /
+            (8.0L * std::numbers::pi * opts.initial.numberOfParticles);
+        auto const fitsCodeUnits = [](long double value) {
+            return value >= std::numeric_limits<double>::min() &&
+                value <= std::numeric_limits<double>::max();
+        };
+        if (!fitsCodeUnits(lengthCm) || !fitsCodeUnits(massG) || !fitsCodeUnits(timeSeconds) ||
+            !fitsCodeUnits(gm)) {
+            THROW_ERROR("units.boxLength produces out-of-range simulation units\n");
+        }
+        opts.units.lengthCm = double(lengthCm);
+        opts.units.massG = double(massG);
+        opts.units.timeSeconds = double(timeSeconds);
+        opts.gravity.gm = double(gm);
+    } else {
+        // Preserve the mass-input arithmetic for exact compatibility with checkpoints.
+        opts.units.massG *= constants::kM0;
+        opts.units.lengthCm = pow(opts.units.massG * (8.0 * std::numbers::pi) *
+                opts.initial.numberOfParticles * constants::kG /
+                (3.0 * opts.cosmology.omegaM * sqr(constants::kH0 * opts.cosmology.hubble)),
+            1.0 / 3.0);
+        opts.units.timeSeconds = opts.units.lengthCm / constants::kC;
+        double const h = constants::kH0 * opts.units.timeSeconds;
+        opts.gravity.gm = opts.cosmology.omegaM * 3.0 * sqr(h * opts.cosmology.hubble) /
+            (8.0 * std::numbers::pi) / opts.initial.numberOfParticles;
+    }
     terminal::detailPrint("box_size = %e Mpc\n", opts.units.lengthCm / constants::kMpcToCm);
     opts.analysis.sliceSize =
         std::min((20.0 / opts.cosmology.hubble) / (opts.units.lengthCm / constants::kMpcToCm), 1.0);
@@ -1548,7 +1597,7 @@ bool processOptions(int argc, char* argv[]) {
     terminal::detailPrint("Simulation Options\n");
     terminal::detailPrint("code_to_M_solar = %e\n", opts.units.massG / 1.98e33);
     terminal::detailPrint(
-        "Box size = %e cm/h\n", opts.units.lengthCm / constants::kMpcToCm * opts.cosmology.hubble);
+        "Box size = %e Mpc/h\n", opts.units.lengthCm / constants::kMpcToCm * opts.cosmology.hubble);
     if (opts.initial.plummer) {
         opts.gravity.gm = 1.0 / opts.initial.numberOfParticles;
         // The model's default angle; an explicit gravity.openingAngle takes precedence.
@@ -1571,6 +1620,8 @@ bool processOptions(int argc, char* argv[]) {
 #endif
 
     SHOW("checkpoint.intervalSeconds", checkpoint.intervalSeconds);
+    show("units.massSolar", opts.units.massG / constants::kM0);
+    show("units.boxLength", opts.units.lengthCm / constants::kMpcToCm * opts.cosmology.hubble);
     SHOW("units.lengthCm", units.lengthCm);
     SHOW("units.massG", units.massG);
     SHOW("units.timeSeconds", units.timeSeconds);
@@ -1685,6 +1736,10 @@ bool processOptions(int argc, char* argv[]) {
             SHOW("configuration", configuration);
         }
         PRINT("%-38s: %zu\n", "initial.numberOfParticles", size_t(opts.initial.numberOfParticles));
+        PRINT("%-38s: %e Mpc/h (%e Mpc comoving)\n", "units.boxLength",
+            opts.units.lengthCm / constants::kMpcToCm * opts.cosmology.hubble,
+            opts.units.lengthCm / constants::kMpcToCm);
+        PRINT("%-38s: %e Msun\n", "units.massSolar", opts.units.massG / constants::kM0);
         PRINT("%-38s: %i localities, %zu worker threads here\n", "Runtime", hpxSize(),
             size_t(hpx::get_num_worker_threads()));
         SHOW("compute.cuda", compute.cuda);
