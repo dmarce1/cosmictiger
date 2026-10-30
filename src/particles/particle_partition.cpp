@@ -59,4 +59,8 @@ void particlesSwap(ParticleInteger first, ParticleInteger second) {
         detail::swapParticleBytes(particlesSph[first], particlesSph[second]);
         detail::swapParticleBytes(particlesTy[first], particlesTy[second]);
     }
+    if (options.starFormation.enabled) {
+        detail::swapParticleBytes(
+            particlesStarFormationStates[first], particlesStarFormationStates[second]);
+    }
 }

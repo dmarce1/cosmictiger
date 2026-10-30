@@ -29,6 +29,9 @@
 #include <cosmictiger/core/timer.hpp>
 #include <cosmictiger/sph/cullen_and_dehnen/particle_exchange.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
+#if COSMICTIGER_ENABLE_STAR_FORMATION
+#include <cosmictiger/sph/star_formation.hpp>
+#endif
 
 HPX_PLAIN_ACTION(sphTreeNeighbor, SphTreeNeighborAction);
 
@@ -52,6 +55,7 @@ struct SphRunWorkspace {
     Vector<float, PinnedAllocator<float>> hostInternalEnergy;
     Vector<float, PinnedAllocator<float>> hostPressureEnergyRatio;
     Vector<float, PinnedAllocator<float>> hostAdiabaticIndex;
+    Vector<float, PinnedAllocator<float>> hostHydroCoupling;
     Vector<float, PinnedAllocator<float>> hostDensity;
     Vector<float, PinnedAllocator<float>> hostBalsaraFactor;
     Vector<float, PinnedAllocator<float>> hostViscosityAlpha;
@@ -354,7 +358,7 @@ SphRunReturn sphRun(SphRunParameters params, bool cuda) {
 
                     case kSphRunPrehydro2:
                         test = hasActiveNeighbors(self);
-                        test = test && !isConverged(self);
+                        test = test && (params.refreshConvergedDensity || !isConverged(self));
                         break;
 
                     case kSphRunHydro:
@@ -458,11 +462,14 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
     }
     if (params.runType == kSphRunHydro) {
         hostDensity.resize(particleStorageSize);
+        if (getOptions().starFormation.enabled) {
+            hostHydroCoupling.resize(particleStorageSize);
+        }
     }
     if (params.runType == kSphRunHydro ||
         (params.runType == kSphRunPrehydro2 && params.variableViscosity)) {
         hostInternalEnergy.resize(particleStorageSize);
-        if (getOptions().chemistry.enabled) {
+        if (getOptions().chemistry.enabled || getOptions().starFormation.enabled) {
             hostPressureEnergyRatio.resize(particleStorageSize);
             hostAdiabaticIndex.resize(particleStorageSize);
         }
@@ -500,10 +507,16 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
                         sphParticlesGlobalReadInternalEnergyAndSupportRadius(
                             node.globalParticleRange(), hostInternalEnergy.data(),
                             hostSupportRadius.data(), offset);
-                        if (getOptions().chemistry.enabled) {
+                        if (getOptions().chemistry.enabled || getOptions().starFormation.enabled) {
                             sphParticlesGlobalReadChemistryEos(node.globalParticleRange(),
                                 hostPressureEnergyRatio.data(), hostAdiabaticIndex.data(), offset);
                         }
+#if COSMICTIGER_ENABLE_STAR_FORMATION
+                        if (getOptions().starFormation.enabled) {
+                            starFormationReadHydroCoupling(
+                                node.globalParticleRange(), hostHydroCoupling.data(), offset);
+                        }
+#endif
                         sphParticlesGlobalReadDensity(node.globalParticleRange(),
                             hostDensity.data(), offset,
                             params.balsaraSwitch ? hostBalsaraFactor.data() : nullptr,
@@ -540,6 +553,7 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
         copy(runData.sourceInternalEnergy, hostInternalEnergy);
         copy(runData.sourcePressureEnergyRatio, hostPressureEnergyRatio);
         copy(runData.sourceAdiabaticIndex, hostAdiabaticIndex);
+        copy(runData.sourceHydroCoupling, hostHydroCoupling);
         copy(runData.sourceDensity, hostDensity);
         copy(runData.sourceBalsaraFactor, hostBalsaraFactor);
         copy(runData.sourceViscosityAlpha, hostViscosityAlpha);

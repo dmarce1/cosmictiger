@@ -400,9 +400,11 @@ struct GasMigrationState {
         }
         if (getOptions().chemistry.enabled) {
             arc & chemistry;
-            arc & chemistryEos;
             arc & chemistryStep.halfInterval;
             arc & chemistryStep.pendingHeating;
+        }
+        if (getOptions().chemistry.enabled || getOptions().starFormation.enabled) {
+            arc & chemistryEos;
         }
     }
 };
@@ -428,7 +430,8 @@ HPX_PLAIN_ACTION(receiveSphParticles, ReceiveSphParticlesAction);
 static SphMigrationParticle packSphParticle(ParticleInteger index) {
     SphMigrationParticle result;
     result.part = particlesGetParticle(index);
-    ALWAYS_ASSERT(result.part.type == kDarkMatterType || result.part.type == kSphType);
+    ALWAYS_ASSERT(result.part.type == kDarkMatterType || result.part.type == kSphType ||
+        result.part.type == kStarType);
     if (result.part.type == kSphType) {
         auto const i = particlesCatIndex(index);
         auto& gas = result.gas;
@@ -453,8 +456,10 @@ static SphMigrationParticle packSphParticle(ParticleInteger index) {
                 gas.chemistry[species] = state.abundances[species].raw();
             }
             gas.chemistry[primordial::kAbundanceCount] = state.thermalEnergy;
-            gas.chemistryEos = sphParticlesChemistryEos[i];
             gas.chemistryStep = sphParticlesChemistrySteps[i];
+        }
+        if (getOptions().chemistry.enabled || getOptions().starFormation.enabled) {
+            gas.chemistryEos = sphParticlesChemistryEos[i];
         }
         for (int dim = 0; dim < kDimensions; dim++) {
             gas.predictedAcceleration[dim] = sphParticlesPredictedAccelerations[dim][i];
@@ -494,8 +499,10 @@ static void unpackSphParticle(
                 state.abundances[species].setRaw(gas.chemistry[species]);
             }
             state.thermalEnergy = gas.chemistry[primordial::kAbundanceCount];
-            sphParticlesChemistryEos[i] = gas.chemistryEos;
             sphParticlesChemistrySteps[i] = gas.chemistryStep;
+        }
+        if (getOptions().chemistry.enabled || getOptions().starFormation.enabled) {
+            sphParticlesChemistryEos[i] = gas.chemistryEos;
         }
         for (int dim = 0; dim < kDimensions; dim++) {
             sphParticlesPredictedAccelerations[dim][i] = gas.predictedAcceleration[dim];

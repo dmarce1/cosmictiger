@@ -1644,6 +1644,42 @@ TEST_F(SphCpuTest, BalsaraSymmetricForceAndHeating) {
     }
 }
 
+TEST_F(SphCpuTest, WindDecouplingPreservesDensityAndGravity) {
+    detail::Fixture fixture(2, 2);
+    auto& data = fixture.data_;
+    std::array<float, 2> coupling{1.0f, 1.0f};
+    for (int i = 0; i < 2; ++i) {
+        data.sourcePositionX[i] = i == 0 ? 0.45 : 0.55;
+        data.sourcePositionY[i] = data.sourcePositionZ[i] = 0.5;
+        data.sourceVelocityX[i] = i == 0 ? 0.1f : -0.1f;
+        data.sourceDensity[i] = 1.0f;
+        data.sourceSupportRadius[i] = data.sinkThermodynamicStates[i].supportRadius = 0.3f;
+        data.sinkSmoothingConverged[i] = true;
+        data.sinkGravityAccelerationY[i] = 0.125f;
+    }
+    data.selfGravityEnabled = true;
+    fixture.hydro();
+    EXPECT_NE(data.sinkAccelerations[0].acceleration[0], 0.0f);
+    EXPECT_GT(data.sinkInternalEnergyRate[0], 0.0f);
+    fixture.run(kSphRunPrehydro2);
+    std::array<float, 2> const density{data.sinkDensity[0], data.sinkDensity[1]};
+    data.sourceHydroCoupling = coupling.data();
+    coupling[0] = 0.0f;
+    fixture.hydro();
+    for (int i = 0; i < 2; ++i) {
+        EXPECT_EQ(data.sinkAccelerations[i].acceleration[0], 0.0f);
+        EXPECT_EQ(data.sinkAccelerations[i].acceleration[1], 0.125f);
+        EXPECT_EQ(data.sinkInternalEnergyRate[i], 0.0f);
+    }
+    fixture.run(kSphRunPrehydro2);
+    for (int i = 0; i < 2; ++i) {
+        EXPECT_EQ(data.sinkDensity[i], density[i]);
+    }
+    coupling[0] = 1.0f;
+    fixture.hydro();
+    EXPECT_NE(data.sinkAccelerations[0].acceleration[0], 0.0f);
+}
+
 TEST_F(SphCpuTest, EveryPhaseSubmitsItsArithmeticCount) {
     // The partial final packet verifies that actual SIMD work is counted, even
     // when only one lane in that packet contains a particle.

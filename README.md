@@ -281,10 +281,14 @@ For a small cosmological run using the native Einstein–Boltzmann power spectru
 
 The gas controls appear under `hydro.*` in `--help` and can also be
 specified in the INI configuration file. Primordial chemistry is configured under
-`chemistry.*` and enabled by the cosmology scenario INI when compiled with both
-`COSMICTIGER_ENABLE_SPH=ON` and `COSMICTIGER_ENABLE_CHEMISTRY=ON`.
-Stellar particles, star formation, diffusion, and conduction are unsupported.
-Their former options, the obsolete `hydro.chemistry` switch,
+`chemistry.*`. The cosmological INIs enable both chemistry and SH03 star
+formation, requiring `COSMICTIGER_ENABLE_SPH=ON`,
+`COSMICTIGER_ENABLE_CHEMISTRY=ON`, and `COSMICTIGER_ENABLE_STARS=ON`.
+The `starFormation.*` controls select the equilibrium multiphase model;
+ordinary gas uses Atomic6 chemistry, and converted stars retain gravitational
+interactions. See [the star-formation documentation](docs/star_formation.md)
+for the phase assumptions, source coupling, and supported domains.
+Diffusion and conduction remain unsupported. Their former options, the obsolete `hydro.chemistry` switch,
 `hydro.yReflect`, and `gravity.sphSmoothing` are no longer accepted, including
 false entries in older INI files. Gas smoothing lengths remain adaptive;
 FMM gravity uses one fixed comoving radius for gas and dark matter. The legacy

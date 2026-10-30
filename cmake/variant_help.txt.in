@@ -9,6 +9,7 @@ Enabled capabilities:
   PMMM FMM: @COSMICTIGER_ENABLE_PMMM_FMM@
   SPH: @COSMICTIGER_ENABLE_SPH@
   Particle chemistry: @COSMICTIGER_ENABLE_CHEMISTRY@ (requires SPH)
+  Stars: @COSMICTIGER_ENABLE_STARS@ (COSMICTIGER_ENABLE_STARS; requires chemistry and SPH)
   Traditional integration: @COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL@
   Hierarchical integration: @COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL@
   Global integration: @COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL@
@@ -18,3 +19,5 @@ Enabled capabilities:
 Select enabled algorithms at runtime with gravity.method.far,
 gravity.method.near, and run.timeIntegrator. Select a compiled potential
 degree with gravity.expansionDegree. Run cosmictiger --help for details.
+Star formation uses starFormation.enabled=true with hydro.enabled=true and
+chemistry.enabled=true; see docs/star_formation.md for model assumptions.

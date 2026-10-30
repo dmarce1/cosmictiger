@@ -49,3 +49,9 @@ The fenced formula transcriptions in `cosmictiger/sph/balsara/shear_limiter.hpp`
 `cosmictiger/sph/morris_and_monaghan/viscosity.hpp`, and
 `cosmictiger/sph/cullen_and_dehnen/viscosity.hpp` follow the same exception using
 the symbols of their cited papers. See `docs/monaghan_sph.md` for the symbol table.
+
+The fenced equilibrium formula transcriptions in
+`cosmictiger/sph/springel_and_hernquist/equations.hpp` also follow this exception,
+using Greek identifiers and adjacent equation citations from Springel & Hernquist
+(2003), MNRAS 339, 289. Integration state and public APIs retain the standard
+descriptive naming rules. See `docs/star_formation.md` for units and assumptions.

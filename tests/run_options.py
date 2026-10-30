@@ -26,8 +26,10 @@ def main():
     parser.add_argument("--time-integrator", choices=("traditional", "hierarchical", "global"), required=True)
     parser.add_argument("--without-sph", action="store_true")
     parser.add_argument("--without-chemistry", action="store_true")
+    parser.add_argument("--with-star-formation", action="store_true")
     args = parser.parse_args()
     chemistryAvailable = not args.without_sph and not args.without_chemistry
+    starFormationAvailable = not args.without_sph and args.with_star_formation
     args.workdir.mkdir(parents=True, exist_ok=True)
     unused_view = args.workdir / "view.txt"
     unused_view.unlink(missing_ok=True)
@@ -72,6 +74,9 @@ def main():
     if not re.search(r"^\s*Particle chemistry: " + ("enabled" if chemistryAvailable else "disabled") + r"\s*$",
                      help_text, re.MULTILINE):
         raise RuntimeError("help did not identify the compiled particle chemistry capability")
+    if not re.search(r"^\s*Star formation: " + ("enabled" if starFormationAvailable else "disabled") + r"\s*$",
+                     help_text, re.MULTILINE):
+        raise RuntimeError("help did not identify the compiled star formation capability")
     option_names = set(re.findall(r"^\s+--([A-Za-z][A-Za-z0-9_.]*)", help_text, re.MULTILINE))
     required = {"help", "configuration", "run.scenario", "run.endTime", "run.verbose",
                 "initial.particlesPerDimension", "compute.cuda", "compute.bucketSize",
@@ -92,7 +97,9 @@ def main():
                 "output.units", "output.frame",
                 "units.massSolar", "units.boxLength",
                 "output.xMin", "output.xMax", "output.yMin", "output.yMax",
-                "output.zMin", "output.zMax", "chemistry.initialization"}
+                "output.zMin", "output.zMax", "chemistry.initialization",
+                "starFormation.enabled", "starFormation.seed", "starFormation.winds",
+                "starFormation.evaporationFactor", "starFormation.starFormationTimeGyr"}
     required.update({"run.timeIntegrator", "gravity.method.far", "gravity.method.near",
                      "gravity.expansionDegree", "hydro.viscosityEvolution", "hydro.viscosityAlphaMin",
                      "hydro.viscosityDecay", "hydro.viscosityAlphaMax",
@@ -373,6 +380,9 @@ mapSize = 8
         if not re.search(r"^build\.chemistry\s*:\s*" + ("T" if chemistryAvailable else "F") + r"\s*$",
                          output, re.MULTILINE):
             raise RuntimeError("build metadata did not identify the compiled particle chemistry capability")
+        if not re.search(r"^build\.starFormation\s*:\s*" + ("T" if starFormationAvailable else "F") + r"\s*$",
+                         output, re.MULTILINE):
+            raise RuntimeError("build metadata did not identify the compiled star formation capability")
         expected_hierarchical = "T" if args.time_integrator == "hierarchical" else "F"
         if not re.search(r"^run\.hierarchicalGravity\s*:\s*" + expected_hierarchical + r"\s*$",
                          output, re.MULTILINE):
@@ -660,6 +670,65 @@ mapSize = 8
             ["--hydro.kernelFamily=spline", "--hydro.kernelDegree=1"],
             ["--hydro.kernelFamily=wendland", "--hydro.kernelDegree=8", "--hydro.neighborNumber=12"])):
         run(f"invalid_kernel_{index}", metadata_options + invalid, success=False)
+
+    if not starFormationAvailable:
+        requested = metadata_options + ["--starFormation.enabled=true"]
+        rejected = run("disabled_star_formation", requested, success=False)
+        guidance = "COSMICTIGER_ENABLE_SPH=ON" if args.without_sph else "COSMICTIGER_ENABLE_STARS=ON"
+        if guidance not in rejected:
+            raise RuntimeError("disabled star formation request lacked build guidance")
+    elif not chemistryAvailable:
+        rejected = run("star_formation_without_chemistry_build", [option for option in metadata_options
+                        if not option.startswith("--hydro.enabled=")] + [
+            "--hydro.enabled=true", "--starFormation.enabled=true", "--chemistry.enabled=true"],
+            success=False)
+        if "COSMICTIGER_ENABLE_CHEMISTRY=ON" not in rejected:
+            raise RuntimeError("star formation without compiled chemistry lacked build guidance")
+    elif args.time_integrator != "hierarchical":
+        star_options = [option for option in metadata_options
+                        if not option.startswith("--hydro.enabled=")] + [
+                            "--hydro.enabled=true", "--starFormation.enabled=true",
+                            "--chemistry.enabled=true", "--chemistry.initialization=manual"]
+        star_config = args.workdir / "star_formation.ini"
+        star_config.write_text("[starFormation]\nenabled=true\nbeta=0.15\nseed=18446744073709551615\n"
+                               "[chemistry]\nenabled=true\ninitialization=manual\n")
+        star_ini_options = [option for option in star_options
+                            if not option.startswith(("--starFormation.enabled=", "--chemistry.enabled="))]
+        output = run("star_formation_ini", star_ini_options + [f"--configuration={star_config.resolve()}"])
+        assertNumericSetting(output, "starFormation.beta", 0.15)
+        if not re.search(r"^starFormation\.seed\s*:\s*18446744073709551615\s*$", output, re.MULTILINE):
+            raise RuntimeError("star formation seed lost uint64 precision")
+        output = run("star_formation_override", star_options + [
+            f"--configuration={star_config.resolve()}", "--starFormation.beta=0.2", "--starFormation.seed=17"])
+        assertNumericSetting(output, "starFormation.beta", 0.2)
+        assertNumericSetting(output, "starFormation.seed", 17)
+        for key, value in (("seed", "-1"), ("seed", "18446744073709551616"),
+                           ("beta", "0"), ("beta", "1"), ("beta", "nan"),
+                           ("evaporationFactor", "0"), ("starFormationTimeGyr", "-1"),
+                           ("coldTemperature", "10000"), ("supernovaTemperature", "0"),
+                           ("metalYield", "-0.01"), ("windMassLoading", "0"),
+                           ("windEnergyFraction", "-0.1"), ("windDecouplingMyr", "-1"),
+                           ("windRecoupleDensityFraction", "0"), ("windDirection", "unknown")):
+            rejected = run("star_formation_reject_" + key + "_" + value,
+                           star_options + [f"--starFormation.{key}={value}"], success=False)
+            if "starFormation" not in rejected:
+                raise RuntimeError("invalid star formation setting lacked a diagnostic")
+        for label, options, diagnostic in (
+                ("no_hydro", metadata_options + ["--starFormation.enabled=true"], "hydro.enabled"),
+                ("no_chemistry", [option for option in star_options
+                                  if not option.startswith("--chemistry.enabled=")] +
+                 ["--chemistry.enabled=false"], "chemistry.enabled=true"),
+                ("molecular_network", star_options + ["--chemistry.network=molecular9"],
+                 "chemistry.network=atomic6"),
+                ("wrong_gamma", star_options + ["--hydro.gamma=1.4"], "hydro.gamma"),
+                ("winds_without_model", metadata_options + ["--starFormation.winds=true"], "starFormation.enabled")):
+            rejected = run("star_formation_" + label, options, success=False)
+            if diagnostic not in rejected:
+                raise RuntimeError("incompatible star formation selection lacked a diagnostic")
+        output = run("star_formation_with_atomic6", star_options + ["--chemistry.network=atomic6"])
+        for key in ("starFormation.enabled", "chemistry.enabled"):
+            if not re.search(r"^" + re.escape(key) + r"\s*:\s*T\s*$", output, re.MULTILINE):
+                raise RuntimeError("combined chemistry and star formation was not enabled")
 
     chemistry_fields = ("initialTemperature", "hydrogenIonFraction",
                         "heliumIonFraction", "heliumDoubleIonFraction")
@@ -1031,7 +1100,10 @@ mapSize = 8
                      *(f"chemistry.{field}" for field in chemistry_fields)}
     # The retired rung request is accepted only as an ignored compatibility
     # input; examples must not advertise it as an active chemistry control.
-    public_keys = option_names - {"help", "configuration", "chemistry.synchronizedRung"}
+    # Star-formation defaults have focused tests; complete examples may opt in
+    # without duplicating every optional feedback parameter.
+    public_keys = {key for key in option_names
+                   if not key.startswith("starFormation.")} - {"help", "configuration", "chemistry.synchronizedRung"}
     preset_curvatures = {"closed_no_dark_energy.ini": -1.000092093902909,
                          "omega_k_negative.ini": -0.1, "omega_k_positive.ini": 0.1,
                          "critical.ini": 0.0,
@@ -1048,12 +1120,19 @@ mapSize = 8
             if "method.far" not in ini["gravity"] else set())
         expected_keys = public_keys - preset_optional_keys
         actual_keys = {f"{section}.{key}" for section in ini.sections() for key in ini[section]}
+        star_keys = {key for key in actual_keys if key.startswith("starFormation.")}
+        if not star_keys <= set(option_names):
+            raise RuntimeError(f"{path.name} has unknown star-formation settings: "
+                               f"{sorted(star_keys - set(option_names))}")
+        actual_keys -= star_keys
+        active_chemistry_keys = actual_keys & {f"chemistry.{field}" for field in chemistry_fields}
+        expected_keys |= active_chemistry_keys
         if actual_keys != expected_keys:
             raise RuntimeError(f"{path.name} option coverage differs: {sorted(actual_keys ^ expected_keys)}")
-        # Position width, radius alternatives, and manual chemistry overrides
-        # remain commented, preserving the compiled width, one radius
-        # representation, and native initialization.
-        documented_alternatives = set()
+        # Position width and radius alternatives remain commented. Curved
+        # cosmologies use explicit manual chemistry initial values because
+        # the recombination initializer requires a flat background.
+        documented_alternatives = set(active_chemistry_keys)
         section = None
         for line in path.read_text().splitlines():
             section_match = re.fullmatch(r"\s*\[([^]]+)\]\s*", line)
@@ -1068,7 +1147,8 @@ mapSize = 8
                                f"{sorted(preset_optional_keys - documented_alternatives)}")
         if ini["output"]["units"] != "code" or ini["output"]["frame"] != "comoving":
             raise RuntimeError(f"{path.name} must preserve native output defaults")
-        preset_options = [f"--configuration={path}", "--chemistry.enabled=false"]
+        preset_options = [f"--configuration={path}", "--chemistry.enabled=false",
+                          "--starFormation.enabled=false"]
         if args.time_integrator == "hierarchical":
             # This is option/serialization coverage, with hydro disabled by
             # metadata_options; keep hierarchical integration eligible even
@@ -1081,6 +1161,15 @@ mapSize = 8
         output = run(f"complete_{path.stem}", metadata_options + preset_options)
         if "Checkpoint state and mode validation passed" not in output:
             raise RuntimeError(f"{path.name} did not finish metadata validation")
+        if (ini["run"]["scenario"] == "cosmology" and chemistryAvailable and
+                starFormationAvailable and args.time_integrator != "hierarchical"):
+            enabled_options = [option for option in metadata_options
+                               if not option.startswith("--hydro.enabled=")]
+            enabled = run(f"enabled_physics_{path.stem}", enabled_options +
+                          [f"--configuration={path}"])
+            for key in ("hydro.enabled", "chemistry.enabled", "starFormation.enabled"):
+                if not re.search(r"^" + re.escape(key) + r"\s*:\s*T\s*$", enabled, re.MULTILINE):
+                    raise RuntimeError(f"{path.name} did not enable {key}")
         if path.name in preset_curvatures:
             assertNumericSetting(output, "cosmology.omegaK", preset_curvatures[path.name])
             if path.name in {"closed_no_dark_energy.ini", "critical.ini",

@@ -72,6 +72,16 @@ std::string pmmmMaxPrimeFactorText(int value) {
     return value == 0 ? "infinity" : std::to_string(value);
 }
 
+std::uint64_t parseStarFormationSeed(std::string const& input) {
+    std::uint64_t value = 0;
+    auto const result = std::from_chars(input.data(), input.data() + input.size(), value);
+    if (result.ec != std::errc{} || result.ptr != input.data() + input.size()) {
+        throw std::invalid_argument(
+            "starFormation.seed must be an integer from 0 through 18446744073709551615");
+    }
+    return value;
+}
+
 radial_kernel::KernelSpec kernelSpec(std::string const& family, int degree) {
     radial_kernel::Family kind;
     if (family == "spline") {
@@ -105,6 +115,69 @@ bool isFiniteFloatOption(double value) {
 bool isPositiveFloatOption(double value) {
     // Device fast math flushes subnormal floats, so require a positive normal.
     return isFiniteFloatOption(value) && value >= std::numeric_limits<float>::min();
+}
+
+void validateStarFormation(Options const& opts) {
+    constexpr double kGamma = 5.0 / 3.0;
+    constexpr double kGammaTolerance = 1.0e-12;
+    constexpr double kWarmTemperature = 1.0e4;
+    auto const& settings = opts.starFormation;
+    if (settings.winds && !settings.enabled) {
+        throw std::invalid_argument("starFormation.winds requires starFormation.enabled=true");
+    }
+    if (!settings.enabled) {
+        return;
+    }
+#if !COSMICTIGER_WITH_SPH
+    throw std::invalid_argument("Star formation requires COSMICTIGER_ENABLE_SPH=ON");
+#endif
+#if !COSMICTIGER_ENABLE_STAR_FORMATION
+    throw std::invalid_argument("Star formation requires COSMICTIGER_ENABLE_STARS=ON");
+#endif
+    if (!opts.hydro.enabled) {
+        throw std::invalid_argument("starFormation.enabled requires hydro.enabled=true");
+    }
+    if (!opts.chemistry.enabled) {
+        throw std::invalid_argument("starFormation.enabled requires chemistry.enabled=true");
+    }
+    if (opts.chemistry.network != "atomic6") {
+        throw std::invalid_argument("starFormation.enabled requires chemistry.network=atomic6: "
+                                    "SH03 hot/effective temperatures exceed the molecular9 domain");
+    }
+    if (!isFiniteOption(opts.hydro.gamma) ||
+        std::abs(opts.hydro.gamma - kGamma) > kGammaTolerance) {
+        throw std::invalid_argument("starFormation.enabled requires hydro.gamma=5/3");
+    }
+    if (opts.run.timeIntegrator != "traditional" && opts.run.timeIntegrator != "global") {
+        throw std::invalid_argument(
+            "Star formation requires the traditional or global time integrator");
+    }
+    if (!isFiniteOption(settings.beta) || settings.beta <= 0.0 || settings.beta >= 1.0 ||
+        !isPositiveFloatOption(settings.evaporationFactor) ||
+        !isPositiveFloatOption(settings.starFormationTimeGyr) ||
+        !isPositiveFloatOption(settings.coldTemperature) ||
+        settings.coldTemperature >= kWarmTemperature ||
+        !isPositiveFloatOption(settings.supernovaTemperature) ||
+        settings.supernovaTemperature <= kWarmTemperature) {
+        throw std::invalid_argument(
+            "Invalid starFormation phase parameters: beta must be in (0,1), "
+            "evaporationFactor and starFormationTimeGyr positive, coldTemperature in (0,10000) K, "
+            "and supernovaTemperature above 10000 K");
+    }
+    if (!isFiniteOption(settings.metalYield) || settings.metalYield < 0.0 ||
+        settings.metalYield > 1.0 || !isPositiveFloatOption(settings.windMassLoading) ||
+        !isFiniteOption(settings.windEnergyFraction) || settings.windEnergyFraction < 0.0 ||
+        !isFiniteOption(settings.windDecouplingMyr) || settings.windDecouplingMyr < 0.0 ||
+        !isFiniteOption(settings.windRecoupleDensityFraction) ||
+        settings.windRecoupleDensityFraction <= 0.0 || settings.windRecoupleDensityFraction > 1.0) {
+        throw std::invalid_argument("Invalid starFormation yield or wind parameters: yield must be "
+                                    "in [0,1], energy fraction and decoupling time nonnegative, "
+                                    "mass loading positive, "
+                                    "and recoupling density fraction in (0,1]");
+    }
+    if (settings.windDirection != "isotropic") {
+        throw std::invalid_argument("starFormation.windDirection must be isotropic");
+    }
 }
 
 }    // namespace detail
@@ -146,6 +219,7 @@ Options const& getOptions() {
 }
 
 void setOptions(Options const& opts) {
+    detail::validateStarFormation(opts);
 #if !COSMICTIGER_WITH_GRAVITY
     if (opts.gravity.enabled || opts.analysis.groups || opts.lightcone.enabled) {
         throw std::invalid_argument(
@@ -245,6 +319,7 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"build.pmmmNearPp", gravity::kBuildHasPmmmNearPp},
         {"build.pmmmNearFmm", gravity::kBuildHasPmmmNearFmm},
         {"build.chemistry", bool(COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_CHEMISTRY)},
+        {"build.starFormation", bool(COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_STAR_FORMATION)},
         {"build.integratorTraditional", integration::kBuildHasTraditional},
         {"build.integratorHierarchical", integration::kBuildHasHierarchical},
         {"build.integratorGlobal", integration::kBuildHasGlobal},
@@ -344,6 +419,21 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"units.massSolar", options.units.massG / constants::kM0},
         {"units.boxLength",
             options.units.lengthCm / constants::kMpcToCm * options.cosmology.hubble},
+        {"starFormation.enabled", options.starFormation.enabled},
+        {"starFormation.beta", options.starFormation.beta},
+        {"starFormation.evaporationFactor", options.starFormation.evaporationFactor},
+        {"starFormation.starFormationTimeGyr", options.starFormation.starFormationTimeGyr},
+        {"starFormation.coldTemperature", options.starFormation.coldTemperature},
+        {"starFormation.supernovaTemperature", options.starFormation.supernovaTemperature},
+        {"starFormation.seed", std::to_string(options.starFormation.seed)},
+        {"starFormation.metalYield", options.starFormation.metalYield},
+        {"starFormation.winds", options.starFormation.winds},
+        {"starFormation.windMassLoading", options.starFormation.windMassLoading},
+        {"starFormation.windEnergyFraction", options.starFormation.windEnergyFraction},
+        {"starFormation.windDecouplingMyr", options.starFormation.windDecouplingMyr},
+        {"starFormation.windRecoupleDensityFraction",
+            options.starFormation.windRecoupleDensityFraction},
+        {"starFormation.windDirection", options.starFormation.windDirection},
         {"chemistry.enabled", options.chemistry.enabled},
         {"chemistry.network", options.chemistry.network},
         {"chemistry.initialization", options.chemistry.initialization},
@@ -404,6 +494,7 @@ bool processOptions(int argc, char* argv[]) {
     double boxLength = 0.0;
     std::string omegaLambdaInput;
     std::string pmmmMaxPrimeFactorInput;
+    std::string starFormationSeedInput;
     int expansionDegree = gravity::kBuildFmmOrder > 0 ? gravity::kBuildFmmOrder - 1 : 0;
     CheckpointSelection checkpointSelection;
     namespace po = hpx::program_options;
@@ -745,6 +836,41 @@ bool processOptions(int argc, char* argv[]) {
         po::value<int>(&opts.chemistry.maxSubsteps)->default_value(4096),
         "maximum accepted source substeps per half step");
 
+    po::options_description starFormationOpts("Springel-Hernquist star formation");
+    starFormationOpts.add_options()("starFormation.enabled",
+        po::value<bool>(&opts.starFormation.enabled)->default_value(false),
+        "enable the equilibrium Springel-Hernquist model; requires SPH and atomic6 chemistry")(
+        "starFormation.beta", po::value<double>(&opts.starFormation.beta)->default_value(0.1),
+        "instantaneously recycled massive-star mass fraction")("starFormation.evaporationFactor",
+        po::value<double>(&opts.starFormation.evaporationFactor)->default_value(1000.0),
+        "cloud evaporation factor A0 at the derived density threshold")(
+        "starFormation.starFormationTimeGyr",
+        po::value<double>(&opts.starFormation.starFormationTimeGyr)->default_value(2.1),
+        "star formation time at the density threshold, in Gyr")("starFormation.coldTemperature",
+        po::value<double>(&opts.starFormation.coldTemperature)->default_value(1000.0),
+        "cold-cloud temperature in kelvin")("starFormation.supernovaTemperature",
+        po::value<double>(&opts.starFormation.supernovaTemperature)->default_value(1.0e8),
+        "supernova specific-energy temperature in kelvin")("starFormation.seed",
+        po::value<std::string>(&starFormationSeedInput)->default_value("1"),
+        "seed for particle-identity-based star formation and wind random streams")(
+        "starFormation.metalYield",
+        po::value<double>(&opts.starFormation.metalYield)->default_value(0.02),
+        "new metal mass per mass locked into long-lived stars")("starFormation.winds",
+        po::value<bool>(&opts.starFormation.winds)->default_value(false),
+        "enable stochastic kinetic winds")("starFormation.windMassLoading",
+        po::value<double>(&opts.starFormation.windMassLoading)->default_value(2.0),
+        "wind mass per mass locked into long-lived stars")("starFormation.windEnergyFraction",
+        po::value<double>(&opts.starFormation.windEnergyFraction)->default_value(0.25),
+        "fraction of supernova energy assigned to kinetic winds")("starFormation.windDecouplingMyr",
+        po::value<double>(&opts.starFormation.windDecouplingMyr)->default_value(50.0),
+        "maximum hydrodynamic wind decoupling time in Myr")(
+        "starFormation.windRecoupleDensityFraction",
+        po::value<double>(&opts.starFormation.windRecoupleDensityFraction)->default_value(0.1),
+        "recouple winds below this fraction of the star formation density threshold")(
+        "starFormation.windDirection",
+        po::value<std::string>(&opts.starFormation.windDirection)->default_value("isotropic"),
+        "wind launch direction: isotropic");
+
     po::options_description commandOpts("CosmicTiger options");
     commandOpts.add(runOpts)
         .add(computeOpts)
@@ -757,7 +883,8 @@ bool processOptions(int argc, char* argv[]) {
         .add(cosmologyOpts)
         .add(unitsOpts)
         .add(hydroOpts)
-        .add(chemistryOpts);
+        .add(chemistryOpts)
+        .add(starFormationOpts);
     terminal::detailPrint("Processing options\n");
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, commandOpts), vm);
@@ -777,6 +904,10 @@ bool processOptions(int argc, char* argv[]) {
                   << (gravity::kBuildHasPmmmNearFmm ? " fmm" : "") << "\n";
         std::cout << "  Particle chemistry: "
                   << (COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_CHEMISTRY ? "enabled" : "disabled")
+                  << "\n";
+        std::cout << "  Star formation: "
+                  << (COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_STAR_FORMATION ? "enabled" :
+                                                                                  "disabled")
                   << "\n";
 #if COSMICTIGER_WITH_GRAVITY
         std::cout << "  Potential expansion degrees: " << kFmmMinOrder - 1 << " through "
@@ -824,6 +955,7 @@ bool processOptions(int argc, char* argv[]) {
         THROW_ERROR("units.massSolar must be finite and positive\n");
     }
     opts.gravity.pmmmMaxPrimeFactor = detail::parsePmmmMaxPrimeFactor(pmmmMaxPrimeFactorInput);
+    opts.starFormation.seed = detail::parseStarFormationSeed(starFormationSeedInput);
     int effectiveMeshSize = opts.gravity.meshSize;
     if (opts.gravity.errorInterval < 0) {
         THROW_ERROR("gravity.errorInterval must be nonnegative\n");
@@ -1278,6 +1410,7 @@ bool processOptions(int argc, char* argv[]) {
                     "requires gravity without SPH\n");
     }
     opts.run.hierarchicalGravity = usesHierarchicalIntegration(opts.run);
+    detail::validateStarFormation(opts);
     if (opts.chemistry.enabled) {
         if (!opts.hydro.enabled ||
             (opts.run.scenario != "cosmology" && opts.run.test != "sphGravity") ||
@@ -1553,6 +1686,22 @@ bool processOptions(int argc, char* argv[]) {
     if (detail::displayOptions) {
         terminal::section("Resolved options");
     }
+    show("build.chemistry", bool(COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_CHEMISTRY));
+    show("build.starFormation", bool(COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_STAR_FORMATION));
+    SHOW("starFormation.enabled", starFormation.enabled);
+    SHOW("starFormation.beta", starFormation.beta);
+    SHOW("starFormation.evaporationFactor", starFormation.evaporationFactor);
+    SHOW("starFormation.starFormationTimeGyr", starFormation.starFormationTimeGyr);
+    SHOW("starFormation.coldTemperature", starFormation.coldTemperature);
+    SHOW("starFormation.supernovaTemperature", starFormation.supernovaTemperature);
+    show("starFormation.seed", std::to_string(opts.starFormation.seed));
+    SHOW("starFormation.metalYield", starFormation.metalYield);
+    SHOW("starFormation.winds", starFormation.winds);
+    SHOW("starFormation.windMassLoading", starFormation.windMassLoading);
+    SHOW("starFormation.windEnergyFraction", starFormation.windEnergyFraction);
+    SHOW("starFormation.windDecouplingMyr", starFormation.windDecouplingMyr);
+    SHOW("starFormation.windRecoupleDensityFraction", starFormation.windRecoupleDensityFraction);
+    SHOW("starFormation.windDirection", starFormation.windDirection);
     SHOW("chemistry.enabled", chemistry.enabled);
     SHOW("chemistry.network", chemistry.network);
     SHOW("chemistry.initialization", chemistry.initialization);

@@ -261,8 +261,10 @@ void visitSphCheckpointArrays(
     }
     if (includeChemistry && sphParticlesChemistryStates != nullptr) {
         visit(sphParticlesChemistryStates, count);
-        visit(sphParticlesChemistryEos, count);
         visit(sphParticlesChemistrySteps, count);
+    }
+    if (includeChemistry && sphParticlesChemistryEos != nullptr) {
+        visit(sphParticlesChemistryEos, count);
     }
 }
 
@@ -347,8 +349,10 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
         }
         if (getOptions().chemistry.enabled) {
             sphParticlesArrayResize(sphParticlesChemistryStates, newCapacity);
-            sphParticlesArrayResize(sphParticlesChemistryEos, newCapacity);
             sphParticlesArrayResize(sphParticlesChemistrySteps, newCapacity);
+        }
+        if (getOptions().chemistry.enabled || getOptions().starFormation.enabled) {
+            sphParticlesArrayResize(sphParticlesChemistryEos, newCapacity);
         }
         capacity = newCapacity;
     }
@@ -400,8 +404,11 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
         sphParticlesThermodynamicStates[slot] = {};
         if (getOptions().chemistry.enabled) {
             sphParticlesChemistryStates[slot] = {};
-            sphParticlesChemistryEos[slot] = {};
             sphParticlesChemistrySteps[slot] = {};
+        }
+        if (getOptions().chemistry.enabled || getOptions().starFormation.enabled) {
+            sphParticlesChemistryEos[slot] = {
+                float(getOptions().hydro.gamma - 1.0), float(getOptions().hydro.gamma)};
         }
         sphParticlesAccelerationStates[slot] = {};
         sphParticlesParticleIndices[slot] = kNoParticleIndex;
@@ -430,6 +437,16 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
             sphParticlesParticleIndex(previousSize + i) = offset + i;
         }
     }
+}
+
+void sphParticlesRemove(ParticleInteger index) {
+    ALWAYS_ASSERT(index >= 0 && index < sphParticlesSize());
+    ParticleInteger const last = sphParticlesSize() - 1;
+    if (index != last) {
+        sphParticlesSwap(index, last);
+        particlesCatIndex(sphParticlesParticleIndex(index)) = index;
+    }
+    sphParticlesResize(last, false);
 }
 
 void sphParticlesFree() {
@@ -853,7 +870,7 @@ namespace detail {
 uint32_t sphCheckpointVersion() {
     // Preserve the fixed-viscosity payload version and identify optional state.
     auto const& options = getOptions();
-    return (options.chemistry.enabled ? 11U : 2U) +
+    return (options.starFormation.enabled ? 40U : (options.chemistry.enabled ? 11U : 2U)) +
         (options.hydro.viscosityEvolution == "cullenAndDehnen" ?
                 4U :
                 (options.hydro.viscosityEvolution == "priceEtAl" ?

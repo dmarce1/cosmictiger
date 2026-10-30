@@ -72,7 +72,8 @@ Initial fractional nuclei and temperature are configured in the `chemistry.*`
 option group. Atomic6 requires its molecular fractions to be zero. Options and
 run output record the selected model and tolerances.
 
-Chemistry follows each active gas particle's SPH timestep. Each interval uses
+With star formation disabled, chemistry follows each active gas particle's SPH
+timestep. Each interval uses
 `C(dt/2) K(dt/2) D(dt) K(dt/2) C(dt/2)` (CKDKC), where `C` advances chemistry,
 `K` is the hydro/gravity kick and `D` drifts positions. At a particle's next
 active boundary, the old hydro predictor is replaced before the closing chemistry
@@ -94,6 +95,18 @@ Check timestep refinement
 for the intended problem: a successful local chemistry solve alone does not
 bound operator-splitting error, and the symmetric ordering does not make the
 backward-Euler source solver second order.
+
+With `starFormation.enabled=true`, the Springel–Hernquist source operator owns
+the same opening/closing source clock and heating ledger. It invokes the shared
+chemistry batch solver only for ordinary gas and decoupled wind intervals;
+standalone chemistry steps are skipped and their pending clock fields remain
+zero. Eligible dense gas instead receives the SH03 effective energy and a
+mass-weighted neutral-cold plus atomic-CIE-hot composition. This projection
+does not evolve separate non-equilibrium chemical histories in the unresolved
+phases, and ordinary cooling is not applied to the effective mixture. Combined
+runs currently require `atomic6`. See [star formation](star_formation.md) for
+threshold transitions, wind recoupling, radiation ownership, and projection
+diagnostics.
 
 The deprecated `chemistry.synchronizedRung` key is accepted and ignored so older
 INI files still load. It can be removed; supplying it with chemistry enabled
@@ -155,6 +168,9 @@ heating enters the accumulated source ledger when that particle closes its
 interval. Checkpoints preserve this pending state for particles on different
 rungs. The optional payload has a distinct physics flag and layout version;
 old chemistry checkpoints with the common-rung layout are rejected.
+Combined star-formation runs retain chemical fractions and source energy in
+this payload, while their pending half-interval and heating live exclusively
+in the star-formation state; standalone chemical step fields remain zero.
 Restart checks the reaction/EOS physics version, network, solver settings,
 initial composition, CMB/helium configuration, radiation file checksum and source
 stage state. Chemistry-disabled checkpoints retain the previous payload.

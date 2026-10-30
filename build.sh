@@ -13,6 +13,7 @@ showUsage() {
     printf 'The menu selects compiled capabilities for cosmictiger.\n'
     printf 'SPH requires traditional or global integration; gravity may be disabled.\n'
     printf 'Particle chemistry is independently selectable and requires SPH.\n'
+    printf 'Stars are selectable with COSMICTIGER_ENABLE_STARS and require chemistry and SPH.\n'
     printf 'Position storage is selected for the whole build directory; fixed32 is the default.\n'
     printf 'Use -j with no argument or -j max to use half the available CPUs.\n'
 }
@@ -111,6 +112,7 @@ positionType=fixed32
 enableCuda=ON
 enableSph=ON
 enableChemistry=ON
+enableStars=OFF
 testSuite=OFF
 buildJobs=4
 testJobs=2
@@ -259,6 +261,7 @@ showMainMenu() {
     printf ' 12) Build SPH support: %s\n' "$enableSph"
     printf ' 13) Position storage: %s\n' "$positionType"
     printf ' 14) Build particle chemistry (requires SPH): %s\n' "$enableChemistry"
+    printf ' 15) Build stars (requires chemistry and SPH): %s\n' "$enableStars"
     printf '  Enter or b) Configure and build    q) Quit\n'
     printf 'Build jobs are capped at half the available CPUs; MPI tests use four CPUs each.\n'
 }
@@ -272,6 +275,9 @@ validateFeatures() {
     fi
     if [[ $enableSph == ON && $enableTraditional != ON && $enableGlobal != ON ]]; then
         printf 'SPH requires traditional or global integration.\n' >&2; return 1
+    fi
+    if [[ $enableStars == ON && $enableChemistry != ON ]]; then
+        printf 'Stars require particle chemistry. Enable chemistry (option 14) or disable stars (option 15).\n' >&2; return 1
     fi
     if (( buildJobs > maxJobs )); then
         printf 'Build concurrency is limited to %s jobs.\n' "$maxJobs" >&2; return 1
@@ -301,6 +307,7 @@ while true; do
         12) chooseToggle 'Build SPH support' "$enableSph"; enableSph=$promptValue ;;
         13) choosePositionType ;;
         14) chooseToggle 'Build particle chemistry (requires SPH)' "$enableChemistry"; enableChemistry=$promptValue ;;
+        15) chooseToggle 'Build stars (requires chemistry and SPH)' "$enableStars"; enableStars=$promptValue ;;
         *) printf 'Unknown option.\n' ;;
     esac
 done
@@ -356,6 +363,7 @@ configureCommand=(cmake -S "$rootDir" -B "$buildDir" -G 'Unix Makefiles'
     "-DCOSMICTIGER_WITH_CUDA=$enableCuda"
     "-DCOSMICTIGER_ENABLE_SPH=$enableSph"
     "-DCOSMICTIGER_ENABLE_CHEMISTRY=$enableChemistry"
+    "-DCOSMICTIGER_ENABLE_STARS=$enableStars"
     "-DCOSMICTIGER_ENABLE_FMM=$enableFmm"
     "-DCOSMICTIGER_ENABLE_PMMM_PP=$enablePmmmPp"
     "-DCOSMICTIGER_ENABLE_PMMM_FMM=$enablePmmmFmm"
@@ -417,6 +425,7 @@ printf '\nGravity: FMM=%s PMMM PP=%s PMMM FMM=%s; potential degrees=%s\n' "$enab
 printf 'Integrators: traditional=%s hierarchical=%s global=%s\n' "$enableTraditional" "$enableHierarchical" "$enableGlobal"
 printf 'SPH support: %s\n' "$enableSph"
 printf 'Particle chemistry: %s (requires SPH)\n' "$enableChemistry"
+printf 'Stars: %s (requires chemistry and SPH)\n' "$enableStars"
 printf 'Position storage: %s\n' "$positionType"
 printf 'Build target: %s\n' "$buildTarget"
 printf 'Build directory: %s\nLog: %s\n' "$buildDir" "$logFile"

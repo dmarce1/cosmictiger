@@ -161,6 +161,10 @@ function(cosmictiger_feature_sources output)
         if(COSMICTIGER_ENABLE_CHEMISTRY)
             list(APPEND cosmictiger_source_files src/sph/sph_chemistry.cpp)
         endif()
+        if(COSMICTIGER_ENABLE_STAR_FORMATION)
+            list(APPEND cosmictiger_source_files src/sph/star_formation.cpp
+                src/sph/springel_and_hernquist/cooling.cpp)
+        endif()
     endif()
 
     if(BUILD_TESTING)
@@ -191,6 +195,10 @@ function(cosmictiger_feature_sources output)
                 tests/sph/tree.cpp tests/units_output.cpp tests/distributed_output.cpp)
             if(COSMICTIGER_ENABLE_CHEMISTRY)
                 list(APPEND cosmictiger_source_files tests/sph/chemistry.cpp)
+            endif()
+            if(COSMICTIGER_ENABLE_STAR_FORMATION)
+                list(APPEND cosmictiger_source_files tests/sph/star_formation.cpp
+                    tests/star_formation_particles.cpp)
             endif()
             if(COSMICTIGER_ENABLE_FMM)
                 list(APPEND cosmictiger_source_files tests/sph/gravity.cpp

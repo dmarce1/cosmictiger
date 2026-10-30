@@ -25,6 +25,7 @@ struct SphRunData {
     // Optional local-composition EOS. Null retains the configured ideal gas.
     float* sourcePressureEnergyRatio;
     float* sourceAdiabaticIndex;
+    float* sourceHydroCoupling;    // SH03 winds: zero excludes both directions of hydro forces.
     float* sourceDensity;
     float* sourceBalsaraFactor;
     float* sourceViscosityAlpha;

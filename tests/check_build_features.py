@@ -11,10 +11,11 @@ import shlex
 import sys
 
 
-FEATURES = ("FMM", "PMMM_PP", "PMMM_FMM", "SPH", "CHEMISTRY",
+FEATURES = ("FMM", "PMMM_PP", "PMMM_FMM", "SPH", "CHEMISTRY", "STARS",
             "INTEGRATOR_TRADITIONAL", "INTEGRATOR_HIERARCHICAL", "INTEGRATOR_GLOBAL")
 FEATURE_DEFINITIONS = {"COSMICTIGER_ENABLE_" + feature for feature in FEATURES}
 FEATURE_DEFINITIONS.update({"ORDER", "FMM_MIN_ORDER", "FMM_MAX_ORDER",
+                            "COSMICTIGER_ENABLE_STAR_FORMATION",
                             "COSMICTIGER_POSITION_BITS", "COSMICTIGER_WITH_SPH",
                             "COSMICTIGER_WITH_GRAVITY"})
 LEGACY_DEFINITIONS = {"COSMICTIGER_GRAVITY_PMMM", "COSMICTIGER_PMMM_NEAR_FMM",
@@ -58,11 +59,16 @@ def hasChemistry(configuration):
     return configuration["SPH"] and configuration["CHEMISTRY"]
 
 
+def hasStarFormation(configuration):
+    return configuration["SPH"] and configuration["STARS"]
+
+
 def configurationDefinitions(configuration, bits, degrees):
     low, high = degrees
     if not hasGravity(configuration):
         low = high = -1
     definitions = {"COSMICTIGER_ENABLE_" + key: str(int(configuration[key])) for key in FEATURES}
+    definitions["COSMICTIGER_ENABLE_STAR_FORMATION"] = str(int(configuration["STARS"]))
     definitions.update({"ORDER": str(high + 1), "FMM_MIN_ORDER": str(low + 1),
                         "FMM_MAX_ORDER": str(high + 1), "COSMICTIGER_POSITION_BITS": str(bits),
                         "COSMICTIGER_WITH_SPH": str(int(configuration["SPH"])),
@@ -108,6 +114,11 @@ def sourceSelectionErrors(sources, configuration):
                 "tests/primordial_rates.cpp", "tests/primordial_solver.cpp", "tests/primordial_units.cpp",
                 "tests/primordial_reference.cpp", "tests/primordial_cuda.cu"}:
             errors.append(f"particle chemistry disabled but compiles source: {source}")
+        if not hasStarFormation(configuration) and source in {
+                "src/sph/star_formation.cpp", "src/sph/springel_and_hernquist/cooling.cpp",
+                "tests/sph/star_formation.cpp", "tests/star_formation_particles.cpp",
+                "tests/springel_and_hernquist.cpp", "tests/springel_and_hernquist_cuda.cu"}:
+            errors.append(f"star formation disabled but compiles source: {source}")
         if not configuration["SPH"]:
             if source.startswith(("src/sph/", "tests/sph/", "tests/scenarios/")):
                 errors.append(f"SPH disabled but compiles SPH source: {source}")
@@ -137,6 +148,8 @@ def requiredSources(configuration, cuda):
             required.update({"src/sph/sph.cu", "src/sph/sph_hydro.cu", "src/sph/sph_prehydro.cu", "src/sph/sph_rungs.cu"})
     if hasChemistry(configuration):
         required.add("src/sph/sph_chemistry.cpp")
+    if hasStarFormation(configuration):
+        required.update({"src/sph/star_formation.cpp", "src/sph/springel_and_hernquist/cooling.cpp"})
     if cuda:
         required.add("src/particles/drift.cu")
         if hasGravity(configuration):
@@ -158,6 +171,8 @@ def checkBuild(buildDirectory):
 
     sourceDirectory = Path(setting("CMAKE_HOME_DIRECTORY")).resolve()
     configuration = {feature: enabled("COSMICTIGER_ENABLE_" + feature) for feature in FEATURES}
+    if enabled("COSMICTIGER_ENABLE_STAR_FORMATION") != configuration["STARS"]:
+        raise ValueError("COSMICTIGER_ENABLE_STAR_FORMATION must match COSMICTIGER_ENABLE_STARS")
     degrees = degreeRange(setting("COSMICTIGER_EXPANSION_DEGREE"))
     cuda, testing = enabled("COSMICTIGER_WITH_CUDA"), enabled("BUILD_TESTING")
     positionType = setting("COSMICTIGER_POSITION_TYPE")

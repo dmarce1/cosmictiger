@@ -133,6 +133,7 @@ struct SphRunParameters {
     float zPlaneAcceleration;      // Magnitude of the force toward z = 0.5.
     float maximumTimestep = 1e30f;
     bool globalTimestep = false;
+    bool refreshConvergedDensity = false;    // Recompute diagnostics with fixed, converged supports.
     float viscosityAlpha;
     float viscosityBeta;
     float viscosityEpsilon;
@@ -201,6 +202,7 @@ struct SphRunParameters {
         arc & expansionRate;
         arc & maximumTimestep;
         arc & globalTimestep;
+        arc & refreshConvergedDensity;
         arc & uniformAccelerationY;
         arc & baseTimestep;
         arc & phase;

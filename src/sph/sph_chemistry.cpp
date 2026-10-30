@@ -156,12 +156,84 @@ float storedEnergyAt(float energy, double scaleFactor) {
             .value(),
         "stored a^2 u");
 }
+
+std::vector<primordial::StepResult> integrateChemistryBatch(
+    std::vector<primordial::BatchInput> const& inputs) {
+    auto const& options = getOptions();
+    primordial::SolverOptions solverOptions;
+    solverOptions.relativeTolerance = options.chemistry.relativeTolerance;
+    for (int i = 0; i < primordial::kAbundanceCount; ++i) {
+        solverOptions.abundanceAbsoluteTolerance[i] = options.chemistry.abundanceAbsoluteTolerance;
+    }
+    solverOptions.energyAbsoluteTolerance = options.chemistry.energyAbsoluteTolerance;
+    solverOptions.maxSubsteps = options.chemistry.maxSubsteps;
+    std::vector<primordial::StepResult> results(inputs.size());
+    std::string error;
+    bool const dispatched = inputs.empty() ||
+        primordial::integrateBatch(inputs.data(), results.data(), inputs.size(), solverOptions,
+            options.compute.cuda ? primordial::Backend::Cuda : primordial::Backend::Cpu,
+            static_cast<unsigned>(hpx::get_num_worker_threads()), &error);
+    if (!dispatched) {
+        throw std::runtime_error("Chemistry batch dispatch failed: " + error);
+    }
+    for (size_t index = 0; index < inputs.size(); ++index) {
+        auto const& result = results[index];
+        if (result.status != primordial::SolverStatus::Success ||
+            result.acceptedTime != inputs[index].interval) {
+            throw std::runtime_error("Chemistry failed on rank " + std::to_string(hpxRank()) +
+                " batch index " + std::to_string(index) + " status " +
+                std::to_string(int(result.status)) + "; source update was not committed");
+        }
+    }
+    return results;
+}
+
 std::vector<ParticleInteger> pendingIndices;
 std::vector<int> pendingRungs;
 std::vector<primordial::StepResult> pendingResults;
 std::vector<float> pendingEnergies;
 std::vector<SphChemistryStep> pendingSteps;
 }    // namespace detail
+
+primordial::State sphChemistrySynchronizeEnergy(
+    primordial::State const& state, float storedEnergy, double scaleFactor) {
+    primordial::StrictFloatEnvironment const floatingEnvironment;
+    if (!floatingEnvironment.valid()) {
+        throw std::runtime_error("Chemistry requires IEEE nearest rounding and gradual underflow");
+    }
+    return detail::stateAt(state, storedEnergy, scaleFactor);
+}
+
+std::vector<SphChemistryBatchResult> sphChemistryAdvanceBatch(
+    std::vector<SphChemistryBatchInput> const& inputs, double scaleFactor) {
+    primordial::StrictFloatEnvironment const floatingEnvironment;
+    if (!floatingEnvironment.valid()) {
+        throw std::runtime_error("Chemistry requires IEEE nearest rounding and gradual underflow");
+    }
+    if (!(scaleFactor > 0.0) || !std::isfinite(scaleFactor)) {
+        throw std::invalid_argument("Chemistry batch requires a finite positive scale factor");
+    }
+    std::vector<primordial::BatchInput> physicalInputs;
+    physicalInputs.reserve(inputs.size());
+    for (auto const& input : inputs) {
+        if (input.physicalInterval < 0.0 || !std::isfinite(input.physicalInterval)) {
+            throw std::invalid_argument("Chemistry batch requires finite nonnegative intervals");
+        }
+        physicalInputs.push_back({detail::stateAt(input.state, input.storedEnergy, scaleFactor),
+            detail::environmentAt(scaleFactor, input.storedDensity),
+            primordial::checkedScalar(input.physicalInterval, "physical interval in seconds")});
+    }
+    auto const integrated = detail::integrateChemistryBatch(physicalInputs);
+    std::vector<SphChemistryBatchResult> results;
+    results.reserve(inputs.size());
+    for (size_t index = 0; index < inputs.size(); ++index) {
+        float const storedEnergy = inputs[index].physicalInterval == 0.0 ?
+            inputs[index].storedEnergy :
+            detail::storedEnergyAt(integrated[index].state.thermalEnergy, scaleFactor);
+        results.push_back({integrated[index].state, storedEnergy});
+    }
+    return results;
+}
 
 primordial::Eos sphChemistryEos(
     primordial::State const& state, float storedEnergy, double scaleFactor) {
@@ -278,36 +350,11 @@ double sphChemistryPrepare(int minimumRung, double scaleFactor, double scaleDeri
             append(i, sphParticlesChemistryStates[i], sphParticlesInternalEnergy(i),
                 opening ? selectedHalf : step.halfInterval, rung);
         }
-        primordial::SolverOptions solverOptions;
-        solverOptions.relativeTolerance = options.chemistry.relativeTolerance;
-        for (int i = 0; i < primordial::kAbundanceCount; ++i) {
-            solverOptions.abundanceAbsoluteTolerance[i] =
-                options.chemistry.abundanceAbsoluteTolerance;
-        }
-        solverOptions.energyAbsoluteTolerance = options.chemistry.energyAbsoluteTolerance;
-        solverOptions.maxSubsteps = options.chemistry.maxSubsteps;
-        detail::pendingResults.resize(inputs.size());
+        detail::pendingResults = detail::integrateChemistryBatch(inputs);
         detail::pendingEnergies.resize(inputs.size());
-        std::string error;
-        bool const dispatched = inputs.empty() ||
-            (options.compute.cuda ?
-                    primordial::integrateBatchCuda(inputs.data(), detail::pendingResults.data(),
-                        inputs.size(), solverOptions, &error) :
-                    primordial::integrateBatchCpu(inputs.data(), detail::pendingResults.data(),
-                        inputs.size(), solverOptions,
-                        static_cast<unsigned>(hpx::get_num_worker_threads())));
-        if (!dispatched) {
-            throw std::runtime_error("Chemistry batch dispatch failed: " + error);
-        }
         for (size_t j = 0; j < inputs.size(); ++j) {
             ParticleInteger const i = detail::pendingIndices[j];
             auto const& result = detail::pendingResults[j];
-            if (result.status != primordial::SolverStatus::Success ||
-                result.acceptedTime != inputs[j].interval) {
-                throw std::runtime_error("Chemistry failed on rank " + std::to_string(hpxRank()) +
-                    " gas index " + std::to_string(i) + " status " +
-                    std::to_string(int(result.status)) + "; source update was not committed");
-            }
             detail::pendingEnergies[j] =
                 detail::storedEnergyAt(result.state.thermalEnergy, scaleFactor);
             float const beforeEnergy = sphParticlesInternalEnergy(i);

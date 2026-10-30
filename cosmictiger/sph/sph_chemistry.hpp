@@ -3,9 +3,27 @@
 
 #include <array>
 #include <cstdint>
+#include <vector>
 
 #include <cosmictiger/chemistry/primordial_types.hpp>
 
+struct SphChemistryBatchInput {
+    primordial::State state{};
+    float storedEnergy{};
+    float storedDensity{};
+    double physicalInterval{};
+};
+struct SphChemistryBatchResult {
+    primordial::State state{};
+    float storedEnergy{};
+};
+
+// Nonmutating source transaction: all elements must finish before results return.
+// Density and energy use stored code units; intervals are physical seconds.
+std::vector<SphChemistryBatchResult> sphChemistryAdvanceBatch(
+    std::vector<SphChemistryBatchInput> const& inputs, double scaleFactor);
+primordial::State sphChemistrySynchronizeEnergy(
+    primordial::State const& state, float storedEnergy, double scaleFactor);
 primordial::Eos sphChemistryEos(
     primordial::State const& state, float storedEnergy, double scaleFactor);
 void sphChemistryInitializeParticle(long long index, double scaleFactor);

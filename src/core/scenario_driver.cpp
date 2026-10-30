@@ -27,6 +27,9 @@
 #include <cosmictiger/scenarios/scenario.hpp>
 #if COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/sph_particles.hpp>
+#if COSMICTIGER_ENABLE_STAR_FORMATION
+#include <cosmictiger/sph/star_formation.hpp>
+#endif
 #endif
 
 namespace detail {
@@ -102,6 +105,11 @@ void runFixedScenario() {
         }
     } else {
         particlesSetMinrung(baseOptions.run.minRung);
+#if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_STAR_FORMATION
+        if (baseOptions.starFormation.enabled) {
+            starFormationInitialize();
+        }
+#endif
     }
     state.minrung0 = std::max(state.minrung0, baseOptions.run.minRung);
     bool const hierarchicalMesh =

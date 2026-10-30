@@ -140,6 +140,7 @@ find_library(HEALPIX_CXX_LIBRARY NAMES healpix_cxx REQUIRED)
 
 message(STATUS "cosmictiger SPH = ${COSMICTIGER_WITH_SPH}")
 message(STATUS "cosmictiger particle chemistry = ${COSMICTIGER_ENABLE_CHEMISTRY} (requires SPH)")
+message(STATUS "cosmictiger stars = ${COSMICTIGER_ENABLE_STARS} (COSMICTIGER_ENABLE_STARS; requires chemistry and SPH)")
 message(STATUS "cosmictiger position storage = ${COSMICTIGER_POSITION_TYPE}")
 message(STATUS "cosmictiger integrators: traditional=${COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL}, hierarchical=${COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL}, global=${COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL}")
 message(STATUS "cosmictiger gravity algorithms: FMM=${COSMICTIGER_ENABLE_FMM}, PMMM-PP=${COSMICTIGER_ENABLE_PMMM_PP}, PMMM-FMM=${COSMICTIGER_ENABLE_PMMM_FMM}")
@@ -330,6 +331,10 @@ set(cosmictiger_header_files
 )
 
 if(BUILD_TESTING)
+    set(cosmictiger_star_formation_test_args)
+    if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_STAR_FORMATION)
+        list(APPEND cosmictiger_star_formation_test_args --with-star-formation)
+    endif()
     set(cosmictiger_chemistry_test_args)
     if(NOT COSMICTIGER_WITH_SPH OR NOT COSMICTIGER_ENABLE_CHEMISTRY)
         list(APPEND cosmictiger_chemistry_test_args --without-chemistry)
@@ -383,6 +388,7 @@ if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_CHEMISTRY)
     target_link_libraries(primordial_chemistry INTERFACE cosmictiger_sph_chemistry)
 endif()
 set_source_files_properties(src/sph/sph_chemistry.cpp tests/sph/chemistry.cpp
+    src/sph/star_formation.cpp src/sph/springel_and_hernquist/cooling.cpp tests/sph/star_formation.cpp
     PROPERTIES COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
 # The adaptive Boltzmann solve needs finite-value checks and accurate
 # cancellation in the synchronous Einstein constraints.
@@ -820,6 +826,83 @@ if(BUILD_TESTING)
         --viewer ${PROJECT_SOURCE_DIR}/tools/halo_viewer/halo_viewer.py)
     set_tests_properties(halo_viewer PROPERTIES TIMEOUT 180 PROCESSORS 2)
 
+    if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_STAR_FORMATION)
+        add_executable(springel_and_hernquist_test tests/springel_and_hernquist.cpp
+            src/sph/springel_and_hernquist/cooling.cpp)
+        target_include_directories(springel_and_hernquist_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_link_libraries(springel_and_hernquist_test PRIVATE Boost::boost)
+        target_compile_options(springel_and_hernquist_test PRIVATE -fno-fast-math -ffp-contract=off)
+        cosmictiger_add_gtest(NAME springel_and_hernquist TARGET springel_and_hernquist_test
+            PROPERTIES TIMEOUT 120 PROCESSORS 1)
+        if(COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
+            set(star_formation_test_integrator traditional)
+        else()
+            set(star_formation_test_integrator global)
+        endif()
+        set(star_formation_workdir "${PROJECT_BINARY_DIR}/tests/star_formation_cpu")
+        file(MAKE_DIRECTORY "${star_formation_workdir}")
+        add_test(NAME star_formation_cpu COMMAND cosmictiger --run.test=star_formation
+            --hydro.enabled=true --starFormation.enabled=true --chemistry.enabled=true --chemistry.initialization=manual
+            --compute.cuda=false --initial.particlesPerDimension=8
+            --run.timeIntegrator=${star_formation_test_integrator}
+            ${cosmictiger_test_gravity_args} ${cosmictiger_test_selection_args}
+            --hpx:threads=1 --hpx:bind=none)
+        set_tests_properties(star_formation_cpu PROPERTIES
+            WORKING_DIRECTORY "${star_formation_workdir}" RUN_SERIAL TRUE TIMEOUT 120 PROCESSORS 1)
+        set(star_formation_particles_workdir "${PROJECT_BINARY_DIR}/tests/star_formation_particles_cpu")
+        file(MAKE_DIRECTORY "${star_formation_particles_workdir}")
+        add_test(NAME star_formation_particles_cpu COMMAND cosmictiger --run.test=starFormationParticles
+            --hydro.enabled=true --starFormation.enabled=true --chemistry.enabled=true --chemistry.initialization=manual
+            --compute.cuda=false --initial.particlesPerDimension=8
+            --run.timeIntegrator=${star_formation_test_integrator}
+            ${cosmictiger_test_gravity_args} ${cosmictiger_test_selection_args}
+            --hpx:threads=1 --hpx:bind=none)
+        set_tests_properties(star_formation_particles_cpu PROPERTIES
+            WORKING_DIRECTORY "${star_formation_particles_workdir}" RUN_SERIAL TRUE TIMEOUT 120 PROCESSORS 1)
+        if(HPX_WITH_PARCELPORT_MPI AND MPIEXEC_EXECUTABLE)
+            foreach(star_mpi_fixture IN ITEMS star_formation star_formation_particles)
+                set(star_mpi_test "${star_mpi_fixture}_mpi")
+                set(star_mpi_workdir "${PROJECT_BINARY_DIR}/tests/${star_mpi_test}")
+                file(MAKE_DIRECTORY "${star_mpi_workdir}")
+                set(star_mpi_run_test star_formation)
+                set(star_mpi_gravity_args --gravity.enabled=false)
+                if(star_mpi_fixture STREQUAL "star_formation_particles")
+                    set(star_mpi_run_test starFormationParticles)
+                    set(star_mpi_gravity_args)
+                endif()
+                add_test(NAME ${star_mpi_test} COMMAND ${MPIEXEC_EXECUTABLE}
+                    ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS}
+                    $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS}
+                    --run.test=${star_mpi_run_test}
+                    --hydro.enabled=true --starFormation.enabled=true --chemistry.enabled=true --chemistry.initialization=manual
+                    --compute.cuda=false --initial.particlesPerDimension=8
+                    --run.timeIntegrator=${star_formation_test_integrator}
+                    ${cosmictiger_test_gravity_args} ${cosmictiger_test_selection_args}
+                    ${star_mpi_gravity_args}
+                    --hpx:threads=1 --hpx:localities=2 --hpx:bind=none
+                    ${cosmictiger_mpi_transport_args})
+                set_tests_properties(${star_mpi_test} PROPERTIES
+                    WORKING_DIRECTORY "${star_mpi_workdir}" RUN_SERIAL TRUE TIMEOUT 180
+                    PROCESSORS 4 LABELS "star_formation;cpu;mpi"
+                    ENVIRONMENT "CUDA_VISIBLE_DEVICES=;OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1")
+            endforeach()
+        endif()
+        add_test(NAME star_formation_application COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/run_star_formation.py $<TARGET_FILE:cosmictiger>
+            ${PROJECT_BINARY_DIR}/tests/star_formation_application)
+        set_tests_properties(star_formation_application PROPERTIES
+            RUN_SERIAL TRUE TIMEOUT 1200 PROCESSORS 2 LABELS "integration;star_formation;cpu")
+        if(COSMICTIGER_WITH_CUDA)
+            add_executable(springel_and_hernquist_cuda_test tests/springel_and_hernquist_cuda.cu)
+            target_include_directories(springel_and_hernquist_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
+            target_link_libraries(springel_and_hernquist_cuda_test PRIVATE CUDA::cudart)
+            target_compile_options(springel_and_hernquist_cuda_test PRIVATE
+                $<$<COMPILE_LANGUAGE:CUDA>:--ftz=false;--prec-div=true;--prec-sqrt=true;--fmad=false;-Xcompiler=-fno-fast-math;-Xcompiler=-ffp-contract=off>)
+            cosmictiger_add_gtest(NAME springel_and_hernquist_cuda TARGET springel_and_hernquist_cuda_test
+                PROPERTIES TIMEOUT 120 SKIP_RETURN_CODE 77 RUN_SERIAL TRUE PROCESSORS 1)
+        endif()
+    endif()
+
     if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_CHEMISTRY)
         foreach(chemistry_test IN ITEMS primordial_rates primordial_solver primordial_units)
             add_executable(${chemistry_test}_test tests/${chemistry_test}.cpp)
@@ -1175,7 +1258,7 @@ if(BUILD_TESTING)
         add_test(NAME grouped_options COMMAND ${Python3_EXECUTABLE}
             ${PROJECT_SOURCE_DIR}/tests/run_options.py $<TARGET_FILE:cosmictiger>
             ${PROJECT_BINARY_DIR}/tests/grouped_options ${cosmictiger_sph_test_args}
-            ${cosmictiger_chemistry_test_args}
+            ${cosmictiger_chemistry_test_args} ${cosmictiger_star_formation_test_args}
             --gravity-method ${cosmictiger_default_gravity_method}
             --near-method ${cosmictiger_default_near_method} --order ${cosmictiger_default_fmm_order}
             --time-integrator ${cosmictiger_default_integrator})

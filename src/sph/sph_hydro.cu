@@ -100,6 +100,11 @@ __global__ void sphCudaHydro(
                             data.sourceSupportRadius[sourceParticleIndex], &flops);
                     }
                 }
+                // SH03 section 5.4: wind particles remain density sources, but
+                // neither exert nor receive hydrodynamic pair forces.
+                contains = contains &&
+                    (!data.sourceHydroCoupling ||
+                        data.sourceHydroCoupling[sourceParticleIndex] > 0.0f);
                 int slot = contains;
                 int total;
                 computeIndices<kHydroBlockSize>(slot, total);
@@ -182,7 +187,8 @@ __global__ void sphCudaHydro(
                 float const r_ab2 = r_ab.dot(r_ab);    // |r_ab|²
                 float const H_b = neighbor.supportRadius;
                 flops += 8 + (r_ab2 == 0.0f ? 0 : 2);    // Distances, dot, support squares.
-                if (r_ab2 == 0.0f || r_ab2 >= fmaxf(H_a * H_a, H_b * H_b)) {
+                if ((data.sourceHydroCoupling && data.sourceHydroCoupling[particleIndex] == 0.0f) ||
+                    r_ab2 == 0.0f || r_ab2 >= fmaxf(H_a * H_a, H_b * H_b)) {
                     continue;
                 }
                 float const ρ_b = neighbor.density;

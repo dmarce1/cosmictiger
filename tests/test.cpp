@@ -702,6 +702,10 @@ void bhTest() {
 }
 
 void sphGravityTest();
+#if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_STAR_FORMATION
+void starFormationTest();
+void starFormationParticlesTest();
+#endif
 void sphChemistryTimestepsTest();
 void sphTreeTest();
 void sphOnlyDiagnosticsTest();
@@ -733,6 +737,10 @@ struct ApplicationTest {
 ApplicationTest const applicationTests[] = {
 #if !COSMICTIGER_WITH_GRAVITY
     {"sphOnlyDiagnostics", sphOnlyDiagnosticsTest},
+#endif
+#if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_STAR_FORMATION
+    {"star_formation", starFormationTest},
+    {"starFormationParticles", starFormationParticlesTest},
 #endif
 #if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_CHEMISTRY
     {"nativeChemistryInitialization", nativeChemistryInitializationTest},

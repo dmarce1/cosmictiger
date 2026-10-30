@@ -70,6 +70,9 @@
 #include <cosmictiger/sph/sph_chemistry.hpp>
 #endif
 #include <cosmictiger/sph/sph_particles.hpp>
+#if COSMICTIGER_ENABLE_STAR_FORMATION
+#include <cosmictiger/sph/star_formation.hpp>
+#endif
 #include <cosmictiger/sph/sph_tree.hpp>
 #endif
 
@@ -232,7 +235,9 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     }
     sphParticlesApplyUpdates(minrung, 0, t0, tau, closingTimestep);
 #if COSMICTIGER_ENABLE_CHEMISTRY
-    bool const chemistry = getOptions().chemistry.enabled;
+    // With stars enabled, the combined source owns chemistry and SH03 halves
+    // together; running the standalone chemistry half would cool gas twice.
+    bool const chemistry = getOptions().chemistry.enabled && !getOptions().starFormation.enabled;
     if (chemistry) {
         // Viscosity decay uses the current sound speed during the density pass.
         sphParticlesRefreshChemistryEos(scale);
@@ -277,88 +282,111 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     Vector<TreeId> checklist;
     checklist.push_back(rootId);
 
-    neighborParameters.innerSelection = kSphInteractionsI;
-    neighborParameters.runType = kSphTreeNeighborNeighbors;
-    sphTreeNeighbor(neighborParameters, rootId, checklist).get();
-
-    runParameters.phase = 0;
-    int densityIterations = 0;
-    sphParticlesResetConverged();
-    do {
-        if (++densityIterations > 256) {
-            THROW_ERROR("SPH smoothing lengths did not converge after 256 tree rebuilds\n");
-        }
-
-        runParameters.runType = kSphRunPrehydro1;
-        Timer timer;
-        timer.start();
-        result = sphRun(runParameters, true);
-        timer.stop();
-        if (verbose) {
-            terminal::detailPrint("sph_run(SPH_RUN_PREHYDRO1): tm = %s min_h = %e max_h = %e\n",
-                terminal::formatDuration(timer.read()).c_str(), result.minimumSupportRadius,
-                result.maximumSupportRadius);
-        }
-        timer.reset();
-        needsNeighborRefresh = result.needsAnotherPass;
-        neighborParameters.supportRadiusMultiplier = (1.0 + kSmoothLengthBuffer);
-        neighborParameters.runType = kSphTreeNeighborBoxes;
-        neighborParameters.outerSelection = needsNeighborRefresh ? kSphSetActive : kSphSetAll;
-        neighborParameters.innerSelection = kSphSetAll;
-        timer.start();
-        sphTreeNeighbor(neighborParameters, rootId, Vector<TreeId>()).get();
-        timer.stop();
-        terminal::detailPrint("%s\n", terminal::formatDuration(timer.read()).c_str());
-        timer.reset();
-        timer.start();
-        neighborParameters.innerSelection =
-            needsNeighborRefresh ? kSphInteractionsI : kSphInteractionsIJ;
+    auto prepareDensities = [&]() {
+        neighborParameters.innerSelection = kSphInteractionsI;
         neighborParameters.runType = kSphTreeNeighborNeighbors;
         sphTreeNeighbor(neighborParameters, rootId, checklist).get();
-        timer.stop();
-        terminal::detailPrint("%s\n", terminal::formatDuration(timer.read()).c_str());
-        timer.reset();
 
-        result = SphRunReturn();
-    } while (needsNeighborRefresh);
-    sphParticlesResetConverged();
-    densityIterations = 0;
-    do {
-        if (++densityIterations > 256) {
-            THROW_ERROR("SPH neighbor densities did not converge after 256 tree rebuilds\n");
-        }
+        runParameters.phase = 0;
+        int densityIterations = 0;
+        sphParticlesResetConverged();
+        do {
+            if (++densityIterations > 256) {
+                THROW_ERROR("SPH smoothing lengths did not converge after 256 tree rebuilds\n");
+            }
 
-        runParameters.runType = kSphRunPrehydro2;
-        Timer timer;
-        timer.start();
-        result = sphRun(runParameters, true);
-        timer.stop();
-        if (verbose) {
-            terminal::detailPrint("sph_run(SPH_RUN_PREHYDRO2): tm = %s min_h = %e max_h = %e\n",
-                terminal::formatDuration(timer.read()).c_str(), result.minimumSupportRadius,
-                result.maximumSupportRadius);
+            runParameters.runType = kSphRunPrehydro1;
+            Timer timer;
+            timer.start();
+            result = sphRun(runParameters, true);
+            timer.stop();
+            if (verbose) {
+                terminal::detailPrint("sph_run(SPH_RUN_PREHYDRO1): tm = %s min_h = %e max_h = %e\n",
+                    terminal::formatDuration(timer.read()).c_str(), result.minimumSupportRadius,
+                    result.maximumSupportRadius);
+            }
+            timer.reset();
+            needsNeighborRefresh = result.needsAnotherPass;
+            neighborParameters.supportRadiusMultiplier = (1.0 + kSmoothLengthBuffer);
+            neighborParameters.runType = kSphTreeNeighborBoxes;
+            neighborParameters.outerSelection = needsNeighborRefresh ? kSphSetActive : kSphSetAll;
+            neighborParameters.innerSelection = kSphSetAll;
+            timer.start();
+            sphTreeNeighbor(neighborParameters, rootId, Vector<TreeId>()).get();
+            timer.stop();
+            terminal::detailPrint("%s\n", terminal::formatDuration(timer.read()).c_str());
+            timer.reset();
+            timer.start();
+            neighborParameters.innerSelection =
+                needsNeighborRefresh ? kSphInteractionsI : kSphInteractionsIJ;
+            neighborParameters.runType = kSphTreeNeighborNeighbors;
+            sphTreeNeighbor(neighborParameters, rootId, checklist).get();
+            timer.stop();
+            terminal::detailPrint("%s\n", terminal::formatDuration(timer.read()).c_str());
+            timer.reset();
+
+            result = SphRunReturn();
+        } while (needsNeighborRefresh);
+#if COSMICTIGER_ENABLE_STAR_FORMATION
+        if (getOptions().starFormation.enabled) {
+            starFormationRefreshEos(scale);
         }
-        timer.reset();
-        needsNeighborRefresh = result.needsAnotherPass;
-        neighborParameters.supportRadiusMultiplier =
-            needsNeighborRefresh ? (1.0 + kSmoothLengthBuffer) : 1.01;
-        neighborParameters.runType = kSphTreeNeighborBoxes;
-        neighborParameters.outerSelection = kSphSetAll;
-        neighborParameters.innerSelection = kSphSetAll;
-        timer.start();
-        sphTreeNeighbor(neighborParameters, rootId, Vector<TreeId>()).get();
-        timer.stop();
-        terminal::detailPrint("%s\n", terminal::formatDuration(timer.read()).c_str());
-        timer.reset();
-        timer.start();
-        neighborParameters.innerSelection = kSphInteractionsIJ;
-        neighborParameters.runType = kSphTreeNeighborNeighbors;
-        sphTreeNeighbor(neighborParameters, rootId, checklist).get();
-        timer.stop();
-        terminal::detailPrint("%s\n", terminal::formatDuration(timer.read()).c_str());
-        timer.reset();
-        result = SphRunReturn();
-    } while (needsNeighborRefresh);
+#endif
+        sphParticlesResetConverged();
+        densityIterations = 0;
+        do {
+            if (++densityIterations > 256) {
+                THROW_ERROR("SPH neighbor densities did not converge after 256 tree rebuilds\n");
+            }
+
+            runParameters.runType = kSphRunPrehydro2;
+            Timer timer;
+            timer.start();
+            result = sphRun(runParameters, true);
+            timer.stop();
+            if (verbose) {
+                terminal::detailPrint("sph_run(SPH_RUN_PREHYDRO2): tm = %s min_h = %e max_h = %e\n",
+                    terminal::formatDuration(timer.read()).c_str(), result.minimumSupportRadius,
+                    result.maximumSupportRadius);
+            }
+            timer.reset();
+            needsNeighborRefresh = result.needsAnotherPass;
+            neighborParameters.supportRadiusMultiplier =
+                needsNeighborRefresh ? (1.0 + kSmoothLengthBuffer) : 1.01;
+            neighborParameters.runType = kSphTreeNeighborBoxes;
+            neighborParameters.outerSelection = kSphSetAll;
+            neighborParameters.innerSelection = kSphSetAll;
+            timer.start();
+            sphTreeNeighbor(neighborParameters, rootId, Vector<TreeId>()).get();
+            timer.stop();
+            terminal::detailPrint("%s\n", terminal::formatDuration(timer.read()).c_str());
+            timer.reset();
+            timer.start();
+            neighborParameters.innerSelection = kSphInteractionsIJ;
+            neighborParameters.runType = kSphTreeNeighborNeighbors;
+            sphTreeNeighbor(neighborParameters, rootId, checklist).get();
+            timer.stop();
+            terminal::detailPrint("%s\n", terminal::formatDuration(timer.read()).c_str());
+            timer.reset();
+            result = SphRunReturn();
+        } while (needsNeighborRefresh);
+#if COSMICTIGER_ENABLE_STAR_FORMATION
+        if (getOptions().starFormation.enabled) {
+            starFormationRefreshEos(scale);
+            if (runParameters.variableViscosity) {
+                // The first density pass used the previous density's SH03 sound
+                // speed. Refresh viscosity diagnostics with the converged EOS,
+                // retaining every support-radius convergence flag and neighbor.
+                runParameters.refreshConvergedDensity = true;
+                runParameters.runType = kSphRunPrehydro2;
+                auto const diagnostics = sphRun(runParameters, true);
+                runParameters.refreshConvergedDensity = false;
+                ALWAYS_ASSERT(!diagnostics.needsAnotherPass);
+            }
+        }
+#endif
+    };
+    prepareDensities();
     Timer timer;
     if (runParameters.gradientSwitch()) {
         // Cullen & Dehnen (2010), equation (A15), or Price et al. (2018), equation (50),
@@ -387,6 +415,29 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     }
 #endif
 
+#if COSMICTIGER_ENABLE_STAR_FORMATION
+    if (getOptions().starFormation.enabled && tau > 0.0) {
+        auto const update = starFormationClose(minrung, scale, adot, t0, closingTimestep);
+        energies->heating += update.heating;
+        maxRung = std::max(maxRung, update.maximumNewStarRung);
+        if (update.converted != 0 && !closingOnly) {
+            // Converted stars leave every gas kernel before the next opening kick.
+            // The gravity array is unchanged: stellar populations retain the gas mass.
+            sphTreeDestroy();
+            sphParticlesClearCaches();
+            sphParticlesResetSemiactive();
+            sphStep1(minrung, verbose);
+            prepareDensities();
+            if (runParameters.gradientSwitch()) {
+                // Conversion changes gas neighbors at this same physical time.
+                // Commit the new target without decaying alpha a second time.
+                sphParticlesUpdateTargetAlpha(minrung, t0, tau, 0.0);
+            }
+        }
+        starFormationRefreshEos(scale);
+    }
+#endif
+
     auto eValue = particlesSumEnergies();
     energies->kin = eValue.kin / sqr(scale);
     energies->xmom = eValue.xmom / scale;
@@ -399,6 +450,11 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     energies->therm = eValue.therm / sqr(scale);
 
     if (closingOnly) {
+#if COSMICTIGER_ENABLE_STAR_FORMATION
+        if (getOptions().starFormation.enabled) {
+            starFormationOpenNewStars(t0, scale, runParameters.maximumTimestep, minrung, false);
+        }
+#endif
         // The final measurement includes the previous source half-step, but
         // must not solve chemistry or select hydro timesteps beyond the end.
         sphParticlesClearHydroCaches();
@@ -411,6 +467,14 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     if (chemistry) {
         synchronizedChemistryPressure = sphChemistryPressureIntegral(scale);
         sphParticlesRefreshChemistryEos(scale);
+    }
+#endif
+#if COSMICTIGER_ENABLE_STAR_FORMATION
+    if (getOptions().starFormation.enabled) {
+        starFormationRefreshEos(scale);
+        synchronizedChemistryPressure = starFormationPressureIntegral(scale);
+        runParameters.maximumTimestep = std::min(
+            double(runParameters.maximumTimestep), starFormationMaximumTimestep(minrung, scale));
     }
 #endif
     runParameters.phase = 1;
@@ -457,6 +521,20 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
         runParameters.phase = 0;
         runParameters.runType = kSphRunHydro;
         sphRun(runParameters, true);
+    }
+#endif
+#if COSMICTIGER_ENABLE_STAR_FORMATION
+    if (getOptions().starFormation.enabled) {
+        starFormationOpen(minrung, scale, adot, t0, globalTimestep ? selectedTimestep : -1.0,
+            !globalTimestep && uniformMinimumRung >= 0 ? maxRung : -1);
+        starFormationRefreshEos(scale);
+        runParameters.phase = 0;
+        runParameters.runType = kSphRunHydro;
+        sphRun(runParameters, true);
+        maxRung = std::max(maxRung,
+            starFormationOpenNewStars(t0, scale, runParameters.maximumTimestep, minrung,
+                getOptions().gravity.enabled && !globalTimestep &&
+                    !usesMeshGravity(getOptions().gravity)));
     }
 #endif
     if (!globalTimestep && uniformMinimumRung >= 0) {
@@ -1304,6 +1382,11 @@ void driver() {
     }
 #endif
     if (getOptions().checkpoint.readIndex == -1) {
+#if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_STAR_FORMATION
+        if (getOptions().starFormation.enabled) {
+            starFormationInitialize();
+        }
+#endif
         outputTimeFile(params);
     }
     terminal::detailPrint("tau_max = %e\n", params.tauMax);
@@ -1603,7 +1686,7 @@ void driver() {
             // equation; the gas term follows directly from dU=-P dV.
             energies.cosmic += cosmology::kineticExpansionWork(a0, a, energies.tckin) +
                 (a - a0) *
-                    (getOptions().chemistry.enabled ?
+                    ((getOptions().chemistry.enabled || getOptions().starFormation.enabled) ?
                             -energies.therm + 3.0 * synchronizedChemistryPressure :
                             energies.therm);
             double const dyears =

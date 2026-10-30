@@ -43,7 +43,8 @@ struct SphChemistryStep {
     double pendingHeating{};
 };
 
-// Optional chemistry storage. Abundances are authoritative; the source bridge
+// Optional thermal closure cache is shared by chemistry and SH03.
+// Chemistry abundances are authoritative; the source bridge
 // derives chemistry energy from the hydrodynamic stored a^2 u at each use.
 SPH_PARTICLES_EXTERN primordial::State* sphParticlesChemistryStates;
 SPH_PARTICLES_EXTERN Pair<float>* sphParticlesChemistryEos;
@@ -68,6 +69,7 @@ SPH_PARTICLES_EXTERN char* sphParticlesSemiactiveFlags;
 ParticleInteger sphParticlesSize();
 void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticles = true);
 void sphParticlesFree();
+void sphParticlesRemove(ParticleInteger index);
 void sphParticlesClearHydroCaches();
 void sphParticlesClearCaches();
 void sphParticlesResolveWithParticles();

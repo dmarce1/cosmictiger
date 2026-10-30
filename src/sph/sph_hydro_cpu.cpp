@@ -96,7 +96,11 @@ SphRunReturn sphCpuHydro(
             SimdFloat const r_ab2_staged = r_ab.dot(r_ab);
             SimdFloat const H_b_staged =
                 detail::sphCpuLoad(data.sourceSupportRadius, neighbors, first, 1.0f);
-            auto const interacts = detail::sphCpuValidLanes(neighbors, first) &
+            auto const coupled = data.sourceHydroCoupling ?
+                (detail::sphCpuLoad(data.sourceHydroCoupling, neighbors, first, 0.0f) > zero) &
+                    (SimdFloat(data.sourceHydroCoupling[particleIndex]) > zero) :
+                (one > zero);
+            auto const interacts = coupled & detail::sphCpuValidLanes(neighbors, first) &
                 (r_ab2_staged > zero) &
                 (r_ab2_staged < simdMax(SimdFloat(H_a * H_a), sqr(H_b_staged)));
             // Three fixed scales, five dot operations and H_b² per lane; H_a² is scalar.

@@ -31,6 +31,7 @@ class BuildFeaturesTest(unittest.TestCase):
                       "COSMICTIGER_WITH_CUDA": "OFF", "BUILD_TESTING": "OFF"}
         self.cache.update({"COSMICTIGER_ENABLE_" + key: "ON" if value else "OFF"
                            for key, value in self.features.items()})
+        self.cache["COSMICTIGER_ENABLE_STAR_FORMATION"] = self.cache["COSMICTIGER_ENABLE_STARS"]
         self.addCompilation("cosmictiger_core", "src/core/flops.cpp", {})
         self.addCompilation("cosmictiger_recombination", "src/chemistry/recombination.cpp", {})
         if hasChemistry(self.features):
@@ -62,6 +63,42 @@ class BuildFeaturesTest(unittest.TestCase):
             f"{name}:STRING={value}\n" for name, value in self.cache.items()))
         (self.buildDirectory / "compile_commands.json").write_text(json.dumps(self.commands))
         return checkBuild(self.buildDirectory)
+
+    def testStarFormationCapabilityCombinations(self):
+        for sph, starFormation in product((False, True), repeat=2):
+            with self.subTest(sph=sph, starFormation=starFormation):
+                self.configure(SPH=sph, STARS=starFormation)
+                self.assertIn("Build features passed", self.check())
+                self.assertEqual(self.definitions["COSMICTIGER_ENABLE_STARS"], str(int(starFormation)))
+                self.assertEqual(self.definitions["COSMICTIGER_ENABLE_STAR_FORMATION"], str(int(starFormation)))
+
+    def testStarsCacheAliasMustMatch(self):
+        self.cache["COSMICTIGER_ENABLE_STAR_FORMATION"] = "ON"
+        with self.assertRaisesRegex(ValueError, "must match COSMICTIGER_ENABLE_STARS"):
+            self.check()
+
+    def testStarsCompilerAliasMustMatch(self):
+        self.commands[-1]["arguments"].append("-DCOSMICTIGER_ENABLE_STAR_FORMATION=1")
+        with self.assertRaisesRegex(ValueError, "needs COSMICTIGER_ENABLE_STAR_FORMATION=0"):
+            self.check()
+
+    def testDisabledStarFormationRejectsEveryImplementationSource(self):
+        for source in ("src/sph/star_formation.cpp", "src/sph/springel_and_hernquist/cooling.cpp",
+                       "tests/sph/star_formation.cpp", "tests/star_formation_particles.cpp",
+                       "tests/springel_and_hernquist.cpp", "tests/springel_and_hernquist_cuda.cu"):
+            with self.subTest(source=source):
+                self.configure(STARS=False)
+                self.addCompilation("unused_star_formation", source, {})
+                with self.assertRaisesRegex(ValueError, "star formation disabled but compiles source: " + source):
+                    self.check()
+
+    def testEnabledStarFormationRequiresBothRuntimeSources(self):
+        for source in ("src/sph/star_formation.cpp", "src/sph/springel_and_hernquist/cooling.cpp"):
+            with self.subTest(source=source):
+                self.configure(STARS=True)
+                self.commands = [entry for entry in self.commands if not entry["file"].endswith(source)]
+                with self.assertRaisesRegex(ValueError, "required source missing: " + source):
+                    self.check()
 
     def testDefaultRange(self):
         self.assertIn("one application", self.check())
@@ -277,7 +314,9 @@ class FeatureConfigurationTest(unittest.TestCase):
                               'message(STATUS "default_near=${cosmictiger_default_near_method}")\n'
                               'message(STATUS "pmmm_pp=${COSMICTIGER_ENABLE_PMMM_PP}")\n'
                               'message(STATUS "pmmm_fmm=${COSMICTIGER_ENABLE_PMMM_FMM}")\n'
-                              'message(STATUS "chemistry=${COSMICTIGER_ENABLE_CHEMISTRY}")\n')
+                              'message(STATUS "chemistry=${COSMICTIGER_ENABLE_CHEMISTRY}")\n'
+                              'message(STATUS "stars=${COSMICTIGER_ENABLE_STARS}")\n'
+                              'message(STATUS "star_formation=${COSMICTIGER_ENABLE_STAR_FORMATION}")\n')
             return subprocess.run(["cmake", "-P", str(script)], text=True, capture_output=True)
 
     def testDefaultRange(self):
@@ -289,6 +328,89 @@ class FeatureConfigurationTest(unittest.TestCase):
         self.assertIn("default_gravity=fmm", result.stdout)
         self.assertIn("default_near=none", result.stdout)
         self.assertIn("chemistry=ON", result.stdout)
+        self.assertIn("stars=OFF", result.stdout)
+        self.assertIn("star_formation=OFF", result.stdout)
+
+    def testStarsCapabilityCombinations(self):
+        for sph, stars in product(("OFF", "ON"), repeat=2):
+            with self.subTest(sph=sph, stars=stars):
+                result = self.configure({"COSMICTIGER_ENABLE_SPH": sph,
+                                         "COSMICTIGER_ENABLE_STARS": stars})
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("stars=" + stars, result.stdout)
+                self.assertIn("star_formation=" + stars, result.stdout)
+
+    def testFreshLegacyStarsOption(self):
+        for value in ("OFF", "ON"):
+            with self.subTest(value=value):
+                result = self.configure({"COSMICTIGER_ENABLE_STAR_FORMATION": value})
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("stars=" + value, result.stdout)
+                self.assertIn("star_formation=" + value, result.stdout)
+
+    def testStarsRequiresChemistryEvenWithoutSph(self):
+        for sph in ("OFF", "ON"):
+            with self.subTest(sph=sph):
+                result = self.configure({"COSMICTIGER_ENABLE_SPH": sph,
+                                         "COSMICTIGER_ENABLE_STARS": "ON",
+                                         "COSMICTIGER_ENABLE_CHEMISTRY": "OFF"})
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("COSMICTIGER_ENABLE_STARS=ON requires COSMICTIGER_ENABLE_CHEMISTRY=ON",
+                              result.stderr)
+
+    def testStarsWinsOverConflictingLegacyOption(self):
+        for stars, legacy in (("OFF", "ON"), ("ON", "OFF")):
+            with self.subTest(stars=stars, legacy=legacy):
+                result = self.configure({"COSMICTIGER_ENABLE_STARS": stars,
+                                         "COSMICTIGER_ENABLE_STAR_FORMATION": legacy})
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("stars=" + stars, result.stdout)
+                self.assertIn("star_formation=" + stars, result.stdout)
+
+    def testStarsMigratedCacheCanBeDisabledAndReenabled(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            source = Path(__file__).resolve().parents[1]
+            (path / "CMakeLists.txt").write_text(
+                'cmake_minimum_required(VERSION 3.19)\nproject(stars_cache NONE)\n'
+                f'include("{source / "cmake/features.cmake"}")\n'
+                'message(STATUS "stars=${COSMICTIGER_ENABLE_STARS}")\n'
+                'message(STATUS "star_formation=${COSMICTIGER_ENABLE_STAR_FORMATION}")\n')
+            build = path / "build"
+            build.mkdir()
+            # Simulate the old cache before STARS existed, then migrate it.
+            (build / "CMakeCache.txt").write_text("COSMICTIGER_ENABLE_STAR_FORMATION:BOOL=ON\n")
+            for arguments, expected in (([], "ON"),
+                    (["-DCOSMICTIGER_ENABLE_STARS=OFF"], "OFF"),
+                    (["-DCOSMICTIGER_ENABLE_STAR_FORMATION=ON"], "OFF"),
+                    (["-DCOSMICTIGER_ENABLE_STARS=ON"], "ON")):
+                result = subprocess.run(["cmake", "-S", str(path), "-B", str(build), *arguments],
+                                        text=True, capture_output=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("stars=" + expected, result.stdout)
+                self.assertIn("star_formation=" + expected, result.stdout)
+
+    def testStarsControlsActualSourceSelection(self):
+        source = Path(__file__).resolve().parents[1]
+        for sph, stars, testing in product(("OFF", "ON"), repeat=3):
+            with self.subTest(sph=sph, stars=stars, testing=testing), tempfile.TemporaryDirectory() as directory:
+                script = Path(directory) / "sources.cmake"
+                script.write_text(
+                    f'set(PROJECT_SOURCE_DIR "{source}")\n'
+                    f'set(COSMICTIGER_ENABLE_SPH {sph} CACHE BOOL "")\n'
+                    f'set(COSMICTIGER_ENABLE_STARS {stars} CACHE BOOL "")\n'
+                    f'set(BUILD_TESTING {testing})\nset(COSMICTIGER_WITH_CUDA OFF)\n'
+                    f'include("{source / "cmake/features.cmake"}")\n'
+                    f'include("{source / "cmake/variant_sources.cmake"}")\n'
+                    'cosmictiger_feature_sources(selected)\n'
+                    'foreach(path IN LISTS selected)\nmessage(STATUS "source=${path}")\nendforeach()\n')
+                result = subprocess.run(["cmake", "-P", str(script)], text=True, capture_output=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                enabled = sph == "ON" and stars == "ON"
+                for name in ("src/sph/star_formation.cpp", "src/sph/springel_and_hernquist/cooling.cpp"):
+                    self.assertEqual("source=" + name + "\n" in result.stdout, enabled)
+                for name in ("tests/sph/star_formation.cpp", "tests/star_formation_particles.cpp"):
+                    self.assertEqual("source=" + name + "\n" in result.stdout, enabled and testing == "ON")
 
     def testChemistryCapabilityCombinations(self):
         for sph, chemistry in product(("OFF", "ON"), repeat=2):

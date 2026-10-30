@@ -28,6 +28,21 @@ option(COSMICTIGER_ENABLE_PMMM_PP "Compile PMMM gravity with direct PP near inte
 option(COSMICTIGER_ENABLE_PMMM_FMM "Compile PMMM gravity with FMM near interactions" OFF)
 option(COSMICTIGER_ENABLE_SPH "Compile SPH hydrodynamics" ON)
 option(COSMICTIGER_ENABLE_CHEMISTRY "Compile particle chemistry when SPH is enabled" ON)
+# The legacy name initializes a fresh/migrated cache once. Thereafter STARS is
+# authoritative, so explicitly disabling it cannot be undone by a stale alias.
+set(cosmictiger_stars_default OFF)
+if(NOT DEFINED COSMICTIGER_ENABLE_STARS AND DEFINED COSMICTIGER_ENABLE_STAR_FORMATION)
+    set(cosmictiger_stars_default "${COSMICTIGER_ENABLE_STAR_FORMATION}")
+endif()
+option(COSMICTIGER_ENABLE_STARS "Compile Springel-Hernquist star formation when SPH is enabled"
+    "${cosmictiger_stars_default}")
+set(COSMICTIGER_ENABLE_STAR_FORMATION "${COSMICTIGER_ENABLE_STARS}" CACHE BOOL
+    "Legacy initializer for COSMICTIGER_ENABLE_STARS; thereafter follows STARS" FORCE)
+set(COSMICTIGER_ENABLE_STAR_FORMATION "${COSMICTIGER_ENABLE_STARS}")
+mark_as_advanced(COSMICTIGER_ENABLE_STAR_FORMATION)
+if(COSMICTIGER_ENABLE_STARS AND NOT COSMICTIGER_ENABLE_CHEMISTRY)
+    message(FATAL_ERROR "COSMICTIGER_ENABLE_STARS=ON requires COSMICTIGER_ENABLE_CHEMISTRY=ON")
+endif()
 option(COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL "Compile the traditional block-step integrator" ON)
 option(COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL "Compile the hierarchical gravity integrator" OFF)
 option(COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL "Compile the global-timestep integrator" OFF)

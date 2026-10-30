@@ -137,6 +137,7 @@ constexpr uint32_t kRetiredParticleMesh = 1U << 16;
 constexpr uint32_t kParticleMultipoleMesh = 1U << 17;
 constexpr uint32_t kRuntimeAlgorithms = 1U << 18;
 constexpr uint32_t kGlobalIntegrator = 1U << 19;
+constexpr uint32_t kStarFormation = 1U << 20;
 constexpr uint64_t kFnvOffsetBasis = 14695981039346656037ULL;
 constexpr uint64_t kFnvPrime = 1099511628211ULL;
 
@@ -447,7 +448,25 @@ uint32_t checkpointFlags(Options const& opts) {
         (opts.hydro.enabled && opts.hydro.balsaraSwitch ? kBalsaraSwitch : 0U) |
         (opts.hydro.enabled && opts.hydro.viscosityEvolution != "none" ? kVariableViscosity : 0U) |
         (opts.compute.positionType == "fixed64" ? kFixed64Positions : 0U) |
-        (opts.gravity.method == "pmmm" ? kParticleMultipoleMesh : 0U);
+        (opts.gravity.method == "pmmm" ? kParticleMultipoleMesh : 0U) |
+        (opts.starFormation.enabled ? kStarFormation : 0U);
+}
+
+std::array<uint64_t, 15> starFormationCheckpointParameters(Options const& opts) {
+    auto bits = [](double value) {
+        uint64_t result;
+        std::memcpy(&result, &value, sizeof(result));
+        return result;
+    };
+    auto const& sf = opts.starFormation;
+    // Version two identifies the SH03/nonequilibrium-chemistry source coupling,
+    // whole-particle conversion, and the persistent random-stream convention.
+    return {2, bits(sf.beta), bits(sf.evaporationFactor), bits(sf.starFormationTimeGyr),
+        bits(sf.coldTemperature), bits(sf.supernovaTemperature), sf.seed, bits(sf.metalYield),
+        uint64_t(sf.winds), bits(sf.windMassLoading), bits(sf.windEnergyFraction),
+        bits(sf.windDecouplingMyr), bits(sf.windRecoupleDensityFraction),
+        sf.windDirection == "isotropic" ? uint64_t{0} : uint64_t{1},
+        bits(opts.cosmology.heliumFraction)};
 }
 
 uint32_t checkpointKernelCode(std::string const& family, int degree) {
@@ -608,9 +627,8 @@ std::array<uint64_t, 5> checkpointAlgorithms(Options const& opts) {
 std::array<uint64_t, 5> readCheckpointAlgorithms(FILE* fp) {
     std::array<uint64_t, 5> algorithms{};
     FREAD(algorithms.data(), sizeof(uint64_t), algorithms.size(), fp);
-    if (algorithms[0] != 1 || algorithms[1] > 2 || algorithms[2] > 2 ||
-        algorithms[3] > 9 || algorithms[4] > 2 ||
-        (algorithms[1] == 2 ? algorithms[2] == 0 : algorithms[2] != 0) ||
+    if (algorithms[0] != 1 || algorithms[1] > 2 || algorithms[2] > 2 || algorithms[3] > 9 ||
+        algorithms[4] > 2 || (algorithms[1] == 2 ? algorithms[2] == 0 : algorithms[2] != 0) ||
         (algorithms[1] == 0 ? algorithms[3] != 0 : algorithms[3] < 3)) {
         THROW_ERROR("Invalid checkpoint algorithm selection extension\n");
     }
@@ -680,6 +698,13 @@ void writeDriverState(FILE* fp, DriverParameters const& params) {
         }
     }
 #endif
+    if (getOptions().starFormation.enabled) {
+        auto const parameters = starFormationCheckpointParameters(getOptions());
+        if (fwrite(parameters.data(), sizeof(uint64_t), parameters.size(), fp) !=
+            parameters.size()) {
+            THROW_ERROR("Unable to write star-formation checkpoint parameters\n");
+        }
+    }
     if (fwrite(&params, kHistoricalDriverBytes, 1, fp) != 1) {
         THROW_ERROR("Unable to write checkpoint driver state\n");
     }
@@ -787,6 +812,14 @@ DriverParameters readDriverState(FILE* fp) {
             }
         }
 #endif
+        if (getOptions().starFormation.enabled) {
+            auto parameters = starFormationCheckpointParameters(getOptions());
+            FREAD(parameters.data(), sizeof(uint64_t), parameters.size(), fp);
+            if (parameters != starFormationCheckpointParameters(getOptions())) {
+                THROW_ERROR("Checkpoint star-formation model, feedback, wind, or random-stream "
+                            "parameters differ from the requested run\n");
+            }
+        }
         FREAD(&params, kHistoricalDriverBytes, 1, fp);
         if ((header.flags & kGlobalIntegrator) != 0U) {
             uint64_t version;
@@ -803,8 +836,7 @@ DriverParameters readDriverState(FILE* fp) {
 #if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_CHEMISTRY
         if (getOptions().chemistry.enabled &&
             (sourcePhase[0] != (checkpointSourcePending(params) ? 1.0 : 0.0) ||
-                sourcePhase[1] != 2.0 ||
-                sourcePhase[2] != 0.0)) {
+                sourcePhase[1] != 2.0 || sourcePhase[2] != 0.0)) {
             THROW_ERROR("Checkpoint chemistry source phase is inconsistent\n");
         }
 #endif
@@ -881,7 +913,8 @@ CheckpointSelection readCheckpointSelection(std::string const& outputDirectory, 
             static_cast<int>(algorithms[3])};
     }
     CheckpointSelection result;
-    result.farMethod = (header.flags & detail::kParticleMultipoleMesh) != 0U ? "pmmm" :
+    result.farMethod = (header.flags & detail::kParticleMultipoleMesh) != 0U ?
+        "pmmm" :
         (gravity::kBuildHasGravity ? "fmm" : "none");
     result.timeIntegrator = (header.flags & (1U << 6)) != 0U ? "hierarchical" : "traditional";
     result.nearMethod = "none";
@@ -1140,6 +1173,44 @@ void checkpointStateTest() {
         (legacyDarkMatterOptions.compute.positionType == "fixed32" &&
             legacyDarkMatterOptions.gravity.method == "fmm"));
     auto const sphParameters = detail::sphCheckpointParameters(getOptions());
+    auto starOptions = getOptions();
+    starOptions.hydro.enabled = true;
+    starOptions.chemistry.enabled = true;
+    starOptions.starFormation.enabled = true;
+    auto const starHeader = detail::checkpointHeader(starOptions);
+    ALWAYS_ASSERT(detail::checkpointCompatible(starHeader, starOptions));
+    starOptions.starFormation.enabled = false;
+    ALWAYS_ASSERT(!detail::checkpointCompatible(starHeader, starOptions));
+    starOptions.starFormation.enabled = true;
+    starOptions.chemistry.enabled = false;
+    ALWAYS_ASSERT(!detail::checkpointCompatible(starHeader, starOptions));
+    starOptions.chemistry.enabled = true;
+    auto const starParameters = detail::starFormationCheckpointParameters(starOptions);
+    ALWAYS_ASSERT(starParameters[0] == 2);
+    double StarFormation::* const starScalars[] = {&StarFormation::beta,
+        &StarFormation::evaporationFactor, &StarFormation::starFormationTimeGyr,
+        &StarFormation::coldTemperature, &StarFormation::supernovaTemperature,
+        &StarFormation::metalYield, &StarFormation::windMassLoading,
+        &StarFormation::windEnergyFraction, &StarFormation::windDecouplingMyr,
+        &StarFormation::windRecoupleDensityFraction};
+    for (auto member : starScalars) {
+        auto altered = starOptions;
+        altered.starFormation.*member += 0.125;
+        ALWAYS_ASSERT(starParameters != detail::starFormationCheckpointParameters(altered));
+    }
+    auto alteredStarOptions = starOptions;
+    alteredStarOptions.cosmology.heliumFraction += 0.01;
+    ALWAYS_ASSERT(starParameters != detail::starFormationCheckpointParameters(alteredStarOptions));
+    alteredStarOptions = starOptions;
+    alteredStarOptions.starFormation.seed ^= uint64_t{1} << 63;
+    ALWAYS_ASSERT(starParameters != detail::starFormationCheckpointParameters(alteredStarOptions));
+    alteredStarOptions = starOptions;
+    alteredStarOptions.starFormation.winds = !alteredStarOptions.starFormation.winds;
+    ALWAYS_ASSERT(starParameters != detail::starFormationCheckpointParameters(alteredStarOptions));
+    alteredStarOptions = starOptions;
+    alteredStarOptions.starFormation.windDirection =
+        starOptions.starFormation.windDirection == "isotropic" ? "axial" : "isotropic";
+    ALWAYS_ASSERT(starParameters != detail::starFormationCheckpointParameters(alteredStarOptions));
     auto balsaraOptions = getOptions();
     balsaraOptions.hydro.enabled = true;
     balsaraOptions.hydro.balsaraSwitch = true;

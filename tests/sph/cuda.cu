@@ -276,6 +276,11 @@ public:
         data_.sourceAdiabaticIndex = allocate<float>(count_);
     }
 
+    void enableHydroCoupling() {
+        data_.sourceHydroCoupling = allocate<float>(count_);
+        std::fill_n(data_.sourceHydroCoupling, count_, 1.0f);
+    }
+
     void density() {
         resetReduction();
         sphCudaPrehydro2<<<1, kPrehydro2BlockSize>>>(params_, data_, reduction_);
@@ -1535,6 +1540,42 @@ TEST_F(MonaghanSphCuda, VariableViscosityCpuParity) {
     detail::testCpuCudaParity(1);
     detail::testCpuCudaParity(2);
     detail::testCpuCudaParity(3);
+}
+
+TEST_F(MonaghanSphCuda, WindDecouplingPreservesDensityAndGravity) {
+    detail::Fixture fixture(2, 2);
+    auto& data = fixture.data_;
+    for (int index = 0; index < 2; ++index) {
+        data.sourcePositionX[index] = index == 0 ? 0.45 : 0.55;
+        data.sourcePositionY[index] = data.sourcePositionZ[index] = 0.5;
+        data.sourceVelocityX[index] = index == 0 ? 0.1f : -0.1f;
+        data.sourceDensity[index] = 1.0f;
+        data.sourceSupportRadius[index] = data.sinkThermodynamicStates[index].supportRadius = 0.3f;
+        data.sinkSmoothingConverged[index] = true;
+        data.sinkGravityAccelerationY[index] = 0.125f;
+    }
+    data.selfGravityEnabled = true;
+    fixture.hydro();
+    ASSERT_NE(data.sinkAccelerations[0].acceleration[0], 0.0f);
+    ASSERT_GT(data.sinkInternalEnergyRate[0], 0.0f);
+    fixture.density();
+    std::array<float, 2> const density{data.sinkDensity[0], data.sinkDensity[1]};
+    fixture.enableHydroCoupling();
+    data.sourceHydroCoupling[0] = 0.0f;
+    fixture.hydro();
+    for (int index = 0; index < 2; ++index) {
+        EXPECT_EQ(data.sinkAccelerations[index].acceleration[0], 0.0f);
+        EXPECT_EQ(data.sinkAccelerations[index].acceleration[1], 0.125f);
+        EXPECT_EQ(data.sinkInternalEnergyRate[index], 0.0f);
+    }
+    fixture.density();
+    for (int index = 0; index < 2; ++index) {
+        EXPECT_EQ(data.sinkDensity[index], density[index]);
+    }
+    data.sourceHydroCoupling[0] = 1.0f;
+    fixture.hydro();
+    EXPECT_NE(data.sinkAccelerations[0].acceleration[0], 0.0f);
+    EXPECT_GT(data.sinkInternalEnergyRate[0], 0.0f);
 }
 
 TEST_F(MonaghanSphCuda, CullenDehnenExcludedThermodynamics) {

@@ -22,6 +22,7 @@
 #include <cosmictiger/cuda/cuda.hpp>
 #include <cosmictiger/math/position.hpp>
 #include <cosmictiger/math/range.hpp>
+#include <cosmictiger/particles/star_formation_state.hpp>
 
 static
 #ifdef __CUDACC__
@@ -34,6 +35,7 @@ static
 
 inline constexpr int kDarkMatterType = 0;
 inline constexpr int kSphType = 1;
+inline constexpr int kStarType = 2;
 
 #ifdef LONG_LONG_PART_INT
 using ParticleInteger = long long;
@@ -117,6 +119,7 @@ struct Particle {
     char t;
     char type;
     ParticleInteger gravitySample = -1;
+    StarFormationState starFormation;
     template <class A>
     void serialize(A&& a, unsigned) {
         static bool doGroups = getOptions().analysis.groups;
@@ -138,6 +141,9 @@ struct Particle {
         if (getOptions().hydro.enabled) {
             a & catIndex;
             a & type;
+        }
+        if (getOptions().starFormation.enabled) {
+            a & starFormation;
         }
     }
 };
@@ -181,6 +187,7 @@ PARTICLES_EXTERN ParticleInteger* particlesSph;
 PARTICLES_EXTERN GroupInteger* particlesLgrp;
 PARTICLES_EXTERN char* particlesTr;
 PARTICLES_EXTERN char* particlesTy;
+PARTICLES_EXTERN StarFormationState* particlesStarFormationStates;
 // Transient gravity-check attributes: -1 is unselected, otherwise the global sample slot.
 PARTICLES_EXTERN ParticleInteger* particlesGravitySampleIndices;
 PARTICLES_EXTERN Array<float, kDimensions>* particlesGravitySampleAccelerations;
@@ -199,6 +206,10 @@ uint64_t particlesRemoteFetchCount();
 std::unordered_map<int, ParticleInteger> particlesGroupsInit();
 void particlesGroupsDestroy();
 void particlesResize(ParticleInteger, bool lock = true);
+// Call once on rank zero after fresh initial conditions; restart preserves saved IDs.
+void particlesInitializeStarFormationIds();
+// Local conversion at a synchronized boundary with no outstanding force/cache readers.
+void particlesConvertToStar(ParticleInteger index, double formationTime);
 void particlesRandomInit();
 #if COSMICTIGER_WITH_SPH
 void particlesResolveWithSphParticles();
@@ -375,6 +386,9 @@ inline Particle particlesGetParticle(ParticleInteger index) {
         p.type = particlesType(index);
         p.catIndex = particlesCatIndex(index);
     }
+    if (getOptions().starFormation.enabled) {
+        p.starFormation = particlesStarFormationStates[index];
+    }
     return p;
 }
 
@@ -399,6 +413,9 @@ inline void particlesSetParticle(Particle p, ParticleInteger index) {
     if (getOptions().hydro.enabled) {
         particlesType(index) = p.type;
         particlesCatIndex(index) = p.catIndex;
+    }
+    if (getOptions().starFormation.enabled) {
+        particlesStarFormationStates[index] = p.starFormation;
     }
 }
 

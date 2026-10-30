@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <stddef.h>
 #include <string>
 
@@ -135,7 +136,8 @@ struct Gravity {
     int meshSize{};    // Requested full-particle PMMM side; scale by rung before FFT rounding.
     int pmmmMaxPrimeFactor{5};    // Inclusive FFT mesh prime-factor limit; zero is unrestricted.
     int pmmmNearWidth{2};    // Direct neighbor cube radius for periodic PMMM, one to four cells.
-    int pmmmOrder{gravity::kBuildFmmOrder};    // Potential expansion degree + 1, shared by far and near fields.
+    int pmmmOrder{gravity::kBuildFmmOrder};    // Potential expansion degree + 1, shared by far and
+                                               // near fields.
     std::string pmmmNearMethod{gravity::kBuildPmmmNearMethod};
     int pmmmBatchParticles{4096};             // Target owned sink count per ready near-field batch.
     int fmmOrder{gravity::kBuildFmmOrder};    // Potential expansion degree + 1; template/storage convention.
@@ -251,6 +253,23 @@ struct Chemistry {
     int maxSubsteps{4096};
 };
 
+struct StarFormation {
+    bool enabled{false};
+    double beta{0.1};
+    double evaporationFactor{1000.0};
+    double starFormationTimeGyr{2.1};
+    double coldTemperature{1000.0};
+    double supernovaTemperature{1.0e8};
+    std::uint64_t seed{1};
+    double metalYield{0.02};
+    bool winds{false};
+    double windMassLoading{2.0};
+    double windEnergyFraction{0.25};
+    double windDecouplingMyr{50.0};
+    double windRecoupleDensityFraction{0.1};
+    std::string windDirection{"isotropic"};
+};
+
 struct Options {
     std::string configuration;
     Run run;
@@ -265,6 +284,7 @@ struct Options {
     Units units;
     Hydro hydro;
     Chemistry chemistry;
+    StarFormation starFormation;
 
     template <typename Archive>
     void serialize(Archive&& arc, unsigned) {
@@ -417,6 +437,20 @@ struct Options {
         arc & gravity.pmmmMaxPrimeFactor;
         arc & gravity.errorInterval;
         arc & gravity.errorSampleSize;
+        arc & starFormation.enabled;
+        arc & starFormation.beta;
+        arc & starFormation.evaporationFactor;
+        arc & starFormation.starFormationTimeGyr;
+        arc & starFormation.coldTemperature;
+        arc & starFormation.supernovaTemperature;
+        arc & starFormation.seed;
+        arc & starFormation.metalYield;
+        arc & starFormation.winds;
+        arc & starFormation.windMassLoading;
+        arc & starFormation.windEnergyFraction;
+        arc & starFormation.windDecouplingMyr;
+        arc & starFormation.windRecoupleDensityFraction;
+        arc & starFormation.windDirection;
     }
 };
 
