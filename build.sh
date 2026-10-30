@@ -15,7 +15,8 @@ showUsage() {
     printf 'Particle chemistry is independently selectable and requires SPH.\n'
     printf 'Stars are selectable with COSMICTIGER_ENABLE_STARS and require chemistry and SPH.\n'
     printf 'Position storage is selected for the whole build directory; fixed32 is the default.\n'
-    printf 'Use -j with no argument or -j max to use half the available CPUs.\n'
+    printf 'Build jobs default to the detected system thread count, with no upper cap.\n'
+    printf 'Use -j with no argument or -j max to select that thread count.\n'
 }
 
 requestedBuildJobs=
@@ -91,10 +92,8 @@ if [[ ! $coreCount =~ ^[1-9][0-9]*$ ]]; then
     coreCount=1
 fi
 
-# Keep build and test concurrency within half the available CPUs.
-maxJobs=$((coreCount / 2))
-(( maxJobs > 0 )) || maxJobs=1
-# MPI integration tests use two localities with two HPX threads each.
+# Keep test concurrency within half the available CPUs; MPI integration tests
+# use two localities with two HPX threads each.
 maxTestJobs=$((coreCount / 8))
 if (( maxTestJobs < 1 )); then
     maxTestJobs=1
@@ -114,17 +113,14 @@ enableSph=ON
 enableChemistry=ON
 enableStars=OFF
 testSuite=OFF
-buildJobs=4
+buildJobs=$coreCount
 testJobs=2
-if (( buildJobs > maxJobs )); then
-    buildJobs=$maxJobs
-fi
 if (( testJobs > maxTestJobs )); then
     testJobs=$maxTestJobs
 fi
 if [[ -n $requestedBuildJobs ]]; then
     if [[ $requestedBuildJobs == max ]]; then
-        buildJobs=$maxJobs
+        buildJobs=$coreCount
     elif [[ $requestedBuildJobs =~ ^[0-9]+$ ]] && [[ $requestedBuildJobs =~ [1-9] ]]; then
         buildJobs=$requestedBuildJobs
     else
@@ -139,9 +135,26 @@ dependencyPrefixes=${dependencyPrefixes//:/;}
 cudaArchitectures=
 logFile=
 promptValue=
+useDialog=false
+if command -v whiptail >/dev/null 2>&1 && [[ ${TERM:-dumb} != dumb ]]; then
+    useDialog=true
+fi
 
 trap 'printf "\nInterrupted. Log: %s\n" "${logFile:-none}" >&2; exit 130' INT
 trap 'printf "\nTerminated. Log: %s\n" "${logFile:-none}" >&2; exit 143' TERM
+
+dialogChoice() {
+    whiptail --clear --backtitle 'CosmicTiger builder' "$@" 3>&1 1>&2 2>&3
+}
+
+showMessage() {
+    if [[ $useDialog == true ]]; then
+        whiptail --clear --backtitle 'CosmicTiger builder' \
+            --title 'Build configuration' --msgbox "$1" 10 72
+    else
+        printf '%s\n' "$1" >&2
+    fi
+}
 
 readInput() {
     printf '%s' "$1"
@@ -152,6 +165,18 @@ readInput() {
 }
 
 chooseMode() {
+    if [[ $useDialog == true ]]; then
+        if promptValue=$(dialogChoice --title 'Build mode' \
+            --default-item "$buildMode" \
+            --menu 'Select a build mode.' 14 72 4 \
+            release 'Optimized, without debug symbols' \
+            relwithdebinfo 'Optimized, debug symbols and APEX tasks' \
+            debug 'Debug checks, symbols and APEX tasks' \
+            profile 'APEX tasks and host gprof instrumentation'); then
+            buildMode=$promptValue
+        fi
+        return
+    fi
     while true; do
         printf '\nBuild mode: 1) Release  2) RelWithDebInfo  3) Debug  4) Profile\n'
         readInput "Choice [${buildMode}]: "
@@ -167,6 +192,28 @@ chooseMode() {
 }
 
 chooseGravityFeatures() {
+    if [[ $useDialog == true ]]; then
+        local selectedFeatures feature
+        if selectedFeatures=$(dialogChoice --title 'Gravity capabilities' --notags \
+            --separate-output --checklist \
+            'Space toggles capabilities. Leave all gravity capabilities off for SPH only.' \
+            14 76 3 \
+            fmm 'Global FMM' "$enableFmm" \
+            pmmm_pp 'PMMM with direct particle-pair near field' "$enablePmmmPp" \
+            pmmm_fmm 'PMMM with FMM near field' "$enablePmmmFmm"); then
+            enableFmm=OFF
+            enablePmmmPp=OFF
+            enablePmmmFmm=OFF
+            while IFS= read -r feature; do
+                case "$feature" in
+                    fmm) enableFmm=ON ;;
+                    pmmm_pp) enablePmmmPp=ON ;;
+                    pmmm_fmm) enablePmmmFmm=ON ;;
+                esac
+            done <<< "$selectedFeatures"
+        fi
+        return
+    fi
     chooseToggle 'Compile global FMM' "$enableFmm"; enableFmm=$promptValue
     chooseToggle 'Compile PMMM with PP near field' "$enablePmmmPp"; enablePmmmPp=$promptValue
     chooseToggle 'Compile PMMM with FMM near field' "$enablePmmmFmm"; enablePmmmFmm=$promptValue
@@ -174,24 +221,64 @@ chooseGravityFeatures() {
 
 chooseExpansionDegree() {
     while true; do
-        readInput "Potential expansion degrees [${expansionDegree}] (2-8, scalar or inclusive range): "
+        if [[ $useDialog == true ]]; then
+            if ! promptValue=$(dialogChoice --title 'Potential expansion degrees' \
+                --inputbox 'Enter a degree from 2 to 8, or an inclusive range such as 4-6.' \
+                10 72 "$expansionDegree"); then
+                return
+            fi
+        else
+            readInput "Potential expansion degrees [${expansionDegree}] (2-8, scalar or inclusive range): "
+        fi
         [[ -z $promptValue ]] && return
         if [[ $promptValue =~ ^([2-8])(-([2-8]))?$ ]] &&
             [[ -z ${BASH_REMATCH[3]} || ${BASH_REMATCH[1]} -le ${BASH_REMATCH[3]} ]]; then
             expansionDegree=$promptValue
             return
         fi
-        printf 'Enter a degree or an ordered inclusive range, for example 6 or 4-6.\n'
+        showMessage 'Enter a degree or an ordered inclusive range, for example 6 or 4-6.'
     done
 }
 
 chooseIntegrators() {
+    if [[ $useDialog == true ]]; then
+        local selectedIntegrators integrator
+        if selectedIntegrators=$(dialogChoice --title 'Integrator capabilities' --notags \
+            --separate-output --checklist \
+            'Space toggles integrators. Select at least one. SPH needs traditional or global integration.' \
+            14 76 3 \
+            traditional 'Traditional nested integration' "$enableTraditional" \
+            hierarchical 'Hierarchical integration' "$enableHierarchical" \
+            global 'Global adaptive integration' "$enableGlobal"); then
+            enableTraditional=OFF
+            enableHierarchical=OFF
+            enableGlobal=OFF
+            while IFS= read -r integrator; do
+                case "$integrator" in
+                    traditional) enableTraditional=ON ;;
+                    hierarchical) enableHierarchical=ON ;;
+                    global) enableGlobal=ON ;;
+                esac
+            done <<< "$selectedIntegrators"
+        fi
+        return
+    fi
     chooseToggle 'Compile traditional nested integration' "$enableTraditional"; enableTraditional=$promptValue
     chooseToggle 'Compile hierarchical integration' "$enableHierarchical"; enableHierarchical=$promptValue
     chooseToggle 'Compile global adaptive integration' "$enableGlobal"; enableGlobal=$promptValue
 }
 
 choosePositionType() {
+    if [[ $useDialog == true ]]; then
+        if promptValue=$(dialogChoice --title 'Position storage' \
+            --default-item "$positionType" \
+            --menu 'Select position storage for every target in this build directory.' 12 72 2 \
+            fixed32 '32-bit fixed point (default)' \
+            fixed64 '64-bit fixed point'); then
+            positionType=$promptValue
+        fi
+        return
+    fi
     while true; do
         printf '\nPosition storage: 1) fixed32 (default)  2) fixed64\n'
         readInput "Choice [${positionType}]: "
@@ -207,6 +294,14 @@ choosePositionType() {
 chooseToggle() {
     local label=$1
     local currentValue=$2
+    if [[ $useDialog == true ]]; then
+        if ! promptValue=$(dialogChoice --title "$label" \
+            --default-item "$currentValue" --menu "Select $label." 12 64 2 \
+            ON 'Enabled' OFF 'Disabled'); then
+            promptValue=$currentValue
+        fi
+        return
+    fi
     while true; do
         readInput "$label [${currentValue}] (y/n, Enter keeps): "
         case "${promptValue,,}" in
@@ -222,7 +317,15 @@ chooseNumber() {
     local label=$1
     local currentValue=$2
     while true; do
-        readInput "$label [${currentValue}] (positive whole number, Enter keeps): "
+        if [[ $useDialog == true ]]; then
+            if ! promptValue=$(dialogChoice --title "$label" \
+                --inputbox 'Enter a positive whole number of jobs.' 10 68 "$currentValue"); then
+                promptValue=$currentValue
+                return
+            fi
+        else
+            readInput "$label [${currentValue}] (positive whole number, Enter keeps): "
+        fi
         if [[ -z $promptValue ]]; then
             promptValue=$currentValue
             return
@@ -230,14 +333,23 @@ chooseNumber() {
         if [[ $promptValue =~ ^[0-9]+$ && $promptValue =~ [1-9] ]]; then
             return
         fi
-        printf 'Enter a positive whole number.\n'
+        showMessage 'Enter a positive whole number.'
     done
 }
 
 chooseText() {
     local label=$1
     local currentValue=$2
-    readInput "$label [${currentValue:-automatic default}] (Enter keeps, - resets): "
+    if [[ $useDialog == true ]]; then
+        if ! promptValue=$(dialogChoice --title "$label" \
+            --inputbox "$3 Enter keeps the current value; - resets to the default." \
+            12 74 "$currentValue"); then
+            promptValue=$currentValue
+            return
+        fi
+    else
+        readInput "$label [${currentValue:-automatic default}] (Enter keeps, - resets): "
+    fi
     if [[ $promptValue == '-' ]]; then
         promptValue=
     elif [[ -z $promptValue ]]; then
@@ -263,34 +375,62 @@ showMainMenu() {
     printf ' 14) Build particle chemistry (requires SPH): %s\n' "$enableChemistry"
     printf ' 15) Build stars (requires chemistry and SPH): %s\n' "$enableStars"
     printf '  Enter or b) Configure and build    q) Quit\n'
-    printf 'Build jobs are capped at half the available CPUs; MPI tests use four CPUs each.\n'
+    printf 'Build jobs default to %s system threads, with no upper cap; MPI tests use four CPUs each.\n' "$coreCount"
+}
+
+chooseMainMenu() {
+    if [[ $useDialog == true ]]; then
+        if ! promptValue=$(dialogChoice --title 'Build configuration' \
+            --cancel-button 'Quit' --default-item "$menuChoice" --notags \
+            --menu "Build jobs: default $coreCount system threads, no upper cap. Test limit: $maxTestJobs (four CPUs per MPI test)." \
+            0 0 17 \
+            1 "Build mode: $buildMode" \
+            2 "CUDA: $enableCuda" \
+            3 "Build and run test suite: $testSuite" \
+            4 "Parallel build jobs: $buildJobs" \
+            5 "Parallel test jobs: $testJobs" \
+            6 "HPX installation prefix: ${hpxPrefix:-automatic by build mode}" \
+            7 "CUDA architectures: ${cudaArchitectures:-$defaultCudaArchitectures}" \
+            8 "Additional dependency prefixes: ${dependencyPrefixes:-system default}" \
+            9 "Gravity: FMM=$enableFmm PMMM PP=$enablePmmmPp PMMM FMM=$enablePmmmFmm" \
+            10 "Potential expansion degrees: $expansionDegree" \
+            11 "Integrators: traditional=$enableTraditional hierarchical=$enableHierarchical global=$enableGlobal" \
+            12 "Build SPH support: $enableSph" \
+            13 "Position storage: $positionType" \
+            14 "Build particle chemistry (requires SPH): $enableChemistry" \
+            15 "Build stars (requires chemistry and SPH): $enableStars" \
+            b 'Configure and build' q 'Quit'); then
+            promptValue=q
+        fi
+    else
+        showMainMenu
+        readInput 'Choice [build]: '
+    fi
 }
 
 validateFeatures() {
     if [[ $enableFmm != ON && $enablePmmmPp != ON && $enablePmmmFmm != ON && $enableSph != ON ]]; then
-        printf 'Enable at least one physics component.\n' >&2; return 1
+        showMessage 'Enable at least one physics component.'; return 1
     fi
     if [[ $enableTraditional != ON && $enableHierarchical != ON && $enableGlobal != ON ]]; then
-        printf 'Enable at least one integrator.\n' >&2; return 1
+        showMessage 'Enable at least one integrator.'; return 1
     fi
     if [[ $enableSph == ON && $enableTraditional != ON && $enableGlobal != ON ]]; then
-        printf 'SPH requires traditional or global integration.\n' >&2; return 1
+        showMessage 'SPH requires traditional or global integration.'; return 1
     fi
     if [[ $enableStars == ON && $enableChemistry != ON ]]; then
-        printf 'Stars require particle chemistry. Enable chemistry (option 14) or disable stars (option 15).\n' >&2; return 1
-    fi
-    if (( buildJobs > maxJobs )); then
-        printf 'Build concurrency is limited to %s jobs.\n' "$maxJobs" >&2; return 1
+        showMessage 'Stars require particle chemistry. Enable chemistry (option 14) or disable stars (option 15).'; return 1
     fi
     if (( testJobs > maxTestJobs )); then
-        printf 'Test concurrency is limited to %s jobs (four CPUs per MPI test).\n' "$maxTestJobs" >&2; return 1
+        showMessage "Test concurrency is limited to $maxTestJobs jobs (four CPUs per MPI test)."; return 1
     fi
 }
 
+menuChoice=1
 while true; do
-    showMainMenu
-    readInput 'Choice [build]: '
-    case "${promptValue,,}" in
+    chooseMainMenu
+    menuChoice=${promptValue,,}
+    case "$menuChoice" in
         ''|b|build) if validateFeatures; then break; fi ;;
         q|quit) printf 'No build started.\n'; exit 0 ;;
         1) chooseMode ;;
@@ -298,9 +438,12 @@ while true; do
         3) chooseToggle 'Build and run test suite' "$testSuite"; testSuite=$promptValue ;;
         4) chooseNumber 'Parallel build jobs' "$buildJobs"; buildJobs=$promptValue ;;
         5) chooseNumber 'Parallel test jobs' "$testJobs"; testJobs=$promptValue ;;
-        6) chooseText 'HPX installation prefix' "$hpxPrefix"; hpxPrefix=$promptValue ;;
-        7) chooseText 'CUDA architectures' "$cudaArchitectures"; cudaArchitectures=$promptValue ;;
-        8) chooseText 'Additional dependency prefixes' "$dependencyPrefixes"; dependencyPrefixes=$promptValue ;;
+        6) chooseText 'HPX installation prefix' "$hpxPrefix" \
+            'Enter an HPX prefix. The default follows the build mode.'; hpxPrefix=$promptValue ;;
+        7) chooseText 'CUDA architectures' "$cudaArchitectures" \
+            "Enter architectures (e.g. 86), native, or OFF. The default is $defaultCudaArchitectures."; cudaArchitectures=$promptValue ;;
+        8) chooseText 'Additional dependency prefixes' "$dependencyPrefixes" \
+            'Enter semicolon-separated dependency prefixes.'; dependencyPrefixes=$promptValue ;;
         9) chooseGravityFeatures ;;
         10) chooseExpansionDegree ;;
         11) chooseIntegrators ;;
@@ -396,8 +539,8 @@ fi
 if [[ $enableCuda == ON ]]; then
     configureCommand+=("-DCMAKE_CUDA_ARCHITECTURES=${cudaArchitectures:-$defaultCudaArchitectures}")
 fi
-buildCommand=(cmake --build "$buildDir" --target "$buildTarget" --parallel "$buildJobs")
-testBuildCommand=(cmake --build "$buildDir" --target all --parallel "$buildJobs")
+buildCommand=(cmake --build "$buildDir" --target "$buildTarget" --parallel "$buildJobs" --verbose)
+testBuildCommand=(cmake --build "$buildDir" --target all --parallel "$buildJobs" --verbose)
 testCommand=(ctest --test-dir "$buildDir" --output-on-failure --parallel "$testJobs")
 
 runStage() {
