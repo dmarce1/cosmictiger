@@ -97,13 +97,34 @@ __global__ void coldSampleKernel(ColdSample* results) {
     }
 }
 // Hot extension (docs/molecular9_hot.md): published high-temperature branches,
-// held fits, the 1e4 K cooling clamp and the rotor asymptote on the device.
-CUDA_EXPORT ColdSample hotSample(unsigned index) {
+// held fits, the 1e4 K cooling clamp, the 129-level ladder and the rotor
+// asymptote on the device. Every rate coefficient, the five cooling
+// coefficients, the LTE asymptote, the thermal energy and heat capacity at the
+// sample temperature, the EOS inversion and all seven RHS components are
+// compared with the host for a half-ionized trace composition and for a
+// molecule-dominated one, so the hot branches that never reach the thermal
+// ledger are verified too.
+struct HotSample {
+    primordial::Status status{};
+    float collision[primordial::kCollisionCount]{};
+    float cooling[5]{}, lte{}, energy{}, heatCapacity{}, eosTemperature{}, heating{};
+    float derivative[primordial::kAbundanceCount]{};
+};
+CUDA_EXPORT HotSample hotSample(unsigned index) {
     using namespace primordial;
     float const temperatures[] = {
         5999.0f, 6001.0f, 8000.0f, 9999.0f, 1.0e4f, 10001.0f, 3.0e4f, 1.0e5f, 1.0e6f, 1.0e8f};
-    float const temperature = temperatures[index];
-    ColdSample result;
+    float const temperature = temperatures[index % 10];
+    bool const molecular = index >= 10;
+    HotSample result;
+    RateCoefficients rates;
+    result.status = evaluateRateCoefficients(temperature, Network::Molecular9, rates);
+    if (result.status != Status::Success) {
+        return result;
+    }
+    for (int i = 0; i != kCollisionCount; ++i) {
+        result.collision[i] = rates.collision[i];
+    }
     result.status = molecularCoolingCoefficients(temperature, result.cooling, result.lte);
     if (result.status != Status::Success) {
         return result;
@@ -113,31 +134,44 @@ CUDA_EXPORT ColdSample hotSample(unsigned index) {
     environment.nHydrogen = index % 2 == 0 ? 1.0f : 1.0e4f;
     environment.cmbTemperature = 30.0f;
     State state;
-    state.abundances[0] = SignedAbundance::fromFraction(0.5f);
-    state.abundances[1] = SignedAbundance::fromFraction(0.3f);
-    state.abundances[2] = SignedAbundance::fromFraction(0.2f);
-    state.abundances[3] = SignedAbundance::fromMinority(1.e-8f, false);
-    state.abundances[4] = SignedAbundance::fromFraction(1.e-3f);
-    state.abundances[5] = SignedAbundance::fromMinority(1.e-6f, false);
+    if (molecular) {
+        state.abundances[0] = SignedAbundance::fromFraction(0.1f);
+        state.abundances[1] = SignedAbundance::fromFraction(0.3f);
+        state.abundances[3] = SignedAbundance::fromMinority(1.e-6f, false);
+        state.abundances[4] = SignedAbundance::fromFraction(0.6f);
+        state.abundances[5] = SignedAbundance::fromFraction(0.2f);
+    } else {
+        state.abundances[0] = SignedAbundance::fromFraction(0.5f);
+        state.abundances[1] = SignedAbundance::fromFraction(0.3f);
+        state.abundances[2] = SignedAbundance::fromFraction(0.2f);
+        state.abundances[3] = SignedAbundance::fromMinority(1.e-8f, false);
+        state.abundances[4] = SignedAbundance::fromFraction(1.e-3f);
+        state.abundances[5] = SignedAbundance::fromMinority(1.e-6f, false);
+    }
     result.status =
         thermalEnergyAtTemperature(state, environment, temperature, state.thermalEnergy);
     if (result.status != Status::Success) {
         return result;
     }
+    result.energy = state.thermalEnergy;
     Eos eos;
     result.status = evaluateEos(state, environment, eos);
     if (result.status != Status::Success) {
         return result;
     }
     result.eosTemperature = eos.temperature;
+    result.heatCapacity = eos.heatCapacity;
     Derivative derivative;
     result.status =
         evaluateRhsAtTemperature(workingState(state), environment, temperature, derivative);
+    for (int i = 0; i != kAbundanceCount; ++i) {
+        result.derivative[i] = derivative.abundances[i].toFloat();
+    }
     result.heating = derivative.thermalEnergy.toFloat();
     return result;
 }
-__global__ void hotSampleKernel(ColdSample* results) {
-    if (threadIdx.x < 10) {
+__global__ void hotSampleKernel(HotSample* results) {
+    if (threadIdx.x < 20) {
         results[threadIdx.x] = hotSample(threadIdx.x);
     }
 }
@@ -186,11 +220,11 @@ TEST_F(PrimordialCuda, ColdMolecularRhsAndEosMatchCpu) {
 
 TEST_F(PrimordialCuda, HotMolecularRhsAndEosMatchCpu) {
     using namespace primordial;
-    ColdSample* hotDevice = nullptr;
-    ColdSample hotResults[10];
+    HotSample* hotDevice = nullptr;
+    HotSample hotResults[20];
     cudaError_t hotStatus = cudaMalloc(reinterpret_cast<void**>(&hotDevice), sizeof(hotResults));
     if (hotStatus == cudaSuccess) {
-        hotSampleKernel<<<1, 10>>>(hotDevice);
+        hotSampleKernel<<<1, 20>>>(hotDevice);
         hotStatus = cudaGetLastError();
     }
     if (hotStatus == cudaSuccess) {
@@ -201,12 +235,14 @@ TEST_F(PrimordialCuda, HotMolecularRhsAndEosMatchCpu) {
         std::fprintf(stderr, "Hot molecular CUDA kernel failed\n");
         FAIL() << "Primordial CUDA regression failed; see diagnostic above";
     }
-    for (unsigned i = 0; i != 10; ++i) {
-        ColdSample const cpu = hotSample(i);
-        ColdSample const& gpu = hotResults[i];
+    for (unsigned i = 0; i != 20; ++i) {
+        HotSample const cpu = hotSample(i);
+        HotSample const& gpu = hotResults[i];
         if (cpu.status != Status::Success || gpu.status != Status::Success ||
             !close(cpu.heating, gpu.heating, ::fabsf(cpu.heating), 1.e-40f) ||
             !close(cpu.lte, gpu.lte, cpu.lte, 1.e-44f) ||
+            !close(cpu.energy, gpu.energy, cpu.energy) ||
+            !close(cpu.heatCapacity, gpu.heatCapacity, cpu.heatCapacity) ||
             !close(cpu.eosTemperature, gpu.eosTemperature, cpu.eosTemperature)) {
             std::fprintf(stderr, "Hot molecular CUDA RHS/EOS mismatch at case%u\n", i);
             FAIL() << "Primordial CUDA regression failed; see diagnostic above";
@@ -218,6 +254,88 @@ TEST_F(PrimordialCuda, HotMolecularRhsAndEosMatchCpu) {
                 FAIL() << "Primordial CUDA regression failed; see diagnostic above";
             }
         }
+        for (int reaction = 0; reaction != kCollisionCount; ++reaction) {
+            // Hot branches, held fits and the GA08 interpolation are compared
+            // coefficient by coefficient; underflowed cold tails compare as zero.
+            if (!close(cpu.collision[reaction], gpu.collision[reaction], cpu.collision[reaction],
+                    1.e-44f)) {
+                std::fprintf(
+                    stderr, "Hot molecular CUDA rate mismatch at case%u/k%d\n", i, reaction);
+                FAIL() << "Primordial CUDA regression failed; see diagnostic above";
+            }
+        }
+        for (int species = 0; species != kAbundanceCount; ++species) {
+            if (!close(cpu.derivative[species], gpu.derivative[species],
+                    ::fabsf(cpu.derivative[species]), 1.e-40f)) {
+                std::fprintf(
+                    stderr, "Hot molecular CUDA species RHS mismatch at case%u/x%d\n", i, species);
+                FAIL() << "Primordial CUDA regression failed; see diagnostic above";
+            }
+        }
+    }
+}
+
+TEST_F(PrimordialCuda, HotMolecularBatchMatchesCpu) {
+    using namespace primordial;
+    // The device solver integrates hot molecular gas through the extended
+    // domain: the HotMolecularReference state (dissociation, cooling through
+    // 1e4 K and H2 reformation) and the molecular 1e8 K endpoint with trace H2
+    // and H2+. Status, accepted time, energy and every species must agree with
+    // the CPU as in the other batch cases.
+    std::vector<BatchInput> inputs(2);
+    inputs[0].environment.network = Network::Molecular9;
+    inputs[0].environment.nHydrogen = 1.0f;
+    inputs[0].environment.cmbTemperature = 30.0f;
+    inputs[0].state.abundances[0] = SignedAbundance::fromFraction(0.5f);
+    inputs[0].state.abundances[1] = SignedAbundance::fromFraction(1.e-2f);
+    inputs[0].state.abundances[2] = SignedAbundance::fromFraction(1.e-4f);
+    inputs[0].state.abundances[4] = SignedAbundance::fromFraction(2.e-3f);
+    inputs[0].interval = 1.e12f;
+    inputs[1].environment.network = Network::Molecular9;
+    inputs[1].environment.nHydrogen = 1.0f;
+    inputs[1].environment.cmbTemperature = 30.0f;
+    inputs[1].state.abundances[0] = SignedAbundance::fromMinority(2.e-6f, true);
+    inputs[1].state.abundances[2] = SignedAbundance::fromFraction(1.0f);
+    inputs[1].state.abundances[4] = SignedAbundance::fromMinority(1.e-6f, false);
+    inputs[1].state.abundances[5] = SignedAbundance::fromMinority(1.e-6f, false);
+    inputs[1].interval = 1.e12f;
+    float const temperatures[] = {30000.0f, maximumTemperature(Network::Molecular9)};
+    for (size_t i = 0; i != inputs.size(); ++i) {
+        if (thermalEnergyAtTemperature(inputs[i].state, inputs[i].environment, temperatures[i],
+                inputs[i].state.thermalEnergy) != Status::Success) {
+            FAIL() << "Primordial CUDA regression failed; see diagnostic above";
+        }
+    }
+    std::vector<StepResult> cpu(inputs.size()), gpu(inputs.size());
+    SolverOptions const options;
+    std::string error;
+    if (!integrateBatchCpu(inputs.data(), cpu.data(), inputs.size(), options) ||
+        !integrateBatchCuda(inputs.data(), gpu.data(), inputs.size(), options, &error)) {
+        std::fprintf(stderr, "Hot molecular CUDA dispatch failed: %s\n", error.c_str());
+        FAIL() << "Primordial CUDA regression failed; see diagnostic above";
+    }
+    for (size_t i = 0; i != inputs.size(); ++i) {
+        Eos eos;
+        if (cpu[i].status != Status::Success || gpu[i].status != Status::Success ||
+            cpu[i].acceptedTime != inputs[i].interval ||
+            gpu[i].acceptedTime != inputs[i].interval ||
+            evaluateEos(gpu[i].state, inputs[i].environment, eos) != Status::Success ||
+            eos.temperature >= temperatures[i] ||
+            !close(cpu[i].state.thermalEnergy, gpu[i].state.thermalEnergy,
+                cpu[i].state.thermalEnergy, 1.e-7f)) {
+            std::fprintf(stderr, "Hot molecular CUDA batch parity failed in case%zu\n", i);
+            FAIL() << "Primordial CUDA regression failed; see diagnostic above";
+        }
+        for (int j = 0; j < kAbundanceCount; ++j) {
+            if (cpu[i].state.abundances[j].upper() != gpu[i].state.abundances[j].upper() ||
+                !close(cpu[i].state.abundances[j].raw(), gpu[i].state.abundances[j].raw(),
+                    ::fabsf(cpu[i].state.abundances[j].raw()))) {
+                std::fprintf(stderr, "Hot molecular CUDA batch species mismatch at%zu/%d\n", i, j);
+                FAIL() << "Primordial CUDA regression failed; see diagnostic above";
+            }
+        }
+        std::printf("hot molecular CUDA batch case%zu: %u device substeps, T %.5g K\n", i,
+            gpu[i].acceptedSubsteps, eos.temperature);
     }
 }
 

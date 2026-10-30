@@ -227,17 +227,21 @@ atomic CIE closure with no molecular contribution.
 - CUDA, run 2026-10-30 in `build/molecular_hot_cuda` (nvcc 13.1.115,
   `CMAKE_CUDA_ARCHITECTURES=86`) on this workstation's GPU while another
   process shared the device, so no timing is recorded: `primordial_cuda_test`
-  passed all seven cases, including the new `HotMolecularRhsAndEosMatchCpu`,
-  which evaluates the shared headers on the device for one half-ionized
-  composition with H⁻, H₂ and H₂⁺ traces at 1 and 10⁴ cm⁻³ and ten
-  temperatures from 5999 K to 10⁸ K, comparing the five cooling coefficients,
-  the LTE asymptote, the EOS inversion temperature and the thermal RHS with the
-  host to 2 × 10⁻⁴ relative. Species derivatives and individual rate
-  coefficients are not compared by that kernel, and the EOS temperature is a
-  per-side round trip, so the hot branches that never reach the thermal ledger
-  and the ladder/asymptote energies are verified on the host only; a stronger
-  kernel is drafted in `handoff/primordial_cuda_strengthened.patch` but not yet
-  built or run. The host `primordial_rates` (8/8) and `primordial_solver`
+  passes all eight cases. `HotMolecularRhsAndEosMatchCpu` evaluates the shared
+  headers on the device for a half-ionized composition and a
+  molecule-dominated one, with H⁻, H₂ and H₂⁺ traces, at 1 and 10⁴ cm⁻³ and
+  ten temperatures from 5999 K to 10⁸ K, and compares all 29 rate
+  coefficients (so the hot branches k[6], k[16] and the held fits k[8],
+  k[15], k[27], k[28]), the five cooling coefficients, the LTE asymptote, the
+  energy and heat capacity (the ladder/asymptote energies), the EOS inversion
+  temperature, the thermal RHS and all six species derivatives with the host
+  to 2 × 10⁻⁴ relative. `HotMolecularBatchMatchesCpu` integrates the 30 000 K
+  reference state (776 device substeps, ending at 9005 K) and the 10⁸ K
+  molecular endpoint (1542 substeps) over 10¹² s on the device; status,
+  accepted time, thermal energy and every species match the CPU solver to the
+  same tolerance, so no CPU/GPU drift beyond it appears over the full
+  integrations. The strengthened cases were added 2026-10-30 (test run 113 s,
+  68 s of it the batch case). The host `primordial_rates` (8/8) and `primordial_solver`
   (10/10) suites pass unchanged in that tree (neither runs on the GPU).
   `run_primordial_integration.py --cuda`, run directly (there is no CUDA
   integration CTest) with one locality and two HPX threads, passed all four
