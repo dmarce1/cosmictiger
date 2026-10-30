@@ -897,13 +897,14 @@ mapSize = 8
     # The retired rung request is accepted only as an ignored compatibility
     # input; examples must not advertise it as an active chemistry control.
     public_keys = option_names - {"help", "configuration", "chemistry.synchronizedRung"}
-    preset_curvatures = {"lcdm_present.ini": 0.0,
-                         "closed_no_dark_energy.ini": -1.000092093902909,
+    preset_curvatures = {"closed_no_dark_energy.ini": -1.000092093902909,
                          "omega_k_negative.ini": -0.1, "omega_k_positive.ini": 0.1,
                          "critical.ini": 0.0,
                          "subcritical_no_dark_energy.ini": 0.6864420835574896}
     checked_presets = set()
     for path in [root / "default.ini", *sorted((root / "configurations").glob("*.ini"))]:
+        if path.name == "lcdm_present.ini":
+            continue  # Local, untracked preset; not part of repository validation.
         ini = configparser.ConfigParser(interpolation=None, inline_comment_prefixes=("#",))
         ini.optionxform = str
         with path.open() as stream:

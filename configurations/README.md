@@ -136,12 +136,11 @@ It enables the `atomic6` primordial chemistry network; see
 [primordial chemistry](../docs/primordial_chemistry.md). A collisionless
 cosmological run can disable both `hydro.enabled` and `chemistry.enabled`.
 
-Six collisionless cosmology presets use 32³ particles in a 100 Mpc/h box,
+Five collisionless cosmology presets use 32³ particles in a 100 Mpc/h box,
 CPU execution, and 100 particle snapshots at equal conformal intervals:
 
 | Preset | Background and endpoint |
 | --- | --- |
-| [lcdm_present.ini](lcdm_present.ini) | Standard flat ΛCDM, expanding to `a=1`. |
 | [closed_no_dark_energy.ini](closed_no_dark_energy.ini) | Collapsing: `Ωm=2`, `ΩΛ=0`, through turnaround to contracting `a≈1e-6`. |
 | [omega_k_negative.ini](omega_k_negative.ini) | `Ωk=-0.1`, positive spatial curvature, positive Λ; expanding to `a=10`. |
 | [omega_k_positive.ini](omega_k_positive.ini) | `Ωk=+0.1`, negative spatial curvature, positive Λ; expanding to `a=10`. |
@@ -165,7 +164,7 @@ The optional [lcdm_ten_ages.ini](lcdm_ten_ages.ini) continues the standard model
 to ten times its present age, recalculated with the current radiation model.
 Its present age is about 13.81146 Gyr and its final scale factor is about
 1291.70. This preserves the historical future-evolution example separately
-from the six cosmology choices above.
+from the five cosmology choices above.
 
 These files contain complete options and describe their assumptions in their
 headers. Their positive `run.endTime` values are **conformal code durations**,
