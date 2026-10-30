@@ -6,8 +6,9 @@ The evolution driver calls gravity, SPH, and chemistry according to the enabled
 physics. `run.test` is reserved for developer regressions and benchmarks.
 
 Each INI below contains every application option except the top-level `help`
-and `configuration` options, including commented alternatives for radius inputs
-and an optional position-width assertion. Leave `compute.positionType` commented
+and `configuration` options, including commented alternatives for radius and
+box-length inputs and an optional position-width assertion.
+Leave `compute.positionType` commented
 to use the width selected by `COSMICTIGER_POSITION_TYPE` when building. An explicit
 position width must match the executable.
 The files are independent: no other INI is loaded or inherited. Sections map to
@@ -168,9 +169,17 @@ from the five cosmology choices above.
 
 These files contain complete options and describe their assumptions in their
 headers. Their positive `run.endTime` values are **conformal code durations**,
-not years. For a fixed box and cosmology, changing the lattice from 32 to `N`
-requires multiplying `units.massSolar` by `(32/N)^3`; changing the box or the
-cosmology also requires recalculating the duration. See
+not years. To keep a fixed box while changing resolution, remove or comment out
+`units.massSolar` and set `units.boxLength` to the comoving side length in Mpc/h.
+For example, `initial.particlesPerDimension=128` and `units.boxLength=100` give a
+100 Mpc/h box with 128³ collisionless particles when `initial.closePack=false`.
+The reference mass is derived automatically from the resolution and cosmology.
+Alternatively, keep `units.massSolar` in solar masses without `/h`; changing the
+lattice from 32 to `N` at fixed box and cosmology then requires multiplying the
+mass by `(32/N)^3`. Supplying both mass and box length is an error, even across
+CLI and INI inputs. See [units and frames](../docs/units.md) for the reference
+count and hydro mass conventions. Changing the box or cosmology also requires
+recalculating the duration. See
 [background evolution](../docs/cosmology.md) for stopping, signed Λ input,
 accuracy controls, and restart behavior.
 

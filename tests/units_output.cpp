@@ -114,6 +114,8 @@ void checkUnitsOutputCommandLine(DBfile* file) {
         readUnitsOutputScalar(file, "/cli/hydro/maxSupportRadius"), 0.4, "CLI maximum support");
     requireUnitsOutputClose(readUnitsOutputScalar(file, "/cli/units/massSolar"),
         3.0e33 / constants::kM0, "CLI solar mass units");
+    requireUnitsOutputClose(readUnitsOutputScalar(file, "/cli/units/boxLength"),
+        2.0e24 * 0.7 / constants::kMpcToCm, "resolved comoving box length in Mpc/h");
     requireUnitsOutput(readUnitsOutputInteger(file, "/cli/hydro/enabled") == 1,
         "boolean option stored as scalar integer");
     requireUnitsOutput(readUnitsOutputInteger(file, "/cli/output/siloInterval") == 1,

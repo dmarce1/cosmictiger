@@ -29,7 +29,7 @@ def main():
     args.workdir.mkdir(parents=True, exist_ok=True)
     unused_view = args.workdir / "view.txt"
     unused_view.unlink(missing_ok=True)
-    for name in ("configured snapshots", "cli snapshots", "output"):
+    for name in ("configured snapshots", "cli snapshots", "units startup", "output"):
         directory = args.workdir / name
         if directory.exists():
             shutil.rmtree(directory)
@@ -85,6 +85,7 @@ def main():
                 "hydro.zPlaneAcceleration",
                 "output.silo", "output.siloInterval", "output.directory",
                 "output.units", "output.frame",
+                "units.massSolar", "units.boxLength",
                 "output.xMin", "output.xMax", "output.yMin", "output.yMax",
                 "output.zMin", "output.zMax", "chemistry.initialization"}
     required.update({"run.timeIntegrator", "gravity.method.far", "gravity.method.near",
@@ -207,6 +208,121 @@ mapSize = 8
                      success=count == 1, selectors=False)
         if count > 1 and key not in output:
             raise RuntimeError(f"ambiguous {key} lacked an explicit-selection diagnostic")
+
+    # A comoving Mpc/h box contains rho_m,0 * L^3. Resolution changes the mass
+    # unit, and close packing doubles the reference count at fixed resolution.
+    # The constants are CGS values from cosmictiger/math/constants.hpp.
+    normalizationOptions = metadata_options + ["--cosmology.hubble=0.7",
+                                               "--cosmology.omegaB=0.05",
+                                               "--cosmology.omegaC=0.25"]
+    mpcToCm = 3.085678e24
+    solarMassG = 1.989e33
+    matterDensity = 0.3 * 3.0 * (0.7 * 1.e7 / 3.086e24)**2 / (8.0 * math.pi * 6.67259e-8)
+    boxLength = 100.0
+    massSolar = matterDensity * (boxLength * mpcToCm / 0.7)**3 / (8**3 * solarMassG)
+
+    def assertNormalization(output, length, mass):
+        assertNumericSetting(output, "units.boxLength", length)
+        assertNumericSetting(output, "units.massSolar", mass)
+        assertNumericSetting(output, "units.lengthCm", length * mpcToCm / 0.7)
+        assertNumericSetting(output, "units.massG", mass * solarMassG)
+
+    normalized = run("units_box_cli", normalizationOptions + [f"--units.boxLength={boxLength}"])
+    assertNormalization(normalized, boxLength, massSolar)
+    normalized = run("units_mass_inverse", normalizationOptions + [f"--units.massSolar={massSolar:.17g}"])
+    assertNormalization(normalized, boxLength, massSolar)
+    # A small homogeneous lattice skips the Einstein-Boltzmann solve while
+    # exercising the normal successful startup and its nonverbose summary.
+    startupDirectory = args.workdir / "units startup"
+    startupOptions = [option for option in normalizationOptions
+                      if not option.startswith("--run.test=")]
+    startupOutput = run("units_normal_startup", startupOptions + [
+        "--run.verbose=false", f"--units.boxLength={boxLength}",
+        "--cosmology.sigma8=0", "--run.maxIterations=0", "--output.silo=false",
+        "--analysis.power=false", "--analysis.groups=false", "--analysis.tracers=false",
+        "--lightcone.enabled=false", f"--output.directory={startupDirectory.resolve()}"])
+    if "Run configuration" not in startupOutput:
+        raise RuntimeError("normal startup did not print its summary")
+    if "Resolved options" in startupOutput:
+        raise RuntimeError("normal unit summary unexpectedly required verbose diagnostics")
+    assertNumericSetting(startupOutput, "units.boxLength", boxLength)
+    assertNumericSetting(startupOutput, "units.massSolar", massSolar)
+    assertNumericSetting(startupOutput, "initial.numberOfParticles", 8**3)
+    boxSummary = re.search(r"^units\.boxLength\s*:\s*\S+ Mpc/h \((\S+) Mpc comoving\)$",
+                           startupOutput, re.MULTILINE)
+    if boxSummary is None or not math.isclose(float(boxSummary.group(1)), boxLength / 0.7,
+                                             rel_tol=1e-5):
+        raise RuntimeError("normal startup lacked comoving box units and Mpc conversion")
+    if not re.search(r"^units\.massSolar\s*:\s*\S+ Msun$", startupOutput, re.MULTILINE):
+        raise RuntimeError("normal startup lacked solar-mass units")
+    defaultMass = 1.e9 / .6732
+    defaultLength = (8**3 * defaultMass * solarMassG / matterDensity)**(1.0 / 3.0) * 0.7 / mpcToCm
+    assertNormalization(run("units_default_mass", normalizationOptions), defaultLength, defaultMass)
+    for resolution, closePack in ((16, False), (8, True), (16, True)):
+        count = resolution**3 * (2 if closePack else 1)
+        options = [option for option in normalizationOptions
+                   if not option.startswith("--initial.particlesPerDimension=")]
+        normalized = run(f"units_box_resolution_{resolution}_close_pack_{closePack}", options + [
+            f"--initial.particlesPerDimension={resolution}",
+            f"--initial.closePack={str(closePack).lower()}", f"--units.boxLength={boxLength}"])
+        assertNormalization(normalized, boxLength, massSolar * 8**3 / count)
+    if not args.without_sph and args.time_integrator != "hierarchical":
+        options = [option for option in normalizationOptions
+                   if not option.startswith("--hydro.enabled=")]
+        normalized = run("units_box_sph_combined_mass", options + [
+            "--hydro.enabled=true", f"--units.boxLength={boxLength}"])
+        assertNormalization(normalized, boxLength, massSolar)
+
+    normalizationConfig = args.workdir / "normalization.ini"
+    for key, value in (("boxLength", boxLength), ("massSolar", massSolar)):
+        normalizationConfig.write_text(f"[units]\n{key} = {value:.17g}\n")
+        normalized = run(f"units_{key}_ini", normalizationOptions + [
+            f"--configuration={normalizationConfig.resolve()}"])
+        assertNormalization(normalized, boxLength, massSolar)
+        # Ignore an invalid INI value when the same option is replaced on CLI.
+        normalizationConfig.write_text(f"[units]\n{key} = -1\n")
+        normalized = run(f"units_{key}_cli_override", normalizationOptions + [
+            f"--configuration={normalizationConfig.resolve()}", f"--units.{key}={value:.17g}"])
+        assertNormalization(normalized, boxLength, massSolar)
+        for index, invalid in enumerate(("0", "-1", "nan", "inf", "-inf")):
+            normalizationConfig.write_text(f"[units]\n{key} = {invalid}\n")
+            for source, arguments in (
+                    ("cli", [f"--units.{key}={invalid}"]),
+                    ("ini", [f"--configuration={normalizationConfig.resolve()}"])):
+                rejected = run(f"units_{key}_invalid_{source}_{index}",
+                               normalizationOptions + arguments, success=False)
+                if f"units.{key}" not in rejected:
+                    raise RuntimeError(f"invalid units.{key} lacked its option diagnostic")
+
+    for value in ("1e308", "1e-150"):
+        rejected = run(f"units_box_out_of_range_{value}", normalizationOptions + [
+            f"--units.boxLength={value}"], success=False)
+        if "units.boxLength produces out-of-range simulation units" not in rejected:
+            raise RuntimeError("unrepresentable box normalization lacked its range diagnostic")
+    for name, option in (("glass", "--run.scenario=glass"),
+                         ("gadget", "--initial.gadget4Restart=missing.gadget")):
+        rejected = run(f"units_box_unsupported_{name}", normalizationOptions + [
+            option, f"--units.boxLength={boxLength}"], success=False)
+        if "units.boxLength cannot be used" not in rejected or "own length scale" not in rejected:
+            raise RuntimeError(f"box normalization with {name} lacked its length-scale diagnostic")
+
+    for source in ("cli", "ini", "box_cli", "mass_cli"):
+        if source == "cli":
+            arguments = [f"--units.boxLength={boxLength}", f"--units.massSolar={massSolar:.17g}"]
+        else:
+            lines = ["[units]"]
+            arguments = [f"--configuration={normalizationConfig.resolve()}"]
+            for key, value in (("boxLength", boxLength), ("massSolar", massSolar)):
+                onCli = (source == "box_cli" and key == "boxLength" or
+                         source == "mass_cli" and key == "massSolar")
+                if onCli:
+                    arguments.append(f"--units.{key}={value:.17g}")
+                else:
+                    lines.append(f"{key} = {value:.17g}")
+            normalizationConfig.write_text("\n".join(lines) + "\n")
+        rejected = run(f"units_conflicting_{source}", normalizationOptions + arguments, success=False)
+        if "units.massSolar" not in rejected or "units.boxLength" not in rejected:
+            raise RuntimeError("conflicting normalization options lacked both option names")
 
     error_defaults = run("gravity_error_defaults", metadata_options)
     assertNumericSetting(error_defaults, "gravity.errorInterval", 0)
@@ -891,6 +1007,7 @@ mapSize = 8
     root = Path(__file__).resolve().parents[1]
     optional_keys = {"compute.positionType", "gravity.effectiveRadius", "gravity.supportRadius",
                      "gravity.method.near", "gravity.expansionDegree",
+                     "units.boxLength",
                      "hydro.centralEffectiveRadius", "hydro.centralSupportRadius",
                      "hydro.minEffectiveRadius", "hydro.maxEffectiveRadius",
                      *(f"chemistry.{field}" for field in chemistry_fields)}

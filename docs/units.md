@@ -13,6 +13,51 @@ specifies the scale-factor convention for coordinates and density. Native
 velocity and internal energy have additional evolution normalizations, so a
 native code-unit field is not automatically a physical comoving observable.
 
+## Setting the mass or box length
+
+Choose one input for the cosmological normalization:
+
+- `units.massSolar`: reference particle mass in solar masses, without `/h`.
+- `units.boxLength`: comoving box side length in Mpc/h.
+
+The code derives the other quantity from the present-day mean matter density:
+`L_comoving^3 = N_reference * massSolar / rho_m,0`, with consistent physical
+units. Here `N_reference = initial.particlesPerDimension^3`, doubled when
+`initial.closePack=true`. With hydro enabled, the reference mass is split
+between gas and dark matter according to their cosmological density fractions;
+adding the second species does not double the total mass or box volume.
+
+For a 128³ collisionless run in a 100 Mpc/h comoving box, use:
+
+```ini
+[initial]
+particlesPerDimension = 128
+closePack = false
+
+[units]
+boxLength = 100
+```
+
+Remove or comment out any `massSolar` setting before using `boxLength`.
+Explicitly supplying both is an error, including one in the INI and the other
+on the command line. Command-line values still override the same key in the
+INI. If neither is supplied, the existing default mass of
+`1485442661.9132502` solar masses is used.
+
+`boxLength` is rejected for glass generation, which uses a fixed synthetic
+length and Hubble parameter, and for `initial.gadget4Restart` input, whose
+header supplies the physical units.
+
+When restarting an existing checkpoint, retain the same units selector and
+value used to create it. Restart validation requires exact equality of the
+physical unit scales; switching between mathematically equivalent mass and
+length inputs can change rounding. The checkpoint format is unchanged.
+
+At fixed `boxLength` and cosmology, changing the resolution automatically
+changes the reference mass. The proper box length at redshift `z` is the
+comoving length divided by `1+z`; in Mpc it is
+`boxLength / (cosmology.hubble * (1+z))`.
+
 ## Particle output controls
 
 ```ini
@@ -113,9 +158,9 @@ in grams. Convert the corresponding CGS result with:
 Apply these scale conversions to either column of the CGS table. The `h`
 dependence in density follows from the mass unit divided by the cube of the
 length unit; it must not be treated as a single factor of `h`.
-The input `units.massSolar` retains its existing meaning in solar masses,
-without an implicit `/h`. Choosing cosmological output does not reinterpret
-initial-condition or checkpoint parameters.
+The input `units.massSolar` uses solar masses without an implicit `/h`, while
+`units.boxLength` uses comoving Mpc/h. Choosing cosmological output does not
+reinterpret initial-condition or checkpoint parameters.
 
 ## Run settings in Silo
 
