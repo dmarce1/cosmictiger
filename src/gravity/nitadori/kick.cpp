@@ -162,7 +162,7 @@ KickReturn particleMeshPrepareKick(double scale, double baseTimestep, double max
     auto const& options = getOptions();
     double const effectiveRadius = pmmmEffectiveRadius();
     addCpuFlops(1);    // Support-radius conversion, once per locality.
-    double const sign = options.initial.createGlass ? -1.0 : 1.0;
+    double const sign = options.run.scenario == "glass" ? -1.0 : 1.0;
     size_t const count = particlesSize();
     size_t const workers = std::min(
         size_t(std::max(1, hpxHardwareConcurrency())), std::max(size_t(1), (count + 4095) / 4096));
@@ -266,7 +266,7 @@ double particleMeshFinishKick(double baseTimestep, int rung, double explicitTime
         futures.push_back(
             hpx::async<ParticleMeshFinishKickAction>(child, baseTimestep, rung, explicitTimestep));
     }
-    double const sign = getOptions().initial.createGlass ? -1.0 : 1.0;
+    double const sign = getOptions().run.scenario == "glass" ? -1.0 : 1.0;
     double const halfStep = sign *
         (explicitTimestep >= 0.0 ? 0.5 * explicitTimestep : std::ldexp(0.5 * baseTimestep, -rung));
     addCpuFlops(3);    // Half-step multiplication, ldexp, and sign multiplication.

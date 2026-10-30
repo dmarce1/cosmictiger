@@ -211,7 +211,7 @@ void cudaDrift(int rung, float a, float dt, float tau0, float tau1, float tauMax
     Position* z = &particlesPos(kZDimension, rng.first);
     auto* vels = particlesVelData() + rng.first;
     auto const* rungs = &particlesRung(rng.first);
-    drag = getOptions().initial.createGlass ? std::numbers::pi : 0.0;
+    drag = getOptions().run.scenario == "glass" ? std::numbers::pi : 0.0;
     CudaStream stream(cudaGetDevice());
     cudaDriftKernel<<<numberOfBlocks, kDriftBlockSize, 0, stream.nativeHandle()>>>(x, y, z, vels,
         rungs, cnt, rung, a, dt, tau0, tau1, tauMax, doLc, getOptions().lightcone.mapSize, drag);

@@ -221,7 +221,7 @@ masses are these values times the `units.massSolar` unit. SPH CUDA data carry on
 scalar, with no mass value stored per SPH particle.
 
 The hierarchical gravity path remains available for dark-matter-only runs.
-Glass generation (`initial.createGlass=true`) uses its repulsive gravity and drag.
+Glass generation (`run.scenario=glass`) uses its repulsive gravity and drag.
 
 ## Timesteps and migration from the old convention
 

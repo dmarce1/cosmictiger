@@ -258,7 +258,7 @@ void particleMeshTimestepTest() {
     options.analysis.saveForce = false;
     options.analysis.groups = false;
     options.analysis.tracers = false;
-    options.initial.createGlass = false;
+    options.run.scenario = "cosmology";
     options.initial.darkMatterMass = 1.0;
     options.initial.numberOfParticles = 3;
     setOptions(options);

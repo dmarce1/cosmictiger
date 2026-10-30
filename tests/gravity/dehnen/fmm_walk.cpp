@@ -1018,7 +1018,6 @@ void fmmWalkOrdinaryTimesteps(bool useCuda) {
     for (int backend = 0; backend < (useCuda ? 2 : 1); ++backend) {
         options.compute.cuda = backend != 0;
         for (bool glass : {false, true}) {
-            options.initial.createGlass = glass;
             options.run.scenario = glass ? "glass" : "plummer";
             setOptions(options);
             for (int pass = 0; pass < 3; ++pass) {
@@ -1167,8 +1166,6 @@ void fmmWalkHierarchicalTerminalEnergy(bool useCuda) {
     options.run.scenario = "plummer";
     options.gravity.gm = 0.125;
     options.gravity.timestepEta = 1.0e6;
-    options.initial.createGlass = false;
-    options.initial.plummer = false;
     options.initial.numberOfParticles = 3;
     constexpr double kScale = 0.5;
     constexpr double kBaseTimestep = 0.03125;

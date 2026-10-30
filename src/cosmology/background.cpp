@@ -67,8 +67,7 @@ double SimulationBackgroundTable::finalConformalTime() const {
 std::shared_ptr<SimulationBackgroundTable const> simulationBackground(double finalConformalTime) {
     detail::validateBackgroundInterval(finalConformalTime);
     auto const& options = getOptions();
-    bool const fixed = options.initial.createGlass || options.initial.plummer ||
-        (!options.run.scenario.empty() && options.run.scenario != "cosmology");
+    bool const fixed = !options.run.scenario.empty() && options.run.scenario != "cosmology";
     double const initialScale = fixed ? 1.0 : 1.0 / (1.0 + options.cosmology.startRedshift);
     BackgroundCosmologyParameters const parameters{
         units::normalizedHubble100(options) * options.cosmology.hubble, options.cosmology.omegaR,

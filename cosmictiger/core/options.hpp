@@ -64,8 +64,6 @@ struct Checkpoint {
 struct Initial {
     std::string gadget4Restart{};
     bool useGlass{};
-    bool createGlass{};
-    bool plummer{};
     double plummerRadius{};
     bool closePack{};
     bool twoLpt{};
@@ -293,6 +291,8 @@ struct Options {
     void serialize(Archive&& arc, unsigned) {
         // Preserve the historical scalar wire order independently of grouping.
         int retiredLightconeMinGroup = 20;
+        bool retiredGlassSelector = run.scenario == "glass";
+        bool retiredPlummerSelector = run.scenario == "plummer";
         arc & run.hierarchicalGravity;
         arc & run.timeIntegrator;
         arc & hydro.enabled;
@@ -323,11 +323,11 @@ struct Options {
         arc & initial.closePack;
         arc & initial.numberOfParticles;
         arc & initial.useGlass;
-        arc & initial.createGlass;
+        arc & retiredGlassSelector;
         arc & initial.gadget4Restart;
         arc & run.minRung;
         arc & run.treeOpeningAngle;
-        arc & initial.plummer;
+        arc & retiredPlummerSelector;
         arc & initial.plummerRadius;
         arc & cosmology.omegaK;
         arc & cosmology.omegaLambda;

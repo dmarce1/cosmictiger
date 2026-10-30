@@ -619,7 +619,7 @@ void checkSfNewStarKicks() {
     options.gravity.timestepEta = 0.25;
     options.starFormation.winds = false;
     for (int mode = 0; mode != 4; ++mode) {
-        options.initial.createGlass = mode == 2;
+        options.run.scenario = mode == 2 ? "glass" : original.run.scenario;
         setOptions(options);
         resetSfFixture(false);
         onSfLocalities<ConfigureSfGravityAction>(mode);
@@ -654,7 +654,7 @@ void checkSfNewStarKicks() {
                 "new star ignored gravity, cap, minimum rung, or old-rung reduction bound");
             auto const acceleration = sfTestGravity(mode, int(rank));
             double const half =
-                (options.initial.createGlass ? -0.5 : 0.5) * std::exp2(-expectedRung);
+                (options.run.scenario == "glass" ? -0.5 : 0.5) * std::exp2(-expectedRung);
             for (size_t dim = 0; dim < kDimensions; ++dim) {
                 double const expectedVelocity = float(std::fma(
                     double(acceleration[dim]), half, sfFloat(synchronized[rank], 1, 10 + dim)));

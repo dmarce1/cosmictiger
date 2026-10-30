@@ -361,8 +361,6 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"checkpoint.intervalSeconds", options.checkpoint.intervalSeconds},
         {"initial.gadget4Restart", options.initial.gadget4Restart},
         {"initial.useGlass", options.initial.useGlass},
-        {"initial.createGlass", options.initial.createGlass},
-        {"initial.plummer", options.initial.plummer},
         {"initial.plummerRadius", options.initial.plummerRadius},
         {"initial.closePack", options.initial.closePack},
         {"initial.twoLpt", options.initial.twoLpt},
@@ -595,10 +593,7 @@ bool processOptions(int argc, char* argv[]) {
         po::value<std::string>(&opts.initial.gadget4Restart)->default_value(""),
         "Gadget4 input file for power-spectrum analysis")("initial.useGlass",
         po::value<bool>(&opts.initial.useGlass)->default_value(false),
-        "initialize from a glass file")("initial.createGlass",
-        po::value<bool>(&opts.initial.createGlass)->default_value(false), "create a glass file")(
-        "initial.plummer", po::value<bool>(&opts.initial.plummer)->default_value(false),
-        "initialize the dark-matter Plummer model")("initial.plummerRadius",
+        "initialize from a glass file")("initial.plummerRadius",
         po::value<double>(&opts.initial.plummerRadius)->default_value(1.0e-2), "Plummer radius")(
         "initial.closePack", po::value<bool>(&opts.initial.closePack)->default_value(false),
         "use a close-packed particle lattice")("initial.twoLpt",
@@ -902,7 +897,10 @@ bool processOptions(int argc, char* argv[]) {
         .add(starFormationOpts);
     terminal::detailPrint("Processing options\n");
     po::variables_map vm;
-    po::store(po::parse_command_line(argc, argv, commandOpts), vm);
+    // Require exact names: retired initial.plummer must not abbreviate plummerRadius.
+    po::store(po::parse_command_line(argc, argv, commandOpts,
+                  po::command_line_style::default_style & ~po::command_line_style::allow_guessing),
+        vm);
     po::notify(vm);
     if (vm.count("help")) {
         std::cout << "Compiled algorithms:\n"
@@ -988,16 +986,6 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.gravity.pmmmNearWidth < 1 || opts.gravity.pmmmNearWidth > 4) {
         THROW_ERROR("gravity.pmmmNearWidth must be between 1 and 4\n");
     }
-    if (opts.initial.plummer && opts.initial.createGlass) {
-        THROW_ERROR("initial.plummer and initial.createGlass cannot both be enabled\n");
-    }
-    if (opts.initial.plummer || opts.initial.createGlass) {
-        std::string const legacy = opts.initial.plummer ? "plummer" : "glass";
-        if (isExplicit("run.scenario") && opts.run.scenario != legacy) {
-            THROW_ERROR("initial.plummer/createGlass conflicts with run.scenario\n");
-        }
-        opts.run.scenario = legacy;
-    }
 #if !COSMICTIGER_WITH_GRAVITY
     if (opts.gravity.enabled) {
         THROW_ERROR("gravity.enabled=true requires a gravity-enabled build; "
@@ -1012,8 +1000,6 @@ bool processOptions(int argc, char* argv[]) {
     }
 #endif
     auto const& scenario = scenarios::definition(opts.run.scenario);
-    opts.initial.plummer = opts.run.scenario == "plummer";
-    opts.initial.createGlass = opts.run.scenario == "glass";
     if (opts.run.test.empty()) {
         if (!isExplicit("gravity.enabled")) {
             opts.gravity.enabled = gravity::kBuildHasGravity && scenario.gravity;
@@ -1433,7 +1419,7 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.chemistry.enabled) {
         if (!opts.hydro.enabled ||
             (opts.run.scenario != "cosmology" && opts.run.test != "sphGravity") ||
-            opts.initial.createGlass || opts.initial.plummer) {
+            opts.run.scenario == "glass" || opts.run.scenario == "plummer") {
             THROW_ERROR("chemistry.enabled requires cosmological SPH initial conditions\n");
         }
         if (opts.chemistry.network != "atomic6" && opts.chemistry.network != "molecular9") {
@@ -1456,7 +1442,7 @@ bool processOptions(int argc, char* argv[]) {
         }
     }
     if (opts.hydro.enabled) {
-        if (opts.initial.createGlass || opts.initial.plummer ||
+        if (opts.run.scenario == "glass" || opts.run.scenario == "plummer" ||
             !opts.initial.gadget4Restart.empty()) {
             THROW_ERROR("SPH cannot use the dark-matter-only glass, Plummer or Gadget loaders\n");
         }
@@ -1520,7 +1506,7 @@ bool processOptions(int argc, char* argv[]) {
     }
 
     if (hasBoxLength) {
-        if (opts.initial.createGlass || !opts.initial.gadget4Restart.empty()) {
+        if (opts.run.scenario == "glass" || !opts.initial.gadget4Restart.empty()) {
             THROW_ERROR("units.boxLength cannot be used with glass generation or Gadget4 input, "
                         "which supply their own length scale\n");
         }
@@ -1670,7 +1656,7 @@ bool processOptions(int argc, char* argv[]) {
     // Behroozi, Wechsler & Wu (2013), https://arxiv.org/html/1110.4372v3
     opts.analysis.linkingLength = pow(opts.initial.numberOfParticles, -1.0 / kDimensions) * 0.28;
     opts.analysis.minGroupSize = 20;
-    if (opts.initial.createGlass) {
+    if (opts.run.scenario == "glass") {
         opts.gravity.gm = 1.0 / opts.initial.numberOfParticles;
         opts.units.lengthCm = constants::kMpcToCm;
         opts.cosmology.hubble = 1.0;
@@ -1679,7 +1665,7 @@ bool processOptions(int argc, char* argv[]) {
         THROW_ERROR("initial.particlesPerDimension must be an even number\n");
     }
     opts.gravity.supportRadius *= pow(opts.initial.numberOfParticles, -1.0 / kDimensions);
-    if (opts.initial.plummer) {
+    if (opts.run.scenario == "plummer") {
         opts.gravity.supportRadius = gravityTable.supportRadiusPerEffectiveRadius *
             1.5015907655628273 *
             pow((4.0 / 3.0 * std::numbers::pi * pow(opts.initial.plummerRadius, 3.0)) /
@@ -1783,7 +1769,7 @@ bool processOptions(int argc, char* argv[]) {
     terminal::detailPrint("code_to_M_solar = %e\n", opts.units.massG / 1.98e33);
     terminal::detailPrint(
         "Box size = %e Mpc/h\n", opts.units.lengthCm / constants::kMpcToCm * opts.cosmology.hubble);
-    if (opts.initial.plummer) {
+    if (opts.run.scenario == "plummer") {
         opts.gravity.gm = 1.0 / opts.initial.numberOfParticles;
         // The model's default angle; an explicit gravity.openingAngle takes precedence.
         if (vm.count("gravity.openingAngle") == 0 || vm["gravity.openingAngle"].defaulted()) {

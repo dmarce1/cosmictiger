@@ -110,7 +110,7 @@ double gravityFinishGlobalKick(double timestep) {
     }
     ALWAYS_ASSERT(detail::globalAccelerationCount == particlesSize());
     auto const& options = getOptions();
-    double const halfStep = (options.initial.createGlass ? -0.5 : 0.5) * timestep;
+    double const halfStep = (options.run.scenario == "glass" ? -0.5 : 0.5) * timestep;
     double kinetic = 0.0;
     FlopCount flops = 1;
     for (ParticleInteger i = 0; i < particlesSize(); ++i) {

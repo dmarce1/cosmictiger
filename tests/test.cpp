@@ -271,7 +271,7 @@ static void kickTest() {
     Timer totalTime;
     double totalFlops = 0.0;
     tm.start();
-    if (getOptions().initial.plummer) {
+    if (getOptions().run.scenario == "plummer") {
         scenarios::initializePlummerParticles();
     } else {
         initialize(getOptions().cosmology.startRedshift);
@@ -414,7 +414,7 @@ static void forceTest() {
     auto const readCheck = getOptions().checkpoint.readIndex;
     if (readCheck != -1) {
         readCheckpoint();
-    } else if (getOptions().initial.plummer) {
+    } else if (getOptions().run.scenario == "plummer") {
         // The driver's clustered model, for walks whose cost depends on radius contrast.
         scenarios::initializePlummerParticles();
     } else {

@@ -112,7 +112,7 @@ def main():
                        "hydro.yReflect", "gravity.sphSmoothing", "cosmology.omegaK",
                        "initial.usePowerFile", "gravity.cloud", "gravity.method",
                        "gravity.pmmmNearMethod", "gravity.pmmmOrder", "gravity.fmmOrder",
-                       "run.hierarchicalGravity"}
+                       "run.hierarchicalGravity", "initial.createGlass", "initial.plummer"}
     if removed_options & option_names:
         raise RuntimeError(f"removed options remain in help: {sorted(removed_options & option_names)}")
     for name in option_names - {"help", "configuration"}:
@@ -624,7 +624,8 @@ mapSize = 8
     if not re.search(r"^hydro\.pressureOperator\s*:\s*variational\s*$", operator_override,
                      re.MULTILINE):
         raise RuntimeError("CLI hydro.pressureOperator did not override INI")
-    for key in ("hydro.viscosityBetaMode", "hydro.viscosityBetaOverAlpha"):
+    for key in ("hydro.viscosityBetaMode", "hydro.viscosityBetaOverAlpha",
+                "initial.createGlass", "initial.plummer"):
         if re.search(r"^" + re.escape(key) + r"\s*:", balsara_default, re.MULTILINE):
             raise RuntimeError(f"removed option {key} is still reported")
     viscosity_override = run("variable_viscosity_cli_override", [
@@ -1316,14 +1317,17 @@ mapSize = 8
                  "run.timeIntegrator": args.time_integrator
                  }.get(option, "false")
         group, name = option.split(".")
-        removed_config.write_text(f"[{group}]\n{name} = {value}\n")
-        for source, arguments in (
-                ("cli", [f"--{option}={value}"]),
-                ("ini", [f"--configuration={removed_config.resolve()}"])):
-            output = run(f"removed_{source}_{option}", arguments, success=False)
-            if option not in output or not re.search(
-                    r"unrecogni[sz]ed option|is ambiguous and matches", output):
-                raise RuntimeError(f"removed {source} option {option} was not rejected explicitly")
+        # Numeric legacy booleans must not abbreviate the surviving plummerRadius option.
+        values = [value, "0", "1"] if option == "initial.plummer" else [value]
+        for value in values:
+            removed_config.write_text(f"[{group}]\n{name} = {value}\n")
+            for source, arguments in (
+                    ("cli", [f"--{option}={value}"]),
+                    ("ini", [f"--configuration={removed_config.resolve()}"])):
+                output = run(f"removed_{source}_{option}_{value}", arguments, success=False)
+                if option not in output or not re.search(
+                        r"unrecogni[sz]ed option|is ambiguous and matches", output):
+                    raise RuntimeError(f"removed {source} option {option} was not rejected explicitly")
     if not args.without_sph and args.gravity_method == "fmm" and args.time_integrator != "hierarchical":
         for parameter in ("omegaB", "omegaC"):
             for value in ("0", "-0.1", "nan", "inf"):

@@ -1785,7 +1785,7 @@ void pmmmTest() {
     options.analysis.groups = false;
     options.initial.darkMatterMass = 0.75;
     options.initial.gasMass = 0.25;
-    options.initial.createGlass = false;
+    options.run.scenario = "cosmology";
     options.run.hierarchicalGravity =
         usesHierarchicalIntegration(options.run) && options.gravity.enabled;
     setOptions(options);

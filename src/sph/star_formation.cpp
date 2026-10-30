@@ -471,7 +471,7 @@ int starFormationOpenNewStars(double baseTimestep, double scaleFactor, double ma
             float const timestepBase = float(baseTimestep);
             float const timestepCap = float(maximumTimestep);
             float const factor = float(options.gravity.timestepEta) * std::sqrt(float(scaleFactor));
-            float const sign = options.initial.createGlass ? -1.0f : 1.0f;
+            float const sign = options.run.scenario == "glass" ? -1.0f : 1.0f;
             for (auto const& star : detail::newStars) {
                 // The gravity traversal still saw gas and deferred its rung proposal.
                 // Apply the ordinary FMM collisionless criterion before its first drift.

@@ -103,7 +103,7 @@ void checkDispatch(size_t count, int rung, bool glass) {
     auto const initialPositions = fixture.positions;
     auto const initialVelocities = fixture.velocities;
     currentRange = Pair<ParticleInteger>(3, count - 4);
-    options.initial.createGlass = glass;
+    options.run.scenario = glass ? "glass" : "cosmology";
     // A nonzero caller drag must be overridden in both ordinary and glass modes.
     drift(0.5, 0.125, 0.0, 0.125, 0.0, rung, 123.0);
     double const damping = glass ? 1.0 / (1.0 + std::acos(-1.0) * 0.125) : 1.0;

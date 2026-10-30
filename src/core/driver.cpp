@@ -659,7 +659,7 @@ ForceStepResult kickStep(int minrung, double scale, double dadt, double t0, doub
     kparams.htime = false;
     kparams.ascending = kparams.descending = kparams.top = true;
     kparams.doPhi = fullEval;
-    kparams.sign = getOptions().initial.createGlass ? -1.0 : 1.0;
+    kparams.sign = getOptions().run.scenario == "glass" ? -1.0 : 1.0;
     kparams.nodeLoad = flopsPerNode / flopsPerParticle;
     kparams.gpu = getOptions().compute.cuda;
     usedGpu = kparams.gpu;
@@ -973,14 +973,14 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         } else {
             kparams.top = top;
         }
-        kparams.sign = getOptions().initial.createGlass ? -1.0 : 1.0;
+        kparams.sign = getOptions().run.scenario == "glass" ? -1.0 : 1.0;
         kparams.ascending = ascending || top;
         if (closingOnly || (clipTop && top)) {
             kparams.descending = false;
         } else {
             kparams.descending = !ascending || top;
         }
-        kparams.velInit = getOptions().initial.plummer;
+        kparams.velInit = getOptions().run.scenario == "plummer";
         kparams.nodeLoad = flopsPerNode / flopsPerParticle;
         kparams.gpu = getOptions().compute.cuda;
         kparams.minLevel = minimumTreeLevel;
@@ -1141,7 +1141,7 @@ double doPowerSpectrum(int num, double a, double adot) {
     int const m = 8;
     terminal::detailPrint("Computing power spectrum\n");
     double const h = getOptions().cosmology.hubble;
-    auto const glass = getOptions().initial.createGlass;
+    auto const glass = getOptions().run.scenario == "glass";
     double const omegaM = getOptions().cosmology.omegaM;
     double const boxSize =
         (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
@@ -1700,7 +1700,7 @@ void driver() {
             double a0 = a;
             double physicalInterval = a * dt;
             double driftScale = a;
-            if (!getOptions().initial.createGlass && !getOptions().initial.plummer) {
+            if (getOptions().run.scenario != "glass" && getOptions().run.scenario != "plummer") {
                 auto const interval = cosmosAdvance(adot, a, dt);
                 physicalInterval = interval.physicalTime;
                 driftScale = dt / interval.driftIntegral;
@@ -1845,7 +1845,7 @@ void driver() {
             thisIter > getOptions().run.maxIterations) {
             break;
 #if COSMICTIGER_WITH_GRAVITY
-        } else if (getOptions().initial.createGlass && std::abs(glassError) < 1.0e-5) {
+        } else if (getOptions().run.scenario == "glass" && std::abs(glassError) < 1.0e-5) {
             scenarios::saveGlass();
             break;
 #endif
@@ -1858,7 +1858,7 @@ void driver() {
     section_timing::measure(section_timing::Section::snapshotOutput,
         [&]() { viewOutputViews(params.step + 1, a, true, years); });
 #if COSMICTIGER_WITH_GRAVITY
-    if (getOptions().initial.createGlass) {
+    if (getOptions().run.scenario == "glass") {
         scenarios::saveGlass();
     }
     if (getOptions().lightcone.enabled) {
