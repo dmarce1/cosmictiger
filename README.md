@@ -285,7 +285,7 @@ specified in the INI configuration file. Primordial chemistry is configured unde
 formation, requiring `COSMICTIGER_ENABLE_SPH=ON`,
 `COSMICTIGER_ENABLE_CHEMISTRY=ON`, and `COSMICTIGER_ENABLE_STARS=ON`.
 The `starFormation.*` controls select the equilibrium multiphase model;
-ordinary gas uses Atomic6 chemistry, and converted stars retain gravitational
+ordinary gas uses the selected chemistry network (`atomic6` or `molecular9`), and converted stars retain gravitational
 interactions. See [the star-formation documentation](docs/star_formation.md)
 for the phase assumptions, source coupling, and supported domains.
 Diffusion and conduction remain unsupported. Their former options, the obsolete `hydro.chemistry` switch,
