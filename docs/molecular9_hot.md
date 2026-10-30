@@ -224,9 +224,28 @@ atomic CIE closure with no molecular contribution.
   `molecular9` as well as `atomic6`, plus one `molecular9` cosmology run with
   restart and rejection checks; the fixture's own guard no longer demands
   `atomic6`.
-- CUDA parity and GPU execution were **not** run for this extension: GPU work
-  was paused at the time. `primordial_cuda` carries the same shared headers and
-  must be run before any combined CUDA claim.
+- CUDA, run 2026-10-30 in `build/molecular_hot_cuda` (nvcc 13.1.115,
+  `CMAKE_CUDA_ARCHITECTURES=86`) on this workstation's GPU while another
+  process shared the device, so no timing is recorded: `primordial_cuda_test`
+  passed all seven cases, including the new `HotMolecularRhsAndEosMatchCpu`,
+  which evaluates the shared headers on the device for one half-ionized
+  composition with H⁻, H₂ and H₂⁺ traces at 1 and 10⁴ cm⁻³ and ten
+  temperatures from 5999 K to 10⁸ K, comparing the five cooling coefficients,
+  the LTE asymptote, the EOS inversion temperature and the thermal RHS with the
+  host to 2 × 10⁻⁴ relative. Species derivatives and individual rate
+  coefficients are not compared by that kernel, and the EOS temperature is a
+  per-side round trip, so the hot branches that never reach the thermal ledger
+  and the ladder/asymptote energies are verified on the host only; a stronger
+  kernel is drafted in `handoff/primordial_cuda_strengthened.patch` but not yet
+  built or run. The host `primordial_rates` (8/8) and `primordial_solver`
+  (10/10) suites pass unchanged in that tree (neither runs on the GPU).
+  `run_primordial_integration.py --cuda`, run directly (there is no CUDA
+  integration CTest) with one locality and two HPX threads, passed all four
+  cases including `molecular9_hot` with every chemistry batch on the device
+  solver, byte-exact restart and the chemistry-network rejection, for both
+  the traditional and the global integrator. Not covered on the GPU: MPI, the
+  SH03 fixtures (they refuse `compute.cuda`), and the positivity projection
+  (host coverage only).
 
 ## Sources
 
