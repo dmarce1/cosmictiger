@@ -96,6 +96,51 @@ __global__ void coldSampleKernel(ColdSample* results) {
         results[threadIdx.x] = coldSample(threadIdx.x);
     }
 }
+// Hot extension (docs/molecular9_hot.md): published high-temperature branches,
+// held fits, the 1e4 K cooling clamp and the rotor asymptote on the device.
+CUDA_EXPORT ColdSample hotSample(unsigned index) {
+    using namespace primordial;
+    float const temperatures[] = {
+        5999.0f, 6001.0f, 8000.0f, 9999.0f, 1.0e4f, 10001.0f, 3.0e4f, 1.0e5f, 1.0e6f, 1.0e8f};
+    float const temperature = temperatures[index];
+    ColdSample result;
+    result.status = molecularCoolingCoefficients(temperature, result.cooling, result.lte);
+    if (result.status != Status::Success) {
+        return result;
+    }
+    Environment environment;
+    environment.network = Network::Molecular9;
+    environment.nHydrogen = index % 2 == 0 ? 1.0f : 1.0e4f;
+    environment.cmbTemperature = 30.0f;
+    State state;
+    state.abundances[0] = SignedAbundance::fromFraction(0.5f);
+    state.abundances[1] = SignedAbundance::fromFraction(0.3f);
+    state.abundances[2] = SignedAbundance::fromFraction(0.2f);
+    state.abundances[3] = SignedAbundance::fromMinority(1.e-8f, false);
+    state.abundances[4] = SignedAbundance::fromFraction(1.e-3f);
+    state.abundances[5] = SignedAbundance::fromMinority(1.e-6f, false);
+    result.status =
+        thermalEnergyAtTemperature(state, environment, temperature, state.thermalEnergy);
+    if (result.status != Status::Success) {
+        return result;
+    }
+    Eos eos;
+    result.status = evaluateEos(state, environment, eos);
+    if (result.status != Status::Success) {
+        return result;
+    }
+    result.eosTemperature = eos.temperature;
+    Derivative derivative;
+    result.status =
+        evaluateRhsAtTemperature(workingState(state), environment, temperature, derivative);
+    result.heating = derivative.thermalEnergy.toFloat();
+    return result;
+}
+__global__ void hotSampleKernel(ColdSample* results) {
+    if (threadIdx.x < 10) {
+        results[threadIdx.x] = hotSample(threadIdx.x);
+    }
+}
 }    // namespace
 using PrimordialCuda = detail::CudaTest;
 
@@ -133,6 +178,43 @@ TEST_F(PrimordialCuda, ColdMolecularRhsAndEosMatchCpu) {
             if (!close(cpu.cooling[partner], gpu.cooling[partner], cpu.cooling[partner], 1.e-44f)) {
                 std::fprintf(
                     stderr, "Cold molecular CUDA coefficient mismatch at case%u/%d\n", i, partner);
+                FAIL() << "Primordial CUDA regression failed; see diagnostic above";
+            }
+        }
+    }
+}
+
+TEST_F(PrimordialCuda, HotMolecularRhsAndEosMatchCpu) {
+    using namespace primordial;
+    ColdSample* hotDevice = nullptr;
+    ColdSample hotResults[10];
+    cudaError_t hotStatus = cudaMalloc(reinterpret_cast<void**>(&hotDevice), sizeof(hotResults));
+    if (hotStatus == cudaSuccess) {
+        hotSampleKernel<<<1, 10>>>(hotDevice);
+        hotStatus = cudaGetLastError();
+    }
+    if (hotStatus == cudaSuccess) {
+        hotStatus = cudaMemcpy(hotResults, hotDevice, sizeof(hotResults), cudaMemcpyDeviceToHost);
+    }
+    cudaError_t const hotRelease = cudaFree(hotDevice);
+    if (hotStatus != cudaSuccess || hotRelease != cudaSuccess) {
+        std::fprintf(stderr, "Hot molecular CUDA kernel failed\n");
+        FAIL() << "Primordial CUDA regression failed; see diagnostic above";
+    }
+    for (unsigned i = 0; i != 10; ++i) {
+        ColdSample const cpu = hotSample(i);
+        ColdSample const& gpu = hotResults[i];
+        if (cpu.status != Status::Success || gpu.status != Status::Success ||
+            !close(cpu.heating, gpu.heating, ::fabsf(cpu.heating), 1.e-40f) ||
+            !close(cpu.lte, gpu.lte, cpu.lte, 1.e-44f) ||
+            !close(cpu.eosTemperature, gpu.eosTemperature, cpu.eosTemperature)) {
+            std::fprintf(stderr, "Hot molecular CUDA RHS/EOS mismatch at case%u\n", i);
+            FAIL() << "Primordial CUDA regression failed; see diagnostic above";
+        }
+        for (int partner = 0; partner != 5; ++partner) {
+            if (!close(cpu.cooling[partner], gpu.cooling[partner], cpu.cooling[partner], 1.e-44f)) {
+                std::fprintf(
+                    stderr, "Hot molecular CUDA coefficient mismatch at case%u/%d\n", i, partner);
                 FAIL() << "Primordial CUDA regression failed; see diagnostic above";
             }
         }

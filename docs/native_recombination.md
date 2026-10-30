@@ -44,8 +44,9 @@ the stored particle state; it resolves the same initial options only to verify
 checkpoint compatibility. Restoring older checkpoints requires the original
 initial values, usually with `chemistry.initialization=manual`.
 
-The temperature limits are 10–1e8 K for `atomic6` and 10–6000 K for
-`molecular9`, following the subsequent [cold molecular extension](molecular9_cold.md).
+The temperature limits are 10–1e8 K for both networks, following the
+subsequent [cold](molecular9_cold.md) and [hot](molecular9_hot.md) molecular
+extensions.
 An out-of-domain initial temperature fails explicitly and is never raised to a
 floor. The fiducial native history at z=49 is 48.855 K and can initialize either
 network. An unheated background falls below 10 K near z=20; the supported

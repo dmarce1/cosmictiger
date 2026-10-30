@@ -14,9 +14,10 @@ afterward `STARS` controls both names, including when explicitly set `OFF`.
 At runtime set `hydro.enabled=true`, `starFormation.enabled=true`, and
 `chemistry.enabled=true`. The traditional and global time integrators are
 supported. The gas adiabatic index must be \(\gamma=5/3\). Stars require
-chemistry at configure time and runtime, with `chemistry.network=atomic6`.
-The molecular network's upper temperature limit does not cover the hot gas
-released from this closure; combined `molecular9` runs are rejected.
+chemistry at configure time and runtime, with either `chemistry.network`.
+Both networks cover 10–10⁸ K, so the hot gas released from this closure stays
+inside the [molecular network's domain](molecular9_hot.md); ordinary
+`molecular9` gas keeps all nine species through heating and cooling.
 
 ## Cooling assumptions and units
 
@@ -30,7 +31,8 @@ adapter. Its atomic temperature domain is 10–10⁸ K; unsupported states fail
 explicitly. Metallicity is an enrichment tracer and does not change cooling.
 
 Ordinary gas and hydrodynamically decoupled winds instead advance the existing
-non-equilibrium Atomic6 thermochemistry operator. They use its configured
+non-equilibrium thermochemistry operator of the configured `chemistry.network`
+(`atomic6` or `molecular9`). They use its configured
 radiation table, cosmological CMB exchange, solver tolerances, and supported
 density/temperature domain. They do not additionally call the CIE cooling
 adapter. Thus imposed radiation affects ordinary gas but does not modify the
@@ -54,8 +56,8 @@ For hydrogen mass fraction \(X\), the neutral molecular weight is
 \(u=k_B T/[(\gamma-1)\mu m_p]\): cold clouds and the nominal 10⁴ K warm
 energy use \(\mu_n\); the supernova energy uses \(\mu_i\). The warm energy
 is a reference for threshold calibration, not a floor imposed on ordinary
-non-equilibrium gas. Ordinary gas can cool below that energy within Atomic6's
-domain. Pressure continuity at the calibrated threshold applies when the
+non-equilibrium gas. Ordinary gas can cool below that energy within the
+configured network's domain. Pressure continuity at the calibrated threshold applies when the
 ordinary gas has energy \(u_4\); a parcel arriving at another energy undergoes
 a thermal projection whose change enters the source-energy ledger.
 
@@ -119,8 +121,9 @@ Eligible dense gas receives \(u_{\rm eff}\) and a mass-weighted chemical
 projection: cold gas is neutral and atomic, while hot gas has the CIE
 composition at \(u_h\). Both phases use the same primordial hydrogen and
 helium mass fractions. Each ionized fraction is the hot-phase fraction times
-\(1-x\); molecular fractions are zero. This preserves H/He nuclei and charge
-closure. The stored chemical thermal energy is synchronized with the projected
+\(1-x\); molecular fractions are zero, so a `molecular9` parcel's H⁻, H₂ and
+H₂⁺ are discarded on entry along with its atomic history. This preserves H/He
+nuclei and charge closure. The stored chemical thermal energy is synchronized with the projected
 SPH energy, but the hydrodynamic pressure and signal speed still come from the
 SH03 effective equation of state. Ordinary chemical cooling is never applied
 to this effective mixture.

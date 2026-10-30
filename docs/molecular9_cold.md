@@ -1,8 +1,9 @@
 # Molecular9 down to 10 K
 
-The molecular network supports 10–6000 K at proper hydrogen-nucleus densities
-up to 10⁴ cm⁻³. This extends the existing nine-species model without adding
-species or changing its source integrator. Temperature outside this range is
+This extension lowered the molecular network's floor from 100 K to 10 K at
+proper hydrogen-nucleus densities up to 10⁴ cm⁻³, without adding species or
+changing its source integrator; the ceiling, 6000 K at the time, was later
+raised to 10⁸ K by the [hot extension](molecular9_hot.md). Temperature outside this range is
 an error, not a request to clamp or heat the gas to a floor.
 
 ## Cold cooling model

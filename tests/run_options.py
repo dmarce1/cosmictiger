@@ -718,20 +718,24 @@ mapSize = 8
                 ("no_chemistry", [option for option in star_options
                                   if not option.startswith("--chemistry.enabled=")] +
                  ["--chemistry.enabled=false"], "chemistry.enabled=true"),
-                ("molecular_network", star_options + ["--chemistry.network=molecular9"],
-                 "chemistry.network=atomic6"),
                 ("wrong_gamma", star_options + ["--hydro.gamma=1.4"], "hydro.gamma"),
                 ("winds_without_model", metadata_options + ["--starFormation.winds=true"], "starFormation.enabled")):
             rejected = run("star_formation_" + label, options, success=False)
             if diagnostic not in rejected:
                 raise RuntimeError("incompatible star formation selection lacked a diagnostic")
-        output = run("star_formation_with_atomic6", star_options + ["--chemistry.network=atomic6"])
-        for key in ("starFormation.enabled", "chemistry.enabled"):
-            if not re.search(r"^" + re.escape(key) + r"\s*:\s*T\s*$", output, re.MULTILINE):
-                raise RuntimeError("combined chemistry and star formation was not enabled")
+        for network in ("atomic6", "molecular9"):
+            # Both networks share the 10 K to 1e8 K domain, so SH03's hot and
+            # effective temperatures are representable with molecules retained.
+            output = run("star_formation_with_" + network,
+                         star_options + [f"--chemistry.network={network}"])
+            for key in ("starFormation.enabled", "chemistry.enabled"):
+                if not re.search(r"^" + re.escape(key) + r"\s*:\s*T\s*$", output, re.MULTILINE):
+                    raise RuntimeError("combined chemistry and star formation was not enabled")
+            if not re.search(r"^chemistry\.network\s*:\s*" + network + r"\s*$", output, re.MULTILINE):
+                raise RuntimeError("combined star formation did not keep the selected network")
 
     chemistry_fields = ("initialTemperature", "hydrogenIonFraction",
-                        "heliumIonFraction", "heliumDoubleIonFraction")
+                        "heliumIonFraction", "heliumDoubleIonFraction", "molecularFraction")
 
     if args.without_chemistry and not args.without_sph:
         chemistryConfig = args.workdir / "disabled_chemistry.ini"
@@ -805,9 +809,24 @@ mapSize = 8
             "chemistry_molecular_native", chemistry_options + ["--chemistry.network=molecular9"]))
         if molecular_native != native:
             raise RuntimeError("Cold molecular initialization differs from the native atomic history")
+        for network in ("atomic6", "molecular9"):
+            # Hot initial states are inside both domains; manual molecular
+            # fractions are retained rather than reset above 6000 K.
+            hot = chemistrySettings(run("chemistry_hot_" + network, chemistry_options + [
+                f"--chemistry.network={network}", "--chemistry.initialization=manual",
+                "--chemistry.initialTemperature=50000", "--chemistry.hydrogenIonFraction=0.9"]
+                + (["--chemistry.molecularFraction=0.001"] if network == "molecular9" else [])))
+            expectedMolecular = 0.001 if network == "molecular9" else 0.0
+            if (hot["initialTemperature"] != 50000.0 or hot["hydrogenIonFraction"] != 0.9
+                    or hot["molecularFraction"] != expectedMolecular):
+                raise RuntimeError(f"Hot manual {network} initialization was not retained")
         for label, extra in (("unknown_mode", ["--chemistry.initialization=unknown"]),
-                             ("molecular_hot", ["--chemistry.network=molecular9",
-                                                "--chemistry.initialTemperature=6001"])):
+                             ("molecular_too_hot", ["--chemistry.network=molecular9",
+                                                    "--chemistry.initialization=manual",
+                                                    "--chemistry.initialTemperature=2e8"]),
+                             ("atomic_too_hot", ["--chemistry.network=atomic6",
+                                                 "--chemistry.initialization=manual",
+                                                 "--chemistry.initialTemperature=2e8"])):
             output = run(f"chemistry_{label}", chemistry_options + extra, success=False)
             if "chemistry" not in output.lower():
                 raise RuntimeError(f"Invalid chemistry initialization {label} lacked a diagnostic")

@@ -140,10 +140,6 @@ void validateStarFormation(Options const& opts) {
     if (!opts.chemistry.enabled) {
         throw std::invalid_argument("starFormation.enabled requires chemistry.enabled=true");
     }
-    if (opts.chemistry.network != "atomic6") {
-        throw std::invalid_argument("starFormation.enabled requires chemistry.network=atomic6: "
-                                    "SH03 hot/effective temperatures exceed the molecular9 domain");
-    }
     if (!isFiniteOption(opts.hydro.gamma) ||
         std::abs(opts.hydro.gamma - kGamma) > kGammaTolerance) {
         throw std::invalid_argument("starFormation.enabled requires hydro.gamma=5/3");
@@ -803,7 +799,7 @@ bool processOptions(int argc, char* argv[]) {
         po::value<bool>(&opts.chemistry.enabled)->default_value(false),
         "evolve primordial thermochemistry (requires hydro.enabled)")("chemistry.network",
         po::value<std::string>(&opts.chemistry.network)->default_value("atomic6"),
-        "atomic6 or molecular9; optically thin low-density gas")("chemistry.initialization",
+        "atomic6 or molecular9; optically thin gas, 10 K to 1e8 K")("chemistry.initialization",
         po::value<std::string>(&opts.chemistry.initialization)->default_value("recombination"),
         "recombination fills unspecified initial T/H+/He+/He++; manual uses fixed defaults")(
         "chemistry.radiationFile",
@@ -839,7 +835,7 @@ bool processOptions(int argc, char* argv[]) {
     po::options_description starFormationOpts("Springel-Hernquist star formation");
     starFormationOpts.add_options()("starFormation.enabled",
         po::value<bool>(&opts.starFormation.enabled)->default_value(false),
-        "enable the equilibrium Springel-Hernquist model; requires SPH and atomic6 chemistry")(
+        "enable the equilibrium Springel-Hernquist model; requires SPH and chemistry")(
         "starFormation.beta", po::value<double>(&opts.starFormation.beta)->default_value(0.1),
         "instantaneously recycled massive-star mass fraction")("starFormation.evaporationFactor",
         po::value<double>(&opts.starFormation.evaporationFactor)->default_value(1000.0),

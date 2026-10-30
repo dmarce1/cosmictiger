@@ -57,6 +57,65 @@ struct QuadraticTraceLoss {
         return primordial::Status::Success;
     }
 };
+// A trace species held at exactly zero whose derivative carries only
+// Jacobian-level noise of the wrong sign; the other variable relaxes stiffly.
+struct StiffWithNoisyZero {
+    float rate{};
+    primordial::Status operator()(primordial::WorkingState const& state,
+        primordial::Environment const& environment, primordial::Derivative& derivative) const {
+        auto const status = primordial::validateComposition(state, environment);
+        if (status != primordial::Status::Success) {
+            return status;
+        }
+        derivative = {};
+        derivative.abundances[0] = FloatFloat(rate) * (FloatFloat(0.3f) - state.abundances[0]);
+        derivative.abundances[2] = FloatFloat(-1.0e-37f);
+        return primordial::Status::Success;
+    }
+};
+void checkPositivityProjection() {
+    using namespace primordial;
+    // Before the line-search projection, a species at exactly zero receiving a
+    // noise-level negative Newton correction made every damped candidate
+    // infeasible: the HEAD solver exhausts 4096 substeps (StepLimit) on the
+    // atomic state below and fails outright (NonConvergence) on the synthetic
+    // model at rate 1e9. Both must now integrate to the end of the interval.
+    for (int network = 0; network != 2; ++network) {
+        Environment environment;
+        environment.network = network == 0 ? Network::Atomic6 : Network::Molecular9;
+        environment.nHydrogen = 0.05f;
+        environment.cmbTemperature = 30.0f;
+        State initial;
+        initial.abundances[0] = SignedAbundance::fromFraction(network == 0 ? 0.5f : 0.1f);
+        require(thermalEnergyAtTemperature(initial, environment, 12000.0f, initial.thermalEnergy) ==
+                Status::Success,
+            "12000 K initial state");
+        SolverOptions options;
+        auto const result = advance(initial, environment, 1.e12f, options);
+        Eos eos;
+        require(result.status == Status::Success && result.acceptedTime == 1.e12f &&
+                result.acceptedSubsteps < 2000 &&
+                evaluateEos(result.state, environment, eos) == Status::Success &&
+                eos.temperature < 12000.0f && eos.temperature > 9000.0f,
+            "exact-zero helium ions no longer stall the 12000 K cooling step");
+        std::printf("projection %s: substeps %u rejected %u T %.5g K He++ %g\n",
+            network == 0 ? "atomic6" : "molecular9", result.acceptedSubsteps,
+            result.rejectedSubsteps, eos.temperature, result.state.abundances[2].fraction());
+    }
+    Environment environment;
+    State initial;
+    initial.abundances[0] = SignedAbundance::fromFraction(0.1f);
+    initial.thermalEnergy = 1.0f;
+    for (float rate : {1.e3f, 1.e9f}) {
+        SolverOptions options;
+        auto const result =
+            advanceWithModel(initial, environment, 1.e3f, options, StiffWithNoisyZero{rate});
+        require(result.status == Status::Success && result.acceptedTime == 1.e3f &&
+                result.acceptedSubsteps <= 8 && result.state.abundances[2].raw() == 0.0f &&
+                std::fabs(result.state.abundances[0].fraction() - 0.3f) < 1.e-6f,
+            "noise-level negative derivative on a zero species is projected away");
+    }
+}
 void checkColdEvolution() {
     using namespace primordial;
     for (int scenario = 0; scenario != 3; ++scenario) {
@@ -148,6 +207,10 @@ void checkColdEvolution() {
 
 TEST(PrimordialSolver, ColdEvolution) {
     checkColdEvolution();
+}
+
+TEST(PrimordialSolver, PositivityProjection) {
+    checkPositivityProjection();
 }
 
 TEST(PrimordialSolver, CoupledConvergence) {
@@ -358,20 +421,82 @@ TEST(PrimordialSolver, MolecularReference) {
         "molecular accepted state satisfies elemental and charge bounds");
 }
 
+TEST(PrimordialSolver, HotMolecularReference) {
+    using namespace primordial;
+    // Hot molecular gas above the former 6000 K ceiling, independently
+    // integrated by SciPy Radau through primordial_reference.py (case 3):
+    // 30000 K, half ionized, 2H2/H = 2e-3, nH = 1 cm^-3, 1e12 s. The gas cools
+    // to 9002 K while its H2 is dissociated and a trace reforms through H-;
+    // the ions, H- and H2+ stay nonequilibrium throughout. Global error is
+    // first order in the local tolerance, as for the cold molecular reference.
+    Environment environment;
+    environment.network = Network::Molecular9;
+    environment.nHydrogen = 1.0f;
+    environment.cmbTemperature = 30.0f;
+    State initial;
+    initial.abundances[0] = SignedAbundance::fromFraction(0.5f);
+    initial.abundances[1] = SignedAbundance::fromFraction(1.e-2f);
+    initial.abundances[2] = SignedAbundance::fromFraction(1.e-4f);
+    initial.abundances[4] = SignedAbundance::fromFraction(2.e-3f);
+    require(thermalEnergyAtTemperature(initial, environment, 30000.0f, initial.thermalEnergy) ==
+            Status::Success,
+        "hot molecular initial EOS");
+    double const reference[kAbundanceCount] = {0.41703869429443197, 0.008059196426452035,
+        3.5672851449212995e-05, 4.07671312114601e-08, 1.511879959900395e-05, 2.612192904896867e-07};
+    double const referenceEnergy = 1.7414174912344547;
+    double previousError = 1.0;
+    for (float tolerance : {1.e-3f, 1.e-4f, 1.e-5f}) {
+        SolverOptions options;
+        options.relativeTolerance = tolerance;
+        auto const result = advance(initial, environment, 1.e12f, options);
+        Eos eos;
+        require(result.status == Status::Success && result.acceptedTime == 1.e12f &&
+                evaluateEos(result.state, environment, eos) == Status::Success,
+            "hot molecular solve completes");
+        double error = 0.0;
+        for (int i = 0; i < kAbundanceCount; ++i) {
+            double const value = result.state.abundances[i].value().toDouble();
+            error =
+                std::max(error, std::fabs(value - reference[i]) / std::max(reference[i], 1.e-12));
+        }
+        error = std::max(error, std::fabs(result.state.thermalEnergy / referenceEnergy - 1.0));
+        std::printf("hot molecular tolerance %.3g T %.6g K 2H2/H %.6g error %.4g steps %u\n",
+            tolerance, eos.temperature, result.state.abundances[4].value().toDouble(), error,
+            result.acceptedSubsteps);
+        require(error < 0.4 * std::sqrt(tolerance) && error < 0.7 * previousError,
+            "hot molecular independent reference with first-order refinement");
+        require(eos.temperature > 6000.0f && eos.temperature < 12000.0f &&
+                result.state.abundances[4].value().toDouble() < 0.05 * 2.e-3 &&
+                result.state.abundances[4].value() > FloatFloat(0.0f),
+            "hot molecular gas crossed 6000 K downward with its H2 dissociated");
+        require(validateComposition(result.state, environment) == Status::Success,
+            "hot molecular accepted state satisfies elemental and charge bounds");
+        previousError = error;
+    }
+}
+
 TEST(PrimordialSolver, ThermalEndpoints) {
     using namespace primordial;
     SolverOptions options;
     // At exact thermal endpoints the Newton Jacobian must find feasible
     // derivative probes while the physical trajectory points into the domain.
-    for (int endpoint = 0; endpoint != 2; ++endpoint) {
+    for (int endpoint = 0; endpoint != 3; ++endpoint) {
         Environment boundaryEnvironment;
         State boundaryInitial;
         float interval;
-        if (endpoint == 0) {
+        if (endpoint == 0 || endpoint == 2) {
+            // Endpoint 2 is the molecular network at the same 1e8 K ceiling,
+            // carrying trace H2 and H2+ that must dissociate rather than reset.
+            boundaryEnvironment.network = endpoint == 2 ? Network::Molecular9 : Network::Atomic6;
             boundaryEnvironment.nHydrogen = 1.0f;
             boundaryEnvironment.cmbTemperature = 30.0f;
-            boundaryInitial.abundances[0] = SignedAbundance::fromFraction(1.0f);
+            boundaryInitial.abundances[0] =
+                SignedAbundance::fromMinority(endpoint == 2 ? 2.e-6f : 0.0f, true);
             boundaryInitial.abundances[2] = SignedAbundance::fromFraction(1.0f);
+            if (endpoint == 2) {
+                boundaryInitial.abundances[4] = SignedAbundance::fromMinority(1.e-6f, false);
+                boundaryInitial.abundances[5] = SignedAbundance::fromMinority(1.e-6f, false);
+            }
             interval = 1.e12f;
         } else {
             boundaryEnvironment.network = Network::Molecular9;
@@ -381,7 +506,7 @@ TEST(PrimordialSolver, ThermalEndpoints) {
             boundaryInitial.abundances[4] = SignedAbundance::fromFraction(1.0f);
             interval = 1.e8f;
         }
-        float const temperature = endpoint == 0 ? maximumTemperature(boundaryEnvironment.network) :
+        float const temperature = endpoint != 1 ? maximumTemperature(boundaryEnvironment.network) :
                                                   minimumTemperature(boundaryEnvironment.network);
         require(thermalEnergyAtTemperature(boundaryInitial, boundaryEnvironment, temperature,
                     boundaryInitial.thermalEnergy) == Status::Success,
@@ -392,9 +517,14 @@ TEST(PrimordialSolver, ThermalEndpoints) {
                 boundary.newtonIterations > 3 &&
                 evaluateEos(boundary.state, boundaryEnvironment, boundaryEos) == Status::Success,
             "thermal endpoint Jacobian remains feasible");
-        require(endpoint == 0 ? boundaryEos.temperature < temperature :
+        require(endpoint != 1 ? boundaryEos.temperature < temperature :
                                 boundaryEos.temperature > temperature,
             "endpoint trajectory moves into supported thermal domain");
+        if (endpoint == 2) {
+            require(boundary.state.abundances[4].value() < FloatFloat(1.e-6f) &&
+                    boundary.state.abundances[4].value() > FloatFloat(0.0f),
+                "trace H2 dissociates at the hot endpoint without being reset");
+        }
         if (endpoint == 1) {
             double const exactEnergy = boundaryInitial.thermalEnergy +
                 0.5 *

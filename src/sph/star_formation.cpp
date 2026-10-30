@@ -134,10 +134,11 @@ void starFormationInitialize() {
     auto const model = detail::model();
     particlesInitializeStarFormationIds();
     PRINT("SH03 equilibrium star formation: rho_th=%.12e g/cm^3, nH_th=%.12e cm^-3; N_g=1, "
-          "dense atomic CIE, ordinary gas Atomic6 chemistry\n",
+          "dense atomic CIE, ordinary gas %s chemistry\n",
         model.thresholdDensity,
         model.thresholdDensity * (1.0 - getOptions().cosmology.heliumFraction) /
-            springel_and_hernquist::kProtonMass);
+            springel_and_hernquist::kProtonMass,
+        getOptions().chemistry.network.c_str());
 }
 
 HPX_PLAIN_ACTION(starFormationRefreshEos, StarFormationRefreshEosAction);

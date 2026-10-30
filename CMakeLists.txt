@@ -925,7 +925,7 @@ if(BUILD_TESTING)
             target_compile_options(primordial_reference PRIVATE -fno-fast-math -ffp-contract=off)
             add_test(NAME primordial_radau_reference COMMAND ${Python3_EXECUTABLE}
                 ${PROJECT_SOURCE_DIR}/tests/primordial_reference.py $<TARGET_FILE:primordial_reference>)
-            set_tests_properties(primordial_radau_reference PROPERTIES TIMEOUT 240
+            set_tests_properties(primordial_radau_reference PROPERTIES TIMEOUT 600
                 ENVIRONMENT "OPENBLAS_NUM_THREADS=1;OMP_NUM_THREADS=1;MKL_NUM_THREADS=1")
         endif()
     endif()

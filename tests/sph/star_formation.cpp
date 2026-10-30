@@ -806,10 +806,11 @@ void checkSfOutput(bool wind) {
 void starFormationTest() {
     using namespace detail;
     auto const originalOptions = getOptions();
+    // Either network: the dense projection is atomic and the ordinary-gas
+    // references below come from the configured chemistry batch solver.
     requireSf(originalOptions.starFormation.enabled && originalOptions.hydro.enabled &&
-            originalOptions.chemistry.enabled && originalOptions.chemistry.network == "atomic6" &&
-            !originalOptions.compute.cuda,
-        "fixture requires CPU SPH star formation with atomic6 chemistry");
+            originalOptions.chemistry.enabled && !originalOptions.compute.cuda,
+        "fixture requires CPU SPH star formation with chemistry");
     auto options = originalOptions;
     options.starFormation.winds = false;
     setOptions(options);

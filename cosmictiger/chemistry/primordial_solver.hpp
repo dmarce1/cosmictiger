@@ -114,6 +114,23 @@ namespace detail {
         }
     };
 
+    // Clamp each fraction to its branch's feasible half-line: fraction >= 0 on
+    // the lower branch (stored value >= 0) and fraction <= 1 on the upper branch
+    // (stored value <= 0). A species at exactly zero (He++ below 2e4 K, say)
+    // can receive a noise-level correction of the wrong sign from the
+    // numerical Jacobian; left unprojected, every damped candidate stays
+    // infeasible, the composition check rejects all of them, and the substep
+    // is rejected at every useful step size. The far bounds and the 0.5
+    // branch split are still left to the composition check.
+    CUDA_EXPORT inline void solverProject(SolverCoordinates& coordinates) {
+        for (int index = 0; index < kAbundanceCount; ++index) {
+            FloatFloat& value = coordinates.values[index];
+            if (coordinates.upper[index] ? value > FloatFloat(0.0f) : value < FloatFloat(0.0f)) {
+                value = FloatFloat(0.0f);
+            }
+        }
+    }
+
     // Partial-pivoted dense elimination in FloatFloat. Independent elemental
     // abundances remove redundant conservation rows before this solve.
     CUDA_EXPORT inline bool solverLinearSolve(FloatFloat matrix[kSolverVariables][kSolverVariables],
@@ -335,6 +352,9 @@ namespace detail {
                 for (int index = 0; index < kSolverVariables; ++index) {
                     corrected.values[index] += correction[index];
                 }
+                // Project before decoding: a representable noise correction on
+                // an exact-zero species must not disguise stagnation.
+                solverProject(corrected);
                 WorkingState const decodedCorrection = corrected.state();
                 bool unchanged = true;
                 for (int index = 0; index < kSolverVariables; ++index) {
@@ -353,6 +373,8 @@ namespace detail {
                 for (int index = 0; index < kSolverVariables; ++index) {
                     candidate.values[index] += FloatFloat(damping) * correction[index];
                 }
+                // The residual is evaluated at the projected point.
+                solverProject(candidate);
                 FloatFloat candidateResidual[kSolverVariables]{};
                 Derivative candidateDerivative;
                 float candidateNorm;

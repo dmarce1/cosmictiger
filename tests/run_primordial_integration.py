@@ -43,7 +43,7 @@ def globalState(path):
     return driver, timestep
 
 
-def gasState(path, requireEos=True, globalTimestep=None):
+def gasState(path, requireEos=True, globalTimestep=None, expectedCount=512):
     payload = (path / "checkpoint.0.dat").read_bytes()
     prefix = struct.pack("=I", 0x43545350)
     offset = payload.rfind(prefix)
@@ -53,7 +53,7 @@ def gasState(path, requireEos=True, globalTimestep=None):
     if fields[1] not in (11, 13, 15, 17) or fields[2] not in (4, 8) or fields[5:] != (3, 4):
         raise RuntimeError(f"Unsupported chemistry checkpoint layout {fields}")
     count = int.from_bytes(payload[offset + 28:offset + 28 + fields[2]], sys.byteorder, signed=True)
-    if count != 512:
+    if count != expectedCount:
         raise RuntimeError(f"Unexpected gas count {count}")
     # The tail is explicitly serialized: six signed fractions, eV/H energy,
     # pressure/energy ratio and frozen gamma, then each particle's pending
@@ -84,9 +84,9 @@ def gasState(path, requireEos=True, globalTimestep=None):
     return [record[:9] for record in records], payload[offset:chemistryEnd]
 
 
-def gasPayload(path, globalMode=False):
+def gasPayload(path, globalMode=False, expectedCount=512):
     timestep = globalState(path)[1] if globalMode else None
-    return gasState(path, globalTimestep=timestep)[1]
+    return gasState(path, globalTimestep=timestep, expectedCount=expectedCount)[1]
 
 
 def nativeInitialReference(executable, directory, redshift):
@@ -164,6 +164,8 @@ def main():
     parser.add_argument("workdir", type=Path)
     parser.add_argument("--recombination-reference", type=Path, required=True)
     parser.add_argument("--cuda", action="store_true")
+    parser.add_argument("--cases", default="",
+                        help="comma-separated subset of case names to run (default: all)")
     parser.add_argument("--time-integrator", choices=("traditional", "global"),
                         default="traditional")
     args = parser.parse_args()
@@ -180,7 +182,10 @@ def main():
                "--output.directory=."]
     options += application_arguments(executable, far="fmm", integrator=args.time_integrator,
                                      hydro=True)
+    selected = {name for name in args.cases.split(",") if name}
     for name, network in (("native_initial", "atomic6"), ("molecular9_native_initial", "molecular9")):
+        if selected and name not in selected:
+            continue
         initial = prepareCase(base, name)
         reference = nativeInitialReference(args.recombination_reference, initial, 49.0)
         runSimulation(options + [f"--chemistry.network={network}",
@@ -192,21 +197,38 @@ def main():
     cases = (("atomic6", "atomic6", []),
              ("molecular9_cold", "molecular9", []),
              ("molecular9", "molecular9",
-              ["--chemistry.initialization=manual", "--chemistry.molecularFraction=0.2"]))
+              ["--chemistry.initialization=manual", "--chemistry.molecularFraction=0.2"]),
+             # Hot molecular gas above the former 6000 K ceiling: molecules are
+             # retained, dissociate and recombine within the nine-species network.
+             # Cooling, recombining gas costs the first-order source solver a few
+             # hundred substeps per particle, so this case uses 64 particles and
+             # the coarser production tolerances to stay inside the run timeout.
+             ("molecular9_hot", "molecular9",
+              ["--chemistry.initialization=manual", "--chemistry.initialTemperature=30000",
+               "--chemistry.hydrogenIonFraction=0.5", "--chemistry.molecularFraction=0.001",
+               "--chemistry.relativeTolerance=1e-3",
+               "--chemistry.abundanceAbsoluteTolerance=1e-10",
+               "--initial.particlesPerDimension=4"]))
     for name, network, initialization in cases:
+        if selected and name not in selected:
+            continue
         baseline = prepareCase(base, f"{name}_baseline")
         table = "COSMICTIGER_PRIMORDIAL_RADIATION 1\n" + "\n".join(
             str(z) + " " + " ".join(["0"] * 14) for z in (0, 100)) + "\n"
         (baseline / "radiation.txt").write_text(table)
         command = options + [f"--chemistry.network={network}", "--chemistry.radiationFile=radiation.txt",
                              "--output.silo=true", "--output.units=both", "--output.frame=both"]
+        overridden = {option.split("=")[0] for option in initialization}
+        command = [option for option in command if option.split("=")[0] not in overridden]
         command += initialization
         runSimulation(command + ["--run.maxIterations=1"], baseline, "run.log")
         checkpoint1 = baseline / "checkpoint.1"
         checkpoint2 = baseline / "checkpoint.2"
         checkManifest(checkpoint1, 1)
         checkManifest(checkpoint2, 2)
-        uninterrupted = gasPayload(checkpoint2, args.time_integrator == "global")
+        gasCount = next(int(option.split("=")[1]) ** 3 for option in command
+                        if option.startswith("--initial.particlesPerDimension="))
+        uninterrupted = gasPayload(checkpoint2, args.time_integrator == "global", gasCount)
         checkOutput(baseline)
         restarted = prepareCase(base, f"{name}_restart", checkpoint1)
         (restarted / "radiation.txt").write_text(table)
@@ -215,7 +237,7 @@ def main():
              "--gravity.expansionDegree="))]
         runSimulation(restartCommand + ["--checkpoint.readIndex=1", "--run.maxIterations=0"],
                       restarted, "restart.log")
-        restored = gasPayload(restarted / "checkpoint.2", args.time_integrator == "global")
+        restored = gasPayload(restarted / "checkpoint.2", args.time_integrator == "global", gasCount)
         if uninterrupted != restored:
             raise RuntimeError(f"{name}: restart changed the gas payload (source phase or state mismatch)")
         altered = prepareCase(base, f"{name}_radiation_changed", checkpoint1)
@@ -224,20 +246,35 @@ def main():
                                altered, "rejected.log", expectSuccess=False)
         if "radiation" not in output.lower():
             raise RuntimeError("Changed radiation table lacked compatibility diagnostic")
+        # Same particle layout and radiation table as the checkpoint, so the
+        # restart reaches the chemistry comparison and fails on the network.
         incompatible = prepareCase(base, f"{name}_incompatible", checkpoint1)
-        output = runSimulation(options + [f"--chemistry.network={'molecular9' if network == 'atomic6' else 'atomic6'}",
-            "--chemistry.initialization=manual",
-            "--checkpoint.readIndex=1", "--run.maxIterations=0"], incompatible, "rejected.log", expectSuccess=False)
-        if "chemistry" not in output.lower():
-            raise RuntimeError("Incompatible restart lacked chemistry diagnostic")
+        (incompatible / "radiation.txt").write_text(table)
+        swapped = "molecular9" if network == "atomic6" else "atomic6"
+        # Keep chemistry enabled with the same radiation table and solver
+        # settings; only the network and the initial composition change (the
+        # molecular fractions of a manual molecular9 start are invalid for atomic6).
+        initialComposition = ("--chemistry.network=", "--chemistry.initialTemperature=",
+                              "--chemistry.hydrogenIonFraction=", "--chemistry.heliumIonFraction=",
+                              "--chemistry.heliumDoubleIonFraction=",
+                              "--chemistry.hydrogenMinusFraction=", "--chemistry.molecularFraction=",
+                              "--chemistry.molecularIonFraction=")
+        incompatibleCommand = [option for option in restartCommand
+                               if not option.startswith(initialComposition)] + [
+            f"--chemistry.network={swapped}", "--checkpoint.readIndex=1", "--run.maxIterations=0"]
+        output = runSimulation(incompatibleCommand, incompatible, "rejected.log", expectSuccess=False)
+        if "Checkpoint chemistry network" not in output:
+            raise RuntimeError("Incompatible restart lacked the chemistry network diagnostic")
         print(f"{name}: production {'CUDA' if args.cuda else 'CPU'} {args.time_integrator} "
               "stepping, exact gas restart, incompatible-network rejection passed")
-    # No silent extrapolation of the selected molecular cooling fits.
-    invalid = prepareCase(base, "invalid_domain")
-    output = runSimulation(options + ["--chemistry.network=molecular9", "--chemistry.initialTemperature=10000",
-        "--run.maxIterations=0"], invalid, "rejected.log", expectSuccess=False)
-    if "chemistry" not in output.lower():
-        raise RuntimeError("Unsupported domain lacked chemistry diagnostic")
+    # No silent extrapolation beyond the shared 1e8 K ceiling of either network.
+    for network in ("molecular9", "atomic6"):
+        invalid = prepareCase(base, f"invalid_domain_{network}")
+        output = runSimulation(options + [f"--chemistry.network={network}",
+            "--chemistry.initialization=manual", "--chemistry.initialTemperature=2e8",
+            "--run.maxIterations=0"], invalid, "rejected.log", expectSuccess=False)
+        if "chemistry" not in output.lower():
+            raise RuntimeError("Unsupported domain lacked chemistry diagnostic")
     return 0
 
 

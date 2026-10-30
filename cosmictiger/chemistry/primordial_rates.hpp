@@ -56,6 +56,24 @@ struct ThermalRates {
     }
 };
 namespace detail {
+    // Molecular9 above 6000 K: see docs/molecular9_hot.md. Fits with a
+    // published upper temperature, and fits whose published form diverges
+    // (exponential or steep power-law growth far above any collisional rate),
+    // are evaluated at min(T, freeze). Slowly growing forms that stay below
+    // 3.5e-8 cm^3/s at 1e8 K are left as published. Published high-temperature
+    // branches are joined to the low branch by the binary64 ratio of the two
+    // published expressions at the splice, so no coefficient jumps there.
+    inline constexpr float kMolecularFitFreezeTemperature = 1.0e4f;            // GA08 model range.
+    inline constexpr float kAssociationFreezeTemperature = 32000.0f;           // GP98 Table 1, H8.
+    inline constexpr float kChargeTransferFreezeTemperature = 30000.0f;        // Savin 2004.
+    inline constexpr float kHeliumTransferFreezeTemperature = 1.0e5f;          // GA08 A1/27.
+    inline constexpr float kAttachmentContinuity = 1.0056449265332643f;        // 6000 K.
+    inline constexpr float kIonPairContinuity = 1.0075749241800007f;           // 8000 K.
+    inline constexpr float kHeliumTransferContinuity = 1.0024342795865604f;    // 1e4 K.
+    CUDA_EXPORT inline float molecularFitTemperature(float temperature) {
+        return temperature < kMolecularFitFreezeTemperature ? temperature :
+                                                              kMolecularFitFreezeTemperature;
+    }
     template <int count>
     CUDA_EXPORT inline float polynomial(float x, float const (&coefficients)[count]) {
         FloatFloat result(coefficients[count - 1]);
@@ -191,15 +209,29 @@ CUDA_EXPORT inline Status evaluateRateCoefficients(
     float const logTemperature = ::log10f(temperature);
     float const electronTemperature = kBoltzmannEv * temperature;
     float const logElectronTemperature = ::logf(electronTemperature);
+    float const frozenTemperature = detail::molecularFitTemperature(temperature);
     // Glover & Abel 2008 Appendix A: Wishart attachment; fiducial associative
     // detachment; Galli-Palla radiative association; Savin charge transfer.
-    float const attachment[] = {-17.845f, 0.762f, 0.1523f, -0.03274f};
-    k[6] = ::powf(10.0f, detail::polynomial(logTemperature, attachment));
+    // Attachment has both published branches (GA08 A1/1; Abel97 fit 1..1e8 K).
+    if (temperature <= 6000.0f) {
+        float const attachment[] = {-17.845f, 0.762f, 0.1523f, -0.03274f};
+        k[6] = ::powf(10.0f, detail::polynomial(logTemperature, attachment));
+    } else {
+        float const logSquared = logTemperature * logTemperature;
+        float const hotAttachment[] = {-16.4199f, 0.1998f, -5.447e-3f, 4.0415e-5f};
+        k[6] = detail::kAttachmentContinuity *
+            ::powf(10.0f, detail::polynomial(logSquared, hotAttachment));
+    }
     k[7] = 1.3e-9f;
+    // GP98 Table 1 H8 is published for 1 <= T <= 32000 K and held above.
     float const association[] = {-19.38f, -1.523f, 1.118f, -0.1269f};
-    k[8] = ::powf(10.0f, detail::polynomial(logTemperature, association));
+    k[8] = ::powf(10.0f,
+        detail::polynomial(
+            ::log10f(::fminf(temperature, detail::kAssociationFreezeTemperature)), association));
     k[9] = 6.4e-10f;
-    k[10] = detail::molecularChargeTransfer(temperature);
+    // Savin et al. 2004 computed 100..30000 K; the polynomial is held above.
+    k[10] = detail::molecularChargeTransfer(
+        ::fminf(temperature, detail::kChargeTransferFreezeTemperature));
     // Glover & Abel 2008 Table A1 vibrational-ground-state dissociation.
     // evaluateDensityDependentRates supplies the prescribed LTE interpolation.
     k[11] = 4.49e-9f * ::powf(temperature, 0.11f) * ::expf(-101858.0f / temperature);
@@ -216,23 +248,43 @@ CUDA_EXPORT inline Status evaluateRateCoefficients(
         ::expf(detail::polynomial(logElectronTemperature, atomDetachment));
     // Croft et al. 1999 mutual neutralization and GA08 Appendix A channels
     // for H2+ formation, dissociative recombination, and H- destruction.
-    k[15] = 2.4e-6f * (1.0f + temperature / 20000.0f) / root;
-    k[16] = 6.9e-9f * ::powf(temperature, -0.35f);
+    // The Croft form grows as sqrt(T) and is held at the molecular freeze
+    // temperature; H- + H+ -> H2+ + e has both published branches (GA08 A1/16).
+    k[15] = 2.4e-6f * (1.0f + frozenTemperature / 20000.0f) / ::sqrtf(frozenTemperature);
+    k[16] = temperature <= 8000.0f ?
+        6.9e-9f * ::powf(temperature, -0.35f) :
+        detail::kIonPairContinuity * 9.6e-7f * ::powf(temperature, -0.9f);
     k[17] = temperature <= 617.0f ? 1.0e-8f : 1.32e-6f * ::powf(temperature, -0.76f);
     // GA08 Table A1: split H- + H2+ products, molecular dissociation by H2
     // and He, dissociative attachment, and minor H/He charge-transfer channels.
     k[18] = 1.4e-7f * ::sqrtf(300.0f / temperature);
     k[19] = 5.996e-30f * ::powf(temperature, 4.1881f) /
         ::powf(1.0f + 6.761e-6f * temperature, 5.6881f) * ::expf(-54657.4f / temperature);
-    k[20] = ::powf(10.0f, -27.029f + 3.801f * logTemperature - 29487.0f / temperature);
+    // The He ground-state dissociation fit grows as T^3.8 and is held at the
+    // molecular freeze temperature; evaluateDensityDependentRates agrees.
+    k[20] = ::powf(
+        10.0f, -27.029f + 3.801f * ::log10f(frozenTemperature) - 29487.0f / frozenTemperature);
     k[21] = k[18];
     k[22] = 2.7e-8f * ::powf(temperature, -1.27f) * ::expf(-43000.0f / temperature);
     k[23] = 3.7e-14f * ::expf(35.0f / temperature);
     k[24] = 7.2e-15f;
     k[25] = 1.2e-15f * ::powf(temperature / 300.0f, 0.25f);
-    k[26] = 1.26e-9f * ::powf(temperature, -0.75f) * ::expf(-127500.0f / temperature);
-    k[27] = 2.32e-7f * ::powf(temperature / 300.0f, -0.52f) * ::expf(temperature / 22400.0f);
-    k[28] = 4.1e-17f * temperature * temperature * ::expf(-19870.0f / temperature);
+    // He + H+ -> He+ + H: both GA08 A1/27 branches (Kimura et al. 1993). The
+    // open-ended T^4.74 branch is held at 1e5 K, where it is already three
+    // orders of magnitude below electron-impact ionization of He.
+    if (temperature <= 1.0e4f) {
+        k[26] = 1.26e-9f * ::powf(temperature, -0.75f) * ::expf(-127500.0f / temperature);
+    } else {
+        k[26] = detail::kHeliumTransferContinuity * 4.0e-37f *
+            ::powf(::fminf(temperature, detail::kHeliumTransferFreezeTemperature), 4.74f);
+    }
+    // exp(+T/22400) is a low-temperature fit artefact and is held at the
+    // molecular freeze temperature, like the other mutual neutralization fit.
+    k[27] = 2.32e-7f * ::powf(frozenTemperature / 300.0f, -0.52f) *
+        ::expf(frozenTemperature / 22400.0f);
+    // He + H- detachment grows as T^2 and is held like the other diverging fits.
+    k[28] =
+        4.1e-17f * frozenTemperature * frozenTemperature * ::expf(-19870.0f / frozenTemperature);
     for (int i = 0; i != kCollisionCount; ++i) {
         if (!finite(k[i]) || k[i] < 0.0f) {
             return Status::UnsupportedState;
@@ -250,11 +302,16 @@ CUDA_EXPORT inline void evaluateDensityDependentRates(Composition const& c,
     if (environment.network != Network::Molecular9) {
         return;
     }
-    float const logTemperature = ::log10f(temperature);
+    // The critical-density fits (GA08 eqs. 15-17) and the He ground-state
+    // dissociation fit are held at the molecular freeze temperature; the
+    // linear He expression would otherwise underflow to zero near 7e5 K.
+    float const frozenTemperature = detail::molecularFitTemperature(temperature);
+    float const logTemperature = ::log10f(frozenTemperature);
     float const t4 = logTemperature - 4.0f;
     float const criticalH = ::powf(10.0f, 3.0f - 0.416f * t4 - 0.327f * t4 * t4);
     float const criticalH2 = ::powf(10.0f, 4.845f - 1.3f * t4 + 1.62f * t4 * t4);
-    float const criticalHe = ::powf(10.0f, 5.0792f * (1.0f - 1.23e-5f * (temperature - 2000.0f)));
+    float const criticalHe =
+        ::powf(10.0f, 5.0792f * (1.0f - 1.23e-5f * (frozenTemperature - 2000.0f)));
     FloatFloat const densityRatio = FloatFloat(environment.nHydrogen) *
         (c.hydrogen / FloatFloat(criticalH) +
             FloatFloat(2.0f) * c.molecularHydrogen / FloatFloat(criticalH2) +
@@ -265,10 +322,10 @@ CUDA_EXPORT inline void evaluateDensityDependentRates(Composition const& c,
         ::logf(6.67e-12f) + 0.5f * naturalLog - 1.0f - 63593.0f / temperature,
         ::logf(5.996e-30f) + 4.1881f * naturalLog - 5.6881f * ::log1pf(6.761e-6f * temperature) -
             54657.4f / temperature,
-        2.302585092994046f * (-27.029f + 3.801f * logTemperature - 29487.0f / temperature)};
+        2.302585092994046f * (-27.029f + 3.801f * logTemperature - 29487.0f / frozenTemperature)};
     float const logLte[] = {::logf(1.91e-9f) + 0.136f * naturalLog - 53407.1f / temperature,
         ::logf(3.52e-9f) - 43900.0f / temperature, ::logf(1.3e-9f) - 53300.0f / temperature,
-        2.302585092994046f * (-2.729f - 1.75f * logTemperature - 23474.0f / temperature)};
+        2.302585092994046f * (-2.729f - 1.75f * ::log10f(temperature) - 23474.0f / temperature)};
     int const indices[] = {11, 12, 19, 20};
     for (int i = 0; i != 4; ++i) {
         result.collision[indices[i]] = ::expf(logLow[i] + lteFraction * (logLte[i] - logLow[i]));
@@ -328,11 +385,17 @@ CUDA_EXPORT inline void reactionFluxes(Composition const& c, Environment const& 
 // Order of collision partners: H, H2, He, H+, e. All five are retained.
 // This remains spontaneous line cooling with no molecular CMB absorption or
 // evolved spin populations. Compton exchange is a separate thermal process.
+// Above 6000 K the H, H2 and He polynomials are evaluated beyond their
+// published range up to 1e4 K, and every coefficient (including the LTE
+// asymptote) is held at its 1e4 K value above that. This follows Grackle's
+// GAHI/GAH2/GAHe/GAHp/GAel/H2LTE clamps (rate_functions.c, revision
+// 01261db); it is a documented continuation, not a published fit.
 CUDA_EXPORT inline Status molecularCoolingCoefficients(
-    float temperature, float (&cooling)[5], float& lte) {
-    if (!finite(temperature) || temperature < 10.0f || temperature > 6000.0f) {
+    float gasTemperature, float (&cooling)[5], float& lte) {
+    if (!finite(gasTemperature) || gasTemperature < 10.0f || gasTemperature > 1.0e8f) {
         return Status::UnsupportedState;
     }
+    float const temperature = detail::molecularFitTemperature(gasTemperature);
     float const x = ::log10f(temperature / 1000.0f);
     float const atomLow[] = {
         -24.311209f, 3.5692468f, -11.332860f, -27.850082f, -21.328264f, -4.2519023f};
@@ -456,17 +519,22 @@ CUDA_EXPORT inline Status evaluateThermalRates(Composition const& c, Environment
         result.molecularLineCooling = c.molecularHydrogen * emission;
         // GA08 eqs. (44)-(50), vibrational H2+ cooling by H and e, with LTE
         // saturation. The published low-T H fit is itself an extrapolation.
+        // GA08 computed these to 1e4 K; all three are held at that value above.
+        float const ionTemperature = detail::molecularFitTemperature(temperature);
+        float const logIonTemperature = ::log10f(ionTemperature);
         float const ionElectron =
-            (temperature <= 2000.0f ? (1.1e-19f / kElectronVolt) * ::powf(temperature, -0.34f) :
-                                      (3.35e-21f / kElectronVolt) * ::powf(temperature, 0.12f)) *
-            ::expf(-3025.0f / temperature);
-        float const ionAtom = temperature <= 1000.0f ?
-            (1.36e-22f / kElectronVolt) * ::expf(-3152.0f / temperature) :
+            (ionTemperature <= 2000.0f ?
+                    (1.1e-19f / kElectronVolt) * ::powf(ionTemperature, -0.34f) :
+                    (3.35e-21f / kElectronVolt) * ::powf(ionTemperature, 0.12f)) *
+            ::expf(-3025.0f / ionTemperature);
+        float const ionAtom = ionTemperature <= 1000.0f ?
+            (1.36e-22f / kElectronVolt) * ::expf(-3152.0f / ionTemperature) :
             ::powf(10.0f,
-                -36.42f + 5.95f * logTemperature - 0.526f * logTemperature * logTemperature) /
+                -36.42f + 5.95f * logIonTemperature -
+                    0.526f * logIonTemperature * logIonTemperature) /
                 kElectronVolt;
-        float const ionLte =
-            (2.0e-19f / kElectronVolt) * ::powf(temperature, 0.1f) * ::expf(-3125.0f / temperature);
+        float const ionLte = (2.0e-19f / kElectronVolt) * ::powf(ionTemperature, 0.1f) *
+            ::expf(-3125.0f / ionTemperature);
         FloatFloat const ionLow = FloatFloat(environment.nHydrogen) *
             (c.hydrogen * FloatFloat(ionAtom) + c.electrons * FloatFloat(ionElectron));
         if (ionLte > 0.0f) {

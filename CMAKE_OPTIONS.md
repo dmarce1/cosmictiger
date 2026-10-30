@@ -59,7 +59,7 @@ Star formation requires `COSMICTIGER_ENABLE_STARS=ON`,
 Configuration rejects stars enabled with chemistry disabled. With SPH disabled,
 the stars and chemistry settings remain cached but their sources and tests
 are excluded. Runtime `starFormation.enabled=true` requires
-`hydro.enabled=true`, `chemistry.enabled=true`, `chemistry.network=atomic6`,
+`hydro.enabled=true`, `chemistry.enabled=true` with either network,
 and traditional or global integration. See [the model documentation](docs/star_formation.md) for the
 CIE cooling assumptions, configuration example, and validation targets.
 

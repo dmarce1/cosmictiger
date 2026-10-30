@@ -28,8 +28,10 @@ Build, runtime, restart, and parity evidence is recorded separately in
 [primordial_chemistry.md](primordial_chemistry.md); the presence of code is not a
 claim that every release gate below has passed.
 
-The implemented bounds are **10–10⁸ K for atomic6**, **100–6000 K for molecular9**,
-and **proper H-nucleus density at most 10⁴ cm⁻³** for both. Molecular9 contains
+The implemented bounds are **10–10⁸ K for both networks** (molecular9 was
+first 100–6000 K, then extended [down to 10 K](molecular9_cold.md) and
+[up to 10⁸ K](molecular9_hot.md)), and **proper H-nucleus density at most
+10⁴ cm⁻³** for both. Molecular9 contains
 29 two-body H/He reactions, eight aggregate photon channels, five H₂ cooling
 partners, H₂⁺ cooling, and approximate LTE population bridges. Molecular modes
 use a frozen ortho:para ratio of 3:1. The dominant-process thermal closure leaves
@@ -80,10 +82,11 @@ unconstrained abundance. A nine-species model must actually include the H₂⁺
 channel; retaining only H⁻ and H₂ is a reduced model with a different scope.
 
 The first release covers optically thin, low-density primordial gas. Its explicit
-bounds are 10–10⁸ K for atomic6 and 100–6000 K for molecular9, with proper
-hydrogen-nucleus density at most 10⁴ cm⁻³. Widening the molecular interval needs
-new rate/cooling fits and a validation campaign; there is no automatic switch to
-atomic chemistry when a molecular state leaves its domain. The low-density limit is a deliberate boundary,
+bounds are now 10–10⁸ K for both networks, with proper hydrogen-nucleus density
+at most 10⁴ cm⁻³. The molecular interval was widened with published
+high-temperature branches, documented held fits and an asymptotic molecular
+EOS; there is no automatic switch to atomic chemistry, and molecular states
+are retained through hot gas. The low-density limit is a deliberate boundary,
 consistent with the scope of [Abel et al. 1997](https://arxiv.org/abs/astro-ph/9608040).
 The solver must report an unsupported state rather than silently extrapolating a
 fit or imposing a temperature floor to hide an integration failure.

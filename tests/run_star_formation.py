@@ -57,7 +57,7 @@ def prepare(base, name, checkpoint=None):
     return directory
 
 
-def read_particle_state(checkpoint, expected_count):
+def read_particle_state(checkpoint, expected_count, network="atomic6"):
     """Exclude driver timing/padding; retain physical arrays and every source scalar."""
     data = (checkpoint / "checkpoint.0.dat").read_bytes()
     position_bytes = checkpoint_position_bytes(data)
@@ -135,8 +135,9 @@ def read_particle_state(checkpoint, expected_count):
             fractions = [value if math.copysign(1.0, value) > 0 else 1.0 + value
                          for value in chemistry[:6]]
             if (fractions[1] + fractions[2] > 1.0 + 1e-6
-                    or any(value != 0.0 for value in fractions[3:])):
-                raise RuntimeError("checkpoint has invalid Atomic6 chemical composition")
+                    or fractions[0] + fractions[3] + fractions[4] + fractions[5] > 1.0 + 1e-6
+                    or (network == "atomic6" and any(value != 0.0 for value in fractions[3:]))):
+                raise RuntimeError(f"checkpoint has invalid {network} chemical composition")
             if chemistry[9:] != (0.0, 0.0):
                 raise RuntimeError("chemistry and star formation both own a pending source step")
             states[identity]["chemistry"] = chemistry
@@ -177,17 +178,21 @@ def main():
     def command(options):
         return [str(executable), *[f"--{key}={value}" for key, value in options.items()]]
 
-    for workers in (1, 2):
+    # Both chemistry networks cover 10 K to 1e8 K, so the SH03 closure runs with
+    # either; the molecular network keeps its nine species in ordinary gas.
+    for workers, network in ((1, "atomic6"), (2, "atomic6"), (1, "molecular9")):
         for fixture, marker in (("star_formation", "Star formation passed:"),
                                 ("starFormationParticles", "Star-formation particles passed:"),
                                 ("checkpointState", "Checkpoint state and mode validation passed")):
-            name = fixture + "_threads_" + str(workers)
+            name = fixture + "_" + network + "_threads_" + str(workers)
             directory = prepare(base, name)
             output = run_process(command(dict(common, **selection,
-                **{"run.test": fixture, "hpx:threads": workers, "chemistry.initialization": "manual"})), directory, name)
+                **{"run.test": fixture, "hpx:threads": workers, "chemistry.initialization": "manual",
+                   "chemistry.network": network})), directory, name)
             if marker not in output:
                 raise RuntimeError(f"{name} did not report its assertions passed")
-            evidence["fixtures"].append({"name": fixture, "workers": workers, "passed": True})
+            evidence["fixtures"].append({"name": fixture, "workers": workers, "network": network,
+                                         "passed": True})
 
     if not args.fixtures_only:
         solvers = [("fmm", None)] if "fmm" in available["far"] else []
@@ -195,24 +200,31 @@ def main():
             solvers.extend(("pmmm", near) for near in ("pp", "fmm") if near in available["near"])
         if not solvers:
             solvers = [("none", None)]
-        for far, near in solvers:
-            for integrator in integrators:
+        # One combination also runs the nine-species network: ordinary gas and
+        # winds then evolve molecular fractions that the dense projection drops.
+        combinations = [(far, near, integrator, "atomic6")
+                        for far, near in solvers for integrator in integrators]
+        combinations.append((*combinations[0][:3], "molecular9"))
+        for far, near, integrator, network in combinations:
                 selections = application_options(executable, far=far, near=near,
                                                  integrator=integrator, hydro=True)
                 gravity = far != "none"
                 label = "_".join(value for value in (far, near, integrator) if value)
+                if network != "atomic6":
+                    label += "_" + network
                 options = dict(common, **selections, **{"run.scenario": "cosmology",
                     "gravity.enabled": str(gravity).lower(), "run.maxIterations": 2,
                     "run.numberOfSteps": 64, "run.minRung": 0,
                     "cosmology.sigma8": 0, "cosmology.startRedshift": 49,
                     "cosmology.endRedshift": 0, "checkpoint.intervalSeconds": 0,
-                    "hpx:threads": 1})
+                    "hpx:threads": 1, "chemistry.network": network})
                 baseline = prepare(base, "cosmology_" + label)
                 run_process(command(options), baseline, "baseline")
                 for iteration in (1, 2):
                     checkManifest(baseline / f"checkpoint.{iteration}", iteration, gravity=gravity)
-                _, first = read_particle_state(baseline / "checkpoint.1", 1024)
-                reference_payload, reference = read_particle_state(baseline / "checkpoint.2", 1024)
+                _, first = read_particle_state(baseline / "checkpoint.1", 1024, network)
+                reference_payload, reference = read_particle_state(
+                    baseline / "checkpoint.2", 1024, network)
                 if set(first) != set(reference):
                     raise RuntimeError("evolution changed stable particle identities")
                 gas_states = [state for state in first.values() if state["type"] == 1]
@@ -233,7 +245,8 @@ def main():
                 if "Done reading checkpoint" not in output:
                     raise RuntimeError("restart did not load its saved simulation")
                 checkManifest(resumed / "checkpoint.2", 2, gravity=gravity)
-                resumed_payload, resumed_state = read_particle_state(resumed / "checkpoint.2", 1024)
+                resumed_payload, resumed_state = read_particle_state(
+                    resumed / "checkpoint.2", 1024, network)
                 if reference_payload != resumed_payload or reference != resumed_state:
                     raise RuntimeError("restart changed particle arrays or persistent star formation state")
                 # A short restart may not cross the next coarse diagnostic boundary.
@@ -250,7 +263,8 @@ def main():
                         "run.maxIterations": 0})), directory, "incompatible_restart", success=False)
                     if "checkpoint" not in rejected.lower() or "Done reading checkpoint" in rejected:
                         raise RuntimeError("incompatible source parameters were not rejected before loading")
-                entry = {"gravity": far, "near": near, "integrator": integrator, "particles": len(reference),
+                entry = {"gravity": far, "near": near, "integrator": integrator, "network": network,
+                         "particles": len(reference),
                          "gas": sum(state["type"] == 1 for state in reference.values()),
                          "stars": sum(state["type"] == 2 for state in reference.values()),
                          "maximum_event_counter": max(state["counter"] for state in reference.values()),

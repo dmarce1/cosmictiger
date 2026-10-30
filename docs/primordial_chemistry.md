@@ -103,8 +103,10 @@ standalone chemistry steps are skipped and their pending clock fields remain
 zero. Eligible dense gas instead receives the SH03 effective energy and a
 mass-weighted neutral-cold plus atomic-CIE-hot composition. This projection
 does not evolve separate non-equilibrium chemical histories in the unresolved
-phases, and ordinary cooling is not applied to the effective mixture. Combined
-runs currently require `atomic6`. See [star formation](star_formation.md) for
+phases, and ordinary cooling is not applied to the effective mixture. Either
+network may be combined with star formation; with `molecular9`, entering the
+dense branch also discards the parcel's molecular fractions. See
+[star formation](star_formation.md) for
 threshold transitions, wind recoupling, radiation ownership, and projection
 diagnostics.
 
@@ -116,7 +118,9 @@ with old chemistry checkpoints.
 ## Solver and model limits
 
 The current solver is adaptive backward Euler with step doubling, bounded Newton
-iterations and positivity-aware line searches. The accepted fine solution consists
+iterations and positivity-aware line searches that project each fraction onto
+its branch's feasible half-line (fraction at least zero, at most one) before
+the residual is evaluated. The accepted fine solution consists
 of two half steps. It is a first-order baseline, not SDIRK. Relative tolerance is a
 **local** error control, not a promise of equally small global trajectory error.
 The default is 1e-4 and requests below the tested floor 1e-5 are rejected.
@@ -124,12 +128,14 @@ Species absolute tolerances also matter for traces. Failure returns the last
 accepted state/time and work counters. The SPH bridge prepares all ranks before
 committing source results, and does not commit a partially failed batch.
 
-The current density ceiling is 10^4 H nuclei/cm³. Atomic6 accepts 10–10^8 K;
-molecular9 accepts 10–6000 K, with the [cold extension](molecular9_cold.md)
-providing the previously missing low-temperature cooling branches. Unsupported
-states are errors, not floors or silent extrapolations. This excludes a complete
-high-density collapse calculation and parts of hot or very cold molecular gas
-physics. There are no metals, dust, deuterium/HD, self-consistent radiative transfer,
+The current density ceiling is 10^4 H nuclei/cm³. Both networks accept
+10–10^8 K: the [cold extension](molecular9_cold.md) supplies the molecular
+low-temperature cooling branches and the [hot extension](molecular9_hot.md)
+keeps all nine species through dissociation, ionization and recombination,
+listing which fits are held constant or extrapolated above their published
+ranges. Unsupported states are errors, not floors or silent extrapolations.
+This excludes a complete high-density collapse calculation and parts of very
+cold molecular gas physics. There are no metals, dust, deuterium/HD, self-consistent radiative transfer,
 shielding, three-body chemistry or state-resolved molecular populations. Molecular
 rotational/vibrational thermodynamics uses an approximate fixed ortho/para model.
 Unresolved thermal partition for some product-state reactions is explicitly

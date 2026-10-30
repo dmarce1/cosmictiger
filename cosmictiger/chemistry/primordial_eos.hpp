@@ -12,6 +12,15 @@ namespace detail {
         float energyKelvin{}, heatCapacity{};
     };
 
+    // Above this temperature the classical rigid-rotor asymptote replaces the
+    // ladder sums: its O(x^4) truncation (59x^4/14175, about 2e-11 at
+    // x = theta/T = 8.5e-3 for H2) is negligible there, while the 129-level
+    // sums used between 6000 K and 1e4 K are still converged for both
+    // molecules (the H2+ ladder needs the longer sum above 6000 K). The 65-level
+    // sums below 6000 K are untouched, so every previously supported state
+    // is unchanged bit for bit. See docs/molecular9_hot.md.
+    inline constexpr float kRotorSeriesTemperature = 1.0e4f;
+
     // Rigid rotor, separately normalized even/odd ladders, frozen ortho:para=3:1.
     // E = k T^2 d(log Z)/dT, cv = dE/dT; never approximate E as cv(T)*T.
     // Boley et al. 2007, eqs. (1)-(5), including the normalized ortho ground state:
@@ -19,9 +28,30 @@ namespace detail {
     CUDA_EXPORT inline MolecularModes molecularModes(
         float temperature, float rotation, float vibration) {
         FloatFloat energy(0.0f), capacity(0.0f);
-        for (int parity = 0; parity != 2; ++parity) {
+        if (temperature > kRotorSeriesTemperature) {
+            // Mulholland's asymptotic rotational partition function,
+            // Z = (T/theta)[1 + x/3 + x^2/15 + 4x^3/315 + O(x^4)], x = theta/T,
+            // gives per ladder E/k = T - theta/3 - theta^2/(45T) - 8theta^3/(945T^2)
+            // and cv/k = 1 + theta^2/(45T^2) + 16theta^3/(945T^3). The even and
+            // odd ladders each hold half of Z to within exp(-pi^2/(4x)) here
+            // (x <= 8.6e-3), so both have this mean energy; the odd ladder's
+            // normalized ground state subtracts 2theta. Truncation error is
+            // O(x^4) ~ 5e-9, below the binary32 EOS inversion tolerance.
+            FloatFloat const x = FloatFloat(rotation) / FloatFloat(temperature);
+            FloatFloat const xSquared = x * x;
+            FloatFloat const mean = FloatFloat(temperature) *
+                (((FloatFloat(1.0f) - x / FloatFloat(3.0f)) - xSquared / FloatFloat(45.0f)) -
+                    FloatFloat(8.0f / 945.0f) * xSquared * x);
+            energy += mean - FloatFloat(1.5f) * FloatFloat(rotation);
+            capacity += (FloatFloat(1.0f) + xSquared / FloatFloat(45.0f)) +
+                FloatFloat(16.0f / 945.0f) * xSquared * x;
+        }
+        // 65 levels converge every state up to 6000 K; the H2+ ladder needs the
+        // longer sum to stay converged up to the series switch.
+        int const highestLevel = temperature > 6000.0f ? 128 : 64;
+        for (int parity = 0; parity != 2 && temperature <= kRotorSeriesTemperature; ++parity) {
             FloatFloat partition(0.0f), first(0.0f), second(0.0f);
-            for (int j = parity; j <= 64; j += 2) {
+            for (int j = parity; j <= highestLevel; j += 2) {
                 float const level = rotation * static_cast<float>(j * (j + 1) - 2 * parity);
                 float const weight = static_cast<float>(2 * j + 1) * ::expf(-level / temperature);
                 partition += FloatFloat(weight);
@@ -48,8 +78,12 @@ namespace detail {
 CUDA_EXPORT inline float minimumTemperature(Network) {
     return 10.0f;
 }
-CUDA_EXPORT inline float maximumTemperature(Network network) {
-    return network == Network::Molecular9 ? 6000.0f : 1.0e8f;
+// Both networks share the atomic ceiling. Molecular9 keeps all nine species
+// through heating, dissociation and recombination; its molecular fits above
+// their published ranges follow the documented continuations in
+// primordial_rates.hpp and docs/molecular9_hot.md.
+CUDA_EXPORT inline float maximumTemperature(Network) {
+    return 1.0e8f;
 }
 
 CUDA_EXPORT inline Status thermalEnergyAtTemperature(WorkingState const& state,
