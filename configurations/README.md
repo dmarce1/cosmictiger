@@ -186,6 +186,8 @@ accuracy controls, and restart behavior.
 Gravity uses a fixed comoving support radius, with a Ferrers degree-4 density
 kernel in these configurations. SPH has independently selected kernels and
 variable smoothing radii; the examples use cubic splines and 42 weighted
-neighbors. Set gravity radius through `gravity.effectiveRadius`,
+neighbors, and the Monaghan pressure operator (`hydro.pressureOperator =
+monaghan`). The [variational operator](../docs/variational_sph.md) requires
+chemistry and star formation to be disabled. Set gravity radius through `gravity.effectiveRadius`,
 `gravity.supportRadius`, or the legacy `gravity.softening` alias. Alternative
 radius representations remain commented to avoid conflicting inputs.

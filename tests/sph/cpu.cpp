@@ -238,6 +238,14 @@ public:
         run(kSphRunPrehydro2);
     }
 
+    // hydro.pressureOperator=variational: the density pass writes zeta, which publishDensity
+    // stages with the density for the force pass.
+    void enableVariationalPressure() {
+        params_.variationalPressure = true;
+        data_.sourceGradHCorrection = allocate<float>(count_ + sourceOffset_ + 3);
+        data_.sinkGradHCorrection = allocate<float>(count_ + sinkOffset_ + 3);
+    }
+
     void enableCompositionEos() {
         data_.sourcePressureEnergyRatio = allocate<float>(count_ + sourceOffset_ + 3);
         data_.sourceAdiabaticIndex = allocate<float>(count_ + sourceOffset_ + 3);
@@ -254,6 +262,10 @@ public:
         for (int i = 0; i < count_; i++) {
             data_.sourceDensity[sourceIndex(i)] = data_.sinkDensity[sinkIndex(i)];
             data_.sourceBalsaraFactor[sourceIndex(i)] = data_.sinkBalsaraFactor[sinkIndex(i)];
+            if (data_.sinkGradHCorrection != nullptr) {
+                data_.sourceGradHCorrection[sourceIndex(i)] =
+                    data_.sinkGradHCorrection[sinkIndex(i)];
+            }
         }
     }
 
@@ -1496,6 +1508,835 @@ void testRungPropagation() {
     }
 }
 
+// Variational pressure operator (cosmictiger/sph/volume.hpp). A double-precision periodic
+// reference evaluates the same equations at given supports; tests/sph/volume.cpp shows that
+// those equations are the exact gradient of the discrete thermal energy.
+struct VariationalReference {
+    std::vector<double> density;
+    std::vector<double> zeta;
+    std::vector<double> residual;    // (sum w - target)/target at the given support
+    std::vector<std::array<double, kDimensions>> acceleration;    // pressure part of dv/dtau
+    std::vector<double> energyRate;    // pressure work and homogeneous expansion of dE/dtau
+};
+
+// A reproducible uniform deviate in [0, 1).
+double nextDeviate(uint64_t& state) {
+    state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+    return double(state >> 11) * 0x1.0p-53;
+}
+
+std::array<double, kDimensions> periodicSeparation(Fixture const& fixture, int a, int b) {
+    Position const* positions[kDimensions] = {fixture.data_.sourcePositionX,
+        fixture.data_.sourcePositionY, fixture.data_.sourcePositionZ};
+    std::array<double, kDimensions> separation{};
+    for (int dim = 0; dim < kDimensions; dim++) {
+        double const difference = positions[dim][fixture.sourceIndex(a)].toDouble() -
+            positions[dim][fixture.sourceIndex(b)].toDouble();
+        separation[dim] = difference - std::round(difference);
+    }
+    return separation;
+}
+
+double kernelSumAt(Fixture const& fixture, int i, double support) {
+    double sum = 0.0;
+    for (int j = 0; j < fixture.count_; j++) {
+        auto const separation = periodicSeparation(fixture, i, j);
+        double const q = std::sqrt(separation[0] * separation[0] + separation[1] * separation[1] +
+                             separation[2] * separation[2]) /
+            support;
+        sum += q < 1.0 ? radial_kernel::value(selectedHydroKernel(), q) : 0.0;
+    }
+    return sum;
+}
+
+double targetKernelSum(Fixture const& fixture) {
+    return fixture.data_.targetNeighborCount * 3.0 / (4.0 * kPi);
+}
+
+// Supports solving the constraint to roundoff, then clamped to the fixture's bounds.
+std::vector<double> exactSupports(Fixture const& fixture) {
+    std::vector<double> supports(fixture.count_);
+    for (int i = 0; i < fixture.count_; i++) {
+        double lower = 1.0e-3;
+        double upper = fixture.params_.maximumSupportRadius;
+        if (kernelSumAt(fixture, i, upper) < targetKernelSum(fixture)) {
+            supports[i] = upper;
+            continue;
+        }
+        for (int iteration = 0; iteration < 200 && upper - lower > 1.0e-15 * upper; iteration++) {
+            double const middle = 0.5 * (lower + upper);
+            (kernelSumAt(fixture, i, middle) < targetKernelSum(fixture) ? lower : upper) = middle;
+        }
+        supports[i] = std::max(0.5 * (lower + upper), double(fixture.params_.minimumSupportRadius));
+    }
+    return supports;
+}
+
+VariationalReference variationalReference(
+    Fixture const& fixture, std::vector<double> const& support) {
+    auto const& data = fixture.data_;
+    auto const& table = selectedHydroKernel();
+    int const count = fixture.count_;
+    double const mass = data.gasMass;
+    double const gamma = data.adiabaticIndex;
+    double const inverseScaleFactor = 1.0 / fixture.params_.scaleFactor;
+    VariationalReference result;
+    result.density.resize(count);
+    result.zeta.resize(count);
+    result.residual.resize(count);
+    result.acceleration.assign(count, {});
+    result.energyRate.assign(count, 0.0);
+    std::vector<double> pressureFactor(count);
+    auto const gradient = [&](double radius, double supportRadius) {
+        double const q = radius / supportRadius;
+        return q < 1.0 ? sph_volume::kernelGradientFactor(
+                             radial_kernel::derivative(table, q), 1.0 / supportRadius, radius) :
+                         0.0;
+    };
+    for (int i = 0; i < count; i++) {
+        auto sums = sph_volume::emptySupportSums<double>();
+        for (int j = 0; j < count; j++) {
+            auto const separation = periodicSeparation(fixture, i, j);
+            double const q = std::sqrt(separation[0] * separation[0] +
+                                 separation[1] * separation[1] + separation[2] * separation[2]) /
+                support[i];
+            if (q < 1.0) {
+                sph_volume::accumulateSupportSums(sums, mass, radial_kernel::value(table, q),
+                    radial_kernel::derivative(table, q), q);
+            }
+        }
+        result.density[i] = sph_volume::weightedDensity(sums, 1.0 / support[i]);
+        result.residual[i] = (sums.numberSum - targetKernelSum(fixture)) / targetKernelSum(fixture);
+        auto const constraint = sph_volume::classifySupport(float(support[i]),
+            fixture.params_.minimumSupportRadius, fixture.params_.maximumSupportRadius,
+            float(result.residual[i]), kSphSupportRadiusTolerance);
+        result.zeta[i] =
+            constraint == sph_volume::SupportConstraint::Free ? sph_volume::zeta(sums) : 0.0;
+        // (1/m_i) P_i x_i/y_i^2 with x = m.
+        pressureFactor[i] =
+            (gamma - 1.0) * data.sourceInternalEnergy[fixture.sourceIndex(i)] / result.density[i];
+    }
+    for (int i = 0; i < count; i++) {
+        int const sourceI = fixture.sourceIndex(i);
+        for (int j = 0; j < count; j++) {
+            if (i == j) {
+                continue;
+            }
+            int const sourceJ = fixture.sourceIndex(j);
+            auto const separation = periodicSeparation(fixture, i, j);
+            double const radius = std::sqrt(separation[0] * separation[0] +
+                separation[1] * separation[1] + separation[2] * separation[2]);
+            double const gradientI = gradient(radius, support[i]);
+            double const gradientJ = gradient(radius, support[j]);
+            double const coefficientIJ = pressureFactor[i] * (mass - result.zeta[i]);
+            double const coefficientJI = pressureFactor[j] * (mass - result.zeta[j]);
+            double const velocityDotSeparation =
+                (data.sourceVelocityX[sourceI] - data.sourceVelocityX[sourceJ]) * separation[0] +
+                (data.sourceVelocityY[sourceI] - data.sourceVelocityY[sourceJ]) * separation[1] +
+                (data.sourceVelocityZ[sourceI] - data.sourceVelocityZ[sourceJ]) * separation[2];
+            for (int dim = 0; dim < kDimensions; dim++) {
+                result.acceleration[i][dim] -= inverseScaleFactor *
+                    (coefficientIJ * gradientI + coefficientJI * gradientJ) * separation[dim];
+            }
+            result.energyRate[i] +=
+                inverseScaleFactor * coefficientIJ * gradientI * velocityDotSeparation;
+        }
+        result.energyRate[i] += (5.0 - 3.0 * gamma) * fixture.params_.expansionRate *
+            inverseScaleFactor * data.sourceInternalEnergy[sourceI];
+    }
+    return result;
+}
+
+struct RateDifference {
+    double acceleration;    // largest difference over the largest acceleration
+    double energyRate;      // largest difference over the largest rate
+};
+
+RateDifference compareRates(Fixture const& fixture, VariationalReference const& reference) {
+    double accelerationScale = 0.0;
+    double rateScale = 0.0;
+    double accelerationError = 0.0;
+    double rateError = 0.0;
+    for (int i = 0; i < fixture.count_; i++) {
+        auto const& acceleration =
+            fixture.data_.sinkAccelerations[fixture.sinkIndex(i)].acceleration;
+        for (int dim = 0; dim < kDimensions; dim++) {
+            accelerationScale =
+                std::max(accelerationScale, std::abs(reference.acceleration[i][dim]));
+            accelerationError = std::max(
+                accelerationError, std::abs(acceleration[dim] - reference.acceleration[i][dim]));
+        }
+        double const rate = fixture.data_.sinkInternalEnergyRate[fixture.sinkIndex(i)];
+        rateScale = std::max(rateScale, std::abs(reference.energyRate[i]));
+        rateError = std::max(rateError, std::abs(rate - reference.energyRate[i]));
+    }
+    return {accelerationError / accelerationScale, rateError / rateScale};
+}
+
+void perturbLattice(Fixture& fixture, int side, uint64_t seed) {
+    initializeLattice(fixture, side);
+    uint64_t state = seed;
+    for (int i = 0; i < fixture.count_; i++) {
+        int const source = fixture.sourceIndex(i);
+        double const spacing = 1.0 / side;
+        fixture.data_.sourcePositionX[source] = fixture.data_.sourcePositionX[source].toDouble() +
+            0.3 * spacing * (nextDeviate(state) - 0.5);
+        fixture.data_.sourcePositionY[source] = fixture.data_.sourcePositionY[source].toDouble() +
+            0.3 * spacing * (nextDeviate(state) - 0.5);
+        fixture.data_.sourcePositionZ[source] = fixture.data_.sourcePositionZ[source].toDouble() +
+            0.3 * spacing * (nextDeviate(state) - 0.5);
+        fixture.data_.sourceVelocityX[source] = 0.1 * (nextDeviate(state) - 0.5);
+        fixture.data_.sourceVelocityY[source] = 0.1 * (nextDeviate(state) - 0.5);
+        fixture.data_.sourceVelocityZ[source] = 0.1 * (nextDeviate(state) - 0.5);
+        fixture.data_.sourceInternalEnergy[source] = 1.0 + 0.4 * nextDeviate(state);
+    }
+}
+
+// Production float rates against the double reference: at the production supports the
+// difference is roundoff; at exactly solved supports it measures the 1e-4 solve tolerance.
+// The comoving rates carry 1/a and the homogeneous (5 - 3 gamma) term at a = 0.7.
+void testVariationalAgainstReference() {
+    constexpr int kSide = 6;
+    Fixture fixture(kSide * kSide * kSide);
+    fixture.enableVariationalPressure();
+    perturbLattice(fixture, kSide, 2026);
+    fixture.params_.viscosityAlpha = 0.0f;
+    fixture.params_.viscosityBeta = 0.0f;
+    fixture.data_.adiabaticIndex = 1.4f;
+    fixture.params_.scaleFactor = 0.7f;
+    fixture.params_.expansionRate = 0.05f;
+    fixture.solveSmoothing(0.05f, 0.49f, 0.3f);
+    fixture.density();
+    SphRunReturn const densityPass = *fixture.reduction_;
+    require(densityPass.heldSupports == 0, "perturbed lattice supports are free");
+    require(densityPass.maximumSupportResidual <= 1.2f * kSphSupportRadiusTolerance,
+        "density pass reports the support-solve residual");
+    require(densityPass.minimumGradHOmega > 0.5f && densityPass.illConditionedSupports == 0,
+        "perturbed lattice corrections are well conditioned");
+    fixture.hydro();
+    std::vector<double> production(fixture.count_);
+    for (int i = 0; i < fixture.count_; i++) {
+        production[i] = fixture.data_.sourceSupportRadius[fixture.sourceIndex(i)];
+    }
+    auto const reference = variationalReference(fixture, production);
+    for (int i = 0; i < fixture.count_; i++) {
+        requireClose("variational zeta", fixture.data_.sinkGradHCorrection[fixture.sinkIndex(i)],
+            reference.zeta[i], 2.0e-5 * fixture.data_.gasMass);
+        requireClose("variational density", fixture.data_.sinkDensity[fixture.sinkIndex(i)],
+            reference.density[i], 2.0e-6);
+    }
+    auto const roundoff = compareRates(fixture, reference);
+    std::printf("variational float/double rates at production supports: acceleration %.3e, "
+                "energy %.3e\n",
+        roundoff.acceleration, roundoff.energyRate);
+    require(roundoff.acceleration < 2.0e-5 && roundoff.energyRate < 2.0e-5,
+        "production variational rates match the double reference at the same supports");
+    auto const exact = compareRates(fixture, variationalReference(fixture, exactSupports(fixture)));
+    std::printf("variational float rates against exactly solved supports: acceleration %.3e, "
+                "energy %.3e (solve tolerance %.1e)\n",
+        exact.acceleration, exact.energyRate, double(kSphSupportRadiusTolerance));
+    require(exact.acceleration < 2.0e-3 && exact.energyRate < 2.0e-3,
+        "support-solve tolerance bounds the variational rate error");
+}
+
+// An isolated cluster in the periodic box: linear and angular momentum and kinetic plus
+// internal energy with viscosity, held supports at H_max, and the Hubble-flow identity
+// sum_b (m - zeta_a) F_a r_ab . r_ab = -3 rho_a for free supports.
+void testVariationalIsolatedCluster() {
+    constexpr int kSide = 4;
+    Fixture fixture(kSide * kSide * kSide);
+    fixture.enableVariationalPressure();
+    uint64_t state = 77;
+    int i = 0;
+    for (int ix = 0; ix < kSide; ix++) {
+        for (int iy = 0; iy < kSide; iy++) {
+            for (int iz = 0; iz < kSide; iz++) {
+                int const source = fixture.sourceIndex(i++);
+                fixture.data_.sourcePositionX[source] =
+                    0.36 + 0.09 * ix + 0.02 * nextDeviate(state);
+                fixture.data_.sourcePositionY[source] =
+                    0.36 + 0.09 * iy + 0.02 * nextDeviate(state);
+                fixture.data_.sourcePositionZ[source] =
+                    0.36 + 0.09 * iz + 0.02 * nextDeviate(state);
+                fixture.data_.sourceInternalEnergy[source] = 1.0 + 0.5 * nextDeviate(state);
+            }
+        }
+    }
+    fixture.solveSmoothing(0.05f, 0.2f, 0.15f);
+    fixture.density();
+    require(
+        fixture.reduction_->heldSupports > 0 && fixture.reduction_->heldSupports < fixture.count_,
+        "cluster edge supports are held at the maximum");
+    std::vector<double> supports(fixture.count_);
+    for (int k = 0; k < fixture.count_; k++) {
+        supports[k] = fixture.data_.sourceSupportRadius[fixture.sourceIndex(k)];
+    }
+    auto const reference = variationalReference(fixture, supports);
+    int referenceHeld = 0;
+    for (int k = 0; k < fixture.count_; k++) {
+        float const productionZeta = fixture.data_.sinkGradHCorrection[fixture.sinkIndex(k)];
+        if (reference.zeta[k] == 0.0) {
+            referenceHeld++;
+            require(productionZeta == 0.0f, "held supports use zeta = 0");
+        } else {
+            require(productionZeta != 0.0f, "free supports are not held");
+            requireClose("free-support zeta", productionZeta, reference.zeta[k],
+                2.0e-5 * fixture.data_.gasMass);
+        }
+    }
+    require(referenceHeld == fixture.reduction_->heldSupports,
+        "production and reference hold the same supports");
+    // Hubble flow v = h (r - centre), no viscosity: the pair work of a free support equals
+    // the homogeneous expansion work -3 h P/rho.
+    fixture.params_.viscosityAlpha = 0.0f;
+    fixture.params_.viscosityBeta = 0.0f;
+    double const hubble = 0.2;
+    for (int k = 0; k < fixture.count_; k++) {
+        int const source = fixture.sourceIndex(k);
+        fixture.data_.sourceVelocityX[source] =
+            hubble * (fixture.data_.sourcePositionX[source].toDouble() - 0.5);
+        fixture.data_.sourceVelocityY[source] =
+            hubble * (fixture.data_.sourcePositionY[source].toDouble() - 0.5);
+        fixture.data_.sourceVelocityZ[source] =
+            hubble * (fixture.data_.sourcePositionZ[source].toDouble() - 0.5);
+    }
+    fixture.hydro();
+    int free = 0;
+    double heldMismatch = 0.0;
+    for (int k = 0; k < fixture.count_; k++) {
+        int const source = fixture.sourceIndex(k);
+        double const expansionWork = -3.0 * hubble * (fixture.data_.adiabaticIndex - 1.0) *
+            fixture.data_.sourceInternalEnergy[source];
+        double const work = fixture.data_.sinkInternalEnergyRate[fixture.sinkIndex(k)];
+        if (fixture.data_.sinkGradHCorrection[fixture.sinkIndex(k)] != 0.0f) {
+            requireClose("free-support Hubble work", work, expansionWork, 2.0e-5);
+            free++;
+        } else {
+            heldMismatch = std::max(heldMismatch, std::abs(work / expansionWork - 1.0));
+        }
+    }
+    require(free > 0 && heldMismatch > 1.0e-3,
+        "the Hubble identity holds for free supports and not for held ones");
+    // Random velocities with viscosity: momentum, angular momentum and energy.
+    fixture.params_.viscosityAlpha = 1.0f;
+    fixture.params_.viscosityBeta = 2.0f;
+    for (int k = 0; k < fixture.count_; k++) {
+        int const source = fixture.sourceIndex(k);
+        fixture.data_.sourceVelocityX[source] = 0.3 * (nextDeviate(state) - 0.5);
+        fixture.data_.sourceVelocityY[source] = 0.3 * (nextDeviate(state) - 0.5);
+        fixture.data_.sourceVelocityZ[source] = 0.3 * (nextDeviate(state) - 0.5);
+    }
+    fixture.hydro();
+    fixture.checkConservation();
+    std::array<double, kDimensions> torque{};
+    double torqueScale = 0.0;
+    for (int k = 0; k < fixture.count_; k++) {
+        int const source = fixture.sourceIndex(k);
+        auto const& a = fixture.data_.sinkAccelerations[fixture.sinkIndex(k)].acceleration;
+        std::array<double, kDimensions> const r{
+            fixture.data_.sourcePositionX[source].toDouble() - 0.5,
+            fixture.data_.sourcePositionY[source].toDouble() - 0.5,
+            fixture.data_.sourcePositionZ[source].toDouble() - 0.5};
+        std::array<double, kDimensions> const moment{
+            r[1] * a[2] - r[2] * a[1], r[2] * a[0] - r[0] * a[2], r[0] * a[1] - r[1] * a[0]};
+        for (int dim = 0; dim < kDimensions; dim++) {
+            torque[dim] += fixture.data_.gasMass * moment[dim];
+            torqueScale += std::abs(fixture.data_.gasMass * moment[dim]);
+        }
+    }
+    for (int dim = 0; dim < kDimensions; dim++) {
+        requireClose("variational angular momentum rate", torque[dim], 0.0, 3.0e-5 * torqueScale);
+    }
+}
+
+// Held supports: every lattice support at H_min, at H_max, and fixed. With equal fixed
+// supports the variational force is the Monaghan force; the work is split differently
+// between the pair members but has the same total.
+void testVariationalHeldSupports() {
+    constexpr int kSide = 5;
+    Fixture fixture(kSide * kSide * kSide);
+    fixture.enableVariationalPressure();
+    initializeLattice(fixture, kSide);
+    struct Bounds {
+        float minimum;
+        float maximum;
+        float initial;
+    };
+    for (auto const bounds :
+        {Bounds{0.43f, 0.49f, 0.48f}, Bounds{0.1f, 0.24f, 0.2f}, Bounds{0.3f, 0.3f, 0.17f}}) {
+        fixture.solveSmoothing(bounds.minimum, bounds.maximum, bounds.initial);
+        for (int i = 0; i < fixture.count_; i++) {
+            fixture.data_.sinkGradHCorrection[fixture.sinkIndex(i)] = -7.0f;
+        }
+        fixture.density();
+        require(fixture.reduction_->heldSupports == fixture.count_, "every support is held");
+        for (int i = 0; i < fixture.count_; i++) {
+            require(fixture.data_.sinkGradHCorrection[fixture.sinkIndex(i)] == 0.0f,
+                "held supports use zeta = 0");
+        }
+    }
+    uint64_t state = 5;
+    for (int i = 0; i < fixture.count_; i++) {
+        int const source = fixture.sourceIndex(i);
+        fixture.data_.sourceVelocityX[source] = 0.2 * (nextDeviate(state) - 0.5);
+        fixture.data_.sourceVelocityY[source] = 0.2 * (nextDeviate(state) - 0.5);
+        fixture.data_.sourceInternalEnergy[source] = 1.0 + 0.5 * nextDeviate(state);
+    }
+    fixture.density();
+    fixture.hydro();
+    fixture.checkConservation();
+    std::vector<Array<float, kDimensions>> variational(fixture.count_);
+    double variationalWork = 0.0;
+    for (int i = 0; i < fixture.count_; i++) {
+        variational[i] = fixture.data_.sinkAccelerations[fixture.sinkIndex(i)].acceleration;
+        variationalWork += fixture.data_.sinkInternalEnergyRate[fixture.sinkIndex(i)];
+    }
+    fixture.params_.variationalPressure = false;
+    fixture.hydro();
+    double monaghanWork = 0.0;
+    double workScale = 0.0;
+    for (int i = 0; i < fixture.count_; i++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
+            requireClose("fixed equal supports reproduce the Monaghan force", variational[i][dim],
+                fixture.data_.sinkAccelerations[fixture.sinkIndex(i)].acceleration[dim], 2.0e-5);
+        }
+        double const rate = fixture.data_.sinkInternalEnergyRate[fixture.sinkIndex(i)];
+        monaghanWork += rate;
+        workScale += std::abs(rate);
+    }
+    requireClose("fixed equal supports conserve the same total work", variationalWork, monaghanWork,
+        3.0e-5 * workScale);
+}
+
+// A uniform free lattice has no pressure force or work; only the homogeneous source remains.
+void testVariationalUniformLattice() {
+    constexpr int kSide = 5;
+    Fixture fixture(kSide * kSide * kSide);
+    fixture.enableVariationalPressure();
+    initializeLattice(fixture, kSide);
+    for (float const gamma : {5.0f / 3.0f, 1.4f}) {
+        fixture.data_.adiabaticIndex = gamma;
+        fixture.params_.scaleFactor = 0.6f;
+        fixture.params_.expansionRate = 0.09f;
+        for (int i = 0; i < fixture.count_; i++) {
+            fixture.data_.sourceInternalEnergy[fixture.sourceIndex(i)] = 2.0f;
+        }
+        fixture.solveSmoothing(0.1f, 0.49f, 0.2f);
+        fixture.density();
+        require(fixture.reduction_->heldSupports == 0, "uniform lattice supports are free");
+        fixture.hydro(1);
+        double const background = (5.0 - 3.0 * gamma) * 0.09 / 0.6 * 2.0;
+        for (int i = 0; i < fixture.count_; i++) {
+            requireClose("variational homogeneous energy source",
+                fixture.data_.sinkInternalEnergyRate[fixture.sinkIndex(i)], background, 2.0e-5);
+            for (int dim = 0; dim < kDimensions; dim++) {
+                requireClose("uniform variational force",
+                    fixture.data_.sinkAccelerations[fixture.sinkIndex(i)].acceleration[dim], 0.0,
+                    2.0e-4);
+            }
+        }
+    }
+}
+
+// Synchronous kick-drift-kick stepping over the production kernels, as in the global
+// integrator: every particle is active and the supports, densities and corrections are
+// rebuilt before every force pass. The state is kept in double so that time-integration
+// error is not hidden by float accumulation; the kernels read float snapshots. Rates are
+// conformal-time rates of the stored w = a v_pec and E = a^2 u, and the comoving drift is
+// dx/dtau = w/a.
+class GlobalStepper {
+    Fixture& fixture_;
+    std::vector<std::array<double, kDimensions>> acceleration_;
+    std::vector<double> energyRate_;
+
+    double scaleFactor(double time) const {
+        return cosmological_ ? std::pow(time / initialTime_, 2) : 1.0;
+    }
+
+    double expansionRate(double time) const {
+        // a = (tau/tau0)^2, the Einstein-de Sitter law in conformal time.
+        return cosmological_ ? 2.0 * scaleFactor(time) / time : 0.0;
+    }
+
+    void publish() {
+        auto& data = fixture_.data_;
+        for (int i = 0; i < fixture_.count_; i++) {
+            int const source = fixture_.sourceIndex(i);
+            Position* positions[kDimensions] = {
+                data.sourcePositionX, data.sourcePositionY, data.sourcePositionZ};
+            float* velocities[kDimensions] = {
+                data.sourceVelocityX, data.sourceVelocityY, data.sourceVelocityZ};
+            for (int dim = 0; dim < kDimensions; dim++) {
+                double const wrapped = position_[i][dim] - std::floor(position_[i][dim]);
+                positions[dim][source] = wrapped;
+                velocities[dim][source] = velocity_[i][dim];
+            }
+            data.sourceInternalEnergy[source] = energy_[i];
+            data.sinkThermodynamicStates[fixture_.sinkIndex(i)].internalEnergy = energy_[i];
+        }
+    }
+
+public:
+    std::vector<std::array<double, kDimensions>> position_;
+    std::vector<std::array<double, kDimensions>> velocity_;
+    std::vector<double> energy_;
+    double time_;
+    double initialTime_;
+    bool cosmological_;
+    double expansionWork_ = 0.0;    // integral of (5 - 3 gamma)(da/dtau)/a sum m E dtau
+
+    explicit GlobalStepper(Fixture& fixture, bool cosmological = false, double initialTime = 1.0)
+      : fixture_(fixture)
+      , acceleration_(fixture.count_)
+      , energyRate_(fixture.count_)
+      , position_(fixture.count_)
+      , velocity_(fixture.count_)
+      , energy_(fixture.count_)
+      , time_(initialTime)
+      , initialTime_(initialTime)
+      , cosmological_(cosmological) {
+        auto const& data = fixture.data_;
+        for (int i = 0; i < fixture.count_; i++) {
+            int const source = fixture.sourceIndex(i);
+            position_[i] = {data.sourcePositionX[source].toDouble(),
+                data.sourcePositionY[source].toDouble(), data.sourcePositionZ[source].toDouble()};
+            velocity_[i] = {data.sourceVelocityX[source], data.sourceVelocityY[source],
+                data.sourceVelocityZ[source]};
+            energy_[i] = data.sourceInternalEnergy[source];
+        }
+        evaluate();
+    }
+
+    void evaluate() {
+        auto& data = fixture_.data_;
+        fixture_.params_.scaleFactor = scaleFactor(time_);
+        fixture_.params_.expansionRate = expansionRate(time_);
+        publish();
+        for (int i = 0; i < fixture_.count_; i++) {
+            data.sinkSmoothingConverged[fixture_.sinkIndex(i)] = false;
+        }
+        fixture_.run(kSphRunPrehydro1);
+        require(!fixture_.reduction_->needsAnotherPass, "stepping fixture supports converge");
+        fixture_.publishSupport();
+        fixture_.density();
+        fixture_.hydro();
+        for (int i = 0; i < fixture_.count_; i++) {
+            auto const& a = data.sinkAccelerations[fixture_.sinkIndex(i)].acceleration;
+            acceleration_[i] = {a[kXDimension], a[kYDimension], a[kZDimension]};
+            energyRate_[i] = data.sinkInternalEnergyRate[fixture_.sinkIndex(i)];
+        }
+    }
+
+    // The kernels' single-precision coefficient, which is exactly zero for gamma = 5/3.
+    double expansionPower() const {
+        float const coefficient = 5.0f - 3.0f * fixture_.data_.adiabaticIndex;
+        double thermal = 0.0;
+        for (double const energy : energy_) {
+            thermal += fixture_.data_.gasMass * energy;
+        }
+        return coefficient * expansionRate(time_) / scaleFactor(time_) * thermal;
+    }
+
+    void kick(double interval) {
+        for (int i = 0; i < fixture_.count_; i++) {
+            for (int dim = 0; dim < kDimensions; dim++) {
+                velocity_[i][dim] += acceleration_[i][dim] * interval;
+            }
+            energy_[i] += energyRate_[i] * interval;
+            require(energy_[i] > 0.0, "stepping keeps internal energy positive");
+        }
+    }
+
+    // As sphParticlesApplyUpdates: the closing half-kick is first predicted with the old
+    // rates, the velocity-dependent rates are evaluated at the predicted state, and the
+    // corrector replaces the predicted kick.
+    void step(double interval) {
+        double const powerBefore = expansionPower();
+        kick(0.5 * interval);
+        double const drift = interval / scaleFactor(time_ + 0.5 * interval);
+        for (int i = 0; i < fixture_.count_; i++) {
+            for (int dim = 0; dim < kDimensions; dim++) {
+                position_[i][dim] += velocity_[i][dim] * drift;
+            }
+        }
+        time_ += interval;
+        auto const predictedAcceleration = acceleration_;
+        auto const predictedEnergyRate = energyRate_;
+        kick(0.5 * interval);
+        evaluate();
+        for (int i = 0; i < fixture_.count_; i++) {
+            for (int dim = 0; dim < kDimensions; dim++) {
+                velocity_[i][dim] +=
+                    (acceleration_[i][dim] - predictedAcceleration[i][dim]) * 0.5 * interval;
+            }
+            energy_[i] += (energyRate_[i] - predictedEnergyRate[i]) * 0.5 * interval;
+            require(energy_[i] > 0.0, "stepping keeps internal energy positive");
+        }
+        expansionWork_ += 0.5 * interval * (powerBefore + expansionPower());
+    }
+
+    // sum_i m_i (w_i^2/2 + E_i) of the stored variables.
+    double storedEnergy() const {
+        double total = 0.0;
+        for (int i = 0; i < fixture_.count_; i++) {
+            total += fixture_.data_.gasMass *
+                (0.5 *
+                        (velocity_[i][0] * velocity_[i][0] + velocity_[i][1] * velocity_[i][1] +
+                            velocity_[i][2] * velocity_[i][2]) +
+                    energy_[i]);
+        }
+        return total;
+    }
+
+    double kineticEnergy() const {
+        double total = 0.0;
+        for (int i = 0; i < fixture_.count_; i++) {
+            total += 0.5 * fixture_.data_.gasMass *
+                (velocity_[i][0] * velocity_[i][0] + velocity_[i][1] * velocity_[i][1] +
+                    velocity_[i][2] * velocity_[i][2]);
+        }
+        return total;
+    }
+
+    // A_i = (gamma - 1) u_i / rho_i^(gamma - 1) from the last density pass.
+    double entropy(int i) const {
+        double const gamma = fixture_.data_.adiabaticIndex;
+        return (gamma - 1.0) * energy_[i] /
+            std::pow(double(fixture_.data_.sourceDensity[fixture_.sourceIndex(i)]), gamma - 1.0);
+    }
+};
+
+// A plane sound wave rho'/rho = v/c = delta sin(k x) on an 8^3 lattice, inviscid, with c = 1.
+void initializeSoundWave(Fixture& fixture, int side, double amplitude, double gamma) {
+    initializeLattice(fixture, side);
+    double const k = 2.0 * kPi;
+    double const internalEnergy = 1.0 / (gamma * (gamma - 1.0));
+    fixture.data_.adiabaticIndex = float(gamma);
+    fixture.params_.viscosityAlpha = 0.0f;
+    fixture.params_.viscosityBeta = 0.0f;
+    for (int i = 0; i < fixture.count_; i++) {
+        int const source = fixture.sourceIndex(i);
+        double const x = fixture.data_.sourcePositionX[source].toDouble();
+        fixture.data_.sourcePositionX[source] = x + amplitude / k * std::cos(k * x);
+        fixture.data_.sourceVelocityX[source] = amplitude * std::sin(k * x);
+        fixture.data_.sourceInternalEnergy[source] =
+            internalEnergy * std::pow(1.0 + amplitude * std::sin(k * x), gamma - 1.0);
+    }
+    fixture.solveSmoothing(0.05f, 0.49f, 0.25f);
+}
+
+struct WaveRun {
+    double energyError;     // max |Delta sum m(v^2/2 + u)| over the wave's kinetic energy
+    double entropyError;    // max_i |Delta A_i| / A_i at the end
+    double profileError;    // L2 error of v_x after half a period, over the amplitude
+};
+
+WaveRun runSoundWave(bool variational, int steps) {
+    constexpr int kSide = 8;
+    constexpr double kAmplitude = 0.05;
+    double const gamma = 5.0 / 3.0;
+    Fixture fixture(kSide * kSide * kSide);
+    if (variational) {
+        fixture.enableVariationalPressure();
+    }
+    initializeSoundWave(fixture, kSide, kAmplitude, gamma);
+    GlobalStepper stepper(fixture);
+    std::vector<double> initialEntropy(fixture.count_);
+    for (int i = 0; i < fixture.count_; i++) {
+        initialEntropy[i] = stepper.entropy(i);
+    }
+    double const initialEnergy = stepper.storedEnergy();
+    double const waveEnergy = stepper.kineticEnergy();
+    double const halfPeriod = 0.5;
+    WaveRun run{};
+    for (int step = 0; step < steps; step++) {
+        stepper.step(halfPeriod / steps);
+        run.energyError = std::max(
+            run.energyError, std::abs(stepper.storedEnergy() - initialEnergy) / waveEnergy);
+    }
+    double squared = 0.0;
+    for (int i = 0; i < fixture.count_; i++) {
+        run.entropyError =
+            std::max(run.entropyError, std::abs(stepper.entropy(i) / initialEntropy[i] - 1.0));
+        // After half a period the right-moving wave is the Eulerian field v = -delta sin(k x),
+        // evaluated at each particle's current position.
+        double const expected = -kAmplitude * std::sin(2.0 * kPi * stepper.position_[i][0]);
+        squared += std::pow(stepper.velocity_[i][0] - expected, 2);
+    }
+    run.profileError = std::sqrt(squared / fixture.count_) / kAmplitude;
+    return run;
+}
+
+// Kick-drift-kick energy error falls as dt^2 for both operators. The wave profile error is
+// the spatial error at eight particles per wavelength; the entropy error is limited by the
+// support-solve tolerance once the time error is small.
+void testSoundWaveTimestepRefinement() {
+    for (bool const variational : {false, true}) {
+        std::array<WaveRun, 3> runs{};
+        int const steps[] = {12, 24, 48};
+        for (int k = 0; k < 3; k++) {
+            runs[k] = runSoundWave(variational, steps[k]);
+            std::printf("%s sound wave, %d steps per half period: energy %.3e, entropy %.3e, "
+                        "profile %.3e\n",
+                variational ? "variational" : "monaghan", steps[k], runs[k].energyError,
+                runs[k].entropyError, runs[k].profileError);
+        }
+        for (int k = 1; k < 3; k++) {
+            require(runs[k].energyError < 0.35 * runs[k - 1].energyError,
+                "kick-drift-kick energy error converges at second order");
+        }
+        require(runs[2].energyError < 2.0e-3, "refined sound-wave energy error");
+        require(runs[2].profileError < 0.15, "sound wave propagates at the sound speed");
+        if (variational) {
+            // Each particle's work is its own adiabatic rate, so the entropy error is a
+            // time error; the Monaghan pair split leaves a resolution-limited floor.
+            require(
+                runs[2].entropyError < 0.5 * runs[1].entropyError && runs[2].entropyError < 2.0e-4,
+                "variational sound-wave entropy error converges with the timestep");
+        }
+    }
+}
+
+// A large-amplitude smooth compression, stopped before a shock forms: without viscosity the
+// variational particle entropies change only through the time and support-solve errors.
+void testAdiabaticCompression() {
+    constexpr int kSide = 8;
+    for (bool const variational : {false, true}) {
+        std::array<double, 2> entropyErrors{};
+        std::array<double, 2> energyErrors{};
+        int const steps[] = {20, 40};
+        for (int k = 0; k < 2; k++) {
+            Fixture fixture(kSide * kSide * kSide);
+            if (variational) {
+                fixture.enableVariationalPressure();
+            }
+            initializeSoundWave(fixture, kSide, 0.0, 1.4);
+            for (int i = 0; i < fixture.count_; i++) {
+                int const source = fixture.sourceIndex(i);
+                fixture.data_.sourceVelocityX[source] =
+                    -0.3 * std::sin(2.0 * kPi * fixture.data_.sourcePositionX[source].toDouble());
+            }
+            GlobalStepper stepper(fixture);
+            std::vector<double> initialEntropy(fixture.count_);
+            double maximumDensity = 0.0;
+            for (int i = 0; i < fixture.count_; i++) {
+                initialEntropy[i] = stepper.entropy(i);
+            }
+            double const initialEnergy = stepper.storedEnergy();
+            double const kinetic = stepper.kineticEnergy();
+            for (int step = 0; step < steps[k]; step++) {
+                stepper.step(0.2 / steps[k]);
+                energyErrors[k] = std::max(
+                    energyErrors[k], std::abs(stepper.storedEnergy() - initialEnergy) / kinetic);
+            }
+            for (int i = 0; i < fixture.count_; i++) {
+                entropyErrors[k] = std::max(
+                    entropyErrors[k], std::abs(stepper.entropy(i) / initialEntropy[i] - 1.0));
+                maximumDensity = std::max(
+                    maximumDensity, double(fixture.data_.sourceDensity[fixture.sourceIndex(i)]));
+            }
+            std::printf("%s compression, %d steps: maximum density %.3f, entropy %.3e, "
+                        "energy %.3e\n",
+                variational ? "variational" : "monaghan", steps[k], maximumDensity,
+                entropyErrors[k], energyErrors[k]);
+            require(maximumDensity > 1.2, "the compression is nonlinear");
+        }
+        require(energyErrors[1] < 0.35 * energyErrors[0], "compression energy error converges");
+        if (variational) {
+            require(entropyErrors[1] < 3.0e-3, "variational compression is adiabatic");
+        }
+    }
+}
+
+// Comoving sound waves in an Einstein-de Sitter background, a = (tau/tau0)^2, from a = 1 to
+// a = 4. The pair rates exchange stored kinetic and thermal energy exactly, so
+// sum m (w^2/2 + E) changes only by the integral of (5 - 3 gamma)(da/dtau)/a sum m E,
+// which vanishes for gamma = 5/3. The residual converges at second order. With gamma = 5/3
+// these variables evolve as a static gas in ds = dtau/a, so the early, large steps in s
+// dominate the error.
+void testCosmologicalExpansion() {
+    constexpr int kSide = 8;
+    for (double const gamma : {5.0 / 3.0, 1.4}) {
+        std::array<double, 3> residuals{};
+        std::array<double, 3> uniformErrors{};
+        int const steps[] = {40, 80, 160};
+        for (int k = 0; k < 3; k++) {
+            Fixture fixture(kSide * kSide * kSide);
+            fixture.enableVariationalPressure();
+            initializeSoundWave(fixture, kSide, 0.05, gamma);
+            GlobalStepper stepper(fixture, true, 1.0);
+            double const initialEnergy = stepper.storedEnergy();
+            double const kinetic = stepper.kineticEnergy();
+            // The kick-drift-kick energy error oscillates; its maximum over the run converges.
+            // It is measured against the wave energy or the homogeneous expansion work.
+            for (int step = 0; step < steps[k]; step++) {
+                stepper.step(1.0 / steps[k]);
+                residuals[k] = std::max(residuals[k],
+                    std::abs(stepper.storedEnergy() - initialEnergy - stepper.expansionWork_));
+            }
+            residuals[k] /= std::max(kinetic, std::abs(stepper.expansionWork_));
+            // A uniform lattice follows E proportional to a^(5 - 3 gamma).
+            Fixture uniform(kSide * kSide * kSide);
+            uniform.enableVariationalPressure();
+            initializeSoundWave(uniform, kSide, 0.0, gamma);
+            GlobalStepper background(uniform, true, 1.0);
+            double const initialInternal = background.energy_[0];
+            for (int step = 0; step < steps[k]; step++) {
+                background.step(1.0 / steps[k]);
+            }
+            double const expected = initialInternal * std::pow(4.0, 5.0 - 3.0 * gamma);
+            uniformErrors[k] = std::abs(background.energy_[0] / expected - 1.0);
+            std::printf("variational EdS expansion gamma %.4f, %d steps: energy residual %.3e, "
+                        "uniform E error %.3e\n",
+                gamma, steps[k], residuals[k], uniformErrors[k]);
+        }
+        for (int k = 1; k < 3; k++) {
+            require(residuals[k] < 0.35 * residuals[k - 1] || residuals[k] < 1.0e-6,
+                "cosmological energy budget converges at second order");
+            if (gamma != 5.0 / 3.0) {
+                require(uniformErrors[k] < 0.35 * uniformErrors[k - 1],
+                    "homogeneous expansion converges at second order");
+            }
+        }
+        require(residuals[2] < 2.0e-3, "refined cosmological energy budget");
+        require(uniformErrors[2] < (gamma == 5.0 / 3.0 ? 1.0e-6 : 2.0e-3),
+            "uniform lattice follows the adiabatic expansion law");
+    }
+}
+
+// Corrections are rebuilt by each density pass and never carried over: a NaN left on a
+// source outside every support is masked before arithmetic, even with FP traps; a NaN on an
+// interacting source stops the force pass.
+void testVariationalStaleCorrections() {
+    Fixture fixture(3);
+    fixture.enableVariationalPressure();
+    fixture.data_.targetNeighborCount = 1.5f;
+    double const positions[3][3] = {{0.5, 0.5, 0.5}, {0.56, 0.5, 0.5}, {0.9, 0.1, 0.2}};
+    for (int i = 0; i < 3; i++) {
+        int const source = fixture.sourceIndex(i);
+        fixture.data_.sourcePositionX[source] = positions[i][0];
+        fixture.data_.sourcePositionY[source] = positions[i][1];
+        fixture.data_.sourcePositionZ[source] = positions[i][2];
+        fixture.data_.sourceSupportRadius[source] =
+            fixture.data_.sinkThermodynamicStates[fixture.sinkIndex(i)].supportRadius = 0.1f;
+        fixture.data_.sinkSmoothingConverged[fixture.sinkIndex(i)] = true;
+    }
+    fixture.params_.minimumSupportRadius = fixture.params_.maximumSupportRadius = 0.1f;
+    fixture.density();
+    float const notANumber = std::numeric_limits<float>::quiet_NaN();
+    fixture.data_.sourceGradHCorrection[fixture.sourceIndex(2)] = notANumber;
+    fixture.hydro();
+    fixture.checkConservation();
+    fixture.data_.sourceGradHCorrection[fixture.sourceIndex(1)] = notANumber;
+    bool stopped = false;
+    try {
+        fixture.run(kSphRunHydro);
+    } catch (std::runtime_error const&) {
+        stopped = true;
+    }
+    require(stopped, "a stale interacting correction stops the variational force pass");
+}
+
 }    // namespace detail
 
 namespace detail {
@@ -1815,6 +2656,38 @@ TEST_F(SphCpuTest, SelectedKernels) {
         detail::testSelectedCentralGravity();
         detail::testFixedGravityTimestep();
     }
+}
+
+TEST_F(SphCpuTest, VariationalAgainstReference) {
+    detail::testVariationalAgainstReference();
+}
+
+TEST_F(SphCpuTest, VariationalIsolatedCluster) {
+    detail::testVariationalIsolatedCluster();
+}
+
+TEST_F(SphCpuTest, VariationalHeldSupports) {
+    detail::testVariationalHeldSupports();
+}
+
+TEST_F(SphCpuTest, VariationalUniformLattice) {
+    detail::testVariationalUniformLattice();
+}
+
+TEST_F(SphCpuTest, VariationalStaleCorrections) {
+    detail::testVariationalStaleCorrections();
+}
+
+TEST_F(SphCpuTest, SoundWaveTimestepRefinement) {
+    detail::testSoundWaveTimestepRefinement();
+}
+
+TEST_F(SphCpuTest, AdiabaticCompression) {
+    detail::testAdiabaticCompression();
+}
+
+TEST_F(SphCpuTest, VariationalCosmologicalExpansion) {
+    detail::testCosmologicalExpansion();
 }
 
 TEST_F(SphCpuTest, GlobalRawTimestep) {

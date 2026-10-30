@@ -38,6 +38,10 @@ SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, CudaSt
     reduction->inverseAccelerationTimestep = 0.f;
     reduction->inverseSoundTimestep = 0.f;
     reduction->inverseViscosityTimestep = 0.f;
+    reduction->minimumGradHOmega = std::numeric_limits<float>::max();
+    reduction->maximumSupportResidual = 0.0f;
+    reduction->heldSupports = 0;
+    reduction->illConditionedSupports = 0;
     static int smoothingBlockCount;
     static int densityBlockCount;
     static int hydroBlockCount;
@@ -78,6 +82,10 @@ SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, CudaSt
         result.needsAnotherPass = reduction->pendingChanges;
         result.minimumSupportRadius = reduction->minimumSupportRadius;
         result.maximumSupportRadius = reduction->maximumSupportRadius;
+        result.minimumGradHOmega = reduction->minimumGradHOmega;
+        result.maximumSupportResidual = reduction->maximumSupportResidual;
+        result.heldSupports = reduction->heldSupports;
+        result.illConditionedSupports = reduction->illConditionedSupports;
     } break;
     case kSphRunRungs: {
         sphCudaRungs<<<rungBlockCount, kRungsBlockSize, 0, stream.nativeHandle()>>>(

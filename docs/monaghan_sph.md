@@ -202,8 +202,11 @@ after restart and migration and is not stored in checkpoints. Checkpoint metadat
 records whether the limiter is enabled and rejects a restart with a different setting.
 Use `--hydro.balsaraSwitch=false` to disable this shear correction.
 
-The active formulation has no pressure-entropy weighting or grad-h factors.
-The same symmetric pressure and viscosity factors enter force and thermal work.
+This default `hydro.pressureOperator=monaghan` formulation has no pressure-entropy
+weighting or grad-h factors. `hydro.pressureOperator=variational` replaces only its
+pressure force and reversible work with the compatible density-energy operator with
+grad-H terms; see [variational SPH](variational_sph.md). In the Monaghan operator the
+same symmetric pressure and viscosity factors enter force and thermal work.
 Their simultaneous pair rates conserve linear
 and angular momentum and balance kinetic with internal energy. This algebraic
 identity does not imply exact conservation by a finite-step asynchronous integrator.
@@ -455,6 +458,7 @@ hydrodynamic controls are:
 | `hydro.viscosityDecayPrice` | `0.1` | Price et al. decay coefficient \(\sigma_{\rm decay}\) |
 | `hydro.viscosityEpsilon` | `0.01` | Denominator coefficient multiplying \(\bar\ell^2\) |
 | `hydro.balsaraSwitch` | `true` | Apply the Balsara shear limiter to artificial viscosity |
+| `hydro.pressureOperator` | `monaghan` | Pressure force and work: `monaghan` (equations 6.4–6.5), or `variational` ([compatible density-energy with grad-H](variational_sph.md); ideal gas without chemistry or star formation) |
 | `hydro.neighborNumber` | `42` | Kernel-weighted support-sphere count |
 | `compute.sphBucketSize` | `0` (automatic) | SPH tree leaf limit; automatic sizing uses `floor(8/pi * hydro.neighborNumber)`, giving `106` at the default neighbor target |
 | `hydro.minEffectiveRadius` | unset | Alternative minimum effective radius \(h=2\sigma\), in initial interparticle spacings |
@@ -486,8 +490,10 @@ kernel and variable smoothing radii. See
 [gravitational softening](kernels.md#fixed-comoving-gravitational-softening) for
 the gravity radius options and their independence from SPH smoothing.
 
-Checkpoints use version 3, and the low byte of `reserved` identifies the Monaghan
-discretization. The next two bytes encode independent gravity and hydro kernel
+Checkpoints use version 3, and the low byte of `reserved` identifies the SPH pressure
+operator: 1 for this Monaghan discretization, 2 for the
+[variational operator](variational_sph.md); a restart with the other operator is
+rejected. The next two bytes encode independent gravity and hydro kernel
 selections. Bit 24 identifies the compact gas layout after removal of stellar,
 chemistry, and obsolete solver fields. Older SPH checkpoints lack this bit and
 are rejected before particle data are loaded; the gas payload also has its own

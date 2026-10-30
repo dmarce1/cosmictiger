@@ -328,6 +328,7 @@ set(cosmictiger_header_files
     cosmictiger/sph/price_etal/viscosity.hpp
     cosmictiger/sph/sph_flops.hpp
     cosmictiger/sph/viscosity_state.hpp
+    cosmictiger/sph/volume.hpp
 )
 
 if(BUILD_TESTING)
@@ -1798,6 +1799,12 @@ if(BUILD_TESTING)
         target_include_directories(monaghan_sph_test PRIVATE ${PROJECT_SOURCE_DIR})
         cosmictiger_add_gtest(NAME monaghan_sph TARGET monaghan_sph_test
             PROPERTIES TIMEOUT 20)
+
+        # Weighted-volume and grad-H algebra of the variational pressure operator.
+        add_executable(sph_volume_test tests/sph/volume.cpp)
+        target_include_directories(sph_volume_test PRIVATE ${PROJECT_SOURCE_DIR})
+        cosmictiger_add_gtest(NAME sph_volume TARGET sph_volume_test
+            PROPERTIES TIMEOUT 120 LABELS "sph;cpu")
     endif()
 
     foreach(analysis_kernel IN ITEMS power lightcone)
@@ -2355,6 +2362,17 @@ if(BUILD_TESTING)
                 --extra-option=--gravity.method.far=fmm)
             set_tests_properties(smoke_${smoke_mode}_cpu PROPERTIES RUN_SERIAL TRUE TIMEOUT 500)
         endforeach()
+        # Both SPH pressure operators in the Sod, blast, hydroWave and cosmology scenarios,
+        # a CFL refinement and the chemistry rejection; the cosmology case needs gravity.
+        if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL AND
+                COSMICTIGER_ENABLE_CHEMISTRY AND COSMICTIGER_WITH_GRAVITY)
+            add_test(NAME variational_sph_application COMMAND ${Python3_EXECUTABLE}
+                ${PROJECT_SOURCE_DIR}/tests/run_variational_sph.py
+                $<TARGET_FILE:cosmictiger>
+                ${PROJECT_BINARY_DIR}/tests/variational_sph_application --quick)
+            set_tests_properties(variational_sph_application PROPERTIES
+                RUN_SERIAL TRUE TIMEOUT 600 PROCESSORS 4)
+        endif()
         foreach(smoke_mode IN ITEMS sod dm_cpu dm_cuda sph)
             if((NOT COSMICTIGER_WITH_SPH OR NOT COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL) AND
                     NOT smoke_mode MATCHES "^dm_")

@@ -8,10 +8,13 @@
 
 #pragma once
 
+#include <numbers>
+
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/sph/sph.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
 #include <cosmictiger/sph/sph_tree.hpp>
+#include <cosmictiger/sph/volume.hpp>
 
 struct SphRunData {
     // Staged source arrays, including the sources that are also local sinks.
@@ -34,11 +37,14 @@ struct SphRunData {
     float* sourceAccelerationZ;
     float* sourceVelocityDivergence;
     float* sourceSupportRadius;
+    // Variational operator: zeta_i of cosmictiger/sph/volume.hpp from this step's density pass.
+    float* sourceGradHCorrection;
     char* sourceRungs;
 
     // Local sink arrays indexed by the SPH particle index.
     float* sinkInternalEnergyRate;
     float* sinkDensity;
+    float* sinkGradHCorrection;    // Written with the density when the operator is variational.
     float* sinkBalsaraFactor;
     SphViscosityState* sinkViscosityStates;
     SphCullenDehnenState* sinkCullenDehnenStates;
@@ -69,6 +75,33 @@ struct SphRunData {
 
 inline constexpr int kMaxNeighborRungDifference = 1;
 inline constexpr float kSphSupportRadiusTolerance = float(1.0e-4);
+
+// Target of the support solves: ΣW = Σ_b w(q_ab) = 3 N_target/(4π).
+CUDA_EXPORT inline float sphTargetKernelSum(float targetNeighborCount) {
+    return targetNeighborCount * (3.0f / (4.0f * std::numbers::pi_v<float>) );
+}
+
+struct SphGradHEvaluation {
+    sph_volume::GradHCorrection<float> correction;
+    sph_volume::SupportConstraint constraint;
+    float relativeResidual;    // (ΣW − target)/target at the stored support radius
+};
+
+// The variational density pass's correction for one sink, from its unweighted sums
+// numberSum = Σ_b w(q_ab) and numberMoment = Σ_b q_ab w'(q_ab) at the converged support.
+// Every gas particle has the mass gasMass and the volume weight x = gasMass.
+CUDA_EXPORT inline SphGradHEvaluation sphGradHEvaluation(float supportRadius,
+    float minimumSupportRadius, float maximumSupportRadius, float targetNeighborCount,
+    float gasMass, float numberSum, float numberMoment) {
+    float const target = sphTargetKernelSum(targetNeighborCount);
+    SphGradHEvaluation result;
+    result.relativeResidual = (numberSum - target) / target;
+    result.constraint = sph_volume::classifySupport(supportRadius, minimumSupportRadius,
+        maximumSupportRadius, result.relativeResidual, kSphSupportRadiusTolerance);
+    result.correction = sph_volume::gradHCorrection(
+        sph_volume::equalWeightSupportSums(numberSum, numberMoment, gasMass), result.constraint);
+    return result;
+}
 
 // A source can reach any sink in this box through a periodic image. Expanding
 // the unwrapped interval before testing avoids inconsistent endpoint wrapping.

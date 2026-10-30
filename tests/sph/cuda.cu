@@ -8,8 +8,10 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <limits>
 #include <new>
@@ -108,6 +110,7 @@ class Fixture {
         *reduction_ = {};
         reduction_->minimumSupportRadius = std::numeric_limits<float>::max();
         reduction_->minimumTimestep = std::numeric_limits<float>::max();
+        reduction_->minimumGradHOmega = std::numeric_limits<float>::max();
     }
 
 public:
@@ -276,6 +279,14 @@ public:
         data_.sourceAdiabaticIndex = allocate<float>(count_);
     }
 
+    // hydro.pressureOperator=variational with an independent zeta source snapshot.
+    void enableVariationalPressure(bool separateSources) {
+        params_.variationalPressure = true;
+        data_.sourceGradHCorrection = allocate<float>(count_);
+        data_.sinkGradHCorrection =
+            separateSources ? allocate<float>(count_) : data_.sourceGradHCorrection;
+    }
+
     void enableHydroCoupling() {
         data_.sourceHydroCoupling = allocate<float>(count_);
         std::fill_n(data_.sourceHydroCoupling, count_, 1.0f);
@@ -357,6 +368,15 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
     std::vector<float> density(data.sinkDensity, data.sinkDensity + fixture.count_);
     std::vector<float> balsaraFactor(
         data.sinkBalsaraFactor, data.sinkBalsaraFactor + fixture.count_);
+    bool const variational = fixture.params_.variationalPressure;
+    std::vector<float> gradHCorrection;
+    std::vector<float> sourceGradHCorrection;
+    if (variational) {
+        gradHCorrection.assign(data.sinkGradHCorrection, data.sinkGradHCorrection + fixture.count_);
+        sourceGradHCorrection.assign(
+            data.sourceGradHCorrection, data.sourceGradHCorrection + fixture.count_);
+        cpuData.sinkGradHCorrection = gradHCorrection.data();
+    }
     std::vector<float> energyRate(
         data.sinkInternalEnergyRate, data.sinkInternalEnergyRate + fixture.count_);
     std::vector<SphAcceleration> acceleration(
@@ -413,6 +433,7 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
     *fixture.reduction_ = {};
     fixture.reduction_->minimumSupportRadius = std::numeric_limits<float>::max();
     fixture.reduction_->minimumTimestep = std::numeric_limits<float>::max();
+    fixture.reduction_->minimumGradHOmega = std::numeric_limits<float>::max();
     switch (runType) {
     case kSphRunPrehydro1:
         sphCudaPrehydro1<<<1, kPrehydro1BlockSize>>>(fixture.params_, data, fixture.reduction_);
@@ -456,7 +477,21 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
         cudaResult.inverseViscosityTimestep, 5.0e-5);
     requireClose("CPU/CUDA acceleration timestep", cpuResult.inverseAccelerationTimestep,
         cudaResult.inverseAccelerationTimestep, 5.0e-5);
+    require(cpuResult.heldSupports == cudaResult.heldSupports &&
+            cpuResult.illConditionedSupports == cudaResult.illConditionedSupports,
+        "CPU/CUDA held and ill-conditioned support counts");
+    requireClose("CPU/CUDA minimum grad-H Omega", cpuResult.minimumGradHOmega,
+        cudaResult.minimumGradHOmega, 5.0e-5);
+    requireClose("CPU/CUDA support residual", cpuResult.maximumSupportResidual,
+        cudaResult.maximumSupportResidual, 1.0e-6);
     for (int i = 0; i < fixture.count_; i++) {
+        if (variational) {
+            requireClose("CPU/CUDA grad-H correction", gradHCorrection[i] / data.gasMass,
+                data.sinkGradHCorrection[i] / data.gasMass, 5.0e-5);
+            require(std::bit_cast<uint32_t>(data.sourceGradHCorrection[i]) ==
+                    std::bit_cast<uint32_t>(sourceGradHCorrection[i]),
+                "CPU/CUDA phases preserve grad-H source snapshots");
+        }
         if (fixture.params_.variableViscosity) {
             auto const& cpu = viscosityStates[i];
             auto const& gpu = data.sinkViscosityStates[i];
@@ -509,12 +544,15 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
     }
 }
 
-void testCpuCudaParity(int viscosityMode = 0) {
+void testCpuCudaParity(int viscosityMode = 0, bool variational = false) {
     // Three unequal leaves and 19 neighbors exercise indirection and SIMD tails.
     Fixture fixture(19, 3, true);
     if (viscosityMode != 0) {
         fixture.enableVariableViscosity(viscosityMode == 2, viscosityMode == 3);
         fixture.params_.viscosityBeta = 3.5f;
+    }
+    if (variational) {
+        fixture.enableVariationalPressure(true);
     }
     fixture.params_.balsaraSwitch = true;
     auto& data = fixture.data_;
@@ -597,6 +635,9 @@ void testCpuCudaParity(int viscosityMode = 0) {
     for (int source = 0; source < fixture.count_; source++) {
         data.sourceDensity[source] = data.sinkDensity[sinkIndices[source]];
         data.sourceBalsaraFactor[source] = data.sinkBalsaraFactor[sinkIndices[source]];
+        if (variational) {
+            data.sourceGradHCorrection[source] = data.sinkGradHCorrection[sinkIndices[source]];
+        }
     }
     compareCpuCudaPhase(fixture, kSphRunHydro, 0);
     compareCpuCudaPhase(fixture, kSphRunHydro, 1);
@@ -619,12 +660,22 @@ void testCpuCudaParity(int viscosityMode = 0) {
         0.025f;
     data.sourceDensity[excluded] = data.sourceInternalEnergy[excluded] = 0.0f;
     data.sinkDensity[excludedSink] = -9.0f;
+    if (variational) {
+        // An unbuilt correction on the excluded source must stay masked on both backends.
+        data.sinkGradHCorrection[excludedSink] = -9.0f;
+        data.sourceGradHCorrection[excluded] = std::numeric_limits<float>::quiet_NaN();
+    }
     compareCpuCudaPhase(fixture, kSphRunPrehydro2);
     require(!data.sinkSemiactive[excludedSink] && data.sinkDensity[excludedSink] == -9.0f,
         "distant inactive particle must leave density untouched");
+    require(!variational || data.sinkGradHCorrection[excludedSink] == -9.0f,
+        "distant inactive particle must leave its correction untouched");
     for (int source = 0; source < excluded; source++) {
         data.sourceDensity[source] = data.sinkDensity[sinkIndices[source]];
         data.sourceBalsaraFactor[source] = data.sinkBalsaraFactor[sinkIndices[source]];
+        if (variational) {
+            data.sourceGradHCorrection[source] = data.sinkGradHCorrection[sinkIndices[source]];
+        }
     }
     compareCpuCudaPhase(fixture, kSphRunHydro, 0);
     compareCpuCudaPhase(fixture, kSphRunHydro, 1);
@@ -1540,6 +1591,12 @@ TEST_F(MonaghanSphCuda, VariableViscosityCpuParity) {
     detail::testCpuCudaParity(1);
     detail::testCpuCudaParity(2);
     detail::testCpuCudaParity(3);
+}
+
+TEST_F(MonaghanSphCuda, VariationalPressureCpuParity) {
+    detail::testCpuCudaParity(0, true);
+    detail::testCpuCudaParity(1, true);
+    detail::testCpuCudaParity(2, true);
 }
 
 TEST_F(MonaghanSphCuda, WindDecouplingPreservesDensityAndGravity) {

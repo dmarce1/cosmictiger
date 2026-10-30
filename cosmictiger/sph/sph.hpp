@@ -85,10 +85,20 @@ struct SphRunReturn {
     float inverseSoundTimestep = 0.0f;
     float inverseViscosityTimestep = 0.0f;
     float inverseAccelerationTimestep = 0.0f;
+    // Variational density-pass diagnostics, accumulated over every evaluated support.
+    // A leaf repeated by a later pass contributes again to the counts.
+    float minimumGradHOmega = std::numeric_limits<float>::max();    // Over free supports.
+    float maximumSupportResidual = 0.0f;    // Largest |sum w - target|/target of a free support.
+    int heldSupports = 0;                   // Supports at an active bound, with zeta = 0.
+    int illConditionedSupports = 0;         // Free supports with a small Omega.
     template <typename Archive>
     void serialize(Archive&& arc, unsigned) {
         arc & minimumTimestep;
         arc & needsAnotherPass;
+        arc & minimumGradHOmega;
+        arc & maximumSupportResidual;
+        arc & heldSupports;
+        arc & illConditionedSupports;
         arc & floatingPointOperations;
         arc & inverseSoundTimestep;
         arc & inverseViscosityTimestep;
@@ -115,6 +125,10 @@ struct SphRunReturn {
         inverseAccelerationTimestep =
             std::max(inverseAccelerationTimestep, other.inverseAccelerationTimestep);
         needsAnotherPass = needsAnotherPass || other.needsAnotherPass;
+        minimumGradHOmega = std::min(minimumGradHOmega, other.minimumGradHOmega);
+        maximumSupportResidual = std::max(maximumSupportResidual, other.maximumSupportResidual);
+        heldSupports += other.heldSupports;
+        illConditionedSupports += other.illConditionedSupports;
         return *this;
     }
 };
@@ -134,6 +148,9 @@ struct SphRunParameters {
     float maximumTimestep = 1e30f;
     bool globalTimestep = false;
     bool refreshConvergedDensity = false;    // Recompute diagnostics with fixed, converged supports.
+    // hydro.pressureOperator=variational: compatible density-energy pressure with grad-H
+    // (cosmictiger/sph/volume.hpp); otherwise the Monaghan (1992) pressure terms.
+    bool variationalPressure = false;
     float viscosityAlpha;
     float viscosityBeta;
     float viscosityEpsilon;
@@ -154,6 +171,7 @@ struct SphRunParameters {
         minimumSupportRadius = opts.hydro.minSupportRadius;
         maximumSupportRadius = opts.hydro.maxSupportRadius;
         velocityDampingRate = opts.hydro.damping;
+        variationalPressure = opts.hydro.pressureOperator == "variational";
         uniformAccelerationY = opts.hydro.yAcceleration;
         zPlaneAcceleration = opts.hydro.zPlaneAcceleration;
         viscosityAlpha = opts.hydro.viscosityAlpha;
@@ -203,6 +221,7 @@ struct SphRunParameters {
         arc & maximumTimestep;
         arc & globalTimestep;
         arc & refreshConvergedDensity;
+        arc & variationalPressure;
         arc & uniformAccelerationY;
         arc & baseTimestep;
         arc & phase;

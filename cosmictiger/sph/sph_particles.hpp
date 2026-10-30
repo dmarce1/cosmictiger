@@ -61,6 +61,11 @@ SPH_PARTICLES_EXTERN float* sphParticlesInternalEnergyRates;
 SPH_PARTICLES_EXTERN float* sphParticlesDensities;
 // Derived during every density pass; rebuilt after restart and migration.
 SPH_PARTICLES_EXTERN float* sphParticlesBalsaraFactors;
+// Variational operator only: zeta_i of cosmictiger/sph/volume.hpp, written by the density pass
+// for every semiactive particle before each force pass. Neither checkpointed nor migrated:
+// sphParticlesResetConverged sets every slot to NaN when a density pass starts, so a force
+// pass can use only corrections rebuilt by the current pass.
+SPH_PARTICLES_EXTERN float* sphParticlesGradHCorrections;
 SPH_PARTICLES_EXTERN SphViscosityState* sphParticlesViscosityStates;
 SPH_PARTICLES_EXTERN SphCullenDehnenState* sphParticlesCullenDehnenStates;
 SPH_PARTICLES_EXTERN char* sphParticlesConvergenceFlags;
@@ -84,7 +89,8 @@ void sphParticlesGlobalReadRungs(ParticleGlobalRange range, char*, ParticleInteg
 void sphParticlesGlobalReadVelocities(
     ParticleGlobalRange range, float*, float*, float*, ParticleInteger offset);
 void sphParticlesGlobalReadDensity(ParticleGlobalRange range, float*, ParticleInteger offset,
-    float* balsaraFactor = nullptr, float* viscosityAlpha = nullptr);
+    float* balsaraFactor = nullptr, float* viscosityAlpha = nullptr,
+    float* gradHCorrection = nullptr);
 void sphParticlesGlobalReadChemistryEos(ParticleGlobalRange range, float* pressureEnergyRatio,
     float* adiabaticIndex, ParticleInteger offset);
 #if COSMICTIGER_ENABLE_CHEMISTRY

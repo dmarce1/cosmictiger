@@ -82,7 +82,8 @@ def main():
                 "initial.particlesPerDimension", "compute.cuda", "compute.bucketSize",
                 "compute.sphBucketSize", "compute.positionType",
                 "hydro.enabled", "hydro.viscosityAlpha", "hydro.viscosityBeta",
-                "hydro.viscosityEpsilon", "hydro.balsaraSwitch", "hydro.neighborNumber", "gravity.enabled",
+                "hydro.viscosityEpsilon", "hydro.balsaraSwitch", "hydro.pressureOperator",
+                "hydro.neighborNumber", "gravity.enabled",
                 "gravity.kernelFamily", "gravity.kernelDegree",
                 "gravity.meshSize", "gravity.pmmmNearWidth", "gravity.pmmmMaxPrimeFactor",
                 "gravity.openingAngle", "gravity.openingSchedule",
@@ -613,10 +614,16 @@ mapSize = 8
         if not re.search(r"^" + re.escape(key) + r"\s*:\s*" + expected_value + r"\s*$",
                          configured, re.MULTILINE):
             raise RuntimeError(f"INI {key} was not applied")
-    for key, expected_value in (("hydro.viscosityEvolution", "morrisAndMonaghan"),):
+    for key, expected_value in (("hydro.viscosityEvolution", "morrisAndMonaghan"),
+                                ("hydro.pressureOperator", "monaghan")):
         if not re.search(r"^" + re.escape(key) + r"\s*:\s*" + expected_value + r"\s*$",
                          balsara_default, re.MULTILINE):
             raise RuntimeError(f"unexpected default for {key}")
+    operator_override = run("pressure_operator_cli_override", [
+        f"--configuration={config.resolve()}", "--hydro.pressureOperator=variational"])
+    if not re.search(r"^hydro\.pressureOperator\s*:\s*variational\s*$", operator_override,
+                     re.MULTILINE):
+        raise RuntimeError("CLI hydro.pressureOperator did not override INI")
     for key in ("hydro.viscosityBetaMode", "hydro.viscosityBetaOverAlpha"):
         if re.search(r"^" + re.escape(key) + r"\s*:", balsara_default, re.MULTILINE):
             raise RuntimeError(f"removed option {key} is still reported")
@@ -759,12 +766,22 @@ mapSize = 8
             assertNumericSetting(output, "hydro.zPlaneAcceleration", acceleration)
             if "Checkpoint state and mode validation passed" not in output:
                 raise RuntimeError("z-plane acceleration checkpoint state did not round-trip")
+        # The variational operator has its own checkpoint formulation code.
+        output = run("variational_checkpoint", hydro_metadata_options + [
+            f"--configuration={config.resolve()}", "--hydro.pressureOperator=variational"])
+        if "Checkpoint state and mode validation passed" not in output:
+            raise RuntimeError("variational pressure checkpoint state did not round-trip")
 
     if chemistryAvailable and args.time_integrator != "hierarchical":
         chemistry_options = [option for option in metadata_options
                              if not option.startswith("--hydro.enabled=")] + [
                                  "--hydro.enabled=true", "--chemistry.enabled=true",
                                  "--cosmology.startRedshift=49"]
+        # The variational operator supports only the constant-gamma ideal gas.
+        rejected = run("variational_chemistry", chemistry_options + [
+            "--hydro.pressureOperator=variational"], success=False)
+        if "constant-gamma ideal gas" not in rejected:
+            raise RuntimeError("variational pressure with chemistry lacked its diagnostic")
 
         def chemistrySettings(output):
             result = {}
@@ -1259,6 +1276,7 @@ mapSize = 8
         ("cfl_underflow", "--hydro.cfl=1e-100", "single precision"),
         ("support_underflow", "--hydro.minSupportRadius=1e-100", "single precision"),
         ("viscosity_evolution", "--hydro.viscosityEvolution=unknown", "hydro.viscosityEvolution"),
+        ("pressure_operator", "--hydro.pressureOperator=unknown", "hydro.pressureOperator"),
         ("viscosity_alpha_max", "--hydro.viscosityAlphaMax=0", "hydro.viscosityAlphaMax"),
         ("viscosity_decay_cd", "--hydro.viscosityDecayCD=0", "hydro.viscosityDecayCD"),
         ("viscosity_alpha_max_price", "--hydro.viscosityAlphaMaxPrice=0",

@@ -119,6 +119,29 @@ bool solveSphCpuSupportRadius(SphRunParameters const& parameters, SphRunData con
     return false;
 }
 
+// A held support uses ζ_a = 0. A free support whose correction is non-finite or has
+// Ω_a ≤ 0 cannot be used and stops the run; a small positive Ω_a is counted.
+void recordSphCpuGradH(SphGradHEvaluation const& gradH, float supportRadius, float density,
+    float numberSum, float numberMoment, SphRunReturn& result) {
+    if (gradH.constraint != sph_volume::SupportConstraint::Free) {
+        result.heldSupports++;
+        return;
+    }
+    if (!sph_volume::isUsable(gradH.correction)) {
+        PRINT("SPH grad-H correction is unusable: supportRadius=%e density=%e ΣW=%e "
+              "Σq dw/dq=%e Ω=%e ζ=%e residual=%e\n",
+            supportRadius, density, numberSum, numberMoment, gradH.correction.omega,
+            gradH.correction.zeta, gradH.relativeResidual);
+        ALWAYS_ASSERT(false);
+    }
+    result.minimumGradHOmega = std::min(result.minimumGradHOmega, gradH.correction.omega);
+    result.maximumSupportResidual =
+        std::max(result.maximumSupportResidual, std::abs(gradH.relativeResidual));
+    if (!sph_volume::isWellConditioned(gradH.correction)) {
+        result.illConditionedSupports++;
+    }
+}
+
 bool sphCpuHasActiveNeighbor(SphRunParameters const& parameters, SphRunData const& data,
     std::vector<int> const& neighbors, int particleIndex, float supportRadius,
     FlopCounter<>& flops) {
@@ -215,6 +238,10 @@ SphRunReturn sphCpuPrehydro2(
         cullen_and_dehnen::GradientSums<SimdFloat> gradientSums{};
         SimdFloat ρ_a_R_a_pack(0.0f);
         SimdFloat v_sig_a_pack(0.0f);
+        // Variational operator: the unweighted sums ΣW = Σ_b w(q_ab) and Σ_b q_ab w'(q_ab)
+        // of cosmictiger/sph/volume.hpp give Ω_a and ζ_a at this support radius.
+        SimdFloat ΣW_pack(0.0f);
+        SimdFloat Σqdw_pack(0.0f);
         float c_a_switch = 0.0f;    // Sound speed for the CD signal speed or the Price target.
         if (parameters.gradientSwitch()) {
             float const γ_a = data.sourceAdiabaticIndex ? data.sourceAdiabaticIndex[particleIndex] :
@@ -229,10 +256,19 @@ SphRunReturn sphCpuPrehydro2(
                 detail::sphCpuSeparations(data, particleIndex, neighbors, first);
             SimdFloat const radius = simdSqrt(r_ab.dot(r_ab));
             SimdFloat const q_ab = radius * SimdFloat(one_over_H_a);
-            ρ_a_pack += simdSelect(detail::sphCpuValidLanes(neighbors, first),
-                m_b_over_H_a3 * kernelW(q_ab), SimdFloat(0.0f));
+            SimdFloat const w_ab = kernelW(q_ab);
+            ρ_a_pack += simdSelect(
+                detail::sphCpuValidLanes(neighbors, first), m_b_over_H_a3 * w_ab, SimdFloat(0.0f));
             flops +=
                 12 * SimdFloat::size() + sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab);
+            if (parameters.variationalPressure) {
+                auto const inside =
+                    detail::sphCpuValidLanes(neighbors, first) && q_ab < SimdFloat(1.0f);
+                ΣW_pack += simdSelect(inside, w_ab, SimdFloat(0.0f));
+                Σqdw_pack += simdSelect(inside, q_ab * dkernelWDq(q_ab), SimdFloat(0.0f));
+                flops += 3 * SimdFloat::size() +
+                    sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab, true);
+            }
             if (parameters.balsaraSwitch || parameters.variableViscosity) {
                 // GADGET-4 equation (72): accumulate ρ_a div(v)_a and ρ_a curl(v)_a
                 // as −Σ_b m_b v_ab·gradW_ab and Σ_b m_b v_ab×gradW_ab.
@@ -320,6 +356,16 @@ SphRunReturn sphCpuPrehydro2(
         flops += SimdFloat::size() - 1;
         ALWAYS_ASSERT(H_a > 0.0f && ρ_a > 0.0f);
         data.sinkDensity[sinkIndex] = ρ_a;
+        if (parameters.variationalPressure) {
+            float const ΣW = simdSum(ΣW_pack);
+            float const Σqdw = simdSum(Σqdw_pack);
+            auto const gradH = sphGradHEvaluation(H_a, parameters.minimumSupportRadius,
+                parameters.maximumSupportRadius, data.targetNeighborCount, data.gasMass, ΣW, Σqdw);
+            // Reductions, residual (2), and Ω, ζ, the weighted sums (6).
+            flops += 2 * (SimdFloat::size() - 1) + 8;
+            detail::recordSphCpuGradH(gradH, H_a, ρ_a, ΣW, Σqdw, result);
+            data.sinkGradHCorrection[sinkIndex] = gradH.correction.zeta;
+        }
         if (parameters.balsaraSwitch) {
             Vector3<float> const ρ_a_curl_v_a(simdSum(ρ_a_curl_v_a_pack[kXDimension]),
                 simdSum(ρ_a_curl_v_a_pack[kYDimension]), simdSum(ρ_a_curl_v_a_pack[kZDimension]));

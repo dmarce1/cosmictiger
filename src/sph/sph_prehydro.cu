@@ -273,6 +273,9 @@ __global__ void sphCudaPrehydro2(
             cullen_and_dehnen::GradientSums<float> gradientSums{};
             float ρ_a_R_a = 0.0f;
             float v_sig_a = 0.0f;
+            // Variational operator: ΣW = Σ_b w(q_ab) and Σ_b q_ab w'(q_ab) give Ω_a and ζ_a.
+            float ΣW = 0.0f;
+            float Σqdw = 0.0f;
             float c_a_switch = 0.0f;    // Sound speed for the CD signal speed or Price target.
             if (parameters.gradientSwitch()) {
                 float const γ_a = data.sourceAdiabaticIndex ?
@@ -291,8 +294,14 @@ __global__ void sphCudaPrehydro2(
                     distance(position[kZDimension], neighbor.positionZ));
                 float const radius = sqrtf(r_ab.dot(r_ab));
                 float const q_ab = radius * one_over_H_a;    // r_ab/H_a
-                ρ_a += m_b_over_H_a3 * kernelW(q_ab);
+                float const w_ab = kernelW(q_ab);
+                ρ_a += m_b_over_H_a3 * w_ab;
                 flops += 12 + sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab);
+                if (parameters.variationalPressure && q_ab < 1.0f) {
+                    ΣW += w_ab;
+                    Σqdw += q_ab * dkernelWDq(q_ab);
+                    flops += 3 + sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab, true);
+                }
                 if (parameters.cullenDehnen) {
                     // Cullen & Dehnen (2010), equation (17), including the self term.
                     float const div_v_b = workspace.particles[neighborIndex].divergence;
@@ -356,6 +365,11 @@ __global__ void sphCudaPrehydro2(
             }
             sharedReduceAdd<float, kPrehydro2BlockSize>(ρ_a);
             flops += detail::sphReductionFlops<kPrehydro2BlockSize>();
+            if (parameters.variationalPressure) {
+                sharedReduceAdd<float, kPrehydro2BlockSize>(ΣW);
+                sharedReduceAdd<float, kPrehydro2BlockSize>(Σqdw);
+                flops += 2 * detail::sphReductionFlops<kPrehydro2BlockSize>();
+            }
             if (parameters.balsaraSwitch || parameters.variableViscosity) {
                 sharedReduceAdd<float, kPrehydro2BlockSize>(ρ_a_div_v_a);
                 for (int dim = 0; dim < kDimensions; ++dim) {
@@ -383,6 +397,34 @@ __global__ void sphCudaPrehydro2(
             if (threadIndex == 0) {
                 ALWAYS_ASSERT(H_a > 0.0f && ρ_a > 0.0f);
                 data.sinkDensity[sinkIndex] = ρ_a;
+                if (parameters.variationalPressure) {
+                    // NOLINTBEGIN(readability-identifier-naming)
+                    auto const gradH = sphGradHEvaluation(H_a, parameters.minimumSupportRadius,
+                        parameters.maximumSupportRadius, data.targetNeighborCount, data.gasMass, ΣW,
+                        Σqdw);
+                    flops += 8;    // Residual (2), and Ω, ζ, the weighted sums (6).
+                    if (gradH.constraint != sph_volume::SupportConstraint::Free) {
+                        atomicAdd(&reduction->heldSupports, 1);
+                    } else {
+                        // A held support uses ζ_a = 0. An unusable free correction stops the
+                        // run; a small positive Ω_a is counted.
+                        if (!sph_volume::isUsable(gradH.correction)) {
+                            PRINT("SPH grad-H correction is unusable: supportRadius=%e "
+                                  "density=%e ΣW=%e Σq dw/dq=%e Ω=%e ζ=%e residual=%e\n",
+                                H_a, ρ_a, ΣW, Σqdw, gradH.correction.omega, gradH.correction.zeta,
+                                gradH.relativeResidual);
+                            __trap();
+                        }
+                        atomicMin(&reduction->minimumGradHOmega, gradH.correction.omega);
+                        atomicMax(
+                            &reduction->maximumSupportResidual, fabsf(gradH.relativeResidual));
+                        if (!sph_volume::isWellConditioned(gradH.correction)) {
+                            atomicAdd(&reduction->illConditionedSupports, 1);
+                        }
+                    }
+                    data.sinkGradHCorrection[sinkIndex] = gradH.correction.zeta;
+                    // NOLINTEND(readability-identifier-naming)
+                }
                 if (data.sinkBalsaraFactor) {
                     data.sinkBalsaraFactor[sinkIndex] = parameters.balsaraSwitch ?
                         balsara::balsaraFactor(ρ_a_div_v_a, ρ_a_curl_v_a.norm()) :

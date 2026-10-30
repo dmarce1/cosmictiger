@@ -57,6 +57,7 @@ struct SphRunWorkspace {
     Vector<float, PinnedAllocator<float>> hostAdiabaticIndex;
     Vector<float, PinnedAllocator<float>> hostHydroCoupling;
     Vector<float, PinnedAllocator<float>> hostDensity;
+    Vector<float, PinnedAllocator<float>> hostGradHCorrection;
     Vector<float, PinnedAllocator<float>> hostBalsaraFactor;
     Vector<float, PinnedAllocator<float>> hostViscosityAlpha;
     Vector<float, PinnedAllocator<float>> hostAccelerationX;
@@ -462,6 +463,9 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
     }
     if (params.runType == kSphRunHydro) {
         hostDensity.resize(particleStorageSize);
+        if (params.variationalPressure) {
+            hostGradHCorrection.resize(particleStorageSize);
+        }
         if (getOptions().starFormation.enabled) {
             hostHydroCoupling.resize(particleStorageSize);
         }
@@ -517,10 +521,13 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
                                 node.globalParticleRange(), hostHydroCoupling.data(), offset);
                         }
 #endif
+                        // The correction shares the density's cache line, so a remote
+                        // source's ζ is from the same density pass as its ρ.
                         sphParticlesGlobalReadDensity(node.globalParticleRange(),
                             hostDensity.data(), offset,
                             params.balsaraSwitch ? hostBalsaraFactor.data() : nullptr,
-                            params.variableViscosity ? hostViscosityAlpha.data() : nullptr);
+                            params.variableViscosity ? hostViscosityAlpha.data() : nullptr,
+                            params.variationalPressure ? hostGradHCorrection.data() : nullptr);
                     }
                     if (params.runType == kSphRunPrehydro2 && params.gradientSwitch()) {
                         sphParticlesGlobalReadViscosityDiagnostics(node.globalParticleRange(),
@@ -555,6 +562,7 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
         copy(runData.sourceAdiabaticIndex, hostAdiabaticIndex);
         copy(runData.sourceHydroCoupling, hostHydroCoupling);
         copy(runData.sourceDensity, hostDensity);
+        copy(runData.sourceGradHCorrection, hostGradHCorrection);
         copy(runData.sourceBalsaraFactor, hostBalsaraFactor);
         copy(runData.sourceViscosityAlpha, hostViscosityAlpha);
         copy(runData.sourceAccelerationX, hostAccelerationX);
@@ -575,6 +583,7 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
     runData.sinkSemiactive = &sphParticlesSemiactive(0);
     runData.sinkParticleRungs = &particlesRung(0);
     runData.sinkDensity = &sphParticlesDensity(0);
+    runData.sinkGradHCorrection = sphParticlesGradHCorrections;
     runData.sinkBalsaraFactor = sphParticlesBalsaraFactors;
     runData.sinkViscosityStates = sphParticlesViscosityStates;
     runData.sinkCullenDehnenStates = sphParticlesCullenDehnenStates;

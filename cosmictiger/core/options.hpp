@@ -201,6 +201,9 @@ struct Hydro {
     double viscosityBeta{};
     double viscosityEpsilon{};
     bool balsaraSwitch{true};
+    // Pressure force and reversible work: monaghan (Monaghan 1992, the regression baseline)
+    // or variational (compatible density-energy SPH with grad-H, docs/variational_sph.md).
+    std::string pressureOperator{"monaghan"};
     std::string viscosityEvolution{"morrisAndMonaghan"};
     double viscosityAlphaMin{0.1};
     double viscosityDecay{0.2};
@@ -451,6 +454,7 @@ struct Options {
         arc & starFormation.windDecouplingMyr;
         arc & starFormation.windRecoupleDensityFraction;
         arc & starFormation.windDirection;
+        arc & hydro.pressureOperator;
     }
 };
 

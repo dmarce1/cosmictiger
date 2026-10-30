@@ -176,6 +176,20 @@ void validateStarFormation(Options const& opts) {
     }
 }
 
+// The variational operator is implemented for the constant-gamma ideal gas only. The
+// composition EOS of chemistry and SH03 keeps the Monaghan operator for now.
+void validatePressureOperator(Options const& opts) {
+    if (opts.hydro.pressureOperator != "monaghan" && opts.hydro.pressureOperator != "variational") {
+        throw std::invalid_argument("hydro.pressureOperator must be monaghan or variational");
+    }
+    if (opts.hydro.enabled && opts.hydro.pressureOperator == "variational" &&
+        (opts.chemistry.enabled || opts.starFormation.enabled)) {
+        throw std::invalid_argument(
+            "hydro.pressureOperator=variational supports only the constant-gamma ideal gas; "
+            "it cannot be combined with chemistry.enabled or starFormation.enabled");
+    }
+}
+
 }    // namespace detail
 
 void show(char const* name, bool opt) {
@@ -216,6 +230,7 @@ Options const& getOptions() {
 
 void setOptions(Options const& opts) {
     detail::validateStarFormation(opts);
+    detail::validatePressureOperator(opts);
 #if !COSMICTIGER_WITH_GRAVITY
     if (opts.gravity.enabled || opts.analysis.groups || opts.lightcone.enabled) {
         throw std::invalid_argument(
@@ -454,6 +469,7 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"hydro.viscosityBeta", options.hydro.viscosityBeta},
         {"hydro.viscosityEpsilon", options.hydro.viscosityEpsilon},
         {"hydro.balsaraSwitch", options.hydro.balsaraSwitch},
+        {"hydro.pressureOperator", options.hydro.pressureOperator},
         {"hydro.viscosityEvolution", options.hydro.viscosityEvolution},
         {"hydro.viscosityAlphaMin", options.hydro.viscosityAlphaMin},
         {"hydro.viscosityDecay", options.hydro.viscosityDecay},
@@ -751,7 +767,10 @@ bool processOptions(int argc, char* argv[]) {
         "viscosity regularization relative to the calibrated radius sqrt(5/6) effectiveRadius")(
         "hydro.balsaraSwitch", po::value<bool>(&opts.hydro.balsaraSwitch)->default_value(true),
         "suppress artificial viscosity in shear flows with the Balsara switch")(
-        "hydro.viscosityEvolution",
+        "hydro.pressureOperator",
+        po::value<std::string>(&opts.hydro.pressureOperator)->default_value("monaghan"),
+        "pressure force and work: monaghan, or variational (compatible density-energy with "
+        "grad-H; ideal gas without chemistry or star formation)")("hydro.viscosityEvolution",
         po::value<std::string>(&opts.hydro.viscosityEvolution)->default_value("morrisAndMonaghan"),
         "viscosity evolution: none, morrisAndMonaghan, cullenAndDehnen, or priceEtAl")(
         "hydro.viscosityAlphaMin",
@@ -1270,6 +1289,9 @@ bool processOptions(int argc, char* argv[]) {
         THROW_ERROR("hydro.viscosityAlpha and hydro.viscosityBeta must be finite and nonnegative; "
                     "hydro.viscosityEpsilon must be finite and positive\n");
     }
+    if (opts.hydro.pressureOperator != "monaghan" && opts.hydro.pressureOperator != "variational") {
+        THROW_ERROR("hydro.pressureOperator must be monaghan or variational\n");
+    }
     if (opts.hydro.viscosityEvolution != "none" &&
         opts.hydro.viscosityEvolution != "morrisAndMonaghan" &&
         opts.hydro.viscosityEvolution != "cullenAndDehnen" &&
@@ -1407,6 +1429,7 @@ bool processOptions(int argc, char* argv[]) {
     }
     opts.run.hierarchicalGravity = usesHierarchicalIntegration(opts.run);
     detail::validateStarFormation(opts);
+    detail::validatePressureOperator(opts);
     if (opts.chemistry.enabled) {
         if (!opts.hydro.enabled ||
             (opts.run.scenario != "cosmology" && opts.run.test != "sphGravity") ||
@@ -1733,6 +1756,7 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("hydro.viscosityBeta", hydro.viscosityBeta);
     SHOW("hydro.viscosityEpsilon", hydro.viscosityEpsilon);
     SHOW("hydro.balsaraSwitch", hydro.balsaraSwitch);
+    SHOW("hydro.pressureOperator", hydro.pressureOperator);
     SHOW("hydro.viscosityEvolution", hydro.viscosityEvolution);
     SHOW("hydro.viscosityAlphaMin", hydro.viscosityAlphaMin);
     SHOW("hydro.viscosityDecay", hydro.viscosityDecay);
@@ -1937,6 +1961,7 @@ bool processOptions(int argc, char* argv[]) {
             SHOW("compute.sphBucketSize", compute.sphBucketSize);
             SHOW("hydro.kernelFamily", hydro.kernelFamily);
             SHOW("hydro.kernelDegree", hydro.kernelDegree);
+            SHOW("hydro.pressureOperator", hydro.pressureOperator);
             SHOW("hydro.balsaraSwitch", hydro.balsaraSwitch);
             SHOW("hydro.viscosityEvolution", hydro.viscosityEvolution);
             SHOW("hydro.viscosityAlphaMin", hydro.viscosityAlphaMin);

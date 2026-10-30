@@ -49,6 +49,11 @@ struct SphReduction {
     float inverseSoundTimestep;
     float inverseViscosityTimestep;
     float inverseAccelerationTimestep;
+    // Variational density-pass diagnostics; see SphRunReturn.
+    float minimumGradHOmega;
+    float maximumSupportResidual;
+    int heldSupports;
+    int illConditionedSupports;
 };
 
 #ifdef USE_CUDA

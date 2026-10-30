@@ -94,6 +94,7 @@ sph/
 ├── sph_hydro_cpu.cpp, sph_hydro.cu
 ├── sph_rungs_cpu.cpp, sph_rungs.cu
 ├── sph_chemistry.*, sph_flops.hpp, kernels.hpp, viscosity_state.hpp
+├── volume.hpp
 ├── monaghan/
 │   ├── equations.hpp
 │   └── viscosity.hpp
@@ -113,9 +114,11 @@ The parent directory owns particle storage, neighbor traversal, smoothing and
 density loops, execution, timesteps, and common viscosity state. The Monaghan
 module supplies the pressure/thermal-work equations and pair viscosity;
 Morris–Monaghan and Cullen–Dehnen supply the coefficient-evolution laws. The
-Balsara module supplies the optional shear limiter. The common CPU and CUDA
-loops call those modules, so selecting a viscosity model does not create a
-second neighbor engine.
+Balsara module supplies the optional shear limiter. `volume.hpp` holds the
+weighted-volume and grad-H algebra of the variational pressure operator
+(`hydro.pressureOperator=monaghan|variational`, [variational SPH](variational_sph.md)).
+The common CPU and CUDA loops call those modules, so selecting a viscosity model
+or pressure operator does not create a second neighbor engine.
 
 The runtime selector remains
 `hydro.viscosityEvolution=none|morrisAndMonaghan|cullenAndDehnen`. Model-specific
