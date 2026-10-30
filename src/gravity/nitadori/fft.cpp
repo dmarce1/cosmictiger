@@ -456,7 +456,7 @@ void transform() {
 }
 
 void destroy() {
-#if defined(USE_CUDA) && COSMICTIGER_ENABLE_PMMM_NEAR_PP
+#if defined(USE_CUDA) && COSMICTIGER_ENABLE_PMMM_PP
     // Every solve has drained its tasks before this quiescent teardown. Release
     // retained PP buffers even when only the standalone near-field API ran.
     clearPmmmNearCudaWorkspaces();

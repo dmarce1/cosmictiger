@@ -40,7 +40,9 @@
 #include <cosmictiger/math/simulation_units.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
+#if COSMICTIGER_ENABLE_CHEMISTRY
 #include <cosmictiger/sph/sph_chemistry.hpp>
+#endif
 #include <cosmictiger/sph/sph_particles.hpp>
 #endif
 
@@ -904,9 +906,11 @@ static void initX0() {
             sphParticlesThermodynamicState(i).internalEnergy = storedThermalEnergy;
             sphParticlesSupportRadius(i) = smoothLength;
             sphParticlesDensity(i) = density;
+#if COSMICTIGER_ENABLE_CHEMISTRY
             if (getOptions().chemistry.enabled) {
                 sphChemistryInitializeParticle(i, scale);
             }
+#endif
         }
     }
 #endif

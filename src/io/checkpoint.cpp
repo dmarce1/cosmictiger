@@ -38,7 +38,9 @@
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/sph.hpp>
+#if COSMICTIGER_ENABLE_CHEMISTRY
 #include <cosmictiger/sph/sph_chemistry.hpp>
+#endif
 #include <cosmictiger/sph/sph_particles.hpp>
 #endif
 
@@ -125,6 +127,7 @@ constexpr uint32_t kCheckpointManifestVersion = 1;
 constexpr uint32_t kScenarioManifestVersion = 2;
 constexpr uint32_t kMonaghanSph = 1;
 constexpr uint32_t kCompactSphLayout = 1U << 24;
+constexpr uint32_t kChemistry = 1U << 11;
 constexpr uint32_t kZPlaneAcceleration = 1U << 12;
 constexpr uint32_t kBalsaraSwitch = 1U << 13;
 constexpr uint32_t kVariableViscosity = 1U << 14;
@@ -435,7 +438,6 @@ uint32_t checkpointFlags(Options const& opts) {
     constexpr uint32_t kLightcone = 1U << 7;
     constexpr uint32_t kGroups = 1U << 8;
     constexpr uint32_t kTracers = 1U << 9;
-    constexpr uint32_t kChemistry = 1U << 11;
     // Leave retired option bits unused so old incompatible headers remain rejected.
     return kRuntimeAlgorithms | (usesGlobalIntegration(opts.run) ? kGlobalIntegrator : 0U) |
         (opts.hydro.enabled ? kSph : 0U) | (opts.run.hierarchicalGravity ? kHierarchical : 0U) |
@@ -659,7 +661,7 @@ void writeDriverState(FILE* fp, DriverParameters const& params) {
             }
         }
     }
-#if COSMICTIGER_WITH_SPH
+#if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_CHEMISTRY
     if (getOptions().chemistry.enabled) {
         auto const chemicalParameters = sphChemistryCheckpointParameters();
         uint64_t const radiationChecksum = sphChemistryRadiationChecksum();
@@ -703,6 +705,12 @@ DriverParameters readDriverState(FILE* fp) {
         if ((header.flags & kRetiredParticleMesh) != 0U) {
             THROW_ERROR("Ordinary PM gravity checkpoints are no longer supported\n");
         }
+#if !COSMICTIGER_WITH_SPH || !COSMICTIGER_ENABLE_CHEMISTRY
+        if ((header.flags & kChemistry) != 0U) {
+            THROW_ERROR("Chemistry checkpoints require COSMICTIGER_ENABLE_SPH=ON and "
+                        "COSMICTIGER_ENABLE_CHEMISTRY=ON\n");
+        }
+#endif
         if (!checkpointCompatible(header, getOptions())) {
             THROW_ERROR("Checkpoint physics, particle layout or integrator differs from the "
                         "requested run\n");
@@ -749,7 +757,7 @@ DriverParameters readDriverState(FILE* fp) {
                 }
             }
         }
-#if COSMICTIGER_WITH_SPH
+#if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_CHEMISTRY
         std::array<double, 3> sourcePhase{};
         if (getOptions().chemistry.enabled) {
             auto chemicalParameters = sphChemistryCheckpointParameters();
@@ -792,7 +800,7 @@ DriverParameters readDriverState(FILE* fp) {
                 THROW_ERROR("Invalid global timestep checkpoint extension\n");
             }
         }
-#if COSMICTIGER_WITH_SPH
+#if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_CHEMISTRY
         if (getOptions().chemistry.enabled &&
             (sourcePhase[0] != (checkpointSourcePending(params) ? 1.0 : 0.0) ||
                 sourcePhase[1] != 2.0 ||
@@ -855,6 +863,12 @@ CheckpointSelection readCheckpointSelection(std::string const& outputDirectory, 
     if ((header.flags & detail::kRetiredParticleMesh) != 0U) {
         THROW_ERROR("Ordinary PM gravity checkpoints are no longer supported\n");
     }
+#if !COSMICTIGER_WITH_SPH || !COSMICTIGER_ENABLE_CHEMISTRY
+    if ((header.flags & detail::kChemistry) != 0U) {
+        THROW_ERROR("Chemistry checkpoints require COSMICTIGER_ENABLE_SPH=ON and "
+                    "COSMICTIGER_ENABLE_CHEMISTRY=ON\n");
+    }
+#endif
     if (header.version != detail::kCheckpointVersion &&
         header.version != detail::kLegacyDarkMatterCheckpointVersion) {
         THROW_ERROR("Unsupported checkpoint for algorithm selection\n");

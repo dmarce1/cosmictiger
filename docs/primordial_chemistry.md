@@ -2,7 +2,8 @@
 
 The opt-in primordial source operator evolves H, H+, He, He+, He++, electrons,
 and, for `molecular9`, H−, H2 and H2+. CPU and CUDA dispatch the same reaction,
-EOS and implicit integration implementation. Chemistry is disabled by default.
+EOS and implicit integration implementation. The runtime `chemistry.enabled`
+option is disabled by default; cosmology scenario INIs enable it explicitly.
 The implemented model and remaining research/optimization gates are distinguished
 in [the plan](primordial_chemistry_plan.md). The complete reaction catalogue,
 source citations, fit domains and thermal approximations are in
@@ -44,6 +45,12 @@ restore the caller's floating-point environment; CUDA uses explicit strict flags
 Boost.Units does not enter device structures.
 
 ## Running
+
+Particle chemistry requires both `COSMICTIGER_ENABLE_SPH=ON` and
+`COSMICTIGER_ENABLE_CHEMISTRY=ON`, which are the CMake defaults. Set
+`-DCOSMICTIGER_ENABLE_CHEMISTRY=OFF` to build SPH without particle chemistry.
+With SPH disabled, the chemistry setting is inactive. Homogeneous cosmological
+recombination remains available regardless of these settings.
 
 For example, with an existing configured build:
 

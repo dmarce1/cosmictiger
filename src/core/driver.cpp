@@ -43,7 +43,7 @@
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/kick_workspace.hpp>
-#if COSMICTIGER_ENABLE_PMMM
+#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
 #include <cosmictiger/gravity/nitadori/kick.hpp>
 #include <cosmictiger/gravity/nitadori/solver.hpp>
 #endif
@@ -66,7 +66,9 @@
 #include <cosmictiger/scenarios/scenario.hpp>
 #if COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/sph.hpp>
+#if COSMICTIGER_ENABLE_CHEMISTRY
 #include <cosmictiger/sph/sph_chemistry.hpp>
+#endif
 #include <cosmictiger/sph/sph_particles.hpp>
 #include <cosmictiger/sph/sph_tree.hpp>
 #endif
@@ -228,12 +230,14 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     if (verbose) {
         terminal::detailPrint("Doing SPH step with minrung = %i\n", minrung);
     }
-    bool const chemistry = getOptions().chemistry.enabled;
     sphParticlesApplyUpdates(minrung, 0, t0, tau, closingTimestep);
+#if COSMICTIGER_ENABLE_CHEMISTRY
+    bool const chemistry = getOptions().chemistry.enabled;
     if (chemistry) {
         // Viscosity decay uses the current sound speed during the density pass.
         sphParticlesRefreshChemistryEos(scale);
     }
+#endif
     SphRunParameters runParameters;
     if (getOptions().run.scenario == "cosmology") {
         runParameters.maximumTimestep =
@@ -375,11 +379,13 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     timer.reset();
 
     sphParticlesApplyUpdates(minrung, 1, t0, tau, closingTimestep);
+#if COSMICTIGER_ENABLE_CHEMISTRY
     if (chemistry && tau > 0.0) {
         // CKDKC closes C only after the old hydro predictor has been replaced.
         // Each active gas particle still owns its old rung and source interval.
         energies->heating += sphChemistryClose(minrung, scale, adot, t0, closingTimestep);
     }
+#endif
 
     auto eValue = particlesSumEnergies();
     energies->kin = eValue.kin / sqr(scale);
@@ -401,10 +407,12 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
         sphParticlesResetSemiactive();
         return result;
     }
+#if COSMICTIGER_ENABLE_CHEMISTRY
     if (chemistry) {
         synchronizedChemistryPressure = sphChemistryPressureIntegral(scale);
         sphParticlesRefreshChemistryEos(scale);
     }
+#endif
     runParameters.phase = 1;
     runParameters.runType = kSphRunHydro;
     result = sphRun(runParameters, true);
@@ -438,6 +446,7 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
         runParameters.runType = kSphRunRungs;
         repeat = sphRun(runParameters, true).needsAnotherPass;
     }
+#if COSMICTIGER_ENABLE_CHEMISTRY
     if (chemistry) {
         // Chemistry follows the selected SPH interval, subcycling internally.
         sphChemistryOpen(minrung, scale, adot, t0, globalTimestep ? selectedTimestep : -1.0,
@@ -449,10 +458,11 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
         runParameters.runType = kSphRunHydro;
         sphRun(runParameters, true);
     }
+#endif
     if (!globalTimestep && uniformMinimumRung >= 0) {
         // The dark matter and hydro proposals have both been reduced globally.
         // Set every rung before either species opens its next half-step.
-#if COSMICTIGER_ENABLE_PMMM
+#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
         section_timing::measure(
             section_timing::Section::gravity, [&]() { particleMeshFinishKick(t0, maxRung); });
 #endif
@@ -604,7 +614,7 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
         section_timing::measure(section_timing::Section::analysis, []() { gravityErrorBegin(); });
     }
     if (getOptions().gravity.enabled) {
-#if COSMICTIGER_ENABLE_PMMM
+#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
         if (meshGravity) {
             Timer timer;
             timer.start();
@@ -688,7 +698,7 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
         } else {
             energies.tckin += gravity.dkin;
         }
-#if COSMICTIGER_ENABLE_PMMM
+#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
         if (meshGravity && !global && !closingOnly) {
             energies.tckin = section_timing::measure(section_timing::Section::gravity,
                 [&]() { return particleMeshFinishKick(baseTimestep, gravity.maxRung); });
@@ -696,7 +706,7 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
 #endif
     }
     if (global && !closingOnly && getOptions().gravity.enabled) {
-#if COSMICTIGER_ENABLE_PMMM
+#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
         if (meshGravity) {
             particleMeshFinishGlobalKick(result.minimumTimestep);
         }
@@ -717,7 +727,7 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
 }
 
 #if COSMICTIGER_WITH_GRAVITY && COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
-#if COSMICTIGER_ENABLE_PMMM
+#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
 // Rung-restricted drift is deliberately locality-local. The PMMM stage entry
 // runs only on the root, so dispatch that completed stage to every locality.
 void particleMeshDriftRung(
@@ -903,13 +913,13 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         tm.reset();
         tm.start();
         if (top) {
-#if COSMICTIGER_ENABLE_FMM || (COSMICTIGER_ENABLE_PMMM && COSMICTIGER_ENABLE_PMMM_NEAR_FMM)
+#if COSMICTIGER_ENABLE_FMM || COSMICTIGER_ENABLE_PMMM_FMM
             resetGravityCounters();
             setGravityCounterUse(true);
 #endif
         }
         KickReturn thisKr;
-#if COSMICTIGER_ENABLE_PMMM
+#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
         if (meshGravity) {
             thisKr = section_timing::measure(
                 section_timing::Section::gravity, [&]() { return pmmmKick(kparams); });
@@ -922,7 +932,7 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         }
 #endif
         if (top) {
-#if COSMICTIGER_ENABLE_FMM || (COSMICTIGER_ENABLE_PMMM && COSMICTIGER_ENABLE_PMMM_NEAR_FMM)
+#if COSMICTIGER_ENABLE_FMM || COSMICTIGER_ENABLE_PMMM_FMM
             setGravityCounterUse(false);
 #endif
         }
@@ -976,7 +986,7 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
                 a = 1.0 / cosmosAinv(adot, scale, dt);
             }
             //			PRINT( "%e %e %e\n", a, a0, a1);
-#if COSMICTIGER_ENABLE_PMMM
+#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
             if (meshGravity) {
                 section_timing::measure(section_timing::Section::drift, [&]() {
                     particleMeshDriftRung(a, dt, tau, tau + dt, getOptions().run.numberOfSteps * t0,
@@ -1642,7 +1652,7 @@ void driver() {
             //	PRINT( "%e %e %e %e\n", kr.node_flops, kr.part_flops, sr.flops, dr.flops);
             double const numberOfParticles = getOptions().initial.numberOfParticles;
             double close = 0.0, direct = 0.0;
-#if COSMICTIGER_ENABLE_FMM || (COSMICTIGER_ENABLE_PMMM && COSMICTIGER_ENABLE_PMMM_NEAR_FMM)
+#if COSMICTIGER_ENABLE_FMM || COSMICTIGER_ENABLE_PMMM_FMM
             if (!usesMeshGravity(getOptions().gravity) ||
                 getOptions().gravity.pmmmNearMethod == "fmm") {
                 getGravityCounters(close, direct);

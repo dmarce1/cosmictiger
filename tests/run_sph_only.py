@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import struct
 
 from application_selection import application_options
 
@@ -42,11 +43,13 @@ def main():
         directory.mkdir()
         return directory
 
-    def execute(directory, options, success=True, executable=None):
+    def execute(directory, options, success=True, executable=None, omitChemistryDefault=False):
         particleCount = ([] if any(option.startswith("--initial.particlesPerDimension=")
                                     for option in options)
                          else ["--initial.particlesPerDimension=8"])
-        command = [str((executable or args.executable).resolve()), *common, *particleCount, *options]
+        defaults = [option for option in common
+                    if not (omitChemistryDefault and option.startswith("--chemistry.enabled="))]
+        command = [str((executable or args.executable).resolve()), *defaults, *particleCount, *options]
         result = subprocess.run(command, cwd=directory, env=environment, text=True,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=180)
         (directory / "run.log").write_text(result.stdout)
@@ -55,8 +58,8 @@ def main():
                                + result.stdout[-6000:])
         return result.stdout
 
-    def reject(name, options, diagnostic):
-        output = execute(prepare(name), options, success=False)
+    def reject(name, options, diagnostic, omitChemistryDefault=False):
+        output = execute(prepare(name), options, success=False, omitChemistryDefault=omitChemistryDefault)
         if diagnostic not in output:
             raise RuntimeError(f"{name}: missing diagnostic {diagnostic!r}")
 
@@ -65,6 +68,14 @@ def main():
         raise RuntimeError("help does not identify the gravity-free build")
     if "Potential expansion degrees:" in helpText:
         raise RuntimeError("SPH-only help advertises an unused expansion order")
+    chemistryDisabled = re.search(r"Particle chemistry:\s*disabled\s*$", helpText, re.MULTILINE) is not None
+    if chemistryDisabled:
+        reject("chemistry_cli", ["--chemistry.enabled=true"], "COSMICTIGER_ENABLE_CHEMISTRY=ON",
+               omitChemistryDefault=True)
+        chemistryConfig = base / "chemistry.ini"
+        chemistryConfig.write_text("[chemistry]\nenabled = true\n")
+        reject("chemistry_ini", [f"--configuration={chemistryConfig}"], "COSMICTIGER_ENABLE_CHEMISTRY=ON",
+               omitChemistryDefault=True)
     metadata = execute(prepare("metadata"), ["--run.test=checkpointState", "--hydro.enabled=false"])
     execute(prepare("saved_diagnostics"), ["--run.test=sphOnlyDiagnostics", "--hydro.enabled=true"])
     for key, value in (("gravity.method.far", "none"), ("gravity.expansionDegree", "0"),
@@ -126,6 +137,25 @@ def main():
             extra.append("--hydro.centralAcceleration=1")
         evolve(scenario, scenario, 1, extra)
     first, options = evolve("wave_first", "hydroWave", 1)
+    if chemistryDisabled:
+        incompatibleChemistry = prepare("chemistry_restart_rejected")
+        copiedChemistry = incompatibleChemistry / "checkpoint.1"
+        shutil.copytree(first / "checkpoint.1", copiedChemistry)
+        # This synthetic fixture only advertises chemistry in the header. An
+        # unavailable capability must be rejected before any chemistry payload.
+        rankPath = copiedChemistry / "checkpoint.0.dat"
+        payload = bytearray(rankPath.read_bytes())
+        flags = struct.unpack_from("=I", payload, 12)[0]
+        struct.pack_into("=I", payload, 12, flags | (1 << 11))
+        rankPath.write_bytes(payload)
+        manifest = copiedChemistry / "checkpoint.meta"
+        records = manifest.read_text().splitlines()
+        records[1] = f"0 {len(payload)} {fnv1a64(payload):016x}"
+        manifest.write_text("\n".join(records) + "\n")
+        output = execute(incompatibleChemistry, [*options, "--checkpoint.readIndex=1"], success=False)
+        if "Chemistry checkpoints require" not in output or "Done reading checkpoint" in output:
+            raise RuntimeError("chemistry checkpoint was not rejected before loading particle state")
+        print("chemistry: disabled CLI, INI, and synthetic checkpoint header rejected")
     full, _ = evolve("wave_full", "hydroWave", 2)
     resumed = prepare("wave_restart")
     shutil.copytree(first / "checkpoint.1", resumed / "checkpoint.1")

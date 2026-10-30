@@ -12,6 +12,7 @@ showUsage() {
     printf 'Run the interactive CosmicTiger configure and build menu in a terminal.\n'
     printf 'The menu selects compiled capabilities for cosmictiger.\n'
     printf 'SPH requires traditional or global integration; gravity may be disabled.\n'
+    printf 'Particle chemistry is independently selectable and requires SPH.\n'
     printf 'Position storage is selected for the whole build directory; fixed32 is the default.\n'
     printf 'Use -j with no argument or -j max to use half the available CPUs.\n'
 }
@@ -100,9 +101,8 @@ fi
 
 buildMode=release
 enableFmm=ON
-enablePmmm=OFF
-enableNearPp=ON
-enableNearFmm=OFF
+enablePmmmPp=OFF
+enablePmmmFmm=OFF
 expansionDegree=4-6
 enableTraditional=ON
 enableHierarchical=OFF
@@ -110,6 +110,7 @@ enableGlobal=OFF
 positionType=fixed32
 enableCuda=ON
 enableSph=ON
+enableChemistry=ON
 testSuite=OFF
 buildJobs=4
 testJobs=2
@@ -165,11 +166,8 @@ chooseMode() {
 
 chooseGravityFeatures() {
     chooseToggle 'Compile global FMM' "$enableFmm"; enableFmm=$promptValue
-    chooseToggle 'Compile PMMM' "$enablePmmm"; enablePmmm=$promptValue
-    if [[ $enablePmmm == ON ]]; then
-        chooseToggle 'Compile PMMM PP near method' "$enableNearPp"; enableNearPp=$promptValue
-        chooseToggle 'Compile PMMM FMM near method' "$enableNearFmm"; enableNearFmm=$promptValue
-    fi
+    chooseToggle 'Compile PMMM with PP near field' "$enablePmmmPp"; enablePmmmPp=$promptValue
+    chooseToggle 'Compile PMMM with FMM near field' "$enablePmmmFmm"; enablePmmmFmm=$promptValue
 }
 
 chooseExpansionDegree() {
@@ -255,21 +253,19 @@ showMainMenu() {
     printf '  6) HPX installation prefix: %s\n' "${hpxPrefix:-automatic by build mode}"
     printf '  7) CUDA architectures: %s\n' "${cudaArchitectures:-$defaultCudaArchitectures}"
     printf '  8) Additional dependency prefixes: %s\n' "${dependencyPrefixes:-system default}"
-    printf '  9) Gravity: FMM=%s PMMM=%s (near PP=%s FMM=%s)\n' "$enableFmm" "$enablePmmm" "$enableNearPp" "$enableNearFmm"
+    printf '  9) Gravity: FMM=%s PMMM PP=%s PMMM FMM=%s\n' "$enableFmm" "$enablePmmmPp" "$enablePmmmFmm"
     printf ' 10) Potential expansion degrees: %s\n' "$expansionDegree"
     printf ' 11) Integrators: traditional=%s hierarchical=%s global=%s\n' "$enableTraditional" "$enableHierarchical" "$enableGlobal"
     printf ' 12) Build SPH support: %s\n' "$enableSph"
     printf ' 13) Position storage: %s\n' "$positionType"
+    printf ' 14) Build particle chemistry (requires SPH): %s\n' "$enableChemistry"
     printf '  Enter or b) Configure and build    q) Quit\n'
     printf 'Build jobs are capped at half the available CPUs; MPI tests use four CPUs each.\n'
 }
 
 validateFeatures() {
-    if [[ $enableFmm != ON && $enablePmmm != ON && $enableSph != ON ]]; then
+    if [[ $enableFmm != ON && $enablePmmmPp != ON && $enablePmmmFmm != ON && $enableSph != ON ]]; then
         printf 'Enable at least one physics component.\n' >&2; return 1
-    fi
-    if [[ $enablePmmm == ON && $enableNearPp != ON && $enableNearFmm != ON ]]; then
-        printf 'PMMM requires at least one near method.\n' >&2; return 1
     fi
     if [[ $enableTraditional != ON && $enableHierarchical != ON && $enableGlobal != ON ]]; then
         printf 'Enable at least one integrator.\n' >&2; return 1
@@ -304,6 +300,7 @@ while true; do
         11) chooseIntegrators ;;
         12) chooseToggle 'Build SPH support' "$enableSph"; enableSph=$promptValue ;;
         13) choosePositionType ;;
+        14) chooseToggle 'Build particle chemistry (requires SPH)' "$enableChemistry"; enableChemistry=$promptValue ;;
         *) printf 'Unknown option.\n' ;;
     esac
 done
@@ -351,15 +348,17 @@ configureCommand=(cmake -S "$rootDir" -B "$buildDir" -G 'Unix Makefiles'
     -UHPX_DIR '-UMPI_*'
     -UCOSMICTIGER_TIME_INTEGRATOR -UCOSMICTIGER_GRAVITY_METHOD
     -UCOSMICTIGER_PMMM_NEAR_METHOD -UCOSMICTIGER_WITH_ORDER
+    -UCOSMICTIGER_ENABLE_PMMM -UCOSMICTIGER_ENABLE_PMMM_NEAR_PP
+    -UCOSMICTIGER_ENABLE_PMMM_NEAR_FMM
     -UCOSMICTIGER_FMM_MIN_ORDER -UCOSMICTIGER_FMM_MAX_ORDER -UCOSMICTIGER_WITH_SPH
     '-U*GSL*' '-UCHEALPIX_*' '-UHEALPIX_CXX_*'
     "-DCMAKE_BUILD_TYPE=$buildType"
     "-DCOSMICTIGER_WITH_CUDA=$enableCuda"
     "-DCOSMICTIGER_ENABLE_SPH=$enableSph"
+    "-DCOSMICTIGER_ENABLE_CHEMISTRY=$enableChemistry"
     "-DCOSMICTIGER_ENABLE_FMM=$enableFmm"
-    "-DCOSMICTIGER_ENABLE_PMMM=$enablePmmm"
-    "-DCOSMICTIGER_ENABLE_PMMM_NEAR_PP=$enableNearPp"
-    "-DCOSMICTIGER_ENABLE_PMMM_NEAR_FMM=$enableNearFmm"
+    "-DCOSMICTIGER_ENABLE_PMMM_PP=$enablePmmmPp"
+    "-DCOSMICTIGER_ENABLE_PMMM_FMM=$enablePmmmFmm"
     "-DCOSMICTIGER_EXPANSION_DEGREE=$expansionDegree"
     "-DCOSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL=$enableTraditional"
     "-DCOSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL=$enableHierarchical"
@@ -414,9 +413,10 @@ runStage() {
     printf '%s succeeded.\n' "$stageName"
 }
 
-printf '\nGravity: FMM=%s PMMM=%s; potential degrees=%s\n' "$enableFmm" "$enablePmmm" "$expansionDegree"
+printf '\nGravity: FMM=%s PMMM PP=%s PMMM FMM=%s; potential degrees=%s\n' "$enableFmm" "$enablePmmmPp" "$enablePmmmFmm" "$expansionDegree"
 printf 'Integrators: traditional=%s hierarchical=%s global=%s\n' "$enableTraditional" "$enableHierarchical" "$enableGlobal"
 printf 'SPH support: %s\n' "$enableSph"
+printf 'Particle chemistry: %s (requires SPH)\n' "$enableChemistry"
 printf 'Position storage: %s\n' "$positionType"
 printf 'Build target: %s\n' "$buildTarget"
 printf 'Build directory: %s\nLog: %s\n' "$buildDir" "$logFile"

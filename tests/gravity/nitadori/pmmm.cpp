@@ -69,7 +69,7 @@ void requirePmmm(bool condition, std::string const& message) {
     }
 }
 
-#if COSMICTIGER_ENABLE_PMMM_NEAR_FMM
+#if COSMICTIGER_ENABLE_PMMM_FMM
 void reservePmmmCudaFixture() {
     // Reserve the largest fixture on every rank before temporary CPU execution.
     // The application's retained particle/tree arenas assume a fixed backend.
@@ -99,7 +99,7 @@ void resetPmmmSavedForces() {
     }
 }
 
-#if COSMICTIGER_ENABLE_PMMM_NEAR_PP
+#if COSMICTIGER_ENABLE_PMMM_PP
 void checkedPmmmNearField(std::vector<PmmmNearParticle> const& sinks,
     std::vector<PmmmNearParticle> const& sources, double cellWidth, bool doPotential,
     std::vector<std::array<double, 4>>& fields) {
@@ -582,7 +582,7 @@ Vector<int> readPmmmOverlapGate() {
         int(gate->receivedHeld)};
 }
 
-#if COSMICTIGER_ENABLE_PMMM_NEAR_FMM
+#if COSMICTIGER_ENABLE_PMMM_FMM
 size_t verifyPmmmTreeCell(TreeId id, uint64_t key, int meshSize) {
     auto const* node = treeGetNode(id);
     uint64_t positionKey = 0;
@@ -925,7 +925,7 @@ HPX_PLAIN_ACTION(detail::readPmmmFixture, ReadPmmmFixtureAction);
 HPX_PLAIN_ACTION(detail::readPmmmKickFixture, ReadPmmmKickFixtureAction);
 HPX_PLAIN_ACTION(detail::installPmmmOverlapGate, InstallPmmmOverlapGateAction);
 HPX_PLAIN_ACTION(detail::readPmmmOverlapGate, ReadPmmmOverlapGateAction);
-#if COSMICTIGER_ENABLE_PMMM_NEAR_FMM
+#if COSMICTIGER_ENABLE_PMMM_FMM
 HPX_PLAIN_ACTION(detail::buildPmmmTestForest, BuildPmmmTestForestAction);
 HPX_PLAIN_ACTION(detail::reservePmmmCudaFixture, ReservePmmmCudaFixtureAction);
 #endif
@@ -969,7 +969,7 @@ void distributePmmmFixture(int fixture) {
     }
 }
 
-#if COSMICTIGER_ENABLE_PMMM_NEAR_FMM
+#if COSMICTIGER_ENABLE_PMMM_FMM
 void checkPmmmForestGeometry() {
     treePrepareCellForest();
     std::vector<hpx::future<Vector<TreeCellRoot>>> futures;
@@ -1638,7 +1638,7 @@ void checkPmmmCellOverlap() {
     PRINT("PMMM deterministic interior/boundary whole-cell overlap checks passed\n");
 }
 
-#if COSMICTIGER_ENABLE_PMMM_NEAR_FMM
+#if COSMICTIGER_ENABLE_PMMM_FMM
 void checkPmmmFmmNear() {
     if (!(getOptions().gravity.pmmmNearMethod == "fmm")) {
         return;
@@ -1789,7 +1789,7 @@ void pmmmTest() {
     options.run.hierarchicalGravity =
         usesHierarchicalIntegration(options.run) && options.gravity.enabled;
     setOptions(options);
-#if COSMICTIGER_ENABLE_PMMM_NEAR_PP
+#if COSMICTIGER_ENABLE_PMMM_PP
     if (options.gravity.pmmmNearMethod == "pp") {
         detail::checkPmmmNearEdges();
         detail::checkPmmmNearBatches();
@@ -1879,7 +1879,7 @@ void pmmmTest() {
         }
     }
     pmmmDestroy();
-#if COSMICTIGER_ENABLE_PMMM_NEAR_FMM
+#if COSMICTIGER_ENABLE_PMMM_FMM
     detail::checkPmmmFmmNear();
 #endif
     detail::checkPmmmPpBatchTargets();

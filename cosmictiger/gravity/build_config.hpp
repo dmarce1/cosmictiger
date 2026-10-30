@@ -20,22 +20,21 @@
 #define COSMICTIGER_ENABLE_FMM COSMICTIGER_WITH_GRAVITY
 #endif
 #endif
-#ifndef COSMICTIGER_ENABLE_PMMM
+#ifndef COSMICTIGER_ENABLE_PMMM_FMM
+#if defined(COSMICTIGER_GRAVITY_PMMM) && defined(COSMICTIGER_PMMM_NEAR_FMM)
+#define COSMICTIGER_ENABLE_PMMM_FMM \
+    (COSMICTIGER_WITH_GRAVITY && COSMICTIGER_GRAVITY_PMMM && COSMICTIGER_PMMM_NEAR_FMM)
+#else
+#define COSMICTIGER_ENABLE_PMMM_FMM 0
+#endif
+#endif
+#ifndef COSMICTIGER_ENABLE_PMMM_PP
 #if defined(COSMICTIGER_GRAVITY_PMMM)
-#define COSMICTIGER_ENABLE_PMMM (COSMICTIGER_WITH_GRAVITY && COSMICTIGER_GRAVITY_PMMM)
+#define COSMICTIGER_ENABLE_PMMM_PP \
+    (COSMICTIGER_WITH_GRAVITY && COSMICTIGER_GRAVITY_PMMM && !COSMICTIGER_ENABLE_PMMM_FMM)
 #else
-#define COSMICTIGER_ENABLE_PMMM 0
+#define COSMICTIGER_ENABLE_PMMM_PP 0
 #endif
-#endif
-#ifndef COSMICTIGER_ENABLE_PMMM_NEAR_FMM
-#if defined(COSMICTIGER_PMMM_NEAR_FMM)
-#define COSMICTIGER_ENABLE_PMMM_NEAR_FMM COSMICTIGER_PMMM_NEAR_FMM
-#else
-#define COSMICTIGER_ENABLE_PMMM_NEAR_FMM 0
-#endif
-#endif
-#ifndef COSMICTIGER_ENABLE_PMMM_NEAR_PP
-#define COSMICTIGER_ENABLE_PMMM_NEAR_PP (!COSMICTIGER_ENABLE_PMMM_NEAR_FMM)
 #endif
 #ifndef ORDER
 #error "ORDER (the default potential expansion degree plus one) must be defined"
@@ -44,14 +43,12 @@
 namespace gravity {
 
 inline constexpr bool kBuildHasFmm = COSMICTIGER_ENABLE_FMM != 0;
-inline constexpr bool kBuildHasPmmm = COSMICTIGER_ENABLE_PMMM != 0;
+inline constexpr bool kBuildHasPmmm = COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM;
 inline constexpr bool kBuildHasGravity = kBuildHasFmm || kBuildHasPmmm;
-inline constexpr bool kBuildHasPmmmNearPp = kBuildHasPmmm && COSMICTIGER_ENABLE_PMMM_NEAR_PP;
-inline constexpr bool kBuildHasPmmmNearFmm = kBuildHasPmmm && COSMICTIGER_ENABLE_PMMM_NEAR_FMM;
+inline constexpr bool kBuildHasPmmmNearPp = COSMICTIGER_ENABLE_PMMM_PP != 0;
+inline constexpr bool kBuildHasPmmmNearFmm = COSMICTIGER_ENABLE_PMMM_FMM != 0;
 static_assert(kBuildHasGravity ? ORDER >= 3 && ORDER <= 9 : ORDER == 0,
     "Gravity builds require potential degree 2 through 8; SPH-only builds use order zero");
-static_assert(!kBuildHasPmmm || kBuildHasPmmmNearPp || kBuildHasPmmmNearFmm,
-    "PMMM requires an enabled near-interaction algorithm");
 inline constexpr int kBuildFmmOrder = ORDER;
 inline constexpr char const* kBuildGravityMethod =
     kBuildHasFmm ? "fmm" : (kBuildHasPmmm ? "pmmm" : "none");

@@ -94,7 +94,7 @@ physics and integrators:
 ```sh
 cmake -S . -B build/release_cpu -DCMAKE_BUILD_TYPE=Release \
   -DCOSMICTIGER_WITH_CUDA=OFF -DBUILD_TESTING=OFF \
-  -DCOSMICTIGER_ENABLE_FMM=ON -DCOSMICTIGER_ENABLE_PMMM=ON \
+  -DCOSMICTIGER_ENABLE_FMM=ON -DCOSMICTIGER_ENABLE_PMMM_PP=ON \
   -DCOSMICTIGER_ENABLE_INTEGRATOR_GLOBAL=ON \
   -DCOSMICTIGER_EXPANSION_DEGREE=4-6
 cmake --build build/release_cpu --target cosmictiger --parallel 3
@@ -103,9 +103,10 @@ build/release_cpu/cosmictiger --gravity.method.far=pmmm \
   --run.timeIntegrator=global --compute.cuda=false
 ```
 
-Fresh defaults enable FMM, SPH, traditional nested integration, and potential
-expansion degrees 4-6. PMMM, its FMM near method, hierarchical integration, and
-global integration can be enabled independently. A single eligible algorithm is
+Fresh defaults enable FMM, SPH, particle chemistry, traditional nested integration,
+and potential expansion degrees 4-6. PMMM with PP or FMM near fields, hierarchical
+integration, and global integration can be enabled independently. Both PMMM options default
+to `OFF` and may be enabled together. A single eligible algorithm is
 automatically selected; multiple eligible algorithms require a CLI/INI selection.
 
 Use `gravity.method.far=fmm|pmmm`, `gravity.method.near=pp|fmm` for PMMM,
@@ -120,8 +121,13 @@ Global integration advances every particle with the minimum raw allowed timestep
 across all particles and ranks, without power-of-two rounding. It supports SPH,
 gravity, and combined runs, including explicit chemistry source intervals.
 
-Set `COSMICTIGER_ENABLE_SPH=OFF` for gravity-only builds, or disable both
-`COSMICTIGER_ENABLE_FMM` and `COSMICTIGER_ENABLE_PMMM` for SPH-only builds.
+Set `COSMICTIGER_ENABLE_SPH=OFF` for gravity-only builds, or disable
+`COSMICTIGER_ENABLE_FMM`, `COSMICTIGER_ENABLE_PMMM_PP`, and
+`COSMICTIGER_ENABLE_PMMM_FMM` for SPH-only builds.
+`COSMICTIGER_ENABLE_CHEMISTRY` defaults to `ON`; set it to `OFF` to retain SPH
+without particle chemistry. Particle chemistry is compiled only when SPH and
+chemistry are both enabled. The chemistry setting is inactive when SPH is off;
+homogeneous cosmological recombination remains available in every configuration.
 Disabled physics and its test problems are excluded from compilation and test
 registration. Coupled tests require both. Shared sources compile once, while
 selected degrees keep separate CPU/CUDA instantiation units.
@@ -275,9 +281,10 @@ For a small cosmological run using the native Einstein–Boltzmann power spectru
 
 The gas controls appear under `hydro.*` in `--help` and can also be
 specified in the INI configuration file. Primordial chemistry is configured under
-`chemistry.*` and enabled by the cosmology scenario INI. Stellar particles, star
-formation, diffusion, and conduction are unsupported. Their former options,
-the obsolete `hydro.chemistry` switch,
+`chemistry.*` and enabled by the cosmology scenario INI when compiled with both
+`COSMICTIGER_ENABLE_SPH=ON` and `COSMICTIGER_ENABLE_CHEMISTRY=ON`.
+Stellar particles, star formation, diffusion, and conduction are unsupported.
+Their former options, the obsolete `hydro.chemistry` switch,
 `hydro.yReflect`, and `gravity.sphSmoothing` are no longer accepted, including
 false entries in older INI files. Gas smoothing lengths remain adaptive;
 FMM gravity uses one fixed comoving radius for gas and dark matter. The legacy
@@ -630,17 +637,18 @@ is best effort. This handler is adapted from OctoTiger's `stacktrace_fix` commit
 `a0720ee02feebf776b797b2fdc74edf6bcc5bd83`.
 
 Run `./build.sh` in a terminal for the interactive builder. Choose Release,
-RelWithDebInfo, Debug, or Profile (host gprof instrumentation), CUDA, SPH, job counts,
-HPX prefix, CUDA architectures, additional dependency prefixes, enabled gravity
-and near methods, potential expansion degrees (a scalar or inclusive range),
+RelWithDebInfo, Debug, or Profile (host gprof instrumentation), CUDA, SPH,
+particle chemistry, job counts, HPX prefix, CUDA architectures, additional
+dependency prefixes, enabled gravity and near methods, potential expansion degrees
+(a scalar or inclusive range),
 enabled time integrators, and fixed32 or fixed64 position storage.
 Builds use `build/<mode>_<cuda|cpu>` (for example `build/release_cuda`), with live
 output and a `builder.*.log`. The default builds `cosmictiger` with FMM, SPH,
-traditional integration, potential degrees 4–6, and fixed32 positions. Building
-and running the test suite is opt-in. Build concurrency is capped at half the
-available CPUs. Use `./build.sh -j 4` to select a count, or `./build.sh -j`
-(also `-j max`) to use that ceiling. Test concurrency accounts for two MPI
-localities with two HPX threads each.
+particle chemistry, traditional integration, potential degrees 4–6, and fixed32
+positions. Building and running the test suite is opt-in. Build concurrency is
+capped at half the available CPUs. Use `./build.sh -j 4` to select a count, or
+`./build.sh -j` (also `-j max`) to use that ceiling. Test concurrency accounts for
+two MPI localities with two HPX threads each.
 
 The builder uses `~/local/hpx/<build type>` when installed (RelWithDebInfo for Profile),
 or normal CMake package discovery. Additional dependency prefixes default to the

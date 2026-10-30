@@ -3,7 +3,9 @@
 set(cosmictiger_retired_cache_options)
 foreach(legacy IN ITEMS COSMICTIGER_TIME_INTEGRATOR COSMICTIGER_GRAVITY_METHOD
         COSMICTIGER_PMMM_NEAR_METHOD COSMICTIGER_WITH_ORDER
-        COSMICTIGER_FMM_MIN_ORDER COSMICTIGER_FMM_MAX_ORDER COSMICTIGER_WITH_SPH)
+        COSMICTIGER_FMM_MIN_ORDER COSMICTIGER_FMM_MAX_ORDER COSMICTIGER_WITH_SPH
+        COSMICTIGER_ENABLE_PMMM COSMICTIGER_ENABLE_PMMM_NEAR_PP
+        COSMICTIGER_ENABLE_PMMM_NEAR_FMM)
     if(DEFINED CACHE{${legacy}})
         list(APPEND cosmictiger_retired_cache_options ${legacy})
     endif()
@@ -16,13 +18,16 @@ if(cosmictiger_retired_cache_options)
         "using cmake -U COSMICTIGER_TIME_INTEGRATOR -U COSMICTIGER_GRAVITY_METHOD "
         "-U COSMICTIGER_PMMM_NEAR_METHOD -U COSMICTIGER_WITH_ORDER "
         "-U COSMICTIGER_FMM_MIN_ORDER -U COSMICTIGER_FMM_MAX_ORDER "
-        "-U COSMICTIGER_WITH_SPH, and supply the desired new feature options.")
+        "-U COSMICTIGER_WITH_SPH -U COSMICTIGER_ENABLE_PMMM "
+        "-U COSMICTIGER_ENABLE_PMMM_NEAR_PP -U COSMICTIGER_ENABLE_PMMM_NEAR_FMM, "
+        "and supply the desired new feature options. PMMM variants are selected "
+        "directly with COSMICTIGER_ENABLE_PMMM_PP and COSMICTIGER_ENABLE_PMMM_FMM.")
 endif()
 option(COSMICTIGER_ENABLE_FMM "Compile the global FMM gravity solver" ON)
-option(COSMICTIGER_ENABLE_PMMM "Compile the PMMM gravity solver" OFF)
-option(COSMICTIGER_ENABLE_SPH "Compile SPH hydrodynamics and particle chemistry" ON)
-option(COSMICTIGER_ENABLE_PMMM_NEAR_PP "Compile direct PP for PMMM near interactions" ON)
-option(COSMICTIGER_ENABLE_PMMM_NEAR_FMM "Compile FMM for PMMM near interactions" OFF)
+option(COSMICTIGER_ENABLE_PMMM_PP "Compile PMMM gravity with direct PP near interactions" OFF)
+option(COSMICTIGER_ENABLE_PMMM_FMM "Compile PMMM gravity with FMM near interactions" OFF)
+option(COSMICTIGER_ENABLE_SPH "Compile SPH hydrodynamics" ON)
+option(COSMICTIGER_ENABLE_CHEMISTRY "Compile particle chemistry when SPH is enabled" ON)
 option(COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL "Compile the traditional block-step integrator" ON)
 option(COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL "Compile the hierarchical gravity integrator" OFF)
 option(COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL "Compile the global-timestep integrator" OFF)
@@ -31,17 +36,13 @@ if(NOT COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL AND
         NOT COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL)
     message(FATAL_ERROR "Enable at least one COSMICTIGER_ENABLE_INTEGRATOR_* algorithm")
 endif()
-if(COSMICTIGER_ENABLE_PMMM AND NOT COSMICTIGER_ENABLE_PMMM_NEAR_PP AND
-        NOT COSMICTIGER_ENABLE_PMMM_NEAR_FMM)
-    message(FATAL_ERROR "PMMM requires at least one COSMICTIGER_ENABLE_PMMM_NEAR_* algorithm")
-endif()
 set(COSMICTIGER_WITH_SPH ${COSMICTIGER_ENABLE_SPH})
 set(COSMICTIGER_WITH_GRAVITY OFF)
-if(COSMICTIGER_ENABLE_FMM OR COSMICTIGER_ENABLE_PMMM)
+if(COSMICTIGER_ENABLE_FMM OR COSMICTIGER_ENABLE_PMMM_PP OR COSMICTIGER_ENABLE_PMMM_FMM)
     set(COSMICTIGER_WITH_GRAVITY ON)
 endif()
 if(NOT COSMICTIGER_WITH_GRAVITY AND NOT COSMICTIGER_ENABLE_SPH)
-    message(FATAL_ERROR "Enable at least one of COSMICTIGER_ENABLE_FMM, COSMICTIGER_ENABLE_PMMM, or COSMICTIGER_ENABLE_SPH")
+    message(FATAL_ERROR "Enable at least one of COSMICTIGER_ENABLE_FMM, COSMICTIGER_ENABLE_PMMM_PP, COSMICTIGER_ENABLE_PMMM_FMM, or COSMICTIGER_ENABLE_SPH")
 endif()
 if(COSMICTIGER_ENABLE_SPH AND NOT COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL AND
         NOT COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL)
@@ -79,12 +80,12 @@ endif()
 set(cosmictiger_default_gravity_method none)
 if(COSMICTIGER_ENABLE_FMM)
     set(cosmictiger_default_gravity_method fmm)
-elseif(COSMICTIGER_ENABLE_PMMM)
+elseif(COSMICTIGER_ENABLE_PMMM_PP OR COSMICTIGER_ENABLE_PMMM_FMM)
     set(cosmictiger_default_gravity_method pmmm)
 endif()
 set(cosmictiger_default_near_method none)
-if(COSMICTIGER_ENABLE_PMMM)
-    if(COSMICTIGER_ENABLE_PMMM_NEAR_PP)
+if(COSMICTIGER_ENABLE_PMMM_PP OR COSMICTIGER_ENABLE_PMMM_FMM)
+    if(COSMICTIGER_ENABLE_PMMM_PP)
         set(cosmictiger_default_near_method pp)
     else()
         set(cosmictiger_default_near_method fmm)

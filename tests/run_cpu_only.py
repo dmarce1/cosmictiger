@@ -12,6 +12,7 @@ def main():
     parser.add_argument('executable', type=Path)
     parser.add_argument('guard', type=Path)
     parser.add_argument('workdir', type=Path)
+    parser.add_argument('--without-chemistry', action='store_true')
     args = parser.parse_args()
     workdir = args.workdir.resolve()
     workdir.mkdir(parents=True, exist_ok=True)
@@ -24,9 +25,10 @@ def main():
                '--hpx:threads=2', '--hpx:bind=none', '--output.directory=.']
     command += application_arguments(args.executable.resolve(), far="fmm", hydro=True)
     cases = [('checkpointState', 'Checkpoint state and mode validation passed', []),
-             ('sphGravity', 'SPH gravity regression passed', []),
-             ('sphGravity', 'SPH gravity regression passed',
-              ['--chemistry.enabled=true', '--chemistry.initialization=manual'])]
+             ('sphGravity', 'SPH gravity regression passed', [])]
+    if not args.without_chemistry:
+        cases.append(('sphGravity', 'SPH gravity regression passed',
+                      ['--chemistry.enabled=true', '--chemistry.initialization=manual']))
     for case, (test, marker, options) in enumerate(cases):
         result = subprocess.run(command + [f'--run.test={test}'] + options, cwd=workdir,
                                 env=environment, text=True, stdout=subprocess.PIPE,

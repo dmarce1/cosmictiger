@@ -3,13 +3,14 @@
 """Ensure capability graph checks catch missing sources and disabled algorithms."""
 
 import json
+from itertools import product
 from pathlib import Path
 import tempfile
 import subprocess
 import unittest
 
-from check_build_features import (FEATURES, checkBuild, configurationDefinitions,
-                                  degreeRange, hasTree, requiredSources)
+from check_build_features import (FEATURES, LEGACY_DEFINITIONS, checkBuild, configurationDefinitions,
+                                  degreeRange, hasChemistry, hasTree, requiredSources)
 
 
 class BuildFeaturesTest(unittest.TestCase):
@@ -21,8 +22,7 @@ class BuildFeaturesTest(unittest.TestCase):
         self.configure()
 
     def configure(self, **changes):
-        self.features = {feature: feature in ("FMM", "SPH", "PMMM_NEAR_PP",
-                                             "INTEGRATOR_TRADITIONAL") for feature in FEATURES}
+        self.features = {feature: feature in ("FMM", "SPH", "CHEMISTRY", "INTEGRATOR_TRADITIONAL") for feature in FEATURES}
         self.features.update(changes)
         self.degrees = (4, 6)
         self.commands = []
@@ -33,7 +33,7 @@ class BuildFeaturesTest(unittest.TestCase):
                            for key, value in self.features.items()})
         self.addCompilation("cosmictiger_core", "src/core/flops.cpp", {})
         self.addCompilation("cosmictiger_recombination", "src/chemistry/recombination.cpp", {})
-        if self.features["SPH"]:
+        if hasChemistry(self.features):
             self.addCompilation("cosmictiger_sph_chemistry", "src/chemistry/primordial_chemistry.cpp", {})
         self.definitions = configurationDefinitions(self.features, 32, self.degrees)
         for source in sorted(requiredSources(self.features, False)):
@@ -48,7 +48,7 @@ class BuildFeaturesTest(unittest.TestCase):
         self.linkPath.write_text("c++ CMakeFiles/cosmictiger.dir/src/main.cpp.o "
                                 "CMakeFiles/cosmictiger_objects.dir/src/core/driver.cpp.o "
                                 "libcosmictiger_core.a libcosmictiger_recombination.a\n" +
-                                ("libcosmictiger_sph_chemistry.a\n" if self.features["SPH"] else ""))
+                                ("libcosmictiger_sph_chemistry.a\n" if hasChemistry(self.features) else ""))
 
     def addCompilation(self, target, source, definitions):
         self.commands.append({"directory": str(self.buildDirectory),
@@ -68,16 +68,20 @@ class BuildFeaturesTest(unittest.TestCase):
         self.assertIn("potential degrees=4-6", self.check())
 
     def testCombinedSolvers(self):
-        self.configure(PMMM=True, PMMM_NEAR_FMM=True, INTEGRATOR_HIERARCHICAL=True,
+        self.configure(PMMM_PP=True, PMMM_FMM=True, INTEGRATOR_HIERARCHICAL=True,
                        INTEGRATOR_GLOBAL=True)
         self.assertIn("Build features passed", self.check())
 
     def testPmmmPpWithoutTree(self):
-        self.configure(FMM=False, PMMM=True, SPH=False)
+        self.configure(FMM=False, PMMM_PP=True, SPH=False)
         self.assertIn("Build features passed", self.check())
 
     def testPmmmNearFmmWithoutGlobalFmm(self):
-        self.configure(FMM=False, PMMM=True, PMMM_NEAR_PP=False, PMMM_NEAR_FMM=True, SPH=False)
+        self.configure(FMM=False, PMMM_FMM=True, SPH=False)
+        self.assertIn("Build features passed", self.check())
+
+    def testBothPmmmSolversWithoutGlobalFmm(self):
+        self.configure(FMM=False, PMMM_PP=True, PMMM_FMM=True, SPH=False)
         self.assertIn("Build features passed", self.check())
 
     def testSphOnly(self):
@@ -100,10 +104,20 @@ class BuildFeaturesTest(unittest.TestCase):
                 degreeRange(invalid)
 
     def testMissingEnabledSolver(self):
-        self.configure(PMMM=True)
-        self.commands = [entry for entry in self.commands if not entry["file"].endswith("nitadori/solver.cpp")]
-        with self.assertRaisesRegex(ValueError, "required source missing: src/gravity/nitadori/solver.cpp"):
-            self.check()
+        for feature in ("PMMM_PP", "PMMM_FMM"):
+            with self.subTest(feature=feature):
+                self.configure(FMM=False, **{feature: True})
+                self.commands = [entry for entry in self.commands if not entry["file"].endswith("nitadori/solver.cpp")]
+                with self.assertRaisesRegex(ValueError, "required source missing: src/gravity/nitadori/solver.cpp"):
+                    self.check()
+
+    def testMissingEnabledNearSolver(self):
+        for feature, source in (("PMMM_PP", "near_pp.cpp"), ("PMMM_FMM", "fmm_batch.cpp")):
+            with self.subTest(feature=feature):
+                self.configure(FMM=False, **{feature: True})
+                self.commands = [entry for entry in self.commands if not entry["file"].endswith("nitadori/" + source)]
+                with self.assertRaisesRegex(ValueError, "required source missing: src/gravity/nitadori/" + source):
+                    self.check()
 
     def testPmmmSourceLeak(self):
         self.addCompilation("cosmictiger_objects", "src/gravity/nitadori/solver.cpp", self.definitions)
@@ -111,16 +125,19 @@ class BuildFeaturesTest(unittest.TestCase):
             self.check()
 
     def testFmmSourceLeak(self):
-        self.configure(FMM=False, PMMM=True)
+        self.configure(FMM=False, PMMM_PP=True)
         self.addCompilation("cosmictiger_objects", "src/gravity/dehnen/execution.cpp", self.definitions)
         with self.assertRaisesRegex(ValueError, "FMM disabled but compiles solver source"):
             self.check()
 
     def testNearSolverLeak(self):
-        self.configure(FMM=False, PMMM=True)
-        self.addCompilation("cosmictiger_objects", "src/gravity/nitadori/cell_tree.cpp", self.definitions)
-        with self.assertRaisesRegex(ValueError, "PMMM_NEAR_FMM disabled but compiles near solver"):
-            self.check()
+        for enabled, disabled, source in (("PMMM_PP", "PMMM_FMM", "cell_tree.cpp"),
+                                           ("PMMM_FMM", "PMMM_PP", "near_pp.cpp")):
+            with self.subTest(disabled=disabled):
+                self.configure(FMM=False, **{enabled: True})
+                self.addCompilation("cosmictiger_objects", "src/gravity/nitadori/" + source, self.definitions)
+                with self.assertRaisesRegex(ValueError, disabled + " disabled but compiles near solver"):
+                    self.check()
 
     def testSphSourceLeak(self):
         self.configure(SPH=False)
@@ -131,7 +148,30 @@ class BuildFeaturesTest(unittest.TestCase):
     def testUnlinkedChemistryLeak(self):
         self.configure(SPH=False)
         self.addCompilation("unused_chemistry", "src/chemistry/primordial_chemistry.cpp", {})
-        with self.assertRaisesRegex(ValueError, "SPH disabled but compiles particle chemistry"):
+        with self.assertRaisesRegex(ValueError, "particle chemistry disabled but compiles source"):
+            self.check()
+
+    def testChemistryCapabilityCombinations(self):
+        for sph, chemistry in product((False, True), repeat=2):
+            with self.subTest(sph=sph, chemistry=chemistry):
+                self.configure(SPH=sph, CHEMISTRY=chemistry)
+                self.assertIn("Build features passed", self.check())
+                self.assertEqual(self.definitions["COSMICTIGER_ENABLE_CHEMISTRY"], str(int(chemistry)))
+
+    def testDisabledChemistrySourceLeak(self):
+        for source in ("src/chemistry/primordial_chemistry.cpp", "src/chemistry/primordial_chemistry.cu",
+                       "src/sph/sph_chemistry.cpp", "tests/sph/chemistry.cpp",
+                       "tests/primordial_rates.cpp", "tests/primordial_solver.cpp", "tests/primordial_units.cpp",
+                       "tests/primordial_reference.cpp", "tests/primordial_cuda.cu"):
+            with self.subTest(source=source):
+                self.configure(CHEMISTRY=False)
+                self.addCompilation("unused_chemistry", source, {})
+                with self.assertRaisesRegex(ValueError, "particle chemistry disabled but compiles source: " + source):
+                    self.check()
+
+    def testMissingSphChemistrySource(self):
+        self.commands = [entry for entry in self.commands if not entry["file"].endswith("sph/sph_chemistry.cpp")]
+        with self.assertRaisesRegex(ValueError, "required source missing: src/sph/sph_chemistry.cpp"):
             self.check()
 
     def testSphOnlyGravitySourceLeak(self):
@@ -141,7 +181,7 @@ class BuildFeaturesTest(unittest.TestCase):
             self.check()
 
     def testTreeLeak(self):
-        self.configure(FMM=False, PMMM=True)
+        self.configure(FMM=False, PMMM_PP=True)
         self.addCompilation("cosmictiger_objects", "src/gravity/tree_build.cpp", self.definitions)
         with self.assertRaisesRegex(ValueError, "tree algorithms disabled but compiles tree source"):
             self.check()
@@ -167,9 +207,12 @@ class BuildFeaturesTest(unittest.TestCase):
             self.check()
 
     def testLegacyDefinition(self):
-        self.commands[-1]["arguments"].append("-DCOSMICTIGER_GRAVITY_PMMM=0")
-        with self.assertRaisesRegex(ValueError, "retains legacy selection definition"):
-            self.check()
+        for name in sorted(LEGACY_DEFINITIONS):
+            with self.subTest(name=name):
+                self.configure()
+                self.commands[-1]["arguments"].append("-D" + name + "=0")
+                with self.assertRaisesRegex(ValueError, "retains legacy selection definition " + name):
+                    self.check()
 
     def testCoreDefinitionLeak(self):
         self.commands[0]["arguments"].append("-DORDER=7")
@@ -189,6 +232,12 @@ class BuildFeaturesTest(unittest.TestCase):
     def testMissingChemistry(self):
         self.linkPath.write_text(self.linkPath.read_text().replace("libcosmictiger_sph_chemistry.a", ""))
         with self.assertRaisesRegex(ValueError, "lacks particle chemistry source"):
+            self.check()
+
+    def testMissingRecombinationWithoutChemistry(self):
+        self.configure(CHEMISTRY=False)
+        self.linkPath.write_text(self.linkPath.read_text().replace("libcosmictiger_recombination.a", ""))
+        with self.assertRaisesRegex(ValueError, "lacks shared homogeneous recombination"):
             self.check()
 
     def testOldNamedApplication(self):
@@ -222,13 +271,32 @@ class FeatureConfigurationTest(unittest.TestCase):
             script.write_text("\n".join(f"set({key} {value} CACHE STRING \"test\")"
                                         for key, value in values.items()) +
                               f'\ninclude("{source}")\n' +
-                              'message(STATUS "range=${COSMICTIGER_FMM_MIN_ORDER}-${COSMICTIGER_FMM_MAX_ORDER}")\n')
+                              'message(STATUS "range=${COSMICTIGER_FMM_MIN_ORDER}-${COSMICTIGER_FMM_MAX_ORDER}")\n'
+                              'message(STATUS "gravity=${COSMICTIGER_WITH_GRAVITY}")\n'
+                              'message(STATUS "default_gravity=${cosmictiger_default_gravity_method}")\n'
+                              'message(STATUS "default_near=${cosmictiger_default_near_method}")\n'
+                              'message(STATUS "pmmm_pp=${COSMICTIGER_ENABLE_PMMM_PP}")\n'
+                              'message(STATUS "pmmm_fmm=${COSMICTIGER_ENABLE_PMMM_FMM}")\n'
+                              'message(STATUS "chemistry=${COSMICTIGER_ENABLE_CHEMISTRY}")\n')
             return subprocess.run(["cmake", "-P", str(script)], text=True, capture_output=True)
 
     def testDefaultRange(self):
         result = self.configure({})
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("range=5-7", result.stdout)
+        self.assertIn("pmmm_pp=OFF", result.stdout)
+        self.assertIn("pmmm_fmm=OFF", result.stdout)
+        self.assertIn("default_gravity=fmm", result.stdout)
+        self.assertIn("default_near=none", result.stdout)
+        self.assertIn("chemistry=ON", result.stdout)
+
+    def testChemistryCapabilityCombinations(self):
+        for sph, chemistry in product(("OFF", "ON"), repeat=2):
+            with self.subTest(sph=sph, chemistry=chemistry):
+                result = self.configure({"COSMICTIGER_ENABLE_SPH": sph,
+                                         "COSMICTIGER_ENABLE_CHEMISTRY": chemistry})
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("chemistry=" + chemistry, result.stdout)
 
     def testSingleAndBoundaryDegrees(self):
         for value, orders in (("2", "3-3"), ("8", "9-9"), ("2-8", "3-9")):
@@ -246,8 +314,10 @@ class FeatureConfigurationTest(unittest.TestCase):
 
     def testRetiredCacheRequiresExplicitMigration(self):
         for key, value in (("COSMICTIGER_WITH_ORDER", "7"), ("COSMICTIGER_WITH_SPH", "OFF"),
-                           ("COSMICTIGER_GRAVITY_METHOD", "pmmm")):
-            with self.subTest(key=key):
+                           ("COSMICTIGER_GRAVITY_METHOD", "pmmm"),
+                           *product(("COSMICTIGER_ENABLE_PMMM", "COSMICTIGER_ENABLE_PMMM_NEAR_PP",
+                                     "COSMICTIGER_ENABLE_PMMM_NEAR_FMM"), ("ON", "OFF"))):
+            with self.subTest(key=key, value=value):
                 result = self.configure({key: value})
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("Retired CosmicTiger cache options", result.stderr)
@@ -259,10 +329,25 @@ class FeatureConfigurationTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Enable at least one COSMICTIGER_ENABLE_INTEGRATOR", result.stderr)
 
-    def testNoPmmmNearAlgorithm(self):
-        result = self.configure({"COSMICTIGER_ENABLE_PMMM": "ON", "COSMICTIGER_ENABLE_PMMM_NEAR_PP": "OFF"})
+    def testGravityCapabilityCombinations(self):
+        for fmm, pmmmPp, pmmmFmm in product((False, True), repeat=3):
+            with self.subTest(fmm=fmm, pmmmPp=pmmmPp, pmmmFmm=pmmmFmm):
+                result = self.configure({"COSMICTIGER_ENABLE_" + feature: "ON" if enabled else "OFF"
+                                         for feature, enabled in (("FMM", fmm), ("PMMM_PP", pmmmPp),
+                                                                  ("PMMM_FMM", pmmmFmm))})
+                self.assertEqual(result.returncode, 0, result.stderr)
+                gravity = fmm or pmmmPp or pmmmFmm
+                self.assertIn("gravity=" + ("ON" if gravity else "OFF"), result.stdout)
+                self.assertIn("range=" + ("5-7" if gravity else "0-0"), result.stdout)
+                self.assertIn("default_gravity=" + ("fmm" if fmm else "pmmm" if gravity else "none"), result.stdout)
+                self.assertIn("default_near=" + ("pp" if pmmmPp else "fmm" if pmmmFmm else "none"), result.stdout)
+
+    def testNoPhysics(self):
+        result = self.configure({"COSMICTIGER_ENABLE_FMM": "OFF", "COSMICTIGER_ENABLE_SPH": "OFF"})
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("PMMM requires", result.stderr)
+        self.assertIn("Enable at least one", result.stderr)
+        self.assertIn("COSMICTIGER_ENABLE_PMMM_PP", result.stderr)
+        self.assertIn("COSMICTIGER_ENABLE_PMMM_FMM", result.stderr)
 
     def testGlobalSphOnly(self):
         result = self.configure({"COSMICTIGER_ENABLE_FMM": "OFF",

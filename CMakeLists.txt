@@ -139,10 +139,11 @@ find_path(HEALPIX_CXX_INCLUDE_DIR healpix_base.h PATH_SUFFIXES healpix_cxx REQUI
 find_library(HEALPIX_CXX_LIBRARY NAMES healpix_cxx REQUIRED)
 
 message(STATUS "cosmictiger SPH = ${COSMICTIGER_WITH_SPH}")
+message(STATUS "cosmictiger particle chemistry = ${COSMICTIGER_ENABLE_CHEMISTRY} (requires SPH)")
 message(STATUS "cosmictiger position storage = ${COSMICTIGER_POSITION_TYPE}")
 message(STATUS "cosmictiger integrators: traditional=${COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL}, hierarchical=${COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL}, global=${COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL}")
-message(STATUS "cosmictiger gravity algorithms: FMM=${COSMICTIGER_ENABLE_FMM}, PMMM=${COSMICTIGER_ENABLE_PMMM}")
-if(COSMICTIGER_ENABLE_PMMM)
+message(STATUS "cosmictiger gravity algorithms: FMM=${COSMICTIGER_ENABLE_FMM}, PMMM-PP=${COSMICTIGER_ENABLE_PMMM_PP}, PMMM-FMM=${COSMICTIGER_ENABLE_PMMM_FMM}")
+if(COSMICTIGER_ENABLE_PMMM_PP OR COSMICTIGER_ENABLE_PMMM_FMM)
     message(STATUS "cosmictiger PMMM near solver = ${cosmictiger_default_near_method}")
 endif()
 if(COSMICTIGER_WITH_GRAVITY)
@@ -329,6 +330,10 @@ set(cosmictiger_header_files
 )
 
 if(BUILD_TESTING)
+    set(cosmictiger_chemistry_test_args)
+    if(NOT COSMICTIGER_WITH_SPH OR NOT COSMICTIGER_ENABLE_CHEMISTRY)
+        list(APPEND cosmictiger_chemistry_test_args --without-chemistry)
+    endif()
     # Only option validation and dispatch depend on test availability.
     set_property(SOURCE src/main.cpp src/core/options.cpp APPEND PROPERTY
         COMPILE_DEFINITIONS COSMICTIGER_BUILD_TESTING)
@@ -351,12 +356,12 @@ target_compile_options(halo_catalog_export PRIVATE -fno-fast-math)
 target_link_libraries(cosmictiger_profiler PRIVATE Threads::Threads)
 target_link_libraries(cosmictiger_stacktrace PRIVATE Threads::Threads)
 # Homogeneous recombination is shared. Particle chemistry is compiled only
-# when SPH is enabled.
+# when both SPH and chemistry are enabled.
 add_library(cosmictiger_recombination STATIC src/chemistry/recombination.cpp)
 target_include_directories(cosmictiger_recombination PUBLIC ${PROJECT_SOURCE_DIR})
 target_link_libraries(cosmictiger_recombination PUBLIC Threads::Threads Boost::boost)
 target_compile_options(cosmictiger_recombination PRIVATE -fno-fast-math -ffp-contract=off)
-if(COSMICTIGER_WITH_SPH)
+if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_CHEMISTRY)
     add_library(cosmictiger_sph_chemistry STATIC src/chemistry/primordial_chemistry.cpp)
     target_include_directories(cosmictiger_sph_chemistry PUBLIC ${PROJECT_SOURCE_DIR})
     target_link_libraries(cosmictiger_sph_chemistry PUBLIC cosmictiger_recombination
@@ -374,7 +379,7 @@ endif()
 # Preserve the existing test-facing dependency for the configured default.
 add_library(primordial_chemistry INTERFACE)
 target_link_libraries(primordial_chemistry INTERFACE cosmictiger_recombination)
-if(COSMICTIGER_WITH_SPH)
+if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_CHEMISTRY)
     target_link_libraries(primordial_chemistry INTERFACE cosmictiger_sph_chemistry)
 endif()
 set_source_files_properties(src/sph/sph_chemistry.cpp tests/sph/chemistry.cpp
@@ -815,7 +820,7 @@ if(BUILD_TESTING)
         --viewer ${PROJECT_SOURCE_DIR}/tools/halo_viewer/halo_viewer.py)
     set_tests_properties(halo_viewer PROPERTIES TIMEOUT 180 PROCESSORS 2)
 
-    if(COSMICTIGER_WITH_SPH)
+    if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_CHEMISTRY)
         foreach(chemistry_test IN ITEMS primordial_rates primordial_solver primordial_units)
             add_executable(${chemistry_test}_test tests/${chemistry_test}.cpp)
             target_link_libraries(${chemistry_test}_test PRIVATE primordial_chemistry)
@@ -863,7 +868,8 @@ if(BUILD_TESTING)
                 LABELS "analysis;python")
         endforeach()
     endif()
-    if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
+    if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_CHEMISTRY AND
+            COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
         set(chemistry_timesteps_workdir "${PROJECT_BINARY_DIR}/tests/sph_chemistry_timesteps_cpu")
         file(MAKE_DIRECTORY "${chemistry_timesteps_workdir}")
         add_test(NAME sph_chemistry_timesteps_cpu COMMAND cosmictiger
@@ -876,7 +882,7 @@ if(BUILD_TESTING)
         set_tests_properties(sph_chemistry_timesteps_cpu PROPERTIES
             WORKING_DIRECTORY "${chemistry_timesteps_workdir}" RUN_SERIAL TRUE TIMEOUT 120 PROCESSORS 2)
     endif()
-    if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_FMM AND
+    if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_CHEMISTRY AND COSMICTIGER_ENABLE_FMM AND
             COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
         add_test(NAME primordial_integration_cpu COMMAND ${Python3_EXECUTABLE}
             ${PROJECT_SOURCE_DIR}/tests/run_primordial_integration.py $<TARGET_FILE:cosmictiger>
@@ -885,7 +891,8 @@ if(BUILD_TESTING)
         set_tests_properties(primordial_integration_cpu PROPERTIES TIMEOUT 1200 RUN_SERIAL TRUE)
     endif()
 
-    if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_FMM AND COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL)
+    if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_CHEMISTRY AND COSMICTIGER_ENABLE_FMM AND
+            COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL)
         add_test(NAME primordial_integration_global_cpu COMMAND ${Python3_EXECUTABLE}
             ${PROJECT_SOURCE_DIR}/tests/run_primordial_integration.py $<TARGET_FILE:cosmictiger>
             ${PROJECT_BINARY_DIR}/tests/primordial_integration_global_cpu --time-integrator=global
@@ -938,7 +945,8 @@ if(BUILD_TESTING)
             if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
                 add_test(NAME cpu_only_runtime COMMAND ${Python3_EXECUTABLE}
                     ${PROJECT_SOURCE_DIR}/tests/run_cpu_only.py $<TARGET_FILE:cosmictiger>
-                    $<TARGET_FILE:no_cuda_runtime> ${PROJECT_BINARY_DIR}/tests/cpu_only)
+                    $<TARGET_FILE:no_cuda_runtime> ${PROJECT_BINARY_DIR}/tests/cpu_only
+                    ${cosmictiger_chemistry_test_args})
                 set_tests_properties(cpu_only_runtime PROPERTIES TIMEOUT 250 RUN_SERIAL TRUE)
             endif()
             add_test(NAME analysis_cpu_runtime COMMAND ${Python3_EXECUTABLE}
@@ -955,7 +963,7 @@ if(BUILD_TESTING)
             endif()
         endif()
     endif()
-    if(COSMICTIGER_WITH_SPH AND COSMICTIGER_WITH_CUDA)
+    if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_CHEMISTRY AND COSMICTIGER_WITH_CUDA)
         target_compile_definitions(primordial_solver_test PRIVATE USE_CUDA)
         add_executable(primordial_cuda_test tests/primordial_cuda.cu)
         target_link_libraries(primordial_cuda_test PRIVATE primordial_chemistry CUDA::cudart)
@@ -1155,7 +1163,7 @@ if(BUILD_TESTING)
             COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
         add_test(NAME scenarios COMMAND ${Python3_EXECUTABLE}
             ${PROJECT_SOURCE_DIR}/tests/run_scenarios.py $<TARGET_FILE:cosmictiger>
-            ${PROJECT_BINARY_DIR}/tests/scenarios)
+            ${PROJECT_BINARY_DIR}/tests/scenarios ${cosmictiger_chemistry_test_args})
         set_tests_properties(scenarios PROPERTIES RUN_SERIAL TRUE TIMEOUT 1200 PROCESSORS 2)
     endif()
 
@@ -1167,6 +1175,7 @@ if(BUILD_TESTING)
         add_test(NAME grouped_options COMMAND ${Python3_EXECUTABLE}
             ${PROJECT_SOURCE_DIR}/tests/run_options.py $<TARGET_FILE:cosmictiger>
             ${PROJECT_BINARY_DIR}/tests/grouped_options ${cosmictiger_sph_test_args}
+            ${cosmictiger_chemistry_test_args}
             --gravity-method ${cosmictiger_default_gravity_method}
             --near-method ${cosmictiger_default_near_method} --order ${cosmictiger_default_fmm_order}
             --time-integrator ${cosmictiger_default_integrator})
@@ -1375,7 +1384,7 @@ if(BUILD_TESTING)
     endif()
 
     # Standalone generator families: these tests do not select a new runtime walk.
-    if(COSMICTIGER_ENABLE_PMMM)
+    if(COSMICTIGER_ENABLE_PMMM_PP OR COSMICTIGER_ENABLE_PMMM_FMM)
         foreach(representation IN ITEMS spherical_ewald)
             set(generated_kernel_target "generated_${representation}_test")
             add_executable(${generated_kernel_target} "tests/gravity/nitadori/generated_${representation}.cpp")
@@ -1478,7 +1487,7 @@ if(BUILD_TESTING)
     target_compile_options(mesh_domain_test PRIVATE -fno-fast-math -ffp-contract=off)
     cosmictiger_add_gtest(NAME mesh_domain TARGET mesh_domain_test
         PROPERTIES TIMEOUT 30 LABELS "particle_mesh;cpu")
-    if(COSMICTIGER_ENABLE_PMMM)
+    if(COSMICTIGER_ENABLE_PMMM_PP OR COSMICTIGER_ENABLE_PMMM_FMM)
         add_executable(pmmm_kernels_test tests/gravity/nitadori/pmmm_kernels.cpp
             tests/gravity/nitadori/pmmm_kernel_flops.cpp src/gravity/nitadori/kernels.cpp)
         target_include_directories(pmmm_kernels_test PRIVATE ${PROJECT_SOURCE_DIR})
@@ -1487,7 +1496,7 @@ if(BUILD_TESTING)
         target_compile_options(pmmm_kernels_test PRIVATE -fno-fast-math -ffp-contract=off)
         cosmictiger_add_gtest(NAME pmmm_kernels TARGET pmmm_kernels_test
             PROPERTIES TIMEOUT 180 LABELS "pmmm;cpu")
-        if(COSMICTIGER_ENABLE_PMMM_NEAR_PP)
+        if(COSMICTIGER_ENABLE_PMMM_PP)
             add_executable(pmmm_near_flops_test tests/gravity/nitadori/near_pp_flops.cpp)
             target_include_directories(pmmm_near_flops_test PRIVATE ${PROJECT_SOURCE_DIR})
             target_link_libraries(pmmm_near_flops_test PRIVATE HPX::hpx Boost::boost)
@@ -1503,7 +1512,7 @@ if(BUILD_TESTING)
             PROPERTIES TIMEOUT 60 LABELS "pmmm;cpu;flops")
     endif()
 
-    if(COSMICTIGER_ENABLE_PMMM)
+    if(COSMICTIGER_ENABLE_PMMM_PP OR COSMICTIGER_ENABLE_PMMM_FMM)
         set(pmmm_workdir "${PROJECT_BINARY_DIR}/tests/pmmm_cpu")
         file(MAKE_DIRECTORY "${pmmm_workdir}")
         add_test(NAME pmmm_cpu COMMAND $<TARGET_FILE:cosmictiger>
@@ -1515,7 +1524,7 @@ if(BUILD_TESTING)
             WORKING_DIRECTORY "${pmmm_workdir}" LABELS "pmmm;cpu")
         foreach(near_method IN ITEMS pp fmm)
             string(TOUPPER "${near_method}" near_feature)
-            if(NOT COSMICTIGER_ENABLE_PMMM_NEAR_${near_feature})
+            if(NOT COSMICTIGER_ENABLE_PMMM_${near_feature})
                 continue()
             endif()
             set(near_workdir "${PROJECT_BINARY_DIR}/tests/pmmm_near_${near_method}")
@@ -1652,7 +1661,7 @@ if(BUILD_TESTING)
                 RUN_SERIAL TRUE LABELS "particle_mesh;mpi")
             # This fixture uses arbitrary per-rank ownership and a global reduction.
             # The FMM near solver requires spatial ownership, covered by streamed tests.
-            if(COSMICTIGER_ENABLE_PMMM_NEAR_PP)
+            if(COSMICTIGER_ENABLE_PMMM_PP)
                 set(pm_timestep_workdir "${PROJECT_BINARY_DIR}/tests/particle_mesh_timestep_mpi")
                 file(MAKE_DIRECTORY "${pm_timestep_workdir}")
                 add_test(NAME particle_mesh_timestep_mpi COMMAND ${MPIEXEC_EXECUTABLE}

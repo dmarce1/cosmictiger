@@ -47,6 +47,7 @@
 
 constexpr bool kVerbose = true;
 
+#if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_CHEMISTRY
 static void nativeChemistryInitializationTest() {
     auto const& options = getOptions();
     if (!options.hydro.enabled || !options.chemistry.enabled ||
@@ -63,6 +64,7 @@ static void nativeChemistryInitializationTest() {
     writeCheckpoint(state);
     PRINT("Native chemistry initialization checkpoint written at iteration zero\n");
 }
+#endif
 
 // 0.7, 0.8
 // 0.55, 0.65
@@ -732,7 +734,7 @@ ApplicationTest const applicationTests[] = {
 #if !COSMICTIGER_WITH_GRAVITY
     {"sphOnlyDiagnostics", sphOnlyDiagnosticsTest},
 #endif
-#if COSMICTIGER_WITH_SPH
+#if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_CHEMISTRY
     {"nativeChemistryInitialization", nativeChemistryInitializationTest},
     {"sphChemistryTimesteps", sphChemistryTimestepsTest},
 #endif
@@ -748,7 +750,7 @@ ApplicationTest const applicationTests[] = {
     {"fmmWalk", fmmWalkTest},
     {"fmmTree", fmmTreeTest},
 #endif
-#if COSMICTIGER_ENABLE_PMMM
+#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
     {"meshDomains", meshDomainsTest},
     {"pmmm", pmmmTest},
     {"particleMeshSort", particleMeshSortTest},

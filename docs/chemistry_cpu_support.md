@@ -14,7 +14,13 @@ The primordial `atomic6` and `molecular9` networks have CPU and CUDA batch imple
 | Power-spectrum density accumulation (`analysis.power=true`) | Implemented, including mixed dark-matter/gas masses |
 | Sphere-surface test and stellar sphere initialization | Rejected; their surface solver requires CUDA |
 
-Use the existing dependency configuration, with `-DCOSMICTIGER_WITH_CUDA=OFF -DBUILD_TESTING=ON`, for a CPU build. For the existing validation build directory:
+Use the existing dependency configuration, with
+`-DCOSMICTIGER_WITH_CUDA=OFF -DBUILD_TESTING=ON`, for a CPU build. Particle
+chemistry also requires `-DCOSMICTIGER_ENABLE_SPH=ON` and
+`-DCOSMICTIGER_ENABLE_CHEMISTRY=ON` (both default to `ON`). Turning chemistry
+off retains SPH and homogeneous cosmological recombination, and excludes the
+particle chemistry tests. With SPH off, the chemistry setting is inactive.
+For the existing validation build directory:
 
 ```sh
 cmake --build build/sph_cpu_validation --parallel 3

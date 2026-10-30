@@ -95,6 +95,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("executable", type=Path)
     parser.add_argument("workdir", type=Path)
+    parser.add_argument("--without-chemistry", action="store_true")
     args = parser.parse_args()
     executable = args.executable.resolve()
     root = Path(__file__).resolve().parents[1]
@@ -134,6 +135,9 @@ def main():
             "checkpoint.intervalSeconds": "0",
         }
         options.update(overrides or {})
+        if args.without_chemistry:
+            options["chemistry.enabled"] = "false"
+            chemistry = False
         output = run_process(command + [f"--{key}={value}" for key, value in options.items()],
                              directory)
         if setting(output, "run.scenario") != scenario:

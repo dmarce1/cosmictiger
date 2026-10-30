@@ -45,7 +45,9 @@
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/sph.hpp>
+#if COSMICTIGER_ENABLE_CHEMISTRY
 #include <cosmictiger/sph/sph_chemistry.hpp>
+#endif
 #include <cosmictiger/sph/sph_particles.hpp>
 #endif
 
@@ -70,7 +72,9 @@ struct SphParticleInfo : public DarkMatterParticleInfo {
     float h;
     float alpha;
     float divergence;
+#if COSMICTIGER_ENABLE_CHEMISTRY
     primordial::State chemistry;
+#endif
 };
 
 #endif
@@ -310,6 +314,7 @@ void writeViscosityField(
     }
 }
 
+#if COSMICTIGER_ENABLE_CHEMISTRY
 void writeChemistryFields(
     DBfile* db, ViewDirectoryMetadata& metadata, Vector<SphParticleInfo> const& gas, double a) {
     if (!getOptions().chemistry.enabled) {
@@ -341,6 +346,7 @@ void writeChemistryFields(
         "species counts per H nucleus; signed fractions preserve minority branches");
     writeViewText(db, "chemistry_network", getOptions().chemistry.network.c_str());
 }
+#endif
 
 #endif
 void writeConvertedView(DBfile* db, ViewDirectoryMetadata& metadata, ViewParticles const& particles,
@@ -387,7 +393,9 @@ void writeConvertedView(DBfile* db, ViewDirectoryMetadata& metadata, ViewParticl
     if (!gas.empty()) {
         writeViewSpecies(db, metadata, "gas", "hydro_", gas, conversion, lengthUnit, velocityUnit,
             massUnit, getOptions().initial.gasMass, time, cycle);
+#if COSMICTIGER_ENABLE_CHEMISTRY
         writeChemistryFields(db, metadata, gas, a);
+#endif
         writeViscosityField(db, metadata, gas);
         if (getOptions().hydro.viscosityGradientSwitch()) {
             writeViewField(db, metadata, "divv", "gas", gas,
@@ -442,9 +450,11 @@ ViewParticles collectViewParticles() {
             if (getOptions().hydro.viscosityGradientSwitch()) {
                 gas.divergence = sphParticlesCullenDehnenStates[index].divergence;
             }
+#if COSMICTIGER_ENABLE_CHEMISTRY
             if (getOptions().chemistry.enabled) {
                 gas.chemistry = sphParticlesChemistryStates[index];
             }
+#endif
             snapshot.gas.push_back(gas);
         }
 #endif
@@ -615,7 +625,9 @@ void writeCodeParticleView(DBfile* db, ViewDirectoryMetadata& metadata,
             db, metadata, "eint", "gas", gas, "code", [](auto const& p) { return p.eint; });
         writeViewField(db, metadata, "kernel_support_radius", "gas", gas, "code",
             [](auto const& p) { return p.h; });
+#if COSMICTIGER_ENABLE_CHEMISTRY
         writeChemistryFields(db, metadata, gas, a);
+#endif
         writeViscosityField(db, metadata, gas);
         if (getOptions().hydro.viscosityGradientSwitch()) {
             writeViewField(db, metadata, "divv", "gas", gas, "1/code_time",

@@ -45,7 +45,7 @@
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/fmm_types.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
-#if COSMICTIGER_ENABLE_PMMM
+#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
 #include <cosmictiger/gravity/nitadori/solver.hpp>
 #endif
 #include <cosmictiger/gravity/tree.hpp>
@@ -169,14 +169,14 @@ int hpx_main(int argc, char* argv[]) {
             }
 #endif
         }
-#if COSMICTIGER_ENABLE_PMMM
+#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
         pmmmDestroy();
 #endif
         particlesDestroy();
     } catch (profile::Interrupted const&) {
         PRINT("\n  Interrupted: finishing cleanup and writing profiling reports.\n");
         try {
-#if COSMICTIGER_ENABLE_PMMM
+#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
             pmmmDestroy();
 #endif
             particlesDestroy();
@@ -198,7 +198,7 @@ int hpx_main(int argc, char* argv[]) {
     } catch (std::exception const& error) {
         PRINT("CosmicTiger failed: %s\n", error.what());
         try {
-#if COSMICTIGER_ENABLE_PMMM
+#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
             pmmmDestroy();
 #endif
         } catch (std::exception const& cleanupError) {
@@ -214,7 +214,7 @@ int hpx_main(int argc, char* argv[]) {
     } catch (...) {
         PRINT("CosmicTiger failed with an unknown exception\n");
         try {
-#if COSMICTIGER_ENABLE_PMMM
+#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
             pmmmDestroy();
 #endif
         } catch (...) {

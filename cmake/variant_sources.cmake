@@ -70,7 +70,7 @@ function(cosmictiger_feature_sources output)
 
     # The tree walk is shared by global FMM and PMMM's optional near-cell FMM.
     set(cosmictiger_uses_fmm OFF)
-    if(COSMICTIGER_ENABLE_FMM OR (COSMICTIGER_ENABLE_PMMM AND COSMICTIGER_ENABLE_PMMM_NEAR_FMM))
+    if(COSMICTIGER_ENABLE_FMM OR COSMICTIGER_ENABLE_PMMM_FMM)
         set(cosmictiger_uses_fmm ON)
     endif()
     if(cosmictiger_uses_fmm)
@@ -101,7 +101,7 @@ function(cosmictiger_feature_sources output)
         )
     endif()
 
-    if(COSMICTIGER_ENABLE_PMMM)
+    if(COSMICTIGER_ENABLE_PMMM_PP OR COSMICTIGER_ENABLE_PMMM_FMM)
         list(APPEND cosmictiger_source_files
             src/gravity/nitadori/collective_dispatch.cpp
             src/gravity/nitadori/kick.cpp
@@ -112,7 +112,7 @@ function(cosmictiger_feature_sources output)
             src/gravity/nitadori/fft.cpp
             src/gravity/nitadori/mesh_exchange.cpp
         )
-        if(COSMICTIGER_ENABLE_PMMM_NEAR_FMM)
+        if(COSMICTIGER_ENABLE_PMMM_FMM)
             list(APPEND cosmictiger_source_files
                 src/gravity/nitadori/cell_schedule.cpp
                 src/gravity/nitadori/cell_tree.cpp
@@ -121,7 +121,7 @@ function(cosmictiger_feature_sources output)
                 src/gravity/nitadori/ghost_storage.cpp
             )
         endif()
-        if(COSMICTIGER_ENABLE_PMMM_NEAR_PP)
+        if(COSMICTIGER_ENABLE_PMMM_PP)
             list(APPEND cosmictiger_source_files
                 src/gravity/nitadori/near_pp.cpp
                 src/gravity/nitadori/near_pp.cu
@@ -142,7 +142,6 @@ function(cosmictiger_feature_sources output)
             src/scenarios/sedov.cpp
             src/sph/sph.cpp
             src/sph/sph.cu
-            src/sph/sph_chemistry.cpp
             src/sph/sph_cpu.cpp
             src/sph/sph_hydro.cu
             src/sph/sph_hydro_cpu.cpp
@@ -159,6 +158,9 @@ function(cosmictiger_feature_sources output)
             src/sph/morris_and_monaghan/viscosity.cpp
             src/sph/price_etal/viscosity.cpp
         )
+        if(COSMICTIGER_ENABLE_CHEMISTRY)
+            list(APPEND cosmictiger_source_files src/sph/sph_chemistry.cpp)
+        endif()
     endif()
 
     if(BUILD_TESTING)
@@ -168,7 +170,7 @@ function(cosmictiger_feature_sources output)
             list(APPEND cosmictiger_source_files
                 tests/analysis_backends.cpp tests/bh.cpp tests/groups_catalogue.cpp tests/rockstar.cpp)
         endif()
-        if(COSMICTIGER_ENABLE_PMMM)
+        if(COSMICTIGER_ENABLE_PMMM_PP OR COSMICTIGER_ENABLE_PMMM_FMM)
             list(APPEND cosmictiger_source_files
                 tests/mesh_domains.cpp
                 tests/gravity/nitadori/particle_mesh_dispatch.cpp
@@ -186,8 +188,10 @@ function(cosmictiger_feature_sources output)
         endif()
         if(COSMICTIGER_WITH_SPH)
             list(APPEND cosmictiger_source_files
-                tests/sph/chemistry.cpp
                 tests/sph/tree.cpp tests/units_output.cpp tests/distributed_output.cpp)
+            if(COSMICTIGER_ENABLE_CHEMISTRY)
+                list(APPEND cosmictiger_source_files tests/sph/chemistry.cpp)
+            endif()
             if(COSMICTIGER_ENABLE_FMM)
                 list(APPEND cosmictiger_source_files tests/sph/gravity.cpp
                     tests/kernel_selection_cuda.cu)

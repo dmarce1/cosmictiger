@@ -47,10 +47,11 @@ and implementation choices.
 Paper-name directories contain only code that can be excluded when that solver
 is not built. Shared implementation belongs in the parent subsystem directory.
 `COSMICTIGER_ENABLE_FMM=OFF` excludes Dehnen sources and headers;
-`COSMICTIGER_ENABLE_PMMM=OFF` excludes Nitadori sources and headers. Both may be
-enabled in one executable. PMMM's independent `COSMICTIGER_ENABLE_PMMM_NEAR_PP`
-and `COSMICTIGER_ENABLE_PMMM_NEAR_FMM` options control its near implementations
-and corresponding tests. Runtime `gravity.method.far=fmm|pmmm` and
+disabling both `COSMICTIGER_ENABLE_PMMM_PP` and
+`COSMICTIGER_ENABLE_PMMM_FMM` excludes Nitadori sources and headers. Global FMM
+and either or both PMMM options may be enabled in one executable. Each PMMM
+option enables the shared PMMM implementation, its corresponding near field,
+and supported tests. Runtime `gravity.method.far=fmm|pmmm` and
 `gravity.method.near=pp|fmm` select among enabled algorithms; a selector is
 required when more than one applicable choice is compiled.
 
@@ -80,6 +81,10 @@ force references used by tests live in `tests/gravity/`.
 `COSMICTIGER_ENABLE_SPH` defaults to `ON`. Setting it to `OFF` excludes SPH,
 hydrodynamic scenarios, particle chemistry, and their tests. Homogeneous
 recombination remains available for collisionless cosmology.
+`COSMICTIGER_ENABLE_CHEMISTRY` independently controls particle chemistry and
+defaults to `ON`. Particle chemistry sources and tests are included only when
+both SPH and chemistry are enabled. With SPH off, the chemistry setting is
+inactive; homogeneous recombination remains available with either setting.
 
 ```text
 sph/

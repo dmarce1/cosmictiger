@@ -85,7 +85,9 @@ void sphParticlesGlobalReadDensity(ParticleGlobalRange range, float*, ParticleIn
     float* balsaraFactor = nullptr, float* viscosityAlpha = nullptr);
 void sphParticlesGlobalReadChemistryEos(ParticleGlobalRange range, float* pressureEnergyRatio,
     float* adiabaticIndex, ParticleInteger offset);
+#if COSMICTIGER_ENABLE_CHEMISTRY
 void sphParticlesRefreshChemistryEos(double scaleFactor);
+#endif
 void sphParticlesResetConverged();
 void sphParticlesResetSemiactive();
 void sphParticlesLoad(FILE* fp);

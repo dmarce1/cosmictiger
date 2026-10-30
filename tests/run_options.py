@@ -25,7 +25,9 @@ def main():
     parser.add_argument("--order", type=int, choices=range(3, 10), required=True)
     parser.add_argument("--time-integrator", choices=("traditional", "hierarchical", "global"), required=True)
     parser.add_argument("--without-sph", action="store_true")
+    parser.add_argument("--without-chemistry", action="store_true")
     args = parser.parse_args()
+    chemistryAvailable = not args.without_sph and not args.without_chemistry
     args.workdir.mkdir(parents=True, exist_ok=True)
     unused_view = args.workdir / "view.txt"
     unused_view.unlink(missing_ok=True)
@@ -67,6 +69,9 @@ def main():
     if not re.search(r"^\s*Time integrators:.*\b" + args.time_integrator + r"\b",
                      help_text, re.MULTILINE):
         raise RuntimeError("help did not identify the compiled time integrator")
+    if not re.search(r"^\s*Particle chemistry: " + ("enabled" if chemistryAvailable else "disabled") + r"\s*$",
+                     help_text, re.MULTILINE):
+        raise RuntimeError("help did not identify the compiled particle chemistry capability")
     option_names = set(re.findall(r"^\s+--([A-Za-z][A-Za-z0-9_.]*)", help_text, re.MULTILINE))
     required = {"help", "configuration", "run.scenario", "run.endTime", "run.verbose",
                 "initial.particlesPerDimension", "compute.cuda", "compute.bucketSize",
@@ -365,6 +370,9 @@ mapSize = 8
                              output, re.MULTILINE):
                 raise RuntimeError(f"compiled metadata did not retain {key}={value}")
         assertNumericSetting(output, "gravity.expansionDegree", args.order - 1)
+        if not re.search(r"^build\.chemistry\s*:\s*" + ("T" if chemistryAvailable else "F") + r"\s*$",
+                         output, re.MULTILINE):
+            raise RuntimeError("build metadata did not identify the compiled particle chemistry capability")
         expected_hierarchical = "T" if args.time_integrator == "hierarchical" else "F"
         if not re.search(r"^run\.hierarchicalGravity\s*:\s*" + expected_hierarchical + r"\s*$",
                          output, re.MULTILINE):
@@ -656,6 +664,15 @@ mapSize = 8
     chemistry_fields = ("initialTemperature", "hydrogenIonFraction",
                         "heliumIonFraction", "heliumDoubleIonFraction")
 
+    if args.without_chemistry and not args.without_sph:
+        chemistryConfig = args.workdir / "disabled_chemistry.ini"
+        chemistryConfig.write_text("[chemistry]\nenabled = true\n")
+        for label, options in (("cli", ["--chemistry.enabled=true"]),
+                               ("ini", [f"--configuration={chemistryConfig.resolve()}"])):
+            rejected = run("disabled_chemistry_" + label, metadata_options + options, success=False)
+            if "COSMICTIGER_ENABLE_CHEMISTRY=ON" not in rejected:
+                raise RuntimeError("disabled chemistry request lacked build guidance")
+
     if not args.without_sph and args.time_integrator != "hierarchical":
         # Both checkpoint layouts round-trip: zero retains the existing SPH block,
         # while nonzero acceleration appends the flagged z-plane force parameter.
@@ -670,6 +687,7 @@ mapSize = 8
             if "Checkpoint state and mode validation passed" not in output:
                 raise RuntimeError("z-plane acceleration checkpoint state did not round-trip")
 
+    if chemistryAvailable and args.time_integrator != "hierarchical":
         chemistry_options = [option for option in metadata_options
                              if not option.startswith("--hydro.enabled=")] + [
                                  "--hydro.enabled=true", "--chemistry.enabled=true",

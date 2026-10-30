@@ -27,7 +27,9 @@
 #include <cosmictiger/sph/morris_and_monaghan/viscosity.hpp>
 #include <cosmictiger/sph/price_etal/viscosity.hpp>
 #include <cosmictiger/sph/sph.hpp>
+#if COSMICTIGER_ENABLE_CHEMISTRY
 #include <cosmictiger/sph/sph_chemistry.hpp>
+#endif
 #include <cosmictiger/sph/sph_particles.hpp>
 
 #include "particle_cache.hpp"
@@ -71,7 +73,9 @@ HPX_PLAIN_ACTION(sphParticlesFetchVelocityCacheLine, SphParticlesFetchVelocityCa
 HPX_PLAIN_ACTION(sphParticlesFetchDensityCacheLine, SphParticlesFetchDensityCacheLineAction);
 HPX_PLAIN_ACTION(sphParticlesClearHydroCaches, SphParticlesClearHydroCachesAction);
 HPX_PLAIN_ACTION(sphParticlesClearCaches, SphParticlesClearCachesAction);
+#if COSMICTIGER_ENABLE_CHEMISTRY
 HPX_PLAIN_ACTION(sphParticlesRefreshChemistryEos, SphParticlesRefreshChemistryEosAction);
+#endif
 HPX_PLAIN_ACTION(
     sphParticlesFetchChemistryEosCacheLine, SphParticlesFetchChemistryEosCacheLineAction);
 
@@ -795,6 +799,7 @@ static Vector<Pair<float>> sphParticlesFetchChemistryEosCacheLine(ParticleIntege
     return line;
 }
 
+#if COSMICTIGER_ENABLE_CHEMISTRY
 void sphParticlesRefreshChemistryEos(double scaleFactor) {
     if (!getOptions().chemistry.enabled) {
         return;
@@ -813,6 +818,7 @@ void sphParticlesRefreshChemistryEos(double scaleFactor) {
         future.get();
     }
 }
+#endif
 
 void sphParticlesClearHydroCaches() {
     Vector<hpx::future<void>> futures;

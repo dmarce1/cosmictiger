@@ -157,6 +157,11 @@ void setOptions(Options const& opts) {
         throw std::invalid_argument("Hydrodynamics and chemistry require COSMICTIGER_ENABLE_SPH=ON");
     }
 #endif
+#if !COSMICTIGER_ENABLE_CHEMISTRY
+    if (opts.chemistry.enabled) {
+        throw std::invalid_argument("Particle chemistry requires COSMICTIGER_ENABLE_CHEMISTRY=ON");
+    }
+#endif
     if (opts.compute.positionType != (kPositionBits == 64 ? "fixed64" : "fixed32")) {
         throw std::invalid_argument(
             "compute.positionType differs from this locality's application backend");
@@ -239,10 +244,12 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"build.pmmm", gravity::kBuildHasPmmm},
         {"build.pmmmNearPp", gravity::kBuildHasPmmmNearPp},
         {"build.pmmmNearFmm", gravity::kBuildHasPmmmNearFmm},
+        {"build.chemistry", bool(COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_CHEMISTRY)},
         {"build.integratorTraditional", integration::kBuildHasTraditional},
         {"build.integratorHierarchical", integration::kBuildHasHierarchical},
         {"build.integratorGlobal", integration::kBuildHasGlobal},
-        {"build.defaultExpansionDegree", gravity::kBuildFmmOrder > 0 ? gravity::kBuildFmmOrder - 1 : 0},
+        {"build.defaultExpansionDegree",
+            gravity::kBuildFmmOrder > 0 ? gravity::kBuildFmmOrder - 1 : 0},
         {"configuration", options.configuration},
         {"run.test", options.run.test},
         {"run.verbose", options.run.verbose},
@@ -310,7 +317,8 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"gravity.pmmmNearWidth", options.gravity.pmmmNearWidth},
         {"gravity.method.near", options.gravity.pmmmNearMethod},
         {"gravity.pmmmBatchParticles", options.gravity.pmmmBatchParticles},
-        {"gravity.expansionDegree", options.gravity.fmmOrder > 0 ? options.gravity.fmmOrder - 1 : 0},
+        {"gravity.expansionDegree",
+            options.gravity.fmmOrder > 0 ? options.gravity.fmmOrder - 1 : 0},
         {"gravity.kernelFamily", options.gravity.kernelFamily},
         {"gravity.kernelDegree", options.gravity.kernelDegree},
         {"gravity.openingAngle", options.gravity.openingAngle},
@@ -767,6 +775,9 @@ bool processOptions(int argc, char* argv[]) {
                   << "  PMMM near solvers:"
                   << (gravity::kBuildHasPmmmNearPp ? " pp" : "")
                   << (gravity::kBuildHasPmmmNearFmm ? " fmm" : "") << "\n";
+        std::cout << "  Particle chemistry: "
+                  << (COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_CHEMISTRY ? "enabled" : "disabled")
+                  << "\n";
 #if COSMICTIGER_WITH_GRAVITY
         std::cout << "  Potential expansion degrees: " << kFmmMinOrder - 1 << " through "
                   << kFmmMaxOrder - 1 << "\n";
@@ -1241,6 +1252,11 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.hydro.enabled || opts.chemistry.enabled) {
         THROW_ERROR("hydro.enabled=true or chemistry.enabled=true requires "
                     "COSMICTIGER_ENABLE_SPH=ON\n");
+    }
+#endif
+#if !COSMICTIGER_ENABLE_CHEMISTRY
+    if (opts.chemistry.enabled) {
+        THROW_ERROR("chemistry.enabled=true requires COSMICTIGER_ENABLE_CHEMISTRY=ON\n");
     }
 #endif
     bool const hierarchicalEligible = integration::kBuildHasHierarchical &&

@@ -8,6 +8,10 @@
 
 #pragma once
 
+#ifndef COSMICTIGER_ENABLE_CHEMISTRY
+#define COSMICTIGER_ENABLE_CHEMISTRY 1
+#endif
+
 // Legacy standalone test targets may still supply the old exclusive switch.
 #ifndef COSMICTIGER_INTEGRATOR_HIERARCHICAL
 #define COSMICTIGER_INTEGRATOR_HIERARCHICAL 0

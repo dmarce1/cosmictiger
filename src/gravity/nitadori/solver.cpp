@@ -57,7 +57,7 @@ void prepare(SolveRequest const& request) {
         state.pendingGhosts = 0;
         state.farPromise = std::make_shared<hpx::promise<void>>();
         state.farReady = state.farPromise->get_future().share();
-#if COSMICTIGER_ENABLE_PMMM_NEAR_FMM
+#if COSMICTIGER_ENABLE_PMMM_FMM
         // Only the FMM pipeline fulfills these per-cell promises. Creating them
         // for PP would report a broken promise for every cell on the next solve.
         if (getOptions().gravity.pmmmNearMethod == "fmm") {
@@ -172,12 +172,12 @@ void solve(SolveRequest request) {
 #endif
     allLocalities<PmmmPrepareAction>(request);
     std::exception_ptr failure;
-#if COSMICTIGER_ENABLE_PMMM_NEAR_FMM
+#if COSMICTIGER_ENABLE_PMMM_FMM
     bool started = false;
 #endif
     try {
         allLocalities<PmmmDepositAction>();
-#if COSMICTIGER_ENABLE_PMMM_NEAR_FMM
+#if COSMICTIGER_ENABLE_PMMM_FMM
         if (options.pmmmNearMethod == "fmm") {
             allLocalities<PmmmPlanGhostsAction>();
             started = true;
@@ -185,12 +185,12 @@ void solve(SolveRequest request) {
         }
 #endif
         allLocalities<PmmmTransformAction>();
-#if COSMICTIGER_ENABLE_PMMM_NEAR_FMM
+#if COSMICTIGER_ENABLE_PMMM_FMM
         if (options.pmmmNearMethod == "fmm") {
             allLocalities<PmmmFinishPipelineAction>();
         }
 #endif
-#if COSMICTIGER_ENABLE_PMMM_NEAR_PP
+#if COSMICTIGER_ENABLE_PMMM_PP
         if (options.pmmmNearMethod == "pp") {
             allLocalities<PmmmEvaluateAction>(request.doPotential);
         }
@@ -198,7 +198,7 @@ void solve(SolveRequest request) {
     } catch (...) {
         failure = std::current_exception();
     }
-#if COSMICTIGER_ENABLE_PMMM_NEAR_FMM
+#if COSMICTIGER_ENABLE_PMMM_FMM
     auto cleanup = [&](auto&& operation) {
         try {
             operation();

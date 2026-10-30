@@ -11,14 +11,15 @@ import shlex
 import sys
 
 
-FEATURES = ("FMM", "PMMM", "SPH", "PMMM_NEAR_PP", "PMMM_NEAR_FMM",
+FEATURES = ("FMM", "PMMM_PP", "PMMM_FMM", "SPH", "CHEMISTRY",
             "INTEGRATOR_TRADITIONAL", "INTEGRATOR_HIERARCHICAL", "INTEGRATOR_GLOBAL")
 FEATURE_DEFINITIONS = {"COSMICTIGER_ENABLE_" + feature for feature in FEATURES}
 FEATURE_DEFINITIONS.update({"ORDER", "FMM_MIN_ORDER", "FMM_MAX_ORDER",
                             "COSMICTIGER_POSITION_BITS", "COSMICTIGER_WITH_SPH",
                             "COSMICTIGER_WITH_GRAVITY"})
 LEGACY_DEFINITIONS = {"COSMICTIGER_GRAVITY_PMMM", "COSMICTIGER_PMMM_NEAR_FMM",
-                      "COSMICTIGER_INTEGRATOR_HIERARCHICAL"}
+                      "COSMICTIGER_INTEGRATOR_HIERARCHICAL", "COSMICTIGER_ENABLE_PMMM",
+                      "COSMICTIGER_ENABLE_PMMM_NEAR_PP", "COSMICTIGER_ENABLE_PMMM_NEAR_FMM"}
 TARGET_PATTERN = re.compile(r"CMakeFiles[/\\]([^/\\]+)\.dir[/\\]")
 
 
@@ -41,12 +42,20 @@ def degreeRange(value):
     return low, high
 
 
+def hasPmmm(configuration):
+    return configuration["PMMM_PP"] or configuration["PMMM_FMM"]
+
+
 def hasGravity(configuration):
-    return configuration["FMM"] or configuration["PMMM"]
+    return configuration["FMM"] or hasPmmm(configuration)
 
 
 def hasTree(configuration):
-    return configuration["FMM"] or (configuration["PMMM"] and configuration["PMMM_NEAR_FMM"])
+    return configuration["FMM"] or configuration["PMMM_FMM"]
+
+
+def hasChemistry(configuration):
+    return configuration["SPH"] and configuration["CHEMISTRY"]
 
 
 def configurationDefinitions(configuration, bits, degrees):
@@ -75,13 +84,14 @@ def sourceSelectionErrors(sources, configuration):
                                       "tests/softening_flops.cpp", "tests/sph/gravity.cpp"}
             if gravitySource or haloSource or excludedTest or Path(source).name.startswith("fmm_instance_"):
                 errors.append(f"gravity disabled but compiles gravity source: {source}")
-        for feature, directory in (("FMM", "dehnen"), ("PMMM", "nitadori")):
-            if not configuration[feature] and source.startswith(
+        for feature, enabled, directory in (("FMM", configuration["FMM"], "dehnen"),
+                                            ("PMMM", hasPmmm(configuration), "nitadori")):
+            if not enabled and source.startswith(
                     (f"src/gravity/{directory}/", f"tests/gravity/{directory}/")):
                 errors.append(f"{feature} disabled but compiles solver source: {source}")
         for feature, pattern in (
-                ("PMMM_NEAR_PP", r"(?:src|tests)/gravity/nitadori/near_pp[^/]*\.(?:cpp|cu)$"),
-                ("PMMM_NEAR_FMM", r"(?:src|tests)/gravity/nitadori/(?:cell_|ghost_|fmm_batch)[^/]*\.(?:cpp|cu)$")):
+                ("PMMM_PP", r"(?:src|tests)/gravity/nitadori/near_pp[^/]*\.(?:cpp|cu)$"),
+                ("PMMM_FMM", r"(?:src|tests)/gravity/nitadori/(?:cell_|ghost_|fmm_batch)[^/]*\.(?:cpp|cu)$")):
             if not configuration[feature] and re.fullmatch(pattern, source):
                 errors.append(f"{feature} disabled but compiles near solver: {source}")
         if not hasTree(configuration) and source in {
@@ -92,13 +102,17 @@ def sourceSelectionErrors(sources, configuration):
             errors.append(f"gravity-enabled build compiles SPH-only diagnostic regression: {source}")
         if (not configuration["SPH"] or not configuration["FMM"]) and source == "tests/kernel_selection_cuda.cu":
             errors.append(f"unavailable SPH gravity regression's CUDA helper: {source}")
+        if not hasChemistry(configuration) and source in {
+                "src/chemistry/primordial_chemistry.cpp", "src/chemistry/primordial_chemistry.cu",
+                "src/sph/sph_chemistry.cpp", "tests/sph/chemistry.cpp",
+                "tests/primordial_rates.cpp", "tests/primordial_solver.cpp", "tests/primordial_units.cpp",
+                "tests/primordial_reference.cpp", "tests/primordial_cuda.cu"}:
+            errors.append(f"particle chemistry disabled but compiles source: {source}")
         if not configuration["SPH"]:
             if source.startswith(("src/sph/", "tests/sph/", "tests/scenarios/")):
                 errors.append(f"SPH disabled but compiles SPH source: {source}")
             if source.startswith("src/scenarios/") and Path(source).name not in collisionlessScenarios:
                 errors.append(f"SPH disabled but compiles a hydrodynamic scenario: {source}")
-            if source in {"src/chemistry/primordial_chemistry.cpp", "src/chemistry/primordial_chemistry.cu"}:
-                errors.append(f"SPH disabled but compiles particle chemistry: {source}")
     return errors
 
 
@@ -108,20 +122,21 @@ def requiredSources(configuration, cuda):
         required.update({"src/gravity/fmm_order.cpp", "src/gravity/error.cpp", "src/gravity/reference_table.cpp"})
     if configuration["FMM"]:
         required.add("src/gravity/dehnen/execution.cpp")
-    if configuration["PMMM"]:
+    if hasPmmm(configuration):
         required.update({"src/gravity/nitadori/solver.cpp", "src/gravity/nitadori/fft.cpp"})
-        if configuration["PMMM_NEAR_PP"]:
+        if configuration["PMMM_PP"]:
             required.add("src/gravity/nitadori/near_pp.cpp")
-        if configuration["PMMM_NEAR_FMM"]:
+        if configuration["PMMM_FMM"]:
             required.add("src/gravity/nitadori/fmm_batch.cpp")
     if hasTree(configuration):
         required.add("src/gravity/kick.cpp")
     if configuration["SPH"]:
         required.update({"src/sph/sph.cpp", "src/sph/sph_hydro_cpu.cpp", "src/sph/sph_prehydro_cpu.cpp",
-                         "src/sph/sph_rungs_cpu.cpp", "src/sph/sph_particles.cpp", "src/sph/sph_tree.cpp",
-                         "src/sph/sph_chemistry.cpp"})
+                         "src/sph/sph_rungs_cpu.cpp", "src/sph/sph_particles.cpp", "src/sph/sph_tree.cpp"})
         if cuda:
             required.update({"src/sph/sph.cu", "src/sph/sph_hydro.cu", "src/sph/sph_prehydro.cu", "src/sph/sph_rungs.cu"})
+    if hasChemistry(configuration):
+        required.add("src/sph/sph_chemistry.cpp")
     if cuda:
         required.add("src/particles/drift.cu")
         if hasGravity(configuration):
@@ -248,7 +263,7 @@ def checkBuild(buildDirectory):
         linkedSources = set().union(*(set(sourcesByTarget.get(library, {})) for library in libraries))
         if "src/chemistry/recombination.cpp" not in linkedSources:
             errors.append("cosmictiger lacks shared homogeneous recombination")
-        if configuration["SPH"]:
+        if hasChemistry(configuration):
             chemistry = {"src/chemistry/primordial_chemistry.cpp"}
             if cuda:
                 chemistry.add("src/chemistry/primordial_chemistry.cu")

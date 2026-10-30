@@ -1,22 +1,24 @@
 # Periodic particle mesh multipoles
 
-Enable PMMM and its near-field algorithms in `./build.sh` or with CMake feature
-options. Every configuration builds one `cosmictiger` executable containing the
-selected capabilities. The default configuration enables FMM and SPH, the
-traditional integrator, and potential expansion degrees four through six;
-PMMM is disabled. A gravity-only PMMM configuration with both near algorithms is:
+Enable PMMM with either or both near-field algorithms in `./build.sh` or with
+CMake feature options. Every configuration builds one `cosmictiger` executable
+containing the selected capabilities. The default configuration enables FMM and
+SPH, particle chemistry, the traditional integrator, and potential expansion
+degrees four through six; PMMM is disabled. A gravity-only PMMM configuration
+with both near algorithms is:
 
 ```sh
 cmake -S . -B build_pmmm -DCOSMICTIGER_ENABLE_FMM=OFF \
-  -DCOSMICTIGER_ENABLE_PMMM=ON -DCOSMICTIGER_ENABLE_SPH=OFF \
-  -DCOSMICTIGER_ENABLE_PMMM_NEAR_PP=ON \
-  -DCOSMICTIGER_ENABLE_PMMM_NEAR_FMM=ON \
+  -DCOSMICTIGER_ENABLE_SPH=OFF \
+  -DCOSMICTIGER_ENABLE_PMMM_PP=ON \
+  -DCOSMICTIGER_ENABLE_PMMM_FMM=ON \
   -DCOSMICTIGER_EXPANSION_DEGREE=4-6
 cmake --build build_pmmm --parallel 12
 ```
 
-`COSMICTIGER_ENABLE_PMMM_NEAR_PP` defaults to `ON` and
-`COSMICTIGER_ENABLE_PMMM_NEAR_FMM` defaults to `OFF`. They are independent of
+`COSMICTIGER_ENABLE_PMMM_PP` and `COSMICTIGER_ENABLE_PMMM_FMM` both default
+to `OFF`. Each enables PMMM with its corresponding near field; both may be
+enabled together. They are independent of
 `COSMICTIGER_ENABLE_FMM`, which enables the full-domain FMM solver. PMMM uses a
 periodic uniform mesh, spherical multipoles about cell centers and FFT
 convolution for distant interactions. Neighboring cells use the selected
@@ -324,6 +326,9 @@ PMMM supports SPH with the traditional and global integrators when
 `COSMICTIGER_ENABLE_SPH=ON`. The hierarchical integrator requires gravity without
 SPH. Set `hydro.enabled=false` explicitly for gravity-only cosmological PMMM
 runs, whose scenario otherwise enables SPH when it is compiled.
+Particle chemistry additionally requires `COSMICTIGER_ENABLE_CHEMISTRY=ON`
+(the default). Setting it to `OFF` retains SPH without particle chemistry;
+homogeneous cosmological recombination remains available.
 
 Moment formation, Green construction, FFTs, spectral contraction, and local
 expansion evaluation run on CPUs. `compute.cuda=true` selects CUDA near-field

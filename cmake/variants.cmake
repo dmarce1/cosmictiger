@@ -39,7 +39,7 @@ endif()
 
 # Capability definitions are shared by the executable and standalone tests.
 add_library(cosmictiger_default_config INTERFACE)
-foreach(feature IN ITEMS FMM PMMM SPH PMMM_NEAR_PP PMMM_NEAR_FMM
+foreach(feature IN ITEMS FMM PMMM_PP PMMM_FMM SPH CHEMISTRY
         INTEGRATOR_TRADITIONAL INTEGRATOR_HIERARCHICAL INTEGRATOR_GLOBAL)
     target_compile_definitions(cosmictiger_default_config INTERFACE
         COSMICTIGER_ENABLE_${feature}=$<BOOL:${COSMICTIGER_ENABLE_${feature}}>)
@@ -55,7 +55,7 @@ target_compile_definitions(cosmictiger_default_config INTERFACE
 
 cosmictiger_feature_sources(cosmictiger_enabled_sources)
 if(COSMICTIGER_ENABLE_FMM OR
-        (COSMICTIGER_ENABLE_PMMM AND COSMICTIGER_ENABLE_PMMM_NEAR_FMM))
+        COSMICTIGER_ENABLE_PMMM_FMM)
     foreach(order IN LISTS COSMICTIGER_FMM_ORDERS)
         set(FMM_INSTANCE_ORDER ${order})
         configure_file(src/gravity/fmm_instance_cpu.cpp.in
@@ -73,7 +73,7 @@ endif()
 add_library(cosmictiger_objects OBJECT ${cosmictiger_enabled_sources}
     ${cosmictiger_header_files} ${COSMICTIGER_GENERATED_FMM_FILES})
 target_link_libraries(cosmictiger_objects PUBLIC cosmictiger_core cosmictiger_default_config)
-if(COSMICTIGER_WITH_SPH)
+if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_CHEMISTRY)
     target_link_libraries(cosmictiger_objects PUBLIC cosmictiger_sph_chemistry)
 endif()
 if(COSMICTIGER_WITH_CUDA)
