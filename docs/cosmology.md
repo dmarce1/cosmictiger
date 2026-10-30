@@ -112,6 +112,54 @@ contains measured power at the output epoch. A comment header records the
 epoch and whether growth rescaling was applied; it does not claim to solve
 perturbation growth in a contracting universe.
 
+## Energy diagnostic
+
+For collisionless particles with fixed comoving gravitational softening, `K`
+is peculiar kinetic energy and `W` is gravitational potential energy. The
+Layzer-Irvine equation gives
+
+```
+R = a(K + W) - a_initial(K_initial + W_initial) + integral(K da) = 0.
+```
+
+`energy.txt` reports `a*W`, `a*K`, and `cosmic`, where `cosmic` includes the
+negative initial energy and the accumulated expansion work. The signed
+`energy_error` is `R / (|a*K| + |a*W| + |cosmic|)` for collisionless runs.
+Gas runs also include scaled thermal energy and the signed heating ledger in
+the residual, and their absolute values in the normalization. This percentage
+uses the sum of absolute budget terms; it is not normalized to the initial
+energy or to the expansion-work integral alone.
+
+During each drift the stored canonical momenta are constant. Writing
+`Q = sum(m p^2 / 2)`, the kinetic expansion work is integrated as
+`Q * (a_new - a_old) / (a_old * a_new)`. This handles both expansion and
+contraction and is independent of how a drift is subdivided. `Q` uses the
+momenta after the opening kicks; the reported `K` uses synchronized momenta.
+Thermal and chemistry work retain their existing quadrature. Neither this
+accounting identity nor a small residual establishes force or timestep
+convergence.
+
+`glass_error` measures the fractional change in `a*W` since the previous
+energy output. It is a glass-relaxation diagnostic, not a cosmological energy
+error, and can become large when `W` crosses zero. Energy rows are written at
+coarse force evaluations and at the completed endpoint (normally `a=1`). The
+terminal force evaluation synchronizes the measured momenta without another
+drift or expansion-work increment. It runs after the final snapshot and
+checkpoint, which retain their normal restart state. Restarting an already
+completed checkpoint does not append another row. An interruption or iteration
+limit before the endpoint does not produce this terminal diagnostic.
+
+Restarts retain accumulated expansion work. Restarting a checkpoint produced
+before the expansion-work correction does not repair its earlier integration
+bias; use a fresh run when comparing the corrected diagnostic over the full
+evolution.
+
+Terminal wall and step durations use `hh:mm::ss.ss`. The final evolution total
+starts after initialization and checkpoint loading, and includes evolution,
+its outputs, and the terminal energy evaluation. A restart also shows the
+recorded total including prior runs; old checkpoints may include initialization
+in that prior runtime. Numeric durations in `progress.txt` remain seconds.
+
 ## Tests
 
 `friedmann_test` checks analytic matter, radiation, curvature, de Sitter,
@@ -121,7 +169,9 @@ curvature signs with positive Λ, critical radiation/matter expansion through
 `a=1e6` against the exact quadratic conformal-time solution, and the nonzero
 limiting expansion speed of subcritical models without Λ. `cosmology_flops_test`
 checks the application wrappers and adaptive work counting.
-`cosmology_evolution_test` checks timestep bounds and stopping roundoff;
+`cosmology_evolution_test` checks timestep bounds, stopping roundoff, exact
+free-streaming energy accounting through expansion and contraction, drift
+subdivision independence, and consistent energy normalization;
 `lightcone_epoch_test` checks emission epochs across turnaround and static
 background behavior.
 
@@ -129,8 +179,13 @@ background behavior.
 particles: closed-dust and negative-Λ recollapse, ordinary gravity/SPH through
 turnaround, checkpoint restarts during contraction and at coarse boundaries,
 completed-run restarts, a future expanding redshift endpoint, and rejection of
-an unreachable endpoint. It compares saved background state with independent
-analytic solutions and checks monotonic clocks. The `rockstar_cpu` regression
+an unreachable endpoint. Collisionless builds use `--collisionless-only` and
+include hierarchical integration. The checks require one final energy row and
+no duplicate on a completed restart. The script compares saved background state
+with independent analytic solutions and checks monotonic clocks. The
+hierarchical `fmmWalk` fixture also checks closing kicks and final energies
+against independent periodic forces with nonzero velocities and mixed particle
+rungs. The `rockstar_cpu` regression
 checks actual lightcone halo metadata during contraction; invalid observer
 times beyond a future conformal boundary are also covered by the core tests.
 The options regression loads all six presets and checks their resolved

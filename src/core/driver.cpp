@@ -115,12 +115,13 @@ void doGroups(int number, double scale, double years) {
     tm.start();
     groupTreeCreate();
     tm.stop();
-    terminal::detailPrint("group_tree_create = %e\n", tm.read());
+    terminal::detailPrint("group_tree_create = %s\n", terminal::formatDuration(tm.read()).c_str());
     tm.reset();
     tm.start();
     particlesGroupsInit();
     tm.stop();
-    terminal::detailPrint("particles_group_init = %e\n", tm.read());
+    terminal::detailPrint(
+        "particles_group_init = %s\n", terminal::formatDuration(tm.read()).c_str());
     tm.reset();
     size_t active;
     int iter = 1;
@@ -134,7 +135,8 @@ void doGroups(int number, double scale, double years) {
         active =
             groupsFind(rootId, std::move(checklist), getOptions().analysis.linkingLength).get();
         tm.stop();
-        terminal::detailPrint("%i groups_find = %e active = %li\n", iter, tm.read(), active);
+        terminal::detailPrint("%i groups_find = %s active = %li\n", iter,
+            terminal::formatDuration(tm.read()).c_str(), active);
         tm.reset();
         particlesIncGroupCacheEpoch();
         groupTreeIncCacheEpoch();
@@ -143,34 +145,35 @@ void doGroups(int number, double scale, double years) {
     tm.start();
     groupTreeDestroy();
     tm.stop();
-    terminal::detailPrint("tree cleanup = %e\n", tm.read());
+    terminal::detailPrint("tree cleanup = %s\n", terminal::formatDuration(tm.read()).c_str());
     Timer reduce;
     reduce.start();
     for (int wave = 0; wave < kGroupWaves; wave++) {
         tm.start();
         groupsAddParticles(wave, scale);
         tm.stop();
-        terminal::detailPrint("%i groups_add_particles %e\n", wave, tm.read());
+        terminal::detailPrint(
+            "%i groups_add_particles %s\n", wave, terminal::formatDuration(tm.read()).c_str());
         tm.reset();
         tm.start();
         groupsReduce(scale);
         tm.stop();
-        terminal::detailPrint("groups_reduce %e\n", tm.read());
+        terminal::detailPrint("groups_reduce %s\n", terminal::formatDuration(tm.read()).c_str());
         tm.reset();
     }
     reduce.stop();
     tm.start();
     groupsCull();
     tm.stop();
-    terminal::detailPrint("groups_cull %e\n", tm.read());
+    terminal::detailPrint("groups_cull %s\n", terminal::formatDuration(tm.read()).c_str());
     tm.reset();
     tm.start();
     auto ngroups = groupsSave(number, scale, years);
     tm.stop();
-    terminal::detailPrint("groups_save %e\n", tm.read());
+    terminal::detailPrint("groups_save %s\n", terminal::formatDuration(tm.read()).c_str());
     total.stop();
-    terminal::detailPrint("Reduction time = %e\n", reduce.read());
-    terminal::detailPrint("Total time = %e\n", total.read());
+    terminal::detailPrint("Reduction time = %s\n", terminal::formatDuration(reduce.read()).c_str());
+    terminal::detailPrint("Total time = %s\n", terminal::formatDuration(total.read()).c_str());
     terminal::detailPrint("Group count = %li of %li candidates\n", ngroups.first, ngroups.second);
     particlesGroupsDestroy();
 }
@@ -190,20 +193,21 @@ SphTreeCreateReturn sphStep1(int minrung, bool verbose) {
 
     timer.start();
     if (verbose) {
-        terminal::detailPrint("starting sph_tree_create = %e\n", timer.read());
+        terminal::detailPrint(
+            "starting sph_tree_create = %s\n", terminal::formatDuration(timer.read()).c_str());
     }
     treeResult = sphTreeCreate(treeParameters);
     timer.stop();
     if (verbose) {
-        terminal::detailPrint(
-            "sph_tree_create time = %e %i\n", timer.read(), treeResult.numberOfActiveParticles);
+        terminal::detailPrint("sph_tree_create time = %s %i\n",
+            terminal::formatDuration(timer.read()).c_str(), treeResult.numberOfActiveParticles);
     }
     timer.reset();
     return treeResult;
 }
 
 SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phase, double adot,
-    EnergiesT* energies, bool verbose, int uniformMinimumRung) {
+    EnergiesT* energies, bool verbose, int uniformMinimumRung, bool closingOnly) {
     float inverseSoundTimestep;
     float inverseViscosityTimestep;
     float inverseAccelerationTimestep;
@@ -264,8 +268,9 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
         result = sphRun(runParameters, true);
         timer.stop();
         if (verbose) {
-            terminal::detailPrint("sph_run(SPH_RUN_PREHYDRO1): tm = %e min_h = %e max_h = %e\n",
-                timer.read(), result.minimumSupportRadius, result.maximumSupportRadius);
+            terminal::detailPrint("sph_run(SPH_RUN_PREHYDRO1): tm = %s min_h = %e max_h = %e\n",
+                terminal::formatDuration(timer.read()).c_str(), result.minimumSupportRadius,
+                result.maximumSupportRadius);
         }
         timer.reset();
         needsNeighborRefresh = result.needsAnotherPass;
@@ -276,7 +281,7 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
         timer.start();
         sphTreeNeighbor(neighborParameters, rootId, Vector<TreeId>()).get();
         timer.stop();
-        terminal::detailPrint("%e\n", timer.read());
+        terminal::detailPrint("%s\n", terminal::formatDuration(timer.read()).c_str());
         timer.reset();
         timer.start();
         neighborParameters.innerSelection =
@@ -284,7 +289,7 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
         neighborParameters.runType = kSphTreeNeighborNeighbors;
         sphTreeNeighbor(neighborParameters, rootId, checklist).get();
         timer.stop();
-        terminal::detailPrint("%e\n", timer.read());
+        terminal::detailPrint("%s\n", terminal::formatDuration(timer.read()).c_str());
         timer.reset();
 
         result = SphRunReturn();
@@ -302,8 +307,9 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
         result = sphRun(runParameters, true);
         timer.stop();
         if (verbose) {
-            terminal::detailPrint("sph_run(SPH_RUN_PREHYDRO2): tm = %e min_h = %e max_h = %e\n",
-                timer.read(), result.minimumSupportRadius, result.maximumSupportRadius);
+            terminal::detailPrint("sph_run(SPH_RUN_PREHYDRO2): tm = %s min_h = %e max_h = %e\n",
+                terminal::formatDuration(timer.read()).c_str(), result.minimumSupportRadius,
+                result.maximumSupportRadius);
         }
         timer.reset();
         needsNeighborRefresh = result.needsAnotherPass;
@@ -315,14 +321,14 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
         timer.start();
         sphTreeNeighbor(neighborParameters, rootId, Vector<TreeId>()).get();
         timer.stop();
-        terminal::detailPrint("%e\n", timer.read());
+        terminal::detailPrint("%s\n", terminal::formatDuration(timer.read()).c_str());
         timer.reset();
         timer.start();
         neighborParameters.innerSelection = kSphInteractionsIJ;
         neighborParameters.runType = kSphTreeNeighborNeighbors;
         sphTreeNeighbor(neighborParameters, rootId, checklist).get();
         timer.stop();
-        terminal::detailPrint("%e\n", timer.read());
+        terminal::detailPrint("%s\n", terminal::formatDuration(timer.read()).c_str());
         timer.reset();
         result = SphRunReturn();
     } while (needsNeighborRefresh);
@@ -340,7 +346,8 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     timer.stop();
     int maxRung = std::max(0, uniformMinimumRung);
     if (verbose) {
-        terminal::detailPrint("sph_run(SPH_RUN_HYDRO): tm = %e\n", timer.read());
+        terminal::detailPrint(
+            "sph_run(SPH_RUN_HYDRO): tm = %s\n", terminal::formatDuration(timer.read()).c_str());
     }
     timer.reset();
 
@@ -365,6 +372,15 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     }
     energies->therm = eValue.therm / sqr(scale);
 
+    if (closingOnly) {
+        // The final measurement includes the previous source half-step, but
+        // must not solve chemistry or select hydro timesteps beyond the end.
+        sphParticlesClearHydroCaches();
+        sphTreeDestroy();
+        sphParticlesClearCaches();
+        sphParticlesResetSemiactive();
+        return result;
+    }
     if (chemistry) {
         synchronizedChemistryPressure = sphChemistryPressureIntegral(scale);
         sphChemistryPendingHeating() =
@@ -382,9 +398,9 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     timer.stop();
     maxRung = std::max(result.maximumRung, maxRung);
     if (verbose) {
-        terminal::detailPrint("sph_run(SPH_RUN_HYDRO): tm = %e max_vsig = %e max_rung = %i, %i\n",
-            timer.read(), result.maximumSignalSpeed, result.maximumHydroRung,
-            result.maximumGravityRung);
+        terminal::detailPrint("sph_run(SPH_RUN_HYDRO): tm = %s max_vsig = %e max_rung = %i, %i\n",
+            terminal::formatDuration(timer.read()).c_str(), result.maximumSignalSpeed,
+            result.maximumHydroRung, result.maximumGravityRung);
     }
     timer.reset();
 
@@ -413,7 +429,8 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
         //	max_rung = kr.max_rung;
         timer.stop();
         if (verbose) {
-            terminal::detailPrint("sph_run(SPH_RUN_RUNGS): tm = %e \n", timer.read());
+            terminal::detailPrint("sph_run(SPH_RUN_RUNGS): tm = %s \n",
+                terminal::formatDuration(timer.read()).c_str());
         }
         timer.reset();
     }
@@ -556,7 +573,7 @@ std::pair<KickReturn, TreeCreateReturn> kickStep(int minrung, double scale, doub
 
 std::pair<KickReturn, TreeCreateReturn> advanceForces(int minRung, double scale,
     double scaleDerivative, double time, double baseTimestep, double theta, bool firstCall,
-    bool fullEvaluation, EnergiesT& energies, int gravityErrorStep) {
+    bool fullEvaluation, EnergiesT& energies, int gravityErrorStep, bool closingOnly) {
     std::pair<KickReturn, TreeCreateReturn> result{};
     if (gravityErrorStep >= 0) {
         section_timing::measure(section_timing::Section::analysis, []() { gravityErrorBegin(); });
@@ -610,9 +627,9 @@ std::pair<KickReturn, TreeCreateReturn> advanceForces(int minRung, double scale,
         sphStep1(activeRung);
         gravity.maxRung = std::max(int(gravity.maxRung),
             sphStep2(activeRung, scale, time, baseTimestep, 1, scaleDerivative, &energies, true,
-                meshGravity ? gravity.maxRung : -1)
+                meshGravity ? gravity.maxRung : -1, closingOnly)
                 .maximumRung);
-        if (getOptions().chemistry.enabled &&
+        if (!closingOnly && getOptions().chemistry.enabled &&
             gravity.maxRung > getOptions().chemistry.synchronizedRung) {
             THROW_ERROR("Chemistry synchronized rung violates the gravity timestep bound; "
                         "increase chemistry.synchronizedRung\n");
@@ -625,21 +642,27 @@ std::pair<KickReturn, TreeCreateReturn> advanceForces(int minRung, double scale,
         energies.ymom += gravity.darkMatterYMomentumCorrection / scale;
         energies.zmom += gravity.darkMatterZMomentumCorrection / scale;
         energies.nmom += gravity.darkMatterMomentumNormCorrection / scale;
-        energies.tckin = energies.kin * sqr(scale);
+        if (!closingOnly) {
+            // SPH and dark matter have now opened their next half-kicks. The
+            // expansion work needs these drift momenta, not the synchronized
+            // velocities used for the reported kinetic energy above.
+            energies.tckin = particlesSumEnergies().kin;
+        }
     }
 #endif
     if (meshGravity && !getOptions().hydro.enabled) {
         // Preparation left the velocities synchronized for these diagnostics.
         energies.pot = gravity.pot / scale;
         energies.kin = gravity.kin / sqr(scale);
-        energies.tckin = gravity.kin;
         energies.xmom = gravity.xmom / scale;
         energies.ymom = gravity.ymom / scale;
         energies.zmom = gravity.zmom / scale;
         energies.nmom = gravity.nmom / scale;
 #if COSMICTIGER_GRAVITY_PMMM
-        section_timing::measure(section_timing::Section::gravity,
-            [&]() { particleMeshFinishKick(baseTimestep, gravity.maxRung); });
+        if (!closingOnly) {
+            energies.tckin = section_timing::measure(section_timing::Section::gravity,
+                [&]() { return particleMeshFinishKick(baseTimestep, gravity.maxRung); });
+        }
 #endif
     } else if (getOptions().gravity.enabled && !getOptions().hydro.enabled) {
         // Ordinary FMM kicks update only the active rungs. Keep the global
@@ -694,7 +717,10 @@ void particleMeshDriftRung(
 std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int maxRung,
     double scale, double adot, double tau, double t0, double theta, EnergiesT* energies,
     int minrung0, bool doPhi, hpx::future<void>* lcFut, bool nocrop, double drag,
-    int gravityErrorStep) {
+    int gravityErrorStep, bool closingOnly) {
+    // A terminal energy evaluation consumes only the outstanding closing
+    // ladder. The saved checkpoint retains the original staggered momenta.
+    nocrop = nocrop || closingOnly;
     Timer tm;
     KickReturn kr;
     TreeCreateReturn sr;
@@ -812,7 +838,7 @@ std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int m
         }
         kparams.sign = getOptions().initial.createGlass ? -1.0 : 1.0;
         kparams.ascending = ascending || top;
-        if (clipTop && top) {
+        if (closingOnly || (clipTop && top)) {
             kparams.descending = false;
         } else {
             kparams.descending = !ascending || top;
@@ -885,6 +911,12 @@ std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int m
             energies->ymom = kr.ymom / scale;
             energies->zmom = kr.zmom / scale;
             energies->nmom = kr.nmom / scale;
+        }
+        if (closingOnly && top) {
+#if !COSMICTIGER_GRAVITY_PMMM
+            treeReset();
+#endif
+            break;
         }
         if (clipTop && top) {
             levels.push_back(minrung0 + 1);
@@ -1042,6 +1074,28 @@ void outputTimeFile(DriverParameters const& parameters) {
     fclose(fp);
 }
 
+static void outputEnergy(double coarseTime, double scale, EnergiesT const& energies,
+    double referenceEnergy, double glassError) {
+    double const error = cosmology::normalizedEnergyError(scale, energies.kin, energies.pot,
+        energies.therm, energies.heating, energies.cosmic, referenceEnergy);
+    FILE* fp = fopen(outputPath("energy.txt").c_str(), "at");
+    if (fp == nullptr) {
+        THROW_ERROR("unable to open energy.txt for writing\n");
+    }
+    // Label the columns once, when the file is new; restarts append.
+    fseek(fp, 0, SEEK_END);
+    if (ftell(fp) == 0) {
+        fprintf(fp,
+            "# step a px/sum|p| py/sum|p| pz/sum|p| a*W a*K cosmic energy_error "
+            "glass_error\n");
+    }
+    double const momentumNorm = energies.nmom > 0.0 ? energies.nmom : 1.0;
+    fprintf(fp, "%e %e %e %e %e %e %e %e %e %e\n", coarseTime, scale, energies.xmom / momentumNorm,
+        energies.ymom / momentumNorm, energies.zmom / momentumNorm, scale * energies.pot,
+        scale * energies.kin, energies.cosmic, error, glassError);
+    fclose(fp);
+}
+
 void driver() {
     profile::checkForInterrupt();
     if (scenarios::definition(getOptions().run.scenario).fixedTime) {
@@ -1049,7 +1103,6 @@ void driver() {
         return;
     }
     Timer totalTime;
-    totalTime.start();
     Timer tmr;
     tmr.start();
     DriverParameters params{};
@@ -1212,7 +1265,8 @@ void driver() {
     int thisIter = 0;
     size_t progressRows = 0;
     terminal::section(getOptions().run.scenario.c_str());
-    PRINT("  tau is conformal time / coarse interval; dt is in code units.\n");
+    PRINT("  tau is conformal time / coarse interval; dt is in code units.\n"
+          "  Wall durations use hh:mm::ss.ss; initialization is excluded.\n");
     Timer reset;
     reset.start();
     if (getOptions().lightcone.enabled) {
@@ -1231,26 +1285,30 @@ void driver() {
             tm.start();
             lcBuffer2homes();
             tm.stop();
-            terminal::detailPrint("lc_buffer2homes %e\n", tm.read());
+            terminal::detailPrint(
+                "lc_buffer2homes %s\n", terminal::formatDuration(tm.read()).c_str());
             tm.reset();
             tm.start();
             lcParticleBoundaries1();
             tm.stop();
-            terminal::detailPrint("lc_particles_boundaries1 %e\n", tm.read());
+            terminal::detailPrint(
+                "lc_particles_boundaries1 %s\n", terminal::formatDuration(tm.read()).c_str());
             tm.reset();
             tm.start();
             double const linkingLength = getOptions().lightcone.linkingLength *
                 pow(getOptions().initial.numberOfParticles, -1.0 / kDimensions);
             lcFormTrees(tau, linkingLength);
             tm.stop();
-            terminal::detailPrint("lc_form_trees %e\n", tm.read());
+            terminal::detailPrint(
+                "lc_form_trees %s\n", terminal::formatDuration(tm.read()).c_str());
             tm.reset();
             tm.start();
             size_t cnt;
             lcFindNeighbors();
             terminal::detailPrint("neighbors found\n");
             tm.stop();
-            terminal::detailPrint("lc_neighbors_found %e\n", tm.read());
+            terminal::detailPrint(
+                "lc_neighbors_found %s\n", terminal::formatDuration(tm.read()).c_str());
             Timer tm2;
             tm2.start();
             do {
@@ -1258,29 +1316,31 @@ void driver() {
                 tm.start();
                 lcParticleBoundaries2();
                 tm.stop();
-                terminal::detailPrint("%e ", tm.read());
+                terminal::detailPrint("%s ", terminal::formatDuration(tm.read()).c_str());
                 tm.reset();
                 tm.start();
                 cnt = lcFindGroups();
                 tm.stop();
-                terminal::detailPrint("%e %li\n", cnt, tm.read());
+                terminal::detailPrint("%li %s\n", cnt, terminal::formatDuration(tm.read()).c_str());
             } while (cnt > 0);
             tm2.stop();
-            terminal::detailPrint("loop time = %e\n", tm2.read());
+            terminal::detailPrint("loop time = %s\n", terminal::formatDuration(tm2.read()).c_str());
             tm.start();
             lcGroups2homes();
             tm.stop();
-            terminal::detailPrint("lc_groups2homes %e\n", tm.read());
+            terminal::detailPrint(
+                "lc_groups2homes %s\n", terminal::formatDuration(tm.read()).c_str());
             tm.reset();
             tm.start();
             lcParts2groups(a, linkingLength, iter);
             tm.stop();
-            terminal::detailPrint("lc_parts2groups %e\n", tm.read());
+            terminal::detailPrint(
+                "lc_parts2groups %s\n", terminal::formatDuration(tm.read()).c_str());
             tm.reset();
             tm.start();
             lcInit(tau, tauMax);
             tm.stop();
-            terminal::detailPrint("lc_init %e\n", tm.read());
+            terminal::detailPrint("lc_init %s\n", terminal::formatDuration(tm.read()).c_str());
             tm.reset();
         }
     };
@@ -1292,6 +1352,10 @@ void driver() {
     EnergiesT energies0;
     double glassError = 1.0;
     bool interrupted = false;
+    double const previousRuntime = runtime;
+    Timer evolutionTime;
+    evolutionTime.start();
+    totalTime.start();
     for (;; step++) {
         if (cosmology::endTimeReached(tau, tauMax)) {
             break;
@@ -1435,38 +1499,16 @@ void driver() {
 
             //			PRINT("GRAVITY max_rung = %i\n", kr.max_rung);
             if (minrung <= 0) {
-                double energy = a * (energies.kin + energies.pot + energies.therm) +
-                    energies.heating + energies.cosmic;
                 if (tau == 0) {
                     energy0 = 0.0;
-                    energies.cosmic = -energy;
-                    energy = 0.0;
+                    energies.cosmic =
+                        -a * (energies.kin + energies.pot + energies.therm) - energies.heating;
                 }
-                double const norm = std::max(fabs(energies.kin) + fabs(energies.pot) +
-                        fabs(energies.therm) + fabs(energies.heating) + fabs(energies.cosmic),
-                    1.0e-30);
-                double const err = (energy - energy0) / norm;
                 if (tau > 0.0) {
                     glassError = fabs(energies0.pot - a * energies.pot) /
                         std::max(fabs(a * energies.pot), 1.0e-30);
                 }
-                FILE* fp = fopen(outputPath("energy.txt").c_str(), "at");
-                if (fp == nullptr) {
-                    THROW_ERROR("unable to open energy.txt for writing\n");
-                }
-                // Label the columns once, when the file is new; restarts append.
-                fseek(fp, 0, SEEK_END);
-                if (ftell(fp) == 0) {
-                    fprintf(fp,
-                        "# step a px/sum|p| py/sum|p| pz/sum|p| a*W a*K cosmic energy_error "
-                        "glass_error\n");
-                }
-                double const momentumNorm = energies.nmom > 0.0 ? energies.nmom : 1.0;
-                fprintf(fp, "%e %e %e %e %e %e %e %e %e %e\n", tau / t0, a,
-                    energies.xmom / momentumNorm, energies.ymom / momentumNorm,
-                    energies.zmom / momentumNorm, a * energies.pot, a * energies.kin,
-                    energies.cosmic, err, glassError);
-                fclose(fp);
+                outputEnergy(tau / t0, a, energies, energy0, glassError);
                 energies0 = energies;
                 energies0.pot *= a;
             }
@@ -1485,11 +1527,11 @@ void driver() {
             // For monatomic gamma=5/3 this reduces to the historical -(K+U).
             // Peebles, Large-Scale Structure of the Universe (1980), energy
             // equation; the gas term follows directly from dU=-P dV.
-            energies.cosmic += (a - a0) *
-                (energies.tckin / (a0 * a0) +
+            energies.cosmic += cosmology::kineticExpansionWork(a0, a, energies.tckin) +
+                (a - a0) *
                     (getOptions().chemistry.enabled ?
                             -energies.therm + 3.0 * synchronizedChemistryPressure :
-                            energies.therm));
+                            energies.therm);
             double const dyears =
                 physicalInterval * getOptions().units.timeSeconds / constants::kSpyr;
             auto const z0 = 1.0 / a0 - 1.0;
@@ -1567,12 +1609,13 @@ void driver() {
                       "chemistry is excluded.\n");
             }
             if (progressRows % 25 == 0) {
-                PRINT("\n%8s %10s %10s %10s %10s %7s %7s %10s %10s %10s\n", "Step", "z", "a", "tau",
-                    "dt", "MinRung", "MaxRung", "Wall[s]", "Step[s]", "TFLOP/s");
+                PRINT("\n%8s %10s %10s %10s %10s %7s %7s %13s %13s %10s\n", "Step", "z", "a", "tau",
+                    "dt", "MinRung", "MaxRung", "Wall", "Step time", "TFLOP/s");
             }
-            PRINT("%8i %10.3e %10.3e %10.3e %10.3e %7i %7i %10.2f %10.3f %10.3e\n", iter,
-                outputRedshift, a, nextTau / t0, dt, displayedMinimumRung, maxRung, runtime,
-                stepTm.read(), flops * 1e-12);
+            PRINT("%8i %10.3e %10.3e %10.3e %10.3e %7i %7i %13s %13s %10.3e\n", iter,
+                outputRedshift, a, nextTau / t0, dt, displayedMinimumRung, maxRung,
+                terminal::formatDuration(runtime).c_str(),
+                terminal::formatDuration(stepTm.read()).c_str(), flops * 1e-12);
             progressRows++;
             fclose(textfp);
             totalTime.reset();
@@ -1634,10 +1677,40 @@ void driver() {
             detail::checkpointRedshiftAlias(params.iter, checkz);
         }
     }
+    if (!interrupted && thisIter > 0 && itime == 0 && cosmology::endTimeReached(tau, tauMax)) {
+        // Finish the energy measurement only after all restart state and
+        // snapshots have been saved. This terminal force pass may reorder and
+        // synchronize particles; nothing subsequently persists or evolves them.
+        // Keep the work ledger and driver state at the completed drift, and
+        // leave completed-checkpoint restarts alone (thisIter == 0).
+        EnergiesT finalEnergies = energies;
+        double const t0 = tauMax / getOptions().run.numberOfSteps;
+        double const theta = getOptions().gravity.openingAngle;
+        if (integration::kBuildUsesHierarchical && getOptions().gravity.enabled) {
+            int minimumRung = minrung0;
+            kickStepHierarchical(minimumRung, maxRung, a, adot, tau, t0, theta, &finalEnergies,
+                minrung0, true, nullptr, true, 0.0, -1, true);
+        } else {
+            // Ordinary force advancement records diagnostics between closing
+            // and opening kicks. Its terminal particle state is discarded.
+            advanceForces(0, a, a * adot, tau, t0, theta, false, true, finalEnergies, -1, true);
+        }
+        double const finalGlassError = std::abs(energies0.pot - a * finalEnergies.pot) /
+            std::max(std::abs(a * finalEnergies.pot), 1.0e-30);
+        outputEnergy(tau / t0, a, finalEnergies, energy0, finalGlassError);
+    }
     if (getOptions().lightcone.enabled) {
         particlesFree();
     }
 #if !COSMICTIGER_GRAVITY_PMMM
     kickClearBuffers();
 #endif
+    evolutionTime.stop();
+    PRINT("  Total evolution time (this run, initialization excluded): %s\n",
+        terminal::formatDuration(thisIter > 0 ? evolutionTime.read() : 0.0).c_str());
+    if (getOptions().checkpoint.readIndex >= 0) {
+        PRINT("  Recorded time including previous runs: %s\n",
+            terminal::formatDuration(previousRuntime + (thisIter > 0 ? evolutionTime.read() : 0.0))
+                .c_str());
+    }
 }

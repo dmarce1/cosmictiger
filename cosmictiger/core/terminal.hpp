@@ -4,8 +4,14 @@
 
 #pragma once
 
+#include <array>
 #include <atomic>
+#include <bit>
+#include <cmath>
+#include <cstdint>
 #include <cstdio>
+#include <limits>
+#include <string>
 
 namespace terminal {
 
@@ -21,6 +27,27 @@ inline void setVerbose(bool enabled) {
 
 inline bool verbose() {
     return detail::verboseEnabled.load(std::memory_order_relaxed);
+}
+
+// Wall-clock durations use hundredths of a second and hours do not wrap at 24.
+inline std::string formatDuration(double seconds) {
+    constexpr std::uint64_t kExponentMask = 0x7ff0000000000000ULL;
+    // Production fast-math builds may assume std::isfinite is always true.
+    if ((std::bit_cast<std::uint64_t>(seconds) & kExponentMask) == kExponentMask) {
+        return "--:--::--.--";
+    }
+    double const rounded = std::round((seconds > 0.0 ? seconds : 0.0) * 100.0);
+    if (rounded >= static_cast<double>(std::numeric_limits<std::uint64_t>::max())) {
+        return "--:--::--.--";
+    }
+    auto const centiseconds = static_cast<std::uint64_t>(rounded);
+    std::array<char, 32> text{};
+    std::snprintf(text.data(), text.size(), "%02llu:%02llu::%02llu.%02llu",
+        static_cast<unsigned long long>(centiseconds / 360000),
+        static_cast<unsigned long long>((centiseconds / 6000) % 60),
+        static_cast<unsigned long long>((centiseconds / 100) % 60),
+        static_cast<unsigned long long>(centiseconds % 100));
+    return text.data();
 }
 
 template <class... Args>

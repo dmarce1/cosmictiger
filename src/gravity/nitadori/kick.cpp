@@ -252,9 +252,9 @@ KickReturn particleMeshPrepareKick(
     return result;
 }
 
-void particleMeshFinishKick(double baseTimestep, int rung) {
+double particleMeshFinishKick(double baseTimestep, int rung) {
     ALWAYS_ASSERT(rung >= 0 && rung < kMaxRung);
-    std::vector<hpx::future<void>> futures;
+    std::vector<hpx::future<double>> futures;
     for (auto const& child : hpxChildren()) {
         futures.push_back(hpx::async<ParticleMeshFinishKickAction>(child, baseTimestep, rung));
     }
@@ -270,6 +270,7 @@ void particleMeshFinishKick(double baseTimestep, int rung) {
             futures.push_back(hpx::async(hpx::annotated_function(
                 [=]() {
                     FlopCounter<> flops;
+                    double kinetic = 0.0;
                     for (size_t i = worker * count / workers; i < (worker + 1) * count / workers;
                         ++i) {
                         particlesRung(i) = rung;
@@ -281,8 +282,15 @@ void particleMeshFinishKick(double baseTimestep, int rung) {
                             }
                             flops += 2 * kDimensions;
                         }
+                        double velocitySquared = 0.0;
+                        for (int dim = 0; dim < kDimensions; ++dim) {
+                            double const velocity = particlesVel(dim, i);
+                            velocitySquared += velocity * velocity;
+                        }
+                        kinetic += 0.5 * particlesMass(i) * velocitySquared;
                     }
                     addCpuFlops(flops);
+                    return kinetic;
                 },
                 "gravity.pmmm.finishKick")));
         }
@@ -291,7 +299,9 @@ void particleMeshFinishKick(double baseTimestep, int rung) {
         throw;
     }
     hpx::wait_all(futures);
+    double kinetic = 0.0;
     for (auto& future : futures) {
-        future.get();
+        kinetic += future.get();
     }
+    return kinetic;
 }

@@ -12,6 +12,8 @@
 #include <string>
 #include <utility>
 
+#include <cosmictiger/core/terminal.hpp>
+
 namespace section_timing {
 
 enum class Section {
@@ -54,23 +56,24 @@ namespace detail {
         return value;
     }
 
-    inline void writeReport(std::FILE* stream, Registry const& state) noexcept {
+    inline void writeReport(std::FILE* stream, Registry const& state) {
         static constexpr std::array<char const*, static_cast<size_t>(Section::count)> labels{
             "Initial conditions", "Transfer functions", "Domains", "Particle sort", "Tree build",
             "Gravity", "Hydrodynamics", "Drift", "Checkpoint read", "Checkpoint write",
             "Snapshot output", "Analysis"};
-        std::fprintf(stream, "Major section timings (wall seconds)\n");
+        std::fprintf(stream, "Major section timings (hh:mm::ss.ss)\n");
         std::fprintf(stream, "Inclusive coordinator timings; nested sections overlap.\n");
-        std::fprintf(stream, "%-24s %12s %16s %16s\n", "Section", "Calls", "Total (s)", "Mean (s)");
+        std::fprintf(stream, "%-24s %12s %16s %16s\n", "Section", "Calls", "Total", "Mean");
         for (size_t index = 0; index < state.entries.size(); ++index) {
             auto const& entry = state.entries[index];
             if (entry.calls == 0) {
                 continue;
             }
             double const seconds = std::chrono::duration<double>(entry.elapsed).count();
-            std::fprintf(stream, "%-24s %12llu %16.6f %16.6f\n", labels[index],
-                static_cast<unsigned long long>(entry.calls), seconds,
-                seconds / static_cast<double>(entry.calls));
+            std::fprintf(stream, "%-24s %12llu %16s %16s\n", labels[index],
+                static_cast<unsigned long long>(entry.calls),
+                terminal::formatDuration(seconds).c_str(),
+                terminal::formatDuration(seconds / static_cast<double>(entry.calls)).c_str());
         }
         std::fflush(stream);
     }

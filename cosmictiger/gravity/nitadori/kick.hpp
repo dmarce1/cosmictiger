@@ -25,4 +25,7 @@ KickReturn particleMeshApplyField(ParticleInteger index,
 // pending until hydro has contributed its timestep bound.
 KickReturn particleMeshPrepareKick(
     double scale, double baseTimestep, double maximumTimestep, bool firstCall, int minimumRung);
-void particleMeshFinishKick(double baseTimestep, int rung);
+// Return the global sum of 0.5 * mass * stored canonical velocity squared after
+// opening the dark-matter kick. Gas velocities are unchanged here; hydro callers
+// finish their gas update separately and must not use this as synchronized energy.
+double particleMeshFinishKick(double baseTimestep, int rung);

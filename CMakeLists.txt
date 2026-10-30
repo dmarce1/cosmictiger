@@ -762,10 +762,13 @@ if(BUILD_TESTING)
     target_compile_options(cosmology_evolution_test PRIVATE -fno-fast-math -ffp-contract=off)
     cosmictiger_add_gtest(NAME cosmology_evolution TARGET cosmology_evolution_test
         PROPERTIES TIMEOUT 30)
-    # Application tests containing SPH cases require the leapfrog integrator.
-    # Standalone force and hydro operator checks remain valid in either build.
-    if(COSMICTIGER_WITH_SPH AND COSMICTIGER_GRAVITY_METHOD STREQUAL "fmm" AND
-            COSMICTIGER_TIME_INTEGRATOR STREQUAL "leapfrog")
+    add_executable(terminal_test tests/terminal.cpp)
+    target_include_directories(terminal_test PRIVATE ${PROJECT_SOURCE_DIR})
+    target_compile_options(terminal_test PRIVATE -ffast-math)
+    cosmictiger_add_gtest(NAME terminal TARGET terminal_test PROPERTIES TIMEOUT 10)
+    # The collisionless checks also exercise terminal hierarchy synchronization.
+    # Only leapfrog builds with SPH include the additional gas evolution case.
+    if(COSMICTIGER_GRAVITY_METHOD STREQUAL "fmm")
         foreach(cosmology_backend IN ITEMS cpu cuda)
             if(cosmology_backend STREQUAL "cuda" AND NOT COSMICTIGER_WITH_CUDA)
                 continue()
@@ -775,6 +778,9 @@ if(BUILD_TESTING)
                 set(cosmology_integration_name cosmology_integration)
             endif()
             set(cosmology_backend_args)
+            if(NOT COSMICTIGER_WITH_SPH OR NOT COSMICTIGER_TIME_INTEGRATOR STREQUAL "leapfrog")
+                list(APPEND cosmology_backend_args --collisionless-only)
+            endif()
             if(cosmology_backend STREQUAL "cuda")
                 list(APPEND cosmology_backend_args --cuda)
             endif()

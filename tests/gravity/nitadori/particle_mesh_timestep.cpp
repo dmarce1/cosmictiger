@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -20,13 +21,14 @@ namespace detail {
 struct MeshTimestepSample {
     Array<float, kDimensions> acceleration{};
     Array<float, kDimensions> velocity{};
+    double mass{};
     double position{};
     int rung{};
     int rank{};
 
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
-        archive & acceleration & velocity & position & rung & rank;
+        archive & acceleration & velocity & mass & position & rung & rank;
     }
 };
 
@@ -65,6 +67,7 @@ Vector<MeshTimestepSample> readMeshTimestepFixture() {
             sample.velocity[dim] = particlesVel(dim, i);
         }
         sample.position = particlesPos(kXDimension, i).toDouble();
+        sample.mass = particlesMass(i);
         sample.rung = particlesRung(i);
         sample.rank = hpxRank();
     }
@@ -132,11 +135,30 @@ void meshTimestepStep(TimeType clock, int expectedRung, bool firstCall = false) 
     auto const synchronized = meshTimestepSamples();
     checkMeshTimestepKick(before, synchronized, expectedRung, false, firstCall);
     FlopCount const beforeFinish = readFlops();
-    particleMeshFinishKick(1.0, proposal.maxRung);
+    double const driftKinetic = particleMeshFinishKick(1.0, proposal.maxRung);
     FlopCount const expectedFinish = kCountFlops ? 3 * FlopCount(hpxSize()) + 6 * before.size() : 0;
     requireMeshTimestep(readFlops() - beforeFinish == expectedFinish,
         "finalization FLOPs omitted the shared half-step or particle kicks");
-    checkMeshTimestepKick(synchronized, meshTimestepSamples(), expectedRung, true, false);
+    auto const after = meshTimestepSamples();
+    checkMeshTimestepKick(synchronized, after, expectedRung, true, false);
+    // Compare the distributed result to an independent sum of the stored float
+    // momenta after the opening kick, including particles on remote localities.
+    double expectedKinetic = 0.0;
+    for (auto const& sample : after) {
+        double velocitySquared = 0.0;
+        for (float velocity : sample.velocity) {
+            velocitySquared += double(velocity) * velocity;
+        }
+        expectedKinetic += 0.5 * sample.mass * velocitySquared;
+    }
+    requireMeshTimestep(std::isfinite(driftKinetic) && expectedKinetic > 0.0 &&
+            std::abs(driftKinetic - expectedKinetic) <=
+                16.0 * std::numeric_limits<double>::epsilon() * expectedKinetic,
+        "finalization did not return the global mass-weighted drift kinetic energy");
+    if (firstCall) {
+        requireMeshTimestep(proposal.kin == 0.0 && driftKinetic > proposal.kin,
+            "kinetic regression must distinguish synchronized energy from drift energy");
+    }
 }
 
 void checkMeshApplyFieldFlops() {

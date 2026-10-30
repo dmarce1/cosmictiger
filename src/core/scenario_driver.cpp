@@ -108,7 +108,6 @@ void runFixedScenario() {
     Timer checkpointTimer;
     checkpointTimer.start();
     Timer runtime;
-    runtime.start();
     double const restoredRuntime = state.runtime;
     int iterations = 0;
     size_t progressRows = 0;
@@ -119,7 +118,8 @@ void runFixedScenario() {
             PRINT(
                 "%-38s: %lld\n", "Initialized particles", static_cast<long long>(particlesSize()));
         }
-        PRINT("  Time and dt are in code units; wall time includes previous runs on restart.\n");
+        PRINT("  Time and dt are in code units; wall durations use hh:mm::ss.ss and include "
+              "previous runs on restart.\n");
     }
     int lastCheckpoint = restarting ? state.iter : -1;
     auto const checkpoint = [&]() {
@@ -134,6 +134,7 @@ void runFixedScenario() {
     };
     double stageStart = 0.0;
     bool interrupted = false;
+    runtime.start();
     for (auto const& stage : plan.stages) {
         double const stageEnd = stageStart + stage.duration;
         double const tolerance = 1.0e-12 * duration;
@@ -240,13 +241,14 @@ void runFixedScenario() {
                           "chemistry is excluded.\n");
                 }
                 if (progressRows % 25 == 0) {
-                    PRINT("\n%8s %13s %13s %7s %13s %10s %10s %10s\n", "Step", "Time", "dt",
-                        "Done %", "Rung(min/max)", "Wall[s]", "Step[s]", "TFLOP/s");
+                    PRINT("\n%8s %13s %13s %7s %13s %13s %13s %10s\n", "Step", "Time", "dt",
+                        "Done %", "Rung(min/max)", "Wall", "Step time", "TFLOP/s");
                 }
-                PRINT("%8i %13.6e %13.6e %7.2f %6i/%-6i %10.2f %10.3f %10.3e\n", state.iter,
-                    state.tau, timestep, std::clamp(100.0 * state.tau / duration, 0.0, 100.0),
-                    displayedMinimumRung, state.maxRung, displayedRuntime, stepTimer.read(),
-                    flops * 1e-12);
+                PRINT("%8i %13.6e %13.6e %7.2f %6i/%-6i %13s %13s %10.3e\n", state.iter, state.tau,
+                    timestep, std::clamp(100.0 * state.tau / duration, 0.0, 100.0),
+                    displayedMinimumRung, state.maxRung,
+                    terminal::formatDuration(displayedRuntime).c_str(),
+                    terminal::formatDuration(stepTimer.read()).c_str(), flops * 1e-12);
                 progressRows++;
             }
         }
@@ -274,8 +276,15 @@ void runFixedScenario() {
     runtime.stop();
     if (hpxRank() == 0) {
         bool const finished = state.tau >= duration * (1.0 - 1.0e-12);
-        PRINT("\n  %s: %s at t=%.6e after %i steps (%.2f s total wall time).\n", definition.name,
+        PRINT("\n  %s: %s at t=%.6e after %i steps.\n", definition.name,
             finished ? "finished" : (interrupted ? "interrupted" : "paused at the iteration limit"),
-            state.tau, state.iter, restoredRuntime + runtime.read());
+            state.tau, state.iter);
+        double const evolutionSeconds = iterations > 0 ? runtime.read() : 0.0;
+        PRINT("  Total evolution time (this run, initialization excluded): %s\n",
+            terminal::formatDuration(evolutionSeconds).c_str());
+        if (restarting) {
+            PRINT("  Recorded time including previous runs: %s\n",
+                terminal::formatDuration(restoredRuntime + evolutionSeconds).c_str());
+        }
     }
 }

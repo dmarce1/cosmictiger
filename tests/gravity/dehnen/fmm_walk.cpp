@@ -1159,6 +1159,149 @@ void fmmWalkOrdinaryTimesteps(bool useCuda) {
     setOptions(saved);
 }
 
+void fmmWalkHierarchicalTerminalEnergy(bool useCuda) {
+    auto const saved = getOptions();
+    auto options = saved;
+    options.chemistry.enabled = false;
+    options.lightcone.enabled = false;
+    options.run.minRung = 2;
+    options.run.scenario = "plummer";
+    options.gravity.gm = 0.125;
+    options.gravity.timestepEta = 1.0e6;
+    options.initial.createGlass = false;
+    options.initial.plummer = false;
+    options.initial.numberOfParticles = 3;
+    constexpr double kScale = 0.5;
+    constexpr double kBaseTimestep = 0.03125;
+    constexpr double kKickTolerance = 2.0e-5;
+    std::array<Array<Position, kDimensions>, 3> const positions{fmmWalkDistributedPosition(0),
+        fmmWalkDistributedPosition(1), fmmWalkDistributedPosition(2)};
+    Vector<Array<Position, kDimensions>> const allPositions(positions.begin(), positions.end());
+    Vector<Array<Position, kDimensions>> const fastPositions(
+        positions.begin() + 1, positions.end());
+    Vector<double> const allMasses(positions.size(), 1.0);
+    Vector<double> const fastMasses(positions.size() - 1, 1.0);
+    std::array<FmmWalkPeriodicField, 3> fullReferences;
+    std::array<FmmWalkPeriodicField, 2> fastReferences;
+    for (size_t i = 0; i < fullReferences.size(); ++i) {
+        fullReferences[i] = fmmWalkDirectPeriodicReference(i, allPositions, allMasses);
+    }
+    for (size_t i = 0; i < fastReferences.size(); ++i) {
+        fastReferences[i] = fmmWalkDirectPeriodicReference(i, fastPositions, fastMasses);
+    }
+    auto const initialVelocity = [](size_t particle, int dim) {
+        return 0.125f * (particle + 1) * (dim + 1);
+    };
+    std::array<std::array<double, kDimensions>, 3> synchronizedVelocity;
+    double storedKinetic = 0.0;
+    double synchronizedKinetic = 0.0;
+    double potential = 0.0;
+    std::array<double, kDimensions> momentum{};
+    double momentumNorm = 0.0;
+    for (size_t i = 0; i < positions.size(); ++i) {
+        double speedSquared = 0.0;
+        potential += 0.5 * options.gravity.gm * fullReferences[i].potential;
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            double const stored = initialVelocity(i, dim);
+            // The closing HOLD ladder subtracts the fast subsystem's half kick,
+            // then adds the full system's coarse half kick at the same positions.
+            double const fastCorrection = i == 0 ? 0.0 :
+                                                   std::ldexp(0.5 * kBaseTimestep, -3) *
+                    options.gravity.gm * fastReferences[i - 1].acceleration[dim];
+            double const synchronized = stored - fastCorrection +
+                std::ldexp(0.5 * kBaseTimestep, -2) * options.gravity.gm *
+                    fullReferences[i].acceleration[dim];
+            synchronizedVelocity[i][dim] = synchronized;
+            storedKinetic += 0.5 * stored * stored;
+            synchronizedKinetic += 0.5 * synchronized * synchronized;
+            momentum[dim] += synchronized;
+            speedSquared += synchronized * synchronized;
+        }
+        momentumNorm += std::sqrt(speedSquared);
+    }
+    if (std::abs(synchronizedKinetic - storedKinetic) <
+        1.0e-3 * std::max(1.0, synchronizedKinetic)) {
+        throw std::runtime_error("Hierarchical terminal fixture must distinguish kick stages");
+    }
+    for (int backend = 0; backend < (useCuda ? 2 : 1); ++backend) {
+        options.compute.cuda = backend != 0;
+        setOptions(options);
+        std::string const label =
+            std::string("hierarchical terminal energy ") + (backend ? "CUDA" : "CPU");
+        particlesResize(positions.size());
+        for (size_t i = 0; i < positions.size(); ++i) {
+            fmmWalkSetParticlePosition(i, positions[i]);
+            particlesRung(i) = i == 0 ? 2 : 3;
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                particlesVel(dim, i) = initialVelocity(i, dim);
+                particlesGravityAcceleration(dim, i) = 12345.0f;
+            }
+            particlesPot(i) = 6789.0f;
+        }
+        particlesSortByRung(0);
+        domainsRebound();
+        // Reproduce the range stack left after descent from rung two to three.
+        particlesSortByRung(2);
+        particlesPushRungs();
+        particlesSortByRung(3);
+        EnergiesT energies;
+        energies.tckin = storedKinetic;
+        energies.cosmic = 3.5;
+        energies.heating = 7.0;
+        energies.therm = 2.0;
+        int minimumRung = 2;
+        kickStepHierarchical(minimumRung, 3, kScale, 0.0, kBaseTimestep, kBaseTimestep, 0.1,
+            &energies, 2, true, nullptr, false, 0.0, -1, true);
+        if (particlesSize() != positions.size()) {
+            throw std::runtime_error(label + " changed particle count");
+        }
+        fmmWalkRequireClose(label + " minimum rung", minimumRung, 2, 0.0);
+        auto const range = particlesCurrentRange();
+        fmmWalkRequireClose(
+            label + " restored full range", range.second - range.first, positions.size(), 0.0);
+        std::array<bool, 3> found{};
+        for (size_t i = 0; i < positions.size(); ++i) {
+            size_t id = positions.size();
+            for (size_t candidate = 0; candidate < positions.size(); ++candidate) {
+                bool matches = true;
+                for (int dim = 0; dim < kDimensions; ++dim) {
+                    matches &= particlesPos(dim, i).raw() == positions[candidate][dim].raw();
+                }
+                if (matches) {
+                    id = candidate;
+                    break;
+                }
+            }
+            if (id == positions.size() || found[id]) {
+                throw std::runtime_error(label + " changed a particle position");
+            }
+            found[id] = true;
+            fmmWalkRequireClose(label + " unchanged rung", particlesRung(i), id == 0 ? 2 : 3, 0.0);
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                fmmWalkRequireClose(label + " closing half kicks", particlesVel(dim, i),
+                    synchronizedVelocity[id][dim], kKickTolerance);
+            }
+        }
+        fmmWalkRequireClose(label + " synchronized potential", energies.pot, potential / kScale);
+        fmmWalkRequireClose(label + " synchronized kinetic", energies.kin,
+            synchronizedKinetic / (kScale * kScale), kKickTolerance);
+        fmmWalkRequireClose(label + " canonical kinetic accumulator", energies.tckin,
+            synchronizedKinetic, kKickTolerance);
+        fmmWalkRequireClose(
+            label + " x momentum", energies.xmom, momentum[0] / kScale, kKickTolerance);
+        fmmWalkRequireClose(
+            label + " y momentum", energies.ymom, momentum[1] / kScale, kKickTolerance);
+        fmmWalkRequireClose(
+            label + " z momentum", energies.zmom, momentum[2] / kScale, kKickTolerance);
+        fmmWalkRequireClose(
+            label + " momentum norm", energies.nmom, momentumNorm / kScale, kKickTolerance);
+        fmmWalkRequireClose(label + " unchanged expansion work", energies.cosmic, 3.5, 0.0);
+        fmmWalkRequireClose(label + " unchanged source work", energies.heating, 7.0, 0.0);
+        fmmWalkRequireClose(label + " unchanged thermal energy", energies.therm, 2.0, 0.0);
+    }
+    setOptions(saved);
+}
+
 void fmmWalkPeriodicBackground(bool useCuda) {
     constexpr float kTheta = 0.1f;
     constexpr float kUntouchedPotential = 12345.0f;
@@ -1552,6 +1695,8 @@ void fmmWalkTest() {
         detail::fmmWalkPeriodicBackground(useCuda);
         if constexpr (!integration::kBuildUsesHierarchical) {
             detail::fmmWalkOrdinaryTimesteps(useCuda);
+        } else {
+            detail::fmmWalkHierarchicalTerminalEnergy(useCuda);
         }
         detail::fmmWalkOpenLargerCell(useCuda);
     } else {

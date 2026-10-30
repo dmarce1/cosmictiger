@@ -130,7 +130,8 @@ def main():
             raise RuntimeError("terminal progress is missing the TFLOP/s column")
         terminal_rows = re.findall(
             r"^\s*\d+(?:\s+[+\-]?[\d.]+e[+\-]\d+){4}"
-            r"\s+\d+\s+\d+\s+[\d.]+\s+[\d.]+\s+([+\-]?[\d.]+e[+\-]\d+)\s*$",
+            r"\s+\d+\s+\d+(?:\s+\d{2,}:\d{2}::\d{2}\.\d{2}){2}"
+            r"\s+([+\-]?[\d.]+e[+\-]\d+)\s*$",
             output_log, re.MULTILINE)
         if len(terminal_rows) != len(rows) or any(
                 not math.isfinite(float(rate)) or float(rate) <= 0 for rate in terminal_rows):

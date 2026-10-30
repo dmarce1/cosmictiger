@@ -108,6 +108,28 @@ def check_finite_progress(directory):
     return rows
 
 
+def read_energy_rows(directory):
+    path = directory / "energy.txt"
+    require(path.is_file(), f"missing energy file in {directory}")
+    rows = [[float(value) for value in line.split()] for line in path.read_text().splitlines()
+            if line.strip() and not line.lstrip().startswith("#")]
+    require(rows and all(len(row) == 10 for row in rows),
+            f"empty or incomplete energy output in {directory}")
+    require(all(math.isfinite(value) for row in rows for value in row),
+            f"nonfinite energy output in {directory}")
+    return rows
+
+
+def check_complete_energy(directory, steps, final_scale):
+    rows = read_energy_rows(directory)
+    require([row[0] for row in rows] == list(range(steps + 1)),
+            f"energy output must contain each coarse epoch from zero through {steps} exactly once")
+    # energy.txt uses seven significant digits, unlike the checkpoint state.
+    require_close(rows[-1][1], final_scale, "final energy scale factor",
+                  relative=1.e-6, absolute=1.e-8)
+    return rows
+
+
 def closed_matter_state(dimensionless_time):
     # Omega_m=2, Omega_k=-1 has a=1-cos(theta), H0*eta=theta.
     # The initial a=1 expanding state is theta=pi/2.
@@ -174,6 +196,8 @@ def main():
     parser.add_argument("executable", type=Path)
     parser.add_argument("workdir", type=Path)
     parser.add_argument("--cuda", action="store_true", help="exercise the CUDA backend")
+    parser.add_argument("--collisionless-only", action="store_true",
+                        help="omit the gas case for builds without leapfrog SPH")
     parser.add_argument("--position-type", choices=("fixed32", "fixed64"), default="fixed32")
     args = parser.parse_args()
     executable = args.executable.resolve()
@@ -222,10 +246,12 @@ def main():
         directory.mkdir()
         return directory
 
-    def exercise(name, overrides, success=True, checkpoint=None):
+    def exercise(name, overrides, success=True, checkpoint=None, energy_source=None):
         directory = prepare(name)
         if checkpoint is not None:
             shutil.copytree(checkpoint, directory / checkpoint.name)
+        if energy_source is not None:
+            shutil.copyfile(energy_source, directory / "energy.txt")
         resolved = dict(options, **overrides)
         output = run_simulation(command + [f"--{key}={value}" for key, value in resolved.items()],
                                 directory, success=success, cuda=args.cuda)
@@ -268,6 +294,7 @@ def main():
         require_close(state["a"], scale, "closed cycloid scale factor")
         require_close(state["adot"] / hubble, rate, "closed cycloid signed rate")
     check_completion(states[-1], duration)
+    check_complete_energy(closed, 32, states[-1]["a"])
     closed_rows = check_finite_progress(closed)
     if args.cuda:
         # gravity_cuda.hpp is the only writer of the interaction counters;
@@ -318,6 +345,7 @@ def main():
     require_close(final["adot"] / hubble, -1.0, "negative-Lambda final signed rate")
     check_completion(final, duration)
     check_finite_progress(negative)
+    check_complete_energy(negative, 32, final["a"])
 
     candidates = [state for state in states[:-1] if state["adot"] < -0.1 * hubble]
     require(candidates, "no intermediate contracting checkpoint was published")
@@ -341,7 +369,7 @@ def main():
     completed, output = exercise("completed_restart", {
         "run.endTime": repr(duration), "cosmology.omegaLambda": "-1",
         "checkpoint.readIndex": str(final["iteration"]),
-    }, checkpoint=final["path"])
+    }, checkpoint=final["path"], energy_source=negative / "energy.txt")
     require("Done reading checkpoint" in output, "completed restart did not read its checkpoint")
     completed_states = checkpoint_states(completed, duration)
     require(len(completed_states) == 1 and
@@ -353,7 +381,9 @@ def main():
     progress = completed / "progress.txt"
     require(not progress.exists() or not progress.read_text().strip(),
             "completed restart produced an extra evolution row")
-    print("completed restart: endpoint state and iteration remain unchanged")
+    require((completed / "energy.txt").read_bytes() == (negative / "energy.txt").read_bytes(),
+            "completed restart changed energy output or appended a duplicate endpoint")
+    print("completed restart: endpoint state, iteration, and energy output remain unchanged")
 
     # An iteration limit can stop after the last fine step of a coarse
     # interval, before the outer driver's step counter increments. Exercise
@@ -373,6 +403,9 @@ def main():
     require(limited_state["iteration"] == boundary["iteration"],
             "iteration limit stopped at the wrong checkpoint")
     require_close(limited_state["tau"], boundary["tau"], "coarse-boundary stop clock")
+    limited_coarse_step = round(32.0 * limited_state["tau"] / duration)
+    require([row[0] for row in read_energy_rows(limited)] == list(range(limited_coarse_step)),
+            "iteration-limited run manufactured an endpoint energy row")
     continued, output = exercise("coarse_boundary_restart", {
         "run.endTime": repr(duration), "cosmology.omegaLambda": "-1",
         "checkpoint.readIndex": str(limited_state["iteration"]),
@@ -396,32 +429,34 @@ def main():
             "changed initial redshift failed without a checkpoint/background diagnostic")
     print("restart with changed background initial redshift: rejected")
 
-    # Enabling gas selects the ordinary gravity/SPH advancement path. Its
-    # optional checkpoint blocks differ from the dark-matter fixture, so use
-    # the reported endpoint state and clock to verify this independent lane.
-    sph, output = exercise("sph_negative_lambda", {
-        "run.endTime": repr(duration), "cosmology.omegaLambda": "-1",
-        "hydro.enabled": "true",
-        "chemistry.enabled": "false", "cosmology.sigma8": "0",
-        "checkpoint.intervalSeconds": "1000000000", "output.silo": "false",
-    })
-    require("Finished:" in output, "SPH negative-Lambda model stopped before its requested endpoint")
-    rows = check_finite_progress(sph)
-    previous_time = 0.0
-    for row in rows:
-        require(previous_time < row[5] <= 32.0,
-                "SPH conformal clock stalled, moved backward, or passed its endpoint")
-        previous_time = row[5]
-    require(any(row[4] > 0.0 for row in rows) and any(row[4] < 0.0 for row in rows),
-            "SPH model did not cross from expansion into contraction")
-    # progress.txt prints three digits after the decimal in scientific
-    # notation; keep the comparison tolerance consistent with that output.
-    require_close(rows[-1][3], 1.0, "SPH final scale", relative=1.e-3, absolute=1.e-3)
-    require_close(rows[-1][4] / hubble, -1.0, "SPH final signed rate",
-                  relative=1.e-3, absolute=1.e-3)
-    require_close(rows[-1][5], 32.0, "SPH completed conformal clock",
-                  relative=0.0, absolute=1.e-3)
-    print("ordinary gravity/SPH: expansion, turnaround, contraction, and endpoint passed")
+    if not args.collisionless_only:
+        # Enabling gas selects the ordinary gravity/SPH advancement path. Its
+        # optional checkpoint blocks differ from the dark-matter fixture, so use
+        # the reported endpoint state and clock to verify this independent lane.
+        sph, output = exercise("sph_negative_lambda", {
+            "run.endTime": repr(duration), "cosmology.omegaLambda": "-1",
+            "hydro.enabled": "true",
+            "chemistry.enabled": "false", "cosmology.sigma8": "0",
+            "checkpoint.intervalSeconds": "1000000000", "output.silo": "false",
+        })
+        require("Finished:" in output, "SPH negative-Lambda model stopped before its requested endpoint")
+        rows = check_finite_progress(sph)
+        previous_time = 0.0
+        for row in rows:
+            require(previous_time < row[5] <= 32.0,
+                    "SPH conformal clock stalled, moved backward, or passed its endpoint")
+            previous_time = row[5]
+        require(any(row[4] > 0.0 for row in rows) and any(row[4] < 0.0 for row in rows),
+                "SPH model did not cross from expansion into contraction")
+        # progress.txt prints three digits after the decimal in scientific
+        # notation; keep the comparison tolerance consistent with that output.
+        require_close(rows[-1][3], 1.0, "SPH final scale", relative=1.e-3, absolute=1.e-3)
+        require_close(rows[-1][4] / hubble, -1.0, "SPH final signed rate",
+                      relative=1.e-3, absolute=1.e-3)
+        require_close(rows[-1][5], 32.0, "SPH completed conformal clock",
+                      relative=0.0, absolute=1.e-3)
+        check_complete_energy(sph, 32, 1.0)
+        print("ordinary gravity/SPH: expansion, turnaround, contraction, and endpoint passed")
 
     endpoint, output = exercise("redshift_endpoint", {"run.endTime": "0",
                                                       "cosmology.endRedshift": "-0.2"})
@@ -430,6 +465,7 @@ def main():
     require_close(final["a"], 1.25, "requested redshift scale factor")
     check_completion(final, math.asin(0.25) / hubble)
     check_finite_progress(endpoint)
+    check_complete_energy(endpoint, 32, final["a"])
     print("default stopping: requested future redshift determines the endpoint")
 
     _, rejected = exercise("unreachable_endpoint", {"run.endTime": "0",

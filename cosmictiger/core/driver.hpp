@@ -60,18 +60,19 @@ struct DriverParameters {
 #if COSMICTIGER_WITH_SPH
 SphTreeCreateReturn sphStep1(int minrung, bool verbose = true);
 SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phase, double adot,
-    EnergiesT* energies, bool verbose = true, int uniformMinimumRung = -1);
+    EnergiesT* energies, bool verbose = true, int uniformMinimumRung = -1,
+    bool closingOnly = false);
 #endif
 std::pair<KickReturn, TreeCreateReturn> kickStep(
     int minrung, double scale, double, double t0, double theta, bool firstCall, bool fullEval);
 std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minimumRung, int maximumRung,
     double scale, double scaleDerivative, double time, double baseTimestep, double theta,
     EnergiesT* energies, int minimumRungFloor, bool doPotential, hpx::future<void>* lightcone,
-    bool keepTop, double drag, int gravityErrorStep = -1);
+    bool keepTop, double drag, int gravityErrorStep = -1, bool closingOnly = false);
 
 std::pair<KickReturn, TreeCreateReturn> advanceForces(int minRung, double scale,
     double scaleDerivative, double time, double baseTimestep, double theta, bool firstCall,
-    bool fullEvaluation, EnergiesT& energies, int gravityErrorStep = -1);
+    bool fullEvaluation, EnergiesT& energies, int gravityErrorStep = -1, bool closingOnly = false);
 
 void runFixedScenario();
 void driver();
