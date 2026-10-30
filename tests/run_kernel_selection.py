@@ -11,6 +11,8 @@ from pathlib import Path
 import re
 import subprocess
 
+from application_selection import application_arguments
+
 
 KERNEL_SPECS = (
     *(('spline', degree) for degree in range(2, 10)),
@@ -34,6 +36,7 @@ def main():
                '--initial.particlesPerDimension=8', '--hydro.enabled=true',
                f'--compute.cuda={str(args.cuda).lower()}',
                '--hydro.neighborNumber=200', '--hpx:threads=2', '--hpx:bind=none']
+    command += application_arguments(executable, far="fmm", hydro=True)
     failures = []
     for gravity, hydro in zip(KERNEL_SPECS, reversed(KERNEL_SPECS)):
         gravity_family, gravity_degree = gravity

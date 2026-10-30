@@ -6,13 +6,25 @@
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
+#include <atomic>
+
 #include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
 
+namespace detail {
+std::atomic<int> selectedFmmOrder{kFmmDefaultOrder};
+}    // namespace detail
+
+int fmmOrder() {
+    return detail::selectedFmmOrder.load(std::memory_order_relaxed);
+}
+
 void setFmmOrder(int order) {
-    if (order != kFmmDefaultOrder) {
-        THROW_ERROR("This executable was built for FMM order %i; requested order %i. "
-                    "Rebuild with COSMICTIGER_WITH_ORDER=%i to change the order.\n",
-            kFmmDefaultOrder, order, order);
+    if (order < kFmmMinOrder || order > kFmmMaxOrder) {
+        THROW_ERROR(
+            "Potential expansion degree %i is unavailable; this executable supports "
+            "degrees %i through %i. Configure COSMICTIGER_EXPANSION_DEGREE to change the range.\n",
+            order - 1, kFmmMinOrder - 1, kFmmMaxOrder - 1);
     }
+    detail::selectedFmmOrder.store(order, std::memory_order_relaxed);
 }

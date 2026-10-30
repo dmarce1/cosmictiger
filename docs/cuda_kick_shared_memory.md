@@ -1,9 +1,12 @@
 # Order-aware CUDA kick shared-memory policy
 
-This document describes the runtime-selectable FMM order, the shared-memory
+This document describes the runtime-selectable FMM expansion degree, the shared-memory
 arena of the CUDA kick kernel, how its budget is chosen, and what was measured.
 Sections marked *measured* report numbers from this workstation (RTX 3090,
 compute capability 8.6, CUDA 12.8, GCC 13.3); everything else is design.
+Historical measurements and tables retain their internal order labels;
+potential expansion degree is one less than that order. They are not new
+measurements of the current build.
 
 ## FMM order
 
@@ -33,9 +36,11 @@ bytes (`fmmPositionedMultipoleStride`; odd orders pad by one float), so that
 every record starts on a 16-byte boundary and the CUDA kick stages whole
 records with 16-byte asynchronous copies (see "Aligned PC multipole staging").
 
-Every order is compiled into the binary and the run selects one with
-`gravity.fmmOrder` (default: the build's `COSMICTIGER_WITH_ORDER`, 7). The
-order-dependent code is instantiated per order from templates:
+`COSMICTIGER_EXPANSION_DEGREE` compiles one potential degree or an inclusive
+range such as the default `4-6` (internal orders 5 through 7). Supported
+potential degrees are 2 through 8. A run selects one compiled degree with
+`gravity.expansionDegree`, defaulting to the largest enabled degree. The
+order-dependent code is instantiated per internal order from templates:
 
 - `cosmictiger/gravity/fmm_order.hpp`: constexpr coefficient counts, byte sizes, the
   `FmmOrder<order>` traits, the runtime `fmmOrder()` and `fmmDispatch()`, which
@@ -48,15 +53,15 @@ order-dependent code is instantiated per order from templates:
   `ExpansionBuffer` / `MultipoleBuffer` used by order-agnostic interfaces.
 - `cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp`: operator wrappers that deduce the degrees from
   their tensor arguments over the generated STF kernels.
-- Generated code: `tools/generate_stf_m2l.py` emits one fully specialized
+- Generated code: `tools/generate_fmm.py` emits one fully specialized
   kernel class per degree for local degrees 2 through 8 and one Ewald derivative
-  overload per order into a single header set in the build tree
-  (`ninja cosmictiger_generated_kernels`). The same entry point uses
-  `tools/stf/stf_ewald.py` to generate the Ewald derivatives.
-  Parsing the whole set costs about two seconds with g++ and three with nvcc.
+  overload per order into the checked-in `cosmictiger/gravity/fmm_kernels/`
+  headers. `cmake --build build --target generate_fmm_kernels` explicitly
+  regenerates them; ordinary builds do not rewrite generated headers.
+  The same entry point uses `tools/cartesian/ewald.py` for Cartesian Ewald derivatives.
 - Per-order translation units: CMake configures
   `instances/fmm_instance_cpu_<order>.cpp` and `fmm_instance_cuda_<order>.cu`
-  from `src/fmm_instance_*.in`; they explicitly instantiate the heavy CPU and
+  from `src/gravity/fmm_instance_*.in`; they explicitly instantiate the heavy CPU and
   CUDA templates so the orders compile in parallel.
 - Ewald tables (`EwaldConst`) are filled once for the runtime order into
   buffers sized for order 9 (about 29 KB of constant memory).
@@ -312,7 +317,8 @@ errors are large by construction). Times are with the potential.
 | 8 | 27.81 | 1.38e-3 | 6.67e-5 | 10.45 | 2.98e-3 | 4.35e-4 | 48.62 | 2.43e-1 |
 | 9 | 43.18 | 9.39e-4 | 6.07e-5 | 12.61 | 2.98e-3 | 6.06e-4 | 84.50 | 2.10e-1 |
 
-Every order runs through the same binary (`gravity.fmmOrder`). On the clustered
+Every order ran through the same benchmark binary. The current equivalent is
+`gravity.expansionDegree=order-1` in a build that enables degrees `2-8`. On the clustered
 fixture the force error stops improving between orders 8 and 9 and the
 potential error rises again: the single-precision floor the order cap is based
 on. A matched-accuracy comparison needs the opening angle varied per order; the
@@ -452,8 +458,9 @@ Orders 3 to 9 at opening angles 0.5 to 1.0, bucket 64, forces only, two
 pairs of 15 samples per cell, direct reference over 1,024 particles, one
 `run_cuda_kick_arena.py` result directory per theta
 (`benchmarks/summarize_kick_profiles.py theta` builds the tables). Every cell
-runs through the same binary with `gravity.fmmOrder` and
-`gravity.openingAngle`.
+ran through the same benchmark binary with an order selector and
+`gravity.openingAngle`. The current order selector is
+`gravity.expansionDegree=order-1`.
 
 adaptive (kick ms / force relative L2):
 

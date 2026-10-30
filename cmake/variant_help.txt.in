@@ -1,57 +1,20 @@
-CosmicTiger build target selection
-=================================
+CosmicTiger build targets
 
-@cosmictiger_variant_count@ physics configurations:
-  Without SPH: 2 integrators x 3 gravity methods x @cosmictiger_variant_order_count@ orders = @cosmictiger_nosph_variant_count@
-  With gravity and SPH:    leapfrog x 3 gravity methods x @cosmictiger_variant_order_count@ orders = @cosmictiger_sph_variant_count@
+  cosmictiger       Build the application with the enabled capabilities.
+  cosmictiger_help  Show this guide.
 
-  Without gravity: cosmictiger_leapfrog_sph (one order-independent SPH target)
+Enabled capabilities:
+  FMM: @COSMICTIGER_ENABLE_FMM@
+  PMMM: @COSMICTIGER_ENABLE_PMMM@
+  SPH: @COSMICTIGER_ENABLE_SPH@
+  PMMM near PP: @COSMICTIGER_ENABLE_PMMM_NEAR_PP@
+  PMMM near FMM: @COSMICTIGER_ENABLE_PMMM_NEAR_FMM@
+  Traditional integration: @COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL@
+  Hierarchical integration: @COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL@
+  Global integration: @COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL@
+  Potential expansion degrees: @COSMICTIGER_EXPANSION_DEGREE@
+  Particle positions: @COSMICTIGER_POSITION_TYPE@
 
-SPH supports leapfrog with all three gravity methods. Hierarchical stepping
-lacks hydro integration and requires SPH disabled. This restriction means the SPH
-choice does not double every combination.
-
-Gravity-enabled target format: cosmictiger_<integrator>_<gravity>[_sph]_<order>
-Include _sph to enable SPH; omit it for collisionless targets.
-
-Choose a target family below and replace <order> with one of:
-  @cosmictiger_variant_order_help@
-
-@cosmictiger_variant_family_help@
-Gravity names:
-  none      SPH only: cosmictiger_leapfrog_sph, without gravitational forces
-  fmm       Global FMM
-  pmmm_pp   PMMM with direct particle-particle near interactions
-  pmmm_fmm  PMMM with FMM near interactions
-
-Examples (run from this build directory):
-  make -j12 cosmictiger_leapfrog_sph
-  make -j12 cosmictiger_leapfrog_pmmm_pp_7
-  make -j12 cosmictiger_leapfrog_fmm_sph_7
-  make -j12 cosmictiger_leapfrog_pmmm_fmm_sph_7
-  make -j12 cosmictiger_hierarchical_pmmm_fmm_5
-
-Build only the target you need. Selecting another named target does not require
-reconfiguring and reuses the shared core library and previously built objects.
-
-Position storage: @COSMICTIGER_POSITION_TYPE@ (default: fixed32).
-Each target builds one executable. Select fixed32 or fixed64 when configuring:
-  cmake -S @PROJECT_SOURCE_DIR@ -B . -DCOSMICTIGER_POSITION_TYPE=fixed64
-Target and executable names stay the same. Rebuild after changing this option.
-The runtime compute.positionType option, if supplied, must match the build.
-
-Select the SPH-only default with -DCOSMICTIGER_GRAVITY_METHOD=none,
--DCOSMICTIGER_WITH_SPH=ON, and -DCOSMICTIGER_TIME_INTEGRATOR=leapfrog.
-FMM order does not apply to this target. Cosmology and FFTW support remain shared.
-
-Configured default: @cosmictiger_default_variant@
-  make cosmictiger    Builds the configured default executable.
-  make                Builds that default executable and enabled tests/tools.
-                      It does not build all physics configurations.
-
-Build type: @CMAKE_BUILD_TYPE@    CUDA: @COSMICTIGER_WITH_CUDA@    Tests: @BUILD_TESTING@
-These settings apply to the whole build directory, outside the physics matrix.
-
-  make cosmictiger_help    Shows this guide without compiling.
-  make help               Lists CMake's available build targets.
-  cmake --build . --target cosmictiger_help    Equivalent help with any generator.
+Select enabled algorithms at runtime with gravity.method.far,
+gravity.method.near, and run.timeIntegrator. Select a compiled potential
+degree with gravity.expansionDegree. Run cosmictiger --help for details.

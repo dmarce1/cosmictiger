@@ -48,6 +48,7 @@ struct CudaKickData {
     float* gy;
     float* gz;
     float* pot;
+    Array<float*, kDimensions> globalAcceleration{};
     ParticleInteger const* gravitySampleIndices;
     Array<float, kDimensions>* gravitySampleAccelerations;
 };
@@ -95,6 +96,8 @@ struct KickParameters {
     FmmGeometry geometry{};
     ParticleInteger outputOffset = 0;
     bool forceOnly = false;
+    bool globalTimestep = false;
+    double previousTimestep = 0.0;
     bool htime;
     float sign;
     int minLevel;
@@ -153,9 +156,17 @@ struct KickParameters {
         arc & openLargerCell;
         arc & geometry;
         arc & forceOnly;
+        arc & globalTimestep;
+        arc & previousTimestep;
         arc & outputOffset;
     }
 };
+
+// Global integration retains the new acceleration until the hydro/DM minimum
+// has been reduced. Begin after domain redistribution, before the force walk.
+void gravityBeginGlobalKick();
+double gravityFinishGlobalKick(double timestep);
+float* gravityGlobalAcceleration(int dimension);
 
 struct KickWorkitem {
     FmmGeometry geometry{};

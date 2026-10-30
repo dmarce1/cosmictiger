@@ -22,6 +22,7 @@
 #include <cosmictiger/sph/sph_cpu.hpp>
 #include <cosmictiger/sph/sph_cuda.hpp>
 #include <tests/cuda_test.hpp>
+#include <tests/sph/global_timestep_cases.hpp>
 
 // Only the options-constructor, CPU counter, and host assertion services are replaced here.
 // Density, smoothing, forces, heating, device assertions, and allocation use the
@@ -106,6 +107,7 @@ class Fixture {
         resetGpuFlops();
         *reduction_ = {};
         reduction_->minimumSupportRadius = std::numeric_limits<float>::max();
+        reduction_->minimumTimestep = std::numeric_limits<float>::max();
     }
 
 public:
@@ -303,7 +305,8 @@ public:
                     "finite active-kernel acceleration");
             }
             if (phase == 1) {
-                require(data_.sourceRungs[i] >= 1 && data_.sourceRungs[i] < kMaxRung,
+                require(data_.sourceRungs[i] >= (params_.globalTimestep ? 0 : 1) &&
+                        data_.sourceRungs[i] < kMaxRung,
                     "valid active-kernel timestep rung");
             }
         }
@@ -404,6 +407,7 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
     resetGpuFlops();
     *fixture.reduction_ = {};
     fixture.reduction_->minimumSupportRadius = std::numeric_limits<float>::max();
+    fixture.reduction_->minimumTimestep = std::numeric_limits<float>::max();
     switch (runType) {
     case kSphRunPrehydro1:
         sphCudaPrehydro1<<<1, kPrehydro1BlockSize>>>(fixture.params_, data, fixture.reduction_);
@@ -1718,4 +1722,8 @@ TEST_F(MonaghanSphCuda, SelectedKernelsGravityTimestepsAndCpuParity) {
         detail::testFixedGravityTimestep();
         detail::testCpuCudaParity();
     }
+}
+
+TEST_F(MonaghanSphCuda, GlobalRawTimestep) {
+    detail::testGlobalRawTimestep<detail::Fixture>();
 }

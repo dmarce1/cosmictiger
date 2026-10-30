@@ -49,7 +49,7 @@ For example, with an existing configured build:
 
 ```sh
 ./cosmictiger --hydro.enabled=true --chemistry.enabled=true \
-  --chemistry.network=atomic6 --chemistry.synchronizedRung=8 \
+  --chemistry.network=atomic6 \
   --chemistry.initialTemperature=1000 --chemistry.hydrogenIonFraction=0.0002 \
   --compute.cuda=false
 ```
@@ -65,20 +65,33 @@ Initial fractional nuclei and temperature are configured in the `chemistry.*`
 option group. Atomic6 requires its molecular fractions to be zero. Options and
 run output record the selected model and tolerances.
 
-The first production integration uses a fixed, globally synchronized rung.
-Every full interval has an opening and closing chemistry half step, around the
-existing hydro/gravity leapfrog. The old hydro predictor is replaced before the
-closing source step; the next source opening precedes the next hydro force.
+Chemistry follows each active gas particle's SPH timestep. Each interval uses
+`C(dt/2) K(dt/2) D(dt) K(dt/2) C(dt/2)` (CKDKC), where `C` advances chemistry,
+`K` is the hydro/gravity kick and `D` drifts positions. At a particle's next
+active boundary, the old hydro predictor is replaced before the closing chemistry
+half step. That source step uses the saved interval that just completed; the
+next opening chemistry half step uses the newly selected SPH rung, or the actual
+selected interval in global-step mode. Inactive
+particles do not advance chemistry during another particle's finer step.
 Physical source duration uses the scale factor at the half-interval midpoint.
 Density/composition-dependent pressure and frozen-composition sound speed enter
 both CPU and CUDA hydro kernels, including the cosmological expansion term.
 The cosmic energy diagnostic uses the pressure integral for variable gamma.
 
-If hydro or gravity requires a finer rung than `chemistry.synchronizedRung`, the
-run stops with a diagnostic. Increase the configured rung and restart from a
-compatible initial state. Check timestep refinement for the intended problem;
-a successful local chemistry solve alone does not bound operator-splitting error.
-Individual gas rungs with independent chemical clocks are not implemented.
+Hydro selects its next interval, including applicable neighbor limits, before
+the opening source step. Chemistry advances once over that selected half-interval;
+its implicit solver subcycles internally. The updated EOS and hydro rates are
+recomputed for the opening kick without changing the selected timestep or
+repeating chemistry. Chemistry has no separate outer timestep option.
+Check timestep refinement
+for the intended problem: a successful local chemistry solve alone does not
+bound operator-splitting error, and the symmetric ordering does not make the
+backward-Euler source solver second order.
+
+The deprecated `chemistry.synchronizedRung` key is accepted and ignored so older
+INI files still load. It can be removed; supplying it with chemistry enabled
+prints a notice. It does not select a fixed timestep or restore compatibility
+with old chemistry checkpoints.
 
 ## Solver and model limits
 
@@ -129,13 +142,15 @@ an explicit externally supplied radiation model, not a built-in UV background.
 
 ## Persistence and diagnostics
 
-Chemical fractions, source energy, EOS caches and predictor state migrate/sort
-with the gas particle. The optional checkpoint payload has a distinct physics
-flag and its own layout version. Restart checks the reaction/EOS physics version,
-network, solver settings, initial composition, CMB/helium configuration, radiation
-file checksum and pending source phase. Chemistry-disabled checkpoints retain
-the previous payload. The opening source heating ledger is carried until the
-next synchronized diagnostic epoch and saved in the checkpoint.
+Chemical fractions, source energy, EOS caches, predictor state, pending source
+half-interval and opening heating migrate/sort with each gas particle. Opening
+heating enters the accumulated source ledger when that particle closes its
+interval. Checkpoints preserve this pending state for particles on different
+rungs. The optional payload has a distinct physics flag and layout version;
+old chemistry checkpoints with the common-rung layout are rejected.
+Restart checks the reaction/EOS physics version, network, solver settings,
+initial composition, CMB/helium configuration, radiation file checksum and source
+stage state. Chemistry-disabled checkpoints retain the previous payload.
 
 Gas Silo output includes species counts per H nucleus, six raw signed fractions,
 temperature, mean molecular weight and frozen gamma. Existing output metadata

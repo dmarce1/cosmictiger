@@ -186,8 +186,7 @@ void fmmWalkVerifyEwald(std::string const& label, TreeId sink, Vector<TreeId> co
         auto& expansion = reference.expansion<order.value>();
         cpuGravityEwald<order.value>(expansion, sourceLeaves, sink, true);
         cosmictiger::gravity::Field<float> field{};
-        cosmictiger::gravity::cartesian::L2P(
-            field, expansion, fmmScaleDisplacement(displacement));
+        cosmictiger::gravity::cartesian::L2P(field, expansion, fmmScaleDisplacement(displacement));
         return field;
     });
     std::array<double, kDimensions> const expectedAcceleration = {
@@ -1675,7 +1674,7 @@ void fmmWalkTest() {
     options.hydro.enabled = false;
 
     options.gravity.enabled = true;
-    options.run.hierarchicalGravity = integration::kBuildUsesHierarchical;
+    options.run.hierarchicalGravity = getOptions().run.hierarchicalGravity;
     options.analysis.saveForce = true;
 
     options.analysis.groups = false;
@@ -1693,7 +1692,7 @@ void fmmWalkTest() {
         detail::fmmWalkInternalCloudHybrid(useCuda);
         detail::fmmWalkCellSupportBounds(useCuda);
         detail::fmmWalkPeriodicBackground(useCuda);
-        if constexpr (!integration::kBuildUsesHierarchical) {
+        if (!getOptions().run.hierarchicalGravity) {
             detail::fmmWalkOrdinaryTimesteps(useCuda);
         } else {
             detail::fmmWalkHierarchicalTerminalEnergy(useCuda);

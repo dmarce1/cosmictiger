@@ -7,6 +7,8 @@ import csv
 import ctypes
 import math
 from pathlib import Path
+
+from application_selection import application_options
 import struct
 import sys
 
@@ -167,6 +169,7 @@ def main():
               "analysis.tracers": "false", "analysis.views": "false", "analysis.power": "false",
               "lightcone.enabled": "false", "output.silo": "false", "output.directory": ".",
               "checkpoint.intervalSeconds": 0}
+    common.update(application_options(executable, far=args.gravity_method))
     if args.gravity_method == "pmmm":
         common["gravity.meshSize"] = 8
         if args.cuda:

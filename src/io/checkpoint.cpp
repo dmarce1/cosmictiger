@@ -7,6 +7,7 @@
  */
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -17,6 +18,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <vector>
 
 #include <fcntl.h>
 #include <sys/types.h>
@@ -130,6 +132,8 @@ constexpr uint32_t kFixed64Positions = 1U << 15;
 // Retired PM checkpoints are recognized only to reject them before reading payloads.
 constexpr uint32_t kRetiredParticleMesh = 1U << 16;
 constexpr uint32_t kParticleMultipoleMesh = 1U << 17;
+constexpr uint32_t kRuntimeAlgorithms = 1U << 18;
+constexpr uint32_t kGlobalIntegrator = 1U << 19;
 constexpr uint64_t kFnvOffsetBasis = 14695981039346656037ULL;
 constexpr uint64_t kFnvPrime = 1099511628211ULL;
 
@@ -433,7 +437,8 @@ uint32_t checkpointFlags(Options const& opts) {
     constexpr uint32_t kTracers = 1U << 9;
     constexpr uint32_t kChemistry = 1U << 11;
     // Leave retired option bits unused so old incompatible headers remain rejected.
-    return (opts.hydro.enabled ? kSph : 0U) | (opts.run.hierarchicalGravity ? kHierarchical : 0U) |
+    return kRuntimeAlgorithms | (usesGlobalIntegration(opts.run) ? kGlobalIntegrator : 0U) |
+        (opts.hydro.enabled ? kSph : 0U) | (opts.run.hierarchicalGravity ? kHierarchical : 0U) |
         (opts.lightcone.enabled ? kLightcone : 0U) | (opts.analysis.groups ? kGroups : 0U) |
         (opts.analysis.tracers ? kTracers : 0U) | (opts.chemistry.enabled ? kChemistry : 0U) |
         (opts.hydro.enabled && opts.hydro.zPlaneAcceleration != 0.0 ? kZPlaneAcceleration : 0U) |
@@ -493,7 +498,8 @@ bool checkpointCompatible(CheckpointHeader const& header, Options const& opts) {
             opts.compute.positionType == "fixed32" &&
             header.version == kLegacyDarkMatterCheckpointVersion);
     return supportedVersion && (header.flags & kRetiredParticleMesh) == 0U &&
-        header.flags == checkpointFlags(opts) && header.reserved == checkpointPhysicsCode(opts) &&
+        (header.flags & ~kRuntimeAlgorithms) == (checkpointFlags(opts) & ~kRuntimeAlgorithms) &&
+        header.reserved == checkpointPhysicsCode(opts) &&
         header.darkMatterMass == opts.initial.darkMatterMass &&
         header.gasMass == opts.initial.gasMass && header.gamma == opts.hydro.gamma &&
         header.softening == opts.gravity.supportRadius &&
@@ -589,10 +595,43 @@ bool pmmmCheckpointCompatible(std::array<uint64_t, 11> parameters, Options const
     return parameters == expected;
 }
 
+// Versioned selection metadata leaves all historical order values unchanged.
+std::array<uint64_t, 5> checkpointAlgorithms(Options const& opts) {
+    return {1, opts.gravity.method == "pmmm" ? 2U : (opts.gravity.method == "fmm" ? 1U : 0U),
+        opts.gravity.method == "pmmm" ? (opts.gravity.pmmmNearMethod == "fmm" ? 2U : 1U) : 0U,
+        static_cast<uint64_t>(opts.gravity.fmmOrder),
+        usesGlobalIntegration(opts.run) ? 2U : (usesHierarchicalIntegration(opts.run) ? 1U : 0U)};
+}
+
+std::array<uint64_t, 5> readCheckpointAlgorithms(FILE* fp) {
+    std::array<uint64_t, 5> algorithms{};
+    FREAD(algorithms.data(), sizeof(uint64_t), algorithms.size(), fp);
+    if (algorithms[0] != 1 || algorithms[1] > 2 || algorithms[2] > 2 ||
+        algorithms[3] > 9 || algorithms[4] > 2 ||
+        (algorithms[1] == 2 ? algorithms[2] == 0 : algorithms[2] != 0) ||
+        (algorithms[1] == 0 ? algorithms[3] != 0 : algorithms[3] < 3)) {
+        THROW_ERROR("Invalid checkpoint algorithm selection extension\n");
+    }
+    return algorithms;
+}
+
+bool checkpointSourcePending(DriverParameters const& params) {
+    return usesGlobalIntegration(getOptions().run) ? params.globalTimestep > 0.0 : params.tau > 0.0;
+}
+
+// DriverParameters historically used its native layout. The new member is appended;
+// preserve exactly the old prefix so existing version-three files remain readable.
+constexpr size_t kHistoricalDriverBytes = offsetof(DriverParameters, globalTimestep);
+static_assert(kHistoricalDriverBytes == offsetof(DriverParameters, itime) + sizeof(TimeType));
+
 void writeDriverState(FILE* fp, DriverParameters const& params) {
     auto const header = checkpointHeader(getOptions());
     if (fwrite(&header, sizeof(header), 1, fp) != 1) {
         THROW_ERROR("Unable to write checkpoint header\n");
+    }
+    auto const algorithms = checkpointAlgorithms(getOptions());
+    if (fwrite(algorithms.data(), sizeof(uint64_t), algorithms.size(), fp) != algorithms.size()) {
+        THROW_ERROR("Unable to write checkpoint algorithm selection\n");
     }
     if ((header.flags & kParticleMultipoleMesh) != 0U) {
         auto const meshParameters = pmmmCheckpointParameters(getOptions());
@@ -629,21 +668,25 @@ void writeDriverState(FILE* fp, DriverParameters const& params) {
             fwrite(&radiationChecksum, sizeof(radiationChecksum), 1, fp) != 1) {
             THROW_ERROR("Unable to write chemistry checkpoint parameters\n");
         }
-        // Checkpoints are taken after drift: the closing source half is pending.
-        // tau=0 instead denotes the untouched initial state. Fixed rungs make the
-        // interval recoverable without a per-particle chemical clock.
-        std::array<double, 3> const sourcePhase = {params.tau == 0.0 ? 0.0 : 1.0,
-            std::ldexp(params.tauMax / getOptions().run.numberOfSteps,
-                -1 - getOptions().chemistry.synchronizedRung),
-            sphChemistryPendingHeating()};
+        // The adaptive CKDKC marker identifies per-particle opening intervals
+        // and heating, persisted alongside the gas state after drift.
+        std::array<double, 3> const sourcePhase = {
+            checkpointSourcePending(params) ? 1.0 : 0.0, 2.0, 0.0};
         if (fwrite(sourcePhase.data(), sizeof(double), sourcePhase.size(), fp) !=
             sourcePhase.size()) {
             THROW_ERROR("Unable to write chemistry source phase\n");
         }
     }
 #endif
-    if (fwrite(&params, sizeof(params), 1, fp) != 1) {
+    if (fwrite(&params, kHistoricalDriverBytes, 1, fp) != 1) {
         THROW_ERROR("Unable to write checkpoint driver state\n");
+    }
+    if ((header.flags & kGlobalIntegrator) != 0U) {
+        uint64_t const version = 1;
+        if (fwrite(&version, sizeof(version), 1, fp) != 1 ||
+            fwrite(&params.globalTimestep, sizeof(params.globalTimestep), 1, fp) != 1) {
+            THROW_ERROR("Unable to write global timestep checkpoint extension\n");
+        }
     }
 }
 
@@ -663,6 +706,11 @@ DriverParameters readDriverState(FILE* fp) {
         if (!checkpointCompatible(header, getOptions())) {
             THROW_ERROR("Checkpoint physics, particle layout or integrator differs from the "
                         "requested run\n");
+        }
+        if ((header.flags & kRuntimeAlgorithms) != 0U &&
+            readCheckpointAlgorithms(fp) != checkpointAlgorithms(getOptions())) {
+            THROW_ERROR("Checkpoint gravity methods, expansion degree, or time integrator "
+                        "differs from the requested run\n");
         }
         if ((header.flags & kParticleMultipoleMesh) != 0U) {
             auto const meshParameters = readPmmmCheckpointParameters(fp);
@@ -730,23 +778,25 @@ DriverParameters readDriverState(FILE* fp) {
                             "settings differ\n");
             }
         }
-        if (getOptions().chemistry.enabled) {
-            // Inspect the exponent bits: this TU otherwise permits fast-math.
-            uint64_t bits;
-            std::memcpy(&bits, &sourcePhase[2], sizeof(bits));
-            if ((bits & 0x7ff0000000000000ULL) == 0x7ff0000000000000ULL) {
-                THROW_ERROR("Checkpoint chemistry energy ledger is not finite\n");
-            }
-            sphChemistryPendingHeating() = sourcePhase[2];
-        }
 #endif
-        FREAD(&params, sizeof(params), 1, fp);
+        FREAD(&params, kHistoricalDriverBytes, 1, fp);
+        if ((header.flags & kGlobalIntegrator) != 0U) {
+            uint64_t version;
+            FREAD(&version, sizeof(version), 1, fp);
+            FREAD(&params.globalTimestep, sizeof(params.globalTimestep), 1, fp);
+            uint64_t bits;
+            std::memcpy(&bits, &params.globalTimestep, sizeof(bits));
+            if (version != 1 || (bits & 0x7ff0000000000000ULL) == 0x7ff0000000000000ULL ||
+                params.globalTimestep < 0.0 || params.itime != 0 ||
+                (params.iter > 0 && params.globalTimestep == 0.0)) {
+                THROW_ERROR("Invalid global timestep checkpoint extension\n");
+            }
+        }
 #if COSMICTIGER_WITH_SPH
         if (getOptions().chemistry.enabled &&
-            (sourcePhase[0] != (params.tau == 0.0 ? 0.0 : 1.0) ||
-                sourcePhase[1] !=
-                    std::ldexp(params.tauMax / getOptions().run.numberOfSteps,
-                        -1 - getOptions().chemistry.synchronizedRung))) {
+            (sourcePhase[0] != (checkpointSourcePending(params) ? 1.0 : 0.0) ||
+                sourcePhase[1] != 2.0 ||
+                sourcePhase[2] != 0.0)) {
             THROW_ERROR("Checkpoint chemistry source phase is inconsistent\n");
         }
 #endif
@@ -787,6 +837,48 @@ DriverParameters readDriverState(FILE* fp) {
 
 }    // namespace detail
 
+CheckpointSelection readCheckpointSelection(std::string const& outputDirectory, int iteration) {
+    auto const path = detail::checkpointRankFile(
+        detail::fs::path(outputDirectory) / ("checkpoint." + std::to_string(iteration)), 0);
+    detail::CheckpointFile file(fopen(path.c_str(), "rb"));
+    if (!file) {
+        THROW_ERROR("Unable to read checkpoint algorithm selection from %s\n", path.c_str());
+    }
+    uint64_t magic;
+    FREAD(&magic, sizeof(magic), 1, file.get());
+    if (magic != detail::kCheckpointMagic) {
+        return {"fmm", "none", "hierarchical", 0};
+    }
+    rewind(file.get());
+    detail::CheckpointHeader header;
+    FREAD(&header, sizeof(header), 1, file.get());
+    if ((header.flags & detail::kRetiredParticleMesh) != 0U) {
+        THROW_ERROR("Ordinary PM gravity checkpoints are no longer supported\n");
+    }
+    if (header.version != detail::kCheckpointVersion &&
+        header.version != detail::kLegacyDarkMatterCheckpointVersion) {
+        THROW_ERROR("Unsupported checkpoint for algorithm selection\n");
+    }
+    if ((header.flags & detail::kRuntimeAlgorithms) != 0U) {
+        auto const algorithms = detail::readCheckpointAlgorithms(file.get());
+        return {algorithms[1] == 2 ? "pmmm" : (algorithms[1] == 1 ? "fmm" : "none"),
+            algorithms[2] == 2 ? "fmm" : (algorithms[2] == 1 ? "pp" : "none"),
+            algorithms[4] == 2 ? "global" : (algorithms[4] == 1 ? "hierarchical" : "traditional"),
+            static_cast<int>(algorithms[3])};
+    }
+    CheckpointSelection result;
+    result.farMethod = (header.flags & detail::kParticleMultipoleMesh) != 0U ? "pmmm" :
+        (gravity::kBuildHasGravity ? "fmm" : "none");
+    result.timeIntegrator = (header.flags & (1U << 6)) != 0U ? "hierarchical" : "traditional";
+    result.nearMethod = "none";
+    if (result.farMethod == "pmmm") {
+        auto const parameters = detail::readPmmmCheckpointParameters(file.get());
+        result.nearMethod = parameters[0] >= 2 && parameters[7] != 0 ? "fmm" : "pp";
+        result.expansionOrder = static_cast<int>(parameters[2]);
+    }
+    return result;
+}
+
 void checkpointStateTest() {
     constexpr double kScale = 0.5;
     constexpr double kClock = 0.125;
@@ -801,10 +893,12 @@ void checkpointStateTest() {
     input.a = kScale;
     input.tau = kClock;
     input.tauMax = 2.0;
-    input.itime = 128;
+    input.itime = usesGlobalIntegration(getOptions().run) ? 0 : 128;
+    input.iter = 1;
     input.maxRung = kRung;
     input.energies.therm = kThermal;
     input.energies.heating = kHeating;
+    input.globalTimestep = usesGlobalIntegration(getOptions().run) ? 0.03125 : 0.0;
     detail::writeDriverState(fp, input);
     rewind(fp);
     auto const restored = detail::readDriverState(fp);
@@ -812,6 +906,28 @@ void checkpointStateTest() {
         restored.a == input.a && restored.tau == input.tau && restored.tauMax == input.tauMax);
     ALWAYS_ASSERT(restored.itime == input.itime && restored.maxRung == input.maxRung);
     ALWAYS_ASSERT(restored.energies.therm == kThermal && restored.energies.heating == kHeating);
+    ALWAYS_ASSERT(restored.globalTimestep == input.globalTimestep);
+    if (!usesGlobalIntegration(getOptions().run)) {
+        // Strip only the new selection extension to reconstruct the exact old
+        // version-three driver payload and exercise its unchanged decoder.
+        long const length = ftell(fp);
+        ALWAYS_ASSERT(length > long(sizeof(detail::CheckpointHeader) + 5 * sizeof(uint64_t)));
+        std::vector<unsigned char> bytes(static_cast<size_t>(length));
+        rewind(fp);
+        ALWAYS_ASSERT(fread(bytes.data(), 1, bytes.size(), fp) == bytes.size());
+        auto oldHeader = detail::checkpointHeader(getOptions());
+        oldHeader.flags &= ~detail::kRuntimeAlgorithms;
+        detail::CheckpointFile oldStream(tmpfile());
+        ALWAYS_ASSERT(oldStream != nullptr);
+        ALWAYS_ASSERT(fwrite(&oldHeader, sizeof(oldHeader), 1, oldStream.get()) == 1);
+        size_t const offset = sizeof(oldHeader) + 5 * sizeof(uint64_t);
+        ALWAYS_ASSERT(fwrite(bytes.data() + offset, 1, bytes.size() - offset, oldStream.get()) ==
+            bytes.size() - offset);
+        rewind(oldStream.get());
+        auto const previous = detail::readDriverState(oldStream.get());
+        ALWAYS_ASSERT(previous.tau == input.tau && previous.itime == input.itime &&
+            previous.energies.heating == input.energies.heating && previous.globalTimestep == 0.0);
+    }
     auto changed = getOptions();
     auto const header = detail::checkpointHeader(changed);
     changed.gravity.method = changed.gravity.method == "pmmm" ? "fmm" : "pmmm";

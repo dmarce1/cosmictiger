@@ -379,6 +379,7 @@ struct GasMigrationState {
     float divergence;         // Previous physical divergence for Cullen-Dehnen and Price et al.
     Array<float, primordial::kAbundanceCount + 1> chemistry;
     Pair<float> chemistryEos;
+    SphChemistryStep chemistryStep;
     template <class Archive>
     void serialize(Archive& arc, unsigned) {
         arc & acceleration;
@@ -400,6 +401,8 @@ struct GasMigrationState {
         if (getOptions().chemistry.enabled) {
             arc & chemistry;
             arc & chemistryEos;
+            arc & chemistryStep.halfInterval;
+            arc & chemistryStep.pendingHeating;
         }
     }
 };
@@ -451,6 +454,7 @@ static SphMigrationParticle packSphParticle(ParticleInteger index) {
             }
             gas.chemistry[primordial::kAbundanceCount] = state.thermalEnergy;
             gas.chemistryEos = sphParticlesChemistryEos[i];
+            gas.chemistryStep = sphParticlesChemistrySteps[i];
         }
         for (int dim = 0; dim < kDimensions; dim++) {
             gas.predictedAcceleration[dim] = sphParticlesPredictedAccelerations[dim][i];
@@ -491,6 +495,7 @@ static void unpackSphParticle(
             }
             state.thermalEnergy = gas.chemistry[primordial::kAbundanceCount];
             sphParticlesChemistryEos[i] = gas.chemistryEos;
+            sphParticlesChemistrySteps[i] = gas.chemistryStep;
         }
         for (int dim = 0; dim < kDimensions; dim++) {
             sphParticlesPredictedAccelerations[dim][i] = gas.predictedAcceleration[dim];
@@ -597,8 +602,8 @@ void domainsBegin(int rung) {
                     for (ParticleInteger i = begin; i < end; i++) {
                         // Ordinary timesteps drift every rung together. Rebalance
                         // all particles before building their common gravity tree.
-                        if (!integration::kBuildUsesHierarchical || !getOptions().gravity.enabled ||
-                            particlesRung(i) == rung) {
+                        if (!getOptions().run.hierarchicalGravity ||
+                            !getOptions().gravity.enabled || particlesRung(i) == rung) {
                             Array<double, kDimensions> x;
                             for (ParticleInteger dim = 0; dim < kDimensions; dim++) {
                                 x[dim] = positionDomainCoordinate(particlesPos(dim, i));
@@ -609,7 +614,7 @@ void domainsBegin(int rung) {
                                 send.push_back(particlesGetParticle(i));
                                 if (send.size() >= kMaxParticlesPerParcel) {
                                     //				PRINT( "Sending %i from %i to %i\n",
-                                    //send.size(),
+                                    // send.size(),
                                     // hpx_rank(), rank);
                                     futs.push_back(hpx::async<DomainsTransmitParticlesAction>(
                                         hpxLocalities()[rank], std::move(send)));

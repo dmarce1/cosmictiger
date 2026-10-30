@@ -25,10 +25,11 @@ def rewriteCheckpoint(checkpoint, ranks, transform):
     """Update a copied rank payload and its manifest checksum together."""
     manifest = checkpoint / "checkpoint.meta"
     lines = manifest.read_text().splitlines()
-    offset = ctypes.sizeof(Header)
     for rank in range(ranks):
         path = checkpoint / f"checkpoint.{rank}.dat"
         data = path.read_bytes()
+        flags = Header.from_buffer_copy(data).flags
+        offset = ctypes.sizeof(Header) + (40 if flags & (1 << 18) else 0)
         data = transform(data, offset)
         path.write_bytes(data)
         lines[rank + 1] = f"{rank} {len(data)} {fnv1a64(data):016x}"
@@ -67,11 +68,11 @@ def changeCompiledIdentity(checkpoint, ranks, *, order=None, near_method=None, f
             header = Header.from_buffer_copy(payload)
             if time_integrator == "hierarchical":
                 header.flags |= 1 << 6
-            elif time_integrator == "leapfrog":
+            elif time_integrator == "traditional":
                 header.flags &= ~(1 << 6)
             if fmm:
                 header.flags &= ~(1 << 17)
-            payload[:offset] = bytes(header)
+            payload[:len(bytes(header))] = bytes(header)
             if fmm:
                 del payload[offset:offset + 88]
         return bytes(payload)
@@ -93,7 +94,7 @@ def main():
     parser.add_argument("--cuda", action="store_true")
     parser.add_argument("--near-method", choices=("pp", "fmm"), required=True)
     parser.add_argument("--order", type=int, choices=range(3, 10), required=True)
-    parser.add_argument("--time-integrator", choices=("leapfrog", "hierarchical"), required=True)
+    parser.add_argument("--time-integrator", choices=("traditional", "hierarchical", "global"), required=True)
     parser.add_argument("--viscosity-evolution",
                         choices=("none", "morrisAndMonaghan", "cullenAndDehnen"),
                         default="morrisAndMonaghan")
@@ -102,14 +103,16 @@ def main():
     parser.add_argument("--sph-only", action="store_true",
                         help="run only mixed evolution and restart, without dark-matter cases")
     args = parser.parse_args()
-    if args.sph_only and (not args.with_sph or args.time_integrator != "leapfrog"):
-        parser.error("--sph-only requires --with-sph and --time-integrator=leapfrog")
+    if args.sph_only and (not args.with_sph or args.time_integrator == "hierarchical"):
+        parser.error("--sph-only requires --with-sph and --time-integrator=traditional")
     executable = args.executable.resolve()
     root = args.workdir.resolve()
     root.mkdir(parents=True, exist_ok=True)
     ranks = args.ranks if args.mpi_exec else 1
     common = {"hpx:threads": 2, "hpx:bind": "none",
               "gravity.meshSize": 8, "gravity.pmmmNearWidth": 2,
+              "gravity.method.far": "pmmm", "gravity.method.near": args.near_method,
+              "gravity.expansionDegree": args.order - 1, "run.timeIntegrator": args.time_integrator,
               "gravity.enabled": "true", "compute.cuda": str(args.cuda).lower(),
               "compute.positionType": args.position_type,
               "initial.particlesPerDimension": 8, "initial.closePack": "false",
@@ -142,19 +145,19 @@ def main():
         if hydro and (not args.with_sph or args.time_integrator == "hierarchical"):
             rejected = prepareCase(root, label + "_rejected")
             log = run(rejected, dict(options, **{"run.maxIterations": 0}), False)
-            diagnostic = ("COSMICTIGER_TIME_INTEGRATOR=leapfrog"
+            diagnostic = ("run.timeIntegrator"
                           if args.time_integrator == "hierarchical" else
-                          "COSMICTIGER_WITH_SPH=ON")
-            require(diagnostic in log or "COSMICTIGER_WITH_SPH=ON" in log,
+                          "COSMICTIGER_ENABLE_SPH=ON")
+            require(diagnostic in log or "COSMICTIGER_ENABLE_SPH=ON" in log,
                     "unavailable SPH was not rejected with the expected diagnostic")
             print(f"{label}: unavailable SPH rejected at startup")
             continue
         baseline = prepareCase(root, label + "_baseline")
         log = run(baseline, dict(options, **{"run.maxIterations": 3}))
-        for key, expected in (("build.timeIntegrator", args.time_integrator),
-                              ("build.gravityMethod", "pmmm"),
-                              ("build.pmmmNearMethod", args.near_method),
-                              ("build.fmmOrder", str(args.order))):
+        for key, expected in (("run.timeIntegrator", args.time_integrator),
+                              ("gravity.method.far", "pmmm"),
+                              ("gravity.method.near", args.near_method),
+                              ("gravity.expansionDegree", str(args.order - 1))):
             require(re.search(r"^" + re.escape(key) + r"\s*:\s*" + expected + r"\s*$",
                               log, re.MULTILINE), f"compiled variant differs from {key}={expected}")
         paths = sorted((path for path in baseline.glob("checkpoint.*") if path.is_dir() and
@@ -235,14 +238,14 @@ def main():
                       ("near_method", {"near_method": "fmm" if near_method == "pp" else "pp"}),
                       ("solver", {"fmm": True}),
                       ("integrator", {"time_integrator": "hierarchical"
-                                      if args.time_integrator == "leapfrog" else "leapfrog"}))
+                                      if args.time_integrator == "traditional" else "traditional"}))
         for name, identity in identities:
             rejected = prepareCase(root, label + "_reject_" + name, source)
             changeCompiledIdentity(rejected / source.name, ranks, **identity)
             log = run(rejected, dict(options, **{
                 "checkpoint.readIndex": 2, "run.maxIterations": 0}), False)
             require("checkpoint" in log.lower(), f"{name} mismatch lacked a checkpoint diagnostic")
-        print(f"{label}: {args.time_integrator} dyadic steps, scheduled single drifts, restart state, "
+        print(f"{label}: {args.time_integrator} timesteps, scheduled single drifts, restart state, "
               "legacy unrestricted meshes, and PMMM mesh/prime-factor/order/near-width/method/"
               "solver/integrator mismatch rejection passed")
     print(f"PMMM evolution passed ({ranks} rank(s), {'CUDA' if args.cuda else 'CPU'} drift, "

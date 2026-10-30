@@ -38,10 +38,16 @@ struct SphAcceleration {
     Array<float, kDimensions> acceleration;
 };
 
+struct SphChemistryStep {
+    double halfInterval{};
+    double pendingHeating{};
+};
+
 // Optional chemistry storage. Abundances are authoritative; the source bridge
 // derives chemistry energy from the hydrodynamic stored a^2 u at each use.
 SPH_PARTICLES_EXTERN primordial::State* sphParticlesChemistryStates;
 SPH_PARTICLES_EXTERN Pair<float>* sphParticlesChemistryEos;
+SPH_PARTICLES_EXTERN SphChemistryStep* sphParticlesChemistrySteps;
 
 SPH_PARTICLES_EXTERN SphThermodynamicState* sphParticlesThermodynamicStates;
 SPH_PARTICLES_EXTERN SphAcceleration* sphParticlesAccelerationStates;
@@ -85,10 +91,12 @@ void sphParticlesResetSemiactive();
 void sphParticlesLoad(FILE* fp);
 void sphParticlesSave(FILE* fp);
 void sphCheckpointTest();
-void sphParticlesApplyUpdates(int minimumRung, int phase, float timeStepScale, float time);
+void sphParticlesApplyUpdates(
+    int minimumRung, int phase, float timeStepScale, float time, double explicitTimestep = -1.0);
 // Cullen-Dehnen and Price et al.: commit the pending divergences and move alpha toward the
 // density pass's target before the force pass snapshots it.
-void sphParticlesUpdateTargetAlpha(int minimumRung, float timeStepScale, float time);
+void sphParticlesUpdateTargetAlpha(
+    int minimumRung, float timeStepScale, float time, double explicitTimestep = -1.0);
 
 inline float& sphParticlesPredictedInternalEnergyRate(ParticleInteger index) {
     return sphParticlesPredictedInternalEnergyRates[index];

@@ -428,7 +428,47 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, kD
                 auto& vy = particlesVel(kYDimension, i);
                 auto& vz = particlesVel(kZDimension, i);
                 auto& rung = particlesRung(i);
-                if (params.htime) {
+                if (params.globalTimestep) {
+                    float const gx = forces.gx[j], gy = forces.gy[j], gz = forces.gz[j];
+                    float const accelerationSquared = sqr(gx, gy, gz) + 1e-35f;
+                    double const timestep = std::min(double(params.maxDt),
+                        double(eta * sqrtf(params.a) *
+                            sqrtf(gravityEffectiveRadius / sqrtf(accelerationSquared))));
+                    ALWAYS_ASSERT(std::isfinite(timestep) && timestep > 0.0);
+                    kr.minimumTimestep = std::min(kr.minimumTimestep, timestep);
+                    gravityGlobalAcceleration(kXDimension)[i] = gx;
+                    gravityGlobalAcceleration(kYDimension)[i] = gy;
+                    gravityGlobalAcceleration(kZDimension)[i] = gz;
+                    float const mass = particlesMass(i);
+                    double const oldKinetic = 0.5 * mass * sqr(vx, vy, vz);
+#if COSMICTIGER_WITH_SPH
+                    bool const gas = getOptions().hydro.enabled && particlesType(i) == kSphType;
+                    if (gas) {
+                        ParticleInteger const k = particlesCatIndex(i);
+                        sphParticlesGravityAcceleration(kXDimension, k) = gx;
+                        sphParticlesGravityAcceleration(kYDimension, k) = gy;
+                        sphParticlesGravityAcceleration(kZDimension, k) = gz;
+                    }
+#else
+                    bool const gas = false;
+#endif
+                    if (!gas) {
+                        double const halfStep = params.sign * 0.5 * params.previousTimestep;
+                        vx = std::fma(gx, halfStep, vx);
+                        vy = std::fma(gy, halfStep, vy);
+                        vz = std::fma(gz, halfStep, vz);
+                        flops += 8;    // Signed half-interval and three fused multiply-adds.
+                    }
+                    kr.kin += 0.5 * mass * sqr(vx, vy, vz);
+                    kr.xmom += mass * vx;
+                    kr.ymom += mass * vy;
+                    kr.zmom += mass * vz;
+                    kr.nmom += mass * sqrt(sqr(vx, vy, vz));
+                    kr.pot += 0.5 * mass * forces.phi[j];
+                    kr.dkin += 0.5 * mass * sqr(vx, vy, vz) - oldKinetic;
+                    rung = 0;
+                    flops += 12;
+                } else if (params.htime) {
                     float g2;
                     float kin0 = 0.5 * sqr(vx, vy, vz);
                     float const sgn = params.sign * (params.top ? 1.f : -1.f);

@@ -13,6 +13,8 @@ import shutil
 import signal
 import struct
 import subprocess
+
+from application_selection import application_arguments
 import sys
 
 from run_checkpoint import checkManifest, checkpoint_position_bytes
@@ -197,13 +199,14 @@ def main():
     parser.add_argument("workdir", type=Path)
     parser.add_argument("--cuda", action="store_true", help="exercise the CUDA backend")
     parser.add_argument("--collisionless-only", action="store_true",
-                        help="omit the gas case for builds without leapfrog SPH")
+                        help="omit the gas case for builds without a supported SPH integrator")
     parser.add_argument("--position-type", choices=("fixed32", "fixed64"), default="fixed32")
     args = parser.parse_args()
     executable = args.executable.resolve()
     base = args.workdir.resolve()
     base.mkdir(parents=True, exist_ok=True)
     command = [str(executable), "--hpx:threads=2", "--hpx:bind=none"]
+    command += application_arguments(executable, far="fmm", hydro=not args.collisionless_only)
     options = {
         "run.scenario": "cosmology",
         "run.verbose": "false",

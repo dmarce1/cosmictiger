@@ -268,7 +268,9 @@ SphRunReturn sphCpuHydro(
                 flops += 3;    // Two divisions and a product; abs is a sign operation.
             }
             ALWAYS_ASSERT(std::isfinite(δt) && δt > 0.0f);
-            int const hydroRung =
+            result.minimumTimestep = std::min(result.minimumTimestep, double(δt));
+            int const hydroRung = parameters.globalTimestep ?
+                0 :
                 std::max(1, int(std::ceil(std::log2(parameters.baseTimestep / δt))));
             int nextRung = std::max(std::max(parameters.minimumRung, previousRung - 1), hydroRung);
 #if COSMICTIGER_WITH_GRAVITY
@@ -276,13 +278,20 @@ SphRunReturn sphCpuHydro(
                 data.accelerationTimestepFactor *
                     std::sqrt(parameters.scaleFactor * data.gravityEffectiveRadius /
                         std::fmax(gravityAcceleration.norm(), 1.0e-30f)));
-            int const gravityRung =
+            if (data.selfGravityEnabled) {
+                result.minimumTimestep = std::min(result.minimumTimestep, double(gravityTimestep));
+            }
+            int const gravityRung = parameters.globalTimestep ?
+                0 :
                 std::max(1, int(std::ceil(std::log2(parameters.baseTimestep / gravityTimestep))));
             nextRung = std::max(nextRung, data.selfGravityEnabled ? gravityRung : 1);
             result.maximumGravityRung = std::max(result.maximumGravityRung, gravityRung);
             // Exclude the bound computed only for disabled-gravity diagnostics.
-            flops += data.selfGravityEnabled ? 13 : 0;
+            flops += data.selfGravityEnabled ? (parameters.globalTimestep ? 10 : 13) : 0;
 #endif
+            if (parameters.globalTimestep) {
+                nextRung = 0;
+            }
             ALWAYS_ASSERT(nextRung < kMaxRung);
             data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]] = nextRung;
             result.maximumHydroRung = std::max(result.maximumHydroRung, hydroRung);
@@ -295,7 +304,7 @@ SphRunReturn sphCpuHydro(
                 std::fmax(result.inverseAccelerationTimestep, one_over_δt_f);
             // h/c/visc (8), acceleration norm/limit (12), timestep (2), hydro rung (3).
             // Exclude the signal-speed diagnostic.
-            flops += 25;
+            flops += parameters.globalTimestep ? 22 : 25;
         }
     }
     result.floatingPointOperations = FlopCount(flops);

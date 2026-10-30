@@ -8,8 +8,20 @@
 
 #pragma once
 
+#include <string>
+
 #include <cosmictiger/core/containers.hpp>
 #include <cosmictiger/core/driver.hpp>
+
+struct CheckpointSelection {
+    std::string farMethod;
+    std::string nearMethod;
+    std::string timeIntegrator;
+    int expansionOrder{};
+};
+
+// Read only algorithm selection before resolving CLI/INI defaults at startup.
+CheckpointSelection readCheckpointSelection(std::string const& outputDirectory, int iteration);
 
 // Reject stale checkpoint paths before a fresh simulation writes any output.
 void validateCheckpointOutput();

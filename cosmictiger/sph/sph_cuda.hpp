@@ -36,6 +36,7 @@ inline constexpr int kHydroBlockSize = 96;
 inline constexpr int kRungsBlockSize = 256;
 
 struct SphReduction {
+    float minimumTimestep;
     int nextNodeIndex;
     int pendingChanges;
     float minimumSupportRadius;

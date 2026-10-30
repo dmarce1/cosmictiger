@@ -54,6 +54,7 @@ __device__ FlopCount doKick(KickReturn& result, KickParameters params, CudaKickD
     auto const* sinkY = data.y + sinkFirst;
     auto const* sinkZ = data.z + sinkFirst;
     int maxRung = 0;
+    float minimumTimestep = std::numeric_limits<float>::max();
     float phiTot = 0.0f;
     float kinTot = 0.f;
     float xmomTot = 0.0f;
@@ -127,7 +128,50 @@ __device__ FlopCount doKick(KickReturn& result, KickParameters params, CudaKickD
             (data.type[sinkIndex] == kDarkMatterType ? data.darkMatterMass : data.sphMass) :
             1.0f;
         float const kin0 = 0.5f * mass * sqr(vx, vy, vz);
-        if (params.htime) {
+        if (params.globalTimestep) {
+            float const accelerationSquared = sqr(gx, gy, gz) + 1e-35f;
+            float const timestep = fminf(params.maxDt,
+                params.eta * sqrtf(params.a) *
+                    sqrtf(gravityEffectiveRadius / sqrtf(accelerationSquared)));
+            ALWAYS_ASSERT(isfinite(timestep) && timestep > 0.0f);
+            minimumTimestep = fminf(minimumTimestep, timestep);
+            data.globalAcceleration[kXDimension][sinkIndex] = gx;
+            data.globalAcceleration[kYDimension][sinkIndex] = gy;
+            data.globalAcceleration[kZDimension][sinkIndex] = gz;
+#if COSMICTIGER_WITH_SPH
+            bool const gas = data.sph && data.type[sinkIndex] == kSphType;
+            if (gas) {
+                ParticleInteger const k = data.catIndex[sinkIndex];
+                data.sphGravityAccelerationX[k] = gx;
+                data.sphGravityAccelerationY[k] = gy;
+                data.sphGravityAccelerationZ[k] = gz;
+            }
+#else
+            bool const gas = false;
+#endif
+            if (!gas) {
+                double const halfStep = params.sign * 0.5 * params.previousTimestep;
+                vx = fma(double(gx), halfStep, double(vx));
+                vy = fma(double(gy), halfStep, double(vy));
+                vz = fma(double(gz), halfStep, double(vz));
+                flops += 8;    // Signed half-interval and three fused multiply-adds.
+            }
+            rungs[sinkIndex] = 0;
+            kinTot += 0.5f * mass * sqr(vx, vy, vz);
+            xmomTot += mass * vx;
+            ymomTot += mass * vy;
+            zmomTot += mass * vz;
+            nmomTot += mass * sqrtf(sqr(vx, vy, vz));
+            if (allGx != nullptr) {
+                allGx[sinkIndex] = gx;
+                allGy[sinkIndex] = gy;
+                allGz[sinkIndex] = gz;
+            }
+            if (allPhi != nullptr) {
+                allPhi[sinkIndex] = phi;
+            }
+            flops += 12;
+        } else if (params.htime) {
             float const sgn = params.sign * (params.top ? 1.f : -1.f);
             flops += 1;    // Kick direction; exclude energy and momentum diagnostics.
             if (params.ascending) {
@@ -262,8 +306,10 @@ __device__ FlopCount doKick(KickReturn& result, KickParameters params, CudaKickD
     sharedReduceAdd(darkMatterZMomentumCorrection);
     sharedReduceAdd(darkMatterMomentumNormCorrection);
 
+    sharedReduceMin(minimumTimestep);
     sharedReduceMax(maxRung);
     if (tid == 0) {
+        result.minimumTimestep = fmin(result.minimumTimestep, double(minimumTimestep));
         result.maxRung = max(result.maxRung, maxRung);
         result.pot += phiTot;
         result.xmom += xmomTot;
@@ -454,8 +500,8 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                 }
                 ParticleInteger const numberOfSinks =
                     self.particleRange.second - self.particleRange.first;
-#if !COSMICTIGER_GRAVITY_PMMM
-                if (numberOfSinks) {
+#if COSMICTIGER_ENABLE_FMM
+                if (numberOfSinks && geometry.meshSize == 0) {
                     flops += cudaApplyPeriodicPolicy<order>(data, globalParams, expansion, self,
                         echecks, nextlist, cclist, leaflist, bothlist);
                 }
@@ -725,6 +771,9 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
         atomicAdd(&rc->darkMatterZMomentumCorrection, kr.darkMatterZMomentumCorrection);
         atomicAdd(&rc->darkMatterMomentumNormCorrection, kr.darkMatterMomentumNormCorrection);
 
+        // Positive IEEE doubles have the same ordering as their unsigned bit patterns.
+        atomicMin(reinterpret_cast<unsigned long long*>(&rc->minimumTimestep),
+            static_cast<unsigned long long>(__double_as_longlong(kr.minimumTimestep)));
         atomicMax(&rc->maxRung, kr.maxRung);
     }
     addGpuFlops(flops);

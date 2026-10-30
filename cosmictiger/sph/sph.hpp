@@ -73,6 +73,7 @@ struct SphTreeNeighborParameters {
 };
 
 struct SphRunReturn {
+    double minimumTimestep = std::numeric_limits<double>::max();
     float minimumSupportRadius = std::numeric_limits<float>::max();
     float maximumSupportRadius = 0.0f;
     double floatingPointOperations = 0.0;
@@ -86,6 +87,7 @@ struct SphRunReturn {
     float inverseAccelerationTimestep = 0.0f;
     template <typename Archive>
     void serialize(Archive&& arc, unsigned) {
+        arc & minimumTimestep;
         arc & needsAnotherPass;
         arc & floatingPointOperations;
         arc & inverseSoundTimestep;
@@ -99,6 +101,7 @@ struct SphRunReturn {
         arc & maximumSignalSpeed;
     }
     SphRunReturn& operator+=(SphRunReturn const& other) {
+        minimumTimestep = std::min(minimumTimestep, other.minimumTimestep);
         floatingPointOperations += other.floatingPointOperations;
         maximumSupportRadius = std::max(maximumSupportRadius, other.maximumSupportRadius);
         minimumSupportRadius = std::min(minimumSupportRadius, other.minimumSupportRadius);
@@ -129,6 +132,7 @@ struct SphRunParameters {
     float uniformAccelerationY;    // Optional uniform force along y.
     float zPlaneAcceleration;      // Magnitude of the force toward z = 0.5.
     float maximumTimestep = 1e30f;
+    bool globalTimestep = false;
     float viscosityAlpha;
     float viscosityBeta;
     float viscosityEpsilon;
@@ -196,6 +200,7 @@ struct SphRunParameters {
         arc & maximumSupportRadius;
         arc & expansionRate;
         arc & maximumTimestep;
+        arc & globalTimestep;
         arc & uniformAccelerationY;
         arc & baseTimestep;
         arc & phase;

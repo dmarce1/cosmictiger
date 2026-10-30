@@ -6,6 +6,10 @@ import os
 from pathlib import Path
 import signal
 import subprocess
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from application_selection import application_arguments
 
 
 def stop_process_group(process):
@@ -38,6 +42,7 @@ def run_case(args, name, marker, blocker):
                   "--compute.cuda=false", "--hpx:threads=2", "--hpx:bind=none",
                   "--hpx:localities=2", "--hpx:ini=hpx.parcel.mpi.enable=1",
                   "--hpx:ini=hpx.threadpools.io_pool_size=1"])
+    command += application_arguments(args.executable.resolve(), far="pmmm")
     if args.disable_tcp:
         command.append("--hpx:ini=hpx.parcel.tcp.enable=0")
     log_path = workdir / "failure.log"

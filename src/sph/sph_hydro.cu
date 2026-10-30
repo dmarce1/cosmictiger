@@ -324,7 +324,10 @@ __global__ void sphCudaHydro(
                             parameters.courantFactor / kViscosityWidthScale * u_a / fabsf(du_a_dt));
                     }
                     ALWAYS_ASSERT(isfinite(δt) && δt > 0.0f);
-                    int const hydroRung = max(1, int(ceilf(log2f(parameters.baseTimestep / δt))));
+                    atomicMin(&reduction->minimumTimestep, δt);
+                    int const hydroRung = parameters.globalTimestep ?
+                        0 :
+                        max(1, int(ceilf(log2f(parameters.baseTimestep / δt))));
                     int nextRung = max(max(parameters.minimumRung, previousRung - 1), hydroRung);
 #if COSMICTIGER_WITH_GRAVITY
                     float const gravityTimestep = fminf(parameters.maximumTimestep,
@@ -332,20 +335,27 @@ __global__ void sphCudaHydro(
                             sqrtf(parameters.scaleFactor * data.gravityEffectiveRadius /
                                 fmaxf(sqrtf(gravityAcceleration.dot(gravityAcceleration)),
                                     1.0e-30f)));
-                    int const gravityRung =
+                    if (data.selfGravityEnabled) {
+                        atomicMin(&reduction->minimumTimestep, gravityTimestep);
+                    }
+                    int const gravityRung = parameters.globalTimestep ?
+                        0 :
                         max(1, int(ceilf(log2f(parameters.baseTimestep / gravityTimestep))));
                     nextRung = max(nextRung, data.selfGravityEnabled ? gravityRung : 1);
                     maximumGravityRung = max(maximumGravityRung, gravityRung);
                     // Exclude the bound computed only for disabled-gravity diagnostics.
-                    flops += data.selfGravityEnabled ? 13 : 0;
+                    flops += data.selfGravityEnabled ? (parameters.globalTimestep ? 10 : 13) : 0;
 #endif
+                    if (parameters.globalTimestep) {
+                        nextRung = 0;
+                    }
                     ALWAYS_ASSERT(nextRung < kMaxRung);
                     data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]] = nextRung;
                     maximumHydroRung = max(maximumHydroRung, hydroRung);
                     maximumRung = max(maximumRung, nextRung);
                     maximumSignalSpeed = fmaxf(maximumSignalSpeed, one_over_δt_cv * h_a);
                     // Exclude the signal-speed report.
-                    flops += 25;
+                    flops += parameters.globalTimestep ? 22 : 25;
                     atomicMax(&reduction->inverseSoundTimestep, one_over_δt_c);
                     atomicMax(&reduction->inverseViscosityTimestep, one_over_δt_visc);
                     atomicMax(&reduction->inverseAccelerationTimestep, one_over_δt_f);

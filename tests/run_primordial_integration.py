@@ -11,40 +11,82 @@ import subprocess
 import sys
 
 from run_checkpoint import prepareCase, runSimulation, checkManifest
+from application_selection import application_arguments
+from gravity.nitadori.pmmm_evolution_helpers import Header, Driver
 
 
-def gasState(path, requireEos=True):
+def globalState(path):
     payload = (path / "checkpoint.0.dat").read_bytes()
-    prefix = struct.pack("=2I", 0x43545350, 3)
+    header = Header.from_buffer_copy(payload)
+    if (header.magic != 0x4354535048303031 or header.version != 3 or
+            not header.flags & (1 << 19) or header.flags & (1 << 17)):
+        raise RuntimeError("Expected an FMM global checkpoint")
+    offset = ctypes.sizeof(Header)
+    if header.flags & (1 << 18):
+        algorithms = struct.unpack_from("=5Q", payload, offset)
+        if algorithms[0] != 1 or algorithms[1] != 1 or algorithms[4] != 2:
+            raise RuntimeError("Invalid global algorithm checkpoint extension")
+        offset += 40
+    if not header.flags & 1 or not header.flags & (1 << 11):
+        raise RuntimeError("Expected SPH chemistry checkpoint extensions")
+    offset += 104  # Historical thirteen-double SPH block.
+    if header.flags & (1 << 12):
+        offset += 8
+    if header.flags & (1 << 14):
+        offset += 56
+    offset += 17 * 8 + 8 + 24  # Chemistry parameters, radiation checksum, CKDKC phase.
+    driver = Driver.from_buffer_copy(payload, offset)
+    version, timestep = struct.unpack_from("=Qd", payload, offset + ctypes.sizeof(Driver))
+    if (version != 1 or driver.integer_time != 0 or not math.isfinite(timestep) or
+            timestep < 0 or (driver.iteration > 0 and timestep == 0)):
+        raise RuntimeError("Invalid raw global checkpoint phase")
+    return driver, timestep
+
+
+def gasState(path, requireEos=True, globalTimestep=None):
+    payload = (path / "checkpoint.0.dat").read_bytes()
+    prefix = struct.pack("=I", 0x43545350)
     offset = payload.rfind(prefix)
     if offset < 0:
         raise RuntimeError("No versioned chemistry gas payload in checkpoint")
     fields = struct.unpack_from("=7I", payload, offset)
-    if fields[2] not in (4, 8) or fields[5:] != (3, 4):
+    if fields[1] not in (11, 13, 15, 17) or fields[2] not in (4, 8) or fields[5:] != (3, 4):
         raise RuntimeError(f"Unsupported chemistry checkpoint layout {fields}")
     count = int.from_bytes(payload[offset + 28:offset + 28 + fields[2]], sys.byteorder, signed=True)
     if count != 512:
         raise RuntimeError(f"Unexpected gas count {count}")
     # The tail is explicitly serialized: six signed fractions, eV/H energy,
-    # pressure/energy ratio and frozen gamma for each gas particle.
-    chemistryStart = offset + 28 + fields[2] + count * (fields[3] + fields[4] + 38 + fields[2])
-    chemistryEnd = chemistryStart + count * 9 * 4
+    # pressure/energy ratio and frozen gamma, then each particle's pending
+    # conformal half-interval and opening heating ledger (two doubles).
+    viscosityBytes = {11: 0, 13: 8, 15: 12, 17: 12}[fields[1]]
+    chemistryStart = offset + 28 + fields[2] + count * (
+        fields[3] + fields[4] + 38 + fields[2] + viscosityBytes)
+    chemistryEnd = chemistryStart + count * (9 * 4 + 2 * 8)
     if chemistryEnd > len(payload):
         raise RuntimeError("Truncated chemistry checkpoint state")
     chemistry = payload[chemistryStart:chemistryEnd]
-    values = struct.unpack(f"={count * 9}f", chemistry)
-    for i in range(count):
-        words = values[9 * i:9 * i + 9]
+    records = list(struct.iter_unpack("=9f2d", chemistry))
+    for i, record in enumerate(records):
+        words = record[:9]
+        halfInterval, pendingHeating = record[9:]
+        if not (math.isfinite(halfInterval) and halfInterval >= 0 and
+                math.isfinite(pendingHeating)):
+            raise RuntimeError(f"Invalid per-particle chemistry phase {record[9:]}")
+        if requireEos and halfInterval <= 0:
+            raise RuntimeError("Evolved chemistry checkpoint lost its pending source half")
+        if globalTimestep is not None and halfInterval != 0.5 * globalTimestep:
+            raise RuntimeError("Chemistry half-interval differs from the exact global timestep")
         if not (all(math.isfinite(x) for x in words) and
                 all(abs(x) <= .5 for x in words[:6]) and words[6] > 0):
             raise RuntimeError(f"Invalid chemistry checkpoint state {words}")
         if requireEos and not (words[7] > 0 and words[8] > 1):
             raise RuntimeError(f"Invalid evolved chemistry EOS state {words}")
-    return [values[9 * i:9 * i + 9] for i in range(count)], payload[offset:chemistryEnd]
+    return [record[:9] for record in records], payload[offset:chemistryEnd]
 
 
-def gasPayload(path):
-    return gasState(path)[1]
+def gasPayload(path, globalMode=False):
+    timestep = globalState(path)[1] if globalMode else None
+    return gasState(path, globalTimestep=timestep)[1]
 
 
 def nativeInitialReference(executable, directory, redshift):
@@ -122,6 +164,8 @@ def main():
     parser.add_argument("workdir", type=Path)
     parser.add_argument("--recombination-reference", type=Path, required=True)
     parser.add_argument("--cuda", action="store_true")
+    parser.add_argument("--time-integrator", choices=("traditional", "global"),
+                        default="traditional")
     args = parser.parse_args()
     executable = args.executable.resolve()
     base = args.workdir.resolve()
@@ -131,9 +175,11 @@ def main():
                f"--compute.cuda={'true' if args.cuda else 'false'}",
                "--analysis.views=false", "--lightcone.enabled=false", "--analysis.power=false",
                "--analysis.groups=false", "--chemistry.enabled=true",
-               "--chemistry.synchronizedRung=8", "--checkpoint.intervalSeconds=0",
+               "--checkpoint.intervalSeconds=0",
                "--cosmology.startRedshift=49", f"--cosmology.thetaCmb={2.7255 / 2.73:.17g}",
                "--output.directory=."]
+    options += application_arguments(executable, far="fmm", integrator=args.time_integrator,
+                                     hydro=True)
     for name, network in (("native_initial", "atomic6"), ("molecular9_native_initial", "molecular9")):
         initial = prepareCase(base, name)
         reference = nativeInitialReference(args.recombination_reference, initial, 49.0)
@@ -160,12 +206,16 @@ def main():
         checkpoint2 = baseline / "checkpoint.2"
         checkManifest(checkpoint1, 1)
         checkManifest(checkpoint2, 2)
-        uninterrupted = gasPayload(checkpoint2)
+        uninterrupted = gasPayload(checkpoint2, args.time_integrator == "global")
         checkOutput(baseline)
         restarted = prepareCase(base, f"{name}_restart", checkpoint1)
         (restarted / "radiation.txt").write_text(table)
-        runSimulation(command + ["--checkpoint.readIndex=1", "--run.maxIterations=0"], restarted, "restart.log")
-        restored = gasPayload(restarted / "checkpoint.2")
+        restartCommand = [option for option in command if not option.startswith(
+            ("--run.timeIntegrator=", "--gravity.method.far=", "--gravity.method.near=",
+             "--gravity.expansionDegree="))]
+        runSimulation(restartCommand + ["--checkpoint.readIndex=1", "--run.maxIterations=0"],
+                      restarted, "restart.log")
+        restored = gasPayload(restarted / "checkpoint.2", args.time_integrator == "global")
         if uninterrupted != restored:
             raise RuntimeError(f"{name}: restart changed the gas payload (source phase or state mismatch)")
         altered = prepareCase(base, f"{name}_radiation_changed", checkpoint1)
@@ -180,7 +230,8 @@ def main():
             "--checkpoint.readIndex=1", "--run.maxIterations=0"], incompatible, "rejected.log", expectSuccess=False)
         if "chemistry" not in output.lower():
             raise RuntimeError("Incompatible restart lacked chemistry diagnostic")
-        print(f"{name}: production {'CUDA' if args.cuda else 'CPU'} stepping, exact gas restart, incompatible-network rejection passed")
+        print(f"{name}: production {'CUDA' if args.cuda else 'CPU'} {args.time_integrator} "
+              "stepping, exact gas restart, incompatible-network rejection passed")
     # No silent extrapolation of the selected molecular cooling fits.
     invalid = prepareCase(base, "invalid_domain")
     output = runSimulation(options + ["--chemistry.network=molecular9", "--chemistry.initialTemperature=10000",

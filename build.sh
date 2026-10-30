@@ -10,10 +10,10 @@ set -u
 showUsage() {
     printf 'Usage: %s [-j [jobs|max]]\n' "${0##*/}"
     printf 'Run the interactive CosmicTiger configure and build menu in a terminal.\n'
-    printf 'The menu selects a named target in one Makefile per build mode and CUDA setting.\n'
-    printf 'SPH requires leapfrog; select gravity none for an SPH-only executable.\n'
+    printf 'The menu selects compiled capabilities for cosmictiger.\n'
+    printf 'SPH requires traditional or global integration; gravity may be disabled.\n'
     printf 'Position storage is selected for the whole build directory; fixed32 is the default.\n'
-    printf 'Use -j with no argument or -j max to use all available CPUs.\n'
+    printf 'Use -j with no argument or -j max to use half the available CPUs.\n'
 }
 
 requestedBuildJobs=
@@ -89,8 +89,9 @@ if [[ ! $coreCount =~ ^[1-9][0-9]*$ ]]; then
     coreCount=1
 fi
 
-# `-j` may explicitly select any positive job count; max means all CPUs.
-maxJobs=$coreCount
+# Keep build and test concurrency within half the available CPUs.
+maxJobs=$((coreCount / 2))
+(( maxJobs > 0 )) || maxJobs=1
 # MPI integration tests use two localities with two HPX threads each.
 maxTestJobs=$((coreCount / 8))
 if (( maxTestJobs < 1 )); then
@@ -98,10 +99,14 @@ if (( maxTestJobs < 1 )); then
 fi
 
 buildMode=release
-gravityVariant=fmm
-fmmOrder=7
-fmmOrderExplicit=false
-timeIntegrator=leapfrog
+enableFmm=ON
+enablePmmm=OFF
+enableNearPp=ON
+enableNearFmm=OFF
+expansionDegree=4-6
+enableTraditional=ON
+enableHierarchical=OFF
+enableGlobal=OFF
 positionType=fixed32
 enableCuda=ON
 enableSph=ON
@@ -116,7 +121,7 @@ if (( testJobs > maxTestJobs )); then
 fi
 if [[ -n $requestedBuildJobs ]]; then
     if [[ $requestedBuildJobs == max ]]; then
-        buildJobs=$coreCount
+        buildJobs=$maxJobs
     elif [[ $requestedBuildJobs =~ ^[0-9]+$ ]] && [[ $requestedBuildJobs =~ [1-9] ]]; then
         buildJobs=$requestedBuildJobs
     else
@@ -158,59 +163,32 @@ chooseMode() {
     done
 }
 
-setGravityVariant() {
-    gravityVariant=$1
-    if [[ $gravityVariant == none ]]; then
-        enableSph=ON
-        timeIntegrator=leapfrog
-        return
+chooseGravityFeatures() {
+    chooseToggle 'Compile global FMM' "$enableFmm"; enableFmm=$promptValue
+    chooseToggle 'Compile PMMM' "$enablePmmm"; enablePmmm=$promptValue
+    if [[ $enablePmmm == ON ]]; then
+        chooseToggle 'Compile PMMM PP near method' "$enableNearPp"; enableNearPp=$promptValue
+        chooseToggle 'Compile PMMM FMM near method' "$enableNearFmm"; enableNearFmm=$promptValue
     fi
-    if [[ $fmmOrderExplicit == false ]]; then
-        if [[ $gravityVariant == fmm ]]; then
-            fmmOrder=7
-        else
-            fmmOrder=8
+}
+
+chooseExpansionDegree() {
+    while true; do
+        readInput "Potential expansion degrees [${expansionDegree}] (2-8, scalar or inclusive range): "
+        [[ -z $promptValue ]] && return
+        if [[ $promptValue =~ ^([2-8])(-([2-8]))?$ ]] &&
+            [[ -z ${BASH_REMATCH[3]} || ${BASH_REMATCH[1]} -le ${BASH_REMATCH[3]} ]]; then
+            expansionDegree=$promptValue
+            return
         fi
-    fi
-}
-
-chooseGravityVariant() {
-    while true; do
-        printf '\nGravity solver: 1) FMM  2) PMMM-FMM  3) PMMM-PP  4) None (SPH only)\n'
-        readInput "Choice [${gravityVariant}]: "
-        case "${promptValue,,}" in
-            '') return ;;
-            1|fmm) setGravityVariant fmm; return ;;
-            2|pmmm_fmm|pmmm-fmm) setGravityVariant pmmm_fmm; return ;;
-            3|pmmm_pp|pmmm-pp) setGravityVariant pmmm_pp; return ;;
-            4|none) setGravityVariant none; return ;;
-        esac
-        printf 'Choose 1 through 4, or press Enter to keep the current solver.\n'
+        printf 'Enter a degree or an ordered inclusive range, for example 6 or 4-6.\n'
     done
 }
 
-chooseFmmOrder() {
-    while true; do
-        readInput "FMM kernel order [${fmmOrder}] (3 through 9, Enter keeps): "
-        case "$promptValue" in
-            '') return ;;
-            [3-9]) fmmOrder=$promptValue; fmmOrderExplicit=true; return ;;
-        esac
-        printf 'Enter an integer from 3 through 9.\n'
-    done
-}
-
-chooseTimeIntegrator() {
-    while true; do
-        printf '\nTime integrator: 1) Leapfrog (KDK)  2) Hierarchical (dark matter only)\n'
-        readInput "Choice [${timeIntegrator}]: "
-        case "${promptValue,,}" in
-            '') return ;;
-            1|leapfrog) timeIntegrator=leapfrog; return ;;
-            2|hierarchical) timeIntegrator=hierarchical; return ;;
-        esac
-        printf 'Choose 1 or 2, or press Enter to keep the current integrator.\n'
-    done
+chooseIntegrators() {
+    chooseToggle 'Compile traditional nested integration' "$enableTraditional"; enableTraditional=$promptValue
+    chooseToggle 'Compile hierarchical integration' "$enableHierarchical"; enableHierarchical=$promptValue
+    chooseToggle 'Compile global adaptive integration' "$enableGlobal"; enableGlobal=$promptValue
 }
 
 choosePositionType() {
@@ -277,228 +255,58 @@ showMainMenu() {
     printf '  6) HPX installation prefix: %s\n' "${hpxPrefix:-automatic by build mode}"
     printf '  7) CUDA architectures: %s\n' "${cudaArchitectures:-$defaultCudaArchitectures}"
     printf '  8) Additional dependency prefixes: %s\n' "${dependencyPrefixes:-system default}"
-    printf '  9) Gravity solver: %s\n' "$gravityVariant"
-    printf ' 10) FMM kernel order: %s\n' "${fmmOrder} (ignored with gravity none)"
-    printf ' 11) Time integrator: %s\n' "$timeIntegrator"
+    printf '  9) Gravity: FMM=%s PMMM=%s (near PP=%s FMM=%s)\n' "$enableFmm" "$enablePmmm" "$enableNearPp" "$enableNearFmm"
+    printf ' 10) Potential expansion degrees: %s\n' "$expansionDegree"
+    printf ' 11) Integrators: traditional=%s hierarchical=%s global=%s\n' "$enableTraditional" "$enableHierarchical" "$enableGlobal"
     printf ' 12) Build SPH support: %s\n' "$enableSph"
     printf ' 13) Position storage: %s\n' "$positionType"
     printf '  Enter or b) Configure and build    q) Quit\n'
-    printf 'Build jobs accept any positive count; MPI tests use four CPUs each.\n'
+    printf 'Build jobs are capped at half the available CPUs; MPI tests use four CPUs each.\n'
 }
 
-validateVariant() {
-    local message
-    if [[ $gravityVariant == none && ( $enableSph != ON || $timeIntegrator != leapfrog ) ]]; then
-        message='SPH-only builds require SPH enabled and leapfrog.'
-    elif [[ $enableSph == ON && $timeIntegrator != leapfrog ]]; then
-        message='SPH requires leapfrog. Disable SPH, or select leapfrog, before building.'
-    else
-        return 0
+validateFeatures() {
+    if [[ $enableFmm != ON && $enablePmmm != ON && $enableSph != ON ]]; then
+        printf 'Enable at least one physics component.\n' >&2; return 1
     fi
-    if [[ $useDialog == true ]]; then
-        whiptail --clear --backtitle 'CosmicTiger builder' \
-            --title 'Unsupported physics combination' --msgbox "$message" 10 74
-    else
-        printf '\n%s\n' "$message" >&2
+    if [[ $enablePmmm == ON && $enableNearPp != ON && $enableNearFmm != ON ]]; then
+        printf 'PMMM requires at least one near method.\n' >&2; return 1
     fi
-    return 1
-}
-
-dialogChoice() {
-    whiptail --clear --backtitle 'CosmicTiger builder' "$@" 3>&1 1>&2 2>&3
-}
-
-chooseDialogNumber() {
-    local label=$1
-    local currentValue=$2
-    while true; do
-        if ! promptValue=$(dialogChoice --title "$label" \
-            --inputbox 'Enter a positive whole number of jobs.' \
-            10 68 "$currentValue"); then
-            promptValue=$currentValue
-            return
-        fi
-        if [[ -z $promptValue ]]; then
-            promptValue=$currentValue
-            return
-        fi
-        if [[ $promptValue =~ ^[0-9]+$ && $promptValue =~ [1-9] ]]; then
-            return
-        fi
-        whiptail --clear --backtitle 'CosmicTiger builder' \
-            --title 'Invalid job count' \
-            --msgbox 'Enter a positive whole number.' 8 58
-    done
-}
-
-chooseDialogText() {
-    local label=$1
-    local currentValue=$2
-    local description=$3
-    if promptValue=$(dialogChoice --title "$label" \
-        --inputbox "$description" 10 72 "$currentValue"); then
-        if [[ $promptValue == '-' ]]; then
-            promptValue=
-        fi
-    else
-        promptValue=$currentValue
+    if [[ $enableTraditional != ON && $enableHierarchical != ON && $enableGlobal != ON ]]; then
+        printf 'Enable at least one integrator.\n' >&2; return 1
+    fi
+    if [[ $enableSph == ON && $enableTraditional != ON && $enableGlobal != ON ]]; then
+        printf 'SPH requires traditional or global integration.\n' >&2; return 1
+    fi
+    if (( buildJobs > maxJobs )); then
+        printf 'Build concurrency is limited to %s jobs.\n' "$maxJobs" >&2; return 1
+    fi
+    if (( testJobs > maxTestJobs )); then
+        printf 'Test concurrency is limited to %s jobs (four CPUs per MPI test).\n' "$maxTestJobs" >&2; return 1
     fi
 }
 
-useDialog=false
-if command -v whiptail >/dev/null 2>&1 && [[ ${TERM:-dumb} != dumb ]]; then
-    useDialog=true
-    while true; do
-        if ! menuChoice=$(dialogChoice --title 'Build configuration' \
-            --cancel-button 'Quit' --default-item 1 --notags \
-            --menu 'Use arrow keys to choose a setting. Build jobs accept any positive count.' \
-            25 78 14 \
-            1 "Build mode: $buildMode" \
-            2 "CUDA: $enableCuda" \
-            3 "Build and run test suite: $testSuite" \
-            4 "Parallel build jobs: $buildJobs" \
-            5 "Parallel test jobs: $testJobs" \
-            6 "HPX installation prefix: ${hpxPrefix:-automatic by build mode}" \
-            7 "CUDA architectures: ${cudaArchitectures:-$defaultCudaArchitectures}" \
-            8 "Additional dependency prefixes: ${dependencyPrefixes:-system default}" \
-            9 "Gravity solver: $gravityVariant" \
-            10 "FMM kernel order: $fmmOrder (ignored with gravity none)" \
-            11 "Time integrator: $timeIntegrator" \
-            12 "Build SPH support: $enableSph" \
-            13 "Position storage: $positionType" \
-            b 'Configure and build' \
-            q 'Quit'); then
-            printf 'No build started.\n'
-            exit 0
-        fi
-        case "$menuChoice" in
-            9)
-                if promptValue=$(dialogChoice --title 'Gravity solver' \
-                    --default-item "$gravityVariant" \
-                    --menu 'Select the solver compiled into this executable.' 14 68 4 \
-                    fmm 'Global FMM' \
-                    pmmm_fmm 'PMMM with FMM near interactions' \
-                    pmmm_pp 'PMMM with direct particle-pair near interactions' \
-                    none 'SPH only; no gravitational forces'); then
-                    setGravityVariant "$promptValue"
-                fi
-                ;;
-            10)
-                if promptValue=$(dialogChoice --title 'FMM kernel order' \
-                    --default-item "$fmmOrder" \
-                    --menu 'Select the only FMM order compiled into this executable.' 17 68 7 \
-                    3 'Multipole degree 1' 4 'Multipole degree 2' \
-                    5 'Multipole degree 3' 6 'Multipole degree 4' \
-                    7 'Multipole degree 5' 8 'Multipole degree 6' \
-                    9 'Multipole degree 7'); then
-                    fmmOrder=$promptValue
-                    fmmOrderExplicit=true
-                fi
-                ;;
-            11)
-                if promptValue=$(dialogChoice --title 'Time integrator' \
-                    --default-item "$timeIntegrator" \
-                    --menu 'Select the time integrator compiled into this executable.' 12 72 2 \
-                    leapfrog 'Ordinary block-timestep kick-drift-kick (default)' \
-                    hierarchical 'Hierarchical gravity (dark matter only; no SPH)'); then
-                    timeIntegrator=$promptValue
-                fi
-                ;;
-            13)
-                if promptValue=$(dialogChoice --title 'Position storage' \
-                    --default-item "$positionType" \
-                    --menu 'Select position storage for every target in this build directory.' 12 72 2 \
-                    fixed32 '32-bit fixed point (default)' \
-                    fixed64 '64-bit fixed point'); then
-                    positionType=$promptValue
-                fi
-                ;;
-            b) if validateVariant; then break; fi ;;
-            q) printf 'No build started.\n'; exit 0 ;;
-            1)
-                if promptValue=$(dialogChoice --title 'Build mode' \
-                    --default-item "$buildMode" \
-                    --menu 'Select a build mode.' 14 64 4 \
-                    release 'Optimized, without debug symbols' \
-                    relwithdebinfo 'Optimized, debug symbols and APEX tasks' \
-                    debug 'Debug checks, symbols and APEX tasks' \
-                    profile 'APEX tasks and host gprof instrumentation'); then
-                    buildMode=$promptValue
-                fi
-                ;;
-            2|3|12)
-                if [[ $menuChoice == 2 ]]; then
-                    dialogLabel='CUDA'
-                    dialogCurrent=$enableCuda
-                elif [[ $menuChoice == 3 ]]; then
-                    dialogLabel='Build and run test suite'
-                    dialogCurrent=$testSuite
-                else
-                    dialogLabel='Build SPH support'
-                    dialogCurrent=$enableSph
-                fi
-                if promptValue=$(dialogChoice --title "$dialogLabel" \
-                    --default-item "$dialogCurrent" \
-                    --menu "Select $dialogLabel." 12 58 2 \
-                    ON 'Enabled' OFF 'Disabled'); then
-                    if [[ $menuChoice == 2 ]]; then
-                        enableCuda=$promptValue
-                    elif [[ $menuChoice == 3 ]]; then
-                        testSuite=$promptValue
-                    else
-                        enableSph=$promptValue
-                    fi
-                fi
-                ;;
-            4)
-                chooseDialogNumber 'Parallel build jobs' "$buildJobs"
-                buildJobs=$promptValue
-                ;;
-            5)
-                chooseDialogNumber 'Parallel test jobs' "$testJobs"
-                testJobs=$promptValue
-                ;;
-            6)
-                chooseDialogText 'HPX installation prefix' "$hpxPrefix" \
-                    'Enter an HPX prefix, or leave blank to use ~/local/hpx/<build type> if installed.'
-                hpxPrefix=$promptValue
-                ;;
-            7)
-                chooseDialogText 'CUDA architectures' "$cudaArchitectures" \
-                    "Enter architectures (e.g. 86), native, or OFF for the compiler default. Blank uses $defaultCudaArchitectures."
-                cudaArchitectures=$promptValue
-                ;;
-            8)
-                chooseDialogText 'Additional dependency prefixes' "$dependencyPrefixes" \
-                    'Enter semicolon-separated dependency prefixes. Use - to clear them.'
-                dependencyPrefixes=$promptValue
-                ;;
-        esac
-    done
-else
-    while true; do
-        showMainMenu
-        readInput 'Choice [build]: '
-        case "${promptValue,,}" in
-            ''|b|build) if validateVariant; then break; fi ;;
-            q|quit) printf 'No build started.\n'; exit 0 ;;
-            1) chooseMode ;;
-            2) chooseToggle 'Enable CUDA' "$enableCuda"; enableCuda=$promptValue ;;
-            3) chooseToggle 'Build and run test suite' "$testSuite"; testSuite=$promptValue ;;
-            4) chooseNumber 'Parallel build jobs' "$buildJobs"; buildJobs=$promptValue ;;
-            5) chooseNumber 'Parallel test jobs' "$testJobs"; testJobs=$promptValue ;;
-            6) chooseText 'HPX installation prefix' "$hpxPrefix"; hpxPrefix=$promptValue ;;
-            7) chooseText 'CUDA architectures' "$cudaArchitectures"; cudaArchitectures=$promptValue ;;
-            8) chooseText 'Additional dependency prefixes' "$dependencyPrefixes"; dependencyPrefixes=$promptValue ;;
-            9) chooseGravityVariant ;;
-            10) chooseFmmOrder ;;
-            11) chooseTimeIntegrator ;;
-            12) chooseToggle 'Build SPH support' "$enableSph"; enableSph=$promptValue ;;
-            13) choosePositionType ;;
-            *) printf 'Unknown option.\n' ;;
-        esac
-    done
-fi
+while true; do
+    showMainMenu
+    readInput 'Choice [build]: '
+    case "${promptValue,,}" in
+        ''|b|build) if validateFeatures; then break; fi ;;
+        q|quit) printf 'No build started.\n'; exit 0 ;;
+        1) chooseMode ;;
+        2) chooseToggle 'Enable CUDA' "$enableCuda"; enableCuda=$promptValue ;;
+        3) chooseToggle 'Build and run test suite' "$testSuite"; testSuite=$promptValue ;;
+        4) chooseNumber 'Parallel build jobs' "$buildJobs"; buildJobs=$promptValue ;;
+        5) chooseNumber 'Parallel test jobs' "$testJobs"; testJobs=$promptValue ;;
+        6) chooseText 'HPX installation prefix' "$hpxPrefix"; hpxPrefix=$promptValue ;;
+        7) chooseText 'CUDA architectures' "$cudaArchitectures"; cudaArchitectures=$promptValue ;;
+        8) chooseText 'Additional dependency prefixes' "$dependencyPrefixes"; dependencyPrefixes=$promptValue ;;
+        9) chooseGravityFeatures ;;
+        10) chooseExpansionDegree ;;
+        11) chooseIntegrators ;;
+        12) chooseToggle 'Build SPH support' "$enableSph"; enableSph=$promptValue ;;
+        13) choosePositionType ;;
+        *) printf 'Unknown option.\n' ;;
+    esac
+done
 
 for requiredCommand in cmake make tee mktemp; do
     if ! command -v "$requiredCommand" >/dev/null 2>&1; then
@@ -511,27 +319,8 @@ if [[ $testSuite == ON ]] && ! command -v ctest >/dev/null 2>&1; then
     exit 1
 fi
 
-case "$gravityVariant" in
-    none) gravityMethod=none; pmmmNearMethod=pp ;;
-    fmm) gravityMethod=fmm; pmmmNearMethod=pp ;;
-    pmmm_fmm) gravityMethod=pmmm; pmmmNearMethod=fmm ;;
-    pmmm_pp) gravityMethod=pmmm; pmmmNearMethod=pp ;;
-esac
-if [[ $enableCuda == ON ]]; then
-    platformVariant=cuda
-else
-    platformVariant=cpu
-fi
-if [[ $enableSph == ON ]]; then
-    sphVariant=_sph
-else
-    sphVariant=
-fi
-if [[ $gravityVariant == none ]]; then
-    buildTarget=cosmictiger_leapfrog_sph
-else
-    buildTarget="cosmictiger_${timeIntegrator}_${gravityVariant}${sphVariant}_${fmmOrder}"
-fi
+if [[ $enableCuda == ON ]]; then platformVariant=cuda; else platformVariant=cpu; fi
+buildTarget=cosmictiger
 buildDir="$rootDir/build/${buildMode}_${platformVariant}"
 if ! mkdir -p -- "$buildDir"; then
     printf 'Cannot create build directory: %s\n' "$buildDir" >&2
@@ -560,14 +349,21 @@ fi
 # Rediscover dependency paths so old cached /tmp installs do not hide system packages.
 configureCommand=(cmake -S "$rootDir" -B "$buildDir" -G 'Unix Makefiles'
     -UHPX_DIR '-UMPI_*'
+    -UCOSMICTIGER_TIME_INTEGRATOR -UCOSMICTIGER_GRAVITY_METHOD
+    -UCOSMICTIGER_PMMM_NEAR_METHOD -UCOSMICTIGER_WITH_ORDER
+    -UCOSMICTIGER_FMM_MIN_ORDER -UCOSMICTIGER_FMM_MAX_ORDER -UCOSMICTIGER_WITH_SPH
     '-U*GSL*' '-UCHEALPIX_*' '-UHEALPIX_CXX_*'
     "-DCMAKE_BUILD_TYPE=$buildType"
     "-DCOSMICTIGER_WITH_CUDA=$enableCuda"
-    "-DCOSMICTIGER_WITH_SPH=$enableSph"
-    "-DCOSMICTIGER_GRAVITY_METHOD=$gravityMethod"
-    "-DCOSMICTIGER_PMMM_NEAR_METHOD=$pmmmNearMethod"
-    "-DCOSMICTIGER_WITH_ORDER=$fmmOrder"
-    "-DCOSMICTIGER_TIME_INTEGRATOR=$timeIntegrator"
+    "-DCOSMICTIGER_ENABLE_SPH=$enableSph"
+    "-DCOSMICTIGER_ENABLE_FMM=$enableFmm"
+    "-DCOSMICTIGER_ENABLE_PMMM=$enablePmmm"
+    "-DCOSMICTIGER_ENABLE_PMMM_NEAR_PP=$enableNearPp"
+    "-DCOSMICTIGER_ENABLE_PMMM_NEAR_FMM=$enableNearFmm"
+    "-DCOSMICTIGER_EXPANSION_DEGREE=$expansionDegree"
+    "-DCOSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL=$enableTraditional"
+    "-DCOSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL=$enableHierarchical"
+    "-DCOSMICTIGER_ENABLE_INTEGRATOR_GLOBAL=$enableGlobal"
     "-DCOSMICTIGER_POSITION_TYPE=$positionType"
     "-DCOSMICTIGER_REQUIRE_APEX=$requireApex"
     "-DBUILD_TESTING=$testSuite"
@@ -618,12 +414,8 @@ runStage() {
     printf '%s succeeded.\n' "$stageName"
 }
 
-if [[ $gravityVariant == none ]]; then
-    printf '\nGravity solver: none (SPH only); FMM order: not applicable\n'
-else
-    printf '\nGravity solver: %s; FMM kernel order: %s\n' "$gravityVariant" "$fmmOrder"
-fi
-printf 'Time integrator: %s\n' "$timeIntegrator"
+printf '\nGravity: FMM=%s PMMM=%s; potential degrees=%s\n' "$enableFmm" "$enablePmmm" "$expansionDegree"
+printf 'Integrators: traditional=%s hierarchical=%s global=%s\n' "$enableTraditional" "$enableHierarchical" "$enableGlobal"
 printf 'SPH support: %s\n' "$enableSph"
 printf 'Position storage: %s\n' "$positionType"
 printf 'Build target: %s\n' "$buildTarget"

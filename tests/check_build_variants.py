@@ -1,301 +1,275 @@
-# CosmicTiger - build matrix graph checker regression; BSL-1.0.
+# CosmicTiger - enabled build graph checker regression; BSL-1.0.
 
-"""Ensure the graph checks catch cross-variant configuration and source leaks."""
+"""Ensure capability graph checks catch missing sources and disabled algorithms."""
 
 import json
 from pathlib import Path
 import tempfile
+import subprocess
 import unittest
 
-from check_build_features import checkBuild, configurationDefinitions, namedVariants, requiredSources
+from check_build_features import (FEATURES, checkBuild, configurationDefinitions,
+                                  degreeRange, hasTree, requiredSources)
 
 
-class BuildVariantsTest(unittest.TestCase):
+class BuildFeaturesTest(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.buildDirectory = Path(self.temporary.name)
         self.sourceDirectory = self.buildDirectory / "source"
-        self.default = "cosmictiger_leapfrog_fmm_sph_7"
+        self.configure()
+
+    def configure(self, **changes):
+        self.features = {feature: feature in ("FMM", "SPH", "PMMM_NEAR_PP",
+                                             "INTEGRATOR_TRADITIONAL") for feature in FEATURES}
+        self.features.update(changes)
+        self.degrees = (4, 6)
         self.commands = []
-        cache = {"CMAKE_HOME_DIRECTORY": str(self.sourceDirectory), "CMAKE_GENERATOR": "Unix Makefiles",
-                 "COSMICTIGER_TIME_INTEGRATOR": "leapfrog", "COSMICTIGER_GRAVITY_METHOD": "fmm",
-                 "COSMICTIGER_PMMM_NEAR_METHOD": "pp", "COSMICTIGER_WITH_ORDER": "7",
-                 "COSMICTIGER_POSITION_TYPE": "fixed32",
-                 "COSMICTIGER_WITH_SPH": "ON", "COSMICTIGER_WITH_CUDA": "OFF", "BUILD_TESTING": "OFF"}
-        (self.buildDirectory / "CMakeCache.txt").write_text("".join(
-            f"{name}:STRING={value}\n" for name, value in cache.items()))
+        self.cache = {"CMAKE_HOME_DIRECTORY": str(self.sourceDirectory), "CMAKE_GENERATOR": "Unix Makefiles",
+                      "COSMICTIGER_EXPANSION_DEGREE": "4-6", "COSMICTIGER_POSITION_TYPE": "fixed32",
+                      "COSMICTIGER_WITH_CUDA": "OFF", "BUILD_TESTING": "OFF"}
+        self.cache.update({"COSMICTIGER_ENABLE_" + key: "ON" if value else "OFF"
+                           for key, value in self.features.items()})
         self.addCompilation("cosmictiger_core", "src/core/flops.cpp", {})
         self.addCompilation("cosmictiger_recombination", "src/chemistry/recombination.cpp", {})
-        self.addCompilation("cosmictiger_sph_chemistry", "src/chemistry/primordial_chemistry.cpp", {})
-        variants = namedVariants()
-        for base, configuration in variants.items():
-            objects = base + "_objects"
-            definitions = configurationDefinitions(configuration, 32)
-            for source in sorted(requiredSources(configuration, False)):
-                self.addCompilation(objects, source, definitions)
-            if configuration[1] in ("fmm", "pmmm_fmm"):
-                self.addCompilation(objects,
-                                    f"instances/fmm_instance_cpu_{configuration[3]}.cpp",
-                                    definitions)
-            self.addApplication(base, objects, definitions)
-        self.addApplication("cosmictiger", self.default + "_objects",
-                            configurationDefinitions(variants[self.default], 32))
-        self.makefilePath = self.buildDirectory / "CMakeFiles/Makefile2"
-        self.makefilePath.write_text(
-            "all: CMakeFiles/cosmictiger.dir/all\n"
-            f"CMakeFiles/cosmictiger.dir/all: CMakeFiles/{self.default}_objects.dir/all\n")
+        if self.features["SPH"]:
+            self.addCompilation("cosmictiger_sph_chemistry", "src/chemistry/primordial_chemistry.cpp", {})
+        self.definitions = configurationDefinitions(self.features, 32, self.degrees)
+        for source in sorted(requiredSources(self.features, False)):
+            self.addCompilation("cosmictiger_objects", source, self.definitions)
+        if hasTree(self.features):
+            for degree in range(self.degrees[0], self.degrees[1] + 1):
+                self.addCompilation("cosmictiger_objects", f"instances/fmm_instance_cpu_{degree + 1}.cpp",
+                                    self.definitions)
+        self.addCompilation("cosmictiger", "src/main.cpp", self.definitions)
+        self.linkPath = self.buildDirectory / "CMakeFiles/cosmictiger.dir/link.txt"
+        self.linkPath.parent.mkdir(parents=True, exist_ok=True)
+        self.linkPath.write_text("c++ CMakeFiles/cosmictiger.dir/src/main.cpp.o "
+                                "CMakeFiles/cosmictiger_objects.dir/src/core/driver.cpp.o "
+                                "libcosmictiger_core.a libcosmictiger_recombination.a\n" +
+                                ("libcosmictiger_sph_chemistry.a\n" if self.features["SPH"] else ""))
 
     def addCompilation(self, target, source, definitions):
         self.commands.append({"directory": str(self.buildDirectory),
                               "file": str(self.sourceDirectory / source),
-                              "arguments": ["c++", *[f"-D{name}={value}"
-                                             for name, value in definitions.items()],
+                              "arguments": ["c++", *[f"-D{name}={value}" for name, value in definitions.items()],
                                             "-o", f"CMakeFiles/{target}.dir/{source}.o",
                                             "-c", str(self.sourceDirectory / source)]})
 
-    def addApplication(self, application, objects, definitions):
-        self.addCompilation(application, "src/main.cpp", definitions)
-        linkPath = self.buildDirectory / "CMakeFiles" / (application + ".dir") / "link.txt"
-        linkPath.parent.mkdir(parents=True, exist_ok=True)
-        linkPath.write_text(f"c++ CMakeFiles/{application}.dir/src/main.cpp.o "
-                           f"CMakeFiles/{objects}.dir/src/core/driver.cpp.o "
-                           "libcosmictiger_core.a libcosmictiger_recombination.a\n")
-        if definitions["COSMICTIGER_WITH_SPH"] == "1":
-            linkPath.write_text(linkPath.read_text() + "libcosmictiger_sph_chemistry.a\n")
-
     def check(self):
+        (self.buildDirectory / "CMakeCache.txt").write_text("".join(
+            f"{name}:STRING={value}\n" for name, value in self.cache.items()))
         (self.buildDirectory / "compile_commands.json").write_text(json.dumps(self.commands))
         return checkBuild(self.buildDirectory)
 
-    def testCompleteMatrix(self):
-        self.assertEqual(len(namedVariants()), 64)
-        self.assertIn("64 physics variants", self.check())
-        self.assertIn("65 Makefile link commands checked", self.check())
-        self.assertIn("positions=fixed32", self.check())
+    def testDefaultRange(self):
+        self.assertIn("one application", self.check())
+        self.assertIn("potential degrees=4-6", self.check())
 
-    def selectSphOnlyDefault(self):
-        cachePath = self.buildDirectory / "CMakeCache.txt"
-        cachePath.write_text(cachePath.read_text().replace(
-            "COSMICTIGER_GRAVITY_METHOD:STRING=fmm", "COSMICTIGER_GRAVITY_METHOD:STRING=none"))
-        self.commands = [command for command in self.commands if
-                         "CMakeFiles/cosmictiger.dir/" not in " ".join(command["arguments"])]
-        self.default = "cosmictiger_leapfrog_sph"
-        self.addApplication("cosmictiger", self.default + "_objects",
-                            configurationDefinitions(namedVariants()[self.default], 32))
-        self.makefilePath.write_text(
-            "all: CMakeFiles/cosmictiger.dir/all\n"
-            f"CMakeFiles/cosmictiger.dir/all: CMakeFiles/{self.default}_objects.dir/all\n")
+    def testCombinedSolvers(self):
+        self.configure(PMMM=True, PMMM_NEAR_FMM=True, INTEGRATOR_HIERARCHICAL=True,
+                       INTEGRATOR_GLOBAL=True)
+        self.assertIn("Build features passed", self.check())
 
-    def testSphOnlyDefault(self):
-        self.selectSphOnlyDefault()
-        self.assertIn("default all selects only cosmictiger_leapfrog_sph", self.check())
-        self.assertEqual(namedVariants()[self.default], ("leapfrog", "none", True, 0))
+    def testPmmmPpWithoutTree(self):
+        self.configure(FMM=False, PMMM=True, SPH=False)
+        self.assertIn("Build features passed", self.check())
 
-    def testSphOnlyGravitySourceLeak(self):
-        configuration = namedVariants()["cosmictiger_leapfrog_sph"]
-        self.addCompilation("cosmictiger_leapfrog_sph_objects", "src/gravity/reference_table.cpp",
-                            configurationDefinitions(configuration, 32))
-        with self.assertRaisesRegex(ValueError, "gravity disabled but compiles gravity source"):
+    def testPmmmNearFmmWithoutGlobalFmm(self):
+        self.configure(FMM=False, PMMM=True, PMMM_NEAR_PP=False, PMMM_NEAR_FMM=True, SPH=False)
+        self.assertIn("Build features passed", self.check())
+
+    def testSphOnly(self):
+        self.configure(FMM=False)
+        self.assertIn("Build features passed", self.check())
+        self.assertEqual(self.definitions["ORDER"], "0")
+
+    def testSingleDegree(self):
+        self.cache["COSMICTIGER_EXPANSION_DEGREE"] = "6"
+        self.commands = [entry for entry in self.commands if not any(
+            entry["file"].endswith(f"fmm_instance_cpu_{order}.cpp") for order in (5, 6))]
+        for entry in self.commands:
+            entry["arguments"] = [arg.replace("FMM_MIN_ORDER=5", "FMM_MIN_ORDER=7") for arg in entry["arguments"]]
+        self.assertIn("potential degrees=6-6", self.check())
+
+    def testBounds(self):
+        self.assertEqual(degreeRange("2-8"), (2, 8))
+        for invalid in ("1", "9", "6-4", "4;5;6", "4--6", "4-9", ""):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                degreeRange(invalid)
+
+    def testMissingEnabledSolver(self):
+        self.configure(PMMM=True)
+        self.commands = [entry for entry in self.commands if not entry["file"].endswith("nitadori/solver.cpp")]
+        with self.assertRaisesRegex(ValueError, "required source missing: src/gravity/nitadori/solver.cpp"):
             self.check()
 
-    def testSphOnlyHaloPotentialLeak(self):
-        configuration = namedVariants()["cosmictiger_leapfrog_sph"]
-        self.addCompilation("cosmictiger_leapfrog_sph_objects", "src/analysis/bh.cpp",
-                            configurationDefinitions(configuration, 32))
-        with self.assertRaisesRegex(ValueError, "gravity disabled but compiles gravity source"):
+    def testPmmmSourceLeak(self):
+        self.addCompilation("cosmictiger_objects", "src/gravity/nitadori/solver.cpp", self.definitions)
+        with self.assertRaisesRegex(ValueError, "PMMM disabled but compiles solver source"):
             self.check()
 
-    def testSphOnlyLinkedGravityLibrary(self):
-        self.addCompilation("gravity_helper", "src/gravity/reference_table.cpp", {})
-        linkPath = self.buildDirectory / "CMakeFiles/cosmictiger_leapfrog_sph.dir/link.txt"
-        linkPath.write_text(linkPath.read_text() + "libgravity_helper.a\n")
-        with self.assertRaisesRegex(ValueError, "linked libraries: gravity disabled"):
-            self.check()
-
-    def testSphOnlyStandaloneGravityTest(self):
-        self.selectSphOnlyDefault()
-        cachePath = self.buildDirectory / "CMakeCache.txt"
-        cachePath.write_text(cachePath.read_text().replace("BUILD_TESTING:STRING=OFF", "BUILD_TESTING:STRING=ON"))
-        self.addCompilation("gravity_test", "tests/gravity/reference_table.cpp", {})
-        with self.assertRaisesRegex(ValueError, "gravity_test: gravity disabled"):
-            self.check()
-
-    def testGravityBuildSphOnlyDiagnosticLeak(self):
-        configuration = namedVariants()[self.default]
-        self.addCompilation(self.default + "_objects", "tests/sph/no_gravity.cpp",
-                            configurationDefinitions(configuration, 32))
-        with self.assertRaisesRegex(ValueError, "gravity-enabled build compiles SPH-only"):
-            self.check()
-
-    def testSphOnlyGeneratedInstanceLeak(self):
-        configuration = namedVariants()["cosmictiger_leapfrog_sph"]
-        self.addCompilation("cosmictiger_leapfrog_sph_objects", "instances/fmm_instance_cpu_7.cpp",
-                            configurationDefinitions(configuration, 32))
-        with self.assertRaisesRegex(ValueError, "generated FMM instances"):
-            self.check()
-
-    def testFixed64Matrix(self):
-        cachePath = self.buildDirectory / "CMakeCache.txt"
-        cachePath.write_text(cachePath.read_text().replace("=fixed32", "=fixed64"))
-        for command in self.commands:
-            command["arguments"] = [argument.replace("COSMICTIGER_POSITION_BITS=32",
-                                                       "COSMICTIGER_POSITION_BITS=64")
-                                    for argument in command["arguments"]]
-        self.assertIn("positions=fixed64", self.check())
-        self.assertIn("65 Makefile link commands checked", self.check())
-
-    def testSphFamilies(self):
-        variants = namedVariants()
-        for gravity in ("fmm", "pmmm_pp", "pmmm_fmm"):
-            for order in range(3, 10):
-                self.assertIn(f"cosmictiger_leapfrog_{gravity}_sph_{order}", variants)
-                self.assertNotIn(f"cosmictiger_hierarchical_{gravity}_sph_{order}", variants)
-
-    def testMissingPmmmSphHydro(self):
-        self.commands = [command for command in self.commands if not (
-            "cosmictiger_leapfrog_pmmm_pp_sph_7_objects.dir" in " ".join(command["arguments"]) and
-            command["file"].endswith("src/sph/sph_hydro_cpu.cpp"))]
-        with self.assertRaisesRegex(ValueError, "required source missing: src/sph/sph_hydro_cpu.cpp"):
-            self.check()
-
-    def testInvalidPositionType(self):
-        cachePath = self.buildDirectory / "CMakeCache.txt"
-        cachePath.write_text(cachePath.read_text().replace("=fixed32", "=float64"))
-        with self.assertRaisesRegex(ValueError, "invalid COSMICTIGER_POSITION_TYPE"):
-            self.check()
-
-    def testWrongIntegratorDefinition(self):
-        for command in self.commands:
-            if "cosmictiger_hierarchical_pmmm_pp_7_objects.dir" in " ".join(command["arguments"]):
-                command["arguments"].remove("-DCOSMICTIGER_INTEGRATOR_HIERARCHICAL=1")
-                command["arguments"].append("-DCOSMICTIGER_INTEGRATOR_HIERARCHICAL=0")
-                break
-        with self.assertRaisesRegex(ValueError, "needs COSMICTIGER_INTEGRATOR_HIERARCHICAL=1"):
-            self.check()
-
-    def testWrongPositionWidth(self):
-        for command in self.commands:
-            if "cosmictiger_leapfrog_pmmm_pp_7.dir" in " ".join(command["arguments"]):
-                command["arguments"].remove("-DCOSMICTIGER_POSITION_BITS=32")
-                command["arguments"].append("-DCOSMICTIGER_POSITION_BITS=64")
-                break
-        with self.assertRaisesRegex(ValueError, "needs COSMICTIGER_POSITION_BITS=32"):
-            self.check()
-
-    def testStandaloneWrongPositionWidth(self):
-        self.addCompilation("drift_cpu_test", "src/particles/drift_cpu.cpp",
-                            {"COSMICTIGER_POSITION_BITS": "64"})
-        with self.assertRaisesRegex(ValueError, "drift_cpu_test: .*needs COSMICTIGER_POSITION_BITS=32"):
-            self.check()
-
-    def testStandaloneConflictingPositionWidths(self):
-        self.addCompilation("drift_cpu_test", "src/particles/drift_cpu.cpp",
-                            {"COSMICTIGER_POSITION_BITS": "32"})
-        self.commands[-1]["arguments"].append("-DCOSMICTIGER_POSITION_BITS=64")
-        with self.assertRaisesRegex(ValueError, "drift_cpu_test: .*found \\['32', '64'\\]"):
-            self.check()
-
-    def testUnwantedCompanion(self):
-        self.addApplication(self.default + "_fixed64", self.default + "_objects",
-                            configurationDefinitions(namedVariants()[self.default], 64))
-        with self.assertRaisesRegex(ValueError, "unexpected application target"):
+    def testFmmSourceLeak(self):
+        self.configure(FMM=False, PMMM=True)
+        self.addCompilation("cosmictiger_objects", "src/gravity/dehnen/execution.cpp", self.definitions)
+        with self.assertRaisesRegex(ValueError, "FMM disabled but compiles solver source"):
             self.check()
 
     def testNearSolverLeak(self):
-        configuration = ("leapfrog", "pmmm_pp", False, 7)
-        self.addCompilation("cosmictiger_leapfrog_pmmm_pp_7_objects",
-                            "src/gravity/nitadori/cell_tree.cpp",
-                            configurationDefinitions(configuration, 32))
-        with self.assertRaisesRegex(ValueError, "compiles the other near solver"):
+        self.configure(FMM=False, PMMM=True)
+        self.addCompilation("cosmictiger_objects", "src/gravity/nitadori/cell_tree.cpp", self.definitions)
+        with self.assertRaisesRegex(ValueError, "PMMM_NEAR_FMM disabled but compiles near solver"):
             self.check()
 
     def testSphSourceLeak(self):
-        configuration = ("leapfrog", "fmm", False, 7)
-        self.addCompilation("cosmictiger_leapfrog_fmm_7_objects", "src/sph/sph.cpp",
-                            configurationDefinitions(configuration, 32))
+        self.configure(SPH=False)
+        self.addCompilation("cosmictiger_objects", "src/sph/sph.cpp", self.definitions)
         with self.assertRaisesRegex(ValueError, "SPH disabled but compiles SPH source"):
+            self.check()
+
+    def testUnlinkedChemistryLeak(self):
+        self.configure(SPH=False)
+        self.addCompilation("unused_chemistry", "src/chemistry/primordial_chemistry.cpp", {})
+        with self.assertRaisesRegex(ValueError, "SPH disabled but compiles particle chemistry"):
+            self.check()
+
+    def testSphOnlyGravitySourceLeak(self):
+        self.configure(FMM=False)
+        self.addCompilation("cosmictiger_objects", "src/gravity/reference_table.cpp", self.definitions)
+        with self.assertRaisesRegex(ValueError, "gravity disabled but compiles gravity source"):
+            self.check()
+
+    def testTreeLeak(self):
+        self.configure(FMM=False, PMMM=True)
+        self.addCompilation("cosmictiger_objects", "src/gravity/tree_build.cpp", self.definitions)
+        with self.assertRaisesRegex(ValueError, "tree algorithms disabled but compiles tree source"):
+            self.check()
+
+    def testMissingDegreeInstantiation(self):
+        self.commands = [entry for entry in self.commands if not entry["file"].endswith("fmm_instance_cpu_6.cpp")]
+        with self.assertRaisesRegex(ValueError, "generated FMM instances"):
+            self.check()
+
+    def testExtraneousDegreeInstantiation(self):
+        self.addCompilation("cosmictiger_objects", "instances/fmm_instance_cpu_8.cpp", self.definitions)
+        with self.assertRaisesRegex(ValueError, "generated FMM instances"):
+            self.check()
+
+    def testDuplicateDegreeInstantiation(self):
+        self.addCompilation("cosmictiger_objects", "instances/fmm_instance_cpu_7.cpp", self.definitions)
+        with self.assertRaisesRegex(ValueError, "generated FMM instances"):
+            self.check()
+
+    def testWrongDefinition(self):
+        self.commands[-1]["arguments"].remove("-DCOSMICTIGER_ENABLE_FMM=1")
+        with self.assertRaisesRegex(ValueError, "needs COSMICTIGER_ENABLE_FMM=1"):
+            self.check()
+
+    def testLegacyDefinition(self):
+        self.commands[-1]["arguments"].append("-DCOSMICTIGER_GRAVITY_PMMM=0")
+        with self.assertRaisesRegex(ValueError, "retains legacy selection definition"):
             self.check()
 
     def testCoreDefinitionLeak(self):
         self.commands[0]["arguments"].append("-DORDER=7")
-        with self.assertRaisesRegex(ValueError, "inherits variant definition ORDER"):
-            self.check()
-
-    def testCorePositionWidthLeak(self):
-        self.commands[0]["arguments"].append("-DCOSMICTIGER_POSITION_BITS=64")
-        with self.assertRaisesRegex(ValueError, "inherits variant definition COSMICTIGER_POSITION_BITS"):
+        with self.assertRaisesRegex(ValueError, "inherits feature definition ORDER"):
             self.check()
 
     def testDuplicateCoreCompilation(self):
-        configuration = ("leapfrog", "fmm", True, 7)
-        self.addCompilation(self.default + "_objects", "src/core/flops.cpp",
-                            configurationDefinitions(configuration, 32))
+        self.addCompilation("cosmictiger_objects", "src/core/flops.cpp", self.definitions)
         with self.assertRaisesRegex(ValueError, "recompiles shared core source"):
             self.check()
 
-    def testMissingVariant(self):
-        self.commands = [command for command in self.commands if
-                         "cosmictiger_hierarchical_pmmm_fmm_9.dir" not in
-                         " ".join(command["arguments"])]
-        with self.assertRaisesRegex(ValueError, "missing application target"):
+    def testWrongLink(self):
+        self.linkPath.write_text(self.linkPath.read_text().replace("cosmictiger_objects", "old_objects"))
+        with self.assertRaisesRegex(ValueError, "links unexpected object targets"):
             self.check()
 
-    def testWrongLegacyObjects(self):
-        linkPath = self.buildDirectory / "CMakeFiles/cosmictiger.dir/link.txt"
-        linkPath.write_text(linkPath.read_text().replace(self.default + "_objects",
-                           "cosmictiger_hierarchical_pmmm_pp_3_objects"))
-        with self.assertRaisesRegex(ValueError, "links variant objects"):
-            self.check()
-
-    def testWrongGeneratedOrder(self):
-        for command in self.commands:
-            if "cosmictiger_hierarchical_fmm_9_objects.dir" in " ".join(command["arguments"]) and \
-                    command["file"].endswith("fmm_instance_cpu_9.cpp"):
-                command["file"] = command["file"].replace("fmm_instance_cpu_9.cpp", "fmm_instance_cpu_7.cpp")
-                break
-        with self.assertRaisesRegex(ValueError, "generated FMM instances"):
-            self.check()
-
-    def testUnnecessaryPmmmPpInstantiation(self):
-        configuration = ("leapfrog", "pmmm_pp", False, 7)
-        self.addCompilation("cosmictiger_leapfrog_pmmm_pp_7_objects",
-                            "instances/fmm_instance_cpu_7.cpp",
-                            configurationDefinitions(configuration, 32))
-        with self.assertRaisesRegex(ValueError, "generated FMM instances"):
-            self.check()
-
-    def testMissingSphChemistry(self):
-        linkPath = self.buildDirectory / "CMakeFiles" / (self.default + ".dir/link.txt")
-        linkPath.write_text(linkPath.read_text().replace("libcosmictiger_sph_chemistry.a", ""))
+    def testMissingChemistry(self):
+        self.linkPath.write_text(self.linkPath.read_text().replace("libcosmictiger_sph_chemistry.a", ""))
         with self.assertRaisesRegex(ValueError, "lacks particle chemistry source"):
             self.check()
 
-    def testEagerNamedApplication(self):
-        self.makefilePath.write_text(self.makefilePath.read_text() +
-                                    f"all: CMakeFiles/{self.default}.dir/all\n")
-        with self.assertRaisesRegex(ValueError, "root all eagerly builds named variant target"):
+    def testOldNamedApplication(self):
+        self.addCompilation("cosmictiger_leapfrog_fmm_7", "src/main.cpp", self.definitions)
+        with self.assertRaisesRegex(ValueError, "unexpected application target"):
             self.check()
 
-    def testEagerSelectedObjects(self):
-        self.makefilePath.write_text(self.makefilePath.read_text() +
-                                    f"all: CMakeFiles/{self.default}_objects.dir/all\n")
-        with self.assertRaisesRegex(ValueError, "root all eagerly builds named variant target"):
+    def testUnusedNamedObjectTarget(self):
+        self.addCompilation("cosmictiger_leapfrog_fmm_7_objects", "src/core/driver.cpp", self.definitions)
+        with self.assertRaisesRegex(ValueError, "unexpected physics object target"):
             self.check()
 
-    def testIndirectUnselectedObjects(self):
-        self.makefilePath.write_text(self.makefilePath.read_text() +
-                                    "all: CMakeFiles/cosmictiger_core.dir/all\n"
-                                    "CMakeFiles/cosmictiger_core.dir/all: "
-                                    "CMakeFiles/cosmictiger_hierarchical_pmmm_pp_3_objects.dir/all\n")
-        with self.assertRaisesRegex(ValueError, "root all reaches an unselected variant target"):
+    def testFixed64(self):
+        self.cache["COSMICTIGER_POSITION_TYPE"] = "fixed64"
+        for entry in self.commands:
+            entry["arguments"] = [arg.replace("COSMICTIGER_POSITION_BITS=32", "COSMICTIGER_POSITION_BITS=64")
+                                  for arg in entry["arguments"]]
+        self.assertIn("positions=fixed64", self.check())
+
+    def testWrongPositionWidth(self):
+        self.commands[-1]["arguments"].append("-DCOSMICTIGER_POSITION_BITS=64")
+        with self.assertRaisesRegex(ValueError, "needs COSMICTIGER_POSITION_BITS=32"):
             self.check()
 
-    def testMissingLegacyObjectDependency(self):
-        self.makefilePath.write_text(self.makefilePath.read_text().replace(
-            f"CMakeFiles/cosmictiger.dir/all: CMakeFiles/{self.default}_objects.dir/all\n", ""))
-        with self.assertRaisesRegex(ValueError, "Makefile dependency omits selected objects"):
-            self.check()
+
+class FeatureConfigurationTest(unittest.TestCase):
+    def configure(self, values):
+        with tempfile.TemporaryDirectory() as directory:
+            script = Path(directory) / "features.cmake"
+            source = Path(__file__).resolve().parents[1] / "cmake/features.cmake"
+            script.write_text("\n".join(f"set({key} {value} CACHE STRING \"test\")"
+                                        for key, value in values.items()) +
+                              f'\ninclude("{source}")\n' +
+                              'message(STATUS "range=${COSMICTIGER_FMM_MIN_ORDER}-${COSMICTIGER_FMM_MAX_ORDER}")\n')
+            return subprocess.run(["cmake", "-P", str(script)], text=True, capture_output=True)
+
+    def testDefaultRange(self):
+        result = self.configure({})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("range=5-7", result.stdout)
+
+    def testSingleAndBoundaryDegrees(self):
+        for value, orders in (("2", "3-3"), ("8", "9-9"), ("2-8", "3-9")):
+            with self.subTest(value=value):
+                result = self.configure({"COSMICTIGER_EXPANSION_DEGREE": value})
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("range=" + orders, result.stdout)
+
+    def testInvalidRangesFailBeforeDependencies(self):
+        for value in ("1", "9", "6-4", "4-9", "4--6"):
+            with self.subTest(value=value):
+                result = self.configure({"COSMICTIGER_EXPANSION_DEGREE": value})
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("COSMICTIGER_EXPANSION_DEGREE", result.stderr)
+
+    def testRetiredCacheRequiresExplicitMigration(self):
+        for key, value in (("COSMICTIGER_WITH_ORDER", "7"), ("COSMICTIGER_WITH_SPH", "OFF"),
+                           ("COSMICTIGER_GRAVITY_METHOD", "pmmm")):
+            with self.subTest(key=key):
+                result = self.configure({key: value})
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("Retired CosmicTiger cache options", result.stderr)
+                self.assertIn(key, result.stderr)
+                self.assertIn("-U", result.stderr)
+
+    def testNoIntegrator(self):
+        result = self.configure({"COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL": "OFF"})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Enable at least one COSMICTIGER_ENABLE_INTEGRATOR", result.stderr)
+
+    def testNoPmmmNearAlgorithm(self):
+        result = self.configure({"COSMICTIGER_ENABLE_PMMM": "ON", "COSMICTIGER_ENABLE_PMMM_NEAR_PP": "OFF"})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("PMMM requires", result.stderr)
+
+    def testGlobalSphOnly(self):
+        result = self.configure({"COSMICTIGER_ENABLE_FMM": "OFF",
+                                 "COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL": "OFF",
+                                 "COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL": "ON"})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("range=0-0", result.stdout)
 
 
 if __name__ == "__main__":

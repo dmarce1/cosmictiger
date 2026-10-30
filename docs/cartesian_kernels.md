@@ -3,8 +3,9 @@
 `cosmictiger::gravity::cartesian::Multipole<Real, order>` stores symmetric
 trace-free moments, and `cartesian::Expansion<Real, order>` stores local
 coefficients and a Laplacian. Their second template argument is the application
-FMM order: the multipole degree is `order - 2`, and the local degree is
-`order - 1`. Internal `cartesian::detail::Coefficients<Real, degree, withTrace>`
+internal FMM order: the multipole degree is `order - 2`, and the local degree is
+`order - 1`. The public potential expansion degree is `order - 1`.
+Internal `cartesian::detail::Coefficients<Real, degree, withTrace>`
 storage and generated operator specializations retain degree-based arguments.
 The same namespace contains the generated operators `P2M`, `M2M`, `M2L`, `M2P`,
 `P2L`, `L2L`, and `L2P`; `M2LDerivatives` contracts precomputed harmonic derivatives.
@@ -15,13 +16,15 @@ in `tools/cartesian/LICENSE`; the surrounding application remains GPL.
 
 Kernels are generated for every supported FMM order, 3 through 9: source
 degrees 1 through 7 paired with local degrees 2 through 8. CMake's
-`COSMICTIGER_FMM_MIN_ORDER` and `COSMICTIGER_FMM_MAX_ORDER` select the compiled
-range, defaulting to 4 through 8. The corresponding `FMM_MIN_ORDER` and
+`COSMICTIGER_EXPANSION_DEGREE` selects one potential degree or an inclusive
+range, defaulting to `4-6`; these map to internal orders 5 through 7.
+The corresponding `FMM_MIN_ORDER` and
 `FMM_MAX_ORDER` preprocessor guards exclude other orders from compilation while
 retaining all orders in the source headers. A run selects one compiled
-order with `gravity.fmmOrder` (default 7, the build's `COSMICTIGER_WITH_ORDER`),
-and `fmmDispatch()` switches to that order's instantiation at coarse boundaries.
-At order 7 the source stores 36 coefficients and the local stores 49 Cartesian
+potential degree with `gravity.expansionDegree`, defaulting to the largest
+enabled degree, six in the default range. `fmmDispatch()` switches to the
+corresponding internal order's instantiation at coarse boundaries.
+At potential degree 6 (internal order 7) the source stores 36 coefficients and the local stores 49 Cartesian
 coefficients and one constant Laplacian; in general a degree-`d` tensor stores
 `(d + 1)^2` coefficients. Indices are rank-major, with `nz=0` followed by `nz=1`.
 Moments are positive raw Cartesian moments multiplied by `S^rank`, and local
@@ -171,10 +174,9 @@ The float derivative regression compares every stored rank against double
 precision at ten separations, including the origin and box corner, for every
 selected order. The other periodic images retain their existing `erfc` recurrence.
 
-CPU runtime validation uses
-`--compute.cuda=false` in the CUDA-enabled application. A complete
-`COSMICTIGER_WITH_CUDA=OFF` application build still has pre-existing
-unconditional CUDA calls elsewhere in the application.
+CPU runtime validation uses `--compute.cuda=false`. It can run in either a
+CUDA-enabled application or a CPU-only build configured with
+`COSMICTIGER_WITH_CUDA=OFF`; CUDA tests require a CUDA-enabled build and device.
 
 ## Historical benchmarks
 

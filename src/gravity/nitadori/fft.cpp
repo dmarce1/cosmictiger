@@ -144,7 +144,7 @@ void initialize(int meshSize) {
     }
     cache.meshSize = meshSize;
     cache.lastUsed = ++meshCachePool.nextUse;
-    cache.order = gravity::kBuildFmmOrder;
+    cache.order = getOptions().gravity.pmmmOrder;
     cache.nearWidth = options.pmmmNearWidth;
     cache.sourceCount = fmmMultipoleCoefficientCount(cache.order);
     cache.localCount = fmmLocalHarmonicCoefficientCount(cache.order);
@@ -456,7 +456,7 @@ void transform() {
 }
 
 void destroy() {
-#if defined(USE_CUDA) && !COSMICTIGER_PMMM_NEAR_FMM
+#if defined(USE_CUDA) && COSMICTIGER_ENABLE_PMMM_NEAR_PP
     // Every solve has drained its tasks before this quiescent teardown. Release
     // retained PP buffers even when only the standalone near-field API ran.
     clearPmmmNearCudaWorkspaces();

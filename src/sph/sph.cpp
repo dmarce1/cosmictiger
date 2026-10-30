@@ -15,7 +15,7 @@
 
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/safe_io.hpp>
-#if COSMICTIGER_GRAVITY_PMMM
+#if COSMICTIGER_ENABLE_PMMM
 #include <cosmictiger/gravity/nitadori/solver.hpp>
 #endif
 #include <cosmictiger/math/constants.hpp>
@@ -570,11 +570,12 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
     runData.sinkGravityAccelerationX = &sphParticlesGravityAcceleration(kXDimension, 0);
     runData.sinkGravityAccelerationY = &sphParticlesGravityAcceleration(kYDimension, 0);
     runData.sinkGravityAccelerationZ = &sphParticlesGravityAcceleration(kZDimension, 0);
-#if COSMICTIGER_GRAVITY_PMMM
-    runData.gravityEffectiveRadius = pmmmEffectiveRadius();
-#else
     runData.gravityEffectiveRadius = getOptions().gravity.supportRadius /
         selectedGravityKernel().supportRadiusPerEffectiveRadius;
+#if COSMICTIGER_ENABLE_PMMM
+    if (usesMeshGravity(getOptions().gravity)) {
+        runData.gravityEffectiveRadius = pmmmEffectiveRadius();
+    }
 #endif
     addCpuFlops(1);
     runData.selfGravityEnabled = getOptions().gravity.enabled;

@@ -4,6 +4,8 @@ import os
 from pathlib import Path
 import subprocess
 
+from application_selection import application_arguments
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -20,6 +22,7 @@ def main():
                '--initial.particlesPerDimension=8', '--analysis.views=false',
                '--analysis.power=false', '--analysis.groups=false', '--lightcone.enabled=false',
                '--hpx:threads=2', '--hpx:bind=none', '--output.directory=.']
+    command += application_arguments(args.executable.resolve(), far="fmm", hydro=True)
     cases = [('checkpointState', 'Checkpoint state and mode validation passed', []),
              ('sphGravity', 'SPH gravity regression passed', []),
              ('sphGravity', 'SPH gravity regression passed',

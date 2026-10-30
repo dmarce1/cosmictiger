@@ -8,16 +8,29 @@
 
 #pragma once
 
+// Legacy standalone test targets may still supply the old exclusive switch.
 #ifndef COSMICTIGER_INTEGRATOR_HIERARCHICAL
-#error "COSMICTIGER_INTEGRATOR_HIERARCHICAL must be defined by the build configuration"
+#define COSMICTIGER_INTEGRATOR_HIERARCHICAL 0
+#endif
+#ifndef COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL
+#define COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL (!COSMICTIGER_INTEGRATOR_HIERARCHICAL)
+#endif
+#ifndef COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
+#define COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL COSMICTIGER_INTEGRATOR_HIERARCHICAL
+#endif
+#ifndef COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL
+#define COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL 0
 #endif
 
 namespace integration {
 
-static_assert(COSMICTIGER_INTEGRATOR_HIERARCHICAL == 0 || COSMICTIGER_INTEGRATOR_HIERARCHICAL == 1);
-
-inline constexpr bool kBuildUsesHierarchical = COSMICTIGER_INTEGRATOR_HIERARCHICAL != 0;
-inline constexpr char const* kBuildTimeIntegrator =
-    kBuildUsesHierarchical ? "hierarchical" : "leapfrog";
+inline constexpr bool kBuildHasTraditional = COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL != 0;
+inline constexpr bool kBuildHasHierarchical = COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL != 0;
+inline constexpr bool kBuildHasGlobal = COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL != 0;
+inline constexpr bool kBuildUsesHierarchical = !kBuildHasTraditional && kBuildHasHierarchical;
+inline constexpr char const* kBuildTimeIntegrator = kBuildHasTraditional ? "traditional" :
+    (kBuildHasHierarchical ? "hierarchical" : "global");
+static_assert(kBuildHasTraditional || kBuildHasHierarchical || kBuildHasGlobal,
+    "At least one time integrator must be enabled");
 
 }    // namespace integration

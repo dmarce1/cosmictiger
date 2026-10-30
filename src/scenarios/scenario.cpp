@@ -1,5 +1,5 @@
-#include <array>
 #include <stdexcept>
+#include <vector>
 
 #include <cosmictiger/scenarios/scenario.hpp>
 
@@ -16,8 +16,10 @@
 namespace scenarios {
 
 ScenarioDefinition const& definition(std::string const& name) {
-    static std::array<ScenarioDefinition, COSMICTIGER_WITH_SPH ? 10 : 3> const definitions{{
+    static std::vector<ScenarioDefinition> const definitions{
+#if COSMICTIGER_WITH_GRAVITY
         {"plummer", true, false, false, 64, nullptr},
+#endif
 #if COSMICTIGER_WITH_SPH
         {"sod", false, true, true, 20, initializeSod},
         {"blast", false, true, true, 16, initializeBlast},
@@ -28,8 +30,10 @@ ScenarioDefinition const& definition(std::string const& name) {
         {"hydroWave", false, true, true, 64, initializeHydroWave},
 #endif
         {"cosmology", true, COSMICTIGER_WITH_SPH != 0, false, 64, nullptr},
+#if COSMICTIGER_WITH_GRAVITY
         {"glass", true, false, false, 64, nullptr},
-    }};
+#endif
+    };
     for (auto const& scenario : definitions) {
         if (name == scenario.name) {
             return scenario;
@@ -38,15 +42,17 @@ ScenarioDefinition const& definition(std::string const& name) {
 #if !COSMICTIGER_WITH_SPH
     if (name == "sod" || name == "blast" || name == "rayleighTaylor" || name == "kelvinHelmholtz" ||
         name == "disc" || name == "polytropicStar" || name == "hydroWave") {
-        throw std::invalid_argument("run.scenario=" + name + " requires COSMICTIGER_WITH_SPH=ON");
+        throw std::invalid_argument("run.scenario=" + name + " requires COSMICTIGER_ENABLE_SPH=ON");
     }
-    throw std::invalid_argument(
-        "Unknown run.scenario '" + name + "'; choose plummer, cosmology, or glass");
-#else
-    throw std::invalid_argument("Unknown run.scenario '" + name +
-        "'; choose plummer, sod, blast, rayleighTaylor, kelvinHelmholtz, disc, "
-        "polytropicStar, hydroWave, cosmology, or glass");
 #endif
+    std::string available;
+    for (auto const& scenario : definitions) {
+        if (!available.empty()) {
+            available += ", ";
+        }
+        available += scenario.name;
+    }
+    throw std::invalid_argument("Unavailable run.scenario '" + name + "'; choose " + available);
 }
 
 }    // namespace scenarios

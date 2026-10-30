@@ -152,12 +152,12 @@ KickReturn particleMeshApplyField(ParticleInteger index,
     return result;
 }
 
-KickReturn particleMeshPrepareKick(
-    double scale, double baseTimestep, double maximumTimestep, bool firstCall, int minimumRung) {
+KickReturn particleMeshPrepareKick(double scale, double baseTimestep, double maximumTimestep,
+    bool firstCall, int minimumRung, double previousTimestep) {
     std::vector<hpx::future<KickReturn>> futures;
     for (auto const& child : hpxChildren()) {
         futures.push_back(hpx::async<ParticleMeshPrepareKickAction>(
-            child, scale, baseTimestep, maximumTimestep, firstCall, minimumRung));
+            child, scale, baseTimestep, maximumTimestep, firstCall, minimumRung, previousTimestep));
     }
     auto const& options = getOptions();
     double const effectiveRadius = pmmmEffectiveRadius();
@@ -188,19 +188,26 @@ KickReturn particleMeshPrepareKick(
                         if (!(timestep > 0.0) || !std::isfinite(timestep)) {
                             THROW_ERROR("Particle mesh timestep is not finite and positive\n");
                         }
-                        double const requestedRung = std::ceil(std::log2(baseTimestep / timestep));
-                        if (!(requestedRung < kMaxRung)) {
-                            THROW_ERROR(
-                                "Particle mesh timestep exceeds the available rung range\n");
-                        }
+                        result.minimumTimestep = std::min(result.minimumTimestep, timestep);
                         int const previousRung = particlesRung(i);
-                        result.maxRung = std::max(result.maxRung,
-                            std::max({1, int(requestedRung), previousRung - 1, minimumRung}));
+                        if (previousTimestep < 0.0) {
+                            double const requestedRung =
+                                std::ceil(std::log2(baseTimestep / timestep));
+                            if (!(requestedRung < kMaxRung)) {
+                                THROW_ERROR(
+                                    "Particle mesh timestep exceeds the available rung range\n");
+                            }
+                            result.maxRung = std::max(result.maxRung,
+                                std::max({1, int(requestedRung), previousRung - 1, minimumRung}));
+                        } else {
+                            particlesRung(i) = 0;
+                        }
 #if COSMICTIGER_WITH_SPH
                         bool const gas = options.hydro.enabled && particlesType(i) == kSphType;
 #endif
-                        double const oldHalfStep =
-                            firstCall ? 0.0 : std::ldexp(0.5 * baseTimestep, -previousRung);
+                        double const oldHalfStep = previousTimestep >= 0.0 ?
+                            0.5 * previousTimestep :
+                            (firstCall ? 0.0 : std::ldexp(0.5 * baseTimestep, -previousRung));
                         // Acceleration norm, timestep/rung proposal, and optional old half-step.
                         flops += 2 * kDimensions + 8 + (firstCall ? 0 : 2);
                         double velocitySquared = 0.0;
@@ -252,14 +259,16 @@ KickReturn particleMeshPrepareKick(
     return result;
 }
 
-double particleMeshFinishKick(double baseTimestep, int rung) {
+double particleMeshFinishKick(double baseTimestep, int rung, double explicitTimestep) {
     ALWAYS_ASSERT(rung >= 0 && rung < kMaxRung);
     std::vector<hpx::future<double>> futures;
     for (auto const& child : hpxChildren()) {
-        futures.push_back(hpx::async<ParticleMeshFinishKickAction>(child, baseTimestep, rung));
+        futures.push_back(
+            hpx::async<ParticleMeshFinishKickAction>(child, baseTimestep, rung, explicitTimestep));
     }
     double const sign = getOptions().initial.createGlass ? -1.0 : 1.0;
-    double const halfStep = sign * std::ldexp(0.5 * baseTimestep, -rung);
+    double const halfStep = sign *
+        (explicitTimestep >= 0.0 ? 0.5 * explicitTimestep : std::ldexp(0.5 * baseTimestep, -rung));
     addCpuFlops(3);    // Half-step multiplication, ldexp, and sign multiplication.
     bool const hydro = getOptions().hydro.enabled;
     size_t const count = particlesSize();
@@ -304,4 +313,9 @@ double particleMeshFinishKick(double baseTimestep, int rung) {
         kinetic += future.get();
     }
     return kinetic;
+}
+
+double particleMeshFinishGlobalKick(double timestep) {
+    ALWAYS_ASSERT(std::isfinite(timestep) && timestep > 0.0);
+    return particleMeshFinishKick(0.0, 0, timestep);
 }

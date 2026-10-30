@@ -21,9 +21,9 @@ def main():
     parser.add_argument("executable", type=Path)
     parser.add_argument("workdir", type=Path)
     parser.add_argument("--gravity-method", choices=("fmm", "pmmm"), required=True)
-    parser.add_argument("--near-method", choices=("pp", "fmm"), required=True)
+    parser.add_argument("--near-method", choices=("pp", "fmm", "none"), required=True)
     parser.add_argument("--order", type=int, choices=range(3, 10), required=True)
-    parser.add_argument("--time-integrator", choices=("leapfrog", "hierarchical"), required=True)
+    parser.add_argument("--time-integrator", choices=("traditional", "hierarchical", "global"), required=True)
     parser.add_argument("--without-sph", action="store_true")
     args = parser.parse_args()
     args.workdir.mkdir(parents=True, exist_ok=True)
@@ -36,7 +36,15 @@ def main():
     command = [str(args.executable.resolve()), "--hpx:threads=2", "--hpx:bind=none"]
     environment = dict(os.environ, CUDA_VISIBLE_DEVICES="")
 
-    def run(name, options, success=True, pmmm_mesh=8):
+    def run(name, options, success=True, pmmm_mesh=8, selectors=True):
+        if selectors:
+            selected = {"gravity.method.far": args.gravity_method,
+                        "gravity.expansionDegree": args.order - 1,
+                        "run.timeIntegrator": args.time_integrator}
+            if args.gravity_method == "pmmm":
+                selected["gravity.method.near"] = args.near_method
+            options = options + [f"--{key}={value}" for key, value in selected.items()
+                                 if not any(option.startswith(f"--{key}=") for option in options)]
         # Most cases inspect unrelated options; supply the required PMMM mesh.
         # Mesh/INI-specific cases can disable this fixture default explicitly.
         if (args.gravity_method == "pmmm" and pmmm_mesh is not None and
@@ -56,7 +64,7 @@ def main():
             raise RuntimeError(f"incorrect {key}: expected {expected}")
 
     help_text = run("help", ["--help"])
-    if not re.search(r"^\s*Time integrator:\s*" + args.time_integrator + r"\s*$",
+    if not re.search(r"^\s*Time integrators:.*\b" + args.time_integrator + r"\b",
                      help_text, re.MULTILINE):
         raise RuntimeError("help did not identify the compiled time integrator")
     option_names = set(re.findall(r"^\s+--([A-Za-z][A-Za-z0-9_.]*)", help_text, re.MULTILINE))
@@ -79,7 +87,8 @@ def main():
                 "output.units", "output.frame",
                 "output.xMin", "output.xMax", "output.yMin", "output.yMax",
                 "output.zMin", "output.zMax", "chemistry.initialization"}
-    required.update({"hydro.viscosityEvolution", "hydro.viscosityAlphaMin",
+    required.update({"run.timeIntegrator", "gravity.method.far", "gravity.method.near",
+                     "gravity.expansionDegree", "hydro.viscosityEvolution", "hydro.viscosityAlphaMin",
                      "hydro.viscosityDecay", "hydro.viscosityAlphaMax",
                      "hydro.viscosityDecayCD", "hydro.viscosityAlphaMaxPrice",
                      "hydro.viscosityDecayPrice"})
@@ -89,11 +98,11 @@ def main():
                        "hydro.yReflect", "gravity.sphSmoothing", "cosmology.omegaK",
                        "initial.usePowerFile", "gravity.cloud", "gravity.method",
                        "gravity.pmmmNearMethod", "gravity.pmmmOrder", "gravity.fmmOrder",
-                       "run.timeIntegrator", "run.hierarchicalGravity"}
+                       "run.hierarchicalGravity"}
     if removed_options & option_names:
         raise RuntimeError(f"removed options remain in help: {sorted(removed_options & option_names)}")
     for name in option_names - {"help", "configuration"}:
-        if not re.fullmatch(r"[a-z][A-Za-z0-9]*\.[a-z][A-Za-z0-9]*", name):
+        if not re.fullmatch(r"[a-z][A-Za-z0-9]*(?:\.[a-z][A-Za-z0-9]*)+", name):
             raise RuntimeError(f"option does not use groupName.optionName: {name}")
 
     # Mix section-style and dotted keys. Choosing a checkpoint serialization
@@ -152,6 +161,53 @@ mapSize = 8
     metadata_options = ["--run.test=checkpointState", "--compute.cuda=false",
                         "--hydro.enabled=false", "--initial.particlesPerDimension=8"]
 
+    for key, value in (("gravity.method.far", "unknown"),
+                       ("run.timeIntegrator", "unknown"),
+                       ("gravity.expansionDegree", "1"),
+                       ("gravity.expansionDegree", "9")):
+        output = run("selection_invalid_" + key + "_" + value,
+                     metadata_options + [f"--{key}={value}"], success=False)
+        if key not in output:
+            raise RuntimeError(f"invalid {key} lacked a selection diagnostic")
+    degree_range = re.search(r"Potential expansion degrees: (\d+) through (\d+)", help_text)
+    if degree_range is None:
+        raise RuntimeError("help omitted the compiled potential degree range")
+    for degree in range(int(degree_range[1]), int(degree_range[2]) + 1):
+        output = run(f"selection_degree_{degree}",
+                     metadata_options + [f"--gravity.expansionDegree={degree}"])
+        assertNumericSetting(output, "gravity.expansionDegree", degree)
+    selected_options = [f"--gravity.method.far={args.gravity_method}",
+                        f"--gravity.expansionDegree={args.order - 1}",
+                        f"--run.timeIntegrator={args.time_integrator}"]
+    if args.gravity_method == "pmmm":
+        selected_options.append(f"--gravity.method.near={args.near_method}")
+    selection_config = args.workdir / "algorithm_selection.ini"
+    selection_config.write_text(
+        f"[run]\ntimeIntegrator = {args.time_integrator}\n[gravity]\n"
+        f"method.far = {args.gravity_method}\nexpansionDegree = {args.order - 1}\n" +
+        (f"method.near = {args.near_method}\n" if args.gravity_method == "pmmm" else ""))
+    output = run("selection_ini", metadata_options + [
+        f"--configuration={selection_config.resolve()}"], selectors=False)
+    assertNumericSetting(output, "gravity.expansionDegree", args.order - 1)
+    default_degree_options = [option for option in selected_options if not option.startswith(
+        "--gravity.expansionDegree=")]
+    output = run("selection_default_degree", metadata_options + default_degree_options,
+                 selectors=False)
+    assertNumericSetting(output, "gravity.expansionDegree", int(degree_range[2]))
+    for key, label, choices in (
+            ("gravity.method.far", "Gravity solvers", ("fmm", "pmmm")),
+            ("run.timeIntegrator", "Time integrators", ("traditional", "hierarchical", "global")),
+            ("gravity.method.near", "PMMM near solvers", ("pp", "fmm"))):
+        if key == "gravity.method.near" and args.gravity_method != "pmmm":
+            continue
+        compiled = re.search(r"^\s*" + label + r":([^\n]*)", help_text, re.MULTILINE)
+        count = sum(choice in compiled[1].split() for choice in choices) if compiled else 0
+        arguments = [option for option in selected_options if not option.startswith(f"--{key}=")]
+        output = run("selection_implicit_" + key, metadata_options + arguments,
+                     success=count == 1, selectors=False)
+        if count > 1 and key not in output:
+            raise RuntimeError(f"ambiguous {key} lacked an explicit-selection diagnostic")
+
     error_defaults = run("gravity_error_defaults", metadata_options)
     assertNumericSetting(error_defaults, "gravity.errorInterval", 0)
     assertNumericSetting(error_defaults, "gravity.errorSampleSize", 100)
@@ -186,13 +242,13 @@ mapSize = 8
         raise RuntimeError("INI hydro.balsaraSwitch=false was not applied")
     balsara_default = run("balsara_default", metadata_options)
     def assertCompiledSettings(output):
-        for key, value in (("build.gravityMethod", args.gravity_method),
-                           ("build.pmmmNearMethod", args.near_method),
-                           ("build.timeIntegrator", args.time_integrator)):
+        for key, value in (("gravity.method.far", args.gravity_method),
+                           ("gravity.method.near", args.near_method if args.gravity_method == "pmmm" else "none"),
+                           ("run.timeIntegrator", args.time_integrator)):
             if not re.search(r"^" + re.escape(key) + r"\s*:\s*" + value + r"\s*$",
                              output, re.MULTILINE):
                 raise RuntimeError(f"compiled metadata did not retain {key}={value}")
-        assertNumericSetting(output, "build.fmmOrder", args.order)
+        assertNumericSetting(output, "gravity.expansionDegree", args.order - 1)
         expected_hierarchical = "T" if args.time_integrator == "hierarchical" else "F"
         if not re.search(r"^run\.hierarchicalGravity\s*:\s*" + expected_hierarchical + r"\s*$",
                          output, re.MULTILINE):
@@ -346,7 +402,7 @@ mapSize = 8
     sph_options = [option for option in metadata_options
                    if not option.startswith("--hydro.enabled=")]
     if args.without_sph:
-        sph_build_error = "COSMICTIGER_WITH_SPH=ON"
+        sph_build_error = "COSMICTIGER_ENABLE_SPH=ON"
         for gravity_enabled in ("true", "false"):
             rejected = run(f"disabled_sph_cli_gravity_{gravity_enabled}", sph_options + [
                 "--hydro.enabled=true", f"--gravity.enabled={gravity_enabled}"], success=False)
@@ -374,7 +430,7 @@ mapSize = 8
         if sph_build_error not in rejected:
             raise RuntimeError("disabled SPH chemistry request lacked build guidance")
     elif args.time_integrator == "hierarchical":
-        sph_integrator_error = "COSMICTIGER_TIME_INTEGRATOR=leapfrog"
+        sph_integrator_error = "run.timeIntegrator"
         for gravity_enabled in ("true", "false"):
             rejected = run(f"hierarchical_sph_gravity_{gravity_enabled}", sph_options + [
                 "--hydro.enabled=true", f"--gravity.enabled={gravity_enabled}"], success=False)
@@ -484,7 +540,7 @@ mapSize = 8
     chemistry_fields = ("initialTemperature", "hydrogenIonFraction",
                         "heliumIonFraction", "heliumDoubleIonFraction")
 
-    if not args.without_sph and args.time_integrator == "leapfrog":
+    if not args.without_sph and args.time_integrator != "hierarchical":
         # Both checkpoint layouts round-trip: zero retains the existing SPH block,
         # while nonzero acceleration appends the flagged z-plane force parameter.
         hydro_metadata_options = [option for option in metadata_options
@@ -834,10 +890,13 @@ mapSize = 8
     # and empty-string defaults without running its physical problem.
     root = Path(__file__).resolve().parents[1]
     optional_keys = {"compute.positionType", "gravity.effectiveRadius", "gravity.supportRadius",
+                     "gravity.method.near", "gravity.expansionDegree",
                      "hydro.centralEffectiveRadius", "hydro.centralSupportRadius",
                      "hydro.minEffectiveRadius", "hydro.maxEffectiveRadius",
                      *(f"chemistry.{field}" for field in chemistry_fields)}
-    expected_keys = option_names - {"help", "configuration"} - optional_keys
+    # The retired rung request is accepted only as an ignored compatibility
+    # input; examples must not advertise it as an active chemistry control.
+    public_keys = option_names - {"help", "configuration", "chemistry.synchronizedRung"}
     preset_curvatures = {"lcdm_present.ini": 0.0,
                          "closed_no_dark_energy.ini": -1.000092093902909,
                          "omega_k_negative.ini": -0.1, "omega_k_positive.ini": 0.1,
@@ -849,6 +908,9 @@ mapSize = 8
         ini.optionxform = str
         with path.open() as stream:
             ini.read_file(stream)
+        preset_optional_keys = optional_keys | ({"gravity.method.far"}
+            if "method.far" not in ini["gravity"] else set())
+        expected_keys = public_keys - preset_optional_keys
         actual_keys = {f"{section}.{key}" for section in ini.sections() for key in ini[section]}
         if actual_keys != expected_keys:
             raise RuntimeError(f"{path.name} option coverage differs: {sorted(actual_keys ^ expected_keys)}")
@@ -861,15 +923,21 @@ mapSize = 8
             section_match = re.fullmatch(r"\s*\[([^]]+)\]\s*", line)
             if section_match:
                 section = section_match.group(1)
-            alternative_match = re.match(r"\s*[#;]\s*([A-Za-z][A-Za-z0-9]*)\s*=", line)
+            alternative_match = re.match(
+                r"\s*[#;]\s*([A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*)*)\s*=", line)
             if section and alternative_match:
                 documented_alternatives.add(f"{section}.{alternative_match.group(1)}")
-        if not optional_keys <= documented_alternatives:
+        if not preset_optional_keys <= documented_alternatives:
             raise RuntimeError(f"{path.name} is missing commented optional settings: "
-                               f"{sorted(optional_keys - documented_alternatives)}")
+                               f"{sorted(preset_optional_keys - documented_alternatives)}")
         if ini["output"]["units"] != "code" or ini["output"]["frame"] != "comoving":
             raise RuntimeError(f"{path.name} must preserve native output defaults")
         preset_options = [f"--configuration={path}", "--chemistry.enabled=false"]
+        if args.time_integrator == "hierarchical":
+            # This is option/serialization coverage, with hydro disabled by
+            # metadata_options; keep hierarchical integration eligible even
+            # for examples whose physical problem uses imposed forces only.
+            preset_options.append("--gravity.enabled=true")
         if args.without_sph and ini["run"]["scenario"] not in ("cosmology", "plummer", "glass"):
             # Keep validating every example's option coverage and syntax when its
             # physical scenario is unavailable in the compiled executable.
@@ -991,9 +1059,10 @@ mapSize = 8
                 ("cli", [f"--{option}={value}"]),
                 ("ini", [f"--configuration={removed_config.resolve()}"])):
             output = run(f"removed_{source}_{option}", arguments, success=False)
-            if option not in output or not re.search(r"unrecogni[sz]ed option", output):
+            if option not in output or not re.search(
+                    r"unrecogni[sz]ed option|is ambiguous and matches", output):
                 raise RuntimeError(f"removed {source} option {option} was not rejected explicitly")
-    if not args.without_sph and args.gravity_method == "fmm" and args.time_integrator == "leapfrog":
+    if not args.without_sph and args.gravity_method == "fmm" and args.time_integrator != "hierarchical":
         for parameter in ("omegaB", "omegaC"):
             for value in ("0", "-0.1", "nan", "inf"):
                 output = run(f"invalid_class_mass_{parameter}_{value}", [

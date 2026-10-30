@@ -37,6 +37,8 @@ struct DriverParameters {
     double runtime;
     double years;
     TimeType itime;
+    // Interval of the pending global half-step, independent of the rung clock.
+    double globalTimestep{};
     template <typename A>
     void serialize(A&& arc, unsigned) {
         arc & bucketSize;
@@ -55,28 +57,32 @@ struct DriverParameters {
         arc & runtime;
         arc & itime;
         arc & years;
+        arc & globalTimestep;
     }
 };
 
 #if COSMICTIGER_WITH_SPH
 SphTreeCreateReturn sphStep1(int minrung, bool verbose = true);
 SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phase, double adot,
-    EnergiesT* energies, bool verbose = true, int uniformMinimumRung = -1,
-    bool closingOnly = false);
+    EnergiesT* energies, bool verbose = true, int uniformMinimumRung = -1, bool closingOnly = false,
+    double previousTimestep = 0.0, double maximumGlobalTimestep = 0.0);
 #endif
 #if COSMICTIGER_WITH_GRAVITY
-ForceStepResult kickStep(
-    int minrung, double scale, double, double t0, double theta, bool firstCall, bool fullEval);
+ForceStepResult kickStep(int minrung, double scale, double, double t0, double theta, bool firstCall,
+    bool fullEval, double previousTimestep = 0.0, double maximumGlobalTimestep = 0.0);
+#if COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
 ForceStepResult kickStepHierarchical(int& minimumRung, int maximumRung, double scale,
     double scaleDerivative, double time, double baseTimestep, double theta, EnergiesT* energies,
     int minimumRungFloor, bool doPotential, hpx::future<void>* lightcone, bool keepTop, double drag,
     int gravityErrorStep = -1, bool closingOnly = false);
+#endif
 
 #endif
 
 ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative, double time,
     double baseTimestep, double theta, bool firstCall, bool fullEvaluation, EnergiesT& energies,
-    int gravityErrorStep = -1, bool closingOnly = false);
+    int gravityErrorStep = -1, bool closingOnly = false, double previousTimestep = 0.0,
+    double maximumGlobalTimestep = 0.0);
 
 void runFixedScenario();
 void driver();

@@ -9,19 +9,19 @@
 primordial::Eos sphChemistryEos(
     primordial::State const& state, float storedEnergy, double scaleFactor);
 void sphChemistryInitializeParticle(long long index, double scaleFactor);
-// Returns the negative change in a * total physical thermal energy (code units),
-// for the existing cosmological heating ledger. All ranks participate.
-double sphChemistryAdvance(
-    double scaleFactor, double intervalScaleFactor, double conformalInterval);
-void sphChemistrySetRungs();
+// Close only active particles' saved source halves after the hydro corrector.
+// Returns their opening plus closing changes to the cosmological heating ledger.
+double sphChemistryClose(int minimumRung, double scaleFactor, double scaleDerivative,
+    double baseTimestep, double explicitTimestep = -1.0);
+// Open chemistry over half of each active particle's selected SPH timestep.
+// The source solver subcycles internally; chemistry does not reselect timesteps.
+void sphChemistryOpen(int minimumRung, double scaleFactor, double scaleDerivative,
+    double baseTimestep, double explicitTimestep = -1.0, int uniformRung = -1);
 std::array<double, 17> sphChemistryCheckpointParameters();
 uint64_t sphChemistryRadiationChecksum();
 
 // HI,HII,HeI,HeII,HeIII,H-,H2,H2+,e counts per H nucleus, then T,mu,gamma.
 std::array<float, 12> sphChemistryOutput(
     primordial::State const& state, float storedEnergy, double scaleFactor);
-
-// Opening source energy belongs to the next synchronized diagnostic epoch.
-double& sphChemistryPendingHeating();
 
 double sphChemistryPressureIntegral(double scaleFactor);

@@ -10,6 +10,8 @@ import re
 import shutil
 import subprocess
 
+from application_selection import application_options
+
 from run_checkpoint import checkManifest, checkpoint_position_bytes, fnv1a64, hydro_particle_payload
 
 
@@ -19,7 +21,7 @@ def main():
     parser.add_argument("workdir", type=Path)
     parser.add_argument("--position-type", choices=("fixed32", "fixed64"), required=True)
     parser.add_argument("--reference", type=Path,
-                        help="gravity-enabled leapfrog/SPH executable for evolution comparison")
+                        help="gravity-enabled traditional/SPH executable for evolution comparison")
     args = parser.parse_args()
     base = args.workdir.resolve()
     base.mkdir(parents=True, exist_ok=True)
@@ -30,6 +32,8 @@ def main():
               "--analysis.views=false", "--analysis.power=false", "--lightcone.enabled=false",
               "--output.directory=.", "--output.silo=false",
               "--run.verbose=true", "--checkpoint.intervalSeconds=0"]
+    selected = application_options(args.executable.resolve(), hydro=True)
+    common += [f"--{key}={value}" for key, value in selected.items()]
 
     def prepare(name):
         directory = base / name
@@ -57,14 +61,14 @@ def main():
             raise RuntimeError(f"{name}: missing diagnostic {diagnostic!r}")
 
     helpText = execute(prepare("help"), ["--help"])
-    if not re.search(r"Gravity solver:\s*none\s*$", helpText, re.MULTILINE):
+    if not re.search(r"Gravity solvers:\s*none\s*$", helpText, re.MULTILINE):
         raise RuntimeError("help does not identify the gravity-free build")
-    if "FMM/PMMM expansion order:" in helpText:
+    if "Potential expansion degrees:" in helpText:
         raise RuntimeError("SPH-only help advertises an unused expansion order")
     metadata = execute(prepare("metadata"), ["--run.test=checkpointState", "--hydro.enabled=false"])
     execute(prepare("saved_diagnostics"), ["--run.test=sphOnlyDiagnostics", "--hydro.enabled=true"])
-    for key, value in (("build.gravityMethod", "none"), ("build.fmmOrder", "0"),
-                       ("build.timeIntegrator", "leapfrog"),
+    for key, value in (("gravity.method.far", "none"), ("gravity.expansionDegree", "0"),
+                       ("run.timeIntegrator", selected["run.timeIntegrator"]),
                        ("compute.positionType", args.position_type), ("gravity.enabled", "F")):
         if not re.search(r"^" + re.escape(key) + r"\s*:\s*" + value + r"\s*$",
                          metadata, re.MULTILINE):

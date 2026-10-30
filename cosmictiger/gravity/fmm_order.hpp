@@ -9,6 +9,7 @@
 #pragma once
 
 #include <type_traits>
+#include <utility>
 
 #include <cosmictiger/core/assert.hpp>
 #include <cosmictiger/core/defs.hpp>
@@ -26,9 +27,9 @@
 // background quadratic; order 9 (degree-7 multipoles, degree-8 expansions) is
 // the largest: single precision gains nothing measurable beyond it.
 //
-// COSMICTIGER_WITH_ORDER selects the only order compiled into this binary.
-// fmmDispatch() directly instantiates it at tree, CPU walk, and CUDA launch
-// boundaries; no runtime order selection is performed.
+// COSMICTIGER_EXPANSION_DEGREE selects the compiled potential degree range.
+// fmmDispatch() selects its order at tree, CPU walk, and CUDA launch boundaries.
+// Runtime and serialized internal orders remain one greater than potential degree.
 //
 // Coefficient counts use compact rank-major Cartesian storage: a degree-d
 // harmonic tensor stores (d + 1)^2 coefficients, and local expansions append one constant Laplacian
@@ -44,8 +45,8 @@ inline constexpr int kFmmMinOrder = FMM_MIN_ORDER;
 inline constexpr int kFmmMaxOrder = FMM_MAX_ORDER;
 
 inline constexpr int kFmmDefaultOrder = gravity::kBuildFmmOrder;
-static_assert(kFmmMinOrder == kFmmDefaultOrder && kFmmMaxOrder == kFmmDefaultOrder,
-    "FMM_MIN_ORDER and FMM_MAX_ORDER must equal the selected COSMICTIGER_WITH_ORDER");
+static_assert(kFmmMinOrder <= kFmmDefaultOrder && kFmmDefaultOrder <= kFmmMaxOrder,
+    "The default expansion degree must be in the compiled range");
 
 CUDA_EXPORT constexpr int fmmMultipoleDegree(int order) {
     return order - 2;
@@ -149,23 +150,37 @@ struct FmmOrder {
     static constexpr int kEwaldTensorOrder_ = order;
 };
 
-// Compatibility checks for callers carrying serialized or explicit orders.
-// The selected order itself is a constant for the lifetime of the executable.
-inline constexpr int fmmOrder() {
-    return kFmmDefaultOrder;
-}
+// The selected order is set before constructing trees, Ewald tables or PMMM
+// plans, and is synchronized across localities by setOptions().
+int fmmOrder();
 void setFmmOrder(int order);
 
-// Explicit-order callers must request this binary's sole compiled order.
+namespace detail {
+
+template <int candidate, class F>
+decltype(auto) dispatchFmmOrder(int order, F&& f) {
+    if constexpr (candidate < kFmmMaxOrder) {
+        if (order == candidate) {
+            return std::forward<F>(f)(std::integral_constant<int, candidate>{});
+        }
+        return dispatchFmmOrder<candidate + 1>(order, std::forward<F>(f));
+    } else {
+        ALWAYS_ASSERT(order == candidate);
+        return std::forward<F>(f)(std::integral_constant<int, candidate>{});
+    }
+}
+
+}    // namespace detail
+
 template <class F>
 decltype(auto) fmmDispatch(int order, F&& f) {
-    ALWAYS_ASSERT(order == kFmmDefaultOrder);
-    return f(std::integral_constant<int, kFmmDefaultOrder>{});
+    ALWAYS_ASSERT(order >= kFmmMinOrder && order <= kFmmMaxOrder);
+    return detail::dispatchFmmOrder<kFmmMinOrder>(order, std::forward<F>(f));
 }
 
 template <class F>
 decltype(auto) fmmDispatch(F&& f) {
-    return f(std::integral_constant<int, kFmmDefaultOrder>{});
+    return fmmDispatch(fmmOrder(), std::forward<F>(f));
 }
 
 // Internal normalized FMM coordinate scale. Physical lengths use the unit box.

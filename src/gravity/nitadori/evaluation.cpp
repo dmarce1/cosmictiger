@@ -30,7 +30,7 @@ void consumeField(ParticleInteger index, std::array<double, 4> const& field, Kic
     }
 }
 
-#if !COSMICTIGER_PMMM_NEAR_FMM
+#if COSMICTIGER_ENABLE_PMMM_NEAR_PP
 void evaluateParticles(bool doPotential) {
     int const n = cache.meshSize;
     int const width = cache.nearWidth;
@@ -191,6 +191,6 @@ void evaluateParticles(bool doPotential) {
 
 }    // namespace pmmm::detail
 
-#if !COSMICTIGER_PMMM_NEAR_FMM
+#if COSMICTIGER_ENABLE_PMMM_NEAR_PP
 HPX_REGISTER_ACTION(PmmmEvaluateAction, PmmmEvaluateAction);
 #endif

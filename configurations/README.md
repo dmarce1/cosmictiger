@@ -15,15 +15,27 @@ CLI groups, and explicit CLI values override values in the selected file.
 [default.ini](../default.ini) records the application defaults; the cosmology
 scenario configuration below also enables primordial chemistry explicitly.
 
-The gravity solver, PMMM near method, and expansion order are selected by
-`./build.sh` or CMake when building the executable; the INIs contain runtime
-controls only. Global FMM keeps `gravity.openingAngle` and `gravity.openingSchedule`
-as runtime controls. A PMMM build requires an explicit valid `gravity.meshSize`,
-and retains `gravity.pmmmNearWidth` at runtime. The supplied `meshSize = 0` is
-unset; override it for PMMM, for example with `--gravity.meshSize=32`.
-SPH uses `leapfrog_<gravity>_sph` builds with global FMM, PMMM-PP, or PMMM-FMM.
-Hierarchical hydro integration is not implemented. To run a collisionless
-cosmology, set
+CMake `COSMICTIGER_ENABLE_*` options select which algorithms are compiled.
+`gravity.method.far=fmm|pmmm`, `gravity.method.near=pp|fmm` (PMMM only), and
+`run.timeIntegrator=traditional|hierarchical|global` select the run. A single
+eligible compiled algorithm is automatic; multiple choices require CLI/INI
+selection. Restart can recover omitted selections from the checkpoint.
+The supplied configurations choose traditional integration and FMM when gravity
+is enabled. Override those selections for a build containing different algorithms.
+
+`COSMICTIGER_EXPANSION_DEGREE=4-6` compiles potential degrees 4, 5, and 6 by default.
+`gravity.expansionDegree` chooses a compiled degree and defaults to the largest.
+The implementation's historical order is one greater than potential degree.
+Global FMM retains `gravity.openingAngle` and `gravity.openingSchedule`.
+PMMM requires an explicit valid `gravity.meshSize`, at least
+`2*gravity.pmmmNearWidth+1`; override the supplied zero with, for example,
+`--gravity.meshSize=32 --gravity.method.far=pmmm --gravity.method.near=pp`.
+
+Traditional and global integration support SPH. Hierarchical integration requires
+gravity without SPH. Global integration advances all particles using the smallest
+raw allowable timestep across all particles and localities, without power-of-two
+rounding; final-time and scenario-stage boundaries can shorten that interval.
+To run a collisionless cosmology, set
 `--hydro.enabled=false --chemistry.enabled=false`.
 
 | Configuration | `run.scenario` | Enabled physics | Output directory |

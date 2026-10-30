@@ -26,6 +26,7 @@ SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, CudaSt
     };
     std::unique_ptr<SphReduction, decltype(releaseReduction)> reductionOwner(
         reduction, releaseReduction);
+    reduction->minimumTimestep = std::numeric_limits<float>::max();
     reduction->nextNodeIndex = reduction->pendingChanges = 0;
     reduction->minimumSupportRadius = std::numeric_limits<float>::max();
     reduction->maximumSupportRadius = 0.0f;
@@ -104,6 +105,7 @@ SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, CudaSt
     } break;
     }
     timer.stop();
+    result.minimumTimestep = reduction->minimumTimestep;
     result.floatingPointOperations = reduction->floatingPointOperations;
     terminal::detailPrint(
         "SPH GFLOP/s = %e\n", double(reduction->floatingPointOperations) * 1.0e-9 / timer.read());

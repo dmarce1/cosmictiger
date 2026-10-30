@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <exception>
 #include <fstream>
 #include <iterator>
 #include <limits>
@@ -21,7 +22,7 @@
 #include <cosmictiger/sph/sph_chemistry.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
 
-namespace {
+namespace detail {
 using RadiationMember = float primordial::Radiation::*;
 constexpr RadiationMember kRadiationMembers[] = {&primordial::Radiation::hydrogenIonization,
     &primordial::Radiation::heliumIonization, &primordial::Radiation::heliumPlusIonization,
@@ -155,9 +156,12 @@ float storedEnergyAt(float energy, double scaleFactor) {
             .value(),
         "stored a^2 u");
 }
+std::vector<ParticleInteger> pendingIndices;
+std::vector<int> pendingRungs;
 std::vector<primordial::StepResult> pendingResults;
 std::vector<float> pendingEnergies;
-}    // namespace
+std::vector<SphChemistryStep> pendingSteps;
+}    // namespace detail
 
 primordial::Eos sphChemistryEos(
     primordial::State const& state, float storedEnergy, double scaleFactor) {
@@ -166,8 +170,8 @@ primordial::Eos sphChemistryEos(
         throw std::runtime_error("Chemistry requires IEEE nearest rounding and gradual underflow");
     }
     primordial::Eos eos;
-    auto const status = primordial::evaluateEos(
-        stateAt(state, storedEnergy, scaleFactor), environmentAt(scaleFactor, 0.0f, false), eos);
+    auto const status = primordial::evaluateEos(detail::stateAt(state, storedEnergy, scaleFactor),
+        detail::environmentAt(scaleFactor, 0.0f, false), eos);
     if (status != primordial::Status::Success) {
         throw std::runtime_error(
             "Chemistry EOS rejected gas state (status " + std::to_string(int(status)) + ")");
@@ -190,74 +194,147 @@ void sphChemistryInitializeParticle(long long index, double scaleFactor) {
         state.abundances[i] = primordial::SignedAbundance::fromMinority(
             static_cast<float>(upper ? 1.0 - fractions[i] : fractions[i]), upper);
     }
-    auto const status = primordial::thermalEnergyAtTemperature(state, environmentAt(scaleFactor),
-        static_cast<float>(options.chemistry.initialTemperature), state.thermalEnergy);
+    auto const status =
+        primordial::thermalEnergyAtTemperature(state, detail::environmentAt(scaleFactor),
+            static_cast<float>(options.chemistry.initialTemperature), state.thermalEnergy);
     if (status != primordial::Status::Success) {
         throw std::runtime_error(
             "Initial chemistry composition/temperature is outside the selected model");
     }
-    sphParticlesInternalEnergy(index) = storedEnergyAt(state.thermalEnergy, scaleFactor);
-    sphParticlesRung(index) = options.chemistry.synchronizedRung;
+    sphParticlesInternalEnergy(index) = detail::storedEnergyAt(state.thermalEnergy, scaleFactor);
+    sphParticlesChemistrySteps[index] = {};
 }
 
-double sphChemistryPrepare(
-    double scaleFactor, double intervalScaleFactor, double conformalInterval);
+double sphChemistryPrepare(int minimumRung, double scaleFactor, double scaleDerivative,
+    double baseTimestep, bool opening, double explicitTimestep, int uniformRung);
 void sphChemistryCommit();
 HPX_PLAIN_ACTION(sphChemistryPrepare, SphChemistryPrepareAction);
 HPX_PLAIN_ACTION(sphChemistryCommit, SphChemistryCommitAction);
-HPX_PLAIN_ACTION(sphChemistrySetRungs, SphChemistrySetRungsAction);
 
-double sphChemistryPrepare(
-    double scaleFactor, double intervalScaleFactor, double conformalInterval) {
+double sphChemistryPrepare(int minimumRung, double scaleFactor, double scaleDerivative,
+    double baseTimestep, bool opening, double explicitTimestep, int uniformRung) {
     std::vector<hpx::future<double>> remote;
     for (auto const& child : hpxChildren()) {
-        remote.push_back(hpx::async<SphChemistryPrepareAction>(
-            child, scaleFactor, intervalScaleFactor, conformalInterval));
-    }
-    auto const& options = getOptions();
-    auto const scales = units::scalesFromOptions(options);
-    float const seconds = primordial::physicalSeconds(
-        units::toPhysicalInterval(units::ConformalTime(conformalInterval * scales.timeScale()),
-            units::CosmologicalContext(intervalScaleFactor, options.cosmology.hubble)));
-    std::vector<primordial::BatchInput> inputs(sphParticlesSize());
-    for (size_t i = 0; i < inputs.size(); ++i) {
-        inputs[i].state =
-            stateAt(sphParticlesChemistryStates[i], sphParticlesInternalEnergy(i), scaleFactor);
-        inputs[i].environment = environmentAt(scaleFactor, sphParticlesDensity(i));
-        inputs[i].interval = seconds;
-    }
-    primordial::SolverOptions solverOptions;
-    solverOptions.relativeTolerance = options.chemistry.relativeTolerance;
-    for (int i = 0; i < primordial::kAbundanceCount; ++i) {
-        solverOptions.abundanceAbsoluteTolerance[i] = options.chemistry.abundanceAbsoluteTolerance;
-    }
-    solverOptions.energyAbsoluteTolerance = options.chemistry.energyAbsoluteTolerance;
-    solverOptions.maxSubsteps = options.chemistry.maxSubsteps;
-    pendingResults.resize(inputs.size());
-    pendingEnergies.resize(inputs.size());
-    std::string error;
-    bool const dispatched = options.compute.cuda ?
-        primordial::integrateBatchCuda(
-            inputs.data(), pendingResults.data(), inputs.size(), solverOptions, &error) :
-        primordial::integrateBatchCpu(inputs.data(), pendingResults.data(), inputs.size(),
-            solverOptions, static_cast<unsigned>(hpx::get_num_worker_threads()));
-    if (!dispatched) {
-        throw std::runtime_error("Chemistry batch dispatch failed: " + error);
+        remote.push_back(hpx::async<SphChemistryPrepareAction>(child, minimumRung, scaleFactor,
+            scaleDerivative, baseTimestep, opening, explicitTimestep, uniformRung));
     }
     double heating = 0.0;
-    for (size_t i = 0; i < inputs.size(); ++i) {
-        auto const& result = pendingResults[i];
-        if (result.status != primordial::SolverStatus::Success || result.acceptedTime != seconds) {
-            throw std::runtime_error("Chemistry failed on rank " + std::to_string(hpxRank()) +
-                " gas index " + std::to_string(i) + " status " +
-                std::to_string(int(result.status)) + "; source update was not committed");
+    std::exception_ptr failure;
+    try {
+        auto const& options = getOptions();
+        auto const scales = units::scalesFromOptions(options);
+        std::vector<primordial::BatchInput> inputs;
+        detail::pendingIndices.clear();
+        detail::pendingRungs.clear();
+        detail::pendingSteps.clear();
+        auto append = [&](ParticleInteger i, primordial::State const& state, float energy,
+                          double halfInterval, int rung) {
+            if (!(halfInterval > 0.0) || !std::isfinite(halfInterval)) {
+                throw std::runtime_error("Chemistry requires a positive pending SPH half-interval");
+            }
+            double const midpointScale =
+                scaleFactor + (opening ? 0.5 : -0.5) * scaleDerivative * halfInterval;
+            primordial::BatchInput input;
+            input.state = detail::stateAt(state, energy, scaleFactor);
+            input.environment = detail::environmentAt(scaleFactor, sphParticlesDensity(i));
+            input.interval = primordial::physicalSeconds(
+                units::toPhysicalInterval(units::ConformalTime(halfInterval * scales.timeScale()),
+                    units::CosmologicalContext(midpointScale, options.cosmology.hubble)));
+            inputs.push_back(input);
+            detail::pendingIndices.push_back(i);
+            detail::pendingRungs.push_back(rung);
+            detail::pendingSteps.push_back({opening ? halfInterval : 0.0, 0.0});
+        };
+        if (!std::isfinite(explicitTimestep)) {
+            throw std::runtime_error("Explicit chemistry/SPH timestep is not finite");
         }
-        pendingEnergies[i] = storedEnergyAt(result.state.thermalEnergy, scaleFactor);
-        heating -= options.initial.gasMass *
-            double(pendingEnergies[i] - sphParticlesInternalEnergy(i)) / scaleFactor;
+        for (ParticleInteger i = 0; i < sphParticlesSize(); ++i) {
+            int const currentRung = sphParticlesRung(i);
+            if (currentRung < minimumRung) {
+                continue;
+            }
+            int const rung = opening && uniformRung >= 0 ? uniformRung : currentRung;
+            if (rung < 0 || rung >= kMaxRung) {
+                throw std::runtime_error("Chemistry/SPH requires an unsupported timestep rung");
+            }
+            double const selectedHalf = explicitTimestep >= 0.0 ?
+                0.5 * explicitTimestep :
+                std::ldexp(baseTimestep, -1 - rung);
+            auto const& step = sphParticlesChemistrySteps[i];
+            if (opening) {
+                if (step.halfInterval != 0.0 || step.pendingHeating != 0.0) {
+                    throw std::runtime_error(
+                        "Chemistry opening attempted before closing the old interval");
+                }
+            } else {
+                if (!std::isfinite(step.pendingHeating)) {
+                    throw std::runtime_error("Pending chemistry heating is not finite");
+                }
+                if (step.halfInterval != selectedHalf) {
+                    throw std::runtime_error(
+                        "Pending chemistry interval differs from the old SPH timestep");
+                }
+            }
+            append(i, sphParticlesChemistryStates[i], sphParticlesInternalEnergy(i),
+                opening ? selectedHalf : step.halfInterval, rung);
+        }
+        primordial::SolverOptions solverOptions;
+        solverOptions.relativeTolerance = options.chemistry.relativeTolerance;
+        for (int i = 0; i < primordial::kAbundanceCount; ++i) {
+            solverOptions.abundanceAbsoluteTolerance[i] =
+                options.chemistry.abundanceAbsoluteTolerance;
+        }
+        solverOptions.energyAbsoluteTolerance = options.chemistry.energyAbsoluteTolerance;
+        solverOptions.maxSubsteps = options.chemistry.maxSubsteps;
+        detail::pendingResults.resize(inputs.size());
+        detail::pendingEnergies.resize(inputs.size());
+        std::string error;
+        bool const dispatched = inputs.empty() ||
+            (options.compute.cuda ?
+                    primordial::integrateBatchCuda(inputs.data(), detail::pendingResults.data(),
+                        inputs.size(), solverOptions, &error) :
+                    primordial::integrateBatchCpu(inputs.data(), detail::pendingResults.data(),
+                        inputs.size(), solverOptions,
+                        static_cast<unsigned>(hpx::get_num_worker_threads())));
+        if (!dispatched) {
+            throw std::runtime_error("Chemistry batch dispatch failed: " + error);
+        }
+        for (size_t j = 0; j < inputs.size(); ++j) {
+            ParticleInteger const i = detail::pendingIndices[j];
+            auto const& result = detail::pendingResults[j];
+            if (result.status != primordial::SolverStatus::Success ||
+                result.acceptedTime != inputs[j].interval) {
+                throw std::runtime_error("Chemistry failed on rank " + std::to_string(hpxRank()) +
+                    " gas index " + std::to_string(i) + " status " +
+                    std::to_string(int(result.status)) + "; source update was not committed");
+            }
+            detail::pendingEnergies[j] =
+                detail::storedEnergyAt(result.state.thermalEnergy, scaleFactor);
+            float const beforeEnergy = sphParticlesInternalEnergy(i);
+            double const change = -options.initial.gasMass *
+                double(detail::pendingEnergies[j] - beforeEnergy) / scaleFactor;
+            if (opening) {
+                detail::pendingSteps[j].pendingHeating = change;
+            } else {
+                heating += change + sphParticlesChemistrySteps[i].pendingHeating;
+            }
+        }
+    } catch (...) {
+        failure = std::current_exception();
     }
+    // Drain every prepare before reporting failure. A caller may retry, and no
+    // previous rank's work may still be writing the next transaction's buffers.
     for (auto& future : remote) {
-        heating += future.get();
+        try {
+            heating += future.get();
+        } catch (...) {
+            if (!failure) {
+                failure = std::current_exception();
+            }
+        }
+    }
+    if (failure) {
+        std::rethrow_exception(failure);
     }
     return heating;
 }
@@ -266,51 +343,50 @@ void sphChemistryCommit() {
     for (auto const& child : hpxChildren()) {
         remote.push_back(hpx::async<SphChemistryCommitAction>(child));
     }
-    if (pendingResults.size() != size_t(sphParticlesSize())) {
-        throw std::runtime_error("Chemistry transaction size changed");
+    for (size_t j = 0; j < detail::pendingResults.size(); ++j) {
+        ParticleInteger const i = detail::pendingIndices[j];
+        sphParticlesChemistryStates[i] = detail::pendingResults[j].state;
+        sphParticlesInternalEnergy(i) = detail::pendingEnergies[j];
+        sphParticlesChemistrySteps[i] = detail::pendingSteps[j];
+        sphParticlesRung(i) = detail::pendingRungs[j];
     }
-    for (size_t i = 0; i < pendingResults.size(); ++i) {
-        sphParticlesChemistryStates[i] = pendingResults[i].state;
-        sphParticlesInternalEnergy(i) = pendingEnergies[i];
-    }
-    pendingResults.clear();
-    pendingEnergies.clear();
+    detail::pendingIndices.clear();
+    detail::pendingRungs.clear();
+    detail::pendingResults.clear();
+    detail::pendingEnergies.clear();
+    detail::pendingSteps.clear();
     for (auto& future : remote) {
         future.get();
     }
 }
-double sphChemistryAdvance(
-    double scaleFactor, double intervalScaleFactor, double conformalInterval) {
-    // Strang's symmetric source splitting: SIAM J. Numer. Anal. 5 (1968),
-    // 506-517, doi:10.1137/0705041. Prepare every rank before committing any.
-    double const heating = sphChemistryPrepare(scaleFactor, intervalScaleFactor, conformalInterval);
+double sphChemistryClose(int minimumRung, double scaleFactor, double scaleDerivative,
+    double baseTimestep, double explicitTimestep) {
+    // CKDKC: the old hydro corrector has finished before this closing C.
+    // Prepare every rank before committing any source update.
+    double const heating = sphChemistryPrepare(
+        minimumRung, scaleFactor, scaleDerivative, baseTimestep, false, explicitTimestep, -1);
     sphChemistryCommit();
     sphParticlesClearHydroCaches();
     return heating;
 }
-void sphChemistrySetRungs() {
-    std::vector<hpx::future<void>> remote;
-    for (auto const& child : hpxChildren()) {
-        remote.push_back(hpx::async<SphChemistrySetRungsAction>(child));
-    }
-    for (ParticleInteger i = 0; i < particlesSize(); ++i) {
-        particlesRung(i) = getOptions().chemistry.synchronizedRung;
-    }
-    for (auto& future : remote) {
-        future.get();
-    }
+void sphChemistryOpen(int minimumRung, double scaleFactor, double scaleDerivative,
+    double baseTimestep, double explicitTimestep, int uniformRung) {
+    // CKDKC: use the selected SPH interval, with only the local source solve subcycled.
+    sphChemistryPrepare(minimumRung, scaleFactor, scaleDerivative, baseTimestep, true,
+        explicitTimestep, uniformRung);
+    sphChemistryCommit();
+    sphParticlesClearHydroCaches();
 }
 std::array<double, 17> sphChemistryCheckpointParameters() {
     auto const& c = getOptions().chemistry;
-    return {double(primordial::kPhysicsVersion), c.network == "atomic6" ? 6.0 : 9.0,
-        double(c.synchronizedRung), c.initialTemperature, c.hydrogenIonFraction,
-        c.heliumIonFraction, c.heliumDoubleIonFraction, c.hydrogenMinusFraction,
-        c.molecularFraction, c.molecularIonFraction, c.relativeTolerance,
+    return {double(primordial::kPhysicsVersion), c.network == "atomic6" ? 6.0 : 9.0, 0.0,
+        c.initialTemperature, c.hydrogenIonFraction, c.heliumIonFraction, c.heliumDoubleIonFraction,
+        c.hydrogenMinusFraction, c.molecularFraction, c.molecularIonFraction, c.relativeTolerance,
         c.abundanceAbsoluteTolerance, c.energyAbsoluteTolerance, double(c.maxSubsteps),
-        getOptions().cosmology.heliumFraction, getOptions().cosmology.thetaCmb, 1.0};
+        getOptions().cosmology.heliumFraction, getOptions().cosmology.thetaCmb, 2.0};
 }
 uint64_t sphChemistryRadiationChecksum() {
-    return radiationTable().checksum;
+    return detail::radiationTable().checksum;
 }
 
 std::array<float, 12> sphChemistryOutput(
@@ -319,17 +395,12 @@ std::array<float, 12> sphChemistryOutput(
     if (!floatingEnvironment.valid()) {
         throw std::runtime_error("Chemistry requires IEEE nearest rounding and gradual underflow");
     }
-    auto const c = primordial::composition(state, environmentAt(scaleFactor, 0.0f, false));
+    auto const c = primordial::composition(state, detail::environmentAt(scaleFactor, 0.0f, false));
     auto const eos = sphChemistryEos(state, storedEnergy, scaleFactor);
     return {c.hydrogen.toFloat(), c.hydrogenPlus.toFloat(), c.helium.toFloat(),
         c.heliumPlus.toFloat(), c.heliumDoublePlus.toFloat(), c.hydrogenMinus.toFloat(),
         c.molecularHydrogen.toFloat(), c.molecularHydrogenPlus.toFloat(), c.electrons.toFloat(),
         eos.temperature, eos.meanMolecularWeight, eos.adiabaticIndex};
-}
-
-double& sphChemistryPendingHeating() {
-    static double heating = 0.0;
-    return heating;
 }
 
 HPX_PLAIN_ACTION(sphChemistryPressureIntegral, SphChemistryPressureIntegralAction);

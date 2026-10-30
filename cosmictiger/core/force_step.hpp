@@ -7,11 +7,14 @@
 
 #pragma once
 
+#include <limits>
+
 #include <cosmictiger/cuda/cuda_export.hpp>
 
 // Force advancement diagnostics shared by hydrodynamics and gravity solvers.
 struct ForceStepResult {
     int maxRung;
+    double minimumTimestep;
     double pot;
     double kin;
     double dkin;
@@ -28,6 +31,7 @@ struct ForceStepResult {
     CUDA_EXPORT
     ForceStepResult() {
         maxRung = 0;
+        minimumTimestep = std::numeric_limits<double>::max();
         pot = 0.0;
         kin = 0.0;
         xmom = ymom = zmom = nmom = 0.0;
@@ -42,6 +46,9 @@ struct ForceStepResult {
     ForceStepResult& operator+=(ForceStepResult const& other) {
         if (other.maxRung > maxRung) {
             maxRung = other.maxRung;
+        }
+        if (other.minimumTimestep < minimumTimestep) {
+            minimumTimestep = other.minimumTimestep;
         }
         pot += other.pot;
         kin += other.kin;
@@ -61,6 +68,7 @@ struct ForceStepResult {
     template <class A>
     void serialize(A&& arc, unsigned) {
         arc & maxRung;
+        arc & minimumTimestep;
         arc & pot;
         arc & kin;
         arc & xmom;

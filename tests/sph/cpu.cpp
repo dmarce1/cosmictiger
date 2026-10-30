@@ -23,6 +23,7 @@
 #include <gtest/gtest.h>
 
 #include <cosmictiger/sph/sph_cpu.hpp>
+#include <tests/sph/global_timestep_cases.hpp>
 
 namespace detail {
 FlopCount submittedSphFlops = 0;
@@ -318,7 +319,8 @@ public:
                     "finite active-kernel acceleration");
             }
             if (phase == 1) {
-                require(data_.sinkParticleRungs[particleIndex(i)] >= 1 &&
+                require(
+                    data_.sinkParticleRungs[particleIndex(i)] >= (params_.globalTimestep ? 0 : 1) &&
                         data_.sinkParticleRungs[particleIndex(i)] < kMaxRung,
                     "valid active-kernel timestep rung");
             }
@@ -1777,4 +1779,8 @@ TEST_F(SphCpuTest, SelectedKernels) {
         detail::testSelectedCentralGravity();
         detail::testFixedGravityTimestep();
     }
+}
+
+TEST_F(SphCpuTest, GlobalRawTimestep) {
+    detail::testGlobalRawTimestep<detail::Fixture>();
 }

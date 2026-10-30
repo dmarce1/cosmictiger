@@ -8,39 +8,54 @@
 
 #pragma once
 
-// Standalone gravity tests historically specify the solver flags directly.
-// Application variants always supply this feature flag explicitly.
+// Compatibility inputs for standalone tests that still specify the historical
+// single-solver macros. Application builds define every ENABLE_* capability.
 #ifndef COSMICTIGER_WITH_GRAVITY
 #define COSMICTIGER_WITH_GRAVITY 1
 #endif
-
-#ifndef COSMICTIGER_GRAVITY_PMMM
-#error "COSMICTIGER_GRAVITY_PMMM must be defined by the build configuration"
+#ifndef COSMICTIGER_ENABLE_FMM
+#if defined(COSMICTIGER_GRAVITY_PMMM)
+#define COSMICTIGER_ENABLE_FMM (COSMICTIGER_WITH_GRAVITY && !COSMICTIGER_GRAVITY_PMMM)
+#else
+#define COSMICTIGER_ENABLE_FMM COSMICTIGER_WITH_GRAVITY
 #endif
-#ifndef COSMICTIGER_PMMM_NEAR_FMM
-#error "COSMICTIGER_PMMM_NEAR_FMM must be defined by the build configuration"
+#endif
+#ifndef COSMICTIGER_ENABLE_PMMM
+#if defined(COSMICTIGER_GRAVITY_PMMM)
+#define COSMICTIGER_ENABLE_PMMM (COSMICTIGER_WITH_GRAVITY && COSMICTIGER_GRAVITY_PMMM)
+#else
+#define COSMICTIGER_ENABLE_PMMM 0
+#endif
+#endif
+#ifndef COSMICTIGER_ENABLE_PMMM_NEAR_FMM
+#if defined(COSMICTIGER_PMMM_NEAR_FMM)
+#define COSMICTIGER_ENABLE_PMMM_NEAR_FMM COSMICTIGER_PMMM_NEAR_FMM
+#else
+#define COSMICTIGER_ENABLE_PMMM_NEAR_FMM 0
+#endif
+#endif
+#ifndef COSMICTIGER_ENABLE_PMMM_NEAR_PP
+#define COSMICTIGER_ENABLE_PMMM_NEAR_PP (!COSMICTIGER_ENABLE_PMMM_NEAR_FMM)
 #endif
 #ifndef ORDER
-#error "ORDER (COSMICTIGER_WITH_ORDER) must be defined by the build configuration"
+#error "ORDER (the default potential expansion degree plus one) must be defined"
 #endif
 
 namespace gravity {
 
-static_assert(COSMICTIGER_GRAVITY_PMMM == 0 || COSMICTIGER_GRAVITY_PMMM == 1);
-static_assert(COSMICTIGER_PMMM_NEAR_FMM == 0 || COSMICTIGER_PMMM_NEAR_FMM == 1);
-static_assert(COSMICTIGER_WITH_GRAVITY == 0 || COSMICTIGER_WITH_GRAVITY == 1);
-static_assert(COSMICTIGER_WITH_GRAVITY ? ORDER >= 3 && ORDER <= 9 : ORDER == 0,
-    "Gravity builds require order 3 to 9; SPH-only builds use order zero");
-static_assert(
-    COSMICTIGER_WITH_GRAVITY || (!COSMICTIGER_GRAVITY_PMMM && !COSMICTIGER_PMMM_NEAR_FMM));
-
-inline constexpr bool kBuildHasGravity = COSMICTIGER_WITH_GRAVITY != 0;
-inline constexpr bool kBuildUsesPmmm = COSMICTIGER_GRAVITY_PMMM != 0;
-inline constexpr bool kBuildPmmmNearUsesFmm = COSMICTIGER_PMMM_NEAR_FMM != 0;
+inline constexpr bool kBuildHasFmm = COSMICTIGER_ENABLE_FMM != 0;
+inline constexpr bool kBuildHasPmmm = COSMICTIGER_ENABLE_PMMM != 0;
+inline constexpr bool kBuildHasGravity = kBuildHasFmm || kBuildHasPmmm;
+inline constexpr bool kBuildHasPmmmNearPp = kBuildHasPmmm && COSMICTIGER_ENABLE_PMMM_NEAR_PP;
+inline constexpr bool kBuildHasPmmmNearFmm = kBuildHasPmmm && COSMICTIGER_ENABLE_PMMM_NEAR_FMM;
+static_assert(kBuildHasGravity ? ORDER >= 3 && ORDER <= 9 : ORDER == 0,
+    "Gravity builds require potential degree 2 through 8; SPH-only builds use order zero");
+static_assert(!kBuildHasPmmm || kBuildHasPmmmNearPp || kBuildHasPmmmNearFmm,
+    "PMMM requires an enabled near-interaction algorithm");
 inline constexpr int kBuildFmmOrder = ORDER;
 inline constexpr char const* kBuildGravityMethod =
-    kBuildHasGravity ? (kBuildUsesPmmm ? "pmmm" : "fmm") : "none";
+    kBuildHasFmm ? "fmm" : (kBuildHasPmmm ? "pmmm" : "none");
 inline constexpr char const* kBuildPmmmNearMethod =
-    kBuildHasGravity ? (kBuildPmmmNearUsesFmm ? "fmm" : "pp") : "none";
+    kBuildHasPmmmNearPp ? "pp" : (kBuildHasPmmmNearFmm ? "fmm" : "none");
 
 }    // namespace gravity

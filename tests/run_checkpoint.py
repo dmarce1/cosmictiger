@@ -257,6 +257,7 @@ def main():
         return 0
 
     options = [str(executable), "--hpx:threads=2", "--hpx:bind=none",
+               "--run.timeIntegrator=traditional", "--gravity.method.far=fmm",
                "--initial.particlesPerDimension=8", "--hydro.enabled=false",
                "--compute.cuda=false", "--analysis.views=false",
                "--lightcone.enabled=false", "--analysis.power=false",

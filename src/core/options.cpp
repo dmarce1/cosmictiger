@@ -36,6 +36,7 @@
 #include <cosmictiger/gravity/opening_schedule.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #endif
+#include <cosmictiger/io/checkpoint.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/io/view.hpp>
 #include <cosmictiger/math/constants.hpp>
@@ -153,26 +154,35 @@ void setOptions(Options const& opts) {
 #endif
 #if !COSMICTIGER_WITH_SPH
     if (opts.hydro.enabled || opts.chemistry.enabled) {
-        throw std::invalid_argument("Hydrodynamics and chemistry require COSMICTIGER_WITH_SPH=ON");
+        throw std::invalid_argument("Hydrodynamics and chemistry require COSMICTIGER_ENABLE_SPH=ON");
     }
 #endif
     if (opts.compute.positionType != (kPositionBits == 64 ? "fixed64" : "fixed32")) {
         throw std::invalid_argument(
             "compute.positionType differs from this locality's application backend");
     }
-    if (opts.gravity.method != gravity::kBuildGravityMethod ||
-        opts.gravity.pmmmNearMethod != gravity::kBuildPmmmNearMethod ||
-        opts.gravity.pmmmOrder != gravity::kBuildFmmOrder) {
-        throw std::invalid_argument(
-            "Gravity solver, PMMM near method, and expansion order must match this "
-            "executable's build configuration");
+    if ((opts.gravity.method == "fmm" && !gravity::kBuildHasFmm) ||
+        (opts.gravity.method == "pmmm" && !gravity::kBuildHasPmmm) ||
+        (opts.gravity.method != "fmm" && opts.gravity.method != "pmmm" &&
+            !(opts.gravity.method == "none" && !opts.gravity.enabled))) {
+        throw std::invalid_argument("gravity.method.far is unavailable in this executable");
     }
-    if (opts.run.hierarchicalGravity !=
-        (integration::kBuildUsesHierarchical && opts.gravity.enabled)) {
-        throw std::invalid_argument(
-            "Time integrator must match this executable's build configuration");
+    if (usesMeshGravity(opts.gravity) &&
+        !((opts.gravity.pmmmNearMethod == "pp" && gravity::kBuildHasPmmmNearPp) ||
+            (opts.gravity.pmmmNearMethod == "fmm" && gravity::kBuildHasPmmmNearFmm))) {
+        throw std::invalid_argument("gravity.method.near is unavailable in this executable");
+    }
+    if (!((opts.run.timeIntegrator == "traditional" && integration::kBuildHasTraditional) ||
+            (opts.run.timeIntegrator == "hierarchical" && integration::kBuildHasHierarchical) ||
+            (opts.run.timeIntegrator == "global" && integration::kBuildHasGlobal)) ||
+        opts.run.hierarchicalGravity !=
+            (usesHierarchicalIntegration(opts.run) && opts.gravity.enabled)) {
+        throw std::invalid_argument("run.timeIntegrator is unavailable or inconsistent");
     }
 #if COSMICTIGER_WITH_GRAVITY
+    if (opts.gravity.fmmOrder != opts.gravity.pmmmOrder) {
+        throw std::invalid_argument("Far and near gravity must use the same expansion degree");
+    }
     setFmmOrder(opts.gravity.fmmOrder);
 #endif
     terminal::setVerbose(opts.run.verbose);
@@ -224,10 +234,15 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         gravityTable.supportRadiusPerEffectiveRadius;
     double const timestepEta = options.gravity.timestepEta;
     return {
-        {"build.timeIntegrator", std::string(integration::kBuildTimeIntegrator)},
-        {"build.gravityMethod", std::string(gravity::kBuildGravityMethod)},
-        {"build.pmmmNearMethod", std::string(gravity::kBuildPmmmNearMethod)},
-        {"build.fmmOrder", gravity::kBuildFmmOrder},
+        {"run.timeIntegrator", options.run.timeIntegrator},
+        {"build.fmm", gravity::kBuildHasFmm},
+        {"build.pmmm", gravity::kBuildHasPmmm},
+        {"build.pmmmNearPp", gravity::kBuildHasPmmmNearPp},
+        {"build.pmmmNearFmm", gravity::kBuildHasPmmmNearFmm},
+        {"build.integratorTraditional", integration::kBuildHasTraditional},
+        {"build.integratorHierarchical", integration::kBuildHasHierarchical},
+        {"build.integratorGlobal", integration::kBuildHasGlobal},
+        {"build.defaultExpansionDegree", gravity::kBuildFmmOrder > 0 ? gravity::kBuildFmmOrder - 1 : 0},
         {"configuration", options.configuration},
         {"run.test", options.run.test},
         {"run.verbose", options.run.verbose},
@@ -288,15 +303,14 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"gravity.enabled", options.gravity.enabled},
         {"gravity.errorInterval", options.gravity.errorInterval},
         {"gravity.errorSampleSize", options.gravity.errorSampleSize},
-        {"gravity.method", options.gravity.method},
+        {"gravity.method.far", options.gravity.method},
         {"gravity.meshSize", options.gravity.meshSize},
         {"gravity.pmmmMaxPrimeFactor",
             detail::pmmmMaxPrimeFactorText(options.gravity.pmmmMaxPrimeFactor)},
         {"gravity.pmmmNearWidth", options.gravity.pmmmNearWidth},
-        {"gravity.pmmmNearMethod", options.gravity.pmmmNearMethod},
+        {"gravity.method.near", options.gravity.pmmmNearMethod},
         {"gravity.pmmmBatchParticles", options.gravity.pmmmBatchParticles},
-        {"gravity.pmmmOrder", options.gravity.pmmmOrder},
-        {"gravity.fmmOrder", options.gravity.fmmOrder},
+        {"gravity.expansionDegree", options.gravity.fmmOrder > 0 ? options.gravity.fmmOrder - 1 : 0},
         {"gravity.kernelFamily", options.gravity.kernelFamily},
         {"gravity.kernelDegree", options.gravity.kernelDegree},
         {"gravity.openingAngle", options.gravity.openingAngle},
@@ -324,7 +338,6 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"chemistry.network", options.chemistry.network},
         {"chemistry.initialization", options.chemistry.initialization},
         {"chemistry.radiationFile", options.chemistry.radiationFile},
-        {"chemistry.synchronizedRung", options.chemistry.synchronizedRung},
         {"chemistry.initialTemperature", options.chemistry.initialTemperature},
         {"chemistry.hydrogenIonFraction", options.chemistry.hydrogenIonFraction},
         {"chemistry.heliumIonFraction", options.chemistry.heliumIonFraction},
@@ -380,10 +393,15 @@ bool processOptions(int argc, char* argv[]) {
     double centralEffectiveRadius;
     std::string omegaLambdaInput;
     std::string pmmmMaxPrimeFactorInput;
+    int expansionDegree = gravity::kBuildFmmOrder > 0 ? gravity::kBuildFmmOrder - 1 : 0;
+    CheckpointSelection checkpointSelection;
     namespace po = hpx::program_options;
     bool rc;
     po::options_description runOpts("Run control");
-    runOpts.add_options()("help", "produce help message")("configuration",
+    runOpts.add_options()("run.timeIntegrator",
+        po::value<std::string>(&opts.run.timeIntegrator)->default_value(""),
+        "time integrator: traditional, hierarchical, or global; required when multiple eligible "
+        "integrators are compiled")("help", "produce help message")("configuration",
         po::value<std::string>(&opts.configuration)->default_value(""),
         "INI configuration file; explicit command-line values take precedence")("run.test",
         po::value<std::string>(&opts.run.test)->default_value(""),
@@ -536,7 +554,14 @@ bool processOptions(int argc, char* argv[]) {
         "lightcone HEALPix Nside; -1 chooses automatically");
 
     po::options_description gravityOpts("Gravity");
-    gravityOpts.add_options()("gravity.enabled",
+    gravityOpts.add_options()("gravity.method.far",
+        po::value<std::string>(&opts.gravity.method)->default_value(""),
+        "far-field gravity: fmm or pmmm; required when both are compiled")(
+        "gravity.method.near", po::value<std::string>(&opts.gravity.pmmmNearMethod)->default_value(""),
+        "PMMM near field: pp or fmm; required when both are compiled")(
+        "gravity.expansionDegree", po::value<int>(&expansionDegree)->default_value(expansionDegree),
+        "maximum degree of the potential expansion; must be in the compiled degree range")(
+        "gravity.enabled",
         po::value<bool>(&opts.gravity.enabled)->default_value(gravity::kBuildHasGravity),
         "enable gravity")("gravity.errorInterval",
         po::value<int>(&opts.gravity.errorInterval)->default_value(0),
@@ -545,7 +570,7 @@ bool processOptions(int argc, char* argv[]) {
         po::value<int>(&opts.gravity.errorSampleSize)->default_value(100),
         "number of evenly spaced particles for gravity error checks (capped at particle count)")(
         "gravity.meshSize", po::value<int>(&opts.gravity.meshSize)->default_value(0),
-        "Requested full-particle PMMM cells per axis; required for PMMM builds")(
+        "Requested full-particle PMMM cells per axis; required when PMMM is selected")(
         "gravity.pmmmMaxPrimeFactor",
         po::value<std::string>(&pmmmMaxPrimeFactorInput)->default_value("5"),
         "largest allowed FFT mesh prime factor; integer >=2 or infinity; mesh sizes round up")(
@@ -680,9 +705,8 @@ bool processOptions(int argc, char* argv[]) {
         "chemistry.radiationFile",
         po::value<std::string>(&opts.chemistry.radiationFile)->default_value(""),
         "optional versioned redshift/photo-rate table; empty means no imposed UV")(
-        "chemistry.synchronizedRung",
-        po::value<int>(&opts.chemistry.synchronizedRung)->default_value(4),
-        "fixed common timestep rung; fail if hydro/gravity requires a finer step")(
+        "chemistry.synchronizedRung", po::value<int>(),
+        "deprecated and ignored; chemistry follows SPH timesteps")(
         "chemistry.initialTemperature",
         po::value<double>(&opts.chemistry.initialTemperature)->default_value(1000.0),
         "initial gas temperature in kelvin")("chemistry.hydrogenIonFraction",
@@ -726,12 +750,21 @@ bool processOptions(int argc, char* argv[]) {
     po::store(po::parse_command_line(argc, argv, commandOpts), vm);
     po::notify(vm);
     if (vm.count("help")) {
-        std::cout << "Build configuration (fixed at compile time):\n"
-                  << "  Time integrator: " << integration::kBuildTimeIntegrator << "\n"
-                  << "  Gravity solver: " << gravity::kBuildGravityMethod << "\n";
+        std::cout << "Compiled algorithms:\n"
+                  << "  Time integrators:"
+                  << (integration::kBuildHasTraditional ? " traditional" : "")
+                  << (integration::kBuildHasHierarchical ? " hierarchical" : "")
+                  << (integration::kBuildHasGlobal ? " global" : "") << "\n"
+                  << "  Gravity solvers:"
+                  << (gravity::kBuildHasFmm ? " fmm" : "")
+                  << (gravity::kBuildHasPmmm ? " pmmm" : "")
+                  << (gravity::kBuildHasGravity ? "" : " none") << "\n"
+                  << "  PMMM near solvers:"
+                  << (gravity::kBuildHasPmmmNearPp ? " pp" : "")
+                  << (gravity::kBuildHasPmmmNearFmm ? " fmm" : "") << "\n";
 #if COSMICTIGER_WITH_GRAVITY
-        std::cout << "  PMMM near method: " << gravity::kBuildPmmmNearMethod << "\n"
-                  << "  FMM/PMMM expansion order: " << gravity::kBuildFmmOrder << "\n";
+        std::cout << "  Potential expansion degrees: " << kFmmMinOrder - 1 << " through "
+                  << kFmmMaxOrder - 1 << "\n";
 #endif
         std::cout << "\n";
         std::cout << commandOpts << "\n";
@@ -781,29 +814,6 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.gravity.pmmmNearWidth < 1 || opts.gravity.pmmmNearWidth > 4) {
         THROW_ERROR("gravity.pmmmNearWidth must be between 1 and 4\n");
     }
-#if COSMICTIGER_WITH_GRAVITY
-    if (usesMeshGravity(opts.gravity)) {
-        opts.gravity.openingAngle = std::sqrt(3.0) / (opts.gravity.pmmmNearWidth + 1);
-        if (opts.gravity.meshSize < 2 * opts.gravity.pmmmNearWidth + 1) {
-            THROW_ERROR("gravity.meshSize must be at least 2*gravity.pmmmNearWidth+1 "
-                        "for a PMMM build\n");
-        }
-        try {
-            effectiveMeshSize =
-                pmmm::detail::fftMeshSize(opts.gravity.meshSize, opts.gravity.pmmmMaxPrimeFactor);
-        } catch (std::exception const& error) {
-            THROW_ERROR(
-                "gravity.meshSize with gravity.pmmmMaxPrimeFactor is invalid: %s\n", error.what());
-        }
-        size_t const meshSize = static_cast<size_t>(effectiveMeshSize);
-        size_t const maximumCells = std::min(size_t(std::numeric_limits<ptrdiff_t>::max()),
-            std::numeric_limits<size_t>::max() / (8 * sizeof(float)));
-        if (meshSize > maximumCells / meshSize / meshSize) {
-            THROW_ERROR("Effective gravity.meshSize cubed after gravity.pmmmMaxPrimeFactor "
-                        "rounding exceeds mesh indexing/allocation limits\n");
-        }
-    }
-#endif
     if (opts.initial.plummer && opts.initial.createGlass) {
         THROW_ERROR("initial.plummer and initial.createGlass cannot both be enabled\n");
     }
@@ -817,7 +827,7 @@ bool processOptions(int argc, char* argv[]) {
 #if !COSMICTIGER_WITH_GRAVITY
     if (opts.gravity.enabled) {
         THROW_ERROR("gravity.enabled=true requires a gravity-enabled build; "
-                    "this executable was built with COSMICTIGER_GRAVITY_METHOD=none\n");
+                    "this executable has no enabled gravity solver\n");
     }
     if (opts.run.scenario == "plummer" || opts.run.scenario == "glass") {
         THROW_ERROR(
@@ -850,6 +860,93 @@ bool processOptions(int argc, char* argv[]) {
             opts.output.directory = "./output/" + opts.run.scenario;
         }
     }
+    bool const checkpointSelectionNeeded = !isExplicit("run.timeIntegrator") ||
+        (gravity::kBuildHasGravity &&
+            (!isExplicit("gravity.method.far") || !isExplicit("gravity.expansionDegree") ||
+                (opts.gravity.method == "pmmm" && !isExplicit("gravity.method.near"))));
+    if (opts.checkpoint.readIndex >= 0 && checkpointSelectionNeeded) {
+        checkpointSelection =
+            readCheckpointSelection(opts.output.directory, opts.checkpoint.readIndex);
+        if (!isExplicit("gravity.method.far")) {
+            opts.gravity.method = checkpointSelection.farMethod;
+        }
+        if (!isExplicit("gravity.method.near")) {
+            opts.gravity.pmmmNearMethod = checkpointSelection.nearMethod;
+        }
+        if (!isExplicit("gravity.expansionDegree") && checkpointSelection.expansionOrder > 0) {
+            expansionDegree = checkpointSelection.expansionOrder - 1;
+        }
+        if (!isExplicit("run.timeIntegrator")) {
+            opts.run.timeIntegrator = checkpointSelection.timeIntegrator;
+        }
+    }
+    if (opts.gravity.method.empty()) {
+        if (opts.gravity.enabled && gravity::kBuildHasFmm && gravity::kBuildHasPmmm) {
+            THROW_ERROR("Multiple far-field gravity algorithms are compiled; select "
+                        "--gravity.method.far=fmm or --gravity.method.far=pmmm\n");
+        }
+        opts.gravity.method = gravity::kBuildGravityMethod;
+    }
+    if ((opts.gravity.method == "fmm" && !gravity::kBuildHasFmm) ||
+        (opts.gravity.method == "pmmm" && !gravity::kBuildHasPmmm) ||
+        (opts.gravity.method != "fmm" && opts.gravity.method != "pmmm" &&
+            !(opts.gravity.method == "none" && !opts.gravity.enabled))) {
+        THROW_ERROR("gravity.method.far must select a compiled fmm or pmmm solver\n");
+    }
+    if (usesMeshGravity(opts.gravity)) {
+        if (opts.gravity.pmmmNearMethod.empty()) {
+            if (opts.gravity.enabled && gravity::kBuildHasPmmmNearPp &&
+                gravity::kBuildHasPmmmNearFmm) {
+                THROW_ERROR("Multiple PMMM near-field algorithms are compiled; select "
+                            "--gravity.method.near=pp or --gravity.method.near=fmm\n");
+            }
+            opts.gravity.pmmmNearMethod = gravity::kBuildPmmmNearMethod;
+        }
+        if (!((opts.gravity.pmmmNearMethod == "pp" && gravity::kBuildHasPmmmNearPp) ||
+                (opts.gravity.pmmmNearMethod == "fmm" && gravity::kBuildHasPmmmNearFmm))) {
+            THROW_ERROR("gravity.method.near must select a compiled pp or fmm PMMM near solver\n");
+        }
+    } else {
+        if (isExplicit("gravity.method.near")) {
+            THROW_ERROR("gravity.method.near applies only when gravity.method.far=pmmm\n");
+        }
+        opts.gravity.pmmmNearMethod = "none";
+    }
+#if COSMICTIGER_WITH_GRAVITY
+    if (expansionDegree < kFmmMinOrder - 1 || expansionDegree > kFmmMaxOrder - 1) {
+        THROW_ERROR("gravity.expansionDegree must be in this build's compiled range [%i,%i]\n",
+            kFmmMinOrder - 1, kFmmMaxOrder - 1);
+    }
+    opts.gravity.fmmOrder = opts.gravity.pmmmOrder = expansionDegree + 1;
+#else
+    if (isExplicit("gravity.expansionDegree")) {
+        THROW_ERROR("gravity.expansionDegree requires a gravity-enabled build\n");
+    }
+    opts.gravity.fmmOrder = opts.gravity.pmmmOrder = 0;
+#endif
+#if COSMICTIGER_WITH_GRAVITY
+    if (opts.gravity.enabled && usesMeshGravity(opts.gravity)) {
+        opts.gravity.openingAngle = std::sqrt(3.0) / (opts.gravity.pmmmNearWidth + 1);
+        if (opts.gravity.meshSize < 2 * opts.gravity.pmmmNearWidth + 1) {
+            THROW_ERROR("gravity.meshSize must be at least 2*gravity.pmmmNearWidth+1 "
+                        "when gravity.method.far=pmmm\n");
+        }
+        try {
+            effectiveMeshSize =
+                pmmm::detail::fftMeshSize(opts.gravity.meshSize, opts.gravity.pmmmMaxPrimeFactor);
+        } catch (std::exception const& error) {
+            THROW_ERROR(
+                "gravity.meshSize with gravity.pmmmMaxPrimeFactor is invalid: %s\n", error.what());
+        }
+        size_t const meshSize = static_cast<size_t>(effectiveMeshSize);
+        size_t const maximumCells = std::min(size_t(std::numeric_limits<ptrdiff_t>::max()),
+            std::numeric_limits<size_t>::max() / (8 * sizeof(float)));
+        if (meshSize > maximumCells / meshSize / meshSize) {
+            THROW_ERROR("Effective gravity.meshSize cubed after gravity.pmmmMaxPrimeFactor "
+                        "rounding exceeds mesh indexing/allocation limits\n");
+        }
+    }
+#endif
     if (opts.gravity.errorInterval > 0 && !opts.gravity.enabled) {
         THROW_ERROR("gravity.errorInterval requires gravity.enabled=true\n");
     }
@@ -857,7 +954,7 @@ bool processOptions(int argc, char* argv[]) {
     auto const openingSchedule = gravity::parseOpeningSchedule(opts.gravity.openingSchedule);
     if (!openingSchedule.empty() &&
         (usesMeshGravity(opts.gravity) || opts.run.scenario != "cosmology")) {
-        THROW_ERROR("gravity.openingSchedule requires an FMM build and "
+        THROW_ERROR("gravity.openingSchedule requires gravity.method.far=fmm and "
                     "run.scenario=cosmology\n");
     }
 #else
@@ -1103,7 +1200,6 @@ bool processOptions(int argc, char* argv[]) {
         THROW_ERROR("hydro support radii must remain finite and positive in single precision "
                     "after normalization by initial.particlesPerDimension\n");
     }
-    opts.run.hierarchicalGravity = integration::kBuildUsesHierarchical && opts.gravity.enabled;
     opts.hydro.damping = 0.0;
     if (opts.compute.sphBucketSize == 0) {
         // Retain the historical SPH bucket heuristic, using the final parsed
@@ -1128,13 +1224,28 @@ bool processOptions(int argc, char* argv[]) {
 #if !COSMICTIGER_WITH_SPH
     if (opts.hydro.enabled || opts.chemistry.enabled) {
         THROW_ERROR("hydro.enabled=true or chemistry.enabled=true requires "
-                    "COSMICTIGER_WITH_SPH=ON\n");
+                    "COSMICTIGER_ENABLE_SPH=ON\n");
     }
 #endif
-    if (opts.hydro.enabled && integration::kBuildUsesHierarchical) {
-        THROW_ERROR("SPH requires ordinary block-timestep leapfrog; rebuild with "
-                    "COSMICTIGER_TIME_INTEGRATOR=leapfrog\n");
+    bool const hierarchicalEligible = integration::kBuildHasHierarchical &&
+        opts.gravity.enabled && !opts.hydro.enabled;
+    if (opts.run.timeIntegrator.empty()) {
+        int const choices = int(integration::kBuildHasTraditional) + int(hierarchicalEligible) +
+            int(integration::kBuildHasGlobal);
+        if (choices != 1) {
+            THROW_ERROR("Select --run.timeIntegrator=traditional, hierarchical, or global from "
+                        "the compiled integrators eligible for this physics\n");
+        }
+        opts.run.timeIntegrator = integration::kBuildHasTraditional ? "traditional" :
+            (hierarchicalEligible ? "hierarchical" : "global");
     }
+    if (!((opts.run.timeIntegrator == "traditional" && integration::kBuildHasTraditional) ||
+            (opts.run.timeIntegrator == "hierarchical" && hierarchicalEligible) ||
+            (opts.run.timeIntegrator == "global" && integration::kBuildHasGlobal))) {
+        THROW_ERROR("run.timeIntegrator is unavailable for the selected physics; hierarchical "
+                    "requires gravity without SPH\n");
+    }
+    opts.run.hierarchicalGravity = usesHierarchicalIntegration(opts.run);
     if (opts.chemistry.enabled) {
         if (!opts.hydro.enabled ||
             (opts.run.scenario != "cosmology" && opts.run.test != "sphGravity") ||
@@ -1144,8 +1255,9 @@ bool processOptions(int argc, char* argv[]) {
         if (opts.chemistry.network != "atomic6" && opts.chemistry.network != "molecular9") {
             THROW_ERROR("chemistry.network must be atomic6 or molecular9\n");
         }
-        if (opts.chemistry.synchronizedRung < 1 || opts.chemistry.synchronizedRung >= kMaxRung) {
-            THROW_ERROR("chemistry.synchronizedRung must be in [1, MAX_RUNG)\n");
+        if (isExplicit("chemistry.synchronizedRung")) {
+            PRINT("Notice: chemistry.synchronizedRung is deprecated and ignored; "
+                  "chemistry follows SPH timesteps.\n");
         }
         if (!detail::isPositiveFloatOption(opts.chemistry.relativeTolerance) ||
             opts.chemistry.relativeTolerance < 1.0e-5 || opts.chemistry.relativeTolerance > 0.1 ||
@@ -1380,7 +1492,6 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("chemistry.network", chemistry.network);
     SHOW("chemistry.initialization", chemistry.initialization);
     SHOW("chemistry.radiationFile", chemistry.radiationFile);
-    SHOW("chemistry.synchronizedRung", chemistry.synchronizedRung);
     SHOW("chemistry.initialTemperature", chemistry.initialTemperature);
     SHOW("chemistry.hydrogenIonFraction", chemistry.hydrogenIonFraction);
     SHOW("chemistry.heliumIonFraction", chemistry.heliumIonFraction);
@@ -1396,8 +1507,8 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("gravity.enabled", gravity.enabled);
     SHOW("gravity.errorInterval", gravity.errorInterval);
     SHOW("gravity.errorSampleSize", gravity.errorSampleSize);
-    show("build.timeIntegrator", std::string(integration::kBuildTimeIntegrator));
-    SHOW("build.gravityMethod", gravity.method);
+    SHOW("run.timeIntegrator", run.timeIntegrator);
+    SHOW("gravity.method.far", gravity.method);
     SHOW("gravity.meshSize", gravity.meshSize);
     show("gravity.pmmmMaxPrimeFactor",
         detail::pmmmMaxPrimeFactorText(opts.gravity.pmmmMaxPrimeFactor));
@@ -1405,7 +1516,7 @@ bool processOptions(int argc, char* argv[]) {
         show("gravity.effectiveMeshSize", effectiveMeshSize);
     }
     SHOW("gravity.pmmmNearWidth", gravity.pmmmNearWidth);
-    SHOW("build.pmmmNearMethod", gravity.pmmmNearMethod);
+    SHOW("gravity.method.near", gravity.pmmmNearMethod);
     SHOW("gravity.pmmmBatchParticles", gravity.pmmmBatchParticles);
     SHOW("run.hierarchicalGravity", run.hierarchicalGravity);
     SHOW("hydro.viscosityAlpha", hydro.viscosityAlpha);
@@ -1465,7 +1576,7 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("units.timeSeconds", units.timeSeconds);
     SHOW("compute.cuda", compute.cuda);
     SHOW("compute.positionType", compute.positionType);
-    SHOW("build.fmmOrder", gravity.fmmOrder);
+    show("gravity.expansionDegree", opts.gravity.fmmOrder > 0 ? opts.gravity.fmmOrder - 1 : 0);
     SHOW("compute.cudaKickResidency", compute.cudaKickResidency);
     SHOW("compute.cudaKickSinkTile", compute.cudaKickSinkTile);
     SHOW("compute.cudaKickParticleTile", compute.cudaKickParticleTile);
@@ -1578,10 +1689,10 @@ bool processOptions(int argc, char* argv[]) {
             size_t(hpx::get_num_worker_threads()));
         SHOW("compute.cuda", compute.cuda);
         SHOW("compute.positionType", compute.positionType);
-        show("build.timeIntegrator", std::string(integration::kBuildTimeIntegrator));
+        SHOW("run.timeIntegrator", run.timeIntegrator);
         SHOW("gravity.enabled", gravity.enabled);
         if (opts.gravity.enabled) {
-            SHOW("build.gravityMethod", gravity.method);
+            SHOW("gravity.method.far", gravity.method);
             if (opts.gravity.errorInterval > 0) {
                 SHOW("gravity.errorInterval", gravity.errorInterval);
                 SHOW("gravity.errorSampleSize", gravity.errorSampleSize);
@@ -1592,12 +1703,12 @@ bool processOptions(int argc, char* argv[]) {
                     detail::pmmmMaxPrimeFactorText(opts.gravity.pmmmMaxPrimeFactor));
                 show("gravity.effectiveMeshSize", effectiveMeshSize);
                 SHOW("gravity.pmmmNearWidth", gravity.pmmmNearWidth);
-                SHOW("build.pmmmNearMethod", gravity.pmmmNearMethod);
+                SHOW("gravity.method.near", gravity.pmmmNearMethod);
                 SHOW("gravity.pmmmBatchParticles", gravity.pmmmBatchParticles);
                 PRINT("%-38s: periodic multipole mesh, %s particle timesteps\n", "PMMM gravity",
-                    integration::kBuildUsesHierarchical ? "hierarchical" : "ordinary block");
+                    opts.run.timeIntegrator.c_str());
             }
-            SHOW("build.fmmOrder", gravity.fmmOrder);
+            show("gravity.expansionDegree", opts.gravity.fmmOrder > 0 ? opts.gravity.fmmOrder - 1 : 0);
             SHOW("gravity.openingAngle", gravity.openingAngle);
             if (!opts.gravity.openingSchedule.empty()) {
                 SHOW("gravity.openingSchedule", gravity.openingSchedule);

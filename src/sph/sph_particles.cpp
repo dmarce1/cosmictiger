@@ -111,7 +111,8 @@ static Array<SpinlockType, kParticleCacheSize> rungMutexes;
 static Array<SpinlockType, kParticleCacheSize> velocityMutexes;
 static Array<SpinlockType, kParticleCacheSize> densityMutexes;
 HPX_PLAIN_ACTION(sphParticlesApplyUpdates, SphParticlesApplyUpdatesAction);
-void sphParticlesApplyUpdates(int minimumRung, int phase, float timeStepScale, float time) {
+void sphParticlesApplyUpdates(
+    int minimumRung, int phase, float timeStepScale, float time, double explicitTimestep) {
     // At time zero no step has opened yet, so there is no half-kick to close or correct.
     if (!(phase == 2 || time > 0.0)) {
         return;
@@ -119,12 +120,12 @@ void sphParticlesApplyUpdates(int minimumRung, int phase, float timeStepScale, f
     Vector<hpx::future<void>> futures;
     for (auto& child : hpxChildren()) {
         futures.push_back(hpx::async<SphParticlesApplyUpdatesAction>(
-            child, minimumRung, phase, timeStepScale, time));
+            child, minimumRung, phase, timeStepScale, time, explicitTimestep));
     }
     int const numberOfThreads = hpxHardwareConcurrency();
     for (int threadIndex = 0; threadIndex < numberOfThreads; threadIndex++) {
         futures.push_back(hpx::async(hpx::annotated_function(
-            [timeStepScale, numberOfThreads, threadIndex, phase, minimumRung]() {
+            [timeStepScale, numberOfThreads, threadIndex, phase, minimumRung, explicitTimestep]() {
                 ParticleInteger const rangeBegin =
                     (size_t) threadIndex * sphParticlesSize() / numberOfThreads;
                 ParticleInteger const rangeEnd =
@@ -133,7 +134,9 @@ void sphParticlesApplyUpdates(int minimumRung, int phase, float timeStepScale, f
                 for (int gasIndex = rangeBegin; gasIndex < rangeEnd; gasIndex++) {
                     ParticleInteger const gravityIndex = sphParticlesParticleIndex(gasIndex);
                     auto const rung = sphParticlesRung(gasIndex);
-                    float const halfTimeStep = 0.5f * timeStepScale / (1 << rung);
+                    double const halfTimeStep = explicitTimestep >= 0.0 ?
+                        0.5 * explicitTimestep :
+                        std::ldexp(double(timeStepScale), -1 - int(rung));
                     flops += 2;
                     if (getOptions().hydro.viscosityEvolution == "morrisAndMonaghan" &&
                         rung >= minimumRung) {
@@ -255,6 +258,7 @@ void visitSphCheckpointArrays(
     if (includeChemistry && sphParticlesChemistryStates != nullptr) {
         visit(sphParticlesChemistryStates, count);
         visit(sphParticlesChemistryEos, count);
+        visit(sphParticlesChemistrySteps, count);
     }
 }
 
@@ -340,6 +344,7 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
         if (getOptions().chemistry.enabled) {
             sphParticlesArrayResize(sphParticlesChemistryStates, newCapacity);
             sphParticlesArrayResize(sphParticlesChemistryEos, newCapacity);
+            sphParticlesArrayResize(sphParticlesChemistrySteps, newCapacity);
         }
         capacity = newCapacity;
     }
@@ -392,6 +397,7 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
         if (getOptions().chemistry.enabled) {
             sphParticlesChemistryStates[slot] = {};
             sphParticlesChemistryEos[slot] = {};
+            sphParticlesChemistrySteps[slot] = {};
         }
         sphParticlesAccelerationStates[slot] = {};
         sphParticlesParticleIndices[slot] = kNoParticleIndex;
@@ -841,7 +847,7 @@ namespace detail {
 uint32_t sphCheckpointVersion() {
     // Preserve the fixed-viscosity payload version and identify optional state.
     auto const& options = getOptions();
-    return (options.chemistry.enabled ? 3U : 2U) +
+    return (options.chemistry.enabled ? 11U : 2U) +
         (options.hydro.viscosityEvolution == "cullenAndDehnen" ?
                 4U :
                 (options.hydro.viscosityEvolution == "priceEtAl" ?
@@ -893,6 +899,9 @@ void sphParticlesLoad(FILE* fp) {
             state.thermalEnergy = words[primordial::kAbundanceCount];
             sphParticlesChemistryEos[index] = {
                 words[primordial::kAbundanceCount + 1], words[primordial::kAbundanceCount + 2]};
+            double stepWords[2];
+            FREAD(stepWords, sizeof(double), 2, fp);
+            sphParticlesChemistrySteps[index] = {stepWords[0], stepWords[1]};
         }
     }
 }
@@ -932,6 +941,9 @@ void sphParticlesSave(FILE* fp) {
             words[primordial::kAbundanceCount + 1] = sphParticlesChemistryEos[index].first;
             words[primordial::kAbundanceCount + 2] = sphParticlesChemistryEos[index].second;
             FWRITE(words, sizeof(float), primordial::kAbundanceCount + 3, fp);
+            auto const& step = sphParticlesChemistrySteps[index];
+            double const stepWords[2] = {step.halfInterval, step.pendingHeating};
+            FWRITE(stepWords, sizeof(double), 2, fp);
         }
     }
 }
@@ -1121,7 +1133,8 @@ void sphParticlesResetSemiactive() {
 }
 
 HPX_PLAIN_ACTION(sphParticlesUpdateTargetAlpha, SphParticlesUpdateTargetAlphaAction);
-void sphParticlesUpdateTargetAlpha(int minimumRung, float timeStepScale, float time) {
+void sphParticlesUpdateTargetAlpha(
+    int minimumRung, float timeStepScale, float time, double explicitTimestep) {
     if (!getOptions().hydro.viscosityGradientSwitch()) {
         return;
     }
@@ -1129,7 +1142,7 @@ void sphParticlesUpdateTargetAlpha(int minimumRung, float timeStepScale, float t
     Vector<hpx::future<void>> pending;
     for (auto const& child : hpxChildren()) {
         pending.push_back(hpx::async<SphParticlesUpdateTargetAlphaAction>(
-            child, minimumRung, timeStepScale, time));
+            child, minimumRung, timeStepScale, time, explicitTimestep));
     }
     FlopCounter<> flops;
     for (ParticleInteger index = 0; index < sphParticlesSize(); ++index) {
@@ -1140,7 +1153,9 @@ void sphParticlesUpdateTargetAlpha(int minimumRung, float timeStepScale, float t
             diagnostic.divergence = diagnostic.pendingDivergence;
         }
         if (active) {
-            float const timeStep = time > 0.0f ? timeStepScale / (1 << rung) : 0.0f;
+            float const timeStep = explicitTimestep >= 0.0 ?
+                explicitTimestep :
+                (time > 0.0f ? timeStepScale / (1 << rung) : 0.0f);
             auto& state = sphParticlesViscosityStates[index];
             // Cullen & Dehnen (2010), equation (A15), or Price et al. (2018), equation (50).
             state.alpha = cullenDehnen ?

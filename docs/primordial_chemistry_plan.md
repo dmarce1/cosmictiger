@@ -2,7 +2,8 @@
 
 This records the original implementation plan and 2026-10-18 baseline.
 Subsequent changes add [native recombination and particle initialization](native_recombination.md),
-remove bundled RECFAST, and [extend molecular9 to 10 K](molecular9_cold.md).
+remove bundled RECFAST, [extend molecular9 to 10 K](molecular9_cold.md), and couple
+chemistry to each active particle's SPH timestep with CKDKC splitting.
 
 Build a new local thermochemistry module with the same reaction network, equation
 of state, and stiff integration algorithm on CPU and CUDA. Start with atomic H/He,
@@ -16,7 +17,7 @@ density, energy, composition, and radiation environment. Neither its initial
 composition nor its subsequent temperature should be inferred from a single
 background electron fraction without a documented initialization model.
 
-## Current implementation status (2026-10-18)
+## Baseline implementation status (2026-10-18)
 
 The first implementation now contains shared CPU/CUDA `atomic6` and
 `molecular9` rate/EOS source, signed-complement float abundance storage, scaled
@@ -40,7 +41,7 @@ high-density chemistry/opacity are not implemented.
 The present solver is the **backward-Euler verification baseline**, with a
 finite-difference Jacobian evaluated at FP32 coefficient resolution. An analytic
 or generated Jacobian, L-stable second-order SDIRK, CPU SIMD, optimized GPU
-scheduling, individual-rung chemistry, and a broad matched-library trajectory campaign
+scheduling, and a broad matched-library trajectory campaign
 remain later work. Three independent Radau reference trajectories now test the
 production RHS integrator and tolerance refinement; this does not replace
 the full model-comparison campaign. Default relative tolerance
@@ -50,6 +51,19 @@ numerical controls, not claims of corresponding physical rate accuracy.
 The sections below retain the staged design and outstanding release gates,
 updated to the selected scaled-float implementation rather than the original
 double-only proposal.
+
+The subsequent timestep update removes the separate common-rung mode. The
+deprecated `chemistry.synchronizedRung` key remains accepted but ignored for
+older INI files and can be removed.
+Chemistry closes each active particle's saved old half-interval after the hydro
+corrector, then opens the half-interval selected for its next SPH step. Hydro and
+neighbor timestep selection finish before the opening source solve; chemistry
+uses that interval once, with internal subcycling. Updated EOS and hydro rates
+are refreshed without changing the selected timestep. Pending interval/heating
+are preserved per particle
+through migration and restart. Old common-rung chemistry checkpoints are
+rejected. The backward-Euler source solver is unchanged; implementation and
+validation details are distinguished in [the current guide](primordial_chemistry.md).
 
 ## Scientific scope
 
@@ -262,18 +276,25 @@ driver path. Limit retries so one stiff particle cannot hang a GPU launch.
 
 The present SPH update has predictor, replacement and final-kick phases in
 `sphParticlesApplyUpdates`. Its phase 1 removes the earlier energy predictor;
-chemistry energy must not be accidentally removed or applied twice there. Add
-explicit source stages around the hydro update, initially at synchronized
-timesteps. Use a symmetric split and verify temporal convergence rather than
-assuming the split retains second order automatically.
+chemistry energy must not be accidentally removed or applied twice there.
+The coupling uses CKDKC: an opening chemistry half step, opening hydro/gravity
+kick, drift, closing kick, and closing chemistry half step. Only active particles
+advance chemistry. Close the old source interval after phase 1 replaces the
+hydro predictor and before selecting the next rung; open chemistry before phase
+2 applies the next hydro kick. Store the pending half-interval and opening
+heating per particle so rung changes and staggered restarts retain ownership.
+Initial particles have no closing source step; the final synchronized evaluation
+closes the pending interval without opening another.
 
-Extend this to individual rungs only after documenting each particle's chemical
-time, physical interval, and predictor/corrector ownership. Integrate each
-interval once. Couple strong heating/cooling to the hydrodynamic timestep and
-neighbor timestep propagation; internal chemistry subcycling alone cannot make a
-large hydrodynamic step accurate. Refresh pressure and sound-speed caches after
-accepted source updates. Keep all source fields stable while a CPU/GPU batch
-reads them, following the existing SPH staging convention.
+Select the next SPH interval and complete applicable neighbor-rung limits before
+opening chemistry. Use the selected rung, or the explicit selected interval in
+global-step mode, for both source and kick halves. Refresh EOS and hydro rates
+after the source solve without reselecting the timestep or retrying the source.
+The implicit chemistry solver retains its internal adaptive subcycling. Commit
+opening heating once. Keep all source fields stable while a CPU/GPU batch reads
+them and prepare every rank before committing a batch. Verify temporal
+convergence: internal chemistry accuracy does not bound splitting error, and
+symmetric splitting does not make the backward-Euler source solver second order.
 
 ## Repository integration
 
@@ -302,6 +323,9 @@ abundances during restart. Include staggered stage state, following the current
 SPH checkpoint visitor. Persist signed-complement float encodings, including
 negative zero, with the physics version and scaled energy convention. Do not
 serialize decoded bulk fractions and thereby discard their minor complements.
+Persist each particle's pending source half-interval and opening heating with
+its chemistry state. Reject the previous common-rung chemistry checkpoint
+layout because it cannot supply these stage fields.
 
 ## Milestones and release gates
 
@@ -335,7 +359,7 @@ serialize decoded bulk fractions and thereby discard their minor complements.
    photodissociation and shielding assumptions. Compare one-zone collapse and
    cooling-from-ionized-gas histories within the supported domain.
 
-6. **Enable individual rungs and optimize.** Verify per-particle time ownership,
+6. **Validate individual rungs and optimize.** Verify per-particle time ownership,
    neighbor response to thermal changes, MPI cache freshness and restarts at
    staggered phases. Benchmark scalar/parallel/SIMD CPU and CUDA throughput on
    identical states, including stiff outliers and data-transfer costs. Performance
@@ -373,7 +397,7 @@ distinct evidence.
 
 Proceed first with atomic H/He, optically thin case-A recombination, no imposed
 UV background, scaled FP32 with signed-complement storage and targeted
-FloatFloat arithmetic, and synchronized source integration. The next
+FloatFloat arithmetic, and source integration on each active SPH timestep. The next
 default is the complete nine-species network within the validated low-density
 domain. Preserve the current chemistry-disabled mode for nonradiative work.
 

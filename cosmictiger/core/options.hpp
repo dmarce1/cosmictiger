@@ -27,8 +27,9 @@ struct Run {
     // run.test=force: build the tree once at this opening angle and sweep only
     // the kick's angle upward from it; zero rebuilds the tree at every angle.
     double treeOpeningAngle{};
-    // Build-selected mode; retained in the historical serialized layout.
+    // Retain the historical boolean while the selector distinguishes all three modes.
     bool hierarchicalGravity{integration::kBuildUsesHierarchical};
+    std::string timeIntegrator{integration::kBuildTimeIntegrator};
 };
 
 struct Compute {
@@ -129,16 +130,15 @@ struct Gravity {
     int errorInterval{};
     // Evenly spaced global particle indices, capped at the particle count.
     int errorSampleSize{100};
-    // Build descriptors are retained in the historical serialized layout.
-    // Solver dispatch uses build_config.hpp; setOptions rejects mismatches.
+    // Selected algorithms retain their historical serialized field names.
     std::string method{gravity::kBuildGravityMethod};
     int meshSize{};    // Requested full-particle PMMM side; scale by rung before FFT rounding.
     int pmmmMaxPrimeFactor{5};    // Inclusive FFT mesh prime-factor limit; zero is unrestricted.
     int pmmmNearWidth{2};    // Direct neighbor cube radius for periodic PMMM, one to four cells.
-    int pmmmOrder{gravity::kBuildFmmOrder};    // Shared far-field and near-field build order.
+    int pmmmOrder{gravity::kBuildFmmOrder};    // Potential expansion degree + 1, shared by far and near fields.
     std::string pmmmNearMethod{gravity::kBuildPmmmNearMethod};
     int pmmmBatchParticles{4096};             // Target owned sink count per ready near-field batch.
-    int fmmOrder{gravity::kBuildFmmOrder};    // Fixed multipole degree + 2, selected at build time.
+    int fmmOrder{gravity::kBuildFmmOrder};    // Potential expansion degree + 1; template/storage convention.
     std::string kernelFamily{"ferrers"};
     int kernelDegree{4};
     double openingAngle{};
@@ -152,8 +152,16 @@ struct Gravity {
     double gm{};
 };
 
-inline constexpr bool usesMeshGravity(Gravity const&) {
-    return gravity::kBuildUsesPmmm;
+inline bool usesMeshGravity(Gravity const& gravityOptions) {
+    return gravityOptions.method == "pmmm";
+}
+
+inline bool usesHierarchicalIntegration(Run const& run) {
+    return run.timeIntegrator == "hierarchical";
+}
+
+inline bool usesGlobalIntegration(Run const& run) {
+    return run.timeIntegrator == "global";
 }
 
 struct Cosmology {
@@ -225,12 +233,11 @@ struct Hydro {
 };
 
 struct Chemistry {
-    // Source integration is initially restricted to globally synchronized steps.
+    // Source half steps follow each active gas particle's hydrodynamic timestep.
     bool enabled{false};
     std::string network{"atomic6"};
     std::string initialization{"recombination"};
     std::string radiationFile{""};
-    int synchronizedRung{4};
     double initialTemperature{1000.0};
     double hydrogenIonFraction{2.0e-4};
     double heliumIonFraction{0.0};
@@ -264,6 +271,7 @@ struct Options {
         // Preserve the historical scalar wire order independently of grouping.
         int retiredLightconeMinGroup = 20;
         arc & run.hierarchicalGravity;
+        arc & run.timeIntegrator;
         arc & hydro.enabled;
         arc & gravity.enabled;
         arc & compute.sphBucketSize;
@@ -384,7 +392,6 @@ struct Options {
         arc & chemistry.network;
         arc & chemistry.initialization;
         arc & chemistry.radiationFile;
-        arc & chemistry.synchronizedRung;
         arc & chemistry.initialTemperature;
         arc & chemistry.hydrogenIonFraction;
         arc & chemistry.heliumIonFraction;

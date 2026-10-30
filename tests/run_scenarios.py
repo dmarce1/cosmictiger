@@ -101,7 +101,8 @@ def main():
     root = Path(__file__).resolve().parents[1]
     base = args.workdir.resolve()
     base.mkdir(parents=True, exist_ok=True)
-    command = [str(executable), "--hpx:threads=2", "--hpx:bind=none"]
+    command = [str(executable), "--hpx:threads=2", "--hpx:bind=none",
+               "--run.timeIntegrator=traditional", "--gravity.method.far=fmm"]
     expected_files = {stem + ".ini" for stem, *_ in SCENARIOS}
     expected_files.update(stem + ".ini" for stem in COSMOLOGY_PRESETS)
     actual_files = {path.name for path in (root / "configurations").glob("*.ini")}
@@ -131,7 +132,6 @@ def main():
             # The cold disc must support its actual configured coarse timestep.
             "run.endTime": "0" if scenario == "disc" else "0.00001",
             "checkpoint.intervalSeconds": "0",
-            "chemistry.synchronizedRung": "8",
         }
         options.update(overrides or {})
         output = run_process(command + [f"--{key}={value}" for key, value in options.items()],

@@ -361,6 +361,10 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
     dindices[workitems.size()] = dcount;
     eindices[workitems.size()] = ecount;
     CudaKickData data;
+    for (int dim = 0; dim < kDimensions; ++dim) {
+        data.globalAcceleration[dim] =
+            kparams.globalTimestep ? gravityGlobalAcceleration(dim) : nullptr;
+    }
     data.x = devX;
     data.y = devY;
     data.z = devZ;

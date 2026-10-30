@@ -9,6 +9,8 @@ from pathlib import Path
 import re
 import signal
 import subprocess
+
+from application_selection import application_options
 import sys
 import tempfile
 import time
@@ -136,6 +138,8 @@ def run_regression(args, directory):
                "lightcone.enabled": "false", "output.silo": "false",
                "output.directory": simulation, "checkpoint.intervalSeconds": 1000000000,
                "hpx:threads": 2, "hpx:bind": "none"}
+    options.update(application_options(args.executable.resolve(),
+        hydro=args.scenario == "hydroWave"))
     if ranks > 1:
         options["hpx:localities"] = ranks
     application = [str(args.executable.resolve())] + args.mpi_postflag + [

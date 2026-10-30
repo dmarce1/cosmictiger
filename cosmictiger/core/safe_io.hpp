@@ -87,7 +87,7 @@ static void safeFread(void* src, size_t size, size_t count, FILE* fp, int line, 
     }
 }
 
-static void safeFwrite(void* src, size_t size, size_t count, FILE* fp, int line, char const* file) {
+static void safeFwrite(void const* src, size_t size, size_t count, FILE* fp, int line, char const* file) {
     auto write = fwrite(src, size, count, fp);
     if (write != count) {
         PRINT("Attempt to write %li elements of size %li in %s on line %i failed - only %li "

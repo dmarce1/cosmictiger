@@ -483,6 +483,7 @@ void initializeSphDomainRegression() {
     if (getOptions().chemistry.enabled) {
         sphParticlesChemistryStates[0] = migrationChemistryState(target);
         sphParticlesChemistryEos[0] = {0.4f + 0.01f * target, 1.4f + 0.01f * target};
+        sphParticlesChemistrySteps[0] = {std::ldexp(1.0, -4 - target), -0.125 + target / 64.0};
     }
 }
 HPX_PLAIN_ACTION(initializeSphDomainRegression, InitializeSphDomainRegressionAction);
@@ -566,6 +567,10 @@ void validateSphDomainRegression() {
             "migration pressure ratio", sphParticlesChemistryEos[0].first, 0.4f + 0.01f * target);
         requireClose(
             "migration adiabatic index", sphParticlesChemistryEos[0].second, 1.4f + 0.01f * target);
+        requireClose("migration chemistry half interval",
+            sphParticlesChemistrySteps[0].halfInterval, std::ldexp(1.0, -4 - target), 0.0);
+        requireClose("migration pending chemistry heating",
+            sphParticlesChemistrySteps[0].pendingHeating, -0.125 + target / 64.0, 0.0);
     }
     ParticleGlobalRange remote;
     remote.proc = (hpxRank() + 1) % hpxSize();
@@ -645,7 +650,7 @@ void sphGravityTest() {
     opts.hydro.enabled = true;
 
     opts.gravity.enabled = true;
-    opts.run.hierarchicalGravity = integration::kBuildUsesHierarchical;
+    opts.run.hierarchicalGravity = getOptions().run.hierarchicalGravity;
     opts.analysis.saveForce = true;
 
     opts.analysis.groups = false;

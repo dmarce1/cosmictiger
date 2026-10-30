@@ -7,6 +7,8 @@ from pathlib import Path
 import signal
 import subprocess
 
+from application_selection import application_arguments
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -37,6 +39,9 @@ def main():
                "--lightcone.enabled=true", f"--lightcone.directory={output}",
                "--lightcone.mapSize=1", "--lightcone.linkingLength=0.28",
                f"--hpx:threads={args.threads}", "--hpx:bind=none"]
+    command += application_arguments(args.executable.resolve())
+    if "--gravity.method.far=pmmm" in command:
+        command.append("--gravity.meshSize=8")
     if args.ranks > 1:
         command = [args.mpi_exec, "-n", str(args.ranks)] + command
         command += [f"--hpx:localities={args.ranks}"]

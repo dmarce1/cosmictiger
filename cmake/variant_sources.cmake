@@ -1,9 +1,5 @@
-# Select sources independently for each physics variant. Keep the shared core
-# out of these object libraries so it is compiled once for the whole build.
-function(cosmictiger_variant_sources output gravity near sph)
-    set(COSMICTIGER_GRAVITY_METHOD ${gravity})
-    set(COSMICTIGER_PMMM_NEAR_METHOD ${near})
-    set(COSMICTIGER_WITH_SPH ${sph})
+# Select the union of enabled algorithms, keeping the shared core separate.
+function(cosmictiger_feature_sources output)
     set(cosmictiger_source_files
         src/analysis/compress.cpp
         src/analysis/group_entry.cpp
@@ -50,7 +46,7 @@ function(cosmictiger_variant_sources output gravity near sph)
         src/particles/particle_partition.cpp
     )
 
-    if(NOT gravity STREQUAL "none")
+    if(COSMICTIGER_WITH_GRAVITY)
         list(APPEND cosmictiger_source_files
             src/analysis/group_tree.cpp
             src/analysis/groups.cpp
@@ -74,7 +70,7 @@ function(cosmictiger_variant_sources output gravity near sph)
 
     # The tree walk is shared by global FMM and PMMM's optional near-cell FMM.
     set(cosmictiger_uses_fmm OFF)
-    if(gravity STREQUAL "fmm" OR (gravity STREQUAL "pmmm" AND near STREQUAL "fmm"))
+    if(COSMICTIGER_ENABLE_FMM OR (COSMICTIGER_ENABLE_PMMM AND COSMICTIGER_ENABLE_PMMM_NEAR_FMM))
         set(cosmictiger_uses_fmm ON)
     endif()
     if(cosmictiger_uses_fmm)
@@ -92,7 +88,7 @@ function(cosmictiger_variant_sources output gravity near sph)
         )
     endif()
 
-    if(COSMICTIGER_GRAVITY_METHOD STREQUAL "fmm")
+    if(COSMICTIGER_ENABLE_FMM)
         list(APPEND cosmictiger_source_files
             src/gravity/dehnen/ewald_indices.cpp
             src/gravity/dehnen/ewald_indices.cu
@@ -105,7 +101,7 @@ function(cosmictiger_variant_sources output gravity near sph)
         )
     endif()
 
-    if(COSMICTIGER_GRAVITY_METHOD STREQUAL "pmmm")
+    if(COSMICTIGER_ENABLE_PMMM)
         list(APPEND cosmictiger_source_files
             src/gravity/nitadori/collective_dispatch.cpp
             src/gravity/nitadori/kick.cpp
@@ -116,7 +112,7 @@ function(cosmictiger_variant_sources output gravity near sph)
             src/gravity/nitadori/fft.cpp
             src/gravity/nitadori/mesh_exchange.cpp
         )
-        if(COSMICTIGER_PMMM_NEAR_METHOD STREQUAL "fmm")
+        if(COSMICTIGER_ENABLE_PMMM_NEAR_FMM)
             list(APPEND cosmictiger_source_files
                 src/gravity/nitadori/cell_schedule.cpp
                 src/gravity/nitadori/cell_tree.cpp
@@ -124,7 +120,8 @@ function(cosmictiger_variant_sources output gravity near sph)
                 src/gravity/nitadori/ghost_exchange.cpp
                 src/gravity/nitadori/ghost_storage.cpp
             )
-        else()
+        endif()
+        if(COSMICTIGER_ENABLE_PMMM_NEAR_PP)
             list(APPEND cosmictiger_source_files
                 src/gravity/nitadori/near_pp.cpp
                 src/gravity/nitadori/near_pp.cu
@@ -167,29 +164,31 @@ function(cosmictiger_variant_sources output gravity near sph)
     if(BUILD_TESTING)
         list(APPEND cosmictiger_source_files
             tests/test.cpp)
-        if(NOT gravity STREQUAL "none")
+        if(COSMICTIGER_WITH_GRAVITY)
             list(APPEND cosmictiger_source_files
                 tests/analysis_backends.cpp tests/bh.cpp tests/groups_catalogue.cpp tests/rockstar.cpp)
         endif()
-        if(COSMICTIGER_GRAVITY_METHOD STREQUAL "pmmm")
+        if(COSMICTIGER_ENABLE_PMMM)
             list(APPEND cosmictiger_source_files
                 tests/mesh_domains.cpp
                 tests/gravity/nitadori/particle_mesh_dispatch.cpp
                 tests/particle_mesh_sort.cpp
                 tests/gravity/nitadori/particle_mesh_timestep.cpp
                 tests/gravity/nitadori/pmmm.cpp)
-        elseif(COSMICTIGER_GRAVITY_METHOD STREQUAL "fmm")
+        endif()
+        if(COSMICTIGER_ENABLE_FMM)
             list(APPEND cosmictiger_source_files
                 tests/gravity/dehnen/fmm_tree.cpp tests/gravity/dehnen/fmm_walk.cpp
                 tests/gravity/analytic.cpp tests/gravity/analytic.cu tests/linear_growth.cpp)
         endif()
-        if(gravity STREQUAL "none")
+        if(NOT COSMICTIGER_WITH_GRAVITY)
             list(APPEND cosmictiger_source_files tests/sph/no_gravity.cpp)
         endif()
         if(COSMICTIGER_WITH_SPH)
             list(APPEND cosmictiger_source_files
+                tests/sph/chemistry.cpp
                 tests/sph/tree.cpp tests/units_output.cpp tests/distributed_output.cpp)
-            if(COSMICTIGER_GRAVITY_METHOD STREQUAL "fmm")
+            if(COSMICTIGER_ENABLE_FMM)
                 list(APPEND cosmictiger_source_files tests/sph/gravity.cpp
                     tests/kernel_selection_cuda.cu)
             endif()

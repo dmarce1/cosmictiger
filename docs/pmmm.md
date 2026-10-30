@@ -1,21 +1,34 @@
 # Periodic particle mesh multipoles
 
-Select **PMMM-PP** or **PMMM-FMM** and the expansion order in `./build.sh`.
-The default build is global FMM at order seven; selecting PMMM defaults to order
-eight. An explicit order selection overrides the default. To configure PMMM
-directly with CMake, use:
+Enable PMMM and its near-field algorithms in `./build.sh` or with CMake feature
+options. Every configuration builds one `cosmictiger` executable containing the
+selected capabilities. The default configuration enables FMM and SPH, the
+traditional integrator, and potential expansion degrees four through six;
+PMMM is disabled. A gravity-only PMMM configuration with both near algorithms is:
 
 ```sh
-cmake -S . -B build_pmmm -DCOSMICTIGER_GRAVITY_METHOD=pmmm \
-  -DCOSMICTIGER_PMMM_NEAR_METHOD=pp -DCOSMICTIGER_WITH_ORDER=8
+cmake -S . -B build_pmmm -DCOSMICTIGER_ENABLE_FMM=OFF \
+  -DCOSMICTIGER_ENABLE_PMMM=ON -DCOSMICTIGER_ENABLE_SPH=OFF \
+  -DCOSMICTIGER_ENABLE_PMMM_NEAR_PP=ON \
+  -DCOSMICTIGER_ENABLE_PMMM_NEAR_FMM=ON \
+  -DCOSMICTIGER_EXPANSION_DEGREE=4-6
 cmake --build build_pmmm --parallel 12
 ```
 
-Set `COSMICTIGER_PMMM_NEAR_METHOD=fmm` for an adaptive FMM near field. Each build
-contains one solver variant and one order from 3 through 9. PMMM uses a periodic
-uniform mesh, spherical multipoles about cell centers and FFT convolution for
-distant interactions. Neighboring cells use the compiled direct-pair or adaptive
-FMM near field.
+`COSMICTIGER_ENABLE_PMMM_NEAR_PP` defaults to `ON` and
+`COSMICTIGER_ENABLE_PMMM_NEAR_FMM` defaults to `OFF`. They are independent of
+`COSMICTIGER_ENABLE_FMM`, which enables the full-domain FMM solver. PMMM uses a
+periodic uniform mesh, spherical multipoles about cell centers and FFT
+convolution for distant interactions. Neighboring cells use the selected
+direct-pair or adaptive FMM near field.
+
+Use `gravity.method.far=fmm|pmmm`, `gravity.method.near=pp|fmm`, and
+`run.timeIntegrator=traditional|hierarchical|global` to select among enabled
+algorithms. A selector is required when more than one eligible algorithm is
+available; a sole eligible algorithm is selected automatically. The near
+selector applies only to PMMM. `gravity.expansionDegree` selects a compiled
+potential degree and defaults to the largest enabled degree, six in the default
+range. Algorithm and degree selections can differ between runs of one executable.
 
 PMMM's forward, inverse, and cached Green-function FFTs run their parallel jobs
 on the existing HPX worker pool through FFTW's threading callback. They share
@@ -29,7 +42,9 @@ parallelized by HPX. Their planning and destruction also run on native I/O
 threads so waiting for the shared planner lock cannot block HPX workers.
 
 ```sh
-./build_pmmm/cosmictiger --gravity.meshSize=32 --gravity.pmmmNearWidth=2 \
+./build_pmmm/cosmictiger --gravity.method.far=pmmm --gravity.method.near=pp \
+  --gravity.expansionDegree=6 --run.timeIntegrator=traditional \
+  --gravity.meshSize=32 --gravity.pmmmNearWidth=2 \
   --initial.particlesPerDimension=32 --hydro.enabled=false \
   --compute.cuda=false --hpx:threads=12
 ```
@@ -38,8 +53,14 @@ The runtime settings can also be supplied in an INI file:
 
 ```ini
 [gravity]
+method.far = pmmm
+method.near = pp
+expansionDegree = 6
 meshSize = 32
 pmmmNearWidth = 2
+
+[run]
+timeIntegrator = traditional
 
 [hydro]
 enabled = false
@@ -47,7 +68,8 @@ enabled = false
 
 The former `gravity.method`, `gravity.pmmmNearMethod`, `gravity.fmmOrder`, and
 `gravity.pmmmOrder` inputs are rejected on both the CLI and in INI files.
-`--help` and the `build.*` startup fields report the selected build configuration.
+`--help` and the `build.*` startup fields report the enabled capabilities;
+resolved option output reports the runtime selections.
 
 `gravity.meshSize=n` requests `n` full-particle cells on each axis of the
 normalized unit box, independently of the initial-condition particle count.
@@ -68,8 +90,8 @@ region contains `(2*w+1)^3` cells (27, 125, 343, or 729, respectively),
 including the sink cell. The mesh must satisfy `n >= 2*w+1`, so periodic near
 cells are distinct. Odd mesh sizes are supported.
 
-`COSMICTIGER_PMMM_NEAR_METHOD=pp|fmm` selects how those near cells are evaluated
-at build time. The default `pp` sums all primary particle pairs. The `fmm` choice uses the
+`gravity.method.near=pp|fmm` selects how those near cells are evaluated from the
+compiled capabilities. The `pp` method sums all primary particle pairs. The `fmm` method uses the
 existing Cartesian FMM operators and adaptive tree acceptance within the same
 near-cell region. It first exchanges complete remote source-cell particle
 records and builds local source trees as individual cells become ready.
@@ -78,19 +100,20 @@ interior and ready boundary work to overlap outstanding cell fetches.
 It adds no second periodic correction or distant-cell force:
 the spherical FFT result supplies those contributions in either mode.
 
-`COSMICTIGER_WITH_ORDER` sets the shared PMMM and near FMM expansion order,
-defaulting to eight in a fresh PMMM build. PMMM fixes `gravity.openingAngle` to
+`gravity.expansionDegree` sets the shared PMMM and near FMM potential degree.
+PMMM fixes `gravity.openingAngle` to
 `sqrt(3)/(w+1)`, even when a scalar opening angle is supplied explicitly. At the
 default ghost width of two, theta is approximately 0.577350269. This theta stays
 fixed during cosmological evolution; global FMM opening schedules are not
 accepted in PMMM mode. `compute.bucketSize` controls the near FMM tree bucket
 size. Near FMM can reduce pair work in dense cells, but its additional
 approximation and actual performance must be checked on the intended
-distribution. With a PMMM-FMM build:
+distribution. With the near FMM capability enabled:
 
 ```sh
-./build_pmmm/cosmictiger --gravity.meshSize=32 --gravity.pmmmNearWidth=2 \
-  --compute.bucketSize=32 \
+./build_pmmm/cosmictiger --gravity.method.far=pmmm --gravity.method.near=fmm \
+  --run.timeIntegrator=traditional --gravity.meshSize=32 --gravity.pmmmNearWidth=2 \
+  --gravity.expansionDegree=6 --compute.bucketSize=32 \
   --hydro.enabled=false --compute.cuda=false
 ```
 
@@ -101,17 +124,18 @@ rounded full-particle side length. The existing
 apply; the parser checks this bound after converting the configured radius
 to box units. Both near methods retain the selected compact gravity kernel for
 direct pairs, including distinct coincident particles, and exclude primary self.
-PMMM accuracy is controlled by mesh size, expansion order, and near width.
+PMMM accuracy is controlled by mesh size, expansion degree, and near width.
 The derived opening angle controls only the optional near FMM; the near width
 also changes which interactions are included in the far-field convolution.
 
 ## Global FMM opening schedules
 
-For an FMM build with `run.scenario=cosmology`, an optional schedule replaces the
+For `gravity.method.far=fmm` with `run.scenario=cosmology`, an optional schedule replaces the
 previous hardcoded cosmology opening angles:
 
 ```sh
-./cosmictiger --cosmology.startRedshift=49 \
+./cosmictiger --gravity.method.far=fmm --run.timeIntegrator=traditional \
+  --cosmology.startRedshift=49 \
   --gravity.openingSchedule='49:0.41,20:0.51,2:0.61'
 ```
 
@@ -154,24 +178,26 @@ dependency on the global solver in `gravity/dehnen/`. Owned particle arrays and
 sorting remain in `particles/`. See [source organization](source_layout.md) for
 the complete ownership and generated-code layout.
 
-## Orders and coefficient conventions
+## Expansion degrees and coefficient conventions
 
-PMMM uses the same application order convention and total-degree truncation
-as the current FMM. For `COSMICTIGER_WITH_ORDER=q`, source multipoles have degree
-`S=q-2`, local expansions have degree `L=q-1`, and a contraction retains only
-terms with source degree plus local degree at most `L`. Each executable compiles
-one selected order from 3 through 9; PMMM defaults to eight.
+PMMM and FMM share a potential-degree convention and total-degree truncation.
+`COSMICTIGER_EXPANSION_DEGREE=d` compiles one degree; an inclusive range such as
+`4-6` compiles every degree in that range. Supported degrees are two through
+eight. For potential degree `d`, source multipoles have degree `S=d-1`, local
+expansions have degree `L=d`, and a contraction retains only terms with source
+degree plus local degree at most `d`. The internal historical order is
+`q=d+1`, so the same limits are `S=q-2` and `L=q-1`.
 This implementation does not retain the full
 rectangular source/local contraction used by the experimental PMMM reference.
 
 The spherical representation stores real and imaginary harmonic components
 as real scalar fields. The channel counts are:
 
-| Quantity | Scalar fields | At the default order 8 |
+| Quantity | Scalar fields | At default potential degree 6 (`q=7`) |
 | --- | ---: | ---: |
-| Source multipoles | `(q-1)^2` | 49 |
-| Local expansions | `q^2` | 64 |
-| Cached harmonic Green filters | `q^2` | 64 |
+| Source multipoles | `d^2 = (q-1)^2` | 36 |
+| Local expansions | `(d+1)^2 = q^2` | 49 |
+| Cached harmonic Green filters | `(d+1)^2 = q^2` | 49 |
 
 Let `h=1/n`, and let `a` be a particle's offset from its source cell center in
 box units. P2M accumulates `mass * U(-a/h)` using the generated spherical
@@ -227,15 +253,17 @@ coefficient-group redistributions in this implementation.
 The first solve at a mesh size creates three plans: source forward, Green-filter
 forward, and local inverse. It also constructs and transforms the Green filters once.
 Subsequent solves reuse those plans, buffers, and Green spectra. At the default
-order eight, a normal solve performs 49 scalar-equivalent forward transforms and
-64 inverse transforms through two batched execution calls; the 64 Green
+potential degree six, a normal solve performs 36 scalar-equivalent forward transforms and
+49 inverse transforms through two batched execution calls; the 49 Green
 transforms belong to initialization. This describes work, not measured speed.
 
 Each mesh cache lasts until eviction, explicit PMMM destruction, or application
-shutdown. Changing the requested base mesh size, maximum prime factor, order,
+shutdown. Changing the requested base mesh size, maximum prime factor, degree,
 or near width requires explicit PMMM destruction.
 The near opening angle is fixed by the near width.
-The solver, near method, and expansion order require a different build.
+The runtime solver, near method, and degree remain fixed during an evolution.
+Changing them between runs requires a new build only if the requested capability
+or degree was not compiled.
 Plans use `FFTW_ESTIMATE`; there is no persistent disk-wisdom cache. MPI calls
 run on native OS threads through HPX, use a communicator separate from HPX
 parcel traffic, and require the application's existing `MPI_THREAD_MULTIPLE`
@@ -292,9 +320,10 @@ cells remain outstanding. `storedAccelerationParticles` and
 `storedPotentialParticles` expose retained solve-result arrays: both are zero
 for the ordinary streamed kick path.
 
-SPH currently requires an FMM build whenever gravity is enabled.
-PMMM with `hydro.enabled=true` is rejected at startup; set `hydro.enabled=false`
-explicitly for cosmological PMMM runs, whose scenario otherwise enables SPH.
+PMMM supports SPH with the traditional and global integrators when
+`COSMICTIGER_ENABLE_SPH=ON`. The hierarchical integrator requires gravity without
+SPH. Set `hydro.enabled=false` explicitly for gravity-only cosmological PMMM
+runs, whose scenario otherwise enables SPH when it is compiled.
 
 Moment formation, Green construction, FFTs, spectral contraction, and local
 expansion evaluation run on CPUs. `compute.cuda=true` selects CUDA near-field
@@ -339,26 +368,45 @@ approximately
 
 This includes two padded real arrays, source/local/Green complex arrays, and
 the double moment array. For a balanced large mesh on `P` ranks, its leading
-term is `[16*(q-1)^2 + 12*q^2]*n^3/P` bytes. Order eight is about 1552 bytes
-per cell across the job, or roughly 3.0 GiB for a `128^3` mesh before dividing
+term is `[16*(q-1)^2 + 12*q^2]*n^3/P` bytes. Potential degree six (`q=7`) is about
+1164 bytes per cell across the job, or roughly 2.3 GiB for a `128^3` mesh before dividing
 among ranks. FFT padding, allocation imbalance, and plan storage add overhead.
 These estimates exclude particle arrays, source copies, cell forests and metadata,
 communication packets, output fields, and near-field CPU/CUDA workspaces.
 
-`COSMICTIGER_TIME_INTEGRATOR=leapfrog` is the default. PMMM's leapfrog path uses
-conservative synchronized kick-drift-kick steps: all particles are sources and
+`COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL=ON` is the default;
+`COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL` and
+`COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL` default to `OFF`. These capabilities are
+independent. If several are eligible for the selected physics, choose one with
+`run.timeIntegrator`.
+
+PMMM's `traditional` path uses synchronized kick-drift-kick steps: all particles are sources and
 sinks in every mesh solve, and all particles advance on the most restrictive
 requested rung across the job. It calls `pmmmSolve(true)`, retaining acceleration
-and potential arrays for kick preparation, then applies a common rung before
-the drift. This differs from the individual block timesteps used by leapfrog
-with global FMM.
+and potential arrays for kick preparation, combines gravity and SPH bounds when
+hydro is enabled, then applies a common rung before the drift. FMM's traditional
+path retains individual block timesteps.
 
-Build with `COSMICTIGER_TIME_INTEGRATOR=hierarchical` to use the hierarchical
+The `global` path advances every particle on one continuous timestep: the
+collective minimum of the raw enabled gravity and SPH limits, capped by the
+configured maximum step, cosmological limit, and remaining time to the endpoint.
+It does not round that interval to a power of two, impose rung-growth limits, or
+apply the minimum-rung floor. The previous interval's closing half-kick uses its
+saved duration; the new opening half-kick uses the newly selected duration after
+the collective reduction. The path supports gravity-only, SPH-only, and coupled
+gravity/SPH evolution on CPU and CUDA. With chemistry, each candidate opening
+chemistry half-step is a transaction from the same synchronized state: if its
+updated gas state tightens the hydro bound, the candidate is retried at the
+smaller interval before committing. Checkpoints preserve the pending closing
+half-step and its exact interval. Final diagnostics close that half-step after
+the final checkpoint, without opening another interval.
+
+Select `run.timeIntegrator=hierarchical` to use the hierarchical
 particle timestep ladder for dark matter. Every ladder stage selects one
 particle range as both its sources and sinks. Moment deposition, remote cell
 packets, and near FMM all use that same selection; an inactive slow particle
 does not enter a fast stage's force. Ascending/descending signed kicks and
-per-rung drifts are retained. In both integrators, the timestep criterion uses
+per-rung drifts are retained. In all integrators, the gravity timestep criterion uses
 the selected compact kernel's effective radius and the complete near-plus-far
 acceleration.
 
@@ -398,7 +446,7 @@ fields are not checkpoint state. Calls to `pmmmSolve` alone collect full fields
 and do not advance particles.
 
 PMMM and adaptive FMM have different error and work controls even at the same
-nominal order. Mesh refinement, near width, and order convergence should be
+potential degree. Mesh refinement, near width, and degree convergence should be
 checked on the intended particle distribution. Clustered cells can make the
 direct near field expensive. No relative performance claim follows from the
 coefficient counts or the FFT decomposition alone.
@@ -418,18 +466,19 @@ for these fixtures, not accuracy guarantees for arbitrary particle distributions
 Potential error is scaled by `max(1, abs(referencePotential))`; each force-component
 error uses `max(1, norm(referenceAcceleration))`.
 
-| Order | Potential budget | Force budget |
+| Potential degree (`q-1`) | Potential budget | Force budget |
 | ---: | ---: | ---: |
-| 3 | `3e-2` | `6e-2` |
-| 4 | `1.5e-3` | `2.5e-2` |
-| 5 | `3.5e-4` | `7.5e-3` |
-| 6 | `6e-5` | `2e-3` |
-| 7 | `3e-5` | `5e-4` |
-| 8 | `8e-6` | `1.25e-4` |
-| 9 | `3e-6` | `5e-5` |
+| 2 | `3e-2` | `6e-2` |
+| 3 | `1.5e-3` | `2.5e-2` |
+| 4 | `3.5e-4` | `7.5e-3` |
+| 5 | `6e-5` | `2e-3` |
+| 6 | `3e-5` | `5e-4` |
+| 7 | `8e-6` | `1.25e-4` |
+| 8 | `3e-6` | `5e-5` |
 
-A direct double expansion reaches about `1.614e-3` force error at order six in
-these fixtures, so the former `5e-4` limit for every order from six onward was
+A direct double expansion reaches about `1.614e-3` force error at potential
+degree five (historical order six) in these fixtures, so the former `5e-4`
+limit for every potential degree from five onward was
 too strict even before FFT roundoff. The numerical allowance is checked
 independently and added to the truncation budget for the computed-field Ewald
 comparison.
@@ -443,10 +492,13 @@ wall time, including communication, staging, and scheduling overhead. See
 ## Restart and regression checks
 
 Checkpoints identify PMMM separately from FMM and record its requested mesh size,
-maximum prime factor, order, near width, near method, and timestep compatibility parameters. Changing
-these incompatible settings on restart is rejected, including restarting with a
-binary compiled for a different solver, near method, or order. Historical ordinary PM
-checkpoints are unsupported. Checkpoints do not store
+maximum prime factor, expansion degree (in the historical internal order
+convention), near width, near method, and timestep compatibility parameters.
+Omitted runtime algorithm, degree, and integrator selectors inherit the saved
+selection on restart. Explicit incompatible selections are rejected, as are
+saved capabilities unavailable in the executable. A build may contain additional
+algorithms or a larger degree range without invalidating a checkpoint.
+Historical ordinary PM checkpoints are unsupported. Checkpoints do not store
 FFTW plans or Green spectra: the first solve after restart reconstructs the
 cache, then reuses it for later steps.
 PMMM extension version four adds the maximum prime factor. Versions one through
@@ -457,21 +509,26 @@ their hierarchical stage meshes can differ.
 PMMM extension version three appends the PMMM order and resolved opening angle
 to the version-two metadata, which added the near-method selection. Historical
 version-one and version-two extensions retain their legacy shared order
-convention; their saved FMM order must match the compiled PMMM order. Version-one
-extensions identify the PP near method and are rejected by PMMM-FMM builds. Version-three restarts also require the resolved opening angle
+convention; their saved FMM order must match the selected PMMM order. Version-one
+extensions identify the PP near method and require that capability and runtime
+selection. Version-three restarts also require the resolved opening angle
 to match. The checkpoint hierarchy flag must match: historical synchronous PMMM
-evolution checkpoints cannot resume under the hierarchical driver. Opening angle
+evolution checkpoints cannot resume under the hierarchical driver. Global
+evolution also records its exact previous interval and pending half-step phase;
+it cannot restart under a different integrator. Opening angle
 is derived from the recorded near width; bucket size remains a mutable control
 rather than checkpoint identity.
 
 The standalone `pmmm_kernels` tests check the numerical adapters and total
 degree rule. Application tests compare complete fields against an independent
 direct Ewald sum, exercise periodic boundaries,
-and check cache reuse with the compiled near method. Run both PMMM build variants
-to cover both near methods. In a PMMM-FMM build, a dense, unequal-mass fixture
+and check cache reuse with the selected near method. Run with each near method
+enabled, either in one combined executable or separate minimal builds. With
+`gravity.method.near=fmm`, a dense, unequal-mass fixture
 proves that the CPU walk accepts multipoles and checks convergence when the near
 opening angle is tightened. Distributed tests require ghost source exchange and zero remote
-tree or particle fetches during the near walk. Repeated solves in each compiled PP/FMM variant check owned counts, exact position bits, velocities, rungs, and saved
+tree or particle fetches during the near walk. Repeated solves with each PP/FMM
+selection check owned counts, exact position bits, velocities, rungs, and saved
 field sentinels after ghost cleanup. The suite includes valid split cell ownership,
 empty localities, periodic seams, distinct coincident sources, exact cell-center containment near
 the fixed-point upper boundary, odd/even meshes, and CPU/CUDA agreement when
@@ -481,15 +538,17 @@ sinks and no retained full-field result arrays, and exercise single-cell and
 batched scheduling. A distributed observer gate holds one requested ghost
 cell until an independent sink completes, checks that dependent sinks wait,
 and compares the resulting fields with the ungated solve.
-The evolution regression checks the compiled near method, hierarchical clocks,
+The evolution regression checks the selected near method, hierarchical clocks,
 exactly one scheduled drift per active particle, current restarts, historical
-PP-extension acceptance or rejection, incompatible restarts, and startup rejection
-of PMMM with SPH. Run it in both PMMM build variants for full near-method coverage.
+PP-extension acceptance or rejection, and incompatible restarts. Run it with
+both near methods for full near-method coverage. Global evolution checks cover
+non-dyadic intervals, all-particle stepping, restart continuity, and coupled SPH.
 A small CPU application
 regression can be selected explicitly:
 
 ```sh
-./build_pmmm/cosmictiger --run.test=pmmm --gravity.meshSize=8 \
+./build_pmmm/cosmictiger --run.test=pmmm --gravity.method.far=pmmm \
+  --gravity.method.near=pp --run.timeIntegrator=traditional --gravity.meshSize=8 \
   --initial.particlesPerDimension=8 --hydro.enabled=false \
   --compute.cuda=false --hpx:threads=2 --hpx:bind=none
 ```

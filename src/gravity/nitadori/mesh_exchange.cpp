@@ -126,8 +126,8 @@ void deposit() {
                 CellData cell;
                 cell.key = range.key;
                 cell.coefficients.assign(cache.sourceCount, 0.0);
-                constexpr bool kUseFmm = gravity::kBuildPmmmNearUsesFmm;
-                if constexpr (kUseFmm) {
+                bool const useFmm = getOptions().gravity.pmmmNearMethod == "fmm";
+                if (useFmm) {
                     cell.sourceRank = hpxRank();
                     cell.particleCount = range.end - range.begin;
                 } else {
@@ -141,7 +141,7 @@ void deposit() {
                         cell.radialTrace += source.mass * source.offset[axis] * source.offset[axis];
                     }
                     flops += 3 * kDimensions;
-                    if constexpr (!kUseFmm) {
+                    if (!useFmm) {
                         cell.sources.push_back(source);
                     }
                 }

@@ -1,165 +1,83 @@
 # CosmicTiger CMake options
 
-This is a source-level reference for the configuration inputs in
-`CMakeLists.txt` and `cmake/FindLibbacktrace.cmake`. No build directory is needed
-to read it. Pass options as `-DNAME=value` when configuring with CMake 3.24 or
-newer:
+Configure one `cosmictiger` executable with the capabilities needed for a run.
+Disabled physics and its test problems are excluded from compilation. Shared
+sources compile once; each selected expansion degree has separate CPU/CUDA
+instantiation units.
 
 ```sh
-cmake -S . -B build/release_cpu -G 'Unix Makefiles' \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DCOSMICTIGER_WITH_CUDA=OFF \
-  -DBUILD_TESTING=OFF
-make -C build/release_cpu -j4 cosmictiger_leapfrog_fmm_sph_7
-make -C build/release_cpu -j4 cosmictiger_hierarchical_pmmm_pp_8
+cmake -S . -B build/release_cpu -DCMAKE_BUILD_TYPE=Release \
+  -DCOSMICTIGER_WITH_CUDA=OFF -DBUILD_TESTING=OFF \
+  -DCOSMICTIGER_ENABLE_FMM=ON -DCOSMICTIGER_ENABLE_PMMM=ON \
+  -DCOSMICTIGER_ENABLE_PMMM_NEAR_FMM=ON \
+  -DCOSMICTIGER_ENABLE_INTEGRATOR_GLOBAL=ON \
+  -DCOSMICTIGER_EXPANSION_DEGREE=4-6
+cmake --build build/release_cpu --target cosmictiger --parallel 3
+build/release_cpu/cosmictiger --gravity.method.far=pmmm \
+  --gravity.method.near=pp --gravity.meshSize=16 \
+  --gravity.expansionDegree=6 --run.timeIntegrator=global --compute.cuda=false
 ```
-
-Run examples from the repository root. CMake creates the directory specified by
-`-B`; configuration discovers dependencies and generates build rules, while
-`make` or `cmake --build` compiles them. Both examples use the same generated
-Makefile and shared core library. Add dependency paths below as needed.
 
 ## Project options
 
-Defaults apply to a fresh CMake configuration. Boolean options accept `ON` or
-`OFF`; solver and integrator names are lowercase.
-
-| Option | Default | Values and purpose |
+| Option | Fresh default | Purpose |
 | --- | --- | --- |
-| `COSMICTIGER_GRAVITY_METHOD` | `fmm` | `none` for SPH without gravity, `fmm` for global FMM, or `pmmm` for PMMM. `none` requires SPH and leapfrog. Selects the compiled gravity solver for the default executable and tests. |
-| `COSMICTIGER_PMMM_NEAR_METHOD` | `pp` | `pp` for direct particle-particle near interactions, or `fmm` for cell FMM near interactions. Selects the default PMMM near solver. |
-| `COSMICTIGER_WITH_ORDER` | `7` for FMM; `8` for PMMM | One integer from `3` through `9`, selecting the default executable's shared FMM/PMMM kernel order. The convention is multipole degree plus two. Explicit or cached selections override the default. Ignored by SPH-only targets; their compiled order is zero. |
-| `COSMICTIGER_TIME_INTEGRATOR` | `leapfrog` | `leapfrog` for ordinary block-timestep kick-drift-kick (KDK), or `hierarchical` for hierarchical gravity. Selects the compiled integrator for the default executable and tests. Hierarchical hydro integration is not implemented, so hierarchical builds currently require SPH disabled. |
-| `COSMICTIGER_POSITION_TYPE` | `fixed32` | `fixed32` or `fixed64` position storage for the default executable and every named variant in this build directory. Target and executable names are unchanged. |
-| `COSMICTIGER_WITH_MAX_BUCKET` | `128` | One of `32`, `64`, `128`, `256`, `512`, `1024`. Compile-time ceiling for the runtime `compute.bucketSize`. |
-| `COSMICTIGER_WITH_CUDA` | `ON` | Builds CUDA code. Requires the CUDA toolkit and HPX built with CUDA support. |
-| `COSMICTIGER_WITH_SPH` | `ON` | Selects SPH support for the default executable and, when testing is enabled, SPH tests. `OFF` excludes SPH implementation sources from that executable and omits SPH tests. SPH supports leapfrog without gravity, with global FMM, or with either PMMM near method. Named targets include `_sph` for SPH support and omit it for collisionless builds. |
-| `COSMICTIGER_WITH_LONG_LONG_PART_INT` | `OFF` | Uses `long long` to index local particles. |
-| `COSMICTIGER_ENABLE_PROFILING` | `ON` | Enables statistical CPU sampling and `PROFILE()` metadata. Independent of the installed HPX's APEX support. |
-| `COSMICTIGER_REQUIRE_APEX` | Depends on build type | Defaults to `ON` for `Debug`, `RelWithDebInfo`, and `Profile`; otherwise `OFF`. Rejects an HPX installation without APEX when enabled. |
-| `BUILD_TESTING` | `ON` | Standard CTest option used here to include standalone tests and embedded `run.test` application tests. `OFF` excludes both. |
+| `COSMICTIGER_ENABLE_FMM` | `ON` | Compile global FMM gravity. |
+| `COSMICTIGER_ENABLE_PMMM` | `OFF` | Compile PMMM gravity. |
+| `COSMICTIGER_ENABLE_SPH` | `ON` | Compile SPH, particle chemistry, and hydro problems. |
+| `COSMICTIGER_ENABLE_PMMM_NEAR_PP` | `ON` | Include direct near interactions when PMMM is enabled. |
+| `COSMICTIGER_ENABLE_PMMM_NEAR_FMM` | `OFF` | Include cell FMM near interactions when PMMM is enabled. Includes shared FMM machinery without requiring global FMM. |
+| `COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL` | `ON` | Traditional nested individual block timesteps. |
+| `COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL` | `OFF` | Hierarchical Hamiltonian integration for collisionless gravity. |
+| `COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL` | `OFF` | All particles share the smallest raw allowable timestep, without power-of-two quantization. |
+| `COSMICTIGER_EXPANSION_DEGREE` | `4-6` | Inclusive potential-degree range, or one degree such as `6`; supported degrees are 2 through 8. |
+| `COSMICTIGER_POSITION_TYPE` | `fixed32` | `fixed32` or `fixed64` particle positions for the build. |
+| `COSMICTIGER_WITH_CUDA` | `ON` | Compile CUDA; requires a CUDA-enabled HPX installation. |
+| `COSMICTIGER_WITH_MAX_BUCKET` | `128` | Maximum tree leaf bucket: 32, 64, 128, 256, 512, or 1024. |
+| `COSMICTIGER_WITH_LONG_LONG_PART_INT` | `OFF` | Use long long local particle indices. |
+| `COSMICTIGER_ENABLE_PROFILING` | `ON` | CPU sampling and PROFILE metadata. |
+| `COSMICTIGER_REQUIRE_APEX` | Build-dependent | ON for Debug, RelWithDebInfo, Profile; otherwise OFF. Requires an APEX-enabled HPX installation. |
+| `BUILD_TESTING` | `ON` | Compile and register tests supported by the enabled capabilities. |
 
-`cosmictiger` and all named variants use the position storage selected by
-`COSMICTIGER_POSITION_TYPE`. Position storage precision is independent of
-floating-point arithmetic precision. Runtime `compute.positionType` defaults to
-the compiled width; an explicit CLI or INI value must match it. There are no
-companion executables or automatic runtime switches. The five physics cache
-options select the default executable and its tests; all supported named
-variants are available regardless of the selected default.
+At least one physics component and one integrator must be enabled. PMMM needs
+at least one near method. SPH needs traditional or global integration available;
+a collisionless run may select hierarchical integration even when SPH is compiled.
+To build SPH only, disable both `COSMICTIGER_ENABLE_FMM` and
+`COSMICTIGER_ENABLE_PMMM`. To build gravity only, disable `COSMICTIGER_ENABLE_SPH`.
 
-To build with 64-bit positions while preserving a separate fixed32 build:
+Runtime selection uses `gravity.method.far=fmm|pmmm`,
+`gravity.method.near=pp|fmm` (PMMM), and
+`run.timeIntegrator=traditional|hierarchical|global`. A sole eligible method is
+automatic; multiple eligible methods require an explicit CLI/INI choice. A saved
+checkpoint selection also resolves these choices on restart. Help and startup
+metadata distinguish compiled capabilities from the selected run.
 
-```sh
-cmake -S . -B build/release_cpu_fixed64 -G 'Unix Makefiles' \
-  -DCMAKE_BUILD_TYPE=Release -DCOSMICTIGER_WITH_CUDA=OFF \
-  -DCOSMICTIGER_POSITION_TYPE=fixed64 -DBUILD_TESTING=OFF
-make -C build/release_cpu_fixed64 -j4 cosmictiger_leapfrog_fmm_sph_7
-```
+`gravity.expansionDegree` defaults to the highest compiled degree. Potential
+degree d means source multipole degree d-1 and historical internal order d+1.
+The default degrees 4-6 therefore instantiate old orders 5-7. PMMM far and near
+FMM share the selected degree. Internal tensor and old checkpoint integers keep
+their historical order convention. PMMM formerly defaulted to old order 8
+(potential degree 7); request a range including 7 to retain that accuracy setting.
+SPH-only builds instantiate no gravity expansions.
 
-Alternatively, change the option in an existing build directory and rebuild the
-desired targets. Their names remain unchanged. Checkpoints require the same
-position width as the executable used to write them.
-The supplied INIs leave `compute.positionType` commented to use the compiled
-width automatically.
+The global integrator reduces raw gravity/hydro limits over all particles and
+all localities before opening the next half-step. Cosmological and configured
+maximum-step limits also apply. Final-time and scenario-stage boundaries may
+shorten a step. Kicks, drifts, SPH and chemistry use explicit old/new intervals;
+checkpoints retain the actual pending interval independently of the integer rung
+clock. Traditional and hierarchical integration retain their individual timesteps.
 
-The former `COSMICTIGER_FMM_MIN_ORDER` and `COSMICTIGER_FMM_MAX_ORDER` options
-are retired. CMake removes their cached values and derives both from
-`COSMICTIGER_WITH_ORDER`. Generated source headers still cover orders 3–9, but
-each gravity-enabled executable compiles only its selected order. SPH-only targets compile no FMM instances.
+Gravity-only builds omit hydro problems/tests; SPH-only builds omit gravity
+problems/tests. Coupled tests require both capabilities, and backend-specific
+tests require that backend. Hydro problems with imposed forces remain available
+without self-gravity. Common infrastructure and homogeneous recombination remain
+available. The shared cosmology implementation still requires FFTW/MPI.
 
-Preprocessor definitions such as `ORDER`, `FMM_MIN_ORDER`, `FMM_MAX_ORDER`,
-`MAX_BUCKET_SIZE`, `COSMICTIGER_WITH_GRAVITY`, `COSMICTIGER_GRAVITY_PMMM`, and `COSMICTIGER_PMMM_NEAR_FMM`
-are derived from these settings, not independent CMake options.
-
-The solver, PMMM near method, kernel order, time integrator, and SPH support are
-compiled into each executable. Switch them by building and running the matching
-named target. Leapfrog is the default for both dark matter and SPH. The
-hierarchical integrator supports dark matter only; `hydro.enabled=true` requires
-a `leapfrog_<gravity>_sph` variant. The hierarchical driver lacks SPH integration
-stages. Leapfrog SPH supports no gravity, global FMM, PMMM-PP, and PMMM-FMM.
-PMMM ghost width remains a runtime option, `--gravity.pmmmNearWidth` (1–4,
-default 2). PMMM derives its theta from `sqrt(3)/(pmmmNearWidth+1)` and requires
-the runtime `--gravity.meshSize` setting. Global FMM keeps `--gravity.openingAngle`
-and the optional cosmological `--gravity.openingSchedule` as runtime controls.
-
-For the SPH-only default, set `COSMICTIGER_GRAVITY_METHOD=none`,
-`COSMICTIGER_WITH_SPH=ON`, and `COSMICTIGER_TIME_INTEGRATOR=leapfrog`.
-It excludes gravity sources, generated FMM instances, gravity tests, and halo
-potential analysis. It retains cosmology, imposed hydro fields, and shared
-FFTW/MPI dependencies. The cached FMM order is preserved for later gravity
-builds; the SPH-only executable has no order and reports zero in build metadata.
-
-## Named physics targets
-
-After configuring, print the physics target guide without compiling:
-
-```sh
-make -C build/release_cpu cosmictiger_help
-```
-
-From inside the build directory, use `make cosmictiger_help`. It shows the nine gravity
-families, the SPH-only target, orders, selection examples, current default, CPU/CUDA mode,
-and position storage. Standard `make help` lists available targets,
-including `cosmictiger_help`.
-
-Every configuration provides gravity-enabled targets named
-`cosmictiger_<integrator>_<gravity>[_sph]_<order>` and the order-independent
-`cosmictiger_leapfrog_sph` target. The optional `_sph` selects SPH;
-omit it for collisionless builds. Replace `<order>` in each supported family
-below with any integer from 3 through 9:
-
-| Target family | Physics |
-| --- | --- |
-| `cosmictiger_leapfrog_sph` | Leapfrog, SPH only; no gravity or expansion order |
-| `cosmictiger_leapfrog_fmm_sph_<order>` | Leapfrog, global FMM, SPH available |
-| `cosmictiger_leapfrog_pmmm_pp_sph_<order>` | Leapfrog, PMMM with direct near pairs, SPH available |
-| `cosmictiger_leapfrog_pmmm_fmm_sph_<order>` | Leapfrog, PMMM with FMM near interactions, SPH available |
-| `cosmictiger_leapfrog_fmm_<order>` | Leapfrog, global FMM, no SPH |
-| `cosmictiger_leapfrog_pmmm_pp_<order>` | Leapfrog, PMMM with direct near pairs, no SPH |
-| `cosmictiger_leapfrog_pmmm_fmm_<order>` | Leapfrog, PMMM with FMM near interactions, no SPH |
-| `cosmictiger_hierarchical_fmm_<order>` | Hierarchical, global FMM, no SPH |
-| `cosmictiger_hierarchical_pmmm_pp_<order>` | Hierarchical, PMMM with direct near pairs, no SPH |
-| `cosmictiger_hierarchical_pmmm_fmm_<order>` | Hierarchical, PMMM with FMM near interactions, no SPH |
-
-The 64 physics variants comprise 42 collisionless combinations (2 integrators
-× 3 gravity methods × 7 orders), 21 SPH combinations with gravity (leapfrog × 3
-gravity methods × 7 orders), and one SPH-only target. These produce 64 named
-executables, each using the position width selected for the build directory. Target names never include a position-width suffix.
-
-The `cosmictiger_core` static library contains configuration-independent
-implementation sources and compiles once per build directory. Remaining sources
-use per-variant objects and compile definitions, including position storage
-precision. Building another variant reuses the shared core and any previously
-built objects for that exact variant. A default executable and the corresponding
-named executable reuse the same variant objects.
-
-Source selection follows the compiled solver: global FMM builds exclude PMMM
-implementation sources, and PMMM builds include only their selected near-field
-implementation. Shared gravity utilities remain available to the selected solver.
-
-Named variants are excluded from the default `all` build. Plain `make` builds
-the configured `cosmictiger` executable and enabled tests, without compiling the whole
-matrix. Request additional variants from the same Makefile, without
-reconfiguring:
-
-```sh
-make -C build/release_cpu -j4 cosmictiger_leapfrog_pmmm_fmm_7
-make -C build/release_cpu -j4 cosmictiger_leapfrog_pmmm_pp_5
-make -C build/release_cpu -j4 cosmictiger_leapfrog_pmmm_fmm_sph_7
-
-# Equivalent generator-independent command:
-cmake --build build/release_cpu --parallel 4 \
-  --target cosmictiger_leapfrog_pmmm_pp_5
-```
-
-For a different default executable and matching test selection, reconfigure
-the existing directory with the five cache options above. For example, select
-hierarchical PMMM-PP at order 5 with `COSMICTIGER_TIME_INTEGRATOR=hierarchical`,
-`COSMICTIGER_GRAVITY_METHOD=pmmm`, `COSMICTIGER_PMMM_NEAR_METHOD=pp`,
-`COSMICTIGER_WITH_ORDER=5`, and `COSMICTIGER_WITH_SPH=OFF`. Changing defaults
-does not remove other named targets or their existing objects. SPH is supported
-only with leapfrog; hierarchical SPH combinations are
-rejected during configuration.
+There are no named physics-combination executables. `cosmictiger_help` prints
+the configured capabilities. Old exclusive CMake selections are retired; a fresh
+build directory avoids ambiguous cached selections. See configure diagnostics for
+migration guidance. CPU/CUDA and position width remain build-directory settings.
+An explicit runtime `compute.positionType` must match the compiled width.
 
 ## Common CMake and toolchain settings
 
@@ -236,54 +154,9 @@ itself built with CUDA may require CUDA toolchain discovery even when
 
 ## Using build.sh
 
-`./build.sh` provides an interactive configure/build menu. Its initial choices
-are `Release`, global FMM, order 7, leapfrog, fixed32 positions, CUDA and SPH enabled,
-and tests disabled. Choosing a PMMM solver changes the default order to 8; an order
-explicitly chosen in the menu is retained when changing solvers. In particular,
-its `BUILD_TESTING=OFF` differs from direct CMake's
-default `ON`. It generates Unix Makefiles in `build/<mode>_<cuda|cpu>`, such as
-`build/release_cuda` or `build/debug_cpu`. Physics selections share one build
-directory and preserve previously compiled named variants. Build mode and CUDA
-support remain separate because they affect the common library and toolchain.
-Position storage is selected for the whole build directory; changing it rebuilds
-the requested target under the same name.
-
-Disable "Build SPH support" in the menu when selecting hierarchical
-integration. The menu reports unsupported SPH combinations and returns to its
-settings without starting a build. A valid selection determines both the named
-target to build and the default physics cache options, so enabling tests tests
-the selected physics combination.
-
-The script builds the named executable at the selected position width, chooses the APEX
-requirement from the build mode, supplies the custom `Profile` flags above,
-and rediscovers cached HPX, MPI, GSL, and HEALPix paths. `Profile` uses a
-`RelWithDebInfo` HPX installation. For settings not offered by the menu,
-configure directly with CMake.
-
-## Inspecting and changing a configured build
-
-```sh
-# List cached options, including advanced entries and help descriptions.
-# This reads the existing cache without configuring or compiling.
-cmake -LAH -N build/release_cpu
-
-# Change an option, reconfigure, then rebuild.
-cmake -S . -B build/release_cpu -DCOSMICTIGER_WITH_MAX_BUCKET=256
-cmake --build build/release_cpu --parallel 4
-
-# Help for CMake's built-in variables; project variables are documented above.
-cmake --help-variable-list
-cmake --help-variable CMAKE_BUILD_TYPE
-```
-
-Options persist in `CMakeCache.txt`; omitting a previously supplied option does
-not reset it. This includes `COSMICTIGER_REQUIRE_APEX`: its build-type-dependent
-default is chosen when the cache entry is first created. Supply an explicit
-value when changing an existing configuration. A new build directory gives
-fresh defaults.
-
-The cache listing contains dependency settings and detected results as well
-as user options. Internal probe results such as `COSMICTIGER_FFTW3F_MPI_LINKS`
-are not feature switches and should not be set to bypass dependency checks.
-CMake has no general source-only command that lists every possible project
-option: options can be created conditionally while `CMakeLists.txt` executes.
+`./build.sh` offers an interactive menu for build mode, enabled physics, near
+methods, integrators, potential-degree range, CUDA, position storage, dependency
+paths, and tests. It builds `cosmictiger` in `build/<mode>_<cpu|cuda>`. Changing
+capabilities reconfigures that directory. Use separate directories for builds
+that need to remain available simultaneously. Local jobs are capped at half the
+available cores; concurrent work shares that budget.

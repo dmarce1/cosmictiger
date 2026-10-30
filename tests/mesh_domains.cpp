@@ -32,8 +32,8 @@ void requireMeshDomain(bool condition, char const* message) {
 void migrateMeshDomainFixture() {
     // These ownership checks move every rung. Hierarchical builds migrate one
     // rung per call; ordinary leapfrog migrates the whole population together.
-    constexpr int kLastRung = integration::kBuildUsesHierarchical ? 7 : 0;
-    for (int rung = 0; rung <= kLastRung; ++rung) {
+    int const lastRung = getOptions().run.hierarchicalGravity ? 7 : 0;
+    for (int rung = 0; rung <= lastRung; ++rung) {
         domainsBegin(rung);
         domainsEnd();
     }
@@ -356,7 +356,7 @@ void meshDomainsTest() {
     options.gravity.enabled = true;
     options.gravity.meshSize = detail::kMeshDomainSide;
     options.gravity.errorInterval = 1;
-    options.run.hierarchicalGravity = integration::kBuildUsesHierarchical;
+    options.run.hierarchicalGravity = getOptions().run.hierarchicalGravity;
     options.analysis.groups = true;
     options.analysis.tracers = true;
     options.analysis.saveForce = false;

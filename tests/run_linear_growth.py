@@ -13,6 +13,8 @@ from pathlib import Path
 import signal
 import subprocess
 
+from application_selection import application_arguments
+
 
 def require(condition, message):
     if not condition:
@@ -38,6 +40,7 @@ def runDiagnostic(executable, workdir):
                "--cosmology.omegaC=0.26503", "--analysis.views=false",
                "--lightcone.enabled=false", "--analysis.power=false",
                "--analysis.groups=false"]
+    command += application_arguments(executable, far="fmm", hydro=True)
     logPath = workdir / "run.log"
     with logPath.open("w") as log:
         with subprocess.Popen(command, cwd=workdir, env=environment, text=True, stdout=log,

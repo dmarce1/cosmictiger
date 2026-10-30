@@ -57,16 +57,18 @@ void prepare(SolveRequest const& request) {
         state.pendingGhosts = 0;
         state.farPromise = std::make_shared<hpx::promise<void>>();
         state.farReady = state.farPromise->get_future().share();
-#if COSMICTIGER_PMMM_NEAR_FMM
+#if COSMICTIGER_ENABLE_PMMM_NEAR_FMM
         // Only the FMM pipeline fulfills these per-cell promises. Creating them
         // for PP would report a broken promise for every cell on the next solve.
-        for (size_t index = 0; index < state.cells.size(); ++index) {
-            auto source = std::make_shared<SourceCell>();
-            source->range = state.cells[index];
-            source->owner = hpxRank();
-            state.ownedCells.emplace(source->range.key, index);
-            state.sourceCellsByKey[source->range.key].push_back(index);
-            state.sourceCells.push_back(std::move(source));
+        if (getOptions().gravity.pmmmNearMethod == "fmm") {
+            for (size_t index = 0; index < state.cells.size(); ++index) {
+                auto source = std::make_shared<SourceCell>();
+                source->range = state.cells[index];
+                source->owner = hpxRank();
+                state.ownedCells.emplace(source->range.key, index);
+                state.sourceCellsByKey[source->range.key].push_back(index);
+                state.sourceCells.push_back(std::move(source));
+            }
         }
 #endif
         state.radialTrace = 0;
@@ -170,26 +172,33 @@ void solve(SolveRequest request) {
 #endif
     allLocalities<PmmmPrepareAction>(request);
     std::exception_ptr failure;
-#if COSMICTIGER_PMMM_NEAR_FMM
+#if COSMICTIGER_ENABLE_PMMM_NEAR_FMM
     bool started = false;
 #endif
     try {
         allLocalities<PmmmDepositAction>();
-#if COSMICTIGER_PMMM_NEAR_FMM
-        allLocalities<PmmmPlanGhostsAction>();
-        started = true;
-        allLocalities<PmmmStartPipelineAction>();
+#if COSMICTIGER_ENABLE_PMMM_NEAR_FMM
+        if (options.pmmmNearMethod == "fmm") {
+            allLocalities<PmmmPlanGhostsAction>();
+            started = true;
+            allLocalities<PmmmStartPipelineAction>();
+        }
 #endif
         allLocalities<PmmmTransformAction>();
-#if COSMICTIGER_PMMM_NEAR_FMM
-        allLocalities<PmmmFinishPipelineAction>();
-#else
-        allLocalities<PmmmEvaluateAction>(request.doPotential);
+#if COSMICTIGER_ENABLE_PMMM_NEAR_FMM
+        if (options.pmmmNearMethod == "fmm") {
+            allLocalities<PmmmFinishPipelineAction>();
+        }
+#endif
+#if COSMICTIGER_ENABLE_PMMM_NEAR_PP
+        if (options.pmmmNearMethod == "pp") {
+            allLocalities<PmmmEvaluateAction>(request.doPotential);
+        }
 #endif
     } catch (...) {
         failure = std::current_exception();
     }
-#if COSMICTIGER_PMMM_NEAR_FMM
+#if COSMICTIGER_ENABLE_PMMM_NEAR_FMM
     auto cleanup = [&](auto&& operation) {
         try {
             operation();
@@ -203,9 +212,11 @@ void solve(SolveRequest request) {
         cleanup([]() { allLocalities<PmmmAbortPipelineAction>(); });
         cleanup([]() { allLocalities<PmmmFinishPipelineAction>(); });
     }
-    cleanup([]() { treeDestroy(); });
-    cleanup([]() { particlesCacheFree(); });
-    cleanup([]() { allLocalities<PmmmClearGhostsAction>(); });
+    if (options.pmmmNearMethod == "fmm") {
+        cleanup([]() { treeDestroy(); });
+        cleanup([]() { particlesCacheFree(); });
+        cleanup([]() { allLocalities<PmmmClearGhostsAction>(); });
+    }
 #endif
     if (failure) {
         std::rethrow_exception(failure);

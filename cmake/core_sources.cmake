@@ -1,11 +1,11 @@
 # Sources shared by every integrator, gravity solver, SPH setting, expansion
 # order, and position precision. Their project-header dependencies do not
-# include the variant build configuration or the Position type.
+# include the capability build configuration or the Position type.
 #
 # Keep source-specific floating-point options when compiling these in the
 # shared library; in particular, Boltzmann and Friedmann require IEEE checks.
 # CUDA support is selected for the whole build, so its utility objects may
-# also be shared by all application variants in that build.
+# also be shared by the configured application and its tests.
 set(cosmictiger_core_source_files
     src/analysis/group_entry.cpp
     src/core/assert.cpp

@@ -13,7 +13,7 @@
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/core/timer.hpp>
 #if COSMICTIGER_WITH_GRAVITY
-#if !COSMICTIGER_GRAVITY_PMMM
+#if COSMICTIGER_ENABLE_FMM
 #include <cosmictiger/gravity/dehnen/execution.hpp>
 #endif
 #include <cosmictiger/gravity/kick_workspace.hpp>
@@ -104,8 +104,9 @@ void runFixedScenario() {
         particlesSetMinrung(baseOptions.run.minRung);
     }
     state.minrung0 = std::max(state.minrung0, baseOptions.run.minRung);
-    bool const hierarchicalMesh = integration::kBuildUsesHierarchical &&
-        baseOptions.gravity.enabled && usesMeshGravity(baseOptions.gravity);
+    bool const hierarchicalMesh =
+        baseOptions.run.hierarchicalGravity && baseOptions.gravity.enabled;
+    bool const global = usesGlobalIntegration(baseOptions.run);
     section_timing::measure(section_timing::Section::domains, []() { domainsRebound(); });
     Timer checkpointTimer;
     checkpointTimer.start();
@@ -140,7 +141,7 @@ void runFixedScenario() {
     for (auto const& stage : plan.stages) {
         double const stageEnd = stageStart + stage.duration;
         double const tolerance = 1.0e-12 * duration;
-        if (state.tau >= stageEnd - tolerance) {
+        if (state.tau >= (global ? stageEnd : stageEnd - tolerance)) {
             stageStart = stageEnd;
             continue;
         }
@@ -151,14 +152,15 @@ void runFixedScenario() {
         }
         setOptions(stageOptions);
         double const baseTimestep = duration / baseOptions.run.numberOfSteps;
-        while (state.tau < stageEnd - tolerance && iterations < baseOptions.run.maxIterations) {
+        while (state.tau < (global ? stageEnd : stageEnd - tolerance) &&
+            iterations < baseOptions.run.maxIterations) {
             if (profile::interruptRequested()) {
                 interrupted = true;
                 break;
             }
             Timer stepTimer;
             stepTimer.start();
-            int const minimumRung = minRung(state.itime);
+            int const minimumRung = global ? 0 : minRung(state.itime);
             bool const fullEvaluation = minimumRung == 0;
             if (fullEvaluation) {
                 section_timing::measure(section_timing::Section::snapshotOutput,
@@ -171,7 +173,7 @@ void runFixedScenario() {
                 state.step :
                 -1;
             ForceStepResult result;
-#if COSMICTIGER_WITH_GRAVITY
+#if COSMICTIGER_WITH_GRAVITY && COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
             if (hierarchicalMesh) {
                 if (minimumRung == 0) {
                     state.minrung0 = std::max(state.minrung0 - 1, baseOptions.run.minRung);
@@ -189,10 +191,12 @@ void runFixedScenario() {
             {
                 result = advanceForces(minimumRung, 1.0, 0.0, state.tau, baseTimestep,
                     baseOptions.gravity.openingAngle, state.iter == 0, fullEvaluation,
-                    state.energies, gravityErrorStep);
+                    state.energies, gravityErrorStep, false, state.globalTimestep,
+                    global ? std::min(baseTimestep, stageEnd - state.tau) : 0.0);
             }
             double const flops = flopsPerSecond();
-            state.maxRung = std::max({int(result.maxRung), baseOptions.run.minRung, minimumRung});
+            state.maxRung =
+                global ? 0 : std::max({int(result.maxRung), baseOptions.run.minRung, minimumRung});
             int const displayedMinimumRung =
                 usesMeshGravity(baseOptions.gravity) && !hierarchicalMesh ? state.maxRung :
                                                                             minimumRung;
@@ -203,7 +207,9 @@ void runFixedScenario() {
                 section_timing::measure(section_timing::Section::analysis,
                     [&]() { detail::writeScenarioDiagnostics(state); });
             }
-            double const timestep = std::ldexp(baseTimestep, -state.maxRung);
+            double const timestep = global ?
+                std::min(result.minimumTimestep, stageEnd - state.tau) :
+                std::ldexp(baseTimestep, -state.maxRung);
             if (!(timestep > 0.0) || state.tau + timestep == state.tau) {
                 THROW_ERROR("Scenario timestep cannot advance time\n");
             }
@@ -212,7 +218,10 @@ void runFixedScenario() {
                     [&]() { drift(1.0, timestep, state.tau, state.tau + timestep, duration); });
             }
             state.tau += timestep;
-            state.itime = inc(state.itime, state.maxRung);
+            state.itime = global ? 0 : inc(state.itime, state.maxRung);
+            if (global) {
+                state.globalTimestep = timestep;
+            }
             state.iter++;
             iterations++;
             if (state.itime == 0) {
@@ -271,17 +280,33 @@ void runFixedScenario() {
         section_timing::measure(
             section_timing::Section::checkpointWrite, [&]() { writeCheckpoint(state); });
     }
-    if (state.tau >= duration * (1.0 - 1.0e-12) && plan.finish != nullptr) {
+    bool const completed = global ? state.tau >= duration : state.tau >= duration * (1.0 - 1.0e-12);
+    if (global && completed && !interrupted && iterations > 0) {
+        // Restart state remains at the completed drift with a pending closing
+        // half-step. Only the final diagnostics consume the synchronized state.
+        auto finalOptions = baseOptions;
+        finalOptions.hydro.damping = plan.stages.back().damping;
+        if (plan.stages.back().viscosityAlpha >= 0.0) {
+            finalOptions.hydro.viscosityAlpha = plan.stages.back().viscosityAlpha;
+        }
+        setOptions(finalOptions);
+        advanceForces(0, 1.0, 0.0, state.tau, duration / baseOptions.run.numberOfSteps,
+            baseOptions.gravity.openingAngle, false, true, state.energies, -1, true,
+            state.globalTimestep, duration / baseOptions.run.numberOfSteps);
+        detail::writeScenarioDiagnostics(state);
+        setOptions(baseOptions);
+    }
+    if (completed && plan.finish != nullptr) {
         plan.finish(state.tau);
     }
-#if COSMICTIGER_WITH_GRAVITY && !COSMICTIGER_GRAVITY_PMMM
+#if COSMICTIGER_ENABLE_FMM
     kickClearBuffers();
 #endif
     runtime.stop();
     if (hpxRank() == 0) {
-        bool const finished = state.tau >= duration * (1.0 - 1.0e-12);
         PRINT("\n  %s: %s at t=%.6e after %i steps.\n", definition.name,
-            finished ? "finished" : (interrupted ? "interrupted" : "paused at the iteration limit"),
+            completed ? "finished" :
+                        (interrupted ? "interrupted" : "paused at the iteration limit"),
             state.tau, state.iter);
         double const evolutionSeconds = iterations > 0 ? runtime.read() : 0.0;
         PRINT("  Total evolution time (this run, initialization excluded): %s\n",

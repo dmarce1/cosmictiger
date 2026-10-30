@@ -46,13 +46,17 @@ and implementation choices.
 
 Paper-name directories contain only code that can be excluded when that solver
 is not built. Shared implementation belongs in the parent subsystem directory.
-`COSMICTIGER_GRAVITY_METHOD=fmm` excludes Nitadori sources and headers; `pmmm`
-excludes Dehnen sources and headers. PMMM also compiles only its selected near
-solver and corresponding tests.
+`COSMICTIGER_ENABLE_FMM=OFF` excludes Dehnen sources and headers;
+`COSMICTIGER_ENABLE_PMMM=OFF` excludes Nitadori sources and headers. Both may be
+enabled in one executable. PMMM's independent `COSMICTIGER_ENABLE_PMMM_NEAR_PP`
+and `COSMICTIGER_ENABLE_PMMM_NEAR_FMM` options control its near implementations
+and corresponding tests. Runtime `gravity.method.far=fmm|pmmm` and
+`gravity.method.near=pp|fmm` select among enabled algorithms; a selector is
+required when more than one applicable choice is compiled.
 
 Global FMM and PMMM's FMM near solver use the parent directory's Cartesian
 operators, local tree construction, acceptance tests, traversal, and CPU/CUDA
-workspaces. PMMM with the PP near solver omits this tree-walk implementation.
+workspaces. A PMMM-only build with only the PP near solver omits this tree-walk implementation.
 The PMMM cell FMM uses the common routines without invoking the global solver.
 The common tree builder accepts bounded-center and child-routing
 callbacks; the common walk receives solver execution callbacks. Remote source
@@ -73,7 +77,7 @@ force references used by tests live in `tests/gravity/`.
 
 ## SPH
 
-`COSMICTIGER_WITH_SPH` defaults to `ON`. Setting it to `OFF` excludes SPH,
+`COSMICTIGER_ENABLE_SPH` defaults to `ON`. Setting it to `OFF` excludes SPH,
 hydrodynamic scenarios, particle chemistry, and their tests. Homogeneous
 recombination remains available for collisionless cosmology.
 
@@ -121,11 +125,9 @@ in `scenarios/`, alongside the scenarios that use them.
 ## Generated code and build integration
 
 The old `cosmictiger/fmm/` and `src/fmm/` directories are folded into gravity.
-Generated headers are checked in beneath `cosmictiger/gravity/`:
-
-- Common Cartesian free-space operators and configuration stay at the parent level.
-- Cartesian Ewald operators go into `dehnen/`.
-- Spherical PMMM and spherical Ewald operators go into `nitadori/`.
+Generated headers are checked in beneath `cosmictiger/gravity/fmm_kernels/`,
+with flat `cartesian_*` and `spherical_*` names for free-space and Ewald operators
+and their configuration.
 
 Generators remain organized by representation under `tools/cartesian/` and
 `tools/fmm/`, with `tools/generate_fmm.py` as the entry point. Running it without
@@ -133,10 +135,12 @@ arguments regenerates both families for FMM orders 3 through 9 in the source
 header directory, using the repository's clang-format configuration.
 `generate_fmm_kernels` is the explicit CMake regeneration target;
 `generate_cartesian_kernels` and `cosmictiger_generated_kernels` are aliases.
-These targets always regenerate all orders 3 through 9. CMake's
-`COSMICTIGER_FMM_MIN_ORDER` and `COSMICTIGER_FMM_MAX_ORDER` select the compiled
-range, defaulting to 4 through 8, through `FMM_MIN_ORDER`/`FMM_MAX_ORDER`
-preprocessor guards and per-order instantiations.
+These targets always regenerate all internal orders 3 through 9, corresponding
+to potential degrees 2 through 8. `COSMICTIGER_EXPANSION_DEGREE` selects a scalar
+degree or inclusive range, defaulting to `4-6`. CMake converts that selection
+to internal orders by adding one, then uses `FMM_MIN_ORDER`/`FMM_MAX_ORDER`
+preprocessor guards and per-order instantiations. Runtime
+`gravity.expansionDegree` chooses one compiled degree, defaulting to the largest.
 Ordinary builds use the checked-in headers without rewriting them, and
 `python3 tools/generate_fmm.py --check` verifies them without writing.
 

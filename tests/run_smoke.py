@@ -14,6 +14,8 @@ import re
 import shutil
 import signal
 import subprocess
+
+from application_selection import application_arguments
 import sys
 
 
@@ -64,6 +66,10 @@ def main():
     command = [str(args.executable), "--hpx:threads=2", "--hpx:bind=none",
                "--initial.particlesPerDimension=8", "--analysis.views=false",
                "--lightcone.enabled=false", "--analysis.power=false", "--analysis.groups=false"]
+    selector_arguments = application_arguments(args.executable.resolve(), far="fmm",
+        hydro=args.mode in ("sod", "sph", "sph_mpi"))
+    command += [argument for argument in selector_arguments if not any(
+        option.split("=", 1)[0] == argument.split("=", 1)[0] for option in args.extra_option)]
     if args.mode == "sod":
         # Select the left half of the domain, a directory containing spaces,
         # and a cadence that does not divide the final cycle (20).

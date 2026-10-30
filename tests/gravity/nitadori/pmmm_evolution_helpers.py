@@ -63,6 +63,15 @@ def read_rank(path, expected_iteration, ranks, time_integrator):
     hydro = bool(header.flags & 1)
     position_bytes = 8 if header.flags & (1 << 15) else 4
     offset = ctypes.sizeof(Header)
+    require(bool(header.flags & (1 << 19)) == (time_integrator == "global"),
+            f"{path}: global integrator flag differs from the selected mode")
+    if header.flags & (1 << 18):
+        algorithms = struct.unpack_from("=5Q", data, offset)
+        require(algorithms[0] == 1 and algorithms[1] == 2,
+                f"{path}: invalid algorithm selection extension")
+        require(algorithms[4] == {"traditional": 0, "hierarchical": 1, "global": 2}[time_integrator],
+                f"{path}: algorithm selection integrator differs")
+        offset += 40
     extension_version = struct.unpack_from("=Q", data, offset)[0]
     require(extension_version in (1, 2, 3, 4), f"{path}: unsupported PMMM version")
     extension_size = {1: 7, 2: 8, 3: 10, 4: 11}[extension_version]
@@ -97,6 +106,12 @@ def read_rank(path, expected_iteration, ranks, time_integrator):
                 [driver.a, driver.adot, driver.tau, driver.tau_max, *driver.energies]),
             f"{path}: nonfinite driver state")
     offset += ctypes.sizeof(Driver)
+    driver.global_timestep = 0.0
+    if header.flags & (1 << 19):
+        version, driver.global_timestep = struct.unpack_from("=Qd", data, offset)
+        require(version == 1 and math.isfinite(driver.global_timestep) and driver.global_timestep >= 0,
+                f"{path}: invalid explicit global timestep")
+        offset += 16
 
     def parse_particles(integer_bytes):
         cursor = offset
@@ -213,9 +228,9 @@ def read_checkpoint(path, ranks, time_integrator):
     minimum_rung = state.min_rung if time_integrator == "hierarchical" else 0
     require(rows and all(minimum_rung <= row["rung"] <= state.max_rung < 64 for row in rows),
             f"{path}: particle rung lies outside the timestep range")
-    if time_integrator == "leapfrog":
+    if time_integrator == "traditional":
         require(all(row["rung"] == state.max_rung for row in rows),
-                f"{path}: ordinary PMMM leapfrog did not synchronize every particle rung")
+                f"{path}: ordinary PMMM traditional did not synchronize every particle rung")
     if header.flags & 1:
         require(sum(row["type"] == 0 for row in rows) == header.particles_per_species and
                 sum(row["type"] == 1 for row in rows) == header.particles_per_species,
@@ -245,6 +260,8 @@ def compare_restart(reference, resumed):
     require((reference_state.tau, reference_state.integer_time, reference_state.max_rung) ==
             (resumed_state.tau, resumed_state.integer_time, resumed_state.max_rung),
             "restart changed the common clock")
+    require(reference_state.global_timestep == resumed_state.global_timestep,
+            "restart changed the pending global interval")
     for old, new in match_rows(reference_rows, resumed_rows):
         require(max(map(abs, displacement(old["x"], new["x"]))) <= 2.0e-8,
                 "restart changed particle positions")
@@ -257,14 +274,17 @@ def compare_restart(reference, resumed):
 
 def check_clock(checkpoints):
     for (header, old, _), (_, new, _) in zip(checkpoints, checkpoints[1:]):
-        expected = math.ldexp(old.tau_max / header.steps, -new.max_rung)
+        global_step = bool(header.flags & (1 << 19))
+        expected = new.global_timestep if global_step else math.ldexp(
+            old.tau_max / header.steps, -new.max_rung)
         require(math.isclose(new.tau - old.tau, expected, rel_tol=1.0e-10, abs_tol=1.0e-20),
-                "particle mesh clock did not advance by its finest dyadic step")
-        require(old.integer_time % (1 << (64 - new.max_rung)) == 0,
-                "timestep coarsened away from an integer-clock synchronization boundary")
+                "particle mesh clock did not advance by the selected interval")
+        if not global_step:
+            require(old.integer_time % (1 << (64 - new.max_rung)) == 0,
+                    "timestep coarsened away from an integer-clock synchronization boundary")
 
 
-def match_drift_rows(before, after, base_timestep, active_rung):
+def match_drift_rows(before, after, base_timestep, active_rung, global_timestep=None):
     """Match identities at the predicted start of each particle's scheduled drift.
 
     A crowded particle can cross a nearer neighbor during one rung step. Matching
@@ -275,7 +295,8 @@ def match_drift_rows(before, after, base_timestep, active_rung):
     unused = set(range(len(before)))
     for row in after:
         active = row["rung"] >= active_rung
-        timestep = math.ldexp(base_timestep, -row["rung"]) if active else 0.0
+        timestep = (global_timestep if global_timestep is not None else
+                    math.ldexp(base_timestep, -row["rung"])) if active else 0.0
         predicted = tuple((position - timestep * velocity) % 1.0
                           for position, velocity in zip(row["x"], row["v"]))
         candidates = [index for index in unused
@@ -295,21 +316,24 @@ def check_single_drift(before, after):
     base_timestep = old_state.tau_max / header.steps
     clock_rung = (64 - (old_state.integer_time & -old_state.integer_time).bit_length() + 1
                   if old_state.integer_time else 0)
-    # Hierarchical steps drift only the active rungs. Ordinary PMMM leapfrog
+    # Hierarchical steps drift only the active rungs. Ordinary PMMM traditional
     # assigns every particle the common rung and drifts the entire population.
     hierarchical = bool(header.flags & (1 << 6))
     active_rung = max(clock_rung, state.min_rung) if hierarchical else 0
     quantum = 2.0 ** (-64 if header.flags & (1 << 15) else -32)
     signal = error = 0.0
-    for old, new in match_drift_rows(old_rows, rows, base_timestep, active_rung):
+    global_timestep = state.global_timestep if header.flags & (1 << 19) else None
+    for old, new in match_drift_rows(old_rows, rows, base_timestep, active_rung, global_timestep):
         moved = displacement(old["x"], new["x"])
         active = old["rung"] >= active_rung
-        require(new["rung"] >= old["rung"] - 1,
-                "a particle timestep grew by more than a factor of two")
+        if global_timestep is None:
+            require(new["rung"] >= old["rung"] - 1,
+                    "a particle timestep grew by more than a factor of two")
         if not active:
             require(old["rung"] == new["rung"] and old["v"] == new["v"] and
                     old["x"] == new["x"], "inactive slower particle changed during a fast stage")
-        timestep = math.ldexp(base_timestep, -new["rung"]) if active else 0.0
+        timestep = (global_timestep if global_timestep is not None else
+                    math.ldexp(base_timestep, -new["rung"])) if active else 0.0
         for actual, velocity in zip(moved, new["v"]):
             expected = timestep * velocity
             signal += expected * expected

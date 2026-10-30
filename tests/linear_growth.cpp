@@ -864,7 +864,7 @@ void linearGrowthTest() {
             "use COSMICTIGER_LINEAR_GROWTH_LOAD_FILE for a custom particle load");
     }
     options.gravity.enabled = true;
-    options.run.hierarchicalGravity = integration::kBuildUsesHierarchical;
+    options.run.hierarchicalGravity = getOptions().run.hierarchicalGravity;
 
     options.analysis.saveForce = true;
 

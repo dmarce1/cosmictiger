@@ -120,13 +120,16 @@ void writeViewCommandLine(DBfile* db) {
     std::set<std::string> groups;
     for (auto const& entry : getOptionsMetadata(getOptions())) {
         std::string name = entry.name;
-        auto const separator = name.find('.');
-        if (separator != std::string::npos) {
+        size_t separator = name.find('.');
+        while (separator != std::string::npos) {
+            // PDB treats dots as structure-member syntax. Represent every
+            // option component as a directory, including gravity.method.far.
+            name[separator] = '/';
             auto const group = name.substr(0, separator);
             if (groups.insert(group).second) {
                 checkViewWrite(DBMkDir(db, group.c_str()), group.c_str());
             }
-            name[separator] = '/';
+            separator = name.find('.', separator + 1);
         }
         std::visit(
             [db, &name](auto const& value) {
