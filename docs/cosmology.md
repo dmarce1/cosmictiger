@@ -154,7 +154,7 @@ before the expansion-work correction does not repair its earlier integration
 bias; use a fresh run when comparing the corrected diagnostic over the full
 evolution.
 
-Terminal wall and step durations use `hh:mm::ss.ss`. The final evolution total
+Terminal wall and step durations use `hh:mm:ss.ss`. The final evolution total
 starts after initialization and checkpoint loading, and includes evolution,
 its outputs, and the terminal energy evaluation. A restart also shows the
 recorded total including prior runs; old checkpoints may include initialization

@@ -1331,7 +1331,7 @@ void driver() {
     size_t progressRows = 0;
     terminal::section(getOptions().run.scenario.c_str());
     PRINT("  tau is conformal time / coarse interval; dt is in code units.\n"
-          "  Wall durations use hh:mm::ss.ss; initialization is excluded.\n");
+          "  Wall durations use hh:mm:ss.ss; initialization is excluded.\n");
     Timer reset;
     reset.start();
 #if COSMICTIGER_WITH_GRAVITY

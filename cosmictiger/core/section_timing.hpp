@@ -61,7 +61,7 @@ namespace detail {
             "Initial conditions", "Transfer functions", "Domains", "Particle sort", "Tree build",
             "Gravity", "Hydrodynamics", "Drift", "Checkpoint read", "Checkpoint write",
             "Snapshot output", "Analysis"};
-        std::fprintf(stream, "Major section timings (hh:mm::ss.ss)\n");
+        std::fprintf(stream, "Major section timings (hh:mm:ss.ss)\n");
         std::fprintf(stream, "Inclusive coordinator timings; nested sections overlap.\n");
         std::fprintf(stream, "%-24s %12s %16s %16s\n", "Section", "Calls", "Total", "Mean");
         for (size_t index = 0; index < state.entries.size(); ++index) {

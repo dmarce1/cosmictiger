@@ -121,7 +121,7 @@ void runFixedScenario() {
             PRINT(
                 "%-38s: %lld\n", "Initialized particles", static_cast<long long>(particlesSize()));
         }
-        PRINT("  Time and dt are in code units; wall durations use hh:mm::ss.ss and include "
+        PRINT("  Time and dt are in code units; wall durations use hh:mm:ss.ss and include "
               "previous runs on restart.\n");
     }
     int lastCheckpoint = restarting ? state.iter : -1;
